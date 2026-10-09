@@ -6,20 +6,21 @@ using System.Collections.Generic;
 using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
-using AUTD3.Link;
 using static AUTD3.Units;
 
 internal static class Program
 {
     private static async Task Main()
     {
+        using var logGuard = Tracing.Init(new TracingOption());
+
         using var geometry = new Geometry(new List<Autd3>
         {
             new Autd3(Vector3.Zero),
             new Autd3(new Vector3(Autd3.DeviceWidth, 0f, 0f)),
         });
 
-        await using var client = await Client.OpenAsync(geometry, new EchocatLinkOption(), new ClientConfig());
+        await using var client = await Client.OpenAsync(geometry, new TransportOption(), new ClientConfig());
 
         Console.WriteLine($"devices: {client.NumDevices}");
 
@@ -33,15 +34,8 @@ internal static class Program
         using var right = geometry.PhaseBuffer();
         Pattern.Focus(geometry, rightTarget, wavelength, right);
 
-        using var builder = client.DatagramBuilder();
-        builder
-            .Push(new SetSilencer())
-            .PushEach(device => new Pattern(device.Idx % 2 == 0 ? left : right, Intensity.Max));
-        using var frames = builder.Build();
-        foreach (var frame in frames)
-        {
-            await client.SendCheckedAsync(frame);
-        }
+        await client.SendAsync(new SetSilencer());
+        await client.SendAsync(Command.Each(device => new Pattern(device.Idx % 2 == 0 ? left : right, Intensity.Max)));
 
         Console.WriteLine("even devices -> left target, odd devices -> right target — press Ctrl+C to stop");
 

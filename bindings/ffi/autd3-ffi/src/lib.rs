@@ -1,36 +1,39 @@
-use std::ffi::{CString, c_char, c_void};
+use std::ffi::{c_char, c_void};
+use std::future::Future;
 use std::num::{NonZeroU16, NonZeroU32, NonZeroUsize};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
+mod logging;
+mod udp;
+
 use autd3_ffi_abi::{
-    AUTD3_ERR_INVALID_ARGUMENT, AUTD3_OK, CheckerBackend, ClientBackend, ClientOpener,
-    CompletionCallback, CompletionCtx, IntensityBuffer, ModulationBuffer, PhaseBuffer,
-    ResponseTokenData, drop_handle, handle_mut, handle_ref, into_handle, slice_mut, slice_ref,
-    take_handle, to_rt_policy, to_rt_priority, write_cstr, write_out,
+    AUTD3_ERR, AUTD3_ERR_DEVICE, AUTD3_ERR_INVALID_ARGUMENT, AUTD3_ERR_NETWORK, AUTD3_ERR_TIMEOUT,
+    AUTD3_ERR_UNSUPPORTED_FIRMWARE, AUTD3_OK, Autd3FirmwareVersion, Buffer, CompletionCallback,
+    CompletionCtx, IntensityBuffer, ModulationBuffer, PhaseBuffer, drop_handle, handle_mut,
+    handle_ref, into_handle, slice_mut, slice_ref, take_handle, to_ns, write_cstr, write_out,
 };
 use autd3_rs::commands::{
-    BoxedCommand, ChangeModulationBank, ChangePatternBank, Clear, Command, ConfigFociStm,
-    ConfigModulation, ConfigPattern, EmulateGpioIn, FixedCompletionTime, FixedUpdateRate,
-    FociStm as CoreFociStm, FociStmOption, ForceFan, GpioOut, Modulation, Nop, PWE_TABLE_SIZE,
-    Pattern, PatternCompression, PatternIntensity, PatternStm, PatternStmMode, PatternStmOption,
-    SetGpioOut, SetOutputMask, SetPhaseCorrection, SetPulseWidthTable, SetSilencer, StmConfig,
-    StmIntensity, Synchronize, WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer,
-    WritePatternCompressed, circle, line,
+    ActivateModulationBank, ActivatePatternBank, BoxedCommand, Clear, Command, ConfigFociStm,
+    ConfigModulation, ConfigPattern, CpuConfig, EmulateGpioIn, Expansion, FixedCompletionTime,
+    FixedUpdateRate, FociStm as CoreFociStm, FociStmOption, ForceFan, FpgaBusWait, GpioOut,
+    Modulation, Nop, PWE_TABLE_SIZE, Pattern, PatternIntensity, PatternStm, PatternStmOption,
+    PhaseDepth, ReleaseFailsafe, SetCpuConfig, SetGpioOut, SetOutputMask, SetPhaseCorrection,
+    SetPulseWidthTable, SetSilencer, StmConfig, StmIntensity, Synchronize, WriteFociBuffer,
+    WriteModulationBuffer, WritePatternBuffer, WritePatternPhase, circle, each, line,
 };
 use autd3_rs::rt::Executor;
+use autd3_rs::udp::StateChecker;
 use autd3_rs::units::Hz;
 use autd3_rs::value::{
-    ControlPoint, ControlPoints, DcSysTime, GpioIn, Intensity, LoopBehavior, ModulationBank,
-    Nearest, PatternBank, Phase, PulseWidth, SamplingConfig, TransitionMode,
+    ControlPoint, ControlPoints, GpioIn, Intensity, LoopBehavior, ModulationBank, Nearest,
+    PatternBank, Phase, PulseWidth, SamplingConfig, SysTime, TransitionMode,
 };
 use autd3_rs::{
-    ClientConfig, CoreId, DatagramBuilder as CoreDatagramBuilder, Frames, Geometry, Length, Point3,
-    Response, UnitVector3, Vector3, Velocity,
+    BusStats, Client, ClientConfig, DeviceState, Error, FirmwareVersion, FpgaState, Frames,
+    Geometry, Length, NetworkCause, Point3, Response, ResponseFuture, StreamFuture, Telemetry,
+    TelemetryCounters, UnitVector3, Vector3, Velocity,
 };
-use autd3_rs::{DeviceState, Telemetry};
-
-mod legacy;
 
 pub(crate) fn executor() -> &'static Executor {
     static EXECUTOR: OnceLock<Executor> = OnceLock::new();
@@ -63,25 +66,15 @@ fn to_gpio_in(v: u8) -> Option<GpioIn> {
     }
 }
 
-fn to_telemetry(counter: u8) -> Option<Telemetry> {
-    match counter {
-        0x00 => Some(Telemetry::FifoDrop),
-        0x01 => Some(Telemetry::Dedup),
-        0x02 => Some(Telemetry::SeqMismatch),
-        0x03 => Some(Telemetry::DispatchError),
-        0x04 => Some(Telemetry::Processed),
-        0x05 => Some(Telemetry::Failsafe),
-        0x06 => Some(Telemetry::SyncResync),
-        _ => None,
-    }
+fn flatten_telemetry(counters: &[TelemetryCounters]) -> Vec<u32> {
+    counters.iter().flat_map(|c| c.iter().copied()).collect()
 }
 
-pub(crate) fn to_transition_mode(mode: u8, value: u64, margin_ns: u32) -> Option<TransitionMode> {
+pub(crate) fn to_transition_mode(mode: u8, value: u64) -> Option<TransitionMode> {
     match mode {
         0x00 => Some(TransitionMode::SyncIdx),
         0x01 => Some(TransitionMode::SysTime {
-            time: DcSysTime::from_nanos(value),
-            margin: (margin_ns != 0).then(|| Duration::from_nanos(u64::from(margin_ns))),
+            time: SysTime::from_nanos(value),
         }),
         #[allow(clippy::cast_possible_truncation)]
         0x02 => to_gpio_in(value as u8).map(TransitionMode::Gpio),
@@ -111,7 +104,7 @@ fn to_gpio_out(g: &Autd3GpioOut) -> Option<GpioOut> {
         7 => Some(GpioOut::PatternBank),
         8 => Some(GpioOut::PatternIdx(g.value as u16)),
         9 => Some(GpioOut::IsStmMode),
-        10 => Some(GpioOut::SysTimeEq(DcSysTime::from_nanos(g.value))),
+        10 => Some(GpioOut::SysTimeEq(SysTime::from_nanos(g.value))),
         11 => Some(GpioOut::SyncDiff),
         12 => Some(GpioOut::PwmOut(g.value as u8)),
         13 => Some(GpioOut::Direct(g.value != 0)),
@@ -127,24 +120,17 @@ fn rep_to_loop_behavior(rep: u16) -> LoopBehavior {
     }
 }
 
-fn to_pattern_stm_mode(mode: u8) -> Option<PatternStmMode> {
-    match mode {
-        0 => Some(PatternStmMode::PhaseIntensityFull),
-        1 => Some(PatternStmMode::PhaseFull),
-        2 => Some(PatternStmMode::PhaseHalf),
-        _ => None,
-    }
-}
-
 #[repr(C)]
 pub struct Autd3StmControlPoint {
     pub point: [f32; 3],
     pub phase_offset: u8,
 }
 
-pub struct FociSample {
-    intensity: Intensity,
-    points: Vec<ControlPoint>,
+fn to_control_point(p: &Autd3StmControlPoint) -> ControlPoint {
+    ControlPoint::new(
+        Point3::new(p.point[0], p.point[1], p.point[2]),
+        Phase(p.phase_offset),
+    )
 }
 
 macro_rules! foci_points {
@@ -154,61 +140,27 @@ macro_rules! foci_points {
         }
 
         impl FociPoints {
-            fn from_samples(samples: &[FociSample], num_foci: usize) -> Option<Self> {
+            fn from_flat(
+                points: &[Autd3StmControlPoint],
+                intensities: &[u8],
+                num_foci: usize,
+            ) -> Option<Self> {
                 match num_foci {
                     $($n => Some(FociPoints::$variant(
-                        samples
+                        points
+                            .as_chunks::<$n>()
+                            .0
                             .iter()
-                            .map(|s| {
-                                let arr: [ControlPoint; $n] = core::array::from_fn(|k| s.points[k]);
-                                ControlPoints::new(arr, s.intensity)
+                            .zip(intensities)
+                            .map(|(chunk, &intensity)| {
+                                ControlPoints::new(
+                                    chunk.each_ref().map(to_control_point),
+                                    Intensity(intensity),
+                                )
                             })
                             .collect(),
                     )),)*
                     _ => None,
-                }
-            }
-
-            fn push_into<'a>(
-                &'a self,
-                config: StmConfig,
-                option: FociStmOption,
-                builder: &mut CoreDatagramBuilder<'a>,
-            ) {
-                match self {
-                    $(FociPoints::$variant(v) => {
-                        builder.push(CoreFociStm::new(config, v.as_slice(), option));
-                    })*
-                }
-            }
-
-            pub(crate) fn push_legacy_into<'a>(
-                &'a self,
-                config: StmConfig,
-                option: FociStmOption,
-                builder: &mut autd3_rs::legacy::LegacyDatagramBuilder<'a>,
-            ) {
-                match self {
-                    $(FociPoints::$variant(v) => {
-                        builder.push(CoreFociStm::new(config, v.as_slice(), option));
-                    })*
-                }
-            }
-
-            fn push_write_foci_into<'a>(
-                &'a self,
-                bank: PatternBank,
-                index_offset: usize,
-                builder: &mut CoreDatagramBuilder<'a>,
-            ) {
-                match self {
-                    $(FociPoints::$variant(v) => {
-                        builder.push(WriteFociBuffer {
-                            bank,
-                            index_offset,
-                            points: v.as_slice(),
-                        });
-                    })*
                 }
             }
 
@@ -245,6 +197,28 @@ macro_rules! foci_points {
 }
 foci_points!(1 => N1, 2 => N2, 3 => N3, 4 => N4, 5 => N5, 6 => N6, 7 => N7, 8 => N8);
 
+unsafe fn foci_points(
+    points: *const Autd3StmControlPoint,
+    num_samples: usize,
+    num_foci: u8,
+    intensities: *const u8,
+) -> Option<FociPoints> {
+    let n = usize::from(num_foci);
+    let points = unsafe { slice_ref(points, num_samples * n) }?;
+    let intensities = unsafe { slice_ref(intensities, num_samples) }?;
+    FociPoints::from_flat(points, intensities, n)
+}
+
+unsafe fn clone_buffers<T: Clone>(
+    buffers: *const *const Buffer<T>,
+    len: usize,
+) -> Option<Vec<Vec<Vec<T>>>> {
+    unsafe { slice_ref(buffers, len) }?
+        .iter()
+        .map(|&p| unsafe { handle_ref(p) }.map(|buffer| buffer.0.clone()))
+        .collect()
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn autd3_stm_config_freq(hz: f32) -> *mut StmConfig {
     into_handle(StmConfig::new(hz * Hz))
@@ -256,19 +230,13 @@ pub extern "C" fn autd3_stm_config_freq_nearest(hz: f32) -> *mut StmConfig {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_stm_config_period(secs: f32) -> *mut StmConfig {
-    match Duration::try_from_secs_f32(secs) {
-        Ok(period) => into_handle(StmConfig::new(period)),
-        Err(_) => std::ptr::null_mut(),
-    }
+pub extern "C" fn autd3_stm_config_period(period_ns: u64) -> *mut StmConfig {
+    into_handle(StmConfig::new(Duration::from_nanos(period_ns)))
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_stm_config_period_nearest(secs: f32) -> *mut StmConfig {
-    match Duration::try_from_secs_f32(secs) {
-        Ok(period) => into_handle(StmConfig::new(Nearest(period))),
-        Err(_) => std::ptr::null_mut(),
-    }
+pub extern "C" fn autd3_stm_config_period_nearest(period_ns: u64) -> *mut StmConfig {
+    into_handle(StmConfig::new(Nearest(Duration::from_nanos(period_ns))))
 }
 
 #[unsafe(no_mangle)]
@@ -284,23 +252,32 @@ pub unsafe extern "C" fn autd3_stm_config_into_sampling_config(
     config: *const StmConfig,
     size: usize,
     out: *mut u16,
+    out_err: *mut c_char,
+    out_err_len: usize,
 ) -> i32 {
     let Some(config) = (unsafe { handle_ref(config) }) else {
-        return -1;
+        unsafe { write_cstr(out_err, out_err_len, "null stm config") };
+        return AUTD3_ERR_INVALID_ARGUMENT;
     };
 
     if u32::try_from(size).is_err() {
-        return -1;
+        unsafe {
+            write_cstr(
+                out_err,
+                out_err_len,
+                "the number of samples is out of range",
+            );
+        };
+        return AUTD3_ERR_INVALID_ARGUMENT;
     }
 
-    let Ok(value) = config.into_sampling_config(size).divide() else {
-        return -1;
-    };
-
-    if unsafe { write_out(out, value) } != AUTD3_OK {
-        return -1;
+    match config.into_sampling_config(size).divide() {
+        Ok(value) => unsafe { write_out(out, value.get()) },
+        Err(e) => {
+            unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
+            AUTD3_ERR
+        }
     }
-    0
 }
 
 #[unsafe(no_mangle)]
@@ -412,19 +389,26 @@ macro_rules! client_config_setter {
     };
 }
 
-client_config_setter!(autd3_client_config_set_low_latency, low_latency, bool);
-client_config_setter!(autd3_client_config_set_validate_state, validate_state, bool);
 client_config_setter!(
     autd3_client_config_set_require_supported_firmware,
     require_supported_firmware,
     bool
 );
-client_config_setter!(
-    autd3_client_config_set_timeout_cycles,
-    timeout_cycles,
-    u32,
-    NonZeroU32
-);
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_client_config_set_ack_timeout_ns(
+    config: *mut ClientConfig,
+    ns: u64,
+) -> i32 {
+    let Some(config) = (unsafe { handle_mut(config) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    if ns == 0 {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    }
+    config.ack_timeout = Duration::from_nanos(ns);
+    AUTD3_OK
+}
+
 client_config_setter!(
     autd3_client_config_set_max_inflight,
     max_inflight,
@@ -437,62 +421,147 @@ client_config_setter!(
     u32,
     NonZeroU32
 );
-client_config_setter!(
-    autd3_client_config_set_reset_resend_cycles,
-    reset_resend_cycles,
-    u32,
-    NonZeroU32
-);
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_config_set_rt_priority(
-    config: *mut ClientConfig,
-    mode: u8,
-    value: u8,
+pub unsafe extern "C" fn autd3_client_config_get_ack_timeout_ns(
+    config: *const ClientConfig,
+    out: *mut u64,
 ) -> i32 {
-    let (Some(config), Some(rt_priority)) =
-        (unsafe { handle_mut(config) }, to_rt_priority(mode, value))
-    else {
+    let Some(config) = (unsafe { handle_ref(config) }) else {
         return AUTD3_ERR_INVALID_ARGUMENT;
     };
-    config.rt_priority = rt_priority;
+    unsafe { write_out(out, to_ns(config.ack_timeout)) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_client_config_get_max_inflight(
+    config: *const ClientConfig,
+    out: *mut usize,
+) -> i32 {
+    let Some(config) = (unsafe { handle_ref(config) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    unsafe { write_out(out, config.max_inflight.get()) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_client_config_get_max_resync_rounds(
+    config: *const ClientConfig,
+    out: *mut u32,
+) -> i32 {
+    let Some(config) = (unsafe { handle_ref(config) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    unsafe { write_out(out, config.max_resync_rounds.get()) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_client_config_get_require_supported_firmware(
+    config: *const ClientConfig,
+    out: *mut bool,
+) -> i32 {
+    let Some(config) = (unsafe { handle_ref(config) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    unsafe { write_out(out, config.require_supported_firmware) }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_params_max_devices() -> usize {
+    autd3_rs::MAX_DEVICES
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_params_pwe_table_size() -> usize {
+    PWE_TABLE_SIZE
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_telemetry_count() -> usize {
+    Telemetry::ALL.len()
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_telemetry_all(dst: *mut u8, len: usize) -> i32 {
+    if len != Telemetry::ALL.len() {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    }
+    let Some(dst) = (unsafe { slice_mut(dst, len) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    for (out, counter) in dst.iter_mut().zip(Telemetry::ALL) {
+        *out = counter.as_u8();
+    }
     AUTD3_OK
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_config_set_rt_policy(
-    config: *mut ClientConfig,
-    value: u8,
+pub unsafe extern "C" fn autd3_silencer_default_completion_time(
+    out_intensity_ns: *mut u64,
+    out_phase_ns: *mut u64,
+    out_strict_mode: *mut bool,
 ) -> i32 {
-    let (Some(config), Some(rt_policy)) = (unsafe { handle_mut(config) }, to_rt_policy(value))
-    else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    config.rt_policy = rt_policy;
-    AUTD3_OK
+    let default = FixedCompletionTime::default();
+    let codes = [
+        unsafe { write_out(out_intensity_ns, to_ns(default.intensity)) },
+        unsafe { write_out(out_phase_ns, to_ns(default.phase)) },
+        unsafe { write_out(out_strict_mode, default.strict_mode) },
+    ];
+    codes
+        .into_iter()
+        .find(|&code| code != AUTD3_OK)
+        .unwrap_or(AUTD3_OK)
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_config_set_rt_affinity(
-    config: *mut ClientConfig,
-    has_affinity: bool,
-    core_id: usize,
-) -> i32 {
-    let Some(config) = (unsafe { handle_mut(config) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    config.rt_affinity = has_affinity.then_some(CoreId { id: core_id });
-    AUTD3_OK
+pub extern "C" fn autd3_fpga_state_is_thermal_asserted(raw: u8) -> bool {
+    FpgaState(raw).is_thermal_asserted()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_fpga_state_current_mod_bank(raw: u8) -> u8 {
+    match FpgaState(raw).current_mod_bank() {
+        ModulationBank::B0 => 0,
+        ModulationBank::B1 => 1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_fpga_state_current_pattern_bank(raw: u8) -> u8 {
+    match FpgaState(raw).current_pattern_bank() {
+        PatternBank::B0 => 0,
+        PatternBank::B1 => 1,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_fpga_state_is_pattern_mode(raw: u8) -> bool {
+    FpgaState(raw).is_pattern_mode()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_fpga_state_is_pattern_stopped(raw: u8) -> bool {
+    FpgaState(raw).is_pattern_stopped()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_fpga_state_is_mod_stopped(raw: u8) -> bool {
+    FpgaState(raw).is_mod_stopped()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_fpga_state_is_transition_pending(raw: u8) -> bool {
+    FpgaState(raw).is_transition_pending()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_fpga_state_is_failsafe_active(raw: u8) -> bool {
+    FpgaState(raw).is_failsafe_active()
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_client_config_free(config: *mut ClientConfig) {
     unsafe { drop_handle(config) }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_opener_free(opener: *mut ClientOpener) {
-    unsafe { drop_handle(opener) }
 }
 
 pub enum OwnedPatternIntensity {
@@ -528,6 +597,8 @@ impl OwnedStmIntensity {
 }
 
 pub enum Pending {
+    Each(Vec<Option<Pending>>),
+    Sequence(Vec<Pending>),
     Pattern {
         phases: Vec<Vec<Phase>>,
         intensities: OwnedPatternIntensity,
@@ -535,7 +606,7 @@ pub enum Pending {
         transition_mode: TransitionMode,
     },
     Modulation {
-        divider: u16,
+        config: SamplingConfig,
         data: Vec<u8>,
         bank: ModulationBank,
         loop_behavior: LoopBehavior,
@@ -552,10 +623,10 @@ pub enum Pending {
         index_offset: usize,
         points: FociPoints,
     },
-    WritePatternCompressed {
+    WritePatternPhase {
         bank: PatternBank,
-        index: u32,
-        format: PatternCompression,
+        index: u16,
+        depth: PhaseDepth,
         intensity: Intensity,
         patterns: Vec<Vec<Vec<Phase>>>,
     },
@@ -573,7 +644,7 @@ pub enum Pending {
         sound_speed: Velocity,
         loop_behavior: LoopBehavior,
     },
-    ChangePatternBank {
+    ActivatePatternBank {
         bank: PatternBank,
         transition_mode: TransitionMode,
     },
@@ -588,14 +659,16 @@ pub enum Pending {
         size: u32,
         loop_behavior: LoopBehavior,
     },
-    ChangeModulationBank {
+    ActivateModulationBank {
         bank: ModulationBank,
         transition_mode: TransitionMode,
     },
     Clear,
     Synchronize,
+    ReleaseFailsafe,
     Nop,
     ForceFan(bool),
+    SetCpuConfig(Box<CpuConfig>),
     SetSilencerCompletion {
         intensity: Duration,
         phase: Duration,
@@ -624,11 +697,10 @@ pub enum Pending {
         phases: Vec<Vec<Vec<Phase>>>,
         intensities: OwnedStmIntensity,
         bank: PatternBank,
-        mode: PatternStmMode,
+        phase_depth: PhaseDepth,
         loop_behavior: LoopBehavior,
         transition_mode: TransitionMode,
     },
-    Each(Vec<Option<Pending>>),
 }
 
 unsafe fn owned_pattern_intensity(
@@ -654,23 +726,12 @@ unsafe fn owned_stm_intensity(
     if num_intensities != 1 && num_intensities != num_patterns {
         return None;
     }
-    let buffers = unsafe { slice_ref(intensities, num_intensities) }?
-        .iter()
-        .map(|&p| unsafe { handle_ref(p) }.map(|p| p.0.clone()))
-        .collect::<Option<Vec<_>>>()?;
+    let buffers = unsafe { clone_buffers(intensities, num_intensities) }?;
     Some(if num_intensities == 1 {
         OwnedStmIntensity::Shared(buffers.into_iter().next().expect("checked length"))
     } else {
         OwnedStmIntensity::PerIndex(buffers)
     })
-}
-
-fn to_pattern_compression(v: u8) -> Option<PatternCompression> {
-    match v {
-        1 => Some(PatternCompression::PhaseFull),
-        2 => Some(PatternCompression::PhaseHalf),
-        _ => None,
-    }
 }
 
 #[unsafe(no_mangle)]
@@ -681,7 +742,6 @@ pub unsafe extern "C" fn autd3_op_pattern(
     uniform_intensity: u8,
     transition_mode: u8,
     transition_value: u64,
-    transition_margin_ns: u32,
 ) -> *mut Pending {
     let Some(phases) = (unsafe { handle_ref(phases) }) else {
         return std::ptr::null_mut();
@@ -692,7 +752,7 @@ pub unsafe extern "C" fn autd3_op_pattern(
     };
     let (Some(bank), Some(transition_mode)) = (
         to_pattern_bank(bank),
-        to_transition_mode(transition_mode, transition_value, transition_margin_ns),
+        to_transition_mode(transition_mode, transition_value),
     ) else {
         return std::ptr::null_mut();
     };
@@ -713,7 +773,6 @@ pub unsafe extern "C" fn autd3_op_modulation(
     loop_rep: u16,
     transition_mode: u8,
     transition_value: u64,
-    transition_margin_ns: u32,
 ) -> *mut Pending {
     let (Some(sampling_config), Some(modulation_buffer)) =
         (unsafe { handle_ref(sampling_config) }, unsafe {
@@ -724,17 +783,17 @@ pub unsafe extern "C" fn autd3_op_modulation(
     };
     let (Some(bank), Some(transition_mode)) = (
         to_modulation_bank(bank),
-        to_transition_mode(transition_mode, transition_value, transition_margin_ns),
+        to_transition_mode(transition_mode, transition_value),
     ) else {
         return std::ptr::null_mut();
     };
 
-    let Ok(divider) = sampling_config.divide() else {
+    if sampling_config.divide().is_err() {
         return std::ptr::null_mut();
-    };
+    }
     let data = modulation_buffer.0.clone();
     into_handle(Pending::Modulation {
-        divider,
+        config: *sampling_config,
         data,
         bank,
         loop_behavior: rep_to_loop_behavior(loop_rep),
@@ -778,38 +837,11 @@ pub unsafe extern "C" fn autd3_op_write_foci_buffer(
     num_foci: u8,
     intensities: *const u8,
 ) -> *mut Pending {
-    if num_foci == 0 {
-        return std::ptr::null_mut();
-    }
     let Some(bank) = to_pattern_bank(bank) else {
         return std::ptr::null_mut();
     };
 
-    let n = usize::from(num_foci);
-    let (Some(points), Some(intensities)) =
-        (unsafe { slice_ref(points, num_samples * n) }, unsafe {
-            slice_ref(intensities, num_samples)
-        })
-    else {
-        return std::ptr::null_mut();
-    };
-    let samples = points
-        .chunks_exact(n)
-        .zip(intensities)
-        .map(|(chunk, intensity)| FociSample {
-            intensity: Intensity(*intensity),
-            points: chunk
-                .iter()
-                .map(|p| {
-                    ControlPoint::new(
-                        Point3::new(p.point[0], p.point[1], p.point[2]),
-                        Phase(p.phase_offset),
-                    )
-                })
-                .collect(),
-        })
-        .collect::<Vec<_>>();
-    let Some(points) = FociPoints::from_samples(&samples, n) else {
+    let Some(points) = (unsafe { foci_points(points, num_samples, num_foci, intensities) }) else {
         return std::ptr::null_mut();
     };
     into_handle(Pending::WriteFociBuffer {
@@ -820,46 +852,35 @@ pub unsafe extern "C" fn autd3_op_write_foci_buffer(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_op_write_pattern_compressed(
+pub unsafe extern "C" fn autd3_op_write_pattern_phase(
     bank: u8,
-    index: u32,
-    format: u8,
+    index: u16,
+    depth: u8,
     intensity: u8,
     patterns: *const *const PhaseBuffer,
     num_patterns: usize,
 ) -> *mut Pending {
-    if num_patterns == 0 {
-        return std::ptr::null_mut();
-    }
-    let (Some(bank), Some(format)) = (to_pattern_bank(bank), to_pattern_compression(format)) else {
+    let (Some(bank), Some(depth)) = (to_pattern_bank(bank), PhaseDepth::from_u8(depth)) else {
         return std::ptr::null_mut();
     };
-
-    let Some(slice) = (unsafe { slice_ref(patterns, num_patterns) }) else {
+    let Some(patterns) = (unsafe { clone_buffers(patterns, num_patterns) }) else {
         return std::ptr::null_mut();
     };
-    let mut patterns = Vec::with_capacity(slice.len());
-    for p in slice {
-        let Some(pattern) = (unsafe { handle_ref(*p) }) else {
-            return std::ptr::null_mut();
-        };
-        patterns.push(pattern.0.clone());
-    }
-    into_handle(Pending::WritePatternCompressed {
+    into_handle(Pending::WritePatternPhase {
         bank,
         index,
-        format,
+        depth,
         intensity: Intensity(intensity),
         patterns,
     })
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pattern_compression_per_frame(format: u8, out: *mut usize) -> i32 {
-    let Some(format) = to_pattern_compression(format) else {
+pub unsafe extern "C" fn autd3_phase_depth_max_count(depth: u8, out: *mut usize) -> i32 {
+    let Some(depth) = PhaseDepth::from_u8(depth) else {
         return AUTD3_ERR_INVALID_ARGUMENT;
     };
-    unsafe { write_out(out, format.per_frame()) }
+    unsafe { write_out(out, depth.max_count()) }
 }
 
 #[unsafe(no_mangle)]
@@ -909,19 +930,18 @@ pub unsafe extern "C" fn autd3_op_config_foci_stm(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_op_change_pattern_bank(
+pub extern "C" fn autd3_op_activate_pattern_bank(
     bank: u8,
     transition_mode: u8,
     transition_value: u64,
-    transition_margin_ns: u32,
 ) -> *mut Pending {
     let (Some(bank), Some(transition_mode)) = (
         to_pattern_bank(bank),
-        to_transition_mode(transition_mode, transition_value, transition_margin_ns),
+        to_transition_mode(transition_mode, transition_value),
     ) else {
         return std::ptr::null_mut();
     };
-    into_handle(Pending::ChangePatternBank {
+    into_handle(Pending::ActivatePatternBank {
         bank,
         transition_mode,
     })
@@ -966,19 +986,18 @@ pub unsafe extern "C" fn autd3_op_config_modulation(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_op_change_modulation_bank(
+pub extern "C" fn autd3_op_activate_modulation_bank(
     bank: u8,
     transition_mode: u8,
     transition_value: u64,
-    transition_margin_ns: u32,
 ) -> *mut Pending {
     let (Some(bank), Some(transition_mode)) = (
         to_modulation_bank(bank),
-        to_transition_mode(transition_mode, transition_value, transition_margin_ns),
+        to_transition_mode(transition_mode, transition_value),
     ) else {
         return std::ptr::null_mut();
     };
-    into_handle(Pending::ChangeModulationBank {
+    into_handle(Pending::ActivateModulationBank {
         bank,
         transition_mode,
     })
@@ -995,6 +1014,11 @@ pub extern "C" fn autd3_op_synchronize() -> *mut Pending {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn autd3_op_release_failsafe() -> *mut Pending {
+    into_handle(Pending::ReleaseFailsafe)
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn autd3_op_nop() -> *mut Pending {
     into_handle(Pending::Nop)
 }
@@ -1002,6 +1026,285 @@ pub extern "C" fn autd3_op_nop() -> *mut Pending {
 #[unsafe(no_mangle)]
 pub extern "C" fn autd3_op_force_fan(value: bool) -> *mut Pending {
     into_handle(Pending::ForceFan(value))
+}
+
+pub struct CpuConfigHandle(pub(crate) CpuConfig);
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_cpu_config_new() -> *mut CpuConfigHandle {
+    into_handle(CpuConfigHandle(CpuConfig::default()))
+}
+
+macro_rules! cpu_config_non_zero_field {
+    ([$($field:tt).+], $ty:ty, $non_zero:ty, $set:ident, $get:ident) => {
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $set(handle: *mut CpuConfigHandle, value: $ty) -> i32 {
+            let (Some(config), Some(value)) =
+                (unsafe { handle_mut(handle) }, <$non_zero>::new(value))
+            else {
+                return AUTD3_ERR_INVALID_ARGUMENT;
+            };
+            config.0.$($field).+ = value;
+            AUTD3_OK
+        }
+
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $get(handle: *const CpuConfigHandle, out: *mut $ty) -> i32 {
+            let Some(config) = (unsafe { handle_ref(handle) }) else {
+                return AUTD3_ERR_INVALID_ARGUMENT;
+            };
+            unsafe { autd3_ffi_abi::write_out(out, config.0.$($field).+.get()) }
+        }
+    };
+}
+
+autd3_ffi_abi::option_handle_field!(
+    CpuConfigHandle,
+    [sys_time_transition_margin],
+    duration,
+    autd3_cpu_config_set_sys_time_transition_margin,
+    autd3_cpu_config_get_sys_time_transition_margin
+);
+cpu_config_non_zero_field!(
+    [fpga_wait_update_max_polls],
+    u32,
+    NonZeroU32,
+    autd3_cpu_config_set_fpga_wait_update_max_polls,
+    autd3_cpu_config_get_fpga_wait_update_max_polls
+);
+cpu_config_non_zero_field!(
+    [fpga_flash_max_polls],
+    u32,
+    NonZeroU32,
+    autd3_cpu_config_set_fpga_flash_max_polls,
+    autd3_cpu_config_get_fpga_flash_max_polls
+);
+autd3_ffi_abi::option_handle_field!(
+    CpuConfigHandle,
+    [sync_guard],
+    duration,
+    autd3_cpu_config_set_sync_guard,
+    autd3_cpu_config_get_sync_guard
+);
+autd3_ffi_abi::option_handle_field!(
+    CpuConfigHandle,
+    [update_activate_delay],
+    duration,
+    autd3_cpu_config_set_update_activate_delay,
+    autd3_cpu_config_get_update_activate_delay
+);
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_cpu_config_set_failsafe_timeout(
+    handle: *mut CpuConfigHandle,
+    ns: u64,
+) -> i32 {
+    let Some(config) = (unsafe { handle_mut(handle) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    config.0.failsafe_timeout = (ns != 0).then(|| Duration::from_nanos(ns));
+    AUTD3_OK
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_cpu_config_get_failsafe_timeout(
+    handle: *const CpuConfigHandle,
+    out: *mut u64,
+) -> i32 {
+    let Some(config) = (unsafe { handle_ref(handle) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    unsafe {
+        autd3_ffi_abi::write_out(
+            out,
+            config.0.failsafe_timeout.map_or(0, autd3_ffi_abi::to_ns),
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_cpu_config_set_ptp_unlock_failsafe_timeout(
+    handle: *mut CpuConfigHandle,
+    ns: u64,
+) -> i32 {
+    let Some(config) = (unsafe { handle_mut(handle) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    config.0.ptp_unlock_failsafe_timeout = (ns != 0).then(|| Duration::from_nanos(ns));
+    AUTD3_OK
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_cpu_config_get_ptp_unlock_failsafe_timeout(
+    handle: *const CpuConfigHandle,
+    out: *mut u64,
+) -> i32 {
+    let Some(config) = (unsafe { handle_ref(handle) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    unsafe {
+        autd3_ffi_abi::write_out(
+            out,
+            config
+                .0
+                .ptp_unlock_failsafe_timeout
+                .map_or(0, autd3_ffi_abi::to_ns),
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_cpu_config_set_fpga_bus_wait(
+    handle: *mut CpuConfigHandle,
+    cycles: u8,
+) -> i32 {
+    let (Some(config), Some(wait)) = (unsafe { handle_mut(handle) }, FpgaBusWait::from_u8(cycles))
+    else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    config.0.fpga_bus_wait = wait;
+    AUTD3_OK
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_cpu_config_get_fpga_bus_wait(
+    handle: *const CpuConfigHandle,
+    out: *mut u8,
+) -> i32 {
+    let Some(config) = (unsafe { handle_ref(handle) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    unsafe { autd3_ffi_abi::write_out(out, config.0.fpga_bus_wait.as_u8()) }
+}
+
+autd3_ffi_abi::option_handle_field!(
+    CpuConfigHandle,
+    [ptp.sync_interval],
+    duration,
+    autd3_cpu_config_set_ptp_sync_interval,
+    autd3_cpu_config_get_ptp_sync_interval
+);
+autd3_ffi_abi::option_handle_field!(
+    CpuConfigHandle,
+    [ptp.tx_timestamp_timeout],
+    duration,
+    autd3_cpu_config_set_ptp_tx_timestamp_timeout,
+    autd3_cpu_config_get_ptp_tx_timestamp_timeout
+);
+autd3_ffi_abi::option_handle_field!(
+    CpuConfigHandle,
+    [ptp.delay_resp_timeout],
+    duration,
+    autd3_cpu_config_set_ptp_delay_resp_timeout,
+    autd3_cpu_config_get_ptp_delay_resp_timeout
+);
+autd3_ffi_abi::option_handle_field!(
+    CpuConfigHandle,
+    [ptp.holdover],
+    duration,
+    autd3_cpu_config_set_ptp_holdover,
+    autd3_cpu_config_get_ptp_holdover
+);
+cpu_config_non_zero_field!(
+    [ptp.lock_samples],
+    u16,
+    NonZeroU16,
+    autd3_cpu_config_set_ptp_lock_samples,
+    autd3_cpu_config_get_ptp_lock_samples
+);
+autd3_ffi_abi::option_handle_field!(
+    CpuConfigHandle,
+    [ptp.step_threshold],
+    duration,
+    autd3_cpu_config_set_ptp_step_threshold,
+    autd3_cpu_config_get_ptp_step_threshold
+);
+autd3_ffi_abi::option_handle_field!(
+    CpuConfigHandle,
+    [ptp.lock_threshold],
+    duration,
+    autd3_cpu_config_set_ptp_lock_threshold,
+    autd3_cpu_config_get_ptp_lock_threshold
+);
+autd3_ffi_abi::option_handle_field!(
+    CpuConfigHandle,
+    [ptp.kp_milli],
+    u32,
+    autd3_cpu_config_set_ptp_kp_milli,
+    autd3_cpu_config_get_ptp_kp_milli
+);
+autd3_ffi_abi::option_handle_field!(
+    CpuConfigHandle,
+    [ptp.ki_milli],
+    u32,
+    autd3_cpu_config_set_ptp_ki_milli,
+    autd3_cpu_config_get_ptp_ki_milli
+);
+autd3_ffi_abi::option_handle_field!(
+    CpuConfigHandle,
+    [ptp.max_freq_ppb],
+    u32,
+    autd3_cpu_config_set_ptp_max_freq_ppb,
+    autd3_cpu_config_get_ptp_max_freq_ppb
+);
+cpu_config_non_zero_field!(
+    [ptp.delay_req_syncs],
+    u16,
+    NonZeroU16,
+    autd3_cpu_config_set_ptp_delay_req_syncs,
+    autd3_cpu_config_get_ptp_delay_req_syncs
+);
+autd3_ffi_abi::option_handle_field!(
+    CpuConfigHandle,
+    [ptp.path_delay_filter_shift],
+    u8,
+    autd3_cpu_config_set_ptp_path_delay_filter_shift,
+    autd3_cpu_config_get_ptp_path_delay_filter_shift
+);
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_cpu_config_set_ptp_pause_quanta(
+    handle: *mut CpuConfigHandle,
+    quanta: u16,
+) -> i32 {
+    let Some(config) = (unsafe { handle_mut(handle) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    config.0.ptp.pause_quanta = NonZeroU16::new(quanta);
+    AUTD3_OK
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_cpu_config_get_ptp_pause_quanta(
+    handle: *const CpuConfigHandle,
+    out: *mut u16,
+) -> i32 {
+    let Some(config) = (unsafe { handle_ref(handle) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    unsafe { autd3_ffi_abi::write_out(out, config.0.ptp.pause_quanta.map_or(0, NonZeroU16::get)) }
+}
+
+autd3_ffi_abi::option_handle_field!(
+    CpuConfigHandle,
+    [ptp.pause_hold_syncs],
+    u16,
+    autd3_cpu_config_set_ptp_pause_hold_syncs,
+    autd3_cpu_config_get_ptp_pause_hold_syncs
+);
+autd3_ffi_abi::option_handle_field!(
+    CpuConfigHandle,
+    [ptp.pause_retry],
+    duration,
+    autd3_cpu_config_set_ptp_pause_retry,
+    autd3_cpu_config_get_ptp_pause_retry
+);
+autd3_ffi_abi::option_handle_lifecycle!(CpuConfigHandle, autd3_cpu_config_free);
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_op_set_cpu_config(config: *const CpuConfigHandle) -> *mut Pending {
+    let Some(config) = (unsafe { handle_ref(config) }) else {
+        return std::ptr::null_mut();
+    };
+    into_handle(Pending::SetCpuConfig(Box::new(config.0)))
 }
 
 #[unsafe(no_mangle)]
@@ -1067,31 +1370,35 @@ fn total_len(lens: &[usize]) -> Option<usize> {
         .try_fold(0usize, |acc, &len| acc.checked_add(len))
 }
 
+unsafe fn per_device<T>(
+    values: *const u8,
+    lens: *const usize,
+    num_devices: usize,
+    convert: impl Fn(u8) -> T,
+) -> Option<Vec<Vec<T>>> {
+    let lens = unsafe { slice_ref(lens, num_devices) }?;
+    let mut rest = unsafe { slice_ref(values, total_len(lens)?) }?;
+    Some(
+        lens.iter()
+            .map(|&len| {
+                let (device, tail) = rest.split_at(len);
+                rest = tail;
+                device.iter().map(|&v| convert(v)).collect()
+            })
+            .collect(),
+    )
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_op_set_output_mask(
     masks: *const u8,
     lens: *const usize,
     num_devices: usize,
 ) -> *mut Pending {
-    let Some(lens) = (unsafe { slice_ref(lens, num_devices) }) else {
-        return std::ptr::null_mut();
-    };
-    let Some(total) = total_len(lens) else {
-        return std::ptr::null_mut();
-    };
-    let Some(slice) = (unsafe { slice_ref(masks, total) }) else {
-        return std::ptr::null_mut();
-    };
-    let mut offset = 0;
-    let masks = lens
-        .iter()
-        .map(|&len| {
-            let device = &slice[offset..offset + len];
-            offset += len;
-            device.iter().map(|&src| src != 0).collect()
-        })
-        .collect();
-    into_handle(Pending::SetOutputMask(masks))
+    match unsafe { per_device(masks, lens, num_devices, |v| v != 0) } {
+        Some(masks) => into_handle(Pending::SetOutputMask(masks)),
+        None => std::ptr::null_mut(),
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -1100,25 +1407,10 @@ pub unsafe extern "C" fn autd3_op_set_phase_correction(
     lens: *const usize,
     num_devices: usize,
 ) -> *mut Pending {
-    let Some(lens) = (unsafe { slice_ref(lens, num_devices) }) else {
-        return std::ptr::null_mut();
-    };
-    let Some(total) = total_len(lens) else {
-        return std::ptr::null_mut();
-    };
-    let Some(slice) = (unsafe { slice_ref(phases, total) }) else {
-        return std::ptr::null_mut();
-    };
-    let mut offset = 0;
-    let phases = lens
-        .iter()
-        .map(|&len| {
-            let device = &slice[offset..offset + len];
-            offset += len;
-            device.iter().map(|&src| Phase(src)).collect()
-        })
-        .collect();
-    into_handle(Pending::SetPhaseCorrection(phases))
+    match unsafe { per_device(phases, lens, num_devices, Phase) } {
+        Some(phases) => into_handle(Pending::SetPhaseCorrection(phases)),
+        None => std::ptr::null_mut(),
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -1127,7 +1419,7 @@ pub unsafe extern "C" fn autd3_op_set_pulse_width_table(table: *const u16) -> *m
         return std::ptr::null_mut();
     };
 
-    let mut t = Box::new([PulseWidth::new(0); PWE_TABLE_SIZE]);
+    let mut t = Box::new(SetPulseWidthTable::empty_table());
     for (dst, &src) in t.iter_mut().zip(slice.iter()) {
         *dst = PulseWidth::new(src);
     }
@@ -1135,15 +1427,10 @@ pub unsafe extern "C" fn autd3_op_set_pulse_width_table(table: *const u16) -> *m
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_set_pulse_width_table_default_table(out: *mut u16) {
-    let table = SetPulseWidthTable::default_table();
-    let Some(out) = (unsafe { slice_mut(out, table.len()) }) else {
-        return;
-    };
-
-    for (dst, pw) in out.iter_mut().zip(table.iter()) {
-        *dst = pw.pulse_width().unwrap_or(0);
-    }
+pub extern "C" fn autd3_op_set_pulse_width_table_default() -> *mut Pending {
+    into_handle(Pending::SetPulseWidthTable(Box::new(
+        *SetPulseWidthTable::default().table,
+    )))
 }
 
 #[unsafe(no_mangle)]
@@ -1176,46 +1463,18 @@ pub unsafe extern "C" fn autd3_op_foci_stm(
     loop_rep: u16,
     transition_mode: u8,
     transition_value: u64,
-    transition_margin_ns: u32,
 ) -> *mut Pending {
-    if num_foci == 0 {
-        return std::ptr::null_mut();
-    }
     let Some(config) = (unsafe { handle_ref(config) }) else {
         return std::ptr::null_mut();
     };
     let (Some(bank), Some(transition_mode)) = (
         to_pattern_bank(bank),
-        to_transition_mode(transition_mode, transition_value, transition_margin_ns),
+        to_transition_mode(transition_mode, transition_value),
     ) else {
         return std::ptr::null_mut();
     };
 
-    let n = usize::from(num_foci);
-    let (Some(points), Some(intensities)) =
-        (unsafe { slice_ref(points, num_samples * n) }, unsafe {
-            slice_ref(intensities, num_samples)
-        })
-    else {
-        return std::ptr::null_mut();
-    };
-    let samples = points
-        .chunks_exact(n)
-        .zip(intensities)
-        .map(|(chunk, intensity)| FociSample {
-            intensity: Intensity(*intensity),
-            points: chunk
-                .iter()
-                .map(|p| {
-                    ControlPoint::new(
-                        Point3::new(p.point[0], p.point[1], p.point[2]),
-                        Phase(p.phase_offset),
-                    )
-                })
-                .collect(),
-        })
-        .collect::<Vec<_>>();
-    let Some(points) = FociPoints::from_samples(&samples, n) else {
+    let Some(points) = (unsafe { foci_points(points, num_samples, num_foci, intensities) }) else {
         return std::ptr::null_mut();
     };
     into_handle(Pending::FociStm {
@@ -1237,30 +1496,23 @@ pub unsafe extern "C" fn autd3_op_pattern_stm(
     num_intensities: usize,
     uniform_intensity: u8,
     bank: u8,
-    mode: u8,
+    phase_depth: u8,
     loop_rep: u16,
     transition_mode: u8,
     transition_value: u64,
-    transition_margin_ns: u32,
 ) -> *mut Pending {
-    let (Some(config), Some(phase_ptrs)) = (unsafe { handle_ref(config) }, unsafe {
-        slice_ref(phases, num_patterns)
-    }) else {
+    let Some(config) = (unsafe { handle_ref(config) }) else {
         return std::ptr::null_mut();
     };
-    let (Some(bank), Some(mode), Some(transition_mode)) = (
+    let (Some(bank), Some(phase_depth), Some(transition_mode)) = (
         to_pattern_bank(bank),
-        to_pattern_stm_mode(mode),
-        to_transition_mode(transition_mode, transition_value, transition_margin_ns),
+        PhaseDepth::from_u8(phase_depth),
+        to_transition_mode(transition_mode, transition_value),
     ) else {
         return std::ptr::null_mut();
     };
 
-    let Some(phases) = phase_ptrs
-        .iter()
-        .map(|&p| unsafe { handle_ref(p) }.map(|p| p.0.clone()))
-        .collect::<Option<Vec<_>>>()
-    else {
+    let Some(phases) = (unsafe { clone_buffers(phases, num_patterns) }) else {
         return std::ptr::null_mut();
     };
     let Some(intensities) = (unsafe {
@@ -1278,7 +1530,7 @@ pub unsafe extern "C" fn autd3_op_pattern_stm(
         phases,
         intensities,
         bank,
-        mode,
+        phase_depth,
         loop_behavior: rep_to_loop_behavior(loop_rep),
         transition_mode,
     })
@@ -1289,367 +1541,78 @@ pub unsafe extern "C" fn autd3_op_free(op: *mut Pending) {
     unsafe { drop_handle(op) }
 }
 
-#[allow(clippy::too_many_lines)]
-fn pending_to_boxed(pending: &Pending) -> Option<BoxedCommand<'_>> {
-    Some(match pending {
-        Pending::Pattern {
-            phases,
-            intensities,
-            bank,
-            transition_mode,
-        } => Pattern {
-            transition_mode: *transition_mode,
-            ..Pattern::with_bank(*bank, phases, intensities.as_ref())
+impl Pending {
+    fn check_each_lengths(&self, num_devices: usize) -> Result<(), String> {
+        match self {
+            Pending::Each(devices) if devices.len() != num_devices => Err(format!(
+                "per-device command holds {} entries for {num_devices} devices",
+                devices.len()
+            )),
+            Pending::Each(devices) => devices
+                .iter()
+                .flatten()
+                .try_for_each(|op| op.check_each_lengths(num_devices)),
+            Pending::Sequence(ops) => ops
+                .iter()
+                .try_for_each(|op| op.check_each_lengths(num_devices)),
+            _ => Ok(()),
         }
-        .boxed(),
-        Pending::Modulation {
-            divider,
-            data,
-            bank,
-            loop_behavior,
-            transition_mode,
-        } => {
-            let divider = NonZeroU16::new(*divider)?;
-            Modulation {
-                bank: *bank,
-                config: SamplingConfig::new(divider),
-                data,
-                loop_behavior: *loop_behavior,
-                transition_mode: *transition_mode,
-            }
-            .boxed()
-        }
-        Pending::WritePatternBuffer {
-            bank,
-            index,
-            phases,
-            intensities,
-        } => WritePatternBuffer::new(*bank, usize::from(*index), phases, intensities.as_ref())
-            .boxed(),
-        Pending::ConfigPattern {
-            bank,
-            config,
-            size,
-            loop_behavior,
-        } => ConfigPattern {
-            bank: *bank,
-            config: *config,
-            size: usize::try_from(*size).unwrap_or(usize::MAX),
-            loop_behavior: *loop_behavior,
-        }
-        .boxed(),
-        Pending::ConfigFociStm {
-            bank,
-            config,
-            size,
-            num_foci,
-            sound_speed,
-            loop_behavior,
-        } => ConfigFociStm {
-            bank: *bank,
-            config: *config,
-            size: usize::try_from(*size).unwrap_or(usize::MAX),
-            num_foci: *num_foci,
-            sound_speed: *sound_speed,
-            loop_behavior: *loop_behavior,
-        }
-        .boxed(),
-        Pending::ChangePatternBank {
-            bank,
-            transition_mode,
-        } => ChangePatternBank {
-            bank: *bank,
-            transition_mode: *transition_mode,
-        }
-        .boxed(),
-        Pending::WriteModulationBuffer { bank, offset, data } => WriteModulationBuffer {
-            bank: *bank,
-            offset: usize::try_from(*offset).unwrap_or(usize::MAX),
-            data,
-        }
-        .boxed(),
-        Pending::ConfigModulation {
-            bank,
-            config,
-            size,
-            loop_behavior,
-        } => ConfigModulation {
-            bank: *bank,
-            config: *config,
-            size: usize::try_from(*size).unwrap_or(usize::MAX),
-            loop_behavior: *loop_behavior,
-        }
-        .boxed(),
-        Pending::ChangeModulationBank {
-            bank,
-            transition_mode,
-        } => ChangeModulationBank {
-            bank: *bank,
-            transition_mode: *transition_mode,
-        }
-        .boxed(),
-        Pending::Clear => Clear.boxed(),
-        Pending::Synchronize => Synchronize.boxed(),
-        Pending::Nop => Nop.boxed(),
-        Pending::ForceFan(value) => ForceFan { value: *value }.boxed(),
-        Pending::SetSilencerCompletion {
-            intensity,
-            phase,
-            strict,
-        } => SetSilencer::new(FixedCompletionTime {
-            intensity: *intensity,
-            phase: *phase,
-            strict_mode: *strict,
-        })
-        .boxed(),
-        Pending::SetSilencerUpdateRate { intensity, phase } => SetSilencer::new(FixedUpdateRate {
-            intensity: *intensity,
-            phase: *phase,
-        })
-        .boxed(),
-        Pending::SetSilencerDisable => SetSilencer::disable().boxed(),
-        Pending::SetGpioOut(outputs) => SetGpioOut { outputs: *outputs }.boxed(),
-        Pending::EmulateGpioIn(values) => EmulateGpioIn { values: *values }.boxed(),
-        Pending::SetOutputMask(masks) => SetOutputMask { masks }.boxed(),
-        Pending::SetPhaseCorrection(phases) => SetPhaseCorrection { phases }.boxed(),
-        Pending::SetPulseWidthTable(t) => SetPulseWidthTable { table: t }.boxed(),
-        Pending::WriteFociBuffer {
-            bank,
-            index_offset,
-            points,
-        } => points.boxed_write_foci(*bank, *index_offset),
-        Pending::WritePatternCompressed {
-            bank,
-            index,
-            format,
-            intensity,
-            patterns,
-        } => {
-            let mut arr: [Option<&[Vec<Phase>]>; 4] = [None; 4];
-            for (slot, buf) in arr.iter_mut().zip(patterns.iter()) {
-                *slot = Some(buf.as_slice());
-            }
-            WritePatternCompressed {
-                bank: *bank,
-                index: usize::try_from(*index).unwrap_or(usize::MAX),
-                format: *format,
-                intensity: *intensity,
-                patterns: arr,
-            }
-            .boxed()
-        }
-        Pending::FociStm {
-            config,
-            points,
-            bank,
-            sound_speed,
-            loop_behavior,
-            transition_mode,
-        } => points.boxed_stm(
-            *config,
-            FociStmOption {
-                bank: *bank,
-                sound_speed: Velocity::from_m_s(*sound_speed),
-                loop_behavior: *loop_behavior,
-                transition_mode: *transition_mode,
-            },
-        ),
-        Pending::PatternStm {
-            config,
-            phases,
-            intensities,
-            bank,
-            mode,
-            loop_behavior,
-            transition_mode,
-        } => PatternStm::new(
-            *config,
-            phases,
-            intensities.as_ref(),
-            PatternStmOption {
-                bank: *bank,
-                mode: *mode,
-                loop_behavior: *loop_behavior,
-                transition_mode: *transition_mode,
-            },
-        )
-        .boxed(),
-        Pending::Each(_) => return None,
-    })
-}
-
-pub struct DatagramBuilder {
-    geometry: Arc<Geometry>,
-    pending: Vec<Pending>,
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_datagram_builder_new(
-    geometry: *const Geometry,
-) -> *mut DatagramBuilder {
-    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
-        return std::ptr::null_mut();
-    };
-
-    into_handle(DatagramBuilder {
-        geometry: Arc::new(geometry.clone()),
-        pending: Vec::new(),
-    })
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_datagram_builder_push(
-    builder: *mut DatagramBuilder,
-    op: *mut Pending,
-) -> i32 {
-    let Some(builder) = (unsafe { handle_mut(builder) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    let Some(op) = (unsafe { take_handle(op) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-
-    builder.pending.push(op);
-    AUTD3_OK
-}
-
-pub(crate) unsafe fn take_each(
-    ops: *const *mut Pending,
-    num_devices: usize,
-) -> Option<Vec<Option<Pending>>> {
-    let slice = unsafe { slice_ref(ops, num_devices) }?;
-    if slice
-        .iter()
-        .filter_map(|&p| unsafe { handle_ref(p.cast_const()) })
-        .any(|pending| matches!(pending, Pending::Each(_)))
-    {
-        return None;
     }
-    Some(slice.iter().map(|&p| unsafe { take_handle(p) }).collect())
-}
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_datagram_builder_push_each(
-    builder: *mut DatagramBuilder,
-    ops: *const *mut Pending,
-    num_devices: usize,
-) -> i32 {
-    let Some(builder) = (unsafe { handle_mut(builder) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    let Some(devices) = (unsafe { take_each(ops, num_devices) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-
-    builder.pending.push(Pending::Each(devices));
-    AUTD3_OK
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_datagram_builder_free(builder: *mut DatagramBuilder) {
-    unsafe { drop_handle(builder) }
-}
-
-#[unsafe(no_mangle)]
-#[allow(clippy::too_many_lines)]
-pub unsafe extern "C" fn autd3_datagram_builder_build(
-    builder: *const DatagramBuilder,
-    client: *const ClientHandle,
-    out_err: *mut c_char,
-    out_err_len: usize,
-) -> *mut Arc<Frames> {
-    let Some(builder) = (unsafe { handle_ref(builder) }) else {
-        unsafe { write_cstr(out_err, out_err_len, "null builder") };
-        return std::ptr::null_mut();
-    };
-
-    let dc_offset_ns =
-        unsafe { handle_ref(client) }.map_or(0, |client: &ClientHandle| client.0.dc_offset_ns());
-    let mut core = CoreDatagramBuilder::with_dc_offset(Arc::clone(&builder.geometry), dc_offset_ns);
-    for pending in &builder.pending {
-        match pending {
+    #[allow(clippy::too_many_lines)]
+    fn boxed(&self) -> BoxedCommand<'_> {
+        match self {
+            Pending::Each(devices) => each(|device| {
+                devices
+                    .get(device.idx())
+                    .and_then(Option::as_ref)
+                    .map(Pending::boxed)
+            })
+            .boxed(),
+            Pending::Sequence(ops) => Sequence(ops).boxed(),
             Pending::Pattern {
                 phases,
                 intensities,
                 bank,
                 transition_mode,
-            } => {
-                core.push(Pattern {
-                    transition_mode: *transition_mode,
-                    ..Pattern::with_bank(*bank, phases, intensities.as_ref())
-                });
+            } => Pattern {
+                transition_mode: *transition_mode,
+                ..Pattern::with_bank(*bank, phases, intensities.as_ref())
             }
+            .boxed(),
             Pending::Modulation {
-                divider,
+                config,
                 data,
                 bank,
                 loop_behavior,
                 transition_mode,
-            } => {
-                let Some(divider) = NonZeroU16::new(*divider) else {
-                    unsafe { write_cstr(out_err, out_err_len, "divider must be >= 1") };
-                    return std::ptr::null_mut();
-                };
-                core.push(Modulation {
-                    bank: *bank,
-                    config: SamplingConfig::new(divider),
-                    data,
-                    loop_behavior: *loop_behavior,
-                    transition_mode: *transition_mode,
-                });
+            } => Modulation {
+                bank: *bank,
+                config: *config,
+                data,
+                loop_behavior: *loop_behavior,
+                transition_mode: *transition_mode,
             }
+            .boxed(),
             Pending::WritePatternBuffer {
                 bank,
                 index,
                 phases,
                 intensities,
-            } => {
-                core.push(WritePatternBuffer::new(
-                    *bank,
-                    usize::from(*index),
-                    phases,
-                    intensities.as_ref(),
-                ));
-            }
-            Pending::WriteFociBuffer {
-                bank,
-                index_offset,
-                points,
-            } => {
-                points.push_write_foci_into(*bank, *index_offset, &mut core);
-            }
-            Pending::WritePatternCompressed {
-                bank,
-                index,
-                format,
-                intensity,
-                patterns,
-            } => {
-                let mut arr: [Option<&[Vec<Phase>]>; 4] = [None; 4];
-                for (slot, buf) in arr.iter_mut().zip(patterns.iter()) {
-                    *slot = Some(buf.as_slice());
-                }
-                core.push(WritePatternCompressed {
-                    bank: *bank,
-                    index: usize::try_from(*index).unwrap_or(usize::MAX),
-                    format: *format,
-                    intensity: *intensity,
-                    patterns: arr,
-                });
-            }
+            } => WritePatternBuffer::new(*bank, usize::from(*index), phases, intensities.as_ref())
+                .boxed(),
             Pending::ConfigPattern {
                 bank,
                 config,
                 size,
                 loop_behavior,
-            } => {
-                core.push(ConfigPattern {
-                    bank: *bank,
-                    config: *config,
-                    size: usize::try_from(*size).unwrap_or(usize::MAX),
-                    loop_behavior: *loop_behavior,
-                });
+            } => ConfigPattern {
+                bank: *bank,
+                config: *config,
+                size: usize::try_from(*size).unwrap_or(usize::MAX),
+                loop_behavior: *loop_behavior,
             }
+            .boxed(),
             Pending::ConfigFociStm {
                 bank,
                 config,
@@ -1657,101 +1620,97 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
                 num_foci,
                 sound_speed,
                 loop_behavior,
-            } => {
-                core.push(ConfigFociStm {
-                    bank: *bank,
-                    config: *config,
-                    size: usize::try_from(*size).unwrap_or(usize::MAX),
-                    num_foci: *num_foci,
-                    sound_speed: *sound_speed,
-                    loop_behavior: *loop_behavior,
-                });
+            } => ConfigFociStm {
+                bank: *bank,
+                config: *config,
+                size: usize::try_from(*size).unwrap_or(usize::MAX),
+                num_foci: *num_foci,
+                sound_speed: *sound_speed,
+                loop_behavior: *loop_behavior,
             }
-            Pending::ChangePatternBank {
+            .boxed(),
+            Pending::ActivatePatternBank {
                 bank,
                 transition_mode,
-            } => {
-                core.push(ChangePatternBank {
-                    bank: *bank,
-                    transition_mode: *transition_mode,
-                });
+            } => ActivatePatternBank {
+                bank: *bank,
+                transition_mode: *transition_mode,
             }
-            Pending::WriteModulationBuffer { bank, offset, data } => {
-                core.push(WriteModulationBuffer {
-                    bank: *bank,
-                    offset: usize::try_from(*offset).unwrap_or(usize::MAX),
-                    data,
-                });
+            .boxed(),
+            Pending::WriteModulationBuffer { bank, offset, data } => WriteModulationBuffer {
+                bank: *bank,
+                offset: usize::try_from(*offset).unwrap_or(usize::MAX),
+                data,
             }
+            .boxed(),
             Pending::ConfigModulation {
                 bank,
                 config,
                 size,
                 loop_behavior,
-            } => {
-                core.push(ConfigModulation {
-                    bank: *bank,
-                    config: *config,
-                    size: usize::try_from(*size).unwrap_or(usize::MAX),
-                    loop_behavior: *loop_behavior,
-                });
+            } => ConfigModulation {
+                bank: *bank,
+                config: *config,
+                size: usize::try_from(*size).unwrap_or(usize::MAX),
+                loop_behavior: *loop_behavior,
             }
-            Pending::ChangeModulationBank {
+            .boxed(),
+            Pending::ActivateModulationBank {
                 bank,
                 transition_mode,
-            } => {
-                core.push(ChangeModulationBank {
-                    bank: *bank,
-                    transition_mode: *transition_mode,
-                });
+            } => ActivateModulationBank {
+                bank: *bank,
+                transition_mode: *transition_mode,
             }
-            Pending::Clear => {
-                core.push(Clear);
-            }
-            Pending::Synchronize => {
-                core.push(Synchronize);
-            }
-            Pending::Nop => {
-                core.push(Nop);
-            }
-            Pending::ForceFan(value) => {
-                core.push(ForceFan { value: *value });
-            }
+            .boxed(),
+            Pending::Clear => Clear.boxed(),
+            Pending::Synchronize => Synchronize.boxed(),
+            Pending::ReleaseFailsafe => ReleaseFailsafe.boxed(),
+            Pending::Nop => Nop.boxed(),
+            Pending::ForceFan(value) => ForceFan { value: *value }.boxed(),
+            Pending::SetCpuConfig(config) => SetCpuConfig::new(**config).boxed(),
             Pending::SetSilencerCompletion {
                 intensity,
                 phase,
                 strict,
-            } => {
-                core.push(SetSilencer::new(FixedCompletionTime {
-                    intensity: *intensity,
-                    phase: *phase,
-                    strict_mode: *strict,
-                }));
-            }
+            } => SetSilencer::new(FixedCompletionTime {
+                intensity: *intensity,
+                phase: *phase,
+                strict_mode: *strict,
+            })
+            .boxed(),
             Pending::SetSilencerUpdateRate { intensity, phase } => {
-                core.push(SetSilencer::new(FixedUpdateRate {
+                SetSilencer::new(FixedUpdateRate {
                     intensity: *intensity,
                     phase: *phase,
-                }));
+                })
+                .boxed()
             }
-            Pending::SetSilencerDisable => {
-                core.push(SetSilencer::disable());
+            Pending::SetSilencerDisable => SetSilencer::disable().boxed(),
+            Pending::SetGpioOut(outputs) => SetGpioOut { outputs: *outputs }.boxed(),
+            Pending::EmulateGpioIn(values) => EmulateGpioIn { values: *values }.boxed(),
+            Pending::SetOutputMask(masks) => SetOutputMask { masks }.boxed(),
+            Pending::SetPhaseCorrection(phases) => SetPhaseCorrection { phases }.boxed(),
+            Pending::SetPulseWidthTable(t) => SetPulseWidthTable { table: t }.boxed(),
+            Pending::WriteFociBuffer {
+                bank,
+                index_offset,
+                points,
+            } => points.boxed_write_foci(*bank, *index_offset),
+            Pending::WritePatternPhase {
+                bank,
+                index,
+                depth,
+                intensity,
+                patterns,
+            } => WritePatternPhase {
+                bank: *bank,
+                index: usize::from(*index),
+                depth: *depth,
+                intensity: *intensity,
+                patterns,
             }
-            Pending::SetGpioOut(outputs) => {
-                core.push(SetGpioOut { outputs: *outputs });
-            }
-            Pending::EmulateGpioIn(values) => {
-                core.push(EmulateGpioIn { values: *values });
-            }
-            Pending::SetOutputMask(masks) => {
-                core.push(SetOutputMask { masks });
-            }
-            Pending::SetPhaseCorrection(phases) => {
-                core.push(SetPhaseCorrection { phases });
-            }
-            Pending::SetPulseWidthTable(t) => {
-                core.push(SetPulseWidthTable { table: t });
-            }
+            .boxed(),
             Pending::FociStm {
                 config,
                 points,
@@ -1759,98 +1718,284 @@ pub unsafe extern "C" fn autd3_datagram_builder_build(
                 sound_speed,
                 loop_behavior,
                 transition_mode,
-            } => {
-                let option = FociStmOption {
+            } => points.boxed_stm(
+                *config,
+                FociStmOption {
                     bank: *bank,
                     sound_speed: Velocity::from_m_s(*sound_speed),
                     loop_behavior: *loop_behavior,
                     transition_mode: *transition_mode,
-                };
-                points.push_into(*config, option, &mut core);
-            }
+                },
+            ),
             Pending::PatternStm {
                 config,
                 phases,
                 intensities,
                 bank,
-                mode,
+                phase_depth,
                 loop_behavior,
                 transition_mode,
-            } => {
-                core.push(PatternStm::new(
-                    *config,
-                    phases,
-                    intensities.as_ref(),
-                    PatternStmOption {
-                        bank: *bank,
-                        mode: *mode,
-                        loop_behavior: *loop_behavior,
-                        transition_mode: *transition_mode,
-                    },
-                ));
-            }
-            Pending::Each(devices) => {
-                core.push_each::<BoxedCommand, _>(|device| {
-                    devices
-                        .get(device.idx())
-                        .and_then(Option::as_ref)
-                        .and_then(pending_to_boxed)
-                });
-            }
+            } => PatternStm::new(
+                *config,
+                phases,
+                intensities.as_ref(),
+                PatternStmOption {
+                    bank: *bank,
+                    phase_depth: *phase_depth,
+                    loop_behavior: *loop_behavior,
+                    transition_mode: *transition_mode,
+                },
+            )
+            .boxed(),
         }
     }
-    match core.build() {
-        Ok(datagrams) => into_handle(Arc::new(datagrams)),
+}
+
+struct Sequence<'a>(&'a [Pending]);
+
+impl<'a> Command<'a> for Sequence<'a> {
+    fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
+        for op in self.0 {
+            expansion.push(op.boxed())?;
+        }
+        Ok(())
+    }
+}
+
+fn is_distinct(ops: &[*mut Pending]) -> bool {
+    ops.iter()
+        .enumerate()
+        .all(|(i, p)| p.is_null() || !ops[..i].contains(p))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_command_each(
+    ops: *const *mut Pending,
+    num_devices: usize,
+) -> *mut Pending {
+    let Some(ops) = (unsafe { slice_ref(ops, num_devices) }) else {
+        return std::ptr::null_mut();
+    };
+    if !is_distinct(ops) {
+        return std::ptr::null_mut();
+    }
+
+    into_handle(Pending::Each(
+        ops.iter().map(|&p| unsafe { take_handle(p) }).collect(),
+    ))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_command_sequence(
+    ops: *const *mut Pending,
+    len: usize,
+) -> *mut Pending {
+    let Some(ops) = (unsafe { slice_ref(ops, len) }) else {
+        return std::ptr::null_mut();
+    };
+    if ops.iter().any(|p| p.is_null()) || !is_distinct(ops) {
+        return std::ptr::null_mut();
+    }
+
+    into_handle(Pending::Sequence(
+        ops.iter()
+            .filter_map(|&p| unsafe { take_handle(p) })
+            .collect(),
+    ))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_frames_encode(
+    geometry: *const Geometry,
+    command: *mut Pending,
+    out_code: *mut i32,
+    out_err: *mut c_char,
+    out_err_len: usize,
+) -> *mut Arc<Frames> {
+    let mut frames = Frames::default();
+    let code = unsafe { encode_into(&mut frames, geometry, command, out_err, out_err_len) };
+    if code == AUTD3_OK {
+        into_handle(Arc::new(frames))
+    } else {
+        unsafe { write_out(out_code, code) };
+        std::ptr::null_mut()
+    }
+}
+
+unsafe fn encode_into(
+    frames: &mut Frames,
+    geometry: *const Geometry,
+    command: *mut Pending,
+    out_err: *mut c_char,
+    out_err_len: usize,
+) -> i32 {
+    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
+        unsafe { write_cstr(out_err, out_err_len, "null geometry") };
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    let Some(command) = (unsafe { take_handle(command) }) else {
+        unsafe { write_cstr(out_err, out_err_len, "null command") };
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+
+    if let Err(message) = command.check_each_lengths(geometry.num_devices()) {
+        unsafe { write_cstr(out_err, out_err_len, &message) };
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    }
+
+    match frames.encode_into(geometry, command.boxed()) {
+        Ok(()) => AUTD3_OK,
         Err(e) => {
             unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
-            std::ptr::null_mut()
+            error_code(&e)
         }
     }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_datagrams_num_frames(datagrams: *const Arc<Frames>) -> usize {
-    let Some(datagrams) = (unsafe { handle_ref::<Arc<Frames>>(datagrams) }) else {
+pub extern "C" fn autd3_frames_new() -> *mut Arc<Frames> {
+    into_handle(Arc::new(Frames::default()))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_frames_encode_into(
+    frames: *mut Arc<Frames>,
+    geometry: *const Geometry,
+    command: *mut Pending,
+    out_err: *mut c_char,
+    out_err_len: usize,
+) -> i32 {
+    let Some(frames) = (unsafe { handle_mut(frames) }) else {
+        unsafe { write_cstr(out_err, out_err_len, "null frames") };
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    if Arc::get_mut(frames).is_none() {
+        *frames = Arc::new(Frames::default());
+    }
+    let Some(frames) = Arc::get_mut(frames) else {
+        unsafe { write_cstr(out_err, out_err_len, "the frames are shared") };
+        return AUTD3_ERR;
+    };
+    unsafe { encode_into(frames, geometry, command, out_err, out_err_len) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_frames_num_frames(frames: *const Arc<Frames>) -> usize {
+    let Some(frames) = (unsafe { handle_ref::<Arc<Frames>>(frames) }) else {
         return 0;
     };
 
-    datagrams.len()
+    frames.len()
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_datagrams_free(datagrams: *mut Arc<Frames>) {
-    unsafe { drop_handle(datagrams) }
+pub unsafe extern "C" fn autd3_frames_free(frames: *mut Arc<Frames>) {
+    unsafe { drop_handle(frames) }
 }
 
-pub struct ClientHandle(Box<dyn ClientBackend>);
+pub struct ClientHandle(Arc<Client>);
 
-pub struct CheckerHandle(Box<dyn CheckerBackend>);
+pub struct CheckerHandle(pub(crate) StateChecker);
 
-pub struct StringArray(Vec<CString>);
+pub struct ResponseToken(Vec<ResponseFuture>);
+
+pub struct StreamToken(StreamFuture);
 
 pub struct ByteArray(Vec<u8>);
 
-pub struct LinkStatus {
+pub struct ResponseHandle(Response);
+
+pub struct BusStatsHandle(BusStats);
+
+pub struct FirmwareVersionArray(Vec<Autd3FirmwareVersion>);
+
+pub struct U32Array(Vec<u32>);
+
+pub struct DeviceStatus {
     devices: Vec<DeviceState>,
-    recoveries: u64,
 }
 
-pub(crate) fn to_cstrings(values: Vec<String>) -> Vec<CString> {
-    values
-        .into_iter()
-        .map(|s| CString::new(s.replace('\0', " ")).unwrap_or_default())
-        .collect()
+pub(crate) fn error_code(e: &Error) -> i32 {
+    match e {
+        Error::Timeout { .. } | Error::SeqMismatch { .. } => AUTD3_ERR_TIMEOUT,
+        Error::DeviceError { .. } | Error::UnexpectedReply { .. } => AUTD3_ERR_DEVICE,
+        Error::Network(_) | Error::DeviceLost { .. } => AUTD3_ERR_NETWORK,
+        Error::UnsupportedFirmware { .. } => AUTD3_ERR_UNSUPPORTED_FIRMWARE,
+        Error::InvalidPayload(_) | Error::Encode(_) => AUTD3_ERR_INVALID_ARGUMENT,
+        _ => AUTD3_ERR,
+    }
+}
+
+fn spawn_completion<T>(
+    ctx: CompletionCtx,
+    future: impl Future<Output = Result<T, Error>> + Send + 'static,
+    into_value: impl FnOnce(T) -> *mut c_void + Send + 'static,
+) {
+    executor().spawn(async move {
+        match future.await {
+            Ok(value) => ctx.ok(into_value(value)),
+            Err(e) => ctx.fail(error_code(&e), &e.to_string()),
+        }
+    });
+}
+
+unsafe fn client_ctx(
+    client: *const ClientHandle,
+    cb: CompletionCallback,
+    user_data: *mut c_void,
+) -> Option<(Arc<Client>, CompletionCtx)> {
+    let ctx = CompletionCtx::new(cb, user_data)?;
+    let Some(client) = (unsafe { handle_ref(client) }) else {
+        ctx.err("null client");
+        return None;
+    };
+    Some((Arc::clone(&client.0), ctx))
+}
+
+unsafe fn send_ctx(
+    client: *const ClientHandle,
+    frames: *const Arc<Frames>,
+    cb: CompletionCallback,
+    user_data: *mut c_void,
+) -> Option<(Arc<Client>, Arc<Frames>, CompletionCtx)> {
+    let ctx = CompletionCtx::new(cb, user_data)?;
+    let (Some(client), Some(frames)) = (unsafe { handle_ref(client) }, unsafe {
+        handle_ref::<Arc<Frames>>(frames)
+    }) else {
+        ctx.err("null argument");
+        return None;
+    };
+    Some((Arc::clone(&client.0), Arc::clone(frames), ctx))
+}
+
+fn frame_span(frames: &Frames, frame: i64) -> (usize, usize) {
+    match usize::try_from(frame) {
+        Ok(index) => (index, 1),
+        Err(_) => (0, frames.len()),
+    }
+}
+
+fn frame_at(frames: &Frames, index: usize) -> Result<autd3_rs::Frame<'_>, Error> {
+    frames.frame(index).ok_or_else(|| {
+        Error::Network(NetworkCause::new(std::io::Error::other(format!(
+            "frame {index} out of range"
+        ))))
+    })
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_client_open(
     geometry: *const Geometry,
-    link: *mut ClientOpener,
+    option: *mut udp::TransportOptionHandle,
     config: *const ClientConfig,
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
     let Some(ctx) = CompletionCtx::new(cb, user_data) else {
+        return;
+    };
+    let Some(udp::TransportOptionHandle(option)) = (unsafe { take_handle(option) }) else {
+        ctx.invalid_argument("null argument");
         return;
     };
     let (Some(geometry), Some(config)) = (unsafe { handle_ref(geometry) }, unsafe {
@@ -1859,18 +2004,32 @@ pub unsafe extern "C" fn autd3_client_open(
         ctx.invalid_argument("null argument");
         return;
     };
-    let Some(opener) = (unsafe { take_handle(link) }) else {
-        ctx.invalid_argument("null argument");
+    let num_devices = geometry.num_devices();
+    if num_devices == 0 || num_devices > autd3_rs::MAX_DEVICES {
+        ctx.invalid_argument(&format!(
+            "the device count {num_devices} is outside 1..={}",
+            autd3_rs::MAX_DEVICES
+        ));
         return;
-    };
+    }
 
-    let fut = opener(geometry.clone(), *config);
-    executor().spawn(async move {
-        match fut.await {
-            Ok(backend) => ctx.ok(into_handle(ClientHandle(backend)).cast()),
-            Err(e) => ctx.err_of(&e),
-        }
-    });
+    let geometry = geometry.clone();
+    let config = *config;
+    spawn_completion(
+        ctx,
+        async move { Client::open(&geometry, &option, config).await },
+        |client| into_handle(ClientHandle(Arc::new(client))).cast(),
+    );
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_client_state_checker(
+    client: *const ClientHandle,
+) -> *mut CheckerHandle {
+    let Some(client) = (unsafe { handle_ref(client) }) else {
+        return std::ptr::null_mut();
+    };
+    into_handle(CheckerHandle(client.0.state_checker()))
 }
 
 #[unsafe(no_mangle)]
@@ -1883,63 +2042,127 @@ pub unsafe extern "C" fn autd3_client_num_devices(client: *const ClientHandle) -
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_client_device_time_now(
+    client: *const ClientHandle,
+    out_ns: *mut u64,
+    out_err: *mut c_char,
+    out_err_len: usize,
+) -> i32 {
+    let Some(client) = (unsafe { handle_ref(client) }) else {
+        unsafe { write_cstr(out_err, out_err_len, "null client") };
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+
+    match client.0.device_time_now() {
+        Ok(now) => unsafe { write_out(out_ns, now.sys_time()) },
+        Err(e) => {
+            unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
+            error_code(&e)
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_client_send_checked(
     client: *const ClientHandle,
-    datagrams: *const Arc<Frames>,
+    frames: *const Arc<Frames>,
     frame: i64,
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
+    let Some((client, frames, ctx)) = (unsafe { send_ctx(client, frames, cb, user_data) }) else {
         return;
     };
-    let (Some(client), Some(datagrams)) = (unsafe { handle_ref(client) }, unsafe {
-        handle_ref::<Arc<Frames>>(datagrams)
-    }) else {
-        ctx.err("null argument");
-        return;
-    };
-
-    let datagrams = datagrams.clone();
-    let frame = usize::try_from(frame).ok();
-    let fut = client.0.send_checked(datagrams, frame);
-    executor().spawn(async move {
-        match fut.await {
-            Ok(()) => ctx.ok(std::ptr::null_mut()),
-            Err(e) => ctx.err_of(&e),
-        }
-    });
+    spawn_completion(
+        ctx,
+        async move {
+            let (start, count) = frame_span(&frames, frame);
+            for index in (start..).take(count) {
+                client
+                    .send_frame(frame_at(&frames, index)?)
+                    .await?
+                    .await?
+                    .check()?;
+            }
+            Ok(())
+        },
+        |()| std::ptr::null_mut(),
+    );
 }
-
-pub struct ResponseToken(ResponseTokenData);
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_client_send(
     client: *const ClientHandle,
-    datagrams: *const Arc<Frames>,
+    frames: *const Arc<Frames>,
     frame: i64,
+    cb: CompletionCallback,
+    user_data: *mut c_void,
+) {
+    let Some((client, frames, ctx)) = (unsafe { send_ctx(client, frames, cb, user_data) }) else {
+        return;
+    };
+    spawn_completion(
+        ctx,
+        async move {
+            let (start, count) = frame_span(&frames, frame);
+            let mut futures = Vec::new();
+            for index in (start..).take(count) {
+                futures.push(client.send_frame(frame_at(&frames, index)?).await?);
+            }
+            Ok(futures)
+        },
+        |futures| into_handle(ResponseToken(futures)).cast(),
+    );
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_client_send_streaming(
+    client: *const ClientHandle,
+    command: *mut Pending,
+    cb: CompletionCallback,
+    user_data: *mut c_void,
+) {
+    let Some((client, ctx)) = (unsafe { client_ctx(client, cb, user_data) }) else {
+        return;
+    };
+    let Some(command) = (unsafe { take_handle(command) }) else {
+        ctx.invalid_argument("null command");
+        return;
+    };
+    if let Err(message) = command.check_each_lengths(client.num_devices()) {
+        ctx.invalid_argument(&message);
+        return;
+    }
+
+    spawn_completion(
+        ctx,
+        async move {
+            let queued = client.send_streaming(command.boxed());
+            queued.await
+        },
+        |stream| into_handle(StreamToken(stream)).cast(),
+    );
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_stream_token_await(
+    token: *mut StreamToken,
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
     let Some(ctx) = CompletionCtx::new(cb, user_data) else {
         return;
     };
-    let (Some(client), Some(datagrams)) = (unsafe { handle_ref(client) }, unsafe {
-        handle_ref::<Arc<Frames>>(datagrams)
-    }) else {
-        ctx.err("null argument");
+    let Some(StreamToken(stream)) = (unsafe { take_handle(token) }) else {
+        ctx.err("null token");
         return;
     };
+    spawn_completion(ctx, stream, |()| std::ptr::null_mut());
+}
 
-    let datagrams = datagrams.clone();
-    let frame = usize::try_from(frame).ok();
-    let fut = client.0.send(datagrams, frame);
-    executor().spawn(async move {
-        match fut.await {
-            Ok(token) => ctx.ok(into_handle(ResponseToken(token)).cast()),
-            Err(e) => ctx.err_of(&e),
-        }
-    });
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_stream_token_free(token: *mut StreamToken) {
+    unsafe { drop_handle(token) }
 }
 
 #[unsafe(no_mangle)]
@@ -1951,19 +2174,56 @@ pub unsafe extern "C" fn autd3_response_token_await(
     let Some(ctx) = CompletionCtx::new(cb, user_data) else {
         return;
     };
-    if token.is_null() {
+    let Some(ResponseToken(futures)) = (unsafe { take_handle(token) }) else {
         ctx.err("null token");
         return;
-    }
+    };
+    spawn_completion(
+        ctx,
+        async move {
+            let mut merged: Option<Response> = None;
+            for future in futures {
+                let response = future.await?;
+                match merged.as_mut() {
+                    None => merged = Some(response),
+                    Some(m) => m.merge(&response),
+                }
+            }
+            Ok(merged.unwrap_or_default())
+        },
+        |response| into_handle(ResponseHandle(response)).cast(),
+    );
+}
 
-    let token = unsafe { *Box::from_raw(token) };
-    let fut = token.0.0;
-    executor().spawn(async move {
-        match fut.await {
-            Ok(response) => ctx.ok(into_handle(ByteArray(response.data().to_vec())).cast()),
-            Err(e) => ctx.err_of(&e),
-        }
-    });
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_response_num_devices(response: *const ResponseHandle) -> usize {
+    unsafe { handle_ref(response) }.map_or(0, |r| r.0.status().len())
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_response_status(response: *const ResponseHandle) -> *const u8 {
+    unsafe { handle_ref(response) }.map_or(std::ptr::null(), |r| r.0.status().as_ptr())
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_response_value_len(
+    response: *const ResponseHandle,
+    device: usize,
+) -> usize {
+    unsafe { handle_ref(response) }.map_or(0, |r| r.0.value(device).len())
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_response_value_data(
+    response: *const ResponseHandle,
+    device: usize,
+) -> *const u8 {
+    unsafe { handle_ref(response) }.map_or(std::ptr::null(), |r| r.0.value(device).as_ptr())
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_response_free(response: *mut ResponseHandle) {
+    unsafe { drop_handle(response) }
 }
 
 #[unsafe(no_mangle)]
@@ -1977,16 +2237,16 @@ pub unsafe extern "C" fn autd3_response_check(
     len: usize,
     out_err: *mut c_char,
     out_err_len: usize,
-) -> bool {
+) -> i32 {
     let response = match unsafe { slice_ref(data, len) } {
-        Some(data) if !data.is_empty() => Response::from_slice(data),
+        Some(data) if !data.is_empty() => Response::from_status(data),
         _ => Response::default(),
     };
     match response.check() {
-        Ok(()) => true,
+        Ok(()) => AUTD3_OK,
         Err(e) => {
             unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
-            false
+            error_code(&e)
         }
     }
 }
@@ -1997,21 +2257,112 @@ pub unsafe extern "C" fn autd3_client_read_firmware_version(
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
+    let Some((client, ctx)) = (unsafe { client_ctx(client, cb, user_data) }) else {
         return;
     };
-    let Some(client) = (unsafe { handle_ref(client) }) else {
-        ctx.err("null client");
-        return;
-    };
+    spawn_completion(
+        ctx,
+        async move { client.read_firmware_version().await },
+        |versions| {
+            let versions = versions.into_iter().map(to_firmware_version).collect();
+            into_handle(FirmwareVersionArray(versions)).cast()
+        },
+    );
+}
 
-    let fut = client.0.read_firmware_version();
-    executor().spawn(async move {
-        match fut.await {
-            Ok(versions) => ctx.ok(into_handle(StringArray(to_cstrings(versions))).cast()),
-            Err(e) => ctx.err_of(&e),
-        }
-    });
+fn to_firmware_version(version: FirmwareVersion) -> Autd3FirmwareVersion {
+    Autd3FirmwareVersion {
+        cpu: [version.cpu.major, version.cpu.minor, version.cpu.patch],
+        fpga: [version.fpga.major, version.fpga.minor, version.fpga.patch],
+        is_emulator: version.is_emulator(),
+        is_supported: version.is_supported(),
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_firmware_version_array_len(
+    array: *const FirmwareVersionArray,
+) -> usize {
+    unsafe { handle_ref(array) }.map_or(0, |a| a.0.len())
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_firmware_version_array_get(
+    array: *const FirmwareVersionArray,
+    index: usize,
+    out: *mut Autd3FirmwareVersion,
+) -> i32 {
+    let Some(version) = (unsafe { handle_ref(array) }).and_then(|a| a.0.get(index)) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    unsafe { write_out(out, *version) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_firmware_version_array_free(array: *mut FirmwareVersionArray) {
+    unsafe { drop_handle(array) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_firmware_version_supported_series(
+    out_major: *mut u8,
+    out_minor: *mut u8,
+) -> i32 {
+    let (major, minor) = FirmwareVersion::SUPPORTED_SERIES;
+    if unsafe { write_out(out_major, major) } != AUTD3_OK {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    }
+    unsafe { write_out(out_minor, minor) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_client_bus_stats(
+    client: *const ClientHandle,
+) -> *mut BusStatsHandle {
+    let Some(client) = (unsafe { handle_ref(client) }) else {
+        return std::ptr::null_mut();
+    };
+    into_handle(BusStatsHandle(client.0.bus_stats()))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_bus_stats_frames(stats: *const BusStatsHandle) -> u64 {
+    unsafe { handle_ref(stats) }.map_or(0, |stats| stats.0.frames())
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_bus_stats_resets(stats: *const BusStatsHandle) -> u64 {
+    unsafe { handle_ref(stats) }.map_or(0, |stats| stats.0.resets())
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_bus_stats_heartbeats(stats: *const BusStatsHandle) -> u64 {
+    unsafe { handle_ref(stats) }.map_or(0, |stats| stats.0.heartbeats())
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_bus_stats_missed_replies(stats: *const BusStatsHandle) -> u64 {
+    unsafe { handle_ref(stats) }.map_or(0, |stats| stats.0.missed_replies())
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_bus_stats_acked_frames(stats: *const BusStatsHandle) -> u64 {
+    unsafe { handle_ref(stats) }.map_or(0, |stats| stats.0.acked_frames())
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_bus_stats_worst_ack_latency_ns(stats: *const BusStatsHandle) -> u64 {
+    unsafe { handle_ref(stats) }.map_or(0, |stats| stats.0.worst_ack_latency_ns())
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_bus_stats_mean_ack_latency_ns(stats: *const BusStatsHandle) -> u64 {
+    unsafe { handle_ref(stats) }.map_or(0, |stats| stats.0.mean_ack_latency_ns())
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_bus_stats_free(stats: *mut BusStatsHandle) {
+    unsafe { drop_handle(stats) }
 }
 
 #[unsafe(no_mangle)]
@@ -2020,72 +2371,30 @@ pub unsafe extern "C" fn autd3_client_read_fpga_state(
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
+    let Some((client, ctx)) = (unsafe { client_ctx(client, cb, user_data) }) else {
         return;
     };
-    let Some(client) = (unsafe { handle_ref(client) }) else {
-        ctx.err("null client");
-        return;
-    };
-
-    let fut = client.0.read_fpga_state();
-    executor().spawn(async move {
-        match fut.await {
-            Ok(states) => ctx.ok(into_handle(ByteArray(states)).cast()),
-            Err(e) => ctx.err_of(&e),
-        }
-    });
+    spawn_completion(
+        ctx,
+        async move { client.read_fpga_state().await },
+        |states| into_handle(ByteArray(states.into_iter().map(FpgaState::raw).collect())).cast(),
+    );
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_client_read_telemetry(
     client: *const ClientHandle,
-    counter: u8,
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
+    let Some((client, ctx)) = (unsafe { client_ctx(client, cb, user_data) }) else {
         return;
     };
-    let Some(client) = (unsafe { handle_ref(client) }) else {
-        ctx.err("null client");
-        return;
-    };
-    let Some(counter) = to_telemetry(counter) else {
-        ctx.err("unknown telemetry counter");
-        return;
-    };
-
-    let fut = client.0.read_telemetry(counter);
-    executor().spawn(async move {
-        match fut.await {
-            Ok(values) => ctx.ok(into_handle(ByteArray(values)).cast()),
-            Err(e) => ctx.err_of(&e),
-        }
-    });
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_read_error_detail(
-    client: *const ClientHandle,
-    cb: CompletionCallback,
-    user_data: *mut c_void,
-) {
-    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
-        return;
-    };
-    let Some(client) = (unsafe { handle_ref(client) }) else {
-        ctx.err("null client");
-        return;
-    };
-
-    let fut = client.0.read_error_detail();
-    executor().spawn(async move {
-        match fut.await {
-            Ok(detail) => ctx.ok(into_handle(ByteArray(detail)).cast()),
-            Err(e) => ctx.err_of(&e),
-        }
-    });
+    spawn_completion(
+        ctx,
+        async move { client.read_telemetry().await },
+        |counters| into_handle(U32Array(flatten_telemetry(&counters))).cast(),
+    );
 }
 
 #[unsafe(no_mangle)]
@@ -2112,31 +2421,47 @@ pub unsafe extern "C" fn autd3_byte_array_free(array: *mut ByteArray) {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_checker(client: *const ClientHandle) -> *mut CheckerHandle {
-    let Some(client) = (unsafe { handle_ref(client) }) else {
-        return std::ptr::null_mut();
+pub unsafe extern "C" fn autd3_u32_array_len(array: *const U32Array) -> usize {
+    let Some(array) = (unsafe { handle_ref(array) }) else {
+        return 0;
     };
 
-    into_handle(CheckerHandle(client.0.checker()))
+    array.0.len()
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_u32_array_data(array: *const U32Array) -> *const u32 {
+    let Some(array) = (unsafe { handle_ref(array) }) else {
+        return std::ptr::null();
+    };
+
+    array.0.as_ptr()
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_u32_array_free(array: *mut U32Array) {
+    unsafe { drop_handle(array) }
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_checker_check(
     checker: *const CheckerHandle,
+    out_code: *mut i32,
     out_err: *mut c_char,
     out_err_len: usize,
-) -> *mut LinkStatus {
+) -> *mut DeviceStatus {
     let Some(checker) = (unsafe { handle_ref(checker) }) else {
+        unsafe { write_out(out_code, AUTD3_ERR_INVALID_ARGUMENT) };
         unsafe { write_cstr(out_err, out_err_len, "null checker") };
         return std::ptr::null_mut();
     };
 
-    match checker.0.check() {
-        Ok(status) => into_handle(LinkStatus {
-            devices: status.devices,
-            recoveries: status.recoveries,
+    match checker.0.check().map_err(Error::from) {
+        Ok(status) => into_handle(DeviceStatus {
+            devices: status.devices().to_vec(),
         }),
         Err(e) => {
+            unsafe { write_out(out_code, error_code(&e)) };
             unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
             std::ptr::null_mut()
         }
@@ -2149,25 +2474,16 @@ pub unsafe extern "C" fn autd3_checker_free(checker: *mut CheckerHandle) {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_stop(
+pub unsafe extern "C" fn autd3_client_silent_stop(
     client: *const ClientHandle,
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
+    let Some((client, ctx)) = (unsafe { client_ctx(client, cb, user_data) }) else {
         return;
     };
-    let Some(client) = (unsafe { handle_ref(client) }) else {
-        ctx.err("null client");
-        return;
-    };
-
-    let fut = client.0.stop();
-    executor().spawn(async move {
-        match fut.await {
-            Ok(()) => ctx.ok(std::ptr::null_mut()),
-            Err(e) => ctx.err_of(&e),
-        }
+    spawn_completion(ctx, async move { client.silent_stop().await }, |()| {
+        std::ptr::null_mut()
     });
 }
 
@@ -2177,20 +2493,11 @@ pub unsafe extern "C" fn autd3_client_close(
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
+    let Some((client, ctx)) = (unsafe { client_ctx(client, cb, user_data) }) else {
         return;
     };
-    let Some(client) = (unsafe { handle_ref(client) }) else {
-        ctx.err("null client");
-        return;
-    };
-
-    let fut = client.0.close();
-    executor().spawn(async move {
-        match fut.await {
-            Ok(()) => ctx.ok(std::ptr::null_mut()),
-            Err(e) => ctx.err_of(&e),
-        }
+    spawn_completion(ctx, async move { client.close().await }, |()| {
+        std::ptr::null_mut()
     });
 }
 
@@ -2200,42 +2507,7 @@ pub unsafe extern "C" fn autd3_client_free(client: *mut ClientHandle) {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_string_array_len(array: *const StringArray) -> usize {
-    let Some(array) = (unsafe { handle_ref(array) }) else {
-        return 0;
-    };
-
-    array.0.len()
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_string_array_get(
-    array: *const StringArray,
-    index: usize,
-) -> *const c_char {
-    let Some(array) = (unsafe { handle_ref(array) }) else {
-        return std::ptr::null();
-    };
-
-    array.0.get(index).map_or(std::ptr::null(), |s| s.as_ptr())
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_string_array_free(array: *mut StringArray) {
-    unsafe { drop_handle(array) }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_link_status_recoveries(status: *const LinkStatus) -> u64 {
-    let Some(status) = (unsafe { handle_ref(status) }) else {
-        return 0;
-    };
-
-    status.recoveries
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_link_status_num_devices(status: *const LinkStatus) -> usize {
+pub unsafe extern "C" fn autd3_device_status_num_devices(status: *const DeviceStatus) -> usize {
     let Some(status) = (unsafe { handle_ref(status) }) else {
         return 0;
     };
@@ -2244,11 +2516,10 @@ pub unsafe extern "C" fn autd3_link_status_num_devices(status: *const LinkStatus
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_link_status_device_state(
-    status: *const LinkStatus,
+pub unsafe extern "C" fn autd3_device_status_device_state(
+    status: *const DeviceStatus,
     index: usize,
     out_kind: *mut u8,
-    out_bits: *mut u8,
 ) -> bool {
     let Some(status) = (unsafe { handle_ref(status) }) else {
         return false;
@@ -2257,19 +2528,19 @@ pub unsafe extern "C" fn autd3_link_status_device_state(
     let Some(state) = status.devices.get(index) else {
         return false;
     };
-    let (kind, bits) = match state {
-        DeviceState::Op => (0, 0),
-        DeviceState::SafeOp => (1, 0),
-        DeviceState::SafeOpError => (2, 0),
-        DeviceState::Lost => (3, 0),
-        DeviceState::Other(bits) => (4, *bits),
-    };
+    unsafe { write_out(out_kind, device_state_code(*state)) == AUTD3_OK }
+}
 
-    unsafe { write_out(out_kind, kind) == AUTD3_OK && write_out(out_bits, bits) == AUTD3_OK }
+fn device_state_code(state: DeviceState) -> u8 {
+    match state {
+        DeviceState::Ready => 0,
+        DeviceState::Syncing => 1,
+        _ => 2,
+    }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_link_status_free(status: *mut LinkStatus) {
+pub unsafe extern "C" fn autd3_device_status_free(status: *mut DeviceStatus) {
     unsafe { drop_handle(status) }
 }
 
@@ -2278,8 +2549,6 @@ autd3_ffi_abi::export_abi_version!();
 #[cfg(test)]
 mod tests {
     use super::*;
-    use autd3_ffi_abi::{AUTD3_RT_PRIORITY_DEFAULT, AUTD3_RT_PRIORITY_MAX, AUTD3_RT_PRIORITY_MIN};
-    use autd3_rs::RtPriority;
 
     #[test]
     fn a_new_client_config_matches_the_rust_default() {
@@ -2287,15 +2556,9 @@ mod tests {
         let config = unsafe { take_handle(handle) }.unwrap();
         let expected = ClientConfig::default();
 
-        assert_eq!(expected.timeout_cycles, config.timeout_cycles);
+        assert_eq!(expected.ack_timeout, config.ack_timeout);
         assert_eq!(expected.max_inflight, config.max_inflight);
         assert_eq!(expected.max_resync_rounds, config.max_resync_rounds);
-        assert_eq!(expected.low_latency, config.low_latency);
-        assert_eq!(expected.reset_resend_cycles, config.reset_resend_cycles);
-        assert_eq!(expected.rt_priority, config.rt_priority);
-        assert_eq!(expected.rt_policy, config.rt_policy);
-        assert_eq!(expected.rt_affinity, config.rt_affinity);
-        assert_eq!(expected.validate_state, config.validate_state);
         assert_eq!(
             expected.require_supported_firmware,
             config.require_supported_firmware
@@ -2303,45 +2566,10 @@ mod tests {
     }
 
     #[test]
-    fn the_default_rt_priority_mode_keeps_the_rust_default() {
-        let handle = autd3_client_config_new();
-        assert_eq!(AUTD3_OK, unsafe {
-            autd3_client_config_set_rt_priority(handle, AUTD3_RT_PRIORITY_DEFAULT, 0)
-        });
-        let config = unsafe { take_handle(handle) }.unwrap();
-        assert_eq!(ClientConfig::default().rt_priority, config.rt_priority);
-        assert!(config.rt_priority.is_some());
-    }
-
-    #[test]
-    fn the_min_and_max_rt_priority_modes_select_the_bounds() {
-        for (mode, expected) in [
-            (AUTD3_RT_PRIORITY_MIN, RtPriority::MIN),
-            (AUTD3_RT_PRIORITY_MAX, RtPriority::MAX),
-        ] {
-            let handle = autd3_client_config_new();
-            assert_eq!(AUTD3_OK, unsafe {
-                autd3_client_config_set_rt_priority(handle, mode, 0)
-            });
-            let config = unsafe { take_handle(handle) }.unwrap();
-            assert_eq!(Some(expected), config.rt_priority);
-        }
-    }
-
-    #[test]
-    fn an_unknown_rt_priority_mode_is_rejected() {
-        let handle = autd3_client_config_new();
-        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
-            autd3_client_config_set_rt_priority(handle, 9, 0)
-        });
-        unsafe { autd3_client_config_free(handle) };
-    }
-
-    #[test]
     fn a_zero_nonzero_setter_argument_is_rejected() {
         let handle = autd3_client_config_new();
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
-            autd3_client_config_set_timeout_cycles(handle, 0)
+            autd3_client_config_set_ack_timeout_ns(handle, 0)
         });
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
             autd3_client_config_set_max_inflight(handle, 0)
@@ -2350,43 +2578,471 @@ mod tests {
     }
 
     #[test]
+    fn a_new_cpu_config_matches_the_rust_default() {
+        let handle = autd3_cpu_config_new();
+        let mut ns = 0u64;
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_cpu_config_get_sys_time_transition_margin(handle, &raw mut ns)
+        });
+        assert_eq!(
+            CpuConfig::default().sys_time_transition_margin,
+            Duration::from_nanos(ns)
+        );
+        let config = unsafe { take_handle(handle) }.unwrap();
+        assert_eq!(CpuConfig::default(), config.0);
+    }
+
+    #[test]
+    fn cpu_config_setters_reach_their_fields() {
+        let handle = autd3_cpu_config_new();
+        unsafe {
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_set_sys_time_transition_margin(handle, 0)
+            );
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_set_fpga_wait_update_max_polls(handle, 11)
+            );
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_set_fpga_flash_max_polls(handle, 12)
+            );
+            assert_eq!(AUTD3_OK, autd3_cpu_config_set_sync_guard(handle, 13));
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_set_update_activate_delay(handle, 14_000_000)
+            );
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_set_failsafe_timeout(handle, 25_000_000)
+            );
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_set_ptp_unlock_failsafe_timeout(handle, 26_000_000)
+            );
+            assert_eq!(AUTD3_OK, autd3_cpu_config_set_fpga_bus_wait(handle, 2));
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_set_ptp_sync_interval(handle, 15_000_000)
+            );
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_set_ptp_tx_timestamp_timeout(handle, 16_000_000)
+            );
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_set_ptp_delay_resp_timeout(handle, 17_000_000)
+            );
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_set_ptp_holdover(handle, 18_000_000)
+            );
+            assert_eq!(AUTD3_OK, autd3_cpu_config_set_ptp_lock_samples(handle, 19));
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_set_ptp_step_threshold(handle, 20)
+            );
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_set_ptp_lock_threshold(handle, 21)
+            );
+            assert_eq!(AUTD3_OK, autd3_cpu_config_set_ptp_kp_milli(handle, 22));
+            assert_eq!(AUTD3_OK, autd3_cpu_config_set_ptp_ki_milli(handle, 23));
+            assert_eq!(AUTD3_OK, autd3_cpu_config_set_ptp_max_freq_ppb(handle, 24));
+        }
+        let op = unsafe { autd3_op_set_cpu_config(handle) };
+        assert!(!op.is_null());
+        unsafe { autd3_op_free(op) };
+
+        let config = unsafe { take_handle(handle) }.unwrap().0;
+        assert_eq!(
+            config,
+            CpuConfig {
+                sys_time_transition_margin: Duration::ZERO,
+                fpga_wait_update_max_polls: NonZeroU32::new(11).unwrap(),
+                fpga_flash_max_polls: NonZeroU32::new(12).unwrap(),
+                sync_guard: Duration::from_nanos(13),
+                update_activate_delay: Duration::from_millis(14),
+                failsafe_timeout: Some(Duration::from_millis(25)),
+                ptp_unlock_failsafe_timeout: Some(Duration::from_millis(26)),
+                fpga_bus_wait: autd3_rs::commands::FpgaBusWait::Cycles2,
+                ptp: autd3_rs::commands::PtpConfig {
+                    sync_interval: Duration::from_millis(15),
+                    tx_timestamp_timeout: Duration::from_millis(16),
+                    delay_resp_timeout: Duration::from_millis(17),
+                    holdover: Duration::from_millis(18),
+                    lock_samples: NonZeroU16::new(19).unwrap(),
+                    step_threshold: Duration::from_nanos(20),
+                    lock_threshold: Duration::from_nanos(21),
+                    kp_milli: 22,
+                    ki_milli: 23,
+                    max_freq_ppb: 24,
+                    ..autd3_rs::commands::PtpConfig::default()
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn the_ptp_delay_request_and_pause_fields_reach_the_config() {
+        let handle = autd3_cpu_config_new();
+        unsafe {
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_set_ptp_delay_req_syncs(handle, 26)
+            );
+            assert_eq!(
+                AUTD3_ERR_INVALID_ARGUMENT,
+                autd3_cpu_config_set_ptp_delay_req_syncs(handle, 0)
+            );
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_set_ptp_path_delay_filter_shift(handle, 4)
+            );
+            assert_eq!(AUTD3_OK, autd3_cpu_config_set_ptp_pause_quanta(handle, 27));
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_set_ptp_pause_hold_syncs(handle, 28)
+            );
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_set_ptp_pause_retry(handle, 29_000_000)
+            );
+        }
+        let config = unsafe { take_handle(handle) }.unwrap().0;
+        assert_eq!(
+            config.ptp,
+            autd3_rs::commands::PtpConfig {
+                delay_req_syncs: NonZeroU16::new(26).unwrap(),
+                path_delay_filter_shift: 4,
+                pause_quanta: NonZeroU16::new(27),
+                pause_hold_syncs: 28,
+                pause_retry: Duration::from_millis(29),
+                ..autd3_rs::commands::PtpConfig::default()
+            }
+        );
+    }
+
+    #[test]
+    fn a_zero_pause_quanta_disables_the_pause() {
+        let handle = autd3_cpu_config_new();
+        let mut quanta = 0u16;
+        unsafe {
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_get_ptp_pause_quanta(handle, &raw mut quanta)
+            );
+            assert_eq!(quanta, 48);
+            assert_eq!(AUTD3_OK, autd3_cpu_config_set_ptp_pause_quanta(handle, 0));
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_get_ptp_pause_quanta(handle, &raw mut quanta)
+            );
+            assert_eq!(quanta, 0);
+        }
+        let config = unsafe { take_handle(handle) }.unwrap().0;
+        assert_eq!(config.ptp.pause_quanta, None);
+    }
+
+    #[test]
+    fn a_zero_failsafe_timeout_disables_the_failsafe() {
+        let handle = autd3_cpu_config_new();
+        let mut ns = 0u64;
+        unsafe {
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_get_failsafe_timeout(handle, &raw mut ns)
+            );
+            assert_eq!(ns, 500_000_000);
+            assert_eq!(AUTD3_OK, autd3_cpu_config_set_failsafe_timeout(handle, 0));
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_get_failsafe_timeout(handle, &raw mut ns)
+            );
+            assert_eq!(ns, 0);
+            assert_eq!(
+                AUTD3_ERR_INVALID_ARGUMENT,
+                autd3_cpu_config_set_failsafe_timeout(std::ptr::null_mut(), 0)
+            );
+        }
+        let config = unsafe { take_handle(handle) }.unwrap().0;
+        assert_eq!(config.failsafe_timeout, None);
+    }
+
+    #[test]
+    fn the_fpga_bus_wait_is_three_cycles_until_it_is_set_and_rejects_other_counts() {
+        let handle = autd3_cpu_config_new();
+        let mut cycles = 0u8;
+        unsafe {
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_get_fpga_bus_wait(handle, &raw mut cycles)
+            );
+            assert_eq!(cycles, 3);
+            for invalid in [0, 1, 4, u8::MAX] {
+                assert_eq!(
+                    AUTD3_ERR_INVALID_ARGUMENT,
+                    autd3_cpu_config_set_fpga_bus_wait(handle, invalid)
+                );
+            }
+            assert_eq!(AUTD3_OK, autd3_cpu_config_set_fpga_bus_wait(handle, 2));
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_get_fpga_bus_wait(handle, &raw mut cycles)
+            );
+            assert_eq!(cycles, 2);
+            assert_eq!(
+                AUTD3_ERR_INVALID_ARGUMENT,
+                autd3_cpu_config_set_fpga_bus_wait(std::ptr::null_mut(), 2)
+            );
+        }
+        let config = unsafe { take_handle(handle) }.unwrap().0;
+        assert_eq!(
+            config.fpga_bus_wait,
+            autd3_rs::commands::FpgaBusWait::Cycles2
+        );
+    }
+
+    #[test]
+    fn the_ptp_unlock_failsafe_timeout_is_zero_until_it_is_set() {
+        let handle = autd3_cpu_config_new();
+        let mut ns = 1u64;
+        unsafe {
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_get_ptp_unlock_failsafe_timeout(handle, &raw mut ns)
+            );
+            assert_eq!(ns, 0);
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_set_ptp_unlock_failsafe_timeout(handle, 2_000_000_000)
+            );
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_get_ptp_unlock_failsafe_timeout(handle, &raw mut ns)
+            );
+            assert_eq!(ns, 2_000_000_000);
+            assert_eq!(
+                AUTD3_ERR_INVALID_ARGUMENT,
+                autd3_cpu_config_set_ptp_unlock_failsafe_timeout(std::ptr::null_mut(), 0)
+            );
+        }
+        let config = unsafe { take_handle(handle) }.unwrap().0;
+        assert_eq!(
+            config.ptp_unlock_failsafe_timeout,
+            Some(Duration::from_secs(2))
+        );
+    }
+
+    #[test]
+    fn a_zero_cpu_config_count_is_rejected_and_keeps_the_value() {
+        let handle = autd3_cpu_config_new();
+        unsafe {
+            assert_eq!(
+                AUTD3_ERR_INVALID_ARGUMENT,
+                autd3_cpu_config_set_fpga_wait_update_max_polls(handle, 0)
+            );
+            assert_eq!(
+                AUTD3_ERR_INVALID_ARGUMENT,
+                autd3_cpu_config_set_fpga_flash_max_polls(handle, 0)
+            );
+            assert_eq!(
+                AUTD3_ERR_INVALID_ARGUMENT,
+                autd3_cpu_config_set_ptp_lock_samples(handle, 0)
+            );
+        }
+        let config = unsafe { take_handle(handle) }.unwrap().0;
+        assert_eq!(CpuConfig::default(), config);
+        assert!(unsafe { autd3_op_set_cpu_config(std::ptr::null()) }.is_null());
+    }
+
+    #[test]
     fn unknown_enum_discriminants_are_rejected() {
         assert!(to_pattern_bank(2).is_none());
         assert!(to_modulation_bank(2).is_none());
         assert!(to_gpio_in(4).is_none());
-        assert!(to_telemetry(0x07).is_none());
-        assert!(to_pattern_stm_mode(3).is_none());
-        assert!(to_pattern_compression(0).is_none());
-        assert!(to_transition_mode(0x03, 0, 0).is_none());
+        assert!(PhaseDepth::from_u8(0).is_none());
+        assert!(PhaseDepth::from_u8(2).is_none());
+        assert!(to_transition_mode(0x03, 0).is_none());
         assert!(to_gpio_out(&Autd3GpioOut { kind: 14, value: 0 }).is_none());
     }
 
     #[test]
-    fn every_telemetry_counter_round_trips() {
-        assert_eq!(Some(Telemetry::SyncResync), to_telemetry(0x06));
-        for counter in 0x00..=0x06u8 {
-            assert!(to_telemetry(counter).is_some());
+    fn telemetry_is_flattened_to_every_counter_of_every_device() {
+        let devices = [TelemetryCounters::default(); 2];
+        assert_eq!(
+            flatten_telemetry(&devices),
+            vec![0; devices.len() * autd3_rs::Telemetry::ALL.len()]
+        );
+    }
+
+    #[test]
+    fn a_lost_device_is_reported_as_a_network_error() {
+        assert_eq!(
+            error_code(&Error::DeviceLost { device: 3 }),
+            AUTD3_ERR_NETWORK
+        );
+        assert_eq!(
+            error_code(&Error::UnexpectedReply { device: 3 }),
+            AUTD3_ERR_DEVICE
+        );
+    }
+
+    #[test]
+    fn device_states_have_stable_codes() {
+        assert_eq!(device_state_code(DeviceState::Ready), 0);
+        assert_eq!(device_state_code(DeviceState::Syncing), 1);
+        assert_eq!(device_state_code(DeviceState::Lost), 2);
+    }
+
+    #[test]
+    fn a_period_crosses_the_boundary_in_nanoseconds() {
+        let mut err = [0 as c_char; 256];
+        for (period_ns, size, expected) in [
+            (100_000_000u64, 4usize, 1000u16),
+            (333_000_000, 3, 4440),
+            (1_000_000, 1, 40),
+        ] {
+            let handle = autd3_stm_config_period(period_ns);
+            let mut out = 0u16;
+            assert_eq!(AUTD3_OK, unsafe {
+                autd3_stm_config_into_sampling_config(
+                    handle,
+                    size,
+                    &raw mut out,
+                    err.as_mut_ptr(),
+                    err.len(),
+                )
+            });
+            assert_eq!(expected, out);
+            unsafe { autd3_stm_config_free(handle) };
         }
     }
 
     #[test]
-    fn a_non_representable_period_is_rejected_instead_of_panicking() {
-        for secs in [-1.0, f32::NAN, f32::INFINITY, -f32::MAX, f32::MAX] {
-            assert!(autd3_stm_config_period(secs).is_null());
-            assert!(autd3_stm_config_period_nearest(secs).is_null());
-        }
-
-        let handle = autd3_stm_config_period(0.001);
-        assert!(!handle.is_null());
+    fn an_indivisible_period_reports_the_rust_message() {
+        let mut err = [0 as c_char; 256];
+        let handle = autd3_stm_config_period(100_000_001);
+        let mut out = 0u16;
+        assert_eq!(AUTD3_ERR, unsafe {
+            autd3_stm_config_into_sampling_config(
+                handle,
+                4,
+                &raw mut out,
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        });
+        let message = unsafe { std::ffi::CStr::from_ptr(err.as_ptr()) }.to_string_lossy();
+        assert!(message.contains("must be divisible"), "{message}");
         unsafe { autd3_stm_config_free(handle) };
     }
 
     #[test]
+    fn the_client_config_getters_read_the_rust_default() {
+        let handle = autd3_client_config_new();
+        let expected = ClientConfig::default();
+        let mut ns = 0u64;
+        let mut inflight = 0usize;
+        let mut rounds = 0u32;
+        let mut require = true;
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_client_config_get_ack_timeout_ns(handle, &raw mut ns)
+        });
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_client_config_get_max_inflight(handle, &raw mut inflight)
+        });
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_client_config_get_max_resync_rounds(handle, &raw mut rounds)
+        });
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_client_config_get_require_supported_firmware(handle, &raw mut require)
+        });
+        assert_eq!(expected.ack_timeout, Duration::from_nanos(ns));
+        assert_eq!(expected.max_inflight.get(), inflight);
+        assert_eq!(expected.max_resync_rounds.get(), rounds);
+        assert_eq!(expected.require_supported_firmware, require);
+        unsafe { autd3_client_config_free(handle) };
+    }
+
+    #[test]
+    fn the_silencer_default_matches_rust() {
+        let expected = FixedCompletionTime::default();
+        let (mut intensity, mut phase, mut strict) = (0u64, 0u64, false);
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_silencer_default_completion_time(
+                &raw mut intensity,
+                &raw mut phase,
+                &raw mut strict,
+            )
+        });
+        assert_eq!(expected.intensity, Duration::from_nanos(intensity));
+        assert_eq!(expected.phase, Duration::from_nanos(phase));
+        assert_eq!(expected.strict_mode, strict);
+    }
+
+    #[test]
+    fn telemetry_all_lists_every_counter_in_id_order() {
+        let mut ids = vec![0xFFu8; autd3_telemetry_count()];
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_telemetry_all(ids.as_mut_ptr(), ids.len())
+        });
+        let expected: Vec<u8> = Telemetry::ALL.iter().map(|t| t.as_u8()).collect();
+        assert_eq!(expected, ids);
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_telemetry_all(ids.as_mut_ptr(), ids.len() + 1)
+        });
+    }
+
+    #[test]
+    fn fpga_state_getters_follow_rust_for_every_raw_value() {
+        for raw in 0..=u8::MAX {
+            let state = FpgaState(raw);
+            assert_eq!(
+                state.is_thermal_asserted(),
+                autd3_fpga_state_is_thermal_asserted(raw)
+            );
+            assert_eq!(
+                state.current_mod_bank() == ModulationBank::B1,
+                autd3_fpga_state_current_mod_bank(raw) == 1
+            );
+            assert_eq!(
+                state.current_pattern_bank() == PatternBank::B1,
+                autd3_fpga_state_current_pattern_bank(raw) == 1
+            );
+            assert_eq!(
+                state.is_pattern_mode(),
+                autd3_fpga_state_is_pattern_mode(raw)
+            );
+            assert_eq!(
+                state.is_pattern_stopped(),
+                autd3_fpga_state_is_pattern_stopped(raw)
+            );
+            assert_eq!(state.is_mod_stopped(), autd3_fpga_state_is_mod_stopped(raw));
+            assert_eq!(
+                state.is_transition_pending(),
+                autd3_fpga_state_is_transition_pending(raw)
+            );
+            assert_eq!(
+                state.is_failsafe_active(),
+                autd3_fpga_state_is_failsafe_active(raw)
+            );
+        }
+    }
+
+    #[test]
     fn a_size_wider_than_u32_is_rejected_instead_of_dividing_by_zero() {
-        let handle = autd3_stm_config_period(1.0);
+        let handle = autd3_stm_config_period(1_000_000_000);
         let mut out = 0u16;
-        assert_eq!(-1, unsafe {
-            autd3_stm_config_into_sampling_config(handle, 1usize << 32, &raw mut out)
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_stm_config_into_sampling_config(
+                handle,
+                1usize << 32,
+                &raw mut out,
+                std::ptr::null_mut(),
+                0,
+            )
         });
         unsafe { autd3_stm_config_free(handle) };
     }
@@ -2411,77 +3067,336 @@ mod tests {
         );
     }
 
-    fn one_device_geometry() -> *mut Geometry {
-        into_handle(Geometry::new(vec![autd3_rs::Autd3::new(
-            Point3::origin(),
-            autd3_rs::UnitQuaternion::identity(),
-        )]))
+    fn geometry_of(num_devices: usize) -> *mut Geometry {
+        into_handle(Geometry::new(
+            (0..num_devices)
+                .map(|_| {
+                    autd3_rs::Autd3::new(Point3::origin(), autd3_rs::UnitQuaternion::identity())
+                })
+                .collect(),
+        ))
     }
 
-    #[test]
-    fn a_push_that_fails_leaves_the_op_handle_with_the_caller() {
-        let op = autd3_op_clear();
-        assert!(!op.is_null());
-
-        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
-            autd3_datagram_builder_push(std::ptr::null_mut(), op)
-        });
-
-        let geometry = one_device_geometry();
-        let builder = unsafe { autd3_datagram_builder_new(geometry) };
-        assert_eq!(AUTD3_OK, unsafe {
-            autd3_datagram_builder_push(builder, op)
-        });
-
-        unsafe { autd3_datagram_builder_free(builder) };
-        unsafe { drop_handle(geometry) };
-    }
-
-    #[test]
-    fn a_rejected_push_each_leaves_every_op_handle_with_the_caller() {
-        let nested: *mut Pending = into_handle(Pending::Each(vec![None]));
-        let ops = [nested];
-
-        assert!(unsafe { take_each(ops.as_ptr(), ops.len()) }.is_none());
-
-        let geometry = one_device_geometry();
-        let builder = unsafe { autd3_datagram_builder_new(geometry) };
-        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
-            autd3_datagram_builder_push_each(builder, ops.as_ptr(), ops.len())
-        });
-
-        unsafe { autd3_op_free(nested) };
-        unsafe { autd3_datagram_builder_free(builder) };
-        unsafe { drop_handle(geometry) };
-    }
-
-    #[test]
-    fn a_failed_open_leaves_the_link_handle_with_the_caller() {
-        extern "C" fn never_reports_success(
-            code: i32,
-            _value: *mut c_void,
-            _msg: *const c_char,
-            _user_data: *mut c_void,
-        ) {
-            assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
-        }
-
-        let opener: ClientOpener = Box::new(|_geometry, _config| unreachable!());
-        let opener = into_handle(opener);
-        let config = autd3_client_config_new();
-
+    fn encode(geometry: *const Geometry, command: *mut Pending) -> *mut Arc<Frames> {
         unsafe {
-            autd3_client_open(
-                std::ptr::null(),
-                opener,
-                config,
-                Some(never_reports_success),
+            autd3_frames_encode(
+                geometry,
+                command,
                 std::ptr::null_mut(),
-            );
+                std::ptr::null_mut(),
+                0,
+            )
         }
+    }
 
-        assert!(unsafe { take_handle(opener) }.is_some());
-        unsafe { autd3_client_config_free(config) };
+    fn num_frames_of(geometry: *const Geometry, command: *mut Pending) -> usize {
+        let frames = encode(geometry, command);
+        assert!(!frames.is_null());
+        let len = unsafe { autd3_frames_num_frames(frames) };
+        unsafe { autd3_frames_free(frames) };
+        len
+    }
+
+    #[test]
+    fn a_rejected_encode_leaves_the_command_handle_with_the_caller() {
+        let geometry = geometry_of(1);
+        let op = autd3_op_clear();
+
+        assert!(encode(std::ptr::null(), op).is_null());
+        assert!(encode(geometry, std::ptr::null_mut()).is_null());
+
+        assert_eq!(1, num_frames_of(geometry, op));
+        unsafe { drop_handle(geometry) };
+    }
+
+    #[test]
+    fn a_rejected_encode_reports_the_reason() {
+        let geometry = geometry_of(1);
+        let mut err = [0 as c_char; 64];
+
+        let frames = unsafe {
+            autd3_frames_encode(
+                geometry,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        };
+
+        assert!(frames.is_null());
+        let message = unsafe { std::ffi::CStr::from_ptr(err.as_ptr()) };
+        assert_eq!("null command", message.to_str().unwrap());
+        unsafe { drop_handle(geometry) };
+    }
+
+    #[test]
+    fn a_command_that_fails_to_encode_is_consumed_and_yields_no_frames() {
+        let geometry = geometry_of(0);
+        let mut err = [0 as c_char; 128];
+
+        let mut code = AUTD3_OK;
+
+        let frames = unsafe {
+            autd3_frames_encode(
+                geometry,
+                autd3_op_clear(),
+                &raw mut code,
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        };
+
+        assert!(frames.is_null());
+        assert_ne!(0, err[0]);
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
+        unsafe { drop_handle(geometry) };
+    }
+
+    #[test]
+    fn a_rejected_encode_reports_the_error_code() {
+        let geometry = geometry_of(1);
+        let mut code = AUTD3_OK;
+
+        let frames = unsafe {
+            autd3_frames_encode(
+                geometry,
+                std::ptr::null_mut(),
+                &raw mut code,
+                std::ptr::null_mut(),
+                0,
+            )
+        };
+
+        assert!(frames.is_null());
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
+        unsafe { drop_handle(geometry) };
+    }
+
+    #[test]
+    fn a_successful_encode_leaves_the_error_code_untouched() {
+        let geometry = geometry_of(1);
+        let mut code = AUTD3_OK;
+
+        let frames = unsafe {
+            autd3_frames_encode(
+                geometry,
+                autd3_op_clear(),
+                &raw mut code,
+                std::ptr::null_mut(),
+                0,
+            )
+        };
+
+        assert!(!frames.is_null());
+        assert_eq!(AUTD3_OK, code);
+        unsafe { autd3_frames_free(frames) };
+        unsafe { drop_handle(geometry) };
+    }
+
+    #[test]
+    fn a_null_bus_stats_handle_reads_as_zero() {
+        assert!(unsafe { autd3_client_bus_stats(std::ptr::null()) }.is_null());
+        assert_eq!(0, unsafe { autd3_bus_stats_frames(std::ptr::null()) });
+        assert_eq!(0, unsafe {
+            autd3_bus_stats_mean_ack_latency_ns(std::ptr::null())
+        });
+        unsafe { autd3_bus_stats_free(std::ptr::null_mut()) };
+    }
+
+    #[test]
+    fn a_rejected_each_leaves_every_op_handle_with_the_caller() {
+        let op = autd3_op_clear();
+
+        assert!(unsafe { autd3_command_each(std::ptr::null(), 1) }.is_null());
+
+        let aliased = [op, op];
+        assert!(unsafe { autd3_command_each(aliased.as_ptr(), aliased.len()) }.is_null());
+
+        let geometry = geometry_of(1);
+        let ops = [op];
+        let command = unsafe { autd3_command_each(ops.as_ptr(), ops.len()) };
+        assert!(!command.is_null());
+        assert_eq!(1, num_frames_of(geometry, command));
+        unsafe { drop_handle(geometry) };
+    }
+
+    #[test]
+    fn a_rejected_sequence_leaves_every_op_handle_with_the_caller() {
+        let first = autd3_op_clear();
+        let second = autd3_op_nop();
+
+        assert!(unsafe { autd3_command_sequence(std::ptr::null(), 2) }.is_null());
+
+        let with_null = [first, std::ptr::null_mut(), second];
+        assert!(unsafe { autd3_command_sequence(with_null.as_ptr(), with_null.len()) }.is_null());
+
+        let aliased = [first, second, first];
+        assert!(unsafe { autd3_command_sequence(aliased.as_ptr(), aliased.len()) }.is_null());
+
+        let geometry = geometry_of(1);
+        let ops = [first, second];
+        let command = unsafe { autd3_command_sequence(ops.as_ptr(), ops.len()) };
+        assert!(!command.is_null());
+        assert_eq!(2, num_frames_of(geometry, command));
+        unsafe { drop_handle(geometry) };
+    }
+
+    #[test]
+    fn an_unsent_composed_command_is_freed_with_its_children() {
+        let ops = [autd3_op_clear(), std::ptr::null_mut()];
+        let per_device = unsafe { autd3_command_each(ops.as_ptr(), ops.len()) };
+        let ops = [per_device, autd3_op_nop()];
+        let sequence = unsafe { autd3_command_sequence(ops.as_ptr(), ops.len()) };
+        assert!(!sequence.is_null());
+
+        unsafe { autd3_op_free(sequence) };
+    }
+
+    #[test]
+    fn the_device_time_of_a_null_client_is_an_error() {
+        let mut ns = 0u64;
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_client_device_time_now(std::ptr::null(), &raw mut ns, std::ptr::null_mut(), 0)
+        });
+    }
+
+    #[test]
+    fn each_takes_one_frame_and_leaves_unassigned_devices_out() {
+        let geometry = geometry_of(2);
+        let ops = [autd3_op_nop(), std::ptr::null_mut()];
+        let command = unsafe { autd3_command_each(ops.as_ptr(), ops.len()) };
+
+        assert_eq!(1, num_frames_of(geometry, command));
+        unsafe { drop_handle(geometry) };
+    }
+
+    #[test]
+    fn each_spans_the_longest_per_device_command() {
+        let geometry = geometry_of(2);
+        let long = [autd3_op_clear(), autd3_op_nop(), autd3_op_synchronize()];
+        let long = unsafe { autd3_command_sequence(long.as_ptr(), long.len()) };
+        let ops = [autd3_op_nop(), long];
+        let command = unsafe { autd3_command_each(ops.as_ptr(), ops.len()) };
+
+        assert_eq!(3, num_frames_of(geometry, command));
+        unsafe { drop_handle(geometry) };
+    }
+
+    #[test]
+    fn a_sequence_expands_its_commands_in_order() {
+        let geometry = geometry_of(2);
+        let per_device = [autd3_op_nop(), std::ptr::null_mut()];
+        let per_device = unsafe { autd3_command_each(per_device.as_ptr(), per_device.len()) };
+        let inner = [autd3_op_nop(), autd3_op_nop()];
+        let inner = unsafe { autd3_command_sequence(inner.as_ptr(), inner.len()) };
+        let ops = [autd3_op_clear(), per_device, inner];
+        let command = unsafe { autd3_command_sequence(ops.as_ptr(), ops.len()) };
+
+        assert_eq!(4, num_frames_of(geometry, command));
+        unsafe { drop_handle(geometry) };
+    }
+
+    #[test]
+    fn frames_are_re_encoded_in_place_even_while_shared() {
+        let geometry = geometry_of(1);
+        let frames = autd3_frames_new();
+        assert_eq!(0, unsafe { autd3_frames_num_frames(frames) });
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_frames_encode_into(frames, geometry, autd3_op_clear(), std::ptr::null_mut(), 0)
+        });
+        assert_eq!(1, unsafe { autd3_frames_num_frames(frames) });
+
+        let held = Arc::clone(unsafe { handle_ref::<Arc<Frames>>(frames) }.unwrap());
+        let ops = [autd3_op_clear(), autd3_op_nop()];
+        let sequence = unsafe { autd3_command_sequence(ops.as_ptr(), ops.len()) };
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_frames_encode_into(frames, geometry, sequence, std::ptr::null_mut(), 0)
+        });
+        assert_eq!(2, unsafe { autd3_frames_num_frames(frames) });
+        assert_eq!(1, held.len());
+
+        let command = autd3_op_clear();
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_frames_encode_into(
+                std::ptr::null_mut(),
+                geometry,
+                command,
+                std::ptr::null_mut(),
+                0,
+            )
+        });
+        unsafe { autd3_op_free(command) };
+        unsafe { autd3_frames_free(frames) };
+        unsafe { drop_handle(geometry) };
+    }
+
+    #[test]
+    fn an_empty_sequence_encodes_to_no_frames() {
+        let geometry = geometry_of(1);
+        let command = unsafe { autd3_command_sequence(std::ptr::null(), 0) };
+        assert!(!command.is_null());
+
+        assert_eq!(0, num_frames_of(geometry, command));
+        unsafe { drop_handle(geometry) };
+    }
+
+    fn encode_error(geometry: *const Geometry, command: *mut Pending) -> String {
+        let mut err = [0 as c_char; 128];
+        let frames = unsafe {
+            autd3_frames_encode(
+                geometry,
+                command,
+                std::ptr::null_mut(),
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        };
+        assert!(frames.is_null());
+        unsafe { std::ffi::CStr::from_ptr(err.as_ptr()) }
+            .to_str()
+            .unwrap()
+            .to_owned()
+    }
+
+    #[test]
+    fn an_each_that_does_not_match_the_device_count_fails_to_encode() {
+        let geometry = geometry_of(2);
+
+        let short = [autd3_op_nop()];
+        let short = unsafe { autd3_command_each(short.as_ptr(), short.len()) };
+        assert!(encode_error(geometry, short).contains("1 entries for 2 devices"));
+
+        let long = [autd3_op_nop(), std::ptr::null_mut(), autd3_op_nop()];
+        let long = unsafe { autd3_command_each(long.as_ptr(), long.len()) };
+        assert!(encode_error(geometry, long).contains("3 entries for 2 devices"));
+
+        unsafe { drop_handle(geometry) };
+    }
+
+    #[test]
+    fn a_nested_each_that_does_not_match_the_device_count_fails_to_encode() {
+        let geometry = geometry_of(2);
+
+        let inner = [autd3_op_nop()];
+        let inner = unsafe { autd3_command_each(inner.as_ptr(), inner.len()) };
+        let outer = [std::ptr::null_mut(), inner];
+        let outer = unsafe { autd3_command_each(outer.as_ptr(), outer.len()) };
+        assert!(encode_error(geometry, outer).contains("1 entries for 2 devices"));
+
+        let inner = [autd3_op_nop(), autd3_op_nop(), autd3_op_nop()];
+        let inner = unsafe { autd3_command_each(inner.as_ptr(), inner.len()) };
+        let sequence = [autd3_op_clear(), inner];
+        let sequence = unsafe { autd3_command_sequence(sequence.as_ptr(), sequence.len()) };
+        assert!(encode_error(geometry, sequence).contains("3 entries for 2 devices"));
+
+        unsafe { drop_handle(geometry) };
+    }
+
+    #[test]
+    fn the_frame_count_of_a_null_frames_handle_is_zero() {
+        assert_eq!(0, unsafe { autd3_frames_num_frames(std::ptr::null()) });
+        unsafe { autd3_frames_free(std::ptr::null_mut()) };
     }
 
     #[test]

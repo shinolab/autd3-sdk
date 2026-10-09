@@ -1,8 +1,8 @@
 use std::ffi::c_char;
 
 use autd3_ffi_abi::{
-    AUTD3_ERR, AUTD3_ERR_INVALID_ARGUMENT, AUTD3_OK, ModulationBuffer, drop_handle, handle_mut,
-    handle_ref, into_handle, slice_ref, write_cstr, write_out,
+    AUTD3_ERR_INVALID_ARGUMENT, AUTD3_OK, ModulationBuffer, drop_handle, finish, handle_mut,
+    handle_ref, into_handle, slice_mut, slice_ref, write_cstr, write_out,
 };
 use autd3_rs_core::Angle;
 use autd3_rs_core::units::Hz;
@@ -15,20 +15,6 @@ fn to_sampling_mode(mode: u8, freq: f32, freq_int: u32) -> Option<SamplingMode> 
         1 => Some(SamplingMode::from(freq_int * Hz)),
         2 => Some(SamplingMode::from(Nearest(freq * Hz))),
         _ => None,
-    }
-}
-
-unsafe fn finish<E: std::fmt::Display>(
-    result: Result<(), E>,
-    out_err: *mut c_char,
-    out_err_len: usize,
-) -> i32 {
-    match result {
-        Ok(()) => AUTD3_OK,
-        Err(e) => {
-            unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
-            AUTD3_ERR
-        }
     }
 }
 
@@ -114,6 +100,25 @@ pub unsafe extern "C" fn autd3_modulation_buffer_set(
     };
     *v = value;
     0
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_modulation_buffer_copy_to(
+    buffer: *const ModulationBuffer,
+    dst: *mut u8,
+    len: usize,
+) -> i32 {
+    let Some(buffer) = (unsafe { handle_ref(buffer) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    if len != buffer.0.len() {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    }
+    let Some(dst) = (unsafe { slice_mut(dst, len) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    dst.copy_from_slice(&buffer.0);
+    AUTD3_OK
 }
 
 #[unsafe(no_mangle)]
@@ -215,14 +220,14 @@ pub unsafe extern "C" fn autd3_modulation_square(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_modulation_constant(
-    intensity: u8,
+    amplitude: u8,
     buffer: *mut ModulationBuffer,
 ) -> i32 {
     let Some(buffer) = (unsafe { handle_mut(buffer) }) else {
         return -1;
     };
 
-    autd3_rs_modulation::constant(intensity, &mut buffer.0);
+    autd3_rs_modulation::constant(amplitude, &mut buffer.0);
     0
 }
 
@@ -278,7 +283,7 @@ pub unsafe extern "C" fn autd3_modulation_fourier(
         let Some(freq) = to_sampling_mode(c.mode, c.freq, c.freq_int) else {
             return unsafe { invalid_argument(out_err, out_err_len, "unknown sampling mode") };
         };
-        sine_components.push(SineComponent::<SamplingMode> {
+        sine_components.push(SineComponent {
             freq,
             option: *component_option,
         });

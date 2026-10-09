@@ -76,6 +76,8 @@ impl From<Nearest<Duration>> for StmConfig {
 
 #[cfg(test)]
 mod tests {
+    use core::num::NonZeroU16;
+
     use super::*;
     use crate::units::Hz;
 
@@ -83,7 +85,7 @@ mod tests {
     fn stm_freq_multiplies_sampling_rate_by_size() {
         assert_eq!(
             StmConfig::new(100.0 * Hz).into_sampling_config(4).divide(),
-            Ok(100)
+            Ok(NonZeroU16::new(100).unwrap())
         );
     }
 
@@ -93,7 +95,7 @@ mod tests {
             StmConfig::new(Duration::from_millis(1))
                 .into_sampling_config(4)
                 .divide(),
-            Ok(10)
+            Ok(NonZeroU16::new(10).unwrap())
         );
     }
 
@@ -112,7 +114,7 @@ mod tests {
             StmConfig::new(Nearest(Duration::from_nanos(50_001)))
                 .into_sampling_config(2)
                 .divide(),
-            Ok(1)
+            Ok(NonZeroU16::new(1).unwrap())
         );
     }
 
@@ -122,7 +124,7 @@ mod tests {
             StmConfig::new(SamplingConfig::FREQ_4K)
                 .into_sampling_config(7)
                 .divide(),
-            Ok(10)
+            Ok(NonZeroU16::new(10).unwrap())
         );
     }
 

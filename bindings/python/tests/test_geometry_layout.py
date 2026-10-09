@@ -10,7 +10,7 @@ FIXTURE = """[
   { "origin": [192.0, 0.0, 0.0], "rotation": [0.7071068, 0.0, 0.7071068, 0.0] }
 ]"""
 
-PITCH_MM = 10.16
+PITCH_MM = Autd3.PITCH_MM
 
 
 def two_devices() -> Geometry:

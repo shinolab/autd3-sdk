@@ -4,12 +4,10 @@ use std::path::Path;
 use anyhow::{Context, Result, bail};
 use clap::{Subcommand, ValueEnum};
 
-use crate::cpu::gen_param;
+use crate::cpu_codegen::gen_param;
 use crate::util::{capture, host_triple, on_path, run_env, workspace_root};
 
 const MIRI_PACKAGES: &[&str] = &["autd3-cpu-wire", "autd3-cpu-fw", "autd3-rs-core"];
-
-const MIRI_FLAGS: &str = "-Zmiri-disable-isolation -Zmiri-ignore-leaks";
 
 const MUTANTS_PACKAGES: &[&str] = &[
     "autd3-cpu-wire",
@@ -19,10 +17,7 @@ const MUTANTS_PACKAGES: &[&str] = &[
     "autd3-rs-modulation",
 ];
 
-const LEAK_SKIP: &[&str] = &[
-    "shutdown_does_not_wait_for_a_pending_task",
-    "a_client_that_vanishes_without_closing_does_not_block_the_next_one",
-];
+const LEAK_SKIP: &[&str] = &["shutdown_does_not_wait_for_a_pending_task"];
 
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum SanitizerKind {
@@ -174,10 +169,7 @@ fn run_miri(root: &Path, packages: &[String], filter: Option<&str>) -> Result<()
             "cargo",
             args,
             root,
-            &[
-                ("CARGO_TARGET_DIR", target_dir.as_os_str()),
-                ("MIRIFLAGS", OsStr::new(MIRI_FLAGS)),
-            ],
+            &[("CARGO_TARGET_DIR", target_dir.as_os_str())],
         )?;
     }
     Ok(())

@@ -29,14 +29,8 @@ fn main() -> Result<()> {
     let center = geometry.center();
     let emulator = Emulator::new(geometry);
     let record = emulator.record(async move |r| {
-        let mut builder = r.datagram_builder();
-        builder
-            .push(SetSilencer::disable())
-            .push(Pattern::new(&phases, &intensities));
-        let datagrams = builder.build()?;
-        for frame in &datagrams {
-            r.send_checked(frame).await?;
-        }
+        r.send(SetSilencer::disable()).await?;
+        r.send(Pattern::new(&phases, &intensities)).await?;
         r.tick(Duration::from_millis(1))?;
         Ok(())
     })?;

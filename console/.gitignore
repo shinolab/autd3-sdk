@@ -2,5 +2,3 @@ target/
 
 THIRD-PARTY-LICENSES.md
 
-twincat/*
-!twincat/.gitkeep

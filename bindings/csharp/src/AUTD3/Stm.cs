@@ -5,13 +5,6 @@ using System.Runtime.InteropServices;
 
 namespace AUTD3
 {
-    public enum PatternStmMode : byte
-    {
-        PhaseIntensityFull = 0,
-        PhaseFull = 1,
-        PhaseHalf = 2,
-    }
-
     [StructLayout(LayoutKind.Sequential)]
     internal struct Autd3StmControlPointNative
     {
@@ -23,16 +16,16 @@ namespace AUTD3
 
     internal static class FociPoints
     {
-        internal static (Autd3StmControlPointNative[] Points, byte[] Intensities, byte NumFoci) Flatten(ControlPoints[] samples, string command)
+        internal static (Autd3StmControlPointNative[] Points, byte[] Intensities, byte NumFoci) Flatten(IReadOnlyList<ControlPoints> samples, string command)
         {
-            if (samples.Length == 0)
+            if (samples.Count == 0)
             {
-                throw new Autd3Exception($"{command} requires at least one sample");
+                throw new Autd3Exception($"{command} requires at least one sample", Autd3ErrorCode.InvalidArgument);
             }
             var numFoci = (byte)samples[0].Points.Length;
-            var points = new Autd3StmControlPointNative[samples.Length * numFoci];
-            var intensities = new byte[samples.Length];
-            for (var i = 0; i < samples.Length; i++)
+            var points = new Autd3StmControlPointNative[samples.Count * numFoci];
+            var intensities = new byte[samples.Count];
+            for (var i = 0; i < samples.Count; i++)
             {
                 if (samples[i].Points.Length != numFoci)
                 {
@@ -72,28 +65,28 @@ namespace AUTD3
         internal static extern IntPtr autd3_stm_config_freq_nearest(float hz);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_stm_config_period(float secs);
+        internal static extern IntPtr autd3_stm_config_period(ulong periodNs);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_stm_config_period_nearest(float secs);
+        internal static extern IntPtr autd3_stm_config_period_nearest(ulong periodNs);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_stm_config_sampling(ushort divide);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_stm_config_into_sampling_config(IntPtr config, UIntPtr size, out ushort @out);
+        internal static extern int autd3_stm_config_into_sampling_config(IntPtr config, UIntPtr size, out ushort @out, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_stm_config_free(IntPtr config);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_foci_stm(IntPtr config, Autd3StmControlPointNative[] points, UIntPtr numSamples, byte numFoci, byte[] intensities, byte bank, float soundSpeedMS, ushort loopRep, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
+        internal static extern IntPtr autd3_op_foci_stm(IntPtr config, Autd3StmControlPointNative[] points, UIntPtr numSamples, byte numFoci, byte[] intensities, byte bank, float soundSpeedMS, ushort loopRep, byte transitionMode, ulong transitionValue);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_write_foci_buffer(byte bank, uint indexOffset, Autd3StmControlPointNative[] points, UIntPtr numSamples, byte numFoci, byte[] intensities);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_pattern_stm(IntPtr config, IntPtr[] phases, UIntPtr numPatterns, IntPtr[] intensities, UIntPtr numIntensities, byte uniformIntensity, byte bank, byte mode, ushort loopRep, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
+        internal static extern IntPtr autd3_op_pattern_stm(IntPtr config, IntPtr[] phases, UIntPtr numPatterns, IntPtr[] intensities, UIntPtr numIntensities, byte uniformIntensity, byte bank, byte phaseDepth, ushort loopRep, byte transitionMode, ulong transitionValue);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_stm_circle(float[] center, float radiusMm, UIntPtr numPoints, float[] normal, byte intensity, Autd3StmControlPointNative[] outPoints, byte[] outIntensities);
@@ -115,32 +108,43 @@ namespace AUTD3
 
         private readonly ConfigKind _kind;
         private readonly float _value;
+        private readonly ulong _periodNs;
         private readonly SamplingConfig _sampling;
 
-        private StmConfig(ConfigKind kind, float value, SamplingConfig sampling)
+        private StmConfig(ConfigKind kind, float value, ulong periodNs, SamplingConfig sampling)
         {
             _kind = kind;
             _value = value;
+            _periodNs = periodNs;
             _sampling = sampling;
         }
 
-        public StmConfig(Freq freq) : this(ConfigKind.Freq, freq.Hz, default)
+        private static ulong PeriodNanos(TimeSpan period)
+        {
+            if (period < TimeSpan.Zero)
+            {
+                throw new Autd3Exception("an STM period must not be negative", Autd3ErrorCode.InvalidArgument);
+            }
+            return OptionNative.ToNanos(period);
+        }
+
+        public StmConfig(Freq freq) : this(ConfigKind.Freq, freq.Hz, 0, default)
         {
         }
 
-        public StmConfig(Nearest<Freq> freq) : this(ConfigKind.FreqNearest, freq.Value.Hz, default)
+        public StmConfig(Nearest<Freq> freq) : this(ConfigKind.FreqNearest, freq.Value.Hz, 0, default)
         {
         }
 
-        public StmConfig(TimeSpan period) : this(ConfigKind.Period, (float)period.TotalSeconds, default)
+        public StmConfig(TimeSpan period) : this(ConfigKind.Period, 0f, PeriodNanos(period), default)
         {
         }
 
-        public StmConfig(Nearest<TimeSpan> period) : this(ConfigKind.PeriodNearest, (float)period.Value.TotalSeconds, default)
+        public StmConfig(Nearest<TimeSpan> period) : this(ConfigKind.PeriodNearest, 0f, PeriodNanos(period.Value), default)
         {
         }
 
-        public StmConfig(SamplingConfig sampling) : this(ConfigKind.Sampling, 0f, sampling)
+        public StmConfig(SamplingConfig sampling) : this(ConfigKind.Sampling, 0f, 0, sampling)
         {
         }
 
@@ -159,9 +163,10 @@ namespace AUTD3
             var handle = CreateHandle();
             try
             {
-                if (NativeStm.autd3_stm_config_into_sampling_config(handle, (UIntPtr)Math.Max(size, 1), out var divide) != 0)
+                var err = new byte[NativeAbi.ErrorBufferLength];
+                if (NativeStm.autd3_stm_config_into_sampling_config(handle, (UIntPtr)Math.Max(size, 1), out var divide, err, (UIntPtr)err.Length) != 0)
                 {
-                    throw new Autd3Exception("stm config cannot be resolved to a sampling config");
+                    throw new Autd3Exception(NativeUtil.Utf8(err), Autd3ErrorCode.InvalidArgument);
                 }
                 return new SamplingConfig(divide);
             }
@@ -177,8 +182,8 @@ namespace AUTD3
             {
                 ConfigKind.Freq => NativeStm.autd3_stm_config_freq(_value),
                 ConfigKind.FreqNearest => NativeStm.autd3_stm_config_freq_nearest(_value),
-                ConfigKind.Period => NativeStm.autd3_stm_config_period(_value),
-                ConfigKind.PeriodNearest => NativeStm.autd3_stm_config_period_nearest(_value),
+                ConfigKind.Period => NativeStm.autd3_stm_config_period(_periodNs),
+                ConfigKind.PeriodNearest => NativeStm.autd3_stm_config_period_nearest(_periodNs),
                 _ => NativeStm.autd3_stm_config_sampling(_sampling.Divide()),
             };
             if (handle == IntPtr.Zero)
@@ -215,49 +220,49 @@ namespace AUTD3
 
     public readonly struct FociStmOption
     {
-        public PatternBank Bank { get; init; } = PatternBank.B0;
-        public Velocity SoundSpeed { get; init; } = Velocity.FromMS(340f);
-        public LoopBehavior LoopBehavior { get; init; } = LoopBehavior.Infinite;
-        public TransitionMode TransitionMode { get; init; } = TransitionMode.Immediate;
-
-        public FociStmOption()
-        {
-        }
+        private readonly PatternBank? _bank;
+        public PatternBank Bank { get => _bank ?? PatternBank.B0; init => _bank = value; }
+        private readonly Velocity? _soundSpeed;
+        public Velocity SoundSpeed { get => _soundSpeed ?? Velocity.FromMS(340f); init => _soundSpeed = value; }
+        private readonly LoopBehavior? _loopBehavior;
+        public LoopBehavior LoopBehavior { get => _loopBehavior ?? LoopBehavior.Infinite; init => _loopBehavior = value; }
+        private readonly TransitionMode? _transitionMode;
+        public TransitionMode TransitionMode { get => _transitionMode ?? TransitionMode.Immediate; init => _transitionMode = value; }
     }
 
     public readonly struct PatternStmOption
     {
-        public PatternBank Bank { get; init; } = PatternBank.B0;
-        public PatternStmMode Mode { get; init; } = PatternStmMode.PhaseIntensityFull;
-        public LoopBehavior LoopBehavior { get; init; } = LoopBehavior.Infinite;
-        public TransitionMode TransitionMode { get; init; } = TransitionMode.Immediate;
-
-        public PatternStmOption()
-        {
-        }
+        private readonly PatternBank? _bank;
+        public PatternBank Bank { get => _bank ?? PatternBank.B0; init => _bank = value; }
+        private readonly PhaseDepth? _phaseDepth;
+        public PhaseDepth PhaseDepth { get => _phaseDepth ?? PhaseDepth.Bits8; init => _phaseDepth = value; }
+        private readonly LoopBehavior? _loopBehavior;
+        public LoopBehavior LoopBehavior { get => _loopBehavior ?? LoopBehavior.Infinite; init => _loopBehavior = value; }
+        private readonly TransitionMode? _transitionMode;
+        public TransitionMode TransitionMode { get => _transitionMode ?? TransitionMode.Immediate; init => _transitionMode = value; }
     }
 
     public sealed class FociStm : ICommand
     {
         private readonly StmConfig _config;
-        private readonly ControlPoints[] _points;
+        private readonly IReadOnlyList<ControlPoints> _points;
         private readonly FociStmOption _option;
 
-        public FociStm(StmConfig config, ControlPoints[] points, FociStmOption? option = null)
+        public FociStm(StmConfig config, IReadOnlyList<ControlPoints> points, FociStmOption? option = null)
         {
             _config = config;
             _points = points;
             _option = option ?? new FociStmOption();
         }
 
-        IntPtr ICommand.CreateOp()
+        IntPtr ICommand.CreateOp(Geometry geometry)
         {
             var (points, intensities, numFoci) = FociPoints.Flatten(_points, "FociStm");
             var configHandle = _config.CreateHandle();
             try
             {
-                return NativeStm.autd3_op_foci_stm(configHandle, points, (UIntPtr)_points.Length, numFoci, intensities,
-                    (byte)_option.Bank, _option.SoundSpeed.MS, _option.LoopBehavior.Rep, _option.TransitionMode.Mode, _option.TransitionMode.Value, _option.TransitionMode.MarginNs);
+                return NativeStm.autd3_op_foci_stm(configHandle, points, (UIntPtr)_points.Count, numFoci, intensities,
+                    (byte)_option.Bank, _option.SoundSpeed.MS, _option.LoopBehavior.Rep, _option.TransitionMode.Mode, _option.TransitionMode.Value);
             }
             finally
             {
@@ -324,7 +329,7 @@ namespace AUTD3
             _option = option ?? new PatternStmOption();
         }
 
-        IntPtr ICommand.CreateOp()
+        IntPtr ICommand.CreateOp(Geometry geometry)
         {
             var buffers = _intensities.Buffers;
             var phaseHandles = new SafeHandle[_phases.Length];
@@ -344,7 +349,7 @@ namespace AUTD3
             {
                 return NativeStm.autd3_op_pattern_stm(configHandle, phaseLease.Pointers, (UIntPtr)phaseLease.Pointers.Length,
                     intensityLease.Pointers, (UIntPtr)intensityLease.Pointers.Length, _intensities.Uniform,
-                    (byte)_option.Bank, (byte)_option.Mode, _option.LoopBehavior.Rep, _option.TransitionMode.Mode, _option.TransitionMode.Value, _option.TransitionMode.MarginNs);
+                    (byte)_option.Bank, (byte)_option.PhaseDepth, _option.LoopBehavior.Rep, _option.TransitionMode.Mode, _option.TransitionMode.Value);
             }
             finally
             {
@@ -357,19 +362,19 @@ namespace AUTD3
     {
         private readonly PatternBank _bank;
         private readonly uint _indexOffset;
-        private readonly ControlPoints[] _points;
+        private readonly IReadOnlyList<ControlPoints> _points;
 
-        public WriteFociBuffer(PatternBank bank, uint indexOffset, ControlPoints[] points)
+        public WriteFociBuffer(PatternBank bank, uint indexOffset, IReadOnlyList<ControlPoints> points)
         {
             _bank = bank;
             _indexOffset = indexOffset;
             _points = points;
         }
 
-        IntPtr ICommand.CreateOp()
+        IntPtr ICommand.CreateOp(Geometry geometry)
         {
             var (points, intensities, numFoci) = FociPoints.Flatten(_points, "WriteFociBuffer");
-            return NativeStm.autd3_op_write_foci_buffer((byte)_bank, _indexOffset, points, (UIntPtr)_points.Length, numFoci, intensities);
+            return NativeStm.autd3_op_write_foci_buffer((byte)_bank, _indexOffset, points, (UIntPtr)_points.Count, numFoci, intensities);
         }
     }
 
@@ -397,9 +402,6 @@ namespace AUTD3
             Fill(dst, outPoints, outIntensities);
         }
 
-        public static void Circle(Vector3 center, Length radius, int numPoints, Vector3 normal, List<ControlPoints> dst) =>
-            Circle(center, radius, numPoints, normal, Intensity.Max, dst);
-
         public static void Line(Vector3 start, Vector3 end, int numPoints, Intensity intensity, List<ControlPoints> dst)
         {
             var outPoints = new Autd3StmControlPointNative[numPoints];
@@ -411,8 +413,5 @@ namespace AUTD3
             }
             Fill(dst, outPoints, outIntensities);
         }
-
-        public static void Line(Vector3 start, Vector3 end, int numPoints, List<ControlPoints> dst) =>
-            Line(start, end, numPoints, Intensity.Max, dst);
     }
 }

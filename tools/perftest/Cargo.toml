@@ -6,7 +6,7 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 publish = false
-description = "CLI tool for measuring EtherCAT-link performance."
+description = "CLI tool for measuring communication performance."
 
 [[bin]]
 name = "autd3-rs-perftest"
@@ -17,10 +17,11 @@ mem-profile = []
 
 [dependencies]
 autd3-rs = { workspace = true, features = ["logging"] }
+autd3-rs-firmware-emulator = { workspace = true, features = ["udp"] }
 clap.workspace = true
 humantime.workspace = true
 anyhow.workspace = true
-tokio = { workspace = true, features = ["sync", "time", "macros", "rt", "rt-multi-thread", "signal"] }
+tokio = { workspace = true, features = ["time", "macros", "rt", "rt-multi-thread", "signal"] }
 
 [lints]
 workspace = true

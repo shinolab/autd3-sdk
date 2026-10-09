@@ -1,72 +1,56 @@
 #![allow(clippy::cast_possible_truncation)]
 
-use autd3_rs_core::protocol::{Cmd, Seq, TX_FRAME_BYTES, TxFrame};
+mod common;
+#[path = "common/modulation.rs"]
+mod modulation;
+#[path = "common/pattern.rs"]
+mod pattern;
+
+use autd3_cpu_wire::fpga_params::FpgaStateFlags;
+use autd3_cpu_wire::payload::{
+    EmissionType, TransitionMode, WriteModPayload, WritePatternRawPayload,
+};
+use autd3_cpu_wire::{ModulationBank, PatternBank};
+use autd3_rs_core::params::REP_INFINITE;
+use autd3_rs_core::protocol::Cmd;
 use autd3_rs_firmware_emulator::Device;
+use autd3_rs_firmware_emulator::test_utils::FpgaEmulatorTestExt;
+use zerocopy::IntoBytes;
+use zerocopy::little_endian::{U16, U32};
 
-const NUM_TRANSDUCERS: usize = 249;
-const REP_INFINITE: u16 = 0xFFFF;
-const IMMEDIATE: u8 = 0xFF;
+use common::{NUM_TRANSDUCERS, frame};
+use modulation::{activate_modulation_bank, config_modulation};
+use pattern::{activate_pattern_bank, config_pattern};
 
-const BIT_THERMAL: u8 = 1 << 0;
-const BIT_MOD_BANK: u8 = 1 << 1;
-const BIT_PATTERN_BANK: u8 = 1 << 2;
-const BIT_PATTERN_MODE: u8 = 1 << 3;
+const BIT_THERMAL: u8 = FpgaStateFlags::THERMAL_ASSERT.bits();
+const BIT_MOD_BANK: u8 = FpgaStateFlags::MOD_BANK.bits();
+const BIT_PATTERN_BANK: u8 = FpgaStateFlags::PATTERN_BANK.bits();
+const BIT_PATTERN_MODE: u8 = FpgaStateFlags::PATTERN_MODE.bits();
 
-fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> [u8; TX_FRAME_BYTES] {
-    let mut tx = TxFrame::new(Seq::new(seq), cmd);
-    tx.payload[..payload.len()].copy_from_slice(payload);
-    let mut buf = [0u8; TX_FRAME_BYTES];
-    tx.write_to(&mut buf);
-    buf
+fn write_modulation(bank: ModulationBank, samples: &[u8]) -> Vec<u8> {
+    let header = WriteModPayload {
+        bank,
+        reserved: 0,
+        offset: U32::new(0),
+    };
+    [header.as_bytes(), samples].concat()
 }
 
-fn write_modulation(bank: u8, samples: &[u8]) -> Vec<u8> {
-    let mut w = vec![bank, 0];
-    w.extend_from_slice(&0u32.to_le_bytes());
-    w.extend_from_slice(&(samples.len() as u16).to_le_bytes());
-    w.extend_from_slice(samples);
-    w
+fn write_pattern(bank: PatternBank) -> Vec<u8> {
+    let header = WritePatternRawPayload {
+        bank,
+        count: 1,
+        index: U16::new(0),
+    };
+    [header.as_bytes(), &[0u8; NUM_TRANSDUCERS * 2]].concat()
 }
 
-fn config_modulation(bank: u8, size: usize, rep: u16) -> Vec<u8> {
-    let mut c = vec![bank, 0];
-    c.extend_from_slice(&1u16.to_le_bytes());
-    c.extend_from_slice(&(size as u32).to_le_bytes());
-    c.extend_from_slice(&rep.to_le_bytes());
-    c
-}
-
-fn change_mod_bank(bank: u8) -> Vec<u8> {
-    let mut c = vec![bank, IMMEDIATE];
-    c.extend_from_slice(&0u64.to_le_bytes());
-    c
-}
-
-fn write_pattern(bank: u8) -> Vec<u8> {
-    let mut w = vec![bank, 0];
-    w.extend_from_slice(&0u16.to_le_bytes());
-    w.extend(std::iter::repeat_n(0u8, NUM_TRANSDUCERS * 2));
-    w
-}
-
-fn config_pattern(bank: u8, size: usize, rep: u16) -> Vec<u8> {
-    let mut c = vec![0u8; 14];
-    c[0] = bank;
-    c[1] = 1;
-    c[2..4].copy_from_slice(&512u16.to_le_bytes());
-    c[4..8].copy_from_slice(&(size as u32).to_le_bytes());
-    c[12..14].copy_from_slice(&rep.to_le_bytes());
-    c
-}
-
-fn change_pattern_bank(bank: u8) -> Vec<u8> {
-    let mut c = vec![bank, IMMEDIATE];
-    c.extend_from_slice(&0u64.to_le_bytes());
-    c
+fn config_raw_pattern(bank: PatternBank, size: u32, rep: u16) -> Vec<u8> {
+    config_pattern(bank, EmissionType::Raw, size, 0, 0, rep)
 }
 
 fn read_state(device: &mut Device, seq: u8) -> u8 {
-    device.send(&frame(seq, Cmd::ReadFpgaState, &[])).data
+    device.send(&frame(seq, Cmd::ReadFpgaState, &[])).data()[0]
 }
 
 #[test]
@@ -98,16 +82,20 @@ fn modulation_bank_switch_reflects_in_state() {
     device.send(&frame(
         0,
         Cmd::WriteModulationBuffer,
-        &write_modulation(1, &samples),
+        &write_modulation(ModulationBank::B1, &samples),
     ));
     device.send(&frame(
         1,
         Cmd::ConfigModulation,
-        &config_modulation(1, samples.len(), REP_INFINITE),
+        &config_modulation(ModulationBank::B1, 1, samples.len() as u32, REP_INFINITE),
     ));
     assert_eq!(0, read_state(&mut device, 2) & BIT_MOD_BANK);
 
-    device.send(&frame(3, Cmd::ChangeModulationBank, &change_mod_bank(1)));
+    device.send(&frame(
+        3,
+        Cmd::ActivateModulationBank,
+        &activate_modulation_bank(ModulationBank::B1, TransitionMode::Immediate, 0),
+    ));
     assert_eq!(1, device.fpga().current_mod_bank());
     assert_eq!(BIT_MOD_BANK, read_state(&mut device, 4) & BIT_MOD_BANK);
 }
@@ -117,15 +105,23 @@ fn pattern_bank_switch_reflects_in_state() {
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
 
-    device.send(&frame(0, Cmd::WritePatternRaw, &write_pattern(1)));
+    device.send(&frame(
+        0,
+        Cmd::WritePatternRaw,
+        &write_pattern(PatternBank::B1),
+    ));
     device.send(&frame(
         1,
         Cmd::ConfigPattern,
-        &config_pattern(1, 1, REP_INFINITE),
+        &config_raw_pattern(PatternBank::B1, 1, REP_INFINITE),
     ));
     assert_eq!(0, read_state(&mut device, 2) & BIT_PATTERN_BANK);
 
-    device.send(&frame(3, Cmd::ChangePatternBank, &change_pattern_bank(1)));
+    device.send(&frame(
+        3,
+        Cmd::ActivatePatternBank,
+        &activate_pattern_bank(PatternBank::B1, TransitionMode::Immediate),
+    ));
     assert_eq!(1, device.fpga().current_pattern_bank());
     let state = read_state(&mut device, 4);
     assert_eq!(BIT_PATTERN_BANK | BIT_PATTERN_MODE, state);
@@ -139,9 +135,13 @@ fn multi_index_pattern_reports_stm_mode() {
     device.send(&frame(
         0,
         Cmd::ConfigPattern,
-        &config_pattern(0, 4, REP_INFINITE),
+        &config_raw_pattern(PatternBank::B0, 4, REP_INFINITE),
     ));
-    device.send(&frame(1, Cmd::ChangePatternBank, &change_pattern_bank(0)));
+    device.send(&frame(
+        1,
+        Cmd::ActivatePatternBank,
+        &activate_pattern_bank(PatternBank::B0, TransitionMode::Immediate),
+    ));
 
     assert!(!device.fpga().is_pattern_mode());
     assert_eq!(0, read_state(&mut device, 2) & BIT_PATTERN_MODE);

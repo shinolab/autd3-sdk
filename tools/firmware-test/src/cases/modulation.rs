@@ -2,6 +2,7 @@ use core::time::Duration;
 
 use anyhow::Result;
 
+use autd3_rs::Frames;
 use autd3_rs::commands::{Modulation, SetSilencer};
 use autd3_rs::params::MOD_BUFFER_SAMPLES;
 use autd3_rs::units::Hz;
@@ -9,10 +10,9 @@ use autd3_rs::value::{LoopBehavior, ModulationBank, Nearest, SamplingConfig, Tra
 use autd3_rs_modulation::{SineOption, constant, modulation_buffer, sine};
 
 use crate::Ctx;
-use crate::cases::ERR_INVALID_TRANSITION_MODE;
 use crate::cases::pattern_util::{
-    change_mod_bank, expect_firmware_error, focus_at, report_fpga_state, send_pattern_mod,
-    write_mod_bank,
+    activate_mod_bank, expect_transition_mode_rejections, focus_at, report_fpga_state,
+    send_pattern_mod, write_mod_bank,
 };
 use crate::io::wait_enter;
 
@@ -35,7 +35,7 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     wait_enter("No AM is applied").await;
     report_fpga_state(ctx, "B1 static", Some(ModulationBank::B1), None, None).await?;
 
-    change_mod_bank(ctx, ModulationBank::B0).await?;
+    activate_mod_bank(ctx, ModulationBank::B0, TransitionMode::Immediate).await?;
     wait_enter("AM is applied again").await;
     report_fpga_state(ctx, "back to B0", Some(ModulationBank::B0), None, None).await?;
 
@@ -45,7 +45,7 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     wait_enter("AM is still applied").await;
     report_fpga_state(ctx, "B0 stays active", Some(ModulationBank::B0), None, None).await?;
 
-    change_mod_bank(ctx, ModulationBank::B1).await?;
+    activate_mod_bank(ctx, ModulationBank::B1, TransitionMode::Immediate).await?;
     wait_enter("No AM is applied").await;
     report_fpga_state(ctx, "switch to B1", Some(ModulationBank::B1), None, None).await?;
 
@@ -71,7 +71,7 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
         .await?;
     wait_enter(&format!("A single pop is heard once every {period:?}")).await;
 
-    change_mod_bank(ctx, ModulationBank::B1).await?;
+    activate_mod_bank(ctx, ModulationBank::B1, TransitionMode::Immediate).await?;
 
     let saw_config = SamplingConfig::new(Nearest(256.0 * Hz));
     let ramp: Vec<u8> = (0..=255u8).collect();
@@ -93,38 +93,21 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     .await?;
     wait_enter("A reversed sawtooth AM is applied for exactly one waveform").await;
 
-    println!("transition-mode validation (firmware):");
     let mut probe = modulation_buffer();
     constant(0xFF, &mut probe);
-    expect_firmware_error(
-        ctx,
-        "modulation infinite loop + SyncIdx",
-        {
-            let mut b = ctx.client.datagram_builder();
-            b.push(SetSilencer::default()).push(Modulation {
-                loop_behavior: LoopBehavior::Infinite,
-                transition_mode: TransitionMode::SyncIdx,
-                ..Modulation::with_bank(ModulationBank::B1, SamplingConfig::FREQ_4K, &probe)
-            });
-            b.build()
-        },
-        ERR_INVALID_TRANSITION_MODE,
-    )
-    .await;
-    expect_firmware_error(
-        ctx,
-        "modulation finite loop + Immediate",
-        {
-            let mut b = ctx.client.datagram_builder();
-            b.push(SetSilencer::default()).push(Modulation {
-                loop_behavior: LoopBehavior::ONCE,
-                transition_mode: TransitionMode::Immediate,
-                ..Modulation::with_bank(ModulationBank::B1, SamplingConfig::FREQ_4K, &probe)
-            });
-            b.build()
-        },
-        ERR_INVALID_TRANSITION_MODE,
-    )
+    expect_transition_mode_rejections(ctx, "modulation", |loop_behavior, transition_mode| {
+        Frames::encode(
+            ctx.client.geometry(),
+            (
+                SetSilencer::default(),
+                Modulation {
+                    loop_behavior,
+                    transition_mode,
+                    ..Modulation::with_bank(ModulationBank::B1, SamplingConfig::FREQ_4K, &probe)
+                },
+            ),
+        )
+    })
     .await;
     Ok(())
 }

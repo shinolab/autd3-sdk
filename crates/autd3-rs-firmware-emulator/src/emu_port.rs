@@ -1,7 +1,8 @@
+use core::num::NonZeroU64;
+
 use crate::emu_fpga::FpgaEmulator;
 use autd3_cpu_fw::Port;
 use autd3_cpu_fw::port::FlashError;
-use autd3_cpu_fw::proto::TxFrame;
 use autd3_cpu_fw::update::{FLASH_SECTOR_BYTES, LOADER_REGION_END};
 
 fn flash_span(
@@ -28,23 +29,31 @@ impl Port for FpgaEmulator {
 
     fn memory_barrier(&mut self) {}
 
-    fn next_sync0(&mut self) -> u64 {
-        FpgaEmulator::next_sync0(self)
+    fn next_sync_edge(&mut self, _guard_ns: u32) -> Option<NonZeroU64> {
+        NonZeroU64::new(FpgaEmulator::next_sync_edge(self))
     }
 
-    fn dc_sys_time(&mut self) -> u64 {
-        FpgaEmulator::dc_sys_time(self)
+    #[cfg(feature = "udp")]
+    fn configure_ptp(&mut self, config: autd3_cpu_fw::ptp::Config) {
+        self.note_ptp_config(config);
     }
 
-    fn sync0_cycle_ns(&mut self) -> u32 {
-        FpgaEmulator::sync0_cycle_ns(self)
+    #[cfg(not(feature = "udp"))]
+    fn configure_ptp(&mut self, _config: autd3_cpu_fw::ptp::Config) {}
+
+    fn set_fpga_bus_wait(&mut self, _wait: autd3_cpu_fw::port::FpgaBusWait) {}
+
+    fn sys_time(&mut self) -> Option<u64> {
+        Some(FpgaEmulator::sys_time(self))
     }
 
-    fn al_status_code(&mut self) -> u16 {
-        FpgaEmulator::al_status_code(self)
+    fn host_idle_ms(&mut self) -> Option<u32> {
+        FpgaEmulator::host_idle_ms(self)
     }
 
-    fn publish_tx(&mut self, _tx: TxFrame) {}
+    fn ptp_unlocked_ms(&mut self) -> Option<u32> {
+        None
+    }
 
     fn flash_read(&mut self, addr: u32, buf: &mut [u8]) -> Result<(), FlashError> {
         let start = usize::try_from(addr).map_err(|_| FlashError)?;

@@ -4,12 +4,12 @@ use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result, bail};
 use clap::Args;
-use toml_edit::{DocumentMut, Item, Value, value};
+use toml_edit::{DocumentMut, Item, TableLike, Value, value};
 
 use crate::changelog::write_changelog_file;
-use crate::component::{COMPONENTS, Component, detect};
-use crate::cpu::gen_param;
-use crate::util::capture;
+use crate::component::{COMPONENTS, Component, detect, find};
+use crate::cpu_codegen::{PARAMS_SVH_REL, gen_param};
+use crate::util::{capture, package_version};
 
 const DOC_COMPONENT: &str = "doc";
 
@@ -98,7 +98,7 @@ pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
         "firmware" => {
             bump_firmware(root, &core)?;
             println!(
-                "Updated firmware version (fw/wire/board Cargo.toml + params.svh, regenerated params.rs) -> {core}"
+                "Updated firmware version (fw/wire/board Cargo.toml + params.svh, regenerated fpga_params.rs) -> {core}"
             );
         }
         other => bail!("no version-bump implementation for component `{other}`"),
@@ -170,21 +170,14 @@ fn refresh_locks(root: &Path) -> Result<Vec<String>> {
 }
 
 fn bump_doc(root: &Path, version: Option<&str>) -> Result<()> {
-    let software = COMPONENTS
-        .iter()
-        .find(|c| c.name == "software")
-        .context("missing `software` component")?;
     let raw = match version {
         Some(v) => v.to_string(),
-        None => version_from_branch(root, software)?,
+        None => version_from_branch(root, find("software")?)?,
     };
     let (core, _) = parse_version(&raw, false)?;
-    let mut parts = core.split('.');
-    let (Some(major), Some(minor), Some(patch)) = (parts.next(), parts.next(), parts.next()) else {
-        bail!("invalid version `{core}`");
-    };
+    let [major, minor, patch] = version_parts(&core)?;
     let slug = format!("{major}.{minor}.x");
-    if patch != "0" {
+    if patch != 0 {
         return sync_doc_snapshot(root, &slug, &core);
     }
 
@@ -218,7 +211,7 @@ fn sync_doc_snapshot(root: &Path, slug: &str, core: &str) -> Result<()> {
 
 fn resolve_component(root: &Path, name: Option<&str>) -> Result<&'static Component> {
     if let Some(name) = name {
-        return COMPONENTS.iter().find(|c| c.name == name).with_context(|| {
+        return find(name).ok().with_context(|| {
             let known = COMPONENTS
                 .iter()
                 .map(|c| c.name)
@@ -337,7 +330,7 @@ fn print_next_steps(name: &str) {
             println!("  cargo xtask rust build         # check the bump builds");
             println!("  cargo xtask cpu build");
             println!(
-                "  git add firmware/fpga/rtl/sources_1/new/headers/params.svh firmware/cpu/fw/src/params.rs firmware/cpu/fw/Cargo.toml firmware/cpu/wire/Cargo.toml firmware/cpu/board/Cargo.toml firmware/cpu/board/Cargo.lock Cargo.toml Cargo.lock doc/src/content/docs CHANGELOG.md"
+                "  git add firmware/fpga/rtl/sources_1/new/headers/params.svh firmware/cpu/fw/src/fpga_params.rs firmware/cpu/fw/Cargo.toml firmware/cpu/wire/Cargo.toml firmware/cpu/board/Cargo.toml firmware/cpu/board/Cargo.lock Cargo.toml Cargo.lock doc/src/content/docs CHANGELOG.md"
             );
         }
         _ => {}
@@ -353,11 +346,7 @@ fn bump_console(root: &Path, version: &str) -> Result<()> {
 }
 
 fn bump_unity_series(root: &Path, core: &str) -> Result<()> {
-    let unity = COMPONENTS
-        .iter()
-        .find(|c| c.name == "unity")
-        .context("missing `unity` component")?;
-    let current = unity.current_version(root)?;
+    let current = find("unity")?.current_version(root)?;
     let [major, minor, _] = version_parts(core)?;
     let [cur_major, cur_minor, _] = version_parts(&current)?;
     if (major, minor) == (cur_major, cur_minor) {
@@ -386,110 +375,97 @@ fn version_parts(version: &str) -> Result<[u32; 3]> {
     Ok(out)
 }
 
-fn bump_cargo_toml(path: &Path, version: &str) -> Result<()> {
+fn edit_toml(path: &Path, edit: impl FnOnce(&mut DocumentMut) -> Result<()>) -> Result<()> {
     let text =
         std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
     let mut doc: DocumentMut = text
         .parse()
         .with_context(|| format!("parsing {}", path.display()))?;
-
-    let package = doc
-        .get_mut("workspace")
-        .and_then(Item::as_table_like_mut)
-        .and_then(|w| w.get_mut("package"))
-        .and_then(Item::as_table_like_mut)
-        .with_context(|| format!("missing [workspace.package] table in {}", path.display()))?;
-    package.insert("version", value(version));
-
-    if let Some(deps) = doc
-        .get_mut("workspace")
-        .and_then(|w| w.get_mut("dependencies"))
-        .and_then(Item::as_table_like_mut)
-    {
-        for (key, item) in deps.iter_mut() {
-            let name = key.get();
-            if !name.starts_with("autd3-") || FIRMWARE_VERSIONED_CRATES.contains(&name) {
-                continue;
-            }
-            if let Some(inline) = item.as_inline_table_mut() {
-                if inline.contains_key("version") {
-                    inline.insert("version", Value::from(version));
-                }
-            } else if item.as_str().is_some() {
-                *item = value(version);
-            }
-        }
-    }
-
-    std::fs::write(path, doc.to_string()).with_context(|| format!("writing {}", path.display()))?;
-    Ok(())
+    edit(&mut doc)?;
+    std::fs::write(path, doc.to_string()).with_context(|| format!("writing {}", path.display()))
 }
 
-fn bump_package_version(path: &Path, version: &str) -> Result<()> {
-    let text =
-        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-    let mut doc: DocumentMut = text
-        .parse()
-        .with_context(|| format!("parsing {}", path.display()))?;
+fn bump_autd3_deps(deps: &mut dyn TableLike, version: &str) {
+    for (key, item) in deps.iter_mut() {
+        let name = key.get();
+        if !name.starts_with("autd3-") || FIRMWARE_VERSIONED_CRATES.contains(&name) {
+            continue;
+        }
+        if let Some(inline) = item.as_inline_table_mut() {
+            if inline.contains_key("version") {
+                inline.insert("version", Value::from(version));
+            }
+        } else if item.as_str().is_some() {
+            *item = value(version);
+        }
+    }
+}
+
+fn set_package_version(doc: &mut DocumentMut, path: &Path, version: &str) -> Result<()> {
     let package = doc
         .get_mut("package")
         .and_then(Item::as_table_like_mut)
         .with_context(|| format!("missing [package] table in {}", path.display()))?;
     package.insert("version", value(version));
-    std::fs::write(path, doc.to_string()).with_context(|| format!("writing {}", path.display()))?;
     Ok(())
+}
+
+fn bump_cargo_toml(path: &Path, version: &str) -> Result<()> {
+    edit_toml(path, |doc| {
+        let package = doc
+            .get_mut("workspace")
+            .and_then(Item::as_table_like_mut)
+            .and_then(|w| w.get_mut("package"))
+            .and_then(Item::as_table_like_mut)
+            .with_context(|| format!("missing [workspace.package] table in {}", path.display()))?;
+        package.insert("version", value(version));
+
+        if let Some(deps) = doc
+            .get_mut("workspace")
+            .and_then(|w| w.get_mut("dependencies"))
+            .and_then(Item::as_table_like_mut)
+        {
+            bump_autd3_deps(deps, version);
+        }
+        Ok(())
+    })
+}
+
+fn bump_package_version(path: &Path, version: &str) -> Result<()> {
+    edit_toml(path, |doc| set_package_version(doc, path, version))
 }
 
 fn bump_standalone_crate(path: &Path, version: &str) -> Result<()> {
-    bump_package_version(path, version)?;
-    let text =
-        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-    let mut doc: DocumentMut = text
-        .parse()
-        .with_context(|| format!("parsing {}", path.display()))?;
-    for table in ["dependencies", "dev-dependencies", "build-dependencies"] {
-        let Some(deps) = doc.get_mut(table).and_then(Item::as_table_like_mut) else {
-            continue;
-        };
-        for (key, item) in deps.iter_mut() {
-            let name = key.get();
-            if !name.starts_with("autd3-") || FIRMWARE_VERSIONED_CRATES.contains(&name) {
-                continue;
-            }
-            if let Some(inline) = item.as_inline_table_mut()
-                && inline.contains_key("version")
-            {
-                inline.insert("version", Value::from(version));
+    edit_toml(path, |doc| {
+        set_package_version(doc, path, version)?;
+        for table in ["dependencies", "dev-dependencies", "build-dependencies"] {
+            if let Some(deps) = doc.get_mut(table).and_then(Item::as_table_like_mut) {
+                bump_autd3_deps(deps, version);
             }
         }
-    }
-    std::fs::write(path, doc.to_string()).with_context(|| format!("writing {}", path.display()))?;
-    Ok(())
+        Ok(())
+    })
 }
 
 fn bump_workspace_dep_version(path: &Path, dep: &str, version: &str) -> Result<()> {
-    let text =
-        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-    let mut doc: DocumentMut = text
-        .parse()
-        .with_context(|| format!("parsing {}", path.display()))?;
-    let item = doc
-        .get_mut("workspace")
-        .and_then(|w| w.get_mut("dependencies"))
-        .and_then(Item::as_table_like_mut)
-        .and_then(|deps| deps.get_mut(dep))
-        .with_context(|| {
-            format!(
-                "missing [workspace.dependencies] `{dep}` in {}",
-                path.display()
-            )
-        })?;
-    let inline = item
-        .as_inline_table_mut()
-        .with_context(|| format!("workspace dependency `{dep}` is not an inline table"))?;
-    inline.insert("version", Value::from(version));
-    std::fs::write(path, doc.to_string()).with_context(|| format!("writing {}", path.display()))?;
-    Ok(())
+    edit_toml(path, |doc| {
+        let item = doc
+            .get_mut("workspace")
+            .and_then(|w| w.get_mut("dependencies"))
+            .and_then(Item::as_table_like_mut)
+            .and_then(|deps| deps.get_mut(dep))
+            .with_context(|| {
+                format!(
+                    "missing [workspace.dependencies] `{dep}` in {}",
+                    path.display()
+                )
+            })?;
+        let inline = item
+            .as_inline_table_mut()
+            .with_context(|| format!("workspace dependency `{dep}` is not an inline table"))?;
+        inline.insert("version", Value::from(version));
+        Ok(())
+    })
 }
 
 fn bump_python_pyproject(root: &Path, version: &str) -> Result<()> {
@@ -512,23 +488,22 @@ fn bump_python_pyproject(root: &Path, version: &str) -> Result<()> {
 
     let siblings = python_distribution_names(&manifests)?;
     for path in &manifests {
-        let text =
-            std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-        let mut doc: DocumentMut = text
-            .parse()
-            .with_context(|| format!("parsing {}", path.display()))?;
-        let project = doc
-            .get_mut("project")
-            .and_then(Item::as_table_like_mut)
-            .with_context(|| format!("missing [project] table in {}", path.display()))?;
-        project.insert("version", value(version));
-        if let Some(dynamic) = project.get_mut("dynamic").and_then(Item::as_array_mut) {
-            dynamic.retain(|v| v.as_str() != Some("version"));
-            if dynamic.is_empty() {
-                project.remove("dynamic");
+        edit_toml(path, |doc| {
+            let project = doc
+                .get_mut("project")
+                .and_then(Item::as_table_like_mut)
+                .with_context(|| format!("missing [project] table in {}", path.display()))?;
+            project.insert("version", value(version));
+            if let Some(dynamic) = project.get_mut("dynamic").and_then(Item::as_array_mut) {
+                dynamic.retain(|v| v.as_str() != Some("version"));
+                if dynamic.is_empty() {
+                    project.remove("dynamic");
+                }
             }
-        }
-        if let Some(dependencies) = project.get_mut("dependencies").and_then(Item::as_array_mut) {
+            let Some(dependencies) = project.get_mut("dependencies").and_then(Item::as_array_mut)
+            else {
+                return Ok(());
+            };
             for dep in dependencies.iter_mut() {
                 let Some(spec) = dep.as_str() else { continue };
                 let name = spec
@@ -552,9 +527,8 @@ fn bump_python_pyproject(root: &Path, version: &str) -> Result<()> {
                         .decorated(prefix.as_str(), suffix.as_str());
                 }
             }
-        }
-        std::fs::write(path, doc.to_string())
-            .with_context(|| format!("writing {}", path.display()))?;
+            Ok(())
+        })?;
     }
     Ok(())
 }
@@ -681,24 +655,11 @@ fn bump_csharp_props(path: &Path, version: &str) -> Result<()> {
     Ok(())
 }
 
-fn package_version(path: &Path) -> Result<String> {
-    let text =
-        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-    let doc: DocumentMut = text
-        .parse()
-        .with_context(|| format!("parsing {}", path.display()))?;
-    doc.get("package")
-        .and_then(|p| p.get("version"))
-        .and_then(Item::as_str)
-        .map(str::to_string)
-        .with_context(|| format!("missing [package].version in {}", path.display()))
-}
-
 pub fn firmware_series(root: &Path) -> Result<String> {
     let version = package_version(&root.join("firmware/cpu/fw/Cargo.toml"))?;
     let [major, minor, _] = version_parts(&version)?;
 
-    let svh = root.join("firmware/fpga/rtl/sources_1/new/headers/params.svh");
+    let svh = root.join(PARAMS_SVH_REL);
     let text =
         std::fs::read_to_string(&svh).with_context(|| format!("reading {}", svh.display()))?;
     let fpga_major = read_digits_after(&text, "VersionNumMajor = 8'd")?;
@@ -716,7 +677,7 @@ pub fn firmware_series(root: &Path) -> Result<String> {
 fn bump_firmware(root: &Path, version: &str) -> Result<()> {
     let [major, minor, patch] = version_parts(version)?;
 
-    let svh = root.join("firmware/fpga/rtl/sources_1/new/headers/params.svh");
+    let svh = root.join(PARAMS_SVH_REL);
     let mut text =
         std::fs::read_to_string(&svh).with_context(|| format!("reading {}", svh.display()))?;
     for (key, val) in [
@@ -742,7 +703,7 @@ fn bump_firmware(root: &Path, version: &str) -> Result<()> {
     Ok(())
 }
 
-fn read_digits_after(content: &str, key: &str) -> Result<u32> {
+fn digits_span(content: &str, key: &str) -> Result<std::ops::Range<usize>> {
     let pos = content
         .find(key)
         .with_context(|| format!("`{key}` not found"))?;
@@ -750,22 +711,20 @@ fn read_digits_after(content: &str, key: &str) -> Result<u32> {
     let len = content[start..]
         .find(|c: char| !c.is_ascii_digit())
         .with_context(|| format!("no digits after `{key}`"))?;
-    content[start..start + len]
+    Ok(start..start + len)
+}
+
+fn read_digits_after(content: &str, key: &str) -> Result<u32> {
+    content[digits_span(content, key)?]
         .parse()
         .with_context(|| format!("non-numeric value after `{key}`"))
 }
 
 fn bump_digits_after(content: &str, key: &str, new: u32) -> Result<String> {
-    let pos = content
-        .find(key)
-        .with_context(|| format!("`{key}` not found"))?;
-    let start = pos + key.len();
-    let len = content[start..]
-        .find(|c: char| !c.is_ascii_digit())
-        .with_context(|| format!("no digits after `{key}`"))?;
+    let span = digits_span(content, key)?;
     Ok(format!(
         "{}{new}{}",
-        &content[..start],
-        &content[start + len..]
+        &content[..span.start],
+        &content[span.end..]
     ))
 }

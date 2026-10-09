@@ -1,24 +1,30 @@
+use core::f32::consts::PI;
 use core::num::NonZeroU16;
 
 use anyhow::Result;
 
 use autd3_rs::commands::{
-    ChangeModulationBank, ChangePatternBank, ConfigFociStm, ConfigModulation, ConfigPattern,
+    ActivateModulationBank, ActivatePatternBank, ConfigFociStm, ConfigModulation, ConfigPattern,
     Modulation, Pattern, SetSilencer, StmConfig, WriteFociBuffer, WriteModulationBuffer,
     WritePatternBuffer,
 };
-use autd3_rs::geometry::{Geometry, offset};
+use autd3_rs::geometry::{Geometry, Point3, Vector3, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::{
-    ControlPoints, Intensity, LoopBehavior, ModulationBank, PatternBank, Phase, SamplingConfig,
-    TransitionMode,
+    ControlPoint, ControlPoints, Intensity, LoopBehavior, ModulationBank, PatternBank, Phase,
+    SamplingConfig, TransitionMode,
 };
-use autd3_rs::{Error, Frames, Velocity};
+use autd3_rs::{Error, Frames, Telemetry, Velocity};
 use autd3_rs_pattern::{focus, set_intensity, wavelength};
 
 use crate::Ctx;
+use crate::cases::ERR_INVALID_TRANSITION_MODE;
 
 pub const SOUND_SPEED_M_S: f32 = 340.0;
+pub const POINT_NUM: usize = 200;
+pub const RADIUS_MM: f32 = 30.0;
+pub const TR_A: u8 = 0;
+pub const TR_B: u8 = 248;
 
 pub type Buffers = (Vec<Vec<Phase>>, Vec<Vec<Intensity>>);
 
@@ -36,45 +42,67 @@ pub fn focus_at(geometry: &Geometry, off: [f32; 3], intensity: u8) -> Buffers {
     (phases, intensities)
 }
 
+pub fn circle_foci(center: Point3<f32>, n: usize) -> Vec<ControlPoints<1>> {
+    (0..n)
+        .map(|i| {
+            let theta = 2.0 * PI * i as f32 / n as f32;
+            let p = center + Vector3::new(RADIUS_MM * theta.cos(), RADIUS_MM * theta.sin(), 0.0);
+            ControlPoints::new([ControlPoint::new(p, Phase::ZERO)], Intensity::MAX)
+        })
+        .collect()
+}
+
+pub async fn resyncs(ctx: &Ctx<'_>) -> Result<Vec<u32>> {
+    Ok(ctx
+        .client
+        .read_telemetry()
+        .await?
+        .iter()
+        .map(|t| t.get(Telemetry::SyncResync))
+        .collect())
+}
+
 pub async fn send_pattern_mod(
     ctx: &Ctx<'_>,
     pattern: &Buffers,
     modulation: &[u8],
     config: SamplingConfig,
 ) -> Result<()> {
-    let mut builder = ctx.client.datagram_builder();
-    builder
-        .push(SetSilencer::default())
-        .push(Pattern::new(&pattern.0, &pattern.1))
-        .push(Modulation::new(config, modulation));
-    let frames = builder.build()?;
-    for frame in &frames {
-        ctx.client.send_checked(frame).await?;
-    }
-    Ok(())
+    ctx.send_frames(&Frames::encode(
+        ctx.client.geometry(),
+        (
+            SetSilencer::default(),
+            Pattern::new(&pattern.0, &pattern.1),
+            Modulation::new(config, modulation),
+        ),
+    )?)
+    .await
 }
 
 pub async fn write_pattern_bank(ctx: &Ctx<'_>, bank: PatternBank, pattern: &Buffers) -> Result<()> {
-    let mut builder = ctx.client.datagram_builder();
-    builder
-        .push(WritePatternBuffer::new(bank, 0, &pattern.0, &pattern.1))
-        .push(ConfigPattern {
-            bank,
-            config: SamplingConfig::new(NonZeroU16::MAX),
-            size: 1,
-            loop_behavior: LoopBehavior::Infinite,
-        });
-    let frames = builder.build()?;
-    for frame in &frames {
-        ctx.client.send_checked(frame).await?;
-    }
-    Ok(())
+    ctx.send_frames(&Frames::encode(
+        ctx.client.geometry(),
+        (
+            WritePatternBuffer::new(bank, 0, &pattern.0, &pattern.1),
+            ConfigPattern {
+                bank,
+                config: SamplingConfig::new(NonZeroU16::MAX),
+                size: 1,
+                loop_behavior: LoopBehavior::Infinite,
+            },
+        ),
+    )?)
+    .await
 }
 
-pub async fn change_pattern_bank(ctx: &Ctx<'_>, bank: PatternBank) -> Result<()> {
-    ctx.send(ChangePatternBank {
+pub async fn activate_pattern_bank(
+    ctx: &Ctx<'_>,
+    bank: PatternBank,
+    transition_mode: TransitionMode,
+) -> Result<()> {
+    ctx.send(ActivatePatternBank {
         bank,
-        transition_mode: TransitionMode::Immediate,
+        transition_mode,
     })
     .await
 }
@@ -85,24 +113,23 @@ pub async fn write_mod_bank(
     config: SamplingConfig,
     data: &[u8],
 ) -> Result<()> {
-    let mut builder = ctx.client.datagram_builder();
-    builder
-        .push(WriteModulationBuffer {
-            bank,
-            offset: 0,
-            data,
-        })
-        .push(ConfigModulation {
-            bank,
-            config,
-            size: data.len(),
-            loop_behavior: LoopBehavior::Infinite,
-        });
-    let frames = builder.build()?;
-    for frame in &frames {
-        ctx.client.send_checked(frame).await?;
-    }
-    Ok(())
+    ctx.send_frames(&Frames::encode(
+        ctx.client.geometry(),
+        (
+            WriteModulationBuffer {
+                bank,
+                offset: 0,
+                data,
+            },
+            ConfigModulation {
+                bank,
+                config,
+                size: data.len(),
+                loop_behavior: LoopBehavior::Infinite,
+            },
+        ),
+    )?)
+    .await
 }
 
 pub async fn report_fpga_state(
@@ -150,21 +177,26 @@ fn mark(name: &str, ok: bool, actual: &str) -> String {
     format!("[{status}] {name}={actual}")
 }
 
-pub async fn expect_firmware_ok(ctx: &Ctx<'_>, label: &str, built: Result<Frames, Error>) {
-    let frames = match built {
-        Ok(frames) => frames,
+async fn send_built(
+    ctx: &Ctx<'_>,
+    label: &str,
+    built: Result<Frames, Error>,
+) -> Option<Result<(), Error>> {
+    match built {
+        Ok(frames) => Some(ctx.try_send_frames(&frames).await),
         Err(e) => {
             println!("  [FAIL] {label}: rejected client-side before reaching firmware ({e:?})");
-            return;
-        }
-    };
-    for frame in &frames {
-        if let Err(e) = ctx.client.send_checked(frame).await {
-            println!("  [FAIL] {label}: firmware rejected the command ({e:?})");
-            return;
+            None
         }
     }
-    println!("  [OK] {label}: firmware accepted the command");
+}
+
+pub async fn expect_firmware_ok(ctx: &Ctx<'_>, label: &str, built: Result<Frames, Error>) {
+    match send_built(ctx, label, built).await {
+        Some(Ok(())) => println!("  [OK] {label}: firmware accepted the command"),
+        Some(Err(e)) => println!("  [FAIL] {label}: firmware rejected the command ({e:?})"),
+        None => {}
+    }
 }
 
 pub async fn expect_firmware_error(
@@ -173,20 +205,9 @@ pub async fn expect_firmware_error(
     built: Result<Frames, Error>,
     expected: u8,
 ) {
-    let frames = match built {
-        Ok(frames) => frames,
-        Err(e) => {
-            println!("  [FAIL] {label}: rejected client-side before reaching firmware ({e:?})");
-            return;
-        }
+    let Some(result) = send_built(ctx, label, built).await else {
+        return;
     };
-    let mut result = Ok(());
-    for frame in &frames {
-        result = ctx.client.send_checked(frame).await;
-        if result.is_err() {
-            break;
-        }
-    }
     match result {
         Err(Error::DeviceError { code, .. }) if code == expected => {
             println!("  [OK] {label}: firmware rejected (code={code:#04x})");
@@ -203,10 +224,36 @@ pub async fn expect_firmware_error(
     }
 }
 
-pub async fn change_mod_bank(ctx: &Ctx<'_>, bank: ModulationBank) -> Result<()> {
-    ctx.send(ChangeModulationBank {
+pub async fn expect_transition_mode_rejections(
+    ctx: &Ctx<'_>,
+    name: &str,
+    build: impl Fn(LoopBehavior, TransitionMode) -> Result<Frames, Error>,
+) {
+    println!("transition-mode validation (firmware):");
+    expect_firmware_error(
+        ctx,
+        &format!("{name} infinite loop + SyncIdx"),
+        build(LoopBehavior::Infinite, TransitionMode::SyncIdx),
+        ERR_INVALID_TRANSITION_MODE,
+    )
+    .await;
+    expect_firmware_error(
+        ctx,
+        &format!("{name} finite loop + Immediate"),
+        build(LoopBehavior::ONCE, TransitionMode::Immediate),
+        ERR_INVALID_TRANSITION_MODE,
+    )
+    .await;
+}
+
+pub async fn activate_mod_bank(
+    ctx: &Ctx<'_>,
+    bank: ModulationBank,
+    transition_mode: TransitionMode,
+) -> Result<()> {
+    ctx.send(ActivateModulationBank {
         bank,
-        transition_mode: TransitionMode::Immediate,
+        transition_mode,
     })
     .await
 }
@@ -220,33 +267,24 @@ pub async fn write_foci_bank(
 ) -> Result<()> {
     let size = points.len();
     let config = config.into().into_sampling_config(size);
-    let mut builder = ctx.client.datagram_builder();
-    builder
-        .push(WriteFociBuffer {
-            bank,
-            index_offset: 0,
-            points,
-        })
-        .push(ConfigFociStm {
-            bank,
-            config,
-            size,
-            num_foci: 1,
-            sound_speed: Velocity::from_m_s(SOUND_SPEED_M_S),
-            loop_behavior,
-        });
-    let frames = builder.build()?;
-    for frame in &frames {
-        ctx.client.send_checked(frame).await?;
-    }
-    Ok(())
-}
-
-pub async fn change_pattern_bank_sync(ctx: &Ctx<'_>, bank: PatternBank) -> Result<()> {
-    ctx.send(ChangePatternBank {
-        bank,
-        transition_mode: TransitionMode::SyncIdx,
-    })
+    ctx.send_frames(&Frames::encode(
+        ctx.client.geometry(),
+        (
+            WriteFociBuffer {
+                bank,
+                index_offset: 0,
+                points,
+            },
+            ConfigFociStm {
+                bank,
+                config,
+                size,
+                num_foci: 1,
+                sound_speed: Velocity::from_m_s(SOUND_SPEED_M_S),
+                loop_behavior,
+            },
+        ),
+    )?)
     .await
 }
 
@@ -259,19 +297,15 @@ pub async fn write_pattern_stm_bank(
 ) -> Result<()> {
     let size = patterns.len();
     let config = config.into().into_sampling_config(size);
-    let mut builder = ctx.client.datagram_builder();
     for (index, (phases, intensities)) in patterns.iter().enumerate() {
-        builder.push(WritePatternBuffer::new(bank, index, phases, intensities));
+        ctx.send(WritePatternBuffer::new(bank, index, phases, intensities))
+            .await?;
     }
-    builder.push(ConfigPattern {
+    ctx.send(ConfigPattern {
         bank,
         config,
         size,
         loop_behavior,
-    });
-    let frames = builder.build()?;
-    for frame in &frames {
-        ctx.client.send_checked(frame).await?;
-    }
-    Ok(())
+    })
+    .await
 }

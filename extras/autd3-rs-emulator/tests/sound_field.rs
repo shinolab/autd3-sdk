@@ -17,21 +17,15 @@ fn recorded() -> Record {
 
     emulator
         .record(async move |r| {
-            let mut builder = r.datagram_builder();
-            builder
-                .push(SetSilencer {
-                    config: FixedCompletionTime {
-                        intensity: ULTRASOUND_PERIOD,
-                        phase: ULTRASOUND_PERIOD,
-                        strict_mode: false,
-                    },
-                })
-                .push(Modulation::new(SamplingConfig::FREQ_4K, &modulation))
-                .push(Pattern::new(&phases, &intensities));
-            let datagrams = builder.build()?;
-            for frame in &datagrams {
-                r.send_checked(frame).await?;
-            }
+            r.send(SetSilencer::new(FixedCompletionTime {
+                intensity: ULTRASOUND_PERIOD,
+                phase: ULTRASOUND_PERIOD,
+                strict_mode: false,
+            }))
+            .await?;
+            r.send(Modulation::new(SamplingConfig::FREQ_4K, &modulation))
+                .await?;
+            r.send(Pattern::new(&phases, &intensities)).await?;
             r.tick(2 * ULTRASOUND_PERIOD)?;
             Ok(())
         })

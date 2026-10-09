@@ -1,27 +1,27 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use thiserror::Error;
 
-use autd3_rs_core::error::{EncodeError, LinkError};
+use autd3_cpu_wire::payload::PayloadBuildError;
+use autd3_rs_core::error::EncodeError;
 use autd3_rs_core::protocol::describe_device_error;
 
-use crate::commands::PatternCompression;
+use crate::commands::PhaseDepth;
 use crate::firmware_version::FirmwareVersion;
-use crate::mirror::{BankLoop, SilencerAxis};
-use crate::telemetry::Telemetry;
-use autd3_rs_core::value::{PulseWidthError, SamplingConfigError, TransitionMode};
+use autd3_rs_core::value::{PulseWidthError, SamplingConfigError};
 
 #[derive(Clone)]
-pub struct LinkCause(Arc<dyn core::error::Error + Send + Sync>);
+pub struct NetworkCause(Arc<dyn core::error::Error + Send + Sync>);
 
-impl LinkCause {
+impl NetworkCause {
     #[must_use]
     pub fn new<E: core::error::Error + Send + Sync + 'static>(source: E) -> Self {
         Self(Arc::new(source))
     }
 }
 
-impl core::ops::Deref for LinkCause {
+impl core::ops::Deref for NetworkCause {
     type Target = dyn core::error::Error + Send + Sync + 'static;
 
     fn deref(&self) -> &Self::Target {
@@ -29,13 +29,13 @@ impl core::ops::Deref for LinkCause {
     }
 }
 
-impl core::fmt::Debug for LinkCause {
+impl core::fmt::Debug for NetworkCause {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         core::fmt::Debug::fmt(&*self.0, f)
     }
 }
 
-impl core::fmt::Display for LinkCause {
+impl core::fmt::Display for NetworkCause {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         core::fmt::Display::fmt(&*self.0, f)
     }
@@ -48,25 +48,6 @@ pub enum Error {
     DeviceError { device: usize, code: u8 },
 
     #[error(
-        "device {device}: strict silencer {axis:?} completion {completion_steps} steps exceeds sampling divider {sampling_div}"
-    )]
-    SilencerConstraint {
-        device: usize,
-        axis: SilencerAxis,
-        completion_steps: u16,
-        sampling_div: u16,
-    },
-
-    #[error(
-        "device {device}: transition mode {transition_mode:?} is invalid for a {bank_loop:?} loop bank"
-    )]
-    TransitionConstraint {
-        device: usize,
-        transition_mode: TransitionMode,
-        bank_loop: BankLoop,
-    },
-
-    #[error(
         "device {device} runs firmware {version}, which is outside the series supported by this SDK ({}.{}.x)",
         FirmwareVersion::SUPPORTED_SERIES.0,
         FirmwareVersion::SUPPORTED_SERIES.1
@@ -76,19 +57,31 @@ pub enum Error {
         version: FirmwareVersion,
     },
 
+    #[error("device {device} returned a shorter reply than the command defines")]
+    UnexpectedReply { device: usize },
+
     #[error(
-        "device {device} rejected telemetry counter {counter:?}; its firmware does not know this counter"
+        "device {device} is lost: it stopped replying, so nothing is sent to it until the client is reopened"
     )]
-    UnsupportedTelemetry { device: usize, counter: Telemetry },
+    DeviceLost { device: usize },
 
-    #[error("ack timeout after {cycles} cycles")]
-    Timeout { cycles: u32 },
+    #[error("the devices did not reply within {timeout:?}")]
+    Timeout { timeout: std::time::Duration },
 
-    #[error("link error: {0}")]
-    Link(#[source] LinkCause),
+    #[error(
+        "device {device} did not accept the frame: it acknowledged sequence {got} where {expected} was sent"
+    )]
+    SeqMismatch {
+        device: usize,
+        expected: u8,
+        got: u8,
+    },
 
-    #[error(transparent)]
-    DcSysTime(#[from] autd3_rs_core::value::DcSysTimeError),
+    #[error("network error: {0}")]
+    Network(#[source] NetworkCause),
+
+    #[error("the device time is unknown: no reply carrying it has been observed yet")]
+    DeviceTimeUnknown,
 
     #[error("invalid payload: {0}")]
     InvalidPayload(PayloadError),
@@ -96,16 +89,13 @@ pub enum Error {
     #[error(transparent)]
     Encode(#[from] EncodeError),
 
-    #[error("client RT worker is no longer alive")]
-    RtClosed,
-
-    #[error("RT thread panicked")]
-    RtPanicked,
+    #[error("the client is closed")]
+    Closed,
 }
 
-impl From<LinkError> for Error {
-    fn from(e: LinkError) -> Self {
-        Error::Link(LinkCause::new(e))
+impl From<crate::udp::UdpError> for Error {
+    fn from(e: crate::udp::UdpError) -> Self {
+        Error::Network(NetworkCause::new(e))
     }
 }
 
@@ -124,14 +114,25 @@ pub enum PayloadError {
     #[error("max_inflight must be <= {max}")]
     MaxInflightTooLarge { max: usize },
 
-    #[error("link must expose 1..={max} devices, got {got}")]
-    DeviceCountOutOfRange { got: usize, max: usize },
+    #[error("ack_timeout must be longer than zero")]
+    ZeroAckTimeout,
 
-    #[error("geometry has {geometry} device(s) but link exposes {link}")]
-    GeometryDeviceMismatch { geometry: usize, link: usize },
+    #[error("the number of devices must be 1..={max}, got {got}")]
+    DeviceCountOutOfRange { got: usize, max: usize },
 
     #[error("expected {expected} datagram(s) (one per device), got {got}")]
     DatagramCountMismatch { expected: usize, got: usize },
+
+    #[error(
+        "CPU config `{field}` = {value:?} must be a multiple of {unit:?} within {min:?}..={max:?}"
+    )]
+    CpuConfigOutOfRange {
+        field: &'static str,
+        value: Duration,
+        unit: Duration,
+        min: Duration,
+        max: Duration,
+    },
 
     #[error("modulation size {size} out of range {min}..={max}")]
     ModulationSizeOutOfRange { size: usize, min: usize, max: usize },
@@ -168,10 +169,10 @@ pub enum PayloadError {
     #[error("pattern size {size} must be >= {min}")]
     PatternSizeTooSmall { size: usize, min: usize },
 
-    #[error("{count} patterns do not fit the {format} compression, which carries {max} per frame")]
-    PatternCountExceedsFormat {
+    #[error("{count} patterns do not fit the {depth:?} phase depth, which carries {max} per frame")]
+    PatternCountExceedsDepth {
         count: usize,
-        format: &'static str,
+        depth: PhaseDepth,
         max: usize,
     },
 
@@ -191,6 +192,9 @@ pub enum PayloadError {
     #[error("sound_speed must be >= 1")]
     SoundSpeedZero,
 
+    #[error("sound_speed {m_s} m/s exceeds the representable maximum {max} m/s")]
+    SoundSpeedTooLarge { m_s: f32, max: f32 },
+
     #[error("STM size {size} out of range {min}..={max}")]
     StmSizeOutOfRange { size: usize, min: usize, max: usize },
 
@@ -208,18 +212,92 @@ pub enum PayloadError {
     PatternStmLengthMismatch { phases: usize, intensities: usize },
 
     #[error(
-        "the {format:?} compression carries a single uniform intensity; per-transducer or per-index intensities are not supported"
+        "the {depth:?} phase depth carries a single uniform intensity; per-transducer or per-index intensities are not supported"
     )]
-    PatternCompressionRequiresUniformIntensity { format: PatternCompression },
+    PhaseDepthRequiresUniformIntensity { depth: PhaseDepth },
 
     #[error("pattern STM index {index} out of range 0..{max}")]
     PatternIndexOutOfRange { index: usize, max: usize },
+
+    #[error("{count} patterns do not fit one frame, which carries {max}")]
+    PatternCountExceedsFrame { count: usize, max: usize },
 
     #[error(transparent)]
     SamplingConfig(#[from] SamplingConfigError),
 
     #[error(transparent)]
     PulseWidth(#[from] PulseWidthError),
+}
+
+impl From<PayloadBuildError> for PayloadError {
+    fn from(e: PayloadBuildError) -> Self {
+        match e {
+            PayloadBuildError::ModulationSizeOutOfRange { size, min, max } => {
+                Self::ModulationSizeOutOfRange { size, min, max }
+            }
+            PayloadBuildError::ModulationOffsetNotEven { offset } => {
+                Self::ModulationOffsetNotEven { offset }
+            }
+            PayloadBuildError::ModulationWriteExceedsCapacity {
+                offset,
+                end,
+                capacity,
+            } => Self::ModulationWriteExceedsCapacity {
+                offset,
+                end,
+                capacity,
+            },
+            PayloadBuildError::FociWriteExceedsCapacity {
+                offset,
+                end,
+                capacity,
+            } => Self::FociWriteExceedsCapacity {
+                offset,
+                end,
+                capacity,
+            },
+            PayloadBuildError::StmSizeOutOfRange { size, min, max } => {
+                Self::StmSizeOutOfRange { size, min, max }
+            }
+            PayloadBuildError::FiniteLoopNeedsMultipleSamples { size } => {
+                Self::FiniteLoopNeedsMultipleSamples { size }
+            }
+            PayloadBuildError::PatternSizeTooSmall { size, min } => {
+                Self::PatternSizeTooSmall { size, min }
+            }
+            PayloadBuildError::NumFociOutOfRange { num_foci, max } => {
+                Self::NumFociOutOfRange { num_foci, max }
+            }
+            PayloadBuildError::StmFociExceedCapacity {
+                size,
+                num_foci,
+                capacity,
+            } => Self::StmFociExceedCapacity {
+                size,
+                num_foci,
+                capacity,
+            },
+            PayloadBuildError::SoundSpeedZero => Self::SoundSpeedZero,
+            PayloadBuildError::SoundSpeedTooLarge { m_s, max } => {
+                Self::SoundSpeedTooLarge { m_s, max }
+            }
+            PayloadBuildError::SilencerCompletionTimeNotMultiple(time) => {
+                Self::SilencerCompletionTimeNotMultiple(time)
+            }
+            PayloadBuildError::SilencerCompletionTimeOutOfRange(time) => {
+                Self::SilencerCompletionTimeOutOfRange(time)
+            }
+            PayloadBuildError::PatternCountExceedsDepth { count, depth, max } => {
+                Self::PatternCountExceedsDepth { count, depth, max }
+            }
+            PayloadBuildError::PatternCountExceedsFrame { count, max } => {
+                Self::PatternCountExceedsFrame { count, max }
+            }
+            PayloadBuildError::PatternIndexOutOfRange { index, max } => {
+                Self::PatternIndexOutOfRange { index, max }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -237,25 +315,20 @@ mod tests {
     }
 
     #[test]
-    fn a_link_error_keeps_its_source_when_it_becomes_a_client_error() {
+    fn a_network_error_keeps_its_source_when_it_becomes_a_client_error() {
         let io = std::io::Error::from(std::io::ErrorKind::PermissionDenied);
-        let e = Error::from(LinkError::with_source("failed to open the link", io));
+        let message = io.to_string();
+        let e = Error::from(crate::udp::UdpError::from(io));
 
-        assert_eq!(e.to_string(), "link error: failed to open the link");
-        assert_eq!(
-            chain(&e),
-            vec![
-                "failed to open the link".to_owned(),
-                std::io::Error::from(std::io::ErrorKind::PermissionDenied).to_string(),
-            ]
-        );
+        assert_eq!(e.to_string(), format!("network error: {message}"));
+        assert_eq!(chain(&e), vec![message.clone(), message]);
 
-        let link_error = core::error::Error::source(&e)
+        let udp_error = core::error::Error::source(&e)
             .expect("the cause must be reachable through source()")
-            .downcast_ref::<LinkError>()
-            .expect("the LinkError itself must survive the conversion");
+            .downcast_ref::<crate::udp::UdpError>()
+            .expect("the UdpError itself must survive the conversion");
         assert_eq!(
-            core::error::Error::source(link_error)
+            core::error::Error::source(udp_error)
                 .expect("the source must survive")
                 .downcast_ref::<std::io::Error>()
                 .map(std::io::Error::kind),
@@ -264,10 +337,10 @@ mod tests {
     }
 
     #[test]
-    fn a_link_error_without_a_source_ends_the_chain() {
-        let e = Error::from(LinkError::new("the bus is gone"));
+    fn a_network_error_without_a_source_ends_the_chain() {
+        let e = Error::from(crate::udp::UdpError::Closed);
 
-        assert_eq!(e.to_string(), "link error: the bus is gone");
-        assert_eq!(chain(&e), vec!["the bus is gone".to_owned()]);
+        assert_eq!(e.to_string(), "network error: the connection is closed");
+        assert_eq!(chain(&e), vec!["the connection is closed".to_owned()]);
     }
 }

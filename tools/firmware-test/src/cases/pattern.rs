@@ -2,12 +2,13 @@ use anyhow::Result;
 
 use autd3_rs::commands::Pattern;
 use autd3_rs::units::Hz;
-use autd3_rs::value::{Intensity, PatternBank, SamplingConfig};
+use autd3_rs::value::{Intensity, PatternBank, SamplingConfig, TransitionMode};
 use autd3_rs_modulation::{SineOption, modulation_buffer, sine};
 
 use crate::Ctx;
 use crate::cases::pattern_util::{
-    buffers, change_pattern_bank, focus_at, report_fpga_state, send_pattern_mod, write_pattern_bank,
+    activate_pattern_bank, buffers, focus_at, report_fpga_state, send_pattern_mod,
+    write_pattern_bank,
 };
 use crate::io::wait_enter;
 
@@ -26,7 +27,7 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     wait_enter("The focus disappeared").await;
     report_fpga_state(ctx, "B1 null", None, Some(PatternBank::B1), Some(true)).await?;
 
-    change_pattern_bank(ctx, PatternBank::B0).await?;
+    activate_pattern_bank(ctx, PatternBank::B0, TransitionMode::Immediate).await?;
     wait_enter("The focus is shown again").await;
     report_fpga_state(ctx, "back to B0", None, Some(PatternBank::B0), Some(true)).await?;
 
@@ -41,7 +42,7 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     )
     .await?;
 
-    change_pattern_bank(ctx, PatternBank::B1).await?;
+    activate_pattern_bank(ctx, PatternBank::B1, TransitionMode::Immediate).await?;
     wait_enter("The focus disappeared").await;
     report_fpga_state(ctx, "switch to B1", None, Some(PatternBank::B1), Some(true)).await?;
     Ok(())

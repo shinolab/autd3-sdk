@@ -7,7 +7,6 @@ using System.Diagnostics;
 using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
-using AUTD3.Link;
 using static AUTD3.Units;
 
 internal static class Program
@@ -22,28 +21,20 @@ internal static class Program
 
     private static async Task Configure(Client client, PhaseBuffer phases)
     {
-        using var builder = client.DatagramBuilder();
-        builder
-            .Push(new WritePatternBuffer(PatternBank.B0, 0, phases, Intensity.Min))
-            .Push(new ConfigPattern(PatternBank.B0, SamplingConfig.Freq4k, 1));
-        using var frames = builder.Build();
-        foreach (var frame in frames)
-        {
-            await client.SendCheckedAsync(frame);
-        }
+        await client.SendAsync(Command.Sequence(
+            new WritePatternBuffer(PatternBank.B0, 0, phases, Intensity.Min),
+            new ConfigPattern(PatternBank.B0, SamplingConfig.Freq4k, 1)));
     }
 
-    private static Frames WriteFocus(Client client, PhaseBuffer phases)
-    {
-        using var builder = client.DatagramBuilder();
-        builder.Push(new WritePatternBuffer(PatternBank.B0, 0, phases, Intensity.Max));
-        return builder.Build();
-    }
+    private static WritePatternBuffer WriteFocus(PhaseBuffer phases) =>
+        new WritePatternBuffer(PatternBank.B0, 0, phases, Intensity.Max);
 
     private static async Task Main()
     {
+        using var logGuard = Tracing.Init(new TracingOption());
+
         using var geometry = new Geometry(new List<Autd3> { new Autd3(Vector3.Zero) });
-        await using var client = await Client.OpenAsync(geometry, new EchocatLinkOption(), new ClientConfig());
+        await using var client = await Client.OpenAsync(geometry, new TransportOption(), new ClientConfig());
 
         var center = geometry.Center;
         const float radius = 30f;
@@ -52,40 +43,39 @@ internal static class Program
         using var phases = geometry.PhaseBuffer();
         await Configure(client, phases);
 
-        var frames = new List<Frames>(TotalPoints);
+        var targets = new List<Vector3>(TotalPoints);
         for (var i = 0; i < TotalPoints; i++)
         {
             var theta = 2.0 * Math.PI * i / TotalPoints;
-            var target = center + new Vector3(radius * (float)Math.Cos(theta), radius * (float)Math.Sin(theta), 150f);
-            Pattern.Focus(geometry, target, wavelength, phases);
-            frames.Add(WriteFocus(client, phases));
+            targets.Add(center + new Vector3(radius * (float)Math.Cos(theta), radius * (float)Math.Sin(theta), 150f));
         }
 
         Console.WriteLine($"sweeping a focus through {TotalPoints} positions, twice");
 
         // stop-and-wait: confirm each frame lands before issuing the next.
         var sw = Stopwatch.StartNew();
-        foreach (var dg in frames)
+        foreach (var target in targets)
         {
-            foreach (var frame in dg)
-            {
-                await client.SendCheckedAsync(frame);
-            }
+            Pattern.Focus(geometry, target, wavelength, phases);
+            await client.SendAsync(WriteFocus(phases));
         }
         Report("stop-and-wait", sw.Elapsed.TotalSeconds);
 
         // streaming: keep Client.MaxInflight frames on the wire, draining the oldest response once the window is full.
         sw.Restart();
-        var pending = new Queue<ResponseToken>();
-        foreach (var dg in frames)
+        var pending = new Queue<ResponseFuture>();
+        using var frames = new Frames();
+        foreach (var target in targets)
         {
-            foreach (var frame in dg)
+            Pattern.Focus(geometry, target, wavelength, phases);
+            frames.EncodeInto(geometry, WriteFocus(phases));
+            foreach (var frame in frames)
             {
                 if (pending.Count >= Client.MaxInflight)
                 {
                     (await pending.Dequeue()).Check();
                 }
-                pending.Enqueue(await client.SendAsync(frame));
+                pending.Enqueue(await client.SendFrameAsync(frame));
             }
         }
         while (pending.Count > 0)
@@ -94,9 +84,6 @@ internal static class Program
         }
         Report("streaming", sw.Elapsed.TotalSeconds);
 
-        foreach (var dg in frames)
-        {
-            dg.Dispose();
-        }
+        await client.SilentStopAsync();
     }
 }

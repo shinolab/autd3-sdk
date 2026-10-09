@@ -1,18 +1,29 @@
+use core::hash::{Hash, Hasher};
 use core::num::NonZeroU16;
 use core::time::Duration as StdDuration;
 
+use autd3_rs_core::nalgebra::Complex;
 use autd3_rs_core::units::Hz;
 use autd3_rs_core::value::{
     Intensity as CoreIntensity, Nearest, Phase as CorePhase, SamplingConfig as CoreSamplingConfig,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use pyo3::types::PyComplex;
 
 use crate::error::to_pyerr;
-use crate::units::Angle;
+use crate::units::{Angle, Freq, hash_f32};
 
-#[pyclass(name = "Intensity", module = "autd3_core", from_py_object)]
-#[derive(Clone)]
+#[pyclass(
+    name = "Intensity",
+    module = "autd3_core",
+    eq,
+    ord,
+    hash,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Intensity(pub CoreIntensity);
 
 #[pymethods]
@@ -52,9 +63,41 @@ impl Intensity {
     }
 }
 
-#[pyclass(name = "Phase", module = "autd3_core", from_py_object)]
-#[derive(Clone)]
+#[pyclass(
+    name = "Phase",
+    module = "autd3_core",
+    eq,
+    hash,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Phase(pub CorePhase);
+
+impl Hash for Phase {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.0.hash(state);
+    }
+}
+
+fn extract_complex(value: &Bound<'_, PyAny>) -> PyResult<Option<Complex<f32>>> {
+    let complex = if let Ok(complex) = value.cast::<PyComplex>() {
+        complex.clone()
+    } else if value.hasattr("__complex__")? {
+        value
+            .py()
+            .get_type::<PyComplex>()
+            .call1((value,))?
+            .cast_into::<PyComplex>()?
+    } else {
+        return Ok(None);
+    };
+    #[allow(clippy::cast_possible_truncation)]
+    Ok(Some(Complex::new(
+        complex.real() as f32,
+        complex.imag() as f32,
+    )))
+}
 
 #[pymethods]
 impl Phase {
@@ -64,10 +107,13 @@ impl Phase {
             return Ok(Self(CorePhase(v)));
         }
         if let Ok(angle) = value.cast::<Angle>() {
-            return Ok(Self(CorePhase::from(angle.borrow().0)));
+            return Ok(Self(CorePhase::from(angle.get().0)));
+        }
+        if let Some(complex) = extract_complex(value)? {
+            return Ok(Self(CorePhase::from(complex)));
         }
         Err(PyValueError::new_err(
-            "Phase expects an int (0-255) or an Angle (e.g. 0.5 * pi * rad)",
+            "Phase expects an int (0-255), an Angle (e.g. 0.5 * pi * rad) or a complex number",
         ))
     }
 
@@ -88,11 +134,15 @@ impl Phase {
         self.0.0
     }
 
-    fn radian(&self) -> f32 {
+    fn rad(&self) -> f32 {
         self.0.rad()
     }
 
     fn __int__(&self) -> u8 {
+        self.0.0
+    }
+
+    fn __index__(&self) -> u8 {
         self.0.0
     }
 
@@ -101,9 +151,22 @@ impl Phase {
     }
 }
 
-#[pyclass(name = "SamplingConfig", module = "autd3_core", skip_from_py_object)]
-#[derive(Clone)]
+#[pyclass(
+    name = "SamplingConfig",
+    module = "autd3_core",
+    eq,
+    hash,
+    frozen,
+    skip_from_py_object
+)]
+#[derive(Clone, PartialEq)]
 pub struct SamplingConfig(pub CoreSamplingConfig);
+
+impl Hash for SamplingConfig {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.divide().ok().hash(state);
+    }
+}
 
 #[pymethods]
 impl SamplingConfig {
@@ -122,12 +185,12 @@ impl SamplingConfig {
     #[new]
     fn new(value: &Bound<'_, PyAny>) -> PyResult<Self> {
         if let Ok(nearest) = value.cast::<PyNearest>() {
-            return Ok(Self(match nearest.borrow().0 {
+            return Ok(Self(match nearest.get().0 {
                 NearestInner::Freq(hz) => CoreSamplingConfig::new(Nearest(hz * Hz)),
                 NearestInner::Period(period) => CoreSamplingConfig::new(Nearest(period)),
             }));
         }
-        if let Ok(freq) = value.extract::<crate::units::Freq>() {
+        if let Ok(freq) = value.extract::<Freq>() {
             return Ok(Self(freq.sampling_config()));
         }
         if let Ok(period) = value.extract::<Duration>() {
@@ -144,18 +207,18 @@ impl SamplingConfig {
     }
 
     fn divide(&self) -> PyResult<u16> {
-        self.0.divide().map_err(to_pyerr)
+        self.0.divide().map(NonZeroU16::get).map_err(to_pyerr)
     }
 
-    fn freq(&self) -> PyResult<f32> {
-        self.0.freq().map(|f| f.hz()).map_err(to_pyerr)
-    }
-
-    fn period(&self) -> PyResult<f32> {
+    fn freq(&self) -> PyResult<Freq> {
         self.0
-            .period()
-            .map(|p| p.as_nanos() as f32 / 1000.0)
+            .freq()
+            .map(|f| Freq::from_hz_f32(f.hz()))
             .map_err(to_pyerr)
+    }
+
+    fn period(&self) -> PyResult<Duration> {
+        self.0.period().map(Duration).map_err(to_pyerr)
     }
 
     fn __repr__(&self) -> String {
@@ -163,21 +226,43 @@ impl SamplingConfig {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 enum NearestInner {
     Freq(f32),
     Period(StdDuration),
 }
 
-#[pyclass(name = "Nearest", module = "autd3_core", skip_from_py_object)]
-#[derive(Clone, Copy)]
+#[pyclass(
+    name = "Nearest",
+    module = "autd3_core",
+    eq,
+    hash,
+    frozen,
+    skip_from_py_object
+)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct PyNearest(NearestInner);
+
+impl Hash for PyNearest {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self.0 {
+            NearestInner::Freq(hz) => {
+                0u8.hash(state);
+                hash_f32(hz, state);
+            }
+            NearestInner::Period(period) => {
+                1u8.hash(state);
+                period.hash(state);
+            }
+        }
+    }
+}
 
 #[pymethods]
 impl PyNearest {
     #[new]
     fn new(value: &Bound<'_, PyAny>) -> PyResult<Self> {
-        if let Ok(freq) = value.extract::<crate::units::Freq>() {
+        if let Ok(freq) = value.extract::<Freq>() {
             return Ok(Self(NearestInner::Freq(freq.hz_f32())));
         }
         if let Ok(period) = value.extract::<Duration>() {
@@ -210,8 +295,16 @@ impl PyNearest {
     }
 }
 
-#[pyclass(name = "Duration", module = "autd3_core", from_py_object)]
-#[derive(Clone, Copy)]
+#[pyclass(
+    name = "Duration",
+    module = "autd3_core",
+    eq,
+    ord,
+    hash,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Duration(pub StdDuration);
 
 #[pymethods]

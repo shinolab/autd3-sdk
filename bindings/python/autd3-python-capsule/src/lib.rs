@@ -1,31 +1,45 @@
+pub mod extract;
 pub mod numpy;
 
 use std::ffi::{CStr, c_void};
 use std::ptr::NonNull;
 
-use autd3_rs_core::Geometry;
 use autd3_rs_core::value::{Intensity, Phase};
-use pyo3::exceptions::{PyAttributeError, PyTypeError, PyValueError};
+use autd3_rs_core::{Device, Geometry};
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyCapsule, PyCapsuleMethods};
 
-pub const GEOMETRY_CAPSULE_NAME: &CStr = c"autd3.geometry.v1";
-pub const PHASE_CAPSULE_NAME: &CStr = c"autd3.phase.v1";
-pub const PHASE_MUT_CAPSULE_NAME: &CStr = c"autd3.phase.mut.v1";
-pub const INTENSITY_CAPSULE_NAME: &CStr = c"autd3.intensity.v1";
-pub const INTENSITY_MUT_CAPSULE_NAME: &CStr = c"autd3.intensity.mut.v1";
-pub const MODULATION_CAPSULE_NAME: &CStr = c"autd3.modulation.v1";
+const GEOMETRY_CAPSULE_NAME: &CStr = c"autd3.geometry.v1";
+const DEVICE_CAPSULE_NAME: &CStr = c"autd3.device.v1";
+const PHASE_CAPSULE_NAME: &CStr = c"autd3.phase.v2";
+const INTENSITY_CAPSULE_NAME: &CStr = c"autd3.intensity.v2";
+const MODULATION_CAPSULE_NAME: &CStr = c"autd3.modulation.v1";
 
-pub fn to_pyerr<E: core::fmt::Display>(py: Python<'_>, e: E) -> PyErr {
-    let msg = e.to_string();
+pub mod error_code {
+    pub const GENERIC: i32 = -1;
+    pub const TIMEOUT: i32 = -2;
+    pub const DEVICE: i32 = -3;
+    pub const NETWORK: i32 = -4;
+    pub const INVALID_ARGUMENT: i32 = -5;
+    pub const UNSUPPORTED_FIRMWARE: i32 = -6;
+}
+
+#[must_use]
+pub fn to_pyerr_with_code(py: Python<'_>, code: i32, msg: String) -> PyErr {
     match py
         .import("autd3_core")
         .and_then(|m| m.getattr("Autd3Error"))
         .and_then(|c| c.call1((msg.clone(),)))
+        .and_then(|inst| inst.setattr("code", code).map(|()| inst))
     {
         Ok(inst) => PyErr::from_value(inst),
         Err(_) => PyValueError::new_err(msg),
     }
+}
+
+pub fn to_pyerr<E: core::fmt::Display>(py: Python<'_>, e: E) -> PyErr {
+    to_pyerr_with_code(py, error_code::GENERIC, e.to_string())
 }
 
 pub fn to_pyerr_gil<E: core::fmt::Display>(e: E) -> PyErr {
@@ -40,26 +54,6 @@ pub fn capsule_of<'py>(obj: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyCapsule
     Ok(capsule.cast_into::<PyCapsule>()?)
 }
 
-pub fn legacy_capsule_of<'py>(obj: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyCapsule>> {
-    if let Ok(capsule) = obj.cast::<PyCapsule>() {
-        return Ok(capsule.clone());
-    }
-    let capsule = match obj.call_method0("_legacy_capsule") {
-        Ok(capsule) => capsule,
-        Err(e) if e.is_instance_of::<PyAttributeError>(obj.py()) => {
-            let name = obj
-                .get_type()
-                .name()
-                .map_or_else(|_| "this link".to_owned(), |name| name.to_string());
-            return Err(PyTypeError::new_err(format!(
-                "{name} does not support LegacyClient; update the autd3-link-* wheel to one that exposes _legacy_capsule"
-            )));
-        }
-        Err(e) => return Err(e),
-    };
-    Ok(capsule.cast_into::<PyCapsule>()?)
-}
-
 pub fn geometry_into_capsule(py: Python<'_>, geometry: Geometry) -> PyResult<Bound<'_, PyCapsule>> {
     PyCapsule::new_with_value(py, geometry, GEOMETRY_CAPSULE_NAME)
 }
@@ -69,28 +63,21 @@ pub fn geometry_from_capsule<'a>(capsule: &'a Bound<'_, PyCapsule>) -> PyResult<
     Ok(unsafe { ptr.cast::<Geometry>().as_ref() })
 }
 
-fn buffer_into_capsule<'py, T: Send + 'static>(
-    py: Python<'py>,
-    data: Vec<Vec<T>>,
-    name: &'static CStr,
-) -> PyResult<Bound<'py, PyCapsule>> {
-    PyCapsule::new_with_value(py, data, name)
+pub fn device_into_capsule(py: Python<'_>, device: Device) -> PyResult<Bound<'_, PyCapsule>> {
+    PyCapsule::new_with_value(py, device, DEVICE_CAPSULE_NAME)
 }
 
-fn buffer_from_capsule<'a, T>(
-    capsule: &'a Bound<'_, PyCapsule>,
-    name: &'static CStr,
-) -> PyResult<&'a [Vec<T>]> {
-    let ptr: NonNull<c_void> = capsule.pointer_checked(Some(name))?;
-    Ok(unsafe { ptr.cast::<Vec<Vec<T>>>().as_ref() })
+pub fn device_from_capsule<'a>(capsule: &'a Bound<'_, PyCapsule>) -> PyResult<&'a Device> {
+    let ptr: NonNull<c_void> = capsule.pointer_checked(Some(DEVICE_CAPSULE_NAME))?;
+    Ok(unsafe { ptr.cast::<Device>().as_ref() })
 }
 
-pub struct BufferMut {
+struct BorrowedBuffer {
     addr: usize,
     _owner: Py<PyAny>,
 }
 
-unsafe fn buffer_capsule_mut<'py, T>(
+unsafe fn buffer_capsule<'py, T>(
     py: Python<'py>,
     ptr: NonNull<Vec<Vec<T>>>,
     owner: Py<PyAny>,
@@ -98,7 +85,7 @@ unsafe fn buffer_capsule_mut<'py, T>(
 ) -> PyResult<Bound<'py, PyCapsule>> {
     PyCapsule::new_with_value(
         py,
-        BufferMut {
+        BorrowedBuffer {
             addr: ptr.as_ptr() as usize,
             _owner: owner,
         },
@@ -106,70 +93,62 @@ unsafe fn buffer_capsule_mut<'py, T>(
     )
 }
 
-#[allow(clippy::mut_from_ref)]
-fn buffer_from_capsule_mut<'a, T>(
-    capsule: &'a Bound<'_, PyCapsule>,
+fn buffer_ptr<T>(
+    capsule: &Bound<'_, PyCapsule>,
     name: &'static CStr,
-) -> PyResult<&'a mut Vec<Vec<T>>> {
+) -> PyResult<*mut Vec<Vec<T>>> {
     let ptr: NonNull<c_void> = capsule.pointer_checked(Some(name))?;
-    let addr = unsafe { ptr.cast::<BufferMut>().as_ref() }.addr;
-    Ok(unsafe { &mut *(addr as *mut Vec<Vec<T>>) })
+    Ok(unsafe { ptr.cast::<BorrowedBuffer>().as_ref() }.addr as *mut Vec<Vec<T>>)
 }
 
-pub fn phases_into_capsule(
-    py: Python<'_>,
-    data: Vec<Vec<Phase>>,
-) -> PyResult<Bound<'_, PyCapsule>> {
-    buffer_into_capsule(py, data, PHASE_CAPSULE_NAME)
+pub fn phase_buffer_addr(capsule: &Bound<'_, PyCapsule>) -> PyResult<usize> {
+    Ok(buffer_ptr::<Phase>(capsule, PHASE_CAPSULE_NAME)?.addr())
 }
 
-pub fn phases_from_capsule<'a>(capsule: &'a Bound<'_, PyCapsule>) -> PyResult<&'a [Vec<Phase>]> {
-    buffer_from_capsule(capsule, PHASE_CAPSULE_NAME)
+pub fn intensity_buffer_addr(capsule: &Bound<'_, PyCapsule>) -> PyResult<usize> {
+    Ok(buffer_ptr::<Intensity>(capsule, INTENSITY_CAPSULE_NAME)?.addr())
 }
 
 #[allow(clippy::missing_safety_doc)]
-pub unsafe fn phase_capsule_mut(
+pub unsafe fn phase_capsule(
     py: Python<'_>,
     ptr: NonNull<Vec<Vec<Phase>>>,
     owner: Py<PyAny>,
 ) -> PyResult<Bound<'_, PyCapsule>> {
-    unsafe { buffer_capsule_mut(py, ptr, owner, PHASE_MUT_CAPSULE_NAME) }
+    unsafe { buffer_capsule(py, ptr, owner, PHASE_CAPSULE_NAME) }
+}
+
+pub fn phases_from_capsule<'a>(capsule: &'a Bound<'_, PyCapsule>) -> PyResult<&'a [Vec<Phase>]> {
+    Ok(unsafe { &*buffer_ptr(capsule, PHASE_CAPSULE_NAME)? })
 }
 
 #[allow(clippy::mut_from_ref)]
 pub fn phases_from_capsule_mut<'a>(
     capsule: &'a Bound<'_, PyCapsule>,
 ) -> PyResult<&'a mut Vec<Vec<Phase>>> {
-    buffer_from_capsule_mut(capsule, PHASE_MUT_CAPSULE_NAME)
+    Ok(unsafe { &mut *buffer_ptr(capsule, PHASE_CAPSULE_NAME)? })
 }
 
-pub fn intensities_into_capsule(
+#[allow(clippy::missing_safety_doc)]
+pub unsafe fn intensity_capsule(
     py: Python<'_>,
-    data: Vec<Vec<Intensity>>,
+    ptr: NonNull<Vec<Vec<Intensity>>>,
+    owner: Py<PyAny>,
 ) -> PyResult<Bound<'_, PyCapsule>> {
-    buffer_into_capsule(py, data, INTENSITY_CAPSULE_NAME)
+    unsafe { buffer_capsule(py, ptr, owner, INTENSITY_CAPSULE_NAME) }
 }
 
 pub fn intensities_from_capsule<'a>(
     capsule: &'a Bound<'_, PyCapsule>,
 ) -> PyResult<&'a [Vec<Intensity>]> {
-    buffer_from_capsule(capsule, INTENSITY_CAPSULE_NAME)
-}
-
-#[allow(clippy::missing_safety_doc)]
-pub unsafe fn intensity_capsule_mut(
-    py: Python<'_>,
-    ptr: NonNull<Vec<Vec<Intensity>>>,
-    owner: Py<PyAny>,
-) -> PyResult<Bound<'_, PyCapsule>> {
-    unsafe { buffer_capsule_mut(py, ptr, owner, INTENSITY_MUT_CAPSULE_NAME) }
+    Ok(unsafe { &*buffer_ptr(capsule, INTENSITY_CAPSULE_NAME)? })
 }
 
 #[allow(clippy::mut_from_ref)]
 pub fn intensities_from_capsule_mut<'a>(
     capsule: &'a Bound<'_, PyCapsule>,
 ) -> PyResult<&'a mut Vec<Vec<Intensity>>> {
-    buffer_from_capsule_mut(capsule, INTENSITY_MUT_CAPSULE_NAME)
+    Ok(unsafe { &mut *buffer_ptr(capsule, INTENSITY_CAPSULE_NAME)? })
 }
 
 pub fn modulation_into_capsule(py: Python<'_>, data: Vec<u8>) -> PyResult<Bound<'_, PyCapsule>> {
@@ -181,29 +160,18 @@ pub fn modulation_from_capsule<'a>(capsule: &'a Bound<'_, PyCapsule>) -> PyResul
     Ok(unsafe { ptr.cast::<Vec<u8>>().as_ref() })
 }
 
-#[cfg(feature = "client")]
-mod link {
-    use std::cell::RefCell;
+#[cfg(feature = "frame")]
+mod frame {
     use std::ffi::{CStr, c_void};
-    use std::future::Future;
-    use std::pin::Pin;
     use std::ptr::NonNull;
     use std::sync::Arc;
 
-    use autd3_rs::Error;
-    use autd3_rs::{ClientConfig, Frames, Response, ResponseFuture};
-    use autd3_rs_core::Geometry;
-    use pyo3::exceptions::PyValueError;
+    use autd3_rs::Frames;
+
     use pyo3::prelude::*;
     use pyo3::types::{PyCapsule, PyCapsuleMethods};
 
-    pub const LINK_CAPSULE_NAME: &CStr = c"autd3.link.v1";
-    pub const FRAME_CAPSULE_NAME: &CStr = c"autd3.frame.v1";
-
-    #[must_use]
-    pub fn link_err(message: impl Into<String>) -> Error {
-        autd3_rs_core::error::LinkError::new(message).into()
-    }
+    const FRAME_CAPSULE_NAME: &CStr = c"autd3.frame.v1";
 
     pub fn frame_into_capsule(
         py: Python<'_>,
@@ -218,256 +186,41 @@ mod link {
         let (frames, index) = unsafe { ptr.cast::<(Arc<Frames>, usize)>().as_ref() };
         Ok((Arc::clone(frames), *index))
     }
+}
 
-    pub type BoxFuture<T> = Pin<Box<dyn Future<Output = Result<T, Error>> + Send>>;
+#[cfg(feature = "frame")]
+pub use frame::{frame_from_capsule, frame_into_capsule};
 
-    pub struct LinkStatusData {
-        pub device_states: Vec<String>,
-        pub all_op: bool,
-        pub any_lost: bool,
-        pub recoveries: u64,
-    }
+#[cfg(feature = "frame")]
+mod client_error {
+    use autd3_rs::Error;
+    use pyo3::prelude::*;
 
-    pub struct ResponseToken {
-        fut: ResponseFuture,
-    }
+    use crate::error_code;
 
-    impl ResponseToken {
-        #[must_use]
-        pub fn new(fut: ResponseFuture) -> Self {
-            Self { fut }
-        }
-
-        pub fn wait(self) -> BoxFuture<Response> {
-            Box::pin(self.fut)
-        }
-    }
-
-    pub trait ClientBackend: Send + Sync {
-        fn num_devices(&self) -> usize;
-        fn dc_offset_ns(&self) -> i64;
-        fn read_firmware_version(&self) -> BoxFuture<Vec<String>>;
-        fn read_fpga_state(&self) -> BoxFuture<Vec<u8>>;
-        fn read_error_detail(&self) -> BoxFuture<Vec<u8>>;
-        fn read_telemetry(&self, counter: autd3_rs::Telemetry) -> BoxFuture<Vec<u8>>;
-        fn send(&self, datagrams: Arc<Frames>, index: usize) -> BoxFuture<ResponseToken>;
-        fn send_checked(&self, datagrams: Arc<Frames>, frame: Option<usize>) -> BoxFuture<()>;
-        fn check_status(&self) -> Result<LinkStatusData, Error>;
-        fn stop(&self) -> BoxFuture<()>;
-        fn close(&self) -> BoxFuture<()>;
-    }
-
-    pub type ClientOpener =
-        Box<dyn FnOnce(Geometry, ClientConfig) -> BoxFuture<Box<dyn ClientBackend>> + Send>;
-
-    pub fn client_opener<F, Fut>(f: F) -> ClientOpener
-    where
-        F: FnOnce(Geometry, ClientConfig) -> Fut + Send + 'static,
-        Fut: Future<Output = Result<Box<dyn ClientBackend>, Error>> + Send + 'static,
-    {
-        Box::new(move |geo, cfg| Box::pin(f(geo, cfg)))
-    }
-
-    pub fn link_into_capsule(
-        py: Python<'_>,
-        opener: ClientOpener,
-    ) -> PyResult<Bound<'_, PyCapsule>> {
-        PyCapsule::new_with_value(py, RefCell::new(Some(opener)), LINK_CAPSULE_NAME)
-    }
-
-    pub fn take_client_opener(capsule: &Bound<'_, PyCapsule>) -> PyResult<ClientOpener> {
-        let ptr: NonNull<c_void> = capsule.pointer_checked(Some(LINK_CAPSULE_NAME))?;
-        let cell = unsafe { ptr.cast::<RefCell<Option<ClientOpener>>>().as_ref() };
-        cell.borrow_mut()
-            .take()
-            .ok_or_else(|| PyValueError::new_err("link has already been consumed by open()"))
-    }
-
-    use autd3_rs::legacy::{LegacyClient, LegacyClientConfig, LegacyError, LegacyFrames};
-    use autd3_rs_core::link::{IntoLink, StateCheck};
-
-    pub const LEGACY_LINK_CAPSULE_NAME: &CStr = c"autd3.legacy_link.v1";
-    pub const LEGACY_FRAME_CAPSULE_NAME: &CStr = c"autd3.legacy_frame.v1";
-
-    pub type LegacyBoxFuture<T> = Pin<Box<dyn Future<Output = Result<T, LegacyError>> + Send>>;
-
-    pub trait LegacyClientBackend: Send + Sync {
-        fn num_devices(&self) -> usize;
-        fn dc_offset_ns(&self) -> i64;
-        fn read_firmware_version(&self) -> LegacyBoxFuture<Vec<String>>;
-        fn read_fpga_state(&self) -> LegacyBoxFuture<Vec<u8>>;
-        fn send(&self, frames: Arc<LegacyFrames>, index: usize) -> LegacyBoxFuture<Vec<u8>>;
-        fn send_checked(
-            &self,
-            frames: Arc<LegacyFrames>,
-            frame: Option<usize>,
-        ) -> LegacyBoxFuture<()>;
-        fn check_status(&self) -> Result<LinkStatusData, LegacyError>;
-        fn stop(&self) -> LegacyBoxFuture<()>;
-        fn close(&self) -> LegacyBoxFuture<()>;
-    }
-
-    pub type LegacyClientOpener = Box<
-        dyn FnOnce(Geometry, LegacyClientConfig) -> LegacyBoxFuture<Box<dyn LegacyClientBackend>>
-            + Send,
-    >;
-
-    struct LegacyBackend<C> {
-        client: Arc<LegacyClient>,
-        checker: Arc<std::sync::Mutex<C>>,
-    }
-
-    fn legacy_frame_range(
-        frames: &LegacyFrames,
-        frame: Option<usize>,
-    ) -> Result<(usize, usize), LegacyError> {
-        match frame {
-            Some(index) if index >= frames.len() => {
-                Err(LegacyError::Link(format!("frame {index} out of range")))
-            }
-            Some(index) => Ok((index, index + 1)),
-            None => Ok((0, frames.len())),
+    #[must_use]
+    pub fn client_error_code(e: &Error) -> i32 {
+        match e {
+            Error::Timeout { .. } | Error::SeqMismatch { .. } => error_code::TIMEOUT,
+            Error::DeviceError { .. } | Error::UnexpectedReply { .. } => error_code::DEVICE,
+            Error::Network(_) | Error::DeviceLost { .. } => error_code::NETWORK,
+            Error::UnsupportedFirmware { .. } => error_code::UNSUPPORTED_FIRMWARE,
+            Error::InvalidPayload(_) | Error::Encode(_) => error_code::INVALID_ARGUMENT,
+            _ => error_code::GENERIC,
         }
     }
 
-    impl<C: StateCheck> LegacyClientBackend for LegacyBackend<C> {
-        fn num_devices(&self) -> usize {
-            self.client.num_devices()
-        }
-
-        fn dc_offset_ns(&self) -> i64 {
-            self.client.dc_offset_ns()
-        }
-
-        fn read_firmware_version(&self) -> LegacyBoxFuture<Vec<String>> {
-            let client = Arc::clone(&self.client);
-            Box::pin(async move {
-                let versions = client.read_firmware_version().await?;
-                Ok::<Vec<String>, LegacyError>(versions.iter().map(ToString::to_string).collect())
-            })
-        }
-
-        fn read_fpga_state(&self) -> LegacyBoxFuture<Vec<u8>> {
-            let client = Arc::clone(&self.client);
-            Box::pin(async move {
-                let states = client.read_fpga_state().await?;
-                Ok::<Vec<u8>, LegacyError>(states.iter().map(|s| s.0).collect())
-            })
-        }
-
-        fn send(&self, frames: Arc<LegacyFrames>, index: usize) -> LegacyBoxFuture<Vec<u8>> {
-            let client = Arc::clone(&self.client);
-            Box::pin(async move {
-                let frame = frames
-                    .frame(index)
-                    .ok_or_else(|| LegacyError::Link(format!("frame {index} out of range")))?;
-                Ok::<Vec<u8>, LegacyError>(client.send(frame).await?.data().to_vec())
-            })
-        }
-
-        fn send_checked(
-            &self,
-            frames: Arc<LegacyFrames>,
-            frame: Option<usize>,
-        ) -> LegacyBoxFuture<()> {
-            let client = Arc::clone(&self.client);
-            Box::pin(async move {
-                let (start, end) = legacy_frame_range(&frames, frame)?;
-                for index in start..end {
-                    let frame = frames
-                        .frame(index)
-                        .ok_or_else(|| LegacyError::Link(format!("frame {index} out of range")))?;
-                    client.send_checked(frame).await?;
-                }
-                Ok::<(), LegacyError>(())
-            })
-        }
-
-        fn check_status(&self) -> Result<LinkStatusData, LegacyError> {
-            let status = self
-                .checker
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .check()
-                .map_err(|e| LegacyError::Link(e.to_string()))?;
-            Ok(LinkStatusData {
-                device_states: status.devices().iter().map(ToString::to_string).collect(),
-                all_op: status.all_op(),
-                any_lost: status.any_lost(),
-                recoveries: status.recoveries(),
-            })
-        }
-
-        fn stop(&self) -> LegacyBoxFuture<()> {
-            let client = Arc::clone(&self.client);
-            Box::pin(async move { client.stop().await })
-        }
-
-        fn close(&self) -> LegacyBoxFuture<()> {
-            let client = Arc::clone(&self.client);
-            Box::pin(async move { client.close().await })
-        }
+    #[must_use]
+    pub fn client_pyerr(py: Python<'_>, e: &Error) -> PyErr {
+        crate::to_pyerr_with_code(py, client_error_code(e), e.to_string())
     }
 
-    pub fn legacy_client_opener<T, F>(make_link: F) -> LegacyClientOpener
-    where
-        F: FnOnce(&Geometry) -> Result<T, LegacyError> + Send + 'static,
-        T: IntoLink + 'static,
-    {
-        Box::new(move |geometry, config| {
-            Box::pin(async move {
-                let link = make_link(&geometry)?;
-                let (client, checker) =
-                    LegacyClient::open_with_checker(&geometry, link, config).await?;
-                let backend: Box<dyn LegacyClientBackend> = Box::new(LegacyBackend {
-                    client: Arc::new(client),
-                    checker: Arc::new(std::sync::Mutex::new(checker)),
-                });
-                Ok(backend)
-            })
-        })
-    }
-
-    pub fn legacy_link_into_capsule(
-        py: Python<'_>,
-        opener: LegacyClientOpener,
-    ) -> PyResult<Bound<'_, PyCapsule>> {
-        PyCapsule::new_with_value(py, RefCell::new(Some(opener)), LEGACY_LINK_CAPSULE_NAME)
-    }
-
-    pub fn take_legacy_client_opener(
-        capsule: &Bound<'_, PyCapsule>,
-    ) -> PyResult<LegacyClientOpener> {
-        let ptr: NonNull<c_void> = capsule.pointer_checked(Some(LEGACY_LINK_CAPSULE_NAME))?;
-        let cell = unsafe { ptr.cast::<RefCell<Option<LegacyClientOpener>>>().as_ref() };
-        cell.borrow_mut()
-            .take()
-            .ok_or_else(|| PyValueError::new_err("link has already been consumed by open()"))
-    }
-
-    pub fn legacy_frame_into_capsule(
-        py: Python<'_>,
-        frames: Arc<LegacyFrames>,
-        index: usize,
-    ) -> PyResult<Bound<'_, PyCapsule>> {
-        PyCapsule::new_with_value(py, (frames, index), LEGACY_FRAME_CAPSULE_NAME)
-    }
-
-    pub fn legacy_frame_from_capsule(
-        capsule: &Bound<'_, PyCapsule>,
-    ) -> PyResult<(Arc<LegacyFrames>, usize)> {
-        let ptr: NonNull<c_void> = capsule.pointer_checked(Some(LEGACY_FRAME_CAPSULE_NAME))?;
-        let (frames, index) = unsafe { ptr.cast::<(Arc<LegacyFrames>, usize)>().as_ref() };
-        Ok((Arc::clone(frames), *index))
+    #[allow(clippy::needless_pass_by_value)]
+    #[must_use]
+    pub fn client_pyerr_gil(e: Error) -> PyErr {
+        Python::attach(|py| client_pyerr(py, &e))
     }
 }
 
-#[cfg(feature = "client")]
-pub use link::{
-    BoxFuture, ClientBackend, ClientOpener, FRAME_CAPSULE_NAME, LEGACY_FRAME_CAPSULE_NAME,
-    LEGACY_LINK_CAPSULE_NAME, LINK_CAPSULE_NAME, LegacyBoxFuture, LegacyClientBackend,
-    LegacyClientOpener, LinkStatusData, ResponseToken, client_opener, frame_from_capsule,
-    frame_into_capsule, legacy_client_opener, legacy_frame_from_capsule, legacy_frame_into_capsule,
-    legacy_link_into_capsule, link_err, link_into_capsule, take_client_opener,
-    take_legacy_client_opener,
-};
+#[cfg(feature = "frame")]
+pub use client_error::{client_error_code, client_pyerr, client_pyerr_gil};

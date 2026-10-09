@@ -1,33 +1,25 @@
 use anyhow::Result;
 
-use autd3_rs::commands::{GpioOut, SetGpioOut};
+use autd3_rs::commands::{GpioOut, SetGpioOut, each};
 use autd3_rs::common::ULTRASOUND_PERIOD;
-use autd3_rs::value::{DcSysTime, Intensity, Phase, SamplingConfig};
+use autd3_rs::value::{Intensity, Phase, SamplingConfig};
 use autd3_rs_modulation::{constant, modulation_buffer};
 
 use crate::Ctx;
-use crate::cases::pattern_util::{Buffers, buffers, send_pattern_mod};
+use crate::cases::pattern_util::{Buffers, TR_A, TR_B, buffers, send_pattern_mod};
 use crate::io::wait_enter;
-
-const TR_A: u8 = 0;
-const TR_B: u8 = 248;
 
 async fn send_gpio(ctx: &Ctx<'_>, outputs: [GpioOut; 4]) -> Result<()> {
     ctx.send(SetGpioOut { outputs }).await
 }
 
 async fn send_gpio_each(ctx: &Ctx<'_>, outputs: impl Fn(usize) -> [GpioOut; 4]) -> Result<()> {
-    let mut builder = ctx.client.datagram_builder();
-    builder.push_each(|dev| {
+    ctx.send(each(|dev| {
         Some(SetGpioOut {
             outputs: outputs(dev.idx()),
         })
-    });
-    let frames = builder.build()?;
-    for frame in &frames {
-        ctx.client.send_checked(frame).await?;
-    }
-    Ok(())
+    }))
+    .await
 }
 
 fn custom_drive(ctx: &Ctx<'_>) -> Buffers {
@@ -124,7 +116,7 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     )
     .await;
 
-    let t0 = DcSysTime::now()? + std::time::Duration::from_secs(2);
+    let t0 = ctx.client.device_time_now()? + std::time::Duration::from_secs(2);
     send_gpio_each(ctx, |dev| {
         let at = if dev == 0 { t0 } else { t0 + ULTRASOUND_PERIOD };
         [

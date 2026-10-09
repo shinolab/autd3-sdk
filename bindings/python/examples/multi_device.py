@@ -7,24 +7,22 @@ Run with: cargo xtask py example multi_device
 import asyncio
 
 import autd3
-import autd3_link_echocat as echocat
-from scipy.spatial.transform import Rotation
+from autd3.geometry import Autd3, Geometry
 
 
 async def main() -> None:
-    geometry = autd3.geometry.Geometry(
+    _log_guard = autd3.init_tracing()
+
+    geometry = Geometry(
         [
-            autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]),
-            autd3.geometry.Autd3(
-                origin=(autd3.geometry.Autd3.DEVICE_WIDTH, 0.0, 0.0),
-                rotation=Rotation.identity(),
-            ),
+            Autd3([0.0, 0.0, 0.0]),
+            Autd3([Autd3.DEVICE_WIDTH, 0.0, 0.0]),
         ]
     )
 
     async with await autd3.Client.open(
         geometry,
-        echocat.EchocatLinkOption(),
+        autd3.TransportOption(),
         autd3.ClientConfig(),
     ) as client:
         print("devices:", client.num_devices())

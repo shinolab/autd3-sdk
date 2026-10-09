@@ -1,6 +1,6 @@
 # autd3-console
 
-GUI console that launches the AUTD3 tools: the sound field simulator, the CPU/FPGA firmware writer, and (on Windows) the TwinCAT setup CLI.
+GUI console that launches the AUTD3 tools: the sound field simulator and the CPU/FPGA firmware writer.
 
 ## Install
 

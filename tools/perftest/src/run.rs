@@ -1,26 +1,30 @@
 use std::collections::VecDeque;
-use std::num::{NonZeroU32, NonZeroUsize};
+use std::num::NonZeroUsize;
+use std::ops::ControlFlow;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use autd3_rs::commands::{ConfigPattern, GpioOut, Nop, Pattern, SetGpioOut, WritePatternBuffer};
-use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::protocol::TX_FRAME_BYTES;
-use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig};
-use autd3_rs::{
-    Client, ClientConfig, CoreId, Error as ClientError, Frames, IntoLink, Link, LinkStats,
-    ResponseFuture, RtPriority, RtSchedulePolicy, StateCheck,
+use autd3_rs::commands::{
+    ActivatePatternBank, ConfigPattern, GpioOut, Nop, Pattern, SetGpioOut, WriteModulationBuffer,
+    WritePatternBuffer,
 };
-use autd3_rs_link_remote::{DiscoveryOption, RemoteLink, ServerKind, discover};
+use autd3_rs::geometry::{Autd3, Geometry};
+use autd3_rs::params::MOD_BUFFER_SAMPLES;
+use autd3_rs::protocol::FrameHeader;
+use autd3_rs::value::{
+    Intensity, LoopBehavior, ModulationBank, PatternBank, Phase, SamplingConfig, TransitionMode,
+};
+use autd3_rs::{
+    BusStats, Client, ClientConfig, Error as ClientError, Frame, Frames, Interface, ResponseFuture,
+    StateChecker, Telemetry, TelemetryCounters, TransportOption,
+};
+use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
-use autd3_rs_link_twincat::{TwinCATLink, TwinCATLinkOption};
-
-use crate::cli::{Cli, Command, LinkKind, Mode, RtPolicy};
+use crate::cli::{Cli, Command, Mode};
 use crate::mem::{self, MemProfile};
-use crate::nop::PacedNop;
-use crate::stats::{Sample, SampleStatus};
+use crate::stats::{DriverAckLatency, Sample, SampleStatus};
 
 const PROGRESS_INTERVAL: Duration = Duration::from_secs(1);
 const STATE_CHECK_INTERVAL: Duration = Duration::from_millis(100);
@@ -29,12 +33,11 @@ pub struct RunOutput {
     pub samples: Vec<Sample>,
     pub sends: u64,
     pub stopped_on_error: Option<(u64, SampleStatus)>,
-    pub rt_closed: bool,
-    pub warmup: u64,
+    pub driver_closed: bool,
     pub elapsed: Duration,
     pub frame_bytes: usize,
-    pub stale_cycles: u64,
-    pub lost_cycles: u64,
+    pub missed_replies: u64,
+    pub driver_ack: Option<DriverAckLatency>,
     pub mem: Option<MemProfile>,
 }
 
@@ -43,11 +46,13 @@ struct Sender {
     frames: Frames,
     phases: Vec<Vec<Phase>>,
     intensities: Vec<Vec<Intensity>>,
+    modulation: Vec<u8>,
     tick: u8,
+    next_frame: usize,
 }
 
 impl Sender {
-    fn new(client: &Client, geometry: &Geometry, cli: &Cli) -> Result<Self> {
+    fn new(geometry: &Geometry, cli: &Cli) -> Result<Self> {
         let mut sender = Self {
             command: cli.command,
             frames: Frames::default(),
@@ -64,13 +69,18 @@ impl Sender {
             } else {
                 Vec::new()
             },
+            modulation: if cli.command.is_bulk() {
+                vec![0; MOD_BUFFER_SAMPLES]
+            } else {
+                Vec::new()
+            },
             tick: 0,
+            next_frame: 0,
         };
         if cli.command == Command::Nop {
-            let mut builder = client.datagram_builder();
-            builder.push(Nop);
-            builder
-                .build_into(&mut sender.frames)
+            sender
+                .frames
+                .encode_into(geometry, Nop)
                 .context("building Nop frame")?;
         }
         Ok(sender)
@@ -80,28 +90,67 @@ impl Sender {
         if self.command == Command::Nop {
             return Ok(());
         }
+        if self.command.is_bulk() {
+            let mut value = self.tick;
+            for sample in &mut self.modulation {
+                *sample = value;
+                value = value.wrapping_add(1);
+            }
+            self.tick = self.tick.wrapping_add(1);
+            self.frames
+                .encode_into(
+                    client.geometry(),
+                    WriteModulationBuffer {
+                        bank: ModulationBank::B1,
+                        offset: 0,
+                        data: &self.modulation,
+                    },
+                )
+                .context("encoding modulation write")?;
+            return Ok(());
+        }
         fill_phases(&mut self.phases, self.tick);
         self.tick = self.tick.wrapping_add(1);
 
-        let mut builder = client.datagram_builder();
-        if self.command == Command::Pattern {
-            builder.push(Pattern::with_bank(
-                PatternBank::B0,
-                &self.phases,
-                &self.intensities,
-            ));
+        let encoded = if self.command == Command::Pattern {
+            self.frames.encode_into(
+                client.geometry(),
+                Pattern::with_bank(PatternBank::B0, &self.phases, &self.intensities),
+            )
         } else {
-            builder.push(WritePatternBuffer::new(
-                PatternBank::B0,
-                0,
-                &self.phases,
-                &self.intensities,
-            ));
-        }
-        builder
-            .build_into(&mut self.frames)
-            .context("encoding pattern write")?;
+            self.frames.encode_into(
+                client.geometry(),
+                WritePatternBuffer::new(PatternBank::B0, 0, &self.phases, &self.intensities),
+            )
+        };
+        encoded.context("encoding pattern write")?;
         Ok(())
+    }
+
+    fn next_frame(&mut self, client: &Client) -> Result<Frame<'_>> {
+        if self.next_frame >= self.frames.len() {
+            self.prepare(client)?;
+            self.next_frame = 0;
+        }
+        let frame = self
+            .frames
+            .frame(self.next_frame)
+            .context("the command built no frame")?;
+        self.next_frame += 1;
+        Ok(frame)
+    }
+
+    fn frame_bytes(&self) -> usize {
+        self.frames
+            .frame(0)
+            .map_or(size_of::<FrameHeader>(), |frame| {
+                frame
+                    .datagrams()
+                    .iter()
+                    .map(|d| size_of::<FrameHeader>() + d.payload_len)
+                    .max()
+                    .unwrap_or(size_of::<FrameHeader>())
+            })
     }
 }
 
@@ -116,32 +165,29 @@ fn fill_phases(phases: &mut [Vec<Phase>], tick: u8) {
 }
 
 async fn send_config_pattern_once(client: &Client) -> Result<()> {
-    let mut builder = client.datagram_builder();
-    builder.push(ConfigPattern {
-        bank: PatternBank::B0,
-        config: SamplingConfig::FREQ_4K,
-        size: 1,
-        loop_behavior: LoopBehavior::Infinite,
-    });
-    for frame in &builder.build()? {
-        client.send_checked(frame).await?;
-    }
+    client
+        .send((
+            ConfigPattern {
+                bank: PatternBank::B0,
+                config: SamplingConfig::FREQ_4K,
+                size: 1,
+                loop_behavior: LoopBehavior::Infinite,
+            },
+            ActivatePatternBank {
+                bank: PatternBank::B0,
+                transition_mode: TransitionMode::Immediate,
+            },
+        ))
+        .await?;
     Ok(())
 }
 
-async fn send_set_gpio_out_once(client: &Client) -> Result<()> {
-    let mut builder = client.datagram_builder();
-    builder.push(SetGpioOut {
-        outputs: [
-            GpioOut::BaseSignal,
-            GpioOut::Off,
-            GpioOut::Off,
-            GpioOut::Off,
-        ],
-    });
-    for frame in &builder.build()? {
-        client.send_checked(frame).await?;
-    }
+async fn send_set_gpio_out_once(client: &Client, output: GpioOut) -> Result<()> {
+    client
+        .send(SetGpioOut {
+            outputs: [output, GpioOut::Off, GpioOut::Off, GpioOut::Off],
+        })
+        .await?;
     Ok(())
 }
 
@@ -188,7 +234,7 @@ impl StateCheckGuard {
     }
 }
 
-fn spawn_state_check<C: StateCheck>(mut checker: C, interval: Duration) -> StateCheckGuard {
+fn spawn_state_check(checker: StateChecker, interval: Duration) -> StateCheckGuard {
     let stop = Arc::new(AtomicBool::new(false));
     let join = tokio::spawn({
         let stop = Arc::clone(&stop);
@@ -205,117 +251,65 @@ fn spawn_state_check<C: StateCheck>(mut checker: C, interval: Duration) -> State
 }
 
 pub async fn run(cli: &Cli) -> Result<RunOutput> {
-    match cli.link {
-        LinkKind::Echocat => {
-            let link_cfg = autd3_rs_link_echocat::EchocatLinkOption {
-                iface: cli.interface.clone().into(),
-                sync0_period: cli.sync0_period,
-                frame_phase: cli.echocat_frame_phase(),
-                sleep_strategy: cli.echocat_sleep_strategy(),
-                ..Default::default()
-            };
-            let link = tokio::task::spawn_blocking(move || {
-                autd3_rs_link_echocat::EchocatLink::open(&link_cfg)
-            })
-            .await
-            .expect("open task panicked")
-            .context("opening EtherCAT link (echocat)")?;
-            let guard = spawn_state_check(link.state_checker(), STATE_CHECK_INTERVAL);
-            let out = Box::pin(run_with_bus_link(link, cli)).await;
-            guard.stop().await;
-            out
-        }
-        LinkKind::Twincat => {
-            let opt = match (cli.twincat_remote, cli.ams_net_id) {
-                (Some(addr), Some(ams_net_id)) => TwinCATLinkOption::remote(addr, ams_net_id),
-                _ => TwinCATLinkOption::local(),
-            };
-            let link = tokio::task::spawn_blocking(move || TwinCATLink::open(opt))
-                .await
-                .expect("open task panicked")
-                .context("opening TwinCAT link")?;
-            let guard = spawn_state_check(link.state_checker(), STATE_CHECK_INTERVAL);
-            let out = Box::pin(run_with_bus_link(link, cli)).await;
-            guard.stop().await;
-            out
-        }
-        LinkKind::Remote => {
-            let num_devices = cli.devices.expect("--devices validated for --link remote");
-            let addr = if let Some(addr) = cli.addr {
-                addr
+    let emulator = cli
+        .emulator
+        .then(|| UdpEmulator::spawn(cli.devices.get()))
+        .transpose()
+        .context("starting the UDP device emulator")?;
+    let mut option = match &emulator {
+        Some(emulator) => TransportOption {
+            iface: emulator.interface(),
+            reply_timeout: Duration::from_millis(50),
+            response_timeout: Duration::from_millis(50),
+            enumeration_timeout: Duration::from_secs(1),
+            sync_timeout: Duration::from_secs(5),
+            ..Default::default()
+        },
+        None => TransportOption {
+            iface: if cli.simulator {
+                Interface::Simulator
             } else {
-                let appliance = discover(&DiscoveryOption {
-                    instance: cli.instance.clone(),
-                    kind: Some(ServerKind::Appliance),
-                    ..Default::default()
-                })
-                .context("finding the appliance over mDNS")?;
-                eprintln!("appliance: {} at {}", appliance.instance, appliance.addr);
-                appliance.addr
-            };
-            let link = tokio::task::spawn_blocking(move || {
-                let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()).collect());
-                RemoteLink::open(addr, None, &geometry)
-            })
-            .await
-            .expect("open task panicked")
-            .with_context(|| format!("opening the remote link to {addr}"))?;
-            let guard = spawn_state_check(link.state_checker(), STATE_CHECK_INTERVAL);
-            let out = Box::pin(run_with_bus_link(link, cli)).await;
-            guard.stop().await;
-            out
-        }
-        LinkKind::Nop => {
-            let num_devices = cli.devices.expect("--devices validated for --link nop");
-            let link = PacedNop::new(cli.sync0_period);
-            Box::pin(run_with_link(link, num_devices, cli)).await
-        }
+                cli.interface.clone().into()
+            },
+            ..Default::default()
+        },
+    };
+    option.heartbeat = Some(cli.heartbeat);
+    if let Some(reply_timeout) = cli.reply_timeout {
+        option.reply_timeout = reply_timeout;
     }
+    option.send_rate_limit = cli.send_rate_limit;
+    if let Some(bytes) = cli.send_buffer {
+        option.send_buffer = std::num::NonZeroUsize::new(bytes);
+    }
+    let out = Box::pin(run_with_option(option, cli)).await;
+    drop(emulator);
+    out
 }
 
-async fn run_with_bus_link<L: Link>(link: L, cli: &Cli) -> Result<RunOutput> {
-    let num_devices = link.num_devices();
-    if let Some(expected) = cli.devices
-        && num_devices != expected
-    {
-        anyhow::bail!("expected {expected} device(s) on the bus, found {num_devices}");
-    }
-    run_with_link(link, num_devices, cli).await
-}
-
-async fn run_with_link<T: IntoLink>(link: T, num_devices: usize, cli: &Cli) -> Result<RunOutput> {
+async fn run_with_option(option: TransportOption, cli: &Cli) -> Result<RunOutput> {
+    let num_devices = cli.devices.get();
     eprintln!("devices: {num_devices}");
 
     let max_inflight = match cli.mode {
-        Mode::StopAndWait => 1,
-        Mode::Streaming => cli.max_inflight.max(1),
+        Mode::StopAndWait if !cli.command.is_bulk() => 1,
+        _ => cli.max_inflight.max(1),
     };
     let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()).collect());
     let client = Box::pin(Client::open(
         &geometry,
-        link,
+        &option,
         ClientConfig {
-            timeout_cycles: cli.timeout_cycles,
+            ack_timeout: cli.ack_timeout,
             max_inflight: NonZeroUsize::new(max_inflight).unwrap(),
             max_resync_rounds: cli.max_resync_rounds,
-            low_latency: cli.low_latency,
-            reset_resend_cycles: NonZeroU32::new(2).unwrap(),
-            rt_priority: match cli.rt_priority {
-                Some(p) => Some(RtPriority::new(p).expect("validated to 0..=99")),
-                None => ClientConfig::default().rt_priority,
-            },
-            rt_policy: match cli.rt_policy {
-                RtPolicy::Normal => RtSchedulePolicy::Normal,
-                RtPolicy::Fifo => RtSchedulePolicy::Fifo,
-                RtPolicy::RoundRobin => RtSchedulePolicy::RoundRobin,
-            },
-            rt_affinity: cli.rt_affinity.map(|id| CoreId { id }),
-            validate_state: false,
             ..Default::default()
         },
     ))
     .await
-    .context("client handshake")?;
+    .context("opening the devices")?;
+    let checker = client.state_checker();
+    let guard = spawn_state_check(checker, STATE_CHECK_INTERVAL);
 
     let fw = client
         .read_firmware_version()
@@ -328,249 +322,87 @@ async fn run_with_link<T: IntoLink>(link: T, num_devices: usize, cli: &Cli) -> R
     if cli.command.is_pattern() {
         send_config_pattern_once(&client)
             .await
-            .context("initial ConfigPattern")?;
+            .context("initial ConfigPattern + ActivatePatternBank")?;
     }
     if cli.gpio_base_signal {
-        send_set_gpio_out_once(&client)
+        send_set_gpio_out_once(&client, GpioOut::BaseSignal)
             .await
             .context("initial SetGpioOut")?;
         eprintln!("GPIO[0]: BaseSignal (probe it to check inter-device sync)");
+    }
+    if cli.gpio_sync {
+        send_set_gpio_out_once(&client, GpioOut::Sync)
+            .await
+            .context("initial SetGpioOut")?;
+        eprintln!("GPIO[0]: Sync (probe it to check the sync pulse of every device)");
     }
 
     let shutdown = Arc::new(AtomicBool::new(false));
     spawn_signal_listener(Arc::clone(&shutdown));
 
-    let sender = Sender::new(&client, &geometry, cli)?;
-    let link_stats = client.link_stats();
+    let telemetry_before = if cli.telemetry {
+        Some(client.read_telemetry().await.context("reading telemetry")?)
+    } else {
+        None
+    };
+    if let Some(hold) = cli.hold {
+        eprintln!("holding the connection idle for {hold:?}");
+        tokio::time::sleep(hold).await;
+    }
+
+    let sender = Sender::new(&geometry, cli)?;
+    let bus_stats = client.bus_stats();
 
     let output = match cli.mode {
-        Mode::StopAndWait => run_stop_and_wait(&client, cli, sender, shutdown, &link_stats).await,
+        Mode::StopAndWait => run_stop_and_wait(&client, cli, sender, shutdown, &bus_stats).await,
         Mode::Streaming => {
-            run_streaming(&client, cli, sender, shutdown, max_inflight, &link_stats).await
+            run_streaming(&client, cli, sender, shutdown, max_inflight, &bus_stats).await
         }
     };
 
-    let _ = client.close().await;
+    if let Some(before) = telemetry_before {
+        let after = client.read_telemetry().await.context("reading telemetry")?;
+        print_telemetry(&before, &after);
+    }
+
+    if let Err(e) = client.close().await {
+        eprintln!("the client closed with an error: {e}");
+    }
+    guard.stop().await;
 
     output
 }
 
-async fn run_stop_and_wait(
-    client: &Client,
-    cli: &Cli,
-    mut sender: Sender,
-    shutdown: Arc<AtomicBool>,
-    link_stats: &LinkStats,
-) -> Result<RunOutput> {
-    let mut recorded = Recorder::new(cli);
-    let mut index: u64 = 0;
-    let mut stopped_on_error = None;
-    let mut rt_closed = false;
-    let mut progress = Progress::new(cli);
-
-    let mem_recorder = mem::start();
-    let start = Instant::now();
-    loop {
-        if shutdown.load(Ordering::Relaxed) {
-            break;
-        }
-        if let Some(n) = cli.count
-            && index >= n
-        {
-            break;
-        }
-        if let Some(d) = cli.duration
-            && start.elapsed() >= d
-        {
-            break;
-        }
-
-        sender.prepare(client)?;
-        let t0 = Instant::now();
-        let res = client
-            .send_checked(sender.frames.frame(0).expect("one frame"))
-            .await;
-        let rtt = t0.elapsed();
-
-        let status = match res {
-            Ok(()) => SampleStatus::Ok,
-            Err(ClientError::DeviceError { code, .. }) => SampleStatus::DeviceError(code),
-            Err(ClientError::Timeout { .. }) => SampleStatus::Timeout,
-            Err(ClientError::Link(cause)) => {
-                eprintln!("link error: {cause}");
-                SampleStatus::LinkError
-            }
-            Err(ClientError::InvalidPayload(e)) => {
-                anyhow::bail!("payload rejected by the local encoder: {e}");
-            }
-            Err(ClientError::Encode(e)) => {
-                anyhow::bail!("value rejected by the local encoder: {e}");
-            }
-            Err(e @ ClientError::SilencerConstraint { .. }) => {
-                anyhow::bail!("rejected by the local silencer precheck: {e}");
-            }
-            Err(e @ ClientError::TransitionConstraint { .. }) => {
-                anyhow::bail!("rejected by the local transition precheck: {e}");
-            }
-            Err(ClientError::RtClosed) => {
-                eprintln!("client RT thread closed unexpectedly");
-                rt_closed = true;
-                SampleStatus::LinkError
-            }
-            Err(e) => anyhow::bail!("{e}"),
-        };
-
-        recorded.push(Sample { index, rtt, status });
-        progress.observe(status, start.elapsed());
-        if rt_closed {
-            break;
-        }
-        if cli.stop_on_error && status != SampleStatus::Ok {
-            stopped_on_error = Some((index, status));
-            break;
-        }
-        index += 1;
+fn print_telemetry(before: &[TelemetryCounters], after: &[TelemetryCounters]) {
+    for counter in Telemetry::ALL {
+        let at_start: Vec<u32> = before.iter().map(|c| c.get(*counter)).collect();
+        let deltas: Vec<u32> = before
+            .iter()
+            .zip(after)
+            .map(|(b, a)| a.get(*counter).wrapping_sub(b.get(*counter)))
+            .collect();
+        eprintln!("telemetry {counter:?}: at start {at_start:?}, delta {deltas:?}");
     }
-
-    progress.finish();
-
-    let mem = mem::profile(mem_recorder, recorded.sends);
-    Ok(RunOutput {
-        samples: recorded.samples,
-        sends: recorded.sends,
-        stopped_on_error,
-        rt_closed,
-        warmup: cli.warmup,
-        elapsed: start.elapsed(),
-        frame_bytes: TX_FRAME_BYTES,
-        stale_cycles: link_stats.stale_cycles(),
-        lost_cycles: link_stats.lost_cycles(),
-        mem,
-    })
 }
 
-async fn run_streaming(
-    client: &Client,
-    cli: &Cli,
-    mut sender: Sender,
-    shutdown: Arc<AtomicBool>,
-    max_inflight: usize,
-    link_stats: &LinkStats,
-) -> Result<RunOutput> {
-    let mut recorded = Recorder::new(cli);
-    let mut pending: VecDeque<PendingFuture> = VecDeque::with_capacity(max_inflight);
-    let mut sends_issued: u64 = 0;
-    let mut sample_index: u64 = 0;
-    let mut stopped_on_error = None;
-    let mut rt_closed = false;
-    let mut progress = Progress::new(cli);
-
-    let mem_recorder = mem::start();
-    let start = Instant::now();
-    loop {
-        if shutdown.load(Ordering::Relaxed) {
-            break;
+async fn send_all(client: &Client, frames: &Frames, window: usize) -> Result<(), ClientError> {
+    let mut pending: VecDeque<ResponseFuture> = VecDeque::with_capacity(window);
+    for frame in frames {
+        if pending.len() >= window {
+            let fut = pending.pop_front().expect("non-empty");
+            fut.await?.check()?;
         }
-        let need_send = streaming_need_send(cli, sends_issued, start);
-
-        if need_send && pending.len() < max_inflight {
-            sender.prepare(client)?;
-            let sent_at = Instant::now();
-            let fut = match client
-                .send(sender.frames.frame(0).expect("one frame"))
-                .await
-            {
-                Ok(fut) => fut,
-                Err(ClientError::RtClosed) => {
-                    eprintln!("client RT thread closed unexpectedly");
-                    rt_closed = true;
-                    break;
-                }
-                Err(e) => return Err(e.into()),
-            };
-            pending.push_back(PendingFuture { sent_at, fut });
-            sends_issued += 1;
-            continue;
-        }
-
-        if pending.is_empty() {
-            break;
-        }
-
-        let entry = pending.pop_front().expect("non-empty");
-        let res = entry.fut.await;
-        let rtt = entry.sent_at.elapsed();
-        let status = match res {
-            Ok(resp) => match resp.data().iter().find(|&&d| d != 0) {
-                None => SampleStatus::Ok,
-                Some(&code) => SampleStatus::DeviceError(code),
-            },
-            Err(ClientError::Timeout { .. }) => SampleStatus::Timeout,
-            Err(ClientError::Link(cause)) => {
-                eprintln!("link error: {cause}");
-                SampleStatus::LinkError
-            }
-            Err(ClientError::DeviceError { code, .. }) => SampleStatus::DeviceError(code),
-            Err(ClientError::InvalidPayload(e)) => {
-                anyhow::bail!("payload rejected by the local encoder: {e}");
-            }
-            Err(ClientError::Encode(e)) => {
-                anyhow::bail!("value rejected by the local encoder: {e}");
-            }
-            Err(e @ ClientError::SilencerConstraint { .. }) => {
-                anyhow::bail!("rejected by the local silencer precheck: {e}");
-            }
-            Err(e @ ClientError::TransitionConstraint { .. }) => {
-                anyhow::bail!("rejected by the local transition precheck: {e}");
-            }
-            Err(ClientError::RtClosed) => {
-                eprintln!("client RT thread closed unexpectedly");
-                rt_closed = true;
-                SampleStatus::LinkError
-            }
-            Err(e) => anyhow::bail!("{e}"),
-        };
-        recorded.push(Sample {
-            index: sample_index,
-            rtt,
-            status,
-        });
-        progress.observe(status, start.elapsed());
-        if rt_closed {
-            break;
-        }
-        if cli.stop_on_error && status != SampleStatus::Ok {
-            stopped_on_error = Some((sample_index, status));
-            break;
-        }
-        sample_index += 1;
+        pending.push_back(client.send_frame(frame).await?);
     }
-
-    progress.finish();
-
-    let mem = mem::profile(mem_recorder, recorded.sends);
-    Ok(RunOutput {
-        samples: recorded.samples,
-        sends: recorded.sends,
-        stopped_on_error,
-        rt_closed,
-        warmup: cli.warmup,
-        elapsed: start.elapsed(),
-        frame_bytes: TX_FRAME_BYTES,
-        stale_cycles: link_stats.stale_cycles(),
-        lost_cycles: link_stats.lost_cycles(),
-        mem,
-    })
+    for fut in pending {
+        fut.await?.check()?;
+    }
+    Ok(())
 }
 
-struct PendingFuture {
-    sent_at: Instant,
-    fut: ResponseFuture,
-}
-
-fn streaming_need_send(cli: &Cli, sends_issued: u64, start: Instant) -> bool {
+fn budget_left(cli: &Cli, issued: u64, start: Instant) -> bool {
     if let Some(n) = cli.count
-        && sends_issued >= n
+        && issued >= n
     {
         return false;
     }
@@ -582,19 +414,233 @@ fn streaming_need_send(cli: &Cli, sends_issued: u64, start: Instant) -> bool {
     true
 }
 
+#[derive(Clone, Copy)]
+enum Outcome {
+    Sample(SampleStatus),
+    DriverClosed,
+}
+
+fn classify(res: Result<(), ClientError>) -> Result<Outcome> {
+    Ok(Outcome::Sample(match res {
+        Ok(()) => SampleStatus::Ok,
+        Err(ClientError::DeviceError { code, .. }) => SampleStatus::DeviceError(code),
+        Err(ClientError::Timeout { .. }) => SampleStatus::Timeout,
+        Err(ClientError::Network(cause)) => {
+            eprintln!("network error: {cause}");
+            SampleStatus::NetworkError
+        }
+        Err(ClientError::InvalidPayload(e)) => {
+            anyhow::bail!("payload rejected by the local encoder: {e}");
+        }
+        Err(ClientError::Encode(e)) => {
+            anyhow::bail!("value rejected by the local encoder: {e}");
+        }
+        Err(ClientError::Closed) => {
+            eprintln!("the client closed unexpectedly");
+            return Ok(Outcome::DriverClosed);
+        }
+        Err(e) => anyhow::bail!("{e}"),
+    }))
+}
+
+#[derive(Clone, Copy)]
+struct AckSnapshot {
+    frames: u64,
+    total_ns: u128,
+}
+
+impl AckSnapshot {
+    fn take(bus_stats: &BusStats) -> Self {
+        let frames = bus_stats.acked_frames();
+        Self {
+            frames,
+            total_ns: u128::from(bus_stats.mean_ack_latency_ns()) * u128::from(frames),
+        }
+    }
+
+    fn latency_since(self, before: Self, worst_ns: u64) -> Option<DriverAckLatency> {
+        let frames = self.frames.saturating_sub(before.frames);
+        if frames == 0 {
+            return None;
+        }
+        let mean_ns = self.total_ns.saturating_sub(before.total_ns) / u128::from(frames);
+        Some(DriverAckLatency {
+            frames,
+            mean: Duration::from_nanos(u64::try_from(mean_ns).unwrap_or(u64::MAX)),
+            worst: Duration::from_nanos(worst_ns),
+        })
+    }
+}
+
+struct Measurement {
+    recorded: Recorder,
+    progress: Progress,
+    stopped_on_error: Option<(u64, SampleStatus)>,
+    driver_closed: bool,
+    stop_on_error: bool,
+    mem_recorder: mem::Recorder,
+    start: Instant,
+    bus_stats: BusStats,
+    warmup: u64,
+    ack_before: Option<AckSnapshot>,
+}
+
+impl Measurement {
+    fn start(cli: &Cli, bus_stats: &BusStats) -> Self {
+        let recorded = Recorder::new(cli);
+        let progress = Progress::new(cli);
+        let mem_recorder = mem::start();
+        Self {
+            recorded,
+            progress,
+            stopped_on_error: None,
+            driver_closed: false,
+            stop_on_error: cli.stop_on_error,
+            mem_recorder,
+            start: Instant::now(),
+            bus_stats: bus_stats.clone(),
+            warmup: cli.warmup,
+            ack_before: (cli.warmup == 0).then(|| AckSnapshot::take(bus_stats)),
+        }
+    }
+
+    fn record(&mut self, index: u64, rtt: Duration, outcome: Outcome) -> ControlFlow<()> {
+        let status = match outcome {
+            Outcome::Sample(status) => status,
+            Outcome::DriverClosed => {
+                self.driver_closed = true;
+                SampleStatus::NetworkError
+            }
+        };
+        self.recorded.push(Sample { index, rtt, status });
+        if self.ack_before.is_none() && self.recorded.sends == self.warmup {
+            self.ack_before = Some(AckSnapshot::take(&self.bus_stats));
+        }
+        self.progress.observe(status, self.start.elapsed());
+        if self.driver_closed {
+            return ControlFlow::Break(());
+        }
+        if self.stop_on_error && status != SampleStatus::Ok {
+            self.stopped_on_error = Some((index, status));
+            return ControlFlow::Break(());
+        }
+        ControlFlow::Continue(())
+    }
+
+    fn finish(mut self, sender: &Sender) -> RunOutput {
+        self.progress.finish();
+        let bus_stats = &self.bus_stats;
+        let driver_ack = self.ack_before.and_then(|before| {
+            AckSnapshot::take(bus_stats).latency_since(before, bus_stats.worst_ack_latency_ns())
+        });
+        let mem = mem::profile(self.mem_recorder, self.recorded.sends);
+        RunOutput {
+            samples: self.recorded.samples,
+            sends: self.recorded.sends,
+            stopped_on_error: self.stopped_on_error,
+            driver_closed: self.driver_closed,
+            elapsed: self.start.elapsed(),
+            frame_bytes: sender.frame_bytes(),
+            missed_replies: bus_stats.missed_replies(),
+            driver_ack,
+            mem,
+        }
+    }
+}
+
+async fn run_stop_and_wait(
+    client: &Client,
+    cli: &Cli,
+    mut sender: Sender,
+    shutdown: Arc<AtomicBool>,
+    bus_stats: &BusStats,
+) -> Result<RunOutput> {
+    let window = if cli.command.is_bulk() {
+        cli.max_inflight.max(1)
+    } else {
+        1
+    };
+    let mut index: u64 = 0;
+    let mut measurement = Measurement::start(cli, bus_stats);
+    while !shutdown.load(Ordering::Relaxed) && budget_left(cli, index, measurement.start) {
+        sender.prepare(client)?;
+        let t0 = Instant::now();
+        let res = send_all(client, &sender.frames, window).await;
+        let rtt = t0.elapsed();
+
+        if measurement.record(index, rtt, classify(res)?).is_break() {
+            break;
+        }
+        index += 1;
+    }
+    Ok(measurement.finish(&sender))
+}
+
+async fn run_streaming(
+    client: &Client,
+    cli: &Cli,
+    mut sender: Sender,
+    shutdown: Arc<AtomicBool>,
+    max_inflight: usize,
+    bus_stats: &BusStats,
+) -> Result<RunOutput> {
+    let mut pending: VecDeque<PendingFuture> = VecDeque::with_capacity(max_inflight);
+    let mut sends_issued: u64 = 0;
+    let mut sample_index: u64 = 0;
+    let mut measurement = Measurement::start(cli, bus_stats);
+    while !shutdown.load(Ordering::Relaxed) {
+        let need_send = budget_left(cli, sends_issued, measurement.start);
+
+        if need_send && pending.len() < max_inflight {
+            let frame = sender.next_frame(client)?;
+            let sent_at = Instant::now();
+            let fut = match client.send_frame(frame).await {
+                Ok(fut) => fut,
+                Err(ClientError::Closed) => {
+                    eprintln!("the client closed unexpectedly");
+                    measurement.driver_closed = true;
+                    break;
+                }
+                Err(e) => return Err(e.into()),
+            };
+            pending.push_back(PendingFuture { sent_at, fut });
+            sends_issued += 1;
+            continue;
+        }
+
+        let Some(entry) = pending.pop_front() else {
+            break;
+        };
+        let res = entry.fut.await;
+        let rtt = entry.sent_at.elapsed();
+        let outcome = classify(res.and_then(|resp| resp.check()))?;
+        if measurement.record(sample_index, rtt, outcome).is_break() {
+            break;
+        }
+        sample_index += 1;
+    }
+    Ok(measurement.finish(&sender))
+}
+
+struct PendingFuture {
+    sent_at: Instant,
+    fut: ResponseFuture,
+}
+
+#[derive(Default)]
 struct Counters {
     ok: u64,
     timeouts: u64,
     device_errors: u64,
-    link_errors: u64,
+    network_errors: u64,
 }
 
 impl std::fmt::Display for Counters {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "ok={} timeout={} dev_err={} link_err={}    ",
-            self.ok, self.timeouts, self.device_errors, self.link_errors
+            "ok={} timeout={} dev_err={} net_err={}    ",
+            self.ok, self.timeouts, self.device_errors, self.network_errors
         )
     }
 }
@@ -603,10 +649,7 @@ struct Progress {
     count_total: Option<u64>,
     duration_total: Option<Duration>,
     completed: u64,
-    ok: u64,
-    timeouts: u64,
-    link_errors: u64,
-    device_errors: u64,
+    counters: Counters,
     last_render: Instant,
     rendered_once: bool,
 }
@@ -617,10 +660,7 @@ impl Progress {
             count_total: cli.count,
             duration_total: cli.duration,
             completed: 0,
-            ok: 0,
-            timeouts: 0,
-            link_errors: 0,
-            device_errors: 0,
+            counters: Counters::default(),
             last_render: Instant::now()
                 .checked_sub(PROGRESS_INTERVAL)
                 .unwrap_or_else(Instant::now),
@@ -631,10 +671,10 @@ impl Progress {
     fn observe(&mut self, status: SampleStatus, elapsed: Duration) {
         self.completed += 1;
         match status {
-            SampleStatus::Ok => self.ok += 1,
-            SampleStatus::Timeout => self.timeouts += 1,
-            SampleStatus::LinkError => self.link_errors += 1,
-            SampleStatus::DeviceError(_) => self.device_errors += 1,
+            SampleStatus::Ok => self.counters.ok += 1,
+            SampleStatus::Timeout => self.counters.timeouts += 1,
+            SampleStatus::NetworkError => self.counters.network_errors += 1,
+            SampleStatus::DeviceError(_) => self.counters.device_errors += 1,
         }
         let now = Instant::now();
         if now.duration_since(self.last_render) >= PROGRESS_INTERVAL {
@@ -644,12 +684,7 @@ impl Progress {
     }
 
     fn render(&mut self, elapsed: Duration) {
-        let tail = Counters {
-            ok: self.ok,
-            timeouts: self.timeouts,
-            device_errors: self.device_errors,
-            link_errors: self.link_errors,
-        };
+        let tail = &self.counters;
         if let Some(total) = self.count_total {
             eprint!("\r[{:>8}/{total}] {tail}", self.completed);
         } else if let Some(total) = self.duration_total {
@@ -689,10 +724,8 @@ fn estimate_capacity(cli: &Cli) -> usize {
     if let Some(n) = cli.count {
         return usize::try_from(n).unwrap_or(usize::MAX);
     }
-    if let Some(d) = cli.duration
-        && let Some(cycles) = d.as_micros().checked_div(cli.sync0_period.as_micros())
-    {
-        return cycles as usize;
+    if let Some(d) = cli.duration {
+        return usize::try_from(d.as_millis()).unwrap_or(usize::MAX);
     }
     0
 }

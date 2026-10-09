@@ -17,9 +17,4 @@ pub mod units {
     pub use super::velocity::s;
 }
 
-use crate::params::ULTRASOUND_FREQ_HZ;
-
-pub const ULTRASOUND_FREQ: Freq<u32> = Freq {
-    freq: ULTRASOUND_FREQ_HZ,
-};
 pub const ULTRASOUND_PERIOD: Duration = Duration::from_micros(25);

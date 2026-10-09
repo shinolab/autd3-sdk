@@ -1,13 +1,10 @@
 mod cli;
 mod mem;
-mod nop;
 mod report;
 mod run;
-mod snippet;
 mod stats;
 
 use anyhow::Result;
-use autd3_rs::PerfTuning;
 use autd3_rs::rt::{LogWriter, TracingOption, init_tracing};
 use clap::Parser;
 
@@ -28,52 +25,32 @@ async fn main() -> Result<()> {
         anyhow::bail!(msg);
     }
 
-    let _tuning = (!cli.no_win_perf_tune).then(|| {
-        let tuning = PerfTuning::apply();
-        eprintln!(
-            "perf-tune: timer={}, priority={}",
-            if tuning.timer_boosted() {
-                "1ms"
-            } else {
-                "default"
-            },
-            if tuning.high_priority() {
-                "HIGH"
-            } else {
-                "default"
-            },
-        );
-        tuning
-    });
-
     let output = Box::pin(run(&cli)).await?;
     let RunOutput {
         samples,
         sends,
         stopped_on_error,
-        rt_closed,
-        warmup,
+        driver_closed,
         elapsed,
         frame_bytes,
-        stale_cycles,
-        lost_cycles,
+        missed_replies,
+        driver_ack,
         mem,
     } = output;
 
     if sends > samples.len() as u64 {
         eprintln!(
             "warning: recorded only the first {} of {sends} sends (--max-samples); \
-             the summary and CSV cover that prefix only",
+             the summary and CSV cover that prefix only \
+             (except the driver ack latency, which covers the whole run)",
             samples.len(),
         );
     }
 
-    let drop = usize::try_from(warmup)
+    let drop = usize::try_from(cli.warmup)
         .unwrap_or(samples.len())
         .min(samples.len());
     let measured = &samples[drop..];
-
-    snippet::print(&cli);
 
     if let Some(path) = &cli.csv {
         if let Err(e) = write_csv(path, &samples) {
@@ -83,7 +60,7 @@ async fn main() -> Result<()> {
         }
     }
 
-    let summary = Summary::from_samples(measured, frame_bytes, elapsed, stale_cycles, lost_cycles);
+    let summary = Summary::from_samples(measured, frame_bytes, elapsed, missed_replies, driver_ack);
     print_summary(&summary);
     if let Some(mem) = &mem {
         print_mem(mem);
@@ -92,9 +69,9 @@ async fn main() -> Result<()> {
     if let Some((index, status)) = stopped_on_error {
         anyhow::bail!("stopped at send #{index}: {status:?} (--stop-on-error)");
     }
-    if rt_closed {
+    if driver_closed {
         anyhow::bail!(
-            "the client RT thread died before the run finished; \
+            "the client closed before the run finished; \
              the summary covers only what was sent until then"
         );
     }

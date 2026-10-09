@@ -1,6 +1,8 @@
-use core::num::NonZeroU16;
-
-use autd3_python_capsule::{modulation_from_capsule, modulation_into_capsule, to_pyerr};
+use autd3_python_capsule::extract::{
+    angle_to_py, extract_angle, extract_sampling_config, sampling_config_to_py,
+};
+use autd3_python_capsule::numpy;
+use autd3_python_capsule::{modulation_into_capsule, to_pyerr};
 use autd3_rs_core::common::Angle;
 use autd3_rs_core::params::MOD_BUFFER_SAMPLES;
 use autd3_rs_core::units::Hz;
@@ -9,16 +11,9 @@ use autd3_rs_modulation::{
     FourierOption as CoreFourierOption, SamplingMode, SineComponent as CoreSineComponent,
     SineOption as CoreSineOption, SquareOption as CoreSquareOption,
 };
-use pyo3::exceptions::{PyIndexError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyCapsule;
-
-fn extract_sampling_config(obj: &Bound<'_, PyAny>) -> PyResult<SamplingConfig> {
-    let divide: u16 = obj.call_method0("divide")?.extract()?;
-    let divide = NonZeroU16::new(divide)
-        .ok_or_else(|| PyValueError::new_err("sampling_config divide must be >= 1"))?;
-    Ok(SamplingConfig::new(divide))
-}
 
 fn freq_mode(freq: &Bound<'_, PyAny>) -> PyResult<SamplingMode> {
     if let Ok(hz) = freq.call_method0("nearest_hz") {
@@ -46,18 +41,28 @@ fn freq_mode(freq: &Bound<'_, PyAny>) -> PyResult<SamplingMode> {
     })
 }
 
-fn extract_angle(obj: &Bound<'_, PyAny>) -> PyResult<Angle> {
-    let radian: f32 = obj
-        .getattr("rad")
-        .and_then(|v| v.extract())
-        .map_err(|_| PyValueError::new_err("phase must be an Angle, e.g. 90 * deg"))?;
-    Ok(Angle::from_rad(radian))
+fn mode_to_py(py: Python<'_>, mode: SamplingMode) -> PyResult<Bound<'_, PyAny>> {
+    let core = py.import("autd3_core")?;
+    let freq = core.getattr("Freq")?;
+    match mode {
+        SamplingMode::ExactFreq(f) => freq.call_method1("from_hz", (f.hz(),)),
+        SamplingMode::ExactFreqFloat(f) => freq.call_method1("from_hz", (f.hz(),)),
+        SamplingMode::NearestFreq(f) => core
+            .getattr("Nearest")?
+            .call1((freq.call_method1("from_hz", (f.hz(),))?,)),
+        _ => Err(PyValueError::new_err("unsupported sampling mode")),
+    }
 }
 
-#[pyclass(name = "SineOption", module = "autd3_modulation", skip_from_py_object)]
-pub struct SineOption {
-    pub(crate) inner: CoreSineOption,
-}
+#[pyclass(
+    name = "SineOption",
+    module = "autd3_modulation",
+    eq,
+    frozen,
+    skip_from_py_object
+)]
+#[derive(Clone, Copy, PartialEq)]
+pub struct SineOption(pub(crate) CoreSineOption);
 
 #[pymethods]
 impl SineOption {
@@ -70,15 +75,42 @@ impl SineOption {
         clamp: bool,
         #[pyo3(from_py_with = extract_sampling_config)] sampling_config: SamplingConfig,
     ) -> Self {
-        Self {
-            inner: CoreSineOption {
-                amplitude,
-                offset,
-                phase,
-                clamp,
-                sampling_config,
-            },
-        }
+        Self(CoreSineOption {
+            amplitude,
+            offset,
+            phase,
+            clamp,
+            sampling_config,
+        })
+    }
+
+    #[getter]
+    fn amplitude(&self) -> u8 {
+        self.0.amplitude
+    }
+
+    #[getter]
+    fn offset(&self) -> u8 {
+        self.0.offset
+    }
+
+    #[getter]
+    fn phase<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        angle_to_py(py, self.0.phase)
+    }
+
+    #[getter]
+    fn clamp(&self) -> bool {
+        self.0.clamp
+    }
+
+    #[getter]
+    fn sampling_config<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        sampling_config_to_py(py, self.0.sampling_config)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{:?}", self.0)
     }
 }
 
@@ -99,6 +131,42 @@ impl ModulationBuffer {
     #[staticmethod]
     fn from_bytes(data: Vec<u8>) -> Self {
         Self { data }
+    }
+
+    #[staticmethod]
+    fn from_array(values: &Bound<'_, PyAny>) -> PyResult<Self> {
+        if numpy::is_ndarray(values)? {
+            return Ok(Self {
+                data: numpy::u8_vector_bytes(values)?.as_bytes().to_vec(),
+            });
+        }
+        let data: Vec<u8> = values.extract().map_err(|e| {
+            PyTypeError::new_err(format!(
+                "values must be a uint8 numpy.ndarray or a sequence of ints in 0..=255: {e}"
+            ))
+        })?;
+        Ok(Self { data })
+    }
+
+    fn copy_from(&mut self, values: &Bound<'_, PyAny>) -> PyResult<()> {
+        let bytes = numpy::u8_vector_bytes(values)?;
+        self.data.clear();
+        self.data.extend_from_slice(bytes.as_bytes());
+        Ok(())
+    }
+
+    fn to_numpy<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        numpy::u8_vector(py, &self.data)
+    }
+
+    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
+        other
+            .cast::<Self>()
+            .is_ok_and(|other| self.data == other.borrow().data)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("ModulationBuffer(len={})", self.data.len())
     }
 
     fn __len__(&self) -> usize {
@@ -135,11 +203,12 @@ fn modulation_buffer() -> ModulationBuffer {
 #[pyclass(
     name = "SquareOption",
     module = "autd3_modulation",
+    eq,
+    frozen,
     skip_from_py_object
 )]
-pub struct SquareOption {
-    inner: CoreSquareOption,
-}
+#[derive(Clone, Copy, PartialEq)]
+pub struct SquareOption(CoreSquareOption);
 
 #[pymethods]
 impl SquareOption {
@@ -151,61 +220,114 @@ impl SquareOption {
         duty: f32,
         #[pyo3(from_py_with = extract_sampling_config)] sampling_config: SamplingConfig,
     ) -> Self {
-        Self {
-            inner: CoreSquareOption {
-                low,
-                high,
-                duty,
-                sampling_config,
-            },
-        }
+        Self(CoreSquareOption {
+            low,
+            high,
+            duty,
+            sampling_config,
+        })
+    }
+
+    #[getter]
+    fn low(&self) -> u8 {
+        self.0.low
+    }
+
+    #[getter]
+    fn high(&self) -> u8 {
+        self.0.high
+    }
+
+    #[getter]
+    fn duty(&self) -> f32 {
+        self.0.duty
+    }
+
+    #[getter]
+    fn sampling_config<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        sampling_config_to_py(py, self.0.sampling_config)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{:?}", self.0)
     }
 }
 
 #[pyclass(
     name = "FourierOption",
     module = "autd3_modulation",
+    eq,
+    frozen,
     skip_from_py_object
 )]
-pub struct FourierOption {
-    inner: CoreFourierOption,
-}
+#[derive(Clone, Copy, PartialEq)]
+pub struct FourierOption(CoreFourierOption);
 
 #[pymethods]
 impl FourierOption {
     #[new]
     #[pyo3(signature = (scale_factor = None, clamp = false, offset = 0x00))]
     fn new(scale_factor: Option<f32>, clamp: bool, offset: u8) -> Self {
-        Self {
-            inner: CoreFourierOption {
-                scale_factor,
-                clamp,
-                offset,
-            },
-        }
+        Self(CoreFourierOption {
+            scale_factor,
+            clamp,
+            offset,
+        })
+    }
+
+    #[getter]
+    fn scale_factor(&self) -> Option<f32> {
+        self.0.scale_factor
+    }
+
+    #[getter]
+    fn clamp(&self) -> bool {
+        self.0.clamp
+    }
+
+    #[getter]
+    fn offset(&self) -> u8 {
+        self.0.offset
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{:?}", self.0)
     }
 }
 
 #[pyclass(
     name = "SineComponent",
     module = "autd3_modulation",
+    eq,
+    frozen,
     skip_from_py_object
 )]
-pub struct SineComponent {
-    inner: CoreSineComponent<SamplingMode>,
-}
+#[derive(Clone, Copy, PartialEq)]
+pub struct SineComponent(CoreSineComponent);
 
 #[pymethods]
 impl SineComponent {
     #[new]
     #[pyo3(signature = (freq, option))]
     fn new(freq: &Bound<'_, PyAny>, option: &SineOption) -> PyResult<Self> {
-        Ok(Self {
-            inner: CoreSineComponent {
-                freq: freq_mode(freq)?,
-                option: option.inner,
-            },
-        })
+        Ok(Self(CoreSineComponent {
+            freq: freq_mode(freq)?,
+            option: option.0,
+        }))
+    }
+
+    #[getter]
+    fn freq<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        mode_to_py(py, self.0.freq)
+    }
+
+    #[getter]
+    fn option(&self) -> SineOption {
+        SineOption(self.0.option)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{:?}", self.0)
     }
 }
 
@@ -217,7 +339,7 @@ fn sine(
     option: &SineOption,
     mut dst: PyRefMut<'_, ModulationBuffer>,
 ) -> PyResult<()> {
-    autd3_rs_modulation::sine(freq_mode(freq)?, &option.inner, &mut dst.data)
+    autd3_rs_modulation::sine(freq_mode(freq)?, &option.0, &mut dst.data)
         .map_err(|e| to_pyerr(py, e))?;
     Ok(())
 }
@@ -230,14 +352,14 @@ fn square(
     option: &SquareOption,
     mut dst: PyRefMut<'_, ModulationBuffer>,
 ) -> PyResult<()> {
-    autd3_rs_modulation::square(freq_mode(freq)?, &option.inner, &mut dst.data)
+    autd3_rs_modulation::square(freq_mode(freq)?, &option.0, &mut dst.data)
         .map_err(|e| to_pyerr(py, e))?;
     Ok(())
 }
 
 #[pyfunction]
-fn constant(intensity: u8, mut dst: PyRefMut<'_, ModulationBuffer>) {
-    autd3_rs_modulation::constant(intensity, &mut dst.data);
+fn constant(amplitude: u8, mut dst: PyRefMut<'_, ModulationBuffer>) {
+    autd3_rs_modulation::constant(amplitude, &mut dst.data);
 }
 
 #[pyfunction]
@@ -247,8 +369,8 @@ fn fourier(
     option: &FourierOption,
     mut dst: PyRefMut<'_, ModulationBuffer>,
 ) -> PyResult<()> {
-    let components = components.iter().map(|c| c.inner).collect::<Vec<_>>();
-    autd3_rs_modulation::fourier(&components, &option.inner, &mut dst.data)
+    let components = components.iter().map(|c| c.0).collect::<Vec<_>>();
+    autd3_rs_modulation::fourier(&components, &option.0, &mut dst.data)
         .map_err(|e| to_pyerr(py, e))?;
     Ok(())
 }
@@ -264,14 +386,23 @@ fn radiation_pressure_inplace(mut buffer: PyRefMut<'_, ModulationBuffer>) {
 }
 
 #[pyfunction]
-fn samples_per_period(divider: u16, freq_hz: u32) -> Option<u32> {
-    let divider = core::num::NonZeroU16::new(divider)?;
-    autd3_rs_modulation::samples_per_period(divider, autd3_rs_core::Freq::from_hz(freq_hz))
-}
-
-#[pyfunction]
-fn _read_modulation_capsule(capsule: &Bound<'_, PyCapsule>) -> PyResult<usize> {
-    Ok(modulation_from_capsule(capsule)?.len())
+fn samples_per_period(divider: u16, freq: &Bound<'_, PyAny>) -> PyResult<Option<u32>> {
+    let freq_hz = freq
+        .getattr("hz_int")
+        .and_then(|v| v.extract::<Option<u32>>())
+        .map_err(|_| {
+            PyValueError::new_err(
+                "freq must be a frequency, e.g. 200 * Hz (bare numbers are not accepted)",
+            )
+        })?
+        .ok_or_else(|| {
+            PyValueError::new_err(
+                "freq must be an integer frequency, e.g. 200 * Hz (not 200.0 * Hz)",
+            )
+        })?;
+    Ok(core::num::NonZeroU16::new(divider).and_then(|divider| {
+        autd3_rs_modulation::samples_per_period(divider, autd3_rs_core::Freq::from_hz(freq_hz))
+    }))
 }
 
 #[pymodule]
@@ -289,6 +420,5 @@ fn autd3_modulation(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(radiation_pressure, m)?)?;
     m.add_function(wrap_pyfunction!(radiation_pressure_inplace, m)?)?;
     m.add_function(wrap_pyfunction!(samples_per_period, m)?)?;
-    m.add_function(wrap_pyfunction!(_read_modulation_capsule, m)?)?;
     Ok(())
 }

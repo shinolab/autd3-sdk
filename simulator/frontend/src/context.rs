@@ -13,6 +13,14 @@ use crate::tabs::Tab;
 pub type SharedRenderer = Rc<RefCell<Option<Renderer>>>;
 pub type ControlRx = Rc<RefCell<Option<UnboundedReceiver<ClientMsg>>>>;
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum Field {
+    SliceCenter,
+    SliceRot,
+    CameraPos,
+    CameraRot,
+}
+
 #[derive(Clone)]
 pub struct Ctx {
     pub renderer: SharedRenderer,
@@ -27,7 +35,7 @@ pub struct Ctx {
     pub dragging: Signal<bool>,
     pub gizmo_drag: Signal<bool>,
     pub last_pos: Signal<(f64, f64)>,
-    pub num_drag: Signal<Option<(u8, usize, f64, f32)>>,
+    pub num_drag: Signal<Option<(Field, usize, f64, f32)>>,
 
     pub max_pressure: Signal<f32>,
     pub slice_center: Signal<[f32; 3]>,
@@ -143,7 +151,7 @@ impl Ctx {
         self.renderer.borrow_mut().as_mut().map(f)
     }
 
-    pub fn apply_field(&self, kind: u8, axis: usize, value: f32) {
+    pub fn apply_field(&self, field: Field, axis: usize, value: f32) {
         let (mut slice_center, mut slice_rot, mut cam_pos, mut cam_rot) = (
             self.slice_center,
             self.slice_rot,
@@ -152,8 +160,8 @@ impl Ctx {
         );
         let mut r = self.renderer.borrow_mut();
         let r = r.as_mut();
-        match kind {
-            0 => {
+        match field {
+            Field::SliceCenter => {
                 let mut c = slice_center();
                 c[axis] = value;
                 slice_center.set(c);
@@ -161,7 +169,7 @@ impl Ctx {
                     r.set_slice_coord(axis, value);
                 }
             }
-            1 => {
+            Field::SliceRot => {
                 let mut a = slice_rot();
                 a[axis] = value;
                 slice_rot.set(a);
@@ -169,14 +177,14 @@ impl Ctx {
                     r.set_slice_rot(axis, value);
                 }
             }
-            2 => {
+            Field::CameraPos => {
                 if let Some(r) = r {
                     r.set_camera_pos(axis, value);
                     cam_pos.set(r.camera_pos());
                     cam_rot.set(r.camera_rot());
                 }
             }
-            _ => {
+            Field::CameraRot => {
                 let mut a = cam_rot();
                 a[axis] = value;
                 cam_rot.set(a);
@@ -187,40 +195,44 @@ impl Ctx {
         }
     }
 
-    pub fn clamp_field(&self, kind: u8, axis: usize, v: f32) -> f32 {
+    pub fn clamp_field(&self, field: Field, axis: usize, v: f32) -> f32 {
         let bounds = self.slice_bounds;
-        match kind {
-            1 | 3 => v.clamp(-180.0, 180.0),
-            0 => {
+        match field {
+            Field::SliceRot | Field::CameraRot => v.clamp(-180.0, 180.0),
+            Field::SliceCenter => {
                 let (lo, hi) = bounds()[axis];
                 v.clamp(lo, hi)
             }
-            _ => v,
+            Field::CameraPos => v,
         }
     }
 
-    pub fn field_handler(&self, kind: u8, axis: usize) -> impl FnMut(Event<FormData>) + 'static {
+    pub fn field_handler(
+        &self,
+        field: Field,
+        axis: usize,
+    ) -> impl FnMut(Event<FormData>) + 'static {
         let ctx = self.clone();
         move |e: Event<FormData>| {
             if let Ok(v) = e.parsed::<f32>() {
-                let v = ctx.clamp_field(kind, axis, v);
-                ctx.apply_field(kind, axis, v);
+                let v = ctx.clamp_field(field, axis, v);
+                ctx.apply_field(field, axis, v);
             }
         }
     }
 
-    pub fn num_down(&self, kind: u8, axis: usize) -> impl FnMut(Event<MouseData>) + 'static {
+    pub fn num_down(&self, field: Field, axis: usize) -> impl FnMut(Event<MouseData>) + 'static {
         let ctx = self.clone();
         move |e: Event<MouseData>| {
             let (sc, sr, cp, cr) = (ctx.slice_center, ctx.slice_rot, ctx.cam_pos, ctx.cam_rot);
-            let start = match kind {
-                0 => sc()[axis],
-                1 => sr()[axis],
-                2 => cp()[axis],
-                _ => cr()[axis],
+            let start = match field {
+                Field::SliceCenter => sc()[axis],
+                Field::SliceRot => sr()[axis],
+                Field::CameraPos => cp()[axis],
+                Field::CameraRot => cr()[axis],
             };
             let mut num_drag = ctx.num_drag;
-            num_drag.set(Some((kind, axis, e.client_coordinates().x, start)));
+            num_drag.set(Some((field, axis, e.client_coordinates().x, start)));
         }
     }
 }

@@ -9,12 +9,13 @@ pub struct Autd3 {
 }
 
 impl Autd3 {
-    pub const NUM_TRANSDUCERS: usize = autd3_cpu_wire::params::NUM_TRANSDUCERS;
+    pub const NUM_TRANSDUCERS: usize = autd3_cpu_wire::fpga_params::NUM_TRANSDUCERS;
     pub const GRID_X: u32 = 18;
     pub const GRID_Y: u32 = 14;
     pub const PITCH_MM: f32 = 10.16;
     pub const DEVICE_WIDTH: f32 = 192.0;
     pub const DEVICE_HEIGHT: f32 = 151.4;
+    pub const ROTATION_NORM_TOLERANCE: f32 = 1e-3;
 
     #[must_use]
     pub fn new(origin: Point3<f32>, rotation: UnitQuaternion<f32>) -> Self {

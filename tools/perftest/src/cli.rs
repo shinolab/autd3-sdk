@@ -1,19 +1,14 @@
-use std::net::{IpAddr, SocketAddr};
-use std::num::NonZeroU32;
+use std::num::{NonZeroU32, NonZeroUsize};
 use std::path::PathBuf;
 use std::time::Duration;
 
 use autd3_rs::MAX_INFLIGHT;
-use autd3_rs_link_echocat::{FramePhase, SleepStrategy};
-use autd3_rs_link_twincat::AmsNetId;
+use autd3_rs::udp::DEVICE_QUEUE_FRAMES;
 use clap::{ArgGroup, Parser, ValueEnum};
 
-pub const DEFAULT_MAX_SAMPLES: u64 = 1_000_000;
-
-#[cfg(target_os = "windows")]
-pub const DEFAULT_SYNC0_PERIOD: &str = "2ms";
-#[cfg(not(target_os = "windows"))]
-pub const DEFAULT_SYNC0_PERIOD: &str = "1ms";
+const DEFAULT_MAX_SAMPLES: u64 = 1_000_000;
+const DEFAULT_HEARTBEAT: &str = "10ms";
+const DEFAULT_ACK_TIMEOUT: &str = "10ms";
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum Mode {
@@ -23,41 +18,22 @@ pub enum Mode {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
-pub enum LinkKind {
-    #[default]
-    Echocat,
-    Twincat,
-    Remote,
-    Nop,
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum Command {
     Nop,
     WritePatternBuffer,
     #[default]
     Pattern,
+    WriteModulationBuffer,
 }
 
 impl Command {
     pub const fn is_pattern(self) -> bool {
         matches!(self, Self::WritePatternBuffer | Self::Pattern)
     }
-}
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
-pub enum SleepStrategyArg {
-    #[default]
-    Sleep,
-    Spin,
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
-pub enum RtPolicy {
-    Normal,
-    #[default]
-    Fifo,
-    RoundRobin,
+    pub const fn is_bulk(self) -> bool {
+        matches!(self, Self::WriteModulationBuffer)
+    }
 }
 
 #[derive(Parser, Debug, Clone)]
@@ -67,58 +43,70 @@ pub enum RtPolicy {
     group(ArgGroup::new("stop").args(["count", "duration"]).multiple(false))
 )]
 pub struct Cli {
-    #[arg(long, value_enum, default_value_t = LinkKind::Echocat)]
-    pub link: LinkKind,
+    #[arg(
+        long,
+        default_value_t = false,
+        conflicts_with_all = ["interface", "simulator"],
+        help = "Run against the in-process UDP device emulator instead of real devices \
+                (baseline of the host side; no hardware needed)."
+    )]
+    pub emulator: bool,
     #[arg(
         long,
         value_enum,
         default_value_t = Command::Pattern,
-        help = "Command to measure. nop touches no FPGA register (pure link path), \
+        help = "Command to measure. nop touches no FPGA register (pure communication path), \
                 write-pattern-buffer writes FPGA RAM without latching, \
-                pattern is the fused write+config+bank-change that latches CTL_FLAG once per frame."
+                pattern is the production write + config + bank-activation (3 frames, 1 CTL_FLAG latch), \
+                write-modulation-buffer writes the whole modulation buffer of bank 1 per sample \
+                (its frames pipelined up to --max-inflight; stop-and-wait only)."
     )]
     pub command: Command,
     #[arg(
         long,
-        default_value = None,
-        help = "EtherCAT network interface"
+        help = "Network interface the devices hang off (maps to TransportOption.iface). \
+                Omit to pick the one whose devices answer."
     )]
     pub interface: Option<String>,
-    #[arg(long)]
-    pub devices: Option<usize>,
-    #[arg(
-        long = "sync0-period",
-        value_parser = humantime::parse_duration,
-        default_value = DEFAULT_SYNC0_PERIOD,
-        help = "SYNC0 / EtherCAT cycle period, e.g. 1ms / 500us (maps to *LinkOption.sync0_period). \
-                Defaults to 2ms on Windows (absorbs DPC wake jitter, matching every link's own Windows default) and 1ms elsewhere."
-    )]
-    pub sync0_period: Duration,
     #[arg(
         long,
-        alias = "frame-phase-percent",
-        default_value_t = 0,
-        help = "Where the process data sits in the SYNC0 period, as a percent of it. \
-                With --link echocat it moves the frame \
-                (EchocatLinkOption.frame_phase = period * percent); 0 lets the measured exchange \
-                centre it."
+        conflicts_with = "interface",
+        help = "Connect to the simulator on this host only (maps to Interface::Simulator). \
+                Without it the simulator is still preferred when it runs."
     )]
-    pub shift_percent: u8,
+    pub simulator: bool,
     #[arg(
-        long = "sleep-strategy",
-        value_enum,
-        default_value_t = SleepStrategyArg::Sleep,
-        help = "--link echocat only: how the RT thread waits for the next cycle (maps to EchocatLinkOption.sleep_strategy)."
+        long,
+        default_value_t = NonZeroUsize::MIN,
+        help = "Device count of the geometry. Opening fails when it does not match the chain."
     )]
-    pub sleep_strategy: SleepStrategyArg,
+    pub devices: NonZeroUsize,
     #[arg(
-        long = "spin-margin",
+        long,
         value_parser = humantime::parse_duration,
-        default_value = "1ms",
-        help = "How long before the deadline --sleep-strategy spin stops sleeping and busy-waits. \
-                Must exceed how far the OS oversleeps (0.5-0.7ms on Windows even under timeBeginPeriod(1))."
+        default_value = DEFAULT_HEARTBEAT,
+        help = "Heartbeat interval while nothing is sent, e.g. 10ms (maps to TransportOption.heartbeat)."
     )]
-    pub spin_margin: Duration,
+    pub heartbeat: Duration,
+    #[arg(
+        long = "reply-timeout",
+        value_parser = humantime::parse_duration,
+        help = "How long a heartbeat waits for every reply (maps to TransportOption.reply_timeout). \
+                Omit to keep the library default."
+    )]
+    pub reply_timeout: Option<Duration>,
+    #[arg(
+        long = "send-rate-limit",
+        help = "Cap on the line occupancy of the sends in percent of the device link speed, e.g. 95 \
+                (maps to TransportOption.send_rate_limit). Omit to send without a limit."
+    )]
+    pub send_rate_limit: Option<f32>,
+    #[arg(
+        long = "send-buffer",
+        help = "Socket send buffer in bytes (maps to TransportOption.send_buffer). 0 keeps the OS \
+                default. Omit to use the library default."
+    )]
+    pub send_buffer: Option<usize>,
     #[arg(long)]
     pub count: Option<u64>,
     #[arg(long, value_parser = humantime::parse_duration)]
@@ -141,66 +129,52 @@ pub struct Cli {
     #[arg(
         long,
         default_value_t = false,
+        conflicts_with = "gpio_base_signal",
+        help = "Emit Sync (high on the FPGA clock that detects the sync input edge) on GPIO[0] to probe the sync pulse itself on a scope"
+    )]
+    pub gpio_sync: bool,
+    #[arg(
+        long,
+        default_value_t = false,
         help = "Stop at the first failed send and exit non-zero (soak testing). \
                 The summary is still printed."
     )]
     pub stop_on_error: bool,
+    #[arg(
+        long,
+        default_value_t = false,
+        help = "Read the firmware telemetry counters before and after the run and print the \
+                per-device deltas (e.g. Failsafe, SyncResync, FifoDrop)."
+    )]
+    pub telemetry: bool,
+    #[arg(
+        long,
+        value_parser = humantime::parse_duration,
+        help = "Keep the connection idle (heartbeats only) this long before measuring, e.g. 3s."
+    )]
+    pub hold: Option<Duration>,
     #[arg(long)]
     pub csv: Option<PathBuf>,
     #[arg(
-        long,
-        default_value_t = NonZeroU32::new(10).unwrap(),
-        help = "maps to ClientConfig.timeout_cycles"
+        long = "ack-timeout",
+        value_parser = humantime::parse_duration,
+        default_value = DEFAULT_ACK_TIMEOUT,
+        help = "maps to ClientConfig.ack_timeout"
     )]
-    pub timeout_cycles: NonZeroU32,
+    pub ack_timeout: Duration,
     #[arg(long, value_enum, default_value_t = Mode::StopAndWait)]
     pub mode: Mode,
     #[arg(
         long = "max-inflight",
         alias = "inflight",
-        default_value_t = MAX_INFLIGHT,
-        help = "Pipeline depth in streaming mode (maps to ClientConfig.max_inflight). Ignored in stop-and-wait."
+        default_value_t = DEVICE_QUEUE_FRAMES,
+        help = "Pipeline depth in streaming mode (maps to ClientConfig.max_inflight). \
+                Stop-and-wait ignores it except with --command write-modulation-buffer, \
+                which pipelines the frames of one sample up to this depth."
     )]
     pub max_inflight: usize,
     #[arg(long, default_value_t = NonZeroU32::new(8).unwrap(), help = "maps to ClientConfig.max_resync_rounds")]
     pub max_resync_rounds: NonZeroU32,
-    #[arg(
-        long,
-        default_value_t = false,
-        help = "maps to ClientConfig.low_latency"
-    )]
-    pub low_latency: bool,
-    #[arg(
-        long,
-        help = "--link remote only: address of the appliance's wire port. \
-                Omit to find it over mDNS."
-    )]
-    pub addr: Option<SocketAddr>,
-    #[arg(
-        long,
-        help = "--link remote only: instance name to pick when several appliances answer."
-    )]
-    pub instance: Option<String>,
-    #[arg(long)]
-    pub twincat_remote: Option<IpAddr>,
-    #[arg(long)]
-    pub ams_net_id: Option<AmsNetId>,
-    #[arg(long, default_value_t = false)]
-    pub no_win_perf_tune: bool,
-    #[arg(
-        long,
-        help = "maps to ClientConfig.rt_priority (0..=99). Omit to keep the library default \
-                (TimeCritical on Windows, SCHED_FIFO 80 elsewhere)."
-    )]
-    pub rt_priority: Option<u8>,
-    #[arg(long, value_enum, default_value_t = RtPolicy::Fifo, help = "maps to ClientConfig.rt_policy")]
-    pub rt_policy: RtPolicy,
-    #[arg(
-        long = "rt-affinity",
-        alias = "rt-core",
-        help = "Pin the RT thread to this CPU core (maps to ClientConfig.rt_affinity)."
-    )]
-    pub rt_affinity: Option<usize>,
 }
 
 impl Cli {
@@ -213,107 +187,15 @@ impl Cli {
                 self.max_inflight,
             ));
         }
-        if self.shift_percent > 100 {
-            return Err(format!(
-                "--shift-percent {} must be in 0..=100",
-                self.shift_percent
-            ));
+        if self.command.is_bulk() && self.mode == Mode::Streaming {
+            return Err("--command write-modulation-buffer runs in stop-and-wait only".to_string());
         }
-        if self.link == LinkKind::Echocat && self.shift_percent == 100 {
-            return Err(
-                "--shift-percent 100 lands the frame on the SYNC0 edge with --link echocat, \
-                 where the firmware drops it as a sequence mismatch; use 1..=99, or 0 to let \
-                 the measured exchange centre it"
-                    .to_string(),
-            );
+        if self.heartbeat.is_zero() {
+            return Err("--heartbeat must be longer than 0".to_string());
         }
-        if self.link == LinkKind::Twincat {
-            if self.twincat_remote.is_some() && self.ams_net_id.is_none() {
-                return Err("--ams-net-id is required when --twincat-remote is set".to_string());
-            }
-        } else if self.twincat_remote.is_some() || self.ams_net_id.is_some() {
-            return Err(
-                "--twincat-remote / --ams-net-id are only valid with --link twincat".to_string(),
-            );
-        }
-        if self.link != LinkKind::Echocat && self.sleep_strategy != SleepStrategyArg::Sleep {
-            return Err(
-                "--sleep-strategy is only valid with --link echocat: the other links do not \
-                 drive the cycle wait themselves"
-                    .to_string(),
-            );
-        }
-        if self.sleep_strategy == SleepStrategyArg::Spin && self.spin_margin.is_zero() {
-            return Err(
-                "--spin-margin 0s leaves no room for the OS to oversleep past the deadline"
-                    .to_string(),
-            );
-        }
-        if self.link != LinkKind::Remote && (self.addr.is_some() || self.instance.is_some()) {
-            return Err("--addr / --instance are only valid with --link remote".to_string());
-        }
-        if self.link == LinkKind::Remote {
-            if self.devices.is_none() {
-                return Err(
-                    "--devices is required with --link remote: the appliance rejects a client \
-                     whose geometry does not match the bus"
-                        .to_string(),
-                );
-            }
-            if self.interface.is_some() {
-                return Err(
-                    "--interface is not valid with --link remote: the appliance owns the \
-                     EtherCAT interface"
-                        .to_string(),
-                );
-            }
-            if self.shift_percent != 0 {
-                return Err(
-                    "--shift-percent is not valid with --link remote: the appliance owns SYNC0"
-                        .to_string(),
-                );
-            }
-            if self.addr.is_some() && self.instance.is_some() {
-                return Err("--instance is redundant with --addr".to_string());
-            }
-        }
-        if self.link == LinkKind::Nop {
-            if self.devices.is_none() {
-                return Err("--devices is required with --link nop".to_string());
-            }
-            if self.interface.is_some() {
-                return Err("--interface is not valid with --link nop".to_string());
-            }
-        } else if self.sync0_period.is_zero() {
-            return Err("--sync0-period 0ms (free-run) is only valid with --link nop".to_string());
-        }
-        if let Some(p) = self.rt_priority
-            && p > 99
-        {
-            return Err(format!("--rt-priority {p} must be in 0..=99"));
+        if self.ack_timeout.is_zero() {
+            return Err("--ack-timeout must be longer than 0".to_string());
         }
         Ok(())
-    }
-
-    pub fn sync0_shift(&self) -> Duration {
-        let nanos = self.sync0_period.as_nanos() * u128::from(self.shift_percent) / 100;
-        Duration::from_nanos(u64::try_from(nanos).unwrap_or(u64::MAX))
-    }
-
-    pub fn echocat_frame_phase(&self) -> FramePhase {
-        if self.shift_percent == 0 {
-            FramePhase::Auto
-        } else {
-            FramePhase::At(self.sync0_shift())
-        }
-    }
-
-    pub fn echocat_sleep_strategy(&self) -> SleepStrategy {
-        match self.sleep_strategy {
-            SleepStrategyArg::Sleep => SleepStrategy::Sleep,
-            SleepStrategyArg::Spin => SleepStrategy::Spin {
-                margin: self.spin_margin,
-            },
-        }
     }
 }

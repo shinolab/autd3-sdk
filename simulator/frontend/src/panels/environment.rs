@@ -1,23 +1,15 @@
 use dioxus::prelude::*;
 
+use super::common::scalar_handler;
 use crate::context::Ctx;
+use crate::render::Renderer;
 
 #[component]
 pub fn EnvironmentPanel() -> Element {
     let ctx = use_context::<Ctx>();
-    let renderer = ctx.renderer.clone();
-    let mut sound_speed = ctx.sound_speed;
-    let on_sound_speed = {
-        let renderer = renderer.clone();
-        move |e: Event<FormData>| {
-            if let Ok(v) = e.parsed::<f32>() {
-                sound_speed.set(v);
-                if let Some(r) = renderer.borrow_mut().as_mut() {
-                    r.set_sound_speed(v);
-                }
-            }
-        }
-    };
+    let sound_speed = ctx.sound_speed;
+    let on_sound_speed =
+        scalar_handler(ctx.renderer.clone(), sound_speed, Renderer::set_sound_speed);
     let sound_speed_label = format!("Sound speed: {:.0} mm/s", sound_speed());
 
     rsx! {

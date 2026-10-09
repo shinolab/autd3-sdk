@@ -1,56 +1,28 @@
-use core::time::Duration;
+use std::sync::Arc;
 
+use autd3_python_capsule::extract::{
+    extract_direction, extract_duration, extract_length, extract_point, extract_u8,
+    extract_velocity, intensity_to_py, is_duration, nanos_to_duration, phase_to_py, velocity_to_py,
+};
+use autd3_python_capsule::numpy::f32_vec3;
+use autd3_rs::commands::Expansion;
 use autd3_rs::commands::WriteFociBuffer as CoreWriteFociBuffer;
 use autd3_rs::commands::{
-    FociStm as CoreFociStm, FociStmOption as CoreFociStmOption,
-    PatternStmMode as CorePatternStmMode, PatternStmOption as CorePatternStmOption,
-    StmConfig as CoreStmConfig, StmIntensity as CoreStmIntensity, circle as core_circle,
-    line as core_line,
+    FociStm as CoreFociStm, FociStmOption as CoreFociStmOption, PatternStm as CorePatternStm,
+    PatternStmOption as CorePatternStmOption, StmConfig as CoreStmConfig,
+    StmIntensity as CoreStmIntensity, circle as core_circle, line as core_line,
 };
 use autd3_rs::value::{
     ControlPoint as CoreControlPoint, ControlPoints as CoreControlPoints, Intensity, Nearest,
     PatternBank as CorePatternBank, Phase, SamplingConfig,
 };
-use autd3_rs::{Point3, Vector3, Velocity};
-use autd3_rs_core::geometry::UnitVector3;
-use autd3_rs_core::units::{Hz, mm};
+use autd3_rs_core::units::Hz;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 
+use crate::datagram::PushCommand;
 use crate::ops;
-
-fn extract_point(obj: &Bound<'_, PyAny>) -> PyResult<Point3<f32>> {
-    let [x, y, z] = obj.extract::<[f32; 3]>().map_err(|_| {
-        PyValueError::new_err(
-            "expected a length-3 array-like (numpy array, list, or tuple) of x, y, z in mm",
-        )
-    })?;
-    Ok(Point3::new(x, y, z))
-}
-
-fn extract_direction(obj: &Bound<'_, PyAny>) -> PyResult<UnitVector3<f32>> {
-    let [x, y, z] = obj
-        .extract::<[f32; 3]>()
-        .map_err(|_| PyValueError::new_err("expected a length-3 direction vector"))?;
-    Ok(UnitVector3::new_normalize(Vector3::new(x, y, z)))
-}
-
-fn extract_u8(obj: &Bound<'_, PyAny>) -> PyResult<u8> {
-    if let Ok(v) = obj.extract::<u8>() {
-        return Ok(v);
-    }
-    obj.getattr("value")?.extract::<u8>()
-}
-
-fn extract_velocity(obj: &Bound<'_, PyAny>) -> PyResult<Velocity> {
-    let mm_per_s: f32 = obj.getattr("mm_s").and_then(|v| v.extract()).map_err(|_| {
-        PyValueError::new_err(
-            "sound speed must be a Velocity, e.g. 340 * m / s (bare numbers are no longer accepted)",
-        )
-    })?;
-    Ok(Velocity::from_mm_s(mm_per_s))
-}
 
 #[pyclass(name = "StmConfig", module = "autd3.commands", from_py_object)]
 #[derive(Clone, Copy)]
@@ -79,10 +51,8 @@ pub(crate) fn extract_stm_config(value: &Bound<'_, PyAny>) -> PyResult<CoreStmCo
     if let Ok(hz) = value.getattr("hz") {
         return Ok(CoreStmConfig::new(hz.extract::<f32>()? * Hz));
     }
-    if let Ok(nanos) = value.call_method0("as_nanos") {
-        return Ok(CoreStmConfig::new(nanos_to_duration(
-            nanos.extract::<u128>()?,
-        )?));
+    if is_duration(value)? {
+        return Ok(CoreStmConfig::new(extract_duration(value)?));
     }
     Err(PyValueError::new_err(
         "StmConfig expects a frequency (e.g. 1.0 * Hz), a Duration, a SamplingConfig, or Nearest(...)",
@@ -109,21 +79,19 @@ impl StmConfig {
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
         py.import("autd3_core")?
             .getattr("SamplingConfig")?
-            .call1((divide,))
+            .call1((divide.get(),))
     }
 }
 
-fn nanos_to_duration(nanos: u128) -> PyResult<Duration> {
-    u64::try_from(nanos)
-        .map(Duration::from_nanos)
-        .map_err(|_| PyValueError::new_err("duration is out of range"))
-}
-
-#[pyclass(name = "ControlPoint", module = "autd3.value", skip_from_py_object)]
-#[derive(Clone, Copy)]
-pub struct ControlPoint {
-    pub(crate) inner: CoreControlPoint,
-}
+#[pyclass(
+    name = "ControlPoint",
+    module = "autd3.value",
+    eq,
+    frozen,
+    skip_from_py_object
+)]
+#[derive(Clone, Copy, PartialEq)]
+pub struct ControlPoint(pub(crate) CoreControlPoint);
 
 #[pymethods]
 impl ControlPoint {
@@ -134,14 +102,36 @@ impl ControlPoint {
             .map(extract_u8)
             .transpose()?
             .map_or(Phase::ZERO, Phase);
-        Ok(Self {
-            inner: CoreControlPoint::new(extract_point(point)?, phase_offset),
-        })
+        Ok(Self(CoreControlPoint::new(
+            extract_point(point)?,
+            phase_offset,
+        )))
+    }
+
+    #[getter]
+    fn point<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let p = self.0.point;
+        f32_vec3(py, [p.x, p.y, p.z])
+    }
+
+    #[getter]
+    fn phase_offset<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        phase_to_py(py, self.0.phase_offset)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{:?}", self.0)
     }
 }
 
-#[pyclass(name = "ControlPoints", module = "autd3.value", skip_from_py_object)]
-#[derive(Clone)]
+#[pyclass(
+    name = "ControlPoints",
+    module = "autd3.value",
+    eq,
+    frozen,
+    skip_from_py_object
+)]
+#[derive(Clone, PartialEq)]
 pub struct ControlPoints {
     pub(crate) points: Vec<CoreControlPoint>,
     pub(crate) intensity: Intensity,
@@ -160,9 +150,26 @@ impl ControlPoints {
             .transpose()?
             .map_or(Intensity::MAX, Intensity);
         Ok(Self {
-            points: points.iter().map(|p| p.inner).collect(),
+            points: points.iter().map(|p| p.0).collect(),
             intensity,
         })
+    }
+
+    #[getter]
+    fn points(&self) -> Vec<ControlPoint> {
+        self.points.iter().copied().map(ControlPoint).collect()
+    }
+
+    #[getter]
+    fn intensity<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        intensity_to_py(py, self.intensity)
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "ControlPoints {{ points: {:?}, intensity: {:?} }}",
+            self.points, self.intensity
+        )
     }
 }
 
@@ -176,9 +183,7 @@ impl ControlPoints {
 }
 
 #[pyclass(name = "FociStmOption", module = "autd3.commands", skip_from_py_object)]
-pub struct FociStmOption {
-    pub(crate) inner: CoreFociStmOption,
-}
+pub struct FociStmOption(pub(crate) CoreFociStmOption);
 
 #[pymethods]
 impl FociStmOption {
@@ -203,54 +208,27 @@ impl FociStmOption {
         if let Some(t) = transition_mode {
             inner.transition_mode = t.0;
         }
-        Ok(Self { inner })
+        Ok(Self(inner))
     }
 
     #[getter]
     fn bank(&self) -> ops::PatternBank {
-        ops::PatternBank(self.inner.bank)
+        ops::PatternBank(self.0.bank)
     }
 
     #[getter]
     fn sound_speed<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        py.import("autd3_core")?
-            .getattr("Velocity")?
-            .call_method1("from_mm_s", (self.inner.sound_speed.mm_s(),))
+        velocity_to_py(py, self.0.sound_speed)
     }
 
     #[getter]
     fn loop_behavior(&self) -> ops::LoopBehavior {
-        ops::LoopBehavior(self.inner.loop_behavior)
+        ops::LoopBehavior(self.0.loop_behavior)
     }
 
     #[getter]
     fn transition_mode(&self) -> ops::TransitionMode {
-        ops::TransitionMode(self.inner.transition_mode)
-    }
-}
-
-#[pyclass(name = "PatternStmMode", module = "autd3.commands", from_py_object)]
-#[derive(Clone, Copy)]
-pub struct PatternStmMode(pub(crate) CorePatternStmMode);
-
-#[pymethods]
-impl PatternStmMode {
-    #[classattr]
-    #[pyo3(name = "PhaseIntensityFull")]
-    fn phase_intensity_full() -> Self {
-        Self(CorePatternStmMode::PhaseIntensityFull)
-    }
-
-    #[classattr]
-    #[pyo3(name = "PhaseFull")]
-    fn phase_full() -> Self {
-        Self(CorePatternStmMode::PhaseFull)
-    }
-
-    #[classattr]
-    #[pyo3(name = "PhaseHalf")]
-    fn phase_half() -> Self {
-        Self(CorePatternStmMode::PhaseHalf)
+        ops::TransitionMode(self.0.transition_mode)
     }
 }
 
@@ -259,17 +237,15 @@ impl PatternStmMode {
     module = "autd3.commands",
     skip_from_py_object
 )]
-pub struct PatternStmOption {
-    pub(crate) inner: CorePatternStmOption,
-}
+pub struct PatternStmOption(pub(crate) CorePatternStmOption);
 
 #[pymethods]
 impl PatternStmOption {
     #[new]
-    #[pyo3(signature = (bank = None, mode = None, loop_behavior = None, transition_mode = None))]
+    #[pyo3(signature = (bank = None, phase_depth = None, loop_behavior = None, transition_mode = None))]
     fn new(
         bank: Option<ops::PatternBank>,
-        mode: Option<PatternStmMode>,
+        phase_depth: Option<ops::PhaseDepth>,
         loop_behavior: Option<ops::LoopBehavior>,
         transition_mode: Option<ops::TransitionMode>,
     ) -> Self {
@@ -277,8 +253,8 @@ impl PatternStmOption {
         if let Some(b) = bank {
             inner.bank = b.0;
         }
-        if let Some(m) = mode {
-            inner.mode = m.0;
+        if let Some(d) = phase_depth {
+            inner.phase_depth = d.0;
         }
         if let Some(l) = loop_behavior {
             inner.loop_behavior = l.0;
@@ -286,33 +262,32 @@ impl PatternStmOption {
         if let Some(t) = transition_mode {
             inner.transition_mode = t.0;
         }
-        Self { inner }
+        Self(inner)
     }
 
     #[getter]
     fn bank(&self) -> ops::PatternBank {
-        ops::PatternBank(self.inner.bank)
+        ops::PatternBank(self.0.bank)
     }
 
     #[getter]
-    fn mode(&self) -> PatternStmMode {
-        PatternStmMode(self.inner.mode)
+    fn phase_depth(&self) -> ops::PhaseDepth {
+        ops::PhaseDepth(self.0.phase_depth)
     }
 
     #[getter]
     fn loop_behavior(&self) -> ops::LoopBehavior {
-        ops::LoopBehavior(self.inner.loop_behavior)
+        ops::LoopBehavior(self.0.loop_behavior)
     }
 
     #[getter]
     fn transition_mode(&self) -> ops::TransitionMode {
-        ops::TransitionMode(self.inner.transition_mode)
+        ops::TransitionMode(self.0.transition_mode)
     }
 }
 
 macro_rules! foci_points {
     ($($n:literal => $variant:ident),* $(,)?) => {
-        #[derive(Clone)]
         pub(crate) enum FociPoints {
             $($variant(Vec<CoreControlPoints<$n>>)),*
         }
@@ -343,47 +318,36 @@ macro_rules! foci_points {
                 }
             }
 
-            pub(crate) fn push_into<'a>(
+            fn push_into<'a>(
                 &'a self,
                 config: CoreStmConfig,
                 option: CoreFociStmOption,
-                builder: &mut autd3_rs::DatagramBuilder<'a>,
-            ) {
+                expansion: &mut Expansion<'_, 'a>,
+            ) -> Result<(), autd3_rs::Error> {
                 match self {
                     $(FociPoints::$variant(v) => {
-                        builder.push(CoreFociStm::new(config, v.as_slice(), option));
+                        expansion.push(CoreFociStm::new(config, v.as_slice(), option))?;
                     })*
                 }
+                Ok(())
             }
 
-            pub(crate) fn push_legacy_into<'a>(
-                &'a self,
-                config: CoreStmConfig,
-                option: CoreFociStmOption,
-                builder: &mut autd3_rs::legacy::LegacyDatagramBuilder<'a>,
-            ) {
-                match self {
-                    $(FociPoints::$variant(v) => {
-                        builder.push(CoreFociStm::new(config, v.as_slice(), option));
-                    })*
-                }
-            }
-
-            pub(crate) fn push_write_foci<'a>(
+            fn push_write_foci<'a>(
                 &'a self,
                 bank: CorePatternBank,
                 index_offset: usize,
-                builder: &mut autd3_rs::DatagramBuilder<'a>,
-            ) {
+                expansion: &mut Expansion<'_, 'a>,
+            ) -> Result<(), autd3_rs::Error> {
                 match self {
                     $(FociPoints::$variant(v) => {
-                        builder.push(CoreWriteFociBuffer {
+                        expansion.push(CoreWriteFociBuffer {
                             bank,
                             index_offset,
                             points: v.as_slice(),
-                        });
+                        })?;
                     })*
                 }
+                Ok(())
             }
         }
     };
@@ -391,36 +355,53 @@ macro_rules! foci_points {
 
 foci_points!(1 => N1, 2 => N2, 3 => N3, 4 => N4, 5 => N5, 6 => N6, 7 => N7, 8 => N8);
 
-#[pyclass(name = "FociStm", module = "autd3.commands")]
-pub struct FociStm {
-    pub(crate) config: CoreStmConfig,
-    pub(crate) points: FociPoints,
-    pub(crate) option: CoreFociStmOption,
+pub(crate) struct FociStmData {
+    config: CoreStmConfig,
+    points: FociPoints,
+    option: CoreFociStmOption,
 }
+
+impl PushCommand for FociStmData {
+    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
+        self.points.push_into(self.config, self.option, expansion)
+    }
+}
+
+#[pyclass(name = "FociStm", module = "autd3.commands", frozen)]
+pub struct FociStm(pub(crate) Arc<FociStmData>);
 
 #[pymethods]
 impl FociStm {
     #[new]
-    #[pyo3(signature = (config, samples, option = None))]
+    #[pyo3(signature = (config, points, option = None))]
     fn new(
         config: &Bound<'_, PyAny>,
-        samples: Vec<PyRef<'_, ControlPoints>>,
+        points: Vec<PyRef<'_, ControlPoints>>,
         option: Option<PyRef<'_, FociStmOption>>,
     ) -> PyResult<Self> {
-        Ok(Self {
+        Ok(Self(Arc::new(FociStmData {
             config: extract_stm_config(config)?,
-            points: FociPoints::from_samples(&samples)?,
-            option: option.map_or_else(CoreFociStmOption::default, |o| o.inner),
-        })
+            points: FociPoints::from_samples(&points)?,
+            option: option.map_or_else(CoreFociStmOption::default, |o| o.0),
+        })))
     }
 }
 
-#[pyclass(name = "WriteFociBuffer", module = "autd3.commands")]
-pub struct WriteFociBuffer {
-    pub(crate) bank: CorePatternBank,
-    pub(crate) index_offset: usize,
-    pub(crate) points: FociPoints,
+pub(crate) struct WriteFociBufferData {
+    bank: CorePatternBank,
+    index_offset: usize,
+    points: FociPoints,
 }
+
+impl PushCommand for WriteFociBufferData {
+    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
+        self.points
+            .push_write_foci(self.bank, self.index_offset, expansion)
+    }
+}
+
+#[pyclass(name = "WriteFociBuffer", module = "autd3.commands", frozen)]
+pub struct WriteFociBuffer(pub(crate) Arc<WriteFociBufferData>);
 
 #[pymethods]
 impl WriteFociBuffer {
@@ -430,15 +411,14 @@ impl WriteFociBuffer {
         index_offset: usize,
         points: Vec<PyRef<'_, ControlPoints>>,
     ) -> PyResult<Self> {
-        Ok(Self {
+        Ok(Self(Arc::new(WriteFociBufferData {
             bank: bank.0,
             index_offset,
             points: FociPoints::from_samples(&points)?,
-        })
+        })))
     }
 }
 
-#[derive(Clone)]
 pub(crate) enum OwnedStmIntensity {
     Uniform(Intensity),
     Shared(Vec<Vec<Intensity>>),
@@ -446,7 +426,7 @@ pub(crate) enum OwnedStmIntensity {
 }
 
 impl OwnedStmIntensity {
-    pub(crate) fn as_ref(&self) -> CoreStmIntensity<'_> {
+    fn as_ref(&self) -> CoreStmIntensity<'_> {
         match self {
             OwnedStmIntensity::Uniform(intensity) => CoreStmIntensity::Uniform(*intensity),
             OwnedStmIntensity::Shared(intensities) => CoreStmIntensity::Shared(intensities),
@@ -471,13 +451,27 @@ fn extract_stm_intensity(obj: &Bound<'_, PyAny>) -> PyResult<OwnedStmIntensity> 
     ))
 }
 
-#[pyclass(name = "PatternStm", module = "autd3.commands")]
-pub struct PatternStm {
-    pub(crate) config: CoreStmConfig,
-    pub(crate) phases: Vec<Vec<Vec<Phase>>>,
-    pub(crate) intensities: OwnedStmIntensity,
-    pub(crate) option: CorePatternStmOption,
+pub(crate) struct PatternStmData {
+    config: CoreStmConfig,
+    phases: Vec<Vec<Vec<Phase>>>,
+    intensities: OwnedStmIntensity,
+    option: CorePatternStmOption,
 }
+
+impl PushCommand for PatternStmData {
+    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
+        expansion.push(CorePatternStm::new(
+            self.config,
+            self.phases.as_slice(),
+            self.intensities.as_ref(),
+            self.option,
+        ))?;
+        Ok(())
+    }
+}
+
+#[pyclass(name = "PatternStm", module = "autd3.commands", frozen)]
+pub struct PatternStm(pub(crate) Arc<PatternStmData>);
 
 #[pymethods]
 impl PatternStm {
@@ -495,12 +489,12 @@ impl PatternStm {
             .map(crate::datagram::extract_phases)
             .collect::<PyResult<Vec<_>>>()?;
         let intensities = extract_stm_intensity(intensities)?;
-        Ok(Self {
+        Ok(Self(Arc::new(PatternStmData {
             config: stm_config,
             phases,
             intensities,
-            option: option.map_or_else(CorePatternStmOption::default, |o| o.inner),
-        })
+            option: option.map_or_else(CorePatternStmOption::default, |o| o.0),
+        })))
     }
 }
 
@@ -508,7 +502,7 @@ impl PatternStm {
 #[pyo3(signature = (center, radius, num_points, normal, intensity, dst))]
 fn circle(
     center: &Bound<'_, PyAny>,
-    radius: f32,
+    radius: &Bound<'_, PyAny>,
     num_points: usize,
     normal: &Bound<'_, PyAny>,
     intensity: &Bound<'_, PyAny>,
@@ -518,7 +512,7 @@ fn circle(
     let mut pts = Vec::new();
     core_circle(
         extract_point(center)?,
-        radius * mm,
+        extract_length(radius)?,
         num_points,
         extract_direction(normal)?,
         intensity,
@@ -561,7 +555,6 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ControlPoint>()?;
     m.add_class::<ControlPoints>()?;
     m.add_class::<FociStmOption>()?;
-    m.add_class::<PatternStmMode>()?;
     m.add_class::<PatternStmOption>()?;
     m.add_class::<FociStm>()?;
     m.add_class::<WriteFociBuffer>()?;

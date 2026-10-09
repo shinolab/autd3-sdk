@@ -5,12 +5,12 @@ from autd3_core import Intensity, Nearest, Phase, SamplingConfig
 from ._autd3 import (
     ControlPoint,
     ControlPoints,
-    DcSysTime,
     GpioIn,
     LoopBehavior,
     ModulationBank,
     PatternBank,
     PulseWidth,
+    SysTime,
     Telemetry,
     TransitionMode,
 )
@@ -18,7 +18,6 @@ from ._autd3 import (
 __all__ = [
     "ControlPoint",
     "ControlPoints",
-    "DcSysTime",
     "GpioIn",
     "Intensity",
     "LoopBehavior",
@@ -28,6 +27,7 @@ __all__ = [
     "Phase",
     "PulseWidth",
     "SamplingConfig",
+    "SysTime",
     "Telemetry",
     "TransitionMode",
 ]

@@ -5,7 +5,7 @@ use polars::frame::DataFrame;
 
 use crate::raw::RawFrame;
 use crate::record::{
-    OUTPUT_VOLTAGE, Record, TransducerRecord, ULTRASOUND_PERIOD_COUNT, output_raw,
+    output_raw, Record, TransducerRecord, OUTPUT_VOLTAGE, ULTRASOUND_PERIOD_COUNT,
 };
 
 impl TransducerRecord {
@@ -32,9 +32,9 @@ impl TransducerRecord {
             return None;
         }
         let mut out = Vec::with_capacity(n * ULTRASOUND_PERIOD_COUNT);
-        for (pw, phase) in self.pulse_width[start..start + n]
+        for (pw, phase) in self.pulse_width[start..][..n]
             .iter()
-            .zip(self.phase[start..start + n].iter())
+            .zip(self.phase[start..][..n].iter())
         {
             Self::voltage_frame(*pw, u16::from(*phase), &mut out);
         }

@@ -168,7 +168,7 @@ fn scatter<T: Copy>(e: &[T], mask: TransducerMask<'_>, null: T, dst: &mut [Vec<T
             let mut at = 0;
             for slot in dst {
                 let n = slot.len().min(e.len() - at);
-                slot[..n].copy_from_slice(&e[at..at + n]);
+                slot[..n].copy_from_slice(&e[at..][..n]);
                 at += n;
             }
         }

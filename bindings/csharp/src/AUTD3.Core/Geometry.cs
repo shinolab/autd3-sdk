@@ -18,10 +18,11 @@ namespace AUTD3
             {
                 native[i] = devices[i].ToNative();
             }
-            var handle = NativeCore.autd3_core_geometry_new(native, (UIntPtr)native.Length);
+            var err = new byte[NativeAbi.ErrorBufferLength];
+            var handle = NativeCore.autd3_core_geometry_new(native, (UIntPtr)native.Length, err, (UIntPtr)err.Length);
             if (handle == IntPtr.Zero)
             {
-                throw new Autd3Exception("failed to create geometry");
+                throw new Autd3Exception(NativeUtil.Utf8(err), Autd3ErrorCode.InvalidArgument);
             }
             _handle = new GeometryHandle(handle);
         }
@@ -29,6 +30,16 @@ namespace AUTD3
         private Geometry(GeometryHandle handle)
         {
             _handle = handle;
+        }
+
+        internal Geometry Clone()
+        {
+            var handle = NativeCore.autd3_core_geometry_clone(Handle);
+            if (handle == IntPtr.Zero)
+            {
+                throw new Autd3Exception("failed to clone geometry");
+            }
+            return new Geometry(new GeometryHandle(handle));
         }
 
         public static Geometry FromJson(string json)
@@ -171,11 +182,28 @@ namespace AUTD3
             get
             {
                 var n = NumTransducers;
+                var flat = new float[n * 3];
+                if (NativeCore.autd3_core_device_positions(_geometry, _dev, flat, (UIntPtr)flat.Length) != 0)
+                {
+                    throw new Autd3Exception("failed to read the transducer positions");
+                }
                 var result = new Vector3[n];
                 for (var i = 0; i < n; i++)
-                    result[i] = Position(i);
+                {
+                    result[i] = Coords.FromPoint(new System.Numerics.Vector3(flat[i * 3], flat[i * 3 + 1], flat[i * 3 + 2]));
+                }
                 return result;
             }
+        }
+
+        public Vector3 ToLocal(Vector3 point)
+        {
+            var xyz = new float[3];
+            if (NativeCore.autd3_core_device_to_local(_geometry, _dev, Coords.PointArray(point), xyz) != 0)
+            {
+                throw new Autd3Exception("failed to convert the point to the device frame");
+            }
+            return Coords.FromPointArray(xyz);
         }
 
         public Vector3[] Directions

@@ -4,10 +4,10 @@ const FPGA_MAIN_CLK_FREQ: u32 = fw::FPGA_CLK_FREQ_HZ;
 const NUM_BANKS: usize = fw::NUM_BANKS;
 const REP_INFINITE: u16 = fw::REP_INFINITE;
 
-const MODE_SYNC_IDX: u8 = fw::TRANSITION_MODE_SYNC_IDX;
-const MODE_SYS_TIME: u8 = fw::TRANSITION_MODE_SYS_TIME;
-const MODE_GPIO: u8 = fw::TRANSITION_MODE_GPIO;
-const MODE_EXT: u8 = fw::TRANSITION_MODE_EXT;
+const MODE_SYNC_IDX: u8 = fw::TransitionMode::SyncIdx.as_u8();
+const MODE_SYS_TIME: u8 = fw::TransitionMode::SysTime.as_u8();
+const MODE_GPIO: u8 = fw::TransitionMode::Gpio.as_u8();
+const MODE_EXT: u8 = fw::TransitionMode::Ext.as_u8();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum State {
@@ -59,12 +59,21 @@ impl Swapchain {
         self.cur_bank
     }
 
+    #[cfg(test)]
+    pub(crate) fn force_cur_bank(&mut self, bank: usize) {
+        self.cur_bank = bank;
+    }
+
     pub(crate) fn cur_idx(&self) -> usize {
         self.cur_idx
     }
 
     pub(crate) fn stopped(&self) -> bool {
         self.stop
+    }
+
+    pub(crate) fn ext_active(&self) -> bool {
+        self.ext_mode && self.state == State::InfiniteLoop
     }
 
     pub(crate) fn transition_pending(&self) -> bool {
@@ -114,7 +123,7 @@ impl Swapchain {
             State::WaitStart => {
                 let fire = match self.transition_mode {
                     MODE_SYNC_IDX => last_lap < lap,
-                    MODE_SYS_TIME => self.transition_value <= sys_time_ns,
+                    MODE_SYS_TIME => self.transition_value <= Self::fpga_sys_time(sys_time_ns),
                     MODE_GPIO => gpio_in[self.transition_value as usize & 0x3],
 
                     _ => true,
@@ -180,7 +189,7 @@ impl Swapchain {
 mod tests {
     use super::*;
 
-    const MODE_IMMEDIATE: u8 = fw::TRANSITION_MODE_IMMEDIATE;
+    const MODE_IMMEDIATE: u8 = fw::TransitionMode::Immediate.as_u8();
 
     #[test]
     fn cur_idx_stays_within_bank_after_switch_from_large_cycle() {
@@ -268,7 +277,15 @@ mod tests {
     fn pending_transition_is_replaced_by_request_to_previous_bank() {
         let mut sc = Swapchain::new();
         sc.set(0, REP_INFINITE, 1, CYCLE, 0, MODE_IMMEDIATE, 0);
-        sc.set(LAP_NS / 2, 0, 1, CYCLE, 1, MODE_SYS_TIME, 1_000 * LAP_NS);
+        sc.set(
+            LAP_NS / 2,
+            0,
+            1,
+            CYCLE,
+            1,
+            MODE_SYS_TIME,
+            Swapchain::fpga_sys_time(1_000 * LAP_NS),
+        );
         assert!(sc.transition_pending());
 
         sc.set(LAP_NS / 2 + 1, 0, 1, CYCLE, 1, MODE_SYNC_IDX, 0);

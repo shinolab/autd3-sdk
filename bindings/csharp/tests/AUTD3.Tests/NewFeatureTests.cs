@@ -14,12 +14,10 @@ namespace AUTD3.Tests
 
     public class NewFeatureTests
     {
-        private static Geometry SingleDevice() => new Geometry(new[] { new Autd3(Vector3.Zero) });
-
         [Fact]
         public void PlaneFillsBuffer()
         {
-            using var geometry = SingleDevice();
+            using var geometry = Fixture.SingleDevice();
             using var buffer = geometry.PhaseBuffer();
             Pattern.Plane(geometry, new Vector3(0f, 0f, 1f), Pattern.Wavelength(340 * m / s), buffer);
             Assert.Equal(1, buffer.NumDevices);
@@ -28,7 +26,7 @@ namespace AUTD3.Tests
         [Fact]
         public void BesselFillsBuffer()
         {
-            using var geometry = SingleDevice();
+            using var geometry = Fixture.SingleDevice();
             using var buffer = geometry.PhaseBuffer();
             Pattern.Bessel(geometry, geometry.Center, new Vector3(0f, 0f, 1f), 0.3f * rad, Pattern.Wavelength(340 * m / s), buffer);
             Assert.Equal(1, buffer.NumDevices);
@@ -37,7 +35,7 @@ namespace AUTD3.Tests
         [Fact]
         public void LaguerreGaussianMatchesFocusAndWritesIntensity()
         {
-            using var geometry = SingleDevice();
+            using var geometry = Fixture.SingleDevice();
             var wavelength = Pattern.Wavelength(340 * m / s);
             var device = geometry[0];
             var target = device.Center + new Vector3(0f, 0f, 150f);
@@ -77,7 +75,7 @@ namespace AUTD3.Tests
         [Fact]
         public void HermiteGaussianFillsBuffersAndRejectsInvalidWaist()
         {
-            using var geometry = SingleDevice();
+            using var geometry = Fixture.SingleDevice();
             var wavelength = Pattern.Wavelength(340 * m / s);
             var device = geometry[0];
             var target = device.Center + new Vector3(0f, 0f, 150f);
@@ -120,7 +118,7 @@ namespace AUTD3.Tests
         [Fact]
         public void BufferStartsAtZeroPhaseMaxIntensity()
         {
-            using var geometry = SingleDevice();
+            using var geometry = Fixture.SingleDevice();
             using var phases = geometry.PhaseBuffer();
             using var intensities = geometry.IntensityBuffer();
             Assert.All(phases[0], p => Assert.Equal(Phase.Zero, p));
@@ -130,7 +128,7 @@ namespace AUTD3.Tests
         [Fact]
         public void SetAndAddPhaseUpdateTheBuffer()
         {
-            using var geometry = SingleDevice();
+            using var geometry = Fixture.SingleDevice();
             using var phases = geometry.PhaseBuffer();
             using var intensities = geometry.IntensityBuffer();
             Pattern.SetIntensity(new Intensity(0x80), intensities);
@@ -157,7 +155,7 @@ namespace AUTD3.Tests
         [Fact]
         public void BufferIndexerAndIterator()
         {
-            using var geometry = SingleDevice();
+            using var geometry = Fixture.SingleDevice();
             using var phases = geometry.PhaseBuffer();
             using var intensities = geometry.IntensityBuffer();
             Assert.Equal(1, phases.NumDevices);
@@ -212,7 +210,7 @@ namespace AUTD3.Tests
         [Fact]
         public void HoloNaiveFillsBuffer()
         {
-            using var geometry = SingleDevice();
+            using var geometry = Fixture.SingleDevice();
             using var phases = geometry.PhaseBuffer();
             using var intensities = geometry.IntensityBuffer();
             var foci = new[]
@@ -263,99 +261,178 @@ namespace AUTD3.Tests
         public void CircleProducesControlPoints()
         {
             var points = new List<ControlPoints>();
-            Stm.Circle(new Vector3(0f, 0f, 150f), 30f * mm, 4, new Vector3(0f, 0f, 1f), points);
+            Stm.Circle(new Vector3(0f, 0f, 150f), 30f * mm, 4, new Vector3(0f, 0f, 1f), Intensity.Max, points);
             Assert.Equal(4, points.Count);
         }
 
         [Fact]
         public void FociStmBuildsDatagrams()
         {
-            using var geometry = SingleDevice();
+            using var geometry = Fixture.SingleDevice();
             var points = new List<ControlPoints>();
-            Stm.Circle(geometry.Center + new Vector3(0f, 0f, 150f), 30f * mm, 4, new Vector3(0f, 0f, 1f), points);
-            using var builder = new DatagramBuilder(geometry);
-            builder.Push(new FociStm(1 * Hz, points.ToArray()));
-            using var frames = builder.Build();
+            Stm.Circle(geometry.Center + new Vector3(0f, 0f, 150f), 30f * mm, 4, new Vector3(0f, 0f, 1f), Intensity.Max, points);
+            using var frames = Frames.Encode(geometry, new FociStm(1 * Hz, points.ToArray()));
             Assert.True(frames.Length > 0);
         }
 
         [Fact]
         public void LaterStagesAModulationBankWithoutChangingIt()
         {
-            using var geometry = SingleDevice();
+            using var geometry = Fixture.SingleDevice();
             using var modulation = Modulation.ModulationBuffer();
             Modulation.Sine(200 * Hz, new SineOption(), modulation);
 
-            using var builder = new DatagramBuilder(geometry);
-            builder.Push(new Modulation(ModulationBank.B1, SamplingConfig.Freq4k, modulation,
+            using var frames = Frames.Encode(geometry, new Modulation(ModulationBank.B1, SamplingConfig.Freq4k, modulation,
                 transitionMode: TransitionMode.Later));
-            using var frames = builder.Build();
             Assert.Equal(2, frames.Length);
         }
 
         [Fact]
         public void LaterStagesAPatternBankWithoutChangingIt()
         {
-            using var geometry = SingleDevice();
+            using var geometry = Fixture.SingleDevice();
             using var phases = geometry.PhaseBuffer();
             Pattern.SetPhase(Phase.Pi, phases);
             using var intensities = geometry.IntensityBuffer();
 
-            using var builder = new DatagramBuilder(geometry);
-            builder.Push(new Pattern(PatternBank.B1, phases, intensities, TransitionMode.Later));
-            using var frames = builder.Build();
+            using var frames = Frames.Encode(geometry, new Pattern(PatternBank.B1, phases, intensities, TransitionMode.Later));
             Assert.Equal(2, frames.Length);
         }
 
         [Fact]
-        public void ABankChangeRefusesToNotTransition()
+        public void ABankActivationRefusesToNotTransition()
         {
-            using var geometry = SingleDevice();
-            using var builder = new DatagramBuilder(geometry);
-            builder.Push(new ChangeModulationBank(ModulationBank.B1, TransitionMode.Later));
-            var e = Assert.Throws<Autd3Exception>(() => builder.Build());
+            using var geometry = Fixture.SingleDevice();
+            var e = Assert.Throws<Autd3Exception>(() =>
+                Frames.Encode(geometry, new ActivateModulationBank(ModulationBank.B1, TransitionMode.Later)));
             Assert.Contains("Later", e.Message);
         }
 
         [Fact]
         public void CommandsBuildDatagrams()
         {
-            using var geometry = SingleDevice();
-            using var builder = new DatagramBuilder(geometry);
-            builder
-                .Push(new Clear())
-                .Push(new Synchronize())
-                .Push(new ForceFan(true))
-                .Push(new SetSilencer(new FixedUpdateRate(256, 256)))
-                .Push(new SetSilencer())
-                .Push(SetSilencer.Disable());
-            using var frames = builder.Build();
-            Assert.True(frames.Length > 0);
+            using var geometry = Fixture.SingleDevice();
+            using var frames = Frames.Encode(geometry, Command.Sequence(
+                new Clear(),
+                new Synchronize(),
+                new ReleaseFailsafe(),
+                new ForceFan(true),
+                new SetSilencer(new FixedUpdateRate(256, 256)),
+                new SetSilencer(),
+                SetSilencer.Disable()));
+            Assert.Equal(7, frames.Length);
         }
 
         [Fact]
-        public void PushEachAssignsPerDevice()
+        public void SetCpuConfigBuildsADatagram()
+        {
+            using var geometry = Fixture.SingleDevice();
+
+            using var defaultFrames = Frames.Encode(geometry, new SetCpuConfig(new CpuConfig()));
+            Assert.Equal(1, defaultFrames.Length);
+
+            using var frames = Frames.Encode(geometry, new SetCpuConfig(new CpuConfig
+            {
+                SysTimeTransitionMargin = TimeSpan.Zero,
+                FpgaWaitUpdateMaxPolls = 1,
+                FpgaFlashMaxPolls = uint.MaxValue,
+                SyncGuard = TimeSpan.FromTicks(5000),
+                UpdateActivateDelay = TimeSpan.FromMilliseconds(200),
+                FailsafeTimeout = TimeSpan.FromSeconds(2),
+                Ptp = new PtpConfig
+                {
+                    SyncInterval = TimeSpan.FromMilliseconds(32),
+                    TxTimestampTimeout = TimeSpan.FromMilliseconds(4),
+                    DelayRespTimeout = TimeSpan.FromMilliseconds(8),
+                    Holdover = TimeSpan.FromSeconds(2),
+                    LockSamples = 1,
+                    StepThreshold = TimeSpan.FromTicks(200),
+                    LockThreshold = TimeSpan.FromTicks(2),
+                    KpMilli = 200,
+                    KiMilli = 40,
+                    MaxFreqPpb = 100_000,
+                    DelayReqSyncs = 4,
+                    PathDelayFilterShift = 0,
+                    PauseQuanta = 24,
+                    PauseHoldSyncs = 0,
+                    PauseRetry = TimeSpan.Zero,
+                },
+            }));
+            Assert.Equal(1, frames.Length);
+
+            using var withoutPauseFrames = Frames.Encode(geometry, new SetCpuConfig(new CpuConfig { Ptp = new PtpConfig { PauseQuanta = null } }));
+            Assert.Equal(1, withoutPauseFrames.Length);
+
+            using var disabledFrames = Frames.Encode(geometry, new SetCpuConfig(new CpuConfig { FailsafeTimeout = null }));
+            Assert.Equal(1, disabledFrames.Length);
+        }
+
+        [Fact]
+        public void SetCpuConfigRejectsZeroWhereItIsNotAllowed()
+        {
+            using var geometry = Fixture.SingleDevice();
+
+            var waitUpdate = Assert.Throws<Autd3Exception>(() =>
+                Frames.Encode(geometry, new SetCpuConfig(new CpuConfig { FpgaWaitUpdateMaxPolls = 0 })));
+            Assert.Contains("fpgaWaitUpdateMaxPolls", waitUpdate.Message);
+
+            var delayReqSyncs = Assert.Throws<Autd3Exception>(() =>
+                Frames.Encode(geometry, new SetCpuConfig(new CpuConfig { Ptp = new PtpConfig { DelayReqSyncs = 0 } })));
+            Assert.Contains("ptp.delayReqSyncs", delayReqSyncs.Message);
+
+            var pauseQuanta = Assert.Throws<Autd3Exception>(() =>
+                Frames.Encode(geometry, new SetCpuConfig(new CpuConfig { Ptp = new PtpConfig { PauseQuanta = 0 } })));
+            Assert.Contains("ptp.pauseQuanta", pauseQuanta.Message);
+
+            var flash = Assert.Throws<Autd3Exception>(() =>
+                Frames.Encode(geometry, new SetCpuConfig(new CpuConfig { FpgaFlashMaxPolls = 0 })));
+            Assert.Contains("fpgaFlashMaxPolls", flash.Message);
+
+            var lockSamples = Assert.Throws<Autd3Exception>(() =>
+                Frames.Encode(geometry, new SetCpuConfig(new CpuConfig { Ptp = new PtpConfig { LockSamples = 0 } })));
+            Assert.Contains("ptp.lockSamples", lockSamples.Message);
+
+            var negative = Assert.Throws<Autd3Exception>(() =>
+                Frames.Encode(geometry, new SetCpuConfig(new CpuConfig { SyncGuard = TimeSpan.FromTicks(-1) })));
+            Assert.Contains("syncGuard", negative.Message);
+
+            var failsafe = Assert.Throws<Autd3Exception>(() =>
+                Frames.Encode(geometry, new SetCpuConfig(new CpuConfig { FailsafeTimeout = TimeSpan.Zero })));
+            Assert.Contains("failsafeTimeout", failsafe.Message);
+        }
+
+        [Fact]
+        public void SetCpuConfigRejectsADurationTheWireCannotCarry()
+        {
+            using var geometry = Fixture.SingleDevice();
+            Assert.Throws<Autd3Exception>(() => Frames.Encode(geometry,
+                new SetCpuConfig(new CpuConfig { UpdateActivateDelay = TimeSpan.FromTicks(15000) })));
+
+            Assert.Throws<Autd3Exception>(() => Frames.Encode(geometry,
+                new SetCpuConfig(new CpuConfig { FailsafeTimeout = TimeSpan.FromTicks(1L << 62) })));
+        }
+
+        [Fact]
+        public void EachAssignsPerDevice()
         {
             using var geometry = new Geometry(new[]
             {
                 new Autd3(Vector3.Zero),
                 new Autd3(new Vector3(Autd3.DeviceWidth, 0f, 0f)),
             });
-            using var builder = new DatagramBuilder(geometry);
-            builder.PushEach(device => device.Idx == 0 ? new Clear() : (ICommand?)null);
-            using var frames = builder.Build();
-            Assert.True(frames.Length > 0);
+            using var frames = Frames.Encode(geometry,
+                Command.Each(device => device.Idx == 0 ? new Clear() : (ICommand?)null));
+            Assert.Equal(1, frames.Length);
         }
 
         [Fact]
         public void SetPulseWidthTableBuildsDatagram()
         {
-            using var geometry = SingleDevice();
-            var table = SetPulseWidthTable.DefaultTable();
+            using var geometry = Fixture.SingleDevice();
+            var table = SetPulseWidthTable.EmptyTable();
             Assert.Equal(SetPulseWidthTable.TableSize, table.Length);
-            using var builder = new DatagramBuilder(geometry);
-            builder.Push(new SetPulseWidthTable(table));
-            using var frames = builder.Build();
+            using var frames = Frames.Encode(geometry, new SetPulseWidthTable(table));
+            using var defaultFrames = Frames.Encode(geometry, new SetPulseWidthTable());
             Assert.True(frames.Length > 0);
         }
 
@@ -370,7 +447,7 @@ namespace AUTD3.Tests
         [Fact]
         public void DeviceAccessors()
         {
-            using var geometry = SingleDevice();
+            using var geometry = Fixture.SingleDevice();
             Assert.True(geometry.NumTransducers > 0);
             var device = geometry[0];
             Assert.Equal(0, device.Idx);

@@ -18,9 +18,6 @@ impl core::fmt::Debug for Angle {
 
 impl Angle {
     pub const ZERO: Self = Self { radian: 0.0 };
-    pub const PI: Self = Self {
-        radian: core::f32::consts::PI,
-    };
 
     #[must_use]
     pub const fn from_rad(radian: f32) -> Self {

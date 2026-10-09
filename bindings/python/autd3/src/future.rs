@@ -2,8 +2,21 @@ use std::future::Future;
 
 use pyo3::IntoPyObjectExt;
 use pyo3::prelude::*;
+use pyo3::types::PyNone;
 
 use crate::runtime;
+
+pub(crate) struct Completed;
+
+impl<'py> IntoPyObject<'py> for Completed {
+    type Target = PyNone;
+    type Output = Borrowed<'py, 'py, PyNone>;
+    type Error = std::convert::Infallible;
+
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
+        Ok(PyNone::get(py))
+    }
+}
 
 #[pyclass]
 struct CheckedCompletor;

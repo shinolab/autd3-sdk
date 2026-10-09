@@ -2,6 +2,7 @@ use std::ops::RangeInclusive;
 use std::sync::Arc;
 use std::time::Duration;
 
+use autd3_python_capsule::extract::{extract_duration, extract_velocity, velocity_to_py};
 use autd3_python_capsule::{capsule_of, frame_from_capsule, geometry_from_capsule, to_pyerr_gil};
 use autd3_rs_core::common::Velocity;
 use autd3_rs_core::geometry::Geometry;
@@ -13,28 +14,6 @@ use autd3_rs_emulator::{
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict};
-
-fn extract_duration(obj: &Bound<'_, PyAny>) -> PyResult<Duration> {
-    let nanos = obj.call_method0("as_nanos")?.extract::<u128>()?;
-    u64::try_from(nanos)
-        .map(Duration::from_nanos)
-        .map_err(|_| PyValueError::new_err("duration is out of range"))
-}
-
-fn extract_velocity(obj: &Bound<'_, PyAny>) -> PyResult<Velocity> {
-    let mm_per_s: f32 = obj.getattr("mm_s").and_then(|v| v.extract()).map_err(|_| {
-        PyValueError::new_err(
-            "sound speed must be a Velocity, e.g. 340 * m / s (bare numbers are no longer accepted)",
-        )
-    })?;
-    Ok(Velocity::from_mm_s(mm_per_s))
-}
-
-fn velocity_to_py(py: Python<'_>, v: Velocity) -> PyResult<Bound<'_, PyAny>> {
-    py.import("autd3_core")?
-        .getattr("Velocity")?
-        .call_method1("from_mm_s", (v.mm_s(),))
-}
 
 fn raw_to_polars(py: Python<'_>, frame: RawFrame) -> PyResult<Bound<'_, PyAny>> {
     let frombuffer = py.import("numpy")?.getattr("frombuffer")?;
@@ -75,9 +54,7 @@ fn extract_order(order: &str) -> PyResult<AxisOrder> {
 }
 
 #[pyclass(name = "Grid", module = "autd3_emulator")]
-pub struct Grid {
-    inner: CoreGrid,
-}
+pub struct Grid(CoreGrid);
 
 #[pymethods]
 impl Grid {
@@ -90,15 +67,13 @@ impl Grid {
         resolution: f32,
         order: &str,
     ) -> PyResult<Self> {
-        Ok(Self {
-            inner: CoreGrid {
-                x: extract_axis(x)?,
-                y: extract_axis(y)?,
-                z: extract_axis(z)?,
-                resolution,
-                order: extract_order(order)?,
-            },
-        })
+        Ok(Self(CoreGrid {
+            x: extract_axis(x)?,
+            y: extract_axis(y)?,
+            z: extract_axis(z)?,
+            resolution,
+            order: extract_order(order)?,
+        }))
     }
 }
 
@@ -177,14 +152,12 @@ impl InstantRecordOption {
 }
 
 #[pyclass(name = "Rms", module = "autd3_emulator")]
-pub struct Rms {
-    inner: CoreRms,
-}
+pub struct Rms(CoreRms);
 
 #[pymethods]
 impl Rms {
     fn observe_points<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        raw_to_polars(py, self.inner.observe_points_raw())
+        raw_to_polars(py, self.0.observe_points_raw())
     }
 
     fn next<'py>(
@@ -193,13 +166,13 @@ impl Rms {
         duration: &Bound<'_, PyAny>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let d = extract_duration(duration)?;
-        let frame = self.inner.next_raw(d).map_err(to_pyerr_gil)?;
+        let frame = self.0.next_raw(d).map_err(to_pyerr_gil)?;
         raw_to_polars(py, frame)
     }
 
     fn skip(&mut self, duration: &Bound<'_, PyAny>) -> PyResult<()> {
         let d = extract_duration(duration)?;
-        self.inner.skip(d).map_err(to_pyerr_gil)?;
+        self.0.skip(d).map_err(to_pyerr_gil)?;
         Ok(())
     }
 }
@@ -234,34 +207,32 @@ impl Instant {
 }
 
 #[pyclass(name = "Record", module = "autd3_emulator")]
-pub struct Record {
-    inner: Arc<CoreRecord>,
-}
+pub struct Record(Arc<CoreRecord>);
 
 #[pymethods]
 impl Record {
     fn num_transducers(&self) -> usize {
-        self.inner.num_transducers()
+        self.0.num_transducers()
     }
 
     fn num_samples(&self) -> usize {
-        self.inner.num_samples()
+        self.0.num_samples()
     }
 
     fn phase<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        raw_to_polars(py, self.inner.phase_raw())
+        raw_to_polars(py, self.0.phase_raw())
     }
 
     fn pulse_width<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        raw_to_polars(py, self.inner.pulse_width_raw())
+        raw_to_polars(py, self.0.pulse_width_raw())
     }
 
     fn output_voltage<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        raw_to_polars(py, self.inner.output_voltage_raw())
+        raw_to_polars(py, self.0.output_voltage_raw())
     }
 
     fn output_ultrasound<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        raw_to_polars(py, self.inner.output_ultrasound_raw())
+        raw_to_polars(py, self.0.output_ultrasound_raw())
     }
 
     fn sound_field(
@@ -273,22 +244,22 @@ impl Record {
         if let Ok(opt) = option.cast::<RmsRecordOption>() {
             let opt = opt.borrow();
             let rms = self
-                .inner
+                .0
                 .sound_field(
-                    range.inner.clone(),
+                    range.0.clone(),
                     CoreRmsOption {
                         sound_speed: opt.sound_speed,
                     },
                 )
                 .map_err(to_pyerr_gil)?;
-            return Ok(Py::new(py, Rms { inner: rms })?.into_any());
+            return Ok(Py::new(py, Rms(rms))?.into_any());
         }
         if let Ok(opt) = option.cast::<InstantRecordOption>() {
             let opt = opt.borrow();
             let instant = self
-                .inner
+                .0
                 .sound_field(
-                    range.inner.clone(),
+                    range.0.clone(),
                     CoreInstantOption {
                         sound_speed: opt.sound_speed,
                         time_step: Duration::from_nanos(opt.time_step_ns),
@@ -300,7 +271,7 @@ impl Record {
             return Ok(Py::new(
                 py,
                 Instant {
-                    _record: Arc::clone(&self.inner),
+                    _record: Arc::clone(&self.0),
                     inner: instant,
                 },
             )?
@@ -337,13 +308,18 @@ impl Recorder {
         self.num_devices
     }
 
-    fn datagram_builder<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        py.import("autd3")?
-            .getattr("DatagramBuilder")?
-            .call1((self.geometry.bind(py),))
+    fn send(&mut self, py: Python<'_>, command: &Bound<'_, PyAny>) -> PyResult<()> {
+        let frames = py
+            .import("autd3")?
+            .getattr("Frames")?
+            .call_method1("encode", (self.geometry.bind(py), command))?;
+        for index in 0..frames.len()? {
+            self.send_frame(&frames.get_item(index)?)?;
+        }
+        Ok(())
     }
 
-    fn send_checked(&mut self, frame: &Bound<'_, PyAny>) -> PyResult<()> {
+    fn send_frame(&mut self, frame: &Bound<'_, PyAny>) -> PyResult<()> {
         let recorder = self
             .inner
             .as_mut()
@@ -353,7 +329,7 @@ impl Recorder {
         let f = frames
             .frame(index)
             .ok_or_else(|| PyValueError::new_err("frame index out of range"))?;
-        pollster::block_on(recorder.send_checked(f)).map_err(to_pyerr_gil)?;
+        pollster::block_on(recorder.send_frame(f)).map_err(to_pyerr_gil)?;
         Ok(())
     }
 
@@ -373,9 +349,7 @@ impl Recorder {
             .inner
             .take()
             .ok_or_else(|| PyValueError::new_err("recorder has already been consumed"))?;
-        Ok(Record {
-            inner: Arc::new(recorder.into_record()),
-        })
+        Ok(Record(Arc::new(recorder.into_record())))
     }
 }
 
@@ -419,9 +393,7 @@ impl Emulator {
             .inner
             .take()
             .ok_or_else(|| PyValueError::new_err("recorder has already been consumed"))?;
-        Ok(Record {
-            inner: Arc::new(inner.into_record()),
-        })
+        Ok(Record(Arc::new(inner.into_record())))
     }
 }
 

@@ -3,21 +3,56 @@ using System.Numerics;
 
 namespace AUTD3
 {
+    public enum Autd3ErrorCode
+    {
+        Error = -1,
+        Timeout = -2,
+        Device = -3,
+        Network = -4,
+        InvalidArgument = -5,
+        UnsupportedFirmware = -6,
+        Aborted = -7,
+    }
+
     public sealed class Autd3Exception : Exception
     {
-        public Autd3Exception(string message) : base(message)
+        public Autd3ErrorCode Code { get; }
+
+        public Autd3Exception(string message) : this(message, Autd3ErrorCode.Error)
         {
         }
+
+        public Autd3Exception(string message, Autd3ErrorCode code) : base(message)
+        {
+            Code = code;
+        }
+
+        internal static Autd3Exception FromNative(int code, string message) =>
+            new Autd3Exception(message, Enum.IsDefined(typeof(Autd3ErrorCode), code) ? (Autd3ErrorCode)code : Autd3ErrorCode.Error);
+
+        internal static Autd3Exception FromNative(int code, byte[] err) => FromNative(code, NativeUtil.Utf8(err));
+    }
+
+    public static class Params
+    {
+        public static readonly TimeSpan UltrasoundPeriod = OptionNative.FromNanos(NativeCore.autd3_core_params_ultrasound_period_ns());
+        public static readonly uint UltrasoundFreqHz = NativeCore.autd3_core_params_ultrasound_freq_hz();
+        public static readonly int ModBufferSamples = (int)NativeCore.autd3_core_params_mod_buffer_samples();
+        public static readonly int BufferSizeMin = (int)NativeCore.autd3_core_params_buffer_size_min();
+        public static readonly int EmissionMaxIndices = (int)NativeCore.autd3_core_params_emission_max_indices();
+        public static readonly byte NumFociMax = NativeCore.autd3_core_params_num_foci_max();
+        public static readonly ushort PulseWidthPeriod = NativeCore.autd3_core_params_pulse_width_period();
+        public static readonly int MaxInflight = (int)NativeCore.autd3_core_params_max_inflight();
     }
 
     public readonly struct Autd3
     {
-        public const int NumTransducers = 249;
-        public const uint GridX = 18;
-        public const uint GridY = 14;
-        public const float PitchMm = 10.16f;
-        public const float DeviceWidth = 192.0f;
-        public const float DeviceHeight = 151.4f;
+        public static readonly int NumTransducers = (int)NativeCore.autd3_core_params_num_transducers();
+        public static readonly uint GridX = NativeCore.autd3_core_params_grid_x();
+        public static readonly uint GridY = NativeCore.autd3_core_params_grid_y();
+        public static readonly float PitchMm = NativeCore.autd3_core_params_pitch_mm();
+        public static readonly float DeviceWidth = NativeCore.autd3_core_params_device_width_mm();
+        public static readonly float DeviceHeight = NativeCore.autd3_core_params_device_height_mm();
 
         public Vector3 Origin { get; }
         public Quaternion Rotation { get; }
@@ -88,13 +123,10 @@ namespace AUTD3
         public static Phase Zero => new Phase(0x00);
         public static Phase Pi => new Phase(0x80);
 
-        public float Rad() => NativeCore.autd3_core_phase_radian(Value);
+        public float Rad() => Value / 256f * 2f * MathF.PI;
 
-        public static explicit operator Phase(Angle angle)
-        {
-            var p = (int)MathF.Round(angle.Rad / (2f * MathF.PI) * 256f);
-            return new Phase((byte)(p & 0xFF));
-        }
+        public static explicit operator Phase(Angle angle) =>
+            new Phase(NativeCore.autd3_core_phase_from_rad(angle.Rad));
 
         public static explicit operator Phase(Complex value) =>
             (Phase)new Angle(MathF.Atan2((float)value.Imaginary, (float)value.Real));
@@ -116,121 +148,126 @@ namespace AUTD3
 
     public readonly struct Interface
     {
-        private readonly string? _name;
+        private const byte KindNic = 0;
+        private const byte KindSimulator = 1;
+        private const byte KindAddr = 2;
 
-        private Interface(string? name)
+        private readonly byte _kind;
+        private readonly string? _value;
+
+        private Interface(byte kind, string? value)
         {
-            _name = name;
+            _kind = kind;
+            _value = value;
         }
 
         public static Interface Auto => default;
 
-        public static Interface Name(string name) => new Interface(name);
+        public static Interface Simulator => new Interface(KindSimulator, null);
 
-        internal string? NameValue => _name;
+        public static Interface Name(string name) => new Interface(KindNic, name);
+
+        public static Interface Addr(string addr) => new Interface(KindAddr, addr);
+
+        public string? NameValue => _kind == KindNic ? _value : null;
+
+        public bool IsAuto => _kind == KindNic && _value == null;
+
+        public bool IsSimulator => _kind == KindSimulator;
+
+        public string? AddrValue => _kind == KindAddr ? _value : null;
     }
 
     public readonly struct DeviceState : IEquatable<DeviceState>
     {
         private readonly byte _kind;
-        private readonly byte _bits;
 
-        private DeviceState(byte kind, byte bits)
+        private DeviceState(byte kind)
         {
             _kind = kind;
-            _bits = bits;
         }
 
-        public static DeviceState Op => new DeviceState(0, 0);
-        public static DeviceState SafeOp => new DeviceState(1, 0);
-        public static DeviceState SafeOpError => new DeviceState(2, 0);
-        public static DeviceState Lost => new DeviceState(3, 0);
-        public static DeviceState Other(byte bits) => new DeviceState(4, bits);
+        public static DeviceState Ready => new DeviceState(0);
+        public static DeviceState Syncing => new DeviceState(1);
+        public static DeviceState Lost => new DeviceState(2);
 
-        internal static DeviceState FromNative(byte kind, byte bits) => new DeviceState(kind, bits);
+        internal static DeviceState FromNative(byte kind) => new DeviceState(kind);
 
         public override string ToString() => _kind switch
         {
-            0 => "OP",
-            1 => "SAFE-OP",
-            2 => "SAFE-OP + ERROR",
-            3 => "LOST",
-            _ => _bits switch
-            {
-                0x00 => "NONE",
-                0x01 => "INIT",
-                0x02 => "PRE-OP",
-                0x03 => "BOOT",
-                _ => $"UNKNOWN (0x{_bits:x2})",
-            },
+            0 => "READY",
+            1 => "SYNCING",
+            2 => "LOST",
+            _ => $"UNKNOWN ({_kind})",
         };
 
-        public bool Equals(DeviceState other) => _kind == other._kind && _bits == other._bits;
+        public bool Equals(DeviceState other) => _kind == other._kind;
 
         public override bool Equals(object? obj) => obj is DeviceState other && Equals(other);
 
-        public override int GetHashCode() => (_kind << 8) | _bits;
+        public override int GetHashCode() => _kind;
 
         public static bool operator ==(DeviceState left, DeviceState right) => left.Equals(right);
 
         public static bool operator !=(DeviceState left, DeviceState right) => !left.Equals(right);
     }
 
-    public readonly struct DcSysTime : IEquatable<DcSysTime>, IComparable<DcSysTime>
+    public readonly struct SysTime : IEquatable<SysTime>, IComparable<SysTime>
     {
-        private static readonly DateTime EcatEpoch = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-
         private readonly ulong _ns;
 
-        private DcSysTime(ulong ns)
+        private SysTime(ulong ns)
         {
             _ns = ns;
         }
 
-        public static DcSysTime Zero => new DcSysTime(0);
+        public static SysTime Zero => new SysTime(0);
 
-        public static DcSysTime FromNanos(ulong ns) => new DcSysTime(ns);
+        public static SysTime FromNanos(ulong ns) => new SysTime(ns);
 
-        public ulong SysTime => _ns;
+        public ulong Nanos => _ns;
 
-        public static DcSysTime Now() => FromUtc(DateTime.UtcNow);
-
-        public static DcSysTime FromUtc(DateTime utc)
+        public static SysTime operator +(SysTime lhs, TimeSpan rhs)
         {
-            var ticks = utc.ToUniversalTime().Ticks - EcatEpoch.Ticks;
-            if (ticks < 0)
+            if (rhs < TimeSpan.Zero)
             {
-                throw new Autd3Exception("UTC time is out of the representable DcSysTime range (2000-01-01 0:00:00 UTC ..)");
+                throw new ArgumentOutOfRangeException(nameof(rhs));
             }
-            return new DcSysTime((ulong)ticks * 100);
+            var ns = OptionNative.ToNanos(rhs);
+            return new SysTime(ns > ulong.MaxValue - lhs._ns ? ulong.MaxValue : lhs._ns + ns);
         }
 
-        public DateTime ToUtc() => EcatEpoch.AddTicks((long)(_ns / 100));
+        public static SysTime operator -(SysTime lhs, TimeSpan rhs)
+        {
+            if (rhs < TimeSpan.Zero)
+            {
+                throw new ArgumentOutOfRangeException(nameof(rhs));
+            }
+            var ns = OptionNative.ToNanos(rhs);
+            return new SysTime(ns > lhs._ns ? 0 : lhs._ns - ns);
+        }
 
-        public static DcSysTime operator +(DcSysTime lhs, TimeSpan rhs) =>
-            new DcSysTime(checked(lhs._ns + (ulong)rhs.Ticks * 100));
+        public static TimeSpan operator -(SysTime lhs, SysTime rhs) =>
+            OptionNative.FromNanos(rhs._ns > lhs._ns ? 0 : lhs._ns - rhs._ns);
 
-        public static DcSysTime operator -(DcSysTime lhs, TimeSpan rhs) =>
-            new DcSysTime(checked(lhs._ns - (ulong)rhs.Ticks * 100));
+        public bool Equals(SysTime other) => _ns == other._ns;
 
-        public bool Equals(DcSysTime other) => _ns == other._ns;
-
-        public override bool Equals(object? obj) => obj is DcSysTime other && Equals(other);
+        public override bool Equals(object? obj) => obj is SysTime other && Equals(other);
 
         public override int GetHashCode() => _ns.GetHashCode();
 
-        public int CompareTo(DcSysTime other) => _ns.CompareTo(other._ns);
+        public int CompareTo(SysTime other) => _ns.CompareTo(other._ns);
 
-        public static bool operator ==(DcSysTime left, DcSysTime right) => left.Equals(right);
+        public static bool operator ==(SysTime left, SysTime right) => left.Equals(right);
 
-        public static bool operator !=(DcSysTime left, DcSysTime right) => !left.Equals(right);
+        public static bool operator !=(SysTime left, SysTime right) => !left.Equals(right);
 
-        public static bool operator <(DcSysTime left, DcSysTime right) => left._ns < right._ns;
+        public static bool operator <(SysTime left, SysTime right) => left._ns < right._ns;
 
-        public static bool operator >(DcSysTime left, DcSysTime right) => left._ns > right._ns;
+        public static bool operator >(SysTime left, SysTime right) => left._ns > right._ns;
 
-        public static bool operator <=(DcSysTime left, DcSysTime right) => left._ns <= right._ns;
+        public static bool operator <=(SysTime left, SysTime right) => left._ns <= right._ns;
 
-        public static bool operator >=(DcSysTime left, DcSysTime right) => left._ns >= right._ns;
+        public static bool operator >=(SysTime left, SysTime right) => left._ns >= right._ns;
     }
 }

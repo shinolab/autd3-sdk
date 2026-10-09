@@ -9,7 +9,7 @@ use autd3_cpu_wire::fpga_update::{
 };
 
 use crate::clean::{CleanArgs, Cleaner};
-use crate::util::{on_path, run, which};
+use crate::util::{copy_dir, on_path, run, which};
 
 const PROJECT_NAME: &str = "autd3-fpga";
 
@@ -201,7 +201,10 @@ pub fn fpga_build(root: &Path, force: bool) -> Result<FpgaArtifacts> {
 fn split_flash_image(mcs: &Path, update_image: &Path) -> Result<()> {
     let (start, flash) = read_mcs(mcs)?;
     if start != 0 {
-        bail!("{} starts at 0x{start:X}, expected the golden image at 0x0", mcs.display());
+        bail!(
+            "{} starts at 0x{start:X}, expected the golden image at 0x0",
+            mcs.display()
+        );
     }
     let barrier_base = FPGA_BARRIER_BASE as usize;
     let golden = summarize_bitstream(flash.get(..barrier_base).unwrap_or(&flash));
@@ -225,7 +228,9 @@ fn split_flash_image(mcs: &Path, update_image: &Path) -> Result<()> {
         .get(barrier_end..FPGA_IMAGE_BASE as usize)
         .is_none_or(|gap| gap.iter().any(|&b| b != 0xFF))
     {
-        bail!("the gap between the barrier and the update slot is not empty, or the mcs has no update image");
+        bail!(
+            "the gap between the barrier and the update slot is not empty, or the mcs has no update image"
+        );
     }
     let slot = &flash[FPGA_IMAGE_BASE as usize..];
     let used = slot
@@ -266,7 +271,10 @@ fn read_mcs(path: &Path) -> Result<(u32, Vec<u8>)> {
             .with_context(|| format!("line {line_no}: missing ':'"))?;
         let bytes = (0..hex.len())
             .step_by(2)
-            .map(|i| hex.get(i..i + 2).and_then(|b| u8::from_str_radix(b, 16).ok()))
+            .map(|i| {
+                hex.get(i..i + 2)
+                    .and_then(|b| u8::from_str_radix(b, 16).ok())
+            })
             .collect::<Option<Vec<u8>>>()
             .with_context(|| format!("line {line_no}: malformed hex"))?;
         if bytes.len() < 5 || bytes.len() != usize::from(bytes[0]) + 5 {
@@ -300,7 +308,7 @@ fn read_mcs(path: &Path) -> Result<(u32, Vec<u8>)> {
     let mut image = vec![0xFF; end_index - start_index];
     for (addr, data) in &records {
         let offset = usize::try_from(*addr)? - start_index;
-        image[offset..offset + data.len()].copy_from_slice(data);
+        image[offset..][..data.len()].copy_from_slice(data);
     }
     Ok((start, image))
 }
@@ -427,24 +435,6 @@ fn fpga_commit_ips(fpga_dir: &Path) -> Result<()> {
     }
     copy_dir(&src, &dst)?;
     println!("committed IP: {} -> {}", src.display(), dst.display());
-    Ok(())
-}
-
-fn copy_dir(src: &Path, dst: &Path) -> Result<()> {
-    std::fs::create_dir_all(dst).with_context(|| format!("creating {}", dst.display()))?;
-    for entry in std::fs::read_dir(src)
-        .with_context(|| format!("reading {}", src.display()))?
-        .flatten()
-    {
-        let from = entry.path();
-        let to = dst.join(entry.file_name());
-        if from.is_dir() {
-            copy_dir(&from, &to)?;
-        } else {
-            std::fs::copy(&from, &to)
-                .with_context(|| format!("copying {} -> {}", from.display(), to.display()))?;
-        }
-    }
     Ok(())
 }
 

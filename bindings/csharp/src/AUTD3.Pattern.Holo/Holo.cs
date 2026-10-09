@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using System.Runtime.InteropServices;
 
@@ -104,52 +105,54 @@ namespace AUTD3.Holo
 
     public readonly struct NaiveOption
     {
-        public IntensityConstraint Constraint { get; init; } = IntensityConstraint.Clamp(Intensity.Min, Intensity.Max);
-        public Directivity Directivity { get; init; } = Directivity.Sphere;
-        public TransducerMask Mask { get; init; } = TransducerMask.AllEnabled;
-        public bool Parallel { get; init; } = true;
-
-        public NaiveOption()
-        {
-        }
+        private readonly IntensityConstraint? _constraint;
+        public IntensityConstraint Constraint { get => _constraint ?? IntensityConstraint.Clamp(Intensity.Min, Intensity.Max); init => _constraint = value; }
+        private readonly Directivity? _directivity;
+        public Directivity Directivity { get => _directivity ?? Directivity.Sphere; init => _directivity = value; }
+        private readonly TransducerMask? _mask;
+        public TransducerMask Mask { get => _mask ?? TransducerMask.AllEnabled; init => _mask = value; }
+        private readonly bool? _parallel;
+        public bool Parallel { get => _parallel ?? true; init => _parallel = value; }
     }
 
     public readonly struct GsOption
     {
-        public uint Repeat { get; init; } = 100;
-        public IntensityConstraint Constraint { get; init; } = IntensityConstraint.Clamp(Intensity.Min, Intensity.Max);
-        public Directivity Directivity { get; init; } = Directivity.Sphere;
-        public TransducerMask Mask { get; init; } = TransducerMask.AllEnabled;
-        public bool Parallel { get; init; } = true;
-
-        public GsOption()
-        {
-        }
+        private readonly uint? _repeat;
+        public uint Repeat { get => _repeat ?? 100; init => _repeat = value; }
+        private readonly IntensityConstraint? _constraint;
+        public IntensityConstraint Constraint { get => _constraint ?? IntensityConstraint.Clamp(Intensity.Min, Intensity.Max); init => _constraint = value; }
+        private readonly Directivity? _directivity;
+        public Directivity Directivity { get => _directivity ?? Directivity.Sphere; init => _directivity = value; }
+        private readonly TransducerMask? _mask;
+        public TransducerMask Mask { get => _mask ?? TransducerMask.AllEnabled; init => _mask = value; }
+        private readonly bool? _parallel;
+        public bool Parallel { get => _parallel ?? true; init => _parallel = value; }
     }
 
     public readonly struct GspatOption
     {
-        public uint Repeat { get; init; } = 100;
-        public IntensityConstraint Constraint { get; init; } = IntensityConstraint.Clamp(Intensity.Min, Intensity.Max);
-        public Directivity Directivity { get; init; } = Directivity.Sphere;
-        public TransducerMask Mask { get; init; } = TransducerMask.AllEnabled;
-        public bool Parallel { get; init; } = true;
-
-        public GspatOption()
-        {
-        }
+        private readonly uint? _repeat;
+        public uint Repeat { get => _repeat ?? 100; init => _repeat = value; }
+        private readonly IntensityConstraint? _constraint;
+        public IntensityConstraint Constraint { get => _constraint ?? IntensityConstraint.Clamp(Intensity.Min, Intensity.Max); init => _constraint = value; }
+        private readonly Directivity? _directivity;
+        public Directivity Directivity { get => _directivity ?? Directivity.Sphere; init => _directivity = value; }
+        private readonly TransducerMask? _mask;
+        public TransducerMask Mask { get => _mask ?? TransducerMask.AllEnabled; init => _mask = value; }
+        private readonly bool? _parallel;
+        public bool Parallel { get => _parallel ?? true; init => _parallel = value; }
     }
 
     public readonly struct GreedyOption
     {
-        public byte PhaseQuantizationLevels { get; init; } = 16;
-        public IntensityConstraint Constraint { get; init; } = IntensityConstraint.Uniform(Intensity.Max);
-        public Directivity Directivity { get; init; } = Directivity.Sphere;
-        public TransducerMask Mask { get; init; } = TransducerMask.AllEnabled;
-
-        public GreedyOption()
-        {
-        }
+        private readonly byte? _phaseQuantizationLevels;
+        public byte PhaseQuantizationLevels { get => _phaseQuantizationLevels ?? 16; init => _phaseQuantizationLevels = value; }
+        private readonly IntensityConstraint? _constraint;
+        public IntensityConstraint Constraint { get => _constraint ?? IntensityConstraint.Uniform(Intensity.Max); init => _constraint = value; }
+        private readonly Directivity? _directivity;
+        public Directivity Directivity { get => _directivity ?? Directivity.Sphere; init => _directivity = value; }
+        private readonly TransducerMask? _mask;
+        public TransducerMask Mask { get => _mask ?? TransducerMask.AllEnabled; init => _mask = value; }
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -189,7 +192,16 @@ namespace AUTD3.Holo
         internal static extern int autd3_holo_gspat(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, UIntPtr repeat, in IntensityConstraintNative constraint, byte directivity, byte[]? mask, [MarshalAs(UnmanagedType.I1)] bool parallel, PhaseBufferHandle phases, IntensityBufferHandle intensities, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_holo_greedy(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, byte phaseQuantizationLevels, in IntensityConstraintNative constraint, byte directivity, byte[]? mask, PhaseBufferHandle phases, IntensityBufferHandle intensities, byte[] outErr, UIntPtr outErrLen);
+        internal static extern int autd3_holo_naive_batch(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, in IntensityConstraintNative constraint, byte directivity, byte[]? mask, [MarshalAs(UnmanagedType.I1)] bool parallel, IntPtr[] phases, IntPtr[] intensities, UIntPtr numProblems, byte[] outErr, UIntPtr outErrLen);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_holo_gs_batch(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, UIntPtr repeat, in IntensityConstraintNative constraint, byte directivity, byte[]? mask, [MarshalAs(UnmanagedType.I1)] bool parallel, IntPtr[] phases, IntPtr[] intensities, UIntPtr numProblems, byte[] outErr, UIntPtr outErrLen);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_holo_gspat_batch(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, UIntPtr repeat, in IntensityConstraintNative constraint, byte directivity, byte[]? mask, [MarshalAs(UnmanagedType.I1)] bool parallel, IntPtr[] phases, IntPtr[] intensities, UIntPtr numProblems, byte[] outErr, UIntPtr outErrLen);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_holo_greedy(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, IntPtr intensities, byte uniformIntensity, byte phaseQuantizationLevels, byte directivity, byte[]? mask, PhaseBufferHandle dst, byte[] outErr, UIntPtr outErrLen);
     }
 
     public readonly struct AmplitudeTarget
@@ -267,7 +279,69 @@ namespace AUTD3.Holo
             }
         }
 
-        public static void Greedy(Geometry geometry, AmplitudeTarget[] foci, Length wavelength, GreedyOption option, PhaseBuffer phases, IntensityBuffer intensities)
+        private static void CheckBatch(IReadOnlyList<PhaseBuffer> phases, IReadOnlyList<IntensityBuffer> intensities)
+        {
+            if (phases.Count != intensities.Count)
+            {
+                throw new Autd3Exception(
+                    $"a batch needs one intensity buffer per phase buffer, but {phases.Count} phase and {intensities.Count} intensity buffers were given",
+                    Autd3ErrorCode.InvalidArgument);
+            }
+        }
+
+        private static HandleArray Lease<T>(IReadOnlyList<T> buffers, Func<T, SafeHandle> handle)
+        {
+            var handles = new SafeHandle[buffers.Count];
+            for (var i = 0; i < handles.Length; i++)
+            {
+                handles[i] = handle(buffers[i]);
+            }
+            return new HandleArray(handles);
+        }
+
+        public static void NaiveBatch(Geometry geometry, AmplitudeTarget[] foci, Length wavelength, NaiveOption option, IReadOnlyList<PhaseBuffer> phases, IReadOnlyList<IntensityBuffer> intensities)
+        {
+            CheckBatch(phases, intensities);
+            var c = option.Constraint.ToNative();
+            var err = new byte[NativeAbi.ErrorBufferLength];
+            using var p = Lease(phases, b => b.Handle);
+            using var i = Lease(intensities, b => b.Handle);
+            var code = NativeHolo.autd3_holo_naive_batch(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, geometry.NumDevices), option.Parallel, p.Pointers, i.Pointers, (UIntPtr)phases.Count, err, (UIntPtr)err.Length);
+            if (code != 0)
+            {
+                throw Autd3Exception.FromNative(code, err);
+            }
+        }
+
+        public static void GsBatch(Geometry geometry, AmplitudeTarget[] foci, Length wavelength, GsOption option, IReadOnlyList<PhaseBuffer> phases, IReadOnlyList<IntensityBuffer> intensities)
+        {
+            CheckBatch(phases, intensities);
+            var c = option.Constraint.ToNative();
+            var err = new byte[NativeAbi.ErrorBufferLength];
+            using var p = Lease(phases, b => b.Handle);
+            using var i = Lease(intensities, b => b.Handle);
+            var code = NativeHolo.autd3_holo_gs_batch(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, geometry.NumDevices), option.Parallel, p.Pointers, i.Pointers, (UIntPtr)phases.Count, err, (UIntPtr)err.Length);
+            if (code != 0)
+            {
+                throw Autd3Exception.FromNative(code, err);
+            }
+        }
+
+        public static void GspatBatch(Geometry geometry, AmplitudeTarget[] foci, Length wavelength, GspatOption option, IReadOnlyList<PhaseBuffer> phases, IReadOnlyList<IntensityBuffer> intensities)
+        {
+            CheckBatch(phases, intensities);
+            var c = option.Constraint.ToNative();
+            var err = new byte[NativeAbi.ErrorBufferLength];
+            using var p = Lease(phases, b => b.Handle);
+            using var i = Lease(intensities, b => b.Handle);
+            var code = NativeHolo.autd3_holo_gspat_batch(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, geometry.NumDevices), option.Parallel, p.Pointers, i.Pointers, (UIntPtr)phases.Count, err, (UIntPtr)err.Length);
+            if (code != 0)
+            {
+                throw Autd3Exception.FromNative(code, err);
+            }
+        }
+
+        public static void Greedy(Geometry geometry, AmplitudeTarget[] foci, Length wavelength, PatternIntensity intensities, GreedyOption option, PhaseBuffer dst)
         {
             var c = option.Constraint.ToNative();
             var err = new byte[NativeAbi.ErrorBufferLength];

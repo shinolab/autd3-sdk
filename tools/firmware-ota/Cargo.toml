@@ -6,7 +6,7 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 publish = false
-description = "Update the AUTD3 CPU and FPGA firmware over EtherCAT (no J-Link / Vivado): streams the images through the PDO protocol, reboots the devices, and confirms the result."
+description = "Update the AUTD3 CPU and FPGA firmware over UDP (no J-Link / Vivado): streams the images through the frame protocol, reboots the devices, and confirms the result."
 
 [lib]
 path = "src/lib.rs"
@@ -17,7 +17,7 @@ path = "src/main.rs"
 
 [dependencies]
 autd3-cpu-wire.workspace = true
-autd3-rs-core.workspace = true
+autd3-rs.workspace = true
 autd3-firmware-writer.workspace = true
 clap.workspace = true
 anyhow.workspace = true
@@ -25,7 +25,7 @@ thiserror.workspace = true
 zerocopy.workspace = true
 
 [dev-dependencies]
-autd3-rs-firmware-emulator.workspace = true
+autd3-rs-firmware-emulator = { workspace = true, features = ["udp"] }
 
 [lints]
 workspace = true

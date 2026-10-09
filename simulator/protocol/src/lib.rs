@@ -26,7 +26,7 @@ pub struct DeviceState {
     pub stm_freq_div: u16,
     pub stm_cycle: u32,
     pub stm_idx: u32,
-    pub gpio_types: [u8; 4],
+    pub gpio_types: [String; 4],
     pub gpio_out: [Vec<u8>; 4],
 }
 
@@ -66,7 +66,7 @@ mod tests {
             stm_freq_div: 20,
             stm_cycle: 5,
             stm_idx: 4,
-            gpio_types: [0x01, 0x20, 0xE0, 0xF0],
+            gpio_types: ["BaseSig", "ModBank", "PwmOut", "Direct"].map(String::from),
             gpio_out: [vec![0, 1], vec![1, 0], vec![1, 1], vec![0, 0]],
         }
     }

@@ -4,15 +4,31 @@ Browser frontend for the AUTD3 Simulator.
 
 ## How to use
 
-The backend listens as a Remote Link server (default port **8080**), decodes the frames sent by a connected client and displays the sound field.
+The backend emulates AUTD3 devices over UDP on the host (IPv6 loopback): it answers the enumeration on
+**`[::1]:44336`**, runs the real CPU firmware logic on the frames a client sends and displays the sound field.
 The browser UI is on a separate port (default **8081**).
+
+A client on the same host reaches the simulator with the default `TransportOption` (`Interface::Auto` prefers a running
+simulator over real devices). Set `Interface::Simulator` to connect to nothing but the simulator:
+
+```rust
+let option = TransportOption {
+    iface: Interface::Simulator,
+    ..Default::default()
+};
+let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
+```
+
+The geometry of the emulated devices is given to the simulator (`--geometry <json>`, the output of `Geometry::to_json`;
+a single AUTD3 at the origin when omitted). The client's geometry must have the same number of devices.
 
 ```bash
 # 1) Start the simulator (in autd3-sdk/)
-cargo xtask simulator run --open          # UI=8081, Remote Link=8080
+cargo xtask simulator run --open                        # UI=8081, devices on [::1]:44336
+cargo xtask simulator run --geometry geometry.json      # emulate the devices of a geometry file
 
 # 2) Connect a client (in another terminal; example that sends a focus)
-cargo xtask example remote_client          # connects to 127.0.0.1:8080 and sends a focus
+cargo xtask rust example focus_sine
 ```
 
 ## Required tools
