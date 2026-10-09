@@ -97,7 +97,7 @@ namespace AUTD3
         }
     }
 
-    public sealed class TransducerGroups<TKey> where TKey : struct
+    public sealed class TransducerGroups<TKey> where TKey : notnull
     {
         private readonly int[] _numTransducers;
         private readonly List<TKey> _keys = new List<TKey>();
@@ -109,7 +109,7 @@ namespace AUTD3
 
         public int NumDevices => _numTransducers.Length;
 
-        public TransducerGroups(Geometry geometry, Func<Device, int, TKey?> key)
+        public TransducerGroups(Geometry geometry, Func<Device, int, TKey> key)
         {
             _numTransducers = new int[geometry.NumDevices];
             FlatIndices = new int[geometry.NumTransducers];
@@ -122,23 +122,18 @@ namespace AUTD3
                 for (var tr = 0; tr < numTransducers; tr++)
                 {
                     var value = key(device, tr);
-                    if (value == null)
-                    {
-                        FlatIndices[k++] = -1;
-                        continue;
-                    }
-                    if (!_lookup.TryGetValue(value.Value, out var index))
+                    if (!_lookup.TryGetValue(value, out var index))
                     {
                         index = _keys.Count;
-                        _lookup.Add(value.Value, index);
-                        _keys.Add(value.Value);
+                        _lookup.Add(value, index);
+                        _keys.Add(value);
                     }
                     FlatIndices[k++] = index;
                 }
             }
         }
 
-        public TKey? Key(int device, int transducer)
+        public TKey Key(int device, int transducer)
         {
             if (device < 0 || device >= _numTransducers.Length)
             {
@@ -148,31 +143,20 @@ namespace AUTD3
             {
                 throw new ArgumentOutOfRangeException(nameof(transducer));
             }
-            var index = FlatIndices[Offset(device) + transducer];
-            return index < 0 ? (TKey?)null : _keys[index];
+            return _keys[FlatIndices[Offset(device) + transducer]];
         }
 
-        public int? Index(int device, int transducer)
+        public int Index(int device, int transducer)
         {
             if (transducer < 0 || transducer >= NumTransducers(device))
             {
                 throw new ArgumentOutOfRangeException(nameof(transducer));
             }
-            var index = FlatIndices[Offset(device) + transducer];
-            return index < 0 ? (int?)null : index;
+            return FlatIndices[Offset(device) + transducer];
         }
 
-        public IReadOnlyList<int?> Indices(int device)
-        {
-            var indices = new int?[NumTransducers(device)];
-            var offset = Offset(device);
-            for (var tr = 0; tr < indices.Length; tr++)
-            {
-                var index = FlatIndices[offset + tr];
-                indices[tr] = index < 0 ? (int?)null : index;
-            }
-            return indices;
-        }
+        public IReadOnlyList<int> Indices(int device) =>
+            new ArraySegment<int>(FlatIndices, Offset(device), NumTransducers(device));
 
         public int NumTransducers(int device)
         {
@@ -968,7 +952,7 @@ namespace AUTD3
             }
         }
 
-        public static void Group<TKey>(Geometry geometry, TransducerGroups<TKey> groups, Func<TKey, PhaseBuffer> source, PhaseBuffer dst) where TKey : struct
+        public static void Group<TKey>(Geometry geometry, TransducerGroups<TKey> groups, Func<TKey, PhaseBuffer> source, PhaseBuffer dst) where TKey : notnull
         {
             using var lease = GroupSources(geometry, groups, key => source(key)?.Handle, dst.Handle);
             if (NativePattern.autd3_pattern_group_phase(geometry.Handle, groups.FlatIndices, lease.Pointers, (UIntPtr)groups.Keys.Count, dst.Handle) != 0)
@@ -977,7 +961,7 @@ namespace AUTD3
             }
         }
 
-        public static void Group<TKey>(Geometry geometry, TransducerGroups<TKey> groups, Func<TKey, IntensityBuffer> source, IntensityBuffer dst) where TKey : struct
+        public static void Group<TKey>(Geometry geometry, TransducerGroups<TKey> groups, Func<TKey, IntensityBuffer> source, IntensityBuffer dst) where TKey : notnull
         {
             using var lease = GroupSources(geometry, groups, key => source(key)?.Handle, dst.Handle);
             if (NativePattern.autd3_pattern_group_intensity(geometry.Handle, groups.FlatIndices, lease.Pointers, (UIntPtr)groups.Keys.Count, dst.Handle) != 0)
@@ -986,7 +970,7 @@ namespace AUTD3
             }
         }
 
-        private static HandleArray GroupSources<TKey>(Geometry geometry, TransducerGroups<TKey> groups, Func<TKey, SafeHandle?> source, SafeHandle dst) where TKey : struct
+        private static HandleArray GroupSources<TKey>(Geometry geometry, TransducerGroups<TKey> groups, Func<TKey, SafeHandle?> source, SafeHandle dst) where TKey : notnull
         {
             if (groups.FlatIndices.Length != geometry.NumTransducers)
             {
@@ -1010,7 +994,7 @@ namespace AUTD3
             return new HandleArray(handles);
         }
 
-        public static void GroupCompute<TKey>(Geometry geometry, TransducerGroups<TKey> groups, Action<TKey, TransducerMask, PhaseBuffer, IntensityBuffer> compute, PhaseBuffer phases, IntensityBuffer intensities) where TKey : struct
+        public static void GroupCompute<TKey>(Geometry geometry, TransducerGroups<TKey> groups, Action<TKey, TransducerMask, PhaseBuffer, IntensityBuffer> compute, PhaseBuffer phases, IntensityBuffer intensities) where TKey : notnull
         {
             if (compute == null)
             {

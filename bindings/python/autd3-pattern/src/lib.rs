@@ -707,24 +707,26 @@ impl TransducerGroups {
         let mut error = None;
         let inner = CoreTransducerGroups::new(core_geometry, |device, tr| {
             if error.is_some() {
-                return None;
+                return 0;
             }
             key.call1((&devices[device.idx()], tr))
                 .and_then(|k| {
                     if k.is_none() {
-                        return Ok(None);
+                        return Err(PyValueError::new_err(
+                            "every transducer must be assigned a key (the key function returned None)",
+                        ));
                     }
                     if let Some(index) = lookup.get_item(&k)? {
-                        return index.extract::<usize>().map(Some);
+                        return index.extract::<usize>();
                     }
                     let index = keys.len();
                     lookup.set_item(&k, index)?;
                     keys.push(k.unbind());
-                    Ok(Some(index))
+                    Ok(index)
                 })
                 .unwrap_or_else(|e| {
                     error = Some(e);
-                    None
+                    0
                 })
         });
         if let Some(e) = error {
@@ -741,20 +743,17 @@ impl TransducerGroups {
         self.keys.iter().map(|key| key.clone_ref(py)).collect()
     }
 
-    fn key(&self, py: Python<'_>, device: usize, transducer: usize) -> PyResult<Option<Py<PyAny>>> {
+    fn key(&self, py: Python<'_>, device: usize, transducer: usize) -> PyResult<Py<PyAny>> {
         self.check_transducer(device, transducer)?;
-        Ok(self
-            .inner
-            .index(device, transducer)
-            .map(|index| self.keys[index].clone_ref(py)))
+        Ok(self.keys[self.inner.index(device, transducer)].clone_ref(py))
     }
 
-    fn index(&self, device: usize, transducer: usize) -> PyResult<Option<usize>> {
+    fn index(&self, device: usize, transducer: usize) -> PyResult<usize> {
         self.check_transducer(device, transducer)?;
         Ok(self.inner.index(device, transducer))
     }
 
-    fn indices(&self, device: usize) -> PyResult<Vec<Option<usize>>> {
+    fn indices(&self, device: usize) -> PyResult<Vec<usize>> {
         self.check_device(device)?;
         Ok(self.inner.indices(device).to_vec())
     }
@@ -813,7 +812,7 @@ impl TransducerGroups {
                 (0..self.inner.num_devices())
                     .map(|dev| {
                         (0..self.inner.num_transducers(dev))
-                            .map(|tr| self.inner.key(dev, tr) == Some(index))
+                            .map(|tr| self.inner.key(dev, tr) == index)
                             .collect()
                     })
                     .collect(),
@@ -969,7 +968,7 @@ fn copy_group<T: Copy>(
 ) {
     for (dev, (slot, src)) in dst.iter_mut().zip(source).enumerate() {
         for (tr, (o, &v)) in slot.iter_mut().zip(src).enumerate() {
-            if groups.key(dev, tr) == Some(index) {
+            if groups.key(dev, tr) == index {
                 *o = v;
             }
         }

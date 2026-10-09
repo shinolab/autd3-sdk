@@ -3,14 +3,14 @@ use super::{Device, Geometry, TransducerMask};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TransducerGroups<K> {
     keys: Vec<K>,
-    indices: Vec<Vec<Option<usize>>>,
+    indices: Vec<Vec<usize>>,
 }
 
 impl<K: Copy + Eq> TransducerGroups<K> {
     #[must_use]
     pub fn new<F>(geometry: &Geometry, mut key: F) -> Self
     where
-        F: FnMut(&Device, usize) -> Option<K>,
+        F: FnMut(&Device, usize) -> K,
     {
         let mut keys = Vec::new();
         let indices = geometry
@@ -18,14 +18,13 @@ impl<K: Copy + Eq> TransducerGroups<K> {
             .map(|device| {
                 (0..device.num_transducers())
                     .map(|tr| {
-                        key(device, tr).map(|k| {
-                            keys.iter()
-                                .position(|&known| known == k)
-                                .unwrap_or_else(|| {
-                                    keys.push(k);
-                                    keys.len() - 1
-                                })
-                        })
+                        let k = key(device, tr);
+                        keys.iter()
+                            .position(|&known| known == k)
+                            .unwrap_or_else(|| {
+                                keys.push(k);
+                                keys.len() - 1
+                            })
                     })
                     .collect()
             })
@@ -39,17 +38,17 @@ impl<K: Copy + Eq> TransducerGroups<K> {
     }
 
     #[must_use]
-    pub fn key(&self, device: usize, transducer: usize) -> Option<K> {
-        self.index(device, transducer).map(|index| self.keys[index])
+    pub fn key(&self, device: usize, transducer: usize) -> K {
+        self.keys[self.index(device, transducer)]
     }
 
     #[must_use]
-    pub fn index(&self, device: usize, transducer: usize) -> Option<usize> {
+    pub fn index(&self, device: usize, transducer: usize) -> usize {
         self.indices[device][transducer]
     }
 
     #[must_use]
-    pub fn indices(&self, device: usize) -> &[Option<usize>] {
+    pub fn indices(&self, device: usize) -> &[usize] {
         &self.indices[device]
     }
 
@@ -69,7 +68,7 @@ impl<K: Copy + Eq> TransducerGroups<K> {
             self.indices
                 .iter()
                 .flatten()
-                .filter(|&&i| i == Some(index))
+                .filter(|&&i| i == index)
                 .count()
         })
     }
@@ -110,50 +109,52 @@ mod tests {
         Right,
     }
 
+    fn sides(device: &Device, tr: usize) -> Side {
+        if device.idx() == 0 && !tr.is_multiple_of(3) {
+            Side::Right
+        } else {
+            Side::Left
+        }
+    }
+
     #[test]
     fn keys_are_recorded_in_first_appearance_order() {
         let geometry = Geometry::new(vec![Autd3::default(), Autd3::default()]);
-        let groups = TransducerGroups::new(&geometry, |device, tr| match (device.idx(), tr % 3) {
-            (_, 0) => None,
-            (0, _) => Some(Side::Right),
-            _ => Some(Side::Left),
+        let groups = TransducerGroups::new(&geometry, |device, tr| match (device.idx(), tr) {
+            (0, 0) => Side::Right,
+            _ => sides(device, tr),
         });
 
         assert_eq!(groups.keys(), &[Side::Right, Side::Left]);
         assert_eq!(groups.num_devices(), 2);
         assert_eq!(groups.num_transducers(1), Autd3::NUM_TRANSDUCERS);
-        assert_eq!(groups.key(0, 0), None);
-        assert_eq!(groups.key(0, 1), Some(Side::Right));
-        assert_eq!(groups.key(1, 1), Some(Side::Left));
-        assert_eq!(groups.index(1, 1), Some(1));
-        assert_eq!(groups.indices(1)[1], Some(1));
+        assert_eq!(groups.key(0, 1), Side::Right);
+        assert_eq!(groups.key(0, 3), Side::Left);
+        assert_eq!(groups.key(1, 1), Side::Left);
+        assert_eq!(groups.index(1, 1), 1);
+        assert_eq!(groups.indices(1)[1], 1);
         assert_eq!(groups.indices(0).len(), Autd3::NUM_TRANSDUCERS);
         assert_eq!(
             groups.num_transducers_in(Side::Right),
-            (0..Autd3::NUM_TRANSDUCERS).filter(|tr| tr % 3 != 0).count()
+            1 + (1..Autd3::NUM_TRANSDUCERS)
+                .filter(|tr| !tr.is_multiple_of(3))
+                .count()
         );
     }
 
     #[test]
     fn a_key_without_transducers_has_no_mask() {
         let geometry = Geometry::new(vec![Autd3::default()]);
-        let groups = TransducerGroups::new(&geometry, |_, _| Some(Side::Left));
+        let groups = TransducerGroups::new(&geometry, |_, _| Side::Left);
         assert!(groups.mask(Side::Left).is_some());
         assert!(groups.mask(Side::Right).is_none());
         assert_eq!(groups.num_transducers_in(Side::Right), 0);
-
-        let empty = TransducerGroups::<Side>::new(&geometry, |_, _| None);
-        assert_eq!(empty.keys(), []);
     }
 
     #[test]
     fn masks_lists_every_key_in_first_appearance_order() {
         let geometry = Geometry::new(vec![Autd3::default(), Autd3::default()]);
-        let groups = TransducerGroups::new(&geometry, |device, tr| match (device.idx(), tr % 3) {
-            (_, 0) => None,
-            (0, _) => Some(Side::Right),
-            _ => Some(Side::Left),
-        });
+        let groups = TransducerGroups::new(&geometry, sides);
 
         let masks: Vec<_> = groups.masks().collect();
         assert_eq!(masks.len(), 2);
@@ -161,8 +162,5 @@ mod tests {
             assert_eq!(listed, key);
             assert_eq!(Some(mask), groups.mask(key));
         }
-
-        let empty = TransducerGroups::<Side>::new(&geometry, |_, _| None);
-        assert_eq!(empty.masks().count(), 0);
     }
 }

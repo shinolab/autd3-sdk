@@ -108,35 +108,25 @@ def test_pattern_group() -> None:
     dst_i = geo.intensity_buffer()
     pattern.set_intensity(0x60, dst_i)
 
-    def key(device: autd3.geometry.Device, tr: int) -> str | None:
-        if tr % 3 == 0:
-            return "left"
-        if device.idx() == 1 and tr % 3 == 1:
-            return "right"
-        return None
-
-    def side(dev: int, tr: int) -> str | None:
-        if tr % 3 == 0:
-            return "left"
+    def side(dev: int, tr: int) -> str:
         if dev == 1 and tr % 3 == 1:
             return "right"
-        return None
+        return "left"
+
+    def key(device: autd3.geometry.Device, tr: int) -> str:
+        return side(device.idx(), tr)
 
     groups = pattern.TransducerGroups(geo, key)
     assert groups.keys() == ["left", "right"]
     assert groups.key(1, 1) == "right"
-    assert groups.key(0, 1) is None
+    assert groups.key(0, 1) == "left"
 
     pattern.group(geo, groups, {"left": left, "right": right}, dst)
     pattern.group(geo, groups, {"left": left_i, "right": right_i}, dst_i)
 
     for dev in range(2):
         for tr in range(len(dst[dev])):
-            expected = {
-                "left": (autd3.value.Phase(0x10), autd3.value.Intensity(0x20)),
-                "right": (autd3.value.Phase(0x30), autd3.value.Intensity(0x40)),
-                None: (autd3.value.Phase(0xFF), autd3.value.Intensity(0x60)),
-            }[side(dev, tr)]
+            expected = {"left": (autd3.value.Phase(0x10), autd3.value.Intensity(0x20)), "right": (autd3.value.Phase(0x30), autd3.value.Intensity(0x40))}[side(dev, tr)]
             assert (dst[dev][tr], dst_i[dev][tr]) == expected
 
     with pytest.raises(ValueError):
@@ -154,6 +144,8 @@ def test_pattern_group() -> None:
         pattern.group(geo, groups, {"left": left, "right": right}, loose(1))
     with pytest.raises(TypeError):
         pattern.TransducerGroups(geo, loose(lambda device, tr: []))
+    with pytest.raises(ValueError):
+        pattern.TransducerGroups(geo, lambda device, tr: None)
     with pytest.raises(KeyError):
         groups.mask("center")
 
@@ -205,10 +197,8 @@ def test_pattern_group() -> None:
             p, i = computed[dev][tr], computed_i[dev][tr]
             if side(dev, tr) == "left":
                 assert i == autd3.value.Intensity.MAX
-            elif side(dev, tr) == "right":
-                assert (p, i) == (autd3.value.Phase(0x30), autd3.value.Intensity(0x40))
             else:
-                assert (p, i) == (autd3.value.Phase(0xFF), autd3.value.Intensity(0x60))
+                assert (p, i) == (autd3.value.Phase(0x30), autd3.value.Intensity(0x40))
 
     def fail(
         key: str,
@@ -228,9 +218,7 @@ def test_pattern_group() -> None:
     pattern.group_compute(geo, groups, lambda key, mask, phases, intensities: None, computed, computed_i)
     for dev in range(2):
         for tr in range(len(computed[dev])):
-            written = (autd3.value.Phase.ZERO, autd3.value.Intensity.MAX)
-            untouched = (autd3.value.Phase(0xFF), autd3.value.Intensity(0x60))
-            assert (computed[dev][tr], computed_i[dev][tr]) == (untouched if side(dev, tr) is None else written)
+            assert (computed[dev][tr], computed_i[dev][tr]) == (autd3.value.Phase.ZERO, autd3.value.Intensity.MAX)
 
 
 def test_pattern_laguerre_hermite_gaussian() -> None:
