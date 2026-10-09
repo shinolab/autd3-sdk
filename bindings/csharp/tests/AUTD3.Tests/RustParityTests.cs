@@ -98,37 +98,30 @@ namespace AUTD3.Tests
             Assert.Equal(encodeInto.Message, encode.Message);
         }
 
-        private enum Range
-        {
-            Near,
-            Far,
-            Missing,
-        }
-
         [Fact]
-        public void GroupsExposeTheirKeysAndMasks()
+        public void GroupsAcceptReferenceTypeKeys()
         {
             using var geometry = Fixture.Devices(2);
-            var groups = new TransducerGroups<Range>(geometry, (device, tr) => device.Idx == 0 && tr < 10 ? Range.Near : Range.Far);
-            Assert.Equal(new[] { Range.Near, Range.Far }, groups.Keys);
-            Assert.Equal((Range?)Range.Near, groups.Key(0, 0));
-            Assert.Equal((Range?)Range.Far, groups.Key(1, 0));
-            Assert.Equal(10, groups.NumTransducersIn(Range.Near));
-            Assert.Equal(10, groups.Mask(Range.Near)!.Value.NumEnabled(geometry));
-            Assert.Null(groups.Mask(Range.Missing));
-            Assert.Equal(0, groups.NumTransducersIn(Range.Missing));
+            var groups = new TransducerGroups<string>(geometry, (device, tr) => device.Idx == 0 && tr < 10 ? "near" : "far");
+            Assert.Equal(new[] { "near", "far" }, groups.Keys);
+            Assert.Equal("near", groups.Key(0, 0));
+            Assert.Equal("far", groups.Key(1, 0));
+            Assert.Equal(10, groups.NumTransducersIn("near"));
+            Assert.Equal(10, groups.Mask("near")!.Value.NumEnabled(geometry));
+            Assert.Null(groups.Mask("missing"));
+            Assert.Equal(0, groups.NumTransducersIn("missing"));
 
             using var near = geometry.PhaseBuffer();
             Pattern.SetPhase(new Phase(0x10), near);
             using var far = geometry.PhaseBuffer();
             Pattern.SetPhase(new Phase(0x20), far);
             using var dst = geometry.PhaseBuffer();
-            Pattern.Group(geometry, groups, key => key == Range.Near ? near : far, dst);
+            Pattern.Group(geometry, groups, key => key == "near" ? near : far, dst);
             Assert.Equal(new Phase(0x10), dst[0][0]);
             Assert.Equal(new Phase(0x20), dst[0][10]);
             Assert.Equal(new Phase(0x20), dst[1][0]);
 
-            var seen = new List<Range>();
+            var seen = new List<string>();
             using var intensities = geometry.IntensityBuffer();
             Pattern.GroupCompute(geometry, groups, (key, mask, _, _) =>
             {
