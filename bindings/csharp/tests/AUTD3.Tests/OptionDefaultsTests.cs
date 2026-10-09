@@ -151,7 +151,6 @@ namespace AUTD3.Tests
 
             var greedy = new GreedyOption();
             Assert.Equal(16, greedy.PhaseQuantizationLevels);
-            Assert.Equal(IntensityConstraint.Uniform(Intensity.Max), greedy.Constraint);
             Assert.Equal(Directivity.Sphere, greedy.Directivity);
             Assert.Equal(TransducerMask.AllEnabled, greedy.Mask);
         }

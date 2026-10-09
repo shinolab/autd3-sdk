@@ -6,7 +6,7 @@ use autd3_python_capsule::{
     intensity_buffer_addr, phase_buffer_addr, phases_from_capsule_mut,
 };
 use autd3_rs_core::geometry::TransducerMask;
-use autd3_rs_core::value::{Intensity, Phase};
+use autd3_rs_core::value::{Intensity, PatternIntensity, Phase};
 use autd3_rs_pattern_holo::{
     Amplitude as CoreAmplitude, AmplitudeTarget as CoreAmplitudeTarget,
     Directivity as CoreDirectivity, GreedyOption as CoreGreedyOption, GsOption as CoreGsOption,
@@ -345,13 +345,11 @@ impl GreedyOption {
     #[new]
     #[pyo3(signature = (
         phase_quantization_levels = 16,
-        constraint = IntensityConstraint(CoreIntensityConstraint::Uniform(Intensity::MAX)),
         directivity = Directivity(CoreDirectivity::Sphere),
         mask = None,
     ))]
     fn new(
         phase_quantization_levels: u8,
-        constraint: IntensityConstraint,
         directivity: Directivity,
         mask: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
@@ -360,7 +358,6 @@ impl GreedyOption {
                 phase_quantization_levels: NonZeroU8::new(phase_quantization_levels).ok_or_else(
                     || PyValueError::new_err("phase_quantization_levels must be >= 1"),
                 )?,
-                constraint: constraint.0,
                 directivity: directivity.0,
                 ..CoreGreedyOption::default()
             },
@@ -653,15 +650,14 @@ fn gspat_batch(
 }
 
 #[pyfunction]
-#[pyo3(signature = (geometry, foci, wavelength, option, phases, intensities))]
+#[pyo3(signature = (geometry, foci, wavelength, intensities, option, dst))]
 fn greedy(
     geometry: &Bound<'_, PyAny>,
     foci: Vec<PyRef<'_, AmplitudeTarget>>,
     wavelength: &Bound<'_, PyAny>,
     intensities: &Bound<'_, PyAny>,
     option: &GreedyOption,
-    phases: &Bound<'_, PyAny>,
-    intensities: &Bound<'_, PyAny>,
+    dst: &Bound<'_, PyAny>,
 ) -> PyResult<()> {
     let geo_capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&geo_capsule)?;
@@ -671,13 +667,14 @@ fn greedy(
         mask: mask_ref(option.mask.as_deref()),
         ..option.inner
     };
-    let intensity_capsule = match intensities.extract::<u8>() {
-        Ok(_) => None,
-        Err(_) => Some(capsule_of(intensities)?),
+    let intensity_capsule = if intensities.hasattr("_capsule")? {
+        Some(capsule_of(intensities)?)
+    } else {
+        None
     };
     let intensities = match &intensity_capsule {
         Some(capsule) => PatternIntensity::PerDevice(intensities_from_capsule(capsule)?),
-        None => PatternIntensity::Uniform(Intensity(intensities.extract::<u8>()?)),
+        None => PatternIntensity::Uniform(Intensity(extract_u8(intensities)?)),
     };
     let dst_capsule = capsule_of(dst)?;
     let dst = phases_from_capsule_mut(&dst_capsule)?;

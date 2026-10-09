@@ -480,7 +480,8 @@ def test_holo_algorithms() -> None:
     holo.naive(geo, foci, wavelength, holo.NaiveOption(), phases, intensities)
     holo.gs(geo, foci, wavelength, holo.GsOption(repeat=10), phases, intensities)
     holo.gspat(geo, foci, wavelength, holo.GspatOption(repeat=10), phases, intensities)
-    holo.greedy(geo, foci, wavelength, holo.GreedyOption(), phases, intensities)
+    holo.greedy(geo, foci, wavelength, intensities, holo.GreedyOption(), phases)
+    holo.greedy(geo, foci, wavelength, autd3.value.Intensity.MAX, holo.GreedyOption(), phases)
     assert len(phases) == geo.num_devices()
     assert len(intensities) == geo.num_devices()
 

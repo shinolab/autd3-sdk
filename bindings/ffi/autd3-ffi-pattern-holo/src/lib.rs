@@ -609,56 +609,54 @@ pub unsafe extern "C" fn autd3_holo_greedy(
     foci: *const Autd3HoloAmplitudeTarget,
     num_foci: usize,
     wavelength_mm: f32,
+    intensities: *const IntensityBuffer,
+    uniform_intensity: u8,
     phase_quantization_levels: u8,
-    constraint: *const Autd3IntensityConstraint,
     directivity: u8,
     mask: *const u8,
-    phases: *mut PhaseBuffer,
-    intensities: *mut IntensityBuffer,
+    dst: *mut PhaseBuffer,
     out_err: *mut c_char,
     out_err_len: usize,
 ) -> i32 {
+    let fail = |message: &str| {
+        unsafe { write_cstr(out_err, out_err_len, message) };
+        AUTD3_ERR_INVALID_ARGUMENT
+    };
+
     let Some(phase_quantization_levels) = NonZeroU8::new(phase_quantization_levels) else {
-        unsafe {
-            write_cstr(
-                out_err,
-                out_err_len,
-                "phase_quantization_levels must be >= 1",
-            );
-        }
-        return AUTD3_ERR_INVALID_ARGUMENT;
+        return fail("phase_quantization_levels must be >= 1");
     };
-    let common = match unsafe {
-        prepare(
-            geometry,
-            foci,
-            num_foci,
-            constraint,
-            directivity,
-            mask,
-            phases,
-            intensities,
-            out_err,
-            out_err_len,
-        )
-    } {
-        Ok(common) => common,
-        Err(code) => return code,
+    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
+        return fail("null geometry");
     };
+    let intensities = match unsafe { handle_ref(intensities) } {
+        Some(intensities) => PatternIntensity::PerDevice(&intensities.0),
+        None => PatternIntensity::Uniform(Intensity(uniform_intensity)),
+    };
+    let Some(dst) = (unsafe { handle_mut(dst) }) else {
+        return fail("null phase buffer");
+    };
+    let Some(directivity) = to_directivity(directivity) else {
+        return fail("unknown directivity");
+    };
+    let Some(foci) = (unsafe { slice_ref(foci, num_foci) }) else {
+        return fail("null foci");
+    };
+    let foci = build_foci(foci);
+    let mask = unsafe { build_mask(mask, geometry.num_devices()) };
     let option = GreedyOption {
         phase_quantization_levels,
-        constraint: common.constraint,
-        directivity: common.directivity,
+        directivity,
         objective_func: abs_objective_func,
-        mask: mask_ref(common.mask.as_deref()),
+        mask: mask_ref(mask.as_deref()),
     };
     let result = greedy(
-        common.geometry,
-        &common.foci,
+        geometry,
+        &foci,
         Length::from_mm(wavelength_mm),
+        intensities,
         &option,
-        &mut common.phases.0,
-        &mut common.intensities.0,
+        &mut dst.0,
     );
     unsafe { finish(result, out_err, out_err_len) }
 }

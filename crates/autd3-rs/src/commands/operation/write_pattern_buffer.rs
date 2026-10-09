@@ -1,49 +1,13 @@
 use crate::error::Error;
 use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
-use crate::value::{Intensity, PatternBank, Phase};
+use crate::value::{Intensity, PatternBank, PatternIntensity, Phase};
 
 use super::{Distribution, Encoded, Operation, device_slot, write_header};
 use autd3_cpu_wire::fpga_params::NUM_TRANSDUCERS;
 use autd3_cpu_wire::layout::PATTERN_RAW_DATA_LEN;
 use autd3_cpu_wire::payload::WritePatternRawPayload;
 use zerocopy::IntoBytes;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PatternIntensity<'a> {
-    Uniform(Intensity),
-    PerDevice(&'a [Vec<Intensity>]),
-}
-
-impl Default for PatternIntensity<'_> {
-    fn default() -> Self {
-        PatternIntensity::Uniform(Intensity::MAX)
-    }
-}
-
-impl From<Intensity> for PatternIntensity<'_> {
-    fn from(value: Intensity) -> Self {
-        PatternIntensity::Uniform(value)
-    }
-}
-
-impl<'a> From<&'a [Vec<Intensity>]> for PatternIntensity<'a> {
-    fn from(value: &'a [Vec<Intensity>]) -> Self {
-        PatternIntensity::PerDevice(value)
-    }
-}
-
-impl<'a> From<&'a Vec<Vec<Intensity>>> for PatternIntensity<'a> {
-    fn from(value: &'a Vec<Vec<Intensity>>) -> Self {
-        PatternIntensity::PerDevice(value.as_slice())
-    }
-}
-
-impl<'a, const N: usize> From<&'a [Vec<Intensity>; N]> for PatternIntensity<'a> {
-    fn from(value: &'a [Vec<Intensity>; N]) -> Self {
-        PatternIntensity::PerDevice(value.as_slice())
-    }
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StmIntensity<'a> {
