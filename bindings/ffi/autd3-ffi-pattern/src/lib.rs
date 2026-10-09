@@ -899,12 +899,16 @@ unsafe fn group_impl<T: Copy>(
         || !sources
             .iter()
             .all(|source| matches_geometry(geometry, source))
-        || keys
-            .iter()
-            .any(|&key| usize::try_from(key).is_ok_and(|key| key >= num_sources))
     {
         return -1;
     }
+    let Some(keys) = keys
+        .iter()
+        .map(|&key| usize::try_from(key).ok().filter(|&key| key < num_sources))
+        .collect::<Option<Vec<usize>>>()
+    else {
+        return -1;
+    };
 
     let mut next = 0;
     let offsets: Vec<usize> = geometry
@@ -915,9 +919,7 @@ unsafe fn group_impl<T: Copy>(
             start
         })
         .collect();
-    let groups = TransducerGroups::new(geometry, |device, tr| {
-        usize::try_from(keys[offsets[device.idx()] + tr]).ok()
-    });
+    let groups = TransducerGroups::new(geometry, |device, tr| keys[offsets[device.idx()] + tr]);
     autd3_rs_pattern::group(
         geometry,
         &groups,
@@ -947,7 +949,10 @@ unsafe fn group_copy_impl<T: Copy>(
     ) else {
         return -1;
     };
-    if !matches_geometry(geometry, source) || !matches_geometry(geometry, buffer) {
+    if !matches_geometry(geometry, source)
+        || !matches_geometry(geometry, buffer)
+        || indices.iter().any(|&i| i < 0)
+    {
         return -1;
     }
 
@@ -1054,9 +1059,8 @@ mod tests {
 
     fn sides(dev: usize, tr: usize) -> i32 {
         match (dev, tr % 3) {
-            (_, 0) => 0,
             (1, 1) => 1,
-            _ => -1,
+            _ => 0,
         }
     }
 
@@ -1202,7 +1206,7 @@ mod tests {
     }
 
     #[test]
-    fn group_writes_the_source_of_each_key_and_leaves_unassigned_transducers_untouched() {
+    fn group_writes_the_source_of_each_key() {
         let geometry = geometry();
         let keys = keys(&geometry, sides);
 
@@ -1240,8 +1244,7 @@ mod tests {
             for tr in 0..Autd3::NUM_TRANSDUCERS {
                 let (p, i) = match sides(dev, tr) {
                     0 => (Phase(0x10), Intensity(0x30)),
-                    1 => (Phase(0x20), Intensity(0x40)),
-                    _ => (Phase(0xFF), Intensity(0xEE)),
+                    _ => (Phase(0x20), Intensity(0x40)),
                 };
                 assert_eq!(dst.0[dev][tr], p, "dev {dev} tr {tr}");
                 assert_eq!(dst_i.0[dev][tr], i, "dev {dev} tr {tr}");
@@ -1256,6 +1259,7 @@ mod tests {
         let mut dst = phases(&geometry, 0xFF);
         let zeros = keys(&geometry, |_, _| 0);
         let out_of_range = keys(&geometry, |_, tr| i32::from(tr == 5));
+        let unassigned = keys(&geometry, |_, tr| -i32::from(tr == 5));
         let single_geometry = Geometry::new(vec![Autd3::default()]);
         let single = phases(&single_geometry, 0x10);
         let dst_ptr = &raw mut dst;
@@ -1271,6 +1275,7 @@ mod tests {
         };
         assert_eq!(call(&zeros, &[dst_ptr.cast_const()]), -1);
         assert_eq!(call(&out_of_range, &[&raw const left]), -1);
+        assert_eq!(call(&unassigned, &[&raw const left]), -1);
         assert_eq!(call(&zeros, &[&raw const single]), -1);
         assert_eq!(call(&zeros, &[std::ptr::null()]), -1);
         assert_eq!(
@@ -1364,6 +1369,19 @@ mod tests {
                 autd3_pattern_group_copy_phase(
                     &raw const geometry,
                     std::ptr::null(),
+                    0,
+                    &raw const source,
+                    dst_ptr,
+                )
+            },
+            -1
+        );
+        let unassigned = keys(&geometry, |_, tr| -i32::from(tr == 5));
+        assert_eq!(
+            unsafe {
+                autd3_pattern_group_copy_phase(
+                    &raw const geometry,
+                    unassigned.as_ptr(),
                     0,
                     &raw const source,
                     dst_ptr,

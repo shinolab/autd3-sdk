@@ -51,18 +51,12 @@ namespace AUTD3.Tests
         }
 
         private static TransducerGroups<Side> Sides(Geometry geometry) =>
-            new TransducerGroups<Side>(geometry, (device, tr) => (device.Idx, tr % 3) switch
-            {
-                (_, 0) => Side.Left,
-                (1, 1) => Side.Right,
-                _ => (Side?)null,
-            });
+            new TransducerGroups<Side>(geometry, (device, tr) => Expected(device.Idx, tr, Side.Left, Side.Right));
 
-        private static T Expected<T>(int dev, int tr, T left, T right, T none) => (dev, tr % 3) switch
+        private static T Expected<T>(int dev, int tr, T left, T right) => (dev, tr % 3) switch
         {
-            (_, 0) => left,
             (1, 1) => right,
-            _ => none,
+            _ => left,
         };
 
         [Fact]
@@ -84,8 +78,8 @@ namespace AUTD3.Tests
 
             var groups = Sides(geometry);
             Assert.Equal(new[] { Side.Left, Side.Right }, groups.Keys);
-            Assert.Equal((Side?)Side.Right, groups.Key(1, 1));
-            Assert.Null(groups.Key(0, 1));
+            Assert.Equal(Side.Right, groups.Key(1, 1));
+            Assert.Equal(Side.Left, groups.Key(0, 1));
 
             Pattern.Group(geometry, groups, side => side == Side.Left ? left : right, dst);
             Pattern.Group(geometry, groups, side => side == Side.Left ? leftI : rightI, dstI);
@@ -94,8 +88,8 @@ namespace AUTD3.Tests
             {
                 for (var tr = 0; tr < dst[dev].NumTransducers; tr++)
                 {
-                    Assert.Equal(Expected(dev, tr, new Phase(0x10), new Phase(0x30), new Phase(0xFF)), dst[dev][tr]);
-                    Assert.Equal(Expected(dev, tr, new Intensity(0x20), new Intensity(0x40), new Intensity(0x60)), dstI[dev][tr]);
+                    Assert.Equal(Expected(dev, tr, new Phase(0x10), new Phase(0x30)), dst[dev][tr]);
+                    Assert.Equal(Expected(dev, tr, new Intensity(0x20), new Intensity(0x40)), dstI[dev][tr]);
                 }
             }
 
@@ -113,7 +107,7 @@ namespace AUTD3.Tests
         public void GroupMaskRestrictsHoloToTheGroup()
         {
             using var geometry = new Geometry(new[] { new Autd3(Vector3.Zero), new Autd3(new Vector3(200f, 0f, 0f)) });
-            var groups = new TransducerGroups<Side>(geometry, (device, tr) => device.Idx == 1 && tr % 3 == 1 ? Side.Left : (Side?)null);
+            var groups = new TransducerGroups<Side>(geometry, (device, tr) => device.Idx == 1 && tr % 3 == 1 ? Side.Left : Side.Right);
             using var phases = geometry.PhaseBuffer();
             using var intensities = geometry.IntensityBuffer();
             var foci = new[] { new AUTD3.Holo.AmplitudeTarget(geometry.Center + new Vector3(0f, 0f, 150f), 5e3f * AUTD3.Holo.HoloUnits.Pa) };
@@ -167,19 +161,14 @@ namespace AUTD3.Tests
             {
                 for (var tr = 0; tr < phases[dev].NumTransducers; tr++)
                 {
-                    switch (dev, tr % 3)
+                    if (Expected(dev, tr, true, false))
                     {
-                        case (_, 0):
-                            Assert.Equal(Intensity.Max, intensities[dev][tr]);
-                            break;
-                        case (1, 1):
-                            Assert.Equal(new Phase(0x30), phases[dev][tr]);
-                            Assert.Equal(new Intensity(0x40), intensities[dev][tr]);
-                            break;
-                        default:
-                            Assert.Equal(new Phase(0xFF), phases[dev][tr]);
-                            Assert.Equal(new Intensity(0x60), intensities[dev][tr]);
-                            break;
+                        Assert.Equal(Intensity.Max, intensities[dev][tr]);
+                    }
+                    else
+                    {
+                        Assert.Equal(new Phase(0x30), phases[dev][tr]);
+                        Assert.Equal(new Intensity(0x40), intensities[dev][tr]);
                     }
                 }
             }
@@ -201,9 +190,8 @@ namespace AUTD3.Tests
             {
                 for (var tr = 0; tr < phases[dev].NumTransducers; tr++)
                 {
-                    var assigned = Expected(dev, tr, true, true, false);
-                    Assert.Equal(assigned ? Phase.Zero : new Phase(0xFF), phases[dev][tr]);
-                    Assert.Equal(assigned ? Intensity.Max : new Intensity(0x60), intensities[dev][tr]);
+                    Assert.Equal(Phase.Zero, phases[dev][tr]);
+                    Assert.Equal(Intensity.Max, intensities[dev][tr]);
                 }
             }
         }

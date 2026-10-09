@@ -239,7 +239,7 @@ mod tests {
             point: focus_target(&geometry),
             amplitude: 5e3 * Pa,
         }];
-        let groups = TransducerGroups::new(&geometry, |_, tr| Some(tr % 2));
+        let groups = TransducerGroups::new(&geometry, |_, tr| tr % 2);
 
         let (mut phases, mut intensities) = slot(&geometry);
         naive(
@@ -275,7 +275,7 @@ mod tests {
             point: focus_target(&geometry),
             amplitude: 5e3 * Pa,
         }];
-        let groups = TransducerGroups::new(&geometry, |_, tr| Some(tr % 2 == 0));
+        let groups = TransducerGroups::new(&geometry, |_, tr| tr % 2 == 0);
         let other = (Phase(0x40), Intensity(0x20));
 
         let (mut phases, mut intensities) = slot(&geometry);

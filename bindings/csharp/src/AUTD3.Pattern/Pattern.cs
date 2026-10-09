@@ -109,7 +109,7 @@ namespace AUTD3
 
         public int NumDevices => _numTransducers.Length;
 
-        public TransducerGroups(Geometry geometry, Func<Device, int, TKey?> key)
+        public TransducerGroups(Geometry geometry, Func<Device, int, TKey> key)
         {
             _numTransducers = new int[geometry.NumDevices];
             FlatIndices = new int[geometry.NumTransducers];
@@ -122,23 +122,18 @@ namespace AUTD3
                 for (var tr = 0; tr < numTransducers; tr++)
                 {
                     var value = key(device, tr);
-                    if (value == null)
-                    {
-                        Indices[k++] = -1;
-                        continue;
-                    }
-                    if (!_lookup.TryGetValue(value.Value, out var index))
+                    if (!_lookup.TryGetValue(value, out var index))
                     {
                         index = _keys.Count;
-                        _lookup.Add(value.Value, index);
-                        _keys.Add(value.Value);
+                        _lookup.Add(value, index);
+                        _keys.Add(value);
                     }
                     FlatIndices[k++] = index;
                 }
             }
         }
 
-        public TKey? Key(int device, int transducer)
+        public TKey Key(int device, int transducer)
         {
             if (device < 0 || device >= _numTransducers.Length)
             {

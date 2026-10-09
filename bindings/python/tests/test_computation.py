@@ -108,24 +108,18 @@ def test_pattern_group() -> None:
     dst_i = geo.intensity_buffer()
     pattern.set_intensity(0x60, dst_i)
 
-    def key(device: autd3.geometry.Device, tr: int) -> str | None:
-        if tr % 3 == 0:
-            return "left"
-        if device.idx() == 1 and tr % 3 == 1:
-            return "right"
-        return None
-
-    def side(dev: int, tr: int) -> str | None:
-        if tr % 3 == 0:
-            return "left"
+    def side(dev: int, tr: int) -> str:
         if dev == 1 and tr % 3 == 1:
             return "right"
-        return None
+        return "left"
+
+    def key(device: autd3.geometry.Device, tr: int) -> str:
+        return side(device.idx(), tr)
 
     groups = pattern.TransducerGroups(geo, key)
     assert groups.keys() == ["left", "right"]
     assert groups.key(1, 1) == "right"
-    assert groups.key(0, 1) is None
+    assert groups.key(0, 1) == "left"
 
     pattern.group(geo, groups, {"left": left, "right": right}, dst)
     pattern.group(geo, groups, {"left": left_i, "right": right_i}, dst_i)

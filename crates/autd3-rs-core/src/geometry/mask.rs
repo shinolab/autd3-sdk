@@ -8,7 +8,7 @@ pub enum TransducerMask<'a> {
     Masked(&'a [Vec<bool>]),
     #[non_exhaustive]
     Group {
-        indices: &'a [Vec<Option<usize>>],
+        indices: &'a [Vec<usize>],
         index: usize,
     },
 }
@@ -68,7 +68,7 @@ impl TransducerMask<'_> {
         match self {
             Self::AllEnabled => true,
             Self::Masked(m) => m[device][transducer],
-            Self::Group { indices, index } => indices[device][transducer] == Some(index),
+            Self::Group { indices, index } => indices[device][transducer] == index,
         }
     }
 
@@ -77,11 +77,9 @@ impl TransducerMask<'_> {
         match self {
             Self::AllEnabled => geometry.iter().map(Device::num_transducers).sum(),
             Self::Masked(m) => m.iter().flatten().filter(|&&b| b).count(),
-            Self::Group { indices, index } => indices
-                .iter()
-                .flatten()
-                .filter(|&&i| i == Some(index))
-                .count(),
+            Self::Group { indices, index } => {
+                indices.iter().flatten().filter(|&&i| i == index).count()
+            }
         }
     }
 }
@@ -142,8 +140,10 @@ mod tests {
     #[test]
     fn group_mask_selects_the_key() {
         let geometry = geometry();
-        let groups =
-            TransducerGroups::new(&geometry, |device, tr| (tr < 10).then_some(device.idx()));
+        let groups = TransducerGroups::new(
+            &geometry,
+            |device, tr| if tr < 10 { device.idx() } else { 2 },
+        );
         let mask = groups.mask(1).unwrap();
         assert_eq!(mask.validate(&geometry), Ok(()));
         assert!(mask.is_enabled(1, 9));
@@ -154,7 +154,7 @@ mod tests {
 
     #[test]
     fn group_mask_from_another_geometry_is_an_error() {
-        let groups = TransducerGroups::new(&Geometry::new(vec![Autd3::default()]), |_, _| Some(0));
+        let groups = TransducerGroups::new(&Geometry::new(vec![Autd3::default()]), |_, _| 0);
         assert_eq!(
             groups.mask(0).unwrap().validate(&geometry()),
             Err(TransducerMaskError::DeviceCountMismatch {

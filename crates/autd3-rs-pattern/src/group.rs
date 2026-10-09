@@ -21,9 +21,7 @@ fn write_device<K, T, S>(
 {
     let dev = device.idx();
     for (tr, (slot, &index)) in dst.iter_mut().zip(groups.indices(dev)).enumerate() {
-        if let Some(index) = index {
-            *slot = sources[index].as_ref()[dev][tr];
-        }
+        *slot = sources[index].as_ref()[dev][tr];
     }
 }
 
@@ -62,7 +60,7 @@ pub fn group<K, T, S, F>(
 pub fn group_compute<K, E, F>(
     geometry: &Geometry,
     groups: &TransducerGroups<K>,
-    compute: F,
+    mut compute: F,
     phases: &mut [Vec<Phase>],
     intensities: &mut [Vec<Intensity>],
 ) -> Result<(), E>
@@ -72,14 +70,20 @@ where
 {
     let mut scratch_phases = geometry.phase_buffer();
     let mut scratch_intensities = geometry.intensity_buffer();
-    group_compute_with(
-        groups,
-        compute,
-        &mut scratch_phases,
-        &mut scratch_intensities,
-        phases,
-        intensities,
-    )
+    for (index, (key, mask)) in groups.masks().enumerate() {
+        for slot in &mut scratch_phases {
+            slot.fill(Phase::ZERO);
+        }
+        for slot in &mut scratch_intensities {
+            slot.fill(Intensity::MAX);
+        }
+        compute(key, mask, &mut scratch_phases, &mut scratch_intensities)?;
+        assert_same_shape(&scratch_phases, phases);
+        assert_same_shape(&scratch_intensities, intensities);
+        copy_group(groups, index, &scratch_phases, phases);
+        copy_group(groups, index, &scratch_intensities, intensities);
+    }
+    Ok(())
 }
 
 fn assert_same_shape<A, B>(scratch: &[Vec<A>], dst: &[Vec<B>]) {
@@ -102,39 +106,11 @@ fn copy_group<K: Copy + Eq, T: Copy>(
 ) {
     for (dev, (slot, source)) in dst.iter_mut().zip(scratch.iter()).enumerate() {
         for ((out, &v), &i) in slot.iter_mut().zip(source).zip(groups.indices(dev)) {
-            if i == Some(index) {
+            if i == index {
                 *out = v;
             }
         }
     }
-}
-
-pub fn group_compute_with<K, E, F>(
-    groups: &TransducerGroups<K>,
-    mut compute: F,
-    scratch_phases: &mut [Vec<Phase>],
-    scratch_intensities: &mut [Vec<Intensity>],
-    phases: &mut [Vec<Phase>],
-    intensities: &mut [Vec<Intensity>],
-) -> Result<(), E>
-where
-    K: Copy + Eq,
-    F: FnMut(K, TransducerMask<'_>, &mut [Vec<Phase>], &mut [Vec<Intensity>]) -> Result<(), E>,
-{
-    for (index, (key, mask)) in groups.masks().enumerate() {
-        for slot in scratch_phases.iter_mut() {
-            slot.fill(Phase::ZERO);
-        }
-        for slot in scratch_intensities.iter_mut() {
-            slot.fill(Intensity::MAX);
-        }
-        compute(key, mask, scratch_phases, scratch_intensities)?;
-        assert_same_shape(scratch_phases, phases);
-        assert_same_shape(scratch_intensities, intensities);
-        copy_group(groups, index, scratch_phases, phases);
-        copy_group(groups, index, scratch_intensities, intensities);
-    }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -165,26 +141,23 @@ mod tests {
         ])
     }
 
-    fn sides(geometry: &Geometry) -> TransducerGroups<Side> {
-        TransducerGroups::new(geometry, |device, tr| match (device.idx(), tr % 3) {
-            (_, 0) => Some(Side::Left),
-            (1, 1) => Some(Side::Right),
-            _ => None,
-        })
+    fn side_of(dev: usize, tr: usize) -> Side {
+        match (dev, tr % 3) {
+            (1, 1) => Side::Right,
+            _ => Side::Left,
+        }
     }
 
-    fn assert_sides<T: Copy + PartialEq + core::fmt::Debug>(
-        dst: &[Vec<T>],
-        left: T,
-        right: T,
-        null: T,
-    ) {
+    fn sides(geometry: &Geometry) -> TransducerGroups<Side> {
+        TransducerGroups::new(geometry, |device, tr| side_of(device.idx(), tr))
+    }
+
+    fn assert_sides<T: Copy + PartialEq + core::fmt::Debug>(dst: &[Vec<T>], left: T, right: T) {
         for (dev, slot) in dst.iter().enumerate() {
             for (tr, &v) in slot.iter().enumerate() {
-                let expected = match (dev, tr % 3) {
-                    (_, 0) => left,
-                    (1, 1) => right,
-                    _ => null,
+                let expected = match side_of(dev, tr) {
+                    Side::Left => left,
+                    Side::Right => right,
                 };
                 assert_eq!(v, expected, "dev {dev} tr {tr}");
             }
@@ -212,11 +185,11 @@ mod tests {
             &mut dst,
         );
 
-        assert_sides(&dst, Phase(0x10), Phase(0x30), Phase(0xFF));
+        assert_sides(&dst, Phase(0x10), Phase(0x30));
     }
 
     #[test]
-    fn group_leaves_unassigned_transducers_untouched() {
+    fn group_copies_intensity_buffers_too() {
         let geometry = geometry();
         let mut left = geometry.intensity_buffer();
         fill(Intensity(0x20), &mut left);
@@ -236,7 +209,7 @@ mod tests {
             &mut dst,
         );
 
-        assert_sides(&dst, Intensity(0x20), Intensity(0x40), Intensity(0x60));
+        assert_sides(&dst, Intensity(0x20), Intensity(0x40));
     }
 
     #[test]
@@ -249,7 +222,7 @@ mod tests {
             }
         }
         let mut dst = geometry.phase_buffer();
-        let groups = TransducerGroups::new(&geometry, |_, _| Some(()));
+        let groups = TransducerGroups::new(&geometry, |_, _| ());
 
         let mut calls = 0;
         group(
@@ -271,7 +244,7 @@ mod tests {
         let geometry = geometry();
         let mut src = geometry.phase_buffer();
         fill(Phase(0x55), &mut src);
-        let groups = TransducerGroups::new(&geometry, |_, tr| (tr % 2 == 0).then_some(Side::Left));
+        let groups = sides(&geometry);
 
         let mut expected = geometry.phase_buffer();
         fill(Phase(0xFF), &mut expected);
@@ -299,7 +272,7 @@ mod tests {
                 seen.push(side);
                 for (dev, slot) in phases.iter().enumerate() {
                     for tr in 0..slot.len() {
-                        assert_eq!(mask.is_enabled(dev, tr), groups.key(dev, tr) == Some(side));
+                        assert_eq!(mask.is_enabled(dev, tr), groups.key(dev, tr) == side);
                     }
                 }
                 let (p, i) = match side {
@@ -316,13 +289,8 @@ mod tests {
 
         assert_eq!(result, Ok(()));
         assert_eq!(seen, [Side::Left, Side::Right]);
-        assert_sides(&phases, Phase(0x10), Phase(0x30), Phase(0xFF));
-        assert_sides(
-            &intensities,
-            Intensity(0x20),
-            Intensity(0x40),
-            Intensity(0x60),
-        );
+        assert_sides(&phases, Phase(0x10), Phase(0x30));
+        assert_sides(&intensities, Intensity(0x20), Intensity(0x40));
     }
 
     #[test]
@@ -353,19 +321,16 @@ mod tests {
     }
 
     #[test]
-    fn group_compute_with_hands_a_fresh_pattern_buffer_to_each_key() {
+    fn group_compute_hands_a_fresh_pattern_buffer_to_each_key() {
         let geometry = geometry();
         let groups = sides(&geometry);
-        let mut scratch_phases = geometry.phase_buffer();
-        fill(Phase(0xAA), &mut scratch_phases);
-        let mut scratch_intensities = geometry.intensity_buffer();
-        fill(Intensity(0xBB), &mut scratch_intensities);
         let mut phases = geometry.phase_buffer();
         fill(Phase(0xFF), &mut phases);
         let mut intensities = geometry.intensity_buffer();
         fill(Intensity(0x60), &mut intensities);
 
-        let result: Result<(), ()> = group_compute_with(
+        let result: Result<(), ()> = group_compute(
+            &geometry,
             &groups,
             |side, _, phases, intensities| {
                 if side == Side::Left {
@@ -374,19 +339,12 @@ mod tests {
                 }
                 Ok(())
             },
-            &mut scratch_phases,
-            &mut scratch_intensities,
             &mut phases,
             &mut intensities,
         );
 
         assert_eq!(result, Ok(()));
-        assert_sides(&phases, Phase(0x10), Phase::ZERO, Phase(0xFF));
-        assert_sides(
-            &intensities,
-            Intensity(0x20),
-            Intensity::MAX,
-            Intensity(0x60),
-        );
+        assert_sides(&phases, Phase(0x10), Phase::ZERO);
+        assert_sides(&intensities, Intensity(0x20), Intensity::MAX);
     }
 }

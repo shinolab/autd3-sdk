@@ -728,24 +728,26 @@ impl TransducerGroups {
         let mut error = None;
         let inner = CoreTransducerGroups::new(core_geometry, |device, tr| {
             if error.is_some() {
-                return None;
+                return 0;
             }
             key.call1((&devices[device.idx()], tr))
                 .and_then(|k| {
                     if k.is_none() {
-                        return Ok(None);
+                        return Err(PyValueError::new_err(
+                            "every transducer must be assigned a key (the key function returned None)",
+                        ));
                     }
                     if let Some(index) = lookup.get_item(&k)? {
-                        return index.extract::<usize>().map(Some);
+                        return index.extract::<usize>();
                     }
                     let index = keys.len();
                     lookup.set_item(&k, index)?;
                     keys.push(k.unbind());
-                    Ok(Some(index))
+                    Ok(index)
                 })
                 .unwrap_or_else(|e| {
                     error = Some(e);
-                    None
+                    0
                 })
         });
         if let Some(e) = error {
@@ -831,7 +833,7 @@ impl TransducerGroups {
                 (0..self.inner.num_devices())
                     .map(|dev| {
                         (0..self.inner.num_transducers(dev))
-                            .map(|tr| self.inner.key(dev, tr) == Some(index))
+                            .map(|tr| self.inner.key(dev, tr) == index)
                             .collect()
                     })
                     .collect(),
@@ -1003,7 +1005,7 @@ fn copy_group<T: Copy>(
 ) {
     for (dev, (slot, src)) in dst.iter_mut().zip(source).enumerate() {
         for (tr, (o, &v)) in slot.iter_mut().zip(src).enumerate() {
-            if groups.key(dev, tr) == Some(index) {
+            if groups.key(dev, tr) == index {
                 *o = v;
             }
         }
