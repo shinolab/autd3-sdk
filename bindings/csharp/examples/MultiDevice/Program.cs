@@ -6,19 +6,20 @@ using System.Collections.Generic;
 using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
-using AUTD3.Link;
 
 internal static class Program
 {
     private static async Task Main()
     {
+        using var logGuard = Tracing.Init(new TracingOption());
+
         using var geometry = new Geometry(new List<Autd3>
         {
             new Autd3(Vector3.Zero),
             new Autd3(new Vector3(Autd3.DeviceWidth, 0f, 0f)),
         });
 
-        await using var client = await Client.OpenAsync(geometry, new EchocatLinkOption(), new ClientConfig());
+        await using var client = await Client.OpenAsync(geometry, new TransportOption(), new ClientConfig());
 
         Console.WriteLine($"devices: {client.NumDevices}");
         var versions = await client.ReadFirmwareVersionAsync();

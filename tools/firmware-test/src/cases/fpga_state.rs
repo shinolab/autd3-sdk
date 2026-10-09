@@ -4,10 +4,8 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 
 use autd3_rs::FpgaState;
-use autd3_rs::commands::{
-    ChangeModulationBank, ChangePatternBank, ConfigModulation, EmulateGpioIn, SetSilencer,
-    WriteModulationBuffer,
-};
+use autd3_rs::Frames;
+use autd3_rs::commands::{ConfigModulation, EmulateGpioIn, SetSilencer, WriteModulationBuffer};
 use autd3_rs::geometry::{Point3, Vector3, offset};
 use autd3_rs::units::mm;
 use autd3_rs::value::{
@@ -16,7 +14,7 @@ use autd3_rs::value::{
 };
 
 use crate::Ctx;
-use crate::cases::pattern_util::write_foci_bank;
+use crate::cases::pattern_util::{activate_mod_bank, activate_pattern_bank, write_foci_bank};
 use crate::io::wait_enter;
 
 const SAMPLING_DIVIDER: u16 = 20_000;
@@ -99,11 +97,7 @@ async fn pattern_finite_loop(ctx: &Ctx<'_>, center: Point3<f32>) -> Result<()> {
         LoopBehavior::ONCE,
     )
     .await?;
-    ctx.send(ChangePatternBank {
-        bank: PatternBank::B1,
-        transition_mode: TransitionMode::SyncIdx,
-    })
-    .await?;
+    activate_pattern_bank(ctx, PatternBank::B1, TransitionMode::SyncIdx).await?;
     expect_state(
         ctx,
         "right after the bank change",
@@ -119,11 +113,7 @@ async fn pattern_finite_loop(ctx: &Ctx<'_>, center: Point3<f32>) -> Result<()> {
     )
     .await?;
 
-    ctx.send(ChangePatternBank {
-        bank: PatternBank::B0,
-        transition_mode: TransitionMode::Immediate,
-    })
-    .await?;
+    activate_pattern_bank(ctx, PatternBank::B0, TransitionMode::Immediate).await?;
     expect_state(ctx, "back to the infinite bank", "!pattern_stopped", |s| {
         !s.is_pattern_stopped() && !s.is_transition_pending()
     })
@@ -141,11 +131,7 @@ async fn pattern_gpio_pending(ctx: &Ctx<'_>, center: Point3<f32>) -> Result<()> 
         LoopBehavior::ONCE,
     )
     .await?;
-    ctx.send(ChangePatternBank {
-        bank: PatternBank::B1,
-        transition_mode: TransitionMode::Gpio(GpioIn::I0),
-    })
-    .await?;
+    activate_pattern_bank(ctx, PatternBank::B1, TransitionMode::Gpio(GpioIn::I0)).await?;
     tokio::time::sleep(Duration::from_secs(1)).await;
     expect_state(
         ctx,
@@ -171,38 +157,31 @@ async fn pattern_gpio_pending(ctx: &Ctx<'_>, center: Point3<f32>) -> Result<()> 
         values: [false, false, false, false],
     })
     .await?;
-    ctx.send(ChangePatternBank {
-        bank: PatternBank::B0,
-        transition_mode: TransitionMode::Immediate,
-    })
-    .await?;
+    activate_pattern_bank(ctx, PatternBank::B0, TransitionMode::Immediate).await?;
     Ok(())
 }
 
 async fn modulation_finite_loop(ctx: &Ctx<'_>) -> Result<()> {
     println!("modulation finite loop (SyncIdx transition):");
     let data = [0xFFu8; 4];
-    let mut builder = ctx.client.datagram_builder();
-    builder
-        .push(WriteModulationBuffer {
-            bank: ModulationBank::B1,
-            offset: 0,
-            data: &data,
-        })
-        .push(ConfigModulation {
-            bank: ModulationBank::B1,
-            config: slow_sampling(),
-            size: data.len(),
-            loop_behavior: LoopBehavior::ONCE,
-        });
-    for frame in &builder.build()? {
-        ctx.client.send_checked(frame).await?;
-    }
-    ctx.send(ChangeModulationBank {
-        bank: ModulationBank::B1,
-        transition_mode: TransitionMode::SyncIdx,
-    })
+    ctx.send_frames(&Frames::encode(
+        ctx.client.geometry(),
+        (
+            WriteModulationBuffer {
+                bank: ModulationBank::B1,
+                offset: 0,
+                data: &data,
+            },
+            ConfigModulation {
+                bank: ModulationBank::B1,
+                config: slow_sampling(),
+                size: data.len(),
+                loop_behavior: LoopBehavior::ONCE,
+            },
+        ),
+    )?)
     .await?;
+    activate_mod_bank(ctx, ModulationBank::B1, TransitionMode::SyncIdx).await?;
     expect_state(
         ctx,
         "right after the bank change",
@@ -218,11 +197,7 @@ async fn modulation_finite_loop(ctx: &Ctx<'_>) -> Result<()> {
     )
     .await?;
 
-    ctx.send(ChangeModulationBank {
-        bank: ModulationBank::B0,
-        transition_mode: TransitionMode::Immediate,
-    })
-    .await?;
+    activate_mod_bank(ctx, ModulationBank::B0, TransitionMode::Immediate).await?;
     expect_state(ctx, "back to the infinite bank", "!mod_stopped", |s| {
         !s.is_mod_stopped() && !s.is_transition_pending()
     })

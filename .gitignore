@@ -5,7 +5,6 @@
 /extras/autd3-rs-pattern-holo-wgpu/target
 /firmware/cpu/build
 /firmware/cpu/board/target
-/crates/autd3-rs/tests/golden/generator/target
 /firmware/dist
 
 

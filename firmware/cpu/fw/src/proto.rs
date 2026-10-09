@@ -1,6 +1,5 @@
 pub use autd3_cpu_wire::{
-    Cmd, Error, FRAME_BYTES_MAX, FrameHeader, PAYLOAD_BYTES, REPLY_DATA_BYTES_MAX, Telemetry,
-    wire_enum_u8,
+    Cmd, Error, FRAME_BYTES_MAX, FrameHeader, PAYLOAD_BYTES, REPLY_DATA_BYTES_MAX, wire_enum_u8,
 };
 
 pub const MOD_BUFFER_SAMPLES: u32 = autd3_cpu_wire::layout::MOD_BUFFER_SAMPLES as u32;

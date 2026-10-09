@@ -1,25 +1,15 @@
 use core::cell::Cell;
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
-use enum_map::EnumMap;
-use zerocopy::IntoBytes;
-
-use autd3_cpu_wire::payload::FirmwareInfo;
-
 use crate::cmd;
 use crate::ctx::{IsrCell, MainCell};
 use crate::fifo::{FIFO_DEPTH, Fifo};
 use crate::fpga;
-use crate::fpga_params::{
-    ADDR_FPGA_STATE, ADDR_FUNCTION_BITS, ADDR_VERSION_NUM_MAJOR, ADDR_VERSION_NUM_MINOR,
-    ADDR_VERSION_NUM_PATCH,
-};
 use crate::port::Port;
 use crate::proto::{
     Cmd, Disposition, Drained, Error, FrameHeader, PAYLOAD_BYTES, Reply, ReplyData, RxFrame,
-    Telemetry,
 };
-use crate::version::{FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH};
+use enum_map::EnumMap;
 
 #[repr(C, align(4))]
 struct Slot {
@@ -66,12 +56,25 @@ impl Slot {
     }
 }
 
+#[derive(enum_map::Enum, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Counter {
+    FifoDrop,
+    Dedup,
+    SeqMismatch,
+    DispatchError,
+    Processed,
+    SendFailure,
+    Failsafe,
+    PtpUnlockFailsafe,
+    BootFailure,
+}
+
 pub struct Cpu {
     last_seq: IsrCell<u8>,
     last_cmd: IsrCell<u8>,
     slots: [Slot; FIFO_DEPTH as usize],
     fifo: Fifo,
-    telemetry: EnumMap<Telemetry, AtomicU32>,
+    counters: EnumMap<Counter, AtomicU32>,
     failsafe_fired: MainCell<bool>,
     ptp_unlock_failsafe_fired: MainCell<bool>,
     expected_seq: MainCell<u8>,
@@ -101,7 +104,9 @@ impl Cpu {
             last_cmd: IsrCell::new(0xFF),
             slots: [const { Slot::new() }; FIFO_DEPTH as usize],
             fifo: Fifo::new(),
-            telemetry: EnumMap::from_array([const { AtomicU32::new(0) }; Telemetry::ALL.len()]),
+            counters: EnumMap::from_array(
+                [const { AtomicU32::new(0) }; <Counter as enum_map::Enum>::LENGTH],
+            ),
             failsafe_fired: MainCell::new(false),
             ptp_unlock_failsafe_fired: MainCell::new(false),
             expected_seq: MainCell::new(0),
@@ -128,11 +133,11 @@ impl Cpu {
     }
 
     pub fn count_boot_failure(&self) {
-        self.bump(Telemetry::BootFailure);
+        self.bump(Counter::BootFailure);
     }
 
     pub fn count_send_failures(&self, count: u32) {
-        self.telemetry[Telemetry::SendFailure].fetch_add(count, Ordering::Relaxed);
+        self.counters[Counter::SendFailure].fetch_add(count, Ordering::Relaxed);
     }
 
     #[must_use]
@@ -141,8 +146,8 @@ impl Cpu {
     }
 
     pub(crate) fn reset_telemetry(&self) {
-        for (id, counter) in &self.telemetry {
-            if id != Telemetry::BootFailure {
+        for (id, counter) in &self.counters {
+            if id != Counter::BootFailure {
                 counter.store(0, Ordering::Relaxed);
             }
         }
@@ -150,13 +155,13 @@ impl Cpu {
         self.ptp_unlock_failsafe_fired.set(false);
     }
 
-    fn bump(&self, id: Telemetry) {
-        self.telemetry[id].fetch_add(1, Ordering::Relaxed);
+    fn bump(&self, id: Counter) {
+        self.counters[id].fetch_add(1, Ordering::Relaxed);
     }
 
     #[must_use]
-    pub fn telemetry(&self, id: Telemetry) -> u32 {
-        self.telemetry[id].load(Ordering::Relaxed)
+    pub fn counter(&self, id: Counter) -> u32 {
+        self.counters[id].load(Ordering::Relaxed)
     }
 
     pub fn tick_1ms<P: Port>(&self, port: &mut P) {
@@ -165,13 +170,13 @@ impl Cpu {
         self.fpga_update_tick(port);
         let config = self.config();
         let silent = cmd::failsafe::host_silent(port, &config);
-        self.failsafe(port, silent, &self.failsafe_fired, Telemetry::Failsafe);
+        self.failsafe(port, silent, &self.failsafe_fired, Counter::Failsafe);
         let unlocked = cmd::failsafe::ptp_unlock_expired(port, &config);
         self.failsafe(
             port,
             unlocked,
             &self.ptp_unlock_failsafe_fired,
-            Telemetry::PtpUnlockFailsafe,
+            Counter::PtpUnlockFailsafe,
         );
     }
 
@@ -180,7 +185,7 @@ impl Cpu {
         port: &mut P,
         tripped: bool,
         fired: &MainCell<bool>,
-        counter: Telemetry,
+        counter: Counter,
     ) {
         if !tripped {
             fired.set(false);
@@ -213,7 +218,7 @@ impl Cpu {
         };
         let FrameHeader { seq, cmd: raw_cmd } = *header;
         if seq == self.last_seq.get() && raw_cmd == self.last_cmd.get() {
-            self.bump(Telemetry::Dedup);
+            self.bump(Counter::Dedup);
             let completed_ack = if Cmd::from_u8(raw_cmd) == Some(Cmd::Reset) {
                 Reply::RESET.ack
             } else {
@@ -228,7 +233,7 @@ impl Cpu {
 
         let head = self.fifo.head();
         if Fifo::is_full(head, self.fifo.tail_acquire()) {
-            self.bump(Telemetry::FifoDrop);
+            self.bump(Counter::FifoDrop);
             return Disposition::Dropped;
         }
         self.slots[Fifo::slot(head)].store(*header, payload, msg_id);
@@ -273,7 +278,7 @@ impl Cpu {
             return Some(Reply::RESET);
         }
         if in_frame.header.seq != self.expected_seq.get() {
-            self.bump(Telemetry::SeqMismatch);
+            self.bump(Counter::SeqMismatch);
             return None;
         }
         self.expected_seq.set(in_frame.header.seq.wrapping_add(1));
@@ -284,41 +289,12 @@ impl Cpu {
         let result = match outcome {
             Ok(data) => Reply::new(in_frame.header.seq, Error::None, data),
             Err(err) => {
-                self.bump(Telemetry::DispatchError);
+                self.bump(Counter::DispatchError);
                 Reply::new(in_frame.header.seq, err, ReplyData::EMPTY)
             }
         };
-        self.bump(Telemetry::Processed);
+        self.bump(Counter::Processed);
         Some(result)
-    }
-
-    fn read_telemetry<P: Port>(&self, port: &mut P) -> ReplyData {
-        let mut bytes = [0u8; Telemetry::REPLY_BYTES];
-        for (chunk, id) in bytes
-            .chunks_mut(Telemetry::COUNTER_BYTES)
-            .zip(Telemetry::ALL)
-        {
-            let value = match id {
-                Telemetry::SyncResync => u32::from(fpga::read_ctl(port, ADDR_FPGA_STATE) >> 8),
-                id => self.telemetry(*id),
-            };
-            chunk.copy_from_slice(&value.to_le_bytes());
-        }
-        ReplyData::from_slice(&bytes)
-    }
-
-    fn read_firmware_info<P: Port>(&self, port: &mut P) -> ReplyData {
-        let info = FirmwareInfo {
-            cpu_version: [FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH],
-            fpga_version: [
-                fpga::read_ctl(port, ADDR_VERSION_NUM_MAJOR) as u8,
-                fpga::read_ctl(port, ADDR_VERSION_NUM_MINOR) as u8,
-                fpga::read_ctl(port, ADDR_VERSION_NUM_PATCH) as u8,
-            ],
-            fpga_functions: fpga::read_ctl(port, ADDR_FUNCTION_BITS) as u8,
-            fpga_boot_image: self.fpga_boot_image(port) as u8,
-        };
-        ReplyData::from_slice(info.as_bytes())
     }
 
     fn dispatch<P: Port>(&self, port: &mut P, cmd: Cmd, payload: &[u8]) -> Outcome {
@@ -330,11 +306,7 @@ impl Cpu {
         let result = match cmd {
             Cmd::Nop => Ok(()),
             Cmd::SetCpuConfig => self.set_cpu_config(port, payload),
-            Cmd::ReadFpgaState => {
-                return Ok(ReplyData::from_slice(&[
-                    fpga::read_ctl(port, ADDR_FPGA_STATE) as u8,
-                ]));
-            }
+            Cmd::ReadFpgaState => return Ok(cmd::fpga_state::read(port)),
             Cmd::ReadTelemetry => return Ok(self.read_telemetry(port)),
             Cmd::ReadFirmwareInfo => return Ok(self.read_firmware_info(port)),
             Cmd::ReadRunningImage => {
@@ -382,20 +354,20 @@ impl Cpu {
 #[cfg(all(test, not(loom)))]
 mod tests {
 
+    use super::Counter;
     use crate::cmd::config_mod::ConfigModPayload;
     use crate::cmd::force_fan::ForceFanPayload;
     use crate::fifo::FIFO_DEPTH;
     use crate::fpga::{PHASE_CORR_WORDS, PWE_TABLE_SIZE, REP_INFINITE};
     use crate::fpga_params::{
-        ADDR_FPGA_STATE, ADDR_FUNCTION_BITS, ADDR_MOD_CYCLE0, ADDR_MOD_FREQ_DIV0, ADDR_MOD_REP0,
-        ADDR_PATTERN_CYCLE0, ADDR_PATTERN_MODE0, ADDR_PATTERN_REP0,
-        ADDR_SILENCER_COMPLETION_STEPS_INTENSITY, ADDR_SILENCER_COMPLETION_STEPS_PHASE,
-        ADDR_SILENCER_FLAG, ADDR_SILENCER_SET_RESULT, ADDR_SILENCER_UPDATE_RATE_INTENSITY,
-        ADDR_SILENCER_UPDATE_RATE_PHASE, ADDR_VERSION_NUM_MAJOR, ADDR_VERSION_NUM_MINOR,
-        ADDR_VERSION_NUM_PATCH, CtlFlags, EmissionType, NUM_BANKS, NUM_TRANSDUCERS,
+        ADDR_MOD_CYCLE0, ADDR_MOD_FREQ_DIV0, ADDR_MOD_REP0, ADDR_PATTERN_CYCLE0,
+        ADDR_PATTERN_MODE0, ADDR_PATTERN_REP0, ADDR_SILENCER_COMPLETION_STEPS_INTENSITY,
+        ADDR_SILENCER_COMPLETION_STEPS_PHASE, ADDR_SILENCER_FLAG, ADDR_SILENCER_SET_RESULT,
+        ADDR_SILENCER_UPDATE_RATE_INTENSITY, ADDR_SILENCER_UPDATE_RATE_PHASE, CtlFlags,
+        EmissionType, NUM_BANKS, NUM_TRANSDUCERS,
     };
     use crate::proto::{
-        Cmd, Disposition, Drained, Error, FRAME_BYTES_MAX, OUTPUT_MASK_WORDS, RxFrame, Telemetry,
+        Cmd, Disposition, Drained, Error, FRAME_BYTES_MAX, OUTPUT_MASK_WORDS, RxFrame,
     };
     use crate::test_utils::builders::{config_mod, force_fan, write_foci_buffer, write_mod_buffer};
     use crate::test_utils::mock::{Frame, Harness};
@@ -412,7 +384,7 @@ mod tests {
     fn a_clean_boot_counts_no_boot_failure() {
         let mut h = Harness::new();
         h.reboot();
-        assert_eq!(h.telemetry(Telemetry::BootFailure), 0);
+        assert_eq!(h.counter(Counter::BootFailure), 0);
     }
 
     #[test]
@@ -421,11 +393,11 @@ mod tests {
         h.port.latch_stuck = true;
         h.reboot();
         h.port.latch_stuck = false;
-        assert_eq!(h.telemetry(Telemetry::BootFailure), 1);
+        assert_eq!(h.counter(Counter::BootFailure), 1);
 
         h.deliver(&Frame::new(0, Cmd::Clear));
         assert_eq!(h.status(), Error::None);
-        assert_eq!(h.telemetry(Telemetry::BootFailure), 1);
+        assert_eq!(h.counter(Counter::BootFailure), 1);
     }
 
     #[test]
@@ -434,7 +406,7 @@ mod tests {
         h.port.flash_fail = true;
         h.reboot();
         h.port.flash_fail = false;
-        assert_eq!(h.telemetry(Telemetry::BootFailure), 1);
+        assert_eq!(h.counter(Counter::BootFailure), 1);
     }
 
     #[test]
@@ -442,7 +414,7 @@ mod tests {
         let h = Harness::new();
         h.cpu.count_boot_failure();
         h.cpu.count_boot_failure();
-        assert_eq!(h.telemetry(Telemetry::BootFailure), 2);
+        assert_eq!(h.counter(Counter::BootFailure), 2);
     }
 
     #[test]
@@ -450,10 +422,10 @@ mod tests {
         let mut h = Harness::new();
         h.cpu.count_send_failures(2);
         h.cpu.count_send_failures(1);
-        assert_eq!(h.telemetry(Telemetry::SendFailure), 3);
+        assert_eq!(h.counter(Counter::SendFailure), 3);
 
         h.deliver(&Frame::new(0, Cmd::Clear));
-        assert_eq!(h.telemetry(Telemetry::SendFailure), 0);
+        assert_eq!(h.counter(Counter::SendFailure), 0);
     }
 
     #[test]
@@ -490,7 +462,7 @@ mod tests {
         assert_eq!(h.status(), Error::UnknownCmd);
         assert_eq!(h.ack(), 0);
         assert_eq!(h.expected_seq(), 1);
-        assert_eq!(h.telemetry(Telemetry::DispatchError), 1);
+        assert_eq!(h.counter(Counter::DispatchError), 1);
     }
 
     #[test]
@@ -564,7 +536,7 @@ mod tests {
         assert_eq!(h.ack(), 0);
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.expected_seq(), 1);
-        assert_eq!(h.telemetry(Telemetry::DispatchError), 0);
+        assert_eq!(h.counter(Counter::DispatchError), 0);
     }
 
     #[test]
@@ -732,7 +704,7 @@ mod tests {
         assert_eq!(h.ack(), 0xFF);
         assert_eq!(h.expected_seq(), 0);
         assert!(!h.process_one());
-        assert_eq!(h.telemetry(Telemetry::Processed), 3);
+        assert_eq!(h.counter(Counter::Processed), 3);
     }
 
     #[test]
@@ -748,7 +720,7 @@ mod tests {
         h.cpu.process_pending(&mut h.port);
         assert_eq!(h.ack(), 0);
         assert_eq!(h.expected_seq(), 1);
-        assert_eq!(h.telemetry(Telemetry::SeqMismatch), 0);
+        assert_eq!(h.counter(Counter::SeqMismatch), 0);
     }
 
     #[test]
@@ -759,7 +731,7 @@ mod tests {
         assert_ne!(before.data(), []);
 
         h.deliver(&Frame::new(9, Cmd::Nop));
-        assert_eq!(h.telemetry(Telemetry::SeqMismatch), 1);
+        assert_eq!(h.counter(Counter::SeqMismatch), 1);
         assert_eq!(h.cpu.reply(), before);
     }
 
@@ -887,7 +859,7 @@ mod tests {
             h.cpu.recv_frame(&[1, Cmd::Nop as u8], 1),
             crate::proto::Disposition::Dropped
         );
-        assert_eq!(h.telemetry(Telemetry::Dedup), 1);
+        assert_eq!(h.counter(Counter::Dedup), 1);
 
         h.cpu.process_pending(&mut h.port);
         assert_eq!(
@@ -895,8 +867,8 @@ mod tests {
             crate::proto::Disposition::Reply
         );
         assert_eq!(h.ack(), 1);
-        assert_eq!(h.telemetry(Telemetry::Dedup), 2);
-        assert_eq!(h.telemetry(Telemetry::Processed), 2);
+        assert_eq!(h.counter(Counter::Dedup), 2);
+        assert_eq!(h.counter(Counter::Processed), 2);
     }
 
     #[test]
@@ -931,8 +903,8 @@ mod tests {
             h.cpu.recv_frame(&[5, Cmd::Nop as u8], 1),
             crate::proto::Disposition::Dropped
         );
-        assert_eq!(h.telemetry(Telemetry::SeqMismatch), 1);
-        assert_eq!(h.telemetry(Telemetry::Dedup), 1);
+        assert_eq!(h.counter(Counter::SeqMismatch), 1);
+        assert_eq!(h.counter(Counter::Dedup), 1);
     }
 
     #[test]
@@ -947,7 +919,7 @@ mod tests {
             assert_eq!(h.ack(), 0xFF);
         }
         assert_eq!(h.expected_seq(), 0);
-        assert_eq!(h.telemetry(Telemetry::Dedup), 3);
+        assert_eq!(h.counter(Counter::Dedup), 3);
     }
 
     #[test]
@@ -970,22 +942,12 @@ mod tests {
         );
     }
 
-    fn read_telemetry(h: &mut Harness, seq: u8) -> std::vec::Vec<u32> {
-        h.deliver(&Frame::new(seq, Cmd::ReadTelemetry));
-        assert_eq!(h.status(), Error::None);
-        let data = h.reply_data();
-        assert_eq!(data.len(), Telemetry::REPLY_BYTES);
-        data.chunks(4)
-            .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
-            .collect()
-    }
-
     #[test]
     fn telemetry_counts_processed_frames() {
         let mut h = Harness::new();
         h.deliver(&Frame::new(0, Cmd::Nop));
         h.deliver(&Frame::new(1, Cmd::Nop));
-        assert_eq!(h.telemetry(Telemetry::Processed), 2);
+        assert_eq!(h.counter(Counter::Processed), 2);
     }
 
     #[test]
@@ -994,16 +956,16 @@ mod tests {
         let f = Frame::new(0, Cmd::Nop);
         h.deliver(&f);
         h.deliver(&f);
-        assert_eq!(h.telemetry(Telemetry::Dedup), 1);
-        assert_eq!(h.telemetry(Telemetry::Processed), 1);
+        assert_eq!(h.counter(Counter::Dedup), 1);
+        assert_eq!(h.counter(Counter::Processed), 1);
     }
 
     #[test]
     fn telemetry_counts_seq_mismatch() {
         let mut h = Harness::new();
         h.deliver(&Frame::new(5, Cmd::Nop));
-        assert_eq!(h.telemetry(Telemetry::SeqMismatch), 1);
-        assert_eq!(h.telemetry(Telemetry::Processed), 0);
+        assert_eq!(h.counter(Counter::SeqMismatch), 1);
+        assert_eq!(h.counter(Counter::Processed), 0);
     }
 
     #[test]
@@ -1011,7 +973,7 @@ mod tests {
         let mut h = Harness::new();
         h.deliver(&force_fan(0, 2));
         assert_eq!(h.status(), Error::InvalidPayload);
-        assert_eq!(h.telemetry(Telemetry::DispatchError), 1);
+        assert_eq!(h.counter(Counter::DispatchError), 1);
     }
 
     #[test]
@@ -1022,57 +984,7 @@ mod tests {
         for i in 0..=capacity {
             h.deliver_no_drain(&Frame::new(i, Cmd::Nop));
         }
-        assert_eq!(h.telemetry(Telemetry::FifoDrop), 1);
-    }
-
-    #[test]
-    fn read_telemetry_returns_every_counter_at_once() {
-        let mut h = Harness::new();
-        h.deliver(&force_fan(0, 2));
-
-        let counters = read_telemetry(&mut h, 1);
-        assert_eq!(counters.len(), Telemetry::ALL.len());
-        assert_eq!(counters[Telemetry::DispatchError as usize], 1);
-        assert_eq!(counters[Telemetry::Processed as usize], 1);
-        assert_eq!(counters[Telemetry::FifoDrop as usize], 0);
-    }
-
-    #[test]
-    fn read_telemetry_sync_resync_returns_fpga_state_high_byte() {
-        let mut h = Harness::new();
-        h.set_ctl(ADDR_FPGA_STATE, 0x2A83);
-        let counters = read_telemetry(&mut h, 0);
-        assert_eq!(counters[Telemetry::SyncResync as usize], 0x2A);
-    }
-
-    #[test]
-    fn telemetry_counters_are_wider_than_a_byte() {
-        let mut h = Harness::new();
-        let mut seq = 0u8;
-        for _ in 0..300 {
-            h.deliver(&Frame::new(seq, Cmd::Nop));
-            seq = seq.wrapping_add(1);
-        }
-        let counters = read_telemetry(&mut h, seq);
-        assert_eq!(counters[Telemetry::Processed as usize], 300);
-    }
-
-    #[test]
-    fn derived_telemetry_id_is_not_a_cpu_counter() {
-        let h = Harness::new();
-        for &id in Telemetry::ALL {
-            assert_eq!(h.telemetry(id), 0);
-        }
-        assert_eq!(h.telemetry(Telemetry::SyncResync), 0);
-    }
-
-    #[test]
-    fn read_fpga_functions_returns_function_bits_register() {
-        let mut h = Harness::new();
-        h.set_ctl(ADDR_FUNCTION_BITS, 0xA5);
-
-        h.deliver(&Frame::new(0, Cmd::ReadFirmwareInfo));
-        assert_eq!(h.firmware_info().fpga_functions, 0xA5);
+        assert_eq!(h.counter(Counter::FifoDrop), 1);
     }
 
     #[test]
@@ -1136,26 +1048,5 @@ mod tests {
         assert_eq!(h.latch_count(CtlFlags::DEBUG_SET), 1);
         assert_eq!(h.ctl(ADDR_SILENCER_SET_RESULT), 0);
         assert_eq!(h.latch_count(CtlFlags::SYNC_SET), 0);
-    }
-
-    #[test]
-    fn read_fpga_state_returns_register_byte() {
-        let mut h = Harness::new();
-        h.set_ctl(ADDR_FPGA_STATE, 0x83);
-        h.deliver(&Frame::new(0, Cmd::ReadFpgaState));
-        assert_eq!(h.status(), Error::None);
-        assert_eq!(h.reply_data(), [0x83]);
-    }
-
-    #[test]
-    fn read_fpga_fw_version_returns_register_bytes() {
-        let mut h = Harness::new();
-        h.set_ctl(ADDR_VERSION_NUM_MAJOR, 0x0A);
-        h.set_ctl(ADDR_VERSION_NUM_MINOR, 0x0B);
-        h.set_ctl(ADDR_VERSION_NUM_PATCH, 0x0C);
-
-        h.deliver(&Frame::new(0, Cmd::ReadFirmwareInfo));
-        assert_eq!(h.status(), Error::None);
-        assert_eq!(h.firmware_info().fpga_version, [0x0A, 0x0B, 0x0C]);
     }
 }

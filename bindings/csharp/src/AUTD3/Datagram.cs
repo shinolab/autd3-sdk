@@ -6,72 +6,45 @@ namespace AUTD3
 {
 
 
-    public enum RtSchedulePolicy : byte
+    internal static class ClientConfigDefaults
     {
-        Normal = 0,
-        Fifo = 1,
-        RoundRobin = 2,
-    }
+        internal static readonly TimeSpan AckTimeout;
+        internal static readonly uint MaxInflight;
+        internal static readonly uint MaxResyncRounds;
+        internal static readonly bool RequireSupportedFirmware;
 
-    public readonly struct RtPriority : IEquatable<RtPriority>
-    {
-        private const byte ModeDefault = 0;
-        private const byte ModeDisabled = 1;
-        private const byte ModeExplicit = 2;
-        private const byte ModeMin = 3;
-        private const byte ModeMax = 4;
-
-        internal byte Mode { get; }
-        internal byte Value { get; }
-
-        private RtPriority(byte mode, byte value)
+        static ClientConfigDefaults()
         {
-            Mode = mode;
-            Value = value;
+            var handle = NativeClient.autd3_client_config_new();
+            if (handle == IntPtr.Zero)
+            {
+                throw new Autd3Exception("failed to create client config");
+            }
+            try
+            {
+                AckTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_client_config_get_ack_timeout_ns);
+                OptionNative.Apply("preset", NativeClient.autd3_client_config_get_max_inflight(handle, out var maxInflight));
+                MaxInflight = (uint)maxInflight;
+                OptionNative.Apply("preset", NativeClient.autd3_client_config_get_max_resync_rounds(handle, out MaxResyncRounds));
+                OptionNative.Apply("preset", NativeClient.autd3_client_config_get_require_supported_firmware(handle, out RequireSupportedFirmware));
+            }
+            finally
+            {
+                NativeClient.autd3_client_config_free(handle);
+            }
         }
-
-        public RtPriority(byte value) : this(ModeExplicit, value)
-        {
-        }
-
-        public static RtPriority Default => default;
-        public static RtPriority Min => new RtPriority(ModeMin, 0);
-        public static RtPriority Max => new RtPriority(ModeMax, 0);
-
-        public bool Equals(RtPriority other) => Mode == other.Mode && Value == other.Value;
-        public override bool Equals(object? obj) => obj is RtPriority other && Equals(other);
-        public override int GetHashCode() => HashCode.Combine(Mode, Value);
-        public static bool operator ==(RtPriority left, RtPriority right) => left.Equals(right);
-        public static bool operator !=(RtPriority left, RtPriority right) => !left.Equals(right);
-
-        internal static (byte Mode, byte Value) ToNative(RtPriority? priority) =>
-            priority is { } p ? (p.Mode, p.Value) : (ModeDisabled, (byte)0);
-
-        public override string ToString() => Mode switch
-        {
-            ModeExplicit => $"RtPriority({Value})",
-            ModeMin => "RtPriority.Min",
-            ModeMax => "RtPriority.Max",
-            _ => "RtPriority.Default",
-        };
     }
 
     public readonly struct ClientConfig
     {
-        public bool LowLatency { get; init; } = false;
-        public uint TimeoutCycles { get; init; } = 10;
-        public uint MaxInflight { get; init; } = 127;
-        public uint MaxResyncRounds { get; init; } = 8;
-        public uint ResetResendCycles { get; init; } = 2;
-        public RtPriority? RtPriority { get; init; } = AUTD3.RtPriority.Default;
-        public RtSchedulePolicy RtPolicy { get; init; } = RtSchedulePolicy.Fifo;
-        public ulong? RtAffinity { get; init; } = null;
-        public bool ValidateState { get; init; } = true;
-        public bool RequireSupportedFirmware { get; init; } = false;
-
-        public ClientConfig()
-        {
-        }
+        private readonly TimeSpan? _ackTimeout;
+        public TimeSpan AckTimeout { get => _ackTimeout ?? ClientConfigDefaults.AckTimeout; init => _ackTimeout = value; }
+        private readonly uint? _maxInflight;
+        public uint MaxInflight { get => _maxInflight ?? ClientConfigDefaults.MaxInflight; init => _maxInflight = value; }
+        private readonly uint? _maxResyncRounds;
+        public uint MaxResyncRounds { get => _maxResyncRounds ?? ClientConfigDefaults.MaxResyncRounds; init => _maxResyncRounds = value; }
+        private readonly bool? _requireSupportedFirmware;
+        public bool RequireSupportedFirmware { get => _requireSupportedFirmware ?? ClientConfigDefaults.RequireSupportedFirmware; init => _requireSupportedFirmware = value; }
 
         internal IntPtr CreateHandle()
         {
@@ -82,17 +55,10 @@ namespace AUTD3
             }
             try
             {
-                NativeConfig.Apply("lowLatency", NativeClient.autd3_client_config_set_low_latency(handle, LowLatency));
-                NativeConfig.Apply("timeoutCycles", NativeClient.autd3_client_config_set_timeout_cycles(handle, TimeoutCycles));
-                NativeConfig.Apply("maxInflight", NativeClient.autd3_client_config_set_max_inflight(handle, (UIntPtr)MaxInflight));
-                NativeConfig.Apply("maxResyncRounds", NativeClient.autd3_client_config_set_max_resync_rounds(handle, MaxResyncRounds));
-                NativeConfig.Apply("resetResendCycles", NativeClient.autd3_client_config_set_reset_resend_cycles(handle, ResetResendCycles));
-                var (rtPriorityMode, rtPriorityValue) = AUTD3.RtPriority.ToNative(RtPriority);
-                NativeConfig.Apply("rtPriority", NativeClient.autd3_client_config_set_rt_priority(handle, rtPriorityMode, rtPriorityValue));
-                NativeConfig.Apply("rtPolicy", NativeClient.autd3_client_config_set_rt_policy(handle, (byte)RtPolicy));
-                NativeConfig.Apply("rtAffinity", NativeClient.autd3_client_config_set_rt_affinity(handle, RtAffinity.HasValue, (UIntPtr)(RtAffinity ?? 0)));
-                NativeConfig.Apply("validateState", NativeClient.autd3_client_config_set_validate_state(handle, ValidateState));
-                NativeConfig.Apply("requireSupportedFirmware", NativeClient.autd3_client_config_set_require_supported_firmware(handle, RequireSupportedFirmware));
+                OptionNative.SetRequiredDuration(handle, "ackTimeout", AckTimeout, NativeClient.autd3_client_config_set_ack_timeout_ns);
+                OptionNative.Apply("maxInflight", NativeClient.autd3_client_config_set_max_inflight(handle, (UIntPtr)MaxInflight));
+                OptionNative.Apply("maxResyncRounds", NativeClient.autd3_client_config_set_max_resync_rounds(handle, MaxResyncRounds));
+                OptionNative.Apply("requireSupportedFirmware", NativeClient.autd3_client_config_set_require_supported_firmware(handle, RequireSupportedFirmware));
             }
             catch
             {
@@ -102,99 +68,6 @@ namespace AUTD3
             return handle;
         }
     }
-
-    internal static class NativeConfig
-    {
-        internal static void Apply(string field, int code)
-        {
-            if (code != 0)
-            {
-                throw new Autd3Exception($"`{field}` is out of the range the native library accepts");
-            }
-        }
-    }
-
-    public sealed class DatagramBuilder : IDisposable
-    {
-        private readonly Geometry _geometry;
-        private readonly int _numDevices;
-        private readonly Client? _client;
-
-        private readonly DatagramBuilderHandle _handle;
-
-        internal DatagramBuilderHandle Handle => _handle;
-
-        public DatagramBuilder(Geometry geometry) : this(geometry, null)
-        {
-        }
-
-        internal DatagramBuilder(Geometry geometry, Client? client)
-        {
-            _geometry = geometry;
-            _numDevices = geometry.NumDevices;
-            _client = client;
-            var handle = NativeClient.autd3_datagram_builder_new(geometry.Handle);
-            if (handle == IntPtr.Zero)
-            {
-                throw new Autd3Exception("failed to create datagram builder");
-            }
-            _handle = new DatagramBuilderHandle(handle);
-        }
-
-        public DatagramBuilder Push(ICommand command)
-        {
-            var op = command.CreateOp();
-            if (NativeClient.autd3_datagram_builder_push(Handle, op) != 0)
-            {
-                throw new Autd3Exception("failed to push the command onto the datagram builder");
-            }
-            return this;
-        }
-
-        public DatagramBuilder PushEach(Func<Device, ICommand?> factory)
-        {
-            var ops = new IntPtr[_numDevices];
-            try
-            {
-                for (var i = 0; i < _numDevices; i++)
-                {
-                    var command = factory(_geometry[i]);
-                    ops[i] = command == null ? IntPtr.Zero : command.CreateOp();
-                }
-            }
-            catch
-            {
-                foreach (var op in ops)
-                {
-                    if (op != IntPtr.Zero)
-                    {
-                        NativeClient.autd3_op_free(op);
-                    }
-                }
-                throw;
-            }
-            if (NativeClient.autd3_datagram_builder_push_each(Handle, ops, (UIntPtr)_numDevices) != 0)
-            {
-                throw new Autd3Exception("failed to push the per-device commands onto the datagram builder");
-            }
-            return this;
-        }
-
-        public Frames Build()
-        {
-            var err = new byte[NativeAbi.ErrorBufferLength];
-            using var client = new HandleLease(_client?.Handle);
-            var handle = NativeClient.autd3_datagram_builder_build(Handle, client.Pointer, err, (UIntPtr)err.Length);
-            if (handle == IntPtr.Zero)
-            {
-                throw new Autd3Exception(NativeUtil.Utf8(err));
-            }
-            return new Frames(handle);
-        }
-
-        public void Dispose() => _handle.Dispose();
-    }
-
 
     public readonly struct Frame
     {
@@ -219,7 +92,79 @@ namespace AUTD3
             _handle = new FramesHandle(handle);
         }
 
-        public int Length => (int)NativeClient.autd3_datagrams_num_frames(Handle);
+        public Frames() : this(NativeClient.autd3_frames_new())
+        {
+        }
+
+        public static Frames Encode(Geometry geometry, ICommand command)
+        {
+            if (geometry == null)
+            {
+                throw new ArgumentNullException(nameof(geometry));
+            }
+            if (command == null)
+            {
+                throw new ArgumentNullException(nameof(command));
+            }
+            var op = CreateOp(geometry, command);
+            var err = new byte[NativeAbi.ErrorBufferLength];
+            IntPtr handle;
+            int code;
+            try
+            {
+                handle = NativeClient.autd3_frames_encode(geometry.Handle, op, out code, err, (UIntPtr)err.Length);
+            }
+            catch
+            {
+                NativeClient.autd3_op_free(op);
+                throw;
+            }
+            if (handle == IntPtr.Zero)
+            {
+                throw Autd3Exception.FromNative(code, err);
+            }
+            return new Frames(handle);
+        }
+
+        public void EncodeInto(Geometry geometry, ICommand command)
+        {
+            if (geometry == null)
+            {
+                throw new ArgumentNullException(nameof(geometry));
+            }
+            if (command == null)
+            {
+                throw new ArgumentNullException(nameof(command));
+            }
+            var op = CreateOp(geometry, command);
+            var err = new byte[NativeAbi.ErrorBufferLength];
+            int code;
+            try
+            {
+                code = NativeClient.autd3_frames_encode_into(Handle, geometry.Handle, op, err, (UIntPtr)err.Length);
+            }
+            catch
+            {
+                NativeClient.autd3_op_free(op);
+                throw;
+            }
+            if (code != 0)
+            {
+                throw Autd3Exception.FromNative(code, err);
+            }
+        }
+
+        private static IntPtr CreateOp(Geometry geometry, ICommand command)
+        {
+            var op = command.CreateOp(geometry);
+            if (op == IntPtr.Zero)
+            {
+                throw new Autd3Exception("failed to create the command", Autd3ErrorCode.InvalidArgument);
+            }
+            return op;
+        }
+
+        public int Length => (int)NativeClient.autd3_frames_num_frames(Handle);
 
         public Frame this[int index]
         {

@@ -7,7 +7,7 @@ use std::vec::Vec;
 
 use zerocopy::{Immutable, IntoBytes};
 
-use crate::app::Cpu;
+use crate::app::{Counter, Cpu};
 use crate::fpga::PWE_TABLE_SIZE;
 use crate::fpga_params::{
     ADDR_CTL_FLAG, ADDR_FLASH_ADDR_0, ADDR_FLASH_ADDR_1, ADDR_FLASH_CMD, ADDR_FLASH_LEN_0,
@@ -23,7 +23,7 @@ use crate::fpga_params::{
 use crate::port::{FlashError, Port};
 use crate::proto::{
     Cmd, Drained, EMISSION_RAM_WORDS, Error, FrameHeader, MOD_BUFFER_SAMPLES, OUTPUT_MASK_WORDS,
-    PAYLOAD_BYTES, Reply, RxFrame, Telemetry,
+    PAYLOAD_BYTES, Reply, RxFrame,
 };
 use autd3_cpu_wire::fpga_update::{FPGA_FLASH_BYTES, FPGA_GOLDEN_REGION_END, FPGA_SECTOR_BYTES};
 use autd3_cpu_wire::update::{FLASH_BYTES, FLASH_SECTOR_BYTES, LOADER_REGION_END, crc32};
@@ -587,8 +587,8 @@ impl Harness {
         self.port.isr_frame = Some((Rc::clone(&self.cpu), seq, cmd as u8));
     }
 
-    pub(crate) fn telemetry(&self, id: Telemetry) -> u32 {
-        self.cpu.telemetry(id)
+    pub(crate) fn counter(&self, id: Counter) -> u32 {
+        self.cpu.counter(id)
     }
 
     pub(crate) fn output_mask(&self, idx: usize) -> u16 {

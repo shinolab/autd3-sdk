@@ -4,56 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use anyhow::{Context, Result, bail};
 use clap::{Subcommand, ValueEnum};
 
-use crate::util::{on_path, publishable_members, run};
-
-const PY_WHEELS: &[&str] = &[
-    "autd3-core",
-    "autd3",
-    "autd3-pattern",
-    "autd3-pattern-holo",
-    "autd3-modulation",
-    "autd3-link-echocat",
-    "autd3-link-remote",
-    "autd3-link-twincat",
-    "autd3-link-nop",
-    "autd3-emulator",
-];
-
-const CS_PACKAGES: &[(&str, &str)] = &[
-    ("AUTD3.Core", "autd3-ffi-core"),
-    ("AUTD3", "autd3-ffi"),
-    ("AUTD3.Pattern", "autd3-ffi-pattern"),
-    ("AUTD3.Pattern.Holo", "autd3-ffi-pattern-holo"),
-    ("AUTD3.Modulation", "autd3-ffi-modulation"),
-    ("AUTD3.Link.Echocat", "autd3-ffi-link-echocat"),
-    ("AUTD3.Link.Remote", "autd3-ffi-link-remote"),
-    ("AUTD3.Link.TwinCAT", "autd3-ffi-link-twincat"),
-    ("AUTD3.Link.Nop", "autd3-ffi-link-nop"),
-];
-
-const UNITY_PACKAGES: &[(&str, &str)] = &[
-    ("com.shinolab.autd3-sdk.core", "autd3-ffi-core"),
-    ("com.shinolab.autd3-sdk", "autd3-ffi"),
-    ("com.shinolab.autd3-sdk.pattern", "autd3-ffi-pattern"),
-    (
-        "com.shinolab.autd3-sdk.pattern.holo",
-        "autd3-ffi-pattern-holo",
-    ),
-    ("com.shinolab.autd3-sdk.modulation", "autd3-ffi-modulation"),
-    (
-        "com.shinolab.autd3-sdk.link.echocat",
-        "autd3-ffi-link-echocat",
-    ),
-    (
-        "com.shinolab.autd3-sdk.link.remote",
-        "autd3-ffi-link-remote",
-    ),
-    (
-        "com.shinolab.autd3-sdk.link.twincat",
-        "autd3-ffi-link-twincat",
-    ),
-    ("com.shinolab.autd3-sdk.link.nop", "autd3-ffi-link-nop"),
-];
+use crate::util::{copy_file, on_path, publishable_members, run};
 
 const PUBLISH_WORKSPACES: &[&str] = &[
     ".",
@@ -150,19 +101,12 @@ fn check(root: &Path) -> Result<()> {
 fn audit(root: &Path) -> Result<()> {
     deny(
         root,
-        DENY_WORKSPACES
-            .iter()
-            .chain(AUDIT_ONLY_WORKSPACES)
-            .copied(),
+        DENY_WORKSPACES.iter().chain(AUDIT_ONLY_WORKSPACES).copied(),
         &["advisories", "bans", "sources"],
     )
 }
 
-fn deny<'a>(
-    root: &Path,
-    workspaces: impl Iterator<Item = &'a str>,
-    checks: &[&str],
-) -> Result<()> {
+fn deny<'a>(root: &Path, workspaces: impl Iterator<Item = &'a str>, checks: &[&str]) -> Result<()> {
     if !on_path("cargo-deny") {
         bail!("`cargo-deny` is required");
     }
@@ -171,7 +115,11 @@ fn deny<'a>(
     let mut failed = Vec::new();
     for ws in workspaces {
         let dir = root.join(ws);
-        println!("== cargo-deny check {}: {} ==", checks.join(" "), dir.display());
+        println!(
+            "== cargo-deny check {}: {} ==",
+            checks.join(" "),
+            dir.display()
+        );
         let args = ["deny", "--config", config.as_str(), "check"]
             .into_iter()
             .chain(checks.iter().copied());
@@ -234,10 +182,10 @@ pub fn generate_python(root: &Path) -> Result<()> {
     let mit_license = root.join("LICENSE");
 
     let py = root.join("bindings/python");
-    for wheel in PY_WHEELS {
+    for wheel in crate::py::WHEELS {
         let dir = py.join(wheel);
         about(root, &dir.join("Cargo.toml"), &dir.join(THIRD_PARTY))?;
-        copy(&mit_license, &dir.join("LICENSE"))?;
+        copy_file(&mit_license, &dir.join("LICENSE"))?;
     }
     Ok(())
 }
@@ -247,8 +195,9 @@ pub fn generate_csharp(root: &Path) -> Result<()> {
 
     let ffi = root.join("bindings/ffi");
     let cs_src = root.join("bindings/csharp/src");
-    for (pkg, krate) in CS_PACKAGES {
-        let dir = cs_src.join(pkg);
+    for pkg in crate::cs::PACKAGES {
+        let krate = pkg.ffi_crate;
+        let dir = cs_src.join(pkg.assembly);
         about(
             root,
             &ffi.join(krate).join("Cargo.toml"),
@@ -264,14 +213,15 @@ pub fn generate_unity(root: &Path) -> Result<()> {
 
     let ffi = root.join("bindings/ffi");
     let unity = root.join("bindings/unity");
-    for (pkg, krate) in UNITY_PACKAGES {
-        let dir = unity.join(pkg);
+    for pkg in crate::cs::PACKAGES {
+        let krate = pkg.ffi_crate;
+        let dir = unity.join(pkg.unity_id);
         about(
             root,
             &ffi.join(krate).join("Cargo.toml"),
             &dir.join(THIRD_PARTY),
         )?;
-        copy(&mit_license, &dir.join("LICENSE.md"))?;
+        copy_file(&mit_license, &dir.join("LICENSE.md"))?;
     }
     Ok(())
 }
@@ -372,13 +322,4 @@ fn placeholder(manifest: &Path, out: &Path) -> Result<()> {
         std::fs::create_dir_all(parent)?;
     }
     std::fs::write(out, PLACEHOLDER).with_context(|| format!("writing {}", out.display()))
-}
-
-fn copy(src: &Path, dst: &Path) -> Result<()> {
-    if let Some(parent) = dst.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::copy(src, dst)
-        .with_context(|| format!("copying {} -> {}", src.display(), dst.display()))?;
-    Ok(())
 }

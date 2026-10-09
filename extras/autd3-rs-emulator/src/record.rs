@@ -3,7 +3,7 @@
 use autd3_rs_core::common::ULTRASOUND_PERIOD;
 use autd3_rs_core::geometry::Point3;
 use autd3_rs_core::params::ULTRASOUND_FREQ_HZ;
-use autd3_rs_core::value::{DcSysTime, PULSE_WIDTH_PERIOD};
+use autd3_rs_core::value::{PULSE_WIDTH_PERIOD, SysTime};
 
 pub(crate) const ULTRASOUND_PERIOD_COUNT: usize = PULSE_WIDTH_PERIOD as usize;
 pub(crate) const OUTPUT_VOLTAGE: f32 = 12.0;
@@ -73,13 +73,13 @@ impl Record {
     }
 
     #[must_use]
-    pub fn start(&self) -> DcSysTime {
-        DcSysTime::from_nanos(self.start_ns)
+    pub fn start(&self) -> SysTime {
+        SysTime::from_nanos(self.start_ns)
     }
 
     #[must_use]
-    pub fn end(&self) -> DcSysTime {
-        DcSysTime::from_nanos(self.end_ns)
+    pub fn end(&self) -> SysTime {
+        SysTime::from_nanos(self.end_ns)
     }
 
     #[must_use]

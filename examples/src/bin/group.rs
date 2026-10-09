@@ -4,13 +4,12 @@
 
 use anyhow::Result;
 
-use autd3_rs::commands::{Pattern, SetSilencer};
+use autd3_rs::commands::{Pattern, SetSilencer, each};
 use autd3_rs::geometry::{Autd3, Geometry, Point3, UnitQuaternion, offset};
 use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::Intensity;
-use autd3_rs::{Client, ClientConfig};
-use autd3_rs_link_echocat::EchocatLinkOption;
+use autd3_rs::{Client, ClientConfig, TransportOption};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
@@ -26,7 +25,7 @@ async fn main() -> Result<()> {
 
     let client = Client::open(
         &geometry,
-        EchocatLinkOption::default(),
+        &TransportOption::default(),
         ClientConfig::default(),
     )
     .await?;
@@ -43,23 +42,21 @@ async fn main() -> Result<()> {
     let mut right = geometry.phase_buffer();
     autd3_rs_pattern::focus(&geometry, right_target, wavelength, &mut right);
 
-    let mut builder = client.datagram_builder();
-    builder.push(SetSilencer::default()).push_each(|device| {
-        Some(if device.idx() % 2 == 0 {
-            Pattern::new(&left, Intensity::MAX)
-        } else {
-            Pattern::new(&right, Intensity::MAX)
-        })
-    });
-    let datagrams = builder.build()?;
-    for frame in &datagrams {
-        client.send_checked(frame).await?;
-    }
+    client.send(SetSilencer::default()).await?;
+    client
+        .send(each(|device| {
+            Some(if device.idx() % 2 == 0 {
+                Pattern::new(&left, Intensity::MAX)
+            } else {
+                Pattern::new(&right, Intensity::MAX)
+            })
+        }))
+        .await?;
 
     println!("even devices -> left target, odd devices -> right target — press Ctrl+C to stop");
     tokio::signal::ctrl_c().await?;
 
-    client.stop().await?;
+    client.silent_stop().await?;
     client.close().await?;
     Ok(())
 }

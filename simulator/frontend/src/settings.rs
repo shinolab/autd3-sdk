@@ -79,7 +79,7 @@ pub fn hex_to_rgb(hex: &str) -> Option<[f32; 3]> {
         return None;
     }
     let component = |i: usize| {
-        u8::from_str_radix(&h[i..i + 2], 16)
+        u8::from_str_radix(&h[i..][..2], 16)
             .ok()
             .map(|v| f32::from(v) / 255.0)
     };

@@ -1,19 +1,36 @@
 #![allow(clippy::cast_possible_truncation)]
 
+mod common;
+#[path = "common/pattern.rs"]
+mod pattern;
+
+use autd3_cpu_wire::PatternBank;
+use autd3_cpu_wire::payload::{
+    EmissionType, PhaseDepth, TransitionMode, WritePatternPhasePayload, WritePatternRawPayload,
+};
 use autd3_rs_core::params::REP_INFINITE;
-use autd3_rs_core::protocol::{Cmd, Seq, TX_FRAME_BYTES, TxFrame};
-use autd3_rs_core::value::{Intensity, Phase, TransitionMode};
+use autd3_rs_core::protocol::{Cmd, DeviceErrorCode};
+use autd3_rs_core::value::{Intensity, Phase};
 use autd3_rs_firmware_emulator::Device;
+use autd3_rs_firmware_emulator::test_utils::FpgaEmulatorTestExt;
+use zerocopy::IntoBytes;
+use zerocopy::little_endian::U16;
 
-const NUM_TRANSDUCERS: usize = 249;
-const BANK: u8 = 1;
+use common::{NUM_TRANSDUCERS, frame};
+use pattern::{activate_pattern_bank, config_pattern};
 
-fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> [u8; TX_FRAME_BYTES] {
-    let mut tx = TxFrame::new(Seq::new(seq), cmd);
-    tx.payload[..payload.len()].copy_from_slice(payload);
-    let mut buf = [0u8; TX_FRAME_BYTES];
-    tx.write_to(&mut buf);
-    buf
+const BANK: PatternBank = PatternBank::B1;
+
+fn write_phase_header(depth: PhaseDepth, count: u8, intensity: u8) -> Vec<u8> {
+    WritePatternPhasePayload {
+        bank: BANK,
+        depth,
+        count,
+        intensity,
+        index: U16::new(0),
+    }
+    .as_bytes()
+    .to_vec()
 }
 
 #[test]
@@ -25,132 +42,107 @@ fn raw_pattern_round_trips_to_emissions() {
             .collect(),
     );
 
-    let mut write = vec![BANK, 0];
-    write.extend_from_slice(&0u16.to_le_bytes());
+    let mut write = WritePatternRawPayload {
+        bank: BANK,
+        count: 1,
+        index: U16::new(0),
+    }
+    .as_bytes()
+    .to_vec();
     write.extend(expected.0.iter().map(|p| p.0));
     write.extend(expected.1.iter().map(|i| i.0));
 
-    let mut config = vec![0u8; 14];
-    config[0] = BANK;
-    config[1] = 0x01;
-    config[2..4].copy_from_slice(&512u16.to_le_bytes());
-    config[4..8].copy_from_slice(&1u32.to_le_bytes());
-    config[8] = 0;
-    config[10..12].copy_from_slice(&0u16.to_le_bytes());
-    config[12..14].copy_from_slice(&REP_INFINITE.to_le_bytes());
-
-    let mut change = vec![0u8; 10];
-    change[0] = BANK;
-    change[1] = TransitionMode::Immediate.try_as_u8().unwrap();
+    let config = config_pattern(BANK, EmissionType::Raw, 1, 0, 0, REP_INFINITE);
+    let change = activate_pattern_bank(BANK, TransitionMode::Immediate);
 
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
-    assert_eq!(device.send(&frame(0, Cmd::WritePatternRaw, &write)).data, 0);
-    assert_eq!(device.send(&frame(1, Cmd::ConfigPattern, &config)).data, 0);
     assert_eq!(
-        device.send(&frame(2, Cmd::ChangePatternBank, &change)).data,
-        0
+        device.send(&frame(0, Cmd::WritePatternRaw, &write)).status,
+        DeviceErrorCode::None
+    );
+    assert_eq!(
+        device.send(&frame(1, Cmd::ConfigPattern, &config)).status,
+        DeviceErrorCode::None
+    );
+    assert_eq!(
+        device
+            .send(&frame(2, Cmd::ActivatePatternBank, &change))
+            .status,
+        DeviceErrorCode::None
     );
 
-    assert_eq!(u16::from(BANK), device.fpga().req_pattern_bank());
-    assert_eq!(0x01, device.fpga().pattern_mode(BANK as usize));
+    assert_eq!(BANK as u16, device.fpga().req_pattern_bank());
+    assert_eq!(
+        u16::from(EmissionType::Raw.as_u8()),
+        device.fpga().pattern_mode(BANK as usize)
+    );
     assert_eq!(expected, device.fpga().emissions_at(BANK as usize, 0));
 }
 
-fn config_change(bank: u8) -> (Vec<u8>, Vec<u8>) {
-    let mut config = vec![0u8; 12];
-    config[0] = bank;
-    config[1] = 0x01;
-    config[2..4].copy_from_slice(&512u16.to_le_bytes());
-    config[4..8].copy_from_slice(&4u32.to_le_bytes());
-    let mut change = vec![0u8; 10];
-    change[0] = bank;
-    (config, change)
-}
-
-#[test]
-fn phase_full_pattern_decompresses_to_two_indices() {
-    let phases: Vec<(u8, u8)> = (0..NUM_TRANSDUCERS)
-        .map(|i| (i as u8, (255 - i) as u8))
-        .collect();
-
-    let mut write = vec![BANK, 1, 2, 0x80];
-    write.extend_from_slice(&0u32.to_le_bytes());
-    for &(p0, p1) in &phases {
-        let word = u16::from(p0) | (u16::from(p1) << 8);
-        write.extend_from_slice(&word.to_le_bytes());
-    }
-
-    let (config, change) = config_change(BANK);
+fn send_phase_pattern(write: &[u8]) -> Device {
+    let config = config_pattern(BANK, EmissionType::Raw, 4, 0, 0, 0);
+    let change = activate_pattern_bank(BANK, TransitionMode::SyncIdx);
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
     assert_eq!(
-        device
-            .send(&frame(0, Cmd::WritePatternCompressed, &write))
-            .data,
-        0
+        device.send(&frame(0, Cmd::WritePatternPhase, write)).status,
+        DeviceErrorCode::None
     );
-    assert_eq!(device.send(&frame(1, Cmd::ConfigPattern, &config)).data, 0);
     assert_eq!(
-        device.send(&frame(2, Cmd::ChangePatternBank, &change)).data,
-        0
+        device.send(&frame(1, Cmd::ConfigPattern, &config)).status,
+        DeviceErrorCode::None
     );
-
-    let idx0 = device.fpga().emissions_at(BANK as usize, 0);
-    let idx1 = device.fpga().emissions_at(BANK as usize, 1);
-    for (i, &(p0, p1)) in phases.iter().enumerate() {
-        assert_eq!(idx0.0[i], Phase(p0), "index 0 phase t={i}");
-        assert_eq!(idx0.1[i], Intensity(0x80), "index 0 intensity t={i}");
-        assert_eq!(idx1.0[i], Phase(p1), "index 1 phase t={i}");
-        assert_eq!(idx1.1[i], Intensity(0x80), "index 1 intensity t={i}");
-    }
+    assert_eq!(
+        device
+            .send(&frame(2, Cmd::ActivatePatternBank, &change))
+            .status,
+        DeviceErrorCode::None
+    );
+    device
 }
 
 #[test]
-fn phase_half_pattern_decompresses_to_four_indices() {
-    let nibbles: Vec<[u8; 4]> = (0..NUM_TRANSDUCERS)
-        .map(|i| {
-            [
-                (i & 0x0F) as u8,
-                ((i + 1) & 0x0F) as u8,
-                ((i + 2) & 0x0F) as u8,
-                ((i + 3) & 0x0F) as u8,
-            ]
-        })
-        .collect();
+fn phase_bits8_pattern_expands_to_consecutive_indices() {
+    let phase = |g: usize, t: usize| (t * 3 + g * 17) as u8;
 
-    let mut write = vec![BANK, 2, 4, 0xFF];
-    write.extend_from_slice(&0u32.to_le_bytes());
-    for n in &nibbles {
-        let word = u16::from(n[0])
-            | (u16::from(n[1]) << 4)
-            | (u16::from(n[2]) << 8)
-            | (u16::from(n[3]) << 12);
-        write.extend_from_slice(&word.to_le_bytes());
-    }
-
-    let (config, change) = config_change(BANK);
-    let mut device = Device::new(NUM_TRANSDUCERS);
-    device.send(&frame(0, Cmd::Reset, &[]));
-    assert_eq!(
-        device
-            .send(&frame(0, Cmd::WritePatternCompressed, &write))
-            .data,
-        0
-    );
-    assert_eq!(device.send(&frame(1, Cmd::ConfigPattern, &config)).data, 0);
-    assert_eq!(
-        device.send(&frame(2, Cmd::ChangePatternBank, &change)).data,
-        0
-    );
-
+    let mut write = write_phase_header(PhaseDepth::Bits8, 4, 0x80);
     for g in 0..4 {
-        let idx = device.fpga().emissions_at(BANK as usize, g);
-        for (i, n) in nibbles.iter().enumerate() {
-            let p4 = n[g];
-            let expected = (p4 << 4) | p4;
-            assert_eq!(idx.0[i], Phase(expected), "g={g} t={i}");
-            assert_eq!(idx.1[i], Intensity(0xFF), "g={g} t={i}");
+        write.extend((0..NUM_TRANSDUCERS).map(|t| phase(g, t)));
+    }
+
+    let device = send_phase_pattern(&write);
+    for g in 0..4 {
+        let (phases, intensities) = device.fpga().emissions_at(BANK as usize, g);
+        for t in 0..NUM_TRANSDUCERS {
+            assert_eq!(phases[t], Phase(phase(g, t)), "g={g} t={t}");
+            assert_eq!(intensities[t], Intensity(0x80), "g={g} t={t}");
+        }
+    }
+}
+
+#[test]
+fn phase_bits4_pattern_expands_nibbles_to_full_range() {
+    let nibble = |g: usize, t: usize| ((t + g) & 0x0F) as u8;
+
+    let mut write = write_phase_header(PhaseDepth::Bits4, 4, 0xFF);
+    for g in 0..4 {
+        write.extend((0..NUM_TRANSDUCERS.div_ceil(2)).map(|i| {
+            let hi = if 2 * i + 1 < NUM_TRANSDUCERS {
+                nibble(g, 2 * i + 1)
+            } else {
+                0
+            };
+            (hi << 4) | nibble(g, 2 * i)
+        }));
+    }
+
+    let device = send_phase_pattern(&write);
+    for g in 0..4 {
+        let (phases, intensities) = device.fpga().emissions_at(BANK as usize, g);
+        for t in 0..NUM_TRANSDUCERS {
+            assert_eq!(phases[t], Phase(nibble(g, t) * 0x11), "g={g} t={t}");
+            assert_eq!(intensities[t], Intensity(0xFF), "g={g} t={t}");
         }
     }
 }
@@ -160,9 +152,9 @@ fn unknown_command_reports_error() {
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
 
-    let mut bad = frame(0, Cmd::ReadErrorDetail, &[]);
+    let mut bad = frame(0, Cmd::Nop, &[]);
     bad[1] = 0x7F;
     let rx = device.send(&bad);
 
-    assert_eq!(rx.data, 0x01);
+    assert_eq!(rx.status, DeviceErrorCode::UnknownCmd);
 }

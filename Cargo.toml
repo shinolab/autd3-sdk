@@ -35,22 +35,26 @@ homepage = "https://shinolab.github.io/autd3-sdk/en/"
 
 [workspace.dependencies]
 approx = { version = "0.5.1", default-features = false, features = ["std"] }
-core_affinity = { version = "0.8.3", default-features = false }
 nalgebra = { version = "0.35.0", default-features = false, features = ["std"] }
+num-integer = { version = "0.1.47", default-features = false }
 rayon = { version = "1.11.0", default-features = false }
 rstest = { version = "0.27.0", default-features = false }
 thiserror = { version = "2.0.18", default-features = false, features = ["std"] }
 zerocopy = { version = "0.8.52", default-features = false, features = [
     "derive",
 ] }
+crc = { version = "3.4.0", default-features = false }
+enum-map = { version = "2.7.3", default-features = false }
+bitflags = { version = "2.13.2", default-features = false }
+etherparse = { version = "0.21.0", default-features = false }
 tokio = { version = "1.52.3", default-features = false, features = [
     "sync",
     "time",
     "macros",
     "rt",
 ] }
-thread-priority = { version = "3.1.1", default-features = false }
 socket2 = { version = "0.6.4", default-features = false }
+libc = { version = "0.2.190", default-features = false }
 clap = { version = "4.6.1", default-features = false, features = [
     "std",
     "derive",
@@ -58,6 +62,13 @@ clap = { version = "4.6.1", default-features = false, features = [
     "usage",
     "error-context",
 ] }
+futures-channel = { version = "0.3.34", default-features = false, features = [
+    "alloc",
+] }
+async-lock = { version = "3.4.2", default-features = false, features = [
+    "std",
+] }
+pollster = { version = "1.0.1", default-features = false }
 humantime = { version = "2.3.0", default-features = false }
 if-addrs = { version = "0.15.0", default-features = false }
 serde = { version = "1.0.228", default-features = false, features = [

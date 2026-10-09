@@ -7,7 +7,7 @@ use crate::mem::MemProfile;
 use crate::stats::{Sample, SampleStatus, Summary};
 
 pub fn print_summary(s: &Summary) {
-    let total = s.success + s.timeouts + s.link_errors + s.device_errors.values().sum::<u64>();
+    let total = s.success + s.timeouts + s.network_errors + s.device_errors.values().sum::<u64>();
 
     println!();
     println!("=== perftest summary ===");
@@ -15,7 +15,7 @@ pub fn print_summary(s: &Summary) {
     println!("total sends     : {total}");
     println!("  success       : {}", s.success);
     println!("  timeouts      : {}", s.timeouts);
-    println!("  link errors   : {}", s.link_errors);
+    println!("  network errors: {}", s.network_errors);
     if s.device_errors.is_empty() {
         println!("  device errors : 0");
     } else {
@@ -24,8 +24,7 @@ pub fn print_summary(s: &Summary) {
             println!("    code {code:#04x} : {count}");
         }
     }
-    println!("  stale cycles  : {}", s.stale_cycles);
-    println!("  lost cycles   : {}", s.lost_cycles);
+    println!("  missed replies: {}", s.missed_replies);
 
     println!();
     println!("throughput      :");
@@ -40,6 +39,17 @@ pub fn print_summary(s: &Summary) {
     println!("  p99           : {}", format_duration(s.latency.p99));
     println!("  min           : {}", format_duration(s.latency.min));
     println!("  max           : {}", format_duration(s.latency.max));
+
+    if let Some(ack) = &s.driver_ack {
+        println!();
+        println!("driver ack latency (per frame, send -> acked by all devices):");
+        println!("  frames        : {}", ack.frames);
+        println!("  mean          : {}", format_duration(ack.mean));
+        println!(
+            "  worst         : {}   (since open, start-up and warm-up included)",
+            format_duration(ack.worst)
+        );
+    }
 }
 
 pub fn print_mem(m: &MemProfile) {
@@ -113,7 +123,7 @@ fn status_str(s: SampleStatus) -> String {
         SampleStatus::Ok => "ok".to_string(),
         SampleStatus::DeviceError(code) => format!("dev:{code:#04x}"),
         SampleStatus::Timeout => "timeout".to_string(),
-        SampleStatus::LinkError => "link".to_string(),
+        SampleStatus::NetworkError => "network".to_string(),
     }
 }
 

@@ -85,12 +85,12 @@ fn read_focus(ram: &[u16], word_base: usize) -> u64 {
 impl FpgaEmulator {
     #[must_use]
     pub fn sound_speed(&self, bank: usize) -> u16 {
-        self.controller[fw::ADDR_PATTERN_SOUND_SPEED0 as usize + bank]
+        self.latched_config[fw::ADDR_PATTERN_SOUND_SPEED0 as usize + bank]
     }
 
     #[must_use]
     pub fn num_foci(&self, bank: usize) -> usize {
-        self.controller[fw::ADDR_PATTERN_NUM_FOCI0 as usize + bank] as usize
+        self.latched_config[fw::ADDR_PATTERN_NUM_FOCI0 as usize + bank] as usize
     }
 
     #[must_use]
@@ -126,7 +126,7 @@ impl FpgaEmulator {
                 let sin = ((sin / num_foci as u16) >> 1) as usize;
                 let cos = ((cos / num_foci as u16) >> 1) as usize;
                 let phase = Phase(ATAN_TABLE[(sin << 7) | cos]) + self.phase_correction(i);
-                let intensity = if self.output_mask_enabled(i) {
+                let intensity = if self.emits(i) {
                     Intensity(intensity)
                 } else {
                     Intensity::MIN

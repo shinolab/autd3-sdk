@@ -7,21 +7,23 @@ Run with: cargo xtask py example focus_sine
 import asyncio
 import signal
 
-import numpy as np
-
 import autd3
-import autd3_link_echocat as echocat
 import autd3_modulation as modulation
 import autd3_pattern as pattern
-from autd3.units import Hz, m, s
+from autd3.commands import Modulation, Pattern, SetSilencer
+from autd3.geometry import Autd3, Geometry, offset
+from autd3.units import Hz, m, mm, s
+from autd3.value import Intensity, SamplingConfig
 
 
 async def main() -> None:
-    geometry = autd3.geometry.Geometry([autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+    _log_guard = autd3.init_tracing()
+
+    geometry = Geometry([Autd3([0.0, 0.0, 0.0])])
 
     async with await autd3.Client.open(
         geometry,
-        echocat.EchocatLinkOption(),
+        autd3.TransportOption(),
         autd3.ClientConfig(),
     ) as client:
         print("devices:", client.num_devices())
@@ -29,7 +31,7 @@ async def main() -> None:
             print(f"device[{i}] firmware version: {fw}")
 
         # length in mm
-        target = geometry.center() + np.array([0.0, 0.0, 150.0])
+        target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm)
         wavelength = pattern.wavelength(340 * m / s)
         phases = geometry.phase_buffer()
         pattern.focus(geometry, target, wavelength, phases)
@@ -37,12 +39,9 @@ async def main() -> None:
         mod_buf = modulation.modulation_buffer()
         modulation.sine(200 * Hz, modulation.SineOption(), mod_buf)
 
-        builder = client.datagram_builder()
-        builder.push(autd3.commands.Pattern(phases, autd3.value.Intensity.MAX))
-        builder.push(autd3.commands.Modulation(autd3.value.SamplingConfig.FREQ_4K, mod_buf))
-        datagrams = builder.build()
-        for frame in datagrams:
-            await client.send_checked(frame)
+        await client.send(SetSilencer())
+        await client.send(Pattern(phases, Intensity.MAX))
+        await client.send(Modulation(SamplingConfig.FREQ_4K, mod_buf))
 
         print(
             f"emitting a 200 Hz AM focus at "
@@ -53,6 +52,8 @@ async def main() -> None:
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, stop.set)
         await stop.wait()
+
+        await client.silent_stop()
 
 
 if __name__ == "__main__":

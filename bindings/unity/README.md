@@ -33,8 +33,7 @@ Add every package to your Unity project's `Packages/manifest.json` as a `file:` 
     "com.shinolab.autd3-sdk.core": "file:/abs/path/autd3-sdk/bindings/unity/com.shinolab.autd3-sdk.core",
     "com.shinolab.autd3-sdk": "file:/abs/path/autd3-sdk/bindings/unity/com.shinolab.autd3-sdk",
     "com.shinolab.autd3-sdk.pattern": "file:/abs/path/autd3-sdk/bindings/unity/com.shinolab.autd3-sdk.pattern",
-    "com.shinolab.autd3-sdk.modulation": "file:/abs/path/autd3-sdk/bindings/unity/com.shinolab.autd3-sdk.modulation",
-    "com.shinolab.autd3-sdk.link.nop": "file:/abs/path/autd3-sdk/bindings/unity/com.shinolab.autd3-sdk.link.nop"
+    "com.shinolab.autd3-sdk.modulation": "file:/abs/path/autd3-sdk/bindings/unity/com.shinolab.autd3-sdk.modulation"
   }
 }
 ```
@@ -49,4 +48,4 @@ Positions scale by 1000 and flip z, directions flip z and are normalised, and ro
 ## Platform notes
 
 - Targets are Editor + Standalone (Windows / macOS / Linux). Mobile / IL2CPP device builds are not validated yet.
-- On Linux, EtherCAT raw sockets need `CAP_NET_RAW`.
+- The UDP link needs no special privileges; allow inbound UDP from `fe80::/10` source port 44336 in the host firewall.

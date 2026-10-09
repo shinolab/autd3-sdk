@@ -1,29 +1,55 @@
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
 use crate::clean::{CleanArgs, Cleaner};
-use crate::util::run;
+use crate::util::{run, run_env};
 
 const SOLUTION: &str = "AUTD3.slnx";
 
-const CS_NATIVE: &[(&str, &str)] = &[
-    ("AUTD3.Core", "autd3_core"),
-    ("AUTD3", "autd3capi"),
-    ("AUTD3.Pattern", "autd3_pattern"),
-    ("AUTD3.Pattern.Holo", "autd3_pattern_holo"),
-    ("AUTD3.Modulation", "autd3_modulation"),
-    ("AUTD3.Link.Echocat", "autd3_link_echocat"),
-    ("AUTD3.Link.Remote", "autd3_link_remote"),
-    ("AUTD3.Link.TwinCAT", "autd3_link_twincat"),
-    ("AUTD3.Link.Nop", "autd3_link_nop"),
+pub(crate) struct BindingPkg {
+    pub assembly: &'static str,
+    pub unity_id: &'static str,
+    pub ffi_crate: &'static str,
+    pub lib: &'static str,
+}
+
+pub(crate) const PACKAGES: &[BindingPkg] = &[
+    BindingPkg {
+        assembly: "AUTD3.Core",
+        unity_id: "com.shinolab.autd3-sdk.core",
+        ffi_crate: "autd3-ffi-core",
+        lib: "autd3_core",
+    },
+    BindingPkg {
+        assembly: "AUTD3",
+        unity_id: "com.shinolab.autd3-sdk",
+        ffi_crate: "autd3-ffi",
+        lib: "autd3capi",
+    },
+    BindingPkg {
+        assembly: "AUTD3.Pattern",
+        unity_id: "com.shinolab.autd3-sdk.pattern",
+        ffi_crate: "autd3-ffi-pattern",
+        lib: "autd3_pattern",
+    },
+    BindingPkg {
+        assembly: "AUTD3.Pattern.Holo",
+        unity_id: "com.shinolab.autd3-sdk.pattern.holo",
+        ffi_crate: "autd3-ffi-pattern-holo",
+        lib: "autd3_pattern_holo",
+    },
+    BindingPkg {
+        assembly: "AUTD3.Modulation",
+        unity_id: "com.shinolab.autd3-sdk.modulation",
+        ffi_crate: "autd3-ffi-modulation",
+        lib: "autd3_modulation",
+    },
 ];
 
-const RIDS: &[&str] = &["win-x64", "linux-x64", "osx-arm64"];
-
-const PCAP_TRAIT: &str = "Category!=Pcap";
+pub(crate) const RIDS: &[&str] = &["win-x64", "linux-x64", "osx-arm64"];
 
 #[derive(Subcommand)]
 pub enum CsCmd {
@@ -43,11 +69,7 @@ pub enum CsCmd {
         out: Option<PathBuf>,
     },
     /// Build the FFI cdylibs and run the C# tests against them
-    Test {
-        /// Skip the tests that need a pcap runtime
-        #[arg(long)]
-        no_pcap: bool,
-    },
+    Test,
     /// `dotnet format` the C# solution
     Format {
         /// Rewrite the files instead of only checking them
@@ -61,9 +83,6 @@ pub enum CsCmd {
         /// Build the Debug configuration instead of Release
         #[arg(long)]
         debug: bool,
-        /// Do not wrap the run in `sudo`
-        #[arg(long)]
-        no_sudo: bool,
         /// Arguments forwarded to the example
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
@@ -80,26 +99,24 @@ pub fn run_cs(root: &Path, cmd: CsCmd) -> Result<()> {
             run("dotnet", ["build", SOLUTION, "-c", config], &dir)
         }
         CsCmd::Pack { native_dir, out } => pack(root, native_dir, out),
-        CsCmd::Test { no_pcap } => {
+        CsCmd::Test => {
             let native = build_ffi(root)?;
-            let filter: &[&str] = if no_pcap {
-                &["--filter", PCAP_TRAIT]
-            } else {
-                &[]
-            };
             if cfg!(target_os = "windows") {
                 run("dotnet", ["build", SOLUTION, "-c", "Debug"], &dir)?;
                 stage_native_libs(&native, &dir)?;
-                let mut args = vec!["test", SOLUTION, "-c", "Debug", "--no-build"];
-                args.extend(filter);
-                run("dotnet", args, &dir)
+                run(
+                    "dotnet",
+                    ["test", SOLUTION, "-c", "Debug", "--no-build"],
+                    &dir,
+                )
             } else {
-                let mut cmd = Command::new("dotnet");
-                cmd.args(["test", SOLUTION, "-c", "Debug"])
-                    .args(filter)
-                    .current_dir(&dir);
-                set_native_lib_path(&mut cmd, &native);
-                spawn(cmd, "dotnet")
+                let (var, value) = native_lib_env(&native);
+                run_env(
+                    "dotnet",
+                    ["test", SOLUTION, "-c", "Debug"],
+                    &dir,
+                    &[(var, value.as_os_str())],
+                )
             }
         }
         CsCmd::Format { fix } => {
@@ -109,12 +126,7 @@ pub fn run_cs(root: &Path, cmd: CsCmd) -> Result<()> {
             }
             run("dotnet", args, &dir)
         }
-        CsCmd::Example {
-            name,
-            debug,
-            no_sudo,
-            args,
-        } => {
+        CsCmd::Example { name, debug, args } => {
             let native = build_ffi(root)?;
             let config = if debug { "Debug" } else { "Release" };
             let project_dir = dir.join("examples").join(&name);
@@ -128,7 +140,13 @@ pub fn run_cs(root: &Path, cmd: CsCmd) -> Result<()> {
                 &dir,
             )?;
             let exe = find_example_exe(&project_dir, config, &name)?;
-            run_example(&exe, &native, &args, no_sudo, &dir)
+            let (var, value) = native_lib_env(&native);
+            run_env(
+                &exe.to_string_lossy(),
+                &args,
+                &dir,
+                &[(var, value.as_os_str())],
+            )
         }
         CsCmd::Clean(args) => crate::clean::scope(root, args, clean),
     }
@@ -164,7 +182,9 @@ fn pack(root: &Path, native_dir: Option<PathBuf>, out: Option<PathBuf>) -> Resul
     std::fs::create_dir_all(&out)?;
     let src = dir.join("src");
 
-    for (pkg, lib) in CS_NATIVE {
+    for pkg in PACKAGES {
+        let lib = pkg.lib;
+        let pkg = pkg.assembly;
         let pkg_dir = src.join(pkg);
         let runtimes = pkg_dir.join("runtimes");
         if runtimes.exists() {
@@ -211,7 +231,7 @@ fn stage_native(from: &Path, rid: &str, lib: &str, runtimes: &Path) -> Result<()
     Ok(())
 }
 
-fn rid_affix(rid: &str) -> (&'static str, &'static str) {
+pub(crate) fn rid_affix(rid: &str) -> (&'static str, &'static str) {
     if rid.starts_with("win") {
         ("", "dll")
     } else if rid.starts_with("osx") {
@@ -221,13 +241,13 @@ fn rid_affix(rid: &str) -> (&'static str, &'static str) {
     }
 }
 
-fn host_rid() -> Result<&'static str> {
+pub(crate) fn host_rid() -> Result<&'static str> {
     Ok(match (std::env::consts::OS, std::env::consts::ARCH) {
         ("linux", "x86_64") => "linux-x64",
         ("windows", "x86_64") => "win-x64",
         ("macos", "aarch64") => "osx-arm64",
         ("macos", "x86_64") => "osx-x64",
-        (os, arch) => bail!("unsupported host {os}/{arch} for `cs pack`"),
+        (os, arch) => bail!("unsupported host {os}/{arch}"),
     })
 }
 
@@ -250,51 +270,20 @@ fn find_example_exe(project_dir: &Path, config: &str, name: &str) -> Result<Path
     bail!("built example executable not found under {}", bin.display());
 }
 
-fn run_example(
-    exe: &Path,
-    native: &Path,
-    args: &[String],
-    no_sudo: bool,
-    cwd: &Path,
-) -> Result<()> {
-    let exe = exe.to_string_lossy().into_owned();
-    let native = native.to_string_lossy().into_owned();
-    let lib_path_var = if cfg!(target_os = "macos") {
-        "DYLD_LIBRARY_PATH"
-    } else {
-        "LD_LIBRARY_PATH"
-    };
-    if !no_sudo && cfg!(unix) {
-        let mut sudo_args = vec![format!("{lib_path_var}={native}"), exe];
-        sudo_args.extend(args.iter().cloned());
-        run("sudo", sudo_args.iter().map(String::as_str), cwd)
-    } else {
-        let mut cmd = Command::new(&exe);
-        cmd.current_dir(cwd).args(args).env(lib_path_var, &native);
-        spawn(cmd, "example")
-    }
-}
-
-fn set_native_lib_path(cmd: &mut Command, native: &Path) {
+fn native_lib_env(native: &Path) -> (&'static str, OsString) {
     if cfg!(target_os = "windows") {
         let existing = std::env::var("PATH").unwrap_or_default();
-        cmd.env("PATH", format!("{};{existing}", native.display()));
+        ("PATH", format!("{};{existing}", native.display()).into())
     } else if cfg!(target_os = "macos") {
-        cmd.env("DYLD_LIBRARY_PATH", native);
+        ("DYLD_LIBRARY_PATH", native.into())
     } else {
-        cmd.env("LD_LIBRARY_PATH", native);
+        ("LD_LIBRARY_PATH", native.into())
     }
 }
 
 fn stage_native_libs(native: &Path, csharp_dir: &Path) -> Result<()> {
     let test_bin = csharp_dir.join("tests/AUTD3.Tests/bin/Debug");
-    let ext = if cfg!(target_os = "windows") {
-        "dll"
-    } else if cfg!(target_os = "macos") {
-        "dylib"
-    } else {
-        "so"
-    };
+    let (_, ext) = rid_affix(host_rid()?);
     let mut staged = 0;
     for tfm in std::fs::read_dir(&test_bin)
         .with_context(|| format!("reading test output dir {}", test_bin.display()))?
@@ -317,16 +306,6 @@ fn stage_native_libs(native: &Path, csharp_dir: &Path) -> Result<()> {
             native.display(),
             test_bin.display()
         );
-    }
-    Ok(())
-}
-
-fn spawn(mut cmd: Command, program: &str) -> Result<()> {
-    let status = cmd
-        .status()
-        .with_context(|| format!("failed to spawn `{program}`"))?;
-    if !status.success() {
-        bail!("`{program}` exited with {status}");
     }
     Ok(())
 }

@@ -6,29 +6,22 @@ use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
 use crate::clean::{CleanArgs, Cleaner};
-use crate::util::{run, run_env, which};
+use crate::cpu_codegen::gen_param;
+use crate::util::{cargo_clippy, cargo_fmt, run, run_env, which};
 
 #[derive(Subcommand)]
 pub enum CpuCmd {
     /// Build `board` and link it with `platform/autd3-platform.o` into the flashable `.bin`
-    Build {
-        /// Toggle PORTA pin 5 around the EtherCAT ISR frame handler so its width can be scoped
-        #[arg(long)]
-        isr_probe: bool,
-    },
+    Build,
     /// Build, then write the `.bin` to the device with J-Link
-    Flash {
-        /// Toggle PORTA pin 5 around the EtherCAT ISR frame handler so its width can be scoped
-        #[arg(long)]
-        isr_probe: bool,
-    },
+    Flash,
     /// Run the portable firmware logic (`autd3-cpu-fw`) tests on the host
     Test {
         /// Model-check the ISR/main-loop FIFO handoff with loom instead of the regular tests
         #[arg(long)]
         loom: bool,
     },
-    /// Regenerate `fw/src/params.rs` from the FPGA `params.svh`
+    /// Regenerate `fw/src/fpga_params.rs` from the FPGA `params.svh`
     GenParam,
     /// Write the slot-A image header (magic/generation 0/length/CRC32) into a linked `.bin`
     StampImage {
@@ -53,13 +46,16 @@ pub enum CpuCmd {
 
 pub fn run_cpu(root: &Path, cmd: &CpuCmd) -> Result<()> {
     match cmd {
-        CpuCmd::Build { isr_probe } => cpu_build(root, *isr_probe).map(|_| ()),
-        CpuCmd::Flash { isr_probe } => cpu_flash(root, *isr_probe),
+        CpuCmd::Build => cpu_build(root).map(|_| ()),
+        CpuCmd::Flash => cpu_flash(root),
         CpuCmd::Test { loom } => cpu_test(root, *loom),
         CpuCmd::GenParam => gen_param(root),
         CpuCmd::StampImage { bin } => stamp_image(bin),
         CpuCmd::Lint { loom } => cpu_lint(root, *loom),
-        CpuCmd::Format { fix } => cpu_format(root, *fix),
+        CpuCmd::Format { fix } => {
+            cargo_fmt(root, &["-p", "autd3-cpu-fw"], *fix)?;
+            cargo_fmt(&board_dir(root), &[], *fix)
+        }
         CpuCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
 }
@@ -84,8 +80,8 @@ fn board_dir(root: &Path) -> PathBuf {
     root.join("firmware/cpu/board")
 }
 
-fn cpu_flash(root: &Path, isr_probe: bool) -> Result<()> {
-    let bin = cpu_build(root, isr_probe)?;
+fn cpu_flash(root: &Path) -> Result<()> {
+    let bin = cpu_build(root)?;
 
     let jlink = match std::env::var("JLINK") {
         Ok(v) if !v.is_empty() => v,
@@ -175,7 +171,7 @@ fn tee_lines(reader: impl std::io::Read, log: &mut String) {
     }
 }
 
-pub fn cpu_build(root: &Path, isr_probe: bool) -> Result<PathBuf> {
+pub fn cpu_build(root: &Path) -> Result<PathBuf> {
     gen_param(root)?;
 
     let prefix = std::env::var("CROSS_COMPILE").unwrap_or_else(|_| "arm-none-eabi-".to_string());
@@ -193,7 +189,7 @@ pub fn cpu_build(root: &Path, isr_probe: bool) -> Result<PathBuf> {
     let platform_obj = cpu_dir.join("platform/autd3-platform.o");
     if !platform_obj.exists() {
         bail!(
-            "{} not found (it is committed to the repository; check your checkout)",
+            "{} not found (it is exported from the private platform build and committed to the repository; check your checkout)",
             platform_obj.display()
         );
     }
@@ -203,12 +199,7 @@ pub fn cpu_build(root: &Path, isr_probe: bool) -> Result<PathBuf> {
         .with_context(|| format!("creating {}", build_dir.display()))?;
 
     let board = board_dir(root);
-    let mut build_args = vec!["build", "--release"];
-    if isr_probe {
-        build_args.push("--features");
-        build_args.push("isr-probe");
-    }
-    run("cargo", build_args, &board).context(
+    run("cargo", ["build", "--release"], &board).context(
         "building the firmware staticlib failed \
          (is the target installed? `rustup target add armv7r-none-eabi`)",
     )?;
@@ -275,9 +266,12 @@ pub fn stamp_image(bin: &Path) -> Result<()> {
         bail!("slot-A image is {body_len} bytes, over the {SLOT_IMAGE_CAPACITY}-byte capacity");
     }
     let header = ImageHeader::new(0, body_len as u32, crc32(&image[body_at..]));
-    let slot = &mut image[header_at..header_at + core::mem::size_of::<ImageHeader>()];
+    let slot = &mut image[header_at..][..core::mem::size_of::<ImageHeader>()];
     if slot != header.as_bytes() && slot.iter().any(|&b| b != 0xFF) {
-        bail!("{} already carries a different slot-A header", bin.display());
+        bail!(
+            "{} already carries a different slot-A header",
+            bin.display()
+        );
     }
     slot.copy_from_slice(header.as_bytes());
     std::fs::write(bin, &image).with_context(|| format!("writing {}", bin.display()))?;
@@ -286,10 +280,6 @@ pub fn stamp_image(bin: &Path) -> Result<()> {
         header.crc32.get()
     );
     Ok(())
-}
-
-pub fn gen_param(root: &Path) -> Result<()> {
-    crate::cpu_codegen::gen_param(root)
 }
 
 fn cpu_test(root: &Path, loom: bool) -> Result<()> {
@@ -325,36 +315,7 @@ fn cpu_lint(root: &Path, loom: bool) -> Result<()> {
             &[("RUSTFLAGS", OsStr::new("--cfg loom"))],
         );
     }
-    run(
-        "cargo",
-        [
-            "clippy",
-            "-p",
-            "autd3-cpu-fw",
-            "--all-targets",
-            "--",
-            "-D",
-            "warnings",
-        ],
-        root,
-    )?;
-    run(
-        "cargo",
-        ["clippy", "--release", "--", "-D", "warnings"],
-        &board_dir(root),
-    )
+    cargo_clippy(root, &["-p", "autd3-cpu-fw", "--all-targets"])?;
+    cargo_clippy(&board_dir(root), &["--release"])
 }
 
-fn cpu_format(root: &Path, fix: bool) -> Result<()> {
-    let mut args = vec!["fmt", "-p", "autd3-cpu-fw"];
-    if !fix {
-        args.extend(["--", "--check"]);
-    }
-    run("cargo", args, root)?;
-
-    let mut board_args = vec!["fmt"];
-    if !fix {
-        board_args.extend(["--", "--check"]);
-    }
-    run("cargo", board_args, &board_dir(root))
-}

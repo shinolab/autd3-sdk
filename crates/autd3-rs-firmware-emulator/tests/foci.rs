@@ -1,60 +1,74 @@
 #![allow(clippy::cast_possible_truncation)]
 
+mod common;
+#[path = "common/pattern.rs"]
+mod pattern;
+
+use autd3_cpu_wire::PatternBank;
+use autd3_cpu_wire::payload::{EmissionType, TransitionMode, WriteFociPayload};
 use autd3_rs_core::params::REP_INFINITE;
-use autd3_rs_core::protocol::{Cmd, Seq, TX_FRAME_BYTES, TxFrame};
-use autd3_rs_core::value::{Intensity, TransitionMode};
+use autd3_rs_core::protocol::{Cmd, DeviceErrorCode};
+use autd3_rs_core::value::Intensity;
 use autd3_rs_firmware_emulator::Device;
+use zerocopy::IntoBytes;
+use zerocopy::little_endian::U32;
 
-const NUM_TRANSDUCERS: usize = 249;
-const BANK: u8 = 0;
+use common::{NUM_TRANSDUCERS, frame};
+use pattern::{activate_pattern_bank, config_pattern};
+
+const BANK: PatternBank = PatternBank::B0;
+const NUM_FOCI: u8 = 1;
+const SOUND_SPEED: u16 = 340;
 const FOCUS_INTENSITY: u8 = 0xAA;
-
-fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> [u8; TX_FRAME_BYTES] {
-    let mut tx = TxFrame::new(Seq::new(seq), cmd);
-    tx.payload[..payload.len()].copy_from_slice(payload);
-    let mut buf = [0u8; TX_FRAME_BYTES];
-    tx.write_to(&mut buf);
-    buf
-}
 
 #[test]
 fn single_focus_synthesizes_phases() {
     let z: u64 = 8192;
-    let focus: u64 = (z << 36) | (u64::from(FOCUS_INTENSITY) << 54);
+    let focus: u64 = (u64::from(FOCUS_INTENSITY) << 54) | (z << 36);
 
-    let mut write = vec![BANK, 0];
-    write.extend_from_slice(&0u32.to_le_bytes());
-    write.extend_from_slice(&16u16.to_le_bytes());
+    let mut write = WriteFociPayload {
+        bank: BANK,
+        reserved: 0,
+        offset: U32::new(0),
+    }
+    .as_bytes()
+    .to_vec();
     write.extend_from_slice(&focus.to_le_bytes());
     write.extend_from_slice(&focus.to_le_bytes());
 
-    let mut config = vec![0u8; 14];
-    config[0] = BANK;
-    config[1] = 0x00;
-    config[2..4].copy_from_slice(&512u16.to_le_bytes());
-    config[4..8].copy_from_slice(&2u32.to_le_bytes());
-    config[8] = 1;
-    config[10..12].copy_from_slice(&340u16.to_le_bytes());
-    config[12..14].copy_from_slice(&REP_INFINITE.to_le_bytes());
-
-    let change = {
-        let mut c = vec![BANK, TransitionMode::Immediate.try_as_u8().unwrap()];
-        c.extend_from_slice(&0u64.to_le_bytes());
-        c
-    };
+    let config = config_pattern(
+        BANK,
+        EmissionType::Foci,
+        2,
+        NUM_FOCI,
+        SOUND_SPEED,
+        REP_INFINITE,
+    );
+    let change = activate_pattern_bank(BANK, TransitionMode::Immediate);
 
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
-    assert_eq!(device.send(&frame(0, Cmd::WriteFociBuffer, &write)).data, 0);
-    assert_eq!(device.send(&frame(1, Cmd::ConfigPattern, &config)).data, 0);
     assert_eq!(
-        device.send(&frame(2, Cmd::ChangePatternBank, &change)).data,
-        0
+        device.send(&frame(0, Cmd::WriteFociBuffer, &write)).status,
+        DeviceErrorCode::None
+    );
+    assert_eq!(
+        device.send(&frame(1, Cmd::ConfigPattern, &config)).status,
+        DeviceErrorCode::None
+    );
+    assert_eq!(
+        device
+            .send(&frame(2, Cmd::ActivatePatternBank, &change))
+            .status,
+        DeviceErrorCode::None
     );
     device.fpga_mut().update_with_sys_time(0);
 
-    assert_eq!(0x00, device.fpga().pattern_mode(BANK as usize));
-    assert_eq!(1, device.fpga().num_foci(BANK as usize));
+    assert_eq!(
+        u16::from(EmissionType::Foci.as_u8()),
+        device.fpga().pattern_mode(BANK as usize)
+    );
+    assert_eq!(usize::from(NUM_FOCI), device.fpga().num_foci(BANK as usize));
 
     let (phases, intensities) = device.fpga().emissions();
     assert_eq!(NUM_TRANSDUCERS, phases.len());

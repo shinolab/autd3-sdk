@@ -9,8 +9,7 @@ use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::SamplingConfig;
-use autd3_rs::{Client, ClientConfig};
-use autd3_rs_link_echocat::EchocatLinkOption;
+use autd3_rs::{Client, ClientConfig, TransportOption};
 use autd3_rs_pattern_holo::{AmplitudeTarget, GspatOption, NalgebraBackend, Pa, gspat};
 
 #[tokio::main(flavor = "multi_thread")]
@@ -21,7 +20,7 @@ async fn main() -> Result<()> {
 
     let client = Client::open(
         &geometry,
-        EchocatLinkOption::default(),
+        &TransportOption::default(),
         ClientConfig::default(),
     )
     .await?;
@@ -60,20 +59,16 @@ async fn main() -> Result<()> {
         &mut modulation,
     )?;
 
-    let mut builder = client.datagram_builder();
-    builder
-        .push(SetSilencer::default())
-        .push(Pattern::new(&phases, &intensities))
-        .push(Modulation::new(SamplingConfig::FREQ_4K, &modulation));
-    let datagrams = builder.build()?;
-    for frame in &datagrams {
-        client.send_checked(frame).await?;
-    }
+    client.send(SetSilencer::default()).await?;
+    client.send(Pattern::new(&phases, &intensities)).await?;
+    client
+        .send(Modulation::new(SamplingConfig::FREQ_4K, &modulation))
+        .await?;
 
     println!("emitting two GSPAT foci with a 200 Hz AM — press Ctrl+C to stop");
     tokio::signal::ctrl_c().await?;
 
-    client.stop().await?;
+    client.silent_stop().await?;
     client.close().await?;
     Ok(())
 }

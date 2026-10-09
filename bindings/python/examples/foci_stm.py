@@ -7,40 +7,40 @@ Run with: cargo xtask py example foci_stm
 import asyncio
 import signal
 
-import numpy as np
-
 import autd3
-import autd3_link_echocat as echocat
-from autd3.units import Hz
+from autd3.commands import FociStm, FociStmOption, SetSilencer, circle
+from autd3.geometry import Autd3, Geometry, offset
+from autd3.units import Hz, mm
+from autd3.value import ControlPoints, Intensity
 
 
 async def main() -> None:
-    geometry = autd3.geometry.Geometry([autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+    _log_guard = autd3.init_tracing()
+
+    geometry = Geometry([Autd3([0.0, 0.0, 0.0])])
 
     async with await autd3.Client.open(
         geometry,
-        echocat.EchocatLinkOption(),
+        autd3.TransportOption(),
         autd3.ClientConfig(),
     ) as client:
         print("devices:", client.num_devices())
 
-        center = geometry.center() + np.array([0.0, 0.0, 150.0])
-        samples = []
-        autd3.commands.circle(center, 30.0, 200, [0.0, 0.0, 1.0], autd3.value.Intensity.MAX, samples)
-        stm = autd3.commands.FociStm(1.0 * Hz, samples, autd3.commands.FociStmOption())
+        center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm)
+        points: list[ControlPoints] = []
+        circle(center, 30.0 * mm, 200, [0.0, 0.0, 1.0], Intensity.MAX, points)
 
-        builder = client.datagram_builder()
-        builder.push(autd3.commands.SetSilencer())
-        builder.push(stm)
-        for frame in builder.build():
-            await client.send_checked(frame)
+        await client.send(SetSilencer())
+        await (await client.send_streaming(FociStm(1.0 * Hz, points, FociStmOption())))
 
-        print("sweeping a focus around a 30 mm circle at 1 Hz — press Ctrl+C to stop")
+        print("running a 1 Hz circular foci STM — press Ctrl+C to stop")
         stop = asyncio.Event()
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, stop.set)
         await stop.wait()
+
+        await client.silent_stop()
 
 
 if __name__ == "__main__":

@@ -31,8 +31,6 @@ namespace AUTD3
 
         public static Angle Zero => new Angle(0f);
 
-        public static Angle Pi => new Angle(MathF.PI);
-
         public static Angle FromRad(float radian) => new Angle(radian);
 
         public static Angle FromDeg(float degree) => new Angle(degree * (MathF.PI / 180f));
@@ -74,6 +72,10 @@ namespace AUTD3
         }
 
         public float Hz => HzValue;
+
+        public static Freq FromHz(uint hz) => new Freq(FreqMode.IntExact, hz, hz);
+
+        public static Freq FromHz(float hz) => new Freq(FreqMode.FloatExact, hz, 0);
 
         internal byte ModeCode => (byte)Mode;
 
@@ -153,8 +155,14 @@ namespace AUTD3
             HzPerUnitInt = hzPerUnitInt;
         }
 
-        public static Freq operator *(int value, FreqUnit unit) =>
-            new Freq(Freq.FreqMode.IntExact, value * unit.HzPerUnit, (uint)value * unit.HzPerUnitInt);
+        public static Freq operator *(int value, FreqUnit unit)
+        {
+            if (value < 0)
+            {
+                throw new Autd3Exception($"an integer frequency must not be negative, but {value} was given", Autd3ErrorCode.InvalidArgument);
+            }
+            return new Freq(Freq.FreqMode.IntExact, value * unit.HzPerUnit, checked((uint)value * unit.HzPerUnitInt));
+        }
 
         public static Freq operator *(float value, FreqUnit unit) =>
             new Freq(Freq.FreqMode.FloatExact, value * unit.HzPerUnit, 0);
@@ -178,6 +186,10 @@ namespace AUTD3
         public static readonly FreqUnit Hz = new FreqUnit(1f, 1u);
         public static readonly FreqUnit kHz = new FreqUnit(1000f, 1000u);
         public static readonly SecUnit s = default;
+
+        public static Vector3 Point(Length x, Length y, Length z) => Coords.FromLengths(x, y, z);
+
+        public static Vector3 Offset(Length x, Length y, Length z) => Coords.FromLengths(x, y, z);
 
         public static Nearest<Freq> Nearest(Freq freq) => new Nearest<Freq>(freq);
 

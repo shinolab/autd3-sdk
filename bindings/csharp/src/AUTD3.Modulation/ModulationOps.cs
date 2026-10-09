@@ -1,5 +1,4 @@
 using System;
-using System.Runtime.InteropServices;
 
 namespace AUTD3
 {
@@ -7,25 +6,6 @@ namespace AUTD3
     {
         B0 = 0,
         B1 = 1,
-    }
-
-    internal static class NativeModulationOp
-    {
-        private const string Lib = "autd3capi";
-
-        static NativeModulationOp() => NativeAbi.Verify(Lib, autd3_abi_version());
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        private static extern uint autd3_abi_version();
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_write_modulation_buffer(byte bank, uint offset, ModulationBufferHandle modulationBuffer);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_config_modulation(byte bank, IntPtr samplingConfig, uint size, ushort rep);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_change_modulation_bank(byte bank, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
     }
 
     public sealed class WriteModulationBuffer : ICommand
@@ -41,8 +21,8 @@ namespace AUTD3
             _buffer = data;
         }
 
-        IntPtr ICommand.CreateOp() =>
-            NativeModulationOp.autd3_op_write_modulation_buffer((byte)_bank, _offset, _buffer.Handle);
+        IntPtr ICommand.CreateOp(Geometry geometry) =>
+            NativeModulation.autd3_op_write_modulation_buffer((byte)_bank, _offset, _buffer.Handle);
     }
 
     public sealed class ConfigModulation : ICommand
@@ -60,12 +40,12 @@ namespace AUTD3
             _loopBehavior = loopBehavior ?? LoopBehavior.Infinite;
         }
 
-        IntPtr ICommand.CreateOp()
+        IntPtr ICommand.CreateOp(Geometry geometry)
         {
             var sampling = _config.CreateHandle();
             try
             {
-                return NativeModulationOp.autd3_op_config_modulation((byte)_bank, sampling, _size, _loopBehavior.Rep);
+                return NativeModulation.autd3_op_config_modulation((byte)_bank, sampling, _size, _loopBehavior.Rep);
             }
             finally
             {
@@ -74,18 +54,18 @@ namespace AUTD3
         }
     }
 
-    public sealed class ChangeModulationBank : ICommand
+    public sealed class ActivateModulationBank : ICommand
     {
         private readonly ModulationBank _bank;
         private readonly TransitionMode _transitionMode;
 
-        public ChangeModulationBank(ModulationBank bank, TransitionMode? transitionMode = null)
+        public ActivateModulationBank(ModulationBank bank, TransitionMode? transitionMode = null)
         {
             _bank = bank;
             _transitionMode = transitionMode ?? TransitionMode.Immediate;
         }
 
-        IntPtr ICommand.CreateOp() =>
-            NativeModulationOp.autd3_op_change_modulation_bank((byte)_bank, _transitionMode.Mode, _transitionMode.Value, _transitionMode.MarginNs);
+        IntPtr ICommand.CreateOp(Geometry geometry) =>
+            NativeModulation.autd3_op_activate_modulation_bank((byte)_bank, _transitionMode.Mode, _transitionMode.Value);
     }
 }

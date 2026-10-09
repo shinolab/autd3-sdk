@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
 using AUTD3;
-using AUTD3.Link;
 using static AUTD3.Units;
 
 namespace AUTD3.Samples
@@ -11,17 +10,19 @@ namespace AUTD3.Samples
     // Coordinates are in the Unity frame (metres, left-handed): a device emits along its
     // local -z, so the focus that the dotnet sample writes as new Vector3(0, 0, 150) is
     // new Vector3(0, 0, -0.15f) here.
-    // The Nop link runs without hardware; swap it for new Echocat(...) on a real device.
+    //
+    // The UdpEmulator and its option runs without hardware; swap it for new TransportOption() on a real device.
     public sealed class FocusSineSample : MonoBehaviour
     {
+        private UdpEmulator _emulator;
         private Client _client;
         private Geometry _geometry;
 
         private async void Start()
         {
             _geometry = new Geometry(new List<Autd3> { new Autd3(Vector3.zero) });
-            // Fully qualified: the enclosing AUTD3 namespace also has a `Nop` command.
-            _client = await Client.OpenAsync(_geometry, new AUTD3.Link.Nop(), new ClientConfig());
+            _emulator = new UdpEmulator(1);
+            _client = await Client.OpenAsync(_geometry, _emulator.Option(), new ClientConfig());
 
             var target = _geometry.Center + new Vector3(0f, 0f, -0.15f);
             var wavelength = Pattern.Wavelength(340 * m / s);
@@ -32,15 +33,8 @@ namespace AUTD3.Samples
             using var modulation = Modulation.ModulationBuffer();
             Modulation.Sine(200 * Hz, new SineOption(), modulation);
 
-            using var builder = _client.DatagramBuilder();
-            builder
-                .Push(new Pattern(phases, intensities))
-                .Push(new Modulation(SamplingConfig.Freq4k, modulation));
-            using var frames = builder.Build();
-            foreach (var frame in frames)
-            {
-                await _client.SendCheckedAsync(frame);
-            }
+            await _client.SendAsync(new Pattern(phases, intensities));
+            await _client.SendAsync(new Modulation(SamplingConfig.Freq4k, modulation));
 
             Debug.Log($"AUTD3: emitting a 200 Hz AM focus at {target} (Unity frame, metres)");
         }
@@ -49,13 +43,17 @@ namespace AUTD3.Samples
         {
             if (_client != null)
             {
-                await _client.StopAsync();
+                await _client.SilentStopAsync();
                 await _client.CloseAsync();
                 _client.Dispose();
                 _client = null;
             }
+            _driver?.Dispose();
+            _driver = null;
             _geometry?.Dispose();
             _geometry = null;
+            _emulator?.Dispose();
+            _emulator = null;
         }
     }
 }

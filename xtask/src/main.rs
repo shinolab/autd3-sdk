@@ -185,7 +185,6 @@ fn main() -> Result<()> {
         TopCmd::Clean(args) => clean::scope(&root, args.common, |cleaner| {
             rust::clean(cleaner)?;
             cpu::clean(cleaner)?;
-            tool::clean(cleaner)?;
             holo_wgpu::clean(cleaner)?;
             simulator::clean(cleaner)?;
             console::clean(cleaner)?;

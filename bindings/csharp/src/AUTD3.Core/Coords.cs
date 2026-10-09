@@ -23,6 +23,8 @@ namespace AUTD3
         internal static Quaternion FromRotation(SnQuaternion q) => new Quaternion(-q.X, -q.Y, q.Z, q.W);
 
         internal static Quaternion IdentityRotation => Quaternion.identity;
+
+        internal static Vector3 FromLengths(Length x, Length y, Length z) => new Vector3(x.M, y.M, z.M);
 #else
         internal static SnVector3 Point(Vector3 v) => v;
 
@@ -37,6 +39,8 @@ namespace AUTD3
         internal static Quaternion FromRotation(SnQuaternion q) => q;
 
         internal static Quaternion IdentityRotation => Quaternion.Identity;
+
+        internal static Vector3 FromLengths(Length x, Length y, Length z) => new Vector3(x.Mm, y.Mm, z.Mm);
 #endif
 
         internal static float[] PointArray(Vector3 v)

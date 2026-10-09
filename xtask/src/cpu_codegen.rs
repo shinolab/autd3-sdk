@@ -5,9 +5,9 @@ use anyhow::{Context, Result};
 
 use crate::util::run;
 
-const PARAMS_SVH_REL: &str = "firmware/fpga/rtl/sources_1/new/headers/params.svh";
-const FW_OUT_REL: &str = "firmware/cpu/fw/src/params.rs";
-const WIRE_OUT_REL: &str = "firmware/cpu/wire/src/params.rs";
+pub(crate) const PARAMS_SVH_REL: &str = "firmware/fpga/rtl/sources_1/new/headers/params.svh";
+const FW_OUT_REL: &str = "firmware/cpu/fw/src/fpga_params.rs";
+const WIRE_OUT_REL: &str = "firmware/cpu/wire/src/fpga_params.rs";
 const IP_DIR_REL: &str = "firmware/fpga/rtl/sources_1/ip";
 const TR_COE_REL: &str = "firmware/fpga/coe/tr.coe";
 
@@ -36,12 +36,99 @@ const IP_CONSTS: &[IpConst] = &[
 const FW_INTERNAL_PREFIXES: &[&str] = &[
     "ADDR_",
     "BRAM_SELECT_",
-    "BRAM_CNT_SELECT_",
     "CTL_FLAG_",
     "FLASH_OP_",
     "FLASH_ERR_",
     "FLASH_BUF_",
+    "SYNC_CYCLE_",
 ];
+
+const FUNCTION_BIT_PREFIX: &str = "FUNC_";
+const FUNCTION_BIT_SUFFIX: &str = "_BIT";
+
+enum TypedKind {
+    Flags(&'static str),
+    Enum,
+}
+
+struct Typed {
+    sv: &'static str,
+    rust: &'static str,
+    prefix: &'static str,
+    kind: TypedKind,
+}
+
+const TYPED_ENUMS: &[Typed] = &[
+    Typed {
+        sv: "fpga_state_bit_t",
+        rust: "FpgaStateFlags",
+        prefix: "FPGA_STATE_BIT_",
+        kind: TypedKind::Flags("u8"),
+    },
+    Typed {
+        sv: "silencer_mode_bit_t",
+        rust: "SilencerFlags",
+        prefix: "SILENCER_FLAG_BIT_",
+        kind: TypedKind::Flags("u8"),
+    },
+    Typed {
+        sv: "transition_mode_t",
+        rust: "TransitionMode",
+        prefix: "TRANSITION_MODE_",
+        kind: TypedKind::Enum,
+    },
+    Typed {
+        sv: "emission_type_t",
+        rust: "EmissionType",
+        prefix: "EMISSION_TYPE_",
+        kind: TypedKind::Enum,
+    },
+    Typed {
+        sv: "debug_type_t",
+        rust: "GpioOutType",
+        prefix: "GPIO_O_TYPE_",
+        kind: TypedKind::Enum,
+    },
+    Typed {
+        sv: "ctl_flag_bit_t",
+        rust: "CtlFlags",
+        prefix: "CTL_FLAG_BIT_",
+        kind: TypedKind::Flags("u16"),
+    },
+    Typed {
+        sv: "bram_select_t",
+        rust: "BramSelect",
+        prefix: "BRAM_SELECT_",
+        kind: TypedKind::Enum,
+    },
+    Typed {
+        sv: "flash_op_t",
+        rust: "FlashOp",
+        prefix: "FLASH_OP_",
+        kind: TypedKind::Enum,
+    },
+    Typed {
+        sv: "flash_err_t",
+        rust: "FlashErr",
+        prefix: "FLASH_ERR_",
+        kind: TypedKind::Enum,
+    },
+];
+
+fn function_bit(name: &str) -> Option<&str> {
+    name.strip_prefix(FUNCTION_BIT_PREFIX)?
+        .strip_suffix(FUNCTION_BIT_SUFFIX)
+}
+
+fn to_pascal(name: &str) -> String {
+    name.split('_')
+        .filter(|word| !word.is_empty())
+        .map(|word| {
+            let (head, tail) = word.split_at(1);
+            format!("{}{}", head.to_ascii_uppercase(), tail.to_ascii_lowercase())
+        })
+        .collect()
+}
 
 fn is_fw_internal(name: &str) -> bool {
     FW_INTERNAL_PREFIXES.iter().any(|p| name.starts_with(p))
@@ -67,22 +154,10 @@ fn rust_type(name: &str) -> &'static str {
         "usize"
     } else if name == "EMISSION_MAX_INDICES"
         || name == "ULTRASOUND_FREQ_HZ"
-        || (name.starts_with("FLASH_")
-            && !name.starts_with("FLASH_OP_")
-            && !name.starts_with("FLASH_ERR_"))
+        || name.starts_with("FLASH_")
     {
         "u32"
-    } else if name == "NUM_FOCI_MAX"
-        || name.starts_with("FLASH_OP_")
-        || name.starts_with("FLASH_ERR_")
-        || name.starts_with("VERSION_NUM_")
-        || name.starts_with("BRAM_SELECT_")
-        || name.starts_with("BRAM_CNT_SELECT_")
-        || name.starts_with("TRANSITION_MODE_")
-        || name.starts_with("EMISSION_TYPE_")
-        || name.starts_with("GPIO_O_TYPE_")
-        || name.starts_with("SILENCER_FLAG_")
-    {
+    } else if name == "NUM_FOCI_MAX" || name.starts_with("VERSION_NUM_") {
         "u8"
     } else {
         "u16"
@@ -267,7 +342,7 @@ fn parse(text: &str) -> (Vec<Const>, Vec<Enum>) {
             enum_consts = Vec::new();
             if let Some(open) = line.find('{')
                 && let Some(close) = line[open + 1..].find('}')
-                && let Some(c) = parse_member(&line[open + 1..open + 1 + close])
+                && let Some(c) = parse_member(&line[open + 1..][..close])
             {
                 enum_consts.push(c);
             }
@@ -443,14 +518,43 @@ fn emit(out: &mut String, c: &Const) {
     );
 }
 
-fn emit_bit_mask(out: &mut String, c: &Const) {
-    let mask = c.name.replace("_BIT", "");
+fn emit_flags<'a>(
+    out: &mut String,
+    rust: &str,
+    repr: &str,
+    flags: impl Iterator<Item = (&'a str, &'a str)>,
+) {
     let _ = writeln!(
         out,
-        "pub const {mask}: {} = 1 << {};",
-        rust_type(&mask),
-        c.name
+        "bitflags::bitflags! {{\n    #[derive(Clone, Copy, PartialEq, Eq, Debug)]\n    pub struct {rust}: {repr} {{"
     );
+    for (name, bit) in flags {
+        let _ = writeln!(out, "        const {name} = 1 << {};", to_value(bit));
+    }
+    out.push_str("    }\n}\n");
+}
+
+fn emit_typed(out: &mut String, wire_crate: &str, typed: &Typed, e: &Enum) {
+    let members = e.consts.iter().map(|c| {
+        (
+            c.name.strip_prefix(typed.prefix).unwrap_or(&c.name),
+            &*c.value,
+        )
+    });
+    match typed.kind {
+        TypedKind::Flags(repr) => emit_flags(out, typed.rust, repr, members),
+        TypedKind::Enum => {
+            let _ = writeln!(
+                out,
+                "{wire_crate}::wire_enum_u8! {{\n    pub enum {} {{",
+                typed.rust
+            );
+            for (name, value) in members {
+                let _ = writeln!(out, "        {} = {},", to_pascal(name), to_value(value));
+            }
+            out.push_str("    }\n}\n");
+        }
+    }
 }
 
 fn generate(
@@ -471,9 +575,9 @@ fn generate(
         "Client-facing wire constants shared with the firmware.",
     );
     let mut fw = header(PARAMS_SVH_REL, "Firmware-internal FPGA register map.");
-    fw.push_str("pub use autd3_cpu_wire::params::*;\n");
+    fw.push_str("pub use autd3_cpu_wire::fpga_params::*;\n");
 
-    for c in &consts {
+    for c in consts.iter().filter(|c| function_bit(&c.name).is_none()) {
         emit(
             if is_fw_internal(&c.name) {
                 &mut fw
@@ -483,22 +587,31 @@ fn generate(
             c,
         );
     }
+    wire.push('\n');
+    emit_flags(
+        &mut wire,
+        "FunctionBits",
+        "u8",
+        consts
+            .iter()
+            .filter_map(|c| function_bit(&c.name).map(|name| (name, &*c.value))),
+    );
     for e in &enums {
         let Some(first) = e.consts.first() else {
             continue;
         };
-        let out = if is_fw_internal(&first.name) {
-            &mut fw
+        let (out, wire_crate) = if is_fw_internal(&first.name) {
+            (&mut fw, "autd3_cpu_wire")
         } else {
-            &mut wire
+            (&mut wire, "crate")
         };
         out.push('\n');
-        let is_bit = e.name.ends_with("bit_t");
+        if let Some(typed) = TYPED_ENUMS.iter().find(|t| t.sv == e.name) {
+            emit_typed(out, wire_crate, typed, e);
+            continue;
+        }
         for c in &e.consts {
             emit(out, c);
-            if is_bit {
-                emit_bit_mask(out, c);
-            }
         }
     }
 

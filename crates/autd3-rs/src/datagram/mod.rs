@@ -1,12 +1,7 @@
-mod builder;
-pub(crate) mod dc_offset;
 mod each;
+mod expansion;
 mod frame;
-mod mirror;
 
-pub use builder::DatagramBuilder;
+pub use each::{Each, each};
+pub use expansion::Expansion;
 pub use frame::{Datagram, Frame, FrameIter, Frames};
-pub(crate) use mirror::{Mirror, MirrorHandle};
-
-#[cfg(test)]
-mod tests;

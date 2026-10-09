@@ -5,8 +5,6 @@ use thiserror::Error;
 
 use super::{Autd3, Device, Geometry};
 
-const ROTATION_NORM_TOLERANCE: f32 = 1e-3;
-
 #[derive(Debug, Error)]
 #[error("failed to convert the geometry layout: {0}")]
 pub struct LayoutError(#[from] serde_json::Error);
@@ -48,7 +46,7 @@ impl<'de> Deserialize<'de> for Autd3 {
             repr.rotation[3],
         );
         let norm = rotation.norm();
-        if (norm - 1.0).abs() > ROTATION_NORM_TOLERANCE {
+        if (norm - 1.0).abs() > Autd3::ROTATION_NORM_TOLERANCE {
             return Err(D::Error::custom(format!(
                 "`rotation` must be a unit quaternion [w, x, y, z], but its norm is {norm}"
             )));

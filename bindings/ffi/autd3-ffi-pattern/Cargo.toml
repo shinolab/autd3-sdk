@@ -15,6 +15,7 @@ crate-type = ["cdylib"]
 autd3-rs-pattern.workspace = true
 autd3-rs-core.workspace = true
 autd3-ffi-abi.workspace = true
+zerocopy.workspace = true
 
 [lints]
 workspace = true

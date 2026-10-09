@@ -6,7 +6,7 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 publish = false
-description = "Interactive firmware acceptance-test runner exercising every AUTD3 firmware feature over a link."
+description = "Interactive firmware acceptance-test runner exercising every AUTD3 firmware feature over UDP."
 
 [[bin]]
 name = "autd3-rs-firmware-test"
@@ -19,12 +19,10 @@ autd3-rs-modulation.workspace = true
 clap.workspace = true
 anyhow.workspace = true
 tokio = { workspace = true, features = [
-    "sync",
     "time",
     "macros",
     "rt",
     "rt-multi-thread",
-    "signal",
 ] }
 
 [lints]

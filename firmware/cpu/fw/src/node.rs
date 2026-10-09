@@ -1138,19 +1138,19 @@ mod tests {
         h.node
             .on_frame(&mut h.nic, h.now_ms, &heartbeat, rx, &mut cmds);
         assert_eq!(h.replies().len(), 1);
-        assert_eq!(cpu.telemetry(crate::proto::Telemetry::SendFailure), 0);
+        assert_eq!(cpu.counter(crate::app::Counter::SendFailure), 0);
 
         h.nic.send_refusals = 2;
         h.node
             .on_frame(&mut h.nic, h.now_ms, &heartbeat, rx, &mut cmds);
         h.node.send_completion(&mut h.nic, 1, &mut cmds);
         assert!(h.replies().is_empty());
-        assert_eq!(cpu.telemetry(crate::proto::Telemetry::SendFailure), 2);
+        assert_eq!(cpu.counter(crate::app::Counter::SendFailure), 2);
 
         h.node
             .on_frame(&mut h.nic, h.now_ms, &heartbeat, rx, &mut cmds);
         assert_eq!(h.replies().len(), 1);
-        assert_eq!(cpu.telemetry(crate::proto::Telemetry::SendFailure), 2);
+        assert_eq!(cpu.counter(crate::app::Counter::SendFailure), 2);
     }
 
     #[test]

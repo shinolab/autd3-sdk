@@ -4,7 +4,7 @@ use anyhow::Result;
 use clap::Subcommand;
 
 use crate::clean::{CleanArgs, Cleaner};
-use crate::util::{publish_workspace, run};
+use crate::util::{cargo_clippy, cargo_fmt, publish_workspace, run};
 
 #[derive(Subcommand)]
 pub enum HoloWgpuCmd {
@@ -48,19 +48,8 @@ pub fn run_holo_wgpu(root: &Path, cmd: &HoloWgpuCmd) -> Result<()> {
             args.extend(["--", "--ignored", "--nocapture", "--test-threads=1"]);
             run("cargo", args, &dir)
         }
-        HoloWgpuCmd::Lint => run(
-            "cargo",
-            vec!["clippy", "--all-targets", "--", "-D", "warnings"],
-            &dir,
-        ),
-        HoloWgpuCmd::Format { fix } => {
-            let mut args = vec!["fmt"];
-            if !*fix {
-                args.push("--");
-                args.push("--check");
-            }
-            run("cargo", args, &dir)
-        }
+        HoloWgpuCmd::Lint => cargo_clippy(&dir, &["--all-targets"]),
+        HoloWgpuCmd::Format { fix } => cargo_fmt(&dir, &[], *fix),
         HoloWgpuCmd::Publish { dry_run } => publish_workspace(&dir, *dry_run),
         HoloWgpuCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }

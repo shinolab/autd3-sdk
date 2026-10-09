@@ -39,15 +39,10 @@ fn main() -> Result<()> {
 
     let emulator = Emulator::new(geometry);
     let record = emulator.record(async move |r| {
-        let mut builder = r.datagram_builder();
-        builder
-            .push(SetSilencer::default())
-            .push(Pattern::new(&phases, Intensity::MAX))
-            .push(Modulation::new(SamplingConfig::FREQ_4K, &modulation));
-        let datagrams = builder.build()?;
-        for frame in &datagrams {
-            r.send_checked(frame).await?;
-        }
+        r.send(SetSilencer::default()).await?;
+        r.send(Pattern::new(&phases, Intensity::MAX)).await?;
+        r.send(Modulation::new(SamplingConfig::FREQ_4K, &modulation))
+            .await?;
         r.tick(Duration::from_millis(10))?;
         Ok(())
     })?;

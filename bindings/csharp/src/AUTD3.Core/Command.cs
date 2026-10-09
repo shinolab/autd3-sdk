@@ -4,6 +4,6 @@ namespace AUTD3
 {
     public interface ICommand
     {
-        internal IntPtr CreateOp();
+        internal IntPtr CreateOp(Geometry geometry);
     }
 }

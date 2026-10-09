@@ -1,20 +1,19 @@
-use core::f32::consts::PI;
 use core::num::NonZeroU16;
 
 use anyhow::Result;
 
 use autd3_rs::commands::{FixedCompletionTime, FociStm, FociStmOption, Modulation, SetSilencer};
 use autd3_rs::common::ULTRASOUND_PERIOD;
-use autd3_rs::geometry::{Vector3, offset};
-use autd3_rs::mirror::{
+use autd3_rs::geometry::offset;
+use autd3_rs::params::{
     SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY, SILENCER_DEFAULT_COMPLETION_STEPS_PHASE,
 };
 use autd3_rs::units::{Hz, mm};
-use autd3_rs::value::{ControlPoint, ControlPoints, Intensity, Phase, SamplingConfig};
+use autd3_rs::value::SamplingConfig;
 use autd3_rs_modulation::{SineOption, constant, modulation_buffer, sine};
 
 use crate::Ctx;
-use crate::cases::pattern_util::{focus_at, send_pattern_mod};
+use crate::cases::pattern_util::{circle_foci, focus_at, send_pattern_mod};
 use crate::io::wait_enter;
 
 fn completion_time(intensity_mul: u32, phase_mul: u32) -> FixedCompletionTime {
@@ -65,13 +64,7 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
 
     ctx.send(SetSilencer::default()).await?;
     let center = ctx.geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
-    let foci: Vec<ControlPoints<1>> = (0..10)
-        .map(|i| {
-            let theta = 2.0 * PI * i as f32 / 10.0;
-            let p = center + Vector3::new(30.0 * theta.cos(), 30.0 * theta.sin(), 0.0);
-            ControlPoints::new([ControlPoint::new(p, Phase::ZERO)], Intensity::MAX)
-        })
-        .collect();
+    let foci = circle_foci(center, 10);
     let mut static_ff = modulation_buffer();
     constant(0xFF, &mut static_ff);
     ctx.send(Modulation::new(

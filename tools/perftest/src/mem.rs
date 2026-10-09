@@ -131,4 +131,4 @@ mod imp {
     }
 }
 
-pub use imp::{profile, start};
+pub use imp::{Recorder, profile, start};

@@ -58,7 +58,15 @@ impl Write for Sink {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+#[error("failed to install the tracing subscriber: {0}")]
+pub struct TracingInitError(#[source] Box<dyn std::error::Error + Send + Sync>);
+
 pub fn init_tracing(option: TracingOption) -> TracingGuard {
+    try_init_tracing(option).expect("the tracing subscriber is installed once per process")
+}
+
+pub fn try_init_tracing(option: TracingOption) -> Result<TracingGuard, TracingInitError> {
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(option.default_filter));
     let sink = match option.writer {
@@ -72,10 +80,33 @@ pub fn init_tracing(option: TracingOption) -> TracingGuard {
         .with_env_filter(filter)
         .with_writer(writer)
         .with_ansi(ansi);
-    if std::env::var_os("JOURNAL_STREAM").is_some() {
-        builder.without_time().init();
+    let installed = if std::env::var_os("JOURNAL_STREAM").is_some() {
+        builder.without_time().try_init()
     } else {
-        builder.init();
+        builder.try_init()
+    };
+    installed.map_err(TracingInitError)?;
+    Ok(TracingGuard(guard))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_second_initialization_is_an_error() {
+        let option = TracingOption {
+            default_filter: "off",
+            writer: LogWriter::Stderr,
+        };
+
+        let _first = try_init_tracing(option);
+        let second = try_init_tracing(option);
+
+        assert!(
+            second
+                .err()
+                .is_some_and(|e| e.to_string().contains("tracing subscriber"))
+        );
     }
-    TracingGuard(guard)
 }

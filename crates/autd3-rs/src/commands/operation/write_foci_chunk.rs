@@ -1,13 +1,12 @@
-use crate::error::{Error, PayloadError};
+use crate::EncodeError;
+use crate::error::Error;
 use crate::geometry::Device;
-use crate::params::{FOCUS_WORDS, MAX_FOCI_TOTAL};
+use crate::params::FOCUS_WORDS;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{ControlPoints, PatternBank};
 
-use super::{Distribution, Operation};
+use super::{Distribution, Encoded, Operation, write_header};
 use autd3_cpu_wire::payload::WriteFociPayload;
-use zerocopy::FromBytes;
-use zerocopy::little_endian::{U16, U32};
 
 #[derive(Clone, Debug)]
 pub(crate) struct WriteFociChunk<'a, const N: usize> {
@@ -25,33 +24,14 @@ impl<const N: usize> Operation for WriteFociChunk<'_, N> {
         Distribution::PerDevice
     }
 
-    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Cmd, Error> {
-        let total = self.points.len() * N;
-        if total == 0 {
-            return Err(PayloadError::FociEmpty.into());
-        }
-        let base = self.index_offset * N;
-        let end = base + total;
-        if end > MAX_FOCI_TOTAL {
-            return Err(PayloadError::FociWriteExceedsCapacity {
-                offset: base,
-                end,
-                capacity: MAX_FOCI_TOTAL,
-            }
-            .into());
-        }
-
+    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         let start = self.focus_start;
-        let word_offset = u32::try_from((base + start) * FOCUS_WORDS).expect("bounded by capacity");
-        let len = u16::try_from(self.focus_len * FOCUS_WORDS * 2).expect("bounded by frame");
-
-        let (h, rest) = WriteFociPayload::mut_from_prefix(&mut out[..]).unwrap();
-        *h = WriteFociPayload {
-            bank: self.bank.as_u8(),
-            reserved: 0,
-            offset: U32::new(word_offset),
-            data_len: U16::new(len),
-        };
+        let header = WriteFociPayload::new(
+            self.bank,
+            (self.index_offset * N).saturating_add(start),
+            self.focus_len,
+        )?;
+        let rest = write_header(out, &header);
         for (dst, k) in rest
             .as_chunks_mut::<8>()
             .0
@@ -59,9 +39,12 @@ impl<const N: usize> Operation for WriteFociChunk<'_, N> {
             .zip(start..start + self.focus_len)
         {
             let focus = self.points[k / N].focus(device, k % N);
-            *dst = focus.encode()?.to_le_bytes();
+            *dst = focus.encode().map_err(EncodeError::from)?.to_le_bytes();
         }
-        Ok(Cmd::WriteFociBuffer)
+        Ok(Encoded::header_with_data::<WriteFociPayload>(
+            Cmd::WriteFociBuffer,
+            self.focus_len * FOCUS_WORDS * 2,
+        ))
     }
 }
 
@@ -69,8 +52,7 @@ impl<const N: usize> Operation for WriteFociChunk<'_, N> {
 mod tests {
     use super::*;
     use crate::geometry::Point3;
-    use crate::test_utils::test_device;
-    const HEADER_BYTES: usize = core::mem::size_of::<WriteFociPayload>();
+    use crate::test_utils::{encode, test_device};
 
     #[test]
     fn write_foci_chunk_writes_its_own_window() {
@@ -85,14 +67,19 @@ mod tests {
             focus_len: 2,
         };
 
-        let mut out = [0u8; PAYLOAD_BYTES];
-        let cmd = op.encode(&test_device(0), &mut out).unwrap();
+        let (cmd, out) = encode(&op).unwrap();
 
-        assert_eq!(cmd, Cmd::WriteFociBuffer);
+        assert_eq!(
+            cmd,
+            Encoded::header_with_data::<WriteFociPayload>(Cmd::WriteFociBuffer, 2 * 8)
+        );
         let word_offset = u32::try_from((10 + 2) * FOCUS_WORDS).unwrap();
         assert_eq!(&out[2..6], &word_offset.to_le_bytes());
-        assert_eq!(&out[6..8], &u16::try_from(2 * 8).unwrap().to_le_bytes());
-        let first = u64::from_le_bytes(out[HEADER_BYTES..HEADER_BYTES + 8].try_into().unwrap());
+        let first = u64::from_le_bytes(
+            out[size_of::<WriteFociPayload>()..][..8]
+                .try_into()
+                .unwrap(),
+        );
         assert_eq!(first, points[2].focus(&test_device(0), 0).encode().unwrap());
     }
 
@@ -114,7 +101,11 @@ mod tests {
 
         let mut out = [0u8; PAYLOAD_BYTES];
         op.encode(&device, &mut out).unwrap();
-        let f = u64::from_le_bytes(out[HEADER_BYTES..HEADER_BYTES + 8].try_into().unwrap());
+        let f = u64::from_le_bytes(
+            out[size_of::<WriteFociPayload>()..][..8]
+                .try_into()
+                .unwrap(),
+        );
         assert_eq!(f & 0x3_FFFF, 40);
         assert_eq!((f >> 18) & 0x3_FFFF, 80);
         assert_eq!((f >> 36) & 0x3_FFFF, 120);

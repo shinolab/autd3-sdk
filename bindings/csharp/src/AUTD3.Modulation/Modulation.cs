@@ -83,7 +83,10 @@ namespace AUTD3
         internal static extern int autd3_modulation_fourier(SineComponentNative[] components, UIntPtr numComponents, IntPtr option, ModulationBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_modulation_constant(byte intensity, ModulationBufferHandle buffer);
+        internal static extern int autd3_modulation_buffer_copy_to(ModulationBufferHandle buffer, [Out] byte[] dst, UIntPtr len);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_modulation_constant(byte amplitude, ModulationBufferHandle buffer);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_modulation_radiation_pressure(ModulationBufferHandle src, ModulationBufferHandle dst);
@@ -92,7 +95,16 @@ namespace AUTD3
         internal static extern int autd3_modulation_radiation_pressure_inplace(ModulationBufferHandle buffer);
 
         [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_modulation(byte bank, IntPtr samplingConfig, ModulationBufferHandle modulationBuffer, ushort loopRep, byte transitionMode, ulong transitionValue, uint transitionMarginNs);
+        internal static extern IntPtr autd3_op_modulation(byte bank, IntPtr samplingConfig, ModulationBufferHandle modulationBuffer, ushort loopRep, byte transitionMode, ulong transitionValue);
+
+        [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr autd3_op_write_modulation_buffer(byte bank, uint offset, ModulationBufferHandle modulationBuffer);
+
+        [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr autd3_op_config_modulation(byte bank, IntPtr samplingConfig, uint size, ushort rep);
+
+        [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr autd3_op_activate_modulation_bank(byte bank, byte transitionMode, ulong transitionValue);
     }
 
     internal sealed class ModulationBufferHandle : Autd3SafeHandle
@@ -138,6 +150,16 @@ namespace AUTD3
 
         public int Length => (int)NativeModulation.autd3_modulation_buffer_len(Handle);
 
+        public byte[] ToArray()
+        {
+            var data = new byte[Length];
+            if (NativeModulation.autd3_modulation_buffer_copy_to(Handle, data, (UIntPtr)data.Length) != 0)
+            {
+                throw new Autd3Exception("failed to copy the modulation buffer");
+            }
+            return data;
+        }
+
         public byte this[int index]
         {
             get
@@ -169,38 +191,32 @@ namespace AUTD3
 
     public readonly struct SineOption
     {
-        public byte Amplitude { get; init; } = 0xFF;
-        public byte Offset { get; init; } = 0x80;
-        public Angle Phase { get; init; } = default;
-        public bool Clamp { get; init; } = false;
-        public SamplingConfig SamplingConfig { get; init; } = SamplingConfig.Freq4k;
-
-        public SineOption()
-        {
-        }
+        private readonly byte? _amplitude;
+        public byte Amplitude { get => _amplitude ?? 0xFF; init => _amplitude = value; }
+        private readonly byte? _offset;
+        public byte Offset { get => _offset ?? 0x80; init => _offset = value; }
+        public Angle Phase { get; init; }
+        public bool Clamp { get; init; }
+        private readonly SamplingConfig? _samplingConfig;
+        public SamplingConfig SamplingConfig { get => _samplingConfig ?? SamplingConfig.Freq4k; init => _samplingConfig = value; }
     }
 
     public readonly struct SquareOption
     {
-        public byte Low { get; init; } = 0x00;
-        public byte High { get; init; } = 0xFF;
-        public float Duty { get; init; } = 0.5f;
-        public SamplingConfig SamplingConfig { get; init; } = SamplingConfig.Freq4k;
-
-        public SquareOption()
-        {
-        }
+        public byte Low { get; init; }
+        private readonly byte? _high;
+        public byte High { get => _high ?? 0xFF; init => _high = value; }
+        private readonly float? _duty;
+        public float Duty { get => _duty ?? 0.5f; init => _duty = value; }
+        private readonly SamplingConfig? _samplingConfig;
+        public SamplingConfig SamplingConfig { get => _samplingConfig ?? SamplingConfig.Freq4k; init => _samplingConfig = value; }
     }
 
     public readonly struct FourierOption
     {
-        public float? ScaleFactor { get; init; } = null;
-        public bool Clamp { get; init; } = false;
-        public byte Offset { get; init; } = 0x00;
-
-        public FourierOption()
-        {
-        }
+        public float? ScaleFactor { get; init; }
+        public bool Clamp { get; init; }
+        public byte Offset { get; init; }
     }
 
     public readonly struct SineComponent
@@ -250,22 +266,22 @@ namespace AUTD3
 
         public static ModulationBuffer ModulationBuffer() => new ModulationBuffer();
 
-        public static uint SamplesPerPeriod(ushort divider, uint freqHz)
+        public static uint? SamplesPerPeriod(ushort divider, Freq freq)
         {
-            if (!NativeModulation.autd3_modulation_samples_per_period(divider, freqHz, out var value))
+            if (freq.Mode != AUTD3.Freq.FreqMode.IntExact)
             {
-                throw new Autd3Exception("samples_per_period is not an integer for the given frequency");
+                throw new Autd3Exception("samples_per_period requires an integer frequency", Autd3ErrorCode.InvalidArgument);
             }
-            return value;
+            return NativeModulation.autd3_modulation_samples_per_period(divider, freq.HzIntValue, out var value) ? value : null;
         }
 
-        IntPtr ICommand.CreateOp()
+        IntPtr ICommand.CreateOp(Geometry geometry)
         {
             var sampling = _samplingConfig.CreateHandle();
             try
             {
                 return NativeModulation.autd3_op_modulation(
-                    (byte)_bank, sampling, _buffer.Handle, _loopBehavior.Rep, _transitionMode.Mode, _transitionMode.Value, _transitionMode.MarginNs);
+                    (byte)_bank, sampling, _buffer.Handle, _loopBehavior.Rep, _transitionMode.Mode, _transitionMode.Value);
             }
             finally
             {
@@ -337,9 +353,9 @@ namespace AUTD3
             }
         }
 
-        public static void Constant(byte intensity, ModulationBuffer dst)
+        public static void Constant(byte amplitude, ModulationBuffer dst)
         {
-            if (NativeModulation.autd3_modulation_constant(intensity, dst.Handle) != 0)
+            if (NativeModulation.autd3_modulation_constant(amplitude, dst.Handle) != 0)
             {
                 throw new Autd3Exception("constant modulation failed");
             }

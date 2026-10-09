@@ -32,7 +32,7 @@ fn ws_url() -> String {
     };
     let host = location
         .host()
-        .unwrap_or_else(|_| "127.0.0.1:8080".to_string());
+        .unwrap_or_else(|_| "127.0.0.1:8081".to_string());
     format!("{scheme}://{host}/ws")
 }
 
@@ -236,19 +236,9 @@ fn App() -> Element {
             }
         }
     };
-    let on_up = {
+    let on_release = {
         let renderer = renderer.clone();
-        move |_| {
-            dragging.set(false);
-            gizmo_drag.set(false);
-            if let Some(r) = renderer.borrow_mut().as_mut() {
-                r.end_gizmo_drag();
-            }
-        }
-    };
-    let on_leave = {
-        let renderer = renderer.clone();
-        move |_| {
+        move |_: Event<MouseData>| {
             dragging.set(false);
             gizmo_drag.set(false);
             if let Some(r) = renderer.borrow_mut().as_mut() {
@@ -298,10 +288,10 @@ fn App() -> Element {
     let on_root_move = {
         let ctx = ctx.clone();
         move |e: Event<MouseData>| {
-            if let Some((kind, axis, start_x, start_val)) = num_drag() {
+            if let Some((field, axis, start_x, start_val)) = num_drag() {
                 let delta = (e.client_coordinates().x - start_x) as f32 * 0.5;
-                let v = ctx.clamp_field(kind, axis, start_val + delta);
-                ctx.apply_field(kind, axis, v);
+                let v = ctx.clamp_field(field, axis, start_val + delta);
+                ctx.apply_field(field, axis, v);
             }
         }
     };
@@ -355,8 +345,8 @@ fn App() -> Element {
                         id: "field",
                         class: "block size-full rounded shadow cursor-grab",
                         onmousedown: on_down,
-                        onmouseup: on_up,
-                        onmouseleave: on_leave,
+                        onmouseup: on_release.clone(),
+                        onmouseleave: on_release,
                         onmousemove: on_move,
                         onwheel: on_wheel,
                     }

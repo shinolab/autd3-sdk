@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
 use crate::clean::{CleanArgs, Cleaner};
-use crate::util::{capture_lenient, run, run_built_bin};
+use crate::util::{cargo_bin, cargo_build_args, on_path, run};
 
 #[derive(Subcommand)]
 pub enum FirmwareCmd {
@@ -56,13 +56,9 @@ pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
 
 fn bundle(root: &Path, args: &BundleArgs) -> Result<()> {
     crate::bump::firmware_series(root)?;
-    let component = crate::component::COMPONENTS
-        .iter()
-        .find(|c| c.name == "firmware")
-        .context("no `firmware` component")?;
-    let version = component.current_version(root)?;
+    let version = crate::component::find("firmware")?.current_version(root)?;
 
-    let cpu = crate::cpu::cpu_build(root, false)?;
+    let cpu = crate::cpu::cpu_build(root)?;
     let fpga = crate::fpga::fpga_build(root, args.force)?;
 
     let stem = format!("autd3-sdk-firmware-v{version}");
@@ -90,7 +86,7 @@ fn bundle(root: &Path, args: &BundleArgs) -> Result<()> {
 fn upload(root: &Path, version: &str, archive: &Path) -> Result<()> {
     let tag = format!("firmware-v{version}");
 
-    if capture_lenient("gh", &["--version"], root).is_err() {
+    if !on_path("gh") {
         bail!(
             "`gh` is required for --upload but was not found on PATH; install the GitHub CLI (https://cli.github.com/) or upload {} manually to the `{tag}` release",
             archive.display()
@@ -154,14 +150,10 @@ fn write_zip(archive: &Path, entries: &[(String, PathBuf)]) -> Result<()> {
 fn write(root: &Path, args: &WriteArgs) -> Result<()> {
     run(
         "cargo",
-        ["build", "-p", "autd3-firmware-writer", "--release"],
+        cargo_build_args("autd3-firmware-writer", None, false),
         root,
     )?;
-    let bin = root.join("target").join("release").join(if cfg!(windows) {
-        "autd3-firmware-writer.exe"
-    } else {
-        "autd3-firmware-writer"
-    });
+    let bin = cargo_bin(root, None, false, "autd3-firmware-writer");
 
     let mut cli_args: Vec<String> = Vec::new();
     if let Some(version) = &args.version {
@@ -179,5 +171,5 @@ fn write(root: &Path, args: &WriteArgs) -> Result<()> {
         cli_args.push("--list".to_string());
     }
 
-    run_built_bin(&bin, &cli_args, true, root)
+    run(&bin.to_string_lossy(), &cli_args, root)
 }

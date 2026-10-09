@@ -6,7 +6,7 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Core types and link abstraction shared across the AUTD3 phased-array sdk crates."
+description = "Core types shared across the AUTD3 SDK crates."
 readme = "README.md"
 keywords = ["autd3", "haptics"]
 categories = ["science"]
@@ -20,13 +20,10 @@ serde = ["dep:serde", "dep:serde_json"]
 
 [dependencies]
 autd3-cpu-wire.workspace = true
-chrono = { version = "0.4.45", default-features = false, features = ["std"] }
-core_affinity.workspace = true
 nalgebra.workspace = true
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 thiserror.workspace = true
-thread-priority.workspace = true
 tracing.workspace = true
 tracing-appender = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, optional = true }
@@ -35,6 +32,9 @@ zerocopy.workspace = true
 [dev-dependencies]
 rstest.workspace = true
 approx.workspace = true
+async-lock.workspace = true
+futures-channel.workspace = true
+pollster.workspace = true
 
 [lints]
 workspace = true

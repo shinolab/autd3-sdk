@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use clap::Args;
+use walkdir::WalkDir;
 
 const WALK_SKIP: &[&str] = &[".git", "target", "node_modules", ".venv"];
 
@@ -131,9 +132,7 @@ impl<'a> Cleaner<'a> {
     }
 
     pub fn nested(&mut self, rel: &str, names: &[&str]) -> Result<()> {
-        let mut found = Vec::new();
-        collect_nested(&self.root.join(rel), names, &mut found);
-        for path in found {
+        for path in collect_nested(&self.root.join(rel), names) {
             self.remove(&path)?;
         }
         Ok(())
@@ -182,32 +181,45 @@ fn sorted_entries(dir: &Path) -> Vec<PathBuf> {
     paths
 }
 
-fn collect_nested(dir: &Path, names: &[&str], out: &mut Vec<PathBuf>) {
-    for path in sorted_entries(dir) {
-        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
-            continue;
+fn collect_nested(dir: &Path, names: &[&str]) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    let mut walker = WalkDir::new(dir)
+        .min_depth(1)
+        .follow_links(true)
+        .sort_by_file_name()
+        .into_iter();
+    while let Some(entry) = walker.next() {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(e) => {
+                let broken = e.path().filter(|path| {
+                    path.file_name()
+                        .and_then(|name| name.to_str())
+                        .is_some_and(|name| names.contains(&name))
+                });
+                found.extend(broken.map(Path::to_path_buf));
+                continue;
+            }
         };
-        if names.contains(&name) {
-            out.push(path);
-            continue;
+        let name = entry.file_name().to_str();
+        let wanted = name.is_some_and(|name| names.contains(&name));
+        let skipped = name.is_none_or(|name| WALK_SKIP.contains(&name));
+        if entry.file_type().is_dir() && (wanted || skipped) {
+            walker.skip_current_dir();
         }
-        if path.is_dir() && !WALK_SKIP.contains(&name) {
-            collect_nested(&path, names, out);
+        if wanted {
+            found.push(entry.into_path());
         }
     }
+    found
 }
 
 fn dir_size(dir: &Path) -> u64 {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return 0;
-    };
-    entries
+    WalkDir::new(dir)
+        .into_iter()
         .flatten()
-        .map(|entry| match entry.file_type() {
-            Ok(kind) if kind.is_dir() => dir_size(&entry.path()),
-            Ok(kind) if kind.is_file() => entry.metadata().map_or(0, |meta| meta.len()),
-            _ => 0,
-        })
+        .filter(|entry| entry.file_type().is_file())
+        .map(|entry| entry.metadata().map_or(0, |meta| meta.len()))
         .sum()
 }
 

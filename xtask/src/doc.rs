@@ -7,11 +7,11 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, value};
+use walkdir::WalkDir;
 
 use crate::clean::{CleanArgs, Cleaner};
-use crate::component::COMPONENTS;
 use crate::py::{WHEELS, develop, ensure_venv, pip_install, venv_python};
-use crate::util::{capture, on_path, run, run_tool};
+use crate::util::{capture, files_under, on_path, run, run_tool};
 
 const FIRMWARE_MARKER: &str = "Firmware v";
 const CRATE_PIN_PREFIX: &str = "autd3-";
@@ -315,8 +315,7 @@ fn preserve_snapshot_versions(doc: &Path, slug: &str) -> Result<()> {
     }
     let tracked = capture("git", &["ls-files", "src/content/docs"], doc)?;
     let tracked: Vec<&str> = tracked.lines().collect();
-    let mut pages = Vec::new();
-    snapshot_pages(&doc.join("src/content/docs"), slug, &mut pages)?;
+    let mut pages = snapshot_pages(&doc.join("src/content/docs"), slug)?;
     pages.sort();
     let mut kept = Vec::new();
     for page in &pages {
@@ -331,7 +330,7 @@ fn preserve_snapshot_versions(doc: &Path, slug: &str) -> Result<()> {
         let frozen = capture("git", &["show", &format!(":./{rel}")], doc)?;
         let mut text =
             fs::read_to_string(page).with_context(|| format!("reading {}", page.display()))?;
-        for (label, spans) in SNAPSHOT_VERSION_SPANS {
+        for (label, spans, _) in SNAPSHOT_VERSION_SPANS {
             let was = spans(&frozen);
             let now = spans(&text);
             if was.len() != now.len() {
@@ -375,22 +374,22 @@ fn preserve_snapshot_versions(doc: &Path, slug: &str) -> Result<()> {
     Ok(())
 }
 
-fn snapshot_pages(dir: &Path, slug: &str, out: &mut Vec<PathBuf>) -> Result<()> {
-    for entry in fs::read_dir(dir).with_context(|| format!("reading {}", dir.display()))? {
-        let path = entry?.path();
-        if path.is_dir() {
-            snapshot_pages(&path, slug, out)?;
-        } else if matches!(
-            path.extension().and_then(|e| e.to_str()),
-            Some("md" | "mdx")
-        ) && path
-            .components()
-            .any(|c| c.as_os_str().to_str() == Some(slug))
-        {
-            out.push(path);
-        }
-    }
-    Ok(())
+fn snapshot_pages(dir: &Path, slug: &str) -> Result<Vec<PathBuf>> {
+    let mut pages = files_under(dir, |_| true)?;
+    pages.retain(|path| {
+        is_page(path)
+            && path
+                .components()
+                .any(|c| c.as_os_str().to_str() == Some(slug))
+    });
+    Ok(pages)
+}
+
+fn is_page(path: &Path) -> bool {
+    matches!(
+        path.extension().and_then(|e| e.to_str()),
+        Some("md" | "mdx")
+    )
 }
 
 fn prune_nested_versions(doc: &Path, slug: &str) -> Result<()> {
@@ -417,24 +416,39 @@ fn prune_nested_versions(doc: &Path, slug: &str) -> Result<()> {
 }
 
 fn remove_dirs_named(dir: &Path, names: &[String], removed: &mut Vec<PathBuf>) -> Result<()> {
-    for entry in fs::read_dir(dir).with_context(|| format!("reading {}", dir.display()))? {
-        let path = entry?.path();
-        if !path.is_dir() {
-            continue;
-        }
-        let name = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or_default();
-        if names.iter().any(|n| n == name) {
-            fs::remove_dir_all(&path)
-                .with_context(|| format!("failed to remove {}", path.display()))?;
-            removed.push(path);
-        } else {
-            remove_dirs_named(&path, names, removed)?;
+    let mut found = Vec::new();
+    let mut walker = WalkDir::new(dir)
+        .min_depth(1)
+        .follow_links(true)
+        .into_iter();
+    while let Some(entry) = walker.next() {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(e) if is_broken_link(&e) => continue,
+            Err(e) => return Err(e).with_context(|| format!("reading {}", dir.display())),
+        };
+        if entry.file_type().is_dir()
+            && entry
+                .file_name()
+                .to_str()
+                .is_some_and(|name| names.iter().any(|n| n == name))
+        {
+            walker.skip_current_dir();
+            found.push(entry.into_path());
         }
     }
+    for path in found {
+        fs::remove_dir_all(&path)
+            .with_context(|| format!("failed to remove {}", path.display()))?;
+        removed.push(path);
+    }
     Ok(())
+}
+
+fn is_broken_link(error: &walkdir::Error) -> bool {
+    error
+        .io_error()
+        .is_some_and(|e| e.kind() == std::io::ErrorKind::NotFound)
 }
 
 fn declare_version_slug(doc: &Path, slug: &str) -> Result<()> {
@@ -585,26 +599,10 @@ fn version_slugs(doc: &Path) -> Result<Vec<String>> {
     Ok(slugs)
 }
 
-fn live_pages(dir: &Path, slugs: &[String], out: &mut Vec<PathBuf>) -> Result<()> {
-    for entry in fs::read_dir(dir).with_context(|| format!("reading {}", dir.display()))? {
-        let path = entry?.path();
-        let name = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or_default()
-            .to_string();
-        if path.is_dir() {
-            if !slugs.contains(&name) {
-                live_pages(&path, slugs, out)?;
-            }
-        } else if matches!(
-            path.extension().and_then(|e| e.to_str()),
-            Some("md" | "mdx")
-        ) {
-            out.push(path);
-        }
-    }
-    Ok(())
+fn live_pages(dir: &Path, slugs: &[String]) -> Result<Vec<PathBuf>> {
+    let mut pages = files_under(dir, |name| !slugs.iter().any(|slug| slug == name))?;
+    pages.retain(|path| is_page(path));
+    Ok(pages)
 }
 
 fn firmware_series_spans(text: &str) -> Vec<(usize, usize, String)> {
@@ -703,7 +701,7 @@ fn crate_version_spans(text: &str) -> Vec<(usize, usize, String)> {
         let Some(len) = text[start..].find('"') else {
             continue;
         };
-        let value = &text[start..start + len];
+        let value = &text[start..][..len];
         if matches!(value.split('.').count(), 2 | 3)
             && value
                 .split('.')
@@ -717,43 +715,58 @@ fn crate_version_spans(text: &str) -> Vec<(usize, usize, String)> {
 
 type Spans = fn(&str) -> Vec<(usize, usize, String)>;
 
-const SNAPSHOT_VERSION_SPANS: &[(&str, Spans)] = &[
-    ("firmware series", firmware_series_spans),
-    ("Unity package version", unity_version_spans),
-    ("console release", console_version_spans),
-    ("crate version", crate_version_spans),
+struct SnapshotVersions {
+    software: String,
+    firmware: String,
+    unity: String,
+    console: String,
+}
+
+type SnapshotPin = fn(&SnapshotVersions, &str) -> String;
+
+const SNAPSHOT_VERSION_SPANS: &[(&str, Spans, SnapshotPin)] = &[
+    ("firmware series", firmware_series_spans, |v, _| {
+        v.firmware.clone()
+    }),
+    ("Unity package version", unity_version_spans, |v, _| {
+        v.unity.clone()
+    }),
+    ("console release", console_version_spans, |v, _| {
+        v.console.clone()
+    }),
+    ("crate version", crate_version_spans, |v, old| {
+        crate_pin(old, &v.software)
+    }),
 ];
+
+fn crate_pin(old: &str, version: &str) -> String {
+    if old.split('.').count() == 2 {
+        version_series(version)
+    } else {
+        version.to_owned()
+    }
+}
 
 fn crate_pin_files(root: &Path, doc: &Path) -> Result<Vec<PathBuf>> {
     let mut files = doc_pages(doc)?;
-    crate_readmes(root, &mut files)?;
+    files.extend(crate_readmes(root)?);
     Ok(files)
 }
 
-fn crate_readmes(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
-    let entries =
-        fs::read_dir(dir).with_context(|| format!("reading directory {}", dir.display()))?;
-    for entry in entries {
-        let path = entry?.path();
-        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
-            continue;
-        };
-        if path.is_dir() {
-            if !name.starts_with('.') && !CRATE_PIN_SKIP_DIRS.contains(&name) {
-                crate_readmes(&path, out)?;
-            }
-        } else if name == "README.md" && dir.join("Cargo.toml").is_file() {
-            out.push(path);
-        }
-    }
-    Ok(())
+fn crate_readmes(dir: &Path) -> Result<Vec<PathBuf>> {
+    let mut readmes = files_under(dir, |name| {
+        !name.starts_with('.') && !CRATE_PIN_SKIP_DIRS.contains(&name)
+    })?;
+    readmes.retain(|path| {
+        path.file_name().is_some_and(|name| name == "README.md")
+            && path.with_file_name("Cargo.toml").is_file()
+    });
+    Ok(readmes)
 }
 
 fn doc_pages(doc: &Path) -> Result<Vec<PathBuf>> {
     let slugs = version_slugs(doc)?;
-    let mut pages = Vec::new();
-    live_pages(&doc.join("src/content/docs"), &slugs, &mut pages)?;
-    Ok(pages)
+    live_pages(&doc.join("src/content/docs"), &slugs)
 }
 
 fn rewrite_spans(root: &Path, spans: Spans, new: &str) -> Result<usize> {
@@ -808,11 +821,7 @@ fn collect_spans_in(files: &[PathBuf], spans: Spans) -> Result<Vec<(PathBuf, Str
 }
 
 fn component_version(root: &Path, name: &str) -> Result<String> {
-    COMPONENTS
-        .iter()
-        .find(|c| c.name == name)
-        .with_context(|| format!("missing `{name}` component"))?
-        .current_version(root)
+    crate::component::find(name)?.current_version(root)
 }
 
 pub fn rewrite_firmware_series(root: &Path, series: &str) -> Result<usize> {
@@ -829,17 +838,8 @@ pub fn rewrite_console_version(root: &Path, version: &str) -> Result<usize> {
 
 pub fn rewrite_crate_version(root: &Path, version: &str) -> Result<usize> {
     let files = crate_pin_files(root, &root.join("doc"))?;
-    let series = version_series(version);
-    rewrite_spans_in(&files, crate_version_spans, &|old| {
-        if old.split('.').count() == 2 {
-            series.clone()
-        } else {
-            version.to_owned()
-        }
-    })
+    rewrite_spans_in(&files, crate_version_spans, &|old| crate_pin(old, version))
 }
-
-type SyncRule<'a> = (&'a str, Spans, &'a dyn Fn(&str) -> String);
 
 pub fn sync_snapshot_versions(root: &Path, slug: &str) -> Result<usize> {
     let doc = root.join("doc");
@@ -849,8 +849,7 @@ pub fn sync_snapshot_versions(root: &Path, slug: &str) -> Result<usize> {
              this series yet"
         );
     }
-    let mut pages = Vec::new();
-    snapshot_pages(&doc.join("src/content/docs"), slug, &mut pages)?;
+    let mut pages = snapshot_pages(&doc.join("src/content/docs"), slug)?;
     pages.sort();
     if pages.is_empty() {
         bail!(
@@ -859,35 +858,16 @@ pub fn sync_snapshot_versions(root: &Path, slug: &str) -> Result<usize> {
         );
     }
 
-    let software = component_version(root, "software")?;
-    let series = version_series(&software);
-    let firmware = format!("{}.x", crate::bump::firmware_series(root)?);
-    let unity = component_version(root, "unity")?;
-    let console = component_version(root, "console")?;
-
-    let crate_pin = |old: &str| {
-        if old.split('.').count() == 2 {
-            series.clone()
-        } else {
-            software.clone()
-        }
+    let versions = SnapshotVersions {
+        software: component_version(root, "software")?,
+        firmware: format!("{}.x", crate::bump::firmware_series(root)?),
+        unity: component_version(root, "unity")?,
+        console: component_version(root, "console")?,
     };
-    let rules: [SyncRule; 4] = [
-        ("firmware series", firmware_series_spans, &|_| {
-            firmware.clone()
-        }),
-        ("Unity package version", unity_version_spans, &|_| {
-            unity.clone()
-        }),
-        ("console release", console_version_spans, &|_| {
-            console.clone()
-        }),
-        ("crate version", crate_version_spans, &crate_pin),
-    ];
 
     let mut total = 0;
-    for (label, spans, new) in rules {
-        let count = rewrite_spans_in(&pages, spans, new)?;
+    for (label, spans, pin) in SNAPSHOT_VERSION_SPANS {
+        let count = rewrite_spans_in(&pages, *spans, &|old| pin(&versions, old))?;
         if count > 0 {
             println!("doc: rewrote the {label} in {count} {slug} page(s)");
         }
@@ -905,38 +885,7 @@ fn version_series(version: &str) -> String {
 fn verify_versions(root: &Path, doc: &Path) -> Result<()> {
     verify_firmware_series(root, doc)?;
     verify_unity_version(root, doc)?;
-    verify_console_version(root, doc)?;
-    verify_crate_version(root, doc)
-}
-
-fn verify_crate_version(root: &Path, doc: &Path) -> Result<()> {
-    let expected = component_version(root, "software")?;
-    let series = version_series(&expected);
-    let files = crate_pin_files(root, doc)?;
-    let found = collect_spans_in(&files, crate_version_spans)?;
-    if found.is_empty() {
-        bail!(
-            "no `{CRATE_PIN_PREFIX}<crate> = \"<version>\"` requirement found in the current docs or \
-             crate READMEs; the install snippets must pin a version (kept in sync with the \
-             [workspace.package] version in Cargo.toml)"
-        );
-    }
-    let offenders: Vec<_> = found
-        .iter()
-        .filter(|(_, version)| *version != expected && *version != series)
-        .map(|(page, version)| format!("{}: {version}", page.display()))
-        .collect();
-    if !offenders.is_empty() {
-        bail!(
-            "docs or crate READMEs tell users to depend on a crate version that is not the current \
-             one (expected `{expected}` or `{series}`):\n  {}\n\
-             run `cargo xtask bump-version software <version>` (it rewrites these files), or fix the \
-             version by hand. frozen version snapshots are exempt: they record the crate version of \
-             their own SDK release.",
-            offenders.join("\n  ")
-        );
-    }
-    Ok(())
+    verify_console_version(root, doc)
 }
 
 fn verify_firmware_series(root: &Path, doc: &Path) -> Result<()> {
@@ -1138,8 +1087,7 @@ fn run_python_samples(root: &Path, doc: &Path) -> Result<()> {
         bail!("python sample runner not found: {}", runner.display());
     }
     let examples_dir = py_codes.join("examples");
-    let mut rels = Vec::new();
-    collect_py(&examples_dir, &examples_dir, &mut rels)?;
+    let mut rels = collect_py(&examples_dir)?;
     rels.sort();
 
     let python = venv_python(&venv);
@@ -1212,28 +1160,30 @@ fn wait_timeout(child: &mut Child, limit: Duration) -> Result<Option<std::proces
     }
 }
 
-fn collect_py(dir: &Path, base: &Path, out: &mut Vec<String>) -> Result<()> {
-    for entry in fs::read_dir(dir).with_context(|| format!("failed to read {}", dir.display()))? {
-        let path = entry?.path();
-        if path.is_dir() {
-            if path.file_name().is_some_and(|n| n == "__pycache__") {
-                continue;
-            }
-            collect_py(&path, base, out)?;
-        } else if path.extension().is_some_and(|e| e == "py") {
+fn collect_py(dir: &Path) -> Result<Vec<String>> {
+    relative_sources(dir, "py", |name| name != "__pycache__")
+}
+
+fn relative_sources(
+    dir: &Path,
+    extension: &str,
+    descend: impl Fn(&str) -> bool,
+) -> Result<Vec<String>> {
+    files_under(dir, descend)?
+        .iter()
+        .filter(|path| path.extension().is_some_and(|e| e == extension))
+        .map(|path| {
             let rel = path
-                .strip_prefix(base)
-                .with_context(|| format!("{} is not under {}", path.display(), base.display()))?;
-            out.push(rel.to_string_lossy().replace('\\', "/"));
-        }
-    }
-    Ok(())
+                .strip_prefix(dir)
+                .with_context(|| format!("{} is not under {}", path.display(), dir.display()))?;
+            Ok(rel.to_string_lossy().replace('\\', "/"))
+        })
+        .collect()
 }
 
 fn sync_examples(samples: &Path, check: bool) -> Result<()> {
     let examples_dir = samples.join("examples");
-    let mut rels = Vec::new();
-    collect_rs(&examples_dir, &examples_dir, &mut rels)?;
+    let mut rels = collect_rs(&examples_dir)?;
     rels.sort();
 
     let manifest_path = samples.join("Cargo.toml");
@@ -1277,19 +1227,8 @@ fn sync_examples(samples: &Path, check: bool) -> Result<()> {
     Ok(())
 }
 
-fn collect_rs(dir: &Path, base: &Path, out: &mut Vec<String>) -> Result<()> {
-    for entry in fs::read_dir(dir).with_context(|| format!("failed to read {}", dir.display()))? {
-        let path = entry?.path();
-        if path.is_dir() {
-            collect_rs(&path, base, out)?;
-        } else if path.extension().is_some_and(|e| e == "rs") {
-            let rel = path
-                .strip_prefix(base)
-                .with_context(|| format!("{} is not under {}", path.display(), base.display()))?;
-            out.push(rel.to_string_lossy().replace('\\', "/"));
-        }
-    }
-    Ok(())
+fn collect_rs(dir: &Path) -> Result<Vec<String>> {
+    relative_sources(dir, "rs", |_| true)
 }
 
 fn npm_install(doc: &Path) -> Result<()> {

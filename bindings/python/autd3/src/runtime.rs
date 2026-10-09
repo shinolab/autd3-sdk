@@ -10,17 +10,12 @@ use pyo3::prelude::*;
 
 type Completion = Box<dyn FnOnce() + Send + 'static>;
 
+#[derive(Clone)]
 pub(crate) struct Completions(Sender<Option<Completion>>);
 
 impl Completions {
     pub(crate) fn post(&self, completion: impl FnOnce() + Send + 'static) {
         let _ = self.0.send(Some(Box::new(completion)));
-    }
-}
-
-impl Clone for Completions {
-    fn clone(&self) -> Self {
-        Self(self.0.clone())
     }
 }
 
@@ -71,32 +66,29 @@ fn shutdown_error() -> PyErr {
     PyRuntimeError::new_err("autd3 runtime has been shut down")
 }
 
-pub(crate) fn completions() -> PyResult<Completions> {
+fn with_runtime<R>(f: impl FnOnce(&Runtime) -> Option<R>) -> PyResult<R> {
     let mut state = STATE.lock().unwrap_or_else(PoisonError::into_inner);
     if matches!(*state, State::Uninit) {
         *state = State::Running(Runtime::new());
     }
     match &*state {
-        State::Running(runtime) => Ok(runtime.completions.clone()),
+        State::Running(runtime) => f(runtime).ok_or_else(shutdown_error),
         State::Shutdown => Err(shutdown_error()),
         State::Uninit => unreachable!(),
     }
 }
 
+pub(crate) fn completions() -> PyResult<Completions> {
+    with_runtime(|runtime| Some(runtime.completions.clone()))
+}
+
 pub(crate) fn spawn<F: Future<Output = ()> + Send + 'static>(future: F) -> PyResult<()> {
-    let mut state = STATE.lock().unwrap_or_else(PoisonError::into_inner);
-    if matches!(*state, State::Uninit) {
-        *state = State::Running(Runtime::new());
-    }
-    match &*state {
-        State::Running(runtime) if runtime.executor.spawn(future) => Ok(()),
-        State::Running(_) | State::Shutdown => Err(shutdown_error()),
-        State::Uninit => unreachable!(),
-    }
+    with_runtime(|runtime| runtime.executor.spawn(future).then_some(()))
 }
 
 #[pyfunction]
 pub(crate) fn _shutdown_runtime(py: Python<'_>) {
+    py.detach(crate::udp::shutdown_emulators);
     let runtime = {
         let mut state = STATE.lock().unwrap_or_else(PoisonError::into_inner);
         match std::mem::replace(&mut *state, State::Shutdown) {
@@ -107,4 +99,5 @@ pub(crate) fn _shutdown_runtime(py: Python<'_>) {
     if let Some(runtime) = runtime {
         py.detach(|| runtime.shutdown());
     }
+    py.detach(crate::logging::flush);
 }

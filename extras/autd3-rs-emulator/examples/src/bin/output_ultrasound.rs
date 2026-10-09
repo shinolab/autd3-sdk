@@ -44,14 +44,8 @@ fn main() -> Result<()> {
 
     let emulator = Emulator::new(geometry);
     let record = emulator.record(async move |r| {
-        let mut builder = r.datagram_builder();
-        builder
-            .push(SetSilencer::disable())
-            .push(Pattern::new(&phases, Intensity::MAX));
-        let datagrams = builder.build()?;
-        for frame in &datagrams {
-            r.send_checked(frame).await?;
-        }
+        r.send(SetSilencer::disable()).await?;
+        r.send(Pattern::new(&phases, Intensity::MAX)).await?;
         r.tick(ULTRASOUND_PERIOD * 30)?;
         Ok(())
     })?;

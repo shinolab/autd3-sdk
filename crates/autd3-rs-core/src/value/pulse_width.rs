@@ -21,27 +21,21 @@ enum PulseWidthInner {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
-pub struct PulseWidth {
-    inner: PulseWidthInner,
-}
+pub struct PulseWidth(PulseWidthInner);
 
 impl PulseWidth {
     #[must_use]
     pub const fn new(pulse_width: u16) -> Self {
-        Self {
-            inner: PulseWidthInner::Raw(pulse_width),
-        }
+        Self(PulseWidthInner::Raw(pulse_width))
     }
 
     #[must_use]
     pub const fn from_duty(duty: f32) -> Self {
-        Self {
-            inner: PulseWidthInner::Duty(duty),
-        }
+        Self(PulseWidthInner::Duty(duty))
     }
 
     pub fn pulse_width(self) -> Result<u16, PulseWidthError> {
-        let pulse_width = match self.inner {
+        let pulse_width = match self.0 {
             PulseWidthInner::Duty(duty) => {
                 if !(0.0..1.0).contains(&duty) {
                     return Err(PulseWidthError::DutyRatioOutOfRange(duty));
