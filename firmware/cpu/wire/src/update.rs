@@ -1,3 +1,4 @@
+use crc::{CRC_32_ISO_HDLC, Crc, Table};
 use zerocopy::little_endian::U32;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
@@ -12,7 +13,6 @@ pub const SLOT_HEADER_BYTES: u32 = FLASH_PAGE_BYTES;
 pub const SLOT_IMAGE_CAPACITY: u32 = SLOT_BYTES - SLOT_HEADER_BYTES;
 pub const IMAGE_MAGIC: u32 = u32::from_le_bytes(*b"AUT2");
 pub const IMAGE_VECTOR_BYTES: u32 = 0x40;
-pub const IMAGE_VECTOR_LOAD_ADDR: u32 = 0x0000_0000;
 pub const IMAGE_RESET_VECTOR_OFFSET: u32 = 0x20;
 pub const IMAGE_APP_LOAD_ADDR: u32 = 0x0004_0000;
 pub const ATCM_APP_REGION_END: u32 = 0x0007_0000;
@@ -60,16 +60,29 @@ impl Slot {
     }
 }
 
-pub const IMAGE_STATUS_NORMAL: u32 = 0xFFFF_FFFF;
-pub const IMAGE_STATUS_TRIAL: u32 = 0x5A5A_5A5A;
-pub const IMAGE_STATUS_CONFIRMED: u32 = 0x0000_0000;
+crate::wire_enum_u32! {
+    pub enum ImageStatus {
+        Normal = 0xFFFF_FFFF,
+        Trial = 0x5A5A_5A5A,
+        Confirmed = 0x0000_0000,
+    }
+}
+
+crate::wire_enum_u8! {
+    pub enum RunningImage {
+        Unknown = 0,
+        Confirmed = 1,
+        Unconfirmed = 2,
+    }
+}
+
 pub const IMAGE_ATTEMPTS_UNTRIED: u32 = 0xFFFF_FFFF;
 pub const IMAGE_MAX_ATTEMPTS: u32 = 1;
 
 pub const IMAGE_HEADER_STATUS_OFFSET: u32 = 16;
 pub const IMAGE_HEADER_ATTEMPTS_OFFSET: u32 = 20;
 
-const _: () = assert!(IMAGE_STATUS_CONFIRMED & !IMAGE_STATUS_TRIAL == 0);
+const _: () = assert!(ImageStatus::Confirmed.as_u32() & !ImageStatus::Trial.as_u32() == 0);
 const _: () = assert!(IMAGE_MAX_ATTEMPTS >= 1 && IMAGE_MAX_ATTEMPTS <= u32::BITS);
 
 #[must_use]
@@ -100,21 +113,21 @@ const _: () =
 impl ImageHeader {
     #[must_use]
     pub fn new(generation: u32, length: u32, crc32: u32) -> Self {
-        Self::with_status(generation, length, crc32, IMAGE_STATUS_NORMAL)
+        Self::with_status(generation, length, crc32, ImageStatus::Normal)
     }
 
     #[must_use]
     pub fn new_trial(generation: u32, length: u32, crc32: u32) -> Self {
-        Self::with_status(generation, length, crc32, IMAGE_STATUS_TRIAL)
+        Self::with_status(generation, length, crc32, ImageStatus::Trial)
     }
 
-    fn with_status(generation: u32, length: u32, crc32: u32, status: u32) -> Self {
+    fn with_status(generation: u32, length: u32, crc32: u32, status: ImageStatus) -> Self {
         Self {
             magic: U32::new(IMAGE_MAGIC),
             generation: U32::new(generation),
             length: U32::new(length),
             crc32: U32::new(crc32),
-            status: U32::new(status),
+            status: U32::new(status.as_u32()),
             attempts: U32::new(IMAGE_ATTEMPTS_UNTRIED),
         }
     }
@@ -125,15 +138,20 @@ impl ImageHeader {
     }
 
     #[must_use]
+    pub fn status(&self) -> Option<ImageStatus> {
+        ImageStatus::from_u32(self.status.get())
+    }
+
+    #[must_use]
     pub fn is_trial(&self) -> bool {
-        self.status.get() == IMAGE_STATUS_TRIAL
+        self.status() == Some(ImageStatus::Trial)
     }
 
     #[must_use]
     pub fn needs_confirmation(&self) -> bool {
         !matches!(
-            self.status.get(),
-            IMAGE_STATUS_NORMAL | IMAGE_STATUS_CONFIRMED
+            self.status(),
+            Some(ImageStatus::Normal | ImageStatus::Confirmed)
         )
     }
 
@@ -144,63 +162,39 @@ impl ImageHeader {
 
     #[must_use]
     pub fn is_boot_eligible(&self) -> bool {
-        match self.status.get() {
-            IMAGE_STATUS_NORMAL | IMAGE_STATUS_CONFIRMED => true,
-            IMAGE_STATUS_TRIAL => self.attempts_used() < IMAGE_MAX_ATTEMPTS,
-            _ => false,
+        match self.status() {
+            Some(ImageStatus::Normal | ImageStatus::Confirmed) => true,
+            Some(ImageStatus::Trial) => self.attempts_used() < IMAGE_MAX_ATTEMPTS,
+            None => false,
         }
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct SlotCandidate {
-    pub generation: u32,
-    pub eligible: bool,
-}
-
 #[must_use]
-pub fn select_slot(a: Option<u32>, b: Option<u32>) -> Option<(Slot, u32)> {
+pub fn select_slot(a: Option<u32>, b: Option<u32>) -> Option<Slot> {
     match (a, b) {
-        (Some(ga), Some(gb)) if gb > ga => Some((Slot::B, gb)),
-        (Some(ga), _) => Some((Slot::A, ga)),
-        (None, Some(gb)) => Some((Slot::B, gb)),
+        (Some(ga), Some(gb)) if gb > ga => Some(Slot::B),
+        (Some(_), _) => Some(Slot::A),
+        (None, Some(_)) => Some(Slot::B),
         (None, None) => None,
     }
 }
 
 #[must_use]
-pub fn select_boot_slot(a: Option<SlotCandidate>, b: Option<SlotCandidate>) -> Option<(Slot, u32)> {
-    let eligible = |c: Option<SlotCandidate>| c.filter(|c| c.eligible).map(|c| c.generation);
-    let any = |c: Option<SlotCandidate>| c.map(|c| c.generation);
+pub fn select_boot_slot(a: Option<&ImageHeader>, b: Option<&ImageHeader>) -> Option<Slot> {
+    let eligible = |h: Option<&ImageHeader>| {
+        h.filter(|h| h.is_boot_eligible())
+            .map(|h| h.generation.get())
+    };
+    let any = |h: Option<&ImageHeader>| h.map(|h| h.generation.get());
     select_slot(eligible(a), eligible(b)).or_else(|| select_slot(any(a), any(b)))
 }
 
-pub const CRC32_INIT: u32 = 0xFFFF_FFFF;
+pub static CRC32: Crc<u32, Table<1>> = Crc::<u32, Table<1>>::new(&CRC_32_ISO_HDLC);
 
 #[must_use]
-pub const fn crc32_update(mut crc: u32, bytes: &[u8]) -> u32 {
-    let mut i = 0;
-    while i < bytes.len() {
-        crc ^= bytes[i] as u32;
-        let mut bit = 0;
-        while bit < 8 {
-            let mask = 0u32.wrapping_sub(crc & 1);
-            crc = (crc >> 1) ^ (0xEDB8_8320 & mask);
-            bit += 1;
-        }
-        i += 1;
-    }
-    crc
-}
-
-#[must_use]
-pub const fn crc32_finish(crc: u32) -> u32 {
-    !crc
-}
-
-#[must_use]
-pub const fn crc32(bytes: &[u8]) -> u32 {
-    crc32_finish(crc32_update(CRC32_INIT, bytes))
+pub fn crc32(bytes: &[u8]) -> u32 {
+    CRC32.checksum(bytes)
 }
 
 #[cfg(test)]
@@ -216,19 +210,20 @@ mod tests {
     #[test]
     fn crc32_streams_in_pieces() {
         let whole = crc32(b"hello world");
-        let mut crc = crc32_update(CRC32_INIT, b"hello ");
-        crc = crc32_update(crc, b"world");
-        assert_eq!(crc32_finish(crc), whole);
+        let mut digest = CRC32.digest();
+        digest.update(b"hello ");
+        digest.update(b"world");
+        assert_eq!(digest.finalize(), whole);
     }
 
     #[test]
     fn slot_selection_prefers_the_newest_generation_and_a_on_ties() {
         assert_eq!(select_slot(None, None), None);
-        assert_eq!(select_slot(Some(3), None), Some((Slot::A, 3)));
-        assert_eq!(select_slot(None, Some(7)), Some((Slot::B, 7)));
-        assert_eq!(select_slot(Some(3), Some(7)), Some((Slot::B, 7)));
-        assert_eq!(select_slot(Some(9), Some(7)), Some((Slot::A, 9)));
-        assert_eq!(select_slot(Some(5), Some(5)), Some((Slot::A, 5)));
+        assert_eq!(select_slot(Some(3), None), Some(Slot::A));
+        assert_eq!(select_slot(None, Some(7)), Some(Slot::B));
+        assert_eq!(select_slot(Some(3), Some(7)), Some(Slot::B));
+        assert_eq!(select_slot(Some(9), Some(7)), Some(Slot::A));
+        assert_eq!(select_slot(Some(5), Some(5)), Some(Slot::A));
     }
 
     #[test]
@@ -262,7 +257,10 @@ mod tests {
         assert!(trial.needs_confirmation());
         assert_eq!(trial.attempts_used(), 0);
         assert!(trial.is_boot_eligible());
-        assert_eq!(IMAGE_STATUS_TRIAL & normal.status.get(), IMAGE_STATUS_TRIAL);
+        assert_eq!(
+            ImageStatus::Trial.as_u32() & normal.status.get(),
+            ImageStatus::Trial.as_u32()
+        );
 
         let before = trial.attempts.get();
         trial.attempts = U32::new(next_attempts(before));
@@ -270,7 +268,7 @@ mod tests {
         assert_eq!(trial.attempts_used(), 1);
         assert!(!trial.is_boot_eligible());
 
-        trial.status = U32::new(IMAGE_STATUS_CONFIRMED);
+        trial.status = U32::new(ImageStatus::Confirmed.as_u32());
         assert!(!trial.needs_confirmation());
         assert!(trial.is_boot_eligible());
     }
@@ -278,7 +276,7 @@ mod tests {
     #[test]
     fn an_interrupted_status_write_is_not_eligible() {
         let mut h = ImageHeader::new_trial(2, 100, 0);
-        h.status = U32::new(IMAGE_STATUS_TRIAL & 0x00FF_FFFF);
+        h.status = U32::new(ImageStatus::Trial.as_u32() & 0x00FF_FFFF);
         assert!(h.needs_confirmation());
         assert!(!h.is_trial());
         assert!(!h.is_boot_eligible());
@@ -286,23 +284,26 @@ mod tests {
 
     #[test]
     fn untried_trials_boot_and_tried_ones_fall_back() {
-        let ok = |generation| {
-            Some(SlotCandidate {
-                generation,
-                eligible: true,
-            })
-        };
+        let ok = |generation| ImageHeader::new(generation, 100, 0);
         let spent = |generation| {
-            Some(SlotCandidate {
-                generation,
-                eligible: false,
-            })
+            let mut h = ImageHeader::new_trial(generation, 100, 0);
+            h.attempts = U32::new(next_attempts(h.attempts.get()));
+            h
         };
-        assert_eq!(select_boot_slot(ok(1), ok(2)), Some((Slot::B, 2)));
-        assert_eq!(select_boot_slot(ok(1), spent(2)), Some((Slot::A, 1)));
-        assert_eq!(select_boot_slot(spent(3), ok(2)), Some((Slot::B, 2)));
-        assert_eq!(select_boot_slot(spent(1), spent(2)), Some((Slot::B, 2)));
-        assert_eq!(select_boot_slot(None, spent(2)), Some((Slot::B, 2)));
+        assert_eq!(select_boot_slot(Some(&ok(1)), Some(&ok(2))), Some(Slot::B));
+        assert_eq!(
+            select_boot_slot(Some(&ok(1)), Some(&spent(2))),
+            Some(Slot::A)
+        );
+        assert_eq!(
+            select_boot_slot(Some(&spent(3)), Some(&ok(2))),
+            Some(Slot::B)
+        );
+        assert_eq!(
+            select_boot_slot(Some(&spent(1)), Some(&spent(2))),
+            Some(Slot::B)
+        );
+        assert_eq!(select_boot_slot(None, Some(&spent(2))), Some(Slot::B));
         assert_eq!(select_boot_slot(None, None), None);
     }
 
