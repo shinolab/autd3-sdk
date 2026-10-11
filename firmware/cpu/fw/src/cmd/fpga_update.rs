@@ -348,7 +348,9 @@ impl Cpu {
             return;
         }
         self.fpga_update.reconfig_failed.set(!reconfigured);
-        let _ = fpga::init(port, self.config().fpga_wait_update_max_polls);
+        if fpga::init(port, self.config().fpga_wait_update_max_polls).is_err() {
+            self.count_boot_failure();
+        }
         self.fpga_update.state.set(State::Idle);
     }
 }
@@ -366,6 +368,7 @@ mod tests {
     use zerocopy::little_endian::U32;
 
     use super::{FPGA_REBOOT_ATTEMPTS, FPGA_REBOOT_DELAY_MS, FPGA_RECONFIG_SETTLE_MS, State};
+    use crate::app::Counter;
     use crate::cmd::update::{UpdateBeginPayload, UpdateChunkPayload};
     use crate::fpga_params::{
         ADDR_FLASH_CMD, ADDR_FLASH_LEN_0, ADDR_FUNCTION_BITS, CtlFlags, FLASH_BUF_BYTES, FlashErr,
@@ -840,6 +843,33 @@ mod tests {
         assert_eq!(h.cpu.fpga_update.state(), State::Idle);
         assert!((0..OUTPUT_MASK_WORDS).all(|i| h.output_mask(i) == 0xFFFF));
         assert_ne!(boot_image(&mut h, seq), FpgaBootImage::ReconfigFailed as u8);
+    }
+
+    #[test]
+    fn a_reinitialization_that_times_out_after_reconfiguration_counts_a_boot_failure() {
+        let (mut h, seq) = activated(47);
+        h.tick_1ms(u32::from(FPGA_REBOOT_DELAY_MS) + u32::from(FPGA_RECONFIG_SETTLE_MS) - 1);
+        assert_eq!(h.counter(Counter::BootFailure), 0);
+        h.port.latch_stuck = true;
+        h.tick_1ms(1);
+        h.port.latch_stuck = false;
+        assert_eq!(h.counter(Counter::BootFailure), 1);
+        assert!(!h.cpu.fpga_update.is_locked());
+        assert!(output_muted(&h));
+
+        h.deliver(&Frame::new(seq, Cmd::Clear));
+        assert_eq!(h.status(), Error::None);
+        assert!(!output_muted(&h));
+        assert_eq!(h.counter(Counter::BootFailure), 1);
+    }
+
+    #[test]
+    fn a_clean_reinitialization_after_reconfiguration_counts_no_boot_failure() {
+        let (mut h, _) = activated(48);
+        h.tick_1ms(u32::from(FPGA_REBOOT_DELAY_MS) + u32::from(FPGA_RECONFIG_SETTLE_MS));
+        assert!(!h.cpu.fpga_update.is_locked());
+        assert!(!output_muted(&h));
+        assert_eq!(h.counter(Counter::BootFailure), 0);
     }
 
     #[test]
