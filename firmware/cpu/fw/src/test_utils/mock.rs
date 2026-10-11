@@ -74,6 +74,8 @@ pub(crate) struct MockPort {
     pub host_idle_ms: Option<u32>,
     pub ptp_unlocked_ms: Option<u32>,
     pub latch_stuck: bool,
+    pub ram_switches: Vec<(u16, u16)>,
+    pub barriers: u32,
     pub flash: Vec<u8>,
     pub flash_fail: bool,
     pub flash_write_fail_after: Option<usize>,
@@ -124,6 +126,8 @@ impl MockPort {
             host_idle_ms: None,
             ptp_unlocked_ms: None,
             latch_stuck: false,
+            ram_switches: Vec::new(),
+            barriers: 0,
             flash: vec![0xFF; FLASH_BYTES as usize],
             flash_fail: false,
             flash_write_fail_after: None,
@@ -172,6 +176,15 @@ impl MockPort {
                         value & !LATCH_MASK.bits()
                     };
                 } else {
+                    if matches!(
+                        addr,
+                        ADDR_MOD_MEM_WR_BANK
+                            | ADDR_MOD_MEM_WR_PAGE
+                            | ADDR_PATTERN_MEM_WR_BANK
+                            | ADDR_PATTERN_MEM_WR_PAGE
+                    ) {
+                        self.ram_switches.push((addr, value));
+                    }
                     self.ctl[(addr & 0xFF) as usize] = value;
                 }
             }
@@ -345,6 +358,7 @@ impl Port for MockPort {
     }
 
     fn memory_barrier(&mut self) {
+        self.barriers += 1;
         self.fpga_flash_target_unflushed = false;
     }
 

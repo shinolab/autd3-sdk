@@ -7,33 +7,38 @@ use crate::proto::{EMISSION_SLOT_WORDS, Error};
 
 pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
     let (p, data) = WritePatternPhasePayload::parse(payload)?;
-    let index = u32::from(p.index.get());
     let depth = p.depth;
     let intensity = p.intensity;
-    for (g, pattern) in data.chunks_exact(depth.bytes_per_pattern()).enumerate() {
-        let offset = (index + g as u32) * EMISSION_SLOT_WORDS;
-        match depth {
-            autd3_cpu_wire::payload::PhaseDepth::Bits8 => fpga::write_ram_words(
-                port,
-                &EMISSION_RAM,
-                p.bank.as_u8(),
-                offset,
-                pattern
-                    .iter()
-                    .map(|phase| u16::from_le_bytes([*phase, intensity])),
-            ),
-            _ => fpga::write_ram_words(
-                port,
-                &EMISSION_RAM,
-                p.bank.as_u8(),
-                offset,
-                pattern
-                    .iter()
-                    .flat_map(|byte| [byte & 0x0F, byte >> 4])
-                    .take(NUM_TRANSDUCERS)
-                    .map(|nibble| u16::from_le_bytes([nibble * 0x11, intensity])),
-            ),
-        }
+    let patterns = (u32::from(p.index.get())..)
+        .map(|index| index * EMISSION_SLOT_WORDS)
+        .zip(data.chunks_exact(depth.bytes_per_pattern()));
+    match depth {
+        autd3_cpu_wire::payload::PhaseDepth::Bits8 => fpga::write_ram_at(
+            port,
+            &EMISSION_RAM,
+            p.bank.as_u8(),
+            patterns.flat_map(|(offset, pattern)| {
+                (offset..).zip(
+                    pattern
+                        .iter()
+                        .map(move |phase| u16::from_le_bytes([*phase, intensity])),
+                )
+            }),
+        ),
+        _ => fpga::write_ram_at(
+            port,
+            &EMISSION_RAM,
+            p.bank.as_u8(),
+            patterns.flat_map(|(offset, pattern)| {
+                (offset..).zip(
+                    pattern
+                        .iter()
+                        .flat_map(|byte| [byte & 0x0F, byte >> 4])
+                        .take(NUM_TRANSDUCERS)
+                        .map(move |nibble| u16::from_le_bytes([nibble * 0x11, intensity])),
+                )
+            }),
+        ),
     }
     Ok(())
 }
@@ -44,8 +49,12 @@ mod tests {
     use std::vec::Vec;
 
     use autd3_cpu_wire::payload::PhaseDepth;
+    use rstest::rstest;
 
-    use crate::fpga_params::{EMISSION_MAX_INDICES, NUM_TRANSDUCERS};
+    use crate::fpga::FPGA_PAGE_WORDS;
+    use crate::fpga_params::{
+        ADDR_PATTERN_MEM_WR_BANK, ADDR_PATTERN_MEM_WR_PAGE, EMISSION_MAX_INDICES, NUM_TRANSDUCERS,
+    };
     use crate::proto::{EMISSION_SLOT_WORDS, Error};
     use crate::test_utils::builders::{
         assert_fpga_unchanged, fpga_snapshot, invalid_bank, write_pattern_phase,
@@ -132,6 +141,108 @@ mod tests {
                     0x4200 | u16::from(bits4_phase(g, t) * 0x11),
                     "pattern {g} transducer {t}"
                 );
+            }
+        }
+    }
+
+    #[rstest]
+    #[case::bits8(PhaseDepth::Bits8)]
+    #[case::bits4(PhaseDepth::Bits4)]
+    fn a_frame_of_patterns_in_one_page_selects_the_bank_and_the_page_once(
+        #[case] depth: PhaseDepth,
+    ) {
+        let mut h = Harness::new();
+        h.port.ram_switches.clear();
+        h.port.barriers = 0;
+        let count = depth.max_count();
+        let data = vec![0x21u8; count * depth.bytes_per_pattern()];
+        h.deliver(&write_pattern_phase(
+            0,
+            1,
+            5,
+            depth as u8,
+            count as u8,
+            0x80,
+            &data,
+        ));
+        assert_eq!(h.status(), Error::None);
+        assert_eq!(
+            h.port.ram_switches,
+            [(ADDR_PATTERN_MEM_WR_BANK, 1), (ADDR_PATTERN_MEM_WR_PAGE, 0)]
+        );
+        assert_eq!(h.port.barriers, 4);
+    }
+
+    #[rstest]
+    #[case::bits8(PhaseDepth::Bits8)]
+    #[case::bits4(PhaseDepth::Bits4)]
+    fn patterns_across_a_page_boundary_land_in_their_slots_with_one_page_switch(
+        #[case] depth: PhaseDepth,
+    ) {
+        let mut h = Harness::new();
+        let slot = EMISSION_SLOT_WORDS as usize;
+        let per_page = FPGA_PAGE_WORDS as usize / slot;
+        let count = depth.max_count();
+        let first = per_page - 2;
+        let data: Vec<u8> = match depth {
+            PhaseDepth::Bits8 => (0..count)
+                .flat_map(|g| (0..NUM_TRANSDUCERS).map(move |t| bits8_phase(g, t)))
+                .collect(),
+            _ => pack_bits4(count),
+        };
+        let expected = |g: usize, t: usize| match depth {
+            PhaseDepth::Bits8 => 0x4200 | u16::from(bits8_phase(g, t)),
+            _ => 0x4200 | u16::from(bits4_phase(g, t) * 0x11),
+        };
+        h.port.ram_switches.clear();
+        h.port.barriers = 0;
+        h.deliver(&write_pattern_phase(
+            0,
+            1,
+            first as u16,
+            depth as u8,
+            count as u8,
+            0x42,
+            &data,
+        ));
+        assert_eq!(h.status(), Error::None);
+        assert_eq!(
+            h.port.ram_switches,
+            [
+                (ADDR_PATTERN_MEM_WR_BANK, 1),
+                (ADDR_PATTERN_MEM_WR_PAGE, 0),
+                (ADDR_PATTERN_MEM_WR_PAGE, 1)
+            ]
+        );
+        assert_eq!(h.port.barriers, 6);
+
+        let mut reference = Harness::new();
+        reference.port.ram_switches.clear();
+        for g in 0..count {
+            let pattern = &data[g * depth.bytes_per_pattern()..][..depth.bytes_per_pattern()];
+            reference.deliver(&write_pattern_phase(
+                g as u8,
+                1,
+                (first + g) as u16,
+                depth as u8,
+                1,
+                0x42,
+                pattern,
+            ));
+            assert_eq!(reference.status(), Error::None);
+        }
+        assert_eq!(reference.port.ram_switches.len(), 2 * count);
+        assert_eq!(h.port.em_ram, reference.port.em_ram);
+        for g in 0..count {
+            for t in 0..NUM_TRANSDUCERS {
+                assert_eq!(
+                    h.emission_word(1, (first + g) * slot + t),
+                    expected(g, t),
+                    "pattern {g} transducer {t}"
+                );
+            }
+            for t in NUM_TRANSDUCERS..slot {
+                assert_eq!(h.emission_word(1, (first + g) * slot + t), 0);
             }
         }
     }
