@@ -277,5 +277,5 @@ pub(crate) fn host_idle_ms() -> Option<u32> {
 }
 
 pub(crate) fn ptp_unlocked_ms() -> Option<u32> {
-    irq::without_irq(|| net().node.ptp_unlocked_ms(timer::now_ms()))
+    crate::cpu().ptp_unlocked_ms()
 }

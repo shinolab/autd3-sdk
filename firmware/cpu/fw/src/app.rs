@@ -80,6 +80,8 @@ pub struct Cpu {
     expected_seq: MainCell<u8>,
     pub(crate) config: MainCell<cmd::cpu_config::CpuConfig>,
     pub(crate) config_reset_requested: AtomicBool,
+    ptp_unlocked: AtomicBool,
+    ptp_unlocked_ms: AtomicU32,
     pub(crate) update: cmd::update::UpdateSession,
     pub(crate) fpga_update: cmd::fpga_update::FpgaUpdateSession,
     results: [Cell<Reply>; FIFO_DEPTH as usize],
@@ -112,6 +114,8 @@ impl Cpu {
             expected_seq: MainCell::new(0),
             config: MainCell::new(cmd::cpu_config::default_config()),
             config_reset_requested: AtomicBool::new(false),
+            ptp_unlocked: AtomicBool::new(false),
+            ptp_unlocked_ms: AtomicU32::new(0),
             update: cmd::update::UpdateSession::new(),
             fpga_update: cmd::fpga_update::FpgaUpdateSession::new(),
             results: [const { Cell::new(Reply::RESET) }; FIFO_DEPTH as usize],
@@ -138,6 +142,23 @@ impl Cpu {
 
     pub fn count_send_failures(&self, count: u32) {
         self.counters[Counter::SendFailure].fetch_add(count, Ordering::Relaxed);
+    }
+
+    pub fn publish_ptp_unlocked(&self, elapsed_ms: Option<u32>) {
+        match elapsed_ms {
+            Some(ms) => {
+                self.ptp_unlocked_ms.store(ms, Ordering::Relaxed);
+                self.ptp_unlocked.store(true, Ordering::Release);
+            }
+            None => self.ptp_unlocked.store(false, Ordering::Release),
+        }
+    }
+
+    #[must_use]
+    pub fn ptp_unlocked_ms(&self) -> Option<u32> {
+        self.ptp_unlocked
+            .load(Ordering::Acquire)
+            .then(|| self.ptp_unlocked_ms.load(Ordering::Relaxed))
     }
 
     #[must_use]
