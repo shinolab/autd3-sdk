@@ -9,10 +9,7 @@ async def main() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
     emulator = UdpEmulator(geometry.num_devices())
     async with await Client.open(geometry, emulator.option(), ClientConfig()) as client:
-        masks = [
-            [True] * geometry.device(i).num_transducers()
-            for i in range(geometry.num_devices())
-        ]
+        masks = geometry.output_mask_buffer()
 
         await client.send(SetOutputMask(masks=masks))
 

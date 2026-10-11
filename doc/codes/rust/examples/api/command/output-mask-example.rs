@@ -16,10 +16,7 @@ async fn main() -> anyhow::Result<()> {
     };
     let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
 
-    let masks: Vec<Vec<bool>> = geometry
-        .iter()
-        .map(|dev| vec![true; dev.num_transducers()])
-        .collect();
+    let masks = geometry.output_mask_buffer();
 
     client.send(SetOutputMask { masks: &masks }).await?;
 

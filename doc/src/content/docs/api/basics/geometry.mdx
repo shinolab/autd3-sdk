@@ -59,6 +59,7 @@ import { excerpt } from "@lib/excerpt";
 | `center()`           | `Point3<f32>`                      | アレイ全体の中心座標                  |
 | `phase_buffer()`     | `Vec<Vec<Phase>>`     | Pattern 計算用の位相バッファを確保 (初期値 0)    |
 | `intensity_buffer()` | `Vec<Vec<Intensity>>` | Pattern 計算用の振幅バッファを確保 (初期値最大) |
+| `output_mask_buffer()` | `Vec<Vec<bool>>`    | `SetOutputMask` 用の出力マスクバッファを確保 (初期値 `true`) |
 | `iter()` / `&geometry` | `Iterator<Item = &Device>`       | 各 `Device` を走査                    |
 | `geometry[i]`        | `&Device`                          | `i` 番目の `Device` を取得            |
 | `to_json()`          | `String`                           | 配置を JSON 文字列にする              |
