@@ -1,9 +1,11 @@
 use std::fmt::Write as _;
+use std::io::Write as _;
 use std::path::Path;
+use std::process::{Command, Stdio};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 
-use crate::util::{on_path, run};
+use crate::util::on_path;
 
 const BRAM_DATA_WIDTH: u32 = 16;
 
@@ -467,28 +469,66 @@ fn push_initial(out: &mut String, groups: &[Group]) {
     out.push_str("\nendmodule\n`default_nettype wire\n");
 }
 
-pub fn gen_controller(fpga_dir: &Path) -> Result<()> {
-    let path = fpga_dir.join("rtl/sources_1/new/controller/controller.sv");
-    let contents = generate(&param_groups());
-    std::fs::write(&path, contents)
-        .with_context(|| format!("failed to write {}", path.display()))?;
-
+fn render() -> Result<String> {
     if !on_path("verible-verilog-format") {
-        anyhow::bail!(
+        bail!(
             "verible-verilog-format not found on PATH. Install Verible so the generated \
              controller.sv can be formatted."
         );
     }
-    run(
-        "verible-verilog-format",
-        [
-            path.to_string_lossy().as_ref(),
-            crate::fpga::VERIBLE_COLUMN_LIMIT,
-            "--inplace",
-        ],
-        fpga_dir,
-    )?;
+    let mut child = Command::new("verible-verilog-format")
+        .args([crate::fpga::VERIBLE_COLUMN_LIMIT, "-"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .context("failed to spawn verible-verilog-format")?;
+    let mut stdin = child
+        .stdin
+        .take()
+        .context("verible-verilog-format has no stdin")?;
+    let source = generate(&param_groups());
+    let writer = std::thread::spawn(move || stdin.write_all(source.as_bytes()));
+    let output = child
+        .wait_with_output()
+        .context("failed to wait for verible-verilog-format")?;
+    writer
+        .join()
+        .map_err(|_| anyhow::anyhow!("the verible-verilog-format stdin writer panicked"))?
+        .context("failed to feed verible-verilog-format")?;
+    if !output.status.success() {
+        bail!("verible-verilog-format exited with {}", output.status);
+    }
+    String::from_utf8(output.stdout).context("verible-verilog-format wrote non-UTF-8 output")
+}
 
+pub fn gen_controller(fpga_dir: &Path, check: bool) -> Result<()> {
+    let path = fpga_dir.join("rtl/sources_1/new/controller/controller.sv");
+    let contents = render()?;
+
+    if check {
+        let committed = std::fs::read_to_string(&path)
+            .with_context(|| format!("failed to read {}", path.display()))?;
+        if committed != contents {
+            let line = committed
+                .lines()
+                .zip(contents.lines())
+                .position(|(a, b)| a != b)
+                .map_or_else(
+                    || committed.lines().count().min(contents.lines().count()) + 1,
+                    |i| i + 1,
+                );
+            bail!(
+                "{} differs from the generator output (first difference at line {line}); \
+                 edit xtask/src/fpga_codegen.rs and run `cargo xtask fpga gen-controller`",
+                path.display()
+            );
+        }
+        println!("{} is up to date", path.display());
+        return Ok(());
+    }
+
+    std::fs::write(&path, contents)
+        .with_context(|| format!("failed to write {}", path.display()))?;
     println!("generated {}", path.display());
     Ok(())
 }
