@@ -5,7 +5,7 @@ use crate::net::Mac;
 use crate::nic::{Nic, RxMeta, complete};
 use autd3_cpu_wire::udp::Role;
 use message::{
-    FRAME_CAP, Message, MessageType, Outgoing, PortIdentity, correction_ns, port_identity,
+    Content, FRAME_CAP, Message, MessageType, Outgoing, PortIdentity, correction_ns, port_identity,
 };
 use servo::Servo;
 
@@ -322,11 +322,10 @@ impl Ptp {
                 self.pause_syncs = self.pause_syncs.saturating_sub(1);
                 self.arm_tx_timestamp(nic);
                 let sync = Outgoing {
-                    kind: MessageType::Sync,
+                    content: Content::Sync,
                     seq,
                     timestamp: 0,
                     correction: 0,
-                    requesting: None,
                 };
                 if self.send(nic, &sync, self.downstream, true) {
                     self.master = MasterState::WaitSyncTs { seq, since: now_ms };
@@ -338,11 +337,10 @@ impl Ptp {
                         self.master = MasterState::Idle;
                         self.pause_futile = false;
                         let follow_up = Outgoing {
-                            kind: MessageType::FollowUp,
+                            content: Content::FollowUp,
                             seq,
                             timestamp: t1,
                             correction: 0,
-                            requesting: None,
                         };
                         self.pause_upstream_while_congested(nic);
                         let _ = self.send(nic, &follow_up, self.downstream, false);
@@ -492,11 +490,10 @@ impl Ptp {
         self.seq = self.seq.wrapping_add(1);
         self.arm_tx_timestamp(nic);
         let req = Outgoing {
-            kind: MessageType::DelayReq,
+            content: Content::DelayReq,
             seq: self.seq,
             timestamp: 0,
             correction: 0,
-            requesting: None,
         };
         self.delay = if self.send(nic, &req, self.upstream, true) {
             DelayState::WaitReqTs {
@@ -554,11 +551,12 @@ impl Ptp {
             return;
         };
         let resp = Outgoing {
-            kind: MessageType::DelayResp,
+            content: Content::DelayResp {
+                requesting: msg.source,
+            },
             seq: msg.seq,
             timestamp: complete(now, rx.timestamp_ns),
             correction: msg.correction,
-            requesting: Some(msg.source),
         };
         self.pause_upstream_while_congested(nic);
         let _ = self.send(nic, &resp, rx.port, false);
@@ -659,7 +657,7 @@ impl Ptp {
 mod tests {
     use std::vec::Vec;
 
-    use super::message::{self, FRAME_CAP, MessageType, Outgoing};
+    use super::message::{self, Content, FRAME_CAP, MessageType, Outgoing};
     use autd3_cpu_wire::udp::Role;
 
     use super::servo::Servo;
@@ -1179,19 +1177,17 @@ mod tests {
         slave.configure(&mut s, Role::Slave, SLAVE_MAC, 0);
         let mut buf = [0u8; FRAME_CAP];
         let sync = Outgoing {
-            kind: MessageType::Sync,
+            content: Content::Sync,
             seq: 1,
             timestamp: 0,
             correction: 0,
-            requesting: None,
         };
         let len = message::build(&mut buf, MASTER_MAC, [0; 8], &sync);
         let follow_up = Outgoing {
-            kind: MessageType::FollowUp,
+            content: Content::FollowUp,
             seq: 1,
             timestamp: 5,
             correction: 0,
-            requesting: None,
         };
         let mut fu = [0u8; FRAME_CAP];
         let fu_len = message::build(&mut fu, MASTER_MAC, [0; 8], &follow_up);
@@ -1212,14 +1208,13 @@ mod tests {
         assert_eq!(s.sent[0].port, 0);
     }
 
-    fn frame(kind: MessageType, seq: u16, timestamp: u64) -> ([u8; FRAME_CAP], usize) {
+    fn frame(content: Content, seq: u16, timestamp: u64) -> ([u8; FRAME_CAP], usize) {
         let mut buf = [0u8; FRAME_CAP];
         let out = Outgoing {
-            kind,
+            content,
             seq,
             timestamp,
             correction: 0,
-            requesting: None,
         };
         let len = message::build(&mut buf, MASTER_MAC, [0; 8], &out);
         (buf, len)
@@ -1234,8 +1229,8 @@ mod tests {
             port: 0,
             timestamp_ns: 10,
         };
-        let (fu, fu_len) = frame(MessageType::FollowUp, 1, 5);
-        let (sync, sync_len) = frame(MessageType::Sync, 1, 0);
+        let (fu, fu_len) = frame(Content::FollowUp, 1, 5);
+        let (sync, sync_len) = frame(Content::Sync, 1, 0);
         slave.on_message(&mut s, &fu[ETH_HEADER..fu_len], from_upstream, 0);
         assert!(s.sent.is_empty());
         slave.on_message(&mut s, &sync[ETH_HEADER..sync_len], from_upstream, 0);
@@ -1263,9 +1258,9 @@ mod tests {
             port: 0,
             timestamp_ns: 10,
         };
-        let (sync, sync_len) = frame(MessageType::Sync, 2, 0);
-        let (stale, stale_len) = frame(MessageType::FollowUp, 1, 5);
-        let (fu, fu_len) = frame(MessageType::FollowUp, 2, 5);
+        let (sync, sync_len) = frame(Content::Sync, 2, 0);
+        let (stale, stale_len) = frame(Content::FollowUp, 1, 5);
+        let (fu, fu_len) = frame(Content::FollowUp, 2, 5);
         slave.on_message(&mut s, &sync[ETH_HEADER..sync_len], from_upstream, 0);
         slave.on_message(&mut s, &stale[ETH_HEADER..stale_len], from_upstream, 0);
         assert!(s.sent.is_empty());
@@ -1341,11 +1336,12 @@ mod tests {
         };
         let mut buf = [0u8; FRAME_CAP];
         let foreign = Outgoing {
-            kind: MessageType::DelayResp,
+            content: Content::DelayResp {
+                requesting: [9; 10],
+            },
             seq: pair.slave.seq,
             timestamp: 2_000,
             correction: 0,
-            requesting: Some([9; 10]),
         };
         let len = message::build(&mut buf, MASTER_MAC, [0; 8], &foreign);
         pair.slave
@@ -1355,7 +1351,9 @@ mod tests {
         assert_eq!(pair.slave.last_sample_ms, last_sample);
 
         let own = Outgoing {
-            requesting: Some(pair.slave.identity()),
+            content: Content::DelayResp {
+                requesting: pair.slave.identity(),
+            },
             ..foreign
         };
         let len = message::build(&mut buf, MASTER_MAC, [0; 8], &own);
@@ -1367,19 +1365,17 @@ mod tests {
     }
 
     fn frame_with_correction(
-        kind: MessageType,
+        content: Content,
         seq: u16,
         timestamp: u64,
         correction: i64,
-        requesting: Option<[u8; 10]>,
     ) -> ([u8; FRAME_CAP], usize) {
         let mut buf = [0u8; FRAME_CAP];
         let out = Outgoing {
-            kind,
+            content,
             seq,
             timestamp,
             correction,
-            requesting,
         };
         let len = message::build(&mut buf, MASTER_MAC, [0; 8], &out);
         (buf, len)
@@ -1399,9 +1395,9 @@ mod tests {
             timestamp_ns: (nic.local() % NS_PER_SEC) as u32,
         };
         let (sync, sync_len) =
-            frame_with_correction(MessageType::Sync, seq, 0, corrections[0], None);
+            frame_with_correction(Content::Sync, seq, 0, corrections[0]);
         let (fu, fu_len) =
-            frame_with_correction(MessageType::FollowUp, seq, t1, corrections[1], None);
+            frame_with_correction(Content::FollowUp, seq, t1, corrections[1]);
         let sync = &sync[ETH_HEADER..sync_len];
         let fu = &fu[ETH_HEADER..fu_len];
         if follow_up_first {
@@ -1515,11 +1511,12 @@ mod tests {
             since: 0,
         };
         let (resp, len) = frame_with_correction(
-            MessageType::DelayResp,
+            Content::DelayResp {
+                requesting: slave.identity(),
+            },
             slave.seq,
             t4,
             correction,
-            Some(slave.identity()),
         );
         let rx = RxMeta {
             port: 0,
@@ -1543,8 +1540,8 @@ mod tests {
             port: 0,
             timestamp_ns: 10,
         };
-        let (sync, sync_len) = frame(MessageType::Sync, 1, 0);
-        let (mut fu, fu_len) = frame(MessageType::FollowUp, 1, 5);
+        let (sync, sync_len) = frame(Content::Sync, 1, 0);
+        let (mut fu, fu_len) = frame(Content::FollowUp, 1, 5);
         fu[ETH_HEADER + 34..][..6].fill(0xFF);
         slave.on_message(&mut s, &sync[ETH_HEADER..sync_len], rx, 0);
         slave.on_message(&mut s, &fu[ETH_HEADER..fu_len], rx, 0);
