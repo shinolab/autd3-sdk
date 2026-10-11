@@ -27,6 +27,7 @@ pub trait CommandLayer {
     fn reply(&mut self) -> Reply;
     fn send_failed(&mut self, count: u32);
     fn unassigned(&mut self);
+    fn ptp_unlocked(&mut self, elapsed_ms: Option<u32>);
 }
 
 impl CommandLayer for &crate::Cpu {
@@ -44,6 +45,10 @@ impl CommandLayer for &crate::Cpu {
 
     fn unassigned(&mut self) {
         crate::Cpu::request_config_reset(self);
+    }
+
+    fn ptp_unlocked(&mut self, elapsed_ms: Option<u32>) {
+        crate::Cpu::publish_ptp_unlocked(self, elapsed_ms);
     }
 }
 
@@ -205,11 +210,6 @@ impl Node {
         self.ptp.set_config(config);
     }
 
-    #[must_use]
-    pub const fn ptp_unlocked_ms(&self, now_ms: u32) -> Option<u32> {
-        self.ptp.unlocked_ms(now_ms)
-    }
-
     pub fn flags<N: Nic>(&self, nic: &mut N) -> Flags {
         let mut flags = Flags::empty();
         if self.is_assigned() {
@@ -250,6 +250,7 @@ impl Node {
             cmds.unassigned();
         }
         self.ptp.tick(&mut nic, now_ms);
+        cmds.ptp_unlocked(self.ptp.unlocked_ms(now_ms));
         nic.report(cmds);
     }
 
@@ -300,6 +301,7 @@ impl Node {
             Some(Packet::Ptp { message }) => {
                 if self.is_assigned() {
                     self.ptp.on_message(nic, message, rx, now_ms);
+                    cmds.ptp_unlocked(self.ptp.unlocked_ms(now_ms));
                 }
                 Received::Nothing
             }
@@ -598,6 +600,7 @@ mod tests {
         reply: CmdReply,
         send_failures: u32,
         unassigned: u32,
+        ptp_unlocked: Vec<Option<u32>>,
     }
 
     impl CommandLayer for FakeCommands {
@@ -620,6 +623,10 @@ mod tests {
 
         fn unassigned(&mut self) {
             self.unassigned += 1;
+        }
+
+        fn ptp_unlocked(&mut self, elapsed_ms: Option<u32>) {
+            self.ptp_unlocked.push(elapsed_ms);
         }
     }
 
@@ -660,6 +667,7 @@ mod tests {
                     reply: CmdReply::new(0xFF, Error::None, ReplyData::EMPTY),
                     send_failures: 0,
                     unassigned: 0,
+                    ptp_unlocked: Vec::new(),
                 },
             }
         }
@@ -1516,6 +1524,100 @@ mod tests {
         wired.run_ms(3000);
         assert!(wired.slave.node.ptp.is_locked());
         assert_eq!(wired.slave.nic.pulse_armed, 2);
+    }
+
+    #[test]
+    fn the_time_since_the_lock_was_lost_is_published_on_every_tick() {
+        let mut wired = Wired::new(-30_000.0);
+        wired.run_ms(5000);
+        assert!(wired.slave.node.ptp.is_locked());
+        assert!(wired.slave.cmds.ptp_unlocked.iter().all(Option::is_none));
+        wired.slave.cmds.ptp_unlocked.clear();
+        for _ in 0..1100 {
+            wired.gm.nic.t += 1e6;
+            wired.slave.nic.t = wired.gm.nic.t;
+            wired.slave.tick(1);
+        }
+        assert!(!wired.slave.node.ptp.is_locked());
+        let published = core::mem::take(&mut wired.slave.cmds.ptp_unlocked);
+        assert_eq!(published.len(), 1100);
+        let lost = published.iter().position(Option::is_some).unwrap();
+        assert!(published[..lost].iter().all(Option::is_none));
+        for (elapsed, ms) in published[lost..].iter().enumerate() {
+            assert_eq!(*ms, Some(elapsed as u32));
+        }
+
+        wired.gm.now_ms = wired.slave.now_ms;
+        wired.run_ms(3000);
+        assert!(wired.slave.node.ptp.is_locked());
+        assert_eq!(wired.slave.cmds.ptp_unlocked.last(), Some(&None));
+    }
+
+    #[test]
+    fn a_step_on_a_received_message_publishes_the_lost_lock_without_waiting_for_a_tick() {
+        let mut wired = Wired::new(25_000.0);
+        wired.run_ms(5000);
+        assert!(wired.slave.node.ptp.is_locked());
+        wired.slave.nic.step(200_000);
+        while wired.slave.node.ptp.is_locked() {
+            wired.gm.nic.t += 1e6;
+            wired.slave.nic.t = wired.gm.nic.t;
+            wired.gm.tick(1);
+            wired.slave.tick(1);
+            assert_eq!(wired.slave.cmds.ptp_unlocked.last(), Some(&None));
+            wired.deliver();
+        }
+        assert_eq!(wired.slave.cmds.ptp_unlocked.last(), Some(&Some(0)));
+    }
+
+    #[test]
+    fn reset_id_publishes_that_no_lock_is_lost() {
+        let mut wired = Wired::new(-30_000.0);
+        wired.run_ms(5000);
+        for _ in 0..1100 {
+            wired.gm.nic.t += 1e6;
+            wired.slave.nic.t = wired.gm.nic.t;
+            wired.slave.tick(1);
+        }
+        assert!(matches!(
+            wired.slave.cmds.ptp_unlocked.last(),
+            Some(&Some(_))
+        ));
+        wired.slave.send(ALL_NODES, Kind::ResetId, &[]);
+        wired.slave.replies();
+        wired.slave.tick(50);
+        assert!(!wired.slave.node.is_assigned());
+        assert_eq!(wired.slave.cmds.ptp_unlocked.last(), Some(&None));
+    }
+
+    #[cfg(not(loom))]
+    #[test]
+    fn the_cpu_reads_the_published_time_since_the_lock_was_lost() {
+        use crate::test_utils::mock::Harness as CpuHarness;
+
+        let c = CpuHarness::new();
+        let mut wired = Wired::new(-30_000.0);
+        wired.run_ms(5000);
+        assert!(wired.slave.node.ptp.is_locked());
+        assert_eq!(c.cpu.ptp_unlocked_ms(), None);
+        let mut lost_for = None;
+        for _ in 0..1100 {
+            wired.gm.nic.t += 1e6;
+            wired.slave.nic.t = wired.gm.nic.t;
+            wired.slave.now_ms += 1;
+            let slave = &mut wired.slave;
+            slave
+                .node
+                .tick(&mut slave.nic, slave.now_ms, &mut &*c.cpu);
+            if !slave.node.ptp.is_locked() {
+                let elapsed = lost_for.map_or(0, |ms: u32| ms + 1);
+                lost_for = Some(elapsed);
+            }
+            assert_eq!(c.cpu.ptp_unlocked_ms(), lost_for);
+        }
+        assert!(lost_for.is_some_and(|ms| ms > 0));
+        c.cpu.publish_ptp_unlocked(None);
+        assert_eq!(c.cpu.ptp_unlocked_ms(), None);
     }
 
     #[test]
