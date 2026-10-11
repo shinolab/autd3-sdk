@@ -684,6 +684,8 @@ mod tests {
         pauses: u32,
         rx_jitter_ns: u32,
         rx_jitter_state: u32,
+        residence_ns: [u32; 2],
+        correct_residence: bool,
     }
 
     impl Pair {
@@ -708,6 +710,8 @@ mod tests {
                 pauses: 0,
                 rx_jitter_ns: 0,
                 rx_jitter_state: 1,
+                residence_ns: [0; 2],
+                correct_residence: true,
             }
         }
 
@@ -725,6 +729,20 @@ mod tests {
             ((jittered - jittered % TIMER_PERIOD_NS) % NS_PER_SEC) as u32
         }
 
+        fn relay(&self, f: &mut Sent, event: MessageType, direction: usize) -> f64 {
+            if f.frame[ETH_HEADER] & 0x0F != event.as_u8() {
+                return 0.0;
+            }
+            let residence = self.residence_ns[direction];
+            if self.correct_residence {
+                let field = &mut f.frame[ETH_HEADER + 8..][..8];
+                let correction = i64::from_be_bytes((&*field).try_into().unwrap())
+                    + (i64::from(residence) << 16);
+                field.copy_from_slice(&correction.to_be_bytes());
+            }
+            f64::from(residence)
+        }
+
         fn deliver(&mut self) {
             loop {
                 let from_master: Vec<Sent> = core::mem::take(&mut self.m.sent);
@@ -734,23 +752,25 @@ mod tests {
                 }
                 self.m.t += HOP_NS;
                 self.s.t = self.m.t;
-                for f in from_master {
+                for mut f in from_master {
                     if f.port != 1 {
                         self.pauses += 1;
                         continue;
                     }
+                    let residence = self.relay(&mut f, MessageType::Sync, 0);
                     let rx = RxMeta {
                         port: 0,
-                        timestamp_ns: self.slave_rx_timestamp(f.at),
+                        timestamp_ns: self.slave_rx_timestamp(f.at + residence),
                     };
                     let now_ms = self.now_ms;
                     self.slave
                         .on_message(&mut self.s, &f.frame[ETH_HEADER..], rx, now_ms);
                 }
-                for f in from_slave {
+                for mut f in from_slave {
                     if f.port != 0 {
                         continue;
                     }
+                    let residence = self.relay(&mut f, MessageType::DelayReq, 1);
                     if f.frame[ETH_HEADER] & 0x0F == MessageType::DelayReq.as_u8() {
                         self.delay_reqs += 1;
                         if self.drop_delay_reqs {
@@ -759,7 +779,8 @@ mod tests {
                     }
                     let rx = RxMeta {
                         port: 1,
-                        timestamp_ns: (self.m.local_at(f.at + WIRE_DELAY_NS) % NS_PER_SEC) as u32,
+                        timestamp_ns: (self.m.local_at(f.at + residence + WIRE_DELAY_NS)
+                            % NS_PER_SEC) as u32,
                     };
                     let now_ms = self.now_ms;
                     self.master
@@ -846,6 +867,96 @@ mod tests {
         pair.slave.tick(&mut pair.s, lost);
         assert!(!pair.slave.is_locked());
         assert!(!pair.slave.pulse_pending);
+    }
+
+    const RESIDENCE_NS: [u32; 2] = [6_000, 1_500];
+
+    const _: () = assert!(RESIDENCE_NS[0] as f64 + WIRE_DELAY_NS < HOP_NS);
+    const _: () = assert!(RESIDENCE_NS[0].abs_diff(RESIDENCE_NS[1]) / 2 > 1_000);
+
+    #[test]
+    fn a_relay_that_adds_its_residence_time_to_the_correction_does_not_shift_the_slave() {
+        let mut pair = Pair::new(3_000_000.0, 40_000.0);
+        pair.residence_ns = RESIDENCE_NS;
+        pair.run_ms(6000);
+        assert!(pair.slave.is_locked());
+        assert!(pair.true_offset().abs() < 100.0, "{}", pair.true_offset());
+        assert!(pair.slave.last_offset().abs() < 100);
+        let path_delay = pair.slave.path_delay().unwrap();
+        assert!(
+            (path_delay as f64 - WIRE_DELAY_NS).abs() < 50.0,
+            "{path_delay}"
+        );
+    }
+
+    #[test]
+    fn a_relay_that_leaves_the_correction_untouched_delays_the_slave_by_half_the_asymmetry() {
+        let mut pair = Pair::new(3_000_000.0, 40_000.0);
+        pair.residence_ns = RESIDENCE_NS;
+        pair.correct_residence = false;
+        pair.run_ms(6000);
+        assert!(pair.slave.is_locked());
+        let shift = f64::from(RESIDENCE_NS[0] - RESIDENCE_NS[1]) / 2.0;
+        assert!(
+            (pair.true_offset() + shift).abs() < 100.0,
+            "{}",
+            pair.true_offset()
+        );
+    }
+
+    #[rstest]
+    #[case::zero(0)]
+    #[case::one(1)]
+    #[case::minus_one(-1)]
+    #[case::positive(40)]
+    #[case::negative(-77)]
+    #[case::just_below_the_floor(124)]
+    #[case::just_above_the_negative_floor(-124)]
+    fn a_drift_below_the_shortest_period_is_dithered_between_both_floors(#[case] ppb: i32) {
+        let mut ptp = Ptp::new();
+        let floor = ptp.shortest_period_ppb();
+        assert_eq!(floor, 125);
+        let written: Vec<i32> = (0..2 * floor).map(|_| ptp.dither_drift(ppb)).collect();
+        assert!(written.iter().all(|w| w.abs() == floor));
+        assert_eq!(written.iter().sum::<i32>(), 2 * floor * ppb);
+        assert_eq!(ptp.drift_residual_ppb, 0);
+        if ppb == 0 {
+            for (i, w) in written.iter().enumerate() {
+                assert_eq!(*w, if i % 2 == 0 { floor } else { -floor });
+            }
+        }
+        let mut residual = 0;
+        for w in written {
+            residual += ppb - w;
+            assert!(residual.abs() <= floor);
+        }
+    }
+
+    #[rstest]
+    #[case::at_the_floor(125)]
+    #[case::at_the_negative_floor(-125)]
+    #[case::above_the_floor(126)]
+    #[case::far_above(400_000)]
+    #[case::most_negative(i32::MIN)]
+    fn a_drift_at_or_above_the_shortest_period_is_written_as_is(#[case] ppb: i32) {
+        let mut ptp = Ptp::new();
+        assert_eq!(ptp.dither_drift(40), 125);
+        assert_ne!(ptp.drift_residual_ppb, 0);
+        assert_eq!(ptp.dither_drift(ppb), ppb);
+        assert_eq!(ptp.drift_residual_ppb, 0);
+        assert_eq!(ptp.dither_drift(ppb), ppb);
+    }
+
+    #[test]
+    fn the_dither_floor_follows_the_sync_interval() {
+        let mut ptp = Ptp::new();
+        ptp.set_config(Config {
+            sync_interval: core::time::Duration::from_millis(16),
+            ..Config::default()
+        });
+        assert_eq!(ptp.shortest_period_ppb(), 63);
+        assert_eq!(ptp.dither_drift(0), 63);
+        assert_eq!(ptp.dither_drift(0), -63);
     }
 
     #[test]
@@ -1394,10 +1505,8 @@ mod tests {
             port: 0,
             timestamp_ns: (nic.local() % NS_PER_SEC) as u32,
         };
-        let (sync, sync_len) =
-            frame_with_correction(Content::Sync, seq, 0, corrections[0]);
-        let (fu, fu_len) =
-            frame_with_correction(Content::FollowUp, seq, t1, corrections[1]);
+        let (sync, sync_len) = frame_with_correction(Content::Sync, seq, 0, corrections[0]);
+        let (fu, fu_len) = frame_with_correction(Content::FollowUp, seq, t1, corrections[1]);
         let sync = &sync[ETH_HEADER..sync_len];
         let fu = &fu[ETH_HEADER..fu_len];
         if follow_up_first {
