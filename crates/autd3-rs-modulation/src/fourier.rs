@@ -46,12 +46,15 @@ pub fn fourier(
     let scale = option.scale_factor.unwrap_or(1.0 / buffers.len() as f32);
     let offset = f32::from(option.offset);
 
-    let len = buffers.iter().fold(1usize, |acc, b| acc.lcm(&b.len()));
-    if len > MOD_BUFFER_SAMPLES {
-        return Err(ModulationError::FourierPeriodTooLong {
+    let len = buffers
+        .iter()
+        .try_fold(1usize, |acc, b| {
+            acc.checked_mul(b.len() / acc.gcd(&b.len()))
+                .filter(|&len| len <= MOD_BUFFER_SAMPLES)
+        })
+        .ok_or(ModulationError::FourierPeriodTooLong {
             max: MOD_BUFFER_SAMPLES,
-        });
-    }
+        })?;
     let mut acc = vec![0f32; len];
     for buf in &buffers {
         for (a, b) in acc.iter_mut().zip(buf.iter().cycle()) {
@@ -164,6 +167,69 @@ mod tests {
         fourier(&mixed, &FourierOption::default(), &mut mixed_buf).unwrap();
         fourier(&exact, &FourierOption::default(), &mut exact_buf).unwrap();
         assert_eq!(mixed_buf, exact_buf);
+    }
+
+    fn nearest_components(periods: &[f32]) -> Vec<SineComponent> {
+        use autd3_rs_core::value::Nearest;
+
+        periods
+            .iter()
+            .map(|&period| SineComponent {
+                freq: Nearest(4000.0 / period * Hz).into(),
+                option: SineOption::default(),
+            })
+            .collect()
+    }
+
+    fn periods(components: &[SineComponent]) -> Vec<usize> {
+        components
+            .iter()
+            .map(|c| sine_samples(c.freq, &c.option).unwrap().len())
+            .collect()
+    }
+
+    #[test]
+    fn fourier_rejects_coprime_periods_whose_product_overflows() {
+        let components = nearest_components(&[65521.0, 65519.0, 65497.0, 65479.0, 65449.0]);
+        let periods = periods(&components);
+        assert_eq!(periods, [65521, 65519, 65497, 65479, 65449]);
+        assert!(
+            periods
+                .iter()
+                .enumerate()
+                .all(|(i, a)| periods[..i].iter().all(|b| num_integer::gcd(*a, *b) == 1))
+        );
+        assert!(
+            periods
+                .iter()
+                .try_fold(1usize, |acc, &n| acc.checked_mul(n))
+                .is_none()
+        );
+
+        let mut buf = Vec::new();
+        assert_eq!(
+            fourier(&components, &FourierOption::default(), &mut buf),
+            Err(ModulationError::FourierPeriodTooLong {
+                max: MOD_BUFFER_SAMPLES
+            })
+        );
+    }
+
+    #[test]
+    fn fourier_accepts_a_period_up_to_the_buffer_and_rejects_one_past_it() {
+        let mut buf = Vec::new();
+
+        let fits = nearest_components(&[256.0, 65536.0]);
+        fourier(&fits, &FourierOption::default(), &mut buf).unwrap();
+        assert_eq!(buf.len(), MOD_BUFFER_SAMPLES);
+
+        let too_long = nearest_components(&[3.0, 65536.0]);
+        assert_eq!(
+            fourier(&too_long, &FourierOption::default(), &mut buf),
+            Err(ModulationError::FourierPeriodTooLong {
+                max: MOD_BUFFER_SAMPLES
+            })
+        );
     }
 
     #[test]
