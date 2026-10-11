@@ -229,6 +229,7 @@ module controller (
       fpga_state_prev <= 16'hFFFF;
       ctl_flags <= '0;
       ctl_flags_cand <= '0;
+      silencer_set_result <= '0;
       MOD_SETTINGS.UPDATE <= 1'b0;
       PATTERN_SETTINGS.UPDATE <= 1'b0;
       SILENCER_SETTINGS.UPDATE <= 1'b0;
