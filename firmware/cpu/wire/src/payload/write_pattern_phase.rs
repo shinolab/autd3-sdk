@@ -33,8 +33,9 @@ impl PhaseDepth {
     pub fn pack(self, phases: &[u8], dst: &mut [u8]) {
         match self {
             Self::Bits8 => {
-                let (head, tail) = dst.split_at_mut(phases.len());
-                head.copy_from_slice(phases);
+                let len = phases.len().min(dst.len());
+                let (head, tail) = dst.split_at_mut(len);
+                head.copy_from_slice(&phases[..len]);
                 tail.fill(0);
             }
             Self::Bits4 => {
@@ -157,6 +158,33 @@ mod tests {
         assert_eq!(parsed.intensity, 0x80);
         assert_eq!(usize::from(parsed.index.get()), index);
         assert_eq!(data.len(), count * depth.bytes_per_pattern());
+    }
+
+    #[rstest]
+    #[case(PhaseDepth::Bits8, &[0x12, 0x34, 0x56, 0x78], [0x12, 0x34, 0x56, 0x78])]
+    #[case(PhaseDepth::Bits8, &[0x12, 0x34], [0x12, 0x34, 0x00, 0x00])]
+    #[case(PhaseDepth::Bits8, &[], [0x00, 0x00, 0x00, 0x00])]
+    #[case(PhaseDepth::Bits8, &[0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC], [0x12, 0x34, 0x56, 0x78])]
+    #[case(
+        PhaseDepth::Bits4,
+        &[0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80],
+        [0x21, 0x43, 0x65, 0x87]
+    )]
+    #[case(PhaseDepth::Bits4, &[0x10, 0x20, 0x30], [0x21, 0x03, 0x00, 0x00])]
+    #[case(PhaseDepth::Bits4, &[], [0x00, 0x00, 0x00, 0x00])]
+    #[case(
+        PhaseDepth::Bits4,
+        &[0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xA0],
+        [0x21, 0x43, 0x65, 0x87]
+    )]
+    fn pack_zero_fills_a_short_input_and_drops_what_does_not_fit(
+        #[case] depth: PhaseDepth,
+        #[case] phases: &[u8],
+        #[case] expected: [u8; 4],
+    ) {
+        let mut dst = [0xFF; 4];
+        depth.pack(phases, &mut dst);
+        assert_eq!(dst, expected);
     }
 
     #[test]
