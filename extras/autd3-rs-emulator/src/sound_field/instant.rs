@@ -298,6 +298,7 @@ impl<'a> SoundFieldOption<'a> for InstantRecordOption {
         record: &'a Record,
         range: impl Range,
     ) -> Result<Self::Output, EmulatorError> {
+        range.validate()?;
         if !ULTRASOUND_PERIOD
             .as_nanos()
             .is_multiple_of(self.time_step.as_nanos())
