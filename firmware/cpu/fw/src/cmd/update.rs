@@ -154,12 +154,12 @@ impl Cpu {
         if self.update.is_resetting() {
             return Err(Error::UpdateActivating);
         }
-        self.update.state.set(State::Idle);
         let p = UpdateBeginPayload::parse(payload)?;
         let length = p.length.get();
         if !is_plausible_length(length) {
             return Err(Error::InvalidPayload);
         }
+        self.update.state.set(State::Idle);
         let a = valid_header(port, Slot::A)?;
         let b = valid_header(port, Slot::B)?;
         let generation_of = |h: Option<ImageHeader>| h.map(|h| h.generation.get());
@@ -332,6 +332,7 @@ mod tests {
         FLASH_SECTOR_BYTES, IMAGE_APP_CAPACITY, IMAGE_VECTOR_BYTES, ImageHeader, LOADER_REGION_END,
         RunningImage, SLOT_HEADER_BYTES, SLOT_IMAGE_CAPACITY, Slot, crc32,
     };
+    use rstest::rstest;
     use zerocopy::little_endian::U32;
     use zerocopy::{FromBytes, IntoBytes};
 
@@ -605,6 +606,62 @@ mod tests {
         h.deliver(&begin(5, max, 0));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.port.erased, [(Slot::B.base(), erased_len(max))]);
+    }
+
+    #[rstest]
+    #[case::truncated_payload(None)]
+    #[case::zero_length(Some(0))]
+    #[case::vector_table_only(Some(IMAGE_VECTOR_BYTES))]
+    #[case::one_past_the_capacity(Some(IMAGE_VECTOR_BYTES + IMAGE_APP_CAPACITY + 1))]
+    fn an_invalid_begin_keeps_a_committed_image_activatable(#[case] length: Option<u32>) {
+        let (mut h, _) = running_from_slot_a();
+        let img = image(300, 9);
+        let mut seq = 0;
+        run_update(&mut h, &mut seq, &img);
+        assert_eq!(h.cpu.update.state(), State::Committed);
+        let erased = h.port.erased.clone();
+
+        let mut invalid = begin(seq, length.unwrap_or(0), 0);
+        if length.is_none() {
+            invalid.set_len(size_of::<UpdateBeginPayload>() - 1);
+        }
+        h.deliver(&invalid);
+        assert_eq!(h.status(), Error::InvalidPayload);
+        assert_eq!(h.cpu.update.state(), State::Committed);
+        assert_eq!(h.port.erased, erased);
+
+        h.deliver(&Frame::new(seq + 1, Cmd::UpdateActivate));
+        assert_eq!(h.status(), Error::None);
+        h.tick_1ms(u32::from(ACTIVATE_DELAY_MS));
+        assert_eq!(h.port.reset_count, 1);
+    }
+
+    #[test]
+    fn an_invalid_begin_keeps_the_session_that_is_receiving() {
+        let (mut h, _) = running_from_slot_a();
+        let img = image(300, 9);
+        h.deliver(&begin(0, img.len() as u32, crc32(&img)));
+        assert_eq!(h.status(), Error::None);
+        let session = h.cpu.update.state();
+        h.deliver(&begin(1, 0, 0));
+        assert_eq!(h.status(), Error::InvalidPayload);
+        assert_eq!(h.cpu.update.state(), session);
+        let mut seq = 2;
+        send_image(&mut h, &mut seq, &img);
+        h.deliver(&Frame::new(seq, Cmd::UpdateCommit));
+        assert_eq!(h.status(), Error::None);
+    }
+
+    #[test]
+    fn a_valid_begin_discards_a_committed_image() {
+        let (mut h, _) = running_from_slot_a();
+        let img = image(300, 9);
+        let mut seq = 0;
+        run_update(&mut h, &mut seq, &img);
+        h.deliver(&begin(seq, img.len() as u32, crc32(&img)));
+        assert_eq!(h.status(), Error::None);
+        h.deliver(&Frame::new(seq + 1, Cmd::UpdateActivate));
+        assert_eq!(h.status(), Error::UpdateNotCommitted);
     }
 
     #[test]
