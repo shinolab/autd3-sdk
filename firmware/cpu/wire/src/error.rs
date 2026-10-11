@@ -33,7 +33,7 @@ impl Error {
             Self::MissTransitionTime => "sys-time transition is too close to now (would be missed)",
             Self::FpgaTimeout => "FPGA did not acknowledge a register update in time",
             Self::SyncNotReady => {
-                "the sync pulse is not running yet (the device has not received SetTime)"
+                "the sync pulse is not running (SetTime not received, PTP not locked, or the pulse was re-armed)"
             }
             Self::UpdateNotStarted => "firmware update session is not open (UpdateBegin required)",
             Self::UpdateImageInvalid => "firmware image CRC32 mismatch after write-back",
@@ -49,7 +49,7 @@ impl Error {
                 "an FPGA update is in progress; output commands are rejected until the FPGA reboots"
             }
             Self::UpdateActivating => {
-                "a firmware activation is pending; the device reboots within 100 ms"
+                "a firmware activation is pending; the device reboots within the configured activate delay (default 100 ms)"
             }
             Self::SyncMissed => {
                 "Synchronize kept missing the sync edge it wrote (the device was too busy to latch in time); reopen to retry"
@@ -92,6 +92,21 @@ mod tests {
         assert_eq!(Error::from_u8(0x09), None);
         assert_eq!(Error::from_u8(0x11), None);
         assert_eq!(Error::from_u8(0x13), None);
+    }
+
+    #[test]
+    fn sync_not_ready_names_every_cause() {
+        let text = Error::SyncNotReady.describe();
+        for cause in ["SetTime not received", "PTP not locked", "re-armed"] {
+            assert!(text.contains(cause));
+        }
+    }
+
+    #[test]
+    fn update_activating_does_not_promise_a_fixed_delay() {
+        let text = Error::UpdateActivating.describe();
+        assert!(text.contains("configured activate delay"));
+        assert!(!text.contains("within 100 ms"));
     }
 
     #[test]
