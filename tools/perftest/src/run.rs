@@ -12,7 +12,6 @@ use autd3_rs::commands::{
 };
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::params::MOD_BUFFER_SAMPLES;
-use autd3_rs::protocol::FrameHeader;
 use autd3_rs::value::{
     Intensity, LoopBehavior, ModulationBank, PatternBank, Phase, SamplingConfig, TransitionMode,
 };
@@ -25,7 +24,7 @@ use autd3_rs_firmware_emulator::udp::UdpEmulator;
 use crate::cli::{Cli, Command, Mode};
 use crate::mem::{self, MemProfile};
 use crate::report::{LiveBlock, interval_lines, telemetry_lines};
-use crate::stats::{Counters, DriverAckLatency, Histogram, SampleStatus, Summary};
+use crate::stats::{Counters, DriverAckLatency, Histogram, SampleStatus, Summary, Traffic};
 
 const REPORT_INTERVAL: Duration = Duration::from_secs(1);
 const STATE_CHECK_INTERVAL: Duration = Duration::from_millis(100);
@@ -136,19 +135,6 @@ impl Sender {
             .context("the command built no frame")?;
         self.next_frame += 1;
         Ok(frame)
-    }
-
-    fn frame_bytes(&self) -> usize {
-        self.frames
-            .frame(0)
-            .map_or(size_of::<FrameHeader>(), |frame| {
-                frame
-                    .datagrams()
-                    .iter()
-                    .map(|d| size_of::<FrameHeader>() + d.payload_len)
-                    .max()
-                    .unwrap_or(size_of::<FrameHeader>())
-            })
     }
 }
 
@@ -335,17 +321,25 @@ async fn run_with_option(option: TransportOption, cli: &Cli) -> Result<RunOutput
     output
 }
 
-async fn send_all(client: &Client, frames: &Frames, window: usize) -> Result<(), ClientError> {
+async fn send_all(
+    client: &Client,
+    frames: &Frames,
+    window: usize,
+    traffic: &mut Traffic,
+) -> Result<(), ClientError> {
     let mut pending: VecDeque<ResponseFuture> = VecDeque::with_capacity(window);
     for frame in frames {
         if pending.len() >= window {
             let fut = pending.pop_front().expect("non-empty");
             fut.await?.check()?;
+            traffic.replied();
         }
         pending.push_back(client.send_frame(frame).await?);
+        traffic.sent(&frame);
     }
     for fut in pending {
         fut.await?.check()?;
+        traffic.replied();
     }
     Ok(())
 }
@@ -410,6 +404,7 @@ impl AckSnapshot {
 
 struct Measurement {
     counters: Counters,
+    traffic: Traffic,
     rtts: Histogram,
     live: Live,
     stopped_on_error: Option<(u64, SampleStatus)>,
@@ -423,10 +418,12 @@ struct Measurement {
 
 impl Measurement {
     fn start(cli: &Cli, bus_stats: &BusStats, telemetry_start: Vec<Telemetry>) -> Self {
-        let live = Live::new(telemetry_start);
+        let traffic = Traffic::new(cli.devices.get());
+        let live = Live::new(traffic, telemetry_start);
         let mem_recorder = mem::start();
         Self {
             counters: Counters::default(),
+            traffic,
             rtts: Histogram::new(),
             live,
             stopped_on_error: None,
@@ -464,11 +461,17 @@ impl Measurement {
 
     async fn report(&mut self, client: &Client) {
         self.live
-            .report_if_due(client, &self.counters, &self.bus_stats, self.start)
+            .report_if_due(
+                client,
+                &self.counters,
+                self.traffic,
+                &self.bus_stats,
+                self.start,
+            )
             .await;
     }
 
-    fn finish(self, sender: &Sender) -> RunOutput {
+    fn finish(self) -> RunOutput {
         let elapsed = self.start.elapsed();
         let bus_stats = &self.bus_stats;
         let driver_ack = AckSnapshot::take(bus_stats)
@@ -481,7 +484,7 @@ impl Measurement {
                 elapsed,
                 missed_replies: bus_stats.missed_replies(),
                 throughput_cmd_per_sec: per_sec(self.counters.ok),
-                throughput_byte_per_sec: per_sec(self.counters.ok * sender.frame_bytes() as u64),
+                traffic: self.traffic.rate(elapsed),
                 latency: self.rtts.latency(),
                 driver_ack,
                 counters: self.counters,
@@ -511,7 +514,7 @@ async fn run_stop_and_wait(
     while !shutdown.load(Ordering::Relaxed) {
         sender.prepare(client)?;
         let t0 = Instant::now();
-        let res = send_all(client, &sender.frames, window).await;
+        let res = send_all(client, &sender.frames, window, &mut measurement.traffic).await;
         let rtt = t0.elapsed();
 
         if measurement.record(index, rtt, classify(res)?).is_break() {
@@ -520,7 +523,7 @@ async fn run_stop_and_wait(
         measurement.report(client).await;
         index += 1;
     }
-    Ok(measurement.finish(&sender))
+    Ok(measurement.finish())
 }
 
 async fn run_streaming(
@@ -545,6 +548,7 @@ async fn run_streaming(
                 }
                 Err(e) => return Err(e.into()),
             };
+            measurement.traffic.sent(&frame);
             pending.push_back(PendingFuture { sent_at, fut });
             continue;
         }
@@ -555,13 +559,16 @@ async fn run_streaming(
         let res = entry.fut.await;
         let rtt = entry.sent_at.elapsed();
         let outcome = classify(res.and_then(|resp| resp.check()))?;
+        if matches!(outcome, Outcome::Sample(SampleStatus::Ok)) {
+            measurement.traffic.replied();
+        }
         if measurement.record(sample_index, rtt, outcome).is_break() {
             break;
         }
         measurement.report(client).await;
         sample_index += 1;
     }
-    Ok(measurement.finish(&sender))
+    Ok(measurement.finish())
 }
 
 struct PendingFuture {
@@ -573,16 +580,18 @@ struct Live {
     last_report: Instant,
     block: LiveBlock,
     rtts: Histogram,
+    traffic_last: Traffic,
     telemetry_start: Vec<Telemetry>,
     telemetry_last: Vec<Telemetry>,
 }
 
 impl Live {
-    fn new(telemetry_start: Vec<Telemetry>) -> Self {
+    fn new(traffic: Traffic, telemetry_start: Vec<Telemetry>) -> Self {
         Self {
             last_report: Instant::now(),
             block: LiveBlock::new(),
             rtts: Histogram::new(),
+            traffic_last: traffic,
             telemetry_last: telemetry_start.clone(),
             telemetry_start,
         }
@@ -592,6 +601,7 @@ impl Live {
         &mut self,
         client: &Client,
         counters: &Counters,
+        traffic: Traffic,
         bus_stats: &BusStats,
         start: Instant,
     ) {
@@ -603,12 +613,15 @@ impl Live {
         let cmd_per_sec = self.rtts.count() as f64 / interval.as_secs_f64();
         let latency = self.rtts.latency();
         self.rtts.clear();
+        let traffic_rate = traffic.since(self.traffic_last).rate(interval);
+        self.traffic_last = traffic;
         let mut lines = interval_lines(
             start.elapsed(),
             cmd_per_sec,
             counters,
             bus_stats.missed_replies(),
             &latency,
+            &traffic_rate,
         )
         .to_vec();
         match client.read_telemetry().await {
