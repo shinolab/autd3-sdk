@@ -5,6 +5,8 @@ sidebar:
   order: 8
 ---
 
+import CodeTabs from "@components/CodeTabs.astro";
+
 `Simulator` は, AUTD3 の出力音場をブラウザ上で可視化する音場シミュレータ.
 実機がなくても, クライアントが送ったデータから生成される音場を確認できる.
 
@@ -16,5 +18,15 @@ sidebar:
 
 ## 接続
 
-`Simulator` は内部で `RemoteServer` を起動しているため, クライアントからは [`RemoteLink`](/autd3-sdk/api/link/remote/) で接続する.
-接続先は `127.0.0.1:<link-port>` ( デフォルトは 8080 ).
+クライアントは Simulator と同じホストで動かす必要がある.
+
+既定の [`TransportOption`](/autd3-sdk/api/basics/transport-option/) (`iface` が `Auto`) は, Simulator が動いていれば Simulator に, 動いていなければ実機につながる.
+アドレスを指定する必要はない.
+Simulator にしかつなぎたくない場合は, `iface` に `Simulator` を指定すること.
+Simulator を動かしたまま実機につなぐ場合は, `iface` に `Name(..)` で NIC を指定する.
+
+<CodeTabs
+  rust={'let option = TransportOption {\n    iface: Interface::Simulator,\n    ..Default::default()\n};'}
+  python={'option = TransportOption(iface=Interface.Simulator)'}
+  csharp={'var option = new TransportOption { Iface = Interface.Simulator };'}
+/>

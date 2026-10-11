@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use autd3_rs::commands::{ChangeModulationBank, ConfigModulation, WriteModulationBuffer};
+use autd3_rs::commands::{ActivateModulationBank, ConfigModulation, WriteModulationBuffer};
 use autd3_rs::units::Hz;
 use autd3_rs::value::{LoopBehavior, ModulationBank, SamplingConfig, TransitionMode};
 use autd3_rs_modulation::{SineOption, modulation_buffer, sine};
@@ -28,7 +28,7 @@ async fn main() -> Result<()> {
     // ANCHOR_END: config
     let transition_mode = TransitionMode::Immediate;
     // ANCHOR: change
-    ChangeModulationBank {
+    ActivateModulationBank {
         bank,
         transition_mode,
     };

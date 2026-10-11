@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
-using AUTD3.Link;
 using static AUTD3.Units;
 
 namespace DocSamples.TutorialSendModes;
@@ -17,14 +16,9 @@ internal static class Sample
     {
         var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
-        await using var client = await Client.OpenAsync(geometry, new EchocatLinkOption(), new ClientConfig());
+        await using var client = await Client.OpenAsync(geometry, new TransportOption(), new ClientConfig());
 
-        var builder = client.DatagramBuilder();
-        builder.Push(new SetSilencer());
-        foreach (var frame in builder.Build())
-        {
-            await client.SendCheckedAsync(frame);
-        }
+        await client.SendAsync(new SetSilencer());
 
         var wavelength = Pattern.Wavelength(340.0f * m / s);
 
@@ -55,12 +49,7 @@ internal static class Sample
                 wavelength,
                 phases
             );
-            var builder = client.DatagramBuilder();
-            builder.Push(new Pattern(phases, Intensity.Max));
-            foreach (var frame in builder.Build())
-            {
-                await client.SendCheckedAsync(frame);
-            }
+            await client.SendAsync(new Pattern(phases, Intensity.Max));
         }
         // ANCHOR_END: stop_and_wait
     }
@@ -69,7 +58,8 @@ internal static class Sample
     {
         // ANCHOR: streaming
         var phases = geometry.PhaseBuffer();
-        var pending = new Queue<ResponseToken>();
+        using var frames = new Frames();
+        var pending = new Queue<ResponseFuture>();
         foreach (var target in targets)
         {
             Pattern.Focus(
@@ -78,15 +68,14 @@ internal static class Sample
                 wavelength,
                 phases
             );
-            var builder = client.DatagramBuilder();
-            builder.Push(new Pattern(phases, Intensity.Max));
-            foreach (var frame in builder.Build())
+            frames.EncodeInto(geometry, new Pattern(phases, Intensity.Max));
+            foreach (var frame in frames)
             {
                 if (pending.Count >= Client.MaxInflight)
                 {
                     (await pending.Dequeue()).Check();
                 }
-                pending.Enqueue(await client.SendAsync(frame));
+                pending.Enqueue(await client.SendFrameAsync(frame));
             }
         }
         // Drain the remaining responses.

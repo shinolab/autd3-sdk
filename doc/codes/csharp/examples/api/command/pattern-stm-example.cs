@@ -2,8 +2,6 @@ using System;
 using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
-using AUTD3.Link;
-using Nop = AUTD3.Link.Nop;
 using static AUTD3.Units;
 
 // HIDE
@@ -15,7 +13,8 @@ internal static class Sample
     {
         // HIDE_END
 var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
-await using var client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());
+using var emulator = new UdpEmulator(geometry.NumDevices);
+await using var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());
 
 var center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
 var wavelength = Pattern.Wavelength(340.0f * m / s);
@@ -34,24 +33,18 @@ for (var i = 0; i < 200; i++)
     patterns[i] = buffer;
 }
 
-var builder = client.DatagramBuilder();
-builder.Push(new PatternStm(
+await client.SendAsync(new PatternStm(
     1.0f * Hz,
     patterns,
     Intensity.Max,
     new PatternStmOption
     {
         Bank = PatternBank.B0,
-        Mode = PatternStmMode.PhaseIntensityFull,
+        PhaseDepth = PhaseDepth.Bits8,
         LoopBehavior = LoopBehavior.Infinite,
         TransitionMode = TransitionMode.Immediate,
     }
 ));
-var frames = builder.Build();
-foreach (var frame in frames)
-{
-    await client.SendCheckedAsync(frame);
-}
         // HIDE
     }
 }

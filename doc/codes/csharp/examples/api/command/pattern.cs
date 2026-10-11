@@ -41,7 +41,7 @@ internal static class Sample
             size: 1,
             loopBehavior: LoopBehavior.Infinite
         );
-        new ChangePatternBank(
+        new ActivatePatternBank(
             bank: bank,
             transitionMode: transitionMode
         );

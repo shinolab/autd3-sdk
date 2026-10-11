@@ -1,0 +1,33 @@
+---
+title: Logging
+description: init_tracing, which writes the library's logs to standard output or standard error
+sidebar:
+  order: 6
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/api/basics/tracing.rs?raw";
+import pySample from "@codes/python/examples/api/basics/tracing.py?raw";
+import csSample from "@codes/csharp/examples/api/basics/tracing.cs?raw";
+
+The library's logs are emitted through the `tracing` crate.
+`init_tracing` is provided as a utility for initializing logging.
+
+In Rust, enable the `logging` feature of `autd3-rs`.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+`init_tracing` returns a guard.
+Keep the guard until the end of the program.
+
+## TracingOption
+
+| Field            | Type           | Default  | Description                                                  |
+| ---------------- | -------------- | -------- | ------------------------------------------------------------ |
+| `default_filter` | `&'static str` | `"info"` | Filter used when the `RUST_LOG` environment variable is not set |
+| `writer`         | `LogWriter`    | `Stdout` | Output destination. `LogWriter::Stdout` / `LogWriter::Stderr` |
+
+If the `RUST_LOG` environment variable is set, it takes precedence over `default_filter`.

@@ -2,9 +2,8 @@ import asyncio
 
 import numpy as np
 
-import autd3_link_echocat as echocat
 import autd3_pattern as pattern
-from autd3 import Client, ClientConfig
+from autd3 import Client, ClientConfig, TransportOption
 from autd3.commands import Pattern
 from autd3.geometry import Autd3, Geometry
 from autd3.units import m, s
@@ -15,7 +14,7 @@ async def main() -> None:
 
     async with await Client.open(
         geometry,
-        echocat.EchocatLinkOption(),
+        TransportOption(),
         ClientConfig(),
     ) as client:
         wavelength = pattern.wavelength(340 * m / s)
@@ -31,10 +30,7 @@ async def main() -> None:
             wavelength,
             pat_a,
         )
-        builder = client.datagram_builder()
-        builder.push(Pattern(pat_a, Intensity.MAX, bank=PatternBank.B0))
-        for frame in builder.build():
-            await client.send_checked(frame)
+        await client.send(Pattern(pat_a, Intensity.MAX, bank=PatternBank.B0))
 
         # Write focus B to bank B1, which is not currently playing, then switch to B1.
         # B0 keeps playing cleanly while B1 is being written (double buffering).
@@ -46,10 +42,7 @@ async def main() -> None:
             wavelength,
             pat_b,
         )
-        builder = client.datagram_builder()
-        builder.push(Pattern(pat_b, Intensity.MAX, bank=PatternBank.B1))
-        for frame in builder.build():
-            await client.send_checked(frame)
+        await client.send(Pattern(pat_b, Intensity.MAX, bank=PatternBank.B1))
         # ANCHOR_END: switch
 
 

@@ -21,13 +21,13 @@ fn main() -> Result<()> {
 
     // ANCHOR: components
     SineComponent {
-        freq: 100 * Hz,
+        freq: (100 * Hz).into(),
         option: SineOption::default(),
     };
     // ANCHOR_END: components
 
     let components = [SineComponent {
-        freq: 100 * Hz,
+        freq: (100 * Hz).into(),
         option: SineOption::default(),
     }];
     // ANCHOR: api

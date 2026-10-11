@@ -5,15 +5,12 @@ sidebar:
   order: 7
 ---
 
-`autd3-console` は, ファームウェアの書き込み, シミュレータの起動, TwinCAT のセットアップ, アプライアンスの操作をまとめた GUI ツール.
+`autd3-console` は, ファームウェアの書き込みとシミュレータの起動をまとめた GUI ツール.
 
 ## 入手
 
 GitHub Releases (`console-v*`) から配布している.
 [console-v0.9.0](https://github.com/shinolab/autd3-sdk/releases/tag/console-v0.9.0) を開き, そこに記載のインストールコマンドを実行する.
-
-インストーラは実行ファイルを `~/.autd3/bin` (Windows では `%USERPROFILE%\.autd3\bin`) に置き, `PATH` に追加する.
-`PATH` の変更を反映するにはシェル (Windows ではターミナル) を開き直す.
 
 インストーラを使わない場合は, 同じリリースのアーカイブ (`console-<target>.tar.xz` / `.zip`) をダウンロードし,
 展開して `autd3-console` を実行してもよい.
@@ -36,17 +33,14 @@ xattr -dr com.apple.quarantine <展開先ディレクトリ>
 
 ## 同梱されるコマンド
 
-GUI を使わずに直接叩けるコマンドも同じアーカイブに入っている.
+GUI を使わずに直接叩けるコマンドも同梱されている.
 
 | コマンド | 用途 |
 | --- | --- |
 | `autd3-console` | GUI 本体 |
-| `autd3-appliance` | [アプライアンス](/autd3-sdk/getting-started/appliance/) の探索と操作 |
 | `autd3-firmware-writer` | [ファームウェア](/autd3-sdk/getting-started/setup/firmware/) の書き込み (JTAG) |
-| `autd3-rs-firmware-ota` | [ファームウェア](/autd3-sdk/getting-started/setup/firmware/#ethernet-ケーブルを使用した-ota) の更新 (EtherCAT) |
-| `autd3-rs-simulator` | [シミュレータ](/autd3-sdk/guide/simulator/) |
-
-Windows 版にはこれに加えて TwinCAT のセットアップ用の `twincat-cli` が入る.
+| `autd3-firmware-ota` | [ファームウェア](/autd3-sdk/getting-started/setup/firmware/#ethernet-ケーブルを使用した-ota) の更新 (OTA) |
+| `autd3-simulator` | [シミュレータ](/autd3-sdk/guide/simulator/) |
 
 ## タブ
 
@@ -55,9 +49,7 @@ Windows 版にはこれに加えて TwinCAT のセットアップ用の `twincat
 | タブ | 内容 |
 | --- | --- |
 | Simulator | [シミュレータ](/autd3-sdk/guide/simulator/) の起動 |
-| Appliance | [アプライアンス](/autd3-sdk/getting-started/appliance/) の探索, 状態表示, バスの開閉 |
-| TwinCAT | [TwinCAT のセットアップ](/autd3-sdk/getting-started/twincat/) (Windows のみ表示される) |
-| Firmware | [ファームウェアの更新](/autd3-sdk/getting-started/setup/firmware/) (JTAG / EtherCAT) |
+| Firmware | [ファームウェアの更新](/autd3-sdk/getting-started/setup/firmware/) (JTAG / OTA) |
 
 ## 更新
 

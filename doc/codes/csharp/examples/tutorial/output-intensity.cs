@@ -1,7 +1,6 @@
 using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
-using AUTD3.Link;
 using static AUTD3.Units;
 
 namespace DocSamples.TutorialOutputIntensity;
@@ -12,7 +11,7 @@ internal static class Sample
     {
         var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
-        await using var client = await Client.OpenAsync(geometry, new EchocatLinkOption(), new ClientConfig());
+        await using var client = await Client.OpenAsync(geometry, new TransportOption(), new ClientConfig());
 
         var target = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
         var wavelength = Pattern.Wavelength(340.0f * m / s);
@@ -37,13 +36,8 @@ internal static class Sample
         );
         // ANCHOR_END: modulation
 
-        var builder = client.DatagramBuilder();
-        builder.Push(new SetSilencer());
-        builder.Push(new Pattern(phases, intensity));
-        builder.Push(new Modulation(SamplingConfig.Freq4k, modulation));
-        foreach (var frame in builder.Build())
-        {
-            await client.SendCheckedAsync(frame);
-        }
+        await client.SendAsync(new SetSilencer());
+        await client.SendAsync(new Pattern(phases, intensity));
+        await client.SendAsync(new Modulation(SamplingConfig.Freq4k, modulation));
     }
 }

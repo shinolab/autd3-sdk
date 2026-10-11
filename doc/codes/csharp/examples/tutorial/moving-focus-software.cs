@@ -2,7 +2,6 @@ using System;
 using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
-using AUTD3.Link;
 using static AUTD3.Units;
 
 namespace DocSamples.TutorialMovingFocusSoftware;
@@ -13,7 +12,7 @@ internal static class Sample
     {
         var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
-        var client = await Client.OpenAsync(geometry, new EchocatLinkOption(), new ClientConfig());
+        var client = await Client.OpenAsync(geometry, new TransportOption(), new ClientConfig());
 
         var center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
         var wavelength = Pattern.Wavelength(340.0f * m / s);
@@ -31,12 +30,7 @@ internal static class Sample
                     wavelength,
                     phases
                 );
-                var builder = client.DatagramBuilder();
-                builder.Push(new Pattern(phases, Intensity.Max));
-                foreach (var frame in builder.Build())
-                {
-                    await client.SendCheckedAsync(frame);
-                }
+                await client.SendAsync(new Pattern(phases, Intensity.Max));
                 await Task.Delay(TimeSpan.FromSeconds(1));
             }
         }

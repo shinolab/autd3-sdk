@@ -9,18 +9,14 @@ autoexamples = false
 [workspace]
 
 [dependencies]
-autd3-rs = { path = "../../../crates/autd3-rs", features = ["legacy"] }
+autd3-rs = { path = "../../../crates/autd3-rs", features = ["logging"] }
+autd3-rs-firmware-emulator = { path = "../../../crates/autd3-rs-firmware-emulator", features = ["udp"] }
 autd3-rs-pattern = { path = "../../../crates/autd3-rs-pattern" }
 autd3-rs-pattern-holo = { path = "../../../crates/autd3-rs-pattern-holo" }
 autd3-rs-modulation = { path = "../../../crates/autd3-rs-modulation" }
 autd3-rs-emulator = { path = "../../../extras/autd3-rs-emulator" }
-autd3-rs-link-nop = { path = "../../../crates/autd3-rs-link-nop" }
-autd3-rs-link-echocat = { path = "../../../crates/autd3-rs-link-echocat" }
-autd3-rs-link-remote = { path = "../../../crates/autd3-rs-link-remote" }
-autd3-rs-link-twincat = { path = "../../../crates/autd3-rs-link-twincat" }
-chrono = { version = "0.4.45", default-features = false, features = ["std"] }
 anyhow = "1"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "time"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "time"] }
 
 [lints.rust]
 unused = "allow"
@@ -34,14 +30,6 @@ name = "api_basics_client"
 path = "examples/api/basics/client.rs"
 
 [[example]]
-name = "api_basics_datagram_builder"
-path = "examples/api/basics/datagram-builder.rs"
-
-[[example]]
-name = "api_basics_dc_sys_time"
-path = "examples/api/basics/dc-sys-time.rs"
-
-[[example]]
 name = "api_basics_geometry"
 path = "examples/api/basics/geometry.rs"
 
@@ -50,12 +38,32 @@ name = "api_basics_sampling_config"
 path = "examples/api/basics/sampling-config.rs"
 
 [[example]]
+name = "api_basics_send"
+path = "examples/api/basics/send.rs"
+
+[[example]]
+name = "api_basics_sys_time"
+path = "examples/api/basics/sys-time.rs"
+
+[[example]]
+name = "api_basics_tracing"
+path = "examples/api/basics/tracing.rs"
+
+[[example]]
 name = "api_command_clear_example"
 path = "examples/api/command/clear-example.rs"
 
 [[example]]
 name = "api_command_clear"
 path = "examples/api/command/clear.rs"
+
+[[example]]
+name = "api_command_cpu_config_example"
+path = "examples/api/command/cpu-config-example.rs"
+
+[[example]]
+name = "api_command_cpu_config"
+path = "examples/api/command/cpu-config.rs"
 
 [[example]]
 name = "api_command_foci_stm_example"
@@ -106,8 +114,8 @@ name = "api_command_lowlevel_mod_bank"
 path = "examples/api/command/lowlevel/mod-bank.rs"
 
 [[example]]
-name = "api_command_lowlevel_pattern_compressed_example"
-path = "examples/api/command/lowlevel/pattern-compressed-example.rs"
+name = "api_command_lowlevel_pattern_phase_example"
+path = "examples/api/command/lowlevel/pattern-phase-example.rs"
 
 [[example]]
 name = "api_command_modulation_example"
@@ -298,20 +306,12 @@ name = "api_compute_pattern_set"
 path = "examples/api/compute/pattern/set.rs"
 
 [[example]]
-name = "api_link_echocat"
-path = "examples/api/link/echocat.rs"
+name = "api_connection_device_emulator"
+path = "examples/api/connection/device-emulator.rs"
 
 [[example]]
-name = "api_link_remote_client"
-path = "examples/api/link/remote_client.rs"
-
-[[example]]
-name = "api_link_remote_server"
-path = "examples/api/link/remote_server.rs"
-
-[[example]]
-name = "api_link_twincat"
-path = "examples/api/link/twincat.rs"
+name = "api_connection_udp"
+path = "examples/api/connection/udp.rs"
 
 [[example]]
 name = "guide_custom_modulation"
@@ -324,10 +324,6 @@ path = "examples/guide/custom-pattern.rs"
 [[example]]
 name = "guide_emulator"
 path = "examples/guide/emulator.rs"
-
-[[example]]
-name = "guide_legacy"
-path = "examples/guide/legacy.rs"
 
 [[example]]
 name = "guide_state_check"

@@ -8,7 +8,8 @@ use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::units::{Hz, kHz};
 use autd3_rs::value::SamplingConfig;
 use autd3_rs::{Client, ClientConfig};
-use autd3_rs_link_nop::Nop;
+use autd3_rs::udp::TransportOption;
+use autd3_rs_firmware_emulator::udp::UdpEmulator;
 use autd3_rs_modulation::{Nearest, SineOption, sine};
 
 #[tokio::main(flavor = "multi_thread")]
@@ -22,16 +23,21 @@ async fn main() -> Result<()> {
     // ANCHOR_END: api
 
     let geometry = Geometry::new(vec![Autd3::default()]);
-    let client = Client::open(&geometry, Nop, ClientConfig::default()).await?;
+    let emulator = UdpEmulator::spawn(geometry.num_devices())?;
+    let option = TransportOption {
+        iface: emulator.interface(),
+        ..TransportOption::default()
+    };
+    let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
 
     let mut modulation = autd3_rs_modulation::modulation_buffer();
     sine(150 * Hz, &SineOption::default(), &mut modulation)?;
 
     // ANCHOR: modulation
-    let mut builder = client.datagram_builder();
-    builder.push(Modulation::new(SamplingConfig::FREQ_4K, &modulation));
+    client
+        .send(Modulation::new(SamplingConfig::FREQ_4K, &modulation))
+        .await?;
     // ANCHOR_END: modulation
-    let _ = builder.build()?;
 
     client.close().await?;
     Ok(())

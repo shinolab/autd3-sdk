@@ -15,18 +15,19 @@ internal static class Sample
 
         SetSilencer.Disable();
 
-        new SetSilencer(new FixedCompletionTime(
-            intensity: intensity,
-            phase: phase,
-            strictMode: strictMode
-        ));
+        new SetSilencer(new FixedCompletionTime
+        {
+            Intensity = intensity,
+            Phase = phase,
+            StrictMode = strictMode,
+        });
         // ANCHOR_END: api
 
         ushort intensityRate = 256;
         ushort phaseRate = 256;
 
         // ANCHOR: api
-        new SetSilencer(new FixedUpdateRate(intensity: intensityRate, phase: phaseRate));
+        new SetSilencer(new FixedUpdateRate(intensityRate, phaseRate));
         // ANCHOR_END: api
     }
 }

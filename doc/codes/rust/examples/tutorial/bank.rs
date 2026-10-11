@@ -5,13 +5,19 @@ use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::{Intensity, PatternBank};
 use autd3_rs::{Client, ClientConfig};
-use autd3_rs_link_nop::Nop;
+use autd3_rs::udp::TransportOption;
+use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let client = Client::open(&geometry, Nop, ClientConfig::default()).await?;
+    let emulator = UdpEmulator::spawn(geometry.num_devices())?;
+    let option = TransportOption {
+        iface: emulator.interface(),
+        ..TransportOption::default()
+    };
+    let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
 
     let wavelength = autd3_rs_pattern::wavelength(340.0 * m / s);
 
@@ -26,11 +32,7 @@ async fn main() -> Result<()> {
         wavelength,
         &mut pat_a,
     );
-    let mut builder = client.datagram_builder();
-    builder.push(Pattern::with_bank(PatternBank::B0, &pat_a, Intensity::MAX));
-    for frame in &builder.build()? {
-        client.send_checked(frame).await?;
-    }
+    client.send(Pattern::with_bank(PatternBank::B0, &pat_a, Intensity::MAX)).await?;
 
     // Write focus B to bank B1, which is not currently playing, then switch to B1.
     // B0 keeps playing cleanly while B1 is being written (double buffering).
@@ -42,11 +44,7 @@ async fn main() -> Result<()> {
         wavelength,
         &mut pat_b,
     );
-    let mut builder = client.datagram_builder();
-    builder.push(Pattern::with_bank(PatternBank::B1, &pat_b, Intensity::MAX));
-    for frame in &builder.build()? {
-        client.send_checked(frame).await?;
-    }
+    client.send(Pattern::with_bank(PatternBank::B1, &pat_b, Intensity::MAX)).await?;
     // ANCHOR_END: switch
 
     client.close().await?;

@@ -2,7 +2,6 @@ using System;
 using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
-using AUTD3.Link;
 
 namespace DocSamples.GuideStateCheck;
 
@@ -15,17 +14,14 @@ internal static class Sample
         var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
         // ANCHOR: open
-        var (client, checker) = await Client.OpenWithCheckerAsync(
-            geometry,
-            new EchocatLinkOption(),
-            new ClientConfig()
-        );
+        var client = await Client.OpenAsync(geometry, new TransportOption(), new ClientConfig());
+        using var checker = client.StateChecker();
         // ANCHOR_END: open
 
         await using (client)
         {
             // ANCHOR: poll
-            LinkStatus? last = null;
+            DeviceStatus? last = null;
             while (true)
             {
                 var status = checker.Check();
@@ -35,7 +31,7 @@ internal static class Sample
                     {
                         Console.WriteLine($"device[{i}]: {status.Devices[i]}");
                     }
-                    Console.WriteLine($"all operational: {status.AllOp}, any lost: {status.AnyLost}, recoveries: {status.Recoveries}");
+                    Console.WriteLine($"all ready: {status.AllReady}, any lost: {status.AnyLost}");
                     last = status;
                 }
                 await Task.Delay(CheckInterval);

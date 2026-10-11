@@ -39,7 +39,7 @@ internal static class Sample
             size: (uint)data.Length,
             loopBehavior: loopBehavior
         );
-        new ChangeModulationBank(
+        new ActivateModulationBank(
             bank: bank,
             transitionMode: transitionMode
         );

@@ -39,7 +39,6 @@ fn main() -> Result<()> {
             Side::Left => &left,
             Side::Right => &right,
         },
-        Phase::ZERO,
         &mut dst,
     );
     // ANCHOR_END: api

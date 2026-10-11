@@ -14,10 +14,6 @@
     <ProjectReference Include="../../../bindings/csharp/src/AUTD3.Pattern/AUTD3.Pattern.csproj" />
     <ProjectReference Include="../../../bindings/csharp/src/AUTD3.Pattern.Holo/AUTD3.Pattern.Holo.csproj" />
     <ProjectReference Include="../../../bindings/csharp/src/AUTD3.Modulation/AUTD3.Modulation.csproj" />
-    <ProjectReference Include="../../../bindings/csharp/src/AUTD3.Link.Nop/AUTD3.Link.Nop.csproj" />
-    <ProjectReference Include="../../../bindings/csharp/src/AUTD3.Link.Echocat/AUTD3.Link.Echocat.csproj" />
-    <ProjectReference Include="../../../bindings/csharp/src/AUTD3.Link.Remote/AUTD3.Link.Remote.csproj" />
-    <ProjectReference Include="../../../bindings/csharp/src/AUTD3.Link.TwinCAT/AUTD3.Link.TwinCAT.csproj" />
   </ItemGroup>
 
 </Project>

@@ -15,7 +15,6 @@ import csFullSample from "@codes/csharp/examples/api/command/lowlevel/bank-examp
 import { excerpt } from "@lib/excerpt";
 
 `WritePatternBuffer` は, 指定したバンク・インデックスへ Pattern (各振動子の位相と振幅) を書き込む低レベルコマンド.
-通信上は位相列・振幅列の順で送られ, デバイスの CPU が FPGA のメモリへ振動子毎に並べ直して書き込む.
 
 ## API
 
@@ -30,7 +29,6 @@ import { excerpt } from "@lib/excerpt";
 
 ## Example
 
-複数の低レベルコマンドは 1 つの datagram にまとめて送る. 以下は `WritePatternBuffer` → `ConfigPattern` → `ChangePatternBank` で 1 つの Pattern を再生する例 (高レベルの [Pattern](/autd3-sdk/api/command/pattern/) と等価).
+以下は `WritePatternBuffer` → `ConfigPattern` → `ActivatePatternBank` で 1 つの Pattern を再生する例 (高レベルの [Pattern](/autd3-sdk/api/command/pattern/) と等価).
 
 <CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />
-

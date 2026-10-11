@@ -2,8 +2,6 @@ using System.Collections.Generic;
 using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
-using AUTD3.Link;
-using Nop = AUTD3.Link.Nop;
 using static AUTD3.Units;
 
 // HIDE
@@ -15,7 +13,8 @@ internal static class Sample
     {
         // HIDE_END
 var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
-await using var client = await Client.OpenAsync(geometry, new Nop(), new ClientConfig());
+using var emulator = new UdpEmulator(geometry.NumDevices);
+await using var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());
 
 var center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
 var dst = new List<ControlPoints>();
@@ -31,13 +30,12 @@ var points = dst.ToArray();
 
 var bank = PatternBank.B0;
 
-var builder = client.DatagramBuilder();
-builder.Push(new WriteFociBuffer(
+await client.SendAsync(new WriteFociBuffer(
     bank: bank,
     indexOffset: 0,
     points: points
 ));
-builder.Push(new ConfigFociStm(
+await client.SendAsync(new ConfigFociStm(
     bank: bank,
     config: new StmConfig(1.0f * Hz).IntoSamplingConfig(points.Length),
     size: (uint)points.Length,
@@ -45,15 +43,10 @@ builder.Push(new ConfigFociStm(
     soundSpeed: 340.0f * m / s,
     loopBehavior: LoopBehavior.Infinite
 ));
-builder.Push(new ChangePatternBank(
+await client.SendAsync(new ActivatePatternBank(
     bank: bank,
     transitionMode: TransitionMode.Immediate
 ));
-var frames = builder.Build();
-foreach (var frame in frames)
-{
-    await client.SendCheckedAsync(frame);
-}
         // HIDE
     }
 }

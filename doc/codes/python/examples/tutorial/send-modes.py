@@ -4,9 +4,8 @@ import math
 
 import numpy as np
 
-import autd3_link_echocat as echocat
 import autd3_pattern as pattern
-from autd3 import MAX_INFLIGHT, Client, ClientConfig
+from autd3 import Client, ClientConfig, Frames, MAX_INFLIGHT, TransportOption
 from autd3.commands import Pattern, SetSilencer
 from autd3.geometry import Autd3, Geometry
 from autd3.units import m, s
@@ -21,13 +20,10 @@ async def main() -> None:
 
     async with await Client.open(
         geometry,
-        echocat.EchocatLinkOption(),
+        TransportOption(),
         ClientConfig(),
     ) as client:
-        builder = client.datagram_builder()
-        builder.push(SetSilencer())
-        for frame in builder.build():
-            await client.send_checked(frame)
+        await client.send(SetSilencer())
 
         wavelength = pattern.wavelength(340 * m / s)
 
@@ -61,16 +57,14 @@ async def stop_and_wait(client, geometry, targets, wavelength) -> None:
             wavelength,
             phases,
         )
-        builder = client.datagram_builder()
-        builder.push(Pattern(phases, Intensity.MAX))
-        for frame in builder.build():
-            await client.send_checked(frame)
+        await client.send(Pattern(phases, Intensity.MAX))
     # ANCHOR_END: stop_and_wait
 
 
 async def streaming(client, geometry, targets, wavelength) -> None:
     # ANCHOR: streaming
     phases = geometry.phase_buffer()
+    frames = Frames()
     pending = collections.deque()
     for target in targets:
         pattern.focus(
@@ -79,12 +73,11 @@ async def streaming(client, geometry, targets, wavelength) -> None:
             wavelength,
             phases,
         )
-        builder = client.datagram_builder()
-        builder.push(Pattern(phases, Intensity.MAX))
-        for frame in builder.build():
+        frames.encode_into(geometry, Pattern(phases, Intensity.MAX))
+        for frame in frames:
             if len(pending) >= MAX_INFLIGHT:
                 (await pending.popleft()).check()
-            pending.append(await client.send(frame))
+            pending.append(await client.send_frame(frame))
     # Drain the remaining responses.
     while pending:
         (await pending.popleft()).check()

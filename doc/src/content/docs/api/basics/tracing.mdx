@@ -1,0 +1,33 @@
+---
+title: ログ出力
+description: ライブラリのログを標準出力・標準エラーへ出す init_tracing
+sidebar:
+  order: 6
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/api/basics/tracing.rs?raw";
+import pySample from "@codes/python/examples/api/basics/tracing.py?raw";
+import csSample from "@codes/csharp/examples/api/basics/tracing.cs?raw";
+
+ライブラリのログは `tracing` crate を用いて出力される.
+ユーティリティとしてログ初期化用の `init_tracing` が用意されている.
+
+Rust では `autd3-rs` の feature `logging` を有効にする.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+`init_tracing` は guard を返す.
+guard をプログラムの終わりまで保持すること.
+
+## TracingOption
+
+| フィールド       | 型             | デフォルト | 説明                                           |
+| ---------------- | -------------- | ---------- | ---------------------------------------------- |
+| `default_filter` | `&'static str` | `"info"`   | 環境変数 `RUST_LOG` が無いときに使うフィルタ   |
+| `writer`         | `LogWriter`    | `Stdout`   | 出力先. `LogWriter::Stdout` / `LogWriter::Stderr` |
+
+環境変数 `RUST_LOG` が設定されていれば, `default_filter` よりそちらが優先される.

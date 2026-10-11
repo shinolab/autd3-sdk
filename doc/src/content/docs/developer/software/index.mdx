@@ -19,52 +19,48 @@ import Mermaid from "@components/Mermaid.astro";
   PAT["autd3-rs-pattern"]
   HOLO["autd3-rs-pattern-holo"]
   MOD["autd3-rs-modulation"]
-  LINK["autd3-rs-link-*"]
   EMU["autd3-rs-firmware-emulator"]
   RS --> CORE
   PAT --> CORE
   MOD --> CORE
-  LINK --> CORE
   EMU --> CORE
   HOLO --> PAT`}
 />
 
 | クレート                     | 役割                                                                 |
 | ---------------------------- | -------------------------------------------------------------------- |
-| `autd3-rs-core`              | 基盤層. geometry / value / params / protocol / error と `Link` 抽象.   |
-| `autd3-rs`                   | クライアント本体.                                                     |
+| `autd3-rs-core`              | 基盤層. geometry / value / params / protocol / error と通信の観測型 (`bus`). |
+| `autd3-rs`                   | クライアント本体. UDP 通信 (`udp`) とデバイスエミュレータ (feature `emulator`) を含む. |
 | `autd3-rs-pattern`           | Emission パターン計算 (焦点合成等).                                   |
 | `autd3-rs-pattern-holo`      | 多焦点音場再構成. 理論は[理論と考察](/autd3-sdk/theory/holo/)を参照.  |
 | `autd3-rs-modulation`        | AM 波形計算.                                                          |
-| `autd3-rs-link-echocat`      | 自前の EtherCAT Link                                                  |
-| `autd3-rs-link-twincat`      | EtherCAT マスタを TwinCAT に委譲する Link 実装 (Windows 専用).        |
-| `autd3-rs-link-remote`       | ネットワーク越しに別ホストの Link を駆動する Link 実装.               |
-| `autd3-rs-link-nop`          | 何もしない Link 実装 (テスト・ドキュメント用).                        |
 | `autd3-rs-firmware-emulator` | 実 CPU ファームウェア (`autd3-cpu-fw`) のソースを取り込み, Rust による FPGA エミュレータと組み合わせる. |
 
 ## スレッドモデル
 
-EtherCAT マスタが要求する定周期処理と, ユーザーの非同期 API を分離している.
+デバイスとの送受信と, ユーザーの非同期 API を分離している.
 
 <Mermaid
   title="スレッドモデル"
   code={`flowchart LR
   U["ユーザースレッド (非同期)"]
-  RT["RT スレッド (定周期 EtherCAT)"]
-  U -- "mpsc: コマンド" --> RT
-  RT -- "oneshot: 完了通知" --> U`}
+  IO["I/O スレッド (受信・生存確認)"]
+  D["デバイス"]
+  U -- "UDP: フレーム" --> D
+  D -- "UDP: 返信" --> IO
+  IO -- "oneshot: 完了通知" --> U`}
 />
 
-- **RT スレッド**: EtherCAT マスタが要求する定周期で動作する. 非同期ランタイムの外で独立した OS スレッドとして動き, レイテンシを最小化する.
-- **ユーザースレッド**: `.await` で RT スレッドの完了通知を待つ. 待機は自前の `Waker` 実装だけで組まれており, 特定の非同期ランタイムに依存しない.
+- **ユーザースレッド**: `send` を呼んだスレッドがその場で全デバイスへフレームを送り, `.await` で完了通知を待つ. 待機は自前の `Waker` 実装だけで組まれており, 特定の非同期ランタイムに依存しない.
+- **I/O スレッド**: `Client` が持つ 1 本の OS スレッド. 返信を読んで `msg_id` で送信中のフレームへ照合し, 全デバイスの返信が揃ったら完了を通知する. 送るものが無い間は `heartbeat` ごとに生存確認を送る.
 
-`Link` トレイトの `cycle(tx, rx)` が 1 サイクル分の PDO 送受信を担う.
-`EchocatLink` はホスト自身が EtherCAT マスタとなり raw socket で PDO を直接回す.
-`TwinCATLink` は EtherCAT マスタを TwinCAT の RT カーネルに委譲する.
+`UdpBus` は要求駆動の口 (`send` / `heartbeat` / `recv`) だけを持ち, 送信と受信を別スレッドから同時に呼べる.
+普通の UDP ソケットで各デバイスへフレームを 1 つずつ送り, 届いた返信を 1 つずつ返す. いつ送るか (窓・`Reset`・生存確認) は `Client` が決める.
+Link のような差し替え可能な通信路の抽象は無い.
 
 ## ユーザー API からデバイスまで
 
-ユーザーが積んだコマンドは, フレーム列へ実体化されたうえで RT スレッドから 1 サイクルに 1 フレームずつ送出される.
+ユーザーが渡したコマンドは, フレーム列へ実体化されたうえで `send` を呼んだスレッドから送出される (返信を待たずに送ってよいのは `max_inflight` フレームまで).
 
 <Mermaid
   title="コマンドの流れ"
@@ -72,12 +68,12 @@ EtherCAT マスタが要求する定周期処理と, ユーザーの非同期 AP
   CMD["Command"]
   FR["Frames"]
   DEV["デバイス"]
-  CMD -- "DatagramBuilder" --> FR
-  FR -- "Client / RT スレッド" --> DEV`}
+  CMD -- "Frames::encode" --> FR
+  FR -- "Client" --> DEV`}
 />
 
-- [DatagramBuilder](/autd3-sdk/developer/software/datagram-builder/): コマンドを送信フレームへ変換する
-- [送信処理](/autd3-sdk/developer/software/transmission/): フレームを送出し, SEQ/ACK で多重化と回復を行う
+- [エンコーダ](/autd3-sdk/developer/software/encoder/): コマンドを送信フレームへ変換する
+- [送信処理](/autd3-sdk/developer/software/transmission/): フレームを送出し, 返信を `msg_id` で照合して完了させる
 
 ## バインディング
 

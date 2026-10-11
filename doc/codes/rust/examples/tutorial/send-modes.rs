@@ -7,8 +7,9 @@ use autd3_rs::commands::{Pattern, SetSilencer};
 use autd3_rs::geometry::{Autd3, Geometry, Point3, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::Intensity;
-use autd3_rs::{Client, ClientConfig, Length, MAX_INFLIGHT, ResponseFuture};
-use autd3_rs_link_nop::Nop;
+use autd3_rs::{Client, ClientConfig, Frames, Length, MAX_INFLIGHT, ResponseFuture};
+use autd3_rs::udp::TransportOption;
+use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
 const NUM_POINTS: usize = 1000;
 const RADIUS_MM: f32 = 30.0;
@@ -17,13 +18,14 @@ const RADIUS_MM: f32 = 30.0;
 async fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let client = Client::open(&geometry, Nop, ClientConfig::default()).await?;
+    let emulator = UdpEmulator::spawn(geometry.num_devices())?;
+    let option = TransportOption {
+        iface: emulator.interface(),
+        ..TransportOption::default()
+    };
+    let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
 
-    let mut builder = client.datagram_builder();
-    builder.push(SetSilencer::default());
-    for frame in &builder.build()? {
-        client.send_checked(frame).await?;
-    }
+    client.send(SetSilencer::default()).await?;
 
     let wavelength = autd3_rs_pattern::wavelength(340.0 * m / s);
 
@@ -46,7 +48,7 @@ async fn main() -> Result<()> {
     stop_and_wait(&client, &geometry, &targets, wavelength).await?;
     streaming(&client, &geometry, &targets, wavelength).await?;
 
-    client.stop().await?;
+    client.silent_stop().await?;
     client.close().await?;
     Ok(())
 }
@@ -66,11 +68,7 @@ async fn stop_and_wait(
             wavelength,
             &mut phases,
         );
-        let mut builder = client.datagram_builder();
-        builder.push(Pattern::new(&phases, Intensity::MAX));
-        for frame in &builder.build()? {
-            client.send_checked(frame).await?;
-        }
+        client.send(Pattern::new(&phases, Intensity::MAX)).await?;
     }
     // ANCHOR_END: stop_and_wait
     Ok(())
@@ -84,6 +82,7 @@ async fn streaming(
 ) -> Result<()> {
     // ANCHOR: streaming
     let mut phases = geometry.phase_buffer();
+    let mut frames = Frames::default();
     let mut pending: VecDeque<ResponseFuture> = VecDeque::with_capacity(MAX_INFLIGHT);
     for &target in targets {
         autd3_rs_pattern::focus(
@@ -92,18 +91,17 @@ async fn streaming(
             wavelength,
             &mut phases,
         );
-        let mut builder = client.datagram_builder();
-        builder.push(Pattern::new(&phases, Intensity::MAX));
-        for frame in &builder.build()? {
+        frames.encode_into(geometry, Pattern::new(&phases, Intensity::MAX))?;
+        for frame in &frames {
             if pending.len() >= MAX_INFLIGHT {
                 pending.pop_front().expect("non-empty").await?.check()?;
             }
-            pending.push_back(client.send(frame).await?);
+            pending.push_back(client.send_frame(frame).await?);
         }
     }
     // Drain the remaining responses.
-    while let Some(fut) = pending.pop_front() {
-        fut.await?.check()?;
+    while let Some(response) = pending.pop_front() {
+        response.await?.check()?;
     }
     // ANCHOR_END: streaming
     Ok(())
