@@ -22,6 +22,11 @@ pub const DEFAULT_HOP_LIMIT: u8 = 64;
 
 pub const UNSPECIFIED: Ipv6 = [0; 16];
 
+#[must_use]
+pub const fn is_link_local_unicast(ip: &Ipv6) -> bool {
+    ip[0] == 0xFE && ip[1] & 0xC0 == 0x80
+}
+
 const ECHO_ID_SEQ: usize = 4;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -37,6 +42,7 @@ mod tests {
     use std::vec::Vec;
 
     use etherparse::{EtherType, IpNumber, icmpv6};
+    use rstest::rstest;
 
     use super::*;
 
@@ -102,6 +108,24 @@ mod tests {
         frame[0..4].copy_from_slice(&0x1234_5678u32.to_le_bytes());
         frame[4] = 0x80;
         frame
+    }
+
+    #[rstest]
+    #[case::host(HOST_IP, true)]
+    #[case::first_of_the_prefix([0xFE, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], true)]
+    #[case::last_of_the_prefix([0xFE, 0xBF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF], true)]
+    #[case::just_below_the_prefix([0xFE, 0x7F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF], false)]
+    #[case::site_local([0xFE, 0xC0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], false)]
+    #[case::unspecified(UNSPECIFIED, false)]
+    #[case::loopback([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], false)]
+    #[case::all_nodes(autd3_cpu_wire::udp::ALL_NODES, false)]
+    #[case::global([0x20, 0x01, 0x0D, 0xB8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], false)]
+    #[case::unique_local([0xFD, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], false)]
+    fn only_fe80_slash_10_is_a_link_local_unicast_address(
+        #[case] ip: Ipv6,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(is_link_local_unicast(&ip), expected);
     }
 
     #[test]

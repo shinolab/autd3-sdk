@@ -344,7 +344,10 @@ impl Node {
                 Received::Nothing
             }
             Some(Packet::Udp(udp)) => {
-                if udp.dst_port == PORT && (udp.dst_ip == self.addr || udp.dst_ip == ALL_NODES) {
+                if udp.dst_port == PORT
+                    && (udp.dst_ip == self.addr || udp.dst_ip == ALL_NODES)
+                    && net::is_link_local_unicast(&udp.src_ip)
+                {
                     self.on_udp(nic, now_ms, &udp, rx, cmds)
                 } else {
                     Received::Nothing
@@ -571,6 +574,7 @@ mod tests {
         solicited_node,
     };
     use etherparse::{EtherType, IpNumber, icmpv6};
+    use rstest::rstest;
     use zerocopy::little_endian::U64;
     use zerocopy::{FromBytes, IntoBytes};
 
@@ -694,6 +698,17 @@ mod tests {
     }
 
     fn encode_request(dst: Ipv6, version: u8, kind: u8, msg_id: u16, body: &[u8]) -> Vec<u8> {
+        encode_request_from(HOST_IP, dst, version, kind, msg_id, body)
+    }
+
+    fn encode_request_from(
+        src_ip: Ipv6,
+        dst: Ipv6,
+        version: u8,
+        kind: u8,
+        msg_id: u16,
+        body: &[u8],
+    ) -> Vec<u8> {
         let mut buf = vec![0u8; MAX_FRAME];
         let header = Header {
             version,
@@ -704,7 +719,7 @@ mod tests {
         buf[UDP_PAYLOAD_OFFSET + size_of::<Header>()..][..body.len()].copy_from_slice(body);
         let src = Endpoint {
             mac: HOST_MAC,
-            ip: HOST_IP,
+            ip: src_ip,
             port: HOST_PORT,
         };
         let to = Endpoint {
@@ -1011,6 +1026,73 @@ mod tests {
         assert_eq!(reply.unit_id, 1);
         assert_eq!(reply.flags, Flags::ASSIGNED);
         assert_eq!(reply.sys_time.get(), 5_000_000_000);
+    }
+
+    #[rstest]
+    #[case::unspecified(net::UNSPECIFIED)]
+    #[case::loopback([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])]
+    #[case::all_nodes(ALL_NODES)]
+    #[case::global([0x20, 0x01, 0x0D, 0xB8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])]
+    #[case::site_local([0xFE, 0xC0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])]
+    fn a_datagram_from_a_source_that_is_not_link_local_unicast_is_dropped(#[case] src_ip: Ipv6) {
+        let mut h = Harness::new();
+        for kind in [Kind::ReadUnitInfo, Kind::Discover, Kind::ResetId] {
+            let request =
+                encode_request_from(src_ip, ALL_NODES, PROTOCOL_VERSION, kind.as_u8(), 1, &[]);
+            assert_eq!(h.deliver(&request), Received::Nothing);
+        }
+        let unsupported = encode_request_from(
+            src_ip,
+            ALL_NODES,
+            PROTOCOL_VERSION + 1,
+            Kind::Discover.as_u8(),
+            1,
+            &[],
+        );
+        assert_eq!(h.deliver(&unsupported), Received::Nothing);
+        assert!(h.nic.sent.is_empty());
+
+        h.assign(1);
+        h.send(unit_address(1), Kind::Frame, &frame_body(1));
+        let host = h.only_reply();
+        for (kind, body) in [
+            (Kind::Frame, &frame_body(2)[..]),
+            (Kind::Heartbeat, &[][..]),
+        ] {
+            let request = encode_request_from(
+                src_ip,
+                unit_address(1),
+                PROTOCOL_VERSION,
+                kind.as_u8(),
+                2,
+                body,
+            );
+            assert_eq!(h.deliver(&request), Received::Nothing);
+        }
+        assert_eq!(h.cmds.frames.len(), 1);
+        assert!(h.nic.sent.is_empty());
+        h.tick(50);
+        assert!(h.node.is_assigned());
+
+        h.cmds.reply = CmdReply::new(1, Error::None, ReplyData::EMPTY);
+        h.node.send_completion(&mut h.nic, 9, &mut h.cmds);
+        assert_eq!(h.only_reply().dst_ip, host.dst_ip);
+    }
+
+    #[test]
+    fn a_datagram_from_the_last_link_local_address_is_answered() {
+        let mut h = Harness::new();
+        let src_ip = [0xFE, 0xBF, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9];
+        let request = encode_request_from(
+            src_ip,
+            ALL_NODES,
+            PROTOCOL_VERSION,
+            Kind::Discover.as_u8(),
+            1,
+            &[],
+        );
+        h.deliver(&request);
+        assert_eq!(h.only_reply().dst_ip, src_ip);
     }
 
     #[test]
@@ -1606,9 +1688,7 @@ mod tests {
             wired.slave.nic.t = wired.gm.nic.t;
             wired.slave.now_ms += 1;
             let slave = &mut wired.slave;
-            slave
-                .node
-                .tick(&mut slave.nic, slave.now_ms, &mut &*c.cpu);
+            slave.node.tick(&mut slave.nic, slave.now_ms, &mut &*c.cpu);
             if !slave.node.ptp.is_locked() {
                 let elapsed = lost_for.map_or(0, |ms: u32| ms + 1);
                 lost_for = Some(elapsed);
