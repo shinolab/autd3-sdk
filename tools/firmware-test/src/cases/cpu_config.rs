@@ -162,14 +162,14 @@ async fn latch_polls(ctx: &Ctx<'_>) -> Result<()> {
     Ok(())
 }
 
-fn states(ctx: &Ctx<'_>) -> Vec<DeviceState> {
+pub(crate) fn states(ctx: &Ctx<'_>) -> Vec<DeviceState> {
     ctx.states
         .check()
         .map(|s| s.devices().to_vec())
         .unwrap_or_default()
 }
 
-async fn watch(ctx: &Ctx<'_>, label: &str, window: Duration) -> Vec<DeviceState> {
+pub(crate) async fn watch(ctx: &Ctx<'_>, label: &str, window: Duration) -> Vec<DeviceState> {
     let deadline = std::time::Instant::now() + window;
     let mut seen = states(ctx);
     let mut changes = 0u32;

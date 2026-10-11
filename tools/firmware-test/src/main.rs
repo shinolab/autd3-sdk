@@ -15,11 +15,56 @@ use autd3_rs::{Client, ClientConfig, Error, Frames, Interface, StateChecker, Tra
 use crate::cli::Cli;
 use crate::io::{check, prompt, wait_enter};
 
+const REOPEN_ATTEMPTS: u32 = 5;
+const REOPEN_INTERVAL: Duration = Duration::from_secs(2);
+
 pub struct Ctx<'a> {
     pub client: &'a Client,
     pub geometry: &'a Geometry,
     pub states: &'a StateChecker,
     pub heartbeat: Duration,
+    pub lost_timeout: Duration,
+}
+
+pub struct Link<'a> {
+    pub geometry: &'a Geometry,
+    pub option: &'a TransportOption,
+}
+
+impl Link<'_> {
+    async fn open(&self) -> Result<Client, Error> {
+        Client::open(self.geometry, self.option, ClientConfig::default()).await
+    }
+
+    pub async fn reopen(&self) -> Result<Client> {
+        let mut attempt = 1;
+        loop {
+            match self.open().await {
+                Ok(client) => {
+                    restore_gpio_out(&client).await;
+                    return Ok(client);
+                }
+                Err(e) if attempt < REOPEN_ATTEMPTS => {
+                    eprintln!(
+                        "reopening attempt {attempt}/{REOPEN_ATTEMPTS} failed: {e}; retrying in {REOPEN_INTERVAL:?}"
+                    );
+                    attempt += 1;
+                    tokio::time::sleep(REOPEN_INTERVAL).await;
+                }
+                Err(e) => {
+                    return Err(e).context(format!(
+                        "reopening the devices failed {REOPEN_ATTEMPTS} time(s)"
+                    ));
+                }
+            }
+        }
+    }
+}
+
+enum Selected {
+    Quit,
+    Lost,
+    Reboot,
 }
 
 impl Ctx<'_> {
@@ -56,7 +101,15 @@ const CASE_NAMES: &[&str] = &[
     "FPGA State",
     "CPU Config",
     "Synchronize",
+    "PTP Unlock Failsafe",
+    "Lost",
+    "Reboot",
 ];
+
+const LOST_INDEX: usize = 16;
+const REBOOT_INDEX: usize = 17;
+
+const _: () = assert!(CASE_NAMES.len() == REBOOT_INDEX + 1);
 
 async fn dispatch(index: usize, ctx: &Ctx<'_>) -> Result<()> {
     match index {
@@ -75,6 +128,7 @@ async fn dispatch(index: usize, ctx: &Ctx<'_>) -> Result<()> {
         12 => cases::fpga_state::run(ctx).await,
         13 => cases::cpu_config::run(ctx).await,
         14 => cases::synchronize::run(ctx).await,
+        15 => cases::ptp_unlock_failsafe::run(ctx).await,
         _ => Ok(()),
     }
 }
@@ -101,48 +155,72 @@ async fn main() -> Result<()> {
 
 async fn run(cli: &Cli) -> Result<()> {
     let geometry = Geometry::new((0..cli.devices).map(|_| Autd3::default()).collect());
-    let config = ClientConfig::default();
+    let heartbeat = Duration::from_micros(cli.heartbeat_us);
 
+    let default = TransportOption::default();
     let option = TransportOption {
         iface: if cli.simulator {
             Interface::Simulator
         } else {
             cli.interface.clone().into()
         },
-        heartbeat: Some(Duration::from_micros(cli.heartbeat_us)),
-        ..Default::default()
+        heartbeat: Some(heartbeat),
+        lost_timeout: cli
+            .lost_timeout_ms
+            .map_or(default.lost_timeout, Duration::from_millis),
+        ..default
     };
-    let client = Client::open(&geometry, &option, config)
-        .await
-        .context("opening the devices")?;
-    let states = client.state_checker();
+    let link = Link {
+        geometry: &geometry,
+        option: &option,
+    };
+    let mut client = link.open().await.context("opening the devices")?;
 
-    run_session(
-        &client,
-        &geometry,
-        &states,
-        Duration::from_micros(cli.heartbeat_us),
-    )
-    .await;
+    describe(&client).await;
+    if restore_gpio_out(&client).await {
+        wait_enter("The GPIO[0] output is synchronised across every device").await;
+    }
+
+    loop {
+        let states = client.state_checker();
+        let ctx = Ctx {
+            client: &client,
+            geometry: &geometry,
+            states: &states,
+            heartbeat,
+            lost_timeout: option.lost_timeout,
+        };
+        client = match select(&ctx).await {
+            Selected::Quit => break,
+            Selected::Lost => cases::lost::run(client, &link).await?,
+            Selected::Reboot => cases::reboot::run(client, &link).await?,
+        };
+    }
 
     client.close().await.context("closing client")?;
     println!("Ok!");
     Ok(())
 }
 
-async fn run_session(
-    client: &Client,
-    geometry: &Geometry,
-    states: &StateChecker,
-    heartbeat: Duration,
-) {
-    let ctx = Ctx {
-        client,
-        geometry,
-        states,
-        heartbeat,
-    };
+async fn restore_gpio_out(client: &Client) -> bool {
+    use autd3_rs::commands::{GpioOut, SetGpioOut};
+    let sent = client
+        .send(SetGpioOut {
+            outputs: [
+                GpioOut::BaseSignal,
+                GpioOut::Off,
+                GpioOut::Off,
+                GpioOut::Off,
+            ],
+        })
+        .await;
+    if let Err(e) = &sent {
+        eprintln!("set gpio out failed: {e}");
+    }
+    sent.is_ok()
+}
 
+pub async fn describe(client: &Client) {
     match client.read_firmware_version().await {
         Ok(fw) => {
             check(&format!("Connected devices: {}", client.num_devices()));
@@ -158,25 +236,6 @@ async fn run_session(
             }
         }
         Err(e) => eprintln!("read firmware version failed: {e}"),
-    }
-
-    {
-        use autd3_rs::commands::{GpioOut, SetGpioOut};
-        if let Err(e) = ctx
-            .send(SetGpioOut {
-                outputs: [
-                    GpioOut::BaseSignal,
-                    GpioOut::Off,
-                    GpioOut::Off,
-                    GpioOut::Off,
-                ],
-            })
-            .await
-        {
-            eprintln!("set gpio out failed: {e}");
-        } else {
-            wait_enter("The GPIO[0] output is synchronised across every device").await;
-        }
     }
 
     match client.read_fpga_state().await {
@@ -202,7 +261,9 @@ async fn run_session(
         }
         Err(e) => eprintln!("read fpga state failed: {e}"),
     }
+}
 
+async fn select(ctx: &Ctx<'_>) -> Selected {
     loop {
         println!();
         for (i, name) in CASE_NAMES.iter().enumerate() {
@@ -211,18 +272,23 @@ async fn run_session(
         println!("[anything else]: quit");
         let sel = prompt("Select a number").await;
         let Ok(i) = sel.trim().parse::<usize>() else {
-            break;
+            return Selected::Quit;
         };
         if i >= CASE_NAMES.len() {
-            break;
+            return Selected::Quit;
         }
 
         println!("=== {} ===", CASE_NAMES[i]);
-        if let Err(e) = dispatch(i, &ctx).await {
+        match i {
+            LOST_INDEX => return Selected::Lost,
+            REBOOT_INDEX => return Selected::Reboot,
+            _ => {}
+        }
+        if let Err(e) = dispatch(i, ctx).await {
             eprintln!("test failed: {e:?}");
         }
 
-        if let Err(e) = reset(&ctx).await {
+        if let Err(e) = reset(ctx).await {
             eprintln!("reset failed: {e:?}");
         }
     }

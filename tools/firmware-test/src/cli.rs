@@ -11,6 +11,8 @@ pub struct Cli {
     pub devices: usize,
     #[arg(long, default_value_t = 10_000)]
     pub heartbeat_us: u64,
+    #[arg(long)]
+    pub lost_timeout_ms: Option<u64>,
 }
 
 impl Cli {
