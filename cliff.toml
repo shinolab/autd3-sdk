@@ -24,6 +24,12 @@ conventional_commits = true
 filter_unconventional = true
 split_commits = false
 commit_parsers = [
+    { sha = "91aa913e34c41425a841d1450f67e47da3f2d83b", skip = true },
+    { sha = "04022074bc9e281829f4a31c5c0dfa0fef490988", skip = true },
+    { sha = "ebd04fb0b18d169bc2c43e79842f33f94ccefb92", skip = true },
+    { sha = "dee18b10f31e59b1b5f27640f1f9003389cbc927", skip = true },
+    { sha = "d507e7fefe987ff8cbd1326af0dbb8d0686cb82f", skip = true },
+    { sha = "ed7d6d860aeb9774c4507ebdba132b0cd1f8afae", skip = true },
     { footer = "^BREAKING[ -]CHANGE", group = "<!-- 0 -->💥 Breaking Changes" },
     { message = "^[a-z]+(\\(.+\\))?!", group = "<!-- 0 -->💥 Breaking Changes" },
     { message = "^feat", group = "<!-- 1 -->🚀 Features" },
