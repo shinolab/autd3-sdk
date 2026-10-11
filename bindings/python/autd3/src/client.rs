@@ -107,8 +107,8 @@ impl BusStats {
         self.0.heartbeats()
     }
 
-    fn missed_replies(&self) -> u64 {
-        self.0.missed_replies()
+    fn missed_heartbeat_replies(&self) -> u64 {
+        self.0.missed_heartbeat_replies()
     }
 
     fn acked_frames(&self) -> u64 {
@@ -125,11 +125,11 @@ impl BusStats {
 
     fn __repr__(&self) -> String {
         format!(
-            "BusStats(frames={}, resets={}, heartbeats={}, missed_replies={}, acked_frames={}, worst_ack_latency_ns={}, mean_ack_latency_ns={})",
+            "BusStats(frames={}, resets={}, heartbeats={}, missed_heartbeat_replies={}, acked_frames={}, worst_ack_latency_ns={}, mean_ack_latency_ns={})",
             self.0.frames(),
             self.0.resets(),
             self.0.heartbeats(),
-            self.0.missed_replies(),
+            self.0.missed_heartbeat_replies(),
             self.0.acked_frames(),
             self.0.worst_ack_latency_ns(),
             self.0.mean_ack_latency_ns()

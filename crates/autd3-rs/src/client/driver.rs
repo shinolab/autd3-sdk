@@ -305,7 +305,8 @@ impl Driver {
             let missed = (wait.expected & !wait.replied).count_ones();
             if missed > 0 {
                 tracing::trace!(missed, "heartbeat replies missing");
-                self.stats.record_missed_replies(u64::from(missed));
+                self.stats
+                    .record_missed_heartbeat_replies(u64::from(missed));
             }
             self.heartbeat = None;
         }
