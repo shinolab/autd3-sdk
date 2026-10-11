@@ -222,17 +222,6 @@ pub unsafe extern "C" fn autd3_udp_free_string(ptr: *mut c_char) {
 
 pub struct UdpEmulatorHandle(UdpEmulator);
 
-fn emulator_option(emulator: &UdpEmulator) -> CoreOption {
-    CoreOption {
-        iface: emulator.interface(),
-        reply_timeout: Duration::from_millis(50),
-        response_timeout: Duration::from_millis(50),
-        enumeration_timeout: Duration::from_secs(1),
-        sync_timeout: Duration::from_secs(5),
-        ..CoreOption::default()
-    }
-}
-
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_udp_emulator_spawn(
     num_devices: usize,
@@ -255,7 +244,9 @@ pub unsafe extern "C" fn autd3_udp_emulator_option(
     let Some(emulator) = (unsafe { handle_ref(handle) }) else {
         return std::ptr::null_mut();
     };
-    into_handle(TransportOptionHandle(emulator_option(&emulator.0)))
+    into_handle(TransportOptionHandle(CoreOption::for_emulator(
+        emulator.0.interface(),
+    )))
 }
 
 #[unsafe(no_mangle)]
@@ -277,6 +268,8 @@ autd3_ffi_abi::option_handle_lifecycle!(UdpEmulatorHandle, autd3_udp_emulator_fr
 
 #[cfg(test)]
 mod tests {
+    use std::alloc::{GlobalAlloc, Layout, System};
+    use std::cell::Cell;
     use std::ffi::CString;
     use std::time::Duration;
 
@@ -509,6 +502,115 @@ mod tests {
         assert_eq!(0, client);
         unsafe { crate::autd3_client_config_free(config) };
     }
+
+    #[test]
+    fn a_client_open_without_a_callback_still_consumes_the_option() {
+        let geometry = Geometry::new(vec![Autd3::default()]);
+        let config = crate::autd3_client_config_new();
+        let live = LIVE_ALLOCATIONS.get();
+        let option = autd3_transport_option_new();
+        assert!(live < LIVE_ALLOCATIONS.get());
+        unsafe {
+            crate::autd3_client_open(
+                &raw const geometry,
+                option,
+                config,
+                None,
+                std::ptr::null_mut(),
+            );
+        }
+        assert_eq!(live, LIVE_ALLOCATIONS.get());
+        unsafe { crate::autd3_client_config_free(config) };
+    }
+
+    #[test]
+    fn a_token_await_without_a_callback_still_consumes_the_token() {
+        let live = LIVE_ALLOCATIONS.get();
+        let token = into_handle(crate::ResponseToken(Vec::new()));
+        assert!(live < LIVE_ALLOCATIONS.get());
+        unsafe { crate::autd3_response_token_await(token, None, std::ptr::null_mut()) };
+        assert_eq!(live, LIVE_ALLOCATIONS.get());
+    }
+
+    #[test]
+    fn the_emulator_option_is_the_shared_emulator_option() {
+        let emulator = unsafe { autd3_udp_emulator_spawn(1, std::ptr::null_mut(), 0) };
+        assert!(!emulator.is_null());
+        let option = unsafe { autd3_udp_emulator_option(emulator) };
+        let interface = unsafe { handle_ref(emulator.cast_const()) }
+            .unwrap()
+            .0
+            .interface();
+        assert_eq!(
+            CoreOption::for_emulator(interface),
+            unsafe { handle_ref(option.cast_const()) }.unwrap().0
+        );
+        unsafe { autd3_transport_option_free(option) };
+        unsafe { autd3_udp_emulator_free(emulator) };
+    }
+
+    #[test]
+    fn a_length_mismatch_leaves_the_streamed_command_with_the_caller() {
+        let emulator = unsafe { autd3_udp_emulator_spawn(1, std::ptr::null_mut(), 0) };
+        let geometry = Geometry::new(vec![Autd3::default()]);
+        let config = crate::autd3_client_config_new();
+        let option = unsafe { autd3_udp_emulator_option(emulator) };
+        let (code, client) = complete(|cb, user_data| unsafe {
+            crate::autd3_client_open(&raw const geometry, option, config, cb, user_data);
+        });
+        assert_eq!(AUTD3_OK, code);
+        let client = client as *mut crate::ClientHandle;
+
+        let per_device = [crate::autd3_op_nop(), crate::autd3_op_nop()];
+        let command = unsafe { crate::autd3_command_each(per_device.as_ptr(), per_device.len()) };
+        let (code, stream) = complete(|cb, user_data| unsafe {
+            crate::autd3_client_send_streaming(client, command, cb, user_data);
+        });
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
+        assert_eq!(0, stream);
+
+        let two = Geometry::new(vec![Autd3::default(), Autd3::default()]);
+        let frames = crate::autd3_frames_new();
+        assert_eq!(AUTD3_OK, unsafe {
+            crate::autd3_frames_encode_into(
+                frames,
+                &raw const two,
+                command,
+                std::ptr::null_mut(),
+                0,
+            )
+        });
+        unsafe { crate::autd3_frames_free(frames) };
+
+        let (code, _) = complete(|cb, user_data| unsafe {
+            crate::autd3_client_close(client, cb, user_data);
+        });
+        assert_eq!(AUTD3_OK, code);
+        unsafe { crate::autd3_client_free(client) };
+        unsafe { crate::autd3_client_config_free(config) };
+        unsafe { autd3_udp_emulator_free(emulator) };
+    }
+
+    struct CountingAllocator;
+
+    thread_local! {
+        static LIVE_ALLOCATIONS: Cell<isize> = const { Cell::new(0) };
+    }
+
+    unsafe impl GlobalAlloc for CountingAllocator {
+        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+            LIVE_ALLOCATIONS.set(LIVE_ALLOCATIONS.get() + 1);
+            unsafe { System.alloc(layout) }
+        }
+
+        unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+            LIVE_ALLOCATIONS.set(LIVE_ALLOCATIONS.get() - 1);
+            unsafe { System.dealloc(ptr, layout) }
+        }
+    }
+
+    #[global_allocator]
+    static ALLOCATOR: CountingAllocator = CountingAllocator;
 
     type Completion = (i32, usize);
 

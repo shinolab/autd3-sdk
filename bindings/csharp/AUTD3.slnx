@@ -20,5 +20,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/AUTD3.Tests/AUTD3.Tests.csproj" />
+    <Project Path="tests/AUTD3.Unity.Samples/AUTD3.Unity.Samples.csproj" />
   </Folder>
 </Solution>

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>10</LangVersion>
+    <IsPackable>false</IsPackable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <NoWarn>$(NoWarn);CS8618;CS8625</NoWarn>
+    <DefineConstants>$(DefineConstants);AUTD3_UNITY</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="UnityEngineStubs.cs" />
+    <Compile Include="../../src/*/*.cs" Exclude="../../src/*/GlobalUsings.cs" />
+    <Compile Include="../../src/AUTD3.Core/GlobalUsings.cs" />
+    <Compile Include="../../../unity/*/Samples~/**/*.cs" />
+  </ItemGroup>
+
+</Project>

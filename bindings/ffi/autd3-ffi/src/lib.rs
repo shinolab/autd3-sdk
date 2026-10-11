@@ -1,5 +1,6 @@
 use std::ffi::{c_char, c_void};
 use std::future::Future;
+use std::mem::ManuallyDrop;
 use std::num::{NonZeroU16, NonZeroU32, NonZeroUsize};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
@@ -1826,23 +1827,22 @@ unsafe fn encode_into(
         unsafe { write_cstr(out_err, out_err_len, "null geometry") };
         return AUTD3_ERR_INVALID_ARGUMENT;
     };
-    let Some(command) = (unsafe { take_handle(command) }) else {
+    let Some(pending) = (unsafe { handle_ref(command.cast_const()) }) else {
         unsafe { write_cstr(out_err, out_err_len, "null command") };
         return AUTD3_ERR_INVALID_ARGUMENT;
     };
 
-    if let Err(message) = command.check_each_lengths(geometry.num_devices()) {
+    if let Err(message) = pending.check_each_lengths(geometry.num_devices()) {
         unsafe { write_cstr(out_err, out_err_len, &message) };
         return AUTD3_ERR_INVALID_ARGUMENT;
     }
 
-    match frames.encode_into(geometry, command.boxed()) {
-        Ok(()) => AUTD3_OK,
-        Err(e) => {
-            unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
-            error_code(&e)
-        }
+    if let Err(e) = frames.encode_into(geometry, pending.boxed()) {
+        unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
+        return error_code(&e);
     }
+    unsafe { drop_handle(command) };
+    AUTD3_OK
 }
 
 #[unsafe(no_mangle)]
@@ -1984,10 +1984,11 @@ pub unsafe extern "C" fn autd3_client_open(
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
+    let option = unsafe { take_handle(option) };
     let Some(ctx) = CompletionCtx::new(cb, user_data) else {
         return;
     };
-    let Some(udp::TransportOptionHandle(option)) = (unsafe { take_handle(option) }) else {
+    let Some(udp::TransportOptionHandle(option)) = option else {
         ctx.invalid_argument("null argument");
         return;
     };
@@ -2118,23 +2119,29 @@ pub unsafe extern "C" fn autd3_client_send_streaming(
     let Some((client, ctx)) = (unsafe { client_ctx(client, cb, user_data) }) else {
         return;
     };
-    let Some(command) = (unsafe { take_handle(command) }) else {
+    let Some(pending) = (unsafe { handle_ref(command.cast_const()) }) else {
         ctx.invalid_argument("null command");
         return;
     };
-    if let Err(message) = command.check_each_lengths(client.num_devices()) {
+    if let Err(message) = pending.check_each_lengths(client.num_devices()) {
         ctx.invalid_argument(&message);
         return;
     }
 
-    spawn_completion(
-        ctx,
-        async move {
+    let command = ManuallyDrop::new(unsafe { Box::from_raw(command) });
+    executor().spawn(async move {
+        let queued = {
             let queued = client.send_streaming(command.boxed());
             queued.await
-        },
-        |stream| into_handle(StreamToken(stream)).cast(),
-    );
+        };
+        match queued {
+            Ok(stream) => {
+                drop(ManuallyDrop::into_inner(command));
+                ctx.ok(into_handle(StreamToken(stream)).cast());
+            }
+            Err(e) => ctx.fail(error_code(&e), &e.to_string()),
+        }
+    });
 }
 
 #[unsafe(no_mangle)]
@@ -2143,10 +2150,11 @@ pub unsafe extern "C" fn autd3_stream_token_await(
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
+    let token = unsafe { take_handle(token) };
     let Some(ctx) = CompletionCtx::new(cb, user_data) else {
         return;
     };
-    let Some(StreamToken(stream)) = (unsafe { take_handle(token) }) else {
+    let Some(StreamToken(stream)) = token else {
         ctx.err("null token");
         return;
     };
@@ -2164,10 +2172,11 @@ pub unsafe extern "C" fn autd3_response_token_await(
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
+    let token = unsafe { take_handle(token) };
     let Some(ctx) = CompletionCtx::new(cb, user_data) else {
         return;
     };
-    let Some(ResponseToken(futures)) = (unsafe { take_handle(token) }) else {
+    let Some(ResponseToken(futures)) = token else {
         ctx.err("null token");
         return;
     };
@@ -3096,6 +3105,37 @@ mod tests {
         len
     }
 
+    fn two_entries_for_one_device() -> *mut Pending {
+        let per_device = [autd3_op_nop(), autd3_op_nop()];
+        unsafe { autd3_command_each(per_device.as_ptr(), per_device.len()) }
+    }
+
+    #[test]
+    fn a_length_mismatch_leaves_the_command_handle_with_the_caller() {
+        let one = geometry_of(1);
+        let two = geometry_of(2);
+
+        let command = two_entries_for_one_device();
+        let mut code = AUTD3_OK;
+        assert!(
+            unsafe { autd3_frames_encode(one, command, &raw mut code, std::ptr::null_mut(), 0) }
+                .is_null()
+        );
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
+        assert_eq!(1, num_frames_of(two, command));
+
+        let command = two_entries_for_one_device();
+        let frames = autd3_frames_new();
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_frames_encode_into(frames, one, command, std::ptr::null_mut(), 0)
+        });
+        unsafe { autd3_op_free(command) };
+
+        unsafe { autd3_frames_free(frames) };
+        unsafe { drop_handle(one) };
+        unsafe { drop_handle(two) };
+    }
+
     #[test]
     fn a_rejected_encode_leaves_the_command_handle_with_the_caller() {
         let geometry = geometry_of(1);
@@ -3130,26 +3170,34 @@ mod tests {
     }
 
     #[test]
-    fn a_command_that_fails_to_encode_is_consumed_and_yields_no_frames() {
-        let geometry = geometry_of(0);
+    fn a_command_that_fails_to_encode_stays_with_the_caller_and_yields_no_frames() {
+        let empty = geometry_of(0);
+        let one = geometry_of(1);
         let mut err = [0 as c_char; 128];
 
         let mut code = AUTD3_OK;
+        let command = autd3_op_clear();
 
         let frames = unsafe {
-            autd3_frames_encode(
-                geometry,
-                autd3_op_clear(),
-                &raw mut code,
-                err.as_mut_ptr(),
-                err.len(),
-            )
+            autd3_frames_encode(empty, command, &raw mut code, err.as_mut_ptr(), err.len())
         };
 
         assert!(frames.is_null());
         assert_ne!(0, err[0]);
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
-        unsafe { drop_handle(geometry) };
+
+        let frames = autd3_frames_new();
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_frames_encode_into(frames, empty, command, std::ptr::null_mut(), 0)
+        });
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_frames_encode_into(frames, one, command, std::ptr::null_mut(), 0)
+        });
+        assert_eq!(1, unsafe { autd3_frames_num_frames(frames) });
+
+        unsafe { autd3_frames_free(frames) };
+        unsafe { drop_handle(empty) };
+        unsafe { drop_handle(one) };
     }
 
     #[test]
@@ -3352,6 +3400,7 @@ mod tests {
             )
         };
         assert!(frames.is_null());
+        unsafe { autd3_op_free(command) };
         unsafe { std::ffi::CStr::from_ptr(err.as_ptr()) }
             .to_str()
             .unwrap()

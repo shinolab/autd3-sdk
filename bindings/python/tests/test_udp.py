@@ -86,3 +86,38 @@ def test_device_states_are_values() -> None:
     assert len({autd3.DeviceState.Ready, autd3.DeviceState.Syncing, autd3.DeviceState.Lost}) == 3
     assert repr(autd3.DeviceState.Syncing) == "DeviceState.Syncing"
     assert str(autd3.DeviceState.Lost) == "LOST"
+
+
+def test_the_client_config_reads_back_its_fields() -> None:
+    default = autd3.ClientConfig()
+    assert default.ack_timeout == autd3.Duration.from_millis(10)
+    assert default.max_inflight == 7
+    assert default.max_resync_rounds == 8
+    assert default.require_supported_firmware is False
+
+    config = autd3.ClientConfig(
+        ack_timeout=autd3.Duration.from_millis(3),
+        max_inflight=2,
+        max_resync_rounds=5,
+        require_supported_firmware=True,
+    )
+    assert config.ack_timeout == autd3.Duration.from_millis(3)
+    assert config.max_inflight == 2
+    assert config.max_resync_rounds == 5
+    assert config.require_supported_firmware is True
+
+
+def test_the_emulator_option_only_shortens_the_timeouts() -> None:
+    emulator = autd3.UdpEmulator(1)
+    option = emulator.option()
+    default = autd3.TransportOption()
+    assert option.iface != default.iface
+    assert option.reply_timeout == autd3.Duration.from_millis(50)
+    assert option.response_timeout == autd3.Duration.from_millis(50)
+    assert option.enumeration_timeout == autd3.Duration.from_secs(1)
+    assert option.sync_timeout == autd3.Duration.from_secs(5)
+    assert option.heartbeat == default.heartbeat
+    assert option.lost_timeout == default.lost_timeout
+    assert option.send_rate_limit == default.send_rate_limit
+    assert option.send_buffer == default.send_buffer
+    assert option.timer_resolution == default.timer_resolution
