@@ -79,7 +79,6 @@ pub fn set_and_wait_update<P: Port>(
     let flag = flags.bits();
     let persistent = read_ctl(port, ADDR_CTL_FLAG);
     write_ctl(port, ADDR_CTL_FLAG, persistent | flag);
-    port.memory_barrier();
     for _ in 0..max_polls.get() {
         if (read_ctl(port, ADDR_CTL_FLAG) & flag) == 0 {
             return if (read_ctl(port, ADDR_SILENCER_SET_RESULT) & flag) == 0 {
@@ -313,4 +312,51 @@ pub fn init<P: Port>(port: &mut P, max_polls: NonZeroU32) -> Result<(), Error> {
         write_ctl(port, ADDR_CTL_FLAG, 0);
     }
     Ok(())
+}
+
+#[cfg(all(test, not(loom)))]
+mod tests {
+    use core::num::NonZeroU32;
+
+    use super::{FPGA_PAGE_WORDS, MOD_RAM, set_and_wait_update, write_ram_words};
+    use crate::fpga_params::{ADDR_MOD_MEM_WR_BANK, ADDR_MOD_MEM_WR_PAGE, CtlFlags};
+    use crate::test_utils::mock::Harness;
+
+    #[test]
+    fn a_latch_is_set_and_awaited_without_a_barrier() {
+        let mut h = Harness::new();
+        h.port.barriers = 0;
+        let latched = h.latch_count(CtlFlags::SILENCER_SET);
+        assert_eq!(
+            set_and_wait_update(&mut h.port, CtlFlags::SILENCER_SET, NonZeroU32::MIN),
+            Ok(())
+        );
+        assert_eq!(h.latch_count(CtlFlags::SILENCER_SET), latched + 1);
+        assert_eq!(h.port.barriers, 0);
+    }
+
+    #[test]
+    fn every_bank_and_page_switch_of_a_ram_write_sits_between_barriers() {
+        let mut h = Harness::new();
+        h.port.ram_switches.clear();
+        h.port.barriers = 0;
+        write_ram_words(
+            &mut h.port,
+            &MOD_RAM,
+            1,
+            FPGA_PAGE_WORDS - 1,
+            [0x1234, 0x5678].into_iter(),
+        );
+        assert_eq!(
+            h.port.ram_switches,
+            [
+                (ADDR_MOD_MEM_WR_BANK, 1),
+                (ADDR_MOD_MEM_WR_PAGE, 0),
+                (ADDR_MOD_MEM_WR_PAGE, 1)
+            ]
+        );
+        assert_eq!(h.port.barriers, 6);
+        assert_eq!(h.mod_word(1, FPGA_PAGE_WORDS as usize - 1), 0x1234);
+        assert_eq!(h.mod_word(1, FPGA_PAGE_WORDS as usize), 0x5678);
+    }
 }
