@@ -1,0 +1,24 @@
+---
+title: SetPhaseCorrection
+description: SetPhaseCorrection for per-transducer phase correction
+sidebar:
+  order: 8
+slug: en/0.10.x/api/command/phase-correction
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`SetPhaseCorrection` is a command that sets the phase offset added to each transducer.
+The offset set here is added to all subsequent output phases.
+
+## API
+
+<CodeTabs rust={"SetPhaseCorrection { phases: &phases };"} python={"SetPhaseCorrection(phases)"} csharp={"new SetPhaseCorrection(phases);"} />
+
+| Field    | Type            | Description                                    |
+| -------- | --------------- | --------------------------------------------- |
+| `phases` | `&[Vec<Phase>]` | Phase offset table per device. |
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::SetPhaseCorrection;\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::value::Phase;\nuse autd3_rs::{Client, ClientConfig};\nuse autd3_rs::udp::TransportOption;\nuse autd3_rs_firmware_emulator::udp::UdpEmulator;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet emulator = UdpEmulator::spawn(geometry.num_devices())?;\nlet option = TransportOption {\n    iface: emulator.interface(),\n    ..TransportOption::default()\n};\nlet client = Client::open(&geometry, &option, ClientConfig::default()).await?;\n\nlet phases: Vec<Vec<Phase>> = geometry\n    .iter()\n    .map(|dev| vec![Phase::ZERO; dev.num_transducers()])\n    .collect();\n\nclient.send(SetPhaseCorrection { phases: &phases }).await?;\n\nclient.close().await?;"} python={"import asyncio\n\nfrom autd3 import Client, ClientConfig, UdpEmulator\nfrom autd3.commands import SetPhaseCorrection\nfrom autd3.geometry import Autd3, Geometry\nfrom autd3.value import Phase\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])\n    emulator = UdpEmulator(geometry.num_devices())\n    async with await Client.open(geometry, emulator.option(), ClientConfig()) as client:\n        phases = [\n            [Phase.ZERO] * geometry.device(i).num_transducers()\n            for i in range(geometry.num_devices())\n        ]\n\n        await client.send(SetPhaseCorrection(phases=phases))\n\n\nasyncio.run(main())"} csharp={"using System.Numerics;\nusing System.Threading.Tasks;\nusing AUTD3;\n\nvar geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });\nusing var emulator = new UdpEmulator(geometry.NumDevices);\nawait using var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());\n\nvar phases = new Phase[geometry.NumDevices][];\nfor (var i = 0; i < geometry.NumDevices; i++)\n{\n    var count = geometry[i].NumTransducers;\n    phases[i] = new Phase[count];\n    for (var t = 0; t < count; t++)\n    {\n        phases[i][t] = Phase.Zero;\n    }\n}\n\nawait client.SendAsync(new SetPhaseCorrection(phases));"} />

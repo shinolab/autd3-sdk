@@ -1,0 +1,34 @@
+---
+title: 任意のパターン・変調
+description: ヘルパ関数を使わず, 任意の位相・振幅パターン・AM 波形を直接構築する方法
+sidebar:
+  order: 5
+slug: 0.10.x/guide/custom
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`Pattern` と `Modulation` は, 計算済みのバッファをそのままデバイスへ送るコマンドである.
+[計算ヘルパ](/autd3-sdk/0.10.x/api/compute/pattern/) はあらかじめ用意された計算ヘルパである.
+ヘルパを介さずバッファを直接構築すれば, 任意のパターン・変調を表現できる.
+
+## 任意のPattern
+
+パターンは, デバイスごとに `Vec<Phase>` を並べた位相バッファと振幅の組である.
+`Geometry::phase_buffer` で全デバイス分の位相バッファを確保し, 各振動子の位相を自由に設定できる.
+振幅は全素子同一なら `Intensity` をそのまま渡し, 素子ごとに変えたいときだけ
+`Geometry::intensity_buffer` でバッファを確保する.
+
+以下は, [`focus`](/autd3-sdk/0.10.x/api/compute/pattern/focus/) と同じ単一焦点を, ヘルパを使わず手動で計算する例である.
+各振動子から焦点までの距離に応じた位相を与えている.
+
+<CodeTabs rust={"let mut phases = geometry.phase_buffer();\nfor (slot, device) in phases.iter_mut().zip(&geometry) {\n    for (p, &pos) in slot.iter_mut().zip(device.positions()) {\n        let dist = (target - pos).norm();\n        *p = Phase::from(-dist / wavelength.mm() * 2.0 * PI * rad);\n    }\n}\n\nPattern::new(&phases, Intensity::MAX);"} python={"phases = geometry.phase_buffer()\nfor slot, device in zip(phases, geometry):\n    for t, pos in enumerate(device.positions()):\n        dist = float(np.linalg.norm(target - pos))\n        slot[t] = Phase(-dist / wavelength.mm * 2.0 * math.pi * rad)\n\nPattern(phases, Intensity.MAX)"} csharp={"var phases = geometry.PhaseBuffer();\nforeach (var device in geometry)\n{\n    var slot = phases[device.Idx];\n    for (var t = 0; t < device.NumTransducers; t++)\n    {\n        var dist = Vector3.Distance(target, device.Position(t));\n        slot[t] = (Phase)(-dist / wavelength.Mm * 2.0f * MathF.PI * rad);\n    }\n}\n\nnew Pattern(phases, Intensity.Max);"} />
+
+## 任意のModulation
+
+変調は, AM 波形を表す `&[u8]` バッファと [`SamplingConfig`](/autd3-sdk/0.10.x/api/basics/sampling-config/) の組である.
+バッファの各要素は 1 サンプルの振幅を表す.
+
+以下は, 周期中の最初の 1 サンプルだけ出力する Burst 変調の例.
+
+<CodeTabs rust={"let length = 10;\nlet mut data = vec![0x00u8; length];\ndata[0] = 0xFF;\n\nModulation::new(SamplingConfig::FREQ_4K, &data);"} python={"length = 10\ndata = ModulationBuffer(length)\ndata[0] = 0xFF\n\nModulation(SamplingConfig.FREQ_4K, data)"} csharp={"var length = 10;\nvar data = new ModulationBuffer(length);\ndata[0] = 0xFF;\n\nnew Modulation(SamplingConfig.Freq4k, data);"} />

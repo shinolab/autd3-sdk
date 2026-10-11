@@ -1,0 +1,28 @@
+---
+title: TransportOption
+description: UDP/IPv6 リンクローカルで AUTD3 と直接通信する
+sidebar:
+  order: 1
+slug: 0.10.x/api/basics/transport-option
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+## API
+
+<CodeTabs rust={"TransportOption {\n    iface,\n    heartbeat,\n    reply_timeout,\n    lost_timeout,\n    response_timeout,\n    enumeration_timeout,\n    sync_timeout,\n    send_rate_limit,\n    send_buffer,\n    timer_resolution,\n    ..Default::default()\n};"} python={"TransportOption(\n    iface=iface,\n    heartbeat=heartbeat,\n    reply_timeout=reply_timeout,\n    lost_timeout=lost_timeout,\n    response_timeout=response_timeout,\n    enumeration_timeout=enumeration_timeout,\n    sync_timeout=sync_timeout,\n    send_rate_limit=send_rate_limit,\n    send_buffer=send_buffer,\n    timer_resolution=timer_resolution,\n)"} csharp={"new TransportOption\n{\n    Iface = iface,\n    Heartbeat = heartbeat,\n    ReplyTimeout = replyTimeout,\n    LostTimeout = lostTimeout,\n    ResponseTimeout = responseTimeout,\n    EnumerationTimeout = enumerationTimeout,\n    SyncTimeout = syncTimeout,\n    SendRateLimit = sendRateLimit,\n    SendBuffer = sendBuffer,\n    TimerResolution = timerResolution,\n};"} />
+
+| フィールド            | 型          | 既定値  | 説明                                                                                          |
+| --------------------- | ----------- | ------- | --------------------------------------------------------------------------------------------- |
+| `iface`               | `Interface` | `Auto`  | 接続先. `Auto` で自動検出, `Name(..)` で NIC を名前指定, `Simulator` で Simulator のみ, `Addr(..)` でアドレスを直接指定 |
+| `heartbeat`           | `Option<Duration>`  | 10 ms   | 生存確認用のコマンド送信間隔. `None` で生存確認を送らない |
+| `reply_timeout`       | `Duration`  | 1 ms    | 返信を待つ上限                                                                                 |
+| `lost_timeout`        | `Duration`  | 100 ms  | この時間返信が無いデバイスを `Lost` とする. `heartbeat` より長くする                           |
+| `response_timeout`    | `Duration`  | 200 ms  | 列挙などの管理メッセージの返信を待つ時間                                                       |
+| `enumeration_timeout` | `Duration`  | 30 s    | open時のデバイス列挙処理の試行時間上限                                                         |
+| `sync_timeout`        | `Duration`  | 30 s    | open時の全台がデバイス間の同期を待つ上限                                                         |
+| `send_rate_limit`     | `Option<f32>` | なし | ホストの送信が回線を占める量の上限 \[%]. デバイスの回線速度 (100 Mbps) に対する割合. `None` で抑えない |
+| `send_buffer`         | `Option<NonZeroUsize>` | 8192 | ソケットの送信バッファの大きさ \[B]. `None` で OS の既定のままにする |
+| `timer_resolution`    | `Option<Duration>`  | 1 ms    | Windows のタイマ分解能. `None` で変更しない. |
+
+基本的に `iface` 以外を変更することは推奨しない.

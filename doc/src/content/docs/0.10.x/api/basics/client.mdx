@@ -1,0 +1,73 @@
+---
+title: Client
+description: デバイスとの接続・送信を司る Client
+sidebar:
+  order: 2
+slug: 0.10.x/api/basics/client
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import Install from "@components/Install.astro";
+
+`Client` はコマンドの送信・状態の読み出しを行う中心的なオブジェクト.
+
+<Install rust="autd3-rs" python="autd3" csharp="AUTD3" />
+
+<CodeTabs rust={"let client = Client::open(&geometry, &udp, option).await?;"} python={"await Client.open(geometry, udp, option)"} csharp={"await Client.OpenAsync(geometry, udp, option);"} />
+
+| 引数       | 型             | 説明                   |
+| ---------- | -------------- | ---------------------- |
+| `geometry` | `&Geometry`    | デバイスの物理配置     |
+| `option`   | `&TransportOption` | 接続先と通信の設定 |
+| `config`   | `ClientConfig` | 下記参照               |
+
+デバイスの稼働状態を継続的に監視したい場合は `Client::state_checker` で取った `StateChecker` を駆動する ([状態監視](/autd3-sdk/0.10.x/guide/state-check/) 参照).
+
+## API
+
+<CodeTabs rust={"let num_devices = client.num_devices();\nlet geometry = client.geometry();\n\nlet firmware = client.read_firmware_version().await?;\nlet fpga_state = client.read_fpga_state().await?;\n\nclient.send(Nop).await?;\nlet done = client.send_streaming(Nop).await?;\nlet resp = client.send_frame(frame).await?.await?;\n\nclient.silent_stop().await?;\nclient.close().await?;"} python={"num_devices = client.num_devices()\ngeometry = client.geometry()\n\nfirmware = await client.read_firmware_version()\nfpga_state = await client.read_fpga_state()\n\nawait client.send(Nop())\ndone = await client.send_streaming(Nop())\nresp = await (await client.send_frame(frame))\n\nawait client.silent_stop()\nawait client.close()"} csharp={"var numDevices = client.NumDevices;\nvar geometry = client.Geometry;\n\nvar firmware = await client.ReadFirmwareVersionAsync();\nvar fpgaState = await client.ReadFpgaStateAsync();\n\nawait client.SendAsync(new Nop());\nvar done = await client.SendStreamingAsync(new Nop());\nvar resp = await await client.SendFrameAsync(frame);\n\nawait client.SilentStopAsync();\nawait client.CloseAsync();"} />
+
+| メソッド                  | async | 返り値                                 | 説明                                                       |
+| ------------------------- | :---: | -------------------------------------- | ---------------------------------------------------------- |
+| `num_devices()`           | —     | `usize`                                | 接続中のデバイス台数                                       |
+| `geometry()`              | —     | `&Geometry`                            | 接続時のデバイスの物理配置                                 |
+| `bus_stats()`             | —     | `BusStats`                             | 送受信の統計 (送信フレーム数・ack 遅延など)                |
+| `read_firmware_version()` | ✓     | `Result<Vec<FirmwareVersion>, Error>` | 各デバイスの CPU/FPGA ファームウェアバージョン             |
+| `read_fpga_state()`       | ✓     | `Result<Vec<FpgaState>, Error>`       | 各デバイスの FPGA 状態                                     |
+| `send(cmd)`               | ✓     | `Result<(), Error>`                   | コマンドを送信し, 1 フレームずつ応答確認まで行う           |
+| `send_streaming(cmd)`     | ✓     | `Result<StreamFuture, Error>`         | `send`のstream版                                           |
+| `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | フレームを 1 つ送る                                        |
+| `state_checker()`         | —     | `StateChecker`                         | `StateChecker`を取得. 詳細は[状態監視](/autd3-sdk/0.10.x/guide/state-check/)を参照. |
+| `silent_stop()`           | ✓     | `Result<(), Error>`                   | Silencer を設定してから全振動子を停止                      |
+| `close()`                 | ✓     | `Result<(), Error>`                   | 停止して接続を閉じる                                       |
+
+`silent_stop()` は, 振幅を一気に落としてノイズが出るのを避けるため, まず [Silencer](/autd3-sdk/0.10.x/api/command/silencer/) を設定してから全振動子の振幅を 0 にする.
+Silencer の設定は上書きされたままになるので, 別の設定で出力を再開する場合は `SetSilencer` を送り直すこと.
+
+## ClientConfig
+
+<CodeTabs rust={"ClientConfig {\n    ack_timeout: Duration::from_millis(10),\n    max_inflight: NonZeroUsize::new(DEVICE_QUEUE_FRAMES).unwrap(),\n    max_resync_rounds: NonZeroU32::new(8).unwrap(),\n    require_supported_firmware: false,\n    ..Default::default()\n}"} python={"ClientConfig(\n    ack_timeout=Duration.from_millis(10),\n    max_inflight=7,\n    max_resync_rounds=8,\n    require_supported_firmware=False,\n)"} csharp={"new ClientConfig\n{\n    AckTimeout = TimeSpan.FromMilliseconds(10),\n    MaxInflight = 7,\n    MaxResyncRounds = 8,\n    RequireSupportedFirmware = false,\n}"} />
+
+| フィールド             | 型                    | デフォルト          | 説明                                                       |
+| ---------------------- | --------------------- | ------------------- | ---------------------------------------------------------- |
+| `ack_timeout`          | `Duration`            | 10 ms               | 応答待ちのタイムアウト. 過ぎると送信中のフレームは `Timeout` で失敗する. |
+| `max_inflight`         | `NonZeroUsize`        | `7`                 | 応答を待たずに送ってよいフレーム数 (stream送信用)           |
+| `max_resync_rounds`    | `NonZeroU32`          | `8`                 | デバイスとの足並みを揃え直す試行の回数上限                 |
+| `require_supported_firmware` | `bool`          | `false`             | `true`なら接続時にファームウェアがサポートされているか検査する |
+
+`max_inflight` は `MAX_INFLIGHT (7)` を超えるとエラーになる.
+
+再送処理は行われない. 失敗したコマンドはユーザが送り直す必要がある.
+
+## each
+
+`each` はデバイスを引数にするクロージャを受け取り, デバイスごとに異なるコマンドを割り当てる.
+Rust では `FnMut(&Device) -> Option<C>`, Python では `Callable[[Device], Command | None]`, C# では `Func<Device, ICommand?>`.
+`None` を返したデバイスには何も割り当てない.
+
+<CodeTabs rust={"client\n    .send(each(|device| {\n        Some(if device.idx() % 2 == 0 {\n            Pattern::new(&left, Intensity::MAX)\n        } else {\n            Pattern::new(&right, Intensity::MAX)\n        })\n    }))\n    .await?;"} python={"await client.send(each(lambda device: Pattern(left if device.idx() % 2 == 0 else right, Intensity.MAX)))"} csharp={"await client.SendAsync(Command.Each(device => device.Idx % 2 == 0\n    ? new Pattern(left, Intensity.Max)\n    : new Pattern(right, Intensity.Max)));"} />
+
+Rust ではクロージャの返り値はすべて同じ型でなければならない.
+型の異なるコマンドを混在させたい場合は, `Command::boxed` で `BoxedCommand` に揃える.
+
+<CodeTabs rust={"client\n    .send(each(|device| {\n        Some(if device.idx() % 2 == 0 {\n            Pattern::new(&left, Intensity::MAX).boxed()\n        } else {\n            Modulation::new(SamplingConfig::FREQ_4K, &modulation).boxed()\n        })\n    }))\n    .await?;"} />

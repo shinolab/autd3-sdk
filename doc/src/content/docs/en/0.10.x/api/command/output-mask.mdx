@@ -1,0 +1,26 @@
+---
+title: SetOutputMask
+description: SetOutputMask to toggle output enable/disable
+sidebar:
+  order: 9
+slug: en/0.10.x/api/command/output-mask
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`SetOutputMask` is a command that toggles output enable/disable per transducer.
+
+## API
+
+<CodeTabs rust={"SetOutputMask { masks: &masks };"} python={"SetOutputMask(masks)"} csharp={"new SetOutputMask(masks);"} />
+
+| Field   | Type           | Description                                                    |
+| ------- | -------------- | ------------------------------------------------------------- |
+| `masks` | `&[Vec<bool>]` | Output mask per device (output when `true`). |
+
+`Geometry::output_mask_buffer` allocates the masks for all devices.
+Every entry starts at `true` (all transducers output).
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::SetOutputMask;\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::{Client, ClientConfig};\nuse autd3_rs::udp::TransportOption;\nuse autd3_rs_firmware_emulator::udp::UdpEmulator;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet emulator = UdpEmulator::spawn(geometry.num_devices())?;\nlet option = TransportOption {\n    iface: emulator.interface(),\n    ..TransportOption::default()\n};\nlet client = Client::open(&geometry, &option, ClientConfig::default()).await?;\n\nlet masks = geometry.output_mask_buffer();\n\nclient.send(SetOutputMask { masks: &masks }).await?;\n\nclient.close().await?;"} python={"import asyncio\n\nfrom autd3 import Client, ClientConfig, UdpEmulator\nfrom autd3.commands import SetOutputMask\nfrom autd3.geometry import Autd3, Geometry\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])\n    emulator = UdpEmulator(geometry.num_devices())\n    async with await Client.open(geometry, emulator.option(), ClientConfig()) as client:\n        masks = geometry.output_mask_buffer()\n\n        await client.send(SetOutputMask(masks=masks))\n\n\nasyncio.run(main())"} csharp={"using System.Numerics;\nusing System.Threading.Tasks;\nusing AUTD3;\n\nvar geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });\nusing var emulator = new UdpEmulator(geometry.NumDevices);\nawait using var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());\n\nvar masks = geometry.OutputMaskBuffer();\n\nawait client.SendAsync(new SetOutputMask(masks));"} />

@@ -2,6 +2,32 @@
 
 # Rust
 
+## [0.10.0] - 2026-10-11
+
+### 💥 Breaking Changes
+
+- [**breaking**] Replace Emission with separate phase and intensity buffers
+- [**breaking**] Accept a uniform or shared intensity instead of one buffer per pattern index
+- *(holo)* [**breaking**] Unify LinAlgBackend on the batched API
+- *(modulation)* [**breaking**] Return sample count as usize and drop SampleCountOverflow
+- [**breaking**] Remove the appliance
+- [**breaking**] Remove the EtherCAT links
+- [**breaking**] Drop legacy firmware support
+- [**breaking**] Talk to the devices over UDP and let the user run the Driver
+- *(holo)* [**breaking**] Greedy takes user intensities and writes phase only
+- *(pattern)* [**breaking**] Require a key for every transducer in TransducerGroups and drop group_compute_with
+
+### 🚀 Features
+
+- *(geometry)* Add output_mask_buffer
+
+### 🐛 Bug Fixes
+
+- *(pattern)* Compute Bessel beam phase along the given direction
+- *(autd3-rs)* Reject a modulation write whose offset overflows instead of panicking
+- *(modulation)* Reject fourier whose common period exceeds the modulation buffer
+- *(bindings)* Keep a command handle with the caller when encoding or streaming fails
+
 ## [0.9.0] - 2026-09-19
 
 ### 💥 Breaking Changes
@@ -76,14 +102,11 @@
 - *(tune)* Gate candidates on the exchange budget and report device frame counters
 - *(client)* Read the firmware version at open so a foreign series always warns
 - *(link-remote)* Enable the discovery feature by default
-- *(appliance)* Apply a tuned candidate to the saved config and tolerate unknown keys
-- *(appliance)* Pick the candidate to apply with a radio next to each sweep result
 
 ### 🐛 Bug Fixes
 
 - *(echocat)* Validate the link option before sync0_period divides by zero
 - *(remote)* Surface a bus-thread panic as a failed state instead of a silent stop
-- *(server)* Bound the tune periods and the config durations at the API boundary
 - Reject the inputs that reach a panic in the pattern, sampling and holo paths
 - *(echocat)* Carry the OP recovery on the cyclic frames instead of acyclic transfers
 - Hold every native handle in a SafeHandle
@@ -126,14 +149,12 @@
 
 ### 🚀 Features
 
-- Rename `autd3-appliance list` to `scan`
 - Detect firmware outside the supported series
 - Re-export nalgebra from the core and holo crates
 
 ### 🐛 Bug Fixes
 
 - *(console)* Bundle twincat-cli again by building it in CI
-- *(appliance)* Tolerate bus and uplink states this client does not know
 - Distinguish a rejected telemetry counter from a counter value of 2
 
 ## [0.5.0] - 2026-08-03
@@ -317,6 +338,30 @@
 
 # Python
 
+## [0.10.0] - 2026-10-11
+
+### 💥 Breaking Changes
+
+- [**breaking**] Replace Emission with separate phase and intensity buffers
+- [**breaking**] Accept a uniform or shared intensity instead of one buffer per pattern index
+- *(emulator)* [**breaking**] Replace the fifteen Range types with a single Grid and share the backend plumbing
+- [**breaking**] Talk to the devices over UDP and let the user run the Driver
+- *(holo)* [**breaking**] Greedy takes user intensities and writes phase only
+- *(pattern)* [**breaking**] Require a key for every transducer in TransducerGroups and drop group_compute_with
+
+### 🚀 Features
+
+- *(geometry)* Add output_mask_buffer
+
+### 🐛 Bug Fixes
+
+- *(bindings)* Keep a command handle with the caller when encoding or streaming fails
+- *(emulator)* Reject invalid sound-field grids instead of computing on them
+
+### ⚡ Performance
+
+- *(python)* Add numpy bulk I/O to PhaseBuffer/IntensityBuffer and speed up Device.positions/directions
+
 ## [0.9.0] - 2026-09-19
 
 ### 💥 Breaking Changes
@@ -489,6 +534,25 @@
 
 # C#
 
+## [0.10.0] - 2026-10-11
+
+### 💥 Breaking Changes
+
+- [**breaking**] Replace Emission with separate phase and intensity buffers
+- [**breaking**] Accept a uniform or shared intensity instead of one buffer per pattern index
+- *(csharp)* [**breaking**] Replace option struct constructors with init properties
+- [**breaking**] Talk to the devices over UDP and let the user run the Driver
+- *(holo)* [**breaking**] Greedy takes user intensities and writes phase only
+- *(pattern)* [**breaking**] Require a key for every transducer in TransducerGroups and drop group_compute_with
+
+### 🚀 Features
+
+- *(geometry)* Add output_mask_buffer
+
+### 🐛 Bug Fixes
+
+- *(bindings)* Keep a command handle with the caller when encoding or streaming fails
+
 ## [0.9.0] - 2026-09-19
 
 ### 💥 Breaking Changes
@@ -623,6 +687,17 @@
 
 # Unity
 
+## [0.10.0] - 2026-10-11
+
+### 💥 Breaking Changes
+
+- [**breaking**] Replace Emission with separate phase and intensity buffers
+- [**breaking**] Talk to the devices over UDP and let the user run the Driver
+
+### 🐛 Bug Fixes
+
+- *(bindings)* Keep a command handle with the caller when encoding or streaming fails
+
 ## [0.9.0] - 2026-09-19
 
 ### 💥 Breaking Changes
@@ -656,6 +731,13 @@
 ## [0.1.0] - 2026-07-06
 
 # Simulator
+
+## [0.10.0] - 2026-10-11
+
+### 💥 Breaking Changes
+
+- [**breaking**] Replace Emission with separate phase and intensity buffers
+- [**breaking**] Talk to the devices over UDP and let the user run the Driver
 
 ## [0.9.0] - 2026-09-19
 
@@ -753,6 +835,17 @@
 
 # Console
 
+## [0.10.0] - 2026-10-11
+
+### 💥 Breaking Changes
+
+- [**breaking**] Remove the appliance
+- [**breaking**] Talk to the devices over UDP and let the user run the Driver
+
+### 🚀 Features
+
+- *(console)* Confirm the firmware OTA against the versions read back from the bus
+
 ## [0.9.0] - 2026-09-19
 
 ### 🚀 Features
@@ -823,61 +916,16 @@
 
 - Derive simulator device count from client geometry
 
-# Appliance
-
-## [0.9.0] - 2026-09-19
-
-### 🚀 Features
-
-- *(link-remote)* Discover the simulator over mDNS alongside the appliance
-
-## [0.8.0] - 2026-09-11
-
-### 💥 Breaking Changes
-
-- [**breaking**] Judge tune candidates by the measured exchange time instead of a wire-time estimate
-
-### 🚀 Features
-
-- *(appliance)* Add a diagnostic EtherCAT capture and an offline wiretrace tool
-
-## [0.7.0] - 2026-08-31
-
-### 💥 Breaking Changes
-
-- [**breaking**] Mark growable public error enums and observation snapshots as non_exhaustive
-- [**breaking**] Wrap thread-priority in an RtPriority newtype and re-export the 0.x crates on the public surface
-- [**breaking**] Narrow the public surface — hide echocat internals, encode-layer types, and dead re-exports
-
-### 🚀 Features
-
-- *(echocat)* Make the frame landing phase in the SYNC0 period configurable
-- *(tune)* Gate candidates on the exchange budget and report device frame counters
-- *(link-remote)* Enable the discovery feature by default
-- *(appliance)* Apply a tuned candidate to the saved config and tolerate unknown keys
-- *(appliance)* Pick the candidate to apply with a radio next to each sweep result
-
-### 🐛 Bug Fixes
-
-- *(server)* Bound the tune periods and the config durations at the API boundary
-
-## [0.6.0] - 2026-08-04
-
-### 🚀 Features
-
-- Rename `autd3-appliance list` to `scan`
-
-### 🐛 Bug Fixes
-
-- *(appliance)* Tolerate bus and uplink states this client does not know
-
-## [0.5.0] - 2026-08-03
-
-### 💥 Breaking Changes
-
-- *(appliance)* [**breaking**] Ship the EtherCAT master as a zero-config appliance
-
 # Firmware
+
+## [0.10.0] - 2026-10-11
+
+### 💥 Breaking Changes
+
+- [**breaking**] Replace Emission with separate phase and intensity buffers
+- *(fpga)* [**breaking**] Take sync times in ticks, validate configs at the latch, capture the CPU bus in IOBs, and gate the output on failsafe
+- *(firmware)* [**breaking**] Replace EtherCAT with a UDP transport and PTP synchronization
+- [**breaking**] Talk to the devices over UDP and let the user run the Driver
 
 ## [0.9.0] - 2026-09-19
 

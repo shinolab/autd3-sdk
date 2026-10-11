@@ -1,0 +1,27 @@
+---
+title: ForceFan
+description: ファンを強制起動する ForceFan
+sidebar:
+  order: 6
+slug: 0.10.x/api/command/force-fan
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`ForceFan` は, 冷却ファンを強制的に On にするコマンド.
+
+:::caution
+強制的にOffにすることはできない.
+:::
+
+## API
+
+<CodeTabs rust={"ForceFan { value };"} python={"ForceFan(value)"} csharp={"new ForceFan(value);"} />
+
+| フィールド | 型     | 説明                                      |
+| ---------- | ------ | ----------------------------------------- |
+| `value`    | `bool` | `true` でファンを強制起動                 |
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::ForceFan;\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::{Client, ClientConfig};\nuse autd3_rs::udp::TransportOption;\nuse autd3_rs_firmware_emulator::udp::UdpEmulator;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet emulator = UdpEmulator::spawn(geometry.num_devices())?;\nlet option = TransportOption {\n    iface: emulator.interface(),\n    ..TransportOption::default()\n};\nlet client = Client::open(&geometry, &option, ClientConfig::default()).await?;\n\nclient.send(ForceFan { value: true }).await?;\n\nclient.close().await?;"} python={"import asyncio\n\nfrom autd3 import Client, ClientConfig, UdpEmulator\nfrom autd3.commands import ForceFan\nfrom autd3.geometry import Autd3, Geometry\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])\n    emulator = UdpEmulator(geometry.num_devices())\n    async with await Client.open(geometry, emulator.option(), ClientConfig()) as client:\n        await client.send(ForceFan(value=True))\n\n\nasyncio.run(main())"} csharp={"using System.Numerics;\nusing System.Threading.Tasks;\nusing AUTD3;\n\nvar geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });\nusing var emulator = new UdpEmulator(geometry.NumDevices);\nawait using var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());\n\nawait client.SendAsync(new ForceFan(true));"} />

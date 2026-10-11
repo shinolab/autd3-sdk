@@ -193,7 +193,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "async-lock",
  "autd3-cpu-wire",
@@ -209,7 +209,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-core"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "autd3-cpu-wire",
  "nalgebra",
@@ -224,7 +224,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-emulator"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "autd3-rs",
  "autd3-rs-core",
@@ -237,7 +237,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-firmware-emulator"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "autd3-cpu-fw",
  "autd3-cpu-wire",
@@ -248,7 +248,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-modulation"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "autd3-rs-core",
  "num-integer",
@@ -257,14 +257,14 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-pattern"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "autd3-rs-core",
 ]
 
 [[package]]
 name = "autd3-rs-pattern-holo"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "autd3-rs-core",
  "nalgebra",

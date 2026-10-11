@@ -1,0 +1,63 @@
+---
+title: ホストのネットワーク設定
+description: UDP で AUTD3 と通信するためのファイアウォールと NIC の設定
+sidebar:
+  order: 3
+slug: 0.10.x/getting-started/setup/network
+---
+
+ホストと AUTD3 は, UDP over IPv6 リンクローカルで通信する.
+デバイス側の UDP ポートは **44336** である.
+
+ホストの NIC に IP アドレスを設定する必要はなく, root / 管理者権限も要らない.
+ただし, 以下の設定が必要になる.
+
+## IPv6 を有効にする
+
+AUTD3 を接続する NIC で IPv6 が有効になっている必要がある.
+IPv6 を無効にした NIC にはリンクローカルアドレスが付かないため, 通信できない.
+
+* Windows: アダプタのプロパティで「インターネット プロトコル バージョン 6 (TCP/IPv6)」にチェックが入っていることを確認する
+* Linux: `ip -6 addr show dev <if>` で `fe80::` から始まるアドレスが表示されることを確認する
+
+## ファイアウォールで受信を許可する
+
+デバイスの返信は, ホストが送った宛先 (マルチキャスト) とは別のアドレスから届く.
+ファイアウォールの設定によっては返信が弾かれる可能性がある.
+そのため, AUTD3 を接続する NIC で, 送信元 UDP ポート 44336 からの受信を許可すること.
+
+### Linux
+
+`ufw` を使っている場合は, 次のように許可する.
+
+```sh
+sudo ufw allow in on <if> proto udp from fe80::/10 port 44336
+```
+
+`<if>` は AUTD3 を接続した NIC の名前 (例: `enp3s0`) に置き換える.
+
+### Windows
+
+Windows Defender ファイアウォールで受信の規則を追加する.
+
+1. **受信の規則** → **新しい規則** → **カスタム** を選ぶ
+2. プロトコルの種類に **UDP** を選び, **リモート ポート** に `44336` を指定する
+3. **接続を許可する** を選び, AUTD3 を接続した NIC のネットワークプロファイルに適用する
+
+PowerShell (管理者) からは次のように追加できる.
+
+```powershell
+New-NetFirewallRule -DisplayName "AUTD3" -Direction Inbound -Protocol UDP -RemotePort 44336 -Action Allow
+```
+
+### macOS
+
+アプリケーションファイアウォールを有効にしている場合は, AUTD3 を使うアプリケーション (Python や `dotnet` から使う場合はそれらの実行ファイル) の受信を許可する.
+
+## 割り込みモデレーションの無効化
+
+NIC の割り込みモデレーション (interrupt coalescing) は, 受信の遅延を増やしばらつかせる.
+返信が数百 µs 以上遅れて送り直しの原因になることがあるので, 切っておくことを推奨する.
+
+* Linux: `sudo ethtool -C <if> rx-usecs 0`
+* Windows: デバイス マネージャーでアダプタのプロパティを開き, **詳細設定** の「割り込みモデレーション (Interrupt Moderation)」を「無効」にする

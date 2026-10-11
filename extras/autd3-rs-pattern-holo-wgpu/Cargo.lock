@@ -47,13 +47,12 @@ version = "0.10.0"
 dependencies = [
  "bitflags",
  "crc",
- "enum-map",
  "zerocopy",
 ]
 
 [[package]]
 name = "autd3-rs-core"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "autd3-cpu-wire",
  "nalgebra",
@@ -64,14 +63,14 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-pattern"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "autd3-rs-core",
 ]
 
 [[package]]
 name = "autd3-rs-pattern-holo"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "autd3-rs-core",
  "nalgebra",
@@ -82,7 +81,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-pattern-holo-wgpu"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "autd3-rs-core",
  "autd3-rs-pattern",
@@ -262,26 +261,6 @@ name = "either"
 version = "1.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e5e8f6c15a24b9a3ee5efec809ccd006d3b30e8b3bb63c39af737c7f87daa1d"
-
-[[package]]
-name = "enum-map"
-version = "2.7.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6866f3bfdf8207509a033af1a75a7b08abda06bbaaeae6669323fd5a097df2e9"
-dependencies = [
- "enum-map-derive",
-]
-
-[[package]]
-name = "enum-map-derive"
-version = "0.17.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f282cfdfe92516eb26c2af8589c274c7c17681f5ecc03c18255fe741c6aa64eb"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
 
 [[package]]
 name = "equivalent"

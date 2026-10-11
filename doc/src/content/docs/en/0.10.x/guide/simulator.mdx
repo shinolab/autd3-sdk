@@ -1,0 +1,29 @@
+---
+title: Simulator
+description: Launching and connecting to the sound field simulator
+sidebar:
+  order: 8
+slug: en/0.10.x/guide/simulator
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`Simulator` is a sound field simulator that visualizes the AUTD3 output sound field in a browser.
+Even without real hardware, you can check the sound field generated from the data sent by the client.
+
+## Launching
+
+`Simulator` is bundled with the GUI console `autd3-console`.
+
+Obtain `autd3-console` as described in [Console](/autd3-sdk/en/0.10.x/guide/console/), launch it, and open the "Simulator" tab at the top.
+
+## Connecting
+
+The client must run on the same host as the Simulator.
+
+The default [`TransportOption`](/autd3-sdk/en/0.10.x/api/basics/transport-option/) (`iface` set to `Auto`) connects to the Simulator when it is running, and to real devices otherwise.
+No address needs to be given.
+To connect to nothing but the Simulator, set `iface` to `Simulator`.
+To connect to real devices while the Simulator keeps running, specify the NIC with `Name(..)` in `iface`.
+
+<CodeTabs rust={'let option = TransportOption {\n    iface: Interface::Simulator,\n    ..Default::default()\n};'} python={'option = TransportOption(iface=Interface.Simulator)'} csharp={'var option = new TransportOption { Iface = Interface.Simulator };'} />

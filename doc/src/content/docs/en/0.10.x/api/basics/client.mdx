@@ -1,0 +1,73 @@
+---
+title: Client
+description: The Client that manages connection and transmission to devices
+sidebar:
+  order: 2
+slug: en/0.10.x/api/basics/client
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import Install from "@components/Install.astro";
+
+`Client` is the central object that sends commands and reads state.
+
+<Install rust="autd3-rs" python="autd3" csharp="AUTD3" />
+
+<CodeTabs rust={"let client = Client::open(&geometry, &udp, option).await?;"} python={"await Client.open(geometry, udp, option)"} csharp={"await Client.OpenAsync(geometry, udp, option);"} />
+
+| Parameter  | Type               | Description                        |
+| ---------- | ------------------ | ---------------------------------- |
+| `geometry` | `&Geometry`        | Physical layout of the devices     |
+| `option`   | `&TransportOption` | Destination and transport settings |
+| `config`   | `ClientConfig`     | See below                          |
+
+To continuously monitor the operating state of the devices, drive the `StateChecker` taken from `Client::state_checker` (see [State Monitoring](/autd3-sdk/en/0.10.x/guide/state-check/)).
+
+## API
+
+<CodeTabs rust={"let num_devices = client.num_devices();\nlet geometry = client.geometry();\n\nlet firmware = client.read_firmware_version().await?;\nlet fpga_state = client.read_fpga_state().await?;\n\nclient.send(Nop).await?;\nlet done = client.send_streaming(Nop).await?;\nlet resp = client.send_frame(frame).await?.await?;\n\nclient.silent_stop().await?;\nclient.close().await?;"} python={"num_devices = client.num_devices()\ngeometry = client.geometry()\n\nfirmware = await client.read_firmware_version()\nfpga_state = await client.read_fpga_state()\n\nawait client.send(Nop())\ndone = await client.send_streaming(Nop())\nresp = await (await client.send_frame(frame))\n\nawait client.silent_stop()\nawait client.close()"} csharp={"var numDevices = client.NumDevices;\nvar geometry = client.Geometry;\n\nvar firmware = await client.ReadFirmwareVersionAsync();\nvar fpgaState = await client.ReadFpgaStateAsync();\n\nawait client.SendAsync(new Nop());\nvar done = await client.SendStreamingAsync(new Nop());\nvar resp = await await client.SendFrameAsync(frame);\n\nawait client.SilentStopAsync();\nawait client.CloseAsync();"} />
+
+| Method                    | async | Returns                               | Description                                                |
+| ------------------------- | :---: | ------------------------------------- | ---------------------------------------------------------- |
+| `num_devices()`           | —     | `usize`                               | Number of connected devices                                |
+| `geometry()`              | —     | `&Geometry`                           | Physical layout of the devices given at open time          |
+| `bus_stats()`             | —     | `BusStats`                            | Send/receive statistics (number of frames sent, ack latency, etc.) |
+| `read_firmware_version()` | ✓     | `Result<Vec<FirmwareVersion>, Error>` | CPU/FPGA firmware version of each device                   |
+| `read_fpga_state()`       | ✓     | `Result<Vec<FpgaState>, Error>`       | FPGA state of each device                                  |
+| `send(cmd)`               | ✓     | `Result<(), Error>`                   | Send a command, confirming the response frame by frame     |
+| `send_streaming(cmd)`     | ✓     | `Result<StreamFuture, Error>`         | Streaming version of `send`                                |
+| `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | Send one frame                                             |
+| `state_checker()`         | —     | `StateChecker`                        | Get a `StateChecker`. See [State Monitoring](/autd3-sdk/en/0.10.x/guide/state-check/) for details. |
+| `silent_stop()`           | ✓     | `Result<(), Error>`                   | Set the Silencer, then stop all transducers                |
+| `close()`                 | ✓     | `Result<(), Error>`                   | Stop and close the connection                              |
+
+To avoid the noise of dropping the amplitude at once, `silent_stop()` first sets the [Silencer](/autd3-sdk/en/0.10.x/api/command/silencer/) and then drives every transducer to zero amplitude.
+The Silencer setting stays overwritten, so send `SetSilencer` again before resuming the output with a different setting.
+
+## ClientConfig
+
+<CodeTabs rust={"ClientConfig {\n    ack_timeout: Duration::from_millis(10),\n    max_inflight: NonZeroUsize::new(DEVICE_QUEUE_FRAMES).unwrap(),\n    max_resync_rounds: NonZeroU32::new(8).unwrap(),\n    require_supported_firmware: false,\n    ..Default::default()\n}"} python={"ClientConfig(\n    ack_timeout=Duration.from_millis(10),\n    max_inflight=7,\n    max_resync_rounds=8,\n    require_supported_firmware=False,\n)"} csharp={"new ClientConfig\n{\n    AckTimeout = TimeSpan.FromMilliseconds(10),\n    MaxInflight = 7,\n    MaxResyncRounds = 8,\n    RequireSupportedFirmware = false,\n}"} />
+
+| Field                        | Type           | Default | Description                                                                         |
+| ---------------------------- | -------------- | ------- | ----------------------------------------------------------------------------------- |
+| `ack_timeout`                | `Duration`     | 10 ms   | Response-wait timeout. Once it elapses, the frames in flight fail with `Timeout`.   |
+| `max_inflight`               | `NonZeroUsize` | `7`     | Number of frames that may be sent without waiting for a reply (for streaming sends) |
+| `max_resync_rounds`          | `NonZeroU32`   | `8`     | Maximum number of attempts to get back in step with the devices                     |
+| `require_supported_firmware` | `bool`         | `false` | If `true`, check on open that the firmware is supported                             |
+
+`max_inflight` errors if it exceeds `MAX_INFLIGHT (7)`.
+
+There is no retransmission. A failed command must be sent again by the user.
+
+## each
+
+`each` takes a closure that receives a device and assigns a different command per device.
+In Rust it is `FnMut(&Device) -> Option<C>`, in Python `Callable[[Device], Command | None]`, and in C# `Func<Device, ICommand?>`.
+Nothing is assigned to a device for which `None` is returned.
+
+<CodeTabs rust={"client\n    .send(each(|device| {\n        Some(if device.idx() % 2 == 0 {\n            Pattern::new(&left, Intensity::MAX)\n        } else {\n            Pattern::new(&right, Intensity::MAX)\n        })\n    }))\n    .await?;"} python={"await client.send(each(lambda device: Pattern(left if device.idx() % 2 == 0 else right, Intensity.MAX)))"} csharp={"await client.SendAsync(Command.Each(device => device.Idx % 2 == 0\n    ? new Pattern(left, Intensity.Max)\n    : new Pattern(right, Intensity.Max)));"} />
+
+In Rust, the return values of the closure must all be the same type.
+To mix commands of different types, unify them into a `BoxedCommand` with `Command::boxed`.
+
+<CodeTabs rust={"client\n    .send(each(|device| {\n        Some(if device.idx() % 2 == 0 {\n            Pattern::new(&left, Intensity::MAX).boxed()\n        } else {\n            Modulation::new(SamplingConfig::FREQ_4K, &modulation).boxed()\n        })\n    }))\n    .await?;"} />
