@@ -24,21 +24,19 @@ use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
 use crate::cli::{Cli, Command, Mode};
 use crate::mem::{self, MemProfile};
-use crate::stats::{DriverAckLatency, Sample, SampleStatus};
+use crate::report::{LiveBlock, interval_lines, telemetry_lines};
+use crate::stats::{Counters, DriverAckLatency, Histogram, SampleStatus, Summary};
 
-const PROGRESS_INTERVAL: Duration = Duration::from_secs(1);
+const REPORT_INTERVAL: Duration = Duration::from_secs(1);
 const STATE_CHECK_INTERVAL: Duration = Duration::from_millis(100);
 
 pub struct RunOutput {
-    pub samples: Vec<Sample>,
-    pub sends: u64,
+    pub summary: Summary,
     pub stopped_on_error: Option<(u64, SampleStatus)>,
     pub driver_closed: bool,
-    pub elapsed: Duration,
-    pub frame_bytes: usize,
-    pub missed_replies: u64,
-    pub driver_ack: Option<DriverAckLatency>,
     pub mem: Option<MemProfile>,
+    pub telemetry_start: Vec<Telemetry>,
+    pub telemetry_end: Vec<Telemetry>,
 }
 
 struct Sender {
@@ -182,44 +180,18 @@ async fn send_config_pattern_once(client: &Client) -> Result<()> {
     Ok(())
 }
 
-async fn send_set_gpio_out_once(client: &Client, output: GpioOut) -> Result<()> {
+async fn send_base_signal_gpio_out_once(client: &Client) -> Result<()> {
     client
         .send(SetGpioOut {
-            outputs: [output, GpioOut::Off, GpioOut::Off, GpioOut::Off],
+            outputs: [
+                GpioOut::BaseSignal,
+                GpioOut::Off,
+                GpioOut::Off,
+                GpioOut::Off,
+            ],
         })
         .await?;
     Ok(())
-}
-
-struct Recorder {
-    samples: Vec<Sample>,
-    limit: Option<u64>,
-    sends: u64,
-}
-
-impl Recorder {
-    fn new(cli: &Cli) -> Self {
-        let limit = (cli.max_samples != 0).then_some(cli.max_samples);
-        let cap = match (estimate_capacity(cli), limit) {
-            (n, Some(limit)) => n.min(usize::try_from(limit).unwrap_or(usize::MAX)),
-            (n, None) => n,
-        };
-        Self {
-            samples: Vec::with_capacity(cap),
-            limit,
-            sends: 0,
-        }
-    }
-
-    fn push(&mut self, sample: Sample) {
-        self.sends += 1;
-        if self
-            .limit
-            .is_none_or(|limit| (self.samples.len() as u64) < limit)
-        {
-            self.samples.push(sample);
-        }
-    }
 }
 
 struct StateCheckGuard {
@@ -324,27 +296,15 @@ async fn run_with_option(option: TransportOption, cli: &Cli) -> Result<RunOutput
             .await
             .context("initial ConfigPattern + ActivatePatternBank")?;
     }
-    if cli.gpio_base_signal {
-        send_set_gpio_out_once(&client, GpioOut::BaseSignal)
-            .await
-            .context("initial SetGpioOut")?;
-        eprintln!("GPIO[0]: BaseSignal (probe it to check inter-device sync)");
-    }
-    if cli.gpio_sync {
-        send_set_gpio_out_once(&client, GpioOut::Sync)
-            .await
-            .context("initial SetGpioOut")?;
-        eprintln!("GPIO[0]: Sync (probe it to check the sync pulse of every device)");
-    }
+    send_base_signal_gpio_out_once(&client)
+        .await
+        .context("initial SetGpioOut")?;
+    eprintln!("GPIO[0]: BaseSignal (probe it to check inter-device sync)");
 
     let shutdown = Arc::new(AtomicBool::new(false));
     spawn_signal_listener(Arc::clone(&shutdown));
 
-    let telemetry_before = if cli.telemetry {
-        Some(client.read_telemetry().await.context("reading telemetry")?)
-    } else {
-        None
-    };
+    let telemetry_start = client.read_telemetry().await.context("reading telemetry")?;
     if let Some(hold) = cli.hold {
         eprintln!("holding the connection idle for {hold:?}");
         tokio::time::sleep(hold).await;
@@ -353,16 +313,18 @@ async fn run_with_option(option: TransportOption, cli: &Cli) -> Result<RunOutput
     let sender = Sender::new(&geometry, cli)?;
     let bus_stats = client.bus_stats();
 
-    let output = match cli.mode {
-        Mode::StopAndWait => run_stop_and_wait(&client, cli, sender, shutdown, &bus_stats).await,
+    let measurement = Measurement::start(cli, &bus_stats, telemetry_start);
+    let mut output = match cli.mode {
+        Mode::StopAndWait => run_stop_and_wait(&client, cli, sender, shutdown, measurement).await,
         Mode::Streaming => {
-            run_streaming(&client, cli, sender, shutdown, max_inflight, &bus_stats).await
+            run_streaming(&client, sender, shutdown, max_inflight, measurement).await
         }
     };
 
-    if let Some(before) = telemetry_before {
-        let after = client.read_telemetry().await.context("reading telemetry")?;
-        print_telemetry(&before, &after);
+    if let Ok(output) = &mut output
+        && let Ok(telemetry) = client.read_telemetry().await
+    {
+        output.telemetry_end = telemetry;
     }
 
     if let Err(e) = client.close().await {
@@ -371,33 +333,6 @@ async fn run_with_option(option: TransportOption, cli: &Cli) -> Result<RunOutput
     guard.stop().await;
 
     output
-}
-
-type TelemetryRead = fn(&Telemetry) -> u32;
-
-const TELEMETRY_COUNTERS: [(&str, TelemetryRead); 10] = [
-    ("fifo_drop", |t| t.fifo_drop),
-    ("dedup", |t| t.dedup),
-    ("seq_mismatch", |t| t.seq_mismatch),
-    ("dispatch_error", |t| t.dispatch_error),
-    ("processed", |t| t.processed),
-    ("send_failure", |t| t.send_failure),
-    ("failsafe", |t| u32::from(t.failsafe)),
-    ("ptp_unlock_failsafe", |t| u32::from(t.ptp_unlock_failsafe)),
-    ("sync_resync", |t| u32::from(t.sync_resync)),
-    ("boot_failure", |t| u32::from(t.boot_failure)),
-];
-
-fn print_telemetry(before: &[Telemetry], after: &[Telemetry]) {
-    for (name, read) in TELEMETRY_COUNTERS {
-        let at_start: Vec<u32> = before.iter().map(read).collect();
-        let deltas: Vec<u32> = before
-            .iter()
-            .zip(after)
-            .map(|(b, a)| read(a).wrapping_sub(read(b)))
-            .collect();
-        eprintln!("telemetry {name}: at start {at_start:?}, delta {deltas:?}");
-    }
 }
 
 async fn send_all(client: &Client, frames: &Frames, window: usize) -> Result<(), ClientError> {
@@ -413,20 +348,6 @@ async fn send_all(client: &Client, frames: &Frames, window: usize) -> Result<(),
         fut.await?.check()?;
     }
     Ok(())
-}
-
-fn budget_left(cli: &Cli, issued: u64, start: Instant) -> bool {
-    if let Some(n) = cli.count
-        && issued >= n
-    {
-        return false;
-    }
-    if let Some(d) = cli.duration
-        && start.elapsed() >= d
-    {
-        return false;
-    }
-    true
 }
 
 #[derive(Clone, Copy)]
@@ -488,34 +409,33 @@ impl AckSnapshot {
 }
 
 struct Measurement {
-    recorded: Recorder,
-    progress: Progress,
+    counters: Counters,
+    rtts: Histogram,
+    live: Live,
     stopped_on_error: Option<(u64, SampleStatus)>,
     driver_closed: bool,
     stop_on_error: bool,
     mem_recorder: mem::Recorder,
     start: Instant,
     bus_stats: BusStats,
-    warmup: u64,
-    ack_before: Option<AckSnapshot>,
+    ack_before: AckSnapshot,
 }
 
 impl Measurement {
-    fn start(cli: &Cli, bus_stats: &BusStats) -> Self {
-        let recorded = Recorder::new(cli);
-        let progress = Progress::new(cli);
+    fn start(cli: &Cli, bus_stats: &BusStats, telemetry_start: Vec<Telemetry>) -> Self {
+        let live = Live::new(telemetry_start);
         let mem_recorder = mem::start();
         Self {
-            recorded,
-            progress,
+            counters: Counters::default(),
+            rtts: Histogram::new(),
+            live,
             stopped_on_error: None,
             driver_closed: false,
             stop_on_error: cli.stop_on_error,
             mem_recorder,
             start: Instant::now(),
             bus_stats: bus_stats.clone(),
-            warmup: cli.warmup,
-            ack_before: (cli.warmup == 0).then(|| AckSnapshot::take(bus_stats)),
+            ack_before: AckSnapshot::take(bus_stats),
         }
     }
 
@@ -527,11 +447,11 @@ impl Measurement {
                 SampleStatus::NetworkError
             }
         };
-        self.recorded.push(Sample { index, rtt, status });
-        if self.ack_before.is_none() && self.recorded.sends == self.warmup {
-            self.ack_before = Some(AckSnapshot::take(&self.bus_stats));
+        self.counters.observe(status);
+        if status == SampleStatus::Ok {
+            self.rtts.record(rtt);
+            self.live.rtts.record(rtt);
         }
-        self.progress.observe(status, self.start.elapsed());
         if self.driver_closed {
             return ControlFlow::Break(());
         }
@@ -542,23 +462,35 @@ impl Measurement {
         ControlFlow::Continue(())
     }
 
-    fn finish(mut self, sender: &Sender) -> RunOutput {
-        self.progress.finish();
+    async fn report(&mut self, client: &Client) {
+        self.live
+            .report_if_due(client, &self.counters, &self.bus_stats, self.start)
+            .await;
+    }
+
+    fn finish(self, sender: &Sender) -> RunOutput {
+        let elapsed = self.start.elapsed();
         let bus_stats = &self.bus_stats;
-        let driver_ack = self.ack_before.and_then(|before| {
-            AckSnapshot::take(bus_stats).latency_since(before, bus_stats.worst_ack_latency_ns())
-        });
-        let mem = mem::profile(self.mem_recorder, self.recorded.sends);
+        let driver_ack = AckSnapshot::take(bus_stats)
+            .latency_since(self.ack_before, bus_stats.worst_ack_latency_ns());
+        let mem = mem::profile(self.mem_recorder, self.counters.total());
+        let secs = elapsed.as_secs_f64();
+        let per_sec = |n: u64| if secs > 0.0 { n as f64 / secs } else { 0.0 };
         RunOutput {
-            samples: self.recorded.samples,
-            sends: self.recorded.sends,
+            summary: Summary {
+                elapsed,
+                missed_replies: bus_stats.missed_replies(),
+                throughput_cmd_per_sec: per_sec(self.counters.ok),
+                throughput_byte_per_sec: per_sec(self.counters.ok * sender.frame_bytes() as u64),
+                latency: self.rtts.latency(),
+                driver_ack,
+                counters: self.counters,
+            },
             stopped_on_error: self.stopped_on_error,
             driver_closed: self.driver_closed,
-            elapsed: self.start.elapsed(),
-            frame_bytes: sender.frame_bytes(),
-            missed_replies: bus_stats.missed_replies(),
-            driver_ack,
             mem,
+            telemetry_start: self.live.telemetry_start,
+            telemetry_end: self.live.telemetry_last,
         }
     }
 }
@@ -568,7 +500,7 @@ async fn run_stop_and_wait(
     cli: &Cli,
     mut sender: Sender,
     shutdown: Arc<AtomicBool>,
-    bus_stats: &BusStats,
+    mut measurement: Measurement,
 ) -> Result<RunOutput> {
     let window = if cli.command.is_bulk() {
         cli.max_inflight.max(1)
@@ -576,8 +508,7 @@ async fn run_stop_and_wait(
         1
     };
     let mut index: u64 = 0;
-    let mut measurement = Measurement::start(cli, bus_stats);
-    while !shutdown.load(Ordering::Relaxed) && budget_left(cli, index, measurement.start) {
+    while !shutdown.load(Ordering::Relaxed) {
         sender.prepare(client)?;
         let t0 = Instant::now();
         let res = send_all(client, &sender.frames, window).await;
@@ -586,6 +517,7 @@ async fn run_stop_and_wait(
         if measurement.record(index, rtt, classify(res)?).is_break() {
             break;
         }
+        measurement.report(client).await;
         index += 1;
     }
     Ok(measurement.finish(&sender))
@@ -593,20 +525,15 @@ async fn run_stop_and_wait(
 
 async fn run_streaming(
     client: &Client,
-    cli: &Cli,
     mut sender: Sender,
     shutdown: Arc<AtomicBool>,
     max_inflight: usize,
-    bus_stats: &BusStats,
+    mut measurement: Measurement,
 ) -> Result<RunOutput> {
     let mut pending: VecDeque<PendingFuture> = VecDeque::with_capacity(max_inflight);
-    let mut sends_issued: u64 = 0;
     let mut sample_index: u64 = 0;
-    let mut measurement = Measurement::start(cli, bus_stats);
     while !shutdown.load(Ordering::Relaxed) {
-        let need_send = budget_left(cli, sends_issued, measurement.start);
-
-        if need_send && pending.len() < max_inflight {
+        if pending.len() < max_inflight {
             let frame = sender.next_frame(client)?;
             let sent_at = Instant::now();
             let fut = match client.send_frame(frame).await {
@@ -619,7 +546,6 @@ async fn run_streaming(
                 Err(e) => return Err(e.into()),
             };
             pending.push_back(PendingFuture { sent_at, fut });
-            sends_issued += 1;
             continue;
         }
 
@@ -632,6 +558,7 @@ async fn run_streaming(
         if measurement.record(sample_index, rtt, outcome).is_break() {
             break;
         }
+        measurement.report(client).await;
         sample_index += 1;
     }
     Ok(measurement.finish(&sender))
@@ -642,87 +569,56 @@ struct PendingFuture {
     fut: ResponseFuture,
 }
 
-#[derive(Default)]
-struct Counters {
-    ok: u64,
-    timeouts: u64,
-    device_errors: u64,
-    network_errors: u64,
+struct Live {
+    last_report: Instant,
+    block: LiveBlock,
+    rtts: Histogram,
+    telemetry_start: Vec<Telemetry>,
+    telemetry_last: Vec<Telemetry>,
 }
 
-impl std::fmt::Display for Counters {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "ok={} timeout={} dev_err={} net_err={}    ",
-            self.ok, self.timeouts, self.device_errors, self.network_errors
-        )
-    }
-}
-
-struct Progress {
-    count_total: Option<u64>,
-    duration_total: Option<Duration>,
-    completed: u64,
-    counters: Counters,
-    last_render: Instant,
-    rendered_once: bool,
-}
-
-impl Progress {
-    fn new(cli: &Cli) -> Self {
+impl Live {
+    fn new(telemetry_start: Vec<Telemetry>) -> Self {
         Self {
-            count_total: cli.count,
-            duration_total: cli.duration,
-            completed: 0,
-            counters: Counters::default(),
-            last_render: Instant::now()
-                .checked_sub(PROGRESS_INTERVAL)
-                .unwrap_or_else(Instant::now),
-            rendered_once: false,
+            last_report: Instant::now(),
+            block: LiveBlock::new(),
+            rtts: Histogram::new(),
+            telemetry_last: telemetry_start.clone(),
+            telemetry_start,
         }
     }
 
-    fn observe(&mut self, status: SampleStatus, elapsed: Duration) {
-        self.completed += 1;
-        match status {
-            SampleStatus::Ok => self.counters.ok += 1,
-            SampleStatus::Timeout => self.counters.timeouts += 1,
-            SampleStatus::NetworkError => self.counters.network_errors += 1,
-            SampleStatus::DeviceError(_) => self.counters.device_errors += 1,
+    async fn report_if_due(
+        &mut self,
+        client: &Client,
+        counters: &Counters,
+        bus_stats: &BusStats,
+        start: Instant,
+    ) {
+        let interval = self.last_report.elapsed();
+        if interval < REPORT_INTERVAL {
+            return;
         }
-        let now = Instant::now();
-        if now.duration_since(self.last_render) >= PROGRESS_INTERVAL {
-            self.render(elapsed);
-            self.last_render = now;
+        self.last_report = Instant::now();
+        let cmd_per_sec = self.rtts.count() as f64 / interval.as_secs_f64();
+        let latency = self.rtts.latency();
+        self.rtts.clear();
+        let mut lines = interval_lines(
+            start.elapsed(),
+            cmd_per_sec,
+            counters,
+            bus_stats.missed_replies(),
+            &latency,
+        )
+        .to_vec();
+        match client.read_telemetry().await {
+            Ok(now) => {
+                lines.extend(telemetry_lines(&self.telemetry_start, &now));
+                self.telemetry_last = now;
+            }
+            Err(e) => lines.push(format!("{:>11}telemetry  read failed: {e}", "")),
         }
-    }
-
-    fn render(&mut self, elapsed: Duration) {
-        let tail = &self.counters;
-        if let Some(total) = self.count_total {
-            eprint!("\r[{:>8}/{total}] {tail}", self.completed);
-        } else if let Some(total) = self.duration_total {
-            eprint!(
-                "\r[{:>6.1}/{:.1}s] {tail}",
-                elapsed.as_secs_f64(),
-                total.as_secs_f64()
-            );
-        } else {
-            eprint!(
-                "\r[{:>8} ({:.1}s)] {tail}",
-                self.completed,
-                elapsed.as_secs_f64()
-            );
-        }
-        let _ = std::io::Write::flush(&mut std::io::stderr());
-        self.rendered_once = true;
-    }
-
-    fn finish(&mut self) {
-        if self.rendered_once {
-            eprintln!();
-        }
+        self.block.draw(&lines);
     }
 }
 
@@ -733,14 +629,4 @@ fn spawn_signal_listener(flag: Arc<AtomicBool>) {
             eprintln!("\nCtrl+C received — stopping after the current sample...");
         }
     });
-}
-
-fn estimate_capacity(cli: &Cli) -> usize {
-    if let Some(n) = cli.count {
-        return usize::try_from(n).unwrap_or(usize::MAX);
-    }
-    if let Some(d) = cli.duration {
-        return usize::try_from(d.as_millis()).unwrap_or(usize::MAX);
-    }
-    0
 }

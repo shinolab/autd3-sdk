@@ -1,12 +1,10 @@
 use std::num::{NonZeroU32, NonZeroUsize};
-use std::path::PathBuf;
 use std::time::Duration;
 
 use autd3_rs::MAX_INFLIGHT;
 use autd3_rs::udp::DEVICE_QUEUE_FRAMES;
-use clap::{ArgGroup, Parser, ValueEnum};
+use clap::{Parser, ValueEnum};
 
-const DEFAULT_MAX_SAMPLES: u64 = 1_000_000;
 const DEFAULT_HEARTBEAT: &str = "10ms";
 const DEFAULT_ACK_TIMEOUT: &str = "10ms";
 
@@ -37,11 +35,7 @@ impl Command {
 }
 
 #[derive(Parser, Debug, Clone)]
-#[command(
-    name = "autd3-rs-perftest",
-    about,
-    group(ArgGroup::new("stop").args(["count", "duration"]).multiple(false))
-)]
+#[command(name = "autd3-rs-perftest", about)]
 pub struct Cli {
     #[arg(
         long,
@@ -107,32 +101,6 @@ pub struct Cli {
                 default. Omit to use the library default."
     )]
     pub send_buffer: Option<usize>,
-    #[arg(long)]
-    pub count: Option<u64>,
-    #[arg(long, value_parser = humantime::parse_duration)]
-    pub duration: Option<Duration>,
-    #[arg(long, default_value_t = 0)]
-    pub warmup: u64,
-    #[arg(
-        long,
-        default_value_t = DEFAULT_MAX_SAMPLES,
-        help = "Cap on retained per-send samples (0 = unlimited). Sends continue past the cap \
-                but are no longer recorded, so an unbounded run has bounded memory."
-    )]
-    pub max_samples: u64,
-    #[arg(
-        long,
-        default_value_t = false,
-        help = "Emit BaseSignal on GPIO[0] to probe inter-device sync on a scope"
-    )]
-    pub gpio_base_signal: bool,
-    #[arg(
-        long,
-        default_value_t = false,
-        conflicts_with = "gpio_base_signal",
-        help = "Emit Sync (high on the FPGA clock that detects the sync input edge) on GPIO[0] to probe the sync pulse itself on a scope"
-    )]
-    pub gpio_sync: bool,
     #[arg(
         long,
         default_value_t = false,
@@ -142,19 +110,10 @@ pub struct Cli {
     pub stop_on_error: bool,
     #[arg(
         long,
-        default_value_t = false,
-        help = "Read the firmware telemetry counters before and after the run and print the \
-                per-device deltas (e.g. failsafe, sync_resync, fifo_drop)."
-    )]
-    pub telemetry: bool,
-    #[arg(
-        long,
         value_parser = humantime::parse_duration,
         help = "Keep the connection idle (heartbeats only) this long before measuring, e.g. 3s."
     )]
     pub hold: Option<Duration>,
-    #[arg(long)]
-    pub csv: Option<PathBuf>,
     #[arg(
         long = "ack-timeout",
         value_parser = humantime::parse_duration,
