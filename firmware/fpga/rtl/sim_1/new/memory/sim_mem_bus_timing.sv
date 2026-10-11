@@ -9,6 +9,7 @@ module sim_mem_bus_timing ();
   localparam real SKEW = 0.05;
   localparam real T_RDS = 4.0;
   localparam int SIZE = 256;
+  localparam int BUF_WORDS = FlashBufBytes / 2;
 
   logic CLK;
   logic locked;
@@ -62,7 +63,12 @@ module sim_mem_bus_timing ();
   assign memory_bus.BRAM_ADDR = bus_addr;
   assign memory_bus.DATA_IN = wdata;
 
+  logic [9:0] buf_idx = '0;
+
+  assign flash_bus.BUF_IDX = buf_idx;
+
   logic [15:0] expected[SIZE];
+  logic [15:0] expected_buf[BUF_WORDS];
   int errors = 0;
 
   initial begin
@@ -120,6 +126,25 @@ module sim_mem_bus_timing ();
     end
   endtask
 
+  function automatic logic [15:0] buf_addr(input logic [8:0] idx);
+    return {BRAM_SELECT_FLASH_BUF, 8'h00} | {7'd0, idx};
+  endfunction
+
+  task automatic check_buf(input logic [8:0] idx);
+    logic [15:0] value;
+    @(posedge CLK);
+    buf_idx = {idx, 1'b0};
+    repeat (2) @(posedge CLK);
+    value[7:0] = flash_bus.BUF_BYTE;
+    buf_idx = {idx, 1'b1};
+    repeat (2) @(posedge CLK);
+    value[15:8] = flash_bus.BUF_BYTE;
+    if (value !== expected_buf[idx]) begin
+      $display("ERR: flash buf addr=%0d expected=%h got=%h", idx, expected_buf[idx], value);
+      errors++;
+    end
+  endtask
+
   initial begin
     @(posedge locked);
 
@@ -142,6 +167,27 @@ module sim_mem_bus_timing ();
     end
 
     `ASSERT_EQ(0, errors);
+    $display("OK! controller region");
+
+    for (int i = 0; i < BUF_WORDS; i++) begin
+      expected_buf[i] = sim_helper_random.range(16'hFFFF, 0);
+    end
+
+    for (int i = 0; i < BUF_WORDS; i++) begin
+      align();
+      bus_write(buf_addr(i[8:0]), expected_buf[i], buf_addr(i[8:0] ^ 9'h155), ~expected_buf[i]);
+      check_buf(i[8:0]);
+      if ((i[8:0] ^ 9'h155) < i[8:0]) begin
+        check_buf(i[8:0] ^ 9'h155);
+      end
+    end
+
+    for (int i = 0; i < BUF_WORDS; i++) begin
+      check_buf(i[8:0]);
+    end
+
+    `ASSERT_EQ(0, errors);
+    $display("OK! flash buffer region (select 0x%02h and 0x%02h)", BRAM_SELECT_FLASH_BUF, BRAM_SELECT_FLASH_BUF | 8'h01);
 
     $display("OK! sim_mem_bus_timing");
     $finish();
