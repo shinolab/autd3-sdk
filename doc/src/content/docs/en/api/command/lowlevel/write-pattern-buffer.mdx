@@ -15,7 +15,6 @@ import csFullSample from "@codes/csharp/examples/api/command/lowlevel/bank-examp
 import { excerpt } from "@lib/excerpt";
 
 `WritePatternBuffer` is a low-level command that writes a Pattern (the phase and intensity of each transducer) to the specified bank and index.
-On the wire the phases are sent first, followed by the intensities, and the device CPU interleaves them per transducer when writing the FPGA memory.
 
 ## API
 
@@ -30,8 +29,6 @@ On the wire the phases are sent first, followed by the intensities, and the devi
 
 ## Example
 
-Multiple low-level commands are sent together in a single datagram.
-The following is an example of playing a single Pattern via `WritePatternBuffer` → `ConfigPattern` → `ChangePatternBank` (equivalent to the high-level [Pattern](/autd3-sdk/en/api/command/pattern/)).
+The following is an example of playing a single Pattern via `WritePatternBuffer` → `ConfigPattern` → `ActivatePatternBank` (equivalent to the high-level [Pattern](/autd3-sdk/en/api/command/pattern/)).
 
 <CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />
-

@@ -20,7 +20,7 @@ def main() -> None:
     for slot, device in zip(phases, geometry):
         for t, pos in enumerate(device.positions()):
             dist = float(np.linalg.norm(target - pos))
-            slot[t] = Phase(-dist / wavelength * 2.0 * math.pi * rad)
+            slot[t] = Phase(-dist / wavelength.mm * 2.0 * math.pi * rad)
 
     Pattern(phases, Intensity.MAX)
     # ANCHOR_END: api

@@ -1,0 +1,301 @@
+---
+title: エンコーダ
+description: コマンドをフレーム列へ実体化する Frames::encode の内部構造
+sidebar:
+  order: 1
+---
+
+import Mermaid from "@components/Mermaid.astro";
+
+`Frames::encode` は, コマンドを 1 回で送れる単位 (フレーム) の列へ変換する.
+`Geometry` とコマンドだけから決まる純粋な関数で, `Client` を必要としない.
+実装は `crates/autd3-rs/src/datagram/` にある.
+
+<Mermaid
+  title="コマンドからフレームへの変換"
+  code={`flowchart LR
+  CMD["Command"]
+  OP["Operation"]
+  FR["Frames"]
+  CMD -- "expand()" --> OP
+  OP -- "encode()" --> FR`}
+/>
+
+|              | 型             | 内容                                                                      |
+| ------------ | -------------- | ------------------------------------------------------------------------- |
+| ユーザー向け | `Command<'a>`  | 複数の`Operation`を束ねたもの. `expand` で自身を `Operation` の列へ展開.  |
+| 中間         | `Operation`    | 1 フレーム分の処理に対応. `encode` でペイロードに内容を書き出し, `Cmd` と書いた長さ (`Encoded`) を返す. |
+| 出力         | `Frames`       | 実際に送出する `Datagram` の連結バッファとフレーム境界.                   |
+
+```rust
+pub trait Command<'a> {
+    fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error>;
+    fn boxed(self) -> BoxedCommand<'a> where Self: Sized + 'a;
+}
+
+pub trait Operation {
+    fn distribution(&self) -> Distribution { Distribution::Broadcast }
+    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error>;
+}
+```
+
+`impl<'a, O: Operation + 'a> Command<'a> for O` のブランケット実装があるため, 単一の `Operation` はそのまま `Command` として扱える.
+
+`Operation` は 1 フレームに対応する.
+ペイロード長を超えるデータを送る可能性があるものは, `Operation` ではなく `Command` として実装される.
+例えば, `WriteModualtionBuffer`は `Command` であり, `expand` の時点で単一, または, 複数の `WriteModulationChunk` へ分割される.
+
+### Distribution
+
+```rust
+pub enum Distribution { Broadcast, PerDevice }
+```
+
+| 値          | 意味                                     | 
+| ----------- | ---------------------------------------- | 
+| `Broadcast` | 全デバイスに同一ペイロード.              |
+| `PerDevice` | デバイス毎に異なるペイロード.            |
+
+`distribution` の既定実装は `Broadcast` を返す.
+デバイス毎に内容が変わる `Operation` だけが上書きして `PerDevice` を返す.
+
+## expand から encode まで
+
+まずは単一のコマンドだけを追う.
+`each` は後述する.
+
+### `Expansion` の構造
+
+```rust
+pub struct Expansion<'g, 'a> {
+    geometry: &'g Geometry,
+    ops: Vec<Box<dyn Operation + 'a>>,
+}
+```
+
+| フィールド | 役割                                                             |
+| ---------- | ---------------------------------------------------------------- |
+| `geometry` | `each` がデバイス毎にコマンドを割り当てるために参照する.         |
+| `ops`      | 展開された `Operation` の列.                                     |
+
+`Expansion` は `Command` の展開先となる入れ物で, `Frames::encode_into` の中で作られる.
+ユーザーが直接作ることはなく, `Command` を自作するときに `push` を呼ぶ相手としてだけ現れる.
+
+### push
+
+```rust
+pub fn push<C: Command<'a>>(&mut self, cmd: C) -> Result<&mut Self, Error> {
+    cmd.expand(self)?;
+    Ok(self)
+}
+
+pub(crate) fn push_op<O: Operation + 'a>(&mut self, op: O) -> &mut Self {
+    self.ops.push(Box::new(op));
+    self
+}
+
+impl<'a, O: Operation + 'a> Command<'a> for O {
+    fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
+        expansion.push_op(self);
+        Ok(())
+    }
+}
+```
+
+`push`が呼ばれると, その引数の `Command` の `expand` が呼ばれる.
+`Command` は `expand` の中で, 自身を複数の `Command`/`Operation` に展開し, 再帰的に`push` する.
+最終的には `Operation` に対する, `Command` のブランケット実装で `push_op` が呼ばれ再帰が止まり, `ops` に `Operation` が積まれる.
+
+#### 例: 単一の Operation
+
+```rust
+Frames::encode(&geometry, Clear)?;
+```
+
+`Clear` は `Operation` なので, ブランケット実装経由で `push_op` が 1 回呼ばれる.
+
+```
+ops = [ Clear ]
+```
+
+#### 例: 複数の Operation へ展開されるコマンド
+
+`Modulation` は「バッファ書き込み → 設定 → バンク切り替え」の 3 段に展開される.
+
+```rust
+impl<'a> Command<'a> for Modulation<'a> {
+    fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
+        expansion
+            .push(WriteModulationBuffer { bank: self.bank, offset: 0, data: self.data })?
+            .push(ConfigModulation { .. })?;
+        if !self.transition_mode.is_later() {
+            expansion.push(ActivateModulationBank { .. })?;
+        }
+        Ok(())
+    }
+}
+```
+
+`transition_mode` が `Later` のときは, バンク切り替えを積まない.
+
+さらに `WriteModulationBuffer` 自身も `Command` であり, `WriteModulationChunk` へ分割される.
+したがって, 1 フレームに収まらないサイズの `Modulation` を 1 つ渡すと, `ops` は次のようになる.
+
+```
+ops = [ WriteModulationChunk { offset: 0 }
+      , WriteModulationChunk { offset: PAYLOAD_BYTES - size_of::<WriteModPayload>() }
+      , ...
+      , ConfigModulation
+      , ActivateModulationBank ]
+```
+
+#### 例: タプル
+
+タプルは要素を先頭から順に `push` するだけの `Command` である.
+
+```rust
+Frames::encode(&geometry, (SetSilencer::default(), Clear))?;
+```
+
+```
+ops = [ SetSilencer, Clear ]
+```
+
+### encode
+
+```rust
+pub fn encode<'a>(geometry: &Geometry, cmd: impl Command<'a>) -> Result<Frames, Error>;
+pub fn encode_into<'a>(&mut self, geometry: &Geometry, cmd: impl Command<'a>) -> Result<(), Error>;
+```
+
+`encode` は `Frames` を新規に作って, `encode_into` を呼び出すだけ.
+
+`encode_into` はコマンドを展開し, `ops` を先頭から順に `Frames` へ書き出す.
+
+```rust
+self.clear();
+let mut expansion = Expansion::new(geometry);
+expansion.push(cmd)?;                            // 展開に失敗すればここでエラー
+let ops = expansion.finish();
+let encoded = ops.iter().try_for_each(|op| self.push_op(op.as_ref(), geometry));
+if encoded.is_err() {
+    self.clear();                                // 中途半端なフレーム列を残さない
+}
+```
+
+`Operation` 1 つがフレーム 1 つに対応する.
+`Distribution` によって, そのフレームが持つ `Datagram` の数が変わる.
+
+```rust
+let encode_devices = match op.distribution() {
+    Distribution::Broadcast => 1,
+    Distribution::PerDevice => geometry.num_devices(),
+};
+let start = self.payloads.len();
+for device in 0..encode_devices {
+    let mut payload = [0u8; PAYLOAD_BYTES];
+    let cmd = op.encode(&geometry[device], &mut payload)?;
+    self.payloads.push(Datagram { cmd, payload });
+}
+self.frames.push(FrameDesc { dist, start, len: encode_devices });
+```
+
+`Broadcast` では `encode` がデバイス 0 に対して 1 回しか呼ばれず, ペイロードも 1 部しか保持しない.
+
+### Frames の構造
+
+```rust
+pub struct Datagram { 
+    pub cmd: Cmd, 
+    pub payload: [u8; PAYLOAD_BYTES] 
+}
+
+struct FrameDesc {
+    dist: Distribution,
+    start: usize, 
+    len: usize
+}
+
+pub struct Frames {
+    payloads: Vec<Datagram>,   // 全フレームのペイロードを連結
+    frames: Vec<FrameDesc>,    // 各フレームの (distribution, 開始位置, 長さ)
+}
+
+pub struct Frame<'a> { 
+    dist: Distribution,
+    datagrams: &'a [Datagram] 
+}
+```
+
+フレームごとに `Vec` を持たず, 1 本の連結バッファと境界記述に分けている.
+
+デバイス 2 台で `Pattern` (`PerDevice`) と `ConfigModulation` (`Broadcast`) を積んだ場合は次のようになる.
+
+```
+payloads: [ P(dev0), P(dev1), C ]
+           └──── frame 0 ───┘ └ frame 1
+frames:   [ { PerDevice, start: 0, len: 2 }
+          , { Broadcast, start: 2, len: 1 } ]
+```
+
+`Frames` は `IntoIterator` を実装しており, `Frame` を順に取り出して送信する.
+送信側の詳細は[送信処理](/autd3-sdk/developer/software/transmission/)を参照.
+
+### `expand` 失敗の扱い
+
+`expand` は `Result<(), Error>` を返し, 展開の時点で分かる不正はその場でエラーにする.
+`push` は引数の `expand` の結果をそのまま伝播するので, 最初の 1 件で展開が止まる.
+
+たとえば `WriteModulationBuffer` は空データを弾く.
+
+```rust
+if self.data.is_empty() {
+    return Err(PayloadError::ModulationDataEmpty.into());
+}
+```
+
+### デバイスの状態は検証しない
+
+エンコーダが検証するのはペイロードとして表現できるかどうかだけである.
+[`Silencer`](/autd3-sdk/guide/silencer/) の制約のように, デバイスの現在の状態に依存する検証はクライアント側では行わない.
+これらはデバイスが検証し, 違反は該当フレームの応答 (`Error::DeviceError`) として返る.
+
+## each
+
+`each` はデバイス毎に異なるコマンドを割り当てる.
+
+```rust
+pub fn each<'a, C, F>(assign: F) -> Each<F>
+where
+    C: Command<'a>,
+    F: FnMut(&Device) -> Option<C>;
+```
+
+`Each<F>` も `Command` であり, `expand` でデバイス毎の op 列を作る.
+
+```rust
+Vec<Vec<Box<dyn Operation + 'a>>>
+```
+
+`assign` が返したコマンドは使い捨ての子 `Expansion` で展開し, op 列を取り出す.
+`None` を返したデバイスは空の `Vec` になる.
+
+### フレームへの展開
+
+デバイス毎の op 列は長さが異なる可能性がある.
+1 フレームは全デバイスで同じ SEQ を共有するため, 尺を揃える必要があり, 不足分は `Nop` で埋められる.
+
+```
+        frame 0     frame 1     frame 2
+dev0 |   opA    |    opB    |    ---    |   ← 不足分は Nop
+dev1 |   opC    |    opD    |    opE    |
+```
+
+フレーム `k` は, 各デバイスの op 列の `k` 番目を引く `Operation` (`EachFrame`) として `ops` に積まれる.
+
+```
+ops = [ EachFrame { frame: 0 }, EachFrame { frame: 1 }, EachFrame { frame: 2 } ]
+```
+
+`each` を 2 つ続けて渡した場合, 担当デバイスが重複していなくても別々のフレーム列になる.
+同じフレームに載せたいものは 1 つの `each` に書く.

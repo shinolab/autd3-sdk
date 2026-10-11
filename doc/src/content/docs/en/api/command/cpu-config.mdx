@@ -1,0 +1,78 @@
+---
+title: SetCpuConfig
+description: SetCpuConfig to change the internal settings of the CPU firmware
+sidebar:
+  order: 10.5
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/api/command/cpu-config.rs?raw";
+import pySample from "@codes/python/examples/api/command/cpu-config.py?raw";
+import fullSample from "@codes/rust/examples/api/command/cpu-config-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/cpu-config-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/cpu-config.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/cpu-config-example.cs?raw";
+
+`SetCpuConfig` is a command that changes the settings the CPU firmware uses internally (wait times, polling limits, and PTP synchronization parameters).
+
+:::caution
+You normally do not need to change anything other than `sys_time_transition_margin`, `failsafe_timeout`, and `ptp_unlock_failsafe_timeout`.
+Behavior is not guaranteed when any other field is changed from its default.
+:::
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+### CpuConfig
+
+| Field                        | Type         | Default       | Description |
+| ---------------------------- | ------------ | ------------- | ----------- |
+| `sys_time_transition_margin` | `Duration`   | 10 ms         | Miss margin for `TransitionMode::SysTime`. A transition time earlier than "current device time + margin" is rejected with `MISS_TRANSITION_TIME`. `0` means no margin |
+| `fpga_wait_update_max_polls` | `NonZeroU32` | 1,000,000     | Maximum number of polls while waiting for the FPGA to apply a setting. Exceeding it yields `FPGA_TIMEOUT` |
+| `fpga_flash_max_polls`       | `NonZeroU32` | 2,000,000,000 | Maximum number of polls while waiting for an FPGA flash operation (FPGA firmware update) to complete |
+| `sync_guard`                 | `Duration`   | 250 μs        | Margin for choosing the synchronization start time |
+| `update_activate_delay`      | `Duration`   | 100 ms        | Grace period between the CPU firmware update activation and the reboot. |
+| `failsafe_timeout`           | `Option<Duration>` | 500 ms  | A device stops its output once nothing has arrived from the host for this long (failsafe). `None` disables the failsafe |
+| `ptp_unlock_failsafe_timeout` | `Option<Duration>` | `None` | A device stops its output once it has been without its PTP lock for this long. `None` disables it |
+| `fpga_bus_wait`              | `FpgaBusWait` | `Cycles3`    | Wait cycles of the bus the CPU reads and writes the FPGA through. `Cycles2` or `Cycles3` |
+| `ptp`                        | `PtpConfig`  |               | PTP synchronization parameters |
+
+### PtpConfig
+
+| Field                  | Type         | Default | Description |
+| ---------------------- | ------------ | ------- | ----------- |
+| `sync_interval`        | `Duration`   | 8 ms    | Interval at which `Sync` messages are sent |
+| `tx_timestamp_timeout` | `Duration`   | 3 ms    | How long to wait for the transmit timestamp of `Delay_Req` |
+| `delay_resp_timeout`   | `Duration`   | 6 ms    | How long to wait for `Delay_Resp` |
+| `holdover`             | `Duration`   | 1 s     | How long the lock is kept while locked and no `Sync` arrives |
+| `lock_samples`         | `NonZeroU16` | 64      | Number of consecutive samples required to lock |
+| `step_threshold`       | `Duration`   | 10 μs   | The clock is stepped when the time offset exceeds this |
+| `lock_threshold`       | `Duration`   | 100 ns  | Samples whose time offset is below this count toward the lock |
+| `kp_milli`             | `u32`        | 50      | Proportional gain of the servo × 1000 |
+| `ki_milli`             | `u32`        | 1       | Integral gain of the servo × 1000 |
+| `max_freq_ppb`         | `u32`        | 500,000 | Limit of the frequency correction [ppb] |
+| `delay_req_syncs`      | `NonZeroU16` | 32      | Interval at which the path delay is measured again once locked (in `Sync` messages) |
+| `path_delay_filter_shift` | `u8`      | 5       | Smoothing factor `1 / 2^n` of the path delay. 0 disables the smoothing |
+| `pause_quanta`         | `Option<NonZeroU16>` | 48 | Length of the `PAUSE` sent to the host when the link is saturated [512 bit times]. `None` sends no `PAUSE` |
+| `pause_hold_syncs`     | `u16`        | 64      | Number of `Sync` messages for which a `PAUSE` keeps being sent on every send after the link was found saturated |
+| `pause_retry`          | `Duration`   | 8 ms    | How long `PAUSE` keeps being sent while a `Sync` cannot be sent out |
+
+:::danger
+With `failsafe_timeout` set to `None`, a device keeps emitting ultrasound even when communication is lost because the host crashed or a cable was unplugged.
+Keep `failsafe_timeout` well above twice the `heartbeat`. If it is too short, the output stops even while the host is running.
+With `ptp_unlock_failsafe_timeout` set, a device that loses its PTP lock (any device but the first one) stops its output the same way as the failsafe once this long has passed since the loss.
+Locking again takes about 1 s with the default settings, so a shorter value stops the output on every loss of the lock.
+
+An output stopped by the failsafe does not come back automatically.
+Whether a device is stopped can be checked with `is_failsafe_active()` (C#: `IsFailsafeActive`) of the `FpgaState` returned from `read_fpga_state()`.
+Sending the `ReleaseFailsafe` command resumes the output.
+[Clear](/autd3-sdk/en/api/command/clear/) releases it as well, but returns every state to its default.
+:::
+
+The settings return to their defaults on [Clear](/autd3-sdk/en/api/command/clear/) and on power cycling.
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

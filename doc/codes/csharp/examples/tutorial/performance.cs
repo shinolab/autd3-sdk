@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
-using AUTD3.Link;
 using static AUTD3.Units;
 
 namespace DocSamples.TutorialPerformance;
@@ -17,36 +16,36 @@ internal static class Sample
     {
         var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
-        await using var client = await Client.OpenAsync(geometry, new EchocatLinkOption(), new ClientConfig());
+        await using var client = await Client.OpenAsync(geometry, new TransportOption(), new ClientConfig());
 
         var phases = geometry.PhaseBuffer();
 
         // ANCHOR: configure
-        var builder = client.DatagramBuilder();
-        builder.Push(SetSilencer.Disable());
-        builder.Push(new WritePatternBuffer(
+        await client.SendAsync(SetSilencer.Disable());
+        await client.SendAsync(new WritePatternBuffer(
             bank: PatternBank.B0,
             index: 0,
             phases: phases,
             intensities: Intensity.Min
         ));
-        builder.Push(new ConfigPattern(
+        await client.SendAsync(new ConfigPattern(
             bank: PatternBank.B0,
             config: SamplingConfig.Freq40k,
             size: 1,
             loopBehavior: LoopBehavior.Infinite
         ));
-        foreach (var frame in builder.Build())
-        {
-            await client.SendCheckedAsync(frame);
-        }
+        await client.SendAsync(new ActivatePatternBank(
+            bank: PatternBank.B0,
+            transitionMode: TransitionMode.Immediate
+        ));
         // ANCHOR_END: configure
 
         var center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
         var wavelength = Pattern.Wavelength(340.0f * m / s);
 
         // ANCHOR: hot_loop
-        var pending = new Queue<ResponseToken>();
+        using var frames = new Frames();
+        var pending = new Queue<ResponseFuture>();
         for (var i = 0; i < NumPoints; i++)
         {
             var theta = 2.0f * MathF.PI * i / NumPoints;
@@ -58,20 +57,19 @@ internal static class Sample
                 phases
             );
 
-            var hotBuilder = client.DatagramBuilder();
-            hotBuilder.Push(new WritePatternBuffer(
+            frames.EncodeInto(geometry, new WritePatternBuffer(
                 bank: PatternBank.B0,
                 index: 0,
                 phases: phases,
                 intensities: Intensity.Max
             ));
-            foreach (var frame in hotBuilder.Build())
+            foreach (var frame in frames)
             {
                 if (pending.Count >= Client.MaxInflight)
                 {
                     (await pending.Dequeue()).Check();
                 }
-                pending.Enqueue(await client.SendAsync(frame));
+                pending.Enqueue(await client.SendFrameAsync(frame));
             }
         }
         while (pending.Count > 0)

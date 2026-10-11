@@ -38,12 +38,12 @@ import { excerpt } from "@lib/excerpt";
 | `PatternBank`     | Active Pattern bank                       |
 | `PatternIdx(u16)` | High when Pattern is at the specified index |
 | `IsStmMode`   | High when in Stm mode (`size != 1`)                 |
-| `SysTimeEq(DcSysTime)` | High when the system time matches the specified value |
+| `SysTimeEq(SysTime)` | High when the system time matches the specified value |
 | `SyncDiff`        | Synchronization error                    |
 | `PwmOut(u8)`      | PWM output of the specified transducer   |
 | `Direct(bool)`    | Directly output the specified fixed value |
 
-For the `DcSysTime` passed to `SysTimeEq`, see [DcSysTime](/autd3-sdk/en/api/basics/dc-sys-time/).
+For the `SysTime` passed to `SysTimeEq`, see [SysTime](/autd3-sdk/en/api/basics/sys-time/).
 
 ## Example
 

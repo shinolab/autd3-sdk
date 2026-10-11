@@ -3,7 +3,6 @@ using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
 using AUTD3;
-using AUTD3.Link;
 using static AUTD3.Units;
 
 // HIDE
@@ -17,10 +16,10 @@ internal static class Sample
 // Define a geometry consisting of a single AUTD3 device.
 var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
-// Open the client over an echocat link.
+// Open the client.
 await using var client = await Client.OpenAsync(
     geometry,
-    new EchocatLinkOption(),
+    new TransportOption(),
     new ClientConfig()
 );
 
@@ -43,15 +42,9 @@ Modulation.Sine(
     modulation
 );
 
-var builder = client.DatagramBuilder();
-builder.Push(new SetSilencer());
-builder.Push(new Pattern(phases, Intensity.Max));
-builder.Push(new Modulation(SamplingConfig.Freq4k, modulation));
-var frames = builder.Build();
-foreach (var frame in frames)
-{
-    await client.SendCheckedAsync(frame);
-}
+await client.SendAsync(new SetSilencer());
+await client.SendAsync(new Pattern(phases, Intensity.Max));
+await client.SendAsync(new Modulation(SamplingConfig.Freq4k, modulation));
 
 using var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>

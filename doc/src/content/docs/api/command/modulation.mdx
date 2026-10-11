@@ -53,13 +53,13 @@ import { excerpt } from "@lib/excerpt";
 
 `config` は [`SamplingConfig`](/autd3-sdk/api/basics/sampling-config/) で指定する.
 `data` は `modulation_buffer()` で確保したバッファへ書き込む.
-`loop_behavior` / `transition_mode` の挙動は [ChangeModulationBank](/autd3-sdk/api/command/lowlevel/change-modulation-bank/) を参照.
+`loop_behavior` / `transition_mode` の挙動は [ActivateModulationBank](/autd3-sdk/api/command/lowlevel/activate-modulation-bank/) を参照.
 
 modulation の計算には幾つかの[ヘルパ関数](/autd3-sdk/api/compute/modulation/)が用意されている.
 
 ## 等価な低レベルコマンド
 
-`Modulation` は [WriteModulationBuffer](/autd3-sdk/api/command/lowlevel/write-modulation-buffer/) + [ConfigModulation](/autd3-sdk/api/command/lowlevel/config-modulation/) + [ChangeModulationBank](/autd3-sdk/api/command/lowlevel/change-modulation-bank/) の 3 つと等価である. データが 1 フレームに収まる場合は融合して 1 フレームで送られ, 収まらない場合は上記の 3 コマンドに展開される.
+`Modulation` は [WriteModulationBuffer](/autd3-sdk/api/command/lowlevel/write-modulation-buffer/) + [ConfigModulation](/autd3-sdk/api/command/lowlevel/config-modulation/) + [ActivateModulationBank](/autd3-sdk/api/command/lowlevel/activate-modulation-bank/) の 3 つと等価であり, この順に展開して送られる.
 以下は `Modulation { bank, config, data, loop_behavior, transition_mode }` と等価な組み合わせである
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />

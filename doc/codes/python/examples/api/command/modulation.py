@@ -1,4 +1,4 @@
-from autd3.commands import ChangeModulationBank, ConfigModulation, Modulation, WriteModulationBuffer
+from autd3.commands import ActivateModulationBank, ConfigModulation, Modulation, WriteModulationBuffer
 from autd3.value import LoopBehavior, ModulationBank, SamplingConfig, TransitionMode
 from autd3_modulation import modulation_buffer
 
@@ -35,7 +35,7 @@ ConfigModulation(
     size=len(data),
     loop_behavior=loop_behavior,
 )
-ChangeModulationBank(
+ActivateModulationBank(
     bank=bank,
     transition_mode=transition_mode,
 )

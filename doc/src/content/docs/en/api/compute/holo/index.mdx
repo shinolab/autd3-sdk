@@ -62,12 +62,11 @@ It is specified via the `mask` field of each Option (the default is `AllEnabled`
 
 - `TransducerMask::AllEnabled` — uses all transducers (default).
 - `TransducerMask::Masked(&[Vec<bool>])` — specifies enabled/disabled for each transducer individually.
-- `groups.mask(key)` — uses only the transducers assigned the key `key` in `TransducerGroups` (see [group](/autd3-sdk/en/api/compute/pattern/group/)).
 
 ### LinAlgBackend (NalgebraBackend)
 
 `naive` / `gs` / `gspat` delegate linear algebra operations to the `LinAlgBackend` trait.
-`NalgebraBackend` is used as the standard implementation.
+`NalgebraBackend`, which computes on the CPU, is used as the standard implementation.
 The backend is passed as the first argument of each function.
 
 `greedy` does not use matrix operations, so it does not take a backend.
@@ -78,7 +77,7 @@ The backend is passed as the first argument of each function.
 
 <Install rust="autd3-rs-pattern-holo-wgpu"/>
 
-### The batch API
+#### Batch API
 
 `naive` / `gs` / `gspat` each have a `naive_batch` / `gs_batch` / `gspat_batch` counterpart that solves several independent problems at once.
 
@@ -86,6 +85,6 @@ The backend is passed as the first argument of each function.
 
 The problem count is determined by the length of `phases` / `intensities` (both must have the same length).
 The foci are passed as a slice of length equal to the number of problems multiplied by the number of foci per problem.
-An error is returned if the length of the slice is not divisible by the problem count.
+All problems must have the same number of foci; an error is returned if the length of the slice is not divisible by the problem count.
 
-The gain comes from GPU backends, `NalgebraBackend` does not get faster.
+The batch API is faster only with a GPU backend; it has no benefit with a CPU backend.

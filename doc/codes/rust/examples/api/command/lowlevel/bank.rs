@@ -3,12 +3,10 @@ use core::num::NonZeroU16;
 use anyhow::Result;
 
 use autd3_rs::commands::{
-    ChangePatternBank, ConfigPattern, PatternCompression, WritePatternBuffer,
-    WritePatternCompressed,
+    ActivatePatternBank, ConfigPattern, PhaseDepth, WritePatternBuffer, WritePatternPhase,
 };
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode};
-use autd3_rs_link_nop::Nop;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
@@ -35,25 +33,22 @@ async fn main() -> Result<()> {
     // ANCHOR_END: config
     let transition_mode = TransitionMode::Immediate;
     // ANCHOR: change
-    ChangePatternBank {
+    ActivatePatternBank {
         bank,
         transition_mode,
     };
     // ANCHOR_END: change
 
-    let p0 = geometry.phase_buffer();
-    let p1 = geometry.phase_buffer();
-    let p2 = geometry.phase_buffer();
-    let p3 = geometry.phase_buffer();
-    let patterns = [Some(&p0[..]), Some(&p1[..]), Some(&p2[..]), Some(&p3[..])];
+    let _patterns = vec![geometry.phase_buffer(); 4];
+    let patterns = &_patterns;
     let index = 0;
-    let format = PatternCompression::PhaseHalf;
+    let depth = PhaseDepth::Bits4;
     let intensity = Intensity::MAX;
     // ANCHOR: compressed
-    WritePatternCompressed {
+    WritePatternPhase {
         bank,
         index,
-        format,
+        depth,
         intensity,
         patterns,
     };

@@ -1,4 +1,4 @@
-from autd3.commands import ChangeModulationBank, ConfigModulation, WriteModulationBuffer
+from autd3.commands import ActivateModulationBank, ConfigModulation, WriteModulationBuffer
 from autd3.units import Hz
 from autd3.value import LoopBehavior, ModulationBank, SamplingConfig, TransitionMode
 from autd3_modulation import SineOption, modulation_buffer, sine
@@ -24,7 +24,7 @@ ConfigModulation(
 # ANCHOR_END: config
 transition_mode = TransitionMode.Immediate
 # ANCHOR: change
-ChangeModulationBank(
+ActivateModulationBank(
     bank=bank,
     transition_mode=transition_mode,
 )

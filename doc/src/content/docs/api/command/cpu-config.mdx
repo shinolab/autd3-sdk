@@ -1,0 +1,78 @@
+---
+title: SetCpuConfig
+description: CPU ファームウェアの内部設定値を変更する SetCpuConfig
+sidebar:
+  order: 10.5
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/api/command/cpu-config.rs?raw";
+import pySample from "@codes/python/examples/api/command/cpu-config.py?raw";
+import fullSample from "@codes/rust/examples/api/command/cpu-config-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/cpu-config-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/cpu-config.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/cpu-config-example.cs?raw";
+
+`SetCpuConfig` は, CPU ファームウェアが内部で使う設定値 (待ち時間・ポーリング上限・PTP 同期のパラメータ) を変更するコマンド.
+
+:::caution
+`sys_time_transition_margin`, `failsafe_timeout`, `ptp_unlock_failsafe_timeout` 以外は通常変更する必要はない.
+これら以外を既定値から変更した場合の動作は保証しない.
+:::
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+### CpuConfig
+
+| フィールド                   | 型           | 既定値        | 説明 |
+| ---------------------------- | ------------ | ------------- | ---- |
+| `sys_time_transition_margin` | `Duration`   | 10 ms         | `TransitionMode::SysTime` の取りこぼし判定マージン. 「デバイスの現在時刻 + マージン」より前の遷移時刻は `MISS_TRANSITION_TIME` で拒否される. `0` はマージン無し |
+| `fpga_wait_update_max_polls` | `NonZeroU32` | 1,000,000     | FPGA の設定反映待ちのポーリング上限回数. 超えると `FPGA_TIMEOUT` |
+| `fpga_flash_max_polls`       | `NonZeroU32` | 2,000,000,000 | FPGA フラッシュ操作 (FPGA ファームウェア更新) の完了待ちのポーリング上限回数 |
+| `sync_guard`                 | `Duration`   | 250 μs        | 同期開始時刻の選択マージン                                                   |
+| `update_activate_delay`      | `Duration`   | 100 ms        | CPU ファームウェア更新の適用指示から再起動までの猶予  |
+| `failsafe_timeout`           | `Option<Duration>` | 500 ms  | ホストからの通信がこの時間途絶えるとデバイスが出力を止める (failsafe). `None` は failsafe 無効 |
+| `ptp_unlock_failsafe_timeout` | `Option<Duration>` | `None` | PTP のロックを失ったままこの時間が経つと, そのデバイスが出力を止める. `None` は無効 |
+| `fpga_bus_wait`              | `FpgaBusWait` | `Cycles3`    | CPU が FPGA を読み書きするバスのウェイト周期数. `Cycles2` または `Cycles3` |
+| `ptp`                        | `PtpConfig`  |               | PTP 同期のパラメータ |
+
+### PtpConfig
+
+| フィールド             | 型           | 既定値  | 説明 |
+| ---------------------- | ------------ | ------- | ---- |
+| `sync_interval`        | `Duration`   | 8 ms    | `Sync` メッセージの送出間隔 |
+| `tx_timestamp_timeout` | `Duration`   | 3 ms    | `Delay_Req` の送信タイムスタンプの回収待ち上限 |
+| `delay_resp_timeout`   | `Duration`   | 6 ms    | `Delay_Resp` の待ち上限 |
+| `holdover`             | `Duration`   | 1 s     | ロック中に `Sync` を受けられないままロックを保つ時間 |
+| `lock_samples`         | `NonZeroU16` | 64      | ロックに必要な連続標本数 |
+| `step_threshold`       | `Duration`   | 10 μs   | 時刻のずれがこれを超えたら時計を強制的に揃える |
+| `lock_threshold`       | `Duration`   | 100 ns  | 時刻のずれがこれ未満の標本をロックに数える |
+| `kp_milli`             | `u32`        | 50      | サーボの比例ゲイン × 1000 |
+| `ki_milli`             | `u32`        | 1       | サーボの積分ゲイン × 1000 |
+| `max_freq_ppb`         | `u32`        | 500,000 | 周波数補正の上限 [ppb] |
+| `delay_req_syncs`      | `NonZeroU16` | 32      | ロック後に経路遅延を測り直す間隔 (`Sync` の回数) |
+| `path_delay_filter_shift` | `u8`      | 5       | 経路遅延の平滑化の係数 `1 / 2^n`. 0 で平滑化しない |
+| `pause_quanta`         | `Option<NonZeroU16>` | 48 | 回線が飽和したときにホストへ送られる `PAUSE` の長さ [512 ビット時間]. `None` で `PAUSE` を送らない |
+| `pause_hold_syncs`     | `u16`        | 64      | 一度詰まってから, 送信のたびに `PAUSE` を送り続ける `Sync` の回数 |
+| `pause_retry`          | `Duration`   | 8 ms    | `Sync` を送り出せない間, `PAUSE` を送り続ける時間 |
+
+:::danger
+`failsafe_timeout` を `None` にすると, ホストのクラッシュやケーブル断で通信が途絶えてもデバイスは超音波を出力し続ける.
+`failsafe_timeout` は `heartbeat` の 2 倍より十分長く保つこと. 短すぎるとホストが動いていても出力が止まる.
+`ptp_unlock_failsafe_timeout` を指定すると, PTP のロックを失ったデバイス (先頭のデバイス以外) は, 失ってからこの時間が経つと failsafe と同じ方法で出力を止める.
+再ロックには既定の設定で 1 s 程度かかるので, それより短い値を指定するとロックを失うたびに必ず出力が止まる.
+
+failsafe で止まった出力は, 自動では戻らない.
+止まっているかどうかは `read_fpga_state()` が返す `FpgaState` の `is_failsafe_active()` (C#: `IsFailsafeActive`) で確認できる.
+`ReleaseFailsafe` コマンドを送ると出力が再開される.
+[Clear](/autd3-sdk/api/command/clear/) でも解除されるが, すべての状態が既定値に戻る.
+:::
+
+設定値は [Clear](/autd3-sdk/api/command/clear/) と電源再投入で既定値に戻る.
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

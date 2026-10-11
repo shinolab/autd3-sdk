@@ -2,18 +2,18 @@ import asyncio
 
 import numpy as np
 
-from autd3 import Client, ClientConfig
-from autd3.commands import ChangePatternBank, ConfigPattern, WritePatternBuffer
+from autd3 import Client, ClientConfig, UdpEmulator
+from autd3.commands import ActivatePatternBank, ConfigPattern, WritePatternBuffer
 from autd3.geometry import Autd3, Geometry
 from autd3.units import m, s
 from autd3.value import Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode
-from autd3_link_nop import Nop
 from autd3_pattern import focus, wavelength
 
 
 async def main() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
-    async with await Client.open(geometry, Nop(), ClientConfig()) as client:
+    emulator = UdpEmulator(geometry.num_devices())
+    async with await Client.open(geometry, emulator.option(), ClientConfig()) as client:
         phases = geometry.phase_buffer()
         focus(
             geometry,
@@ -24,8 +24,7 @@ async def main() -> None:
 
         bank = PatternBank.B0
 
-        builder = client.datagram_builder()
-        builder.push(
+        await client.send(
             WritePatternBuffer(
                 bank=bank,
                 index=0,
@@ -33,7 +32,7 @@ async def main() -> None:
                 intensities=Intensity.MAX,
             )
         )
-        builder.push(
+        await client.send(
             ConfigPattern(
                 bank=bank,
                 config=SamplingConfig(0xFFFF),
@@ -41,15 +40,12 @@ async def main() -> None:
                 loop_behavior=LoopBehavior.Infinite,
             )
         )
-        builder.push(
-            ChangePatternBank(
+        await client.send(
+            ActivatePatternBank(
                 bank=bank,
                 transition_mode=TransitionMode.Immediate,
             )
         )
-        frames = builder.build()
-        for frame in frames:
-            await client.send_checked(frame)
 
 
 asyncio.run(main())

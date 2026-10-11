@@ -27,7 +27,7 @@ internal static class Sample
         // ANCHOR_END: config
         var transitionMode = TransitionMode.Immediate;
         // ANCHOR: change
-        new ChangeModulationBank(
+        new ActivateModulationBank(
             bank: bank,
             transitionMode: transitionMode
         );

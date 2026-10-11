@@ -8,10 +8,12 @@ sidebar:
 This section describes the steps to connect the AUTD3 device to the PC.
 For details on the device configuration, dimensions, coordinate system, and connectors, see [Guide/AUTD3](/autd3-sdk/en/hardware/board/).
 
-## EtherCAT Connection
+## Ethernet Connection
 
-Connect the PC and the EtherCAT In of the first AUTD3 with an Ethernet cable.
-When using multiple devices, connect the EtherCAT Out of the n-th device to the EtherCAT In of the (n+1)-th device in order (daisy chain).
+Connect the PC and the middle one of the three Ethernet ports of the first AUTD3 (labeled CN10 on the board) with an Ethernet cable.
+When using multiple devices, connect the outermost port (CN11) of the n-th device to the middle port (CN10) of the (n+1)-th device.
+
+The devices are numbered 0, 1, 2, ... from the one nearest to the PC.
 
 :::caution
 Use an Ethernet cable of CAT 5e or higher.

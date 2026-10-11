@@ -52,11 +52,11 @@ Several [helper functions](/autd3-sdk/en/api/compute/pattern/) are provided for 
 
 ## Equivalent Low-Level Commands
 
-`Pattern` is equivalent to the three commands [WritePatternBuffer](/autd3-sdk/en/api/command/lowlevel/write-pattern-buffer/) + [ConfigPattern](/autd3-sdk/en/api/command/lowlevel/config-pattern/) + [ChangePatternBank](/autd3-sdk/en/api/command/lowlevel/change-pattern-bank/), which are fused into a single frame.
+`Pattern` is equivalent to the three commands [WritePatternBuffer](/autd3-sdk/en/api/command/lowlevel/write-pattern-buffer/) + [ConfigPattern](/autd3-sdk/en/api/command/lowlevel/config-pattern/) + [ActivatePatternBank](/autd3-sdk/en/api/command/lowlevel/activate-pattern-bank/), and is sent expanded into three frames in that order.
 The following is equivalent to `Pattern { bank, phases, intensities }`.
 
-When `transition_mode` is `TransitionMode::Later`, nothing is fused: the command decomposes into the two frames `WritePatternBuffer` + `ConfigPattern` and no `ChangePatternBank` is sent.
-See the `TransitionMode` section of [ChangePatternBank](/autd3-sdk/en/api/command/lowlevel/change-pattern-bank/) for details.
+When `transition_mode` is `TransitionMode::Later`, only the two frames `WritePatternBuffer` + `ConfigPattern` are sent and no `ActivatePatternBank` is sent.
+See the `TransitionMode` section of [ActivatePatternBank](/autd3-sdk/en/api/command/lowlevel/activate-pattern-bank/) for details.
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />
 

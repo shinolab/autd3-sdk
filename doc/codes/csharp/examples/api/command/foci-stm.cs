@@ -61,7 +61,7 @@ internal static class Sample
             soundSpeed: option.SoundSpeed,
             loopBehavior: option.LoopBehavior
         );
-        new ChangePatternBank(
+        new ActivatePatternBank(
             bank: option.Bank,
             transitionMode: option.TransitionMode
         );
