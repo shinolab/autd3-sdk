@@ -77,8 +77,9 @@ impl Servo {
                 let mut out = self.step(offset);
                 let elapsed = at - first_at;
                 if elapsed > 0 {
-                    let excess = i128::from(offset - first) * NS_PER_SEC * i128::from(MILLI)
-                        / i128::from(elapsed);
+                    let excess =
+                        (i128::from(offset) - i128::from(first)) * NS_PER_SEC * i128::from(MILLI)
+                            / i128::from(elapsed);
                     self.integral_mppb = clamp_mppb(-excess, config);
                     out.drift_ppb = Some(round_ppb(self.integral_mppb));
                 }
@@ -146,10 +147,13 @@ mod tests {
     use core::num::NonZeroU16;
     use core::time::Duration;
 
+    use rstest::rstest;
+
     use super::{Config, Servo};
 
     const LOCK_SAMPLES: u16 = autd3_cpu_wire::cpu_params::PTP_LOCK_SAMPLES.get();
     const STEP_THRESHOLD_NS: i64 = autd3_cpu_wire::cpu_params::PTP_STEP_THRESHOLD.as_nanos() as i64;
+    const MAX_FREQ_PPB: i32 = autd3_cpu_wire::cpu_params::PTP_MAX_FREQ_PPB.cast_signed();
 
     #[test]
     fn the_servo_needs_64_quiet_samples_to_lock() {
@@ -198,6 +202,27 @@ mod tests {
         servo.sample(1_000_000, 0, &Config::default());
         let out = servo.sample(1_000_160, 16_000_000, &Config::default());
         assert_eq!(out.drift_ppb, Some(-10_000));
+    }
+
+    #[rstest]
+    #[case::rising_across_the_whole_range(i64::MIN + 1, i64::MAX, -MAX_FREQ_PPB)]
+    #[case::falling_across_the_whole_range(i64::MAX, i64::MIN + 1, MAX_FREQ_PPB)]
+    #[case::rising_past_the_positive_end(-STEP_THRESHOLD_NS - 1, i64::MAX, -MAX_FREQ_PPB)]
+    #[case::falling_past_the_negative_end(STEP_THRESHOLD_NS + 1, i64::MIN + 1, MAX_FREQ_PPB)]
+    #[case::equal_at_the_positive_end(i64::MAX, i64::MAX, 0)]
+    fn the_frequency_estimate_does_not_wrap_on_offsets_at_the_ends_of_the_range(
+        #[case] first: i64,
+        #[case] second: i64,
+        #[case] drift_ppb: i32,
+    ) {
+        let mut servo = Servo::new();
+        assert_eq!(
+            servo.sample(first, 0, &Config::default()),
+            super::Output::default()
+        );
+        let out = servo.sample(second, 16_000_000, &Config::default());
+        assert_eq!(out.step_ns, Some(-second));
+        assert_eq!(out.drift_ppb, Some(drift_ppb));
     }
 
     #[test]

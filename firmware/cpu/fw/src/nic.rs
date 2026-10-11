@@ -37,7 +37,9 @@ pub fn plan_step(now_ns: u64, offset_ns: i64) -> TimeStep {
         return TimeStep::Postpone;
     }
     let within_second = now_ns % NS_PER_SEC;
-    let after = within_second.cast_signed() + offset_ns;
+    let Some(after) = within_second.cast_signed().checked_add(offset_ns) else {
+        return TimeStep::OutOfRange;
+    };
     if let Ok(immediate) = i32::try_from(offset_ns)
         && offset_ns.abs() < IMMEDIATE_STEP_LIMIT_NS
         && (IMMEDIATE_STEP_RESULT_MARGIN_NS
@@ -101,6 +103,8 @@ pub const fn other_port(port: u8) -> u8 {
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
     use super::{NS_PER_SEC, TimeStep, is_near_second_wrap, plan_step};
 
     const SEC: u64 = 7 * NS_PER_SEC;
@@ -193,6 +197,25 @@ mod tests {
         assert!(!is_near_second_wrap(SEC + 999_989_999));
         assert!(is_near_second_wrap(SEC + 999_990_000));
         assert!(is_near_second_wrap(SEC + 999_999_999));
+    }
+
+    #[rstest]
+    #[case::largest_offset_mid_second(SEC + 500_000_000, i64::MAX)]
+    #[case::largest_offset_late_in_the_second(SEC + 999_989_999, i64::MAX)]
+    #[case::sum_one_past_the_signed_range(SEC + 500_000_000, i64::MAX - 499_999_999)]
+    #[case::sum_at_the_end_of_the_signed_range(SEC + 500_000_000, i64::MAX - 500_000_000)]
+    #[case::largest_offset_at_the_start_of_a_second(SEC, i64::MAX)]
+    #[case::smallest_offset(SEC + 500_000_000, i64::MIN)]
+    #[case::smallest_offset_at_the_start_of_time(0, i64::MIN)]
+    #[case::smallest_offset_at_the_end_of_the_timer_range(
+        u64::from(u32::MAX) * NS_PER_SEC + 500_000_000,
+        i64::MIN
+    )]
+    fn an_offset_at_the_ends_of_the_signed_range_is_refused_without_wrapping(
+        #[case] now_ns: u64,
+        #[case] offset_ns: i64,
+    ) {
+        assert_eq!(TimeStep::OutOfRange, plan_step(now_ns, offset_ns));
     }
 
     #[test]
