@@ -25,6 +25,7 @@ jobs:
       console: ${{ steps.filter.outputs.console }}
       emulator: ${{ steps.filter.outputs.emulator }}
       cpu: ${{ steps.filter.outputs.cpu }}
+      fpga: ${{ steps.filter.outputs.fpga }}
       py: ${{ steps.filter.outputs.py }}
       ffi: ${{ steps.filter.outputs.ffi }}
       cs: ${{ steps.filter.outputs.cs }}
@@ -113,6 +114,13 @@ jobs:
               - 'firmware/cpu/**'
               - 'firmware/fpga/rtl/sources_1/new/headers/params.svh'
               - '.github/workflows/ci-cpu.yml'
+            fpga:
+              - *shared
+              - *xtask-core
+              - 'xtask/src/fpga.rs'
+              - 'xtask/src/fpga_codegen.rs'
+              - 'firmware/fpga/rtl/sources_1/new/controller/controller.sv'
+              - '.github/workflows/ci-fpga.yml'
             py:
               - *shared
               - *xtask-core
@@ -243,6 +251,12 @@ jobs:
     if: ${{ needs.changes.outputs.cpu == 'true' }}
     uses: ./.github/workflows/ci-cpu.yml
 
+  fpga:
+    name: fpga
+    needs: changes
+    if: ${{ needs.changes.outputs.fpga == 'true' }}
+    uses: ./.github/workflows/ci-fpga.yml
+
   py:
     name: py
     needs: changes
@@ -332,7 +346,7 @@ jobs:
   ci-passed:
     name: ci-passed
     if: ${{ always() }}
-    needs: [changes, rust, holo-wgpu, simulator, console, emulator, cpu, py, ffi, cs, unity, license, doc, semver, guard]
+    needs: [changes, rust, holo-wgpu, simulator, console, emulator, cpu, fpga, py, ffi, cs, unity, license, doc, semver, guard]
     runs-on: ubuntu-latest
     steps:
       - name: Verify detect-changes succeeded
@@ -348,7 +362,8 @@ jobs:
             ${{ needs.simulator.result }}
             ${{ needs.console.result }}
             ${{ needs.emulator.result }}
-            ${{ needs.cpu.result }} ${{ needs.py.result }}
+            ${{ needs.cpu.result }} ${{ needs.fpga.result }}
+            ${{ needs.py.result }}
             ${{ needs.ffi.result }} ${{ needs.cs.result }}
             ${{ needs.unity.result }} ${{ needs.license.result }}
             ${{ needs.doc.result }} ${{ needs.semver.result }}
