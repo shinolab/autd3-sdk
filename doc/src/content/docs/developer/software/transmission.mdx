@@ -238,7 +238,7 @@ if in_frame.seq == expected_seq {
 | --------------- | ------- | ----------- | ------------- |
 | 成功 | 返信を待つ | 返信を待つ | ソケットへ渡した時刻から未返信を数える |
 | ソケットが満杯 (`WouldBlock`) | `lost_timeout` まで空きを待つ. 空かなければ諦め, 返信が来ないので `Error::Timeout` になる | 待たずにその機体を飛ばす | 数えない |
-| 一過性のエラー (`ConnectionReset` / `ConnectionRefused` / `HostUnreachable` / `NetworkUnreachable` / `NetworkDown` / `AddrNotAvailable` / `Interrupted`) | 送れたものとして返信を待つ. 返信が来なければ `Error::Timeout` になる | 同左 (返信が来なければ `missed_replies`) | 送れたものとして未返信を数える |
+| 一過性のエラー (`ConnectionReset` / `ConnectionRefused` / `HostUnreachable` / `NetworkUnreachable` / `NetworkDown` / `AddrNotAvailable` / `Interrupted`) | 送れたものとして返信を待つ. 返信が来なければ `Error::Timeout` になる | 同左 (返信が来なければ `missed_heartbeat_replies`) | 送れたものとして未返信を数える |
 | それ以外のエラー | そのフレームを `UdpError::Unsent` を原因とする `Error::Network` で失敗させる | その機体を飛ばして続ける | 未返信には数えない. 返信を挟まずに失敗が `lost_timeout` 続いたら `Lost` にする |
 
 1 台でも送れなかった `Frame` は, 残りの機体が返信しても成功にしない.

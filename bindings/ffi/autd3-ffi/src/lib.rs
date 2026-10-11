@@ -2343,8 +2343,10 @@ pub unsafe extern "C" fn autd3_bus_stats_heartbeats(stats: *const BusStatsHandle
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_bus_stats_missed_replies(stats: *const BusStatsHandle) -> u64 {
-    unsafe { handle_ref(stats) }.map_or(0, |stats| stats.0.missed_replies())
+pub unsafe extern "C" fn autd3_bus_stats_missed_heartbeat_replies(
+    stats: *const BusStatsHandle,
+) -> u64 {
+    unsafe { handle_ref(stats) }.map_or(0, |stats| stats.0.missed_heartbeat_replies())
 }
 
 #[unsafe(no_mangle)]
