@@ -16,9 +16,11 @@ autd3-cpu-fw = { path = "../fw" }
 
 [profile.dev]
 panic = "abort"
+overflow-checks = false
 
 [profile.release]
 panic = "abort"
+overflow-checks = false
 opt-level = 2
 lto = true
 codegen-units = 1

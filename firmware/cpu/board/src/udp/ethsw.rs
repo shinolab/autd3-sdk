@@ -131,7 +131,6 @@ pub(crate) fn init_switch() -> bool {
         write32(base + SW_MAC_COMMAND_CONFIG, MAC_COMMAND_CONFIG_ENABLE);
     }
 
-    write32(SW_HUB_CONTROL, HUB_DISABLED);
     // Disable cut-through for PTP frames. See RZ/T1 Group User’s Manual: Hardware § 29.3.2.2
     set_hub_filter(HUB_FILTER_PTP, PTP_MULTICAST_MAC);
     write32(SW_PORT_ENA, PORT_ENA_ALL);
