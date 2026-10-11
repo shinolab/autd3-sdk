@@ -185,21 +185,30 @@ pub fn write_ram_words<P: Port>(
     offset: u32,
     words: impl Iterator<Item = u16>,
 ) {
+    write_ram_at(port, ram, bank, (offset..).zip(words));
+}
+
+pub fn write_ram_at<P: Port>(
+    port: &mut P,
+    ram: &Ram,
+    bank: u8,
+    words: impl Iterator<Item = (u32, u16)>,
+) {
     let mut words = words.peekable();
-    if words.peek().is_none() {
+    let Some(&(first, _)) = words.peek() else {
         return;
-    }
+    };
     write_switch(port, ram.wr_bank_reg, u16::from(bank));
-    let mut page = offset / FPGA_PAGE_WORDS;
+    let mut page = first / FPGA_PAGE_WORDS;
     write_switch(port, ram.wr_page_reg, page as u16);
-    for (word_idx, word) in (offset..).zip(words) {
+    words.for_each(|(word_idx, word)| {
         let p = word_idx / FPGA_PAGE_WORDS;
         if p != page {
             page = p;
             write_switch(port, ram.wr_page_reg, page as u16);
         }
         write(port, ram.select, (word_idx % FPGA_PAGE_WORDS) as u16, word);
-    }
+    });
 }
 
 fn init_silencer<P: Port>(port: &mut P) {
