@@ -19,7 +19,7 @@ namespace AUTD3.Tests
             Assert.Equal(TimeSpan.FromSeconds(10), option.EnumerationTimeout);
             Assert.Equal(TimeSpan.FromSeconds(30), option.SyncTimeout);
             Assert.Null(option.SendRateLimit);
-            Assert.Equal(8192u, option.SendBuffer);
+            Assert.Equal(8192ul, option.SendBuffer);
             Assert.Equal(TimeSpan.FromMilliseconds(1), option.TimerResolution);
         }
 
@@ -91,8 +91,8 @@ namespace AUTD3.Tests
         [Fact]
         public void ASendBufferReachesTheNativeOption()
         {
-            Assert.Equal(8192u, default(TransportOption).SendBuffer);
-            foreach (var bytes in new uint?[] { null, 65536 })
+            Assert.Equal(8192ul, default(TransportOption).SendBuffer);
+            foreach (var bytes in new ulong?[] { null, 65536, 1ul << 32 })
             {
                 var handle = new TransportOption { SendBuffer = bytes }.CreateHandle();
                 try

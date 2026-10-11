@@ -169,6 +169,8 @@ namespace AUTD3.Tests
         [InlineData(typeof(GsOption))]
         [InlineData(typeof(GspatOption))]
         [InlineData(typeof(GreedyOption))]
+        [InlineData(typeof(FixedCompletionTime))]
+        [InlineData(typeof(TracingOption))]
         public void TheDefaultValueEqualsTheConstructedOne(Type type)
         {
             var constructed = Activator.CreateInstance(type);

@@ -12,7 +12,7 @@ namespace AUTD3
         internal static readonly TimeSpan ResponseTimeout;
         internal static readonly TimeSpan EnumerationTimeout;
         internal static readonly TimeSpan SyncTimeout;
-        internal static readonly uint? SendBuffer;
+        internal static readonly ulong? SendBuffer;
         internal static readonly TimeSpan? TimerResolution;
 
         static TransportOptionDefaults()
@@ -66,9 +66,9 @@ namespace AUTD3
         public float? SendRateLimit { get; init; }
 
         private readonly bool _sendBufferSet;
-        private readonly uint? _sendBuffer;
+        private readonly ulong? _sendBuffer;
 
-        public uint? SendBuffer
+        public ulong? SendBuffer
         {
             get => _sendBufferSet ? _sendBuffer : TransportOptionDefaults.SendBuffer;
             init
@@ -189,10 +189,10 @@ namespace AUTD3
             return resolution == TimeSpan.Zero ? null : resolution;
         }
 
-        internal static uint? ReadSendBuffer(IntPtr handle)
+        internal static ulong? ReadSendBuffer(IntPtr handle)
         {
             OptionNative.Apply("sendBuffer", NativeClient.autd3_transport_option_get_send_buffer(handle, out var bytes));
-            return bytes == 0 ? null : checked((uint)bytes);
+            return bytes == 0 ? null : bytes;
         }
 
         private static float? ReadSendRateLimit(IntPtr handle)

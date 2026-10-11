@@ -15,7 +15,7 @@ internal static class Sample
         var enumerationTimeout = TimeSpan.FromSeconds(10);
         var syncTimeout = TimeSpan.FromSeconds(30);
         float? sendRateLimit = null;
-        uint sendBuffer = 8192;
+        ulong sendBuffer = 8192;
         var timerResolution = TimeSpan.FromMilliseconds(1);
         // ANCHOR: api
         new TransportOption

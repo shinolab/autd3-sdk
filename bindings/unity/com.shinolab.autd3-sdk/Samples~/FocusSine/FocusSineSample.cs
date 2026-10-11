@@ -48,8 +48,6 @@ namespace AUTD3.Samples
                 _client.Dispose();
                 _client = null;
             }
-            _driver?.Dispose();
-            _driver = null;
             _geometry?.Dispose();
             _geometry = null;
             _emulator?.Dispose();

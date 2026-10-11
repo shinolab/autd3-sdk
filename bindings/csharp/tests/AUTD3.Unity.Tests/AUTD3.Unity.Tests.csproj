@@ -16,8 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="../../src/AUTD3.Core/GlobalUsings.cs" />
-    <Compile Include="../../src/AUTD3.Core/Coords.cs" />
+    <Compile Include="../../src/AUTD3.Core/*.cs" />
   </ItemGroup>
 
   <ItemGroup>

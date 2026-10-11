@@ -260,15 +260,7 @@ impl UdpEmulator {
     }
 
     fn option(&self) -> PyResult<TransportOption> {
-        self.with(|emulator| {
-            TransportOption(CoreOption {
-                iface: emulator.interface(),
-                reply_timeout: Duration::from_millis(50),
-                enumeration_timeout: Duration::from_secs(1),
-                sync_timeout: Duration::from_secs(5),
-                ..CoreOption::default()
-            })
-        })
+        self.with(|emulator| TransportOption(CoreOption::for_emulator(emulator.interface())))
     }
 
     fn reboot(&self, index: usize) -> PyResult<()> {

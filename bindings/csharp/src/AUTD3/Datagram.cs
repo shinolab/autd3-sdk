@@ -121,6 +121,7 @@ namespace AUTD3
             }
             if (handle == IntPtr.Zero)
             {
+                NativeClient.autd3_op_free(op);
                 throw Autd3Exception.FromNative(code, err);
             }
             return new Frames(handle);
@@ -150,6 +151,7 @@ namespace AUTD3
             }
             if (code != 0)
             {
+                NativeClient.autd3_op_free(op);
                 throw Autd3Exception.FromNative(code, err);
             }
         }

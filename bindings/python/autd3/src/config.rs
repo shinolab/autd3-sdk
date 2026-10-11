@@ -45,4 +45,24 @@ impl ClientConfig {
         }
         Ok(Self(inner))
     }
+
+    #[getter]
+    fn ack_timeout<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        autd3_python_capsule::extract::duration_to_py(py, self.0.ack_timeout)
+    }
+
+    #[getter]
+    fn max_inflight(&self) -> NonZeroUsize {
+        self.0.max_inflight
+    }
+
+    #[getter]
+    fn max_resync_rounds(&self) -> NonZeroU32 {
+        self.0.max_resync_rounds
+    }
+
+    #[getter]
+    fn require_supported_firmware(&self) -> bool {
+        self.0.require_supported_firmware
+    }
 }

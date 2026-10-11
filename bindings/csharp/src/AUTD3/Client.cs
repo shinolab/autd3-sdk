@@ -564,18 +564,18 @@ namespace AUTD3
                 throw new ArgumentNullException(nameof(command));
             }
             var op = Command.CreateOp(command, _geometry);
-            Task<IntPtr> queued;
+            IntPtr stream;
             try
             {
-                queued = AsyncOps.InvokeAsync((cb, ud) =>
-                    NativeClient.autd3_client_send_streaming(Handle, op, cb, ud));
+                stream = await AsyncOps.InvokeAsync((cb, ud) =>
+                    NativeClient.autd3_client_send_streaming(Handle, op, cb, ud)).ConfigureAwait(false);
             }
             catch
             {
                 NativeClient.autd3_op_free(op);
                 throw;
             }
-            return new StreamFuture(await queued.ConfigureAwait(false));
+            return new StreamFuture(stream);
         }
 
         public async Task<ResponseFuture> SendFrameAsync(Frame frame)
