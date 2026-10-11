@@ -9,9 +9,8 @@ use autd3_rs::rt::{LogWriter, TracingOption, init_tracing};
 use clap::Parser;
 
 use crate::cli::Cli;
-use crate::report::{print_mem, print_summary, write_csv};
+use crate::report::{print_mem, print_summary, print_telemetry};
 use crate::run::{RunOutput, run};
-use crate::stats::Summary;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
@@ -27,41 +26,16 @@ async fn main() -> Result<()> {
 
     let output = Box::pin(run(&cli)).await?;
     let RunOutput {
-        samples,
-        sends,
+        summary,
         stopped_on_error,
         driver_closed,
-        elapsed,
-        frame_bytes,
-        missed_replies,
-        driver_ack,
         mem,
+        telemetry_start,
+        telemetry_end,
     } = output;
 
-    if sends > samples.len() as u64 {
-        eprintln!(
-            "warning: recorded only the first {} of {sends} sends (--max-samples); \
-             the summary and CSV cover that prefix only \
-             (except the driver ack latency, which covers the whole run)",
-            samples.len(),
-        );
-    }
-
-    let drop = usize::try_from(cli.warmup)
-        .unwrap_or(samples.len())
-        .min(samples.len());
-    let measured = &samples[drop..];
-
-    if let Some(path) = &cli.csv {
-        if let Err(e) = write_csv(path, &samples) {
-            eprintln!("warning: failed to write CSV to {}: {e}", path.display());
-        } else {
-            println!("\nCSV written: {}", path.display());
-        }
-    }
-
-    let summary = Summary::from_samples(measured, frame_bytes, elapsed, missed_replies, driver_ack);
     print_summary(&summary);
+    print_telemetry(&telemetry_start, &telemetry_end);
     if let Some(mem) = &mem {
         print_mem(mem);
     }
