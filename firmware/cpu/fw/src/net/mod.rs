@@ -290,6 +290,65 @@ mod tests {
     }
 
     #[test]
+    fn a_frame_cut_at_any_length_is_parsed_without_a_panic() {
+        let mut ptp = [0u8; MIN_FRAME];
+        ptp[12..14].copy_from_slice(&ETHERTYPE_PTP.to_be_bytes());
+        for len in 0..=ptp.len() {
+            assert_eq!(
+                matches!(parse(&ptp[..len]), Some(Packet::Ptp { .. })),
+                len >= ETH_HEADER,
+                "ptp cut at {len}"
+            );
+        }
+
+        let payload: Vec<u8> = (0..1446u16).map(|i| i as u8).collect();
+        for frame in [
+            udp_frame(&payload),
+            udp_frame(&[]),
+            neighbor_solicitation(UNIT_IP, NDP_HOP_LIMIT),
+            echo_request(&[0x5A; 64]),
+        ] {
+            assert!(parse(&frame).is_some());
+            for len in 0..frame.len() {
+                assert_eq!(
+                    parse(&frame[..len]),
+                    None,
+                    "cut at {len} of {}",
+                    frame.len()
+                );
+            }
+            let mut padded = frame.clone();
+            padded.resize(MAX_FRAME, 0xA5);
+            for len in frame.len()..=MAX_FRAME {
+                assert_eq!(parse(&padded[..len]), parse(&frame), "padded to {len}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_frame_with_any_length_field_is_parsed_without_a_panic() {
+        for frame in [
+            udp_frame(&[1, 2, 3, 4]),
+            neighbor_solicitation(UNIT_IP, NDP_HOP_LIMIT),
+            echo_request(&[0x5A; 8]),
+        ] {
+            for length in 0..=u16::MAX {
+                let mut ip = frame.clone();
+                ip[ETH_HEADER + 4..][..2].copy_from_slice(&length.to_be_bytes());
+                let _ = parse(&ip);
+            }
+        }
+        let frame = udp_frame(&[1, 2, 3, 4]);
+        for length in 0..=u16::MAX {
+            let mut udp = frame.clone();
+            udp[ETH_HEADER + IPV6_HEADER + 4..][..2].copy_from_slice(&length.to_be_bytes());
+            if let Some(Packet::Udp(u)) = parse(&udp) {
+                assert!(u.payload.len() <= 4, "udp length {length}");
+            }
+        }
+    }
+
+    #[test]
     fn malformed_frames_are_dropped() {
         assert_eq!(parse(&[]), None);
         assert_eq!(parse(&[0u8; 13]), None);
