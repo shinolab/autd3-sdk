@@ -430,7 +430,8 @@ impl UdpBus {
                 } => {
                     let accepted = {
                         let mut trackers = self.trackers();
-                        let expected = u8::try_from(index).expect("at most 255 units");
+                        let expected =
+                            u8::try_from(index).expect("a unit index is below MAX_DEVICES");
                         let accepted = trackers[index].replied(expected, unit_id, flags);
                         self.shared.publish(index, trackers[index].state());
                         accepted
