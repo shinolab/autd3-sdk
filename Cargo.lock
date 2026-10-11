@@ -233,6 +233,7 @@ name = "autd3-rs-perftest"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "autd3-cpu-wire",
  "autd3-rs",
  "autd3-rs-firmware-emulator",
  "clap",

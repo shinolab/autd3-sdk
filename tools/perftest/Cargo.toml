@@ -17,6 +17,7 @@ mem-profile = []
 
 [dependencies]
 autd3-rs = { workspace = true, features = ["logging"] }
+autd3-cpu-wire.workspace = true
 autd3-rs-firmware-emulator = { workspace = true, features = ["udp"] }
 clap.workspace = true
 humantime.workspace = true

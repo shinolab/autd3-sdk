@@ -6,7 +6,7 @@ use std::io::{IsTerminal, Write as _};
 use autd3_rs::Telemetry;
 
 use crate::mem::MemProfile;
-use crate::stats::{Counters, LatencyStats, Summary};
+use crate::stats::{Counters, LatencyStats, Summary, TrafficRate};
 
 struct TelemetryCounter {
     name: &'static str,
@@ -129,7 +129,8 @@ pub fn interval_lines(
     counters: &Counters,
     missed_replies: u64,
     latency: &LatencyStats,
-) -> [String; 2] {
+    traffic: &TrafficRate,
+) -> [String; 3] {
     [
         format!(
             "[{:>8.1}s] {cmd_per_sec:>10.1} cmd/s  ok {}  timeout {}  dev_err {}  net_err {}  missed {missed_replies}",
@@ -146,6 +147,10 @@ pub fn interval_lines(
             format_duration(latency.p50),
             format_duration(latency.p99),
             format_duration(latency.max),
+        ),
+        format!(
+            "{:>11}line       sent {:.0} byte/s  down {:.1} %  up {:.1} %",
+            "", traffic.tx_byte_per_sec, traffic.line_down_percent, traffic.line_up_percent,
         ),
     ]
 }
@@ -211,7 +216,18 @@ pub fn print_summary(s: &Summary) {
     println!();
     println!("throughput      :");
     println!("  cmd / sec     : {:>12.2}", s.throughput_cmd_per_sec);
-    println!("  byte / sec    : {:>12.2}", s.throughput_byte_per_sec);
+    println!(
+        "  byte / sec    : {:>12.2}   (UDP payload sent, all devices)",
+        s.traffic.tx_byte_per_sec
+    );
+    println!(
+        "  line down     : {:>12.1} %   (host -> devices, of 100 Mbps, headers and gaps included)",
+        s.traffic.line_down_percent
+    );
+    println!(
+        "  line up       : {:>12.1} %   (replies)",
+        s.traffic.line_up_percent
+    );
 
     println!();
     println!("latency (successful samples):");
