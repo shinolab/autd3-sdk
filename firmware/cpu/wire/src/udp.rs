@@ -251,6 +251,44 @@ mod tests {
     }
 
     #[test]
+    fn a_unit_info_is_these_bytes_on_the_wire() {
+        let info = UnitInfo {
+            unit_id: 0x07,
+            flags: Flags::ASSIGNED | Flags::SYNC_READY | Flags::PTP_LOCKED,
+            upstream_port: 0x01,
+            reserved: 0,
+            fw_version: [0, 10, 3],
+            reserved2: 0,
+            sys_time: U64::new(0x0102_0304_0506_0708),
+            ptp_offset_ns: I32::new(-2),
+        };
+        assert_eq!(
+            info.as_bytes(),
+            &[
+                0x07, 0x19, 0x01, 0x00, 0x00, 0x0A, 0x03, 0x00, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03,
+                0x02, 0x01, 0xFE, 0xFF, 0xFF, 0xFF,
+            ]
+        );
+    }
+
+    #[test]
+    fn a_frame_reply_is_these_bytes_on_the_wire() {
+        let reply = FrameReply {
+            ack: 0x2A,
+            status: 0x08,
+            flags: Flags::ASSIGNED | Flags::DOWNSTREAM_OPEN | Flags::GRANDMASTER,
+            unit_id: 0x03,
+            sys_time: U64::new(0x1112_1314_1516_1718),
+        };
+        assert_eq!(
+            reply.as_bytes(),
+            &[
+                0x2A, 0x08, 0x23, 0x03, 0x18, 0x17, 0x16, 0x15, 0x14, 0x13, 0x12, 0x11,
+            ]
+        );
+    }
+
+    #[test]
     fn a_header_carries_the_current_version() {
         let h = Header::new(Kind::Discover, 0x1234);
         assert_eq!(h.as_bytes(), &[PROTOCOL_VERSION, 0x03, 0x34, 0x12]);
