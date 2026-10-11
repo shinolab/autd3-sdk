@@ -163,31 +163,58 @@ pub fn parse(message: &[u8]) -> Option<Message> {
     })
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Content {
+    Sync,
+    DelayReq,
+    FollowUp,
+    DelayResp { requesting: PortIdentity },
+}
+
+impl Content {
+    #[must_use]
+    pub const fn kind(self) -> MessageType {
+        match self {
+            Self::Sync => MessageType::Sync,
+            Self::DelayReq => MessageType::DelayReq,
+            Self::FollowUp => MessageType::FollowUp,
+            Self::DelayResp { .. } => MessageType::DelayResp,
+        }
+    }
+
+    const fn requesting(self) -> PortIdentity {
+        match self {
+            Self::DelayResp { requesting } => requesting,
+            Self::Sync | Self::DelayReq | Self::FollowUp => [0; PORT_IDENTITY_LEN],
+        }
+    }
+}
+
 pub struct Outgoing {
-    pub kind: MessageType,
+    pub content: Content,
     pub seq: u16,
     pub timestamp: u64,
     pub correction: i64,
-    pub requesting: Option<PortIdentity>,
 }
 
 #[must_use]
 pub fn build(buf: &mut [u8; FRAME_CAP], mac: Mac, clock_id: [u8; 8], out: &Outgoing) -> usize {
-    let len = out.kind.len();
+    let kind = out.content.kind();
+    let len = kind.len();
     let eth = Ethernet2Header {
         source: mac,
-        destination: out.kind.destination(),
+        destination: kind.destination(),
         ether_type: EtherType(ETHERTYPE_PTP),
     };
     let message = TimestampedMessage {
         header: Header {
-            message_type: out.kind.as_u8(),
+            message_type: kind.as_u8(),
             version: PTP_VERSION,
             length: U16::new(len as u16),
             domain: 0,
             minor_sdo: 0,
             flags: [
-                if out.kind == MessageType::Sync {
+                if kind == MessageType::Sync {
                     FLAG_TWO_STEP
                 } else {
                     0
@@ -198,7 +225,7 @@ pub fn build(buf: &mut [u8; FRAME_CAP], mac: Mac, clock_id: [u8; 8], out: &Outgo
             type_specific: [0; 4],
             source: port_identity(clock_id),
             seq: U16::new(out.seq),
-            control: out.kind.control(),
+            control: kind.control(),
             log_interval: LOG_INTERVAL_UNSPECIFIED,
         },
         timestamp: Timestamp::from_ns(out.timestamp),
@@ -207,7 +234,7 @@ pub fn build(buf: &mut [u8; FRAME_CAP], mac: Mac, clock_id: [u8; 8], out: &Outgo
     let (base, requesting) = body.split_at_mut(size_of::<TimestampedMessage>());
     eth_header.copy_from_slice(&eth.to_bytes());
     base.copy_from_slice(message.as_bytes());
-    requesting.copy_from_slice(&out.requesting.unwrap_or_default());
+    requesting.copy_from_slice(&out.content.requesting());
     (ETH_HEADER + len).max(MIN_FRAME)
 }
 
@@ -231,7 +258,9 @@ pub fn build_pause(buf: &mut [u8; FRAME_CAP], mac: Mac, quanta: u16) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::{FRAME_CAP, MessageType, Outgoing, build, build_pause, correction_ns, parse};
+    use super::{
+        Content, FRAME_CAP, MessageType, Outgoing, build, build_pause, correction_ns, parse,
+    };
     use crate::net::{ETH_HEADER, Mac};
     use crate::nic::NS_PER_SEC;
     use rstest::rstest;
@@ -242,11 +271,12 @@ mod tests {
     fn messages_round_trip() {
         let mut buf = [0u8; FRAME_CAP];
         let out = Outgoing {
-            kind: MessageType::DelayResp,
+            content: Content::DelayResp {
+                requesting: [1, 2, 3, 4, 5, 6, 7, 8, 0, 1],
+            },
             seq: 0xBEEF,
             timestamp: 812_345_678_901_234_567,
             correction: -(5 << 16),
-            requesting: Some([1, 2, 3, 4, 5, 6, 7, 8, 0, 1]),
         };
         let len = build(&mut buf, SLAVE_MAC, [7; 8], &out);
         assert_eq!(len, 68);
@@ -261,11 +291,10 @@ mod tests {
         assert_eq!(&m.source[..8], &[7; 8]);
 
         let sync = Outgoing {
-            kind: MessageType::Sync,
+            content: Content::Sync,
             seq: 1,
             timestamp: 0,
             correction: 0,
-            requesting: None,
         };
         let len = build(&mut buf, SLAVE_MAC, [7; 8], &sync);
         assert_eq!(len, 60);
@@ -282,11 +311,10 @@ mod tests {
     fn a_timestamp_beyond_the_nanosecond_range_is_rejected() {
         let mut buf = [0u8; FRAME_CAP];
         let out = Outgoing {
-            kind: MessageType::FollowUp,
+            content: Content::FollowUp,
             seq: 1,
             timestamp: u64::MAX,
             correction: 0,
-            requesting: None,
         };
         let len = build(&mut buf, SLAVE_MAC, [7; 8], &out);
         assert_eq!(parse(&buf[ETH_HEADER..len]).unwrap().timestamp, u64::MAX);
@@ -318,46 +346,43 @@ mod tests {
 
     #[rstest]
     #[case::sync(
-        MessageType::Sync,
-        None,
+        Content::Sync,
         "011b1900000002415554440188f70002002c00000200fffffffffffafffd0000000001020304050607080001beef007f0003123456783ade68b100000000000000000000"
     )]
     #[case::follow_up(
-        MessageType::FollowUp,
-        None,
+        Content::FollowUp,
         "03415554440002415554440188f70802002c00000000fffffffffffafffd0000000001020304050607080001beef027f0003123456783ade68b100000000000000000000"
     )]
     #[case::delay_req(
-        MessageType::DelayReq,
-        None,
+        Content::DelayReq,
         "011b1900000002415554440188f70102002c00000000fffffffffffafffd0000000001020304050607080001beef017f0003123456783ade68b100000000000000000000"
     )]
     #[case::delay_resp(
-        MessageType::DelayResp,
-        Some([1, 2, 3, 4, 5, 6, 7, 8, 0, 1]),
+        Content::DelayResp { requesting: [1, 2, 3, 4, 5, 6, 7, 8, 0, 1] },
         "03415554440002415554440188f70902003600000000fffffffffffafffd0000000001020304050607080001beef037f0003123456783ade68b101020304050607080001"
     )]
-    fn every_message_kind_matches_the_golden_bytes(
-        #[case] kind: MessageType,
-        #[case] requesting: Option<[u8; 10]>,
-        #[case] golden: &str,
-    ) {
+    fn every_message_kind_matches_the_golden_bytes(#[case] content: Content, #[case] golden: &str) {
         let mut buf = [0xCCu8; FRAME_CAP];
         let out = Outgoing {
-            kind,
+            content,
             seq: 0xBEEF,
             timestamp: 0x0003_1234_5678 * NS_PER_SEC + 987_654_321,
             correction: -(5 << 16) - 3,
-            requesting,
         };
         let len = build(&mut buf, SLAVE_MAC, [1, 2, 3, 4, 5, 6, 7, 8], &out);
         assert_eq!(hex(&buf), golden);
         let m = parse(&buf[ETH_HEADER..len]).unwrap();
-        assert_eq!(m.kind, kind);
+        assert_eq!(m.kind, content.kind());
         assert_eq!(m.seq, 0xBEEF);
         assert_eq!(m.timestamp, out.timestamp);
         assert_eq!(m.correction, out.correction);
-        assert_eq!(m.requesting, requesting);
+        assert_eq!(
+            m.requesting,
+            match content {
+                Content::DelayResp { requesting } => Some(requesting),
+                Content::Sync | Content::DelayReq | Content::FollowUp => None,
+            }
+        );
         assert_eq!(m.source, [1, 2, 3, 4, 5, 6, 7, 8, 0, 1]);
     }
 }
