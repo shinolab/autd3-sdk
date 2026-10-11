@@ -24,6 +24,9 @@ import { excerpt } from "@lib/excerpt";
 | ------- | -------------- | ------------------------------------------------------------- |
 | `masks` | `&[Vec<bool>]` | Output mask per device (output when `true`). |
 
+`Geometry::output_mask_buffer` allocates the masks for all devices.
+Every entry starts at `true` (all transducers output).
+
 ## Example
 
 <CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

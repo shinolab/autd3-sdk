@@ -59,6 +59,7 @@ Provides retrieval of information about the whole layout and access to each `Dev
 | `center()`             | `Point3<f32>`                | Center coordinate of the whole array |
 | `phase_buffer()`       | `Vec<Vec<Phase>>`            | Allocate a phase buffer for Pattern computation (starts at 0) |
 | `intensity_buffer()`   | `Vec<Vec<Intensity>>`        | Allocate an intensity buffer for Pattern computation (starts at the maximum) |
+| `output_mask_buffer()` | `Vec<Vec<bool>>`             | Allocate an output mask buffer for `SetOutputMask` (starts at `true`) |
 | `iter()` / `&geometry` | `Iterator<Item = &Device>`   | Iterate over each `Device`           |
 | `geometry[i]`          | `&Device`                    | Get the `i`-th `Device`              |
 | `to_json()`            | `String`                     | Convert the layout to a JSON string  |

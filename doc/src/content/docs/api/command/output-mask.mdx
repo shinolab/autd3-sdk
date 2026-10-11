@@ -24,6 +24,9 @@ import { excerpt } from "@lib/excerpt";
 | ---------- | -------------- | --------------------------------------------------------------------------------------------- |
 | `masks`    | `&[Vec<bool>]` | デバイスごとの出力マスク (`true` で出力). |
 
+`Geometry::output_mask_buffer` で全デバイス分のマスクを確保できる.
+初期値はすべて `true` (全振動子が出力).
+
 ## Example
 
 <CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />
