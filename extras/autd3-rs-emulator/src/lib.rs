@@ -11,7 +11,7 @@ mod sound_field;
 
 pub use aabb::Aabb;
 pub use client_api::ClientApi;
-pub use error::EmulatorError;
+pub use error::{EmulatorError, GridAxis, InvalidGrid};
 pub use range::{AxisOrder, Grid, Range};
 pub use raw::{RawColumn, RawFrame};
 pub use record::Record;

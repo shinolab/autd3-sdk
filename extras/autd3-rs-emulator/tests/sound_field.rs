@@ -6,7 +6,8 @@ use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::value::{Intensity, Phase, SamplingConfig};
 
 use autd3_rs_emulator::{
-    AxisOrder, ClientApi, Emulator, Grid, InstantRecordOption, Record, RmsRecordOption,
+    AxisOrder, ClientApi, Emulator, EmulatorError, Grid, GridAxis, InstantRecordOption,
+    InvalidGrid, Record, RmsRecordOption,
 };
 
 fn recorded() -> Record {
@@ -40,6 +41,85 @@ fn range() -> Grid {
         resolution: 10.0,
         order: AxisOrder::XYZ,
     }
+}
+
+fn invalid_ranges() -> Vec<(Grid, InvalidGrid)> {
+    let mut cases: Vec<_> = [0.0, -10.0, f32::NAN, f32::INFINITY, f32::NEG_INFINITY]
+        .into_iter()
+        .map(|resolution| {
+            (
+                Grid {
+                    resolution,
+                    ..range()
+                },
+                InvalidGrid::Resolution,
+            )
+        })
+        .collect();
+    cases.push((
+        Grid {
+            y: 10.0..=-10.0,
+            ..range()
+        },
+        InvalidGrid::Reversed(GridAxis::Y),
+    ));
+    cases.push((
+        Grid {
+            z: 150.0..=f32::INFINITY,
+            ..range()
+        },
+        InvalidGrid::NonFiniteBound(GridAxis::Z),
+    ));
+    cases
+}
+
+fn assert_invalid_grid<T>(result: Result<T, EmulatorError>, expected: InvalidGrid) {
+    match result {
+        Err(EmulatorError::InvalidGrid(e)) => assert_eq!(e, expected),
+        Err(e) => panic!("{expected:?}: {e}"),
+        Ok(_) => panic!("{expected:?}: accepted"),
+    }
+}
+
+#[test]
+fn sound_field_rejects_an_invalid_grid() {
+    let record = recorded();
+    for (grid, expected) in invalid_ranges() {
+        assert_invalid_grid(
+            record.sound_field(grid.clone(), RmsRecordOption::default()),
+            expected,
+        );
+        assert_invalid_grid(
+            record.sound_field(grid, InstantRecordOption::default()),
+            expected,
+        );
+    }
+}
+
+#[test]
+fn single_point_grid_yields_one_observation_point() {
+    let record = recorded();
+    let grid = Grid {
+        x: 0.0..=0.0,
+        y: 0.0..=0.0,
+        ..range()
+    };
+    let rms = record
+        .sound_field(grid.clone(), RmsRecordOption::default())
+        .unwrap();
+    assert_eq!(rms.observe_points().height(), 1);
+
+    let mut instant = record
+        .sound_field(
+            grid,
+            InstantRecordOption {
+                time_step: Duration::from_micros(5),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(instant.observe_points().height(), 1);
+    assert_eq!(instant.next(ULTRASOUND_PERIOD).unwrap().height(), 1);
 }
 
 #[test]
@@ -81,7 +161,7 @@ fn rms_skip_then_exhaust_errors() {
 
 #[cfg(feature = "gpu")]
 mod gpu {
-    use super::{ULTRASOUND_PERIOD, range, recorded};
+    use super::{ULTRASOUND_PERIOD, assert_invalid_grid, invalid_ranges, range, recorded};
     use autd3_rs_emulator::{EmulatorError, InstantRecordOption, RmsRecordOption};
     use polars::frame::DataFrame;
     use std::time::Duration;
@@ -114,6 +194,33 @@ mod gpu {
             z: 1.0..=1.0,
             resolution: 10.0,
             order: autd3_rs_emulator::AxisOrder::XYZ,
+        }
+    }
+
+    #[test]
+    fn gpu_sound_field_rejects_an_invalid_grid() {
+        let record = recorded();
+        for (grid, expected) in invalid_ranges() {
+            assert_invalid_grid(
+                record.sound_field(
+                    grid.clone(),
+                    RmsRecordOption {
+                        gpu: true,
+                        ..Default::default()
+                    },
+                ),
+                expected,
+            );
+            assert_invalid_grid(
+                record.sound_field(
+                    grid,
+                    InstantRecordOption {
+                        gpu: true,
+                        ..Default::default()
+                    },
+                ),
+                expected,
+            );
         }
     }
 

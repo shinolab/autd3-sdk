@@ -148,6 +148,7 @@ impl<'a> SoundFieldOption<'a> for RmsRecordOption {
         record: &'a Record,
         range: impl Range,
     ) -> Result<Self::Output, EmulatorError> {
+        range.validate()?;
         let (x, y, z): (Vec<f32>, Vec<f32>, Vec<f32>) = range.points().collect();
         let positions = record.transducer_positions();
         let sources: Vec<RmsSource> = record

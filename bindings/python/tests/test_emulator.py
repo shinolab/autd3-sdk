@@ -1,5 +1,6 @@
 """Hardware-free tests: emulator emission recording and sound-field computation."""
 
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
@@ -129,6 +130,31 @@ def test_grid_axes_and_order() -> None:
         emu.Grid(x=loose("0"), y=0.0, z=150.0, resolution=1.0)
     with pytest.raises(TypeError):
         record.sound_field(loose((0.0, 0.0, 150.0)), emu.RmsRecordOption())
+
+
+def test_sound_field_rejects_an_invalid_grid() -> None:
+    record = recorded(geometry())
+    computations: list[Callable[[emu.Grid], object]] = [
+        lambda grid: record.sound_field(grid, emu.RmsRecordOption()),
+        lambda grid: record.sound_field(grid, emu.InstantRecordOption()),
+    ]
+
+    for resolution in [0.0, -1.0, float("nan"), float("inf"), float("-inf")]:
+        grid = emu.Grid(x=(-10.0, 10.0), y=0.0, z=150.0, resolution=resolution)
+        for compute in computations:
+            with pytest.raises(autd3.Autd3Error, match="invalid grid: resolution"):
+                compute(grid)
+
+    reversed_axis = emu.Grid(x=(10.0, -10.0), y=0.0, z=150.0, resolution=1.0)
+    non_finite = emu.Grid(x=0.0, y=(0.0, float("inf")), z=150.0, resolution=1.0)
+    for compute in computations:
+        with pytest.raises(autd3.Autd3Error, match="invalid grid: the start of the x axis"):
+            compute(reversed_axis)
+        with pytest.raises(autd3.Autd3Error, match="invalid grid: the bounds of the y axis"):
+            compute(non_finite)
+
+    single = emu.Grid(x=0.0, y=0.0, z=150.0, resolution=1.0)
+    assert record.sound_field(single, emu.RmsRecordOption()).observe_points().rows() == [(0.0, 0.0, 150.0)]
 
 
 def test_a_command_copies_its_buffers_when_it_is_created() -> None:
