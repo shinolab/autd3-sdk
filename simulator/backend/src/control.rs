@@ -1,6 +1,7 @@
 use std::io;
 use std::net::{SocketAddr, SocketAddrV6, UdpSocket};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::time::Duration;
 
 use autd3_rs::geometry::Geometry;
 use autd3_rs_core::simulator::{Status, decode_geometry, encode_reply};
@@ -11,6 +12,8 @@ use tokio::sync::watch;
 use crate::emulator::geometry_msg;
 
 const DATAGRAM_BYTES_MAX: usize = 8192;
+const ERROR_BACKOFF_MIN: Duration = Duration::from_millis(1);
+const ERROR_BACKOFF_MAX: Duration = Duration::from_secs(1);
 
 pub type Spawn = fn(usize) -> io::Result<UdpEmulator>;
 
@@ -90,6 +93,12 @@ fn apply(scene: &Scene, datagram: &[u8]) -> Status {
     }
 }
 
+fn next_backoff(previous: Option<Duration>) -> Duration {
+    previous.map_or(ERROR_BACKOFF_MIN, |previous| {
+        previous.saturating_mul(2).min(ERROR_BACKOFF_MAX)
+    })
+}
+
 pub fn spawn(scene: Arc<Scene>, addr: SocketAddrV6) -> io::Result<SocketAddrV6> {
     let socket = UdpSocket::bind(addr)?;
     let SocketAddr::V6(addr) = socket.local_addr()? else {
@@ -99,17 +108,47 @@ pub fn spawn(scene: Arc<Scene>, addr: SocketAddrV6) -> io::Result<SocketAddrV6> 
         .name("simulator-control".into())
         .spawn(move || {
             let mut buf = vec![0u8; DATAGRAM_BYTES_MAX];
+            let mut backoff = None;
             loop {
                 match socket.recv_from(&mut buf) {
                     Ok((len, src)) => {
+                        backoff = None;
                         let status = apply(&scene, &buf[..len]);
                         if let Err(e) = socket.send_to(&encode_reply(status), src) {
                             tracing::debug!("failed to answer {src}: {e}");
                         }
                     }
-                    Err(e) => tracing::debug!("control socket error: {e}"),
+                    Err(e) => {
+                        let wait = next_backoff(backoff);
+                        tracing::debug!("control socket error: {e}; retrying in {wait:?}");
+                        std::thread::sleep(wait);
+                        backoff = Some(wait);
+                    }
                 }
             }
         })?;
     Ok(addr)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_wait_after_an_error_doubles_up_to_the_cap() {
+        let mut backoff = None;
+        let mut waits = Vec::new();
+        for _ in 0..12 {
+            let wait = next_backoff(backoff);
+            waits.push(wait);
+            backoff = Some(wait);
+        }
+        assert_eq!(waits[0], ERROR_BACKOFF_MIN);
+        assert!(
+            waits
+                .windows(2)
+                .all(|w| w[1] == (w[0] * 2).min(ERROR_BACKOFF_MAX))
+        );
+        assert_eq!(waits[11], ERROR_BACKOFF_MAX);
+    }
 }
