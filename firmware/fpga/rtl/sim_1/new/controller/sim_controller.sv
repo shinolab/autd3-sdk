@@ -141,6 +141,7 @@ module sim_controller ();
 
   logic [15:0] fpga_state;
   logic [15:0] ctl_flag;
+  logic [15:0] set_result;
 
   localparam bit [7:0] TransitionImmediate = 8'hFF;
   localparam bit [7:0] SilencerStrict = 8'd1 << params::SILENCER_FLAG_BIT_STRICT_MODE;
@@ -483,6 +484,22 @@ module sim_controller ();
     latch_silencer(SilencerStrict, 16'd2, 16'd2, 1'b1);
     latch_silencer(8'd0, 16'd200, 16'd200, 1'b0);
     $display("OK! fixed update rate mode releases the guard");
+
+    latch_silencer(SilencerStrict, 16'd2, 16'd2, 1'b1);
+    `ASSERT_EQ(16'd1 << params::CTL_FLAG_BIT_SILENCER_SET, controller.silencer_set_result);
+    sim_helper_bram.read_cnt(params::ADDR_SILENCER_SET_RESULT, set_result);
+    `ASSERT_EQ(16'd1 << params::CTL_FLAG_BIT_SILENCER_SET, set_result);
+    enable_gate = 1'b0;
+    repeat (2) @(posedge CLK);
+    `ASSERT_EQ(16'd0, controller.silencer_set_result);
+    repeat (8) @(posedge CLK);
+    enable_gate = 1'b1;
+    repeat (128) @(posedge CLK);
+    `ASSERT_EQ(16'd0, controller.silencer_set_result);
+    latch_pattern(1'b0, TransitionImmediate, 16'd1, 16'd1, 16'hFFFF, 16'hFFFF, 1'b0);
+    sim_helper_bram.read_cnt(params::ADDR_SILENCER_SET_RESULT, set_result);
+    `ASSERT_EQ(16'd0, set_result);
+    $display("OK! losing ENABLE clears the latch results");
 
     $display("OK! sim_controller");
     $finish();

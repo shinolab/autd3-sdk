@@ -310,7 +310,7 @@ fn push_header(out: &mut String, all_states: &[(&Group, Vec<State>)]) {
 
 fn push_dispatch(out: &mut String, all_states: &[(&Group, Vec<State>)]) {
     out.push_str(
-        "\n  always_ff @(posedge CLK) begin\n    if (!ENABLE) begin\n      state <= REQ_WR_VER_PATCH;\n      we <= 1'b0;\n      fpga_state_prev <= 16'hFFFF;\n      ctl_flags <= '0;\n      ctl_flags_cand <= '0;\n",
+        "\n  always_ff @(posedge CLK) begin\n    if (!ENABLE) begin\n      state <= REQ_WR_VER_PATCH;\n      we <= 1'b0;\n      fpga_state_prev <= 16'hFFFF;\n      ctl_flags <= '0;\n      ctl_flags_cand <= '0;\n      silencer_set_result <= '0;\n",
     );
     for (group, _) in all_states {
         writeln!(out, "      {}_SETTINGS.UPDATE <= 1'b0;", group.name).unwrap();
