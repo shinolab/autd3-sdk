@@ -260,9 +260,7 @@ impl UdpEmulator {
     }
 
     fn option(&self) -> PyResult<TransportOption> {
-        self.with(|emulator| {
-            TransportOption(CoreOption::for_emulator(emulator.interface()))
-        })
+        self.with(|emulator| TransportOption(CoreOption::for_emulator(emulator.interface())))
     }
 
     fn reboot(&self, index: usize) -> PyResult<()> {
