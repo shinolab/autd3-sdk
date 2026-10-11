@@ -136,7 +136,7 @@ pub(super) fn is_timeout(e: &io::Error) -> bool {
     )
 }
 
-fn is_transient(e: &io::Error) -> bool {
+fn is_undeliverable(e: &io::Error) -> bool {
     matches!(
         e.kind(),
         io::ErrorKind::ConnectionReset
@@ -145,8 +145,34 @@ fn is_transient(e: &io::Error) -> bool {
             | io::ErrorKind::NetworkUnreachable
             | io::ErrorKind::NetworkDown
             | io::ErrorKind::AddrNotAvailable
-            | io::ErrorKind::Interrupted
     )
+}
+
+fn is_transient(e: &io::Error) -> bool {
+    is_undeliverable(e) || e.kind() == io::ErrorKind::Interrupted
+}
+
+fn send_until_accepted(
+    give_up: Option<Instant>,
+    mut attempt: impl FnMut() -> io::Result<usize>,
+    mut wait_writable: impl FnMut(Duration) -> io::Result<()>,
+) -> io::Result<()> {
+    loop {
+        match attempt() {
+            Ok(_) => return Ok(()),
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                let remaining = give_up
+                    .map(|give_up| give_up.saturating_duration_since(Instant::now()))
+                    .unwrap_or_default();
+                if remaining.is_zero() {
+                    return Err(e);
+                }
+                wait_writable(remaining)?;
+            }
+            Err(e) => return Err(e),
+        }
+    }
 }
 
 impl Channel {
@@ -270,7 +296,7 @@ impl Channel {
         }
         match self.transmit(&datagram[..len], dst, give_up, before_attempt) {
             Ok(()) => Ok(()),
-            Err(e) if is_transient(&e) => {
+            Err(e) if is_undeliverable(&e) => {
                 tracing::debug!(%dst, ?kind, "sending a datagram failed: {e}");
                 Ok(())
             }
@@ -289,22 +315,14 @@ impl Channel {
         give_up: Option<Instant>,
         mut before_attempt: impl FnMut(),
     ) -> io::Result<()> {
-        loop {
-            before_attempt();
-            match self.send_now(datagram, dst) {
-                Ok(_) => return Ok(()),
-                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    let remaining = give_up
-                        .map(|give_up| give_up.saturating_duration_since(Instant::now()))
-                        .unwrap_or_default();
-                    if remaining.is_zero() {
-                        return Err(e);
-                    }
-                    sys::wait_writable(&self.socket, remaining)?;
-                }
-                Err(e) => return Err(e),
-            }
-        }
+        send_until_accepted(
+            give_up,
+            || {
+                before_attempt();
+                self.send_now(datagram, dst)
+            },
+            |remaining| sys::wait_writable(&self.socket, remaining),
+        )
     }
 
     pub(crate) fn request(&self, dst: SocketAddrV6, kind: Kind, body: &[u8]) -> io::Result<u16> {
@@ -428,4 +446,77 @@ fn parse_response(
         status,
         body: body.to_vec(),
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::Cell;
+
+    use super::*;
+
+    #[test]
+    fn an_interrupted_send_is_attempted_again_until_the_socket_takes_it() {
+        let attempts = Cell::new(0);
+        let result = send_until_accepted(
+            None,
+            || {
+                attempts.set(attempts.get() + 1);
+                if attempts.get() < 3 {
+                    Err(io::Error::from(io::ErrorKind::Interrupted))
+                } else {
+                    Ok(0)
+                }
+            },
+            |_| panic!("an interrupted send does not wait for the socket"),
+        );
+        assert!(result.is_ok());
+        assert_eq!(attempts.get(), 3);
+    }
+
+    #[test]
+    fn an_interrupted_send_keeps_the_error_of_the_attempt_that_follows() {
+        let attempts = Cell::new(0);
+        let result = send_until_accepted(
+            None,
+            || {
+                attempts.set(attempts.get() + 1);
+                Err(io::Error::from(if attempts.get() < 2 {
+                    io::ErrorKind::Interrupted
+                } else {
+                    io::ErrorKind::PermissionDenied
+                }))
+            },
+            |_| Ok(()),
+        );
+        assert_eq!(
+            result.map_err(|e| e.kind()),
+            Err(io::ErrorKind::PermissionDenied)
+        );
+        assert_eq!(attempts.get(), 2);
+    }
+
+    #[test]
+    fn a_full_socket_without_a_deadline_fails_at_the_first_attempt() {
+        let attempts = Cell::new(0);
+        let result = send_until_accepted(
+            None,
+            || {
+                attempts.set(attempts.get() + 1);
+                Err(io::Error::from(io::ErrorKind::WouldBlock))
+            },
+            |_| panic!("no deadline leaves nothing to wait for"),
+        );
+        assert_eq!(result.map_err(|e| e.kind()), Err(io::ErrorKind::WouldBlock));
+        assert_eq!(attempts.get(), 1);
+    }
+
+    #[test]
+    fn an_interruption_is_not_counted_as_a_sent_datagram() {
+        let interrupted = io::Error::from(io::ErrorKind::Interrupted);
+        assert!(!is_undeliverable(&interrupted));
+        assert!(is_transient(&interrupted));
+        assert!(is_undeliverable(&io::Error::from(
+            io::ErrorKind::HostUnreachable
+        )));
+    }
 }
