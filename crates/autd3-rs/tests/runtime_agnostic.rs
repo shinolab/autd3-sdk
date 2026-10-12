@@ -49,6 +49,21 @@ fn a_client_opens_sends_and_closes_without_an_async_runtime() {
 }
 
 #[test]
+fn a_timeout_is_noticed_without_an_async_runtime() {
+    let emulator = emulator(1);
+    let client = open(&emulator, config());
+
+    emulator.drop_next_replies(0, 1);
+    assert!(matches!(
+        block_on(client.send(Nop)),
+        Err(Error::Timeout { .. })
+    ));
+    block_on(client.send(Nop)).unwrap();
+
+    block_on(client.close()).unwrap();
+}
+
+#[test]
 fn more_concurrent_sends_than_slots_all_complete_on_one_executor_thread() {
     const SENDERS: usize = 12;
     let emulator = emulator(1);

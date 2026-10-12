@@ -178,3 +178,26 @@ async fn dropping_the_client_closes_the_connection_without_sending_the_stop_fram
             .all(|&i| i == Intensity::MAX)
     );
 }
+
+#[tokio::test]
+async fn a_close_whose_stop_frame_fails_leaves_the_client_open_for_another_try() {
+    let (emulator, client) = open(1).await;
+    emit(&client).await;
+    let checker = client.state_checker();
+
+    emulator.drop_next_replies(0, 1);
+    let failed = client.close().await;
+
+    assert!(matches!(failed, Err(Error::Timeout { .. })));
+    assert!(checker.check().is_ok());
+    client.send(Nop).await.unwrap();
+
+    client.close().await.unwrap();
+
+    assert!(matches!(checker.check(), Err(UdpError::Closed)));
+    assert!(
+        intensities(&emulator, 0)
+            .iter()
+            .all(|&i| i == Intensity::MIN)
+    );
+}
