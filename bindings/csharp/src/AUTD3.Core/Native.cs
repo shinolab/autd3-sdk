@@ -151,7 +151,7 @@ namespace AUTD3
     {
         internal const ushort Major = 0;
         internal const ushort Minor = 10;
-        internal const ushort Patch = 0;
+        internal const ushort Patch = 1;
 
         internal const int ErrorBufferLength = 1024;
 

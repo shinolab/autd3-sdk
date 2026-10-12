@@ -10,14 +10,14 @@ checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
 
 [[package]]
 name = "autd3-cpu"
-version = "0.10.0"
+version = "0.10.1"
 dependencies = [
  "autd3-cpu-fw",
 ]
 
 [[package]]
 name = "autd3-cpu-fw"
-version = "0.10.0"
+version = "0.10.1"
 dependencies = [
  "autd3-cpu-wire",
  "bitflags",
@@ -29,7 +29,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-cpu-wire"
-version = "0.10.0"
+version = "0.10.1"
 dependencies = [
  "bitflags",
  "crc",

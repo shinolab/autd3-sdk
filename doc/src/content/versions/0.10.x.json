@@ -138,6 +138,19 @@
               }
             }
           ]
+        },
+        {
+          "label": "上級",
+          "translations": {
+            "en": "Advanced"
+          },
+          "items": [
+            {
+              "autogenerate": {
+                "directory": "api/advanced"
+              }
+            }
+          ]
         }
       ]
     },
