@@ -41,6 +41,7 @@ async fn main() -> Result<()> {
     Interface::Auto;
     Interface::Name("eth0".to_string());
     Interface::Simulator;
+    Interface::Addr("[::1]:44336".parse()?);
     // ANCHOR_END: iface
 
     let _ = geometry;

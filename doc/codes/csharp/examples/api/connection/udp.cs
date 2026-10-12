@@ -37,6 +37,7 @@ internal static class Sample
         _ = Interface.Auto;
         _ = Interface.Name("eth0");
         _ = Interface.Simulator;
+        _ = Interface.Addr("[::1]:44336");
         // ANCHOR_END: iface
     }
 }

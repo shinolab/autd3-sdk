@@ -30,11 +30,11 @@ import Mermaid from "@components/Mermaid.astro";
 | クレート                     | 役割                                                                 |
 | ---------------------------- | -------------------------------------------------------------------- |
 | `autd3-rs-core`              | 基盤層. geometry / value / params / protocol / error と通信の観測型 (`bus`). |
-| `autd3-rs`                   | クライアント本体. UDP 通信 (`udp`) とデバイスエミュレータ (feature `emulator`) を含む. |
-| `autd3-rs-pattern`           | Emission パターン計算 (焦点合成等).                                   |
+| `autd3-rs`                   | クライアント本体                                                      |
+| `autd3-rs-pattern`           | 位相・振幅パターンの計算 (単一焦点等).                                |
 | `autd3-rs-pattern-holo`      | 多焦点音場再構成. 理論は[理論と考察](/autd3-sdk/theory/holo/)を参照.  |
 | `autd3-rs-modulation`        | AM 波形計算.                                                          |
-| `autd3-rs-firmware-emulator` | 実 CPU ファームウェア (`autd3-cpu-fw`) のソースを取り込み, Rust による FPGA エミュレータと組み合わせる. |
+| `autd3-rs-firmware-emulator` | 実 CPU ファームウェア (`autd3-cpu-fw`) のソースを取り込み, Rust による FPGA エミュレータと組み合わせる |
 
 ## スレッドモデル
 

@@ -161,15 +161,14 @@ ETHSW のタイマはデバイス間で PTP (IEEE 1588, L2, E2E, two-step) に�
 
 `CMD_SYNCHRONIZE` は以下を行う.
 
-1. 同期パルスの周期 (ファームの定数 <Math tex="\SI{1}{ms}" />) を FPGA内部の`SYS_TIME` の単位 (<Math tex="\SI{20.48}{MHz}" />) へ変換する
-
-    <MathBlock tex={String.raw`
-    \text{cycle\_ticks} = \text{cycle\_ns} \times \frac{\SI{20.48}{MHz}}{\SI{1}{GHz}} = 64 \times \frac{\text{cycle\_ns}}{3125}
-    `} />
-
 1. 次に同期パルスが立ち上がるデバイス時刻 (現在時刻から <Math tex="\SI{250}{us}" /> 以上先の最初の <Math tex="\SI{1}{ms}" /> 境界) を求める.
     - 同期パルスがまだ動いていない場合は `ERR_SYNC_NOT_READY` を返す
-1. その時刻を `ADDR_SYNC_TIME_*` へ, 変換した周期を `ADDR_SYNC_CYCLE_*` へ書き込む (FPGA のレジスタ名は `ECAT_SYNC_*`).
+1. その時刻を FPGA 内部の `SYS_TIME` の単位 (<Math tex="\SI{20.48}{MHz}" />) へ変換し, `ADDR_SYNC_TIME_*` へ書き込む.
+
+    <MathBlock tex={String.raw`
+    \text{ticks} = \text{time\_ns} \times \frac{\SI{20.48}{MHz}}{\SI{1}{GHz}} = 64 \times \frac{\text{time\_ns}}{3125}
+    `} />
+
 1. デバイス時刻がその立ち上がりの <Math tex="\SI{1}{ms}" /> 前を過ぎるまで待つ (最長 <Math tex="\SI{250}{us}" />).
     - FPGA はフラグを受けたあと最初の立ち上がりで `SYS_TIME` をセットするので, 1 つ手前の立ち上がりより前にフラグを立てると `SYS_TIME` が <Math tex="\SI{1}{ms}" /> 進む
 1. `SYNC_SET` フラグを立て, FPGA の [Synchronizer](/autd3-sdk/developer/fpga/synchronizer/) が `SYS_TIME` をセットするのを待つ.

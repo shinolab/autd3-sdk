@@ -2,7 +2,7 @@
 
 Async client library for [AUTD3](https://hapislab.org/en/airborne-ultrasound-tactile-display), an airborne ultrasound tactile display that produces midair haptic sensations without the user wearing any device.
 
-This crate drives AUTD3 devices: it owns the realtime bus thread, builds the wire frames, and exposes an `async` API for sending emission patterns and amplitude modulation.
+This crate drives AUTD3 devices: it owns the I/O thread that talks to the devices over UDP, builds the wire frames, and exposes an `async` API for sending phase/intensity patterns and amplitude modulation.
 
 ## Documentation
 

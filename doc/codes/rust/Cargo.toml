@@ -22,6 +22,10 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal
 unused = "allow"
 
 [[example]]
+name = "api_advanced_controller"
+path = "examples/api/advanced/controller.rs"
+
+[[example]]
 name = "api_basics_client_config"
 path = "examples/api/basics/client-config.rs"
 
@@ -352,10 +356,6 @@ path = "examples/tutorial/multiple-device.rs"
 [[example]]
 name = "tutorial_output_intensity"
 path = "examples/tutorial/output-intensity.rs"
-
-[[example]]
-name = "tutorial_performance"
-path = "examples/tutorial/performance.rs"
 
 [[example]]
 name = "tutorial_send_modes"
