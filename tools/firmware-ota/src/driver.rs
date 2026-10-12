@@ -7,7 +7,7 @@ use autd3_cpu_wire::layout::UPDATE_CHUNK_MAX_DATA_LEN;
 use autd3_cpu_wire::payload::{FirmwareInfo, UpdateBeginPayload, UpdateChunkPayload};
 use autd3_cpu_wire::update::RunningImage;
 use autd3_rs::protocol::{Cmd, FrameHeader, PAYLOAD_BYTES, Seq};
-use autd3_rs::{UdpBus, UdpError};
+use autd3_rs::{Reply, UdpBus, UdpError};
 use zerocopy::little_endian::U32;
 use zerocopy::{FromBytes, Immutable, IntoBytes};
 
@@ -26,7 +26,7 @@ const FPGA_UPDATE_CHUNK_TIMEOUT: Duration = Duration::from_secs(20);
 const FPGA_UPDATE_COMMIT_TIMEOUT: Duration = Duration::from_secs(120);
 pub const FPGA_RECONFIG_WAIT: Duration =
     Duration::from_millis(autd3_cpu_wire::fpga_update::FPGA_RECONFIG_WORST_MS as u64 + 2000);
-const MIN_CPU_FIRMWARE_VERSION: [u8; 3] = [0, 10, 0];
+pub const MIN_CPU_FIRMWARE_VERSION: [u8; 3] = [0, 10, 0];
 
 #[derive(Debug, thiserror::Error)]
 pub enum DriverError {
@@ -205,6 +205,37 @@ fn not_before(msg_id: u16, first: u16) -> bool {
     msg_id.wrapping_sub(first) < 0x8000
 }
 
+fn await_replies(
+    bus: &UdpBus,
+    frames: &[Vec<u8>],
+    timeout: Duration,
+    retransmit: Duration,
+    mut complete: impl FnMut(&[u16], Reply) -> bool,
+) -> Result<bool, UdpError> {
+    let mut sent = Vec::new();
+    let end = Instant::now() + timeout;
+    while Instant::now() < end {
+        sent.push(bus.send(frames)?.msg_id);
+        let retransmit_at = (Instant::now() + retransmit).min(end);
+        loop {
+            let keepalive = (Instant::now()
+                + bus.heartbeat_interval().unwrap_or(RETRANSMIT_INTERVAL))
+            .min(retransmit_at);
+            let Some(reply) = bus.recv(keepalive)? else {
+                if Instant::now() >= retransmit_at {
+                    break;
+                }
+                bus.heartbeat()?;
+                continue;
+            };
+            if complete(&sent, reply) {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
+}
+
 impl Exchange for UdpBus {
     type Error = UdpError;
 
@@ -213,27 +244,20 @@ impl Exchange for UdpBus {
     }
 
     fn reset(&mut self, timeout: Duration) -> Result<bool, UdpError> {
-        let frame = Frame::new(Cmd::Reset);
-        let frames = vec![frame.bytes(Seq::ZERO); self.num_devices()];
-        let first = self.next_msg_id();
-        let start = Instant::now();
+        let frames = vec![Frame::new(Cmd::Reset).bytes(Seq::ZERO); self.num_devices()];
         let mut confirmed = vec![false; self.num_devices()];
-        while start.elapsed() < timeout {
-            self.send(&frames)?;
-            let deadline = (Instant::now() + RETRANSMIT_INTERVAL).min(start + timeout);
-            while confirmed.contains(&false) {
-                let Some(reply) = self.recv(deadline)? else {
-                    break;
-                };
-                if not_before(reply.msg_id, first) && reply.ack == 0xFF {
+        await_replies(
+            self,
+            &frames,
+            timeout,
+            RETRANSMIT_INTERVAL,
+            |sent, reply| {
+                if sent.contains(&reply.msg_id) && reply.ack == 0xFF {
                     confirmed[reply.device] = true;
                 }
-            }
-            if !confirmed.contains(&false) {
-                return Ok(true);
-            }
-        }
-        Ok(false)
+                !confirmed.contains(&false)
+            },
+        )
     }
 
     fn exchange(
@@ -246,36 +270,22 @@ impl Exchange for UdpBus {
         let frames = vec![frame.bytes(seq); self.num_devices()];
         let mut replies: Vec<Option<DeviceReply>> = vec![None; self.num_devices()];
         let first = self.next_msg_id();
-        let end = Instant::now() + timeout;
-        while Instant::now() < end {
-            self.send(&frames)?;
-            let retransmit_at = (Instant::now() + retransmit).min(end);
-            loop {
-                let keepalive = (Instant::now()
-                    + self.heartbeat_interval().unwrap_or(RETRANSMIT_INTERVAL))
-                .min(retransmit_at);
-                let Some(reply) = self.recv(keepalive)? else {
-                    if Instant::now() >= retransmit_at {
-                        break;
-                    }
-                    self.heartbeat()?;
-                    continue;
-                };
-                if not_before(reply.msg_id, first)
-                    && reply.ack == seq.get()
-                    && replies[reply.device].is_none()
-                {
-                    replies[reply.device] = Some(DeviceReply {
-                        status: reply.status,
-                        value: reply.data().to_vec(),
-                    });
-                }
-                if replies.iter().all(Option::is_some) {
-                    return Ok(Ok(replies.into_iter().map(Option::unwrap).collect()));
-                }
+        await_replies(self, &frames, timeout, retransmit, |_, reply| {
+            if not_before(reply.msg_id, first)
+                && reply.ack == seq.get()
+                && replies[reply.device].is_none()
+            {
+                replies[reply.device] = Some(DeviceReply {
+                    status: reply.status,
+                    value: reply.data().to_vec(),
+                });
             }
-        }
-        Ok(Err(replies.iter().position(Option::is_none).unwrap_or(0)))
+            replies.iter().all(Option::is_some)
+        })?;
+        Ok(match replies.iter().position(Option::is_none) {
+            Some(device) => Err(device),
+            None => Ok(replies.into_iter().flatten().collect()),
+        })
     }
 
     fn idle(&mut self, duration: Duration) -> Result<(), UdpError> {

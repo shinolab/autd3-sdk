@@ -51,6 +51,7 @@ struct Unit {
     duplicate_frames: u32,
     muted: bool,
     heartbeats: u64,
+    id_resets: u64,
 }
 
 impl Unit {
@@ -268,6 +269,7 @@ impl Chain {
                     self.reply_status(i, src, header, Status::Ok, info.as_bytes());
                 }
                 Kind::ResetId => {
+                    self.units[i].id_resets += 1;
                     self.reply_status(i, src, header, Status::Ok, &[]);
                     self.units[i].close_at.get_or_insert(
                         now + Duration::from_millis(u64::from(RESET_ID_CLOSE_DELAY_MS)),
@@ -536,6 +538,7 @@ impl UdpEmulator {
                 duplicate_frames: 0,
                 muted: false,
                 heartbeats: 0,
+                id_resets: 0,
             });
         }
         let sockets: Vec<Arc<UdpSocket>> = units.iter().map(|u| Arc::clone(&u.socket)).collect();
@@ -646,6 +649,11 @@ impl UdpEmulator {
     #[must_use]
     pub fn heartbeats_received(&self, index: usize) -> u64 {
         lock(&self.chain).units[index].heartbeats
+    }
+
+    #[must_use]
+    pub fn id_resets_received(&self, index: usize) -> u64 {
+        lock(&self.chain).units[index].id_resets
     }
 
     pub fn reboot(&self, index: usize) {

@@ -12,7 +12,7 @@ use autd3_rs_core::{BusStats, DeviceClock, FRAME_BYTES_MAX};
 use zerocopy::FromBytes;
 
 use super::channel::{Channel, Datagram};
-use super::enumerate::{Bringup, bring_up, same_endpoint};
+use super::enumerate::{Bringup, Units, bring_up, same_endpoint};
 use super::error::UdpError;
 use super::iface;
 use super::option::TransportOption;
@@ -77,7 +77,13 @@ pub struct UdpBus {
 
 impl UdpBus {
     pub fn open(option: &TransportOption, num_devices: usize) -> Result<Self, UdpError> {
-        Self::open_with(option, num_devices, Bringup::Synchronized, None, SIMULATOR)
+        Self::open_with(
+            option,
+            Units::Exactly(num_devices),
+            Bringup::Synchronized,
+            None,
+            SIMULATOR,
+        )
     }
 
     pub fn open_with_geometry(
@@ -86,7 +92,7 @@ impl UdpBus {
     ) -> Result<Self, UdpError> {
         Self::open_with(
             option,
-            geometry.num_devices(),
+            Units::Exactly(geometry.num_devices()),
             Bringup::Synchronized,
             Some(geometry),
             SIMULATOR,
@@ -99,23 +105,29 @@ impl UdpBus {
     ) -> Result<Self, UdpError> {
         Self::open_with(
             option,
-            num_devices,
+            Units::Exactly(num_devices),
             Bringup::Unsynchronized,
             None,
             SIMULATOR,
         )
     }
 
+    pub fn open_unsynchronized_all(option: &TransportOption) -> Result<Self, UdpError> {
+        Self::open_with(option, Units::All, Bringup::Unsynchronized, None, SIMULATOR)
+    }
+
     fn open_with(
         option: &TransportOption,
-        num_devices: usize,
+        expected: Units,
         bringup: Bringup,
         geometry: Option<&Geometry>,
         simulator: Simulator,
     ) -> Result<Self, UdpError> {
         option.validate()?;
         let timer_resolution = TimerResolutionGuard::new(option.timer_resolution);
-        if !(1..=MAX_DEVICES).contains(&num_devices) {
+        if let Units::Exactly(num_devices) = expected
+            && !(1..=MAX_DEVICES).contains(&num_devices)
+        {
             return Err(UdpError::InvalidDeviceCount(num_devices));
         }
         let target = iface::resolve_with(&option.iface, option.response_timeout, simulator)?;
@@ -129,7 +141,8 @@ impl UdpBus {
             option.send_buffer,
         )?;
         let device_clock = DeviceClock::new();
-        let units = bring_up(&channel, option, num_devices, bringup, &device_clock)?;
+        let units = bring_up(&channel, option, expected, bringup, &device_clock)?;
+        let last = units.len() - 1;
         Ok(Self {
             channel,
             trackers: Mutex::new(vec![Tracker::new(); units.len()]),
@@ -141,7 +154,7 @@ impl UdpBus {
             reply_timeout: option.reply_timeout,
             lost_timeout: option.lost_timeout,
             msg_id: AtomicU16::new(0),
-            heartbeat_from: AtomicUsize::new(num_devices - 1),
+            heartbeat_from: AtomicUsize::new(last),
             last_send: Mutex::new(Instant::now()),
             closed: AtomicBool::new(false),
             _timer_resolution: timer_resolution,
