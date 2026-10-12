@@ -3,7 +3,7 @@ use std::time::Duration;
 use anyhow::{Result, anyhow};
 use clap::Args;
 
-use autd3_rs::{Interface, MAX_DEVICES, TransportOption, UdpBus, UdpError};
+use autd3_rs::{Interface, TransportOption, UdpBus, UdpError};
 
 const LOST_AFTER_HEARTBEATS: u32 = 10;
 
@@ -65,25 +65,14 @@ impl UdpArgs {
     }
 
     pub fn open(&self, expected: Option<usize>) -> Result<UdpBus> {
-        self.enumerate(expected).map_err(udp_error)
+        enumerate(&self.option(), expected).map_err(udp_error)
     }
+}
 
-    fn enumerate(&self, expected: Option<usize>) -> Result<UdpBus, UdpError> {
-        let option = self.option();
-        if let Some(devices) = expected {
-            return UdpBus::open_unsynchronized(&option, devices);
-        }
-        let mut devices = 1;
-        loop {
-            match UdpBus::open_unsynchronized(&option, devices) {
-                Err(UdpError::DeviceCountMismatch { found, .. })
-                    if found > devices && found <= MAX_DEVICES =>
-                {
-                    devices = found;
-                }
-                other => return other,
-            }
-        }
+fn enumerate(option: &TransportOption, expected: Option<usize>) -> Result<UdpBus, UdpError> {
+    match expected {
+        Some(devices) => UdpBus::open_unsynchronized(option, devices),
+        None => UdpBus::open_unsynchronized_all(option),
     }
 }
 
@@ -116,6 +105,7 @@ fn udp_error(e: UdpError) -> anyhow::Error {
 
 #[cfg(test)]
 mod tests {
+    use autd3_rs_firmware_emulator::udp::UdpEmulator;
     use clap::Parser;
 
     use super::*;
@@ -159,6 +149,34 @@ mod tests {
                 enumeration_timeout: Duration::from_secs(20),
                 ..TransportOption::default()
             }
+        );
+    }
+
+    #[test]
+    fn the_device_count_is_found_in_a_single_enumeration() {
+        for devices in [1, 2, 5] {
+            let emulator = UdpEmulator::spawn(devices).unwrap();
+            let option = TransportOption::for_emulator(emulator.interface());
+            let bus = enumerate(&option, None).unwrap();
+            assert_eq!(bus.num_devices(), devices);
+            assert_eq!(emulator.id_resets_received(0), 1, "{devices} devices");
+        }
+    }
+
+    #[test]
+    fn a_given_device_count_must_match_the_chain() {
+        let emulator = UdpEmulator::spawn(3).unwrap();
+        let option = TransportOption::for_emulator(emulator.interface());
+        let err = enumerate(&option, Some(2)).err().unwrap();
+        assert!(
+            matches!(
+                err,
+                UdpError::DeviceCountMismatch {
+                    expected: 2,
+                    found: 3
+                }
+            ),
+            "{err}"
         );
     }
 

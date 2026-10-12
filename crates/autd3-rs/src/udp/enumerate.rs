@@ -9,6 +9,7 @@ use autd3_rs_core::value::SysTime;
 use zerocopy::little_endian::U64;
 use zerocopy::{FromBytes, IntoBytes};
 
+use super::bus::MAX_DEVICES;
 use super::channel::{Channel, Response};
 use super::error::UdpError;
 use super::option::TransportOption;
@@ -163,7 +164,7 @@ impl Enumerator<'_> {
             .is_ok_and(|(reply, _)| reply.downstream_link != 0))
     }
 
-    fn enumerate(&mut self, expected: usize) -> Result<Vec<SocketAddrV6>, UdpError> {
+    fn enumerate(&mut self, expected: usize, limit: usize) -> Result<Vec<SocketAddrV6>, UdpError> {
         let deadline = Instant::now().checked_add(self.option.enumeration_timeout);
         let mut units: Vec<SocketAddrV6> = Vec::with_capacity(expected);
         loop {
@@ -183,9 +184,9 @@ impl Enumerator<'_> {
                 std::thread::sleep(DISCOVER_RETRY_INTERVAL);
                 continue;
             };
-            if units.len() >= expected {
+            if units.len() >= limit {
                 return Err(UdpError::DeviceCountMismatch {
-                    expected,
+                    expected: limit,
                     found: units.len() + 1,
                 });
             }
@@ -328,6 +329,28 @@ impl Enumerator<'_> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Units {
+    Exactly(usize),
+    All,
+}
+
+impl Units {
+    const fn at_least(self) -> usize {
+        match self {
+            Self::Exactly(count) => count,
+            Self::All => 1,
+        }
+    }
+
+    const fn at_most(self) -> usize {
+        match self {
+            Self::Exactly(count) => count,
+            Self::All => MAX_DEVICES,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Bringup {
     Synchronized,
     Unsynchronized,
@@ -336,13 +359,13 @@ pub(crate) enum Bringup {
 pub(crate) fn bring_up(
     channel: &Channel,
     option: &TransportOption,
-    expected: usize,
+    expected: Units,
     bringup: Bringup,
     device_clock: &DeviceClock,
 ) -> Result<Vec<SocketAddrV6>, UdpError> {
     let mut enumerator = Enumerator { channel, option };
     enumerator.reset()?;
-    let units = enumerator.enumerate(expected)?;
+    let units = enumerator.enumerate(expected.at_least(), expected.at_most())?;
     enumerator.cross_check(&units)?;
     if bringup == Bringup::Unsynchronized {
         tracing::info!(
