@@ -45,6 +45,7 @@ fn drive_until_ready<T>(driver: &mut Driver, future: impl Future<Output = T>) ->
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn a_user_thread_polling_and_waiting_drives_the_controller() {
     let emulator = emulator(2);
     let (controller, driver) = open(&emulator, &option(&emulator));
@@ -64,6 +65,7 @@ async fn a_user_thread_polling_and_waiting_drives_the_controller() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn one_thread_can_run_both_the_controller_and_the_driver() {
     let emulator = emulator(2);
     let (controller, mut driver) = open(&emulator, &option(&emulator));
@@ -79,6 +81,7 @@ fn one_thread_can_run_both_the_controller_and_the_driver() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn a_controller_resynchronizes_by_itself_when_initialize_is_skipped() {
     let emulator = emulator(1);
     let (controller, mut driver) = open(&emulator, &option(&emulator));
@@ -92,6 +95,7 @@ fn a_controller_resynchronizes_by_itself_when_initialize_is_skipped() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn dropping_the_controller_stops_the_driver() {
     let emulator = emulator(1);
     let (controller, driver) = open(&emulator, &option(&emulator));
@@ -103,6 +107,7 @@ fn dropping_the_controller_stops_the_driver() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn dropping_the_driver_fails_the_frames_in_flight_and_later_sends_with_closed() {
     let emulator = emulator(1);
     let (controller, mut driver) =

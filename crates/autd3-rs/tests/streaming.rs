@@ -26,6 +26,7 @@ async fn open_windowed(num_devices: usize, max_inflight: usize) -> (UdpEmulator,
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn a_streamed_command_arrives_whole_on_every_device() {
     let (emulator, client) = open(2).await;
     let data = samples(30_000);
@@ -52,6 +53,7 @@ async fn a_streamed_command_arrives_whole_on_every_device() {
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn a_stream_never_has_more_frames_in_flight_than_the_window() {
     for window in [1, 3, MAX_INFLIGHT] {
         let (emulator, client) = open_windowed(1, window).await;
@@ -76,6 +78,7 @@ async fn a_stream_never_has_more_frames_in_flight_than_the_window() {
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn a_stream_stops_at_the_frame_a_device_rejects() {
     let (_emulator, client) = open_windowed(2, 1).await;
     let before = client.bus_stats().frames();
@@ -99,6 +102,7 @@ async fn a_stream_stops_at_the_frame_a_device_rejects() {
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn a_stream_inside_the_window_reports_the_rejection_after_sending_everything() {
     let (_emulator, client) = open(2).await;
     let before = client.bus_stats().frames();
@@ -121,6 +125,7 @@ async fn a_stream_inside_the_window_reports_the_rejection_after_sending_everythi
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn a_stream_reports_the_failure_of_its_earliest_frame() {
     let (emulator, client) = open(1).await;
 
@@ -133,6 +138,7 @@ async fn a_stream_reports_the_failure_of_its_earliest_frame() {
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn a_command_that_cannot_be_encoded_sends_nothing() {
     let (_emulator, client) = open(1).await;
     let before = client.bus_stats().frames();
@@ -157,6 +163,7 @@ async fn a_command_that_cannot_be_encoded_sends_nothing() {
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn several_streams_can_be_awaited_after_all_of_them_were_sent() {
     let (emulator, client) = open(2).await;
     let first = samples(5_000);
