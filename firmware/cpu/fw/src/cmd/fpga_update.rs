@@ -357,6 +357,7 @@ impl Cpu {
 
 #[cfg(all(test, not(loom)))]
 mod tests {
+    use std::vec;
     use std::vec::Vec;
 
     use autd3_cpu_wire::fpga_update::{
@@ -528,10 +529,11 @@ mod tests {
             Some(&(FlashOp::Crc32.as_u8(), FPGA_IMAGE_BASE, img.len() as u32))
         );
         assert_eq!(h.cpu.fpga_update.state(), State::Committed);
+        let erased_sector = vec![0xFF; FPGA_SECTOR_BYTES as usize];
         assert!(
             h.port.fpga_flash[..FPGA_GOLDEN_REGION_END as usize]
-                .iter()
-                .all(|&b| b == 0xFF)
+                .chunks(FPGA_SECTOR_BYTES as usize)
+                .all(|sector| sector == erased_sector)
         );
     }
 

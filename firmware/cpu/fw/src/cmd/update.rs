@@ -433,7 +433,12 @@ mod tests {
         assert_eq!(h.status(), Error::UpdateFlash);
         assert_eq!(h.cpu.update.state(), State::Idle);
         assert_eq!(h.port.erased, []);
-        assert!(h.port.flash.iter().all(|&b| b == 0xFF));
+        assert!(
+            h.port
+                .flash
+                .chunks(FLASH_SECTOR_BYTES as usize)
+                .all(|sector| *sector == [0xFF; FLASH_SECTOR_BYTES as usize])
+        );
 
         h.deliver(&chunk(1, 0, &[1, 2, 3]));
         assert_eq!(h.status(), Error::UpdateNotStarted);
@@ -547,7 +552,12 @@ mod tests {
         h.deliver(&Frame::new(1, Cmd::UpdateCommit));
         assert_eq!(h.status(), Error::UpdateNotStarted);
         assert_eq!(h.port.erased, []);
-        assert!(h.port.flash.iter().all(|&b| b == 0xFF));
+        assert!(
+            h.port
+                .flash
+                .chunks(FLASH_SECTOR_BYTES as usize)
+                .all(|sector| *sector == [0xFF; FLASH_SECTOR_BYTES as usize])
+        );
     }
 
     #[test]
