@@ -421,6 +421,26 @@ namespace AUTD3.Tests
         }
 
         [Fact]
+        public void SetCpuConfigRejectsAPtpValuePastItsRange()
+        {
+            using var geometry = Fixture.SingleDevice();
+
+            using var atTheLimits = Frames.Encode(geometry, new SetCpuConfig(new CpuConfig
+            {
+                Ptp = new PtpConfig { MaxFreqPpb = int.MaxValue, PathDelayFilterShift = 16 },
+            }));
+            Assert.Equal(1, atTheLimits.Length);
+
+            var maxFreqPpb = Assert.Throws<Autd3Exception>(() =>
+                Frames.Encode(geometry, new SetCpuConfig(new CpuConfig { Ptp = new PtpConfig { MaxFreqPpb = 0x8000_0000 } })));
+            Assert.Contains("ptp.maxFreqPpb", maxFreqPpb.Message);
+
+            var pathDelayFilterShift = Assert.Throws<Autd3Exception>(() =>
+                Frames.Encode(geometry, new SetCpuConfig(new CpuConfig { Ptp = new PtpConfig { PathDelayFilterShift = 17 } })));
+            Assert.Contains("ptp.pathDelayFilterShift", pathDelayFilterShift.Message);
+        }
+
+        [Fact]
         public void SetCpuConfigRejectsADurationTheWireCannotCarry()
         {
             using var geometry = Fixture.SingleDevice();

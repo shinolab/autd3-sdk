@@ -52,9 +52,9 @@ import csFullSample from "@codes/csharp/examples/api/command/cpu-config-example.
 | `lock_threshold`       | `Duration`   | 100 ns  | 時刻のずれがこれ未満の標本をロックに数える |
 | `kp_milli`             | `u32`        | 50      | サーボの比例ゲイン × 1000 |
 | `ki_milli`             | `u32`        | 1       | サーボの積分ゲイン × 1000 |
-| `max_freq_ppb`         | `u32`        | 500,000 | 周波数補正の上限 [ppb] |
+| `max_freq_ppb`         | `MaxFreqPpb` | 500,000 | 周波数補正の上限 [ppb]. 0 から 2,147,483,647 |
 | `delay_req_syncs`      | `NonZeroU16` | 32      | ロック後に経路遅延を測り直す間隔 (`Sync` の回数) |
-| `path_delay_filter_shift` | `u8`      | 5       | 経路遅延の平滑化の係数 `1 / 2^n`. 0 で平滑化しない |
+| `path_delay_filter_shift` | `PathDelayFilterShift` | 5 | 経路遅延の平滑化の係数 `1 / 2^n`. 0 から 16. 0 で平滑化しない |
 | `pause_quanta`         | `Option<NonZeroU16>` | 48 | 回線が飽和したときにホストへ送られる `PAUSE` の長さ [512 ビット時間]. `None` で `PAUSE` を送らない |
 | `pause_hold_syncs`     | `u16`        | 64      | 一度詰まってから, 送信のたびに `PAUSE` を送り続ける `Sync` の回数 |
 | `pause_retry`          | `Duration`   | 8 ms    | `Sync` を送り出せない間, `PAUSE` を送り続ける時間 |

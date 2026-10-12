@@ -1,7 +1,9 @@
 use std::num::{NonZeroU16, NonZeroU32};
 use std::time::Duration;
 
-use autd3_rs::commands::{CpuConfig, FpgaBusWait, PtpConfig, SetCpuConfig};
+use autd3_rs::commands::{
+    CpuConfig, FpgaBusWait, MaxFreqPpb, PathDelayFilterShift, PtpConfig, SetCpuConfig,
+};
 
 fn main() {
     // ANCHOR: api
@@ -24,9 +26,9 @@ fn main() {
             lock_threshold: Duration::from_nanos(100),
             kp_milli: 50,
             ki_milli: 1,
-            max_freq_ppb: 500_000,
+            max_freq_ppb: MaxFreqPpb::new(500_000).unwrap(),
             delay_req_syncs: NonZeroU16::new(32).unwrap(),
-            path_delay_filter_shift: 5,
+            path_delay_filter_shift: PathDelayFilterShift::new(5).unwrap(),
             pause_quanta: NonZeroU16::new(48),
             pause_hold_syncs: 64,
             pause_retry: Duration::from_millis(8),

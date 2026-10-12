@@ -1,4 +1,6 @@
-pub use autd3_cpu_wire::config::{CpuConfig, FpgaBusWait, PtpConfig};
+pub use autd3_cpu_wire::config::{
+    CpuConfig, FpgaBusWait, MaxFreqPpb, PathDelayFilterShift, PtpConfig,
+};
 use autd3_cpu_wire::payload::{CpuConfigOutOfRange, SetCpuConfigPayload};
 
 use crate::error::{Error, PayloadError};

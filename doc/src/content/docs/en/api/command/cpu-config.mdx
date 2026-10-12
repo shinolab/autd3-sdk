@@ -52,9 +52,9 @@ Behavior is not guaranteed when any other field is changed from its default.
 | `lock_threshold`       | `Duration`   | 100 ns  | Samples whose time offset is below this count toward the lock |
 | `kp_milli`             | `u32`        | 50      | Proportional gain of the servo × 1000 |
 | `ki_milli`             | `u32`        | 1       | Integral gain of the servo × 1000 |
-| `max_freq_ppb`         | `u32`        | 500,000 | Limit of the frequency correction [ppb] |
+| `max_freq_ppb`         | `MaxFreqPpb` | 500,000 | Limit of the frequency correction [ppb]. 0 to 2,147,483,647 |
 | `delay_req_syncs`      | `NonZeroU16` | 32      | Interval at which the path delay is measured again once locked (in `Sync` messages) |
-| `path_delay_filter_shift` | `u8`      | 5       | Smoothing factor `1 / 2^n` of the path delay. 0 disables the smoothing |
+| `path_delay_filter_shift` | `PathDelayFilterShift` | 5 | Smoothing factor `1 / 2^n` of the path delay. 0 to 16. 0 disables the smoothing |
 | `pause_quanta`         | `Option<NonZeroU16>` | 48 | Length of the `PAUSE` sent to the host when the link is saturated [512 bit times]. `None` sends no `PAUSE` |
 | `pause_hold_syncs`     | `u16`        | 64      | Number of `Sync` messages for which a `PAUSE` keeps being sent on every send after the link was found saturated |
 | `pause_retry`          | `Duration`   | 8 ms    | How long `PAUSE` keeps being sent while a `Sync` cannot be sent out |
