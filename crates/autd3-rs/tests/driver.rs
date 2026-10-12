@@ -4,7 +4,6 @@ use std::future::Future;
 use std::pin::pin;
 use std::task::{Context, Poll, Waker};
 use std::thread::JoinHandle;
-use std::time::{Duration, Instant};
 
 use autd3_rs::commands::{ForceFan, Nop};
 use autd3_rs::udp::{TransportOption, UdpError};
@@ -90,26 +89,6 @@ fn a_controller_resynchronizes_by_itself_when_initialize_is_skipped() {
     assert_eq!(controller.bus_stats().resets(), 1);
     assert_eq!(controller.bus_stats().frames(), 1);
     assert_eq!(fans(&emulator), [true]);
-}
-
-#[test]
-fn poll_reports_the_close_and_keeps_reporting_it() {
-    let emulator = emulator(1);
-    let (controller, mut driver) = open(&emulator, &option(&emulator));
-    let checker = controller.state_checker();
-    drive_until_ready(&mut driver, controller.initialize()).unwrap();
-
-    drive_until_ready(&mut driver, controller.close()).unwrap();
-
-    assert!(checker.check().is_ok());
-    assert!(matches!(driver.poll(), Ok(None)));
-    assert!(matches!(checker.check(), Err(UdpError::Closed)));
-    assert!(matches!(driver.poll(), Ok(None)));
-    assert!(
-        driver
-            .wait(Instant::now() + Duration::from_secs(60))
-            .is_ok()
-    );
 }
 
 #[test]

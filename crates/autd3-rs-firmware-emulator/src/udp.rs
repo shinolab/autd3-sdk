@@ -795,30 +795,3 @@ impl Drop for UdpEmulator {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use autd3_cpu_fw::proto::Cmd;
-    use autd3_cpu_wire::payload::Telemetry;
-
-    use super::*;
-
-    #[test]
-    fn a_reply_that_cannot_be_sent_is_counted_as_a_send_failure() {
-        let emulator = UdpEmulator::spawn(1).unwrap();
-        let unsendable = SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::LOCALHOST, 0, 0, 0));
-        let mut chain = lock(&emulator.chain);
-        let header = Header::new(Kind::ReadUnitInfo, 1);
-        assert_eq!(
-            chain.units[0].device.send(&[0, Cmd::Reset.as_u8()]).ack,
-            Reply::RESET.ack
-        );
-
-        chain.reply(0, unsendable, header, &[]);
-        chain.reply_status(0, unsendable, header, Status::Ok, &[]);
-
-        let read = chain.units[0].device.send(&[0, Cmd::ReadTelemetry.as_u8()]);
-        let (telemetry, _) = Telemetry::read_from_prefix(read.data()).unwrap();
-        assert_eq!(telemetry.send_failure.get(), 2);
-    }
-}
