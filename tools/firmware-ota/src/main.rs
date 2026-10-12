@@ -12,7 +12,7 @@ use autd3_cpu_wire::update::RunningImage;
 use autd3_firmware_writer::bundle;
 use autd3_rs_firmware_ota::{
     CpuFirmwareImage, Driver, DriverError, Exchange, FPGA_RECONFIG_WAIT, FpgaFirmwareImage,
-    boot_image,
+    MIN_CPU_FIRMWARE_VERSION, boot_image,
 };
 
 use udp::UdpArgs;
@@ -59,20 +59,22 @@ impl Target {
         to confirm it (the reboot leaves the devices unassigned, so the chain is enumerated \
         again); an unconfirmed image rolls back at the next reset. The FPGA image is \
         written to the update slot and the FPGA reconfigures in place (golden image fallback).\n\n\
-        Only UDP firmware images (v0.10.0 or newer) are accepted, and only devices already \
-        running the UDP firmware are reached. Devices on the EtherCAT firmware (v0.9.x or \
-        older) must be written once via J-Link."
+        --version only takes UDP firmware releases (v0.10.0 or newer). A local image is not \
+        checked for its version: writing an EtherCAT CPU image (v0.9.x or older) leaves the \
+        devices unreachable over UDP until they are written again via J-Link. Only devices \
+        already running the UDP firmware are reached; devices on the EtherCAT firmware must \
+        be written once via J-Link."
 )]
 struct Cli {
     #[arg(
         required_unless_present_any = ["version", "reboot_only"],
-        help = "Flash image: `autd3-cpu.bin` (or `*-fpga-update.img` with --fpga)"
+        help = "Flash image: `autd3-cpu.bin` (or `*-fpga-update.img` with --fpga); its version is not checked"
     )]
     image: Option<PathBuf>,
     #[arg(
         long,
         conflicts_with = "image",
-        help = "Release to download and write (e.g. 0.9.0) instead of a local image"
+        help = "Release to download and write (e.g. 0.10.0; 0.10.0 or newer) instead of a local image"
     )]
     version: Option<String>,
     #[arg(
@@ -587,6 +589,22 @@ fn parse_version(version: &str) -> Option<Version> {
     parts.next().is_none().then_some(v)
 }
 
+fn udp_release(version: &str) -> Result<Version> {
+    let Some(release) = parse_version(version) else {
+        bail!("`{version}` is not a release version (expected MAJOR.MINOR.PATCH, e.g. 0.10.0)");
+    };
+    if release < MIN_CPU_FIRMWARE_VERSION {
+        bail!(
+            "release {} is an EtherCAT firmware; this tool only writes UDP firmware ({} or \
+             newer), and a device written with an older CPU image is unreachable over UDP. \
+             Write that release via J-Link",
+            fmt_version(release),
+            fmt_version(MIN_CPU_FIRMWARE_VERSION)
+        );
+    }
+    Ok(release)
+}
+
 fn main_cpu(cli: &Cli, bytes: Vec<u8>, release: Option<Version>) -> Result<()> {
     let image = if cli.slot_image {
         CpuFirmwareImage::from_slot_image(bytes)?
@@ -661,39 +679,46 @@ fn update_cpu<L: Exchange>(
     Ok(())
 }
 
+#[derive(Debug, PartialEq, Eq)]
+struct ReleaseImages {
+    cpu: Option<PathBuf>,
+    fpga: Option<PathBuf>,
+}
+
+fn release_images(bundle: bundle::Bundle, target: Target) -> Result<ReleaseImages> {
+    let cpu = if target.cpu() {
+        Some(
+            bundle
+                .cpu
+                .context("the release bundle has no CPU firmware image (*.bin)")?,
+        )
+    } else {
+        None
+    };
+    let fpga = if target.fpga() {
+        Some(bundle.fpga_update.context(
+            "the release bundle has no FPGA update image (*-fpga-update.img): the cached \
+             bundle may be incomplete (retry with --force-download)",
+        )?)
+    } else {
+        None
+    };
+    Ok(ReleaseImages { cpu, fpga })
+}
+
 fn main_release(cli: &Cli, version: &str) -> Result<()> {
     if cli.confirm_only && cli.target != Target::Cpu {
         bail!("--confirm-only only applies to the CPU image; pass --target cpu");
     }
+    let release = udp_release(version)?;
     let bundle = bundle::fetch(version, cli.force_download)?;
-    if bundle.fpga_update.is_none() {
-        bail!(
-            "the release bundle has no FPGA update image (*-fpga-update.img): either this \
-             release predates firmware updates (before v0.9.0) and must be written via JTAG, \
-             or the cached bundle is incomplete (retry with --force-download)"
-        );
-    }
-    let cpu = if cli.target.cpu() {
-        let path = bundle
-            .cpu
-            .context("the release bundle has no CPU firmware image (*.bin)")?;
-        Some(read_image(&path)?)
-    } else {
-        None
-    };
-    let fpga = if cli.target.fpga() {
-        let path = bundle
-            .fpga_update
-            .context("the release bundle has no FPGA update image (*-fpga-update.img)")?;
-        Some(read_image(&path)?)
-    } else {
-        None
-    };
-    let release = parse_version(version);
+    let images = release_images(bundle, cli.target)?;
+    let cpu = images.cpu.as_deref().map(read_image).transpose()?;
+    let fpga = images.fpga.as_deref().map(read_image).transpose()?;
     let shown = version.trim_start_matches('v');
     if let Some(bytes) = cpu {
         println!("== CPU firmware v{shown} ==");
-        main_cpu(cli, bytes, release)?;
+        main_cpu(cli, bytes, Some(release))?;
     }
     if let Some(bytes) = fpga {
         println!("== FPGA firmware v{shown} ==");
@@ -735,6 +760,57 @@ mod tests {
         assert_eq!(parse_version("1.2"), None);
         assert_eq!(parse_version("1.2.3.4"), None);
         assert_eq!(parse_version("a.b.c"), None);
+    }
+
+    #[test]
+    fn only_udp_releases_are_accepted() {
+        assert_eq!(udp_release("0.10.0").unwrap(), [0, 10, 0]);
+        assert_eq!(udp_release("v0.10.1").unwrap(), [0, 10, 1]);
+        assert_eq!(udp_release("1.0.0").unwrap(), [1, 0, 0]);
+        for older in ["0.9.0", "v0.9.9", "0.6.1", "0.0.0"] {
+            let err = udp_release(older).unwrap_err().to_string();
+            assert!(err.contains("J-Link") && err.contains("0.10.0"), "{err}");
+        }
+        for malformed in ["0.10", "latest", "0.10.0-rc.1", ""] {
+            let err = udp_release(malformed).unwrap_err().to_string();
+            assert!(err.contains("MAJOR.MINOR.PATCH"), "{err}");
+        }
+    }
+
+    #[test]
+    fn only_the_images_of_the_target_are_required_from_the_bundle() {
+        let cpu = PathBuf::from("autd3-cpu.bin");
+        let fpga = PathBuf::from("autd3-fpga-update.img");
+        let cpu_only = bundle::Bundle {
+            cpu: Some(cpu.clone()),
+            ..bundle::Bundle::default()
+        };
+        let fpga_only = bundle::Bundle {
+            fpga_update: Some(fpga.clone()),
+            ..bundle::Bundle::default()
+        };
+        assert_eq!(
+            release_images(cpu_only.clone(), Target::Cpu).unwrap(),
+            ReleaseImages {
+                cpu: Some(cpu),
+                fpga: None
+            }
+        );
+        assert_eq!(
+            release_images(fpga_only.clone(), Target::Fpga).unwrap(),
+            ReleaseImages {
+                cpu: None,
+                fpga: Some(fpga)
+            }
+        );
+        for (bundle, target) in [
+            (cpu_only.clone(), Target::Both),
+            (cpu_only, Target::Fpga),
+            (fpga_only.clone(), Target::Both),
+            (fpga_only, Target::Cpu),
+        ] {
+            assert!(release_images(bundle, target).is_err(), "{target:?}");
+        }
     }
 
     #[test]
