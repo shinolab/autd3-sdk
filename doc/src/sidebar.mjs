@@ -52,6 +52,11 @@ const usersManual = [
         translations: { en: "Compute Helpers" },
         items: [{ autogenerate: { directory: "api/compute" } }],
       },
+      {
+        label: "上級",
+        translations: { en: "Advanced" },
+        items: [{ autogenerate: { directory: "api/advanced" } }],
+      },
     ],
   },
   {

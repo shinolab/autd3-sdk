@@ -30,4 +30,5 @@ TransportOption(
 Interface.Auto
 Interface.Name("eth0")
 Interface.Simulator
+Interface.Addr("[::1]:44336")
 # ANCHOR_END: iface
