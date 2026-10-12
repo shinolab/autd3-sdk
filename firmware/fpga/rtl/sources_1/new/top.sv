@@ -10,7 +10,7 @@ module top (
     input wire CPU_RD_N,
     input wire CPU_RDWR,
     input wire MRCC_25P6M,
-    input wire CAT_SYNC0,
+    input wire SYNC_IN,
     output wire FORCE_FAN,
     input wire THERMO,
     output wire [252:1] XDCR_OUT,
@@ -98,7 +98,7 @@ module top (
   ) main (
       .MRCC_25P6M(MRCC_25P6M),
       .RESET(reset),
-      .CAT_SYNC0(CAT_SYNC0),
+      .SYNC_IN(SYNC_IN),
       .MEM_BUS(memory_bus.bram_port),
       .THERMO(THERMO),
       .FORCE_FAN(FORCE_FAN),

@@ -5,7 +5,7 @@ module main #(
 ) (
     input wire MRCC_25P6M,
     input wire RESET,
-    input wire CAT_SYNC0,
+    input wire SYNC_IN,
     memory_bus_if.bram_port MEM_BUS,
     input wire THERMO,
     output wire FORCE_FAN,
@@ -163,7 +163,7 @@ module main #(
   synchronizer synchronizer (
       .CLK(clk),
       .SYNC_SETTINGS(sync_settings),
-      .SYNC_IN(CAT_SYNC0),
+      .SYNC_IN(SYNC_IN),
       .SYS_TIME(sys_time),
       .SYNC(sync),
       .SKIP_ONE_ASSERT(skip_one_assert),
@@ -277,7 +277,7 @@ module main #(
       .THERMO(thermo_sync),
       .FORCE_FAN(FORCE_FAN),
       .SYNC(sync),
-      .SYNC_IN_RAW(CAT_SYNC0),
+      .SYNC_IN_RAW(SYNC_IN),
       .PATTERN_BANK(pattern_bank),
       .MOD_BANK(mod_bank),
       .PATTERN_IDX(pattern_idx),
