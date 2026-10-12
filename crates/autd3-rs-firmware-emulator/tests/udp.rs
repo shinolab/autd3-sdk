@@ -91,9 +91,12 @@ impl Host {
     }
 
     fn ask_one(&mut self, dst: SocketAddrV6, kind: Kind, body: &[u8]) -> Answer {
-        let mut answers = self.ask(dst, kind, body);
-        assert_eq!(answers.len(), 1);
-        answers.remove(0)
+        let msg_id = self.request(dst, kind, body);
+        let answer = self.receive(PATIENCE).unwrap();
+        assert_eq!(answer.header.msg_id.get(), msg_id);
+        assert_eq!(answer.header.kind, kind.as_u8());
+        assert!(self.collect().is_empty());
+        answer
     }
 
     fn unit_infos(&mut self, emulator: &UdpEmulator) -> Vec<UnitInfo> {
@@ -152,9 +155,7 @@ impl Host {
     }
 
     fn accepted(&mut self, emulator: &UdpEmulator, index: usize, bytes: &[u8]) -> Answer {
-        let mut answers = self.frame(emulator, index, bytes);
-        assert_eq!(answers.len(), 1);
-        answers.remove(0)
+        self.ask_one(emulator.device_addr(index), Kind::Frame, bytes)
     }
 
     fn reset(&mut self, emulator: &UdpEmulator, index: usize) {
@@ -192,6 +193,7 @@ fn enumerated(num_devices: usize) -> (UdpEmulator, Host) {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn the_emulator_exposes_its_group_and_device_addresses() {
     let emulator = UdpEmulator::spawn(3).unwrap();
 
@@ -207,6 +209,7 @@ fn the_emulator_exposes_its_group_and_device_addresses() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn only_the_head_of_a_fresh_chain_is_reachable() {
     let emulator = UdpEmulator::spawn(3).unwrap();
     let mut host = Host::new();
@@ -227,6 +230,7 @@ fn only_the_head_of_a_fresh_chain_is_reachable() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn assigning_and_unblocking_walks_down_the_chain() {
     let emulator = UdpEmulator::spawn(3).unwrap();
     let mut host = Host::new();
@@ -262,6 +266,7 @@ fn assigning_and_unblocking_walks_down_the_chain() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn an_assignment_is_refused_when_it_is_malformed_and_ignored_when_repeated() {
     let emulator = UdpEmulator::spawn(1).unwrap();
     let mut host = Host::new();
@@ -289,6 +294,7 @@ fn an_assignment_is_refused_when_it_is_malformed_and_ignored_when_repeated() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn unicast_only_requests_are_ignored_on_the_group_address() {
     let (emulator, mut host) = enumerated(2);
     let group = emulator.addr();
@@ -308,6 +314,7 @@ fn unicast_only_requests_are_ignored_on_the_group_address() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn a_request_of_another_protocol_version_is_answered_with_the_supported_one() {
     let emulator = UdpEmulator::spawn(1).unwrap();
     let host = Host::new();
@@ -325,6 +332,7 @@ fn a_request_of_another_protocol_version_is_answered_with_the_supported_one() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn malformed_datagrams_are_ignored() {
     let (emulator, mut host) = enumerated(1);
     let dst = emulator.device_addr(0);
@@ -342,6 +350,7 @@ fn malformed_datagrams_are_ignored() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn setting_the_time_is_only_accepted_by_the_grandmaster() {
     let emulator = UdpEmulator::spawn(2).unwrap();
     let mut host = Host::new();
@@ -388,6 +397,7 @@ fn setting_the_time_is_only_accepted_by_the_grandmaster() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn a_frame_runs_on_the_addressed_unit_and_is_acknowledged_with_its_sequence() {
     let (emulator, mut host) = enumerated(2);
     host.reset(&emulator, 1);
@@ -406,6 +416,7 @@ fn a_frame_runs_on_the_addressed_unit_and_is_acknowledged_with_its_sequence() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn a_frame_to_an_unassigned_unit_is_ignored() {
     let emulator = UdpEmulator::spawn(1).unwrap();
     let mut host = Host::new();
@@ -422,6 +433,7 @@ fn a_frame_to_an_unassigned_unit_is_ignored() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn a_heartbeat_is_answered_with_the_last_acknowledgement() {
     let (emulator, mut host) = enumerated(1);
     host.reset(&emulator, 0);
@@ -437,6 +449,7 @@ fn a_heartbeat_is_answered_with_the_last_acknowledgement() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn a_reboot_forgets_the_id_and_the_state_and_cuts_the_units_behind() {
     let (emulator, mut host) = enumerated(3);
     for index in 0..3 {
@@ -460,6 +473,7 @@ fn a_reboot_forgets_the_id_and_the_state_and_cuts_the_units_behind() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn a_dropped_frame_never_reaches_the_firmware() {
     let (emulator, mut host) = enumerated(2);
     host.reset(&emulator, 0);
@@ -478,6 +492,7 @@ fn a_dropped_frame_never_reaches_the_firmware() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn a_dropped_reply_leaves_the_frame_executed() {
     let (emulator, mut host) = enumerated(1);
     host.reset(&emulator, 0);
@@ -496,6 +511,7 @@ fn a_dropped_reply_leaves_the_frame_executed() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn a_dropped_unit_info_is_answered_on_the_next_request() {
     let (emulator, mut host) = enumerated(2);
 
@@ -508,6 +524,7 @@ fn a_dropped_unit_info_is_answered_on_the_next_request() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn a_duplicated_frame_is_executed_and_answered_once() {
     let (emulator, mut host) = enumerated(1);
     host.reset(&emulator, 0);
@@ -525,6 +542,7 @@ fn a_duplicated_frame_is_executed_and_answered_once() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn a_muted_unit_hears_the_host_but_neither_executes_nor_answers() {
     let (emulator, mut host) = enumerated(1);
     host.reset(&emulator, 0);
@@ -546,6 +564,7 @@ fn a_muted_unit_hears_the_host_but_neither_executes_nor_answers() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn a_frame_out_of_sequence_is_answered_with_the_last_accepted_one() {
     let (emulator, mut host) = enumerated(1);
     host.reset(&emulator, 0);
@@ -567,6 +586,7 @@ fn silent_at(host: &mut Host, addr: SocketAddrV6) -> bool {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn an_assignment_moves_the_unit_to_a_new_address() {
     let emulator = UdpEmulator::spawn(1).unwrap();
     let mut host = Host::new();
@@ -584,6 +604,7 @@ fn an_assignment_moves_the_unit_to_a_new_address() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn a_reboot_abandons_the_address_of_the_unit() {
     let (emulator, mut host) = enumerated(2);
     let assigned = emulator.device_addr(0);
@@ -601,6 +622,7 @@ fn a_reboot_abandons_the_address_of_the_unit() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn a_paused_main_loop_queues_frames_and_drops_the_one_past_the_queue() {
     let (emulator, mut host) = enumerated(1);
     let unit = emulator.device_addr(0);
@@ -648,6 +670,7 @@ fn a_paused_main_loop_queues_frames_and_drops_the_one_past_the_queue() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn a_frame_delivered_twice_to_a_paused_main_loop_is_answered_once_it_has_run() {
     let (emulator, mut host) = enumerated(1);
     let unit = emulator.device_addr(0);

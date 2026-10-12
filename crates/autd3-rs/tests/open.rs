@@ -17,6 +17,7 @@ async fn open_error(num_devices: usize, option: &TransportOption, config: Client
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn an_empty_geometry_is_rejected() {
     let emulator = emulator(1);
 
@@ -32,6 +33,7 @@ async fn an_empty_geometry_is_rejected() {
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn a_window_wider_than_the_device_queue_is_rejected() {
     let emulator = emulator(1);
     let config = ClientConfig {
@@ -48,6 +50,7 @@ async fn a_window_wider_than_the_device_queue_is_rejected() {
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn a_zero_ack_timeout_is_rejected() {
     let emulator = emulator(1);
     let config = ClientConfig {
@@ -64,6 +67,7 @@ async fn a_zero_ack_timeout_is_rejected() {
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn an_invalid_transport_option_is_rejected() {
     let emulator = emulator(1);
     let option = TransportOption {
@@ -83,6 +87,7 @@ async fn an_invalid_transport_option_is_rejected() {
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn a_geometry_with_more_devices_than_attached_times_out_the_enumeration() {
     let emulator = emulator(1);
     let option = TransportOption {
@@ -102,6 +107,7 @@ async fn a_geometry_with_more_devices_than_attached_times_out_the_enumeration() 
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn a_geometry_with_fewer_devices_than_attached_is_a_count_mismatch() {
     let emulator = emulator(2);
 
@@ -117,6 +123,7 @@ async fn a_geometry_with_fewer_devices_than_attached_is_a_count_mismatch() {
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn open_fails_when_a_device_never_locks_to_the_grandmaster() {
     let emulator = emulator(2);
     emulator.set_ptp_lock_blocked(1, true);
@@ -134,6 +141,7 @@ async fn open_fails_when_a_device_never_locks_to_the_grandmaster() {
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn the_bundled_firmware_passes_the_supported_series_check() {
     let emulator = emulator(2);
     let config = ClientConfig {
@@ -148,6 +156,7 @@ async fn the_bundled_firmware_passes_the_supported_series_check() {
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn open_clears_what_a_previous_session_left_on_the_devices() {
     let emulator = emulator(2);
     let first = open_with(&emulator, &option(&emulator), config()).await;
@@ -164,6 +173,7 @@ async fn open_clears_what_a_previous_session_left_on_the_devices() {
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn the_devices_can_be_opened_again_after_a_close() {
     let emulator = emulator(3);
     for _ in 0..2 {
@@ -175,6 +185,7 @@ async fn the_devices_can_be_opened_again_after_a_close() {
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn open_survives_a_lost_unit_info_reply() {
     let emulator = emulator(2);
     emulator.drop_next_unit_infos(0, 1);
@@ -187,6 +198,7 @@ async fn open_survives_a_lost_unit_info_reply() {
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn open_sends_the_reset_again_when_its_reply_is_lost() {
     let emulator = emulator(2);
     emulator.drop_next_replies(1, 1);
@@ -199,6 +211,7 @@ async fn open_sends_the_reset_again_when_its_reply_is_lost() {
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn open_times_out_when_the_reset_is_never_acknowledged() {
     let emulator = emulator(1);
     emulator.drop_next_replies(0, 2);

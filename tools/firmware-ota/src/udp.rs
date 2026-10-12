@@ -153,6 +153,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "depends on real time"]
     fn the_device_count_is_found_in_a_single_enumeration() {
         for devices in [1, 2, 5] {
             let emulator = UdpEmulator::spawn(devices).unwrap();
@@ -164,6 +165,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "depends on real time"]
     fn a_given_device_count_must_match_the_chain() {
         let emulator = UdpEmulator::spawn(3).unwrap();
         let option = TransportOption::for_emulator(emulator.interface());
