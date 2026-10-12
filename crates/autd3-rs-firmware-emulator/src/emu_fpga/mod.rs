@@ -181,6 +181,7 @@ pub struct FpgaEmulator {
     sys_time_ns: u64,
     pub(crate) thermal: bool,
     pub(crate) host_idle_ms: Option<u32>,
+    pub(crate) ptp_unlocked_ms: Option<u32>,
     #[cfg(feature = "udp")]
     pending_ptp_config: Option<autd3_cpu_fw::ptp::Config>,
     mod_swapchain: Swapchain,
@@ -222,6 +223,7 @@ impl FpgaEmulator {
             sys_time_ns: 0,
             thermal: false,
             host_idle_ms: None,
+            ptp_unlocked_ms: None,
             #[cfg(feature = "udp")]
             pending_ptp_config: None,
             mod_swapchain: Swapchain::new(),
