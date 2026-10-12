@@ -17,15 +17,26 @@ import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
 
 | Field                 | Type                   | Default | Description                                                                                   |
 | --------------------- | ---------------------- | ------- | --------------------------------------------------------------------------------------------- |
-| `iface`               | `Interface`            | `Auto`  | Destination. `Auto` detects it automatically, `Name(..)` selects a NIC by name, `Simulator` targets only the Simulator, and `Addr(..)` specifies the addresses directly |
+| `iface`               | `Interface`            | `Auto`  | Destination                                                                                   |
 | `heartbeat`           | `Option<Duration>`     | 10 ms   | Interval at which the liveness-check command is sent. `None` sends no liveness check |
 | `reply_timeout`       | `Duration`             | 1 ms    | Upper bound on waiting for a reply                                                            |
 | `lost_timeout`        | `Duration`             | 100 ms  | A device that has not replied for this long is treated as `Lost`. Make it longer than `heartbeat` |
 | `response_timeout`    | `Duration`             | 200 ms  | Time to wait for replies to management messages such as enumeration                           |
-| `enumeration_timeout` | `Duration`             | 30 s    | Upper bound on the time spent trying to enumerate the devices on open                         |
+| `enumeration_timeout` | `Duration`             | 10 s    | Upper bound on the time spent trying to enumerate the devices on open                         |
 | `sync_timeout`        | `Duration`             | 30 s    | Upper bound on waiting for all devices to synchronize with one another on open                |
 | `send_rate_limit`     | `Option<f32>`          | None    | Upper bound on the share of the line the host's transmission may occupy [%], relative to the device line rate (100 Mbps). `None` applies no limit |
 | `send_buffer`         | `Option<NonZeroUsize>` | 8192    | Size of the socket send buffer [B]. `None` leaves the OS default                              |
 | `timer_resolution`    | `Option<Duration>`     | 1 ms    | Windows timer resolution. `None` leaves it unchanged.                                         |
 
 Changing anything other than `iface` is generally not recommended.
+
+## Interface
+
+<CodeTabs rust={excerpt(sample, "iface")} python={excerpt(pySample, "iface")} csharp={excerpt(csSample, "iface")} />
+
+| Value       | Destination                                                                                             |
+| ----------- | ------------------------------------------------------------------------------------------------------- |
+| `Auto`      | The [Simulator](/autd3-sdk/en/guide/simulator/) if it is running, otherwise the network interface on which the devices replied |
+| `Name(..)`  | The real devices connected to the network interface with the given name                                 |
+| `Simulator` | The Simulator only                                                                                      |
+| `Addr(..)`  | The given IPv6 address and port                                                                         |
