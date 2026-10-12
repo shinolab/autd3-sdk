@@ -36,6 +36,7 @@ fn stop_frames(client: &Client) -> u64 {
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn close_silences_every_device() {
     let (emulator, client) = open(2).await;
     emit(&client).await;
@@ -61,6 +62,7 @@ async fn close_silences_every_device() {
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn silent_stop_silences_the_devices_and_keeps_the_client_open() {
     let (emulator, client) = open(2).await;
     emit(&client).await;
@@ -80,6 +82,7 @@ async fn silent_stop_silences_the_devices_and_keeps_the_client_open() {
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn everything_fails_with_closed_after_a_close() {
     let (_emulator, client) = open(1).await;
     let checker = client.state_checker();
@@ -110,6 +113,7 @@ async fn everything_fails_with_closed_after_a_close() {
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn a_second_close_succeeds_without_sending_the_stop_frames_again() {
     let (emulator, client) = open(1).await;
     client.close().await.unwrap();
@@ -123,6 +127,7 @@ async fn a_second_close_succeeds_without_sending_the_stop_frames_again() {
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn concurrent_closes_send_the_stop_frames_once() {
     let (_emulator, client) = open(2).await;
     let frames = client.bus_stats().frames();
@@ -135,6 +140,7 @@ async fn concurrent_closes_send_the_stop_frames_once() {
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn a_frame_still_in_flight_resolves_with_closed_when_the_client_closes() {
     let emulator = emulator(1);
     let client = open_with(&emulator, &option(&emulator), patient_config()).await;
@@ -148,6 +154,7 @@ async fn a_frame_still_in_flight_resolves_with_closed_when_the_client_closes() {
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn a_frame_still_in_flight_resolves_with_closed_when_the_client_is_dropped() {
     let emulator = emulator(1);
     let client = open_with(&emulator, &option(&emulator), patient_config()).await;
@@ -161,6 +168,7 @@ async fn a_frame_still_in_flight_resolves_with_closed_when_the_client_is_dropped
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn dropping_the_client_closes_the_connection_without_sending_the_stop_frames() {
     let (emulator, client) = open(1).await;
     emit(&client).await;
@@ -180,6 +188,7 @@ async fn dropping_the_client_closes_the_connection_without_sending_the_stop_fram
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn a_close_whose_stop_frame_fails_leaves_the_client_open_for_another_try() {
     let (emulator, client) = open(1).await;
     emit(&client).await;

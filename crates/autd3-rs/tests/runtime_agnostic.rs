@@ -29,6 +29,7 @@ async fn stream_silencer(client: &Client, rounds: usize) -> Result<(), Error> {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn a_client_opens_sends_and_closes_without_an_async_runtime() {
     let emulator = emulator(2);
     block_on(async {
@@ -49,6 +50,7 @@ fn a_client_opens_sends_and_closes_without_an_async_runtime() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn a_timeout_is_noticed_without_an_async_runtime() {
     let emulator = emulator(1);
     let client = open(&emulator, config());
@@ -64,6 +66,7 @@ fn a_timeout_is_noticed_without_an_async_runtime() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn more_concurrent_sends_than_slots_all_complete_on_one_executor_thread() {
     const SENDERS: usize = 12;
     let emulator = emulator(1);
@@ -100,6 +103,7 @@ fn more_concurrent_sends_than_slots_all_complete_on_one_executor_thread() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn several_os_threads_share_one_client() {
     const THREADS: usize = 4;
     const ROUNDS: usize = 8;

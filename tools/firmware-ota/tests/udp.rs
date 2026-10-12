@@ -27,6 +27,7 @@ fn open(emulator: &UdpEmulator) -> Driver<UdpBus> {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn the_handshake_and_the_reads_go_through_the_udp_bus() {
     let emulator = UdpEmulator::spawn(2).unwrap();
     let mut driver = open(&emulator);
@@ -45,6 +46,7 @@ fn the_handshake_and_the_reads_go_through_the_udp_bus() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn a_lost_frame_is_retransmitted() {
     let emulator = UdpEmulator::spawn(2).unwrap();
     let mut driver = open(&emulator);
@@ -56,6 +58,7 @@ fn a_lost_frame_is_retransmitted() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn a_lost_reply_is_recovered() {
     let emulator = UdpEmulator::spawn(2).unwrap();
     let mut driver = open(&emulator);
@@ -67,6 +70,7 @@ fn a_lost_reply_is_recovered() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn a_lost_reset_reply_is_recovered_when_the_lost_timeout_outlasts_the_retransmission() {
     let emulator = UdpEmulator::spawn(2).unwrap();
     let option = TransportOption {
@@ -82,6 +86,7 @@ fn a_lost_reset_reply_is_recovered_when_the_lost_timeout_outlasts_the_retransmis
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn a_handshake_nobody_answers_is_reported_as_an_unconfirmed_reset() {
     let emulator = UdpEmulator::spawn(2).unwrap();
     let bus = bus(&emulator);
@@ -95,6 +100,7 @@ fn a_handshake_nobody_answers_is_reported_as_an_unconfirmed_reset() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn a_device_that_stops_answering_is_named_in_the_timeout() {
     let emulator = UdpEmulator::spawn(2).unwrap();
     let mut driver = open(&emulator);
@@ -113,6 +119,7 @@ fn a_device_that_stops_answering_is_named_in_the_timeout() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn a_closed_bus_fails_the_next_request_with_a_network_error() {
     let emulator = UdpEmulator::spawn(1).unwrap();
     let bus = bus(&emulator);

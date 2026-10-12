@@ -14,6 +14,7 @@ async fn open_monitored(num_devices: usize) -> (UdpEmulator, Client) {
 }
 
 #[tokio::test]
+#[ignore = "depends on real time"]
 async fn every_device_is_ready_after_open() {
     let (_emulator, client) = open_monitored(3).await;
 

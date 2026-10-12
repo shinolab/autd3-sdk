@@ -8,6 +8,7 @@ const SILENT_DEVICE: usize = 1;
 const RESETS_LEFT_UNANSWERED: u32 = 3;
 
 #[test]
+#[ignore = "depends on real time"]
 fn reset_is_confirmed_by_a_device_that_stays_silent_past_the_lost_timeout() {
     let emulator = UdpEmulator::spawn(2).unwrap();
     let option = TransportOption::for_emulator(emulator.interface());
@@ -25,6 +26,7 @@ fn reset_is_confirmed_by_a_device_that_stays_silent_past_the_lost_timeout() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn the_handshake_survives_a_lost_reset_reply_with_the_default_lost_timeout() {
     let emulator = UdpEmulator::spawn(2).unwrap();
     let option = TransportOption::for_emulator(emulator.interface());
@@ -40,6 +42,7 @@ fn the_handshake_survives_a_lost_reset_reply_with_the_default_lost_timeout() {
 }
 
 #[test]
+#[ignore = "depends on real time"]
 fn reset_reports_a_device_that_never_answers() {
     let emulator = UdpEmulator::spawn(2).unwrap();
     let option = TransportOption::for_emulator(emulator.interface());

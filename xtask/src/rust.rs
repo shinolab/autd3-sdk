@@ -14,7 +14,19 @@ pub enum RustCmd {
     /// Build the `crates/` workspace
     Build,
     /// Run the `crates/` workspace tests
-    Test,
+    Test {
+        #[arg(
+            long,
+            short,
+            help = "Only test this package (repeatable; defaults to the whole workspace)"
+        )]
+        package: Vec<String>,
+        #[arg(
+            long,
+            help = "Also run the tests marked `#[ignore]`, such as the ones that depend on real time"
+        )]
+        include_ignored: bool,
+    },
     /// Measure `crates/` workspace test coverage with cargo-llvm-cov
     Coverage {
         /// Include `tools/` and `examples/`, which carry no tests by convention
@@ -76,11 +88,23 @@ pub enum RustCmd {
 pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
     match cmd {
         RustCmd::Build => run("cargo", ["build", "--workspace", "--all-targets"], root),
-        RustCmd::Test => run(
-            "cargo",
-            ["test", "--workspace", "--lib", "--bins", "--tests"],
-            root,
-        ),
+        RustCmd::Test {
+            package,
+            include_ignored,
+        } => {
+            let mut args = vec!["test".to_string()];
+            if package.is_empty() {
+                args.push("--workspace".to_string());
+            }
+            for package in package {
+                args.extend(["--package".to_string(), package.clone()]);
+            }
+            args.extend(["--lib", "--bins", "--tests"].map(String::from));
+            if *include_ignored {
+                args.extend(["--", "--include-ignored"].map(String::from));
+            }
+            run("cargo", args, root)
+        }
         RustCmd::Coverage { all, open } => run_coverage(root, *all, *open),
         RustCmd::Lint => run_lint(root),
         RustCmd::Format { fix } => cargo_fmt(root, &["--all"], *fix),
