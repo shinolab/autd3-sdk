@@ -76,11 +76,11 @@ async fn on_single_thread(geometry: &Geometry, option: &TransportOption) -> Resu
 }
 
 async fn drive_at_interval(mut driver: Driver) -> Result<()> {
-// ANCHOR: interval
+    // ANCHOR: interval
     while driver.poll()?.is_some() {
         tokio::time::sleep(POLL_INTERVAL).await;
     }
-// ANCHOR_END: interval
+    // ANCHOR_END: interval
     Ok(())
 }
 
@@ -97,7 +97,5 @@ async fn main() -> Result<()> {
     #[cfg(unix)]
     on_single_thread(&geometry, &option).await?;
     println!("reactor: ok");
-    at_interval(&geometry, &option).await?;
-    println!("interval: ok");
     Ok(())
 }
