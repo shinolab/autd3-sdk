@@ -2,6 +2,15 @@
 
 # Rust
 
+## [0.10.1] - 2026-10-12
+
+### 🐛 Bug Fixes
+
+- *(firmware-ota)* Refuse pre-UDP releases and enumerate the chain in a single pass
+- Retry a datagram send interrupted by a signal
+- *(modulation)* Reject a fourier period before the lcm overflows
+- *(firmware-emulator)* Make the UDP emulator follow the device on readdressing, PTP unlock, send failures and main-loop stalls
+
 ## [0.10.0] - 2026-10-11
 
 ### 💥 Breaking Changes
@@ -732,6 +741,17 @@
 
 # Simulator
 
+## [0.10.1] - 2026-10-12
+
+### 🐛 Bug Fixes
+
+- *(simulator)* Back off while the control socket keeps failing
+
+### 📦 Dependencies
+
+- *(deps)* Bump rust-embed
+- *(deps)* Update Cargo.lock files
+
 ## [0.10.0] - 2026-10-11
 
 ### 💥 Breaking Changes
@@ -835,6 +855,12 @@
 
 # Console
 
+## [0.10.1] - 2026-10-12
+
+### 📦 Dependencies
+
+- *(deps)* Update Cargo.lock files
+
 ## [0.10.0] - 2026-10-11
 
 ### 💥 Breaking Changes
@@ -917,6 +943,26 @@
 - Derive simulator device count from client geometry
 
 # Firmware
+
+## [0.10.1] - 2026-10-12
+
+### 🐛 Bug Fixes
+
+- *(firmware)* Count an FPGA init failure after reconfiguration as a boot failure
+- *(firmware)* Publish the PTP unlocked time as atomics instead of reading the node with interrupts masked
+- *(firmware)* Keep frame-derived PTP offsets from overflowing in the servo and the time step
+- *(firmware)* Drop UDP datagrams whose source is not a link-local unicast address
+- *(firmware)* Keep the update session when UpdateBegin carries an invalid payload
+- *(firmware)* Drop the barrier after the CTL_FLAG latch write
+- *(firmware)* Count TX buffer and pause advertisement failures at boot and state overflow-checks
+- *(fpga)* Clear the latch results when ENABLE drops
+- *(fpga)* Make the CAT_SYNC0 to GPIO_OUT passthrough a false path
+- *(wire)* Describe SyncNotReady and UpdateActivating without a fixed cause or delay
+- *(wire)* Make PhaseDepth::pack truncate an oversized 8-bit input like the 4-bit path
+
+### ⚡ Performance
+
+- *(firmware)* Select the write bank and page once per WritePatternPhase frame
 
 ## [0.10.0] - 2026-10-11
 

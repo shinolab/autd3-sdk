@@ -14,13 +14,14 @@ The packages provided for each language are as follows.
 
 <CodeTabs>
   <Fragment slot="rust">
-    * [autd3-rs](https://crates.io/crates/autd3-rs): Client (includes the UDP communication and the device emulator)
+    * [autd3-rs](https://crates.io/crates/autd3-rs): Client
     * [autd3-rs-core](https://crates.io/crates/autd3-rs-core): Core layer
     * [autd3-rs-pattern](https://crates.io/crates/autd3-rs-pattern): Pattern computation (single focal point, etc.)
     * [autd3-rs-pattern-holo](https://crates.io/crates/autd3-rs-pattern-holo): Multi-focus optimization
     * [autd3-rs-pattern-holo-wgpu](https://crates.io/crates/autd3-rs-pattern-holo-wgpu): GPU backend for multi-focus optimization
     * [autd3-rs-modulation](https://crates.io/crates/autd3-rs-modulation): AM modulation computation
     * [autd3-rs-emulator](https://crates.io/crates/autd3-rs-emulator): [Emulator](/autd3-sdk/en/0.10.x/guide/emulator/) that records emission data without real hardware
+    * [autd3-rs-firmware-emulator](https://crates.io/crates/autd3-rs-firmware-emulator): Firmware emulator
   </Fragment>
 
   <Fragment slot="python">
@@ -67,9 +68,9 @@ Add the scoped registry and the required packages to the Unity project's `Packag
     }
   ],
   "dependencies": {
-    "com.shinolab.autd3-sdk": "0.10.0",
-    "com.shinolab.autd3-sdk.pattern": "0.10.0",
-    "com.shinolab.autd3-sdk.modulation": "0.10.0"
+    "com.shinolab.autd3-sdk": "0.10.1",
+    "com.shinolab.autd3-sdk.pattern": "0.10.1",
+    "com.shinolab.autd3-sdk.modulation": "0.10.1"
   }
 }
 ```

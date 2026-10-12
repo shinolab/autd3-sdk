@@ -17,7 +17,7 @@ pub const FLASH_USR_ACCESS_GOLDEN: u32 = 0x474F_4C44;
 pub const FLASH_USR_ACCESS_UPDATE: u32 = 0x5550_4454;
 pub const VERSION_NUM_MAJOR: u8 = 0x0;
 pub const VERSION_NUM_MINOR: u8 = 0xA;
-pub const VERSION_NUM_PATCH: u8 = 0x0;
+pub const VERSION_NUM_PATCH: u8 = 0x1;
 
 bitflags::bitflags! {
     #[derive(Clone, Copy, PartialEq, Eq, Debug)]

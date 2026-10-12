@@ -149,7 +149,7 @@ FPGA 側の「書き込み先を切り替えるレジスタ」(`MOD_MEM_WR_BANK`
 
 ## 同期
 
-FPGA の同期入力 (`CAT_SYNC0` ピン) には, ETHSW のタイマから作った同期パルスを入れる.
+FPGA の同期入力 (`SYNC_IN` ピン) には, ETHSW のタイマから作った同期パルスを入れる.
 タイマの SYNCOUT (<Math tex="\SI{500}{us}" /> 周期) から ELC → MTU → PPG を経て, 立ち上がりが <Math tex="\SI{1}{ms}" /> 境界に乗る <Math tex="\SI{1}{ms}" /> 周期のパルスを作る.
 
 ETHSW のタイマはデバイス間で PTP (IEEE 1588, L2, E2E, two-step) によって揃える (`fw/src/ptp`).
@@ -162,25 +162,23 @@ ETHSW のタイマはデバイス間で PTP (IEEE 1588, L2, E2E, two-step) に�
 
 `CMD_SYNCHRONIZE` は以下を行う.
 
-1. 同期パルスの周期 (ファームの定数 <Math tex="\SI{1}{ms}" />) を FPGA内部の`SYS_TIME` の単位 (<Math tex="\SI{20.48}{MHz}" />) へ変換する
+1. 次に同期パルスが立ち上がるデバイス時刻 (現在時刻から <Math tex="\SI{250}{us}" /> 以上先の最初の <Math tex="\SI{1}{ms}" /> 境界) を求める.
+   * 同期パルスがまだ動いていない場合は `ERR_SYNC_NOT_READY` を返す
+
+2. その時刻を FPGA 内部の `SYS_TIME` の単位 (<Math tex="\SI{20.48}{MHz}" />) へ変換し, `ADDR_SYNC_TIME_*` へ書き込む.
 
    <MathBlock
      tex={String.raw`
-   \text{cycle\_ticks} = \text{cycle\_ns} \times \frac{\SI{20.48}{MHz}}{\SI{1}{GHz}} = 64 \times \frac{\text{cycle\_ns}}{3125}
+   \text{ticks} = \text{time\_ns} \times \frac{\SI{20.48}{MHz}}{\SI{1}{GHz}} = 64 \times \frac{\text{time\_ns}}{3125}
    `}
    />
 
-2. 次に同期パルスが立ち上がるデバイス時刻 (現在時刻から <Math tex="\SI{250}{us}" /> 以上先の最初の <Math tex="\SI{1}{ms}" /> 境界) を求める.
-   * 同期パルスがまだ動いていない場合は `ERR_SYNC_NOT_READY` を返す
-
-3. その時刻を `ADDR_SYNC_TIME_*` へ, 変換した周期を `ADDR_SYNC_CYCLE_*` へ書き込む (FPGA のレジスタ名は `ECAT_SYNC_*`).
-
-4. デバイス時刻がその立ち上がりの <Math tex="\SI{1}{ms}" /> 前を過ぎるまで待つ (最長 <Math tex="\SI{250}{us}" />).
+3. デバイス時刻がその立ち上がりの <Math tex="\SI{1}{ms}" /> 前を過ぎるまで待つ (最長 <Math tex="\SI{250}{us}" />).
    * FPGA はフラグを受けたあと最初の立ち上がりで `SYS_TIME` をセットするので, 1 つ手前の立ち上がりより前にフラグを立てると `SYS_TIME` が <Math tex="\SI{1}{ms}" /> 進む
 
-5. `SYNC_SET` フラグを立て, FPGA の [Synchronizer](/autd3-sdk/0.10.x/developer/fpga/synchronizer/) が `SYS_TIME` をセットするのを待つ.
+4. `SYNC_SET` フラグを立て, FPGA の [Synchronizer](/autd3-sdk/0.10.x/developer/fpga/synchronizer/) が `SYS_TIME` をセットするのを待つ.
 
-6. デバイス時刻を読み直し, 書き込んだ立ち上がりより手前であることを確かめる.
+5. デバイス時刻を読み直し, 書き込んだ立ち上がりより手前であることを確かめる.
    * フラグが立ち上がりより後に届くと `SYS_TIME` が <Math tex="\SI{1}{ms}" /> 遅れる
    * 手前でなければ, 立ち上がりの時刻を求め直して書き込みからやり直す (合計 3 回まで)
    * 3 回とも間に合わなければ `ERR_SYNC_MISSED` を返す
