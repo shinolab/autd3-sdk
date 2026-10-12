@@ -148,7 +148,7 @@ FPGA 側の「書き込み先を切り替えるレジスタ」(`MOD_MEM_WR_BANK`
 
 ## 同期
 
-FPGA の同期入力 (`CAT_SYNC0` ピン) には, ETHSW のタイマから作った同期パルスを入れる.
+FPGA の同期入力 (`SYNC_IN` ピン) には, ETHSW のタイマから作った同期パルスを入れる.
 タイマの SYNCOUT (<Math tex="\SI{500}{us}" /> 周期) から ELC → MTU → PPG を経て, 立ち上がりが <Math tex="\SI{1}{ms}" /> 境界に乗る <Math tex="\SI{1}{ms}" /> 周期のパルスを作る.
 
 ETHSW のタイマはデバイス間で PTP (IEEE 1588, L2, E2E, two-step) によって揃える (`fw/src/ptp`).
