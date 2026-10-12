@@ -28,5 +28,10 @@ zerocopy = { workspace = true, optional = true }
 autd3-cpu-wire.workspace = true
 zerocopy.workspace = true
 
+[[test]]
+name = "udp"
+path = "tests/udp.rs"
+required-features = ["udp"]
+
 [lints]
 workspace = true
