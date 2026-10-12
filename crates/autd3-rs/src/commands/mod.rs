@@ -13,9 +13,9 @@ pub use write_modulation_buffer::WriteModulationBuffer;
 pub use operation::{
     ActivateModulationBank, ActivatePatternBank, Clear, ConfigFociStm, ConfigModulation,
     ConfigPattern, CpuConfig, Distribution, EmulateGpioIn, Encoded, FixedCompletionTime,
-    FixedUpdateRate, ForceFan, FpgaBusWait, GpioOut, Nop, Operation, PWE_TABLE_SIZE,
-    PatternIntensity, PhaseDepth, PtpConfig, ReleaseFailsafe, SetCpuConfig, SetGpioOut,
-    SetOutputMask, SetPhaseCorrection, SetPulseWidthTable, SetSilencer, SilencerConfig,
+    FixedUpdateRate, ForceFan, FpgaBusWait, GpioOut, MaxFreqPpb, Nop, Operation, PWE_TABLE_SIZE,
+    PathDelayFilterShift, PatternIntensity, PhaseDepth, PtpConfig, ReleaseFailsafe, SetCpuConfig,
+    SetGpioOut, SetOutputMask, SetPhaseCorrection, SetPulseWidthTable, SetSilencer, SilencerConfig,
     StmIntensity, Synchronize, WritePatternBuffer, WritePatternPhase,
 };
 pub use stm::{FociStm, FociStmOption, PatternStm, PatternStmOption, StmConfig, circle, line};

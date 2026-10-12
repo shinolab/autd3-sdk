@@ -443,9 +443,9 @@ impl Ptp {
     fn filtered_path_delay(&self, measured: i64) -> Option<i64> {
         let measured = measured.checked_mul(1 << PATH_DELAY_FRACTION_BITS)?;
         match self.path_delay_acc {
-            Some(acc) => {
-                acc.checked_add(measured.checked_sub(acc)? >> self.config.path_delay_filter_shift)
-            }
+            Some(acc) => acc.checked_add(
+                measured.checked_sub(acc)? >> self.config.path_delay_filter_shift.get(),
+            ),
             None => Some(measured),
         }
     }
@@ -658,6 +658,7 @@ mod tests {
     use std::vec::Vec;
 
     use super::message::{self, Content, FRAME_CAP, MessageType, Outgoing};
+    use autd3_cpu_wire::config::PathDelayFilterShift;
     use autd3_cpu_wire::udp::Role;
 
     use super::servo::Servo;
@@ -1221,7 +1222,7 @@ mod tests {
         assert_eq!(slave.path_delay(), Some(1_025));
 
         slave.set_config(Config {
-            path_delay_filter_shift: 0,
+            path_delay_filter_shift: PathDelayFilterShift::MIN,
             ..Config::default()
         });
         assert_eq!(slave.path_delay(), Some(1_025));
@@ -1229,7 +1230,7 @@ mod tests {
         assert_eq!(slave.path_delay(), Some(700));
 
         slave.set_config(Config {
-            path_delay_filter_shift: 16,
+            path_delay_filter_shift: PathDelayFilterShift::MAX,
             ..Config::default()
         });
         slave.path_delay_acc = slave.filtered_path_delay(-700);

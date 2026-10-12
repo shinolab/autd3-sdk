@@ -19,10 +19,11 @@ use autd3_rs::commands::{
     ActivateModulationBank, ActivatePatternBank, BoxedCommand, Clear, Command, ConfigFociStm,
     ConfigModulation, ConfigPattern, CpuConfig, EmulateGpioIn, Expansion, FixedCompletionTime,
     FixedUpdateRate, FociStm as CoreFociStm, FociStmOption, ForceFan, FpgaBusWait, GpioOut,
-    Modulation, Nop, PWE_TABLE_SIZE, Pattern, PatternIntensity, PatternStm, PatternStmOption,
-    PhaseDepth, ReleaseFailsafe, SetCpuConfig, SetGpioOut, SetOutputMask, SetPhaseCorrection,
-    SetPulseWidthTable, SetSilencer, StmConfig, StmIntensity, Synchronize, WriteFociBuffer,
-    WriteModulationBuffer, WritePatternBuffer, WritePatternPhase, circle, each, line,
+    MaxFreqPpb, Modulation, Nop, PWE_TABLE_SIZE, PathDelayFilterShift, Pattern, PatternIntensity,
+    PatternStm, PatternStmOption, PhaseDepth, ReleaseFailsafe, SetCpuConfig, SetGpioOut,
+    SetOutputMask, SetPhaseCorrection, SetPulseWidthTable, SetSilencer, StmConfig, StmIntensity,
+    Synchronize, WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer, WritePatternPhase,
+    circle, each, line,
 };
 use autd3_rs::rt::Executor;
 use autd3_rs::udp::StateChecker;
@@ -1029,12 +1030,12 @@ pub extern "C" fn autd3_cpu_config_new() -> *mut CpuConfigHandle {
     into_handle(CpuConfigHandle(CpuConfig::default()))
 }
 
-macro_rules! cpu_config_non_zero_field {
-    ([$($field:tt).+], $ty:ty, $non_zero:ty, $set:ident, $get:ident) => {
+macro_rules! cpu_config_bounded_field {
+    ([$($field:tt).+], $ty:ty, $bounded:ty, $set:ident, $get:ident) => {
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $set(handle: *mut CpuConfigHandle, value: $ty) -> i32 {
             let (Some(config), Some(value)) =
-                (unsafe { handle_mut(handle) }, <$non_zero>::new(value))
+                (unsafe { handle_mut(handle) }, <$bounded>::new(value))
             else {
                 return AUTD3_ERR_INVALID_ARGUMENT;
             };
@@ -1059,14 +1060,14 @@ autd3_ffi_abi::option_handle_field!(
     autd3_cpu_config_set_sys_time_transition_margin,
     autd3_cpu_config_get_sys_time_transition_margin
 );
-cpu_config_non_zero_field!(
+cpu_config_bounded_field!(
     [fpga_wait_update_max_polls],
     u32,
     NonZeroU32,
     autd3_cpu_config_set_fpga_wait_update_max_polls,
     autd3_cpu_config_get_fpga_wait_update_max_polls
 );
-cpu_config_non_zero_field!(
+cpu_config_bounded_field!(
     [fpga_flash_max_polls],
     u32,
     NonZeroU32,
@@ -1198,7 +1199,7 @@ autd3_ffi_abi::option_handle_field!(
     autd3_cpu_config_set_ptp_holdover,
     autd3_cpu_config_get_ptp_holdover
 );
-cpu_config_non_zero_field!(
+cpu_config_bounded_field!(
     [ptp.lock_samples],
     u16,
     NonZeroU16,
@@ -1233,24 +1234,24 @@ autd3_ffi_abi::option_handle_field!(
     autd3_cpu_config_set_ptp_ki_milli,
     autd3_cpu_config_get_ptp_ki_milli
 );
-autd3_ffi_abi::option_handle_field!(
-    CpuConfigHandle,
+cpu_config_bounded_field!(
     [ptp.max_freq_ppb],
     u32,
+    MaxFreqPpb,
     autd3_cpu_config_set_ptp_max_freq_ppb,
     autd3_cpu_config_get_ptp_max_freq_ppb
 );
-cpu_config_non_zero_field!(
+cpu_config_bounded_field!(
     [ptp.delay_req_syncs],
     u16,
     NonZeroU16,
     autd3_cpu_config_set_ptp_delay_req_syncs,
     autd3_cpu_config_get_ptp_delay_req_syncs
 );
-autd3_ffi_abi::option_handle_field!(
-    CpuConfigHandle,
+cpu_config_bounded_field!(
     [ptp.path_delay_filter_shift],
     u8,
+    PathDelayFilterShift,
     autd3_cpu_config_set_ptp_path_delay_filter_shift,
     autd3_cpu_config_get_ptp_path_delay_filter_shift
 );
@@ -2654,6 +2655,10 @@ mod tests {
             assert_eq!(AUTD3_OK, autd3_cpu_config_set_ptp_kp_milli(handle, 22));
             assert_eq!(AUTD3_OK, autd3_cpu_config_set_ptp_ki_milli(handle, 23));
             assert_eq!(AUTD3_OK, autd3_cpu_config_set_ptp_max_freq_ppb(handle, 24));
+            assert_eq!(
+                AUTD3_ERR_INVALID_ARGUMENT,
+                autd3_cpu_config_set_ptp_max_freq_ppb(handle, 0x8000_0000)
+            );
         }
         let op = unsafe { autd3_op_set_cpu_config(handle) };
         assert!(!op.is_null());
@@ -2681,7 +2686,7 @@ mod tests {
                     lock_threshold: Duration::from_nanos(21),
                     kp_milli: 22,
                     ki_milli: 23,
-                    max_freq_ppb: 24,
+                    max_freq_ppb: autd3_rs::commands::MaxFreqPpb::new(24).unwrap(),
                     ..autd3_rs::commands::PtpConfig::default()
                 },
             }
@@ -2704,6 +2709,10 @@ mod tests {
                 AUTD3_OK,
                 autd3_cpu_config_set_ptp_path_delay_filter_shift(handle, 4)
             );
+            assert_eq!(
+                AUTD3_ERR_INVALID_ARGUMENT,
+                autd3_cpu_config_set_ptp_path_delay_filter_shift(handle, 17)
+            );
             assert_eq!(AUTD3_OK, autd3_cpu_config_set_ptp_pause_quanta(handle, 27));
             assert_eq!(
                 AUTD3_OK,
@@ -2719,7 +2728,7 @@ mod tests {
             config.ptp,
             autd3_rs::commands::PtpConfig {
                 delay_req_syncs: NonZeroU16::new(26).unwrap(),
-                path_delay_filter_shift: 4,
+                path_delay_filter_shift: autd3_rs::commands::PathDelayFilterShift::new(4).unwrap(),
                 pause_quanta: NonZeroU16::new(27),
                 pause_hold_syncs: 28,
                 pause_retry: Duration::from_millis(29),

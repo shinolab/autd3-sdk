@@ -66,7 +66,7 @@ mod tests {
     use core::num::{NonZeroU16, NonZeroU32};
     use core::time::Duration;
 
-    use autd3_cpu_wire::config::PtpConfig;
+    use autd3_cpu_wire::config::{MaxFreqPpb, PathDelayFilterShift, PtpConfig};
     use zerocopy::IntoBytes;
     use zerocopy::little_endian::{U16, U32};
 
@@ -251,9 +251,9 @@ mod tests {
             lock_threshold: Duration::from_nanos(200),
             kp_milli: 150,
             ki_milli: 30,
-            max_freq_ppb: 100_000,
+            max_freq_ppb: MaxFreqPpb::new(100_000).unwrap(),
             delay_req_syncs: NonZeroU16::new(4).unwrap(),
-            path_delay_filter_shift: 2,
+            path_delay_filter_shift: PathDelayFilterShift::new(2).unwrap(),
             pause_quanta: None,
             pause_hold_syncs: 16,
             pause_retry: Duration::from_millis(4),
