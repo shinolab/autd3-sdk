@@ -1,6 +1,6 @@
 mod common;
 
-use std::num::NonZeroUsize;
+use std::num::{NonZeroU32, NonZeroUsize};
 use std::time::Duration;
 
 use autd3_rs::commands::{ForceFan, Nop};
@@ -83,6 +83,25 @@ async fn an_invalid_transport_option_is_rejected() {
 }
 
 #[tokio::test]
+async fn a_geometry_with_more_devices_than_attached_times_out_the_enumeration() {
+    let emulator = emulator(1);
+    let option = TransportOption {
+        enumeration_timeout: Duration::from_millis(200),
+        ..option(&emulator)
+    };
+
+    let error = open_error(2, &option, config()).await;
+
+    assert!(matches!(
+        udp_error(&error),
+        Some(UdpError::EnumerationTimeout {
+            expected: 2,
+            found: 1
+        })
+    ));
+}
+
+#[tokio::test]
 async fn a_geometry_with_fewer_devices_than_attached_is_a_count_mismatch() {
     let emulator = emulator(2);
 
@@ -94,6 +113,23 @@ async fn a_geometry_with_fewer_devices_than_attached_is_a_count_mismatch() {
             expected: 1,
             found: 2
         })
+    ));
+}
+
+#[tokio::test]
+async fn open_fails_when_a_device_never_locks_to_the_grandmaster() {
+    let emulator = emulator(2);
+    emulator.set_ptp_lock_blocked(1, true);
+    let option = TransportOption {
+        sync_timeout: Duration::from_millis(200),
+        ..option(&emulator)
+    };
+
+    let error = open_error(2, &option, config()).await;
+
+    assert!(matches!(
+        udp_error(&error),
+        Some(UdpError::SyncTimeout { not_ready, .. }) if not_ready == &[1]
     ));
 }
 
@@ -136,4 +172,44 @@ async fn the_devices_can_be_opened_again_after_a_close() {
         assert_eq!(client.read_firmware_version().await.unwrap().len(), 3);
         client.close().await.unwrap();
     }
+}
+
+#[tokio::test]
+async fn open_survives_a_lost_unit_info_reply() {
+    let emulator = emulator(2);
+    emulator.drop_next_unit_infos(0, 1);
+    emulator.drop_next_unit_infos(1, 1);
+
+    let client = open_with(&emulator, &option(&emulator), config()).await;
+
+    client.send(Nop).await.unwrap();
+    client.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn open_sends_the_reset_again_when_its_reply_is_lost() {
+    let emulator = emulator(2);
+    emulator.drop_next_replies(1, 1);
+
+    let client = open_with(&emulator, &option(&emulator), config()).await;
+
+    assert_eq!(client.bus_stats().resets(), 2);
+    client.send(Nop).await.unwrap();
+    client.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn open_times_out_when_the_reset_is_never_acknowledged() {
+    let emulator = emulator(1);
+    emulator.drop_next_replies(0, 2);
+    let config = ClientConfig {
+        max_resync_rounds: NonZeroU32::new(2).unwrap(),
+        ..config()
+    };
+
+    let error = open_error(1, &option(&emulator), config).await;
+
+    assert!(matches!(error, Error::Timeout { .. }));
+    let client = open_with(&emulator, &option(&emulator), common::config()).await;
+    client.close().await.unwrap();
 }

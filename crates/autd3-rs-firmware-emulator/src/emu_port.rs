@@ -52,7 +52,7 @@ impl Port for FpgaEmulator {
     }
 
     fn ptp_unlocked_ms(&mut self) -> Option<u32> {
-        None
+        self.ptp_unlocked_ms
     }
 
     fn flash_read(&mut self, addr: u32, buf: &mut [u8]) -> Result<(), FlashError> {

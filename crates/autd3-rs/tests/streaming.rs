@@ -52,6 +52,30 @@ async fn a_streamed_command_arrives_whole_on_every_device() {
 }
 
 #[tokio::test]
+async fn a_stream_never_has_more_frames_in_flight_than_the_window() {
+    for window in [1, 3, MAX_INFLIGHT] {
+        let (emulator, client) = open_windowed(1, window).await;
+        let data = samples(30_000);
+        let before = client.bus_stats().frames();
+
+        emulator.drop_next_replies(0, 1);
+        let stream = client
+            .send_streaming(Modulation::new(SamplingConfig::FREQ_4K, &data))
+            .await
+            .unwrap();
+
+        assert_eq!(
+            client.bus_stats().frames() - before,
+            u64::try_from(window).unwrap()
+        );
+        assert!(matches!(stream.await, Err(Error::Timeout { .. })));
+        client.send(Nop).await.unwrap();
+        assert_eq!(client.bus_stats().resets(), 2);
+        client.close().await.unwrap();
+    }
+}
+
+#[tokio::test]
 async fn a_stream_stops_at_the_frame_a_device_rejects() {
     let (_emulator, client) = open_windowed(2, 1).await;
     let before = client.bus_stats().frames();
@@ -93,6 +117,18 @@ async fn a_stream_inside_the_window_reports_the_rejection_after_sending_everythi
             code: INVALID_TRANSITION_MODE
         })
     ));
+    client.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_stream_reports_the_failure_of_its_earliest_frame() {
+    let (emulator, client) = open(1).await;
+
+    emulator.drop_next_frames(0, 1);
+    let stream = client.send_streaming((Nop, Nop, Nop)).await.unwrap();
+
+    assert!(matches!(stream.await, Err(Error::Timeout { .. })));
+    client.send(Nop).await.unwrap();
     client.close().await.unwrap();
 }
 
