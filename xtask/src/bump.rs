@@ -47,9 +47,8 @@ pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
         Some(v) => v.to_string(),
         None => version_from_branch(root, component)?,
     };
-    let allow_build = matches!(component.name, "python" | "cs");
-    let (core, full) = parse_version(&raw, allow_build)?;
-    let tag = format!("{}{full}", component.tag_prefix);
+    let core = parse_version(&raw)?;
+    let tag = format!("{}{core}", component.tag_prefix);
 
     match component.name {
         "software" => {
@@ -68,25 +67,16 @@ pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
             bump_console(root, &core)?;
             let pins = crate::doc::rewrite_crate_version(root, &core)?;
             println!("Updated crate version pins in {pins} doc page(s)/README(s) -> {core}");
-            println!(
-                "Updated software version -> {core} (crates, ffi, python, csharp, emulator, holo-wgpu, simulator, console)"
-            );
-            bump_unity_series(root, &core)?;
-        }
-        "python" => {
-            bump_cargo_toml(&root.join("bindings/python/Cargo.toml"), &core)?;
-            bump_python_pyproject(root, &full)?;
-            println!("Updated python version -> pyproject {full} (crate {core})");
-        }
-        "cs" => {
-            bump_csharp_props(&root.join("bindings/csharp/Directory.Build.props"), &full)?;
-            bump_csharp_abi(root, &core)?;
-            println!("Updated C# version -> {full} (C ABI expectation {core})");
-        }
-        "unity" => {
             let count = bump_unity(root, &core)?;
             println!("Updated Unity version -> {core} ({count} package.json, incl. sibling deps)");
+            println!(
+                "Updated software version -> {core} (crates, ffi, python, csharp, unity, emulator, holo-wgpu, simulator, console)"
+            );
         }
+        "python" | "cs" | "unity" => bail!(
+            "`{}` shares the software version; run `cargo xtask bump-version software <x.y.z>`",
+            component.name
+        ),
         "simulator" => {
             bump_cargo_toml(&root.join("simulator/Cargo.toml"), &core)?;
             println!("Updated simulator version -> {core}");
@@ -174,7 +164,7 @@ fn bump_doc(root: &Path, version: Option<&str>) -> Result<()> {
         Some(v) => v.to_string(),
         None => version_from_branch(root, find("software")?)?,
     };
-    let (core, _) = parse_version(&raw, false)?;
+    let core = parse_version(&raw)?;
     let [major, minor, patch] = version_parts(&core)?;
     let slug = format!("{major}.{minor}.x");
     if patch != 0 {
@@ -251,7 +241,7 @@ fn release_stem(root: &Path) -> Result<String> {
         })
 }
 
-fn parse_version(version: &str, allow_build: bool) -> Result<(String, String)> {
+fn parse_version(version: &str) -> Result<String> {
     let parts: Vec<&str> = version.split('.').collect();
     let numeric = parts
         .iter()
@@ -259,22 +249,17 @@ fn parse_version(version: &str, allow_build: bool) -> Result<(String, String)> {
     if !numeric {
         bail!("invalid version `{version}`: components must be non-empty and numeric");
     }
-    match parts.len() {
-        3 => Ok((version.to_string(), version.to_string())),
-        4 if allow_build => Ok((parts[..3].join("."), version.to_string())),
-        4 => bail!(
-            "version `{version}` has a build component; only `python`/`cs` accept major.minor.patch.build"
-        ),
-        n => {
-            bail!(
-                "invalid version `{version}`: expected major.minor.patch[.build], got {n} components"
-            )
-        }
+    if parts.len() != 3 {
+        bail!(
+            "invalid version `{version}`: expected major.minor.patch, got {} components",
+            parts.len()
+        );
     }
+    Ok(version.to_string())
 }
 
 fn print_doc_followup(name: &str, core: &str) {
-    if !matches!(name, "software" | "console" | "unity" | "firmware") {
+    if !matches!(name, "software" | "console" | "firmware") {
         return;
     }
     let purpose = if name == "software" && core.ends_with(".0") {
@@ -302,20 +287,6 @@ fn print_next_steps(name: &str) {
                 "  git add Cargo.toml Cargo.lock CHANGELOG.md bindings/ffi/Cargo.toml bindings/ffi/Cargo.lock bindings/python/Cargo.toml bindings/python/Cargo.lock 'bindings/python/*/pyproject.toml' bindings/csharp/Directory.Build.props bindings/csharp/src/AUTD3.Core/Native.cs extras/autd3-rs-emulator/Cargo.toml extras/autd3-rs-emulator/Cargo.lock extras/autd3-rs-pattern-holo-wgpu/Cargo.toml extras/autd3-rs-pattern-holo-wgpu/Cargo.lock simulator/Cargo.toml simulator/Cargo.lock console/Cargo.toml console/Cargo.lock console/dist.toml 'bindings/unity/*/package.json' doc/src/content/docs"
             );
         }
-        "python" => {
-            println!("  cargo xtask py build           # check the bump builds");
-            println!(
-                "  git add bindings/python/Cargo.toml bindings/python/Cargo.lock 'bindings/python/*/pyproject.toml' CHANGELOG.md"
-            );
-        }
-        "cs" => {
-            println!(
-                "  git add bindings/csharp/Directory.Build.props bindings/csharp/src/AUTD3.Core/Native.cs CHANGELOG.md"
-            );
-        }
-        "unity" => {
-            println!("  git add 'bindings/unity/*/package.json' doc/src/content/docs CHANGELOG.md");
-        }
         "simulator" => {
             println!("  cargo xtask simulator build    # check the bump builds");
             println!("  git add simulator/Cargo.toml simulator/Cargo.lock CHANGELOG.md");
@@ -342,22 +313,6 @@ fn bump_console(root: &Path, version: &str) -> Result<()> {
     bump_package_version(&root.join("console/dist.toml"), version)?;
     let pages = crate::doc::rewrite_console_version(root, version)?;
     println!("Updated console release link in {pages} doc page(s) -> console-v{version}");
-    Ok(())
-}
-
-fn bump_unity_series(root: &Path, core: &str) -> Result<()> {
-    let current = find("unity")?.current_version(root)?;
-    let [major, minor, _] = version_parts(core)?;
-    let [cur_major, cur_minor, _] = version_parts(&current)?;
-    if (major, minor) == (cur_major, cur_minor) {
-        println!(
-            "Kept Unity version {current} ({major}.{minor} series unchanged; npm patch is self-driven)"
-        );
-        return Ok(());
-    }
-    let version = format!("{major}.{minor}.0");
-    let count = bump_unity(root, &version)?;
-    println!("Updated Unity version -> {version} ({count} package.json, incl. sibling deps)");
     Ok(())
 }
 
