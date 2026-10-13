@@ -301,7 +301,6 @@ fn unicast_only_requests_are_ignored_on_the_group_address() {
 
     for kind in [
         Kind::Frame,
-        Kind::Heartbeat,
         Kind::AssignId,
         Kind::UnblockDownstream,
         Kind::SetTime,
@@ -310,7 +309,30 @@ fn unicast_only_requests_are_ignored_on_the_group_address() {
     }
 
     assert!(!fan(&emulator, 0));
-    assert_eq!(emulator.heartbeats_received(0), 0);
+}
+
+#[test]
+#[ignore = "depends on real time"]
+fn a_heartbeat_on_the_group_address_is_answered_by_every_assigned_unit() {
+    let (emulator, mut host) = enumerated(2);
+
+    let answers = host.ask(emulator.addr(), Kind::Heartbeat, &[]);
+
+    let mut units: Vec<u8> = answers
+        .iter()
+        .map(|answer| answer.frame_reply().0.unit_id)
+        .collect();
+    units.sort_unstable();
+    assert_eq!(units, [0, 1]);
+    assert_eq!(emulator.heartbeats_received(0), 1);
+    assert_eq!(emulator.heartbeats_received(1), 1);
+
+    emulator.reboot(1);
+
+    let answers = host.ask(emulator.addr(), Kind::Heartbeat, &[]);
+
+    assert_eq!(answers.len(), 1);
+    assert_eq!(answers[0].frame_reply().0.unit_id, 0);
 }
 
 #[test]

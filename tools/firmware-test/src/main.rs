@@ -65,6 +65,7 @@ enum Selected {
     Quit,
     Lost,
     Reboot,
+    AutoRecovery,
 }
 
 impl Ctx<'_> {
@@ -104,12 +105,14 @@ const CASE_NAMES: &[&str] = &[
     "PTP Unlock Failsafe",
     "Lost",
     "Reboot",
+    "Auto Recovery",
 ];
 
 const LOST_INDEX: usize = 16;
 const REBOOT_INDEX: usize = 17;
+const AUTO_RECOVERY_INDEX: usize = 18;
 
-const _: () = assert!(CASE_NAMES.len() == REBOOT_INDEX + 1);
+const _: () = assert!(CASE_NAMES.len() == AUTO_RECOVERY_INDEX + 1);
 
 async fn dispatch(index: usize, ctx: &Ctx<'_>) -> Result<()> {
     match index {
@@ -194,6 +197,7 @@ async fn run(cli: &Cli) -> Result<()> {
             Selected::Quit => break,
             Selected::Lost => cases::lost::run(client, &link).await?,
             Selected::Reboot => cases::reboot::run(client, &link).await?,
+            Selected::AutoRecovery => cases::auto_recovery::run(client, &link).await?,
         };
     }
 
@@ -282,6 +286,7 @@ async fn select(ctx: &Ctx<'_>) -> Selected {
         match i {
             LOST_INDEX => return Selected::Lost,
             REBOOT_INDEX => return Selected::Reboot,
+            AUTO_RECOVERY_INDEX => return Selected::AutoRecovery,
             _ => {}
         }
         if let Err(e) = dispatch(i, ctx).await {

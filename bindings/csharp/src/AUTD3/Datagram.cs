@@ -12,6 +12,8 @@ namespace AUTD3
         internal static readonly uint MaxInflight;
         internal static readonly uint MaxResyncRounds;
         internal static readonly bool RequireSupportedFirmware;
+        internal static readonly uint? ResynchronizeOnRecovery;
+        internal static readonly uint? ReleaseFailsafeOnRecovery;
 
         static ClientConfigDefaults()
         {
@@ -27,6 +29,10 @@ namespace AUTD3
                 MaxInflight = (uint)maxInflight;
                 OptionNative.Apply("preset", NativeClient.autd3_client_config_get_max_resync_rounds(handle, out MaxResyncRounds));
                 OptionNative.Apply("preset", NativeClient.autd3_client_config_get_require_supported_firmware(handle, out RequireSupportedFirmware));
+                OptionNative.Apply("preset", NativeClient.autd3_client_config_get_resynchronize_on_recovery(handle, out var resynchronizeOnRecovery));
+                ResynchronizeOnRecovery = resynchronizeOnRecovery == 0 ? null : resynchronizeOnRecovery;
+                OptionNative.Apply("preset", NativeClient.autd3_client_config_get_release_failsafe_on_recovery(handle, out var releaseFailsafeOnRecovery));
+                ReleaseFailsafeOnRecovery = releaseFailsafeOnRecovery == 0 ? null : releaseFailsafeOnRecovery;
             }
             finally
             {
@@ -45,6 +51,28 @@ namespace AUTD3
         public uint MaxResyncRounds { get => _maxResyncRounds ?? ClientConfigDefaults.MaxResyncRounds; init => _maxResyncRounds = value; }
         private readonly bool? _requireSupportedFirmware;
         public bool RequireSupportedFirmware { get => _requireSupportedFirmware ?? ClientConfigDefaults.RequireSupportedFirmware; init => _requireSupportedFirmware = value; }
+        private readonly bool _resynchronizeOnRecoverySet;
+        private readonly uint? _resynchronizeOnRecovery;
+        public uint? ResynchronizeOnRecovery
+        {
+            get => _resynchronizeOnRecoverySet ? _resynchronizeOnRecovery : ClientConfigDefaults.ResynchronizeOnRecovery;
+            init
+            {
+                _resynchronizeOnRecovery = value;
+                _resynchronizeOnRecoverySet = true;
+            }
+        }
+        private readonly bool _releaseFailsafeOnRecoverySet;
+        private readonly uint? _releaseFailsafeOnRecovery;
+        public uint? ReleaseFailsafeOnRecovery
+        {
+            get => _releaseFailsafeOnRecoverySet ? _releaseFailsafeOnRecovery : ClientConfigDefaults.ReleaseFailsafeOnRecovery;
+            init
+            {
+                _releaseFailsafeOnRecovery = value;
+                _releaseFailsafeOnRecoverySet = true;
+            }
+        }
 
         internal IntPtr CreateHandle()
         {
@@ -59,6 +87,18 @@ namespace AUTD3
                 OptionNative.Apply("maxInflight", NativeClient.autd3_client_config_set_max_inflight(handle, (UIntPtr)MaxInflight));
                 OptionNative.Apply("maxResyncRounds", NativeClient.autd3_client_config_set_max_resync_rounds(handle, MaxResyncRounds));
                 OptionNative.Apply("requireSupportedFirmware", NativeClient.autd3_client_config_set_require_supported_firmware(handle, RequireSupportedFirmware));
+                OptionNative.Apply("resynchronizeOnRecovery", ResynchronizeOnRecovery switch
+                {
+                    null => NativeClient.autd3_client_config_set_resynchronize_on_recovery(handle, 0),
+                    0 => -1,
+                    { } attempts => NativeClient.autd3_client_config_set_resynchronize_on_recovery(handle, attempts),
+                });
+                OptionNative.Apply("releaseFailsafeOnRecovery", ReleaseFailsafeOnRecovery switch
+                {
+                    null => NativeClient.autd3_client_config_set_release_failsafe_on_recovery(handle, 0),
+                    0 => -1,
+                    { } attempts => NativeClient.autd3_client_config_set_release_failsafe_on_recovery(handle, attempts),
+                });
             }
             catch
             {

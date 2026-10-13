@@ -15,6 +15,7 @@ namespace AUTD3.Tests
             Assert.Equal(TimeSpan.FromMilliseconds(10), option.Heartbeat);
             Assert.Equal(TimeSpan.FromMilliseconds(1), option.ReplyTimeout);
             Assert.Equal(TimeSpan.FromMilliseconds(100), option.LostTimeout);
+            Assert.Null(option.RecoveryInterval);
             Assert.Equal(TimeSpan.FromMilliseconds(200), option.ResponseTimeout);
             Assert.Equal(TimeSpan.FromSeconds(10), option.EnumerationTimeout);
             Assert.Equal(TimeSpan.FromSeconds(30), option.SyncTimeout);
@@ -64,6 +65,27 @@ namespace AUTD3.Tests
             }
 
             var zero = new TransportOption { Heartbeat = TimeSpan.Zero };
+            Assert.Throws<Autd3Exception>(() => zero.CreateHandle());
+        }
+
+        [Fact]
+        public void ARecoveryIntervalReachesTheNativeOption()
+        {
+            Assert.Null(default(TransportOption).RecoveryInterval);
+            foreach (var interval in new TimeSpan?[] { null, TimeSpan.FromMilliseconds(100) })
+            {
+                var handle = new TransportOption { RecoveryInterval = interval }.CreateHandle();
+                try
+                {
+                    Assert.Equal(interval, TransportOption.FromHandle(handle).RecoveryInterval);
+                }
+                finally
+                {
+                    NativeClient.autd3_transport_option_free(handle);
+                }
+            }
+
+            var zero = new TransportOption { RecoveryInterval = TimeSpan.Zero };
             Assert.Throws<Autd3Exception>(() => zero.CreateHandle());
         }
 

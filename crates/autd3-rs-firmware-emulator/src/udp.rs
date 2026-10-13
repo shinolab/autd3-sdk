@@ -288,11 +288,7 @@ impl Chain {
         };
         let unicast_only = matches!(
             kind,
-            Kind::Frame
-                | Kind::Heartbeat
-                | Kind::AssignId
-                | Kind::UnblockDownstream
-                | Kind::SetTime
+            Kind::Frame | Kind::AssignId | Kind::UnblockDownstream | Kind::SetTime
         );
         if unicast_only && via == Via::Group {
             return;

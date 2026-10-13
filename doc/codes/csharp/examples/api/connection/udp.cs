@@ -11,6 +11,7 @@ internal static class Sample
         var heartbeat = TimeSpan.FromMilliseconds(10);
         var replyTimeout = TimeSpan.FromMilliseconds(1);
         var lostTimeout = TimeSpan.FromMilliseconds(100);
+        TimeSpan? recoveryInterval = null;
         var responseTimeout = TimeSpan.FromMilliseconds(200);
         var enumerationTimeout = TimeSpan.FromSeconds(10);
         var syncTimeout = TimeSpan.FromSeconds(30);
@@ -24,6 +25,7 @@ internal static class Sample
             Heartbeat = heartbeat,
             ReplyTimeout = replyTimeout,
             LostTimeout = lostTimeout,
+            RecoveryInterval = recoveryInterval,
             ResponseTimeout = responseTimeout,
             EnumerationTimeout = enumerationTimeout,
             SyncTimeout = syncTimeout,

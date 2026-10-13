@@ -102,6 +102,7 @@ Ok(rx)                          // ResponseFuture
 loop {
     self.check_timeouts(now);        // 先頭の ack_timeout
     self.check_heartbeat(now)?;      // 生存確認の送信・返信締切
+    self.recover(now);               // Lost の機体の探索と, 復帰した機体の取り込み
     let deadline = self.next_deadline(now);
     match self.bus.recv(deadline) {  // ソケットの受信タイムアウトで待つ
         Ok(Some(reply)) => { self.dispatch(&reply); self.drain()?; }
@@ -111,7 +112,7 @@ loop {
 }
 ```
 
-期限は「先頭が `ack_timeout` を過ぎる時刻」「次の生存確認の時刻」「生存確認の返信待ちの締め切り」のうち最も早いものである.
+期限は「先頭が `ack_timeout` を過ぎる時刻」「次の生存確認の時刻」「生存確認の返信待ちの締め切り」「次の探索の時刻 (自動復帰が有効で `Lost` の機体がある間)」のうち最も早いものである.
 返信が 1 つ届いたら, 溜まっている返信を読み切ってからタイマの判定へ戻るので, スレッドが遅れても届いている返信を見ずに `Timeout` にすることは無い.
 
 デバイスは各フレームの扱いを終えた時点で 1 回返信する.
@@ -306,13 +307,34 @@ async fn reset(&self) -> Result<(), Error> {
 デバイスの状態は `UdpBus` が返信の途絶 (`lost_timeout`) から `Lost` と判定し, `StateChecker` が報告する.
 途絶は要求を送れた機体についてだけ測る (送信そのものが失敗した機体は数えない).
 
-`Lost` と判定した機体には, 以後 `Frame` も生存確認も送らない.
+`Lost` と判定した機体には, 以後 `Frame` も生存確認も unicast では送らない.
 応答しない機体へ送り続けると, その宛先の近隣探索 (NDP) が解決しない間, 送ったパケットが OS の未解決キューに溜まってソケットの送信バッファを占める.
 Linux の既定では 1 宛先のキューの上限 (`unres_qlen_bytes`) と送信バッファ (`wmem_default`) がどちらも 212,992 B なので, 1 台ぶんで送信バッファが尽き, 生きている機体への送信まで失敗する (実機では途中の 1 台の再起動から約 10 秒で全台への送信が失敗した).
-`Lost` の機体は生きていても何も届かなくなるので, failsafe で出力が止まる.
+自動復帰が無効 (既定) なら, `Lost` の機体は生きていても何も届かなくなるので, failsafe で出力が止まる.
 
 `Lost` の機体を待っていた `pending` は `Timeout` で失敗し, 次の送信の `Reset` は `Lost` でない機体の返信だけで揃う.
 以後は残りの機体だけで送受信が続く.
+
+### Lost からの自動復帰
+
+`TransportOption::recovery_interval` が `Some` のとき, `Lost` の機体がある間, I/O スレッドはその間隔で生存確認 (`Heartbeat`) を 1 個 `ff02::1` へ送る.
+マルチキャストは近隣探索を要さないので, 応答しない機体が居ても送信バッファを占めない.
+割当済みのデバイスは `ff02::1` 宛の生存確認にも unicast のときと同じ返信を返し, `UdpBus::recv` は `Lost` の機体のアドレスから割当済み・ID の一致する返信を受けたらその機体を復帰させる.
+再起動した機体は未割当で上がり生存確認に返信しないので, `Lost` のまま残る.
+
+:::caution
+探索の生存確認は届いた全デバイスが「ホストが生きている信号」として数える (unicast の生存確認と区別しない).
+そのため自動復帰が有効な間は, ホストが `Lost` と見なしている機体でも探索が届いていれば failsafe は発火しない.
+`heartbeat` が `None` でも, `Lost` の機体がある間は生きている機体にも探索が届く.
+:::
+
+復帰した機体は, 次の送信の `Reset` が出るまで `Frame` の宛先に入らない (生存確認は届く).
+I/O スレッドが復帰を見て `need_reset` を立てるので, 復帰した機体が最初に受ける `Frame` は必ず `Reset` になる.
+`Reset` の往復中に別の機体が復帰したら `need_reset` を下ろさず, 次の送信がもう一度 `Reset` する.
+
+`Reset` の後, `ClientConfig` の設定に従って, 復帰した機体のうち `Ready` のものへ `Synchronize`, 続いて `ReleaseFailsafe` を, ユーザのフレームに先立って送る (他の機体には `Nop` を載せる).
+`Syncing` の機体は `Ready` になった後の送信まで持ち越す. 返信した機体だけを処理済みとし, 失敗すればその送信がエラーを返して次の送信でやり直す.
+失敗が `ClientConfig` で指定した回数 (既定 3 回) に達したら, その機体の復元を諦めて警告を出し, 以後の送信はそのまま通す.
 
 読み出し (`read_firmware_version` / `read_fpga_state` / `read_telemetry`) は全機体ぶんの値を返すので, `Lost` の機体が居る間は `Error::DeviceLost { device }` で失敗する.
 送らなかった機体の値が無いためで, 返信の `data` が短い `Error::UnexpectedReply` とは区別する.

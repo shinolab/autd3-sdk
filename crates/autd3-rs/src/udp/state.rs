@@ -17,6 +17,7 @@ pub(crate) struct Tracker {
     unanswered_since: Option<Instant>,
     send_failing_since: Option<Instant>,
     state: DeviceState,
+    awaits_reset: bool,
 }
 
 impl Tracker {
@@ -25,7 +26,16 @@ impl Tracker {
             unanswered_since: None,
             send_failing_since: None,
             state: DeviceState::Ready,
+            awaits_reset: false,
         }
+    }
+
+    pub(crate) fn admit(&mut self) {
+        self.awaits_reset = false;
+    }
+
+    pub(crate) fn takes_frames(self) -> bool {
+        !self.is_lost() && !self.awaits_reset
     }
 
     pub(crate) fn send_failed(&mut self, now: Instant, lost_timeout: Duration) {
@@ -53,6 +63,20 @@ impl Tracker {
             self.state = DeviceState::Lost;
             return false;
         }
+        self.observe(flags);
+        true
+    }
+
+    pub(crate) fn revive(&mut self, unit: u8, unit_id: u8, flags: Flags) -> bool {
+        if !self.is_lost() || !flags.contains(Flags::ASSIGNED) || unit_id != unit {
+            return false;
+        }
+        self.observe(flags);
+        self.awaits_reset = true;
+        true
+    }
+
+    fn observe(&mut self, flags: Flags) {
         self.unanswered_since = None;
         self.send_failing_since = None;
         self.state = if flags.contains(SYNCED) {
@@ -60,7 +84,6 @@ impl Tracker {
         } else {
             DeviceState::Syncing
         };
-        true
     }
 
     pub(crate) fn expire(&mut self, now: Instant, lost_timeout: Duration) {
@@ -247,6 +270,51 @@ mod tests {
         assert_eq!(t.state(), DeviceState::Lost);
         assert!(!t.replied(1, 1, READY));
         assert_eq!(t.state(), DeviceState::Lost);
+    }
+
+    #[test]
+    fn a_recovered_device_counts_its_silence_afresh() {
+        let start = Instant::now();
+        let mut t = Tracker::new();
+        t.requested(start);
+        t.expire(start + LOST_AFTER, LOST_AFTER);
+        assert_eq!(t.state(), DeviceState::Lost);
+        assert!(t.revive(1, 1, Flags::ASSIGNED));
+        assert_eq!(t.state(), DeviceState::Syncing);
+        t.expire(start + LOST_AFTER * 2, LOST_AFTER);
+        assert_eq!(t.state(), DeviceState::Syncing);
+        assert!(t.replied(1, 1, READY));
+        assert_eq!(t.state(), DeviceState::Ready);
+    }
+
+    #[test]
+    fn a_recovered_device_takes_no_frame_until_it_is_admitted() {
+        let start = Instant::now();
+        let mut t = Tracker::new();
+        assert!(t.takes_frames());
+        t.requested(start);
+        t.expire(start + LOST_AFTER, LOST_AFTER);
+        assert!(!t.takes_frames());
+        assert!(t.revive(1, 1, READY));
+        assert!(!t.is_lost());
+        assert!(!t.takes_frames());
+        t.admit();
+        assert!(t.takes_frames());
+    }
+
+    #[test]
+    fn only_a_lost_device_answering_under_its_own_id_is_revived() {
+        let start = Instant::now();
+        let mut t = Tracker::new();
+        assert!(!t.revive(1, 1, READY));
+        assert!(t.takes_frames());
+        t.requested(start);
+        t.expire(start + LOST_AFTER, LOST_AFTER);
+        assert!(!t.revive(1, 1, Flags::SYNC_READY));
+        assert!(!t.revive(1, 2, READY));
+        assert_eq!(t.state(), DeviceState::Lost);
+        assert!(t.revive(1, 1, READY));
+        assert_eq!(t.state(), DeviceState::Ready);
     }
 
     #[test]

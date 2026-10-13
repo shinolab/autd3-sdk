@@ -37,7 +37,18 @@ The meaning of each state is as follows.
 | `Lost`    | No reply for a certain period of time                                                 |
 
 When a device in the middle of the chain becomes `Lost`, every device beyond it also becomes `Lost`.
-There is no automatic recovery from `Lost`, so the client must be reopened with `Client::open`.
+By default there is no automatic recovery from `Lost`, so the client must be reopened with `Client::open`.
+
+## Automatic recovery from Lost
+
+When `recovery_interval` of `TransportOption` is set, the client looks for the devices at that interval while any device is `Lost`, and recovers the devices that answer again.
+Only a device whose communication was cut off, for example by an unplugged cable, is recovered; a power-cycled device is not (reopen the client with `Client::open`). The total number of recovered devices can be read from `recoveries` of `BusStats`.
+
+Note the following when a device is recovered.
+
+- By default, `Synchronize` is sent again to the recovered device only, before the first send after it becomes `Ready`. Setting `resynchronize_on_recovery` of `ClientConfig` to `None` turns this off.
+- By default, `ReleaseFailsafe` is sent to the recovered device only. Setting `release_failsafe_on_recovery` of `ClientConfig` to `None` turns this off.
+- If one of these sends fails, the send in progress returns the error and the next send tries again. After the configured number of failures (3 by default) the client gives up and lets later sends through; send `Synchronize` or `ReleaseFailsafe` yourself if needed.
 
 The following is an example that calls `check` at fixed intervals and outputs only when the state changes.
 

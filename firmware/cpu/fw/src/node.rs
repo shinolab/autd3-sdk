@@ -387,9 +387,9 @@ impl Node {
             Some(kind @ (Kind::Frame | Kind::Heartbeat)) => {
                 let is_frame = matches!(kind, Kind::Frame);
                 if !self.is_assigned()
-                    || !unicast
                     || (is_frame
-                        && !(size_of::<FrameHeader>()..=FRAME_BYTES_MAX).contains(&body.len()))
+                        && (!unicast
+                            || !(size_of::<FrameHeader>()..=FRAME_BYTES_MAX).contains(&body.len())))
                 {
                     return Received::Nothing;
                 }
@@ -1244,6 +1244,24 @@ mod tests {
     }
 
     #[test]
+    fn a_heartbeat_to_all_nodes_is_answered_only_by_an_assigned_unit() {
+        let mut h = Harness::new();
+        assert_eq!(h.send(ALL_NODES, Kind::Heartbeat, &[]), Received::Nothing);
+        assert!(h.replies().is_empty());
+
+        h.assign(4);
+        assert_eq!(
+            h.send(ALL_NODES, Kind::Heartbeat, &[]),
+            Received::HostMessage
+        );
+        let r = h.only_reply();
+        assert_eq!(r.header, Header::new(Kind::Heartbeat, 0x4242));
+        let (reply, _) = parse_frame_reply(&r.body);
+        assert_eq!(reply.unit_id, 4);
+        assert!(reply.flags.contains(Flags::ASSIGNED));
+    }
+
+    #[test]
     fn a_heartbeat_is_answered_with_the_current_result() {
         let mut h = Harness::new();
         assert_eq!(
@@ -1253,9 +1271,6 @@ mod tests {
         assert!(h.replies().is_empty());
 
         h.assign(4);
-        assert_eq!(h.send(ALL_NODES, Kind::Heartbeat, &[]), Received::Nothing);
-        assert!(h.replies().is_empty());
-
         h.cmds.reply = CmdReply::new(0x33, Error::None, ReplyData::from_slice(&[1, 2, 3]));
         assert_eq!(
             h.send(unit_address(4), Kind::Heartbeat, &[]),
