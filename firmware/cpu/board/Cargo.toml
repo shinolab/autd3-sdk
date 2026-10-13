@@ -11,6 +11,12 @@ publish = false
 [lib]
 crate-type = ["staticlib"]
 
+[[bin]]
+name = "autd3-cpu-loader"
+path = "src/bin/loader.rs"
+test = false
+bench = false
+
 [dependencies]
 autd3-cpu-fw = { path = "../fw" }
 

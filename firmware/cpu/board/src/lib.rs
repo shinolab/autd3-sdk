@@ -4,6 +4,8 @@ mod bsp;
 mod mem;
 mod port;
 mod regs;
+mod sflash;
+mod startup;
 mod udp;
 
 use core::arch::asm;
@@ -24,10 +26,6 @@ fn cpu() -> &'static Cpu {
     &CPU.0
 }
 
-unsafe extern "C" {
-    fn sflash_init();
-}
-
 const PRCR_UNLOCK_ALL: u32 = 0x0000_A503;
 const FPGA_STARTUP_MS: u16 = 200;
 
@@ -43,7 +41,6 @@ pub extern "C" fn main() -> ! {
     bsp::io::leds_on();
     bsp::timer::delay_ms(FPGA_STARTUP_MS);
     udp::init();
-    unsafe { sflash_init() };
     cpu().mark_boot_attempt(&mut HwPort);
     cpu().init(&mut HwPort);
     udp::start();

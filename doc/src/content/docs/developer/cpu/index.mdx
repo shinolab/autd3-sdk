@@ -52,12 +52,13 @@ cargo xtask cpu format --fix  # rustfmt 実書き換え
 `cargo xtask cpu build` は以下を行う.
 
 1. `cargo xtask cpu gen-param` で FPGA の `params.svh` から `fw/src/params.rs` を生成する.
-1. `board/` を `armv7r-none-eabi` ターゲットの staticlib (`libautd3_cpu.a`) としてビルドする.
-1. `arm-none-eabi-gcc` で `platform/autd3-platform.o` とリンカスクリプト `platform/autd3-cpu.ld` を用いてリンクする.
-1. `objcopy` で `build/autd3-cpu.bin` を生成する.
+1. `board/` を `armv7r-none-eabi` ターゲットでビルドする. アプリの staticlib (`libautd3_cpu.a`) とローダの実行ファイル (`autd3-cpu-loader`) ができる.
+1. `arm-none-eabi-gcc` でリンカスクリプト `platform/autd3-cpu.ld` を用いてアプリをリンクする.
+1. `objcopy` でローダとアプリをそれぞれバイナリにし, ローダを先頭, アプリをスロット A に置いて `build/autd3-cpu.bin` に合成する.
 
-`platform/autd3-platform.o` はローダ・スタートアップ・シリアルフラッシュドライバを含む非公開コードのビルド済みオブジェクトである.
-スタートアップは `board/src/lib.rs` の `main` を呼び, 以後の初期化とメインループはすべて Rust 側で行う.
+ローダ (`board/src/bin/loader.rs`)・スタートアップ (`board/src/startup.rs`)・シリアルフラッシュドライバ (`board/src/sflash.rs`) も Rust で書かれている.
+ローダはブート ROM が BTCM に展開して実行するプログラムで, 起動するスロットを選んで ATCM にコピーする.
+スタートアップは `board/src/lib.rs` の `main` を呼び, 以後の初期化とメインループを行う.
 
 ### 実機書き込み
 
