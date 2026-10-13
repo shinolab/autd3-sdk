@@ -53,6 +53,16 @@ pub(crate) const SYSTEM_LOCOCR_LCSTP: u32 = 1;
 pub(crate) const SYSTEM_SCKCR_CKIO_SHIFT: u32 = 8;
 pub(crate) const SYSTEM_SCKCR_CKIO_MASK: u32 = 7 << SYSTEM_SCKCR_CKIO_SHIFT;
 
+pub(crate) const SPIBSC_CMNCR: usize = 0xA000_5000;
+pub(crate) const SPIBSC_DRCR: usize = 0xA000_500C;
+pub(crate) const SPIBSC_SMCR: usize = 0xA000_5020;
+pub(crate) const SPIBSC_SMCMR: usize = 0xA000_5024;
+pub(crate) const SPIBSC_SMADR: usize = 0xA000_5028;
+pub(crate) const SPIBSC_SMENR: usize = 0xA000_5030;
+pub(crate) const SPIBSC_SMRDR0: usize = 0xA000_5038;
+pub(crate) const SPIBSC_SMWDR0: usize = 0xA000_5040;
+pub(crate) const SPIBSC_CMNSR: usize = 0xA000_5048;
+
 pub(crate) const VIC_IEN0: usize = 0xA001_0080;
 pub(crate) const VIC_IEC: [usize; 10] = [
     0xA001_00A0,

@@ -11,7 +11,7 @@ use crate::util::{cargo_clippy, cargo_fmt, run, run_env, which};
 
 #[derive(Subcommand)]
 pub enum CpuCmd {
-    /// Build `board` and link it with `platform/autd3-platform.o` into the flashable `.bin`
+    /// Build the loader and the application from `board` and merge them into the flashable `.bin`
     Build,
     /// Build, then write the `.bin` to the device with J-Link
     Flash,
@@ -186,13 +186,6 @@ pub fn cpu_build(root: &Path) -> Result<PathBuf> {
     }
 
     let cpu_dir = root.join("firmware/cpu");
-    let platform_obj = cpu_dir.join("platform/autd3-platform.o");
-    if !platform_obj.exists() {
-        bail!(
-            "{} not found (it is exported from the private platform build and committed to the repository; check your checkout)",
-            platform_obj.display()
-        );
-    }
     let linker_script = cpu_dir.join("platform/autd3-cpu.ld");
     let build_dir = cpu_dir.join("build");
     std::fs::create_dir_all(&build_dir)
@@ -211,10 +204,17 @@ pub fn cpu_build(root: &Path) -> Result<PathBuf> {
         bail!("{} not found after cargo build", staticlib.display());
     }
 
+    let loader_elf = board
+        .join("target")
+        .join(CPU_TARGET)
+        .join("release/autd3-cpu-loader");
+    if !loader_elf.exists() {
+        bail!("{} not found after cargo build", loader_elf.display());
+    }
+
     let elf = build_dir.join("autd3-cpu.x");
     let map_flag = format!("-Wl,-Map={}", build_dir.join("autd3-cpu.map").display());
     let script_flag = format!("-T{}", linker_script.display());
-    let platform_str = platform_obj.to_string_lossy().into_owned();
     let staticlib_str = staticlib.to_string_lossy().into_owned();
     let elf_str = elf.to_string_lossy().into_owned();
     let mut args: Vec<&str> = Vec::new();
@@ -226,25 +226,48 @@ pub fn cpu_build(root: &Path) -> Result<PathBuf> {
         &map_flag,
         "-Wl,--no-warn-rwx-segments",
         "-Wl,-z,noexecstack",
-        &platform_str,
+        "-Wl,--undefined=_vector_table",
         &staticlib_str,
         "-o",
         &elf_str,
     ]);
     run(&cc, args, root)?;
 
-    let bin = build_dir.join("autd3-cpu.bin");
-    let bin_str = bin.to_string_lossy().into_owned();
-    run(
+    let loader = objcopy_binary(
         &objcopy,
-        ["-O", "binary", "--gap-fill", "0xff", &elf_str, &bin_str],
+        &loader_elf,
+        &build_dir.join("autd3-cpu-loader.bin"),
         root,
     )?;
+    let app = objcopy_binary(&objcopy, &elf, &build_dir.join("autd3-cpu-app.bin"), root)?;
+    let app_at = autd3_cpu_wire::update::Slot::A.image_base() as usize;
+    if loader.len() > autd3_cpu_wire::update::LOADER_REGION_END as usize {
+        bail!(
+            "the loader is {} bytes; it overruns the loader region",
+            loader.len()
+        );
+    }
+    let mut image = loader;
+    image.resize(app_at, 0xFF);
+    image.extend_from_slice(&app);
+    let bin = build_dir.join("autd3-cpu.bin");
+    std::fs::write(&bin, &image).with_context(|| format!("writing {}", bin.display()))?;
 
     stamp_image(&bin)?;
 
     println!("firmware built: {}", bin.display());
     Ok(bin)
+}
+
+fn objcopy_binary(objcopy: &str, elf: &Path, bin: &Path, cwd: &Path) -> Result<Vec<u8>> {
+    let elf_str = elf.to_string_lossy().into_owned();
+    let bin_str = bin.to_string_lossy().into_owned();
+    run(
+        objcopy,
+        ["-O", "binary", "--gap-fill", "0xff", &elf_str, &bin_str],
+        cwd,
+    )?;
+    std::fs::read(bin).with_context(|| format!("reading {}", bin.display()))
 }
 
 pub fn stamp_image(bin: &Path) -> Result<()> {

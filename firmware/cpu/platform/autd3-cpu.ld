@@ -1,36 +1,16 @@
 OUTPUT_FORMAT("elf32-littlearm", "elf32-bigarm", "elf32-littlearm")
 OUTPUT_ARCH(arm)
-ENTRY("_PowerON_Reset")
+ENTRY(Reset_Handler)
 
 MEMORY
 {
 	ATCM(wax)        : org = 0x00000000, len = 0x00070000
 	ATCM_STACK(rw)   : org = 0x00070000, len = 0x00010000
-	BTCM(wax)        : org = 0x00800000, len = 0x00008000
-	SERIAL_FLASH(rx) : org = 0x30000000, len = 0x00010000
 	APP_FLASH(rx)    : org = 0x30010100, len = 0x0007FF00
 }
 
 SECTIONS
 {
-	_sflash_top = 0x30000000;
-	_app_image_s = ORIGIN(APP_FLASH);
-
-	.loader_param :
-	{
-		_loader_param_ram_s = .;
-		KEEP(* (.loader_param))
-		_loader_param_ram_e = .;
-	} > BTCM AT > SERIAL_FLASH
-
-	.loader_text 0x00802000 :
-	{
-		_loader_text_ram_s = .;
-		KEEP(* (.loader_text))
-		KEEP(* (.loader_text2))
-		_loader_text_ram_e = .;
-	} > BTCM AT > SERIAL_FLASH
-
 	.vector :
 	{
 		_vec_ram_s = .;
