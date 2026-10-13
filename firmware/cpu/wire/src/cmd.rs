@@ -35,6 +35,8 @@ crate::wire_enum_u8! {
         ReadTelemetry = 0xE8,
         ReadFirmwareInfo = 0xEB,
         ReadRunningImage = 0xEC,
+        WriteFpgaMemory = 0xF0,
+        ReadFpgaMemory = 0xF1,
     }
 }
 

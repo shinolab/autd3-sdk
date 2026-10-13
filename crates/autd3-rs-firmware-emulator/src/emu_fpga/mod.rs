@@ -295,14 +295,18 @@ impl FpgaEmulator {
         let a = (addr & 0x3FFF) as usize;
         match select >> 6 {
             sel if sel == SELECT_MOD >> 6 => {
-                let bank = self.controller[reg(fw::ADDR_MOD_MEM_WR_BANK)] as usize;
-                let page = self.controller[reg(fw::ADDR_MOD_MEM_WR_PAGE)] as usize;
-                self.mod_ram[bank][(page << 14) | a] = value;
+                let bank = self.controller[reg(fw::ADDR_MOD_MEM_WR_BANK)] as usize & 1;
+                let page = self.controller[reg(fw::ADDR_MOD_MEM_WR_PAGE)] as usize & 1;
+                if let Some(word) = self.mod_ram[bank].get_mut((page << 14) | a) {
+                    *word = value;
+                }
             }
             sel if sel == SELECT_EMISSION >> 6 => {
-                let bank = self.controller[reg(fw::ADDR_PATTERN_MEM_WR_BANK)] as usize;
-                let page = self.controller[reg(fw::ADDR_PATTERN_MEM_WR_PAGE)] as usize;
-                self.em_ram[bank][(page << 14) | a] = value;
+                let bank = self.controller[reg(fw::ADDR_PATTERN_MEM_WR_BANK)] as usize & 1;
+                let page = self.controller[reg(fw::ADDR_PATTERN_MEM_WR_PAGE)] as usize & 0xF;
+                if let Some(word) = self.em_ram[bank].get_mut((page << 14) | a) {
+                    *word = value;
+                }
             }
             _ => self.write_controller(addr as usize, value),
         }
@@ -412,7 +416,7 @@ impl FpgaEmulator {
 
     fn latched_request(&self, chain: Chain) -> BankRequest {
         let regs = chain.regs();
-        let req = self.latched_config[reg(regs.req_rd_bank)] as usize;
+        let req = self.latched_config[reg(regs.req_rd_bank)] as usize & 1;
         let finite = self.latched_config[reg(regs.rep) + req] != fw::REP_INFINITE;
         let all = if finite {
             self.swapchain(chain).ext_active()
@@ -424,7 +428,7 @@ impl FpgaEmulator {
 
     fn staged_request(&self, chain: Chain) -> BankRequest {
         let regs = chain.regs();
-        let req = self.controller[reg(regs.req_rd_bank)] as usize;
+        let req = self.controller[reg(regs.req_rd_bank)] as usize & 1;
         let finite = self.controller[reg(regs.rep) + req] != fw::REP_INFINITE;
         let all = if finite {
             self.latched_request(chain).all
@@ -477,7 +481,7 @@ impl FpgaEmulator {
 
     fn arm_swapchain(&mut self, chain: Chain) {
         let regs = chain.regs();
-        let req = self.controller[reg(regs.req_rd_bank)] as usize;
+        let req = self.controller[reg(regs.req_rd_bank)] as usize & 1;
         let rep = self.latched_config[reg(regs.rep) + req];
         let freq_div = self.latched_config[reg(regs.freq_div) + req];
         let cycle = self.latched_config[reg(regs.cycle) + req] as usize + 1;

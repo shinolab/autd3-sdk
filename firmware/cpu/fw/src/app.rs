@@ -372,6 +372,8 @@ impl Cpu {
             Cmd::ReadFpgaState => return Ok(cmd::fpga_state::read(port)),
             Cmd::ReadTelemetry => return Ok(self.read_telemetry(port)),
             Cmd::ReadFirmwareInfo => return Ok(self.read_firmware_info(port)),
+            Cmd::ReadFpgaMemory => return cmd::fpga_memory::read(port, payload),
+            Cmd::WriteFpgaMemory => cmd::fpga_memory::write(port, payload),
             Cmd::ReadRunningImage => {
                 return self
                     .running_image(port)

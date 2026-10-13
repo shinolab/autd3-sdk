@@ -1,5 +1,3 @@
-mod udp;
-
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -12,10 +10,8 @@ use autd3_cpu_wire::update::RunningImage;
 use autd3_firmware_writer::bundle;
 use autd3_rs_firmware_ota::{
     CpuFirmwareImage, Driver, DriverError, Exchange, FPGA_RECONFIG_WAIT, FpgaFirmwareImage,
-    MIN_CPU_FIRMWARE_VERSION, boot_image,
+    MIN_CPU_FIRMWARE_VERSION, UdpArgs, boot_image,
 };
-
-use udp::UdpArgs;
 
 type Version = [u8; 3];
 
@@ -556,7 +552,7 @@ fn reconnect_and_run<L: Exchange>(
 }
 
 fn main_fpga(cli: &Cli, bytes: Vec<u8>) -> Result<()> {
-    let connect: Connect<'_, _> = &|devices| cli.udp.open(devices);
+    let connect: Connect<'_, _> = &|devices| Ok(cli.udp.open(devices)?);
     if cli.verify_only {
         open_and_run(connect, cli.devices, Stage::FpgaVerify)?;
         return Ok(());
@@ -616,7 +612,7 @@ fn main_cpu(cli: &Cli, bytes: Vec<u8>, release: Option<Version>) -> Result<()> {
         image.len(),
         image.crc32()
     );
-    update_cpu(cli, &|devices| cli.udp.open(devices), &image, release)
+    update_cpu(cli, &|devices| Ok(cli.udp.open(devices)?), &image, release)
 }
 
 fn update_cpu<L: Exchange>(
