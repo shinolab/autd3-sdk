@@ -1,5 +1,5 @@
 use core::cell::Cell;
-use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU16, AtomicU32, Ordering};
 
 use crate::cmd;
 use crate::ctx::{IsrCell, MainCell};
@@ -9,7 +9,7 @@ use crate::port::Port;
 use crate::proto::{
     Cmd, Disposition, Drained, Error, FrameHeader, PAYLOAD_BYTES, Reply, ReplyData, RxFrame,
 };
-use enum_map::EnumMap;
+use autd3_cpu_wire::payload::Telemetry;
 
 #[repr(C, align(4))]
 struct Slot {
@@ -56,17 +56,74 @@ impl Slot {
     }
 }
 
-#[derive(enum_map::Enum, Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Counter {
-    FifoDrop,
-    Dedup,
-    SeqMismatch,
-    DispatchError,
-    Processed,
-    SendFailure,
-    Failsafe,
-    PtpUnlockFailsafe,
-    BootFailure,
+struct Counters {
+    fifo_drop: AtomicU32,
+    dedup: AtomicU32,
+    seq_mismatch: AtomicU32,
+    dispatch_error: AtomicU32,
+    processed: AtomicU32,
+    send_failure: AtomicU32,
+    failsafe: AtomicU16,
+    ptp_unlock_failsafe: AtomicU16,
+    boot_failure: AtomicU8,
+}
+
+impl Counters {
+    const fn new() -> Self {
+        Self {
+            fifo_drop: AtomicU32::new(0),
+            dedup: AtomicU32::new(0),
+            seq_mismatch: AtomicU32::new(0),
+            dispatch_error: AtomicU32::new(0),
+            processed: AtomicU32::new(0),
+            send_failure: AtomicU32::new(0),
+            failsafe: AtomicU16::new(0),
+            ptp_unlock_failsafe: AtomicU16::new(0),
+            boot_failure: AtomicU8::new(0),
+        }
+    }
+
+    fn reset_all_but_boot_failure(&self) {
+        self.fifo_drop.store(0, Ordering::Relaxed);
+        self.dedup.store(0, Ordering::Relaxed);
+        self.seq_mismatch.store(0, Ordering::Relaxed);
+        self.dispatch_error.store(0, Ordering::Relaxed);
+        self.processed.store(0, Ordering::Relaxed);
+        self.send_failure.store(0, Ordering::Relaxed);
+        self.failsafe.store(0, Ordering::Relaxed);
+        self.ptp_unlock_failsafe.store(0, Ordering::Relaxed);
+    }
+
+    fn telemetry(&self, sync_resync: u8) -> Telemetry {
+        Telemetry {
+            fifo_drop: self.fifo_drop.load(Ordering::Relaxed).into(),
+            dedup: self.dedup.load(Ordering::Relaxed).into(),
+            seq_mismatch: self.seq_mismatch.load(Ordering::Relaxed).into(),
+            dispatch_error: self.dispatch_error.load(Ordering::Relaxed).into(),
+            processed: self.processed.load(Ordering::Relaxed).into(),
+            send_failure: self.send_failure.load(Ordering::Relaxed).into(),
+            failsafe: self.failsafe.load(Ordering::Relaxed).into(),
+            ptp_unlock_failsafe: self.ptp_unlock_failsafe.load(Ordering::Relaxed).into(),
+            sync_resync,
+            boot_failure: self.boot_failure.load(Ordering::Relaxed),
+        }
+    }
+}
+
+fn bump(counter: &AtomicU32) {
+    counter.fetch_add(1, Ordering::Relaxed);
+}
+
+fn bump_saturating_u16(counter: &AtomicU16) {
+    let _ = counter.try_update(Ordering::Relaxed, Ordering::Relaxed, |count| {
+        count.checked_add(1)
+    });
+}
+
+fn bump_saturating_u8(counter: &AtomicU8) {
+    let _ = counter.try_update(Ordering::Relaxed, Ordering::Relaxed, |count| {
+        count.checked_add(1)
+    });
 }
 
 pub struct Cpu {
@@ -74,7 +131,7 @@ pub struct Cpu {
     last_cmd: IsrCell<u8>,
     slots: [Slot; FIFO_DEPTH as usize],
     fifo: Fifo,
-    counters: EnumMap<Counter, AtomicU32>,
+    counters: Counters,
     failsafe_fired: MainCell<bool>,
     ptp_unlock_failsafe_fired: MainCell<bool>,
     expected_seq: MainCell<u8>,
@@ -106,7 +163,7 @@ impl Cpu {
             last_cmd: IsrCell::new(0xFF),
             slots: [const { Slot::new() }; FIFO_DEPTH as usize],
             fifo: Fifo::new(),
-            counters: EnumMap::from_array([const { AtomicU32::new(0) }; _]),
+            counters: Counters::new(),
             failsafe_fired: MainCell::new(false),
             ptp_unlock_failsafe_fired: MainCell::new(false),
             expected_seq: MainCell::new(0),
@@ -135,11 +192,13 @@ impl Cpu {
     }
 
     pub fn count_boot_failure(&self) {
-        self.bump(Counter::BootFailure);
+        bump_saturating_u8(&self.counters.boot_failure);
     }
 
     pub fn count_send_failures(&self, count: u32) {
-        self.counters[Counter::SendFailure].fetch_add(count, Ordering::Relaxed);
+        self.counters
+            .send_failure
+            .fetch_add(count, Ordering::Relaxed);
     }
 
     pub fn publish_ptp_unlocked(&self, elapsed_ms: Option<u32>) {
@@ -165,22 +224,13 @@ impl Cpu {
     }
 
     pub(crate) fn reset_telemetry(&self) {
-        for (id, counter) in &self.counters {
-            if id != Counter::BootFailure {
-                counter.store(0, Ordering::Relaxed);
-            }
-        }
+        self.counters.reset_all_but_boot_failure();
         self.failsafe_fired.set(false);
         self.ptp_unlock_failsafe_fired.set(false);
     }
 
-    fn bump(&self, id: Counter) {
-        self.counters[id].fetch_add(1, Ordering::Relaxed);
-    }
-
-    #[must_use]
-    pub fn counter(&self, id: Counter) -> u32 {
-        self.counters[id].load(Ordering::Relaxed)
+    pub(crate) fn telemetry(&self, sync_resync: u8) -> Telemetry {
+        self.counters.telemetry(sync_resync)
     }
 
     pub fn tick_1ms<P: Port>(&self, port: &mut P) {
@@ -189,23 +239,17 @@ impl Cpu {
         self.fpga_update_tick(port);
         let config = self.config();
         let silent = cmd::failsafe::host_silent(port, &config);
-        self.failsafe(port, silent, &self.failsafe_fired, Counter::Failsafe);
+        Self::failsafe(port, silent, &self.failsafe_fired, &self.counters.failsafe);
         let unlocked = cmd::failsafe::ptp_unlock_expired(port, &config);
-        self.failsafe(
+        Self::failsafe(
             port,
             unlocked,
             &self.ptp_unlock_failsafe_fired,
-            Counter::PtpUnlockFailsafe,
+            &self.counters.ptp_unlock_failsafe,
         );
     }
 
-    fn failsafe<P: Port>(
-        &self,
-        port: &mut P,
-        tripped: bool,
-        fired: &MainCell<bool>,
-        counter: Counter,
-    ) {
+    fn failsafe<P: Port>(port: &mut P, tripped: bool, fired: &MainCell<bool>, counter: &AtomicU16) {
         if !tripped {
             fired.set(false);
             return;
@@ -213,7 +257,7 @@ impl Cpu {
         if !fired.get() {
             fired.set(true);
             cmd::failsafe::mute(port);
-            self.bump(counter);
+            bump_saturating_u16(counter);
         }
     }
 
@@ -237,7 +281,7 @@ impl Cpu {
         };
         let FrameHeader { seq, cmd: raw_cmd } = *header;
         if seq == self.last_seq.get() && raw_cmd == self.last_cmd.get() {
-            self.bump(Counter::Dedup);
+            bump(&self.counters.dedup);
             let completed_ack = if Cmd::from_u8(raw_cmd) == Some(Cmd::Reset) {
                 Reply::RESET.ack
             } else {
@@ -252,7 +296,7 @@ impl Cpu {
 
         let head = self.fifo.head();
         if Fifo::is_full(head, self.fifo.tail_acquire()) {
-            self.bump(Counter::FifoDrop);
+            bump(&self.counters.fifo_drop);
             return Disposition::Dropped;
         }
         self.slots[Fifo::slot(head)].store(*header, payload, msg_id);
@@ -297,7 +341,7 @@ impl Cpu {
             return Some(Reply::RESET);
         }
         if in_frame.header.seq != self.expected_seq.get() {
-            self.bump(Counter::SeqMismatch);
+            bump(&self.counters.seq_mismatch);
             return None;
         }
         self.expected_seq.set(in_frame.header.seq.wrapping_add(1));
@@ -308,11 +352,11 @@ impl Cpu {
         let result = match outcome {
             Ok(data) => Reply::new(in_frame.header.seq, Error::None, data),
             Err(err) => {
-                self.bump(Counter::DispatchError);
+                bump(&self.counters.dispatch_error);
                 Reply::new(in_frame.header.seq, err, ReplyData::EMPTY)
             }
         };
-        self.bump(Counter::Processed);
+        bump(&self.counters.processed);
         Some(result)
     }
 
@@ -373,7 +417,6 @@ impl Cpu {
 #[cfg(all(test, not(loom)))]
 mod tests {
 
-    use super::Counter;
     use crate::cmd::config_mod::ConfigModPayload;
     use crate::cmd::force_fan::ForceFanPayload;
     use crate::fifo::FIFO_DEPTH;
@@ -403,7 +446,7 @@ mod tests {
     fn a_clean_boot_counts_no_boot_failure() {
         let mut h = Harness::new();
         h.reboot();
-        assert_eq!(h.counter(Counter::BootFailure), 0);
+        assert_eq!(h.telemetry().boot_failure, 0);
     }
 
     #[test]
@@ -412,11 +455,11 @@ mod tests {
         h.port.latch_stuck = true;
         h.reboot();
         h.port.latch_stuck = false;
-        assert_eq!(h.counter(Counter::BootFailure), 1);
+        assert_eq!(h.telemetry().boot_failure, 1);
 
         h.deliver(&Frame::new(0, Cmd::Clear));
         assert_eq!(h.status(), Error::None);
-        assert_eq!(h.counter(Counter::BootFailure), 1);
+        assert_eq!(h.telemetry().boot_failure, 1);
     }
 
     #[test]
@@ -425,7 +468,7 @@ mod tests {
         h.port.flash_fail = true;
         h.reboot();
         h.port.flash_fail = false;
-        assert_eq!(h.counter(Counter::BootFailure), 1);
+        assert_eq!(h.telemetry().boot_failure, 1);
     }
 
     #[test]
@@ -433,7 +476,7 @@ mod tests {
         let h = Harness::new();
         h.cpu.count_boot_failure();
         h.cpu.count_boot_failure();
-        assert_eq!(h.counter(Counter::BootFailure), 2);
+        assert_eq!(h.telemetry().boot_failure, 2);
     }
 
     #[test]
@@ -441,10 +484,10 @@ mod tests {
         let mut h = Harness::new();
         h.cpu.count_send_failures(2);
         h.cpu.count_send_failures(1);
-        assert_eq!(h.counter(Counter::SendFailure), 3);
+        assert_eq!(h.telemetry().send_failure, 3);
 
         h.deliver(&Frame::new(0, Cmd::Clear));
-        assert_eq!(h.counter(Counter::SendFailure), 0);
+        assert_eq!(h.telemetry().send_failure, 0);
     }
 
     #[test]
@@ -481,7 +524,7 @@ mod tests {
         assert_eq!(h.status(), Error::UnknownCmd);
         assert_eq!(h.ack(), 0);
         assert_eq!(h.expected_seq(), 1);
-        assert_eq!(h.counter(Counter::DispatchError), 1);
+        assert_eq!(h.telemetry().dispatch_error, 1);
     }
 
     #[test]
@@ -555,7 +598,7 @@ mod tests {
         assert_eq!(h.ack(), 0);
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.expected_seq(), 1);
-        assert_eq!(h.counter(Counter::DispatchError), 0);
+        assert_eq!(h.telemetry().dispatch_error, 0);
     }
 
     #[test]
@@ -723,7 +766,7 @@ mod tests {
         assert_eq!(h.ack(), 0xFF);
         assert_eq!(h.expected_seq(), 0);
         assert!(!h.process_one());
-        assert_eq!(h.counter(Counter::Processed), 3);
+        assert_eq!(h.telemetry().processed, 3);
     }
 
     #[test]
@@ -739,7 +782,7 @@ mod tests {
         h.cpu.process_pending(&mut h.port);
         assert_eq!(h.ack(), 0);
         assert_eq!(h.expected_seq(), 1);
-        assert_eq!(h.counter(Counter::SeqMismatch), 0);
+        assert_eq!(h.telemetry().seq_mismatch, 0);
     }
 
     #[test]
@@ -750,7 +793,7 @@ mod tests {
         assert_ne!(before.data(), []);
 
         h.deliver(&Frame::new(9, Cmd::Nop));
-        assert_eq!(h.counter(Counter::SeqMismatch), 1);
+        assert_eq!(h.telemetry().seq_mismatch, 1);
         assert_eq!(h.cpu.reply(), before);
     }
 
@@ -878,7 +921,7 @@ mod tests {
             h.cpu.recv_frame(&[1, Cmd::Nop as u8], 1),
             crate::proto::Disposition::Dropped
         );
-        assert_eq!(h.counter(Counter::Dedup), 1);
+        assert_eq!(h.telemetry().dedup, 1);
 
         h.cpu.process_pending(&mut h.port);
         assert_eq!(
@@ -886,8 +929,8 @@ mod tests {
             crate::proto::Disposition::Reply
         );
         assert_eq!(h.ack(), 1);
-        assert_eq!(h.counter(Counter::Dedup), 2);
-        assert_eq!(h.counter(Counter::Processed), 2);
+        assert_eq!(h.telemetry().dedup, 2);
+        assert_eq!(h.telemetry().processed, 2);
     }
 
     #[test]
@@ -922,8 +965,8 @@ mod tests {
             h.cpu.recv_frame(&[5, Cmd::Nop as u8], 1),
             crate::proto::Disposition::Dropped
         );
-        assert_eq!(h.counter(Counter::SeqMismatch), 1);
-        assert_eq!(h.counter(Counter::Dedup), 1);
+        assert_eq!(h.telemetry().seq_mismatch, 1);
+        assert_eq!(h.telemetry().dedup, 1);
     }
 
     #[test]
@@ -938,7 +981,7 @@ mod tests {
             assert_eq!(h.ack(), 0xFF);
         }
         assert_eq!(h.expected_seq(), 0);
-        assert_eq!(h.counter(Counter::Dedup), 3);
+        assert_eq!(h.telemetry().dedup, 3);
     }
 
     #[test]
@@ -966,7 +1009,7 @@ mod tests {
         let mut h = Harness::new();
         h.deliver(&Frame::new(0, Cmd::Nop));
         h.deliver(&Frame::new(1, Cmd::Nop));
-        assert_eq!(h.counter(Counter::Processed), 2);
+        assert_eq!(h.telemetry().processed, 2);
     }
 
     #[test]
@@ -975,16 +1018,16 @@ mod tests {
         let f = Frame::new(0, Cmd::Nop);
         h.deliver(&f);
         h.deliver(&f);
-        assert_eq!(h.counter(Counter::Dedup), 1);
-        assert_eq!(h.counter(Counter::Processed), 1);
+        assert_eq!(h.telemetry().dedup, 1);
+        assert_eq!(h.telemetry().processed, 1);
     }
 
     #[test]
     fn telemetry_counts_seq_mismatch() {
         let mut h = Harness::new();
         h.deliver(&Frame::new(5, Cmd::Nop));
-        assert_eq!(h.counter(Counter::SeqMismatch), 1);
-        assert_eq!(h.counter(Counter::Processed), 0);
+        assert_eq!(h.telemetry().seq_mismatch, 1);
+        assert_eq!(h.telemetry().processed, 0);
     }
 
     #[test]
@@ -992,7 +1035,7 @@ mod tests {
         let mut h = Harness::new();
         h.deliver(&force_fan(0, 2));
         assert_eq!(h.status(), Error::InvalidPayload);
-        assert_eq!(h.counter(Counter::DispatchError), 1);
+        assert_eq!(h.telemetry().dispatch_error, 1);
     }
 
     #[test]
@@ -1003,7 +1046,7 @@ mod tests {
         for i in 0..=capacity {
             h.deliver_no_drain(&Frame::new(i, Cmd::Nop));
         }
-        assert_eq!(h.counter(Counter::FifoDrop), 1);
+        assert_eq!(h.telemetry().fifo_drop, 1);
     }
 
     #[test]

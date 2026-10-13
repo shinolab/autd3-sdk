@@ -19,7 +19,6 @@ mod tests {
 
     use autd3_cpu_wire::cpu_params;
 
-    use crate::app::Counter;
     use crate::cmd::cpu_config::{CpuConfig, default_config};
     use crate::cmd::silencer::SilencerFlags;
     use crate::fpga::TransitionMode;
@@ -40,10 +39,10 @@ mod tests {
     fn clear_resets_telemetry_counters() {
         let mut h = Harness::new();
         h.deliver(&force_fan(0, 2));
-        assert_eq!(h.counter(Counter::DispatchError), 1);
+        assert_eq!(h.telemetry().dispatch_error, 1);
 
         h.deliver(&Frame::new(1, Cmd::Clear));
-        assert_eq!(h.counter(Counter::DispatchError), 0);
+        assert_eq!(h.telemetry().dispatch_error, 0);
     }
 
     #[test]
@@ -142,7 +141,7 @@ mod tests {
         );
         assert_eq!(h.port.latch_log.len(), 2);
         assert_eq!(h.ctl_flags(), CtlFlags::empty());
-        assert_eq!(h.counter(Counter::Failsafe), 0);
+        assert_eq!(h.telemetry().failsafe, 0);
     }
 
     #[test]
@@ -183,16 +182,16 @@ mod tests {
         let mut h = Harness::new();
         h.port.host_idle_ms = Some(FAILSAFE_TIMEOUT_MS);
         h.tick_1ms(1);
-        assert_eq!(h.counter(Counter::Failsafe), 1);
+        assert_eq!(h.telemetry().failsafe, 1);
 
         h.deliver(&Frame::new(0, Cmd::Clear));
         assert_eq!(h.status(), Error::None);
         assert!(!h.ctl_flags().contains(CtlFlags::FAILSAFE));
-        assert_eq!(h.counter(Counter::Failsafe), 0);
+        assert_eq!(h.telemetry().failsafe, 0);
 
         h.tick_1ms(1);
         assert!(h.ctl_flags().contains(CtlFlags::FAILSAFE));
-        assert_eq!(h.counter(Counter::Failsafe), 1);
+        assert_eq!(h.telemetry().failsafe, 1);
     }
 
     #[test]
@@ -217,6 +216,6 @@ mod tests {
 
         h.tick_1ms(10);
         assert!(!h.ctl_flags().contains(CtlFlags::FAILSAFE));
-        assert_eq!(h.counter(Counter::PtpUnlockFailsafe), 0);
+        assert_eq!(h.telemetry().ptp_unlock_failsafe, 0);
     }
 }
