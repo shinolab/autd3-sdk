@@ -369,7 +369,6 @@ mod tests {
     use zerocopy::little_endian::U32;
 
     use super::{FPGA_REBOOT_ATTEMPTS, FPGA_REBOOT_DELAY_MS, FPGA_RECONFIG_SETTLE_MS, State};
-    use crate::app::Counter;
     use crate::cmd::update::{UpdateBeginPayload, UpdateChunkPayload};
     use crate::fpga_params::{
         ADDR_FLASH_CMD, ADDR_FLASH_LEN_0, ADDR_FUNCTION_BITS, CtlFlags, FLASH_BUF_BYTES, FlashErr,
@@ -851,18 +850,18 @@ mod tests {
     fn a_reinitialization_that_times_out_after_reconfiguration_counts_a_boot_failure() {
         let (mut h, seq) = activated(47);
         h.tick_1ms(u32::from(FPGA_REBOOT_DELAY_MS) + u32::from(FPGA_RECONFIG_SETTLE_MS) - 1);
-        assert_eq!(h.counter(Counter::BootFailure), 0);
+        assert_eq!(h.telemetry().boot_failure, 0);
         h.port.latch_stuck = true;
         h.tick_1ms(1);
         h.port.latch_stuck = false;
-        assert_eq!(h.counter(Counter::BootFailure), 1);
+        assert_eq!(h.telemetry().boot_failure, 1);
         assert!(!h.cpu.fpga_update.is_locked());
         assert!(output_muted(&h));
 
         h.deliver(&Frame::new(seq, Cmd::Clear));
         assert_eq!(h.status(), Error::None);
         assert!(!output_muted(&h));
-        assert_eq!(h.counter(Counter::BootFailure), 1);
+        assert_eq!(h.telemetry().boot_failure, 1);
     }
 
     #[test]
@@ -871,7 +870,7 @@ mod tests {
         h.tick_1ms(u32::from(FPGA_REBOOT_DELAY_MS) + u32::from(FPGA_RECONFIG_SETTLE_MS));
         assert!(!h.cpu.fpga_update.is_locked());
         assert!(!output_muted(&h));
-        assert_eq!(h.counter(Counter::BootFailure), 0);
+        assert_eq!(h.telemetry().boot_failure, 0);
     }
 
     #[test]

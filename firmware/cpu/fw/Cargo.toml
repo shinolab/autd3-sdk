@@ -15,7 +15,6 @@ categories = ["science"]
 autd3-cpu-wire.workspace = true
 zerocopy.workspace = true
 etherparse.workspace = true
-enum-map.workspace = true
 bitflags.workspace = true
 const_fn = { version = "0.4.7", default-features = false }
 
