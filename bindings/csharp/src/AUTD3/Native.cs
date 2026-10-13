@@ -269,7 +269,7 @@ namespace AUTD3
         internal static extern ulong autd3_bus_stats_heartbeats(BusStatsHandle stats);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern ulong autd3_bus_stats_missed_replies(BusStatsHandle stats);
+        internal static extern ulong autd3_bus_stats_missed_heartbeat_replies(BusStatsHandle stats);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern ulong autd3_bus_stats_acked_frames(BusStatsHandle stats);

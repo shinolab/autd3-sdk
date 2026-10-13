@@ -482,7 +482,7 @@ impl Measurement {
         RunOutput {
             summary: Summary {
                 elapsed,
-                missed_replies: bus_stats.missed_replies(),
+                missed_heartbeat_replies: bus_stats.missed_heartbeat_replies(),
                 throughput_cmd_per_sec: per_sec(self.counters.ok),
                 traffic: self.traffic.rate(elapsed),
                 latency: self.rtts.latency(),
@@ -619,7 +619,7 @@ impl Live {
             start.elapsed(),
             cmd_per_sec,
             counters,
-            bus_stats.missed_replies(),
+            bus_stats.missed_heartbeat_replies(),
             &latency,
             &traffic_rate,
         )

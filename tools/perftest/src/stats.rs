@@ -231,7 +231,7 @@ pub struct DriverAckLatency {
 pub struct Summary {
     pub elapsed: Duration,
     pub counters: Counters,
-    pub missed_replies: u64,
+    pub missed_heartbeat_replies: u64,
     pub throughput_cmd_per_sec: f64,
     pub traffic: TrafficRate,
     pub latency: LatencyStats,

@@ -127,13 +127,13 @@ pub fn interval_lines(
     elapsed: Duration,
     cmd_per_sec: f64,
     counters: &Counters,
-    missed_replies: u64,
+    missed_heartbeat_replies: u64,
     latency: &LatencyStats,
     traffic: &TrafficRate,
 ) -> [String; 3] {
     [
         format!(
-            "[{:>8.1}s] {cmd_per_sec:>10.1} cmd/s  ok {}  timeout {}  dev_err {}  net_err {}  missed {missed_replies}",
+            "[{:>8.1}s] {cmd_per_sec:>10.1} cmd/s  ok {}  timeout {}  dev_err {}  net_err {}  missed {missed_heartbeat_replies}",
             elapsed.as_secs_f64(),
             counters.ok,
             counters.timeouts,
@@ -211,7 +211,7 @@ pub fn print_summary(s: &Summary) {
             println!("    code {code:#04x} : {count}");
         }
     }
-    println!("  missed replies: {}", s.missed_replies);
+    println!("  missed heartbeat replies: {}", s.missed_heartbeat_replies);
 
     println!();
     println!("throughput      :");

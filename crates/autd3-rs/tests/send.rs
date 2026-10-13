@@ -123,7 +123,7 @@ async fn the_statistics_count_the_frames_and_their_acknowledgements() {
     assert_eq!(stats.frames(), FRAMES_SENT_BY_OPEN + 5);
     assert_eq!(stats.acked_frames(), stats.resets() + stats.frames());
     assert_eq!(stats.resets(), 1);
-    assert_eq!(stats.missed_replies(), 0);
+    assert_eq!(stats.missed_heartbeat_replies(), 0);
     client.close().await.unwrap();
 }
 
