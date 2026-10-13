@@ -122,6 +122,7 @@ namespace AUTD3
         public ulong Resets => NativeClient.autd3_bus_stats_resets(Handle);
         public ulong Heartbeats => NativeClient.autd3_bus_stats_heartbeats(Handle);
         public ulong MissedHeartbeatReplies => NativeClient.autd3_bus_stats_missed_heartbeat_replies(Handle);
+        public ulong Recoveries => NativeClient.autd3_bus_stats_recoveries(Handle);
         public ulong AckedFrames => NativeClient.autd3_bus_stats_acked_frames(Handle);
         public ulong WorstAckLatencyNs => NativeClient.autd3_bus_stats_worst_ack_latency_ns(Handle);
         public ulong MeanAckLatencyNs => NativeClient.autd3_bus_stats_mean_ack_latency_ns(Handle);
@@ -130,7 +131,7 @@ namespace AUTD3
 
         public override string ToString() =>
             $"BusStats {{ Frames = {Frames}, Resets = {Resets}, Heartbeats = {Heartbeats}, MissedHeartbeatReplies = {MissedHeartbeatReplies}, " +
-            $"AckedFrames = {AckedFrames}, WorstAckLatencyNs = {WorstAckLatencyNs}, MeanAckLatencyNs = {MeanAckLatencyNs} }}";
+            $"Recoveries = {Recoveries}, AckedFrames = {AckedFrames}, WorstAckLatencyNs = {WorstAckLatencyNs}, MeanAckLatencyNs = {MeanAckLatencyNs} }}";
     }
 
     public readonly struct Telemetry : IEquatable<Telemetry>

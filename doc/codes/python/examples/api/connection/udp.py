@@ -5,6 +5,7 @@ iface = Interface.Auto
 heartbeat = Duration.from_millis(10)
 reply_timeout = Duration.from_millis(1)
 lost_timeout = Duration.from_millis(100)
+recovery_interval = None
 response_timeout = Duration.from_millis(200)
 enumeration_timeout = Duration.from_secs(10)
 sync_timeout = Duration.from_secs(30)
@@ -17,6 +18,7 @@ TransportOption(
     heartbeat=heartbeat,
     reply_timeout=reply_timeout,
     lost_timeout=lost_timeout,
+    recovery_interval=recovery_interval,
     response_timeout=response_timeout,
     enumeration_timeout=enumeration_timeout,
     sync_timeout=sync_timeout,

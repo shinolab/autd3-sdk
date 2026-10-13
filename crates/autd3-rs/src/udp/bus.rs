@@ -16,6 +16,7 @@ use super::enumerate::{Bringup, Units, bring_up, same_endpoint};
 use super::error::UdpError;
 use super::iface;
 use super::option::TransportOption;
+use super::recovery::Recovery;
 use super::reply::Reply;
 use super::simulator::{self, SIMULATOR, Simulator};
 use super::state::{SharedState, StateChecker, Tracker};
@@ -63,6 +64,7 @@ pub struct UdpBus {
     units: Vec<SocketAddrV6>,
     trackers: Mutex<Vec<Tracker>>,
     shared: Arc<SharedState>,
+    recovery: Option<Mutex<Recovery>>,
     stats: BusStats,
     device_clock: DeviceClock,
     heartbeat: Option<Duration>,
@@ -147,6 +149,9 @@ impl UdpBus {
             channel,
             trackers: Mutex::new(vec![Tracker::new(); units.len()]),
             shared: SharedState::new(units.len()),
+            recovery: option
+                .recovery_interval
+                .map(|interval| Mutex::new(Recovery::new(interval))),
             units,
             stats: BusStats::default(),
             device_clock,
@@ -292,12 +297,10 @@ impl UdpBus {
             Kind::Frame => now.checked_add(self.lost_timeout),
             _ => None,
         };
-        let live = self
-            .trackers()
-            .iter()
-            .enumerate()
-            .filter(|(_, tracker)| !tracker.is_lost())
-            .fold(0u128, |live, (index, _)| live | 1 << index);
+        let live = self.devices_where(match kind {
+            Kind::Frame => Tracker::takes_frames,
+            _ => |tracker: Tracker| !tracker.is_lost(),
+        });
         let mut devices = 0u128;
         let mut unsent: Option<Unsent> = None;
         let count = self.units.len();
@@ -408,6 +411,51 @@ impl UdpBus {
         }
     }
 
+    fn devices_where(&self, holds: impl Fn(Tracker) -> bool) -> u128 {
+        self.trackers()
+            .iter()
+            .enumerate()
+            .filter(|&(_, &tracker)| holds(tracker))
+            .fold(0u128, |devices, (index, _)| devices | 1 << index)
+    }
+
+    fn recovery(&self) -> Option<MutexGuard<'_, Recovery>> {
+        self.recovery
+            .as_ref()
+            .map(|recovery| recovery.lock().unwrap_or_else(PoisonError::into_inner))
+    }
+
+    pub fn recover(&self, now: Instant) -> Option<Instant> {
+        let mut recovery = self.recovery()?;
+        if self.is_closed() || self.devices_where(Tracker::is_lost) == 0 {
+            recovery.idle();
+            return None;
+        }
+        if !recovery.is_due(now) {
+            return recovery.next_at();
+        }
+        let group = self.channel.group();
+        if let Err(e) = self
+            .channel
+            .send(group, Kind::Heartbeat, self.reserve_msg_id(), &[], None)
+        {
+            tracing::debug!(%group, "probing for the lost devices failed: {e}");
+        }
+        recovery.probed(now)
+    }
+
+    #[must_use]
+    pub fn take_recovered(&self) -> u128 {
+        self.recovery()
+            .map_or(0, |mut recovery| recovery.take_recovered())
+    }
+
+    pub fn admit_recovered(&self) {
+        for tracker in self.trackers().iter_mut() {
+            tracker.admit();
+        }
+    }
+
     pub fn recv(&self, deadline: Instant) -> Result<Option<Reply>, UdpError> {
         self.ensure_open()?;
         loop {
@@ -428,15 +476,23 @@ impl UdpBus {
                     flags,
                     sys_time,
                 } => {
-                    let accepted = {
+                    let (accepted, revived) = {
                         let mut trackers = self.trackers();
                         let expected =
                             u8::try_from(index).expect("a unit index is below MAX_DEVICES");
                         let accepted = trackers[index].replied(expected, unit_id, flags);
+                        let revived = !accepted
+                            && self.recovery.is_some()
+                            && trackers[index].revive(expected, unit_id, flags);
                         self.shared.publish(index, trackers[index].state());
-                        accepted
+                        (accepted, revived)
                     };
-                    if !accepted {
+                    if revived && let Some(mut recovery) = self.recovery() {
+                        recovery.restored(index);
+                        self.stats.record_recovery();
+                        tracing::info!(device = index, "a lost device answers again");
+                    }
+                    if !(accepted || revived) {
                         continue;
                     }
                     if index == 0

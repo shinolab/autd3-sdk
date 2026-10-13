@@ -21,6 +21,7 @@ import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
 | `heartbeat`           | `Option<Duration>`     | 10 ms   | Interval at which the liveness-check command is sent. `None` sends no liveness check |
 | `reply_timeout`       | `Duration`             | 1 ms    | Upper bound on waiting for a reply                                                            |
 | `lost_timeout`        | `Duration`             | 100 ms  | A device that has not replied for this long is treated as `Lost`. Make it longer than `heartbeat` |
+| `recovery_interval`   | `Option<Duration>`     | None    | While a device is `Lost`, look for it at this interval and recover it automatically once it answers again (a power-cycled device is not recovered). `None` disables the automatic recovery (see [State check](/autd3-sdk/en/guide/state-check/)) |
 | `response_timeout`    | `Duration`             | 200 ms  | Time to wait for replies to management messages such as enumeration                           |
 | `enumeration_timeout` | `Duration`             | 10 s    | Upper bound on the time spent trying to enumerate the devices on open                         |
 | `sync_timeout`        | `Duration`             | 30 s    | Upper bound on waiting for all devices to synchronize with one another on open                |

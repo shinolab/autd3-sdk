@@ -389,6 +389,16 @@ macro_rules! client_config_setter {
             AUTD3_OK
         }
     };
+    ($set:ident, $field:ident, attempts) => {
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $set(config: *mut ClientConfig, value: u32) -> i32 {
+            let Some(config) = (unsafe { handle_mut(config) }) else {
+                return AUTD3_ERR_INVALID_ARGUMENT;
+            };
+            config.$field = NonZeroU32::new(value);
+            AUTD3_OK
+        }
+    };
     ($set:ident, $field:ident, $raw:ty, $nonzero:ty) => {
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $set(config: *mut ClientConfig, value: $raw) -> i32 {
@@ -407,6 +417,16 @@ client_config_setter!(
     autd3_client_config_set_require_supported_firmware,
     require_supported_firmware,
     bool
+);
+client_config_setter!(
+    autd3_client_config_set_resynchronize_on_recovery,
+    resynchronize_on_recovery,
+    attempts
+);
+client_config_setter!(
+    autd3_client_config_set_release_failsafe_on_recovery,
+    release_failsafe_on_recovery,
+    attempts
 );
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_client_config_set_ack_timeout_ns(
@@ -478,6 +498,40 @@ pub unsafe extern "C" fn autd3_client_config_get_require_supported_firmware(
         return AUTD3_ERR_INVALID_ARGUMENT;
     };
     unsafe { write_out(out, config.require_supported_firmware) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_client_config_get_resynchronize_on_recovery(
+    config: *const ClientConfig,
+    out: *mut u32,
+) -> i32 {
+    let Some(config) = (unsafe { handle_ref(config) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    unsafe {
+        write_out(
+            out,
+            config.resynchronize_on_recovery.map_or(0, NonZeroU32::get),
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_client_config_get_release_failsafe_on_recovery(
+    config: *const ClientConfig,
+    out: *mut u32,
+) -> i32 {
+    let Some(config) = (unsafe { handle_ref(config) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    unsafe {
+        write_out(
+            out,
+            config
+                .release_failsafe_on_recovery
+                .map_or(0, NonZeroU32::get),
+        )
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -2351,6 +2405,11 @@ pub unsafe extern "C" fn autd3_bus_stats_missed_heartbeat_replies(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_bus_stats_recoveries(stats: *const BusStatsHandle) -> u64 {
+    unsafe { handle_ref(stats) }.map_or(0, |stats| stats.0.recoveries())
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_bus_stats_acked_frames(stats: *const BusStatsHandle) -> u64 {
     unsafe { handle_ref(stats) }.map_or(0, |stats| stats.0.acked_frames())
 }
@@ -2569,6 +2628,14 @@ mod tests {
         assert_eq!(
             expected.require_supported_firmware,
             config.require_supported_firmware
+        );
+        assert_eq!(
+            expected.resynchronize_on_recovery,
+            config.resynchronize_on_recovery
+        );
+        assert_eq!(
+            expected.release_failsafe_on_recovery,
+            config.release_failsafe_on_recovery
         );
     }
 
@@ -2995,6 +3062,50 @@ mod tests {
         assert_eq!(expected.max_inflight.get(), inflight);
         assert_eq!(expected.max_resync_rounds.get(), rounds);
         assert_eq!(expected.require_supported_firmware, require);
+        let mut resynchronize = u32::MAX;
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_client_config_get_resynchronize_on_recovery(handle, &raw mut resynchronize)
+        });
+        assert_eq!(
+            expected.resynchronize_on_recovery,
+            NonZeroU32::new(resynchronize)
+        );
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_client_config_set_resynchronize_on_recovery(handle, 0)
+        });
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_client_config_get_resynchronize_on_recovery(handle, &raw mut resynchronize)
+        });
+        assert_eq!(resynchronize, 0);
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_client_config_set_resynchronize_on_recovery(handle, 5)
+        });
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_client_config_get_resynchronize_on_recovery(handle, &raw mut resynchronize)
+        });
+        assert_eq!(resynchronize, 5);
+        let mut release_failsafe = u32::MAX;
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_client_config_get_release_failsafe_on_recovery(handle, &raw mut release_failsafe)
+        });
+        assert_eq!(
+            expected.release_failsafe_on_recovery,
+            NonZeroU32::new(release_failsafe)
+        );
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_client_config_set_release_failsafe_on_recovery(handle, 0)
+        });
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_client_config_get_release_failsafe_on_recovery(handle, &raw mut release_failsafe)
+        });
+        assert_eq!(release_failsafe, 0);
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_client_config_set_release_failsafe_on_recovery(handle, 2)
+        });
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_client_config_get_release_failsafe_on_recovery(handle, &raw mut release_failsafe)
+        });
+        assert_eq!(release_failsafe, 2);
         unsafe { autd3_client_config_free(handle) };
     }
 

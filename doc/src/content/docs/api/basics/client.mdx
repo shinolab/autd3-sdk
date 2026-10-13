@@ -63,6 +63,8 @@ Silencer の設定は上書きされたままになるので, 別の設定で出
 | `max_inflight`         | `NonZeroUsize`        | `7`                 | 応答を待たずに送ってよいフレーム数 (stream送信用)           |
 | `max_resync_rounds`    | `NonZeroU32`          | `8`                 | デバイスとの足並みを揃え直す試行の回数上限                 |
 | `require_supported_firmware` | `bool`          | `false`             | `true`なら接続時にファームウェアがサポートされているか検査する |
+| `resynchronize_on_recovery` | `Option<NonZeroU32>` | `Some(3)`       | `Lost` から自動復帰したデバイスへ, 次の送信の前に `Synchronize` を送り直す. 値は試行回数の上限で, `None` なら送らない ([状態監視](/autd3-sdk/guide/state-check/) 参照) |
+| `release_failsafe_on_recovery` | `Option<NonZeroU32>` | `Some(3)`    | `Lost` から自動復帰したデバイスへ, 次の送信の前に `ReleaseFailsafe` を送り, フェイルセーフで止まった出力を再開させる. 値は試行回数の上限で, `None` なら送らない ([状態監視](/autd3-sdk/guide/state-check/) 参照) |
 
 `max_inflight` は `MAX_INFLIGHT (7)` を超えるとエラーになる.
 

@@ -20,6 +20,8 @@ internal static class Sample
                 MaxInflight = 7,
                 MaxResyncRounds = 8,
                 RequireSupportedFirmware = false,
+                ResynchronizeOnRecovery = 3,
+                ReleaseFailsafeOnRecovery = 3,
             }
             // ANCHOR_END: config
             ;

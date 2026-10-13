@@ -12,6 +12,7 @@ pub struct TransportOption {
     pub heartbeat: Option<Duration>,
     pub reply_timeout: Duration,
     pub lost_timeout: Duration,
+    pub recovery_interval: Option<Duration>,
     pub response_timeout: Duration,
     pub enumeration_timeout: Duration,
     pub sync_timeout: Duration,
@@ -27,6 +28,7 @@ impl Default for TransportOption {
             heartbeat: Some(Duration::from_millis(10)),
             reply_timeout: Duration::from_millis(1),
             lost_timeout: Duration::from_millis(100),
+            recovery_interval: None,
             response_timeout: Duration::from_millis(200),
             enumeration_timeout: Duration::from_secs(10),
             sync_timeout: Duration::from_secs(30),
@@ -68,6 +70,9 @@ impl TransportOption {
             self.lost_timeout,
             self.heartbeat.unwrap_or_default().saturating_add(tick),
         )?;
+        if let Some(recovery_interval) = self.recovery_interval {
+            check("recovery_interval", recovery_interval, tick)?;
+        }
         check("response_timeout", self.response_timeout, tick)?;
         if let Some(timer_resolution) = self.timer_resolution {
             check(
@@ -100,6 +105,7 @@ mod tests {
         assert_eq!(option.heartbeat, Some(Duration::from_millis(10)));
         assert_eq!(option.reply_timeout, Duration::from_millis(1));
         assert_eq!(option.lost_timeout, Duration::from_millis(100));
+        assert_eq!(option.recovery_interval, None);
         assert_eq!(option.response_timeout, Duration::from_millis(200));
         assert_eq!(option.enumeration_timeout, Duration::from_secs(10));
         assert_eq!(option.sync_timeout, Duration::from_secs(30));
@@ -159,6 +165,13 @@ mod tests {
         },
         "reply_timeout"
     )]
+    #[case::zero_recovery_interval(
+        TransportOption {
+            recovery_interval: Some(Duration::ZERO),
+            ..TransportOption::default()
+        },
+        "recovery_interval"
+    )]
     #[case::zero_response_timeout(
         TransportOption {
             response_timeout: Duration::ZERO,
@@ -189,6 +202,7 @@ mod tests {
             heartbeat: Some(Duration::MAX),
             reply_timeout: Duration::MAX,
             lost_timeout: Duration::MAX,
+            recovery_interval: Some(Duration::MAX),
             response_timeout: Duration::MAX,
             enumeration_timeout: Duration::MAX,
             sync_timeout: Duration::MAX,

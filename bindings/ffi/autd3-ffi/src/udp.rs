@@ -41,6 +41,34 @@ pub unsafe extern "C" fn autd3_transport_option_get_heartbeat(
     unsafe { autd3_ffi_abi::write_out(out, option.0.heartbeat.map_or(0, autd3_ffi_abi::to_ns)) }
 }
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_transport_option_set_recovery_interval(
+    handle: *mut TransportOptionHandle,
+    ns: u64,
+) -> i32 {
+    let Some(option) = (unsafe { autd3_ffi_abi::handle_mut(handle) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    option.0.recovery_interval = (ns != 0).then(|| Duration::from_nanos(ns));
+    AUTD3_OK
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_transport_option_get_recovery_interval(
+    handle: *const TransportOptionHandle,
+    out: *mut u64,
+) -> i32 {
+    let Some(option) = (unsafe { autd3_ffi_abi::handle_ref(handle) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    unsafe {
+        autd3_ffi_abi::write_out(
+            out,
+            option.0.recovery_interval.map_or(0, autd3_ffi_abi::to_ns),
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_transport_option_set_timer_resolution(
     handle: *mut TransportOptionHandle,
     ns: u64,
@@ -285,6 +313,36 @@ mod tests {
             AUTD3_OK
         );
         (ns != 0).then(|| Duration::from_nanos(ns))
+    }
+
+    fn recovery_interval(handle: *const TransportOptionHandle) -> Option<Duration> {
+        let mut ns = u64::MAX;
+        assert_eq!(
+            unsafe { autd3_transport_option_get_recovery_interval(handle, &raw mut ns) },
+            AUTD3_OK
+        );
+        (ns != 0).then(|| Duration::from_nanos(ns))
+    }
+
+    #[test]
+    fn the_recovery_is_off_until_an_interval_is_set() {
+        let handle = autd3_transport_option_new();
+        assert_eq!(recovery_interval(handle), None);
+        assert_eq!(
+            unsafe { autd3_transport_option_set_recovery_interval(handle, 100_000_000) },
+            AUTD3_OK
+        );
+        assert_eq!(recovery_interval(handle), Some(Duration::from_millis(100)));
+        assert_eq!(
+            unsafe { autd3_transport_option_set_recovery_interval(handle, 0) },
+            AUTD3_OK
+        );
+        assert_eq!(recovery_interval(handle), None);
+        assert_eq!(
+            unsafe { autd3_transport_option_set_recovery_interval(std::ptr::null_mut(), 1) },
+            AUTD3_ERR_INVALID_ARGUMENT
+        );
+        unsafe { autd3_transport_option_free(handle) };
     }
 
     #[test]

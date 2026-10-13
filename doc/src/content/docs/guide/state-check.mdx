@@ -37,7 +37,18 @@ import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 | `Lost`    | 返信が一定時間無い                                      |
 
 途中の 1 台が`Lost`すると, その機体より先の機体も全て `Lost` になる.
-`Lost` からは自動で復帰しないので, `Client::open` で開き直す必要がある.
+既定では `Lost` からは自動で復帰しないので, `Client::open` で開き直す必要がある.
+
+## Lost からの自動復帰
+
+`TransportOption` の `recovery_interval` を指定すると, `Lost` のデバイスがある間その間隔でデバイスを探し, 応答が戻ったデバイスを自動で復帰させる.
+対象はケーブルの抜き差しなどで通信が途絶えただけのデバイスで, 電源を入れ直したデバイスは復帰しない (`Client::open` で開き直す). 復帰したデバイスの数は `BusStats` の `recoveries` で読める.
+
+復帰の際には以下の点に注意されたい.
+
+- 既定では, 復帰したデバイスが `Ready` になった後の最初の送信の前に, そのデバイスだけへ `Synchronize` を送り直す. `ClientConfig` の `resynchronize_on_recovery` を `None` にすると送らない.
+- 既定では復帰したデバイスへだけ `ReleaseFailsafe` を送る. `ClientConfig` の `release_failsafe_on_recovery` を `None` にすると送らない.
+- これらの送信が失敗すると, そのときの送信がエラーを返し, 次の送信でやり直す. 指定した回数 (既定 3 回) 失敗したら諦めて, 以後の送信はそのまま通す. この場合は必要に応じて `Synchronize` や `ReleaseFailsafe` を自分で送り直すこと.
 
 以下は, 一定間隔で `check` を呼び, 状態が変化したときだけ出力する例.
 

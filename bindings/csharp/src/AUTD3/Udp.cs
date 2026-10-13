@@ -57,6 +57,7 @@ namespace AUTD3
         public TimeSpan ReplyTimeout { get => _replyTimeout ?? TransportOptionDefaults.ReplyTimeout; init => _replyTimeout = value; }
         private readonly TimeSpan? _lostTimeout;
         public TimeSpan LostTimeout { get => _lostTimeout ?? TransportOptionDefaults.LostTimeout; init => _lostTimeout = value; }
+        public TimeSpan? RecoveryInterval { get; init; }
         private readonly TimeSpan? _responseTimeout;
         public TimeSpan ResponseTimeout { get => _responseTimeout ?? TransportOptionDefaults.ResponseTimeout; init => _responseTimeout = value; }
         private readonly TimeSpan? _enumerationTimeout;
@@ -120,6 +121,12 @@ namespace AUTD3
                 });
                 OptionNative.SetRequiredDuration(handle, "replyTimeout", ReplyTimeout, NativeClient.autd3_transport_option_set_reply_timeout);
                 OptionNative.SetRequiredDuration(handle, "lostTimeout", LostTimeout, NativeClient.autd3_transport_option_set_lost_timeout);
+                OptionNative.Apply("recoveryInterval", RecoveryInterval switch
+                {
+                    null => NativeClient.autd3_transport_option_set_recovery_interval(handle, 0),
+                    { } interval when interval > TimeSpan.Zero => NativeClient.autd3_transport_option_set_recovery_interval(handle, OptionNative.ToNanos(interval)),
+                    _ => -1,
+                });
                 OptionNative.SetRequiredDuration(handle, "responseTimeout", ResponseTimeout, NativeClient.autd3_transport_option_set_response_timeout);
                 OptionNative.SetRequiredDuration(handle, "enumerationTimeout", EnumerationTimeout, NativeClient.autd3_transport_option_set_enumeration_timeout);
                 OptionNative.SetRequiredDuration(handle, "syncTimeout", SyncTimeout, NativeClient.autd3_transport_option_set_sync_timeout);
@@ -156,6 +163,7 @@ namespace AUTD3
             Heartbeat = ReadHeartbeat(handle),
             ReplyTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_reply_timeout),
             LostTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_lost_timeout),
+            RecoveryInterval = ReadRecoveryInterval(handle),
             ResponseTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_response_timeout),
             EnumerationTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_enumeration_timeout),
             SyncTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_sync_timeout),
@@ -181,6 +189,12 @@ namespace AUTD3
         {
             var heartbeat = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_heartbeat);
             return heartbeat == TimeSpan.Zero ? null : heartbeat;
+        }
+
+        private static TimeSpan? ReadRecoveryInterval(IntPtr handle)
+        {
+            var interval = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_recovery_interval);
+            return interval == TimeSpan.Zero ? null : interval;
         }
 
         internal static TimeSpan? ReadTimerResolution(IntPtr handle)

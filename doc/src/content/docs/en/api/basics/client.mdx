@@ -63,6 +63,8 @@ The Silencer setting stays overwritten, so send `SetSilencer` again before resum
 | `max_inflight`               | `NonZeroUsize` | `7`     | Number of frames that may be sent without waiting for a reply (for streaming sends) |
 | `max_resync_rounds`          | `NonZeroU32`   | `8`     | Maximum number of attempts to get back in step with the devices                     |
 | `require_supported_firmware` | `bool`         | `false` | If `true`, check on open that the firmware is supported                             |
+| `resynchronize_on_recovery`  | `Option<NonZeroU32>` | `Some(3)` | Send `Synchronize` again to a device recovered from `Lost`, before the next send. The value is the maximum number of attempts; `None` sends nothing (see [State check](/autd3-sdk/en/guide/state-check/)) |
+| `release_failsafe_on_recovery` | `Option<NonZeroU32>` | `Some(3)` | Send `ReleaseFailsafe` to a device recovered from `Lost`, before the next send, to resume the output stopped by the failsafe. The value is the maximum number of attempts; `None` sends nothing (see [State check](/autd3-sdk/en/guide/state-check/)) |
 
 `max_inflight` errors if it exceeds `MAX_INFLIGHT (7)`.
 

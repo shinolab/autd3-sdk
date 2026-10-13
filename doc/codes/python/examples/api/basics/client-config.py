@@ -15,6 +15,8 @@ async def main() -> None:
             max_inflight=7,
             max_resync_rounds=8,
             require_supported_firmware=False,
+            resynchronize_on_recovery=3,
+            release_failsafe_on_recovery=3,
         )
         # ANCHOR_END: config
     )

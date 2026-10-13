@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::num::NonZeroU32;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
@@ -42,10 +43,41 @@ impl Inflight {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Restoring {
+    pub(crate) devices: u128,
+    failures: u32,
+}
+
+impl Restoring {
+    pub(crate) fn recovered(&mut self, devices: u128) {
+        self.devices |= devices;
+        self.failures = 0;
+    }
+
+    pub(crate) fn restored(&mut self, devices: u128) {
+        self.devices &= !devices;
+        self.failures = 0;
+    }
+
+    pub(crate) fn failed(&mut self, devices: u128, attempts: NonZeroU32) -> bool {
+        self.failures += 1;
+        if self.failures < attempts.get() {
+            return false;
+        }
+        self.devices &= !devices;
+        self.failures = 0;
+        true
+    }
+}
+
 pub(crate) struct Pending {
     pub(crate) entries: VecDeque<Inflight>,
     pub(crate) head_since: Instant,
     pub(crate) need_reset: bool,
+    pub(crate) resync: Restoring,
+    pub(crate) release_failsafe: Restoring,
+    pub(crate) recoveries: u64,
     pub(crate) next_seq: Seq,
     pub(crate) failure: Option<NetworkCause>,
     pub(crate) closed: bool,
@@ -142,6 +174,9 @@ impl Shared {
                 entries: VecDeque::new(),
                 head_since: Instant::now(),
                 need_reset: true,
+                resync: Restoring::default(),
+                release_failsafe: Restoring::default(),
+                recoveries: 0,
                 next_seq: Seq::ZERO,
                 failure: None,
                 closed: false,
@@ -176,18 +211,30 @@ pub struct Driver {
     shared: Arc<Shared>,
     stats: BusStats,
     ack_timeout: Duration,
+    resynchronize_on_recovery: bool,
+    release_failsafe_on_recovery: bool,
     heartbeat: Option<HeartbeatWait>,
+    next_recovery: Option<Instant>,
     finished: bool,
 }
 
 impl Driver {
-    pub(crate) fn new(bus: Arc<UdpBus>, shared: Arc<Shared>, ack_timeout: Duration) -> Self {
+    pub(crate) fn new(
+        bus: Arc<UdpBus>,
+        shared: Arc<Shared>,
+        ack_timeout: Duration,
+        resynchronize_on_recovery: bool,
+        release_failsafe_on_recovery: bool,
+    ) -> Self {
         Self {
             stats: bus.stats(),
             bus,
             shared,
             ack_timeout,
+            resynchronize_on_recovery,
+            release_failsafe_on_recovery,
             heartbeat: None,
+            next_recovery: None,
             finished: false,
         }
     }
@@ -258,6 +305,7 @@ impl Driver {
         }
         self.check_timeouts(now);
         self.check_heartbeat(now)?;
+        self.recover(now);
         Ok(self.next_deadline(now))
     }
 
@@ -325,6 +373,23 @@ impl Driver {
         Ok(())
     }
 
+    fn recover(&mut self, now: Instant) {
+        self.next_recovery = self.bus.recover(now);
+        let recovered = self.bus.take_recovered();
+        if recovered == 0 {
+            return;
+        }
+        let mut pending = self.shared.pending();
+        pending.need_reset = true;
+        pending.recoveries += 1;
+        if self.resynchronize_on_recovery {
+            pending.resync.recovered(recovered);
+        }
+        if self.release_failsafe_on_recovery {
+            pending.release_failsafe.recovered(recovered);
+        }
+    }
+
     fn next_deadline(&self, now: Instant) -> Instant {
         let mut deadline = self
             .bus
@@ -333,6 +398,9 @@ impl Driver {
             .unwrap_or(now + IDLE_WAIT);
         if let Some(expiry) = self.heartbeat.as_ref().and_then(|wait| wait.deadline) {
             deadline = deadline.min(expiry);
+        }
+        if let Some(probe) = self.next_recovery {
+            deadline = deadline.min(probe);
         }
         let mut pending = self.shared.pending();
         if let Some(expiry) = pending.ack_deadline(self.ack_timeout) {
@@ -450,6 +518,42 @@ mod tests {
             tx,
         };
         (entry, rx)
+    }
+
+    #[test]
+    fn a_restoration_is_given_up_after_the_allowed_failures() {
+        let attempts = NonZeroU32::new(3).unwrap();
+        let mut restoring = Restoring::default();
+        restoring.recovered(0b110);
+        assert!(!restoring.failed(0b010, attempts));
+        assert!(!restoring.failed(0b010, attempts));
+        assert_eq!(restoring.devices, 0b110);
+        assert!(restoring.failed(0b010, attempts));
+        assert_eq!(restoring.devices, 0b100);
+        assert!(!restoring.failed(0b100, attempts));
+    }
+
+    #[test]
+    fn a_success_or_a_new_recovery_restarts_the_failure_count() {
+        let attempts = NonZeroU32::new(2).unwrap();
+        let mut restoring = Restoring::default();
+        restoring.recovered(0b11);
+        assert!(!restoring.failed(0b11, attempts));
+        restoring.restored(0b01);
+        assert_eq!(restoring.devices, 0b10);
+        assert!(!restoring.failed(0b10, attempts));
+        restoring.recovered(0b100);
+        assert!(!restoring.failed(0b110, attempts));
+        assert!(restoring.failed(0b110, attempts));
+        assert_eq!(restoring.devices, 0);
+    }
+
+    #[test]
+    fn a_single_allowed_attempt_gives_up_at_the_first_failure() {
+        let mut restoring = Restoring::default();
+        restoring.recovered(0b1);
+        assert!(restoring.failed(0b1, NonZeroU32::MIN));
+        assert_eq!(restoring.devices, 0);
     }
 
     #[test]

@@ -16,14 +16,22 @@ impl ClientConfig {
         max_inflight = None,
         max_resync_rounds = None,
         require_supported_firmware = None,
+        resynchronize_on_recovery = CoreClientConfig::default().resynchronize_on_recovery,
+        release_failsafe_on_recovery = CoreClientConfig::default().release_failsafe_on_recovery,
     ))]
     fn new(
         ack_timeout: Option<&Bound<'_, PyAny>>,
         max_inflight: Option<usize>,
         max_resync_rounds: Option<u32>,
         require_supported_firmware: Option<bool>,
+        resynchronize_on_recovery: Option<NonZeroU32>,
+        release_failsafe_on_recovery: Option<NonZeroU32>,
     ) -> PyResult<Self> {
-        let mut inner = CoreClientConfig::default();
+        let mut inner = CoreClientConfig {
+            resynchronize_on_recovery,
+            release_failsafe_on_recovery,
+            ..CoreClientConfig::default()
+        };
         if let Some(v) = crate::udp::opt_duration(ack_timeout)? {
             if v.is_zero() {
                 return Err(PyValueError::new_err(
@@ -64,5 +72,15 @@ impl ClientConfig {
     #[getter]
     fn require_supported_firmware(&self) -> bool {
         self.0.require_supported_firmware
+    }
+
+    #[getter]
+    fn resynchronize_on_recovery(&self) -> Option<NonZeroU32> {
+        self.0.resynchronize_on_recovery
+    }
+
+    #[getter]
+    fn release_failsafe_on_recovery(&self) -> Option<NonZeroU32> {
+        self.0.release_failsafe_on_recovery
     }
 }

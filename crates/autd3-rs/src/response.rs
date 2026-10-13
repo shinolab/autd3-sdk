@@ -48,6 +48,10 @@ impl Response {
         self
     }
 
+    pub(crate) fn replied(&self) -> u128 {
+        self.replied
+    }
+
     pub(crate) fn decode<T>(&self, parse: impl Fn(&[u8]) -> Option<T>) -> Result<Vec<T>, Error> {
         let silent = !self.replied & all_replied(self.len);
         if silent != 0 {
@@ -160,6 +164,13 @@ mod tests {
             crate::client::MAX_DEVICES
         );
         assert_eq!(Response::default().decode(|_| Some(())).unwrap().len(), 0);
+        assert_eq!(full.replied(), u128::MAX);
+        assert_eq!(
+            Response::from_status(&[0, 0, 0])
+                .with_replied(0b1101)
+                .replied(),
+            0b101
+        );
         let unsent = Response::from_status(&[0, 0]).with_replied(0);
         assert!(matches!(
             unsent.decode(|_| Some(())),

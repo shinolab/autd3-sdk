@@ -14,6 +14,30 @@ namespace AUTD3.Tests
             Assert.Equal(7u, config.MaxInflight);
             Assert.Equal(8u, config.MaxResyncRounds);
             Assert.False(config.RequireSupportedFirmware);
+            Assert.Equal(3u, config.ResynchronizeOnRecovery);
+            Assert.Equal(3u, config.ReleaseFailsafeOnRecovery);
+        }
+
+        [Fact]
+        public void TheRestorationsOfARecoveredDeviceCanBeTurnedOff()
+        {
+            Assert.Equal(3u, default(ClientConfig).ResynchronizeOnRecovery);
+            var config = new ClientConfig { ResynchronizeOnRecovery = null, ReleaseFailsafeOnRecovery = 5 };
+            Assert.Null(config.ResynchronizeOnRecovery);
+            Assert.Equal(5u, config.ReleaseFailsafeOnRecovery);
+            var handle = config.CreateHandle();
+            try
+            {
+                Assert.Equal(0, NativeClient.autd3_client_config_get_resynchronize_on_recovery(handle, out var resynchronize));
+                Assert.Equal(0u, resynchronize);
+                Assert.Equal(0, NativeClient.autd3_client_config_get_release_failsafe_on_recovery(handle, out var release));
+                Assert.Equal(5u, release);
+            }
+            finally
+            {
+                NativeClient.autd3_client_config_free(handle);
+            }
+            Assert.ThrowsAny<Exception>(() => new ClientConfig { ResynchronizeOnRecovery = 0 }.CreateHandle());
         }
 
         [Fact]
