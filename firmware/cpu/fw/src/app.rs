@@ -106,9 +106,7 @@ impl Cpu {
             last_cmd: IsrCell::new(0xFF),
             slots: [const { Slot::new() }; FIFO_DEPTH as usize],
             fifo: Fifo::new(),
-            counters: EnumMap::from_array(
-                [const { AtomicU32::new(0) }; <Counter as enum_map::Enum>::LENGTH],
-            ),
+            counters: EnumMap::from_array([const { AtomicU32::new(0) }; _]),
             failsafe_fired: MainCell::new(false),
             ptp_unlock_failsafe_fired: MainCell::new(false),
             expected_seq: MainCell::new(0),
