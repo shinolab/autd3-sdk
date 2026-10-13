@@ -197,6 +197,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "autd3-rs-fpga-memory"
+version = "0.10.1"
+dependencies = [
+ "anyhow",
+ "autd3-cpu-wire",
+ "autd3-rs-firmware-ota",
+ "clap",
+]
+
+[[package]]
 name = "autd3-rs-modulation"
 version = "0.10.1"
 dependencies = [

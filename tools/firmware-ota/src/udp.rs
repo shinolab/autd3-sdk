@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use anyhow::{Result, anyhow};
 use clap::Args;
 
 use autd3_rs::{Interface, TransportOption, UdpBus, UdpError};
@@ -64,8 +63,8 @@ impl UdpArgs {
         }
     }
 
-    pub fn open(&self, expected: Option<usize>) -> Result<UdpBus> {
-        enumerate(&self.option(), expected).map_err(udp_error)
+    pub fn open(&self, expected: Option<usize>) -> Result<UdpBus, OpenError> {
+        enumerate(&self.option(), expected).map_err(OpenError)
     }
 }
 
@@ -95,11 +94,15 @@ fn firewall_hint() -> String {
     )
 }
 
-fn udp_error(e: UdpError) -> anyhow::Error {
-    if udp_found_nothing(&e) {
-        anyhow!("{e}; {}", firewall_hint())
+#[derive(Debug, thiserror::Error)]
+#[error("{0}{hint}", hint = hint(.0))]
+pub struct OpenError(UdpError);
+
+fn hint(e: &UdpError) -> String {
+    if udp_found_nothing(e) {
+        format!("; {}", firewall_hint())
     } else {
-        e.into()
+        String::new()
     }
 }
 
@@ -192,14 +195,14 @@ mod tests {
                 found: 0,
             },
         ] {
-            let message = udp_error(nothing).to_string();
+            let message = OpenError(nothing).to_string();
             assert!(
                 message.contains("firewall") && message.contains("44336"),
                 "{message}"
             );
         }
 
-        let message = udp_error(UdpError::DeviceCountMismatch {
+        let message = OpenError(UdpError::DeviceCountMismatch {
             expected: 2,
             found: 3,
         })

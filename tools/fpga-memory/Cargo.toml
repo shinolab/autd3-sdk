@@ -1,0 +1,22 @@
+[package]
+name = "autd3-rs-fpga-memory"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+description = "Read and write raw AUTD3 FPGA bus addresses over UDP (diagnostics only; bypasses every check of the regular commands)."
+
+[[bin]]
+name = "autd3-fpga-memory"
+path = "src/main.rs"
+
+[dependencies]
+autd3-cpu-wire.workspace = true
+autd3-rs-firmware-ota.workspace = true
+clap.workspace = true
+anyhow.workspace = true
+
+[lints]
+workspace = true

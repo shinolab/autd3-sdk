@@ -669,6 +669,17 @@ mod tests {
     }
 
     #[test]
+    fn raw_fpga_memory_access_is_rejected_while_locked() {
+        let mut h = ota_capable();
+        h.deliver(&begin(0, 100, 0));
+        for (seq, cmd) in [(1, Cmd::WriteFpgaMemory), (2, Cmd::ReadFpgaMemory)] {
+            h.deliver(&Frame::new(seq, cmd));
+            assert_eq!(h.status(), Error::FpgaUpdateInProgress);
+        }
+        assert!(output_muted(&h));
+    }
+
+    #[test]
     fn output_commands_are_rejected_while_locked() {
         let mut h = ota_capable();
         h.deliver(&begin(0, 100, 0));

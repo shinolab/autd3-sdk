@@ -8,6 +8,7 @@ pub(crate) mod cpu_config;
 pub(crate) mod failsafe;
 pub(crate) mod firmware_info;
 pub(crate) mod force_fan;
+pub(crate) mod fpga_memory;
 pub(crate) mod fpga_state;
 pub(crate) mod fpga_update;
 pub(crate) mod gpio_in;

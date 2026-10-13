@@ -1,6 +1,7 @@
 mod driver;
 mod fpga_image;
 mod image;
+mod udp;
 
 pub use driver::{
     DEFAULT_TIMEOUT, DeviceReply, Driver, DriverError, Exchange, FPGA_RECONFIG_WAIT, Frame,
@@ -8,3 +9,4 @@ pub use driver::{
 };
 pub use fpga_image::{FpgaFirmwareImage, FpgaImageLoadError};
 pub use image::{CpuFirmwareImage, ImageError};
+pub use udp::{OpenError, UdpArgs};

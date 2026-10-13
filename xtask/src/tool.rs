@@ -37,6 +37,17 @@ pub enum ToolCmd {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
+    #[command(about = "Read / write raw FPGA bus addresses over UDP (diagnostics only)")]
+    FpgaMemory {
+        #[arg(long, help = "Build the dev profile instead of release")]
+        debug: bool,
+        #[arg(
+            trailing_var_arg = true,
+            allow_hyphen_values = true,
+            help = "Arguments forwarded to the tool (`read <ADDR>` or `write <ADDR> <WORD>...` first)"
+        )]
+        args: Vec<String>,
+    },
 }
 
 pub fn run_tool(root: &Path, cmd: ToolCmd) -> Result<()> {
@@ -71,6 +82,16 @@ pub fn run_tool(root: &Path, cmd: ToolCmd) -> Result<()> {
                 root,
                 "autd3-rs-firmware-ota",
                 "autd3-firmware-ota",
+                debug,
+                &[],
+            )?;
+            run(&bin.to_string_lossy(), &args, root)
+        }
+        ToolCmd::FpgaMemory { debug, args } => {
+            let bin = build_bin(
+                root,
+                "autd3-rs-fpga-memory",
+                "autd3-fpga-memory",
                 debug,
                 &[],
             )?;
