@@ -21,9 +21,17 @@ module synchronizer (
 
   localparam int DiffMax = 8191;
 
-  (* ASYNC_REG = "true" *) logic [2:0] sync_tri = '0;
+  logic sync_in;
+  logic sync_in_prev = 1'b0;
   logic sync;
-  assign sync = sync_tri[2:1] == 2'b01;
+
+  cdc_sync sync_in_cdc (
+      .CLK(CLK),
+      .D  (SYNC_IN),
+      .Q  (sync_in)
+  );
+
+  assign sync = ~sync_in_prev & sync_in;
   assign SYNC = sync;
 
   logic [56:0] sync_time = '0;
@@ -119,7 +127,7 @@ module synchronizer (
 
   always_ff @(posedge CLK) adjust_cnt <= adjust_cnt == adjust_cnt_cyc ? '0 : adjust_cnt + 1;
 
-  always_ff @(posedge CLK) sync_tri <= {sync_tri[1:0], SYNC_IN};
+  always_ff @(posedge CLK) sync_in_prev <= sync_in;
 
 endmodule
 `default_nettype wire

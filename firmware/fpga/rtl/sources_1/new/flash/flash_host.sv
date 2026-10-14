@@ -22,15 +22,20 @@ module flash_host (
   logic req = 1'b0;
   logic [15:0] rdata = 16'd0;
 
-  (* ASYNC_REG = "TRUE" *) logic [1:0] ack_sync = 2'b00;
   logic ack = 1'b0;
+  logic ack_sync;
   logic busy;
 
-  assign busy = req != ack_sync[1];
+  cdc_sync ack_cdc (
+      .CLK(BUS_CLK),
+      .D  (ack),
+      .Q  (ack_sync)
+  );
+
+  assign busy = req != ack_sync;
   assign DATA_OUT = rdata;
 
   always_ff @(posedge BUS_CLK) begin
-    ack_sync <= {ack_sync[0], ack};
     if (WE & REG_EN) begin
       case (ADDR[7:0])
         ADDR_FLASH_CMD: begin
@@ -81,8 +86,7 @@ module flash_host (
 
   assign FLASH_BUS.BUF_BYTE = buf_msb ? buf_word[15:8] : buf_word[7:0];
 
-  (* ASYNC_REG = "TRUE" *) logic [1:0] req_sync = 2'b00;
-  logic req_seen = 1'b0;
+  logic requested;
   logic pending = 1'b0;
   logic [7:0] cmd_op = 8'd0;
   logic [23:0] cmd_addr = 24'd0;
@@ -93,10 +97,14 @@ module flash_host (
   assign FLASH_BUS.CMD_ADDR = cmd_addr;
   assign FLASH_BUS.CMD_LEN = cmd_len;
 
+  cdc_toggle req_cdc (
+      .CLK   (CLK),
+      .TOGGLE(req),
+      .PULSE (requested)
+  );
+
   always_ff @(posedge CLK) begin
-    req_sync <= {req_sync[0], req};
-    req_seen <= req_sync[1];
-    if (req_seen != req_sync[1]) begin
+    if (requested) begin
       pending  <= 1'b1;
       cmd_op   <= op_reg;
       cmd_addr <= addr_reg;
