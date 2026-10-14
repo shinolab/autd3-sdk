@@ -649,6 +649,7 @@ def test_cpu_config_defaults() -> None:
     assert config.ptp_unlock_failsafe_timeout is None
     assert config.fpga_bus_wait == autd3.commands.FpgaBusWait.Cycles3
     assert config.fpga_bus_wait.cycles == 3
+    assert config.cpu_watchdog_timeout == autd3.Duration.from_secs(1)
     assert config.ptp.sync_interval.as_millis() == 8
     assert config.ptp.tx_timestamp_timeout.as_millis() == 3
     assert config.ptp.delay_resp_timeout.as_millis() == 6
@@ -751,6 +752,14 @@ def test_cpu_config_fields() -> None:
     assert fast.fpga_bus_wait.cycles == 2
     assert fast != autd3.commands.CpuConfig()
 
+    unwatched = autd3.commands.CpuConfig(cpu_watchdog_timeout=None)
+    assert unwatched.cpu_watchdog_timeout is None
+    assert unwatched != autd3.commands.CpuConfig()
+
+    watched = autd3.commands.CpuConfig(cpu_watchdog_timeout=autd3.Duration.from_millis(30))
+    assert watched.cpu_watchdog_timeout == autd3.Duration.from_millis(30)
+    assert watched != autd3.commands.CpuConfig()
+
 
 def test_cpu_config_rejects_invalid_arguments() -> None:
     with pytest.raises(ValueError, match="fpga_wait_update_max_polls"):
@@ -789,6 +798,17 @@ def test_set_cpu_config_builds() -> None:
         )
     )
     with pytest.raises(autd3.Autd3Error, match="ptp_unlock_failsafe_timeout"):
+        autd3.Frames.encode(geo, commands)
+
+    commands = []
+    commands.append(autd3.commands.SetCpuConfig(autd3.commands.CpuConfig(cpu_watchdog_timeout=None)))
+    assert len(autd3.Frames.encode(geo, commands)) == 1
+
+    commands = []
+    commands.append(
+        autd3.commands.SetCpuConfig(autd3.commands.CpuConfig(cpu_watchdog_timeout=autd3.Duration.from_nanos(0)))
+    )
+    with pytest.raises(autd3.Autd3Error, match="cpu_watchdog_timeout"):
         autd3.Frames.encode(geo, commands)
 
     commands = []

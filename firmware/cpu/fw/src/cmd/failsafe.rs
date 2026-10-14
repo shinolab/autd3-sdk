@@ -33,6 +33,8 @@ pub(crate) fn release<P: Port>(port: &mut P, config: &CpuConfig) -> Result<(), E
         return Err(Error::FailsafeConditionActive);
     }
     set(port, false);
+    fpga::set_watchdog_timeout(port, config.cpu_watchdog_timeout);
+    fpga::release_watchdog(port);
     Ok(())
 }
 
@@ -48,7 +50,7 @@ mod tests {
     use crate::fpga_params::{CtlFlags, NUM_TRANSDUCERS};
     use crate::proto::{Cmd, Error};
     use crate::test_utils::builders::{force_fan, output_mask, set_cpu_config};
-    use crate::test_utils::mock::{Frame, Harness};
+    use crate::test_utils::mock::{Frame, Harness, WatchdogEvent};
 
     const FAILSAFE_TIMEOUT_MS: u32 = cpu_params::FAILSAFE_TIMEOUT.as_millis() as u32;
 
@@ -503,6 +505,130 @@ mod tests {
         h.port.host_idle_ms = Some(0);
         h.port.ptp_unlocked_ms = Some(49);
         release(&mut h, 2);
+    }
+
+    const CPU_WATCHDOG_TIMEOUT_MS: u16 = cpu_params::CPU_WATCHDOG_TIMEOUT.as_millis() as u16;
+
+    const _: () = assert!(CPU_WATCHDOG_TIMEOUT_MS == 1000);
+
+    #[test]
+    fn boot_releases_the_watchdog_and_then_arms_it_with_the_default_timeout() {
+        let h = Harness::new();
+        assert_eq!(
+            h.port.watchdog_log,
+            [
+                WatchdogEvent::Release,
+                WatchdogEvent::Timeout(CPU_WATCHDOG_TIMEOUT_MS)
+            ]
+        );
+    }
+
+    #[test]
+    fn a_boot_whose_fpga_init_times_out_leaves_the_watchdog_fired() {
+        let mut h = Harness::new();
+        h.port.watchdog_log.clear();
+        h.port.watchdog_state = 1;
+        h.port.latch_stuck = true;
+        h.reboot();
+        assert_eq!(
+            h.port.watchdog_log,
+            [WatchdogEvent::Timeout(CPU_WATCHDOG_TIMEOUT_MS)]
+        );
+        assert_eq!(h.port.watchdog_state & 1, 1);
+    }
+
+    #[test]
+    fn every_tick_kicks_the_watchdog() {
+        let mut h = Harness::new();
+        let kicks = h.port.watchdog_kicks;
+        h.tick_1ms(3);
+        assert_eq!(h.port.watchdog_kicks - kicks, 3);
+    }
+
+    #[test]
+    fn the_watchdog_timeout_follows_the_config() {
+        let mut h = Harness::new();
+        h.deliver(&set_cpu_config(
+            0,
+            &CpuConfig {
+                cpu_watchdog_timeout: Some(Duration::from_millis(250)),
+                ..default_config()
+            },
+        ));
+        assert_eq!(h.status(), Error::None);
+        assert_eq!(h.port.watchdog_timeout, Some(250));
+
+        h.deliver(&set_cpu_config(
+            1,
+            &CpuConfig {
+                cpu_watchdog_timeout: None,
+                ..default_config()
+            },
+        ));
+        assert_eq!(h.status(), Error::None);
+        assert_eq!(h.port.watchdog_timeout, Some(0));
+
+        h.deliver(&Frame::new(2, Cmd::Clear));
+        assert_eq!(h.status(), Error::None);
+        assert_eq!(h.port.watchdog_timeout, Some(CPU_WATCHDOG_TIMEOUT_MS));
+    }
+
+    #[test]
+    fn a_config_reset_rearms_the_watchdog_with_the_default_timeout() {
+        let mut h = Harness::new();
+        h.deliver(&set_cpu_config(
+            0,
+            &CpuConfig {
+                cpu_watchdog_timeout: None,
+                ..default_config()
+            },
+        ));
+        assert_eq!(h.port.watchdog_timeout, Some(0));
+
+        h.cpu.request_config_reset();
+        h.tick_1ms(1);
+        assert_eq!(h.port.watchdog_timeout, Some(CPU_WATCHDOG_TIMEOUT_MS));
+    }
+
+    #[test]
+    fn clear_releases_a_fired_watchdog_after_the_timeout_is_rewritten() {
+        let mut h = Harness::new();
+        h.port.watchdog_state = 1;
+        h.port.watchdog_log.clear();
+        h.deliver(&Frame::new(0, Cmd::Clear));
+        assert_eq!(h.status(), Error::None);
+        assert_eq!(
+            h.port.watchdog_log,
+            [
+                WatchdogEvent::Timeout(CPU_WATCHDOG_TIMEOUT_MS),
+                WatchdogEvent::Release
+            ]
+        );
+        assert_eq!(h.port.watchdog_state & 1, 0);
+    }
+
+    #[test]
+    fn release_failsafe_releases_a_fired_watchdog() {
+        let mut h = Harness::new();
+        h.port.watchdog_state = 1;
+        let releases = h.port.watchdog_releases;
+        release(&mut h, 0);
+        assert_eq!(h.port.watchdog_releases - releases, 1);
+        assert_eq!(h.port.watchdog_state & 1, 0);
+    }
+
+    #[test]
+    fn a_rejected_release_keeps_the_watchdog_fired() {
+        let mut h = Harness::new();
+        set_ptp_unlock_failsafe_timeout(&mut h, 0, Some(Duration::from_millis(50)));
+        h.port.ptp_unlocked_ms = Some(50);
+        h.tick_1ms(1);
+        h.port.watchdog_state = 1;
+        let releases = h.port.watchdog_releases;
+        h.deliver(&Frame::new(1, Cmd::ReleaseFailsafe));
+        assert_eq!(h.status(), Error::FailsafeConditionActive);
+        assert_eq!(h.port.watchdog_releases, releases);
+        assert_eq!(h.port.watchdog_state & 1, 1);
     }
 
     #[test]

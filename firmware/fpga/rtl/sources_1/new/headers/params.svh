@@ -17,6 +17,7 @@ package params;
   localparam int FuncDynamicFreqBit = 1;
   localparam int FuncFlashOtaBit = 2;
   localparam int FuncStrictSilencerGuardBit = 3;
+  localparam int FuncCpuWatchdogBit = 4;
   localparam int FuncEmulatorBit = 7;  // reserved
 
   localparam bit [23:0] FlashWritableBase = 24'h800000;
@@ -27,8 +28,8 @@ package params;
   localparam bit [31:0] FlashUsrAccessUpdate = 32'h55504454;
 
   localparam bit [7:0] VersionNumMajor = 8'd0;
-  localparam bit [7:0] VersionNumMinor = 8'd10;
-  localparam bit [7:0] VersionNumPatch = 8'd1;
+  localparam bit [7:0] VersionNumMinor = 8'd11;
+  localparam bit [7:0] VersionNumPatch = 8'd0;
 
   typedef enum int {
     CTL_FLAG_BIT_MOD_SET = 0,
@@ -63,6 +64,7 @@ package params;
     BRAM_SELECT_FLASH       = 8'h03,
     BRAM_SELECT_FLASH_BUF   = 8'h04,
     BRAM_SELECT_PWE_TABLE   = 8'h06,
+    BRAM_SELECT_WATCHDOG    = 8'h07,
     BRAM_SELECT_MOD         = 8'h40,
     BRAM_SELECT_EMISSION    = 8'hC0
   } bram_select_t;
@@ -79,6 +81,13 @@ package params;
     ADDR_FLASH_USR_ACCESS_0 = 8'h08,
     ADDR_FLASH_USR_ACCESS_1 = 8'h09
   } flash_addr_t;
+
+  typedef enum logic [7:0] {
+    ADDR_WATCHDOG_KICK    = 8'h00,
+    ADDR_WATCHDOG_TIMEOUT = 8'h01,
+    ADDR_WATCHDOG_RELEASE = 8'h02,
+    ADDR_WATCHDOG_STATE   = 8'h03
+  } watchdog_addr_t;
 
   typedef enum logic [7:0] {
     FLASH_OP_CRC32   = 8'h02,

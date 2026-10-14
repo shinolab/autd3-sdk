@@ -9,7 +9,8 @@ module memory (
     modulation_bus_if.in_port MOD_BUS,
     emission_bus_if.in_port EMISSION_BUS,
     pwe_table_bus_if.in_port PWE_TABLE_BUS,
-    flash_bus_if.host_port FLASH_BUS
+    flash_bus_if.host_port FLASH_BUS,
+    output wire CPU_WATCHDOG_FIRED
 );
 
   import params::*;
@@ -23,7 +24,14 @@ module memory (
   logic [15:0] data_out;
   logic [15:0] ctl_dout;
   logic [15:0] flash_dout;
-  logic flash_rd_sel = 1'b0;
+  logic [15:0] watchdog_dout;
+
+  typedef enum logic [1:0] {
+    RD_SEL_CTL,
+    RD_SEL_FLASH,
+    RD_SEL_WATCHDOG
+  } rd_sel_t;
+  rd_sel_t rd_sel = RD_SEL_CTL;
 
   (* IOB = "TRUE" *) logic cs_n_iob = 1'b1;
   (* IOB = "TRUE" *) logic we_n_iob = 1'b1;
@@ -56,7 +64,7 @@ module memory (
   assign select = addr[15:8];
   assign data_in = data_q;
   assign MEM_BUS.DATA_OUT = data_out;
-  assign data_out = flash_rd_sel ? flash_dout : ctl_dout;
+  assign data_out = (rd_sel == RD_SEL_FLASH) ? flash_dout : (rd_sel == RD_SEL_WATCHDOG) ? watchdog_dout : ctl_dout;
 
   ///////////////////////////// Controller ////////////////////////////
   logic ctl_en;
@@ -84,17 +92,32 @@ module memory (
 
   logic flash_reg_en;
   logic flash_buf_en;
+  logic watchdog_en;
 
   assign flash_reg_en = (select == BRAM_SELECT_FLASH) & en;
   assign flash_buf_en = (select[7:1] == FlashBufSelect[7:1]) & en;
+  assign watchdog_en  = (select == BRAM_SELECT_WATCHDOG) & en;
 
   always_ff @(posedge bus_clk) begin
     if (flash_reg_en) begin
-      flash_rd_sel <= 1'b1;
+      rd_sel <= RD_SEL_FLASH;
+    end else if (watchdog_en) begin
+      rd_sel <= RD_SEL_WATCHDOG;
     end else if (ctl_en) begin
-      flash_rd_sel <= 1'b0;
+      rd_sel <= RD_SEL_CTL;
     end
   end
+
+  cpu_watchdog cpu_watchdog (
+      .BUS_CLK(bus_clk),
+      .CLK(CLK),
+      .EN(watchdog_en),
+      .WE(we),
+      .ADDR(addr[7:0]),
+      .DATA_IN(data_in),
+      .DATA_OUT(watchdog_dout),
+      .FIRED(CPU_WATCHDOG_FIRED)
+  );
 
   flash_host flash_host (
       .BUS_CLK(bus_clk),

@@ -16,6 +16,7 @@ fn main() {
         failsafe_timeout: Some(Duration::from_millis(500)),
         ptp_unlock_failsafe_timeout: None,
         fpga_bus_wait: FpgaBusWait::Cycles3,
+        cpu_watchdog_timeout: Some(Duration::from_secs(1)),
         ptp: PtpConfig {
             sync_interval: Duration::from_millis(8),
             tx_timestamp_timeout: Duration::from_millis(3),

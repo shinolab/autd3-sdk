@@ -18,6 +18,7 @@ internal static class Sample
             FailsafeTimeout = TimeSpan.FromMilliseconds(500),
             PtpUnlockFailsafeTimeout = null,
             FpgaBusWait = FpgaBusWait.Cycles3,
+            CpuWatchdogTimeout = TimeSpan.FromSeconds(1),
             Ptp = new PtpConfig
             {
                 SyncInterval = TimeSpan.FromMilliseconds(8),

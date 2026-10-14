@@ -211,6 +211,7 @@ impl Cpu {
         }
         self.fpga_update.state.set(State::Locked);
         failsafe::mute(port);
+        fpga::set_watchdog_timeout(port, None);
         run_command(
             port,
             self.config().fpga_flash_max_polls,
@@ -348,9 +349,7 @@ impl Cpu {
             return;
         }
         self.fpga_update.reconfig_failed.set(!reconfigured);
-        if fpga::init(port, self.config().fpga_wait_update_max_polls).is_err() {
-            self.count_boot_failure();
-        }
+        self.init(port);
         self.fpga_update.state.set(State::Idle);
     }
 }
@@ -873,6 +872,24 @@ mod tests {
         assert_eq!(h.status(), Error::None);
         assert!(!output_muted(&h));
         assert_eq!(h.telemetry().boot_failure, 1);
+    }
+
+    #[test]
+    fn the_watchdog_is_suspended_from_begin_until_the_reinitialization() {
+        let mut h = ota_capable();
+        h.deliver(&begin(0, 100, 0));
+        assert_eq!(h.status(), Error::None);
+        assert_eq!(h.port.watchdog_timeout, Some(0));
+        let (mut h, _) = activated(61);
+        assert_eq!(h.port.watchdog_timeout, Some(0));
+        h.tick_1ms(u32::from(FPGA_REBOOT_DELAY_MS) + u32::from(FPGA_RECONFIG_SETTLE_MS) - 1);
+        assert_eq!(h.port.watchdog_timeout, Some(0));
+        h.tick_1ms(1);
+        assert!(!h.cpu.fpga_update.is_locked());
+        assert_eq!(
+            h.port.watchdog_timeout,
+            Some(autd3_cpu_wire::cpu_params::CPU_WATCHDOG_TIMEOUT.as_millis() as u16)
+        );
     }
 
     #[test]

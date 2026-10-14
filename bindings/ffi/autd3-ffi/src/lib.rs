@@ -81,6 +81,7 @@ fn to_telemetry(telemetry: Telemetry) -> Autd3Telemetry {
         ptp_unlock_failsafe: telemetry.ptp_unlock_failsafe,
         sync_resync: telemetry.sync_resync,
         boot_failure: telemetry.boot_failure,
+        cpu_watchdog: telemetry.cpu_watchdog,
     }
 }
 
@@ -1196,6 +1197,37 @@ pub unsafe extern "C" fn autd3_cpu_config_get_ptp_unlock_failsafe_timeout(
             config
                 .0
                 .ptp_unlock_failsafe_timeout
+                .map_or(0, autd3_ffi_abi::to_ns),
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_cpu_config_set_cpu_watchdog_timeout(
+    handle: *mut CpuConfigHandle,
+    ns: u64,
+) -> i32 {
+    let Some(config) = (unsafe { handle_mut(handle) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    config.0.cpu_watchdog_timeout = (ns != 0).then(|| Duration::from_nanos(ns));
+    AUTD3_OK
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_cpu_config_get_cpu_watchdog_timeout(
+    handle: *const CpuConfigHandle,
+    out: *mut u64,
+) -> i32 {
+    let Some(config) = (unsafe { handle_ref(handle) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    unsafe {
+        autd3_ffi_abi::write_out(
+            out,
+            config
+                .0
+                .cpu_watchdog_timeout
                 .map_or(0, autd3_ffi_abi::to_ns),
         )
     }
@@ -2698,6 +2730,10 @@ mod tests {
             assert_eq!(AUTD3_OK, autd3_cpu_config_set_fpga_bus_wait(handle, 2));
             assert_eq!(
                 AUTD3_OK,
+                autd3_cpu_config_set_cpu_watchdog_timeout(handle, 27_000_000)
+            );
+            assert_eq!(
+                AUTD3_OK,
                 autd3_cpu_config_set_ptp_sync_interval(handle, 15_000_000)
             );
             assert_eq!(
@@ -2745,6 +2781,7 @@ mod tests {
                 failsafe_timeout: Some(Duration::from_millis(25)),
                 ptp_unlock_failsafe_timeout: Some(Duration::from_millis(26)),
                 fpga_bus_wait: autd3_rs::commands::FpgaBusWait::Cycles2,
+                cpu_watchdog_timeout: Some(Duration::from_millis(27)),
                 ptp: autd3_rs::commands::PtpConfig {
                     sync_interval: Duration::from_millis(15),
                     tx_timestamp_timeout: Duration::from_millis(16),
@@ -2918,6 +2955,34 @@ mod tests {
     }
 
     #[test]
+    fn the_cpu_watchdog_timeout_is_one_second_until_zero_disables_it() {
+        let handle = autd3_cpu_config_new();
+        let mut ns = 0u64;
+        unsafe {
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_get_cpu_watchdog_timeout(handle, &raw mut ns)
+            );
+            assert_eq!(ns, 1_000_000_000);
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_set_cpu_watchdog_timeout(handle, 0)
+            );
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_get_cpu_watchdog_timeout(handle, &raw mut ns)
+            );
+            assert_eq!(ns, 0);
+            assert_eq!(
+                AUTD3_ERR_INVALID_ARGUMENT,
+                autd3_cpu_config_set_cpu_watchdog_timeout(std::ptr::null_mut(), 0)
+            );
+        }
+        let config = unsafe { take_handle(handle) }.unwrap().0;
+        assert_eq!(config.cpu_watchdog_timeout, None);
+    }
+
+    #[test]
     fn a_zero_cpu_config_count_is_rejected_and_keeps_the_value() {
         let handle = autd3_cpu_config_new();
         unsafe {
@@ -2956,6 +3021,7 @@ mod tests {
         telemetry.processed = 0x1234_5678;
         telemetry.failsafe = 0x0708;
         telemetry.boot_failure = 9;
+        telemetry.cpu_watchdog = 10;
         let array = into_handle(TelemetryArray(vec![
             to_telemetry(Telemetry::default()),
             to_telemetry(telemetry),
@@ -2969,6 +3035,7 @@ mod tests {
         assert_eq!(out.processed, 0x1234_5678);
         assert_eq!(out.failsafe, 0x0708);
         assert_eq!(out.boot_failure, 9);
+        assert_eq!(out.cpu_watchdog, 10);
         assert_eq!(out.fifo_drop, 0);
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
             autd3_telemetry_array_get(array, 2, &raw mut out)

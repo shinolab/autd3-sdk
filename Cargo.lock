@@ -72,7 +72,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-cpu-fw"
-version = "0.10.1"
+version = "0.11.0"
 dependencies = [
  "autd3-cpu-wire",
  "bitflags",
@@ -85,7 +85,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-cpu-wire"
-version = "0.10.1"
+version = "0.11.0"
 dependencies = [
  "bitflags",
  "crc",

@@ -7,6 +7,7 @@ pub const ERR_FAILSAFE_CONDITION_ACTIVE: u8 = 0x15;
 
 pub mod auto_recovery;
 pub mod cpu_config;
+pub mod cpu_watchdog;
 pub mod error;
 pub mod foci_stm;
 pub mod force_fan;

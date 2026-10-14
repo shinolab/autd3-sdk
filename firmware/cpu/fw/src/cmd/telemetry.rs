@@ -9,7 +9,8 @@ use crate::proto::ReplyData;
 impl Cpu {
     pub(crate) fn read_telemetry<P: Port>(&self, port: &mut P) -> ReplyData {
         let sync_resync = (fpga::read_ctl(port, ADDR_FPGA_STATE) >> 8) as u8;
-        let telemetry = self.telemetry(sync_resync);
+        let cpu_watchdog = fpga::watchdog_state(port).count;
+        let telemetry = self.telemetry(sync_resync, cpu_watchdog);
         ReplyData::from_slice(telemetry.as_bytes())
     }
 }
@@ -18,7 +19,7 @@ impl Cpu {
 mod tests {
     use autd3_cpu_wire::payload::Telemetry;
 
-    use crate::fpga_params::ADDR_FPGA_STATE;
+    use crate::fpga_params::{ADDR_FPGA_STATE, ADDR_FUNCTION_BITS, FunctionBits};
     use crate::proto::{Cmd, Error};
     use crate::test_utils::builders::force_fan;
     use crate::test_utils::mock::{Frame, Harness};
@@ -46,6 +47,27 @@ mod tests {
         let mut h = Harness::new();
         h.set_ctl(ADDR_FPGA_STATE, 0x2A83);
         assert_eq!(read_telemetry(&mut h, 0).sync_resync, 0x2A);
+    }
+
+    #[test]
+    fn read_telemetry_cpu_watchdog_returns_the_fpga_fire_count() {
+        let mut h = Harness::new();
+        h.port.watchdog_state = 0x2A01;
+        assert_eq!(read_telemetry(&mut h, 0).cpu_watchdog, 0x2A);
+
+        h.deliver(&Frame::new(1, Cmd::Clear));
+        assert_eq!(read_telemetry(&mut h, 2).cpu_watchdog, 0x2A);
+    }
+
+    #[test]
+    fn an_fpga_without_the_watchdog_reports_no_fires() {
+        let mut h = Harness::new();
+        h.set_ctl(
+            ADDR_FUNCTION_BITS,
+            u16::from(FunctionBits::STRICT_SILENCER_GUARD.bits()),
+        );
+        h.port.watchdog_state = 0x2A01;
+        assert_eq!(read_telemetry(&mut h, 0).cpu_watchdog, 0);
     }
 
     #[test]

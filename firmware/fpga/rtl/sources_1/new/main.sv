@@ -73,26 +73,28 @@ module main #(
   logic mod_ext_active;
   logic gpio_in_soft[4];
   logic failsafe;
+  logic cpu_watchdog_fired;
+  logic output_gate;
   logic signed [13:0] sync_time_diff;
   logic [7:0] sync_resync_count;
 
-  (* ASYNC_REG = "true" *) logic gpio_in_hard_meta[4] = '{1'b0, 1'b0, 1'b0, 1'b0};
-  (* ASYNC_REG = "true" *) logic gpio_in_hard_sync[4] = '{1'b0, 1'b0, 1'b0, 1'b0};
+  logic gpio_in_hard_sync[4];
   logic gpio_in[4];
   for (genvar i = 0; i < 4; i++) begin : gen_gpio_in_cdc
-    always_ff @(posedge clk) begin
-      gpio_in_hard_meta[i] <= ~GPIO_IN_HARD[i];
-      gpio_in_hard_sync[i] <= gpio_in_hard_meta[i];
-    end
+    cdc_sync gpio_in_hard_cdc (
+        .CLK(clk),
+        .D  (~GPIO_IN_HARD[i]),
+        .Q  (gpio_in_hard_sync[i])
+    );
     assign gpio_in[i] = gpio_in_hard_sync[i] | gpio_in_soft[i];
   end
 
-  (* ASYNC_REG = "true" *)logic thermo_meta = 1'b0;
-  (* ASYNC_REG = "true" *)logic thermo_sync = 1'b0;
-  always_ff @(posedge clk) begin
-    thermo_meta <= THERMO;
-    thermo_sync <= thermo_meta;
-  end
+  logic thermo_sync;
+  cdc_sync thermo_cdc (
+      .CLK(clk),
+      .D  (THERMO),
+      .Q  (thermo_sync)
+  );
 
   clk_wiz clk_wiz (
       .clk_in1(MRCC_25P6M),
@@ -101,12 +103,12 @@ module main #(
       .locked(locked)
   );
 
-  (* ASYNC_REG = "true" *)logic locked_meta = 1'b0;
-  (* ASYNC_REG = "true" *)logic locked_sync = 1'b0;
-  always_ff @(posedge clk) begin
-    locked_meta <= locked;
-    locked_sync <= locked_meta;
-  end
+  logic locked_sync;
+  cdc_sync locked_cdc (
+      .CLK(clk),
+      .D  (locked),
+      .Q  (locked_sync)
+  );
 
   memory memory (
       .CLK(clk),
@@ -117,8 +119,11 @@ module main #(
       .MOD_BUS(mod_bus.in_port),
       .EMISSION_BUS(emission_bus.in_port),
       .PWE_TABLE_BUS(pwe_table_bus.in_port),
-      .FLASH_BUS(flash_bus.host_port)
+      .FLASH_BUS(flash_bus.host_port),
+      .CPU_WATCHDOG_FIRED(cpu_watchdog_fired)
   );
+
+  assign output_gate = failsafe | cpu_watchdog_fired;
 
   assign ICAP_CLK = clk;
 
@@ -190,7 +195,7 @@ module main #(
       .EMISSION_BUS_FOCUS(emission_bus.out_focus_port),
       .EMISSION_BUS_RAW(emission_bus.out_raw_port),
       .OUTPUT_MASK_BUS(output_mask_bus.out_port),
-      .FAILSAFE(failsafe),
+      .FAILSAFE(output_gate),
       .INTENSITY(intensity),
       .PHASE(phase),
       .GPIO_IN(gpio_in),

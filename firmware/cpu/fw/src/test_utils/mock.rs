@@ -17,8 +17,9 @@ use crate::fpga_params::{
     ADDR_MOD_TRANSITION_MODE, ADDR_PATTERN_FREQ_DIV0, ADDR_PATTERN_MEM_WR_BANK,
     ADDR_PATTERN_MEM_WR_PAGE, ADDR_PATTERN_REP0, ADDR_PATTERN_REQ_RD_BANK,
     ADDR_PATTERN_TRANSITION_MODE, ADDR_SILENCER_COMPLETION_STEPS_PHASE, ADDR_SILENCER_FLAG,
-    ADDR_SILENCER_SET_RESULT, BramSelect, CtlFlags, FLASH_BUF_BYTES, FlashErr, FlashOp,
-    FunctionBits, NUM_BANKS,
+    ADDR_SILENCER_SET_RESULT, ADDR_WATCHDOG_KICK, ADDR_WATCHDOG_RELEASE, ADDR_WATCHDOG_STATE,
+    ADDR_WATCHDOG_TIMEOUT, BramSelect, CtlFlags, FLASH_BUF_BYTES, FlashErr, FlashOp, FunctionBits,
+    NUM_BANKS,
 };
 use crate::port::{FlashError, Port};
 use crate::proto::{
@@ -50,6 +51,13 @@ const PATTERN_LATCHED_REGS: [(u16, usize); 4] = [
     (ADDR_PATTERN_FREQ_DIV0, NUM_BANKS),
     (ADDR_PATTERN_REP0, NUM_BANKS),
 ];
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum WatchdogEvent {
+    Kick,
+    Timeout(u16),
+    Release,
+}
 
 pub(crate) struct MockPort {
     pub ctl: Box<[u16; 256]>,
@@ -95,6 +103,11 @@ pub(crate) struct MockPort {
     pub fpga_usr_access: u32,
     pub fpga_reboots: u32,
     pub fpga_reboots_to_ignore: u32,
+    pub watchdog_kicks: u32,
+    pub watchdog_timeout: Option<u16>,
+    pub watchdog_releases: u32,
+    pub watchdog_state: u16,
+    pub watchdog_log: Vec<WatchdogEvent>,
     isr_frame: Option<(Rc<Cpu>, u8, u8)>,
     pub isr_seen_reply: Option<Reply>,
 }
@@ -102,7 +115,8 @@ pub(crate) struct MockPort {
 impl MockPort {
     pub(crate) fn new() -> Self {
         let mut ctl = Box::new([0; 256]);
-        ctl[ADDR_FUNCTION_BITS as usize] = u16::from(FunctionBits::STRICT_SILENCER_GUARD.bits());
+        ctl[ADDR_FUNCTION_BITS as usize] =
+            u16::from((FunctionBits::STRICT_SILENCER_GUARD | FunctionBits::CPU_WATCHDOG).bits());
         Self {
             ctl,
             latched: Box::new([0; 256]),
@@ -147,6 +161,11 @@ impl MockPort {
             fpga_usr_access: 0,
             fpga_reboots: 0,
             fpga_reboots_to_ignore: 0,
+            watchdog_kicks: 0,
+            watchdog_timeout: None,
+            watchdog_releases: 0,
+            watchdog_state: 0,
+            watchdog_log: Vec::new(),
             isr_frame: None,
             isr_seen_reply: None,
         }
@@ -209,6 +228,22 @@ impl MockPort {
                 self.output_mask[(addr as usize) & (OUTPUT_MASK_WORDS - 1)] = value;
             }
             Some(BramSelect::PweTable) => self.pwe[(addr as usize) & (PWE_TABLE_SIZE - 1)] = value,
+            Some(BramSelect::Watchdog) => match addr & 0xFF {
+                ADDR_WATCHDOG_KICK => {
+                    self.watchdog_kicks += 1;
+                    self.watchdog_log.push(WatchdogEvent::Kick);
+                }
+                ADDR_WATCHDOG_TIMEOUT => {
+                    self.watchdog_timeout = Some(value);
+                    self.watchdog_log.push(WatchdogEvent::Timeout(value));
+                }
+                ADDR_WATCHDOG_RELEASE => {
+                    self.watchdog_releases += 1;
+                    self.watchdog_state &= !1;
+                    self.watchdog_log.push(WatchdogEvent::Release);
+                }
+                _ => {}
+            },
             _ => {}
         }
     }
@@ -343,6 +378,13 @@ impl Port for MockPort {
                 self.ctl_flag_reads += 1;
             }
             return self.ctl[(addr & 0xFF) as usize];
+        }
+        if select == BramSelect::Watchdog.as_u8() {
+            return match addr & 0xFF {
+                ADDR_WATCHDOG_TIMEOUT => self.watchdog_timeout.unwrap_or(0),
+                ADDR_WATCHDOG_STATE => self.watchdog_state,
+                _ => 0,
+            };
         }
         if select == BramSelect::Flash.as_u8() {
             if addr & 0xFF == ADDR_FLASH_STATUS {
@@ -603,7 +645,7 @@ impl Harness {
     }
 
     pub(crate) fn telemetry(&self) -> Telemetry {
-        self.cpu.telemetry(0)
+        self.cpu.telemetry(0, 0)
     }
 
     pub(crate) fn output_mask(&self, idx: usize) -> u16 {

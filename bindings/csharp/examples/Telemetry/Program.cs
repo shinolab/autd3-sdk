@@ -22,6 +22,7 @@ internal static class Program
         ("PtpUnlockFailsafe", t => t.PtpUnlockFailsafe),
         ("SyncResync", t => t.SyncResync),
         ("BootFailure", t => t.BootFailure),
+        ("CpuWatchdog", t => t.CpuWatchdog),
     };
 
     private static void PrintSnapshot(IReadOnlyList<Telemetry> snapshot)

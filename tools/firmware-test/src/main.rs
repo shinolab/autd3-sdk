@@ -66,6 +66,7 @@ enum Selected {
     Lost,
     Reboot,
     AutoRecovery,
+    CpuWatchdog,
 }
 
 impl Ctx<'_> {
@@ -106,13 +107,15 @@ const CASE_NAMES: &[&str] = &[
     "Lost",
     "Reboot",
     "Auto Recovery",
+    "CPU Watchdog",
 ];
 
 const LOST_INDEX: usize = 16;
 const REBOOT_INDEX: usize = 17;
 const AUTO_RECOVERY_INDEX: usize = 18;
+const CPU_WATCHDOG_INDEX: usize = 19;
 
-const _: () = assert!(CASE_NAMES.len() == AUTO_RECOVERY_INDEX + 1);
+const _: () = assert!(CASE_NAMES.len() == CPU_WATCHDOG_INDEX + 1);
 
 async fn dispatch(index: usize, ctx: &Ctx<'_>) -> Result<()> {
     match index {
@@ -198,6 +201,7 @@ async fn run(cli: &Cli) -> Result<()> {
             Selected::Lost => cases::lost::run(client, &link).await?,
             Selected::Reboot => cases::reboot::run(client, &link).await?,
             Selected::AutoRecovery => cases::auto_recovery::run(client, &link).await?,
+            Selected::CpuWatchdog => cases::cpu_watchdog::run(client, &link).await?,
         };
     }
 
@@ -287,6 +291,7 @@ async fn select(ctx: &Ctx<'_>) -> Selected {
             LOST_INDEX => return Selected::Lost,
             REBOOT_INDEX => return Selected::Reboot,
             AUTO_RECOVERY_INDEX => return Selected::AutoRecovery,
+            CPU_WATCHDOG_INDEX => return Selected::CpuWatchdog,
             _ => {}
         }
         if let Err(e) = dispatch(i, ctx).await {
