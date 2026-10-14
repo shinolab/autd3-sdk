@@ -17,14 +17,17 @@ module flash #(
     output wire [31:0] ICAP_I
 );
 
-  (* ASYNC_REG = "TRUE" *) logic [1:0] eos_sync = 2'b00;
+  logic eos_sync;
   logic reboot;
   logic start;
 
-  always_ff @(posedge CLK) begin
-    eos_sync <= {eos_sync[0], EOS};
-    start <= eos_sync[1] & LOCKED;
-  end
+  cdc_sync eos_cdc (
+      .CLK(CLK),
+      .D  (EOS),
+      .Q  (eos_sync)
+  );
+
+  always_ff @(posedge CLK) start <= eos_sync & LOCKED;
 
   assign FLASH_BUS.USR_ACCESS = USR_ACCESS;
 
