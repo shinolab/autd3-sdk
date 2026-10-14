@@ -11,7 +11,9 @@ pub use autd3_cpu_wire::update::{
 };
 
 use crate::app::Cpu;
+use crate::cmd::failsafe;
 use crate::ctx::MainCell;
+use crate::fpga;
 use crate::port::{FlashError, Port};
 use crate::proto::Error;
 
@@ -159,6 +161,8 @@ impl Cpu {
         if !is_plausible_length(length) {
             return Err(Error::InvalidPayload);
         }
+        failsafe::mute(port);
+        fpga::set_watchdog_timeout(port, None);
         self.update.state.set(State::Idle);
         let a = valid_header(port, Slot::A)?;
         let b = valid_header(port, Slot::B)?;
@@ -340,6 +344,9 @@ mod tests {
 
     const ACTIVATE_DELAY_MS: u16 =
         autd3_cpu_wire::cpu_params::UPDATE_ACTIVATE_DELAY.as_millis() as u16;
+    const CPU_WATCHDOG_TIMEOUT_MS: u16 =
+        autd3_cpu_wire::cpu_params::CPU_WATCHDOG_TIMEOUT.as_millis() as u16;
+    use crate::fpga_params::CtlFlags;
     use crate::proto::{Cmd, Disposition, Error};
     use crate::test_utils::mock::{Frame, Harness};
 
@@ -769,6 +776,60 @@ mod tests {
         h.deliver(&Frame::new(seq, Cmd::UpdateCommit));
         assert_eq!(h.status(), Error::None);
         assert_eq!(header_of(&h, Slot::B).generation.get(), 1);
+    }
+
+    fn output_muted(h: &Harness) -> bool {
+        h.ctl_flags().contains(CtlFlags::FAILSAFE)
+    }
+
+    #[test]
+    fn begin_mutes_the_output_and_suspends_the_watchdog() {
+        let (mut h, _) = running_from_slot_a();
+        assert!(!output_muted(&h));
+        h.deliver(&begin(0, FLASH_SECTOR_BYTES, 0));
+        assert_eq!(h.status(), Error::None);
+        assert!(output_muted(&h));
+        assert_eq!(h.port.watchdog_timeout, Some(0));
+    }
+
+    #[test]
+    fn a_begin_without_a_valid_slot_still_mutes_the_output() {
+        let mut h = Harness::new();
+        h.deliver(&begin(0, FLASH_SECTOR_BYTES, 0));
+        assert_eq!(h.status(), Error::UpdateFlash);
+        assert!(output_muted(&h));
+        assert_eq!(h.port.watchdog_timeout, Some(0));
+    }
+
+    #[test]
+    fn a_begin_with_an_implausible_length_leaves_the_output_alone() {
+        let (mut h, _) = running_from_slot_a();
+        h.deliver(&begin(0, 0, 0));
+        assert_eq!(h.status(), Error::InvalidPayload);
+        assert!(!output_muted(&h));
+        assert_eq!(h.port.watchdog_timeout, Some(CPU_WATCHDOG_TIMEOUT_MS));
+    }
+
+    #[test]
+    fn release_failsafe_after_begin_resumes_the_output_and_rearms_the_watchdog() {
+        let (mut h, _) = running_from_slot_a();
+        h.deliver(&begin(0, FLASH_SECTOR_BYTES, 0));
+        assert_eq!(h.status(), Error::None);
+        h.deliver(&Frame::new(1, Cmd::ReleaseFailsafe));
+        assert_eq!(h.status(), Error::None);
+        assert!(!output_muted(&h));
+        assert_eq!(h.port.watchdog_timeout, Some(CPU_WATCHDOG_TIMEOUT_MS));
+    }
+
+    #[test]
+    fn clear_after_begin_resumes_the_output_and_rearms_the_watchdog() {
+        let (mut h, _) = running_from_slot_a();
+        h.deliver(&begin(0, FLASH_SECTOR_BYTES, 0));
+        assert_eq!(h.status(), Error::None);
+        h.deliver(&Frame::new(1, Cmd::Clear));
+        assert_eq!(h.status(), Error::None);
+        assert!(!output_muted(&h));
+        assert_eq!(h.port.watchdog_timeout, Some(CPU_WATCHDOG_TIMEOUT_MS));
     }
 
     #[test]

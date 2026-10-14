@@ -373,6 +373,7 @@ impl CpuConfigPy {
         failsafe_timeout = CoreCpuConfig::default().failsafe_timeout,
         ptp_unlock_failsafe_timeout = CoreCpuConfig::default().ptp_unlock_failsafe_timeout,
         fpga_bus_wait = FpgaBusWaitPy(CoreCpuConfig::default().fpga_bus_wait),
+        cpu_watchdog_timeout = CoreCpuConfig::default().cpu_watchdog_timeout,
         ptp = PtpConfigPy::default(),
     ))]
     #[allow(clippy::too_many_arguments)]
@@ -387,6 +388,7 @@ impl CpuConfigPy {
             Duration,
         >,
         fpga_bus_wait: FpgaBusWaitPy,
+        #[pyo3(from_py_with = crate::udp::none_or_duration)] cpu_watchdog_timeout: Option<Duration>,
         ptp: PtpConfigPy,
     ) -> PyResult<Self> {
         Ok(Self(CoreCpuConfig {
@@ -401,6 +403,7 @@ impl CpuConfigPy {
             failsafe_timeout,
             ptp_unlock_failsafe_timeout,
             fpga_bus_wait: fpga_bus_wait.0,
+            cpu_watchdog_timeout,
             ptp: ptp.0,
         }))
     }
@@ -452,6 +455,14 @@ impl CpuConfigPy {
     #[getter]
     fn fpga_bus_wait(&self) -> FpgaBusWaitPy {
         FpgaBusWaitPy(self.0.fpga_bus_wait)
+    }
+
+    #[getter]
+    fn cpu_watchdog_timeout<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
+        self.0
+            .cpu_watchdog_timeout
+            .map(|timeout| duration_to_py(py, timeout))
+            .transpose()
     }
 
     #[getter]

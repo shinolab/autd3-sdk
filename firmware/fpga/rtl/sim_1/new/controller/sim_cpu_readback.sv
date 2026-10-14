@@ -77,6 +77,14 @@ module sim_cpu_readback ();
 
   logic [15:0] value;
 
+  logic [ 7:0] function_bits;
+  always_comb begin
+    function_bits = 8'd0;
+    function_bits[params::FuncFlashOtaBit] = 1'b1;
+    function_bits[params::FuncStrictSilencerGuardBit] = 1'b1;
+    function_bits[params::FuncCpuWatchdogBit] = 1'b1;
+  end
+
   localparam bit [15:0] PersistentFlags = (16'd1 << params::CTL_FLAG_BIT_FORCE_FAN)
       | (16'd1 << params::CTL_FLAG_BIT_GPIO_IN_0) | (16'd1 << params::CTL_FLAG_BIT_GPIO_IN_2);
 
@@ -100,7 +108,7 @@ module sim_cpu_readback ();
     `ASSERT_EQ({8'h00, params::VersionNumMajor}, value);
 
     sim_helper_bram.read_cnt(params::ADDR_FUNCTION_BITS, value);
-    `ASSERT_EQ({8'h00, (8'd1 << params::FuncFlashOtaBit) | (8'd1 << params::FuncStrictSilencerGuardBit)}, value);
+    `ASSERT_EQ({8'h00, function_bits}, value);
 
     sim_helper_bram.read_cnt(params::ADDR_VERSION_NUM_MINOR, value);
     `ASSERT_EQ({8'h00, params::VersionNumMinor}, value);

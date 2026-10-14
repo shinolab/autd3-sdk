@@ -37,6 +37,7 @@ import csFullSample from "@codes/csharp/examples/api/command/cpu-config-example.
 | `failsafe_timeout`           | `Option<Duration>` | 500 ms  | ホストからの通信がこの時間途絶えるとデバイスが出力を止める (failsafe). `None` は failsafe 無効 |
 | `ptp_unlock_failsafe_timeout` | `Option<Duration>` | `None` | PTP のロックを失ったままこの時間が経つと, そのデバイスが出力を止める. `None` は無効 |
 | `fpga_bus_wait`              | `FpgaBusWait` | `Cycles3`    | CPU が FPGA を読み書きするバスのウェイト周期数. `Cycles2` または `Cycles3` |
+| `cpu_watchdog_timeout`       | `Option<Duration>` | 1 s     | CPU ファームウェアがこの時間止まると出力を止める. `None` は無効 |
 | `ptp`                        | `PtpConfig`  |               | PTP 同期のパラメータ |
 
 ### PtpConfig
@@ -65,7 +66,10 @@ import csFullSample from "@codes/csharp/examples/api/command/cpu-config-example.
 `ptp_unlock_failsafe_timeout` を指定すると, PTP のロックを失ったデバイス (先頭のデバイス以外) は, 失ってからこの時間が経つと failsafe と同じ方法で出力を止める.
 再ロックには既定の設定で 1 s 程度かかるので, それより短い値を指定するとロックを失うたびに必ず出力が止まる.
 
-failsafe で止まった出力は, 自動では戻らない.
+`cpu_watchdog_timeout` は, CPU ファームウェアのハングやリセット中に FPGA が出力を止めるまでの時間で, failsafe と同じ方法で出力を止める.
+`None` にすると, CPU ファームウェアが止まってもデバイスは止まる直前の出力を続ける.
+
+failsafe や CPU ウォッチドッグで止まった出力は, 自動では戻らない.
 止まっているかどうかは `read_fpga_state()` が返す `FpgaState` の `is_failsafe_active()` (C#: `IsFailsafeActive`) で確認できる.
 `ReleaseFailsafe` コマンドを送ると出力が再開される.
 [Clear](/autd3-sdk/api/command/clear/) でも解除されるが, すべての状態が既定値に戻る.

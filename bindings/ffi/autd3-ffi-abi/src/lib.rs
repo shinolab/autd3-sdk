@@ -118,6 +118,7 @@ pub struct Autd3Telemetry {
     pub ptp_unlock_failsafe: u16,
     pub sync_resync: u8,
     pub boot_failure: u8,
+    pub cpu_watchdog: u8,
 }
 
 #[repr(transparent)]

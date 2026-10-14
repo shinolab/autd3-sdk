@@ -13,6 +13,7 @@ pub struct Telemetry {
     pub ptp_unlock_failsafe: u16,
     pub sync_resync: u8,
     pub boot_failure: u8,
+    pub cpu_watchdog: u8,
 }
 
 impl Telemetry {
@@ -29,6 +30,7 @@ impl Telemetry {
             ptp_unlock_failsafe: wire.ptp_unlock_failsafe.get(),
             sync_resync: wire.sync_resync,
             boot_failure: wire.boot_failure,
+            cpu_watchdog: wire.cpu_watchdog,
         })
     }
 }
@@ -51,6 +53,7 @@ mod tests {
             ptp_unlock_failsafe: 9.into(),
             sync_resync: 10,
             boot_failure: 11,
+            cpu_watchdog: 12,
         }
     }
 
@@ -70,6 +73,7 @@ mod tests {
                 ptp_unlock_failsafe: 9,
                 sync_resync: 10,
                 boot_failure: 11,
+                cpu_watchdog: 12,
             }
         );
     }
@@ -86,6 +90,6 @@ mod tests {
 
     #[test]
     fn a_short_reply_is_rejected() {
-        assert!(Telemetry::parse(&[0; 29]).is_none());
+        assert!(Telemetry::parse(&[0; 30]).is_none());
     }
 }

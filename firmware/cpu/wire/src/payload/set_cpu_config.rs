@@ -57,6 +57,7 @@ const fn to_millis(field: &'static str, value: Duration) -> Result<U16, CpuConfi
 }
 
 const FAILSAFE_DISABLED: u16 = 0;
+const WATCHDOG_DISABLED: u16 = 0;
 const PAUSE_DISABLED: u16 = 0;
 
 const fn from_nanos(value: U32) -> Duration {
@@ -104,6 +105,7 @@ pub struct SetCpuConfigPayload {
     pub ptp_pause_retry_ms: U16,
     pub ptp_unlock_failsafe_timeout_ms: U16,
     pub fpga_bus_wait: U16,
+    pub cpu_watchdog_timeout_ms: U16,
 }
 
 impl SetCpuConfigPayload {
@@ -162,6 +164,14 @@ impl SetCpuConfigPayload {
                 None => U16::new(FAILSAFE_DISABLED),
             },
             fpga_bus_wait: U16::new(config.fpga_bus_wait.as_u8() as u16),
+            cpu_watchdog_timeout_ms: match config.cpu_watchdog_timeout {
+                Some(timeout) => tri!(to_millis_at_least(
+                    "cpu_watchdog_timeout",
+                    timeout,
+                    Duration::from_millis(1)
+                )),
+                None => U16::new(WATCHDOG_DISABLED),
+            },
         })
     }
 
@@ -218,6 +228,10 @@ impl SetCpuConfigPayload {
                 _ => Some(from_millis(self.ptp_unlock_failsafe_timeout_ms)),
             },
             fpga_bus_wait,
+            cpu_watchdog_timeout: match self.cpu_watchdog_timeout_ms.get() {
+                WATCHDOG_DISABLED => None,
+                _ => Some(from_millis(self.cpu_watchdog_timeout_ms)),
+            },
             ptp: PtpConfig {
                 sync_interval: from_millis(self.ptp_sync_interval_ms),
                 tx_timestamp_timeout: from_millis(self.ptp_tx_timestamp_timeout_ms),
@@ -272,7 +286,8 @@ const _: () = assert!(core::mem::offset_of!(SetCpuConfigPayload, ptp_pause_retry
 const _: () =
     assert!(core::mem::offset_of!(SetCpuConfigPayload, ptp_unlock_failsafe_timeout_ms) == 60);
 const _: () = assert!(core::mem::offset_of!(SetCpuConfigPayload, fpga_bus_wait) == 62);
-const _: () = assert!(core::mem::size_of::<SetCpuConfigPayload>() == 64);
+const _: () = assert!(core::mem::offset_of!(SetCpuConfigPayload, cpu_watchdog_timeout_ms) == 64);
+const _: () = assert!(core::mem::size_of::<SetCpuConfigPayload>() == 66);
 
 #[cfg(test)]
 mod tests {
@@ -290,6 +305,7 @@ mod tests {
             failsafe_timeout: Some(Duration::from_millis(24)),
             ptp_unlock_failsafe_timeout: Some(Duration::from_millis(29)),
             fpga_bus_wait: FpgaBusWait::Cycles2,
+            cpu_watchdog_timeout: Some(Duration::from_millis(30)),
             ptp: PtpConfig {
                 sync_interval: Duration::from_millis(14),
                 tx_timestamp_timeout: Duration::from_millis(15),
@@ -319,6 +335,7 @@ mod tests {
         assert_eq!(payload.ptp_pause_retry_ms.get(), 28);
         assert_eq!(payload.ptp_unlock_failsafe_timeout_ms.get(), 29);
         assert_eq!(payload.fpga_bus_wait.get(), 2);
+        assert_eq!(payload.cpu_watchdog_timeout_ms.get(), 30);
         assert_eq!(payload.decode(), Some(config));
         assert_eq!(SetCpuConfigPayload::parse(payload.as_bytes()), Ok(config));
     }
@@ -333,7 +350,7 @@ mod tests {
                 0x03, 0x00, 0x64, 0x00, 0x08, 0x00, 0x03, 0x00, 0x06, 0x00, 0xE8, 0x03, 0x40, 0x00,
                 0x10, 0x27, 0x00, 0x00, 0x64, 0x00, 0x00, 0x00, 0x32, 0x00, 0x00, 0x00, 0x01, 0x00,
                 0x00, 0x00, 0x20, 0xA1, 0x07, 0x00, 0xF4, 0x01, 0x20, 0x00, 0x05, 0x00, 0x30, 0x00,
-                0x40, 0x00, 0x08, 0x00, 0x00, 0x00, 0x03, 0x00,
+                0x40, 0x00, 0x08, 0x00, 0x00, 0x00, 0x03, 0x00, 0xE8, 0x03,
             ]
         );
     }
@@ -361,6 +378,9 @@ mod tests {
     #[case(CpuConfig { ptp_unlock_failsafe_timeout: Some(MS_MAX), ..CpuConfig::default() })]
     #[case(CpuConfig { fpga_bus_wait: FpgaBusWait::Cycles2, ..CpuConfig::default() })]
     #[case(CpuConfig { fpga_bus_wait: FpgaBusWait::Cycles3, ..CpuConfig::default() })]
+    #[case(CpuConfig { cpu_watchdog_timeout: None, ..CpuConfig::default() })]
+    #[case(CpuConfig { cpu_watchdog_timeout: Some(MS_MIN), ..CpuConfig::default() })]
+    #[case(CpuConfig { cpu_watchdog_timeout: Some(MS_MAX), ..CpuConfig::default() })]
     #[case(CpuConfig { ptp: PtpConfig { sync_interval: MS_MIN, ..PtpConfig::default() }, ..CpuConfig::default() })]
     #[case(CpuConfig { ptp: PtpConfig { sync_interval: MS_MAX, ..PtpConfig::default() }, ..CpuConfig::default() })]
     #[case(CpuConfig { ptp: PtpConfig { tx_timestamp_timeout: Duration::ZERO, ..PtpConfig::default() }, ..CpuConfig::default() })]
@@ -490,6 +510,42 @@ mod tests {
         assert_eq!(
             SetCpuConfigPayload::encode(&config).unwrap().decode(),
             Some(config)
+        );
+    }
+
+    #[test]
+    fn the_cpu_watchdog_is_one_second_by_default_and_zero_on_the_wire_when_disabled() {
+        let default = SetCpuConfigPayload::encode(&CpuConfig::default()).unwrap();
+        assert_eq!(default.cpu_watchdog_timeout_ms.get(), 1000);
+
+        let config = CpuConfig {
+            cpu_watchdog_timeout: None,
+            ..CpuConfig::default()
+        };
+        let payload = SetCpuConfigPayload::encode(&config).unwrap();
+        assert_eq!(payload.cpu_watchdog_timeout_ms.get(), 0);
+        assert_eq!(payload.decode(), Some(config));
+    }
+
+    #[rstest]
+    #[case(Duration::ZERO)]
+    #[case(Duration::from_micros(1500))]
+    #[case(Duration::from_millis(65536))]
+    fn a_cpu_watchdog_timeout_the_wire_would_read_as_disabled_is_rejected(
+        #[case] timeout: Duration,
+    ) {
+        assert_eq!(
+            SetCpuConfigPayload::encode(&CpuConfig {
+                cpu_watchdog_timeout: Some(timeout),
+                ..CpuConfig::default()
+            }),
+            Err(CpuConfigOutOfRange {
+                field: "cpu_watchdog_timeout",
+                value: timeout,
+                unit: Duration::from_millis(1),
+                min: Duration::from_millis(1),
+                max: Duration::from_millis(65535),
+            })
         );
     }
 

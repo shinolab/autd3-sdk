@@ -366,7 +366,7 @@ namespace AUTD3
         {
             public uint FifoDrop, Dedup, SeqMismatch, DispatchError, Processed, SendFailure;
             public ushort Failsafe, PtpUnlockFailsafe;
-            public byte SyncResync, BootFailure;
+            public byte SyncResync, BootFailure, CpuWatchdog;
         }
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]

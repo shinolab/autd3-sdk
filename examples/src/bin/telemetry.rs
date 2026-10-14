@@ -14,7 +14,7 @@ const POLL_INTERVAL: Duration = Duration::from_secs(1);
 
 type Read = fn(&Telemetry) -> u32;
 
-const COUNTERS: [(&str, Read); 10] = [
+const COUNTERS: [(&str, Read); 11] = [
     ("fifo_drop", |t| t.fifo_drop),
     ("dedup", |t| t.dedup),
     ("seq_mismatch", |t| t.seq_mismatch),
@@ -25,6 +25,7 @@ const COUNTERS: [(&str, Read); 10] = [
     ("ptp_unlock_failsafe", |t| u32::from(t.ptp_unlock_failsafe)),
     ("sync_resync", |t| u32::from(t.sync_resync)),
     ("boot_failure", |t| u32::from(t.boot_failure)),
+    ("cpu_watchdog", |t| u32::from(t.cpu_watchdog)),
 ];
 
 #[tokio::main(flavor = "multi_thread")]

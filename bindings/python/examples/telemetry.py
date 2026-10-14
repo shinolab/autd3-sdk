@@ -17,6 +17,7 @@ COUNTERS = (
     "ptp_unlock_failsafe",
     "sync_resync",
     "boot_failure",
+    "cpu_watchdog",
 )
 
 

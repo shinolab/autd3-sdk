@@ -31,6 +31,7 @@ autd3_cpu_wire::wire_enum_u8! {
         Flash = 0x3,
         FlashBuf = 0x4,
         PweTable = 0x6,
+        Watchdog = 0x7,
         Mod = 0x40,
         Emission = 0xC0,
     }
@@ -46,6 +47,11 @@ pub const ADDR_FLASH_RESULT_0: u16 = 0x6;
 pub const ADDR_FLASH_RESULT_1: u16 = 0x7;
 pub const ADDR_FLASH_USR_ACCESS_0: u16 = 0x8;
 pub const ADDR_FLASH_USR_ACCESS_1: u16 = 0x9;
+
+pub const ADDR_WATCHDOG_KICK: u16 = 0x0;
+pub const ADDR_WATCHDOG_TIMEOUT: u16 = 0x1;
+pub const ADDR_WATCHDOG_RELEASE: u16 = 0x2;
+pub const ADDR_WATCHDOG_STATE: u16 = 0x3;
 
 autd3_cpu_wire::wire_enum_u8! {
     pub enum FlashOp {

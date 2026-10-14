@@ -18,9 +18,10 @@ pub struct Telemetry {
     pub ptp_unlock_failsafe: U16,
     pub sync_resync: u8,
     pub boot_failure: u8,
+    pub cpu_watchdog: u8,
 }
 
-const _: () = assert!(core::mem::size_of::<Telemetry>() == 30);
+const _: () = assert!(core::mem::size_of::<Telemetry>() == 31);
 const _: () = assert!(core::mem::size_of::<Telemetry>() <= REPLY_DATA_BYTES_MAX);
 
 #[cfg(test)]
@@ -40,13 +41,14 @@ mod tests {
             ptp_unlock_failsafe: U16::new(0x1B1C),
             sync_resync: 0x1D,
             boot_failure: 0x1E,
+            cpu_watchdog: 0x1F,
         };
         assert_eq!(
             telemetry.as_bytes(),
             &[
                 0x04, 0x03, 0x02, 0x01, 0x08, 0x07, 0x06, 0x05, 0x0C, 0x0B, 0x0A, 0x09, 0x10, 0x0F,
                 0x0E, 0x0D, 0x14, 0x13, 0x12, 0x11, 0x18, 0x17, 0x16, 0x15, 0x1A, 0x19, 0x1C, 0x1B,
-                0x1D, 0x1E,
+                0x1D, 0x1E, 0x1F,
             ]
         );
     }

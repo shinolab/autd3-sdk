@@ -1,4 +1,5 @@
 use core::num::NonZeroU32;
+use core::time::Duration;
 
 use autd3_cpu_wire::cpu_params::PWE_DEFAULT_TABLE;
 
@@ -10,7 +11,8 @@ use crate::fpga_params::{
     ADDR_PATTERN_REP0, ADDR_PATTERN_REQ_RD_BANK, ADDR_PATTERN_TRANSITION_MODE,
     ADDR_PATTERN_TRANSITION_VALUE_0, ADDR_SILENCER_COMPLETION_STEPS_INTENSITY,
     ADDR_SILENCER_COMPLETION_STEPS_PHASE, ADDR_SILENCER_FLAG, ADDR_SILENCER_SET_RESULT,
-    ADDR_SILENCER_UPDATE_RATE_INTENSITY, ADDR_SILENCER_UPDATE_RATE_PHASE, BramSelect, CtlFlags,
+    ADDR_SILENCER_UPDATE_RATE_INTENSITY, ADDR_SILENCER_UPDATE_RATE_PHASE, ADDR_WATCHDOG_KICK,
+    ADDR_WATCHDOG_RELEASE, ADDR_WATCHDOG_STATE, ADDR_WATCHDOG_TIMEOUT, BramSelect, CtlFlags,
     FunctionBits, NUM_BANKS, NUM_TRANSDUCERS,
 };
 pub use crate::fpga_params::{PWE_TABLE_SIZE, REP_INFINITE};
@@ -68,6 +70,38 @@ pub fn functions<P: Port>(port: &mut P) -> FunctionBits {
     match read_ctl(port, ADDR_FUNCTION_BITS) as u8 {
         0xFF => FunctionBits::empty(),
         bits => FunctionBits::from_bits_retain(bits),
+    }
+}
+
+pub fn watchdog_kick<P: Port>(port: &mut P) {
+    write(port, BramSelect::Watchdog, ADDR_WATCHDOG_KICK, 0);
+}
+
+pub fn set_watchdog_timeout<P: Port>(port: &mut P, timeout: Option<Duration>) {
+    let ms = timeout.map_or(0, |timeout| {
+        u16::try_from(timeout.as_millis()).unwrap_or(u16::MAX)
+    });
+    write(port, BramSelect::Watchdog, ADDR_WATCHDOG_TIMEOUT, ms);
+}
+
+pub fn release_watchdog<P: Port>(port: &mut P) {
+    write(port, BramSelect::Watchdog, ADDR_WATCHDOG_RELEASE, 0);
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct WatchdogState {
+    pub fired: bool,
+    pub count: u8,
+}
+
+pub fn watchdog_state<P: Port>(port: &mut P) -> WatchdogState {
+    if !functions(port).contains(FunctionBits::CPU_WATCHDOG) {
+        return WatchdogState::default();
+    }
+    let raw = read(port, BramSelect::Watchdog, ADDR_WATCHDOG_STATE);
+    WatchdogState {
+        fired: raw & 1 != 0,
+        count: (raw >> 8) as u8,
     }
 }
 
@@ -311,6 +345,7 @@ pub fn init<P: Port>(port: &mut P, max_polls: NonZeroU32) -> Result<(), Error> {
     if !gate.is_empty() {
         write_ctl(port, ADDR_CTL_FLAG, 0);
     }
+    release_watchdog(port);
     Ok(())
 }
 

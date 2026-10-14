@@ -94,7 +94,7 @@ impl Counters {
         self.ptp_unlock_failsafe.store(0, Ordering::Relaxed);
     }
 
-    fn telemetry(&self, sync_resync: u8) -> Telemetry {
+    fn telemetry(&self, sync_resync: u8, cpu_watchdog: u8) -> Telemetry {
         Telemetry {
             fifo_drop: self.fifo_drop.load(Ordering::Relaxed).into(),
             dedup: self.dedup.load(Ordering::Relaxed).into(),
@@ -106,6 +106,7 @@ impl Counters {
             ptp_unlock_failsafe: self.ptp_unlock_failsafe.load(Ordering::Relaxed).into(),
             sync_resync,
             boot_failure: self.boot_failure.load(Ordering::Relaxed),
+            cpu_watchdog,
         }
     }
 }
@@ -180,9 +181,11 @@ impl Cpu {
 
 impl Cpu {
     pub fn init<P: Port>(&self, port: &mut P) {
-        if fpga::init(port, self.config().fpga_wait_update_max_polls).is_err() {
+        let config = self.config();
+        if fpga::init(port, config.fpga_wait_update_max_polls).is_err() {
             self.count_boot_failure();
         }
+        fpga::set_watchdog_timeout(port, config.cpu_watchdog_timeout);
     }
 
     pub fn mark_boot_attempt<P: Port>(&self, port: &mut P) {
@@ -229,11 +232,12 @@ impl Cpu {
         self.ptp_unlock_failsafe_fired.set(false);
     }
 
-    pub(crate) fn telemetry(&self, sync_resync: u8) -> Telemetry {
-        self.counters.telemetry(sync_resync)
+    pub(crate) fn telemetry(&self, sync_resync: u8, cpu_watchdog: u8) -> Telemetry {
+        self.counters.telemetry(sync_resync, cpu_watchdog)
     }
 
     pub fn tick_1ms<P: Port>(&self, port: &mut P) {
+        fpga::watchdog_kick(port);
         self.apply_requested_config_reset(port);
         self.update_tick(port);
         self.fpga_update_tick(port);

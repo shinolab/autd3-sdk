@@ -102,6 +102,12 @@ namespace AUTD3
         internal static extern int autd3_cpu_config_get_fpga_bus_wait(IntPtr config, out byte cycles);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_cpu_config_set_cpu_watchdog_timeout(IntPtr config, ulong ns);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_cpu_config_get_cpu_watchdog_timeout(IntPtr config, out ulong ns);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_cpu_config_set_ptp_sync_interval(IntPtr config, ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
@@ -310,6 +316,7 @@ namespace AUTD3
         internal static readonly TimeSpan? FailsafeTimeout;
         internal static readonly TimeSpan? PtpUnlockFailsafeTimeout;
         internal static readonly FpgaBusWait FpgaBusWait;
+        internal static readonly TimeSpan? CpuWatchdogTimeout;
         internal static readonly TimeSpan PtpSyncInterval;
         internal static readonly TimeSpan PtpTxTimestampTimeout;
         internal static readonly TimeSpan PtpDelayRespTimeout;
@@ -346,6 +353,8 @@ namespace AUTD3
                 PtpUnlockFailsafeTimeout = ptpUnlockFailsafeTimeout == TimeSpan.Zero ? null : ptpUnlockFailsafeTimeout;
                 OptionNative.Apply("preset", NativeCommand.autd3_cpu_config_get_fpga_bus_wait(handle, out var fpgaBusWait));
                 FpgaBusWait = (FpgaBusWait)fpgaBusWait;
+                var cpuWatchdogTimeout = OptionNative.GetDuration(handle, NativeCommand.autd3_cpu_config_get_cpu_watchdog_timeout);
+                CpuWatchdogTimeout = cpuWatchdogTimeout == TimeSpan.Zero ? null : cpuWatchdogTimeout;
                 PtpSyncInterval = OptionNative.GetDuration(handle, NativeCommand.autd3_cpu_config_get_ptp_sync_interval);
                 PtpTxTimestampTimeout = OptionNative.GetDuration(handle, NativeCommand.autd3_cpu_config_get_ptp_tx_timestamp_timeout);
                 PtpDelayRespTimeout = OptionNative.GetDuration(handle, NativeCommand.autd3_cpu_config_get_ptp_delay_resp_timeout);
@@ -445,6 +454,8 @@ namespace AUTD3
         private readonly TimeSpan? _failsafeTimeout;
         private readonly bool _ptpUnlockFailsafeTimeoutSet;
         private readonly TimeSpan? _ptpUnlockFailsafeTimeout;
+        private readonly bool _cpuWatchdogTimeoutSet;
+        private readonly TimeSpan? _cpuWatchdogTimeout;
 
         private readonly TimeSpan? _sysTimeTransitionMargin;
         public TimeSpan SysTimeTransitionMargin { get => _sysTimeTransitionMargin ?? CpuConfigDefaults.SysTimeTransitionMargin; init => _sysTimeTransitionMargin = value; }
@@ -480,6 +491,16 @@ namespace AUTD3
         private readonly FpgaBusWait? _fpgaBusWait;
         public FpgaBusWait FpgaBusWait { get => _fpgaBusWait ?? CpuConfigDefaults.FpgaBusWait; init => _fpgaBusWait = value; }
 
+        public TimeSpan? CpuWatchdogTimeout
+        {
+            get => _cpuWatchdogTimeoutSet ? _cpuWatchdogTimeout : CpuConfigDefaults.CpuWatchdogTimeout;
+            init
+            {
+                _cpuWatchdogTimeout = value;
+                _cpuWatchdogTimeoutSet = true;
+            }
+        }
+
         public PtpConfig Ptp { get; init; }
 
         internal IntPtr CreateHandle()
@@ -509,6 +530,12 @@ namespace AUTD3
                     _ => -1,
                 });
                 OptionNative.Apply("fpgaBusWait", NativeCommand.autd3_cpu_config_set_fpga_bus_wait(handle, (byte)FpgaBusWait));
+                OptionNative.Apply("cpuWatchdogTimeout", CpuWatchdogTimeout switch
+                {
+                    null => NativeCommand.autd3_cpu_config_set_cpu_watchdog_timeout(handle, 0),
+                    { } timeout when timeout > TimeSpan.Zero => NativeCommand.autd3_cpu_config_set_cpu_watchdog_timeout(handle, OptionNative.ToNanos(timeout)),
+                    _ => -1,
+                });
                 Ptp.Apply(handle);
             }
             catch

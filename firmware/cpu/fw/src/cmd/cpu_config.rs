@@ -6,6 +6,7 @@ use autd3_cpu_wire::cpu_params;
 use core::sync::atomic::Ordering;
 
 use crate::app::Cpu;
+use crate::fpga;
 use crate::port::Port;
 use crate::proto::Error;
 use crate::ptp;
@@ -25,6 +26,7 @@ pub(crate) const fn default_config() -> CpuConfig {
         failsafe_timeout: Some(cpu_params::FAILSAFE_TIMEOUT),
         ptp_unlock_failsafe_timeout: None,
         fpga_bus_wait: FpgaBusWait::Cycles3,
+        cpu_watchdog_timeout: Some(cpu_params::CPU_WATCHDOG_TIMEOUT),
         ptp: ptp::default_config(),
     }
 }
@@ -38,6 +40,7 @@ impl Cpu {
         self.config.set(config);
         port.configure_ptp(config.ptp);
         port.set_fpga_bus_wait(config.fpga_bus_wait);
+        fpga::set_watchdog_timeout(port, config.cpu_watchdog_timeout);
     }
 
     pub fn request_config_reset(&self) {

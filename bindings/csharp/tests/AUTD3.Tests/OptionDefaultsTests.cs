@@ -50,6 +50,7 @@ namespace AUTD3.Tests
             Assert.Equal(TimeSpan.FromTicks(2500), config.SyncGuard);
             Assert.Equal(TimeSpan.FromMilliseconds(100), config.UpdateActivateDelay);
             Assert.Equal(TimeSpan.FromMilliseconds(500), config.FailsafeTimeout);
+            Assert.Equal(TimeSpan.FromSeconds(1), config.CpuWatchdogTimeout);
             Assert.Equal(new PtpConfig(), config.Ptp);
 
             var ptp = new PtpConfig();
@@ -92,6 +93,9 @@ namespace AUTD3.Tests
             Assert.Equal(FpgaBusWait.Cycles3, config.FpgaBusWait);
             Assert.Equal(FpgaBusWait.Cycles3, default(CpuConfig).FpgaBusWait);
             Assert.Equal(FpgaBusWait.Cycles2, new CpuConfig { FpgaBusWait = FpgaBusWait.Cycles2 }.FpgaBusWait);
+            Assert.Equal(TimeSpan.FromSeconds(1), config.CpuWatchdogTimeout);
+            Assert.Equal(TimeSpan.FromSeconds(1), default(CpuConfig).CpuWatchdogTimeout);
+            Assert.Null(new CpuConfig { CpuWatchdogTimeout = null }.CpuWatchdogTimeout);
             Assert.Equal((ushort)128, config.Ptp.LockSamples);
             Assert.Equal(new PtpConfig().SyncInterval, config.Ptp.SyncInterval);
             Assert.Equal(new PtpConfig().KpMilli, config.Ptp.KpMilli);

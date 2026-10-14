@@ -133,6 +133,7 @@ pub struct CpuConfig {
     pub failsafe_timeout: Option<Duration>,
     pub ptp_unlock_failsafe_timeout: Option<Duration>,
     pub fpga_bus_wait: FpgaBusWait,
+    pub cpu_watchdog_timeout: Option<Duration>,
     pub ptp: PtpConfig,
 }
 
@@ -147,6 +148,7 @@ impl Default for CpuConfig {
             failsafe_timeout: Some(cpu_params::FAILSAFE_TIMEOUT),
             ptp_unlock_failsafe_timeout: None,
             fpga_bus_wait: FpgaBusWait::Cycles3,
+            cpu_watchdog_timeout: Some(cpu_params::CPU_WATCHDOG_TIMEOUT),
             ptp: PtpConfig::default(),
         }
     }
