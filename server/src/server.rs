@@ -12,7 +12,7 @@ use autd3_rs::udp::{Monitor, Pump, Sent, UdpBus, UdpError, UdpOption};
 use autd3_rs::{DeviceState, DeviceStatus, Interface, SERVER_PORT, ServerLink};
 
 use crate::health::{Change, Health, MISSES_BEFORE_SILENT};
-use crate::session::{MsgIds, admission};
+use crate::session::{Attachment, MsgIds, admission};
 use crate::status::{BusCounters, Counters, Status};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(50);
@@ -106,28 +106,23 @@ impl Session {
 
 #[derive(Default)]
 struct Hub {
-    bus: Mutex<Option<Arc<UdpBus>>>,
-    session: Mutex<Option<Arc<Session>>>,
+    attachment: Mutex<Attachment<Arc<UdpBus>, Arc<Session>>>,
     relayed: Mutex<Counters>,
 }
 
 impl Hub {
-    fn bus(&self) -> Option<Arc<UdpBus>> {
-        lock(&self.bus).clone()
+    fn bus_of(&self, session: &Session) -> Option<Arc<UdpBus>> {
+        lock(&self.attachment)
+            .bus_of(|attached| std::ptr::eq(Arc::as_ptr(attached), session))
+            .cloned()
     }
 
     fn session(&self) -> Option<Arc<Session>> {
-        lock(&self.session).clone()
+        lock(&self.attachment).session().cloned()
     }
 
     fn detach(&self, session: &Arc<Session>) {
-        let mut slot = lock(&self.session);
-        if slot
-            .as_ref()
-            .is_some_and(|attached| Arc::ptr_eq(attached, session))
-        {
-            *slot = None;
-        }
+        lock(&self.attachment).detach(|attached| Arc::ptr_eq(attached, session));
     }
 
     fn count(&self, update: impl FnOnce(&mut Counters)) {
@@ -167,7 +162,7 @@ fn relay(hub: &Hub, session: &Session, request: Request<'_>) {
             broadcast,
             frames,
         } => {
-            let sent = match hub.bus() {
+            let sent = match hub.bus_of(session) {
                 Some(bus) => {
                     let bus_msg_id = bus.reserve_msg_id();
                     lock(&session.ids).remember(bus_msg_id, msg_id);
@@ -197,7 +192,7 @@ fn relay(hub: &Hub, session: &Session, request: Request<'_>) {
             session.notify(&Notice::Settled { msg_id, outcome });
         }
         Request::Admit => {
-            if let Some(bus) = hub.bus() {
+            if let Some(bus) = hub.bus_of(session) {
                 bus.admit_recovered();
             }
         }
@@ -492,17 +487,19 @@ impl Server {
             ids: Mutex::new(MsgIds::default()),
             states: Mutex::new(None),
         });
-        let bus = hub.bus();
-        let mut slot = lock(&hub.session);
-        let admitted = admission(
-            version,
-            num_devices,
-            bus.as_ref().map(|bus| bus.num_devices()),
-            slot.is_some(),
-        );
-        let bus = match (admitted, bus) {
-            (Ok(()), Some(bus)) => bus,
-            (Err(reason), _) => {
+        let mut attachment = lock(&hub.attachment);
+        let attached = attachment.attach(Arc::clone(&session), |bus, attached| {
+            admission(
+                version,
+                num_devices,
+                bus.map(|bus| bus.num_devices()),
+                attached,
+            )
+        });
+        let bus = match attached {
+            Ok(Some(bus)) => bus,
+            Err(reason) => {
+                drop(attachment);
                 tracing::info!(%peer, %reason, "refused a client");
                 session.notify(&Notice::Reject {
                     version: LINK_VERSION,
@@ -511,7 +508,7 @@ impl Server {
                 session.close();
                 return None;
             }
-            (Ok(()), None) => return None,
+            Ok(None) => return None,
         };
         session.notify(&Notice::Welcome {
             version: LINK_VERSION,
@@ -520,8 +517,7 @@ impl Server {
         if let Ok(status) = bus.state_checker().check() {
             session.publish_states(status.devices().to_vec());
         }
-        *slot = Some(Arc::clone(&session));
-        drop(slot);
+        drop(attachment);
         bus.wake();
         tracing::info!(%peer, "a client attached");
         Some((session, stream, reader))
@@ -538,7 +534,7 @@ impl Server {
         let monitor = Monitor::new(bus)?;
         let mut health = Health::new(read_all(&monitor, num_devices)?);
         *lock(&hub.relayed) = Counters::default();
-        *lock(&hub.bus) = Some(Arc::clone(bus));
+        lock(&hub.attachment).serve(Arc::clone(bus));
         tracing::info!(num_devices, addr = %self.addr, "serving the devices");
         let ended = AtomicBool::new(false);
         let outcome = std::thread::scope(|scope| {
@@ -564,8 +560,8 @@ impl Server {
             let pumped = pumping.join().unwrap_or(Ok(()));
             watched.and(pumped.map_err(ServerError::from))
         });
-        *lock(&hub.bus) = None;
-        if let Some(session) = lock(&hub.session).take() {
+        let retired = lock(&hub.attachment).retire();
+        if let Some(session) = retired {
             session.notify(&Notice::Failure("the server stopped serving the devices"));
             session.close();
         }
