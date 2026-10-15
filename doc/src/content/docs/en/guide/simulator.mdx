@@ -20,10 +20,8 @@ Obtain `autd3-console` as described in [Console](/autd3-sdk/en/guide/console/), 
 
 The client must run on the same host as the Simulator.
 
-The default [`UdpOption`](/autd3-sdk/en/api/basics/transport-option/) (`iface` set to `Auto`) connects to the Simulator when it is running, and to real devices otherwise.
-No address needs to be given.
-To connect to nothing but the Simulator, set `iface` to `Simulator`.
-To connect to real devices while the Simulator keeps running, specify the NIC with `Name(..)` in `iface`.
+The default [`UdpOption`](/autd3-sdk/en/api/basics/transport-option/) (`iface` set to `Auto`) connects to the Simulator when no real devices are attached.
+If both the Simulator and real devices are found, opening fails; set `iface` to `Simulator`, or specify the NIC of the real devices with `Name(..)`.
 
 <CodeTabs
   rust={'let option = UdpOption {\n    iface: Interface::Simulator,\n    ..Default::default()\n};'}
