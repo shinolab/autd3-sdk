@@ -21,7 +21,7 @@ import CodeTabs from "@components/CodeTabs.astro";
 | `response_timeout`    | `Duration`  | 200 ms  | 列挙などの管理メッセージの返信を待つ時間                                                       |
 | `enumeration_timeout` | `Duration`  | 10 s    | open時のデバイス列挙処理の試行時間上限                                                         |
 | `sync_timeout`        | `Duration`  | 30 s    | open時の全台がデバイス間の同期を待つ上限                                                         |
-| `send_rate_limit`     | `Option<f32>` | なし | ホストの送信が回線を占める量の上限 \[%]. デバイスの回線速度 (100 Mbps) に対する割合. `None` で抑えない |
+| `send_rate_limit`     | `Option<f32>` | `None` | ホストの送信が回線を占める量の上限 \[%]. デバイスの回線速度 (100 Mbps) に対する割合. `None` で抑えない |
 | `send_buffer`         | `Option<NonZeroUsize>` | 8192 | ソケットの送信バッファの大きさ \[B]. `None` で OS の既定のままにする |
 | `timer_resolution`    | `Option<Duration>`  | 1 ms    | Windows のタイマ分解能. `None` で変更しない. |
 

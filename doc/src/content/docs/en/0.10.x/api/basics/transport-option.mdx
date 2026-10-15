@@ -21,7 +21,7 @@ import CodeTabs from "@components/CodeTabs.astro";
 | `response_timeout`    | `Duration`             | 200 ms  | Time to wait for replies to management messages such as enumeration                           |
 | `enumeration_timeout` | `Duration`             | 10 s    | Upper bound on the time spent trying to enumerate the devices on open                         |
 | `sync_timeout`        | `Duration`             | 30 s    | Upper bound on waiting for all devices to synchronize with one another on open                |
-| `send_rate_limit`     | `Option<f32>`          | None    | Upper bound on the share of the line the host's transmission may occupy \[%], relative to the device line rate (100 Mbps). `None` applies no limit |
+| `send_rate_limit`     | `Option<f32>`          | `None`    | Upper bound on the share of the line the host's transmission may occupy \[%], relative to the device line rate (100 Mbps). `None` applies no limit |
 | `send_buffer`         | `Option<NonZeroUsize>` | 8192    | Size of the socket send buffer \[B]. `None` leaves the OS default                              |
 | `timer_resolution`    | `Option<Duration>`     | 1 ms    | Windows timer resolution. `None` leaves it unchanged.                                         |
 
