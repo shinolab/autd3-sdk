@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use autd3_cpu_fw::proto::{Disposition, Drained, Reply};
+use autd3_cpu_fw::proto::{Disposition, Drained, FrameHeader, Reply};
 use autd3_cpu_fw::ptp::Config as PtpConfig;
 use autd3_cpu_wire::udp::{
     AssignIdBody, Flags, FrameReply, Header, Kind, PROTOCOL_VERSION, RESET_ID_CLOSE_DELAY_MS, Role,
@@ -500,10 +500,19 @@ impl Chain {
         self.frame_reply(index, src, header, now);
     }
 
-    fn frame(&mut self, index: usize, src: SocketAddr, header: Header, body: &[u8], now: Instant) {
-        if self.units[index].id.is_none() || !(2..=FRAME_BYTES_MAX).contains(&body.len()) {
+    fn frame(&mut self, index: usize, src: SocketAddr, header: Header, frame: &[u8], now: Instant) {
+        if self.units[index].id.is_none()
+            || !(size_of::<FrameHeader>()..=FRAME_BYTES_MAX).contains(&frame.len())
+        {
             return;
         }
+        let mut immediate = [0u8; FRAME_BYTES_MAX];
+        let body = &mut immediate[..frame.len()];
+        body.copy_from_slice(frame);
+        if let Ok((frame_header, _)) = FrameHeader::mut_from_prefix(body) {
+            frame_header.exec_at = 0.into();
+        }
+        let body = &*body;
         if self.units[index].drop_frames > 0 {
             self.units[index].drop_frames -= 1;
             return;

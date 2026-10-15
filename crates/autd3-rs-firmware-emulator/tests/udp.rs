@@ -18,7 +18,7 @@ const PATIENCE: Duration = Duration::from_secs(5);
 const SYNCED: Flags = Flags::PTP_LOCKED.union(Flags::SYNC_READY);
 
 fn frame(seq: u8, cmd: Cmd, payload: &[u8]) -> Vec<u8> {
-    [&[seq, cmd.as_u8()], payload].concat()
+    [&[seq, cmd.as_u8(), 0, 0, 0, 0], payload].concat()
 }
 
 struct Answer {

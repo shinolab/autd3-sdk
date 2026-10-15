@@ -146,6 +146,7 @@ The `u32` fields wrap around to 0 on overflow, and the `u16` / `u8` fields stop 
 | `require_supported_firmware` | `bool`         | `false` | If `true`, check on open that the firmware is supported                             |
 | `resynchronize_on_recovery`  | `Option<NonZeroU32>` | `Some(3)` | Send `Synchronize` again to a device recovered from `Lost`, before the next send. The value is the maximum number of attempts; `None` sends nothing (see [State check](/autd3-sdk/en/guide/state-check/)) |
 | `release_failsafe_on_recovery` | `Option<NonZeroU32>` | `Some(3)` | Send `ReleaseFailsafe` to a device recovered from `Lost`, before the next send, to resume the output stopped by the failsafe. The value is the maximum number of attempts; `None` sends nothing (see [State check](/autd3-sdk/en/guide/state-check/)) |
+| `exec_lead`           | `Option<Duration>`     | `None`    | Makes every device start processing a sent frame at the same time (see below). `None` lets each device process a frame as soon as it arrives |
 
 `max_inflight` errors if it exceeds `MAX_INFLIGHT (7)` (Python: `autd3.params.MAX_INFLIGHT`, C#: `Params.MaxInflight`).
 The default is also `MAX_INFLIGHT`, which equals `DEVICE_QUEUE_FRAMES`, the number of frames in the receive queue of each device (Python: `autd3.params.DEVICE_QUEUE_FRAMES`, C#: `Params.DeviceQueueFrames`).
@@ -153,6 +154,20 @@ Setting `ack_timeout` to 0 makes opening the `Client` fail with an error (`Inval
 The Python defaults are the same as in Rust, and only `resynchronize_on_recovery` / `release_failsafe_on_recovery`, whose type is an `Option`, accept `None`.
 
 There is no retransmission. A failed command must be sent again by the user.
+
+### exec_lead
+
+Frames are sent to the devices one at a time, so they reach the devices at slightly different times.
+With `exec_lead` set, every send carries "the current device time + `exec_lead`" rounded up to a whole millisecond, and each device holds the frame until that time.
+Every device thus starts processing what one send carries at the same timing.
+
+Note the following:
+- It does not guarantee that every device always starts processing at the same time
+  - If a send does not complete within `exec_lead`, a late device processes the frame after the stamped time. `exec_late` of `read_telemetry` counts how often that happened.
+  - Even when it succeeds, only the start of the processing inside the CPU board is aligned; it does not guarantee that the start of the processing on the FPGA is aligned (that is, for example, that the phase of the emitted ultrasound is updated at the same timing)
+- A send completes `exec_lead` later
+- It must be at least 1 ms, and shorter than `lost_timeout` of [`UdpOption`](/autd3-sdk/en/api/basics/transport-option/)
+- Keep `ack_timeout` (10 ms by default) longer than `exec_lead` + 1 ms + the processing time
 
 ## each
 

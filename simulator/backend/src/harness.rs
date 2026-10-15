@@ -44,7 +44,11 @@ impl Harness {
             let sys_time_ns = u64::try_from(self.boot.elapsed().as_nanos()).unwrap_or(u64::MAX);
             for (index, device) in self.devices.iter_mut().enumerate() {
                 let datagram = frame.datagram_for(index);
-                let bytes = [&[self.seq, datagram.cmd.as_u8()], datagram.payload()].concat();
+                let bytes = [
+                    &[self.seq, datagram.cmd.as_u8(), 0, 0, 0, 0],
+                    datagram.payload(),
+                ]
+                .concat();
                 device.fpga_mut().update_with_sys_time(sys_time_ns);
                 let _ = device.send(&bytes);
             }

@@ -1,14 +1,18 @@
 mod common;
 
+use std::time::Duration;
+
 use autd3_rs::commands::{Distribution, ForceFan, Modulation, Nop, each};
 use autd3_rs::value::SamplingConfig;
-use autd3_rs::{Error, Frames, PayloadError, Version};
+use autd3_rs::{ClientConfig, Error, Frames, PayloadError, Version};
 use autd3_rs_firmware_emulator::autd3_cpu_fw::{
     FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH,
 };
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
-use common::{INVALID_TRANSITION_MODE, REJECTED_BY_THE_DEVICE, geometry, open};
+use common::{
+    INVALID_TRANSITION_MODE, REJECTED_BY_THE_DEVICE, config, emulator, geometry, open, open_with,
+};
 
 const FRAMES_SENT_BY_OPEN: u64 = 3;
 
@@ -26,6 +30,24 @@ async fn a_single_device_receives_what_is_sent() {
 
     client.send(ForceFan { value: true }).await.unwrap();
     assert_eq!(fans(&emulator), [true]);
+
+    client.close().await.unwrap();
+}
+
+#[tokio::test]
+#[ignore = "depends on real time"]
+async fn the_emulator_processes_frames_with_exec_lead_without_waiting() {
+    let emulator = emulator(3);
+    let config = ClientConfig {
+        exec_lead: Some(Duration::from_millis(5)),
+        ..config()
+    };
+    let client = open_with(&emulator, &common::option(&emulator), config).await;
+
+    client.send(ForceFan { value: true }).await.unwrap();
+    assert_eq!(fans(&emulator), [true, true, true]);
+    let telemetry = client.read_telemetry().await.unwrap();
+    assert!(telemetry.iter().all(|t| t.exec_late == 0), "{telemetry:?}");
 
     client.close().await.unwrap();
 }

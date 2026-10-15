@@ -39,7 +39,7 @@ impl Exchange for Chain {
     }
 
     fn reset(&mut self, _timeout: Duration) -> Result<bool, Self::Error> {
-        let reset = [0, Cmd::Reset.as_u8()];
+        let reset = [0, Cmd::Reset.as_u8(), 0, 0, 0, 0];
         let frames = vec![&reset[..]; self.0.num_devices()];
         let replies = self.0.send(&frames, 0);
         Ok(replies.len() == self.0.num_devices())

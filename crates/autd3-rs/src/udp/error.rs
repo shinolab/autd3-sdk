@@ -66,7 +66,7 @@ pub enum UdpError {
     InvalidDeviceCount(usize),
     #[error("{expected} frames are needed (one per device), but {got} were given")]
     FrameCountMismatch { expected: usize, got: usize },
-    #[error("a frame must be 2..=1448 bytes, but {0} bytes were given")]
+    #[error("a frame must be 6..=1448 bytes, but {0} bytes were given")]
     InvalidFrameLength(usize),
     #[error("the frame could not be sent to device {device}: {source}")]
     Unsent {

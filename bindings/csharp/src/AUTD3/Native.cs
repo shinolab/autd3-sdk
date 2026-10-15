@@ -129,6 +129,9 @@ namespace AUTD3
         internal static extern int autd3_client_config_set_ack_timeout_ns(IntPtr config, ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_client_config_set_exec_lead(IntPtr config, [MarshalAs(UnmanagedType.I1)] bool hasValue, ulong ns);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_client_config_set_max_inflight(IntPtr config, UIntPtr value);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
@@ -151,6 +154,9 @@ namespace AUTD3
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_client_config_get_release_failsafe_on_recovery(IntPtr config, out uint value);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_client_config_get_exec_lead(IntPtr config, [MarshalAs(UnmanagedType.I1)] out bool hasValue, out ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_client_config_free(IntPtr config);
@@ -397,6 +403,7 @@ namespace AUTD3
             public uint FifoDrop, Dedup, SeqMismatch, DispatchError, Processed, SendFailure;
             public ushort Failsafe, PtpUnlockFailsafe;
             public byte SyncResync, BootFailure, CpuWatchdog;
+            public uint ExecLate;
         }
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]

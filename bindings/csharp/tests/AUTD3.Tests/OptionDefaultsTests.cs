@@ -16,6 +16,7 @@ namespace AUTD3.Tests
             Assert.False(config.RequireSupportedFirmware);
             Assert.Equal(3u, config.ResynchronizeOnRecovery);
             Assert.Equal(3u, config.ReleaseFailsafeOnRecovery);
+            Assert.Null(config.ExecLead);
         }
 
         [Fact]
@@ -38,6 +39,29 @@ namespace AUTD3.Tests
                 NativeClient.autd3_client_config_free(handle);
             }
             Assert.ThrowsAny<Exception>(() => new ClientConfig { ResynchronizeOnRecovery = 0 }.CreateHandle());
+        }
+
+        [Fact]
+        public void AnExecLeadReachesTheNativeConfig()
+        {
+            Assert.Null(default(ClientConfig).ExecLead);
+            foreach (var lead in new TimeSpan?[] { null, TimeSpan.Zero, TimeSpan.FromMilliseconds(5) })
+            {
+                var config = new ClientConfig { ExecLead = lead };
+                Assert.Equal(lead, config.ExecLead);
+                var handle = config.CreateHandle();
+                try
+                {
+                    Assert.Equal(lead, OptionNative.GetOptionalDuration(handle, NativeClient.autd3_client_config_get_exec_lead));
+                }
+                finally
+                {
+                    NativeClient.autd3_client_config_free(handle);
+                }
+            }
+
+            var negative = new ClientConfig { ExecLead = TimeSpan.FromTicks(-1) };
+            Assert.Throws<Autd3Exception>(() => negative.CreateHandle());
         }
 
         [Fact]

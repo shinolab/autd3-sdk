@@ -6,6 +6,8 @@ use crate::protocol::MAX_INFLIGHT;
 
 pub use crate::udp::bus::MAX_DEVICES;
 
+const EXEC_LEAD_MIN: Duration = Duration::from_millis(1);
+
 #[derive(Clone, Copy, Debug)]
 pub struct ClientConfig {
     pub ack_timeout: Duration,
@@ -14,6 +16,7 @@ pub struct ClientConfig {
     pub require_supported_firmware: bool,
     pub resynchronize_on_recovery: Option<NonZeroU32>,
     pub release_failsafe_on_recovery: Option<NonZeroU32>,
+    pub exec_lead: Option<Duration>,
 }
 
 impl Default for ClientConfig {
@@ -25,6 +28,7 @@ impl Default for ClientConfig {
             require_supported_firmware: false,
             resynchronize_on_recovery: NonZeroU32::new(3),
             release_failsafe_on_recovery: NonZeroU32::new(3),
+            exec_lead: None,
         }
     }
 }
@@ -37,6 +41,15 @@ impl ClientConfig {
         if self.ack_timeout.is_zero() {
             return Err(PayloadError::ZeroAckTimeout.into());
         }
+        if let Some(exec_lead) = self.exec_lead
+            && exec_lead < EXEC_LEAD_MIN
+        {
+            return Err(PayloadError::ExecLeadTooShort {
+                got: exec_lead,
+                min: EXEC_LEAD_MIN,
+            }
+            .into());
+        }
         Ok(self)
     }
 }
@@ -48,6 +61,24 @@ mod tests {
     #[test]
     fn the_default_passes_validation() {
         assert!(ClientConfig::default().validate().is_ok());
+    }
+
+    #[test]
+    fn exec_lead_is_off_by_default() {
+        assert_eq!(ClientConfig::default().exec_lead, None);
+    }
+
+    #[test]
+    fn an_exec_lead_below_one_millisecond_is_rejected() {
+        let with = |exec_lead| ClientConfig {
+            exec_lead: Some(exec_lead),
+            ..ClientConfig::default()
+        };
+        assert!(with(EXEC_LEAD_MIN).validate().is_ok());
+        assert!(matches!(
+            with(Duration::from_micros(999)).validate(),
+            Err(Error::InvalidPayload(PayloadError::ExecLeadTooShort { .. }))
+        ));
     }
 
     #[test]

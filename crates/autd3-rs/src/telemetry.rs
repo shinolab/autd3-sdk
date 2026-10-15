@@ -14,6 +14,7 @@ pub struct Telemetry {
     pub sync_resync: u8,
     pub boot_failure: u8,
     pub cpu_watchdog: u8,
+    pub exec_late: u32,
 }
 
 impl Telemetry {
@@ -31,6 +32,7 @@ impl Telemetry {
             sync_resync: wire.sync_resync,
             boot_failure: wire.boot_failure,
             cpu_watchdog: wire.cpu_watchdog,
+            exec_late: wire.exec_late.get(),
         })
     }
 }
@@ -54,6 +56,7 @@ mod tests {
             sync_resync: 10,
             boot_failure: 11,
             cpu_watchdog: 12,
+            exec_late: 0x0D0E_0F10.into(),
         }
     }
 
@@ -74,6 +77,7 @@ mod tests {
                 sync_resync: 10,
                 boot_failure: 11,
                 cpu_watchdog: 12,
+                exec_late: 0x0D0E_0F10,
             }
         );
     }
@@ -90,6 +94,6 @@ mod tests {
 
     #[test]
     fn a_short_reply_is_rejected() {
-        assert!(Telemetry::parse(&[0; 30]).is_none());
+        assert!(Telemetry::parse(&[0; 34]).is_none());
     }
 }

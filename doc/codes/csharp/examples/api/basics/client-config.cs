@@ -21,6 +21,7 @@ internal static class Sample
                 RequireSupportedFirmware = false,
                 ResynchronizeOnRecovery = 3,
                 ReleaseFailsafeOnRecovery = 3,
+                ExecLead = null,
             }
             // ANCHOR_END: config
             ;

@@ -23,6 +23,7 @@ internal static class Program
         ("SyncResync", t => t.SyncResync),
         ("BootFailure", t => t.BootFailure),
         ("CpuWatchdog", t => t.CpuWatchdog),
+        ("ExecLate", t => t.ExecLate),
     };
 
     private static void PrintSnapshot(IReadOnlyList<Telemetry> snapshot)
