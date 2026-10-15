@@ -483,6 +483,8 @@ impl Measurement {
             summary: Summary {
                 elapsed,
                 missed_heartbeat_replies: bus_stats.missed_heartbeat_replies(),
+                resets: bus_stats.resets(),
+                recoveries: bus_stats.recoveries(),
                 throughput_cmd_per_sec: per_sec(self.counters.ok),
                 traffic: self.traffic.rate(elapsed),
                 latency: self.rtts.latency(),
