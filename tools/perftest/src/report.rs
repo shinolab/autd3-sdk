@@ -13,6 +13,7 @@ struct TelemetryCounter {
     read: fn(&Telemetry) -> u32,
     mask: u32,
     per_device: bool,
+    absolute: bool,
 }
 
 const TELEMETRY_COUNTERS: [TelemetryCounter; 10] = [
@@ -21,65 +22,78 @@ const TELEMETRY_COUNTERS: [TelemetryCounter; 10] = [
         read: |t| t.fifo_drop,
         mask: u32::MAX,
         per_device: true,
+        absolute: false,
     },
     TelemetryCounter {
         name: "dedup",
         read: |t| t.dedup,
         mask: u32::MAX,
         per_device: true,
+        absolute: false,
     },
     TelemetryCounter {
         name: "seq_mismatch",
         read: |t| t.seq_mismatch,
         mask: u32::MAX,
         per_device: true,
+        absolute: false,
     },
     TelemetryCounter {
         name: "dispatch_error",
         read: |t| t.dispatch_error,
         mask: u32::MAX,
         per_device: true,
+        absolute: false,
     },
     TelemetryCounter {
         name: "send_failure",
         read: |t| t.send_failure,
         mask: u32::MAX,
         per_device: true,
+        absolute: false,
     },
     TelemetryCounter {
         name: "failsafe",
         read: |t| u32::from(t.failsafe),
         mask: 0xFFFF,
         per_device: true,
+        absolute: false,
     },
     TelemetryCounter {
         name: "ptp_unlock_failsafe",
         read: |t| u32::from(t.ptp_unlock_failsafe),
         mask: 0xFFFF,
         per_device: true,
+        absolute: false,
     },
     TelemetryCounter {
         name: "sync_resync",
         read: |t| u32::from(t.sync_resync),
         mask: 0xFF,
         per_device: true,
+        absolute: true,
     },
     TelemetryCounter {
         name: "boot_failure",
         read: |t| u32::from(t.boot_failure),
         mask: 0xFF,
         per_device: true,
+        absolute: false,
     },
     TelemetryCounter {
         name: "processed",
         read: |t| t.processed,
         mask: u32::MAX,
         per_device: false,
+        absolute: false,
     },
 ];
 
 impl TelemetryCounter {
     fn deltas(&self, start: &[Telemetry], now: &[Telemetry]) -> Vec<u32> {
+        if self.absolute {
+            return now.iter().map(self.read).collect();
+        }
         start
             .iter()
             .zip(now)
@@ -182,7 +196,9 @@ pub fn telemetry_lines(start: &[Telemetry], now: &[Telemetry]) -> Vec<String> {
 
 pub fn print_telemetry(start: &[Telemetry], end: &[Telemetry]) {
     println!();
-    println!("telemetry (per device, at start -> delta over the run):");
+    println!(
+        "telemetry (per device, at start -> delta over the run; sync_resync: at start -> at end, cleared by Synchronize):"
+    );
     for counter in &TELEMETRY_COUNTERS {
         let at_start: Vec<u32> = start.iter().map(counter.read).collect();
         println!(
@@ -212,6 +228,8 @@ pub fn print_summary(s: &Summary) {
         }
     }
     println!("  missed heartbeat replies: {}", s.missed_heartbeat_replies);
+    println!("  resets since open       : {}", s.resets);
+    println!("  recoveries since open   : {}", s.recoveries);
 
     println!();
     println!("throughput      :");
