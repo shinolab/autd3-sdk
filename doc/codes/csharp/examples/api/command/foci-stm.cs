@@ -9,8 +9,8 @@ internal static class Sample
 {
     internal static void Run()
     {
-        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
-        var center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
+        var geometry = new Geometry(new[] { new Autd3() });
+        var center = geometry.Center + Offset(0.0f * mm, 0.0f * mm, 150.0f * mm);
         var radius = 30.0f * mm;
         var numPoints = 200;
         var normal = Vector3.UnitZ;
@@ -20,8 +20,8 @@ internal static class Sample
         Stm.Circle(center, radius, numPoints, normal, intensity, dst);
         // ANCHOR_END: circle
 
-        var start = center + new Vector3(-15.0f, 0.0f, 0.0f);
-        var end = center + new Vector3(15.0f, 0.0f, 0.0f);
+        var start = center + Offset(-15.0f * mm, 0.0f * mm, 0.0f * mm);
+        var end = center + Offset(15.0f * mm, 0.0f * mm, 0.0f * mm);
         // ANCHOR: line
         Stm.Line(start, end, numPoints, intensity, dst);
         // ANCHOR_END: line

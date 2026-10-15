@@ -25,6 +25,10 @@ It takes the same arguments as `Client::open`.
 
 <CodeTabs rust={excerpt(sample, "run")} />
 
+Unlike `Client::open`, `Controller::open` does not initialize the devices (handshake, firmware version check, `Clear`, `Synchronize`).
+Start driving the `Driver` first, then call `controller.initialize().await`, and send commands only after it completes.
+`initialize` waits for replies, so it does not complete if called before the `Driver` is driven.
+
 ## Driver
 
 `Driver` has the following methods.

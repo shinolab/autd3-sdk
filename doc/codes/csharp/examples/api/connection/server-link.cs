@@ -1,5 +1,4 @@
 using System;
-using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
 
@@ -9,9 +8,9 @@ internal static class Sample
 {
     internal static async Task Run()
     {
-        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
+        var geometry = new Geometry(new[] { new Autd3() });
 
-        ushort port = 44338;
+        var port = ServerLink.ServerPort;
         var timeout = TimeSpan.FromSeconds(1);
         // ANCHOR: api
         var link = new ServerLink { Port = port, Timeout = timeout };

@@ -1,8 +1,8 @@
 use std::ffi::c_char;
 
 use autd3_ffi_abi::{
-    AUTD3_ERR_INVALID_ARGUMENT, AUTD3_OK, ModulationBuffer, drop_handle, finish, handle_mut,
-    handle_ref, into_handle, slice_mut, slice_ref, write_cstr, write_out,
+    AUTD3_ERR_INVALID_ARGUMENT, AUTD3_OK, ModulationBuffer, drop_handle, handle_mut, handle_ref,
+    into_handle, slice_mut, slice_ref, write_cstr, write_out,
 };
 use autd3_rs_core::Angle;
 use autd3_rs_core::units::Hz;
@@ -15,6 +15,17 @@ fn to_sampling_mode(mode: u8, freq: f32, freq_int: u32) -> Option<SamplingMode> 
         1 => Some(SamplingMode::from(freq_int * Hz)),
         2 => Some(SamplingMode::from(Nearest(freq * Hz))),
         _ => None,
+    }
+}
+
+unsafe fn finish(
+    result: Result<(), autd3_rs_modulation::ModulationError>,
+    out_err: *mut c_char,
+    out_err_len: usize,
+) -> i32 {
+    match result {
+        Ok(()) => AUTD3_OK,
+        Err(e) => unsafe { invalid_argument(out_err, out_err_len, &e.to_string()) },
     }
 }
 
@@ -143,6 +154,71 @@ pub unsafe extern "C" fn autd3_modulation_sine_option_new(
         clamp,
         sampling_config,
     })
+}
+
+fn first_error(codes: &[i32]) -> i32 {
+    codes
+        .iter()
+        .copied()
+        .find(|&code| code != AUTD3_OK)
+        .unwrap_or(AUTD3_OK)
+}
+
+unsafe fn write_sampling_divide(config: SamplingConfig, out: *mut u16) -> i32 {
+    match config.divide() {
+        Ok(divide) => unsafe { write_out(out, divide.get()) },
+        Err(_) => AUTD3_ERR_INVALID_ARGUMENT,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_modulation_sine_option_default(
+    out_amplitude: *mut u8,
+    out_offset: *mut u8,
+    out_phase_rad: *mut f32,
+    out_clamp: *mut bool,
+    out_sampling_divide: *mut u16,
+) -> i32 {
+    let default = SineOption::default();
+    first_error(&[
+        unsafe { write_out(out_amplitude, default.amplitude) },
+        unsafe { write_out(out_offset, default.offset) },
+        unsafe { write_out(out_phase_rad, default.phase.rad()) },
+        unsafe { write_out(out_clamp, default.clamp) },
+        unsafe { write_sampling_divide(default.sampling_config, out_sampling_divide) },
+    ])
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_modulation_square_option_default(
+    out_low: *mut u8,
+    out_high: *mut u8,
+    out_duty: *mut f32,
+    out_sampling_divide: *mut u16,
+) -> i32 {
+    let default = SquareOption::default();
+    first_error(&[
+        unsafe { write_out(out_low, default.low) },
+        unsafe { write_out(out_high, default.high) },
+        unsafe { write_out(out_duty, default.duty) },
+        unsafe { write_sampling_divide(default.sampling_config, out_sampling_divide) },
+    ])
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_modulation_fourier_option_default(
+    out_has_scale_factor: *mut bool,
+    out_scale_factor: *mut f32,
+    out_clamp: *mut bool,
+    out_offset: *mut u8,
+) -> i32 {
+    let default = FourierOption::default();
+    first_error(&[
+        unsafe { write_out(out_has_scale_factor, default.scale_factor.is_some()) },
+        unsafe { write_out(out_scale_factor, default.scale_factor.unwrap_or(0.0)) },
+        unsafe { write_out(out_clamp, default.clamp) },
+        unsafe { write_out(out_offset, default.offset) },
+    ])
 }
 
 #[unsafe(no_mangle)]
@@ -297,6 +373,9 @@ pub unsafe extern "C" fn autd3_modulation_radiation_pressure(
     src: *const ModulationBuffer,
     dst: *mut ModulationBuffer,
 ) -> i32 {
+    if std::ptr::eq(src, dst.cast_const()) {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    }
     let (Some(src), Some(dst)) = (unsafe { handle_ref(src) }, unsafe { handle_mut(dst) }) else {
         return -1;
     };
@@ -318,3 +397,86 @@ pub unsafe extern "C" fn autd3_modulation_radiation_pressure_inplace(
 }
 
 autd3_ffi_abi::export_abi_version!();
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn radiation_pressure_rejects_the_same_buffer_as_src_and_dst() {
+        let buffer = autd3_modulation_buffer_new();
+        unsafe { &mut *buffer }.0 = vec![0x80, 0xFF];
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_modulation_radiation_pressure(buffer, buffer)
+        });
+        assert_eq!(vec![0x80, 0xFF], unsafe { &*buffer }.0);
+        let dst = autd3_modulation_buffer_new();
+        assert_eq!(0, unsafe {
+            autd3_modulation_radiation_pressure(buffer, dst)
+        });
+        assert_eq!(2, unsafe { &*dst }.0.len());
+        unsafe {
+            autd3_modulation_buffer_free(buffer);
+            autd3_modulation_buffer_free(dst);
+        }
+    }
+
+    #[test]
+    fn the_option_defaults_match_the_rust_default() {
+        let (mut amplitude, mut offset, mut phase, mut clamp, mut divide) = (0, 0, 1.0, true, 0);
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_modulation_sine_option_default(
+                &raw mut amplitude,
+                &raw mut offset,
+                &raw mut phase,
+                &raw mut clamp,
+                &raw mut divide,
+            )
+        });
+        let sine = SineOption::default();
+        assert_eq!(sine.amplitude, amplitude);
+        assert_eq!(sine.offset, offset);
+        assert_eq!(sine.phase.rad().to_bits(), phase.to_bits());
+        assert_eq!(sine.clamp, clamp);
+        assert_eq!(sine.sampling_config.divide().unwrap().get(), divide);
+
+        let (mut low, mut high, mut duty) = (1, 0, 0.0);
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_modulation_square_option_default(
+                &raw mut low,
+                &raw mut high,
+                &raw mut duty,
+                &raw mut divide,
+            )
+        });
+        let square = SquareOption::default();
+        assert_eq!(square.low, low);
+        assert_eq!(square.high, high);
+        assert_eq!(square.duty.to_bits(), duty.to_bits());
+        assert_eq!(square.sampling_config.divide().unwrap().get(), divide);
+
+        let (mut has_scale, mut scale, mut fourier_clamp, mut fourier_offset) =
+            (true, 1.0, true, 1);
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_modulation_fourier_option_default(
+                &raw mut has_scale,
+                &raw mut scale,
+                &raw mut fourier_clamp,
+                &raw mut fourier_offset,
+            )
+        });
+        let fourier = FourierOption::default();
+        assert_eq!(fourier.scale_factor.is_some(), has_scale);
+        assert_eq!(fourier.clamp, fourier_clamp);
+        assert_eq!(fourier.offset, fourier_offset);
+
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_modulation_fourier_option_default(
+                std::ptr::null_mut(),
+                &raw mut scale,
+                &raw mut fourier_clamp,
+                &raw mut fourier_offset,
+            )
+        });
+    }
+}

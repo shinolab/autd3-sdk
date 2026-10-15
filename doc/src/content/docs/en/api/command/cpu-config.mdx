@@ -60,6 +60,8 @@ Behavior is not guaranteed when any other field is changed from its default.
 | `pause_hold_syncs`     | `u16`        | 64      | Number of `Sync` messages for which a `PAUSE` keeps being sent on every send after the link was found saturated |
 | `pause_retry`          | `Duration`   | 8 ms    | How long `PAUSE` keeps being sent while a `Sync` cannot be sent out |
 
+In C#, the `Duration` fields are passed as `TimeSpan`, so they can only be specified in 100 ns units (the default 100 ns of `lock_threshold` is `TimeSpan.FromTicks(1)`).
+
 :::danger
 With `failsafe_timeout` set to `None`, a device keeps emitting ultrasound even when communication is lost because the host crashed or a cable was unplugged.
 Keep `failsafe_timeout` well above twice the `heartbeat`. If it is too short, the output stops even while the host is running.
@@ -71,7 +73,7 @@ With `None`, a device keeps the output it had when the CPU firmware stopped.
 
 An output stopped by the failsafe or the CPU watchdog does not come back automatically.
 Whether a device is stopped can be checked with `is_failsafe_active()` (C#: `IsFailsafeActive`) of the `FpgaState` returned from `read_fpga_state()`.
-Sending the `ReleaseFailsafe` command resumes the output.
+Sending the [`ReleaseFailsafe`](/autd3-sdk/en/api/command/release-failsafe/) command resumes the output.
 [Clear](/autd3-sdk/en/api/command/clear/) releases it as well, but returns every state to its default.
 :::
 

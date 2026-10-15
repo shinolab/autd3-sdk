@@ -14,7 +14,7 @@ internal static class Sample
 
     internal static async Task Run()
     {
-        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
+        var geometry = new Geometry(new[] { new Autd3() });
 
         await using var client = await Client.OpenAsync(geometry, new UdpOption(), new ClientConfig());
 
@@ -24,17 +24,19 @@ internal static class Sample
 
         // ANCHOR: targets
         // Prepare 1000 focus points along a circle 150 mm above the array center.
-        var center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
+        var center = geometry.Center + Offset(0.0f * mm, 0.0f * mm, 150.0f * mm);
         var targets = new Vector3[NumPoints];
         for (var i = 0; i < NumPoints; i++)
         {
             var theta = 2.0f * MathF.PI * i / NumPoints;
-            targets[i] = center + new Vector3(RadiusMm * MathF.Cos(theta), RadiusMm * MathF.Sin(theta), 0.0f);
+            targets[i] = center + Offset(RadiusMm * MathF.Cos(theta) * mm, RadiusMm * MathF.Sin(theta) * mm, 0.0f * mm);
         }
         // ANCHOR_END: targets
 
         await StopAndWait(client, geometry, targets, wavelength);
         await Streaming(client, geometry, targets, wavelength);
+
+        await client.SilentStopAsync();
     }
 
     private static async Task StopAndWait(Client client, Geometry geometry, Vector3[] targets, Length wavelength)

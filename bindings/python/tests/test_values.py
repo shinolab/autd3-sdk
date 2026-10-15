@@ -65,7 +65,8 @@ EQUAL_PAIRS: list[tuple[Hashable, Hashable]] = [
     (autd3.Interface.Name("eth0"), autd3.Interface.Name("eth0")),
     (10 * mm, Length.from_m(0.01)),
     (0.0 * mm, -0.0 * mm),
-    (2 * kHz, 2000.0 * Hz),
+    (2 * kHz, 2000 * Hz),
+    (2.0 * kHz, 2000.0 * Hz),
     (340 * m / s, Velocity.from_mm_s(340_000.0)),
     (0.0 * rad, Angle.ZERO),
     (180 * deg, Angle.from_deg(180.0)),
@@ -100,6 +101,7 @@ DISTINCT_PAIRS: list[tuple[object, object]] = [
     (10 * mm, 11 * mm),
     (10 * mm, 10.0),
     (200 * Hz, 201 * Hz),
+    (200 * Hz, 200.0 * Hz),
     (1.0 * rad, 1.0 * deg),
 ]
 
@@ -140,7 +142,7 @@ def test_sampling_config_reports_typed_period_and_frequency() -> None:
     assert config.period() == autd3.params.ULTRASOUND_PERIOD.__class__.from_nanos(
         10 * autd3.params.ULTRASOUND_PERIOD.as_nanos()
     )
-    assert config.freq() == 4000 * Hz
+    assert config.freq() == 4000.0 * Hz
     assert isinstance(config.freq(), Freq)
 
 
@@ -265,23 +267,24 @@ def test_transducer_groups_queries() -> None:
         groups.indices(2)
     with pytest.raises(IndexError):
         groups.num_transducers(2)
-    with pytest.raises(KeyError):
-        groups.mask("missing")
+    assert groups.mask("missing") is None
 
 
 def test_control_points_expose_their_fields() -> None:
     control_point = ControlPoint([1.0, 2.0, 3.0], Phase(0x20))
     np.testing.assert_array_equal(control_point.point, [1.0, 2.0, 3.0])
     assert control_point.phase_offset == Phase(0x20)
-    assert ControlPoint([1.0, 2.0, 3.0]).phase_offset == Phase.ZERO
     assert control_point == ControlPoint([1.0, 2.0, 3.0], 0x20)
-    assert control_point != ControlPoint([1.0, 2.0, 3.0])
+    assert control_point != ControlPoint([1.0, 2.0, 3.0], Phase.ZERO)
+    with pytest.raises(TypeError):
+        loose(ControlPoint)([1.0, 2.0, 3.0])
 
-    control_points = ControlPoints([control_point, ControlPoint([4.0, 5.0, 6.0])], Intensity(0x80))
-    assert control_points.points == [control_point, ControlPoint([4.0, 5.0, 6.0])]
+    control_points = ControlPoints([control_point, ControlPoint([4.0, 5.0, 6.0], Phase.ZERO)], Intensity(0x80))
+    assert control_points.points == [control_point, ControlPoint([4.0, 5.0, 6.0], Phase.ZERO)]
     assert control_points.intensity == Intensity(0x80)
-    assert ControlPoints([control_point]).intensity == Intensity.MAX
-    assert control_points == ControlPoints([control_point, ControlPoint([4.0, 5.0, 6.0])], 0x80)
+    with pytest.raises(TypeError):
+        loose(ControlPoints)([control_point])
+    assert control_points == ControlPoints([control_point, ControlPoint([4.0, 5.0, 6.0], Phase.ZERO)], 0x80)
     assert control_points != ControlPoints([control_point], 0x80)
 
 
@@ -421,7 +424,7 @@ def test_holo_batches_solve_one_problem_per_buffer() -> None:
     with pytest.raises(holo.HoloError):
         holo.naive_batch(geometry, foci, wavelength, holo.NaiveOption(), [], [])
     assert all(buffer.num_devices() == 1 for buffer in phases)
-    with pytest.raises(ValueError, match="Length"):
+    with pytest.raises(TypeError, match="Length"):
         holo.naive(geometry, foci, loose(8.5), holo.NaiveOption(), phases[0], intensities[0])
 
 

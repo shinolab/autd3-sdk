@@ -1,25 +1,30 @@
 import asyncio
+import math
 
 import numpy as np
 
 from autd3 import Client, ClientConfig, UdpOption
-from autd3.commands import FociStm, FociStmOption, circle
-from autd3.geometry import Autd3, Geometry
+from autd3.commands import FociStm, FociStmOption
+from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import Hz, mm
-from autd3.value import Intensity, LoopBehavior, PatternBank, TransitionMode
+from autd3.value import ControlPoint, ControlPoints, Intensity, LoopBehavior, PatternBank, Phase, TransitionMode
 
 
 async def main() -> None:
-    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+    geometry = Geometry([Autd3()])
 
     async with await Client.open(
         geometry,
         UdpOption(),
         ClientConfig(),
     ) as client:
-        center = geometry.center() + np.array([0.0, 0.0, 150.0])
+        center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm)
+        radius = (30.0 * mm).mm
         foci = []
-        circle(center, 30.0 * mm, 20, [0.0, 0.0, 1.0], Intensity.MAX, foci)
+        for i in range(20):
+            theta = 2.0 * math.pi * i / 20.0
+            p = center + np.array([radius * math.cos(theta), radius * math.sin(theta), 0.0])
+            foci.append(ControlPoints([ControlPoint(p, Phase.ZERO)], Intensity.MAX))
 
         # ANCHOR: infinite
         # By default the playback loops infinitely; B0 keeps circling the focus.

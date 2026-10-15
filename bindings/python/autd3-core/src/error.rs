@@ -9,6 +9,10 @@ pub(crate) fn to_pyerr<E: core::fmt::Display>(e: E) -> pyo3::PyErr {
     Autd3Error::new_err(e.to_string())
 }
 
+pub(crate) fn invalid_argument<E: core::fmt::Display>(py: Python<'_>, e: E) -> pyo3::PyErr {
+    autd3_python_capsule::invalid_argument(py, e)
+}
+
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let ty = m.py().get_type::<Autd3Error>();
     ty.setattr("code", error_code::GENERIC)?;

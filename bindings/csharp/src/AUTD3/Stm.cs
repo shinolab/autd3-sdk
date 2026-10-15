@@ -22,14 +22,19 @@ namespace AUTD3
             {
                 throw new Autd3Exception($"{command} requires at least one sample", Autd3ErrorCode.InvalidArgument);
             }
-            var numFoci = (byte)samples[0].Points.Length;
+            var firstFoci = samples[0].Points?.Length ?? 0;
+            if (firstFoci < 1 || firstFoci > Params.NumFociMax)
+            {
+                throw new Autd3Exception($"number of foci per sample must be 1..={Params.NumFociMax}", Autd3ErrorCode.InvalidArgument);
+            }
+            var numFoci = (byte)firstFoci;
             var points = new Autd3StmControlPointNative[samples.Count * numFoci];
             var intensities = new byte[samples.Count];
             for (var i = 0; i < samples.Count; i++)
             {
-                if (samples[i].Points.Length != numFoci)
+                if ((samples[i].Points?.Length ?? 0) != numFoci)
                 {
-                    throw new Autd3Exception($"all {command} samples must have the same number of foci");
+                    throw new Autd3Exception($"all {command} samples must have the same number of foci", Autd3ErrorCode.InvalidArgument);
                 }
                 intensities[i] = samples[i].Intensity.Value;
                 for (var j = 0; j < numFoci; j++)
@@ -86,7 +91,10 @@ namespace AUTD3
         internal static extern IntPtr autd3_op_write_foci_buffer(byte bank, uint indexOffset, Autd3StmControlPointNative[] points, UIntPtr numSamples, byte numFoci, byte[] intensities);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_pattern_stm(IntPtr config, IntPtr[] phases, UIntPtr numPatterns, IntPtr[] intensities, UIntPtr numIntensities, byte uniformIntensity, byte bank, byte phaseDepth, ushort loopRep, byte transitionMode, ulong transitionValue);
+        internal static extern IntPtr autd3_op_pattern_stm(IntPtr config, IntPtr[] phases, UIntPtr numPatterns, byte intensityKind, IntPtr[] intensities, UIntPtr numIntensities, byte uniformIntensity, byte bank, byte phaseDepth, ushort loopRep, byte transitionMode, ulong transitionValue);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern float autd3_foci_stm_option_default_sound_speed();
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_stm_circle(float[] center, float radiusMm, UIntPtr numPoints, float[] normal, byte intensity, Autd3StmControlPointNative[] outPoints, byte[] outIntensities);
@@ -199,11 +207,13 @@ namespace AUTD3
         public Vector3 Point { get; }
         public Phase PhaseOffset { get; }
 
-        public ControlPoint(Vector3 point, Phase? phaseOffset = null)
+        public ControlPoint(Vector3 point, Phase phaseOffset)
         {
             Point = point;
-            PhaseOffset = phaseOffset ?? Phase.Zero;
+            PhaseOffset = phaseOffset;
         }
+
+        public static explicit operator ControlPoint(Vector3 point) => new ControlPoint(point, Phase.Zero);
     }
 
     public readonly struct ControlPoints
@@ -211,35 +221,51 @@ namespace AUTD3
         public ControlPoint[] Points { get; }
         public Intensity Intensity { get; }
 
-        public ControlPoints(ControlPoint[] points, Intensity? intensity = null)
+        public ControlPoints(ControlPoint[] points, Intensity intensity)
         {
             Points = points;
-            Intensity = intensity ?? Intensity.Max;
+            Intensity = intensity;
         }
+
+        public static explicit operator ControlPoints(Vector3 point) => (ControlPoints)(ControlPoint)point;
+
+        public static explicit operator ControlPoints(ControlPoint point) => new ControlPoints(new[] { point }, Intensity.Max);
+
+        public static explicit operator ControlPoints(Vector3[] points)
+        {
+            if (points == null)
+            {
+                throw new ArgumentNullException(nameof(points));
+            }
+            var controlPoints = new ControlPoint[points.Length];
+            for (var i = 0; i < points.Length; i++)
+            {
+                controlPoints[i] = (ControlPoint)points[i];
+            }
+            return new ControlPoints(controlPoints, Intensity.Max);
+        }
+    }
+
+    internal static class FociStmDefaults
+    {
+        internal static readonly Velocity SoundSpeed = Velocity.FromMS(NativeStm.autd3_foci_stm_option_default_sound_speed());
     }
 
     public readonly struct FociStmOption
     {
-        private readonly PatternBank? _bank;
-        public PatternBank Bank { get => _bank ?? PatternBank.B0; init => _bank = value; }
+        public PatternBank Bank { get; init; }
         private readonly Velocity? _soundSpeed;
-        public Velocity SoundSpeed { get => _soundSpeed ?? Velocity.FromMS(340f); init => _soundSpeed = value; }
-        private readonly LoopBehavior? _loopBehavior;
-        public LoopBehavior LoopBehavior { get => _loopBehavior ?? LoopBehavior.Infinite; init => _loopBehavior = value; }
-        private readonly TransitionMode? _transitionMode;
-        public TransitionMode TransitionMode { get => _transitionMode ?? TransitionMode.Immediate; init => _transitionMode = value; }
+        public Velocity SoundSpeed { get => _soundSpeed ?? FociStmDefaults.SoundSpeed; init => _soundSpeed = value; }
+        public LoopBehavior LoopBehavior { get; init; }
+        public TransitionMode TransitionMode { get; init; }
     }
 
     public readonly struct PatternStmOption
     {
-        private readonly PatternBank? _bank;
-        public PatternBank Bank { get => _bank ?? PatternBank.B0; init => _bank = value; }
-        private readonly PhaseDepth? _phaseDepth;
-        public PhaseDepth PhaseDepth { get => _phaseDepth ?? PhaseDepth.Bits8; init => _phaseDepth = value; }
-        private readonly LoopBehavior? _loopBehavior;
-        public LoopBehavior LoopBehavior { get => _loopBehavior ?? LoopBehavior.Infinite; init => _loopBehavior = value; }
-        private readonly TransitionMode? _transitionMode;
-        public TransitionMode TransitionMode { get => _transitionMode ?? TransitionMode.Immediate; init => _transitionMode = value; }
+        public PatternBank Bank { get; init; }
+        public PhaseDepth PhaseDepth { get; init; }
+        public LoopBehavior LoopBehavior { get; init; }
+        public TransitionMode TransitionMode { get; init; }
     }
 
     public sealed class FociStm : ICommand
@@ -248,11 +274,11 @@ namespace AUTD3
         private readonly IReadOnlyList<ControlPoints> _points;
         private readonly FociStmOption _option;
 
-        public FociStm(StmConfig config, IReadOnlyList<ControlPoints> points, FociStmOption? option = null)
+        public FociStm(StmConfig config, IReadOnlyList<ControlPoints> points, FociStmOption option)
         {
             _config = config;
             _points = points;
-            _option = option ?? new FociStmOption();
+            _option = option;
         }
 
         IntPtr ICommand.CreateOp(Geometry geometry)
@@ -273,30 +299,40 @@ namespace AUTD3
 
     public readonly struct StmIntensity
     {
+        internal const byte KindUniform = 0;
+        internal const byte KindShared = 1;
+        internal const byte KindPerIndex = 2;
+
         private readonly IntensityBuffer[]? _buffers;
-        private readonly Intensity? _uniform;
+        private readonly Intensity _uniform;
+        private readonly byte _kind;
 
         public StmIntensity(Intensity uniform)
         {
             _buffers = null;
             _uniform = uniform;
+            _kind = KindUniform;
         }
 
         public StmIntensity(IntensityBuffer shared)
         {
             _buffers = new[] { shared ?? throw new ArgumentNullException(nameof(shared)) };
-            _uniform = null;
+            _uniform = default;
+            _kind = KindShared;
         }
 
         public StmIntensity(IntensityBuffer[] perIndex)
         {
             _buffers = perIndex ?? throw new ArgumentNullException(nameof(perIndex));
-            _uniform = null;
+            _uniform = default;
+            _kind = KindPerIndex;
         }
 
         internal IntensityBuffer[] Buffers => _buffers ?? Array.Empty<IntensityBuffer>();
 
-        internal byte Uniform => (_uniform ?? Intensity.Max).Value;
+        internal byte Kind => _kind;
+
+        internal byte Uniform => _uniform.Value;
 
         public static implicit operator StmIntensity(Intensity uniform) => new StmIntensity(uniform);
 
@@ -312,21 +348,12 @@ namespace AUTD3
         private readonly StmIntensity _intensities;
         private readonly PatternStmOption _option;
 
-        public PatternStm(StmConfig config, PhaseBuffer[] phases, StmIntensity intensities, PatternStmOption? option = null)
+        public PatternStm(StmConfig config, PhaseBuffer[] phases, StmIntensity intensities, PatternStmOption option)
         {
-            if (phases == null)
-            {
-                throw new ArgumentNullException(nameof(phases));
-            }
-            var buffers = intensities.Buffers;
-            if (buffers.Length > 1 && buffers.Length != phases.Length)
-            {
-                throw new Autd3Exception("PatternStm expects one intensity buffer per index, a single shared buffer, or a uniform intensity");
-            }
             _config = config;
-            _phases = phases;
+            _phases = phases ?? throw new ArgumentNullException(nameof(phases));
             _intensities = intensities;
-            _option = option ?? new PatternStmOption();
+            _option = option;
         }
 
         IntPtr ICommand.CreateOp(Geometry geometry)
@@ -348,8 +375,8 @@ namespace AUTD3
             try
             {
                 return NativeStm.autd3_op_pattern_stm(configHandle, phaseLease.Pointers, (UIntPtr)phaseLease.Pointers.Length,
-                    intensityLease.Pointers, (UIntPtr)intensityLease.Pointers.Length, _intensities.Uniform,
-                    (byte)_option.Bank, (byte)_option.PhaseDepth, _option.LoopBehavior.Rep, _option.TransitionMode.Mode, _option.TransitionMode.Value);
+                    _intensities.Kind, intensityLease.Pointers, (UIntPtr)intensityLease.Pointers.Length, _intensities.Uniform,
+                    (byte)_option.Bank, _option.PhaseDepth.ToBits(), _option.LoopBehavior.Rep, _option.TransitionMode.Mode, _option.TransitionMode.Value);
             }
             finally
             {
@@ -397,7 +424,7 @@ namespace AUTD3
             if (NativeStm.autd3_stm_circle(Coords.PointArray(center), radius.Mm, (UIntPtr)numPoints,
                 Coords.DirArray(normal), intensity.Value, outPoints, outIntensities) != 0)
             {
-                throw new Autd3Exception("circle failed");
+                throw new Autd3Exception("circle failed", Autd3ErrorCode.InvalidArgument);
             }
             Fill(dst, outPoints, outIntensities);
         }
@@ -409,7 +436,7 @@ namespace AUTD3
             if (NativeStm.autd3_stm_line(Coords.PointArray(start), Coords.PointArray(end), (UIntPtr)numPoints,
                 intensity.Value, outPoints, outIntensities) != 0)
             {
-                throw new Autd3Exception("line failed");
+                throw new Autd3Exception("line failed", Autd3ErrorCode.InvalidArgument);
             }
             Fill(dst, outPoints, outIntensities);
         }

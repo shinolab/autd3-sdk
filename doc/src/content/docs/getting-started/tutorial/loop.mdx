@@ -37,7 +37,7 @@ import csSample from "@codes/csharp/examples/tutorial/loop.cs?raw";
 遷移先が有限ループのとき使用できるモード.
 
 - `SyncIdx`: 切り替え対象バンクの再生インデックスが 0 に戻ったタイミングで切り替える.
-- `SysTime(SysTime)`: 指定した [デバイス時刻](/autd3-sdk/api/basics/sys-time/)に切り替える.
+- `SysTime { time }`: 指定した [デバイス時刻](/autd3-sdk/api/basics/sys-time/) `time` に切り替える (Python / C# では `TransitionMode.SysTime(time)`).
 - `Gpio(GpioIn)`: 指定した [GPIO 入力ピン](/autd3-sdk/hardware/gpio)のトリガで切り替える.
 
 :::note

@@ -10,7 +10,7 @@ internal static class Sample
     internal static void Run()
     {
         // HIDE_END
-var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
+var geometry = new Geometry(new[] { new Autd3() });
 
 var phases = geometry.PhaseBuffer();
 

@@ -57,6 +57,9 @@ namespace AUTD3
         internal static extern IntPtr autd3_op_force_fan([MarshalAs(UnmanagedType.I1)] bool value);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr autd3_op_force_fan_default();
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_cpu_config_new();
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
@@ -84,16 +87,16 @@ namespace AUTD3
         internal static extern int autd3_cpu_config_get_update_activate_delay(IntPtr config, out ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_set_failsafe_timeout(IntPtr config, ulong ns);
+        internal static extern int autd3_cpu_config_set_failsafe_timeout(IntPtr config, [MarshalAs(UnmanagedType.I1)] bool hasValue, ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_get_failsafe_timeout(IntPtr config, out ulong ns);
+        internal static extern int autd3_cpu_config_get_failsafe_timeout(IntPtr config, [MarshalAs(UnmanagedType.I1)] out bool hasValue, out ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_set_ptp_unlock_failsafe_timeout(IntPtr config, ulong ns);
+        internal static extern int autd3_cpu_config_set_ptp_unlock_failsafe_timeout(IntPtr config, [MarshalAs(UnmanagedType.I1)] bool hasValue, ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_get_ptp_unlock_failsafe_timeout(IntPtr config, out ulong ns);
+        internal static extern int autd3_cpu_config_get_ptp_unlock_failsafe_timeout(IntPtr config, [MarshalAs(UnmanagedType.I1)] out bool hasValue, out ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_cpu_config_set_fpga_bus_wait(IntPtr config, byte cycles);
@@ -102,10 +105,10 @@ namespace AUTD3
         internal static extern int autd3_cpu_config_get_fpga_bus_wait(IntPtr config, out byte cycles);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_set_cpu_watchdog_timeout(IntPtr config, ulong ns);
+        internal static extern int autd3_cpu_config_set_cpu_watchdog_timeout(IntPtr config, [MarshalAs(UnmanagedType.I1)] bool hasValue, ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_get_cpu_watchdog_timeout(IntPtr config, out ulong ns);
+        internal static extern int autd3_cpu_config_get_cpu_watchdog_timeout(IntPtr config, [MarshalAs(UnmanagedType.I1)] out bool hasValue, out ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_cpu_config_set_ptp_sync_interval(IntPtr config, ulong ns);
@@ -222,7 +225,13 @@ namespace AUTD3
         internal static extern IntPtr autd3_op_set_gpio_out(GpioOutNative[] outputs);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr autd3_op_set_gpio_out_default();
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_emulate_gpio_in(byte[] values);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr autd3_op_emulate_gpio_in_default();
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_set_output_mask(byte[] masks, UIntPtr[] lens, UIntPtr numDevices);
@@ -231,18 +240,21 @@ namespace AUTD3
         internal static extern IntPtr autd3_op_set_phase_correction(byte[] phases, UIntPtr[] lens, UIntPtr numDevices);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_set_pulse_width_table(ushort[] table);
+        internal static extern IntPtr autd3_op_set_pulse_width_table(PulseWidthNative[] table);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_set_pulse_width_table_default();
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        [return: MarshalAs(UnmanagedType.I1)]
-        internal static extern bool autd3_pulse_width_from_duty(float duty, [Out] ushort[] outValue);
+        internal static extern int autd3_pulse_width_resolve(PulseWidthNative pulseWidth, out ushort @out, byte[] outErr, UIntPtr outErrLen);
+    }
 
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        [return: MarshalAs(UnmanagedType.I1)]
-        internal static extern bool autd3_pulse_width_new(ushort pulseWidth, [Out] ushort[] outValue);
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct PulseWidthNative
+    {
+        public byte Kind;
+        public ushort Raw;
+        public float Duty;
     }
 
     public readonly struct GpioOut
@@ -296,14 +308,20 @@ namespace AUTD3
 
     public sealed class ForceFan : ICommand
     {
-        private readonly bool _value;
+        private readonly bool? _value;
+
+        public ForceFan()
+        {
+            _value = null;
+        }
 
         public ForceFan(bool value)
         {
             _value = value;
         }
 
-        IntPtr ICommand.CreateOp(Geometry geometry) => NativeCommand.autd3_op_force_fan(_value);
+        IntPtr ICommand.CreateOp(Geometry geometry) =>
+            _value is bool value ? NativeCommand.autd3_op_force_fan(value) : NativeCommand.autd3_op_force_fan_default();
     }
 
     internal static class CpuConfigDefaults
@@ -347,14 +365,11 @@ namespace AUTD3
                 OptionNative.Apply("preset", NativeCommand.autd3_cpu_config_get_fpga_flash_max_polls(handle, out FpgaFlashMaxPolls));
                 SyncGuard = OptionNative.GetDuration(handle, NativeCommand.autd3_cpu_config_get_sync_guard);
                 UpdateActivateDelay = OptionNative.GetDuration(handle, NativeCommand.autd3_cpu_config_get_update_activate_delay);
-                var failsafeTimeout = OptionNative.GetDuration(handle, NativeCommand.autd3_cpu_config_get_failsafe_timeout);
-                FailsafeTimeout = failsafeTimeout == TimeSpan.Zero ? null : failsafeTimeout;
-                var ptpUnlockFailsafeTimeout = OptionNative.GetDuration(handle, NativeCommand.autd3_cpu_config_get_ptp_unlock_failsafe_timeout);
-                PtpUnlockFailsafeTimeout = ptpUnlockFailsafeTimeout == TimeSpan.Zero ? null : ptpUnlockFailsafeTimeout;
+                FailsafeTimeout = OptionNative.GetOptionalDuration(handle, NativeCommand.autd3_cpu_config_get_failsafe_timeout);
+                PtpUnlockFailsafeTimeout = OptionNative.GetOptionalDuration(handle, NativeCommand.autd3_cpu_config_get_ptp_unlock_failsafe_timeout);
                 OptionNative.Apply("preset", NativeCommand.autd3_cpu_config_get_fpga_bus_wait(handle, out var fpgaBusWait));
-                FpgaBusWait = (FpgaBusWait)fpgaBusWait;
-                var cpuWatchdogTimeout = OptionNative.GetDuration(handle, NativeCommand.autd3_cpu_config_get_cpu_watchdog_timeout);
-                CpuWatchdogTimeout = cpuWatchdogTimeout == TimeSpan.Zero ? null : cpuWatchdogTimeout;
+                FpgaBusWait = FpgaBusWaitNative.FromCycles(fpgaBusWait);
+                CpuWatchdogTimeout = OptionNative.GetOptionalDuration(handle, NativeCommand.autd3_cpu_config_get_cpu_watchdog_timeout);
                 PtpSyncInterval = OptionNative.GetDuration(handle, NativeCommand.autd3_cpu_config_get_ptp_sync_interval);
                 PtpTxTimestampTimeout = OptionNative.GetDuration(handle, NativeCommand.autd3_cpu_config_get_ptp_tx_timestamp_timeout);
                 PtpDelayRespTimeout = OptionNative.GetDuration(handle, NativeCommand.autd3_cpu_config_get_ptp_delay_resp_timeout);
@@ -517,25 +532,10 @@ namespace AUTD3
                 OptionNative.Apply("fpgaFlashMaxPolls", NativeCommand.autd3_cpu_config_set_fpga_flash_max_polls(handle, FpgaFlashMaxPolls));
                 OptionNative.SetRequiredDuration(handle, "syncGuard", SyncGuard, NativeCommand.autd3_cpu_config_set_sync_guard);
                 OptionNative.SetRequiredDuration(handle, "updateActivateDelay", UpdateActivateDelay, NativeCommand.autd3_cpu_config_set_update_activate_delay);
-                OptionNative.Apply("failsafeTimeout", FailsafeTimeout switch
-                {
-                    null => NativeCommand.autd3_cpu_config_set_failsafe_timeout(handle, 0),
-                    { } timeout when timeout > TimeSpan.Zero => NativeCommand.autd3_cpu_config_set_failsafe_timeout(handle, OptionNative.ToNanos(timeout)),
-                    _ => -1,
-                });
-                OptionNative.Apply("ptpUnlockFailsafeTimeout", PtpUnlockFailsafeTimeout switch
-                {
-                    null => NativeCommand.autd3_cpu_config_set_ptp_unlock_failsafe_timeout(handle, 0),
-                    { } timeout when timeout > TimeSpan.Zero => NativeCommand.autd3_cpu_config_set_ptp_unlock_failsafe_timeout(handle, OptionNative.ToNanos(timeout)),
-                    _ => -1,
-                });
-                OptionNative.Apply("fpgaBusWait", NativeCommand.autd3_cpu_config_set_fpga_bus_wait(handle, (byte)FpgaBusWait));
-                OptionNative.Apply("cpuWatchdogTimeout", CpuWatchdogTimeout switch
-                {
-                    null => NativeCommand.autd3_cpu_config_set_cpu_watchdog_timeout(handle, 0),
-                    { } timeout when timeout > TimeSpan.Zero => NativeCommand.autd3_cpu_config_set_cpu_watchdog_timeout(handle, OptionNative.ToNanos(timeout)),
-                    _ => -1,
-                });
+                OptionNative.SetOptionalDuration(handle, "failsafeTimeout", FailsafeTimeout, NativeCommand.autd3_cpu_config_set_failsafe_timeout);
+                OptionNative.SetOptionalDuration(handle, "ptpUnlockFailsafeTimeout", PtpUnlockFailsafeTimeout, NativeCommand.autd3_cpu_config_set_ptp_unlock_failsafe_timeout);
+                OptionNative.Apply("fpgaBusWait", NativeCommand.autd3_cpu_config_set_fpga_bus_wait(handle, FpgaBusWaitNative.ToCycles(FpgaBusWait)));
+                OptionNative.SetOptionalDuration(handle, "cpuWatchdogTimeout", CpuWatchdogTimeout, NativeCommand.autd3_cpu_config_set_cpu_watchdog_timeout);
                 Ptp.Apply(handle);
             }
             catch
@@ -551,10 +551,16 @@ namespace AUTD3
     {
         private readonly CpuConfig _config;
 
+        public SetCpuConfig() : this(new CpuConfig())
+        {
+        }
+
         public SetCpuConfig(CpuConfig config)
         {
             _config = config;
         }
+
+        public CpuConfig Config => _config;
 
         IntPtr ICommand.CreateOp(Geometry geometry)
         {
@@ -603,9 +609,13 @@ namespace AUTD3
         private readonly bool? _strictMode;
         public bool StrictMode { get => _strictMode ?? SilencerDefaults.StrictMode; init => _strictMode = value; }
 
-        IntPtr ISilencerConfig.CreateOp() =>
-            NativeCommand.autd3_op_set_silencer_completion_time(
+        IntPtr ISilencerConfig.CreateOp()
+        {
+            OptionNative.Apply("intensity", Intensity < TimeSpan.Zero ? -1 : 0);
+            OptionNative.Apply("phase", Phase < TimeSpan.Zero ? -1 : 0);
+            return NativeCommand.autd3_op_set_silencer_completion_time(
                 OptionNative.ToNanos(Intensity), OptionNative.ToNanos(Phase), StrictMode);
+        }
     }
 
     public readonly struct FixedUpdateRate : ISilencerConfig
@@ -657,19 +667,28 @@ namespace AUTD3
 
     public sealed class SetGpioOut : ICommand
     {
-        private readonly GpioOut[] _outputs;
+        private readonly GpioOut[]? _outputs;
+
+        public SetGpioOut()
+        {
+            _outputs = null;
+        }
 
         public SetGpioOut(GpioOut[] outputs)
         {
             if (outputs.Length != 4)
             {
-                throw new Autd3Exception("SetGpioOut requires exactly 4 outputs");
+                throw new Autd3Exception("SetGpioOut requires exactly 4 outputs", Autd3ErrorCode.InvalidArgument);
             }
             _outputs = outputs;
         }
 
         IntPtr ICommand.CreateOp(Geometry geometry)
         {
+            if (_outputs is null)
+            {
+                return NativeCommand.autd3_op_set_gpio_out_default();
+            }
             var native = new GpioOutNative[4];
             for (var i = 0; i < 4; i++)
             {
@@ -681,19 +700,28 @@ namespace AUTD3
 
     public sealed class EmulateGpioIn : ICommand
     {
-        private readonly bool[] _values;
+        private readonly bool[]? _values;
+
+        public EmulateGpioIn()
+        {
+            _values = null;
+        }
 
         public EmulateGpioIn(bool[] values)
         {
             if (values.Length != 4)
             {
-                throw new Autd3Exception("EmulateGpioIn requires exactly 4 values");
+                throw new Autd3Exception("EmulateGpioIn requires exactly 4 values", Autd3ErrorCode.InvalidArgument);
             }
             _values = values;
         }
 
         IntPtr ICommand.CreateOp(Geometry geometry)
         {
+            if (_values is null)
+            {
+                return NativeCommand.autd3_op_emulate_gpio_in_default();
+            }
             var bytes = new byte[4];
             for (var i = 0; i < 4; i++)
             {
@@ -719,37 +747,57 @@ namespace AUTD3
         }
     }
 
-    public readonly struct PulseWidth
+    public readonly struct PulseWidth : IEquatable<PulseWidth>
     {
-        public ushort Value { get; }
+        private const byte KindRaw = 0;
+        private const byte KindDuty = 1;
+
+        private readonly byte _kind;
+        private readonly ushort _raw;
+        private readonly float _duty;
 
         public PulseWidth(ushort pulseWidth)
         {
-            var outValue = new ushort[1];
-            if (!NativeCommand.autd3_pulse_width_new(pulseWidth, outValue))
-            {
-                throw new Autd3Exception("invalid pulse width");
-            }
-            Value = outValue[0];
+            _kind = KindRaw;
+            _raw = pulseWidth;
+            _duty = 0f;
         }
 
-        private PulseWidth(ushort value, bool validated)
+        private PulseWidth(float duty)
         {
-            _ = validated;
-            Value = value;
+            _kind = KindDuty;
+            _raw = 0;
+            _duty = duty;
         }
 
-        internal static PulseWidth FromValidated(ushort value) => new PulseWidth(value, true);
+        public static PulseWidth FromDuty(float duty) => new PulseWidth(duty);
 
-        public static PulseWidth FromDuty(float duty)
+        public ushort Value
         {
-            var outValue = new ushort[1];
-            if (!NativeCommand.autd3_pulse_width_from_duty(duty, outValue))
+            get
             {
-                throw new Autd3Exception("duty must be in [0, 1)");
+                var err = new byte[NativeAbi.ErrorBufferLength];
+                var code = NativeCommand.autd3_pulse_width_resolve(ToNative(), out var value, err, (UIntPtr)err.Length);
+                if (code != 0)
+                {
+                    throw Autd3Exception.FromNative(code, err);
+                }
+                return value;
             }
-            return FromValidated(outValue[0]);
         }
+
+        internal PulseWidthNative ToNative() => new PulseWidthNative { Kind = _kind, Raw = _raw, Duty = _duty };
+
+        public bool Equals(PulseWidth other) =>
+            _kind == other._kind && (_kind == KindRaw ? _raw == other._raw : _duty.Equals(other._duty));
+
+        public override bool Equals(object? obj) => obj is PulseWidth other && Equals(other);
+
+        public override int GetHashCode() => _kind == KindRaw ? HashCode.Combine(_kind, _raw) : HashCode.Combine(_kind, _duty);
+
+        public static bool operator ==(PulseWidth left, PulseWidth right) => left.Equals(right);
+
+        public static bool operator !=(PulseWidth left, PulseWidth right) => !left.Equals(right);
     }
 
     public sealed class SetPulseWidthTable : ICommand
@@ -767,7 +815,7 @@ namespace AUTD3
         {
             if (table.Length != TableSize)
             {
-                throw new Autd3Exception($"pulse width table requires {TableSize} values");
+                throw new Autd3Exception($"pulse width table requires {TableSize} values", Autd3ErrorCode.InvalidArgument);
             }
             _table = table;
         }
@@ -780,12 +828,12 @@ namespace AUTD3
             {
                 return NativeCommand.autd3_op_set_pulse_width_table_default();
             }
-            var raw = new ushort[TableSize];
+            var native = new PulseWidthNative[TableSize];
             for (var i = 0; i < TableSize; i++)
             {
-                raw[i] = _table[i].Value;
+                native[i] = _table[i].ToNative();
             }
-            return NativeCommand.autd3_op_set_pulse_width_table(raw);
+            return NativeCommand.autd3_op_set_pulse_width_table(native);
         }
     }
 
@@ -840,7 +888,7 @@ namespace AUTD3
                 var handle = compose(ops, (UIntPtr)ops.Length);
                 if (handle == IntPtr.Zero)
                 {
-                    throw new Autd3Exception("failed to compose the commands");
+                    throw new Autd3Exception("failed to compose the commands", Autd3ErrorCode.InvalidArgument);
                 }
                 return handle;
             }
@@ -862,7 +910,7 @@ namespace AUTD3
             var op = command.CreateOp(geometry);
             if (op == IntPtr.Zero)
             {
-                throw new Autd3Exception("failed to create the command");
+                throw new Autd3Exception("failed to create the command", Autd3ErrorCode.InvalidArgument);
             }
             return op;
         }

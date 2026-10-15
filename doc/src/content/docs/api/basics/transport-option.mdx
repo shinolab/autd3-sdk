@@ -31,6 +31,11 @@ import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
 
 基本的に `iface` 以外を変更することは推奨しない.
 
+Python の既定値は Rust と同じ具体値で, 型が `Option` の項目だけ `None` (無効) を渡せる. それ以外の項目に `None` を渡すと `TypeError` になる.
+C# では型が `Option` の項目を `null` にすると無効になる.
+`Option<Duration>` の項目 (`heartbeat` / `recovery_interval` / `timer_resolution`) と `send_rate_limit` に `0` (C#: `TimeSpan.Zero`) を渡しても無効の意味にはならず, 範囲外として `Client` を開くときにエラー (`Network`) になる.
+`send_buffer` の `0` は, Python では `UdpOption` を作るときに `ValueError`, C# では `Client` を開くときに `Autd3Exception` (`InvalidArgument`) になる (Rust は `NonZeroUsize` の型で `0` を渡せない).
+
 ## Interface
 
 <CodeTabs rust={excerpt(sample, "iface")} python={excerpt(pySample, "iface")} csharp={excerpt(csSample, "iface")} />

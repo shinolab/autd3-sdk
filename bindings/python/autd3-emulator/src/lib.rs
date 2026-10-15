@@ -2,7 +2,9 @@ use std::ops::RangeInclusive;
 use std::sync::Arc;
 use std::time::Duration;
 
-use autd3_python_capsule::extract::{extract_duration, extract_velocity, velocity_to_py};
+use autd3_python_capsule::extract::{
+    duration_to_py, extract_duration, extract_velocity, velocity_to_py,
+};
 use autd3_python_capsule::{capsule_of, frame_from_capsule, geometry_from_capsule, to_pyerr_gil};
 use autd3_rs_core::common::Velocity;
 use autd3_rs_core::geometry::Geometry;
@@ -59,7 +61,7 @@ pub struct Grid(CoreGrid);
 #[pymethods]
 impl Grid {
     #[new]
-    #[pyo3(signature = (x, y, z, resolution, order = "xyz"))]
+    #[pyo3(signature = (x, y, z, resolution, order))]
     fn new(
         x: &Bound<'_, PyAny>,
         y: &Bound<'_, PyAny>,
@@ -85,14 +87,9 @@ pub struct RmsRecordOption {
 #[pymethods]
 impl RmsRecordOption {
     #[new]
-    #[pyo3(signature = (sound_speed = None))]
-    fn new(sound_speed: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
-        Ok(Self {
-            sound_speed: match sound_speed {
-                Some(v) => extract_velocity(v)?,
-                None => CoreRmsOption::default().sound_speed,
-            },
-        })
+    #[pyo3(signature = (sound_speed = CoreRmsOption::default().sound_speed))]
+    fn new(#[pyo3(from_py_with = extract_velocity)] sound_speed: Velocity) -> Self {
+        Self { sound_speed }
     }
 
     #[getter]
@@ -107,6 +104,11 @@ impl RmsRecordOption {
     }
 }
 
+fn time_step_nanos(time_step: Duration) -> PyResult<u64> {
+    u64::try_from(time_step.as_nanos())
+        .map_err(|_| PyValueError::new_err("time_step is out of range"))
+}
+
 #[pyclass(name = "InstantRecordOption", module = "autd3_emulator")]
 pub struct InstantRecordOption {
     sound_speed: Velocity,
@@ -118,23 +120,19 @@ pub struct InstantRecordOption {
 #[pymethods]
 impl InstantRecordOption {
     #[new]
-    #[pyo3(signature = (sound_speed = None, time_step = None, memory_limits_hint_mb = 128))]
+    #[pyo3(signature = (
+        sound_speed = CoreInstantOption::default().sound_speed,
+        time_step = CoreInstantOption::default().time_step,
+        memory_limits_hint_mb = CoreInstantOption::default().memory_limits_hint_mb,
+    ))]
     fn new(
-        sound_speed: Option<&Bound<'_, PyAny>>,
-        time_step: Option<&Bound<'_, PyAny>>,
+        #[pyo3(from_py_with = extract_velocity)] sound_speed: Velocity,
+        #[pyo3(from_py_with = extract_duration)] time_step: Duration,
         memory_limits_hint_mb: usize,
     ) -> PyResult<Self> {
-        let time_step_ns = match time_step {
-            Some(d) => u64::try_from(extract_duration(d)?.as_nanos())
-                .map_err(|_| PyValueError::new_err("time_step is out of range"))?,
-            None => 1_000,
-        };
         Ok(Self {
-            sound_speed: match sound_speed {
-                Some(v) => extract_velocity(v)?,
-                None => CoreInstantOption::default().sound_speed,
-            },
-            time_step_ns,
+            sound_speed,
+            time_step_ns: time_step_nanos(time_step)?,
             memory_limits_hint_mb,
         })
     }
@@ -147,6 +145,17 @@ impl InstantRecordOption {
     #[setter]
     fn set_sound_speed(&mut self, value: &Bound<'_, PyAny>) -> PyResult<()> {
         self.sound_speed = extract_velocity(value)?;
+        Ok(())
+    }
+
+    #[getter]
+    fn time_step<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        duration_to_py(py, Duration::from_nanos(self.time_step_ns))
+    }
+
+    #[setter]
+    fn set_time_step(&mut self, value: &Bound<'_, PyAny>) -> PyResult<()> {
+        self.time_step_ns = time_step_nanos(extract_duration(value)?)?;
         Ok(())
     }
 }
@@ -295,7 +304,7 @@ pub struct Recorder {
 #[pymethods]
 impl Recorder {
     #[new]
-    #[pyo3(signature = (geometry, start_ns = 0))]
+    #[pyo3(signature = (geometry, start_ns))]
     fn new(geometry: &Bound<'_, PyAny>, start_ns: u64) -> PyResult<Self> {
         let capsule = capsule_of(geometry)?;
         let inner = geometry_from_capsule(&capsule)?;

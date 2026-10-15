@@ -57,6 +57,33 @@ macro_rules! option_handle_field {
             unsafe { $crate::write_out(out, $crate::to_ns(option.0.$($field).+)) }
         }
     };
+    ($handle:ty, [$($field:tt).+], optional_duration, $set:ident, $get:ident) => {
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $set(handle: *mut $handle, has_value: bool, ns: u64) -> i32 {
+            let Some(option) = (unsafe { $crate::handle_mut(handle) }) else {
+                return $crate::AUTD3_ERR_INVALID_ARGUMENT;
+            };
+            option.0.$($field).+ = has_value.then(|| ::std::time::Duration::from_nanos(ns));
+            $crate::AUTD3_OK
+        }
+
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $get(
+            handle: *const $handle,
+            out_has_value: *mut bool,
+            out: *mut u64,
+        ) -> i32 {
+            let Some(option) = (unsafe { $crate::handle_ref(handle) }) else {
+                return $crate::AUTD3_ERR_INVALID_ARGUMENT;
+            };
+            let value = option.0.$($field).+;
+            let code = unsafe { $crate::write_out(out_has_value, value.is_some()) };
+            if code != $crate::AUTD3_OK {
+                return code;
+            }
+            unsafe { $crate::write_out(out, value.map_or(0, $crate::to_ns)) }
+        }
+    };
     ($handle:ty, [$($field:tt).+], $ty:ty, $set:ident, $get:ident) => {
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $set(handle: *mut $handle, value: $ty) -> i32 {

@@ -1,23 +1,21 @@
 import asyncio
 
-import numpy as np
-
 from autd3 import Client, ClientConfig, UdpEmulator
 from autd3.commands import ActivatePatternBank, ConfigPattern, WritePatternBuffer
-from autd3.geometry import Autd3, Geometry
-from autd3.units import m, s
+from autd3.geometry import Autd3, Geometry, offset
+from autd3.units import m, mm, s
 from autd3.value import Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode
 from autd3_pattern import focus, wavelength
 
 
 async def main() -> None:
-    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+    geometry = Geometry([Autd3()])
     emulator = UdpEmulator(geometry.num_devices())
     async with await Client.open(geometry, emulator.option(), ClientConfig()) as client:
         phases = geometry.phase_buffer()
         focus(
             geometry,
-            geometry.center() + np.array([0.0, 0.0, 150.0]),
+            geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm),
             wavelength(340 * m / s),
             phases,
         )

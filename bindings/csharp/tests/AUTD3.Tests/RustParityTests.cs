@@ -24,7 +24,7 @@ namespace AUTD3.Tests
             using var geometry = Fixture.SingleDevice();
             var points = new List<ControlPoints>();
             Stm.Circle(geometry.Center + new Vector3(0f, 0f, 150f), 30f * mm, size, new Vector3(0f, 0f, 1f), Intensity.Max, points);
-            using var frames = Frames.Encode(geometry, new FociStm(TimeSpan.FromMilliseconds(millis), points));
+            using var frames = Frames.Encode(geometry, new FociStm(TimeSpan.FromMilliseconds(millis), points, new FociStmOption()));
             Assert.True(frames.Length > 0);
         }
 
@@ -79,7 +79,7 @@ namespace AUTD3.Tests
             Assert.NotEqual(SamplingConfig.Freq4k, unset);
             Assert.NotEqual(unset, default(SamplingConfig));
             var e = Assert.Throws<Autd3Exception>(() =>
-                Frames.Encode(geometry, new ConfigModulation(ModulationBank.B0, unset, 2)));
+                Frames.Encode(geometry, new ConfigModulation(ModulationBank.B0, unset, 2, LoopBehavior.Infinite)));
             Assert.Equal(Autd3ErrorCode.InvalidArgument, e.Code);
 
             Assert.Equal(SamplingConfig.Freq4k, new SineOption().SamplingConfig);

@@ -90,7 +90,10 @@ def test_invalid_rotation_raises() -> None:
 
 def test_an_omitted_rotation_is_the_identity() -> None:
     assert_same_rotation(Geometry([Autd3([0.0, 0.0, 0.0])])[0].rotation(), [1.0, 0.0, 0.0, 0.0])
-    assert_same_rotation(rotation_of(None), [1.0, 0.0, 0.0, 0.0])
+    assert_same_rotation(Geometry([Autd3()])[0].rotation(), [1.0, 0.0, 0.0, 0.0])
+    assert Autd3() == Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])
+    with pytest.raises(TypeError):
+        rotation_of(None)
     assert Autd3([1.0, 2.0, 3.0]) == Autd3([1.0, 2.0, 3.0], [1.0, 0.0, 0.0, 0.0])
     assert Autd3([1.0, 2.0, 3.0]) != Autd3([0.0, 2.0, 3.0])
     assert Autd3([1.0, 2.0, 3.0]).origin.tolist() == [1.0, 2.0, 3.0]

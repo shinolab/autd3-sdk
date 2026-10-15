@@ -145,7 +145,7 @@ namespace AUTD3.Tests
         public void ConfigFociStmBuildsDatagram()
         {
             using var geometry = Fixture.SingleDevice();
-            using var frames = Frames.Encode(geometry, new ConfigFociStm(PatternBank.B0, SamplingConfig.Freq4k, 4, 1, Velocity.FromMS(340f)));
+            using var frames = Frames.Encode(geometry, new ConfigFociStm(PatternBank.B0, SamplingConfig.Freq4k, 4, 1, Velocity.FromMS(340f), LoopBehavior.Infinite));
             Assert.True(frames.Length > 0);
         }
 

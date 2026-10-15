@@ -1,4 +1,3 @@
-using System.Numerics;
 using AUTD3;
 
 namespace DocSamples.ApiCommandPattern;
@@ -7,7 +6,7 @@ internal static class Sample
 {
     internal static void Run()
     {
-        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
+        var geometry = new Geometry(new[] { new Autd3() });
 
         var bank = PatternBank.B0;
         var transitionMode = TransitionMode.Immediate;

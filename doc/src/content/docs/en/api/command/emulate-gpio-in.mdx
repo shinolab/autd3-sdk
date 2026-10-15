@@ -1,0 +1,34 @@
+---
+title: EmulateGpioIn
+description: EmulateGpioIn asserts GPIO inputs from software
+sidebar:
+  order: 7.5
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/emulate-gpio-in.rs?raw";
+import pySample from "@codes/python/examples/api/command/emulate-gpio-in.py?raw";
+import fullSample from "@codes/rust/examples/api/command/emulate-gpio-in-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/emulate-gpio-in-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/emulate-gpio-in.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/emulate-gpio-in-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`EmulateGpioIn` is a command that asserts the four [GPIO input terminals](/autd3-sdk/en/hardware/gpio/) of the devices from software.
+The effective value the FPGA sees is the logical OR of the physical terminal input and `EmulateGpioIn`.
+It is useful, for example, to try switching with [`TransitionMode::Gpio`](/autd3-sdk/en/api/command/lowlevel/activate-pattern-bank/) without external wiring.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+| Field    | Type        | Default         | Description                                            |
+| -------- | ----------- | --------------- | ------------------------------------------------------ |
+| `values` | `[bool; 4]` | all `false`     | Whether to assert each of inputs 0..3 (`true` asserts) |
+
+Python takes a sequence of 4 `bool`s, and C# takes a `bool[]` of length 4.
+A length other than 4 is an error at construction (`ValueError` in Python, `Autd3Exception` (`InvalidArgument`) in C#). In Rust, the array type fixes the length.
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

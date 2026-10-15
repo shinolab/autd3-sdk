@@ -9,6 +9,8 @@ import Math from "@components/Math.astro";
 import CodeTabs from "@components/CodeTabs.astro";
 import Install from "@components/Install.astro";
 import batchSample from "@codes/rust/examples/api/compute/holo/batch.rs?raw";
+import pyBatchSample from "@codes/python/examples/api/compute/holo/batch.py?raw";
+import csBatchSample from "@codes/csharp/examples/api/compute/holo/batch.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
 Holo は複数の焦点 (制御点) を同時に生成するための Pattern 計算群. 
@@ -27,11 +29,13 @@ Holo は複数の焦点 (制御点) を同時に生成するための Pattern �
 
 ### AmplitudeTarget
 
-焦点を表す構造体. 位置と目標振幅を持つ. 
+焦点を表す構造体. 位置 `point` と目標振幅 `amplitude` を持つ (Python はプロパティ `point` / `amplitude`, C# は `Point` / `Amplitude`). 
 
 ### 振幅単位 `Pa` / `kPa` / `dB`
 
 目標振幅 `Amplitude` は, `f32` に振幅単位を掛けて構築する. 
+値は `pascal()` (Pa) と `spl()` (dB) で読む (Python はプロパティ `pascal` / `spl`, C# は `Pascal` / `Spl`). 
+`Amplitude` はスカラ倍 (`* f32` / `f32 *`)・除算 (`/ f32`)・大小比較ができる (Python / C# も同じ). 
 
 ### IntensityConstraint
 
@@ -45,8 +49,13 @@ Holo は複数の焦点 (制御点) を同時に生成するための Pattern �
 | `Uniform(Intensity)`            | 全振動子を一定強度にする                       |
 | `Clamp(Intensity, Intensity)`   | 振幅を指定範囲にクランプする                   |
 
-各 Option の `constraint` フィールドで指定する. デフォルトはアルゴリズムにより異なる. 
+各 Option の `constraint` フィールドで指定する. デフォルトは `naive` / `gs` / `gspat` とも `Clamp(Intensity::MIN, Intensity::MAX)`. 
 `greedy` は振幅を最適化しないので `constraint` を持たず, 振幅は入力として与える. 
+
+### エラー
+
+各関数の失敗は, Rust では `HoloError`, Python では `HoloError` (`autd3_core.Autd3Error` のサブクラスで `code` は `INVALID_ARGUMENT`), C# では `Autd3Exception` (`Code` は `InvalidArgument`) になる.
+焦点が空のとき, 出力バッファの台数が `geometry` と合わないとき, `mask` の形が `geometry` と合わないときなどに失敗する.
 
 ### Directivity
 
@@ -62,6 +71,9 @@ Holo は複数の焦点 (制御点) を同時に生成するための Pattern �
 - `TransducerMask::AllEnabled` — 全振動子を使う (デフォルト). 
 - `TransducerMask::Masked(&[Vec<bool>])` — 各振動子ごとに有効/無効を指定する. 
 
+Python では `TransducerMask.AllEnabled` / `TransducerMask.masked(rows)`, C# では `TransducerMask.AllEnabled` / `TransducerMask.Masked(bool[][])` と書く.
+Python の `mask` に `None` は渡せない (`TypeError`). [`TransducerGroups.mask(key)`](/autd3-sdk/api/compute/pattern/group/) がどの振動子にも割り当てられていないキーで返す `None` が, 全振動子の指定として黙って通ることはない.
+
 ### LinAlgBackend (NalgebraBackend)
 
 `naive` / `gs` / `gspat` は線形代数演算を `LinAlgBackend` トレイトに委譲する.
@@ -70,20 +82,22 @@ Holo は複数の焦点 (制御点) を同時に生成するための Pattern �
 
 `greedy` は行列演算を使わないためバックエンドを取らない. 
 
+Python / C# は `NalgebraBackend` に固定しており, バックエンドの引数を取らない.
+
 ### GPU Backend (WgpuBackend)
 
-GPUで計算するバックエンドとして `WgpuBackend` を用意している.
+GPUで計算するバックエンドとして `WgpuBackend` を用意している (Rust のみ).
 
 <Install rust="autd3-rs-pattern-holo-wgpu"/>
 
-#### バッチ API
+### バッチ API
 
 `naive` / `gs` / `gspat` には, 独立した複数の問題をまとめて解く `naive_batch` / `gs_batch` / `gspat_batch` がある. 
 
-<CodeTabs rust={excerpt(batchSample, "api")} />
+<CodeTabs rust={excerpt(batchSample, "api")} python={excerpt(pyBatchSample, "api")} csharp={excerpt(csBatchSample, "api")} />
 
 問題数は `phases` / `intensities` の長さで決まる (両者の長さは揃える).
 焦点は 問題数 × 各問題あたりの焦点数 の長さのスライスを渡す.
 全問題は焦点数が揃っている必要があり, 問題数で割り切れなければエラーになる.
 
-バッチAPIで計算速度に利があるのはGPU バックエンドのみで, CPU バックエンドでは意味はない.
+バッチ API で計算速度に利があるのは GPU バックエンドだけである. CPU バックエンド (Python / C# の `NalgebraBackend` を含む) は問題を 1 つずつ順に解くので, 1 問題ずつ関数を呼ぶのと速度は変わらない.

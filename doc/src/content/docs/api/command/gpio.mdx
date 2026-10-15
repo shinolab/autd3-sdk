@@ -20,9 +20,9 @@ import { excerpt } from "@lib/excerpt";
 
 <CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
 
-| フィールド | 型             | 説明                      |
-| ---------- | -------------- | ------------------------- |
-| `outputs`  | `[GpioOut; 4]` | 端子 0..3 に割り当てる出力 |
+| フィールド | 型             | デフォルト   | 説明                       |
+| ---------- | -------------- | ------------ | -------------------------- |
+| `outputs`  | `[GpioOut; 4]` | すべて `Off` | 端子 0..3 に割り当てる出力 |
 
 ## GpioOut
 

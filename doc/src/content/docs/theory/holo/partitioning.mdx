@@ -22,7 +22,7 @@ import Figure from "@components/Figure.astro";
 そのため, SDKには実装されていない.
 
 :::note
-アレイを分割すること自体は, 振動子毎に強度/位相を指定する `Pattern` を自分で構築すれば可能である.
+アレイを分割すること自体は, [`TransducerGroups` と `group_compute`](/autd3-sdk/api/compute/pattern/group/) を使えば可能である. 各グループの計算では, holo の `mask` に `groups.mask(key)` を渡せばそのグループの振動子だけで最適化できる.
 :::
 
 この手法は焦点の数が増えてきたらどうすべきか, といった問題や, 各焦点同士の干渉などを一切考慮していない, などの問題がある.

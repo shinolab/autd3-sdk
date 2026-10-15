@@ -23,7 +23,7 @@ import { excerpt } from "@lib/excerpt";
 | Field       | Type                             | Description                        |
 | ----------- | -------------------------------- | ---------------------------------- |
 | `bank`      | `PatternBank`                    | Destination bank                   |
-| `index`     | `u16`                            | Destination index for writing within the bank |
+| `index`     | `usize`                          | Destination index for writing within the bank |
 | `phases`      | `&[Vec<Phase>]`     | Per-device phases                  |
 | `intensities` | `PatternIntensity`  | Intensity (a uniform `Intensity`, or a per-device `&[Vec<Intensity>]` buffer) |
 

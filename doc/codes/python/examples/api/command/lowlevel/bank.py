@@ -2,7 +2,7 @@ from autd3.commands import ActivatePatternBank, ConfigPattern, PhaseDepth, Write
 from autd3.geometry import Autd3, Geometry
 from autd3.value import Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode
 
-geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+geometry = Geometry([Autd3()])
 
 bank = PatternBank.B0
 index = 0

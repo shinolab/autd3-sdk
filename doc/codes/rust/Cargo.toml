@@ -70,6 +70,14 @@ name = "api_command_cpu_config"
 path = "examples/api/command/cpu-config.rs"
 
 [[example]]
+name = "api_command_emulate_gpio_in_example"
+path = "examples/api/command/emulate-gpio-in-example.rs"
+
+[[example]]
+name = "api_command_emulate_gpio_in"
+path = "examples/api/command/emulate-gpio-in.rs"
+
+[[example]]
 name = "api_command_foci_stm_example"
 path = "examples/api/command/foci-stm-example.rs"
 
@@ -160,6 +168,14 @@ path = "examples/api/command/phase-correction-example.rs"
 [[example]]
 name = "api_command_phase_correction"
 path = "examples/api/command/phase-correction.rs"
+
+[[example]]
+name = "api_command_release_failsafe_example"
+path = "examples/api/command/release-failsafe-example.rs"
+
+[[example]]
+name = "api_command_release_failsafe"
+path = "examples/api/command/release-failsafe.rs"
 
 [[example]]
 name = "api_command_set_pulse_width_table_example"

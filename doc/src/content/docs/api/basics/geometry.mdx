@@ -27,6 +27,7 @@ import { excerpt } from "@lib/excerpt";
 <Code code={excerpt(pySample, "api")} lang="python" />
 
 `Autd3([x, y, z], rotation)` は原点位置と姿勢から 1 台のデバイスを構築する.
+どちらも省略でき, 原点の既定は `[0, 0, 0]`, 姿勢の既定は単位クォータニオン `[1, 0, 0, 0]` である (`Autd3()` は Rust の `Autd3::default()` と同じ).
 
 姿勢には以下の 3 形式を渡せる.
 
@@ -41,10 +42,14 @@ import { excerpt } from "@lib/excerpt";
 
 `new Autd3(origin, rotation)` は原点位置 (`Vector3`) と姿勢 (`Quaternion`) から 1 台のデバイスを構築する.
 姿勢を省略した `new Autd3(origin)` もある (`Quaternion.Identity` を使う).
+`new Autd3()` (と `default(Autd3)`) は Rust の `Autd3::default()` と同じく原点・`Quaternion.Identity` になる.
 </Fragment>
 </CodeTabs>
 
 `Geometry::new` に複数台を渡すと, 先頭から順にデバイス番号 (`idx`) が割り振られる.
+
+Rust は姿勢を `UnitQuaternion` で受けるので単位長が型で保証される.
+Python / C# はクォータニオンのノルムを検査し, 1 との差が `ROTATION_NORM_TOLERANCE` (1e-3, C#: `Autd3.RotationNormTolerance`) を超えるとエラーにする (Python は `Autd3` の構築時に `ValueError`, C# は `Geometry` の構築時に `Autd3Exception` (`InvalidArgument`)).
 
 ## API
 
@@ -56,14 +61,17 @@ import { excerpt } from "@lib/excerpt";
 | -------------------- | ---------------------------------- | ------------------------------------- |
 | `num_devices()`      | `usize`                            | デバイス台数                          |
 | `num_transducers()`  | `usize`                            | 全デバイスの振動子総数                |
+| `is_empty()`         | `bool`                             | デバイスが 1 台も無いか               |
 | `center()`           | `Point3<f32>`                      | アレイ全体の中心座標                  |
 | `phase_buffer()`     | `Vec<Vec<Phase>>`     | Pattern 計算用の位相バッファを確保 (初期値 0)    |
 | `intensity_buffer()` | `Vec<Vec<Intensity>>` | Pattern 計算用の振幅バッファを確保 (初期値最大) |
 | `output_mask_buffer()` | `Vec<Vec<bool>>`    | `SetOutputMask` 用の出力マスクバッファを確保 (初期値 `true`) |
 | `iter()` / `&geometry` | `Iterator<Item = &Device>`       | 各 `Device` を走査                    |
 | `geometry[i]`        | `&Device`                          | `i` 番目の `Device` を取得            |
-| `to_json()`          | `String`                           | 配置を JSON 文字列にする              |
-| `from_json(&str)`    | `Result<Geometry, Error>` | JSON 文字列から`Geometry`を生成          |
+| `to_json()`          | `Result<String, LayoutError>`      | 配置を JSON 文字列にする              |
+| `from_json(&str)`    | `Result<Geometry, LayoutError>`    | JSON 文字列から`Geometry`を生成          |
+
+範囲外の `geometry[i]` は, Rust では panic, Python では `IndexError` (負の `i` も), C# では `ArgumentOutOfRangeException` になる.
 
 ## Device
 
@@ -77,6 +85,7 @@ import { excerpt } from "@lib/excerpt";
 | -------------------- | ----------------------- | --------------------------------------------- |
 | `idx()`              | `usize`                 | `Geometry` 内でのデバイス番号                 |
 | `num_transducers()`  | `usize`                 | 振動子数                                      |
+| `is_empty()`         | `bool`                  | 振動子が 1 つも無いか                         |
 | `center()`           | `Point3<f32>`           | デバイス中心座標                              |
 | `rotation()`         | `UnitQuaternion<f32>`   | デバイスの姿勢 (回転)                         |
 | `x_direction()`      | `UnitVector3<f32>`      | ローカル x 軸方向                             |
@@ -86,6 +95,7 @@ import { excerpt } from "@lib/excerpt";
 | `directions()`       | `&[UnitVector3<f32>]`   | 全振動子の法線方向                            |
 | `position(i)`        | `Point3<f32>`           | `i` 番目の振動子の位置                        |
 | `direction(i)`       | `UnitVector3<f32>`      | `i` 番目の振動子の方向                        |
+| `to_local(p)`        | `Point3<f32>`           | グローバル座標の点 `p` をデバイスのローカル座標 (0 番目の振動子が原点) に変換 |
 
 Python では座標・方向・姿勢はすべて `float32` の numpy 配列で返る (`Geometry.center()` や `Autd3.origin` / `Autd3.rotation` も同じ).
 姿勢は `[w, x, y, z]` の順のクォータニオン.
@@ -93,7 +103,7 @@ Python では座標・方向・姿勢はすべて `float32` の numpy 配列で�
 ## 座標ヘルパ
 
 座標を組み立てるヘルパがある.
-引数の型が `Length` になっており, `150 * mm` のように単位を指定することができる.
+引数の型が `Length` になっており, `150 * mm` のように単位を指定することができる ([単位と値型](/autd3-sdk/api/basics/units/) 参照).
 
 | 関数                | 返り値 (Rust)   | 説明                                         |
 | ------------------- | --------------- | -------------------------------------------- |

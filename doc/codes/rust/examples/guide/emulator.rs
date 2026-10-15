@@ -18,7 +18,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut phases = geometry.phase_buffer();
     autd3_rs_pattern::focus(&geometry, target, wavelength, &mut phases);
 
-    let mut modulation = Vec::new();
+    let mut modulation = autd3_rs_modulation::modulation_buffer();
     autd3_rs_modulation::sine(
         200 * autd3_rs::units::Hz,
         &autd3_rs_modulation::SineOption::default(),

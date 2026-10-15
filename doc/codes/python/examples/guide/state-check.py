@@ -9,7 +9,7 @@ CHECK_INTERVAL = 0.1
 
 
 async def main() -> None:
-    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+    geometry = Geometry([Autd3()])
 
     # ANCHOR: open
     client = await Client.open(geometry, UdpOption(), ClientConfig())

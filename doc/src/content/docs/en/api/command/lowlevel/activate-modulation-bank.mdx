@@ -31,10 +31,12 @@ import { excerpt } from "@lib/excerpt";
 | -------------------- | --------------------------        |
 | `Immediate`          | Immediate                         |
 | `SyncIdx`            | When the playback index next becomes 0 |
-| `SysTime(SysTime)`   | At the specified device time      |
+| `SysTime { time }`   | At the specified device time `time` (`SysTime`) |
 | `Gpio(GpioIn)`       | Trigger on the specified GPIO input pin |
 | `Ext`                | Extended mode (automatically switches to the next bank when playback within the bank finishes) |
 | `Later`              | Does not transition (only writes to the bank) |
+
+In Python / C#, `SysTime` is written as `TransitionMode.SysTime(time)`.
 
 `SysTime` rejects a time earlier than "now + margin" with a `MISS_TRANSITION_TIME` error, because the FPGA may miss a transition whose time is too close.
 The margin defaults to 10 ms and can be changed with `sys_time_transition_margin` of [SetCpuConfig](/autd3-sdk/en/api/command/cpu-config/).

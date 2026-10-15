@@ -10,14 +10,14 @@ use autd3_rs::commands::{
     GpioOut as CoreGpioOut, MaxFreqPpb, Nop as CoreNop, PWE_TABLE_SIZE, PathDelayFilterShift,
     PtpConfig as CorePtpConfig, ReleaseFailsafe as CoreReleaseFailsafe,
     SetCpuConfig as CoreSetCpuConfig, SetGpioOut, SetOutputMask, SetPhaseCorrection,
-    SetPulseWidthTable as CoreSetPulseWidthTable, SetSilencer, Synchronize as CoreSynchronize,
+    SetPulseWidthTable as CoreSetPulseWidthTable, SetSilencer, SilencerConfig,
+    Synchronize as CoreSynchronize,
 };
-use autd3_rs::geometry::Autd3;
 use autd3_rs::value::{Phase, PulseWidth as CorePulseWidth};
 
 use crate::datagram::PushCommand;
 use crate::ops::SysTime;
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 
 macro_rules! simple_command {
@@ -46,6 +46,7 @@ pub struct ForceFan(pub(crate) Arc<CoreForceFan>);
 #[pymethods]
 impl ForceFan {
     #[new]
+    #[pyo3(signature = (value = CoreForceFan::default().value))]
     fn new(value: bool) -> Self {
         Self(Arc::new(CoreForceFan { value }))
     }
@@ -54,39 +55,61 @@ impl ForceFan {
 #[pyclass(
     name = "FixedCompletionTime",
     module = "autd3.commands",
+    eq,
+    frozen,
     skip_from_py_object
 )]
+#[derive(PartialEq)]
 pub struct FixedCompletionTimePy(FixedCompletionTime);
 
 #[pymethods]
 impl FixedCompletionTimePy {
     #[new]
-    #[pyo3(signature = (intensity = None, phase = None, strict_mode = true))]
+    #[pyo3(signature = (
+        intensity = FixedCompletionTime::default().intensity,
+        phase = FixedCompletionTime::default().phase,
+        strict_mode = FixedCompletionTime::default().strict_mode,
+    ))]
     fn new(
-        intensity: Option<&Bound<'_, PyAny>>,
-        phase: Option<&Bound<'_, PyAny>>,
+        #[pyo3(from_py_with = extract_duration)] intensity: Duration,
+        #[pyo3(from_py_with = extract_duration)] phase: Duration,
         strict_mode: bool,
-    ) -> PyResult<Self> {
-        let default = FixedCompletionTime::default();
-        Ok(Self(FixedCompletionTime {
-            intensity: intensity
-                .map(extract_duration)
-                .transpose()?
-                .unwrap_or(default.intensity),
-            phase: phase
-                .map(extract_duration)
-                .transpose()?
-                .unwrap_or(default.phase),
+    ) -> Self {
+        Self(FixedCompletionTime {
+            intensity,
+            phase,
             strict_mode,
-        }))
+        })
+    }
+
+    #[getter]
+    fn intensity<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        duration_to_py(py, self.0.intensity)
+    }
+
+    #[getter]
+    fn phase<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        duration_to_py(py, self.0.phase)
+    }
+
+    #[getter]
+    fn strict_mode(&self) -> bool {
+        self.0.strict_mode
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{:?}", self.0)
     }
 }
 
 #[pyclass(
     name = "FixedUpdateRate",
     module = "autd3.commands",
+    eq,
+    frozen,
     skip_from_py_object
 )]
+#[derive(PartialEq)]
 pub struct FixedUpdateRatePy(FixedUpdateRate);
 
 #[pymethods]
@@ -101,6 +124,32 @@ impl FixedUpdateRatePy {
                 .ok_or_else(|| PyValueError::new_err("phase must be >= 1"))?,
         }))
     }
+
+    #[getter]
+    fn intensity(&self) -> u16 {
+        self.0.intensity.get()
+    }
+
+    #[getter]
+    fn phase(&self) -> u16 {
+        self.0.phase.get()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{:?}", self.0)
+    }
+}
+
+fn extract_silencer_config(config: &Bound<'_, PyAny>) -> PyResult<SilencerConfig> {
+    if let Ok(c) = config.cast::<FixedCompletionTimePy>() {
+        return Ok(c.get().0.into());
+    }
+    if let Ok(c) = config.cast::<FixedUpdateRatePy>() {
+        return Ok(c.get().0.into());
+    }
+    Err(PyTypeError::new_err(
+        "SetSilencer expects a FixedCompletionTime or FixedUpdateRate",
+    ))
 }
 
 #[pyclass(name = "SetSilencer", module = "autd3.commands", frozen)]
@@ -109,23 +158,9 @@ pub struct SetSilencerPy(pub(crate) Arc<SetSilencer>);
 #[pymethods]
 impl SetSilencerPy {
     #[new]
-    #[pyo3(signature = (config = None))]
-    fn new(config: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
-        let inner = match config {
-            None => SetSilencer::default(),
-            Some(config) => {
-                if let Ok(c) = config.cast::<FixedCompletionTimePy>() {
-                    SetSilencer::new(c.borrow().0)
-                } else if let Ok(c) = config.cast::<FixedUpdateRatePy>() {
-                    SetSilencer::new(c.borrow().0)
-                } else {
-                    return Err(PyValueError::new_err(
-                        "SetSilencer expects a FixedCompletionTime or FixedUpdateRate",
-                    ));
-                }
-            }
-        };
-        Ok(Self(Arc::new(inner)))
+    #[pyo3(signature = (config = SetSilencer::default().config))]
+    fn new(#[pyo3(from_py_with = extract_silencer_config)] config: SilencerConfig) -> Self {
+        Self(Arc::new(SetSilencer::new(config)))
     }
 
     #[staticmethod]
@@ -606,6 +641,7 @@ pub struct SetGpioOutPy(pub(crate) Arc<SetGpioOut>);
 #[pymethods]
 impl SetGpioOutPy {
     #[new]
+    #[pyo3(signature = (outputs = SetGpioOut::default().outputs.map(GpioOut).to_vec()))]
     fn new(outputs: Vec<GpioOut>) -> PyResult<Self> {
         let outputs: [GpioOut; 4] = outputs
             .try_into()
@@ -622,6 +658,7 @@ pub struct EmulateGpioInPy(pub(crate) Arc<EmulateGpioIn>);
 #[pymethods]
 impl EmulateGpioInPy {
     #[new]
+    #[pyo3(signature = (values = EmulateGpioIn::default().values.to_vec()))]
     fn new(values: Vec<bool>) -> PyResult<Self> {
         let values: [bool; 4] = values
             .try_into()
@@ -649,17 +686,8 @@ pub struct SetOutputMaskPy(pub(crate) Arc<SetOutputMaskCmd>);
 #[pymethods]
 impl SetOutputMaskPy {
     #[new]
-    fn new(masks: Vec<Vec<bool>>) -> PyResult<Self> {
-        for device in &masks {
-            if device.len() != Autd3::NUM_TRANSDUCERS {
-                return Err(PyValueError::new_err(format!(
-                    "each device mask needs {} entries, got {}",
-                    Autd3::NUM_TRANSDUCERS,
-                    device.len()
-                )));
-            }
-        }
-        Ok(Self(Arc::new(SetOutputMaskCmd { masks })))
+    fn new(masks: Vec<Vec<bool>>) -> Self {
+        Self(Arc::new(SetOutputMaskCmd { masks }))
     }
 }
 
@@ -686,13 +714,6 @@ impl SetPhaseCorrectionPy {
         let phases = phases
             .into_iter()
             .map(|device| {
-                if device.len() != Autd3::NUM_TRANSDUCERS {
-                    return Err(PyValueError::new_err(format!(
-                        "each device needs {} phases, got {}",
-                        Autd3::NUM_TRANSDUCERS,
-                        device.len()
-                    )));
-                }
                 device
                     .iter()
                     .map(|p| extract_u8(p).map(Phase))
@@ -701,6 +722,19 @@ impl SetPhaseCorrectionPy {
             .collect::<PyResult<Vec<_>>>()?;
         Ok(Self(Arc::new(SetPhaseCorrectionCmd { phases })))
     }
+}
+
+fn extract_pulse_width_table(
+    table: &Bound<'_, PyAny>,
+) -> PyResult<Box<[CorePulseWidth; PWE_TABLE_SIZE]>> {
+    let table: Vec<PulseWidth> = table.extract()?;
+    let table: [PulseWidth; PWE_TABLE_SIZE] = table.try_into().map_err(|v: Vec<PulseWidth>| {
+        PyValueError::new_err(format!(
+            "SetPulseWidthTable needs exactly {PWE_TABLE_SIZE} entries, got {}",
+            v.len()
+        ))
+    })?;
+    Ok(Box::new(table.map(|pulse_width| pulse_width.0)))
 }
 
 pub(crate) struct SetPulseWidthTableCmd {
@@ -720,23 +754,13 @@ pub struct SetPulseWidthTablePy(pub(crate) Arc<SetPulseWidthTableCmd>);
 #[pymethods]
 impl SetPulseWidthTablePy {
     #[new]
-    #[pyo3(signature = (table=None))]
-    fn new(table: Option<Vec<PulseWidth>>) -> PyResult<Self> {
-        let Some(table) = table else {
-            return Ok(Self(Arc::new(SetPulseWidthTableCmd {
-                table: *CoreSetPulseWidthTable::default().table,
-            })));
-        };
-        let table: [PulseWidth; PWE_TABLE_SIZE] =
-            table.try_into().map_err(|v: Vec<PulseWidth>| {
-                PyValueError::new_err(format!(
-                    "SetPulseWidthTable needs exactly {PWE_TABLE_SIZE} entries, got {}",
-                    v.len()
-                ))
-            })?;
-        Ok(Self(Arc::new(SetPulseWidthTableCmd {
-            table: table.map(|pulse_width| pulse_width.0),
-        })))
+    #[pyo3(signature = (table = Box::new(*CoreSetPulseWidthTable::default().table)))]
+    fn new(
+        #[pyo3(from_py_with = extract_pulse_width_table)] table: Box<
+            [CorePulseWidth; PWE_TABLE_SIZE],
+        >,
+    ) -> Self {
+        Self(Arc::new(SetPulseWidthTableCmd { table: *table }))
     }
 
     #[staticmethod]

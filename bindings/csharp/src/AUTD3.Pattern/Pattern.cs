@@ -360,6 +360,12 @@ namespace AUTD3
         internal static extern int autd3_pattern_group_phase(GeometryHandle geometry, int[] keys, IntPtr[] sources, UIntPtr numSources, PhaseBufferHandle buffer);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_pattern_group_device_phase(GeometryHandle geometry, UIntPtr dev, int[] keys, IntPtr[] sources, UIntPtr numSources, [In, Out] byte[] dst);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_pattern_group_device_intensity(GeometryHandle geometry, UIntPtr dev, int[] keys, IntPtr[] sources, UIntPtr numSources, [In, Out] byte[] dst);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_pattern_group_copy_phase(GeometryHandle geometry, int[] indices, int index, PhaseBufferHandle source, PhaseBufferHandle buffer);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
@@ -654,7 +660,7 @@ namespace AUTD3
             {
                 if (src[d] == null || src[d].Length != Autd3.NumTransducers)
                 {
-                    throw new Autd3Exception($"each device requires {Autd3.NumTransducers} {name}");
+                    throw new Autd3Exception($"each device requires {Autd3.NumTransducers} {name}", Autd3ErrorCode.InvalidArgument);
                 }
                 for (var t = 0; t < Autd3.NumTransducers; t++)
                 {
@@ -707,17 +713,17 @@ namespace AUTD3
         private readonly PatternIntensity _intensities;
         private readonly TransitionMode _transitionMode;
 
-        public Pattern(PhaseBuffer phases, PatternIntensity intensities, TransitionMode? transitionMode = null)
+        public Pattern(PhaseBuffer phases, PatternIntensity intensities, TransitionMode transitionMode = default)
             : this(PatternBank.B0, phases, intensities, transitionMode)
         {
         }
 
-        public Pattern(PatternBank bank, PhaseBuffer phases, PatternIntensity intensities, TransitionMode? transitionMode = null)
+        public Pattern(PatternBank bank, PhaseBuffer phases, PatternIntensity intensities, TransitionMode transitionMode = default)
         {
             _bank = bank;
             _phases = phases;
             _intensities = intensities;
-            _transitionMode = transitionMode ?? TransitionMode.Immediate;
+            _transitionMode = transitionMode;
         }
 
         IntPtr ICommand.CreateOp(Geometry geometry)
@@ -735,7 +741,7 @@ namespace AUTD3
         {
             if (NativePattern.autd3_pattern_focus(geometry.Handle, Coords.PointArray(target), wavelength.Mm, dst.Handle) != 0)
             {
-                throw new Autd3Exception("focus failed (buffer device count must match geometry)");
+                throw new Autd3Exception("focus failed (buffer device count must match geometry)", Autd3ErrorCode.InvalidArgument);
             }
         }
 
@@ -745,7 +751,7 @@ namespace AUTD3
             if (NativePattern.autd3_pattern_focus_device(device.GeometryHandle, device.DeviceIndex,
                 Coords.PointArray(target), wavelength.Mm, native) != 0)
             {
-                throw new Autd3Exception("focus_device failed");
+                throw new Autd3Exception("focus_device failed", Autd3ErrorCode.InvalidArgument);
             }
             FromNative(native, dst);
         }
@@ -756,7 +762,7 @@ namespace AUTD3
                 Coords.PointArray(position),
                 Coords.PointArray(target), wavelength.Mm, out var p) != 0)
             {
-                throw new Autd3Exception("focus_transducer failed");
+                throw new Autd3Exception("focus_transducer failed", Autd3ErrorCode.InvalidArgument);
             }
             return new Phase(p);
         }
@@ -765,7 +771,7 @@ namespace AUTD3
         {
             if (NativePattern.autd3_pattern_plane(geometry.Handle, Coords.DirArray(dir), wavelength.Mm, dst.Handle) != 0)
             {
-                throw new Autd3Exception("plane failed (buffer device count must match geometry)");
+                throw new Autd3Exception("plane failed (buffer device count must match geometry)", Autd3ErrorCode.InvalidArgument);
             }
         }
 
@@ -775,7 +781,7 @@ namespace AUTD3
             if (NativePattern.autd3_pattern_plane_device(device.GeometryHandle, device.DeviceIndex,
                 Coords.DirArray(dir), wavelength.Mm, native) != 0)
             {
-                throw new Autd3Exception("plane_device failed");
+                throw new Autd3Exception("plane_device failed", Autd3ErrorCode.InvalidArgument);
             }
             FromNative(native, dst);
         }
@@ -786,7 +792,7 @@ namespace AUTD3
                 Coords.PointArray(position),
                 Coords.DirArray(dir), wavelength.Mm, out var p) != 0)
             {
-                throw new Autd3Exception("plane_transducer failed");
+                throw new Autd3Exception("plane_transducer failed", Autd3ErrorCode.InvalidArgument);
             }
             return new Phase(p);
         }
@@ -795,7 +801,7 @@ namespace AUTD3
         {
             if (NativePattern.autd3_pattern_bessel(geometry.Handle, Coords.PointArray(apex), Coords.DirArray(dir), theta.Rad, wavelength.Mm, dst.Handle) != 0)
             {
-                throw new Autd3Exception("bessel failed (buffer device count must match geometry)");
+                throw new Autd3Exception("bessel failed (buffer device count must match geometry)", Autd3ErrorCode.InvalidArgument);
             }
         }
 
@@ -806,7 +812,7 @@ namespace AUTD3
                 Coords.PointArray(apex),
                 Coords.DirArray(dir), theta.Rad, wavelength.Mm, native) != 0)
             {
-                throw new Autd3Exception("bessel_device failed");
+                throw new Autd3Exception("bessel_device failed", Autd3ErrorCode.InvalidArgument);
             }
             FromNative(native, dst);
         }
@@ -818,7 +824,7 @@ namespace AUTD3
                 Coords.PointArray(apex),
                 Coords.DirArray(dir), theta.Rad, wavelength.Mm, out var p) != 0)
             {
-                throw new Autd3Exception("bessel_transducer failed");
+                throw new Autd3Exception("bessel_transducer failed", Autd3ErrorCode.InvalidArgument);
             }
             return new Phase(p);
         }
@@ -828,7 +834,7 @@ namespace AUTD3
             if (NativePattern.autd3_pattern_laguerre_gaussian_phase(geometry.Handle, Coords.PointArray(target), Coords.DirArray(axis),
                 option.P, option.L, option.Waist.Mm, wavelength.Mm, dst.Handle) != 0)
             {
-                throw new Autd3Exception("laguerre_gaussian_phase failed (waist must be positive and buffer device count must match geometry)");
+                throw new Autd3Exception("laguerre_gaussian_phase failed (waist must be a positive finite length and buffer device count must match geometry)", Autd3ErrorCode.InvalidArgument);
             }
         }
 
@@ -838,7 +844,7 @@ namespace AUTD3
             if (NativePattern.autd3_pattern_laguerre_gaussian_phase_device(device.GeometryHandle, device.DeviceIndex,
                 Coords.PointArray(target), Coords.DirArray(axis), option.P, option.L, option.Waist.Mm, wavelength.Mm, native) != 0)
             {
-                throw new Autd3Exception("laguerre_gaussian_phase_device failed (waist must be positive)");
+                throw new Autd3Exception("laguerre_gaussian_phase_device failed (waist must be a positive finite length)", Autd3ErrorCode.InvalidArgument);
             }
             FromNative(native, dst);
         }
@@ -850,7 +856,7 @@ namespace AUTD3
                 Coords.PointArray(target),
                 Coords.DirArray(axis), option.P, option.L, option.Waist.Mm, wavelength.Mm, out var p) != 0)
             {
-                throw new Autd3Exception("laguerre_gaussian_phase_transducer failed (waist must be positive)");
+                throw new Autd3Exception("laguerre_gaussian_phase_transducer failed (waist must be a positive finite length)", Autd3ErrorCode.InvalidArgument);
             }
             return new Phase(p);
         }
@@ -860,7 +866,7 @@ namespace AUTD3
             if (NativePattern.autd3_pattern_laguerre_gaussian_intensity(geometry.Handle, Coords.PointArray(target), Coords.DirArray(axis),
                 option.P, option.L, option.Waist.Mm, wavelength.Mm, dst.Handle) != 0)
             {
-                throw new Autd3Exception("laguerre_gaussian_intensity failed (waist must be positive and buffer device count must match geometry)");
+                throw new Autd3Exception("laguerre_gaussian_intensity failed (waist must be a positive finite length and buffer device count must match geometry)", Autd3ErrorCode.InvalidArgument);
             }
         }
 
@@ -870,7 +876,7 @@ namespace AUTD3
             if (NativePattern.autd3_pattern_laguerre_gaussian_intensity_device(device.GeometryHandle, device.DeviceIndex,
                 Coords.PointArray(target), Coords.DirArray(axis), option.P, option.L, option.Waist.Mm, wavelength.Mm, native) != 0)
             {
-                throw new Autd3Exception("laguerre_gaussian_intensity_device failed (waist must be positive)");
+                throw new Autd3Exception("laguerre_gaussian_intensity_device failed (waist must be a positive finite length)", Autd3ErrorCode.InvalidArgument);
             }
             FromNative(native, dst);
         }
@@ -880,7 +886,7 @@ namespace AUTD3
             if (NativePattern.autd3_pattern_hermite_gaussian_phase(geometry.Handle, Coords.PointArray(target), Coords.DirArray(axis), Coords.DirArray(xDir),
                 option.M, option.N, option.Waist.Mm, wavelength.Mm, dst.Handle) != 0)
             {
-                throw new Autd3Exception("hermite_gaussian_phase failed (waist must be positive and buffer device count must match geometry)");
+                throw new Autd3Exception("hermite_gaussian_phase failed (waist must be a positive finite length and buffer device count must match geometry)", Autd3ErrorCode.InvalidArgument);
             }
         }
 
@@ -890,7 +896,7 @@ namespace AUTD3
             if (NativePattern.autd3_pattern_hermite_gaussian_phase_device(device.GeometryHandle, device.DeviceIndex,
                 Coords.PointArray(target), Coords.DirArray(axis), Coords.DirArray(xDir), option.M, option.N, option.Waist.Mm, wavelength.Mm, native) != 0)
             {
-                throw new Autd3Exception("hermite_gaussian_phase_device failed (waist must be positive)");
+                throw new Autd3Exception("hermite_gaussian_phase_device failed (waist must be a positive finite length)", Autd3ErrorCode.InvalidArgument);
             }
             FromNative(native, dst);
         }
@@ -903,7 +909,7 @@ namespace AUTD3
                 Coords.DirArray(axis),
                 Coords.DirArray(xDir), option.M, option.N, option.Waist.Mm, wavelength.Mm, out var p) != 0)
             {
-                throw new Autd3Exception("hermite_gaussian_phase_transducer failed (waist must be positive)");
+                throw new Autd3Exception("hermite_gaussian_phase_transducer failed (waist must be a positive finite length)", Autd3ErrorCode.InvalidArgument);
             }
             return new Phase(p);
         }
@@ -913,7 +919,7 @@ namespace AUTD3
             if (NativePattern.autd3_pattern_hermite_gaussian_intensity(geometry.Handle, Coords.PointArray(target), Coords.DirArray(axis), Coords.DirArray(xDir),
                 option.M, option.N, option.Waist.Mm, wavelength.Mm, dst.Handle) != 0)
             {
-                throw new Autd3Exception("hermite_gaussian_intensity failed (waist must be positive and buffer device count must match geometry)");
+                throw new Autd3Exception("hermite_gaussian_intensity failed (waist must be a positive finite length and buffer device count must match geometry)", Autd3ErrorCode.InvalidArgument);
             }
         }
 
@@ -923,7 +929,7 @@ namespace AUTD3
             if (NativePattern.autd3_pattern_hermite_gaussian_intensity_device(device.GeometryHandle, device.DeviceIndex,
                 Coords.PointArray(target), Coords.DirArray(axis), Coords.DirArray(xDir), option.M, option.N, option.Waist.Mm, wavelength.Mm, native) != 0)
             {
-                throw new Autd3Exception("hermite_gaussian_intensity_device failed (waist must be positive)");
+                throw new Autd3Exception("hermite_gaussian_intensity_device failed (waist must be a positive finite length)", Autd3ErrorCode.InvalidArgument);
             }
             FromNative(native, dst);
         }
@@ -932,7 +938,7 @@ namespace AUTD3
         {
             if (NativePattern.autd3_pattern_set_intensity(intensity.Value, dst.Handle) != 0)
             {
-                throw new Autd3Exception("set_intensity failed");
+                throw new Autd3Exception("set_intensity failed", Autd3ErrorCode.InvalidArgument);
             }
         }
 
@@ -940,7 +946,7 @@ namespace AUTD3
         {
             if (NativePattern.autd3_pattern_set_phase(phase.Value, dst.Handle) != 0)
             {
-                throw new Autd3Exception("set_phase failed");
+                throw new Autd3Exception("set_phase failed", Autd3ErrorCode.InvalidArgument);
             }
         }
 
@@ -948,7 +954,7 @@ namespace AUTD3
         {
             if (NativePattern.autd3_pattern_add_phase(phase.Value, dst.Handle) != 0)
             {
-                throw new Autd3Exception("add_phase failed");
+                throw new Autd3Exception("add_phase failed", Autd3ErrorCode.InvalidArgument);
             }
         }
 
@@ -957,7 +963,7 @@ namespace AUTD3
             using var lease = GroupSources(geometry, groups, key => source(key)?.Handle, dst.Handle);
             if (NativePattern.autd3_pattern_group_phase(geometry.Handle, groups.FlatIndices, lease.Pointers, (UIntPtr)groups.Keys.Count, dst.Handle) != 0)
             {
-                throw new Autd3Exception("group failed (every buffer must match the geometry)");
+                throw new Autd3Exception("group failed (every buffer must match the geometry)", Autd3ErrorCode.InvalidArgument);
             }
         }
 
@@ -966,15 +972,40 @@ namespace AUTD3
             using var lease = GroupSources(geometry, groups, key => source(key)?.Handle, dst.Handle);
             if (NativePattern.autd3_pattern_group_intensity(geometry.Handle, groups.FlatIndices, lease.Pointers, (UIntPtr)groups.Keys.Count, dst.Handle) != 0)
             {
-                throw new Autd3Exception("group failed (every buffer must match the geometry)");
+                throw new Autd3Exception("group failed (every buffer must match the geometry)", Autd3ErrorCode.InvalidArgument);
             }
         }
 
-        private static HandleArray GroupSources<TKey>(Geometry geometry, TransducerGroups<TKey> groups, Func<TKey, SafeHandle?> source, SafeHandle dst) where TKey : notnull
+        public static void GroupDevice<TKey>(Device device, TransducerGroups<TKey> groups, Func<TKey, PhaseBuffer> source, Phase[] dst) where TKey : notnull
         {
-            if (groups.FlatIndices.Length != geometry.NumTransducers)
+            var native = ToNative(dst);
+            using var lease = GroupSources(NativeCore.autd3_core_geometry_num_transducers(device.GeometryHandle), groups, key => source(key)?.Handle, null);
+            if (NativePattern.autd3_pattern_group_device_phase(device.GeometryHandle, device.DeviceIndex, groups.FlatIndices, lease.Pointers, (UIntPtr)groups.Keys.Count, native) != 0)
             {
-                throw new Autd3Exception("groups must be built from the same geometry");
+                throw new Autd3Exception("group_device failed (every buffer must match the geometry)", Autd3ErrorCode.InvalidArgument);
+            }
+            FromNative(native, dst);
+        }
+
+        public static void GroupDevice<TKey>(Device device, TransducerGroups<TKey> groups, Func<TKey, IntensityBuffer> source, Intensity[] dst) where TKey : notnull
+        {
+            var native = ToNative(dst);
+            using var lease = GroupSources(NativeCore.autd3_core_geometry_num_transducers(device.GeometryHandle), groups, key => source(key)?.Handle, null);
+            if (NativePattern.autd3_pattern_group_device_intensity(device.GeometryHandle, device.DeviceIndex, groups.FlatIndices, lease.Pointers, (UIntPtr)groups.Keys.Count, native) != 0)
+            {
+                throw new Autd3Exception("group_device failed (every buffer must match the geometry)", Autd3ErrorCode.InvalidArgument);
+            }
+            FromNative(native, dst);
+        }
+
+        private static HandleArray GroupSources<TKey>(Geometry geometry, TransducerGroups<TKey> groups, Func<TKey, SafeHandle?> source, SafeHandle dst) where TKey : notnull =>
+            GroupSources(NativeCore.autd3_core_geometry_num_transducers(geometry.Handle), groups, source, dst);
+
+        private static HandleArray GroupSources<TKey>(UIntPtr numTransducers, TransducerGroups<TKey> groups, Func<TKey, SafeHandle?> source, SafeHandle? dst) where TKey : notnull
+        {
+            if (groups.FlatIndices.Length != (int)numTransducers)
+            {
+                throw new Autd3Exception("groups must be built from the same geometry", Autd3ErrorCode.InvalidArgument);
             }
             var keys = groups.Keys;
             var handles = new SafeHandle[keys.Count];
@@ -983,11 +1014,11 @@ namespace AUTD3
                 var handle = source(keys[i]);
                 if (handle == null)
                 {
-                    throw new Autd3Exception($"no source was given for the key {keys[i]}");
+                    throw new Autd3Exception($"no source was given for the key {keys[i]}", Autd3ErrorCode.InvalidArgument);
                 }
                 if (ReferenceEquals(handle, dst))
                 {
-                    throw new Autd3Exception("dst must not be one of the sources");
+                    throw new Autd3Exception("dst must not be one of the sources", Autd3ErrorCode.InvalidArgument);
                 }
                 handles[i] = handle;
             }
@@ -1002,11 +1033,11 @@ namespace AUTD3
             }
             if (groups.FlatIndices.Length != geometry.NumTransducers)
             {
-                throw new Autd3Exception("groups must be built from the same geometry");
+                throw new Autd3Exception("groups must be built from the same geometry", Autd3ErrorCode.InvalidArgument);
             }
             if (phases.NumDevices != geometry.NumDevices || intensities.NumDevices != geometry.NumDevices)
             {
-                throw new Autd3Exception("group_compute failed (dst must match the geometry)");
+                throw new Autd3Exception("group_compute failed (dst must match the geometry)", Autd3ErrorCode.InvalidArgument);
             }
             using var scratchPhases = geometry.PhaseBuffer();
             using var scratchIntensities = geometry.IntensityBuffer();
@@ -1019,7 +1050,7 @@ namespace AUTD3
                 if (NativePattern.autd3_pattern_group_copy_phase(geometry.Handle, groups.FlatIndices, i, scratchPhases.Handle, phases.Handle) != 0
                     || NativePattern.autd3_pattern_group_copy_intensity(geometry.Handle, groups.FlatIndices, i, scratchIntensities.Handle, intensities.Handle) != 0)
                 {
-                    throw new Autd3Exception("group_compute failed (dst must match the geometry)");
+                    throw new Autd3Exception("group_compute failed (dst must match the geometry)", Autd3ErrorCode.InvalidArgument);
                 }
             }
         }
@@ -1036,7 +1067,7 @@ namespace AUTD3
             }
             if (dst.Length != Autd3.NumTransducers)
             {
-                throw new Autd3Exception($"dst requires {Autd3.NumTransducers} elements");
+                throw new Autd3Exception($"dst requires {Autd3.NumTransducers} elements", Autd3ErrorCode.InvalidArgument);
             }
             var native = new byte[dst.Length];
             for (var i = 0; i < dst.Length; i++)

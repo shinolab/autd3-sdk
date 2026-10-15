@@ -67,7 +67,13 @@ pub struct SineOption(pub(crate) CoreSineOption);
 #[pymethods]
 impl SineOption {
     #[new]
-    #[pyo3(signature = (amplitude = 0xFF, offset = 0x80, phase = Angle::ZERO, clamp = false, sampling_config = SamplingConfig::FREQ_4K))]
+    #[pyo3(signature = (
+        amplitude = CoreSineOption::default().amplitude,
+        offset = CoreSineOption::default().offset,
+        phase = CoreSineOption::default().phase,
+        clamp = CoreSineOption::default().clamp,
+        sampling_config = CoreSineOption::default().sampling_config,
+    ))]
     fn new(
         amplitude: u8,
         offset: u8,
@@ -213,7 +219,12 @@ pub struct SquareOption(CoreSquareOption);
 #[pymethods]
 impl SquareOption {
     #[new]
-    #[pyo3(signature = (low = 0x00, high = 0xFF, duty = 0.5, sampling_config = SamplingConfig::FREQ_4K))]
+    #[pyo3(signature = (
+        low = CoreSquareOption::default().low,
+        high = CoreSquareOption::default().high,
+        duty = CoreSquareOption::default().duty,
+        sampling_config = CoreSquareOption::default().sampling_config,
+    ))]
     fn new(
         low: u8,
         high: u8,
@@ -266,7 +277,11 @@ pub struct FourierOption(CoreFourierOption);
 #[pymethods]
 impl FourierOption {
     #[new]
-    #[pyo3(signature = (scale_factor = None, clamp = false, offset = 0x00))]
+    #[pyo3(signature = (
+        scale_factor = CoreFourierOption::default().scale_factor,
+        clamp = CoreFourierOption::default().clamp,
+        offset = CoreFourierOption::default().offset,
+    ))]
     fn new(scale_factor: Option<f32>, clamp: bool, offset: u8) -> Self {
         Self(CoreFourierOption {
             scale_factor,
@@ -376,8 +391,20 @@ fn fourier(
 }
 
 #[pyfunction]
-fn radiation_pressure(src: PyRef<'_, ModulationBuffer>, mut dst: PyRefMut<'_, ModulationBuffer>) {
-    autd3_rs_modulation::radiation_pressure(&src.data, &mut dst.data);
+fn radiation_pressure(
+    src: &Bound<'_, ModulationBuffer>,
+    dst: &Bound<'_, ModulationBuffer>,
+) -> PyResult<()> {
+    if src.is(dst) {
+        return Err(PyValueError::new_err(
+            "src and dst must be different buffers; use radiation_pressure_inplace to rewrite a buffer in place",
+        ));
+    }
+    autd3_rs_modulation::radiation_pressure(
+        &src.try_borrow()?.data,
+        &mut dst.try_borrow_mut()?.data,
+    );
+    Ok(())
 }
 
 #[pyfunction]

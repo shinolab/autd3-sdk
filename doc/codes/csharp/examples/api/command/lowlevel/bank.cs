@@ -1,4 +1,3 @@
-using System.Numerics;
 using AUTD3;
 
 namespace DocSamples.ApiCommandLowlevelBank;
@@ -7,7 +6,7 @@ internal static class Sample
 {
     internal static void Run()
     {
-        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
+        var geometry = new Geometry(new[] { new Autd3() });
 
         var bank = PatternBank.B0;
         ushort index = 0;
@@ -43,7 +42,7 @@ internal static class Sample
 
     internal static void RunPhase()
     {
-        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
+        var geometry = new Geometry(new[] { new Autd3() });
 
         var bank = PatternBank.B0;
         var p0 = geometry.PhaseBuffer();

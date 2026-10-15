@@ -26,10 +26,11 @@ def test_require_supported_firmware_is_settable() -> None:
 
 
 def test_zero_valued_config_fields_are_rejected() -> None:
-    with pytest.raises(ValueError):
-        autd3.ClientConfig(ack_timeout=autd3.Duration.from_millis(0))
+    assert autd3.ClientConfig(ack_timeout=autd3.Duration.from_millis(0)).ack_timeout == autd3.Duration.from_millis(0)
     with pytest.raises(ValueError):
         autd3.ClientConfig(max_inflight=0)
+    with pytest.raises(TypeError):
+        autd3.ClientConfig(ack_timeout=loose(None))
 
 
 def test_the_mutable_capsule_keeps_its_buffer_alive() -> None:

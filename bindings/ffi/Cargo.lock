@@ -78,6 +78,7 @@ dependencies = [
 name = "autd3-ffi-core"
 version = "0.11.0"
 dependencies = [
+ "autd3-cpu-wire",
  "autd3-ffi-abi",
  "autd3-rs-core",
 ]

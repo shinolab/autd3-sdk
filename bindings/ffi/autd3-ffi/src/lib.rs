@@ -437,9 +437,6 @@ pub unsafe extern "C" fn autd3_client_config_set_ack_timeout_ns(
     let Some(config) = (unsafe { handle_mut(config) }) else {
         return AUTD3_ERR_INVALID_ARGUMENT;
     };
-    if ns == 0 {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    }
     config.ack_timeout = Duration::from_nanos(ns);
     AUTD3_OK
 }
@@ -543,6 +540,16 @@ pub extern "C" fn autd3_params_max_devices() -> usize {
 #[unsafe(no_mangle)]
 pub extern "C" fn autd3_params_pwe_table_size() -> usize {
     PWE_TABLE_SIZE
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_params_server_port() -> u16 {
+    autd3_rs::SERVER_PORT
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_foci_stm_option_default_sound_speed() -> f32 {
+    FociStmOption::default().sound_speed.m_s()
 }
 
 #[unsafe(no_mangle)]
@@ -764,24 +771,29 @@ unsafe fn owned_pattern_intensity(
         .map(|intensities| OwnedPatternIntensity::PerDevice(intensities.0.clone()))
 }
 
+pub const AUTD3_STM_INTENSITY_UNIFORM: u8 = 0;
+pub const AUTD3_STM_INTENSITY_SHARED: u8 = 1;
+pub const AUTD3_STM_INTENSITY_PER_INDEX: u8 = 2;
+
 unsafe fn owned_stm_intensity(
+    kind: u8,
     intensities: *const *const IntensityBuffer,
     num_intensities: usize,
-    num_patterns: usize,
     uniform_intensity: u8,
 ) -> Option<OwnedStmIntensity> {
-    if num_intensities == 0 {
-        return Some(OwnedStmIntensity::Uniform(Intensity(uniform_intensity)));
+    match kind {
+        AUTD3_STM_INTENSITY_UNIFORM => {
+            Some(OwnedStmIntensity::Uniform(Intensity(uniform_intensity)))
+        }
+        AUTD3_STM_INTENSITY_SHARED if num_intensities == 1 => {
+            let buffers = unsafe { clone_buffers(intensities, num_intensities) }?;
+            buffers.into_iter().next().map(OwnedStmIntensity::Shared)
+        }
+        AUTD3_STM_INTENSITY_PER_INDEX => {
+            unsafe { clone_buffers(intensities, num_intensities) }.map(OwnedStmIntensity::PerIndex)
+        }
+        _ => None,
     }
-    if num_intensities != 1 && num_intensities != num_patterns {
-        return None;
-    }
-    let buffers = unsafe { clone_buffers(intensities, num_intensities) }?;
-    Some(if num_intensities == 1 {
-        OwnedStmIntensity::Shared(buffers.into_iter().next().expect("checked length"))
-    } else {
-        OwnedStmIntensity::PerIndex(buffers)
-    })
 }
 
 #[unsafe(no_mangle)]
@@ -838,9 +850,6 @@ pub unsafe extern "C" fn autd3_op_modulation(
         return std::ptr::null_mut();
     };
 
-    if sampling_config.divide().is_err() {
-        return std::ptr::null_mut();
-    }
     let data = modulation_buffer.0.clone();
     into_handle(Pending::Modulation {
         config: *sampling_config,
@@ -1078,6 +1087,11 @@ pub extern "C" fn autd3_op_force_fan(value: bool) -> *mut Pending {
     into_handle(Pending::ForceFan(value))
 }
 
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_op_force_fan_default() -> *mut Pending {
+    into_handle(Pending::ForceFan(ForceFan::default().value))
+}
+
 pub struct CpuConfigHandle(pub(crate) CpuConfig);
 
 #[unsafe(no_mangle)]
@@ -1143,95 +1157,27 @@ autd3_ffi_abi::option_handle_field!(
     autd3_cpu_config_set_update_activate_delay,
     autd3_cpu_config_get_update_activate_delay
 );
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_cpu_config_set_failsafe_timeout(
-    handle: *mut CpuConfigHandle,
-    ns: u64,
-) -> i32 {
-    let Some(config) = (unsafe { handle_mut(handle) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    config.0.failsafe_timeout = (ns != 0).then(|| Duration::from_nanos(ns));
-    AUTD3_OK
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_cpu_config_get_failsafe_timeout(
-    handle: *const CpuConfigHandle,
-    out: *mut u64,
-) -> i32 {
-    let Some(config) = (unsafe { handle_ref(handle) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    unsafe {
-        autd3_ffi_abi::write_out(
-            out,
-            config.0.failsafe_timeout.map_or(0, autd3_ffi_abi::to_ns),
-        )
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_cpu_config_set_ptp_unlock_failsafe_timeout(
-    handle: *mut CpuConfigHandle,
-    ns: u64,
-) -> i32 {
-    let Some(config) = (unsafe { handle_mut(handle) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    config.0.ptp_unlock_failsafe_timeout = (ns != 0).then(|| Duration::from_nanos(ns));
-    AUTD3_OK
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_cpu_config_get_ptp_unlock_failsafe_timeout(
-    handle: *const CpuConfigHandle,
-    out: *mut u64,
-) -> i32 {
-    let Some(config) = (unsafe { handle_ref(handle) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    unsafe {
-        autd3_ffi_abi::write_out(
-            out,
-            config
-                .0
-                .ptp_unlock_failsafe_timeout
-                .map_or(0, autd3_ffi_abi::to_ns),
-        )
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_cpu_config_set_cpu_watchdog_timeout(
-    handle: *mut CpuConfigHandle,
-    ns: u64,
-) -> i32 {
-    let Some(config) = (unsafe { handle_mut(handle) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    config.0.cpu_watchdog_timeout = (ns != 0).then(|| Duration::from_nanos(ns));
-    AUTD3_OK
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_cpu_config_get_cpu_watchdog_timeout(
-    handle: *const CpuConfigHandle,
-    out: *mut u64,
-) -> i32 {
-    let Some(config) = (unsafe { handle_ref(handle) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    unsafe {
-        autd3_ffi_abi::write_out(
-            out,
-            config
-                .0
-                .cpu_watchdog_timeout
-                .map_or(0, autd3_ffi_abi::to_ns),
-        )
-    }
-}
+autd3_ffi_abi::option_handle_field!(
+    CpuConfigHandle,
+    [failsafe_timeout],
+    optional_duration,
+    autd3_cpu_config_set_failsafe_timeout,
+    autd3_cpu_config_get_failsafe_timeout
+);
+autd3_ffi_abi::option_handle_field!(
+    CpuConfigHandle,
+    [ptp_unlock_failsafe_timeout],
+    optional_duration,
+    autd3_cpu_config_set_ptp_unlock_failsafe_timeout,
+    autd3_cpu_config_get_ptp_unlock_failsafe_timeout
+);
+autd3_ffi_abi::option_handle_field!(
+    CpuConfigHandle,
+    [cpu_watchdog_timeout],
+    optional_duration,
+    autd3_cpu_config_set_cpu_watchdog_timeout,
+    autd3_cpu_config_get_cpu_watchdog_timeout
+);
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_cpu_config_set_fpga_bus_wait(
@@ -1433,6 +1379,11 @@ pub unsafe extern "C" fn autd3_op_set_gpio_out(outputs: *const Autd3GpioOut) -> 
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn autd3_op_set_gpio_out_default() -> *mut Pending {
+    into_handle(Pending::SetGpioOut(SetGpioOut::default().outputs))
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_op_emulate_gpio_in(values: *const u8) -> *mut Pending {
     let Some(values) = (unsafe { slice_ref(values, 4) }) else {
         return std::ptr::null_mut();
@@ -1444,6 +1395,11 @@ pub unsafe extern "C" fn autd3_op_emulate_gpio_in(values: *const u8) -> *mut Pen
         values[2] != 0,
         values[3] != 0,
     ]))
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_op_emulate_gpio_in_default() -> *mut Pending {
+    into_handle(Pending::EmulateGpioIn(EmulateGpioIn::default().values))
 }
 
 fn total_len(lens: &[usize]) -> Option<usize> {
@@ -1494,15 +1450,39 @@ pub unsafe extern "C" fn autd3_op_set_phase_correction(
     }
 }
 
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct Autd3PulseWidth {
+    pub kind: u8,
+    pub raw: u16,
+    pub duty: f32,
+}
+
+pub const AUTD3_PULSE_WIDTH_RAW: u8 = 0;
+pub const AUTD3_PULSE_WIDTH_DUTY: u8 = 1;
+
+fn to_pulse_width(value: Autd3PulseWidth) -> Option<PulseWidth> {
+    match value.kind {
+        AUTD3_PULSE_WIDTH_RAW => Some(PulseWidth::new(value.raw)),
+        AUTD3_PULSE_WIDTH_DUTY => Some(PulseWidth::from_duty(value.duty)),
+        _ => None,
+    }
+}
+
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_op_set_pulse_width_table(table: *const u16) -> *mut Pending {
+pub unsafe extern "C" fn autd3_op_set_pulse_width_table(
+    table: *const Autd3PulseWidth,
+) -> *mut Pending {
     let Some(slice) = (unsafe { slice_ref(table, PWE_TABLE_SIZE) }) else {
         return std::ptr::null_mut();
     };
 
     let mut t = Box::new(SetPulseWidthTable::empty_table());
     for (dst, &src) in t.iter_mut().zip(slice.iter()) {
-        *dst = PulseWidth::new(src);
+        let Some(value) = to_pulse_width(src) else {
+            return std::ptr::null_mut();
+        };
+        *dst = value;
     }
     into_handle(Pending::SetPulseWidthTable(t))
 }
@@ -1515,21 +1495,23 @@ pub extern "C" fn autd3_op_set_pulse_width_table_default() -> *mut Pending {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pulse_width_from_duty(duty: f32, out: *mut u16) -> bool {
-    let Ok(value) = PulseWidth::from_duty(duty).pulse_width() else {
-        return false;
+pub unsafe extern "C" fn autd3_pulse_width_resolve(
+    pulse_width: Autd3PulseWidth,
+    out: *mut u16,
+    out_err: *mut c_char,
+    out_err_len: usize,
+) -> i32 {
+    let Some(pulse_width) = to_pulse_width(pulse_width) else {
+        unsafe { write_cstr(out_err, out_err_len, "unknown pulse width kind") };
+        return AUTD3_ERR_INVALID_ARGUMENT;
     };
-
-    unsafe { write_out(out, value) == AUTD3_OK }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pulse_width_new(pulse_width: u16, out: *mut u16) -> bool {
-    let Ok(value) = PulseWidth::new(pulse_width).pulse_width() else {
-        return false;
-    };
-
-    unsafe { write_out(out, value) == AUTD3_OK }
+    match pulse_width.pulse_width() {
+        Ok(value) => unsafe { write_out(out, value) },
+        Err(e) => {
+            unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
+            AUTD3_ERR_INVALID_ARGUMENT
+        }
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -1573,6 +1555,7 @@ pub unsafe extern "C" fn autd3_op_pattern_stm(
     config: *const StmConfig,
     phases: *const *const PhaseBuffer,
     num_patterns: usize,
+    intensity_kind: u8,
     intensities: *const *const IntensityBuffer,
     num_intensities: usize,
     uniform_intensity: u8,
@@ -1598,9 +1581,9 @@ pub unsafe extern "C" fn autd3_op_pattern_stm(
     };
     let Some(intensities) = (unsafe {
         owned_stm_intensity(
+            intensity_kind,
             intensities,
             num_intensities,
-            num_patterns,
             uniform_intensity,
         )
     }) else {
@@ -2703,12 +2686,179 @@ mod tests {
     fn a_zero_nonzero_setter_argument_is_rejected() {
         let handle = autd3_client_config_new();
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
-            autd3_client_config_set_ack_timeout_ns(handle, 0)
-        });
-        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
             autd3_client_config_set_max_inflight(handle, 0)
         });
         unsafe { autd3_client_config_free(handle) };
+    }
+
+    #[test]
+    fn a_zero_ack_timeout_is_left_to_the_open_time_validation() {
+        let handle = autd3_client_config_new();
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_client_config_set_ack_timeout_ns(handle, 0)
+        });
+        let config = unsafe { take_handle(handle) }.unwrap();
+        assert_eq!(Duration::ZERO, config.ack_timeout);
+    }
+
+    fn pending_error(pending: *mut Pending) -> (i32, String) {
+        let geometry = Geometry::new(vec![autd3_rs::geometry::Autd3::default()]);
+        let mut err = [0 as c_char; 256];
+        let mut code = AUTD3_OK;
+        let frames = unsafe {
+            autd3_frames_encode(
+                &raw const geometry,
+                pending,
+                &raw mut code,
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        };
+        if !frames.is_null() {
+            unsafe { autd3_frames_free(frames) };
+            return (AUTD3_OK, String::new());
+        }
+        unsafe { autd3_op_free(pending) };
+        let message = unsafe { std::ffi::CStr::from_ptr(err.as_ptr()) }
+            .to_string_lossy()
+            .into_owned();
+        (code, message)
+    }
+
+    #[test]
+    fn an_unresolvable_modulation_sampling_config_fails_at_encode_with_the_rust_message() {
+        let config = SamplingConfig::new(39_999. * Hz);
+        let buffer = autd3_ffi_abi::ModulationBuffer(vec![0xFF; 10]);
+        let pending = unsafe {
+            autd3_op_modulation(0, &raw const config, &raw const buffer, 0xFFFF, 0xFF, 0)
+        };
+        assert!(!pending.is_null());
+        let (code, message) = pending_error(pending);
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
+        assert!(
+            message.contains("must divide the ultrasound frequency"),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn a_per_index_stm_intensity_of_one_buffer_is_not_treated_as_shared() {
+        let geometry = Geometry::new(vec![autd3_rs::geometry::Autd3::default()]);
+        let phases = autd3_ffi_abi::Buffer(geometry.phase_buffer());
+        let intensities = autd3_ffi_abi::Buffer(geometry.intensity_buffer());
+        let config = autd3_stm_config_freq(1.0);
+        let phase_ptrs = [&raw const phases, &raw const phases];
+        let intensity_ptrs = [&raw const intensities];
+        let encode = |kind: u8| {
+            let pending = unsafe {
+                autd3_op_pattern_stm(
+                    config,
+                    phase_ptrs.as_ptr(),
+                    phase_ptrs.len(),
+                    kind,
+                    intensity_ptrs.as_ptr(),
+                    intensity_ptrs.len(),
+                    0xFF,
+                    0,
+                    8,
+                    0xFFFF,
+                    0xFF,
+                    0,
+                )
+            };
+            assert!(!pending.is_null());
+            pending_error(pending)
+        };
+        assert_eq!(AUTD3_OK, encode(AUTD3_STM_INTENSITY_SHARED).0);
+        let (code, message) = encode(AUTD3_STM_INTENSITY_PER_INDEX);
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code, "{message}");
+        assert!(
+            unsafe {
+                autd3_op_pattern_stm(
+                    config,
+                    phase_ptrs.as_ptr(),
+                    phase_ptrs.len(),
+                    3,
+                    intensity_ptrs.as_ptr(),
+                    intensity_ptrs.len(),
+                    0xFF,
+                    0,
+                    8,
+                    0xFFFF,
+                    0xFF,
+                    0,
+                )
+            }
+            .is_null()
+        );
+        unsafe { autd3_stm_config_free(config) };
+    }
+
+    #[test]
+    fn a_pulse_width_resolves_with_the_rust_message() {
+        let mut out = 0u16;
+        let mut err = [0 as c_char; 256];
+        let raw = |raw| Autd3PulseWidth {
+            kind: AUTD3_PULSE_WIDTH_RAW,
+            raw,
+            duty: 0.0,
+        };
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_pulse_width_resolve(raw(256), &raw mut out, err.as_mut_ptr(), err.len())
+        });
+        assert_eq!(256, out);
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_pulse_width_resolve(raw(512), &raw mut out, err.as_mut_ptr(), err.len())
+        });
+        let message = unsafe { std::ffi::CStr::from_ptr(err.as_ptr()) }.to_string_lossy();
+        assert_eq!(
+            message,
+            PulseWidth::new(512).pulse_width().unwrap_err().to_string()
+        );
+        let duty = Autd3PulseWidth {
+            kind: AUTD3_PULSE_WIDTH_DUTY,
+            raw: 0,
+            duty: 0.5,
+        };
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_pulse_width_resolve(duty, &raw mut out, err.as_mut_ptr(), err.len())
+        });
+        assert_eq!(256, out);
+        let unknown = Autd3PulseWidth {
+            kind: 2,
+            raw: 0,
+            duty: 0.0,
+        };
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_pulse_width_resolve(unknown, &raw mut out, err.as_mut_ptr(), err.len())
+        });
+    }
+
+    #[test]
+    fn an_out_of_range_pulse_width_in_the_table_fails_at_encode() {
+        let mut table = [Autd3PulseWidth {
+            kind: AUTD3_PULSE_WIDTH_RAW,
+            raw: 0,
+            duty: 0.0,
+        }; PWE_TABLE_SIZE];
+        table[3].raw = 512;
+        let pending = unsafe { autd3_op_set_pulse_width_table(table.as_ptr()) };
+        assert!(!pending.is_null());
+        let (code, message) = pending_error(pending);
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
+        assert!(
+            message.contains(&PulseWidth::new(512).pulse_width().unwrap_err().to_string()),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn the_client_constants_match_the_rust_constants() {
+        assert_eq!(autd3_rs::SERVER_PORT, autd3_params_server_port());
+        assert_eq!(
+            FociStmOption::default().sound_speed.m_s(),
+            autd3_foci_stm_option_default_sound_speed()
+        );
     }
 
     #[test]
@@ -2749,16 +2899,16 @@ mod tests {
             );
             assert_eq!(
                 AUTD3_OK,
-                autd3_cpu_config_set_failsafe_timeout(handle, 25_000_000)
+                autd3_cpu_config_set_failsafe_timeout(handle, true, 25_000_000)
             );
             assert_eq!(
                 AUTD3_OK,
-                autd3_cpu_config_set_ptp_unlock_failsafe_timeout(handle, 26_000_000)
+                autd3_cpu_config_set_ptp_unlock_failsafe_timeout(handle, true, 26_000_000)
             );
             assert_eq!(AUTD3_OK, autd3_cpu_config_set_fpga_bus_wait(handle, 2));
             assert_eq!(
                 AUTD3_OK,
-                autd3_cpu_config_set_cpu_watchdog_timeout(handle, 27_000_000)
+                autd3_cpu_config_set_cpu_watchdog_timeout(handle, true, 27_000_000)
             );
             assert_eq!(
                 AUTD3_OK,
@@ -2892,29 +3042,51 @@ mod tests {
         assert_eq!(config.ptp.pause_quanta, None);
     }
 
+    fn optional_duration(
+        get: unsafe extern "C" fn(*const CpuConfigHandle, *mut bool, *mut u64) -> i32,
+        handle: *const CpuConfigHandle,
+    ) -> Option<Duration> {
+        let mut has_value = false;
+        let mut ns = u64::MAX;
+        assert_eq!(AUTD3_OK, unsafe {
+            get(handle, &raw mut has_value, &raw mut ns)
+        });
+        has_value.then(|| Duration::from_nanos(ns))
+    }
+
     #[test]
-    fn a_zero_failsafe_timeout_disables_the_failsafe() {
+    fn the_failsafe_timeout_presence_is_explicit_and_zero_reaches_the_validation() {
         let handle = autd3_cpu_config_new();
-        let mut ns = 0u64;
+        assert_eq!(
+            Some(Duration::from_millis(500)),
+            optional_duration(autd3_cpu_config_get_failsafe_timeout, handle)
+        );
         unsafe {
             assert_eq!(
                 AUTD3_OK,
-                autd3_cpu_config_get_failsafe_timeout(handle, &raw mut ns)
-            );
-            assert_eq!(ns, 500_000_000);
-            assert_eq!(AUTD3_OK, autd3_cpu_config_set_failsafe_timeout(handle, 0));
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_get_failsafe_timeout(handle, &raw mut ns)
-            );
-            assert_eq!(ns, 0);
-            assert_eq!(
-                AUTD3_ERR_INVALID_ARGUMENT,
-                autd3_cpu_config_set_failsafe_timeout(std::ptr::null_mut(), 0)
+                autd3_cpu_config_set_failsafe_timeout(handle, false, 1)
             );
         }
+        assert_eq!(
+            None,
+            optional_duration(autd3_cpu_config_get_failsafe_timeout, handle)
+        );
+        unsafe {
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_set_failsafe_timeout(handle, true, 0)
+            );
+            assert_eq!(
+                AUTD3_ERR_INVALID_ARGUMENT,
+                autd3_cpu_config_set_failsafe_timeout(std::ptr::null_mut(), false, 0)
+            );
+        }
+        assert_eq!(
+            Some(Duration::ZERO),
+            optional_duration(autd3_cpu_config_get_failsafe_timeout, handle)
+        );
         let config = unsafe { take_handle(handle) }.unwrap().0;
-        assert_eq!(config.failsafe_timeout, None);
+        assert_eq!(config.failsafe_timeout, Some(Duration::ZERO));
     }
 
     #[test]
@@ -2952,29 +3124,26 @@ mod tests {
     }
 
     #[test]
-    fn the_ptp_unlock_failsafe_timeout_is_zero_until_it_is_set() {
+    fn the_ptp_unlock_failsafe_timeout_is_none_until_it_is_set() {
         let handle = autd3_cpu_config_new();
-        let mut ns = 1u64;
+        assert_eq!(
+            None,
+            optional_duration(autd3_cpu_config_get_ptp_unlock_failsafe_timeout, handle)
+        );
         unsafe {
             assert_eq!(
                 AUTD3_OK,
-                autd3_cpu_config_get_ptp_unlock_failsafe_timeout(handle, &raw mut ns)
+                autd3_cpu_config_set_ptp_unlock_failsafe_timeout(handle, true, 2_000_000_000)
             );
-            assert_eq!(ns, 0);
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_set_ptp_unlock_failsafe_timeout(handle, 2_000_000_000)
-            );
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_get_ptp_unlock_failsafe_timeout(handle, &raw mut ns)
-            );
-            assert_eq!(ns, 2_000_000_000);
             assert_eq!(
                 AUTD3_ERR_INVALID_ARGUMENT,
-                autd3_cpu_config_set_ptp_unlock_failsafe_timeout(std::ptr::null_mut(), 0)
+                autd3_cpu_config_set_ptp_unlock_failsafe_timeout(std::ptr::null_mut(), true, 0)
             );
         }
+        assert_eq!(
+            Some(Duration::from_secs(2)),
+            optional_duration(autd3_cpu_config_get_ptp_unlock_failsafe_timeout, handle)
+        );
         let config = unsafe { take_handle(handle) }.unwrap().0;
         assert_eq!(
             config.ptp_unlock_failsafe_timeout,
@@ -2983,29 +3152,26 @@ mod tests {
     }
 
     #[test]
-    fn the_cpu_watchdog_timeout_is_one_second_until_zero_disables_it() {
+    fn the_cpu_watchdog_timeout_is_one_second_until_it_is_cleared() {
         let handle = autd3_cpu_config_new();
-        let mut ns = 0u64;
+        assert_eq!(
+            Some(Duration::from_secs(1)),
+            optional_duration(autd3_cpu_config_get_cpu_watchdog_timeout, handle)
+        );
         unsafe {
             assert_eq!(
                 AUTD3_OK,
-                autd3_cpu_config_get_cpu_watchdog_timeout(handle, &raw mut ns)
+                autd3_cpu_config_set_cpu_watchdog_timeout(handle, false, 0)
             );
-            assert_eq!(ns, 1_000_000_000);
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_set_cpu_watchdog_timeout(handle, 0)
-            );
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_get_cpu_watchdog_timeout(handle, &raw mut ns)
-            );
-            assert_eq!(ns, 0);
             assert_eq!(
                 AUTD3_ERR_INVALID_ARGUMENT,
-                autd3_cpu_config_set_cpu_watchdog_timeout(std::ptr::null_mut(), 0)
+                autd3_cpu_config_set_cpu_watchdog_timeout(std::ptr::null_mut(), false, 0)
             );
         }
+        assert_eq!(
+            None,
+            optional_duration(autd3_cpu_config_get_cpu_watchdog_timeout, handle)
+        );
         let config = unsafe { take_handle(handle) }.unwrap().0;
         assert_eq!(config.cpu_watchdog_timeout, None);
     }
@@ -3218,6 +3384,22 @@ mod tests {
         assert_eq!(expected.intensity, Duration::from_nanos(intensity));
         assert_eq!(expected.phase, Duration::from_nanos(phase));
         assert_eq!(expected.strict_mode, strict);
+    }
+
+    #[test]
+    fn the_gpio_and_fan_default_ops_match_rust() {
+        assert!(matches!(
+            unsafe { take_handle(autd3_op_force_fan_default()) },
+            Some(Pending::ForceFan(value)) if value == ForceFan::default().value
+        ));
+        assert!(matches!(
+            unsafe { take_handle(autd3_op_set_gpio_out_default()) },
+            Some(Pending::SetGpioOut(outputs)) if outputs == SetGpioOut::default().outputs
+        ));
+        assert!(matches!(
+            unsafe { take_handle(autd3_op_emulate_gpio_in_default()) },
+            Some(Pending::EmulateGpioIn(values)) if values == EmulateGpioIn::default().values
+        ));
     }
 
     #[test]

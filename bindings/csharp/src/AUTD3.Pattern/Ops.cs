@@ -11,20 +11,27 @@ namespace AUTD3
 
     public enum PhaseDepth : byte
     {
-        Bits8 = 8,
-        Bits4 = 4,
+        Bits8 = 0,
+        Bits4 = 1,
     }
 
     public static class PhaseDepthExt
     {
         public static int MaxCount(this PhaseDepth depth)
         {
-            if (NativePattern.autd3_phase_depth_max_count((byte)depth, out var maxCount) != 0)
+            if (NativePattern.autd3_phase_depth_max_count(depth.ToBits(), out var maxCount) != 0)
             {
-                throw new Autd3Exception($"unknown phase depth {depth}");
+                throw new Autd3Exception($"unknown phase depth {depth}", Autd3ErrorCode.InvalidArgument);
             }
             return (int)maxCount;
         }
+
+        internal static byte ToBits(this PhaseDepth depth) => depth switch
+        {
+            PhaseDepth.Bits8 => 8,
+            PhaseDepth.Bits4 => 4,
+            _ => 0,
+        };
     }
 
     public sealed class WritePatternPhase : ICommand
@@ -52,7 +59,7 @@ namespace AUTD3
                 handles[i] = _patterns[i].Handle;
             }
             using var lease = new HandleArray(handles);
-            return NativePattern.autd3_op_write_pattern_phase((byte)_bank, _index, (byte)_depth, _intensity.Value, lease.Pointers, (UIntPtr)lease.Pointers.Length);
+            return NativePattern.autd3_op_write_pattern_phase((byte)_bank, _index, _depth.ToBits(), _intensity.Value, lease.Pointers, (UIntPtr)lease.Pointers.Length);
         }
     }
 
@@ -85,12 +92,12 @@ namespace AUTD3
         private readonly uint _size;
         private readonly LoopBehavior _loopBehavior;
 
-        public ConfigPattern(PatternBank bank, SamplingConfig config, uint size, LoopBehavior? loopBehavior = null)
+        public ConfigPattern(PatternBank bank, SamplingConfig config, uint size, LoopBehavior loopBehavior)
         {
             _bank = bank;
             _config = config;
             _size = size;
-            _loopBehavior = loopBehavior ?? LoopBehavior.Infinite;
+            _loopBehavior = loopBehavior;
         }
 
         IntPtr ICommand.CreateOp(Geometry geometry)
@@ -116,14 +123,14 @@ namespace AUTD3
         private readonly Velocity _soundSpeed;
         private readonly LoopBehavior _loopBehavior;
 
-        public ConfigFociStm(PatternBank bank, SamplingConfig config, uint size, byte numFoci, Velocity soundSpeed, LoopBehavior? loopBehavior = null)
+        public ConfigFociStm(PatternBank bank, SamplingConfig config, uint size, byte numFoci, Velocity soundSpeed, LoopBehavior loopBehavior)
         {
             _bank = bank;
             _config = config;
             _size = size;
             _numFoci = numFoci;
             _soundSpeed = soundSpeed;
-            _loopBehavior = loopBehavior ?? LoopBehavior.Infinite;
+            _loopBehavior = loopBehavior;
         }
 
         IntPtr ICommand.CreateOp(Geometry geometry)
@@ -145,10 +152,10 @@ namespace AUTD3
         private readonly PatternBank _bank;
         private readonly TransitionMode _transitionMode;
 
-        public ActivatePatternBank(PatternBank bank, TransitionMode? transitionMode = null)
+        public ActivatePatternBank(PatternBank bank, TransitionMode transitionMode)
         {
             _bank = bank;
-            _transitionMode = transitionMode ?? TransitionMode.Immediate;
+            _transitionMode = transitionMode;
         }
 
         IntPtr ICommand.CreateOp(Geometry geometry) =>

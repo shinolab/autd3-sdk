@@ -7,3 +7,5 @@ pub use autd3_cpu_wire::{
 pub use seq::Seq;
 
 pub const MAX_INFLIGHT: usize = autd3_cpu_wire::udp::DEVICE_QUEUE_FRAMES;
+
+pub const MAX_DEVICES: usize = 128;

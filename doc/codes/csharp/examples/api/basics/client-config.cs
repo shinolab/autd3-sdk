@@ -1,5 +1,4 @@
 using System;
-using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
 
@@ -9,7 +8,7 @@ internal static class Sample
 {
     internal static async Task Run()
     {
-        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
+        var geometry = new Geometry(new[] { new Autd3() });
 
         var udp = new UdpOption();
         var option =
@@ -17,7 +16,7 @@ internal static class Sample
             new ClientConfig
             {
                 AckTimeout = TimeSpan.FromMilliseconds(10),
-                MaxInflight = 7,
+                MaxInflight = (uint)Params.DeviceQueueFrames,
                 MaxResyncRounds = 8,
                 RequireSupportedFirmware = false,
                 ResynchronizeOnRecovery = 3,
@@ -26,7 +25,7 @@ internal static class Sample
             // ANCHOR_END: config
             ;
         // ANCHOR: api
-        await Client.OpenAsync(geometry, udp, option);
+        var client = await Client.OpenAsync(geometry, udp, option);
         // ANCHOR_END: api
     }
 }

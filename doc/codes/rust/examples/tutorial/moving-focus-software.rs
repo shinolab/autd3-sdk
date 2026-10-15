@@ -15,10 +15,7 @@ async fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
     let emulator = UdpEmulator::spawn(geometry.num_devices())?;
-    let option = UdpOption {
-        iface: emulator.interface(),
-        ..UdpOption::default()
-    };
+    let option = UdpOption::for_emulator(emulator.interface());
     let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
 
     let center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);

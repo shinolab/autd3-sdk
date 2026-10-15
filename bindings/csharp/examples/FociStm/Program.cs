@@ -25,7 +25,7 @@ internal static class Program
         Stm.Circle(center, 30f * mm, 200, new Vector3(0f, 0f, 1f), Intensity.Max, points);
 
         await client.SendAsync(new SetSilencer());
-        await client.SendAsync(new FociStm(1 * Hz, points.ToArray()));
+        await client.SendAsync(new FociStm(1 * Hz, points.ToArray(), new FociStmOption()));
 
         Console.WriteLine("sweeping a focus around a 30 mm circle at 1 Hz — press Ctrl+C to stop");
 

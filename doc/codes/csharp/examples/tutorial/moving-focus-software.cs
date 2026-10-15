@@ -1,5 +1,4 @@
 using System;
-using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
 using static AUTD3.Units;
@@ -10,11 +9,11 @@ internal static class Sample
 {
     internal static async Task Run()
     {
-        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
+        var geometry = new Geometry(new[] { new Autd3() });
 
         var client = await Client.OpenAsync(geometry, new UdpOption(), new ClientConfig());
 
-        var center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
+        var center = geometry.Center + Offset(0.0f * mm, 0.0f * mm, 150.0f * mm);
         var wavelength = Pattern.Wavelength(340.0f * m / s);
 
         // ANCHOR: loop
@@ -23,7 +22,7 @@ internal static class Sample
         {
             foreach (var sign in new[] { 1.0f, -1.0f })
             {
-                var target = center + new Vector3(sign * 20.0f, 0.0f, 0.0f);
+                var target = center + Offset(sign * 20.0f * mm, 0.0f * mm, 0.0f * mm);
                 Pattern.Focus(
                     geometry,
                     target,

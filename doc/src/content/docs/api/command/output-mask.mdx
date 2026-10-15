@@ -27,6 +27,8 @@ import { excerpt } from "@lib/excerpt";
 `Geometry::output_mask_buffer` で全デバイス分のマスクを確保できる.
 初期値はすべて `true` (全振動子が出力).
 
+デバイス数や各デバイスの振動子数が `geometry` と合わないと, コマンドを encode するとき (送信時) にエラーになる (Python / C# も同じ).
+
 ## Example
 
 <CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

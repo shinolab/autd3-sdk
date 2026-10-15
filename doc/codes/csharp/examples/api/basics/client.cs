@@ -1,4 +1,3 @@
-using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
 
@@ -8,7 +7,7 @@ internal static class Sample
 {
     internal static async Task Run()
     {
-        var layout = new Geometry(new[] { new Autd3(Vector3.Zero) });
+        var layout = new Geometry(new[] { new Autd3() });
         using var emulator = new UdpEmulator(layout.NumDevices);
         var client = await Client.OpenAsync(layout, emulator.Option(), new ClientConfig());
 
@@ -32,7 +31,7 @@ internal static class Sample
 
         _ = (numDevices, geometry, firmware, fpgaState, done, resp);
 
-        var scopedLayout = new Geometry(new[] { new Autd3(Vector3.Zero) });
+        var scopedLayout = new Geometry(new[] { new Autd3() });
 
         // ANCHOR: context_manager
         using var scopedEmulator = new UdpEmulator(scopedLayout.NumDevices);

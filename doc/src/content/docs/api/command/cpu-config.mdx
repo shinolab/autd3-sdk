@@ -60,6 +60,8 @@ import csFullSample from "@codes/csharp/examples/api/command/cpu-config-example.
 | `pause_hold_syncs`     | `u16`        | 64      | 一度詰まってから, 送信のたびに `PAUSE` を送り続ける `Sync` の回数 |
 | `pause_retry`          | `Duration`   | 8 ms    | `Sync` を送り出せない間, `PAUSE` を送り続ける時間 |
 
+C# では `Duration` の項目を `TimeSpan` で渡すので, 100 ns 単位でしか指定できない (`lock_threshold` の既定値 100 ns は `TimeSpan.FromTicks(1)`).
+
 :::danger
 `failsafe_timeout` を `None` にすると, ホストのクラッシュやケーブル断で通信が途絶えてもデバイスは超音波を出力し続ける.
 `failsafe_timeout` は `heartbeat` の 2 倍より十分長く保つこと. 短すぎるとホストが動いていても出力が止まる.
@@ -71,7 +73,7 @@ import csFullSample from "@codes/csharp/examples/api/command/cpu-config-example.
 
 failsafe や CPU ウォッチドッグで止まった出力は, 自動では戻らない.
 止まっているかどうかは `read_fpga_state()` が返す `FpgaState` の `is_failsafe_active()` (C#: `IsFailsafeActive`) で確認できる.
-`ReleaseFailsafe` コマンドを送ると出力が再開される.
+[`ReleaseFailsafe`](/autd3-sdk/api/command/release-failsafe/) コマンドを送ると出力が再開される.
 [Clear](/autd3-sdk/api/command/clear/) でも解除されるが, すべての状態が既定値に戻る.
 :::
 

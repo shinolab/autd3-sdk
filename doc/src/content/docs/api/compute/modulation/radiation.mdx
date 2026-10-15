@@ -42,6 +42,7 @@ import { excerpt } from "@lib/excerpt";
 | `dst` | `&mut Vec<u8>` | 補正後の波形を書き出すバッファ |
 
 in-placeに書き換える `radiation_pressure_inplace` もある.
+`src` と `dst` に同じバッファは渡せない (Rust は借用規則でコンパイルエラー, Python は `ValueError`, C# は `Autd3Exception` (`InvalidArgument`)). 同じバッファを書き換えるときは `radiation_pressure_inplace` を使う.
 
 ## Example
 

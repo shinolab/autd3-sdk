@@ -14,6 +14,7 @@ crate-type = ["cdylib"]
 [dependencies]
 autd3-rs-core = { workspace = true, features = ["serde"] }
 autd3-ffi-abi.workspace = true
+autd3-cpu-wire.workspace = true
 
 [lints]
 workspace = true

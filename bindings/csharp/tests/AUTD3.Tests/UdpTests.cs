@@ -25,6 +25,17 @@ namespace AUTD3.Tests
         }
 
         [Fact]
+        public void UnsetOptionalFieldsAreReadFromTheNativeLibrary()
+        {
+            var defaults = UdpOption.Defaults();
+            var option = new UdpOption();
+            Assert.Equal(defaults.RecoveryInterval, option.RecoveryInterval);
+            Assert.Equal(defaults.SendRateLimit, option.SendRateLimit);
+            Assert.Equal(TimeSpan.FromMilliseconds(5), new UdpOption { RecoveryInterval = TimeSpan.FromMilliseconds(5) }.RecoveryInterval);
+            Assert.Equal(90f, new UdpOption { SendRateLimit = 90f }.SendRateLimit);
+        }
+
+        [Fact]
         public void AnUnsetFieldKeepsTheNativeDefault()
         {
             var option = new UdpOption();
@@ -44,11 +55,28 @@ namespace AUTD3.Tests
             Assert.Equal(TimeSpan.FromMilliseconds(10), default(UdpOption).Heartbeat);
         }
 
+        private static async Task<Autd3Exception> OpenFails(UdpOption option, ClientConfig config)
+        {
+            using var geometry = new Geometry(new[] { new Autd3(System.Numerics.Vector3.Zero) });
+            return await Assert.ThrowsAsync<Autd3Exception>(() => Client.OpenAsync(geometry, option, config));
+        }
+
         [Fact]
-        public void AZeroAckTimeoutIsRejected()
+        public async Task AZeroAckTimeoutFailsTheOpenWithTheRustError()
         {
             var config = new ClientConfig { AckTimeout = TimeSpan.Zero };
-            Assert.Throws<Autd3Exception>(() => config.CreateHandle());
+            NativeClient.autd3_client_config_free(config.CreateHandle());
+            var error = await OpenFails(new UdpOption(), config);
+            Assert.Equal(Autd3ErrorCode.InvalidArgument, error.Code);
+            Assert.Contains("ack_timeout", error.Message);
+        }
+
+        [Fact]
+        public void ANegativeAckTimeoutIsRejected()
+        {
+            var config = new ClientConfig { AckTimeout = TimeSpan.FromTicks(-1) };
+            var error = Assert.Throws<Autd3Exception>(() => config.CreateHandle());
+            Assert.Equal(Autd3ErrorCode.InvalidArgument, error.Code);
         }
 
         [Fact]
@@ -65,14 +93,30 @@ namespace AUTD3.Tests
             }
 
             var zero = new UdpOption { Heartbeat = TimeSpan.Zero };
-            Assert.Throws<Autd3Exception>(() => zero.CreateHandle());
+            handle = zero.CreateHandle();
+            try
+            {
+                Assert.Equal(TimeSpan.Zero, UdpOption.FromHandle(handle).Heartbeat);
+            }
+            finally
+            {
+                NativeClient.autd3_udp_option_free(handle);
+            }
+        }
+
+        [Fact]
+        public async Task AZeroHeartbeatFailsTheOpenWithTheRustError()
+        {
+            var error = await OpenFails(new UdpOption { Heartbeat = TimeSpan.Zero }, new ClientConfig());
+            Assert.Equal(Autd3ErrorCode.Network, error.Code);
+            Assert.Contains("heartbeat", error.Message);
         }
 
         [Fact]
         public void ARecoveryIntervalReachesTheNativeOption()
         {
             Assert.Null(default(UdpOption).RecoveryInterval);
-            foreach (var interval in new TimeSpan?[] { null, TimeSpan.FromMilliseconds(100) })
+            foreach (var interval in new TimeSpan?[] { null, TimeSpan.Zero, TimeSpan.FromMilliseconds(100) })
             {
                 var handle = new UdpOption { RecoveryInterval = interval }.CreateHandle();
                 try
@@ -85,15 +129,15 @@ namespace AUTD3.Tests
                 }
             }
 
-            var zero = new UdpOption { RecoveryInterval = TimeSpan.Zero };
-            Assert.Throws<Autd3Exception>(() => zero.CreateHandle());
+            var negative = new UdpOption { RecoveryInterval = TimeSpan.FromTicks(-1) };
+            Assert.Throws<Autd3Exception>(() => negative.CreateHandle());
         }
 
         [Fact]
         public void ATimerResolutionReachesTheNativeOption()
         {
             Assert.Equal(TimeSpan.FromMilliseconds(1), default(UdpOption).TimerResolution);
-            foreach (var resolution in new TimeSpan?[] { null, TimeSpan.FromMilliseconds(2) })
+            foreach (var resolution in new TimeSpan?[] { null, TimeSpan.Zero, TimeSpan.FromMilliseconds(2) })
             {
                 var handle = new UdpOption { TimerResolution = resolution }.CreateHandle();
                 try
@@ -106,8 +150,8 @@ namespace AUTD3.Tests
                 }
             }
 
-            var zero = new UdpOption { TimerResolution = TimeSpan.Zero };
-            Assert.Throws<Autd3Exception>(() => zero.CreateHandle());
+            var negative = new UdpOption { TimerResolution = TimeSpan.FromTicks(-1) };
+            Assert.Throws<Autd3Exception>(() => negative.CreateHandle());
         }
 
         [Fact]
@@ -145,8 +189,22 @@ namespace AUTD3.Tests
                 NativeClient.autd3_udp_option_free(handle);
             }
 
-            var zero = new UdpOption { SendRateLimit = 0 };
-            Assert.Throws<Autd3Exception>(() => zero.CreateHandle());
+            handle = new UdpOption { SendRateLimit = 0 }.CreateHandle();
+            try
+            {
+                Assert.Equal(0f, UdpOption.FromHandle(handle).SendRateLimit);
+            }
+            finally
+            {
+                NativeClient.autd3_udp_option_free(handle);
+            }
+        }
+
+        [Fact]
+        public async Task AZeroSendRateLimitFailsTheOpen()
+        {
+            var error = await OpenFails(new UdpOption { SendRateLimit = 0 }, new ClientConfig());
+            Assert.Equal(Autd3ErrorCode.Network, error.Code);
         }
 
         [Fact]

@@ -29,4 +29,19 @@ For example, with `SamplingConfig::FREQ_4K` (4 kHz, sampling period 250 µs), on
 - [square](/autd3-sdk/en/api/compute/modulation/square/) — square wave
 - [fourier](/autd3-sdk/en/api/compute/modulation/fourier/) — synthesis of multiple sine waves
 - [radiation_pressure](/autd3-sdk/en/api/compute/modulation/radiation/) — radiation pressure correction
+
+## samples_per_period
+
+`samples_per_period(divider, freq)` returns how many samples one period of a waveform of frequency `freq` takes at the sampling with division ratio `divider`.
+It returns `None` when the sampling frequency is not divisible by `freq` (one period cannot be represented by an integer number of samples) or when `freq` is 0.
+For example, it returns 20 for 200 Hz at division ratio 10 (4 kHz).
+
+| Parameter | Type         | Description                    |
+| --------- | ------------ | ------------------------------ |
+| `divider` | `NonZeroU16` | Division ratio of the sampling |
+| `freq`    | `Freq<u32>`  | Frequency of the waveform (integer frequencies only) |
+
+The return value is `Option<u32>`.
+Python takes `divider` as an `int` and returns `None` for `0`. Passing a floating-point frequency such as `200.0 * Hz` raises `ValueError`.
+C# provides `Modulation.SamplesPerPeriod(ushort divider, Freq freq)`, which returns `uint?` and throws `Autd3Exception` (`InvalidArgument`) for a floating-point frequency.
   

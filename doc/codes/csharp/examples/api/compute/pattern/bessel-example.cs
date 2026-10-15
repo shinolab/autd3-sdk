@@ -10,13 +10,13 @@ internal static class Sample
     internal static void Run()
     {
         // HIDE_END
-var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
+var geometry = new Geometry(new[] { new Autd3() });
 
 var phases = geometry.PhaseBuffer();
 
 Pattern.Bessel(
     geometry,
-    geometry.Center + new Vector3(0.0f, 0.0f, 150.0f),
+    geometry.Center + Offset(0.0f * mm, 0.0f * mm, 150.0f * mm),
     Vector3.UnitZ,
     18.0f * deg,
     Pattern.Wavelength(340.0f * m / s),

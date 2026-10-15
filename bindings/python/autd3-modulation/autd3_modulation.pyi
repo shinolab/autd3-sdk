@@ -9,10 +9,10 @@ from autd3_core import Angle, Freq, Nearest, SamplingConfig
 class SineOption:
     def __new__(
         cls,
-        amplitude: int = 0xFF,
-        offset: int = 0x80,
+        amplitude: int = ...,
+        offset: int = ...,
         phase: Angle = ...,
-        clamp: bool = False,
+        clamp: bool = ...,
         sampling_config: SamplingConfig = ...,
     ) -> SineOption: ...
     @property
@@ -31,9 +31,9 @@ class SineOption:
 class SquareOption:
     def __new__(
         cls,
-        low: int = 0x00,
-        high: int = 0xFF,
-        duty: float = 0.5,
+        low: int = ...,
+        high: int = ...,
+        duty: float = ...,
         sampling_config: SamplingConfig = ...,
     ) -> SquareOption: ...
     @property
@@ -50,9 +50,9 @@ class SquareOption:
 class FourierOption:
     def __new__(
         cls,
-        scale_factor: float | None = None,
-        clamp: bool = False,
-        offset: int = 0x00,
+        scale_factor: float | None = ...,
+        clamp: bool = ...,
+        offset: int = ...,
     ) -> FourierOption: ...
     @property
     def scale_factor(self) -> float | None: ...

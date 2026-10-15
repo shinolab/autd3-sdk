@@ -33,22 +33,22 @@ namespace AUTD3
         internal static extern int autd3_udp_option_get_iface_addr(IntPtr option, out IntPtr addr);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_udp_option_set_heartbeat(IntPtr option, ulong ns);
+        internal static extern int autd3_udp_option_set_heartbeat(IntPtr option, [MarshalAs(UnmanagedType.I1)] bool hasValue, ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_udp_option_get_heartbeat(IntPtr option, out ulong ns);
+        internal static extern int autd3_udp_option_get_heartbeat(IntPtr option, [MarshalAs(UnmanagedType.I1)] out bool hasValue, out ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_udp_option_set_recovery_interval(IntPtr option, ulong ns);
+        internal static extern int autd3_udp_option_set_recovery_interval(IntPtr option, [MarshalAs(UnmanagedType.I1)] bool hasValue, ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_udp_option_get_recovery_interval(IntPtr option, out ulong ns);
+        internal static extern int autd3_udp_option_get_recovery_interval(IntPtr option, [MarshalAs(UnmanagedType.I1)] out bool hasValue, out ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_udp_option_set_timer_resolution(IntPtr option, ulong ns);
+        internal static extern int autd3_udp_option_set_timer_resolution(IntPtr option, [MarshalAs(UnmanagedType.I1)] bool hasValue, ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_udp_option_get_timer_resolution(IntPtr option, out ulong ns);
+        internal static extern int autd3_udp_option_get_timer_resolution(IntPtr option, [MarshalAs(UnmanagedType.I1)] out bool hasValue, out ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_udp_option_set_send_buffer(IntPtr option, ulong bytes);
@@ -57,10 +57,10 @@ namespace AUTD3
         internal static extern int autd3_udp_option_get_send_buffer(IntPtr option, out ulong bytes);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_udp_option_set_send_rate_limit(IntPtr option, float percent);
+        internal static extern int autd3_udp_option_set_send_rate_limit(IntPtr option, [MarshalAs(UnmanagedType.I1)] bool hasValue, float percent);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_udp_option_get_send_rate_limit(IntPtr option, out float percent);
+        internal static extern int autd3_udp_option_get_send_rate_limit(IntPtr option, [MarshalAs(UnmanagedType.I1)] out bool hasValue, out float percent);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_udp_option_set_reply_timeout(IntPtr option, ulong ns);
@@ -106,6 +106,9 @@ namespace AUTD3
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_udp_emulator_reboot(UdpEmulatorHandle emulator, UIntPtr index);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern UIntPtr autd3_udp_emulator_num_devices(UdpEmulatorHandle emulator);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_udp_emulator_free(IntPtr emulator);
@@ -157,6 +160,9 @@ namespace AUTD3
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern UIntPtr autd3_params_pwe_table_size();
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern ushort autd3_params_server_port();
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_silencer_default_completion_time(out ulong intensityNs, out ulong phaseNs, [MarshalAs(UnmanagedType.I1)] out bool strictMode);

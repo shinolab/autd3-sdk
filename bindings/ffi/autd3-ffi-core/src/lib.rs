@@ -11,7 +11,9 @@ use autd3_rs_core::common::ULTRASOUND_PERIOD;
 use autd3_rs_core::geometry::Device;
 use autd3_rs_core::units::{Hz, rad};
 use autd3_rs_core::value::{Nearest, PULSE_WIDTH_PERIOD, Phase, SamplingConfig};
-use autd3_rs_core::{Autd3, Geometry, MAX_INFLIGHT, Point3, Quaternion, UnitQuaternion, params};
+use autd3_rs_core::{
+    Autd3, Geometry, MAX_DEVICES, MAX_INFLIGHT, Point3, Quaternion, UnitQuaternion, params,
+};
 
 #[repr(C)]
 pub struct Autd3Device {
@@ -346,6 +348,26 @@ pub extern "C" fn autd3_core_params_max_inflight() -> usize {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn autd3_core_params_max_devices() -> usize {
+    MAX_DEVICES
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_core_params_port() -> u16 {
+    autd3_cpu_wire::udp::PORT
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_core_params_device_queue_frames() -> usize {
+    autd3_cpu_wire::udp::DEVICE_QUEUE_FRAMES
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_core_params_rotation_norm_tolerance() -> f32 {
+    Autd3::ROTATION_NORM_TOLERANCE
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn autd3_core_params_num_transducers() -> usize {
     Autd3::NUM_TRANSDUCERS
 }
@@ -572,5 +594,15 @@ mod tests {
         );
         assert_eq!(Autd3::NUM_TRANSDUCERS, autd3_core_params_num_transducers());
         assert_eq!(MAX_INFLIGHT, autd3_core_params_max_inflight());
+        assert_eq!(MAX_DEVICES, autd3_core_params_max_devices());
+        assert_eq!(autd3_cpu_wire::udp::PORT, autd3_core_params_port());
+        assert_eq!(
+            autd3_cpu_wire::udp::DEVICE_QUEUE_FRAMES,
+            autd3_core_params_device_queue_frames()
+        );
+        assert_eq!(
+            Autd3::ROTATION_NORM_TOLERANCE.to_bits(),
+            autd3_core_params_rotation_norm_tolerance().to_bits()
+        );
     }
 }

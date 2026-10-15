@@ -8,9 +8,9 @@ internal static class Sample
 {
     internal static void Run()
     {
-        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
+        var geometry = new Geometry(new[] { new Autd3() });
 
-        var apex = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
+        var apex = geometry.Center + Offset(0.0f * mm, 0.0f * mm, 150.0f * mm);
         var direction = Vector3.UnitZ;
         var theta = 18.0f * deg;
         var wavelength = Pattern.Wavelength(340.0f * m / s);

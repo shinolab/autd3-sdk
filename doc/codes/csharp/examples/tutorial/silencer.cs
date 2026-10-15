@@ -10,11 +10,11 @@ internal static class Sample
 {
     internal static async Task Run()
     {
-        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
+        var geometry = new Geometry(new[] { new Autd3() });
 
         await using var client = await Client.OpenAsync(geometry, new UdpOption(), new ClientConfig());
 
-        var center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
+        var center = geometry.Center + Offset(0.0f * mm, 0.0f * mm, 150.0f * mm);
         var radius = 30.0f;
 
         {
@@ -24,7 +24,7 @@ internal static class Sample
             {
                 var theta = 2.0f * MathF.PI * i / 20.0f;
                 var p = center + new Vector3(radius * MathF.Cos(theta), radius * MathF.Sin(theta), 0.0f);
-                foci[i] = new ControlPoints(new[] { new ControlPoint(p) }, Intensity.Max);
+                foci[i] = new ControlPoints(new[] { (ControlPoint)p }, Intensity.Max);
             }
             await client.SendAsync(SetSilencer.Disable());
             await client.SendAsync(new FociStm(50.0f * Hz, foci, new FociStmOption()));
@@ -38,7 +38,7 @@ internal static class Sample
             {
                 var theta = 2.0f * MathF.PI * i / 40.0f;
                 var p = center + new Vector3(radius * MathF.Cos(theta), radius * MathF.Sin(theta), 0.0f);
-                foci[i] = new ControlPoints(new[] { new ControlPoint(p) }, Intensity.Max);
+                foci[i] = new ControlPoints(new[] { (ControlPoint)p }, Intensity.Max);
             }
             await client.SendAsync(new SetSilencer());
             await client.SendAsync(new FociStm(50.0f * Hz, foci, new FociStmOption()));
@@ -52,7 +52,7 @@ internal static class Sample
             {
                 var theta = 2.0f * MathF.PI * i / 40.0f;
                 var p = center + new Vector3(radius * MathF.Cos(theta), radius * MathF.Sin(theta), 0.0f);
-                foci[i] = new ControlPoints(new[] { new ControlPoint(p) }, Intensity.Max);
+                foci[i] = new ControlPoints(new[] { (ControlPoint)p }, Intensity.Max);
             }
             await client.SendAsync(new SetSilencer(new FixedCompletionTime
             {

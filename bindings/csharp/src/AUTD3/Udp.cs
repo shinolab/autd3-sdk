@@ -9,9 +9,11 @@ namespace AUTD3
         internal static readonly TimeSpan? Heartbeat;
         internal static readonly TimeSpan ReplyTimeout;
         internal static readonly TimeSpan LostTimeout;
+        internal static readonly TimeSpan? RecoveryInterval;
         internal static readonly TimeSpan ResponseTimeout;
         internal static readonly TimeSpan EnumerationTimeout;
         internal static readonly TimeSpan SyncTimeout;
+        internal static readonly float? SendRateLimit;
         internal static readonly ulong? SendBuffer;
         internal static readonly TimeSpan? TimerResolution;
 
@@ -20,14 +22,16 @@ namespace AUTD3
             var handle = UdpOption.NewHandle();
             try
             {
-                Heartbeat = UdpOption.ReadHeartbeat(handle);
+                Heartbeat = OptionNative.GetOptionalDuration(handle, NativeClient.autd3_udp_option_get_heartbeat);
                 ReplyTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_udp_option_get_reply_timeout);
                 LostTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_udp_option_get_lost_timeout);
+                RecoveryInterval = OptionNative.GetOptionalDuration(handle, NativeClient.autd3_udp_option_get_recovery_interval);
                 ResponseTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_udp_option_get_response_timeout);
                 EnumerationTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_udp_option_get_enumeration_timeout);
                 SyncTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_udp_option_get_sync_timeout);
+                SendRateLimit = UdpOption.ReadSendRateLimit(handle);
                 SendBuffer = UdpOption.ReadSendBuffer(handle);
-                TimerResolution = UdpOption.ReadTimerResolution(handle);
+                TimerResolution = OptionNative.GetOptionalDuration(handle, NativeClient.autd3_udp_option_get_timer_resolution);
             }
             finally
             {
@@ -57,14 +61,39 @@ namespace AUTD3
         public TimeSpan ReplyTimeout { get => _replyTimeout ?? UdpOptionDefaults.ReplyTimeout; init => _replyTimeout = value; }
         private readonly TimeSpan? _lostTimeout;
         public TimeSpan LostTimeout { get => _lostTimeout ?? UdpOptionDefaults.LostTimeout; init => _lostTimeout = value; }
-        public TimeSpan? RecoveryInterval { get; init; }
+
+        private readonly bool _recoveryIntervalSet;
+        private readonly TimeSpan? _recoveryInterval;
+
+        public TimeSpan? RecoveryInterval
+        {
+            get => _recoveryIntervalSet ? _recoveryInterval : UdpOptionDefaults.RecoveryInterval;
+            init
+            {
+                _recoveryInterval = value;
+                _recoveryIntervalSet = true;
+            }
+        }
+
         private readonly TimeSpan? _responseTimeout;
         public TimeSpan ResponseTimeout { get => _responseTimeout ?? UdpOptionDefaults.ResponseTimeout; init => _responseTimeout = value; }
         private readonly TimeSpan? _enumerationTimeout;
         public TimeSpan EnumerationTimeout { get => _enumerationTimeout ?? UdpOptionDefaults.EnumerationTimeout; init => _enumerationTimeout = value; }
         private readonly TimeSpan? _syncTimeout;
         public TimeSpan SyncTimeout { get => _syncTimeout ?? UdpOptionDefaults.SyncTimeout; init => _syncTimeout = value; }
-        public float? SendRateLimit { get; init; }
+
+        private readonly bool _sendRateLimitSet;
+        private readonly float? _sendRateLimit;
+
+        public float? SendRateLimit
+        {
+            get => _sendRateLimitSet ? _sendRateLimit : UdpOptionDefaults.SendRateLimit;
+            init
+            {
+                _sendRateLimit = value;
+                _sendRateLimitSet = true;
+            }
+        }
 
         private readonly bool _sendBufferSet;
         private readonly ulong? _sendBuffer;
@@ -113,28 +142,17 @@ namespace AUTD3
                     { AddrValue: { } addr } => NativeClient.autd3_udp_option_set_iface_addr(handle, addr),
                     _ => NativeClient.autd3_udp_option_set_iface(handle, Iface.NameValue),
                 });
-                OptionNative.Apply("heartbeat", Heartbeat switch
-                {
-                    null => NativeClient.autd3_udp_option_set_heartbeat(handle, 0),
-                    { } interval when interval > TimeSpan.Zero => NativeClient.autd3_udp_option_set_heartbeat(handle, OptionNative.ToNanos(interval)),
-                    _ => -1,
-                });
+                OptionNative.SetOptionalDuration(handle, "heartbeat", Heartbeat, NativeClient.autd3_udp_option_set_heartbeat);
                 OptionNative.SetRequiredDuration(handle, "replyTimeout", ReplyTimeout, NativeClient.autd3_udp_option_set_reply_timeout);
                 OptionNative.SetRequiredDuration(handle, "lostTimeout", LostTimeout, NativeClient.autd3_udp_option_set_lost_timeout);
-                OptionNative.Apply("recoveryInterval", RecoveryInterval switch
-                {
-                    null => NativeClient.autd3_udp_option_set_recovery_interval(handle, 0),
-                    { } interval when interval > TimeSpan.Zero => NativeClient.autd3_udp_option_set_recovery_interval(handle, OptionNative.ToNanos(interval)),
-                    _ => -1,
-                });
+                OptionNative.SetOptionalDuration(handle, "recoveryInterval", RecoveryInterval, NativeClient.autd3_udp_option_set_recovery_interval);
                 OptionNative.SetRequiredDuration(handle, "responseTimeout", ResponseTimeout, NativeClient.autd3_udp_option_set_response_timeout);
                 OptionNative.SetRequiredDuration(handle, "enumerationTimeout", EnumerationTimeout, NativeClient.autd3_udp_option_set_enumeration_timeout);
                 OptionNative.SetRequiredDuration(handle, "syncTimeout", SyncTimeout, NativeClient.autd3_udp_option_set_sync_timeout);
                 OptionNative.Apply("sendRateLimit", SendRateLimit switch
                 {
-                    null => NativeClient.autd3_udp_option_set_send_rate_limit(handle, 0),
-                    { } percent when percent > 0 => NativeClient.autd3_udp_option_set_send_rate_limit(handle, percent),
-                    _ => -1,
+                    null => NativeClient.autd3_udp_option_set_send_rate_limit(handle, false, 0),
+                    { } percent => NativeClient.autd3_udp_option_set_send_rate_limit(handle, true, percent),
                 });
                 OptionNative.Apply("sendBuffer", SendBuffer switch
                 {
@@ -142,12 +160,7 @@ namespace AUTD3
                     { } bytes when bytes > 0 => NativeClient.autd3_udp_option_set_send_buffer(handle, bytes),
                     _ => -1,
                 });
-                OptionNative.Apply("timerResolution", TimerResolution switch
-                {
-                    null => NativeClient.autd3_udp_option_set_timer_resolution(handle, 0),
-                    { } resolution when resolution > TimeSpan.Zero => NativeClient.autd3_udp_option_set_timer_resolution(handle, OptionNative.ToNanos(resolution)),
-                    _ => -1,
-                });
+                OptionNative.SetOptionalDuration(handle, "timerResolution", TimerResolution, NativeClient.autd3_udp_option_set_timer_resolution);
             }
             catch
             {
@@ -160,16 +173,16 @@ namespace AUTD3
         internal static UdpOption FromHandle(IntPtr handle) => new UdpOption
         {
             Iface = ReadAddr(handle) is { } addr ? Interface.Addr(addr) : Interface.Auto,
-            Heartbeat = ReadHeartbeat(handle),
+            Heartbeat = OptionNative.GetOptionalDuration(handle, NativeClient.autd3_udp_option_get_heartbeat),
             ReplyTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_udp_option_get_reply_timeout),
             LostTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_udp_option_get_lost_timeout),
-            RecoveryInterval = ReadRecoveryInterval(handle),
+            RecoveryInterval = OptionNative.GetOptionalDuration(handle, NativeClient.autd3_udp_option_get_recovery_interval),
             ResponseTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_udp_option_get_response_timeout),
             EnumerationTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_udp_option_get_enumeration_timeout),
             SyncTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_udp_option_get_sync_timeout),
             SendRateLimit = ReadSendRateLimit(handle),
             SendBuffer = ReadSendBuffer(handle),
-            TimerResolution = ReadTimerResolution(handle),
+            TimerResolution = OptionNative.GetOptionalDuration(handle, NativeClient.autd3_udp_option_get_timer_resolution),
         };
 
         internal static UdpOption Defaults()
@@ -185,34 +198,16 @@ namespace AUTD3
             }
         }
 
-        internal static TimeSpan? ReadHeartbeat(IntPtr handle)
-        {
-            var heartbeat = OptionNative.GetDuration(handle, NativeClient.autd3_udp_option_get_heartbeat);
-            return heartbeat == TimeSpan.Zero ? null : heartbeat;
-        }
-
-        private static TimeSpan? ReadRecoveryInterval(IntPtr handle)
-        {
-            var interval = OptionNative.GetDuration(handle, NativeClient.autd3_udp_option_get_recovery_interval);
-            return interval == TimeSpan.Zero ? null : interval;
-        }
-
-        internal static TimeSpan? ReadTimerResolution(IntPtr handle)
-        {
-            var resolution = OptionNative.GetDuration(handle, NativeClient.autd3_udp_option_get_timer_resolution);
-            return resolution == TimeSpan.Zero ? null : resolution;
-        }
-
         internal static ulong? ReadSendBuffer(IntPtr handle)
         {
             OptionNative.Apply("sendBuffer", NativeClient.autd3_udp_option_get_send_buffer(handle, out var bytes));
             return bytes == 0 ? null : bytes;
         }
 
-        private static float? ReadSendRateLimit(IntPtr handle)
+        internal static float? ReadSendRateLimit(IntPtr handle)
         {
-            OptionNative.Apply("sendRateLimit", NativeClient.autd3_udp_option_get_send_rate_limit(handle, out var percent));
-            return percent == 0 ? null : percent;
+            OptionNative.Apply("sendRateLimit", NativeClient.autd3_udp_option_get_send_rate_limit(handle, out var hasValue, out var percent));
+            return hasValue ? percent : (float?)null;
         }
 
         private static string? ReadAddr(IntPtr handle)
@@ -250,7 +245,7 @@ namespace AUTD3
                 var reason = NativeUtil.Utf8(err);
                 throw new Autd3Exception(reason.Length == 0
                     ? "failed to spawn the udp emulator"
-                    : $"failed to spawn the udp emulator: {reason}");
+                    : $"failed to spawn the udp emulator: {reason}", Autd3ErrorCode.Network);
             }
             _handle = new UdpEmulatorHandle(raw);
         }
@@ -271,6 +266,8 @@ namespace AUTD3
                 NativeClient.autd3_udp_option_free(handle);
             }
         }
+
+        public int NumDevices => (int)NativeClient.autd3_udp_emulator_num_devices(Handle);
 
         public void Reboot(int index)
         {

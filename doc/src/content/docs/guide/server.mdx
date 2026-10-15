@@ -53,7 +53,9 @@ import csSample from "@codes/csharp/examples/api/connection/server-link.cs?raw";
 
 | フィールド | 型 | デフォルト | 説明 |
 | --- | --- | --- | --- |
-| `port` | `u16` | 44338 | Server のポート |
+| `port` | `u16` | 44338 (`SERVER_PORT`) | Server のポート |
 | `timeout` | `Duration` | 1 s | 接続を始めてから Server が受け入れるまでの待ち時間. 0 はエラー |
+
+`SERVER_PORT` は Python では `autd3.params.SERVER_PORT`, C# では `ServerLink.ServerPort`.
 
 それ以外の使い方は実機へ直接つなぐ場合と同じ.

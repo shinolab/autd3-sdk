@@ -22,7 +22,13 @@ import { excerpt } from "@lib/excerpt";
 
 | Field   | Type                    | Description                                              |
 | ------- | ----------------------- | ------------------------------------------------------- |
-| `table` | `&[u16; PWE_TABLE_SIZE]` | Pulse width per intensity index (0–255) (256 elements) |
+| `table` | `&[PulseWidth; PWE_TABLE_SIZE]` | Pulse width per intensity index (0–255) (256 elements) |
+
+A `PulseWidth` is made with `PulseWidth::new(u16)` (a pulse width in 512 steps per period) or `PulseWidth::from_duty(f32)` (a duty ratio).
+It is not validated at construction, and `pulse_width()` returns its value as a `Result` (the range is `[0, 512)` for `new` and `[0, 1)` for `from_duty`).
+A table containing an out-of-range value is an error at encode time.
+Python is the same (`PulseWidth(raw)` / `PulseWidth.from_duty(duty)` / `pulse_width()`).
+C# makes it with `new PulseWidth(ushort)` / `PulseWidth.FromDuty(float)` and reads the value with `Value` (not `PulseWidth`, because a member cannot have the same name as its type). An out-of-range value throws `Autd3Exception` (`InvalidArgument`) when `Value` is read and at encode time.
 
 The default command sets an arcsin-shaped table.
 This is a table that makes the output sound pressure (theoretically) linear with respect to intensity, and it is the same table the device holds at boot.

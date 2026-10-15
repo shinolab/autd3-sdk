@@ -1,4 +1,3 @@
-using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
 using static AUTD3.Units;
@@ -9,17 +8,17 @@ internal static class Sample
 {
     internal static async Task Run()
     {
-        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero), new Autd3(Vector3.Zero) });
+        var geometry = new Geometry(new[] { new Autd3(), new Autd3() });
         using var emulator = new UdpEmulator(geometry.NumDevices);
         await using var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());
 
         var wavelength = Pattern.Wavelength(340.0f * m / s);
 
-        var leftTarget = geometry.Center + new Vector3(-40.0f, 0.0f, 150.0f);
+        var leftTarget = geometry.Center + Offset(-40.0f * mm, 0.0f * mm, 150.0f * mm);
         var left = geometry.PhaseBuffer();
         Pattern.Focus(geometry, leftTarget, wavelength, left);
 
-        var rightTarget = geometry.Center + new Vector3(40.0f, 0.0f, 150.0f);
+        var rightTarget = geometry.Center + Offset(40.0f * mm, 0.0f * mm, 150.0f * mm);
         var right = geometry.PhaseBuffer();
         Pattern.Focus(geometry, rightTarget, wavelength, right);
 

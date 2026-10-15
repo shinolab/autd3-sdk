@@ -6,7 +6,7 @@ from autd3.geometry import Autd3, Geometry
 
 
 async def main() -> None:
-    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+    geometry = Geometry([Autd3()])
     emulator = UdpEmulator(geometry.num_devices())
     client = await Client.open(geometry, emulator.option(), ClientConfig())
 
@@ -29,7 +29,7 @@ async def main() -> None:
 
     _ = (num_devices, geometry, firmware, fpga_state, done, resp)
 
-    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+    geometry = Geometry([Autd3()])
 
     # ANCHOR: context_manager
     emulator = UdpEmulator(geometry.num_devices())

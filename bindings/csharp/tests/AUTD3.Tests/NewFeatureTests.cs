@@ -290,7 +290,7 @@ namespace AUTD3.Tests
             using var geometry = Fixture.SingleDevice();
             var points = new List<ControlPoints>();
             Stm.Circle(geometry.Center + new Vector3(0f, 0f, 150f), 30f * mm, 4, new Vector3(0f, 0f, 1f), Intensity.Max, points);
-            using var frames = Frames.Encode(geometry, new FociStm(1 * Hz, points.ToArray()));
+            using var frames = Frames.Encode(geometry, new FociStm(1 * Hz, points.ToArray(), new FociStmOption()));
             Assert.True(frames.Length > 0);
         }
 
@@ -417,7 +417,12 @@ namespace AUTD3.Tests
 
             var failsafe = Assert.Throws<Autd3Exception>(() =>
                 Frames.Encode(geometry, new SetCpuConfig(new CpuConfig { FailsafeTimeout = TimeSpan.Zero })));
-            Assert.Contains("failsafeTimeout", failsafe.Message);
+            Assert.Equal(Autd3ErrorCode.InvalidArgument, failsafe.Code);
+            Assert.Contains("failsafe_timeout", failsafe.Message);
+
+            var negativeFailsafe = Assert.Throws<Autd3Exception>(() =>
+                Frames.Encode(geometry, new SetCpuConfig(new CpuConfig { FailsafeTimeout = TimeSpan.FromTicks(-1) })));
+            Assert.Contains("failsafeTimeout", negativeFailsafe.Message);
         }
 
         [Fact]
@@ -480,7 +485,10 @@ namespace AUTD3.Tests
         {
             Assert.Equal(0, PulseWidth.FromDuty(0f).Value);
             Assert.True(PulseWidth.FromDuty(0.5f).Value > 0);
-            Assert.Throws<Autd3Exception>(() => PulseWidth.FromDuty(1f));
+            var outOfRange = PulseWidth.FromDuty(1f);
+            var error = Assert.Throws<Autd3Exception>(() => outOfRange.Value);
+            Assert.Equal(Autd3ErrorCode.InvalidArgument, error.Code);
+            Assert.Contains("duty", error.Message);
         }
 
         [Fact]

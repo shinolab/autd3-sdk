@@ -1,11 +1,11 @@
 use autd3_rs::units::Hz;
 use autd3_rs::value::SamplingConfig;
-use autd3_rs_modulation::{SquareOption, square};
+use autd3_rs_modulation::{SquareOption, modulation_buffer, square};
 
 // HIDE
 fn main() -> anyhow::Result<()> {
     // HIDE_END
-    let mut dst = Vec::new();
+    let mut dst = modulation_buffer();
 
     square(
         150 * Hz,

@@ -2,7 +2,7 @@ using System;
 
 namespace AUTD3
 {
-    public readonly struct Length
+    public readonly struct Length : IEquatable<Length>
     {
         public float Mm { get; }
 
@@ -16,10 +16,42 @@ namespace AUTD3
         public static Length FromMm(float mm) => new Length(mm);
 
         public static Length FromM(float m) => new Length(m * 1000f);
+
+        public static Length operator +(Length lhs, Length rhs) => new Length(lhs.Mm + rhs.Mm);
+
+        public static Length operator -(Length lhs, Length rhs) => new Length(lhs.Mm - rhs.Mm);
+
+        public static Length operator -(Length value) => new Length(-value.Mm);
+
+        public static Length operator *(Length lhs, float rhs) => new Length(lhs.Mm * rhs);
+
+        public static Length operator *(float lhs, Length rhs) => new Length(lhs * rhs.Mm);
+
+        public static Length operator /(Length lhs, float rhs) => new Length(lhs.Mm / rhs);
+
+        public bool Equals(Length other) => Mm.Equals(other.Mm);
+
+        public override bool Equals(object? obj) => obj is Length other && Equals(other);
+
+        public override int GetHashCode() => Mm.GetHashCode();
+
+        public static bool operator ==(Length left, Length right) => left.Mm == right.Mm;
+
+        public static bool operator !=(Length left, Length right) => left.Mm != right.Mm;
+
+        public static bool operator <(Length left, Length right) => left.Mm < right.Mm;
+
+        public static bool operator >(Length left, Length right) => left.Mm > right.Mm;
+
+        public static bool operator <=(Length left, Length right) => left.Mm <= right.Mm;
+
+        public static bool operator >=(Length left, Length right) => left.Mm >= right.Mm;
     }
 
-    public readonly struct Angle
+    public readonly struct Angle : IEquatable<Angle>
     {
+        private const float DegreesPerRadian = 57.29577951308232f;
+
         public float Rad { get; }
 
         internal Angle(float radian)
@@ -27,16 +59,38 @@ namespace AUTD3
             Rad = radian;
         }
 
-        public float Deg => Rad * (180f / MathF.PI);
+        public float Deg => Rad * DegreesPerRadian;
 
         public static Angle Zero => new Angle(0f);
 
         public static Angle FromRad(float radian) => new Angle(radian);
 
         public static Angle FromDeg(float degree) => new Angle(degree * (MathF.PI / 180f));
+
+        public static Angle operator +(Angle lhs, Angle rhs) => new Angle(lhs.Rad + rhs.Rad);
+
+        public static Angle operator -(Angle lhs, Angle rhs) => new Angle(lhs.Rad - rhs.Rad);
+
+        public static Angle operator -(Angle value) => new Angle(-value.Rad);
+
+        public static Angle operator *(Angle lhs, float rhs) => new Angle(lhs.Rad * rhs);
+
+        public static Angle operator *(float lhs, Angle rhs) => new Angle(rhs.Rad * lhs);
+
+        public static Angle operator /(Angle lhs, float rhs) => new Angle(lhs.Rad / rhs);
+
+        public bool Equals(Angle other) => Rad.Equals(other.Rad);
+
+        public override bool Equals(object? obj) => obj is Angle other && Equals(other);
+
+        public override int GetHashCode() => Rad.GetHashCode();
+
+        public static bool operator ==(Angle left, Angle right) => left.Rad == right.Rad;
+
+        public static bool operator !=(Angle left, Angle right) => left.Rad != right.Rad;
     }
 
-    public readonly struct Velocity
+    public readonly struct Velocity : IEquatable<Velocity>
     {
         public float MmS { get; }
 
@@ -50,9 +104,27 @@ namespace AUTD3
         public static Velocity FromMmS(float mmPerS) => new Velocity(mmPerS);
 
         public static Velocity FromMS(float mPerS) => new Velocity(mPerS * 1000f);
+
+        public bool Equals(Velocity other) => MmS.Equals(other.MmS);
+
+        public override bool Equals(object? obj) => obj is Velocity other && Equals(other);
+
+        public override int GetHashCode() => MmS.GetHashCode();
+
+        public static bool operator ==(Velocity left, Velocity right) => left.MmS == right.MmS;
+
+        public static bool operator !=(Velocity left, Velocity right) => left.MmS != right.MmS;
+
+        public static bool operator <(Velocity left, Velocity right) => left.MmS < right.MmS;
+
+        public static bool operator >(Velocity left, Velocity right) => left.MmS > right.MmS;
+
+        public static bool operator <=(Velocity left, Velocity right) => left.MmS <= right.MmS;
+
+        public static bool operator >=(Velocity left, Velocity right) => left.MmS >= right.MmS;
     }
 
-    public readonly struct Freq
+    public readonly struct Freq : IEquatable<Freq>
     {
         public enum FreqMode : byte
         {
@@ -104,6 +176,32 @@ namespace AUTD3
 
         public static Freq operator /(Freq lhs, float rhs) =>
             new Freq(FreqMode.FloatExact, lhs.HzValue / rhs, 0);
+
+        private bool BothInt(Freq other) => Mode == FreqMode.IntExact && other.Mode == FreqMode.IntExact;
+
+        public bool Equals(Freq other) =>
+            Mode == other.Mode && (Mode == FreqMode.IntExact ? HzIntValue == other.HzIntValue : HzValue.Equals(other.HzValue));
+
+        public override bool Equals(object? obj) => obj is Freq other && Equals(other);
+
+        public override int GetHashCode() => Mode == FreqMode.IntExact ? HashCode.Combine(Mode, HzIntValue) : HashCode.Combine(Mode, HzValue);
+
+        public static bool operator ==(Freq left, Freq right) =>
+            left.Mode == right.Mode && (left.BothInt(right) ? left.HzIntValue == right.HzIntValue : left.HzValue == right.HzValue);
+
+        public static bool operator !=(Freq left, Freq right) => !(left == right);
+
+        public static bool operator <(Freq left, Freq right) =>
+            left.BothInt(right) ? left.HzIntValue < right.HzIntValue : left.HzValue < right.HzValue;
+
+        public static bool operator >(Freq left, Freq right) =>
+            left.BothInt(right) ? left.HzIntValue > right.HzIntValue : left.HzValue > right.HzValue;
+
+        public static bool operator <=(Freq left, Freq right) =>
+            left.BothInt(right) ? left.HzIntValue <= right.HzIntValue : left.HzValue <= right.HzValue;
+
+        public static bool operator >=(Freq left, Freq right) =>
+            left.BothInt(right) ? left.HzIntValue >= right.HzIntValue : left.HzValue >= right.HzValue;
     }
 
     public readonly struct Nearest<T>

@@ -25,6 +25,10 @@ import sample from "@codes/rust/examples/api/advanced/controller.rs?raw";
 
 <CodeTabs rust={excerpt(sample, "run")} />
 
+`Client::open` と違い, `Controller::open` はデバイスの初期化 (ハンドシェイク, ファームウェアバージョンの確認, `Clear`, `Synchronize`) を行わない.
+`Driver` を回し始めてから `controller.initialize().await` を呼び, それが完了してからコマンドを送る.
+`initialize` は返信を待つので, `Driver` を回す前に呼ぶと完了しない.
+
 ## Driver
 
 `Driver` は以下のメソッドを持つ.

@@ -1,10 +1,10 @@
 use autd3_rs::units::Hz;
-use autd3_rs_modulation::{FourierOption, SineComponent, SineOption, fourier};
+use autd3_rs_modulation::{FourierOption, SineComponent, SineOption, fourier, modulation_buffer};
 
 // HIDE
 fn main() -> anyhow::Result<()> {
     // HIDE_END
-    let mut dst = Vec::new();
+    let mut dst = modulation_buffer();
 
     fourier(
         &[SineComponent {

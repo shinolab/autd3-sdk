@@ -6,6 +6,7 @@ use autd3_python_capsule::extract::{
     duration_to_py, extract_duration, extract_sampling_config, extract_velocity,
 };
 use autd3_python_capsule::{capsule_of, modulation_from_capsule};
+use autd3_rs::Velocity;
 use autd3_rs::commands::Expansion;
 use autd3_rs::commands::{
     ActivateModulationBank as CoreActivateModulationBank,
@@ -16,7 +17,7 @@ use autd3_rs::commands::{
 };
 use autd3_rs::value::{
     GpioIn as CoreGpioIn, Intensity, LoopBehavior as CoreLoopBehavior,
-    ModulationBank as CoreModulationBank, PatternBank as CorePatternBank, Phase,
+    ModulationBank as CoreModulationBank, PatternBank as CorePatternBank, Phase, SamplingConfig,
     SysTime as CoreSysTime, TransitionMode as CoreTransitionMode,
 };
 use pyo3::exceptions::PyValueError;
@@ -420,19 +421,19 @@ pub struct ConfigPattern(pub(crate) Arc<CoreConfigPattern>);
 #[pymethods]
 impl ConfigPattern {
     #[new]
-    #[pyo3(signature = (bank, config, size, loop_behavior = None))]
+    #[pyo3(signature = (bank, config, size, loop_behavior))]
     fn new(
         bank: PatternBank,
-        config: &Bound<'_, PyAny>,
+        #[pyo3(from_py_with = extract_sampling_config)] config: SamplingConfig,
         size: usize,
-        loop_behavior: Option<LoopBehavior>,
-    ) -> PyResult<Self> {
-        Ok(Self(Arc::new(CoreConfigPattern {
+        loop_behavior: LoopBehavior,
+    ) -> Self {
+        Self(Arc::new(CoreConfigPattern {
             bank: bank.0,
-            config: extract_sampling_config(config)?,
+            config,
             size,
-            loop_behavior: loop_behavior.map_or(CoreLoopBehavior::Infinite, |l| l.0),
-        })))
+            loop_behavior: loop_behavior.0,
+        }))
     }
 }
 
@@ -442,25 +443,23 @@ pub struct ConfigFociStm(pub(crate) Arc<CoreConfigFociStm>);
 #[pymethods]
 impl ConfigFociStm {
     #[new]
-    #[pyo3(signature = (bank, config, size, num_foci, sound_speed, loop_behavior = None))]
+    #[pyo3(signature = (bank, config, size, num_foci, sound_speed, loop_behavior))]
     fn new(
         bank: PatternBank,
-        config: &Bound<'_, PyAny>,
+        #[pyo3(from_py_with = extract_sampling_config)] config: SamplingConfig,
         size: usize,
         num_foci: u8,
-        sound_speed: &Bound<'_, PyAny>,
-        loop_behavior: Option<LoopBehavior>,
-    ) -> PyResult<Self> {
-        let config = extract_sampling_config(config)?;
-        let sound_speed = extract_velocity(sound_speed)?;
-        Ok(Self(Arc::new(CoreConfigFociStm {
+        #[pyo3(from_py_with = extract_velocity)] sound_speed: Velocity,
+        loop_behavior: LoopBehavior,
+    ) -> Self {
+        Self(Arc::new(CoreConfigFociStm {
             bank: bank.0,
             config,
             size,
             num_foci,
             sound_speed,
-            loop_behavior: loop_behavior.map_or(CoreLoopBehavior::Infinite, |l| l.0),
-        })))
+            loop_behavior: loop_behavior.0,
+        }))
     }
 }
 
@@ -470,11 +469,11 @@ pub struct ActivatePatternBank(pub(crate) Arc<CoreActivatePatternBank>);
 #[pymethods]
 impl ActivatePatternBank {
     #[new]
-    #[pyo3(signature = (bank, transition_mode = None))]
-    fn new(bank: PatternBank, transition_mode: Option<TransitionMode>) -> Self {
+    #[pyo3(signature = (bank, transition_mode))]
+    fn new(bank: PatternBank, transition_mode: TransitionMode) -> Self {
         Self(Arc::new(CoreActivatePatternBank {
             bank: bank.0,
-            transition_mode: transition_mode.map_or(CoreTransitionMode::default(), |t| t.0),
+            transition_mode: transition_mode.0,
         }))
     }
 }
@@ -519,19 +518,19 @@ pub struct ConfigModulation(pub(crate) Arc<CoreConfigModulation>);
 #[pymethods]
 impl ConfigModulation {
     #[new]
-    #[pyo3(signature = (bank, config, size, loop_behavior = None))]
+    #[pyo3(signature = (bank, config, size, loop_behavior))]
     fn new(
         bank: ModulationBank,
-        config: &Bound<'_, PyAny>,
+        #[pyo3(from_py_with = extract_sampling_config)] config: SamplingConfig,
         size: usize,
-        loop_behavior: Option<LoopBehavior>,
-    ) -> PyResult<Self> {
-        Ok(Self(Arc::new(CoreConfigModulation {
+        loop_behavior: LoopBehavior,
+    ) -> Self {
+        Self(Arc::new(CoreConfigModulation {
             bank: bank.0,
-            config: extract_sampling_config(config)?,
+            config,
             size,
-            loop_behavior: loop_behavior.map_or(CoreLoopBehavior::Infinite, |l| l.0),
-        })))
+            loop_behavior: loop_behavior.0,
+        }))
     }
 }
 
@@ -541,11 +540,11 @@ pub struct ActivateModulationBank(pub(crate) Arc<CoreActivateModulationBank>);
 #[pymethods]
 impl ActivateModulationBank {
     #[new]
-    #[pyo3(signature = (bank, transition_mode = None))]
-    fn new(bank: ModulationBank, transition_mode: Option<TransitionMode>) -> Self {
+    #[pyo3(signature = (bank, transition_mode))]
+    fn new(bank: ModulationBank, transition_mode: TransitionMode) -> Self {
         Self(Arc::new(CoreActivateModulationBank {
             bank: bank.0,
-            transition_mode: transition_mode.map_or(CoreTransitionMode::default(), |t| t.0),
+            transition_mode: transition_mode.0,
         }))
     }
 }

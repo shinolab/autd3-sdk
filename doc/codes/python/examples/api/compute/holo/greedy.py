@@ -1,6 +1,5 @@
-import numpy as np
-from autd3.geometry import Autd3, Geometry
-from autd3.units import m, s
+from autd3.geometry import Autd3, Geometry, offset
+from autd3.units import m, mm, s
 from autd3_pattern import TransducerMask
 from autd3_pattern import wavelength as calc_wavelength
 from autd3_pattern_holo import (
@@ -11,16 +10,16 @@ from autd3_pattern_holo import (
     greedy,
 )
 
-geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+geometry = Geometry([Autd3()])
 
-center = geometry.center() + np.array([0.0, 0.0, 150.0])
+center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm)
 foci = [
     AmplitudeTarget(
-        center + np.array([-30.0, 0.0, 0.0]),
+        center + offset(-30.0 * mm, 0.0 * mm, 0.0 * mm),
         2.5e3 * Pa,
     ),
     AmplitudeTarget(
-        center + np.array([30.0, 0.0, 0.0]),
+        center + offset(30.0 * mm, 0.0 * mm, 0.0 * mm),
         2.5e3 * Pa,
     ),
 ]

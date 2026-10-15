@@ -1,16 +1,14 @@
-import numpy as np
-
 import autd3
 import autd3_emulator as emu
 import autd3_pattern as pattern
-from autd3.units import m, s
+from autd3.units import m, mm, s
 from autd3_core import Duration
 from autd3.commands import Pattern
 from autd3.value import Intensity
 from autd3_emulator import Emulator, Grid, Recorder, RmsRecordOption, InstantRecordOption
 
-geometry = autd3.geometry.Geometry([autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
-target = geometry.center() + np.array([0.0, 0.0, 150.0])
+geometry = autd3.geometry.Geometry([autd3.geometry.Autd3()])
+target = geometry.center() + autd3.geometry.offset(0.0 * mm, 0.0 * mm, 150.0 * mm)
 phases = geometry.phase_buffer()
 pattern.focus(geometry, target, pattern.wavelength(340 * m / s), phases)
 
@@ -52,6 +50,7 @@ rng = Grid(
     y=(target[1] - 20.0, target[1] + 20.0),
     z=float(target[2]),
     resolution=1.0,
+    order="xyz",
 )
 # ANCHOR: points
 rms = record.sound_field(rng, RmsRecordOption())
@@ -65,6 +64,7 @@ rng = Grid(
     y=(target[1] - 20.0, target[1] + 20.0),
     z=float(target[2]),
     resolution=1.0,
+    order="xyz",
 )
 rms = record.sound_field(rng, RmsRecordOption())
 field = rms.next(Duration.from_micros(25))

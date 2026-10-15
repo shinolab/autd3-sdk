@@ -1,4 +1,3 @@
-using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
 using static AUTD3.Units;
@@ -9,17 +8,17 @@ internal static class Sample
 {
     internal static async Task Run()
     {
-        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
+        var geometry = new Geometry(new[] { new Autd3() });
 
         await using var client = await Client.OpenAsync(geometry, new UdpOption(), new ClientConfig());
 
-        var center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
+        var center = geometry.Center + Offset(0.0f * mm, 0.0f * mm, 150.0f * mm);
 
         // ANCHOR: stm
         var points = new[]
         {
-            new ControlPoints(new[] { new ControlPoint(center + new Vector3(20.0f, 0.0f, 0.0f)) }),
-            new ControlPoints(new[] { new ControlPoint(center + new Vector3(-20.0f, 0.0f, 0.0f)) }),
+            (ControlPoints)(center + Offset(20.0f * mm, 0.0f * mm, 0.0f * mm)),
+            (ControlPoints)(center + Offset(-20.0f * mm, 0.0f * mm, 0.0f * mm)),
         };
         await client.SendAsync(new FociStm(0.5f * Hz, points, new FociStmOption()));
         // ANCHOR_END: stm

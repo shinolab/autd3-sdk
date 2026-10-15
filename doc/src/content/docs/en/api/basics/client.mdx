@@ -51,6 +51,8 @@ To continuously monitor the operating state of the devices, drive the `StateChec
 | `bus_stats()`             | —     | `BusStats`                            | Send/receive statistics (number of frames sent, ack latency, etc.) |
 | `read_firmware_version()` | ✓     | `Result<Vec<FirmwareVersion>, Error>` | CPU/FPGA firmware version of each device                   |
 | `read_fpga_state()`       | ✓     | `Result<Vec<FpgaState>, Error>`       | FPGA state of each device                                  |
+| `read_telemetry()`        | ✓     | `Result<Vec<Telemetry>, Error>`       | CPU diagnostic counters of each device                     |
+| `device_time_now()`       | —     | `Result<SysTime, Error>`              | Current time of the devices (see [SysTime](/autd3-sdk/en/api/basics/sys-time/)). `DeviceTimeUnknown` if no reply carrying the time has been received yet |
 | `send(cmd)`               | ✓     | `Result<(), Error>`                   | Send a command, confirming the response frame by frame     |
 | `send_streaming(cmd)`     | ✓     | `Result<StreamFuture, Error>`         | Streaming version of `send`                                |
 | `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | Send one frame                                             |
@@ -60,6 +62,77 @@ To continuously monitor the operating state of the devices, drive the `StateChec
 
 To avoid the noise of dropping the amplitude at once, `silent_stop()` first sets the [Silencer](/autd3-sdk/en/api/command/silencer/) and then drives every transducer to zero amplitude.
 The Silencer setting stays overwritten, so send `SetSilencer` again before resuming the output with a different setting.
+
+## Types of the Read Results
+
+`read_firmware_version()` / `read_fpga_state()` / `read_telemetry()` return an array with one element per device, in device-number order.
+They fail with `DeviceLost` while a device is `Lost`.
+
+In Python, the method and field names are the same as in Rust (fields are properties).
+In C#, they are PascalCase properties (`is_thermal_asserted()` → `IsThermalAsserted`, `fifo_drop` → `FifoDrop`, and so on).
+
+### FirmwareVersion
+
+| Member                  | Type             | Description                                            |
+| ----------------------- | ---------------- | ------------------------------------------------------ |
+| `cpu`                   | `Version`        | Version of the CPU firmware                            |
+| `fpga`                  | `Version`        | Version of the FPGA firmware (`0.0.0` if it cannot be read) |
+| `is_emulator()`         | `bool`           | Whether it is a device emulator                        |
+| `is_supported()`        | `bool`           | Whether both the CPU and the FPGA are in a series this SDK supports |
+| `SUPPORTED_SERIES`      | `(u8, u8)`       | Supported series (major, minor) (C#: `SupportedSeries`) |
+
+`Version` has `major` / `minor` / `patch` (`u8`) and `is_unknown()` (whether it is `0.0.0`).
+
+### FpgaState
+
+| Method                    | Type             | Description                              |
+| ------------------------- | ---------------- | ---------------------------------------- |
+| `raw()`                   | `u8`             | Raw value of the state register          |
+| `is_thermal_asserted()`   | `bool`           | Whether the thermal sensor is over the threshold |
+| `current_mod_bank()`      | `ModulationBank` | Current Modulation bank                  |
+| `current_pattern_bank()`  | `PatternBank`    | Current Pattern bank (shared by Pattern and STM) |
+| `is_pattern_mode()`       | `bool`           | Whether a Pattern is being output        |
+| `is_stm_mode()`           | `bool`           | Whether an STM is being output           |
+| `is_pattern_stopped()`    | `bool`           | Whether Pattern / STM playback has stopped |
+| `is_mod_stopped()`        | `bool`           | Whether Modulation playback has stopped |
+| `is_transition_pending()` | `bool`           | Whether a bank switch is waiting to take effect |
+| `is_failsafe_active()`    | `bool`           | Whether the output is stopped by the failsafe |
+
+### Telemetry
+
+CPU diagnostic counters. `Clear` resets all of them to 0 except `boot_failure` (the `Client` sends `Clear` when it opens).
+Reading them does not clear them.
+
+| Field                 | Type  | Description                                            |
+| --------------------- | ----- | ------------------------------------------------------ |
+| `fifo_drop`           | `u32` | Frames dropped because the receive FIFO was full       |
+| `dedup`               | `u32` | Frames dropped as duplicates                           |
+| `seq_mismatch`        | `u32` | Frames ignored because the sequence number did not match |
+| `dispatch_error`      | `u32` | Number of times processing ended in an error           |
+| `processed`           | `u32` | Frames processed                                       |
+| `send_failure`        | `u32` | Number of times the NIC refused to send                |
+| `failsafe`            | `u16` | Number of times the failsafe fired because communication with the host was lost |
+| `ptp_unlock_failsafe` | `u16` | Number of times the failsafe fired because the PTP lock was lost |
+| `sync_resync`         | `u8`  | Number of hardware resynchronizations of the sync input (reset to 0 by `Synchronize`) |
+| `boot_failure`        | `u8`  | Number of steps that failed at boot (not cleared by `Clear`) |
+| `cpu_watchdog`        | `u8`  | Number of times the CPU watchdog fired (kept until the FPGA is reconfigured) |
+
+The `u32` fields wrap around to 0 on overflow, and the `u16` / `u8` fields stop at their maximum.
+
+### BusStats
+
+`bus_stats()` returns the host-side send/receive statistics. The values are totals since the `Client` opened, and each read gives the latest values.
+
+| Method                       | Type  | Description                                  |
+| ---------------------------- | ----- | -------------------------------------------- |
+| `frames()`                   | `u64` | Frames sent                                  |
+| `resets()`                   | `u64` | `Reset`s sent                                |
+| `heartbeats()`               | `u64` | Heartbeats sent                              |
+| `missed_heartbeat_replies()` | `u64` | Heartbeat replies that did not arrive within `reply_timeout` |
+| `recoveries()`               | `u64` | Devices automatically recovered from `Lost`  |
+| `acked_frames()`             | `u64` | Frames that received a reply                 |
+| `worst_ack_latency_ns()`     | `u64` | Maximum time from sending to the reply [ns]  |
+| `mean_ack_latency_ns()`      | `u64` | Mean time from sending to the reply [ns]     |
 
 ## ClientConfig
 
@@ -74,7 +147,10 @@ The Silencer setting stays overwritten, so send `SetSilencer` again before resum
 | `resynchronize_on_recovery`  | `Option<NonZeroU32>` | `Some(3)` | Send `Synchronize` again to a device recovered from `Lost`, before the next send. The value is the maximum number of attempts; `None` sends nothing (see [State check](/autd3-sdk/en/guide/state-check/)) |
 | `release_failsafe_on_recovery` | `Option<NonZeroU32>` | `Some(3)` | Send `ReleaseFailsafe` to a device recovered from `Lost`, before the next send, to resume the output stopped by the failsafe. The value is the maximum number of attempts; `None` sends nothing (see [State check](/autd3-sdk/en/guide/state-check/)) |
 
-`max_inflight` errors if it exceeds `MAX_INFLIGHT (7)`.
+`max_inflight` errors if it exceeds `MAX_INFLIGHT (7)` (Python: `autd3.params.MAX_INFLIGHT`, C#: `Params.MaxInflight`).
+The default is also `MAX_INFLIGHT`, which equals `DEVICE_QUEUE_FRAMES`, the number of frames in the receive queue of each device (Python: `autd3.params.DEVICE_QUEUE_FRAMES`, C#: `Params.DeviceQueueFrames`).
+Setting `ack_timeout` to 0 makes opening the `Client` fail with an error (`InvalidPayload`; the `code` of the Python `Autd3Error` is `INVALID_ARGUMENT`, and the `Code` of the C# `Autd3Exception` is `InvalidArgument`).
+The Python defaults are the same as in Rust, and only `resynchronize_on_recovery` / `release_failsafe_on_recovery`, whose type is an `Option`, accept `None`.
 
 There is no retransmission. A failed command must be sent again by the user.
 

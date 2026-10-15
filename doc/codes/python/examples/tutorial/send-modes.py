@@ -2,13 +2,11 @@ import asyncio
 import collections
 import math
 
-import numpy as np
-
 import autd3_pattern as pattern
 from autd3 import Client, ClientConfig, Frames, MAX_INFLIGHT, UdpOption
 from autd3.commands import Pattern, SetSilencer
-from autd3.geometry import Autd3, Geometry
-from autd3.units import m, s
+from autd3.geometry import Autd3, Geometry, offset
+from autd3.units import m, mm, s
 from autd3.value import Intensity
 
 NUM_POINTS = 1000
@@ -16,7 +14,7 @@ RADIUS_MM = 30.0
 
 
 async def main() -> None:
-    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+    geometry = Geometry([Autd3()])
 
     async with await Client.open(
         geometry,
@@ -29,15 +27,13 @@ async def main() -> None:
 
         # ANCHOR: targets
         # Prepare 1000 focus points along a circle 150 mm above the array center.
-        center = geometry.center() + np.array([0.0, 0.0, 150.0])
+        center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm)
         targets = [
             center
-            + np.array(
-                [
-                    RADIUS_MM * math.cos(2.0 * math.pi * i / NUM_POINTS),
-                    RADIUS_MM * math.sin(2.0 * math.pi * i / NUM_POINTS),
-                    0.0,
-                ]
+            + offset(
+                RADIUS_MM * math.cos(2.0 * math.pi * i / NUM_POINTS) * mm,
+                RADIUS_MM * math.sin(2.0 * math.pi * i / NUM_POINTS) * mm,
+                0.0 * mm,
             )
             for i in range(NUM_POINTS)
         ]
@@ -45,6 +41,7 @@ async def main() -> None:
 
         await stop_and_wait(client, geometry, targets, wavelength)
         await streaming(client, geometry, targets, wavelength)
+        await client.silent_stop()
 
 
 async def stop_and_wait(client, geometry, targets, wavelength) -> None:

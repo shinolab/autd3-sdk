@@ -21,9 +21,9 @@ internal static class Sample
         var totalTransducers = geometry.NumTransducers;
         var arrayCenter = geometry.Center;
 
-        for (var i = 0; i < geometry.NumDevices; i++)
+        foreach (var device in geometry)
         {
-            var device = geometry[i];
+            _ = device;
         }
 
         var first = geometry[0];

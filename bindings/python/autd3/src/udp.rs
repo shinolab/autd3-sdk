@@ -3,15 +3,11 @@ use std::time::Duration;
 
 use autd3_python_capsule::extract::{duration_to_py, extract_duration};
 use autd3_rs::udp::UdpOption as CoreOption;
-use autd3_rs::{Interface as CoreInterface, Link, SERVER_PORT, ServerLink as CoreServerLink};
+use autd3_rs::{Interface as CoreInterface, Link, ServerLink as CoreServerLink};
 use autd3_rs_firmware_emulator::udp::UdpEmulator as CoreEmulator;
 use pyo3::exceptions::{PyIndexError, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use std::sync::{Mutex, PoisonError};
-
-pub(crate) fn opt_duration(obj: Option<&Bound<'_, PyAny>>) -> PyResult<Option<Duration>> {
-    obj.map(extract_duration).transpose()
-}
 
 pub(crate) fn none_or_duration(obj: &Bound<'_, PyAny>) -> PyResult<Option<Duration>> {
     if obj.is_none() {
@@ -78,9 +74,6 @@ impl Interface {
 }
 
 fn extract_iface(obj: &Bound<'_, PyAny>) -> PyResult<CoreInterface> {
-    if obj.is_none() {
-        return Ok(CoreInterface::Auto);
-    }
     if let Ok(iface) = obj.extract::<Interface>() {
         return Ok(iface.0);
     }
@@ -88,68 +81,57 @@ fn extract_iface(obj: &Bound<'_, PyAny>) -> PyResult<CoreInterface> {
         return Ok(CoreInterface::Name(name));
     }
     Err(PyTypeError::new_err(
-        "iface must be an Interface, an interface name or None",
+        "iface must be an Interface or an interface name",
     ))
 }
 
-#[pyclass(name = "UdpOption", module = "autd3")]
+#[pyclass(name = "UdpOption", module = "autd3", eq)]
+#[derive(PartialEq)]
 pub struct UdpOption(pub(crate) CoreOption);
 
 #[pymethods]
 impl UdpOption {
     #[new]
     #[pyo3(signature = (
-        iface = CoreInterface::Auto,
+        iface = CoreOption::default().iface,
         heartbeat = CoreOption::default().heartbeat,
-        reply_timeout = None,
-        lost_timeout = None,
-        response_timeout = None,
-        enumeration_timeout = None,
-        sync_timeout = None,
-        send_rate_limit = None,
+        reply_timeout = CoreOption::default().reply_timeout,
+        lost_timeout = CoreOption::default().lost_timeout,
+        response_timeout = CoreOption::default().response_timeout,
+        enumeration_timeout = CoreOption::default().enumeration_timeout,
+        sync_timeout = CoreOption::default().sync_timeout,
+        send_rate_limit = CoreOption::default().send_rate_limit,
         send_buffer = CoreOption::default().send_buffer,
         timer_resolution = CoreOption::default().timer_resolution,
-        recovery_interval = None,
+        recovery_interval = CoreOption::default().recovery_interval,
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         #[pyo3(from_py_with = extract_iface)] iface: CoreInterface,
         #[pyo3(from_py_with = none_or_duration)] heartbeat: Option<Duration>,
-        reply_timeout: Option<&Bound<'_, PyAny>>,
-        lost_timeout: Option<&Bound<'_, PyAny>>,
-        response_timeout: Option<&Bound<'_, PyAny>>,
-        enumeration_timeout: Option<&Bound<'_, PyAny>>,
-        sync_timeout: Option<&Bound<'_, PyAny>>,
+        #[pyo3(from_py_with = extract_duration)] reply_timeout: Duration,
+        #[pyo3(from_py_with = extract_duration)] lost_timeout: Duration,
+        #[pyo3(from_py_with = extract_duration)] response_timeout: Duration,
+        #[pyo3(from_py_with = extract_duration)] enumeration_timeout: Duration,
+        #[pyo3(from_py_with = extract_duration)] sync_timeout: Duration,
         send_rate_limit: Option<f32>,
         send_buffer: Option<NonZeroUsize>,
         #[pyo3(from_py_with = none_or_duration)] timer_resolution: Option<Duration>,
-        recovery_interval: Option<&Bound<'_, PyAny>>,
-    ) -> PyResult<Self> {
-        let mut inner = CoreOption {
+        #[pyo3(from_py_with = none_or_duration)] recovery_interval: Option<Duration>,
+    ) -> Self {
+        Self(CoreOption {
             iface,
             heartbeat,
+            reply_timeout,
+            lost_timeout,
+            recovery_interval,
+            response_timeout,
+            enumeration_timeout,
+            sync_timeout,
             send_rate_limit,
             send_buffer,
             timer_resolution,
-            recovery_interval: opt_duration(recovery_interval)?,
-            ..CoreOption::default()
-        };
-        if let Some(v) = opt_duration(reply_timeout)? {
-            inner.reply_timeout = v;
-        }
-        if let Some(v) = opt_duration(lost_timeout)? {
-            inner.lost_timeout = v;
-        }
-        if let Some(v) = opt_duration(response_timeout)? {
-            inner.response_timeout = v;
-        }
-        if let Some(v) = opt_duration(enumeration_timeout)? {
-            inner.enumeration_timeout = v;
-        }
-        if let Some(v) = opt_duration(sync_timeout)? {
-            inner.sync_timeout = v;
-        }
-        Ok(Self(inner))
+        })
     }
 
     #[getter]
@@ -215,6 +197,10 @@ impl UdpOption {
             .map(|resolution| duration_to_py(py, resolution))
             .transpose()
     }
+
+    fn __repr__(&self) -> String {
+        format!("{:?}", self.0)
+    }
 }
 
 #[pyclass(name = "ServerLink", module = "autd3", eq, frozen, from_py_object)]
@@ -224,16 +210,9 @@ pub struct ServerLink(pub(crate) CoreServerLink);
 #[pymethods]
 impl ServerLink {
     #[new]
-    #[pyo3(signature = (port = SERVER_PORT, timeout = None))]
-    fn new(port: u16, timeout: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
-        let mut inner = CoreServerLink {
-            port,
-            ..CoreServerLink::default()
-        };
-        if let Some(timeout) = opt_duration(timeout)? {
-            inner.timeout = timeout;
-        }
-        Ok(Self(inner))
+    #[pyo3(signature = (port = CoreServerLink::default().port, timeout = CoreServerLink::default().timeout))]
+    fn new(port: u16, #[pyo3(from_py_with = extract_duration)] timeout: Duration) -> Self {
+        Self(CoreServerLink { port, timeout })
     }
 
     #[getter]
@@ -314,7 +293,6 @@ impl UdpEmulator {
         Ok(Self(inner))
     }
 
-    #[getter]
     fn num_devices(&self) -> PyResult<usize> {
         self.with(CoreEmulator::num_devices)
     }

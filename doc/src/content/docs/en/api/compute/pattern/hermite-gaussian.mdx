@@ -44,6 +44,8 @@ As with `laguerre_gaussian_phase`, the amplitude is changed with `hermite_gaussi
 | `n`     | `u32`    | Mode index along the orthogonal direction               |
 | `waist` | `Length` | Beam waist radius <Math tex="w_0" /> (positive) |
 
+`waist` must be a positive finite length. Otherwise Rust panics when computing, Python raises `ValueError`, and C# throws `Autd3Exception` (`InvalidArgument`).
+
 ## Example
 
 <CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />
