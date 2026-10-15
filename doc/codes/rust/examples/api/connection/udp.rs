@@ -5,6 +5,7 @@ use anyhow::Result;
 
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::Interface;
+use autd3_rs::SIMULATOR_PORT;
 use autd3_rs::UdpOption;
 
 #[tokio::main(flavor = "multi_thread")]
@@ -42,7 +43,7 @@ async fn main() -> Result<()> {
     // ANCHOR: iface
     Interface::Auto;
     Interface::Name("eth0".to_string());
-    Interface::Simulator;
+    Interface::Simulator(SIMULATOR_PORT);
     Interface::Addr("[::1]:44336".parse()?);
     // ANCHOR_END: iface
 

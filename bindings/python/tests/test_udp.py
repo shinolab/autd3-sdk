@@ -63,15 +63,21 @@ def test_the_interface_selects_where_to_connect() -> None:
     assert autd3.UdpOption().iface == autd3.Interface.Auto
     with pytest.raises(TypeError):
         autd3.UdpOption(iface=loose(None))
-    simulator = autd3.UdpOption(iface=autd3.Interface.Simulator)
-    assert simulator.iface == autd3.Interface.Simulator
+    simulator = autd3.UdpOption(iface=autd3.Interface.Simulator(44336))
+    assert simulator.iface == autd3.Interface.Simulator(44336)
+    assert simulator.iface != autd3.Interface.Simulator(50000)
     assert simulator.iface != autd3.Interface.Auto
+    assert autd3.Interface.Simulator(50000).simulator_port() == 50000
+    assert autd3.Interface.Auto.simulator_port() is None
+    assert repr(autd3.Interface.Simulator(50000)) == "Interface.Simulator(50000)"
+    with pytest.raises(OverflowError):
+        autd3.Interface.Simulator(65536)
     assert repr(autd3.Interface.Name("eth0")) == 'Interface.Name("eth0")'
     assert autd3.Interface.Name("eth0").name() == "eth0"
     assert autd3.Interface.Auto.name() is None
-    assert autd3.Interface.Simulator.name() is None
+    assert autd3.Interface.Simulator(44336).name() is None
     assert hash(autd3.Interface.Name("eth0")) == hash(autd3.Interface.Name("eth0"))
-    assert len({autd3.Interface.Auto, autd3.Interface.Simulator, autd3.Interface.Auto}) == 2
+    assert len({autd3.Interface.Auto, autd3.Interface.Simulator(44336), autd3.Interface.Auto}) == 2
     with pytest.raises(TypeError):
         autd3.UdpOption(iface=loose(1))
 
@@ -80,7 +86,7 @@ def test_an_address_interface_round_trips_and_rejects_garbage() -> None:
     iface = autd3.Interface.Addr("[::1]:44336")
     assert repr(iface) == 'Interface.Addr("[::1]:44336")'
     assert autd3.UdpOption(iface=iface).iface == iface
-    assert iface != autd3.Interface.Simulator
+    assert iface != autd3.Interface.Simulator(44336)
     with pytest.raises(ValueError):
         autd3.Interface.Addr("127.0.0.1:1")
 

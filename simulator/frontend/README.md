@@ -5,21 +5,22 @@ Browser frontend for the AUTD3 Simulator.
 ## How to use
 
 The backend emulates AUTD3 devices over UDP on the host (IPv6 loopback): it answers the enumeration on
-**`[::1]:44336`**, runs the real CPU firmware logic on the frames a client sends and displays the sound field.
+**`[::1]:44336`** (change it with `--port`), runs the real CPU firmware logic on the frames a client sends and displays the sound field.
 The browser UI is on a separate port (default **8081**).
 
-A client on the same host reaches the simulator with the default `UdpOption` (`Interface::Auto` prefers a running
-simulator over real devices). Set `Interface::Simulator` to connect to nothing but the simulator:
+A client on the same host reaches the simulator on the default port with the default `UdpOption` (`Interface::Auto`
+fails when both the simulator and real devices answer). Set `Interface::Simulator(port)` to connect to nothing but the
+simulator on that port:
 
 ```rust
 let option = UdpOption {
-    iface: Interface::Simulator,
+    iface: Interface::Simulator(SIMULATOR_PORT),
     ..Default::default()
 };
 let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
 ```
 
-The client sends its geometry to the simulator when it opens (control port `[::1]:44337`), and the simulator rebuilds
+The client sends its geometry to the simulator when it opens (control port `[::1]:port + 1`, `[::1]:44337` by default), and the simulator rebuilds
 the emulated devices and the view to match. Until a client has connected, a single AUTD3 at the origin is shown.
 
 ```bash
@@ -43,7 +44,8 @@ npm install
 ```bash
 cargo xtask simulator run
 cargo xtask simulator run --open          # open the browser automatically after start
-cargo xtask simulator run --port 9000
+cargo xtask simulator run --http-port 9000  # serve the UI on another port
+cargo xtask simulator run --port 50000      # devices on [::1]:50000, control on [::1]:50001
 ```
 
 ## Browser requirements

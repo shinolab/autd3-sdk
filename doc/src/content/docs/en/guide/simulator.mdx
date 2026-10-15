@@ -20,11 +20,14 @@ Obtain `autd3-console` as described in [Console](/autd3-sdk/en/guide/console/), 
 
 The client must run on the same host as the Simulator.
 
-The default [`UdpOption`](/autd3-sdk/en/api/basics/transport-option/) (`iface` set to `Auto`) connects to the Simulator when no real devices are attached.
-If both the Simulator and real devices are found, opening fails; set `iface` to `Simulator`, or specify the NIC of the real devices with `Name(..)`.
+The Simulator listens on port 44336 by default (and on the next port, 44337, for control). Change the port with "UDP port" in the Simulator tab of the console.
+
+The default [`UdpOption`](/autd3-sdk/en/api/basics/transport-option/) (`iface` set to `Auto`) connects to the Simulator on the default port when no real devices are attached.
+If both the Simulator and real devices are found, opening fails; set `iface` to `Simulator(..)` with the Simulator's port, or specify the NIC of the real devices with `Name(..)`.
 
 <CodeTabs
-  rust={'let option = UdpOption {\n    iface: Interface::Simulator,\n    ..Default::default()\n};'}
-  python={'option = UdpOption(iface=Interface.Simulator)'}
-  csharp={'var option = new UdpOption { Iface = Interface.Simulator };'}
+  rust={'let option = UdpOption {\n    iface: Interface::Simulator(SIMULATOR_PORT),\n    ..Default::default()\n};'}
+  python={'option = UdpOption(iface=Interface.Simulator(SIMULATOR_PORT))'}
+  csharp={'var option = new UdpOption { Iface = Interface.Simulator(UdpOption.SimulatorPort) };'}
 />
+

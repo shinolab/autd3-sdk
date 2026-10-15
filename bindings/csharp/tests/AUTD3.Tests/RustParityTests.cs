@@ -249,7 +249,9 @@ namespace AUTD3.Tests
             Assert.Null(Interface.Auto.NameValue);
             Assert.Equal("eth0", Interface.Name("eth0").NameValue);
             Assert.False(Interface.Name("eth0").IsAuto);
-            Assert.True(Interface.Simulator.IsSimulator);
+            Assert.Equal((ushort)44336, Interface.Simulator(44336).SimulatorPort);
+            Assert.Equal((ushort)50000, Interface.Simulator(50000).SimulatorPort);
+            Assert.Null(Interface.Auto.SimulatorPort);
             Assert.Equal("[::1]:8080", Interface.Addr("[::1]:8080").AddrValue);
         }
 

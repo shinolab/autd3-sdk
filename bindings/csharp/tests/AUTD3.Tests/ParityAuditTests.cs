@@ -241,6 +241,7 @@ namespace AUTD3.Tests
             Assert.Equal(Params.MaxInflight, Params.DeviceQueueFrames);
             Assert.Equal(1e-3f, Autd3.RotationNormTolerance);
             Assert.Equal(new ServerLink().Port, ServerLink.ServerPort);
+            Assert.Equal((ushort)44336, UdpOption.SimulatorPort);
         }
 
         [Fact]

@@ -38,7 +38,7 @@ internal static class Sample
         // ANCHOR: iface
         _ = Interface.Auto;
         _ = Interface.Name("eth0");
-        _ = Interface.Simulator;
+        _ = Interface.Simulator(UdpOption.SimulatorPort);
         _ = Interface.Addr("[::1]:44336");
         // ANCHOR_END: iface
     }

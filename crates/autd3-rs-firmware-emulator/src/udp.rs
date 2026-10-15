@@ -8,8 +8,8 @@ use std::time::{Duration, Instant};
 use autd3_cpu_fw::proto::{Disposition, Drained, Reply};
 use autd3_cpu_fw::ptp::Config as PtpConfig;
 use autd3_cpu_wire::udp::{
-    AssignIdBody, Flags, FrameReply, Header, Kind, PORT, PROTOCOL_VERSION, RESET_ID_CLOSE_DELAY_MS,
-    Role, SetTimeBody, Status, UNASSIGNED_ID, UPSTREAM_UNKNOWN, UnblockReply, UnitInfo,
+    AssignIdBody, Flags, FrameReply, Header, Kind, PROTOCOL_VERSION, RESET_ID_CLOSE_DELAY_MS, Role,
+    SetTimeBody, Status, UNASSIGNED_ID, UPSTREAM_UNKNOWN, UnblockReply, UnitInfo,
 };
 use autd3_rs_core::geometry::Autd3;
 use autd3_rs_core::{FRAME_BYTES_MAX, Interface};
@@ -18,7 +18,6 @@ use zerocopy::{FromBytes, IntoBytes};
 
 use crate::Device;
 
-const SIMULATOR: SocketAddrV6 = SocketAddrV6::new(Ipv6Addr::LOCALHOST, PORT, 0, 0);
 const LOOPBACK_ANY: SocketAddrV6 = SocketAddrV6::new(Ipv6Addr::LOCALHOST, 0, 0, 0);
 const POLL_INTERVAL: Duration = Duration::from_millis(10);
 const PULSE_DELAY: Duration = Duration::from_millis(50);
@@ -608,8 +607,11 @@ impl UdpEmulator {
         Self::spawn_at(LOOPBACK_ANY, num_devices)
     }
 
-    pub fn spawn_simulator(num_devices: usize) -> io::Result<Self> {
-        Self::spawn_at(SIMULATOR, num_devices)
+    pub fn spawn_simulator(port: u16, num_devices: usize) -> io::Result<Self> {
+        Self::spawn_at(
+            SocketAddrV6::new(Ipv6Addr::LOCALHOST, port, 0, 0),
+            num_devices,
+        )
     }
 
     fn spawn_at(group: SocketAddrV6, num_devices: usize) -> io::Result<Self> {

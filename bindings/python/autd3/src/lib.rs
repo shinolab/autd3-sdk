@@ -42,6 +42,7 @@ fn _autd3(m: &Bound<'_, PyModule>) -> PyResult<()> {
         autd3_rs::Autd3::ROTATION_NORM_TOLERANCE,
     )?;
     m.add("SERVER_PORT", autd3_rs::SERVER_PORT)?;
+    m.add("SIMULATOR_PORT", autd3_rs::SIMULATOR_PORT)?;
     m.add("PORT", autd3_rs::udp::PORT)?;
     m.add("DEVICE_QUEUE_FRAMES", autd3_rs::udp::DEVICE_QUEUE_FRAMES)?;
     m.add_class::<client::Client>()?;

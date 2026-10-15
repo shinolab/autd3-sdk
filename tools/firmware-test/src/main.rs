@@ -165,10 +165,9 @@ async fn run(cli: &Cli) -> Result<()> {
 
     let default = UdpOption::default();
     let option = UdpOption {
-        iface: if cli.simulator {
-            Interface::Simulator
-        } else {
-            cli.interface.clone().into()
+        iface: match cli.simulator {
+            Some(port) => Interface::Simulator(port),
+            None => cli.interface.clone().into(),
         },
         heartbeat: Some(heartbeat),
         lost_timeout: cli

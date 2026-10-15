@@ -24,7 +24,7 @@ namespace AUTD3
         internal static extern int autd3_udp_option_set_iface(IntPtr option, [MarshalAs(UnmanagedType.LPUTF8Str)] string? interfaceName);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_udp_option_set_iface_simulator(IntPtr option);
+        internal static extern int autd3_udp_option_set_iface_simulator(IntPtr option, ushort port);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_udp_option_set_iface_addr(IntPtr option, [MarshalAs(UnmanagedType.LPUTF8Str)] string addr);
@@ -163,6 +163,9 @@ namespace AUTD3
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern ushort autd3_params_server_port();
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern ushort autd3_params_simulator_port();
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_silencer_default_completion_time(out ulong intensityNs, out ulong phaseNs, [MarshalAs(UnmanagedType.I1)] out bool strictMode);

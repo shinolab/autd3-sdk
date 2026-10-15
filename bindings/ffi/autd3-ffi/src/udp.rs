@@ -206,11 +206,14 @@ pub unsafe extern "C" fn autd3_udp_option_set_iface(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_udp_option_set_iface_simulator(handle: *mut UdpOptionHandle) -> i32 {
+pub unsafe extern "C" fn autd3_udp_option_set_iface_simulator(
+    handle: *mut UdpOptionHandle,
+    port: u16,
+) -> i32 {
     let Some(option) = (unsafe { handle_mut(handle) }) else {
         return AUTD3_ERR_INVALID_ARGUMENT;
     };
-    option.0.iface = Interface::Simulator;
+    option.0.iface = Interface::Simulator(port);
     AUTD3_OK
 }
 
@@ -528,16 +531,16 @@ mod tests {
     fn the_simulator_interface_reaches_the_option() {
         let handle = autd3_udp_option_new();
         assert_eq!(
-            unsafe { autd3_udp_option_set_iface_simulator(handle) },
+            unsafe { autd3_udp_option_set_iface_simulator(handle, 50000) },
             AUTD3_OK
         );
         assert_eq!(
             unsafe { handle_ref(handle.cast_const()) }.unwrap().0.iface,
-            Interface::Simulator
+            Interface::Simulator(50000)
         );
         assert_eq!(iface_addr(handle), None);
         assert_eq!(
-            unsafe { autd3_udp_option_set_iface_simulator(std::ptr::null_mut()) },
+            unsafe { autd3_udp_option_set_iface_simulator(std::ptr::null_mut(), 50000) },
             AUTD3_ERR_INVALID_ARGUMENT
         );
         unsafe { autd3_udp_option_free(handle) };

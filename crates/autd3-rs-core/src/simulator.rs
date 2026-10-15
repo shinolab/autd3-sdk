@@ -3,7 +3,7 @@ use thiserror::Error;
 
 use crate::geometry::{Autd3, Geometry};
 
-pub const PORT: u16 = 44337;
+pub const DEFAULT_PORT: u16 = autd3_cpu_wire::udp::PORT;
 pub const VERSION: u8 = 1;
 pub const MAX_DEVICES: usize = 128;
 pub const REPLY_BYTES: usize = 2;
@@ -103,6 +103,14 @@ pub fn decode_geometry(bytes: &[u8]) -> Result<Geometry, DecodeError> {
 }
 
 #[must_use]
+pub const fn control_port(port: u16) -> Option<u16> {
+    match port {
+        0 => None,
+        _ => port.checked_add(1),
+    }
+}
+
+#[must_use]
 pub const fn encode_reply(status: Status) -> [u8; REPLY_BYTES] {
     [VERSION, status.as_u8()]
 }
@@ -122,6 +130,14 @@ mod tests {
                 ),
             ),
         ])
+    }
+
+    #[test]
+    fn the_control_port_follows_the_device_port() {
+        assert_eq!(control_port(DEFAULT_PORT), Some(44337));
+        assert_eq!(control_port(50000), Some(50001));
+        assert_eq!(control_port(0), None);
+        assert_eq!(control_port(u16::MAX), None);
     }
 
     #[test]

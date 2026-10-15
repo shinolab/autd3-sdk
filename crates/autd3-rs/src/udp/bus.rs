@@ -18,7 +18,7 @@ use super::iface;
 use super::option::UdpOption;
 use super::recovery::Recovery;
 use super::reply::Reply;
-use super::simulator::{self, SIMULATOR, Simulator};
+use super::simulator;
 use super::state::{SharedState, StateChecker, Tracker};
 use super::timer::TimerResolutionGuard;
 
@@ -85,7 +85,7 @@ impl UdpBus {
             Units::Exactly(num_devices),
             Bringup::Synchronized,
             None,
-            Some(SIMULATOR),
+            true,
         )
     }
 
@@ -95,7 +95,7 @@ impl UdpBus {
             Units::Exactly(geometry.num_devices()),
             Bringup::Synchronized,
             Some(geometry),
-            Some(SIMULATOR),
+            true,
         )
     }
 
@@ -105,18 +105,12 @@ impl UdpBus {
             Units::Exactly(num_devices),
             Bringup::Unsynchronized,
             None,
-            Some(SIMULATOR),
+            true,
         )
     }
 
     pub fn open_unsynchronized_all(option: &UdpOption) -> Result<Self, UdpError> {
-        Self::open_with(
-            option,
-            Units::All,
-            Bringup::Unsynchronized,
-            None,
-            Some(SIMULATOR),
-        )
+        Self::open_with(option, Units::All, Bringup::Unsynchronized, None, true)
     }
 
     pub fn open_devices(option: &UdpOption, num_devices: Option<usize>) -> Result<Self, UdpError> {
@@ -125,7 +119,7 @@ impl UdpBus {
             num_devices.map_or(Units::All, Units::Exactly),
             Bringup::Synchronized,
             None,
-            None,
+            false,
         )
     }
 
@@ -134,7 +128,7 @@ impl UdpBus {
         expected: Units,
         bringup: Bringup,
         geometry: Option<&Geometry>,
-        simulator: Option<Simulator>,
+        allow_simulator: bool,
     ) -> Result<Self, UdpError> {
         option.validate()?;
         let timer_resolution = TimerResolutionGuard::new(option.timer_resolution);
@@ -143,7 +137,7 @@ impl UdpBus {
         {
             return Err(UdpError::InvalidDeviceCount(num_devices));
         }
-        let target = iface::resolve_with(&option.iface, option.response_timeout, simulator)?;
+        let target = iface::resolve_with(&option.iface, option.response_timeout, allow_simulator)?;
         if let (Some(control), Some(geometry)) = (target.simulator_control, geometry) {
             simulator::configure(control, geometry, option.enumeration_timeout)?;
         }

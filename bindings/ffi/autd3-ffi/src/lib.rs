@@ -548,6 +548,11 @@ pub extern "C" fn autd3_params_server_port() -> u16 {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn autd3_params_simulator_port() -> u16 {
+    autd3_rs::SIMULATOR_PORT
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn autd3_foci_stm_option_default_sound_speed() -> f32 {
     FociStmOption::default().sound_speed.m_s()
 }
@@ -2855,6 +2860,7 @@ mod tests {
     #[test]
     fn the_client_constants_match_the_rust_constants() {
         assert_eq!(autd3_rs::SERVER_PORT, autd3_params_server_port());
+        assert_eq!(autd3_rs::SIMULATOR_PORT, autd3_params_simulator_port());
         assert_eq!(
             FociStmOption::default().sound_speed.m_s(),
             autd3_foci_stm_option_default_sound_speed()

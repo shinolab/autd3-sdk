@@ -217,9 +217,10 @@ namespace AUTD3.Tests
         [Fact]
         public void TheSimulatorInterfaceIsDistinctAndReachesTheNativeOption()
         {
-            Assert.NotEqual(Interface.Auto, Interface.Simulator);
-            Assert.NotEqual(Interface.Name("eth0"), Interface.Simulator);
-            var handle = new UdpOption { Iface = Interface.Simulator }.CreateHandle();
+            Assert.NotEqual(Interface.Auto, Interface.Simulator(44336));
+            Assert.NotEqual(Interface.Name("eth0"), Interface.Simulator(44336));
+            Assert.NotEqual(Interface.Simulator(44336), Interface.Simulator(50000));
+            var handle = new UdpOption { Iface = Interface.Simulator(50000) }.CreateHandle();
             NativeClient.autd3_udp_option_free(handle);
         }
 
