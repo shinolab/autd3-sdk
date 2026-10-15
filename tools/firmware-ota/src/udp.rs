@@ -13,10 +13,13 @@ pub struct UdpArgs {
     pub interface: Option<String>,
     #[arg(
         long,
+        value_name = "PORT",
+        num_args = 0..=1,
+        default_missing_value = "44336",
         conflicts_with = "interface",
-        help = "Connect to the simulator on this host only (default: the simulator if it runs, else the devices)"
+        help = "Connect to the simulator on this host only, listening on PORT (default 44336)"
     )]
-    pub simulator: bool,
+    pub simulator: Option<u16>,
     #[arg(long, help = "Heartbeat interval while waiting, microseconds")]
     pub heartbeat_us: Option<u64>,
     #[arg(
@@ -45,10 +48,9 @@ impl UdpArgs {
         let default = UdpOption::default();
         let heartbeat = us(self.heartbeat_us).or(default.heartbeat);
         UdpOption {
-            iface: if self.simulator {
-                Interface::Simulator
-            } else {
-                self.interface.clone().into()
+            iface: match self.simulator {
+                Some(port) => Interface::Simulator(port),
+                None => self.interface.clone().into(),
             },
             heartbeat,
             lost_timeout: default.lost_timeout.max(
@@ -213,7 +215,12 @@ mod tests {
     #[test]
     fn the_simulator_flag_reaches_the_option_and_excludes_an_interface() {
         let args = parse(&["--simulator"]);
-        assert_eq!(args.option().iface, Interface::Simulator);
+        assert_eq!(
+            args.option().iface,
+            Interface::Simulator(autd3_rs::SIMULATOR_PORT)
+        );
+        let args = parse(&["--simulator", "50000"]);
+        assert_eq!(args.option().iface, Interface::Simulator(50000));
         assert!(Cli::try_parse_from(["ota", "--simulator", "--interface", "eth0"]).is_err());
     }
 }

@@ -22,6 +22,7 @@ pub use error::{Error, NetworkCause, PayloadError};
 
 #[cfg(feature = "serde")]
 pub use autd3_rs_core::LayoutError;
+pub use autd3_rs_core::simulator::DEFAULT_PORT as SIMULATOR_PORT;
 pub use autd3_rs_core::{
     Angle, Autd3, BusStats, Device, DeviceClock, DeviceState, DeviceStatus, EncodeError, Freq,
     Geometry, Interface, Length, MAX_INFLIGHT, Point3, Quaternion, UnitQuaternion, UnitVector3,

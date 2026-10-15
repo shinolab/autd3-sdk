@@ -64,11 +64,15 @@ pub struct Cli {
     pub interface: Option<String>,
     #[arg(
         long,
+        value_name = "PORT",
+        num_args = 0..=1,
+        default_missing_value = "44336",
         conflicts_with = "interface",
-        help = "Connect to the simulator on this host only (maps to Interface::Simulator). \
-                Without it the simulator is still preferred when it runs."
+        help = "Connect to the simulator on this host only, listening on PORT (default 44336; \
+                maps to Interface::Simulator(PORT)). Without it Interface::Auto fails when both \
+                the simulator and devices answer."
     )]
-    pub simulator: bool,
+    pub simulator: Option<u16>,
     #[arg(
         long,
         conflicts_with_all = ["interface", "simulator"],

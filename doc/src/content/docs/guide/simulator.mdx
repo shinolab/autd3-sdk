@@ -20,11 +20,13 @@ import CodeTabs from "@components/CodeTabs.astro";
 
 クライアントは Simulator と同じホストで動かす必要がある.
 
-既定の [`UdpOption`](/autd3-sdk/api/basics/transport-option/) (`iface` が `Auto`) は, 実機がつながっていなければ Simulator につながる.
-Simulator と実機の両方が見つかった場合はエラーになるため, `iface` に `Simulator` を指定するか, `Name(..)` で実機の NIC を指定すること.
+Simulator は既定でポート 44336 (制御用に次の 44337 も) で待ち受ける. ポートはコンソールの Simulator タブの「UDP port」で変えられる.
+
+既定の [`UdpOption`](/autd3-sdk/api/basics/transport-option/) (`iface` が `Auto`) は, 実機がつながっていなければ既定ポートの Simulator につながる.
+Simulator と実機の両方が見つかった場合はエラーになるため, `iface` に `Simulator(..)` で Simulator のポートを指定するか, `Name(..)` で実機の NIC を指定すること.
 
 <CodeTabs
-  rust={'let option = UdpOption {\n    iface: Interface::Simulator,\n    ..Default::default()\n};'}
-  python={'option = UdpOption(iface=Interface.Simulator)'}
-  csharp={'var option = new UdpOption { Iface = Interface.Simulator };'}
+  rust={'let option = UdpOption {\n    iface: Interface::Simulator(SIMULATOR_PORT),\n    ..Default::default()\n};'}
+  python={'option = UdpOption(iface=Interface.Simulator(SIMULATOR_PORT))'}
+  csharp={'var option = new UdpOption { Iface = Interface.Simulator(UdpOption.SimulatorPort) };'}
 />

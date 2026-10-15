@@ -36,7 +36,7 @@ The run continues until Ctrl+C, then prints the summary.
 | `--emulator`          | Run against the in-process UDP device emulator (firmware emulator behind real UDP sockets on `::1`) instead of real devices. Default: off. |
 | `--command <CMD>`     | `pattern` (default), `write-pattern-buffer`, `write-modulation-buffer`, or `nop`. See the table below. |
 | `--interface <NAME>`  | Network interface the devices hang off (`UdpOption.iface`). Omit to pick the one whose devices answer. |
-| `--simulator`         | Connect to the simulator on this host only (`Interface::Simulator`). Without it the simulator is still preferred when it runs. |
+| `--simulator [PORT]`  | Connect to the simulator on this host only, listening on `PORT` (default 44336; `Interface::Simulator(PORT)`). Without it `Interface::Auto` fails when both the simulator and devices answer. |
 | `--server <PORT>`     | Connect through the `autd3-server` on this loopback port (`ServerLink`). The UDP options come from the server, so `--heartbeat` / `--reply-timeout` / `--send-rate-limit` / `--send-buffer` are ignored. |
 | `--devices <N>`       | Device count of the geometry. Default = 1. Opening fails when it does not match the chain. |
 | `--heartbeat <DUR>`   | Heartbeat interval while nothing is sent (`UdpOption.heartbeat`). Default = `10ms`. |

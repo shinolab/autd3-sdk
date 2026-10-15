@@ -6,7 +6,7 @@ pub enum Interface {
     #[default]
     Auto,
     Name(String),
-    Simulator,
+    Simulator(u16),
     Addr(SocketAddrV6),
 }
 
@@ -15,7 +15,7 @@ impl Interface {
     pub fn name(&self) -> Option<&str> {
         match self {
             Interface::Name(name) => Some(name),
-            Interface::Auto | Interface::Simulator | Interface::Addr(_) => None,
+            Interface::Auto | Interface::Simulator(_) | Interface::Addr(_) => None,
         }
     }
 }

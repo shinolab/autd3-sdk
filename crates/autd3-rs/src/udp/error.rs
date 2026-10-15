@@ -13,6 +13,10 @@ pub enum UdpError {
     NoInterfaceFound,
     #[error("AUTD3 devices answered on several destinations ({}); choose one with `iface`", .0.join(", "))]
     AmbiguousInterface(Vec<String>),
+    #[error(
+        "the simulator port must be within 1..=65534 (its control port is port + 1), but {0} was given"
+    )]
+    InvalidSimulatorPort(u16),
     #[error("no simulator answers at {0}")]
     SimulatorNotFound(SocketAddrV6),
     #[error("the server drives AUTD3 devices only and cannot open {0:?}")]

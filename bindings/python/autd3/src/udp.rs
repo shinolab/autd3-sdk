@@ -34,10 +34,10 @@ impl Interface {
         Self(CoreInterface::Auto)
     }
 
-    #[classattr]
+    #[staticmethod]
     #[pyo3(name = "Simulator")]
-    fn simulator() -> Self {
-        Self(CoreInterface::Simulator)
+    fn simulator(port: u16) -> Self {
+        Self(CoreInterface::Simulator(port))
     }
 
     #[staticmethod]
@@ -63,10 +63,17 @@ impl Interface {
         self.0.name()
     }
 
+    fn simulator_port(&self) -> Option<u16> {
+        match self.0 {
+            CoreInterface::Simulator(port) => Some(port),
+            _ => None,
+        }
+    }
+
     fn __repr__(&self) -> String {
         match &self.0 {
             CoreInterface::Name(name) => format!("Interface.Name({name:?})"),
-            CoreInterface::Simulator => "Interface.Simulator".to_owned(),
+            CoreInterface::Simulator(port) => format!("Interface.Simulator({port})"),
             CoreInterface::Addr(addr) => format!("Interface.Addr({:?})", addr.to_string()),
             _ => "Interface.Auto".to_owned(),
         }

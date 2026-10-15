@@ -15,7 +15,7 @@ const DATAGRAM_BYTES_MAX: usize = 8192;
 const ERROR_BACKOFF_MIN: Duration = Duration::from_millis(1);
 const ERROR_BACKOFF_MAX: Duration = Duration::from_secs(1);
 
-pub type Spawn = fn(usize) -> io::Result<UdpEmulator>;
+pub type Spawn = Box<dyn Fn(usize) -> io::Result<UdpEmulator> + Send + Sync>;
 
 pub struct Scene {
     spawn: Spawn,

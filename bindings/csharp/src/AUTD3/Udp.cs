@@ -42,6 +42,8 @@ namespace AUTD3
 
     public readonly struct UdpOption
     {
+        public static readonly ushort SimulatorPort = NativeClient.autd3_params_simulator_port();
+
         private readonly bool _heartbeatSet;
         private readonly TimeSpan? _heartbeat;
 
@@ -138,7 +140,7 @@ namespace AUTD3
             {
                 OptionNative.Apply("iface", Iface switch
                 {
-                    { IsSimulator: true } => NativeClient.autd3_udp_option_set_iface_simulator(handle),
+                    { SimulatorPort: { } port } => NativeClient.autd3_udp_option_set_iface_simulator(handle, port),
                     { AddrValue: { } addr } => NativeClient.autd3_udp_option_set_iface_addr(handle, addr),
                     _ => NativeClient.autd3_udp_option_set_iface(handle, Iface.NameValue),
                 });

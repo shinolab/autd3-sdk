@@ -5,8 +5,15 @@ use clap::Parser;
 pub struct Cli {
     #[arg(long, default_value = None)]
     pub interface: Option<String>,
-    #[arg(long, conflicts_with = "interface")]
-    pub simulator: bool,
+    #[arg(
+        long,
+        value_name = "PORT",
+        num_args = 0..=1,
+        default_missing_value = "44336",
+        conflicts_with = "interface",
+        help = "Connect to the simulator on this host only, listening on PORT (default 44336)"
+    )]
+    pub simulator: Option<u16>,
     #[arg(long, default_value_t = 1)]
     pub devices: usize,
     #[arg(long, default_value_t = 10_000)]

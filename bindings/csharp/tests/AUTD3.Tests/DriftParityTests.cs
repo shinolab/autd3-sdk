@@ -154,7 +154,7 @@ namespace AUTD3.Tests
         {
             _ = Interface.Auto;
             _ = Interface.Name("eth0");
-            _ = Interface.Simulator;
+            _ = Interface.Simulator(44336);
         }
 
         [Fact]

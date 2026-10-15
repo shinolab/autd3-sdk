@@ -1,7 +1,6 @@
 use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6, UdpSocket};
 use std::time::{Duration, Instant};
 
-use autd3_cpu_wire::udp::PORT;
 use autd3_rs_core::geometry::Geometry;
 use autd3_rs_core::simulator::{self, Status};
 
@@ -13,10 +12,19 @@ pub(crate) struct Simulator {
     pub(crate) control: SocketAddrV6,
 }
 
-pub(crate) const SIMULATOR: Simulator = Simulator {
-    group: SocketAddrV6::new(Ipv6Addr::LOCALHOST, PORT, 0, 0),
-    control: SocketAddrV6::new(Ipv6Addr::LOCALHOST, simulator::PORT, 0, 0),
-};
+impl Simulator {
+    pub(crate) const DEFAULT: Self = Self::at(simulator::DEFAULT_PORT).unwrap();
+
+    pub(crate) const fn at(port: u16) -> Option<Self> {
+        let Some(control) = simulator::control_port(port) else {
+            return None;
+        };
+        Some(Self {
+            group: SocketAddrV6::new(Ipv6Addr::LOCALHOST, port, 0, 0),
+            control: SocketAddrV6::new(Ipv6Addr::LOCALHOST, control, 0, 0),
+        })
+    }
+}
 
 pub(crate) fn configure(
     control: SocketAddrV6,

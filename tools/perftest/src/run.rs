@@ -224,10 +224,9 @@ pub async fn run(cli: &Cli) -> Result<RunOutput> {
             ..Default::default()
         },
         None => UdpOption {
-            iface: if cli.simulator {
-                Interface::Simulator
-            } else {
-                cli.interface.clone().into()
+            iface: match cli.simulator {
+                Some(port) => Interface::Simulator(port),
+                None => cli.interface.clone().into(),
             },
             ..Default::default()
         },

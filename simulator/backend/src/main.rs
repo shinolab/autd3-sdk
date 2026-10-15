@@ -10,10 +10,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs_core::rt::{TracingOption, init_tracing};
-use autd3_rs_core::simulator::PORT as CONTROL_PORT;
+use autd3_rs_core::simulator::control_port;
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 use autd3_rs_simulator_protocol::ServerMsg;
 use clap::Parser;
@@ -25,12 +25,13 @@ use crate::server::{AppState, router};
 
 const STATE_PERIOD: Duration = Duration::from_millis(33);
 const DEVICE_STATE_EVERY: u32 = 6;
-const CONTROL: SocketAddrV6 = SocketAddrV6::new(Ipv6Addr::LOCALHOST, CONTROL_PORT, 0, 0);
 
 type JsonReceiver = watch::Receiver<Arc<str>>;
 
 #[derive(Parser)]
 struct Args {
+    #[arg(long, default_value_t = autd3_rs::SIMULATOR_PORT)]
+    port: u16,
     #[arg(long, default_value_t = 8081)]
     http_port: u16,
     #[arg(long)]
@@ -44,16 +45,24 @@ async fn main() -> Result<()> {
 
     let mod_enabled = Arc::new(AtomicBool::new(true));
 
+    let port = args.port;
+    let Some(control_port) = control_port(port) else {
+        bail!(
+            "--port must be within 1..=65534 (the control port is port + 1), but {port} was given"
+        );
+    };
     let scene = Scene::new(
-        UdpEmulator::spawn_simulator,
+        Box::new(move |num_devices| UdpEmulator::spawn_simulator(port, num_devices)),
         &Geometry::new(vec![Autd3::default()]),
     )
     .context("binding the emulated devices; is another simulator running?")?;
-    let control = control::spawn(Arc::clone(&scene), CONTROL)
-        .context("binding the control port; is another simulator running?")?;
+    let control = control::spawn(
+        Arc::clone(&scene),
+        SocketAddrV6::new(Ipv6Addr::LOCALHOST, control_port, 0, 0),
+    )
+    .context("binding the control port; is another simulator running?")?;
     tracing::info!(
-        "emulated devices on [::1]:{}; a client sets the geometry through {control}",
-        autd3_rs::udp::PORT
+        "emulated devices on [::1]:{port}; a client sets the geometry through {control}"
     );
     let geometry_rx = scene.geometry();
     let (state_rx, device_rx) = spawn_sampler(scene, Arc::clone(&mod_enabled))?;

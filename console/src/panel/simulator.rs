@@ -8,18 +8,27 @@ const BIN: &str = "autd3-simulator";
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SimulatorConfig {
+    pub port: u16,
     pub http_port: u16,
 }
 
 impl Default for SimulatorConfig {
     fn default() -> Self {
-        Self { http_port: 8081 }
+        Self {
+            port: 44336,
+            http_port: 8081,
+        }
     }
 }
 
 impl SimulatorConfig {
     fn args(&self) -> Vec<String> {
-        vec!["--http-port".to_string(), self.http_port.to_string()]
+        vec![
+            "--port".to_string(),
+            self.port.to_string(),
+            "--http-port".to_string(),
+            self.http_port.to_string(),
+        ]
     }
 }
 
@@ -48,6 +57,12 @@ impl SimulatorPanel {
             .num_columns(2)
             .spacing([12.0, 6.0])
             .show(ui, |ui| {
+                ui.label("UDP port");
+                ui.add_enabled(
+                    !running,
+                    egui::DragValue::new(&mut self.config.port).range(1..=65534),
+                );
+                ui.end_row();
                 ui.label("HTTP port");
                 ui.add_enabled(
                     !running,
@@ -97,8 +112,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_config_only_names_the_http_port() {
-        assert_eq!(SimulatorConfig::default().args(), ["--http-port", "8081"]);
+    fn the_config_names_the_udp_and_http_ports() {
+        assert_eq!(
+            SimulatorConfig::default().args(),
+            ["--port", "44336", "--http-port", "8081"]
+        );
     }
 
     #[test]
@@ -108,5 +126,6 @@ mod tests {
         )
         .unwrap();
         assert_eq!(config.http_port, 9000);
+        assert_eq!(config.port, 44336);
     }
 }

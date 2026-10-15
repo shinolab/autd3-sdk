@@ -89,9 +89,12 @@ pub enum SimulatorCmd {
         /// Reuse the already built frontend bundle
         #[arg(long)]
         skip_web_build: bool,
+        /// UDP port the emulated devices listen on (the control port is port + 1)
+        #[arg(long, default_value_t = 44336)]
+        port: u16,
         /// Port the frontend is served on
         #[arg(long, default_value_t = 8081)]
-        port: u16,
+        http_port: u16,
     },
     #[command(about = "Fail on known vulnerabilities in the frontend's npm dependencies")]
     Audit,
@@ -135,7 +138,16 @@ pub fn run_simulator(root: &Path, cmd: &SimulatorCmd) -> Result<()> {
             open,
             skip_web_build,
             port,
-        } => run_serve(&sim, &frontend, *debug, *open, *skip_web_build, *port),
+            http_port,
+        } => run_serve(
+            &sim,
+            &frontend,
+            *debug,
+            *open,
+            *skip_web_build,
+            *port,
+            *http_port,
+        ),
         SimulatorCmd::Audit => {
             if !on_path("npm") {
                 bail!("`npm` not found on PATH (needed for `npm audit`).");
@@ -308,6 +320,7 @@ fn run_serve(
     open: bool,
     skip_web_build: bool,
     port: u16,
+    http_port: u16,
 ) -> Result<()> {
     if !skip_web_build {
         build_frontend(frontend, debug)?;
@@ -328,8 +341,8 @@ fn run_serve(
     )?;
     let bin = cargo_bin(sim, None, debug, "autd3-simulator");
 
-    let url = format!("http://127.0.0.1:{port}");
-    println!("simulator UI at {url} (devices on [::1]:44336)");
+    let url = format!("http://127.0.0.1:{http_port}");
+    println!("simulator UI at {url} (devices on [::1]:{port})");
     if open {
         let url = url.clone();
         std::thread::spawn(move || {
@@ -339,8 +352,10 @@ fn run_serve(
     }
 
     let args = [
-        "--http-port".to_string(),
+        "--port".to_string(),
         port.to_string(),
+        "--http-port".to_string(),
+        http_port.to_string(),
         "--web-dir".to_string(),
         public.to_string_lossy().into_owned(),
     ];

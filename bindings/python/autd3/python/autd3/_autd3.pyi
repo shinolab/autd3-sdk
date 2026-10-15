@@ -67,6 +67,7 @@ GRID_X: int
 GRID_Y: int
 ROTATION_NORM_TOLERANCE: float
 SERVER_PORT: int
+SIMULATOR_PORT: int
 PORT: int
 DEVICE_QUEUE_FRAMES: int
 
@@ -191,12 +192,14 @@ class ClientConfig:
 @final
 class Interface:
     Auto: ClassVar[Interface]
-    Simulator: ClassVar[Interface]
+    @staticmethod
+    def Simulator(port: int) -> Interface: ...
     @staticmethod
     def Name(name: str) -> Interface: ...
     @staticmethod
     def Addr(addr: str) -> Interface: ...
     def name(self) -> str | None: ...
+    def simulator_port(self) -> int | None: ...
     def __eq__(self, other: object) -> bool: ...
     def __hash__(self) -> int: ...
 

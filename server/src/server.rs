@@ -352,7 +352,7 @@ pub struct Server {
 impl Server {
     pub fn bind(option: ServerOption) -> Result<Self, ServerError> {
         option.transport.validate()?;
-        if option.transport.iface == Interface::Simulator {
+        if matches!(option.transport.iface, Interface::Simulator(_)) {
             return Err(UdpError::UnsupportedInterface(option.transport.iface).into());
         }
         if !option.listen.ip().is_loopback() {

@@ -84,29 +84,36 @@ fn answers(target: Target, name: &str, response_timeout: Duration) -> bool {
 pub(crate) fn resolve_with(
     iface: &Interface,
     response_timeout: Duration,
-    simulator: Option<Simulator>,
+    allow_simulator: bool,
 ) -> Result<Target, UdpError> {
-    let simulator = simulator.map(Target::simulator);
-    match (iface, simulator) {
-        (Interface::Addr(addr), _) => Ok(Target {
+    match iface {
+        Interface::Addr(addr) => Ok(Target {
             group: *addr,
             scope: (addr.scope_id() != 0).then_some(addr.scope_id()),
             simulator_control: None,
         }),
-        (Interface::Simulator, Some(simulator)) => {
+        Interface::Simulator(_) if !allow_simulator => {
+            Err(UdpError::UnsupportedInterface(iface.clone()))
+        }
+        Interface::Simulator(port) => {
+            let simulator = Simulator::at(*port)
+                .map(Target::simulator)
+                .ok_or(UdpError::InvalidSimulatorPort(*port))?;
             if answers(simulator, "simulator", response_timeout) {
                 Ok(simulator)
             } else {
                 Err(UdpError::SimulatorNotFound(simulator.group))
             }
         }
-        (Interface::Simulator, None) => Err(UdpError::UnsupportedInterface(iface.clone())),
-        (Interface::Name(name), _) => link_local_interfaces()?
+        Interface::Name(name) => link_local_interfaces()?
             .iter()
             .find(|c| c.name == *name)
             .map(Target::interface)
             .ok_or_else(|| UdpError::InterfaceNotFound(name.clone())),
-        _ => resolve_auto(response_timeout, simulator),
+        _ => resolve_auto(
+            response_timeout,
+            allow_simulator.then_some(Target::simulator(Simulator::DEFAULT)),
+        ),
     }
 }
 
@@ -161,7 +168,6 @@ fn pick_one(answering: Vec<(String, Target)>) -> Result<Target, UdpError> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::simulator::SIMULATOR;
     use super::*;
 
     const RESPONSE_TIMEOUT: Duration = Duration::from_millis(50);
@@ -170,9 +176,9 @@ mod tests {
     fn the_address_of_the_simulator_given_directly_is_not_a_simulator() {
         assert_eq!(
             resolve_with(
-                &Interface::Addr(SIMULATOR.group),
+                &Interface::Addr(Simulator::DEFAULT.group),
                 RESPONSE_TIMEOUT,
-                Some(SIMULATOR)
+                true
             )
             .unwrap()
             .simulator_control,
@@ -184,7 +190,7 @@ mod tests {
     fn a_scoped_address_sends_through_its_interface() {
         let scoped = all_nodes(7);
         assert_eq!(
-            resolve_with(&Interface::Addr(scoped), RESPONSE_TIMEOUT, Some(SIMULATOR)).unwrap(),
+            resolve_with(&Interface::Addr(scoped), RESPONSE_TIMEOUT, true).unwrap(),
             Target {
                 group: scoped,
                 scope: Some(7),
@@ -204,14 +210,17 @@ mod tests {
     }
 
     fn simulator() -> (String, Target) {
-        ("simulator".to_owned(), Target::simulator(SIMULATOR))
+        (
+            "simulator".to_owned(),
+            Target::simulator(Simulator::DEFAULT),
+        )
     }
 
     #[test]
     fn auto_picks_the_simulator_when_only_it_answers() {
         assert_eq!(
             pick_one(vec![simulator()]).unwrap(),
-            Target::simulator(SIMULATOR)
+            Target::simulator(Simulator::DEFAULT)
         );
     }
 
@@ -247,8 +256,27 @@ mod tests {
     #[test]
     fn a_bus_for_the_devices_only_refuses_the_simulator() {
         assert!(matches!(
-            resolve_with(&Interface::Simulator, RESPONSE_TIMEOUT, None),
-            Err(UdpError::UnsupportedInterface(Interface::Simulator))
+            resolve_with(&Interface::Simulator(44336), RESPONSE_TIMEOUT, false),
+            Err(UdpError::UnsupportedInterface(Interface::Simulator(44336)))
         ));
+    }
+
+    #[test]
+    fn a_simulator_port_without_a_control_port_is_refused() {
+        for port in [0, u16::MAX] {
+            assert!(matches!(
+                resolve_with(&Interface::Simulator(port), RESPONSE_TIMEOUT, true),
+                Err(UdpError::InvalidSimulatorPort(p)) if p == port
+            ));
+        }
+    }
+
+    #[test]
+    fn the_simulator_at_a_port_controls_through_the_next_port() {
+        let simulator = Simulator::at(50000).unwrap();
+        assert_eq!(simulator.group.port(), 50000);
+        assert_eq!(simulator.control.port(), 50001);
+        assert_eq!(Simulator::DEFAULT.group.port(), 44336);
+        assert_eq!(Simulator::DEFAULT.control.port(), 44337);
     }
 }
