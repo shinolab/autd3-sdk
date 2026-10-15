@@ -42,7 +42,7 @@ A `0` for `send_buffer` raises `ValueError` when the `UdpOption` is built in Pyt
 
 | Value       | Destination                                                                                             |
 | ----------- | ------------------------------------------------------------------------------------------------------- |
-| `Auto`      | The [Simulator](/autd3-sdk/en/guide/simulator/) if it is running, otherwise the network interface on which the devices replied |
+| `Auto`      | The only one that replied among the [Simulator](/autd3-sdk/en/guide/simulator/) and the network interfaces on which devices replied; an error if two or more replied |
 | `Name(..)`  | The real devices connected to the network interface with the given name                                 |
 | `Simulator` | The Simulator only                                                                                      |
 | `Addr(..)`  | The given IPv6 address and port                                                                         |

@@ -127,31 +127,34 @@ fn resolve_auto(response_timeout: Duration, simulator: Option<Target>) -> Result
                 .collect(),
         )
     });
-    let answering: Vec<Candidate> = candidates
+    let answering: Vec<(String, Target)> = simulator
+        .filter(|_| simulator_answered)
+        .map(|simulator| ("simulator".to_owned(), simulator))
         .into_iter()
-        .zip(answered)
-        .filter_map(|(c, answered)| answered.then_some(c))
+        .chain(
+            candidates
+                .iter()
+                .zip(answered)
+                .filter(|&(_, answered)| answered)
+                .map(|(c, _)| (c.name.clone(), Target::interface(c))),
+        )
         .collect();
-    if let Some(simulator) = simulator.filter(|_| simulator_answered) {
-        if answering.is_empty() {
-            tracing::info!(addr = %simulator.group, "found the simulator");
-        } else {
-            tracing::info!(
-                addr = %simulator.group,
-                ignored = ?answering.iter().map(|c| &c.name).collect::<Vec<_>>(),
-                "found the simulator; it takes precedence over the AUTD3 devices that also answered"
-            );
-        }
-        return Ok(simulator);
-    }
+    pick_one(answering)
+}
+
+fn pick_one(answering: Vec<(String, Target)>) -> Result<Target, UdpError> {
     match answering.as_slice() {
         [] => Err(UdpError::NoInterfaceFound),
-        [found] => {
-            tracing::info!(interface = %found.name, "found AUTD3 devices");
-            Ok(Target::interface(found))
+        [(name, target)] => {
+            if target.simulator_control.is_some() {
+                tracing::info!(addr = %target.group, "found the simulator");
+            } else {
+                tracing::info!(interface = %name, "found AUTD3 devices");
+            }
+            Ok(*target)
         }
         _ => Err(UdpError::AmbiguousInterface(
-            answering.into_iter().map(|c| c.name).collect(),
+            answering.into_iter().map(|(name, _)| name).collect(),
         )),
     }
 }
@@ -188,6 +191,57 @@ mod tests {
                 simulator_control: None,
             }
         );
+    }
+
+    fn interface(name: &str, scope: u32) -> (String, Target) {
+        (
+            name.to_owned(),
+            Target::interface(&Candidate {
+                name: name.to_owned(),
+                scope,
+            }),
+        )
+    }
+
+    fn simulator() -> (String, Target) {
+        ("simulator".to_owned(), Target::simulator(SIMULATOR))
+    }
+
+    #[test]
+    fn auto_picks_the_simulator_when_only_it_answers() {
+        assert_eq!(
+            pick_one(vec![simulator()]).unwrap(),
+            Target::simulator(SIMULATOR)
+        );
+    }
+
+    #[test]
+    fn auto_picks_the_interface_when_only_it_answers() {
+        assert_eq!(
+            pick_one(vec![interface("eth0", 3)]).unwrap(),
+            interface("eth0", 3).1
+        );
+    }
+
+    #[test]
+    fn auto_refuses_when_both_the_simulator_and_devices_answer() {
+        assert!(matches!(
+            pick_one(vec![simulator(), interface("eth0", 3)]),
+            Err(UdpError::AmbiguousInterface(names)) if names == ["simulator", "eth0"]
+        ));
+    }
+
+    #[test]
+    fn auto_refuses_when_several_interfaces_answer() {
+        assert!(matches!(
+            pick_one(vec![interface("eth0", 3), interface("eth1", 4)]),
+            Err(UdpError::AmbiguousInterface(names)) if names == ["eth0", "eth1"]
+        ));
+    }
+
+    #[test]
+    fn auto_fails_when_nothing_answers() {
+        assert!(matches!(pick_one(vec![]), Err(UdpError::NoInterfaceFound)));
     }
 
     #[test]

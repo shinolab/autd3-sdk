@@ -20,10 +20,8 @@ import CodeTabs from "@components/CodeTabs.astro";
 
 クライアントは Simulator と同じホストで動かす必要がある.
 
-既定の [`UdpOption`](/autd3-sdk/api/basics/transport-option/) (`iface` が `Auto`) は, Simulator が動いていれば Simulator に, 動いていなければ実機につながる.
-アドレスを指定する必要はない.
-Simulator にしかつなぎたくない場合は, `iface` に `Simulator` を指定すること.
-Simulator を動かしたまま実機につなぐ場合は, `iface` に `Name(..)` で NIC を指定する.
+既定の [`UdpOption`](/autd3-sdk/api/basics/transport-option/) (`iface` が `Auto`) は, 実機がつながっていなければ Simulator につながる.
+Simulator と実機の両方が見つかった場合はエラーになるため, `iface` に `Simulator` を指定するか, `Name(..)` で実機の NIC を指定すること.
 
 <CodeTabs
   rust={'let option = UdpOption {\n    iface: Interface::Simulator,\n    ..Default::default()\n};'}
