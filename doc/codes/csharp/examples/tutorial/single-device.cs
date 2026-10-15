@@ -19,7 +19,7 @@ var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 // Open the client.
 await using var client = await Client.OpenAsync(
     geometry,
-    new TransportOption(),
+    new UdpOption(),
     new ClientConfig()
 );
 

@@ -1,0 +1,36 @@
+[package]
+name = "autd3-rs-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+description = "Standing I/O server that keeps AUTD3 devices enumerated and relays a local client to them."
+
+[lib]
+name = "autd3_rs_server"
+path = "src/lib.rs"
+
+[[bin]]
+name = "autd3-server"
+path = "src/main.rs"
+
+[dependencies]
+autd3-rs = { workspace = true, features = ["logging"] }
+autd3-cpu-wire.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+humantime.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+autd3-rs-firmware-emulator = { workspace = true, features = ["udp"] }
+pollster.workspace = true
+zerocopy.workspace = true
+
+[lints]
+workspace = true

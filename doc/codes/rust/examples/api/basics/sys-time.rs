@@ -1,7 +1,7 @@
 use core::time::Duration;
 
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::udp::TransportOption;
+use autd3_rs::udp::UdpOption;
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 use autd3_rs::value::SysTime;
 use autd3_rs::{Client, ClientConfig};
@@ -10,9 +10,9 @@ use autd3_rs::{Client, ClientConfig};
 async fn main() -> anyhow::Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
     let emulator = UdpEmulator::spawn(geometry.num_devices())?;
-    let option = TransportOption {
+    let option = UdpOption {
         iface: emulator.interface(),
-        ..TransportOption::default()
+        ..UdpOption::default()
     };
     let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
 

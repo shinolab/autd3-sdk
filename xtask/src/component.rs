@@ -22,6 +22,7 @@ pub const COMPONENTS: &[Component] = &[
         include_paths: &[
             "crates/**",
             "tools/**",
+            "server/**",
             "examples/**",
             "bindings/ffi/**",
         ],

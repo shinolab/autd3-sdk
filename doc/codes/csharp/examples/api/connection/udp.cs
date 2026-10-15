@@ -19,7 +19,7 @@ internal static class Sample
         ulong sendBuffer = 8192;
         var timerResolution = TimeSpan.FromMilliseconds(1);
         // ANCHOR: api
-        new TransportOption
+        new UdpOption
         {
             Iface = iface,
             Heartbeat = heartbeat,

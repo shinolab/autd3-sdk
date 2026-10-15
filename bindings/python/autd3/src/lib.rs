@@ -47,7 +47,8 @@ fn _autd3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<client::StreamFuture>()?;
     m.add_class::<client::DeviceStatus>()?;
     m.add_class::<udp::Interface>()?;
-    m.add_class::<udp::TransportOption>()?;
+    m.add_class::<udp::UdpOption>()?;
+    m.add_class::<udp::ServerLink>()?;
     m.add_class::<udp::UdpEmulator>()?;
     m.add_class::<client::FpgaState>()?;
     m.add_class::<client::Telemetry>()?;

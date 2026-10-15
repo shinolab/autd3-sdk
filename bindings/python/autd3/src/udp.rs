@@ -2,8 +2,8 @@ use std::num::NonZeroUsize;
 use std::time::Duration;
 
 use autd3_python_capsule::extract::{duration_to_py, extract_duration};
-use autd3_rs::Interface as CoreInterface;
-use autd3_rs::udp::TransportOption as CoreOption;
+use autd3_rs::udp::UdpOption as CoreOption;
+use autd3_rs::{Interface as CoreInterface, Link, SERVER_PORT, ServerLink as CoreServerLink};
 use autd3_rs_firmware_emulator::udp::UdpEmulator as CoreEmulator;
 use pyo3::exceptions::{PyIndexError, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -92,11 +92,11 @@ fn extract_iface(obj: &Bound<'_, PyAny>) -> PyResult<CoreInterface> {
     ))
 }
 
-#[pyclass(name = "TransportOption", module = "autd3")]
-pub struct TransportOption(pub(crate) CoreOption);
+#[pyclass(name = "UdpOption", module = "autd3")]
+pub struct UdpOption(pub(crate) CoreOption);
 
 #[pymethods]
-impl TransportOption {
+impl UdpOption {
     #[new]
     #[pyo3(signature = (
         iface = CoreInterface::Auto,
@@ -217,6 +217,55 @@ impl TransportOption {
     }
 }
 
+#[pyclass(name = "ServerLink", module = "autd3", eq, frozen, from_py_object)]
+#[derive(Clone, PartialEq)]
+pub struct ServerLink(pub(crate) CoreServerLink);
+
+#[pymethods]
+impl ServerLink {
+    #[new]
+    #[pyo3(signature = (port = SERVER_PORT, timeout = None))]
+    fn new(port: u16, timeout: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
+        let mut inner = CoreServerLink {
+            port,
+            ..CoreServerLink::default()
+        };
+        if let Some(timeout) = opt_duration(timeout)? {
+            if timeout.is_zero() {
+                return Err(PyValueError::new_err("timeout must not be zero"));
+            }
+            inner.timeout = timeout;
+        }
+        Ok(Self(inner))
+    }
+
+    #[getter]
+    fn port(&self) -> u16 {
+        self.0.port
+    }
+
+    #[getter]
+    fn timeout<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        duration_to_py(py, self.0.timeout)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("ServerLink(port={})", self.0.port)
+    }
+}
+
+pub(crate) fn extract_link(obj: &Bound<'_, PyAny>) -> PyResult<Link> {
+    if let Ok(option) = obj.cast::<UdpOption>() {
+        return Ok(Link::Udp(option.borrow().0.clone()));
+    }
+    if let Ok(link) = obj.extract::<ServerLink>() {
+        return Ok(Link::Server(link.0));
+    }
+    Err(PyTypeError::new_err(
+        "link must be a UdpOption or a ServerLink",
+    ))
+}
+
 static EMULATORS: Mutex<Vec<std::sync::Weak<Mutex<Option<CoreEmulator>>>>> = Mutex::new(Vec::new());
 
 pub(crate) fn shutdown_emulators() {
@@ -270,8 +319,8 @@ impl UdpEmulator {
         self.with(CoreEmulator::num_devices)
     }
 
-    fn option(&self) -> PyResult<TransportOption> {
-        self.with(|emulator| TransportOption(CoreOption::for_emulator(emulator.interface())))
+    fn option(&self) -> PyResult<UdpOption> {
+        self.with(|emulator| UdpOption(CoreOption::for_emulator(emulator.interface())))
     }
 
     fn reboot(&self, index: usize) -> PyResult<()> {

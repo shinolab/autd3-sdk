@@ -317,7 +317,7 @@ Linux の既定では 1 宛先のキューの上限 (`unres_qlen_bytes`) と送�
 
 ### Lost からの自動復帰
 
-`TransportOption::recovery_interval` が `Some` のとき, `Lost` の機体がある間, I/O スレッドはその間隔で生存確認 (`Heartbeat`) を 1 個 `ff02::1` へ送る.
+`UdpOption::recovery_interval` が `Some` のとき, `Lost` の機体がある間, I/O スレッドはその間隔で生存確認 (`Heartbeat`) を 1 個 `ff02::1` へ送る.
 マルチキャストは近隣探索を要さないので, 応答しない機体が居ても送信バッファを占めない.
 割当済みのデバイスは `ff02::1` 宛の生存確認にも unicast のときと同じ返信を返し, `UdpBus::recv` は `Lost` の機体のアドレスから割当済み・ID の一致する返信を受けたらその機体を復帰させる.
 再起動した機体は未割当で上がり生存確認に返信しないので, `Lost` のまま残る.

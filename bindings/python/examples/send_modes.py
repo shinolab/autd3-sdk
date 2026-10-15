@@ -30,7 +30,7 @@ async def main() -> None:
 
     async with await autd3.Client.open(
         geometry,
-        autd3.TransportOption(),
+        autd3.UdpOption(),
         autd3.ClientConfig(),
     ) as client:
         await configure(client)

@@ -17,7 +17,7 @@ internal static class Program
         using var logGuard = Tracing.Init(new TracingOption());
 
         using var geometry = new Geometry(new List<Autd3> { new Autd3(Vector3.Zero) });
-        await using var client = await Client.OpenAsync(geometry, new TransportOption(), new ClientConfig());
+        await using var client = await Client.OpenAsync(geometry, new UdpOption(), new ClientConfig());
         using var checker = client.StateChecker();
 
         Console.WriteLine("watching link status — press Ctrl+C to stop");

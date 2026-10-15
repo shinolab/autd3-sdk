@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use autd3_rs::commands::ActivateModulationBank;
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::udp::{TransportOption, UdpError};
+use autd3_rs::udp::{UdpError, UdpOption};
 use autd3_rs::value::{ModulationBank, TransitionMode};
 use autd3_rs::{Client, ClientConfig, Error};
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
@@ -28,16 +28,16 @@ pub fn emulator(num_devices: usize) -> UdpEmulator {
     UdpEmulator::spawn(num_devices).unwrap()
 }
 
-pub fn option(emulator: &UdpEmulator) -> TransportOption {
-    TransportOption {
+pub fn option(emulator: &UdpEmulator) -> UdpOption {
+    UdpOption {
         heartbeat: None,
         lost_timeout: PATIENCE,
-        ..TransportOption::for_emulator(emulator.interface())
+        ..UdpOption::for_emulator(emulator.interface())
     }
 }
 
-pub fn monitoring_option(emulator: &UdpEmulator) -> TransportOption {
-    TransportOption {
+pub fn monitoring_option(emulator: &UdpEmulator) -> UdpOption {
+    UdpOption {
         heartbeat: Some(Duration::from_millis(10)),
         lost_timeout: LOST_TIMEOUT,
         ..option(emulator)
@@ -58,11 +58,7 @@ pub fn patient_config() -> ClientConfig {
     }
 }
 
-pub async fn open_with(
-    emulator: &UdpEmulator,
-    option: &TransportOption,
-    config: ClientConfig,
-) -> Client {
+pub async fn open_with(emulator: &UdpEmulator, option: &UdpOption, config: ClientConfig) -> Client {
     Client::open(&geometry(emulator.num_devices()), option, config)
         .await
         .unwrap()

@@ -252,6 +252,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "autd3-rs-server"
+version = "0.10.1"
+dependencies = [
+ "anyhow",
+ "autd3-cpu-wire",
+ "autd3-rs",
+ "autd3-rs-firmware-emulator",
+ "clap",
+ "humantime",
+ "pollster",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tracing",
+ "zerocopy",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

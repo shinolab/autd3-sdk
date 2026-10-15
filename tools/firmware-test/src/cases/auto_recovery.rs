@@ -4,7 +4,7 @@ use std::time::Instant;
 use anyhow::{Context, Result};
 
 use autd3_rs::commands::{ForceFan, ReleaseFailsafe};
-use autd3_rs::{Client, ClientConfig, DeviceState, StateChecker, TransportOption};
+use autd3_rs::{Client, ClientConfig, DeviceState, StateChecker, UdpOption};
 
 use crate::io::{check, prompt};
 use crate::{Link, describe, restore_gpio_out};
@@ -80,7 +80,7 @@ fn cut_off(count: usize, first: usize) -> Vec<DeviceState> {
 }
 
 async fn open(link: &Link<'_>, config: ClientConfig) -> Result<Client> {
-    let option = TransportOption {
+    let option = UdpOption {
         recovery_interval: Some(RECOVERY_INTERVAL),
         ..link.option.clone()
     };

@@ -14,7 +14,7 @@ internal static class Sample
         var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
 
         // ANCHOR: open
-        var client = await Client.OpenAsync(geometry, new TransportOption(), new ClientConfig());
+        var client = await Client.OpenAsync(geometry, new UdpOption(), new ClientConfig());
         using var checker = client.StateChecker();
         // ANCHOR_END: open
 

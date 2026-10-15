@@ -9,21 +9,23 @@ use zerocopy::FromBytes;
 use crate::commands::operation::{Clear, Distribution, FixedCompletionTime, Synchronize};
 use crate::commands::{Command, Pattern, SetSilencer};
 use crate::datagram::{Datagram, Frame, Frames};
-use crate::error::{Error, PayloadError};
+use crate::error::{Error, NetworkCause, PayloadError};
 use crate::firmware_version::FirmwareVersion;
 use crate::fpga_state::FpgaState;
 use crate::geometry::Geometry;
+use crate::link::Link;
 use crate::protocol::{Cmd, Seq};
 use crate::telemetry::Telemetry;
 use crate::udp::frame_buf::FrameBuf;
-use crate::udp::{Sent, StateChecker, TransportOption, UdpBus, UdpError};
+use crate::udp::{Sent, StateChecker, UdpError};
 use crate::value::{Intensity, SysTime};
 use autd3_rs_core::{BusStats, DeviceClock, DeviceState};
 
 use super::completion::{self, ResponseFuture, StreamFuture};
 use super::config::{ClientConfig, MAX_DEVICES};
-use super::driver::{Driver, Inflight, Shared};
+use super::driver::{Driver, Inflight, Settlement, Shared, sent_devices};
 use super::pool::{Slot, SlotPool};
+use super::transport::{Dispatch, Transport};
 
 #[derive(Clone, Copy, Debug)]
 enum Restoration {
@@ -33,7 +35,7 @@ enum Restoration {
 
 pub struct Controller {
     geometry: Arc<Geometry>,
-    bus: Arc<UdpBus>,
+    transport: Arc<Transport>,
     shared: Arc<Shared>,
     pool: Arc<SlotPool>,
     gate: AsyncMutex<()>,
@@ -47,7 +49,7 @@ pub struct Controller {
 impl Controller {
     pub fn open(
         geometry: &Geometry,
-        option: &TransportOption,
+        link: impl Into<Link>,
         config: ClientConfig,
     ) -> Result<(Self, Driver), Error> {
         let config = config.validate()?;
@@ -59,10 +61,11 @@ impl Controller {
             }
             .into());
         }
-        let bus = Arc::new(UdpBus::open_with_geometry(option, geometry)?);
+        let (transport, port) = Transport::open(&link.into(), geometry)?;
         let shared = Shared::new();
         let driver = Driver::new(
-            Arc::clone(&bus),
+            Arc::clone(&transport),
+            port,
             Arc::clone(&shared),
             config.ack_timeout,
             config.resynchronize_on_recovery.is_some(),
@@ -75,10 +78,10 @@ impl Controller {
             bufs: Mutex::new(vec![FrameBuf::new(); num_devices]),
             config,
             stopped: AsyncMutex::new(false),
-            device_clock: bus.device_clock(),
-            stats: bus.stats(),
+            device_clock: transport.device_clock(),
+            stats: transport.stats(),
             shared,
-            bus,
+            transport,
         };
         Ok((controller, driver))
     }
@@ -114,7 +117,7 @@ impl Controller {
 
     #[must_use]
     pub fn state_checker(&self) -> StateChecker {
-        self.bus.state_checker()
+        self.transport.state_checker()
     }
 
     pub fn device_time_now(&self) -> Result<SysTime, Error> {
@@ -221,7 +224,7 @@ impl Controller {
         if resync | release_failsafe == 0 {
             return Ok(None);
         }
-        let status = self.bus.state_checker().check()?;
+        let status = self.transport.state_checker().check()?;
         let ready = status
             .devices()
             .iter()
@@ -303,7 +306,7 @@ impl Controller {
         };
         tracing::trace!(seq = seq.get(), cmd = ?datagrams[0].cmd, ?dist, "sending frame");
         let (tx, rx) = completion::channel();
-        let msg_id = self.bus.reserve_msg_id();
+        let msg_id = self.transport.reserve_msg_id();
         self.shared.pending().push(Inflight {
             msg_id,
             seq: Some(seq),
@@ -313,62 +316,63 @@ impl Controller {
             slot: Some(slot),
             tx,
         });
-        let sent = {
+        let dispatch = {
             let mut bufs = self.bufs.lock().unwrap_or_else(PoisonError::into_inner);
             match dist {
                 Distribution::Broadcast => {
                     bufs[0].stage(seq, datagrams[0].cmd, datagrams[0].payload());
-                    self.bus.send_broadcast_as(msg_id, bufs[0].as_ref())
+                    self.transport.send(msg_id, true, &bufs)
                 }
                 Distribution::PerDevice => {
                     for (buf, datagram) in bufs.iter_mut().zip(datagrams) {
                         buf.stage(seq, datagram.cmd, datagram.payload());
                     }
-                    self.bus.send_as(msg_id, &bufs)
+                    self.transport.send(msg_id, false, &bufs)
                 }
             }
         };
-        if self.settle(msg_id, sent)? {
+        if self.dispatched(msg_id, dispatch)? {
             self.stats.record_frame();
         }
         Ok(rx)
     }
 
+    fn dispatched(&self, msg_id: u16, dispatch: Dispatch) -> Result<bool, Error> {
+        match dispatch {
+            Dispatch::Settled(sent) => self.settle(msg_id, sent),
+            Dispatch::Deferred => Ok(false),
+            Dispatch::Failed(e) => {
+                drop(self.shared.pending().withdraw(msg_id));
+                Err(Error::Network(NetworkCause::new(e)))
+            }
+        }
+    }
+
     fn settle(&self, msg_id: u16, sent: Result<Sent, UdpError>) -> Result<bool, Error> {
-        let sent = sent.and_then(|sent| match sent.unsent {
-            Some(unsent) => Err(unsent.into()),
-            None => Ok(sent.devices),
-        });
-        let devices = match sent {
-            Ok(devices) => devices,
-            Err(e) => {
-                let mut pending = self.shared.pending();
-                if matches!(e, UdpError::Unsent { .. }) {
-                    pending.need_reset = true;
-                }
-                drop(pending.withdraw(msg_id));
-                return Err(e.into());
-            }
-        };
-        if devices == 0 {
-            if let Some(entry) = self.shared.pending().withdraw(msg_id) {
-                entry.tx.send(Err(Error::Timeout {
-                    timeout: self.config.ack_timeout,
-                }));
-            }
-            return Ok(false);
-        }
-        let (answered, driver_waits_too_long) = {
+        let (settlement, driver_waits_too_long) = {
             let mut pending = self.shared.pending();
-            let answered = pending.sent(msg_id, devices);
-            let driver_waits_too_long =
-                pending.ack_deadline_precedes_driver_wake(msg_id, self.config.ack_timeout);
-            (answered, driver_waits_too_long)
+            let settlement = pending.settle(msg_id, sent_devices(sent));
+            let driver_waits_too_long = matches!(settlement, Settlement::Reached(_))
+                && pending.ack_deadline_precedes_driver_wake(msg_id, self.config.ack_timeout);
+            (settlement, driver_waits_too_long)
         };
-        if let Some(entry) = answered {
-            entry.complete(&self.stats);
+        match settlement {
+            Settlement::Failed(_, e) => return Err(e),
+            Settlement::Unreached(entry) => {
+                if let Some(entry) = entry {
+                    entry.tx.send(Err(Error::Timeout {
+                        timeout: self.config.ack_timeout,
+                    }));
+                }
+                return Ok(false);
+            }
+            Settlement::Reached(answered) => {
+                if let Some(entry) = answered {
+                    entry.complete(&self.stats);
+                }
+            }
         }
-        if driver_waits_too_long && !self.bus.wake() {
+        if driver_waits_too_long && !self.transport.wake() {
             tracing::debug!(
                 msg_id,
                 "could not wake the driver; the ack timeout is noticed at its next deadline"
@@ -379,7 +383,7 @@ impl Controller {
 
     async fn reset(&self) -> Result<(), Error> {
         let recoveries = self.shared.pending().recoveries;
-        self.bus.admit_recovered();
+        self.transport.admit_recovered();
         let stale = self.shared.pending().take_all();
         if !stale.is_empty() {
             tracing::debug!(
@@ -397,7 +401,7 @@ impl Controller {
             }
             tracing::debug!(round, "sending reset");
             let (tx, rx) = completion::channel();
-            let msg_id = self.bus.reserve_msg_id();
+            let msg_id = self.transport.reserve_msg_id();
             self.shared.pending().push(Inflight {
                 msg_id,
                 seq: None,
@@ -407,14 +411,15 @@ impl Controller {
                 slot: None,
                 tx,
             });
-            let sent = {
+            let dispatch = {
                 let mut bufs = self.bufs.lock().unwrap_or_else(PoisonError::into_inner);
                 bufs[0].stage(Seq::ZERO, Cmd::Reset, &[]);
-                self.bus.send_broadcast_as(msg_id, bufs[0].as_ref())
+                self.transport.send(msg_id, true, &bufs)
             };
-            let reached = self.settle(msg_id, sent)?;
+            let deferred = matches!(dispatch, Dispatch::Deferred);
+            let reached = self.dispatched(msg_id, dispatch)?;
             self.stats.record_reset();
-            if !reached {
+            if !(reached || deferred) {
                 return Err(Error::Timeout {
                     timeout: self.config.ack_timeout,
                 });
@@ -540,7 +545,7 @@ impl Controller {
 
     pub(crate) fn shutdown(&self) {
         self.shared.request_stop();
-        if !self.bus.wake() {
+        if !self.transport.wake() {
             tracing::warn!("could not wake the driver; it stops at its next deadline");
         }
     }

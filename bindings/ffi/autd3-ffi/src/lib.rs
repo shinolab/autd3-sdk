@@ -34,8 +34,8 @@ use autd3_rs::value::{
 };
 use autd3_rs::{
     BusStats, Client, ClientConfig, DeviceState, Error, FirmwareVersion, FpgaState, Frames,
-    Geometry, Length, NetworkCause, Point3, Response, ResponseFuture, StreamFuture, Telemetry,
-    UnitVector3, Vector3, Velocity,
+    Geometry, Length, Link, NetworkCause, Point3, Response, ResponseFuture, StreamFuture,
+    Telemetry, UnitVector3, Vector3, Velocity,
 };
 
 pub(crate) fn executor() -> &'static Executor {
@@ -2066,7 +2066,7 @@ fn frame_at(frames: &Frames, index: usize) -> Result<autd3_rs::Frame<'_>, Error>
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_client_open(
     geometry: *const Geometry,
-    option: *mut udp::TransportOptionHandle,
+    option: *mut udp::UdpOptionHandle,
     config: *const ClientConfig,
     cb: CompletionCallback,
     user_data: *mut c_void,
@@ -2075,10 +2075,38 @@ pub unsafe extern "C" fn autd3_client_open(
     let Some(ctx) = CompletionCtx::new(cb, user_data) else {
         return;
     };
-    let Some(udp::TransportOptionHandle(option)) = option else {
+    let Some(udp::UdpOptionHandle(option)) = option else {
         ctx.invalid_argument("null argument");
         return;
     };
+    unsafe { open_client(geometry, Link::Udp(option), config, ctx) };
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_client_open_server(
+    geometry: *const Geometry,
+    link: *mut udp::ServerLinkHandle,
+    config: *const ClientConfig,
+    cb: CompletionCallback,
+    user_data: *mut c_void,
+) {
+    let link = unsafe { take_handle(link) };
+    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
+        return;
+    };
+    let Some(udp::ServerLinkHandle(link)) = link else {
+        ctx.invalid_argument("null argument");
+        return;
+    };
+    unsafe { open_client(geometry, Link::Server(link), config, ctx) };
+}
+
+unsafe fn open_client(
+    geometry: *const Geometry,
+    link: Link,
+    config: *const ClientConfig,
+    ctx: CompletionCtx,
+) {
     let (Some(geometry), Some(config)) = (unsafe { handle_ref(geometry) }, unsafe {
         handle_ref::<ClientConfig>(config)
     }) else {
@@ -2098,7 +2126,7 @@ pub unsafe extern "C" fn autd3_client_open(
     let config = *config;
     spawn_completion(
         ctx,
-        async move { Client::open(&geometry, &option, config).await },
+        async move { Client::open(&geometry, link, config).await },
         |client| into_handle(ClientHandle(Arc::new(client))).cast(),
     );
 }

@@ -96,7 +96,7 @@ def test_time_arguments_accept_only_a_duration(value: object) -> None:
         with pytest.raises(TypeError, match="expected a Duration"):
             autd3.ClientConfig(ack_timeout=loose(value))
         with pytest.raises(TypeError, match="expected a Duration"):
-            autd3.TransportOption(heartbeat=loose(value))
+            autd3.UdpOption(heartbeat=loose(value))
 
 
 @pytest.mark.parametrize(

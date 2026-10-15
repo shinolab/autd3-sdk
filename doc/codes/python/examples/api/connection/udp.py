@@ -1,4 +1,4 @@
-from autd3 import Duration, Interface, TransportOption
+from autd3 import Duration, Interface, UdpOption
 
 
 iface = Interface.Auto
@@ -13,7 +13,7 @@ send_rate_limit = None
 send_buffer = 8192
 timer_resolution = Duration.from_millis(1)
 # ANCHOR: api
-TransportOption(
+UdpOption(
     iface=iface,
     heartbeat=heartbeat,
     reply_timeout=reply_timeout,

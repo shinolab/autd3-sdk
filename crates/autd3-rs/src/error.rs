@@ -99,6 +99,12 @@ impl From<crate::udp::UdpError> for Error {
     }
 }
 
+impl From<crate::link::LinkError> for Error {
+    fn from(e: crate::link::LinkError) -> Self {
+        Error::Network(NetworkCause::new(e))
+    }
+}
+
 impl<E> From<E> for Error
 where
     E: Into<PayloadError>,

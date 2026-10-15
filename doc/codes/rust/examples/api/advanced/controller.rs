@@ -4,12 +4,12 @@ use anyhow::Result;
 
 use autd3_rs::commands::SetSilencer;
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::{ClientConfig, Controller, Driver, Error, TransportOption};
+use autd3_rs::{ClientConfig, Controller, Driver, Error, UdpOption};
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
 const POLL_INTERVAL: Duration = Duration::from_millis(1);
 
-async fn with_run(geometry: &Geometry, option: &TransportOption) -> Result<()> {
+async fn with_run(geometry: &Geometry, option: &UdpOption) -> Result<()> {
     // ANCHOR: run
     let (controller, driver) = Controller::open(geometry, option, ClientConfig::default())?;
     let driving = std::thread::spawn(move || driver.run());
@@ -32,7 +32,7 @@ fn drive(mut driver: Driver) -> Result<(), Error> {
 }
 // ANCHOR_END: poll
 
-async fn with_poll(geometry: &Geometry, option: &TransportOption) -> Result<()> {
+async fn with_poll(geometry: &Geometry, option: &UdpOption) -> Result<()> {
     let (controller, driver) = Controller::open(geometry, option, ClientConfig::default())?;
     let driving = std::thread::spawn(move || drive(driver));
 
@@ -45,7 +45,7 @@ async fn with_poll(geometry: &Geometry, option: &TransportOption) -> Result<()> 
 }
 
 #[cfg(unix)]
-async fn on_single_thread(geometry: &Geometry, option: &TransportOption) -> Result<()> {
+async fn on_single_thread(geometry: &Geometry, option: &UdpOption) -> Result<()> {
     // ANCHOR: single_thread
     #[cfg(unix)]
     async fn drive_on_reactor(mut driver: Driver) -> Result<()> {
@@ -88,7 +88,7 @@ async fn drive_at_interval(mut driver: Driver) -> Result<()> {
 async fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
     let emulator = UdpEmulator::spawn(geometry.num_devices())?;
-    let option = TransportOption::for_emulator(emulator.interface());
+    let option = UdpOption::for_emulator(emulator.interface());
 
     with_run(&geometry, &option).await?;
     println!("run: ok");

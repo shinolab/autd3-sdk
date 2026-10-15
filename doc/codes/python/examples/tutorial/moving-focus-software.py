@@ -4,7 +4,7 @@ import numpy as np
 
 import autd3_modulation as modulation
 import autd3_pattern as pattern
-from autd3 import Client, ClientConfig, TransportOption
+from autd3 import Client, ClientConfig, UdpOption
 from autd3.commands import Pattern, SetSilencer
 from autd3.geometry import Autd3, Geometry
 from autd3.units import m, s
@@ -18,7 +18,7 @@ async def main() -> None:
 
     async with await Client.open(
         geometry,
-        TransportOption(),
+        UdpOption(),
         ClientConfig(),
     ) as client:
         center = geometry.center() + np.array([0.0, 0.0, 150.0])

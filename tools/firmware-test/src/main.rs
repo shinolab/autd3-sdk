@@ -10,7 +10,7 @@ use clap::Parser;
 use autd3_rs::commands::Command;
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::rt::{LogWriter, TracingOption, init_tracing};
-use autd3_rs::{Client, ClientConfig, Error, Frames, Interface, StateChecker, TransportOption};
+use autd3_rs::{Client, ClientConfig, Error, Frames, Interface, StateChecker, UdpOption};
 
 use crate::cli::Cli;
 use crate::io::{check, prompt, wait_enter};
@@ -28,7 +28,7 @@ pub struct Ctx<'a> {
 
 pub struct Link<'a> {
     pub geometry: &'a Geometry,
-    pub option: &'a TransportOption,
+    pub option: &'a UdpOption,
 }
 
 impl Link<'_> {
@@ -163,8 +163,8 @@ async fn run(cli: &Cli) -> Result<()> {
     let geometry = Geometry::new((0..cli.devices).map(|_| Autd3::default()).collect());
     let heartbeat = Duration::from_micros(cli.heartbeat_us);
 
-    let default = TransportOption::default();
-    let option = TransportOption {
+    let default = UdpOption::default();
+    let option = UdpOption {
         iface: if cli.simulator {
             Interface::Simulator
         } else {

@@ -84,23 +84,24 @@ fn answers(target: Target, name: &str, response_timeout: Duration) -> bool {
 pub(crate) fn resolve_with(
     iface: &Interface,
     response_timeout: Duration,
-    simulator: Simulator,
+    simulator: Option<Simulator>,
 ) -> Result<Target, UdpError> {
-    let simulator = Target::simulator(simulator);
-    match iface {
-        Interface::Addr(addr) => Ok(Target {
+    let simulator = simulator.map(Target::simulator);
+    match (iface, simulator) {
+        (Interface::Addr(addr), _) => Ok(Target {
             group: *addr,
             scope: (addr.scope_id() != 0).then_some(addr.scope_id()),
             simulator_control: None,
         }),
-        Interface::Simulator => {
+        (Interface::Simulator, Some(simulator)) => {
             if answers(simulator, "simulator", response_timeout) {
                 Ok(simulator)
             } else {
                 Err(UdpError::SimulatorNotFound(simulator.group))
             }
         }
-        Interface::Name(name) => link_local_interfaces()?
+        (Interface::Simulator, None) => Err(UdpError::UnsupportedInterface(iface.clone())),
+        (Interface::Name(name), _) => link_local_interfaces()?
             .iter()
             .find(|c| c.name == *name)
             .map(Target::interface)
@@ -109,16 +110,17 @@ pub(crate) fn resolve_with(
     }
 }
 
-fn resolve_auto(response_timeout: Duration, simulator: Target) -> Result<Target, UdpError> {
+fn resolve_auto(response_timeout: Duration, simulator: Option<Target>) -> Result<Target, UdpError> {
     let candidates = link_local_interfaces()?;
     let (simulator_answered, answered): (bool, Vec<bool>) = std::thread::scope(|s| {
-        let simulator_probe = s.spawn(move || answers(simulator, "simulator", response_timeout));
+        let simulator_probe = simulator
+            .map(|simulator| s.spawn(move || answers(simulator, "simulator", response_timeout)));
         let probes: Vec<_> = candidates
             .iter()
             .map(|c| s.spawn(move || answers(Target::interface(c), &c.name, response_timeout)))
             .collect();
         (
-            simulator_probe.join().unwrap_or(false),
+            simulator_probe.is_some_and(|probe| probe.join().unwrap_or(false)),
             probes
                 .into_iter()
                 .map(|probe| probe.join().unwrap_or(false))
@@ -130,7 +132,7 @@ fn resolve_auto(response_timeout: Duration, simulator: Target) -> Result<Target,
         .zip(answered)
         .filter_map(|(c, answered)| answered.then_some(c))
         .collect();
-    if simulator_answered {
+    if let Some(simulator) = simulator.filter(|_| simulator_answered) {
         if answering.is_empty() {
             tracing::info!(addr = %simulator.group, "found the simulator");
         } else {
@@ -167,7 +169,7 @@ mod tests {
             resolve_with(
                 &Interface::Addr(SIMULATOR.group),
                 RESPONSE_TIMEOUT,
-                SIMULATOR
+                Some(SIMULATOR)
             )
             .unwrap()
             .simulator_control,
@@ -179,12 +181,20 @@ mod tests {
     fn a_scoped_address_sends_through_its_interface() {
         let scoped = all_nodes(7);
         assert_eq!(
-            resolve_with(&Interface::Addr(scoped), RESPONSE_TIMEOUT, SIMULATOR).unwrap(),
+            resolve_with(&Interface::Addr(scoped), RESPONSE_TIMEOUT, Some(SIMULATOR)).unwrap(),
             Target {
                 group: scoped,
                 scope: Some(7),
                 simulator_control: None,
             }
         );
+    }
+
+    #[test]
+    fn a_bus_for_the_devices_only_refuses_the_simulator() {
+        assert!(matches!(
+            resolve_with(&Interface::Simulator, RESPONSE_TIMEOUT, None),
+            Err(UdpError::UnsupportedInterface(Interface::Simulator))
+        ));
     }
 }

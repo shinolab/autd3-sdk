@@ -3,7 +3,7 @@ mod common;
 use std::time::{Duration, Instant};
 
 use autd3_rs::commands::{ForceFan, Nop};
-use autd3_rs::udp::TransportOption;
+use autd3_rs::udp::UdpOption;
 use autd3_rs::{Client, ClientConfig, DeviceState};
 use autd3_rs_firmware_emulator::test_utils::FpgaEmulatorTestExt;
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
@@ -14,8 +14,8 @@ const ADDR_SYNC_TIME_0: u16 = 0x10;
 const RECOVERY_INTERVAL: Duration = Duration::from_millis(20);
 const POLL_INTERVAL: Duration = Duration::from_millis(5);
 
-fn recovering_option(emulator: &UdpEmulator) -> TransportOption {
-    TransportOption {
+fn recovering_option(emulator: &UdpEmulator) -> UdpOption {
+    UdpOption {
         recovery_interval: Some(RECOVERY_INTERVAL),
         ..monitoring_option(emulator)
     }

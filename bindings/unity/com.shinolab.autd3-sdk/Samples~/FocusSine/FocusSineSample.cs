@@ -11,7 +11,7 @@ namespace AUTD3.Samples
     // local -z, so the focus that the dotnet sample writes as new Vector3(0, 0, 150) is
     // new Vector3(0, 0, -0.15f) here.
     //
-    // The UdpEmulator and its option runs without hardware; swap it for new TransportOption() on a real device.
+    // The UdpEmulator and its option runs without hardware; swap it for new UdpOption() on a real device.
     public sealed class FocusSineSample : MonoBehaviour
     {
         private UdpEmulator _emulator;
