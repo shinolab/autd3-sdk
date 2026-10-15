@@ -18,6 +18,7 @@ COUNTERS = (
     "sync_resync",
     "boot_failure",
     "cpu_watchdog",
+    "exec_late",
 )
 
 

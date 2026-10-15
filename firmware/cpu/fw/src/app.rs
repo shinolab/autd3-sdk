@@ -10,6 +10,7 @@ use crate::proto::{
     Cmd, Disposition, Drained, Error, FrameHeader, PAYLOAD_BYTES, Reply, ReplyData, RxFrame,
 };
 use autd3_cpu_wire::payload::Telemetry;
+use zerocopy::little_endian::U32;
 
 #[repr(C, align(4))]
 struct Slot {
@@ -27,7 +28,11 @@ impl Slot {
             msg_id: Cell::new(0),
             len: Cell::new(0),
             payload: Cell::new([0; PAYLOAD_BYTES]),
-            header: Cell::new(FrameHeader { seq: 0, cmd: 0 }),
+            header: Cell::new(FrameHeader {
+                seq: 0,
+                cmd: 0,
+                exec_at: U32::ZERO,
+            }),
         }
     }
 
@@ -63,6 +68,7 @@ struct Counters {
     dispatch_error: AtomicU32,
     processed: AtomicU32,
     send_failure: AtomicU32,
+    exec_late: AtomicU32,
     failsafe: AtomicU16,
     ptp_unlock_failsafe: AtomicU16,
     boot_failure: AtomicU8,
@@ -77,6 +83,7 @@ impl Counters {
             dispatch_error: AtomicU32::new(0),
             processed: AtomicU32::new(0),
             send_failure: AtomicU32::new(0),
+            exec_late: AtomicU32::new(0),
             failsafe: AtomicU16::new(0),
             ptp_unlock_failsafe: AtomicU16::new(0),
             boot_failure: AtomicU8::new(0),
@@ -90,6 +97,7 @@ impl Counters {
         self.dispatch_error.store(0, Ordering::Relaxed);
         self.processed.store(0, Ordering::Relaxed);
         self.send_failure.store(0, Ordering::Relaxed);
+        self.exec_late.store(0, Ordering::Relaxed);
         self.failsafe.store(0, Ordering::Relaxed);
         self.ptp_unlock_failsafe.store(0, Ordering::Relaxed);
     }
@@ -107,6 +115,7 @@ impl Counters {
             sync_resync,
             boot_failure: self.boot_failure.load(Ordering::Relaxed),
             cpu_watchdog,
+            exec_late: self.exec_late.load(Ordering::Relaxed).into(),
         }
     }
 }
@@ -148,6 +157,8 @@ pub struct Cpu {
 const _: () = assert!(FIFO_DEPTH as usize > autd3_cpu_wire::udp::DEVICE_QUEUE_FRAMES);
 
 type Outcome = Result<ReplyData, Error>;
+
+const NS_PER_MS: u64 = 1_000_000;
 
 impl Default for Cpu {
     fn default() -> Self {
@@ -283,7 +294,9 @@ impl Cpu {
         let Some((header, payload)) = FrameHeader::parse(frame) else {
             return Disposition::Dropped;
         };
-        let FrameHeader { seq, cmd: raw_cmd } = *header;
+        let FrameHeader {
+            seq, cmd: raw_cmd, ..
+        } = *header;
         if seq == self.last_seq.get() && raw_cmd == self.last_cmd.get() {
             bump(&self.counters.dedup);
             let completed_ack = if Cmd::from_u8(raw_cmd) == Some(Cmd::Reset) {
@@ -314,7 +327,11 @@ impl Cpu {
         let Some(tail) = self.fifo.next() else {
             return Drained::Empty;
         };
-        self.slots[Fifo::slot(tail)].load(work);
+        let slot = &self.slots[Fifo::slot(tail)];
+        if !self.is_due(port, slot.header.get().exec_at.get()) {
+            return Drained::Empty;
+        }
+        slot.load(work);
         self.apply_requested_config_reset(port);
         let result = self
             .handle_frame(port, work)
@@ -324,6 +341,26 @@ impl Cpu {
         Drained::Completed {
             msg_id: work.msg_id,
         }
+    }
+
+    fn is_due<P: Port>(&self, port: &mut P, exec_at: u32) -> bool {
+        if exec_at == 0 {
+            return true;
+        }
+        let Some(now) = port.sys_time() else {
+            bump(&self.counters.exec_late);
+            return true;
+        };
+        let late_ms = ((now / NS_PER_MS) as u32)
+            .wrapping_sub(exec_at)
+            .cast_signed();
+        if late_ms < 0 {
+            return false;
+        }
+        if late_ms >= 1 {
+            bump(&self.counters.exec_late);
+        }
+        true
     }
 
     pub fn step<P: Port>(&self, port: &mut P, work: &mut RxFrame, elapsed_ms: u32) -> Drained {
@@ -865,7 +902,7 @@ mod tests {
         let h = Harness::new();
         let frame = Frame::new(0, Cmd::Nop).bytes();
         assert_eq!(
-            h.cpu.recv_frame(&frame[..2], 0x1234),
+            h.cpu.recv_frame(&frame, 0x1234),
             crate::proto::Disposition::Deferred
         );
         let mut port = crate::test_utils::mock::MockPort::new();
@@ -883,8 +920,8 @@ mod tests {
         let h = Harness::new();
         let mut port = crate::test_utils::mock::MockPort::new();
         let mut work = RxFrame::ZERO;
-        let _ = h.cpu.recv_frame(&[0, Cmd::Nop as u8], 0x11);
-        let _ = h.cpu.recv_frame(&[1, Cmd::Nop as u8], 0x22);
+        let _ = h.cpu.recv_frame(&[0, Cmd::Nop as u8, 0, 0, 0, 0], 0x11);
+        let _ = h.cpu.recv_frame(&[1, Cmd::Nop as u8, 0, 0, 0, 0], 0x22);
         assert_eq!(
             h.cpu.step(&mut port, &mut work, 0),
             Drained::Completed { msg_id: 0x11 }
@@ -903,11 +940,11 @@ mod tests {
         let mut h = Harness::new();
         h.deliver(&Frame::new(0, Cmd::Nop));
         assert_eq!(
-            h.cpu.recv_frame(&[0, Cmd::Nop as u8], 1),
+            h.cpu.recv_frame(&[0, Cmd::Nop as u8, 0, 0, 0, 0], 1),
             crate::proto::Disposition::Reply
         );
         assert_eq!(
-            h.cpu.recv_frame(&[7, Cmd::Reset as u8], 2),
+            h.cpu.recv_frame(&[7, Cmd::Reset as u8, 0, 0, 0, 0], 2),
             crate::proto::Disposition::Deferred
         );
         assert!(h.process_one());
@@ -919,19 +956,19 @@ mod tests {
         let mut h = Harness::new();
         h.deliver(&Frame::new(0, Cmd::Nop));
         assert_eq!(
-            h.cpu.recv_frame(&[1, Cmd::Nop as u8], 1),
+            h.cpu.recv_frame(&[1, Cmd::Nop as u8, 0, 0, 0, 0], 1),
             crate::proto::Disposition::Deferred
         );
         assert_eq!(h.ack(), 0);
         assert_eq!(
-            h.cpu.recv_frame(&[1, Cmd::Nop as u8], 1),
+            h.cpu.recv_frame(&[1, Cmd::Nop as u8, 0, 0, 0, 0], 1),
             crate::proto::Disposition::Dropped
         );
         assert_eq!(h.telemetry().dedup, 1);
 
         h.cpu.process_pending(&mut h.port);
         assert_eq!(
-            h.cpu.recv_frame(&[1, Cmd::Nop as u8], 2),
+            h.cpu.recv_frame(&[1, Cmd::Nop as u8, 0, 0, 0, 0], 2),
             crate::proto::Disposition::Reply
         );
         assert_eq!(h.ack(), 1);
@@ -944,18 +981,18 @@ mod tests {
         let mut h = Harness::new();
         h.deliver(&Frame::new(0, Cmd::Nop));
         assert_eq!(
-            h.cpu.recv_frame(&[0, Cmd::Reset as u8], 1),
+            h.cpu.recv_frame(&[0, Cmd::Reset as u8, 0, 0, 0, 0], 1),
             crate::proto::Disposition::Deferred
         );
         assert_eq!(
-            h.cpu.recv_frame(&[0, Cmd::Reset as u8], 2),
+            h.cpu.recv_frame(&[0, Cmd::Reset as u8, 0, 0, 0, 0], 2),
             crate::proto::Disposition::Dropped
         );
         assert_eq!(h.ack(), 0);
 
         h.cpu.process_pending(&mut h.port);
         assert_eq!(
-            h.cpu.recv_frame(&[0, Cmd::Reset as u8], 3),
+            h.cpu.recv_frame(&[0, Cmd::Reset as u8, 0, 0, 0, 0], 3),
             crate::proto::Disposition::Reply
         );
         assert_eq!(h.ack(), 0xFF);
@@ -968,7 +1005,7 @@ mod tests {
         h.deliver(&Frame::new(5, Cmd::Nop));
         assert_eq!(h.ack(), 0);
         assert_eq!(
-            h.cpu.recv_frame(&[5, Cmd::Nop as u8], 1),
+            h.cpu.recv_frame(&[5, Cmd::Nop as u8, 0, 0, 0, 0], 1),
             crate::proto::Disposition::Dropped
         );
         assert_eq!(h.telemetry().seq_mismatch, 1);
@@ -981,7 +1018,7 @@ mod tests {
         h.deliver(&Frame::new(0, Cmd::Reset));
         for msg_id in 1..4 {
             assert_eq!(
-                h.cpu.recv_frame(&[0, Cmd::Reset as u8], msg_id),
+                h.cpu.recv_frame(&[0, Cmd::Reset as u8, 0, 0, 0, 0], msg_id),
                 crate::proto::Disposition::Reply
             );
             assert_eq!(h.ack(), 0xFF);
@@ -996,18 +1033,164 @@ mod tests {
         let capacity = u8::try_from(FIFO_DEPTH - 1).unwrap();
         for seq in 0..capacity {
             assert_eq!(
-                h.cpu.recv_frame(&[seq, Cmd::Nop as u8], 0),
+                h.cpu.recv_frame(&[seq, Cmd::Nop as u8, 0, 0, 0, 0], 0),
                 crate::proto::Disposition::Deferred
             );
         }
         assert_eq!(
-            h.cpu.recv_frame(&[capacity, Cmd::Nop as u8], 0),
+            h.cpu.recv_frame(&[capacity, Cmd::Nop as u8, 0, 0, 0, 0], 0),
             crate::proto::Disposition::Dropped
         );
         assert_eq!(
-            h.cpu.recv_frame(&[0, Cmd::Reset as u8], 0),
+            h.cpu.recv_frame(&[0, Cmd::Reset as u8, 0, 0, 0, 0], 0),
             crate::proto::Disposition::Dropped
         );
+    }
+
+    fn scheduled(seq: u8, exec_at: u32) -> Frame {
+        let mut frame = Frame::new(seq, Cmd::Nop);
+        frame.set_exec_at(exec_at);
+        frame
+    }
+
+    const MS: u64 = 1_000_000;
+
+    #[test]
+    fn a_frame_waits_until_its_exec_at() {
+        let mut h = Harness::new();
+        h.port.sys_time = Some(10 * MS - 1);
+        h.deliver(&scheduled(0, 10));
+        assert_eq!(h.ack(), 0xFF);
+        assert!(!h.process_one());
+
+        h.port.sys_time = Some(10 * MS);
+        assert!(h.process_one());
+        assert_eq!(h.ack(), 0);
+        assert_eq!(h.telemetry().exec_late, 0);
+    }
+
+    #[test]
+    fn a_zero_exec_at_is_processed_without_reading_the_time() {
+        let mut h = Harness::new();
+        h.port.sys_time = None;
+        h.deliver(&scheduled(0, 0));
+        assert_eq!(h.ack(), 0);
+        assert_eq!(h.telemetry().exec_late, 0);
+    }
+
+    #[test]
+    fn a_waiting_frame_holds_back_the_frames_behind_it() {
+        let mut h = Harness::new();
+        h.port.sys_time = Some(0);
+        h.deliver(&scheduled(0, 5));
+        assert_eq!(
+            h.cpu.recv_frame(&scheduled(1, 0).bytes(), 0),
+            Disposition::Deferred
+        );
+        assert!(!h.process_one());
+        assert_eq!(h.ack(), 0xFF);
+
+        h.port.sys_time = Some(5 * MS);
+        h.cpu.process_pending(&mut h.port);
+        assert_eq!(h.ack(), 1);
+    }
+
+    #[test]
+    fn the_main_loop_keeps_ticking_while_a_frame_waits() {
+        let mut h = Harness::new();
+        h.port.sys_time = Some(0);
+        h.deliver(&scheduled(0, 5));
+        let kicks = h.port.watchdog_kicks;
+        let mut work = RxFrame::ZERO;
+        assert_eq!(h.cpu.step(&mut h.port, &mut work, 3), Drained::Empty);
+        assert_eq!(h.port.watchdog_kicks, kicks + 3);
+        assert_eq!(h.ack(), 0xFF);
+    }
+
+    #[test]
+    fn a_frame_processed_a_full_millisecond_after_its_exec_at_is_late() {
+        let mut h = Harness::new();
+        h.port.sys_time = Some(11 * MS - 1);
+        h.deliver(&scheduled(0, 10));
+        assert_eq!(h.telemetry().exec_late, 0);
+
+        h.port.sys_time = Some(12 * MS);
+        h.deliver(&scheduled(1, 11));
+        assert_eq!(h.ack(), 1);
+        assert_eq!(h.telemetry().exec_late, 1);
+    }
+
+    #[test]
+    fn a_frame_is_processed_and_late_when_the_device_time_is_unknown() {
+        let mut h = Harness::new();
+        h.port.sys_time = None;
+        h.deliver(&scheduled(0, 10));
+        assert_eq!(h.ack(), 0);
+        assert_eq!(h.telemetry().exec_late, 1);
+    }
+
+    #[test]
+    fn exec_at_compares_across_the_u32_wraparound() {
+        let mut h = Harness::new();
+        let before_wrap = u64::from(u32::MAX) * MS;
+        h.port.sys_time = Some(before_wrap);
+        h.deliver(&scheduled(0, 1));
+        assert_eq!(h.ack(), 0xFF);
+
+        h.port.sys_time = Some(before_wrap + 2 * MS);
+        assert!(h.process_one());
+        assert_eq!(h.ack(), 0);
+        assert_eq!(h.telemetry().exec_late, 0);
+
+        h.port.sys_time = Some(before_wrap + 2 * MS);
+        h.deliver(&scheduled(1, u32::MAX));
+        assert_eq!(h.ack(), 1);
+        assert_eq!(h.telemetry().exec_late, 1);
+    }
+
+    #[test]
+    fn a_retransmission_of_a_waiting_frame_is_dropped_without_a_reply() {
+        let mut h = Harness::new();
+        h.port.sys_time = Some(0);
+        let frame = scheduled(0, 5);
+        h.deliver(&frame);
+        assert_eq!(h.cpu.recv_frame(&frame.bytes(), 1), Disposition::Dropped);
+        assert_eq!(h.telemetry().dedup, 1);
+
+        h.port.sys_time = Some(5 * MS);
+        assert!(h.process_one());
+        assert!(!h.process_one());
+        assert_eq!(h.ack(), 0);
+    }
+
+    #[test]
+    fn a_reset_behind_a_waiting_frame_waits_for_it() {
+        let mut h = Harness::new();
+        h.port.sys_time = Some(0);
+        h.deliver(&scheduled(0, 5));
+        assert_eq!(
+            h.cpu.recv_frame(&Frame::new(0, Cmd::Reset).bytes(), 0),
+            Disposition::Deferred
+        );
+        assert!(!h.process_one());
+        assert_eq!(h.expected_seq(), 0);
+        assert_eq!(h.ack(), 0xFF);
+
+        h.port.sys_time = Some(5 * MS);
+        h.cpu.process_pending(&mut h.port);
+        assert_eq!(h.expected_seq(), 0);
+        assert_eq!(h.ack(), 0xFF);
+        assert_eq!(h.telemetry().processed, 1);
+    }
+
+    #[test]
+    fn clear_resets_exec_late() {
+        let mut h = Harness::new();
+        h.port.sys_time = None;
+        h.deliver(&scheduled(0, 10));
+        assert_eq!(h.telemetry().exec_late, 1);
+        h.deliver(&Frame::new(1, Cmd::Clear));
+        assert_eq!(h.telemetry().exec_late, 0);
     }
 
     #[test]

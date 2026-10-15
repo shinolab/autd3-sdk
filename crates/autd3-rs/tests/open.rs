@@ -68,6 +68,24 @@ async fn a_zero_ack_timeout_is_rejected() {
 
 #[tokio::test]
 #[ignore = "depends on real time"]
+async fn an_exec_lead_not_below_lost_timeout_is_rejected() {
+    let emulator = emulator(1);
+    let option = option(&emulator);
+    let config = ClientConfig {
+        exec_lead: Some(option.lost_timeout),
+        ..config()
+    };
+
+    let error = open_error(1, &option, config).await;
+
+    assert!(matches!(
+        error,
+        Error::InvalidPayload(PayloadError::ExecLeadNotBelowLostTimeout { .. })
+    ));
+}
+
+#[tokio::test]
+#[ignore = "depends on real time"]
 async fn an_invalid_udp_option_is_rejected() {
     let emulator = emulator(1);
     let option = UdpOption {

@@ -374,9 +374,14 @@ impl Telemetry {
         self.0.cpu_watchdog
     }
 
+    #[getter]
+    fn exec_late(&self) -> u32 {
+        self.0.exec_late
+    }
+
     fn __repr__(&self) -> String {
         format!(
-            "Telemetry(fifo_drop={}, dedup={}, seq_mismatch={}, dispatch_error={}, processed={}, send_failure={}, failsafe={}, ptp_unlock_failsafe={}, sync_resync={}, boot_failure={}, cpu_watchdog={})",
+            "Telemetry(fifo_drop={}, dedup={}, seq_mismatch={}, dispatch_error={}, processed={}, send_failure={}, failsafe={}, ptp_unlock_failsafe={}, sync_resync={}, boot_failure={}, cpu_watchdog={}, exec_late={})",
             self.0.fifo_drop,
             self.0.dedup,
             self.0.seq_mismatch,
@@ -388,6 +393,7 @@ impl Telemetry {
             self.0.sync_resync,
             self.0.boot_failure,
             self.0.cpu_watchdog,
+            self.0.exec_late,
         )
     }
 }

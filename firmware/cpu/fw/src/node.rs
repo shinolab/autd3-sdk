@@ -1099,7 +1099,7 @@ mod tests {
     fn a_short_frame_is_passed_on_without_padding() {
         let mut h = Harness::new();
         h.assign(1);
-        let body = [9, 0x04, 1, 2];
+        let body = [9, 0x04, 0, 0, 0, 0, 1, 2];
         assert_eq!(
             h.send(unit_address(1), Kind::Frame, &body),
             Received::HostMessage

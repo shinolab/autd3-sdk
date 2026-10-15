@@ -82,6 +82,7 @@ fn to_telemetry(telemetry: Telemetry) -> Autd3Telemetry {
         sync_resync: telemetry.sync_resync,
         boot_failure: telemetry.boot_failure,
         cpu_watchdog: telemetry.cpu_watchdog,
+        exec_late: telemetry.exec_late,
     }
 }
 
@@ -441,6 +442,19 @@ pub unsafe extern "C" fn autd3_client_config_set_ack_timeout_ns(
     AUTD3_OK
 }
 
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_client_config_set_exec_lead(
+    config: *mut ClientConfig,
+    has_value: bool,
+    ns: u64,
+) -> i32 {
+    let Some(config) = (unsafe { handle_mut(config) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    config.exec_lead = has_value.then(|| Duration::from_nanos(ns));
+    AUTD3_OK
+}
+
 client_config_setter!(
     autd3_client_config_set_max_inflight,
     max_inflight,
@@ -530,6 +544,22 @@ pub unsafe extern "C" fn autd3_client_config_get_release_failsafe_on_recovery(
                 .map_or(0, NonZeroU32::get),
         )
     }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_client_config_get_exec_lead(
+    config: *const ClientConfig,
+    out_has_value: *mut bool,
+    out: *mut u64,
+) -> i32 {
+    let Some(config) = (unsafe { handle_ref(config) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    let code = unsafe { write_out(out_has_value, config.exec_lead.is_some()) };
+    if code != AUTD3_OK {
+        return code;
+    }
+    unsafe { write_out(out, config.exec_lead.map_or(0, to_ns)) }
 }
 
 #[unsafe(no_mangle)]
@@ -2685,6 +2715,7 @@ mod tests {
             expected.release_failsafe_on_recovery,
             config.release_failsafe_on_recovery
         );
+        assert_eq!(expected.exec_lead, config.exec_lead);
     }
 
     #[test]
@@ -3222,6 +3253,7 @@ mod tests {
         telemetry.failsafe = 0x0708;
         telemetry.boot_failure = 9;
         telemetry.cpu_watchdog = 10;
+        telemetry.exec_late = 0x0B0C_0D0E;
         let array = into_handle(TelemetryArray(vec![
             to_telemetry(Telemetry::default()),
             to_telemetry(telemetry),
@@ -3236,6 +3268,7 @@ mod tests {
         assert_eq!(out.failsafe, 0x0708);
         assert_eq!(out.boot_failure, 9);
         assert_eq!(out.cpu_watchdog, 10);
+        assert_eq!(out.exec_late, 0x0B0C_0D0E);
         assert_eq!(out.fifo_drop, 0);
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
             autd3_telemetry_array_get(array, 2, &raw mut out)
@@ -3373,6 +3406,42 @@ mod tests {
             autd3_client_config_get_release_failsafe_on_recovery(handle, &raw mut release_failsafe)
         });
         assert_eq!(release_failsafe, 2);
+        unsafe { autd3_client_config_free(handle) };
+    }
+
+    #[test]
+    fn the_exec_lead_presence_is_explicit_and_zero_reaches_the_validation() {
+        let handle = autd3_client_config_new();
+        let exec_lead = |handle: *const ClientConfig| {
+            let mut has_value = true;
+            let mut ns = u64::MAX;
+            assert_eq!(AUTD3_OK, unsafe {
+                autd3_client_config_get_exec_lead(handle, &raw mut has_value, &raw mut ns)
+            });
+            has_value.then(|| Duration::from_nanos(ns))
+        };
+        assert_eq!(ClientConfig::default().exec_lead, exec_lead(handle));
+        assert_eq!(exec_lead(handle), None);
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_client_config_set_exec_lead(handle, true, 5_000_000)
+        });
+        assert_eq!(exec_lead(handle), Some(Duration::from_millis(5)));
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_client_config_set_exec_lead(handle, true, 0)
+        });
+        assert_eq!(exec_lead(handle), Some(Duration::ZERO));
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_client_config_set_exec_lead(handle, false, 1)
+        });
+        assert_eq!(exec_lead(handle), None);
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_client_config_set_exec_lead(std::ptr::null_mut(), true, 1)
+        });
+        let mut has_value = false;
+        let mut ns = 0u64;
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_client_config_get_exec_lead(std::ptr::null(), &raw mut has_value, &raw mut ns)
+        });
         unsafe { autd3_client_config_free(handle) };
     }
 

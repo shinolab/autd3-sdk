@@ -4,7 +4,7 @@ use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 use crate::frame::FRAME_BYTES_MAX;
 
 pub const PORT: u16 = 0xAD30;
-pub const PROTOCOL_VERSION: u8 = 2;
+pub const PROTOCOL_VERSION: u8 = 3;
 
 const _: () = assert!(PORT == 44336);
 

@@ -64,12 +64,13 @@ async fn enqueue(&self, dist: Distribution, datagrams: &[Datagram]) -> Result<Re
 let seq = pending.next_seq;                        // 8 bit の通し番号. 0 → 1 → … → 255 → 0
 pending.next_seq = seq.next();
 for (device, buf) in bufs.iter_mut().enumerate() {
-    buf.stage(seq, datagram.cmd, datagram.payload());   // [SEQ, CMD, Payload]
+    buf.stage(seq, datagram.cmd, exec_at, datagram.payload());   // [SEQ, CMD, EXEC_AT, Payload]
 }
 let sent = self.bus.send(&bufs)?;                  // 全デバイスへ unicast. 同じ msg_id
 ```
 
-`FrameBuf` は 1448 byte の固定長バッファと実際の長さの組で, フレームの先頭 2 byte が `Seq` と `Cmd`, 残りがペイロードである.
+`FrameBuf` は 1448 byte の固定長バッファと実際の長さの組で, フレームの先頭 6 byte が `Seq` と `Cmd` と処理時刻 `exec_at`, 残りがペイロードである.
+`exec_at` は `ClientConfig::exec_lead` を指定したときだけ, 送る直前のデバイス時刻の推定値から求めて全デバイスに同じ値を書く (指定しなければ 0).
 ペイロードは `encode` が返した長さのまま送る (末尾の 0 も省かない). デバイスはデータグラムの長さをペイロード長として扱う.
 
 `UdpBus::send` は `Lost` でない全デバイスへ UDP のデータグラムを送り, その呼び出しに割り当てた `msg_id` と実際に送った機体のビットマスクを返す.

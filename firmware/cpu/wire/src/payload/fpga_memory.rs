@@ -112,8 +112,8 @@ mod tests {
     #[test]
     fn a_write_built_by_the_host_fits_in_a_frame() {
         assert!(WriteFpgaMemoryPayload::new(0, 0).is_none());
-        assert!(WriteFpgaMemoryPayload::new(0, 722).is_some());
-        assert!(WriteFpgaMemoryPayload::new(0, 723).is_none());
+        assert!(WriteFpgaMemoryPayload::new(0, 720).is_some());
+        assert!(WriteFpgaMemoryPayload::new(0, 721).is_none());
     }
 
     #[test]

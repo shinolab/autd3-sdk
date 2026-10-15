@@ -1,16 +1,18 @@
+use zerocopy::little_endian::U32;
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
 pub const FRAME_BYTES_MAX: usize = 1448;
 pub const PAYLOAD_BYTES: usize = FRAME_BYTES_MAX - size_of::<FrameHeader>();
 pub const REPLY_DATA_BYTES_MAX: usize = 40;
 
-const _: () = assert!(PAYLOAD_BYTES == 1446);
+const _: () = assert!(PAYLOAD_BYTES == 1442);
 
 #[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned, Clone, Copy)]
 #[repr(C)]
 pub struct FrameHeader {
     pub seq: u8,
     pub cmd: u8,
+    pub exec_at: U32,
 }
 
 impl FrameHeader {

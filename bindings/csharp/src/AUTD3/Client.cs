@@ -147,6 +147,7 @@ namespace AUTD3
         public byte SyncResync { get; }
         public byte BootFailure { get; }
         public byte CpuWatchdog { get; }
+        public uint ExecLate { get; }
 
         internal Telemetry(NativeClient.TelemetryNative native)
         {
@@ -161,18 +162,20 @@ namespace AUTD3
             SyncResync = native.SyncResync;
             BootFailure = native.BootFailure;
             CpuWatchdog = native.CpuWatchdog;
+            ExecLate = native.ExecLate;
         }
 
         public override string ToString() =>
             $"Telemetry {{ FifoDrop = {FifoDrop}, Dedup = {Dedup}, SeqMismatch = {SeqMismatch}, DispatchError = {DispatchError}, " +
             $"Processed = {Processed}, SendFailure = {SendFailure}, Failsafe = {Failsafe}, PtpUnlockFailsafe = {PtpUnlockFailsafe}, " +
-            $"SyncResync = {SyncResync}, BootFailure = {BootFailure}, CpuWatchdog = {CpuWatchdog} }}";
+            $"SyncResync = {SyncResync}, BootFailure = {BootFailure}, CpuWatchdog = {CpuWatchdog}, ExecLate = {ExecLate} }}";
 
         public bool Equals(Telemetry other) =>
             FifoDrop == other.FifoDrop && Dedup == other.Dedup && SeqMismatch == other.SeqMismatch &&
             DispatchError == other.DispatchError && Processed == other.Processed && SendFailure == other.SendFailure &&
             Failsafe == other.Failsafe && PtpUnlockFailsafe == other.PtpUnlockFailsafe &&
-            SyncResync == other.SyncResync && BootFailure == other.BootFailure && CpuWatchdog == other.CpuWatchdog;
+            SyncResync == other.SyncResync && BootFailure == other.BootFailure && CpuWatchdog == other.CpuWatchdog &&
+            ExecLate == other.ExecLate;
 
         public override bool Equals(object? obj) => obj is Telemetry other && Equals(other);
 
@@ -190,6 +193,7 @@ namespace AUTD3
             hash.Add(SyncResync);
             hash.Add(BootFailure);
             hash.Add(CpuWatchdog);
+            hash.Add(ExecLate);
             return hash.ToHashCode();
         }
 

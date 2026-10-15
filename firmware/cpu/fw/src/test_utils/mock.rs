@@ -347,7 +347,7 @@ impl MockPort {
             return;
         };
         self.isr_seen_reply = Some(cpu.reply());
-        let _ = cpu.recv_frame(&[seq, cmd], 0);
+        let _ = cpu.recv_frame(&[seq, cmd, 0, 0, 0, 0], 0);
     }
 }
 
@@ -487,6 +487,7 @@ impl Port for MockPort {
 pub(crate) struct Frame {
     seq: u8,
     cmd: u8,
+    exec_at: u32,
     len: usize,
     payload: Box<[u8; PAYLOAD_BYTES]>,
 }
@@ -500,6 +501,7 @@ impl Frame {
         Self {
             seq,
             cmd,
+            exec_at: 0,
             len: 0,
             payload: Box::new([0; PAYLOAD_BYTES]),
         }
@@ -535,6 +537,10 @@ impl Frame {
         self.len = self.len.max(index + 1);
     }
 
+    pub(crate) fn set_exec_at(&mut self, exec_at: u32) {
+        self.exec_at = exec_at;
+    }
+
     pub(crate) fn set_len(&mut self, len: usize) {
         self.len = len;
     }
@@ -545,6 +551,7 @@ impl Frame {
             FrameHeader {
                 seq: self.seq,
                 cmd: self.cmd,
+                exec_at: self.exec_at.into(),
             }
             .as_bytes(),
         );
