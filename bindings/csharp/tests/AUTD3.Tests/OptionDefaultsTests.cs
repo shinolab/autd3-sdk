@@ -186,6 +186,7 @@ namespace AUTD3.Tests
         [Theory]
         [InlineData(typeof(ClientConfig))]
         [InlineData(typeof(UdpOption))]
+        [InlineData(typeof(ServerLink))]
         [InlineData(typeof(CpuConfig))]
         [InlineData(typeof(PtpConfig))]
         [InlineData(typeof(FociStmOption))]

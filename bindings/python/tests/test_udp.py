@@ -141,9 +141,12 @@ def test_a_server_link_defaults_to_the_well_known_port() -> None:
         5000, autd3.Duration.from_millis(200)
     )
     assert autd3.ServerLink(5000) != autd3.ServerLink()
-    assert repr(autd3.ServerLink(5000)) == "ServerLink(port=5000)"
-    with pytest.raises(ValueError):
-        autd3.ServerLink(timeout=autd3.Duration.from_secs(0))
+    assert repr(autd3.ServerLink(5000)) == "ServerLink(port=5000, timeout=Duration(1s))"
+    assert (
+        repr(autd3.ServerLink(timeout=autd3.Duration.from_millis(200)))
+        == "ServerLink(port=44338, timeout=Duration(200ms))"
+    )
+    assert autd3.ServerLink(timeout=autd3.Duration.from_secs(0)).timeout == autd3.Duration.from_secs(0)
     with pytest.raises(OverflowError):
         autd3.ServerLink(65536)
 
@@ -164,4 +167,13 @@ def test_a_client_without_a_server_fails_at_once() -> None:
         await autd3.Client.open(geometry(1), autd3.ServerLink(port), autd3.ClientConfig())
 
     with pytest.raises(autd3.Autd3Error, match="no server accepts"):
+        asyncio.run(open_client())
+
+
+def test_a_zero_server_timeout_fails_the_open() -> None:
+    async def open_client() -> None:
+        link = autd3.ServerLink(timeout=autd3.Duration.from_secs(0))
+        await autd3.Client.open(geometry(1), link, autd3.ClientConfig())
+
+    with pytest.raises(autd3.Autd3Error, match="must not be zero"):
         asyncio.run(open_client())

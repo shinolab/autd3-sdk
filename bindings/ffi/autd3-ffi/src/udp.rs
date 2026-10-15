@@ -224,9 +224,6 @@ pub unsafe extern "C" fn autd3_server_link_set_timeout_ns(
     let Some(link) = (unsafe { handle_mut(handle) }) else {
         return AUTD3_ERR_INVALID_ARGUMENT;
     };
-    if ns == 0 {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    }
     link.0.timeout = Duration::from_nanos(ns);
     AUTD3_OK
 }
@@ -572,7 +569,7 @@ mod tests {
     }
 
     #[test]
-    fn the_server_link_round_trips_and_rejects_a_zero_timeout() {
+    fn the_server_link_round_trips() {
         let handle = autd3_server_link_new();
         let mut port = 0u16;
         let mut ns = 0u64;
@@ -588,10 +585,6 @@ mod tests {
         assert_eq!(
             unsafe { autd3_server_link_set_timeout_ns(handle, 2_000_000_000) },
             AUTD3_OK
-        );
-        assert_eq!(
-            unsafe { autd3_server_link_set_timeout_ns(handle, 0) },
-            AUTD3_ERR_INVALID_ARGUMENT
         );
         assert_eq!(
             unsafe { autd3_server_link_get_port(handle, &raw mut port) },
@@ -641,6 +634,44 @@ mod tests {
         });
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
         assert_eq!(0, client);
+    }
+
+    #[test]
+    fn a_server_open_with_a_null_geometry_consumes_the_link() {
+        let config = crate::autd3_client_config_new();
+        let live = LIVE_ALLOCATIONS.get();
+        let link = autd3_server_link_new();
+        assert!(live < LIVE_ALLOCATIONS.get());
+        let (code, client) = complete(|cb, user_data| unsafe {
+            crate::autd3_client_open_server(std::ptr::null(), link, config, cb, user_data);
+        });
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
+        assert_eq!(0, client);
+        assert_eq!(live, LIVE_ALLOCATIONS.get());
+        unsafe { crate::autd3_client_config_free(config) };
+    }
+
+    #[test]
+    fn a_zero_server_timeout_fails_the_open_not_the_setter() {
+        let geometry = Geometry::new(vec![Autd3::default()]);
+        let config = crate::autd3_client_config_new();
+        let link = autd3_server_link_new();
+        assert_eq!(
+            unsafe { autd3_server_link_set_timeout_ns(link, 0) },
+            AUTD3_OK
+        );
+        let mut ns = u64::MAX;
+        assert_eq!(
+            unsafe { autd3_server_link_get_timeout_ns(link, &raw mut ns) },
+            AUTD3_OK
+        );
+        assert_eq!(ns, 0);
+        let (code, client) = complete(|cb, user_data| unsafe {
+            crate::autd3_client_open_server(&raw const geometry, link, config, cb, user_data);
+        });
+        assert_eq!(autd3_ffi_abi::AUTD3_ERR_NETWORK, code);
+        assert_eq!(0, client);
+        unsafe { crate::autd3_client_config_free(config) };
     }
 
     #[test]

@@ -134,6 +134,18 @@ impl ServerConfig {
         args
     }
 
+    fn lost_timeout_outlasts_heartbeat(&self) -> bool {
+        let heartbeat_us = match self.heartbeat_us {
+            Setting::Default => DEFAULT_HEARTBEAT_US,
+            Setting::Custom(us) => us,
+            Setting::Off => return true,
+        };
+        self.lost_timeout_ms
+            .unwrap_or(DEFAULT_LOST_TIMEOUT_MS)
+            .saturating_mul(1_000)
+            > heartbeat_us
+    }
+
     fn client_link(&self) -> String {
         format!("ServerLink {{ port: {}, .. }}", self.port)
     }
@@ -198,6 +210,14 @@ impl ServerConfig {
             1,
             " ms",
         );
+        if !self.lost_timeout_outlasts_heartbeat() {
+            ui.label("");
+            ui.colored_label(
+                egui::Color32::LIGHT_RED,
+                "lost timeout must exceed the heartbeat",
+            );
+            ui.end_row();
+        }
 
         ui.label("Send rate limit");
         ui.horizontal(|ui| {
@@ -656,6 +676,21 @@ mod tests {
                 "--no-timer-resolution"
             ]
         );
+    }
+
+    #[test]
+    fn the_lost_timeout_must_outlast_the_heartbeat() {
+        assert!(ServerConfig::default().lost_timeout_outlasts_heartbeat());
+        let config = |heartbeat_us, lost_timeout_ms| ServerConfig {
+            heartbeat_us,
+            lost_timeout_ms,
+            ..ServerConfig::default()
+        };
+        assert!(config(Setting::Custom(19_999), Some(20)).lost_timeout_outlasts_heartbeat());
+        assert!(!config(Setting::Custom(20_000), Some(20)).lost_timeout_outlasts_heartbeat());
+        assert!(!config(Setting::Default, Some(10)).lost_timeout_outlasts_heartbeat());
+        assert!(!config(Setting::Custom(100_000), None).lost_timeout_outlasts_heartbeat());
+        assert!(config(Setting::Off, Some(1)).lost_timeout_outlasts_heartbeat());
     }
 
     #[test]
