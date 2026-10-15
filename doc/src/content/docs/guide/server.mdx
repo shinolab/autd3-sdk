@@ -6,6 +6,10 @@ sidebar:
 ---
 
 import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/api/connection/server-link.rs?raw";
+import pySample from "@codes/python/examples/api/connection/server-link.py?raw";
+import csSample from "@codes/csharp/examples/api/connection/server-link.cs?raw";
 
 `Server` は, 実機との接続をクライアントのプロセスから切り離して保持し続ける常駐プロセス.
 クライアントは同じホスト上の Server へ接続し, Server がデータを実機へ中継する.
@@ -43,7 +47,13 @@ import CodeTabs from "@components/CodeTabs.astro";
 ## 接続
 
 クライアントは Server と同じホストで動かす必要がある.
-接続先に `UdpOption` の代わりに `ServerLink` (ポートは既定で 44338) を渡すこと.
+接続先に `UdpOption` の代わりに `ServerLink` を渡すこと.
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+| フィールド | 型 | デフォルト | 説明 |
+| --- | --- | --- | --- |
+| `port` | `u16` | 44338 | Server のポート |
+| `timeout` | `Duration` | 1 s | 接続を始めてから Server が受け入れるまでの待ち時間. 0 はエラー |
 
 それ以外の使い方は実機へ直接つなぐ場合と同じ.
-

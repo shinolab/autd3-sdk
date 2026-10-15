@@ -17,6 +17,9 @@ import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 import sample from "@codes/rust/examples/api/basics/send.rs?raw";
 import pySample from "@codes/python/examples/api/basics/send.py?raw";
 import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
+import serverSample from "@codes/rust/examples/api/connection/server-link.rs?raw";
+import pyServerSample from "@codes/python/examples/api/connection/server-link.py?raw";
+import csServerSample from "@codes/csharp/examples/api/connection/server-link.cs?raw";
 
 `Client` はコマンドの送信・状態の読み出しを行う中心的なオブジェクト.
 
@@ -24,11 +27,16 @@ import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
 
 <CodeTabs rust={excerpt(open, "api")} python={excerpt(pyOpen, "api")} csharp={excerpt(csOpen, "api")} />
 
-| 引数       | 型             | 説明                   |
-| ---------- | -------------- | ---------------------- |
-| `geometry` | `&Geometry`    | デバイスの物理配置     |
-| `option`   | `&UdpOption` | 接続先と通信の設定 |
-| `config`   | `ClientConfig` | 下記参照               |
+| 引数       | 型                | 説明                                                         |
+| ---------- | ----------------- | ------------------------------------------------------------ |
+| `geometry` | `&Geometry`       | デバイスの物理配置                                           |
+| `link`     | `impl Into<Link>` | 接続先. [`UdpOption`](/autd3-sdk/api/basics/transport-option/) か `ServerLink` |
+| `config`   | `ClientConfig`    | 下記参照                                                     |
+
+`UdpOption` を渡すと実機 (または [Simulator](/autd3-sdk/guide/simulator/)) へ直接つなぐ.
+`ServerLink` を渡すと同じホストで動いている [Server](/autd3-sdk/guide/server/) を経由してつなぐ.
+
+<CodeTabs rust={excerpt(serverSample, "api")} python={excerpt(pyServerSample, "api")} csharp={excerpt(csServerSample, "api")} />
 
 デバイスの稼働状態を継続的に監視したい場合は `Client::state_checker` で取った `StateChecker` を駆動する ([状態監視](/autd3-sdk/guide/state-check/) 参照).
 
