@@ -1,14 +1,49 @@
 use std::io::{BufRead, BufReader, Read};
+use std::num::NonZeroUsize;
 use std::path::Path;
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 
 pub const FINISHED: &str = "[process finished]";
 
+const LOG_CAPACITY: NonZeroUsize = NonZeroUsize::new(10_000).unwrap();
+
+pub struct LogLines {
+    lines: Vec<String>,
+    capacity: NonZeroUsize,
+}
+
+impl LogLines {
+    pub fn new(capacity: NonZeroUsize) -> Self {
+        Self {
+            lines: Vec::new(),
+            capacity,
+        }
+    }
+
+    pub fn push(&mut self, line: String) {
+        let capacity = self.capacity.get();
+        if self.lines.len() >= 2 * capacity {
+            self.lines.drain(..self.lines.len() - capacity);
+        }
+        self.lines.push(line);
+    }
+
+    pub fn as_slice(&self) -> &[String] {
+        &self.lines[self.lines.len().saturating_sub(self.capacity.get())..]
+    }
+}
+
+impl Default for LogLines {
+    fn default() -> Self {
+        Self::new(LOG_CAPACITY)
+    }
+}
+
 pub struct ManagedProcess {
     child: Child,
     rx: Receiver<String>,
-    logs: Vec<String>,
+    logs: LogLines,
     exited: bool,
 }
 
@@ -32,19 +67,27 @@ impl ManagedProcess {
         Ok(Self {
             child,
             rx,
-            logs: Vec::new(),
+            logs: LogLines::default(),
             exited: false,
         })
     }
 
     pub fn pump(&mut self) {
+        self.pump_with(|_| false);
+    }
+
+    pub fn pump_with(&mut self, mut divert: impl FnMut(&str) -> bool) {
         if self.exited {
             return;
         }
         let mut disconnected = false;
         loop {
             match self.rx.try_recv() {
-                Ok(line) => self.logs.push(line),
+                Ok(line) => {
+                    if !divert(&line) {
+                        self.logs.push(line);
+                    }
+                }
                 Err(TryRecvError::Empty) => break,
                 Err(TryRecvError::Disconnected) => {
                     disconnected = true;
@@ -53,7 +96,10 @@ impl ManagedProcess {
             }
         }
         if disconnected && let Ok(Some(status)) = self.child.try_wait() {
-            self.logs.push(exit_marker(status));
+            let marker = exit_marker(status);
+            if !divert(&marker) {
+                self.logs.push(marker);
+            }
             self.exited = true;
         }
     }
@@ -68,7 +114,7 @@ impl ManagedProcess {
     }
 
     pub fn logs(&self) -> &[String] {
-        &self.logs
+        self.logs.as_slice()
     }
 }
 
@@ -105,4 +151,32 @@ fn spawn_reader<R: Read + Send + 'static>(reader: R, tx: Sender<String>) {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_log_never_holds_more_than_its_capacity() {
+        let capacity = NonZeroUsize::new(3).unwrap();
+        let mut logs = LogLines::new(capacity);
+        assert_eq!(logs.as_slice(), [] as [String; 0]);
+        for i in 0..100 {
+            logs.push(i.to_string());
+            assert!(logs.as_slice().len() <= capacity.get());
+            assert!(logs.lines.len() <= 2 * capacity.get());
+            assert_eq!(logs.as_slice().last(), Some(&i.to_string()));
+        }
+        assert_eq!(logs.as_slice(), ["97", "98", "99"]);
+    }
+
+    #[test]
+    fn the_log_keeps_every_line_below_its_capacity() {
+        let mut logs = LogLines::new(NonZeroUsize::new(4).unwrap());
+        for line in ["a", "b", "c"] {
+            logs.push(line.to_string());
+        }
+        assert_eq!(logs.as_slice(), ["a", "b", "c"]);
+    }
 }

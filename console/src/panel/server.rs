@@ -1,7 +1,7 @@
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 
-use crate::process::ManagedProcess;
+use crate::process::{LogLines, ManagedProcess};
 
 const BIN: &str = "autd3-server";
 const DEFAULT_PORT: u16 = 44338;
@@ -395,20 +395,16 @@ fn parse_status(line: &str) -> Option<Status> {
 
 #[derive(Default)]
 struct Output {
-    consumed: usize,
     status: Option<Status>,
-    logs: Vec<String>,
+    logs: LogLines,
 }
 
 impl Output {
-    fn take(&mut self, lines: &[String]) {
-        for line in &lines[self.consumed.min(lines.len())..] {
-            match parse_status(line) {
-                Some(status) => self.status = Some(status),
-                None => self.logs.push(line.clone()),
-            }
+    fn take(&mut self, line: &str) {
+        match parse_status(line) {
+            Some(status) => self.status = Some(status),
+            None => self.logs.push(line.to_string()),
         }
-        self.consumed = lines.len();
     }
 }
 
@@ -431,8 +427,10 @@ fn mark(ui: &mut egui::Ui, good: bool) {
 impl ServerPanel {
     pub fn pump(&mut self) {
         if let Some(proc) = &mut self.proc {
-            proc.pump();
-            self.output.take(proc.logs());
+            proc.pump_with(|line| {
+                self.output.take(line);
+                true
+            });
         }
     }
 
@@ -479,10 +477,11 @@ impl ServerPanel {
             .auto_shrink([false, false])
             .stick_to_bottom(true)
             .show(ui, |ui| {
-                if self.output.logs.is_empty() {
+                let logs = self.output.logs.as_slice();
+                if logs.is_empty() {
                     ui.weak("no output yet");
                 }
-                for line in &self.output.logs {
+                for line in logs {
                     ui.monospace(line);
                 }
             });
@@ -681,6 +680,41 @@ mod tests {
     }
 
     #[test]
+    fn a_long_running_server_keeps_status_lines_out_of_a_bounded_log() {
+        let capacity = std::num::NonZeroUsize::new(5).unwrap();
+        let mut output = Output {
+            status: None,
+            logs: LogLines::new(capacity),
+        };
+        for i in 0..1_000 {
+            output.take(&format!(
+                concat!(
+                    r#"{{"phase":"serving","error":null,"client":null,"#,
+                    r#""relayed":{{"frames":{},"replies":0,"dropped":0}},"#,
+                    r#""bus":{{"heartbeats":0,"missed_heartbeat_replies":0,"recoveries":0}},"#,
+                    r#""units":[]}}"#
+                ),
+                i
+            ));
+            if i % 10 == 0 {
+                output.take(&format!("INFO line {i}"));
+            }
+            assert!(output.logs.as_slice().len() <= capacity.get());
+        }
+        assert_eq!(
+            output.logs.as_slice(),
+            [
+                "INFO line 950",
+                "INFO line 960",
+                "INFO line 970",
+                "INFO line 980",
+                "INFO line 990"
+            ]
+        );
+        assert_eq!(output.status.unwrap().relayed.frames, 999);
+    }
+
+    #[test]
     fn status_lines_feed_the_table_and_the_rest_feeds_the_log() {
         let lines = [
             "INFO enumerating the devices".to_string(),
@@ -695,12 +729,12 @@ mod tests {
             "{not a status".to_string(),
         ];
         let mut output = Output::default();
-        output.take(&lines[..1]);
-        output.take(&lines);
-        output.take(&lines);
+        for line in &lines {
+            output.take(line);
+        }
 
         assert_eq!(
-            output.logs,
+            output.logs.as_slice(),
             ["INFO enumerating the devices", "{not a status"]
         );
         let status = output.status.unwrap();
