@@ -17,6 +17,9 @@ import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 import sample from "@codes/rust/examples/api/basics/send.rs?raw";
 import pySample from "@codes/python/examples/api/basics/send.py?raw";
 import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
+import serverSample from "@codes/rust/examples/api/connection/server-link.rs?raw";
+import pyServerSample from "@codes/python/examples/api/connection/server-link.py?raw";
+import csServerSample from "@codes/csharp/examples/api/connection/server-link.cs?raw";
 
 `Client` is the central object that sends commands and reads state.
 
@@ -24,11 +27,16 @@ import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
 
 <CodeTabs rust={excerpt(open, "api")} python={excerpt(pyOpen, "api")} csharp={excerpt(csOpen, "api")} />
 
-| Parameter  | Type               | Description                        |
-| ---------- | ------------------ | ---------------------------------- |
-| `geometry` | `&Geometry`        | Physical layout of the devices     |
-| `option`   | `&UdpOption` | Destination and transport settings |
-| `config`   | `ClientConfig`     | See below                          |
+| Parameter  | Type              | Description                                                                  |
+| ---------- | ----------------- | ---------------------------------------------------------------------------- |
+| `geometry` | `&Geometry`       | Physical layout of the devices                                               |
+| `link`     | `impl Into<Link>` | Destination. [`UdpOption`](/autd3-sdk/en/api/basics/transport-option/) or `ServerLink` |
+| `config`   | `ClientConfig`    | See below                                                                    |
+
+A `UdpOption` connects to the devices (or the [Simulator](/autd3-sdk/en/guide/simulator/)) directly.
+A `ServerLink` connects through the [Server](/autd3-sdk/en/guide/server/) running on the same host.
+
+<CodeTabs rust={excerpt(serverSample, "api")} python={excerpt(pyServerSample, "api")} csharp={excerpt(csServerSample, "api")} />
 
 To continuously monitor the operating state of the devices, drive the `StateChecker` taken from `Client::state_checker` (see [State Monitoring](/autd3-sdk/en/guide/state-check/)).
 

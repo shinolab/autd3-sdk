@@ -6,11 +6,15 @@ sidebar:
 ---
 
 import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/api/connection/server-link.rs?raw";
+import pySample from "@codes/python/examples/api/connection/server-link.py?raw";
+import csSample from "@codes/csharp/examples/api/connection/server-link.cs?raw";
 
 `Server` is a standing process that keeps the connection to the devices (their ID assignment and time synchronization) alive outside the client process.
 A client connects to the Server on the same host, and the Server relays its data to the devices.
 
-Use it in cases where there are many devices, and the wait time for enumeration and the synchronization each time the client is reopend are problematic.
+Use it in cases where there are many devices, and the wait time for enumeration and the synchronization each time the client is reopened are problematic.
 
 ## Launching
 
@@ -43,7 +47,14 @@ While it runs, a table shows for each device whether it responds, its PTP lock, 
 ## Connecting
 
 The client must run on the same host as the Server.
-Pass a `ServerLink` (port 44338 by default) instead of a `UdpOption`.
+Pass a `ServerLink` instead of a `UdpOption`.
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `port` | `u16` | 44338 | Port of the Server |
+| `timeout` | `Duration` | 1 s | Wait from the start of the connection until the Server accepts it. 0 is an error |
 
 Everything else works as it does when connecting to the devices directly.
 

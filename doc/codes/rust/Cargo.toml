@@ -314,6 +314,10 @@ name = "api_connection_device_emulator"
 path = "examples/api/connection/device-emulator.rs"
 
 [[example]]
+name = "api_connection_server_link"
+path = "examples/api/connection/server-link.rs"
+
+[[example]]
 name = "api_connection_udp"
 path = "examples/api/connection/udp.rs"
 
