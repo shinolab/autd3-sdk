@@ -146,6 +146,7 @@ CPU の診断カウンタ. `Clear` で `boot_failure` 以外は 0 に戻る (`Cl
 | `require_supported_firmware` | `bool`          | `false`             | `true`なら接続時にファームウェアがサポートされているか検査する |
 | `resynchronize_on_recovery` | `Option<NonZeroU32>` | `Some(3)`       | `Lost` から自動復帰したデバイスへ, 次の送信の前に `Synchronize` を送り直す. 値は試行回数の上限で, `None` なら送らない ([状態監視](/autd3-sdk/guide/state-check/) 参照) |
 | `release_failsafe_on_recovery` | `Option<NonZeroU32>` | `Some(3)`    | `Lost` から自動復帰したデバイスへ, 次の送信の前に `ReleaseFailsafe` を送り, フェイルセーフで止まった出力を再開させる. 値は試行回数の上限で, `None` なら送らない ([状態監視](/autd3-sdk/guide/state-check/) 参照) |
+| `exec_lead`           | `Option<Duration>`  | `None` | 送信したフレームを全デバイスが同じ時刻に処理し始めるようにする (後述). `None` で各デバイスが届いた順にすぐ処理する |
 
 `max_inflight` は `MAX_INFLIGHT (7)` (Python: `autd3.params.MAX_INFLIGHT`, C#: `Params.MaxInflight`) を超えるとエラーになる.
 既定値も `MAX_INFLIGHT` で, これは各デバイスの受信キューのフレーム数 `DEVICE_QUEUE_FRAMES` (Python: `autd3.params.DEVICE_QUEUE_FRAMES`, C#: `Params.DeviceQueueFrames`) に等しい.
@@ -153,6 +154,20 @@ CPU の診断カウンタ. `Clear` で `boot_failure` 以外は 0 に戻る (`Cl
 Python の既定値は Rust と同じで, `None` を渡せるのは型が `Option` の `resynchronize_on_recovery` / `release_failsafe_on_recovery` だけである.
 
 再送処理は行われない. 失敗したコマンドはユーザが送り直す必要がある.
+
+### exec_lead
+
+デバイスへ送信は順に 1 台ずつ行われるので, 各デバイスにフレームが届く時刻は少しずつずれる.
+`exec_lead` を指定すると, 送信の際に「デバイスの現在時刻 + `exec_lead`」 を 1 ms 単位に切り上げた時刻を送信し, 各デバイスはその時刻まで処理を待つ.
+これにより, 1 回の送信の内容を全デバイスが同じタイミングで処理し始める.
+
+注意点は以下の通り
+- 必ず全デバイスが同じ時刻に処理を始めることを保証はしない
+  - 送信の完了が `exec_lead` 以内に終わらなければ, 遅れたデバイスは指定時刻を過ぎてから処理する. この回数は `read_telemetry` の `exec_late` で読める.
+  - また, 成功したとしてもCPUボード内部の処理の開始が揃うだけであり, FPGAの処理の開始が揃うこと (すなわち, 出力される超音波の位相の更新タイミングが揃うことなど) は保証しない
+- 送信完了が`exec_lead` だけ遅れる
+- 1 ms 以上でなければならない. また, [`UdpOption`](/autd3-sdk/api/basics/transport-option/) の `lost_timeout` 未満でなければならない
+- `ack_timeout` (既定 10 ms) は `exec_lead` + 1 ms + 処理時間より長くする
 
 ## each
 

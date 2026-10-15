@@ -18,6 +18,7 @@ async def main() -> None:
             require_supported_firmware=False,
             resynchronize_on_recovery=3,
             release_failsafe_on_recovery=3,
+            exec_lead=None,
         )
         # ANCHOR_END: config
     )

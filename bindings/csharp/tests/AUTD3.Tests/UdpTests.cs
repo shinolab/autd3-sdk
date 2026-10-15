@@ -72,6 +72,14 @@ namespace AUTD3.Tests
         }
 
         [Fact]
+        public async Task AZeroExecLeadFailsTheOpenWithTheRustError()
+        {
+            var error = await OpenFails(new UdpOption(), new ClientConfig { ExecLead = TimeSpan.Zero });
+            Assert.Equal(Autd3ErrorCode.InvalidArgument, error.Code);
+            Assert.Contains("exec_lead must be at least", error.Message);
+        }
+
+        [Fact]
         public void ANegativeAckTimeoutIsRejected()
         {
             var config = new ClientConfig { AckTimeout = TimeSpan.FromTicks(-1) };

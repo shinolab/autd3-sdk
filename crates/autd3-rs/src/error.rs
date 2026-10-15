@@ -123,6 +123,15 @@ pub enum PayloadError {
     #[error("ack_timeout must be longer than zero")]
     ZeroAckTimeout,
 
+    #[error("exec_lead must be at least {min:?}, got {got:?}")]
+    ExecLeadTooShort { got: Duration, min: Duration },
+
+    #[error("exec_lead ({exec_lead:?}) must be shorter than lost_timeout ({lost_timeout:?})")]
+    ExecLeadNotBelowLostTimeout {
+        exec_lead: Duration,
+        lost_timeout: Duration,
+    },
+
     #[error("the number of devices must be 1..={max}, got {got}")]
     DeviceCountOutOfRange { got: usize, max: usize },
 

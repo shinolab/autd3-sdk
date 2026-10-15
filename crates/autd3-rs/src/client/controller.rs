@@ -1,6 +1,6 @@
 use std::num::NonZeroU32;
 use std::sync::{Arc, Mutex, PoisonError};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use async_lock::Mutex as AsyncMutex;
 use autd3_cpu_wire::payload::FirmwareInfo;
@@ -16,7 +16,7 @@ use crate::geometry::Geometry;
 use crate::link::Link;
 use crate::protocol::{Cmd, Seq};
 use crate::telemetry::Telemetry;
-use crate::udp::frame_buf::FrameBuf;
+use crate::udp::frame_buf::{self, FrameBuf};
 use crate::udp::{Sent, StateChecker, UdpError};
 use crate::value::{Intensity, SysTime};
 use autd3_rs_core::{BusStats, DeviceClock, DeviceState};
@@ -43,6 +43,7 @@ pub struct Controller {
     config: ClientConfig,
     stopped: AsyncMutex<bool>,
     device_clock: DeviceClock,
+    exec_lead: Option<Duration>,
     stats: BusStats,
 }
 
@@ -61,7 +62,17 @@ impl Controller {
             }
             .into());
         }
-        let (transport, port) = Transport::open(&link.into(), geometry)?;
+        let link = link.into();
+        if let (Some(exec_lead), Link::Udp(option)) = (config.exec_lead, &link)
+            && exec_lead >= option.lost_timeout
+        {
+            return Err(PayloadError::ExecLeadNotBelowLostTimeout {
+                exec_lead,
+                lost_timeout: option.lost_timeout,
+            }
+            .into());
+        }
+        let (transport, port) = Transport::open(&link, geometry)?;
         let shared = Shared::new();
         let driver = Driver::new(
             Arc::clone(&transport),
@@ -79,6 +90,7 @@ impl Controller {
             config,
             stopped: AsyncMutex::new(false),
             device_clock: transport.device_clock(),
+            exec_lead: config.exec_lead,
             stats: transport.stats(),
             shared,
             transport,
@@ -210,7 +222,12 @@ impl Controller {
             };
             self.restore(slot, restoration).await?;
         };
-        self.transmit(slot, dist, datagrams)
+        let exec_at = self.exec_at()?;
+        self.transmit(slot, dist, datagrams, exec_at)
+    }
+
+    fn exec_at(&self) -> Result<u32, Error> {
+        frame_buf::schedule(self.exec_lead, || self.device_clock.now())
     }
 
     fn next_restoration(&self) -> Result<Option<Restoration>, Error> {
@@ -285,7 +302,7 @@ impl Controller {
 
     async fn attempt(&self, slot: Slot, datagrams: &[Datagram]) -> Result<u128, Error> {
         let response = self
-            .transmit(slot, Distribution::PerDevice, datagrams)?
+            .transmit(slot, Distribution::PerDevice, datagrams, 0)?
             .await?;
         response.check()?;
         Ok(response.replied())
@@ -296,6 +313,7 @@ impl Controller {
         mut slot: Slot,
         dist: Distribution,
         datagrams: &[Datagram],
+        exec_at: u32,
     ) -> Result<ResponseFuture, Error> {
         slot.reset();
         let seq = {
@@ -320,12 +338,12 @@ impl Controller {
             let mut bufs = self.bufs.lock().unwrap_or_else(PoisonError::into_inner);
             match dist {
                 Distribution::Broadcast => {
-                    bufs[0].stage(seq, datagrams[0].cmd, datagrams[0].payload());
+                    bufs[0].stage(seq, datagrams[0].cmd, exec_at, datagrams[0].payload());
                     self.transport.send(msg_id, true, &bufs)
                 }
                 Distribution::PerDevice => {
                     for (buf, datagram) in bufs.iter_mut().zip(datagrams) {
-                        buf.stage(seq, datagram.cmd, datagram.payload());
+                        buf.stage(seq, datagram.cmd, exec_at, datagram.payload());
                     }
                     self.transport.send(msg_id, false, &bufs)
                 }
@@ -413,7 +431,7 @@ impl Controller {
             });
             let dispatch = {
                 let mut bufs = self.bufs.lock().unwrap_or_else(PoisonError::into_inner);
-                bufs[0].stage(Seq::ZERO, Cmd::Reset, &[]);
+                bufs[0].stage(Seq::ZERO, Cmd::Reset, 0, &[]);
                 self.transport.send(msg_id, true, &bufs)
             };
             let deferred = matches!(dispatch, Dispatch::Deferred);

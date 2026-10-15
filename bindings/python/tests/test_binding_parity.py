@@ -342,6 +342,18 @@ def test_a_zero_ack_timeout_is_rejected_at_open() -> None:
     assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
 
 
+def test_a_zero_exec_lead_is_rejected_at_open() -> None:
+    config = autd3.ClientConfig(exec_lead=Duration.from_millis(0))
+    assert config.exec_lead == Duration.from_millis(0)
+
+    async def open_client() -> None:
+        await autd3.Client.open(one_device(), autd3.UdpOption(), config)
+
+    with pytest.raises(autd3.Autd3Error, match="exec_lead must be at least") as err:
+        asyncio.run(open_client())
+    assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
+
+
 def test_pattern_functions_reject_a_buffer_for_another_geometry() -> None:
     geometry = one_device()
     two = Geometry([Autd3(), Autd3([Autd3.DEVICE_WIDTH, 0.0, 0.0])])

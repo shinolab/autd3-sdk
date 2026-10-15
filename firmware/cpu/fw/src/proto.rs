@@ -1,6 +1,7 @@
 pub use autd3_cpu_wire::{
     Cmd, Error, FRAME_BYTES_MAX, FrameHeader, PAYLOAD_BYTES, REPLY_DATA_BYTES_MAX, wire_enum_u8,
 };
+use zerocopy::little_endian::U32;
 
 pub const MOD_BUFFER_SAMPLES: u32 = autd3_cpu_wire::layout::MOD_BUFFER_SAMPLES as u32;
 pub const EMISSION_RAM_WORDS: u32 = autd3_cpu_wire::layout::EMISSION_RAM_WORDS as u32;
@@ -26,7 +27,11 @@ impl RxFrame {
         msg_id: 0,
         len: 0,
         payload: [0; PAYLOAD_BYTES],
-        header: FrameHeader { seq: 0, cmd: 0 },
+        header: FrameHeader {
+            seq: 0,
+            cmd: 0,
+            exec_at: U32::ZERO,
+        },
     };
 
     #[must_use]

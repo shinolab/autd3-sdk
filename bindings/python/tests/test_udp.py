@@ -107,6 +107,7 @@ def test_the_client_config_reads_back_its_fields() -> None:
     assert default.require_supported_firmware is False
     assert default.resynchronize_on_recovery == 3
     assert default.release_failsafe_on_recovery == 3
+    assert default.exec_lead is None
 
     config = autd3.ClientConfig(
         ack_timeout=autd3.Duration.from_millis(3),
@@ -115,6 +116,7 @@ def test_the_client_config_reads_back_its_fields() -> None:
         require_supported_firmware=True,
         resynchronize_on_recovery=None,
         release_failsafe_on_recovery=5,
+        exec_lead=autd3.Duration.from_millis(5),
     )
     assert config.resynchronize_on_recovery is None
     assert config.release_failsafe_on_recovery == 5
@@ -122,6 +124,8 @@ def test_the_client_config_reads_back_its_fields() -> None:
     assert config.max_inflight == 2
     assert config.max_resync_rounds == 5
     assert config.require_supported_firmware is True
+    assert config.exec_lead == autd3.Duration.from_millis(5)
+    assert autd3.ClientConfig(exec_lead=None).exec_lead is None
 
 
 def test_the_emulator_option_only_shortens_the_timeouts() -> None:

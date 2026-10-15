@@ -128,7 +128,7 @@ impl Recorder {
             let len = size_of::<FrameHeader>() + payload.len();
             let mut buf = [0u8; FRAME_BYTES_MAX];
             let (header, body) = buf.split_at_mut(size_of::<FrameHeader>());
-            header.copy_from_slice(&[seq.get(), dg.cmd.as_u8()]);
+            header.copy_from_slice(&[seq.get(), dg.cmd.as_u8(), 0, 0, 0, 0]);
             body[..payload.len()].copy_from_slice(payload);
             let status = dev.send(&buf[..len]).status;
             if status != DeviceErrorCode::None && rejected.is_none() {

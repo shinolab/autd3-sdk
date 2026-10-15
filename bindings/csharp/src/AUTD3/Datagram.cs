@@ -14,6 +14,7 @@ namespace AUTD3
         internal static readonly bool RequireSupportedFirmware;
         internal static readonly uint? ResynchronizeOnRecovery;
         internal static readonly uint? ReleaseFailsafeOnRecovery;
+        internal static readonly TimeSpan? ExecLead;
 
         static ClientConfigDefaults()
         {
@@ -33,6 +34,7 @@ namespace AUTD3
                 ResynchronizeOnRecovery = resynchronizeOnRecovery == 0 ? null : resynchronizeOnRecovery;
                 OptionNative.Apply("preset", NativeClient.autd3_client_config_get_release_failsafe_on_recovery(handle, out var releaseFailsafeOnRecovery));
                 ReleaseFailsafeOnRecovery = releaseFailsafeOnRecovery == 0 ? null : releaseFailsafeOnRecovery;
+                ExecLead = OptionNative.GetOptionalDuration(handle, NativeClient.autd3_client_config_get_exec_lead);
             }
             finally
             {
@@ -73,6 +75,17 @@ namespace AUTD3
                 _releaseFailsafeOnRecoverySet = true;
             }
         }
+        private readonly bool _execLeadSet;
+        private readonly TimeSpan? _execLead;
+        public TimeSpan? ExecLead
+        {
+            get => _execLeadSet ? _execLead : ClientConfigDefaults.ExecLead;
+            init
+            {
+                _execLead = value;
+                _execLeadSet = true;
+            }
+        }
 
         internal IntPtr CreateHandle()
         {
@@ -99,6 +112,7 @@ namespace AUTD3
                     0 => -1,
                     { } attempts => NativeClient.autd3_client_config_set_release_failsafe_on_recovery(handle, attempts),
                 });
+                OptionNative.SetOptionalDuration(handle, "execLead", ExecLead, NativeClient.autd3_client_config_set_exec_lead);
             }
             catch
             {

@@ -39,7 +39,11 @@ impl Stranger {
 
     fn occupy_a_queue_slot(&self) {
         let header = Header::new(Kind::Frame, 0);
-        let datagram = [header.as_bytes(), &[FOREIGN_SEQ, Cmd::Nop.as_u8()]].concat();
+        let datagram = [
+            header.as_bytes(),
+            &[FOREIGN_SEQ, Cmd::Nop.as_u8(), 0, 0, 0, 0],
+        ]
+        .concat();
         self.socket.send_to(&datagram, self.unit).unwrap();
         self.wait_until_everything_sent_was_received();
     }

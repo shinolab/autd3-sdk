@@ -21,6 +21,7 @@ impl ClientConfig {
         require_supported_firmware = CoreClientConfig::default().require_supported_firmware,
         resynchronize_on_recovery = CoreClientConfig::default().resynchronize_on_recovery,
         release_failsafe_on_recovery = CoreClientConfig::default().release_failsafe_on_recovery,
+        exec_lead = CoreClientConfig::default().exec_lead,
     ))]
     fn new(
         #[pyo3(from_py_with = extract_duration)] ack_timeout: Duration,
@@ -29,6 +30,7 @@ impl ClientConfig {
         require_supported_firmware: bool,
         resynchronize_on_recovery: Option<NonZeroU32>,
         release_failsafe_on_recovery: Option<NonZeroU32>,
+        #[pyo3(from_py_with = crate::udp::none_or_duration)] exec_lead: Option<Duration>,
     ) -> PyResult<Self> {
         Ok(Self(CoreClientConfig {
             ack_timeout,
@@ -39,6 +41,7 @@ impl ClientConfig {
             require_supported_firmware,
             resynchronize_on_recovery,
             release_failsafe_on_recovery,
+            exec_lead,
         }))
     }
 
@@ -70,5 +73,13 @@ impl ClientConfig {
     #[getter]
     fn release_failsafe_on_recovery(&self) -> Option<NonZeroU32> {
         self.0.release_failsafe_on_recovery
+    }
+
+    #[getter]
+    fn exec_lead<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
+        self.0
+            .exec_lead
+            .map(|lead| autd3_python_capsule::extract::duration_to_py(py, lead))
+            .transpose()
     }
 }
