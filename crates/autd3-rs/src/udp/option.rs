@@ -7,7 +7,7 @@ use super::error::UdpError;
 use super::pacer::MIN_PERCENT;
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct TransportOption {
+pub struct UdpOption {
     pub iface: Interface,
     pub heartbeat: Option<Duration>,
     pub reply_timeout: Duration,
@@ -21,7 +21,7 @@ pub struct TransportOption {
     pub timer_resolution: Option<Duration>,
 }
 
-impl Default for TransportOption {
+impl Default for UdpOption {
     fn default() -> Self {
         Self {
             iface: Interface::Auto,
@@ -39,7 +39,7 @@ impl Default for TransportOption {
     }
 }
 
-impl TransportOption {
+impl UdpOption {
     #[must_use]
     pub fn for_emulator(iface: Interface) -> Self {
         Self {
@@ -100,7 +100,7 @@ mod tests {
 
     #[test]
     fn the_defaults_follow_the_spec() {
-        let option = TransportOption::default();
+        let option = UdpOption::default();
         assert_eq!(option.iface, Interface::Auto);
         assert_eq!(option.heartbeat, Some(Duration::from_millis(10)));
         assert_eq!(option.reply_timeout, Duration::from_millis(1));
@@ -118,16 +118,16 @@ mod tests {
     #[test]
     fn the_emulator_option_only_shortens_the_timeouts() {
         let iface = Interface::Addr("[::1]:44336".parse().unwrap());
-        let option = TransportOption::for_emulator(iface.clone());
+        let option = UdpOption::for_emulator(iface.clone());
         assert_eq!(
             option,
-            TransportOption {
+            UdpOption {
                 iface,
                 reply_timeout: Duration::from_millis(50),
                 response_timeout: Duration::from_millis(50),
                 enumeration_timeout: Duration::from_secs(1),
                 sync_timeout: Duration::from_secs(5),
-                ..TransportOption::default()
+                ..UdpOption::default()
             }
         );
         assert!(option.validate().is_ok());
@@ -135,9 +135,9 @@ mod tests {
 
     #[test]
     fn a_send_rate_limit_outside_the_percent_range_is_rejected() {
-        let with = |percent: f32| TransportOption {
+        let with = |percent: f32| UdpOption {
             send_rate_limit: Some(percent),
-            ..TransportOption::default()
+            ..UdpOption::default()
         };
         assert!(with(MIN_PERCENT).validate().is_ok());
         assert!(with(95.0).validate().is_ok());
@@ -152,44 +152,41 @@ mod tests {
 
     #[rstest]
     #[case::zero_heartbeat(
-        TransportOption {
+        UdpOption {
             heartbeat: Some(Duration::ZERO),
-            ..TransportOption::default()
+            ..UdpOption::default()
         },
         "heartbeat"
     )]
     #[case::zero_reply_timeout(
-        TransportOption {
+        UdpOption {
             reply_timeout: Duration::ZERO,
-            ..TransportOption::default()
+            ..UdpOption::default()
         },
         "reply_timeout"
     )]
     #[case::zero_recovery_interval(
-        TransportOption {
+        UdpOption {
             recovery_interval: Some(Duration::ZERO),
-            ..TransportOption::default()
+            ..UdpOption::default()
         },
         "recovery_interval"
     )]
     #[case::zero_response_timeout(
-        TransportOption {
+        UdpOption {
             response_timeout: Duration::ZERO,
-            ..TransportOption::default()
+            ..UdpOption::default()
         },
         "response_timeout"
     )]
     #[case::sub_millisecond_timer_resolution(
-        TransportOption {
+        UdpOption {
             timer_resolution: Some(Duration::from_micros(999)),
-            ..TransportOption::default()
+            ..UdpOption::default()
         },
         "timer_resolution"
     )]
-    fn a_duration_below_its_minimum_is_rejected(
-        #[case] option: TransportOption,
-        #[case] rejected: &str,
-    ) {
+    fn a_duration_below_its_minimum_is_rejected(#[case] option: UdpOption, #[case] rejected: &str) {
         assert!(matches!(
             option.validate(),
             Err(UdpError::InvalidOption { field, .. }) if field == rejected
@@ -198,7 +195,7 @@ mod tests {
 
     #[test]
     fn the_durations_have_no_upper_bound() {
-        let option = TransportOption {
+        let option = UdpOption {
             heartbeat: Some(Duration::MAX),
             reply_timeout: Duration::MAX,
             lost_timeout: Duration::MAX,
@@ -207,33 +204,33 @@ mod tests {
             enumeration_timeout: Duration::MAX,
             sync_timeout: Duration::MAX,
             timer_resolution: Some(Duration::MAX),
-            ..TransportOption::default()
+            ..UdpOption::default()
         };
         assert!(option.validate().is_ok());
     }
 
     #[test]
     fn a_heartbeat_longer_than_the_default_failsafe_is_allowed() {
-        let option = TransportOption {
+        let option = UdpOption {
             heartbeat: Some(Duration::from_secs(1)),
             lost_timeout: Duration::from_secs(2),
-            ..TransportOption::default()
+            ..UdpOption::default()
         };
         assert!(option.validate().is_ok());
     }
 
     #[test]
     fn a_disabled_heartbeat_is_allowed() {
-        let option = TransportOption {
+        let option = UdpOption {
             heartbeat: None,
             lost_timeout: Duration::from_micros(1),
-            ..TransportOption::default()
+            ..UdpOption::default()
         };
         assert!(option.validate().is_ok());
-        let option = TransportOption {
+        let option = UdpOption {
             heartbeat: None,
             lost_timeout: Duration::ZERO,
-            ..TransportOption::default()
+            ..UdpOption::default()
         };
         assert!(matches!(
             option.validate(),
@@ -246,19 +243,19 @@ mod tests {
 
     #[test]
     fn a_disabled_timer_resolution_is_allowed() {
-        let option = TransportOption {
+        let option = UdpOption {
             timer_resolution: None,
-            ..TransportOption::default()
+            ..UdpOption::default()
         };
         assert!(option.validate().is_ok());
     }
 
     #[test]
     fn the_lost_timeout_must_outlast_the_heartbeat() {
-        let option = TransportOption {
+        let option = UdpOption {
             heartbeat: Some(Duration::from_millis(20)),
             lost_timeout: Duration::from_millis(20),
-            ..TransportOption::default()
+            ..UdpOption::default()
         };
         assert!(matches!(
             option.validate(),
@@ -271,9 +268,9 @@ mod tests {
 
     #[test]
     fn a_zero_enumeration_timeout_is_allowed() {
-        let option = TransportOption {
+        let option = UdpOption {
             enumeration_timeout: Duration::ZERO,
-            ..TransportOption::default()
+            ..UdpOption::default()
         };
         assert!(option.validate().is_ok());
     }

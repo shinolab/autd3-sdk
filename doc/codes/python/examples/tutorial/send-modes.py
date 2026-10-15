@@ -5,7 +5,7 @@ import math
 import numpy as np
 
 import autd3_pattern as pattern
-from autd3 import Client, ClientConfig, Frames, MAX_INFLIGHT, TransportOption
+from autd3 import Client, ClientConfig, Frames, MAX_INFLIGHT, UdpOption
 from autd3.commands import Pattern, SetSilencer
 from autd3.geometry import Autd3, Geometry
 from autd3.units import m, s
@@ -20,7 +20,7 @@ async def main() -> None:
 
     async with await Client.open(
         geometry,
-        TransportOption(),
+        UdpOption(),
         ClientConfig(),
     ) as client:
         await client.send(SetSilencer())

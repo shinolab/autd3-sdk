@@ -258,6 +258,11 @@ pub fn generate_console(root: &Path) -> Result<()> {
     let ota = std::fs::read_to_string(&ota_tmp)
         .with_context(|| format!("reading {}", ota_tmp.display()))?;
 
+    let server_tmp = console.join(".third-party-server.md");
+    about(root, &root.join("server").join("Cargo.toml"), &server_tmp)?;
+    let server = std::fs::read_to_string(&server_tmp)
+        .with_context(|| format!("reading {}", server_tmp.display()))?;
+
     let mut combined =
         std::fs::read_to_string(&out).with_context(|| format!("reading {}", out.display()))?;
     combined.push_str("\n\n---\n\n# Simulator dependencies\n\n");
@@ -266,9 +271,12 @@ pub fn generate_console(root: &Path) -> Result<()> {
     combined.push_str(&firmware);
     combined.push_str("\n\n---\n\n# Firmware OTA tool dependencies\n\n");
     combined.push_str(&ota);
+    combined.push_str("\n\n---\n\n# Server dependencies\n\n");
+    combined.push_str(&server);
     std::fs::write(&out, combined).with_context(|| format!("writing {}", out.display()))?;
     std::fs::remove_file(&firmware_tmp).ok();
     std::fs::remove_file(&ota_tmp).ok();
+    std::fs::remove_file(&server_tmp).ok();
     Ok(())
 }
 

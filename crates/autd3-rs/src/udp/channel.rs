@@ -69,7 +69,7 @@ mod sys {
         )
     }
 
-    pub(super) fn wait_writable(socket: &UdpSocket, timeout: Duration) -> io::Result<()> {
+    pub(crate) fn wait_writable(socket: &impl AsRawFd, timeout: Duration) -> io::Result<()> {
         let mut fd = libc::pollfd {
             fd: socket.as_raw_fd(),
             events: libc::POLLOUT,
@@ -109,7 +109,7 @@ mod sys {
     }
 
     #[allow(clippy::unnecessary_wraps)]
-    pub(super) fn wait_writable(_socket: &UdpSocket, timeout: Duration) -> io::Result<()> {
+    pub(crate) fn wait_writable<S: ?Sized>(_socket: &S, timeout: Duration) -> io::Result<()> {
         std::thread::sleep(timeout.min(RETRY_INTERVAL));
         Ok(())
     }
@@ -124,6 +124,8 @@ mod sys {
         false
     }
 }
+
+pub(crate) use sys::wait_writable;
 
 pub(crate) fn all_nodes(scope: u32) -> SocketAddrV6 {
     SocketAddrV6::new(Ipv6Addr::from(ALL_NODES), PORT, 0, scope)

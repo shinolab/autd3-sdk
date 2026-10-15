@@ -6,7 +6,7 @@ use anyhow::Result;
 
 use autd3_rs::geometry::{Autd3, Geometry, Point3, UnitQuaternion};
 use autd3_rs::rt::{TracingOption, init_tracing};
-use autd3_rs::{Client, ClientConfig, TransportOption};
+use autd3_rs::{Client, ClientConfig, UdpOption};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
@@ -20,12 +20,7 @@ async fn main() -> Result<()> {
         ),
     ]);
 
-    let client = Client::open(
-        &geometry,
-        &TransportOption::default(),
-        ClientConfig::default(),
-    )
-    .await?;
+    let client = Client::open(&geometry, UdpOption::default(), ClientConfig::default()).await?;
 
     println!("devices: {}", client.num_devices());
     for (i, fw) in client.read_firmware_version().await?.iter().enumerate() {

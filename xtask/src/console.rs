@@ -49,6 +49,7 @@ const BINARIES: &[&str] = &[
     "autd3-simulator",
     "autd3-firmware-writer",
     "autd3-firmware-ota",
+    "autd3-server",
 ];
 
 pub fn run_console(root: &Path, cmd: &ConsoleCmd) -> Result<()> {
@@ -115,12 +116,15 @@ fn stage(root: &Path, console_dir: &Path, debug: bool) -> Result<()> {
     )?;
     let ota_bin = cargo_bin(root, target, debug, "autd3-firmware-ota");
 
+    run_cargo(cargo_build_args("autd3-rs-server", target, debug), root)?;
+    let server_bin = cargo_bin(root, target, debug, "autd3-server");
+
     let out_dir = console_dir.join("target").join("distrib");
     if out_dir.exists() {
         std::fs::remove_dir_all(&out_dir)?;
     }
     std::fs::create_dir_all(&out_dir)?;
-    for (bin, name) in [&console_bin, &sim_bin, &fw_bin, &ota_bin]
+    for (bin, name) in [&console_bin, &sim_bin, &fw_bin, &ota_bin, &server_bin]
         .into_iter()
         .zip(BINARIES)
     {

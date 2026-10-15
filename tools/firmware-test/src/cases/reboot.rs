@@ -4,7 +4,7 @@ use std::time::Instant;
 use anyhow::{Context, Result, bail};
 
 use autd3_rs::protocol::{Cmd, Seq};
-use autd3_rs::{Client, DeviceState, TransportOption, UdpBus};
+use autd3_rs::{Client, DeviceState, UdpBus, UdpOption};
 
 use crate::{Link, describe};
 
@@ -70,8 +70,8 @@ fn gone(bus: &UdpBus) -> Result<(bool, Vec<DeviceState>)> {
     }
 }
 
-fn reboot_all(option: &TransportOption, devices: usize) -> Result<(bool, Vec<DeviceState>)> {
-    let option = TransportOption {
+fn reboot_all(option: &UdpOption, devices: usize) -> Result<(bool, Vec<DeviceState>)> {
+    let option = UdpOption {
         lost_timeout: GONE_LOST_TIMEOUT.max(
             option
                 .heartbeat

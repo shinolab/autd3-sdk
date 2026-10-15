@@ -1,13 +1,13 @@
 import asyncio
 
-from autd3 import Client, ClientConfig, Duration, TransportOption
+from autd3 import Client, ClientConfig, Duration, UdpOption
 from autd3.geometry import Autd3, Geometry
 
 
 async def main() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
-    udp = TransportOption()
+    udp = UdpOption()
     option = (
         # ANCHOR: config
         ClientConfig(

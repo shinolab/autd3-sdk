@@ -40,7 +40,7 @@ pub struct Cli {
     #[arg(
         long,
         default_value_t = false,
-        conflicts_with_all = ["interface", "simulator"],
+        conflicts_with_all = ["interface", "simulator", "server"],
         help = "Run against the in-process UDP device emulator instead of real devices \
                 (baseline of the host side; no hardware needed)."
     )]
@@ -58,7 +58,7 @@ pub struct Cli {
     pub command: Command,
     #[arg(
         long,
-        help = "Network interface the devices hang off (maps to TransportOption.iface). \
+        help = "Network interface the devices hang off (maps to UdpOption.iface). \
                 Omit to pick the one whose devices answer."
     )]
     pub interface: Option<String>,
@@ -71,6 +71,14 @@ pub struct Cli {
     pub simulator: bool,
     #[arg(
         long,
+        conflicts_with_all = ["interface", "simulator"],
+        help = "Connect through the autd3-server listening on this loopback port (maps to ServerLink.port). \
+                The UDP options then come from the server; --heartbeat, --reply-timeout, \
+                --send-rate-limit and --send-buffer are ignored."
+    )]
+    pub server: Option<u16>,
+    #[arg(
+        long,
         default_value_t = NonZeroUsize::MIN,
         help = "Device count of the geometry. Opening fails when it does not match the chain."
     )]
@@ -79,25 +87,25 @@ pub struct Cli {
         long,
         value_parser = humantime::parse_duration,
         default_value = DEFAULT_HEARTBEAT,
-        help = "Heartbeat interval while nothing is sent, e.g. 10ms (maps to TransportOption.heartbeat)."
+        help = "Heartbeat interval while nothing is sent, e.g. 10ms (maps to UdpOption.heartbeat)."
     )]
     pub heartbeat: Duration,
     #[arg(
         long = "reply-timeout",
         value_parser = humantime::parse_duration,
-        help = "How long a heartbeat waits for every reply (maps to TransportOption.reply_timeout). \
+        help = "How long a heartbeat waits for every reply (maps to UdpOption.reply_timeout). \
                 Omit to keep the library default."
     )]
     pub reply_timeout: Option<Duration>,
     #[arg(
         long = "send-rate-limit",
         help = "Cap on the line occupancy of the sends in percent of the device link speed, e.g. 95 \
-                (maps to TransportOption.send_rate_limit). Omit to send without a limit."
+                (maps to UdpOption.send_rate_limit). Omit to send without a limit."
     )]
     pub send_rate_limit: Option<f32>,
     #[arg(
         long = "send-buffer",
-        help = "Socket send buffer in bytes (maps to TransportOption.send_buffer). 0 keeps the OS \
+        help = "Socket send buffer in bytes (maps to UdpOption.send_buffer). 0 keeps the OS \
                 default. Omit to use the library default."
     )]
     pub send_buffer: Option<usize>,

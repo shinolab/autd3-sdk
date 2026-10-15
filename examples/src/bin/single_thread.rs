@@ -5,7 +5,7 @@ use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::{Intensity, SamplingConfig};
-use autd3_rs::{ClientConfig, Controller, Driver, TransportOption};
+use autd3_rs::{ClientConfig, Controller, Driver, UdpOption};
 
 #[cfg(unix)]
 async fn drive(mut driver: Driver) -> Result<()> {
@@ -39,11 +39,8 @@ async fn main() -> Result<()> {
 
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let (controller, driver) = Controller::open(
-        &geometry,
-        &TransportOption::default(),
-        ClientConfig::default(),
-    )?;
+    let (controller, driver) =
+        Controller::open(&geometry, UdpOption::default(), ClientConfig::default())?;
     let driving = tokio::spawn(drive(driver));
     controller.initialize().await?;
 

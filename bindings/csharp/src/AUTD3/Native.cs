@@ -18,82 +18,82 @@ namespace AUTD3
         private static extern uint autd3_abi_version();
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_transport_option_new();
+        internal static extern IntPtr autd3_udp_option_new();
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_set_iface(IntPtr option, [MarshalAs(UnmanagedType.LPUTF8Str)] string? interfaceName);
+        internal static extern int autd3_udp_option_set_iface(IntPtr option, [MarshalAs(UnmanagedType.LPUTF8Str)] string? interfaceName);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_set_iface_simulator(IntPtr option);
+        internal static extern int autd3_udp_option_set_iface_simulator(IntPtr option);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_set_iface_addr(IntPtr option, [MarshalAs(UnmanagedType.LPUTF8Str)] string addr);
+        internal static extern int autd3_udp_option_set_iface_addr(IntPtr option, [MarshalAs(UnmanagedType.LPUTF8Str)] string addr);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_get_iface_addr(IntPtr option, out IntPtr addr);
+        internal static extern int autd3_udp_option_get_iface_addr(IntPtr option, out IntPtr addr);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_set_heartbeat(IntPtr option, ulong ns);
+        internal static extern int autd3_udp_option_set_heartbeat(IntPtr option, ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_get_heartbeat(IntPtr option, out ulong ns);
+        internal static extern int autd3_udp_option_get_heartbeat(IntPtr option, out ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_set_recovery_interval(IntPtr option, ulong ns);
+        internal static extern int autd3_udp_option_set_recovery_interval(IntPtr option, ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_get_recovery_interval(IntPtr option, out ulong ns);
+        internal static extern int autd3_udp_option_get_recovery_interval(IntPtr option, out ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_set_timer_resolution(IntPtr option, ulong ns);
+        internal static extern int autd3_udp_option_set_timer_resolution(IntPtr option, ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_get_timer_resolution(IntPtr option, out ulong ns);
+        internal static extern int autd3_udp_option_get_timer_resolution(IntPtr option, out ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_set_send_buffer(IntPtr option, ulong bytes);
+        internal static extern int autd3_udp_option_set_send_buffer(IntPtr option, ulong bytes);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_get_send_buffer(IntPtr option, out ulong bytes);
+        internal static extern int autd3_udp_option_get_send_buffer(IntPtr option, out ulong bytes);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_set_send_rate_limit(IntPtr option, float percent);
+        internal static extern int autd3_udp_option_set_send_rate_limit(IntPtr option, float percent);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_get_send_rate_limit(IntPtr option, out float percent);
+        internal static extern int autd3_udp_option_get_send_rate_limit(IntPtr option, out float percent);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_set_reply_timeout(IntPtr option, ulong ns);
+        internal static extern int autd3_udp_option_set_reply_timeout(IntPtr option, ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_get_reply_timeout(IntPtr option, out ulong ns);
+        internal static extern int autd3_udp_option_get_reply_timeout(IntPtr option, out ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_set_lost_timeout(IntPtr option, ulong ns);
+        internal static extern int autd3_udp_option_set_lost_timeout(IntPtr option, ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_get_lost_timeout(IntPtr option, out ulong ns);
+        internal static extern int autd3_udp_option_get_lost_timeout(IntPtr option, out ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_set_response_timeout(IntPtr option, ulong ns);
+        internal static extern int autd3_udp_option_set_response_timeout(IntPtr option, ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_get_response_timeout(IntPtr option, out ulong ns);
+        internal static extern int autd3_udp_option_get_response_timeout(IntPtr option, out ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_set_enumeration_timeout(IntPtr option, ulong ns);
+        internal static extern int autd3_udp_option_set_enumeration_timeout(IntPtr option, ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_get_enumeration_timeout(IntPtr option, out ulong ns);
+        internal static extern int autd3_udp_option_get_enumeration_timeout(IntPtr option, out ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_set_sync_timeout(IntPtr option, ulong ns);
+        internal static extern int autd3_udp_option_set_sync_timeout(IntPtr option, ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_get_sync_timeout(IntPtr option, out ulong ns);
+        internal static extern int autd3_udp_option_get_sync_timeout(IntPtr option, out ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_transport_option_free(IntPtr option);
+        internal static extern void autd3_udp_option_free(IntPtr option);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_udp_free_string(IntPtr ptr);
@@ -218,6 +218,27 @@ namespace AUTD3
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_client_open(GeometryHandle geometry, IntPtr option, IntPtr config, CompletionCallback cb, IntPtr userData);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void autd3_client_open_server(GeometryHandle geometry, IntPtr link, IntPtr config, CompletionCallback cb, IntPtr userData);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr autd3_server_link_new();
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_server_link_set_port(IntPtr link, ushort port);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_server_link_get_port(IntPtr link, out ushort port);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_server_link_set_timeout_ns(IntPtr link, ulong ns);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_server_link_get_timeout_ns(IntPtr link, out ulong ns);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void autd3_server_link_free(IntPtr link);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_client_state_checker(ClientHandle client);

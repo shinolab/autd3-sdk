@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use std::num::NonZeroU32;
+use std::num::{NonZeroU32, NonZeroU64};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
@@ -7,11 +7,15 @@ use std::time::{Duration, Instant};
 use autd3_rs_core::BusStats;
 
 use crate::error::{Error, NetworkCause};
+use crate::link::LinkError;
+use crate::link::message::{Notice, Outcome};
 use crate::protocol::Seq;
-use crate::udp::{Reply, UdpBus};
+use crate::udp::{Reply, Sent, UdpError};
+use crate::value::SysTime;
 
 use super::completion::CompletionSender;
 use super::pool::Slot;
+use super::transport::{Port, Transport};
 
 const RESET_ACK: u8 = 0xFF;
 const IDLE_WAIT: Duration = Duration::from_secs(1);
@@ -71,6 +75,34 @@ impl Restoring {
     }
 }
 
+pub(crate) struct SendFailure {
+    pub(crate) error: Error,
+    pub(crate) unsent: bool,
+}
+
+impl From<UdpError> for SendFailure {
+    fn from(e: UdpError) -> Self {
+        Self {
+            unsent: matches!(e, UdpError::Unsent { .. }),
+            error: e.into(),
+        }
+    }
+}
+
+pub(crate) fn sent_devices(sent: Result<Sent, UdpError>) -> Result<u128, SendFailure> {
+    let sent = sent?;
+    match sent.unsent {
+        Some(unsent) => Err(UdpError::from(unsent).into()),
+        None => Ok(sent.devices),
+    }
+}
+
+pub(crate) enum Settlement {
+    Failed(Option<Inflight>, Error),
+    Unreached(Option<Inflight>),
+    Reached(Option<Inflight>),
+}
+
 pub(crate) struct Pending {
     pub(crate) entries: VecDeque<Inflight>,
     pub(crate) head_since: Instant,
@@ -128,6 +160,19 @@ impl Pending {
             self.head_since = Instant::now();
         }
         None
+    }
+
+    pub(crate) fn settle(&mut self, msg_id: u16, sent: Result<u128, SendFailure>) -> Settlement {
+        match sent {
+            Err(failure) => {
+                if failure.unsent {
+                    self.need_reset = true;
+                }
+                Settlement::Failed(self.withdraw(msg_id), failure.error)
+            }
+            Ok(0) => Settlement::Unreached(self.withdraw(msg_id)),
+            Ok(devices) => Settlement::Reached(self.sent(msg_id, devices)),
+        }
     }
 
     pub(crate) fn ack_deadline_precedes_driver_wake(
@@ -199,42 +244,42 @@ impl Shared {
     }
 }
 
-struct HeartbeatWait {
-    msg_id: u16,
-    deadline: Option<Instant>,
-    expected: u128,
-    replied: u128,
-}
-
-pub struct Driver {
-    bus: Arc<UdpBus>,
+struct Session {
     shared: Arc<Shared>,
     stats: BusStats,
     ack_timeout: Duration,
     resynchronize_on_recovery: bool,
     release_failsafe_on_recovery: bool,
-    heartbeat: Option<HeartbeatWait>,
-    next_recovery: Option<Instant>,
+}
+
+pub struct Driver {
+    transport: Arc<Transport>,
+    port: Port,
+    session: Session,
+    maintenance_due: Option<Instant>,
     finished: bool,
 }
 
 impl Driver {
     pub(crate) fn new(
-        bus: Arc<UdpBus>,
+        transport: Arc<Transport>,
+        port: Port,
         shared: Arc<Shared>,
         ack_timeout: Duration,
         resynchronize_on_recovery: bool,
         release_failsafe_on_recovery: bool,
     ) -> Self {
         Self {
-            stats: bus.stats(),
-            bus,
-            shared,
-            ack_timeout,
-            resynchronize_on_recovery,
-            release_failsafe_on_recovery,
-            heartbeat: None,
-            next_recovery: None,
+            session: Session {
+                stats: transport.stats(),
+                shared,
+                ack_timeout,
+                resynchronize_on_recovery,
+                release_failsafe_on_recovery,
+            },
+            transport,
+            port,
+            maintenance_due: None,
             finished: false,
         }
     }
@@ -250,7 +295,7 @@ impl Driver {
         if self.finished {
             return self.outcome().map(|()| None);
         }
-        if self.shared.is_stopping() {
+        if self.session.shared.is_stopping() {
             self.finish(None);
             return Ok(None);
         }
@@ -267,16 +312,19 @@ impl Driver {
         if self.finished {
             return self.outcome();
         }
-        self.bus.wait_readable(deadline).map_err(|e| {
+        self.port.wait_readable(deadline).map_err(|e| {
             tracing::error!("waiting for a reply failed: {e}");
-            let cause = NetworkCause::new(e);
+            let cause = match e {
+                Error::Network(cause) => cause,
+                e => NetworkCause::new(e),
+            };
             self.finish(Some(&cause));
             Error::Network(cause)
         })
     }
 
     fn outcome(&self) -> Result<(), Error> {
-        match &self.shared.pending().failure {
+        match &self.session.shared.pending().failure {
             Some(cause) => Err(Error::Network(cause.clone())),
             None => Ok(()),
         }
@@ -285,7 +333,7 @@ impl Driver {
     fn finish(&mut self, outcome: Option<&NetworkCause>) {
         self.finished = true;
         let entries = {
-            let mut pending = self.shared.pending();
+            let mut pending = self.session.shared.pending();
             pending.failure = outcome.cloned();
             pending.closed = true;
             pending.take_all()
@@ -293,35 +341,70 @@ impl Driver {
         fail(entries, || {
             outcome.cloned().map_or(Error::Closed, Error::Network)
         });
-        let _ = self.bus.close();
+        self.transport.close();
         tracing::debug!("driver stopped");
     }
 
     fn step(&mut self) -> Result<Instant, NetworkCause> {
         self.drain()?;
         let now = Instant::now();
-        if self.ack_overdue(now) {
+        if self.session.ack_overdue(now) {
             self.drain()?;
         }
-        self.check_timeouts(now);
-        self.check_heartbeat(now)?;
-        self.recover(now);
+        self.session.check_timeouts(now);
+        self.maintain(now)?;
         Ok(self.next_deadline(now))
     }
 
     fn drain(&mut self) -> Result<(), NetworkCause> {
-        loop {
-            match self.bus.recv(Instant::now()) {
-                Ok(Some(reply)) => self.dispatch(&reply),
-                Ok(None) => return Ok(()),
-                Err(e) => {
-                    tracing::error!("receiving failed: {e}");
-                    return Err(NetworkCause::new(e));
+        match &mut self.port {
+            Port::Udp(pump) => loop {
+                match pump.recv() {
+                    Ok(Some(reply)) => self.session.dispatch(&reply),
+                    Ok(None) => return Ok(()),
+                    Err(e) => {
+                        tracing::error!("receiving failed: {e}");
+                        return Err(NetworkCause::new(e));
+                    }
                 }
+            },
+            Port::Server(reader) => {
+                let session = &mut self.session;
+                let transport = &*self.transport;
+                reader
+                    .drain(|notice| session.notice(transport, notice))
+                    .map_err(|e| {
+                        tracing::error!("receiving from the server failed: {e}");
+                        NetworkCause::new(e)
+                    })
             }
         }
     }
 
+    fn maintain(&mut self, now: Instant) -> Result<(), NetworkCause> {
+        if let Port::Udp(pump) = &mut self.port {
+            self.maintenance_due = pump.maintain(now, true).map_err(NetworkCause::new)?;
+            let recovered = pump.take_recovered();
+            self.session.recovered(recovered);
+        }
+        Ok(())
+    }
+
+    fn next_deadline(&self, now: Instant) -> Instant {
+        let mut deadline = now + IDLE_WAIT;
+        if let Some(due) = self.maintenance_due {
+            deadline = deadline.min(due);
+        }
+        let mut pending = self.session.shared.pending();
+        if let Some(expiry) = pending.ack_deadline(self.session.ack_timeout) {
+            deadline = deadline.min(expiry);
+        }
+        pending.driver_wakes_at = Some(deadline);
+        deadline
+    }
+}
+
+impl Session {
     fn ack_overdue(&self, now: Instant) -> bool {
         self.shared
             .pending()
@@ -346,36 +429,7 @@ impl Driver {
         fail(entries, || Error::Timeout { timeout });
     }
 
-    fn check_heartbeat(&mut self, now: Instant) -> Result<(), NetworkCause> {
-        if let Some(wait) = &self.heartbeat
-            && wait.deadline.is_some_and(|deadline| now >= deadline)
-        {
-            let missed = (wait.expected & !wait.replied).count_ones();
-            if missed > 0 {
-                tracing::trace!(missed, "heartbeat replies missing");
-                self.stats
-                    .record_missed_heartbeat_replies(u64::from(missed));
-            }
-            self.heartbeat = None;
-        }
-        if let Some(interval) = self.bus.heartbeat_interval()
-            && self.heartbeat.is_none()
-            && now.saturating_duration_since(self.bus.last_send()) >= interval
-        {
-            let sent = self.bus.heartbeat().map_err(NetworkCause::new)?;
-            self.heartbeat = Some(HeartbeatWait {
-                msg_id: sent.msg_id,
-                deadline: now.checked_add(self.bus.reply_timeout().min(interval)),
-                expected: sent.devices,
-                replied: 0,
-            });
-        }
-        Ok(())
-    }
-
-    fn recover(&mut self, now: Instant) {
-        self.next_recovery = self.bus.recover(now);
-        let recovered = self.bus.take_recovered();
+    fn recovered(&mut self, recovered: u128) {
         if recovered == 0 {
             return;
         }
@@ -390,37 +444,94 @@ impl Driver {
         }
     }
 
-    fn next_deadline(&self, now: Instant) -> Instant {
-        let mut deadline = self
-            .bus
-            .heartbeat_interval()
-            .and_then(|interval| self.bus.last_send().checked_add(interval))
-            .unwrap_or(now + IDLE_WAIT);
-        if let Some(expiry) = self.heartbeat.as_ref().and_then(|wait| wait.deadline) {
-            deadline = deadline.min(expiry);
+    fn notice(&mut self, transport: &Transport, notice: Notice<'_>) -> Result<(), LinkError> {
+        let Transport::Server(conn) = transport else {
+            return Ok(());
+        };
+        match notice {
+            Notice::Reply {
+                msg_id,
+                device,
+                ack,
+                status,
+                data,
+            } => self.dispatch(&Reply::new(usize::from(device), msg_id, ack, status, data)),
+            Notice::Settled { msg_id, outcome } => self.settle_deferred(msg_id, outcome),
+            Notice::States(states) => {
+                for (device, state) in states.into_iter().enumerate() {
+                    conn.state().publish(device, state);
+                }
+            }
+            Notice::Recovered(recovered) => {
+                for _ in 0..recovered.count_ones() {
+                    self.stats.record_recovery();
+                }
+                self.recovered(recovered);
+            }
+            Notice::Clock(sys_time) => {
+                if let Some(sys_time) = NonZeroU64::new(sys_time) {
+                    conn.device_clock()
+                        .observe(SysTime::from_nanos(sys_time.get()));
+                }
+            }
+            Notice::Wake => {}
+            Notice::Failure(reason) => return Err(LinkError::ServerFailed(reason.to_owned())),
+            Notice::Welcome { .. } | Notice::Reject { .. } => {
+                return Err(LinkError::Unexpected(
+                    "a handshake answer after the handshake",
+                ));
+            }
         }
-        if let Some(probe) = self.next_recovery {
-            deadline = deadline.min(probe);
+        Ok(())
+    }
+
+    fn settle_deferred(&mut self, msg_id: u16, outcome: Outcome<'_>) {
+        let sent = match outcome {
+            Outcome::Sent { devices } => Ok(devices),
+            Outcome::Unsent { device, reason, .. } => Err(SendFailure::from(UdpError::Unsent {
+                device: usize::from(device),
+                source: std::io::Error::other(reason.to_owned()),
+            })),
+            Outcome::Failed { reason } => Err(SendFailure {
+                error: Error::Network(NetworkCause::new(LinkError::SendFailed(reason.to_owned()))),
+                unsent: false,
+            }),
+        };
+        let (is_frame, settlement) = {
+            let mut pending = self.shared.pending();
+            let is_frame = pending
+                .entries
+                .iter()
+                .find(|entry| entry.msg_id == msg_id)
+                .is_some_and(|entry| entry.seq.is_some());
+            (is_frame, pending.settle(msg_id, sent))
+        };
+        match settlement {
+            Settlement::Failed(entry, error) => {
+                if let Some(entry) = entry {
+                    entry.tx.send(Err(error));
+                }
+            }
+            Settlement::Unreached(entry) => {
+                if let Some(entry) = entry {
+                    entry.tx.send(Err(Error::Timeout {
+                        timeout: self.ack_timeout,
+                    }));
+                }
+            }
+            Settlement::Reached(answered) => {
+                if is_frame {
+                    self.stats.record_frame();
+                }
+                if let Some(entry) = answered {
+                    entry.complete(&self.stats);
+                }
+            }
         }
-        let mut pending = self.shared.pending();
-        if let Some(expiry) = pending.ack_deadline(self.ack_timeout) {
-            deadline = deadline.min(expiry);
-        }
-        pending.driver_wakes_at = Some(deadline);
-        deadline
     }
 
     fn dispatch(&mut self, reply: &Reply) {
         let bit = 1u128 << reply.device;
-        if let Some(wait) = &mut self.heartbeat
-            && wait.msg_id == reply.msg_id
-        {
-            wait.replied |= bit;
-            if wait.replied & wait.expected == wait.expected {
-                self.heartbeat = None;
-            }
-            return;
-        }
         let mut pending = self.shared.pending();
         let Some(index) = pending
             .entries
@@ -486,14 +597,14 @@ impl Drop for Driver {
 #[cfg(unix)]
 impl std::os::fd::AsFd for Driver {
     fn as_fd(&self) -> std::os::fd::BorrowedFd<'_> {
-        self.bus.as_fd()
+        std::os::fd::AsFd::as_fd(&self.port)
     }
 }
 
 #[cfg(windows)]
 impl std::os::windows::io::AsSocket for Driver {
     fn as_socket(&self) -> std::os::windows::io::BorrowedSocket<'_> {
-        self.bus.as_socket()
+        std::os::windows::io::AsSocket::as_socket(&self.port)
     }
 }
 

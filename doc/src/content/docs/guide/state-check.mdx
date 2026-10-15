@@ -41,7 +41,7 @@ import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 
 ## Lost からの自動復帰
 
-`TransportOption` の `recovery_interval` を指定すると, `Lost` のデバイスがある間その間隔でデバイスを探し, 応答が戻ったデバイスを自動で復帰させる.
+`UdpOption` の `recovery_interval` を指定すると, `Lost` のデバイスがある間その間隔でデバイスを探し, 応答が戻ったデバイスを自動で復帰させる.
 対象はケーブルの抜き差しなどで通信が途絶えただけのデバイスで, 電源を入れ直したデバイスは復帰しない (`Client::open` で開き直す). 復帰したデバイスの数は `BusStats` の `recoveries` で読める.
 
 復帰の際には以下の点に注意されたい.

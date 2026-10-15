@@ -8,11 +8,11 @@ The backend emulates AUTD3 devices over UDP on the host (IPv6 loopback): it answ
 **`[::1]:44336`**, runs the real CPU firmware logic on the frames a client sends and displays the sound field.
 The browser UI is on a separate port (default **8081**).
 
-A client on the same host reaches the simulator with the default `TransportOption` (`Interface::Auto` prefers a running
+A client on the same host reaches the simulator with the default `UdpOption` (`Interface::Auto` prefers a running
 simulator over real devices). Set `Interface::Simulator` to connect to nothing but the simulator:
 
 ```rust
-let option = TransportOption {
+let option = UdpOption {
     iface: Interface::Simulator,
     ..Default::default()
 };

@@ -188,7 +188,7 @@ mod tests {
     }
 
     #[test]
-    fn only_customized_transport_options_are_passed() {
+    fn only_customized_udp_options_are_passed() {
         let config = OtaConfig {
             udp: UdpConfig {
                 interface: "  eth0 ".to_string(),

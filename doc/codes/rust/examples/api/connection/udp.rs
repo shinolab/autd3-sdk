@@ -5,7 +5,7 @@ use anyhow::Result;
 
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::Interface;
-use autd3_rs::TransportOption;
+use autd3_rs::UdpOption;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
@@ -23,7 +23,7 @@ async fn main() -> Result<()> {
     let send_buffer = NonZeroUsize::new(8192);
     let timer_resolution = Some(Duration::from_millis(1));
     // ANCHOR: api
-    TransportOption {
+    UdpOption {
         iface,
         heartbeat,
         reply_timeout,

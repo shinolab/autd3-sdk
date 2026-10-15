@@ -9,7 +9,6 @@ use autd3_python_capsule::{capsule_of, client_pyerr, client_pyerr_gil, geometry_
 use autd3_rs::Geometry;
 use autd3_rs::udp::StateChecker as CoreStateChecker;
 
-use crate::udp::TransportOption;
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
 
@@ -409,14 +408,14 @@ impl Client {
     fn open<'py>(
         py: Python<'py>,
         geometry: &Bound<'py, PyAny>,
-        option: &TransportOption,
+        link: &Bound<'py, PyAny>,
         config: &ClientConfig,
     ) -> PyResult<Bound<'py, PyAny>> {
         let geometry = geometry_from_capsule(&capsule_of(geometry)?)?.clone();
-        let option = option.0.clone();
+        let link = crate::udp::extract_link(link)?;
         let config = config.0;
         future_into_py(py, async move {
-            let client = autd3_rs::Client::open(&geometry, &option, config)
+            let client = autd3_rs::Client::open(&geometry, link, config)
                 .await
                 .map_err(client_pyerr_gil)?;
             Ok(Client {

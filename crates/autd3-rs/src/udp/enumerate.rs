@@ -12,7 +12,7 @@ use zerocopy::{FromBytes, IntoBytes};
 use super::bus::MAX_DEVICES;
 use super::channel::{Channel, Response};
 use super::error::UdpError;
-use super::option::TransportOption;
+use super::option::UdpOption;
 use super::state::SYNCED;
 
 const UNICAST_ATTEMPTS: usize = 3;
@@ -64,7 +64,7 @@ const fn role(unit: u8) -> Role {
 
 struct Enumerator<'a> {
     channel: &'a Channel,
-    option: &'a TransportOption,
+    option: &'a UdpOption,
 }
 
 impl Enumerator<'_> {
@@ -358,7 +358,7 @@ pub(crate) enum Bringup {
 
 pub(crate) fn bring_up(
     channel: &Channel,
-    option: &TransportOption,
+    option: &UdpOption,
     expected: Units,
     bringup: Bringup,
     device_clock: &DeviceClock,

@@ -10,7 +10,7 @@ namespace AUTD3.Tests
         [Fact]
         public void TheNativeDefaultsFollowTheSpec()
         {
-            var option = TransportOption.Defaults();
+            var option = UdpOption.Defaults();
             Assert.Equal(Interface.Auto, option.Iface);
             Assert.Equal(TimeSpan.FromMilliseconds(10), option.Heartbeat);
             Assert.Equal(TimeSpan.FromMilliseconds(1), option.ReplyTimeout);
@@ -27,10 +27,10 @@ namespace AUTD3.Tests
         [Fact]
         public void AnUnsetFieldKeepsTheNativeDefault()
         {
-            var option = new TransportOption();
+            var option = new UdpOption();
             Assert.Equal(Interface.Auto, option.Iface);
             Assert.Equal(TimeSpan.FromMilliseconds(10), option.Heartbeat);
-            Assert.Null(new TransportOption { Heartbeat = null }.Heartbeat);
+            Assert.Null(new UdpOption { Heartbeat = null }.Heartbeat);
             Assert.Equal(TimeSpan.FromMilliseconds(1), option.ReplyTimeout);
             Assert.Equal(TimeSpan.FromMilliseconds(100), option.LostTimeout);
             Assert.Equal(TimeSpan.FromMilliseconds(200), option.ResponseTimeout);
@@ -41,7 +41,7 @@ namespace AUTD3.Tests
         [Fact]
         public void TheDefaultValueKeepsTheHeartbeat()
         {
-            Assert.Equal(TimeSpan.FromMilliseconds(10), default(TransportOption).Heartbeat);
+            Assert.Equal(TimeSpan.FromMilliseconds(10), default(UdpOption).Heartbeat);
         }
 
         [Fact]
@@ -54,105 +54,105 @@ namespace AUTD3.Tests
         [Fact]
         public void ADisabledHeartbeatReachesTheNativeOption()
         {
-            var handle = new TransportOption { Heartbeat = null }.CreateHandle();
+            var handle = new UdpOption { Heartbeat = null }.CreateHandle();
             try
             {
-                Assert.Null(TransportOption.FromHandle(handle).Heartbeat);
+                Assert.Null(UdpOption.FromHandle(handle).Heartbeat);
             }
             finally
             {
-                NativeClient.autd3_transport_option_free(handle);
+                NativeClient.autd3_udp_option_free(handle);
             }
 
-            var zero = new TransportOption { Heartbeat = TimeSpan.Zero };
+            var zero = new UdpOption { Heartbeat = TimeSpan.Zero };
             Assert.Throws<Autd3Exception>(() => zero.CreateHandle());
         }
 
         [Fact]
         public void ARecoveryIntervalReachesTheNativeOption()
         {
-            Assert.Null(default(TransportOption).RecoveryInterval);
+            Assert.Null(default(UdpOption).RecoveryInterval);
             foreach (var interval in new TimeSpan?[] { null, TimeSpan.FromMilliseconds(100) })
             {
-                var handle = new TransportOption { RecoveryInterval = interval }.CreateHandle();
+                var handle = new UdpOption { RecoveryInterval = interval }.CreateHandle();
                 try
                 {
-                    Assert.Equal(interval, TransportOption.FromHandle(handle).RecoveryInterval);
+                    Assert.Equal(interval, UdpOption.FromHandle(handle).RecoveryInterval);
                 }
                 finally
                 {
-                    NativeClient.autd3_transport_option_free(handle);
+                    NativeClient.autd3_udp_option_free(handle);
                 }
             }
 
-            var zero = new TransportOption { RecoveryInterval = TimeSpan.Zero };
+            var zero = new UdpOption { RecoveryInterval = TimeSpan.Zero };
             Assert.Throws<Autd3Exception>(() => zero.CreateHandle());
         }
 
         [Fact]
         public void ATimerResolutionReachesTheNativeOption()
         {
-            Assert.Equal(TimeSpan.FromMilliseconds(1), default(TransportOption).TimerResolution);
+            Assert.Equal(TimeSpan.FromMilliseconds(1), default(UdpOption).TimerResolution);
             foreach (var resolution in new TimeSpan?[] { null, TimeSpan.FromMilliseconds(2) })
             {
-                var handle = new TransportOption { TimerResolution = resolution }.CreateHandle();
+                var handle = new UdpOption { TimerResolution = resolution }.CreateHandle();
                 try
                 {
-                    Assert.Equal(resolution, TransportOption.FromHandle(handle).TimerResolution);
+                    Assert.Equal(resolution, UdpOption.FromHandle(handle).TimerResolution);
                 }
                 finally
                 {
-                    NativeClient.autd3_transport_option_free(handle);
+                    NativeClient.autd3_udp_option_free(handle);
                 }
             }
 
-            var zero = new TransportOption { TimerResolution = TimeSpan.Zero };
+            var zero = new UdpOption { TimerResolution = TimeSpan.Zero };
             Assert.Throws<Autd3Exception>(() => zero.CreateHandle());
         }
 
         [Fact]
         public void ASendBufferReachesTheNativeOption()
         {
-            Assert.Equal(8192ul, default(TransportOption).SendBuffer);
+            Assert.Equal(8192ul, default(UdpOption).SendBuffer);
             foreach (var bytes in new ulong?[] { null, 65536, 1ul << 32 })
             {
-                var handle = new TransportOption { SendBuffer = bytes }.CreateHandle();
+                var handle = new UdpOption { SendBuffer = bytes }.CreateHandle();
                 try
                 {
-                    Assert.Equal(bytes, TransportOption.FromHandle(handle).SendBuffer);
+                    Assert.Equal(bytes, UdpOption.FromHandle(handle).SendBuffer);
                 }
                 finally
                 {
-                    NativeClient.autd3_transport_option_free(handle);
+                    NativeClient.autd3_udp_option_free(handle);
                 }
             }
 
-            var zero = new TransportOption { SendBuffer = 0 };
+            var zero = new UdpOption { SendBuffer = 0 };
             Assert.Throws<Autd3Exception>(() => zero.CreateHandle());
         }
 
         [Fact]
         public void ASendRateLimitReachesTheNativeOption()
         {
-            Assert.Null(default(TransportOption).SendRateLimit);
-            var handle = new TransportOption { SendRateLimit = 95 }.CreateHandle();
+            Assert.Null(default(UdpOption).SendRateLimit);
+            var handle = new UdpOption { SendRateLimit = 95 }.CreateHandle();
             try
             {
-                Assert.Equal(95f, TransportOption.FromHandle(handle).SendRateLimit);
+                Assert.Equal(95f, UdpOption.FromHandle(handle).SendRateLimit);
             }
             finally
             {
-                NativeClient.autd3_transport_option_free(handle);
+                NativeClient.autd3_udp_option_free(handle);
             }
 
-            var zero = new TransportOption { SendRateLimit = 0 };
+            var zero = new UdpOption { SendRateLimit = 0 };
             Assert.Throws<Autd3Exception>(() => zero.CreateHandle());
         }
 
         [Fact]
         public void AMalformedAddressIsRejected()
         {
-            var option = new TransportOption { Iface = Interface.Addr("127.0.0.1:1") };
+            var option = new UdpOption { Iface = Interface.Addr("127.0.0.1:1") };
             Assert.Throws<Autd3Exception>(() => option.CreateHandle());
         }
 
@@ -161,8 +161,43 @@ namespace AUTD3.Tests
         {
             Assert.NotEqual(Interface.Auto, Interface.Simulator);
             Assert.NotEqual(Interface.Name("eth0"), Interface.Simulator);
-            var handle = new TransportOption { Iface = Interface.Simulator }.CreateHandle();
-            NativeClient.autd3_transport_option_free(handle);
+            var handle = new UdpOption { Iface = Interface.Simulator }.CreateHandle();
+            NativeClient.autd3_udp_option_free(handle);
+        }
+
+        [Fact]
+        public void AServerLinkDefaultsToTheWellKnownPortAndReachesTheNativeLink()
+        {
+            Assert.Equal((ushort)44338, new ServerLink().Port);
+            Assert.Equal(TimeSpan.FromSeconds(1), default(ServerLink).Timeout);
+            Assert.Equal(new ServerLink(), default(ServerLink));
+            var link = new ServerLink { Port = 5000, Timeout = TimeSpan.FromMilliseconds(200) };
+            var handle = link.CreateHandle();
+            try
+            {
+                Assert.Equal(0, NativeClient.autd3_server_link_get_port(handle, out var port));
+                Assert.Equal(0, NativeClient.autd3_server_link_get_timeout_ns(handle, out var ns));
+                Assert.Equal((ushort)5000, port);
+                Assert.Equal(200_000_000UL, ns);
+            }
+            finally
+            {
+                NativeClient.autd3_server_link_free(handle);
+            }
+            Assert.Throws<Autd3Exception>(() => new ServerLink { Timeout = TimeSpan.Zero }.CreateHandle());
+        }
+
+        [Fact]
+        public async Task AClientWithoutAServerFailsAtOnce()
+        {
+            var probe = new System.Net.Sockets.TcpListener(System.Net.IPAddress.IPv6Loopback, 0);
+            probe.Start();
+            var port = (ushort)((System.Net.IPEndPoint)probe.LocalEndpoint).Port;
+            probe.Stop();
+            using var geometry = new Geometry(new[] { new Autd3(System.Numerics.Vector3.Zero) });
+            var error = await Assert.ThrowsAsync<Autd3Exception>(() =>
+                Client.OpenAsync(geometry, new ServerLink { Port = port }, new ClientConfig()));
+            Assert.Contains("no server accepts", error.Message);
         }
     }
 }

@@ -1,10 +1,10 @@
 [package]
 name = "console"
 version = "0.10.1"
-description = "GUI console that launches AUTD3 tools (simulator / firmware)"
+description = "GUI console that launches AUTD3 tools (simulator / server / firmware)"
 repository = "https://github.com/shinolab/autd3-sdk"
 license = "MIT"
-binaries = ["autd3-console", "autd3-simulator", "autd3-firmware-writer", "autd3-firmware-ota"]
+binaries = ["autd3-console", "autd3-simulator", "autd3-firmware-writer", "autd3-firmware-ota", "autd3-server"]
 out-dir = "target/distrib"
 build-command = [
     "cargo",

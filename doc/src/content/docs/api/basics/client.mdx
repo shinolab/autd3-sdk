@@ -27,7 +27,7 @@ import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
 | 引数       | 型             | 説明                   |
 | ---------- | -------------- | ---------------------- |
 | `geometry` | `&Geometry`    | デバイスの物理配置     |
-| `option`   | `&TransportOption` | 接続先と通信の設定 |
+| `option`   | `&UdpOption` | 接続先と通信の設定 |
 | `config`   | `ClientConfig` | 下記参照               |
 
 デバイスの稼働状態を継続的に監視したい場合は `Client::state_checker` で取った `StateChecker` を駆動する ([状態監視](/autd3-sdk/guide/state-check/) 参照).

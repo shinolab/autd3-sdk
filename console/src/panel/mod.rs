@@ -1,7 +1,9 @@
 mod firmware;
+mod server;
 mod simulator;
 
 pub use firmware::FirmwarePanel;
+pub use server::ServerPanel;
 pub use simulator::SimulatorPanel;
 
 use std::io;
