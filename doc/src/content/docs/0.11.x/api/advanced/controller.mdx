@@ -1,0 +1,73 @@
+---
+title: Controller / Driver
+description: 送受信ループを自分で駆動するための Controller と Driver (Rust のみ)
+sidebar:
+  order: 0
+slug: 0.11.x/api/advanced/controller
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+:::note
+`Controller` / `Driver` は Rust のみで提供される.
+:::
+
+`Controller` と `Driver` は, [`Client`](/autd3-sdk/0.11.x/api/basics/client/) の中身を自分で駆動するためのパーツ.
+
+`Client` は, 返信の受信と生存確認を行う I/O スレッドを内部に 1 本持つ.
+このスレッドの代わりに, 送受信ループを自前のスレッドなどで回したい場合に `Controller` / `Driver` を使う.
+
+## Open
+
+`Controller::open` は `Controller` と `Driver` のタプルを返す.
+引数は `Client::open` と同じ.
+
+<CodeTabs rust={"let (controller, driver) = Controller::open(geometry, option, ClientConfig::default())?;\nlet driving = std::thread::spawn(move || driver.run());\n\ncontroller.initialize().await?;\ncontroller.send(SetSilencer::default()).await?;\ncontroller.close().await?;\n\ndriving.join().unwrap()?;"} />
+
+## Driver
+
+`Driver` は以下のメソッドを持つ.
+
+| メソッド         | 返り値                           | 説明                                                             |
+| ---------------- | -------------------------------- | ---------------------------------------------------------------- |
+| `run(self)`      | `Result<(), Error>`              | `Controller` が閉じるまで `poll` と `wait` を繰り返す. ブロッキング. |
+| `poll(&mut self)` | `Result<Option<Instant>, Error>` | 届いている返信と期限の来た処理を済ませ, 次に呼ぶべき期限を返す. ノンブロッキング. |
+| `wait(&mut self, deadline)` | `Result<(), Error>`   | 返信が届くか `deadline` になるまでスレッドをブロックする           |
+
+### poll / wait
+
+`run` は以下のループと同じである.
+ループの中に自分の処理を挟みたい場合は, `poll` と `wait` を直接呼ぶ.
+
+<CodeTabs rust={"fn drive(mut driver: Driver) -> Result<(), Error> {\n    while let Some(deadline) = driver.poll()? {\n        driver.wait(deadline)?;\n    }\n    Ok(())\n}"} />
+
+`poll` の返り値の意味は以下の通り.
+
+* `Ok(Some(deadline))`: 次に `poll` を呼ぶべき期限. 期限より前でも, 返信が届いたら呼ぶこと. `wait` はこのどちらかまで待つ.
+* `Ok(None)`: `Controller` が閉じた (`close` または Drop). ループを抜ける.
+* `Err(..)`: 通信エラー. 送信中のコマンドと以後の送信は同じ原因のエラーで失敗する.
+
+### 非同期
+
+`Driver` は Unix 系では `AsFd`, Windows では `AsSocket` を実装してある.
+以下は tokio の `AsyncFd` を使いシングルスレッドの tokio ランタイム (`current_thread`) で動かす例 (Unix).
+
+<CodeTabs rust={"#[cfg(unix)]\nasync fn drive_on_reactor(mut driver: Driver) -> Result<()> {\n    use std::os::fd::{AsFd, AsRawFd};\n    use tokio::io::Interest;\n    use tokio::io::unix::AsyncFd;\n\n    let socket = AsyncFd::with_interest(driver.as_fd().as_raw_fd(), Interest::READABLE)?;\n    while let Some(deadline) = driver.poll()? {\n        tokio::select! {\n            readable = socket.readable() => readable?.clear_ready(),\n            () = tokio::time::sleep_until(deadline.into()) => {}\n        }\n    }\n    Ok(())\n}\n\nlet (controller, driver) = Controller::open(geometry, option, ClientConfig::default())?;\nlet driving = tokio::spawn(drive_on_reactor(driver));\n\ncontroller.initialize().await?;\ncontroller.send(SetSilencer::default()).await?;\ncontroller.close().await?;\n\ndriving.await??;"} />
+
+:::caution
+シングルスレッドで動かす場合, 以下の間はそのスレッドがブロックされ, 他のタスクも進まない.
+
+* `Controller::open` (デバイスの列挙と同期の待ち)
+* [`UdpOption`](/autd3-sdk/0.11.x/api/basics/transport-option/) の `send_rate_limit` を指定しているときの送信の待ち
+* ソケットの送信バッファが空くのを待つ間
+:::
+
+リアクタを使わない場合は, 短い周期で `poll` を呼ぶ.
+
+<CodeTabs rust={"while driver.poll()?.is_some() {\n    tokio::time::sleep(POLL_INTERVAL).await;\n}"} />
+
+## 注意点
+
+* `Controller` を先に破棄すると, `Driver` の `poll` は `Ok(None)` を返す. このときデバイスの出力は止まらないので, 終了時は `close` を呼ぶこと.
+* `Driver` を先に破棄すると, 送信中のコマンドと以後の送信は `Error::Closed` で失敗する.
+* `Driver` を`poll` しない限り, `Controller` の非同期メソッドは完了しない.

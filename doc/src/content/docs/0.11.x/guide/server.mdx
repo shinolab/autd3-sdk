@@ -1,0 +1,49 @@
+---
+title: Server
+description: 実機との接続を保持し続ける I/O サーバの起動と接続
+sidebar:
+  order: 9
+slug: 0.11.x/guide/server
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`Server` は, 実機との接続をクライアントのプロセスから切り離して保持し続ける常駐プロセス.
+クライアントは同じホスト上の Server へ接続し, Server がデータを実機へ中継する.
+
+台数が多く, クライアントを開き直すたびに列挙と同期の待ち時間がかかるのが困る場合などに使う.
+
+## 起動
+
+`Server` は GUI コンソール `autd3-console` に同梱されている.
+
+[コンソール](/autd3-sdk/0.11.x/guide/console/) の手順で `autd3-console` を入手して起動し, 上部の「Server」タブを開く.
+「Start」を押すと実機を列挙し, 同期が取れた時点でクライアントを受け付ける.
+機体が見つからない場合や台数が足りない場合は, 揃うまで再試行を続ける.
+
+| 項目 | 内容 |
+| --- | --- |
+| Devices | 機体の台数. 0 なら見つかった全台 |
+| Interface | 実機をつないだ NIC の名前. 空なら自動で探す |
+| Port | クライアントが接続するポート. 既定は 44338 |
+| Recovery interval | 応答が途絶えた機体を自動で復帰させる探索の間隔. 0 なら復帰させない |
+| Heartbeat / Reply timeout / Lost timeout / Send rate limit | [`UdpOption`](/autd3-sdk/0.11.x/api/basics/transport-option/) の同名の項目 |
+
+「Advanced options」を開くと, 残りの項目も設定できる.
+
+| 項目 | 内容 |
+| --- | --- |
+| Response timeout / Enumeration timeout / Sync timeout / Send buffer / Timer resolution | [`UdpOption`](/autd3-sdk/0.11.x/api/basics/transport-option/) の同名の項目 |
+| Monitor interval | 機体の状態を読み直す間隔. 既定は 1 s |
+| Retry interval | 列挙に失敗してからやり直すまでの間隔. 既定は 1 s |
+
+チェックを外した項目と「default」を選んだ項目は既定値になる.
+
+起動中は, 機体ごとの応答・PTP のロック・同期パルスの状態・ファームウェアの版数・PTP のオフセットが表に出る.
+
+## 接続
+
+クライアントは Server と同じホストで動かす必要がある.
+接続先に `UdpOption` の代わりに `ServerLink` (ポートは既定で 44338) を渡すこと.
+
+それ以外の使い方は実機へ直接つなぐ場合と同じ.

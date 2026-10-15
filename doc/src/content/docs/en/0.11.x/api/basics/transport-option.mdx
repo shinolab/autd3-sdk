@@ -1,0 +1,40 @@
+---
+title: UdpOption
+description: Communicate directly with AUTD3 over UDP/IPv6 link-local
+sidebar:
+  order: 1
+slug: en/0.11.x/api/basics/transport-option
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+## API
+
+<CodeTabs rust={"UdpOption {\n    iface,\n    heartbeat,\n    reply_timeout,\n    lost_timeout,\n    recovery_interval,\n    response_timeout,\n    enumeration_timeout,\n    sync_timeout,\n    send_rate_limit,\n    send_buffer,\n    timer_resolution,\n    ..Default::default()\n};"} python={"UdpOption(\n    iface=iface,\n    heartbeat=heartbeat,\n    reply_timeout=reply_timeout,\n    lost_timeout=lost_timeout,\n    recovery_interval=recovery_interval,\n    response_timeout=response_timeout,\n    enumeration_timeout=enumeration_timeout,\n    sync_timeout=sync_timeout,\n    send_rate_limit=send_rate_limit,\n    send_buffer=send_buffer,\n    timer_resolution=timer_resolution,\n)"} csharp={"new UdpOption\n{\n    Iface = iface,\n    Heartbeat = heartbeat,\n    ReplyTimeout = replyTimeout,\n    LostTimeout = lostTimeout,\n    RecoveryInterval = recoveryInterval,\n    ResponseTimeout = responseTimeout,\n    EnumerationTimeout = enumerationTimeout,\n    SyncTimeout = syncTimeout,\n    SendRateLimit = sendRateLimit,\n    SendBuffer = sendBuffer,\n    TimerResolution = timerResolution,\n};"} />
+
+| Field                 | Type                   | Default | Description                                                                                   |
+| --------------------- | ---------------------- | ------- | --------------------------------------------------------------------------------------------- |
+| `iface`               | `Interface`            | `Auto`  | Destination                                                                                   |
+| `heartbeat`           | `Option<Duration>`     | 10 ms   | Interval at which the liveness-check command is sent. `None` sends no liveness check |
+| `reply_timeout`       | `Duration`             | 1 ms    | Upper bound on waiting for a reply                                                            |
+| `lost_timeout`        | `Duration`             | 100 ms  | A device that has not replied for this long is treated as `Lost`. Make it longer than `heartbeat` |
+| `recovery_interval`   | `Option<Duration>`     | `None`    | While a device is `Lost`, look for it at this interval and recover it automatically once it answers again (a power-cycled device is not recovered). `None` disables the automatic recovery (see [State check](/autd3-sdk/en/0.11.x/guide/state-check/)) |
+| `response_timeout`    | `Duration`             | 200 ms  | Time to wait for replies to management messages such as enumeration                           |
+| `enumeration_timeout` | `Duration`             | 10 s    | Upper bound on the time spent trying to enumerate the devices on open                         |
+| `sync_timeout`        | `Duration`             | 30 s    | Upper bound on waiting for all devices to synchronize with one another on open                |
+| `send_rate_limit`     | `Option<f32>`          | `None`    | Upper bound on the share of the line the host's transmission may occupy \[%], relative to the device line rate (100 Mbps). `None` applies no limit |
+| `send_buffer`         | `Option<NonZeroUsize>` | 8192    | Size of the socket send buffer \[B]. `None` leaves the OS default                              |
+| `timer_resolution`    | `Option<Duration>`     | 1 ms    | Windows timer resolution. `None` leaves it unchanged.                                         |
+
+Changing anything other than `iface` is generally not recommended.
+
+## Interface
+
+<CodeTabs rust={"Interface::Auto;\nInterface::Name(\"eth0\".to_string());\nInterface::Simulator;\nInterface::Addr(\"[::1]:44336\".parse()?);"} python={"Interface.Auto\nInterface.Name(\"eth0\")\nInterface.Simulator\nInterface.Addr(\"[::1]:44336\")"} csharp={"_ = Interface.Auto;\n_ = Interface.Name(\"eth0\");\n_ = Interface.Simulator;\n_ = Interface.Addr(\"[::1]:44336\");"} />
+
+| Value       | Destination                                                                                             |
+| ----------- | ------------------------------------------------------------------------------------------------------- |
+| `Auto`      | The [Simulator](/autd3-sdk/en/0.11.x/guide/simulator/) if it is running, otherwise the network interface on which the devices replied |
+| `Name(..)`  | The real devices connected to the network interface with the given name                                 |
+| `Simulator` | The Simulator only                                                                                      |
+| `Addr(..)`  | The given IPv6 address and port                                                                         |

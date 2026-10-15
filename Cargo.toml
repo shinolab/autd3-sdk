@@ -28,7 +28,7 @@ exclude = [
 ]
 
 [workspace.package]
-version = "0.10.1"
+version = "0.11.0"
 edition = "2024"
 license = "MIT"
 authors = ["Shun Suzuki <suzuki@hapis.k.u-tokyo.ac.jp>"]
@@ -89,16 +89,16 @@ tracing-subscriber = { version = "0.3.23", default-features = false, features = 
     "env-filter",
 ] }
 
-autd3-rs = { version = "0.10.1", path = "crates/autd3-rs" }
+autd3-rs = { version = "0.11.0", path = "crates/autd3-rs" }
 autd3-cpu-wire = { version = "0.11.0", path = "firmware/cpu/wire" }
 autd3-cpu-fw = { version = "0.11.0", path = "firmware/cpu/fw" }
-autd3-rs-core = { version = "0.10.1", path = "crates/autd3-rs-core" }
+autd3-rs-core = { version = "0.11.0", path = "crates/autd3-rs-core" }
 autd3-firmware-writer = { path = "tools/firmware-writer" }
 autd3-rs-firmware-ota = { path = "tools/firmware-ota" }
-autd3-rs-firmware-emulator = { version = "0.10.1", path = "crates/autd3-rs-firmware-emulator" }
-autd3-rs-pattern = { version = "0.10.1", path = "crates/autd3-rs-pattern" }
-autd3-rs-pattern-holo = { version = "0.10.1", path = "crates/autd3-rs-pattern-holo" }
-autd3-rs-modulation = { version = "0.10.1", path = "crates/autd3-rs-modulation" }
+autd3-rs-firmware-emulator = { version = "0.11.0", path = "crates/autd3-rs-firmware-emulator" }
+autd3-rs-pattern = { version = "0.11.0", path = "crates/autd3-rs-pattern" }
+autd3-rs-pattern-holo = { version = "0.11.0", path = "crates/autd3-rs-pattern-holo" }
+autd3-rs-modulation = { version = "0.11.0", path = "crates/autd3-rs-modulation" }
 
 [workspace.metadata.cargo-semver-checks.lints]
 macro_now_doc_hidden = "allow"

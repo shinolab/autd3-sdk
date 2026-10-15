@@ -150,8 +150,8 @@ namespace AUTD3
     internal static class NativeAbi
     {
         internal const ushort Major = 0;
-        internal const ushort Minor = 10;
-        internal const ushort Patch = 1;
+        internal const ushort Minor = 11;
+        internal const ushort Patch = 0;
 
         internal const int ErrorBufferLength = 1024;
 

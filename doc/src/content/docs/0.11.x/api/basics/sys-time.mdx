@@ -1,0 +1,43 @@
+---
+title: SysTime
+description: デバイスの時刻 SysTime の API と演算
+sidebar:
+  order: 5
+slug: 0.11.x/api/basics/sys-time
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`SysTime` はデバイスの時刻を表す型.
+[`TransitionMode::SysTime`](/autd3-sdk/0.11.x/getting-started/tutorial/loop/) や [`GpioOut::SysTimeEq`](/autd3-sdk/0.11.x/api/command/gpio/) などで用いる.
+
+各デバイスは自身のクロックを持ち, 出力の切り替えなどはこの時刻で行う.
+この時刻は 64 bitの ns 単位のカウンタで, `Client` を開いたときから数える.
+ホストの時計 (日時) とは対応しない.
+現在のデバイスの時刻は `Client` の `device_time_now()` で取得する.
+
+## 構築
+
+`SysTime` は現在のデバイスの時刻, または生の ns から構築する.
+
+<CodeTabs rust={"let opened = SysTime::ZERO;\nlet now = client.device_time_now()?;\nlet raw = SysTime::from_nanos(1_000_000_000);\nlet ns: u64 = now.sys_time();"} python={"opened = SysTime.ZERO\nnow = client.device_time_now()\nraw = SysTime.from_nanos(1_000_000_000)\nns = now.sys_time"} csharp={"var opened = SysTime.Zero;\nvar now = client.DeviceTimeNow();\nvar raw = SysTime.FromNanos(1_000_000_000);\nulong ns = now.Nanos;"} />
+
+| 操作                    | 説明                                                          |
+| ----------------------- | ------------------------------------------------------------- |
+| `ZERO`                  | `Client` を開いた時点                                         |
+| `Client::device_time_now()` | 現在のデバイスの時刻 (C#: `DeviceTimeNow()`)              |
+| `from_nanos(ns)`        | 開いてからの経過 ns から構築                                  |
+| `sys_time()`            | 開いてからの経過 ns                                           |
+
+## 演算
+
+`SysTime` には時間差を加減算する演算が定義されている.
+
+<CodeTabs rust={"let future = client.device_time_now()? + Duration::from_millis(100);\nlet past = future - Duration::from_millis(50);\nlet elapsed: Duration = future - past;\nlet is_after: bool = future > past; // true"} python={"future = client.device_time_now() + Duration.from_millis(100)\npast = future - Duration.from_millis(50)\nelapsed = future - past\nis_after = future > past"} csharp={"var future = client.DeviceTimeNow() + TimeSpan.FromMilliseconds(100);\nvar past = future - TimeSpan.FromMilliseconds(50);\nTimeSpan elapsed = future - past;\nbool isAfter = future > past; // true"} />
+
+| 演算                          | 結果         | 説明                                     |
+| ----------------------------- | ------------ | ---------------------------------------- |
+| `SysTime + Duration`        | `SysTime`  | 指定時間の加算                           |
+| `SysTime - Duration`        | `SysTime`  | 指定時間の減算                           |
+| `SysTime - SysTime`       | `Duration`   | 2 時刻の差 (負になる場合は 0)            |
+| 比較 (`<` / `>` / `==` など)  | `bool`       | 比較                                     |

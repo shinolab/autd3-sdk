@@ -1,0 +1,76 @@
+---
+title: SetCpuConfig
+description: SetCpuConfig to change the internal settings of the CPU firmware
+sidebar:
+  order: 10.5
+slug: en/0.11.x/api/command/cpu-config
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`SetCpuConfig` is a command that changes the settings the CPU firmware uses internally (wait times, polling limits, and PTP synchronization parameters).
+
+:::caution
+You normally do not need to change anything other than `sys_time_transition_margin`, `failsafe_timeout`, and `ptp_unlock_failsafe_timeout`.
+Behavior is not guaranteed when any other field is changed from its default.
+:::
+
+## API
+
+<CodeTabs rust={"let config = CpuConfig {\n    sys_time_transition_margin: Duration::from_millis(10),\n    fpga_wait_update_max_polls: NonZeroU32::new(1_000_000).unwrap(),\n    fpga_flash_max_polls: NonZeroU32::new(2_000_000_000).unwrap(),\n    sync_guard: Duration::from_micros(250),\n    update_activate_delay: Duration::from_millis(100),\n    failsafe_timeout: Some(Duration::from_millis(500)),\n    ptp_unlock_failsafe_timeout: None,\n    fpga_bus_wait: FpgaBusWait::Cycles3,\n    cpu_watchdog_timeout: Some(Duration::from_secs(1)),\n    ptp: PtpConfig {\n        sync_interval: Duration::from_millis(8),\n        tx_timestamp_timeout: Duration::from_millis(3),\n        delay_resp_timeout: Duration::from_millis(6),\n        holdover: Duration::from_secs(1),\n        lock_samples: NonZeroU16::new(64).unwrap(),\n        step_threshold: Duration::from_micros(10),\n        lock_threshold: Duration::from_nanos(100),\n        kp_milli: 50,\n        ki_milli: 1,\n        max_freq_ppb: MaxFreqPpb::new(500_000).unwrap(),\n        delay_req_syncs: NonZeroU16::new(32).unwrap(),\n        path_delay_filter_shift: PathDelayFilterShift::new(5).unwrap(),\n        pause_quanta: NonZeroU16::new(48),\n        pause_hold_syncs: 64,\n        pause_retry: Duration::from_millis(8),\n    },\n};\nSetCpuConfig::new(config);"} python={"config = CpuConfig(\n    sys_time_transition_margin=Duration.from_millis(10),\n    fpga_wait_update_max_polls=1_000_000,\n    fpga_flash_max_polls=2_000_000_000,\n    sync_guard=Duration.from_micros(250),\n    update_activate_delay=Duration.from_millis(100),\n    failsafe_timeout=Duration.from_millis(500),\n    ptp_unlock_failsafe_timeout=None,\n    fpga_bus_wait=FpgaBusWait.Cycles3,\n    cpu_watchdog_timeout=Duration.from_secs(1),\n    ptp=PtpConfig(\n        sync_interval=Duration.from_millis(8),\n        tx_timestamp_timeout=Duration.from_millis(3),\n        delay_resp_timeout=Duration.from_millis(6),\n        holdover=Duration.from_secs(1),\n        lock_samples=64,\n        step_threshold=Duration.from_micros(10),\n        lock_threshold=Duration.from_nanos(100),\n        kp_milli=50,\n        ki_milli=1,\n        max_freq_ppb=500_000,\n        delay_req_syncs=32,\n        path_delay_filter_shift=5,\n        pause_quanta=48,\n        pause_hold_syncs=64,\n        pause_retry=Duration.from_millis(8),\n    ),\n)\nSetCpuConfig(config)"} csharp={"var config = new CpuConfig\n{\n    SysTimeTransitionMargin = TimeSpan.FromMilliseconds(10),\n    FpgaWaitUpdateMaxPolls = 1_000_000,\n    FpgaFlashMaxPolls = 2_000_000_000,\n    SyncGuard = TimeSpan.FromMicroseconds(250),\n    UpdateActivateDelay = TimeSpan.FromMilliseconds(100),\n    FailsafeTimeout = TimeSpan.FromMilliseconds(500),\n    PtpUnlockFailsafeTimeout = null,\n    FpgaBusWait = FpgaBusWait.Cycles3,\n    CpuWatchdogTimeout = TimeSpan.FromSeconds(1),\n    Ptp = new PtpConfig\n    {\n        SyncInterval = TimeSpan.FromMilliseconds(8),\n        TxTimestampTimeout = TimeSpan.FromMilliseconds(3),\n        DelayRespTimeout = TimeSpan.FromMilliseconds(6),\n        Holdover = TimeSpan.FromSeconds(1),\n        LockSamples = 64,\n        StepThreshold = TimeSpan.FromMicroseconds(10),\n        LockThreshold = TimeSpan.FromTicks(1),\n        KpMilli = 50,\n        KiMilli = 1,\n        MaxFreqPpb = 500_000,\n        DelayReqSyncs = 32,\n        PathDelayFilterShift = 5,\n        PauseQuanta = 48,\n        PauseHoldSyncs = 64,\n        PauseRetry = TimeSpan.FromMilliseconds(8),\n    },\n};\nnew SetCpuConfig(config);"} />
+
+### CpuConfig
+
+| Field                        | Type         | Default       | Description |
+| ---------------------------- | ------------ | ------------- | ----------- |
+| `sys_time_transition_margin` | `Duration`   | 10 ms         | Miss margin for `TransitionMode::SysTime`. A transition time earlier than "current device time + margin" is rejected with `MISS_TRANSITION_TIME`. `0` means no margin |
+| `fpga_wait_update_max_polls` | `NonZeroU32` | 1,000,000     | Maximum number of polls while waiting for the FPGA to apply a setting. Exceeding it yields `FPGA_TIMEOUT` |
+| `fpga_flash_max_polls`       | `NonZeroU32` | 2,000,000,000 | Maximum number of polls while waiting for an FPGA flash operation (FPGA firmware update) to complete |
+| `sync_guard`                 | `Duration`   | 250 μs        | Margin for choosing the synchronization start time |
+| `update_activate_delay`      | `Duration`   | 100 ms        | Grace period between the CPU firmware update activation and the reboot. |
+| `failsafe_timeout`           | `Option<Duration>` | 500 ms  | A device stops its output once nothing has arrived from the host for this long (failsafe). `None` disables the failsafe |
+| `ptp_unlock_failsafe_timeout` | `Option<Duration>` | `None` | A device stops its output once it has been without its PTP lock for this long. `None` disables it |
+| `fpga_bus_wait`              | `FpgaBusWait` | `Cycles3`    | Wait cycles of the bus the CPU reads and writes the FPGA through. `Cycles2` or `Cycles3` |
+| `cpu_watchdog_timeout`       | `Option<Duration>` | 1 s     | Once the CPU firmware has stopped for this long, the device stops the output. `None` disables it |
+| `ptp`                        | `PtpConfig`  |               | PTP synchronization parameters |
+
+### PtpConfig
+
+| Field                  | Type         | Default | Description |
+| ---------------------- | ------------ | ------- | ----------- |
+| `sync_interval`        | `Duration`   | 8 ms    | Interval at which `Sync` messages are sent |
+| `tx_timestamp_timeout` | `Duration`   | 3 ms    | How long to wait for the transmit timestamp of `Delay_Req` |
+| `delay_resp_timeout`   | `Duration`   | 6 ms    | How long to wait for `Delay_Resp` |
+| `holdover`             | `Duration`   | 1 s     | How long the lock is kept while locked and no `Sync` arrives |
+| `lock_samples`         | `NonZeroU16` | 64      | Number of consecutive samples required to lock |
+| `step_threshold`       | `Duration`   | 10 μs   | The clock is stepped when the time offset exceeds this |
+| `lock_threshold`       | `Duration`   | 100 ns  | Samples whose time offset is below this count toward the lock |
+| `kp_milli`             | `u32`        | 50      | Proportional gain of the servo × 1000 |
+| `ki_milli`             | `u32`        | 1       | Integral gain of the servo × 1000 |
+| `max_freq_ppb`         | `MaxFreqPpb` | 500,000 | Limit of the frequency correction \[ppb]. 0 to 2,147,483,647 |
+| `delay_req_syncs`      | `NonZeroU16` | 32      | Interval at which the path delay is measured again once locked (in `Sync` messages) |
+| `path_delay_filter_shift` | `PathDelayFilterShift` | 5 | Smoothing factor `1 / 2^n` of the path delay. 0 to 16. 0 disables the smoothing |
+| `pause_quanta`         | `Option<NonZeroU16>` | 48 | Length of the `PAUSE` sent to the host when the link is saturated \[512 bit times]. `None` sends no `PAUSE` |
+| `pause_hold_syncs`     | `u16`        | 64      | Number of `Sync` messages for which a `PAUSE` keeps being sent on every send after the link was found saturated |
+| `pause_retry`          | `Duration`   | 8 ms    | How long `PAUSE` keeps being sent while a `Sync` cannot be sent out |
+
+:::danger
+With `failsafe_timeout` set to `None`, a device keeps emitting ultrasound even when communication is lost because the host crashed or a cable was unplugged.
+Keep `failsafe_timeout` well above twice the `heartbeat`. If it is too short, the output stops even while the host is running.
+With `ptp_unlock_failsafe_timeout` set, a device that loses its PTP lock (any device but the first one) stops its output the same way as the failsafe once this long has passed since the loss.
+Locking again takes about 1 s with the default settings, so a shorter value stops the output on every loss of the lock.
+
+`cpu_watchdog_timeout` is how long the FPGA waits before stopping the output while the CPU firmware hangs or resets, and it stops the output the same way as the failsafe.
+With `None`, a device keeps the output it had when the CPU firmware stopped.
+
+An output stopped by the failsafe or the CPU watchdog does not come back automatically.
+Whether a device is stopped can be checked with `is_failsafe_active()` (C#: `IsFailsafeActive`) of the `FpgaState` returned from `read_fpga_state()`.
+Sending the `ReleaseFailsafe` command resumes the output.
+[Clear](/autd3-sdk/en/0.11.x/api/command/clear/) releases it as well, but returns every state to its default.
+:::
+
+The settings return to their defaults on [Clear](/autd3-sdk/en/0.11.x/api/command/clear/) and on power cycling.
+
+## Example
+
+<CodeTabs rust={"use std::time::Duration;\n\nuse autd3_rs::commands::{CpuConfig, SetCpuConfig};\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::{Client, ClientConfig};\nuse autd3_rs::udp::UdpOption;\nuse autd3_rs_firmware_emulator::udp::UdpEmulator;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet emulator = UdpEmulator::spawn(geometry.num_devices())?;\nlet option = UdpOption {\n    iface: emulator.interface(),\n    ..UdpOption::default()\n};\nlet client = Client::open(&geometry, &option, ClientConfig::default()).await?;\n\nclient.send(SetCpuConfig::new(CpuConfig {\n    sys_time_transition_margin: Duration::from_millis(20),\n    ..Default::default()\n})).await?;\n\nclient.close().await?;"} python={"import asyncio\n\nfrom autd3 import Client, ClientConfig, Duration, UdpEmulator\nfrom autd3.commands import CpuConfig, SetCpuConfig\nfrom autd3.geometry import Autd3, Geometry\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])\n    emulator = UdpEmulator(geometry.num_devices())\n    async with await Client.open(geometry, emulator.option(), ClientConfig()) as client:\n        await client.send(SetCpuConfig(CpuConfig(sys_time_transition_margin=Duration.from_millis(20))))\n\n\nasyncio.run(main())"} csharp={"using System;\nusing System.Numerics;\nusing System.Threading.Tasks;\nusing AUTD3;\n\nvar geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });\nusing var emulator = new UdpEmulator(geometry.NumDevices);\nawait using var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());\n\nawait client.SendAsync(new SetCpuConfig(new CpuConfig { SysTimeTransitionMargin = TimeSpan.FromMilliseconds(20) }));"} />

@@ -1,0 +1,32 @@
+---
+title: SetPulseWidthTable
+description: 強度から PWM パルス幅への変換テーブルを設定する SetPulseWidthTable
+sidebar:
+  order: 9.5
+slug: 0.11.x/api/command/set-pulse-width-table
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`SetPulseWidthTable` は, 強度 (0–255) から PWM のパルス幅への変換テーブルを設定するコマンド.
+
+## API
+
+<CodeTabs rust={"SetPulseWidthTable { table: &table };"} python={"SetPulseWidthTable(table)"} csharp={"new SetPulseWidthTable(table);"} />
+
+| フィールド | 型                      | 説明                                                 |
+| ---------- | ----------------------- | ---------------------------------------------------- |
+| `table`    | `&[u16; PWE_TABLE_SIZE]` | 強度インデックス (0–255) ごとのパルス幅 (256 要素) |
+
+デフォルトのコマンドは arcsin 形状のテーブルを設定する.
+これは出力音圧が強度に対して (理論的に) 線形になるようなテーブルであり, デバイスが起動時に持つテーブルと同じである.
+
+<CodeTabs rust={"SetPulseWidthTable::default();"} python={"SetPulseWidthTable()"} csharp={"new SetPulseWidthTable();"} />
+
+`empty_table` は全要素が 0 のテーブルを返す.
+
+<CodeTabs rust={"let table = SetPulseWidthTable::empty_table();"} python={"table = SetPulseWidthTable.empty_table()"} csharp={"var table = SetPulseWidthTable.EmptyTable();"} />
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::SetPulseWidthTable;\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::{Client, ClientConfig};\nuse autd3_rs::udp::UdpOption;\nuse autd3_rs::value::PulseWidth;\nuse autd3_rs_firmware_emulator::udp::UdpEmulator;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet emulator = UdpEmulator::spawn(geometry.num_devices())?;\nlet option = UdpOption {\n    iface: emulator.interface(),\n    ..UdpOption::default()\n};\nlet client = Client::open(&geometry, &option, ClientConfig::default()).await?;\n\nlet mut table = SetPulseWidthTable::empty_table();\nfor (width, i) in table.iter_mut().zip(0..) {\n    *width = PulseWidth::new(i);\n}\n\nclient.send(SetPulseWidthTable { table: &table }).await?;\n\nclient.close().await?;"} python={"import asyncio\n\nfrom autd3 import Client, ClientConfig, UdpEmulator\nfrom autd3.commands import SetPulseWidthTable\nfrom autd3.geometry import Autd3, Geometry\nfrom autd3.value import PulseWidth\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])\n    emulator = UdpEmulator(geometry.num_devices())\n    async with await Client.open(geometry, emulator.option(), ClientConfig()) as client:\n        table = SetPulseWidthTable.empty_table()\n        for i in range(len(table)):\n            table[i] = PulseWidth(i)\n\n        await client.send(SetPulseWidthTable(table=table))\n\n\nasyncio.run(main())"} csharp={"using System.Numerics;\nusing System.Threading.Tasks;\nusing AUTD3;\n\nvar geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });\nusing var emulator = new UdpEmulator(geometry.NumDevices);\nawait using var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());\n\nvar table = SetPulseWidthTable.EmptyTable();\nfor (var i = 0; i < table.Length; i++)\n{\n    table[i] = new PulseWidth((ushort)i);\n}\n\nawait client.SendAsync(new SetPulseWidthTable(table));"} />

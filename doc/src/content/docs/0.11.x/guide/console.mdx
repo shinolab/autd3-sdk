@@ -1,0 +1,60 @@
+---
+title: コンソール
+description: autd3-console の入手方法と, 同梱されるツール
+sidebar:
+  order: 7
+slug: 0.11.x/guide/console
+---
+
+`autd3-console` は, ファームウェアの書き込みとシミュレータ・サーバの起動をまとめた GUI ツール.
+
+## 入手
+
+GitHub Releases (`console-v*`) から配布している.
+[console-v0.11.0](https://github.com/shinolab/autd3-sdk/releases/tag/console-v0.11.0) を開き, そこに記載のインストールコマンドを実行する.
+
+インストーラを使わない場合は, 同じリリースのアーカイブ (`console-<target>.tar.xz` / `.zip`) をダウンロードし,
+展開して `autd3-console` を実行してもよい.
+
+### macOS
+
+macOS 版のバイナリは Apple の署名 (codesign / notarization) をしていないため, そのままでは Gatekeeper に阻まれ,
+「開発元を確認できないため開けません」と表示される.
+インストール後に quarantine 属性を外すと実行できる:
+
+```console
+xattr -d com.apple.quarantine ~/.autd3/bin/autd3-console
+```
+
+アーカイブを展開して使う場合は, 展開したディレクトリ全体に対して実行する:
+
+```console
+xattr -dr com.apple.quarantine <展開先ディレクトリ>
+```
+
+## 同梱されるコマンド
+
+GUI を使わずに直接叩けるコマンドも同梱されている.
+
+| コマンド | 用途 |
+| --- | --- |
+| `autd3-console` | GUI 本体 |
+| `autd3-firmware-writer` | [ファームウェア](/autd3-sdk/0.11.x/getting-started/setup/firmware/) の書き込み (JTAG) |
+| `autd3-firmware-ota` | [ファームウェア](/autd3-sdk/0.11.x/getting-started/setup/firmware/#ethernet-ケーブルを使用した-ota) の更新 (OTA) |
+| `autd3-simulator` | [シミュレータ](/autd3-sdk/0.11.x/guide/simulator/) |
+| `autd3-server` | [サーバ](/autd3-sdk/0.11.x/guide/server/) |
+
+## タブ
+
+起動すると上部にタブが並ぶ.
+
+| タブ | 内容 |
+| --- | --- |
+| Simulator | [シミュレータ](/autd3-sdk/0.11.x/guide/simulator/) の起動 |
+| Server | [サーバ](/autd3-sdk/0.11.x/guide/server/) の起動と機体の状態表示 |
+| Firmware | [ファームウェアの更新](/autd3-sdk/0.11.x/getting-started/setup/firmware/) (JTAG / OTA) |
+
+## 更新
+
+起動時に新しいリリースが無いか確認する.
+インストーラで入れた場合はその場で更新でき, アーカイブを展開して使っている場合は Releases ページが開く.

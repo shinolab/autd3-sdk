@@ -2,6 +2,24 @@
 
 # Rust
 
+## [0.11.0] - 2026-10-15
+
+### 💥 Breaking Changes
+
+- [**breaking**] Bound PtpConfig max_freq_ppb and path_delay_filter_shift with MaxFreqPpb/PathDelayFilterShift types
+- [**breaking**] Rename BusStats::missed_replies to missed_heartbeat_replies
+- [**breaking**] Stop the output from the FPGA when the CPU firmware stops (CPU watchdog)
+- [**breaking**] Add Link with ServerLink and autd3-server, rename TransportOption to UdpOption
+
+### 🚀 Features
+
+- Add opt-in automatic recovery of lost devices
+
+### 📦 Dependencies
+
+- *(deps)* Bump zip from 8.6.0 to 9.0.0
+- *(deps)* Bump enum-map from 2.7.3 to 3.1.0
+
 ## [0.10.1] - 2026-10-12
 
 ### 🐛 Bug Fixes
@@ -347,6 +365,23 @@
 
 # Python
 
+## [0.11.0] - 2026-10-15
+
+### 💥 Breaking Changes
+
+- [**breaking**] Bound PtpConfig max_freq_ppb and path_delay_filter_shift with MaxFreqPpb/PathDelayFilterShift types
+- [**breaking**] Rename BusStats::missed_replies to missed_heartbeat_replies
+- [**breaking**] Stop the output from the FPGA when the CPU firmware stops (CPU watchdog)
+- [**breaking**] Add Link with ServerLink and autd3-server, rename TransportOption to UdpOption
+
+### 🚀 Features
+
+- Add opt-in automatic recovery of lost devices
+
+### 📦 Dependencies
+
+- *(deps)* Bump enum-map from 2.7.3 to 3.1.0
+
 ## [0.10.0] - 2026-10-11
 
 ### 💥 Breaking Changes
@@ -543,6 +578,19 @@
 
 # C#
 
+## [0.11.0] - 2026-10-15
+
+### 💥 Breaking Changes
+
+- [**breaking**] Bound PtpConfig max_freq_ppb and path_delay_filter_shift with MaxFreqPpb/PathDelayFilterShift types
+- [**breaking**] Rename BusStats::missed_replies to missed_heartbeat_replies
+- [**breaking**] Stop the output from the FPGA when the CPU firmware stops (CPU watchdog)
+- [**breaking**] Add Link with ServerLink and autd3-server, rename TransportOption to UdpOption
+
+### 🚀 Features
+
+- Add opt-in automatic recovery of lost devices
+
 ## [0.10.0] - 2026-10-11
 
 ### 💥 Breaking Changes
@@ -696,6 +744,12 @@
 
 # Unity
 
+## [0.11.0] - 2026-10-15
+
+### 💥 Breaking Changes
+
+- [**breaking**] Add Link with ServerLink and autd3-server, rename TransportOption to UdpOption
+
 ## [0.10.0] - 2026-10-11
 
 ### 💥 Breaking Changes
@@ -740,6 +794,17 @@
 ## [0.1.0] - 2026-07-06
 
 # Simulator
+
+## [0.11.0] - 2026-10-15
+
+### 💥 Breaking Changes
+
+- [**breaking**] Add Link with ServerLink and autd3-server, rename TransportOption to UdpOption
+
+### 📦 Dependencies
+
+- *(deps)* Bump glam from 0.33.12 to 0.34.1 in /simulator/frontend
+- *(deps)* Bump enum-map from 2.7.3 to 3.1.0
 
 ## [0.10.1] - 2026-10-12
 
@@ -855,6 +920,12 @@
 
 # Console
 
+## [0.11.0] - 2026-10-15
+
+### 💥 Breaking Changes
+
+- [**breaking**] Add Link with ServerLink and autd3-server, rename TransportOption to UdpOption
+
 ## [0.10.1] - 2026-10-12
 
 ### 📦 Dependencies
@@ -943,6 +1014,21 @@
 - Derive simulator device count from client geometry
 
 # Firmware
+
+## [0.11.0] - 2026-10-15
+
+### 💥 Breaking Changes
+
+- [**breaking**] Bound PtpConfig max_freq_ppb and path_delay_filter_shift with MaxFreqPpb/PathDelayFilterShift types
+- [**breaking**] Stop the output from the FPGA when the CPU firmware stops (CPU watchdog)
+
+### 🚀 Features
+
+- Add opt-in automatic recovery of lost devices
+
+### 📦 Dependencies
+
+- *(deps)* Bump enum-map from 2.7.3 to 3.1.0
 
 ## [0.10.1] - 2026-10-12
 
