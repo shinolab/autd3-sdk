@@ -56,6 +56,20 @@ impl core::ops::Mul<rad> for f32 {
     }
 }
 
+impl core::ops::Mul<deg> for i32 {
+    type Output = Angle;
+    fn mul(self, _rhs: deg) -> Self::Output {
+        Self::Output::from_deg(self as f32)
+    }
+}
+
+impl core::ops::Mul<rad> for i32 {
+    type Output = Angle;
+    fn mul(self, _rhs: rad) -> Self::Output {
+        Self::Output::from_rad(self as f32)
+    }
+}
+
 impl core::ops::Neg for Angle {
     type Output = Angle;
     fn neg(self) -> Self::Output {
@@ -141,6 +155,13 @@ mod tests {
     #[test]
     fn dbg() {
         assert_eq!(format!("{:?}", 1.0 * rad), "1 rad");
+    }
+
+    #[test]
+    fn integer_literals() {
+        assert_eq!(90.0 * deg, 90 * deg);
+        assert_eq!(-180.0 * deg, -180 * deg);
+        assert_eq!(2.0 * rad, 2 * rad);
     }
 
     #[test]

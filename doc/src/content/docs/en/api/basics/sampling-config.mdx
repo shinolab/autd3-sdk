@@ -18,8 +18,12 @@ The sampling frequency must be the ultrasound frequency (40 kHz) divided by an i
 
 <CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
 
-`SamplingConfig::new` accepts `NonZeroU16` / `Freq<f32>` / `Duration` / `Nearest<Freq<f32>>` / `Nearest<Duration>`.
+`SamplingConfig::new` accepts `NonZeroU16` / `Freq<f32>` / `Freq<u32>` / `Duration` / `Nearest<Freq<f32>>` / `Nearest<Freq<u32>>` / `Nearest<Duration>`.
+An integer frequency such as `4000 * Hz` can be passed in the same way as `4. * kHz`.
 All of the above represent 4 kHz (division ratio 10) and are equivalent to one another.
+
+Python takes the division ratio as an `int` and the period as a `Duration`.
+C# takes the division ratio as a `ushort` and the period as a `TimeSpan`.
 
 ## Internal Representation
 
@@ -28,14 +32,15 @@ All of the above represent 4 kHz (division ratio 10) and are equivalent to one a
 | Specification method  | Type            |
 | --------------------- | --------------- |
 | Division ratio        | `NonZeroU16`    |
-| Frequency             | `Freq<f32>`     |
-| Period                | `Duration`      |
+| Frequency             | `Freq<f32>` / `Freq<u32>` |
+| Period                | `Duration` (C#: `TimeSpan`) |
 
 The relationship between the division ratio <Math tex="N" />, the sampling frequency <Math tex="f_s" />, and the sampling period <Math tex="T_s" /> is as follows.
 
 <MathBlock tex="f_s = \frac{40\,\mathrm{kHz}}{N}, \quad T_s = 25\,\mathrm{\mu s} \times N" />
 
 When specified by frequency or period, it is an error if it does not evenly divide 40 kHz (i.e., does not yield an integer division ratio).
+`SamplingConfig` does not compute the division ratio at construction; it returns the error when `divide()` / `freq()` / `period()` is called or when a command is encoded (at send time) (the same in Python / C#; the `code` of the Python `Autd3Error` / the `Code` of the C# `Autd3Exception` is `INVALID_ARGUMENT` / `InvalidArgument`).
 To round an indivisible value to the nearest division ratio, wrap the frequency/period in `Nearest`.
 
 ## Presets
@@ -46,3 +51,5 @@ Frequently used constants are provided in advance.
 | ---------- | ------------------ | -------------- |
 | `FREQ_40K` | 40 kHz             | 1              |
 | `FREQ_4K`  | 4 kHz              | 10             |
+
+In C#, they are written as `SamplingConfig.Freq40k` / `SamplingConfig.Freq4k`.

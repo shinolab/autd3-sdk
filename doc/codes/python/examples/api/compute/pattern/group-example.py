@@ -1,9 +1,7 @@
 from enum import Enum, auto
 
-import numpy as np
-
-from autd3.geometry import Autd3, Geometry
-from autd3.units import m, s
+from autd3.geometry import Autd3, Geometry, offset
+from autd3.units import m, mm, s
 from autd3_pattern import (
     IntensityBuffer,
     PhaseBuffer,
@@ -21,7 +19,7 @@ class Side(Enum):
     RIGHT = auto()
 
 
-geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+geometry = Geometry([Autd3()])
 wavelength = calc_wavelength(340 * m / s)
 center = geometry.center()
 
@@ -31,8 +29,8 @@ groups = TransducerGroups(
 )
 
 foci = [
-    AmplitudeTarget(point=center + np.array([-50.0, 0.0, 150.0]), amplitude=5e3 * Pa),
-    AmplitudeTarget(point=center + np.array([-20.0, 0.0, 150.0]), amplitude=5e3 * Pa),
+    AmplitudeTarget(point=center + offset(-50.0 * mm, 0.0 * mm, 150.0 * mm), amplitude=5e3 * Pa),
+    AmplitudeTarget(point=center + offset(-20.0 * mm, 0.0 * mm, 150.0 * mm), amplitude=5e3 * Pa),
 ]
 
 
@@ -40,7 +38,7 @@ def compute(side: Side, mask: TransducerMask, phases: PhaseBuffer, intensities: 
     if side is Side.LEFT:
         gspat(geometry, foci, wavelength, GspatOption(mask=mask), phases, intensities)
     else:
-        focus(geometry, center + np.array([40.0, 0.0, 150.0]), wavelength, phases)
+        focus(geometry, center + offset(40.0 * mm, 0.0 * mm, 150.0 * mm), wavelength, phases)
 
 
 phases = geometry.phase_buffer()

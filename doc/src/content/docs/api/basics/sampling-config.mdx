@@ -18,8 +18,12 @@ import { excerpt } from "@lib/excerpt";
 
 <CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
 
-`SamplingConfig::new` は `NonZeroU16` / `Freq<f32>` / `Duration` / `Nearest<Freq<f32>>` / `Nearest<Duration>` を受け取る.
+`SamplingConfig::new` は `NonZeroU16` / `Freq<f32>` / `Freq<u32>` / `Duration` / `Nearest<Freq<f32>>` / `Nearest<Freq<u32>>` / `Nearest<Duration>` を受け取る.
+`4000 * Hz` のような整数の周波数も `4. * kHz` と同じように渡せる.
 上記はいずれも 4 kHz (分周比 10) を表し, 互いに等価. 
+
+Python は分周比を `int` で, 周期を `Duration` で渡す.
+C# は分周比を `ushort` で, 周期を `TimeSpan` で渡す.
 
 ## 内部表現
 
@@ -28,14 +32,15 @@ import { excerpt } from "@lib/excerpt";
 | 指定方法              | 型              | 
 | --------------------- | --------------- | 
 | 分周比                | `NonZeroU16`    | 
-| 周波数                | `Freq<f32>`     |
-| 周期                  | `Duration`      | 
+| 周波数                | `Freq<f32>` / `Freq<u32>` |
+| 周期                  | `Duration` (C#: `TimeSpan`) | 
 
 分周比 <Math tex="N" /> とサンプリング周波数 <Math tex="f_s" />, サンプリング周期 <Math tex="T_s" /> の関係は次の通り. 
 
 <MathBlock tex="f_s = \frac{40\,\mathrm{kHz}}{N}, \quad T_s = 25\,\mathrm{\mu s} \times N" />
 
 周波数・周期で指定した場合, それが 40 kHz を割り切れない (整数の分周比にならない) とエラーになる. 
+`SamplingConfig` は構築時には分周比を求めず, `divide()` / `freq()` / `period()` を呼んだときか, コマンドを encode するとき (送信時) にエラーを返す (Python / C# も同じ. Python の `Autd3Error.code` / C# の `Autd3Exception.Code` は `INVALID_ARGUMENT` / `InvalidArgument`).
 割り切れない値を最も近い分周比へ丸めたいときは周波数/周期を `Nearest` でラップする. 
 
 ## プリセット
@@ -46,4 +51,6 @@ import { excerpt } from "@lib/excerpt";
 | --------- | ------------------ | ------ |
 | `FREQ_40K`| 40 kHz             | 1      |
 | `FREQ_4K` | 4 kHz              | 10     |
+
+C# では `SamplingConfig.Freq40k` / `SamplingConfig.Freq4k` と書く.
 

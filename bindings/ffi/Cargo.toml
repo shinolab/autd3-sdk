@@ -19,6 +19,7 @@ repository = "https://github.com/shinolab/autd3-sdk"
 [workspace.dependencies]
 autd3-rs = { path = "../../crates/autd3-rs" }
 autd3-rs-core = { path = "../../crates/autd3-rs-core" }
+autd3-cpu-wire = { path = "../../firmware/cpu/wire" }
 autd3-rs-firmware-emulator = { path = "../../crates/autd3-rs-firmware-emulator" }
 autd3-rs-pattern = { path = "../../crates/autd3-rs-pattern" }
 autd3-rs-pattern-holo = { path = "../../crates/autd3-rs-pattern-holo" }

@@ -31,6 +31,11 @@ import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
 
 Changing anything other than `iface` is generally not recommended.
 
+The Python defaults are the same concrete values as in Rust, and only the fields whose type is an `Option` accept `None` (disabled). Passing `None` to any other field raises `TypeError`.
+In C#, setting a field whose type is an `Option` to `null` disables it.
+Passing `0` (C#: `TimeSpan.Zero`) to an `Option<Duration>` field (`heartbeat` / `recovery_interval` / `timer_resolution`) or to `send_rate_limit` does not mean disabled; it is out of range and opening the `Client` fails with an error (`Network`).
+A `0` for `send_buffer` raises `ValueError` when the `UdpOption` is built in Python, and makes opening the `Client` fail with `Autd3Exception` (`InvalidArgument`) in C# (Rust cannot pass `0` because the type is `NonZeroUsize`).
+
 ## Interface
 
 <CodeTabs rust={excerpt(sample, "iface")} python={excerpt(pySample, "iface")} csharp={excerpt(csSample, "iface")} />

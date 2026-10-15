@@ -10,7 +10,7 @@ use autd3_rs_core::geometry::{
     TransducerGroups as CoreTransducerGroups, TransducerMask as CoreTransducerMask,
 };
 use autd3_rs_core::value::{Intensity, Phase};
-use pyo3::exceptions::{PyIndexError, PyKeyError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyCapsule, PyDict};
 use zerocopy::{FromBytes, IntoBytes};
@@ -210,6 +210,7 @@ fn focus(
 ) -> PyResult<()> {
     let capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&capsule)?;
+    check_slots(geometry, &dst.0)?;
     let target = extract_point(target)?;
     autd3_rs_pattern::focus(geometry, target, extract_length(wavelength)?, &mut dst.0);
     Ok(())
@@ -225,6 +226,7 @@ fn plane(
 ) -> PyResult<()> {
     let capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&capsule)?;
+    check_slots(geometry, &dst.0)?;
     let direction = extract_direction(direction)?;
     autd3_rs_pattern::plane(geometry, direction, extract_length(wavelength)?, &mut dst.0);
     Ok(())
@@ -242,6 +244,7 @@ fn bessel(
 ) -> PyResult<()> {
     let capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&capsule)?;
+    check_slots(geometry, &dst.0)?;
     let apex = extract_point(apex)?;
     let direction = extract_direction(direction)?;
     let theta = extract_angle(theta)?;
@@ -256,10 +259,9 @@ fn bessel(
     Ok(())
 }
 
-fn extract_waist(waist: &Bound<'_, PyAny>) -> PyResult<Length> {
-    let waist = extract_length(waist)?;
+fn check_waist(waist: Length) -> PyResult<()> {
     if waist.mm().is_finite() && waist.mm() > 0.0 {
-        Ok(waist)
+        Ok(())
     } else {
         Err(PyValueError::new_err(
             "waist must be a positive finite length",
@@ -267,23 +269,45 @@ fn extract_waist(waist: &Bound<'_, PyAny>) -> PyResult<Length> {
     }
 }
 
+fn check_slots<T>(geometry: &autd3_rs_core::Geometry, dst: &[Vec<T>]) -> PyResult<()> {
+    if dst.len() == geometry.num_devices() {
+        Ok(())
+    } else {
+        Err(PyValueError::new_err(format!(
+            "dst must have one slot per device: the geometry has {} devices, but dst has {}",
+            geometry.num_devices(),
+            dst.len()
+        )))
+    }
+}
+
 #[pyclass(
     name = "LaguerreGaussianOption",
     module = "autd3_pattern",
+    eq,
+    frozen,
     skip_from_py_object
 )]
+#[derive(PartialEq)]
 pub struct LaguerreGaussianOption(autd3_rs_pattern::LaguerreGaussianOption);
+
+impl LaguerreGaussianOption {
+    fn checked(&self) -> PyResult<autd3_rs_pattern::LaguerreGaussianOption> {
+        check_waist(self.0.waist)?;
+        Ok(self.0)
+    }
+}
 
 #[pymethods]
 impl LaguerreGaussianOption {
     #[new]
     #[pyo3(signature = (p, l, waist))]
-    fn new(p: u32, l: i32, waist: &Bound<'_, PyAny>) -> PyResult<Self> {
-        Ok(Self(autd3_rs_pattern::LaguerreGaussianOption {
-            p,
-            l,
-            waist: extract_waist(waist)?,
-        }))
+    fn new(p: u32, l: i32, #[pyo3(from_py_with = extract_length)] waist: Length) -> Self {
+        Self(autd3_rs_pattern::LaguerreGaussianOption { p, l, waist })
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{:?}", self.0)
     }
 
     #[getter]
@@ -305,20 +329,30 @@ impl LaguerreGaussianOption {
 #[pyclass(
     name = "HermiteGaussianOption",
     module = "autd3_pattern",
+    eq,
+    frozen,
     skip_from_py_object
 )]
+#[derive(PartialEq)]
 pub struct HermiteGaussianOption(autd3_rs_pattern::HermiteGaussianOption);
+
+impl HermiteGaussianOption {
+    fn checked(&self) -> PyResult<autd3_rs_pattern::HermiteGaussianOption> {
+        check_waist(self.0.waist)?;
+        Ok(self.0)
+    }
+}
 
 #[pymethods]
 impl HermiteGaussianOption {
     #[new]
     #[pyo3(signature = (m, n, waist))]
-    fn new(m: u32, n: u32, waist: &Bound<'_, PyAny>) -> PyResult<Self> {
-        Ok(Self(autd3_rs_pattern::HermiteGaussianOption {
-            m,
-            n,
-            waist: extract_waist(waist)?,
-        }))
+    fn new(m: u32, n: u32, #[pyo3(from_py_with = extract_length)] waist: Length) -> Self {
+        Self(autd3_rs_pattern::HermiteGaussianOption { m, n, waist })
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{:?}", self.0)
     }
 
     #[getter]
@@ -349,11 +383,12 @@ fn laguerre_gaussian_phase(
 ) -> PyResult<()> {
     let capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&capsule)?;
+    check_slots(geometry, &dst.0)?;
     autd3_rs_pattern::laguerre_gaussian_phase(
         geometry,
         extract_point(target)?,
         extract_direction(axis)?,
-        option.0,
+        option.checked()?,
         extract_length(wavelength)?,
         &mut dst.0,
     );
@@ -372,11 +407,12 @@ fn laguerre_gaussian_intensity(
 ) -> PyResult<()> {
     let capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&capsule)?;
+    check_slots(geometry, &dst.0)?;
     autd3_rs_pattern::laguerre_gaussian_intensity(
         geometry,
         extract_point(target)?,
         extract_direction(axis)?,
-        option.0,
+        option.checked()?,
         extract_length(wavelength)?,
         &mut dst.0,
     );
@@ -396,12 +432,13 @@ fn hermite_gaussian_phase(
 ) -> PyResult<()> {
     let capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&capsule)?;
+    check_slots(geometry, &dst.0)?;
     autd3_rs_pattern::hermite_gaussian_phase(
         geometry,
         extract_point(target)?,
         extract_direction(axis)?,
         extract_direction(x_dir)?,
-        option.0,
+        option.checked()?,
         extract_length(wavelength)?,
         &mut dst.0,
     );
@@ -421,12 +458,13 @@ fn hermite_gaussian_intensity(
 ) -> PyResult<()> {
     let capsule = capsule_of(geometry)?;
     let geometry = geometry_from_capsule(&capsule)?;
+    check_slots(geometry, &dst.0)?;
     autd3_rs_pattern::hermite_gaussian_intensity(
         geometry,
         extract_point(target)?,
         extract_direction(axis)?,
         extract_direction(x_dir)?,
-        option.0,
+        option.checked()?,
         extract_length(wavelength)?,
         &mut dst.0,
     );
@@ -471,13 +509,13 @@ macro_rules! transducer_fn {
 fn extract_lg_option(
     option: &Bound<'_, PyAny>,
 ) -> PyResult<autd3_rs_pattern::LaguerreGaussianOption> {
-    Ok(option.cast::<LaguerreGaussianOption>()?.borrow().0)
+    option.cast::<LaguerreGaussianOption>()?.get().checked()
 }
 
 fn extract_hg_option(
     option: &Bound<'_, PyAny>,
 ) -> PyResult<autd3_rs_pattern::HermiteGaussianOption> {
-    Ok(option.cast::<HermiteGaussianOption>()?.borrow().0)
+    option.cast::<HermiteGaussianOption>()?.get().checked()
 }
 
 device_fn!(
@@ -654,7 +692,7 @@ impl TransducerMask {
         let geometry = geometry_from_capsule(&capsule)?;
         self.as_core()
             .validate(geometry)
-            .map_err(|e| autd3_python_capsule::to_pyerr(capsule.py(), e))
+            .map_err(|e| autd3_python_capsule::invalid_argument(capsule.py(), e))
     }
 
     fn is_enabled(&self, device: usize, transducer: usize) -> PyResult<bool> {
@@ -782,11 +820,12 @@ impl TransducerGroups {
             .collect()
     }
 
-    fn mask(&self, key: &Bound<'_, PyAny>) -> PyResult<TransducerMask> {
-        match self.lookup.bind(key.py()).get_item(key)? {
-            Some(index) => Ok(self.mask_at(index.extract()?)),
-            None => Err(PyKeyError::new_err(key.clone().unbind())),
-        }
+    fn mask(&self, key: &Bound<'_, PyAny>) -> PyResult<Option<TransducerMask>> {
+        self.lookup
+            .bind(key.py())
+            .get_item(key)?
+            .map(|index| Ok(self.mask_at(index.extract()?)))
+            .transpose()
     }
 }
 

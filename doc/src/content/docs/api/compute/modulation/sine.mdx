@@ -37,6 +37,9 @@ import { excerpt } from "@lib/excerpt";
 <MathBlock tex="m_i = \frac{A}{2}\sin\!\left(2\pi f t_i + \theta\right) + b" />
 
 `freq` は `Freq<u32>`（`150 * Hz`）や `Freq<f32>`（`150.0 * Hz`）で指定する.
+整数の周波数は整数のまま, 浮動小数点の周波数は浮動小数点で波形を計算する (`SamplingMode` の `ExactFreq` / `ExactFreqFloat`).
+Python / C# でも `150 * Hz` は整数, `150.0 * Hz` (C#: `150.0f * Hz`) は浮動小数点の周波数になる.
+Python の `Freq` の `+` / `-` / `*` は整数同士なら整数のままだが, `/` は常に浮動小数点を返す. 整数のまま割るときは `//` を使う.
 
 ## SineOption
 

@@ -58,9 +58,20 @@ import MathBlock from "@components/MathBlock.astro";
 この手法のメリットは, 焦点の位相を最適化する必要がないことである.
 また, 計算速度的にも有利である.
 
+:::note
+SDK の [`greedy`](/autd3-sdk/api/compute/holo/greedy/) は位相だけを `phase_quantization_levels` 段に離散化して探索し, 振幅は探索せず入力として与える (上のアルゴリズムで <Math tex="K = 1" /> とした場合にあたる).
+振動子はランダムな順に選ぶ.
+既定の評価関数は上式の二乗誤差ではなく, 二乗を外した絶対誤差の和 (`abs_objective_func`) である.
+Rust では `GreedyOption` の `objective_func` で評価関数を差し替えられる.
+:::
+
 ### 焦点位相に対する貪欲法 (LSSGreedy)
 
 上記のアルゴリズムでは振動子の振幅/位相を離散化したが, 焦点の位相を離散化し, 単一焦点の重ね合わせ解において最適な焦点の位相を貪欲法と全探索で求める方法もある[^chen2022sound].
+
+:::note
+この手法は現在SDKでは実装されていない.
+:::
 
 [^suzuki2021radiation]: Suzuki, Shun, et al. "Radiation pressure field reconstruction for ultrasound midair haptics by Greedy algorithm with brute-force search." IEEE Transactions on Haptics 14.4 (2021): 914-921.
 

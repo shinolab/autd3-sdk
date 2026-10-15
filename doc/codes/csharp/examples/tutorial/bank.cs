@@ -1,4 +1,3 @@
-using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
 using static AUTD3.Units;
@@ -9,7 +8,7 @@ internal static class Sample
 {
     internal static async Task Run()
     {
-        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
+        var geometry = new Geometry(new[] { new Autd3() });
 
         await using var client = await Client.OpenAsync(geometry, new UdpOption(), new ClientConfig());
 
@@ -18,7 +17,7 @@ internal static class Sample
 
         // ANCHOR: switch
         // Write focus A to bank B0 and play it.
-        var targetA = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
+        var targetA = geometry.Center + Offset(0.0f * mm, 0.0f * mm, 150.0f * mm);
         var patA = geometry.PhaseBuffer();
         Pattern.Focus(
             geometry,
@@ -30,7 +29,7 @@ internal static class Sample
 
         // Write focus B to bank B1, which is not currently playing, then switch to B1.
         // B0 keeps playing cleanly while B1 is being written (double buffering).
-        var targetB = geometry.Center + new Vector3(0.0f, 30.0f, 150.0f);
+        var targetB = geometry.Center + Offset(0.0f * mm, 30.0f * mm, 150.0f * mm);
         var patB = geometry.PhaseBuffer();
         Pattern.Focus(
             geometry,

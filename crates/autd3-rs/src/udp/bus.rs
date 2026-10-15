@@ -22,7 +22,7 @@ use super::simulator::{self, SIMULATOR, Simulator};
 use super::state::{SharedState, StateChecker, Tracker};
 use super::timer::TimerResolutionGuard;
 
-pub const MAX_DEVICES: usize = 128;
+pub use autd3_rs_core::MAX_DEVICES;
 
 #[derive(Debug)]
 pub struct Sent {

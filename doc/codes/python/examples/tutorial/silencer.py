@@ -4,23 +4,23 @@ import numpy as np
 
 from autd3 import Client, ClientConfig, UdpOption
 from autd3.commands import FixedCompletionTime, FociStm, FociStmOption, SetSilencer
-from autd3.geometry import Autd3, Geometry
-from autd3.units import Hz
-from autd3.value import ControlPoint, ControlPoints, Intensity
+from autd3.geometry import Autd3, Geometry, offset
+from autd3.units import Hz, mm
+from autd3.value import ControlPoint, ControlPoints, Intensity, Phase
 from autd3_core import Duration
 
 # xtask:expect-error
 
 
 async def main() -> None:
-    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+    geometry = Geometry([Autd3()])
 
     async with await Client.open(
         geometry,
         UdpOption(),
         ClientConfig(),
     ) as client:
-        center = geometry.center() + np.array([0.0, 0.0, 150.0])
+        center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm)
         radius = 30.0
 
         # ANCHOR: disable
@@ -28,7 +28,7 @@ async def main() -> None:
         for i in range(20):
             theta = 2.0 * np.pi * i / 20.0
             p = center + np.array([radius * np.cos(theta), radius * np.sin(theta), 0.0])
-            foci.append(ControlPoints([ControlPoint(p)], Intensity.MAX))
+            foci.append(ControlPoints([ControlPoint(p, Phase.ZERO)], Intensity.MAX))
         await client.send(SetSilencer.disable())
         await client.send(
             FociStm(
@@ -44,7 +44,7 @@ async def main() -> None:
         for i in range(40):
             theta = 2.0 * np.pi * i / 40.0
             p = center + np.array([radius * np.cos(theta), radius * np.sin(theta), 0.0])
-            foci.append(ControlPoints([ControlPoint(p)], Intensity.MAX))
+            foci.append(ControlPoints([ControlPoint(p, Phase.ZERO)], Intensity.MAX))
         await client.send(SetSilencer())
         await client.send(
             FociStm(
@@ -60,7 +60,7 @@ async def main() -> None:
         for i in range(40):
             theta = 2.0 * np.pi * i / 40.0
             p = center + np.array([radius * np.cos(theta), radius * np.sin(theta), 0.0])
-            foci.append(ControlPoints([ControlPoint(p)], Intensity.MAX))
+            foci.append(ControlPoints([ControlPoint(p, Phase.ZERO)], Intensity.MAX))
         await client.send(
             SetSilencer(
                 FixedCompletionTime(

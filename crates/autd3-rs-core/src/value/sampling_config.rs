@@ -93,6 +93,18 @@ impl From<Freq<f32>> for SamplingConfig {
     }
 }
 
+impl From<Freq<u32>> for SamplingConfig {
+    fn from(value: Freq<u32>) -> Self {
+        Self(SamplingConfigInner::Freq(value.hz() as f32 * Hz))
+    }
+}
+
+impl From<Nearest<Freq<u32>>> for SamplingConfig {
+    fn from(value: Nearest<Freq<u32>>) -> Self {
+        Self(SamplingConfigInner::FreqNearest(value.0.hz() as f32 * Hz))
+    }
+}
+
 impl From<Duration> for SamplingConfig {
     fn from(value: Duration) -> Self {
         Self(SamplingConfigInner::Period(value))
@@ -227,6 +239,35 @@ mod tests {
     )]
     fn divide(#[case] expect: Result<u16, SamplingConfigError>, #[case] config: SamplingConfig) {
         assert_eq!(expect, config.divide().map(NonZeroU16::get));
+    }
+
+    #[test]
+    fn an_integer_frequency_resolves_like_the_float_one() {
+        assert_eq!(
+            Ok(10),
+            SamplingConfig::new(4000 * Hz).divide().map(NonZeroU16::get)
+        );
+        assert_eq!(
+            Ok(1),
+            SamplingConfig::new(40 * kHz).divide().map(NonZeroU16::get)
+        );
+        assert_eq!(
+            Err(SamplingConfigError::FreqInvalid(39999. * Hz)),
+            SamplingConfig::new(39999 * Hz)
+                .divide()
+                .map(NonZeroU16::get)
+        );
+        assert_eq!(
+            Ok(13),
+            SamplingConfig::new(Nearest(3000 * Hz))
+                .divide()
+                .map(NonZeroU16::get)
+        );
+        assert_eq!(SamplingConfig::FREQ_4K, SamplingConfig::new(4000 * Hz));
+        assert_eq!(
+            "SamplingConfig::FreqNearest(Nearest(3000 Hz))",
+            format!("{:?}", SamplingConfig::new(Nearest(3000 * Hz)))
+        );
     }
 
     #[test]

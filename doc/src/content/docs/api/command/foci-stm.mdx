@@ -23,11 +23,11 @@ import { excerpt } from "@lib/excerpt";
 
 | 引数      | 型                       | 説明                                       |
 | --------- | ------------------------ | ------------------------------------------ |
-| `freq`    | `impl Into<StmConfig>`   | 再生レート (`Freq` / `Duration` / `SamplingConfig`)  |
+| `config`  | `impl Into<StmConfig>`   | 再生レート (`Freq` / `Duration` / `SamplingConfig`)  |
 | `points`  | `&[ControlPoints<N>]`    | 焦点サンプルの列 (2 サンプル以上)          |
 | `option`  | `FociStmOption`          | 音速・ループ・遷移などのオプション         |
 
-`freq` に `Freq` / `Duration` を渡すと「全サンプルを 1 周する周波数/周期」を表す.
+`config` に `Freq` / `Duration` を渡すと「全サンプルを 1 周する周波数/周期」を表す.
 サンプリング周波数を指定することもできる.
 `Duration` がサンプル数で割り切れない場合はエラーになる (丸めたいときは `Nearest` を使う).
 
@@ -37,6 +37,11 @@ import { excerpt } from "@lib/excerpt";
 
 - `ControlPoint { point, phase_offset }` — 焦点座標 [mm] と位相オフセット. 
 - `ControlPoints<N> { points: [ControlPoint; N], intensity }` — `N` 個の焦点と振幅. 
+
+`ControlPoint::new(point, phase_offset)` / `ControlPoints::new(points, intensity)` の引数はすべて必須 (Python / C# も同じ).
+Rust では `From` で座標から変換でき, 位相オフセットは `Phase::ZERO`, 振幅は `Intensity::MAX` になる (`ControlPoint::from(p)`, `ControlPoints::from(p)` / `ControlPoints::from(cp)` / `ControlPoints::from([p0, p1])`).
+C# では同じ変換を explicit 変換 `(ControlPoint)p` / `(ControlPoints)p` / `(ControlPoints)cp` / `(ControlPoints)points` で書く.
+Python にはこの短い書き方が無いので, `ControlPoints([ControlPoint(p, Phase.ZERO)], Intensity.MAX)` のように明示する.
 
 ## FociStmOption
 
@@ -87,7 +92,7 @@ import { excerpt } from "@lib/excerpt";
 ## 等価な低レベルコマンド
 
 `FociStm` は [WriteFociBuffer](/autd3-sdk/api/command/lowlevel/write-foci-buffer/) + [ConfigFociStm](/autd3-sdk/api/command/lowlevel/config-foci-stm/) + [ActivatePatternBank](/autd3-sdk/api/command/lowlevel/activate-pattern-bank/) の 3 つと等価であり, この順に展開して送られる.
-以下は `FociStm::new(freq, &points, option)` と等価な組み合わせである.
+以下は `FociStm::new(config, &points, option)` と等価な組み合わせである.
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />
 

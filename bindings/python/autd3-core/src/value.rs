@@ -7,11 +7,11 @@ use autd3_rs_core::units::Hz;
 use autd3_rs_core::value::{
     Intensity as CoreIntensity, Nearest, Phase as CorePhase, SamplingConfig as CoreSamplingConfig,
 };
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyValueError, PyZeroDivisionError};
 use pyo3::prelude::*;
-use pyo3::types::PyComplex;
+use pyo3::types::{PyCapsule, PyComplex};
 
-use crate::error::to_pyerr;
+use crate::error::invalid_argument;
 use crate::units::{Angle, Freq, hash_f32};
 
 #[pyclass(
@@ -29,6 +29,7 @@ pub struct Intensity(pub CoreIntensity);
 #[pymethods]
 impl Intensity {
     #[new]
+    #[pyo3(signature = (value = CoreIntensity::default().0))]
     fn new(value: u8) -> Self {
         Self(CoreIntensity(value))
     }
@@ -58,9 +59,41 @@ impl Intensity {
         self.0.0
     }
 
+    fn __add__(&self, rhs: Intensity) -> Self {
+        Self(self.0 + rhs.0)
+    }
+
+    fn __sub__(&self, rhs: Intensity) -> Self {
+        Self(self.0 - rhs.0)
+    }
+
+    fn __mul__(&self, rhs: u8) -> Self {
+        Self(self.0 * rhs)
+    }
+
+    fn __rmul__(&self, lhs: u8) -> Self {
+        Self(lhs * self.0)
+    }
+
+    fn __truediv__(&self, rhs: u8) -> PyResult<Self> {
+        non_zero_divisor(rhs)?;
+        Ok(Self(self.0 / rhs))
+    }
+
+    fn __floordiv__(&self, rhs: u8) -> PyResult<Self> {
+        self.__truediv__(rhs)
+    }
+
     fn __repr__(&self) -> String {
         format!("Intensity(0x{:02X})", self.0.0)
     }
+}
+
+fn non_zero_divisor(rhs: u8) -> PyResult<()> {
+    if rhs == 0 {
+        return Err(PyZeroDivisionError::new_err("division by zero"));
+    }
+    Ok(())
 }
 
 #[pyclass(
@@ -99,22 +132,27 @@ fn extract_complex(value: &Bound<'_, PyAny>) -> PyResult<Option<Complex<f32>>> {
     )))
 }
 
+fn extract_phase(value: &Bound<'_, PyAny>) -> PyResult<CorePhase> {
+    if let Ok(v) = value.extract::<u8>() {
+        return Ok(CorePhase(v));
+    }
+    if let Ok(angle) = value.cast::<Angle>() {
+        return Ok(CorePhase::from(angle.get().0));
+    }
+    if let Some(complex) = extract_complex(value)? {
+        return Ok(CorePhase::from(complex));
+    }
+    Err(PyValueError::new_err(
+        "Phase expects an int (0-255), an Angle (e.g. 0.5 * pi * rad) or a complex number",
+    ))
+}
+
 #[pymethods]
 impl Phase {
     #[new]
-    fn new(value: &Bound<'_, PyAny>) -> PyResult<Self> {
-        if let Ok(v) = value.extract::<u8>() {
-            return Ok(Self(CorePhase(v)));
-        }
-        if let Ok(angle) = value.cast::<Angle>() {
-            return Ok(Self(CorePhase::from(angle.get().0)));
-        }
-        if let Some(complex) = extract_complex(value)? {
-            return Ok(Self(CorePhase::from(complex)));
-        }
-        Err(PyValueError::new_err(
-            "Phase expects an int (0-255), an Angle (e.g. 0.5 * pi * rad) or a complex number",
-        ))
+    #[pyo3(signature = (value = CorePhase::default()))]
+    fn new(#[pyo3(from_py_with = extract_phase)] value: CorePhase) -> Self {
+        Self(value)
     }
 
     #[classattr]
@@ -144,6 +182,31 @@ impl Phase {
 
     fn __index__(&self) -> u8 {
         self.0.0
+    }
+
+    fn __add__(&self, rhs: Phase) -> Self {
+        Self(self.0 + rhs.0)
+    }
+
+    fn __sub__(&self, rhs: Phase) -> Self {
+        Self(self.0 - rhs.0)
+    }
+
+    fn __mul__(&self, rhs: u8) -> Self {
+        Self(self.0 * rhs)
+    }
+
+    fn __rmul__(&self, lhs: u8) -> Self {
+        Self(lhs * self.0)
+    }
+
+    fn __truediv__(&self, rhs: u8) -> PyResult<Self> {
+        non_zero_divisor(rhs)?;
+        Ok(Self(self.0 / rhs))
+    }
+
+    fn __floordiv__(&self, rhs: u8) -> PyResult<Self> {
+        self.__truediv__(rhs)
     }
 
     fn __repr__(&self) -> String {
@@ -206,19 +269,34 @@ impl SamplingConfig {
         Ok(Self(CoreSamplingConfig::new(divide)))
     }
 
-    fn divide(&self) -> PyResult<u16> {
-        self.0.divide().map(NonZeroU16::get).map_err(to_pyerr)
+    fn divide(&self, py: Python<'_>) -> PyResult<u16> {
+        self.0
+            .divide()
+            .map(NonZeroU16::get)
+            .map_err(|e| invalid_argument(py, e))
     }
 
-    fn freq(&self) -> PyResult<Freq> {
+    fn freq(&self, py: Python<'_>) -> PyResult<Freq> {
         self.0
             .freq()
             .map(|f| Freq::from_hz_f32(f.hz()))
-            .map_err(to_pyerr)
+            .map_err(|e| invalid_argument(py, e))
     }
 
-    fn period(&self) -> PyResult<Duration> {
-        self.0.period().map(Duration).map_err(to_pyerr)
+    fn period(&self, py: Python<'_>) -> PyResult<Duration> {
+        self.0
+            .period()
+            .map(Duration)
+            .map_err(|e| invalid_argument(py, e))
+    }
+
+    fn _sampling_config_capsule<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyCapsule>> {
+        autd3_python_capsule::sampling_config_into_capsule(py, self.0)
+    }
+
+    #[staticmethod]
+    fn _from_sampling_config_capsule(capsule: &Bound<'_, PyCapsule>) -> PyResult<Self> {
+        autd3_python_capsule::sampling_config_from_capsule(capsule).map(Self)
     }
 
     fn __repr__(&self) -> String {

@@ -32,12 +32,12 @@ namespace AUTD3
         private readonly uint _size;
         private readonly LoopBehavior _loopBehavior;
 
-        public ConfigModulation(ModulationBank bank, SamplingConfig config, uint size, LoopBehavior? loopBehavior = null)
+        public ConfigModulation(ModulationBank bank, SamplingConfig config, uint size, LoopBehavior loopBehavior)
         {
             _bank = bank;
             _config = config;
             _size = size;
-            _loopBehavior = loopBehavior ?? LoopBehavior.Infinite;
+            _loopBehavior = loopBehavior;
         }
 
         IntPtr ICommand.CreateOp(Geometry geometry)
@@ -59,10 +59,10 @@ namespace AUTD3
         private readonly ModulationBank _bank;
         private readonly TransitionMode _transitionMode;
 
-        public ActivateModulationBank(ModulationBank bank, TransitionMode? transitionMode = null)
+        public ActivateModulationBank(ModulationBank bank, TransitionMode transitionMode)
         {
             _bank = bank;
-            _transitionMode = transitionMode ?? TransitionMode.Immediate;
+            _transitionMode = transitionMode;
         }
 
         IntPtr ICommand.CreateOp(Geometry geometry) =>

@@ -94,18 +94,23 @@ pub struct Pattern(pub(crate) Arc<PatternData>);
 #[pymethods]
 impl Pattern {
     #[new]
-    #[pyo3(signature = (phases, intensities, bank = None, transition_mode = None))]
+    #[pyo3(signature = (
+        phases,
+        intensities,
+        bank = ops::PatternBank(CorePattern::new(&[], Intensity::MAX).bank),
+        transition_mode = ops::TransitionMode(CorePattern::new(&[], Intensity::MAX).transition_mode),
+    ))]
     fn new(
         phases: &Bound<'_, PyAny>,
         intensities: &Bound<'_, PyAny>,
-        bank: Option<ops::PatternBank>,
-        transition_mode: Option<ops::TransitionMode>,
+        bank: ops::PatternBank,
+        transition_mode: ops::TransitionMode,
     ) -> PyResult<Self> {
         Ok(Self(Arc::new(PatternData {
-            bank: bank.map_or(CorePatternBank::B0, |b| b.0),
+            bank: bank.0,
             phases: extract_phases(phases)?,
             intensities: extract_pattern_intensity(intensities)?,
-            transition_mode: transition_mode.map_or(CoreTransitionMode::Immediate, |t| t.0),
+            transition_mode: transition_mode.0,
         })))
     }
 }
@@ -134,23 +139,28 @@ pub struct Modulation(pub(crate) Arc<ModulationData>);
 #[pymethods]
 impl Modulation {
     #[new]
-    #[pyo3(signature = (config, data, bank = None, loop_behavior = None, transition_mode = None))]
+    #[pyo3(signature = (
+        config,
+        data,
+        bank = ops::ModulationBank(CoreModulation::new(SamplingConfig::FREQ_4K, &[]).bank),
+        loop_behavior = ops::LoopBehavior(CoreModulation::new(SamplingConfig::FREQ_4K, &[]).loop_behavior),
+        transition_mode = ops::TransitionMode(CoreModulation::new(SamplingConfig::FREQ_4K, &[]).transition_mode),
+    ))]
     fn new(
-        config: &Bound<'_, PyAny>,
+        #[pyo3(from_py_with = extract_sampling_config)] config: SamplingConfig,
         data: &Bound<'_, PyAny>,
-        bank: Option<ops::ModulationBank>,
-        loop_behavior: Option<ops::LoopBehavior>,
-        transition_mode: Option<ops::TransitionMode>,
+        bank: ops::ModulationBank,
+        loop_behavior: ops::LoopBehavior,
+        transition_mode: ops::TransitionMode,
     ) -> PyResult<Self> {
-        let config = extract_sampling_config(config)?;
         let capsule = capsule_of(data)?;
         let data = modulation_from_capsule(&capsule)?.to_vec();
         Ok(Self(Arc::new(ModulationData {
-            bank: bank.map_or(CoreModulationBank::B0, |b| b.0),
+            bank: bank.0,
             config,
             data,
-            loop_behavior: loop_behavior.map_or(CoreLoopBehavior::Infinite, |l| l.0),
-            transition_mode: transition_mode.map_or(CoreTransitionMode::Immediate, |t| t.0),
+            loop_behavior: loop_behavior.0,
+            transition_mode: transition_mode.0,
         })))
     }
 }

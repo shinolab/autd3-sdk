@@ -1,5 +1,4 @@
 using System;
-using System.Numerics;
 using AUTD3;
 using static AUTD3.Units;
 
@@ -12,16 +11,16 @@ internal static class Sample
 
     internal static void Run()
     {
-        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
+        var geometry = new Geometry(new[] { new Autd3() });
 
-        var center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
+        var center = geometry.Center + Offset(0.0f * mm, 0.0f * mm, 150.0f * mm);
         var wavelength = Pattern.Wavelength(340.0f * m / s);
         var patterns = new PhaseBuffer[NumPoints];
         var intensities = Intensity.Max;
         for (var i = 0; i < NumPoints; i++)
         {
             var theta = 2.0f * MathF.PI * i / NumPoints;
-            var target = center + new Vector3(RadiusMm * MathF.Cos(theta), RadiusMm * MathF.Sin(theta), 0.0f);
+            var target = center + Offset(RadiusMm * MathF.Cos(theta) * mm, RadiusMm * MathF.Sin(theta) * mm, 0.0f * mm);
             var buffer = geometry.PhaseBuffer();
             Pattern.Focus(geometry, target, wavelength, buffer);
             patterns[i] = buffer;

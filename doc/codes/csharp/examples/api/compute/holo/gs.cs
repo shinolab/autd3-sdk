@@ -1,4 +1,3 @@
-using System.Numerics;
 using AUTD3;
 using AUTD3.Holo;
 using static AUTD3.Units;
@@ -10,13 +9,13 @@ internal static class Sample
 {
     internal static void Run()
     {
-        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
+        var geometry = new Geometry(new[] { new Autd3() });
 
-        var center = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
+        var center = geometry.Center + Offset(0.0f * mm, 0.0f * mm, 150.0f * mm);
         var foci = new[]
         {
-            new AmplitudeTarget(center + new Vector3(-30.0f, 0.0f, 0.0f), 2.5e3f * Pa),
-            new AmplitudeTarget(center + new Vector3(30.0f, 0.0f, 0.0f), 2.5e3f * Pa),
+            new AmplitudeTarget(center + Offset(-30.0f * mm, 0.0f * mm, 0.0f * mm), 2.5e3f * Pa),
+            new AmplitudeTarget(center + Offset(30.0f * mm, 0.0f * mm, 0.0f * mm), 2.5e3f * Pa),
         };
 
         var wavelength = Pattern.Wavelength(340.0f * m / s);

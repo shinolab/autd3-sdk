@@ -42,6 +42,7 @@ Each sample <Math tex="m" /> is rewritten by the following equation.
 | `dst` | `&mut Vec<u8>` | buffer to write the corrected waveform |
 
 There is also `radiation_pressure_inplace`, which rewrites in place.
+The same buffer cannot be passed as both `src` and `dst` (a compile error under the borrow rules in Rust, `ValueError` in Python, and `Autd3Exception` (`InvalidArgument`) in C#). Use `radiation_pressure_inplace` to rewrite a buffer in place.
 
 ## Example
 

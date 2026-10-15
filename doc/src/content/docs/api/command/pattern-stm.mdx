@@ -23,12 +23,12 @@ import { excerpt } from "@lib/excerpt";
 
 | 引数       | 型                                    | 説明                                                 |
 | ---------- | ------------------------------------- | ---------------------------------------------------- |
-| `freq`     | `impl Into<StmConfig>`                | 再生レート (`Freq` / `Duration` / `SamplingConfig`) |
+| `config`   | `impl Into<StmConfig>`                | 再生レート (`Freq` / `Duration` / `SamplingConfig`) |
 | `phases`      | `&[Vec<Vec<Phase>>]`     | 各サンプルの位相の列 (2 サンプル以上)                |
 | `intensities` | `impl Into<StmIntensity>` | 全サンプルの振幅 (一様値 / 全 index 共通バッファ / index 毎のバッファ列) |
 | `option`   | `PatternStmOption`                    | 位相のビット幅・ループ・遷移などのオプション         |
 
-`freq` に `Freq` / `Duration` を渡すと「全サンプルを 1 周する周波数/周期」を表す.
+`config` に `Freq` / `Duration` を渡すと「全サンプルを 1 周する周波数/周期」を表す.
 サンプリング周波数を指定することもできる.
 `Duration` がサンプル数で割り切れない場合はエラーになる (丸めたいときは `Nearest` を使う).
 
@@ -37,6 +37,10 @@ import { excerpt } from "@lib/excerpt";
 - `Intensity` : 全デバイス・全振動子・全indexで同じ値を使う場合
 - `&[Vec<Intensity>]` : 振動子ごとには異なるが全indexで共通の値を使う場合
 - `&[Vec<Vec<Intensity>>]` : 全indexごとに異なる値を使う場合
+
+Python では `Intensity` (または `int`), `IntensityBuffer` 1 つ, `IntensityBuffer` の list の順に対応する.
+C# では `Intensity`, `IntensityBuffer`, `IntensityBuffer[]` の順に対応する.
+index 毎のバッファ列は, 長さが 1 でも index 毎として扱い, 本数が `phases` と一致しなければエラーになる.
 
 ## PatternStmOption
 
@@ -63,7 +67,7 @@ import { excerpt } from "@lib/excerpt";
 ## 等価な低レベルコマンド
 
 `PatternStm` は内部で [WritePatternPhase](/autd3-sdk/api/command/lowlevel/write-pattern-phase/) または [WritePatternBuffer](/autd3-sdk/api/command/lowlevel/write-pattern-buffer/) (各 index) + [ConfigPattern](/autd3-sdk/api/command/lowlevel/config-pattern/) + [ActivatePatternBank](/autd3-sdk/api/command/lowlevel/activate-pattern-bank/) の 3 つへ展開される.
-以下は `intensities` が一様値のときの `PatternStm::new(freq, &phases, intensities, option)` と等価な組み合わせである.
+以下は `intensities` が一様値のときの `PatternStm::new(config, &phases, intensities, option)` と等価な組み合わせである.
 `intensities` が振動子ごとの値のときは `WritePatternPhase` の代わりに `WritePatternBuffer` が各 index に使われる.
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />

@@ -1,27 +1,25 @@
 import asyncio
 
-import numpy as np
-
 from autd3 import Client, ClientConfig, UdpOption
 from autd3.commands import FociStm, FociStmOption
-from autd3.geometry import Autd3, Geometry
-from autd3.units import Hz
-from autd3.value import ControlPoint, ControlPoints
+from autd3.geometry import Autd3, Geometry, offset
+from autd3.units import Hz, mm
+from autd3.value import ControlPoint, ControlPoints, Intensity, Phase
 
 async def main() -> None:
-    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+    geometry = Geometry([Autd3()])
 
     async with await Client.open(
         geometry,
         UdpOption(),
         ClientConfig(),
     ) as client:
-        center = geometry.center() + np.array([0.0, 0.0, 150.0])
+        center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm)
 
         # ANCHOR: stm
         points = [
-            ControlPoints([ControlPoint(center + np.array([20.0, 0.0, 0.0]))]),
-            ControlPoints([ControlPoint(center + np.array([-20.0, 0.0, 0.0]))]),
+            ControlPoints([ControlPoint(center + offset(20.0 * mm, 0.0 * mm, 0.0 * mm), Phase.ZERO)], Intensity.MAX),
+            ControlPoints([ControlPoint(center + offset(-20.0 * mm, 0.0 * mm, 0.0 * mm), Phase.ZERO)], Intensity.MAX),
         ]
         await client.send(FociStm(0.5 * Hz, points, FociStmOption()))
         # ANCHOR_END: stm

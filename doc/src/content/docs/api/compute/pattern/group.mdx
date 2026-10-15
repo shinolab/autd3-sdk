@@ -15,7 +15,7 @@ import csSample from "@codes/csharp/examples/api/compute/pattern/group.cs?raw";
 import csFullSample from "@codes/csharp/examples/api/compute/pattern/group-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
-振動子毎に, どのパターンの emission を出力するかを選ぶ.
+振動子毎に, どのパターンの位相・振幅を出力するかを選ぶ.
 振動子の振り分けは `TransducerGroups` でキー (enum など) を割り当てて決める. すべての振動子がいずれかのキーに属する.
 
 合成には 2 つの API がある.
@@ -55,12 +55,19 @@ import { excerpt } from "@lib/excerpt";
 
 `T` は `Phase` または `Intensity` で, 位相・振幅それぞれのバッファに対して呼ぶ.
 
+Python の `source` はキーから出力元バッファへの Mapping (`{key: buffer}`) で渡す.
+キーが欠けていると `KeyError`, 出力元と `dst` のバッファの型 (`PhaseBuffer` / `IntensityBuffer`) が違うと `TypeError`, `dst` が出力元に含まれていると `ValueError` になる.
+C# の `source` は `Func<TKey, PhaseBuffer>` または `Func<TKey, IntensityBuffer>`.
+
+1 台分だけを合成する `group_device(device, groups, source, dst)` もある (C#: `Pattern.GroupDevice`).
+`dst` はそのデバイス 1 台分のバッファで, Rust は `&mut [T]`, Python は長さがそのデバイスの振動子数の `uint8` の numpy 配列, C# は `Phase[]` / `Intensity[]`.
+
 ## TransducerGroups
 
 `TransducerGroups::new(&geometry, |device, tr| ...)` がデバイスと振動子インデックスからキーを返し, 振動子毎のキーを保持する.
 どのグループにも属さない振動子は作れない. 一部の振動子を無出力にするには, そのためのキーを割り当てて振幅 `Intensity::MIN` を書く (Python でキー関数が `None` を返すと `ValueError`).
 キーは Rust では `Copy + Eq` な型, C# では `null` でない任意の型 (`enum` や `string` など), Python ではハッシュ可能な値.
-`mask(key)` でキー `key` の振動子だけを有効にした [Holo](/autd3-sdk/api/compute/holo/) 用の `TransducerMask`を取得できる. どの振動子にも割り当てられていないキーでは Rust は `None`, C# は `null` を返し, Python は `KeyError` を送出する. 
+`mask(key)` でキー `key` の振動子だけを有効にした [Holo](/autd3-sdk/api/compute/holo/) 用の `TransducerMask`を取得できる. どの振動子にも割り当てられていないキーでは Rust と Python は `None`, C# は `null` を返す. 
 
 ## Example
 

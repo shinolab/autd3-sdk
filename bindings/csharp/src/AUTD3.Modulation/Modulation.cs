@@ -62,6 +62,15 @@ namespace AUTD3
         internal static extern void autd3_modulation_sine_option_free(IntPtr option);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_modulation_sine_option_default(out byte amplitude, out byte offset, out float phaseRad, [MarshalAs(UnmanagedType.I1)] out bool clamp, out ushort samplingDivide);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_modulation_square_option_default(out byte low, out byte high, out float duty, out ushort samplingDivide);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_modulation_fourier_option_default([MarshalAs(UnmanagedType.I1)] out bool hasScaleFactor, out float scaleFactor, [MarshalAs(UnmanagedType.I1)] out bool clamp, out byte offset);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_modulation_sine(byte mode, float freq, uint freqInt, IntPtr option, ModulationBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
@@ -189,34 +198,78 @@ namespace AUTD3
         public void Dispose() => _handle.Dispose();
     }
 
+    internal static class ModulationOptionDefaults
+    {
+        internal static readonly byte SineAmplitude;
+        internal static readonly byte SineOffset;
+        internal static readonly Angle SinePhase;
+        internal static readonly bool SineClamp;
+        internal static readonly SamplingConfig SineSamplingConfig;
+        internal static readonly byte SquareLow;
+        internal static readonly byte SquareHigh;
+        internal static readonly float SquareDuty;
+        internal static readonly SamplingConfig SquareSamplingConfig;
+        internal static readonly float? FourierScaleFactor;
+        internal static readonly bool FourierClamp;
+        internal static readonly byte FourierOffset;
+
+        static ModulationOptionDefaults()
+        {
+            OptionNative.Apply("preset", NativeModulation.autd3_modulation_sine_option_default(out SineAmplitude, out SineOffset, out var phase, out SineClamp, out var sineDivide));
+            SinePhase = Angle.FromRad(phase);
+            SineSamplingConfig = new SamplingConfig(sineDivide);
+            OptionNative.Apply("preset", NativeModulation.autd3_modulation_square_option_default(out SquareLow, out SquareHigh, out SquareDuty, out var squareDivide));
+            SquareSamplingConfig = new SamplingConfig(squareDivide);
+            OptionNative.Apply("preset", NativeModulation.autd3_modulation_fourier_option_default(out var hasScaleFactor, out var scaleFactor, out FourierClamp, out FourierOffset));
+            FourierScaleFactor = hasScaleFactor ? scaleFactor : (float?)null;
+        }
+    }
+
     public readonly struct SineOption
     {
         private readonly byte? _amplitude;
-        public byte Amplitude { get => _amplitude ?? 0xFF; init => _amplitude = value; }
+        public byte Amplitude { get => _amplitude ?? ModulationOptionDefaults.SineAmplitude; init => _amplitude = value; }
         private readonly byte? _offset;
-        public byte Offset { get => _offset ?? 0x80; init => _offset = value; }
-        public Angle Phase { get; init; }
-        public bool Clamp { get; init; }
+        public byte Offset { get => _offset ?? ModulationOptionDefaults.SineOffset; init => _offset = value; }
+        private readonly Angle? _phase;
+        public Angle Phase { get => _phase ?? ModulationOptionDefaults.SinePhase; init => _phase = value; }
+        private readonly bool? _clamp;
+        public bool Clamp { get => _clamp ?? ModulationOptionDefaults.SineClamp; init => _clamp = value; }
         private readonly SamplingConfig? _samplingConfig;
-        public SamplingConfig SamplingConfig { get => _samplingConfig ?? SamplingConfig.Freq4k; init => _samplingConfig = value; }
+        public SamplingConfig SamplingConfig { get => _samplingConfig ?? ModulationOptionDefaults.SineSamplingConfig; init => _samplingConfig = value; }
     }
 
     public readonly struct SquareOption
     {
-        public byte Low { get; init; }
+        private readonly byte? _low;
+        public byte Low { get => _low ?? ModulationOptionDefaults.SquareLow; init => _low = value; }
         private readonly byte? _high;
-        public byte High { get => _high ?? 0xFF; init => _high = value; }
+        public byte High { get => _high ?? ModulationOptionDefaults.SquareHigh; init => _high = value; }
         private readonly float? _duty;
-        public float Duty { get => _duty ?? 0.5f; init => _duty = value; }
+        public float Duty { get => _duty ?? ModulationOptionDefaults.SquareDuty; init => _duty = value; }
         private readonly SamplingConfig? _samplingConfig;
-        public SamplingConfig SamplingConfig { get => _samplingConfig ?? SamplingConfig.Freq4k; init => _samplingConfig = value; }
+        public SamplingConfig SamplingConfig { get => _samplingConfig ?? ModulationOptionDefaults.SquareSamplingConfig; init => _samplingConfig = value; }
     }
 
     public readonly struct FourierOption
     {
-        public float? ScaleFactor { get; init; }
-        public bool Clamp { get; init; }
-        public byte Offset { get; init; }
+        private readonly bool _scaleFactorSet;
+        private readonly float? _scaleFactor;
+
+        public float? ScaleFactor
+        {
+            get => _scaleFactorSet ? _scaleFactor : ModulationOptionDefaults.FourierScaleFactor;
+            init
+            {
+                _scaleFactor = value;
+                _scaleFactorSet = true;
+            }
+        }
+
+        private readonly bool? _clamp;
+        public bool Clamp { get => _clamp ?? ModulationOptionDefaults.FourierClamp; init => _clamp = value; }
+        private readonly byte? _offset;
+        public byte Offset { get => _offset ?? ModulationOptionDefaults.FourierOffset; init => _offset = value; }
     }
 
     public readonly struct SineComponent
@@ -239,6 +292,8 @@ namespace AUTD3
             _nearest = true;
         }
 
+        public bool IsNearest => _nearest;
+
         internal byte ModeCode => _nearest ? (byte)2 : Freq.ModeCode;
     }
 
@@ -250,18 +305,18 @@ namespace AUTD3
         private readonly LoopBehavior _loopBehavior;
         private readonly TransitionMode _transitionMode;
 
-        public Modulation(SamplingConfig config, ModulationBuffer data, LoopBehavior? loopBehavior = null, TransitionMode? transitionMode = null)
+        public Modulation(SamplingConfig config, ModulationBuffer data, LoopBehavior loopBehavior = default, TransitionMode transitionMode = default)
             : this(ModulationBank.B0, config, data, loopBehavior, transitionMode)
         {
         }
 
-        public Modulation(ModulationBank bank, SamplingConfig config, ModulationBuffer data, LoopBehavior? loopBehavior = null, TransitionMode? transitionMode = null)
+        public Modulation(ModulationBank bank, SamplingConfig config, ModulationBuffer data, LoopBehavior loopBehavior = default, TransitionMode transitionMode = default)
         {
             _bank = bank;
             _samplingConfig = config;
             _buffer = data;
-            _loopBehavior = loopBehavior ?? LoopBehavior.Infinite;
-            _transitionMode = transitionMode ?? TransitionMode.Immediate;
+            _loopBehavior = loopBehavior;
+            _transitionMode = transitionMode;
         }
 
         public static ModulationBuffer ModulationBuffer() => new ModulationBuffer();
@@ -305,9 +360,10 @@ namespace AUTD3
                 try
                 {
                     var err = new byte[NativeAbi.ErrorBufferLength];
-                    if (NativeModulation.autd3_modulation_sine(modeCode, freq.HzValue, freq.HzIntValue, optionHandle, dst.Handle, err, (UIntPtr)err.Length) != 0)
+                    var code = NativeModulation.autd3_modulation_sine(modeCode, freq.HzValue, freq.HzIntValue, optionHandle, dst.Handle, err, (UIntPtr)err.Length);
+                    if (code != 0)
                     {
-                        throw new Autd3Exception(NativeUtil.Utf8(err));
+                        throw Autd3Exception.FromNative(code, err);
                     }
                 }
                 finally
@@ -337,9 +393,10 @@ namespace AUTD3
                 try
                 {
                     var err = new byte[NativeAbi.ErrorBufferLength];
-                    if (NativeModulation.autd3_modulation_square(modeCode, freq.HzValue, freq.HzIntValue, optionHandle, dst.Handle, err, (UIntPtr)err.Length) != 0)
+                    var code = NativeModulation.autd3_modulation_square(modeCode, freq.HzValue, freq.HzIntValue, optionHandle, dst.Handle, err, (UIntPtr)err.Length);
+                    if (code != 0)
                     {
-                        throw new Autd3Exception(NativeUtil.Utf8(err));
+                        throw Autd3Exception.FromNative(code, err);
                     }
                 }
                 finally
@@ -390,9 +447,10 @@ namespace AUTD3
                 try
                 {
                     var err = new byte[NativeAbi.ErrorBufferLength];
-                    if (NativeModulation.autd3_modulation_fourier(native, (UIntPtr)components.Length, fourierOption, dst.Handle, err, (UIntPtr)err.Length) != 0)
+                    var code = NativeModulation.autd3_modulation_fourier(native, (UIntPtr)components.Length, fourierOption, dst.Handle, err, (UIntPtr)err.Length);
+                    if (code != 0)
                     {
-                        throw new Autd3Exception(NativeUtil.Utf8(err));
+                        throw Autd3Exception.FromNative(code, err);
                     }
                 }
                 finally
@@ -415,6 +473,10 @@ namespace AUTD3
 
         public static void RadiationPressure(ModulationBuffer src, ModulationBuffer dst)
         {
+            if (ReferenceEquals(src, dst))
+            {
+                throw new Autd3Exception("src and dst must be different buffers; use RadiationPressureInplace to transform a buffer in place", Autd3ErrorCode.InvalidArgument);
+            }
             if (NativeModulation.autd3_modulation_radiation_pressure(src.Handle, dst.Handle) != 0)
             {
                 throw new Autd3Exception("radiation pressure failed");

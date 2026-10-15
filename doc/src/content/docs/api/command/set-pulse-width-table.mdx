@@ -22,7 +22,13 @@ import { excerpt } from "@lib/excerpt";
 
 | フィールド | 型                      | 説明                                                 |
 | ---------- | ----------------------- | ---------------------------------------------------- |
-| `table`    | `&[u16; PWE_TABLE_SIZE]` | 強度インデックス (0–255) ごとのパルス幅 (256 要素) |
+| `table`    | `&[PulseWidth; PWE_TABLE_SIZE]` | 強度インデックス (0–255) ごとのパルス幅 (256 要素) |
+
+`PulseWidth` は `PulseWidth::new(u16)` (1 周期 512 刻みのパルス幅) か `PulseWidth::from_duty(f32)` (デューティ比) で作る.
+構築時には検証せず, 値は `pulse_width()` が `Result` で返す (範囲は `new` が `[0, 512)`, `from_duty` が `[0, 1)`).
+範囲外の値を含むテーブルは encode 時にエラーになる.
+Python も同じ (`PulseWidth(raw)` / `PulseWidth.from_duty(duty)` / `pulse_width()`).
+C# は `new PulseWidth(ushort)` / `PulseWidth.FromDuty(float)` で作り, 値は `Value` で読む (型名と同名のメンバは作れないため `PulseWidth` ではない). 範囲外なら `Value` の取得時と encode 時に `Autd3Exception` (`InvalidArgument`) になる.
 
 デフォルトのコマンドは arcsin 形状のテーブルを設定する.
 これは出力音圧が強度に対して (理論的に) 線形になるようなテーブルであり, デバイスが起動時に持つテーブルと同じである.

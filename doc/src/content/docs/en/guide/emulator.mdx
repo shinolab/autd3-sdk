@@ -159,6 +159,15 @@ shape: (249, 20_480)
 Passing an observation range (`Range`) and options to `Record::sound_field` yields a sound field computation object.
 There are two kinds of options: `RmsRecordOption` (RMS sound pressure) and `InstantRecordOption` (instantaneous sound pressure).
 
+| Option                | Field                   | Default  | Description                              |
+| --------------------- | ----------------------- | -------- | ---------------------------------------- |
+| `RmsRecordOption`     | `sound_speed`           | 340 m/s  | Sound speed                              |
+| `InstantRecordOption` | `sound_speed`           | 340 m/s  | Sound speed                              |
+|                       | `time_step`             | 1 µs     | Time interval of the instantaneous sound pressure |
+|                       | `memory_limits_hint_mb` | 128      | Rough memory budget that decides how much is computed at once [MB] |
+
+The Python defaults are the same, and `None` is not accepted.
+
 For both, `observe_points` gives the observation point coordinates, and `next` gives the sound field for the specified duration.
 `skip` advances time without computing.
 
@@ -252,8 +261,8 @@ shape: (1_681, 25)
 Use `Grid` for points on a regular grid: `x` / `y` / `z` give the range of each axis and `resolution` the step width (mm).
 To fix an axis, set its start and end to the same value (`150.0..=150.0` in Rust, `150.0` in Python).
 
-`order` is the enumeration order of the observation points; they are scanned starting from the first axis.
-It is `AxisOrder::XYZ` (default) / `XZY` / `YXZ` / `YZX` / `ZXY` / `ZYX` in Rust, and a string such as `order="xyz"` (default) in Python.
+`order` is the enumeration order of the observation points; they are scanned starting from the first axis. It cannot be omitted.
+It is `AxisOrder::XYZ` / `XZY` / `YXZ` / `YZX` / `ZXY` / `ZYX` in Rust, and a string such as `order="xyz"` in Python.
 
 In Rust, a `Point3` or a `Vec<Point3>` can also be passed directly.
 

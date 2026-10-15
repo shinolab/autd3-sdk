@@ -3,7 +3,7 @@ from autd3.geometry import Autd3, Geometry
 from autd3.units import m, s
 from autd3_pattern import plane, wavelength
 
-geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+geometry = Geometry([Autd3()])
 
 phases = geometry.phase_buffer()
 

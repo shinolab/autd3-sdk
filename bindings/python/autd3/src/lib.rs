@@ -23,6 +23,7 @@ fn _autd3(m: &Bound<'_, PyModule>) -> PyResult<()> {
         "ULTRASOUND_PERIOD",
         autd3_python_capsule::extract::duration_to_py(m.py(), autd3_rs::common::ULTRASOUND_PERIOD)?,
     )?;
+    m.add("ULTRASOUND_FREQ_HZ", autd3_rs::params::ULTRASOUND_FREQ_HZ)?;
     m.add("MOD_BUFFER_SAMPLES", autd3_rs::params::MOD_BUFFER_SAMPLES)?;
     m.add("BUFFER_SIZE_MIN", autd3_rs::params::BUFFER_SIZE_MIN)?;
     m.add(
@@ -36,6 +37,13 @@ fn _autd3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("NUM_TRANSDUCERS", autd3_rs::Autd3::NUM_TRANSDUCERS)?;
     m.add("GRID_X", autd3_rs::Autd3::GRID_X)?;
     m.add("GRID_Y", autd3_rs::Autd3::GRID_Y)?;
+    m.add(
+        "ROTATION_NORM_TOLERANCE",
+        autd3_rs::Autd3::ROTATION_NORM_TOLERANCE,
+    )?;
+    m.add("SERVER_PORT", autd3_rs::SERVER_PORT)?;
+    m.add("PORT", autd3_rs::udp::PORT)?;
+    m.add("DEVICE_QUEUE_FRAMES", autd3_rs::udp::DEVICE_QUEUE_FRAMES)?;
     m.add_class::<client::Client>()?;
     m.add_class::<client::StateChecker>()?;
     m.add_class::<client::DeviceState>()?;

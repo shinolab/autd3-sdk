@@ -38,7 +38,7 @@ internal static class Program
             .ToArray();
 
         await client.SendAsync(new SetSilencer());
-        await client.SendAsync(new PatternStm(1 * Hz, patterns, Intensity.Max));
+        await client.SendAsync(new PatternStm(1 * Hz, patterns, Intensity.Max, new PatternStmOption()));
 
         Console.WriteLine("running a 1 Hz circular pattern STM — press Ctrl+C to stop");
 

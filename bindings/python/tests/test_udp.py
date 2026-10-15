@@ -60,7 +60,9 @@ def test_fields_round_trip() -> None:
 
 
 def test_the_interface_selects_where_to_connect() -> None:
-    assert autd3.UdpOption(iface=None).iface == autd3.Interface.Auto
+    assert autd3.UdpOption().iface == autd3.Interface.Auto
+    with pytest.raises(TypeError):
+        autd3.UdpOption(iface=loose(None))
     simulator = autd3.UdpOption(iface=autd3.Interface.Simulator)
     assert simulator.iface == autd3.Interface.Simulator
     assert simulator.iface != autd3.Interface.Auto

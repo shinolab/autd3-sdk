@@ -16,23 +16,24 @@ class Grid:
         y: _Axis,
         z: _Axis,
         resolution: float,
-        order: Literal["xyz", "xzy", "yxz", "yzx", "zxy", "zyx"] = "xyz",
+        order: Literal["xyz", "xzy", "yxz", "yzx", "zxy", "zyx"],
     ) -> Grid: ...
 
 @final
 class RmsRecordOption:
     sound_speed: Velocity
-    def __new__(cls, sound_speed: Velocity | None = None) -> RmsRecordOption: ...
+    def __new__(cls, sound_speed: Velocity = ...) -> RmsRecordOption: ...
 
 @final
 class InstantRecordOption:
     sound_speed: Velocity
+    time_step: Duration
     memory_limits_hint_mb: int
     def __new__(
         cls,
-        sound_speed: Velocity | None = None,
-        time_step: Duration | None = None,
-        memory_limits_hint_mb: int = 128,
+        sound_speed: Velocity = ...,
+        time_step: Duration = ...,
+        memory_limits_hint_mb: int = ...,
     ) -> InstantRecordOption: ...
 
 @final
@@ -62,7 +63,7 @@ class Record:
 
 @final
 class Recorder:
-    def __new__(cls, geometry: Geometry, start_ns: int = 0) -> Recorder: ...
+    def __new__(cls, geometry: Geometry, start_ns: int) -> Recorder: ...
     def num_devices(self) -> int: ...
     def send(self, command: _Command) -> None: ...
     def send_frame(self, frame: Frame) -> None: ...

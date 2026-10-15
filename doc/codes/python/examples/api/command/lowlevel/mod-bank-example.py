@@ -9,7 +9,7 @@ from autd3_modulation import SineOption, modulation_buffer, sine
 
 
 async def main() -> None:
-    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+    geometry = Geometry([Autd3()])
     emulator = UdpEmulator(geometry.num_devices())
     async with await Client.open(geometry, emulator.option(), ClientConfig()) as client:
         data = modulation_buffer()

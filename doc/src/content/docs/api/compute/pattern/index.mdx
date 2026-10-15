@@ -1,6 +1,6 @@
 ---
 title: Pattern
-description: 各振動子の位相・振幅 emission を計算して音場を作る Pattern
+description: 各振動子の位相・振幅を計算して音場を作る Pattern
 sidebar:
   order: 1
 ---
@@ -8,7 +8,7 @@ sidebar:
 import Math from "@components/Math.astro";
 import Install from "@components/Install.astro";
 
-単一焦点・平面波・ベッセルビーム・音響浮揚向けのトラップ場など, 代表的な音場計算ユーティリティ.
+単一焦点・平面波・ベッセルビーム・ラゲール・ガウシアンビーム (音響渦)・エルミート・ガウシアンビーム (音響浮揚向けのトラップ場) など, 代表的な音場計算ユーティリティ.
 
 <Install rust="autd3-rs-pattern" python="autd3-pattern" csharp="AUTD3.Pattern" />
 
@@ -17,16 +17,22 @@ import Install from "@components/Install.astro";
 - [focus](/autd3-sdk/api/compute/pattern/focus/) — 単一焦点
 - [plane](/autd3-sdk/api/compute/pattern/plane/) — 平面波
 - [bessel](/autd3-sdk/api/compute/pattern/bessel/) — ベッセルビーム
-- [laguerre_gaussian_phase](/autd3-sdk/api/compute/pattern/laguerre-gaussian/) — ラゲール・ガウシアンビーム
-- [hermite_gaussian_phase](/autd3-sdk/api/compute/pattern/hermite-gaussian/) — エルミート・ガウシアンビーム
+- [laguerre_gaussian_phase / laguerre_gaussian_intensity](/autd3-sdk/api/compute/pattern/laguerre-gaussian/) — ラゲール・ガウシアンビームの位相・振幅
+- [hermite_gaussian_phase / hermite_gaussian_intensity](/autd3-sdk/api/compute/pattern/hermite-gaussian/) — エルミート・ガウシアンビームの位相・振幅
 - [set_intensity / set_phase / add_phase](/autd3-sdk/api/compute/pattern/set/) — 振幅・位相の一括設定
-- [group](/autd3-sdk/api/compute/pattern/group/) — 振動子毎にパターンを選択
+- [group / group_compute](/autd3-sdk/api/compute/pattern/group/) — 振動子毎にパターンを選択
 
 `focus` / `plane` / `bessel` / `laguerre_gaussian_phase` / `hermite_gaussian_phase` には, デバイス 1 台分のみを計算する `*_device` 版と, 振動子 1 素子分の位相を返す `*_transducer` 版もある (例: `focus_device` / `focus_transducer`).
+`laguerre_gaussian_intensity` / `hermite_gaussian_intensity` には `*_device` 版だけがある (振幅の正規化に周囲の振動子が要るため, 振動子単位の版は無い).
+`group` には 1 台分の `group_device` もある.
+
+Geometry 単位の関数で `dst` の台数が `geometry` と合わないと, Rust は panic し, Python は `ValueError`, C# は `Autd3Exception` (`InvalidArgument`) になる.
+
+`*_device` 版の `dst` は 1 台分のバッファで, Rust は `&mut [Phase]` / `&mut [Intensity]`, Python は長さがそのデバイスの振動子数の `uint8` の numpy 配列, C# は長さ `NumTransducers` の `Phase[]` / `Intensity[]`.
 
 ## 波長
 
 位相計算には波長 <Math tex="\lambda = c / f" /> が必要になる.
-音速 <Math tex="c" /> から `autd3_rs_pattern::wavelength(sound_speed)` で波長を求められる. 
+音速 <Math tex="c" /> から `autd3_rs_pattern::wavelength(sound_speed)` (Python: `autd3_pattern.wavelength`, C#: `Pattern.Wavelength`) で波長を求められる. 
 音速 340 m/s (室温約15℃の空気中での音速) では<Math tex="\lambda = 8.5\,\mathrm{mm}" />. 
 

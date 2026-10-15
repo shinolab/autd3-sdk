@@ -73,12 +73,12 @@ def test_a_masked_transducer_mask_is_validated_on_use_not_on_construction() -> N
             holo.greedy(geometry, foci, wavelength, intensities, holo.GreedyOption(mask=mask), phases)
 
 
-def test_an_unknown_group_key_is_a_key_error() -> None:
+def test_an_unknown_group_key_has_no_mask() -> None:
     geometry = two_devices()
     groups = pattern.TransducerGroups(geometry, lambda device, tr: "left" if device.idx() == 0 else "right")
-    with pytest.raises(KeyError):
-        groups.mask("center")
+    assert groups.mask("center") is None
     left = groups.mask("left")
+    assert left is not None
     assert left.num_enabled(geometry) == Autd3.NUM_TRANSDUCERS
 
 
@@ -149,7 +149,7 @@ def test_coordinates_and_rotations_are_float32() -> None:
     assert_float32(device.y_direction(), (3,))
     assert_float32(device.axial_direction(), (3,))
     assert_float32(device.to_local([1.0, 2.0, 3.0]), (3,))
-    assert_float32(ControlPoint([1.0, 2.0, 3.0]).point, (3,))
+    assert_float32(ControlPoint([1.0, 2.0, 3.0], 0).point, (3,))
 
     np.testing.assert_array_equal(device.position(5), device.positions()[5])
     np.testing.assert_array_equal(device.direction(5), device.directions()[5])
@@ -166,6 +166,21 @@ def test_autd3_rotation_is_a_scalar_first_quaternion() -> None:
     np.testing.assert_allclose(
         Autd3([0.0, 0.0, 0.0], EulerAngles.ZYZ(45 * deg, 0 * deg, 0 * deg)).rotation, quaternion, atol=1e-6
     )
+
+    with pytest.raises(TypeError):
+        Autd3([0.0, 0.0, 0.0], loose(None))
+
+
+def test_rust_defaults_are_available_without_arguments() -> None:
+    assert Phase() == Phase.ZERO
+    assert autd3.value.Intensity() == autd3.value.Intensity.MAX
+    geometry = Geometry([Autd3()])
+    for command in (
+        autd3.commands.ForceFan(),
+        autd3.commands.SetGpioOut(),
+        autd3.commands.EmulateGpioIn(),
+    ):
+        assert len(autd3.Frames.encode(geometry, command)) == 1
 
 
 def device_slot() -> npt.NDArray[np.uint8]:

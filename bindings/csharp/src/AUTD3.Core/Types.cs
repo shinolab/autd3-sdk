@@ -43,9 +43,12 @@ namespace AUTD3
         public static readonly byte NumFociMax = NativeCore.autd3_core_params_num_foci_max();
         public static readonly ushort PulseWidthPeriod = NativeCore.autd3_core_params_pulse_width_period();
         public static readonly int MaxInflight = (int)NativeCore.autd3_core_params_max_inflight();
+        public static readonly int MaxDevices = (int)NativeCore.autd3_core_params_max_devices();
+        public static readonly ushort Port = NativeCore.autd3_core_params_port();
+        public static readonly int DeviceQueueFrames = (int)NativeCore.autd3_core_params_device_queue_frames();
     }
 
-    public readonly struct Autd3
+    public readonly struct Autd3 : IEquatable<Autd3>
     {
         public static readonly int NumTransducers = (int)NativeCore.autd3_core_params_num_transducers();
         public static readonly uint GridX = NativeCore.autd3_core_params_grid_x();
@@ -53,19 +56,34 @@ namespace AUTD3
         public static readonly float PitchMm = NativeCore.autd3_core_params_pitch_mm();
         public static readonly float DeviceWidth = NativeCore.autd3_core_params_device_width_mm();
         public static readonly float DeviceHeight = NativeCore.autd3_core_params_device_height_mm();
+        public static readonly float RotationNormTolerance = NativeCore.autd3_core_params_rotation_norm_tolerance();
+
+        private readonly Quaternion? _rotation;
 
         public Vector3 Origin { get; }
-        public Quaternion Rotation { get; }
+        public Quaternion Rotation => _rotation ?? Coords.IdentityRotation;
 
-        public Autd3(Vector3 origin) : this(origin, Coords.IdentityRotation)
+        public Autd3(Vector3 origin)
         {
+            Origin = origin;
+            _rotation = null;
         }
 
         public Autd3(Vector3 origin, Quaternion rotation)
         {
             Origin = origin;
-            Rotation = rotation;
+            _rotation = rotation;
         }
+
+        public bool Equals(Autd3 other) => Origin.Equals(other.Origin) && Rotation.Equals(other.Rotation);
+
+        public override bool Equals(object? obj) => obj is Autd3 other && Equals(other);
+
+        public override int GetHashCode() => HashCode.Combine(Origin, Rotation);
+
+        public static bool operator ==(Autd3 left, Autd3 right) => left.Equals(right);
+
+        public static bool operator !=(Autd3 left, Autd3 right) => !left.Equals(right);
 
         internal NativeCore.Autd3Device ToNative()
         {
@@ -84,14 +102,36 @@ namespace AUTD3
         }
     }
 
-    public readonly struct Intensity
+    public readonly struct Intensity : IEquatable<Intensity>, IComparable<Intensity>
     {
-        public byte Value { get; }
+        private readonly byte _inverted;
+
+        public byte Value => (byte)~_inverted;
 
         public Intensity(byte value)
         {
-            Value = value;
+            _inverted = (byte)~value;
         }
+
+        public bool Equals(Intensity other) => _inverted == other._inverted;
+
+        public override bool Equals(object? obj) => obj is Intensity other && Equals(other);
+
+        public override int GetHashCode() => Value;
+
+        public int CompareTo(Intensity other) => Value.CompareTo(other.Value);
+
+        public static bool operator ==(Intensity left, Intensity right) => left.Equals(right);
+
+        public static bool operator !=(Intensity left, Intensity right) => !left.Equals(right);
+
+        public static bool operator <(Intensity left, Intensity right) => left.Value < right.Value;
+
+        public static bool operator >(Intensity left, Intensity right) => left.Value > right.Value;
+
+        public static bool operator <=(Intensity left, Intensity right) => left.Value <= right.Value;
+
+        public static bool operator >=(Intensity left, Intensity right) => left.Value >= right.Value;
 
         public static Intensity Max => new Intensity(0xFF);
         public static Intensity Min => new Intensity(0x00);
@@ -111,7 +151,7 @@ namespace AUTD3
             new Intensity((byte)(lhs.Value / rhs));
     }
 
-    public readonly struct Phase
+    public readonly struct Phase : IEquatable<Phase>
     {
         public byte Value { get; }
 
@@ -119,6 +159,16 @@ namespace AUTD3
         {
             Value = value;
         }
+
+        public bool Equals(Phase other) => Value == other.Value;
+
+        public override bool Equals(object? obj) => obj is Phase other && Equals(other);
+
+        public override int GetHashCode() => Value;
+
+        public static bool operator ==(Phase left, Phase right) => left.Equals(right);
+
+        public static bool operator !=(Phase left, Phase right) => !left.Equals(right);
 
         public static Phase Zero => new Phase(0x00);
         public static Phase Pi => new Phase(0x80);
@@ -146,7 +196,7 @@ namespace AUTD3
             new Phase((byte)(lhs.Value / rhs));
     }
 
-    public readonly struct Interface
+    public readonly struct Interface : IEquatable<Interface>
     {
         private const byte KindNic = 0;
         private const byte KindSimulator = 1;
@@ -176,6 +226,16 @@ namespace AUTD3
         public bool IsSimulator => _kind == KindSimulator;
 
         public string? AddrValue => _kind == KindAddr ? _value : null;
+
+        public bool Equals(Interface other) => _kind == other._kind && string.Equals(_value, other._value, StringComparison.Ordinal);
+
+        public override bool Equals(object? obj) => obj is Interface other && Equals(other);
+
+        public override int GetHashCode() => HashCode.Combine(_kind, _value is null ? 0 : StringComparer.Ordinal.GetHashCode(_value));
+
+        public static bool operator ==(Interface left, Interface right) => left.Equals(right);
+
+        public static bool operator !=(Interface left, Interface right) => !left.Equals(right);
     }
 
     public readonly struct DeviceState : IEquatable<DeviceState>

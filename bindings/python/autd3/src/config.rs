@@ -1,4 +1,7 @@
 use core::num::{NonZeroU32, NonZeroUsize};
+use core::time::Duration;
+
+use autd3_python_capsule::extract::extract_duration;
 
 use autd3_rs::ClientConfig as CoreClientConfig;
 use pyo3::exceptions::PyValueError;
@@ -12,46 +15,31 @@ pub struct ClientConfig(pub(crate) CoreClientConfig);
 impl ClientConfig {
     #[new]
     #[pyo3(signature = (
-        ack_timeout = None,
-        max_inflight = None,
-        max_resync_rounds = None,
-        require_supported_firmware = None,
+        ack_timeout = CoreClientConfig::default().ack_timeout,
+        max_inflight = CoreClientConfig::default().max_inflight.get(),
+        max_resync_rounds = CoreClientConfig::default().max_resync_rounds.get(),
+        require_supported_firmware = CoreClientConfig::default().require_supported_firmware,
         resynchronize_on_recovery = CoreClientConfig::default().resynchronize_on_recovery,
         release_failsafe_on_recovery = CoreClientConfig::default().release_failsafe_on_recovery,
     ))]
     fn new(
-        ack_timeout: Option<&Bound<'_, PyAny>>,
-        max_inflight: Option<usize>,
-        max_resync_rounds: Option<u32>,
-        require_supported_firmware: Option<bool>,
+        #[pyo3(from_py_with = extract_duration)] ack_timeout: Duration,
+        max_inflight: usize,
+        max_resync_rounds: u32,
+        require_supported_firmware: bool,
         resynchronize_on_recovery: Option<NonZeroU32>,
         release_failsafe_on_recovery: Option<NonZeroU32>,
     ) -> PyResult<Self> {
-        let mut inner = CoreClientConfig {
+        Ok(Self(CoreClientConfig {
+            ack_timeout,
+            max_inflight: NonZeroUsize::new(max_inflight)
+                .ok_or_else(|| PyValueError::new_err("max_inflight must be >= 1"))?,
+            max_resync_rounds: NonZeroU32::new(max_resync_rounds)
+                .ok_or_else(|| PyValueError::new_err("max_resync_rounds must be >= 1"))?,
+            require_supported_firmware,
             resynchronize_on_recovery,
             release_failsafe_on_recovery,
-            ..CoreClientConfig::default()
-        };
-        if let Some(v) = crate::udp::opt_duration(ack_timeout)? {
-            if v.is_zero() {
-                return Err(PyValueError::new_err(
-                    "ack_timeout must be longer than zero",
-                ));
-            }
-            inner.ack_timeout = v;
-        }
-        if let Some(v) = max_inflight {
-            inner.max_inflight = NonZeroUsize::new(v)
-                .ok_or_else(|| PyValueError::new_err("max_inflight must be >= 1"))?;
-        }
-        if let Some(v) = max_resync_rounds {
-            inner.max_resync_rounds = NonZeroU32::new(v)
-                .ok_or_else(|| PyValueError::new_err("max_resync_rounds must be >= 1"))?;
-        }
-        if let Some(v) = require_supported_firmware {
-            inner.require_supported_firmware = v;
-        }
-        Ok(Self(inner))
+        }))
     }
 
     #[getter]

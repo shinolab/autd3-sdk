@@ -1,16 +1,14 @@
 import asyncio
 
-import numpy as np
-
 import autd3_pattern as pattern
 from autd3 import Client, ClientConfig, UdpOption
 from autd3.commands import Pattern
-from autd3.geometry import Autd3, Geometry
-from autd3.units import m, s
+from autd3.geometry import Autd3, Geometry, offset
+from autd3.units import m, mm, s
 from autd3.value import Intensity, PatternBank
 
 async def main() -> None:
-    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+    geometry = Geometry([Autd3()])
 
     async with await Client.open(
         geometry,
@@ -22,7 +20,7 @@ async def main() -> None:
 
         # ANCHOR: switch
         # Write focus A to bank B0 and play it.
-        target_a = geometry.center() + np.array([0.0, 0.0, 150.0])
+        target_a = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm)
         pat_a = geometry.phase_buffer()
         pattern.focus(
             geometry,
@@ -34,7 +32,7 @@ async def main() -> None:
 
         # Write focus B to bank B1, which is not currently playing, then switch to B1.
         # B0 keeps playing cleanly while B1 is being written (double buffering).
-        target_b = geometry.center() + np.array([0.0, 30.0, 150.0])
+        target_b = geometry.center() + offset(0.0 * mm, 30.0 * mm, 150.0 * mm)
         pat_b = geometry.phase_buffer()
         pattern.focus(
             geometry,

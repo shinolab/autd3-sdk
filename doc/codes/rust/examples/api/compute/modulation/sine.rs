@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use autd3_rs::units::{Hz, rad};
 use autd3_rs::value::SamplingConfig;
-use autd3_rs_modulation::{Nearest, SineOption, sine};
+use autd3_rs_modulation::{Nearest, SineOption, modulation_buffer, sine};
 
 fn main() -> Result<()> {
     let freq = 150 * Hz;
@@ -23,7 +23,7 @@ fn main() -> Result<()> {
         }
         // ANCHOR_END: option
         ;
-    let mut dst = Vec::new();
+    let mut dst = modulation_buffer();
     // ANCHOR: api
     sine(freq, &option, &mut dst)?;
     // ANCHOR_END: api

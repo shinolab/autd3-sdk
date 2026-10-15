@@ -2,8 +2,8 @@ use std::ffi::c_char;
 use std::num::{NonZeroU8, NonZeroUsize};
 
 use autd3_ffi_abi::{
-    AUTD3_ERR_INVALID_ARGUMENT, IntensityBuffer, PhaseBuffer, finish, handle_mut, handle_ref,
-    slice_ref, write_cstr,
+    AUTD3_ERR_INVALID_ARGUMENT, AUTD3_OK, IntensityBuffer, PhaseBuffer, handle_mut, handle_ref,
+    slice_ref, write_cstr, write_out,
 };
 use autd3_rs_core::geometry::{Autd3, TransducerMask};
 use autd3_rs_core::value::{Intensity, PatternIntensity, Phase};
@@ -39,8 +39,116 @@ pub extern "C" fn autd3_holo_amplitude_kilo_pascal(value: f32) -> f32 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_holo_amplitude_spl(value: f32) -> f32 {
+pub extern "C" fn autd3_holo_amplitude_from_db(value: f32) -> f32 {
     (value * dB).pascal()
+}
+
+unsafe fn finish(
+    result: Result<(), autd3_rs_pattern_holo::HoloError>,
+    out_err: *mut c_char,
+    out_err_len: usize,
+) -> i32 {
+    match result {
+        Ok(()) => AUTD3_OK,
+        Err(e) => {
+            unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
+            AUTD3_ERR_INVALID_ARGUMENT
+        }
+    }
+}
+
+fn from_directivity(d: Directivity) -> u8 {
+    match d {
+        Directivity::T4010A1 => 1,
+        _ => 0,
+    }
+}
+
+fn from_constraint(c: IntensityConstraint) -> Autd3IntensityConstraint {
+    let (kind, min, max, multiply) = match c {
+        IntensityConstraint::Normalize => (0, 0, 0, 0.0),
+        IntensityConstraint::Multiply(value) => (1, 0, 0, value),
+        IntensityConstraint::Uniform(value) => (2, value.0, 0, 0.0),
+        IntensityConstraint::Clamp(min, max) => (3, min.0, max.0, 0.0),
+        _ => (u8::MAX, 0, 0, 0.0),
+    };
+    Autd3IntensityConstraint {
+        kind,
+        min,
+        max,
+        multiply,
+    }
+}
+
+fn first_error(codes: &[i32]) -> i32 {
+    codes
+        .iter()
+        .copied()
+        .find(|&code| code != AUTD3_OK)
+        .unwrap_or(AUTD3_OK)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_holo_naive_option_default(
+    out_constraint: *mut Autd3IntensityConstraint,
+    out_directivity: *mut u8,
+    out_parallel: *mut bool,
+) -> i32 {
+    let default = NaiveOption::default();
+    first_error(&[
+        unsafe { write_out(out_constraint, from_constraint(default.constraint)) },
+        unsafe { write_out(out_directivity, from_directivity(default.directivity)) },
+        unsafe { write_out(out_parallel, default.parallel) },
+    ])
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_holo_gs_option_default(
+    out_repeat: *mut usize,
+    out_constraint: *mut Autd3IntensityConstraint,
+    out_directivity: *mut u8,
+    out_parallel: *mut bool,
+) -> i32 {
+    let default = GsOption::default();
+    first_error(&[
+        unsafe { write_out(out_repeat, default.repeat.get()) },
+        unsafe { write_out(out_constraint, from_constraint(default.constraint)) },
+        unsafe { write_out(out_directivity, from_directivity(default.directivity)) },
+        unsafe { write_out(out_parallel, default.parallel) },
+    ])
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_holo_gspat_option_default(
+    out_repeat: *mut usize,
+    out_constraint: *mut Autd3IntensityConstraint,
+    out_directivity: *mut u8,
+    out_parallel: *mut bool,
+) -> i32 {
+    let default = GspatOption::default();
+    first_error(&[
+        unsafe { write_out(out_repeat, default.repeat.get()) },
+        unsafe { write_out(out_constraint, from_constraint(default.constraint)) },
+        unsafe { write_out(out_directivity, from_directivity(default.directivity)) },
+        unsafe { write_out(out_parallel, default.parallel) },
+    ])
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_holo_greedy_option_default(
+    out_phase_quantization_levels: *mut u8,
+    out_directivity: *mut u8,
+) -> i32 {
+    let default = GreedyOption::default();
+    first_error(&[
+        unsafe {
+            write_out(
+                out_phase_quantization_levels,
+                default.phase_quantization_levels.get(),
+            )
+        },
+        unsafe { write_out(out_directivity, from_directivity(default.directivity)) },
+    ])
 }
 
 fn to_directivity(d: u8) -> Option<Directivity> {
@@ -138,9 +246,6 @@ unsafe fn prepare<'a>(
     let Some(intensities) = (unsafe { handle_mut(intensities) }) else {
         return Err(fail("null intensity buffer"));
     };
-    if phases.0.len() != geometry.num_devices() || intensities.0.len() != geometry.num_devices() {
-        return Err(fail("the buffer length does not match the geometry"));
-    }
     let Some(constraint) = (unsafe { handle_ref(constraint) }) else {
         return Err(fail("null constraint"));
     };
@@ -340,7 +445,6 @@ enum BatchSolver {
 unsafe fn take_buffers<T>(
     handles: *const *mut autd3_ffi_abi::Buffer<T>,
     len: usize,
-    num_devices: usize,
 ) -> Option<Vec<Vec<Vec<T>>>> {
     let handles = unsafe { slice_ref(handles, len) }?;
     let distinct: std::collections::HashSet<_> = handles.iter().collect();
@@ -349,10 +453,7 @@ unsafe fn take_buffers<T>(
     }
     let mut buffers = Vec::with_capacity(len);
     for &handle in handles {
-        let buffer = unsafe { handle_mut(handle) }?;
-        if buffer.0.len() != num_devices {
-            return None;
-        }
+        unsafe { handle_mut(handle) }?;
         buffers.push(handle);
     }
     Some(
@@ -418,15 +519,15 @@ unsafe fn solve_batch(
     let mask = mask_ref(mask.as_deref());
 
     let Some(mut phase_buffers): Option<Vec<Vec<Vec<Phase>>>> =
-        (unsafe { take_buffers(phases, num_problems, geometry.num_devices()) })
+        (unsafe { take_buffers(phases, num_problems) })
     else {
-        return fail("the phase buffers must be distinct, non-null and match the geometry");
+        return fail("the phase buffers must be distinct and non-null");
     };
     let Some(mut intensity_buffers): Option<Vec<Vec<Vec<Intensity>>>> =
-        (unsafe { take_buffers(intensities, num_problems, geometry.num_devices()) })
+        (unsafe { take_buffers(intensities, num_problems) })
     else {
         unsafe { restore_buffers(phases, num_problems, phase_buffers) };
-        return fail("the intensity buffers must be distinct, non-null and match the geometry");
+        return fail("the intensity buffers must be distinct and non-null");
     };
 
     let wavelength = Length::from_mm(wavelength_mm);
@@ -778,5 +879,141 @@ mod tests {
         });
         assert_eq!(1, phases.0.len());
         assert_eq!(1, intensities.0.len());
+    }
+
+    fn message(err: &[c_char]) -> String {
+        unsafe { std::ffi::CStr::from_ptr(err.as_ptr()) }
+            .to_string_lossy()
+            .into_owned()
+    }
+
+    #[test]
+    fn a_mismatched_buffer_reaches_the_rust_validation() {
+        let geometry = geometry();
+        let foci = foci();
+        let mut err = [0 as c_char; 256];
+        let mut phases =
+            Buffer(Geometry::new(vec![Autd3::default(), Autd3::default()]).phase_buffer());
+        let mut intensities = Buffer(geometry.intensity_buffer());
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_holo_naive(
+                &raw const geometry,
+                foci.as_ptr(),
+                foci.len(),
+                8.5,
+                &raw const NORMALIZE,
+                0,
+                std::ptr::null(),
+                false,
+                &raw mut phases,
+                &raw mut intensities,
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        });
+        assert_eq!(
+            message(&err),
+            autd3_rs_pattern_holo::HoloError::DstDeviceCountMismatch {
+                got: 2,
+                expected: 1
+            }
+            .to_string()
+        );
+    }
+
+    #[test]
+    fn a_holo_error_is_an_invalid_argument() {
+        let geometry = geometry();
+        let mut err = [0 as c_char; 256];
+        let mut phases = Buffer(geometry.phase_buffer());
+        let mut intensities = Buffer(geometry.intensity_buffer());
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_holo_gspat(
+                &raw const geometry,
+                std::ptr::null(),
+                0,
+                8.5,
+                10,
+                &raw const NORMALIZE,
+                0,
+                std::ptr::null(),
+                false,
+                &raw mut phases,
+                &raw mut intensities,
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        });
+        assert_eq!(
+            message(&err),
+            autd3_rs_pattern_holo::HoloError::NoFoci.to_string()
+        );
+    }
+
+    #[test]
+    fn the_option_defaults_match_the_rust_default() {
+        let mut constraint = Autd3IntensityConstraint {
+            kind: u8::MAX,
+            min: 0,
+            max: 0,
+            multiply: 0.0,
+        };
+        let mut directivity = u8::MAX;
+        let mut parallel = false;
+        let mut repeat = 0usize;
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_holo_gs_option_default(
+                &raw mut repeat,
+                &raw mut constraint,
+                &raw mut directivity,
+                &raw mut parallel,
+            )
+        });
+        let default = GsOption::default();
+        assert_eq!(default.repeat.get(), repeat);
+        assert_eq!(Some(default.constraint), to_constraint(&constraint));
+        assert_eq!(Some(default.directivity), to_directivity(directivity));
+        assert_eq!(default.parallel, parallel);
+
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_holo_naive_option_default(
+                &raw mut constraint,
+                &raw mut directivity,
+                &raw mut parallel,
+            )
+        });
+        let default = NaiveOption::default();
+        assert_eq!(Some(default.constraint), to_constraint(&constraint));
+        assert_eq!(default.parallel, parallel);
+
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_holo_gspat_option_default(
+                &raw mut repeat,
+                &raw mut constraint,
+                &raw mut directivity,
+                &raw mut parallel,
+            )
+        });
+        assert_eq!(GspatOption::default().repeat.get(), repeat);
+
+        let mut levels = 0u8;
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_holo_greedy_option_default(&raw mut levels, &raw mut directivity)
+        });
+        let default = GreedyOption::default();
+        assert_eq!(default.phase_quantization_levels.get(), levels);
+        assert_eq!(Some(default.directivity), to_directivity(directivity));
+
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_holo_greedy_option_default(std::ptr::null_mut(), &raw mut directivity)
+        });
+        for c in [
+            IntensityConstraint::Normalize,
+            IntensityConstraint::Multiply(0.5),
+            IntensityConstraint::Uniform(Intensity(3)),
+            IntensityConstraint::Clamp(Intensity(1), Intensity(2)),
+        ] {
+            assert_eq!(Some(c), to_constraint(&from_constraint(c)));
+        }
     }
 }

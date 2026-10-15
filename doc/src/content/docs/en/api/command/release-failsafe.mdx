@@ -1,0 +1,34 @@
+---
+title: ReleaseFailsafe
+description: ReleaseFailsafe resumes the output stopped by the failsafe
+sidebar:
+  order: 10.6
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/release-failsafe.rs?raw";
+import pySample from "@codes/python/examples/api/command/release-failsafe.py?raw";
+import fullSample from "@codes/rust/examples/api/command/release-failsafe-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/release-failsafe-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/release-failsafe.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/release-failsafe-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`ReleaseFailsafe` is a command that resumes the output stopped by the failsafe (loss of communication with the host, loss of the PTP lock, or the CPU watchdog).
+See [SetCpuConfig](/autd3-sdk/en/api/command/cpu-config/) for the failsafe conditions and defaults.
+
+The output from before the stop resumes as it was.
+It does nothing to devices that are not stopped by the failsafe.
+A device whose firing condition still holds (for example, one that is still without the PTP lock) rejects it with an error (`ERR_FAILSAFE_CONDITION_ACTIVE`) and stays stopped.
+Whether the output is stopped can be checked with `is_failsafe_active()` (C#: `IsFailsafeActive`) of the `FpgaState` returned by `read_fpga_state()`.
+
+[Clear](/autd3-sdk/en/api/command/clear/) also releases it, but it resets every state to the defaults.
+For a device recovered automatically from `Lost`, `release_failsafe_on_recovery` of `ClientConfig` sends `ReleaseFailsafe` by default (see [Client](/autd3-sdk/en/api/basics/client/#clientconfig)).
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

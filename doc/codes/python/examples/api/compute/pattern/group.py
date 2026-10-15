@@ -1,9 +1,7 @@
 from enum import Enum, auto
 
-import numpy as np
-
-from autd3.geometry import Autd3, Geometry
-from autd3.units import m, s
+from autd3.geometry import Autd3, Geometry, offset
+from autd3.units import m, mm, s
 from autd3.value import Phase
 from autd3_pattern import (
     IntensityBuffer,
@@ -28,7 +26,7 @@ class Side(Enum):
 # ANCHOR_END: api
 
 
-geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+geometry = Geometry([Autd3()])
 
 left = geometry.phase_buffer()
 right = geometry.phase_buffer()
@@ -45,8 +43,8 @@ group(geometry, groups, {Side.LEFT: left, Side.RIGHT: right}, dst)
 # ANCHOR_END: api
 
 wavelength = calc_wavelength(340 * m / s)
-foci = [AmplitudeTarget(point=center + np.array([-30.0, 0.0, 150.0]), amplitude=5e3 * Pa)]
-target = center + np.array([40.0, 0.0, 150.0])
+foci = [AmplitudeTarget(point=center + offset(-30.0 * mm, 0.0 * mm, 150.0 * mm), amplitude=5e3 * Pa)]
+target = center + offset(40.0 * mm, 0.0 * mm, 150.0 * mm)
 phases = geometry.phase_buffer()
 intensities = geometry.intensity_buffer()
 

@@ -1,4 +1,3 @@
-use core::num::NonZeroU16;
 use core::time::Duration;
 
 use autd3_rs_core::common::Angle;
@@ -8,6 +7,7 @@ use autd3_rs_core::{Geometry, Length, Point3, Velocity};
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
+use pyo3::types::PyCapsule;
 
 static DURATION: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 
@@ -45,7 +45,7 @@ pub fn extract_duration(obj: &Bound<'_, PyAny>) -> PyResult<Duration> {
 
 pub fn extract_velocity(obj: &Bound<'_, PyAny>) -> PyResult<Velocity> {
     let mm_per_s: f32 = obj.getattr("mm_s").and_then(|v| v.extract()).map_err(|_| {
-        PyValueError::new_err(
+        PyTypeError::new_err(
             "sound speed must be a Velocity, e.g. 340 * m / s (bare numbers are no longer accepted)",
         )
     })?;
@@ -54,7 +54,7 @@ pub fn extract_velocity(obj: &Bound<'_, PyAny>) -> PyResult<Velocity> {
 
 pub fn extract_length(obj: &Bound<'_, PyAny>) -> PyResult<Length> {
     let millimetres: f32 = obj.getattr("mm").and_then(|v| v.extract()).map_err(|_| {
-        PyValueError::new_err(
+        PyTypeError::new_err(
             "a length must be a Length, e.g. 10 * mm (bare numbers are no longer accepted)",
         )
     })?;
@@ -65,7 +65,7 @@ pub fn extract_angle(obj: &Bound<'_, PyAny>) -> PyResult<Angle> {
     let radian: f32 = obj
         .getattr("rad")
         .and_then(|v| v.extract())
-        .map_err(|_| PyValueError::new_err("expected an Angle, e.g. 90 * deg"))?;
+        .map_err(|_| PyTypeError::new_err("expected an Angle, e.g. 90 * deg"))?;
     Ok(Angle::from_rad(radian))
 }
 
@@ -88,10 +88,22 @@ pub fn extract_direction(obj: &Bound<'_, PyAny>) -> PyResult<UnitVector3<f32>> {
 }
 
 pub fn extract_sampling_config(obj: &Bound<'_, PyAny>) -> PyResult<SamplingConfig> {
-    let divide: u16 = obj.call_method0("divide")?.extract()?;
-    let divide =
-        NonZeroU16::new(divide).ok_or_else(|| PyValueError::new_err("divider must be >= 1"))?;
-    Ok(SamplingConfig::new(divide))
+    let not_a_config = || -> PyResult<PyErr> {
+        Ok(PyTypeError::new_err(format!(
+            "expected a SamplingConfig, e.g. SamplingConfig(4000 * Hz), got {}",
+            obj.get_type().name()?
+        )))
+    };
+    if !obj.hasattr("_sampling_config_capsule")? {
+        return Err(not_a_config()?);
+    }
+    let Ok(capsule) = obj
+        .call_method0("_sampling_config_capsule")?
+        .cast_into::<PyCapsule>()
+    else {
+        return Err(not_a_config()?);
+    };
+    crate::sampling_config_from_capsule(&capsule)
 }
 
 pub fn velocity_to_py(py: Python<'_>, v: Velocity) -> PyResult<Bound<'_, PyAny>> {
@@ -113,10 +125,10 @@ pub fn angle_to_py(py: Python<'_>, v: Angle) -> PyResult<Bound<'_, PyAny>> {
 }
 
 pub fn sampling_config_to_py(py: Python<'_>, config: SamplingConfig) -> PyResult<Bound<'_, PyAny>> {
-    let divide = config.divide().map_err(|e| crate::to_pyerr(py, e))?;
+    let capsule = crate::sampling_config_into_capsule(py, config)?;
     py.import("autd3_core")?
         .getattr("SamplingConfig")?
-        .call1((divide.get(),))
+        .call_method1("_from_sampling_config_capsule", (capsule,))
 }
 
 pub fn duration_to_py(py: Python<'_>, d: Duration) -> PyResult<Bound<'_, PyAny>> {

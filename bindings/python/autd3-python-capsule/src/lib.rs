@@ -4,7 +4,7 @@ pub mod numpy;
 use std::ffi::{CStr, c_void};
 use std::ptr::NonNull;
 
-use autd3_rs_core::value::{Intensity, Phase};
+use autd3_rs_core::value::{Intensity, Phase, SamplingConfig};
 use autd3_rs_core::{Device, Geometry};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -15,6 +15,7 @@ const DEVICE_CAPSULE_NAME: &CStr = c"autd3.device.v1";
 const PHASE_CAPSULE_NAME: &CStr = c"autd3.phase.v2";
 const INTENSITY_CAPSULE_NAME: &CStr = c"autd3.intensity.v2";
 const MODULATION_CAPSULE_NAME: &CStr = c"autd3.modulation.v1";
+const SAMPLING_CONFIG_CAPSULE_NAME: &CStr = c"autd3.sampling_config.v1";
 
 pub mod error_code {
     pub const GENERIC: i32 = -1;
@@ -40,6 +41,10 @@ pub fn to_pyerr_with_code(py: Python<'_>, code: i32, msg: String) -> PyErr {
 
 pub fn to_pyerr<E: core::fmt::Display>(py: Python<'_>, e: E) -> PyErr {
     to_pyerr_with_code(py, error_code::GENERIC, e.to_string())
+}
+
+pub fn invalid_argument<E: core::fmt::Display>(py: Python<'_>, e: E) -> PyErr {
+    to_pyerr_with_code(py, error_code::INVALID_ARGUMENT, e.to_string())
 }
 
 pub fn to_pyerr_gil<E: core::fmt::Display>(e: E) -> PyErr {
@@ -149,6 +154,18 @@ pub fn intensities_from_capsule_mut<'a>(
     capsule: &'a Bound<'_, PyCapsule>,
 ) -> PyResult<&'a mut Vec<Vec<Intensity>>> {
     Ok(unsafe { &mut *buffer_ptr(capsule, INTENSITY_CAPSULE_NAME)? })
+}
+
+pub fn sampling_config_into_capsule(
+    py: Python<'_>,
+    config: SamplingConfig,
+) -> PyResult<Bound<'_, PyCapsule>> {
+    PyCapsule::new_with_value(py, config, SAMPLING_CONFIG_CAPSULE_NAME)
+}
+
+pub fn sampling_config_from_capsule(capsule: &Bound<'_, PyCapsule>) -> PyResult<SamplingConfig> {
+    let ptr: NonNull<c_void> = capsule.pointer_checked(Some(SAMPLING_CONFIG_CAPSULE_NAME))?;
+    Ok(*unsafe { ptr.cast::<SamplingConfig>().as_ref() })
 }
 
 pub fn modulation_into_capsule(py: Python<'_>, data: Vec<u8>) -> PyResult<Bound<'_, PyCapsule>> {

@@ -1,4 +1,3 @@
-using System.Numerics;
 using AUTD3;
 using AUTD3.Holo;
 using static AUTD3.Units;
@@ -20,7 +19,7 @@ internal static class Sample
     internal static void Run()
     {
         // HIDE_END
-var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
+var geometry = new Geometry(new[] { new Autd3() });
 var wavelength = Pattern.Wavelength(340.0f * m / s);
 var center = geometry.Center;
 
@@ -28,8 +27,8 @@ var groups = new TransducerGroups<Side>(geometry, (device, tr) => device.Positio
 
 var foci = new[]
 {
-    new AmplitudeTarget(center + new Vector3(-50.0f, 0.0f, 150.0f), 5e3f * Pa),
-    new AmplitudeTarget(center + new Vector3(-20.0f, 0.0f, 150.0f), 5e3f * Pa),
+    new AmplitudeTarget(center + Offset(-50.0f * mm, 0.0f * mm, 150.0f * mm), 5e3f * Pa),
+    new AmplitudeTarget(center + Offset(-20.0f * mm, 0.0f * mm, 150.0f * mm), 5e3f * Pa),
 };
 
 var phases = geometry.PhaseBuffer();
@@ -42,7 +41,7 @@ Pattern.GroupCompute(geometry, groups, (side, mask, p, i) =>
     }
     else
     {
-        Pattern.Focus(geometry, center + new Vector3(40.0f, 0.0f, 150.0f), wavelength, p);
+        Pattern.Focus(geometry, center + Offset(40.0f * mm, 0.0f * mm, 150.0f * mm), wavelength, p);
     }
 }, phases, intensities);
         // HIDE

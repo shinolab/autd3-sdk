@@ -48,7 +48,7 @@ namespace AUTD3
             var handle = NativeCore.autd3_core_geometry_from_json(json, err, (UIntPtr)err.Length);
             if (handle == IntPtr.Zero)
             {
-                throw new Autd3Exception(NativeUtil.Utf8(err));
+                throw new Autd3Exception(NativeUtil.Utf8(err), Autd3ErrorCode.InvalidArgument);
             }
             return new Geometry(new GeometryHandle(handle));
         }
@@ -98,14 +98,24 @@ namespace AUTD3
             }
         }
 
-        public Device this[int dev] => new Device(Handle, (UIntPtr)dev);
+        public Device this[int dev]
+        {
+            get
+            {
+                if (dev < 0 || dev >= NumDevices)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(dev));
+                }
+                return new Device(Handle, (UIntPtr)dev);
+            }
+        }
 
         public IEnumerator<Device> GetEnumerator()
         {
             var count = NumDevices;
             for (var i = 0; i < count; i++)
             {
-                yield return this[i];
+                yield return new Device(Handle, (UIntPtr)i);
             }
         }
 

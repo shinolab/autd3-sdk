@@ -21,7 +21,6 @@ async fn main() -> Result<()> {
             require_supported_firmware: false,
             resynchronize_on_recovery: NonZeroU32::new(3),
             release_failsafe_on_recovery: NonZeroU32::new(3),
-            ..Default::default()
         }
         // ANCHOR_END: config
         ;

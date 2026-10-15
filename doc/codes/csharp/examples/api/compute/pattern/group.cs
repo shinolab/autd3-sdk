@@ -1,4 +1,3 @@
-using System.Numerics;
 using AUTD3;
 using AUTD3.Holo;
 using static AUTD3.Units;
@@ -20,7 +19,7 @@ internal static class Sample
 {
     internal static void Run()
     {
-        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
+        var geometry = new Geometry(new[] { new Autd3() });
 
         var left = geometry.PhaseBuffer();
         var right = geometry.PhaseBuffer();
@@ -33,8 +32,8 @@ internal static class Sample
         // ANCHOR_END: api
 
         var wavelength = Pattern.Wavelength(340.0f * m / s);
-        var foci = new[] { new AmplitudeTarget(center + new Vector3(-30.0f, 0.0f, 150.0f), 5e3f * Pa) };
-        var target = center + new Vector3(40.0f, 0.0f, 150.0f);
+        var foci = new[] { new AmplitudeTarget(center + Offset(-30.0f * mm, 0.0f * mm, 150.0f * mm), 5e3f * Pa) };
+        var target = center + Offset(40.0f * mm, 0.0f * mm, 150.0f * mm);
         var phases = geometry.PhaseBuffer();
         var intensities = geometry.IntensityBuffer();
         // ANCHOR: compute

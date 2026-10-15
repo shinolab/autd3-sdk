@@ -53,8 +53,10 @@ Pass a `ServerLink` instead of a `UdpOption`.
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
-| `port` | `u16` | 44338 | Port of the Server |
+| `port` | `u16` | 44338 (`SERVER_PORT`) | Port of the Server |
 | `timeout` | `Duration` | 1 s | Wait from the start of the connection until the Server accepts it. 0 is an error |
+
+`SERVER_PORT` is `autd3.params.SERVER_PORT` in Python and `ServerLink.ServerPort` in C#.
 
 Everything else works as it does when connecting to the devices directly.
 

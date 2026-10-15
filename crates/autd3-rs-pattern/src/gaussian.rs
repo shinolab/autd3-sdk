@@ -53,7 +53,10 @@ impl GaussianBeam {
         wavelength: Length,
     ) -> Self {
         let waist_mm = waist.mm();
-        assert!(waist_mm > 0.0, "waist must be positive");
+        assert!(
+            waist_mm.is_finite() && waist_mm > 0.0,
+            "waist must be a positive finite length"
+        );
         Self {
             target,
             axis,
@@ -241,7 +244,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "waist must be positive")]
+    #[should_panic(expected = "waist must be a positive finite length")]
     fn zero_waist_is_rejected() {
         let axis = Vector3::z_axis();
         let _ = GaussianBeam::new(
@@ -249,6 +252,19 @@ mod tests {
             axis,
             azimuth_basis(axis),
             Length::from_mm(0.0),
+            Length::from_mm(8.5),
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "waist must be a positive finite length")]
+    fn infinite_waist_is_rejected() {
+        let axis = Vector3::z_axis();
+        let _ = GaussianBeam::new(
+            Point3::origin(),
+            axis,
+            azimuth_basis(axis),
+            Length::from_mm(f32::INFINITY),
             Length::from_mm(8.5),
         );
     }

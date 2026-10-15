@@ -20,9 +20,9 @@ import { excerpt } from "@lib/excerpt";
 
 <CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
 
-| Field     | Type           | Description                        |
-| --------- | -------------- | --------------------------------- |
-| `outputs` | `[GpioOut; 4]` | Outputs assigned to terminals 0..3 |
+| Field     | Type           | Default   | Description                        |
+| --------- | -------------- | --------- | ---------------------------------- |
+| `outputs` | `[GpioOut; 4]` | all `Off` | Outputs assigned to terminals 0..3 |
 
 ## GpioOut
 

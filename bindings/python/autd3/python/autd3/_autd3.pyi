@@ -54,6 +54,7 @@ _Command: TypeAlias = _SingleCommand | Each | Sequence[_Command]
 MAX_INFLIGHT: int
 MAX_DEVICES: int
 ULTRASOUND_PERIOD: Duration
+ULTRASOUND_FREQ_HZ: int
 MOD_BUFFER_SAMPLES: int
 BUFFER_SIZE_MIN: int
 EMISSION_MAX_INDICES: int
@@ -64,6 +65,10 @@ PITCH_MM: float
 NUM_TRANSDUCERS: int
 GRID_X: int
 GRID_Y: int
+ROTATION_NORM_TOLERANCE: float
+SERVER_PORT: int
+PORT: int
+DEVICE_QUEUE_FRAMES: int
 
 @final
 class DeviceState:
@@ -163,10 +168,10 @@ class Telemetry:
 class ClientConfig:
     def __new__(
         cls,
-        ack_timeout: Duration | None = None,
-        max_inflight: int | None = None,
-        max_resync_rounds: int | None = None,
-        require_supported_firmware: bool | None = None,
+        ack_timeout: Duration = ...,
+        max_inflight: int = ...,
+        max_resync_rounds: int = ...,
+        require_supported_firmware: bool = ...,
         resynchronize_on_recovery: int | None = ...,
         release_failsafe_on_recovery: int | None = ...,
     ) -> ClientConfig: ...
@@ -213,11 +218,11 @@ class TracingGuard:
         traceback: TracebackType | None,
     ) -> None: ...
 
-def init_tracing(default_filter: str | None = None, writer: LogWriter | None = None) -> TracingGuard: ...
+def init_tracing(default_filter: str = ..., writer: LogWriter = ...) -> TracingGuard: ...
 
 @final
 class ServerLink:
-    def __new__(cls, port: int = 44338, timeout: Duration | None = None) -> ServerLink: ...
+    def __new__(cls, port: int = ..., timeout: Duration = ...) -> ServerLink: ...
     @property
     def port(self) -> int: ...
     @property
@@ -228,17 +233,17 @@ class ServerLink:
 class UdpOption:
     def __new__(
         cls,
-        iface: Interface | str | None = ...,
+        iface: Interface | str = ...,
         heartbeat: Duration | None = ...,
-        reply_timeout: Duration | None = None,
-        lost_timeout: Duration | None = None,
-        response_timeout: Duration | None = None,
-        enumeration_timeout: Duration | None = None,
-        sync_timeout: Duration | None = None,
-        send_rate_limit: float | None = None,
+        reply_timeout: Duration = ...,
+        lost_timeout: Duration = ...,
+        response_timeout: Duration = ...,
+        enumeration_timeout: Duration = ...,
+        sync_timeout: Duration = ...,
+        send_rate_limit: float | None = ...,
         send_buffer: int | None = ...,
         timer_resolution: Duration | None = ...,
-        recovery_interval: Duration | None = None,
+        recovery_interval: Duration | None = ...,
     ) -> UdpOption: ...
     @property
     def iface(self) -> Interface: ...
@@ -262,11 +267,11 @@ class UdpOption:
     def send_buffer(self) -> int | None: ...
     @property
     def timer_resolution(self) -> Duration | None: ...
+    def __eq__(self, other: object) -> bool: ...
 
 @final
 class UdpEmulator:
     def __new__(cls, num_devices: int) -> UdpEmulator: ...
-    @property
     def num_devices(self) -> int: ...
     def option(self) -> UdpOption: ...
     def reboot(self, index: int) -> None: ...
@@ -416,7 +421,7 @@ class PulseWidth:
 
 @final
 class ControlPoint:
-    def __new__(cls, point: _Vec3, phase_offset: Phase | int | None = None) -> ControlPoint: ...
+    def __new__(cls, point: _Vec3, phase_offset: Phase | int) -> ControlPoint: ...
     @property
     def point(self) -> npt.NDArray[np.float32]: ...
     @property
@@ -425,7 +430,7 @@ class ControlPoint:
 
 @final
 class ControlPoints:
-    def __new__(cls, points: Sequence[ControlPoint], intensity: Intensity | int | None = None) -> ControlPoints: ...
+    def __new__(cls, points: Sequence[ControlPoint], intensity: Intensity | int) -> ControlPoints: ...
     @property
     def points(self) -> list[ControlPoint]: ...
     @property
@@ -443,8 +448,8 @@ class Pattern:
         cls,
         phases: PhaseBuffer,
         intensities: IntensityBuffer | Intensity | int,
-        bank: PatternBank | None = None,
-        transition_mode: TransitionMode | None = None,
+        bank: PatternBank = ...,
+        transition_mode: TransitionMode = ...,
     ) -> Pattern: ...
 
 @final
@@ -453,9 +458,9 @@ class Modulation:
         cls,
         config: SamplingConfig,
         data: ModulationBuffer,
-        bank: ModulationBank | None = None,
-        loop_behavior: LoopBehavior | None = None,
-        transition_mode: TransitionMode | None = None,
+        bank: ModulationBank = ...,
+        loop_behavior: LoopBehavior = ...,
+        transition_mode: TransitionMode = ...,
     ) -> Modulation: ...
 
 @final
@@ -486,7 +491,7 @@ class ConfigPattern:
         bank: PatternBank,
         config: SamplingConfig,
         size: int,
-        loop_behavior: LoopBehavior | None = None,
+        loop_behavior: LoopBehavior,
     ) -> ConfigPattern: ...
 
 @final
@@ -498,12 +503,12 @@ class ConfigFociStm:
         size: int,
         num_foci: int,
         sound_speed: Velocity,
-        loop_behavior: LoopBehavior | None = None,
+        loop_behavior: LoopBehavior,
     ) -> ConfigFociStm: ...
 
 @final
 class ActivatePatternBank:
-    def __new__(cls, bank: PatternBank, transition_mode: TransitionMode | None = None) -> ActivatePatternBank: ...
+    def __new__(cls, bank: PatternBank, transition_mode: TransitionMode) -> ActivatePatternBank: ...
 
 @final
 class WriteModulationBuffer:
@@ -516,28 +521,27 @@ class ConfigModulation:
         bank: ModulationBank,
         config: SamplingConfig,
         size: int,
-        loop_behavior: LoopBehavior | None = None,
+        loop_behavior: LoopBehavior,
     ) -> ConfigModulation: ...
 
 @final
 class ActivateModulationBank:
-    def __new__(
-        cls, bank: ModulationBank, transition_mode: TransitionMode | None = None
-    ) -> ActivateModulationBank: ...
+    def __new__(cls, bank: ModulationBank, transition_mode: TransitionMode) -> ActivateModulationBank: ...
 
 @final
 class StmConfig:
     def __new__(cls, value: Freq | Duration | SamplingConfig | Nearest | StmConfig) -> StmConfig: ...
     def into_sampling_config(self, size: int) -> SamplingConfig: ...
+    def __eq__(self, other: object) -> bool: ...
 
 @final
 class FociStmOption:
     def __new__(
         cls,
-        bank: PatternBank | None = None,
-        sound_speed: Velocity | None = None,
-        loop_behavior: LoopBehavior | None = None,
-        transition_mode: TransitionMode | None = None,
+        bank: PatternBank = ...,
+        sound_speed: Velocity = ...,
+        loop_behavior: LoopBehavior = ...,
+        transition_mode: TransitionMode = ...,
     ) -> FociStmOption: ...
     @property
     def bank(self) -> PatternBank: ...
@@ -547,15 +551,16 @@ class FociStmOption:
     def loop_behavior(self) -> LoopBehavior: ...
     @property
     def transition_mode(self) -> TransitionMode: ...
+    def __eq__(self, other: object) -> bool: ...
 
 @final
 class PatternStmOption:
     def __new__(
         cls,
-        bank: PatternBank | None = None,
-        phase_depth: PhaseDepth | None = None,
-        loop_behavior: LoopBehavior | None = None,
-        transition_mode: TransitionMode | None = None,
+        bank: PatternBank = ...,
+        phase_depth: PhaseDepth = ...,
+        loop_behavior: LoopBehavior = ...,
+        transition_mode: TransitionMode = ...,
     ) -> PatternStmOption: ...
     @property
     def bank(self) -> PatternBank: ...
@@ -565,6 +570,7 @@ class PatternStmOption:
     def loop_behavior(self) -> LoopBehavior: ...
     @property
     def transition_mode(self) -> TransitionMode: ...
+    def __eq__(self, other: object) -> bool: ...
 
 @final
 class FociStm:
@@ -572,7 +578,7 @@ class FociStm:
         cls,
         config: _StmConfigLike,
         points: Sequence[ControlPoints],
-        option: FociStmOption | None = None,
+        option: FociStmOption,
     ) -> FociStm: ...
 
 @final
@@ -586,7 +592,7 @@ class PatternStm:
         config: _StmConfigLike,
         phases: Sequence[PhaseBuffer],
         intensities: Intensity | int | IntensityBuffer | Sequence[IntensityBuffer],
-        option: PatternStmOption | None = None,
+        option: PatternStmOption,
     ) -> PatternStm: ...
 
 def circle(
@@ -623,24 +629,36 @@ class Nop:
 
 @final
 class ForceFan:
-    def __new__(cls, value: bool) -> ForceFan: ...
+    def __new__(cls, value: bool = ...) -> ForceFan: ...
 
 @final
 class FixedCompletionTime:
     def __new__(
         cls,
-        intensity: Duration | None = None,
-        phase: Duration | None = None,
-        strict_mode: bool = True,
+        intensity: Duration = ...,
+        phase: Duration = ...,
+        strict_mode: bool = ...,
     ) -> FixedCompletionTime: ...
+    @property
+    def intensity(self) -> Duration: ...
+    @property
+    def phase(self) -> Duration: ...
+    @property
+    def strict_mode(self) -> bool: ...
+    def __eq__(self, other: object) -> bool: ...
 
 @final
 class FixedUpdateRate:
     def __new__(cls, intensity: int, phase: int) -> FixedUpdateRate: ...
+    @property
+    def intensity(self) -> int: ...
+    @property
+    def phase(self) -> int: ...
+    def __eq__(self, other: object) -> bool: ...
 
 @final
 class SetSilencer:
-    def __new__(cls, config: FixedCompletionTime | FixedUpdateRate | None = None) -> SetSilencer: ...
+    def __new__(cls, config: FixedCompletionTime | FixedUpdateRate = ...) -> SetSilencer: ...
     @staticmethod
     def disable() -> SetSilencer: ...
 
@@ -778,11 +796,11 @@ class GpioOut:
 
 @final
 class SetGpioOut:
-    def __new__(cls, outputs: Sequence[GpioOut]) -> SetGpioOut: ...
+    def __new__(cls, outputs: Sequence[GpioOut] = ...) -> SetGpioOut: ...
 
 @final
 class EmulateGpioIn:
-    def __new__(cls, values: Sequence[bool]) -> EmulateGpioIn: ...
+    def __new__(cls, values: Sequence[bool] = ...) -> EmulateGpioIn: ...
 
 @final
 class SetOutputMask:
@@ -794,6 +812,6 @@ class SetPhaseCorrection:
 
 @final
 class SetPulseWidthTable:
-    def __new__(cls, table: Sequence[PulseWidth] | None = None) -> SetPulseWidthTable: ...
+    def __new__(cls, table: Sequence[PulseWidth] = ...) -> SetPulseWidthTable: ...
     @staticmethod
     def empty_table() -> list[PulseWidth]: ...

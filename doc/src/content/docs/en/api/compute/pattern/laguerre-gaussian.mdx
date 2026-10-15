@@ -43,6 +43,8 @@ Besides `laguerre_gaussian_phase`, which writes only the phase, there is `laguer
 | `l`     | `i32`    | Azimuthal mode index                                    |
 | `waist` | `Length` | Beam waist radius <Math tex="w_0" /> (positive) |
 
+`waist` must be a positive finite length. Otherwise Rust panics when computing, Python raises `ValueError`, and C# throws `Autd3Exception` (`InvalidArgument`).
+
 ## Example
 
 <CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

@@ -1,5 +1,4 @@
 using System;
-using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
 using AUTD3;
@@ -14,7 +13,7 @@ internal static class Sample
     {
         // HIDE_END
 // Define a geometry consisting of a single AUTD3 device.
-var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
+var geometry = new Geometry(new[] { new Autd3() });
 
 // Open the client.
 await using var client = await Client.OpenAsync(
@@ -24,7 +23,7 @@ await using var client = await Client.OpenAsync(
 );
 
 // Generate a focus 150 mm above the array center.
-var target = geometry.Center + new Vector3(0.0f, 0.0f, 150.0f);
+var target = geometry.Center + Offset(0.0f * mm, 0.0f * mm, 150.0f * mm);
 var wavelength = Pattern.Wavelength(340.0f * m / s);
 var phases = geometry.PhaseBuffer();
 Pattern.Focus(
@@ -60,6 +59,8 @@ try
 catch (OperationCanceledException)
 {
 }
+
+await client.SilentStopAsync();
         // HIDE
     }
 }

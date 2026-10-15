@@ -1,7 +1,7 @@
 from autd3.commands import SetOutputMask
 from autd3.geometry import Autd3, Geometry
 
-geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+geometry = Geometry([Autd3()])
 
 masks = geometry.output_mask_buffer()
 

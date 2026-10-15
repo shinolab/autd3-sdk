@@ -16,5 +16,5 @@ The signal output from each terminal (reference signal, temperature sensor, sync
 
 Each input terminal is **active low**.
 
-The `EmulateGpioIn` command asserts each input from software.
+The [`EmulateGpioIn`](/autd3-sdk/en/api/command/emulate-gpio-in/) command asserts each input from software.
 The effective value the FPGA sees is the logical OR of the physical terminal and `EmulateGpioIn`.

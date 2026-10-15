@@ -51,6 +51,8 @@ import csServerSample from "@codes/csharp/examples/api/connection/server-link.cs
 | `bus_stats()`             | —     | `BusStats`                             | 送受信の統計 (送信フレーム数・ack 遅延など)                |
 | `read_firmware_version()` | ✓     | `Result<Vec<FirmwareVersion>, Error>` | 各デバイスの CPU/FPGA ファームウェアバージョン             |
 | `read_fpga_state()`       | ✓     | `Result<Vec<FpgaState>, Error>`       | 各デバイスの FPGA 状態                                     |
+| `read_telemetry()`        | ✓     | `Result<Vec<Telemetry>, Error>`       | 各デバイスの CPU の診断カウンタ                            |
+| `device_time_now()`       | —     | `Result<SysTime, Error>`              | 現在のデバイスの時刻 ([SysTime](/autd3-sdk/api/basics/sys-time/) 参照). 時刻を載せた返信をまだ受けていなければ `DeviceTimeUnknown` |
 | `send(cmd)`               | ✓     | `Result<(), Error>`                   | コマンドを送信し, 1 フレームずつ応答確認まで行う           |
 | `send_streaming(cmd)`     | ✓     | `Result<StreamFuture, Error>`         | `send`のstream版                                           |
 | `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | フレームを 1 つ送る                                        |
@@ -60,6 +62,77 @@ import csServerSample from "@codes/csharp/examples/api/connection/server-link.cs
 
 `silent_stop()` は, 振幅を一気に落としてノイズが出るのを避けるため, まず [Silencer](/autd3-sdk/api/command/silencer/) を設定してから全振動子の振幅を 0 にする.
 Silencer の設定は上書きされたままになるので, 別の設定で出力を再開する場合は `SetSilencer` を送り直すこと.
+
+## 読み出し結果の型
+
+`read_firmware_version()` / `read_fpga_state()` / `read_telemetry()` はデバイス番号順に 1 台 1 要素の配列を返す.
+`Lost` のデバイスがある間は `DeviceLost` で失敗する.
+
+Python のメソッド・フィールド名は Rust と同じ (フィールドはプロパティ).
+C# は PascalCase のプロパティになる (`is_thermal_asserted()` → `IsThermalAsserted`, `fifo_drop` → `FifoDrop` など).
+
+### FirmwareVersion
+
+| メンバ                  | 型               | 説明                                                   |
+| ----------------------- | ---------------- | ------------------------------------------------------ |
+| `cpu`                   | `Version`        | CPU ファームウェアのバージョン                         |
+| `fpga`                  | `Version`        | FPGA ファームウェアのバージョン (読めなければ `0.0.0`) |
+| `is_emulator()`         | `bool`           | デバイスエミュレータか                                 |
+| `is_supported()`        | `bool`           | CPU と FPGA の両方がこの SDK のサポートする系列か      |
+| `SUPPORTED_SERIES`      | `(u8, u8)`       | サポートする系列 (major, minor) (C#: `SupportedSeries`) |
+
+`Version` は `major` / `minor` / `patch` (`u8`) と `is_unknown()` (`0.0.0` か) を持つ.
+
+### FpgaState
+
+| メソッド                  | 型               | 説明                                     |
+| ------------------------- | ---------------- | ---------------------------------------- |
+| `raw()`                   | `u8`             | 状態レジスタの生の値                     |
+| `is_thermal_asserted()`   | `bool`           | 温度センサが閾値を超えているか           |
+| `current_mod_bank()`      | `ModulationBank` | 現在の Modulation bank                   |
+| `current_pattern_bank()`  | `PatternBank`    | 現在の Pattern bank (Pattern と STM で共有) |
+| `is_pattern_mode()`       | `bool`           | Pattern を出力しているか                 |
+| `is_stm_mode()`           | `bool`           | STM を出力しているか                     |
+| `is_pattern_stopped()`    | `bool`           | Pattern / STM の再生が止まっているか |
+| `is_mod_stopped()`        | `bool`           | Modulation の再生が止まっているか |
+| `is_transition_pending()` | `bool`           | bank の切り替えが発効待ちか              |
+| `is_failsafe_active()`    | `bool`           | フェイルセーフで出力が止まっているか     |
+
+### Telemetry
+
+CPU の診断カウンタ. `Clear` で `boot_failure` 以外は 0 に戻る (`Client` は開くときに `Clear` を送る).
+読み出してもクリアされない.
+
+| フィールド            | 型    | 説明                                                   |
+| --------------------- | ----- | ------------------------------------------------------ |
+| `fifo_drop`           | `u32` | 受信 FIFO が満杯で捨てたフレーム数                     |
+| `dedup`               | `u32` | 重複として捨てたフレーム数                             |
+| `seq_mismatch`        | `u32` | シーケンス番号が合わず無視したフレーム数               |
+| `dispatch_error`      | `u32` | 処理がエラーになった回数                               |
+| `processed`           | `u32` | 処理したフレーム数                                     |
+| `send_failure`        | `u32` | NIC が送信を断った回数                                 |
+| `failsafe`            | `u16` | ホストとの通信途絶によるフェイルセーフの発火回数       |
+| `ptp_unlock_failsafe` | `u16` | PTP ロック喪失によるフェイルセーフの発火回数           |
+| `sync_resync`         | `u8`  | 同期入力のハード再同期回数 (`Synchronize` で 0 に戻る) |
+| `boot_failure`        | `u8`  | 起動時に失敗した手順の数 (`Clear` で消えない)          |
+| `cpu_watchdog`        | `u8`  | CPU ウォッチドッグの発火回数 (FPGA の再構成まで消えない) |
+
+`u32` のフィールドは桁あふれで 0 に戻り, `u16` / `u8` のフィールドは上限で止まる.
+
+### BusStats
+
+`bus_stats()` はホスト側の送受信の統計を返す. 値は `Client` を開いてからの累計で, 読むたびに最新の値になる.
+
+| メソッド                     | 型    | 説明                                         |
+| ---------------------------- | ----- | -------------------------------------------- |
+| `frames()`                   | `u64` | 送ったフレーム数                             |
+| `resets()`                   | `u64` | 送った `Reset` の数                          |
+| `heartbeats()`               | `u64` | 送った Heartbeat の数                        |
+| `missed_heartbeat_replies()` | `u64` | `reply_timeout` までに返らなかった Heartbeat の返信の数 |
+| `recoveries()`               | `u64` | `Lost` から自動復帰したデバイスの数          |
+| `acked_frames()`             | `u64` | 返信を受けたフレーム数                       |
+| `worst_ack_latency_ns()`     | `u64` | 送信から返信までの最大時間 [ns]              |
+| `mean_ack_latency_ns()`      | `u64` | 送信から返信までの平均時間 [ns]              |
 
 ## ClientConfig
 
@@ -74,7 +147,10 @@ Silencer の設定は上書きされたままになるので, 別の設定で出
 | `resynchronize_on_recovery` | `Option<NonZeroU32>` | `Some(3)`       | `Lost` から自動復帰したデバイスへ, 次の送信の前に `Synchronize` を送り直す. 値は試行回数の上限で, `None` なら送らない ([状態監視](/autd3-sdk/guide/state-check/) 参照) |
 | `release_failsafe_on_recovery` | `Option<NonZeroU32>` | `Some(3)`    | `Lost` から自動復帰したデバイスへ, 次の送信の前に `ReleaseFailsafe` を送り, フェイルセーフで止まった出力を再開させる. 値は試行回数の上限で, `None` なら送らない ([状態監視](/autd3-sdk/guide/state-check/) 参照) |
 
-`max_inflight` は `MAX_INFLIGHT (7)` を超えるとエラーになる.
+`max_inflight` は `MAX_INFLIGHT (7)` (Python: `autd3.params.MAX_INFLIGHT`, C#: `Params.MaxInflight`) を超えるとエラーになる.
+既定値も `MAX_INFLIGHT` で, これは各デバイスの受信キューのフレーム数 `DEVICE_QUEUE_FRAMES` (Python: `autd3.params.DEVICE_QUEUE_FRAMES`, C#: `Params.DeviceQueueFrames`) に等しい.
+`ack_timeout` を 0 にすると, `Client` を開くときにエラー (`InvalidPayload`. Python の `Autd3Error.code` は `INVALID_ARGUMENT`, C# の `Autd3Exception.Code` は `InvalidArgument`) になる.
+Python の既定値は Rust と同じで, `None` を渡せるのは型が `Option` の `resynchronize_on_recovery` / `release_failsafe_on_recovery` だけである.
 
 再送処理は行われない. 失敗したコマンドはユーザが送り直す必要がある.
 

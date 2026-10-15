@@ -23,11 +23,11 @@ Unlike [`PatternStm`](/autd3-sdk/en/api/command/pattern-stm/), it can only handl
 
 | Parameter | Type                     | Description                                          |
 | --------- | ------------------------ | --------------------------------------------------- |
-| `freq`    | `impl Into<StmConfig>`   | Playback rate (`Freq` / `Duration` / `SamplingConfig`) |
+| `config`  | `impl Into<StmConfig>`   | Playback rate (`Freq` / `Duration` / `SamplingConfig`) |
 | `points`  | `&[ControlPoints<N>]`    | Sequence of focal point samples (at least 2 samples)        |
 | `option`  | `FociStmOption`          | Options such as sound speed, loop, and transition   |
 
-Passing a `Freq` / `Duration` to `freq` represents "the frequency/period for one full cycle over all samples".
+Passing a `Freq` / `Duration` to `config` represents "the frequency/period for one full cycle over all samples".
 A sampling frequency can also be specified.
 A `Duration` that is not divisible by the number of samples is an error (use `Nearest` to round it).
 
@@ -37,6 +37,11 @@ A single sample is represented by `ControlPoints<N>`. `N` is the number of focal
 
 - `ControlPoint { point, phase_offset }` — focal point coordinate [mm] and phase offset.
 - `ControlPoints<N> { points: [ControlPoint; N], intensity }` — `N` focal points and an amplitude.
+
+All arguments of `ControlPoint::new(point, phase_offset)` / `ControlPoints::new(points, intensity)` are required (the same in Python / C#).
+In Rust, `From` converts from coordinates, with the phase offset `Phase::ZERO` and the amplitude `Intensity::MAX` (`ControlPoint::from(p)`, `ControlPoints::from(p)` / `ControlPoints::from(cp)` / `ControlPoints::from([p0, p1])`).
+In C#, the same conversions are written as the explicit conversions `(ControlPoint)p` / `(ControlPoints)p` / `(ControlPoints)cp` / `(ControlPoints)points`.
+Python has no such shorthand, so write it out, as in `ControlPoints([ControlPoint(p, Phase.ZERO)], Intensity.MAX)`.
 
 ## FociStmOption
 
@@ -87,7 +92,7 @@ Places `num_points` points at equal intervals along a line including the start a
 ## Equivalent Low-Level Commands
 
 `FociStm` is equivalent to the three commands [WriteFociBuffer](/autd3-sdk/en/api/command/lowlevel/write-foci-buffer/) + [ConfigFociStm](/autd3-sdk/en/api/command/lowlevel/config-foci-stm/) + [ActivatePatternBank](/autd3-sdk/en/api/command/lowlevel/activate-pattern-bank/), and is sent expanded in that order.
-The following is equivalent to `FociStm::new(freq, &points, option)`.
+The following is equivalent to `FociStm::new(config, &points, option)`.
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />
 

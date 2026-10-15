@@ -2,7 +2,7 @@ use autd3_rs_core::{
     Autd3 as CoreAutd3, Device as CoreDevice, Geometry as CoreGeometry, Point3, Quaternion,
     UnitQuaternion, UnitVector3, Vector3,
 };
-use pyo3::exceptions::{PyIndexError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyCapsule, PyIterator, PyList};
 
@@ -92,10 +92,17 @@ fn scipy_rotation_to_quat(obj: &Bound<'_, PyAny>) -> PyResult<Option<[f32; 4]>> 
     Ok(Some([qw, qx, qy, qz]))
 }
 
-fn coerce_rotation(rotation: Option<&Bound<'_, PyAny>>) -> PyResult<UnitQuaternion<f32>> {
-    let Some(rotation) = rotation.filter(|rotation| !rotation.is_none()) else {
-        return Ok(UnitQuaternion::identity());
-    };
+fn coerce_origin(origin: &Bound<'_, PyAny>) -> PyResult<Point3<f32>> {
+    let [x, y, z] = origin.extract::<[f32; 3]>()?;
+    Ok(Point3::new(x, y, z))
+}
+
+fn coerce_rotation(rotation: &Bound<'_, PyAny>) -> PyResult<UnitQuaternion<f32>> {
+    if rotation.is_none() {
+        return Err(PyTypeError::new_err(
+            "rotation must be a scalar-first quaternion [w, x, y, z], an EulerAngles, or a scipy.spatial.transform.Rotation, not None",
+        ));
+    }
     if let Ok(euler) = rotation.extract::<EulerAngles>() {
         return Ok(euler.0);
     }
@@ -129,14 +136,16 @@ pub struct Autd3 {
 #[pymethods]
 impl Autd3 {
     #[new]
-    #[pyo3(signature = (origin, rotation = None))]
-    fn new(origin: [f32; 3], rotation: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
-        let [x, y, z] = origin;
-        Ok(Self {
-            origin: Point3::new(x, y, z),
-            rotation: coerce_rotation(rotation)?,
-        })
+    #[pyo3(signature = (origin = CoreAutd3::default().origin, rotation = CoreAutd3::default().rotation))]
+    fn new(
+        #[pyo3(from_py_with = coerce_origin)] origin: Point3<f32>,
+        #[pyo3(from_py_with = coerce_rotation)] rotation: UnitQuaternion<f32>,
+    ) -> Self {
+        Self { origin, rotation }
     }
+
+    #[classattr]
+    const ROTATION_NORM_TOLERANCE: f32 = CoreAutd3::ROTATION_NORM_TOLERANCE;
 
     #[classattr]
     const NUM_TRANSDUCERS: usize = CoreAutd3::NUM_TRANSDUCERS;
@@ -197,6 +206,20 @@ pub(crate) fn offset(
     np_vec3(py, v.x, v.y, v.z)
 }
 
+fn pattern_module<'py>(py: Python<'py>, method: &str) -> PyResult<Bound<'py, PyModule>> {
+    py.import("autd3_pattern").map_err(|e| {
+        if e.is_instance_of::<pyo3::exceptions::PyModuleNotFoundError>(py) {
+            let err = pyo3::exceptions::PyModuleNotFoundError::new_err(format!(
+                "Geometry.{method}() needs the autd3-pattern package (pip install autd3-pattern)"
+            ));
+            err.set_cause(py, Some(e));
+            err
+        } else {
+            e
+        }
+    })
+}
+
 fn same_device(lhs: &CoreDevice, rhs: &CoreDevice) -> bool {
     lhs.idx() == rhs.idx()
         && lhs.rotation() == rhs.rotation()
@@ -245,13 +268,13 @@ impl Geometry {
     }
 
     fn phase_buffer<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        py.import("autd3_pattern")?
+        pattern_module(py, "phase_buffer")?
             .getattr("PhaseBuffer")?
             .call1((self.0.num_devices(),))
     }
 
     fn intensity_buffer<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        py.import("autd3_pattern")?
+        pattern_module(py, "intensity_buffer")?
             .getattr("IntensityBuffer")?
             .call1((self.0.num_devices(),))
     }
@@ -267,7 +290,9 @@ impl Geometry {
         Ok(Device(self.0[index].clone()))
     }
 
-    fn __getitem__(&self, index: usize) -> PyResult<Device> {
+    fn __getitem__(&self, index: isize) -> PyResult<Device> {
+        let index = usize::try_from(index)
+            .map_err(|_| PyIndexError::new_err("device index out of range"))?;
         self.device(index)
     }
 
@@ -329,7 +354,9 @@ impl Device {
         self.0.num_transducers()
     }
 
-    fn __getitem__<'py>(&self, py: Python<'py>, index: usize) -> PyResult<Bound<'py, PyAny>> {
+    fn __getitem__<'py>(&self, py: Python<'py>, index: isize) -> PyResult<Bound<'py, PyAny>> {
+        let index = usize::try_from(index)
+            .map_err(|_| PyIndexError::new_err("transducer index out of range"))?;
         self.position(py, index)
     }
 

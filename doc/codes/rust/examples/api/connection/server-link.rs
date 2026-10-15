@@ -3,13 +3,13 @@ use std::time::Duration;
 use anyhow::Result;
 
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::{Client, ClientConfig, ServerLink};
+use autd3_rs::{Client, ClientConfig, SERVER_PORT, ServerLink};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let port = 44338;
+    let port = SERVER_PORT;
     let timeout = Duration::from_secs(1);
     // ANCHOR: api
     let link = ServerLink { port, timeout };

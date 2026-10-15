@@ -74,11 +74,14 @@ impl TracingGuard {
 }
 
 #[pyfunction]
-#[pyo3(signature = (default_filter = None, writer = None))]
+#[pyo3(signature = (
+    default_filter = TracingOption::default().default_filter.to_owned(),
+    writer = LogWriter(TracingOption::default().writer),
+))]
 pub(crate) fn init_tracing(
     py: Python<'_>,
-    default_filter: Option<String>,
-    writer: Option<LogWriter>,
+    default_filter: String,
+    writer: LogWriter,
 ) -> PyResult<TracingGuard> {
     let mut state = STATE.lock().unwrap_or_else(PoisonError::into_inner);
     if state.initialized {
@@ -88,10 +91,9 @@ pub(crate) fn init_tracing(
             "tracing is already initialized; init_tracing can be called once per process",
         ));
     }
-    let default = TracingOption::default();
     let option = TracingOption {
-        default_filter: default_filter.map_or(default.default_filter, |filter| filter.leak()),
-        writer: writer.map_or(default.writer, |writer| writer.0),
+        default_filter: default_filter.leak(),
+        writer: writer.0,
     };
     match try_init_tracing(option) {
         Ok(guard) => {

@@ -4,7 +4,7 @@ use autd3_python_capsule::extract::number_f32;
 use autd3_rs_core::common::units::Hz;
 use autd3_rs_core::common::{Angle as CoreAngle, Length as CoreLength, Velocity as CoreVelocity};
 use autd3_rs_core::value::SamplingConfig as CoreSamplingConfig;
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyOverflowError, PyValueError, PyZeroDivisionError};
 use pyo3::prelude::*;
 
 pub(crate) fn hash_f32<H: Hasher>(value: f32, state: &mut H) {
@@ -17,19 +17,70 @@ enum FreqVal {
     Float(f32),
 }
 
-#[pyclass(name = "Freq", module = "autd3_core", eq, hash, frozen, from_py_object)]
+#[pyclass(
+    name = "Freq",
+    module = "autd3_core",
+    eq,
+    ord,
+    hash,
+    frozen,
+    from_py_object
+)]
 #[derive(Clone, Copy)]
 pub struct Freq(FreqVal);
 
 impl PartialEq for Freq {
     fn eq(&self, other: &Self) -> bool {
-        self.hz() == other.hz()
+        match (self.0, other.0) {
+            (FreqVal::Int(l), FreqVal::Int(r)) => l == r,
+            (FreqVal::Float(l), FreqVal::Float(r)) => l == r,
+            _ => false,
+        }
     }
+}
+
+impl PartialOrd for Freq {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        match (self.0, other.0) {
+            (FreqVal::Int(l), FreqVal::Int(r)) => Some(l.cmp(&r)),
+            _ => self.hz().partial_cmp(&other.hz()),
+        }
+    }
+}
+
+fn int_freq_overflow() -> PyErr {
+    PyOverflowError::new_err("integer frequency must be in 0..=4294967295 Hz")
+}
+
+fn int_operand(value: &Bound<'_, PyAny>) -> Option<i64> {
+    if value.is_instance_of::<pyo3::types::PyBool>() {
+        return None;
+    }
+    value
+        .is_instance_of::<pyo3::types::PyInt>()
+        .then(|| value.extract::<i64>().ok())
+        .flatten()
+}
+
+fn int_freq(value: Option<i64>) -> PyResult<Freq> {
+    value
+        .and_then(|v| u32::try_from(v).ok())
+        .map(|v| Freq(FreqVal::Int(v)))
+        .ok_or_else(int_freq_overflow)
 }
 
 impl Hash for Freq {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        hash_f32(self.hz(), state);
+        match self.0 {
+            FreqVal::Int(v) => {
+                0u8.hash(state);
+                v.hash(state);
+            }
+            FreqVal::Float(f) => {
+                1u8.hash(state);
+                hash_f32(f, state);
+            }
+        }
     }
 }
 
@@ -61,6 +112,50 @@ impl Freq {
         }
     }
 
+    fn __add__(&self, rhs: Freq) -> PyResult<Freq> {
+        match (self.0, rhs.0) {
+            (FreqVal::Int(l), FreqVal::Int(r)) => int_freq(Some(i64::from(l) + i64::from(r))),
+            _ => Ok(Freq(FreqVal::Float(self.hz() + rhs.hz()))),
+        }
+    }
+
+    fn __sub__(&self, rhs: Freq) -> PyResult<Freq> {
+        match (self.0, rhs.0) {
+            (FreqVal::Int(l), FreqVal::Int(r)) => int_freq(Some(i64::from(l) - i64::from(r))),
+            _ => Ok(Freq(FreqVal::Float(self.hz() - rhs.hz()))),
+        }
+    }
+
+    fn __mul__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<Freq> {
+        if let (FreqVal::Int(l), Some(r)) = (self.0, int_operand(rhs)) {
+            return int_freq(i64::from(l).checked_mul(r));
+        }
+        Ok(Freq(FreqVal::Float(self.hz() * rhs.extract::<f32>()?)))
+    }
+
+    fn __rmul__(&self, lhs: &Bound<'_, PyAny>) -> PyResult<Freq> {
+        self.__mul__(lhs)
+    }
+
+    fn __truediv__(&self, rhs: f32) -> PyResult<Freq> {
+        if rhs == 0.0 {
+            return Err(PyZeroDivisionError::new_err("division by zero"));
+        }
+        Ok(Freq(FreqVal::Float(self.hz() / rhs)))
+    }
+
+    fn __floordiv__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<Freq> {
+        let (FreqVal::Int(l), Some(r)) = (self.0, int_operand(rhs)) else {
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "`//` needs an integer frequency (e.g. 200 * Hz) and an int divisor",
+            ));
+        };
+        if r == 0 {
+            return Err(PyZeroDivisionError::new_err("division by zero"));
+        }
+        int_freq(Some(i64::from(l).div_euclid(r)))
+    }
+
     fn __repr__(&self) -> String {
         match self.0 {
             FreqVal::Int(v) => format!("{v} Hz"),
@@ -89,6 +184,7 @@ macro_rules! float_unit_eq_hash {
     name = "Velocity",
     module = "autd3_core",
     eq,
+    ord,
     hash,
     frozen,
     from_py_object
@@ -97,6 +193,12 @@ macro_rules! float_unit_eq_hash {
 pub struct Velocity(pub CoreVelocity);
 
 float_unit_eq_hash!(Velocity, mm_s);
+
+impl PartialOrd for Velocity {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        self.0.partial_cmp(&other.0)
+    }
+}
 
 #[pymethods]
 impl Velocity {
@@ -166,15 +268,48 @@ impl Angle {
         self.0.deg()
     }
 
+    fn __neg__(&self) -> Self {
+        Self(-self.0)
+    }
+
+    fn __add__(&self, rhs: Angle) -> Self {
+        Self(self.0 + rhs.0)
+    }
+
+    fn __sub__(&self, rhs: Angle) -> Self {
+        Self(self.0 - rhs.0)
+    }
+
+    fn __mul__(&self, rhs: f32) -> Self {
+        Self(self.0 * rhs)
+    }
+
+    fn __rmul__(&self, lhs: f32) -> Self {
+        Self(lhs * self.0)
+    }
+
+    fn __truediv__(&self, rhs: f32) -> PyResult<Self> {
+        non_zero_divisor(rhs)?;
+        Ok(Self(self.0 / rhs))
+    }
+
     fn __repr__(&self) -> String {
         format!("{:?}", self.0)
     }
+}
+
+fn non_zero_divisor(rhs: f32) -> PyResult<()> {
+    if rhs == 0.0 {
+        return Err(PyZeroDivisionError::new_err("division by zero"));
+    }
+    Ok(())
 }
 
 #[pyclass(
     name = "Length",
     module = "autd3_core",
     eq,
+    ord,
     hash,
     frozen,
     from_py_object
@@ -183,6 +318,12 @@ impl Angle {
 pub struct Length(pub CoreLength);
 
 float_unit_eq_hash!(Length, mm);
+
+impl PartialOrd for Length {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        self.0.partial_cmp(&other.0)
+    }
+}
 
 #[pymethods]
 impl Length {
@@ -206,14 +347,36 @@ impl Length {
         self.0.m()
     }
 
-    fn __truediv__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<Velocity> {
+    fn __neg__(&self) -> Self {
+        Self(-self.0)
+    }
+
+    fn __add__(&self, rhs: Length) -> Self {
+        Self(self.0 + rhs.0)
+    }
+
+    fn __sub__(&self, rhs: Length) -> Self {
+        Self(self.0 - rhs.0)
+    }
+
+    fn __mul__(&self, rhs: f32) -> Self {
+        Self(self.0 * rhs)
+    }
+
+    fn __rmul__(&self, lhs: f32) -> Self {
+        Self(lhs * self.0)
+    }
+
+    fn __truediv__<'py>(&self, rhs: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+        let py = rhs.py();
         if rhs.is_instance_of::<SecUnit>() {
-            Ok(Velocity(CoreVelocity::from_mm_s(self.0.mm())))
-        } else {
-            Err(PyValueError::new_err(
-                "a Length may only be divided by `s` to form a Velocity, e.g. 340 * m / s",
-            ))
+            return Ok(Bound::new(py, Velocity(CoreVelocity::from_mm_s(self.0.mm())))?.into_any());
         }
+        let Ok(divisor) = rhs.extract::<f32>() else {
+            return Ok(py.NotImplemented().into_bound(py));
+        };
+        non_zero_divisor(divisor)?;
+        Ok(Bound::new(py, Self(self.0 / divisor))?.into_any())
     }
 
     fn __repr__(&self) -> String {
@@ -307,7 +470,10 @@ impl Freq {
     }
 
     pub(crate) fn sampling_config(self) -> CoreSamplingConfig {
-        CoreSamplingConfig::new(self.hz() * Hz)
+        match self.0 {
+            FreqVal::Int(v) => CoreSamplingConfig::new(v * Hz),
+            FreqVal::Float(f) => CoreSamplingConfig::new(f * Hz),
+        }
     }
 }
 

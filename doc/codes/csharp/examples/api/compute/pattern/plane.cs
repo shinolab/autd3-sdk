@@ -8,7 +8,7 @@ internal static class Sample
 {
     internal static void Run()
     {
-        var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
+        var geometry = new Geometry(new[] { new Autd3() });
 
         var direction = Vector3.UnitZ;
         var wavelength = Pattern.Wavelength(340.0f * m / s);

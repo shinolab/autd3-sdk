@@ -159,6 +159,15 @@ shape: (249, 20_480)
 `Record::sound_field` に観測範囲 ( `Range` ) とオプションを渡すと, 音場計算オブジェクトが得られる.
 オプションには `RmsRecordOption` ( RMS 音圧 ) と `InstantRecordOption` ( 瞬時音圧 ) の 2 種類がある.
 
+| オプション            | フィールド              | 既定値   | 説明                                     |
+| --------------------- | ----------------------- | -------- | ---------------------------------------- |
+| `RmsRecordOption`     | `sound_speed`           | 340 m/s  | 音速                                     |
+| `InstantRecordOption` | `sound_speed`           | 340 m/s  | 音速                                     |
+|                       | `time_step`             | 1 µs     | 瞬時音圧を出す時間間隔                   |
+|                       | `memory_limits_hint_mb` | 128      | 一度に計算する範囲を決めるメモリ量の目安 [MB] |
+
+Python の既定値も同じで, `None` は渡せない.
+
 いずれも `observe_points` で観測点座標を, `next` で指定時間分の音場を得られる.
 `skip` で計算せずに時間を進められる.
 
@@ -252,8 +261,8 @@ shape: (1_681, 25)
 格子状の観測点は `Grid` で指定する. `x` / `y` / `z` に各軸の範囲, `resolution` に刻み幅 ( mm ) を与える.
 固定したい軸は始点と終点を同じ値にする ( Rust は `150.0..=150.0`, Python は `150.0` ).
 
-`order` は観測点の列挙順で, 先頭の軸から走査される.
-Rust は `AxisOrder::XYZ` ( 既定 ) / `XZY` / `YXZ` / `YZX` / `ZXY` / `ZYX`, Python は `order="xyz"` ( 既定 ) のような文字列で指定する.
+`order` は観測点の列挙順で, 先頭の軸から走査される. 省略はできない.
+Rust は `AxisOrder::XYZ` / `XZY` / `YXZ` / `YZX` / `ZXY` / `ZYX`, Python は `order="xyz"` のような文字列で指定する.
 
 また, Rust では `Point3` や `Vec<Point3>` をそのまま渡すこともできる.
 

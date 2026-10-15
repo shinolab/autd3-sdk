@@ -27,10 +27,10 @@ The current time of the devices is obtained with `device_time_now()` of the `Cli
 
 | Operation               | Description                                                    |
 | ----------------------- | ------------------------------------------------------------- |
-| `ZERO`                  | The moment the `Client` opened                                |
+| `ZERO`                  | The moment the `Client` opened (C#: `Zero`)                   |
 | `Client::device_time_now()` | Current time of the devices (C#: `DeviceTimeNow()`)       |
-| `from_nanos(ns)`        | Construct from ns elapsed since the open                      |
-| `sys_time()`            | ns elapsed since the open                                     |
+| `from_nanos(ns)`        | Construct from ns elapsed since the open (C#: `FromNanos(ns)`) |
+| `sys_time()`            | ns elapsed since the open (Python: the `sys_time` property, C#: `Nanos`) |
 
 ## Arithmetic
 
@@ -44,3 +44,6 @@ The current time of the devices is obtained with `device_time_now()` of the `Cli
 | `SysTime - Duration`        | `SysTime`  | Subtract the specified duration          |
 | `SysTime - SysTime`       | `Duration`   | Difference between two times (0 if it would be negative) |
 | Comparison (`<` / `>` / `==`, etc.) | `bool` | Comparison                               |
+
+In C#, `SysTime - SysTime` returns a `TimeSpan`, so it is truncated to 100 ns units.
+When the difference in ns is needed, take the difference of the `Nanos` values.

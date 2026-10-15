@@ -854,53 +854,40 @@ fn matches_geometry<T>(geometry: &Geometry, buffer: &Buffer<T>) -> bool {
             .all(|(device, slot)| slot.len() == device.num_transducers())
 }
 
-unsafe fn group_impl<T: Copy>(
-    geometry: *const Geometry,
+struct GroupInputs<'a, T> {
+    groups: TransducerGroups<usize>,
+    sources: Vec<&'a Buffer<T>>,
+}
+
+unsafe fn group_inputs<'a, T>(
+    geometry: &Geometry,
     keys: *const i32,
     sources: *const *const Buffer<T>,
     num_sources: usize,
-    buffer: *mut Buffer<T>,
-) -> i32 {
-    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
-        return -1;
-    };
-    let (Some(keys), Some(source_ptrs)) = (
-        unsafe { slice_ref(keys, geometry.num_transducers()) },
-        unsafe { slice_ref(sources, num_sources) },
-    ) else {
-        return -1;
-    };
+    dst: *const u8,
+) -> Option<GroupInputs<'a, T>> {
+    let keys = unsafe { slice_ref(keys, geometry.num_transducers()) }?;
+    let source_ptrs = unsafe { slice_ref(sources, num_sources) }?;
     if source_ptrs
         .iter()
-        .any(|&ptr| std::ptr::eq(ptr, buffer.cast_const()))
+        .any(|&ptr| std::ptr::eq(ptr.cast::<u8>(), dst))
     {
-        return -1;
+        return None;
     }
-    let Some(sources) = source_ptrs
+    let sources = source_ptrs
         .iter()
         .map(|&ptr| unsafe { handle_ref(ptr) })
-        .collect::<Option<Vec<&Buffer<T>>>>()
-    else {
-        return -1;
-    };
-    let Some(buffer) = (unsafe { handle_mut(buffer) }) else {
-        return -1;
-    };
-
-    if !matches_geometry(geometry, buffer)
-        || !sources
-            .iter()
-            .all(|source| matches_geometry(geometry, source))
+        .collect::<Option<Vec<&Buffer<T>>>>()?;
+    if !sources
+        .iter()
+        .all(|source| matches_geometry(geometry, source))
     {
-        return -1;
+        return None;
     }
-    let Some(keys) = keys
+    let keys = keys
         .iter()
         .map(|&key| usize::try_from(key).ok().filter(|&key| key < num_sources))
-        .collect::<Option<Vec<usize>>>()
-    else {
-        return -1;
-    };
+        .collect::<Option<Vec<usize>>>()?;
 
     let mut next = 0;
     let offsets: Vec<usize> = geometry
@@ -912,13 +899,71 @@ unsafe fn group_impl<T: Copy>(
         })
         .collect();
     let groups = TransducerGroups::new(geometry, |device, tr| keys[offsets[device.idx()] + tr]);
+    Some(GroupInputs { groups, sources })
+}
+
+unsafe fn group_impl<T: Copy>(
+    geometry: *const Geometry,
+    keys: *const i32,
+    sources: *const *const Buffer<T>,
+    num_sources: usize,
+    buffer: *mut Buffer<T>,
+) -> i32 {
+    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
+        return -1;
+    };
+    let Some(inputs) = (unsafe {
+        group_inputs(
+            geometry,
+            keys,
+            sources,
+            num_sources,
+            buffer.cast_const().cast(),
+        )
+    }) else {
+        return -1;
+    };
+    let Some(buffer) = (unsafe { handle_mut(buffer) }) else {
+        return -1;
+    };
+    if !matches_geometry(geometry, buffer) {
+        return -1;
+    }
     autd3_rs_pattern::group(
         geometry,
-        &groups,
-        |key| sources[key].0.as_slice(),
+        &inputs.groups,
+        |key| inputs.sources[key].0.as_slice(),
         &mut buffer.0,
     );
     0
+}
+
+unsafe fn group_device_impl<T: Copy + FromBytes + IntoBytes>(
+    geometry: *const Geometry,
+    dev: usize,
+    keys: *const i32,
+    sources: *const *const Buffer<T>,
+    num_sources: usize,
+    dst: *mut u8,
+) -> i32 {
+    let Some(geometry_ref) = (unsafe { handle_ref(geometry) }) else {
+        return -1;
+    };
+    let Some(inputs) =
+        (unsafe { group_inputs(geometry_ref, keys, sources, num_sources, dst.cast_const()) })
+    else {
+        return -1;
+    };
+    unsafe {
+        with_device_dst(geometry, dev, dst, |device, buf: &mut [T]| {
+            autd3_rs_pattern::group_device(
+                device,
+                &inputs.groups,
+                |key| inputs.sources[key].0.as_slice(),
+                buf,
+            );
+        })
+    }
 }
 
 unsafe fn group_copy_impl<T: Copy>(
@@ -963,7 +1008,19 @@ unsafe fn group_copy_impl<T: Copy>(
 }
 
 macro_rules! group_api {
-    ($ty:ty, $group:ident, $group_copy:ident) => {
+    ($ty:ty, $group:ident, $group_device:ident, $group_copy:ident) => {
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $group_device(
+            geometry: *const Geometry,
+            dev: usize,
+            keys: *const i32,
+            sources: *const *const $ty,
+            num_sources: usize,
+            dst: *mut u8,
+        ) -> i32 {
+            unsafe { group_device_impl(geometry, dev, keys, sources, num_sources, dst) }
+        }
+
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $group(
             geometry: *const Geometry,
@@ -991,12 +1048,14 @@ macro_rules! group_api {
 group_api!(
     PhaseBuffer,
     autd3_pattern_group_phase,
+    autd3_pattern_group_device_phase,
     autd3_pattern_group_copy_phase
 );
 
 group_api!(
     IntensityBuffer,
     autd3_pattern_group_intensity,
+    autd3_pattern_group_device_intensity,
     autd3_pattern_group_copy_intensity
 );
 
@@ -1191,6 +1250,79 @@ mod tests {
                 2,
                 target.as_ptr(),
                 8.5,
+                dst.as_mut_ptr(),
+            )
+        };
+        assert_eq!(result, -1);
+    }
+
+    #[test]
+    fn group_device_writes_the_source_of_each_key_for_one_device() {
+        let geometry = geometry();
+        let keys = keys(&geometry, sides);
+        let left = phases(&geometry, 0x10);
+        let right = phases(&geometry, 0x20);
+        let sources = [&raw const left, &raw const right];
+        let mut dst = vec![0xFFu8; Autd3::NUM_TRANSDUCERS];
+        let result = unsafe {
+            autd3_pattern_group_device_phase(
+                &raw const geometry,
+                1,
+                keys.as_ptr(),
+                sources.as_ptr(),
+                sources.len(),
+                dst.as_mut_ptr(),
+            )
+        };
+        assert_eq!(result, 0);
+        for (tr, &p) in dst.iter().enumerate() {
+            let expected = match sides(1, tr) {
+                0 => 0x10,
+                _ => 0x20,
+            };
+            assert_eq!(p, expected, "tr {tr}");
+        }
+
+        let left_i = intensities(&geometry, 0x30);
+        let right_i = intensities(&geometry, 0x40);
+        let sources_i = [&raw const left_i, &raw const right_i];
+        let result = unsafe {
+            autd3_pattern_group_device_intensity(
+                &raw const geometry,
+                0,
+                keys.as_ptr(),
+                sources_i.as_ptr(),
+                sources_i.len(),
+                dst.as_mut_ptr(),
+            )
+        };
+        assert_eq!(result, 0);
+        for (tr, &i) in dst.iter().enumerate() {
+            let expected = match sides(0, tr) {
+                0 => 0x30,
+                _ => 0x40,
+            };
+            assert_eq!(i, expected, "tr {tr}");
+        }
+
+        let result = unsafe {
+            autd3_pattern_group_device_phase(
+                &raw const geometry,
+                2,
+                keys.as_ptr(),
+                sources.as_ptr(),
+                sources.len(),
+                dst.as_mut_ptr(),
+            )
+        };
+        assert_eq!(result, -1);
+        let result = unsafe {
+            autd3_pattern_group_device_phase(
+                &raw const geometry,
+                0,
+                keys.as_ptr(),
+                sources.as_ptr(),
+                1,
                 dst.as_mut_ptr(),
             )
         };

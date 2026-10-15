@@ -8,7 +8,7 @@ from autd3.geometry import Autd3, Geometry
 async def main() -> None:
     geometry = Geometry(
         [
-            Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]),
+            Autd3(),
             Autd3([192.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]),
         ]
     )

@@ -23,7 +23,7 @@ internal static class Program
     {
         await client.SendAsync(Command.Sequence(
             new WritePatternBuffer(PatternBank.B0, 0, phases, Intensity.Min),
-            new ConfigPattern(PatternBank.B0, SamplingConfig.Freq4k, 1)));
+            new ConfigPattern(PatternBank.B0, SamplingConfig.Freq4k, 1, LoopBehavior.Infinite)));
     }
 
     private static WritePatternBuffer WriteFocus(PhaseBuffer phases) =>

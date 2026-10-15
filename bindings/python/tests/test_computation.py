@@ -23,7 +23,14 @@ def geometry() -> autd3.geometry.Geometry:
 
 def test_unit_dsl() -> None:
     assert 2 * kHz == 2000 * Hz
-    assert 200 * Hz == 200.0 * Hz
+    assert 200 * Hz != 200.0 * Hz
+    assert 200 * Hz == 200 * Hz
+    assert 200.0 * Hz == 200.0 * Hz
+    assert hash(200 * Hz) != hash(200.0 * Hz)
+    assert hash(200 * Hz) == hash(200 * Hz)
+    assert (200 * Hz) / 2 == 100.0 * Hz
+    assert (200 * Hz) / 2 != 100 * Hz
+    assert 200 * Hz <= 200.0 * Hz
     assert (200 * Hz).hz == 200.0
     assert (200 * Hz).is_int
     assert not (200.0 * Hz).is_int
@@ -46,7 +53,7 @@ def test_phase_from_angle() -> None:
     assert (121.5 * dB).pascal == pytest.approx(23.77, abs=1e-2)
     assert (23.77 * Pa).spl == pytest.approx(121.5, abs=1e-2)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(TypeError):
         pattern.wavelength(loose(340_000.0))
     with pytest.raises(ValueError):
         modulation.sine(loose(200.0), modulation.SineOption(), modulation.modulation_buffer())
@@ -146,8 +153,9 @@ def test_pattern_group() -> None:
         pattern.TransducerGroups(geo, loose(lambda device, tr: []))
     with pytest.raises(ValueError):
         pattern.TransducerGroups(geo, lambda device, tr: None)
-    with pytest.raises(KeyError):
-        groups.mask("center")
+    assert groups.mask("center") is None
+    right_mask = groups.mask("right")
+    assert right_mask is not None
 
     holo_phases = geo.phase_buffer()
     holo_intensities = geo.intensity_buffer()
@@ -155,7 +163,7 @@ def test_pattern_group() -> None:
         geo,
         [holo.AmplitudeTarget(point=geo.center() + np.array([0.0, 0.0, 150.0]), amplitude=5e3 * Pa)],
         pattern.wavelength(340 * m / s),
-        holo.GspatOption(constraint=holo.IntensityConstraint.Uniform(0xFF), mask=groups.mask("right")),
+        holo.GspatOption(constraint=holo.IntensityConstraint.Uniform(0xFF), mask=right_mask),
         holo_phases,
         holo_intensities,
     )
@@ -267,13 +275,17 @@ def test_pattern_laguerre_hermite_gaussian() -> None:
     assert all(near(o, split[0]) or near(o, split[0] + 128) for o in split)
     assert any(near(o, split[0] + 128) for o in split)
 
-    with pytest.raises(ValueError):
-        pattern.LaguerreGaussianOption(p=0, l=1, waist=0.0 * mm)
-    with pytest.raises(ValueError):
-        pattern.HermiteGaussianOption(m=1, n=0, waist=float("nan") * mm)
-    with pytest.raises(ValueError, match="Length"):
+    zero_waist = pattern.LaguerreGaussianOption(p=0, l=1, waist=0.0 * mm)
+    with pytest.raises(ValueError, match="waist"):
+        pattern.laguerre_gaussian_phase(geo, target, [0.0, 0.0, 1.0], zero_waist, wavelength, lg)
+    nan_waist = pattern.HermiteGaussianOption(m=1, n=0, waist=float("nan") * mm)
+    with pytest.raises(ValueError, match="waist"):
+        pattern.hermite_gaussian_phase(geo, target, [0.0, 0.0, 1.0], [1.0, 0.0, 0.0], nan_waist, wavelength, hg)
+    with pytest.raises(ValueError, match="waist"):
+        pattern.hermite_gaussian_phase_transducer(target, target, [0.0, 0.0, 1.0], [1.0, 0.0, 0.0], nan_waist, wavelength)
+    with pytest.raises(TypeError, match="Length"):
         pattern.LaguerreGaussianOption(p=0, l=1, waist=loose(10.0))
-    with pytest.raises(ValueError, match="Length"):
+    with pytest.raises(TypeError, match="Length"):
         pattern.focus(geo, target, loose(8.5), focused)
 
 
@@ -488,10 +500,11 @@ def test_stm_foci_and_pattern() -> None:
     autd3.commands.circle([0.0, 0.0, 150.0], 30.0 * mm, 8, [0.0, 0.0, 1.0], autd3.value.Intensity.MAX, points)
     assert len(points) == 8
     assert all(len(sample.points) == 1 and sample.intensity == autd3.value.Intensity.MAX for sample in points)
-    with pytest.raises(ValueError, match="Length"):
+    with pytest.raises(TypeError, match="Length"):
         autd3.commands.circle([0.0, 0.0, 150.0], loose(30.0), 8, [0.0, 0.0, 1.0], autd3.value.Intensity.MAX, points)
     commands.append(autd3.commands.FociStm(1.0 * Hz, points, autd3.commands.FociStmOption()))
-    commands.append(autd3.commands.FociStm(1.0 * Hz, points=points))
+    with pytest.raises(TypeError):
+        loose(autd3.commands.FociStm)(1.0 * Hz, points)
 
     wavelength = pattern.wavelength(340 * m / s)
     frames = []
@@ -502,6 +515,11 @@ def test_stm_foci_and_pattern() -> None:
     amps = [geo.intensity_buffer() for _ in frames]
     commands.append(
         autd3.commands.PatternStm(autd3.commands.StmConfig(1.0 * Hz), frames, amps, autd3.commands.PatternStmOption())
+    )
+    commands.append(
+        autd3.commands.PatternStm(
+            autd3.commands.StmConfig(1.0 * Hz), frames, geo.intensity_buffer(), autd3.commands.PatternStmOption()
+        )
     )
 
     datagrams = autd3.Frames.encode(geo, commands)
@@ -915,12 +933,21 @@ def test_sys_time_feeds_transition_mode_and_gpio() -> None:
     autd3.commands.GpioOut.SysTimeEq(time)
 
 
-def test_zero_divider_is_rejected_when_the_command_is_created() -> None:
+def test_an_unresolvable_sampling_config_is_rejected_when_encoded() -> None:
     class ZeroDivider:
         def divide(self) -> int:
             return 0
 
     buf = modulation.modulation_buffer()
     modulation.sine(150 * Hz, modulation.SineOption(), buf)
-    with pytest.raises(ValueError, match="divider must be >= 1"):
+    with pytest.raises(TypeError, match="SamplingConfig"):
         autd3.commands.Modulation(loose(ZeroDivider()), buf)
+
+    unresolvable = autd3.value.SamplingConfig(3000.5 * Hz)
+    command = autd3.commands.Modulation(unresolvable, buf)
+    with pytest.raises(autd3.Autd3Error, match="must divide the ultrasound frequency") as err:
+        autd3.Frames.encode(geometry(), command)
+    assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
+    with pytest.raises(autd3.Autd3Error) as err:
+        unresolvable.divide()
+    assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT

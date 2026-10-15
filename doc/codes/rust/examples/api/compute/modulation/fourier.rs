@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 use autd3_rs::units::Hz;
-use autd3_rs_modulation::{fourier, FourierOption, SineComponent, SineOption};
+use autd3_rs_modulation::{fourier, modulation_buffer, FourierOption, SineComponent, SineOption};
 
 fn main() -> Result<()> {
     let scale_factor = None;
@@ -17,7 +17,7 @@ fn main() -> Result<()> {
         }
         // ANCHOR_END: option
         ;
-    let mut dst = Vec::new();
+    let mut dst = modulation_buffer();
 
     // ANCHOR: components
     SineComponent {

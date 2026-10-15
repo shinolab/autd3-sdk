@@ -108,6 +108,18 @@ namespace AUTD3
         internal static extern UIntPtr autd3_core_params_max_inflight();
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern UIntPtr autd3_core_params_max_devices();
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern ushort autd3_core_params_port();
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern UIntPtr autd3_core_params_device_queue_frames();
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern float autd3_core_params_rotation_norm_tolerance();
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern UIntPtr autd3_core_params_num_transducers();
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
@@ -177,6 +189,12 @@ namespace AUTD3
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         internal delegate int GetDurationFn(IntPtr option, out ulong ns);
 
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        internal delegate int SetOptionalDurationFn(IntPtr option, [MarshalAs(UnmanagedType.I1)] bool hasValue, ulong ns);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        internal delegate int GetOptionalDurationFn(IntPtr option, [MarshalAs(UnmanagedType.I1)] out bool hasValue, out ulong ns);
+
         internal static void Apply(string field, int code)
         {
             if (code != 0)
@@ -194,6 +212,22 @@ namespace AUTD3
         {
             Apply("preset", get(option, out var ns));
             return FromNanos(ns);
+        }
+
+        internal static void SetOptionalDuration(IntPtr option, string field, TimeSpan? value, SetOptionalDurationFn set)
+        {
+            Apply(field, value switch
+            {
+                null => set(option, false, 0),
+                { } duration when duration >= TimeSpan.Zero => set(option, true, ToNanos(duration)),
+                _ => -1,
+            });
+        }
+
+        internal static TimeSpan? GetOptionalDuration(IntPtr option, GetOptionalDurationFn get)
+        {
+            Apply("preset", get(option, out var hasValue, out var ns));
+            return hasValue ? FromNanos(ns) : (TimeSpan?)null;
         }
 
         internal static ulong ToNanos(TimeSpan value) =>

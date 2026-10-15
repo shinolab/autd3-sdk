@@ -208,6 +208,8 @@ namespace AUTD3
 
         public int Length => (int)NativeClient.autd3_frames_num_frames(Handle);
 
+        public bool IsEmpty => Length == 0;
+
         public Frame this[int index]
         {
             get

@@ -23,7 +23,7 @@ import { excerpt } from "@lib/excerpt";
 | フィールド  | 型                               | 説明                             |
 | ----------- | -------------------------------- | -------------------------------- |
 | `bank`      | `PatternBank`                    | 書き込み先バンク                 |
-| `index`     | `u16`                            | バンク内の書き込み先インデックス |
+| `index`     | `usize`                          | バンク内の書き込み先インデックス |
 | `phases`      | `&[Vec<Phase>]`     | デバイスごとの位相               |
 | `intensities` | `PatternIntensity`  | 振幅 (`Intensity` の一様値, または `&[Vec<Intensity>]` のデバイスごとのバッファ) |
 

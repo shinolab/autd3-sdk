@@ -253,7 +253,7 @@ namespace AUTD3.Tests
 
             using var frames = Frames.Encode(geometry, Command.Sequence(
                 new WritePatternBuffer(PatternBank.B0, 0, phases, intensities),
-                new ConfigPattern(PatternBank.B0, SamplingConfig.Freq4k, 1)));
+                new ConfigPattern(PatternBank.B0, SamplingConfig.Freq4k, 1, LoopBehavior.Infinite)));
 
             Assert.Equal(2, frames.Length);
             _ = frames[0];

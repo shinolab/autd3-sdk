@@ -72,13 +72,20 @@ def test_record_option_sound_speed_is_velocity() -> None:
     option.sound_speed = 350 * m / s
     assert option.sound_speed.m_s == pytest.approx(350.0)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(TypeError):
         emu.RmsRecordOption(sound_speed=loose(340e3))
+
+
+def test_grid_order_and_recorder_start_are_required() -> None:
+    with pytest.raises(TypeError):
+        loose(emu.Grid)(x=0.0, y=0.0, z=150.0, resolution=1.0)
+    with pytest.raises(TypeError):
+        loose(emu.Recorder)(geometry())
 
 
 def test_sound_field_rms() -> None:
     record = recorded(geometry())
-    rng = emu.Grid(x=(-10.0, 10.0), y=(-10.0, 10.0), z=150.0, resolution=10.0)
+    rng = emu.Grid(x=(-10.0, 10.0), y=(-10.0, 10.0), z=150.0, resolution=10.0, order="xyz")
     rms = record.sound_field(rng, emu.RmsRecordOption())
 
     points = rms.observe_points()
@@ -92,7 +99,7 @@ def test_sound_field_rms() -> None:
 
 def test_sound_field_instant() -> None:
     record = recorded(geometry())
-    rng = emu.Grid(x=(-10.0, 10.0), y=(-10.0, 10.0), z=150.0, resolution=10.0)
+    rng = emu.Grid(x=(-10.0, 10.0), y=(-10.0, 10.0), z=150.0, resolution=10.0, order="xyz")
     instant = record.sound_field(rng, emu.InstantRecordOption(time_step=Duration.from_micros(5)))
     instant.skip(Duration.from_micros(500))
     field = instant.next(ULTRASOUND_PERIOD)
@@ -106,7 +113,7 @@ def test_grid_axes_and_order() -> None:
     def points(grid: emu.Grid) -> list[tuple[float, float, float]]:
         return record.sound_field(grid, emu.RmsRecordOption()).observe_points().rows()
 
-    assert points(emu.Grid(x=(0.0, 1.0), y=(10.0, 11.0), z=150.0, resolution=1.0)) == [
+    assert points(emu.Grid(x=(0.0, 1.0), y=(10.0, 11.0), z=150.0, resolution=1.0, order="xyz")) == [
         (0.0, 10.0, 150.0),
         (1.0, 10.0, 150.0),
         (0.0, 11.0, 150.0),
@@ -118,7 +125,7 @@ def test_grid_axes_and_order() -> None:
         (1.0, 10.0, 150.0),
         (1.0, 11.0, 150.0),
     ]
-    assert points(emu.Grid(x=3.0, y=4.0, z=(150.0, 152.0), resolution=1.0)) == [
+    assert points(emu.Grid(x=3.0, y=4.0, z=(150.0, 152.0), resolution=1.0, order="xyz")) == [
         (3.0, 4.0, 150.0),
         (3.0, 4.0, 151.0),
         (3.0, 4.0, 152.0),
@@ -127,7 +134,7 @@ def test_grid_axes_and_order() -> None:
     with pytest.raises(ValueError):
         emu.Grid(x=0.0, y=0.0, z=150.0, resolution=1.0, order=loose("xy"))
     with pytest.raises(ValueError):
-        emu.Grid(x=loose("0"), y=0.0, z=150.0, resolution=1.0)
+        emu.Grid(x=loose("0"), y=0.0, z=150.0, resolution=1.0, order="xyz")
     with pytest.raises(TypeError):
         record.sound_field(loose((0.0, 0.0, 150.0)), emu.RmsRecordOption())
 
@@ -140,20 +147,20 @@ def test_sound_field_rejects_an_invalid_grid() -> None:
     ]
 
     for resolution in [0.0, -1.0, float("nan"), float("inf"), float("-inf")]:
-        grid = emu.Grid(x=(-10.0, 10.0), y=0.0, z=150.0, resolution=resolution)
+        grid = emu.Grid(x=(-10.0, 10.0), y=0.0, z=150.0, resolution=resolution, order="xyz")
         for compute in computations:
             with pytest.raises(autd3.Autd3Error, match="invalid grid: resolution"):
                 compute(grid)
 
-    reversed_axis = emu.Grid(x=(10.0, -10.0), y=0.0, z=150.0, resolution=1.0)
-    non_finite = emu.Grid(x=0.0, y=(0.0, float("inf")), z=150.0, resolution=1.0)
+    reversed_axis = emu.Grid(x=(10.0, -10.0), y=0.0, z=150.0, resolution=1.0, order="xyz")
+    non_finite = emu.Grid(x=0.0, y=(0.0, float("inf")), z=150.0, resolution=1.0, order="xyz")
     for compute in computations:
         with pytest.raises(autd3.Autd3Error, match="invalid grid: the start of the x axis"):
             compute(reversed_axis)
         with pytest.raises(autd3.Autd3Error, match="invalid grid: the bounds of the y axis"):
             compute(non_finite)
 
-    single = emu.Grid(x=0.0, y=0.0, z=150.0, resolution=1.0)
+    single = emu.Grid(x=0.0, y=0.0, z=150.0, resolution=1.0, order="xyz")
     assert record.sound_field(single, emu.RmsRecordOption()).observe_points().rows() == [(0.0, 0.0, 150.0)]
 
 

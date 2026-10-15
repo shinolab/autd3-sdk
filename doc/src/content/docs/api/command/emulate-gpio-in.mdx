@@ -1,0 +1,34 @@
+---
+title: EmulateGpioIn
+description: GPIO 入力をソフトウェアからアサートする EmulateGpioIn
+sidebar:
+  order: 7.5
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/emulate-gpio-in.rs?raw";
+import pySample from "@codes/python/examples/api/command/emulate-gpio-in.py?raw";
+import fullSample from "@codes/rust/examples/api/command/emulate-gpio-in-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/emulate-gpio-in-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/emulate-gpio-in.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/emulate-gpio-in-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`EmulateGpioIn` は, デバイスの 4 本の [GPIO 入力端子](/autd3-sdk/hardware/gpio/) をソフトウェアからアサートするコマンド.
+FPGA が参照する実効値は, 物理端子の入力と `EmulateGpioIn` の論理和になる.
+[`TransitionMode::Gpio`](/autd3-sdk/api/command/lowlevel/activate-pattern-bank/) による切り替えを, 外部の配線なしに試すときなどに使う.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+| フィールド | 型          | デフォルト    | 説明                                                     |
+| ---------- | ----------- | ------------- | -------------------------------------------------------- |
+| `values`   | `[bool; 4]` | すべて `false` | 入力 0..3 のそれぞれをアサートするか (`true` でアサート) |
+
+Python は長さ 4 の `bool` の列, C# は長さ 4 の `bool[]` で渡す.
+長さが 4 でないと構築時にエラーになる (Python は `ValueError`, C# は `Autd3Exception` (`InvalidArgument`)). Rust は配列の型で長さが決まる.
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

@@ -21,6 +21,6 @@ pub use geometry::{
     TransducerMaskError, UnitQuaternion, UnitVector3, Vector3, offset, point,
 };
 pub use protocol::{
-    Cmd, DeviceErrorCode, FRAME_BYTES_MAX, MAX_INFLIGHT, PAYLOAD_BYTES, REPLY_DATA_BYTES_MAX, Seq,
-    describe_device_error,
+    Cmd, DeviceErrorCode, FRAME_BYTES_MAX, MAX_DEVICES, MAX_INFLIGHT, PAYLOAD_BYTES,
+    REPLY_DATA_BYTES_MAX, Seq, describe_device_error,
 };

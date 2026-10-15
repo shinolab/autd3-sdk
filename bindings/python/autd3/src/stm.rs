@@ -1,10 +1,12 @@
 use std::sync::Arc;
 
 use autd3_python_capsule::extract::{
-    extract_direction, extract_duration, extract_length, extract_point, extract_u8,
-    extract_velocity, intensity_to_py, is_duration, nanos_to_duration, phase_to_py, velocity_to_py,
+    extract_direction, extract_duration, extract_length, extract_point, extract_sampling_config,
+    extract_u8, extract_velocity, intensity_to_py, is_duration, nanos_to_duration, phase_to_py,
+    sampling_config_to_py, velocity_to_py,
 };
 use autd3_python_capsule::numpy::f32_vec3;
+use autd3_rs::Velocity;
 use autd3_rs::commands::Expansion;
 use autd3_rs::commands::WriteFociBuffer as CoreWriteFociBuffer;
 use autd3_rs::commands::{
@@ -14,7 +16,7 @@ use autd3_rs::commands::{
 };
 use autd3_rs::value::{
     ControlPoint as CoreControlPoint, ControlPoints as CoreControlPoints, Intensity, Nearest,
-    PatternBank as CorePatternBank, Phase, SamplingConfig,
+    PatternBank as CorePatternBank, Phase,
 };
 use autd3_rs_core::units::Hz;
 use pyo3::exceptions::PyValueError;
@@ -24,8 +26,14 @@ use pyo3::types::PyList;
 use crate::datagram::PushCommand;
 use crate::ops;
 
-#[pyclass(name = "StmConfig", module = "autd3.commands", from_py_object)]
-#[derive(Clone, Copy)]
+#[pyclass(
+    name = "StmConfig",
+    module = "autd3.commands",
+    eq,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct StmConfig(pub(crate) CoreStmConfig);
 
 pub(crate) fn extract_stm_config(value: &Bound<'_, PyAny>) -> PyResult<CoreStmConfig> {
@@ -43,10 +51,8 @@ pub(crate) fn extract_stm_config(value: &Bound<'_, PyAny>) -> PyResult<CoreStmCo
             _ => Err(PyValueError::new_err("invalid Nearest")),
         };
     }
-    if let Ok(divide) = value.call_method0("divide") {
-        let divide = core::num::NonZeroU16::new(divide.extract::<u16>()?)
-            .ok_or_else(|| PyValueError::new_err("divide must be >= 1"))?;
-        return Ok(CoreStmConfig::new(SamplingConfig::new(divide)));
+    if value.hasattr("_sampling_config_capsule")? {
+        return Ok(CoreStmConfig::new(extract_sampling_config(value)?));
     }
     if let Ok(hz) = value.getattr("hz") {
         return Ok(CoreStmConfig::new(hz.extract::<f32>()? * Hz));
@@ -72,14 +78,11 @@ impl StmConfig {
         py: Python<'py>,
         size: usize,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let divide = self
-            .0
-            .into_sampling_config(size)
-            .divide()
-            .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        py.import("autd3_core")?
-            .getattr("SamplingConfig")?
-            .call1((divide.get(),))
+        sampling_config_to_py(py, self.0.into_sampling_config(size))
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{:?}", self.0)
     }
 }
 
@@ -96,15 +99,11 @@ pub struct ControlPoint(pub(crate) CoreControlPoint);
 #[pymethods]
 impl ControlPoint {
     #[new]
-    #[pyo3(signature = (point, phase_offset = None))]
-    fn new(point: &Bound<'_, PyAny>, phase_offset: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
-        let phase_offset = phase_offset
-            .map(extract_u8)
-            .transpose()?
-            .map_or(Phase::ZERO, Phase);
+    #[pyo3(signature = (point, phase_offset))]
+    fn new(point: &Bound<'_, PyAny>, phase_offset: &Bound<'_, PyAny>) -> PyResult<Self> {
         Ok(Self(CoreControlPoint::new(
             extract_point(point)?,
-            phase_offset,
+            Phase(extract_u8(phase_offset)?),
         )))
     }
 
@@ -140,18 +139,11 @@ pub struct ControlPoints {
 #[pymethods]
 impl ControlPoints {
     #[new]
-    #[pyo3(signature = (points, intensity = None))]
-    fn new(
-        points: Vec<PyRef<'_, ControlPoint>>,
-        intensity: Option<&Bound<'_, PyAny>>,
-    ) -> PyResult<Self> {
-        let intensity = intensity
-            .map(extract_u8)
-            .transpose()?
-            .map_or(Intensity::MAX, Intensity);
+    #[pyo3(signature = (points, intensity))]
+    fn new(points: Vec<PyRef<'_, ControlPoint>>, intensity: &Bound<'_, PyAny>) -> PyResult<Self> {
         Ok(Self {
             points: points.iter().map(|p| p.0).collect(),
-            intensity,
+            intensity: Intensity(extract_u8(intensity)?),
         })
     }
 
@@ -182,33 +174,41 @@ impl ControlPoints {
     }
 }
 
-#[pyclass(name = "FociStmOption", module = "autd3.commands", skip_from_py_object)]
+#[pyclass(
+    name = "FociStmOption",
+    module = "autd3.commands",
+    eq,
+    frozen,
+    skip_from_py_object
+)]
+#[derive(PartialEq)]
 pub struct FociStmOption(pub(crate) CoreFociStmOption);
 
 #[pymethods]
 impl FociStmOption {
     #[new]
-    #[pyo3(signature = (bank = None, sound_speed = None, loop_behavior = None, transition_mode = None))]
+    #[pyo3(signature = (
+        bank = ops::PatternBank(CoreFociStmOption::default().bank),
+        sound_speed = CoreFociStmOption::default().sound_speed,
+        loop_behavior = ops::LoopBehavior(CoreFociStmOption::default().loop_behavior),
+        transition_mode = ops::TransitionMode(CoreFociStmOption::default().transition_mode),
+    ))]
     fn new(
-        bank: Option<ops::PatternBank>,
-        sound_speed: Option<&Bound<'_, PyAny>>,
-        loop_behavior: Option<ops::LoopBehavior>,
-        transition_mode: Option<ops::TransitionMode>,
-    ) -> PyResult<Self> {
-        let mut inner = CoreFociStmOption::default();
-        if let Some(sv) = sound_speed {
-            inner.sound_speed = extract_velocity(sv)?;
-        }
-        if let Some(b) = bank {
-            inner.bank = b.0;
-        }
-        if let Some(l) = loop_behavior {
-            inner.loop_behavior = l.0;
-        }
-        if let Some(t) = transition_mode {
-            inner.transition_mode = t.0;
-        }
-        Ok(Self(inner))
+        bank: ops::PatternBank,
+        #[pyo3(from_py_with = extract_velocity)] sound_speed: Velocity,
+        loop_behavior: ops::LoopBehavior,
+        transition_mode: ops::TransitionMode,
+    ) -> Self {
+        Self(CoreFociStmOption {
+            bank: bank.0,
+            sound_speed,
+            loop_behavior: loop_behavior.0,
+            transition_mode: transition_mode.0,
+        })
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{:?}", self.0)
     }
 
     #[getter]
@@ -235,34 +235,38 @@ impl FociStmOption {
 #[pyclass(
     name = "PatternStmOption",
     module = "autd3.commands",
+    eq,
+    frozen,
     skip_from_py_object
 )]
+#[derive(PartialEq)]
 pub struct PatternStmOption(pub(crate) CorePatternStmOption);
 
 #[pymethods]
 impl PatternStmOption {
     #[new]
-    #[pyo3(signature = (bank = None, phase_depth = None, loop_behavior = None, transition_mode = None))]
+    #[pyo3(signature = (
+        bank = ops::PatternBank(CorePatternStmOption::default().bank),
+        phase_depth = ops::PhaseDepth(CorePatternStmOption::default().phase_depth),
+        loop_behavior = ops::LoopBehavior(CorePatternStmOption::default().loop_behavior),
+        transition_mode = ops::TransitionMode(CorePatternStmOption::default().transition_mode),
+    ))]
     fn new(
-        bank: Option<ops::PatternBank>,
-        phase_depth: Option<ops::PhaseDepth>,
-        loop_behavior: Option<ops::LoopBehavior>,
-        transition_mode: Option<ops::TransitionMode>,
+        bank: ops::PatternBank,
+        phase_depth: ops::PhaseDepth,
+        loop_behavior: ops::LoopBehavior,
+        transition_mode: ops::TransitionMode,
     ) -> Self {
-        let mut inner = CorePatternStmOption::default();
-        if let Some(b) = bank {
-            inner.bank = b.0;
-        }
-        if let Some(d) = phase_depth {
-            inner.phase_depth = d.0;
-        }
-        if let Some(l) = loop_behavior {
-            inner.loop_behavior = l.0;
-        }
-        if let Some(t) = transition_mode {
-            inner.transition_mode = t.0;
-        }
-        Self(inner)
+        Self(CorePatternStmOption {
+            bank: bank.0,
+            phase_depth: phase_depth.0,
+            loop_behavior: loop_behavior.0,
+            transition_mode: transition_mode.0,
+        })
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{:?}", self.0)
     }
 
     #[getter]
@@ -294,10 +298,9 @@ macro_rules! foci_points {
 
         impl FociPoints {
             fn from_samples(samples: &[PyRef<'_, ControlPoints>]) -> PyResult<Self> {
-                let num_foci = samples.first().map_or(0, |s| s.points.len());
-                if num_foci == 0 {
-                    return Err(PyValueError::new_err("FociStm needs at least one sample with at least one focus"));
-                }
+                let Some(num_foci) = samples.first().map(|s| s.points.len()) else {
+                    return Ok(FociPoints::N1(Vec::new()));
+                };
                 if samples.iter().any(|s| s.points.len() != num_foci) {
                     return Err(PyValueError::new_err("every FociStm sample must have the same number of foci"));
                 }
@@ -373,16 +376,16 @@ pub struct FociStm(pub(crate) Arc<FociStmData>);
 #[pymethods]
 impl FociStm {
     #[new]
-    #[pyo3(signature = (config, points, option = None))]
+    #[pyo3(signature = (config, points, option))]
     fn new(
         config: &Bound<'_, PyAny>,
         points: Vec<PyRef<'_, ControlPoints>>,
-        option: Option<PyRef<'_, FociStmOption>>,
+        option: PyRef<'_, FociStmOption>,
     ) -> PyResult<Self> {
         Ok(Self(Arc::new(FociStmData {
             config: extract_stm_config(config)?,
             points: FociPoints::from_samples(&points)?,
-            option: option.map_or_else(CoreFociStmOption::default, |o| o.0),
+            option: option.0,
         })))
     }
 }
@@ -439,6 +442,11 @@ fn extract_stm_intensity(obj: &Bound<'_, PyAny>) -> PyResult<OwnedStmIntensity> 
     if let Some(intensity) = crate::datagram::extract_uniform_intensity(obj) {
         return Ok(OwnedStmIntensity::Uniform(intensity));
     }
+    if obj.hasattr("_capsule")? {
+        return Ok(OwnedStmIntensity::Shared(
+            crate::datagram::extract_intensities(obj)?,
+        ));
+    }
     if let Ok(buffers) = obj.extract::<Vec<Bound<'_, PyAny>>>() {
         return buffers
             .iter()
@@ -476,12 +484,12 @@ pub struct PatternStm(pub(crate) Arc<PatternStmData>);
 #[pymethods]
 impl PatternStm {
     #[new]
-    #[pyo3(signature = (config, phases, intensities, option = None))]
+    #[pyo3(signature = (config, phases, intensities, option))]
     fn new(
         config: &Bound<'_, PyAny>,
         phases: Vec<Bound<'_, PyAny>>,
         intensities: &Bound<'_, PyAny>,
-        option: Option<PyRef<'_, PatternStmOption>>,
+        option: PyRef<'_, PatternStmOption>,
     ) -> PyResult<Self> {
         let stm_config = extract_stm_config(config)?;
         let phases = phases
@@ -493,7 +501,7 @@ impl PatternStm {
             config: stm_config,
             phases,
             intensities,
-            option: option.map_or_else(CorePatternStmOption::default, |o| o.0),
+            option: option.0,
         })))
     }
 }

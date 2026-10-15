@@ -27,6 +27,8 @@ import { excerpt } from "@lib/excerpt";
 `Geometry::output_mask_buffer` allocates the masks for all devices.
 Every entry starts at `true` (all transducers output).
 
+If the number of devices or the number of transducers of each device does not match `geometry`, it is an error when the command is encoded (at send time) (the same in Python / C#).
+
 ## Example
 
 <CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

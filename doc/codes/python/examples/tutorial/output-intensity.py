@@ -1,24 +1,22 @@
 import asyncio
 
-import numpy as np
-
 import autd3_modulation as modulation
 import autd3_pattern as pattern
 from autd3 import Client, ClientConfig, UdpOption
 from autd3.commands import Modulation, Pattern, SetSilencer
-from autd3.geometry import Autd3, Geometry
-from autd3.units import Hz, m, s
+from autd3.geometry import Autd3, Geometry, offset
+from autd3.units import Hz, m, mm, s
 from autd3.value import Intensity, SamplingConfig
 
 async def main() -> None:
-    geometry = Geometry([Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
+    geometry = Geometry([Autd3()])
 
     async with await Client.open(
         geometry,
         UdpOption(),
         ClientConfig(),
     ) as client:
-        target = geometry.center() + np.array([0.0, 0.0, 150.0])
+        target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm)
         wavelength = pattern.wavelength(340 * m / s)
 
         # ANCHOR: pattern_intensity
@@ -30,7 +28,7 @@ async def main() -> None:
         # ANCHOR: modulation
         mod_buf = modulation.modulation_buffer()
         modulation.sine(
-            200.0 * Hz,
+            200 * Hz,
             modulation.SineOption(
                 amplitude=0xFF,
                 offset=0x80,

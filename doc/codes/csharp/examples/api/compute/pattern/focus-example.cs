@@ -1,4 +1,3 @@
-using System.Numerics;
 using AUTD3;
 using static AUTD3.Units;
 
@@ -10,13 +9,13 @@ internal static class Sample
     internal static void Run()
     {
         // HIDE_END
-var geometry = new Geometry(new[] { new Autd3(Vector3.Zero) });
+var geometry = new Geometry(new[] { new Autd3() });
 
 var phases = geometry.PhaseBuffer();
 
 Pattern.Focus(
     geometry,
-    geometry.Center + new Vector3(0.0f, 0.0f, 150.0f),
+    geometry.Center + Offset(0.0f * mm, 0.0f * mm, 150.0f * mm),
     Pattern.Wavelength(340.0f * m / s),
     phases
 );

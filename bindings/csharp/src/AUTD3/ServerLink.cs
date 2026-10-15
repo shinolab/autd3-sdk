@@ -24,6 +24,8 @@ namespace AUTD3
 
     public readonly struct ServerLink
     {
+        public static readonly ushort ServerPort = NativeClient.autd3_params_server_port();
+
         private readonly ushort? _port;
         public ushort Port { get => _port ?? ServerLinkDefaults.Port; init => _port = value; }
         private readonly TimeSpan? _timeout;

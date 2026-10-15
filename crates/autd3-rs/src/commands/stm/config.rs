@@ -3,6 +3,7 @@
 use core::time::Duration;
 
 use crate::Freq;
+use crate::units::Hz;
 use crate::value::{Nearest, SamplingConfig, SamplingConfigError};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -50,6 +51,12 @@ impl From<Freq<f32>> for StmConfig {
     }
 }
 
+impl From<Freq<u32>> for StmConfig {
+    fn from(freq: Freq<u32>) -> Self {
+        Self(StmConfigInner::Freq(freq.hz() as f32 * Hz))
+    }
+}
+
 impl From<Duration> for StmConfig {
     fn from(period: Duration) -> Self {
         Self(StmConfigInner::Period(period))
@@ -68,6 +75,12 @@ impl From<Nearest<Freq<f32>>> for StmConfig {
     }
 }
 
+impl From<Nearest<Freq<u32>>> for StmConfig {
+    fn from(freq: Nearest<Freq<u32>>) -> Self {
+        Self(StmConfigInner::FreqNearest(freq.0.hz() as f32 * Hz))
+    }
+}
+
 impl From<Nearest<Duration>> for StmConfig {
     fn from(period: Nearest<Duration>) -> Self {
         Self(StmConfigInner::PeriodNearest(period.0))
@@ -79,13 +92,33 @@ mod tests {
     use core::num::NonZeroU16;
 
     use super::*;
-    use crate::units::Hz;
 
     #[test]
     fn stm_freq_multiplies_sampling_rate_by_size() {
         assert_eq!(
             StmConfig::new(100.0 * Hz).into_sampling_config(4).divide(),
             Ok(NonZeroU16::new(100).unwrap())
+        );
+    }
+
+    #[test]
+    fn an_integer_stm_freq_resolves_like_the_float_one() {
+        assert_eq!(StmConfig::new(100.0 * Hz), StmConfig::new(100 * Hz));
+        assert_eq!(
+            StmConfig::new(100 * Hz).into_sampling_config(4).divide(),
+            Ok(NonZeroU16::new(100).unwrap())
+        );
+        assert_eq!(
+            StmConfig::new(Nearest(4001.0 * Hz)),
+            StmConfig::new(Nearest(4001 * Hz))
+        );
+        assert_eq!(
+            StmConfig::new(Nearest(4001 * Hz))
+                .into_sampling_config(1)
+                .divide(),
+            StmConfig::new(Nearest(4001.0 * Hz))
+                .into_sampling_config(1)
+                .divide()
         );
     }
 

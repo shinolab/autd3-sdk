@@ -30,8 +30,10 @@ import { excerpt } from "@lib/excerpt";
 | `dst`        | `&mut Vec<u8>`        | output buffer             |
 
 Each `SineComponent` is a pair of a frequency `freq` and a `SineOption`.
+An empty `components` is an error.
 The `sampling_config` of all components must be identical, otherwise an error occurs.
 The length of the synthesized waveform is the least common multiple of the periods of the components.
+It is an error if this exceeds `MOD_BUFFER_SAMPLES` (65536).
 
 Each sample is the sum of all components multiplied by a scale <Math tex="s" /> (`scale_factor`), plus an offset <Math tex="b" /> (`offset`).
 
@@ -45,6 +47,7 @@ Each sample is the sum of all components multiplied by a scale <Math tex="s" /> 
 | `option`   | `SineOption`   | per-component sine Option |
 
 As with [sine](/autd3-sdk/en/api/compute/modulation/sine/), `freq` is given as `Freq<u32>` / `Freq<f32>` / `Nearest(freq)`; in Rust, convert it to `SamplingMode` with `.into()`.
+When read back, the Python `freq` returns `Nearest(Freq)` for a component given with `Nearest`, and C# distinguishes it with `Freq` and `IsNearest`.
 
 The range check is applied to the synthesized value, so the `clamp` of each component's `SineOption` is not used.
 To clamp out-of-range values, set `clamp` of `FourierOption`.

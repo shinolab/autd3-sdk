@@ -9,6 +9,8 @@ import Math from "@components/Math.astro";
 import CodeTabs from "@components/CodeTabs.astro";
 import Install from "@components/Install.astro";
 import batchSample from "@codes/rust/examples/api/compute/holo/batch.rs?raw";
+import pyBatchSample from "@codes/python/examples/api/compute/holo/batch.py?raw";
+import csBatchSample from "@codes/csharp/examples/api/compute/holo/batch.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
 Holo is a set of Pattern computations for generating multiple focal points (control points) simultaneously.
@@ -28,11 +30,13 @@ The provided algorithms are as follows.
 ### AmplitudeTarget
 
 A struct representing a focal point.
-It holds a position and a target amplitude.
+It holds a position `point` and a target amplitude `amplitude` (the `point` / `amplitude` properties in Python, `Point` / `Amplitude` in C#).
 
 ### Amplitude units `Pa` / `kPa` / `dB`
 
 The target amplitude `Amplitude` is constructed by multiplying an `f32` by an amplitude unit.
+Its value is read with `pascal()` (Pa) and `spl()` (dB) (the `pascal` / `spl` properties in Python, `Pascal` / `Spl` in C#).
+`Amplitude` supports scalar multiplication (`* f32` / `f32 *`), division (`/ f32`), and comparison (the same in Python / C#).
 
 ### IntensityConstraint
 
@@ -48,7 +52,12 @@ Therefore, a constraint is specified for converting the amplitude obtained from 
 
 It is specified via the `constraint` field of each Option.
 `greedy` does not optimize the intensities, so it has no `constraint` and takes the intensities as an input.
-The default differs depending on the algorithm.
+The default is `Clamp(Intensity::MIN, Intensity::MAX)` for all of `naive` / `gs` / `gspat`.
+
+### Errors
+
+A failure of each function is a `HoloError` in Rust, a `HoloError` in Python (a subclass of `autd3_core.Autd3Error` whose `code` is `INVALID_ARGUMENT`), and an `Autd3Exception` in C# (whose `Code` is `InvalidArgument`).
+It fails, for example, when the foci are empty, when the number of devices of an output buffer does not match `geometry`, or when the shape of `mask` does not match `geometry`.
 
 ### Directivity
 
@@ -64,6 +73,9 @@ It is specified via the `mask` field of each Option (the default is `AllEnabled`
 - `TransducerMask::AllEnabled` — uses all transducers (default).
 - `TransducerMask::Masked(&[Vec<bool>])` — specifies enabled/disabled for each transducer individually.
 
+In Python they are written as `TransducerMask.AllEnabled` / `TransducerMask.masked(rows)`, and in C# as `TransducerMask.AllEnabled` / `TransducerMask.Masked(bool[][])`.
+In Python, `mask` does not accept `None` (`TypeError`), so the `None` that [`TransducerGroups.mask(key)`](/autd3-sdk/en/api/compute/pattern/group/) returns for a key assigned to no transducer never silently passes as "all transducers".
+
 ### LinAlgBackend (NalgebraBackend)
 
 `naive` / `gs` / `gspat` delegate linear algebra operations to the `LinAlgBackend` trait.
@@ -72,20 +84,22 @@ The backend is passed as the first argument of each function.
 
 `greedy` does not use matrix operations, so it does not take a backend.
 
+Python / C# are fixed to `NalgebraBackend` and do not take a backend argument.
+
 ### GPU Backend (WgpuBackend)
 
-`WgpuBackend` is a backend that performs calculations on the GPU.
+`WgpuBackend` is a backend that performs calculations on the GPU (Rust only).
 
 <Install rust="autd3-rs-pattern-holo-wgpu"/>
 
-#### Batch API
+### Batch API
 
 `naive` / `gs` / `gspat` each have a `naive_batch` / `gs_batch` / `gspat_batch` counterpart that solves several independent problems at once.
 
-<CodeTabs rust={excerpt(batchSample, "api")} />
+<CodeTabs rust={excerpt(batchSample, "api")} python={excerpt(pyBatchSample, "api")} csharp={excerpt(csBatchSample, "api")} />
 
 The problem count is determined by the length of `phases` / `intensities` (both must have the same length).
 The foci are passed as a slice of length equal to the number of problems multiplied by the number of foci per problem.
 All problems must have the same number of foci; an error is returned if the length of the slice is not divisible by the problem count.
 
-The batch API is faster only with a GPU backend; it has no benefit with a CPU backend.
+The batch API is faster only with a GPU backend. A CPU backend (including `NalgebraBackend` used by Python / C#) solves the problems one by one, so it is no faster than calling the function once per problem.
