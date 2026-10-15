@@ -75,6 +75,16 @@ struct Cli {
 }
 
 impl Cli {
+    fn validate(&self) -> Result<()> {
+        if self.monitor_interval.is_zero() {
+            bail!("--monitor-interval must not be zero");
+        }
+        if self.retry_interval.is_zero() {
+            bail!("--retry-interval must not be zero");
+        }
+        Ok(())
+    }
+
     fn option(&self) -> ServerOption {
         let defaults = UdpOption::default();
         ServerOption {
@@ -113,9 +123,7 @@ impl Cli {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    if cli.monitor_interval.is_zero() {
-        bail!("--monitor-interval must not be zero");
-    }
+    cli.validate()?;
     let _log_guard = init_tracing(TracingOption {
         writer: LogWriter::Stderr,
         ..TracingOption::default()
@@ -227,6 +235,26 @@ mod tests {
             ])
             .is_err()
         );
+    }
+
+    #[test]
+    fn zero_intervals_are_rejected() {
+        assert!(parse(&[]).validate().is_ok());
+        assert_eq!(
+            parse(&["--monitor-interval", "0s"])
+                .validate()
+                .unwrap_err()
+                .to_string(),
+            "--monitor-interval must not be zero"
+        );
+        assert_eq!(
+            parse(&["--retry-interval", "0s"])
+                .validate()
+                .unwrap_err()
+                .to_string(),
+            "--retry-interval must not be zero"
+        );
+        assert!(parse(&["--retry-interval", "1ms"]).validate().is_ok());
     }
 
     #[test]

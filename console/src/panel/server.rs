@@ -128,7 +128,7 @@ impl ServerConfig {
             ("--retry-interval", self.retry_interval_ms),
         ] {
             if let Some(ms) = ms {
-                push(&mut args, flag, format!("{ms}ms"));
+                push(&mut args, flag, format!("{}ms", ms.max(1)));
             }
         }
         args
@@ -278,7 +278,7 @@ impl ServerConfig {
             "Retry interval",
             &mut self.retry_interval_ms,
             DEFAULT_RETRY_INTERVAL_MS,
-            0,
+            1,
             " ms",
         );
     }
@@ -712,6 +712,26 @@ mod tests {
             ]
         );
         assert_eq!(output.status.unwrap().relayed.frames, 999);
+    }
+
+    #[test]
+    fn a_zero_interval_saved_before_the_floor_is_raised_to_one_millisecond() {
+        let config = ServerConfig {
+            monitor_interval_ms: Some(0),
+            retry_interval_ms: Some(0),
+            ..ServerConfig::default()
+        };
+        assert_eq!(
+            config.args(),
+            [
+                "--port",
+                "44338",
+                "--monitor-interval",
+                "1ms",
+                "--retry-interval",
+                "1ms"
+            ]
+        );
     }
 
     #[test]
