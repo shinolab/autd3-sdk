@@ -33,7 +33,7 @@ struct Cli {
         help = "Network interface the devices are attached to (default: the one that answers)"
     )]
     iface: Option<String>,
-    #[arg(long, default_value_t = SERVER_PORT, help = "Loopback port the client connects to")]
+    #[arg(long, default_value_t = SERVER_PORT, value_parser = clap::value_parser!(u16).range(1..), help = "Loopback port the client connects to")]
     port: u16,
     #[arg(long, default_value = "1s", value_parser = humantime::parse_duration, help = "Interval of the unit info reads")]
     monitor_interval: Duration,
@@ -132,7 +132,10 @@ fn main() -> Result<()> {
         .with_context(|| format!("binding the loopback port {}", cli.port))?;
     tracing::info!(addr = %server.addr(), "waiting for a client");
     let stop = AtomicBool::new(false);
-    server.run(&stop, |status| println!("{}", status.to_json()));
+    server.run(&stop, |status| match status.to_json() {
+        Ok(json) => println!("{json}"),
+        Err(e) => tracing::error!("serializing the status failed: {e}"),
+    });
     Ok(())
 }
 
@@ -255,6 +258,12 @@ mod tests {
             "--retry-interval must not be zero"
         );
         assert!(parse(&["--retry-interval", "1ms"]).validate().is_ok());
+    }
+
+    #[test]
+    fn the_port_must_not_be_left_to_the_os() {
+        assert!(Cli::try_parse_from(["autd3-server", "--port", "0"]).is_err());
+        assert_eq!(parse(&["--port", "1"]).port, 1);
     }
 
     #[test]

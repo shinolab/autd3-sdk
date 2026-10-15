@@ -184,7 +184,16 @@ namespace AUTD3.Tests
             {
                 NativeClient.autd3_server_link_free(handle);
             }
-            Assert.Throws<Autd3Exception>(() => new ServerLink { Timeout = TimeSpan.Zero }.CreateHandle());
+        }
+
+        [Fact]
+        public async Task AZeroServerTimeoutFailsTheOpen()
+        {
+            NativeClient.autd3_server_link_free(new ServerLink { Timeout = TimeSpan.Zero }.CreateHandle());
+            using var geometry = new Geometry(new[] { new Autd3(System.Numerics.Vector3.Zero) });
+            var error = await Assert.ThrowsAsync<Autd3Exception>(() =>
+                Client.OpenAsync(geometry, new ServerLink { Timeout = TimeSpan.Zero }, new ClientConfig()));
+            Assert.Contains("must not be zero", error.Message);
         }
 
         [Fact]

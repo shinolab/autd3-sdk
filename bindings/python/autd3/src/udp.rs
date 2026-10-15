@@ -231,9 +231,6 @@ impl ServerLink {
             ..CoreServerLink::default()
         };
         if let Some(timeout) = opt_duration(timeout)? {
-            if timeout.is_zero() {
-                return Err(PyValueError::new_err("timeout must not be zero"));
-            }
             inner.timeout = timeout;
         }
         Ok(Self(inner))
@@ -250,7 +247,10 @@ impl ServerLink {
     }
 
     fn __repr__(&self) -> String {
-        format!("ServerLink(port={})", self.0.port)
+        format!(
+            "ServerLink(port={}, timeout=Duration({:?}))",
+            self.0.port, self.0.timeout
+        )
     }
 }
 

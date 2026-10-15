@@ -135,9 +135,8 @@ impl Status {
         }
     }
 
-    #[must_use]
-    pub fn to_json(&self) -> String {
-        serde_json::to_string(self).unwrap_or_default()
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string(self)
     }
 }
 
@@ -150,7 +149,9 @@ mod tests {
     #[test]
     fn an_opening_status_is_one_json_line_naming_the_failure() {
         assert_eq!(
-            Status::opening(Some("no devices".into())).to_json(),
+            Status::opening(Some("no devices".into()))
+                .to_json()
+                .unwrap(),
             concat!(
                 r#"{"phase":"opening","error":"no devices","client":null,"#,
                 r#""relayed":{"frames":0,"replies":0,"dropped":0},"#,
@@ -190,7 +191,8 @@ mod tests {
                 Some(&[DeviceState::Syncing, DeviceState::Lost]),
                 &[Some(device), None]
             )
-            .to_json(),
+            .to_json()
+            .unwrap(),
             concat!(
                 r#"{"phase":"serving","error":null,"client":"[::1]:5000","#,
                 r#""relayed":{"frames":4,"replies":2,"dropped":1},"#,
