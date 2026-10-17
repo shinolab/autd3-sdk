@@ -97,7 +97,7 @@ impl<'a> WritePatternBuffer<'a> {
 
 impl crate::sealed::Sealed for WritePatternBuffer<'_> {}
 
-fn encode_raw_slot(
+pub(super) fn encode_raw_slot(
     phases: &[Vec<Phase>],
     intensities: PatternIntensity<'_>,
     device: &Device,

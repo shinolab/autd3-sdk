@@ -422,6 +422,7 @@ impl Cpu {
             }
             Cmd::WriteFociBuffer => cmd::write_foci::handle(port, payload),
             Cmd::WritePatternRaw => cmd::write_pattern_raw::handle(port, payload),
+            Cmd::WritePatternFused => cmd::write_pattern_fused::handle(port, &config, payload),
             Cmd::WritePatternPhase => cmd::write_pattern_phase::handle(port, payload),
             Cmd::WriteModulationBuffer => cmd::write_mod::handle(port, payload),
             Cmd::ConfigModulation => cmd::config_mod::handle(port, payload),

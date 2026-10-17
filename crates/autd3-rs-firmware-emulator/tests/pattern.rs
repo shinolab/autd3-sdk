@@ -4,10 +4,14 @@ mod common;
 #[path = "common/pattern.rs"]
 mod pattern;
 
+use core::num::NonZeroU16;
+
 use autd3_cpu_wire::PatternBank;
 use autd3_cpu_wire::payload::{
-    EmissionType, PhaseDepth, TransitionMode, WritePatternPhasePayload, WritePatternRawPayload,
+    ConfigPatternPayload, EmissionType, PhaseDepth, TransitionMode, WritePatternFusedPayload,
+    WritePatternPhasePayload, WritePatternRawPayload,
 };
+use autd3_cpu_wire::value::Transition;
 use autd3_rs_core::params::REP_INFINITE;
 use autd3_rs_core::protocol::{Cmd, DeviceErrorCode};
 use autd3_rs_core::value::{Intensity, Phase};
@@ -78,6 +82,73 @@ fn raw_pattern_round_trips_to_emissions() {
         device.fpga().pattern_mode(BANK as usize)
     );
     assert_eq!(expected, device.fpga().emissions_at(BANK as usize, 0));
+}
+
+#[test]
+fn a_fused_pattern_leaves_the_fpga_as_write_config_activate_does() {
+    let phases: Vec<u8> = (0..NUM_TRANSDUCERS).map(|i| (i * 7) as u8).collect();
+    let intensities: Vec<u8> = (0..NUM_TRANSDUCERS).map(|i| (255 - i) as u8).collect();
+
+    let mut write = WritePatternRawPayload {
+        bank: BANK,
+        count: 1,
+        index: U16::new(0),
+    }
+    .as_bytes()
+    .to_vec();
+    write.extend(&phases);
+    write.extend(&intensities);
+    let mut split = Device::new(NUM_TRANSDUCERS);
+    split.send(&frame(0, Cmd::Reset, &[]));
+    for (seq, (cmd, payload)) in [
+        (Cmd::WritePatternRaw, write),
+        (
+            Cmd::ConfigPattern,
+            ConfigPatternPayload::raw(BANK, NonZeroU16::MAX, 1, REP_INFINITE)
+                .unwrap()
+                .as_bytes()
+                .to_vec(),
+        ),
+        (
+            Cmd::ActivatePatternBank,
+            activate_pattern_bank(BANK, TransitionMode::Immediate),
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        assert_eq!(
+            split.send(&frame(seq as u8, cmd, &payload)).status,
+            DeviceErrorCode::None
+        );
+    }
+
+    let mut fused_payload = WritePatternFusedPayload::new(BANK, Transition::Immediate)
+        .as_bytes()
+        .to_vec();
+    fused_payload.extend(&phases);
+    fused_payload.extend(&intensities);
+    let mut fused = Device::new(NUM_TRANSDUCERS);
+    fused.send(&frame(0, Cmd::Reset, &[]));
+    assert_eq!(
+        fused
+            .send(&frame(0, Cmd::WritePatternFused, &fused_payload))
+            .status,
+        DeviceErrorCode::None
+    );
+
+    for addr in 0..=u8::MAX {
+        assert_eq!(
+            split.fpga().controller_reg(u16::from(addr)),
+            fused.fpga().controller_reg(u16::from(addr)),
+            "controller register {addr:#04x}"
+        );
+    }
+    assert_eq!(BANK as u16, fused.fpga().req_pattern_bank());
+    assert_eq!(
+        split.fpga().emissions_at(BANK as usize, 0),
+        fused.fpga().emissions_at(BANK as usize, 0)
+    );
 }
 
 fn send_phase_pattern(write: &[u8]) -> Device {

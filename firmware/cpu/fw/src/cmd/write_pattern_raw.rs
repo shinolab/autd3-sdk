@@ -1,5 +1,8 @@
 pub use autd3_cpu_wire::payload::WritePatternRawPayload;
 
+use autd3_cpu_wire::PatternBank;
+use autd3_cpu_wire::layout::PATTERN_RAW_DATA_LEN;
+
 use crate::fpga::{self, EMISSION_RAM};
 use crate::fpga_params::NUM_TRANSDUCERS;
 use crate::port::Port;
@@ -9,16 +12,26 @@ pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error>
     let (p, slots) = WritePatternRawPayload::parse(payload)?;
     let index = u32::from(p.index.get());
     for (k, data) in slots.iter().enumerate() {
-        let (phases, intensities) = data.split_at(NUM_TRANSDUCERS);
-        fpga::write_ram_interleaved(
-            port,
-            &EMISSION_RAM,
-            p.bank.as_u8(),
-            (index + k as u32) * EMISSION_SLOT_WORDS,
-            phases.try_into().map_err(|_| Error::InvalidPayload)?,
-            intensities.try_into().map_err(|_| Error::InvalidPayload)?,
-        );
+        write_slot(port, p.bank, index + k as u32, data)?;
     }
+    Ok(())
+}
+
+pub(crate) fn write_slot<P: Port>(
+    port: &mut P,
+    bank: PatternBank,
+    index: u32,
+    data: &[u8; PATTERN_RAW_DATA_LEN],
+) -> Result<(), Error> {
+    let (phases, intensities) = data.split_at(NUM_TRANSDUCERS);
+    fpga::write_ram_interleaved(
+        port,
+        &EMISSION_RAM,
+        bank.as_u8(),
+        index * EMISSION_SLOT_WORDS,
+        phases.try_into().map_err(|_| Error::InvalidPayload)?,
+        intensities.try_into().map_err(|_| Error::InvalidPayload)?,
+    );
     Ok(())
 }
 

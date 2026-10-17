@@ -22,6 +22,7 @@ mod update_begin;
 mod update_chunk;
 mod write_foci;
 mod write_mod;
+mod write_pattern_fused;
 mod write_pattern_phase;
 mod write_pattern_raw;
 
@@ -49,6 +50,7 @@ pub use update_begin::UpdateBeginPayload;
 pub use update_chunk::UpdateChunkPayload;
 pub use write_foci::WriteFociPayload;
 pub use write_mod::WriteModPayload;
+pub use write_pattern_fused::WritePatternFusedPayload;
 pub use write_pattern_phase::{PhaseDepth, WritePatternPhasePayload};
 pub use write_pattern_raw::WritePatternRawPayload;
 
