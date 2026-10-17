@@ -9,7 +9,11 @@ use crate::port::Port;
 use crate::proto::Error;
 
 pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
-    let cfg = ConfigPatternPayload::parse(payload)?;
+    write(port, &ConfigPatternPayload::parse(payload)?);
+    Ok(())
+}
+
+pub(crate) fn write<P: Port>(port: &mut P, cfg: &ConfigPatternPayload) {
     let bank_offset = u16::from(cfg.bank.as_u8());
     fpga::write_ctl(
         port,
@@ -37,7 +41,6 @@ pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error>
         cfg.num_foci.map_or(0, |n| u16::from(n.get())),
     );
     fpga::write_ctl(port, ADDR_PATTERN_REP0 + bank_offset, cfg.rep.get());
-    Ok(())
 }
 
 #[cfg(all(test, not(loom)))]

@@ -22,5 +22,6 @@ pub(crate) mod telemetry;
 pub(crate) mod update;
 pub(crate) mod write_foci;
 pub(crate) mod write_mod;
+pub(crate) mod write_pattern_fused;
 pub(crate) mod write_pattern_phase;
 pub(crate) mod write_pattern_raw;

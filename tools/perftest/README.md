@@ -56,13 +56,12 @@ The run continues until Ctrl+C, then prints the summary.
 |------------------------|----------------|----------------|----------|
 | `nop`                  | no             | no             | the communication path only; the firmware acks without touching a single FPGA register |
 | `write-pattern-buffer` | yes            | no             | communication + FPGA RAM streaming |
-| `pattern` (default)    | yes            | once per pattern | the production path: write + config + bank-activation, 3 frames |
+| `pattern` (default)    | yes            | once per pattern | the production path: write + config + bank-activation fused into 1 frame (`WritePatternFused`) |
 | `write-modulation-buffer` | yes (modulation buffer of bank 1) | no | bulk transfer: one sample writes the whole modulation buffer, its frames pipelined up to `--max-inflight` |
 
-`nop` and `write-pattern-buffer` are one frame per sample.
+`nop`, `write-pattern-buffer` and `pattern` are one frame per sample.
+`pattern` writes the RAM, the bank config and the bank change in one frame, which latches once.
 `write-modulation-buffer` is one whole-buffer write per sample (many frames), and runs in `stop-and-wait` only.
-`pattern` is three frames (write, config, bank change), of which only the bank change latches:
-in `stop-and-wait` one sample is the whole pattern (three round trips), in `streaming` every frame is its own sample, and three of them make one pattern.
 
 ## Modes
 

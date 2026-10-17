@@ -20,6 +20,7 @@ use crate::cmd::pwe::PwePayload;
 use crate::cmd::silencer::SilencerPayload;
 use crate::cmd::write_foci::WriteFociPayload;
 use crate::cmd::write_mod::WriteModPayload;
+use crate::cmd::write_pattern_fused::WritePatternFusedPayload;
 use crate::cmd::write_pattern_phase::WritePatternPhasePayload;
 use crate::cmd::write_pattern_raw::WritePatternRawPayload;
 use crate::fpga::{REP_INFINITE, TransitionMode};
@@ -97,6 +98,25 @@ pub(crate) fn write_pattern_raw_multi(
         .collect();
     let mut f = Frame::from_parts(seq, Cmd::WritePatternRaw, &header, &data);
     f.set_payload_byte(offset_of!(WritePatternRawPayload, bank), bank);
+    f
+}
+
+pub(crate) fn write_pattern_fused(
+    seq: u8,
+    bank: u8,
+    transition_mode: TransitionMode,
+    transition_value: u64,
+    phases: &[u8],
+    intensities: &[u8],
+) -> Frame {
+    let header = WritePatternFusedPayload {
+        bank: PatternBank::B0,
+        transition_mode,
+        transition_value: U64::new(transition_value),
+    };
+    let data: std::vec::Vec<u8> = phases.iter().chain(intensities).copied().collect();
+    let mut f = Frame::from_parts(seq, Cmd::WritePatternFused, &header, &data);
+    f.set_payload_byte(offset_of!(WritePatternFusedPayload, bank), bank);
     f
 }
 
