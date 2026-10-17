@@ -5,7 +5,9 @@ use std::time::Duration;
 
 use autd3_rs::commands::{ForceFan, Nop};
 use autd3_rs::udp::{UdpError, UdpOption};
-use autd3_rs::{Client, ClientConfig, Error, MAX_DEVICES, MAX_INFLIGHT, PayloadError};
+use autd3_rs::{
+    Client, ClientConfig, ClientConfigError, Error, MAX_DEVICES, MAX_INFLIGHT, PayloadError,
+};
 
 use common::{config, emulator, geometry, open_with, option, udp_error};
 
@@ -45,7 +47,7 @@ async fn a_window_wider_than_the_device_queue_is_rejected() {
 
     assert!(matches!(
         error,
-        Error::InvalidPayload(PayloadError::MaxInflightTooLarge { max: MAX_INFLIGHT })
+        Error::InvalidConfig(ClientConfigError::MaxInflightTooLarge { max: MAX_INFLIGHT })
     ));
 }
 
@@ -62,7 +64,7 @@ async fn a_zero_ack_timeout_is_rejected() {
 
     assert!(matches!(
         error,
-        Error::InvalidPayload(PayloadError::ZeroAckTimeout)
+        Error::InvalidConfig(ClientConfigError::ZeroAckTimeout)
     ));
 }
 
@@ -80,7 +82,7 @@ async fn an_exec_lead_not_below_lost_timeout_is_rejected() {
 
     assert!(matches!(
         error,
-        Error::InvalidPayload(PayloadError::ExecLeadNotBelowLostTimeout { .. })
+        Error::InvalidConfig(ClientConfigError::ExecLeadNotBelowLostTimeout { .. })
     ));
 }
 

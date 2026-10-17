@@ -83,6 +83,15 @@ impl Client {
         self.controller.device_time_now()
     }
 
+    #[must_use]
+    pub fn config(&self) -> ClientConfig {
+        self.controller.config()
+    }
+
+    pub fn set_config(&self, config: ClientConfig) -> Result<(), Error> {
+        self.controller.set_config(config)
+    }
+
     pub fn send<'a, C: Command<'a>>(
         &self,
         cmd: C,

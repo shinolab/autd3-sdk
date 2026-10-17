@@ -427,6 +427,16 @@ impl Client {
         geometry_to_py(py, &self.geometry)
     }
 
+    fn config(&self) -> ClientConfig {
+        ClientConfig(self.inner.config())
+    }
+
+    fn set_config(&self, py: Python<'_>, config: &ClientConfig) -> PyResult<()> {
+        self.inner
+            .set_config(config.0)
+            .map_err(|e| client_pyerr(py, &e))
+    }
+
     fn device_time_now(&self, py: Python<'_>) -> PyResult<SysTime> {
         self.inner
             .device_time_now()

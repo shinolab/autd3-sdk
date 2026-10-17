@@ -18,7 +18,7 @@ mod sealed {
 mod test_utils;
 
 pub use autd3_rs_core::{bus, common, geometry, nalgebra, params, protocol, rt, units, value};
-pub use error::{Error, NetworkCause, PayloadError};
+pub use error::{ClientConfigError, Error, NetworkCause, PayloadError};
 
 #[cfg(feature = "serde")]
 pub use autd3_rs_core::LayoutError;

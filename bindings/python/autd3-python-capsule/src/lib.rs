@@ -228,7 +228,9 @@ mod client_error {
             Error::DeviceError { .. } | Error::UnexpectedReply { .. } => error_code::DEVICE,
             Error::Network(_) | Error::DeviceLost { .. } => error_code::NETWORK,
             Error::UnsupportedFirmware { .. } => error_code::UNSUPPORTED_FIRMWARE,
-            Error::InvalidPayload(_) | Error::Encode(_) => error_code::INVALID_ARGUMENT,
+            Error::InvalidPayload(_) | Error::InvalidConfig(_) | Error::Encode(_) => {
+                error_code::INVALID_ARGUMENT
+            }
             _ => error_code::GENERIC,
         }
     }

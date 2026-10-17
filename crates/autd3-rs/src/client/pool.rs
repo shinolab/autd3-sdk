@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use async_lock::{Semaphore, SemaphoreGuardArc};
 
-use crate::protocol::REPLY_DATA_BYTES_MAX;
+use crate::protocol::{MAX_INFLIGHT, REPLY_DATA_BYTES_MAX};
 use crate::response::Response;
 
 #[derive(Clone, Copy)]
@@ -62,7 +62,7 @@ impl SlotData {
 pub(crate) struct Slot {
     pool: Arc<SlotPool>,
     data: Option<SlotData>,
-    _permit: SemaphoreGuardArc,
+    permit: Option<SemaphoreGuardArc>,
 }
 
 impl std::ops::Deref for Slot {
@@ -84,21 +84,68 @@ impl Drop for Slot {
         if let Some(data) = self.data.take() {
             self.pool.release(data);
         }
+        if let Some(permit) = self.permit.take() {
+            self.pool.give_back(permit);
+        }
     }
+}
+
+struct Limit {
+    current: usize,
+    debt: usize,
 }
 
 pub(crate) struct SlotPool {
     free: Mutex<Vec<SlotData>>,
     permits: Arc<Semaphore>,
+    limit: Mutex<Limit>,
 }
 
 impl SlotPool {
-    pub(crate) fn new(num_devices: usize, capacity: usize) -> Arc<Self> {
-        let free = (0..capacity).map(|_| SlotData::new(num_devices)).collect();
+    pub(crate) fn new(num_devices: usize, limit: usize) -> Arc<Self> {
+        let free = (0..MAX_INFLIGHT.max(limit))
+            .map(|_| SlotData::new(num_devices))
+            .collect();
         Arc::new(Self {
             free: Mutex::new(free),
-            permits: Arc::new(Semaphore::new(capacity)),
+            permits: Arc::new(Semaphore::new(limit)),
+            limit: Mutex::new(Limit {
+                current: limit,
+                debt: 0,
+            }),
         })
+    }
+
+    pub(crate) fn set_limit(&self, limit: usize) {
+        let mut state = self.limit.lock().unwrap_or_else(PoisonError::into_inner);
+        if limit >= state.current {
+            let grow = limit - state.current;
+            let repaid = grow.min(state.debt);
+            state.debt -= repaid;
+            self.permits.add_permits(grow - repaid);
+        } else {
+            let mut shrink = state.current - limit;
+            while shrink > 0 {
+                let Some(permit) = self.permits.try_acquire_arc() else {
+                    break;
+                };
+                permit.forget();
+                shrink -= 1;
+            }
+            state.debt += shrink;
+        }
+        state.current = limit;
+    }
+
+    fn give_back(&self, permit: SemaphoreGuardArc) {
+        let mut state = self.limit.lock().unwrap_or_else(PoisonError::into_inner);
+        if state.debt > 0 {
+            state.debt -= 1;
+            permit.forget();
+        } else {
+            drop(state);
+            drop(permit);
+        }
     }
 
     pub(crate) async fn acquire(self: &Arc<Self>) -> Slot {
@@ -113,7 +160,7 @@ impl SlotPool {
         Slot {
             pool: Arc::clone(self),
             data: Some(data),
-            _permit: permit,
+            permit: Some(permit),
         }
     }
 
@@ -122,5 +169,81 @@ impl SlotPool {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .push(data);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn available(pool: &Arc<SlotPool>) -> usize {
+        let held: Vec<_> = std::iter::from_fn(|| pool.permits.try_acquire_arc()).collect();
+        held.len()
+    }
+
+    fn acquire(pool: &Arc<SlotPool>, n: usize) -> Vec<Slot> {
+        (0..n).map(|_| pollster::block_on(pool.acquire())).collect()
+    }
+
+    #[test]
+    fn raising_the_limit_frees_more_slots_at_once() {
+        let pool = SlotPool::new(2, 2);
+        let held = acquire(&pool, 2);
+        assert_eq!(available(&pool), 0);
+
+        pool.set_limit(MAX_INFLIGHT);
+
+        assert_eq!(available(&pool), MAX_INFLIGHT - 2);
+        drop(held);
+        assert_eq!(available(&pool), MAX_INFLIGHT);
+    }
+
+    #[test]
+    fn lowering_the_limit_takes_back_the_idle_slots_at_once() {
+        let pool = SlotPool::new(2, MAX_INFLIGHT);
+
+        pool.set_limit(2);
+
+        assert_eq!(available(&pool), 2);
+    }
+
+    #[test]
+    fn lowering_the_limit_below_the_slots_in_use_keeps_them_until_they_return() {
+        let pool = SlotPool::new(2, 4);
+        let mut held = acquire(&pool, 3);
+
+        pool.set_limit(1);
+        assert_eq!(available(&pool), 0);
+
+        held.pop();
+        assert_eq!(available(&pool), 0);
+        held.pop();
+        assert_eq!(available(&pool), 0);
+        held.pop();
+        assert_eq!(available(&pool), 1);
+    }
+
+    #[test]
+    fn raising_the_limit_again_cancels_the_slots_still_owed() {
+        let pool = SlotPool::new(2, 4);
+        let held = acquire(&pool, 4);
+
+        pool.set_limit(1);
+        pool.set_limit(3);
+        assert_eq!(available(&pool), 0);
+
+        drop(held);
+        assert_eq!(available(&pool), 3);
+    }
+
+    #[test]
+    fn every_slot_up_to_the_device_queue_can_be_held_after_raising_the_limit() {
+        let pool = SlotPool::new(2, 1);
+        pool.set_limit(MAX_INFLIGHT);
+
+        let held = acquire(&pool, MAX_INFLIGHT);
+
+        assert_eq!(held.len(), MAX_INFLIGHT);
+        assert_eq!(available(&pool), 0);
     }
 }

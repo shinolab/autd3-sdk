@@ -40,10 +40,9 @@ pub struct Controller {
     pool: Arc<SlotPool>,
     gate: AsyncMutex<()>,
     bufs: Mutex<Vec<FrameBuf>>,
-    config: ClientConfig,
+    lost_timeout: Option<Duration>,
     stopped: AsyncMutex<bool>,
     device_clock: DeviceClock,
-    exec_lead: Option<Duration>,
     stats: BusStats,
 }
 
@@ -53,7 +52,12 @@ impl Controller {
         link: impl Into<Link>,
         config: ClientConfig,
     ) -> Result<(Self, Driver), Error> {
-        let config = config.validate()?;
+        let link = link.into();
+        let lost_timeout = match &link {
+            Link::Udp(option) => Some(option.lost_timeout),
+            Link::Server(_) => None,
+        };
+        let config = config.validate(lost_timeout)?;
         let num_devices = geometry.num_devices();
         if num_devices == 0 || num_devices > MAX_DEVICES {
             return Err(PayloadError::DeviceCountOutOfRange {
@@ -62,35 +66,17 @@ impl Controller {
             }
             .into());
         }
-        let link = link.into();
-        if let (Some(exec_lead), Link::Udp(option)) = (config.exec_lead, &link)
-            && exec_lead >= option.lost_timeout
-        {
-            return Err(PayloadError::ExecLeadNotBelowLostTimeout {
-                exec_lead,
-                lost_timeout: option.lost_timeout,
-            }
-            .into());
-        }
         let (transport, port) = Transport::open(&link, geometry)?;
-        let shared = Shared::new();
-        let driver = Driver::new(
-            Arc::clone(&transport),
-            port,
-            Arc::clone(&shared),
-            config.ack_timeout,
-            config.resynchronize_on_recovery.is_some(),
-            config.release_failsafe_on_recovery.is_some(),
-        );
+        let shared = Shared::new(config);
+        let driver = Driver::new(Arc::clone(&transport), port, Arc::clone(&shared));
         let controller = Self {
             geometry: Arc::new(geometry.clone()),
             pool: SlotPool::new(num_devices, config.max_inflight.get()),
             gate: AsyncMutex::new(()),
             bufs: Mutex::new(vec![FrameBuf::new(); num_devices]),
-            config,
+            lost_timeout,
             stopped: AsyncMutex::new(false),
             device_clock: transport.device_clock(),
-            exec_lead: config.exec_lead,
             stats: transport.stats(),
             shared,
             transport,
@@ -104,7 +90,7 @@ impl Controller {
             self.reset().await?;
         }
         tracing::debug!("handshake complete");
-        self.check_firmware_version(self.config.require_supported_firmware)
+        self.check_firmware_version(self.config().require_supported_firmware)
             .await?;
         self.send(Clear).await?;
         self.send(Synchronize).await?;
@@ -130,6 +116,27 @@ impl Controller {
     #[must_use]
     pub fn state_checker(&self) -> StateChecker {
         self.transport.state_checker()
+    }
+
+    #[must_use]
+    pub fn config(&self) -> ClientConfig {
+        self.shared.pending().config
+    }
+
+    pub fn set_config(&self, config: ClientConfig) -> Result<(), Error> {
+        let config = config.validate(self.lost_timeout)?;
+        {
+            let mut pending = self.shared.pending();
+            pending.reconfigure(config);
+            self.pool.set_limit(config.max_inflight.get());
+        }
+        tracing::debug!(?config, "client config replaced");
+        if !self.transport.wake() {
+            tracing::debug!(
+                "could not wake the driver; the new ack timeout applies at its next deadline"
+            );
+        }
+        Ok(())
     }
 
     pub fn device_time_now(&self) -> Result<SysTime, Error> {
@@ -158,7 +165,7 @@ impl Controller {
             let frames = frames?;
             let mut stream = StreamFuture::default();
             for frame in &frames {
-                if stream.in_flight() >= self.config.max_inflight.get() {
+                if stream.in_flight() >= self.config().max_inflight.get() {
                     stream.settle_oldest().await;
                 }
                 if stream.has_failed() {
@@ -227,7 +234,7 @@ impl Controller {
     }
 
     fn exec_at(&self) -> Result<u32, Error> {
-        frame_buf::schedule(self.exec_lead, || self.device_clock.now())
+        frame_buf::schedule(self.config().exec_lead, || self.device_clock.now())
     }
 
     fn next_restoration(&self) -> Result<Option<Restoration>, Error> {
@@ -273,13 +280,12 @@ impl Controller {
             .collect();
         let outcome = self.attempt(slot, &datagrams).await;
         let mut pending = self.shared.pending();
+        let config = pending.config;
         let (restoring, attempts) = match restoration {
-            Restoration::Synchronize(_) => {
-                (&mut pending.resync, self.config.resynchronize_on_recovery)
-            }
+            Restoration::Synchronize(_) => (&mut pending.resync, config.resynchronize_on_recovery),
             Restoration::ReleaseFailsafe(_) => (
                 &mut pending.release_failsafe,
-                self.config.release_failsafe_on_recovery,
+                config.release_failsafe_on_recovery,
             ),
         };
         match outcome {
@@ -367,19 +373,20 @@ impl Controller {
     }
 
     fn settle(&self, msg_id: u16, sent: Result<Sent, UdpError>) -> Result<bool, Error> {
-        let (settlement, driver_waits_too_long) = {
+        let (settlement, driver_waits_too_long, ack_timeout) = {
             let mut pending = self.shared.pending();
+            let ack_timeout = pending.config.ack_timeout;
             let settlement = pending.settle(msg_id, sent_devices(sent));
             let driver_waits_too_long = matches!(settlement, Settlement::Reached(_))
-                && pending.ack_deadline_precedes_driver_wake(msg_id, self.config.ack_timeout);
-            (settlement, driver_waits_too_long)
+                && pending.ack_deadline_precedes_driver_wake(msg_id, ack_timeout);
+            (settlement, driver_waits_too_long, ack_timeout)
         };
         match settlement {
             Settlement::Failed(_, e) => return Err(e),
             Settlement::Unreached(entry) => {
                 if let Some(entry) = entry {
                     entry.tx.send(Err(Error::Timeout {
-                        timeout: self.config.ack_timeout,
+                        timeout: ack_timeout,
                     }));
                 }
                 return Ok(false);
@@ -408,12 +415,13 @@ impl Controller {
                 stale = stale.len(),
                 "failing the frames left in flight before the reset"
             );
-            let timeout = self.config.ack_timeout;
+            let timeout = self.config().ack_timeout;
             for entry in stale {
                 entry.tx.send(Err(Error::Timeout { timeout }));
             }
         }
-        for round in 0..self.config.max_resync_rounds.get() {
+        let rounds = self.config().max_resync_rounds.get();
+        for round in 0..rounds {
             if let Some(e) = self.closed_error() {
                 return Err(e);
             }
@@ -439,7 +447,7 @@ impl Controller {
             self.stats.record_reset();
             if !(reached || deferred) {
                 return Err(Error::Timeout {
-                    timeout: self.config.ack_timeout,
+                    timeout: self.config().ack_timeout,
                 });
             }
             match rx.await {
@@ -454,12 +462,9 @@ impl Controller {
                 Err(e) => return Err(e),
             }
         }
-        tracing::warn!(
-            rounds = self.config.max_resync_rounds.get(),
-            "the devices did not acknowledge the reset"
-        );
+        tracing::warn!(rounds, "the devices did not acknowledge the reset");
         Err(Error::Timeout {
-            timeout: self.config.ack_timeout,
+            timeout: self.config().ack_timeout,
         })
     }
 

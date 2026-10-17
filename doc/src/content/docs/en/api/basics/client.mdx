@@ -53,6 +53,8 @@ To continuously monitor the operating state of the devices, drive the `StateChec
 | `read_fpga_state()`       | ✓     | `Result<Vec<FpgaState>, Error>`       | FPGA state of each device                                  |
 | `read_telemetry()`        | ✓     | `Result<Vec<Telemetry>, Error>`       | CPU diagnostic counters of each device                     |
 | `device_time_now()`       | —     | `Result<SysTime, Error>`              | Current time of the devices (see [SysTime](/autd3-sdk/en/api/basics/sys-time/)). `DeviceTimeUnknown` if no reply carrying the time has been received yet |
+| `config()`                | —     | `ClientConfig`                        | The current [ClientConfig](#clientconfig)                  |
+| `set_config(config)`      | —     | `Result<(), Error>`                   | Replace the ClientConfig |
 | `send(cmd)`               | ✓     | `Result<(), Error>`                   | Send a command, confirming the response frame by frame     |
 | `send_streaming(cmd)`     | ✓     | `Result<StreamFuture, Error>`         | Streaming version of `send`                                |
 | `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | Send one frame                                             |
@@ -150,7 +152,7 @@ The `u32` fields wrap around to 0 on overflow, and the `u16` / `u8` fields stop 
 
 `max_inflight` errors if it exceeds `MAX_INFLIGHT (7)` (Python: `autd3.params.MAX_INFLIGHT`, C#: `Params.MaxInflight`).
 The default is also `MAX_INFLIGHT`, which equals `DEVICE_QUEUE_FRAMES`, the number of frames in the receive queue of each device (Python: `autd3.params.DEVICE_QUEUE_FRAMES`, C#: `Params.DeviceQueueFrames`).
-Setting `ack_timeout` to 0 makes opening the `Client` fail with an error (`InvalidPayload`; the `code` of the Python `Autd3Error` is `INVALID_ARGUMENT`, and the `Code` of the C# `Autd3Exception` is `InvalidArgument`).
+Setting `ack_timeout` to 0 makes opening the `Client` fail with an error (`InvalidConfig`; the `code` of the Python `Autd3Error` is `INVALID_ARGUMENT`, and the `Code` of the C# `Autd3Exception` is `InvalidArgument`).
 The Python defaults are the same as in Rust, and only `resynchronize_on_recovery` / `release_failsafe_on_recovery`, whose type is an `Option`, accept `None`.
 
 There is no retransmission. A failed command must be sent again by the user.

@@ -2019,7 +2019,9 @@ pub(crate) fn error_code(e: &Error) -> i32 {
         Error::DeviceError { .. } | Error::UnexpectedReply { .. } => AUTD3_ERR_DEVICE,
         Error::Network(_) | Error::DeviceLost { .. } => AUTD3_ERR_NETWORK,
         Error::UnsupportedFirmware { .. } => AUTD3_ERR_UNSUPPORTED_FIRMWARE,
-        Error::InvalidPayload(_) | Error::Encode(_) => AUTD3_ERR_INVALID_ARGUMENT,
+        Error::InvalidPayload(_) | Error::InvalidConfig(_) | Error::Encode(_) => {
+            AUTD3_ERR_INVALID_ARGUMENT
+        }
         _ => AUTD3_ERR,
     }
 }
@@ -2182,6 +2184,37 @@ pub unsafe extern "C" fn autd3_client_device_time_now(
 
     match client.0.device_time_now() {
         Ok(now) => unsafe { write_out(out_ns, now.sys_time()) },
+        Err(e) => {
+            unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
+            error_code(&e)
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_client_get_config(client: *const ClientHandle) -> *mut ClientConfig {
+    let Some(client) = (unsafe { handle_ref(client) }) else {
+        return std::ptr::null_mut();
+    };
+    into_handle(client.0.config())
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_client_set_config(
+    client: *const ClientHandle,
+    config: *const ClientConfig,
+    out_err: *mut c_char,
+    out_err_len: usize,
+) -> i32 {
+    let (Some(client), Some(config)) = (unsafe { handle_ref(client) }, unsafe {
+        handle_ref::<ClientConfig>(config)
+    }) else {
+        unsafe { write_cstr(out_err, out_err_len, "null argument") };
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+
+    match client.0.set_config(*config) {
+        Ok(()) => AUTD3_OK,
         Err(e) => {
             unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
             error_code(&e)
@@ -3780,6 +3813,20 @@ mod tests {
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
             autd3_client_device_time_now(std::ptr::null(), &raw mut ns, std::ptr::null_mut(), 0)
         });
+    }
+
+    #[test]
+    fn the_config_of_a_null_client_is_null() {
+        assert!(unsafe { autd3_client_get_config(std::ptr::null()) }.is_null());
+    }
+
+    #[test]
+    fn setting_the_config_of_a_null_client_is_an_error() {
+        let config = autd3_client_config_new();
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_client_set_config(std::ptr::null(), config, std::ptr::null_mut(), 0)
+        });
+        unsafe { autd3_client_config_free(config) };
     }
 
     #[test]

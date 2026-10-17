@@ -86,6 +86,9 @@ pub enum Error {
     #[error("invalid payload: {0}")]
     InvalidPayload(PayloadError),
 
+    #[error("invalid client config: {0}")]
+    InvalidConfig(ClientConfigError),
+
     #[error(transparent)]
     Encode(#[from] EncodeError),
 
@@ -114,9 +117,9 @@ where
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Error)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
 #[non_exhaustive]
-pub enum PayloadError {
+pub enum ClientConfigError {
     #[error("max_inflight must be <= {max}")]
     MaxInflightTooLarge { max: usize },
 
@@ -131,7 +134,11 @@ pub enum PayloadError {
         exec_lead: Duration,
         lost_timeout: Duration,
     },
+}
 
+#[derive(Clone, Copy, Debug, PartialEq, Error)]
+#[non_exhaustive]
+pub enum PayloadError {
     #[error("the number of devices must be 1..={max}, got {got}")]
     DeviceCountOutOfRange { got: usize, max: usize },
 

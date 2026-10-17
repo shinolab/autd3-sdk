@@ -14,6 +14,7 @@ use crate::udp::{Reply, Sent, UdpError};
 use crate::value::SysTime;
 
 use super::completion::CompletionSender;
+use super::config::ClientConfig;
 use super::pool::Slot;
 use super::transport::{Port, Transport};
 
@@ -110,6 +111,7 @@ pub(crate) struct Pending {
     pub(crate) resync: Restoring,
     pub(crate) release_failsafe: Restoring,
     pub(crate) recoveries: u64,
+    pub(crate) config: ClientConfig,
     pub(crate) next_seq: Seq,
     pub(crate) failure: Option<NetworkCause>,
     pub(crate) closed: bool,
@@ -196,6 +198,16 @@ impl Pending {
             .and_then(|_| self.head_since.checked_add(ack_timeout))
     }
 
+    pub(crate) fn reconfigure(&mut self, config: ClientConfig) {
+        if config.resynchronize_on_recovery.is_none() {
+            self.resync = Restoring::default();
+        }
+        if config.release_failsafe_on_recovery.is_none() {
+            self.release_failsafe = Restoring::default();
+        }
+        self.config = config;
+    }
+
     pub(crate) fn take_all(&mut self) -> Vec<Inflight> {
         self.entries.drain(..).collect()
     }
@@ -213,7 +225,7 @@ pub(crate) struct Shared {
 }
 
 impl Shared {
-    pub(crate) fn new() -> Arc<Self> {
+    pub(crate) fn new(config: ClientConfig) -> Arc<Self> {
         Arc::new(Self {
             pending: Mutex::new(Pending {
                 entries: VecDeque::new(),
@@ -222,6 +234,7 @@ impl Shared {
                 resync: Restoring::default(),
                 release_failsafe: Restoring::default(),
                 recoveries: 0,
+                config,
                 next_seq: Seq::ZERO,
                 failure: None,
                 closed: false,
@@ -247,9 +260,6 @@ impl Shared {
 struct Session {
     shared: Arc<Shared>,
     stats: BusStats,
-    ack_timeout: Duration,
-    resynchronize_on_recovery: bool,
-    release_failsafe_on_recovery: bool,
 }
 
 pub struct Driver {
@@ -261,21 +271,11 @@ pub struct Driver {
 }
 
 impl Driver {
-    pub(crate) fn new(
-        transport: Arc<Transport>,
-        port: Port,
-        shared: Arc<Shared>,
-        ack_timeout: Duration,
-        resynchronize_on_recovery: bool,
-        release_failsafe_on_recovery: bool,
-    ) -> Self {
+    pub(crate) fn new(transport: Arc<Transport>, port: Port, shared: Arc<Shared>) -> Self {
         Self {
             session: Session {
                 stats: transport.stats(),
                 shared,
-                ack_timeout,
-                resynchronize_on_recovery,
-                release_failsafe_on_recovery,
             },
             transport,
             port,
@@ -396,7 +396,8 @@ impl Driver {
             deadline = deadline.min(due);
         }
         let mut pending = self.session.shared.pending();
-        if let Some(expiry) = pending.ack_deadline(self.session.ack_timeout) {
+        let ack_timeout = pending.config.ack_timeout;
+        if let Some(expiry) = pending.ack_deadline(ack_timeout) {
             deadline = deadline.min(expiry);
         }
         pending.driver_wakes_at = Some(deadline);
@@ -406,9 +407,9 @@ impl Driver {
 
 impl Session {
     fn ack_overdue(&self, now: Instant) -> bool {
-        self.shared
-            .pending()
-            .ack_deadline(self.ack_timeout)
+        let pending = self.shared.pending();
+        pending
+            .ack_deadline(pending.config.ack_timeout)
             .is_some_and(|deadline| now >= deadline)
     }
 
@@ -416,16 +417,15 @@ impl Session {
         if !self.ack_overdue(now) {
             return;
         }
-        let entries = {
+        let (entries, timeout) = {
             let mut pending = self.shared.pending();
             pending.need_reset = true;
-            pending.take_all()
+            (pending.take_all(), pending.config.ack_timeout)
         };
         tracing::warn!(
             pending = entries.len(),
             "the head frame got no reply within the ack timeout; failing the pending frames"
         );
-        let timeout = self.ack_timeout;
         fail(entries, || Error::Timeout { timeout });
     }
 
@@ -436,10 +436,10 @@ impl Session {
         let mut pending = self.shared.pending();
         pending.need_reset = true;
         pending.recoveries += 1;
-        if self.resynchronize_on_recovery {
+        if pending.config.resynchronize_on_recovery.is_some() {
             pending.resync.recovered(recovered);
         }
-        if self.release_failsafe_on_recovery {
+        if pending.config.release_failsafe_on_recovery.is_some() {
             pending.release_failsafe.recovered(recovered);
         }
     }
@@ -497,14 +497,15 @@ impl Session {
                 unsent: false,
             }),
         };
-        let (is_frame, settlement) = {
+        let (is_frame, settlement, timeout) = {
             let mut pending = self.shared.pending();
             let is_frame = pending
                 .entries
                 .iter()
                 .find(|entry| entry.msg_id == msg_id)
                 .is_some_and(|entry| entry.seq.is_some());
-            (is_frame, pending.settle(msg_id, sent))
+            let settlement = pending.settle(msg_id, sent);
+            (is_frame, settlement, pending.config.ack_timeout)
         };
         match settlement {
             Settlement::Failed(entry, error) => {
@@ -514,9 +515,7 @@ impl Session {
             }
             Settlement::Unreached(entry) => {
                 if let Some(entry) = entry {
-                    entry.tx.send(Err(Error::Timeout {
-                        timeout: self.ack_timeout,
-                    }));
+                    entry.tx.send(Err(Error::Timeout { timeout }));
                 }
             }
             Settlement::Reached(answered) => {
@@ -614,7 +613,7 @@ mod tests {
     use super::*;
 
     fn pending() -> Arc<Shared> {
-        Shared::new()
+        Shared::new(ClientConfig::default())
     }
 
     fn inflight(msg_id: u16, replied: u128) -> (Inflight, completion::ResponseFuture) {
@@ -665,6 +664,45 @@ mod tests {
         restoring.recovered(0b1);
         assert!(restoring.failed(0b1, NonZeroU32::MIN));
         assert_eq!(restoring.devices, 0);
+    }
+
+    #[test]
+    fn disabling_a_restoration_drops_the_devices_waiting_for_it() {
+        let shared = pending();
+        let mut pending = shared.pending();
+        pending.resync.recovered(0b01);
+        pending.release_failsafe.recovered(0b10);
+
+        pending.reconfigure(ClientConfig {
+            resynchronize_on_recovery: None,
+            ..ClientConfig::default()
+        });
+        assert_eq!(pending.resync.devices, 0);
+        assert_eq!(pending.release_failsafe.devices, 0b10);
+        assert_eq!(pending.config.resynchronize_on_recovery, None);
+
+        pending.reconfigure(ClientConfig {
+            release_failsafe_on_recovery: None,
+            ..ClientConfig::default()
+        });
+        assert_eq!(pending.release_failsafe.devices, 0);
+    }
+
+    #[test]
+    fn changing_only_the_attempts_keeps_the_devices_waiting() {
+        let shared = pending();
+        let mut pending = shared.pending();
+        pending.resync.recovered(0b01);
+        pending.release_failsafe.recovered(0b10);
+
+        pending.reconfigure(ClientConfig {
+            resynchronize_on_recovery: NonZeroU32::new(1),
+            release_failsafe_on_recovery: NonZeroU32::new(5),
+            ..ClientConfig::default()
+        });
+
+        assert_eq!(pending.resync.devices, 0b01);
+        assert_eq!(pending.release_failsafe.devices, 0b10);
     }
 
     #[test]
