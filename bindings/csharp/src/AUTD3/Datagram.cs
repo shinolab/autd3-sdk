@@ -8,13 +8,7 @@ namespace AUTD3
 
     internal static class ClientConfigDefaults
     {
-        internal static readonly TimeSpan AckTimeout;
-        internal static readonly uint MaxInflight;
-        internal static readonly uint MaxResyncRounds;
-        internal static readonly bool RequireSupportedFirmware;
-        internal static readonly uint? ResynchronizeOnRecovery;
-        internal static readonly uint? ReleaseFailsafeOnRecovery;
-        internal static readonly TimeSpan? ExecLead;
+        internal static readonly ClientConfig Preset;
 
         static ClientConfigDefaults()
         {
@@ -25,16 +19,7 @@ namespace AUTD3
             }
             try
             {
-                AckTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_client_config_get_ack_timeout_ns);
-                OptionNative.Apply("preset", NativeClient.autd3_client_config_get_max_inflight(handle, out var maxInflight));
-                MaxInflight = (uint)maxInflight;
-                OptionNative.Apply("preset", NativeClient.autd3_client_config_get_max_resync_rounds(handle, out MaxResyncRounds));
-                OptionNative.Apply("preset", NativeClient.autd3_client_config_get_require_supported_firmware(handle, out RequireSupportedFirmware));
-                OptionNative.Apply("preset", NativeClient.autd3_client_config_get_resynchronize_on_recovery(handle, out var resynchronizeOnRecovery));
-                ResynchronizeOnRecovery = resynchronizeOnRecovery == 0 ? null : resynchronizeOnRecovery;
-                OptionNative.Apply("preset", NativeClient.autd3_client_config_get_release_failsafe_on_recovery(handle, out var releaseFailsafeOnRecovery));
-                ReleaseFailsafeOnRecovery = releaseFailsafeOnRecovery == 0 ? null : releaseFailsafeOnRecovery;
-                ExecLead = OptionNative.GetOptionalDuration(handle, NativeClient.autd3_client_config_get_exec_lead);
+                Preset = ClientConfig.FromHandle(handle);
             }
             finally
             {
@@ -46,18 +31,18 @@ namespace AUTD3
     public readonly struct ClientConfig
     {
         private readonly TimeSpan? _ackTimeout;
-        public TimeSpan AckTimeout { get => _ackTimeout ?? ClientConfigDefaults.AckTimeout; init => _ackTimeout = value; }
+        public TimeSpan AckTimeout { get => _ackTimeout ?? ClientConfigDefaults.Preset.AckTimeout; init => _ackTimeout = value; }
         private readonly uint? _maxInflight;
-        public uint MaxInflight { get => _maxInflight ?? ClientConfigDefaults.MaxInflight; init => _maxInflight = value; }
+        public uint MaxInflight { get => _maxInflight ?? ClientConfigDefaults.Preset.MaxInflight; init => _maxInflight = value; }
         private readonly uint? _maxResyncRounds;
-        public uint MaxResyncRounds { get => _maxResyncRounds ?? ClientConfigDefaults.MaxResyncRounds; init => _maxResyncRounds = value; }
+        public uint MaxResyncRounds { get => _maxResyncRounds ?? ClientConfigDefaults.Preset.MaxResyncRounds; init => _maxResyncRounds = value; }
         private readonly bool? _requireSupportedFirmware;
-        public bool RequireSupportedFirmware { get => _requireSupportedFirmware ?? ClientConfigDefaults.RequireSupportedFirmware; init => _requireSupportedFirmware = value; }
+        public bool RequireSupportedFirmware { get => _requireSupportedFirmware ?? ClientConfigDefaults.Preset.RequireSupportedFirmware; init => _requireSupportedFirmware = value; }
         private readonly bool _resynchronizeOnRecoverySet;
         private readonly uint? _resynchronizeOnRecovery;
         public uint? ResynchronizeOnRecovery
         {
-            get => _resynchronizeOnRecoverySet ? _resynchronizeOnRecovery : ClientConfigDefaults.ResynchronizeOnRecovery;
+            get => _resynchronizeOnRecoverySet ? _resynchronizeOnRecovery : ClientConfigDefaults.Preset.ResynchronizeOnRecovery;
             init
             {
                 _resynchronizeOnRecovery = value;
@@ -68,7 +53,7 @@ namespace AUTD3
         private readonly uint? _releaseFailsafeOnRecovery;
         public uint? ReleaseFailsafeOnRecovery
         {
-            get => _releaseFailsafeOnRecoverySet ? _releaseFailsafeOnRecovery : ClientConfigDefaults.ReleaseFailsafeOnRecovery;
+            get => _releaseFailsafeOnRecoverySet ? _releaseFailsafeOnRecovery : ClientConfigDefaults.Preset.ReleaseFailsafeOnRecovery;
             init
             {
                 _releaseFailsafeOnRecovery = value;
@@ -79,12 +64,32 @@ namespace AUTD3
         private readonly TimeSpan? _execLead;
         public TimeSpan? ExecLead
         {
-            get => _execLeadSet ? _execLead : ClientConfigDefaults.ExecLead;
+            get => _execLeadSet ? _execLead : ClientConfigDefaults.Preset.ExecLead;
             init
             {
                 _execLead = value;
                 _execLeadSet = true;
             }
+        }
+
+        internal static ClientConfig FromHandle(IntPtr handle)
+        {
+            var ackTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_client_config_get_ack_timeout_ns);
+            OptionNative.Apply("preset", NativeClient.autd3_client_config_get_max_inflight(handle, out var maxInflight));
+            OptionNative.Apply("preset", NativeClient.autd3_client_config_get_max_resync_rounds(handle, out var maxResyncRounds));
+            OptionNative.Apply("preset", NativeClient.autd3_client_config_get_require_supported_firmware(handle, out var requireSupportedFirmware));
+            OptionNative.Apply("preset", NativeClient.autd3_client_config_get_resynchronize_on_recovery(handle, out var resynchronizeOnRecovery));
+            OptionNative.Apply("preset", NativeClient.autd3_client_config_get_release_failsafe_on_recovery(handle, out var releaseFailsafeOnRecovery));
+            return new ClientConfig
+            {
+                AckTimeout = ackTimeout,
+                MaxInflight = (uint)maxInflight,
+                MaxResyncRounds = maxResyncRounds,
+                RequireSupportedFirmware = requireSupportedFirmware,
+                ResynchronizeOnRecovery = resynchronizeOnRecovery == 0 ? null : resynchronizeOnRecovery,
+                ReleaseFailsafeOnRecovery = releaseFailsafeOnRecovery == 0 ? null : releaseFailsafeOnRecovery,
+                ExecLead = OptionNative.GetOptionalDuration(handle, NativeClient.autd3_client_config_get_exec_lead),
+            };
         }
 
         internal IntPtr CreateHandle()

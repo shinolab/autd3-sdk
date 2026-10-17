@@ -53,6 +53,8 @@ import csServerSample from "@codes/csharp/examples/api/connection/server-link.cs
 | `read_fpga_state()`       | ✓     | `Result<Vec<FpgaState>, Error>`       | 各デバイスの FPGA 状態                                     |
 | `read_telemetry()`        | ✓     | `Result<Vec<Telemetry>, Error>`       | 各デバイスの CPU の診断カウンタ                            |
 | `device_time_now()`       | —     | `Result<SysTime, Error>`              | 現在のデバイスの時刻 ([SysTime](/autd3-sdk/api/basics/sys-time/) 参照). 時刻を載せた返信をまだ受けていなければ `DeviceTimeUnknown` |
+| `config()`                | —     | `ClientConfig`                        | 現在の [ClientConfig](#clientconfig)                        |
+| `set_config(config)`      | —     | `Result<(), Error>`                   | ClientConfig を更新する | 
 | `send(cmd)`               | ✓     | `Result<(), Error>`                   | コマンドを送信し, 1 フレームずつ応答確認まで行う           |
 | `send_streaming(cmd)`     | ✓     | `Result<StreamFuture, Error>`         | `send`のstream版                                           |
 | `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | フレームを 1 つ送る                                        |
@@ -150,7 +152,7 @@ CPU の診断カウンタ. `Clear` で `boot_failure` 以外は 0 に戻る (`Cl
 
 `max_inflight` は `MAX_INFLIGHT (7)` (Python: `autd3.params.MAX_INFLIGHT`, C#: `Params.MaxInflight`) を超えるとエラーになる.
 既定値も `MAX_INFLIGHT` で, これは各デバイスの受信キューのフレーム数 `DEVICE_QUEUE_FRAMES` (Python: `autd3.params.DEVICE_QUEUE_FRAMES`, C#: `Params.DeviceQueueFrames`) に等しい.
-`ack_timeout` を 0 にすると, `Client` を開くときにエラー (`InvalidPayload`. Python の `Autd3Error.code` は `INVALID_ARGUMENT`, C# の `Autd3Exception.Code` は `InvalidArgument`) になる.
+`ack_timeout` を 0 にすると, `Client` を開くときにエラー (`InvalidConfig`. Python の `Autd3Error.code` は `INVALID_ARGUMENT`, C# の `Autd3Exception.Code` は `InvalidArgument`) になる.
 Python の既定値は Rust と同じで, `None` を渡せるのは型が `Option` の `resynchronize_on_recovery` / `release_failsafe_on_recovery` だけである.
 
 再送処理は行われない. 失敗したコマンドはユーザが送り直す必要がある.

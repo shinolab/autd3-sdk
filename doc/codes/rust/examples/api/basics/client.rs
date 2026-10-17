@@ -1,5 +1,7 @@
 use anyhow::Result;
 
+use std::time::Duration;
+
 use autd3_rs::commands::Nop;
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::{Client, ClientConfig, Frames};
@@ -20,6 +22,12 @@ async fn main() -> Result<()> {
     let num_devices = client.num_devices();
     let geometry = client.geometry();
 
+    let config = client.config();
+    client.set_config(ClientConfig {
+        ack_timeout: Duration::from_millis(20),
+        ..ClientConfig::default()
+    })?;
+
     let firmware = client.read_firmware_version().await?;
     let fpga_state = client.read_fpga_state().await?;
 
@@ -31,6 +39,6 @@ async fn main() -> Result<()> {
     client.close().await?;
     // ANCHOR_END: api
 
-    let _ = (num_devices, geometry, firmware, fpga_state, done, resp);
+    let _ = (num_devices, geometry, config, firmware, fpga_state, done, resp);
     Ok(())
 }

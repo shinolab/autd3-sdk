@@ -566,6 +566,44 @@ namespace AUTD3
             return SysTime.FromNanos(ns);
         }
 
+        public ClientConfig Config
+        {
+            get
+            {
+                var config = NativeClient.autd3_client_get_config(Handle);
+                if (config == IntPtr.Zero)
+                {
+                    throw new Autd3Exception("failed to read the client config");
+                }
+                try
+                {
+                    return ClientConfig.FromHandle(config);
+                }
+                finally
+                {
+                    NativeClient.autd3_client_config_free(config);
+                }
+            }
+        }
+
+        public void SetConfig(ClientConfig config)
+        {
+            var handle = config.CreateHandle();
+            try
+            {
+                var err = new byte[NativeAbi.ErrorBufferLength];
+                var code = NativeClient.autd3_client_set_config(Handle, handle, err, (UIntPtr)err.Length);
+                if (code != 0)
+                {
+                    throw Autd3Exception.FromNative(code, err);
+                }
+            }
+            finally
+            {
+                NativeClient.autd3_client_config_free(handle);
+            }
+        }
+
         public async Task SendAsync(ICommand command)
         {
             using var frames = Frames.Encode(_geometry, command);

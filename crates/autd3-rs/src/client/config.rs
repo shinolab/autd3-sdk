@@ -1,7 +1,7 @@
 use std::num::{NonZeroU32, NonZeroUsize};
 use std::time::Duration;
 
-use crate::error::{Error, PayloadError};
+use crate::error::{ClientConfigError, Error};
 use crate::protocol::MAX_INFLIGHT;
 
 pub use crate::udp::bus::MAX_DEVICES;
@@ -34,21 +34,32 @@ impl Default for ClientConfig {
 }
 
 impl ClientConfig {
-    pub(super) fn validate(self) -> Result<Self, Error> {
+    pub(super) fn validate(self, lost_timeout: Option<Duration>) -> Result<Self, Error> {
         if self.max_inflight.get() > MAX_INFLIGHT {
-            return Err(PayloadError::MaxInflightTooLarge { max: MAX_INFLIGHT }.into());
+            return Err(Error::InvalidConfig(
+                ClientConfigError::MaxInflightTooLarge { max: MAX_INFLIGHT },
+            ));
         }
         if self.ack_timeout.is_zero() {
-            return Err(PayloadError::ZeroAckTimeout.into());
+            return Err(Error::InvalidConfig(ClientConfigError::ZeroAckTimeout));
         }
         if let Some(exec_lead) = self.exec_lead
             && exec_lead < EXEC_LEAD_MIN
         {
-            return Err(PayloadError::ExecLeadTooShort {
+            return Err(Error::InvalidConfig(ClientConfigError::ExecLeadTooShort {
                 got: exec_lead,
                 min: EXEC_LEAD_MIN,
-            }
-            .into());
+            }));
+        }
+        if let (Some(exec_lead), Some(lost_timeout)) = (self.exec_lead, lost_timeout)
+            && exec_lead >= lost_timeout
+        {
+            return Err(Error::InvalidConfig(
+                ClientConfigError::ExecLeadNotBelowLostTimeout {
+                    exec_lead,
+                    lost_timeout,
+                },
+            ));
         }
         Ok(self)
     }
@@ -60,7 +71,7 @@ mod tests {
 
     #[test]
     fn the_default_passes_validation() {
-        assert!(ClientConfig::default().validate().is_ok());
+        assert!(ClientConfig::default().validate(None).is_ok());
     }
 
     #[test]
@@ -74,11 +85,34 @@ mod tests {
             exec_lead: Some(exec_lead),
             ..ClientConfig::default()
         };
-        assert!(with(EXEC_LEAD_MIN).validate().is_ok());
+        assert!(with(EXEC_LEAD_MIN).validate(None).is_ok());
         assert!(matches!(
-            with(Duration::from_micros(999)).validate(),
-            Err(Error::InvalidPayload(PayloadError::ExecLeadTooShort { .. }))
+            with(Duration::from_micros(999)).validate(None),
+            Err(Error::InvalidConfig(
+                ClientConfigError::ExecLeadTooShort { .. }
+            ))
         ));
+    }
+
+    #[test]
+    fn an_exec_lead_not_below_the_lost_timeout_is_rejected() {
+        const LOST_TIMEOUT: Duration = Duration::from_millis(100);
+        let with = |exec_lead| ClientConfig {
+            exec_lead: Some(exec_lead),
+            ..ClientConfig::default()
+        };
+        assert!(
+            with(Duration::from_millis(99))
+                .validate(Some(LOST_TIMEOUT))
+                .is_ok()
+        );
+        assert!(matches!(
+            with(LOST_TIMEOUT).validate(Some(LOST_TIMEOUT)),
+            Err(Error::InvalidConfig(
+                ClientConfigError::ExecLeadNotBelowLostTimeout { .. }
+            ))
+        ));
+        assert!(with(LOST_TIMEOUT).validate(None).is_ok());
     }
 
     #[test]
@@ -88,10 +122,10 @@ mod tests {
             ..ClientConfig::default()
         };
         assert!(matches!(
-            config.validate(),
-            Err(Error::InvalidPayload(PayloadError::MaxInflightTooLarge {
-                max: MAX_INFLIGHT
-            }))
+            config.validate(None),
+            Err(Error::InvalidConfig(
+                ClientConfigError::MaxInflightTooLarge { max: MAX_INFLIGHT }
+            ))
         ));
     }
 }
