@@ -52,7 +52,7 @@ patternの計算には幾つかの[ヘルパ関数](/autd3-sdk/api/compute/patte
 
 ## 等価な低レベルコマンド
 
-`Pattern` は [WritePatternBuffer](/autd3-sdk/api/command/lowlevel/write-pattern-buffer/) + [ConfigPattern](/autd3-sdk/api/command/lowlevel/config-pattern/) + [ActivatePatternBank](/autd3-sdk/api/command/lowlevel/activate-pattern-bank/) の 3 つと等価であり, この順に 3 フレームへ展開して送られる.
+`Pattern` は [WritePatternBuffer](/autd3-sdk/api/command/lowlevel/write-pattern-buffer/) + [ConfigPattern](/autd3-sdk/api/command/lowlevel/config-pattern/) + [ActivatePatternBank](/autd3-sdk/api/command/lowlevel/activate-pattern-bank/) の 3 つと等価である. ただし `Pattern` 自体はこの 3 つを融合した 1 フレームで送られる.
 以下は `Pattern { bank, phases, intensities }` と等価な組み合わせである.
 
 `transition_mode` に `TransitionMode::Later` を指定した場合は `WritePatternBuffer` + `ConfigPattern` の 2 フレームだけを送る (`ActivatePatternBank` を送らない).

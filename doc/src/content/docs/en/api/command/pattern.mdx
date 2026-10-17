@@ -52,7 +52,8 @@ Several [helper functions](/autd3-sdk/en/api/compute/pattern/) are provided for 
 
 ## Equivalent Low-Level Commands
 
-`Pattern` is equivalent to the three commands [WritePatternBuffer](/autd3-sdk/en/api/command/lowlevel/write-pattern-buffer/) + [ConfigPattern](/autd3-sdk/en/api/command/lowlevel/config-pattern/) + [ActivatePatternBank](/autd3-sdk/en/api/command/lowlevel/activate-pattern-bank/), and is sent expanded into three frames in that order.
+`Pattern` is equivalent to the three commands [WritePatternBuffer](/autd3-sdk/en/api/command/lowlevel/write-pattern-buffer/) + [ConfigPattern](/autd3-sdk/en/api/command/lowlevel/config-pattern/) + [ActivatePatternBank](/autd3-sdk/en/api/command/lowlevel/activate-pattern-bank/). However, `Pattern` itself is sent as a single frame that fuses the three.
+The two differ only when the device rejects an invalid transition mode (`Pattern` writes nothing, while with the low-level commands the writes before the rejected `ActivatePatternBank` remain).
 The following is equivalent to `Pattern { bank, phases, intensities }`.
 
 When `transition_mode` is `TransitionMode::Later`, only the two frames `WritePatternBuffer` + `ConfigPattern` are sent and no `ActivatePatternBank` is sent.

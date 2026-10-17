@@ -50,9 +50,9 @@ namespace AUTD3.Tests
             using var intensities = geometry.IntensityBuffer();
 
             using var frames = Frames.Encode(geometry, Command.Each(device =>
-                device.Idx == 0 ? new Pattern(phases, intensities) : (ICommand)new Nop()));
+                device.Idx == 0 ? new Pattern(PatternBank.B0, phases, intensities, TransitionMode.Later) : (ICommand)new Nop()));
 
-            Assert.Equal(3, frames.Length);
+            Assert.Equal(2, frames.Length);
         }
 
         [Fact]
@@ -90,7 +90,7 @@ namespace AUTD3.Tests
                 Command.Each(device => device.Idx == 1 ? new Nop() : null),
                 Command.Sequence(new Pattern(phases, intensities), new Nop())));
 
-            Assert.Equal(7, frames.Length);
+            Assert.Equal(5, frames.Length);
         }
 
         [Fact]

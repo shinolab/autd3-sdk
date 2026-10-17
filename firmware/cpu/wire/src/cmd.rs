@@ -12,6 +12,7 @@ crate::wire_enum_u8! {
         ActivatePatternBank = 0x12,
         WritePatternPhase = 0x13,
         WritePatternRaw = 0x15,
+        WritePatternFused = 0x16,
         WriteModulationBuffer = 0x20,
         ConfigModulation = 0x21,
         ActivateModulationBank = 0x22,
@@ -47,7 +48,7 @@ mod tests {
     #[test]
     fn retired_ids_stay_unassigned() {
         for raw in [
-            0x02, 0x14, 0x16, 0x23, 0xE0, 0xE1, 0xE2, 0xE3, 0xE4, 0xE5, 0xE6, 0xE9, 0xEA,
+            0x02, 0x14, 0x23, 0xE0, 0xE1, 0xE2, 0xE3, 0xE4, 0xE5, 0xE6, 0xE9, 0xEA,
         ] {
             assert_eq!(Cmd::from_u8(raw), None);
         }

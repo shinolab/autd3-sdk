@@ -79,7 +79,9 @@ mod tests {
     use crate::geometry::Autd3;
     use crate::protocol::{Cmd, PAYLOAD_BYTES};
     use crate::test_utils::{FailAt, Marker, Multi, build, cmd_at, payload, test_geometry};
-    use crate::value::{Intensity, LoopBehavior, ModulationBank, Phase, SamplingConfig};
+    use crate::value::{
+        Intensity, LoopBehavior, ModulationBank, Phase, SamplingConfig, TransitionMode,
+    };
 
     #[test]
     fn each_routes_per_device() {
@@ -192,8 +194,8 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(frames.len(), 3, "the pattern spans write + config + change");
-        assert_eq!(cmd_at(&frames, 0, 0), Cmd::WritePatternRaw);
+        assert_eq!(frames.len(), 1, "the pattern is a single fused frame");
+        assert_eq!(cmd_at(&frames, 0, 0), Cmd::WritePatternFused);
         assert_eq!(cmd_at(&frames, 0, 1), Cmd::ConfigModulation);
     }
 
@@ -249,23 +251,27 @@ mod tests {
             size: 2,
             loop_behavior: LoopBehavior::Infinite,
         };
+        let staged = || Pattern {
+            transition_mode: TransitionMode::Later,
+            ..Pattern::new(&phases, &intensities)
+        };
 
         let frames = Frames::encode(
             &geometry,
             each(|device| match device.idx() {
-                0 => Some(Pattern::new(&phases, &intensities).boxed()),
+                0 => Some(staged().boxed()),
                 1 => Some(config.boxed()),
                 _ => None,
             }),
         )
         .unwrap();
 
-        let reference = build(3, Pattern::new(&phases, &intensities)).unwrap();
+        let reference = build(3, staged()).unwrap();
 
         let mut config_payload = [0u8; PAYLOAD_BYTES];
         let config_encoded = config.encode(&geometry[1], &mut config_payload).unwrap();
 
-        assert_eq!(frames.len(), 3);
+        assert_eq!(frames.len(), 2);
         assert_eq!(frames.len(), reference.len());
         for (index, frame) in frames.iter().enumerate() {
             assert_eq!(frame.distribution(), Distribution::PerDevice);

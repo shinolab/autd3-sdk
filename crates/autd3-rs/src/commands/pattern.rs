@@ -1,6 +1,6 @@
 use super::Command;
 use crate::commands::operation::{
-    ActivatePatternBank, ConfigPattern, PatternIntensity, WritePatternBuffer,
+    ConfigPattern, PatternIntensity, WritePatternBuffer, WritePatternFused,
 };
 use crate::datagram::Expansion;
 use crate::error::Error;
@@ -38,6 +38,15 @@ impl<'a> Pattern<'a> {
 
 impl<'a> Command<'a> for Pattern<'a> {
     fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
+        if !self.transition_mode.is_later() {
+            expansion.push(WritePatternFused {
+                bank: self.bank,
+                phases: self.phases,
+                intensities: self.intensities,
+                transition_mode: self.transition_mode,
+            })?;
+            return Ok(());
+        }
         expansion
             .push(WritePatternBuffer::new(
                 self.bank,
@@ -51,12 +60,6 @@ impl<'a> Command<'a> for Pattern<'a> {
                 size: 1,
                 loop_behavior: LoopBehavior::Infinite,
             })?;
-        if !self.transition_mode.is_later() {
-            expansion.push(ActivatePatternBank {
-                bank: self.bank,
-                transition_mode: self.transition_mode,
-            })?;
-        }
         Ok(())
     }
 }
@@ -68,32 +71,63 @@ mod tests {
     use crate::protocol::Cmd;
     use crate::test_utils::{build, cmds, payload};
     use crate::value::Intensity;
+    use autd3_cpu_wire::payload::{WritePatternFusedPayload, WritePatternRawPayload};
 
     #[test]
-    fn pattern_expands_to_write_config_activate() {
+    fn pattern_expands_to_a_single_fused_frame() {
         let phases = vec![vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]; 2];
         let intensities = vec![vec![Intensity::MAX; Autd3::NUM_TRANSDUCERS]; 2];
         let datagrams = build(2, Pattern::new(&phases, &intensities)).unwrap();
 
-        assert_eq!(
-            cmds(&datagrams),
-            [
-                Cmd::WritePatternRaw,
-                Cmd::ConfigPattern,
-                Cmd::ActivatePatternBank,
-            ],
-            "write + config + activate"
-        );
+        assert_eq!(cmds(&datagrams), [Cmd::WritePatternFused]);
+        for device in 0..2 {
+            let fused = payload(&datagrams, 0, device);
+            assert_eq!(
+                fused.len(),
+                size_of::<WritePatternFusedPayload>() + 2 * Autd3::NUM_TRANSDUCERS
+            );
+            assert_eq!(fused[0], 0, "bank B0");
+            assert_eq!(fused[1], 0xFF, "IMMEDIATE");
+        }
+    }
 
-        let config = payload(&datagrams, 1, 0);
-        assert_eq!(config[0], 0, "bank B0");
-        assert_eq!(&config[2..4], &u16::MAX.to_le_bytes());
-        assert_eq!(&config[4..8], &1u32.to_le_bytes(), "size = 1 index");
-        assert_eq!(&config[12..14], &0xFFFFu16.to_le_bytes(), "infinite rep");
+    #[test]
+    fn the_fused_frame_carries_the_same_data_as_the_write_frame() {
+        let phases: Vec<Vec<Phase>> = (0..2)
+            .map(|d| {
+                (0..Autd3::NUM_TRANSDUCERS)
+                    .map(|i| Phase(u8::try_from((i + d) % 256).unwrap()))
+                    .collect()
+            })
+            .collect();
+        let intensities: Vec<Vec<Intensity>> = (0..2)
+            .map(|d| {
+                (0..Autd3::NUM_TRANSDUCERS)
+                    .map(|i| Intensity(u8::try_from((3 * i + d) % 256).unwrap()))
+                    .collect()
+            })
+            .collect();
+        let fused = build(
+            2,
+            Pattern::with_bank(PatternBank::B1, &phases, &intensities),
+        )
+        .unwrap();
+        let later = build(
+            2,
+            Pattern {
+                transition_mode: TransitionMode::Later,
+                ..Pattern::with_bank(PatternBank::B1, &phases, &intensities)
+            },
+        )
+        .unwrap();
 
-        let activate = payload(&datagrams, 2, 0);
-        assert_eq!(activate[0], 0, "bank B0");
-        assert_eq!(activate[1], 0xFF, "IMMEDIATE");
+        for device in 0..2 {
+            assert_eq!(payload(&fused, 0, device)[0], 1, "bank B1");
+            assert_eq!(
+                &payload(&fused, 0, device)[size_of::<WritePatternFusedPayload>()..],
+                &payload(&later, 0, device)[size_of::<WritePatternRawPayload>()..]
+            );
+        }
     }
 
     #[test]
@@ -122,7 +156,7 @@ mod tests {
     }
 
     #[test]
-    fn a_non_immediate_transition_reaches_the_activate_frame() {
+    fn a_non_immediate_transition_reaches_the_fused_frame() {
         let phases = vec![vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]; 2];
         let intensities = vec![vec![Intensity::MAX; Autd3::NUM_TRANSDUCERS]; 2];
         let datagrams = build(
@@ -134,8 +168,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(datagrams.len(), 3);
-        assert_eq!(cmds(&datagrams)[2], Cmd::ActivatePatternBank);
-        assert_eq!(payload(&datagrams, 2, 0)[1], 0xF0, "EXT");
+        assert_eq!(cmds(&datagrams), [Cmd::WritePatternFused]);
+        assert_eq!(payload(&datagrams, 0, 0)[1], 0xF0, "EXT");
     }
 }
