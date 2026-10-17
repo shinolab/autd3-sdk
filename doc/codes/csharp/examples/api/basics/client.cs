@@ -1,3 +1,4 @@
+using System;
 using System.Threading.Tasks;
 using AUTD3;
 
@@ -18,6 +19,9 @@ internal static class Sample
         var numDevices = client.NumDevices;
         var geometry = client.Geometry;
 
+        var config = client.Config;
+        client.SetConfig(new ClientConfig { AckTimeout = TimeSpan.FromMilliseconds(20) });
+
         var firmware = await client.ReadFirmwareVersionAsync();
         var fpgaState = await client.ReadFpgaStateAsync();
 
@@ -29,7 +33,7 @@ internal static class Sample
         await client.CloseAsync();
         // ANCHOR_END: api
 
-        _ = (numDevices, geometry, firmware, fpgaState, done, resp);
+        _ = (numDevices, geometry, config, firmware, fpgaState, done, resp);
 
         var scopedLayout = new Geometry(new[] { new Autd3() });
 

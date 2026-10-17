@@ -42,6 +42,38 @@ namespace AUTD3.Tests
         }
 
         [Fact]
+        public void AClientConfigReadBackFromTheNativeConfigKeepsEveryField()
+        {
+            var config = new ClientConfig
+            {
+                AckTimeout = TimeSpan.FromMilliseconds(25),
+                MaxInflight = 3,
+                MaxResyncRounds = 2,
+                RequireSupportedFirmware = true,
+                ResynchronizeOnRecovery = null,
+                ReleaseFailsafeOnRecovery = 5,
+                ExecLead = TimeSpan.FromMilliseconds(4),
+            };
+            var handle = config.CreateHandle();
+            ClientConfig back;
+            try
+            {
+                back = ClientConfig.FromHandle(handle);
+            }
+            finally
+            {
+                NativeClient.autd3_client_config_free(handle);
+            }
+            Assert.Equal(config.AckTimeout, back.AckTimeout);
+            Assert.Equal(config.MaxInflight, back.MaxInflight);
+            Assert.Equal(config.MaxResyncRounds, back.MaxResyncRounds);
+            Assert.Equal(config.RequireSupportedFirmware, back.RequireSupportedFirmware);
+            Assert.Equal(config.ResynchronizeOnRecovery, back.ResynchronizeOnRecovery);
+            Assert.Equal(config.ReleaseFailsafeOnRecovery, back.ReleaseFailsafeOnRecovery);
+            Assert.Equal(config.ExecLead, back.ExecLead);
+        }
+
+        [Fact]
         public void AnExecLeadReachesTheNativeConfig()
         {
             Assert.Null(default(ClientConfig).ExecLead);

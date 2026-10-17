@@ -1,6 +1,6 @@
 import asyncio
 
-from autd3 import Client, ClientConfig, Frames, UdpEmulator
+from autd3 import Client, ClientConfig, Duration, Frames, UdpEmulator
 from autd3.commands import Nop
 from autd3.geometry import Autd3, Geometry
 
@@ -16,6 +16,9 @@ async def main() -> None:
     num_devices = client.num_devices()
     geometry = client.geometry()
 
+    config = client.config()
+    client.set_config(ClientConfig(ack_timeout=Duration.from_millis(20)))
+
     firmware = await client.read_firmware_version()
     fpga_state = await client.read_fpga_state()
 
@@ -27,7 +30,7 @@ async def main() -> None:
     await client.close()
     # ANCHOR_END: api
 
-    _ = (num_devices, geometry, firmware, fpga_state, done, resp)
+    _ = (num_devices, geometry, config, firmware, fpga_state, done, resp)
 
     geometry = Geometry([Autd3()])
 
