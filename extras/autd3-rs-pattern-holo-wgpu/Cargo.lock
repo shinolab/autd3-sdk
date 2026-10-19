@@ -23,6 +23,7 @@ version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cab112f0a86d568ea0e627cc1d6be74a1e9cd55214684db5561995f6dad897c6"
 dependencies = [
+ "num-complex",
  "num-traits",
 ]
 
@@ -83,6 +84,7 @@ dependencies = [
 name = "autd3-rs-pattern-holo-wgpu"
 version = "0.12.0"
 dependencies = [
+ "approx",
  "autd3-rs-core",
  "autd3-rs-pattern",
  "autd3-rs-pattern-holo",

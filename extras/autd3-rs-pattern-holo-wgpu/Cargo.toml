@@ -44,6 +44,10 @@ tracing = { version = "0.1.44", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 autd3-rs-pattern = { path = "../../crates/autd3-rs-pattern" }
+approx = { version = "0.5.1", default-features = false, features = [
+    "std",
+    "num-complex",
+] }
 
 [lints]
 workspace = true

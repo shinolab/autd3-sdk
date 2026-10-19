@@ -368,10 +368,7 @@ mod tests {
 
         let reached = field_at(&geometry, focus[0].point, &weak, &dst).norm();
         let target = focus[0].amplitude.pascal();
-        assert!(
-            (reached - target).abs() < target * 0.05,
-            "reached {reached} Pa for a {target} Pa target"
-        );
+        approx::assert_relative_eq!(reached, target, max_relative = 0.05);
     }
 
     #[test]
@@ -399,10 +396,7 @@ mod tests {
         )
         .norm();
         let target = foci[0].amplitude.pascal();
-        assert!(
-            (reached - target).abs() < target * 0.05,
-            "reached {reached} Pa for a {target} Pa target"
-        );
+        approx::assert_relative_eq!(reached, target, max_relative = 0.05);
     }
 
     #[test]

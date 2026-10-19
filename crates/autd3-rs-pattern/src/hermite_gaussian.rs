@@ -217,7 +217,7 @@ mod tests {
             hermite_gaussian_phase_transducer(first, target, axis, x_dir, option(1, 0), LAMBDA)
                 - twin(first);
         for &pos in dev.positions() {
-            if (pos.x - target.x).abs() < 1.0e-3 {
+            if approx::abs_diff_eq!(pos.x, target.x, epsilon = 1.0e-3) {
                 continue;
             }
             let hg =
