@@ -7,8 +7,8 @@ use clap::Subcommand;
 
 use crate::clean::{CleanArgs, Cleaner};
 use crate::util::{
-    capture, cargo_bin, cargo_build_args, cargo_clippy, cargo_fmt, copy_dir, on_path, run,
-    run_cargo, run_env, run_tool,
+    capture, cargo_bin, cargo_build_args, cargo_clippy, cargo_fmt, copy_dir, exe_name, on_path,
+    run, run_cargo, run_env, run_tool,
 };
 
 pub fn build_backend_and_frontend(
@@ -224,7 +224,8 @@ fn ensure_wasm_opt(frontend: &Path, dx_home: &Path) -> Result<()> {
     }
 
     let install_dir = dx_home.join("tools").join(DX_BINARYEN_TOOLS_DIR);
-    let bin = install_dir.join("bin").join(wasm_opt_name());
+    let wasm_opt = exe_name("wasm-opt");
+    let bin = install_dir.join("bin").join(&wasm_opt);
     if bin.is_file() {
         return Ok(());
     }
@@ -253,8 +254,7 @@ fn ensure_wasm_opt(frontend: &Path, dx_home: &Path) -> Result<()> {
 
     if !bin.is_file() {
         bail!(
-            "{asset} did not contain bin/{}; wasm-opt is missing from {}",
-            wasm_opt_name(),
+            "{asset} did not contain bin/{wasm_opt}; wasm-opt is missing from {}",
             install_dir.display()
         );
     }
@@ -274,14 +274,6 @@ fn dx_home() -> Result<PathBuf> {
     let data = std::env::var_os("XDG_DATA_HOME")
         .map_or_else(|| home.join(".local").join("share"), PathBuf::from);
     Ok(data.join(".dx"))
-}
-
-fn wasm_opt_name() -> &'static str {
-    if cfg!(windows) {
-        "wasm-opt.exe"
-    } else {
-        "wasm-opt"
-    }
 }
 
 fn binaryen_asset() -> Result<String> {
@@ -307,6 +299,7 @@ fn unpack_binaryen(archive: &Path, install_dir: &Path) -> Result<()> {
     let file =
         std::fs::File::open(archive).with_context(|| format!("opening {}", archive.display()))?;
     let mut tar = tar::Archive::new(flate2::read::GzDecoder::new(file));
+    let wasm_opt = exe_name("wasm-opt");
     for entry in tar.entries()? {
         let mut entry = entry?;
         let path = entry.path()?.into_owned();
@@ -315,7 +308,7 @@ fn unpack_binaryen(archive: &Path, install_dir: &Path) -> Result<()> {
             continue;
         };
         let (name, parent) = (name.as_os_str(), parent.as_os_str());
-        if !(parent == "lib" || (parent == "bin" && name == wasm_opt_name())) {
+        if !(parent == "lib" || (parent == "bin" && name == wasm_opt.as_str())) {
             continue;
         }
         let dir = install_dir.join(parent);

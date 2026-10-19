@@ -42,7 +42,7 @@ pub fn run_changelog(root: &Path, cmd: &ChangelogCmd) -> Result<()> {
 
 fn scope_args(args: &mut Vec<String>, component: &Component, root: &Path) -> Result<()> {
     args.push("--tag-pattern".into());
-    args.push(component.tag_pattern());
+    args.push(format!("^({})[0-9]", component.tag_prefixes().join("|")));
     for sha in unrelated_commits(root, component)? {
         args.push("--skip-commit".into());
         args.push(sha);

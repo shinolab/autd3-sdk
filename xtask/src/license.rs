@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::{Context, Result, bail};
 use clap::{Subcommand, ValueEnum};
 
-use crate::util::{copy_file, on_path, publishable_members, run};
+use crate::util::{copy_file, on_path, run, workspace_members};
 
 const PUBLISH_WORKSPACES: &[&str] = &[
     ".",
@@ -134,7 +134,10 @@ fn check_bundled_license(root: &Path) -> Result<()> {
         } else {
             root.join(ws)
         };
-        for package in publishable_members(&ws_dir)? {
+        for package in workspace_members(&ws_dir)?
+            .iter()
+            .filter(|package| package.publishable())
+        {
             let path = package.dir().join("LICENSE");
             match std::fs::read_to_string(&path) {
                 Ok(text) if text == mit => {}

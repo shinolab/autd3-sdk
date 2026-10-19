@@ -94,10 +94,6 @@ pub fn find(name: &str) -> Result<&'static Component> {
 }
 
 impl Component {
-    pub fn tag_pattern(&self) -> String {
-        format!("^({})[0-9]", self.tag_prefixes().join("|"))
-    }
-
     pub fn tag_prefixes(&self) -> Vec<&'static str> {
         let mut prefixes = vec![self.tag_prefix];
         prefixes.extend_from_slice(self.also_shipped_by);

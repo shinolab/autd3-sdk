@@ -5,8 +5,8 @@ use clap::Subcommand;
 
 use crate::clean::{CleanArgs, Cleaner};
 use crate::util::{
-    cargo_bin, cargo_build_args, cargo_clippy, cargo_fmt, on_path, publish_workspace,
-    publishable_members, run,
+    cargo_bin, cargo_build_args, cargo_clippy, cargo_fmt, on_path, publish_workspace, run,
+    workspace_members,
 };
 
 #[derive(Subcommand)]
@@ -230,7 +230,10 @@ fn run_semver(root: &Path, baseline: Option<&str>) -> Result<()> {
         bail!("`cargo-semver-checks` is required");
     }
     let mut args = vec!["semver-checks".to_string()];
-    for package in publishable_members(root)? {
+    for package in workspace_members(root)?
+        .iter()
+        .filter(|package| package.publishable())
+    {
         args.push("--package".to_string());
         args.push(package.name().to_string());
     }

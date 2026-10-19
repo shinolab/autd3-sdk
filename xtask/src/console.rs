@@ -6,8 +6,8 @@ use clap::Subcommand;
 use crate::clean::{CleanArgs, Cleaner};
 use crate::simulator::build_backend_and_frontend;
 use crate::util::{
-    cargo_bin, cargo_build_args, cargo_clippy, cargo_fmt, copy_file, dist_target,
-    ensure_rust_target, exe_name, package_version, run, run_cargo,
+    cargo_bin, cargo_build_args, cargo_clippy, cargo_fmt, copy_file, dist_target, exe_name,
+    package_version, run, run_cargo,
 };
 
 #[derive(Subcommand)]
@@ -89,7 +89,7 @@ fn stage(root: &Path, console_dir: &Path, debug: bool, license: bool) -> Result<
 
     let target = dist_target();
     if let Some(target) = &target {
-        ensure_rust_target(target)?;
+        run("rustup", ["target", "add", target], root)?;
     }
     let target = target.as_deref();
 

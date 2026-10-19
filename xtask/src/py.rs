@@ -86,7 +86,10 @@ pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
             python,
             license,
         } => build(root, &dir, debug, python.as_deref(), license),
-        PyCmd::Develop { release, python } => develop_in_venv(&dir, python.as_deref(), release),
+        PyCmd::Develop { release, python } => {
+            let venv = venv_for(&dir, python.as_deref())?;
+            develop(&dir, &venv, WHEELS, release)
+        }
         PyCmd::Lint => lint(&dir),
         PyCmd::Format { fix } => cargo_fmt(&dir, &[], fix),
         PyCmd::Test { python } => test(&dir, python.as_deref()),
@@ -158,14 +161,9 @@ fn build(root: &Path, dir: &Path, debug: bool, python: Option<&str>, license: bo
     Ok(())
 }
 
-fn develop_in_venv(dir: &Path, python: Option<&str>, release: bool) -> Result<()> {
-    let venv = venv_for(dir, python)?;
-    develop(dir, &venv, WHEELS, release)
-}
-
 fn lint(dir: &Path) -> Result<()> {
     cargo_clippy(dir, &["--workspace", "--all-targets"])?;
-    let venv = ensure_venv(dir)?;
+    let venv = venv_for(dir, None)?;
     develop(dir, &venv, WHEELS, false)?;
     pip_install(
         dir,
@@ -200,7 +198,7 @@ fn test(dir: &Path, python: Option<&str>) -> Result<()> {
 }
 
 fn example(dir: &Path, name: &str, debug: bool, args: &[String]) -> Result<()> {
-    let venv = ensure_venv(dir)?;
+    let venv = venv_for(dir, None)?;
     develop(dir, &venv, WHEELS, !debug)?;
     pip_install(dir, &venv, &["numpy", "scipy", "polars"])?;
     let script = dir.join("examples").join(format!("{name}.py"));
@@ -350,11 +348,7 @@ pub(crate) fn pip_install(dir: &Path, venv: &Path, packages: &[&str]) -> Result<
     )
 }
 
-pub(crate) fn ensure_venv(dir: &Path) -> Result<PathBuf> {
-    venv_for(dir, None)
-}
-
-fn venv_for(dir: &Path, python: Option<&str>) -> Result<PathBuf> {
+pub(crate) fn venv_for(dir: &Path, python: Option<&str>) -> Result<PathBuf> {
     ensure_uv()?;
     if let Some(spec) = python
         && !spec

@@ -10,7 +10,7 @@ use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, value};
 use walkdir::WalkDir;
 
 use crate::clean::{CleanArgs, Cleaner};
-use crate::py::{WHEELS, develop, ensure_venv, pip_install, venv_python};
+use crate::py::{WHEELS, develop, pip_install, venv_for, venv_python};
 use crate::util::{capture, files_under, on_path, run, run_tool};
 
 const FIRMWARE_MARKER: &str = "Firmware v";
@@ -1082,7 +1082,7 @@ fn build_csharp_samples(doc: &Path) -> Result<()> {
 
 fn run_python_samples(root: &Path, doc: &Path) -> Result<()> {
     let bindings = root.join("bindings").join("python");
-    let venv = ensure_venv(&bindings)?;
+    let venv = venv_for(&bindings, None)?;
     develop(&bindings, &venv, WHEELS, false)?;
     pip_install(&bindings, &venv, &["numpy", "scipy", "polars"])?;
 
