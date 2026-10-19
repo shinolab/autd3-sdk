@@ -6,39 +6,42 @@ use clap::Subcommand;
 use crate::clean::{CleanArgs, Cleaner};
 use crate::simulator::build_backend_and_frontend;
 use crate::util::{
-    cargo_bin, cargo_build_args, cargo_clippy, cargo_fmt, copy_file, dist_target,
-    ensure_rust_target, exe_name, package_version, run, run_cargo,
+    cargo_bin, cargo_build_args, cargo_clippy, cargo_fmt, copy_file, dist_target, exe_name,
+    package_version, run, run_cargo,
 };
 
 #[derive(Subcommand)]
 pub enum ConsoleCmd {
-    /// Build the console workspace
+    #[command(about = "Build the console workspace")]
     Build {
-        /// Build the dev profile instead of release
-        #[arg(long)]
+        #[arg(long, help = "Build the dev profile instead of release")]
         debug: bool,
     },
-    /// Test the console workspace
+    #[command(about = "Test the console workspace")]
     Test,
-    /// Clippy the console workspace
+    #[command(about = "Clippy the console workspace")]
     Lint,
-    /// Rustfmt the console workspace
+    #[command(about = "Rustfmt the console workspace")]
     Format {
-        /// Rewrite the files instead of only checking them
-        #[arg(long)]
+        #[arg(long, help = "Rewrite the files instead of only checking them")]
         fix: bool,
     },
-    /// Build and run the console GUI
+    #[command(about = "Build and run the console GUI")]
     Run {
-        /// Build the dev profile instead of release
-        #[arg(long)]
+        #[arg(long, help = "Build the dev profile instead of release")]
         debug: bool,
     },
-    /// Build every distributed binary into `console/target/distrib` (used by `dist`)
+    #[command(
+        about = "Build every distributed binary into `console/target/distrib` (used by `dist`)"
+    )]
     Stage {
-        /// Build the dev profile instead of release
-        #[arg(long)]
+        #[arg(long, help = "Build the dev profile instead of release")]
         debug: bool,
+        #[arg(
+            long,
+            help = "Generate the third-party license notices with cargo-about (slow; use it for release artifacts)"
+        )]
+        license: bool,
     },
     #[command(about = "Remove the console build outputs")]
     Clean(CleanArgs),
@@ -55,26 +58,22 @@ const BINARIES: &[&str] = &[
 pub fn run_console(root: &Path, cmd: &ConsoleCmd) -> Result<()> {
     let dir = root.join("console");
     match cmd {
-        ConsoleCmd::Build { debug } => {
-            let mut args = vec!["build"];
-            if !*debug {
-                args.push("--release");
-            }
-            run("cargo", args, &dir)
-        }
+        ConsoleCmd::Build { debug } => cargo_with_profile(&dir, "build", *debug),
         ConsoleCmd::Test => run("cargo", ["test"], &dir),
         ConsoleCmd::Lint => cargo_clippy(&dir, &["--all-targets"]),
         ConsoleCmd::Format { fix } => cargo_fmt(&dir, &["-p", "autd3-console"], *fix),
-        ConsoleCmd::Run { debug } => {
-            let mut args = vec!["run"];
-            if !*debug {
-                args.push("--release");
-            }
-            run("cargo", args, &dir)
-        }
-        ConsoleCmd::Stage { debug } => stage(root, &dir, *debug),
+        ConsoleCmd::Run { debug } => cargo_with_profile(&dir, "run", *debug),
+        ConsoleCmd::Stage { debug, license } => stage(root, &dir, *debug, *license),
         ConsoleCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
+}
+
+fn cargo_with_profile(dir: &Path, subcommand: &str, debug: bool) -> Result<()> {
+    let mut args = vec![subcommand];
+    if !debug {
+        args.push("--release");
+    }
+    run("cargo", args, dir)
 }
 
 pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
@@ -85,16 +84,16 @@ pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
     ])
 }
 
-fn stage(root: &Path, console_dir: &Path, debug: bool) -> Result<()> {
+fn stage(root: &Path, console_dir: &Path, debug: bool, license: bool) -> Result<()> {
     check_versions_match(console_dir)?;
 
     let target = dist_target();
     if let Some(target) = &target {
-        ensure_rust_target(target)?;
+        run("rustup", ["target", "add", target], root)?;
     }
     let target = target.as_deref();
 
-    crate::license::generate_console(root)?;
+    crate::license::generate_console(root, license)?;
 
     run_cargo(
         cargo_build_args("autd3-console", target, debug),

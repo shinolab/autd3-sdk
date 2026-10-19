@@ -5,15 +5,15 @@ use clap::Subcommand;
 
 use crate::clean::{CleanArgs, Cleaner};
 use crate::util::{
-    cargo_bin, cargo_build_args, cargo_clippy, cargo_fmt, on_path, publish_workspace,
-    publishable_members, run,
+    cargo_bin, cargo_build_args, cargo_clippy, cargo_fmt, on_path, publish_workspace, run,
+    workspace_members,
 };
 
 #[derive(Subcommand)]
 pub enum RustCmd {
-    /// Build the `crates/` workspace
+    #[command(about = "Build the `crates/` workspace")]
     Build,
-    /// Run the `crates/` workspace tests
+    #[command(about = "Run the `crates/` workspace tests")]
     Test {
         #[arg(
             long,
@@ -27,58 +27,65 @@ pub enum RustCmd {
         )]
         include_ignored: bool,
     },
-    /// Measure `crates/` workspace test coverage with cargo-llvm-cov
+    #[command(about = "Measure `crates/` workspace test coverage with cargo-llvm-cov")]
     Coverage {
-        /// Include `tools/` and `examples/`, which carry no tests by convention
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Include `tools/` and `examples/`, which carry no tests by convention"
+        )]
         all: bool,
-        /// Open the HTML report in a browser
-        #[arg(long)]
+        #[arg(long, help = "Open the HTML report in a browser")]
         open: bool,
     },
-    /// Clippy the `crates/` workspace
+    #[command(about = "Clippy the `crates/` workspace")]
     Lint,
-    /// Rustfmt the `crates/` workspace
+    #[command(about = "Rustfmt the `crates/` workspace")]
     Format {
-        /// Rewrite the files instead of only checking them
-        #[arg(long)]
+        #[arg(long, help = "Rewrite the files instead of only checking them")]
         fix: bool,
     },
-    /// Run the `crates/` workspace criterion benchmarks
+    #[command(about = "Run the `crates/` workspace criterion benchmarks")]
     Bench {
-        /// Only run benchmarks whose id contains this string
+        #[arg(help = "Only run benchmarks whose id contains this string")]
         filter: Option<String>,
-        /// Only benchmark this package
-        #[arg(long, short)]
+        #[arg(long, short, help = "Only benchmark this package")]
         package: Option<String>,
-        /// Save the results under this criterion baseline name
-        #[arg(long)]
+        #[arg(long, help = "Save the results under this criterion baseline name")]
         save_baseline: Option<String>,
-        /// Compare the results against this saved criterion baseline
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Compare the results against this saved criterion baseline"
+        )]
         baseline: Option<String>,
     },
-    /// Check the `crates/` workspace API for SemVer violations with cargo-semver-checks
+    #[command(
+        about = "Check the `crates/` workspace API for SemVer violations with cargo-semver-checks"
+    )]
     Semver {
-        /// Released version to compare against (defaults to the latest one on crates.io)
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Released version to compare against (defaults to the latest one on crates.io)"
+        )]
         baseline: Option<String>,
     },
-    /// Publish the `crates/` workspace to crates.io, skipping already-published versions
+    #[command(
+        about = "Publish the `crates/` workspace to crates.io, skipping already-published versions"
+    )]
     Publish {
-        /// Run every check without uploading
-        #[arg(long)]
+        #[arg(long, help = "Run every check without uploading")]
         dry_run: bool,
     },
-    /// Build and run an example from `examples/`
+    #[command(about = "Build and run an example from `examples/`")]
     Example {
-        /// Example binary name (one binary per feature; see `examples/`)
+        #[arg(help = "Example binary name (one binary per feature; see `examples/`)")]
         name: String,
-        /// Build the dev profile instead of release
-        #[arg(long)]
+        #[arg(long, help = "Build the dev profile instead of release")]
         debug: bool,
-        /// Arguments forwarded to the example
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        #[arg(
+            trailing_var_arg = true,
+            allow_hyphen_values = true,
+            help = "Arguments forwarded to the example"
+        )]
         args: Vec<String>,
     },
     #[command(about = "Remove the `crates/` workspace build outputs")]
@@ -91,20 +98,7 @@ pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
         RustCmd::Test {
             package,
             include_ignored,
-        } => {
-            let mut args = vec!["test".to_string()];
-            if package.is_empty() {
-                args.push("--workspace".to_string());
-            }
-            for package in package {
-                args.extend(["--package".to_string(), package.clone()]);
-            }
-            args.extend(["--lib", "--bins", "--tests"].map(String::from));
-            if *include_ignored {
-                args.extend(["--", "--include-ignored"].map(String::from));
-            }
-            run("cargo", args, root)
-        }
+        } => run_test(root, package, *include_ignored),
         RustCmd::Coverage { all, open } => run_coverage(root, *all, *open),
         RustCmd::Lint => run_lint(root),
         RustCmd::Format { fix } => cargo_fmt(root, &["--all"], *fix),
@@ -113,25 +107,13 @@ pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
             package,
             save_baseline,
             baseline,
-        } => {
-            let mut args = vec!["bench".to_string()];
-            match package {
-                Some(package) => args.extend(["--package".to_string(), package.clone()]),
-                None => args.push("--workspace".to_string()),
-            }
-            args.push("--benches".to_string());
-            args.push("--".to_string());
-            if let Some(filter) = filter {
-                args.push(filter.clone());
-            }
-            if let Some(name) = save_baseline {
-                args.extend(["--save-baseline".to_string(), name.clone()]);
-            }
-            if let Some(name) = baseline {
-                args.extend(["--baseline".to_string(), name.clone()]);
-            }
-            run("cargo", args, root)
-        }
+        } => run_bench(
+            root,
+            filter.as_deref(),
+            package.as_deref(),
+            save_baseline.as_deref(),
+            baseline.as_deref(),
+        ),
         RustCmd::Semver { baseline } => run_semver(root, baseline.as_deref()),
         RustCmd::Publish { dry_run } => publish_workspace(root, *dry_run),
         RustCmd::Example { name, debug, args } => run_example(root, name, *debug, args),
@@ -143,6 +125,21 @@ pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
     cleaner.paths(&["target"])
 }
 
+fn run_test(root: &Path, packages: &[String], include_ignored: bool) -> Result<()> {
+    let mut args = vec!["test"];
+    if packages.is_empty() {
+        args.push("--workspace");
+    }
+    for package in packages {
+        args.extend(["--package", package.as_str()]);
+    }
+    args.extend(["--lib", "--bins", "--tests"]);
+    if include_ignored {
+        args.extend(["--", "--include-ignored"]);
+    }
+    run("cargo", args, root)
+}
+
 fn run_lint(root: &Path) -> Result<()> {
     cargo_clippy(root, &["--workspace", "--all-targets"])?;
     cargo_clippy(
@@ -150,6 +147,15 @@ fn run_lint(root: &Path) -> Result<()> {
         &[
             "-p",
             "autd3-rs-pattern-holo",
+            "--no-default-features",
+            "--all-targets",
+        ],
+    )?;
+    cargo_clippy(
+        root,
+        &[
+            "-p",
+            "autd3-rs-firmware-emulator",
             "--no-default-features",
             "--all-targets",
         ],
@@ -193,12 +199,41 @@ fn run_coverage(root: &Path, all: bool, open: bool) -> Result<()> {
     coverage(root, &test_args, filter, open)
 }
 
+fn run_bench(
+    root: &Path,
+    filter: Option<&str>,
+    package: Option<&str>,
+    save_baseline: Option<&str>,
+    baseline: Option<&str>,
+) -> Result<()> {
+    let mut args = vec!["bench"];
+    match package {
+        Some(package) => args.extend(["--package", package]),
+        None => args.push("--workspace"),
+    }
+    args.push("--benches");
+    args.push("--");
+    if let Some(filter) = filter {
+        args.push(filter);
+    }
+    if let Some(name) = save_baseline {
+        args.extend(["--save-baseline", name]);
+    }
+    if let Some(name) = baseline {
+        args.extend(["--baseline", name]);
+    }
+    run("cargo", args, root)
+}
+
 fn run_semver(root: &Path, baseline: Option<&str>) -> Result<()> {
     if !on_path("cargo-semver-checks") {
         bail!("`cargo-semver-checks` is required");
     }
     let mut args = vec!["semver-checks".to_string()];
-    for package in publishable_members(root)? {
+    for package in workspace_members(root)?
+        .iter()
+        .filter(|package| package.publishable())
+    {
         args.push("--package".to_string());
         args.push(package.name().to_string());
     }

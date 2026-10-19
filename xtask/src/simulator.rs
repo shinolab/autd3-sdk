@@ -7,8 +7,8 @@ use clap::Subcommand;
 
 use crate::clean::{CleanArgs, Cleaner};
 use crate::util::{
-    capture, cargo_bin, cargo_build_args, cargo_clippy, cargo_fmt, copy_dir, on_path, run,
-    run_cargo, run_env, run_tool,
+    capture, cargo_bin, cargo_build_args, cargo_clippy, cargo_fmt, copy_dir, exe_name, on_path,
+    run, run_cargo, run_env, run_tool,
 };
 
 pub fn build_backend_and_frontend(
@@ -19,7 +19,6 @@ pub fn build_backend_and_frontend(
     let sim = root.join("simulator");
     let frontend = sim.join("frontend");
 
-    crate::license::generate_simulator(root)?;
     build_frontend(&frontend, debug)?;
     let public = frontend_public(&frontend, debug);
     stage_web_assets(&sim, &public)?;
@@ -62,38 +61,40 @@ fn stage_web_assets(sim: &Path, public: &Path) -> Result<()> {
 
 #[derive(Subcommand)]
 pub enum SimulatorCmd {
-    /// Build the backend workspace and the browser frontend bundle
+    #[command(about = "Build the backend workspace and the browser frontend bundle")]
     Build {
-        /// Build the dev profile instead of release
-        #[arg(long)]
+        #[arg(long, help = "Build the dev profile instead of release")]
         debug: bool,
+        #[arg(
+            long,
+            help = "Generate the third-party license notices with cargo-about (slow; use it for release artifacts)"
+        )]
+        license: bool,
     },
-    /// Run the backend workspace tests
+    #[command(about = "Run the backend workspace tests")]
     Test,
-    /// Clippy the backend workspace and the (wasm) frontend
+    #[command(about = "Clippy the backend workspace and the (wasm) frontend")]
     Lint,
-    /// Rustfmt the backend workspace and the frontend
+    #[command(about = "Rustfmt the backend workspace and the frontend")]
     Format {
-        /// Rewrite the files instead of only checking them
-        #[arg(long)]
+        #[arg(long, help = "Rewrite the files instead of only checking them")]
         fix: bool,
     },
-    /// Build the frontend and run the backend serving it
+    #[command(about = "Build the frontend and run the backend serving it")]
     Run {
-        /// Build the dev profile instead of release
-        #[arg(long)]
+        #[arg(long, help = "Build the dev profile instead of release")]
         debug: bool,
-        /// Open the simulator in a browser
-        #[arg(long)]
+        #[arg(long, help = "Open the simulator in a browser")]
         open: bool,
-        /// Reuse the already built frontend bundle
-        #[arg(long)]
+        #[arg(long, help = "Reuse the already built frontend bundle")]
         skip_web_build: bool,
-        /// UDP port the emulated devices listen on (the control port is port + 1)
-        #[arg(long, default_value_t = 44336)]
+        #[arg(
+            long,
+            default_value_t = 44336,
+            help = "UDP port the emulated devices listen on (the control port is port + 1)"
+        )]
         port: u16,
-        /// Port the frontend is served on
-        #[arg(long, default_value_t = 8081)]
+        #[arg(long, default_value_t = 8081, help = "Port the frontend is served on")]
         http_port: u16,
     },
     #[command(about = "Fail on known vulnerabilities in the frontend's npm dependencies")]
@@ -106,33 +107,14 @@ pub fn run_simulator(root: &Path, cmd: &SimulatorCmd) -> Result<()> {
     let sim = root.join("simulator");
     let frontend = sim.join("frontend");
     match cmd {
-        SimulatorCmd::Build { debug } => build_backend_and_frontend(root, *debug, None).map(|_| ()),
+        SimulatorCmd::Build { debug, license } => build(root, *debug, *license),
         SimulatorCmd::Test => run(
             "cargo",
             ["test", "--workspace", "--lib", "--bins", "--tests"],
             &sim,
         ),
-        SimulatorCmd::Lint => {
-            cargo_clippy(&sim, &["--workspace", "--all-targets"])?;
-            ensure_css(&frontend)?;
-            cargo_clippy(
-                &frontend,
-                &["--target", "wasm32-unknown-unknown", "--all-targets"],
-            )
-        }
-        SimulatorCmd::Format { fix } => {
-            cargo_fmt(
-                &sim,
-                &[
-                    "-p",
-                    "autd3-rs-simulator",
-                    "-p",
-                    "autd3-rs-simulator-protocol",
-                ],
-                *fix,
-            )?;
-            cargo_fmt(&frontend, &["-p", "autd3-rs-simulator-frontend"], *fix)
-        }
+        SimulatorCmd::Lint => lint(&sim, &frontend),
+        SimulatorCmd::Format { fix } => format(&sim, &frontend, *fix),
         SimulatorCmd::Run {
             debug,
             open,
@@ -148,12 +130,7 @@ pub fn run_simulator(root: &Path, cmd: &SimulatorCmd) -> Result<()> {
             *port,
             *http_port,
         ),
-        SimulatorCmd::Audit => {
-            if !on_path("npm") {
-                bail!("`npm` not found on PATH (needed for `npm audit`).");
-            }
-            run_tool("npm", ["audit"], &frontend)
-        }
+        SimulatorCmd::Audit => audit(&frontend),
         SimulatorCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
 }
@@ -169,6 +146,41 @@ pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
     ])?;
     cleaner.children("simulator/backend/web", &[".gitkeep"])?;
     cleaner.deps("simulator/frontend/node_modules")
+}
+
+fn build(root: &Path, debug: bool, license: bool) -> Result<()> {
+    crate::license::generate_simulator(root, license)?;
+    build_backend_and_frontend(root, debug, None).map(|_| ())
+}
+
+fn lint(sim: &Path, frontend: &Path) -> Result<()> {
+    cargo_clippy(sim, &["--workspace", "--all-targets"])?;
+    ensure_css(frontend)?;
+    cargo_clippy(
+        frontend,
+        &["--target", "wasm32-unknown-unknown", "--all-targets"],
+    )
+}
+
+fn format(sim: &Path, frontend: &Path, fix: bool) -> Result<()> {
+    cargo_fmt(
+        sim,
+        &[
+            "-p",
+            "autd3-rs-simulator",
+            "-p",
+            "autd3-rs-simulator-protocol",
+        ],
+        fix,
+    )?;
+    cargo_fmt(frontend, &["-p", "autd3-rs-simulator-frontend"], fix)
+}
+
+fn audit(frontend: &Path) -> Result<()> {
+    if !on_path("npm") {
+        bail!("`npm` not found on PATH (needed for `npm audit`).");
+    }
+    run_tool("npm", ["audit"], frontend)
 }
 
 fn ensure_css(frontend: &Path) -> Result<()> {
@@ -212,7 +224,8 @@ fn ensure_wasm_opt(frontend: &Path, dx_home: &Path) -> Result<()> {
     }
 
     let install_dir = dx_home.join("tools").join(DX_BINARYEN_TOOLS_DIR);
-    let bin = install_dir.join("bin").join(wasm_opt_name());
+    let wasm_opt = exe_name("wasm-opt");
+    let bin = install_dir.join("bin").join(&wasm_opt);
     if bin.is_file() {
         return Ok(());
     }
@@ -241,8 +254,7 @@ fn ensure_wasm_opt(frontend: &Path, dx_home: &Path) -> Result<()> {
 
     if !bin.is_file() {
         bail!(
-            "{asset} did not contain bin/{}; wasm-opt is missing from {}",
-            wasm_opt_name(),
+            "{asset} did not contain bin/{wasm_opt}; wasm-opt is missing from {}",
             install_dir.display()
         );
     }
@@ -262,14 +274,6 @@ fn dx_home() -> Result<PathBuf> {
     let data = std::env::var_os("XDG_DATA_HOME")
         .map_or_else(|| home.join(".local").join("share"), PathBuf::from);
     Ok(data.join(".dx"))
-}
-
-fn wasm_opt_name() -> &'static str {
-    if cfg!(windows) {
-        "wasm-opt.exe"
-    } else {
-        "wasm-opt"
-    }
 }
 
 fn binaryen_asset() -> Result<String> {
@@ -295,6 +299,7 @@ fn unpack_binaryen(archive: &Path, install_dir: &Path) -> Result<()> {
     let file =
         std::fs::File::open(archive).with_context(|| format!("opening {}", archive.display()))?;
     let mut tar = tar::Archive::new(flate2::read::GzDecoder::new(file));
+    let wasm_opt = exe_name("wasm-opt");
     for entry in tar.entries()? {
         let mut entry = entry?;
         let path = entry.path()?.into_owned();
@@ -303,7 +308,7 @@ fn unpack_binaryen(archive: &Path, install_dir: &Path) -> Result<()> {
             continue;
         };
         let (name, parent) = (name.as_os_str(), parent.as_os_str());
-        if !(parent == "lib" || (parent == "bin" && name == wasm_opt_name())) {
+        if !(parent == "lib" || (parent == "bin" && name == wasm_opt.as_str())) {
             continue;
         }
         let dir = install_dir.join(parent);

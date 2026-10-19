@@ -10,7 +10,7 @@ use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, value};
 use walkdir::WalkDir;
 
 use crate::clean::{CleanArgs, Cleaner};
-use crate::py::{WHEELS, develop, ensure_venv, pip_install, venv_python};
+use crate::py::{WHEELS, develop, pip_install, venv_for, venv_python};
 use crate::util::{capture, files_under, on_path, run, run_tool};
 
 const FIRMWARE_MARKER: &str = "Firmware v";
@@ -25,31 +25,29 @@ const LONG_RUNNING_TIMEOUT: Duration = Duration::from_secs(8);
 
 #[derive(Subcommand)]
 pub enum DocCmd {
-    /// Build the static site into `doc/dist/`
+    #[command(about = "Build the static site into `doc/dist/`")]
     Build {
-        /// Skip compiling the Rust samples
-        #[arg(long)]
+        #[arg(long, help = "Skip compiling the Rust samples")]
         no_samples: bool,
     },
-    /// Run the Astro dev server
+    #[command(about = "Run the Astro dev server")]
     Serve {
-        /// Open the site in a browser
-        #[arg(long)]
+        #[arg(long, help = "Open the site in a browser")]
         open: bool,
     },
-    /// Compile the Rust and C# samples and run the Python ones
+    #[command(about = "Compile the Rust and C# samples and run the Python ones")]
     Samples {
-        /// Only detect drift in the example list (no rewrite, no build)
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Only detect drift in the example list (no rewrite, no build)"
+        )]
         check: bool,
-        /// Only run the Python samples
-        #[arg(long)]
+        #[arg(long, help = "Only run the Python samples")]
         python: bool,
-        /// Only compile the C# samples
-        #[arg(long)]
+        #[arg(long, help = "Only compile the C# samples")]
         csharp: bool,
     },
-    /// Type-check the site without building it
+    #[command(about = "Type-check the site without building it")]
     Check,
     #[command(about = "Fail on high or critical vulnerabilities in the site's npm dependencies")]
     Audit,
@@ -58,17 +56,19 @@ pub enum DocCmd {
         #[arg(long, help = "Only check links inside the site (no network requests)")]
         offline: bool,
     },
-    /// Inline a version snapshot's code examples to drop its `@codes` dependency
+    #[command(about = "Inline a version snapshot's code examples to drop its `@codes` dependency")]
     FreezeVersion {
-        /// Target version slug (e.g. 0.1.x)
+        #[arg(help = "Target version slug (e.g. 0.1.x)")]
         slug: String,
-        /// Regenerate the snapshot from the live docs first, overwriting an already frozen version
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Regenerate the snapshot from the live docs first, overwriting an already frozen version"
+        )]
         force: bool,
     },
-    /// Drop a frozen version: undeclare it and delete its snapshot and config
+    #[command(about = "Drop a frozen version: undeclare it and delete its snapshot and config")]
     RemoveVersion {
-        /// Target version slug (e.g. 0.1.x)
+        #[arg(help = "Target version slug (e.g. 0.1.x)")]
         slug: String,
     },
     #[command(about = "Remove the documentation site build outputs")]
@@ -79,75 +79,17 @@ pub fn run_doc(root: &Path, cmd: &DocCmd) -> Result<()> {
     let doc = root.join("doc");
     let samples = doc.join("codes").join("rust");
     match cmd {
-        DocCmd::Samples { check: true, .. } => sync_examples(&samples, true),
         DocCmd::Samples {
-            check: false,
-            python: true,
-            csharp: false,
-        } => run_python_samples(root, &doc),
-        DocCmd::Samples {
-            check: false,
-            python: false,
-            csharp: true,
-        } => build_csharp_samples(&doc),
-        DocCmd::Samples {
-            check: false,
+            check,
             python,
             csharp,
-        } => {
-            if !*python && !*csharp {
-                build_samples(&samples)?;
-                run_python_samples(root, &doc)?;
-                return build_csharp_samples(&doc);
-            }
-            if *python {
-                run_python_samples(root, &doc)?;
-            }
-            if *csharp {
-                build_csharp_samples(&doc)?;
-            }
-            Ok(())
-        }
-        DocCmd::Build { no_samples } => {
-            verify_frozen_versions(&doc)?;
-            verify_versions(root, &doc)?;
-            if !*no_samples {
-                build_samples(&samples)?;
-            }
-            npm_install(&doc)?;
-            npm(&doc, &["run", "build"])
-        }
-        DocCmd::Serve { open } => {
-            npm_install(&doc)?;
-            let mut args = vec!["run", "dev"];
-            if *open {
-                args.extend_from_slice(&["--", "--open"]);
-            }
-            npm(&doc, &args)
-        }
-        DocCmd::Check => {
-            verify_frozen_versions(&doc)?;
-            verify_versions(root, &doc)?;
-            npm_install(&doc)?;
-            npm(&doc, &["run", "check"])
-        }
+        } => run_samples(root, &doc, &samples, *check, *python, *csharp),
+        DocCmd::Build { no_samples } => build(root, &doc, &samples, *no_samples),
+        DocCmd::Serve { open } => serve(&doc, *open),
+        DocCmd::Check => check(root, &doc),
         DocCmd::Audit => npm(&doc, &["audit", "--audit-level=high"]),
         DocCmd::LinkCheck { offline } => link_check(&doc, *offline),
-        DocCmd::FreezeVersion { slug, force } => {
-            if !on_path("node") {
-                bail!("`node` is required for `doc freeze-version`");
-            }
-            if *force {
-                regenerate_snapshot(&doc, slug)?;
-            }
-            run(
-                "node",
-                ["scripts/freeze-version-codes.mjs", slug.as_str()],
-                &doc,
-            )?;
-            prune_nested_versions(&doc, slug)?;
-            track_frozen_version(&doc, slug)
-        }
+        DocCmd::FreezeVersion { slug, force } => freeze_version(&doc, slug, *force),
         DocCmd::RemoveVersion { slug } => remove_version(&doc, slug),
         DocCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
@@ -166,6 +108,69 @@ pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
     cleaner.nested("doc/codes/python", &["__pycache__"])?;
     cleaner.deps("doc/codes/python/examples/.venv")?;
     cleaner.deps("doc/node_modules")
+}
+
+fn run_samples(
+    root: &Path,
+    doc: &Path,
+    samples: &Path,
+    check: bool,
+    python: bool,
+    csharp: bool,
+) -> Result<()> {
+    if check {
+        return sync_examples(samples, true);
+    }
+    if !python && !csharp {
+        build_samples(samples)?;
+        run_python_samples(root, doc)?;
+        return build_csharp_samples(doc);
+    }
+    if python {
+        run_python_samples(root, doc)?;
+    }
+    if csharp {
+        build_csharp_samples(doc)?;
+    }
+    Ok(())
+}
+
+fn build(root: &Path, doc: &Path, samples: &Path, no_samples: bool) -> Result<()> {
+    verify_frozen_versions(doc)?;
+    verify_versions(root, doc)?;
+    if !no_samples {
+        build_samples(samples)?;
+    }
+    npm_install(doc)?;
+    npm(doc, &["run", "build"])
+}
+
+fn serve(doc: &Path, open: bool) -> Result<()> {
+    npm_install(doc)?;
+    let mut args = vec!["run", "dev"];
+    if open {
+        args.extend_from_slice(&["--", "--open"]);
+    }
+    npm(doc, &args)
+}
+
+fn check(root: &Path, doc: &Path) -> Result<()> {
+    verify_frozen_versions(doc)?;
+    verify_versions(root, doc)?;
+    npm_install(doc)?;
+    npm(doc, &["run", "check"])
+}
+
+fn freeze_version(doc: &Path, slug: &str, force: bool) -> Result<()> {
+    if !on_path("node") {
+        bail!("`node` is required for `doc freeze-version`");
+    }
+    if force {
+        regenerate_snapshot(doc, slug)?;
+    }
+    run("node", ["scripts/freeze-version-codes.mjs", slug], doc)?;
+    prune_nested_versions(doc, slug)?;
+    track_frozen_version(doc, slug)
 }
 
 const SITE_BASE: &str = "/autd3-sdk";
@@ -1077,7 +1082,7 @@ fn build_csharp_samples(doc: &Path) -> Result<()> {
 
 fn run_python_samples(root: &Path, doc: &Path) -> Result<()> {
     let bindings = root.join("bindings").join("python");
-    let venv = ensure_venv(&bindings)?;
+    let venv = venv_for(&bindings, None)?;
     develop(&bindings, &venv, WHEELS, false)?;
     pip_install(&bindings, &venv, &["numpy", "scipy", "polars"])?;
 

@@ -5,7 +5,7 @@ use anyhow::{Result, bail};
 use clap::Subcommand;
 
 use crate::clean::{CleanArgs, Cleaner};
-use crate::util::{capture, cargo_clippy, cargo_fmt_packages, on_path, run, run_cargo, run_env};
+use crate::util::{capture, cargo_clippy, cargo_fmt, on_path, run, run_cargo, run_env};
 
 pub(crate) const WHEELS: &[&str] = &[
     "autd3-core",
@@ -21,21 +21,24 @@ const FREE_THREADED_UNAVAILABLE: &[&str] = &["polars"];
 
 #[derive(Subcommand)]
 pub enum PyCmd {
-    /// Build the wheels into `bindings/python/target/wheels`
+    #[command(about = "Build the wheels into `bindings/python/target/wheels`")]
     Build {
-        /// Build the dev profile instead of release
-        #[arg(long)]
+        #[arg(long, help = "Build the dev profile instead of release")]
         debug: bool,
         #[arg(
             long,
             help = "Build with this interpreter (a uv request such as `3.15t`) instead of the default one"
         )]
         python: Option<String>,
+        #[arg(
+            long,
+            help = "Generate the third-party license notices with cargo-about (slow; use it for release artifacts)"
+        )]
+        license: bool,
     },
-    /// Install the wheels into the local venv in editable mode
+    #[command(about = "Install the wheels into the local venv in editable mode")]
     Develop {
-        /// Build the release profile instead of dev
-        #[arg(long)]
+        #[arg(long, help = "Build the release profile instead of dev")]
         release: bool,
         #[arg(
             long,
@@ -43,15 +46,14 @@ pub enum PyCmd {
         )]
         python: Option<String>,
     },
-    /// Clippy the Python binding workspace
+    #[command(about = "Clippy the Python binding workspace")]
     Lint,
-    /// Rustfmt the Python binding workspace
+    #[command(about = "Rustfmt the Python binding workspace")]
     Format {
-        /// Rewrite the files instead of only checking them
-        #[arg(long)]
+        #[arg(long, help = "Rewrite the files instead of only checking them")]
         fix: bool,
     },
-    /// Install the wheels into the local venv and run pytest
+    #[command(about = "Install the wheels into the local venv and run pytest")]
     Test {
         #[arg(
             long,
@@ -59,15 +61,17 @@ pub enum PyCmd {
         )]
         python: Option<String>,
     },
-    /// Run a Python example from `bindings/python/examples/`
+    #[command(about = "Run a Python example from `bindings/python/examples/`")]
     Example {
-        /// Example script name (without `.py`)
+        #[arg(help = "Example script name (without `.py`)")]
         name: String,
-        /// Build the dev profile instead of release
-        #[arg(long)]
+        #[arg(long, help = "Build the dev profile instead of release")]
         debug: bool,
-        /// Arguments forwarded to the example
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        #[arg(
+            trailing_var_arg = true,
+            allow_hyphen_values = true,
+            help = "Arguments forwarded to the example"
+        )]
         args: Vec<String>,
     },
     #[command(about = "Remove the Python binding build outputs")]
@@ -77,86 +81,19 @@ pub enum PyCmd {
 pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
     let dir = root.join("bindings").join("python");
     match cmd {
-        PyCmd::Build { debug, python } => {
-            crate::license::generate_python(root)?;
-            let out = dir.join("target").join("wheels");
-            let interpreter = python
-                .as_deref()
-                .map(|spec| venv_for(&dir, Some(spec)).map(|venv| venv_python(&venv)))
-                .transpose()?
-                .map(|python| python.to_string_lossy().into_owned());
-            for wheel in WHEELS {
-                drop_stale_native_cdylib(&dir, wheel, !debug);
-                drop_stale_extension_modules(&dir, wheel);
-                let manifest = manifest(wheel);
-                let mut args = vec!["build", "-m", &manifest, "-o"];
-                let out = out.to_string_lossy().into_owned();
-                args.push(&out);
-                if !debug {
-                    args.push("--release");
-                }
-                if let Some(interpreter) = &interpreter {
-                    args.push("-i");
-                    args.push(interpreter);
-                }
-                if NATIVE_LIB_WHEELS.contains(wheel) {
-                    args.push("--auditwheel");
-                    args.push("warn");
-                }
-                maturin(&dir, None, &args)?;
-            }
-            Ok(())
-        }
+        PyCmd::Build {
+            debug,
+            python,
+            license,
+        } => build(root, &dir, debug, python.as_deref(), license),
         PyCmd::Develop { release, python } => {
             let venv = venv_for(&dir, python.as_deref())?;
             develop(&dir, &venv, WHEELS, release)
         }
-        PyCmd::Lint => {
-            cargo_clippy(&dir, &["--workspace", "--all-targets"])?;
-            let venv = ensure_venv(&dir)?;
-            develop(&dir, &venv, WHEELS, false)?;
-            pip_install(&dir, &venv, &["mypy==2.4.0", "pytest", "numpy", "scipy", "polars"])?;
-            let python = venv_python(&venv);
-            run(&python.to_string_lossy(), ["-m", "mypy"], &dir)
-        }
-        PyCmd::Format { fix } => cargo_fmt_packages(&dir, fix),
-        PyCmd::Test { python } => {
-            run_cargo(["test", "-p", "autd3-python-cell"], &dir)?;
-            let venv = venv_for(&dir, python.as_deref())?;
-            develop(&dir, &venv, WHEELS, false)?;
-            let free_threaded = is_free_threaded(&dir, &venv)?;
-            let python = venv_python(&venv);
-            if dir.join("tests").is_dir() {
-                let packages: Vec<&str> = ["pytest", "numpy", "scipy", "polars"]
-                    .into_iter()
-                    .filter(|p| !free_threaded || !FREE_THREADED_UNAVAILABLE.contains(p))
-                    .collect();
-                pip_install(&dir, &venv, &packages)?;
-                run(&python.to_string_lossy(), ["-m", "pytest", "tests"], &dir)
-            } else {
-                let imports = WHEELS
-                    .iter()
-                    .map(|w| format!("import {}", module_name(w)))
-                    .collect::<Vec<_>>()
-                    .join("; ");
-                run(&python.to_string_lossy(), ["-c", &imports], &dir)
-            }
-        }
-        PyCmd::Example { name, debug, args } => {
-            let venv = ensure_venv(&dir)?;
-            develop(&dir, &venv, WHEELS, !debug)?;
-            pip_install(&dir, &venv, &["numpy", "scipy", "polars"])?;
-            let script = dir.join("examples").join(format!("{name}.py"));
-            if !script.is_file() {
-                bail!("example not found: {}", script.display());
-            }
-            let python = venv_python(&venv).to_string_lossy().into_owned();
-            let script = script.to_string_lossy().into_owned();
-            let script_args = ["-B", &script]
-                .into_iter()
-                .chain(args.iter().map(String::as_str));
-            run(&python, script_args, &dir)
-        }
+        PyCmd::Lint => lint(&dir),
+        PyCmd::Format { fix } => cargo_fmt(&dir, &[], fix),
+        PyCmd::Test { python } => test(&dir, python.as_deref()),
+        PyCmd::Example { name, debug, args } => example(&dir, &name, debug, &args),
         PyCmd::Clean(args) => crate::clean::scope(root, args, clean),
     }
 }
@@ -192,6 +129,88 @@ pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
         cleaner.deps(&format!("bindings/python/{name}"))?;
     }
     Ok(())
+}
+
+fn build(root: &Path, dir: &Path, debug: bool, python: Option<&str>, license: bool) -> Result<()> {
+    crate::license::generate_python(root, license)?;
+    let out = dir.join("target").join("wheels");
+    let interpreter = python
+        .map(|spec| venv_for(dir, Some(spec)).map(|venv| venv_python(&venv)))
+        .transpose()?
+        .map(|python| python.to_string_lossy().into_owned());
+    for wheel in WHEELS {
+        drop_stale_native_cdylib(dir, wheel, !debug);
+        drop_stale_extension_modules(dir, wheel);
+        let manifest = manifest(wheel);
+        let mut args = vec!["build", "-m", &manifest, "-o"];
+        let out = out.to_string_lossy().into_owned();
+        args.push(&out);
+        if !debug {
+            args.push("--release");
+        }
+        if let Some(interpreter) = &interpreter {
+            args.push("-i");
+            args.push(interpreter);
+        }
+        if NATIVE_LIB_WHEELS.contains(wheel) {
+            args.push("--auditwheel");
+            args.push("warn");
+        }
+        maturin(dir, None, &args)?;
+    }
+    Ok(())
+}
+
+fn lint(dir: &Path) -> Result<()> {
+    cargo_clippy(dir, &["--workspace", "--all-targets"])?;
+    let venv = venv_for(dir, None)?;
+    develop(dir, &venv, WHEELS, false)?;
+    pip_install(
+        dir,
+        &venv,
+        &["mypy==2.4.0", "pytest", "numpy", "scipy", "polars"],
+    )?;
+    let python = venv_python(&venv);
+    run(&python.to_string_lossy(), ["-m", "mypy"], dir)
+}
+
+fn test(dir: &Path, python: Option<&str>) -> Result<()> {
+    run_cargo(["test", "-p", "autd3-python-cell"], dir)?;
+    let venv = venv_for(dir, python)?;
+    develop(dir, &venv, WHEELS, false)?;
+    let free_threaded = is_free_threaded(dir, &venv)?;
+    let python = venv_python(&venv);
+    if dir.join("tests").is_dir() {
+        let packages: Vec<&str> = ["pytest", "numpy", "scipy", "polars"]
+            .into_iter()
+            .filter(|p| !free_threaded || !FREE_THREADED_UNAVAILABLE.contains(p))
+            .collect();
+        pip_install(dir, &venv, &packages)?;
+        run(&python.to_string_lossy(), ["-m", "pytest", "tests"], dir)
+    } else {
+        let imports = WHEELS
+            .iter()
+            .map(|w| format!("import {}", module_name(w)))
+            .collect::<Vec<_>>()
+            .join("; ");
+        run(&python.to_string_lossy(), ["-c", &imports], dir)
+    }
+}
+
+fn example(dir: &Path, name: &str, debug: bool, args: &[String]) -> Result<()> {
+    let venv = venv_for(dir, None)?;
+    develop(dir, &venv, WHEELS, !debug)?;
+    pip_install(dir, &venv, &["numpy", "scipy", "polars"])?;
+    let script = dir.join("examples").join(format!("{name}.py"));
+    if !script.is_file() {
+        bail!("example not found: {}", script.display());
+    }
+    let python = venv_python(&venv).to_string_lossy().into_owned();
+    let script = script.to_string_lossy().into_owned();
+    let script_args = ["-B", &script]
+        .into_iter()
+        .chain(args.iter().map(String::as_str));
+    run(&python, script_args, dir)
 }
 
 fn stale_extension_modules(dir: &Path, wheel: &str) -> Vec<PathBuf> {
@@ -329,11 +348,7 @@ pub(crate) fn pip_install(dir: &Path, venv: &Path, packages: &[&str]) -> Result<
     )
 }
 
-pub(crate) fn ensure_venv(dir: &Path) -> Result<PathBuf> {
-    venv_for(dir, None)
-}
-
-fn venv_for(dir: &Path, python: Option<&str>) -> Result<PathBuf> {
+pub(crate) fn venv_for(dir: &Path, python: Option<&str>) -> Result<PathBuf> {
     ensure_uv()?;
     if let Some(spec) = python
         && !spec

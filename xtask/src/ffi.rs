@@ -5,7 +5,7 @@ use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
 use crate::clean::{CleanArgs, Cleaner};
-use crate::util::{cargo_clippy, cargo_fmt_packages, files_under, run};
+use crate::util::{cargo_clippy, cargo_fmt, files_under, run};
 
 const CSHARP_SRC: &str = "bindings/csharp/src";
 
@@ -18,26 +18,23 @@ const OPTION_GETTER_MARKER: &str = "_option_get_";
 
 #[derive(Subcommand)]
 pub enum FfiCmd {
-    /// Build the C ABI cdylibs
+    #[command(about = "Build the C ABI cdylibs")]
     Build {
-        /// Build the dev profile instead of release
-        #[arg(long)]
+        #[arg(long, help = "Build the dev profile instead of release")]
         debug: bool,
     },
-    /// Test the FFI workspace
+    #[command(about = "Test the FFI workspace")]
     Test,
-    /// Measure FFI workspace test coverage with cargo-llvm-cov
+    #[command(about = "Measure FFI workspace test coverage with cargo-llvm-cov")]
     Coverage {
-        /// Open the HTML report in a browser
-        #[arg(long)]
+        #[arg(long, help = "Open the HTML report in a browser")]
         open: bool,
     },
-    /// Clippy the FFI workspace
+    #[command(about = "Clippy the FFI workspace")]
     Lint,
-    /// Rustfmt the FFI workspace
+    #[command(about = "Rustfmt the FFI workspace")]
     Format {
-        /// Rewrite the files instead of only checking them
-        #[arg(long)]
+        #[arg(long, help = "Rewrite the files instead of only checking them")]
         fix: bool,
     },
     #[command(about = "Compare the exported C ABI symbols with the C# DllImport declarations")]
@@ -49,13 +46,7 @@ pub enum FfiCmd {
 pub fn run_ffi(root: &Path, cmd: &FfiCmd) -> Result<()> {
     let dir = root.join("bindings").join("ffi");
     match cmd {
-        FfiCmd::Build { debug } => {
-            let mut args = vec!["build", "--workspace"];
-            if !*debug {
-                args.push("--release");
-            }
-            run("cargo", args, &dir)
-        }
+        FfiCmd::Build { debug } => build(&dir, *debug),
         FfiCmd::Test => run("cargo", vec!["test", "--workspace"], &dir),
         FfiCmd::Coverage { open } => crate::rust::coverage(
             &dir,
@@ -64,10 +55,18 @@ pub fn run_ffi(root: &Path, cmd: &FfiCmd) -> Result<()> {
             *open,
         ),
         FfiCmd::Lint => cargo_clippy(&dir, &["--workspace", "--all-targets"]),
-        FfiCmd::Format { fix } => cargo_fmt_packages(&dir, *fix),
+        FfiCmd::Format { fix } => cargo_fmt(&dir, &[], *fix),
         FfiCmd::Drift => drift(root, &dir),
         FfiCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
+}
+
+fn build(dir: &Path, debug: bool) -> Result<()> {
+    let mut args = vec!["build", "--workspace"];
+    if !debug {
+        args.push("--release");
+    }
+    run("cargo", args, dir)
 }
 
 pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
@@ -130,7 +129,6 @@ fn drift(root: &Path, ffi: &Path) -> Result<()> {
         problems.len()
     )
 }
-
 
 fn ffi_crates(ffi: &Path) -> Result<Vec<PathBuf>> {
     let mut dirs = Vec::new();

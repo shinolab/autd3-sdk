@@ -29,12 +29,13 @@ const LOCK_WORKSPACES: &[&str] = &[
 
 #[derive(Args)]
 pub struct BumpVersionCmd {
-    /// Component to bump: software, python, cs, unity, simulator, console, firmware, or doc
+    #[arg(
+        help = "Component to bump: software, python, cs, unity, simulator, console, firmware, or doc"
+    )]
     component: Option<String>,
-    /// Version to bump to
+    #[arg(help = "Version to bump to")]
     version: Option<String>,
-    /// Leave CHANGELOG.md untouched
-    #[arg(long)]
+    #[arg(long, help = "Leave CHANGELOG.md untouched")]
     no_changelog: bool,
 }
 

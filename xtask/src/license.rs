@@ -1,10 +1,9 @@
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{Context, Result, bail};
 use clap::{Subcommand, ValueEnum};
 
-use crate::util::{copy_file, on_path, publishable_members, run};
+use crate::util::{copy_file, on_path, run, workspace_members};
 
 const PUBLISH_WORKSPACES: &[&str] = &[
     ".",
@@ -32,27 +31,18 @@ const THIRD_PARTY: &str = "THIRD-PARTY-LICENSES.md";
 
 const PLACEHOLDER: &str = "# Third-party licenses\n\nThis notice was not generated for this build.\nRun `cargo xtask license generate`, or pass `--license` to the packaging command,\nto produce the real notices with cargo-about.\n";
 
-static GENERATE: AtomicBool = AtomicBool::new(false);
-
-pub fn set_generate(generate: bool) {
-    GENERATE.store(generate, Ordering::Relaxed);
-}
-
-fn generate_enabled() -> bool {
-    GENERATE.load(Ordering::Relaxed)
-}
-
 #[derive(Subcommand)]
 pub enum LicenseCmd {
-    /// Generate the third-party license notices with cargo-about
+    #[command(about = "Generate the third-party license notices with cargo-about")]
     Generate {
-        /// Artifact to generate the notices for
-        #[arg(value_enum, default_value_t = GenTarget::All)]
+        #[arg(value_enum, default_value_t = GenTarget::All, help = "Artifact to generate the notices for")]
         target: GenTarget,
     },
-    /// Check the dependency licenses of every workspace with cargo-deny
+    #[command(about = "Check the dependency licenses of every workspace with cargo-deny")]
     Check,
-    /// Check every workspace for security advisories, duplicates and unknown sources
+    #[command(
+        about = "Check every workspace for security advisories, duplicates and unknown sources"
+    )]
     Audit,
 }
 
@@ -75,19 +65,18 @@ pub fn run_license(root: &Path, cmd: &LicenseCmd) -> Result<()> {
 }
 
 fn generate(root: &Path, target: GenTarget) -> Result<()> {
-    set_generate(true);
     match target {
         GenTarget::All => {
-            generate_python(root)?;
-            generate_csharp(root)?;
-            generate_unity(root)?;
-            generate_console(root)?;
+            generate_python(root, true)?;
+            generate_csharp(root, true)?;
+            generate_unity(root, true)?;
+            generate_console(root, true)?;
         }
-        GenTarget::Python => generate_python(root)?,
-        GenTarget::Csharp => generate_csharp(root)?,
-        GenTarget::Unity => generate_unity(root)?,
-        GenTarget::Console => generate_console(root)?,
-        GenTarget::Simulator => generate_simulator(root)?,
+        GenTarget::Python => generate_python(root, true)?,
+        GenTarget::Csharp => generate_csharp(root, true)?,
+        GenTarget::Unity => generate_unity(root, true)?,
+        GenTarget::Console => generate_console(root, true)?,
+        GenTarget::Simulator => generate_simulator(root, true)?,
     }
     println!("license generate: done");
     Ok(())
@@ -145,7 +134,10 @@ fn check_bundled_license(root: &Path) -> Result<()> {
         } else {
             root.join(ws)
         };
-        for package in publishable_members(&ws_dir)? {
+        for package in workspace_members(&ws_dir)?
+            .iter()
+            .filter(|package| package.publishable())
+        {
             let path = package.dir().join("LICENSE");
             match std::fs::read_to_string(&path) {
                 Ok(text) if text == mit => {}
@@ -170,28 +162,33 @@ fn check_bundled_license(root: &Path) -> Result<()> {
     Ok(())
 }
 
-fn ensure_about() -> Result<()> {
-    if generate_enabled() && !on_path("cargo-about") {
+fn ensure_about(generate: bool) -> Result<()> {
+    if generate && !on_path("cargo-about") {
         bail!("`cargo-about` is required");
     }
     Ok(())
 }
 
-pub fn generate_python(root: &Path) -> Result<()> {
-    ensure_about()?;
+pub fn generate_python(root: &Path, generate: bool) -> Result<()> {
+    ensure_about(generate)?;
     let mit_license = root.join("LICENSE");
 
     let py = root.join("bindings/python");
     for wheel in crate::py::WHEELS {
         let dir = py.join(wheel);
-        about(root, &dir.join("Cargo.toml"), &dir.join(THIRD_PARTY))?;
+        about(
+            root,
+            &dir.join("Cargo.toml"),
+            &dir.join(THIRD_PARTY),
+            generate,
+        )?;
         copy_file(&mit_license, &dir.join("LICENSE"))?;
     }
     Ok(())
 }
 
-pub fn generate_csharp(root: &Path) -> Result<()> {
-    ensure_about()?;
+pub fn generate_csharp(root: &Path, generate: bool) -> Result<()> {
+    ensure_about(generate)?;
 
     let ffi = root.join("bindings/ffi");
     let cs_src = root.join("bindings/csharp/src");
@@ -202,13 +199,14 @@ pub fn generate_csharp(root: &Path) -> Result<()> {
             root,
             &ffi.join(krate).join("Cargo.toml"),
             &dir.join(THIRD_PARTY),
+            generate,
         )?;
     }
     Ok(())
 }
 
-pub fn generate_unity(root: &Path) -> Result<()> {
-    ensure_about()?;
+pub fn generate_unity(root: &Path, generate: bool) -> Result<()> {
+    ensure_about(generate)?;
     let mit_license = root.join("LICENSE");
 
     let ffi = root.join("bindings/ffi");
@@ -220,19 +218,20 @@ pub fn generate_unity(root: &Path) -> Result<()> {
             root,
             &ffi.join(krate).join("Cargo.toml"),
             &dir.join(THIRD_PARTY),
+            generate,
         )?;
         copy_file(&mit_license, &dir.join("LICENSE.md"))?;
     }
     Ok(())
 }
 
-pub fn generate_console(root: &Path) -> Result<()> {
-    ensure_about()?;
+pub fn generate_console(root: &Path, generate: bool) -> Result<()> {
+    ensure_about(generate)?;
     let console = root.join("console");
     let out = console.join(THIRD_PARTY);
-    about(root, &console.join("Cargo.toml"), &out)?;
+    about(root, &console.join("Cargo.toml"), &out, generate)?;
 
-    generate_simulator(root)?;
+    generate_simulator(root, generate)?;
     let simulator_notice = root.join("simulator").join(THIRD_PARTY);
     let simulator = std::fs::read_to_string(&simulator_notice)
         .with_context(|| format!("reading {}", simulator_notice.display()))?;
@@ -245,6 +244,7 @@ pub fn generate_console(root: &Path) -> Result<()> {
             .join("firmware-writer")
             .join("Cargo.toml"),
         &firmware_tmp,
+        generate,
     )?;
     let firmware = std::fs::read_to_string(&firmware_tmp)
         .with_context(|| format!("reading {}", firmware_tmp.display()))?;
@@ -254,12 +254,18 @@ pub fn generate_console(root: &Path) -> Result<()> {
         root,
         &root.join("tools").join("firmware-ota").join("Cargo.toml"),
         &ota_tmp,
+        generate,
     )?;
     let ota = std::fs::read_to_string(&ota_tmp)
         .with_context(|| format!("reading {}", ota_tmp.display()))?;
 
     let server_tmp = console.join(".third-party-server.md");
-    about(root, &root.join("server").join("Cargo.toml"), &server_tmp)?;
+    about(
+        root,
+        &root.join("server").join("Cargo.toml"),
+        &server_tmp,
+        generate,
+    )?;
     let server = std::fs::read_to_string(&server_tmp)
         .with_context(|| format!("reading {}", server_tmp.display()))?;
 
@@ -280,14 +286,19 @@ pub fn generate_console(root: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn generate_simulator(root: &Path) -> Result<()> {
-    ensure_about()?;
+pub fn generate_simulator(root: &Path, generate: bool) -> Result<()> {
+    ensure_about(generate)?;
     let sim = root.join("simulator");
     let out = sim.join(THIRD_PARTY);
-    about(root, &sim.join("Cargo.toml"), &out)?;
+    about(root, &sim.join("Cargo.toml"), &out, generate)?;
 
     let frontend_tmp = sim.join(".third-party-frontend.md");
-    about(root, &sim.join("frontend/Cargo.toml"), &frontend_tmp)?;
+    about(
+        root,
+        &sim.join("frontend/Cargo.toml"),
+        &frontend_tmp,
+        generate,
+    )?;
 
     let mut combined =
         std::fs::read_to_string(&out).with_context(|| format!("reading {}", out.display()))?;
@@ -300,8 +311,8 @@ pub fn generate_simulator(root: &Path) -> Result<()> {
     Ok(())
 }
 
-fn about(root: &Path, manifest: &Path, out: &Path) -> Result<()> {
-    if !generate_enabled() {
+fn about(root: &Path, manifest: &Path, out: &Path, generate: bool) -> Result<()> {
+    if !generate {
         return placeholder(manifest, out);
     }
     let about_toml = root.join("about.toml");

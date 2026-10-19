@@ -24,25 +24,32 @@ const DOC_FILES: &[&str] = &[
 
 #[derive(Subcommand)]
 pub enum UnityCmd {
-    /// Stage the C# sources and the host-RID native libs into the UPM packages
+    #[command(about = "Stage the C# sources and the host-RID native libs into the UPM packages")]
     Build {
-        /// Also write a `Packages/manifest.json` snippet for the staged packages
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Also write a `Packages/manifest.json` snippet for the staged packages"
+        )]
         manifest: bool,
     },
-    /// Pack the UPM packages into `bindings/unity/dist/` and verify the tarballs
+    #[command(about = "Pack the UPM packages into `bindings/unity/dist/` and verify the tarballs")]
     Pack {
-        /// Directory holding the per-RID native libraries; the host RID only if omitted
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Directory holding the per-RID native libraries; the host RID only if omitted"
+        )]
         native_dir: Option<PathBuf>,
-        /// Directory to write the `.tgz` files to
-        #[arg(short, long)]
+        #[arg(short, long, help = "Directory to write the `.tgz` files to")]
         out: Option<PathBuf>,
+        #[arg(
+            long,
+            help = "Generate the third-party license notices with cargo-about (slow; use it for release artifacts)"
+        )]
+        license: bool,
     },
-    /// Run the Unity Test Framework tests
+    #[command(about = "Run the Unity Test Framework tests")]
     Test {
-        /// Path to the Unity Editor executable
-        #[arg(long)]
+        #[arg(long, help = "Path to the Unity Editor executable")]
         unity_editor: Option<PathBuf>,
     },
     #[command(about = "Remove the staged UPM package contents and the packed tarballs")]
@@ -52,7 +59,11 @@ pub enum UnityCmd {
 pub fn run_unity(root: &Path, cmd: UnityCmd) -> Result<()> {
     match cmd {
         UnityCmd::Build { manifest } => build(root, manifest),
-        UnityCmd::Pack { native_dir, out } => pack(root, native_dir.as_deref(), out),
+        UnityCmd::Pack {
+            native_dir,
+            out,
+            license,
+        } => pack(root, native_dir.as_deref(), out, license),
         UnityCmd::Test { unity_editor } => test(root, unity_editor),
         UnityCmd::Clean(args) => crate::clean::scope(root, args, clean),
     }
@@ -96,7 +107,7 @@ fn build(root: &Path, manifest: bool) -> Result<()> {
     Ok(())
 }
 
-fn pack(root: &Path, native_dir: Option<&Path>, out: Option<PathBuf>) -> Result<()> {
+fn pack(root: &Path, native_dir: Option<&Path>, out: Option<PathBuf>, license: bool) -> Result<()> {
     if !on_path("npm") {
         bail!("`npm` is required for `unity pack` (install Node.js)");
     }
@@ -125,7 +136,7 @@ fn pack(root: &Path, native_dir: Option<&Path>, out: Option<PathBuf>) -> Result<
         vec![host_rid()?]
     };
 
-    crate::license::generate_unity(root)?;
+    crate::license::generate_unity(root, license)?;
 
     if out_dir.exists() {
         std::fs::remove_dir_all(&out_dir)?;

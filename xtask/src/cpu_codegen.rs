@@ -123,11 +123,12 @@ fn function_bit(name: &str) -> Option<&str> {
 fn to_pascal(name: &str) -> String {
     name.split('_')
         .filter(|word| !word.is_empty())
-        .map(|word| {
+        .fold(String::new(), |mut pascal, word| {
             let (head, tail) = word.split_at(1);
-            format!("{}{}", head.to_ascii_uppercase(), tail.to_ascii_lowercase())
+            pascal.push_str(&head.to_ascii_uppercase());
+            pascal.push_str(&tail.to_ascii_lowercase());
+            pascal
         })
-        .collect()
 }
 
 fn is_fw_internal(name: &str) -> bool {
@@ -384,10 +385,6 @@ fn xci_value_str<'a>(text: &'a str, key: &str) -> Option<&'a str> {
     Some(&after[q1 + 1..q2])
 }
 
-fn xci_uint(text: &str, key: &str) -> Option<u64> {
-    xci_value_str(text, key)?.parse::<u64>().ok()
-}
-
 fn mhz_to_hz(s: &str) -> Option<u64> {
     let (int, frac) = s.split_once('.').unwrap_or((s, ""));
     if int.is_empty() || !int.bytes().all(|b| b.is_ascii_digit()) {
@@ -438,9 +435,11 @@ fn read_ip_consts(root: &Path) -> Result<Vec<Const>> {
             .join(format!("{}.xci", ic.ip));
         let text = std::fs::read_to_string(&xci)
             .with_context(|| format!("failed to read {}", xci.display()))?;
-        let depth = xci_uint(&text, "Write_Depth_A")
+        let depth = xci_value_str(&text, "Write_Depth_A")
+            .and_then(|v| v.parse::<u64>().ok())
             .with_context(|| format!("missing Write_Depth_A in {}", xci.display()))?;
-        let width = xci_uint(&text, "Write_Width_A")
+        let width = xci_value_str(&text, "Write_Width_A")
+            .and_then(|v| v.parse::<u64>().ok())
             .with_context(|| format!("missing Write_Width_A in {}", xci.display()))?;
         let value = depth * width / ic.elem_bits;
         out.push(Const {

@@ -8,9 +8,11 @@ use crate::util::{cargo_bin, cargo_build_args, on_path, run};
 
 #[derive(Subcommand)]
 pub enum FirmwareCmd {
-    /// Download a released firmware bundle and write it to the device (J-Link / Vivado)
+    #[command(
+        about = "Download a released firmware bundle and write it to the device (J-Link / Vivado)"
+    )]
     Write(WriteArgs),
-    /// Build the CPU and FPGA firmware and zip them into `firmware/dist/`
+    #[command(about = "Build the CPU and FPGA firmware and zip them into `firmware/dist/`")]
     Bundle(BundleArgs),
     #[command(about = "Remove the firmware distribution bundles")]
     Clean(CleanArgs),
@@ -18,27 +20,27 @@ pub enum FirmwareCmd {
 
 #[derive(clap::Args)]
 pub struct BundleArgs {
-    /// Re-synthesize the FPGA even when a bitstream already exists
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Re-synthesize the FPGA even when a bitstream already exists"
+    )]
     force: bool,
-    /// Upload the bundle to the `firmware-vX.Y.Z` GitHub Release (requires `gh`)
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Upload the bundle to the `firmware-vX.Y.Z` GitHub Release (requires `gh`)"
+    )]
     upload: bool,
 }
 
 #[derive(clap::Args)]
 pub struct WriteArgs {
-    /// Firmware version to write (e.g. 1.2.3)
-    #[arg(long)]
+    #[arg(long, help = "Firmware version to write (e.g. 1.2.3)")]
     version: Option<String>,
-    /// What to write: `both` (default), `cpu`, or `fpga`
-    #[arg(long)]
+    #[arg(long, help = "What to write: `both` (default), `cpu`, or `fpga`")]
     target: Option<String>,
-    /// Re-download the bundle even when it is already cached
-    #[arg(long)]
+    #[arg(long, help = "Re-download the bundle even when it is already cached")]
     force_download: bool,
-    /// List the available firmware versions and exit
-    #[arg(long)]
+    #[arg(long, help = "List the available firmware versions and exit")]
     list: bool,
 }
 

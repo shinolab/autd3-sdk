@@ -25,10 +25,6 @@ pub fn dist_target() -> Option<String> {
         .filter(|target| !target.is_empty())
 }
 
-pub fn ensure_rust_target(target: &str) -> Result<()> {
-    run("rustup", ["target", "add", target], &workspace_root())
-}
-
 pub fn cargo_bin(workspace: &Path, target: Option<&str>, debug: bool, name: &str) -> PathBuf {
     let mut dir = workspace.join("target");
     if let Some(target) = target {
@@ -232,13 +228,6 @@ fn read_member_package(
     })
 }
 
-pub fn publishable_members(workspace_dir: &Path) -> Result<Vec<MemberPackage>> {
-    Ok(workspace_members(workspace_dir)?
-        .into_iter()
-        .filter(|package| package.publishable)
-        .collect())
-}
-
 impl MemberPackage {
     pub fn name(&self) -> &str {
         &self.name
@@ -247,9 +236,13 @@ impl MemberPackage {
     pub fn dir(&self) -> &Path {
         &self.dir
     }
+
+    pub fn publishable(&self) -> bool {
+        self.publishable
+    }
 }
 
-fn workspace_members(workspace_dir: &Path) -> Result<Vec<MemberPackage>> {
+pub fn workspace_members(workspace_dir: &Path) -> Result<Vec<MemberPackage>> {
     let manifest = workspace_dir.join("Cargo.toml");
     let text = std::fs::read_to_string(&manifest)
         .with_context(|| format!("failed to read {}", manifest.display()))?;
@@ -295,23 +288,13 @@ fn workspace_members(workspace_dir: &Path) -> Result<Vec<MemberPackage>> {
     Ok(packages)
 }
 
-fn workspace_member_packages(workspace_dir: &Path) -> Result<Vec<String>> {
-    Ok(workspace_members(workspace_dir)?
-        .into_iter()
-        .map(|package| package.name)
-        .collect())
-}
-
 fn is_published(package: &MemberPackage, cwd: &Path) -> Result<bool> {
     let spec = format!("{}@{}", package.name, package.version);
-    let status = Command::new("cargo")
-        .args(["info", &spec, "--registry", "crates-io"])
-        .current_dir(cwd)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .context("failed to spawn `cargo` (is it installed and on PATH?)")?;
-    Ok(status.success())
+    Ok(
+        output("cargo", &["info", &spec, "--registry", "crates-io"], cwd)?
+            .status
+            .success(),
+    )
 }
 
 pub fn publish_workspace(workspace_dir: &Path, dry_run: bool) -> Result<()> {
@@ -354,15 +337,6 @@ pub fn cargo_fmt(dir: &Path, scope: &[&str], fix: bool) -> Result<()> {
         args.extend(["--", "--check"]);
     }
     run("cargo", args, dir)
-}
-
-pub fn cargo_fmt_packages(workspace_dir: &Path, fix: bool) -> Result<()> {
-    let packages = workspace_member_packages(workspace_dir)?;
-    let scope: Vec<&str> = packages
-        .iter()
-        .flat_map(|package| ["-p", package.as_str()])
-        .collect();
-    cargo_fmt(workspace_dir, &scope, fix)
 }
 
 pub fn cargo_clippy(dir: &Path, args: &[&str]) -> Result<()> {

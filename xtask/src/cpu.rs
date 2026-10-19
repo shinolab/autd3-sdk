@@ -11,33 +11,37 @@ use crate::util::{cargo_clippy, cargo_fmt, run, run_env, which};
 
 #[derive(Subcommand)]
 pub enum CpuCmd {
-    /// Build the loader and the application from `board` and merge them into the flashable `.bin`
+    #[command(
+        about = "Build the loader and the application from `board` and merge them into the flashable `.bin`"
+    )]
     Build,
-    /// Build, then write the `.bin` to the device with J-Link
+    #[command(about = "Build, then write the `.bin` to the device with J-Link")]
     Flash,
-    /// Run the portable firmware logic (`autd3-cpu-fw`) tests on the host
+    #[command(about = "Run the portable firmware logic (`autd3-cpu-fw`) tests on the host")]
     Test {
-        /// Model-check the ISR/main-loop FIFO handoff with loom instead of the regular tests
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Model-check the ISR/main-loop FIFO handoff with loom instead of the regular tests"
+        )]
         loom: bool,
     },
-    /// Regenerate `fw/src/fpga_params.rs` from the FPGA `params.svh`
+    #[command(about = "Regenerate `fw/src/fpga_params.rs` from the FPGA `params.svh`")]
     GenParam,
-    /// Write the slot-A image header (magic/generation 0/length/CRC32) into a linked `.bin`
+    #[command(
+        about = "Write the slot-A image header (magic/generation 0/length/CRC32) into a linked `.bin`"
+    )]
     StampImage {
-        /// The flash image produced by the final link (`autd3-cpu.bin`)
+        #[arg(help = "The flash image produced by the final link (`autd3-cpu.bin`)")]
         bin: PathBuf,
     },
-    /// Clippy the firmware
+    #[command(about = "Clippy the firmware")]
     Lint {
-        /// Clippy the loom model instead of the regular targets
-        #[arg(long)]
+        #[arg(long, help = "Clippy the loom model instead of the regular targets")]
         loom: bool,
     },
-    /// Rustfmt the firmware
+    #[command(about = "Rustfmt the firmware")]
     Format {
-        /// Rewrite the files instead of only checking them
-        #[arg(long)]
+        #[arg(long, help = "Rewrite the files instead of only checking them")]
         fix: bool,
     },
     #[command(about = "Remove the CPU firmware build outputs")]
@@ -285,10 +289,13 @@ pub fn stamp_image(bin: &Path) -> Result<()> {
         );
     }
     let body_len = image.len() - body_at;
-    if body_len > SLOT_IMAGE_CAPACITY as usize {
+    let Some(body_len) = u32::try_from(body_len)
+        .ok()
+        .filter(|&len| len <= SLOT_IMAGE_CAPACITY)
+    else {
         bail!("slot-A image is {body_len} bytes, over the {SLOT_IMAGE_CAPACITY}-byte capacity");
-    }
-    let header = ImageHeader::new(0, body_len as u32, crc32(&image[body_at..]));
+    };
+    let header = ImageHeader::new(0, body_len, crc32(&image[body_at..]));
     let slot = &mut image[header_at..][..core::mem::size_of::<ImageHeader>()];
     if slot != header.as_bytes() && slot.iter().any(|&b| b != 0xFF) {
         bail!(
@@ -341,4 +348,3 @@ fn cpu_lint(root: &Path, loom: bool) -> Result<()> {
     cargo_clippy(root, &["-p", "autd3-cpu-fw", "--all-targets"])?;
     cargo_clippy(&board_dir(root), &["--release"])
 }
-

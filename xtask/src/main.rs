@@ -22,6 +22,8 @@ mod tool;
 mod unity;
 mod util;
 
+use std::path::Path;
+
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
@@ -38,7 +40,7 @@ use ffi::{FfiCmd, run_ffi};
 use firmware::{FirmwareCmd, run_firmware};
 use fpga::{FpgaCmd, run_fpga};
 use holo_wgpu::{HoloWgpuCmd, run_holo_wgpu};
-use license::{LicenseCmd, run_license, set_generate};
+use license::{LicenseCmd, run_license};
 use py::{PyCmd, run_py};
 use rust::{RustCmd, run_rust};
 use simulator::{SimulatorCmd, run_simulator};
@@ -49,86 +51,83 @@ use util::workspace_root;
 #[derive(Parser)]
 #[command(name = "xtask", about = "autd3-sdk dev task runner")]
 struct Cli {
-    /// Generate the third-party license notices with cargo-about (slow; use it for release artifacts)
-    #[arg(long, global = true)]
-    license: bool,
     #[command(subcommand)]
     cmd: TopCmd,
 }
 
 #[derive(Subcommand)]
 enum TopCmd {
-    /// The Rust client workspace (`crates/`).
+    #[command(about = "The Rust client workspace (`crates/`)")]
     Rust {
         #[command(subcommand)]
         cmd: RustCmd,
     },
-    /// The CPU firmware (`firmware/cpu/`, no_std Rust).
+    #[command(about = "The CPU firmware (`firmware/cpu/`, no_std Rust)")]
     Cpu {
         #[command(subcommand)]
         cmd: CpuCmd,
     },
-    /// The auxiliary tools (`tools/`).
+    #[command(about = "The auxiliary tools (`tools/`)")]
     Tool {
         #[command(subcommand)]
         cmd: ToolCmd,
     },
-    /// The wgpu holo backend (`extras/autd3-rs-pattern-holo-wgpu/`).
+    #[command(about = "The wgpu holo backend (`extras/autd3-rs-pattern-holo-wgpu/`)")]
     HoloWgpu {
         #[command(subcommand)]
         cmd: HoloWgpuCmd,
     },
-    /// The sound-field simulator (`simulator/`).
+    #[command(about = "The sound-field simulator (`simulator/`)")]
     Simulator {
         #[command(subcommand)]
         cmd: SimulatorCmd,
     },
-    /// The GUI console (`console/`).
+    #[command(about = "The GUI console (`console/`)")]
     Console {
         #[command(subcommand)]
         cmd: ConsoleCmd,
     },
-    /// The firmware emulator (`extras/autd3-rs-emulator/`).
+    #[command(about = "The firmware emulator (`extras/autd3-rs-emulator/`)")]
     Emulator {
         #[command(subcommand)]
         cmd: EmulatorCmd,
     },
-    /// The FPGA firmware (`firmware/fpga/`, Vivado required).
+    #[command(about = "The FPGA firmware (`firmware/fpga/`, Vivado required)")]
     Fpga {
         #[command(subcommand)]
         cmd: FpgaCmd,
     },
-    /// The firmware distribution: bundle a release zip, write it to a device.
+    #[command(about = "The firmware distribution: bundle a release zip, write it to a device")]
     Firmware {
         #[command(subcommand)]
         cmd: FirmwareCmd,
     },
-    /// The Python bindings (`bindings/python/`).
+    #[command(about = "The Python bindings (`bindings/python/`)")]
     Py {
         #[command(subcommand)]
         cmd: PyCmd,
     },
-    /// The C ABI layer every binding is built on (`bindings/ffi/`).
+    #[command(about = "The C ABI layer every binding is built on (`bindings/ffi/`)")]
     Ffi {
         #[command(subcommand)]
         cmd: FfiCmd,
     },
-    /// The C# bindings (`bindings/csharp/`).
+    #[command(about = "The C# bindings (`bindings/csharp/`)")]
     Cs {
         #[command(subcommand)]
         cmd: CsCmd,
     },
-    /// The Unity UPM packages (`bindings/unity/`).
+    #[command(about = "The Unity UPM packages (`bindings/unity/`)")]
     Unity {
         #[command(subcommand)]
         cmd: UnityCmd,
     },
-    /// The third-party license notices shipped with the distributed artifacts.
+    #[command(about = "The third-party license notices shipped with the distributed artifacts")]
     License {
         #[command(subcommand)]
         cmd: LicenseCmd,
     },
-    /// The documentation site (`doc/`).
+    #[command(about = "The documentation site (`doc/`)")]
     Doc {
         #[command(subcommand)]
         cmd: DocCmd,
@@ -140,9 +139,9 @@ enum TopCmd {
         #[command(subcommand)]
         cmd: CheckCmd,
     },
-    /// Generate CHANGELOG.md / release notes with git-cliff.
+    #[command(about = "Generate CHANGELOG.md / release notes with git-cliff")]
     Changelog(ChangelogCmd),
-    /// Bump a component's version and regenerate CHANGELOG.md (no git operations).
+    #[command(about = "Bump a component's version and regenerate CHANGELOG.md (no git operations)")]
     BumpVersion(BumpVersionCmd),
     #[command(about = "Remove every scope's build outputs (FPGA only with --fpga).")]
     Clean(TopCleanArgs),
@@ -162,7 +161,6 @@ struct TopCleanArgs {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let root = workspace_root();
-    set_generate(cli.license);
     match cli.cmd {
         TopCmd::Rust { cmd } => run_rust(&root, &cmd),
         TopCmd::Cpu { cmd } => run_cpu(&root, &cmd),
@@ -182,25 +180,29 @@ fn main() -> Result<()> {
         TopCmd::Check { cmd } => run_check(&root, &cmd),
         TopCmd::Changelog(cmd) => run_changelog(&root, &cmd),
         TopCmd::BumpVersion(cmd) => run_bump_version(&root, &cmd),
-        TopCmd::Clean(args) => clean::scope(&root, args.common, |cleaner| {
-            rust::clean(cleaner)?;
-            cpu::clean(cleaner)?;
-            holo_wgpu::clean(cleaner)?;
-            simulator::clean(cleaner)?;
-            console::clean(cleaner)?;
-            emulator::clean(cleaner)?;
-            firmware::clean(cleaner)?;
-            py::clean(cleaner)?;
-            ffi::clean(cleaner)?;
-            cs::clean(cleaner)?;
-            unity::clean(cleaner)?;
-            doc::clean(cleaner)?;
-            if args.fpga {
-                fpga::clean(cleaner)?;
-            } else {
-                println!("kept the FPGA build outputs; pass --fpga to remove them too");
-            }
-            Ok(())
-        }),
+        TopCmd::Clean(args) => run_clean(&root, &args),
     }
+}
+
+fn run_clean(root: &Path, args: &TopCleanArgs) -> Result<()> {
+    clean::scope(root, args.common, |cleaner| {
+        rust::clean(cleaner)?;
+        cpu::clean(cleaner)?;
+        holo_wgpu::clean(cleaner)?;
+        simulator::clean(cleaner)?;
+        console::clean(cleaner)?;
+        emulator::clean(cleaner)?;
+        firmware::clean(cleaner)?;
+        py::clean(cleaner)?;
+        ffi::clean(cleaner)?;
+        cs::clean(cleaner)?;
+        unity::clean(cleaner)?;
+        doc::clean(cleaner)?;
+        if args.fpga {
+            fpga::clean(cleaner)?;
+        } else {
+            println!("kept the FPGA build outputs; pass --fpga to remove them too");
+        }
+        Ok(())
+    })
 }

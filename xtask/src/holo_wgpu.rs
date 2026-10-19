@@ -8,27 +8,29 @@ use crate::util::{cargo_clippy, cargo_fmt, publish_workspace, run};
 
 #[derive(Subcommand)]
 pub enum HoloWgpuCmd {
-    /// Build the wgpu holo backend
+    #[command(about = "Build the wgpu holo backend")]
     Build,
-    /// Run the wgpu holo backend tests (the GPU-dependent ones skip without an adapter)
+    #[command(
+        about = "Run the wgpu holo backend tests (the GPU-dependent ones skip without an adapter)"
+    )]
     Test,
-    /// Run the ignored measurement tests (needs a GPU and a quiet machine)
+    #[command(about = "Run the ignored measurement tests (needs a GPU and a quiet machine)")]
     Bench {
-        /// Only run tests whose name contains this string
+        #[arg(help = "Only run tests whose name contains this string")]
         filter: Option<String>,
     },
-    /// Clippy the wgpu holo backend
+    #[command(about = "Clippy the wgpu holo backend")]
     Lint,
-    /// Rustfmt the wgpu holo backend
+    #[command(about = "Rustfmt the wgpu holo backend")]
     Format {
-        /// Rewrite the files instead of only checking them
-        #[arg(long)]
+        #[arg(long, help = "Rewrite the files instead of only checking them")]
         fix: bool,
     },
-    /// Publish the wgpu holo backend to crates.io, skipping already-published versions
+    #[command(
+        about = "Publish the wgpu holo backend to crates.io, skipping already-published versions"
+    )]
     Publish {
-        /// Run every check without uploading
-        #[arg(long)]
+        #[arg(long, help = "Run every check without uploading")]
         dry_run: bool,
     },
     #[command(about = "Remove the wgpu holo backend build outputs")]
@@ -40,19 +42,21 @@ pub fn run_holo_wgpu(root: &Path, cmd: &HoloWgpuCmd) -> Result<()> {
     match cmd {
         HoloWgpuCmd::Build => run("cargo", vec!["build", "--all-targets"], &dir),
         HoloWgpuCmd::Test => run("cargo", vec!["test", "--release"], &dir),
-        HoloWgpuCmd::Bench { filter } => {
-            let mut args = vec!["test", "--release"];
-            if let Some(filter) = filter {
-                args.push(filter);
-            }
-            args.extend(["--", "--ignored", "--nocapture", "--test-threads=1"]);
-            run("cargo", args, &dir)
-        }
+        HoloWgpuCmd::Bench { filter } => bench(&dir, filter.as_deref()),
         HoloWgpuCmd::Lint => cargo_clippy(&dir, &["--all-targets"]),
         HoloWgpuCmd::Format { fix } => cargo_fmt(&dir, &[], *fix),
         HoloWgpuCmd::Publish { dry_run } => publish_workspace(&dir, *dry_run),
         HoloWgpuCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
+}
+
+fn bench(dir: &Path, filter: Option<&str>) -> Result<()> {
+    let mut args = vec!["test", "--release"];
+    if let Some(filter) = filter {
+        args.push(filter);
+    }
+    args.extend(["--", "--ignored", "--nocapture", "--test-threads=1"]);
+    run("cargo", args, dir)
 }
 
 pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
