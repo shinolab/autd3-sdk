@@ -107,36 +107,14 @@ pub fn run_simulator(root: &Path, cmd: &SimulatorCmd) -> Result<()> {
     let sim = root.join("simulator");
     let frontend = sim.join("frontend");
     match cmd {
-        SimulatorCmd::Build { debug, license } => {
-            crate::license::generate_simulator(root, *license)?;
-            build_backend_and_frontend(root, *debug, None).map(|_| ())
-        }
+        SimulatorCmd::Build { debug, license } => build(root, *debug, *license),
         SimulatorCmd::Test => run(
             "cargo",
             ["test", "--workspace", "--lib", "--bins", "--tests"],
             &sim,
         ),
-        SimulatorCmd::Lint => {
-            cargo_clippy(&sim, &["--workspace", "--all-targets"])?;
-            ensure_css(&frontend)?;
-            cargo_clippy(
-                &frontend,
-                &["--target", "wasm32-unknown-unknown", "--all-targets"],
-            )
-        }
-        SimulatorCmd::Format { fix } => {
-            cargo_fmt(
-                &sim,
-                &[
-                    "-p",
-                    "autd3-rs-simulator",
-                    "-p",
-                    "autd3-rs-simulator-protocol",
-                ],
-                *fix,
-            )?;
-            cargo_fmt(&frontend, &["-p", "autd3-rs-simulator-frontend"], *fix)
-        }
+        SimulatorCmd::Lint => lint(&sim, &frontend),
+        SimulatorCmd::Format { fix } => format(&sim, &frontend, *fix),
         SimulatorCmd::Run {
             debug,
             open,
@@ -152,12 +130,7 @@ pub fn run_simulator(root: &Path, cmd: &SimulatorCmd) -> Result<()> {
             *port,
             *http_port,
         ),
-        SimulatorCmd::Audit => {
-            if !on_path("npm") {
-                bail!("`npm` not found on PATH (needed for `npm audit`).");
-            }
-            run_tool("npm", ["audit"], &frontend)
-        }
+        SimulatorCmd::Audit => audit(&frontend),
         SimulatorCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
 }
@@ -173,6 +146,41 @@ pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
     ])?;
     cleaner.children("simulator/backend/web", &[".gitkeep"])?;
     cleaner.deps("simulator/frontend/node_modules")
+}
+
+fn build(root: &Path, debug: bool, license: bool) -> Result<()> {
+    crate::license::generate_simulator(root, license)?;
+    build_backend_and_frontend(root, debug, None).map(|_| ())
+}
+
+fn lint(sim: &Path, frontend: &Path) -> Result<()> {
+    cargo_clippy(sim, &["--workspace", "--all-targets"])?;
+    ensure_css(frontend)?;
+    cargo_clippy(
+        frontend,
+        &["--target", "wasm32-unknown-unknown", "--all-targets"],
+    )
+}
+
+fn format(sim: &Path, frontend: &Path, fix: bool) -> Result<()> {
+    cargo_fmt(
+        sim,
+        &[
+            "-p",
+            "autd3-rs-simulator",
+            "-p",
+            "autd3-rs-simulator-protocol",
+        ],
+        fix,
+    )?;
+    cargo_fmt(frontend, &["-p", "autd3-rs-simulator-frontend"], fix)
+}
+
+fn audit(frontend: &Path) -> Result<()> {
+    if !on_path("npm") {
+        bail!("`npm` not found on PATH (needed for `npm audit`).");
+    }
+    run_tool("npm", ["audit"], frontend)
 }
 
 fn ensure_css(frontend: &Path) -> Result<()> {

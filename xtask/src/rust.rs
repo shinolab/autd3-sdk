@@ -98,20 +98,7 @@ pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
         RustCmd::Test {
             package,
             include_ignored,
-        } => {
-            let mut args = vec!["test".to_string()];
-            if package.is_empty() {
-                args.push("--workspace".to_string());
-            }
-            for package in package {
-                args.extend(["--package".to_string(), package.clone()]);
-            }
-            args.extend(["--lib", "--bins", "--tests"].map(String::from));
-            if *include_ignored {
-                args.extend(["--", "--include-ignored"].map(String::from));
-            }
-            run("cargo", args, root)
-        }
+        } => run_test(root, package, *include_ignored),
         RustCmd::Coverage { all, open } => run_coverage(root, *all, *open),
         RustCmd::Lint => run_lint(root),
         RustCmd::Format { fix } => cargo_fmt(root, &["--all"], *fix),
@@ -120,25 +107,13 @@ pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
             package,
             save_baseline,
             baseline,
-        } => {
-            let mut args = vec!["bench".to_string()];
-            match package {
-                Some(package) => args.extend(["--package".to_string(), package.clone()]),
-                None => args.push("--workspace".to_string()),
-            }
-            args.push("--benches".to_string());
-            args.push("--".to_string());
-            if let Some(filter) = filter {
-                args.push(filter.clone());
-            }
-            if let Some(name) = save_baseline {
-                args.extend(["--save-baseline".to_string(), name.clone()]);
-            }
-            if let Some(name) = baseline {
-                args.extend(["--baseline".to_string(), name.clone()]);
-            }
-            run("cargo", args, root)
-        }
+        } => run_bench(
+            root,
+            filter.as_deref(),
+            package.as_deref(),
+            save_baseline.as_deref(),
+            baseline.as_deref(),
+        ),
         RustCmd::Semver { baseline } => run_semver(root, baseline.as_deref()),
         RustCmd::Publish { dry_run } => publish_workspace(root, *dry_run),
         RustCmd::Example { name, debug, args } => run_example(root, name, *debug, args),
@@ -148,6 +123,21 @@ pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
 
 pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
     cleaner.paths(&["target"])
+}
+
+fn run_test(root: &Path, packages: &[String], include_ignored: bool) -> Result<()> {
+    let mut args = vec!["test"];
+    if packages.is_empty() {
+        args.push("--workspace");
+    }
+    for package in packages {
+        args.extend(["--package", package.as_str()]);
+    }
+    args.extend(["--lib", "--bins", "--tests"]);
+    if include_ignored {
+        args.extend(["--", "--include-ignored"]);
+    }
+    run("cargo", args, root)
 }
 
 fn run_lint(root: &Path) -> Result<()> {
@@ -207,6 +197,32 @@ fn run_coverage(root: &Path, all: bool, open: bool) -> Result<()> {
         &["--ignore-filename-regex", COVERAGE_IGNORE]
     };
     coverage(root, &test_args, filter, open)
+}
+
+fn run_bench(
+    root: &Path,
+    filter: Option<&str>,
+    package: Option<&str>,
+    save_baseline: Option<&str>,
+    baseline: Option<&str>,
+) -> Result<()> {
+    let mut args = vec!["bench"];
+    match package {
+        Some(package) => args.extend(["--package", package]),
+        None => args.push("--workspace"),
+    }
+    args.push("--benches");
+    args.push("--");
+    if let Some(filter) = filter {
+        args.push(filter);
+    }
+    if let Some(name) = save_baseline {
+        args.extend(["--save-baseline", name]);
+    }
+    if let Some(name) = baseline {
+        args.extend(["--baseline", name]);
+    }
+    run("cargo", args, root)
 }
 
 fn run_semver(root: &Path, baseline: Option<&str>) -> Result<()> {

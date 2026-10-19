@@ -66,48 +66,56 @@ pub fn run_tool(root: &Path, cmd: ToolCmd) -> Result<()> {
             debug,
             mem_profile,
             args,
-        } => {
-            let features: &[&str] = if mem_profile { &["mem-profile"] } else { &[] };
-            let bin = build_bin(
-                root,
-                "autd3-rs-perftest",
-                "autd3-rs-perftest",
-                debug,
-                features,
-            )?;
-            run(&bin.to_string_lossy(), &args, root)
-        }
-        ToolCmd::FirmwareTest { debug, args } => {
-            let bin = build_bin(
-                root,
-                "autd3-rs-firmware-test",
-                "autd3-rs-firmware-test",
-                debug,
-                &[],
-            )?;
-            run(&bin.to_string_lossy(), &args, root)
-        }
-        ToolCmd::FirmwareOta { debug, args } => {
-            let bin = build_bin(
-                root,
-                "autd3-rs-firmware-ota",
-                "autd3-firmware-ota",
-                debug,
-                &[],
-            )?;
-            run(&bin.to_string_lossy(), &args, root)
-        }
-        ToolCmd::FpgaMemory { debug, args } => {
-            let bin = build_bin(
-                root,
-                "autd3-rs-fpga-memory",
-                "autd3-fpga-memory",
-                debug,
-                &[],
-            )?;
-            run(&bin.to_string_lossy(), &args, root)
-        }
+        } => perftest(root, debug, mem_profile, &args),
+        ToolCmd::FirmwareTest { debug, args } => run_bin(
+            root,
+            "autd3-rs-firmware-test",
+            "autd3-rs-firmware-test",
+            debug,
+            &[],
+            &args,
+        ),
+        ToolCmd::FirmwareOta { debug, args } => run_bin(
+            root,
+            "autd3-rs-firmware-ota",
+            "autd3-firmware-ota",
+            debug,
+            &[],
+            &args,
+        ),
+        ToolCmd::FpgaMemory { debug, args } => run_bin(
+            root,
+            "autd3-rs-fpga-memory",
+            "autd3-fpga-memory",
+            debug,
+            &[],
+            &args,
+        ),
     }
+}
+
+fn perftest(root: &Path, debug: bool, mem_profile: bool, args: &[String]) -> Result<()> {
+    let features: &[&str] = if mem_profile { &["mem-profile"] } else { &[] };
+    run_bin(
+        root,
+        "autd3-rs-perftest",
+        "autd3-rs-perftest",
+        debug,
+        features,
+        args,
+    )
+}
+
+fn run_bin(
+    root: &Path,
+    pkg: &str,
+    bin: &str,
+    debug: bool,
+    features: &[&str],
+    args: &[String],
+) -> Result<()> {
+    let bin = build_bin(root, pkg, bin, debug, features)?;
+    run(&bin.to_string_lossy(), args, root)
 }
 
 fn build_bin(root: &Path, pkg: &str, bin: &str, debug: bool, features: &[&str]) -> Result<PathBuf> {

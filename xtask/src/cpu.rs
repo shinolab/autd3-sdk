@@ -56,12 +56,14 @@ pub fn run_cpu(root: &Path, cmd: &CpuCmd) -> Result<()> {
         CpuCmd::GenParam => gen_param(root),
         CpuCmd::StampImage { bin } => stamp_image(bin),
         CpuCmd::Lint { loom } => cpu_lint(root, *loom),
-        CpuCmd::Format { fix } => {
-            cargo_fmt(root, &["-p", "autd3-cpu-fw"], *fix)?;
-            cargo_fmt(&board_dir(root), &[], *fix)
-        }
+        CpuCmd::Format { fix } => cpu_format(root, *fix),
         CpuCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
+}
+
+fn cpu_format(root: &Path, fix: bool) -> Result<()> {
+    cargo_fmt(root, &["-p", "autd3-cpu-fw"], fix)?;
+    cargo_fmt(&board_dir(root), &[], fix)
 }
 
 pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
@@ -345,4 +347,3 @@ fn cpu_lint(root: &Path, loom: bool) -> Result<()> {
     cargo_clippy(root, &["-p", "autd3-cpu-fw", "--all-targets"])?;
     cargo_clippy(&board_dir(root), &["--release"])
 }
-

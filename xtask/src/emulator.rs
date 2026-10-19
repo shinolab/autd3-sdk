@@ -56,29 +56,10 @@ pub enum EmulatorCmd {
 
 pub fn run_emulator(root: &Path, cmd: &EmulatorCmd) -> Result<()> {
     let dir = root.join("extras").join("autd3-rs-emulator");
-    let feature_args = |gpu: bool| -> Vec<&str> {
-        if gpu {
-            vec!["--features", "autd3-rs-emulator/gpu"]
-        } else {
-            vec![]
-        }
-    };
     match cmd {
-        EmulatorCmd::Build { gpu } => {
-            let mut args = vec!["build", "--workspace", "--all-targets"];
-            args.extend(feature_args(*gpu));
-            run("cargo", args, &dir)
-        }
-        EmulatorCmd::Test { gpu } => {
-            let mut args = vec!["test", "--workspace", "--all-targets"];
-            args.extend(feature_args(*gpu));
-            run("cargo", args, &dir)
-        }
-        EmulatorCmd::Lint { gpu } => {
-            let mut args = vec!["--workspace", "--all-targets"];
-            args.extend(feature_args(*gpu));
-            cargo_clippy(&dir, &args)
-        }
+        EmulatorCmd::Build { gpu } => build(&dir, *gpu),
+        EmulatorCmd::Test { gpu } => test(&dir, *gpu),
+        EmulatorCmd::Lint { gpu } => lint(&dir, *gpu),
         EmulatorCmd::Format { fix } => cargo_fmt(
             &dir,
             &[
@@ -95,30 +76,52 @@ pub fn run_emulator(root: &Path, cmd: &EmulatorCmd) -> Result<()> {
             debug,
             no_plot,
             args,
-        } => {
-            let mut cargo_args = vec![
-                "run",
-                "-p",
-                "autd3-rs-emulator-examples",
-                "--bin",
-                name.as_str(),
-            ];
-            if !*debug {
-                cargo_args.push("--release");
-            }
-            if *no_plot || !args.is_empty() {
-                cargo_args.push("--");
-                if *no_plot {
-                    cargo_args.push("--no-plot");
-                }
-                cargo_args.extend(args.iter().map(String::as_str));
-            }
-            run("cargo", cargo_args, &dir)
-        }
+        } => example(&dir, name, *debug, *no_plot, args),
         EmulatorCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
 }
 
 pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
     cleaner.path("extras/autd3-rs-emulator/target")
+}
+
+fn feature_args(gpu: bool) -> Vec<&'static str> {
+    if gpu {
+        vec!["--features", "autd3-rs-emulator/gpu"]
+    } else {
+        vec![]
+    }
+}
+
+fn build(dir: &Path, gpu: bool) -> Result<()> {
+    let mut args = vec!["build", "--workspace", "--all-targets"];
+    args.extend(feature_args(gpu));
+    run("cargo", args, dir)
+}
+
+fn test(dir: &Path, gpu: bool) -> Result<()> {
+    let mut args = vec!["test", "--workspace", "--all-targets"];
+    args.extend(feature_args(gpu));
+    run("cargo", args, dir)
+}
+
+fn lint(dir: &Path, gpu: bool) -> Result<()> {
+    let mut args = vec!["--workspace", "--all-targets"];
+    args.extend(feature_args(gpu));
+    cargo_clippy(dir, &args)
+}
+
+fn example(dir: &Path, name: &str, debug: bool, no_plot: bool, args: &[String]) -> Result<()> {
+    let mut cargo_args = vec!["run", "-p", "autd3-rs-emulator-examples", "--bin", name];
+    if !debug {
+        cargo_args.push("--release");
+    }
+    if no_plot || !args.is_empty() {
+        cargo_args.push("--");
+        if no_plot {
+            cargo_args.push("--no-plot");
+        }
+        cargo_args.extend(args.iter().map(String::as_str));
+    }
+    run("cargo", cargo_args, dir)
 }

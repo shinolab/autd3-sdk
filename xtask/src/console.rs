@@ -58,26 +58,22 @@ const BINARIES: &[&str] = &[
 pub fn run_console(root: &Path, cmd: &ConsoleCmd) -> Result<()> {
     let dir = root.join("console");
     match cmd {
-        ConsoleCmd::Build { debug } => {
-            let mut args = vec!["build"];
-            if !*debug {
-                args.push("--release");
-            }
-            run("cargo", args, &dir)
-        }
+        ConsoleCmd::Build { debug } => cargo_with_profile(&dir, "build", *debug),
         ConsoleCmd::Test => run("cargo", ["test"], &dir),
         ConsoleCmd::Lint => cargo_clippy(&dir, &["--all-targets"]),
         ConsoleCmd::Format { fix } => cargo_fmt(&dir, &["-p", "autd3-console"], *fix),
-        ConsoleCmd::Run { debug } => {
-            let mut args = vec!["run"];
-            if !*debug {
-                args.push("--release");
-            }
-            run("cargo", args, &dir)
-        }
+        ConsoleCmd::Run { debug } => cargo_with_profile(&dir, "run", *debug),
         ConsoleCmd::Stage { debug, license } => stage(root, &dir, *debug, *license),
         ConsoleCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
+}
+
+fn cargo_with_profile(dir: &Path, subcommand: &str, debug: bool) -> Result<()> {
+    let mut args = vec![subcommand];
+    if !debug {
+        args.push("--release");
+    }
+    run("cargo", args, dir)
 }
 
 pub fn clean(cleaner: &mut Cleaner) -> Result<()> {

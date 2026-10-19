@@ -97,60 +97,11 @@ pub enum CsCmd {
 pub fn run_cs(root: &Path, cmd: CsCmd) -> Result<()> {
     let dir = root.join("bindings").join("csharp");
     match cmd {
-        CsCmd::Build { debug } => {
-            let config = if debug { "Debug" } else { "Release" };
-            run("dotnet", ["build", SOLUTION, "-c", config], &dir)
-        }
+        CsCmd::Build { debug } => build(&dir, debug),
         CsCmd::Pack { native_dir, out } => pack(root, native_dir, out),
-        CsCmd::Test => {
-            let native = build_ffi(root)?;
-            if cfg!(target_os = "windows") {
-                run("dotnet", ["build", SOLUTION, "-c", "Debug"], &dir)?;
-                stage_native_libs(&native, &dir)?;
-                run(
-                    "dotnet",
-                    ["test", SOLUTION, "-c", "Debug", "--no-build"],
-                    &dir,
-                )
-            } else {
-                let (var, value) = native_lib_env(&native);
-                run_env(
-                    "dotnet",
-                    ["test", SOLUTION, "-c", "Debug"],
-                    &dir,
-                    &[(var, value.as_os_str())],
-                )
-            }
-        }
-        CsCmd::Format { fix } => {
-            let mut args = vec!["format", SOLUTION];
-            if !fix {
-                args.push("--verify-no-changes");
-            }
-            run("dotnet", args, &dir)
-        }
-        CsCmd::Example { name, debug, args } => {
-            let native = build_ffi(root)?;
-            let config = if debug { "Debug" } else { "Release" };
-            let project_dir = dir.join("examples").join(&name);
-            let project = project_dir.join(format!("{name}.csproj"));
-            if !project.is_file() {
-                bail!("example not found: {}", project.display());
-            }
-            run(
-                "dotnet",
-                ["build", &project.to_string_lossy(), "-c", config],
-                &dir,
-            )?;
-            let exe = find_example_exe(&project_dir, config, &name)?;
-            let (var, value) = native_lib_env(&native);
-            run_env(
-                &exe.to_string_lossy(),
-                &args,
-                &dir,
-                &[(var, value.as_os_str())],
-            )
-        }
+        CsCmd::Test => test(root, &dir),
+        CsCmd::Format { fix } => format(&dir, fix),
+        CsCmd::Example { name, debug, args } => example(root, &dir, &name, debug, &args),
         CsCmd::Clean(args) => crate::clean::scope(root, args, clean),
     }
 }
@@ -162,6 +113,63 @@ pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
         &["runtimes", "THIRD-PARTY-LICENSES.md"],
     )?;
     cleaner.nested("bindings/csharp", &["bin", "obj"])
+}
+
+fn build(dir: &Path, debug: bool) -> Result<()> {
+    let config = if debug { "Debug" } else { "Release" };
+    run("dotnet", ["build", SOLUTION, "-c", config], dir)
+}
+
+fn test(root: &Path, dir: &Path) -> Result<()> {
+    let native = build_ffi(root)?;
+    if cfg!(target_os = "windows") {
+        run("dotnet", ["build", SOLUTION, "-c", "Debug"], dir)?;
+        stage_native_libs(&native, dir)?;
+        run(
+            "dotnet",
+            ["test", SOLUTION, "-c", "Debug", "--no-build"],
+            dir,
+        )
+    } else {
+        let (var, value) = native_lib_env(&native);
+        run_env(
+            "dotnet",
+            ["test", SOLUTION, "-c", "Debug"],
+            dir,
+            &[(var, value.as_os_str())],
+        )
+    }
+}
+
+fn format(dir: &Path, fix: bool) -> Result<()> {
+    let mut args = vec!["format", SOLUTION];
+    if !fix {
+        args.push("--verify-no-changes");
+    }
+    run("dotnet", args, dir)
+}
+
+fn example(root: &Path, dir: &Path, name: &str, debug: bool, args: &[String]) -> Result<()> {
+    let native = build_ffi(root)?;
+    let config = if debug { "Debug" } else { "Release" };
+    let project_dir = dir.join("examples").join(name);
+    let project = project_dir.join(format!("{name}.csproj"));
+    if !project.is_file() {
+        bail!("example not found: {}", project.display());
+    }
+    run(
+        "dotnet",
+        ["build", &project.to_string_lossy(), "-c", config],
+        dir,
+    )?;
+    let exe = find_example_exe(&project_dir, config, name)?;
+    let (var, value) = native_lib_env(&native);
+    run_env(
+        &exe.to_string_lossy(),
+        args,
+        dir,
+        &[(var, value.as_os_str())],
+    )
 }
 
 fn pack(root: &Path, native_dir: Option<PathBuf>, out: Option<PathBuf>) -> Result<()> {

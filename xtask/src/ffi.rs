@@ -46,13 +46,7 @@ pub enum FfiCmd {
 pub fn run_ffi(root: &Path, cmd: &FfiCmd) -> Result<()> {
     let dir = root.join("bindings").join("ffi");
     match cmd {
-        FfiCmd::Build { debug } => {
-            let mut args = vec!["build", "--workspace"];
-            if !*debug {
-                args.push("--release");
-            }
-            run("cargo", args, &dir)
-        }
+        FfiCmd::Build { debug } => build(&dir, *debug),
         FfiCmd::Test => run("cargo", vec!["test", "--workspace"], &dir),
         FfiCmd::Coverage { open } => crate::rust::coverage(
             &dir,
@@ -65,6 +59,14 @@ pub fn run_ffi(root: &Path, cmd: &FfiCmd) -> Result<()> {
         FfiCmd::Drift => drift(root, &dir),
         FfiCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
+}
+
+fn build(dir: &Path, debug: bool) -> Result<()> {
+    let mut args = vec!["build", "--workspace"];
+    if !debug {
+        args.push("--release");
+    }
+    run("cargo", args, dir)
 }
 
 pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
@@ -127,7 +129,6 @@ fn drift(root: &Path, ffi: &Path) -> Result<()> {
         problems.len()
     )
 }
-
 
 fn ffi_crates(ffi: &Path) -> Result<Vec<PathBuf>> {
     let mut dirs = Vec::new();

@@ -42,19 +42,21 @@ pub fn run_holo_wgpu(root: &Path, cmd: &HoloWgpuCmd) -> Result<()> {
     match cmd {
         HoloWgpuCmd::Build => run("cargo", vec!["build", "--all-targets"], &dir),
         HoloWgpuCmd::Test => run("cargo", vec!["test", "--release"], &dir),
-        HoloWgpuCmd::Bench { filter } => {
-            let mut args = vec!["test", "--release"];
-            if let Some(filter) = filter {
-                args.push(filter);
-            }
-            args.extend(["--", "--ignored", "--nocapture", "--test-threads=1"]);
-            run("cargo", args, &dir)
-        }
+        HoloWgpuCmd::Bench { filter } => bench(&dir, filter.as_deref()),
         HoloWgpuCmd::Lint => cargo_clippy(&dir, &["--all-targets"]),
         HoloWgpuCmd::Format { fix } => cargo_fmt(&dir, &[], *fix),
         HoloWgpuCmd::Publish { dry_run } => publish_workspace(&dir, *dry_run),
         HoloWgpuCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
+}
+
+fn bench(dir: &Path, filter: Option<&str>) -> Result<()> {
+    let mut args = vec!["test", "--release"];
+    if let Some(filter) = filter {
+        args.push(filter);
+    }
+    args.extend(["--", "--ignored", "--nocapture", "--test-threads=1"]);
+    run("cargo", args, dir)
 }
 
 pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
