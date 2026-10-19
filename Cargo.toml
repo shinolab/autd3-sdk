@@ -33,7 +33,7 @@ edition = "2024"
 license = "MIT"
 authors = ["Shun Suzuki <suzuki@hapis.k.u-tokyo.ac.jp>"]
 repository = "https://github.com/shinolab/autd3-sdk"
-homepage = "https://shinolab.github.io/autd3-sdk/en/"
+homepage = "https://hapislab.org/en/airborne-ultrasound-tactile-display"
 
 [workspace.dependencies]
 approx = { version = "0.5.1", default-features = false, features = ["std"] }
@@ -66,9 +66,7 @@ clap = { version = "4.6.1", default-features = false, features = [
 futures-channel = { version = "0.3.34", default-features = false, features = [
     "alloc",
 ] }
-async-lock = { version = "3.4.2", default-features = false, features = [
-    "std",
-] }
+async-lock = { version = "3.4.2", default-features = false, features = ["std"] }
 pollster = { version = "1.0.1", default-features = false }
 humantime = { version = "2.3.0", default-features = false }
 if-addrs = { version = "0.15.0", default-features = false }
