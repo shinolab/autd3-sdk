@@ -160,6 +160,15 @@ fn run_lint(root: &Path) -> Result<()> {
             "--no-default-features",
             "--all-targets",
         ],
+    )?;
+    cargo_clippy(
+        root,
+        &[
+            "-p",
+            "autd3-rs-firmware-emulator",
+            "--no-default-features",
+            "--all-targets",
+        ],
     )
 }
 
