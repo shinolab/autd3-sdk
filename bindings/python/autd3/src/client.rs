@@ -4,7 +4,7 @@ use crate::config::ClientConfig;
 use crate::datagram::{Expand, Frame, command_of};
 use crate::future::{Completed, completed_into_py, future_into_py};
 use crate::ops::SysTime;
-use autd3_python_capsule::extract::geometry_to_py;
+use autd3_python_capsule::extract::{extract_duration, geometry_to_py};
 use autd3_python_capsule::{capsule_of, client_pyerr, client_pyerr_gil, geometry_from_capsule};
 use autd3_rs::Geometry;
 use autd3_rs::udp::StateChecker as CoreStateChecker;
@@ -378,6 +378,35 @@ impl Telemetry {
     }
 }
 
+#[pyclass(name = "ExecAt", module = "autd3", eq, hash, frozen, from_py_object)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ExecAt(pub(crate) autd3_rs::ExecAt);
+
+#[pymethods]
+impl ExecAt {
+    #[classattr]
+    #[pyo3(name = "Immediate")]
+    fn immediate() -> Self {
+        Self(autd3_rs::ExecAt::Immediate)
+    }
+
+    #[staticmethod]
+    #[pyo3(name = "Lead")]
+    fn lead(lead: &Bound<'_, PyAny>) -> PyResult<Self> {
+        Ok(Self(autd3_rs::ExecAt::Lead(extract_duration(lead)?)))
+    }
+
+    #[staticmethod]
+    #[pyo3(name = "At")]
+    fn at(sys_time: SysTime) -> Self {
+        Self(autd3_rs::ExecAt::At(sys_time.0))
+    }
+
+    fn __repr__(&self) -> String {
+        format!("ExecAt.{:?}", self.0)
+    }
+}
+
 #[pyclass(name = "Client", module = "autd3")]
 pub struct Client {
     inner: Arc<autd3_rs::Client>,
@@ -517,6 +546,25 @@ impl Client {
         future_into_py(py, async move {
             let frame = datagrams.frame(index).ok_or_else(frame_out_of_range)?;
             let fut = client.send_frame(frame).await.map_err(client_pyerr_gil)?;
+            Ok(ResponseFuture(Mutex::new(Some(fut))))
+        })
+    }
+
+    fn send_frame_at<'py>(
+        &self,
+        py: Python<'py>,
+        frame: PyRef<'_, Frame>,
+        exec_at: ExecAt,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let client = Arc::clone(&self.inner);
+        let datagrams = Arc::clone(&frame.datagrams);
+        let index = frame.index;
+        future_into_py(py, async move {
+            let frame = datagrams.frame(index).ok_or_else(frame_out_of_range)?;
+            let fut = client
+                .send_frame_at(frame, exec_at.0)
+                .await
+                .map_err(client_pyerr_gil)?;
             Ok(ResponseFuture(Mutex::new(Some(fut))))
         })
     }

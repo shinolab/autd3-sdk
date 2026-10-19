@@ -29,7 +29,7 @@ pub use autd3_rs_core::{
     Vector3, Velocity, offset, point,
 };
 pub use client::{
-    Client, ClientConfig, Controller, Driver, MAX_DEVICES, ResponseFuture, StreamFuture,
+    Client, ClientConfig, Controller, Driver, ExecAt, MAX_DEVICES, ResponseFuture, StreamFuture,
 };
 pub use datagram::{Datagram, Frame, FrameIter, Frames};
 pub use firmware_version::{FirmwareVersion, Version};

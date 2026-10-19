@@ -58,6 +58,7 @@ To continuously monitor the operating state of the devices, drive the `StateChec
 | `send(cmd)`               | ✓     | `Result<(), Error>`                   | Send a command, confirming the response frame by frame     |
 | `send_streaming(cmd)`     | ✓     | `Result<StreamFuture, Error>`         | Streaming version of `send`                                |
 | `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | Send one frame                                             |
+| `send_frame_at(frame, exec)` | ✓  | `Result<ResponseFuture, Error>`       | Send one frame at a given processing time (see [Overriding the processing time](#overriding-the-processing-time)) |
 | `state_checker()`         | —     | `StateChecker`                        | Get a `StateChecker`. See [State Monitoring](/autd3-sdk/en/guide/state-check/) for details. |
 | `silent_stop()`           | ✓     | `Result<(), Error>`                   | Set the Silencer, then stop all transducers                |
 | `close()`                 | ✓     | `Result<(), Error>`                   | Stop and close the connection                              |
@@ -171,6 +172,25 @@ Note the following:
 - A send completes `exec_lead` later
 - It must be at least 100 µs and shorter than 2^31 µs (about 35.8 minutes), and shorter than `lost_timeout` of [`UdpOption`](/autd3-sdk/en/api/basics/transport-option/)
 - Keep `ack_timeout` (10 ms by default) longer than `exec_lead` + the processing time
+
+### Overriding the processing time
+
+`exec_lead` stamps every frame by the same rule.
+To give only a particular frame a different processing time, send it with `send_frame_at` and an `ExecAt`.
+`send` / `send_streaming` / `send_frame` follow `exec_lead`.
+
+<CodeTabs rust={excerpt(methods, "exec_at")} python={excerpt(pyMethods, "exec_at")} csharp={excerpt(csMethods, "exec_at")} />
+
+| `ExecAt`         | Processing time                                                              |
+| ---------------- | ---------------------------------------------------------------------------- |
+| `Immediate`      | None (each device processes the frame as soon as it arrives, even with `exec_lead` set) |
+| `Lead(lead)`     | The current device time + `lead` (used instead of `exec_lead` for this frame only) |
+| `At(sys_time)`   | The device time `sys_time` (see [SysTime](/autd3-sdk/en/api/basics/sys-time/)) |
+
+- `Lead` takes the same range as `exec_lead` (at least 100 µs, shorter than 2^31 µs and than `lost_timeout`). Outside it the send fails with `InvalidPayload` and the frame is not sent
+- `At` fails if it is 2^31 µs or more ahead of the current time, 2^30 µs (about 17.9 minutes) or more behind it, or `lost_timeout` or more ahead. A past time within the range is accepted; the devices process the frame at once and count it in `exec_late`
+- Keep `ack_timeout` (10 ms by default) longer than the time from the send to the given time + the processing time
+- `Lead` / `At` fail with `DeviceTimeUnknown` while the device time is unknown (no reply carrying it has been received yet)
 
 ## each
 

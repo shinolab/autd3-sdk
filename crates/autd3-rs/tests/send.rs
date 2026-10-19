@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use autd3_rs::commands::{Distribution, ForceFan, Modulation, Nop, each};
 use autd3_rs::value::SamplingConfig;
-use autd3_rs::{ClientConfig, Error, Frames, PayloadError, Version};
+use autd3_rs::{ClientConfig, Error, ExecAt, Frames, PayloadError, Version};
 use autd3_rs_firmware_emulator::autd3_cpu_fw::{
     FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH,
 };
@@ -49,6 +49,79 @@ async fn the_emulator_processes_frames_with_exec_lead_without_waiting() {
     let telemetry = client.read_telemetry().await.unwrap();
     assert!(telemetry.iter().all(|t| t.exec_late == 0), "{telemetry:?}");
 
+    client.close().await.unwrap();
+}
+
+#[tokio::test]
+#[ignore = "depends on real time"]
+async fn a_frame_sent_with_an_overridden_execution_time_completes() {
+    let emulator = emulator(2);
+    let config = ClientConfig {
+        exec_lead: Some(Duration::from_millis(5)),
+        ..config()
+    };
+    let client = open_with(&emulator, &common::option(&emulator), config).await;
+    let on = Frames::encode(client.geometry(), ForceFan { value: true }).unwrap();
+    let off = Frames::encode(client.geometry(), ForceFan { value: false }).unwrap();
+
+    client
+        .send_frame_at(on.frame(0).unwrap(), ExecAt::Immediate)
+        .await
+        .unwrap()
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    assert_eq!(fans(&emulator), [true, true]);
+    client
+        .send_frame_at(
+            off.frame(0).unwrap(),
+            ExecAt::Lead(Duration::from_millis(1)),
+        )
+        .await
+        .unwrap()
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    assert_eq!(fans(&emulator), [false, false]);
+    let at = client.device_time_now().unwrap() + Duration::from_millis(1);
+    client
+        .send_frame_at(on.frame(0).unwrap(), ExecAt::At(at))
+        .await
+        .unwrap()
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+    assert_eq!(fans(&emulator), [true, true]);
+
+    client.close().await.unwrap();
+}
+
+#[tokio::test]
+#[ignore = "depends on real time"]
+async fn a_rejected_execution_time_sends_nothing() {
+    let (_emulator, client) = open(1).await;
+    let frames = Frames::encode(client.geometry(), Nop).unwrap();
+    let before = client.bus_stats().frames();
+
+    let error = client
+        .send_frame_at(
+            frames.frame(0).unwrap(),
+            ExecAt::Lead(Duration::from_micros(1)),
+        )
+        .await
+        .err()
+        .unwrap();
+
+    assert!(matches!(
+        error,
+        Error::InvalidPayload(PayloadError::ExecLeadTooShort { .. })
+    ));
+    assert_eq!(client.bus_stats().frames(), before);
+    client.send(Nop).await.unwrap();
+    assert_eq!(client.bus_stats().resets(), 1);
     client.close().await.unwrap();
 }
 

@@ -16,7 +16,7 @@ use crate::geometry::Geometry;
 use crate::link::Link;
 use crate::protocol::{Cmd, Seq};
 use crate::telemetry::Telemetry;
-use crate::udp::frame_buf::{self, FrameBuf};
+use crate::udp::frame_buf::FrameBuf;
 use crate::udp::{Sent, StateChecker, UdpError};
 use crate::value::{Intensity, SysTime};
 use autd3_rs_core::{BusStats, DeviceClock, DeviceState};
@@ -24,6 +24,7 @@ use autd3_rs_core::{BusStats, DeviceClock, DeviceState};
 use super::completion::{self, ResponseFuture, StreamFuture};
 use super::config::{ClientConfig, MAX_DEVICES};
 use super::driver::{Driver, Inflight, Settlement, Shared, sent_devices};
+use super::exec_at::{self, ExecAt};
 use super::pool::{Slot, SlotPool};
 use super::transport::{Dispatch, Transport};
 
@@ -184,7 +185,17 @@ impl Controller {
     }
 
     pub async fn send_frame(&self, frame: Frame<'_>) -> Result<ResponseFuture, Error> {
-        self.enqueue(frame.distribution(), frame.datagrams()).await
+        self.enqueue(frame.distribution(), frame.datagrams(), None)
+            .await
+    }
+
+    pub async fn send_frame_at(
+        &self,
+        frame: Frame<'_>,
+        exec: ExecAt,
+    ) -> Result<ResponseFuture, Error> {
+        self.enqueue(frame.distribution(), frame.datagrams(), Some(exec))
+            .await
     }
 
     fn closed_error(&self) -> Option<Error> {
@@ -203,6 +214,7 @@ impl Controller {
         &self,
         dist: Distribution,
         datagrams: &[Datagram],
+        exec: Option<ExecAt>,
     ) -> Result<ResponseFuture, Error> {
         let expected = match dist {
             Distribution::Broadcast => 1,
@@ -229,12 +241,13 @@ impl Controller {
             };
             self.restore(slot, restoration).await?;
         };
-        let exec_at = self.exec_at()?;
+        let exec_at = self.exec_at(exec)?;
         self.transmit(slot, dist, datagrams, exec_at)
     }
 
-    fn exec_at(&self) -> Result<u32, Error> {
-        frame_buf::schedule(self.config().exec_lead, || self.device_clock.now())
+    fn exec_at(&self, exec: Option<ExecAt>) -> Result<u32, Error> {
+        let exec = exec.unwrap_or_else(|| ExecAt::from_exec_lead(self.config().exec_lead));
+        exec_at::schedule(exec, self.lost_timeout, || self.device_clock.now())
     }
 
     fn next_restoration(&self) -> Result<Option<Restoration>, Error> {
@@ -490,7 +503,7 @@ impl Controller {
         parse: impl Fn(&[u8]) -> Option<T>,
     ) -> Result<Vec<T>, Error> {
         let response = self
-            .enqueue(Distribution::Broadcast, &[Datagram::no_payload(cmd)])
+            .enqueue(Distribution::Broadcast, &[Datagram::no_payload(cmd)], None)
             .await?
             .await?;
         response.check()?;

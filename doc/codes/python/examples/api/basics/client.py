@@ -1,6 +1,6 @@
 import asyncio
 
-from autd3 import Client, ClientConfig, Duration, Frames, UdpEmulator
+from autd3 import Client, ClientConfig, Duration, ExecAt, Frames, UdpEmulator
 from autd3.commands import Nop
 from autd3.geometry import Autd3, Geometry
 
@@ -11,6 +11,16 @@ async def main() -> None:
     client = await Client.open(geometry, emulator.option(), ClientConfig())
 
     frame = next(iter(Frames.encode(geometry, Nop())))
+
+    # ANCHOR: exec_at
+    at = client.device_time_now() + Duration.from_millis(5)
+    (await (await client.send_frame_at(frame, ExecAt.At(at)))).check()
+
+    lead = ExecAt.Lead(Duration.from_millis(1))
+    (await (await client.send_frame_at(frame, lead))).check()
+
+    (await (await client.send_frame_at(frame, ExecAt.Immediate))).check()
+    # ANCHOR_END: exec_at
 
     # ANCHOR: api
     num_devices = client.num_devices()

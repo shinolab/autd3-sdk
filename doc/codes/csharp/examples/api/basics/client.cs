@@ -15,6 +15,16 @@ internal static class Sample
         using var frames = Frames.Encode(layout, new Nop());
         var frame = frames[0];
 
+        // ANCHOR: exec_at
+        var at = client.DeviceTimeNow() + TimeSpan.FromMilliseconds(5);
+        (await await client.SendFrameAsync(frame, ExecAt.At(at))).Check();
+
+        var lead = ExecAt.Lead(TimeSpan.FromMilliseconds(1));
+        (await await client.SendFrameAsync(frame, lead)).Check();
+
+        (await await client.SendFrameAsync(frame, ExecAt.Immediate)).Check();
+        // ANCHOR_END: exec_at
+
         // ANCHOR: api
         var numDevices = client.NumDevices;
         var geometry = client.Geometry;

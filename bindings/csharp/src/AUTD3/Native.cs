@@ -284,6 +284,9 @@ namespace AUTD3
         internal static extern void autd3_client_send(ClientHandle client, FramesHandle frames, long frame, CompletionCallback cb, IntPtr userData);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void autd3_client_send_at(ClientHandle client, FramesHandle frames, long frame, ExecAtNative exec, CompletionCallback cb, IntPtr userData);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_client_send_streaming(ClientHandle client, IntPtr command, CompletionCallback cb, IntPtr userData);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]

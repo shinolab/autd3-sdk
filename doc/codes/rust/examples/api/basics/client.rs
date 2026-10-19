@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use autd3_rs::commands::Nop;
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::{Client, ClientConfig, Frames};
+use autd3_rs::{Client, ClientConfig, ExecAt, Frames};
 use autd3_rs::udp::UdpOption;
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
@@ -17,6 +17,16 @@ async fn main() -> Result<()> {
 
     let frames = Frames::encode(&geometry, Nop)?;
     let frame = frames.iter().next().unwrap();
+
+    // ANCHOR: exec_at
+    let at = client.device_time_now()? + Duration::from_millis(5);
+    client.send_frame_at(frame, ExecAt::At(at)).await?.await?.check()?;
+
+    let lead = ExecAt::Lead(Duration::from_millis(1));
+    client.send_frame_at(frame, lead).await?.await?.check()?;
+
+    client.send_frame_at(frame, ExecAt::Immediate).await?.await?.check()?;
+    // ANCHOR_END: exec_at
 
     // ANCHOR: api
     let num_devices = client.num_devices();
