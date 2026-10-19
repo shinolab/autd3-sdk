@@ -25,31 +25,29 @@ const LONG_RUNNING_TIMEOUT: Duration = Duration::from_secs(8);
 
 #[derive(Subcommand)]
 pub enum DocCmd {
-    /// Build the static site into `doc/dist/`
+    #[command(about = "Build the static site into `doc/dist/`")]
     Build {
-        /// Skip compiling the Rust samples
-        #[arg(long)]
+        #[arg(long, help = "Skip compiling the Rust samples")]
         no_samples: bool,
     },
-    /// Run the Astro dev server
+    #[command(about = "Run the Astro dev server")]
     Serve {
-        /// Open the site in a browser
-        #[arg(long)]
+        #[arg(long, help = "Open the site in a browser")]
         open: bool,
     },
-    /// Compile the Rust and C# samples and run the Python ones
+    #[command(about = "Compile the Rust and C# samples and run the Python ones")]
     Samples {
-        /// Only detect drift in the example list (no rewrite, no build)
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Only detect drift in the example list (no rewrite, no build)"
+        )]
         check: bool,
-        /// Only run the Python samples
-        #[arg(long)]
+        #[arg(long, help = "Only run the Python samples")]
         python: bool,
-        /// Only compile the C# samples
-        #[arg(long)]
+        #[arg(long, help = "Only compile the C# samples")]
         csharp: bool,
     },
-    /// Type-check the site without building it
+    #[command(about = "Type-check the site without building it")]
     Check,
     #[command(about = "Fail on high or critical vulnerabilities in the site's npm dependencies")]
     Audit,
@@ -58,17 +56,19 @@ pub enum DocCmd {
         #[arg(long, help = "Only check links inside the site (no network requests)")]
         offline: bool,
     },
-    /// Inline a version snapshot's code examples to drop its `@codes` dependency
+    #[command(about = "Inline a version snapshot's code examples to drop its `@codes` dependency")]
     FreezeVersion {
-        /// Target version slug (e.g. 0.1.x)
+        #[arg(help = "Target version slug (e.g. 0.1.x)")]
         slug: String,
-        /// Regenerate the snapshot from the live docs first, overwriting an already frozen version
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Regenerate the snapshot from the live docs first, overwriting an already frozen version"
+        )]
         force: bool,
     },
-    /// Drop a frozen version: undeclare it and delete its snapshot and config
+    #[command(about = "Drop a frozen version: undeclare it and delete its snapshot and config")]
     RemoveVersion {
-        /// Target version slug (e.g. 0.1.x)
+        #[arg(help = "Target version slug (e.g. 0.1.x)")]
         slug: String,
     },
     #[command(about = "Remove the documentation site build outputs")]

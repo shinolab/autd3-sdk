@@ -8,27 +8,29 @@ use crate::util::{cargo_clippy, cargo_fmt, publish_workspace, run};
 
 #[derive(Subcommand)]
 pub enum HoloWgpuCmd {
-    /// Build the wgpu holo backend
+    #[command(about = "Build the wgpu holo backend")]
     Build,
-    /// Run the wgpu holo backend tests (the GPU-dependent ones skip without an adapter)
+    #[command(
+        about = "Run the wgpu holo backend tests (the GPU-dependent ones skip without an adapter)"
+    )]
     Test,
-    /// Run the ignored measurement tests (needs a GPU and a quiet machine)
+    #[command(about = "Run the ignored measurement tests (needs a GPU and a quiet machine)")]
     Bench {
-        /// Only run tests whose name contains this string
+        #[arg(help = "Only run tests whose name contains this string")]
         filter: Option<String>,
     },
-    /// Clippy the wgpu holo backend
+    #[command(about = "Clippy the wgpu holo backend")]
     Lint,
-    /// Rustfmt the wgpu holo backend
+    #[command(about = "Rustfmt the wgpu holo backend")]
     Format {
-        /// Rewrite the files instead of only checking them
-        #[arg(long)]
+        #[arg(long, help = "Rewrite the files instead of only checking them")]
         fix: bool,
     },
-    /// Publish the wgpu holo backend to crates.io, skipping already-published versions
+    #[command(
+        about = "Publish the wgpu holo backend to crates.io, skipping already-published versions"
+    )]
     Publish {
-        /// Run every check without uploading
-        #[arg(long)]
+        #[arg(long, help = "Run every check without uploading")]
         dry_run: bool,
     },
     #[command(about = "Remove the wgpu holo backend build outputs")]

@@ -61,41 +61,40 @@ fn stage_web_assets(sim: &Path, public: &Path) -> Result<()> {
 
 #[derive(Subcommand)]
 pub enum SimulatorCmd {
-    /// Build the backend workspace and the browser frontend bundle
+    #[command(about = "Build the backend workspace and the browser frontend bundle")]
     Build {
-        /// Build the dev profile instead of release
-        #[arg(long)]
+        #[arg(long, help = "Build the dev profile instead of release")]
         debug: bool,
-        /// Generate the third-party license notices with cargo-about (slow; use it for release artifacts)
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Generate the third-party license notices with cargo-about (slow; use it for release artifacts)"
+        )]
         license: bool,
     },
-    /// Run the backend workspace tests
+    #[command(about = "Run the backend workspace tests")]
     Test,
-    /// Clippy the backend workspace and the (wasm) frontend
+    #[command(about = "Clippy the backend workspace and the (wasm) frontend")]
     Lint,
-    /// Rustfmt the backend workspace and the frontend
+    #[command(about = "Rustfmt the backend workspace and the frontend")]
     Format {
-        /// Rewrite the files instead of only checking them
-        #[arg(long)]
+        #[arg(long, help = "Rewrite the files instead of only checking them")]
         fix: bool,
     },
-    /// Build the frontend and run the backend serving it
+    #[command(about = "Build the frontend and run the backend serving it")]
     Run {
-        /// Build the dev profile instead of release
-        #[arg(long)]
+        #[arg(long, help = "Build the dev profile instead of release")]
         debug: bool,
-        /// Open the simulator in a browser
-        #[arg(long)]
+        #[arg(long, help = "Open the simulator in a browser")]
         open: bool,
-        /// Reuse the already built frontend bundle
-        #[arg(long)]
+        #[arg(long, help = "Reuse the already built frontend bundle")]
         skip_web_build: bool,
-        /// UDP port the emulated devices listen on (the control port is port + 1)
-        #[arg(long, default_value_t = 44336)]
+        #[arg(
+            long,
+            default_value_t = 44336,
+            help = "UDP port the emulated devices listen on (the control port is port + 1)"
+        )]
         port: u16,
-        /// Port the frontend is served on
-        #[arg(long, default_value_t = 8081)]
+        #[arg(long, default_value_t = 8081, help = "Port the frontend is served on")]
         http_port: u16,
     },
     #[command(about = "Fail on known vulnerabilities in the frontend's npm dependencies")]

@@ -8,48 +8,46 @@ use crate::util::{cargo_clippy, cargo_fmt, publish_workspace, run};
 
 #[derive(Subcommand)]
 pub enum EmulatorCmd {
-    /// Build the emulator workspace
+    #[command(about = "Build the emulator workspace")]
     Build {
-        /// Enable the GPU-accelerated field computation
-        #[arg(long)]
+        #[arg(long, help = "Enable the GPU-accelerated field computation")]
         gpu: bool,
     },
-    /// Run the emulator workspace tests
+    #[command(about = "Run the emulator workspace tests")]
     Test {
-        /// Enable the GPU-accelerated field computation
-        #[arg(long)]
+        #[arg(long, help = "Enable the GPU-accelerated field computation")]
         gpu: bool,
     },
-    /// Clippy the emulator workspace
+    #[command(about = "Clippy the emulator workspace")]
     Lint {
-        /// Enable the GPU-accelerated field computation
-        #[arg(long)]
+        #[arg(long, help = "Enable the GPU-accelerated field computation")]
         gpu: bool,
     },
-    /// Rustfmt the emulator workspace
+    #[command(about = "Rustfmt the emulator workspace")]
     Format {
-        /// Rewrite the files instead of only checking them
-        #[arg(long)]
+        #[arg(long, help = "Rewrite the files instead of only checking them")]
         fix: bool,
     },
-    /// Publish the emulator workspace to crates.io, skipping already-published versions
+    #[command(
+        about = "Publish the emulator workspace to crates.io, skipping already-published versions"
+    )]
     Publish {
-        /// Run every check without uploading
-        #[arg(long)]
+        #[arg(long, help = "Run every check without uploading")]
         dry_run: bool,
     },
-    /// Build and run an emulator example
+    #[command(about = "Build and run an emulator example")]
     Example {
-        /// Example binary name
+        #[arg(help = "Example binary name")]
         name: String,
-        /// Build the dev profile instead of release
-        #[arg(long)]
+        #[arg(long, help = "Build the dev profile instead of release")]
         debug: bool,
-        /// Do not plot the computed field
-        #[arg(long)]
+        #[arg(long, help = "Do not plot the computed field")]
         no_plot: bool,
-        /// Arguments forwarded to the example
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        #[arg(
+            trailing_var_arg = true,
+            allow_hyphen_values = true,
+            help = "Arguments forwarded to the example"
+        )]
         args: Vec<String>,
     },
     #[command(about = "Remove the emulator workspace build outputs")]

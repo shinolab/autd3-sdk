@@ -18,26 +18,23 @@ const OPTION_GETTER_MARKER: &str = "_option_get_";
 
 #[derive(Subcommand)]
 pub enum FfiCmd {
-    /// Build the C ABI cdylibs
+    #[command(about = "Build the C ABI cdylibs")]
     Build {
-        /// Build the dev profile instead of release
-        #[arg(long)]
+        #[arg(long, help = "Build the dev profile instead of release")]
         debug: bool,
     },
-    /// Test the FFI workspace
+    #[command(about = "Test the FFI workspace")]
     Test,
-    /// Measure FFI workspace test coverage with cargo-llvm-cov
+    #[command(about = "Measure FFI workspace test coverage with cargo-llvm-cov")]
     Coverage {
-        /// Open the HTML report in a browser
-        #[arg(long)]
+        #[arg(long, help = "Open the HTML report in a browser")]
         open: bool,
     },
-    /// Clippy the FFI workspace
+    #[command(about = "Clippy the FFI workspace")]
     Lint,
-    /// Rustfmt the FFI workspace
+    #[command(about = "Rustfmt the FFI workspace")]
     Format {
-        /// Rewrite the files instead of only checking them
-        #[arg(long)]
+        #[arg(long, help = "Rewrite the files instead of only checking them")]
         fix: bool,
     },
     #[command(about = "Compare the exported C ABI symbols with the C# DllImport declarations")]

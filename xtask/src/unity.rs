@@ -24,28 +24,32 @@ const DOC_FILES: &[&str] = &[
 
 #[derive(Subcommand)]
 pub enum UnityCmd {
-    /// Stage the C# sources and the host-RID native libs into the UPM packages
+    #[command(about = "Stage the C# sources and the host-RID native libs into the UPM packages")]
     Build {
-        /// Also write a `Packages/manifest.json` snippet for the staged packages
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Also write a `Packages/manifest.json` snippet for the staged packages"
+        )]
         manifest: bool,
     },
-    /// Pack the UPM packages into `bindings/unity/dist/` and verify the tarballs
+    #[command(about = "Pack the UPM packages into `bindings/unity/dist/` and verify the tarballs")]
     Pack {
-        /// Directory holding the per-RID native libraries; the host RID only if omitted
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Directory holding the per-RID native libraries; the host RID only if omitted"
+        )]
         native_dir: Option<PathBuf>,
-        /// Directory to write the `.tgz` files to
-        #[arg(short, long)]
+        #[arg(short, long, help = "Directory to write the `.tgz` files to")]
         out: Option<PathBuf>,
-        /// Generate the third-party license notices with cargo-about (slow; use it for release artifacts)
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Generate the third-party license notices with cargo-about (slow; use it for release artifacts)"
+        )]
         license: bool,
     },
-    /// Run the Unity Test Framework tests
+    #[command(about = "Run the Unity Test Framework tests")]
     Test {
-        /// Path to the Unity Editor executable
-        #[arg(long)]
+        #[arg(long, help = "Path to the Unity Editor executable")]
         unity_editor: Option<PathBuf>,
     },
     #[command(about = "Remove the staged UPM package contents and the packed tarballs")]

@@ -11,9 +11,9 @@ use crate::util::{
 
 #[derive(Subcommand)]
 pub enum RustCmd {
-    /// Build the `crates/` workspace
+    #[command(about = "Build the `crates/` workspace")]
     Build,
-    /// Run the `crates/` workspace tests
+    #[command(about = "Run the `crates/` workspace tests")]
     Test {
         #[arg(
             long,
@@ -27,58 +27,65 @@ pub enum RustCmd {
         )]
         include_ignored: bool,
     },
-    /// Measure `crates/` workspace test coverage with cargo-llvm-cov
+    #[command(about = "Measure `crates/` workspace test coverage with cargo-llvm-cov")]
     Coverage {
-        /// Include `tools/` and `examples/`, which carry no tests by convention
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Include `tools/` and `examples/`, which carry no tests by convention"
+        )]
         all: bool,
-        /// Open the HTML report in a browser
-        #[arg(long)]
+        #[arg(long, help = "Open the HTML report in a browser")]
         open: bool,
     },
-    /// Clippy the `crates/` workspace
+    #[command(about = "Clippy the `crates/` workspace")]
     Lint,
-    /// Rustfmt the `crates/` workspace
+    #[command(about = "Rustfmt the `crates/` workspace")]
     Format {
-        /// Rewrite the files instead of only checking them
-        #[arg(long)]
+        #[arg(long, help = "Rewrite the files instead of only checking them")]
         fix: bool,
     },
-    /// Run the `crates/` workspace criterion benchmarks
+    #[command(about = "Run the `crates/` workspace criterion benchmarks")]
     Bench {
-        /// Only run benchmarks whose id contains this string
+        #[arg(help = "Only run benchmarks whose id contains this string")]
         filter: Option<String>,
-        /// Only benchmark this package
-        #[arg(long, short)]
+        #[arg(long, short, help = "Only benchmark this package")]
         package: Option<String>,
-        /// Save the results under this criterion baseline name
-        #[arg(long)]
+        #[arg(long, help = "Save the results under this criterion baseline name")]
         save_baseline: Option<String>,
-        /// Compare the results against this saved criterion baseline
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Compare the results against this saved criterion baseline"
+        )]
         baseline: Option<String>,
     },
-    /// Check the `crates/` workspace API for SemVer violations with cargo-semver-checks
+    #[command(
+        about = "Check the `crates/` workspace API for SemVer violations with cargo-semver-checks"
+    )]
     Semver {
-        /// Released version to compare against (defaults to the latest one on crates.io)
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Released version to compare against (defaults to the latest one on crates.io)"
+        )]
         baseline: Option<String>,
     },
-    /// Publish the `crates/` workspace to crates.io, skipping already-published versions
+    #[command(
+        about = "Publish the `crates/` workspace to crates.io, skipping already-published versions"
+    )]
     Publish {
-        /// Run every check without uploading
-        #[arg(long)]
+        #[arg(long, help = "Run every check without uploading")]
         dry_run: bool,
     },
-    /// Build and run an example from `examples/`
+    #[command(about = "Build and run an example from `examples/`")]
     Example {
-        /// Example binary name (one binary per feature; see `examples/`)
+        #[arg(help = "Example binary name (one binary per feature; see `examples/`)")]
         name: String,
-        /// Build the dev profile instead of release
-        #[arg(long)]
+        #[arg(long, help = "Build the dev profile instead of release")]
         debug: bool,
-        /// Arguments forwarded to the example
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        #[arg(
+            trailing_var_arg = true,
+            allow_hyphen_values = true,
+            help = "Arguments forwarded to the example"
+        )]
         args: Vec<String>,
     },
     #[command(about = "Remove the `crates/` workspace build outputs")]

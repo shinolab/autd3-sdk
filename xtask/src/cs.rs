@@ -53,38 +53,41 @@ pub(crate) const RIDS: &[&str] = &["win-x64", "linux-x64", "osx-arm64"];
 
 #[derive(Subcommand)]
 pub enum CsCmd {
-    /// Build the C# solution
+    #[command(about = "Build the C# solution")]
     Build {
-        /// Build the Debug configuration instead of Release
-        #[arg(long)]
+        #[arg(long, help = "Build the Debug configuration instead of Release")]
         debug: bool,
     },
-    /// Pack the NuGet packages (native libs from `--native-dir`, host RID otherwise)
+    #[command(
+        about = "Pack the NuGet packages (native libs from `--native-dir`, host RID otherwise)"
+    )]
     Pack {
-        /// Directory holding the per-RID native libraries (defaults to `bindings/ffi/target/native`)
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Directory holding the per-RID native libraries (defaults to `bindings/ffi/target/native`)"
+        )]
         native_dir: Option<PathBuf>,
-        /// Directory to write the `.nupkg` files to
-        #[arg(short, long)]
+        #[arg(short, long, help = "Directory to write the `.nupkg` files to")]
         out: Option<PathBuf>,
     },
-    /// Build the FFI cdylibs and run the C# tests against them
+    #[command(about = "Build the FFI cdylibs and run the C# tests against them")]
     Test,
-    /// `dotnet format` the C# solution
+    #[command(about = "`dotnet format` the C# solution")]
     Format {
-        /// Rewrite the files instead of only checking them
-        #[arg(long)]
+        #[arg(long, help = "Rewrite the files instead of only checking them")]
         fix: bool,
     },
-    /// Build and run a C# example from `bindings/csharp/examples/`
+    #[command(about = "Build and run a C# example from `bindings/csharp/examples/`")]
     Example {
-        /// Example project name
+        #[arg(help = "Example project name")]
         name: String,
-        /// Build the Debug configuration instead of Release
-        #[arg(long)]
+        #[arg(long, help = "Build the Debug configuration instead of Release")]
         debug: bool,
-        /// Arguments forwarded to the example
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        #[arg(
+            trailing_var_arg = true,
+            allow_hyphen_values = true,
+            help = "Arguments forwarded to the example"
+        )]
         args: Vec<String>,
     },
     #[command(about = "Remove the C# binding build outputs")]

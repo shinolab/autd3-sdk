@@ -33,15 +33,16 @@ const PLACEHOLDER: &str = "# Third-party licenses\n\nThis notice was not generat
 
 #[derive(Subcommand)]
 pub enum LicenseCmd {
-    /// Generate the third-party license notices with cargo-about
+    #[command(about = "Generate the third-party license notices with cargo-about")]
     Generate {
-        /// Artifact to generate the notices for
-        #[arg(value_enum, default_value_t = GenTarget::All)]
+        #[arg(value_enum, default_value_t = GenTarget::All, help = "Artifact to generate the notices for")]
         target: GenTarget,
     },
-    /// Check the dependency licenses of every workspace with cargo-deny
+    #[command(about = "Check the dependency licenses of every workspace with cargo-deny")]
     Check,
-    /// Check every workspace for security advisories, duplicates and unknown sources
+    #[command(
+        about = "Check every workspace for security advisories, duplicates and unknown sources"
+    )]
     Audit,
 }
 

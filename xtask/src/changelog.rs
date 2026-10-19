@@ -9,14 +9,21 @@ use crate::util::{capture, capture_lenient};
 
 #[derive(Args)]
 pub struct ChangelogCmd {
-    /// Tag to write the release notes for (e.g. v1.2.3). Required with `--release-notes`
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Tag to write the release notes for (e.g. v1.2.3). Required with `--release-notes`"
+    )]
     tag: Option<String>,
-    /// Write the notes of a single release instead of the whole CHANGELOG.md
-    #[arg(long)]
+    #[arg(
+        long,
+        help = "Write the notes of a single release instead of the whole CHANGELOG.md"
+    )]
     release_notes: bool,
-    /// File to write to (CHANGELOG.md by default; stdout for `--release-notes`)
-    #[arg(short, long)]
+    #[arg(
+        short,
+        long,
+        help = "File to write to (CHANGELOG.md by default; stdout for `--release-notes`)"
+    )]
     output: Option<String>,
 }
 

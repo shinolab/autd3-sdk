@@ -12,35 +12,35 @@ use crate::util::{
 
 #[derive(Subcommand)]
 pub enum ConsoleCmd {
-    /// Build the console workspace
+    #[command(about = "Build the console workspace")]
     Build {
-        /// Build the dev profile instead of release
-        #[arg(long)]
+        #[arg(long, help = "Build the dev profile instead of release")]
         debug: bool,
     },
-    /// Test the console workspace
+    #[command(about = "Test the console workspace")]
     Test,
-    /// Clippy the console workspace
+    #[command(about = "Clippy the console workspace")]
     Lint,
-    /// Rustfmt the console workspace
+    #[command(about = "Rustfmt the console workspace")]
     Format {
-        /// Rewrite the files instead of only checking them
-        #[arg(long)]
+        #[arg(long, help = "Rewrite the files instead of only checking them")]
         fix: bool,
     },
-    /// Build and run the console GUI
+    #[command(about = "Build and run the console GUI")]
     Run {
-        /// Build the dev profile instead of release
-        #[arg(long)]
+        #[arg(long, help = "Build the dev profile instead of release")]
         debug: bool,
     },
-    /// Build every distributed binary into `console/target/distrib` (used by `dist`)
+    #[command(
+        about = "Build every distributed binary into `console/target/distrib` (used by `dist`)"
+    )]
     Stage {
-        /// Build the dev profile instead of release
-        #[arg(long)]
+        #[arg(long, help = "Build the dev profile instead of release")]
         debug: bool,
-        /// Generate the third-party license notices with cargo-about (slow; use it for release artifacts)
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Generate the third-party license notices with cargo-about (slow; use it for release artifacts)"
+        )]
         license: bool,
     },
     #[command(about = "Remove the console build outputs")]

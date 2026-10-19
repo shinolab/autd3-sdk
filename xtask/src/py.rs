@@ -21,24 +21,24 @@ const FREE_THREADED_UNAVAILABLE: &[&str] = &["polars"];
 
 #[derive(Subcommand)]
 pub enum PyCmd {
-    /// Build the wheels into `bindings/python/target/wheels`
+    #[command(about = "Build the wheels into `bindings/python/target/wheels`")]
     Build {
-        /// Build the dev profile instead of release
-        #[arg(long)]
+        #[arg(long, help = "Build the dev profile instead of release")]
         debug: bool,
         #[arg(
             long,
             help = "Build with this interpreter (a uv request such as `3.15t`) instead of the default one"
         )]
         python: Option<String>,
-        /// Generate the third-party license notices with cargo-about (slow; use it for release artifacts)
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Generate the third-party license notices with cargo-about (slow; use it for release artifacts)"
+        )]
         license: bool,
     },
-    /// Install the wheels into the local venv in editable mode
+    #[command(about = "Install the wheels into the local venv in editable mode")]
     Develop {
-        /// Build the release profile instead of dev
-        #[arg(long)]
+        #[arg(long, help = "Build the release profile instead of dev")]
         release: bool,
         #[arg(
             long,
@@ -46,15 +46,14 @@ pub enum PyCmd {
         )]
         python: Option<String>,
     },
-    /// Clippy the Python binding workspace
+    #[command(about = "Clippy the Python binding workspace")]
     Lint,
-    /// Rustfmt the Python binding workspace
+    #[command(about = "Rustfmt the Python binding workspace")]
     Format {
-        /// Rewrite the files instead of only checking them
-        #[arg(long)]
+        #[arg(long, help = "Rewrite the files instead of only checking them")]
         fix: bool,
     },
-    /// Install the wheels into the local venv and run pytest
+    #[command(about = "Install the wheels into the local venv and run pytest")]
     Test {
         #[arg(
             long,
@@ -62,15 +61,17 @@ pub enum PyCmd {
         )]
         python: Option<String>,
     },
-    /// Run a Python example from `bindings/python/examples/`
+    #[command(about = "Run a Python example from `bindings/python/examples/`")]
     Example {
-        /// Example script name (without `.py`)
+        #[arg(help = "Example script name (without `.py`)")]
         name: String,
-        /// Build the dev profile instead of release
-        #[arg(long)]
+        #[arg(long, help = "Build the dev profile instead of release")]
         debug: bool,
-        /// Arguments forwarded to the example
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        #[arg(
+            trailing_var_arg = true,
+            allow_hyphen_values = true,
+            help = "Arguments forwarded to the example"
+        )]
         args: Vec<String>,
     },
     #[command(about = "Remove the Python binding build outputs")]

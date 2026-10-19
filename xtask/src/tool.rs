@@ -7,34 +7,44 @@ use crate::util::{cargo_bin, cargo_build_args, run};
 
 #[derive(Subcommand)]
 pub enum ToolCmd {
-    /// Measure the communication performance
+    #[command(about = "Measure the communication performance")]
     Perftest {
-        /// Build the dev profile instead of release
-        #[arg(long)]
+        #[arg(long, help = "Build the dev profile instead of release")]
         debug: bool,
-        /// Enable the `mem-profile` feature (allocation size histogram)
-        #[arg(long)]
+        #[arg(
+            long,
+            help = "Enable the `mem-profile` feature (allocation size histogram)"
+        )]
         mem_profile: bool,
-        /// Arguments forwarded to the tool
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        #[arg(
+            trailing_var_arg = true,
+            allow_hyphen_values = true,
+            help = "Arguments forwarded to the tool"
+        )]
         args: Vec<String>,
     },
-    /// Run the interactive firmware acceptance tests against a real device
+    #[command(about = "Run the interactive firmware acceptance tests against a real device")]
     FirmwareTest {
-        /// Build the dev profile instead of release
-        #[arg(long)]
+        #[arg(long, help = "Build the dev profile instead of release")]
         debug: bool,
-        /// Arguments forwarded to the tool
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        #[arg(
+            trailing_var_arg = true,
+            allow_hyphen_values = true,
+            help = "Arguments forwarded to the tool"
+        )]
         args: Vec<String>,
     },
-    /// Update the CPU / FPGA firmware over UDP (no J-Link / Vivado) and reboot the devices
+    #[command(
+        about = "Update the CPU / FPGA firmware over UDP (no J-Link / Vivado) and reboot the devices"
+    )]
     FirmwareOta {
-        /// Build the dev profile instead of release
-        #[arg(long)]
+        #[arg(long, help = "Build the dev profile instead of release")]
         debug: bool,
-        /// Arguments forwarded to the tool (the flash image path or `--version X.Y.Z` first)
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        #[arg(
+            trailing_var_arg = true,
+            allow_hyphen_values = true,
+            help = "Arguments forwarded to the tool (the flash image path or `--version X.Y.Z` first)"
+        )]
         args: Vec<String>,
     },
     #[command(about = "Read / write raw FPGA bus addresses over UDP (diagnostics only)")]
