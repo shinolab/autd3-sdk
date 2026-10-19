@@ -8,7 +8,11 @@ module synchronizer (
     output var SYNC,
     output var SKIP_ONE_ASSERT,
     output var signed [13:0] SYNC_TIME_DIFF,
-    output var [7:0] SYNC_RESYNC_COUNT
+    output var [7:0] SYNC_RESYNC_COUNT,
+    input wire PS_ENABLE,
+    output var PS_FINE,
+    output var PS_EDGE,
+    output var signed [13:0] PS_EDGE_DIFF
 );
 
   localparam int CycleTicks = params::SyncCycleTicks;
@@ -20,6 +24,9 @@ module synchronizer (
   localparam int AdjustCntOffset = AdjustCntBase - AdjustCntRange / 2;
 
   localparam int DiffMax = 8191;
+
+  localparam int FineEnter = 1;
+  localparam int FineExit = 8;
 
   logic sync_in;
   logic sync_in_prev = 1'b0;
@@ -43,6 +50,9 @@ module synchronizer (
   logic skip_one_assert = 1'b0;
   logic [7:0] resync_count = '0;
   logic locked = 1'b0;
+  logic fine = 1'b0;
+  logic ps_edge = 1'b0;
+  logic signed [13:0] ps_edge_diff = '0;
 
   logic [31:0] xor_x = 32'd123456789;
   logic [31:0] xor_y = 32'd362436069;
@@ -57,12 +67,18 @@ module synchronizer (
   assign SKIP_ONE_ASSERT = skip_one_assert;
   assign SYNC_TIME_DIFF = sync_time_diff;
   assign SYNC_RESYNC_COUNT = resync_count;
+  assign PS_FINE = fine;
+  assign PS_EDGE = ps_edge;
+  assign PS_EDGE_DIFF = ps_edge_diff;
 
   logic signed [PhaseWidth:0] edge_diff;
   assign edge_diff = (phase >= PhaseWidth'(HalfCycleTicks)) ? $signed({1'b0, PhaseWidth'(CycleTicks) - phase}) : -$signed({1'b0, phase});
 
   logic edge_overflow;
   assign edge_overflow = (edge_diff > DiffMax) || (edge_diff < -DiffMax);
+
+  logic fine_next;
+  assign fine_next = PS_ENABLE && (fine ? ((edge_diff <= FineExit) && (edge_diff >= -FineExit)) : ((edge_diff <= FineEnter) && (edge_diff >= -FineEnter)));
 
   logic [1:0] step;
   always_comb begin
@@ -85,6 +101,8 @@ module synchronizer (
   end
 
   always_ff @(posedge CLK) begin
+    ps_edge <= 1'b0;
+    if (~PS_ENABLE) fine <= 1'b0;
     if (sync) begin
       skip_one_assert <= 1'b0;
       if (set & ~SYNC_SETTINGS.UPDATE) begin
@@ -98,10 +116,14 @@ module synchronizer (
         if (edge_overflow) begin
           phase <= PhaseWidth'(1);
           sync_time_diff <= '0;
+          fine <= 1'b0;
           if (locked && (resync_count != 8'hFF)) resync_count <= resync_count + 8'd1;
         end else begin
           phase <= phase_next;
-          sync_time_diff <= 14'(edge_diff);
+          sync_time_diff <= fine_next ? '0 : 14'(edge_diff);
+          fine <= fine_next;
+          ps_edge <= 1'b1;
+          ps_edge_diff <= 14'(edge_diff);
         end
       end
     end else begin

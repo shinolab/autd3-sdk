@@ -38,6 +38,7 @@ _SingleCommand: TypeAlias = (
     | PatternStm
     | ReleaseFailsafe
     | SetCpuConfig
+    | SetFpgaConfig
     | SetGpioOut
     | SetOutputMask
     | SetPhaseCorrection
@@ -790,6 +791,20 @@ class SetCpuConfig:
     def __new__(cls, config: CpuConfig = ...) -> SetCpuConfig: ...
     @property
     def config(self) -> CpuConfig: ...
+
+@final
+class FpgaConfig:
+    def __new__(cls, *, sync_phase_lock: bool = ...) -> FpgaConfig: ...
+    @property
+    def sync_phase_lock(self) -> bool: ...
+    def __eq__(self, other: object) -> bool: ...
+    def __hash__(self) -> int: ...
+
+@final
+class SetFpgaConfig:
+    def __new__(cls, config: FpgaConfig = ...) -> SetFpgaConfig: ...
+    @property
+    def config(self) -> FpgaConfig: ...
 
 @final
 class GpioOut:

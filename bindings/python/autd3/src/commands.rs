@@ -7,9 +7,10 @@ use autd3_rs::commands::Expansion;
 use autd3_rs::commands::{
     Clear as CoreClear, CpuConfig as CoreCpuConfig, EmulateGpioIn, FixedCompletionTime,
     FixedUpdateRate, ForceFan as CoreForceFan, FpgaBusWait as CoreFpgaBusWait,
-    GpioOut as CoreGpioOut, MaxFreqPpb, Nop as CoreNop, PWE_TABLE_SIZE, PathDelayFilterShift,
-    PtpConfig as CorePtpConfig, ReleaseFailsafe as CoreReleaseFailsafe,
-    SetCpuConfig as CoreSetCpuConfig, SetGpioOut, SetOutputMask, SetPhaseCorrection,
+    FpgaConfig as CoreFpgaConfig, GpioOut as CoreGpioOut, MaxFreqPpb, Nop as CoreNop,
+    PWE_TABLE_SIZE, PathDelayFilterShift, PtpConfig as CorePtpConfig,
+    ReleaseFailsafe as CoreReleaseFailsafe, SetCpuConfig as CoreSetCpuConfig,
+    SetFpgaConfig as CoreSetFpgaConfig, SetGpioOut, SetOutputMask, SetPhaseCorrection,
     SetPulseWidthTable as CoreSetPulseWidthTable, SetSilencer, SilencerConfig,
     Synchronize as CoreSynchronize,
 };
@@ -516,6 +517,61 @@ impl SetCpuConfigPy {
 }
 
 #[pyclass(
+    name = "FpgaConfig",
+    module = "autd3.commands",
+    eq,
+    hash,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+pub struct FpgaConfigPy(CoreFpgaConfig);
+
+impl core::hash::Hash for FpgaConfigPy {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        format!("{:?}", self.0).hash(state);
+    }
+}
+
+#[pymethods]
+impl FpgaConfigPy {
+    #[new]
+    #[pyo3(signature = (
+        *,
+        sync_phase_lock = CoreFpgaConfig::default().sync_phase_lock,
+    ))]
+    fn new(sync_phase_lock: bool) -> Self {
+        Self(CoreFpgaConfig { sync_phase_lock })
+    }
+
+    #[getter]
+    fn sync_phase_lock(&self) -> bool {
+        self.0.sync_phase_lock
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{:?}", self.0)
+    }
+}
+
+#[pyclass(name = "SetFpgaConfig", module = "autd3.commands", frozen)]
+pub struct SetFpgaConfigPy(pub(crate) Arc<CoreSetFpgaConfig>);
+
+#[pymethods]
+impl SetFpgaConfigPy {
+    #[new]
+    #[pyo3(signature = (config = FpgaConfigPy::default()))]
+    fn new(config: FpgaConfigPy) -> Self {
+        Self(Arc::new(CoreSetFpgaConfig::new(config.0)))
+    }
+
+    #[getter]
+    fn config(&self) -> FpgaConfigPy {
+        FpgaConfigPy(self.0.config)
+    }
+}
+
+#[pyclass(
     name = "GpioOut",
     module = "autd3.commands",
     eq,
@@ -813,6 +869,8 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PtpConfigPy>()?;
     m.add_class::<CpuConfigPy>()?;
     m.add_class::<SetCpuConfigPy>()?;
+    m.add_class::<FpgaConfigPy>()?;
+    m.add_class::<SetFpgaConfigPy>()?;
     m.add_class::<GpioOut>()?;
     m.add_class::<SetGpioOutPy>()?;
     m.add_class::<EmulateGpioInPy>()?;

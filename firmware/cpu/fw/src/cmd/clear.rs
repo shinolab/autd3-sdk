@@ -29,7 +29,7 @@ mod tests {
     };
     use crate::proto::{Cmd, Error};
     use crate::test_utils::builders::{
-        activate_mod_bank, config_mod, force_fan, set_cpu_config, set_silencer,
+        activate_mod_bank, config_mod, force_fan, fpga_config, set_cpu_config, set_silencer,
     };
     use crate::test_utils::mock::{Frame, Harness};
 
@@ -107,6 +107,26 @@ mod tests {
         h.deliver(&force_fan(0, 1));
         h.deliver(&Frame::new(1, Cmd::Clear));
         assert!(!h.ctl_flags().contains(CtlFlags::FORCE_FAN));
+    }
+
+    #[test]
+    fn clear_restores_the_default_fpga_config() {
+        let mut h = Harness::new();
+        h.deliver(&fpga_config(0, 0));
+        assert_eq!(h.port.sync_ps_ctl, Some(0));
+        h.deliver(&Frame::new(1, Cmd::Clear));
+        assert_eq!(h.status(), Error::None);
+        assert_eq!(h.port.sync_ps_ctl, Some(1));
+    }
+
+    #[test]
+    fn clear_leaves_the_fpga_config_alone_when_a_latch_times_out() {
+        let mut h = Harness::new();
+        h.deliver(&fpga_config(0, 0));
+        h.port.latch_stuck = true;
+        h.deliver(&Frame::new(1, Cmd::Clear));
+        assert_eq!(h.status(), Error::FpgaTimeout);
+        assert_eq!(h.port.sync_ps_ctl, Some(0));
     }
 
     fn trip_failsafe(h: &mut Harness) {

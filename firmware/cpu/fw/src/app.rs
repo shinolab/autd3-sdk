@@ -452,6 +452,7 @@ impl Cpu {
             Cmd::EmulateGpioIn => cmd::gpio_in::handle(port, payload),
             Cmd::SetGpioOut => cmd::gpio_out::handle(port, payload, max_polls),
             Cmd::ForceFan => cmd::force_fan::handle(port, payload),
+            Cmd::SetFpgaConfig => cmd::fpga_config::handle(port, payload),
             Cmd::ReleaseFailsafe => cmd::failsafe::release(port, &config),
             Cmd::UpdateBegin => self.update_begin(port, payload),
             Cmd::UpdateChunk => self.update_chunk(port, payload),

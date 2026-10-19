@@ -12,6 +12,7 @@ use crate::cmd::config_mod::ConfigModPayload;
 use crate::cmd::config_pattern::ConfigPatternPayload;
 use crate::cmd::cpu_config::{CpuConfig, SetCpuConfigPayload};
 use crate::cmd::force_fan::ForceFanPayload;
+use crate::cmd::fpga_config::SetFpgaConfigPayload;
 use crate::cmd::gpio_in::GpioInPayload;
 use crate::cmd::gpio_out::GpioOutPayload;
 use crate::cmd::output_mask::OutputMaskPayload;
@@ -281,6 +282,21 @@ pub(crate) fn set_silencer(
 pub(crate) fn force_fan(seq: u8, value: u8) -> Frame {
     let mut f = Frame::from_payload(seq, Cmd::ForceFan, &ForceFanPayload { value: false });
     f.set_payload_byte(offset_of!(ForceFanPayload, value), value);
+    f
+}
+
+pub(crate) fn fpga_config(seq: u8, sync_phase_lock: u8) -> Frame {
+    let mut f = Frame::from_payload(
+        seq,
+        Cmd::SetFpgaConfig,
+        &SetFpgaConfigPayload {
+            sync_phase_lock: false,
+        },
+    );
+    f.set_payload_byte(
+        offset_of!(SetFpgaConfigPayload, sync_phase_lock),
+        sync_phase_lock,
+    );
     f
 }
 

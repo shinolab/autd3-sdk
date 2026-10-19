@@ -271,6 +271,7 @@ fn nested_command_of(
         commands::ForceFan,
         commands::SetSilencerPy,
         commands::SetCpuConfigPy,
+        commands::SetFpgaConfigPy,
         commands::SetGpioOutPy,
         commands::EmulateGpioInPy,
         commands::SetOutputMaskPy,

@@ -18,12 +18,12 @@ use autd3_ffi_abi::{
 use autd3_rs::commands::{
     ActivateModulationBank, ActivatePatternBank, BoxedCommand, Clear, Command, ConfigFociStm,
     ConfigModulation, ConfigPattern, CpuConfig, EmulateGpioIn, Expansion, FixedCompletionTime,
-    FixedUpdateRate, FociStm as CoreFociStm, FociStmOption, ForceFan, FpgaBusWait, GpioOut,
-    MaxFreqPpb, Modulation, Nop, PWE_TABLE_SIZE, PathDelayFilterShift, Pattern, PatternIntensity,
-    PatternStm, PatternStmOption, PhaseDepth, ReleaseFailsafe, SetCpuConfig, SetGpioOut,
-    SetOutputMask, SetPhaseCorrection, SetPulseWidthTable, SetSilencer, StmConfig, StmIntensity,
-    Synchronize, WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer, WritePatternPhase,
-    circle, each, line,
+    FixedUpdateRate, FociStm as CoreFociStm, FociStmOption, ForceFan, FpgaBusWait, FpgaConfig,
+    GpioOut, MaxFreqPpb, Modulation, Nop, PWE_TABLE_SIZE, PathDelayFilterShift, Pattern,
+    PatternIntensity, PatternStm, PatternStmOption, PhaseDepth, ReleaseFailsafe, SetCpuConfig,
+    SetFpgaConfig, SetGpioOut, SetOutputMask, SetPhaseCorrection, SetPulseWidthTable, SetSilencer,
+    StmConfig, StmIntensity, Synchronize, WriteFociBuffer, WriteModulationBuffer,
+    WritePatternBuffer, WritePatternPhase, circle, each, line,
 };
 use autd3_rs::rt::Executor;
 use autd3_rs::udp::StateChecker;
@@ -777,6 +777,7 @@ pub enum Pending {
     Nop,
     ForceFan(bool),
     SetCpuConfig(Box<CpuConfig>),
+    SetFpgaConfig(FpgaConfig),
     SetSilencerCompletion {
         intensity: Duration,
         phase: Duration,
@@ -1385,6 +1386,30 @@ pub unsafe extern "C" fn autd3_op_set_cpu_config(config: *const CpuConfigHandle)
     into_handle(Pending::SetCpuConfig(Box::new(config.0)))
 }
 
+pub struct FpgaConfigHandle(pub(crate) FpgaConfig);
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_fpga_config_new() -> *mut FpgaConfigHandle {
+    into_handle(FpgaConfigHandle(FpgaConfig::default()))
+}
+
+autd3_ffi_abi::option_handle_field!(
+    FpgaConfigHandle,
+    [sync_phase_lock],
+    bool,
+    autd3_fpga_config_set_sync_phase_lock,
+    autd3_fpga_config_get_sync_phase_lock
+);
+autd3_ffi_abi::option_handle_lifecycle!(FpgaConfigHandle, autd3_fpga_config_free);
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_op_set_fpga_config(config: *const FpgaConfigHandle) -> *mut Pending {
+    let Some(config) = (unsafe { handle_ref(config) }) else {
+        return std::ptr::null_mut();
+    };
+    into_handle(Pending::SetFpgaConfig(config.0))
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn autd3_op_set_silencer_completion_time(
     intensity_ns: u64,
@@ -1784,6 +1809,7 @@ impl Pending {
             Pending::Nop => Nop.boxed(),
             Pending::ForceFan(value) => ForceFan { value: *value }.boxed(),
             Pending::SetCpuConfig(config) => SetCpuConfig::new(**config).boxed(),
+            Pending::SetFpgaConfig(config) => SetFpgaConfig::new(*config).boxed(),
             Pending::SetSilencerCompletion {
                 intensity,
                 phase,
@@ -3316,6 +3342,47 @@ mod tests {
         let config = unsafe { take_handle(handle) }.unwrap().0;
         assert_eq!(CpuConfig::default(), config);
         assert!(unsafe { autd3_op_set_cpu_config(std::ptr::null()) }.is_null());
+    }
+
+    #[test]
+    fn a_new_fpga_config_matches_the_rust_default() {
+        let handle = autd3_fpga_config_new();
+        let mut sync_phase_lock = false;
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_fpga_config_get_sync_phase_lock(handle, &raw mut sync_phase_lock)
+        });
+        assert_eq!(FpgaConfig::default().sync_phase_lock, sync_phase_lock);
+        let config = unsafe { take_handle(handle) }.unwrap();
+        assert_eq!(FpgaConfig::default(), config.0);
+        assert_eq!(SetFpgaConfig::default().config, config.0);
+    }
+
+    #[test]
+    fn fpga_config_setters_reach_their_fields() {
+        let handle = autd3_fpga_config_new();
+        unsafe {
+            assert_eq!(
+                AUTD3_OK,
+                autd3_fpga_config_set_sync_phase_lock(handle, false)
+            );
+            assert_eq!(
+                AUTD3_ERR_INVALID_ARGUMENT,
+                autd3_fpga_config_set_sync_phase_lock(std::ptr::null_mut(), false)
+            );
+        }
+        let op = unsafe { autd3_op_set_fpga_config(handle) };
+        assert!(matches!(
+            unsafe { take_handle(op) },
+            Some(Pending::SetFpgaConfig(config)) if config == FpgaConfig { sync_phase_lock: false }
+        ));
+        let config = unsafe { take_handle(handle) }.unwrap().0;
+        assert_eq!(
+            config,
+            FpgaConfig {
+                sync_phase_lock: false
+            }
+        );
+        assert!(unsafe { autd3_op_set_fpga_config(std::ptr::null()) }.is_null());
     }
 
     #[test]

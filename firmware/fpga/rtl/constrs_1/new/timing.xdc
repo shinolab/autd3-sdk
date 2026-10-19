@@ -44,3 +44,5 @@ set_false_path -to [get_ports {FLASH_CS_N FLASH_MOSI FLASH_WP_N FLASH_HOLD_N}]
 set_false_path -from [get_ports FLASH_MISO]
 set_max_delay -datapath_only -from [get_clocks cpu_bsc_75M] -to [get_clocks -of_objects [get_pins main/clk_wiz/clk_out1]] 10.000
 set_max_delay -datapath_only -from [get_clocks -of_objects [get_pins main/clk_wiz/clk_out1]] -to [get_clocks cpu_bsc_75M] 10.000
+set_max_delay -datapath_only -from [get_clocks -of_objects [get_pins main/clk_wiz/clk_out1]] -to [get_clocks -of_objects [get_pins main/clk_wiz/clk_out2]] 4.883
+set_max_delay -datapath_only -from [get_clocks -of_objects [get_pins main/clk_wiz/clk_out2]] -to [get_clocks -of_objects [get_pins main/clk_wiz/clk_out1]] 4.883

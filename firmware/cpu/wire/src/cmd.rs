@@ -7,6 +7,7 @@ crate::wire_enum_u8! {
         SetCpuConfig = 0x05,
         ReleaseFailsafe = 0x06,
         Reboot = 0x07,
+        SetFpgaConfig = 0x08,
         WriteFociBuffer = 0x10,
         ConfigPattern = 0x11,
         ActivatePatternBank = 0x12,

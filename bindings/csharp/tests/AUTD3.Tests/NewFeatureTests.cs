@@ -343,6 +343,18 @@ namespace AUTD3.Tests
         }
 
         [Fact]
+        public void SetFpgaConfigBuildsADatagram()
+        {
+            using var geometry = Fixture.SingleDevice();
+
+            using var defaultFrames = Frames.Encode(geometry, new SetFpgaConfig(new FpgaConfig()));
+            Assert.Equal(1, defaultFrames.Length);
+
+            using var frames = Frames.Encode(geometry, new SetFpgaConfig(new FpgaConfig { SyncPhaseLock = false }));
+            Assert.Equal(1, frames.Length);
+        }
+
+        [Fact]
         public void SetCpuConfigBuildsADatagram()
         {
             using var geometry = Fixture.SingleDevice();

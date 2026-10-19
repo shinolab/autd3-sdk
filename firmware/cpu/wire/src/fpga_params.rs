@@ -26,6 +26,7 @@ bitflags::bitflags! {
         const FLASH_OTA = 1 << 2;
         const STRICT_SILENCER_GUARD = 1 << 3;
         const CPU_WATCHDOG = 1 << 4;
+        const SYNC_PHASE_LOCK = 1 << 5;
         const EMULATOR = 1 << 7;
     }
 }

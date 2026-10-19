@@ -177,6 +177,7 @@ def test_rust_defaults_are_available_without_arguments() -> None:
     geometry = Geometry([Autd3()])
     for command in (
         autd3.commands.ForceFan(),
+        autd3.commands.SetFpgaConfig(),
         autd3.commands.SetGpioOut(),
         autd3.commands.EmulateGpioIn(),
     ):

@@ -1,0 +1,31 @@
+---
+title: SetFpgaConfig
+description: FPGA の設定値を変更する SetFpgaConfig
+sidebar:
+  order: 10.55
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/api/command/fpga-config.rs?raw";
+import pySample from "@codes/python/examples/api/command/fpga-config.py?raw";
+import fullSample from "@codes/rust/examples/api/command/fpga-config-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/fpga-config-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/fpga-config.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/fpga-config-example.cs?raw";
+
+`SetFpgaConfig` は, FPGA の設定を変更するコマンド.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+### FpgaConfig
+
+| フィールド        | 型     | 既定値 | 説明 |
+| ----------------- | ------ | ------ | ---- |
+| `sync_phase_lock` | `bool` | `true` | FPGA の動作クロックをデバイス間の同期パルスへ位相ロックする細調整. (既定で有効になっている.) |
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

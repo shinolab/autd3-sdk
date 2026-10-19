@@ -16,6 +16,7 @@ mod output_mask;
 mod phase_corr;
 mod pwe;
 mod set_cpu_config;
+mod set_fpga_config;
 mod silencer;
 mod telemetry;
 mod update_begin;
@@ -41,6 +42,7 @@ pub use output_mask::OutputMaskPayload;
 pub use phase_corr::PhaseCorrPayload;
 pub use pwe::PwePayload;
 pub use set_cpu_config::{CpuConfigOutOfRange, SetCpuConfigPayload};
+pub use set_fpga_config::SetFpgaConfigPayload;
 pub use silencer::{
     SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY, SILENCER_DEFAULT_COMPLETION_STEPS_PHASE,
     SILENCER_DEFAULT_UPDATE_RATE, SilencerPayload,

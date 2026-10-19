@@ -1,6 +1,7 @@
 use core::num::NonZeroU32;
 use core::time::Duration;
 
+use autd3_cpu_wire::config::FpgaConfig;
 use autd3_cpu_wire::cpu_params::PWE_DEFAULT_TABLE;
 
 use crate::fpga_params::{
@@ -11,9 +12,9 @@ use crate::fpga_params::{
     ADDR_PATTERN_REP0, ADDR_PATTERN_REQ_RD_BANK, ADDR_PATTERN_TRANSITION_MODE,
     ADDR_PATTERN_TRANSITION_VALUE_0, ADDR_SILENCER_COMPLETION_STEPS_INTENSITY,
     ADDR_SILENCER_COMPLETION_STEPS_PHASE, ADDR_SILENCER_FLAG, ADDR_SILENCER_SET_RESULT,
-    ADDR_SILENCER_UPDATE_RATE_INTENSITY, ADDR_SILENCER_UPDATE_RATE_PHASE, ADDR_WATCHDOG_KICK,
-    ADDR_WATCHDOG_RELEASE, ADDR_WATCHDOG_STATE, ADDR_WATCHDOG_TIMEOUT, BramSelect, CtlFlags,
-    FunctionBits, NUM_BANKS, NUM_TRANSDUCERS,
+    ADDR_SILENCER_UPDATE_RATE_INTENSITY, ADDR_SILENCER_UPDATE_RATE_PHASE, ADDR_SYNC_PS_CTL,
+    ADDR_WATCHDOG_KICK, ADDR_WATCHDOG_RELEASE, ADDR_WATCHDOG_STATE, ADDR_WATCHDOG_TIMEOUT,
+    BramSelect, CtlFlags, FunctionBits, NUM_BANKS, NUM_TRANSDUCERS,
 };
 pub use crate::fpga_params::{PWE_TABLE_SIZE, REP_INFINITE};
 use crate::port::Port;
@@ -86,6 +87,15 @@ pub fn set_watchdog_timeout<P: Port>(port: &mut P, timeout: Option<Duration>) {
 
 pub fn release_watchdog<P: Port>(port: &mut P) {
     write(port, BramSelect::Watchdog, ADDR_WATCHDOG_RELEASE, 0);
+}
+
+pub fn apply_fpga_config<P: Port>(port: &mut P, config: &FpgaConfig) {
+    write(
+        port,
+        BramSelect::SyncPs,
+        ADDR_SYNC_PS_CTL,
+        u16::from(config.sync_phase_lock),
+    );
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -346,6 +356,7 @@ pub fn init<P: Port>(port: &mut P, max_polls: NonZeroU32) -> Result<(), Error> {
         write_ctl(port, ADDR_CTL_FLAG, 0);
     }
     release_watchdog(port);
+    apply_fpga_config(port, &FpgaConfig::default());
     Ok(())
 }
 

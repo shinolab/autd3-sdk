@@ -835,6 +835,40 @@ def test_set_cpu_config_builds() -> None:
         autd3.Frames.encode(geo, commands)
 
 
+def test_fpga_config_defaults() -> None:
+    config = autd3.commands.FpgaConfig()
+    assert config == autd3.commands.FpgaConfig(sync_phase_lock=True)
+    assert config.sync_phase_lock is True
+    assert autd3.commands.SetFpgaConfig().config == config
+
+
+def test_fpga_config_fields() -> None:
+    config = autd3.commands.FpgaConfig(sync_phase_lock=False)
+    assert config != autd3.commands.FpgaConfig()
+    assert config.sync_phase_lock is False
+    assert autd3.commands.SetFpgaConfig(config).config == config
+    assert autd3.commands.SetFpgaConfig(config=config).config.sync_phase_lock is False
+
+
+def test_fpga_config_rejects_invalid_arguments() -> None:
+    with pytest.raises(TypeError):
+        loose(autd3.commands.FpgaConfig)(False)
+    with pytest.raises(TypeError):
+        autd3.commands.FpgaConfig(sync_phase_lock=loose(None))
+    with pytest.raises(TypeError):
+        autd3.commands.SetFpgaConfig(loose(None))
+    with pytest.raises(TypeError):
+        autd3.commands.SetFpgaConfig(loose(autd3.commands.CpuConfig()))
+
+
+def test_set_fpga_config_builds() -> None:
+    geo = geometry()
+    commands: list[autd3.commands.Command] = []
+    commands.append(autd3.commands.SetFpgaConfig())
+    commands.append(autd3.commands.SetFpgaConfig(autd3.commands.FpgaConfig(sync_phase_lock=False)))
+    assert len(autd3.Frames.encode(geo, commands)) == 2
+
+
 def test_pulse_width_table_and_pulse_width() -> None:
     geo = geometry()
     commands: list[autd3.commands.Command] = []

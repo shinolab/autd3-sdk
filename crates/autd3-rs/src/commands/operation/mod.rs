@@ -6,6 +6,7 @@ mod control;
 mod emulate_gpio_in;
 mod force_fan;
 mod set_cpu_config;
+mod set_fpga_config;
 mod set_gpio_out;
 mod set_output_mask;
 mod set_phase_correction;
@@ -28,6 +29,7 @@ pub use force_fan::ForceFan;
 pub use set_cpu_config::{
     CpuConfig, FpgaBusWait, MaxFreqPpb, PathDelayFilterShift, PtpConfig, SetCpuConfig,
 };
+pub use set_fpga_config::{FpgaConfig, SetFpgaConfig};
 pub use set_gpio_out::{GpioOut, SetGpioOut};
 pub use set_output_mask::SetOutputMask;
 pub use set_phase_correction::SetPhaseCorrection;
