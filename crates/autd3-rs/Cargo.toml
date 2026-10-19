@@ -8,8 +8,8 @@ repository.workspace = true
 homepage.workspace = true
 description = "Core async client library for the AUTD3 SDK."
 readme = "README.md"
-keywords = ["autd3", "haptics"]
-categories = ["science"]
+keywords.workspace = true
+categories.workspace = true
 
 [package.metadata.docs.rs]
 all-features = true

@@ -8,8 +8,8 @@ repository.workspace = true
 homepage.workspace = true
 description = "Software emulator of the AUTD3 device firmware (the real CPU firmware sources + a Rust FPGA emulator) for running tests without hardware."
 readme = "README.md"
-keywords = ["autd3", "haptics"]
-categories = ["science"]
+keywords.workspace = true
+categories.workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
