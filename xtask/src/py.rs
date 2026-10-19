@@ -5,7 +5,7 @@ use anyhow::{Result, bail};
 use clap::Subcommand;
 
 use crate::clean::{CleanArgs, Cleaner};
-use crate::util::{cargo_clippy, cargo_fmt_packages, on_path, run, run_env};
+use crate::util::{capture, cargo_clippy, cargo_fmt_packages, on_path, run, run_cargo, run_env};
 
 pub(crate) const WHEELS: &[&str] = &[
     "autd3-core",
@@ -16,6 +16,8 @@ pub(crate) const WHEELS: &[&str] = &[
     "autd3-emulator",
 ];
 const NATIVE_LIB_WHEELS: &[&str] = &[];
+const FREE_THREADED_UNMET_DEPS: &[&str] = &["autd3-emulator"];
+const FREE_THREADED_UNAVAILABLE: &[&str] = &["polars"];
 
 #[derive(Subcommand)]
 pub enum PyCmd {
@@ -24,12 +26,22 @@ pub enum PyCmd {
         /// Build the dev profile instead of release
         #[arg(long)]
         debug: bool,
+        #[arg(
+            long,
+            help = "Build with this interpreter (a uv request such as `3.15t`) instead of the default one"
+        )]
+        python: Option<String>,
     },
     /// Install the wheels into the local venv in editable mode
     Develop {
         /// Build the release profile instead of dev
         #[arg(long)]
         release: bool,
+        #[arg(
+            long,
+            help = "Use `.venv-<python>` created with this interpreter (a uv request such as `3.15t`)"
+        )]
+        python: Option<String>,
     },
     /// Clippy the Python binding workspace
     Lint,
@@ -40,7 +52,13 @@ pub enum PyCmd {
         fix: bool,
     },
     /// Install the wheels into the local venv and run pytest
-    Test,
+    Test {
+        #[arg(
+            long,
+            help = "Use `.venv-<python>` created with this interpreter (a uv request such as `3.15t`)"
+        )]
+        python: Option<String>,
+    },
     /// Run a Python example from `bindings/python/examples/`
     Example {
         /// Example script name (without `.py`)
@@ -59,9 +77,14 @@ pub enum PyCmd {
 pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
     let dir = root.join("bindings").join("python");
     match cmd {
-        PyCmd::Build { debug } => {
+        PyCmd::Build { debug, python } => {
             crate::license::generate_python(root)?;
             let out = dir.join("target").join("wheels");
+            let interpreter = python
+                .as_deref()
+                .map(|spec| venv_for(&dir, Some(spec)).map(|venv| venv_python(&venv)))
+                .transpose()?
+                .map(|python| python.to_string_lossy().into_owned());
             for wheel in WHEELS {
                 drop_stale_native_cdylib(&dir, wheel, !debug);
                 drop_stale_extension_modules(&dir, wheel);
@@ -72,6 +95,10 @@ pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
                 if !debug {
                     args.push("--release");
                 }
+                if let Some(interpreter) = &interpreter {
+                    args.push("-i");
+                    args.push(interpreter);
+                }
                 if NATIVE_LIB_WHEELS.contains(wheel) {
                     args.push("--auditwheel");
                     args.push("warn");
@@ -80,8 +107,8 @@ pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
             }
             Ok(())
         }
-        PyCmd::Develop { release } => {
-            let venv = ensure_venv(&dir)?;
+        PyCmd::Develop { release, python } => {
+            let venv = venv_for(&dir, python.as_deref())?;
             develop(&dir, &venv, WHEELS, release)
         }
         PyCmd::Lint => {
@@ -93,12 +120,18 @@ pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
             run(&python.to_string_lossy(), ["-m", "mypy"], &dir)
         }
         PyCmd::Format { fix } => cargo_fmt_packages(&dir, fix),
-        PyCmd::Test => {
-            let venv = ensure_venv(&dir)?;
+        PyCmd::Test { python } => {
+            run_cargo(["test", "-p", "autd3-python-cell"], &dir)?;
+            let venv = venv_for(&dir, python.as_deref())?;
             develop(&dir, &venv, WHEELS, false)?;
+            let free_threaded = is_free_threaded(&dir, &venv)?;
             let python = venv_python(&venv);
             if dir.join("tests").is_dir() {
-                pip_install(&dir, &venv, &["pytest", "numpy", "scipy", "polars"])?;
+                let packages: Vec<&str> = ["pytest", "numpy", "scipy", "polars"]
+                    .into_iter()
+                    .filter(|p| !free_threaded || !FREE_THREADED_UNAVAILABLE.contains(p))
+                    .collect();
+                pip_install(&dir, &venv, &packages)?;
                 run(&python.to_string_lossy(), ["-m", "pytest", "tests"], &dir)
             } else {
                 let imports = WHEELS
@@ -146,7 +179,19 @@ pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
         }
     }
     cleaner.nested("bindings/python", &["__pycache__"])?;
-    cleaner.deps("bindings/python/.venv")
+    cleaner.deps("bindings/python/.venv")?;
+    let mut extra_venvs: Vec<String> = std::fs::read_dir(&python)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .filter(|name| name.starts_with(".venv-"))
+        .collect();
+    extra_venvs.sort();
+    for name in extra_venvs {
+        cleaner.deps(&format!("bindings/python/{name}"))?;
+    }
+    Ok(())
 }
 
 fn stale_extension_modules(dir: &Path, wheel: &str) -> Vec<PathBuf> {
@@ -203,9 +248,14 @@ fn drop_stale_extension_modules(dir: &Path, wheel: &str) {
 }
 
 pub(crate) fn develop(dir: &Path, venv: &Path, wheels: &[&str], release: bool) -> Result<()> {
+    let free_threaded = is_free_threaded(dir, venv)?;
     for wheel in wheels {
         drop_stale_native_cdylib(dir, wheel, release);
         drop_stale_extension_modules(dir, wheel);
+        if free_threaded && FREE_THREADED_UNMET_DEPS.contains(wheel) {
+            install_without_deps(dir, venv, wheel, release)?;
+            continue;
+        }
         let manifest = manifest(wheel);
         let mut args = vec!["develop", "-m", &manifest];
         if release {
@@ -214,6 +264,52 @@ pub(crate) fn develop(dir: &Path, venv: &Path, wheels: &[&str], release: bool) -
         maturin(dir, Some(venv), &args)?;
     }
     Ok(())
+}
+
+fn install_without_deps(dir: &Path, venv: &Path, wheel: &str, release: bool) -> Result<()> {
+    let out = dir.join("target").join("no-deps-wheels").join(wheel);
+    if out.exists() {
+        std::fs::remove_dir_all(&out)?;
+    }
+    let manifest = manifest(wheel);
+    let python = venv_python(venv).to_string_lossy().into_owned();
+    let out_arg = out.to_string_lossy().into_owned();
+    let mut args = vec!["build", "-m", &manifest, "-i", &python, "-o", &out_arg];
+    if release {
+        args.push("--release");
+    }
+    maturin(dir, None, &args)?;
+    let built = std::fs::read_dir(&out)?
+        .flatten()
+        .map(|entry| entry.path())
+        .find(|path| path.extension().is_some_and(|ext| ext == "whl"))
+        .ok_or_else(|| anyhow::anyhow!("maturin produced no wheel in {}", out.display()))?;
+    ensure_uv()?;
+    run_env(
+        "uv",
+        [
+            OsStr::new("pip"),
+            OsStr::new("install"),
+            OsStr::new("--no-deps"),
+            OsStr::new("--reinstall"),
+            built.as_os_str(),
+        ],
+        dir,
+        &[("VIRTUAL_ENV", venv.as_os_str())],
+    )
+}
+
+fn is_free_threaded(dir: &Path, venv: &Path) -> Result<bool> {
+    let python = venv_python(venv);
+    let flag = capture(
+        &python.to_string_lossy(),
+        &[
+            "-c",
+            "import sysconfig; print(sysconfig.get_config_var('Py_GIL_DISABLED') or 0)",
+        ],
+        dir,
+    )?;
+    Ok(flag == "1")
 }
 
 fn ensure_uv() -> Result<()> {
@@ -234,10 +330,29 @@ pub(crate) fn pip_install(dir: &Path, venv: &Path, packages: &[&str]) -> Result<
 }
 
 pub(crate) fn ensure_venv(dir: &Path) -> Result<PathBuf> {
+    venv_for(dir, None)
+}
+
+fn venv_for(dir: &Path, python: Option<&str>) -> Result<PathBuf> {
     ensure_uv()?;
-    let venv = dir.join(".venv");
+    if let Some(spec) = python
+        && !spec
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | '+'))
+    {
+        bail!("`--python` takes a uv version request such as `3.15t`, not a path: {spec}");
+    }
+    let venv = match python {
+        Some(spec) => dir.join(format!(".venv-{spec}")),
+        None => dir.join(".venv"),
+    };
     if !venv.join("pyvenv.cfg").is_file() {
-        run("uv", ["venv", &venv.to_string_lossy()], dir)?;
+        let path = venv.to_string_lossy();
+        let mut args = vec!["venv", &*path];
+        if let Some(spec) = python {
+            args.extend(["--python", spec]);
+        }
+        run("uv", args, dir)?;
     }
     Ok(venv)
 }

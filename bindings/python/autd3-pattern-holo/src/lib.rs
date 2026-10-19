@@ -586,8 +586,8 @@ where
 {
     let phase_capsule = capsule_of(phases)?;
     let intensity_capsule = capsule_of(intensities)?;
-    let phases = phases_from_capsule_mut(&phase_capsule)?;
-    let intensities = intensities_from_capsule_mut(&intensity_capsule)?;
+    let mut phases = phases_from_capsule_mut(&phase_capsule)?;
+    let mut intensities = intensities_from_capsule_mut(&intensity_capsule)?;
     f(phases.as_mut_slice(), intensities.as_mut_slice())
 }
 
@@ -871,12 +871,16 @@ fn greedy(
     } else {
         None
     };
-    let intensities = match &intensity_capsule {
-        Some(capsule) => PatternIntensity::PerDevice(intensities_from_capsule(capsule)?),
+    let intensity_guard = intensity_capsule
+        .as_ref()
+        .map(intensities_from_capsule)
+        .transpose()?;
+    let intensities = match &intensity_guard {
+        Some(guard) => PatternIntensity::PerDevice(guard),
         None => PatternIntensity::Uniform(Intensity(extract_u8(intensities)?)),
     };
     let dst_capsule = capsule_of(dst)?;
-    let dst = phases_from_capsule_mut(&dst_capsule)?;
+    let mut dst = phases_from_capsule_mut(&dst_capsule)?;
     autd3_rs_pattern_holo::greedy(
         geometry,
         &foci,
@@ -888,7 +892,7 @@ fn greedy(
     .map_err(holo_err)
 }
 
-#[pymodule]
+#[pymodule(gil_used = false)]
 fn autd3_pattern_holo(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Amplitude>()?;
     m.add_class::<AmplitudeUnit>()?;

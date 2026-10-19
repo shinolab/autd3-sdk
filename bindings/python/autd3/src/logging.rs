@@ -4,6 +4,7 @@ use autd3_rs::rt::{
     LogWriter as CoreLogWriter, TracingGuard as CoreTracingGuard, TracingOption, try_init_tracing,
 };
 use pyo3::prelude::*;
+use pyo3::sync::MutexExt;
 
 #[pyclass(name = "LogWriter", module = "autd3", eq, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -83,7 +84,9 @@ pub(crate) fn init_tracing(
     default_filter: String,
     writer: LogWriter,
 ) -> PyResult<TracingGuard> {
-    let mut state = STATE.lock().unwrap_or_else(PoisonError::into_inner);
+    let mut state = STATE
+        .lock_py_attached(py)
+        .unwrap_or_else(PoisonError::into_inner);
     if state.initialized {
         drop(state);
         return Err(autd3_python_capsule::to_pyerr(

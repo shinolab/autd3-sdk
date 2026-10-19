@@ -408,7 +408,7 @@ fn samples_per_period(divider: u16, freq: &Bound<'_, PyAny>) -> PyResult<Option<
     }))
 }
 
-#[pymodule]
+#[pymodule(gil_used = false)]
 fn autd3_modulation(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<SineOption>()?;
     m.add_class::<SquareOption>()?;

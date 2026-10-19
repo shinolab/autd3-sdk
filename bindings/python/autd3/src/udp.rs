@@ -7,6 +7,7 @@ use autd3_rs::{Interface as CoreInterface, Link, ServerLink as CoreServerLink};
 use autd3_rs_firmware_emulator::udp::UdpEmulator as CoreEmulator;
 use pyo3::exceptions::{PyIndexError, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::sync::MutexExt;
 use std::sync::{Mutex, PoisonError};
 
 pub(crate) fn none_or_duration(obj: &Bound<'_, PyAny>) -> PyResult<Option<Duration>> {
@@ -270,9 +271,9 @@ pub(crate) fn shutdown_emulators() {
 pub struct UdpEmulator(std::sync::Arc<Mutex<Option<CoreEmulator>>>);
 
 impl UdpEmulator {
-    fn with<R>(&self, f: impl FnOnce(&CoreEmulator) -> R) -> PyResult<R> {
+    fn with<R>(&self, py: Python<'_>, f: impl FnOnce(&CoreEmulator) -> R) -> PyResult<R> {
         self.0
-            .lock()
+            .lock_py_attached(py)
             .unwrap_or_else(PoisonError::into_inner)
             .as_ref()
             .map(f)
@@ -283,38 +284,40 @@ impl UdpEmulator {
 #[pymethods]
 impl UdpEmulator {
     #[new]
-    fn new(num_devices: usize) -> PyResult<Self> {
+    fn new(py: Python<'_>, num_devices: usize) -> PyResult<Self> {
         let emulator = CoreEmulator::spawn(num_devices).map_err(|e| {
-            Python::attach(|py| {
-                autd3_python_capsule::to_pyerr_with_code(
-                    py,
-                    autd3_python_capsule::error_code::NETWORK,
-                    e.to_string(),
-                )
-            })
+            autd3_python_capsule::to_pyerr_with_code(
+                py,
+                autd3_python_capsule::error_code::NETWORK,
+                e.to_string(),
+            )
         })?;
         let inner = std::sync::Arc::new(Mutex::new(Some(emulator)));
-        let mut registry = EMULATORS.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut registry = EMULATORS
+            .lock_py_attached(py)
+            .unwrap_or_else(PoisonError::into_inner);
         registry.retain(|weak| weak.strong_count() > 0);
         registry.push(std::sync::Arc::downgrade(&inner));
         Ok(Self(inner))
     }
 
-    fn num_devices(&self) -> PyResult<usize> {
-        self.with(CoreEmulator::num_devices)
+    fn num_devices(&self, py: Python<'_>) -> PyResult<usize> {
+        self.with(py, CoreEmulator::num_devices)
     }
 
-    fn option(&self) -> PyResult<UdpOption> {
-        self.with(|emulator| UdpOption(CoreOption::for_emulator(emulator.interface())))
+    fn option(&self, py: Python<'_>) -> PyResult<UdpOption> {
+        self.with(py, |emulator| {
+            UdpOption(CoreOption::for_emulator(emulator.interface()))
+        })
     }
 
-    fn reboot(&self, index: usize) -> PyResult<()> {
-        let num_devices = self.with(CoreEmulator::num_devices)?;
+    fn reboot(&self, py: Python<'_>, index: usize) -> PyResult<()> {
+        let num_devices = self.with(py, CoreEmulator::num_devices)?;
         if index >= num_devices {
             return Err(PyIndexError::new_err(format!(
                 "device index {index} is out of range for {num_devices} devices"
             )));
         }
-        self.with(|emulator| emulator.reboot(index))
+        self.with(py, |emulator| emulator.reboot(index))
     }
 }

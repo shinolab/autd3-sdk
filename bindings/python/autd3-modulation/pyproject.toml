@@ -6,6 +6,7 @@ build-backend = "maturin"
 name = "autd3-modulation"
 description = "Python bindings for autd3-rs-modulation (sine, etc.)."
 requires-python = ">=3.10"
+classifiers = ["Programming Language :: Python :: Free Threading :: 2 - Beta"]
 license = "MIT"
 version = "0.11.0"
 dependencies = ["autd3-core==0.11.0"]

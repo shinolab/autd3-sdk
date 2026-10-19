@@ -64,8 +64,8 @@ where
     let py_fut = event_loop.call_method0("create_future")?;
     let event_loop_tx = event_loop.unbind();
     let future_tx = py_fut.clone().unbind();
-    let completions = runtime::completions()?;
-    runtime::spawn(async move {
+    let completions = runtime::completions(py)?;
+    runtime::spawn(py, async move {
         let result = fut.await;
         completions.post(move || {
             Python::attach(|py| {

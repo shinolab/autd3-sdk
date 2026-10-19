@@ -11,6 +11,7 @@ description = "Internal cross-wheel PyCapsule contracts shared by autd3 python b
 autd3-rs-core.workspace = true
 autd3-rs = { workspace = true, optional = true }
 pyo3.workspace = true
+autd3-python-cell = { workspace = true, features = ["pyo3"] }
 
 [features]
 frame = ["dep:autd3-rs"]

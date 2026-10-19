@@ -1,6 +1,8 @@
 pub mod extract;
 pub mod numpy;
 
+pub use autd3_python_cell as cell;
+
 use std::ffi::{CStr, c_void};
 use std::ptr::NonNull;
 
@@ -10,10 +12,12 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyCapsule, PyCapsuleMethods};
 
+use crate::cell::{BufferCell, ExclusiveGuard, SharedGuard};
+
 const GEOMETRY_CAPSULE_NAME: &CStr = c"autd3.geometry.v1";
 const DEVICE_CAPSULE_NAME: &CStr = c"autd3.device.v1";
-const PHASE_CAPSULE_NAME: &CStr = c"autd3.phase.v2";
-const INTENSITY_CAPSULE_NAME: &CStr = c"autd3.intensity.v2";
+const PHASE_CAPSULE_NAME: &CStr = c"autd3.phase.v3";
+const INTENSITY_CAPSULE_NAME: &CStr = c"autd3.intensity.v3";
 const MODULATION_CAPSULE_NAME: &CStr = c"autd3.modulation.v1";
 const SAMPLING_CONFIG_CAPSULE_NAME: &CStr = c"autd3.sampling_config.v1";
 
@@ -77,6 +81,7 @@ pub fn device_from_capsule<'a>(capsule: &'a Bound<'_, PyCapsule>) -> PyResult<&'
     Ok(unsafe { ptr.cast::<Device>().as_ref() })
 }
 
+#[repr(C)]
 struct BorrowedBuffer {
     addr: usize,
     _owner: Py<PyAny>,
@@ -84,76 +89,77 @@ struct BorrowedBuffer {
 
 unsafe fn buffer_capsule<'py, T>(
     py: Python<'py>,
-    ptr: NonNull<Vec<Vec<T>>>,
+    cell: NonNull<BufferCell<T>>,
     owner: Py<PyAny>,
     name: &'static CStr,
 ) -> PyResult<Bound<'py, PyCapsule>> {
     PyCapsule::new_with_value(
         py,
         BorrowedBuffer {
-            addr: ptr.as_ptr() as usize,
+            addr: cell.as_ptr() as usize,
             _owner: owner,
         },
         name,
     )
 }
 
-fn buffer_ptr<T>(
-    capsule: &Bound<'_, PyCapsule>,
+fn buffer_cell<'a, T>(
+    capsule: &'a Bound<'_, PyCapsule>,
     name: &'static CStr,
-) -> PyResult<*mut Vec<Vec<T>>> {
+) -> PyResult<&'a BufferCell<T>> {
     let ptr: NonNull<c_void> = capsule.pointer_checked(Some(name))?;
-    Ok(unsafe { ptr.cast::<BorrowedBuffer>().as_ref() }.addr as *mut Vec<Vec<T>>)
+    let addr = unsafe { ptr.cast::<BorrowedBuffer>().as_ref() }.addr;
+    Ok(unsafe { &*(addr as *const BufferCell<T>) })
 }
 
 pub fn phase_buffer_addr(capsule: &Bound<'_, PyCapsule>) -> PyResult<usize> {
-    Ok(buffer_ptr::<Phase>(capsule, PHASE_CAPSULE_NAME)?.addr())
+    Ok(core::ptr::from_ref(buffer_cell::<Phase>(capsule, PHASE_CAPSULE_NAME)?).addr())
 }
 
 pub fn intensity_buffer_addr(capsule: &Bound<'_, PyCapsule>) -> PyResult<usize> {
-    Ok(buffer_ptr::<Intensity>(capsule, INTENSITY_CAPSULE_NAME)?.addr())
+    Ok(core::ptr::from_ref(buffer_cell::<Intensity>(capsule, INTENSITY_CAPSULE_NAME)?).addr())
 }
 
 #[allow(clippy::missing_safety_doc)]
 pub unsafe fn phase_capsule(
     py: Python<'_>,
-    ptr: NonNull<Vec<Vec<Phase>>>,
+    cell: NonNull<BufferCell<Phase>>,
     owner: Py<PyAny>,
 ) -> PyResult<Bound<'_, PyCapsule>> {
-    unsafe { buffer_capsule(py, ptr, owner, PHASE_CAPSULE_NAME) }
+    unsafe { buffer_capsule(py, cell, owner, PHASE_CAPSULE_NAME) }
 }
 
-pub fn phases_from_capsule<'a>(capsule: &'a Bound<'_, PyCapsule>) -> PyResult<&'a [Vec<Phase>]> {
-    Ok(unsafe { &*buffer_ptr(capsule, PHASE_CAPSULE_NAME)? })
+pub fn phases_from_capsule<'a>(
+    capsule: &'a Bound<'_, PyCapsule>,
+) -> PyResult<SharedGuard<'a, Phase>> {
+    Ok(buffer_cell(capsule, PHASE_CAPSULE_NAME)?.try_read()?)
 }
 
-#[allow(clippy::mut_from_ref)]
 pub fn phases_from_capsule_mut<'a>(
     capsule: &'a Bound<'_, PyCapsule>,
-) -> PyResult<&'a mut Vec<Vec<Phase>>> {
-    Ok(unsafe { &mut *buffer_ptr(capsule, PHASE_CAPSULE_NAME)? })
+) -> PyResult<ExclusiveGuard<'a, Phase>> {
+    Ok(buffer_cell(capsule, PHASE_CAPSULE_NAME)?.try_write()?)
 }
 
 #[allow(clippy::missing_safety_doc)]
 pub unsafe fn intensity_capsule(
     py: Python<'_>,
-    ptr: NonNull<Vec<Vec<Intensity>>>,
+    cell: NonNull<BufferCell<Intensity>>,
     owner: Py<PyAny>,
 ) -> PyResult<Bound<'_, PyCapsule>> {
-    unsafe { buffer_capsule(py, ptr, owner, INTENSITY_CAPSULE_NAME) }
+    unsafe { buffer_capsule(py, cell, owner, INTENSITY_CAPSULE_NAME) }
 }
 
 pub fn intensities_from_capsule<'a>(
     capsule: &'a Bound<'_, PyCapsule>,
-) -> PyResult<&'a [Vec<Intensity>]> {
-    Ok(unsafe { &*buffer_ptr(capsule, INTENSITY_CAPSULE_NAME)? })
+) -> PyResult<SharedGuard<'a, Intensity>> {
+    Ok(buffer_cell(capsule, INTENSITY_CAPSULE_NAME)?.try_read()?)
 }
 
-#[allow(clippy::mut_from_ref)]
 pub fn intensities_from_capsule_mut<'a>(
     capsule: &'a Bound<'_, PyCapsule>,
-) -> PyResult<&'a mut Vec<Vec<Intensity>>> {
-    Ok(unsafe { &mut *buffer_ptr(capsule, INTENSITY_CAPSULE_NAME)? })
+) -> PyResult<ExclusiveGuard<'a, Intensity>> {
+    Ok(buffer_cell(capsule, INTENSITY_CAPSULE_NAME)?.try_write()?)
 }
 
 pub fn sampling_config_into_capsule(

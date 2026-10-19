@@ -7,6 +7,7 @@ use std::time::Duration;
 use autd3_rs::rt::Executor;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
+use pyo3::sync::MutexExt;
 
 type Completion = Box<dyn FnOnce() + Send + 'static>;
 
@@ -66,8 +67,10 @@ fn shutdown_error() -> PyErr {
     PyRuntimeError::new_err("autd3 runtime has been shut down")
 }
 
-fn with_runtime<R>(f: impl FnOnce(&Runtime) -> Option<R>) -> PyResult<R> {
-    let mut state = STATE.lock().unwrap_or_else(PoisonError::into_inner);
+fn with_runtime<R>(py: Python<'_>, f: impl FnOnce(&Runtime) -> Option<R>) -> PyResult<R> {
+    let mut state = STATE
+        .lock_py_attached(py)
+        .unwrap_or_else(PoisonError::into_inner);
     if matches!(*state, State::Uninit) {
         *state = State::Running(Runtime::new());
     }
@@ -78,19 +81,24 @@ fn with_runtime<R>(f: impl FnOnce(&Runtime) -> Option<R>) -> PyResult<R> {
     }
 }
 
-pub(crate) fn completions() -> PyResult<Completions> {
-    with_runtime(|runtime| Some(runtime.completions.clone()))
+pub(crate) fn completions(py: Python<'_>) -> PyResult<Completions> {
+    with_runtime(py, |runtime| Some(runtime.completions.clone()))
 }
 
-pub(crate) fn spawn<F: Future<Output = ()> + Send + 'static>(future: F) -> PyResult<()> {
-    with_runtime(|runtime| runtime.executor.spawn(future).then_some(()))
+pub(crate) fn spawn<F: Future<Output = ()> + Send + 'static>(
+    py: Python<'_>,
+    future: F,
+) -> PyResult<()> {
+    with_runtime(py, |runtime| runtime.executor.spawn(future).then_some(()))
 }
 
 #[pyfunction]
 pub(crate) fn _shutdown_runtime(py: Python<'_>) {
     py.detach(crate::udp::shutdown_emulators);
     let runtime = {
-        let mut state = STATE.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut state = STATE
+            .lock_py_attached(py)
+            .unwrap_or_else(PoisonError::into_inner);
         match std::mem::replace(&mut *state, State::Shutdown) {
             State::Running(runtime) => Some(runtime),
             State::Uninit | State::Shutdown => None,

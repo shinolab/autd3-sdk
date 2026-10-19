@@ -1,0 +1,18 @@
+[package]
+name = "autd3-python-cell"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Internal cross-wheel buffer cell with a non-blocking shared/exclusive flag for autd3 python binding crates."
+
+[dependencies]
+thiserror.workspace = true
+pyo3 = { workspace = true, optional = true }
+
+[features]
+pyo3 = ["dep:pyo3"]
+
+[lints]
+workspace = true
