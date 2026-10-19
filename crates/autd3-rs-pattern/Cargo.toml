@@ -8,8 +8,8 @@ repository.workspace = true
 homepage.workspace = true
 description = "Emission-pattern computation utilities for autd3-rs (focus, bessel beam, etc.)."
 readme = "README.md"
-keywords = ["autd3", "haptics"]
-categories = ["science"]
+keywords.workspace = true
+categories.workspace = true
 
 [lib]
 bench = false
