@@ -295,13 +295,6 @@ fn workspace_members(workspace_dir: &Path) -> Result<Vec<MemberPackage>> {
     Ok(packages)
 }
 
-fn workspace_member_packages(workspace_dir: &Path) -> Result<Vec<String>> {
-    Ok(workspace_members(workspace_dir)?
-        .into_iter()
-        .map(|package| package.name)
-        .collect())
-}
-
 fn is_published(package: &MemberPackage, cwd: &Path) -> Result<bool> {
     let spec = format!("{}@{}", package.name, package.version);
     let status = Command::new("cargo")
@@ -354,15 +347,6 @@ pub fn cargo_fmt(dir: &Path, scope: &[&str], fix: bool) -> Result<()> {
         args.extend(["--", "--check"]);
     }
     run("cargo", args, dir)
-}
-
-pub fn cargo_fmt_packages(workspace_dir: &Path, fix: bool) -> Result<()> {
-    let packages = workspace_member_packages(workspace_dir)?;
-    let scope: Vec<&str> = packages
-        .iter()
-        .flat_map(|package| ["-p", package.as_str()])
-        .collect();
-    cargo_fmt(workspace_dir, &scope, fix)
 }
 
 pub fn cargo_clippy(dir: &Path, args: &[&str]) -> Result<()> {

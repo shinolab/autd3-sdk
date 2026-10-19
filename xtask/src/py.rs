@@ -5,7 +5,7 @@ use anyhow::{Result, bail};
 use clap::Subcommand;
 
 use crate::clean::{CleanArgs, Cleaner};
-use crate::util::{capture, cargo_clippy, cargo_fmt_packages, on_path, run, run_cargo, run_env};
+use crate::util::{capture, cargo_clippy, cargo_fmt, on_path, run, run_cargo, run_env};
 
 pub(crate) const WHEELS: &[&str] = &[
     "autd3-core",
@@ -127,7 +127,7 @@ pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
             let python = venv_python(&venv);
             run(&python.to_string_lossy(), ["-m", "mypy"], &dir)
         }
-        PyCmd::Format { fix } => cargo_fmt_packages(&dir, fix),
+        PyCmd::Format { fix } => cargo_fmt(&dir, &[], fix),
         PyCmd::Test { python } => {
             run_cargo(["test", "-p", "autd3-python-cell"], &dir)?;
             let venv = venv_for(&dir, python.as_deref())?;
