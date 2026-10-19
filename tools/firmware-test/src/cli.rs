@@ -1,3 +1,6 @@
+use std::time::Duration;
+
+use autd3_rs::ClientConfig;
 use clap::Parser;
 
 #[derive(Parser, Debug, Clone)]
@@ -20,6 +23,22 @@ pub struct Cli {
     pub heartbeat_us: u64,
     #[arg(long)]
     pub lost_timeout_ms: Option<u64>,
+    #[arg(
+        long,
+        help = "Maps to ClientConfig::exec_lead. Omit to process every frame on arrival"
+    )]
+    pub exec_lead_ms: Option<u64>,
+    #[arg(
+        long,
+        help = "Maps to ClientConfig::ack_timeout. Must exceed --exec-lead-ms by more than 1 ms"
+    )]
+    pub ack_timeout_ms: Option<u64>,
+    #[arg(
+        long,
+        default_value_t = false,
+        help = "Zero the pulse width table after opening and after every case so that no transducer emits"
+    )]
+    pub mute: bool,
 }
 
 impl Cli {
@@ -30,6 +49,32 @@ impl Cli {
         if self.heartbeat_us == 0 {
             return Err("--heartbeat-us must be at least 1".to_string());
         }
+        if self.exec_lead_ms == Some(0) {
+            return Err("--exec-lead-ms must be at least 1".to_string());
+        }
+        if self.ack_timeout_ms == Some(0) {
+            return Err("--ack-timeout-ms must be at least 1".to_string());
+        }
+        let config = self.client_config();
+        if let Some(exec_lead) = config.exec_lead
+            && config.ack_timeout <= exec_lead + Duration::from_millis(1)
+        {
+            return Err(format!(
+                "the ack timeout {:?} must exceed --exec-lead-ms {exec_lead:?} by more than 1 ms; raise --ack-timeout-ms",
+                config.ack_timeout
+            ));
+        }
         Ok(())
+    }
+
+    pub fn client_config(&self) -> ClientConfig {
+        let default = ClientConfig::default();
+        ClientConfig {
+            ack_timeout: self
+                .ack_timeout_ms
+                .map_or(default.ack_timeout, Duration::from_millis),
+            exec_lead: self.exec_lead_ms.map(Duration::from_millis),
+            ..default
+        }
     }
 }

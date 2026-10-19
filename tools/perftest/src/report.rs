@@ -16,7 +16,7 @@ struct TelemetryCounter {
     absolute: bool,
 }
 
-const TELEMETRY_COUNTERS: [TelemetryCounter; 10] = [
+const TELEMETRY_COUNTERS: [TelemetryCounter; 11] = [
     TelemetryCounter {
         name: "fifo_drop",
         read: |t| t.fifo_drop,
@@ -77,6 +77,13 @@ const TELEMETRY_COUNTERS: [TelemetryCounter; 10] = [
         name: "boot_failure",
         read: |t| u32::from(t.boot_failure),
         mask: 0xFF,
+        per_device: true,
+        absolute: false,
+    },
+    TelemetryCounter {
+        name: "exec_late",
+        read: |t| t.exec_late,
+        mask: u32::MAX,
         per_device: true,
         absolute: false,
     },

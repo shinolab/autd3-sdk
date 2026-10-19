@@ -344,6 +344,7 @@ pub async fn run(client: Client, link: &Link<'_>) -> Result<Client> {
         states: &states,
         heartbeat: link.option.heartbeat.unwrap_or_default(),
         lost_timeout: link.option.lost_timeout,
+        mute: link.mute,
     };
     if let Err(e) = halts(&ctx, target).await {
         println!("  [FAIL] the halt checks stopped: {e:#}");

@@ -7,7 +7,7 @@ use autd3_rs::commands::{ForceFan, ReleaseFailsafe};
 use autd3_rs::{Client, ClientConfig, DeviceState, StateChecker, UdpOption};
 
 use crate::io::{check, prompt};
-use crate::{Link, describe, restore_gpio_out};
+use crate::{Link, describe, mute, restore_gpio_out};
 
 const RECOVERY_INTERVAL: Duration = Duration::from_millis(100);
 const DETECTION_WINDOW: Duration = Duration::from_secs(30);
@@ -88,6 +88,9 @@ async fn open(link: &Link<'_>, config: ClientConfig) -> Result<Client> {
         .await
         .context("opening the devices with the automatic recovery")?;
     restore_gpio_out(&client).await;
+    if link.mute && !mute(&client).await {
+        anyhow::bail!("muting the devices failed");
+    }
     Ok(client)
 }
 
@@ -201,7 +204,7 @@ async fn by_cable(link: &Link<'_>, first: usize, config: ClientConfig) -> Result
 
 async fn by_power(link: &Link<'_>) -> Result<()> {
     println!("-- power-cycled device");
-    let client = open(link, ClientConfig::default()).await?;
+    let client = open(link, link.config).await?;
     let count = client.num_devices();
     let states = client.state_checker();
     let last = count - 1;
@@ -256,14 +259,14 @@ pub async fn run(client: Client, link: &Link<'_>) -> Result<Client> {
         .unwrap_or(count - 1);
 
     let rounds = [
-        ClientConfig::default(),
+        link.config,
         ClientConfig {
             release_failsafe_on_recovery: None,
-            ..ClientConfig::default()
+            ..link.config
         },
         ClientConfig {
             resynchronize_on_recovery: None,
-            ..ClientConfig::default()
+            ..link.config
         },
     ];
     for (round, config) in rounds.into_iter().enumerate() {

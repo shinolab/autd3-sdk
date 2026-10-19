@@ -1,3 +1,4 @@
+mod bank_switch;
 mod cli;
 mod mem;
 mod report;
@@ -8,7 +9,7 @@ use anyhow::Result;
 use autd3_rs::rt::{LogWriter, TracingOption, init_tracing};
 use clap::Parser;
 
-use crate::cli::Cli;
+use crate::cli::{Cli, Mode};
 use crate::report::{print_mem, print_summary, print_telemetry};
 use crate::run::{RunOutput, run};
 
@@ -22,6 +23,10 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     if let Err(msg) = cli.validate() {
         anyhow::bail!(msg);
+    }
+
+    if cli.mode == Mode::BankSwitch {
+        return bank_switch::run(&cli).await;
     }
 
     let output = Box::pin(run(&cli)).await?;
