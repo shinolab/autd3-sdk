@@ -9,7 +9,7 @@ import autd3
 import autd3_modulation as modulation
 import autd3_pattern as pattern
 import autd3_pattern_holo as holo
-from autd3.commands import CpuConfig, FpgaBusWait, GpioOut, PhaseDepth, PtpConfig
+from autd3.commands import CpuConfig, FpgaBusWait, FpgaConfig, GpioOut, PhaseDepth, PtpConfig
 from autd3.geometry import Autd3, Geometry, offset, point
 from autd3.units import Angle, Freq, Hz, Length, Velocity, deg, kHz, m, mm, rad, s
 from autd3.value import (
@@ -58,6 +58,7 @@ EQUAL_PAIRS: list[tuple[Hashable, Hashable]] = [
     (FpgaBusWait.Cycles2, FpgaBusWait.Cycles2),
     (PtpConfig(), PtpConfig(kp_milli=PtpConfig().kp_milli)),
     (CpuConfig(), CpuConfig(ptp=PtpConfig())),
+    (FpgaConfig(), FpgaConfig(sync_phase_lock=True)),
     (PhaseDepth.Bits4, PhaseDepth.Bits4),
     (holo.IntensityConstraint.Normalize, holo.IntensityConstraint.Normalize),
     (holo.IntensityConstraint.Multiply(0.5), holo.IntensityConstraint.Multiply(0.5)),
@@ -100,6 +101,7 @@ DISTINCT_PAIRS: list[tuple[object, object]] = [
     (FpgaBusWait.Cycles2, FpgaBusWait.Cycles3),
     (PtpConfig(), PtpConfig(kp_milli=PtpConfig().kp_milli + 1)),
     (CpuConfig(), CpuConfig(failsafe_timeout=None)),
+    (FpgaConfig(), FpgaConfig(sync_phase_lock=False)),
     (holo.IntensityConstraint.Multiply(0.5), holo.IntensityConstraint.Multiply(0.25)),
     (holo.IntensityConstraint.Normalize, holo.IntensityConstraint.Uniform(0)),
     (holo.Directivity.Sphere, holo.Directivity.T4010A1),

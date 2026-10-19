@@ -32,6 +32,7 @@ autd3_cpu_wire::wire_enum_u8! {
         FlashBuf = 0x4,
         PweTable = 0x6,
         Watchdog = 0x7,
+        SyncPs = 0x8,
         Mod = 0x40,
         Emission = 0xC0,
     }
@@ -52,6 +53,19 @@ pub const ADDR_WATCHDOG_KICK: u16 = 0x0;
 pub const ADDR_WATCHDOG_TIMEOUT: u16 = 0x1;
 pub const ADDR_WATCHDOG_RELEASE: u16 = 0x2;
 pub const ADDR_WATCHDOG_STATE: u16 = 0x3;
+
+pub const ADDR_SYNC_PS_CTL: u16 = 0x0;
+pub const ADDR_SYNC_PS_KP: u16 = 0x1;
+pub const ADDR_SYNC_PS_KI: u16 = 0x2;
+pub const ADDR_SYNC_PS_KF: u16 = 0x3;
+pub const ADDR_SYNC_PS_MANUAL_RATE: u16 = 0x4;
+pub const ADDR_SYNC_PS_STATE: u16 = 0x10;
+pub const ADDR_SYNC_PS_RATE: u16 = 0x11;
+pub const ADDR_SYNC_PS_INTEG: u16 = 0x12;
+pub const ADDR_SYNC_PS_PD_POS: u16 = 0x13;
+pub const ADDR_SYNC_PS_PD_NEG: u16 = 0x14;
+pub const ADDR_SYNC_PS_EDGE_DIFF: u16 = 0x15;
+pub const ADDR_SYNC_PS_EDGE_COUNT: u16 = 0x16;
 
 autd3_cpu_wire::wire_enum_u8! {
     pub enum FlashOp {

@@ -234,6 +234,35 @@ namespace AUTD3.Tests
         }
 
         [Fact]
+        public void SetFpgaConfigHasADefaultAndExposesItsConfig()
+        {
+            var config = new FpgaConfig { SyncPhaseLock = false };
+            Assert.False(new SetFpgaConfig(config).Config.SyncPhaseLock);
+            Assert.Equal(new FpgaConfig().SyncPhaseLock, new SetFpgaConfig().Config.SyncPhaseLock);
+            using var geometry = Fixture.SingleDevice();
+            using var frames = Frames.Encode(geometry, new SetFpgaConfig());
+            Assert.Equal(1, frames.Length);
+        }
+
+        [Fact]
+        public void BothSyncPhaseLockValuesReachTheNativeConfig()
+        {
+            foreach (var syncPhaseLock in new[] { false, true })
+            {
+                var handle = new FpgaConfig { SyncPhaseLock = syncPhaseLock }.CreateHandle();
+                try
+                {
+                    Assert.Equal(0, NativeCommand.autd3_fpga_config_get_sync_phase_lock(handle, out var value));
+                    Assert.Equal(syncPhaseLock, value);
+                }
+                finally
+                {
+                    NativeCommand.autd3_fpga_config_free(handle);
+                }
+            }
+        }
+
+        [Fact]
         public void FanAndGpioCommandsHaveADefault()
         {
             using var geometry = Fixture.SingleDevice();

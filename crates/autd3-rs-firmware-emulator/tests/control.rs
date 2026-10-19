@@ -30,6 +30,25 @@ fn force_fan_toggles_and_survives_latch() {
 }
 
 #[test]
+fn the_fpga_config_enables_the_sync_phase_lock_by_default_and_clear_restores_it() {
+    let mut device = Device::new(NUM_TRANSDUCERS);
+    device.send(&frame(0, Cmd::Reset, &[]));
+    assert!(device.fpga().sync_phase_lock());
+
+    let rx = device.send(&frame(0, Cmd::SetFpgaConfig, &[0]));
+    assert_eq!(rx.status, autd3_cpu_wire::Error::None);
+    assert!(!device.fpga().sync_phase_lock());
+
+    let rx = device.send(&frame(1, Cmd::SetFpgaConfig, &[2]));
+    assert_eq!(rx.status, autd3_cpu_wire::Error::InvalidPayload);
+    assert!(!device.fpga().sync_phase_lock());
+
+    let rx = device.send(&frame(2, Cmd::Clear, &[]));
+    assert_eq!(rx.status, autd3_cpu_wire::Error::None);
+    assert!(device.fpga().sync_phase_lock());
+}
+
+#[test]
 fn gpio_out_writes_debug_values() {
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));

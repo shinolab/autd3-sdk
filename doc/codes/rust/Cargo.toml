@@ -94,6 +94,14 @@ name = "api_command_force_fan"
 path = "examples/api/command/force-fan.rs"
 
 [[example]]
+name = "api_command_fpga_config_example"
+path = "examples/api/command/fpga-config-example.rs"
+
+[[example]]
+name = "api_command_fpga_config"
+path = "examples/api/command/fpga-config.rs"
+
+[[example]]
 name = "api_command_gpio_example"
 path = "examples/api/command/gpio-example.rs"
 

@@ -10,7 +10,9 @@ module memory (
     emission_bus_if.in_port EMISSION_BUS,
     pwe_table_bus_if.in_port PWE_TABLE_BUS,
     flash_bus_if.host_port FLASH_BUS,
-    output wire CPU_WATCHDOG_FIRED
+    output wire CPU_WATCHDOG_FIRED,
+    output var settings::sync_ps_settings_t SYNC_PS_SETTINGS,
+    input wire settings::sync_ps_state_t SYNC_PS_STATE
 );
 
   import params::*;
@@ -25,11 +27,13 @@ module memory (
   logic [15:0] ctl_dout;
   logic [15:0] flash_dout;
   logic [15:0] watchdog_dout;
+  logic [15:0] sync_ps_dout;
 
   typedef enum logic [1:0] {
     RD_SEL_CTL,
     RD_SEL_FLASH,
-    RD_SEL_WATCHDOG
+    RD_SEL_WATCHDOG,
+    RD_SEL_SYNC_PS
   } rd_sel_t;
   rd_sel_t rd_sel = RD_SEL_CTL;
 
@@ -64,7 +68,7 @@ module memory (
   assign select = addr[15:8];
   assign data_in = data_q;
   assign MEM_BUS.DATA_OUT = data_out;
-  assign data_out = (rd_sel == RD_SEL_FLASH) ? flash_dout : (rd_sel == RD_SEL_WATCHDOG) ? watchdog_dout : ctl_dout;
+  assign data_out = (rd_sel == RD_SEL_FLASH) ? flash_dout : (rd_sel == RD_SEL_WATCHDOG) ? watchdog_dout : (rd_sel == RD_SEL_SYNC_PS) ? sync_ps_dout : ctl_dout;
 
   ///////////////////////////// Controller ////////////////////////////
   logic ctl_en;
@@ -93,16 +97,20 @@ module memory (
   logic flash_reg_en;
   logic flash_buf_en;
   logic watchdog_en;
+  logic sync_ps_en;
 
   assign flash_reg_en = (select == BRAM_SELECT_FLASH) & en;
   assign flash_buf_en = (select[7:1] == FlashBufSelect[7:1]) & en;
   assign watchdog_en  = (select == BRAM_SELECT_WATCHDOG) & en;
+  assign sync_ps_en   = (select == BRAM_SELECT_SYNC_PS) & en;
 
   always_ff @(posedge bus_clk) begin
     if (flash_reg_en) begin
       rd_sel <= RD_SEL_FLASH;
     end else if (watchdog_en) begin
       rd_sel <= RD_SEL_WATCHDOG;
+    end else if (sync_ps_en) begin
+      rd_sel <= RD_SEL_SYNC_PS;
     end else if (ctl_en) begin
       rd_sel <= RD_SEL_CTL;
     end
@@ -117,6 +125,18 @@ module memory (
       .DATA_IN(data_in),
       .DATA_OUT(watchdog_dout),
       .FIRED(CPU_WATCHDOG_FIRED)
+  );
+
+  sync_ps_regs sync_ps_regs (
+      .BUS_CLK(bus_clk),
+      .CLK(CLK),
+      .EN(sync_ps_en),
+      .WE(we),
+      .ADDR(addr[7:0]),
+      .DATA_IN(data_in),
+      .DATA_OUT(sync_ps_dout),
+      .SETTINGS(SYNC_PS_SETTINGS),
+      .STATE(SYNC_PS_STATE)
   );
 
   flash_host flash_host (

@@ -154,6 +154,19 @@ impl Default for CpuConfig {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct FpgaConfig {
+    pub sync_phase_lock: bool,
+}
+
+impl Default for FpgaConfig {
+    fn default() -> Self {
+        Self {
+            sync_phase_lock: cpu_params::SYNC_PHASE_LOCK,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

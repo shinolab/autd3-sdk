@@ -83,6 +83,7 @@ module sim_cpu_readback ();
     function_bits[params::FuncFlashOtaBit] = 1'b1;
     function_bits[params::FuncStrictSilencerGuardBit] = 1'b1;
     function_bits[params::FuncCpuWatchdogBit] = 1'b1;
+    function_bits[params::FuncSyncPhaseLockBit] = 1'b1;
   end
 
   localparam bit [15:0] PersistentFlags = (16'd1 << params::CTL_FLAG_BIT_FORCE_FAN)

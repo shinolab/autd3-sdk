@@ -17,9 +17,9 @@ use crate::fpga_params::{
     ADDR_MOD_TRANSITION_MODE, ADDR_PATTERN_FREQ_DIV0, ADDR_PATTERN_MEM_WR_BANK,
     ADDR_PATTERN_MEM_WR_PAGE, ADDR_PATTERN_REP0, ADDR_PATTERN_REQ_RD_BANK,
     ADDR_PATTERN_TRANSITION_MODE, ADDR_SILENCER_COMPLETION_STEPS_PHASE, ADDR_SILENCER_FLAG,
-    ADDR_SILENCER_SET_RESULT, ADDR_WATCHDOG_KICK, ADDR_WATCHDOG_RELEASE, ADDR_WATCHDOG_STATE,
-    ADDR_WATCHDOG_TIMEOUT, BramSelect, CtlFlags, FLASH_BUF_BYTES, FlashErr, FlashOp, FunctionBits,
-    NUM_BANKS,
+    ADDR_SILENCER_SET_RESULT, ADDR_SYNC_PS_CTL, ADDR_WATCHDOG_KICK, ADDR_WATCHDOG_RELEASE,
+    ADDR_WATCHDOG_STATE, ADDR_WATCHDOG_TIMEOUT, BramSelect, CtlFlags, FLASH_BUF_BYTES, FlashErr,
+    FlashOp, FunctionBits, NUM_BANKS,
 };
 use crate::port::{FlashError, Port};
 use crate::proto::{
@@ -110,6 +110,7 @@ pub(crate) struct MockPort {
     pub watchdog_releases: u32,
     pub watchdog_state: u16,
     pub watchdog_log: Vec<WatchdogEvent>,
+    pub sync_ps_ctl: Option<u16>,
     isr_frame: Option<(Rc<Cpu>, u8, u8)>,
     pub isr_seen_reply: Option<Reply>,
 }
@@ -117,8 +118,12 @@ pub(crate) struct MockPort {
 impl MockPort {
     pub(crate) fn new() -> Self {
         let mut ctl = Box::new([0; 256]);
-        ctl[ADDR_FUNCTION_BITS as usize] =
-            u16::from((FunctionBits::STRICT_SILENCER_GUARD | FunctionBits::CPU_WATCHDOG).bits());
+        ctl[ADDR_FUNCTION_BITS as usize] = u16::from(
+            (FunctionBits::STRICT_SILENCER_GUARD
+                | FunctionBits::CPU_WATCHDOG
+                | FunctionBits::SYNC_PHASE_LOCK)
+                .bits(),
+        );
         Self {
             ctl,
             latched: Box::new([0; 256]),
@@ -170,6 +175,7 @@ impl MockPort {
             watchdog_releases: 0,
             watchdog_state: 0,
             watchdog_log: Vec::new(),
+            sync_ps_ctl: None,
             isr_frame: None,
             isr_seen_reply: None,
         }
@@ -248,6 +254,9 @@ impl MockPort {
                 }
                 _ => {}
             },
+            Some(BramSelect::SyncPs) if addr & 0xFF == ADDR_SYNC_PS_CTL => {
+                self.sync_ps_ctl = Some(value);
+            }
             _ => {}
         }
     }

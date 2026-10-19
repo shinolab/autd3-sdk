@@ -130,6 +130,14 @@ namespace AUTD3.Tests
         }
 
         [Fact]
+        public void FpgaConfigMatchesTheRustDefault()
+        {
+            Assert.True(new FpgaConfig().SyncPhaseLock);
+            Assert.True(default(FpgaConfig).SyncPhaseLock);
+            Assert.False(new FpgaConfig { SyncPhaseLock = false }.SyncPhaseLock);
+        }
+
+        [Fact]
         public void CpuConfigInitializerKeepsTheOtherDefaults()
         {
             var config = new CpuConfig
@@ -245,6 +253,7 @@ namespace AUTD3.Tests
         [InlineData(typeof(ServerLink))]
         [InlineData(typeof(CpuConfig))]
         [InlineData(typeof(PtpConfig))]
+        [InlineData(typeof(FpgaConfig))]
         [InlineData(typeof(FociStmOption))]
         [InlineData(typeof(PatternStmOption))]
         [InlineData(typeof(SineOption))]

@@ -18,6 +18,7 @@ package params;
   localparam int FuncFlashOtaBit = 2;
   localparam int FuncStrictSilencerGuardBit = 3;
   localparam int FuncCpuWatchdogBit = 4;
+  localparam int FuncSyncPhaseLockBit = 5;
   localparam int FuncEmulatorBit = 7;  // reserved
 
   localparam bit [23:0] FlashWritableBase = 24'h800000;
@@ -65,6 +66,7 @@ package params;
     BRAM_SELECT_FLASH_BUF   = 8'h04,
     BRAM_SELECT_PWE_TABLE   = 8'h06,
     BRAM_SELECT_WATCHDOG    = 8'h07,
+    BRAM_SELECT_SYNC_PS     = 8'h08,
     BRAM_SELECT_MOD         = 8'h40,
     BRAM_SELECT_EMISSION    = 8'hC0
   } bram_select_t;
@@ -88,6 +90,21 @@ package params;
     ADDR_WATCHDOG_RELEASE = 8'h02,
     ADDR_WATCHDOG_STATE   = 8'h03
   } watchdog_addr_t;
+
+  typedef enum logic [7:0] {
+    ADDR_SYNC_PS_CTL         = 8'h00,
+    ADDR_SYNC_PS_KP          = 8'h01,
+    ADDR_SYNC_PS_KI          = 8'h02,
+    ADDR_SYNC_PS_KF          = 8'h03,
+    ADDR_SYNC_PS_MANUAL_RATE = 8'h04,
+    ADDR_SYNC_PS_STATE       = 8'h10,
+    ADDR_SYNC_PS_RATE        = 8'h11,
+    ADDR_SYNC_PS_INTEG       = 8'h12,
+    ADDR_SYNC_PS_PD_POS      = 8'h13,
+    ADDR_SYNC_PS_PD_NEG      = 8'h14,
+    ADDR_SYNC_PS_EDGE_DIFF   = 8'h15,
+    ADDR_SYNC_PS_EDGE_COUNT  = 8'h16
+  } sync_ps_addr_t;
 
   typedef enum logic [7:0] {
     FLASH_OP_CRC32   = 8'h02,

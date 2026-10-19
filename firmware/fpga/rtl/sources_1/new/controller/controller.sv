@@ -28,6 +28,7 @@ module controller (
                                       | (1'b1 << params::FuncFlashOtaBit)
                                       | (1'b1 << params::FuncStrictSilencerGuardBit)
                                       | (1'b1 << params::FuncCpuWatchdogBit)
+                                      | (1'b1 << params::FuncSyncPhaseLockBit)
                                       | (1'b0 << params::FuncEmulatorBit);
 
   logic [15:0] ctl_flags = '0;

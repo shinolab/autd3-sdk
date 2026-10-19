@@ -36,6 +36,8 @@ module main #(
   settings::silencer_settings_t silencer_settings;
   settings::sync_settings_t sync_settings;
   settings::debug_settings_t debug_settings;
+  settings::sync_ps_settings_t sync_ps_settings;
+  settings::sync_ps_state_t sync_ps_state;
 
   logic clk;
   logic locked;
@@ -77,6 +79,11 @@ module main #(
   logic output_gate;
   logic signed [13:0] sync_time_diff;
   logic [7:0] sync_resync_count;
+  logic ps_fine;
+  logic ps_edge;
+  logic signed [13:0] ps_edge_diff;
+  logic signed [15:0] ps_rate;
+  logic ps_rate_toggle;
 
   logic gpio_in_hard_sync[4];
   logic gpio_in[4];
@@ -96,9 +103,19 @@ module main #(
       .Q  (thermo_sync)
   );
 
+  logic psclk;
+  logic psen;
+  logic psincdec;
+  logic psdone;
+
   clk_wiz clk_wiz (
       .clk_in1(MRCC_25P6M),
       .clk_out1(clk),
+      .clk_out2(psclk),
+      .psclk(psclk),
+      .psen(psen),
+      .psincdec(psincdec),
+      .psdone(psdone),
       .reset(RESET),
       .locked(locked)
   );
@@ -120,7 +137,9 @@ module main #(
       .EMISSION_BUS(emission_bus.in_port),
       .PWE_TABLE_BUS(pwe_table_bus.in_port),
       .FLASH_BUS(flash_bus.host_port),
-      .CPU_WATCHDOG_FIRED(cpu_watchdog_fired)
+      .CPU_WATCHDOG_FIRED(cpu_watchdog_fired),
+      .SYNC_PS_SETTINGS(sync_ps_settings),
+      .SYNC_PS_STATE(sync_ps_state)
   );
 
   assign output_gate = failsafe | cpu_watchdog_fired;
@@ -173,7 +192,31 @@ module main #(
       .SYNC(sync),
       .SKIP_ONE_ASSERT(skip_one_assert),
       .SYNC_TIME_DIFF(sync_time_diff),
-      .SYNC_RESYNC_COUNT(sync_resync_count)
+      .SYNC_RESYNC_COUNT(sync_resync_count),
+      .PS_ENABLE(sync_ps_settings.ENABLE & ~sync_ps_settings.MANUAL),
+      .PS_FINE(ps_fine),
+      .PS_EDGE(ps_edge),
+      .PS_EDGE_DIFF(ps_edge_diff)
+  );
+
+  sync_ps_ctrl sync_ps_ctrl (
+      .CLK(clk),
+      .SETTINGS(sync_ps_settings),
+      .EDGE(ps_edge),
+      .FINE(ps_fine),
+      .EDGE_DIFF(ps_edge_diff),
+      .RATE(ps_rate),
+      .RATE_TOGGLE(ps_rate_toggle),
+      .STATE(sync_ps_state)
+  );
+
+  sync_ps_nco sync_ps_nco (
+      .PSCLK(psclk),
+      .RATE(ps_rate),
+      .RATE_TOGGLE(ps_rate_toggle),
+      .PSDONE(psdone),
+      .PSEN(psen),
+      .PSINCDEC(psincdec)
   );
 
   time_cnt_generator time_cnt_generator (

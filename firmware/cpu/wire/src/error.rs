@@ -18,6 +18,7 @@ crate::wire_enum_u8! {
         UpdateActivating = 0x12,
         SyncMissed = 0x14,
         FailsafeConditionActive = 0x15,
+        FpgaUnsupported = 0x16,
     }
 }
 
@@ -56,6 +57,9 @@ impl Error {
             }
             Self::FailsafeConditionActive => {
                 "the condition that tripped the failsafe still holds; the failsafe stays in effect"
+            }
+            Self::FpgaUnsupported => {
+                "the FPGA firmware does not support this command (update the FPGA firmware)"
             }
         }
     }

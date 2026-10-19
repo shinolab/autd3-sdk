@@ -17,12 +17,14 @@ const TEST_PATTERN_SEED: u32 = 0x2545_F491;
     long_about = "Read and write raw AUTD3 FPGA bus addresses over UDP (diagnostics only).\n\n\
         An address is the 16-bit bus address `BRAM select << 8 | address` (0x00__ controller, \
         0x01__ phase correction, 0x02__ output mask, 0x03__ flash registers, 0x04__-0x05__ flash page buffer, \
-        0x06__ pulse width table, 0x4000-0x7FFF modulation, 0xC000-0xFFFF emission; the last two go to the bank and \
+        0x06__ pulse width table, 0x07__ CPU watchdog, 0x08__ synchronizer phase shift, \
+        0x4000-0x7FFF modulation, 0xC000-0xFFFF emission; the last two go to the bank and \
         page selected by the controller registers). Numbers are decimal or `0x` hexadecimal.\n\n\
         Every device on the chain receives the same request. Nothing is validated: a write can \
         open the failsafe gate, latch half-written settings or start a flash command. Only the \
-        controller (0x00__) and flash (0x03__) registers can be read back; a read of any other \
-        address returns the output of whichever of the two was selected last, not the memory.\n\n\
+        controller (0x00__), flash (0x03__), CPU watchdog (0x07__) and synchronizer phase shift (0x08__) registers \
+        can be read back; a read of any other address returns the output of whichever of those was selected last, \
+        not the memory.\n\n\
         --bus-wait changes the wait cycles of the CPU bus to the FPGA for this run only: the \
         devices return to the default (3 cycles) when the chain is enumerated again."
 )]

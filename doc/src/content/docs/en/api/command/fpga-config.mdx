@@ -1,0 +1,31 @@
+---
+title: SetFpgaConfig
+description: SetFpgaConfig to change the FPGA settings
+sidebar:
+  order: 10.55
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/api/command/fpga-config.rs?raw";
+import pySample from "@codes/python/examples/api/command/fpga-config.py?raw";
+import fullSample from "@codes/rust/examples/api/command/fpga-config-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/fpga-config-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/fpga-config.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/fpga-config-example.cs?raw";
+
+`SetFpgaConfig` is a command that changes the settings held by the FPGA.
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+### FpgaConfig
+
+| Field             | Type   | Default | Description |
+| ----------------- | ------ | ------- | ----------- |
+| `sync_phase_lock` | `bool` | `true`  | Fine adjustment that phase-locks the FPGA clock to the sync pulse shared between devices. (enabled by default) |
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

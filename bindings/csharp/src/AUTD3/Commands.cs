@@ -213,6 +213,21 @@ namespace AUTD3
         internal static extern int autd3_cpu_config_get_ptp_pause_retry(IntPtr config, out ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr autd3_fpga_config_new();
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void autd3_fpga_config_free(IntPtr config);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr autd3_op_set_fpga_config(IntPtr config);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_fpga_config_set_sync_phase_lock(IntPtr config, [MarshalAs(UnmanagedType.I1)] bool value);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_fpga_config_get_sync_phase_lock(IntPtr config, [MarshalAs(UnmanagedType.I1)] out bool value);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_set_silencer_completion_time(ulong intensityNs, ulong phaseNs, [MarshalAs(UnmanagedType.I1)] bool strict);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
@@ -577,6 +592,87 @@ namespace AUTD3
             finally
             {
                 NativeCommand.autd3_cpu_config_free(handle);
+            }
+        }
+    }
+
+    internal static class FpgaConfigDefaults
+    {
+        internal static readonly bool SyncPhaseLock;
+
+        static FpgaConfigDefaults()
+        {
+            var handle = NativeCommand.autd3_fpga_config_new();
+            if (handle == IntPtr.Zero)
+            {
+                throw new Autd3Exception("failed to create fpga config");
+            }
+            try
+            {
+                OptionNative.Apply("preset", NativeCommand.autd3_fpga_config_get_sync_phase_lock(handle, out SyncPhaseLock));
+            }
+            finally
+            {
+                NativeCommand.autd3_fpga_config_free(handle);
+            }
+        }
+    }
+
+    public readonly struct FpgaConfig
+    {
+        private readonly bool? _syncPhaseLock;
+        public bool SyncPhaseLock { get => _syncPhaseLock ?? FpgaConfigDefaults.SyncPhaseLock; init => _syncPhaseLock = value; }
+
+        internal IntPtr CreateHandle()
+        {
+            var handle = NativeCommand.autd3_fpga_config_new();
+            if (handle == IntPtr.Zero)
+            {
+                throw new Autd3Exception("failed to create fpga config");
+            }
+            try
+            {
+                OptionNative.Apply("syncPhaseLock", NativeCommand.autd3_fpga_config_set_sync_phase_lock(handle, SyncPhaseLock));
+            }
+            catch
+            {
+                NativeCommand.autd3_fpga_config_free(handle);
+                throw;
+            }
+            return handle;
+        }
+    }
+
+    public sealed class SetFpgaConfig : ICommand
+    {
+        private readonly FpgaConfig _config;
+
+        public SetFpgaConfig() : this(new FpgaConfig())
+        {
+        }
+
+        public SetFpgaConfig(FpgaConfig config)
+        {
+            _config = config;
+        }
+
+        public FpgaConfig Config => _config;
+
+        IntPtr ICommand.CreateOp(Geometry geometry)
+        {
+            var handle = _config.CreateHandle();
+            try
+            {
+                var op = NativeCommand.autd3_op_set_fpga_config(handle);
+                if (op == IntPtr.Zero)
+                {
+                    throw new Autd3Exception("failed to create the fpga config operation");
+                }
+                return op;
+            }
+            finally
+            {
+                NativeCommand.autd3_fpga_config_free(handle);
             }
         }
     }

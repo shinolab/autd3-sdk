@@ -52,6 +52,7 @@ const SELECT_OUTPUT_MASK: usize = fw::BramSelect::OutputMask.as_u8() as usize;
 const SELECT_FLASH: usize = fw::BramSelect::Flash.as_u8() as usize;
 const SELECT_FLASH_BUF: usize = fw::BramSelect::FlashBuf.as_u8() as usize;
 const SELECT_PWE_TABLE: usize = fw::BramSelect::PweTable.as_u8() as usize;
+const SELECT_SYNC_PS: usize = fw::BramSelect::SyncPs.as_u8() as usize;
 const SELECT_MOD: usize = fw::BramSelect::Mod.as_u8() as usize;
 const SELECT_EMISSION: usize = fw::BramSelect::Emission.as_u8() as usize;
 
@@ -190,6 +191,7 @@ pub struct FpgaEmulator {
     reset_count: u32,
     pub(crate) flash: flash::FlashEmulator,
     reconfig_count: u32,
+    sync_ps_ctl: u16,
 }
 
 impl FpgaEmulator {
@@ -201,7 +203,8 @@ impl FpgaEmulator {
         controller[reg(fw::ADDR_FUNCTION_BITS)] = u16::from(
             (FunctionBits::EMULATOR
                 | FunctionBits::FLASH_OTA
-                | FunctionBits::STRICT_SILENCER_GUARD)
+                | FunctionBits::STRICT_SILENCER_GUARD
+                | FunctionBits::SYNC_PHASE_LOCK)
                 .bits(),
         );
         controller[reg(fw::ADDR_VERSION_NUM_MINOR)] = fw::VERSION_NUM_MINOR as u16;
@@ -232,6 +235,7 @@ impl FpgaEmulator {
             reset_count: 0,
             flash: flash::FlashEmulator::new(),
             reconfig_count: 0,
+            sync_ps_ctl: 1,
         }
     }
 
@@ -349,6 +353,9 @@ impl FpgaEmulator {
             SELECT_PHASE_CORR => self.phase_corr[a & 0xFF] = value,
             SELECT_OUTPUT_MASK => self.output_mask[a & (OUTPUT_MASK_WORDS - 1)] = value,
             SELECT_PWE_TABLE => self.pwe[a & (PWE_TABLE_SIZE - 1)] = value,
+            SELECT_SYNC_PS if a & 0xFF == reg(fw::ADDR_SYNC_PS_CTL) => {
+                self.sync_ps_ctl = value & 0b11;
+            }
             SELECT_FLASH => {
                 self.flash.write_reg(a & 0xFF, value);
                 if self.flash.take_reboot_request() {
@@ -372,6 +379,8 @@ impl FpgaEmulator {
             }
         } else if select == SELECT_FLASH {
             self.flash.read_reg(a & 0xFF)
+        } else if select == SELECT_SYNC_PS && a & 0xFF == reg(fw::ADDR_SYNC_PS_CTL) {
+            self.sync_ps_ctl
         } else {
             0
         }
@@ -502,6 +511,11 @@ impl FpgaEmulator {
         let gpio_in = self.effective_gpio_in();
         self.mod_swapchain.update(gpio_in, sys_time_ns);
         self.pattern_swapchain.update(gpio_in, sys_time_ns);
+    }
+
+    #[must_use]
+    pub fn sync_phase_lock(&self) -> bool {
+        self.sync_ps_ctl & 1 != 0
     }
 
     #[must_use]
@@ -746,6 +760,19 @@ mod tests {
 
     fn write(fpga: &mut FpgaEmulator, addr: u16, value: u16) {
         fpga.write(addr, value);
+    }
+
+    #[test]
+    fn sync_phase_lock_starts_enabled_and_keeps_what_is_written() {
+        let mut fpga = FpgaEmulator::new(249);
+        let addr = (u16::from(fw::BramSelect::SyncPs.as_u8()) << 8) | fw::ADDR_SYNC_PS_CTL;
+        let functions = FunctionBits::from_bits_retain(fpga.read(fw::ADDR_FUNCTION_BITS) as u8);
+        assert!(functions.contains(FunctionBits::SYNC_PHASE_LOCK));
+        assert_eq!(fpga.read(addr), 1);
+        write(&mut fpga, addr, 0);
+        assert_eq!(fpga.read(addr), 0);
+        fpga.reload();
+        assert_eq!(fpga.read(addr), 1);
     }
 
     #[test]
