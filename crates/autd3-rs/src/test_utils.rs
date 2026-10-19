@@ -6,7 +6,7 @@ use crate::geometry::{Autd3, Device, Geometry};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
 pub(crate) fn test_geometry(num_devices: usize) -> Geometry {
-    Geometry::new((0..num_devices).map(|_| Autd3::default()).collect())
+    Geometry::new((0..num_devices).map(|_| Autd3::default()))
 }
 
 pub(crate) fn test_device(idx: usize) -> Device {

@@ -19,16 +19,12 @@ pub(crate) type Batched =
     fn(&Geometry, &[AmplitudeTarget], TransducerMask<'_>, &mut Batch) -> Result<(), HoloError>;
 
 pub(crate) fn geometry(devices: usize) -> Geometry {
-    Geometry::new(
-        (0..devices)
-            .map(|i| {
-                Autd3::new(
-                    Point3::new(i as f32 * 200.0, 0.0, 0.0),
-                    UnitQuaternion::identity(),
-                )
-            })
-            .collect(),
-    )
+    Geometry::new((0..devices).map(|i| {
+        Autd3::new(
+            Point3::new(i as f32 * 200.0, 0.0, 0.0),
+            UnitQuaternion::identity(),
+        )
+    }))
 }
 
 pub(crate) fn wavelength() -> Length {

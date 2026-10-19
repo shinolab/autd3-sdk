@@ -14,16 +14,12 @@ const DEVICE_COUNTS: &[usize] = &[1, 9, 64];
 const FOCI_COUNTS: &[usize] = &[1, 4, 16];
 
 fn make_geometry(devices: usize) -> Geometry {
-    Geometry::new(
-        (0..devices)
-            .map(|i| {
-                Autd3::new(
-                    Point3::new(i as f32 * 200.0, 0.0, 0.0),
-                    UnitQuaternion::identity(),
-                )
-            })
-            .collect(),
-    )
+    Geometry::new((0..devices).map(|i| {
+        Autd3::new(
+            Point3::new(i as f32 * 200.0, 0.0, 0.0),
+            UnitQuaternion::identity(),
+        )
+    }))
 }
 
 fn make_foci(geometry: &Geometry, n: usize) -> Vec<AmplitudeTarget> {

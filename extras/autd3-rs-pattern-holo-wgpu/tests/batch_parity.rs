@@ -21,16 +21,12 @@ const CONSTRAINTS: [IntensityConstraint; 4] = [
 ];
 
 fn geometry(devices: usize) -> Geometry {
-    Geometry::new(
-        (0..devices)
-            .map(|i| {
-                Autd3::new(
-                    Point3::new(i as f32 * 200.0, 0.0, 0.0),
-                    UnitQuaternion::identity(),
-                )
-            })
-            .collect(),
-    )
+    Geometry::new((0..devices).map(|i| {
+        Autd3::new(
+            Point3::new(i as f32 * 200.0, 0.0, 0.0),
+            UnitQuaternion::identity(),
+        )
+    }))
 }
 
 fn problem(g: &Geometry, seed: usize, nf: usize) -> Vec<AmplitudeTarget> {

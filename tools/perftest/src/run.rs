@@ -267,7 +267,7 @@ async fn run_with_link(link: Link, cli: &Cli) -> Result<RunOutput> {
         Mode::StopAndWait if !cli.command.is_bulk() => 1,
         _ => cli.max_inflight.max(1),
     };
-    let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()).collect());
+    let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()));
     let client = Box::pin(Client::open(
         &geometry,
         link,

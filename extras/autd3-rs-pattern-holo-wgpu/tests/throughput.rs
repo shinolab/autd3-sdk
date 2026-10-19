@@ -18,16 +18,12 @@ fn throughput_vs_nalgebra() {
         "alg", "dev", "foci", "cpu[ms]", "gpu[ms]", "speedup"
     );
     for d in [9usize, 64] {
-        let g = Geometry::new(
-            (0..d)
-                .map(|i| {
-                    Autd3::new(
-                        Point3::new(i as f32 * 200.0, 0.0, 0.0),
-                        UnitQuaternion::identity(),
-                    )
-                })
-                .collect(),
-        );
+        let g = Geometry::new((0..d).map(|i| {
+            Autd3::new(
+                Point3::new(i as f32 * 200.0, 0.0, 0.0),
+                UnitQuaternion::identity(),
+            )
+        }));
         for nf in [1usize, 16] {
             let f: Vec<AmplitudeTarget> = (0..nf)
                 .map(|i| AmplitudeTarget {
@@ -75,16 +71,12 @@ fn batch_vs_sequential() {
         "alg", "dev", "foci", "problems", "sequential[ms]", "batched[ms]", "speedup"
     );
     for d in [64usize] {
-        let g = Geometry::new(
-            (0..d)
-                .map(|i| {
-                    Autd3::new(
-                        Point3::new(i as f32 * 200.0, 0.0, 0.0),
-                        UnitQuaternion::identity(),
-                    )
-                })
-                .collect(),
-        );
+        let g = Geometry::new((0..d).map(|i| {
+            Autd3::new(
+                Point3::new(i as f32 * 200.0, 0.0, 0.0),
+                UnitQuaternion::identity(),
+            )
+        }));
         for nf in [1usize, 4] {
             for problems in [16usize, 64] {
                 let owned: Vec<Vec<AmplitudeTarget>> = (0..problems)

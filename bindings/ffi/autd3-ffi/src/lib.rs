@@ -3723,13 +3723,9 @@ mod tests {
     }
 
     fn geometry_of(num_devices: usize) -> *mut Geometry {
-        into_handle(Geometry::new(
-            (0..num_devices)
-                .map(|_| {
-                    autd3_rs::Autd3::new(Point3::origin(), autd3_rs::UnitQuaternion::identity())
-                })
-                .collect(),
-        ))
+        into_handle(Geometry::new((0..num_devices).map(|_| {
+            autd3_rs::Autd3::new(Point3::origin(), autd3_rs::UnitQuaternion::identity())
+        })))
     }
 
     fn encode(geometry: *const Geometry, command: *mut Pending) -> *mut Arc<Frames> {
