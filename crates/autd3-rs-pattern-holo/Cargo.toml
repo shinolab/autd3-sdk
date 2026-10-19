@@ -8,8 +8,8 @@ repository.workspace = true
 homepage.workspace = true
 description = "Multi-focus hologram optimization (Naive/GS/GSPAT) for autd3-rs."
 readme = "README.md"
-keywords = ["autd3", "haptics"]
-categories = ["science"]
+keywords.workspace = true
+categories.workspace = true
 
 [package.metadata.docs.rs]
 all-features = true

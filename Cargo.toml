@@ -34,6 +34,8 @@ license = "MIT"
 authors = ["Shun Suzuki <suzuki@hapis.k.u-tokyo.ac.jp>"]
 repository = "https://github.com/shinolab/autd3-sdk"
 homepage = "https://hapislab.org/en/airborne-ultrasound-tactile-display"
+keywords = ["autd3", "haptics"]
+categories = ["science"]
 
 [workspace.dependencies]
 approx = { version = "0.5.1", default-features = false, features = ["std"] }

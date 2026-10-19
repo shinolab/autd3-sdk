@@ -8,8 +8,8 @@ repository.workspace = true
 homepage.workspace = true
 description = "Amplitude-modulation waveform utilities for autd3-rs (sine, etc.)."
 readme = "README.md"
-keywords = ["autd3", "haptics"]
-categories = ["science"]
+keywords.workspace = true
+categories.workspace = true
 
 [dependencies]
 autd3-rs-core.workspace = true
