@@ -349,7 +349,7 @@ def test_a_zero_exec_lead_is_rejected_at_open() -> None:
     async def open_client() -> None:
         await autd3.Client.open(one_device(), autd3.UdpOption(), config)
 
-    with pytest.raises(autd3.Autd3Error, match="exec_lead must be at least") as err:
+    with pytest.raises(autd3.Autd3Error, match="exec_lead must be within") as err:
         asyncio.run(open_client())
     assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
 

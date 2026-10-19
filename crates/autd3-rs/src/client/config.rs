@@ -45,20 +45,15 @@ impl ClientConfig {
             return Err(Error::InvalidConfig(ClientConfigError::ZeroAckTimeout));
         }
         if let Some(exec_lead) = self.exec_lead
-            && exec_lead < EXEC_LEAD_MIN
+            && !(EXEC_LEAD_MIN..EXEC_LEAD_LIMIT).contains(&exec_lead)
         {
-            return Err(Error::InvalidConfig(ClientConfigError::ExecLeadTooShort {
-                got: exec_lead,
-                min: EXEC_LEAD_MIN,
-            }));
-        }
-        if let Some(exec_lead) = self.exec_lead
-            && exec_lead >= EXEC_LEAD_LIMIT
-        {
-            return Err(Error::InvalidConfig(ClientConfigError::ExecLeadTooLong {
-                got: exec_lead,
-                limit: EXEC_LEAD_LIMIT,
-            }));
+            return Err(Error::InvalidConfig(
+                ClientConfigError::ExecLeadOutOfRange {
+                    got: exec_lead,
+                    min: EXEC_LEAD_MIN,
+                    limit: EXEC_LEAD_LIMIT,
+                },
+            ));
         }
         if let (Some(exec_lead), Some(lost_timeout)) = (self.exec_lead, lost_timeout)
             && exec_lead >= lost_timeout
@@ -98,7 +93,7 @@ mod tests {
         assert!(matches!(
             with(Duration::from_nanos(99_999)).validate(None),
             Err(Error::InvalidConfig(
-                ClientConfigError::ExecLeadTooShort { .. }
+                ClientConfigError::ExecLeadOutOfRange { .. }
             ))
         ));
     }
@@ -118,13 +113,13 @@ mod tests {
         assert!(matches!(
             with(limit).validate(None),
             Err(Error::InvalidConfig(
-                ClientConfigError::ExecLeadTooLong { .. }
+                ClientConfigError::ExecLeadOutOfRange { .. }
             ))
         ));
         assert!(matches!(
             with(limit).validate(Some(Duration::MAX)),
             Err(Error::InvalidConfig(
-                ClientConfigError::ExecLeadTooLong { .. }
+                ClientConfigError::ExecLeadOutOfRange { .. }
             ))
         ));
     }
