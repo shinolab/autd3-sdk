@@ -384,7 +384,7 @@ impl Length {
     }
 }
 
-#[pyclass(name = "_FreqUnit", module = "autd3_core", skip_from_py_object)]
+#[pyclass(name = "_FreqUnit", module = "autd3_core")]
 #[derive(Clone, Copy)]
 pub struct FreqUnit {
     scale: u32,
@@ -413,7 +413,7 @@ impl FreqUnit {
     }
 }
 
-#[pyclass(name = "_LengthUnit", module = "autd3_core", skip_from_py_object)]
+#[pyclass(name = "_LengthUnit", module = "autd3_core")]
 #[derive(Clone, Copy)]
 pub struct LengthUnit {
     scale_mm: f32,
@@ -433,7 +433,7 @@ impl LengthUnit {
     }
 }
 
-#[pyclass(name = "_AngleUnit", module = "autd3_core", skip_from_py_object)]
+#[pyclass(name = "_AngleUnit", module = "autd3_core")]
 #[derive(Clone, Copy)]
 pub struct AngleUnit {
     degree: bool,
@@ -456,7 +456,7 @@ impl AngleUnit {
     }
 }
 
-#[pyclass(name = "_SecUnit", module = "autd3_core", skip_from_py_object)]
+#[pyclass(name = "_SecUnit", module = "autd3_core")]
 #[derive(Clone, Copy)]
 pub struct SecUnit;
 

@@ -113,11 +113,7 @@ enum AmpKind {
     Db,
 }
 
-#[pyclass(
-    name = "_AmplitudeUnit",
-    module = "autd3_pattern_holo",
-    skip_from_py_object
-)]
+#[pyclass(name = "_AmplitudeUnit", module = "autd3_pattern_holo")]
 #[derive(Clone, Copy)]
 pub struct AmplitudeUnit(AmpKind);
 
@@ -139,13 +135,7 @@ impl AmplitudeUnit {
     }
 }
 
-#[pyclass(
-    name = "AmplitudeTarget",
-    module = "autd3_pattern_holo",
-    eq,
-    frozen,
-    skip_from_py_object
-)]
+#[pyclass(name = "AmplitudeTarget", module = "autd3_pattern_holo", eq, frozen)]
 #[derive(PartialEq)]
 pub struct AmplitudeTarget(pub(crate) CoreAmplitudeTarget);
 
@@ -307,13 +297,7 @@ fn mask_repr(mask: &Mask) -> String {
     }
 }
 
-#[pyclass(
-    name = "NaiveOption",
-    module = "autd3_pattern_holo",
-    eq,
-    frozen,
-    skip_from_py_object
-)]
+#[pyclass(name = "NaiveOption", module = "autd3_pattern_holo", eq, frozen)]
 #[derive(PartialEq)]
 pub struct NaiveOption {
     inner: CoreNaiveOption<'static>,
@@ -377,13 +361,7 @@ impl NaiveOption {
     }
 }
 
-#[pyclass(
-    name = "GsOption",
-    module = "autd3_pattern_holo",
-    eq,
-    frozen,
-    skip_from_py_object
-)]
+#[pyclass(name = "GsOption", module = "autd3_pattern_holo", eq, frozen)]
 #[derive(PartialEq)]
 pub struct GsOption {
     inner: CoreGsOption<'static>,
@@ -457,13 +435,7 @@ impl GsOption {
     }
 }
 
-#[pyclass(
-    name = "GspatOption",
-    module = "autd3_pattern_holo",
-    eq,
-    frozen,
-    skip_from_py_object
-)]
+#[pyclass(name = "GspatOption", module = "autd3_pattern_holo", eq, frozen)]
 #[derive(PartialEq)]
 pub struct GspatOption {
     inner: CoreGspatOption<'static>,
@@ -537,12 +509,7 @@ impl GspatOption {
     }
 }
 
-#[pyclass(
-    name = "GreedyOption",
-    module = "autd3_pattern_holo",
-    frozen,
-    skip_from_py_object
-)]
+#[pyclass(name = "GreedyOption", module = "autd3_pattern_holo", frozen)]
 pub struct GreedyOption {
     inner: CoreGreedyOption<'static>,
     mask: Mask,

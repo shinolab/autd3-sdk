@@ -7,7 +7,7 @@ use autd3_rs::ClientConfig as CoreClientConfig;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-#[pyclass(name = "ClientConfig", module = "autd3", skip_from_py_object)]
+#[pyclass(name = "ClientConfig", module = "autd3")]
 #[derive(Clone)]
 pub struct ClientConfig(pub(crate) CoreClientConfig);
 

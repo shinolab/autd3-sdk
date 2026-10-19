@@ -214,14 +214,7 @@ impl Phase {
     }
 }
 
-#[pyclass(
-    name = "SamplingConfig",
-    module = "autd3_core",
-    eq,
-    hash,
-    frozen,
-    skip_from_py_object
-)]
+#[pyclass(name = "SamplingConfig", module = "autd3_core", eq, hash, frozen)]
 #[derive(Clone, PartialEq)]
 pub struct SamplingConfig(pub CoreSamplingConfig);
 
@@ -310,14 +303,7 @@ enum NearestInner {
     Period(StdDuration),
 }
 
-#[pyclass(
-    name = "Nearest",
-    module = "autd3_core",
-    eq,
-    hash,
-    frozen,
-    skip_from_py_object
-)]
+#[pyclass(name = "Nearest", module = "autd3_core", eq, hash, frozen)]
 #[derive(Clone, Copy, PartialEq)]
 pub struct PyNearest(NearestInner);
 

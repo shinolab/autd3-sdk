@@ -86,13 +86,7 @@ impl StmConfig {
     }
 }
 
-#[pyclass(
-    name = "ControlPoint",
-    module = "autd3.value",
-    eq,
-    frozen,
-    skip_from_py_object
-)]
+#[pyclass(name = "ControlPoint", module = "autd3.value", eq, frozen)]
 #[derive(Clone, Copy, PartialEq)]
 pub struct ControlPoint(pub(crate) CoreControlPoint);
 
@@ -123,13 +117,7 @@ impl ControlPoint {
     }
 }
 
-#[pyclass(
-    name = "ControlPoints",
-    module = "autd3.value",
-    eq,
-    frozen,
-    skip_from_py_object
-)]
+#[pyclass(name = "ControlPoints", module = "autd3.value", eq, frozen)]
 #[derive(Clone, PartialEq)]
 pub struct ControlPoints {
     pub(crate) points: Vec<CoreControlPoint>,
@@ -174,13 +162,7 @@ impl ControlPoints {
     }
 }
 
-#[pyclass(
-    name = "FociStmOption",
-    module = "autd3.commands",
-    eq,
-    frozen,
-    skip_from_py_object
-)]
+#[pyclass(name = "FociStmOption", module = "autd3.commands", eq, frozen)]
 #[derive(PartialEq)]
 pub struct FociStmOption(pub(crate) CoreFociStmOption);
 
@@ -232,13 +214,7 @@ impl FociStmOption {
     }
 }
 
-#[pyclass(
-    name = "PatternStmOption",
-    module = "autd3.commands",
-    eq,
-    frozen,
-    skip_from_py_object
-)]
+#[pyclass(name = "PatternStmOption", module = "autd3.commands", eq, frozen)]
 #[derive(PartialEq)]
 pub struct PatternStmOption(pub(crate) CorePatternStmOption);
 

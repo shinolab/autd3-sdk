@@ -54,13 +54,7 @@ fn mode_to_py(py: Python<'_>, mode: SamplingMode) -> PyResult<Bound<'_, PyAny>> 
     }
 }
 
-#[pyclass(
-    name = "SineOption",
-    module = "autd3_modulation",
-    eq,
-    frozen,
-    skip_from_py_object
-)]
+#[pyclass(name = "SineOption", module = "autd3_modulation", eq, frozen)]
 #[derive(Clone, Copy, PartialEq)]
 pub struct SineOption(pub(crate) CoreSineOption);
 
@@ -206,13 +200,7 @@ fn modulation_buffer() -> ModulationBuffer {
     }
 }
 
-#[pyclass(
-    name = "SquareOption",
-    module = "autd3_modulation",
-    eq,
-    frozen,
-    skip_from_py_object
-)]
+#[pyclass(name = "SquareOption", module = "autd3_modulation", eq, frozen)]
 #[derive(Clone, Copy, PartialEq)]
 pub struct SquareOption(CoreSquareOption);
 
@@ -264,13 +252,7 @@ impl SquareOption {
     }
 }
 
-#[pyclass(
-    name = "FourierOption",
-    module = "autd3_modulation",
-    eq,
-    frozen,
-    skip_from_py_object
-)]
+#[pyclass(name = "FourierOption", module = "autd3_modulation", eq, frozen)]
 #[derive(Clone, Copy, PartialEq)]
 pub struct FourierOption(CoreFourierOption);
 
@@ -310,13 +292,7 @@ impl FourierOption {
     }
 }
 
-#[pyclass(
-    name = "SineComponent",
-    module = "autd3_modulation",
-    eq,
-    frozen,
-    skip_from_py_object
-)]
+#[pyclass(name = "SineComponent", module = "autd3_modulation", eq, frozen)]
 #[derive(Clone, Copy, PartialEq)]
 pub struct SineComponent(CoreSineComponent);
 

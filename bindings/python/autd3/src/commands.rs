@@ -52,13 +52,7 @@ impl ForceFan {
     }
 }
 
-#[pyclass(
-    name = "FixedCompletionTime",
-    module = "autd3.commands",
-    eq,
-    frozen,
-    skip_from_py_object
-)]
+#[pyclass(name = "FixedCompletionTime", module = "autd3.commands", eq, frozen)]
 #[derive(PartialEq)]
 pub struct FixedCompletionTimePy(FixedCompletionTime);
 
@@ -102,13 +96,7 @@ impl FixedCompletionTimePy {
     }
 }
 
-#[pyclass(
-    name = "FixedUpdateRate",
-    module = "autd3.commands",
-    eq,
-    frozen,
-    skip_from_py_object
-)]
+#[pyclass(name = "FixedUpdateRate", module = "autd3.commands", eq, frozen)]
 #[derive(PartialEq)]
 pub struct FixedUpdateRatePy(FixedUpdateRate);
 
