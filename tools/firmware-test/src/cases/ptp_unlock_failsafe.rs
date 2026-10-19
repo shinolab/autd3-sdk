@@ -25,6 +25,7 @@ fn verdict(ok: bool) -> &'static str {
 fn unlocked_ptp() -> PtpConfig {
     PtpConfig {
         holdover: Duration::from_millis(1),
+        lock_threshold: Duration::ZERO,
         ..PtpConfig::default()
     }
 }
@@ -149,8 +150,15 @@ async fn release_by_relocking(ctx: &Ctx<'_>) -> Result<()> {
         seen.gates
     );
 
-    config(ctx, CpuConfig::default()).await?;
-    let s = watch(ctx, "default again", RELOCK).await;
+    config(
+        ctx,
+        CpuConfig {
+            ptp_unlock_failsafe_timeout: Some(TIMEOUT),
+            ..CpuConfig::default()
+        },
+    )
+    .await?;
+    let s = watch(ctx, "default PTP, timeout still armed", RELOCK).await;
     println!(
         "  {} every device locks again",
         verdict(s.iter().all(|d| *d == DeviceState::Ready))
