@@ -66,53 +66,54 @@ pub fn outcome(logs: &[String]) -> Result<Vec<DeviceVersions>, String> {
 impl Confirm {
     pub fn ui(&self, ui: &egui::Ui) -> Answer {
         let mut answer = Answer::Pending;
-        let modal = egui::Modal::new(egui::Id::new("firmware-ota-confirm")).show(ui.ctx(), |ui| {
-            ui.set_width(460.0);
-            ui.heading(format!("Update the firmware to v{}?", self.version));
-            ui.add_space(4.0);
-            ui.label(format!("{} device(s) on the bus", self.devices.len()));
-            ui.add_space(4.0);
-            egui::Grid::new("firmware-ota-confirm-grid")
-                .num_columns(4)
-                .spacing([12.0, 4.0])
-                .striped(true)
-                .show(ui, |ui| {
-                    for (device, versions) in self.devices.iter().enumerate() {
-                        for (part, current, updated) in [
-                            ("CPU", versions.cpu.as_deref(), self.target.cpu()),
-                            ("FPGA", versions.fpga.as_deref(), self.target.fpga()),
-                        ] {
-                            let Some(current) = current else {
-                                continue;
-                            };
-                            ui.label(format!("device {device}"));
-                            ui.label(part);
-                            ui.monospace(current);
-                            if updated {
-                                ui.monospace(format!("-> {}", self.version));
-                            } else {
-                                ui.weak("(unchanged)");
+        let modal =
+            egui::Modal::new(egui::Id::unique("firmware-ota-confirm")).show(ui.ctx(), |ui| {
+                ui.set_width(460.0);
+                ui.heading(format!("Update the firmware to v{}?", self.version));
+                ui.add_space(4.0);
+                ui.label(format!("{} device(s) on the bus", self.devices.len()));
+                ui.add_space(4.0);
+                egui::Grid::new("firmware-ota-confirm-grid")
+                    .num_columns(4)
+                    .spacing([12.0, 4.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        for (device, versions) in self.devices.iter().enumerate() {
+                            for (part, current, updated) in [
+                                ("CPU", versions.cpu.as_deref(), self.target.cpu()),
+                                ("FPGA", versions.fpga.as_deref(), self.target.fpga()),
+                            ] {
+                                let Some(current) = current else {
+                                    continue;
+                                };
+                                ui.label(format!("device {device}"));
+                                ui.label(part);
+                                ui.monospace(current);
+                                if updated {
+                                    ui.monospace(format!("-> {}", self.version));
+                                } else {
+                                    ui.weak("(unchanged)");
+                                }
+                                ui.end_row();
                             }
-                            ui.end_row();
                         }
+                    });
+                ui.add_space(4.0);
+                ui.colored_label(
+                    egui::Color32::LIGHT_YELLOW,
+                    "Transducer output stops during the update; do not power off the devices \
+                 while it runs.",
+                );
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    if ui.button("Update").clicked() {
+                        answer = Answer::Update;
+                    }
+                    if ui.button("Cancel").clicked() {
+                        answer = Answer::Cancel;
                     }
                 });
-            ui.add_space(4.0);
-            ui.colored_label(
-                egui::Color32::LIGHT_YELLOW,
-                "Transducer output stops during the update; do not power off the devices \
-                 while it runs.",
-            );
-            ui.add_space(8.0);
-            ui.horizontal(|ui| {
-                if ui.button("Update").clicked() {
-                    answer = Answer::Update;
-                }
-                if ui.button("Cancel").clicked() {
-                    answer = Answer::Cancel;
-                }
             });
-        });
         if answer == Answer::Pending && modal.should_close() {
             answer = Answer::Cancel;
         }
