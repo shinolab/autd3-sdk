@@ -89,6 +89,7 @@ The difference shows up in throughput, not latency: many requests are in flight 
 
 Alternates zero-amplitude Patterns between bank B0 and B1, waiting for every reply of one switch before the next, with GPIO[0] on `PatternBank`, so the switch can be probed on two or more devices.
 It sends `Clear` first, so the pulse width table is the default one, whose entry for amplitude 0 is 0: no transducer emits.
+It then sends `Synchronize`, as `Client::open` does: opening the bus restarts PTP, and without it the FPGA clocks of the devices keep the offsets they had before, so the edges of different devices would land on different 25 µs grids.
 
 It drives `UdpBus` directly instead of the `Client` to read the device time each device puts in its reply (`FrameReply.sys_time`, taken right after the frame was processed).
 It stamps `EXEC_AT` the way `ClientConfig.exec_lead` does (per frame, from the device time right before that frame is sent), and resets the sequence after every failed switch.

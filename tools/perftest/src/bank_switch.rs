@@ -8,7 +8,8 @@ use anyhow::{Context, Result, bail};
 use autd3_cpu_wire::payload::Telemetry;
 use autd3_cpu_wire::udp::{FrameReply, Header, Kind, PROTOCOL_VERSION};
 use autd3_rs::commands::{
-    ActivatePatternBank, Clear, ConfigPattern, GpioOut, Pattern, SetGpioOut, WritePatternBuffer,
+    ActivatePatternBank, Clear, ConfigPattern, GpioOut, Pattern, SetGpioOut, Synchronize,
+    WritePatternBuffer,
 };
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::protocol::{Cmd, EXEC_AT_UNIT_NS, FrameHeader, Seq};
@@ -636,6 +637,7 @@ fn prepare(
 ) -> Result<()> {
     session.reset()?;
     session.run_unscheduled(&Frames::encode(geometry, Clear)?, "Clear")?;
+    session.run_unscheduled(&Frames::encode(geometry, Synchronize)?, "Synchronize")?;
     session.run_unscheduled(
         &Frames::encode(
             geometry,
