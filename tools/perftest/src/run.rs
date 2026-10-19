@@ -208,13 +208,15 @@ fn spawn_state_check(checker: StateChecker, interval: Duration) -> StateCheckGua
     StateCheckGuard { stop, join }
 }
 
-pub async fn run(cli: &Cli) -> Result<RunOutput> {
-    let emulator = cli
-        .emulator
+pub fn spawn_emulator(cli: &Cli) -> Result<Option<UdpEmulator>> {
+    cli.emulator
         .then(|| UdpEmulator::spawn(cli.devices.get()))
         .transpose()
-        .context("starting the UDP device emulator")?;
-    let mut option = match &emulator {
+        .context("starting the UDP device emulator")
+}
+
+pub fn udp_option(cli: &Cli, emulator: Option<&UdpEmulator>) -> UdpOption {
+    let mut option = match emulator {
         Some(emulator) => UdpOption {
             iface: emulator.interface(),
             reply_timeout: Duration::from_millis(50),
@@ -239,6 +241,12 @@ pub async fn run(cli: &Cli) -> Result<RunOutput> {
     if let Some(bytes) = cli.send_buffer {
         option.send_buffer = std::num::NonZeroUsize::new(bytes);
     }
+    option
+}
+
+pub async fn run(cli: &Cli) -> Result<RunOutput> {
+    let emulator = spawn_emulator(cli)?;
+    let option = udp_option(cli, emulator.as_ref());
     let link = match cli.server {
         Some(port) => Link::from(ServerLink {
             port,
@@ -267,6 +275,7 @@ async fn run_with_link(link: Link, cli: &Cli) -> Result<RunOutput> {
             ack_timeout: cli.ack_timeout,
             max_inflight: NonZeroUsize::new(max_inflight).unwrap(),
             max_resync_rounds: cli.max_resync_rounds,
+            exec_lead: cli.exec_lead,
             ..Default::default()
         },
     ))
@@ -311,6 +320,7 @@ async fn run_with_link(link: Link, cli: &Cli) -> Result<RunOutput> {
         Mode::Streaming => {
             run_streaming(&client, sender, shutdown, max_inflight, measurement).await
         }
+        Mode::BankSwitch => unreachable!("bank-switch runs without the Client"),
     };
 
     if let Ok(output) = &mut output
@@ -643,7 +653,7 @@ impl Live {
     }
 }
 
-fn spawn_signal_listener(flag: Arc<AtomicBool>) {
+pub fn spawn_signal_listener(flag: Arc<AtomicBool>) {
     tokio::spawn(async move {
         if tokio::signal::ctrl_c().await.is_ok() {
             flag.store(true, Ordering::Relaxed);

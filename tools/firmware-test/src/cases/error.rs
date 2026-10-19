@@ -1,19 +1,23 @@
 use core::num::NonZeroU16;
+use std::time::Duration;
 
 use anyhow::Result;
 
 use autd3_rs::Frames;
 use autd3_rs::commands::{
     ActivateModulationBank, ActivatePatternBank, Clear, ConfigModulation, ConfigPattern,
-    FixedCompletionTime, SetSilencer,
+    FixedCompletionTime, Pattern, SetSilencer,
 };
 use autd3_rs::common::ULTRASOUND_PERIOD;
 use autd3_rs::value::{
-    LoopBehavior, ModulationBank, PatternBank, SamplingConfig, SysTime, TransitionMode,
+    GpioIn, Intensity, LoopBehavior, ModulationBank, PatternBank, SamplingConfig, SysTime,
+    TransitionMode,
 };
 
 use crate::Ctx;
-use crate::cases::pattern_util::{activate_mod_bank, expect_firmware_error, expect_firmware_ok};
+use crate::cases::pattern_util::{
+    activate_mod_bank, buffers, expect_firmware_error, expect_firmware_ok, report_fpga_state,
+};
 use crate::cases::{
     ERR_INVALID_SILENCER_SETTING, ERR_INVALID_TRANSITION_MODE, ERR_MISS_TRANSITION_TIME,
 };
@@ -231,6 +235,59 @@ async fn strict_guard_follows_the_banks_in_use(ctx: &Ctx<'_>) -> Result<()> {
     ctx.send(Clear).await
 }
 
+async fn pattern_transition_rejections(ctx: &Ctx<'_>) -> Result<()> {
+    let (phases, intensities) = buffers(ctx.geometry, Intensity::MIN);
+
+    let frames = Frames::encode(
+        ctx.client.geometry(),
+        Pattern::with_bank(PatternBank::B1, &phases, &intensities),
+    )?;
+    println!(
+        "  [{}] Pattern goes out as {} frame(s)",
+        if frames.len() == 1 { "OK" } else { "FAIL" },
+        frames.len()
+    );
+    ctx.send_frames(&frames).await?;
+    report_fpga_state(
+        ctx,
+        "Pattern B1 in one frame",
+        None,
+        Some(PatternBank::B1),
+        Some(true),
+    )
+    .await?;
+
+    let at = ctx.client.device_time_now()? + Duration::from_secs(1);
+    for (name, transition_mode) in [
+        ("SyncIdx", TransitionMode::SyncIdx),
+        ("SysTime", TransitionMode::SysTime { time: at }),
+        ("Gpio", TransitionMode::Gpio(GpioIn::I0)),
+    ] {
+        expect_firmware_error(
+            ctx,
+            &format!("Pattern B0 + {name}"),
+            Frames::encode(
+                ctx.client.geometry(),
+                Pattern {
+                    transition_mode,
+                    ..Pattern::with_bank(PatternBank::B0, &phases, &intensities)
+                },
+            ),
+            ERR_INVALID_TRANSITION_MODE,
+        )
+        .await;
+        report_fpga_state(
+            ctx,
+            &format!("Pattern B0 + {name} leaves B1 active"),
+            None,
+            Some(PatternBank::B1),
+            Some(true),
+        )
+        .await?;
+    }
+    Ok(())
+}
+
 pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     println!("firmware error-detail checks:");
 
@@ -291,6 +348,7 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
 
     silencer_phase_checks(ctx).await?;
     strict_guard_follows_the_banks_in_use(ctx).await?;
+    pattern_transition_rejections(ctx).await?;
 
     wait_enter("The firmware rejected each malformed command with the expected error code").await;
     Ok(())

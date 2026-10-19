@@ -13,6 +13,14 @@ pub enum Mode {
     #[default]
     StopAndWait,
     Streaming,
+    BankSwitch,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+pub enum Framing {
+    #[default]
+    Fused,
+    Split,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
@@ -133,8 +141,30 @@ pub struct Cli {
         help = "maps to ClientConfig.ack_timeout"
     )]
     pub ack_timeout: Duration,
-    #[arg(long, value_enum, default_value_t = Mode::StopAndWait)]
+    #[arg(
+        long = "exec-lead",
+        value_parser = humantime::parse_duration,
+        help = "Process every frame on the 1 ms device-time boundary this far ahead of the send, e.g. 5ms \
+                (maps to ClientConfig.exec_lead). Omit to process every frame on arrival."
+    )]
+    pub exec_lead: Option<Duration>,
+    #[arg(
+        long,
+        value_enum,
+        default_value_t = Mode::StopAndWait,
+        help = "stop-and-wait, streaming, or bank-switch. bank-switch drives the devices without the \
+                Client: it alternates zero-amplitude Patterns between bank B0 and B1 with GPIO[0] on \
+                PatternBank and records, per device, the reply's device time minus the device time \
+                right before the send."
+    )]
     pub mode: Mode,
+    #[arg(
+        long,
+        value_enum,
+        help = "How bank-switch sends one switch: fused (Pattern, 1 WritePatternFused frame, default) \
+                or split (WritePatternBuffer + ConfigPattern + ActivatePatternBank, 3 frames pipelined)."
+    )]
+    pub framing: Option<Framing>,
     #[arg(
         long = "max-inflight",
         alias = "inflight",
@@ -166,6 +196,27 @@ impl Cli {
         }
         if self.ack_timeout.is_zero() {
             return Err("--ack-timeout must be longer than 0".to_string());
+        }
+        if let Some(exec_lead) = self.exec_lead {
+            if exec_lead < Duration::from_millis(1) {
+                return Err("--exec-lead must be at least 1ms".to_string());
+            }
+            if self.ack_timeout <= exec_lead + Duration::from_millis(1) {
+                return Err(format!(
+                    "--ack-timeout {:?} must exceed --exec-lead {exec_lead:?} by more than 1ms",
+                    self.ack_timeout
+                ));
+            }
+        }
+        if self.mode == Mode::BankSwitch {
+            if self.command != Command::Pattern {
+                return Err("--mode bank-switch sends its own Patterns; drop --command".to_string());
+            }
+            if self.server.is_some() {
+                return Err("--mode bank-switch drives UDP directly; drop --server".to_string());
+            }
+        } else if self.framing.is_some() {
+            return Err("--framing applies to --mode bank-switch only".to_string());
         }
         Ok(())
     }

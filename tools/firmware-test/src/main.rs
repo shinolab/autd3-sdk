@@ -24,16 +24,19 @@ pub struct Ctx<'a> {
     pub states: &'a StateChecker,
     pub heartbeat: Duration,
     pub lost_timeout: Duration,
+    pub mute: bool,
 }
 
 pub struct Link<'a> {
     pub geometry: &'a Geometry,
     pub option: &'a UdpOption,
+    pub config: ClientConfig,
+    pub mute: bool,
 }
 
 impl Link<'_> {
     async fn open(&self) -> Result<Client, Error> {
-        Client::open(self.geometry, self.option, ClientConfig::default()).await
+        Client::open(self.geometry, self.option, self.config).await
     }
 
     pub async fn reopen(&self) -> Result<Client> {
@@ -42,6 +45,9 @@ impl Link<'_> {
             match self.open().await {
                 Ok(client) => {
                     restore_gpio_out(&client).await;
+                    if self.mute && !mute(&client).await {
+                        anyhow::bail!("muting the reopened devices failed");
+                    }
                     return Ok(client);
                 }
                 Err(e) if attempt < REOPEN_ATTEMPTS => {
@@ -110,6 +116,7 @@ const CASE_NAMES: &[&str] = &[
     "CPU Watchdog",
 ];
 
+const PULSE_WIDTH_ENCODER_INDEX: usize = 6;
 const LOST_INDEX: usize = 16;
 const REBOOT_INDEX: usize = 17;
 const AUTO_RECOVERY_INDEX: usize = 18;
@@ -155,6 +162,11 @@ async fn main() -> Result<()> {
     check("An oscilloscope is attached to the GPIO[0]/GPIO[1] pins of each device");
     check("No output is present on any GPIO pin");
     check("Client-side validation is disabled: malformed commands are checked by the firmware");
+    if cli.mute {
+        check(
+            "--mute: the pulse width table is all zero, so no transducer emits and PwmOut stays low",
+        );
+    }
 
     run(&cli).await
 }
@@ -178,8 +190,13 @@ async fn run(cli: &Cli) -> Result<()> {
     let link = Link {
         geometry: &geometry,
         option: &option,
+        config: cli.client_config(),
+        mute: cli.mute,
     };
     let mut client = link.open().await.context("opening the devices")?;
+    if cli.mute && !mute(&client).await {
+        anyhow::bail!("muting the devices failed");
+    }
 
     describe(&client).await;
     if restore_gpio_out(&client).await {
@@ -194,6 +211,7 @@ async fn run(cli: &Cli) -> Result<()> {
             states: &states,
             heartbeat,
             lost_timeout: option.lost_timeout,
+            mute: cli.mute,
         };
         client = match select(&ctx).await {
             Selected::Quit => break,
@@ -223,6 +241,19 @@ async fn restore_gpio_out(client: &Client) -> bool {
         .await;
     if let Err(e) = &sent {
         eprintln!("set gpio out failed: {e}");
+    }
+    sent.is_ok()
+}
+
+pub async fn mute(client: &Client) -> bool {
+    use autd3_rs::commands::SetPulseWidthTable;
+    let sent = client
+        .send(SetPulseWidthTable {
+            table: &SetPulseWidthTable::empty_table(),
+        })
+        .await;
+    if let Err(e) = &sent {
+        eprintln!("muting failed: {e}");
     }
     sent.is_ok()
 }
@@ -291,15 +322,43 @@ async fn select(ctx: &Ctx<'_>) -> Selected {
             REBOOT_INDEX => return Selected::Reboot,
             AUTO_RECOVERY_INDEX => return Selected::AutoRecovery,
             CPU_WATCHDOG_INDEX => return Selected::CpuWatchdog,
+            PULSE_WIDTH_ENCODER_INDEX if ctx.mute => {
+                println!("  [SKIP] the case replaces the pulse width table that --mute zeroes");
+                continue;
+            }
             _ => {}
         }
         if let Err(e) = dispatch(i, ctx).await {
             eprintln!("test failed: {e:?}");
         }
+        if ctx.client.config().exec_lead.is_some() {
+            report_exec_late(ctx.client).await;
+        }
 
         if let Err(e) = reset(ctx).await {
             eprintln!("reset failed: {e:?}");
         }
+        if ctx.mute && !mute(ctx.client).await {
+            eprintln!("stopping: the devices could not be muted after the case");
+            return Selected::Quit;
+        }
+    }
+}
+
+async fn report_exec_late(client: &Client) {
+    match client.read_telemetry().await {
+        Ok(telemetry) => {
+            let late: Vec<u32> = telemetry.iter().map(|t| t.exec_late).collect();
+            println!(
+                "  {} no frame since the last Clear started 1 ms or more after its EXEC_AT: exec_late {late:?}",
+                if late.iter().all(|n| *n == 0) {
+                    "[OK]"
+                } else {
+                    "[FAIL]"
+                }
+            );
+        }
+        Err(e) => eprintln!("read telemetry failed: {e}"),
     }
 }
 
@@ -318,6 +377,5 @@ async fn reset(ctx: &Ctx<'_>) -> Result<()> {
     )?)
     .await?;
 
-    ctx.send(Clear).await?;
-    Ok(())
+    ctx.send(Clear).await
 }
