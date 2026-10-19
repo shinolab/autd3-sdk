@@ -21,7 +21,7 @@ pub const REJECTED_BY_THE_DEVICE: ActivateModulationBank = ActivateModulationBan
 };
 
 pub fn geometry(num_devices: usize) -> Geometry {
-    Geometry::new((0..num_devices).map(|_| Autd3::default()).collect())
+    Geometry::new((0..num_devices).map(|_| Autd3::default()))
 }
 
 pub fn emulator(num_devices: usize) -> UdpEmulator {

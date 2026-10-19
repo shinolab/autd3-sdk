@@ -16,16 +16,12 @@ const TRIALS: usize = 5;
 
 fn propagation(gpu: &WgpuBackend, foci: usize) -> GpuMatrix {
     use autd3_rs_core::common::units::{m, s};
-    let geometry = Geometry::new(
-        (0..64)
-            .map(|i| {
-                Autd3::new(
-                    Point3::new(i as f32 * 200.0, 0.0, 0.0),
-                    UnitQuaternion::identity(),
-                )
-            })
-            .collect(),
-    );
+    let geometry = Geometry::new((0..64).map(|i| {
+        Autd3::new(
+            Point3::new(i as f32 * 200.0, 0.0, 0.0),
+            UnitQuaternion::identity(),
+        )
+    }));
     let mut tr_pos = Vec::with_capacity(N);
     let mut tr_dir = Vec::with_capacity(N);
     for dev in &geometry {

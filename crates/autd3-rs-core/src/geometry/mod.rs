@@ -33,7 +33,7 @@ pub struct Geometry {
 
 impl Geometry {
     #[must_use]
-    pub fn new<D: Into<Device>>(devices: Vec<D>) -> Self {
+    pub fn new<D: Into<Device>>(devices: impl IntoIterator<Item = D>) -> Self {
         Self {
             devices: devices
                 .into_iter()

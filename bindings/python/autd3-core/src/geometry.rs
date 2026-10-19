@@ -234,11 +234,11 @@ pub struct Geometry(CoreGeometry);
 impl Geometry {
     #[new]
     fn new(devices: Vec<Autd3>) -> Self {
-        let devices = devices
-            .into_iter()
-            .map(|d| CoreAutd3::new(d.origin, d.rotation))
-            .collect();
-        Self(CoreGeometry::new(devices))
+        Self(CoreGeometry::new(
+            devices
+                .into_iter()
+                .map(|d| CoreAutd3::new(d.origin, d.rotation)),
+        ))
     }
 
     #[staticmethod]

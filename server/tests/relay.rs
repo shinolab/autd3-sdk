@@ -41,7 +41,7 @@ fn wait_until(what: &str, mut holds: impl FnMut() -> bool) {
 }
 
 fn geometry(num_devices: usize) -> Geometry {
-    Geometry::new((0..num_devices).map(|_| Autd3::default()).collect())
+    Geometry::new((0..num_devices).map(|_| Autd3::default()))
 }
 
 fn config() -> ClientConfig {

@@ -19,9 +19,7 @@ pub struct Harness {
 
 impl Harness {
     pub fn new(num_devices: usize) -> Self {
-        let geometry = Arc::new(Geometry::new(
-            (0..num_devices).map(|_| Autd3::default()).collect(),
-        ));
+        let geometry = Arc::new(Geometry::new((0..num_devices).map(|_| Autd3::default())));
         let devices = geometry
             .iter()
             .map(|device| EmuDevice::new(device.num_transducers()))

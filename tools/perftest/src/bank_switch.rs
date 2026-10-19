@@ -676,7 +676,7 @@ fn measure(cli: &Cli, option: &UdpOption, shutdown: &AtomicBool) -> Result<()> {
             option.lost_timeout
         );
     }
-    let geometry = Geometry::new((0..devices).map(|_| Autd3::default()).collect());
+    let geometry = Geometry::new((0..devices).map(|_| Autd3::default()));
     let mut session = Session::open(cli, option, &geometry)?;
     let phases = geometry.phase_buffer();
     let intensities: Vec<Vec<Intensity>> = geometry

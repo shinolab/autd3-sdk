@@ -172,7 +172,7 @@ async fn main() -> Result<()> {
 }
 
 async fn run(cli: &Cli) -> Result<()> {
-    let geometry = Geometry::new((0..cli.devices).map(|_| Autd3::default()).collect());
+    let geometry = Geometry::new((0..cli.devices).map(|_| Autd3::default()));
     let heartbeat = Duration::from_micros(cli.heartbeat_us);
 
     let default = UdpOption::default();
