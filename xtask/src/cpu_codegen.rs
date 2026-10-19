@@ -123,11 +123,12 @@ fn function_bit(name: &str) -> Option<&str> {
 fn to_pascal(name: &str) -> String {
     name.split('_')
         .filter(|word| !word.is_empty())
-        .map(|word| {
+        .fold(String::new(), |mut pascal, word| {
             let (head, tail) = word.split_at(1);
-            format!("{}{}", head.to_ascii_uppercase(), tail.to_ascii_lowercase())
+            pascal.push_str(&head.to_ascii_uppercase());
+            pascal.push_str(&tail.to_ascii_lowercase());
+            pascal
         })
-        .collect()
 }
 
 fn is_fw_internal(name: &str) -> bool {

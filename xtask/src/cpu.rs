@@ -291,10 +291,13 @@ pub fn stamp_image(bin: &Path) -> Result<()> {
         );
     }
     let body_len = image.len() - body_at;
-    if body_len > SLOT_IMAGE_CAPACITY as usize {
+    let Some(body_len) = u32::try_from(body_len)
+        .ok()
+        .filter(|&len| len <= SLOT_IMAGE_CAPACITY)
+    else {
         bail!("slot-A image is {body_len} bytes, over the {SLOT_IMAGE_CAPACITY}-byte capacity");
-    }
-    let header = ImageHeader::new(0, body_len as u32, crc32(&image[body_at..]));
+    };
+    let header = ImageHeader::new(0, body_len, crc32(&image[body_at..]));
     let slot = &mut image[header_at..][..core::mem::size_of::<ImageHeader>()];
     if slot != header.as_bytes() && slot.iter().any(|&b| b != 0xFF) {
         bail!(
