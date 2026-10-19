@@ -35,6 +35,7 @@ libc.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true
+approx.workspace = true
 autd3-rs-firmware-emulator = { workspace = true, features = ["udp"] }
 pollster.workspace = true
 tracing = { workspace = true, features = ["std"] }

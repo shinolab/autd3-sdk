@@ -51,10 +51,6 @@ mod tests {
     use super::*;
     use crate::units::mm;
 
-    fn approx(a: Point3<f32>, b: Point3<f32>) {
-        assert!((a - b).norm() < 1e-3, "{a:?} != {b:?}");
-    }
-
     #[test]
     fn circle_in_xy_plane_walks_around_center() {
         let mut pts = Vec::new();
@@ -67,10 +63,26 @@ mod tests {
             &mut pts,
         );
         assert_eq!(pts.len(), 4);
-        approx(pts[0].points[0].point, Point3::new(-30.0, 0.0, 0.0));
-        approx(pts[1].points[0].point, Point3::new(0.0, -30.0, 0.0));
-        approx(pts[2].points[0].point, Point3::new(30.0, 0.0, 0.0));
-        approx(pts[3].points[0].point, Point3::new(0.0, 30.0, 0.0));
+        approx::assert_abs_diff_eq!(
+            pts[0].points[0].point,
+            Point3::new(-30.0, 0.0, 0.0),
+            epsilon = 1e-3
+        );
+        approx::assert_abs_diff_eq!(
+            pts[1].points[0].point,
+            Point3::new(0.0, -30.0, 0.0),
+            epsilon = 1e-3
+        );
+        approx::assert_abs_diff_eq!(
+            pts[2].points[0].point,
+            Point3::new(30.0, 0.0, 0.0),
+            epsilon = 1e-3
+        );
+        approx::assert_abs_diff_eq!(
+            pts[3].points[0].point,
+            Point3::new(0.0, 30.0, 0.0),
+            epsilon = 1e-3
+        );
         assert!(pts.iter().all(|p| p.intensity == Intensity::MAX));
     }
 
@@ -85,9 +97,21 @@ mod tests {
             &mut pts,
         );
         assert_eq!(pts.len(), 3);
-        approx(pts[0].points[0].point, Point3::new(0.0, -15.0, 0.0));
-        approx(pts[1].points[0].point, Point3::new(0.0, 0.0, 0.0));
-        approx(pts[2].points[0].point, Point3::new(0.0, 15.0, 0.0));
+        approx::assert_abs_diff_eq!(
+            pts[0].points[0].point,
+            Point3::new(0.0, -15.0, 0.0),
+            epsilon = 1e-3
+        );
+        approx::assert_abs_diff_eq!(
+            pts[1].points[0].point,
+            Point3::new(0.0, 0.0, 0.0),
+            epsilon = 1e-3
+        );
+        approx::assert_abs_diff_eq!(
+            pts[2].points[0].point,
+            Point3::new(0.0, 15.0, 0.0),
+            epsilon = 1e-3
+        );
         assert!(pts.iter().all(|p| p.intensity == Intensity(0x40)));
     }
 }

@@ -97,24 +97,25 @@ mod tests {
         }
         .into();
 
-        let p1 = dev.position(1);
-        assert!((p1.x - Autd3::PITCH_MM).abs() < 1e-4);
-        assert!(p1.y.abs() < 1e-4);
-        assert!(p1.z.abs() < 1e-4);
-
-        let dir = dev.direction(0);
-        assert!(dir.x.abs() < 1e-4);
-        assert!((dir.y + 1.0).abs() < 1e-4, "y={}", dir.y);
-        assert!(dir.z.abs() < 1e-4);
+        approx::assert_abs_diff_eq!(
+            dev.position(1),
+            Point3::new(Autd3::PITCH_MM, 0.0, 0.0),
+            epsilon = 1e-4
+        );
+        approx::assert_abs_diff_eq!(
+            *dev.direction(0),
+            Vector3::new(0.0, -1.0, 0.0),
+            epsilon = 1e-4
+        );
     }
 
     #[test]
     fn device_center_is_array_center() {
         let dev: Device = Autd3::new(Point3::origin(), UnitQuaternion::identity()).into();
         let c = dev.center();
-        assert!((c.x - 86.36).abs() < 1.0, "x center ≈ 86.36, got {}", c.x);
-        assert!((c.y - 66.04).abs() < 1.0, "y center ≈ 66.04, got {}", c.y);
-        assert!(c.z.abs() < f32::EPSILON);
+        approx::assert_abs_diff_eq!(c.x, 86.36, epsilon = 1.0);
+        approx::assert_abs_diff_eq!(c.y, 66.04, epsilon = 1.0);
+        approx::assert_abs_diff_eq!(c.z, 0.0);
     }
 
     #[test]

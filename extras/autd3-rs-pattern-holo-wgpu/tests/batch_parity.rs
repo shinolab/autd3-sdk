@@ -112,11 +112,8 @@ fn seeded(len: usize, offset: usize) -> Vec<Complex<f32>> {
 fn compare_values(label: &str, cpu: &[Complex<f32>], gpu: &[Complex<f32>]) {
     assert_eq!(cpu.len(), gpu.len(), "{label}: length mismatch");
     let scale = cpu.iter().map(|c| c.norm()).fold(0.0f32, f32::max);
-    for (i, (a, b)) in cpu.iter().zip(gpu).enumerate() {
-        assert!(
-            (a - b).norm() <= 1e-3 * scale,
-            "{label}: mismatch at {i}: {a} vs {b} (scale {scale})"
-        );
+    for (a, b) in cpu.iter().zip(gpu) {
+        approx::assert_abs_diff_eq!(a, b, epsilon = 1e-3 * scale);
     }
 }
 

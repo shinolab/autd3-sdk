@@ -14,6 +14,6 @@ mod tests {
 
     #[test]
     fn wavelength_in_air_is_8_5_mm() {
-        assert!((wavelength(340.0 * m / s).mm() - 8.5).abs() < 1e-4);
+        approx::assert_abs_diff_eq!(wavelength(340.0 * m / s).mm(), 8.5, epsilon = 1e-4);
     }
 }
