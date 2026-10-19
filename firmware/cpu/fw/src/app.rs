@@ -7,7 +7,8 @@ use crate::fifo::{FIFO_DEPTH, Fifo};
 use crate::fpga;
 use crate::port::Port;
 use crate::proto::{
-    Cmd, Disposition, Drained, Error, FrameHeader, PAYLOAD_BYTES, Reply, ReplyData, RxFrame,
+    Cmd, Disposition, Drained, EXEC_AT_UNIT_NS, Error, FrameHeader, PAYLOAD_BYTES, Reply,
+    ReplyData, RxFrame,
 };
 use autd3_cpu_wire::payload::Telemetry;
 use zerocopy::little_endian::U32;
@@ -158,7 +159,14 @@ const _: () = assert!(FIFO_DEPTH as usize > autd3_cpu_wire::udp::DEVICE_QUEUE_FR
 
 type Outcome = Result<ReplyData, Error>;
 
-const NS_PER_MS: u64 = 1_000_000;
+pub(crate) const EXEC_SPIN_NS: i64 = 50_000;
+
+fn ahead_of_exec_at_ns(now: u64, exec_at: u32) -> i64 {
+    let ahead_us = exec_at
+        .wrapping_sub((now / EXEC_AT_UNIT_NS) as u32)
+        .cast_signed();
+    i64::from(ahead_us) * EXEC_AT_UNIT_NS.cast_signed() - (now % EXEC_AT_UNIT_NS).cast_signed()
+}
 
 impl Default for Cpu {
     fn default() -> Self {
@@ -351,13 +359,21 @@ impl Cpu {
             bump(&self.counters.exec_late);
             return true;
         };
-        let late_ms = ((now / NS_PER_MS) as u32)
-            .wrapping_sub(exec_at)
-            .cast_signed();
-        if late_ms < 0 {
+        if ahead_of_exec_at_ns(now, exec_at) > EXEC_SPIN_NS {
             return false;
         }
-        if late_ms >= 1 {
+        let late = port.without_irq(|port| {
+            loop {
+                let Some(now) = port.sys_time() else {
+                    break true;
+                };
+                let ahead = ahead_of_exec_at_ns(now, exec_at);
+                if ahead <= 0 {
+                    break ahead <= -EXEC_AT_UNIT_NS.cast_signed();
+                }
+            }
+        });
+        if late {
             bump(&self.counters.exec_late);
         }
         true
@@ -461,6 +477,7 @@ impl Cpu {
 #[cfg(all(test, not(loom)))]
 mod tests {
 
+    use super::EXEC_SPIN_NS;
     use crate::cmd::config_mod::ConfigModPayload;
     use crate::cmd::force_fan::ForceFanPayload;
     use crate::fifo::FIFO_DEPTH;
@@ -473,7 +490,8 @@ mod tests {
         EmissionType, NUM_BANKS, NUM_TRANSDUCERS,
     };
     use crate::proto::{
-        Cmd, Disposition, Drained, Error, FRAME_BYTES_MAX, OUTPUT_MASK_WORDS, RxFrame,
+        Cmd, Disposition, Drained, EXEC_AT_UNIT_NS, Error, FRAME_BYTES_MAX, OUTPUT_MASK_WORDS,
+        RxFrame,
     };
     use crate::test_utils::builders::{config_mod, force_fan, write_foci_buffer, write_mod_buffer};
     use crate::test_utils::mock::{Frame, Harness};
@@ -1054,20 +1072,46 @@ mod tests {
         frame
     }
 
-    const MS: u64 = 1_000_000;
+    const US: u64 = EXEC_AT_UNIT_NS;
+    const LATER: u32 = 1_000;
+    const SPIN: u64 = EXEC_SPIN_NS.unsigned_abs();
 
     #[test]
-    fn a_frame_waits_until_its_exec_at() {
+    fn a_frame_beyond_the_spin_window_returns_to_the_main_loop() {
         let mut h = Harness::new();
-        h.port.sys_time = Some(10 * MS - 1);
-        h.deliver(&scheduled(0, 10));
+        let exec_at = u64::from(LATER) * US;
+        h.port.sys_time = Some(exec_at - SPIN - 1);
+        h.deliver(&scheduled(0, LATER));
         assert_eq!(h.ack(), 0xFF);
         assert!(!h.process_one());
+        assert_eq!(h.port.sys_time_reads_masked, 0);
 
-        h.port.sys_time = Some(10 * MS);
+        h.port.sys_time = Some(exec_at);
         assert!(h.process_one());
         assert_eq!(h.ack(), 0);
         assert_eq!(h.telemetry().exec_late, 0);
+    }
+
+    #[test]
+    fn a_frame_within_the_spin_window_waits_with_irq_masked_until_its_exec_at() {
+        let mut h = Harness::new();
+        let exec_at = u64::from(LATER) * US;
+        h.port.sys_time_reads = [Some(exec_at - SPIN), Some(exec_at - 1), Some(exec_at)].into();
+        h.deliver(&scheduled(0, LATER));
+        assert_eq!(h.ack(), 0);
+        assert_eq!(h.port.sys_time_reads_masked, 2);
+        assert!(!h.port.irq_masked);
+        assert_eq!(h.telemetry().exec_late, 0);
+    }
+
+    #[test]
+    fn a_lost_device_time_during_the_spin_processes_the_frame_as_late() {
+        let mut h = Harness::new();
+        let exec_at = u64::from(LATER) * US;
+        h.port.sys_time_reads = [Some(exec_at - 1), None].into();
+        h.deliver(&scheduled(0, LATER));
+        assert_eq!(h.ack(), 0);
+        assert_eq!(h.telemetry().exec_late, 1);
     }
 
     #[test]
@@ -1083,7 +1127,7 @@ mod tests {
     fn a_waiting_frame_holds_back_the_frames_behind_it() {
         let mut h = Harness::new();
         h.port.sys_time = Some(0);
-        h.deliver(&scheduled(0, 5));
+        h.deliver(&scheduled(0, LATER));
         assert_eq!(
             h.cpu.recv_frame(&scheduled(1, 0).bytes(), 0),
             Disposition::Deferred
@@ -1091,7 +1135,7 @@ mod tests {
         assert!(!h.process_one());
         assert_eq!(h.ack(), 0xFF);
 
-        h.port.sys_time = Some(5 * MS);
+        h.port.sys_time = Some(u64::from(LATER) * US);
         h.cpu.process_pending(&mut h.port);
         assert_eq!(h.ack(), 1);
     }
@@ -1100,7 +1144,7 @@ mod tests {
     fn the_main_loop_keeps_ticking_while_a_frame_waits() {
         let mut h = Harness::new();
         h.port.sys_time = Some(0);
-        h.deliver(&scheduled(0, 5));
+        h.deliver(&scheduled(0, LATER));
         let kicks = h.port.watchdog_kicks;
         let mut work = RxFrame::ZERO;
         assert_eq!(h.cpu.step(&mut h.port, &mut work, 3), Drained::Empty);
@@ -1109,13 +1153,13 @@ mod tests {
     }
 
     #[test]
-    fn a_frame_processed_a_full_millisecond_after_its_exec_at_is_late() {
+    fn a_frame_processed_a_microsecond_after_its_exec_at_is_late() {
         let mut h = Harness::new();
-        h.port.sys_time = Some(11 * MS - 1);
+        h.port.sys_time = Some(11 * US - 1);
         h.deliver(&scheduled(0, 10));
         assert_eq!(h.telemetry().exec_late, 0);
 
-        h.port.sys_time = Some(12 * MS);
+        h.port.sys_time = Some(12 * US);
         h.deliver(&scheduled(1, 11));
         assert_eq!(h.ack(), 1);
         assert_eq!(h.telemetry().exec_late, 1);
@@ -1133,17 +1177,16 @@ mod tests {
     #[test]
     fn exec_at_compares_across_the_u32_wraparound() {
         let mut h = Harness::new();
-        let before_wrap = u64::from(u32::MAX) * MS;
+        let before_wrap = u64::from(u32::MAX) * US;
         h.port.sys_time = Some(before_wrap);
-        h.deliver(&scheduled(0, 1));
+        h.deliver(&scheduled(0, LATER));
         assert_eq!(h.ack(), 0xFF);
 
-        h.port.sys_time = Some(before_wrap + 2 * MS);
+        h.port.sys_time = Some(before_wrap + u64::from(LATER + 1) * US);
         assert!(h.process_one());
         assert_eq!(h.ack(), 0);
         assert_eq!(h.telemetry().exec_late, 0);
 
-        h.port.sys_time = Some(before_wrap + 2 * MS);
         h.deliver(&scheduled(1, u32::MAX));
         assert_eq!(h.ack(), 1);
         assert_eq!(h.telemetry().exec_late, 1);
@@ -1153,12 +1196,12 @@ mod tests {
     fn a_retransmission_of_a_waiting_frame_is_dropped_without_a_reply() {
         let mut h = Harness::new();
         h.port.sys_time = Some(0);
-        let frame = scheduled(0, 5);
+        let frame = scheduled(0, LATER);
         h.deliver(&frame);
         assert_eq!(h.cpu.recv_frame(&frame.bytes(), 1), Disposition::Dropped);
         assert_eq!(h.telemetry().dedup, 1);
 
-        h.port.sys_time = Some(5 * MS);
+        h.port.sys_time = Some(u64::from(LATER) * US);
         assert!(h.process_one());
         assert!(!h.process_one());
         assert_eq!(h.ack(), 0);
@@ -1168,7 +1211,7 @@ mod tests {
     fn a_reset_behind_a_waiting_frame_waits_for_it() {
         let mut h = Harness::new();
         h.port.sys_time = Some(0);
-        h.deliver(&scheduled(0, 5));
+        h.deliver(&scheduled(0, LATER));
         assert_eq!(
             h.cpu.recv_frame(&Frame::new(0, Cmd::Reset).bytes(), 0),
             Disposition::Deferred
@@ -1177,7 +1220,7 @@ mod tests {
         assert_eq!(h.expected_seq(), 0);
         assert_eq!(h.ack(), 0xFF);
 
-        h.port.sys_time = Some(5 * MS);
+        h.port.sys_time = Some(u64::from(LATER) * US);
         h.cpu.process_pending(&mut h.port);
         assert_eq!(h.expected_seq(), 0);
         assert_eq!(h.ack(), 0xFF);

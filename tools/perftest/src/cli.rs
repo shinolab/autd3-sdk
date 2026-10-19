@@ -144,7 +144,7 @@ pub struct Cli {
     #[arg(
         long = "exec-lead",
         value_parser = humantime::parse_duration,
-        help = "Process every frame on the 1 ms device-time boundary this far ahead of the send, e.g. 5ms \
+        help = "Process every frame at the device time this far ahead of the send, e.g. 1ms \
                 (maps to ClientConfig.exec_lead). Omit to process every frame on arrival."
     )]
     pub exec_lead: Option<Duration>,
@@ -198,12 +198,12 @@ impl Cli {
             return Err("--ack-timeout must be longer than 0".to_string());
         }
         if let Some(exec_lead) = self.exec_lead {
-            if exec_lead < Duration::from_millis(1) {
-                return Err("--exec-lead must be at least 1ms".to_string());
+            if exec_lead < Duration::from_micros(100) {
+                return Err("--exec-lead must be at least 100us".to_string());
             }
-            if self.ack_timeout <= exec_lead + Duration::from_millis(1) {
+            if self.ack_timeout <= exec_lead {
                 return Err(format!(
-                    "--ack-timeout {:?} must exceed --exec-lead {exec_lead:?} by more than 1ms",
+                    "--ack-timeout {:?} must exceed --exec-lead {exec_lead:?}",
                     self.ack_timeout
                 ));
             }

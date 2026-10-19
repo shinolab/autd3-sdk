@@ -79,6 +79,8 @@ pub(crate) struct MockPort {
     pub fpga_flash_status_reads: u32,
     pub sys_time: Option<u64>,
     pub sys_time_reads: VecDeque<Option<u64>>,
+    pub irq_masked: bool,
+    pub sys_time_reads_masked: u32,
     pub next_sync_edges: VecDeque<Option<NonZeroU64>>,
     pub host_idle_ms: Option<u32>,
     pub ptp_unlocked_ms: Option<u32>,
@@ -137,6 +139,8 @@ impl MockPort {
             fpga_flash_status_reads: 0,
             sys_time: Some(0),
             sys_time_reads: VecDeque::new(),
+            irq_masked: false,
+            sys_time_reads_masked: 0,
             next_sync_edges: VecDeque::new(),
             host_idle_ms: None,
             ptp_unlocked_ms: None,
@@ -422,10 +426,20 @@ impl Port for MockPort {
     }
 
     fn sys_time(&mut self) -> Option<u64> {
+        if self.irq_masked {
+            self.sys_time_reads_masked += 1;
+        }
         if let Some(sys_time) = self.sys_time_reads.pop_front() {
             self.sys_time = sys_time;
         }
         self.sys_time
+    }
+
+    fn without_irq<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+        let masked = core::mem::replace(&mut self.irq_masked, true);
+        let result = f(self);
+        self.irq_masked = masked;
+        result
     }
 
     fn host_idle_ms(&mut self) -> Option<u32> {

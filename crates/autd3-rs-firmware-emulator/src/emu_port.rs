@@ -47,6 +47,10 @@ impl Port for FpgaEmulator {
         Some(FpgaEmulator::sys_time(self))
     }
 
+    fn without_irq<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+        f(self)
+    }
+
     fn host_idle_ms(&mut self) -> Option<u32> {
         FpgaEmulator::host_idle_ms(self)
     }

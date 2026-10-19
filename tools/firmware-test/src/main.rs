@@ -350,7 +350,7 @@ async fn report_exec_late(client: &Client) {
         Ok(telemetry) => {
             let late: Vec<u32> = telemetry.iter().map(|t| t.exec_late).collect();
             println!(
-                "  {} no frame since the last Clear started 1 ms or more after its EXEC_AT: exec_late {late:?}",
+                "  {} no frame since the last Clear started 1 us or more after its EXEC_AT: exec_late {late:?}",
                 if late.iter().all(|n| *n == 0) {
                     "[OK]"
                 } else {

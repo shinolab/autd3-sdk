@@ -89,4 +89,6 @@ pub mod value;
 pub use bank::{ModulationBank, PatternBank};
 pub use cmd::Cmd;
 pub use error::{Error, describe_device_error};
-pub use frame::{FRAME_BYTES_MAX, FrameHeader, PAYLOAD_BYTES, REPLY_DATA_BYTES_MAX};
+pub use frame::{
+    EXEC_AT_UNIT_NS, FRAME_BYTES_MAX, FrameHeader, PAYLOAD_BYTES, REPLY_DATA_BYTES_MAX,
+};

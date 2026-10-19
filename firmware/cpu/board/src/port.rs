@@ -54,6 +54,10 @@ impl Port for HwPort {
         udp::sys_time()
     }
 
+    fn without_irq<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+        udp::irq::without_irq(|| f(self))
+    }
+
     fn host_idle_ms(&mut self) -> Option<u32> {
         udp::host_idle_ms()
     }

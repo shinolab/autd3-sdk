@@ -48,8 +48,8 @@ The run continues until Ctrl+C, then prints the summary.
 | `--send-buffer <BYTES>` | Socket send buffer (`UdpOption.send_buffer`). `0` keeps the OS default. Omit to use the library default. |
 | `--stop-on-error`     | Stop at the first failed send and exit non-zero. The summary is still printed. Default: off. |
 | `--hold <DUR>`        | Keep the connection idle (heartbeats only) this long before measuring, e.g. `3s`. |
-| `--ack-timeout <DUR>` | How long a request waits for its ACK before raising `Timeout` (`ClientConfig.ack_timeout`). Default = `10ms`. Must exceed `--exec-lead` by more than 1 ms. |
-| `--exec-lead <DUR>`   | Stamp every frame with `EXEC_AT` = the 1 ms device-time boundary this far ahead (`ClientConfig.exec_lead`), e.g. `5ms`. At least `1ms`. Omit to process every frame on arrival. |
+| `--ack-timeout <DUR>` | How long a request waits for its ACK before raising `Timeout` (`ClientConfig.ack_timeout`). Default = `10ms`. Must exceed `--exec-lead` (plus the processing time). |
+| `--exec-lead <DUR>`   | Stamp every frame with `EXEC_AT` = the device time this far ahead, rounded up to 1 µs (`ClientConfig.exec_lead`), e.g. `1ms`. At least `100us`. Omit to process every frame on arrival. |
 | `--max-resync-rounds <N>` | Resync rounds allowed before the client gives up (`ClientConfig.max_resync_rounds`). Default = 8. |
 | `--mode <MODE>`       | `stop-and-wait` (default), `streaming`, or `bank-switch`. See below. |
 | `--framing <FRAMING>` | `bank-switch` only: `fused` (default; `Pattern`, 1 `WritePatternFused` frame) or `split` (`WritePatternBuffer` + `ConfigPattern` + `ActivatePatternBank`, 3 frames pipelined). |

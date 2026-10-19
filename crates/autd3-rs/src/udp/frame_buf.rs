@@ -1,13 +1,11 @@
 use autd3_rs_core::FRAME_BYTES_MAX;
 use std::time::Duration;
 
-use autd3_rs_core::protocol::{Cmd, FrameHeader, Seq};
+use autd3_rs_core::protocol::{Cmd, EXEC_AT_UNIT_NS, FrameHeader, Seq};
 use zerocopy::FromBytes;
 
 use crate::error::Error;
 use crate::value::SysTime;
-
-const NS_PER_MS: u64 = 1_000_000;
 
 pub(crate) fn schedule(
     lead: Option<Duration>,
@@ -22,10 +20,10 @@ pub(crate) fn schedule(
 
 #[must_use]
 fn exec_at(now: SysTime, lead: Duration) -> u32 {
-    let ms = (now + lead).sys_time().div_ceil(NS_PER_MS);
-    match u32::try_from(ms & u64::from(u32::MAX)) {
+    let us = (now + lead).sys_time().div_ceil(EXEC_AT_UNIT_NS);
+    match u32::try_from(us & u64::from(u32::MAX)) {
         Ok(0) | Err(_) => 1,
-        Ok(ms) => ms,
+        Ok(us) => us,
     }
 }
 
@@ -65,23 +63,23 @@ impl AsRef<[u8]> for FrameBuf {
 mod tests {
     use super::*;
 
-    const MS: u64 = NS_PER_MS;
+    const US: u64 = EXEC_AT_UNIT_NS;
 
     #[test]
-    fn exec_at_rounds_up_to_the_next_millisecond_boundary() {
-        let lead = Duration::from_millis(3);
-        assert_eq!(exec_at(SysTime::from_nanos(10 * MS), lead), 13);
-        assert_eq!(exec_at(SysTime::from_nanos(10 * MS + 1), lead), 14);
-        assert_eq!(exec_at(SysTime::from_nanos(11 * MS - 1), lead), 14);
+    fn exec_at_rounds_up_to_the_next_microsecond() {
+        let lead = Duration::from_micros(3);
+        assert_eq!(exec_at(SysTime::from_nanos(10 * US), lead), 13);
+        assert_eq!(exec_at(SysTime::from_nanos(10 * US + 1), lead), 14);
+        assert_eq!(exec_at(SysTime::from_nanos(11 * US - 1), lead), 14);
     }
 
     #[test]
     fn exec_at_keeps_the_low_32_bits_and_never_yields_zero() {
-        let lead = Duration::from_millis(1);
+        let lead = Duration::from_micros(1);
         let wrap = u64::from(u32::MAX) + 1;
-        assert_eq!(exec_at(SysTime::from_nanos((wrap - 1) * MS), lead), 1);
-        assert_eq!(exec_at(SysTime::from_nanos(wrap * MS), lead), 1);
-        assert_eq!(exec_at(SysTime::from_nanos((wrap + 1) * MS), lead), 2);
+        assert_eq!(exec_at(SysTime::from_nanos((wrap - 1) * US), lead), 1);
+        assert_eq!(exec_at(SysTime::from_nanos(wrap * US), lead), 1);
+        assert_eq!(exec_at(SysTime::from_nanos((wrap + 1) * US), lead), 2);
     }
 
     #[test]
@@ -96,10 +94,10 @@ mod tests {
     fn with_a_lead_the_frame_is_scheduled_from_the_device_time() {
         assert_eq!(
             schedule(Some(Duration::from_millis(5)), || Some(
-                SysTime::from_nanos(20 * MS)
+                SysTime::from_nanos(20_000 * US)
             ))
             .unwrap(),
-            25
+            25_000
         );
     }
 

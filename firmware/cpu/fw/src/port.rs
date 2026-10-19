@@ -20,6 +20,8 @@ pub trait Port {
 
     fn sys_time(&mut self) -> Option<u64>;
 
+    fn without_irq<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R;
+
     fn host_idle_ms(&mut self) -> Option<u32>;
 
     fn ptp_unlocked_ms(&mut self) -> Option<u32>;

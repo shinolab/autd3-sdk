@@ -11,7 +11,7 @@ use autd3_rs::commands::{
     ActivatePatternBank, Clear, ConfigPattern, GpioOut, Pattern, SetGpioOut, WritePatternBuffer,
 };
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::protocol::{Cmd, FrameHeader, Seq};
+use autd3_rs::protocol::{Cmd, EXEC_AT_UNIT_NS, FrameHeader, Seq};
 use autd3_rs::value::{
     Intensity, LoopBehavior, PatternBank, SamplingConfig, SysTime, TransitionMode,
 };
@@ -22,7 +22,6 @@ use crate::cli::{Cli, Framing};
 use crate::run::{spawn_emulator, spawn_signal_listener, udp_option};
 use crate::stats::{Counters, SampleStatus};
 
-const NS_PER_MS: u64 = 1_000_000;
 const RESET_ACK: u8 = 0xFF;
 const RECV_BUFFER_BYTES: usize = 2048;
 const REPORT_INTERVAL: Duration = Duration::from_secs(1);
@@ -44,17 +43,17 @@ pub async fn run(cli: &Cli) -> Result<()> {
 }
 
 fn exec_at(now: SysTime, lead: Duration) -> u32 {
-    let ms = (now + lead).sys_time().div_ceil(NS_PER_MS);
-    match u32::try_from(ms & u64::from(u32::MAX)) {
+    let us = (now + lead).sys_time().div_ceil(EXEC_AT_UNIT_NS);
+    match u32::try_from(us & u64::from(u32::MAX)) {
         Ok(0) | Err(_) => 1,
-        Ok(ms) => ms,
+        Ok(us) => us,
     }
 }
 
 fn after_boundary(sys_time: u64, exec_at: u32) -> i64 {
-    let ms = u32::try_from((sys_time / NS_PER_MS) & u64::from(u32::MAX)).unwrap_or(0);
-    let behind = i64::from(ms.wrapping_sub(exec_at).cast_signed());
-    behind * NS_PER_MS.cast_signed() + (sys_time % NS_PER_MS).cast_signed()
+    let us = u32::try_from((sys_time / EXEC_AT_UNIT_NS) & u64::from(u32::MAX)).unwrap_or(0);
+    let behind = i64::from(us.wrapping_sub(exec_at).cast_signed());
+    behind * EXEC_AT_UNIT_NS.cast_signed() + (sys_time % EXEC_AT_UNIT_NS).cast_signed()
 }
 
 #[cfg(unix)]
