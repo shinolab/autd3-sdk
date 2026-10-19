@@ -58,6 +58,7 @@ import csServerSample from "@codes/csharp/examples/api/connection/server-link.cs
 | `send(cmd)`               | ✓     | `Result<(), Error>`                   | コマンドを送信し, 1 フレームずつ応答確認まで行う           |
 | `send_streaming(cmd)`     | ✓     | `Result<StreamFuture, Error>`         | `send`のstream版                                           |
 | `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | フレームを 1 つ送る                                        |
+| `send_frame_at(frame, exec)` | ✓  | `Result<ResponseFuture, Error>`       | 処理時刻を指定してフレームを 1 つ送る ([処理時刻の上書き](#処理時刻の上書き) 参照) |
 | `state_checker()`         | —     | `StateChecker`                         | `StateChecker`を取得. 詳細は[状態監視](/autd3-sdk/guide/state-check/)を参照. |
 | `silent_stop()`           | ✓     | `Result<(), Error>`                   | Silencer を設定してから全振動子を停止                      |
 | `close()`                 | ✓     | `Result<(), Error>`                   | 停止して接続を閉じる                                       |
@@ -171,6 +172,25 @@ Python の既定値は Rust と同じで, `None` を渡せるのは型が `Optio
 - 送信完了が`exec_lead` だけ遅れる
 - 100 µs 以上, 2^31 µs (約 35.8 分) 未満でなければならない. また, [`UdpOption`](/autd3-sdk/api/basics/transport-option/) の `lost_timeout` 未満でなければならない
 - `ack_timeout` (既定 10 ms) は `exec_lead` + 処理時間より長くする
+
+### 処理時刻の上書き
+
+`exec_lead` は全てのフレームに同じ規則で処理時刻を付ける.
+特定のフレームだけ別の処理時刻にするには, `send_frame_at` に `ExecAt` を渡して送る.
+`send` / `send_streaming` / `send_frame` は `exec_lead` に従う.
+
+<CodeTabs rust={excerpt(methods, "exec_at")} python={excerpt(pyMethods, "exec_at")} csharp={excerpt(csMethods, "exec_at")} />
+
+| `ExecAt`         | 処理時刻                                                                 |
+| ---------------- | ------------------------------------------------------------------------ |
+| `Immediate`      | 付けない (`exec_lead` を指定していても, 届いた順にすぐ処理する)          |
+| `Lead(lead)`     | デバイスの現在時刻 + `lead` (このフレームだけ `exec_lead` の代わりに使う) |
+| `At(sys_time)`   | デバイス時刻 `sys_time` ([SysTime](/autd3-sdk/api/basics/sys-time/) 参照) |
+
+- `Lead` の値の範囲は `exec_lead` と同じ (100 µs 以上, 2^31 µs 未満, `lost_timeout` 未満). 外れると `InvalidPayload` で, そのフレームは送られない
+- `At` は現在時刻より 2^31 µs 以上先・2^30 µs (約 17.9 分) 以上前, または `lost_timeout` 以上先だとエラーになる. 過ぎた時刻 (範囲内) は受け付け, デバイスはすぐに処理して `exec_late` に数える
+- `ack_timeout` (既定 10 ms) は, 送信から指定時刻までの時間 + 処理時間より長くする
+- `Lead` / `At` はデバイスの時刻が分からない (時刻を載せた返信をまだ受けていない) と `DeviceTimeUnknown` で失敗する
 
 ## each
 

@@ -148,6 +148,19 @@ pub enum PayloadError {
     #[error("expected {expected} datagram(s) (one per device), got {got}")]
     DatagramCountMismatch { expected: usize, got: usize },
 
+    #[error("the execution lead must be at least {min:?}, got {got:?}")]
+    ExecLeadTooShort { got: Duration, min: Duration },
+
+    #[error(
+        "the execution time must be less than {limit:?} ahead of the device time, got {ahead:?}"
+    )]
+    ExecTooFarAhead { ahead: Duration, limit: Duration },
+
+    #[error(
+        "the execution time must be less than {limit:?} behind the device time, got {behind:?}"
+    )]
+    ExecTooFarBehind { behind: Duration, limit: Duration },
+
     #[error(
         "CPU config `{field}` = {value:?} must be a multiple of {unit:?} within {min:?}..={max:?}"
     )]

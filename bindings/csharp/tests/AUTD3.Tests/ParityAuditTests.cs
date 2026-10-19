@@ -196,6 +196,7 @@ namespace AUTD3.Tests
         public void ArgumentErrorsAreInvalidArguments()
         {
             Assert.Equal(Autd3ErrorCode.InvalidArgument, Assert.Throws<Autd3Exception>(() => new SetGpioOut(new GpioOut[3])).Code);
+            Assert.Equal(Autd3ErrorCode.InvalidArgument, Assert.Throws<Autd3Exception>(() => ExecAt.Lead(TimeSpan.FromTicks(-1))).Code);
             Assert.Equal(Autd3ErrorCode.InvalidArgument, Assert.Throws<Autd3Exception>(() => new EmulateGpioIn(new bool[3])).Code);
             Assert.Equal(Autd3ErrorCode.InvalidArgument, Assert.Throws<Autd3Exception>(() => new SetPulseWidthTable(new PulseWidth[1])).Code);
 
@@ -205,6 +206,17 @@ namespace AUTD3.Tests
                 Frames.Encode(geometry, new FociStm(1 * Hz, new[] { new ControlPoints(tooMany, Intensity.Max) }, new FociStmOption())));
             Assert.Equal(Autd3ErrorCode.InvalidArgument, foci.Code);
             Assert.Contains($"1..={Params.NumFociMax}", foci.Message);
+        }
+
+        [Fact]
+        public void ExecAtCarriesItsKindAndNanosecondsToTheNative()
+        {
+            var immediate = ExecAt.Immediate.ToNative();
+            Assert.Equal((0, 0UL), (immediate.Kind, immediate.Ns));
+            var lead = ExecAt.Lead(TimeSpan.FromMilliseconds(1.5)).ToNative();
+            Assert.Equal((1, 1_500_000UL), (lead.Kind, lead.Ns));
+            var at = ExecAt.At(SysTime.FromNanos(123_456_789)).ToNative();
+            Assert.Equal((2, 123_456_789UL), (at.Kind, at.Ns));
         }
 
         [Fact]

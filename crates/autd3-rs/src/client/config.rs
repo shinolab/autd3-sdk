@@ -6,8 +6,8 @@ use crate::protocol::{EXEC_AT_UNIT_NS, MAX_INFLIGHT};
 
 pub use crate::udp::bus::MAX_DEVICES;
 
-const EXEC_LEAD_MIN: Duration = Duration::from_micros(100);
-const EXEC_LEAD_LIMIT: Duration = Duration::from_nanos(EXEC_AT_UNIT_NS << 31);
+pub(super) const EXEC_LEAD_MIN: Duration = Duration::from_micros(100);
+pub(super) const EXEC_LEAD_LIMIT: Duration = Duration::from_nanos(EXEC_AT_UNIT_NS << 31);
 
 #[derive(Clone, Copy, Debug)]
 pub struct ClientConfig {

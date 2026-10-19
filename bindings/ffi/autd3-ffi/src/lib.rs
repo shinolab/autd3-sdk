@@ -33,7 +33,7 @@ use autd3_rs::value::{
     PatternBank, Phase, PulseWidth, SamplingConfig, SysTime, TransitionMode,
 };
 use autd3_rs::{
-    BusStats, Client, ClientConfig, DeviceState, Error, FirmwareVersion, FpgaState, Frames,
+    BusStats, Client, ClientConfig, DeviceState, Error, ExecAt, FirmwareVersion, FpgaState, Frames,
     Geometry, Length, Link, NetworkCause, Point3, Response, ResponseFuture, StreamFuture,
     Telemetry, UnitVector3, Vector3, Velocity,
 };
@@ -124,6 +124,22 @@ fn to_gpio_out(g: &Autd3GpioOut) -> Option<GpioOut> {
         11 => Some(GpioOut::SyncDiff),
         12 => Some(GpioOut::PwmOut(g.value as u8)),
         13 => Some(GpioOut::Direct(g.value != 0)),
+        _ => None,
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct Autd3ExecAt {
+    pub kind: u8,
+    pub ns: u64,
+}
+
+fn to_exec_at(e: Autd3ExecAt) -> Option<ExecAt> {
+    match e.kind {
+        0 => Some(ExecAt::Immediate),
+        1 => Some(ExecAt::Lead(Duration::from_nanos(e.ns))),
+        2 => Some(ExecAt::At(SysTime::from_nanos(e.ns))),
         _ => None,
     }
 }
@@ -2276,6 +2292,40 @@ pub unsafe extern "C" fn autd3_client_send(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_client_send_at(
+    client: *const ClientHandle,
+    frames: *const Arc<Frames>,
+    frame: i64,
+    exec: Autd3ExecAt,
+    cb: CompletionCallback,
+    user_data: *mut c_void,
+) {
+    let Some((client, frames, ctx)) = (unsafe { send_ctx(client, frames, cb, user_data) }) else {
+        return;
+    };
+    let Some(exec) = to_exec_at(exec) else {
+        ctx.invalid_argument("unknown exec_at kind");
+        return;
+    };
+    spawn_completion(
+        ctx,
+        async move {
+            let (start, count) = frame_span(&frames, frame);
+            let mut futures = Vec::new();
+            for index in (start..).take(count) {
+                futures.push(
+                    client
+                        .send_frame_at(frame_at(&frames, index)?, exec)
+                        .await?,
+                );
+            }
+            Ok(futures)
+        },
+        |futures| into_handle(ResponseToken(futures)).cast(),
+    );
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_client_send_streaming(
     client: *const ClientHandle,
     command: *mut Pending,
@@ -3277,6 +3327,29 @@ mod tests {
         assert!(PhaseDepth::from_u8(2).is_none());
         assert!(to_transition_mode(0x03, 0).is_none());
         assert!(to_gpio_out(&Autd3GpioOut { kind: 14, value: 0 }).is_none());
+        assert!(to_exec_at(Autd3ExecAt { kind: 3, ns: 0 }).is_none());
+    }
+
+    #[test]
+    fn exec_at_kinds_map_to_the_rust_variants() {
+        assert_eq!(
+            to_exec_at(Autd3ExecAt { kind: 0, ns: 7 }),
+            Some(ExecAt::Immediate)
+        );
+        assert_eq!(
+            to_exec_at(Autd3ExecAt {
+                kind: 1,
+                ns: 1_500_000
+            }),
+            Some(ExecAt::Lead(Duration::from_micros(1_500)))
+        );
+        assert_eq!(
+            to_exec_at(Autd3ExecAt {
+                kind: 2,
+                ns: 123_456_789
+            }),
+            Some(ExecAt::At(SysTime::from_nanos(123_456_789)))
+        );
     }
 
     #[test]

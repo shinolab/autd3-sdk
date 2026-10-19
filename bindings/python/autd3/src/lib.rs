@@ -46,6 +46,7 @@ fn _autd3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("PORT", autd3_rs::udp::PORT)?;
     m.add("DEVICE_QUEUE_FRAMES", autd3_rs::udp::DEVICE_QUEUE_FRAMES)?;
     m.add_class::<client::Client>()?;
+    m.add_class::<client::ExecAt>()?;
     m.add_class::<client::StateChecker>()?;
     m.add_class::<client::DeviceState>()?;
     m.add_class::<client::BusStats>()?;

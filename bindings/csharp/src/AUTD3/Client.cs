@@ -7,6 +7,36 @@ using System.Threading.Tasks;
 
 namespace AUTD3
 {
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct ExecAtNative
+    {
+        public byte Kind;
+        public ulong Ns;
+    }
+
+    public readonly struct ExecAt
+    {
+        internal byte Kind { get; }
+        internal ulong Ns { get; }
+
+        private ExecAt(byte kind, ulong ns)
+        {
+            Kind = kind;
+            Ns = ns;
+        }
+
+        public static ExecAt Immediate => new ExecAt(0, 0);
+
+        public static ExecAt Lead(TimeSpan lead) =>
+            lead >= TimeSpan.Zero
+                ? new ExecAt(1, OptionNative.ToNanos(lead))
+                : throw new Autd3Exception("ExecAt.Lead must not be negative", Autd3ErrorCode.InvalidArgument);
+
+        public static ExecAt At(SysTime sysTime) => new ExecAt(2, sysTime.Nanos);
+
+        internal ExecAtNative ToNative() => new ExecAtNative { Kind = Kind, Ns = Ns };
+    }
+
     public readonly struct FpgaState
     {
         public byte Raw { get; }
@@ -636,6 +666,14 @@ namespace AUTD3
         {
             var token = await AsyncOps.InvokeAsync((cb, ud) =>
                 NativeClient.autd3_client_send(Handle, frame.Frames.Handle, frame.Index, cb, ud)).ConfigureAwait(false);
+            return new ResponseFuture(token);
+        }
+
+        public async Task<ResponseFuture> SendFrameAsync(Frame frame, ExecAt execAt)
+        {
+            var exec = execAt.ToNative();
+            var token = await AsyncOps.InvokeAsync((cb, ud) =>
+                NativeClient.autd3_client_send_at(Handle, frame.Frames.Handle, frame.Index, exec, cb, ud)).ConfigureAwait(false);
             return new ResponseFuture(token);
         }
 

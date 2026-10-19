@@ -2,6 +2,7 @@ pub(crate) mod completion;
 mod config;
 mod controller;
 mod driver;
+mod exec_at;
 pub(crate) mod pool;
 mod transport;
 
@@ -9,6 +10,7 @@ pub use completion::{ResponseFuture, StreamFuture};
 pub use config::{ClientConfig, MAX_DEVICES};
 pub use controller::Controller;
 pub use driver::Driver;
+pub use exec_at::ExecAt;
 
 use std::sync::{Mutex, PoisonError};
 use std::thread::JoinHandle;
@@ -108,6 +110,14 @@ impl Client {
 
     pub async fn send_frame(&self, frame: Frame<'_>) -> Result<ResponseFuture, Error> {
         self.controller.send_frame(frame).await
+    }
+
+    pub async fn send_frame_at(
+        &self,
+        frame: Frame<'_>,
+        exec: ExecAt,
+    ) -> Result<ResponseFuture, Error> {
+        self.controller.send_frame_at(frame, exec).await
     }
 
     pub async fn silent_stop(&self) -> Result<(), Error> {
