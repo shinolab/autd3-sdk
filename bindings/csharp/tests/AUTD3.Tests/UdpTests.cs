@@ -76,7 +76,7 @@ namespace AUTD3.Tests
         {
             var error = await OpenFails(new UdpOption(), new ClientConfig { ExecLead = TimeSpan.Zero });
             Assert.Equal(Autd3ErrorCode.InvalidArgument, error.Code);
-            Assert.Contains("exec_lead must be at least", error.Message);
+            Assert.Contains("exec_lead must be within", error.Message);
         }
 
         [Fact]

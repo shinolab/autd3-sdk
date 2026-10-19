@@ -126,11 +126,12 @@ pub enum ClientConfigError {
     #[error("ack_timeout must be longer than zero")]
     ZeroAckTimeout,
 
-    #[error("exec_lead must be at least {min:?}, got {got:?}")]
-    ExecLeadTooShort { got: Duration, min: Duration },
-
-    #[error("exec_lead must be shorter than {limit:?}, got {got:?}")]
-    ExecLeadTooLong { got: Duration, limit: Duration },
+    #[error("exec_lead must be within {min:?}..{limit:?}, got {got:?}")]
+    ExecLeadOutOfRange {
+        got: Duration,
+        min: Duration,
+        limit: Duration,
+    },
 
     #[error("exec_lead ({exec_lead:?}) must be shorter than lost_timeout ({lost_timeout:?})")]
     ExecLeadNotBelowLostTimeout {
