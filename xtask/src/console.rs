@@ -105,7 +105,7 @@ fn stage(root: &Path, console_dir: &Path, debug: bool, license: bool) -> Result<
     )?;
     let console_bin = cargo_bin(console_dir, target, debug, "autd3-console");
 
-    let (sim_bin, _) = build_backend_and_frontend(root, debug, target, license)?;
+    let (sim_bin, _) = build_backend_and_frontend(root, debug, target)?;
 
     run_cargo(
         cargo_build_args("autd3-firmware-writer", target, debug),
