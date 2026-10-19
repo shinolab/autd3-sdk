@@ -1,0 +1,30 @@
+---
+title: focus
+description: 単一焦点を生成する Pattern
+sidebar:
+  order: 2
+srcPath: crates/autd3-rs-pattern/src/focus.rs
+slug: 0.12.x/api/compute/pattern/focus
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import PatternField from "@components/PatternField.astro";
+
+`focus` は単一の焦点を生成する.
+
+<PatternField />
+
+## API
+
+<CodeTabs rust={"focus(&geometry, target, wavelength, &mut phases);"} python={"focus(geometry, target, wavelength, phases)"} csharp={"Pattern.Focus(geometry, target, wavelength, phases);"} />
+
+| 引数         | 型              | 説明                                       |
+| ------------ | --------------- | ------------------------------------------ |
+| `geometry`   | `&Geometry`     | デバイス配置                               |
+| `target`     | `Point3<f32>`   | 焦点座標 \[mm]                              |
+| `wavelength` | `Length`        | 波長                                       |
+| `dst`        | `&mut [Vec<Phase>]` | 出力バッファ                        |
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::geometry::{Autd3, Geometry, offset};\nuse autd3_rs::units::{m, mm, s};\nuse autd3_rs_pattern::{focus, wavelength};\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\n\nlet mut phases = geometry.phase_buffer();\n\nfocus(\n    &geometry,\n    geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm),\n    wavelength(340.0 * m / s),\n    &mut phases,\n);"} python={"from autd3.geometry import Autd3, Geometry, offset\nfrom autd3.units import m, mm, s\nfrom autd3_pattern import focus, wavelength\n\ngeometry = Geometry([Autd3()])\n\nphases = geometry.phase_buffer()\n\nfocus(\n    geometry,\n    geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm),\n    wavelength(340 * m / s),\n    phases,\n)"} csharp={"using AUTD3;\nusing static AUTD3.Units;\n\nvar geometry = new Geometry(new[] { new Autd3() });\n\nvar phases = geometry.PhaseBuffer();\n\nPattern.Focus(\n    geometry,\n    geometry.Center + Offset(0.0f * mm, 0.0f * mm, 150.0f * mm),\n    Pattern.Wavelength(340.0f * m / s),\n    phases\n);"} />

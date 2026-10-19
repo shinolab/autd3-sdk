@@ -2,6 +2,28 @@
 
 # Rust
 
+## [0.12.0] - 2026-10-19
+
+### 💥 Breaking Changes
+
+- *(udp)* [**breaking**] Fail Interface::Auto when both the simulator and devices answer
+- [**breaking**] Take the port in Interface::Simulator
+- [**breaking**] Add exec_lead to start processing a frame on the same 1 ms boundary on every device
+- [**breaking**] Send Pattern as a single WritePatternFused frame
+- [**breaking**] Add Client::config and Client::set_config to change the client config at runtime
+
+### 🚀 Features
+
+- Stamp EXEC_AT in microseconds and start the frame exactly at it
+- Add Client::send_frame_at to override the execution time of a single frame
+
+### 🐛 Bug Fixes
+
+- *(server)* Serialize client attach with bus shutdown
+- *(server)* Reject a zero retry interval
+- Reject a zero server port and check a zero ServerLink timeout at open
+- Align Python/C# bindings and docs with the Rust API
+
 ## [0.11.0] - 2026-10-15
 
 ### 💥 Breaking Changes
@@ -365,6 +387,28 @@
 
 # Python
 
+## [0.12.0] - 2026-10-19
+
+### 💥 Breaking Changes
+
+- [**breaking**] Take the port in Interface::Simulator
+- [**breaking**] Add exec_lead to start processing a frame on the same 1 ms boundary on every device
+- [**breaking**] Add Client::config and Client::set_config to change the client config at runtime
+
+### 🚀 Features
+
+- *(py)* Ship abi3t wheels for free-threaded Python 3.15
+- Add Client::send_frame_at to override the execution time of a single frame
+
+### 🐛 Bug Fixes
+
+- Reject a zero server port and check a zero ServerLink timeout at open
+- Align Python/C# bindings and docs with the Rust API
+
+### 📦 Dependencies
+
+- *(deps)* Bump pyo3 from 0.29.3 to 0.30.1 in /bindings/python (#359)
+
 ## [0.11.0] - 2026-10-15
 
 ### 💥 Breaking Changes
@@ -577,6 +621,24 @@
 - *(py)* Return Response from awaited send instead of implicit check
 
 # C#
+
+## [0.12.0] - 2026-10-19
+
+### 💥 Breaking Changes
+
+- [**breaking**] Take the port in Interface::Simulator
+- [**breaking**] Add exec_lead to start processing a frame on the same 1 ms boundary on every device
+- [**breaking**] Send Pattern as a single WritePatternFused frame
+- [**breaking**] Add Client::config and Client::set_config to change the client config at runtime
+
+### 🚀 Features
+
+- Add Client::send_frame_at to override the execution time of a single frame
+
+### 🐛 Bug Fixes
+
+- Reject a zero server port and check a zero ServerLink timeout at open
+- Align Python/C# bindings and docs with the Rust API
 
 ## [0.11.0] - 2026-10-15
 
@@ -795,6 +857,13 @@
 
 # Simulator
 
+## [0.12.0] - 2026-10-19
+
+### 💥 Breaking Changes
+
+- [**breaking**] Take the port in Interface::Simulator
+- [**breaking**] Add exec_lead to start processing a frame on the same 1 ms boundary on every device
+
 ## [0.11.0] - 2026-10-15
 
 ### 💥 Breaking Changes
@@ -920,6 +989,22 @@
 
 # Console
 
+## [0.12.0] - 2026-10-19
+
+### 💥 Breaking Changes
+
+- [**breaking**] Take the port in Interface::Simulator
+
+### 🐛 Bug Fixes
+
+- *(console)* Cap the server log and keep status lines out of it
+- *(server)* Reject a zero retry interval
+- Reject a zero server port and check a zero ServerLink timeout at open
+
+### 📦 Dependencies
+
+- *(deps)* Bump eframe from 0.36.2 to 0.37.0 in /console (#360)
+
 ## [0.11.0] - 2026-10-15
 
 ### 💥 Breaking Changes
@@ -1014,6 +1099,17 @@
 - Derive simulator device count from client geometry
 
 # Firmware
+
+## [0.12.0] - 2026-10-19
+
+### 💥 Breaking Changes
+
+- [**breaking**] Add exec_lead to start processing a frame on the same 1 ms boundary on every device
+- [**breaking**] Send Pattern as a single WritePatternFused frame
+
+### 🚀 Features
+
+- Stamp EXEC_AT in microseconds and start the frame exactly at it
 
 ## [0.11.0] - 2026-10-15
 

@@ -1,0 +1,47 @@
+---
+title: Modulation
+description: 出力の振幅を時間方向に変調する振幅変調 (AM)
+sidebar:
+  order: 20
+slug: 0.12.x/api/compute/modulation
+---
+
+import Math from "@components/Math.astro";
+import CodeTabs from "@components/CodeTabs.astro";
+import Install from "@components/Install.astro";
+
+Modulation は, 各振動子の出力振幅を時間方向に変調する振幅変調 (AM) 機能である.
+全振動子に共通の係数列を一定周期でサンプリングしながら適用し, Pattern が作る音場の強度を時間的に変化させる.
+
+<Install rust="autd3-rs-modulation" python="autd3-modulation" csharp="AUTD3.Modulation" />
+
+各サンプルは 8 bit の振幅係数 <Math tex="0 \le m \le 255" /> で, 振動子の出力振幅に乗算され, その後 255 で割られる.
+
+## SamplingConfig
+
+バッファの各サンプルは, `Modulation::new` に渡す `SamplingConfig` の周期で順に適用される.
+波形計算関数の Option が持つ `sampling_config` は波形の長さ (サンプル数) を決めるためのもので, `Modulation::new` に渡す `SamplingConfig` と一致させる必要がある.
+たとえば `SamplingConfig::FREQ_4K` (4 kHz, サンプリング周期 250 µs) の場合, 200 Hz の正弦波 1 周期は 20 サンプルになる.
+
+## 関数一覧
+
+* [constant](/autd3-sdk/0.12.x/api/compute/modulation/constant/) — 一定振幅 (変調なし)
+* [sine](/autd3-sdk/0.12.x/api/compute/modulation/sine/) — 正弦波
+* [square](/autd3-sdk/0.12.x/api/compute/modulation/square/) — 矩形波
+* [fourier](/autd3-sdk/0.12.x/api/compute/modulation/fourier/) — 複数正弦波の合成
+* [radiation\_pressure](/autd3-sdk/0.12.x/api/compute/modulation/radiation/) — 放射圧補正
+
+## samples\_per\_period
+
+`samples_per_period(divider, freq)` は, 分周比 `divider` のサンプリングで周波数 `freq` の波形 1 周期が何サンプルになるかを返す.
+サンプリング周波数が `freq` で割り切れない (1 周期を整数のサンプル数で表せない) ときや `freq` が 0 のときは `None` を返す.
+たとえば分周比 10 (4 kHz) で 200 Hz なら 20 を返す.
+
+| 引数      | 型           | 説明                           |
+| --------- | ------------ | ------------------------------ |
+| `divider` | `NonZeroU16` | サンプリングの分周比           |
+| `freq`    | `Freq<u32>`  | 波形の周波数 (整数の周波数のみ) |
+
+返り値は `Option<u32>`.
+Python は `divider` を `int` で受け, `0` なら `None` を返す. `200.0 * Hz` のような浮動小数点の周波数を渡すと `ValueError` になる.
+C# は `Modulation.SamplesPerPeriod(ushort divider, Freq freq)` で `uint?` を返し, 浮動小数点の周波数を渡すと `Autd3Exception` (`InvalidArgument`) になる.

@@ -10,10 +10,6 @@ export default defineConfig({
   site: "https://shinolab.github.io",
   base: "/autd3-sdk",
   redirects: {
-    "/getting-started/appliance": "/autd3-sdk/0.9.x/getting-started/appliance/",
-    "/en/getting-started/appliance": "/autd3-sdk/en/0.9.x/getting-started/appliance/",
-    "/guide/appliance": "/autd3-sdk/0.9.x/getting-started/appliance/",
-    "/en/guide/appliance": "/autd3-sdk/en/0.9.x/getting-started/appliance/",
     "/getting-started/setup/console": "/autd3-sdk/guide/console/",
     "/en/getting-started/setup/console": "/autd3-sdk/en/guide/console/",
     "/api/link": "/autd3-sdk/api/basics/transport-option/",
@@ -87,7 +83,7 @@ export default defineConfig({
       plugins: [
         starlightVersions({
           current: { label: "git" },
-          versions: [{ slug: "0.11.x" }, { slug: "0.10.x" }, { slug: "0.9.x" }],
+          versions: [{ slug: "0.12.x" }, { slug: "0.11.x" }],
         }),
       ],
       sidebar,

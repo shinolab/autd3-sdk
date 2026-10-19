@@ -1,0 +1,58 @@
+---
+title: Server
+description: Launching and connecting to the I/O server that keeps the devices connected
+sidebar:
+  order: 9
+slug: en/0.12.x/guide/server
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`Server` is a standing process that keeps the connection to the devices (their ID assignment and time synchronization) alive outside the client process.
+A client connects to the Server on the same host, and the Server relays its data to the devices.
+
+Use it in cases where there are many devices, and the wait time for enumeration and the synchronization each time the client is reopened are problematic.
+
+## Launching
+
+`Server` is bundled with the GUI console `autd3-console`.
+
+Obtain `autd3-console` as described in [Console](/autd3-sdk/en/0.12.x/guide/console/), launch it, and open the "Server" tab at the top.
+Pressing "Start" enumerates the devices, and clients are accepted once they are synchronized.
+If no device is found or some are missing, the Server keeps retrying until all of them are there.
+
+| Item | Description |
+| --- | --- |
+| Devices | Number of devices. 0 means every device found |
+| Interface | Name of the NIC the devices are attached to. Empty means it is searched for automatically |
+| Port | Port the client connects to. The default is 44338 |
+| Recovery interval | Interval of the probes that recover devices that stopped answering. 0 disables recovery |
+| Heartbeat / Reply timeout / Lost timeout / Send rate limit | The items of the same name in [`UdpOption`](/autd3-sdk/en/0.12.x/api/basics/transport-option/) |
+
+The remaining items are under "Advanced options".
+
+| Item | Description |
+| --- | --- |
+| Response timeout / Enumeration timeout / Sync timeout / Send buffer / Timer resolution | The items of the same name in [`UdpOption`](/autd3-sdk/en/0.12.x/api/basics/transport-option/) |
+| Monitor interval | Interval of the device state reads. The default is 1 s |
+| Retry interval | Pause before enumerating again after a failure. The default is 1 s |
+
+Unchecked items and items set to "default" take their default values.
+
+While it runs, a table shows for each device whether it responds, its PTP lock, the state of its sync pulse, its firmware version, and its PTP offset.
+
+## Connecting
+
+The client must run on the same host as the Server.
+Pass a `ServerLink` instead of a `UdpOption`.
+
+<CodeTabs rust={"let link = ServerLink { port, timeout };\nlet client = Client::open(&geometry, &link, ClientConfig::default()).await?;"} python={"link = ServerLink(port=port, timeout=timeout)\nclient = await Client.open(geometry, link, ClientConfig())"} csharp={"var link = new ServerLink { Port = port, Timeout = timeout };\nvar client = await Client.OpenAsync(geometry, link, new ClientConfig());"} />
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `port` | `u16` | 44338 (`SERVER_PORT`) | Port of the Server |
+| `timeout` | `Duration` | 1 s | Wait from the start of the connection until the Server accepts it. 0 is an error |
+
+`SERVER_PORT` is `autd3.params.SERVER_PORT` in Python and `ServerLink.ServerPort` in C#.
+
+Everything else works as it does when connecting to the devices directly.

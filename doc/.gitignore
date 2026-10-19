@@ -6,12 +6,9 @@ env.d.ts
 codes/rust/target/
 
 src/content/versions/*
-!src/content/versions/0.9.x.json
-!src/content/docs/0.9.x/
-!src/content/docs/*/0.9.x/
-!src/content/versions/0.10.x.json
-!src/content/docs/0.10.x/
-!src/content/docs/*/0.10.x/
 !src/content/versions/0.11.x.json
 !src/content/docs/0.11.x/
 !src/content/docs/*/0.11.x/
+!src/content/versions/0.12.x.json
+!src/content/docs/0.12.x/
+!src/content/docs/*/0.12.x/

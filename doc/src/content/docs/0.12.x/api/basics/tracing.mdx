@@ -1,0 +1,30 @@
+---
+title: ログ出力
+description: ライブラリのログを標準出力・標準エラーへ出す init_tracing
+sidebar:
+  order: 6
+slug: 0.12.x/api/basics/tracing
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+ライブラリのログは `tracing` crate を用いて出力される.
+ユーティリティとしてログ初期化用の `init_tracing` が用意されている.
+
+Rust では `autd3-rs` の feature `logging` を有効にする.
+
+## API
+
+<CodeTabs rust={"let option = TracingOption {\n    default_filter: \"info\",\n    writer: LogWriter::Stdout,\n};\nlet _log_guard = init_tracing(option);"} python={"log_guard = init_tracing(\n    default_filter=\"info\",\n    writer=LogWriter.Stdout,\n)"} csharp={"var option = new TracingOption\n{\n    DefaultFilter = \"info\",\n    Writer = LogWriter.Stdout,\n};\nusing var logGuard = Tracing.Init(option);"} />
+
+`init_tracing` は guard を返す.
+guard をプログラムの終わりまで保持すること.
+
+## TracingOption
+
+| フィールド       | 型             | デフォルト | 説明                                           |
+| ---------------- | -------------- | ---------- | ---------------------------------------------- |
+| `default_filter` | `&'static str` | `"info"`   | 環境変数 `RUST_LOG` が無いときに使うフィルタ   |
+| `writer`         | `LogWriter`    | `Stdout`   | 出力先. `LogWriter::Stdout` / `LogWriter::Stderr` |
+
+環境変数 `RUST_LOG` が設定されていれば, `default_filter` よりそちらが優先される.

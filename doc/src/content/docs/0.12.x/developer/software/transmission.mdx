@@ -1,0 +1,349 @@
+---
+title: 送信処理
+description: フレームの送出, msg_id による返信の照合, 損失時の扱い
+sidebar:
+  order: 2
+slug: 0.12.x/developer/software/transmission
+---
+
+import Mermaid from "@components/Mermaid.astro";
+
+[エンコーダ](/autd3-sdk/0.12.x/developer/software/encoder/) が生成した `Frame` を実際にデバイスへ送り届ける処理について述べる.
+実装は `crates/autd3-rs/src/client/` と `crates/autd3-rs/src/udp/` にある.
+
+`Frames` は複数のフレームを持ち, `Client::send` はそれを 1 フレームずつ `send_frame` で送る.
+
+```rust
+for frame in &frames {
+    client.send_frame(frame).await?.await?.check()?;
+}
+```
+
+これは 1 フレームずつ応答を待つ stop-and-wait である.
+`send_frame` の返す `ResponseFuture` を貯めれば, 応答を待たずに次を送る streaming になる (`Client::send_streaming` がこれを行う).
+
+以下ではまず stop-and-wait が 1 フレームを送り終えるまでを順に追い, そのあと streaming と障害時の処理へ進む.
+
+## stop-and-wait
+
+送信は `send_frame` を呼んだスレッドがその場で行い, 受信は `Client` が持つ I/O スレッドが行う.
+
+<Mermaid
+  title="Client と I/O スレッド"
+  code={`flowchart LR
+U["Client::send_frame (呼び出し側のスレッド)"]
+IO["I/O スレッド"]
+D["デバイス"]
+U -- "UDP: Frame" --> D
+D -- "UDP: 返信" --> IO
+IO -- "oneshot: 完了通知" --> U`}
+/>
+
+両者が共有するのは `pending` (送信中のフレームの一覧) だけである.
+以下では, デバイス 2 台に `PerDevice` のフレームを 1 つ送る場合を例に, 送信から受信までの処理を追う.
+
+### ① Slot を借りる
+
+```rust
+async fn enqueue(&self, dist: Distribution, datagrams: &[Datagram]) -> Result<ResponseFuture, Error> {
+    let _gate = self.gate().await;                 // send_frame どうしの直列化
+    if self.shared.pending().need_reset {
+        self.reset().await?;                       // 後述「損失時の扱い」
+    }
+    let mut slot = self.pool.acquire().await;      // ①
+    /* .. */
+}
+```
+
+`Slot` は各デバイスからの応答 (`status` と読み出し値) を記録する, 1 回の送信に対応する構造体である.
+アロケーションを回避するため毎回確保するのではなく `SlotPool` から借りる.
+`SlotPool` の容量が `max_inflight` なので, 空きが無ければ `.await` で待ち, in-flight 数は自然に上限へ抑えられる.
+
+### ② 送る
+
+```rust
+let seq = pending.next_seq;                        // 8 bit の通し番号. 0 → 1 → … → 255 → 0
+pending.next_seq = seq.next();
+for (device, buf) in bufs.iter_mut().enumerate() {
+    buf.stage(seq, datagram.cmd, exec_at, datagram.payload());   // [SEQ, CMD, EXEC_AT, Payload]
+}
+let sent = self.bus.send(&bufs)?;                  // 全デバイスへ unicast. 同じ msg_id
+```
+
+`FrameBuf` は 1448 byte の固定長バッファと実際の長さの組で, フレームの先頭 6 byte が `Seq` と `Cmd` と処理時刻 `exec_at`, 残りがペイロードである.
+`exec_at` は `ClientConfig::exec_lead` を指定したときだけ, 送る直前のデバイス時刻の推定値 + `exec_lead` を µs 単位に切り上げて求め, 全デバイスに同じ値を書く (指定しなければ 0).
+ペイロードは `encode` が返した長さのまま送る (末尾の 0 も省かない). デバイスはデータグラムの長さをペイロード長として扱う.
+
+`UdpBus::send` は `Lost` でない全デバイスへ UDP のデータグラムを送り, その呼び出しに割り当てた `msg_id` と実際に送った機体のビットマスクを返す.
+
+### ③ pending に積む
+
+```rust
+let (tx, rx) = completion::channel();
+self.shared.pending().push(Inflight {
+    msg_id: sent.msg_id,
+    seq: Some(seq),
+    expected: sent.devices,     // 返信を待つ機体のビットマスク
+    replied: 0,                 // 返信を返した機体のビットマスク
+    sent_at: Instant::now(),
+    slot: Some(slot),
+    tx,
+});
+Ok(rx)                          // ResponseFuture
+```
+
+完了通知用のチャネルを 1 組作り, 送信側 (`tx`) を `Inflight` に持たせて `pending` へ積む.
+受信側 (`rx`) が `ResponseFuture` としてユーザーへ返る.
+ここで `send_frame` は終わりであり, ユーザーは `ResponseFuture` を `await` して待つ.
+
+### ④ 返信を待つ
+
+以下は I/O スレッドの処理である.
+
+```rust
+loop {
+    self.check_timeouts(now);        // 先頭の ack_timeout
+    self.check_heartbeat(now)?;      // 生存確認の送信・返信締切
+    self.recover(now);               // Lost の機体の探索と, 復帰した機体の取り込み
+    let deadline = self.next_deadline(now);
+    match self.bus.recv(deadline) {  // ソケットの受信タイムアウトで待つ
+        Ok(Some(reply)) => { self.dispatch(&reply); self.drain()?; }
+        Ok(None) => {}
+        Err(e) => return Some(NetworkCause::new(e)),
+    }
+}
+```
+
+期限は「先頭が `ack_timeout` を過ぎる時刻」「次の生存確認の時刻」「生存確認の返信待ちの締め切り」「次の探索の時刻 (自動復帰が有効で `Lost` の機体がある間)」のうち最も早いものである.
+返信が 1 つ届いたら, 溜まっている返信を読み切ってからタイマの判定へ戻るので, スレッドが遅れても届いている返信を見ずに `Timeout` にすることは無い.
+
+デバイスは各フレームの扱いを終えた時点で 1 回返信する.
+フレームは受信割り込みが FIFO に積み, メインループが処理した後に返信が届く.
+返信には要求の `msg_id`・`ack` (今処理した SEQ)・`status` (そのフレームのエラーコード)・読み出し値が載る.
+
+:::note
+送るものが無い間は, `heartbeat` (既定 10 ms) ごとに `Lost` でない全デバイスへ生存確認 (`Heartbeat`) を送る.
+デバイスはこれをホストが生きている信号として使い (既定で 500 ms 届かないと出力を止める), 現在の `ack` を載せて返信する.
+ホストはこの返信で状態監視とデバイス時刻の観測を行う. `Heartbeat` の返信は `msg_id` が生存確認のものだけを見て, `pending` の照合には使わない.
+:::
+
+### ⑤ 返信を照合する
+
+```rust
+let Some(index) = pending.entries.iter().position(|e| e.msg_id == reply.msg_id) else {
+    return;                                  // 待っていない返信は捨てる
+};
+let entry = &mut pending.entries[index];
+if reply.ack != seq.get() {                  // デバイスが受理していない
+    /* SeqMismatch で失敗させ, need_reset を立てる (後述) */
+}
+entry.slot.record_reply(reply.device, reply.status, reply.data());
+entry.replied |= 1 << reply.device;
+if entry.replied & entry.expected != entry.expected {
+    return;                                  // まだ返していない機体がある
+}
+```
+
+返信は `msg_id` で `pending` のエントリを引く. SEQ による距離計算やエポックの管理は無い.
+`ack` は「このフレームをデバイスが受理したか」の検査にだけ使う.
+
+デバイス 2 台の両方が返信すると, `replied` は `0b11` になる.
+
+```
+送信直後       replied = 0b00
+dev1 のみ返信  replied = 0b10
+両方返信       replied = 0b11 = expected  → 完了
+```
+
+### ⑥ 完了を通知する
+
+```rust
+let entry = pending.entries.remove(index).expect("index is in range");
+pending.head_since = Instant::now();
+entry.tx.send(Ok(entry.slot.response()));
+```
+
+`Slot` に記録した応答を `Response` へ写して送信側へ渡す. `Slot` は `Inflight` と一緒に破棄され, プールへ戻る.
+これで `Client` 側の `ResponseFuture` が起こされる.
+
+### 全体の流れ
+
+<Mermaid
+  title="stop-and-wait の 1 フレーム"
+  code={`sequenceDiagram
+participant U as Client::send_frame
+participant P as SlotPool
+participant IO as I/O スレッド
+participant D as デバイス
+U->>P: acquire()
+P-->>U: Slot
+U->>D: Frame (seq, msg_id) を全デバイスへ
+U->>U: pending に Inflight を積む
+Note over U: ResponseFuture を await
+D->>D: 処理
+D-->>IO: 返信 (msg_id, ack = seq, status)
+IO->>IO: msg_id で pending を引く
+IO->>P: Slot を返す
+IO-->>U: 完了通知 (waker)`}
+/>
+
+## streaming
+
+`send_frame` が返す `ResponseFuture` をすぐに `await` せず貯めれば, 応答を待たずに次のフレームを送れる.
+このとき `pending` に複数の `Inflight` が並ぶ.
+
+```
+pending: ┌─────────────┬─────────────┬─────────────┐
+         │ seq=3       │ seq=4       │ seq=5       │
+         │ msg_id=41   │ msg_id=42   │ msg_id=43   │
+         └─────────────┴─────────────┴─────────────┘
+```
+
+同時に送ってよい数は `max_inflight` (既定 7) で, これはデバイスの受信キュー (FIFO) の容量に合わせてある.
+フレームは処理されるまでキューに残るので, これより多く送ると溢れて捨てられる (返信が来ないので後述の `Timeout` になる).
+
+### デバイス側の受理条件
+
+```rust
+if in_frame.seq == expected_seq {
+    expected_seq = seq + 1;
+    let outcome = dispatch(cmd, payload);
+    set_reply(in_frame.seq, status_of(outcome), data_of(outcome));   // ack = 今処理した SEQ
+} else {
+    bump(Counter::SeqMismatch);            // 返信は直前の結果の写し
+}
+```
+
+デバイスは順番通りの SEQ しか受理しない.
+各フレームの返信はそのフレーム自身の結果を運び, ホストは `msg_id` でそれを対応するエントリへ届けるので,
+読み出し値を使うコマンドも他のフレームと同じ窓に混ぜて送れる.
+
+## 異常系
+
+異常は主に 3 つのパターンに分かれる.
+
+|              | 判定                                  | 意味                                        |
+| ------------ | ------------------------------------- | ------------------------------------------- |
+| ソケットの異常 | `recv` が `Err`                       | ソケット自体の異常.                         |
+| 送信の失敗   | ある機体宛ての `sendto` が `Err`      | OS がその機体宛てのデータグラムを受け取らなかった. |
+| 返信の停滞   | 先頭が `ack_timeout` の間進まない, または `ack != seq` | フレーム・返信の喪失, FIFO の溢れ, デバイスの停止・途絶. |
+
+### ソケットの異常
+
+ソケットの異常は Client 側ではどうすることもできないので, I/O スレッドは `pending` の全エントリを `Error::Network` で失敗させて終わる.
+以後の `send_frame` も同じ原因の `Error::Network` を返す. `Client` を作り直すこと.
+
+### 送信の失敗
+
+`sendto` の結果は機体ごとに次のように扱う. どの場合も I/O スレッドは止めない.
+
+| `sendto` の結果 | `Frame` | `Heartbeat` | `Lost` の判定 |
+| --------------- | ------- | ----------- | ------------- |
+| 成功 | 返信を待つ | 返信を待つ | ソケットへ渡した時刻から未返信を数える |
+| ソケットが満杯 (`WouldBlock`) | `lost_timeout` まで空きを待つ. 空かなければ諦め, 返信が来ないので `Error::Timeout` になる | 待たずにその機体を飛ばす | 数えない |
+| 一過性のエラー (`ConnectionReset` / `ConnectionRefused` / `HostUnreachable` / `NetworkUnreachable` / `NetworkDown` / `AddrNotAvailable` / `Interrupted`) | 送れたものとして返信を待つ. 返信が来なければ `Error::Timeout` になる | 同左 (返信が来なければ `missed_heartbeat_replies`) | 送れたものとして未返信を数える |
+| それ以外のエラー | そのフレームを `UdpError::Unsent` を原因とする `Error::Network` で失敗させる | その機体を飛ばして続ける | 未返信には数えない. 返信を挟まずに失敗が `lost_timeout` 続いたら `Lost` にする |
+
+1 台でも送れなかった `Frame` は, 残りの機体が返信しても成功にしない.
+送れなかった機体だけ SEQ が進んでいないので, `need_reset` を立てて次の送信の前に `Reset` で揃え直す.
+`Client` は閉じないので, 原因が解消すればそのまま送信を続けられる. 解消しなければその機体は `Lost` になり, 以後は送信の対象から外れる.
+
+### 損失時の扱い
+
+直結の UDP では喪失は稀なので, ホストは自動再送をしない.
+フレームが 1 つ欠けるとデバイスの `expected_seq` はそこで止まり, 以後のフレームはすべて SEQ 不一致で捨てられる.
+
+1. 欠けたフレームより後に送ったフレームには, デバイスが直前の結果の写しを返す. `ack != seq` なのでそのエントリを `Error::SeqMismatch` で失敗させる.
+2. 欠けたフレーム自身には返信が無い. `pending` の先頭が `ack_timeout` の間進まなければ, `pending` 全体を `Error::Timeout` で失敗させる.
+3. どちらの失敗でも「次の送信の前に `Reset` が要る」印 (`need_reset`) を立てる.
+
+```rust
+fn check_timeouts(&mut self, now: Instant) {
+    let mut pending = self.shared.pending();
+    if !pending.entries.is_empty()
+        && now.saturating_duration_since(pending.head_since) >= self.ack_timeout
+    {
+        pending.fail_all(|| Error::Timeout { timeout });
+        pending.need_reset = true;
+    }
+}
+```
+
+時間は送信時刻ではなく「先頭になった時刻, または直前にエントリが完了した時刻」から数える.
+後続のフレームが前のフレーム (`Synchronize` の latch 待ちなど) の待ち時間で道連れにならないためである.
+
+### SEQ のリセット
+
+印が立っている間の `send_frame` は, 本来のフレームを送る前に `Reset` を送る.
+
+```rust
+async fn reset(&self) -> Result<(), Error> {
+    for round in 0..self.config.max_resync_rounds.get() {
+        /* 全デバイスへ (SEQ 0, Reset) を送り, msg_id で照合する Inflight を積む */
+        match rx.await {
+            Ok(_) => { pending.next_seq = Seq::ZERO; pending.need_reset = false; return Ok(()); }
+            Err(Error::Timeout { .. }) => {}       // ack_timeout で送り直す
+            Err(e) => return Err(e),
+        }
+    }
+    Err(Error::Timeout { .. })
+}
+```
+
+デバイス側は `Cmd::Reset` を受けると `expected_seq` を 0 に戻し, `ack` を `0xFF` にして返信する.
+`Reset` は SEQ 一致チェックを bypass するので, 届けば 1 回で足りる.
+ホストはその `msg_id` の返信が `ack = 0xFF` で全機体から揃うまで `ack_timeout` ごとに新しい `msg_id` で送り直し,
+`max_resync_rounds` 回で揃わなければ `send_frame` は `Error::Timeout` を返す (印は残り, 次の `send_frame` が再び試みる).
+
+`Reset` は FPGA の出力状態には触らないので, 回復のための `Reset` で出力は乱れない.
+失敗したコマンドは呼び出し側が送り直す.
+
+:::note
+`Client::open` の handshake もこの `reset` を使う.
+前回のセッションの `expected_seq` や dedup の状態がデバイスに残っていても, ここで揃え直される.
+:::
+
+### 途絶
+
+デバイスが返信しない (再起動・ケーブル断) 間も, 上の返信の停滞と同じ経路で扱い, 最終的に `pending` が `Timeout` する.
+デバイスの状態は `UdpBus` が返信の途絶 (`lost_timeout`) から `Lost` と判定し, `StateChecker` が報告する.
+途絶は要求を送れた機体についてだけ測る (送信そのものが失敗した機体は数えない).
+
+`Lost` と判定した機体には, 以後 `Frame` も生存確認も unicast では送らない.
+応答しない機体へ送り続けると, その宛先の近隣探索 (NDP) が解決しない間, 送ったパケットが OS の未解決キューに溜まってソケットの送信バッファを占める.
+Linux の既定では 1 宛先のキューの上限 (`unres_qlen_bytes`) と送信バッファ (`wmem_default`) がどちらも 212,992 B なので, 1 台ぶんで送信バッファが尽き, 生きている機体への送信まで失敗する (実機では途中の 1 台の再起動から約 10 秒で全台への送信が失敗した).
+自動復帰が無効 (既定) なら, `Lost` の機体は生きていても何も届かなくなるので, failsafe で出力が止まる.
+
+`Lost` の機体を待っていた `pending` は `Timeout` で失敗し, 次の送信の `Reset` は `Lost` でない機体の返信だけで揃う.
+以後は残りの機体だけで送受信が続く.
+
+### Lost からの自動復帰
+
+`UdpOption::recovery_interval` が `Some` のとき, `Lost` の機体がある間, I/O スレッドはその間隔で生存確認 (`Heartbeat`) を 1 個 `ff02::1` へ送る.
+マルチキャストは近隣探索を要さないので, 応答しない機体が居ても送信バッファを占めない.
+割当済みのデバイスは `ff02::1` 宛の生存確認にも unicast のときと同じ返信を返し, `UdpBus::recv` は `Lost` の機体のアドレスから割当済み・ID の一致する返信を受けたらその機体を復帰させる.
+再起動した機体は未割当で上がり生存確認に返信しないので, `Lost` のまま残る.
+
+:::caution
+探索の生存確認は届いた全デバイスが「ホストが生きている信号」として数える (unicast の生存確認と区別しない).
+そのため自動復帰が有効な間は, ホストが `Lost` と見なしている機体でも探索が届いていれば failsafe は発火しない.
+`heartbeat` が `None` でも, `Lost` の機体がある間は生きている機体にも探索が届く.
+:::
+
+復帰した機体は, 次の送信の `Reset` が出るまで `Frame` の宛先に入らない (生存確認は届く).
+I/O スレッドが復帰を見て `need_reset` を立てるので, 復帰した機体が最初に受ける `Frame` は必ず `Reset` になる.
+`Reset` の往復中に別の機体が復帰したら `need_reset` を下ろさず, 次の送信がもう一度 `Reset` する.
+
+`Reset` の後, `ClientConfig` の設定に従って, 復帰した機体のうち `Ready` のものへ `Synchronize`, 続いて `ReleaseFailsafe` を, ユーザのフレームに先立って送る (他の機体には `Nop` を載せる).
+`Syncing` の機体は `Ready` になった後の送信まで持ち越す. 返信した機体だけを処理済みとし, 失敗すればその送信がエラーを返して次の送信でやり直す.
+失敗が `ClientConfig` で指定した回数 (既定 3 回) に達したら, その機体の復元を諦めて警告を出し, 以後の送信はそのまま通す.
+
+読み出し (`read_firmware_version` / `read_fpga_state` / `read_telemetry`) は全機体ぶんの値を返すので, `Lost` の機体が居る間は `Error::DeviceLost { device }` で失敗する.
+送らなかった機体の値が無いためで, 返信の `data` が短い `Error::UnexpectedReply` とは区別する.
+`Response` は完了したエントリの返信済みビットマスクを持ち, 返信の無い機体のうち最も若い番号を報告する.
+
+### 終了
+
+`Client::close` は停止フレームを送ったあと I/O スレッドを止めて join し, `UdpBus::close` を呼ぶ.
+I/O スレッドは終わるときに `pending` の全エントリを `Error::Closed` で失敗させる.
+以後の `send_frame` は `Error::Closed` を返す.

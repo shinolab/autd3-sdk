@@ -1,0 +1,33 @@
+---
+title: ConfigPattern
+description: Pattern バンクの設定
+sidebar:
+  order: 13
+slug: 0.12.x/api/command/lowlevel/config-pattern
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`ConfigPattern` は, Pattern バンクの再生パラメータを設定する低レベルコマンド.
+設定は書き込まれるだけで, 再生には [ActivatePatternBank](/autd3-sdk/0.12.x/api/command/lowlevel/activate-pattern-bank/) を送った時点で反映される.
+再生中のバンクの設定を変える場合も, 同じバンクを指す `ActivatePatternBank` を続けて送る.
+
+## API
+
+<CodeTabs rust={"ConfigPattern {\n    bank,\n    config,\n    size,\n    loop_behavior,\n};"} python={"ConfigPattern(\n    bank=bank,\n    config=config,\n    size=size,\n    loop_behavior=loop_behavior,\n)"} csharp={"new ConfigPattern(\n    bank: bank,\n    config: config,\n    size: size,\n    loopBehavior: loopBehavior\n);"} />
+
+| フィールド  | 型                | 説明                                              |
+| ----------- | ----------------- | ------------------------------------------------- |
+| `bank`      | `PatternBank`     | 対象バンク                                        |
+| `config`    | `SamplingConfig`  | 再生サンプリング周波数                            |
+| `size`      | `usize`           | バンク内のサンプル数. 静的 Pattern は `1`         |
+| `loop_behavior` | `LoopBehavior` | 再生ループ回数 (`Infinite` / `Finite`)           |
+
+`loop_behavior` は, [ActivatePatternBank](/autd3-sdk/0.12.x/api/command/lowlevel/activate-pattern-bank/) で現在と異なるバンクへ切り替えたときのみ作用する.
+
+`size = 1` (静的 Pattern) は `loop_behavior = Infinite` のときのみ有効.
+有限ループを使う場合は `size` を 2 以上にする.
+
+## Example
+
+<CodeTabs rust={"use core::num::NonZeroU16;\n\nuse autd3_rs::commands::{ActivatePatternBank, ConfigPattern, WritePatternBuffer};\nuse autd3_rs::geometry::{Autd3, Geometry, offset};\nuse autd3_rs::units::{m, mm, s};\nuse autd3_rs::value::{Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode};\nuse autd3_rs::{Client, ClientConfig};\nuse autd3_rs::udp::UdpOption;\nuse autd3_rs_firmware_emulator::udp::UdpEmulator;\nuse autd3_rs_pattern::{focus, wavelength};\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet emulator = UdpEmulator::spawn(geometry.num_devices())?;\nlet option = UdpOption::for_emulator(emulator.interface());\nlet client = Client::open(&geometry, &option, ClientConfig::default()).await?;\n\nlet mut phases = geometry.phase_buffer();\nfocus(\n    &geometry,\n    geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm),\n    wavelength(340.0 * m / s),\n    &mut phases,\n);\n\nlet bank = PatternBank::B0;\n\nclient.send(WritePatternBuffer::new(bank, 0, &phases, Intensity::MAX)).await?;\nclient.send(ConfigPattern {\n    bank,\n    config: SamplingConfig::new(NonZeroU16::MAX),\n    size: 1,\n    loop_behavior: LoopBehavior::Infinite,\n}).await?;\nclient.send(ActivatePatternBank {\n    bank,\n    transition_mode: TransitionMode::Immediate,\n}).await?;\n\nclient.close().await?;"} python={"import asyncio\n\nfrom autd3 import Client, ClientConfig, UdpEmulator\nfrom autd3.commands import ActivatePatternBank, ConfigPattern, WritePatternBuffer\nfrom autd3.geometry import Autd3, Geometry, offset\nfrom autd3.units import m, mm, s\nfrom autd3.value import Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode\nfrom autd3_pattern import focus, wavelength\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3()])\n    emulator = UdpEmulator(geometry.num_devices())\n    async with await Client.open(geometry, emulator.option(), ClientConfig()) as client:\n        phases = geometry.phase_buffer()\n        focus(\n            geometry,\n            geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm),\n            wavelength(340 * m / s),\n            phases,\n        )\n\n        bank = PatternBank.B0\n\n        await client.send(\n            WritePatternBuffer(\n                bank=bank,\n                index=0,\n                phases=phases,\n                intensities=Intensity.MAX,\n            )\n        )\n        await client.send(\n            ConfigPattern(\n                bank=bank,\n                config=SamplingConfig(0xFFFF),\n                size=1,\n                loop_behavior=LoopBehavior.Infinite,\n            )\n        )\n        await client.send(\n            ActivatePatternBank(\n                bank=bank,\n                transition_mode=TransitionMode.Immediate,\n            )\n        )\n\n\nasyncio.run(main())"} csharp={"using System.Threading.Tasks;\nusing AUTD3;\nusing static AUTD3.Units;\n\nvar geometry = new Geometry(new[] { new Autd3() });\nusing var emulator = new UdpEmulator(geometry.NumDevices);\nawait using var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());\n\nvar phases = geometry.PhaseBuffer();\nPattern.Focus(\n    geometry,\n    geometry.Center + Offset(0.0f * mm, 0.0f * mm, 150.0f * mm),\n    Pattern.Wavelength(340.0f * m / s),\n    phases\n);\n\nvar bank = PatternBank.B0;\n\nawait client.SendAsync(new WritePatternBuffer(\n    bank: bank,\n    index: 0,\n    phases: phases,\n    intensities: Intensity.Max\n));\nawait client.SendAsync(new ConfigPattern(\n    bank: bank,\n    config: new SamplingConfig(ushort.MaxValue),\n    size: 1,\n    loopBehavior: LoopBehavior.Infinite\n));\nawait client.SendAsync(new ActivatePatternBank(\n    bank: bank,\n    transitionMode: TransitionMode.Immediate\n));"} />

@@ -1,0 +1,28 @@
+---
+title: EmulateGpioIn
+description: EmulateGpioIn asserts GPIO inputs from software
+sidebar:
+  order: 7.5
+slug: en/0.12.x/api/command/emulate-gpio-in
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`EmulateGpioIn` is a command that asserts the four [GPIO input terminals](/autd3-sdk/en/0.12.x/hardware/gpio/) of the devices from software.
+The effective value the FPGA sees is the logical OR of the physical terminal input and `EmulateGpioIn`.
+It is useful, for example, to try switching with [`TransitionMode::Gpio`](/autd3-sdk/en/0.12.x/api/command/lowlevel/activate-pattern-bank/) without external wiring.
+
+## API
+
+<CodeTabs rust={"EmulateGpioIn { values };"} python={"EmulateGpioIn(values)"} csharp={"new EmulateGpioIn(values);"} />
+
+| Field    | Type        | Default         | Description                                            |
+| -------- | ----------- | --------------- | ------------------------------------------------------ |
+| `values` | `[bool; 4]` | all `false`     | Whether to assert each of inputs 0..3 (`true` asserts) |
+
+Python takes a sequence of 4 `bool`s, and C# takes a `bool[]` of length 4.
+A length other than 4 is an error at construction (`ValueError` in Python, `Autd3Exception` (`InvalidArgument`) in C#). In Rust, the array type fixes the length.
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::EmulateGpioIn;\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::{Client, ClientConfig};\nuse autd3_rs::udp::UdpOption;\nuse autd3_rs_firmware_emulator::udp::UdpEmulator;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet emulator = UdpEmulator::spawn(geometry.num_devices())?;\nlet option = UdpOption::for_emulator(emulator.interface());\nlet client = Client::open(&geometry, &option, ClientConfig::default()).await?;\n\nclient.send(EmulateGpioIn {\n    values: [true, false, false, false],\n}).await?;\n\nclient.close().await?;"} python={"import asyncio\n\nfrom autd3 import Client, ClientConfig, UdpEmulator\nfrom autd3.commands import EmulateGpioIn\nfrom autd3.geometry import Autd3, Geometry\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3()])\n    emulator = UdpEmulator(geometry.num_devices())\n    async with await Client.open(geometry, emulator.option(), ClientConfig()) as client:\n        await client.send(EmulateGpioIn([True, False, False, False]))\n\n\nasyncio.run(main())"} csharp={"using System.Threading.Tasks;\nusing AUTD3;\n\nvar geometry = new Geometry(new[] { new Autd3() });\nusing var emulator = new UdpEmulator(geometry.NumDevices);\nawait using var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());\n\nawait client.SendAsync(new EmulateGpioIn(new[] { true, false, false, false }));"} />

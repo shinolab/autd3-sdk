@@ -1,0 +1,95 @@
+---
+title: FociStm
+description: STM that switches a sequence of focal point coordinates at high speed
+sidebar:
+  order: 4
+slug: en/0.12.x/api/command/foci-stm
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`FociStm` provides an STM feature that switches single- and multi-focus sound fields by a hardware timer.
+Unlike [`PatternStm`](/autd3-sdk/en/0.12.x/api/command/pattern-stm/), it can only handle focal points, but the amount of data to transfer is small and the latency is low.
+
+## API
+
+<CodeTabs rust={"FociStm::new(freq, &points, option);"} python={"FociStm(freq, points, option)"} csharp={"new FociStm(freq, points, option);"} />
+
+| Parameter | Type                     | Description                                          |
+| --------- | ------------------------ | --------------------------------------------------- |
+| `config`  | `impl Into<StmConfig>`   | Playback rate (`Freq` / `Duration` / `SamplingConfig`) |
+| `points`  | `&[ControlPoints<N>]`    | Sequence of focal point samples (at least 2 samples)        |
+| `option`  | `FociStmOption`          | Options such as sound speed, loop, and transition   |
+
+Passing a `Freq` / `Duration` to `config` represents "the frequency/period for one full cycle over all samples".
+A sampling frequency can also be specified.
+A `Duration` that is not divisible by the number of samples is an error (use `Nearest` to round it).
+
+## ControlPoint / ControlPoints
+
+A single sample is represented by `ControlPoints<N>`. `N` is the number of focal points emitted simultaneously (up to 8).
+
+* `ControlPoint { point, phase_offset }` — focal point coordinate \[mm] and phase offset.
+* `ControlPoints<N> { points: [ControlPoint; N], intensity }` — `N` focal points and an amplitude.
+
+All arguments of `ControlPoint::new(point, phase_offset)` / `ControlPoints::new(points, intensity)` are required (the same in Python / C#).
+In Rust, `From` converts from coordinates, with the phase offset `Phase::ZERO` and the amplitude `Intensity::MAX` (`ControlPoint::from(p)`, `ControlPoints::from(p)` / `ControlPoints::from(cp)` / `ControlPoints::from([p0, p1])`).
+In C#, the same conversions are written as the explicit conversions `(ControlPoint)p` / `(ControlPoints)p` / `(ControlPoints)cp` / `(ControlPoints)points`.
+Python has no such shorthand, so write it out, as in `ControlPoints([ControlPoint(p, Phase.ZERO)], Intensity.MAX)`.
+
+## FociStmOption
+
+<CodeTabs rust={"FociStmOption {\n    bank,\n    sound_speed,\n    loop_behavior,\n    transition_mode,\n    ..Default::default()\n}"} python={"FociStmOption(\n    bank,\n    sound_speed,\n    loop_behavior,\n    transition_mode,\n)"} csharp={"new FociStmOption\n{\n    Bank = bank,\n    SoundSpeed = soundSpeed,\n    LoopBehavior = loopBehavior,\n    TransitionMode = transitionMode,\n}"} />
+
+| Field             | Type             | Default                     | Description                            |
+| ----------------- | ---------------- | --------------------------- | -------------------------------------- |
+| `bank`            | `PatternBank`    | `PatternBank::B0`           | Bank to write to / play back           |
+| `sound_speed`     | `Velocity`       | `340 m/s`                   | Sound speed used for focus computation |
+| `loop_behavior`   | `LoopBehavior`   | `LoopBehavior::Infinite`    | Loop count                             |
+| `transition_mode` | `TransitionMode` | `TransitionMode::Immediate` | Transition timing on bank switching    |
+
+For the behavior of `loop_behavior` and `transition_mode`, see [playback control](/autd3-sdk/en/0.12.x/api/command/lowlevel/activate-pattern-bank/).
+
+## Helper Functions
+
+Helper functions are provided to generate typical trajectories.
+
+### circle
+
+<CodeTabs rust={"circle(center, radius, num_points, normal, intensity, &mut dst);"} python={"circle(center, radius, num_points, normal, intensity, dst)"} csharp={"Stm.Circle(center, radius, numPoints, normal, intensity, dst);"} />
+
+| Parameter    | Type                         | Description                          |
+| ------------ | ---------------------------- | ------------------------------------ |
+| `center`     | `Point3<f32>`                | Center of the circle \[mm]            |
+| `radius`     | `Length`                     | Radius of the circle                 |
+| `num_points` | `usize`                      | Number of points to generate         |
+| `normal`     | `UnitVector3<f32>`           | Normal of the circle plane (unit vector) |
+| `intensity`  | `Intensity`                  | Amplitude of each point              |
+| `dst`        | `&mut Vec<ControlPoints<1>>` | Output buffer                        |
+
+Places `num_points` points at equal intervals on a circle whose normal is `normal`.
+
+### line
+
+<CodeTabs rust={"line(start, end, num_points, intensity, &mut dst);"} python={"line(start, end, num_points, intensity, dst)"} csharp={"Stm.Line(start, end, numPoints, intensity, dst);"} />
+
+| Parameter    | Type                         | Description                  |
+| ------------ | ---------------------------- | ---------------------------- |
+| `start`      | `Point3<f32>`                | Start point \[mm]             |
+| `end`        | `Point3<f32>`                | End point \[mm]               |
+| `num_points` | `usize`                      | Number of points to generate |
+| `intensity`  | `Intensity`                  | Amplitude of each point      |
+| `dst`        | `&mut Vec<ControlPoints<1>>` | Output buffer                |
+
+Places `num_points` points at equal intervals along a line including the start and end points.
+
+## Equivalent Low-Level Commands
+
+`FociStm` is equivalent to the three commands [WriteFociBuffer](/autd3-sdk/en/0.12.x/api/command/lowlevel/write-foci-buffer/) + [ConfigFociStm](/autd3-sdk/en/0.12.x/api/command/lowlevel/config-foci-stm/) + [ActivatePatternBank](/autd3-sdk/en/0.12.x/api/command/lowlevel/activate-pattern-bank/), and is sent expanded in that order.
+The following is equivalent to `FociStm::new(config, &points, option)`.
+
+<CodeTabs rust={"WriteFociBuffer {\n    bank: option.bank,\n    index_offset: 0,\n    points: &points,\n};\nConfigFociStm {\n    bank: option.bank,\n    config: StmConfig::new(freq).into_sampling_config(points.len()),\n    size: points.len(),\n    num_foci: N, // N is the number of foci in the points\n    sound_speed: option.sound_speed,\n    loop_behavior: option.loop_behavior,\n};\nActivatePatternBank {\n    bank: option.bank,\n    transition_mode: option.transition_mode,\n};"} python={"WriteFociBuffer(\n    bank=option.bank,\n    index_offset=0,\n    points=points,\n)\nConfigFociStm(\n    bank=option.bank,\n    config=StmConfig(freq).into_sampling_config(len(points)),\n    size=len(points),\n    num_foci=num_foci,\n    sound_speed=option.sound_speed,\n    loop_behavior=option.loop_behavior,\n)\nActivatePatternBank(\n    bank=option.bank,\n    transition_mode=option.transition_mode,\n)"} csharp={"new WriteFociBuffer(\n    bank: option.Bank,\n    indexOffset: 0,\n    points: points\n);\nnew ConfigFociStm(\n    bank: option.Bank,\n    config: new StmConfig(freq).IntoSamplingConfig(points.Length),\n    size: (uint)points.Length,\n    numFoci: numFoci,\n    soundSpeed: option.SoundSpeed,\n    loopBehavior: option.LoopBehavior\n);\nnew ActivatePatternBank(\n    bank: option.Bank,\n    transitionMode: option.TransitionMode\n);"} />
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::{FociStm, FociStmOption, circle};\nuse autd3_rs::geometry::{Autd3, Geometry, Vector3, offset};\nuse autd3_rs::units::{Hz, m, mm, s};\nuse autd3_rs::value::{Intensity, LoopBehavior, PatternBank, TransitionMode};\nuse autd3_rs::{Client, ClientConfig};\nuse autd3_rs::udp::UdpOption;\nuse autd3_rs_firmware_emulator::udp::UdpEmulator;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet emulator = UdpEmulator::spawn(geometry.num_devices())?;\nlet option = UdpOption::for_emulator(emulator.interface());\nlet client = Client::open(&geometry, &option, ClientConfig::default()).await?;\n\nlet center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);\nlet mut points = Vec::new();\ncircle(\n    center,\n    30.0 * mm,\n    200,\n    Vector3::z_axis(),\n    Intensity::MAX,\n    &mut points,\n);\n\nclient.send(FociStm::new(\n    1.0 * Hz,\n    &points,\n    FociStmOption {\n        bank: PatternBank::B0,\n        sound_speed: 340.0 * m / s,\n        loop_behavior: LoopBehavior::Infinite,\n        transition_mode: TransitionMode::Immediate,\n        ..Default::default()\n    },\n)).await?;\n\nclient.close().await?;"} python={"import asyncio\n\nfrom autd3 import Client, ClientConfig, UdpEmulator\nfrom autd3.commands import FociStm, FociStmOption, circle\nfrom autd3.geometry import Autd3, Geometry, offset\nfrom autd3.units import Hz, m, mm, s\nfrom autd3.value import Intensity, LoopBehavior, PatternBank, TransitionMode\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3()])\n    emulator = UdpEmulator(geometry.num_devices())\n    async with await Client.open(geometry, emulator.option(), ClientConfig()) as client:\n        center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm)\n        points = []\n        circle(center, 30.0 * mm, 200, [0.0, 0.0, 1.0], Intensity.MAX, points)\n\n        await client.send(\n            FociStm(\n                1.0 * Hz,\n                points,\n                FociStmOption(\n                    bank=PatternBank.B0,\n                    sound_speed=340 * m / s,\n                    loop_behavior=LoopBehavior.Infinite,\n                    transition_mode=TransitionMode.Immediate,\n                ),\n            )\n        )\n\n\nasyncio.run(main())"} csharp={"using System.Collections.Generic;\nusing System.Numerics;\nusing System.Threading.Tasks;\nusing AUTD3;\nusing static AUTD3.Units;\n\nvar geometry = new Geometry(new[] { new Autd3() });\nusing var emulator = new UdpEmulator(geometry.NumDevices);\nawait using var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());\n\nvar center = geometry.Center + Offset(0.0f * mm, 0.0f * mm, 150.0f * mm);\nvar dst = new List<ControlPoints>();\nStm.Circle(\n    center,\n    30.0f * mm,\n    200,\n    Vector3.UnitZ,\n    Intensity.Max,\n    dst\n);\nvar points = dst.ToArray();\n\nawait client.SendAsync(new FociStm(\n    1.0f * Hz,\n    points,\n    new FociStmOption\n    {\n        Bank = PatternBank.B0,\n        SoundSpeed = 340.0f * m / s,\n        LoopBehavior = LoopBehavior.Infinite,\n        TransitionMode = TransitionMode.Immediate,\n    }\n));"} />

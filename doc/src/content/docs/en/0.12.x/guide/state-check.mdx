@@ -1,0 +1,54 @@
+---
+title: State Monitoring
+description: Monitor the communication state of devices with the StateChecker
+sidebar:
+  order: 6
+slug: en/0.12.x/guide/state-check
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+The `StateChecker` lets you monitor whether the communication with the devices is working correctly.
+
+## Obtaining the StateChecker
+
+Take the `StateChecker` with `state_checker` of the [`Client`](/autd3-sdk/en/0.12.x/api/basics/client/).
+
+<CodeTabs rust={"let client = Client::open(&geometry, UdpOption::default(), ClientConfig::default()).await?;\nlet checker = client.state_checker();"} python={"client = await Client.open(geometry, UdpOption(), ClientConfig())\nchecker = client.state_checker()"} csharp={"var client = await Client.OpenAsync(geometry, new UdpOption(), new ClientConfig());\nusing var checker = client.StateChecker();"} />
+
+## Obtaining the State
+
+`StateChecker::check` returns the state `DeviceStatus` at the time of the call.
+`DeviceStatus` holds the following.
+
+* `devices`: the state of each device (`DeviceState`).
+* `all_ready`: whether all devices are in the `Ready` state.
+* `any_lost`: whether any device is in the `Lost` state.
+
+The meaning of each state is as follows.
+
+| State     | Meaning                                                                              |
+| --------- | ------------------------------------------------------------------------------------ |
+| `Ready`   | The device replies, its time is synchronized, and its sync pulse is running           |
+| `Syncing` | The device replies, but its time is still being synchronized or its sync pulse is not running yet |
+| `Lost`    | No reply for a certain period of time                                                 |
+
+When a device in the middle of the chain becomes `Lost`, every device beyond it also becomes `Lost`.
+By default there is no automatic recovery from `Lost`, so the client must be reopened with `Client::open`.
+
+## Automatic recovery from Lost
+
+When `recovery_interval` of `UdpOption` is set, the client looks for the devices at that interval while any device is `Lost`, and recovers the devices that answer again.
+Only a device whose communication was cut off, for example by an unplugged cable, is recovered; a power-cycled device is not (reopen the client with `Client::open`). The total number of recovered devices can be read from `recoveries` of `BusStats`.
+
+Note the following when a device is recovered.
+
+* By default, `Synchronize` is sent again to the recovered device only, before the first send after it becomes `Ready`. Setting `resynchronize_on_recovery` of `ClientConfig` to `None` turns this off.
+* By default, `ReleaseFailsafe` is sent to the recovered device only. Setting `release_failsafe_on_recovery` of `ClientConfig` to `None` turns this off.
+* If one of these sends fails, the send in progress returns the error and the next send tries again. After the configured number of failures (3 by default) the client gives up and lets later sends through; send `Synchronize` or `ReleaseFailsafe` yourself if needed.
+
+The following is an example that calls `check` at fixed intervals and outputs only when the state changes.
+
+<CodeTabs rust={"let mut last: Option<DeviceStatus> = None;\nloop {\n    let status = checker.check()?;\n    if last.as_ref() != Some(&status) {\n        for (i, state) in status.devices().iter().enumerate() {\n            println!(\"device[{i}]: {state}\");\n        }\n        println!(\n            \"all ready: {}, any lost: {}\",\n            status.all_ready(),\n            status.any_lost()\n        );\n        last = Some(status);\n    }\n    tokio::time::sleep(CHECK_INTERVAL).await;\n}"} python={"last = None\nwhile True:\n    status = checker.check()\n    if status != last:\n        for i, state in enumerate(status.devices):\n            print(f\"device[{i}]: {state}\")\n        print(f\"all ready: {status.all_ready}, any lost: {status.any_lost}\")\n        last = status\n    await asyncio.sleep(CHECK_INTERVAL)"} csharp={"DeviceStatus? last = null;\nwhile (true)\n{\n    var status = checker.Check();\n    if (status != last)\n    {\n        for (var i = 0; i < status.Devices.Count; i++)\n        {\n            Console.WriteLine($\"device[{i}]: {status.Devices[i]}\");\n        }\n        Console.WriteLine($\"all ready: {status.AllReady}, any lost: {status.AnyLost}\");\n        last = status;\n    }\n    await Task.Delay(CheckInterval);\n}"} />
+
+How often to call `check` is up to the user.

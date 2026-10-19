@@ -1,0 +1,54 @@
+---
+title: 状態監視
+description: StateChecker でデバイスとの通信状態を監視する
+sidebar:
+  order: 6
+slug: 0.12.x/guide/state-check
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`StateChecker` を使うことでデバイスとの通信が正常に動いているかどうかを監視できる.
+
+## StateChecker の取得
+
+[`Client`](/autd3-sdk/0.12.x/api/basics/client/) の `state_checker` で `StateChecker` を取る.
+
+<CodeTabs rust={"let client = Client::open(&geometry, UdpOption::default(), ClientConfig::default()).await?;\nlet checker = client.state_checker();"} python={"client = await Client.open(geometry, UdpOption(), ClientConfig())\nchecker = client.state_checker()"} csharp={"var client = await Client.OpenAsync(geometry, new UdpOption(), new ClientConfig());\nusing var checker = client.StateChecker();"} />
+
+## 状態の取得
+
+`StateChecker::check` は, 呼び出した時点の状態 `DeviceStatus` を返す.
+`DeviceStatus` は以下を持つ.
+
+* `devices`: デバイスごとの状態 (`DeviceState`).
+* `all_ready`: 全デバイスが `Ready` 状態か.
+* `any_lost`: いずれかのデバイスが `Lost` 状態か.
+
+状態の意味は以下の通り.
+
+| 状態     | 意味                                                                     |
+| -------- | ------------------------------------------------------------------------ |
+| `Ready`   | 返信があり, デバイスの時刻が合っていて, 同期パルスが動いている          |
+| `Syncing` | 返信はあるが, 時刻を合わせている途中か, 同期パルスがまだ動いていない    |
+| `Lost`    | 返信が一定時間無い                                      |
+
+途中の 1 台が`Lost`すると, その機体より先の機体も全て `Lost` になる.
+既定では `Lost` からは自動で復帰しないので, `Client::open` で開き直す必要がある.
+
+## Lost からの自動復帰
+
+`UdpOption` の `recovery_interval` を指定すると, `Lost` のデバイスがある間その間隔でデバイスを探し, 応答が戻ったデバイスを自動で復帰させる.
+対象はケーブルの抜き差しなどで通信が途絶えただけのデバイスで, 電源を入れ直したデバイスは復帰しない (`Client::open` で開き直す). 復帰したデバイスの数は `BusStats` の `recoveries` で読める.
+
+復帰の際には以下の点に注意されたい.
+
+* 既定では, 復帰したデバイスが `Ready` になった後の最初の送信の前に, そのデバイスだけへ `Synchronize` を送り直す. `ClientConfig` の `resynchronize_on_recovery` を `None` にすると送らない.
+* 既定では復帰したデバイスへだけ `ReleaseFailsafe` を送る. `ClientConfig` の `release_failsafe_on_recovery` を `None` にすると送らない.
+* これらの送信が失敗すると, そのときの送信がエラーを返し, 次の送信でやり直す. 指定した回数 (既定 3 回) 失敗したら諦めて, 以後の送信はそのまま通す. この場合は必要に応じて `Synchronize` や `ReleaseFailsafe` を自分で送り直すこと.
+
+以下は, 一定間隔で `check` を呼び, 状態が変化したときだけ出力する例.
+
+<CodeTabs rust={"let mut last: Option<DeviceStatus> = None;\nloop {\n    let status = checker.check()?;\n    if last.as_ref() != Some(&status) {\n        for (i, state) in status.devices().iter().enumerate() {\n            println!(\"device[{i}]: {state}\");\n        }\n        println!(\n            \"all ready: {}, any lost: {}\",\n            status.all_ready(),\n            status.any_lost()\n        );\n        last = Some(status);\n    }\n    tokio::time::sleep(CHECK_INTERVAL).await;\n}"} python={"last = None\nwhile True:\n    status = checker.check()\n    if status != last:\n        for i, state in enumerate(status.devices):\n            print(f\"device[{i}]: {state}\")\n        print(f\"all ready: {status.all_ready}, any lost: {status.any_lost}\")\n        last = status\n    await asyncio.sleep(CHECK_INTERVAL)"} csharp={"DeviceStatus? last = null;\nwhile (true)\n{\n    var status = checker.Check();\n    if (status != last)\n    {\n        for (var i = 0; i < status.Devices.Count; i++)\n        {\n            Console.WriteLine($\"device[{i}]: {status.Devices[i]}\");\n        }\n        Console.WriteLine($\"all ready: {status.AllReady}, any lost: {status.AnyLost}\");\n        last = status;\n    }\n    await Task.Delay(CheckInterval);\n}"} />
+
+`check` を呼ぶ頻度はユーザー次第である.

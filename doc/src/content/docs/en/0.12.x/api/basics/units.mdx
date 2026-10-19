@@ -1,0 +1,41 @@
+---
+title: Units and Value Types
+description: How to build and operate on unit-carrying quantities (Length /
+  Angle / Freq / Velocity) and Phase / Intensity
+sidebar:
+  order: 3
+slug: en/0.12.x/api/basics/units
+---
+
+Lengths, angles, frequencies, and velocities are represented by unit-carrying types, built by multiplying a number by a unit (`150 * mm`, `90 * deg`, `200 * Hz`, `340 * m / s`).
+The units come from `autd3_rs::units` in Rust, `autd3.units` in Python, and `using static AUTD3.Units;` in C#.
+
+## Unit-Carrying Quantities
+
+| Type       | Construction                     | Operations                                                   | Comparison      |
+| ---------- | -------------------------------- | ------------------------------------------------------------ | --------------- |
+| `Length`   | `x * mm` / `x * m`               | `+` / `-` / unary `-` / `* f32` / `f32 *` / `/ f32`. `Length / s` is a `Velocity` | Ordering        |
+| `Velocity` | `Length / s` (e.g. `340 * m / s`) | —                                                            | Ordering        |
+| `Angle`    | `x * deg` / `x * rad`            | `+` / `-` / unary `-` / `* f32` / `f32 *` / `/ f32`          | Equality only   |
+| `Freq`     | `x * Hz` / `x * kHz`             | `+` / `-` / `*` / `/`                                        | Ordering        |
+
+`x` may be an integer or a floating-point number.
+In Rust, `Freq` is split into the integer `Freq<u32>` (`200 * Hz`) and the floating-point `Freq<f32>` (`200.0 * Hz`), which are different types.
+In Python / C#, `Freq` is a single type that remembers whether it is an integer or floating point (`200f * Hz` is floating point in C#).
+Whether it is an integer or floating point changes how Modulation handles the frequency (see [sine](/autd3-sdk/en/0.12.x/api/compute/modulation/sine/)).
+In Python, `+` / `-` / `*` of `Freq` stay integers between integers, and `/` always returns floating point. Use `//` to divide while keeping an integer.
+In Python / C#, equality of `Freq` also compares whether it is an integer or floating point, so an integer and a floating-point `Freq` with the same value are not equal (`200 * Hz != 200.0 * Hz` in Python, with different `hash` values, and `200 * Hz != 200f * Hz` in C#). This matches Rust, where `Freq<u32>` and `Freq<f32>` are different types and cannot be compared. Ordering compares only the values.
+
+## Phase / Intensity
+
+`Phase` is a phase that divides one period into 256 steps, and `Intensity` is an amplitude from 0 to 255; both hold a `u8`.
+
+| Type        | Construction                                               | Operations                                                   | Comparison      |
+| ----------- | ---------------------------------------------------------- | ------------------------------------------------------------ | --------------- |
+| `Phase`     | `Phase(u8)`, conversion from `Angle`, `ZERO` / `PI`        | `+` / `-` (wrap around at 256) / `* u8` / `u8 *` / `/ u8`    | Equality only   |
+| `Intensity` | `Intensity(u8)`, `MIN` / `MAX`                             | `+` / `-` / `* u8` / `u8 *` (saturate to 0–255) / `/ u8`     | Ordering        |
+
+Rust's `Phase::from(angle)` is written as `Phase(angle)` in Python and as the explicit conversion `(Phase)angle` in C#.
+Python can also use `//` to divide while keeping an integer.
+In C#, they are built with `new Phase(byte)` / `new Intensity(byte)`, and the constants are `Phase.Zero` / `Phase.Pi` / `Intensity.Min` / `Intensity.Max`.
+As in Rust, the default of `Phase` is `ZERO` and that of `Intensity` is `MAX`; Python `Phase()` / `Intensity()` and C# `default(Phase)` / `default(Intensity)` (and each element of `new Intensity[n]`) give these values.

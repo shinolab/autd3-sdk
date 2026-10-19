@@ -1,0 +1,63 @@
+---
+title: fourier
+description: 複数の正弦波を合成した振幅変調を生成する Modulation
+sidebar:
+  order: 23
+srcPath: crates/autd3-rs-modulation/src/fourier.rs
+slug: 0.12.x/api/compute/modulation/fourier
+---
+
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+import CodeTabs from "@components/CodeTabs.astro";
+
+`fourier` は複数の正弦波成分を合成した振幅変調を生成する. 各成分を [sine](/autd3-sdk/0.12.x/api/compute/modulation/sine/) と同じ方法で計算し, 足し合わせて 1 つの波形にする.
+
+## API
+
+<CodeTabs rust={"fourier(&components, &option, &mut dst)?;"} python={"fourier(components, option, dst)"} csharp={"Modulation.Fourier(components, option, dst);"} />
+
+| 引数         | 型                    | 説明                      |
+| ------------ | --------------------- | ------------------------- |
+| `components` | `&[SineComponent]`    | 合成する正弦波成分の配列  |
+| `option`     | `&FourierOption`      | 追加オプション (下記参照) |
+| `dst`        | `&mut Vec<u8>`        | 出力バッファ              |
+
+各 `SineComponent` は周波数 `freq` と `SineOption` の組である.
+`components` が空のときはエラーになる.
+全成分の `sampling_config` は一致している必要があり, 異なるとエラーになる.
+合成波形の長さは各成分の周期の最小公倍数である.
+これが `MOD_BUFFER_SAMPLES` (65536) を超えるとエラーになる.
+
+各サンプルは全成分の和にスケール <Math tex="s" /> (`scale_factor`) を掛け, オフセット <Math tex="b" /> (`offset`) を加えた値である.
+
+<MathBlock tex="m_i = s \sum_{k} m^{(k)}_i + b" />
+
+## SineComponent
+
+| フィールド | 型             | 説明                    |
+| ---------- | -------------- | ----------------------- |
+| `freq`     | `SamplingMode` | 成分の周波数            |
+| `option`   | `SineOption`   | 成分ごとの正弦波 Option |
+
+`freq` は [sine](/autd3-sdk/0.12.x/api/compute/modulation/sine/) と同じく `Freq<u32>` / `Freq<f32>` / `Nearest(freq)` で指定し, Rust では `.into()` で `SamplingMode` へ変換する.
+読み出すと, Python の `freq` は `Nearest` で指定した成分なら `Nearest(Freq)` を返し, C# は `Freq` と `IsNearest` で区別する.
+
+値域の判定は合成後の値に対して行うため, 成分の `SineOption` の `clamp` は使われない.
+範囲外の値を丸めるには `FourierOption` の `clamp` を指定する.
+
+<CodeTabs rust={"SineComponent {\n    freq: (100 * Hz).into(),\n    option: SineOption::default(),\n};"} python={"SineComponent(\n    100 * Hz,\n    SineOption(),\n)"} csharp={"new SineComponent(\n    100 * Hz,\n    new SineOption()\n);"} />
+
+## FourierOption
+
+<CodeTabs rust={"FourierOption {\n    scale_factor,\n    clamp,\n    offset,\n    ..Default::default()\n}"} python={"FourierOption(\n    scale_factor,\n    clamp,\n    offset,\n)"} csharp={"new FourierOption\n{\n    ScaleFactor = scaleFactor,\n    Clamp = clamp,\n    Offset = offset,\n}"} />
+
+| フィールド     | 型            | デフォルト | 説明                                                      |
+| -------------- | ------------- | ---------- | --------------------------------------------------------- |
+| `scale_factor` | `Option<f32>` | `None`     | 合成値に掛けるスケール. `None` 場合は成分数の逆数         |
+| `clamp`        | `bool`        | `false`    | 範囲外の値を \[0, 255] へclampするか                       |
+| `offset`       | `u8`          | `0`        | 合成後に加える直流オフセット                              |
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::units::Hz;\nuse autd3_rs_modulation::{FourierOption, SineComponent, SineOption, fourier, modulation_buffer};\n\nlet mut dst = modulation_buffer();\n\nfourier(\n    &[SineComponent {\n        freq: (100 * Hz).into(),\n        option: SineOption::default(),\n    }],\n    &FourierOption {\n        scale_factor: None,\n        clamp: false,\n        offset: 0x00,\n        ..Default::default()\n    },\n    &mut dst,\n)?;"} python={"from autd3.units import Hz\nfrom autd3_modulation import (\n    FourierOption,\n    SineComponent,\n    SineOption,\n    fourier,\n    modulation_buffer,\n)\n\ndst = modulation_buffer()\n\nfourier(\n    [\n        SineComponent(\n            freq=100 * Hz,\n            option=SineOption(),\n        )\n    ],\n    FourierOption(\n        scale_factor=None,\n        clamp=False,\n        offset=0x00,\n    ),\n    dst,\n)"} csharp={"using AUTD3;\nusing static AUTD3.Units;\n\nvar dst = Modulation.ModulationBuffer();\n\nModulation.Fourier(\n    new[]\n    {\n        new SineComponent(\n            100 * Hz,\n            new SineOption()\n        ),\n    },\n    new FourierOption\n    {\n        ScaleFactor = null,\n        Clamp = false,\n        Offset = 0x00,\n    },\n    dst\n);"} />

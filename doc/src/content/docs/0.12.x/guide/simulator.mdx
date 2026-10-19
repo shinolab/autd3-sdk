@@ -1,0 +1,29 @@
+---
+title: Simulator
+description: 音場シミュレータの起動と接続
+sidebar:
+  order: 8
+slug: 0.12.x/guide/simulator
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`Simulator` は, AUTD3 の出力音場をブラウザ上で可視化する音場シミュレータ.
+実機がなくても, クライアントが送ったデータから生成される音場を確認できる.
+
+## 起動
+
+`Simulator` は GUI コンソール `autd3-console` に同梱されている.
+
+[コンソール](/autd3-sdk/0.12.x/guide/console/) の手順で `autd3-console` を入手して起動し, 上部の「Simulator」タブを開く.
+
+## 接続
+
+クライアントは Simulator と同じホストで動かす必要がある.
+
+Simulator は既定でポート 44336 (制御用に次の 44337 も) で待ち受ける. ポートはコンソールの Simulator タブの「UDP port」で変えられる.
+
+既定の [`UdpOption`](/autd3-sdk/0.12.x/api/basics/transport-option/) (`iface` が `Auto`) は, 実機がつながっていなければ既定ポートの Simulator につながる.
+Simulator と実機の両方が見つかった場合はエラーになるため, `iface` に `Simulator(..)` で Simulator のポートを指定するか, `Name(..)` で実機の NIC を指定すること.
+
+<CodeTabs rust={'let option = UdpOption {\n    iface: Interface::Simulator(SIMULATOR_PORT),\n    ..Default::default()\n};'} python={'option = UdpOption(iface=Interface.Simulator(SIMULATOR_PORT))'} csharp={'var option = new UdpOption { Iface = Interface.Simulator(UdpOption.SimulatorPort) };'} />

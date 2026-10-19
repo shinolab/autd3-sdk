@@ -1,0 +1,195 @@
+---
+title: Client
+description: The Client that manages connection and transmission to devices
+sidebar:
+  order: 2
+slug: en/0.12.x/api/basics/client
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import Install from "@components/Install.astro";
+
+`Client` is the central object that sends commands and reads state.
+
+<Install rust="autd3-rs" python="autd3" csharp="AUTD3" />
+
+<CodeTabs rust={"let client = Client::open(&geometry, &udp, option).await?;"} python={"client = await Client.open(geometry, udp, option)"} csharp={"var client = await Client.OpenAsync(geometry, udp, option);"} />
+
+| Parameter  | Type              | Description                                                                  |
+| ---------- | ----------------- | ---------------------------------------------------------------------------- |
+| `geometry` | `&Geometry`       | Physical layout of the devices                                               |
+| `link`     | `impl Into<Link>` | Destination. [`UdpOption`](/autd3-sdk/en/0.12.x/api/basics/transport-option/) or `ServerLink` |
+| `config`   | `ClientConfig`    | See below                                                                    |
+
+A `UdpOption` connects to the devices (or the [Simulator](/autd3-sdk/en/0.12.x/guide/simulator/)) directly.
+A `ServerLink` connects through the [Server](/autd3-sdk/en/0.12.x/guide/server/) running on the same host.
+
+<CodeTabs rust={"let link = ServerLink { port, timeout };\nlet client = Client::open(&geometry, &link, ClientConfig::default()).await?;"} python={"link = ServerLink(port=port, timeout=timeout)\nclient = await Client.open(geometry, link, ClientConfig())"} csharp={"var link = new ServerLink { Port = port, Timeout = timeout };\nvar client = await Client.OpenAsync(geometry, link, new ClientConfig());"} />
+
+To continuously monitor the operating state of the devices, drive the `StateChecker` taken from `Client::state_checker` (see [State Monitoring](/autd3-sdk/en/0.12.x/guide/state-check/)).
+
+## API
+
+<CodeTabs rust={"let num_devices = client.num_devices();\nlet geometry = client.geometry();\n\nlet config = client.config();\nclient.set_config(ClientConfig {\n    ack_timeout: Duration::from_millis(20),\n    ..ClientConfig::default()\n})?;\n\nlet firmware = client.read_firmware_version().await?;\nlet fpga_state = client.read_fpga_state().await?;\n\nclient.send(Nop).await?;\nlet done = client.send_streaming(Nop).await?;\nlet resp = client.send_frame(frame).await?.await?;\n\nclient.silent_stop().await?;\nclient.close().await?;"} python={"num_devices = client.num_devices()\ngeometry = client.geometry()\n\nconfig = client.config()\nclient.set_config(ClientConfig(ack_timeout=Duration.from_millis(20)))\n\nfirmware = await client.read_firmware_version()\nfpga_state = await client.read_fpga_state()\n\nawait client.send(Nop())\ndone = await client.send_streaming(Nop())\nresp = await (await client.send_frame(frame))\n\nawait client.silent_stop()\nawait client.close()"} csharp={"var numDevices = client.NumDevices;\nvar geometry = client.Geometry;\n\nvar config = client.Config;\nclient.SetConfig(new ClientConfig { AckTimeout = TimeSpan.FromMilliseconds(20) });\n\nvar firmware = await client.ReadFirmwareVersionAsync();\nvar fpgaState = await client.ReadFpgaStateAsync();\n\nawait client.SendAsync(new Nop());\nvar done = await client.SendStreamingAsync(new Nop());\nvar resp = await await client.SendFrameAsync(frame);\n\nawait client.SilentStopAsync();\nawait client.CloseAsync();"} />
+
+| Method                    | async | Returns                               | Description                                                |
+| ------------------------- | :---: | ------------------------------------- | ---------------------------------------------------------- |
+| `num_devices()`           | —     | `usize`                               | Number of connected devices                                |
+| `geometry()`              | —     | `&Geometry`                           | Physical layout of the devices given at open time          |
+| `bus_stats()`             | —     | `BusStats`                            | Send/receive statistics (number of frames sent, ack latency, etc.) |
+| `read_firmware_version()` | ✓     | `Result<Vec<FirmwareVersion>, Error>` | CPU/FPGA firmware version of each device                   |
+| `read_fpga_state()`       | ✓     | `Result<Vec<FpgaState>, Error>`       | FPGA state of each device                                  |
+| `read_telemetry()`        | ✓     | `Result<Vec<Telemetry>, Error>`       | CPU diagnostic counters of each device                     |
+| `device_time_now()`       | —     | `Result<SysTime, Error>`              | Current time of the devices (see [SysTime](/autd3-sdk/en/0.12.x/api/basics/sys-time/)). `DeviceTimeUnknown` if no reply carrying the time has been received yet |
+| `config()`                | —     | `ClientConfig`                        | The current [ClientConfig](#clientconfig)                  |
+| `set_config(config)`      | —     | `Result<(), Error>`                   | Replace the ClientConfig |
+| `send(cmd)`               | ✓     | `Result<(), Error>`                   | Send a command, confirming the response frame by frame     |
+| `send_streaming(cmd)`     | ✓     | `Result<StreamFuture, Error>`         | Streaming version of `send`                                |
+| `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | Send one frame                                             |
+| `send_frame_at(frame, exec)` | ✓  | `Result<ResponseFuture, Error>`       | Send one frame at a given processing time (see [Overriding the processing time](#overriding-the-processing-time)) |
+| `state_checker()`         | —     | `StateChecker`                        | Get a `StateChecker`. See [State Monitoring](/autd3-sdk/en/0.12.x/guide/state-check/) for details. |
+| `silent_stop()`           | ✓     | `Result<(), Error>`                   | Set the Silencer, then stop all transducers                |
+| `close()`                 | ✓     | `Result<(), Error>`                   | Stop and close the connection                              |
+
+To avoid the noise of dropping the amplitude at once, `silent_stop()` first sets the [Silencer](/autd3-sdk/en/0.12.x/api/command/silencer/) and then drives every transducer to zero amplitude.
+The Silencer setting stays overwritten, so send `SetSilencer` again before resuming the output with a different setting.
+
+## Types of the Read Results
+
+`read_firmware_version()` / `read_fpga_state()` / `read_telemetry()` return an array with one element per device, in device-number order.
+They fail with `DeviceLost` while a device is `Lost`.
+
+In Python, the method and field names are the same as in Rust (fields are properties).
+In C#, they are PascalCase properties (`is_thermal_asserted()` → `IsThermalAsserted`, `fifo_drop` → `FifoDrop`, and so on).
+
+### FirmwareVersion
+
+| Member                  | Type             | Description                                            |
+| ----------------------- | ---------------- | ------------------------------------------------------ |
+| `cpu`                   | `Version`        | Version of the CPU firmware                            |
+| `fpga`                  | `Version`        | Version of the FPGA firmware (`0.0.0` if it cannot be read) |
+| `is_emulator()`         | `bool`           | Whether it is a device emulator                        |
+| `is_supported()`        | `bool`           | Whether both the CPU and the FPGA are in a series this SDK supports |
+| `SUPPORTED_SERIES`      | `(u8, u8)`       | Supported series (major, minor) (C#: `SupportedSeries`) |
+
+`Version` has `major` / `minor` / `patch` (`u8`) and `is_unknown()` (whether it is `0.0.0`).
+
+### FpgaState
+
+| Method                    | Type             | Description                              |
+| ------------------------- | ---------------- | ---------------------------------------- |
+| `raw()`                   | `u8`             | Raw value of the state register          |
+| `is_thermal_asserted()`   | `bool`           | Whether the thermal sensor is over the threshold |
+| `current_mod_bank()`      | `ModulationBank` | Current Modulation bank                  |
+| `current_pattern_bank()`  | `PatternBank`    | Current Pattern bank (shared by Pattern and STM) |
+| `is_pattern_mode()`       | `bool`           | Whether a Pattern is being output        |
+| `is_stm_mode()`           | `bool`           | Whether an STM is being output           |
+| `is_pattern_stopped()`    | `bool`           | Whether Pattern / STM playback has stopped |
+| `is_mod_stopped()`        | `bool`           | Whether Modulation playback has stopped |
+| `is_transition_pending()` | `bool`           | Whether a bank switch is waiting to take effect |
+| `is_failsafe_active()`    | `bool`           | Whether the output is stopped by the failsafe |
+
+### Telemetry
+
+CPU diagnostic counters. `Clear` resets all of them to 0 except `boot_failure` (the `Client` sends `Clear` when it opens).
+Reading them does not clear them.
+
+| Field                 | Type  | Description                                            |
+| --------------------- | ----- | ------------------------------------------------------ |
+| `fifo_drop`           | `u32` | Frames dropped because the receive FIFO was full       |
+| `dedup`               | `u32` | Frames dropped as duplicates                           |
+| `seq_mismatch`        | `u32` | Frames ignored because the sequence number did not match |
+| `dispatch_error`      | `u32` | Number of times processing ended in an error           |
+| `processed`           | `u32` | Frames processed                                       |
+| `send_failure`        | `u32` | Number of times the NIC refused to send                |
+| `failsafe`            | `u16` | Number of times the failsafe fired because communication with the host was lost |
+| `ptp_unlock_failsafe` | `u16` | Number of times the failsafe fired because the PTP lock was lost |
+| `sync_resync`         | `u8`  | Number of hardware resynchronizations of the sync input (reset to 0 by `Synchronize`) |
+| `boot_failure`        | `u8`  | Number of steps that failed at boot (not cleared by `Clear`) |
+| `cpu_watchdog`        | `u8`  | Number of times the CPU watchdog fired (kept until the FPGA is reconfigured) |
+
+The `u32` fields wrap around to 0 on overflow, and the `u16` / `u8` fields stop at their maximum.
+
+### BusStats
+
+`bus_stats()` returns the host-side send/receive statistics. The values are totals since the `Client` opened, and each read gives the latest values.
+
+| Method                       | Type  | Description                                  |
+| ---------------------------- | ----- | -------------------------------------------- |
+| `frames()`                   | `u64` | Frames sent                                  |
+| `resets()`                   | `u64` | `Reset`s sent                                |
+| `heartbeats()`               | `u64` | Heartbeats sent                              |
+| `missed_heartbeat_replies()` | `u64` | Heartbeat replies that did not arrive within `reply_timeout` |
+| `recoveries()`               | `u64` | Devices automatically recovered from `Lost`  |
+| `acked_frames()`             | `u64` | Frames that received a reply                 |
+| `worst_ack_latency_ns()`     | `u64` | Maximum time from sending to the reply \[ns]  |
+| `mean_ack_latency_ns()`      | `u64` | Mean time from sending to the reply \[ns]     |
+
+## ClientConfig
+
+<CodeTabs rust={"ClientConfig {\n    ack_timeout: Duration::from_millis(10),\n    max_inflight: NonZeroUsize::new(DEVICE_QUEUE_FRAMES).unwrap(),\n    max_resync_rounds: NonZeroU32::new(8).unwrap(),\n    require_supported_firmware: false,\n    resynchronize_on_recovery: NonZeroU32::new(3),\n    release_failsafe_on_recovery: NonZeroU32::new(3),\n    exec_lead: None,\n}"} python={"ClientConfig(\n    ack_timeout=Duration.from_millis(10),\n    max_inflight=DEVICE_QUEUE_FRAMES,\n    max_resync_rounds=8,\n    require_supported_firmware=False,\n    resynchronize_on_recovery=3,\n    release_failsafe_on_recovery=3,\n    exec_lead=None,\n)"} csharp={"new ClientConfig\n{\n    AckTimeout = TimeSpan.FromMilliseconds(10),\n    MaxInflight = (uint)Params.DeviceQueueFrames,\n    MaxResyncRounds = 8,\n    RequireSupportedFirmware = false,\n    ResynchronizeOnRecovery = 3,\n    ReleaseFailsafeOnRecovery = 3,\n    ExecLead = null,\n}"} />
+
+| Field                        | Type           | Default | Description                                                                         |
+| ---------------------------- | -------------- | ------- | ----------------------------------------------------------------------------------- |
+| `ack_timeout`                | `Duration`     | 10 ms   | Response-wait timeout. Once it elapses, the frames in flight fail with `Timeout`.   |
+| `max_inflight`               | `NonZeroUsize` | `7`     | Number of frames that may be sent without waiting for a reply (for streaming sends) |
+| `max_resync_rounds`          | `NonZeroU32`   | `8`     | Maximum number of attempts to get back in step with the devices                     |
+| `require_supported_firmware` | `bool`         | `false` | If `true`, check on open that the firmware is supported                             |
+| `resynchronize_on_recovery`  | `Option<NonZeroU32>` | `Some(3)` | Send `Synchronize` again to a device recovered from `Lost`, before the next send. The value is the maximum number of attempts; `None` sends nothing (see [State check](/autd3-sdk/en/0.12.x/guide/state-check/)) |
+| `release_failsafe_on_recovery` | `Option<NonZeroU32>` | `Some(3)` | Send `ReleaseFailsafe` to a device recovered from `Lost`, before the next send, to resume the output stopped by the failsafe. The value is the maximum number of attempts; `None` sends nothing (see [State check](/autd3-sdk/en/0.12.x/guide/state-check/)) |
+| `exec_lead`           | `Option<Duration>`     | `None`    | Makes every device start processing a sent frame at the same time (see below). `None` lets each device process a frame as soon as it arrives |
+
+`max_inflight` errors if it exceeds `MAX_INFLIGHT (7)` (Python: `autd3.params.MAX_INFLIGHT`, C#: `Params.MaxInflight`).
+The default is also `MAX_INFLIGHT`, which equals `DEVICE_QUEUE_FRAMES`, the number of frames in the receive queue of each device (Python: `autd3.params.DEVICE_QUEUE_FRAMES`, C#: `Params.DeviceQueueFrames`).
+Setting `ack_timeout` to 0 makes opening the `Client` fail with an error (`InvalidConfig`; the `code` of the Python `Autd3Error` is `INVALID_ARGUMENT`, and the `Code` of the C# `Autd3Exception` is `InvalidArgument`).
+The Python defaults are the same as in Rust, and only `resynchronize_on_recovery` / `release_failsafe_on_recovery`, whose type is an `Option`, accept `None`.
+
+There is no retransmission. A failed command must be sent again by the user.
+
+### exec\_lead
+
+Frames are sent to the devices one at a time, so they reach the devices at slightly different times.
+With `exec_lead` set, every send carries "the current device time + `exec_lead`" rounded up to a whole microsecond, and each device holds the frame until that time.
+Every device thus starts processing what one send carries at the same timing.
+
+Note the following:
+
+* It does not guarantee that every device always starts processing at the same time
+  * If a send does not complete within `exec_lead`, a late device processes the frame after the stamped time. `exec_late` of `read_telemetry` counts how often that happened.
+  * With `send_streaming`, the stamped time of a frame can come while the device is still processing the previous one; that frame is processed late (and counted in `exec_late`).
+  * Even when it succeeds, only the start of the processing inside the CPU board is aligned; it does not guarantee that the start of the processing on the FPGA is aligned (that is, for example, that the phase of the emitted ultrasound is updated at the same timing)
+* A send completes `exec_lead` later
+* It must be at least 100 µs and shorter than 2^31 µs (about 35.8 minutes), and shorter than `lost_timeout` of [`UdpOption`](/autd3-sdk/en/0.12.x/api/basics/transport-option/)
+* Keep `ack_timeout` (10 ms by default) longer than `exec_lead` + the processing time
+
+### Overriding the processing time
+
+`exec_lead` stamps every frame by the same rule.
+To give only a particular frame a different processing time, send it with `send_frame_at` and an `ExecAt`.
+`send` / `send_streaming` / `send_frame` follow `exec_lead`.
+
+<CodeTabs rust={"let at = client.device_time_now()? + Duration::from_millis(5);\nclient.send_frame_at(frame, ExecAt::At(at)).await?.await?.check()?;\n\nlet lead = ExecAt::Lead(Duration::from_millis(1));\nclient.send_frame_at(frame, lead).await?.await?.check()?;\n\nclient.send_frame_at(frame, ExecAt::Immediate).await?.await?.check()?;"} python={"at = client.device_time_now() + Duration.from_millis(5)\n(await (await client.send_frame_at(frame, ExecAt.At(at)))).check()\n\nlead = ExecAt.Lead(Duration.from_millis(1))\n(await (await client.send_frame_at(frame, lead))).check()\n\n(await (await client.send_frame_at(frame, ExecAt.Immediate))).check()"} csharp={"var at = client.DeviceTimeNow() + TimeSpan.FromMilliseconds(5);\n(await await client.SendFrameAsync(frame, ExecAt.At(at))).Check();\n\nvar lead = ExecAt.Lead(TimeSpan.FromMilliseconds(1));\n(await await client.SendFrameAsync(frame, lead)).Check();\n\n(await await client.SendFrameAsync(frame, ExecAt.Immediate)).Check();"} />
+
+| `ExecAt`         | Processing time                                                              |
+| ---------------- | ---------------------------------------------------------------------------- |
+| `Immediate`      | None (each device processes the frame as soon as it arrives, even with `exec_lead` set) |
+| `Lead(lead)`     | The current device time + `lead` (used instead of `exec_lead` for this frame only) |
+| `At(sys_time)`   | The device time `sys_time` (see [SysTime](/autd3-sdk/en/0.12.x/api/basics/sys-time/)) |
+
+* `Lead` takes the same range as `exec_lead` (at least 100 µs, shorter than 2^31 µs and than `lost_timeout`). Outside it the send fails with `InvalidPayload` and the frame is not sent
+* `At` fails if it is 2^31 µs or more ahead of the current time, 2^30 µs (about 17.9 minutes) or more behind it, or `lost_timeout` or more ahead. A past time within the range is accepted; the devices process the frame at once and count it in `exec_late`
+* Keep `ack_timeout` (10 ms by default) longer than the time from the send to the given time + the processing time
+* `Lead` / `At` fail with `DeviceTimeUnknown` while the device time is unknown (no reply carrying it has been received yet)
+
+## each
+
+`each` takes a closure that receives a device and assigns a different command per device.
+In Rust it is `FnMut(&Device) -> Option<C>`, in Python `Callable[[Device], Command | None]`, and in C# `Func<Device, ICommand?>`.
+Nothing is assigned to a device for which `None` is returned.
+
+<CodeTabs rust={"client\n    .send(each(|device| {\n        Some(if device.idx() % 2 == 0 {\n            Pattern::new(&left, Intensity::MAX)\n        } else {\n            Pattern::new(&right, Intensity::MAX)\n        })\n    }))\n    .await?;"} python={"await client.send(each(lambda device: Pattern(left if device.idx() % 2 == 0 else right, Intensity.MAX)))"} csharp={"await client.SendAsync(Command.Each(device => device.Idx % 2 == 0\n    ? new Pattern(left, Intensity.Max)\n    : new Pattern(right, Intensity.Max)));"} />
+
+In Rust, the return values of the closure must all be the same type.
+To mix commands of different types, unify them into a `BoxedCommand` with `Command::boxed`.
+
+<CodeTabs rust={"client\n    .send(each(|device| {\n        Some(if device.idx() % 2 == 0 {\n            Pattern::new(&left, Intensity::MAX).boxed()\n        } else {\n            Modulation::new(SamplingConfig::FREQ_4K, &modulation).boxed()\n        })\n    }))\n    .await?;"} />

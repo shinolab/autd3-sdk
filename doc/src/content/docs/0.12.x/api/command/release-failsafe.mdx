@@ -1,0 +1,28 @@
+---
+title: ReleaseFailsafe
+description: フェイルセーフで止まった出力を再開させる ReleaseFailsafe
+sidebar:
+  order: 10.6
+slug: 0.12.x/api/command/release-failsafe
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`ReleaseFailsafe` は, フェイルセーフ (ホストとの通信途絶・PTP ロック喪失・CPU ウォッチドッグ) で止まった出力を再開させるコマンド.
+フェイルセーフの条件と既定値は [SetCpuConfig](/autd3-sdk/0.12.x/api/command/cpu-config/) を参照.
+
+止まる前の出力がそのまま再開する.
+フェイルセーフで止まっていないデバイスには何もしない.
+発火の条件が成り立ったままのデバイス (PTP のロックを失ったまま等) は, エラー (`ERR_FAILSAFE_CONDITION_ACTIVE`) で拒否し, 止まったままにする.
+止まっているかどうかは `read_fpga_state()` が返す `FpgaState` の `is_failsafe_active()` (C#: `IsFailsafeActive`) で確認できる.
+
+[Clear](/autd3-sdk/0.12.x/api/command/clear/) でも解除されるが, すべての状態が既定値に戻る.
+`Lost` から自動復帰したデバイスには, `ClientConfig` の `release_failsafe_on_recovery` が既定で `ReleaseFailsafe` を送る ([Client](/autd3-sdk/0.12.x/api/basics/client/#clientconfig) 参照).
+
+## API
+
+<CodeTabs rust={"ReleaseFailsafe;"} python={"ReleaseFailsafe()"} csharp={"new ReleaseFailsafe();"} />
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::ReleaseFailsafe;\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::{Client, ClientConfig};\nuse autd3_rs::udp::UdpOption;\nuse autd3_rs_firmware_emulator::udp::UdpEmulator;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet emulator = UdpEmulator::spawn(geometry.num_devices())?;\nlet option = UdpOption::for_emulator(emulator.interface());\nlet client = Client::open(&geometry, &option, ClientConfig::default()).await?;\n\nlet states = client.read_fpga_state().await?;\nif states.iter().any(|state| state.is_failsafe_active()) {\n    client.send(ReleaseFailsafe).await?;\n}\n\nclient.close().await?;"} python={"import asyncio\n\nfrom autd3 import Client, ClientConfig, UdpEmulator\nfrom autd3.commands import ReleaseFailsafe\nfrom autd3.geometry import Autd3, Geometry\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3()])\n    emulator = UdpEmulator(geometry.num_devices())\n    async with await Client.open(geometry, emulator.option(), ClientConfig()) as client:\n        states = await client.read_fpga_state()\n        if any(state.is_failsafe_active() for state in states):\n            await client.send(ReleaseFailsafe())\n\n\nasyncio.run(main())"} csharp={"using System.Linq;\nusing System.Threading.Tasks;\nusing AUTD3;\n\nvar geometry = new Geometry(new[] { new Autd3() });\nusing var emulator = new UdpEmulator(geometry.NumDevices);\nawait using var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());\n\nvar states = await client.ReadFpgaStateAsync();\nif (states.Any(state => state.IsFailsafeActive))\n{\n    await client.SendAsync(new ReleaseFailsafe());\n}"} />
