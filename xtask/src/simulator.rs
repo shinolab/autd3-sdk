@@ -15,11 +15,12 @@ pub fn build_backend_and_frontend(
     root: &Path,
     debug: bool,
     target: Option<&str>,
+    license: bool,
 ) -> Result<(PathBuf, PathBuf)> {
     let sim = root.join("simulator");
     let frontend = sim.join("frontend");
 
-    crate::license::generate_simulator(root)?;
+    crate::license::generate_simulator(root, license)?;
     build_frontend(&frontend, debug)?;
     let public = frontend_public(&frontend, debug);
     stage_web_assets(&sim, &public)?;
@@ -67,6 +68,9 @@ pub enum SimulatorCmd {
         /// Build the dev profile instead of release
         #[arg(long)]
         debug: bool,
+        /// Generate the third-party license notices with cargo-about (slow; use it for release artifacts)
+        #[arg(long)]
+        license: bool,
     },
     /// Run the backend workspace tests
     Test,
@@ -106,7 +110,9 @@ pub fn run_simulator(root: &Path, cmd: &SimulatorCmd) -> Result<()> {
     let sim = root.join("simulator");
     let frontend = sim.join("frontend");
     match cmd {
-        SimulatorCmd::Build { debug } => build_backend_and_frontend(root, *debug, None).map(|_| ()),
+        SimulatorCmd::Build { debug, license } => {
+            build_backend_and_frontend(root, *debug, None, *license).map(|_| ())
+        }
         SimulatorCmd::Test => run(
             "cargo",
             ["test", "--workspace", "--lib", "--bins", "--tests"],

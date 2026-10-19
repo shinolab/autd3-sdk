@@ -31,6 +31,9 @@ pub enum PyCmd {
             help = "Build with this interpreter (a uv request such as `3.15t`) instead of the default one"
         )]
         python: Option<String>,
+        /// Generate the third-party license notices with cargo-about (slow; use it for release artifacts)
+        #[arg(long)]
+        license: bool,
     },
     /// Install the wheels into the local venv in editable mode
     Develop {
@@ -77,8 +80,12 @@ pub enum PyCmd {
 pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
     let dir = root.join("bindings").join("python");
     match cmd {
-        PyCmd::Build { debug, python } => {
-            crate::license::generate_python(root)?;
+        PyCmd::Build {
+            debug,
+            python,
+            license,
+        } => {
+            crate::license::generate_python(root, license)?;
             let out = dir.join("target").join("wheels");
             let interpreter = python
                 .as_deref()

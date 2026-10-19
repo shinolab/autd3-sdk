@@ -39,6 +39,9 @@ pub enum ConsoleCmd {
         /// Build the dev profile instead of release
         #[arg(long)]
         debug: bool,
+        /// Generate the third-party license notices with cargo-about (slow; use it for release artifacts)
+        #[arg(long)]
+        license: bool,
     },
     #[command(about = "Remove the console build outputs")]
     Clean(CleanArgs),
@@ -72,7 +75,7 @@ pub fn run_console(root: &Path, cmd: &ConsoleCmd) -> Result<()> {
             }
             run("cargo", args, &dir)
         }
-        ConsoleCmd::Stage { debug } => stage(root, &dir, *debug),
+        ConsoleCmd::Stage { debug, license } => stage(root, &dir, *debug, *license),
         ConsoleCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
 }
@@ -85,7 +88,7 @@ pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
     ])
 }
 
-fn stage(root: &Path, console_dir: &Path, debug: bool) -> Result<()> {
+fn stage(root: &Path, console_dir: &Path, debug: bool, license: bool) -> Result<()> {
     check_versions_match(console_dir)?;
 
     let target = dist_target();
@@ -94,7 +97,7 @@ fn stage(root: &Path, console_dir: &Path, debug: bool) -> Result<()> {
     }
     let target = target.as_deref();
 
-    crate::license::generate_console(root)?;
+    crate::license::generate_console(root, license)?;
 
     run_cargo(
         cargo_build_args("autd3-console", target, debug),
@@ -102,7 +105,7 @@ fn stage(root: &Path, console_dir: &Path, debug: bool) -> Result<()> {
     )?;
     let console_bin = cargo_bin(console_dir, target, debug, "autd3-console");
 
-    let (sim_bin, _) = build_backend_and_frontend(root, debug, target)?;
+    let (sim_bin, _) = build_backend_and_frontend(root, debug, target, license)?;
 
     run_cargo(
         cargo_build_args("autd3-firmware-writer", target, debug),
