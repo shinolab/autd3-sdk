@@ -12,18 +12,33 @@ defaults:
 
 jobs:
   build:
-    name: wheels (${{ matrix.os }})
+    name: wheels (${{ matrix.os }}, ${{ matrix.abi.name }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
+        abi:
+          - name: abi3
+            python: '3.10'
+          - name: abi3t
+            python: '3.15t'
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-rust
       - uses: actions/setup-python@v7
+        id: python
         with:
-          python-version: '3.10'
+          python-version: ${{ matrix.abi.python }}
+      - name: Select the interpreter
+        env:
+          PYTHON_PATH: ${{ steps.python.outputs.python-path }}
+        run: |
+          case "$RUNNER_OS" in
+            Linux) echo "INTERPRETER=python${{ matrix.abi.python }}" >> "$GITHUB_ENV" ;;
+            Windows) echo "INTERPRETER=$(cygpath -m "$PYTHON_PATH")" >> "$GITHUB_ENV" ;;
+            *) echo "INTERPRETER=$PYTHON_PATH" >> "$GITHUB_ENV" ;;
+          esac
       - uses: taiki-e/install-action@v2.87.29
         with:
           tool: cargo-about
@@ -35,41 +50,41 @@ jobs:
         with:
           working-directory: bindings/python
           manylinux: '2_28'
-          args: --release -m autd3-core/Cargo.toml --find-interpreter -o dist
+          args: --release -m autd3-core/Cargo.toml -i ${{ env.INTERPRETER }} -o dist
       - name: Build autd3
         uses: PyO3/maturin-action@v1
         with:
           working-directory: bindings/python
           manylinux: '2_28'
-          args: --release -m autd3/Cargo.toml --find-interpreter -o dist
+          args: --release -m autd3/Cargo.toml -i ${{ env.INTERPRETER }} -o dist
       - name: Build autd3-pattern
         uses: PyO3/maturin-action@v1
         with:
           working-directory: bindings/python
           manylinux: '2_28'
-          args: --release -m autd3-pattern/Cargo.toml --find-interpreter -o dist
+          args: --release -m autd3-pattern/Cargo.toml -i ${{ env.INTERPRETER }} -o dist
       - name: Build autd3-pattern-holo
         uses: PyO3/maturin-action@v1
         with:
           working-directory: bindings/python
           manylinux: '2_28'
-          args: --release -m autd3-pattern-holo/Cargo.toml --find-interpreter -o dist
+          args: --release -m autd3-pattern-holo/Cargo.toml -i ${{ env.INTERPRETER }} -o dist
       - name: Build autd3-modulation
         uses: PyO3/maturin-action@v1
         with:
           working-directory: bindings/python
           manylinux: '2_28'
-          args: --release -m autd3-modulation/Cargo.toml --find-interpreter -o dist
+          args: --release -m autd3-modulation/Cargo.toml -i ${{ env.INTERPRETER }} -o dist
       - name: Build autd3-emulator
         uses: PyO3/maturin-action@v1
         with:
           working-directory: bindings/python
           manylinux: '2_28'
-          args: --release -m autd3-emulator/Cargo.toml --find-interpreter -o dist
+          args: --release -m autd3-emulator/Cargo.toml -i ${{ env.INTERPRETER }} -o dist
 
       - uses: actions/upload-artifact@v7
         with:
-          name: wheels-${{ matrix.os }}
+          name: wheels-${{ matrix.os }}-${{ matrix.abi.name }}
           path: bindings/python/dist/*.whl
 
   publish:

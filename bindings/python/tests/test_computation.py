@@ -951,3 +951,39 @@ def test_an_unresolvable_sampling_config_is_rejected_when_encoded() -> None:
     with pytest.raises(autd3.Autd3Error) as err:
         unresolvable.divide()
     assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
+
+
+class _ProbingWavelength:
+    def __init__(self, probe: Any) -> None:
+        self.probe = probe
+        self.error: Exception | None = None
+
+    @property
+    def mm(self) -> float:
+        try:
+            self.probe()
+        except RuntimeError as e:
+            self.error = e
+        return 8.5
+
+
+def test_a_buffer_being_written_rejects_other_access() -> None:
+    geo = geometry()
+    dst = geo.phase_buffer()
+    view = dst[0]
+    target = geo.center() + autd3.geometry.offset(0.0 * mm, 0.0 * mm, 150.0 * mm)
+
+    reads = _ProbingWavelength(lambda: view[0])
+    pattern.focus(geo, target, loose(reads), dst)
+    assert isinstance(reads.error, RuntimeError)
+
+    writes = _ProbingWavelength(lambda: view.__setitem__(0, 1))
+    pattern.focus(geo, target, loose(writes), dst)
+    assert isinstance(writes.error, RuntimeError)
+
+    copies = _ProbingWavelength(lambda: dst.to_numpy())
+    pattern.focus(geo, target, loose(copies), dst)
+    assert isinstance(copies.error, RuntimeError)
+
+    view[0] = 1
+    assert int(view[0].value) == 1

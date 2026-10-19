@@ -11,6 +11,7 @@ use autd3_rs::udp::StateChecker as CoreStateChecker;
 
 use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::sync::MutexExt;
 
 #[pyclass(
     name = "DeviceState",
@@ -567,7 +568,7 @@ impl ResponseFuture {
     fn __await__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let fut = self
             .0
-            .lock()
+            .lock_py_attached(py)
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .take()
             .ok_or_else(|| PyValueError::new_err("ResponseFuture has already been awaited"))?;
@@ -587,7 +588,7 @@ impl StreamFuture {
     fn __await__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let fut = self
             .0
-            .lock()
+            .lock_py_attached(py)
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .take()
             .ok_or_else(|| PyValueError::new_err("StreamFuture has already been awaited"))?;

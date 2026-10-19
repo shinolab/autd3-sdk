@@ -4,8 +4,11 @@ from collections.abc import Callable
 from typing import Any
 
 import numpy as np
-import polars as pl
 import pytest
+
+pytest.importorskip("polars")
+
+import polars as pl
 
 import autd3
 import autd3_emulator as emu

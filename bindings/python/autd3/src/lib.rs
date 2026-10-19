@@ -11,7 +11,7 @@ mod runtime;
 mod stm;
 mod udp;
 
-#[pymodule]
+#[pymodule(gil_used = false)]
 fn _autd3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(runtime::_shutdown_runtime, m)?)?;
     m.py()

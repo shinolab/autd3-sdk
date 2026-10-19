@@ -5,7 +5,7 @@ mod geometry;
 mod units;
 mod value;
 
-#[pymodule]
+#[pymodule(gil_used = false)]
 fn autd3_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     error::register(m)?;
     m.add_class::<value::Intensity>()?;

@@ -408,7 +408,7 @@ impl Emulator {
     }
 }
 
-#[pymodule]
+#[pymodule(gil_used = false)]
 fn autd3_emulator(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Emulator>()?;
     m.add_class::<Recorder>()?;

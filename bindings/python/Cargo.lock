@@ -72,9 +72,18 @@ dependencies = [
 name = "autd3-python-capsule"
 version = "0.11.0"
 dependencies = [
+ "autd3-python-cell",
  "autd3-rs",
  "autd3-rs-core",
  "pyo3",
+]
+
+[[package]]
+name = "autd3-python-cell"
+version = "0.11.0"
+dependencies = [
+ "pyo3",
+ "thiserror",
 ]
 
 [[package]]
