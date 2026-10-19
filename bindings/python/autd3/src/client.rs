@@ -141,14 +141,7 @@ impl BusStats {
     }
 }
 
-#[pyclass(
-    name = "Version",
-    module = "autd3",
-    eq,
-    hash,
-    frozen,
-    skip_from_py_object
-)]
+#[pyclass(name = "Version", module = "autd3", eq, hash, frozen)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Version(autd3_rs::Version);
 
@@ -188,14 +181,7 @@ impl Version {
     }
 }
 
-#[pyclass(
-    name = "FirmwareVersion",
-    module = "autd3",
-    eq,
-    hash,
-    frozen,
-    skip_from_py_object
-)]
+#[pyclass(name = "FirmwareVersion", module = "autd3", eq, hash, frozen)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct FirmwareVersion(autd3_rs::FirmwareVersion);
 
@@ -238,14 +224,7 @@ impl FirmwareVersion {
     }
 }
 
-#[pyclass(
-    name = "FpgaState",
-    module = "autd3",
-    eq,
-    hash,
-    frozen,
-    skip_from_py_object
-)]
+#[pyclass(name = "FpgaState", module = "autd3", eq, hash, frozen)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct FpgaState(pub(crate) autd3_rs::FpgaState);
 
@@ -313,7 +292,7 @@ impl FpgaState {
     }
 }
 
-#[pyclass(name = "Telemetry", module = "autd3", frozen, eq, skip_from_py_object)]
+#[pyclass(name = "Telemetry", module = "autd3", frozen, eq)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Telemetry(pub(crate) autd3_rs::Telemetry);
 

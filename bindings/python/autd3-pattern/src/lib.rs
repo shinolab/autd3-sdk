@@ -281,13 +281,7 @@ fn check_slots<T>(geometry: &autd3_rs_core::Geometry, dst: &[Vec<T>]) -> PyResul
     }
 }
 
-#[pyclass(
-    name = "LaguerreGaussianOption",
-    module = "autd3_pattern",
-    eq,
-    frozen,
-    skip_from_py_object
-)]
+#[pyclass(name = "LaguerreGaussianOption", module = "autd3_pattern", eq, frozen)]
 #[derive(PartialEq)]
 pub struct LaguerreGaussianOption(autd3_rs_pattern::LaguerreGaussianOption);
 
@@ -326,13 +320,7 @@ impl LaguerreGaussianOption {
     }
 }
 
-#[pyclass(
-    name = "HermiteGaussianOption",
-    module = "autd3_pattern",
-    eq,
-    frozen,
-    skip_from_py_object
-)]
+#[pyclass(name = "HermiteGaussianOption", module = "autd3_pattern", eq, frozen)]
 #[derive(PartialEq)]
 pub struct HermiteGaussianOption(autd3_rs_pattern::HermiteGaussianOption);
 
