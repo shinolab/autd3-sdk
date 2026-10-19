@@ -129,6 +129,9 @@ pub enum ClientConfigError {
     #[error("exec_lead must be at least {min:?}, got {got:?}")]
     ExecLeadTooShort { got: Duration, min: Duration },
 
+    #[error("exec_lead must be shorter than {limit:?}, got {got:?}")]
+    ExecLeadTooLong { got: Duration, limit: Duration },
+
     #[error("exec_lead ({exec_lead:?}) must be shorter than lost_timeout ({lost_timeout:?})")]
     ExecLeadNotBelowLostTimeout {
         exec_lead: Duration,

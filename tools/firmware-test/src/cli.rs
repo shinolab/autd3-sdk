@@ -25,12 +25,12 @@ pub struct Cli {
     pub lost_timeout_ms: Option<u64>,
     #[arg(
         long,
-        help = "Maps to ClientConfig::exec_lead. Omit to process every frame on arrival"
+        help = "Maps to ClientConfig::exec_lead. At least 100. Omit to process every frame on arrival"
     )]
-    pub exec_lead_ms: Option<u64>,
+    pub exec_lead_us: Option<u64>,
     #[arg(
         long,
-        help = "Maps to ClientConfig::ack_timeout. Must exceed --exec-lead-ms by more than 1 ms"
+        help = "Maps to ClientConfig::ack_timeout. Must exceed --exec-lead-us"
     )]
     pub ack_timeout_ms: Option<u64>,
     #[arg(
@@ -49,18 +49,18 @@ impl Cli {
         if self.heartbeat_us == 0 {
             return Err("--heartbeat-us must be at least 1".to_string());
         }
-        if self.exec_lead_ms == Some(0) {
-            return Err("--exec-lead-ms must be at least 1".to_string());
+        if self.exec_lead_us.is_some_and(|us| us < 100) {
+            return Err("--exec-lead-us must be at least 100".to_string());
         }
         if self.ack_timeout_ms == Some(0) {
             return Err("--ack-timeout-ms must be at least 1".to_string());
         }
         let config = self.client_config();
         if let Some(exec_lead) = config.exec_lead
-            && config.ack_timeout <= exec_lead + Duration::from_millis(1)
+            && config.ack_timeout <= exec_lead
         {
             return Err(format!(
-                "the ack timeout {:?} must exceed --exec-lead-ms {exec_lead:?} by more than 1 ms; raise --ack-timeout-ms",
+                "the ack timeout {:?} must exceed --exec-lead-us {exec_lead:?}; raise --ack-timeout-ms",
                 config.ack_timeout
             ));
         }
@@ -73,7 +73,7 @@ impl Cli {
             ack_timeout: self
                 .ack_timeout_ms
                 .map_or(default.ack_timeout, Duration::from_millis),
-            exec_lead: self.exec_lead_ms.map(Duration::from_millis),
+            exec_lead: self.exec_lead_us.map(Duration::from_micros),
             ..default
         }
     }

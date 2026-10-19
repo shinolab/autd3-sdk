@@ -1,5 +1,6 @@
 pub use autd3_cpu_wire::{
-    Cmd, Error, FRAME_BYTES_MAX, FrameHeader, PAYLOAD_BYTES, REPLY_DATA_BYTES_MAX, wire_enum_u8,
+    Cmd, EXEC_AT_UNIT_NS, Error, FRAME_BYTES_MAX, FrameHeader, PAYLOAD_BYTES, REPLY_DATA_BYTES_MAX,
+    wire_enum_u8,
 };
 use zerocopy::little_endian::U32;
 

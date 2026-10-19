@@ -160,16 +160,17 @@ There is no retransmission. A failed command must be sent again by the user.
 ### exec_lead
 
 Frames are sent to the devices one at a time, so they reach the devices at slightly different times.
-With `exec_lead` set, every send carries "the current device time + `exec_lead`" rounded up to a whole millisecond, and each device holds the frame until that time.
+With `exec_lead` set, every send carries "the current device time + `exec_lead`" rounded up to a whole microsecond, and each device holds the frame until that time.
 Every device thus starts processing what one send carries at the same timing.
 
 Note the following:
 - It does not guarantee that every device always starts processing at the same time
   - If a send does not complete within `exec_lead`, a late device processes the frame after the stamped time. `exec_late` of `read_telemetry` counts how often that happened.
+  - With `send_streaming`, the stamped time of a frame can come while the device is still processing the previous one; that frame is processed late (and counted in `exec_late`).
   - Even when it succeeds, only the start of the processing inside the CPU board is aligned; it does not guarantee that the start of the processing on the FPGA is aligned (that is, for example, that the phase of the emitted ultrasound is updated at the same timing)
 - A send completes `exec_lead` later
-- It must be at least 1 ms, and shorter than `lost_timeout` of [`UdpOption`](/autd3-sdk/en/api/basics/transport-option/)
-- Keep `ack_timeout` (10 ms by default) longer than `exec_lead` + 1 ms + the processing time
+- It must be at least 100 µs and shorter than 2^31 µs (about 35.8 minutes), and shorter than `lost_timeout` of [`UdpOption`](/autd3-sdk/en/api/basics/transport-option/)
+- Keep `ack_timeout` (10 ms by default) longer than `exec_lead` + the processing time
 
 ## each
 

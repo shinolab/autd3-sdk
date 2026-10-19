@@ -4,6 +4,7 @@ use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 pub const FRAME_BYTES_MAX: usize = 1448;
 pub const PAYLOAD_BYTES: usize = FRAME_BYTES_MAX - size_of::<FrameHeader>();
 pub const REPLY_DATA_BYTES_MAX: usize = 40;
+pub const EXEC_AT_UNIT_NS: u64 = 1_000;
 
 const _: () = assert!(PAYLOAD_BYTES == 1442);
 

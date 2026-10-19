@@ -2,11 +2,12 @@ use std::num::{NonZeroU32, NonZeroUsize};
 use std::time::Duration;
 
 use crate::error::{ClientConfigError, Error};
-use crate::protocol::MAX_INFLIGHT;
+use crate::protocol::{EXEC_AT_UNIT_NS, MAX_INFLIGHT};
 
 pub use crate::udp::bus::MAX_DEVICES;
 
-const EXEC_LEAD_MIN: Duration = Duration::from_millis(1);
+const EXEC_LEAD_MIN: Duration = Duration::from_micros(100);
+const EXEC_LEAD_LIMIT: Duration = Duration::from_nanos(EXEC_AT_UNIT_NS << 31);
 
 #[derive(Clone, Copy, Debug)]
 pub struct ClientConfig {
@@ -51,6 +52,14 @@ impl ClientConfig {
                 min: EXEC_LEAD_MIN,
             }));
         }
+        if let Some(exec_lead) = self.exec_lead
+            && exec_lead >= EXEC_LEAD_LIMIT
+        {
+            return Err(Error::InvalidConfig(ClientConfigError::ExecLeadTooLong {
+                got: exec_lead,
+                limit: EXEC_LEAD_LIMIT,
+            }));
+        }
         if let (Some(exec_lead), Some(lost_timeout)) = (self.exec_lead, lost_timeout)
             && exec_lead >= lost_timeout
         {
@@ -80,16 +89,42 @@ mod tests {
     }
 
     #[test]
-    fn an_exec_lead_below_one_millisecond_is_rejected() {
+    fn an_exec_lead_below_100_microseconds_is_rejected() {
         let with = |exec_lead| ClientConfig {
             exec_lead: Some(exec_lead),
             ..ClientConfig::default()
         };
-        assert!(with(EXEC_LEAD_MIN).validate(None).is_ok());
+        assert!(with(Duration::from_micros(100)).validate(None).is_ok());
         assert!(matches!(
-            with(Duration::from_micros(999)).validate(None),
+            with(Duration::from_nanos(99_999)).validate(None),
             Err(Error::InvalidConfig(
                 ClientConfigError::ExecLeadTooShort { .. }
+            ))
+        ));
+    }
+
+    #[test]
+    fn an_exec_lead_not_below_2_pow_31_microseconds_is_rejected() {
+        let with = |exec_lead| ClientConfig {
+            exec_lead: Some(exec_lead),
+            ..ClientConfig::default()
+        };
+        let limit = Duration::from_micros(1 << 31);
+        assert!(
+            with(Duration::from_nanos((1 << 31) * 1_000 - 1))
+                .validate(None)
+                .is_ok()
+        );
+        assert!(matches!(
+            with(limit).validate(None),
+            Err(Error::InvalidConfig(
+                ClientConfigError::ExecLeadTooLong { .. }
+            ))
+        ));
+        assert!(matches!(
+            with(limit).validate(Some(Duration::MAX)),
+            Err(Error::InvalidConfig(
+                ClientConfigError::ExecLeadTooLong { .. }
             ))
         ));
     }
