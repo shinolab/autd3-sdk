@@ -4,7 +4,7 @@ use std::num::NonZeroUsize;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
-use autd3_cpu_wire::udp::{ALL_NODES, Header, Kind, PORT, PROTOCOL_VERSION};
+use autd3_cpu_wire::udp::{Header, Kind, PROTOCOL_VERSION};
 use autd3_rs_core::FRAME_BYTES_MAX;
 use socket2::{Domain, Protocol, Socket, Type};
 use zerocopy::{FromBytes, IntoBytes};
@@ -126,10 +126,6 @@ mod sys {
 }
 
 pub(crate) use sys::wait_writable;
-
-pub(crate) fn all_nodes(scope: u32) -> SocketAddrV6 {
-    SocketAddrV6::new(Ipv6Addr::from(ALL_NODES), PORT, 0, scope)
-}
 
 pub(super) fn is_timeout(e: &io::Error) -> bool {
     matches!(
@@ -271,17 +267,6 @@ impl Channel {
         msg_id: u16,
         body: &[u8],
         give_up: Option<Instant>,
-    ) -> io::Result<()> {
-        self.send_with(dst, kind, msg_id, body, give_up, || {})
-    }
-
-    pub(crate) fn send_with(
-        &self,
-        dst: SocketAddrV6,
-        kind: Kind,
-        msg_id: u16,
-        body: &[u8],
-        give_up: Option<Instant>,
         before_attempt: impl FnMut(),
     ) -> io::Result<()> {
         let mut datagram = [0u8; size_of::<Header>() + FRAME_BYTES_MAX];
@@ -306,10 +291,6 @@ impl Channel {
         }
     }
 
-    fn send_now(&self, datagram: &[u8], dst: SocketAddrV6) -> io::Result<usize> {
-        sys::send_now(&self.socket, datagram, dst)
-    }
-
     fn transmit(
         &self,
         datagram: &[u8],
@@ -321,7 +302,7 @@ impl Channel {
             give_up,
             || {
                 before_attempt();
-                self.send_now(datagram, dst)
+                sys::send_now(&self.socket, datagram, dst)
             },
             |remaining| sys::wait_writable(&self.socket, remaining),
         )
@@ -329,7 +310,7 @@ impl Channel {
 
     pub(crate) fn request(&self, dst: SocketAddrV6, kind: Kind, body: &[u8]) -> io::Result<u16> {
         let msg_id = self.next_msg_id();
-        self.send(dst, kind, msg_id, body, None)?;
+        self.send(dst, kind, msg_id, body, None, || {})?;
         Ok(msg_id)
     }
 
@@ -405,15 +386,6 @@ impl Channel {
         Ok(responses)
     }
 
-    pub(crate) fn first(
-        &self,
-        kind: Kind,
-        msg_id: u16,
-        timeout: Duration,
-    ) -> Result<Option<Response>, UdpError> {
-        Ok(self.collect(kind, msg_id, timeout, Some(1))?.pop())
-    }
-
     pub(crate) fn exchange(
         &self,
         dst: SocketAddrV6,
@@ -422,7 +394,7 @@ impl Channel {
         timeout: Duration,
     ) -> Result<Option<Response>, UdpError> {
         let msg_id = self.request(dst, kind, body)?;
-        self.first(kind, msg_id, timeout)
+        Ok(self.collect(kind, msg_id, timeout, Some(1))?.pop())
     }
 }
 

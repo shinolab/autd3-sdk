@@ -112,9 +112,15 @@ impl Enumerator<'_> {
 
     fn discover(&mut self) -> Result<Option<SocketAddrV6>, UdpError> {
         let msg_id = self.group_request(Kind::Discover)?;
-        let Some(first) =
-            self.channel
-                .first(Kind::Discover, msg_id, self.option.response_timeout)?
+        let Some(first) = self
+            .channel
+            .collect(
+                Kind::Discover,
+                msg_id,
+                self.option.response_timeout,
+                Some(1),
+            )?
+            .pop()
         else {
             return Ok(None);
         };
