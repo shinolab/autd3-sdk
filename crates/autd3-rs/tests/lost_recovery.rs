@@ -2,7 +2,9 @@ mod common;
 
 use std::time::{Duration, Instant};
 
-use autd3_rs::commands::{ForceFan, Nop, ReleaseFailsafe, Synchronize, each};
+use autd3_rs::commands::{
+    CpuConfig, ForceFan, Nop, ReleaseFailsafe, SetCpuConfig, Synchronize, each,
+};
 use autd3_rs::{Client, DeviceMask, DeviceState};
 use autd3_rs_firmware_emulator::test_utils::FpgaEmulatorTestExt;
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
@@ -12,6 +14,7 @@ use common::{PATIENCE, config, emulator, monitoring_option, open_with};
 const ADDR_SYNC_TIME_0: u16 = 0x10;
 const SETTLE: Duration = Duration::from_millis(200);
 const POLL_INTERVAL: Duration = Duration::from_millis(5);
+const FAILSAFE_TIMEOUT: Duration = Duration::from_millis(500);
 
 async fn open_monitoring(num_devices: usize) -> (UdpEmulator, Client) {
     let emulator = emulator(num_devices);
@@ -31,6 +34,7 @@ async fn wait_until(client: &Client, what: &str, reached: impl Fn(&[DeviceState]
             "{what} was not reached: {:?}",
             states(client)
         );
+        client.heartbeat().unwrap();
         tokio::time::sleep(POLL_INTERVAL).await;
     }
 }
@@ -50,18 +54,28 @@ fn failsafes(emulator: &UdpEmulator) -> Vec<bool> {
     emulator.with_devices(|devices| devices.iter().map(|d| d.fpga().failsafe()).collect())
 }
 
-async fn wait_until_failsafe(emulator: &UdpEmulator, device: usize) {
+async fn wait_until_failsafe(emulator: &UdpEmulator, client: &Client, device: usize) {
     let give_up = Instant::now() + PATIENCE;
     while !failsafes(emulator)[device] {
         assert!(Instant::now() < give_up, "the failsafe did not trip");
+        client.heartbeat().unwrap();
         tokio::time::sleep(POLL_INTERVAL).await;
     }
 }
 
 async fn cut_off_until_failsafe(emulator: &UdpEmulator, client: &Client, device: usize) {
+    client
+        .send(SetCpuConfig {
+            config: CpuConfig {
+                failsafe_timeout: Some(FAILSAFE_TIMEOUT),
+                ..CpuConfig::default()
+            },
+        })
+        .await
+        .unwrap();
     emulator.set_muted(device, true);
     wait_until_lost(client, device).await;
-    wait_until_failsafe(emulator, device).await;
+    wait_until_failsafe(emulator, client, device).await;
     emulator.set_muted(device, false);
 }
 

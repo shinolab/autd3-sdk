@@ -15,7 +15,7 @@ import sample from "@codes/rust/examples/api/advanced/controller.rs?raw";
 
 `Controller` and `Driver` are the parts that let you drive the internals of [`Client`](/autd3-sdk/en/api/basics/client/) yourself.
 
-`Client` owns one I/O thread that receives the replies and sends the liveness checks.
+`Client` owns one I/O thread that receives the replies.
 Use `Controller` / `Driver` when you want to run the send/receive loop on your own thread or the like instead of that thread.
 
 ## Open

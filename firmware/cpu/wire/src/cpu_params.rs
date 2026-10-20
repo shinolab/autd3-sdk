@@ -8,7 +8,6 @@ pub const FPGA_WAIT_UPDATE_MAX_POLLS: NonZeroU32 = NonZeroU32::new(1_000_000).un
 pub const FPGA_FLASH_MAX_POLLS: NonZeroU32 = NonZeroU32::new(2_000_000_000).unwrap();
 pub const SYNC_GUARD: Duration = Duration::from_micros(250);
 pub const UPDATE_ACTIVATE_DELAY: Duration = Duration::from_millis(100);
-pub const FAILSAFE_TIMEOUT: Duration = Duration::from_millis(500);
 pub const CPU_WATCHDOG_TIMEOUT: Duration = Duration::from_secs(1);
 pub const SYNC_PHASE_LOCK: bool = true;
 

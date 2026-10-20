@@ -349,7 +349,7 @@ mod tests {
                 0x80, 0x96, 0x98, 0x00, 0x40, 0x42, 0x0F, 0x00, 0x00, 0x94, 0x35, 0x77, 0x90, 0xD0,
                 0x03, 0x00, 0x64, 0x00, 0x08, 0x00, 0x03, 0x00, 0x06, 0x00, 0xE8, 0x03, 0x40, 0x00,
                 0x10, 0x27, 0x00, 0x00, 0x64, 0x00, 0x00, 0x00, 0x32, 0x00, 0x00, 0x00, 0x01, 0x00,
-                0x00, 0x00, 0x20, 0xA1, 0x07, 0x00, 0xF4, 0x01, 0x20, 0x00, 0x05, 0x00, 0x30, 0x00,
+                0x00, 0x00, 0x20, 0xA1, 0x07, 0x00, 0x00, 0x00, 0x20, 0x00, 0x05, 0x00, 0x30, 0x00,
                 0x40, 0x00, 0x08, 0x00, 0x00, 0x00, 0x03, 0x00, 0xE8, 0x03,
             ]
         );
@@ -453,17 +453,19 @@ mod tests {
     }
 
     #[test]
-    fn a_disabled_failsafe_is_zero_on_the_wire() {
-        let config = CpuConfig {
-            failsafe_timeout: None,
-            ..CpuConfig::default()
-        };
-        let payload = SetCpuConfigPayload::encode(&config).unwrap();
+    fn the_failsafe_is_disabled_by_default_and_zero_on_the_wire() {
+        let default = CpuConfig::default();
+        assert_eq!(default.failsafe_timeout, None);
+        let payload = SetCpuConfigPayload::encode(&default).unwrap();
         assert_eq!(payload.failsafe_timeout_ms.get(), 0);
-        assert_eq!(payload.decode(), Some(config));
+        assert_eq!(payload.decode(), Some(default));
 
-        let default = SetCpuConfigPayload::encode(&CpuConfig::default()).unwrap();
-        assert_eq!(default.failsafe_timeout_ms.get(), 500);
+        let enabled = SetCpuConfigPayload::encode(&CpuConfig {
+            failsafe_timeout: Some(Duration::from_millis(500)),
+            ..CpuConfig::default()
+        })
+        .unwrap();
+        assert_eq!(enabled.failsafe_timeout_ms.get(), 500);
     }
 
     #[test]

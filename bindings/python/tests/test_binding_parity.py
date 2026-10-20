@@ -337,6 +337,17 @@ def test_a_zero_ack_timeout_is_rejected_at_open() -> None:
     assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
 
 
+def test_a_zero_lost_timeout_is_rejected_at_open() -> None:
+    option = autd3.TransportOption(lost_timeout=Duration.from_nanos(0))
+
+    async def open_client() -> None:
+        await autd3.Client.open(one_device(), option, autd3.ClientConfig())
+
+    with pytest.raises(autd3.Autd3Error, match="lost_timeout") as err:
+        asyncio.run(open_client())
+    assert err.value.code == autd3.Autd3Error.NETWORK
+
+
 def test_a_zero_exec_lead_is_rejected_at_open() -> None:
     config = autd3.ClientConfig(exec_lead=Duration.from_millis(0))
     assert config.exec_lead == Duration.from_millis(0)

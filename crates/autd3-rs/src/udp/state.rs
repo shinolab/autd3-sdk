@@ -95,6 +95,14 @@ impl Tracker {
         }
     }
 
+    pub(crate) fn lost_deadline(self, lost_timeout: Duration) -> Option<Instant> {
+        if self.is_lost() {
+            return None;
+        }
+        self.unanswered_since
+            .and_then(|since| since.checked_add(lost_timeout))
+    }
+
     pub(crate) fn state(self) -> DeviceState {
         self.state
     }
@@ -316,6 +324,21 @@ mod tests {
         assert_eq!(t.state(), DeviceState::Lost);
         assert!(t.revive(1, 1, READY));
         assert_eq!(t.state(), DeviceState::Ready);
+    }
+
+    #[test]
+    fn the_lost_deadline_follows_the_first_unanswered_request_until_the_device_is_lost() {
+        let start = Instant::now();
+        let mut t = Tracker::new();
+        assert_eq!(t.lost_deadline(LOST_AFTER), None);
+        t.requested(start);
+        t.requested(start + LOST_AFTER / 2);
+        assert_eq!(t.lost_deadline(LOST_AFTER), Some(start + LOST_AFTER));
+        assert!(t.replied(1, 1, READY));
+        assert_eq!(t.lost_deadline(LOST_AFTER), None);
+        t.requested(start + LOST_AFTER);
+        t.expire(start + LOST_AFTER * 2, LOST_AFTER);
+        assert_eq!(t.lost_deadline(LOST_AFTER), None);
     }
 
     #[test]

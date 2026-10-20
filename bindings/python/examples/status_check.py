@@ -30,6 +30,7 @@ async def main() -> None:
 
         last: autd3.DeviceStatus | None = None
         while not stop.is_set():
+            client.heartbeat()
             status = checker.check()
             if status != last:
                 print_status(status)

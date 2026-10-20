@@ -67,12 +67,10 @@ pub struct UdpBus {
     recovery: Mutex<Option<Recovery>>,
     stats: BusStats,
     device_clock: DeviceClock,
-    heartbeat: Option<Duration>,
     reply_timeout: Duration,
     lost_timeout: Duration,
     msg_id: AtomicU16,
     heartbeat_from: AtomicUsize,
-    last_send: Mutex<Instant>,
     closed: AtomicBool,
     _timer_resolution: TimerResolutionGuard,
 }
@@ -140,12 +138,10 @@ impl UdpBus {
             units,
             stats: BusStats::default(),
             device_clock,
-            heartbeat: option.heartbeat,
             reply_timeout: option.reply_timeout,
             lost_timeout: option.lost_timeout,
             msg_id: AtomicU16::new(0),
             heartbeat_from: AtomicUsize::new(last),
-            last_send: Mutex::new(Instant::now()),
             closed: AtomicBool::new(false),
             _timer_resolution: timer_resolution,
         })
@@ -181,26 +177,8 @@ impl UdpBus {
     }
 
     #[must_use]
-    pub fn heartbeat_interval(&self) -> Option<Duration> {
-        self.heartbeat
-    }
-
-    #[must_use]
-    pub fn reply_timeout(&self) -> Duration {
-        self.reply_timeout
-    }
-
-    #[must_use]
     pub fn next_msg_id(&self) -> u16 {
         self.msg_id.load(Ordering::Relaxed).wrapping_add(1)
-    }
-
-    #[must_use]
-    pub fn last_send(&self) -> Instant {
-        *self
-            .last_send
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
     }
 
     #[must_use]
@@ -353,10 +331,6 @@ impl UdpBus {
                 }
             }
         }
-        *self
-            .last_send
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner) = Instant::now();
         match unsent {
             Some(unsent) if kind == Kind::Frame && devices == 0 => Err(unsent.into()),
             unsent => Ok(Sent {
@@ -437,6 +411,13 @@ impl UdpBus {
             tracing::debug!(%group, "probing for the lost devices failed: {e}");
         }
         Ok(())
+    }
+
+    pub(crate) fn lost_deadline(&self) -> Option<Instant> {
+        self.trackers()
+            .iter()
+            .filter_map(|tracker| tracker.lost_deadline(self.lost_timeout))
+            .min()
     }
 
     #[must_use]

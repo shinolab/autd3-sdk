@@ -29,6 +29,7 @@ async fn main() -> Result<()> {
     println!("watching device status — press Ctrl+C to stop");
     let mut last: Option<DeviceStatus> = None;
     loop {
+        client.heartbeat()?;
         let status = checker.check()?;
         if last.as_ref() != Some(&status) {
             print_status(&status);

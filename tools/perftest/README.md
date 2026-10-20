@@ -41,12 +41,11 @@ The run continues until Ctrl+C, then prints the summary.
 | `--interface <NAME>`  | Network interface the devices hang off (`TransportOption.iface`). Omit to pick the one whose devices answer. |
 | `--simulator [PORT]`  | Connect to the simulator on this host only, listening on `PORT` (default 44336; `Interface::Simulator(PORT)`). Without it `Interface::Auto` fails when both the simulator and devices answer. |
 | `--devices <N>`       | Device count of the geometry. Default = 1. Opening fails when it does not match the chain. |
-| `--heartbeat <DUR>`   | Heartbeat interval while nothing is sent (`TransportOption.heartbeat`). Default = `10ms`. |
-| `--reply-timeout <DUR>` | How long a heartbeat waits for every reply (`TransportOption.reply_timeout`). Omit to keep the library default. |
+| `--heartbeat <DUR>`   | Interval of `Client::heartbeat` while `--hold` keeps the connection idle. Default = `10ms`. The library sends no heartbeat by itself. |
 | `--send-rate-limit <PERCENT>` | Cap on the line occupancy of the sends in percent of the device link speed (`TransportOption.send_rate_limit`). Omit to send without a limit. |
 | `--send-buffer <BYTES>` | Socket send buffer (`TransportOption.send_buffer`). `0` keeps the OS default. Omit to use the library default. |
 | `--stop-on-error`     | Stop at the first failed send and exit non-zero. The summary is still printed. Default: off. |
-| `--hold <DUR>`        | Keep the connection idle (heartbeats only) this long before measuring, e.g. `3s`. |
+| `--hold <DUR>`        | Keep the connection idle (heartbeats every `--heartbeat` only) this long before measuring, e.g. `3s`. |
 | `--ack-timeout <DUR>` | How long a request waits for its ACK before raising `Timeout` (`ClientConfig.ack_timeout`). Default = `10ms`. Must exceed `--exec-lead` (plus the processing time). |
 | `--exec-lead <DUR>`   | Stamp every frame with `EXEC_AT` = the device time this far ahead, rounded up to 1 µs (`ClientConfig.exec_lead`), e.g. `1ms`. At least `100us`. Omit to process every frame on arrival. |
 | `--max-resync-rounds <N>` | Resync rounds allowed before the client gives up (`ClientConfig.max_resync_rounds`). Default = 8. |

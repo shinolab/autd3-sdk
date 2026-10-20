@@ -15,7 +15,7 @@ import sample from "@codes/rust/examples/api/advanced/controller.rs?raw";
 
 `Controller` と `Driver` は, [`Client`](/autd3-sdk/api/basics/client/) の中身を自分で駆動するためのパーツ.
 
-`Client` は, 返信の受信と生存確認を行う I/O スレッドを内部に 1 本持つ.
+`Client` は, 返信の受信を行う I/O スレッドを内部に 1 本持つ.
 このスレッドの代わりに, 送受信ループを自前のスレッドなどで回したい場合に `Controller` / `Driver` を使う.
 
 ## Open

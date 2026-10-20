@@ -77,7 +77,7 @@ namespace AUTD3.Tests
             Assert.Equal(2_000_000_000u, config.FpgaFlashMaxPolls);
             Assert.Equal(TimeSpan.FromTicks(2500), config.SyncGuard);
             Assert.Equal(TimeSpan.FromMilliseconds(100), config.UpdateActivateDelay);
-            Assert.Equal(TimeSpan.FromMilliseconds(500), config.FailsafeTimeout);
+            Assert.Null(config.FailsafeTimeout);
             Assert.Equal(TimeSpan.FromSeconds(1), config.CpuWatchdogTimeout);
             Assert.Equal(new PtpConfig(), config.Ptp);
 
@@ -120,9 +120,9 @@ namespace AUTD3.Tests
             Assert.Equal(TimeSpan.Zero, config.SysTimeTransitionMargin);
             Assert.Equal(new CpuConfig().FpgaWaitUpdateMaxPolls, config.FpgaWaitUpdateMaxPolls);
             Assert.Equal(new CpuConfig().SyncGuard, config.SyncGuard);
-            Assert.Equal(TimeSpan.FromMilliseconds(500), config.FailsafeTimeout);
-            Assert.Null(new CpuConfig { FailsafeTimeout = null }.FailsafeTimeout);
-            Assert.Equal(TimeSpan.FromMilliseconds(500), default(CpuConfig).FailsafeTimeout);
+            Assert.Null(config.FailsafeTimeout);
+            Assert.Equal(TimeSpan.FromMilliseconds(500), new CpuConfig { FailsafeTimeout = TimeSpan.FromMilliseconds(500) }.FailsafeTimeout);
+            Assert.Null(default(CpuConfig).FailsafeTimeout);
             Assert.Null(config.PtpUnlockFailsafeTimeout);
             Assert.Null(default(CpuConfig).PtpUnlockFailsafeTimeout);
             Assert.Equal(TimeSpan.FromSeconds(2), new CpuConfig { PtpUnlockFailsafeTimeout = TimeSpan.FromSeconds(2) }.PtpUnlockFailsafeTimeout);

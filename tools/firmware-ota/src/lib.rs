@@ -4,8 +4,9 @@ mod image;
 mod udp;
 
 pub use driver::{
-    DEFAULT_TIMEOUT, DeviceReply, Driver, DriverError, Exchange, FPGA_RECONFIG_WAIT, Frame,
-    MIN_CPU_FIRMWARE_VERSION, Replies, UpdateProgress, boot_image,
+    DEFAULT_HEARTBEAT, DEFAULT_TIMEOUT, DeviceReply, Driver, DriverError, Exchange,
+    FPGA_RECONFIG_WAIT, Frame, MIN_CPU_FIRMWARE_VERSION, Replies, UdpLink, UpdateProgress,
+    boot_image,
 };
 pub use fpga_image::{FpgaFirmwareImage, FpgaImageLoadError};
 pub use image::{CpuFirmwareImage, ImageError};

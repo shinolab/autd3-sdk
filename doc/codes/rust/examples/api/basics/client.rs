@@ -25,9 +25,18 @@ async fn main() -> Result<()> {
 
     client.send_frame_at(frame, ExecAt::Immediate).await?.await?.check()?;
     // ANCHOR_END: exec_at
+    // ANCHOR: heartbeat
+    let mut heartbeat = tokio::time::interval(Duration::from_millis(10));
+    for _ in 0..100 {
+        heartbeat.tick().await;
+        client.heartbeat()?;
+    }
+    // ANCHOR_END: heartbeat
     // ANCHOR: api
     let num_devices = client.num_devices();
     let geometry = client.geometry();
+
+    client.heartbeat()?;
 
     let config = client.config();
     client.set_config(ClientConfig {

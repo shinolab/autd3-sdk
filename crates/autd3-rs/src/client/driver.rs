@@ -8,8 +8,7 @@ use futures_channel::oneshot;
 
 use crate::error::{Error, NetworkCause};
 use crate::protocol::Seq;
-use crate::udp::pump::Pump;
-use crate::udp::{Reply, Sent, UdpError};
+use crate::udp::{Reply, Sent, UdpBus, UdpError};
 
 use super::completion::CompletionSender;
 use super::config::ClientConfig;
@@ -232,21 +231,19 @@ struct Session {
 }
 
 pub struct Driver {
-    pump: Pump,
+    bus: Arc<UdpBus>,
     session: Session,
-    maintenance_due: Option<Instant>,
     finished: bool,
 }
 
 impl Driver {
-    pub(crate) fn new(pump: Pump, shared: Arc<Shared>) -> Self {
+    pub(crate) fn new(bus: Arc<UdpBus>, shared: Arc<Shared>) -> Self {
         Self {
             session: Session {
-                stats: pump.bus().stats(),
+                stats: bus.stats(),
                 shared,
             },
-            pump,
-            maintenance_due: None,
+            bus,
             finished: false,
         }
     }
@@ -279,7 +276,7 @@ impl Driver {
         if self.finished {
             return self.outcome();
         }
-        self.pump.bus().wait_readable(deadline).map_err(|e| {
+        self.bus.wait_readable(deadline).map_err(|e| {
             tracing::error!("waiting for a reply failed: {e}");
             let cause = NetworkCause::new(e);
             self.finish(Some(&cause));
@@ -307,7 +304,7 @@ impl Driver {
             let _ = recovery.send(Err(error()));
         }
         fail(entries, error);
-        let _ = self.pump.bus().close();
+        let _ = self.bus.close();
         tracing::debug!("driver stopped");
     }
 
@@ -318,13 +315,15 @@ impl Driver {
             self.drain()?;
         }
         self.session.check_timeouts(now);
-        self.maintain(now)?;
+        if let Some(recovered) = self.bus.settle_recovery(now) {
+            self.session.recovered(recovered);
+        }
         Ok(self.next_deadline(now))
     }
 
     fn drain(&mut self) -> Result<(), NetworkCause> {
         loop {
-            match self.pump.recv() {
+            match self.bus.recv(Instant::now()) {
                 Ok(Some(reply)) => self.session.dispatch(&reply),
                 Ok(None) => return Ok(()),
                 Err(e) => {
@@ -335,17 +334,12 @@ impl Driver {
         }
     }
 
-    fn maintain(&mut self, now: Instant) -> Result<(), NetworkCause> {
-        if let Some(recovered) = self.pump.settle_recovery(now) {
-            self.session.recovered(recovered);
-        }
-        self.maintenance_due = self.pump.maintain(now).map_err(NetworkCause::new)?;
-        Ok(())
-    }
-
     fn next_deadline(&self, now: Instant) -> Instant {
         let mut deadline = now + IDLE_WAIT;
-        if let Some(due) = self.maintenance_due {
+        if let Some(due) = self.bus.recovery_deadline() {
+            deadline = deadline.min(due);
+        }
+        if let Some(due) = self.bus.lost_deadline() {
             deadline = deadline.min(due);
         }
         let mut pending = self.session.shared.pending();
@@ -459,14 +453,14 @@ impl Drop for Driver {
 #[cfg(unix)]
 impl std::os::fd::AsFd for Driver {
     fn as_fd(&self) -> std::os::fd::BorrowedFd<'_> {
-        std::os::fd::AsFd::as_fd(&**self.pump.bus())
+        std::os::fd::AsFd::as_fd(&*self.bus)
     }
 }
 
 #[cfg(windows)]
 impl std::os::windows::io::AsSocket for Driver {
     fn as_socket(&self) -> std::os::windows::io::BorrowedSocket<'_> {
-        std::os::windows::io::AsSocket::as_socket(&**self.pump.bus())
+        std::os::windows::io::AsSocket::as_socket(&*self.bus)
     }
 }
 

@@ -79,6 +79,10 @@ impl Client {
         self.controller.state_checker()
     }
 
+    pub fn heartbeat(&self) -> Result<(), Error> {
+        self.controller.heartbeat()
+    }
+
     pub async fn recover(&self) -> Result<DeviceMask, Error> {
         self.controller.recover().await
     }

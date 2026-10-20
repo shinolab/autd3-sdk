@@ -24,9 +24,19 @@ internal static class Sample
         (await await client.SendFrameAsync(frame, ExecAt.Immediate)).Check();
         // ANCHOR_END: exec_at
 
+        // ANCHOR: heartbeat
+        for (var i = 0; i < 100; i++)
+        {
+            client.Heartbeat();
+            await Task.Delay(TimeSpan.FromMilliseconds(10));
+        }
+        // ANCHOR_END: heartbeat
+
         // ANCHOR: api
         var numDevices = client.NumDevices;
         var geometry = client.Geometry;
+
+        client.Heartbeat();
 
         var config = client.Config;
         client.SetConfig(new ClientConfig { AckTimeout = TimeSpan.FromMilliseconds(20) });

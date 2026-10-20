@@ -231,7 +231,6 @@ pub(crate) struct DriverAckLatency {
 pub(crate) struct Summary {
     pub elapsed: Duration,
     pub counters: Counters,
-    pub missed_heartbeat_replies: u64,
     pub resets: u64,
     pub recoveries: u64,
     pub throughput_cmd_per_sec: f64,

@@ -2148,6 +2148,26 @@ pub unsafe extern "C" fn autd3_client_device_time_now(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_client_heartbeat(
+    client: *const ClientHandle,
+    out_err: *mut c_char,
+    out_err_len: usize,
+) -> i32 {
+    let Some(client) = (unsafe { handle_ref(client) }) else {
+        unsafe { write_cstr(out_err, out_err_len, "null client") };
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+
+    match client.0.heartbeat() {
+        Ok(()) => AUTD3_OK,
+        Err(e) => {
+            unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
+            error_code(&e)
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_client_get_config(client: *const ClientHandle) -> *mut ClientConfig {
     let Some(client) = (unsafe { handle_ref(client) }) else {
         return std::ptr::null_mut();
@@ -2496,13 +2516,6 @@ pub unsafe extern "C" fn autd3_bus_stats_resets(stats: *const BusStatsHandle) ->
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_bus_stats_heartbeats(stats: *const BusStatsHandle) -> u64 {
     unsafe { handle_ref(stats) }.map_or(0, |stats| stats.0.heartbeats())
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_bus_stats_missed_heartbeat_replies(
-    stats: *const BusStatsHandle,
-) -> u64 {
-    unsafe { handle_ref(stats) }.map_or(0, |stats| stats.0.missed_heartbeat_replies())
 }
 
 #[unsafe(no_mangle)]
@@ -3113,6 +3126,16 @@ mod tests {
     #[test]
     fn the_failsafe_timeout_presence_is_explicit_and_zero_reaches_the_validation() {
         let handle = autd3_cpu_config_new();
+        assert_eq!(
+            None,
+            optional_duration(autd3_cpu_config_get_failsafe_timeout, handle)
+        );
+        unsafe {
+            assert_eq!(
+                AUTD3_OK,
+                autd3_cpu_config_set_failsafe_timeout(handle, true, 500_000_000)
+            );
+        }
         assert_eq!(
             Some(Duration::from_millis(500)),
             optional_duration(autd3_cpu_config_get_failsafe_timeout, handle)
@@ -3814,6 +3837,13 @@ mod tests {
         let mut ns = 0u64;
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
             autd3_client_device_time_now(std::ptr::null(), &raw mut ns, std::ptr::null_mut(), 0)
+        });
+    }
+
+    #[test]
+    fn a_heartbeat_through_a_null_client_is_an_error() {
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_client_heartbeat(std::ptr::null(), std::ptr::null_mut(), 0)
         });
     }
 

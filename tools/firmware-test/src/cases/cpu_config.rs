@@ -252,6 +252,15 @@ async fn failsafe_counts(ctx: &Ctx<'_>) -> Result<Vec<u32>> {
         .collect())
 }
 
+async fn set_failsafe_timeout(ctx: &Ctx<'_>, failsafe_timeout: Option<Duration>) -> Result<()> {
+    ctx.send(SetCpuConfig::new(CpuConfig {
+        failsafe_timeout,
+        ..CpuConfig::default()
+    }))
+    .await?;
+    Ok(())
+}
+
 async fn failsafe(ctx: &Ctx<'_>) -> Result<()> {
     println!("-- Failsafe timeout");
     let verdict = |ok: bool| if ok { "[OK]" } else { "[FAIL]" };
@@ -267,19 +276,16 @@ async fn failsafe(ctx: &Ctx<'_>) -> Result<()> {
 
     ctx.send(Clear).await?;
     silence(ctx).await?;
+    set_failsafe_timeout(ctx, Some(Duration::from_millis(500))).await?;
     tokio::time::sleep(idle).await;
     let counts = failsafe_counts(ctx).await?;
     println!(
-        "  {} the default timeout (500 ms) never trips while the heartbeat ({:?}) runs: {counts:?}",
+        "  {} a 500 ms timeout never trips while the heartbeat ({:?}) runs: {counts:?}",
         verdict(counts.iter().all(|c| *c == 0)),
         ctx.heartbeat
     );
 
-    ctx.send(SetCpuConfig::new(CpuConfig {
-        failsafe_timeout: Some(short),
-        ..CpuConfig::default()
-    }))
-    .await?;
+    set_failsafe_timeout(ctx, Some(short)).await?;
     tokio::time::sleep(idle).await;
     let tripped = failsafe_counts(ctx).await?;
     println!(
@@ -292,11 +298,7 @@ async fn failsafe(ctx: &Ctx<'_>) -> Result<()> {
         verdict(gated.iter().all(|s| s.is_failsafe_active()))
     );
 
-    ctx.send(SetCpuConfig::new(CpuConfig {
-        failsafe_timeout: None,
-        ..CpuConfig::default()
-    }))
-    .await?;
+    set_failsafe_timeout(ctx, None).await?;
     let before = failsafe_counts(ctx).await?;
     tokio::time::sleep(idle).await;
     let after = failsafe_counts(ctx).await?;
@@ -315,11 +317,7 @@ async fn failsafe(ctx: &Ctx<'_>) -> Result<()> {
         )
     );
 
-    ctx.send(SetCpuConfig::new(CpuConfig {
-        failsafe_timeout: Some(short),
-        ..CpuConfig::default()
-    }))
-    .await?;
+    set_failsafe_timeout(ctx, Some(short)).await?;
     tokio::time::sleep(idle).await;
     let rearmed = failsafe_counts(ctx).await?;
     println!(
@@ -344,7 +342,7 @@ async fn failsafe(ctx: &Ctx<'_>) -> Result<()> {
     tokio::time::sleep(idle).await;
     let counts = failsafe_counts(ctx).await?;
     println!(
-        "  {} Clear restored the default timeout and the counter: {counts:?}",
+        "  {} Clear disabled the failsafe (the default) and reset the counter: {counts:?}",
         verdict(counts.iter().all(|c| *c == 0))
     );
     let cleared = ctx.client.read_fpga_state().await?;

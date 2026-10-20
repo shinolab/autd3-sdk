@@ -54,10 +54,24 @@ To continuously monitor the operating state of the devices, drive the `StateChec
 | `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | Send one frame                                             |
 | `send_frame_at(frame, exec)` | ✓  | `Result<ResponseFuture, Error>`       | Send one frame at a given processing time (see [Overriding the processing time](#overriding-the-processing-time)) |
 | `state_checker()`         | —     | `StateChecker`                        | Get a `StateChecker`. See [State Monitoring](/autd3-sdk/en/guide/state-check/) for details. |
+| `heartbeat()`             | —     | `Result<(), Error>`                   | Send one liveness check to every device that is not `Lost` (see [Liveness check](#liveness-check)) |
 | `recover()`               | ✓     | `Result<DeviceMask, Error>`           | Look for the `Lost` devices and recover the ones that answer again. See [State Monitoring](/autd3-sdk/en/guide/state-check/#recovery-from-lost) for details. |
 | `close()`                 | ✓     | `Result<(), Error>`                   | Stop and close the connection                              |
 
 To avoid the noise of dropping the amplitude at once, `close()` first sets the [Silencer](/autd3-sdk/en/api/command/silencer/), then drives every transducer to zero amplitude, and then closes the connection.
+
+## Liveness check
+
+While there is nothing to send, `Client` sends nothing to the devices by itself.
+If you set `failsafe_timeout` of [CpuConfig](/autd3-sdk/en/api/command/cpu-config/) (disabled by default), a device stops its output when communication from the host has been cut off for that long, so while you wait with the output kept on, call `heartbeat()` periodically to send liveness checks.
+Keep the period well below half of `failsafe_timeout` (10 ms, for example). Keeping the failsafe from stopping the output is the user's responsibility.
+Note that a device running an older firmware, on which `failsafe_timeout` defaulted to 500 ms, stops its output after 500 ms even if you never set it, so call `heartbeat()` there as well.
+
+<CodeTabs rust={excerpt(methods, "heartbeat")} python={excerpt(pyMethods, "heartbeat")} csharp={excerpt(csMethods, "heartbeat")} />
+
+`heartbeat()` sends one liveness check to every device that is not `Lost` and returns without waiting for the replies.
+The replies update the [state monitoring](/autd3-sdk/en/guide/state-check/) and the device time (`device_time_now()`), so while you send nothing, a lost or rebooted device goes unnoticed and the device time estimate drifts.
+It may be called concurrently with `send` and the other sends.
 
 ## Types of the Read Results
 
@@ -123,8 +137,7 @@ The `u32` fields wrap around to 0 on overflow, and the `u16` / `u8` fields stop 
 | ---------------------------- | ----- | -------------------------------------------- |
 | `frames()`                   | `u64` | Frames sent                                  |
 | `resets()`                   | `u64` | `Reset`s sent                                |
-| `heartbeats()`               | `u64` | Heartbeats sent                              |
-| `missed_heartbeat_replies()` | `u64` | Heartbeat replies that did not arrive within `reply_timeout` |
+| `heartbeats()`               | `u64` | Liveness checks sent with `heartbeat()`      |
 | `recoveries()`               | `u64` | Devices recovered from `Lost` by `recover()` |
 | `acked_frames()`             | `u64` | Frames that received a reply                 |
 | `worst_ack_latency_ns()`     | `u64` | Maximum time from sending to the reply [ns]  |

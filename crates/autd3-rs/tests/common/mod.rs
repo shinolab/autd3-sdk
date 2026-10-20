@@ -31,7 +31,6 @@ pub(crate) fn emulator(num_devices: usize) -> UdpEmulator {
 pub(crate) fn option(emulator: &UdpEmulator) -> TransportOption {
     TransportOption {
         iface: emulator.interface(),
-        heartbeat: None,
         lost_timeout: PATIENCE,
         reply_timeout: Duration::from_millis(50),
         response_timeout: Duration::from_millis(50),
@@ -43,7 +42,6 @@ pub(crate) fn option(emulator: &UdpEmulator) -> TransportOption {
 
 pub(crate) fn monitoring_option(emulator: &UdpEmulator) -> TransportOption {
     TransportOption {
-        heartbeat: Some(Duration::from_millis(10)),
         lost_timeout: LOST_TIMEOUT,
         ..option(emulator)
     }

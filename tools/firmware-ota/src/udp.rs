@@ -4,6 +4,8 @@ use clap::Args;
 
 use autd3_rs::{Interface, TransportOption, UdpBus, UdpError};
 
+use crate::driver::{DEFAULT_HEARTBEAT, UdpLink};
+
 const LOST_AFTER_HEARTBEATS: u32 = 10;
 
 #[derive(Args, Debug, Clone, Default)]
@@ -44,20 +46,21 @@ fn us(value: Option<u64>) -> Option<Duration> {
 
 impl UdpArgs {
     #[must_use]
+    pub fn heartbeat(&self) -> Duration {
+        us(self.heartbeat_us).unwrap_or(DEFAULT_HEARTBEAT)
+    }
+
+    #[must_use]
     pub fn option(&self) -> TransportOption {
         let default = TransportOption::default();
-        let heartbeat = us(self.heartbeat_us).or(default.heartbeat);
         TransportOption {
             iface: match self.simulator {
                 Some(port) => Interface::Simulator(port),
                 None => self.interface.clone().into(),
             },
-            heartbeat,
-            lost_timeout: default.lost_timeout.max(
-                heartbeat
-                    .unwrap_or_default()
-                    .saturating_mul(LOST_AFTER_HEARTBEATS),
-            ),
+            lost_timeout: default
+                .lost_timeout
+                .max(self.heartbeat().saturating_mul(LOST_AFTER_HEARTBEATS)),
             response_timeout: ms(self.response_timeout_ms).unwrap_or(default.response_timeout),
             enumeration_timeout: ms(self.enumeration_timeout_ms)
                 .unwrap_or(default.enumeration_timeout),
@@ -65,8 +68,10 @@ impl UdpArgs {
         }
     }
 
-    pub fn open(&self, expected: Option<usize>) -> Result<UdpBus, OpenError> {
-        enumerate(&self.option(), expected).map_err(OpenError)
+    pub fn open(&self, expected: Option<usize>) -> Result<UdpLink, OpenError> {
+        enumerate(&self.option(), expected)
+            .map(|bus| UdpLink::new(bus, self.heartbeat()))
+            .map_err(OpenError)
     }
 }
 
@@ -129,7 +134,9 @@ mod tests {
 
     #[test]
     fn no_udp_arguments_mean_the_library_defaults() {
-        assert_eq!(parse(&[]).option(), TransportOption::default());
+        let args = parse(&[]);
+        assert_eq!(args.option(), TransportOption::default());
+        assert_eq!(args.heartbeat(), DEFAULT_HEARTBEAT);
     }
 
     #[test]
@@ -148,13 +155,13 @@ mod tests {
             args.option(),
             TransportOption {
                 iface: Interface::Name("eth1".to_string()),
-                heartbeat: Some(Duration::from_millis(20)),
                 lost_timeout: Duration::from_millis(200),
                 response_timeout: Duration::from_millis(300),
                 enumeration_timeout: Duration::from_secs(20),
                 ..TransportOption::default()
             }
         );
+        assert_eq!(args.heartbeat(), Duration::from_millis(20));
     }
 
     #[test]

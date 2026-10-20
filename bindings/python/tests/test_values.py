@@ -100,7 +100,7 @@ DISTINCT_PAIRS: list[tuple[object, object]] = [
     (autd3.ExecAt.Lead(autd3.Duration.from_nanos(5)), autd3.ExecAt.At(SysTime.from_nanos(5))),
     (FpgaBusWait.Cycles2, FpgaBusWait.Cycles3),
     (PtpConfig(), PtpConfig(kp_milli=PtpConfig().kp_milli + 1)),
-    (CpuConfig(), CpuConfig(failsafe_timeout=None)),
+    (CpuConfig(), CpuConfig(failsafe_timeout=autd3.Duration.from_millis(500))),
     (FpgaConfig(), FpgaConfig(sync_phase_lock=False)),
     (holo.IntensityConstraint.Multiply(0.5), holo.IntensityConstraint.Multiply(0.25)),
     (holo.IntensityConstraint.Normalize, holo.IntensityConstraint.Uniform(0)),

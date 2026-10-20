@@ -12,7 +12,6 @@ namespace AUTD3.Tests
         {
             var option = TransportOption.Defaults();
             Assert.Equal(Interface.Auto, option.Iface);
-            Assert.Equal(TimeSpan.FromMilliseconds(10), option.Heartbeat);
             Assert.Equal(TimeSpan.FromMilliseconds(1), option.ReplyTimeout);
             Assert.Equal(TimeSpan.FromMilliseconds(100), option.LostTimeout);
             Assert.Equal(TimeSpan.FromMilliseconds(200), option.ResponseTimeout);
@@ -37,19 +36,11 @@ namespace AUTD3.Tests
         {
             var option = new TransportOption();
             Assert.Equal(Interface.Auto, option.Iface);
-            Assert.Equal(TimeSpan.FromMilliseconds(10), option.Heartbeat);
-            Assert.Null(new TransportOption { Heartbeat = null }.Heartbeat);
             Assert.Equal(TimeSpan.FromMilliseconds(1), option.ReplyTimeout);
             Assert.Equal(TimeSpan.FromMilliseconds(100), option.LostTimeout);
             Assert.Equal(TimeSpan.FromMilliseconds(200), option.ResponseTimeout);
             Assert.Equal(TimeSpan.FromSeconds(10), option.EnumerationTimeout);
             Assert.Equal(TimeSpan.FromSeconds(30), option.SyncTimeout);
-        }
-
-        [Fact]
-        public void TheDefaultValueKeepsTheHeartbeat()
-        {
-            Assert.Equal(TimeSpan.FromMilliseconds(10), default(TransportOption).Heartbeat);
         }
 
         private static async Task<Autd3Exception> OpenFails(TransportOption option, ClientConfig config)
@@ -85,36 +76,11 @@ namespace AUTD3.Tests
         }
 
         [Fact]
-        public void ADisabledHeartbeatReachesTheNativeOption()
+        public async Task AZeroLostTimeoutFailsTheOpenWithTheRustError()
         {
-            var handle = new TransportOption { Heartbeat = null }.CreateHandle();
-            try
-            {
-                Assert.Null(TransportOption.FromHandle(handle).Heartbeat);
-            }
-            finally
-            {
-                NativeClient.autd3_transport_option_free(handle);
-            }
-
-            var zero = new TransportOption { Heartbeat = TimeSpan.Zero };
-            handle = zero.CreateHandle();
-            try
-            {
-                Assert.Equal(TimeSpan.Zero, TransportOption.FromHandle(handle).Heartbeat);
-            }
-            finally
-            {
-                NativeClient.autd3_transport_option_free(handle);
-            }
-        }
-
-        [Fact]
-        public async Task AZeroHeartbeatFailsTheOpenWithTheRustError()
-        {
-            var error = await OpenFails(new TransportOption { Heartbeat = TimeSpan.Zero }, new ClientConfig());
+            var error = await OpenFails(new TransportOption { LostTimeout = TimeSpan.Zero }, new ClientConfig());
             Assert.Equal(Autd3ErrorCode.Network, error.Code);
-            Assert.Contains("heartbeat", error.Message);
+            Assert.Contains("lost_timeout", error.Message);
         }
 
         [Fact]

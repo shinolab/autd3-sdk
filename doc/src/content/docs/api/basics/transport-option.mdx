@@ -18,9 +18,8 @@ import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
 | フィールド            | 型          | 既定値  | 説明                                                                                          |
 | --------------------- | ----------- | ------- | --------------------------------------------------------------------------------------------- |
 | `iface`               | `Interface` | `Auto`  | 接続先                                                                                        |
-| `heartbeat`           | `Option<Duration>`  | 10 ms   | 生存確認用のコマンド送信間隔. `None` で生存確認を送らない |
-| `reply_timeout`       | `Duration`  | 1 ms    | 返信を待つ上限                                                    |
-| `lost_timeout`        | `Duration`  | 100 ms  | この時間返信が無いデバイスを `Lost` とする. `heartbeat` より長くする                           |
+| `reply_timeout`       | `Duration`  | 1 ms    | `recover()` で `Lost` のデバイスの返信を待つ上限                                               |
+| `lost_timeout`        | `Duration`  | 100 ms  | この時間返信が無いデバイスを `Lost` とする                                                     |
 | `response_timeout`    | `Duration`  | 200 ms  | 列挙などの管理メッセージの返信を待つ時間                                                       |
 | `enumeration_timeout` | `Duration`  | 10 s    | open時のデバイス列挙処理の試行時間上限                                                         |
 | `sync_timeout`        | `Duration`  | 30 s    | open時の全台がデバイス間の同期を待つ上限                                                         |
@@ -29,6 +28,7 @@ import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
 | `timer_resolution`    | `Option<Duration>`  | 1 ms    | Windows のタイマ分解能. `None` で変更しない. |
 
 基本的に `iface` 以外を変更することは推奨しない.
+生存確認は `TransportOption` では設定せず, ユーザーが `Client` の [`heartbeat()`](/autd3-sdk/api/basics/client/#生存確認) を呼んで送る.
 
 Python の既定値は Rust と同じ具体値で, 型が `Option` の項目だけ `None` (無効) を渡せる. それ以外の項目に `None` を渡すと `TypeError` になる.
 C# では型が `Option` の項目を `null` にすると無効になる.

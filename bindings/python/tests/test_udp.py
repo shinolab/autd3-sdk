@@ -21,7 +21,6 @@ def loose(value: object) -> Any:
 def test_defaults_follow_the_spec() -> None:
     option = autd3.TransportOption()
     assert option.iface == autd3.Interface.Auto
-    assert option.heartbeat == autd3.Duration.from_millis(10)
     assert option.reply_timeout == autd3.Duration.from_millis(1)
     assert option.lost_timeout == autd3.Duration.from_millis(100)
     assert option.response_timeout == autd3.Duration.from_millis(200)
@@ -35,15 +34,11 @@ def test_defaults_follow_the_spec() -> None:
 def test_fields_round_trip() -> None:
     option = autd3.TransportOption(
         iface="eth1",
-        heartbeat=autd3.Duration.from_millis(2),
         lost_timeout=autd3.Duration.from_millis(50),
         sync_timeout=autd3.Duration.from_secs(3),
         send_rate_limit=95.0,
     )
     assert option.iface == autd3.Interface.Name("eth1")
-    assert option.heartbeat == autd3.Duration.from_millis(2)
-    assert autd3.TransportOption(heartbeat=None).heartbeat is None
-    assert autd3.TransportOption(iface="eth0").heartbeat == autd3.Duration.from_millis(10)
     assert option.lost_timeout == autd3.Duration.from_millis(50)
     assert option.sync_timeout == autd3.Duration.from_secs(3)
     assert option.send_rate_limit == 95.0
@@ -127,7 +122,6 @@ def test_the_emulator_option_only_shortens_the_timeouts() -> None:
     assert option.response_timeout == autd3.Duration.from_millis(50)
     assert option.enumeration_timeout == autd3.Duration.from_secs(1)
     assert option.sync_timeout == autd3.Duration.from_secs(5)
-    assert option.heartbeat == default.heartbeat
     assert option.lost_timeout == default.lost_timeout
     assert option.send_rate_limit == default.send_rate_limit
     assert option.send_buffer == default.send_buffer

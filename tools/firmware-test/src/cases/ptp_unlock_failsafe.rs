@@ -215,7 +215,6 @@ async fn by_cable(ctx: &Ctx<'_>) -> Result<()> {
     config(
         ctx,
         CpuConfig {
-            failsafe_timeout: None,
             ptp_unlock_failsafe_timeout: Some(TIMEOUT),
             ..CpuConfig::default()
         },

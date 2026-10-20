@@ -3,16 +3,17 @@ use std::time::Instant;
 
 use anyhow::{Context, Result};
 
-use autd3_rs::commands::{ForceFan, ReleaseFailsafe, Synchronize, each};
+use autd3_rs::commands::{CpuConfig, ForceFan, ReleaseFailsafe, SetCpuConfig, Synchronize, each};
 use autd3_rs::{Client, DeviceMask, DeviceState, StateChecker};
 
 use crate::io::{check, prompt};
-use crate::{Link, describe, mute, restore_gpio_out};
+use crate::{Link, Session, describe, mute, restore_gpio_out};
 
 const RECOVER_INTERVAL: Duration = Duration::from_millis(100);
 const DETECTION_WINDOW: Duration = Duration::from_secs(30);
 const RECOVERY_WINDOW: Duration = Duration::from_secs(60);
 const FAILSAFE_TRIP: Duration = Duration::from_secs(2);
+const FAILSAFE_TIMEOUT: Duration = Duration::from_millis(500);
 const STICKY_WINDOW: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(10);
 
@@ -79,7 +80,7 @@ fn cut_off(count: usize, first: usize) -> Vec<DeviceState> {
         .collect()
 }
 
-async fn open(link: &Link<'_>) -> Result<Client> {
+async fn open(link: &Link<'_>) -> Result<Session> {
     let client = Client::open(link.geometry, link.option, link.config)
         .await
         .context("opening the devices")?;
@@ -87,7 +88,7 @@ async fn open(link: &Link<'_>) -> Result<Client> {
     if link.mute && !mute(&client).await {
         anyhow::bail!("muting the devices failed");
     }
-    Ok(client)
+    Ok(Session::new(client, link.heartbeat))
 }
 
 async fn recover_until(
@@ -128,6 +129,14 @@ async fn lose(states: &StateChecker, count: usize, first: usize, how: &str) -> b
 async fn by_cable(link: &Link<'_>, first: usize) -> Result<()> {
     println!("-- cable unplugged and plugged back");
     let client = open(link).await?;
+    let failsafe_timeout = FAILSAFE_TIMEOUT.max(link.heartbeat.saturating_mul(4));
+    client
+        .send(SetCpuConfig::new(CpuConfig {
+            failsafe_timeout: Some(failsafe_timeout),
+            ..CpuConfig::default()
+        }))
+        .await
+        .context("enabling the host-silence failsafe")?;
     let count = client.num_devices();
     let states = client.state_checker();
     let ready = vec![DeviceState::Ready; count];
@@ -152,7 +161,7 @@ async fn by_cable(link: &Link<'_>, first: usize) -> Result<()> {
         client.close().await?;
         return Ok(());
     }
-    tokio::time::sleep(FAILSAFE_TRIP).await;
+    tokio::time::sleep(FAILSAFE_TRIP.max(failsafe_timeout.saturating_mul(2))).await;
     check("Plug the cable back and wait until the link LEDs are on");
     println!(
         "  {} the devices stay Lost until recover() is called: {:?}",
@@ -263,7 +272,7 @@ async fn confirmed(question: &str) -> bool {
         .eq_ignore_ascii_case("y")
 }
 
-pub(crate) async fn run(client: Client, link: &Link<'_>) -> Result<Client> {
+pub(crate) async fn run(client: Session, link: &Link<'_>) -> Result<Session> {
     let count = client.num_devices();
     if let Err(e) = client.close().await {
         println!("  closing the client before the case reported: {e}");

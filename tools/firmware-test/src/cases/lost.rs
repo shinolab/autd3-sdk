@@ -7,7 +7,7 @@ use autd3_rs::commands::ForceFan;
 use autd3_rs::{Client, DeviceState, Error, StateChecker};
 
 use crate::io::{check, prompt, wait_enter};
-use crate::{Link, describe};
+use crate::{Link, Session, describe};
 
 const DETECTION_WINDOW: Duration = Duration::from_secs(30);
 const STICKY_WINDOW: Duration = Duration::from_secs(2);
@@ -109,7 +109,7 @@ async fn detect(client: &Client, states: &StateChecker, first: usize) {
     );
 }
 
-pub(crate) async fn run(client: Client, link: &Link<'_>) -> Result<Client> {
+pub(crate) async fn run(client: Session, link: &Link<'_>) -> Result<Session> {
     let count = client.num_devices();
     let states = client.state_checker();
     let before = snapshot(&states);

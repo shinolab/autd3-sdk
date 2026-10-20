@@ -8,7 +8,6 @@ internal static class Sample
     internal static void Run()
     {
         var iface = Interface.Auto;
-        var heartbeat = TimeSpan.FromMilliseconds(10);
         var replyTimeout = TimeSpan.FromMilliseconds(1);
         var lostTimeout = TimeSpan.FromMilliseconds(100);
         var responseTimeout = TimeSpan.FromMilliseconds(200);
@@ -21,7 +20,6 @@ internal static class Sample
         new TransportOption
         {
             Iface = iface,
-            Heartbeat = heartbeat,
             ReplyTimeout = replyTimeout,
             LostTimeout = lostTimeout,
             ResponseTimeout = responseTimeout,
