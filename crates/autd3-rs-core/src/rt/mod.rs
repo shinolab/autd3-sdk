@@ -3,7 +3,7 @@ mod logging;
 
 mod executor;
 
-pub use executor::{Executor, thread_waker};
+pub use executor::Executor;
 
 #[cfg(feature = "logging")]
 pub use logging::{

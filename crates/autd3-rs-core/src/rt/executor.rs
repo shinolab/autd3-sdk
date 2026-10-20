@@ -4,25 +4,8 @@ use std::pin::Pin;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::task::{Context, Wake, Waker};
-use std::thread::{JoinHandle, Thread};
+use std::thread::JoinHandle;
 use std::time::Duration;
-
-struct ThreadWaker(Thread);
-
-impl Wake for ThreadWaker {
-    fn wake(self: Arc<Self>) {
-        self.0.unpark();
-    }
-
-    fn wake_by_ref(self: &Arc<Self>) {
-        self.0.unpark();
-    }
-}
-
-#[must_use]
-pub fn thread_waker() -> Waker {
-    Waker::from(Arc::new(ThreadWaker(std::thread::current())))
-}
 
 type BoxFuture = Pin<Box<dyn Future<Output = ()> + Send + 'static>>;
 

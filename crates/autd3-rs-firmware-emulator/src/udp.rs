@@ -735,11 +735,6 @@ impl UdpEmulator {
         }
     }
 
-    #[must_use]
-    pub fn ptp_config(&self, index: usize) -> PtpConfig {
-        lock(&self.chain).units[index].ptp_config
-    }
-
     pub fn pause_main_loop(&self, index: usize) {
         lock(&self.chain).units[index].main_loop_paused = true;
     }
