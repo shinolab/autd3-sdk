@@ -63,8 +63,6 @@ pub enum UdpError {
         lost_timeout: Duration,
         heartbeat: Option<Duration>,
     },
-    #[error("recovery_interval must be longer than zero")]
-    ZeroRecoveryInterval,
     #[error("response_timeout must be longer than zero")]
     ZeroResponseTimeout,
     #[error("timer_resolution must be at least {min:?}, but {got:?} was given")]

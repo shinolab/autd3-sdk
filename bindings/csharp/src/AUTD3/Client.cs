@@ -713,6 +713,18 @@ namespace AUTD3
             return states;
         }
 
+        public async Task<DeviceMask> RecoverAsync()
+        {
+            var bytes = await ReadByteArrayAsync((cb, ud) =>
+                NativeClient.autd3_client_recover(Handle, cb, ud)).ConfigureAwait(false);
+            var devices = new int[bytes.Length];
+            for (var i = 0; i < bytes.Length; i++)
+            {
+                devices[i] = bytes[i];
+            }
+            return DeviceMask.FromDevices(devices);
+        }
+
         public async Task<IReadOnlyList<Telemetry>> ReadTelemetryAsync()
         {
             var array = await AsyncOps.InvokeAsync((cb, ud) =>

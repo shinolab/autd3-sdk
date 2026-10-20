@@ -38,28 +38,6 @@ namespace AUTD3
         public uint MaxResyncRounds { get => _maxResyncRounds ?? ClientConfigDefaults.Preset.MaxResyncRounds; init => _maxResyncRounds = value; }
         private readonly bool? _requireSupportedFirmware;
         public bool RequireSupportedFirmware { get => _requireSupportedFirmware ?? ClientConfigDefaults.Preset.RequireSupportedFirmware; init => _requireSupportedFirmware = value; }
-        private readonly bool _resynchronizeOnRecoverySet;
-        private readonly uint? _resynchronizeOnRecovery;
-        public uint? ResynchronizeOnRecovery
-        {
-            get => _resynchronizeOnRecoverySet ? _resynchronizeOnRecovery : ClientConfigDefaults.Preset.ResynchronizeOnRecovery;
-            init
-            {
-                _resynchronizeOnRecovery = value;
-                _resynchronizeOnRecoverySet = true;
-            }
-        }
-        private readonly bool _releaseFailsafeOnRecoverySet;
-        private readonly uint? _releaseFailsafeOnRecovery;
-        public uint? ReleaseFailsafeOnRecovery
-        {
-            get => _releaseFailsafeOnRecoverySet ? _releaseFailsafeOnRecovery : ClientConfigDefaults.Preset.ReleaseFailsafeOnRecovery;
-            init
-            {
-                _releaseFailsafeOnRecovery = value;
-                _releaseFailsafeOnRecoverySet = true;
-            }
-        }
         private readonly bool _execLeadSet;
         private readonly TimeSpan? _execLead;
         public TimeSpan? ExecLead
@@ -78,16 +56,12 @@ namespace AUTD3
             OptionNative.Apply("preset", NativeClient.autd3_client_config_get_max_inflight(handle, out var maxInflight));
             OptionNative.Apply("preset", NativeClient.autd3_client_config_get_max_resync_rounds(handle, out var maxResyncRounds));
             OptionNative.Apply("preset", NativeClient.autd3_client_config_get_require_supported_firmware(handle, out var requireSupportedFirmware));
-            OptionNative.Apply("preset", NativeClient.autd3_client_config_get_resynchronize_on_recovery(handle, out var resynchronizeOnRecovery));
-            OptionNative.Apply("preset", NativeClient.autd3_client_config_get_release_failsafe_on_recovery(handle, out var releaseFailsafeOnRecovery));
             return new ClientConfig
             {
                 AckTimeout = ackTimeout,
                 MaxInflight = (uint)maxInflight,
                 MaxResyncRounds = maxResyncRounds,
                 RequireSupportedFirmware = requireSupportedFirmware,
-                ResynchronizeOnRecovery = resynchronizeOnRecovery == 0 ? null : resynchronizeOnRecovery,
-                ReleaseFailsafeOnRecovery = releaseFailsafeOnRecovery == 0 ? null : releaseFailsafeOnRecovery,
                 ExecLead = OptionNative.GetOptionalDuration(handle, NativeClient.autd3_client_config_get_exec_lead),
             };
         }
@@ -105,18 +79,6 @@ namespace AUTD3
                 OptionNative.Apply("maxInflight", NativeClient.autd3_client_config_set_max_inflight(handle, (UIntPtr)MaxInflight));
                 OptionNative.Apply("maxResyncRounds", NativeClient.autd3_client_config_set_max_resync_rounds(handle, MaxResyncRounds));
                 OptionNative.Apply("requireSupportedFirmware", NativeClient.autd3_client_config_set_require_supported_firmware(handle, RequireSupportedFirmware));
-                OptionNative.Apply("resynchronizeOnRecovery", ResynchronizeOnRecovery switch
-                {
-                    null => NativeClient.autd3_client_config_set_resynchronize_on_recovery(handle, 0),
-                    0 => -1,
-                    { } attempts => NativeClient.autd3_client_config_set_resynchronize_on_recovery(handle, attempts),
-                });
-                OptionNative.Apply("releaseFailsafeOnRecovery", ReleaseFailsafeOnRecovery switch
-                {
-                    null => NativeClient.autd3_client_config_set_release_failsafe_on_recovery(handle, 0),
-                    0 => -1,
-                    { } attempts => NativeClient.autd3_client_config_set_release_failsafe_on_recovery(handle, attempts),
-                });
                 OptionNative.SetOptionalDuration(handle, "execLead", ExecLead, NativeClient.autd3_client_config_set_exec_lead);
             }
             catch

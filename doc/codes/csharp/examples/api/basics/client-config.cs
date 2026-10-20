@@ -19,8 +19,6 @@ internal static class Sample
                 MaxInflight = (uint)Params.DeviceQueueFrames,
                 MaxResyncRounds = 8,
                 RequireSupportedFirmware = false,
-                ResynchronizeOnRecovery = 3,
-                ReleaseFailsafeOnRecovery = 3,
                 ExecLead = null,
             }
             // ANCHOR_END: config

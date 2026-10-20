@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use autd3_rs::commands::{ReleaseFailsafe, Synchronize, each};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::{Client, ClientConfig, DeviceStatus};
 use autd3_rs::UdpOption;
@@ -14,6 +15,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::open(&geometry, UdpOption::default(), ClientConfig::default()).await?;
     let checker = client.state_checker();
     // ANCHOR_END: open
+
+    // ANCHOR: recover
+    if checker.check()?.any_lost() {
+        let recovered = client.recover().await?;
+        if !recovered.is_empty() {
+            client
+                .send(each(|device| {
+                    recovered[device.idx()].then_some(Synchronize)
+                }))
+                .await?;
+            client.send(ReleaseFailsafe).await?;
+        }
+    }
+    // ANCHOR_END: recover
 
     // ANCHOR: poll
     let mut last: Option<DeviceStatus> = None;

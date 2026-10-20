@@ -113,7 +113,6 @@ impl UdpOption {
         send_rate_limit = CoreOption::default().send_rate_limit,
         send_buffer = CoreOption::default().send_buffer,
         timer_resolution = CoreOption::default().timer_resolution,
-        recovery_interval = CoreOption::default().recovery_interval,
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -127,14 +126,12 @@ impl UdpOption {
         send_rate_limit: Option<f32>,
         send_buffer: Option<NonZeroUsize>,
         #[pyo3(from_py_with = none_or_duration)] timer_resolution: Option<Duration>,
-        #[pyo3(from_py_with = none_or_duration)] recovery_interval: Option<Duration>,
     ) -> Self {
         Self(CoreOption {
             iface,
             heartbeat,
             reply_timeout,
             lost_timeout,
-            recovery_interval,
             response_timeout,
             enumeration_timeout,
             sync_timeout,
@@ -185,14 +182,6 @@ impl UdpOption {
     #[getter]
     fn send_rate_limit(&self) -> Option<f32> {
         self.0.send_rate_limit
-    }
-
-    #[getter]
-    fn recovery_interval<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
-        self.0
-            .recovery_interval
-            .map(|interval| duration_to_py(py, interval))
-            .transpose()
     }
 
     #[getter]

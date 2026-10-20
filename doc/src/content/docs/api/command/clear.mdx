@@ -27,7 +27,7 @@ Silencer / Pattern / Modulation などの設定がすべて初期化される.
 
 ## Synchronize / Nop
 
-ペイロードを持たないコマンドとして, ほかに `Synchronize` と `Nop` がある (Rust は `Synchronize` / `Nop`, Python は `Synchronize()` / `Nop()`, C# は `new Synchronize()` / `new Nop()`).
+ペイロードを持たないコマンドとして, ほかに `Synchronize` と `Nop` がある.
 
-- `Synchronize` は, FPGA が PWM 生成に使う同期クロックを初期化し直し, デバイス間の出力の位相を揃える. `Client` を開くときに `Clear` の後に送られ, `Lost` から自動復帰したデバイスには `ClientConfig` の `resynchronize_on_recovery` が既定で送り直す ([Client](/autd3-sdk/api/basics/client/#clientconfig) 参照).
+- `Synchronize` は, FPGA が PWM 生成に使う同期クロックを初期化し直し, デバイス間の出力の位相を揃える. `Client` を開くときに `Clear` の後に送られる. `recover()` で `Lost` から復帰したデバイスには自動では送られないので, 必要ならユーザが送り直す ([状態監視](/autd3-sdk/guide/state-check/#lost-からの復帰) 参照).
 - `Nop` は何も変更せず, 常に成功を返す.

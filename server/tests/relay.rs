@@ -4,12 +4,13 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use autd3_rs::commands::{Modulation, Nop};
+use autd3_rs::commands::{ForceFan, Modulation, Nop};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::udp::UdpOption;
 use autd3_rs::value::SamplingConfig;
 use autd3_rs::{
-    Client, ClientConfig, DeviceState, Error, Frames, LinkError, MAX_INFLIGHT, ServerLink,
+    Client, ClientConfig, DeviceMask, DeviceState, Error, Frames, LinkError, MAX_INFLIGHT,
+    ServerLink,
 };
 use autd3_rs_firmware_emulator::test_utils::FpgaEmulatorTestExt;
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
@@ -20,7 +21,6 @@ const POLL: Duration = Duration::from_millis(10);
 const MONITOR_INTERVAL: Duration = Duration::from_millis(50);
 const SYNC_TIMEOUT: Duration = Duration::from_millis(300);
 const LOST_TIMEOUT: Duration = Duration::from_millis(200);
-const RECOVERY_INTERVAL: Duration = Duration::from_millis(20);
 const ACK_TIMEOUT: Duration = Duration::from_millis(250);
 const ADDR_SYNC_TIME_0: u16 = 0x10;
 
@@ -183,6 +183,11 @@ impl Harness {
                 .collect()
         })
     }
+
+    fn fans(&self) -> Vec<bool> {
+        self.emulator
+            .with_devices(|devices| devices.iter().map(|d| d.fpga().force_fan()).collect())
+    }
 }
 
 impl Drop for Harness {
@@ -316,10 +321,9 @@ fn the_server_sends_heartbeats_only_while_a_client_is_attached() {
 
 #[test]
 #[ignore = "depends on real time"]
-fn a_device_that_answers_again_is_recovered_by_the_server_and_restored_by_the_client() {
+fn a_device_that_answers_again_stays_lost_until_the_client_asks_the_server_to_recover_it() {
     let harness = Harness::serving_with(3, |option| UdpOption {
         heartbeat: Some(Duration::from_millis(10)),
-        recovery_interval: Some(RECOVERY_INTERVAL),
         ..option
     });
     let client = harness.open();
@@ -330,19 +334,28 @@ fn a_device_that_answers_again_is_recovered_by_the_server_and_restored_by_the_cl
         states(&client)[1] == DeviceState::Lost
     });
     harness.emulator.set_muted(1, false);
-    wait_until("the client sees every device ready", || {
-        states(&client) == [DeviceState::Ready; 3]
-    });
-    pollster::block_on(client.send(Nop)).unwrap();
+    std::thread::sleep(MONITOR_INTERVAL * 4);
+    assert_eq!(states(&client)[1], DeviceState::Lost);
 
-    let after = harness.sync_times();
-    assert_eq!(after[0], before[0]);
-    assert_ne!(after[1], before[1]);
-    assert_eq!(after[2], before[2]);
+    assert_eq!(
+        pollster::block_on(client.recover()).unwrap(),
+        DeviceMask::from_bits(0b010)
+    );
+    wait_until("the client sees the device back", || {
+        states(&client)[1] != DeviceState::Lost
+    });
+    pollster::block_on(client.send(ForceFan { value: true })).unwrap();
+
+    assert_eq!(harness.sync_times(), before);
+    assert_eq!(harness.fans(), [true, true, true]);
     assert_eq!(client.bus_stats().recoveries(), 1);
     harness.wait_for("the status counts the recovery", |status| {
         status.bus.recoveries == 1
     });
+    assert_eq!(
+        pollster::block_on(client.recover()).unwrap(),
+        DeviceMask::default()
+    );
     pollster::block_on(client.close()).unwrap();
 }
 

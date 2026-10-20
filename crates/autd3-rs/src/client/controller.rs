@@ -1,4 +1,3 @@
-use std::num::NonZeroU32;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -19,7 +18,8 @@ use crate::telemetry::Telemetry;
 use crate::udp::frame_buf::FrameBuf;
 use crate::udp::{Sent, StateChecker, UdpError};
 use crate::value::{Intensity, SysTime};
-use autd3_rs_core::{BusStats, DeviceClock, DeviceState};
+use autd3_rs_core::{BusStats, DeviceClock, DeviceMask};
+use futures_channel::oneshot;
 
 use super::completion::{self, ResponseFuture, StreamFuture};
 use super::config::{ClientConfig, MAX_DEVICES};
@@ -27,12 +27,6 @@ use super::driver::{Driver, Inflight, Settlement, Shared, sent_devices};
 use super::exec_at::{self, ExecAt};
 use super::pool::{Slot, SlotPool};
 use super::transport::{Dispatch, Transport};
-
-#[derive(Clone, Copy, Debug)]
-enum Restoration {
-    Synchronize(u128),
-    ReleaseFailsafe(u128),
-}
 
 pub struct Controller {
     geometry: Arc<Geometry>,
@@ -231,16 +225,10 @@ impl Controller {
         if let Some(e) = self.closed_error() {
             return Err(e);
         }
-        let slot = loop {
-            let slot = self.pool.acquire().await;
-            if self.shared.pending().need_reset {
-                self.reset().await?;
-            }
-            let Some(restoration) = self.next_restoration()? else {
-                break slot;
-            };
-            self.restore(slot, restoration).await?;
-        };
+        let slot = self.pool.acquire().await;
+        if self.shared.pending().need_reset {
+            self.reset().await?;
+        }
         let exec_at = self.exec_at(exec)?;
         self.transmit(slot, dist, datagrams, exec_at)
     }
@@ -248,83 +236,6 @@ impl Controller {
     fn exec_at(&self, exec: Option<ExecAt>) -> Result<u32, Error> {
         let exec = exec.unwrap_or_else(|| ExecAt::from_exec_lead(self.config().exec_lead));
         exec_at::schedule(exec, self.lost_timeout, || self.device_clock.now())
-    }
-
-    fn next_restoration(&self) -> Result<Option<Restoration>, Error> {
-        let (resync, release_failsafe) = {
-            let pending = self.shared.pending();
-            if pending.need_reset {
-                return Ok(None);
-            }
-            (pending.resync.devices, pending.release_failsafe.devices)
-        };
-        if resync | release_failsafe == 0 {
-            return Ok(None);
-        }
-        let status = self.transport.state_checker().check()?;
-        let ready = status
-            .devices()
-            .iter()
-            .enumerate()
-            .filter(|&(_, &state)| state == DeviceState::Ready)
-            .fold(0u128, |ready, (device, _)| ready | 1 << device);
-        let synchronize = resync & ready;
-        if synchronize != 0 {
-            return Ok(Some(Restoration::Synchronize(synchronize)));
-        }
-        let release = release_failsafe & ready;
-        Ok((release != 0).then_some(Restoration::ReleaseFailsafe(release)))
-    }
-
-    async fn restore(&self, slot: Slot, restoration: Restoration) -> Result<(), Error> {
-        tracing::debug!(?restoration, "restoring the recovered devices");
-        let (cmd, recovered) = match restoration {
-            Restoration::Synchronize(recovered) => (Cmd::Synchronize, recovered),
-            Restoration::ReleaseFailsafe(recovered) => (Cmd::ReleaseFailsafe, recovered),
-        };
-        let datagrams: Vec<Datagram> = (0..self.num_devices())
-            .map(|device| {
-                Datagram::no_payload(if recovered & (1 << device) == 0 {
-                    Cmd::Nop
-                } else {
-                    cmd
-                })
-            })
-            .collect();
-        let outcome = self.attempt(slot, &datagrams).await;
-        let mut pending = self.shared.pending();
-        let config = pending.config;
-        let (restoring, attempts) = match restoration {
-            Restoration::Synchronize(_) => (&mut pending.resync, config.resynchronize_on_recovery),
-            Restoration::ReleaseFailsafe(_) => (
-                &mut pending.release_failsafe,
-                config.release_failsafe_on_recovery,
-            ),
-        };
-        match outcome {
-            Ok(replied) => {
-                restoring.restored(recovered & replied);
-                Ok(())
-            }
-            Err(e) => {
-                if restoring.failed(recovered, attempts.unwrap_or(NonZeroU32::MIN)) {
-                    tracing::warn!(
-                        ?restoration,
-                        error = %e,
-                        "giving up restoring the recovered devices"
-                    );
-                }
-                Err(e)
-            }
-        }
-    }
-
-    async fn attempt(&self, slot: Slot, datagrams: &[Datagram]) -> Result<u128, Error> {
-        let response = self
-            .transmit(slot, Distribution::PerDevice, datagrams, 0)?
-            .await?;
-        response.check()?;
-        Ok(response.replied())
     }
 
     fn transmit(
@@ -419,8 +330,26 @@ impl Controller {
         Ok(true)
     }
 
+    pub async fn recover(&self) -> Result<DeviceMask, Error> {
+        let _gate = self.gate.lock().await;
+        if let Some(e) = self.closed_error() {
+            return Err(e);
+        }
+        let (tx, rx) = oneshot::channel();
+        self.shared.pending().await_recovery(tx)?;
+        if let Err(e) = self.transport.probe() {
+            self.shared.pending().recovery = None;
+            return Err(e);
+        }
+        let recovered = rx.await.unwrap_or(Err(Error::Closed))?;
+        tracing::debug!(recovered, "recovery settled");
+        if recovered != 0 {
+            self.reset().await?;
+        }
+        Ok(DeviceMask::from_bits(recovered))
+    }
+
     async fn reset(&self) -> Result<(), Error> {
-        let recoveries = self.shared.pending().recoveries;
         self.transport.admit_recovered();
         let stale = self.shared.pending().take_all();
         if !stale.is_empty() {
@@ -467,7 +396,7 @@ impl Controller {
                 Ok(_) => {
                     let mut pending = self.shared.pending();
                     pending.next_seq = Seq::ZERO;
-                    pending.need_reset = pending.recoveries != recoveries;
+                    pending.need_reset = false;
                     tracing::debug!("reset confirmed by every device");
                     return Ok(());
                 }

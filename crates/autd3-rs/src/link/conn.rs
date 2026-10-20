@@ -176,6 +176,10 @@ impl ServerConn {
         self.write(|buf| Request::Admit.encode(buf))
     }
 
+    pub(crate) fn recover(&self) -> io::Result<()> {
+        self.write(|buf| Request::Recover.encode(buf))
+    }
+
     pub(crate) fn wake(&self) -> io::Result<()> {
         self.write(|buf| Request::Wake.encode(buf))
     }

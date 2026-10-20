@@ -12,7 +12,6 @@ pub struct UdpOption {
     pub heartbeat: Option<Duration>,
     pub reply_timeout: Duration,
     pub lost_timeout: Duration,
-    pub recovery_interval: Option<Duration>,
     pub response_timeout: Duration,
     pub enumeration_timeout: Duration,
     pub sync_timeout: Duration,
@@ -28,7 +27,6 @@ impl Default for UdpOption {
             heartbeat: Some(Duration::from_millis(10)),
             reply_timeout: Duration::from_millis(1),
             lost_timeout: Duration::from_millis(100),
-            recovery_interval: None,
             response_timeout: Duration::from_millis(200),
             enumeration_timeout: Duration::from_secs(10),
             sync_timeout: Duration::from_secs(30),
@@ -52,12 +50,6 @@ impl UdpOption {
                 lost_timeout: self.lost_timeout,
                 heartbeat: self.heartbeat,
             });
-        }
-        if self
-            .recovery_interval
-            .is_some_and(|recovery_interval| recovery_interval.is_zero())
-        {
-            return Err(UdpError::ZeroRecoveryInterval);
         }
         if self.response_timeout.is_zero() {
             return Err(UdpError::ZeroResponseTimeout);
@@ -97,7 +89,6 @@ mod tests {
         assert_eq!(option.heartbeat, Some(Duration::from_millis(10)));
         assert_eq!(option.reply_timeout, Duration::from_millis(1));
         assert_eq!(option.lost_timeout, Duration::from_millis(100));
-        assert_eq!(option.recovery_interval, None);
         assert_eq!(option.response_timeout, Duration::from_millis(200));
         assert_eq!(option.enumeration_timeout, Duration::from_secs(10));
         assert_eq!(option.sync_timeout, Duration::from_secs(30));
@@ -157,13 +148,6 @@ mod tests {
         },
         |e: &UdpError| matches!(e, UdpError::ZeroReplyTimeout)
     )]
-    #[case::zero_recovery_interval(
-        UdpOption {
-            recovery_interval: Some(Duration::ZERO),
-            ..UdpOption::default()
-        },
-        |e: &UdpError| matches!(e, UdpError::ZeroRecoveryInterval)
-    )]
     #[case::zero_response_timeout(
         UdpOption {
             response_timeout: Duration::ZERO,
@@ -191,7 +175,6 @@ mod tests {
             heartbeat: Duration::MAX.checked_sub(Duration::from_nanos(1)),
             reply_timeout: Duration::MAX,
             lost_timeout: Duration::MAX,
-            recovery_interval: Some(Duration::MAX),
             response_timeout: Duration::MAX,
             enumeration_timeout: Duration::MAX,
             sync_timeout: Duration::MAX,

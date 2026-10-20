@@ -64,7 +64,7 @@ pub struct UdpBus {
     units: Vec<SocketAddrV6>,
     trackers: Mutex<Vec<Tracker>>,
     shared: Arc<SharedState>,
-    recovery: Option<Mutex<Recovery>>,
+    recovery: Mutex<Option<Recovery>>,
     stats: BusStats,
     device_clock: DeviceClock,
     heartbeat: Option<Duration>,
@@ -144,9 +144,7 @@ impl UdpBus {
             channel,
             trackers: Mutex::new(vec![Tracker::new(); units.len()]),
             shared: SharedState::new(units.len()),
-            recovery: option
-                .recovery_interval
-                .map(|interval| Mutex::new(Recovery::new(interval))),
+            recovery: Mutex::new(None),
             units,
             stats: BusStats::default(),
             device_clock,
@@ -430,20 +428,20 @@ impl UdpBus {
             .fold(0u128, |devices, (index, _)| devices | 1 << index)
     }
 
-    fn recovery(&self) -> Option<MutexGuard<'_, Recovery>> {
-        self.recovery
-            .as_ref()
-            .map(|recovery| recovery.lock().unwrap_or_else(PoisonError::into_inner))
+    fn recovery(&self) -> MutexGuard<'_, Option<Recovery>> {
+        self.recovery.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    pub fn recover(&self, now: Instant) -> Option<Instant> {
-        let mut recovery = self.recovery()?;
-        if self.is_closed() || self.devices_where(Tracker::is_lost) == 0 {
-            recovery.idle();
-            return None;
+    pub fn probe(&self) -> Result<(), UdpError> {
+        self.ensure_open()?;
+        let now = Instant::now();
+        let lost = self.devices_where(Tracker::is_lost);
+        match &mut *self.recovery() {
+            Some(recovery) => recovery.extend(now, self.reply_timeout, lost),
+            recovery @ None => *recovery = Some(Recovery::new(now, self.reply_timeout, lost)),
         }
-        if !recovery.is_due(now) {
-            return recovery.next_at();
+        if lost == 0 {
+            return Ok(());
         }
         let group = self.channel.group();
         if let Err(e) = self.channel.send(
@@ -456,13 +454,21 @@ impl UdpBus {
         ) {
             tracing::debug!(%group, "probing for the lost devices failed: {e}");
         }
-        recovery.probed(now)
+        Ok(())
     }
 
     #[must_use]
-    pub fn take_recovered(&self) -> u128 {
-        self.recovery()
-            .map_or(0, |mut recovery| recovery.take_recovered())
+    pub fn recovery_deadline(&self) -> Option<Instant> {
+        self.recovery().as_ref().and_then(Recovery::deadline)
+    }
+
+    #[must_use]
+    pub fn settle_recovery(&self, now: Instant) -> Option<u128> {
+        let mut recovery = self.recovery();
+        if !recovery.as_ref()?.is_settled(now) {
+            return None;
+        }
+        recovery.take().map(|recovery| recovery.recovered())
     }
 
     pub fn admit_recovered(&self) {
@@ -492,18 +498,21 @@ impl UdpBus {
                     sys_time,
                 } => {
                     let (accepted, revived) = {
+                        let mut recovery = self.recovery();
                         let mut trackers = self.trackers();
                         let expected =
                             u8::try_from(index).expect("a unit index is below MAX_DEVICES");
                         let accepted = trackers[index].replied(expected, unit_id, flags);
                         let revived = !accepted
-                            && self.recovery.is_some()
+                            && recovery.is_some()
                             && trackers[index].revive(expected, unit_id, flags);
+                        if revived && let Some(recovery) = &mut *recovery {
+                            recovery.restored(index);
+                        }
                         self.shared.publish(index, trackers[index].state());
                         (accepted, revived)
                     };
-                    if revived && let Some(mut recovery) = self.recovery() {
-                        recovery.restored(index);
+                    if revived {
                         self.stats.record_recovery();
                         tracing::info!(device = index, "a lost device answers again");
                     }

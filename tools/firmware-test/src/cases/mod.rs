@@ -5,7 +5,6 @@ pub(crate) const ERR_MISS_TRANSITION_TIME: u8 = 0x06;
 pub(crate) const ERR_FPGA_TIMEOUT: u8 = 0x07;
 pub(crate) const ERR_FAILSAFE_CONDITION_ACTIVE: u8 = 0x15;
 
-pub(crate) mod auto_recovery;
 pub(crate) mod cpu_config;
 pub(crate) mod cpu_watchdog;
 pub(crate) mod error;
@@ -14,6 +13,7 @@ pub(crate) mod force_fan;
 pub(crate) mod fpga_state;
 pub(crate) mod gpio;
 pub(crate) mod lost;
+pub(crate) mod lost_recovery;
 pub(crate) mod modulation;
 pub(crate) mod output_mask;
 pub(crate) mod pattern;

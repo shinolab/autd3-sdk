@@ -15,7 +15,6 @@ namespace AUTD3.Tests
             Assert.Equal(TimeSpan.FromMilliseconds(10), option.Heartbeat);
             Assert.Equal(TimeSpan.FromMilliseconds(1), option.ReplyTimeout);
             Assert.Equal(TimeSpan.FromMilliseconds(100), option.LostTimeout);
-            Assert.Null(option.RecoveryInterval);
             Assert.Equal(TimeSpan.FromMilliseconds(200), option.ResponseTimeout);
             Assert.Equal(TimeSpan.FromSeconds(10), option.EnumerationTimeout);
             Assert.Equal(TimeSpan.FromSeconds(30), option.SyncTimeout);
@@ -29,9 +28,7 @@ namespace AUTD3.Tests
         {
             var defaults = UdpOption.Defaults();
             var option = new UdpOption();
-            Assert.Equal(defaults.RecoveryInterval, option.RecoveryInterval);
             Assert.Equal(defaults.SendRateLimit, option.SendRateLimit);
-            Assert.Equal(TimeSpan.FromMilliseconds(5), new UdpOption { RecoveryInterval = TimeSpan.FromMilliseconds(5) }.RecoveryInterval);
             Assert.Equal(90f, new UdpOption { SendRateLimit = 90f }.SendRateLimit);
         }
 
@@ -118,27 +115,6 @@ namespace AUTD3.Tests
             var error = await OpenFails(new UdpOption { Heartbeat = TimeSpan.Zero }, new ClientConfig());
             Assert.Equal(Autd3ErrorCode.Network, error.Code);
             Assert.Contains("heartbeat", error.Message);
-        }
-
-        [Fact]
-        public void ARecoveryIntervalReachesTheNativeOption()
-        {
-            Assert.Null(default(UdpOption).RecoveryInterval);
-            foreach (var interval in new TimeSpan?[] { null, TimeSpan.Zero, TimeSpan.FromMilliseconds(100) })
-            {
-                var handle = new UdpOption { RecoveryInterval = interval }.CreateHandle();
-                try
-                {
-                    Assert.Equal(interval, UdpOption.FromHandle(handle).RecoveryInterval);
-                }
-                finally
-                {
-                    NativeClient.autd3_udp_option_free(handle);
-                }
-            }
-
-            var negative = new UdpOption { RecoveryInterval = TimeSpan.FromTicks(-1) };
-            Assert.Throws<Autd3Exception>(() => negative.CreateHandle());
         }
 
         [Fact]

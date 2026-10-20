@@ -72,7 +72,7 @@ enum Selected {
     Quit,
     Lost,
     Reboot,
-    AutoRecovery,
+    LostRecovery,
     CpuWatchdog,
 }
 
@@ -123,14 +123,14 @@ const CASE_NAMES: &[&str] = &[
     "PTP Unlock Failsafe",
     "Lost",
     "Reboot",
-    "Auto Recovery",
+    "Lost Recovery",
     "CPU Watchdog",
 ];
 
 const PULSE_WIDTH_ENCODER_INDEX: usize = 6;
 const LOST_INDEX: usize = 16;
 const REBOOT_INDEX: usize = 17;
-const AUTO_RECOVERY_INDEX: usize = 18;
+const LOST_RECOVERY_INDEX: usize = 18;
 const CPU_WATCHDOG_INDEX: usize = 19;
 
 const _: () = assert!(CASE_NAMES.len() == CPU_WATCHDOG_INDEX + 1);
@@ -228,7 +228,7 @@ async fn run(cli: &Cli) -> Result<()> {
             Selected::Quit => break,
             Selected::Lost => cases::lost::run(client, &link).await?,
             Selected::Reboot => cases::reboot::run(client, &link).await?,
-            Selected::AutoRecovery => cases::auto_recovery::run(client, &link).await?,
+            Selected::LostRecovery => cases::lost_recovery::run(client, &link).await?,
             Selected::CpuWatchdog => cases::cpu_watchdog::run(client, &link).await?,
         };
     }
@@ -331,7 +331,7 @@ async fn select(ctx: &Ctx<'_>) -> Selected {
         match i {
             LOST_INDEX => return Selected::Lost,
             REBOOT_INDEX => return Selected::Reboot,
-            AUTO_RECOVERY_INDEX => return Selected::AutoRecovery,
+            LOST_RECOVERY_INDEX => return Selected::LostRecovery,
             CPU_WATCHDOG_INDEX => return Selected::CpuWatchdog,
             PULSE_WIDTH_ENCODER_INDEX if ctx.mute => {
                 println!("  [SKIP] the case replaces the pulse width table that --mute zeroes");

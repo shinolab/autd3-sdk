@@ -16,8 +16,6 @@ async def main() -> None:
             max_inflight=DEVICE_QUEUE_FRAMES,
             max_resync_rounds=8,
             require_supported_firmware=False,
-            resynchronize_on_recovery=3,
-            release_failsafe_on_recovery=3,
             exec_lead=None,
         )
         # ANCHOR_END: config

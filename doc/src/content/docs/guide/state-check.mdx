@@ -37,21 +37,31 @@ import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 | `Lost`    | 返信が一定時間無い                                      |
 
 途中の 1 台が`Lost`すると, その機体より先の機体も全て `Lost` になる.
-既定では `Lost` からは自動で復帰しないので, `Client::open` で開き直す必要がある.
-
-## Lost からの自動復帰
-
-`UdpOption` の `recovery_interval` を指定すると, `Lost` のデバイスがある間その間隔でデバイスを探し, 応答が戻ったデバイスを自動で復帰させる.
-対象はケーブルの抜き差しなどで通信が途絶えただけのデバイスで, 電源を入れ直したデバイスは復帰しない (`Client::open` で開き直す). 復帰したデバイスの数は `BusStats` の `recoveries` で読める.
-
-復帰の際には以下の点に注意されたい.
-
-- 既定では, 復帰したデバイスが `Ready` になった後の最初の送信の前に, そのデバイスだけへ `Synchronize` を送り直す. `ClientConfig` の `resynchronize_on_recovery` を `None` にすると送らない.
-- 既定では復帰したデバイスへだけ `ReleaseFailsafe` を送る. `ClientConfig` の `release_failsafe_on_recovery` を `None` にすると送らない.
-- これらの送信が失敗すると, そのときの送信がエラーを返し, 次の送信でやり直す. 指定した回数 (既定 3 回) 失敗したら諦めて, 以後の送信はそのまま通す. この場合は必要に応じて `Synchronize` や `ReleaseFailsafe` を自分で送り直すこと.
+`Lost` のデバイスは自動では復帰しない ([Lost からの復帰](#lost-からの復帰) 参照).
 
 以下は, 一定間隔で `check` を呼び, 状態が変化したときだけ出力する例.
 
 <CodeTabs rust={excerpt(sample, "poll")} python={excerpt(pySample, "poll")} csharp={excerpt(csSample, "poll")} />
 
 `check` を呼ぶ頻度はユーザー次第である.
+
+## Lost からの復帰
+
+`Client::recover` を呼ぶと, `Lost` のデバイスを 1 回だけ探し, 応答が戻ったデバイスを復帰させる.
+復帰したデバイスがあれば `Reset` を送ってデバイスとの足並みを揃え直してから, 復帰したデバイスを返す.
+戻り値は復帰したデバイスの集合 `DeviceMask` である. `recovered[i]` でデバイス `i` が復帰したかを `bool` で返す.
+
+対象はケーブルの抜き差しなどで通信が途絶えただけのデバイスで, 電源を入れ直したデバイスは復帰しない (`Client::open` で開き直す).
+復帰したデバイスの延べ数は `BusStats` の `recoveries` で読める.
+
+以下は, `check` で `Lost` を見つけたら `recover` を呼び, 復帰したデバイスへ `Synchronize` を, 続いて `ReleaseFailsafe` を送る例.
+
+<CodeTabs rust={excerpt(sample, "recover")} python={excerpt(pySample, "recover")} csharp={excerpt(csSample, "recover")} />
+
+復帰の際には以下の点に注意されたい.
+
+- `recover` は `Synchronize` も `ReleaseFailsafe` も送らない. `Lost` の間はデバイスに何も届かないので, フェイルセーフ ([SetCpuConfig](/autd3-sdk/api/command/cpu-config/) 参照) を有効にしていると出力は止まっている可能性がある.
+  - 出力の位相を揃え直すには [`Synchronize`](/autd3-sdk/api/command/clear/#synchronize--nop) を送る
+  - 止まった出力を再開させるには [`ReleaseFailsafe`](/autd3-sdk/api/command/release-failsafe/) を送る. `ReleaseFailsafe` はフェイルセーフで止まっていないデバイスには何もしないので, 全デバイスへ送ってよい.
+- 復帰したデバイスが `Syncing` の場合は, `check` で `Ready` になるのを待ってから `Synchronize` を送る.
+- `recover` の間, 他の送信は待たされる. また, `Reset` の時点で返信待ちのフレームは `Timeout` で失敗する.

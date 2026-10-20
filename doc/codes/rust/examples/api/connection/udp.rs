@@ -16,7 +16,6 @@ async fn main() -> Result<()> {
     let heartbeat = Some(Duration::from_millis(10));
     let reply_timeout = Duration::from_millis(1);
     let lost_timeout = Duration::from_millis(100);
-    let recovery_interval = None;
     let response_timeout = Duration::from_millis(200);
     let enumeration_timeout = Duration::from_secs(10);
     let sync_timeout = Duration::from_secs(30);
@@ -29,7 +28,6 @@ async fn main() -> Result<()> {
         heartbeat,
         reply_timeout,
         lost_timeout,
-        recovery_interval,
         response_timeout,
         enumeration_timeout,
         sync_timeout,

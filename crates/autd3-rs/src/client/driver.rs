@@ -1,10 +1,11 @@
 use std::collections::VecDeque;
-use std::num::{NonZeroU32, NonZeroU64};
+use std::num::NonZeroU64;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use autd3_rs_core::BusStats;
+use futures_channel::oneshot;
 
 use crate::error::{Error, NetworkCause};
 use crate::link::LinkError;
@@ -48,33 +49,7 @@ impl Inflight {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) struct Restoring {
-    pub(crate) devices: u128,
-    failures: u32,
-}
-
-impl Restoring {
-    pub(crate) fn recovered(&mut self, devices: u128) {
-        self.devices |= devices;
-        self.failures = 0;
-    }
-
-    pub(crate) fn restored(&mut self, devices: u128) {
-        self.devices &= !devices;
-        self.failures = 0;
-    }
-
-    pub(crate) fn failed(&mut self, devices: u128, attempts: NonZeroU32) -> bool {
-        self.failures += 1;
-        if self.failures < attempts.get() {
-            return false;
-        }
-        self.devices &= !devices;
-        self.failures = 0;
-        true
-    }
-}
+pub(crate) type RecoverySender = oneshot::Sender<Result<u128, Error>>;
 
 pub(crate) struct SendFailure {
     pub(crate) error: Error,
@@ -108,9 +83,7 @@ pub(crate) struct Pending {
     pub(crate) entries: VecDeque<Inflight>,
     pub(crate) head_since: Instant,
     pub(crate) need_reset: bool,
-    pub(crate) resync: Restoring,
-    pub(crate) release_failsafe: Restoring,
-    pub(crate) recoveries: u64,
+    pub(crate) recovery: Option<RecoverySender>,
     pub(crate) config: ClientConfig,
     pub(crate) next_seq: Seq,
     pub(crate) failure: Option<NetworkCause>,
@@ -135,6 +108,14 @@ impl Pending {
             self.head_since = entry.sent_at;
         }
         self.entries.push_back(entry);
+    }
+
+    pub(crate) fn await_recovery(&mut self, tx: RecoverySender) -> Result<(), Error> {
+        if let Some(error) = self.closed_error() {
+            return Err(error);
+        }
+        self.recovery = Some(tx);
+        Ok(())
     }
 
     pub(crate) fn withdraw(&mut self, msg_id: u16) -> Option<Inflight> {
@@ -199,12 +180,6 @@ impl Pending {
     }
 
     pub(crate) fn reconfigure(&mut self, config: ClientConfig) {
-        if config.resynchronize_on_recovery.is_none() {
-            self.resync = Restoring::default();
-        }
-        if config.release_failsafe_on_recovery.is_none() {
-            self.release_failsafe = Restoring::default();
-        }
         self.config = config;
     }
 
@@ -231,9 +206,7 @@ impl Shared {
                 entries: VecDeque::new(),
                 head_since: Instant::now(),
                 need_reset: true,
-                resync: Restoring::default(),
-                release_failsafe: Restoring::default(),
-                recoveries: 0,
+                recovery: None,
                 config,
                 next_seq: Seq::ZERO,
                 failure: None,
@@ -342,15 +315,17 @@ impl Driver {
 
     fn finish(&mut self, outcome: Option<&NetworkCause>) {
         self.finished = true;
-        let entries = {
+        let (entries, recovery) = {
             let mut pending = self.session.shared.pending();
             pending.failure = outcome.cloned();
             pending.closed = true;
-            pending.take_all()
+            (pending.take_all(), pending.recovery.take())
         };
-        fail(entries, || {
-            outcome.cloned().map_or(Error::Closed, Error::Network)
-        });
+        let error = || outcome.cloned().map_or(Error::Closed, Error::Network);
+        if let Some(recovery) = recovery {
+            let _ = recovery.send(Err(error()));
+        }
+        fail(entries, error);
         self.transport.close();
         tracing::debug!("driver stopped");
     }
@@ -393,9 +368,10 @@ impl Driver {
 
     fn maintain(&mut self, now: Instant) -> Result<(), NetworkCause> {
         if let Port::Udp(pump) = &mut self.port {
+            if let Some(recovered) = pump.settle_recovery(now) {
+                self.session.recovered(recovered);
+            }
             self.maintenance_due = pump.maintain(now, true).map_err(NetworkCause::new)?;
-            let recovered = pump.take_recovered();
-            self.session.recovered(recovered);
         }
         Ok(())
     }
@@ -440,17 +416,12 @@ impl Session {
     }
 
     fn recovered(&mut self, recovered: u128) {
-        if recovered == 0 {
-            return;
-        }
         let mut pending = self.shared.pending();
-        pending.need_reset = true;
-        pending.recoveries += 1;
-        if pending.config.resynchronize_on_recovery.is_some() {
-            pending.resync.recovered(recovered);
+        if recovered != 0 {
+            pending.need_reset = true;
         }
-        if pending.config.release_failsafe_on_recovery.is_some() {
-            pending.release_failsafe.recovered(recovered);
+        if let Some(recovery) = pending.recovery.take() {
+            let _ = recovery.send(Ok(recovered));
         }
     }
 
@@ -641,78 +612,65 @@ mod tests {
     }
 
     #[test]
-    fn a_restoration_is_given_up_after_the_allowed_failures() {
-        let attempts = NonZeroU32::new(3).unwrap();
-        let mut restoring = Restoring::default();
-        restoring.recovered(0b110);
-        assert!(!restoring.failed(0b010, attempts));
-        assert!(!restoring.failed(0b010, attempts));
-        assert_eq!(restoring.devices, 0b110);
-        assert!(restoring.failed(0b010, attempts));
-        assert_eq!(restoring.devices, 0b100);
-        assert!(!restoring.failed(0b100, attempts));
-    }
-
-    #[test]
-    fn a_success_or_a_new_recovery_restarts_the_failure_count() {
-        let attempts = NonZeroU32::new(2).unwrap();
-        let mut restoring = Restoring::default();
-        restoring.recovered(0b11);
-        assert!(!restoring.failed(0b11, attempts));
-        restoring.restored(0b01);
-        assert_eq!(restoring.devices, 0b10);
-        assert!(!restoring.failed(0b10, attempts));
-        restoring.recovered(0b100);
-        assert!(!restoring.failed(0b110, attempts));
-        assert!(restoring.failed(0b110, attempts));
-        assert_eq!(restoring.devices, 0);
-    }
-
-    #[test]
-    fn a_single_allowed_attempt_gives_up_at_the_first_failure() {
-        let mut restoring = Restoring::default();
-        restoring.recovered(0b1);
-        assert!(restoring.failed(0b1, NonZeroU32::MIN));
-        assert_eq!(restoring.devices, 0);
-    }
-
-    #[test]
-    fn disabling_a_restoration_drops_the_devices_waiting_for_it() {
+    fn a_recovery_waits_until_the_driver_reports_it() {
         let shared = pending();
-        let mut pending = shared.pending();
-        pending.resync.recovered(0b01);
-        pending.release_failsafe.recovered(0b10);
+        let (tx, mut rx) = oneshot::channel();
+        shared.pending().await_recovery(tx).unwrap();
+        assert!(rx.try_recv().unwrap().is_none());
 
-        pending.reconfigure(ClientConfig {
-            resynchronize_on_recovery: None,
-            ..ClientConfig::default()
-        });
-        assert_eq!(pending.resync.devices, 0);
-        assert_eq!(pending.release_failsafe.devices, 0b10);
-        assert_eq!(pending.config.resynchronize_on_recovery, None);
+        let mut session = Session {
+            shared: Arc::clone(&shared),
+            stats: BusStats::default(),
+        };
+        shared.pending().need_reset = false;
+        session.recovered(0b10);
 
-        pending.reconfigure(ClientConfig {
-            release_failsafe_on_recovery: None,
-            ..ClientConfig::default()
-        });
-        assert_eq!(pending.release_failsafe.devices, 0);
+        assert_eq!(rx.try_recv().unwrap().unwrap().unwrap(), 0b10);
+        assert!(shared.pending().need_reset);
     }
 
     #[test]
-    fn changing_only_the_attempts_keeps_the_devices_waiting() {
+    fn a_recovery_bringing_nothing_back_needs_no_reset() {
         let shared = pending();
-        let mut pending = shared.pending();
-        pending.resync.recovered(0b01);
-        pending.release_failsafe.recovered(0b10);
+        let (tx, mut rx) = oneshot::channel();
+        shared.pending().await_recovery(tx).unwrap();
+        shared.pending().need_reset = false;
 
-        pending.reconfigure(ClientConfig {
-            resynchronize_on_recovery: NonZeroU32::new(1),
-            release_failsafe_on_recovery: NonZeroU32::new(5),
-            ..ClientConfig::default()
-        });
+        Session {
+            shared: Arc::clone(&shared),
+            stats: BusStats::default(),
+        }
+        .recovered(0);
 
-        assert_eq!(pending.resync.devices, 0b01);
-        assert_eq!(pending.release_failsafe.devices, 0b10);
+        assert_eq!(rx.try_recv().unwrap().unwrap().unwrap(), 0);
+        assert!(!shared.pending().need_reset);
+    }
+
+    #[test]
+    fn a_recovery_reported_with_nobody_waiting_still_needs_a_reset() {
+        let shared = pending();
+        shared.pending().need_reset = false;
+
+        Session {
+            shared: Arc::clone(&shared),
+            stats: BusStats::default(),
+        }
+        .recovered(0b1);
+
+        assert!(shared.pending().need_reset);
+        assert!(shared.pending().recovery.is_none());
+    }
+
+    #[test]
+    fn a_recovery_is_refused_once_closed() {
+        let shared = pending();
+        shared.pending().closed = true;
+        let (tx, _rx) = oneshot::channel();
+        assert!(matches!(
+            shared.pending().await_recovery(tx),
+            Err(Error::Closed)
+        ));
+        assert!(shared.pending().recovery.is_none());
     }
 
     #[test]

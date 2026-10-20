@@ -15,7 +15,7 @@ pub use exec_at::ExecAt;
 use std::sync::{Mutex, PoisonError};
 use std::thread::JoinHandle;
 
-use autd3_rs_core::BusStats;
+use autd3_rs_core::{BusStats, DeviceMask};
 
 use crate::commands::Command;
 use crate::datagram::Frame;
@@ -79,6 +79,10 @@ impl Client {
     #[must_use]
     pub fn state_checker(&self) -> StateChecker {
         self.controller.state_checker()
+    }
+
+    pub async fn recover(&self) -> Result<DeviceMask, Error> {
+        self.controller.recover().await
     }
 
     pub fn device_time_now(&self) -> Result<SysTime, Error> {

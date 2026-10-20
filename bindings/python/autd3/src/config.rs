@@ -19,8 +19,6 @@ impl ClientConfig {
         max_inflight = CoreClientConfig::default().max_inflight.get(),
         max_resync_rounds = CoreClientConfig::default().max_resync_rounds.get(),
         require_supported_firmware = CoreClientConfig::default().require_supported_firmware,
-        resynchronize_on_recovery = CoreClientConfig::default().resynchronize_on_recovery,
-        release_failsafe_on_recovery = CoreClientConfig::default().release_failsafe_on_recovery,
         exec_lead = CoreClientConfig::default().exec_lead,
     ))]
     fn new(
@@ -28,8 +26,6 @@ impl ClientConfig {
         max_inflight: usize,
         max_resync_rounds: u32,
         require_supported_firmware: bool,
-        resynchronize_on_recovery: Option<NonZeroU32>,
-        release_failsafe_on_recovery: Option<NonZeroU32>,
         #[pyo3(from_py_with = crate::udp::none_or_duration)] exec_lead: Option<Duration>,
     ) -> PyResult<Self> {
         Ok(Self(CoreClientConfig {
@@ -39,8 +35,6 @@ impl ClientConfig {
             max_resync_rounds: NonZeroU32::new(max_resync_rounds)
                 .ok_or_else(|| PyValueError::new_err("max_resync_rounds must be >= 1"))?,
             require_supported_firmware,
-            resynchronize_on_recovery,
-            release_failsafe_on_recovery,
             exec_lead,
         }))
     }
@@ -63,16 +57,6 @@ impl ClientConfig {
     #[getter]
     fn require_supported_firmware(&self) -> bool {
         self.0.require_supported_firmware
-    }
-
-    #[getter]
-    fn resynchronize_on_recovery(&self) -> Option<NonZeroU32> {
-        self.0.resynchronize_on_recovery
-    }
-
-    #[getter]
-    fn release_failsafe_on_recovery(&self) -> Option<NonZeroU32> {
-        self.0.release_failsafe_on_recovery
     }
 
     #[getter]

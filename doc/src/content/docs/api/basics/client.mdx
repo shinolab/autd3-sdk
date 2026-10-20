@@ -60,6 +60,7 @@ import csServerSample from "@codes/csharp/examples/api/connection/server-link.cs
 | `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | フレームを 1 つ送る                                        |
 | `send_frame_at(frame, exec)` | ✓  | `Result<ResponseFuture, Error>`       | 処理時刻を指定してフレームを 1 つ送る ([処理時刻の上書き](#処理時刻の上書き) 参照) |
 | `state_checker()`         | —     | `StateChecker`                         | `StateChecker`を取得. 詳細は[状態監視](/autd3-sdk/guide/state-check/)を参照. |
+| `recover()`               | ✓     | `Result<DeviceMask, Error>`           | `Lost` のデバイスを探し, 応答が戻ったデバイスを復帰させる. 詳細は[状態監視](/autd3-sdk/guide/state-check/#lost-からの復帰)を参照. |
 | `close()`                 | ✓     | `Result<(), Error>`                   | 停止して接続を閉じる                                       |
 
 `close()` は, 振幅を一気に落としてノイズが出るのを避けるため, まず [Silencer](/autd3-sdk/api/command/silencer/) を設定してから全振動子の振幅を 0 にし, その後に接続を閉じる.
@@ -130,7 +131,7 @@ CPU の診断カウンタ. `Clear` で `boot_failure` 以外は 0 に戻る (`Cl
 | `resets()`                   | `u64` | 送った `Reset` の数                          |
 | `heartbeats()`               | `u64` | 送った Heartbeat の数                        |
 | `missed_heartbeat_replies()` | `u64` | `reply_timeout` までに返らなかった Heartbeat の返信の数 |
-| `recoveries()`               | `u64` | `Lost` から自動復帰したデバイスの数          |
+| `recoveries()`               | `u64` | `recover()` で `Lost` から復帰したデバイスの数 |
 | `acked_frames()`             | `u64` | 返信を受けたフレーム数                       |
 | `worst_ack_latency_ns()`     | `u64` | 送信から返信までの最大時間 [ns]              |
 | `mean_ack_latency_ns()`      | `u64` | 送信から返信までの平均時間 [ns]              |
@@ -145,14 +146,12 @@ CPU の診断カウンタ. `Clear` で `boot_failure` 以外は 0 に戻る (`Cl
 | `max_inflight`         | `NonZeroUsize`        | `7`                 | 応答を待たずに送ってよいフレーム数 (stream送信用)           |
 | `max_resync_rounds`    | `NonZeroU32`          | `8`                 | デバイスとの足並みを揃え直す試行の回数上限                 |
 | `require_supported_firmware` | `bool`          | `false`             | `true`なら接続時にファームウェアがサポートされているか検査する |
-| `resynchronize_on_recovery` | `Option<NonZeroU32>` | `Some(3)`       | `Lost` から自動復帰したデバイスへ, 次の送信の前に `Synchronize` を送り直す. 値は試行回数の上限で, `None` なら送らない ([状態監視](/autd3-sdk/guide/state-check/) 参照) |
-| `release_failsafe_on_recovery` | `Option<NonZeroU32>` | `Some(3)`    | `Lost` から自動復帰したデバイスへ, 次の送信の前に `ReleaseFailsafe` を送り, フェイルセーフで止まった出力を再開させる. 値は試行回数の上限で, `None` なら送らない ([状態監視](/autd3-sdk/guide/state-check/) 参照) |
 | `exec_lead`           | `Option<Duration>`  | `None` | 送信したフレームを全デバイスが同じ時刻に処理し始めるようにする (後述). `None` で各デバイスが届いた順にすぐ処理する |
 
 `max_inflight` は `MAX_INFLIGHT (7)` (Python: `autd3.params.MAX_INFLIGHT`, C#: `Params.MaxInflight`) を超えるとエラーになる.
 既定値も `MAX_INFLIGHT` で, これは各デバイスの受信キューのフレーム数 `DEVICE_QUEUE_FRAMES` (Python: `autd3.params.DEVICE_QUEUE_FRAMES`, C#: `Params.DeviceQueueFrames`) に等しい.
 `ack_timeout` を 0 にすると, `Client` を開くときにエラー (`InvalidConfig`. Python の `Autd3Error.code` は `INVALID_ARGUMENT`, C# の `Autd3Exception.Code` は `InvalidArgument`) になる.
-Python の既定値は Rust と同じで, `None` を渡せるのは型が `Option` の `resynchronize_on_recovery` / `release_failsafe_on_recovery` だけである.
+Python の既定値は Rust と同じで, `None` を渡せるのは型が `Option` の `exec_lead` だけである.
 
 再送処理は行われない. 失敗したコマンドはユーザが送り直す必要がある.
 

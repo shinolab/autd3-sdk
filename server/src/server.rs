@@ -196,6 +196,15 @@ fn relay(hub: &Hub, session: &Session, request: Request<'_>) {
                 bus.admit_recovered();
             }
         }
+        Request::Recover => match hub.bus_of(session) {
+            Some(bus) => {
+                if let Err(e) = bus.probe() {
+                    tracing::debug!(peer = %session.peer, "probing for the lost devices failed: {e}");
+                    session.notify(&Notice::Recovered(0));
+                }
+            }
+            None => session.notify(&Notice::Recovered(0)),
+        },
         Request::Wake => session.notify(&Notice::Wake),
         Request::Hello { .. } => {
             tracing::debug!(peer = %session.peer, "ignoring a second hello");
@@ -290,13 +299,13 @@ fn pump(hub: &Hub, bus: &Arc<UdpBus>, stop: &AtomicBool) -> Result<(), UdpError>
             hub.count(|relayed| relayed.replies += 1);
         }
         let now = Instant::now();
+        let recovered = pump.settle_recovery(now);
         let due = pump.maintain(now, session.is_some())?;
-        let recovered = pump.take_recovered();
         if let Some(session) = &session {
             if observed_time && let Some(time) = clock.now() {
                 session.notify(&Notice::Clock(time.sys_time()));
             }
-            if recovered != 0 {
+            if let Some(recovered) = recovered {
                 session.notify(&Notice::Recovered(recovered));
             }
             if let Ok(status) = checker.check() {

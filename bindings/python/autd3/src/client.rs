@@ -9,9 +9,10 @@ use autd3_python_capsule::{capsule_of, client_pyerr, client_pyerr_gil, geometry_
 use autd3_rs::Geometry;
 use autd3_rs::udp::StateChecker as CoreStateChecker;
 
-use pyo3::exceptions::{PyIndexError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyOverflowError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::sync::MutexExt;
+use pyo3::types::{PyIterator, PyList};
 
 #[pyclass(
     name = "DeviceState",
@@ -139,6 +140,75 @@ impl BusStats {
             self.0.worst_ack_latency_ns(),
             self.0.mean_ack_latency_ns()
         )
+    }
+}
+
+#[pyclass(
+    name = "DeviceMask",
+    module = "autd3",
+    eq,
+    hash,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct DeviceMask(autd3_rs::DeviceMask);
+
+fn device_index(index: &Bound<'_, PyAny>) -> PyResult<Option<usize>> {
+    match index.extract::<usize>() {
+        Ok(index) => Ok(Some(index)),
+        Err(e) if e.is_instance_of::<PyOverflowError>(index.py()) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+#[pymethods]
+impl DeviceMask {
+    #[staticmethod]
+    fn from_devices(devices: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let mut indices = Vec::new();
+        for device in devices.try_iter()? {
+            if let Some(index) = device_index(&device?)? {
+                indices.push(index);
+            }
+        }
+        Ok(Self(indices.into_iter().collect()))
+    }
+
+    #[getter]
+    fn bits(&self) -> u128 {
+        self.0.bits()
+    }
+
+    fn __getitem__(&self, index: &Bound<'_, PyAny>) -> PyResult<bool> {
+        Ok(device_index(index)?.is_some_and(|index| self.0[index]))
+    }
+
+    fn __contains__(&self, index: &Bound<'_, PyAny>) -> bool {
+        device_index(index)
+            .ok()
+            .flatten()
+            .is_some_and(|index| self.0.contains(index))
+    }
+
+    fn __len__(&self) -> usize {
+        self.0.len()
+    }
+
+    fn __bool__(&self) -> bool {
+        !self.0.is_empty()
+    }
+
+    fn __iter__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyIterator>> {
+        PyList::new(py, self.0.iter())?.try_iter()
+    }
+
+    fn __or__(&self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("DeviceMask({:?})", self.0.iter().collect::<Vec<_>>())
     }
 }
 
@@ -500,6 +570,17 @@ impl Client {
         future_into_py(py, async move {
             let telemetry = client.read_telemetry().await.map_err(client_pyerr_gil)?;
             Ok(telemetry.into_iter().map(Telemetry).collect::<Vec<_>>())
+        })
+    }
+
+    fn recover<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let client = Arc::clone(&self.inner);
+        future_into_py(py, async move {
+            client
+                .recover()
+                .await
+                .map(DeviceMask)
+                .map_err(client_pyerr_gil)
         })
     }
 

@@ -65,6 +65,21 @@ impl Transport {
         }
     }
 
+    pub(crate) fn probe(&self) -> Result<(), Error> {
+        match self {
+            Transport::Udp(bus) => {
+                bus.probe()?;
+                if !bus.wake() {
+                    tracing::debug!(
+                        "could not wake the driver; the recovery settles at its next deadline"
+                    );
+                }
+                Ok(())
+            }
+            Transport::Server(conn) => conn.recover().map_err(|e| LinkError::from(e).into()),
+        }
+    }
+
     pub(crate) fn admit_recovered(&self) {
         match self {
             Transport::Udp(bus) => bus.admit_recovered(),

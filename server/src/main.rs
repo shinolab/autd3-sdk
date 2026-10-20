@@ -16,7 +16,7 @@ use clap::Parser;
     about,
     long_about = "Keep the AUTD3 devices enumerated and synchronized, and relay a client on this host to them.\n\n\
         A client connects with `Link::Server(ServerLink { port, .. })` over TCP on the loopback address. The \
-        server owns the UDP options (heartbeat, lost timeout, recovery, send rate limit), so reopening a \
+        server owns the UDP options (heartbeat, lost timeout, send rate limit), so reopening a \
         client skips the enumeration and the PTP lock wait of the devices.\n\n\
         The server sends heartbeats only while a client is attached and never sends a frame of its own: \
         while no client is attached the devices stop their output through their failsafe.\n\n\
@@ -48,8 +48,6 @@ struct Cli {
     reply_timeout: Option<Duration>,
     #[arg(long, value_parser = humantime::parse_duration, help = "Silence after which a device is lost (default: 100ms)")]
     lost_timeout: Option<Duration>,
-    #[arg(long, value_parser = humantime::parse_duration, help = "Probe the lost devices at this interval and recover them (default: no recovery)")]
-    recovery_interval: Option<Duration>,
     #[arg(long, value_parser = humantime::parse_duration, help = "Wait for the replies of the management messages (default: 200ms)")]
     response_timeout: Option<Duration>,
     #[arg(long, value_parser = humantime::parse_duration, help = "Give up the enumeration when the device count is not reached within this time (default: 10s)")]
@@ -97,7 +95,6 @@ impl Cli {
                 },
                 reply_timeout: self.reply_timeout.unwrap_or(defaults.reply_timeout),
                 lost_timeout: self.lost_timeout.unwrap_or(defaults.lost_timeout),
-                recovery_interval: self.recovery_interval,
                 response_timeout: self.response_timeout.unwrap_or(defaults.response_timeout),
                 enumeration_timeout: self
                     .enumeration_timeout
@@ -173,8 +170,6 @@ mod tests {
             "2ms",
             "--lost-timeout",
             "150ms",
-            "--recovery-interval",
-            "100ms",
             "--send-rate-limit",
             "95",
             "--response-timeout",
@@ -197,7 +192,6 @@ mod tests {
                     heartbeat: Some(Duration::from_millis(20)),
                     reply_timeout: Duration::from_millis(2),
                     lost_timeout: Duration::from_millis(150),
-                    recovery_interval: Some(Duration::from_millis(100)),
                     response_timeout: Duration::from_millis(300),
                     enumeration_timeout: Duration::from_secs(20),
                     sync_timeout: Duration::from_secs(60),
