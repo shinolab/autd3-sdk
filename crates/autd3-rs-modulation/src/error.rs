@@ -4,17 +4,17 @@ use thiserror::Error;
 #[derive(Clone, Copy, Debug, PartialEq, Error)]
 #[non_exhaustive]
 pub enum ModulationError {
-    #[error("sine modulation value is out of range [0, 255]")]
-    SineValueOutOfRange,
+    #[error("modulation value is out of range [0, 255]")]
+    ValueOutOfRange,
+
+    #[error("modulation value must not be NaN")]
+    ValueNaN,
 
     #[error("square duty {duty} must be in range 0..=1")]
     DutyOutOfRange { duty: f32 },
 
     #[error("fourier components must not be empty")]
     FourierComponentsEmpty,
-
-    #[error("fourier modulation value is out of range [0, 255]")]
-    FourierValueOutOfRange,
 
     #[error(
         "the common period of the fourier components exceeds the modulation buffer ({max} samples)"

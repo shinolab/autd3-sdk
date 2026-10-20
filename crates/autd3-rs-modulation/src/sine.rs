@@ -56,10 +56,7 @@ pub fn sine<S: Into<SamplingMode>>(
     config: SamplingConfig,
     dst: &mut Vec<u8>,
 ) -> Result<(), ModulationError> {
-    if quantize(sine_samples(freq, *option, config)?, option.clamp, dst) {
-        return Err(ModulationError::SineValueOutOfRange);
-    }
-    Ok(())
+    quantize(sine_samples(freq, *option, config)?, option.clamp, dst)
 }
 
 #[cfg(test)]
@@ -186,13 +183,27 @@ mod tests {
         };
         assert_eq!(
             sine(200 * Hz, &opt, SamplingConfig::FREQ_4K, &mut buf),
-            Err(ModulationError::SineValueOutOfRange)
+            Err(ModulationError::ValueOutOfRange)
         );
         assert_eq!(
             buf.as_slice(),
             &[
                 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 254, 215, 180, 151, 133, 127, 133, 151, 180, 215
             ]
+        );
+    }
+
+    #[test]
+    fn sine_nan_phase_is_reported() {
+        let mut buf = Vec::new();
+        let opt = SineOption {
+            phase: Angle::from_rad(f32::NAN),
+            clamp: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            sine(200 * Hz, &opt, SamplingConfig::FREQ_4K, &mut buf),
+            Err(ModulationError::ValueNaN)
         );
     }
 }

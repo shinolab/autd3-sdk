@@ -58,10 +58,7 @@ pub fn fourier(
     }
 
     let samples = acc.into_iter().map(|v| v * scale + offset);
-    if quantize(samples, option.clamp, dst) {
-        return Err(ModulationError::FourierValueOutOfRange);
-    }
-    Ok(())
+    quantize(samples, option.clamp, dst)
 }
 
 #[cfg(test)]
@@ -352,12 +349,31 @@ mod tests {
             SamplingConfig::FREQ_4K,
             &mut buf,
         );
-        assert_eq!(result, Err(ModulationError::FourierValueOutOfRange));
+        assert_eq!(result, Err(ModulationError::ValueOutOfRange));
         assert_eq!(
             buf.as_slice(),
             &[
                 192, 251, 0, 0, 0, 0, 0, 0, 0, 251, 191, 132, 79, 37, 10, 0, 10, 37, 79, 132
             ]
         );
+    }
+
+    #[test]
+    fn fourier_nan_scale_factor_is_reported() {
+        let mut buf = Vec::new();
+        let result = fourier(
+            &[SineComponent {
+                freq: (200 * Hz).into(),
+                option: SineOption::default(),
+            }],
+            &FourierOption {
+                scale_factor: Some(f32::NAN),
+                clamp: true,
+                offset: 0,
+            },
+            SamplingConfig::FREQ_4K,
+            &mut buf,
+        );
+        assert_eq!(result, Err(ModulationError::ValueNaN));
     }
 }
