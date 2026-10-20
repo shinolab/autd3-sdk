@@ -43,7 +43,6 @@ async fn main() -> Result<()> {
     stop_and_wait(&client, &geometry, &targets, wavelength).await?;
     streaming(&client, &geometry, &targets, wavelength).await?;
 
-    client.silent_stop().await?;
     client.close().await?;
     Ok(())
 }

@@ -38,7 +38,6 @@ internal static class Sample
         var done = await client.SendStreamingAsync(new Nop());
         var resp = await await client.SendFrameAsync(frame);
 
-        await client.SilentStopAsync();
         await client.CloseAsync();
         // ANCHOR_END: api
 

@@ -70,7 +70,5 @@ internal static class Program
             stop.TrySetResult();
         };
         await stop.Task;
-
-        await client.SilentStopAsync();
     }
 }

@@ -44,7 +44,6 @@ namespace AUTD3.Samples
         {
             if (_client != null)
             {
-                await _client.SilentStopAsync();
                 await _client.CloseAsync();
                 _client.Dispose();
                 _client = null;

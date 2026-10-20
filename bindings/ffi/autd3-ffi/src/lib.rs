@@ -2727,20 +2727,6 @@ pub unsafe extern "C" fn autd3_checker_free(checker: *mut CheckerHandle) {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_silent_stop(
-    client: *const ClientHandle,
-    cb: CompletionCallback,
-    user_data: *mut c_void,
-) {
-    let Some((client, ctx)) = (unsafe { client_ctx(client, cb, user_data) }) else {
-        return;
-    };
-    spawn_completion(ctx, async move { client.silent_stop().await }, |()| {
-        std::ptr::null_mut()
-    });
-}
-
-#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_client_close(
     client: *const ClientHandle,
     cb: CompletionCallback,

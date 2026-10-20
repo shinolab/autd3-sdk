@@ -63,26 +63,6 @@ async fn close_silences_every_device() {
 
 #[tokio::test]
 #[ignore = "depends on real time"]
-async fn silent_stop_silences_the_devices_and_keeps_the_client_open() {
-    let (emulator, client) = open(2).await;
-    emit(&client).await;
-
-    client.silent_stop().await.unwrap();
-
-    for device in 0..2 {
-        assert!(
-            intensities(&emulator, device)
-                .iter()
-                .all(|&i| i == Intensity::MIN)
-        );
-    }
-    client.send(Nop).await.unwrap();
-    assert_eq!(client.bus_stats().resets(), 1);
-    client.close().await.unwrap();
-}
-
-#[tokio::test]
-#[ignore = "depends on real time"]
 async fn everything_fails_with_closed_after_a_close() {
     let (_emulator, client) = open(1).await;
     let checker = client.state_checker();
@@ -97,7 +77,6 @@ async fn everything_fails_with_closed_after_a_close() {
     ));
     let stream = client.send_streaming(Nop).await.unwrap();
     assert!(matches!(stream.await, Err(Error::Closed)));
-    assert!(matches!(client.silent_stop().await, Err(Error::Closed)));
     assert!(matches!(
         client.read_firmware_version().await,
         Err(Error::Closed)

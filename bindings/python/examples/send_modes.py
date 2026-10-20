@@ -53,8 +53,6 @@ async def main() -> None:
         elapsed = await run_streaming(client, targets, wavelength, autd3.MAX_INFLIGHT)
         report("streaming", elapsed)
 
-        await client.silent_stop()
-
 
 async def run_stop_and_wait(
     client: autd3.Client,

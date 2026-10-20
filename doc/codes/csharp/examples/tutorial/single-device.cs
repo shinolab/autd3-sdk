@@ -61,8 +61,6 @@ try
 catch (OperationCanceledException)
 {
 }
-
-await client.SilentStopAsync();
         // HIDE
     }
 }

@@ -80,7 +80,6 @@ async fn main() -> Result<()> {
     println!("left half -> two GSPAT foci, right half -> single focus — press Ctrl+C to stop");
     tokio::signal::ctrl_c().await?;
 
-    client.silent_stop().await?;
     client.close().await?;
     Ok(())
 }

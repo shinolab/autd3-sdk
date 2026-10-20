@@ -40,7 +40,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tokio::signal::ctrl_c().await?;
 
-    client.silent_stop().await?;
     client.close().await?;
 
     Ok(())

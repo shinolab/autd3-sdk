@@ -55,7 +55,6 @@ async fn main() -> Result<()> {
     println!("running a 1 Hz circular pattern STM — press Ctrl+C to stop");
     tokio::signal::ctrl_c().await?;
 
-    client.silent_stop().await?;
     client.close().await?;
     Ok(())
 }

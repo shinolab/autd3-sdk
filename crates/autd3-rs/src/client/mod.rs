@@ -120,10 +120,6 @@ impl Client {
         self.controller.send_frame_at(frame, exec).await
     }
 
-    pub async fn silent_stop(&self) -> Result<(), Error> {
-        self.controller.silent_stop().await
-    }
-
     pub async fn read_firmware_version(&self) -> Result<Vec<FirmwareVersion>, Error> {
         self.controller.read_firmware_version().await
     }

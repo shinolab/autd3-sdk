@@ -286,6 +286,6 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     }
     .await;
     ctx.send(Clear).await?;
-    ctx.client.silent_stop().await?;
+    ctx.stop_output().await?;
     outcome
 }

@@ -45,7 +45,6 @@ async fn main() -> Result<()> {
     let elapsed = run_streaming(&client, &targets, wavelength, MAX_INFLIGHT).await?;
     report("streaming", elapsed);
 
-    client.silent_stop().await?;
     client.close().await?;
 
     Ok(())

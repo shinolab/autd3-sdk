@@ -83,7 +83,5 @@ internal static class Program
             (await pending.Dequeue()).Check();
         }
         Report("streaming", sw.Elapsed.TotalSeconds);
-
-        await client.SilentStopAsync();
     }
 }

@@ -380,9 +380,6 @@ namespace AUTD3
         internal static extern int autd3_firmware_version_supported_series(out byte major, out byte minor);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_client_silent_stop(ClientHandle client, CompletionCallback cb, IntPtr userData);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_client_close(ClientHandle client, CompletionCallback cb, IntPtr userData);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
