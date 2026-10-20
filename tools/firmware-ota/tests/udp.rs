@@ -28,12 +28,12 @@ fn bus(emulator: &UdpEmulator) -> UdpBus {
 }
 
 fn open(emulator: &UdpEmulator) -> Driver<UdpLink> {
-    Driver::open(UdpLink::from(bus(emulator))).unwrap()
+    Driver::new(UdpLink::from(bus(emulator)))
 }
 
 #[test]
 #[ignore = "depends on real time"]
-fn the_handshake_and_the_reads_go_through_the_udp_bus() {
+fn the_reads_go_through_the_udp_bus() {
     let emulator = UdpEmulator::spawn(2).unwrap();
     let mut driver = open(&emulator);
 
@@ -52,61 +52,40 @@ fn the_handshake_and_the_reads_go_through_the_udp_bus() {
 
 #[test]
 #[ignore = "depends on real time"]
-fn a_lost_frame_is_retransmitted() {
+fn a_lost_frame_fails_the_request_without_sending_it_again() {
     let emulator = UdpEmulator::spawn(2).unwrap();
     let mut driver = open(&emulator);
 
     emulator.drop_next_frames(1, 1);
 
-    assert_eq!(driver.read_firmware_info().unwrap().len(), 2);
+    assert!(matches!(
+        driver.read_firmware_info(),
+        Err(DriverError::Timeout {
+            device: 1,
+            cmd: Cmd::ReadFirmwareInfo,
+            ..
+        })
+    ));
     assert_eq!(driver.read_running_image().unwrap(), [CONFIRMED; 2]);
 }
 
 #[test]
 #[ignore = "depends on real time"]
-fn a_lost_reply_is_recovered() {
+fn a_lost_reply_fails_the_request_although_the_device_ran_it() {
     let emulator = UdpEmulator::spawn(2).unwrap();
     let mut driver = open(&emulator);
 
     emulator.drop_next_replies(0, 1);
-    driver.confirm().unwrap();
+    assert!(matches!(
+        driver.confirm(),
+        Err(DriverError::Timeout {
+            device: 0,
+            cmd: Cmd::UpdateConfirm,
+            ..
+        })
+    ));
 
     assert_eq!(driver.read_running_image().unwrap(), [CONFIRMED; 2]);
-}
-
-#[test]
-#[ignore = "depends on real time"]
-fn a_lost_reset_reply_is_recovered_when_the_lost_timeout_outlasts_the_retransmission() {
-    let emulator = UdpEmulator::spawn(2).unwrap();
-    let option = TransportOption {
-        iface: emulator.interface(),
-        lost_timeout: Duration::from_secs(1),
-        recovery_reply_timeout: Duration::from_millis(50),
-        control_request_timeout: Duration::from_millis(50),
-        enumeration_timeout: Duration::from_secs(1),
-        sync_timeout: Duration::from_secs(5),
-        ..TransportOption::default()
-    };
-    let bus = bus_with(&emulator, &option);
-
-    emulator.drop_next_replies(1, 1);
-    let mut driver = Driver::open(UdpLink::from(bus)).unwrap();
-
-    assert_eq!(driver.read_firmware_info().unwrap().len(), 2);
-}
-
-#[test]
-#[ignore = "depends on real time"]
-fn a_handshake_nobody_answers_is_reported_as_an_unconfirmed_reset() {
-    let emulator = UdpEmulator::spawn(2).unwrap();
-    let bus = bus(&emulator);
-
-    emulator.set_muted(1, true);
-
-    assert!(matches!(
-        Driver::open(UdpLink::from(bus)),
-        Err(DriverError::ResetUnconfirmed)
-    ));
 }
 
 #[test]
@@ -136,7 +115,7 @@ fn a_closed_bus_fails_the_next_request_with_a_network_error() {
     bus.close().unwrap();
 
     assert!(matches!(
-        Driver::open(UdpLink::from(bus)),
+        Driver::new(UdpLink::from(bus)).read_firmware_info(),
         Err(DriverError::Network(_))
     ));
 }

@@ -6,8 +6,8 @@ use autd3_cpu_wire::fpga_update::FpgaBootImage;
 use autd3_cpu_wire::layout::UPDATE_CHUNK_MAX_DATA_LEN;
 use autd3_cpu_wire::payload::{FirmwareInfo, UpdateBeginPayload, UpdateChunkPayload};
 use autd3_cpu_wire::update::RunningImage;
-use autd3_rs::protocol::{Cmd, FrameHeader, PAYLOAD_BYTES, Seq};
-use autd3_rs::{Reply, UdpBus, UdpError};
+use autd3_rs::protocol::{Cmd, FrameHeader, PAYLOAD_BYTES};
+use autd3_rs::{UdpBus, UdpError};
 use zerocopy::little_endian::U32;
 use zerocopy::{FromBytes, Immutable, IntoBytes};
 
@@ -16,8 +16,6 @@ use crate::image::CpuFirmwareImage;
 
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(1);
 pub const DEFAULT_HEARTBEAT: Duration = Duration::from_millis(10);
-const RETRANSMIT_INTERVAL: Duration = Duration::from_millis(100);
-const RESET_RETRANSMIT_INTERVAL: Duration = Duration::from_millis(20);
 const UPDATE_BEGIN_TIMEOUT: Duration = Duration::from_secs(30);
 const UPDATE_CHUNK_TIMEOUT: Duration = Duration::from_secs(4);
 const UPDATE_COMMIT_TIMEOUT: Duration = Duration::from_secs(30);
@@ -51,8 +49,6 @@ pub enum DriverError {
         "device {device} did not reconfigure after activation (or an earlier attempt failed since power-on); the written image boots at the next power cycle"
     )]
     FpgaReconfigFailed { device: usize },
-    #[error("the devices did not acknowledge Reset")]
-    ResetUnconfirmed,
     #[error(
         "device {device} runs CPU firmware {}.{}.{}, but the update needs {}.{}.{} or newer; flash it once via J-Link",
         found[0], found[1], found[2], required[0], required[1], required[2]
@@ -81,8 +77,7 @@ fn timeout_hint(cmd: Cmd) -> &'static str {
         Cmd::Reboot => {
             "the devices that received the request are resetting and come back unassigned; rerun `--reboot-only` to reset the rest"
         }
-        Cmd::Reset
-        | Cmd::Synchronize
+        Cmd::Synchronize
         | Cmd::Clear
         | Cmd::Nop
         | Cmd::SetCpuConfig
@@ -218,11 +213,11 @@ impl Frame {
     }
 
     #[must_use]
-    pub fn bytes(&self, seq: Seq) -> Vec<u8> {
+    pub fn bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(size_of::<FrameHeader>() + self.payload_len);
         bytes.extend_from_slice(
             FrameHeader {
-                seq: seq.get(),
+                reserved: 0,
                 cmd: self.cmd.as_u8(),
                 exec_at: 0.into(),
             }
@@ -240,55 +235,13 @@ pub trait Exchange {
 
     fn num_devices(&self) -> usize;
 
-    fn reset(&mut self, timeout: Duration) -> Result<bool, Self::Error>;
-
-    fn exchange(
-        &mut self,
-        seq: Seq,
-        frame: &Frame,
-        timeout: Duration,
-        retransmit: Duration,
-    ) -> Result<Replies, Self::Error>;
+    fn exchange(&mut self, frame: &Frame, timeout: Duration) -> Result<Replies, Self::Error>;
 
     fn idle(&mut self, duration: Duration) -> Result<(), Self::Error>;
 
     fn close(&mut self) -> Result<(), Self::Error> {
         Ok(())
     }
-}
-
-fn not_before(msg_id: u16, first: u16) -> bool {
-    msg_id.wrapping_sub(first) < 0x8000
-}
-
-fn await_replies(
-    bus: &UdpBus,
-    heartbeat: Duration,
-    frames: &[Vec<u8>],
-    timeout: Duration,
-    retransmit: Duration,
-    mut complete: impl FnMut(&[u16], Reply) -> bool,
-) -> Result<bool, UdpError> {
-    let mut sent = Vec::new();
-    let end = Instant::now() + timeout;
-    while Instant::now() < end {
-        sent.push(bus.send(bus.reserve_msg_id(), frames)?.msg_id);
-        let retransmit_at = (Instant::now() + retransmit).min(end);
-        loop {
-            let keepalive = (Instant::now() + heartbeat).min(retransmit_at);
-            let Some(reply) = bus.recv(keepalive)? else {
-                if Instant::now() >= retransmit_at {
-                    break;
-                }
-                bus.send_heartbeat()?;
-                continue;
-            };
-            if complete(&sent, reply) {
-                return Ok(true);
-            }
-        }
-    }
-    Ok(false)
 }
 
 pub struct UdpLink {
@@ -316,53 +269,28 @@ impl Exchange for UdpLink {
         self.bus.num_devices()
     }
 
-    fn reset(&mut self, timeout: Duration) -> Result<bool, UdpError> {
-        let frames = vec![Frame::new(Cmd::Reset).bytes(Seq::ZERO); self.num_devices()];
-        let mut confirmed = vec![false; self.num_devices()];
-        await_replies(
-            &self.bus,
-            self.heartbeat,
-            &frames,
-            timeout,
-            RETRANSMIT_INTERVAL,
-            |sent, reply| {
-                if sent.contains(&reply.msg_id) && reply.acked_seq == 0xFF {
-                    confirmed[reply.device] = true;
-                }
-                !confirmed.contains(&false)
-            },
-        )
-    }
-
-    fn exchange(
-        &mut self,
-        seq: Seq,
-        frame: &Frame,
-        timeout: Duration,
-        retransmit: Duration,
-    ) -> Result<Replies, UdpError> {
-        let frames = vec![frame.bytes(seq); self.num_devices()];
+    fn exchange(&mut self, frame: &Frame, timeout: Duration) -> Result<Replies, UdpError> {
+        let frames = vec![frame.bytes(); self.num_devices()];
         let mut replies: Vec<Option<DeviceReply>> = vec![None; self.num_devices()];
-        let first = self.bus.peek_next_msg_id();
-        await_replies(
-            &self.bus,
-            self.heartbeat,
-            &frames,
-            timeout,
-            retransmit,
-            |_, reply| {
-                if not_before(reply.msg_id, first)
-                    && reply.acked_seq == seq.get()
-                    && replies[reply.device].is_none()
-                {
-                    replies[reply.device] = Some(DeviceReply {
-                        status: reply.error_code,
-                        value: reply.data().to_vec(),
-                    });
-                }
-                replies.iter().all(Option::is_some)
-            },
-        )?;
+        let sent = self.bus.send(self.bus.reserve_msg_id(), &frames)?;
+        if let Some(unsent) = sent.unsent {
+            return Err(unsent.into());
+        }
+        let msg_id = sent.msg_id;
+        let end = Instant::now() + timeout;
+        while replies.iter().any(Option::is_none) && Instant::now() < end {
+            let keepalive = (Instant::now() + self.heartbeat).min(end);
+            let Some(reply) = self.bus.recv(keepalive)? else {
+                self.bus.send_heartbeat()?;
+                continue;
+            };
+            if reply.msg_id == msg_id {
+                replies[reply.device].get_or_insert(DeviceReply {
+                    status: reply.error_code,
+                    value: reply.data().to_vec(),
+                });
+            }
+        }
         Ok(match replies.iter().position(Option::is_none) {
             Some(device) => Err(device),
             None => Ok(replies.into_iter().flatten().collect()),
@@ -386,7 +314,6 @@ impl Exchange for UdpLink {
 
 pub struct Driver<L: Exchange> {
     inner: L,
-    next_seq: Seq,
 }
 
 fn all_accepted(cmd: Cmd, replies: Vec<DeviceReply>) -> Result<Vec<DeviceReply>, DriverError> {
@@ -405,13 +332,8 @@ fn network_err<E: core::error::Error + Send + Sync + 'static>(e: E) -> DriverErr
 }
 
 impl<L: Exchange> Driver<L> {
-    pub fn open(inner: L) -> Result<Self, DriverError> {
-        let mut driver = Self {
-            inner,
-            next_seq: Seq::ZERO,
-        };
-        driver.handshake()?;
-        Ok(driver)
+    pub fn new(inner: L) -> Self {
+        Self { inner }
     }
 
     #[must_use]
@@ -419,34 +341,9 @@ impl<L: Exchange> Driver<L> {
         self.inner.num_devices()
     }
 
-    fn handshake(&mut self) -> Result<(), DriverError> {
-        if !self.inner.reset(DEFAULT_TIMEOUT).map_err(network_err)? {
-            return Err(DriverError::ResetUnconfirmed);
-        }
-        self.next_seq = Seq::ZERO;
-        Ok(())
-    }
-
     fn send(&mut self, frame: &Frame, timeout: Duration) -> Result<Vec<DeviceReply>, DriverError> {
-        self.send_every(frame, timeout, RETRANSMIT_INTERVAL)
-    }
-
-    fn send_every(
-        &mut self,
-        frame: &Frame,
-        timeout: Duration,
-        retransmit: Duration,
-    ) -> Result<Vec<DeviceReply>, DriverError> {
-        let seq = self.next_seq;
-        match self
-            .inner
-            .exchange(seq, frame, timeout, retransmit)
-            .map_err(network_err)?
-        {
-            Ok(replies) => {
-                self.next_seq = seq.next();
-                Ok(replies)
-            }
+        match self.inner.exchange(frame, timeout).map_err(network_err)? {
+            Ok(replies) => Ok(replies),
             Err(device) => Err(DriverError::Timeout {
                 device,
                 cmd: frame.cmd,
@@ -462,10 +359,6 @@ impl<L: Exchange> Driver<L> {
     ) -> Result<Vec<DeviceReply>, DriverError> {
         let replies = self.send(frame, timeout)?;
         all_accepted(frame.cmd, replies)
-    }
-
-    fn send_reset_request(&mut self, cmd: Cmd) -> Result<Vec<DeviceReply>, DriverError> {
-        self.send_every(&Frame::new(cmd), DEFAULT_TIMEOUT, RESET_RETRANSMIT_INTERVAL)
     }
 
     pub fn read_firmware_info(&mut self) -> Result<Vec<FirmwareInfo>, DriverError> {
@@ -646,12 +539,12 @@ impl<L: Exchange> Driver<L> {
     }
 
     pub fn activate(&mut self) -> Result<(), DriverError> {
-        let replies = self.send_reset_request(Cmd::UpdateActivate)?;
+        let replies = self.send(&Frame::new(Cmd::UpdateActivate), DEFAULT_TIMEOUT)?;
         all_accepted(Cmd::UpdateActivate, replies).map(drop)
     }
 
     pub fn activate_unrebooted(&mut self) -> Result<Vec<usize>, DriverError> {
-        let replies = self.send_reset_request(Cmd::UpdateActivate)?;
+        let replies = self.send(&Frame::new(Cmd::UpdateActivate), DEFAULT_TIMEOUT)?;
         let mut activated = Vec::new();
         for (device, reply) in replies.iter().enumerate() {
             match autd3_cpu_wire::Error::from_u8(reply.status) {
@@ -690,7 +583,7 @@ impl<L: Exchange> Driver<L> {
     }
 
     pub fn reboot(&mut self) -> Result<(), DriverError> {
-        let replies = self.send_reset_request(Cmd::Reboot)?;
+        let replies = self.send(&Frame::new(Cmd::Reboot), DEFAULT_TIMEOUT)?;
         all_accepted(Cmd::Reboot, replies).map(drop)
     }
 
@@ -729,17 +622,7 @@ mod tests {
             self.0.len()
         }
 
-        fn reset(&mut self, _timeout: Duration) -> Result<bool, Self::Error> {
-            Ok(true)
-        }
-
-        fn exchange(
-            &mut self,
-            _seq: Seq,
-            _frame: &Frame,
-            _timeout: Duration,
-            _retransmit: Duration,
-        ) -> Result<Replies, Self::Error> {
+        fn exchange(&mut self, _frame: &Frame, _timeout: Duration) -> Result<Replies, Self::Error> {
             Ok(Ok(self.0.clone()))
         }
 
@@ -757,13 +640,12 @@ mod tests {
 
     #[test]
     fn firmware_without_the_running_image_readout_reads_as_unreported() {
-        let mut driver = Driver::open(Scripted(vec![
+        let mut driver = Driver::new(Scripted(vec![
             reply(autd3_cpu_wire::Error::None, &[2]),
             reply(autd3_cpu_wire::Error::UnknownCmd, &[]),
             reply(autd3_cpu_wire::Error::None, &[1]),
             reply(autd3_cpu_wire::Error::None, &[0xFF]),
-        ]))
-        .unwrap();
+        ]));
         assert_eq!(
             driver.read_running_image().unwrap(),
             [
@@ -777,11 +659,10 @@ mod tests {
 
     #[test]
     fn a_failed_running_image_readout_is_an_error() {
-        let mut driver = Driver::open(Scripted(vec![
+        let mut driver = Driver::new(Scripted(vec![
             reply(autd3_cpu_wire::Error::None, &[2]),
             reply(autd3_cpu_wire::Error::UpdateFlash, &[]),
-        ]))
-        .unwrap();
+        ]));
         assert!(matches!(
             driver.read_running_image(),
             Err(DriverError::Device {
@@ -790,8 +671,7 @@ mod tests {
                 ..
             })
         ));
-        let mut driver =
-            Driver::open(Scripted(vec![reply(autd3_cpu_wire::Error::None, &[])])).unwrap();
+        let mut driver = Driver::new(Scripted(vec![reply(autd3_cpu_wire::Error::None, &[])]));
         assert!(matches!(
             driver.read_running_image(),
             Err(DriverError::ShortReply { device: 0, .. })

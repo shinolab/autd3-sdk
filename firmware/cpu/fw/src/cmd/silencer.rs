@@ -67,7 +67,7 @@ mod tests {
         let mut h = Harness::new();
         let latches_at_boot = h.latch_count(CtlFlags::SILENCER_SET);
 
-        h.deliver(&set_silencer(0, SilencerFlags::STRICT_MODE, 256, 256, 5, 7));
+        h.deliver(&set_silencer(SilencerFlags::STRICT_MODE, 256, 256, 5, 7));
 
         assert_eq!(h.status(), Error::None);
         assert_eq!(
@@ -88,7 +88,6 @@ mod tests {
         let latches_at_boot = h.latch_count(CtlFlags::SILENCER_SET);
 
         h.deliver(&set_silencer(
-            0,
             SilencerFlags::FIXED_UPDATE_RATE_MODE,
             8,
             16,
@@ -112,9 +111,9 @@ mod tests {
     fn set_silencer_rejects_zero_completion_steps_in_steps_mode() {
         let mut h = Harness::new();
 
-        h.deliver(&set_silencer(0, SilencerFlags::empty(), 256, 256, 0, 7));
+        h.deliver(&set_silencer(SilencerFlags::empty(), 256, 256, 0, 7));
         assert_eq!(h.status(), Error::InvalidPayload);
-        h.deliver(&set_silencer(1, SilencerFlags::empty(), 256, 256, 5, 0));
+        h.deliver(&set_silencer(SilencerFlags::empty(), 256, 256, 5, 0));
         assert_eq!(h.status(), Error::InvalidPayload);
 
         assert_eq!(h.ctl(ADDR_SILENCER_COMPLETION_STEPS_INTENSITY), 10);
@@ -126,7 +125,6 @@ mod tests {
         let mut h = Harness::new();
 
         h.deliver(&set_silencer(
-            0,
             SilencerFlags::FIXED_UPDATE_RATE_MODE,
             0,
             16,
@@ -135,7 +133,6 @@ mod tests {
         ));
         assert_eq!(h.status(), Error::InvalidPayload);
         h.deliver(&set_silencer(
-            1,
             SilencerFlags::FIXED_UPDATE_RATE_MODE,
             8,
             0,
@@ -153,7 +150,7 @@ mod tests {
     fn set_silencer_steps_mode_ignores_zero_update_rate() {
         let mut h = Harness::new();
 
-        h.deliver(&set_silencer(0, SilencerFlags::empty(), 0, 0, 5, 7));
+        h.deliver(&set_silencer(SilencerFlags::empty(), 0, 0, 5, 7));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.ctl(ADDR_SILENCER_UPDATE_RATE_INTENSITY), 0);
         assert_eq!(h.ctl(ADDR_SILENCER_COMPLETION_STEPS_INTENSITY), 5);
@@ -164,22 +161,14 @@ mod tests {
         let mut h = Harness::new();
         h.set_ctl(ADDR_FUNCTION_BITS, 0);
 
-        h.deliver(&set_silencer(
-            0,
-            SilencerFlags::STRICT_MODE,
-            256,
-            256,
-            8,
-            40,
-        ));
+        h.deliver(&set_silencer(SilencerFlags::STRICT_MODE, 256, 256, 8, 40));
         assert_eq!(h.status(), Error::InvalidSilencerSetting);
         assert_eq!(h.ctl(ADDR_SILENCER_FLAG), 0);
         assert_eq!(h.ctl(ADDR_SILENCER_COMPLETION_STEPS_INTENSITY), 10);
 
-        h.deliver(&set_silencer(1, SilencerFlags::empty(), 256, 256, 8, 40));
+        h.deliver(&set_silencer(SilencerFlags::empty(), 256, 256, 8, 40));
         assert_eq!(h.status(), Error::None);
         h.deliver(&set_silencer(
-            2,
             SilencerFlags::STRICT_MODE | SilencerFlags::FIXED_UPDATE_RATE_MODE,
             8,
             16,
@@ -194,18 +183,18 @@ mod tests {
         let mut h = Harness::new();
         h.port.reject_latch = CtlFlags::SILENCER_SET | CtlFlags::MOD_SET | CtlFlags::PATTERN_SET;
 
-        h.deliver(&set_silencer(0, SilencerFlags::empty(), 256, 256, 8, 40));
+        h.deliver(&set_silencer(SilencerFlags::empty(), 256, 256, 8, 40));
         assert_eq!(h.status(), Error::InvalidSilencerSetting);
         assert_eq!(h.ctl(ADDR_SILENCER_COMPLETION_STEPS_INTENSITY), 8);
         assert_eq!(h.latched(ADDR_SILENCER_COMPLETION_STEPS_INTENSITY), 10);
 
-        h.deliver(&activate_mod_bank(1, 0, TransitionMode::Immediate, 0));
+        h.deliver(&activate_mod_bank(0, TransitionMode::Immediate, 0));
         assert_eq!(h.status(), Error::InvalidSilencerSetting);
-        h.deliver(&activate_pattern_bank(2, 0, TransitionMode::Immediate, 0));
+        h.deliver(&activate_pattern_bank(0, TransitionMode::Immediate, 0));
         assert_eq!(h.status(), Error::InvalidSilencerSetting);
 
         h.port.reject_latch = CtlFlags::empty();
-        h.deliver(&activate_mod_bank(3, 0, TransitionMode::Immediate, 0));
+        h.deliver(&activate_mod_bank(0, TransitionMode::Immediate, 0));
         assert_eq!(h.status(), Error::None);
     }
 }

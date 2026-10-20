@@ -14,7 +14,7 @@ from autd3.value import Intensity
 async def main() -> None:
     geometry = Geometry([Autd3()])
 
-    async with await Client.open(
+    async with Client.open(
         geometry,
         TransportOption(),
     ) as client:

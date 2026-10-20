@@ -12,7 +12,7 @@ use crate::error::{Error, PayloadError};
 use crate::firmware_version::FirmwareVersion;
 use crate::fpga_state::FpgaState;
 use crate::geometry::Geometry;
-use crate::protocol::{Cmd, PAYLOAD_BYTES, Seq};
+use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::telemetry::Telemetry;
 use crate::udp::frame_buf::FrameBuf;
 use crate::udp::{Sent, StateChecker, TransportOption, UdpBus, UdpError};
@@ -66,13 +66,6 @@ impl Controller {
             bus,
         };
         Ok((controller, driver))
-    }
-
-    pub async fn initialize(&self) -> Result<(), Error> {
-        let _serialized = self.send_serializer.lock().await;
-        self.reset().await?;
-        tracing::info!(num_devices = self.num_devices(), "handshake complete");
-        Ok(())
     }
 
     #[must_use]
@@ -172,14 +165,11 @@ impl Controller {
             return Err(e);
         }
         let reply_slot = self.reply_slots.acquire().await;
-        if self.session.lock_state().reset_required {
-            self.reset().await?;
-        }
         let exec_at = exec_at::schedule(exec, self.lost_timeout, || self.device_clock.now())?;
-        self.send_with_next_seq(reply_slot, dist, datagrams, exec_at)
+        self.send_with_reply_slot(reply_slot, dist, datagrams, exec_at)
     }
 
-    fn send_with_next_seq(
+    fn send_with_reply_slot(
         &self,
         mut reply_slot: ReplySlot,
         dist: Distribution,
@@ -187,22 +177,15 @@ impl Controller {
         exec_at: u32,
     ) -> Result<ResponseFuture, Error> {
         reply_slot.reset();
-        let seq = {
-            let mut state = self.session.lock_state();
-            let seq = state.next_seq;
-            state.next_seq = seq.next();
-            seq
-        };
-        tracing::trace!(seq = seq.get(), cmd = ?datagrams[0].cmd, ?dist, "sending frame");
         let (tx, rx) = completion::channel();
         let msg_id = self.bus.reserve_msg_id();
+        tracing::trace!(msg_id, cmd = ?datagrams[0].cmd, ?dist, "sending frame");
         self.session.lock_state().push_awaiting(InflightRequest {
             msg_id,
-            seq: Some(seq),
             sent_to: None,
             replied_devices: 0,
             sent_at: Instant::now(),
-            reply_slot: Some(reply_slot),
+            reply_slot,
             completion: tx,
         });
         let sent = {
@@ -212,12 +195,12 @@ impl Controller {
                 .unwrap_or_else(PoisonError::into_inner);
             match dist {
                 Distribution::Broadcast => {
-                    bufs[0].write_frame(seq, datagrams[0].cmd, exec_at, datagrams[0].payload());
+                    bufs[0].write_frame(datagrams[0].cmd, exec_at, datagrams[0].payload());
                     self.bus.broadcast(msg_id, bufs[0].as_ref())
                 }
                 Distribution::PerDevice => {
                     for (buf, datagram) in bufs.iter_mut().zip(datagrams) {
-                        buf.write_frame(seq, datagram.cmd, exec_at, datagram.payload());
+                        buf.write_frame(datagram.cmd, exec_at, datagram.payload());
                     }
                     self.bus.send(msg_id, &bufs)
                 }
@@ -308,66 +291,8 @@ impl Controller {
         }
         let recovered_devices = rx.await.unwrap_or(Err(Error::Closed))?;
         tracing::debug!(recovered_devices, "recovery finished");
-        if recovered_devices != 0 {
-            self.reset().await?;
-        }
-        Ok(DeviceMask::from_bits(recovered_devices))
-    }
-
-    async fn reset(&self) -> Result<(), Error> {
         self.bus.readmit_recovered();
-        let stale_requests = self.session.lock_state().take_all_awaiting();
-        if !stale_requests.is_empty() {
-            tracing::debug!(
-                stale = stale_requests.len(),
-                "failing the frames left in flight before the reset"
-            );
-            let timeout = self.session.lock_state().ack_timeout;
-            for request in stale_requests {
-                request.completion.send(Err(Error::Timeout { timeout }));
-            }
-        }
-        if let Some(e) = self.closed_error() {
-            return Err(e);
-        }
-        tracing::debug!("sending reset");
-        let (tx, rx) = completion::channel();
-        let msg_id = self.bus.reserve_msg_id();
-        self.session.lock_state().push_awaiting(InflightRequest {
-            msg_id,
-            seq: None,
-            sent_to: None,
-            replied_devices: 0,
-            sent_at: Instant::now(),
-            reply_slot: None,
-            completion: tx,
-        });
-        let sent = {
-            let mut bufs = self
-                .tx_frame_bufs
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner);
-            bufs[0].write_frame(Seq::ZERO, Cmd::Reset, 0, &[]);
-            self.bus.broadcast(msg_id, bufs[0].as_ref())
-        };
-        let reached = self.apply_send_result(msg_id, sent)?;
-        self.stats.record_reset();
-        if !reached {
-            return Err(Error::Timeout {
-                timeout: self.session.lock_state().ack_timeout,
-            });
-        }
-        if let Err(e) = rx.await {
-            if matches!(e, Error::Timeout { .. }) {
-                tracing::warn!("the devices did not acknowledge the reset");
-            }
-            return Err(e);
-        }
-        let mut state = self.session.lock_state();
-        state.next_seq = Seq::ZERO;
-        state.reset_required = false;
-        tracing::debug!("reset confirmed by every device");
-        Ok(())
+        Ok(DeviceMask::from_bits(recovered_devices))
     }
 
     async fn silent_stop(&self) -> Result<(), Error> {

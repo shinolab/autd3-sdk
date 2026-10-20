@@ -73,9 +73,9 @@ mod tests {
     fn synchronize_writes_next_sync_edge_in_sys_time_ticks_and_latches() {
         let mut h = harness(&[Some(EDGE)], &[Some(EDGE - 250_000), Some(EDGE - 240_000)]);
 
-        h.deliver(&Frame::new(0, Cmd::Synchronize));
+        h.deliver(&Frame::new(Cmd::Synchronize));
 
-        assert_eq!(h.ack(), 0);
+        assert_eq!(h.processed(), 1);
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.ctl(ADDR_SYNC_TIME_0), 0x7000);
         assert_eq!(h.ctl(ADDR_SYNC_TIME_0 + 1), 0xB0A6);
@@ -91,7 +91,7 @@ mod tests {
         let mut h = Harness::new();
         h.port.next_sync_edge = None;
 
-        h.deliver(&Frame::new(0, Cmd::Synchronize));
+        h.deliver(&Frame::new(Cmd::Synchronize));
         assert_eq!(h.status(), Error::SyncNotReady);
         assert_eq!(h.ctl(ADDR_SYNC_TIME_0), 0);
         assert_eq!(h.latch_count(CtlFlags::SYNC_SET), 0);
@@ -101,7 +101,7 @@ mod tests {
     fn synchronize_succeeds_when_the_readback_is_just_before_the_edge() {
         let mut h = harness(&[Some(EDGE)], &[Some(EDGE - CYCLE + 1), Some(EDGE - 1)]);
 
-        h.deliver(&Frame::new(0, Cmd::Synchronize));
+        h.deliver(&Frame::new(Cmd::Synchronize));
 
         assert_eq!(h.status(), Error::None);
         assert_sync_time(&h, EDGE);
@@ -121,7 +121,7 @@ mod tests {
             ],
         );
 
-        h.deliver(&Frame::new(0, Cmd::Synchronize));
+        h.deliver(&Frame::new(Cmd::Synchronize));
 
         assert_eq!(h.status(), Error::None);
         assert_sync_time(&h, EDGE);
@@ -133,7 +133,7 @@ mod tests {
     fn synchronize_returns_sync_not_ready_when_the_clock_never_reaches_the_cycle_before() {
         let mut h = harness(&[Some(EDGE)], &[Some(EDGE - CYCLE)]);
 
-        h.deliver(&Frame::new(0, Cmd::Synchronize));
+        h.deliver(&Frame::new(Cmd::Synchronize));
 
         assert_eq!(h.status(), Error::SyncNotReady);
         assert_eq!(h.ctl(ADDR_SYNC_TIME_0), 0);
@@ -144,7 +144,7 @@ mod tests {
     fn synchronize_returns_sync_not_ready_when_the_time_is_unavailable_before_the_latch() {
         let mut h = harness(&[Some(EDGE)], &[None]);
 
-        h.deliver(&Frame::new(0, Cmd::Synchronize));
+        h.deliver(&Frame::new(Cmd::Synchronize));
 
         assert_eq!(h.status(), Error::SyncNotReady);
         assert_eq!(h.latch_count(CtlFlags::SYNC_SET), 0);
@@ -162,7 +162,7 @@ mod tests {
             ],
         );
 
-        h.deliver(&Frame::new(0, Cmd::Synchronize));
+        h.deliver(&Frame::new(Cmd::Synchronize));
 
         assert_eq!(h.status(), Error::None);
         assert_sync_time(&h, EDGE + CYCLE);
@@ -185,7 +185,7 @@ mod tests {
             ],
         );
 
-        h.deliver(&Frame::new(0, Cmd::Synchronize));
+        h.deliver(&Frame::new(Cmd::Synchronize));
 
         assert_eq!(h.status(), Error::None);
         assert_sync_time(&h, EDGE + 2 * CYCLE);
@@ -211,7 +211,7 @@ mod tests {
             ],
         );
 
-        h.deliver(&Frame::new(0, Cmd::Synchronize));
+        h.deliver(&Frame::new(Cmd::Synchronize));
 
         assert_eq!(h.status(), Error::SyncMissed);
         assert_eq!(h.latch_count(CtlFlags::SYNC_SET), 3);
@@ -222,7 +222,7 @@ mod tests {
     fn synchronize_returns_sync_not_ready_when_the_readback_time_is_unavailable() {
         let mut h = harness(&[Some(EDGE)], &[Some(EDGE - 1), None]);
 
-        h.deliver(&Frame::new(0, Cmd::Synchronize));
+        h.deliver(&Frame::new(Cmd::Synchronize));
 
         assert_eq!(h.status(), Error::SyncNotReady);
         assert_eq!(h.latch_count(CtlFlags::SYNC_SET), 1);
@@ -232,7 +232,7 @@ mod tests {
     fn synchronize_returns_sync_not_ready_when_the_pulse_stops_before_the_retry() {
         let mut h = harness(&[Some(EDGE), None], &[Some(EDGE - 1), Some(EDGE)]);
 
-        h.deliver(&Frame::new(0, Cmd::Synchronize));
+        h.deliver(&Frame::new(Cmd::Synchronize));
 
         assert_eq!(h.status(), Error::SyncNotReady);
         assert_eq!(h.latch_count(CtlFlags::SYNC_SET), 1);
@@ -245,7 +245,7 @@ mod tests {
 
         h.port.next_sync_edge = NonZeroU64::new(0x1122_3344_5566_7788);
         h.port.sys_time = Some(0x1122_3344_5566_7788 - 1);
-        h.deliver(&Frame::new(0, Cmd::Synchronize));
+        h.deliver(&Frame::new(Cmd::Synchronize));
         assert_eq!(h.status(), Error::FpgaTimeout);
         assert_eq!(h.latch_count(CtlFlags::SYNC_SET), 1);
 

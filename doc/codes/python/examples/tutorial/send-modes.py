@@ -16,7 +16,7 @@ RADIUS_MM = 30.0
 async def main() -> None:
     geometry = Geometry([Autd3()])
 
-    async with await Client.open(
+    async with Client.open(
         geometry,
         TransportOption(),
     ) as client:

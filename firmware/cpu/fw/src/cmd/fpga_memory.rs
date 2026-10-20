@@ -42,19 +42,17 @@ mod tests {
         (u16::from(select.as_u8()) << 8) | addr
     }
 
-    fn write(seq: u8, addr: u16, words: &[u16]) -> Frame {
+    fn write(addr: u16, words: &[u16]) -> Frame {
         let data: std::vec::Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
         Frame::from_parts(
-            seq,
             Cmd::WriteFpgaMemory,
             &WriteFpgaMemoryPayload { addr: addr.into() },
             &data,
         )
     }
 
-    fn read(seq: u8, addr: u16, count: u16) -> Frame {
+    fn read(addr: u16, count: u16) -> Frame {
         Frame::from_payload(
-            seq,
             Cmd::ReadFpgaMemory,
             &ReadFpgaMemoryPayload {
                 addr: addr.into(),
@@ -75,11 +73,11 @@ mod tests {
     #[test]
     fn written_controller_words_read_back() {
         let mut h = Harness::new();
-        h.deliver(&write(0, ADDR_DEBUG_VALUE0_0, &[0x1234, 0xABCD, 0x0F0F]));
+        h.deliver(&write(ADDR_DEBUG_VALUE0_0, &[0x1234, 0xABCD, 0x0F0F]));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.reply_data(), [0u8; 0]);
 
-        h.deliver(&read(1, ADDR_DEBUG_VALUE0_0, 3));
+        h.deliver(&read(ADDR_DEBUG_VALUE0_0, 3));
         assert_eq!(h.status(), Error::None);
         assert_eq!(reply_words(&h), [0x1234, 0xABCD, 0x0F0F]);
     }
@@ -87,10 +85,10 @@ mod tests {
     #[test]
     fn a_write_reaches_every_bram_select_through_the_raw_bus_address() {
         let mut h = Harness::new();
-        h.deliver(&write(0, bus_addr(BramSelect::OutputMask, 3), &[0x00FF]));
-        h.deliver(&write(1, bus_addr(BramSelect::PweTable, 7), &[0x0155]));
-        h.deliver(&write(2, ADDR_MOD_MEM_WR_BANK, &[1, 1]));
-        h.deliver(&write(3, bus_addr(BramSelect::Mod, 5), &[0xBEEF, 0xCAFE]));
+        h.deliver(&write(bus_addr(BramSelect::OutputMask, 3), &[0x00FF]));
+        h.deliver(&write(bus_addr(BramSelect::PweTable, 7), &[0x0155]));
+        h.deliver(&write(ADDR_MOD_MEM_WR_BANK, &[1, 1]));
+        h.deliver(&write(bus_addr(BramSelect::Mod, 5), &[0xBEEF, 0xCAFE]));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.port.output_mask[3], 0x00FF);
         assert_eq!(h.port.pwe[7], 0x0155);
@@ -103,7 +101,7 @@ mod tests {
     fn every_written_word_sits_between_barriers() {
         let mut h = Harness::new();
         h.port.barriers = 0;
-        h.deliver(&write(0, ADDR_MOD_MEM_WR_BANK, &[1, 0]));
+        h.deliver(&write(ADDR_MOD_MEM_WR_BANK, &[1, 0]));
         assert_eq!(h.port.barriers, 3);
     }
 
@@ -111,7 +109,7 @@ mod tests {
     fn a_read_does_not_write_the_fpga() {
         let mut h = Harness::new();
         let before = fpga_snapshot(&h);
-        h.deliver(&read(0, ADDR_CTL_FLAG, 20));
+        h.deliver(&read(ADDR_CTL_FLAG, 20));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.reply_data().len(), 40);
         assert_fpga_unchanged(&before, &h);
@@ -120,15 +118,15 @@ mod tests {
     #[test]
     fn the_last_bus_address_is_reachable_but_not_passed() {
         let mut h = Harness::new();
-        h.deliver(&read(0, 0xFFFF, 1));
+        h.deliver(&read(0xFFFF, 1));
         assert_eq!(h.status(), Error::None);
-        h.deliver(&write(1, 0xFFFF, &[0]));
+        h.deliver(&write(0xFFFF, &[0]));
         assert_eq!(h.status(), Error::None);
 
         let before = fpga_snapshot(&h);
-        h.deliver(&read(2, 0xFFFF, 2));
+        h.deliver(&read(0xFFFF, 2));
         assert_eq!(h.status(), Error::InvalidPayload);
-        h.deliver(&write(3, 0xFFFF, &[0, 0xFFFF]));
+        h.deliver(&write(0xFFFF, &[0, 0xFFFF]));
         assert_eq!(h.status(), Error::InvalidPayload);
         assert_fpga_unchanged(&before, &h);
     }
@@ -138,18 +136,17 @@ mod tests {
         let mut h = Harness::new();
         let before = fpga_snapshot(&h);
 
-        let mut half_word = write(1, ADDR_CTL_FLAG, &[CtlFlags::FAILSAFE.bits()]);
+        let mut half_word = write(ADDR_CTL_FLAG, &[CtlFlags::FAILSAFE.bits()]);
         half_word.set_len(size_of::<WriteFpgaMemoryPayload>() + 1);
-        let mut short_read = read(4, ADDR_CTL_FLAG, 1);
+        let mut short_read = read(ADDR_CTL_FLAG, 1);
         short_read.set_len(size_of::<ReadFpgaMemoryPayload>() - 1);
         let frames = [
-            write(0, ADDR_CTL_FLAG, &[]),
+            write(ADDR_CTL_FLAG, &[]),
             half_word,
-            read(2, ADDR_CTL_FLAG, 0),
-            read(3, ADDR_CTL_FLAG, 21),
+            read(ADDR_CTL_FLAG, 0),
+            read(ADDR_CTL_FLAG, 21),
             short_read,
             Frame::from_parts(
-                5,
                 Cmd::ReadFpgaMemory,
                 &ReadFpgaMemoryPayload {
                     addr: U16::ZERO,

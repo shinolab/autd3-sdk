@@ -99,10 +99,6 @@ impl BusStats {
         self.0.frames()
     }
 
-    fn resets(&self) -> u64 {
-        self.0.resets()
-    }
-
     fn heartbeats(&self) -> u64 {
         self.0.heartbeats()
     }
@@ -125,9 +121,8 @@ impl BusStats {
 
     fn __repr__(&self) -> String {
         format!(
-            "BusStats(frames={}, resets={}, heartbeats={}, recoveries={}, acked_frames={}, worst_ack_latency_ns={}, mean_ack_latency_ns={})",
+            "BusStats(frames={}, heartbeats={}, recoveries={}, acked_frames={}, worst_ack_latency_ns={}, mean_ack_latency_ns={})",
             self.0.frames(),
-            self.0.resets(),
             self.0.heartbeats(),
             self.0.recoveries(),
             self.0.acked_frames(),
@@ -369,16 +364,6 @@ impl Telemetry {
     }
 
     #[getter]
-    fn dedup(&self) -> u32 {
-        self.0.dedup
-    }
-
-    #[getter]
-    fn seq_mismatch(&self) -> u32 {
-        self.0.seq_mismatch
-    }
-
-    #[getter]
     fn dispatch_error(&self) -> u32 {
         self.0.dispatch_error
     }
@@ -425,10 +410,8 @@ impl Telemetry {
 
     fn __repr__(&self) -> String {
         format!(
-            "Telemetry(fifo_drop={}, dedup={}, seq_mismatch={}, dispatch_error={}, processed={}, send_failure={}, failsafe={}, ptp_unlock_failsafe={}, sync_resync={}, boot_failure={}, cpu_watchdog={}, exec_late={})",
+            "Telemetry(fifo_drop={}, dispatch_error={}, processed={}, send_failure={}, failsafe={}, ptp_unlock_failsafe={}, sync_resync={}, boot_failure={}, cpu_watchdog={}, exec_late={})",
             self.0.fifo_drop,
-            self.0.dedup,
-            self.0.seq_mismatch,
             self.0.dispatch_error,
             self.0.processed,
             self.0.send_failure,
@@ -484,21 +467,19 @@ fn frame_out_of_range() -> PyErr {
 #[pymethods]
 impl Client {
     #[staticmethod]
-    fn open<'py>(
-        py: Python<'py>,
-        geometry: &Bound<'py, PyAny>,
+    fn open(
+        py: Python<'_>,
+        geometry: &Bound<'_, PyAny>,
         option: &crate::udp::TransportOption,
-    ) -> PyResult<Bound<'py, PyAny>> {
+    ) -> PyResult<Client> {
         let geometry = geometry_from_capsule(&capsule_of(geometry)?)?.clone();
-        let option = option.0.clone();
-        future_into_py(py, async move {
-            let client = autd3_rs::Client::open(&geometry, &option)
-                .await
-                .map_err(client_pyerr_gil)?;
-            Ok(Client {
-                inner: Arc::new(client),
-                geometry: Arc::new(geometry),
-            })
+        let option = &option.0;
+        let client = py
+            .detach(|| autd3_rs::Client::open(&geometry, option))
+            .map_err(|e| client_pyerr(py, &e))?;
+        Ok(Client {
+            inner: Arc::new(client),
+            geometry: Arc::new(geometry),
         })
     }
 

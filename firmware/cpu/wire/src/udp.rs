@@ -4,7 +4,7 @@ use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 use crate::frame::FRAME_BYTES_MAX;
 
 pub const PORT: u16 = 0xAD30;
-pub const PROTOCOL_VERSION: u8 = 3;
+pub const PROTOCOL_VERSION: u8 = 4;
 
 const _: () = assert!(PORT == 44336);
 
@@ -137,7 +137,7 @@ pub struct UnitInfo {
 )]
 #[repr(C)]
 pub struct FrameReply {
-    pub ack: u8,
+    pub reserved: u8,
     pub status: u8,
     pub flags: Flags,
     pub unit_id: u8,
@@ -274,7 +274,7 @@ mod tests {
     #[test]
     fn a_frame_reply_is_these_bytes_on_the_wire() {
         let reply = FrameReply {
-            ack: 0x2A,
+            reserved: 0,
             status: 0x08,
             flags: Flags::ASSIGNED | Flags::DOWNSTREAM_OPEN | Flags::GRANDMASTER,
             unit_id: 0x03,
@@ -283,7 +283,7 @@ mod tests {
         assert_eq!(
             reply.as_bytes(),
             &[
-                0x2A, 0x08, 0x23, 0x03, 0x18, 0x17, 0x16, 0x15, 0x14, 0x13, 0x12, 0x11,
+                0x00, 0x08, 0x23, 0x03, 0x18, 0x17, 0x16, 0x15, 0x14, 0x13, 0x12, 0x11,
             ]
         );
     }

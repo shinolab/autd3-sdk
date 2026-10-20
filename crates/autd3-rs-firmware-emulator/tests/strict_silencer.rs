@@ -29,20 +29,16 @@ const EXT: TransitionMode = TransitionMode::Ext;
 
 struct Host {
     device: Device,
-    seq: u8,
 }
 
 impl Host {
     fn new() -> Self {
-        let mut device = Device::new(NUM_TRANSDUCERS);
-        device.send(&frame(0, Cmd::Reset, &[]));
-        Self { device, seq: 0 }
+        let device = Device::new(NUM_TRANSDUCERS);
+        Self { device }
     }
 
     fn send(&mut self, cmd: Cmd, payload: &[u8]) -> DeviceErrorCode {
-        let frame = frame(self.seq, cmd, payload);
-        self.seq = self.seq.wrapping_add(1);
-        self.device.send(&frame).status
+        self.device.send(&frame(cmd, payload)).status
     }
 
     fn config_modulation(

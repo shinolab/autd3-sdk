@@ -17,7 +17,7 @@ fn heartbeats(emulator: &UdpEmulator) -> Vec<u64> {
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn the_client_sends_no_heartbeat_by_itself() {
-    let (emulator, client) = open(2).await;
+    let (emulator, client) = open(2);
 
     for _ in 0..3 {
         client.send(Nop).await.unwrap();
@@ -31,7 +31,7 @@ async fn the_client_sends_no_heartbeat_by_itself() {
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn each_heartbeat_reaches_every_device_once() {
-    let (emulator, client) = open(3).await;
+    let (emulator, client) = open(3);
 
     for _ in 0..5 {
         client.send_heartbeat().unwrap();
@@ -46,7 +46,7 @@ async fn each_heartbeat_reaches_every_device_once() {
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn a_heartbeat_reply_updates_the_device_state() {
-    let (emulator, client) = open(2).await;
+    let (emulator, client) = open(2);
     let checker = client.state_checker();
 
     emulator.set_ptp_lock_blocked(1, true);
@@ -72,7 +72,7 @@ async fn a_heartbeat_reply_updates_the_device_state() {
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn a_heartbeat_after_close_is_refused() {
-    let (emulator, client) = open(1).await;
+    let (emulator, client) = open(1);
     client.close().await.unwrap();
 
     assert!(matches!(client.send_heartbeat(), Err(Error::Closed)));

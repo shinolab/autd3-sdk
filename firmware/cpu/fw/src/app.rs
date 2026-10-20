@@ -2,7 +2,7 @@ use core::cell::Cell;
 use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU16, AtomicU32, Ordering};
 
 use crate::cmd;
-use crate::ctx::{IsrCell, MainCell};
+use crate::ctx::MainCell;
 use crate::fifo::{FIFO_DEPTH, Fifo};
 use crate::fpga;
 use crate::port::Port;
@@ -30,7 +30,7 @@ impl Slot {
             len: Cell::new(0),
             payload: Cell::new([0; PAYLOAD_BYTES]),
             header: Cell::new(FrameHeader {
-                seq: 0,
+                reserved: 0,
                 cmd: 0,
                 exec_at: U32::ZERO,
             }),
@@ -64,8 +64,6 @@ impl Slot {
 
 struct Counters {
     fifo_drop: AtomicU32,
-    dedup: AtomicU32,
-    seq_mismatch: AtomicU32,
     dispatch_error: AtomicU32,
     processed: AtomicU32,
     send_failure: AtomicU32,
@@ -79,8 +77,6 @@ impl Counters {
     const fn new() -> Self {
         Self {
             fifo_drop: AtomicU32::new(0),
-            dedup: AtomicU32::new(0),
-            seq_mismatch: AtomicU32::new(0),
             dispatch_error: AtomicU32::new(0),
             processed: AtomicU32::new(0),
             send_failure: AtomicU32::new(0),
@@ -93,8 +89,6 @@ impl Counters {
 
     fn reset_all_but_boot_failure(&self) {
         self.fifo_drop.store(0, Ordering::Relaxed);
-        self.dedup.store(0, Ordering::Relaxed);
-        self.seq_mismatch.store(0, Ordering::Relaxed);
         self.dispatch_error.store(0, Ordering::Relaxed);
         self.processed.store(0, Ordering::Relaxed);
         self.send_failure.store(0, Ordering::Relaxed);
@@ -106,8 +100,6 @@ impl Counters {
     fn telemetry(&self, sync_resync: u8, cpu_watchdog: u8) -> Telemetry {
         Telemetry {
             fifo_drop: self.fifo_drop.load(Ordering::Relaxed).into(),
-            dedup: self.dedup.load(Ordering::Relaxed).into(),
-            seq_mismatch: self.seq_mismatch.load(Ordering::Relaxed).into(),
             dispatch_error: self.dispatch_error.load(Ordering::Relaxed).into(),
             processed: self.processed.load(Ordering::Relaxed).into(),
             send_failure: self.send_failure.load(Ordering::Relaxed).into(),
@@ -138,14 +130,11 @@ fn bump_saturating_u8(counter: &AtomicU8) {
 }
 
 pub struct Cpu {
-    last_seq: IsrCell<u8>,
-    last_cmd: IsrCell<u8>,
     slots: [Slot; FIFO_DEPTH as usize],
     fifo: Fifo,
     counters: Counters,
     failsafe_fired: MainCell<bool>,
     ptp_unlock_failsafe_fired: MainCell<bool>,
-    expected_seq: MainCell<u8>,
     pub(crate) config: MainCell<cmd::cpu_config::CpuConfig>,
     pub(crate) config_reset_requested: AtomicBool,
     ptp_unlocked: AtomicBool,
@@ -179,21 +168,18 @@ impl Cpu {
     #[const_fn::const_fn(cfg(not(loom)))]
     pub const fn new() -> Self {
         Self {
-            last_seq: IsrCell::new(0xFF),
-            last_cmd: IsrCell::new(0xFF),
             slots: [const { Slot::new() }; FIFO_DEPTH as usize],
             fifo: Fifo::new(),
             counters: Counters::new(),
             failsafe_fired: MainCell::new(false),
             ptp_unlock_failsafe_fired: MainCell::new(false),
-            expected_seq: MainCell::new(0),
             config: MainCell::new(cmd::cpu_config::default_config()),
             config_reset_requested: AtomicBool::new(false),
             ptp_unlocked: AtomicBool::new(false),
             ptp_unlocked_ms: AtomicU32::new(0),
             update: cmd::update::UpdateSession::new(),
             fpga_update: cmd::fpga_update::FpgaUpdateSession::new(),
-            results: [const { Cell::new(Reply::RESET) }; FIFO_DEPTH as usize],
+            results: [const { Cell::new(Reply::EMPTY) }; FIFO_DEPTH as usize],
         }
     }
 }
@@ -293,32 +279,10 @@ impl Cpu {
         self.results[Fifo::slot(tail.wrapping_sub(1))].get()
     }
 
-    #[cfg(all(test, not(loom)))]
-    pub(crate) fn expected_seq(&self) -> u8 {
-        self.expected_seq.get()
-    }
-
     pub fn recv_frame(&self, frame: &[u8], msg_id: u16) -> Disposition {
         let Some((header, payload)) = FrameHeader::parse(frame) else {
             return Disposition::Dropped;
         };
-        let FrameHeader {
-            seq, cmd: raw_cmd, ..
-        } = *header;
-        if seq == self.last_seq.get() && raw_cmd == self.last_cmd.get() {
-            bump(&self.counters.dedup);
-            let completed_ack = if Cmd::from_u8(raw_cmd) == Some(Cmd::Reset) {
-                Reply::RESET.ack
-            } else {
-                seq
-            };
-            return if self.reply().ack == completed_ack {
-                Disposition::Reply
-            } else {
-                Disposition::Dropped
-            };
-        }
-
         let head = self.fifo.head();
         if Fifo::is_full(head, self.fifo.tail_acquire()) {
             bump(&self.counters.fifo_drop);
@@ -326,8 +290,6 @@ impl Cpu {
         }
         self.slots[Fifo::slot(head)].store(*header, payload, msg_id);
         self.fifo.publish(head);
-        self.last_seq.set(seq);
-        self.last_cmd.set(raw_cmd);
         Disposition::Deferred
     }
 
@@ -341,9 +303,7 @@ impl Cpu {
         }
         slot.load(work);
         self.apply_requested_config_reset(port);
-        let result = self
-            .handle_frame(port, work)
-            .unwrap_or_else(|| self.result_before(tail));
+        let result = self.handle_frame(port, work);
         self.results[Fifo::slot(tail)].set(result);
         self.fifo.commit(tail);
         Drained::Completed {
@@ -391,30 +351,20 @@ impl Cpu {
         while self.process_one(port, &mut work) != Drained::Empty {}
     }
 
-    fn handle_frame<P: Port>(&self, port: &mut P, in_frame: &RxFrame) -> Option<Reply> {
-        let cmd = Cmd::from_u8(in_frame.header.cmd);
-        if cmd == Some(Cmd::Reset) {
-            self.expected_seq.set(0);
-            return Some(Reply::RESET);
-        }
-        if in_frame.header.seq != self.expected_seq.get() {
-            bump(&self.counters.seq_mismatch);
-            return None;
-        }
-        self.expected_seq.set(in_frame.header.seq.wrapping_add(1));
-        let outcome = match cmd {
+    fn handle_frame<P: Port>(&self, port: &mut P, in_frame: &RxFrame) -> Reply {
+        let outcome = match Cmd::from_u8(in_frame.header.cmd) {
             Some(cmd) => self.dispatch(port, cmd, in_frame.payload()),
             None => Err(Error::UnknownCmd),
         };
         let result = match outcome {
-            Ok(data) => Reply::new(in_frame.header.seq, Error::None, data),
+            Ok(data) => Reply::new(Error::None, data),
             Err(err) => {
                 bump(&self.counters.dispatch_error);
-                Reply::new(in_frame.header.seq, err, ReplyData::EMPTY)
+                Reply::new(err, ReplyData::EMPTY)
             }
         };
         bump(&self.counters.processed);
-        Some(result)
+        result
     }
 
     fn dispatch<P: Port>(&self, port: &mut P, cmd: Cmd, payload: &[u8]) -> Outcome {
@@ -469,7 +419,6 @@ impl Cpu {
             Cmd::FpgaUpdateActivate => self.fpga_update_activate(),
             Cmd::Synchronize => cmd::sync::handle(port, &config),
             Cmd::Clear => self.clear(port),
-            Cmd::Reset => Err(Error::UnknownCmd),
             _ => unreachable!(),
         };
         result.map(|()| ReplyData::EMPTY)
@@ -495,16 +444,8 @@ mod tests {
         Cmd, Disposition, Drained, EXEC_AT_UNIT_NS, Error, FRAME_BYTES_MAX, OUTPUT_MASK_WORDS,
         RxFrame,
     };
-    use crate::test_utils::builders::{config_mod, force_fan, write_foci_buffer, write_mod_buffer};
+    use crate::test_utils::builders::{config_mod, force_fan, write_foci_buffer};
     use crate::test_utils::mock::{Frame, Harness};
-    use crate::version::{FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH};
-
-    #[test]
-    fn initial_ack_is_sentinel_byte() {
-        let h = Harness::new();
-        assert_eq!(h.ack(), 0xFF);
-        assert_eq!(h.expected_seq(), 0);
-    }
 
     #[test]
     fn a_clean_boot_counts_no_boot_failure() {
@@ -521,7 +462,7 @@ mod tests {
         h.port.latch_stuck = false;
         assert_eq!(h.telemetry().boot_failure, 1);
 
-        h.deliver(&Frame::new(0, Cmd::Clear));
+        h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.telemetry().boot_failure, 1);
     }
@@ -550,44 +491,16 @@ mod tests {
         h.cpu.count_send_failures(1);
         assert_eq!(h.telemetry().send_failure, 3);
 
-        h.deliver(&Frame::new(0, Cmd::Clear));
+        h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.telemetry().send_failure, 0);
     }
 
     #[test]
-    fn matching_seq_advances_ack_and_expected_seq() {
+    fn unknown_cmd_reports_unknown_cmd_and_is_processed() {
         let mut h = Harness::new();
-
-        h.deliver(&Frame::new(0, Cmd::Nop));
-        assert_eq!(h.ack(), 0);
-        assert_eq!(h.expected_seq(), 1);
-        assert_eq!(h.status(), Error::None);
-
-        h.deliver(&Frame::new(1, Cmd::ReadFirmwareInfo));
-        assert_eq!(h.ack(), 1);
-        assert_eq!(h.expected_seq(), 2);
-        assert_eq!(h.status(), Error::None);
-        assert_eq!(
-            h.firmware_info().cpu_version,
-            [FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH]
-        );
-    }
-
-    #[test]
-    fn mismatched_seq_is_dropped() {
-        let mut h = Harness::new();
-        h.deliver(&Frame::new(5, Cmd::Nop));
-        assert_eq!(h.ack(), 0xFF);
-        assert_eq!(h.expected_seq(), 0);
-    }
-
-    #[test]
-    fn unknown_cmd_reports_unknown_cmd_and_advances_seq() {
-        let mut h = Harness::new();
-        h.deliver(&Frame::raw(0, 0x7F));
+        h.deliver(&Frame::raw(0x7F));
         assert_eq!(h.status(), Error::UnknownCmd);
-        assert_eq!(h.ack(), 0);
-        assert_eq!(h.expected_seq(), 1);
+        assert_eq!(h.processed(), 1);
         assert_eq!(h.telemetry().dispatch_error, 1);
     }
 
@@ -595,90 +508,25 @@ mod tests {
     fn every_cmd_has_a_dispatch_arm() {
         for &cmd in Cmd::ALL {
             let mut h = Harness::new();
-            h.deliver(&Frame::new(0, cmd));
+            h.deliver(&Frame::new(cmd));
             assert_ne!(h.status(), Error::UnknownCmd, "{cmd:?}");
         }
     }
 
     #[test]
-    fn duplicate_frame_is_suppressed_at_isr_boundary() {
-        let mut h = Harness::new();
-        let f = Frame::new(0, Cmd::Nop);
-        h.deliver(&f);
-        h.deliver(&f);
-        assert_eq!(h.ack(), 0);
-        assert_eq!(h.expected_seq(), 1);
-    }
-
-    #[test]
-    fn reset_arriving_during_a_dispatch_applies_after_that_frame() {
+    fn nop_completes_without_changing_state() {
         let mut h = Harness::new();
 
-        let stale = write_foci_buffer(0, 0, 0, &[0x5A5A]);
-        h.deliver_no_drain(&stale);
-        h.arm_isr_frame(0, Cmd::Reset);
-
-        assert!(h.process_one());
-        assert_eq!(h.ack(), 0);
-        assert_eq!(h.expected_seq(), 1);
-
-        assert!(h.process_one());
-        assert_eq!(h.ack(), 0xFF);
+        h.deliver(&Frame::new(Cmd::Nop));
+        assert_eq!(h.processed(), 1);
         assert_eq!(h.status(), Error::None);
-        assert_eq!(h.expected_seq(), 0);
-
-        assert!(!h.process_one());
-
-        h.deliver(&Frame::new(0, Cmd::Nop));
-        assert_eq!(h.ack(), 0);
-        assert_eq!(h.expected_seq(), 1);
-    }
-
-    #[test]
-    fn reset_returns_proto_state_to_post_boot_baseline() {
-        let mut h = Harness::new();
-
-        h.deliver(&Frame::new(0, Cmd::Nop));
-        h.deliver(&Frame::new(1, Cmd::Nop));
-        assert_eq!(h.ack(), 1);
-        assert_eq!(h.expected_seq(), 2);
-
-        h.deliver(&Frame::new(99, Cmd::Reset));
-        assert_eq!(h.ack(), 0xFF);
-        assert_eq!(h.expected_seq(), 0);
-
-        h.deliver(&Frame::new(0, Cmd::ReadFirmwareInfo));
-        assert_eq!(
-            h.firmware_info().cpu_version,
-            [FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH]
-        );
-    }
-
-    #[test]
-    fn nop_acks_without_changing_state() {
-        let mut h = Harness::new();
-
-        h.deliver(&Frame::new(0, Cmd::Nop));
-        assert_eq!(h.ack(), 0);
-        assert_eq!(h.status(), Error::None);
-        assert_eq!(h.expected_seq(), 1);
         assert_eq!(h.telemetry().dispatch_error, 0);
-    }
-
-    #[test]
-    fn seq_wraparound_boundary() {
-        let mut h = Harness::new();
-        for i in 0..257u16 {
-            h.deliver(&Frame::new((i & 0xFF) as u8, Cmd::Nop));
-        }
-        assert_eq!(h.expected_seq(), 1);
-        assert_eq!(h.ack(), 0);
     }
 
     #[test]
     fn unknown_non_streaming_cmd_reports_unknown_cmd() {
         let mut h = Harness::new();
-        h.deliver(&Frame::raw(0, 0xEE));
+        h.deliver(&Frame::raw(0xEE));
         assert_eq!(h.status(), Error::UnknownCmd);
     }
 
@@ -686,71 +534,28 @@ mod tests {
     fn consecutive_frames_each_process_immediately() {
         let mut h = Harness::new();
 
-        h.deliver(&Frame::new(0, Cmd::Nop));
-        assert_eq!(h.ack(), 0);
-        h.deliver(&Frame::new(1, Cmd::Nop));
-        assert_eq!(h.ack(), 1);
-        h.deliver(&Frame::new(2, Cmd::Nop));
-        assert_eq!(h.ack(), 2);
-        assert_eq!(h.expected_seq(), 3);
-    }
-
-    #[test]
-    fn same_seq_different_cmd_is_not_suppressed_at_isr_boundary() {
-        let mut h = Harness::new();
-        h.deliver(&Frame::new(0, Cmd::Reset));
-        assert_eq!(h.expected_seq(), 0);
-
-        h.deliver(&Frame::new(0, Cmd::Nop));
-        assert_eq!(h.ack(), 0);
-        assert_eq!(h.expected_seq(), 1);
-    }
-
-    #[test]
-    fn dedup_state_resets_on_reboot() {
-        let mut h = Harness::new();
-        h.deliver(&Frame::new(0, Cmd::Nop));
-        assert_eq!(h.expected_seq(), 1);
-
-        h.reboot();
-        h.deliver(&Frame::new(0, Cmd::Nop));
-        assert_eq!(h.expected_seq(), 1);
-    }
-
-    #[test]
-    fn handshake_survives_worst_case_dedup_collision_after_crashed_client() {
-        let mut h = Harness::new();
-        h.deliver(&Frame::new(0, Cmd::Reset));
-
-        h.deliver(&Frame::new(0, Cmd::Nop));
-        assert_eq!(h.expected_seq(), 1);
-
-        h.deliver(&Frame::new(0, Cmd::Reset));
-        h.deliver(&Frame::new(1, Cmd::Reset));
-
-        assert_eq!(h.ack(), 0xFF);
-        assert_eq!(h.expected_seq(), 0);
-
-        h.deliver(&Frame::new(0, Cmd::Nop));
-        assert_eq!(h.ack(), 0);
-        assert_eq!(h.status(), Error::None);
-        assert_eq!(h.expected_seq(), 1);
+        h.deliver(&Frame::new(Cmd::Nop));
+        assert_eq!(h.processed(), 1);
+        h.deliver(&Frame::new(Cmd::Nop));
+        assert_eq!(h.processed(), 2);
+        h.deliver(&Frame::new(Cmd::Nop));
+        assert_eq!(h.processed(), 3);
     }
 
     #[test]
     fn fixed_length_payloads_must_match_exactly() {
         let mut h = Harness::new();
-        let mut long = force_fan(0, 1);
+        let mut long = force_fan(1);
         long.set_payload_byte(size_of::<ForceFanPayload>(), 0);
         h.deliver(&long);
         assert_eq!(h.status(), Error::InvalidPayload);
 
-        let mut short = config_mod(1, 0, 10, 4);
+        let mut short = config_mod(0, 10, 4);
         short.set_len(size_of::<ConfigModPayload>() - 1);
         h.deliver(&short);
         assert_eq!(h.status(), Error::InvalidPayload);
 
-        h.deliver(&force_fan(2, 1));
+        h.deliver(&force_fan(1));
         assert_eq!(h.status(), Error::None);
     }
 
@@ -760,168 +565,120 @@ mod tests {
         let mut frame = std::vec![0u8; FRAME_BYTES_MAX + 1];
         frame[1] = Cmd::Nop as u8;
         assert_eq!(h.cpu.recv_frame(&frame, 0), Disposition::Dropped);
-        assert_eq!(h.ack(), 0xFF);
-        assert_eq!(h.expected_seq(), 0);
+        assert_eq!(h.processed(), 0);
     }
 
     #[test]
     fn fifo_mode_defers_processing_until_drained() {
         let mut h = Harness::new();
 
-        h.deliver_no_drain(&Frame::new(0, Cmd::Nop));
-        assert_eq!(h.ack(), 0xFF);
-        assert_eq!(h.expected_seq(), 0);
+        h.deliver_no_drain(&Frame::new(Cmd::Nop));
+        assert_eq!(h.processed(), 0);
 
         h.cpu.process_pending(&mut h.port);
-        assert_eq!(h.ack(), 0);
-        assert_eq!(h.expected_seq(), 1);
+        assert_eq!(h.processed(), 1);
     }
 
     #[test]
     fn fifo_mode_drains_in_order() {
-        let mut h = Harness::new();
-
-        h.deliver_no_drain(&Frame::new(0, Cmd::Nop));
-        h.deliver_no_drain(&Frame::new(1, Cmd::Nop));
-        h.deliver_no_drain(&Frame::new(2, Cmd::Nop));
-        assert_eq!(h.expected_seq(), 0);
-
-        h.cpu.process_pending(&mut h.port);
-        assert_eq!(h.ack(), 2);
-        assert_eq!(h.expected_seq(), 3);
+        let h = Harness::new();
+        let mut port = crate::test_utils::mock::MockPort::new();
+        let mut work = RxFrame::ZERO;
+        for msg_id in 1..=3 {
+            let _ = h.cpu.recv_frame(&Frame::new(Cmd::Nop).bytes(), msg_id);
+        }
+        for msg_id in 1..=3 {
+            assert_eq!(
+                h.cpu.process_one(&mut port, &mut work),
+                Drained::Completed { msg_id }
+            );
+        }
+        assert_eq!(h.cpu.process_one(&mut port, &mut work), Drained::Empty);
     }
 
     #[test]
-    fn reset_is_deferred_until_drained() {
+    fn a_duplicated_frame_is_processed_twice() {
         let mut h = Harness::new();
-        h.deliver(&Frame::new(0, Cmd::Nop));
+        let frame = Frame::new(Cmd::Nop);
+        h.deliver_no_drain(&frame);
+        h.deliver_no_drain(&frame);
+        h.cpu.process_pending(&mut h.port);
+        assert_eq!(h.processed(), 2);
+    }
 
-        h.deliver_no_drain(&Frame::new(0, Cmd::Reset));
-        assert_eq!(h.ack(), 0);
-        assert_eq!(h.expected_seq(), 1);
-
-        assert!(h.process_one());
-        assert_eq!(h.ack(), 0xFF);
+    #[test]
+    fn the_reserved_header_byte_is_ignored() {
+        let mut h = Harness::new();
+        let mut bytes = Frame::new(Cmd::ReadFpgaState).bytes();
+        bytes[0] = 0xFF;
+        let _ = h.cpu.recv_frame(&bytes, 0);
+        h.cpu.process_pending(&mut h.port);
         assert_eq!(h.status(), Error::None);
-        assert_eq!(h.expected_seq(), 0);
-    }
-
-    #[test]
-    fn frames_queued_before_a_reset_are_processed_before_it() {
-        let mut h = Harness::new();
-
-        h.deliver_no_drain(&Frame::new(0, Cmd::Nop));
-        h.deliver_no_drain(&Frame::new(1, Cmd::Nop));
-        h.deliver_no_drain(&Frame::new(2, Cmd::Nop));
-
-        assert!(h.process_one());
-        assert_eq!(h.ack(), 0);
-
-        h.deliver_no_drain(&Frame::new(0, Cmd::Reset));
-        assert_eq!(h.ack(), 0);
-        assert_eq!(h.expected_seq(), 1);
-
-        assert!(h.process_one());
-        assert!(h.process_one());
-        assert_eq!(h.ack(), 2);
-        assert_eq!(h.expected_seq(), 3);
-
-        assert!(h.process_one());
-        assert_eq!(h.ack(), 0xFF);
-        assert_eq!(h.expected_seq(), 0);
-        assert!(!h.process_one());
-        assert_eq!(h.telemetry().processed, 3);
-    }
-
-    #[test]
-    fn a_frame_queued_after_a_reset_is_accepted_in_the_new_seq_space() {
-        let mut h = Harness::new();
-        h.deliver(&Frame::new(0, Cmd::Nop));
-        h.deliver(&Frame::new(1, Cmd::Nop));
-
-        h.deliver_no_drain(&Frame::new(2, Cmd::Nop));
-        h.deliver_no_drain(&Frame::new(0, Cmd::Reset));
-        h.deliver_no_drain(&Frame::new(0, Cmd::Nop));
-
-        h.cpu.process_pending(&mut h.port);
-        assert_eq!(h.ack(), 0);
-        assert_eq!(h.expected_seq(), 1);
-        assert_eq!(h.telemetry().seq_mismatch, 0);
-    }
-
-    #[test]
-    fn a_seq_mismatch_keeps_the_previous_result() {
-        let mut h = Harness::new();
-        h.deliver(&Frame::new(0, Cmd::ReadFirmwareInfo));
-        let before = h.cpu.reply();
-        assert_ne!(before.data(), []);
-
-        h.deliver(&Frame::new(9, Cmd::Nop));
-        assert_eq!(h.telemetry().seq_mismatch, 1);
-        assert_eq!(h.cpu.reply(), before);
+        assert_eq!(h.processed(), 1);
+        assert_eq!(h.reply_data().len(), 1);
     }
 
     #[test]
     fn the_reply_follows_every_completed_frame_across_the_ring_wrap() {
         let mut h = Harness::new();
-        for seq in 0..(3 * FIFO_DEPTH as u8) {
-            h.deliver(&Frame::new(seq, Cmd::Nop));
-            assert_eq!(h.ack(), seq);
+        for i in 0..(3 * u32::from(FIFO_DEPTH)) {
+            h.deliver(&Frame::new(Cmd::ReadFpgaState));
+            assert_eq!(h.processed(), 2 * i + 1);
+            assert_eq!(h.reply_data().len(), 1);
+            h.deliver(&Frame::new(Cmd::Nop));
+            assert_eq!(h.reply_data(), []);
         }
     }
 
     #[test]
-    fn the_reply_is_reset_ack_until_the_first_frame_completes() {
+    fn the_reply_is_empty_until_the_first_frame_completes() {
         let mut h = Harness::new();
-        for seq in 0..=(FIFO_DEPTH as u8) {
-            h.deliver(&Frame::new(seq, Cmd::Nop));
+        assert_eq!(h.cpu.reply(), crate::proto::Reply::EMPTY);
+        for _ in 0..=FIFO_DEPTH {
+            h.deliver(&Frame::new(Cmd::ReadFpgaState));
+            assert_eq!(h.reply_data().len(), 1);
         }
         h.reboot();
-        assert_eq!(h.cpu.reply(), crate::proto::Reply::RESET);
+        assert_eq!(h.cpu.reply(), crate::proto::Reply::EMPTY);
     }
 
     #[test]
     fn the_isr_sees_the_previous_result_while_a_frame_is_being_processed() {
         let mut h = Harness::new();
-        h.deliver(&Frame::new(0, Cmd::ReadFirmwareInfo));
+        h.deliver(&Frame::new(Cmd::ReadFirmwareInfo));
         let previous = h.cpu.reply();
 
-        h.deliver_no_drain(&crate::test_utils::builders::write_foci_buffer(
-            1,
-            0,
-            0,
-            &[0x5A5A],
-        ));
-        h.arm_isr_frame(2, Cmd::Nop);
+        h.deliver_no_drain(&write_foci_buffer(0, 0, &[0x5A5A]));
+        h.arm_isr_frame(Cmd::Nop);
         assert!(h.process_one());
 
         assert_eq!(h.port.isr_seen_reply, Some(previous));
-        assert_eq!(h.ack(), 1);
+        assert_eq!(h.processed(), 2);
+        assert_eq!(h.reply_data(), []);
     }
 
     #[test]
     fn fifo_overflow_drops_beyond_capacity_and_accepts_after_drain() {
         let mut h = Harness::new();
 
-        let capacity = u8::try_from(FIFO_DEPTH - 1).unwrap();
-        for i in 0..capacity {
-            h.deliver_no_drain(&Frame::new(i, Cmd::Nop));
+        let capacity = u32::from(FIFO_DEPTH - 1);
+        for _ in 0..capacity {
+            h.deliver_no_drain(&Frame::new(Cmd::Nop));
         }
-        h.deliver_no_drain(&Frame::new(capacity, Cmd::Nop));
+        h.deliver_no_drain(&Frame::new(Cmd::Nop));
 
         h.cpu.process_pending(&mut h.port);
-        assert_eq!(h.ack(), capacity - 1);
-        assert_eq!(h.expected_seq(), capacity);
+        assert_eq!(h.processed(), capacity);
+        assert_eq!(h.telemetry().fifo_drop, 1);
 
-        h.deliver(&Frame::new(capacity, Cmd::Nop));
-        assert_eq!(h.ack(), capacity);
-        assert_eq!(h.expected_seq(), capacity + 1);
+        h.deliver(&Frame::new(Cmd::Nop));
+        assert_eq!(h.processed(), capacity + 1);
     }
 
     #[test]
     fn a_fifo_frame_completes_with_its_msg_id() {
         let h = Harness::new();
-        let frame = Frame::new(0, Cmd::Nop).bytes();
+        let frame = Frame::new(Cmd::Nop).bytes();
         assert_eq!(
             h.cpu.recv_frame(&frame, 0x1234),
             crate::proto::Disposition::Deferred
@@ -933,7 +690,6 @@ mod tests {
             Drained::Completed { msg_id: 0x1234 }
         );
         assert_eq!(h.cpu.process_one(&mut port, &mut work), Drained::Empty);
-        assert_eq!(h.cpu.reply().ack, 0);
     }
 
     #[test]
@@ -942,134 +698,35 @@ mod tests {
         let mut port = crate::test_utils::mock::MockPort::new();
         let mut work = RxFrame::ZERO;
         let _ = h.cpu.recv_frame(&[0, Cmd::Nop as u8, 0, 0, 0, 0], 0x11);
-        let _ = h.cpu.recv_frame(&[1, Cmd::Nop as u8, 0, 0, 0, 0], 0x22);
+        let _ = h.cpu.recv_frame(&[0, Cmd::Nop as u8, 0, 0, 0, 0], 0x22);
         assert_eq!(
             h.cpu.step(&mut port, &mut work, 0),
             Drained::Completed { msg_id: 0x11 }
         );
-        assert_eq!(h.cpu.reply().ack, 0);
         assert_eq!(
             h.cpu.step(&mut port, &mut work, 3),
             Drained::Completed { msg_id: 0x22 }
         );
-        assert_eq!(h.cpu.reply().ack, 1);
         assert_eq!(h.cpu.step(&mut port, &mut work, 0), Drained::Empty);
-    }
-
-    #[test]
-    fn a_duplicate_is_answered_by_the_isr_and_a_reset_completes_with_its_msg_id() {
-        let mut h = Harness::new();
-        h.deliver(&Frame::new(0, Cmd::Nop));
-        assert_eq!(
-            h.cpu.recv_frame(&[0, Cmd::Nop as u8, 0, 0, 0, 0], 1),
-            crate::proto::Disposition::Reply
-        );
-        assert_eq!(
-            h.cpu.recv_frame(&[7, Cmd::Reset as u8, 0, 0, 0, 0], 2),
-            crate::proto::Disposition::Deferred
-        );
-        assert!(h.process_one());
-        assert_eq!(h.ack(), 0xFF);
-    }
-
-    #[test]
-    fn a_duplicate_of_a_frame_still_in_the_fifo_gets_no_reply() {
-        let mut h = Harness::new();
-        h.deliver(&Frame::new(0, Cmd::Nop));
-        assert_eq!(
-            h.cpu.recv_frame(&[1, Cmd::Nop as u8, 0, 0, 0, 0], 1),
-            crate::proto::Disposition::Deferred
-        );
-        assert_eq!(h.ack(), 0);
-        assert_eq!(
-            h.cpu.recv_frame(&[1, Cmd::Nop as u8, 0, 0, 0, 0], 1),
-            crate::proto::Disposition::Dropped
-        );
-        assert_eq!(h.telemetry().dedup, 1);
-
-        h.cpu.process_pending(&mut h.port);
-        assert_eq!(
-            h.cpu.recv_frame(&[1, Cmd::Nop as u8, 0, 0, 0, 0], 2),
-            crate::proto::Disposition::Reply
-        );
-        assert_eq!(h.ack(), 1);
-        assert_eq!(h.telemetry().dedup, 2);
-        assert_eq!(h.telemetry().processed, 2);
-    }
-
-    #[test]
-    fn a_retransmitted_reset_is_answered_only_after_it_is_processed() {
-        let mut h = Harness::new();
-        h.deliver(&Frame::new(0, Cmd::Nop));
-        assert_eq!(
-            h.cpu.recv_frame(&[0, Cmd::Reset as u8, 0, 0, 0, 0], 1),
-            crate::proto::Disposition::Deferred
-        );
-        assert_eq!(
-            h.cpu.recv_frame(&[0, Cmd::Reset as u8, 0, 0, 0, 0], 2),
-            crate::proto::Disposition::Dropped
-        );
-        assert_eq!(h.ack(), 0);
-
-        h.cpu.process_pending(&mut h.port);
-        assert_eq!(
-            h.cpu.recv_frame(&[0, Cmd::Reset as u8, 0, 0, 0, 0], 3),
-            crate::proto::Disposition::Reply
-        );
-        assert_eq!(h.ack(), 0xFF);
-    }
-
-    #[test]
-    fn a_duplicate_of_a_frame_rejected_for_its_seq_gets_no_reply() {
-        let mut h = Harness::new();
-        h.deliver(&Frame::new(0, Cmd::Nop));
-        h.deliver(&Frame::new(5, Cmd::Nop));
-        assert_eq!(h.ack(), 0);
-        assert_eq!(
-            h.cpu.recv_frame(&[5, Cmd::Nop as u8, 0, 0, 0, 0], 1),
-            crate::proto::Disposition::Dropped
-        );
-        assert_eq!(h.telemetry().seq_mismatch, 1);
-        assert_eq!(h.telemetry().dedup, 1);
-    }
-
-    #[test]
-    fn repeated_resets_are_each_answered_with_the_reset_ack() {
-        let mut h = Harness::new();
-        h.deliver(&Frame::new(0, Cmd::Reset));
-        for msg_id in 1..4 {
-            assert_eq!(
-                h.cpu.recv_frame(&[0, Cmd::Reset as u8, 0, 0, 0, 0], msg_id),
-                crate::proto::Disposition::Reply
-            );
-            assert_eq!(h.ack(), 0xFF);
-        }
-        assert_eq!(h.expected_seq(), 0);
-        assert_eq!(h.telemetry().dedup, 3);
     }
 
     #[test]
     fn a_full_fifo_drops_the_frame_without_a_reply() {
         let h = Harness::new();
-        let capacity = u8::try_from(FIFO_DEPTH - 1).unwrap();
-        for seq in 0..capacity {
+        for _ in 0..FIFO_DEPTH - 1 {
             assert_eq!(
-                h.cpu.recv_frame(&[seq, Cmd::Nop as u8, 0, 0, 0, 0], 0),
+                h.cpu.recv_frame(&[0, Cmd::Nop as u8, 0, 0, 0, 0], 0),
                 crate::proto::Disposition::Deferred
             );
         }
         assert_eq!(
-            h.cpu.recv_frame(&[capacity, Cmd::Nop as u8, 0, 0, 0, 0], 0),
-            crate::proto::Disposition::Dropped
-        );
-        assert_eq!(
-            h.cpu.recv_frame(&[0, Cmd::Reset as u8, 0, 0, 0, 0], 0),
+            h.cpu.recv_frame(&[0, Cmd::Nop as u8, 0, 0, 0, 0], 0),
             crate::proto::Disposition::Dropped
         );
     }
 
-    fn scheduled(seq: u8, exec_at: u32) -> Frame {
-        let mut frame = Frame::new(seq, Cmd::Nop);
+    fn scheduled(exec_at: u32) -> Frame {
+        let mut frame = Frame::new(Cmd::Nop);
         frame.set_exec_at(exec_at);
         frame
     }
@@ -1083,14 +740,14 @@ mod tests {
         let mut h = Harness::new();
         let exec_at = u64::from(LATER) * US;
         h.port.sys_time = Some(exec_at - SPIN - 1);
-        h.deliver(&scheduled(0, LATER));
-        assert_eq!(h.ack(), 0xFF);
+        h.deliver(&scheduled(LATER));
+        assert_eq!(h.processed(), 0);
         assert!(!h.process_one());
         assert_eq!(h.port.sys_time_reads_masked, 0);
 
         h.port.sys_time = Some(exec_at);
         assert!(h.process_one());
-        assert_eq!(h.ack(), 0);
+        assert_eq!(h.processed(), 1);
         assert_eq!(h.telemetry().exec_late, 0);
     }
 
@@ -1099,8 +756,8 @@ mod tests {
         let mut h = Harness::new();
         let exec_at = u64::from(LATER) * US;
         h.port.sys_time_reads = [Some(exec_at - SPIN), Some(exec_at - 1), Some(exec_at)].into();
-        h.deliver(&scheduled(0, LATER));
-        assert_eq!(h.ack(), 0);
+        h.deliver(&scheduled(LATER));
+        assert_eq!(h.processed(), 1);
         assert_eq!(h.port.sys_time_reads_masked, 2);
         assert!(!h.port.irq_masked);
         assert_eq!(h.telemetry().exec_late, 0);
@@ -1111,8 +768,8 @@ mod tests {
         let mut h = Harness::new();
         let exec_at = u64::from(LATER) * US;
         h.port.sys_time_reads = [Some(exec_at - 1), None].into();
-        h.deliver(&scheduled(0, LATER));
-        assert_eq!(h.ack(), 0);
+        h.deliver(&scheduled(LATER));
+        assert_eq!(h.processed(), 1);
         assert_eq!(h.telemetry().exec_late, 1);
     }
 
@@ -1120,8 +777,8 @@ mod tests {
     fn a_zero_exec_at_is_processed_without_reading_the_time() {
         let mut h = Harness::new();
         h.port.sys_time = None;
-        h.deliver(&scheduled(0, 0));
-        assert_eq!(h.ack(), 0);
+        h.deliver(&scheduled(0));
+        assert_eq!(h.processed(), 1);
         assert_eq!(h.telemetry().exec_late, 0);
     }
 
@@ -1129,41 +786,41 @@ mod tests {
     fn a_waiting_frame_holds_back_the_frames_behind_it() {
         let mut h = Harness::new();
         h.port.sys_time = Some(0);
-        h.deliver(&scheduled(0, LATER));
+        h.deliver(&scheduled(LATER));
         assert_eq!(
-            h.cpu.recv_frame(&scheduled(1, 0).bytes(), 0),
+            h.cpu.recv_frame(&scheduled(0).bytes(), 0),
             Disposition::Deferred
         );
         assert!(!h.process_one());
-        assert_eq!(h.ack(), 0xFF);
+        assert_eq!(h.processed(), 0);
 
         h.port.sys_time = Some(u64::from(LATER) * US);
         h.cpu.process_pending(&mut h.port);
-        assert_eq!(h.ack(), 1);
+        assert_eq!(h.processed(), 2);
     }
 
     #[test]
     fn the_main_loop_keeps_ticking_while_a_frame_waits() {
         let mut h = Harness::new();
         h.port.sys_time = Some(0);
-        h.deliver(&scheduled(0, LATER));
+        h.deliver(&scheduled(LATER));
         let kicks = h.port.watchdog_kicks;
         let mut work = RxFrame::ZERO;
         assert_eq!(h.cpu.step(&mut h.port, &mut work, 3), Drained::Empty);
         assert_eq!(h.port.watchdog_kicks, kicks + 3);
-        assert_eq!(h.ack(), 0xFF);
+        assert_eq!(h.processed(), 0);
     }
 
     #[test]
     fn a_frame_processed_a_microsecond_after_its_exec_at_is_late() {
         let mut h = Harness::new();
         h.port.sys_time = Some(11 * US - 1);
-        h.deliver(&scheduled(0, 10));
+        h.deliver(&scheduled(10));
         assert_eq!(h.telemetry().exec_late, 0);
 
         h.port.sys_time = Some(12 * US);
-        h.deliver(&scheduled(1, 11));
-        assert_eq!(h.ack(), 1);
+        h.deliver(&scheduled(11));
+        assert_eq!(h.processed(), 2);
         assert_eq!(h.telemetry().exec_late, 1);
     }
 
@@ -1171,8 +828,8 @@ mod tests {
     fn a_frame_is_processed_and_late_when_the_device_time_is_unknown() {
         let mut h = Harness::new();
         h.port.sys_time = None;
-        h.deliver(&scheduled(0, 10));
-        assert_eq!(h.ack(), 0);
+        h.deliver(&scheduled(10));
+        assert_eq!(h.processed(), 1);
         assert_eq!(h.telemetry().exec_late, 1);
     }
 
@@ -1181,94 +838,41 @@ mod tests {
         let mut h = Harness::new();
         let before_wrap = u64::from(u32::MAX) * US;
         h.port.sys_time = Some(before_wrap);
-        h.deliver(&scheduled(0, LATER));
-        assert_eq!(h.ack(), 0xFF);
+        h.deliver(&scheduled(LATER));
+        assert_eq!(h.processed(), 0);
 
         h.port.sys_time = Some(before_wrap + u64::from(LATER + 1) * US);
         assert!(h.process_one());
-        assert_eq!(h.ack(), 0);
+        assert_eq!(h.processed(), 1);
         assert_eq!(h.telemetry().exec_late, 0);
 
-        h.deliver(&scheduled(1, u32::MAX));
-        assert_eq!(h.ack(), 1);
+        h.deliver(&scheduled(u32::MAX));
+        assert_eq!(h.processed(), 2);
         assert_eq!(h.telemetry().exec_late, 1);
-    }
-
-    #[test]
-    fn a_retransmission_of_a_waiting_frame_is_dropped_without_a_reply() {
-        let mut h = Harness::new();
-        h.port.sys_time = Some(0);
-        let frame = scheduled(0, LATER);
-        h.deliver(&frame);
-        assert_eq!(h.cpu.recv_frame(&frame.bytes(), 1), Disposition::Dropped);
-        assert_eq!(h.telemetry().dedup, 1);
-
-        h.port.sys_time = Some(u64::from(LATER) * US);
-        assert!(h.process_one());
-        assert!(!h.process_one());
-        assert_eq!(h.ack(), 0);
-    }
-
-    #[test]
-    fn a_reset_behind_a_waiting_frame_waits_for_it() {
-        let mut h = Harness::new();
-        h.port.sys_time = Some(0);
-        h.deliver(&scheduled(0, LATER));
-        assert_eq!(
-            h.cpu.recv_frame(&Frame::new(0, Cmd::Reset).bytes(), 0),
-            Disposition::Deferred
-        );
-        assert!(!h.process_one());
-        assert_eq!(h.expected_seq(), 0);
-        assert_eq!(h.ack(), 0xFF);
-
-        h.port.sys_time = Some(u64::from(LATER) * US);
-        h.cpu.process_pending(&mut h.port);
-        assert_eq!(h.expected_seq(), 0);
-        assert_eq!(h.ack(), 0xFF);
-        assert_eq!(h.telemetry().processed, 1);
     }
 
     #[test]
     fn clear_resets_exec_late() {
         let mut h = Harness::new();
         h.port.sys_time = None;
-        h.deliver(&scheduled(0, 10));
+        h.deliver(&scheduled(10));
         assert_eq!(h.telemetry().exec_late, 1);
-        h.deliver(&Frame::new(1, Cmd::Clear));
+        h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.telemetry().exec_late, 0);
     }
 
     #[test]
     fn telemetry_counts_processed_frames() {
         let mut h = Harness::new();
-        h.deliver(&Frame::new(0, Cmd::Nop));
-        h.deliver(&Frame::new(1, Cmd::Nop));
+        h.deliver(&Frame::new(Cmd::Nop));
+        h.deliver(&Frame::new(Cmd::Nop));
         assert_eq!(h.telemetry().processed, 2);
-    }
-
-    #[test]
-    fn telemetry_counts_dedup_hits() {
-        let mut h = Harness::new();
-        let f = Frame::new(0, Cmd::Nop);
-        h.deliver(&f);
-        h.deliver(&f);
-        assert_eq!(h.telemetry().dedup, 1);
-        assert_eq!(h.telemetry().processed, 1);
-    }
-
-    #[test]
-    fn telemetry_counts_seq_mismatch() {
-        let mut h = Harness::new();
-        h.deliver(&Frame::new(5, Cmd::Nop));
-        assert_eq!(h.telemetry().seq_mismatch, 1);
-        assert_eq!(h.telemetry().processed, 0);
     }
 
     #[test]
     fn telemetry_counts_dispatch_errors() {
         let mut h = Harness::new();
-        h.deliver(&force_fan(0, 2));
+        h.deliver(&force_fan(2));
         assert_eq!(h.status(), Error::InvalidPayload);
         assert_eq!(h.telemetry().dispatch_error, 1);
     }
@@ -1277,28 +881,10 @@ mod tests {
     fn telemetry_counts_fifo_drops() {
         let mut h = Harness::new();
 
-        let capacity = u8::try_from(FIFO_DEPTH - 1).unwrap();
-        for i in 0..=capacity {
-            h.deliver_no_drain(&Frame::new(i, Cmd::Nop));
+        for _ in 0..FIFO_DEPTH {
+            h.deliver_no_drain(&Frame::new(Cmd::Nop));
         }
         assert_eq!(h.telemetry().fifo_drop, 1);
-    }
-
-    #[test]
-    fn fpga_state_survives_reset() {
-        let mut h = Harness::new();
-
-        h.deliver(&write_foci_buffer(0, 0, 0, &[0x5A5A]));
-        h.deliver(&write_mod_buffer(1, 1, 8, &[0x77]));
-        h.deliver(&config_mod(2, 1, 5, 256));
-        assert_eq!(h.status(), Error::None);
-
-        h.deliver(&Frame::new(99, Cmd::Reset));
-        assert_eq!(h.expected_seq(), 0);
-
-        assert_eq!(h.emission_word(0, 0), 0x5A5A);
-        assert_eq!(h.mod_word(1, 4), 0x0077);
-        assert_eq!(h.ctl(ADDR_MOD_CYCLE0 + 1), 255);
     }
 
     #[test]

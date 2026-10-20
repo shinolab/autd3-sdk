@@ -1,6 +1,5 @@
 using System;
 using System.Linq;
-using System.Threading.Tasks;
 using Xunit;
 
 namespace AUTD3.Tests
@@ -44,18 +43,18 @@ namespace AUTD3.Tests
             Assert.Equal(TimeSpan.FromMilliseconds(10), option.AckTimeout);
         }
 
-        private static async Task<Autd3Exception> OpenFails(TransportOption option)
+        private static Autd3Exception OpenFails(TransportOption option)
         {
             using var geometry = new Geometry(new[] { new Autd3(System.Numerics.Vector3.Zero) });
-            return await Assert.ThrowsAsync<Autd3Exception>(() => Client.OpenAsync(geometry, option));
+            return Assert.Throws<Autd3Exception>(() => Client.Open(geometry, option));
         }
 
         [Fact]
-        public async Task AZeroAckTimeoutFailsTheOpenWithTheRustError()
+        public void AZeroAckTimeoutFailsTheOpenWithTheRustError()
         {
             var option = new TransportOption { AckTimeout = TimeSpan.Zero };
             NativeClient.autd3_transport_option_free(option.CreateHandle());
-            var error = await OpenFails(option);
+            var error = OpenFails(option);
             Assert.Equal(Autd3ErrorCode.Network, error.Code);
             Assert.Contains("ack_timeout", error.Message);
         }
@@ -69,9 +68,9 @@ namespace AUTD3.Tests
         }
 
         [Fact]
-        public async Task AZeroLostTimeoutFailsTheOpenWithTheRustError()
+        public void AZeroLostTimeoutFailsTheOpenWithTheRustError()
         {
-            var error = await OpenFails(new TransportOption { LostTimeout = TimeSpan.Zero });
+            var error = OpenFails(new TransportOption { LostTimeout = TimeSpan.Zero });
             Assert.Equal(Autd3ErrorCode.Network, error.Code);
             Assert.Contains("lost_timeout", error.Message);
         }
@@ -123,9 +122,9 @@ namespace AUTD3.Tests
         }
 
         [Fact]
-        public async Task AZeroSendRateLimitFailsTheOpen()
+        public void AZeroSendRateLimitFailsTheOpen()
         {
-            var error = await OpenFails(new TransportOption { SendRateLimitPercent = 0 });
+            var error = OpenFails(new TransportOption { SendRateLimitPercent = 0 });
             Assert.Equal(Autd3ErrorCode.Network, error.Code);
         }
 

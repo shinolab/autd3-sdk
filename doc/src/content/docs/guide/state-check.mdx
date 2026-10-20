@@ -50,7 +50,7 @@ import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 ## Lost からの復帰
 
 `Client::recover` を呼ぶと, `Lost` のデバイスを 1 回だけ探し, 応答が戻ったデバイスを復帰させる.
-復帰したデバイスがあれば `Reset` を送ってデバイスとの足並みを揃え直してから, 復帰したデバイスを返す.
+復帰したデバイスは以後の送信の宛先に戻り, `recover` はそれを返す. `recover` 自身はコマンドを送らない.
 戻り値は復帰したデバイスの集合 `DeviceMask` である. `recovered[i]` でデバイス `i` が復帰したかを `bool` で返す.
 
 対象はケーブルの抜き差しなどで通信が途絶えただけのデバイスで, 電源を入れ直したデバイスは復帰しない (`Client::open` で開き直す).
@@ -66,4 +66,4 @@ import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
   - 出力の位相を揃え直すには [`Synchronize`](/autd3-sdk/api/command/synchronize/) を送る
   - 止まった出力を再開させるには [`ReleaseFailsafe`](/autd3-sdk/api/command/release-failsafe/) を送る. `ReleaseFailsafe` はフェイルセーフで止まっていないデバイスには何もしないので, 全デバイスへ送ってよい.
 - 復帰したデバイスが `Syncing` の場合は, `check` で `Ready` になるのを待ってから `Synchronize` を送る.
-- `recover` の間, 他の送信は待たされる. また, `Reset` の時点で返信待ちのフレームは `Timeout` で失敗する.
+- `recover` の間, 他の送信は待たされる. 返信待ちのフレームはそのまま返信を待つ (復帰したデバイスは, 送った時点で宛先に入っていなかったフレームの返信を求められない).

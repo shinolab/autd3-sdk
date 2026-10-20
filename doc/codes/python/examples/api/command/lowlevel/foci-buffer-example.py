@@ -9,7 +9,7 @@ from autd3.value import Intensity, LoopBehavior, PatternBank, TransitionMode
 
 async def main() -> None:
     geometry = Geometry([Autd3()])
-    async with await Client.open(geometry, TransportOption()) as client:
+    async with Client.open(geometry, TransportOption()) as client:
         await client.send((Clear(), Synchronize()))
 
         center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm)

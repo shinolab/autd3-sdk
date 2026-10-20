@@ -23,7 +23,7 @@ async fn main() -> Result<()> {
 
     let geometry = Geometry::new(vec![Autd3::default()]);
     let option = TransportOption::default();
-    let client = Client::open(&geometry, &option).await?;
+    let client = Client::open(&geometry, &option)?;
 
     let mut modulation = autd3_rs_modulation::modulation_buffer();
     sine(150 * Hz, &SineOption::default(), SamplingConfig::FREQ_4K, &mut modulation)?;

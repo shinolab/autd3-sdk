@@ -31,11 +31,11 @@ mod tests {
     fn fpga_config_writes_the_sync_phase_lock_bit() {
         let mut h = Harness::new();
 
-        h.deliver(&fpga_config(0, 0));
+        h.deliver(&fpga_config(0));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.port.sync_ps_ctl, Some(0));
 
-        h.deliver(&fpga_config(1, 1));
+        h.deliver(&fpga_config(1));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.port.sync_ps_ctl, Some(1));
     }
@@ -44,7 +44,7 @@ mod tests {
     fn fpga_config_rejects_out_of_range() {
         let mut h = Harness::new();
         h.port.sync_ps_ctl = None;
-        h.deliver(&fpga_config(0, 2));
+        h.deliver(&fpga_config(2));
         assert_eq!(h.status(), Error::InvalidPayload);
         assert_eq!(h.port.sync_ps_ctl, None);
     }
@@ -57,7 +57,7 @@ mod tests {
             ADDR_FUNCTION_BITS,
             u16::from(FunctionBits::CPU_WATCHDOG.bits()),
         );
-        h.deliver(&fpga_config(0, 0));
+        h.deliver(&fpga_config(0));
         assert_eq!(h.status(), Error::FpgaUnsupported);
         assert_eq!(h.port.sync_ps_ctl, None);
     }

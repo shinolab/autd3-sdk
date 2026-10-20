@@ -13,7 +13,7 @@ async def main() -> None:
     geometry = Geometry([Autd3()])
 
     # ANCHOR: open
-    client = await Client.open(geometry, TransportOption())
+    client = Client.open(geometry, TransportOption())
     checker = client.state_checker()
     # ANCHOR_END: open
 

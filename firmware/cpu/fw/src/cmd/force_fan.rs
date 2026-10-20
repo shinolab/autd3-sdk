@@ -25,11 +25,11 @@ mod tests {
     fn force_fan_sets_and_clears_persistent_bit() {
         let mut h = Harness::new();
 
-        h.deliver(&force_fan(0, 1));
+        h.deliver(&force_fan(1));
         assert_eq!(h.status(), Error::None);
         assert!(h.ctl_flags().contains(CtlFlags::FORCE_FAN));
 
-        h.deliver(&force_fan(1, 0));
+        h.deliver(&force_fan(0));
         assert_eq!(h.status(), Error::None);
         assert!(!h.ctl_flags().contains(CtlFlags::FORCE_FAN));
     }
@@ -37,15 +37,15 @@ mod tests {
     #[test]
     fn force_fan_rejects_out_of_range() {
         let mut h = Harness::new();
-        h.deliver(&force_fan(0, 2));
+        h.deliver(&force_fan(2));
         assert_eq!(h.status(), Error::InvalidPayload);
     }
 
     #[test]
     fn force_fan_survives_subsequent_latch() {
         let mut h = Harness::new();
-        h.deliver(&force_fan(0, 1));
-        h.deliver(&set_silencer(1, SilencerFlags::STRICT_MODE, 256, 256, 5, 7));
+        h.deliver(&force_fan(1));
+        h.deliver(&set_silencer(SilencerFlags::STRICT_MODE, 256, 256, 5, 7));
         assert!(h.ctl_flags().contains(CtlFlags::FORCE_FAN));
     }
 }

@@ -14,21 +14,11 @@ use zerocopy::FromBytes;
 use common::{NUM_TRANSDUCERS, frame};
 
 #[test]
-fn reset_acks_with_sentinel() {
-    let mut device = Device::new(NUM_TRANSDUCERS);
-    let rx = device.send(&frame(0, Cmd::Reset, &[]));
-    assert_eq!(rx.ack, Reply::RESET.ack);
-    assert_eq!(rx.status, DeviceErrorCode::None);
-}
-
-#[test]
 fn reads_the_firmware_info_in_one_frame() {
     let mut device = Device::new(NUM_TRANSDUCERS);
     let (major, minor, patch) = device.fpga().fpga_version();
-    device.send(&frame(0, Cmd::Reset, &[]));
 
-    let rx = device.send(&frame(0, Cmd::ReadFirmwareInfo, &[]));
-    assert_eq!(rx.ack, 0);
+    let rx = device.send(&frame(Cmd::ReadFirmwareInfo, &[]));
     assert_eq!(rx.status, DeviceErrorCode::None);
     let info = FirmwareInfo::read_from_bytes(rx.data()).unwrap();
     assert_eq!(
@@ -61,12 +51,10 @@ fn init_enables_all_outputs_by_default() {
 #[test]
 fn synchronize_writes_the_next_sync_edge_in_sys_time_ticks() {
     let mut device = Device::new(NUM_TRANSDUCERS);
-    device.send(&frame(0, Cmd::Reset, &[]));
     device.fpga_mut().update_with_sys_time(2_500_000);
     device.fpga_mut().set_next_sync_edge(3_000_000);
 
-    let rx = device.send(&frame(0, Cmd::Synchronize, &[]));
-    assert_eq!(rx.ack, 0);
+    let rx = device.send(&frame(Cmd::Synchronize, &[]));
     assert_eq!(rx.status, DeviceErrorCode::None);
     let sync_time: Vec<u16> = (0..4)
         .map(|i| device.fpga().controller_reg(ADDR_SYNC_TIME_0 + i))
@@ -79,13 +67,13 @@ fn audit_drives_multiple_independent_devices() {
     let mut audit = Audit::new([NUM_TRANSDUCERS, NUM_TRANSDUCERS, NUM_TRANSDUCERS]);
     assert_eq!(audit.num_devices(), 3);
 
-    let tx = frame(0, Cmd::Reset, &[]);
+    let tx = frame(Cmd::Nop, &[]);
     let replies = audit.send(&[&tx, &tx, &tx], 7);
     assert_eq!(replies.len(), 3);
     assert!(
         replies
             .iter()
             .enumerate()
-            .all(|(i, r)| r.device == i && r.msg_id == 7 && r.reply.ack == Reply::RESET.ack)
+            .all(|(i, r)| r.device == i && r.msg_id == 7 && r.reply == Reply::EMPTY)
     );
 }

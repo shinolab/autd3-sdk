@@ -70,8 +70,6 @@ fn to_gpio_in(v: u8) -> Option<GpioIn> {
 fn to_telemetry(telemetry: Telemetry) -> Autd3Telemetry {
     Autd3Telemetry {
         fifo_drop: telemetry.fifo_drop,
-        dedup: telemetry.dedup,
-        seq_mismatch: telemetry.seq_mismatch,
         dispatch_error: telemetry.dispatch_error,
         processed: telemetry.processed,
         send_failure: telemetry.send_failure,
@@ -1868,7 +1866,7 @@ pub struct DeviceStatus {
 
 pub(crate) fn error_code(e: &Error) -> i32 {
     match e {
-        Error::Timeout { .. } | Error::SeqMismatch { .. } => AUTD3_ERR_TIMEOUT,
+        Error::Timeout { .. } => AUTD3_ERR_TIMEOUT,
         Error::DeviceError { .. } | Error::UnexpectedReply { .. } => AUTD3_ERR_DEVICE,
         Error::Network(_) | Error::DeviceLost { .. } => AUTD3_ERR_NETWORK,
         Error::InvalidPayload(_) | Error::Encode(_) => AUTD3_ERR_INVALID_ARGUMENT,
@@ -1938,36 +1936,39 @@ fn frame_at(frames: &Frames, index: usize) -> Result<autd3_rs::Frame<'_>, Error>
 pub unsafe extern "C" fn autd3_client_open(
     geometry: *const Geometry,
     option: *mut udp::TransportOptionHandle,
-    cb: CompletionCallback,
-    user_data: *mut c_void,
-) {
+    out: *mut *mut ClientHandle,
+    out_err: *mut c_char,
+    out_err_len: usize,
+) -> i32 {
     let option = unsafe { take_handle(option) };
-    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
-        return;
-    };
-    let Some(udp::TransportOptionHandle(option)) = option else {
-        ctx.invalid_argument("null argument");
-        return;
-    };
-    let Some(geometry) = (unsafe { handle_ref::<Geometry>(geometry) }) else {
-        ctx.invalid_argument("null argument");
-        return;
+    if out.is_null() {
+        unsafe { write_cstr(out_err, out_err_len, "null argument") };
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    }
+    unsafe { out.write(std::ptr::null_mut()) };
+    let (Some(udp::TransportOptionHandle(option)), Some(geometry)) =
+        (option, unsafe { handle_ref::<Geometry>(geometry) })
+    else {
+        unsafe { write_cstr(out_err, out_err_len, "null argument") };
+        return AUTD3_ERR_INVALID_ARGUMENT;
     };
     let num_devices = geometry.num_devices();
     if num_devices == 0 || num_devices > autd3_rs::MAX_DEVICES {
-        ctx.invalid_argument(&format!(
+        let message = format!(
             "the device count {num_devices} is outside 1..={}",
             autd3_rs::MAX_DEVICES
-        ));
-        return;
+        );
+        unsafe { write_cstr(out_err, out_err_len, &message) };
+        return AUTD3_ERR_INVALID_ARGUMENT;
     }
 
-    let geometry = geometry.clone();
-    spawn_completion(
-        ctx,
-        async move { Client::open(&geometry, &option).await },
-        |client| into_handle(ClientHandle(Arc::new(client))).cast(),
-    );
+    match Client::open(geometry, &option) {
+        Ok(client) => unsafe { write_out(out, into_handle(ClientHandle(Arc::new(client)))) },
+        Err(e) => {
+            unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
+            error_code(&e)
+        }
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -2281,11 +2282,6 @@ pub unsafe extern "C" fn autd3_client_bus_stats(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_bus_stats_frames(stats: *const BusStatsHandle) -> u64 {
     unsafe { handle_ref(stats) }.map_or(0, |stats| stats.0.frames())
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_bus_stats_resets(stats: *const BusStatsHandle) -> u64 {
-    unsafe { handle_ref(stats) }.map_or(0, |stats| stats.0.resets())
 }
 
 #[unsafe(no_mangle)]

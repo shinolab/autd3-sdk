@@ -97,20 +97,16 @@ mod tests {
     #[test]
     fn the_margin_follows_the_config() {
         let mut h = Harness::new();
-        h.deliver(&config_mod_rep(0, 1, 10, 100, 4));
+        h.deliver(&config_mod_rep(1, 10, 100, 4));
         h.port.sys_time = Some(1_000_000_000);
 
-        h.deliver(&set_cpu_config(
-            1,
-            &CpuConfig {
-                sys_time_transition_margin: Duration::from_millis(1),
-                ..DEFAULT
-            },
-        ));
+        h.deliver(&set_cpu_config(&CpuConfig {
+            sys_time_transition_margin: Duration::from_millis(1),
+            ..DEFAULT
+        }));
         assert_eq!(h.status(), Error::None);
 
         h.deliver(&activate_mod_bank(
-            2,
             1,
             TransitionMode::SysTime,
             1_000_000_000 + 999_999,
@@ -119,7 +115,6 @@ mod tests {
         assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 0);
 
         h.deliver(&activate_mod_bank(
-            3,
             1,
             TransitionMode::SysTime,
             1_000_000_000 + 1_000_000,
@@ -131,27 +126,18 @@ mod tests {
     #[test]
     fn a_zero_margin_means_no_margin() {
         let mut h = Harness::new();
-        h.deliver(&config_mod_rep(0, 1, 10, 100, 4));
+        h.deliver(&config_mod_rep(1, 10, 100, 4));
         h.port.sys_time = Some(1_000_000_000);
-        h.deliver(&set_cpu_config(
-            1,
-            &CpuConfig {
-                sys_time_transition_margin: Duration::ZERO,
-                ..DEFAULT
-            },
-        ));
+        h.deliver(&set_cpu_config(&CpuConfig {
+            sys_time_transition_margin: Duration::ZERO,
+            ..DEFAULT
+        }));
         assert_eq!(h.status(), Error::None);
 
-        h.deliver(&activate_mod_bank(
-            2,
-            1,
-            TransitionMode::SysTime,
-            999_999_999,
-        ));
+        h.deliver(&activate_mod_bank(1, TransitionMode::SysTime, 999_999_999));
         assert_eq!(h.status(), Error::MissTransitionTime);
 
         h.deliver(&activate_mod_bank(
-            3,
             1,
             TransitionMode::SysTime,
             1_000_000_000,
@@ -181,8 +167,8 @@ mod tests {
             },
         ];
         let mut h = Harness::new();
-        for (seq, payload) in rejected.iter().enumerate() {
-            h.deliver(&Frame::from_payload(seq as u8, Cmd::SetCpuConfig, payload));
+        for payload in &rejected {
+            h.deliver(&Frame::from_payload(Cmd::SetCpuConfig, payload));
             assert_eq!(h.status(), Error::InvalidPayload);
             assert_eq!(h.cpu.config(), DEFAULT);
             assert_eq!(h.port.ptp_config, None);
@@ -190,7 +176,6 @@ mod tests {
 
         let bytes = valid.as_bytes();
         h.deliver(&Frame::from_payload(
-            3,
             Cmd::SetCpuConfig,
             &bytes[..bytes.len() - 1],
         ));
@@ -201,20 +186,17 @@ mod tests {
     #[test]
     fn the_latch_wait_polls_the_configured_number_of_times() {
         let mut h = Harness::new();
-        h.deliver(&set_cpu_config(
-            0,
-            &CpuConfig {
-                fpga_wait_update_max_polls: NonZeroU32::new(5).unwrap(),
-                ..DEFAULT
-            },
-        ));
+        h.deliver(&set_cpu_config(&CpuConfig {
+            fpga_wait_update_max_polls: NonZeroU32::new(5).unwrap(),
+            ..DEFAULT
+        }));
         assert_eq!(h.status(), Error::None);
 
         h.port.latch_stuck = true;
         h.port.next_sync_edge = core::num::NonZeroU64::new(1_000_000);
         h.port.sys_time = Some(500_000);
         let reads = h.port.ctl_flag_reads;
-        h.deliver(&Frame::new(1, Cmd::Synchronize));
+        h.deliver(&Frame::new(Cmd::Synchronize));
         assert_eq!(h.status(), Error::FpgaTimeout);
         assert_eq!(h.port.ctl_flag_reads - reads, 1 + 5);
         h.port.latch_stuck = false;
@@ -225,17 +207,14 @@ mod tests {
         let mut h = Harness::new();
         h.port.next_sync_edge = core::num::NonZeroU64::new(1_000_000);
         h.port.sys_time = Some(500_000);
-        h.deliver(&Frame::new(0, Cmd::Synchronize));
+        h.deliver(&Frame::new(Cmd::Synchronize));
         assert_eq!(h.port.sync_guard_ns, Some(250_000));
 
-        h.deliver(&set_cpu_config(
-            1,
-            &CpuConfig {
-                sync_guard: Duration::ZERO,
-                ..DEFAULT
-            },
-        ));
-        h.deliver(&Frame::new(2, Cmd::Synchronize));
+        h.deliver(&set_cpu_config(&CpuConfig {
+            sync_guard: Duration::ZERO,
+            ..DEFAULT
+        }));
+        h.deliver(&Frame::new(Cmd::Synchronize));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.port.sync_guard_ns, Some(0));
         assert_eq!(h.latch_count(CtlFlags::SYNC_SET), 2);
@@ -261,7 +240,7 @@ mod tests {
             pause_retry: Duration::from_millis(4),
         };
         let mut h = Harness::new();
-        h.deliver(&set_cpu_config(0, &CpuConfig { ptp, ..DEFAULT }));
+        h.deliver(&set_cpu_config(&CpuConfig { ptp, ..DEFAULT }));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.port.ptp_config, Some(ptp));
     }
@@ -269,17 +248,14 @@ mod tests {
     #[test]
     fn the_fpga_bus_wait_reaches_the_port_and_clear_restores_three_cycles() {
         let mut h = Harness::new();
-        h.deliver(&set_cpu_config(
-            0,
-            &CpuConfig {
-                fpga_bus_wait: FpgaBusWait::Cycles2,
-                ..DEFAULT
-            },
-        ));
+        h.deliver(&set_cpu_config(&CpuConfig {
+            fpga_bus_wait: FpgaBusWait::Cycles2,
+            ..DEFAULT
+        }));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.port.fpga_bus_wait, Some(FpgaBusWait::Cycles2));
 
-        h.deliver(&Frame::new(1, Cmd::Clear));
+        h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.port.fpga_bus_wait, Some(FpgaBusWait::Cycles3));
     }
@@ -287,22 +263,19 @@ mod tests {
     #[test]
     fn clear_restores_the_defaults() {
         let mut h = Harness::new();
-        h.deliver(&set_cpu_config(
-            0,
-            &CpuConfig {
-                sys_time_transition_margin: Duration::from_nanos(1),
-                fpga_wait_update_max_polls: NonZeroU32::new(5).unwrap(),
-                ptp: PtpConfig {
-                    holdover: Duration::from_millis(500),
-                    ..PtpConfig::default()
-                },
-                ..DEFAULT
+        h.deliver(&set_cpu_config(&CpuConfig {
+            sys_time_transition_margin: Duration::from_nanos(1),
+            fpga_wait_update_max_polls: NonZeroU32::new(5).unwrap(),
+            ptp: PtpConfig {
+                holdover: Duration::from_millis(500),
+                ..PtpConfig::default()
             },
-        ));
+            ..DEFAULT
+        }));
         assert_eq!(h.status(), Error::None);
         assert_ne!(h.cpu.config(), DEFAULT);
 
-        h.deliver(&Frame::new(1, Cmd::Clear));
+        h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.cpu.config(), DEFAULT);
         assert_eq!(h.port.ptp_config, Some(PtpConfig::default()));
@@ -311,18 +284,15 @@ mod tests {
     #[test]
     fn a_requested_reset_restores_the_defaults_on_the_next_tick() {
         let mut h = Harness::new();
-        h.deliver(&set_cpu_config(
-            0,
-            &CpuConfig {
-                failsafe_timeout: Some(Duration::from_millis(500)),
-                fpga_bus_wait: FpgaBusWait::Cycles2,
-                ptp: PtpConfig {
-                    holdover: Duration::from_millis(500),
-                    ..PtpConfig::default()
-                },
-                ..DEFAULT
+        h.deliver(&set_cpu_config(&CpuConfig {
+            failsafe_timeout: Some(Duration::from_millis(500)),
+            fpga_bus_wait: FpgaBusWait::Cycles2,
+            ptp: PtpConfig {
+                holdover: Duration::from_millis(500),
+                ..PtpConfig::default()
             },
-        ));
+            ..DEFAULT
+        }));
         assert_ne!(h.cpu.config(), DEFAULT);
 
         h.cpu.request_config_reset();
@@ -343,7 +313,7 @@ mod tests {
             failsafe_timeout: Some(Duration::from_millis(500)),
             ..DEFAULT
         };
-        h.deliver(&set_cpu_config(0, &config));
+        h.deliver(&set_cpu_config(&config));
         h.cpu.tick_1ms(&mut h.port);
         assert_eq!(h.cpu.config(), config);
     }
@@ -351,21 +321,18 @@ mod tests {
     #[test]
     fn a_requested_reset_lands_before_a_frame_queued_after_it() {
         let mut h = Harness::new();
-        h.deliver(&set_cpu_config(
-            0,
-            &CpuConfig {
-                failsafe_timeout: Some(Duration::from_millis(500)),
-                fpga_bus_wait: FpgaBusWait::Cycles2,
-                ..DEFAULT
-            },
-        ));
+        h.deliver(&set_cpu_config(&CpuConfig {
+            failsafe_timeout: Some(Duration::from_millis(500)),
+            fpga_bus_wait: FpgaBusWait::Cycles2,
+            ..DEFAULT
+        }));
 
         h.cpu.request_config_reset();
         let config = CpuConfig {
             sys_time_transition_margin: Duration::from_nanos(1),
             ..DEFAULT
         };
-        h.deliver(&set_cpu_config(1, &config));
+        h.deliver(&set_cpu_config(&config));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.cpu.config(), config);
         h.cpu.tick_1ms(&mut h.port);
@@ -379,7 +346,7 @@ mod tests {
             failsafe_timeout: Some(Duration::from_millis(500)),
             ..DEFAULT
         };
-        h.deliver_no_drain(&set_cpu_config(0, &config));
+        h.deliver_no_drain(&set_cpu_config(&config));
         h.cpu.request_config_reset();
         assert!(h.process_one());
         assert_eq!(h.cpu.config(), config);
@@ -388,13 +355,10 @@ mod tests {
     #[test]
     fn a_requested_reset_disables_an_enabled_failsafe_and_keeps_the_gate_closed() {
         let mut h = Harness::new();
-        h.deliver(&set_cpu_config(
-            0,
-            &CpuConfig {
-                failsafe_timeout: Some(Duration::from_millis(500)),
-                ..DEFAULT
-            },
-        ));
+        h.deliver(&set_cpu_config(&CpuConfig {
+            failsafe_timeout: Some(Duration::from_millis(500)),
+            ..DEFAULT
+        }));
         h.port.host_idle_ms = Some(1000);
         h.cpu.tick_1ms(&mut h.port);
         assert_eq!(h.telemetry().failsafe, 1);
@@ -413,13 +377,10 @@ mod tests {
     #[test]
     fn a_requested_reset_stops_a_silent_host_from_tripping_an_enabled_failsafe() {
         let mut h = Harness::new();
-        h.deliver(&set_cpu_config(
-            0,
-            &CpuConfig {
-                failsafe_timeout: Some(Duration::from_millis(500)),
-                ..DEFAULT
-            },
-        ));
+        h.deliver(&set_cpu_config(&CpuConfig {
+            failsafe_timeout: Some(Duration::from_millis(500)),
+            ..DEFAULT
+        }));
         h.port.host_idle_ms = Some(499);
         h.cpu.tick_1ms(&mut h.port);
         assert_eq!(h.telemetry().failsafe, 0);
@@ -429,17 +390,5 @@ mod tests {
         h.cpu.tick_1ms(&mut h.port);
         assert_eq!(h.telemetry().failsafe, 0);
         assert!(!CtlFlags::from_bits_retain(h.ctl(ADDR_CTL_FLAG)).contains(CtlFlags::FAILSAFE));
-    }
-
-    #[test]
-    fn reset_keeps_the_config() {
-        let mut h = Harness::new();
-        let config = CpuConfig {
-            sys_time_transition_margin: Duration::from_nanos(1),
-            ..DEFAULT
-        };
-        h.deliver(&set_cpu_config(0, &config));
-        h.deliver(&Frame::new(0, Cmd::Reset));
-        assert_eq!(h.cpu.config(), config);
     }
 }

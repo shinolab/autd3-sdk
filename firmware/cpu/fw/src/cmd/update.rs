@@ -347,12 +347,11 @@ mod tests {
     const CPU_WATCHDOG_TIMEOUT_MS: u16 =
         autd3_cpu_wire::cpu_params::CPU_WATCHDOG_TIMEOUT.as_millis() as u16;
     use crate::fpga_params::CtlFlags;
-    use crate::proto::{Cmd, Disposition, Error};
+    use crate::proto::{Cmd, Error};
     use crate::test_utils::mock::{Frame, Harness};
 
-    fn begin(seq: u8, length: u32, crc: u32) -> Frame {
+    fn begin(length: u32, crc: u32) -> Frame {
         Frame::from_payload(
-            seq,
             Cmd::UpdateBegin,
             &UpdateBeginPayload {
                 length: U32::new(length),
@@ -361,9 +360,8 @@ mod tests {
         )
     }
 
-    fn chunk(seq: u8, offset: u32, data: &[u8]) -> Frame {
+    fn chunk(offset: u32, data: &[u8]) -> Frame {
         Frame::from_parts(
-            seq,
             Cmd::UpdateChunk,
             &UpdateChunkPayload {
                 offset: U32::new(offset),
@@ -384,22 +382,19 @@ mod tests {
             .collect()
     }
 
-    fn send_image(h: &mut Harness, seq: &mut u8, img: &[u8]) {
+    fn send_image(h: &mut Harness, img: &[u8]) {
         for (i, piece) in img.chunks(UPDATE_CHUNK_MAX_DATA_LEN).enumerate() {
-            h.deliver(&chunk(*seq, (i * UPDATE_CHUNK_MAX_DATA_LEN) as u32, piece));
+            h.deliver(&chunk((i * UPDATE_CHUNK_MAX_DATA_LEN) as u32, piece));
             assert_eq!(h.status(), Error::None, "chunk {i}");
-            *seq = seq.wrapping_add(1);
         }
     }
 
-    fn run_update(h: &mut Harness, seq: &mut u8, img: &[u8]) {
-        h.deliver(&begin(*seq, img.len() as u32, crc32(img)));
+    fn run_update(h: &mut Harness, img: &[u8]) {
+        h.deliver(&begin(img.len() as u32, crc32(img)));
         assert_eq!(h.status(), Error::None);
-        *seq = seq.wrapping_add(1);
-        send_image(h, seq, img);
-        h.deliver(&Frame::new(*seq, Cmd::UpdateCommit));
+        send_image(h, img);
+        h.deliver(&Frame::new(Cmd::UpdateCommit));
         assert_eq!(h.status(), Error::None);
-        *seq = seq.wrapping_add(1);
     }
 
     fn header_of(h: &Harness, slot: Slot) -> ImageHeader {
@@ -436,7 +431,7 @@ mod tests {
     #[test]
     fn begin_refuses_to_erase_when_no_slot_is_valid() {
         let mut h = Harness::new();
-        h.deliver(&begin(0, 5000, 0));
+        h.deliver(&begin(5000, 0));
         assert_eq!(h.status(), Error::UpdateFlash);
         assert_eq!(h.cpu.update.state(), State::Idle);
         assert_eq!(h.port.erased, []);
@@ -447,7 +442,7 @@ mod tests {
                 .all(|sector| *sector == [0xFF; FLASH_SECTOR_BYTES as usize])
         );
 
-        h.deliver(&chunk(1, 0, &[1, 2, 3]));
+        h.deliver(&chunk(0, &[1, 2, 3]));
         assert_eq!(h.status(), Error::UpdateNotStarted);
     }
 
@@ -456,7 +451,7 @@ mod tests {
         let (mut h, _) = running_from_slot_a();
         let corrupt = Slot::A.image_base() as usize + 3;
         h.port.flash[corrupt] ^= 0x10;
-        h.deliver(&begin(0, 5000, 0));
+        h.deliver(&begin(5000, 0));
         assert_eq!(h.status(), Error::UpdateFlash);
         assert_eq!(h.port.erased, []);
     }
@@ -465,8 +460,7 @@ mod tests {
     fn first_update_on_a_fresh_device_targets_slot_b_with_generation_1() {
         let (mut h, running) = running_from_slot_a();
         let img = image(5000, 1);
-        let mut seq = 0;
-        run_update(&mut h, &mut seq, &img);
+        run_update(&mut h, &img);
 
         let header = header_of(&h, Slot::B);
         assert!(header.is_plausible());
@@ -489,8 +483,7 @@ mod tests {
         let running = image(3000, 7);
         stamp(&mut h, Slot::A, 3, &running);
         let img = image(70_000, 2);
-        let mut seq = 0;
-        run_update(&mut h, &mut seq, &img);
+        run_update(&mut h, &img);
 
         let b = header_of(&h, Slot::B);
         assert_eq!(b.generation.get(), 4);
@@ -510,8 +503,7 @@ mod tests {
         stamp(&mut h, Slot::A, 5, &image(100, 3));
         stamp(&mut h, Slot::B, 7, &image(100, 4));
         let img = image(1000, 5);
-        let mut seq = 0;
-        run_update(&mut h, &mut seq, &img);
+        run_update(&mut h, &img);
         assert_eq!(header_of(&h, Slot::A).generation.get(), 8);
         assert_eq!(header_of(&h, Slot::B).generation.get(), 7);
     }
@@ -524,8 +516,7 @@ mod tests {
         let corrupt = Slot::B.image_base() as usize + 10;
         h.port.flash[corrupt] ^= 0x01;
         let img = image(1000, 5);
-        let mut seq = 0;
-        run_update(&mut h, &mut seq, &img);
+        run_update(&mut h, &img);
         assert_eq!(header_of(&h, Slot::B).generation.get(), 2);
         assert_eq!(header_of(&h, Slot::A).generation.get(), 1);
     }
@@ -534,29 +525,28 @@ mod tests {
     fn commit_rejects_a_crc_mismatch_and_leaves_the_slot_invalid() {
         let (mut h, _) = running_from_slot_a();
         let img = image(2000, 6);
-        h.deliver(&begin(0, img.len() as u32, crc32(&img) ^ 1));
-        let mut seq = 1;
-        send_image(&mut h, &mut seq, &img);
-        h.deliver(&Frame::new(seq, Cmd::UpdateCommit));
+        h.deliver(&begin(img.len() as u32, crc32(&img) ^ 1));
+        send_image(&mut h, &img);
+        h.deliver(&Frame::new(Cmd::UpdateCommit));
         assert_eq!(h.status(), Error::UpdateImageInvalid);
         assert!(!header_of(&h, Slot::B).is_plausible());
         assert_eq!(header_of(&h, Slot::A).generation.get(), 0);
         assert_eq!(h.cpu.update.state(), State::Idle);
 
-        h.deliver(&chunk(seq + 1, 0, &img[..8]));
+        h.deliver(&chunk(0, &img[..8]));
         assert_eq!(h.status(), Error::UpdateNotStarted);
-        h.deliver(&Frame::new(seq + 2, Cmd::UpdateCommit));
+        h.deliver(&Frame::new(Cmd::UpdateCommit));
         assert_eq!(h.status(), Error::UpdateNotStarted);
-        h.deliver(&Frame::new(seq + 3, Cmd::UpdateActivate));
+        h.deliver(&Frame::new(Cmd::UpdateActivate));
         assert_eq!(h.status(), Error::UpdateNotCommitted);
     }
 
     #[test]
     fn chunk_and_commit_without_begin_are_rejected() {
         let mut h = Harness::new();
-        h.deliver(&chunk(0, 0, &[1, 2, 3]));
+        h.deliver(&chunk(0, &[1, 2, 3]));
         assert_eq!(h.status(), Error::UpdateNotStarted);
-        h.deliver(&Frame::new(1, Cmd::UpdateCommit));
+        h.deliver(&Frame::new(Cmd::UpdateCommit));
         assert_eq!(h.status(), Error::UpdateNotStarted);
         assert_eq!(h.port.erased, []);
         assert!(
@@ -571,13 +561,12 @@ mod tests {
     fn chunk_out_of_range_is_invalid_payload() {
         let (mut h, _) = running_from_slot_a();
         let img = image(1000, 8);
-        h.deliver(&begin(0, img.len() as u32, crc32(&img)));
-        h.deliver(&chunk(1, 996, &img[..8]));
+        h.deliver(&begin(img.len() as u32, crc32(&img)));
+        h.deliver(&chunk(996, &img[..8]));
         assert_eq!(h.status(), Error::InvalidPayload);
-        h.deliver(&chunk(2, 1001, &[]));
+        h.deliver(&chunk(1001, &[]));
         assert_eq!(h.status(), Error::InvalidPayload);
         let oversized = Frame::from_parts(
-            3,
             Cmd::UpdateChunk,
             &UpdateChunkPayload {
                 offset: U32::new(0),
@@ -586,7 +575,7 @@ mod tests {
         );
         h.deliver(&oversized);
         assert_eq!(h.status(), Error::InvalidPayload);
-        h.deliver(&chunk(4, 1000, &[]));
+        h.deliver(&chunk(1000, &[]));
         assert_eq!(h.status(), Error::None);
         assert_eq!(
             h.cpu.update.state(),
@@ -597,7 +586,7 @@ mod tests {
                 generation: 1
             }
         );
-        h.deliver(&chunk(5, u32::MAX - 1, &img[..3]));
+        h.deliver(&chunk(u32::MAX - 1, &img[..3]));
         assert_eq!(h.status(), Error::InvalidPayload);
     }
 
@@ -605,22 +594,19 @@ mod tests {
     fn begin_rejects_lengths_the_loader_cannot_copy() {
         let max = IMAGE_VECTOR_BYTES + IMAGE_APP_CAPACITY;
         let (mut h, _) = running_from_slot_a();
-        for (seq, length) in [
+        for length in [
             0,
             IMAGE_VECTOR_BYTES,
             max + 1,
             SLOT_IMAGE_CAPACITY,
             SLOT_IMAGE_CAPACITY + 1,
-        ]
-        .into_iter()
-        .enumerate()
-        {
-            h.deliver(&begin(seq as u8, length, 0));
+        ] {
+            h.deliver(&begin(length, 0));
             assert_eq!(h.status(), Error::InvalidPayload, "length {length}");
         }
         assert_eq!(h.cpu.update.state(), State::Idle);
         assert_eq!(h.port.erased, []);
-        h.deliver(&begin(5, max, 0));
+        h.deliver(&begin(max, 0));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.port.erased, [(Slot::B.base(), erased_len(max))]);
     }
@@ -633,12 +619,11 @@ mod tests {
     fn an_invalid_begin_keeps_a_committed_image_activatable(#[case] length: Option<u32>) {
         let (mut h, _) = running_from_slot_a();
         let img = image(300, 9);
-        let mut seq = 0;
-        run_update(&mut h, &mut seq, &img);
+        run_update(&mut h, &img);
         assert_eq!(h.cpu.update.state(), State::Committed);
         let erased = h.port.erased.clone();
 
-        let mut invalid = begin(seq, length.unwrap_or(0), 0);
+        let mut invalid = begin(length.unwrap_or(0), 0);
         if length.is_none() {
             invalid.set_len(size_of::<UpdateBeginPayload>() - 1);
         }
@@ -647,7 +632,7 @@ mod tests {
         assert_eq!(h.cpu.update.state(), State::Committed);
         assert_eq!(h.port.erased, erased);
 
-        h.deliver(&Frame::new(seq + 1, Cmd::UpdateActivate));
+        h.deliver(&Frame::new(Cmd::UpdateActivate));
         assert_eq!(h.status(), Error::None);
         h.tick_1ms(u32::from(ACTIVATE_DELAY_MS));
         assert_eq!(h.port.reset_count, 1);
@@ -657,15 +642,14 @@ mod tests {
     fn an_invalid_begin_keeps_the_session_that_is_receiving() {
         let (mut h, _) = running_from_slot_a();
         let img = image(300, 9);
-        h.deliver(&begin(0, img.len() as u32, crc32(&img)));
+        h.deliver(&begin(img.len() as u32, crc32(&img)));
         assert_eq!(h.status(), Error::None);
         let session = h.cpu.update.state();
-        h.deliver(&begin(1, 0, 0));
+        h.deliver(&begin(0, 0));
         assert_eq!(h.status(), Error::InvalidPayload);
         assert_eq!(h.cpu.update.state(), session);
-        let mut seq = 2;
-        send_image(&mut h, &mut seq, &img);
-        h.deliver(&Frame::new(seq, Cmd::UpdateCommit));
+        send_image(&mut h, &img);
+        h.deliver(&Frame::new(Cmd::UpdateCommit));
         assert_eq!(h.status(), Error::None);
     }
 
@@ -673,11 +657,10 @@ mod tests {
     fn a_valid_begin_discards_a_committed_image() {
         let (mut h, _) = running_from_slot_a();
         let img = image(300, 9);
-        let mut seq = 0;
-        run_update(&mut h, &mut seq, &img);
-        h.deliver(&begin(seq, img.len() as u32, crc32(&img)));
+        run_update(&mut h, &img);
+        h.deliver(&begin(img.len() as u32, crc32(&img)));
         assert_eq!(h.status(), Error::None);
-        h.deliver(&Frame::new(seq + 1, Cmd::UpdateActivate));
+        h.deliver(&Frame::new(Cmd::UpdateActivate));
         assert_eq!(h.status(), Error::UpdateNotCommitted);
     }
 
@@ -689,22 +672,15 @@ mod tests {
 
         let (mut h, _) = running_from_slot_a();
         let img = image(300, 9);
-        let mut seq = 0;
-        h.deliver(&set_cpu_config(
-            seq,
-            &CpuConfig {
-                update_activate_delay: core::time::Duration::from_millis(7),
-                ..CpuConfig::default()
-            },
-        ));
+        h.deliver(&set_cpu_config(&CpuConfig {
+            update_activate_delay: core::time::Duration::from_millis(7),
+            ..CpuConfig::default()
+        }));
         assert_eq!(h.status(), Error::None);
-        seq += 1;
-        h.deliver(&begin(seq, img.len() as u32, crc32(&img)));
-        seq += 1;
-        send_image(&mut h, &mut seq, &img);
-        h.deliver(&Frame::new(seq, Cmd::UpdateCommit));
-        seq += 1;
-        h.deliver(&Frame::new(seq, Cmd::UpdateActivate));
+        h.deliver(&begin(img.len() as u32, crc32(&img)));
+        send_image(&mut h, &img);
+        h.deliver(&Frame::new(Cmd::UpdateCommit));
+        h.deliver(&Frame::new(Cmd::UpdateActivate));
         assert_eq!(h.status(), Error::None);
 
         h.tick_1ms(6);
@@ -717,17 +693,13 @@ mod tests {
     fn activate_requires_a_commit_and_resets_after_the_delay() {
         let (mut h, _) = running_from_slot_a();
         let img = image(300, 9);
-        let mut seq = 0;
-        h.deliver(&begin(seq, img.len() as u32, crc32(&img)));
-        seq += 1;
-        h.deliver(&Frame::new(seq, Cmd::UpdateActivate));
+        h.deliver(&begin(img.len() as u32, crc32(&img)));
+        h.deliver(&Frame::new(Cmd::UpdateActivate));
         assert_eq!(h.status(), Error::UpdateNotCommitted);
-        seq += 1;
-        send_image(&mut h, &mut seq, &img);
-        h.deliver(&Frame::new(seq, Cmd::UpdateCommit));
+        send_image(&mut h, &img);
+        h.deliver(&Frame::new(Cmd::UpdateCommit));
         assert_eq!(h.status(), Error::None);
-        seq += 1;
-        h.deliver(&Frame::new(seq, Cmd::UpdateActivate));
+        h.deliver(&Frame::new(Cmd::UpdateActivate));
         assert_eq!(h.status(), Error::None);
         assert_eq!(
             h.cpu.update.state(),
@@ -738,8 +710,7 @@ mod tests {
 
         h.tick_1ms(u32::from(ACTIVATE_DELAY_MS) - 1);
         assert_eq!(h.port.reset_count, 0);
-        seq += 1;
-        h.deliver(&Frame::new(seq, Cmd::UpdateActivate));
+        h.deliver(&Frame::new(Cmd::UpdateActivate));
         assert_eq!(h.status(), Error::None);
         assert_eq!(
             h.cpu.update.state(),
@@ -759,23 +730,9 @@ mod tests {
     fn flash_driver_failure_is_reported() {
         let (mut h, _) = running_from_slot_a();
         h.port.flash_fail = true;
-        h.deliver(&begin(0, 100, 0));
+        h.deliver(&begin(100, 0));
         assert_eq!(h.status(), Error::UpdateFlash);
         assert_eq!(h.cpu.update.state(), State::Idle);
-    }
-
-    #[test]
-    fn protocol_reset_keeps_the_session_open() {
-        let (mut h, _) = running_from_slot_a();
-        let img = image(400, 11);
-        h.deliver(&begin(0, img.len() as u32, crc32(&img)));
-        h.deliver(&Frame::new(0, Cmd::Reset));
-        assert_eq!(h.expected_seq(), 0);
-        let mut seq = 0;
-        send_image(&mut h, &mut seq, &img);
-        h.deliver(&Frame::new(seq, Cmd::UpdateCommit));
-        assert_eq!(h.status(), Error::None);
-        assert_eq!(header_of(&h, Slot::B).generation.get(), 1);
     }
 
     fn output_muted(h: &Harness) -> bool {
@@ -786,7 +743,7 @@ mod tests {
     fn begin_mutes_the_output_and_suspends_the_watchdog() {
         let (mut h, _) = running_from_slot_a();
         assert!(!output_muted(&h));
-        h.deliver(&begin(0, FLASH_SECTOR_BYTES, 0));
+        h.deliver(&begin(FLASH_SECTOR_BYTES, 0));
         assert_eq!(h.status(), Error::None);
         assert!(output_muted(&h));
         assert_eq!(h.port.watchdog_timeout, Some(0));
@@ -795,7 +752,7 @@ mod tests {
     #[test]
     fn a_begin_without_a_valid_slot_still_mutes_the_output() {
         let mut h = Harness::new();
-        h.deliver(&begin(0, FLASH_SECTOR_BYTES, 0));
+        h.deliver(&begin(FLASH_SECTOR_BYTES, 0));
         assert_eq!(h.status(), Error::UpdateFlash);
         assert!(output_muted(&h));
         assert_eq!(h.port.watchdog_timeout, Some(0));
@@ -804,7 +761,7 @@ mod tests {
     #[test]
     fn a_begin_with_an_implausible_length_leaves_the_output_alone() {
         let (mut h, _) = running_from_slot_a();
-        h.deliver(&begin(0, 0, 0));
+        h.deliver(&begin(0, 0));
         assert_eq!(h.status(), Error::InvalidPayload);
         assert!(!output_muted(&h));
         assert_eq!(h.port.watchdog_timeout, Some(CPU_WATCHDOG_TIMEOUT_MS));
@@ -813,9 +770,9 @@ mod tests {
     #[test]
     fn release_failsafe_after_begin_resumes_the_output_and_rearms_the_watchdog() {
         let (mut h, _) = running_from_slot_a();
-        h.deliver(&begin(0, FLASH_SECTOR_BYTES, 0));
+        h.deliver(&begin(FLASH_SECTOR_BYTES, 0));
         assert_eq!(h.status(), Error::None);
-        h.deliver(&Frame::new(1, Cmd::ReleaseFailsafe));
+        h.deliver(&Frame::new(Cmd::ReleaseFailsafe));
         assert_eq!(h.status(), Error::None);
         assert!(!output_muted(&h));
         assert_eq!(h.port.watchdog_timeout, Some(CPU_WATCHDOG_TIMEOUT_MS));
@@ -824,9 +781,9 @@ mod tests {
     #[test]
     fn clear_after_begin_resumes_the_output_and_rearms_the_watchdog() {
         let (mut h, _) = running_from_slot_a();
-        h.deliver(&begin(0, FLASH_SECTOR_BYTES, 0));
+        h.deliver(&begin(FLASH_SECTOR_BYTES, 0));
         assert_eq!(h.status(), Error::None);
-        h.deliver(&Frame::new(1, Cmd::Clear));
+        h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.status(), Error::None);
         assert!(!output_muted(&h));
         assert_eq!(h.port.watchdog_timeout, Some(CPU_WATCHDOG_TIMEOUT_MS));
@@ -836,9 +793,9 @@ mod tests {
     fn begin_restarts_the_session_and_erases_again() {
         let (mut h, _) = running_from_slot_a();
         let img = image(900, 12);
-        h.deliver(&begin(0, img.len() as u32, crc32(&img)));
-        h.deliver(&chunk(1, 0, &img[..100]));
-        h.deliver(&begin(2, img.len() as u32, crc32(&img)));
+        h.deliver(&begin(img.len() as u32, crc32(&img)));
+        h.deliver(&chunk(0, &img[..100]));
+        h.deliver(&begin(img.len() as u32, crc32(&img)));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.port.erased.len(), 2);
         assert!(slot_image(&h, Slot::B, 100).iter().all(|&b| b == 0xFF));
@@ -848,12 +805,11 @@ mod tests {
     fn begin_before_confirmation_rewrites_the_unconfirmed_slot() {
         let (mut h, running) = running_from_slot_a();
         let img = image(700, 15);
-        let mut seq = 0;
-        run_update(&mut h, &mut seq, &img);
+        run_update(&mut h, &img);
         assert_eq!(header_of(&h, Slot::B).generation.get(), 1);
 
         let next = image(800, 16);
-        run_update(&mut h, &mut seq, &next);
+        run_update(&mut h, &next);
         assert_eq!(header_of(&h, Slot::B).generation.get(), 2);
         assert_eq!(slot_image(&h, Slot::B, next.len()), &next[..]);
         assert_eq!(header_of(&h, Slot::A).generation.get(), 0);
@@ -864,28 +820,26 @@ mod tests {
     fn begin_after_confirmation_targets_the_older_slot() {
         let (mut h, _) = running_from_slot_a();
         let img = image(700, 15);
-        let mut seq = 0;
-        run_update(&mut h, &mut seq, &img);
+        run_update(&mut h, &img);
         h.reboot();
-        h.deliver(&Frame::new(0, Cmd::UpdateConfirm));
+        h.deliver(&Frame::new(Cmd::UpdateConfirm));
         assert_eq!(h.status(), Error::None);
 
         let next = image(800, 16);
-        let mut seq = 1;
-        run_update(&mut h, &mut seq, &next);
+        run_update(&mut h, &next);
         assert_eq!(header_of(&h, Slot::A).generation.get(), 2);
         assert_eq!(slot_image(&h, Slot::A, next.len()), &next[..]);
         assert_eq!(header_of(&h, Slot::B).generation.get(), 1);
         assert_eq!(slot_image(&h, Slot::B, img.len()), &img[..]);
     }
 
-    fn confirm(h: &mut Harness, seq: u8) -> Error {
-        h.deliver(&Frame::new(seq, Cmd::UpdateConfirm));
+    fn confirm(h: &mut Harness) -> Error {
+        h.deliver(&Frame::new(Cmd::UpdateConfirm));
         h.status()
     }
 
-    fn running_image(h: &mut Harness, seq: u8) -> Option<RunningImage> {
-        h.deliver(&Frame::new(seq, Cmd::ReadRunningImage));
+    fn running_image(h: &mut Harness) -> Option<RunningImage> {
+        h.deliver(&Frame::new(Cmd::ReadRunningImage));
         assert_eq!(h.status(), Error::None);
         let data = h.reply_data();
         assert_eq!(data.len(), 1);
@@ -895,39 +849,37 @@ mod tests {
     #[test]
     fn the_running_image_is_unconfirmed_only_until_the_trial_is_confirmed() {
         let (mut h, _) = running_from_slot_a();
-        assert_eq!(running_image(&mut h, 0), Some(RunningImage::Unknown));
+        assert_eq!(running_image(&mut h), Some(RunningImage::Unknown));
         h.reboot();
-        assert_eq!(running_image(&mut h, 0), Some(RunningImage::Confirmed));
+        assert_eq!(running_image(&mut h), Some(RunningImage::Confirmed));
 
         let img = image(900, 30);
-        let mut seq = 1;
-        run_update(&mut h, &mut seq, &img);
-        assert_eq!(running_image(&mut h, seq), Some(RunningImage::Confirmed));
+        run_update(&mut h, &img);
+        assert_eq!(running_image(&mut h), Some(RunningImage::Confirmed));
 
         h.reboot();
         assert_eq!(h.cpu.booted_slot(), Some(Slot::B));
         let flash = h.port.flash.clone();
-        assert_eq!(running_image(&mut h, 0), Some(RunningImage::Unconfirmed));
+        assert_eq!(running_image(&mut h), Some(RunningImage::Unconfirmed));
         assert_eq!(h.port.flash, flash);
 
-        assert_eq!(confirm(&mut h, 1), Error::None);
-        assert_eq!(running_image(&mut h, 2), Some(RunningImage::Confirmed));
+        assert_eq!(confirm(&mut h), Error::None);
+        assert_eq!(running_image(&mut h), Some(RunningImage::Confirmed));
         h.reboot();
-        assert_eq!(running_image(&mut h, 0), Some(RunningImage::Confirmed));
+        assert_eq!(running_image(&mut h), Some(RunningImage::Confirmed));
     }
 
     #[test]
     fn a_rolled_back_unit_reports_a_confirmed_running_image() {
         let (mut h, _) = running_from_slot_a();
         let img = image(900, 31);
-        let mut seq = 0;
-        run_update(&mut h, &mut seq, &img);
+        run_update(&mut h, &img);
 
         h.reboot();
-        assert_eq!(running_image(&mut h, 0), Some(RunningImage::Unconfirmed));
+        assert_eq!(running_image(&mut h), Some(RunningImage::Unconfirmed));
         h.reboot();
         assert_eq!(h.cpu.booted_slot(), Some(Slot::A));
-        assert_eq!(running_image(&mut h, 0), Some(RunningImage::Confirmed));
+        assert_eq!(running_image(&mut h), Some(RunningImage::Confirmed));
         assert!(header_of(&h, Slot::B).needs_confirmation());
     }
 
@@ -935,24 +887,22 @@ mod tests {
     fn the_running_image_is_unknown_once_its_slot_is_rewritten() {
         let (mut h, _) = running_from_slot_a();
         let img = image(900, 32);
-        let mut seq = 0;
-        run_update(&mut h, &mut seq, &img);
+        run_update(&mut h, &img);
         h.reboot();
-        assert_eq!(running_image(&mut h, 0), Some(RunningImage::Unconfirmed));
+        assert_eq!(running_image(&mut h), Some(RunningImage::Unconfirmed));
 
         let next = image(800, 33);
-        h.deliver(&begin(1, next.len() as u32, crc32(&next)));
+        h.deliver(&begin(next.len() as u32, crc32(&next)));
         assert_eq!(h.status(), Error::None);
-        assert_eq!(running_image(&mut h, 2), Some(RunningImage::Unknown));
-        assert_eq!(confirm(&mut h, 3), Error::UpdateNothingToConfirm);
+        assert_eq!(running_image(&mut h), Some(RunningImage::Unknown));
+        assert_eq!(confirm(&mut h), Error::UpdateNothingToConfirm);
     }
 
     #[test]
     fn commit_writes_the_image_as_an_untried_trial() {
         let (mut h, _) = running_from_slot_a();
         let img = image(900, 20);
-        let mut seq = 0;
-        run_update(&mut h, &mut seq, &img);
+        run_update(&mut h, &img);
         let b = header_of(&h, Slot::B);
         assert!(b.is_trial());
         assert_eq!(b.attempts_used(), 0);
@@ -964,8 +914,7 @@ mod tests {
     fn booting_a_trial_spends_its_single_attempt() {
         let (mut h, _) = running_from_slot_a();
         let img = image(900, 21);
-        let mut seq = 0;
-        run_update(&mut h, &mut seq, &img);
+        run_update(&mut h, &img);
 
         h.reboot();
         assert_eq!(h.cpu.booted_slot(), Some(Slot::B));
@@ -979,8 +928,7 @@ mod tests {
     fn an_unconfirmed_trial_rolls_back_on_the_next_boot() {
         let (mut h, running) = running_from_slot_a();
         let img = image(900, 22);
-        let mut seq = 0;
-        run_update(&mut h, &mut seq, &img);
+        run_update(&mut h, &img);
 
         h.reboot();
         assert_eq!(h.cpu.booted_slot(), Some(Slot::B));
@@ -996,15 +944,14 @@ mod tests {
     fn a_confirmed_trial_keeps_booting() {
         let (mut h, _) = running_from_slot_a();
         let img = image(900, 23);
-        let mut seq = 0;
-        run_update(&mut h, &mut seq, &img);
+        run_update(&mut h, &img);
 
         h.reboot();
-        assert_eq!(confirm(&mut h, 0), Error::None);
+        assert_eq!(confirm(&mut h), Error::None);
         let b = header_of(&h, Slot::B);
         assert!(!b.needs_confirmation());
         assert!(b.is_boot_eligible());
-        assert_eq!(confirm(&mut h, 1), Error::None);
+        assert_eq!(confirm(&mut h), Error::None);
 
         for _ in 0..3 {
             h.reboot();
@@ -1019,7 +966,7 @@ mod tests {
         h.reboot();
         assert_eq!(h.cpu.booted_slot(), Some(Slot::A));
         let before = h.port.flash.clone();
-        assert_eq!(confirm(&mut h, 0), Error::None);
+        assert_eq!(confirm(&mut h), Error::None);
         assert_eq!(h.port.flash, before);
         assert_eq!(header_of(&h, Slot::A).attempts_used(), 0);
     }
@@ -1028,33 +975,29 @@ mod tests {
     fn confirm_without_a_booted_image_is_rejected() {
         let (mut h, _) = running_from_slot_a();
         assert_eq!(h.cpu.booted_slot(), None);
-        assert_eq!(confirm(&mut h, 0), Error::UpdateNothingToConfirm);
+        assert_eq!(confirm(&mut h), Error::UpdateNothingToConfirm);
 
         let mut blank = Harness::new();
         blank.reboot();
         assert_eq!(blank.cpu.booted_slot(), None);
-        assert_eq!(confirm(&mut blank, 0), Error::UpdateNothingToConfirm);
+        assert_eq!(confirm(&mut blank), Error::UpdateNothingToConfirm);
     }
 
     #[test]
     fn begin_over_the_booted_trial_forgets_it_so_confirm_cannot_bless_the_next_image() {
         let (mut h, running) = running_from_slot_a();
         let img = image(900, 24);
-        let mut seq = 0;
-        run_update(&mut h, &mut seq, &img);
+        run_update(&mut h, &img);
         h.reboot();
         assert_eq!(h.cpu.booted_slot(), Some(Slot::B));
 
         let next = image(1100, 25);
-        let mut seq = 0;
-        h.deliver(&begin(seq, next.len() as u32, crc32(&next)));
+        h.deliver(&begin(next.len() as u32, crc32(&next)));
         assert_eq!(h.status(), Error::None);
-        seq += 1;
         assert_eq!(h.cpu.booted_slot(), None);
-        assert_eq!(confirm(&mut h, seq), Error::UpdateNothingToConfirm);
-        seq += 1;
-        send_image(&mut h, &mut seq, &next);
-        h.deliver(&Frame::new(seq, Cmd::UpdateCommit));
+        assert_eq!(confirm(&mut h), Error::UpdateNothingToConfirm);
+        send_image(&mut h, &next);
+        h.deliver(&Frame::new(Cmd::UpdateCommit));
         assert_eq!(h.status(), Error::None);
 
         let b = header_of(&h, Slot::B);
@@ -1068,12 +1011,11 @@ mod tests {
     fn confirm_refuses_when_the_booted_header_changed_underneath() {
         let (mut h, _) = running_from_slot_a();
         let img = image(900, 26);
-        let mut seq = 0;
-        run_update(&mut h, &mut seq, &img);
+        run_update(&mut h, &img);
         h.reboot();
         let base = Slot::B.base() as usize;
         h.port.flash[base + 4] ^= 0x01;
-        assert_eq!(confirm(&mut h, 0), Error::UpdateNothingToConfirm);
+        assert_eq!(confirm(&mut h), Error::UpdateNothingToConfirm);
         assert!(header_of(&h, Slot::B).is_trial());
     }
 
@@ -1097,8 +1039,7 @@ mod tests {
     fn an_interrupted_confirm_counts_as_unconfirmed() {
         let (mut h, _) = running_from_slot_a();
         let img = image(900, 28);
-        let mut seq = 0;
-        run_update(&mut h, &mut seq, &img);
+        run_update(&mut h, &img);
         h.reboot();
         let status = Slot::B.base() as usize + 16;
         h.port.flash[status + 3] = 0x00;
@@ -1110,8 +1051,7 @@ mod tests {
     fn a_flash_failure_while_marking_does_not_stop_the_boot() {
         let (mut h, _) = running_from_slot_a();
         let img = image(900, 29);
-        let mut seq = 0;
-        run_update(&mut h, &mut seq, &img);
+        run_update(&mut h, &img);
         h.port.flash_fail = true;
         h.reboot();
         assert_eq!(h.cpu.booted_slot(), None);
@@ -1123,12 +1063,11 @@ mod tests {
     fn resending_an_identical_chunk_is_harmless() {
         let (mut h, _) = running_from_slot_a();
         let img = image(1500, 13);
-        h.deliver(&begin(0, img.len() as u32, crc32(&img)));
-        let mut seq = 1;
-        send_image(&mut h, &mut seq, &img);
-        h.deliver(&chunk(seq, 0, &img[..UPDATE_CHUNK_MAX_DATA_LEN]));
+        h.deliver(&begin(img.len() as u32, crc32(&img)));
+        send_image(&mut h, &img);
+        h.deliver(&chunk(0, &img[..UPDATE_CHUNK_MAX_DATA_LEN]));
         assert_eq!(h.status(), Error::None);
-        h.deliver(&Frame::new(seq + 1, Cmd::UpdateCommit));
+        h.deliver(&Frame::new(Cmd::UpdateCommit));
         assert_eq!(h.status(), Error::None);
     }
 
@@ -1136,17 +1075,15 @@ mod tests {
     fn commit_after_commit_is_rejected_without_touching_the_header() {
         let (mut h, _) = running_from_slot_a();
         let img = image(128, 14);
-        let mut seq = 0;
-        run_update(&mut h, &mut seq, &img);
-        h.deliver(&Frame::new(seq, Cmd::UpdateCommit));
+        run_update(&mut h, &img);
+        h.deliver(&Frame::new(Cmd::UpdateCommit));
         assert_eq!(h.status(), Error::UpdateNotStarted);
         assert_eq!(header_of(&h, Slot::B).generation.get(), 1);
         assert_eq!(h.cpu.update.state(), State::Committed);
     }
 
-    fn fpga_begin(seq: u8, length: u32, crc: u32) -> Frame {
+    fn fpga_begin(length: u32, crc: u32) -> Frame {
         Frame::from_payload(
-            seq,
             Cmd::FpgaUpdateBegin,
             &UpdateBeginPayload {
                 length: U32::new(length),
@@ -1159,16 +1096,13 @@ mod tests {
     fn begin_is_rejected_while_an_activation_is_pending() {
         let (mut h, _) = running_from_slot_a();
         let img = image(300, 31);
-        let mut seq = 0;
-        run_update(&mut h, &mut seq, &img);
-        h.deliver(&Frame::new(seq, Cmd::UpdateActivate));
+        run_update(&mut h, &img);
+        h.deliver(&Frame::new(Cmd::UpdateActivate));
         assert_eq!(h.status(), Error::None);
-        seq += 1;
         let erased_before = h.port.erased.len();
-        h.deliver(&begin(seq, img.len() as u32, crc32(&img)));
+        h.deliver(&begin(img.len() as u32, crc32(&img)));
         assert_eq!(h.status(), Error::UpdateActivating);
-        seq += 1;
-        h.deliver(&fpga_begin(seq, 100, 0));
+        h.deliver(&fpga_begin(100, 0));
         assert_eq!(h.status(), Error::UpdateActivating);
         assert_eq!(h.port.erased.len(), erased_before);
         assert_eq!(h.port.fpga_flash_ops, []);
@@ -1181,7 +1115,7 @@ mod tests {
     #[test]
     fn reboot_resets_after_the_delay_from_any_session_state() {
         let (mut h, _) = running_from_slot_a();
-        h.deliver(&Frame::new(0, Cmd::Reboot));
+        h.deliver(&Frame::new(Cmd::Reboot));
         assert_eq!(h.status(), Error::None);
         assert_eq!(
             h.cpu.update.state(),
@@ -1198,18 +1132,14 @@ mod tests {
         assert_eq!(h.port.reset_count, 1);
 
         let img = image(300, 33);
-        let mut seq = 1;
-        h.deliver(&begin(seq, img.len() as u32, crc32(&img)));
+        h.deliver(&begin(img.len() as u32, crc32(&img)));
         assert_eq!(h.status(), Error::None);
-        seq += 1;
-        h.deliver(&Frame::new(seq, Cmd::Reboot));
+        h.deliver(&Frame::new(Cmd::Reboot));
         assert_eq!(h.status(), Error::None);
         h.tick_1ms(u32::from(ACTIVATE_DELAY_MS));
         assert_eq!(h.port.reset_count, 2);
-
-        seq += 1;
-        run_update(&mut h, &mut seq, &img);
-        h.deliver(&Frame::new(seq, Cmd::Reboot));
+        run_update(&mut h, &img);
+        h.deliver(&Frame::new(Cmd::Reboot));
         assert_eq!(h.status(), Error::None);
         h.tick_1ms(u32::from(ACTIVATE_DELAY_MS));
         assert_eq!(h.port.reset_count, 3);
@@ -1218,17 +1148,15 @@ mod tests {
     #[test]
     fn a_reboot_countdown_advances_while_the_fifo_never_empties() {
         let (mut h, _) = running_from_slot_a();
-        h.deliver(&Frame::new(0, Cmd::Reboot));
+        h.deliver(&Frame::new(Cmd::Reboot));
         assert_eq!(h.status(), Error::None);
-        let mut seq = 1;
-        h.deliver_no_drain(&Frame::new(seq, Cmd::Nop));
-        seq += 1;
+        h.deliver_no_drain(&Frame::new(Cmd::Nop));
 
         for _ in 0..u32::from(ACTIVATE_DELAY_MS) - 1 {
-            h.step_backlogged(&mut seq, 1);
+            h.step_backlogged(1);
         }
         assert_eq!(h.port.reset_count, 0);
-        h.step_backlogged(&mut seq, 1);
+        h.step_backlogged(1);
         assert_eq!(h.port.reset_count, 1);
         assert!(h.process_one());
         assert!(!h.process_one());
@@ -1237,19 +1165,17 @@ mod tests {
     #[test]
     fn a_reboot_countdown_keeps_every_millisecond_of_an_uneven_step() {
         let (mut h, _) = running_from_slot_a();
-        h.deliver(&Frame::new(0, Cmd::Reboot));
-        let mut seq = 1;
-        h.deliver_no_drain(&Frame::new(seq, Cmd::Nop));
-        seq += 1;
+        h.deliver(&Frame::new(Cmd::Reboot));
+        h.deliver_no_drain(&Frame::new(Cmd::Nop));
 
-        h.step_backlogged(&mut seq, 0);
-        h.step_backlogged(&mut seq, u32::from(ACTIVATE_DELAY_MS) - 4);
-        h.step_backlogged(&mut seq, 0);
-        h.step_backlogged(&mut seq, 3);
+        h.step_backlogged(0);
+        h.step_backlogged(u32::from(ACTIVATE_DELAY_MS) - 4);
+        h.step_backlogged(0);
+        h.step_backlogged(3);
         assert_eq!(h.port.reset_count, 0);
-        h.step_backlogged(&mut seq, 0);
+        h.step_backlogged(0);
         assert_eq!(h.port.reset_count, 0);
-        h.step_backlogged(&mut seq, 1);
+        h.step_backlogged(1);
         assert_eq!(h.port.reset_count, 1);
         assert!(h.process_one());
     }
@@ -1258,20 +1184,17 @@ mod tests {
     fn an_activate_countdown_advances_while_the_fifo_never_empties() {
         let (mut h, _) = running_from_slot_a();
         let img = image(300, 9);
-        let mut seq = 0;
-        run_update(&mut h, &mut seq, &img);
-        h.deliver(&Frame::new(seq, Cmd::UpdateActivate));
+        run_update(&mut h, &img);
+        h.deliver(&Frame::new(Cmd::UpdateActivate));
         assert_eq!(h.status(), Error::None);
-        seq += 1;
-        h.deliver_no_drain(&Frame::new(seq, Cmd::Nop));
-        seq += 1;
+        h.deliver_no_drain(&Frame::new(Cmd::Nop));
 
         for _ in 0..u32::from(ACTIVATE_DELAY_MS) - 1 {
-            h.step_backlogged(&mut seq, 1);
+            h.step_backlogged(1);
         }
         assert_eq!(h.port.reset_count, 0);
         assert!(h.cpu.update.is_resetting());
-        h.step_backlogged(&mut seq, 1);
+        h.step_backlogged(1);
         assert_eq!(h.port.reset_count, 1);
         assert_eq!(h.cpu.update.state(), State::Committed);
         assert!(h.process_one());
@@ -1280,9 +1203,9 @@ mod tests {
     #[test]
     fn a_repeated_reboot_restarts_the_delay() {
         let (mut h, _) = running_from_slot_a();
-        h.deliver(&Frame::new(0, Cmd::Reboot));
+        h.deliver(&Frame::new(Cmd::Reboot));
         h.tick_1ms(u32::from(ACTIVATE_DELAY_MS) - 1);
-        h.deliver(&Frame::new(1, Cmd::Reboot));
+        h.deliver(&Frame::new(Cmd::Reboot));
         assert_eq!(h.status(), Error::None);
         h.tick_1ms(u32::from(ACTIVATE_DELAY_MS) - 1);
         assert_eq!(h.port.reset_count, 0);
@@ -1294,15 +1217,15 @@ mod tests {
     fn begin_is_rejected_while_a_reboot_is_pending() {
         let (mut h, _) = running_from_slot_a();
         let img = image(300, 34);
-        h.deliver(&Frame::new(0, Cmd::Reboot));
+        h.deliver(&Frame::new(Cmd::Reboot));
         assert_eq!(h.status(), Error::None);
-        h.deliver(&begin(1, img.len() as u32, crc32(&img)));
+        h.deliver(&begin(img.len() as u32, crc32(&img)));
         assert_eq!(h.status(), Error::UpdateActivating);
-        h.deliver(&fpga_begin(2, 100, 0));
+        h.deliver(&fpga_begin(100, 0));
         assert_eq!(h.status(), Error::UpdateActivating);
         assert_eq!(h.port.erased, []);
         assert!(!h.cpu.fpga_update.is_locked());
-        h.deliver(&Frame::new(3, Cmd::UpdateActivate));
+        h.deliver(&Frame::new(Cmd::UpdateActivate));
         assert_eq!(h.status(), Error::UpdateNotCommitted);
         h.tick_1ms(u32::from(ACTIVATE_DELAY_MS));
         assert_eq!(h.port.reset_count, 1);
@@ -1312,13 +1235,13 @@ mod tests {
     fn a_chunk_with_no_data_writes_nothing() {
         let (mut h, _) = running_from_slot_a();
         let img = image(300, 32);
-        h.deliver(&begin(0, img.len() as u32, crc32(&img)));
+        h.deliver(&begin(img.len() as u32, crc32(&img)));
         h.port.flash_write_fail_after = Some(0);
-        h.deliver(&chunk(1, 0, &[]));
+        h.deliver(&chunk(0, &[]));
         assert_eq!(h.status(), Error::None);
-        h.deliver(&chunk(2, img.len() as u32, &[]));
+        h.deliver(&chunk(img.len() as u32, &[]));
         assert_eq!(h.status(), Error::None);
-        h.deliver(&chunk(3, 0, &img[..1]));
+        h.deliver(&chunk(0, &img[..1]));
         assert_eq!(h.status(), Error::UpdateFlash);
     }
 
@@ -1326,86 +1249,30 @@ mod tests {
     fn a_header_write_failure_fails_the_commit_and_leaves_the_slot_invalid() {
         let (mut h, _) = running_from_slot_a();
         let img = image(300, 33);
-        h.deliver(&begin(0, img.len() as u32, crc32(&img)));
-        let mut seq = 1;
-        send_image(&mut h, &mut seq, &img);
+        h.deliver(&begin(img.len() as u32, crc32(&img)));
+        send_image(&mut h, &img);
         h.port.flash_write_fail_after = Some(0);
-        h.deliver(&Frame::new(seq, Cmd::UpdateCommit));
+        h.deliver(&Frame::new(Cmd::UpdateCommit));
         assert_eq!(h.status(), Error::UpdateFlash);
         assert!(!header_of(&h, Slot::B).is_plausible());
         assert_ne!(h.cpu.update.state(), State::Committed);
-    }
-
-    fn retransmit_recovers_the_reply(h: &mut Harness, frame: &Frame, seq: u8, status: Error) {
-        let bytes = frame.bytes();
-        assert_eq!(h.cpu.recv_frame(&bytes, 10), Disposition::Deferred);
-        assert_eq!(h.cpu.recv_frame(&bytes, 11), Disposition::Dropped);
-        assert_ne!(h.ack(), seq);
-
-        h.cpu.process_pending(&mut h.port);
-        for msg_id in 12..14 {
-            assert_eq!(h.cpu.recv_frame(&bytes, msg_id), Disposition::Reply);
-            assert_eq!(h.ack(), seq);
-            assert_eq!(h.status(), status);
-        }
-        assert_eq!(h.expected_seq(), seq.wrapping_add(1));
-    }
-
-    #[test]
-    fn a_retransmitted_chunk_or_commit_recovers_the_reply_without_running_twice() {
-        let (mut h, _) = running_from_slot_a();
-        let img = image(UPDATE_CHUNK_MAX_DATA_LEN + 10, 35);
-        let (first, second) = img.split_at(UPDATE_CHUNK_MAX_DATA_LEN);
-        h.deliver(&begin(0, img.len() as u32, crc32(&img)));
-        assert_eq!(h.status(), Error::None);
-
-        retransmit_recovers_the_reply(&mut h, &chunk(1, 0, first), 1, Error::None);
-        retransmit_recovers_the_reply(
-            &mut h,
-            &chunk(2, UPDATE_CHUNK_MAX_DATA_LEN as u32, second),
-            2,
-            Error::None,
-        );
-        retransmit_recovers_the_reply(&mut h, &Frame::new(3, Cmd::UpdateCommit), 3, Error::None);
-
-        assert_eq!(h.cpu.update.state(), State::Committed);
-        assert_eq!(slot_image(&h, Slot::B, img.len()), &img[..]);
-        assert_eq!(header_of(&h, Slot::B).crc32.get(), crc32(&img));
-    }
-
-    #[test]
-    fn a_retransmitted_commit_recovers_its_error_status() {
-        let (mut h, _) = running_from_slot_a();
-        let img = image(200, 36);
-        h.deliver(&begin(0, img.len() as u32, crc32(&img) ^ 1));
-        h.deliver(&chunk(1, 0, &img));
-        assert_eq!(h.status(), Error::None);
-
-        retransmit_recovers_the_reply(
-            &mut h,
-            &Frame::new(2, Cmd::UpdateCommit),
-            2,
-            Error::UpdateImageInvalid,
-        );
-        assert_eq!(h.cpu.update.state(), State::Idle);
     }
 
     #[test]
     fn a_confirm_that_does_not_stick_is_reported() {
         let (mut h, _) = running_from_slot_a();
         let img = image(300, 34);
-        let mut seq = 0;
-        run_update(&mut h, &mut seq, &img);
+        run_update(&mut h, &img);
         h.reboot();
         assert_eq!(h.cpu.booted_slot(), Some(Slot::B));
         h.port.flash_write_silent = true;
-        assert_eq!(confirm(&mut h, 0), Error::UpdateFlash);
+        assert_eq!(confirm(&mut h), Error::UpdateFlash);
         assert!(header_of(&h, Slot::B).needs_confirmation());
         h.port.flash_write_silent = false;
         h.port.flash_write_fail_after = Some(0);
-        assert_eq!(confirm(&mut h, 1), Error::UpdateFlash);
+        assert_eq!(confirm(&mut h), Error::UpdateFlash);
         h.port.flash_write_fail_after = None;
-        assert_eq!(confirm(&mut h, 2), Error::None);
+        assert_eq!(confirm(&mut h), Error::None);
         assert!(!header_of(&h, Slot::B).needs_confirmation());
     }
 }

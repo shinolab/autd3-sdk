@@ -253,9 +253,7 @@ async fn run_with_option(option: &TransportOption, cli: &Cli) -> Result<RunOutpu
     eprintln!("devices: {num_devices}");
 
     let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()));
-    let client = Box::pin(Client::open(&geometry, option))
-        .await
-        .context("opening the devices")?;
+    let client = Client::open(&geometry, option).context("opening the devices")?;
     let checker = client.state_checker();
     let guard = spawn_state_check(checker, STATE_CHECK_INTERVAL);
     client
@@ -490,7 +488,6 @@ impl Measurement {
         RunOutput {
             summary: Summary {
                 elapsed,
-                resets: bus_stats.resets(),
                 recoveries: bus_stats.recoveries(),
                 throughput_cmd_per_sec: per_sec(self.counters.ok),
                 traffic: self.traffic.rate(elapsed),

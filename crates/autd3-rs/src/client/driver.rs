@@ -7,22 +7,19 @@ use autd3_rs_core::BusStats;
 use futures_channel::oneshot;
 
 use crate::error::{Error, NetworkCause};
-use crate::protocol::Seq;
 use crate::udp::{Reply, Sent, UdpBus, UdpError};
 
 use super::completion::CompletionSender;
 use super::pool::ReplySlot;
 
-const RESET_ACK: u8 = 0xFF;
 const IDLE_WAIT: Duration = Duration::from_secs(1);
 
 pub(crate) struct InflightRequest {
     pub(crate) msg_id: u16,
-    pub(crate) seq: Option<Seq>,
     pub(crate) sent_to: Option<u128>,
     pub(crate) replied_devices: u128,
     pub(crate) sent_at: Instant,
-    pub(crate) reply_slot: Option<ReplySlot>,
+    pub(crate) reply_slot: ReplySlot,
     pub(crate) completion: CompletionSender,
 }
 
@@ -35,31 +32,14 @@ impl InflightRequest {
     pub(crate) fn complete(self, stats: &BusStats) {
         tracing::trace!(msg_id = self.msg_id, "frame answered by every device");
         stats.record_ack(u64::try_from(self.sent_at.elapsed().as_nanos()).unwrap_or(u64::MAX));
-        let response = match &self.reply_slot {
-            Some(reply_slot) => reply_slot.response(self.replied_devices),
-            None => crate::response::Response::from_error_codes(&[]),
-        };
+        let response = self.reply_slot.response(self.replied_devices);
         self.completion.send(Ok(response));
     }
 }
 
 pub(crate) type RecoveryResultSender = oneshot::Sender<Result<u128, Error>>;
 
-pub(crate) struct SendFailure {
-    pub(crate) error: Error,
-    pub(crate) some_devices_unsent: bool,
-}
-
-impl From<UdpError> for SendFailure {
-    fn from(e: UdpError) -> Self {
-        Self {
-            some_devices_unsent: matches!(e, UdpError::Unsent { .. }),
-            error: e.into(),
-        }
-    }
-}
-
-pub(crate) fn devices_sent_to(sent: Result<Sent, UdpError>) -> Result<u128, SendFailure> {
+pub(crate) fn devices_sent_to(sent: Result<Sent, UdpError>) -> Result<u128, Error> {
     let sent = sent?;
     match sent.unsent {
         Some(unsent) => Err(UdpError::from(unsent).into()),
@@ -76,10 +56,8 @@ pub(crate) enum SendOutcome {
 pub(crate) struct SessionState {
     pub(crate) awaiting_reply: VecDeque<InflightRequest>,
     pub(crate) head_ack_clock_started_at: Instant,
-    pub(crate) reset_required: bool,
     pub(crate) recovery_waiter: Option<RecoveryResultSender>,
     pub(crate) ack_timeout: Duration,
-    pub(crate) next_seq: Seq,
     pub(crate) network_failure: Option<NetworkCause>,
     pub(crate) is_closed: bool,
     pub(crate) driver_wakes_at: Option<Instant>,
@@ -145,15 +123,10 @@ impl SessionState {
     pub(crate) fn apply_send_result(
         &mut self,
         msg_id: u16,
-        send_result: Result<u128, SendFailure>,
+        send_result: Result<u128, Error>,
     ) -> SendOutcome {
         match send_result {
-            Err(failure) => {
-                if failure.some_devices_unsent {
-                    self.reset_required = true;
-                }
-                SendOutcome::Failed(self.remove_by_msg_id(msg_id), failure.error)
-            }
+            Err(error) => SendOutcome::Failed(self.remove_by_msg_id(msg_id), error),
             Ok(0) => SendOutcome::SentToNone(self.remove_by_msg_id(msg_id)),
             Ok(sent_to) => SendOutcome::SentToSome(self.record_sent_to(msg_id, sent_to)),
         }
@@ -202,10 +175,8 @@ impl SharedSession {
             state: Mutex::new(SessionState {
                 awaiting_reply: VecDeque::new(),
                 head_ack_clock_started_at: Instant::now(),
-                reset_required: true,
                 recovery_waiter: None,
                 ack_timeout,
-                next_seq: Seq::ZERO,
                 network_failure: None,
                 is_closed: false,
                 driver_wakes_at: None,
@@ -372,7 +343,6 @@ impl ReplyHandler {
         }
         let (requests, timeout) = {
             let mut state = self.session.lock_state();
-            state.reset_required = true;
             (state.take_all_awaiting(), state.ack_timeout)
         };
         tracing::warn!(
@@ -383,11 +353,7 @@ impl ReplyHandler {
     }
 
     fn finish_recovery(&mut self, recovered_devices: u128) {
-        let mut state = self.session.lock_state();
-        if recovered_devices != 0 {
-            state.reset_required = true;
-        }
-        if let Some(recovery_waiter) = state.recovery_waiter.take() {
+        if let Some(recovery_waiter) = self.session.lock_state().recovery_waiter.take() {
             let _ = recovery_waiter.send(Ok(recovered_devices));
         }
     }
@@ -404,41 +370,17 @@ impl ReplyHandler {
             return;
         };
         let request = &mut state.awaiting_reply[index];
-        match request.seq {
-            None => {
-                if reply.acked_seq != RESET_ACK {
-                    return;
-                }
-            }
-            Some(seq) => {
-                if reply.acked_seq != seq.get() {
-                    let request = state
-                        .awaiting_reply
-                        .remove(index)
-                        .expect("index is in range");
-                    state.reset_required = true;
-                    if index == 0 {
-                        state.head_ack_clock_started_at = Instant::now();
-                    }
-                    drop(state);
-                    tracing::warn!(
-                        device = reply.device,
-                        expected = seq.get(),
-                        got = reply.acked_seq,
-                        "the device did not accept the frame; a reset is required"
-                    );
-                    request.completion.send(Err(Error::SeqMismatch {
-                        device: reply.device,
-                        expected: seq.get(),
-                        got: reply.acked_seq,
-                    }));
-                    return;
-                }
-                if let Some(reply_slot) = &mut request.reply_slot {
-                    reply_slot.record_reply(reply.device, reply.error_code, reply.data());
-                }
-            }
+        if request.replied_devices & reply_bit != 0 {
+            tracing::trace!(
+                msg_id = reply.msg_id,
+                device = reply.device,
+                "dropping a repeated reply"
+            );
+            return;
         }
+        request
+            .reply_slot
+            .record_reply(reply.device, reply.error_code, reply.data());
         request.replied_devices |= reply_bit;
         if !request.has_all_replies() {
             return;
@@ -476,6 +418,7 @@ impl std::os::windows::io::AsSocket for Driver {
 #[cfg(test)]
 mod tests {
     use super::super::completion;
+    use super::super::pool::ReplySlotPool;
     use super::*;
 
     fn shared_session() -> Arc<SharedSession> {
@@ -489,11 +432,10 @@ mod tests {
         let (completion, rx) = completion::channel();
         let request = InflightRequest {
             msg_id,
-            seq: Some(Seq::ZERO),
             sent_to: None,
             replied_devices,
             sent_at: Instant::now(),
-            reply_slot: None,
+            reply_slot: pollster::block_on(ReplySlotPool::new(2).acquire()),
             completion,
         };
         (request, rx)
@@ -510,42 +452,9 @@ mod tests {
             session: Arc::clone(&session),
             stats: BusStats::default(),
         };
-        session.lock_state().reset_required = false;
         reply_handler.finish_recovery(0b10);
 
         assert_eq!(rx.try_recv().unwrap().unwrap().unwrap(), 0b10);
-        assert!(session.lock_state().reset_required);
-    }
-
-    #[test]
-    fn a_recovery_bringing_nothing_back_needs_no_reset() {
-        let session = shared_session();
-        let (tx, mut rx) = oneshot::channel();
-        session.lock_state().register_recovery_waiter(tx).unwrap();
-        session.lock_state().reset_required = false;
-
-        ReplyHandler {
-            session: Arc::clone(&session),
-            stats: BusStats::default(),
-        }
-        .finish_recovery(0);
-
-        assert_eq!(rx.try_recv().unwrap().unwrap().unwrap(), 0);
-        assert!(!session.lock_state().reset_required);
-    }
-
-    #[test]
-    fn a_recovery_reported_with_nobody_waiting_still_needs_a_reset() {
-        let session = shared_session();
-        session.lock_state().reset_required = false;
-
-        ReplyHandler {
-            session: Arc::clone(&session),
-            stats: BusStats::default(),
-        }
-        .finish_recovery(0b1);
-
-        assert!(session.lock_state().reset_required);
         assert!(session.lock_state().recovery_waiter.is_none());
     }
 
@@ -624,6 +533,24 @@ mod tests {
 
         assert!(state.ack_deadline_precedes_driver_wake(1, ACK_TIMEOUT));
         assert!(!state.ack_deadline_precedes_driver_wake(2, ACK_TIMEOUT));
+    }
+
+    #[test]
+    fn a_repeated_reply_from_a_device_keeps_the_first_one() {
+        let session = shared_session();
+        let (request, rx) = inflight_request(7, 0);
+        session.lock_state().push_awaiting(request);
+        assert!(session.lock_state().record_sent_to(7, 0b11).is_none());
+        let mut reply_handler = ReplyHandler {
+            session: Arc::clone(&session),
+            stats: BusStats::default(),
+        };
+
+        reply_handler.handle_reply(&Reply::new(0, 7, 0, &[]));
+        reply_handler.handle_reply(&Reply::new(0, 7, 5, &[]));
+        reply_handler.handle_reply(&Reply::new(1, 7, 0, &[]));
+
+        assert_eq!(pollster::block_on(rx).unwrap().error_codes(), [0, 0]);
     }
 
     #[test]

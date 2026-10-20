@@ -17,7 +17,7 @@ async fn main() -> Result<()> {
 
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let client = Client::open(&geometry, &TransportOption::default()).await?;
+    let client = Client::open(&geometry, &TransportOption::default())?;
     client.send((Clear, Synchronize)).await?;
 
     println!("devices: {}", client.num_devices());

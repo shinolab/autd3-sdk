@@ -21,7 +21,7 @@ mod tests {
     fn read_fpga_state_returns_register_byte() {
         let mut h = Harness::new();
         h.set_ctl(ADDR_FPGA_STATE, 0x83);
-        h.deliver(&Frame::new(0, Cmd::ReadFpgaState));
+        h.deliver(&Frame::new(Cmd::ReadFpgaState));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.reply_data(), [0x83]);
     }
@@ -31,7 +31,7 @@ mod tests {
         let mut h = Harness::new();
         h.set_ctl(ADDR_FPGA_STATE, 0x2A03);
         h.port.watchdog_state = 0x0101;
-        h.deliver(&Frame::new(0, Cmd::ReadFpgaState));
+        h.deliver(&Frame::new(Cmd::ReadFpgaState));
         assert_eq!(h.reply_data(), [0x83]);
     }
 
@@ -44,7 +44,7 @@ mod tests {
         );
         h.set_ctl(ADDR_FPGA_STATE, 0x03);
         h.port.watchdog_state = 0x0101;
-        h.deliver(&Frame::new(0, Cmd::ReadFpgaState));
+        h.deliver(&Frame::new(Cmd::ReadFpgaState));
         assert_eq!(h.reply_data(), [0x03]);
     }
 }

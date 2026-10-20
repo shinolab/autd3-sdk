@@ -287,7 +287,7 @@ fn first_difference(addr: u16, expected: &[u16], devices: &[Vec<u16>]) -> Option
 }
 
 fn open(chain: &Chain) -> Result<Driver<impl Exchange>> {
-    Ok(Driver::open(chain.udp.open(chain.devices)?)?)
+    Ok(Driver::new(chain.udp.open(chain.devices)?))
 }
 
 fn main() -> Result<()> {

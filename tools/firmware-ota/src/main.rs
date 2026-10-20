@@ -437,7 +437,7 @@ fn run_fpga<L: Exchange>(
 }
 
 fn run<L: Exchange>(link: L, stage: Stage<'_>) -> Result<Outcome> {
-    let mut driver = Driver::open(link).context("opening the devices / protocol handshake")?;
+    let mut driver = Driver::new(link);
     let devices = driver.num_devices();
     println!("{devices} device(s) on the bus");
     let mut activation_unacknowledged = false;
@@ -507,8 +507,7 @@ fn run<L: Exchange>(link: L, stage: Stage<'_>) -> Result<Outcome> {
 }
 
 fn main_reboot(cli: &Cli) -> Result<()> {
-    let mut driver = Driver::open(cli.udp.open(cli.devices)?)
-        .context("opening the devices / protocol handshake")?;
+    let mut driver = Driver::new(cli.udp.open(cli.devices)?);
     println!("{} device(s) on the bus", driver.num_devices());
     driver.reboot()?;
     println!("reboot acknowledged; the devices reset in about 100 ms and come back unassigned");

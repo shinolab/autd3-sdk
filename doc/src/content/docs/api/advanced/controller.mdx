@@ -25,10 +25,10 @@ import sample from "@codes/rust/examples/api/advanced/controller.rs?raw";
 
 <CodeTabs rust={excerpt(sample, "run")} />
 
-`Client::open` と違い, `Controller::open` はデバイスとのハンドシェイク (`Reset`) を行わない.
-`Driver` を回し始めてから `controller.initialize().await` を呼び, それが完了してからコマンドを送る.
-`Client::open` と同じく, `Clear` と `Synchronize` は送らないので, 初期状態から始める場合は `initialize` の後に送る.
-`initialize` は返信を待つので, `Driver` を回す前に呼ぶと完了しない.
+`Controller::open` は `Client::open` と同じく同期関数で, デバイスの列挙と I/O の準備だけを行い, デバイスへフレームを送らない.
+`Driver` を回し始めたら, そのままコマンドを送ってよい.
+`Clear` と `Synchronize` も送らないので, 初期状態から始める場合は自分で送る.
+コマンドの完了は返信を待つので, `Driver` を回す前に送ると完了しない.
 
 ## Driver
 

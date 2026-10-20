@@ -61,19 +61,10 @@ mod tests {
     #[test]
     fn config_pattern_allows_single_index_only_for_infinite_loop() {
         let mut h = Harness::new();
-        h.deliver(&config_pattern(
-            0,
-            0,
-            EmissionType::Raw.as_u8(),
-            10,
-            1,
-            0,
-            0,
-        ));
+        h.deliver(&config_pattern(0, EmissionType::Raw.as_u8(), 10, 1, 0, 0));
         assert_eq!(h.status(), Error::None, "static pattern is a single index");
 
         h.deliver(&config_pattern_rep(
-            1,
             0,
             EmissionType::Raw.as_u8(),
             10,
@@ -89,7 +80,6 @@ mod tests {
         );
 
         h.deliver(&config_pattern_rep(
-            2,
             0,
             EmissionType::Raw.as_u8(),
             10,
@@ -107,7 +97,6 @@ mod tests {
         let latches_at_boot = h.latch_count(CtlFlags::PATTERN_SET);
 
         h.deliver(&config_pattern(
-            0,
             0,
             EmissionType::Raw.as_u8(),
             2,
@@ -141,7 +130,6 @@ mod tests {
         let mut h = Harness::new();
 
         h.deliver(&config_pattern(
-            0,
             1,
             EmissionType::Foci.as_u8(),
             1,
@@ -169,7 +157,6 @@ mod tests {
 
         h.deliver(&config_pattern_rep(
             0,
-            0,
             EmissionType::Raw.as_u8(),
             2,
             EMISSION_MAX_INDICES,
@@ -188,7 +175,6 @@ mod tests {
 
         h.deliver(&config_pattern(
             0,
-            0,
             EmissionType::Raw.as_u8(),
             1,
             EMISSION_MAX_INDICES + 1,
@@ -197,7 +183,7 @@ mod tests {
         ));
         assert_eq!(h.status(), Error::InvalidPayload);
 
-        h.deliver(&config_pattern(1, 0, 2, 1, 1, 0, 0));
+        h.deliver(&config_pattern(0, 2, 1, 1, 0, 0));
         assert_eq!(h.status(), Error::InvalidPayload);
 
         assert_eq!(h.ctl(ADDR_PATTERN_CYCLE0), 0);
@@ -207,18 +193,9 @@ mod tests {
     fn config_pattern_rejects_invalid_foci_fields() {
         let mut h = Harness::new();
 
-        h.deliver(&config_pattern(
-            0,
-            0,
-            EmissionType::Foci.as_u8(),
-            1,
-            2,
-            0,
-            340,
-        ));
+        h.deliver(&config_pattern(0, EmissionType::Foci.as_u8(), 1, 2, 0, 340));
         assert_eq!(h.status(), Error::InvalidPayload);
         h.deliver(&config_pattern(
-            1,
             0,
             EmissionType::Foci.as_u8(),
             1,
@@ -228,15 +205,7 @@ mod tests {
         ));
         assert_eq!(h.status(), Error::InvalidPayload);
 
-        h.deliver(&config_pattern(
-            5,
-            0,
-            EmissionType::Foci.as_u8(),
-            1,
-            1,
-            1,
-            340,
-        ));
+        h.deliver(&config_pattern(0, EmissionType::Foci.as_u8(), 1, 1, 1, 340));
         assert_eq!(
             h.status(),
             Error::InvalidPayload,
@@ -244,7 +213,6 @@ mod tests {
         );
 
         h.deliver(&config_pattern(
-            2,
             0,
             EmissionType::Foci.as_u8(),
             1,
@@ -254,19 +222,10 @@ mod tests {
         ));
         assert_eq!(h.status(), Error::InvalidPayload);
 
-        h.deliver(&config_pattern(
-            3,
-            0,
-            EmissionType::Foci.as_u8(),
-            1,
-            2,
-            1,
-            0,
-        ));
+        h.deliver(&config_pattern(0, EmissionType::Foci.as_u8(), 1, 2, 1, 0));
         assert_eq!(h.status(), Error::InvalidPayload);
 
         h.deliver(&config_pattern(
-            4,
             0,
             EmissionType::Foci.as_u8(),
             1,

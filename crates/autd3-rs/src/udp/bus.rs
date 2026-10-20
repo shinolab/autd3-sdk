@@ -1,3 +1,4 @@
+use std::hash::{BuildHasher, RandomState};
 use std::net::SocketAddrV6;
 use std::num::NonZeroU64;
 use std::sync::atomic::{AtomicBool, AtomicU16, AtomicUsize, Ordering};
@@ -72,6 +73,11 @@ pub struct UdpBus {
     closed: AtomicBool,
 }
 
+fn session_msg_id_origin() -> u16 {
+    let [low, high, ..] = RandomState::new().hash_one(()).to_le_bytes();
+    u16::from_le_bytes([low, high])
+}
+
 impl UdpBus {
     pub fn open_with_geometry(
         option: &TransportOption,
@@ -136,7 +142,7 @@ impl UdpBus {
             device_clock,
             recovery_reply_timeout: option.recovery_reply_timeout,
             lost_timeout: option.lost_timeout,
-            last_msg_id: AtomicU16::new(0),
+            last_msg_id: AtomicU16::new(session_msg_id_origin()),
             heartbeat_resume_device: AtomicUsize::new(last_device),
             closed: AtomicBool::new(false),
         })
@@ -169,11 +175,6 @@ impl UdpBus {
     #[must_use]
     pub fn device_clock(&self) -> DeviceClock {
         self.device_clock.clone()
-    }
-
-    #[must_use]
-    pub fn peek_next_msg_id(&self) -> u16 {
-        self.last_msg_id.load(Ordering::Relaxed).wrapping_add(1)
     }
 
     #[must_use]
@@ -367,13 +368,7 @@ impl UdpBus {
             return ClassifiedPacket::Irrelevant;
         };
         ClassifiedPacket::DeviceReply {
-            reply: Reply::new(
-                device,
-                packet.header.msg_id.get(),
-                head.ack,
-                head.status,
-                data,
-            ),
+            reply: Reply::new(device, packet.header.msg_id.get(), head.status, data),
             reported_unit_id: head.unit_id,
             flags: head.flags,
             sys_time: head.sys_time.get(),

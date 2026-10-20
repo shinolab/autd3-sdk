@@ -8,7 +8,7 @@ from autd3.geometry import Autd3, Geometry
 async def main() -> None:
     geometry = Geometry([Autd3()])
     # ANCHOR: open
-    client = await Client.open(geometry, TransportOption())
+    client = Client.open(geometry, TransportOption())
     await client.send((Clear(), Synchronize()))
     # ANCHOR_END: open
 
@@ -51,7 +51,7 @@ async def main() -> None:
     geometry = Geometry([Autd3()])
 
     # ANCHOR: context_manager
-    async with await Client.open(geometry, TransportOption()) as client:
+    async with Client.open(geometry, TransportOption()) as client:
         await client.send(Nop())
     # ANCHOR_END: context_manager
 

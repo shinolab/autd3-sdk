@@ -1,7 +1,6 @@
 use autd3_cpu_wire::update::{ImageHeader, RunningImage, Slot, crc32};
 use std::time::Duration;
 
-use autd3_rs::protocol::{Cmd, Seq};
 use autd3_rs_firmware_emulator::EMULATED_CPU_IMAGE;
 use autd3_rs_firmware_emulator::test_utils::{Audit, DeviceTestExt};
 use autd3_rs_firmware_ota::{
@@ -38,30 +37,15 @@ impl Exchange for Chain {
         self.0.num_devices()
     }
 
-    fn reset(&mut self, _timeout: Duration) -> Result<bool, Self::Error> {
-        let reset = [0, Cmd::Reset.as_u8(), 0, 0, 0, 0];
-        let frames = vec![&reset[..]; self.0.num_devices()];
-        let replies = self.0.send(&frames, 0);
-        Ok(replies.len() == self.0.num_devices())
-    }
-
-    fn exchange(
-        &mut self,
-        seq: Seq,
-        frame: &Frame,
-        _timeout: Duration,
-        _retransmit: Duration,
-    ) -> Result<Replies, Self::Error> {
-        let bytes = frame.bytes(seq);
+    fn exchange(&mut self, frame: &Frame, _timeout: Duration) -> Result<Replies, Self::Error> {
+        let bytes = frame.bytes();
         let frames = vec![&bytes[..]; self.0.num_devices()];
         let mut replies: Vec<Option<DeviceReply>> = vec![None; self.0.num_devices()];
         for r in self.0.send(&frames, 0) {
-            if r.reply.ack == seq.get() {
-                replies[r.device] = Some(DeviceReply {
-                    status: r.reply.status.as_u8(),
-                    value: r.reply.data().to_vec(),
-                });
-            }
+            replies[r.device] = Some(DeviceReply {
+                status: r.reply.status.as_u8(),
+                value: r.reply.data().to_vec(),
+            });
         }
         Ok(match replies.iter().position(Option::is_none) {
             Some(device) => Err(device),
@@ -120,7 +104,7 @@ fn reboot_all(audit: &mut Audit, devices: usize) {
 #[test]
 fn update_activate_confirm_then_the_next_update_takes_the_other_slot() {
     let audit = Audit::new([NUM_TRANSDUCERS, NUM_TRANSDUCERS]);
-    let mut driver = Driver::open(Chain::from(audit)).unwrap();
+    let mut driver = Driver::new(Chain::from(audit));
     assert_eq!(driver.num_devices(), 2);
     assert_eq!(driver.read_firmware_info().unwrap().len(), 2);
 
@@ -152,7 +136,7 @@ fn update_activate_confirm_then_the_next_update_takes_the_other_slot() {
         assert_eq!(header(&audit, device, Slot::B).attempts_used(), 1);
     }
 
-    let mut driver = Driver::open(audit).unwrap();
+    let mut driver = Driver::new(audit);
     driver.confirm().unwrap();
     driver.confirm().unwrap();
     let second = image(1234, 2);
@@ -178,7 +162,7 @@ fn update_activate_confirm_then_the_next_update_takes_the_other_slot() {
 #[test]
 fn an_unconfirmed_update_rolls_back_after_the_next_reset() {
     let audit = Audit::new([NUM_TRANSDUCERS]);
-    let mut driver = Driver::open(Chain::from(audit)).unwrap();
+    let mut driver = Driver::new(Chain::from(audit));
     let next = image(5000, 7);
     driver.update(&next, |_| {}).unwrap();
     driver.activate().unwrap();
@@ -187,7 +171,7 @@ fn an_unconfirmed_update_rolls_back_after_the_next_reset() {
     reboot_all(&mut audit, 1);
     assert_eq!(audit.device(0).booted_slot(), Some(Slot::B));
 
-    let mut driver = Driver::open(audit).unwrap();
+    let mut driver = Driver::new(audit);
     assert_eq!(driver.read_firmware_info().unwrap().len(), 1);
     let mut audit = driver.into_inner();
 
@@ -198,7 +182,7 @@ fn an_unconfirmed_update_rolls_back_after_the_next_reset() {
         EMULATED_CPU_IMAGE
     );
 
-    let mut driver = Driver::open(audit).unwrap();
+    let mut driver = Driver::new(audit);
     driver.confirm().unwrap();
     let mut audit = driver.into_inner();
     audit.device_mut(0).power_cycle();
@@ -212,7 +196,7 @@ fn the_running_image_tells_a_unit_on_trial_from_one_that_rolled_back() {
     const CONFIRMED: Option<RunningImage> = Some(RunningImage::Confirmed);
 
     let audit = Audit::new([NUM_TRANSDUCERS, NUM_TRANSDUCERS]);
-    let mut driver = Driver::open(Chain::from(audit)).unwrap();
+    let mut driver = Driver::new(Chain::from(audit));
     assert_eq!(driver.read_running_image().unwrap(), [CONFIRMED; 2]);
     driver.update(&image(5000, 9), |_| {}).unwrap();
     assert_eq!(driver.read_running_image().unwrap(), [CONFIRMED; 2]);
@@ -220,13 +204,13 @@ fn the_running_image_tells_a_unit_on_trial_from_one_that_rolled_back() {
 
     let mut audit = driver.into_inner();
     reboot_all(&mut audit, 2);
-    let mut driver = Driver::open(audit).unwrap();
+    let mut driver = Driver::new(audit);
     assert_eq!(driver.read_running_image().unwrap(), [TRIAL; 2]);
 
     let mut audit = driver.into_inner();
     audit.device_mut(1).power_cycle();
     assert_eq!(audit.device(1).booted_slot(), Some(Slot::A));
-    let mut driver = Driver::open(audit).unwrap();
+    let mut driver = Driver::new(audit);
     assert_eq!(driver.read_running_image().unwrap(), [TRIAL, CONFIRMED]);
 
     driver.confirm().unwrap();
@@ -239,7 +223,7 @@ fn reboot_resets_every_device_without_touching_the_flash() {
     let before: Vec<Vec<u8>> = (0..2)
         .map(|device| audit.device(device).fpga().cpu_flash().to_vec())
         .collect();
-    let mut driver = Driver::open(Chain::from(audit)).unwrap();
+    let mut driver = Driver::new(Chain::from(audit));
     driver.reboot().unwrap();
 
     let mut audit = driver.into_inner();
@@ -254,7 +238,7 @@ fn reboot_resets_every_device_without_touching_the_flash() {
 fn confirm_before_any_update_is_a_no_op_on_a_normal_image() {
     let audit = Audit::new([NUM_TRANSDUCERS]);
     let before = audit.device(0).fpga().cpu_flash().to_vec();
-    let mut driver = Driver::open(Chain::from(audit)).unwrap();
+    let mut driver = Driver::new(Chain::from(audit));
     driver.confirm().unwrap();
     let audit = driver.into_inner();
     assert_eq!(audit.device(0).fpga().cpu_flash(), &before[..]);
@@ -264,7 +248,7 @@ fn confirm_before_any_update_is_a_no_op_on_a_normal_image() {
 fn update_refuses_when_the_device_has_no_valid_slot() {
     let mut audit = Audit::new([NUM_TRANSDUCERS]);
     audit.device_mut(0).fpga_mut().cpu_flash_mut().fill(0xFF);
-    let mut driver = Driver::open(Chain::from(audit)).unwrap();
+    let mut driver = Driver::new(Chain::from(audit));
     assert!(matches!(
         driver.update(&image(100, 3), |_| {}),
         Err(DriverError::Device {
@@ -287,7 +271,7 @@ fn update_refuses_when_the_device_has_no_valid_slot() {
 #[test]
 fn activation_without_a_committed_image_is_a_device_error() {
     let audit = Audit::new([NUM_TRANSDUCERS]);
-    let mut driver = Driver::open(Chain::from(audit)).unwrap();
+    let mut driver = Driver::new(Chain::from(audit));
     assert!(matches!(
         driver.activate(),
         Err(DriverError::Device {
@@ -361,7 +345,7 @@ mod fpga {
     #[test]
     fn an_fpga_update_reconfigures_into_the_new_image() {
         let audit = Audit::new([NUM_TRANSDUCERS, NUM_TRANSDUCERS]);
-        let mut driver = Driver::open(Chain::from(audit)).unwrap();
+        let mut driver = Driver::new(Chain::from(audit));
         assert_eq!(
             boot_images(&mut driver),
             [FpgaBootImage::Update, FpgaBootImage::Update]
@@ -389,7 +373,7 @@ mod fpga {
             assert!(!audit.device(device).fpga().failsafe());
         }
 
-        let mut driver = Driver::open(audit).unwrap();
+        let mut driver = Driver::new(audit);
         assert_eq!(
             boot_images(&mut driver),
             [FpgaBootImage::Update, FpgaBootImage::Update]
@@ -402,7 +386,7 @@ mod fpga {
     fn an_fpga_that_ignores_reboot_is_reported() {
         let mut audit = Audit::new([NUM_TRANSDUCERS, NUM_TRANSDUCERS]);
         audit.device_mut(1).fpga_mut().ignore_next_reboots(u32::MAX);
-        let mut driver = Driver::open(Chain::from(audit)).unwrap();
+        let mut driver = Driver::new(Chain::from(audit));
         let image = bitstream(1000, 4);
         driver.update_fpga(&image, |_| {}).unwrap();
         driver.activate_fpga().unwrap();
@@ -414,7 +398,7 @@ mod fpga {
         assert_eq!(audit.device(1).fpga().reconfig_count(), 0);
         assert!(!audit.device(1).fpga().failsafe());
 
-        let mut driver = Driver::open(audit).unwrap();
+        let mut driver = Driver::new(audit);
         assert_eq!(
             boot_images(&mut driver),
             [FpgaBootImage::Update, FpgaBootImage::ReconfigFailed]
@@ -430,7 +414,7 @@ mod fpga {
     fn a_reboot_ignored_once_is_retried() {
         let mut audit = Audit::new([NUM_TRANSDUCERS]);
         audit.device_mut(0).fpga_mut().ignore_next_reboots(1);
-        let mut driver = Driver::open(Chain::from(audit)).unwrap();
+        let mut driver = Driver::new(Chain::from(audit));
         driver.update_fpga(&bitstream(1000, 5), |_| {}).unwrap();
         driver.activate_fpga().unwrap();
         let mut audit = driver.into_inner();
@@ -440,7 +424,7 @@ mod fpga {
         settle(&mut audit, 1);
         assert_eq!(audit.device(0).fpga().reconfig_count(), 1);
         assert!(audit.device(0).fpga().output_mask_enabled(0));
-        let mut driver = Driver::open(audit).unwrap();
+        let mut driver = Driver::new(audit);
         driver.ensure_fpga_reconfigured().unwrap();
         driver.close().unwrap();
     }
@@ -448,7 +432,7 @@ mod fpga {
     #[test]
     fn a_broken_slot_falls_back_to_golden() {
         let audit = Audit::new([NUM_TRANSDUCERS]);
-        let mut driver = Driver::open(Chain::from(audit)).unwrap();
+        let mut driver = Driver::new(Chain::from(audit));
         let image = bitstream(1000, 2);
         driver.update_fpga(&image, |_| {}).unwrap();
         driver.activate_fpga().unwrap();
@@ -456,7 +440,7 @@ mod fpga {
         let base = FPGA_IMAGE_BASE as usize;
         audit.device_mut(0).fpga_mut().fpga_flash_mut()[base..][..32].fill(0xFF);
         settle(&mut audit, 1);
-        let mut driver = Driver::open(audit).unwrap();
+        let mut driver = Driver::new(audit);
         assert_eq!(boot_images(&mut driver), [FpgaBootImage::Golden]);
     }
 
@@ -466,7 +450,7 @@ mod fpga {
         let fpga = audit.device_mut(0).fpga_mut();
         let functions = fpga.controller_reg(ADDR_FUNCTION_BITS);
         fpga.fpga_write(ADDR_FUNCTION_BITS, functions & 0x0080);
-        let mut driver = Driver::open(Chain::from(audit)).unwrap();
+        let mut driver = Driver::new(Chain::from(audit));
         assert!(matches!(
             driver.update_fpga(&bitstream(10, 3), |_| {}),
             Err(DriverError::FpgaUpdateUnsupported { device: 0 })
@@ -478,7 +462,7 @@ mod fpga {
     #[test]
     fn output_commands_wait_for_the_reconfiguration() {
         let audit = Audit::new([NUM_TRANSDUCERS]);
-        let mut driver = Driver::open(Chain::from(audit)).unwrap();
+        let mut driver = Driver::new(Chain::from(audit));
         driver.update_fpga(&bitstream(10, 4), |_| {}).unwrap();
         assert!(matches!(
             driver.send_checked(&Frame::new(Cmd::Clear), DEFAULT_TIMEOUT),

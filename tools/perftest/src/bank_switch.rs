@@ -1,5 +1,5 @@
 use std::net::{SocketAddr, UdpSocket};
-use std::num::{NonZeroU16, NonZeroU32};
+use std::num::NonZeroU16;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -12,7 +12,7 @@ use autd3_rs::commands::{
     WritePatternBuffer,
 };
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::protocol::{Cmd, EXEC_AT_UNIT_NS, FrameHeader, Seq};
+use autd3_rs::protocol::{Cmd, EXEC_AT_UNIT_NS, FrameHeader};
 use autd3_rs::value::{
     Intensity, LoopBehavior, PatternBank, SamplingConfig, SysTime, TransitionMode,
 };
@@ -23,7 +23,6 @@ use crate::cli::{Cli, Framing};
 use crate::run::{spawn_emulator, spawn_signal_listener, transport_option};
 use crate::stats::{Counters, SampleStatus};
 
-const RESET_ACK: u8 = 0xFF;
 const RECV_BUFFER_BYTES: usize = 2048;
 const REPORT_INTERVAL: Duration = Duration::from_secs(1);
 const BIN_NS: i64 = 1_000;
@@ -69,9 +68,9 @@ fn clone_socket(bus: &UdpBus) -> std::io::Result<UdpSocket> {
     Ok(UdpSocket::from(bus.as_socket().try_clone_to_owned()?))
 }
 
-fn stage(seq: Seq, exec_at: u32, datagram: &Datagram) -> Vec<u8> {
+fn stage(exec_at: u32, datagram: &Datagram) -> Vec<u8> {
     let mut bytes = FrameHeader {
-        seq: seq.get(),
+        reserved: 0,
         cmd: datagram.cmd.as_u8(),
         exec_at: exec_at.into(),
     }
@@ -96,14 +95,12 @@ struct Peeked {
 
 struct Answer {
     status: u8,
-    ack: u8,
     sys_time: Option<u64>,
     data: Vec<u8>,
 }
 
 struct Sent {
     msg_id: u16,
-    seq: Seq,
     exec_at: u32,
     answers: Vec<Option<Answer>>,
 }
@@ -111,7 +108,6 @@ struct Sent {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Failure {
     Status(SampleStatus),
-    SeqMismatch,
 }
 
 struct Exchange {
@@ -133,13 +129,10 @@ impl Exchange {
         if answers().any(|(_, a)| a.is_none()) {
             return Some(Failure::Status(SampleStatus::Timeout));
         }
-        let answers = || answers().filter_map(|(f, a)| a.as_ref().map(|a| (f, a)));
-        if answers().any(|(f, a)| a.ack != f.seq.get()) {
-            return Some(Failure::SeqMismatch);
-        }
         answers()
-            .find(|(_, a)| a.status != 0)
-            .map(|(_, a)| Failure::Status(SampleStatus::DeviceError(a.status)))
+            .filter_map(|(_, a)| a.as_ref())
+            .find(|a| a.status != 0)
+            .map(|a| Failure::Status(SampleStatus::DeviceError(a.status)))
     }
 }
 
@@ -147,10 +140,8 @@ struct Session {
     bus: UdpBus,
     peek: UdpSocket,
     buf: Box<[u8; RECV_BUFFER_BYTES]>,
-    next_seq: Seq,
     ack_timeout: Duration,
     exec_lead: Option<Duration>,
-    reset_rounds: NonZeroU32,
 }
 
 impl Session {
@@ -161,10 +152,8 @@ impl Session {
             bus,
             peek,
             buf: Box::new([0; RECV_BUFFER_BYTES]),
-            next_seq: Seq::ZERO,
             ack_timeout: cli.ack_timeout,
             exec_lead: cli.exec_lead,
-            reset_rounds: cli.reset_rounds,
         })
     }
 
@@ -209,31 +198,6 @@ impl Session {
         Ok(Some((reply, sys_time)))
     }
 
-    fn reset(&mut self) -> Result<()> {
-        let reset = stage(Seq::ZERO, 0, &Datagram::no_payload(Cmd::Reset));
-        for _ in 0..self.reset_rounds.get() {
-            let sent = self.bus.broadcast(self.bus.reserve_msg_id(), &reset)?;
-            let mut confirmed = vec![false; self.bus.num_devices()];
-            let deadline = Instant::now() + self.ack_timeout;
-            while confirmed.contains(&false) && Instant::now() < deadline {
-                if let Some((reply, _)) = self.receive(deadline)?
-                    && reply.msg_id == sent.msg_id
-                    && reply.acked_seq == RESET_ACK
-                {
-                    confirmed[reply.device] = true;
-                }
-            }
-            if !confirmed.contains(&false) {
-                self.next_seq = Seq::ZERO;
-                return Ok(());
-            }
-        }
-        bail!(
-            "the devices did not acknowledge the reset in {} rounds",
-            self.reset_rounds
-        )
-    }
-
     fn exchange(&mut self, requests: &[Vec<&Datagram>], scheduled: bool) -> Result<Exchange> {
         let lead = self.exec_lead.filter(|_| scheduled);
         let mut exchange = Exchange {
@@ -252,9 +216,7 @@ impl Session {
                     lead,
                 ),
             };
-            let seq = self.next_seq;
-            self.next_seq = seq.next();
-            let bytes: Vec<Vec<u8>> = datagrams.iter().map(|d| stage(seq, exec_at, d)).collect();
+            let bytes: Vec<Vec<u8>> = datagrams.iter().map(|d| stage(exec_at, d)).collect();
             match self.bus.send(self.bus.reserve_msg_id(), &bytes) {
                 Ok(sent) => {
                     if let Some(unsent) = sent.unsent {
@@ -266,7 +228,6 @@ impl Session {
                     }
                     exchange.frames.push(Sent {
                         msg_id: sent.msg_id,
-                        seq,
                         exec_at,
                         answers: datagrams.iter().map(|_| None).collect(),
                     });
@@ -295,7 +256,6 @@ impl Session {
             {
                 frame.answers[reply.device].get_or_insert(Answer {
                     status: reply.error_code,
-                    ack: reply.acked_seq,
                     sys_time,
                     data: reply.data().to_vec(),
                 });
@@ -417,7 +377,6 @@ fn us(ns: i64) -> String {
 
 struct Stats {
     counters: Counters,
-    seq_mismatch: u64,
     unknown_start: u64,
     missing_sys_time: u64,
     delay: Vec<LinearHistogram>,
@@ -429,7 +388,6 @@ impl Stats {
     fn new(devices: usize, bins: usize) -> Self {
         Self {
             counters: Counters::default(),
-            seq_mismatch: 0,
             unknown_start: 0,
             missing_sys_time: 0,
             delay: (0..devices).map(|_| LinearHistogram::new(bins)).collect(),
@@ -441,7 +399,6 @@ impl Stats {
     fn fail(&mut self, failure: Failure) {
         match failure {
             Failure::Status(status) => self.counters.observe(status),
-            Failure::SeqMismatch => self.seq_mismatch += 1,
         }
     }
 
@@ -492,7 +449,6 @@ impl Stats {
             c.ok as f64 / elapsed.as_secs_f64().max(f64::MIN_POSITIVE)
         );
         println!("  timeouts       : {}", c.timeouts);
-        println!("  seq mismatch   : {}", self.seq_mismatch);
         println!("  network errors : {}", c.network_errors);
         for (code, count) in &c.device_errors {
             println!("  device error {code:#04x}: {count}");
@@ -528,7 +484,7 @@ struct TelemetryCounter {
     absolute: bool,
 }
 
-const TELEMETRY_COUNTERS: [TelemetryCounter; 8] = [
+const TELEMETRY_COUNTERS: [TelemetryCounter; 6] = [
     TelemetryCounter {
         name: "exec_late",
         read: |t| t.exec_late.get(),
@@ -537,16 +493,6 @@ const TELEMETRY_COUNTERS: [TelemetryCounter; 8] = [
     TelemetryCounter {
         name: "fifo_drop",
         read: |t| t.fifo_drop.get(),
-        absolute: false,
-    },
-    TelemetryCounter {
-        name: "dedup",
-        read: |t| t.dedup.get(),
-        absolute: false,
-    },
-    TelemetryCounter {
-        name: "seq_mismatch",
-        read: |t| t.seq_mismatch.get(),
         absolute: false,
     },
     TelemetryCounter {
@@ -635,7 +581,6 @@ fn prepare(
     phases: &[Vec<autd3_rs::value::Phase>],
     intensities: &[Vec<Intensity>],
 ) -> Result<()> {
-    session.reset()?;
     session.run_unscheduled(&Frames::encode(geometry, Clear)?, "Clear")?;
     session.run_unscheduled(&Frames::encode(geometry, Synchronize)?, "Synchronize")?;
     session.run_unscheduled(
@@ -720,20 +665,15 @@ fn measure(cli: &Cli, option: &TransportOption, shutdown: &AtomicBool) -> Result
                     ));
                     break;
                 }
-                if let Err(e) = session.reset() {
-                    stopped = Some(e);
-                    break;
-                }
             }
         }
         if last_report.elapsed() >= REPORT_INTERVAL {
             last_report = Instant::now();
             println!(
-                "[{:>8.1}s] ok {}  timeout {}  seq {}  dev_err {}  net_err {}",
+                "[{:>8.1}s] ok {}  timeout {}  dev_err {}  net_err {}",
                 start.elapsed().as_secs_f64(),
                 stats.counters.ok,
                 stats.counters.timeouts,
-                stats.seq_mismatch,
                 stats.counters.device_error_total(),
                 stats.counters.network_errors,
             );
@@ -741,7 +681,7 @@ fn measure(cli: &Cli, option: &TransportOption, shutdown: &AtomicBool) -> Result
     }
     let elapsed = start.elapsed();
 
-    let telemetry_end = session.reset().and_then(|()| session.read_telemetry());
+    let telemetry_end = session.read_telemetry();
     stats.print(elapsed, cli.exec_lead.is_some());
     match &telemetry_end {
         Ok(end) => print_telemetry(&telemetry_start, end),

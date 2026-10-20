@@ -16,7 +16,7 @@ internal static class Sample
 var geometry = new Geometry(new[] { new Autd3() });
 
 // Open the client.
-await using var client = await Client.OpenAsync(
+await using var client = Client.Open(
     geometry,
     new TransportOption()
 );

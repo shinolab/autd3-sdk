@@ -394,7 +394,9 @@ impl Node {
                     return Received::Nothing;
                 }
                 self.host = Some((reply.port, reply.to));
-                if !is_frame || cmds.recv_frame(body, reply.msg_id) == Disposition::Reply {
+                if is_frame {
+                    let _ = cmds.recv_frame(body, reply.msg_id);
+                } else {
                     let state = cmds.reply();
                     self.frame_reply(nic, &reply, &state);
                 }
@@ -510,7 +512,7 @@ impl Node {
 
     fn frame_reply<N: Nic>(&mut self, nic: &mut N, reply: &ReplyTo, state: &Reply) {
         let head = FrameReply {
-            ack: state.ack,
+            reserved: 0,
             status: state.status.as_u8(),
             flags: self.flags(nic),
             unit_id: self.unit_id,
@@ -601,7 +603,6 @@ mod tests {
 
     struct FakeCommands {
         frames: Vec<(Vec<u8>, u16)>,
-        disposition: Disposition,
         reply: CmdReply,
         send_failures: u32,
         unassigned: u32,
@@ -611,11 +612,7 @@ mod tests {
     impl CommandLayer for FakeCommands {
         fn recv_frame(&mut self, frame: &[u8], msg_id: u16) -> Disposition {
             self.frames.push((frame.to_vec(), msg_id));
-            if self.disposition == Disposition::Reply {
-                self.reply =
-                    CmdReply::new(frame[0], Error::None, ReplyData::from_slice(&[0x5A, 0x5B]));
-            }
-            self.disposition
+            Disposition::Deferred
         }
 
         fn reply(&mut self) -> CmdReply {
@@ -668,8 +665,7 @@ mod tests {
                 now_ms: 0,
                 cmds: FakeCommands {
                     frames: Vec::new(),
-                    disposition: Disposition::Reply,
-                    reply: CmdReply::new(0xFF, Error::None, ReplyData::EMPTY),
+                    reply: CmdReply::EMPTY,
                     send_failures: 0,
                     unassigned: 0,
                     ptp_unlocked: Vec::new(),
@@ -805,9 +801,8 @@ mod tests {
         }
     }
 
-    fn frame_body(seq: u8) -> Vec<u8> {
+    fn frame_body() -> Vec<u8> {
         let mut f = vec![0u8; FRAME_BYTES_MAX];
-        f[0] = seq;
         f[1] = 0x04;
         f[FRAME_BYTES_MAX - 1] = 0xEE;
         f
@@ -992,9 +987,9 @@ mod tests {
     }
 
     #[test]
-    fn a_frame_reaches_the_command_layer_and_is_answered_at_once() {
+    fn a_frame_reaches_the_command_layer_and_is_answered_by_its_completion() {
         let mut h = Harness::new();
-        let body = frame_body(7);
+        let body = frame_body();
         assert_eq!(
             h.send(unit_address(UNASSIGNED_ID), Kind::Frame, &body),
             Received::Nothing
@@ -1018,10 +1013,14 @@ mod tests {
         assert_eq!(h.cmds.frames.len(), 1);
         assert_eq!(h.cmds.frames[0].0, body);
         assert_eq!(h.cmds.frames[0].1, 0x4242);
+        assert!(h.replies().is_empty());
+
+        h.cmds.reply = CmdReply::new(Error::None, ReplyData::from_slice(&[0x5A, 0x5B]));
+        h.node.send_completion(&mut h.nic, 0x4242, &mut h.cmds);
         let r = h.only_reply();
         assert_eq!(r.header, Header::new(Kind::Frame, 0x4242));
         let (reply, data) = parse_frame_reply(&r.body);
-        assert_eq!(reply.ack, 7);
+        assert_eq!(reply.reserved, 0);
         assert_eq!(reply.status, 0);
         assert_eq!(data, [0x5A, 0x5B]);
         assert_eq!(reply.unit_id, 1);
@@ -1054,12 +1053,10 @@ mod tests {
         assert!(h.nic.sent.is_empty());
 
         h.assign(1);
-        h.send(unit_address(1), Kind::Frame, &frame_body(1));
+        h.send(unit_address(1), Kind::Frame, &frame_body());
+        h.node.send_completion(&mut h.nic, 0x4242, &mut h.cmds);
         let host = h.only_reply();
-        for (kind, body) in [
-            (Kind::Frame, &frame_body(2)[..]),
-            (Kind::Heartbeat, &[][..]),
-        ] {
+        for (kind, body) in [(Kind::Frame, &frame_body()[..]), (Kind::Heartbeat, &[][..])] {
             let request = encode_request_from(
                 src_ip,
                 unit_address(1),
@@ -1075,7 +1072,6 @@ mod tests {
         h.tick(50);
         assert!(h.node.is_assigned());
 
-        h.cmds.reply = CmdReply::new(1, Error::None, ReplyData::EMPTY);
         h.node.send_completion(&mut h.nic, 9, &mut h.cmds);
         assert_eq!(h.only_reply().dst_ip, host.dst_ip);
     }
@@ -1100,34 +1096,31 @@ mod tests {
     fn a_short_frame_is_passed_on_without_padding() {
         let mut h = Harness::new();
         h.assign(1);
-        let body = [9, 0x04, 0, 0, 0, 0, 1, 2];
+        let body = [0, 0x04, 0, 0, 0, 0, 1, 2];
         assert_eq!(
             h.send(unit_address(1), Kind::Frame, &body),
             Received::HostMessage
         );
         assert_eq!(h.cmds.frames[0].0, body);
-        let (reply, _) = parse_frame_reply(&h.only_reply().body);
-        assert_eq!(reply.ack, 9);
     }
 
     #[test]
     fn a_deferred_frame_is_answered_by_the_completion() {
         let mut h = Harness::new();
         h.assign(2);
-        h.cmds.disposition = Disposition::Deferred;
         assert_eq!(
             h.request(
                 unit_address(2),
                 PROTOCOL_VERSION,
                 Kind::Frame.as_u8(),
                 0x0101,
-                &frame_body(3)
+                &frame_body()
             ),
             Received::HostMessage
         );
         assert!(h.replies().is_empty());
 
-        h.cmds.reply = CmdReply::new(3, Error::InvalidPayload, ReplyData::EMPTY);
+        h.cmds.reply = CmdReply::new(Error::InvalidPayload, ReplyData::EMPTY);
         h.node.send_completion(&mut h.nic, 0x0101, &mut h.cmds);
         let r = h.only_reply();
         assert_eq!(r.header, Header::new(Kind::Frame, 0x0101));
@@ -1136,32 +1129,17 @@ mod tests {
         assert_eq!(r.dst_port, HOST_PORT);
         assert_eq!(r.src_ip, unit_address(2));
         let (reply, data) = parse_frame_reply(&r.body);
-        assert_eq!(reply.ack, 3);
         assert_eq!(reply.status, 0x02);
         assert_eq!(data, []);
     }
 
     #[test]
-    fn a_dropped_frame_gets_no_reply() {
-        let mut h = Harness::new();
-        h.assign(0);
-        h.cmds.disposition = Disposition::Dropped;
-        assert_eq!(
-            h.send(unit_address(0), Kind::Frame, &frame_body(1)),
-            Received::HostMessage
-        );
-        assert!(h.replies().is_empty());
-    }
-
-    #[test]
     fn a_completion_needs_an_assigned_unit_and_a_host() {
         let mut h = Harness::new();
-        h.cmds.reply = CmdReply::new(0, Error::None, ReplyData::EMPTY);
         h.node.send_completion(&mut h.nic, 1, &mut h.cmds);
         assert!(h.replies().is_empty());
 
         h.assign(0);
-        h.cmds.reply = CmdReply::new(0, Error::None, ReplyData::EMPTY);
         h.node.send_completion(&mut h.nic, 1, &mut h.cmds);
         assert!(h.replies().is_empty());
     }
@@ -1184,8 +1162,7 @@ mod tests {
     fn a_refused_completion_is_reported_to_the_command_layer() {
         let mut h = Harness::new();
         h.assign(0);
-        h.cmds.disposition = Disposition::Deferred;
-        h.send(unit_address(0), Kind::Frame, &frame_body(0));
+        h.send(unit_address(0), Kind::Frame, &frame_body());
         h.nic.send_refusals = 1;
         h.node.send_completion(&mut h.nic, 0x4242, &mut h.cmds);
         assert!(h.replies().is_empty());
@@ -1272,7 +1249,7 @@ mod tests {
         assert!(h.replies().is_empty());
 
         h.assign(4);
-        h.cmds.reply = CmdReply::new(0x33, Error::None, ReplyData::from_slice(&[1, 2, 3]));
+        h.cmds.reply = CmdReply::new(Error::None, ReplyData::from_slice(&[1, 2, 3]));
         assert_eq!(
             h.send(unit_address(4), Kind::Heartbeat, &[]),
             Received::HostMessage
@@ -1281,7 +1258,7 @@ mod tests {
         let r = h.only_reply();
         assert_eq!(r.header, Header::new(Kind::Heartbeat, 0x4242));
         let (reply, data) = parse_frame_reply(&r.body);
-        assert_eq!(reply.ack, 0x33);
+        assert_eq!(reply.reserved, 0);
         assert_eq!(data, [1, 2, 3]);
         assert_eq!(reply.unit_id, 4);
     }
@@ -1780,7 +1757,7 @@ mod tests {
             ..default_config()
         };
         let mut c = CpuHarness::new();
-        c.deliver(&set_cpu_config(0, &stale));
+        c.deliver(&set_cpu_config(&stale));
         assert_eq!(c.cpu.config(), stale);
 
         let mut h = Harness::new();

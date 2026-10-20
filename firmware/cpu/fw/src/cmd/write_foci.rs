@@ -28,11 +28,11 @@ mod tests {
     fn write_foci_buffer_writes_words_at_offset_per_bank() {
         let mut h = Harness::new();
 
-        h.deliver(&write_foci_buffer(0, 0, 0, &[0x1234, 0x5678]));
+        h.deliver(&write_foci_buffer(0, 0, &[0x1234, 0x5678]));
         assert_eq!(h.status(), Error::None);
-        h.deliver(&write_foci_buffer(1, 1, 300, &[0xAABB]));
+        h.deliver(&write_foci_buffer(1, 300, &[0xAABB]));
         assert_eq!(h.status(), Error::None);
-        assert_eq!(h.expected_seq(), 2);
+        assert_eq!(h.processed(), 2);
 
         assert_eq!(h.emission_word(0, 0), 0x1234);
         assert_eq!(h.emission_word(0, 1), 0x5678);
@@ -46,7 +46,6 @@ mod tests {
 
         let page = FPGA_PAGE_WORDS as usize;
         h.deliver(&write_foci_buffer(
-            0,
             0,
             FPGA_PAGE_WORDS - 2,
             &[0x0001, 0x0002, 0x0003, 0x0004],
@@ -63,8 +62,8 @@ mod tests {
     #[test]
     fn write_foci_buffer_empty_data_is_no_op_success() {
         let mut h = Harness::new();
-        h.deliver(&write_foci_buffer(0, 0, 0, &[]));
-        assert_eq!(h.ack(), 0);
+        h.deliver(&write_foci_buffer(0, 0, &[]));
+        assert_eq!(h.processed(), 1);
         assert_eq!(h.status(), Error::None);
     }
 
@@ -75,9 +74,9 @@ mod tests {
         h.set_ctl(ADDR_PATTERN_MEM_WR_BANK, UNTOUCHED);
         h.set_ctl(ADDR_PATTERN_MEM_WR_PAGE, UNTOUCHED);
 
-        h.deliver(&write_foci_buffer(0, 1, EMISSION_RAM_WORDS, &[]));
+        h.deliver(&write_foci_buffer(1, EMISSION_RAM_WORDS, &[]));
 
-        assert_eq!(h.ack(), 0);
+        assert_eq!(h.processed(), 1);
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.ctl(ADDR_PATTERN_MEM_WR_BANK), UNTOUCHED);
         assert_eq!(h.ctl(ADDR_PATTERN_MEM_WR_PAGE), UNTOUCHED);
@@ -87,7 +86,7 @@ mod tests {
     fn write_foci_buffer_rejects_invalid_payloads() {
         let mut h = Harness::new();
 
-        h.deliver(&write_foci_buffer(0, invalid_bank(), 0, &[0x0001]));
+        h.deliver(&write_foci_buffer(invalid_bank(), 0, &[0x0001]));
         assert_eq!(h.status(), Error::InvalidPayload);
 
         let odd = WriteFociPayload {
@@ -96,7 +95,6 @@ mod tests {
             offset: U32::new(0),
         };
         h.deliver(&Frame::from_parts(
-            1,
             Cmd::WriteFociBuffer,
             &odd,
             &[0x01, 0x02, 0x03],
@@ -105,7 +103,6 @@ mod tests {
         assert_eq!(h.emission_word(0, 0), 0);
 
         h.deliver(&write_foci_buffer(
-            3,
             0,
             EMISSION_RAM_WORDS - 1,
             &[0x0001, 0x0002],
@@ -114,7 +111,7 @@ mod tests {
         assert_eq!(h.emission_word(0, EMISSION_RAM_WORDS as usize - 1), 0);
 
         let before = fpga_snapshot(&h);
-        h.deliver(&write_foci_buffer(4, 0, u32::MAX, &[0x0001]));
+        h.deliver(&write_foci_buffer(0, u32::MAX, &[0x0001]));
         assert_eq!(h.status(), Error::InvalidPayload);
         assert_fpga_unchanged(&before, &h);
     }

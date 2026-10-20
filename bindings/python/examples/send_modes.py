@@ -28,7 +28,7 @@ async def main() -> None:
 
     geometry = Geometry([Autd3([0.0, 0.0, 0.0])])
 
-    async with await autd3.Client.open(
+    async with autd3.Client.open(
         geometry,
         autd3.TransportOption(),
     ) as client:

@@ -11,7 +11,7 @@ const _: () = assert!(PAYLOAD_BYTES == 1442);
 #[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned, Clone, Copy)]
 #[repr(C)]
 pub struct FrameHeader {
-    pub seq: u8,
+    pub reserved: u8,
     pub cmd: u8,
     pub exec_at: U32,
 }

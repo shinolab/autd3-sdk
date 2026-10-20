@@ -55,15 +55,13 @@ pub(crate) fn patient_option(emulator: &UdpEmulator) -> TransportOption {
     }
 }
 
-pub(crate) async fn open_with(emulator: &UdpEmulator, option: &TransportOption) -> Client {
-    Client::open(&geometry(emulator.num_devices()), option)
-        .await
-        .unwrap()
+pub(crate) fn open_with(emulator: &UdpEmulator, option: &TransportOption) -> Client {
+    Client::open(&geometry(emulator.num_devices()), option).unwrap()
 }
 
-pub(crate) async fn open(num_devices: usize) -> (UdpEmulator, Client) {
+pub(crate) fn open(num_devices: usize) -> (UdpEmulator, Client) {
     let emulator = emulator(num_devices);
-    let client = open_with(&emulator, &option(&emulator)).await;
+    let client = open_with(&emulator, &option(&emulator));
     (emulator, client)
 }
 
@@ -74,7 +72,6 @@ pub(crate) fn udp_error(error: &Error) -> Option<&UdpError> {
         | Error::UnexpectedReply { .. }
         | Error::DeviceLost { .. }
         | Error::Timeout { .. }
-        | Error::SeqMismatch { .. }
         | Error::DeviceTimeUnknown
         | Error::InvalidPayload(_)
         | Error::Encode(_)

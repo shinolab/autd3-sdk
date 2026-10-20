@@ -65,6 +65,11 @@ This equals `DEVICE_QUEUE_FRAMES`, the number of frames in the receive queue of 
 While `MAX_INFLIGHT` frames are waiting for their replies, `send_frame` waits until the replies of one of them are complete.
 To keep fewer frames in flight, await an earlier `ResponseFuture` before sending the next frame.
 
+The devices process every frame they receive in the order it arrives, and they do not detect missing or reordered frames.
+Even if a frame in the middle is lost and fails with `Timeout`, the frames sent after it are processed as usual.
+Send a frame that depends on the success of an earlier one (such as a bank switch after writing a Pattern) only after awaiting the earlier frame's `ResponseFuture` and confirming that it succeeded.
+`send` waits for the response frame by frame, so it does not have this problem.
+
 ## Liveness check
 
 While there is nothing to send, `Client` sends nothing to the devices by itself.
@@ -121,8 +126,6 @@ Reading them does not clear them.
 | Field                 | Type  | Description                                            |
 | --------------------- | ----- | ------------------------------------------------------ |
 | `fifo_drop`           | `u32` | Frames dropped because the receive FIFO was full       |
-| `dedup`               | `u32` | Frames dropped as duplicates                           |
-| `seq_mismatch`        | `u32` | Frames ignored because the sequence number did not match |
 | `dispatch_error`      | `u32` | Number of times processing ended in an error           |
 | `processed`           | `u32` | Frames processed                                       |
 | `send_failure`        | `u32` | Number of times the NIC refused to send                |
@@ -131,6 +134,7 @@ Reading them does not clear them.
 | `sync_resync`         | `u8`  | Number of hardware resynchronizations of the sync input (reset to 0 by `Synchronize`) |
 | `boot_failure`        | `u8`  | Number of steps that failed at boot (not cleared by `Clear`) |
 | `cpu_watchdog`        | `u8`  | Number of times the CPU watchdog fired (kept until the FPGA is reconfigured) |
+| `exec_late`           | `u32` | Frames whose processing started 1 µs or more after their [processing time](#processing-time) |
 
 The `u32` fields wrap around to 0 on overflow, and the `u16` / `u8` fields stop at their maximum.
 
@@ -141,7 +145,6 @@ The `u32` fields wrap around to 0 on overflow, and the `u16` / `u8` fields stop 
 | Method                       | Type  | Description                                  |
 | ---------------------------- | ----- | -------------------------------------------- |
 | `frames()`                   | `u64` | Frames sent                                  |
-| `resets()`                   | `u64` | `Reset`s sent                                |
 | `heartbeats()`               | `u64` | Liveness checks sent with `send_heartbeat()`      |
 | `recoveries()`               | `u64` | Devices recovered from `Lost` by `recover()` |
 | `acked_frames()`             | `u64` | Frames that received a reply                 |
@@ -154,8 +157,8 @@ The response-wait timeout is `ack_timeout` of [`TransportOption`](/autd3-sdk/en/
 If the replies to the frame at the head of the wait do not all arrive within `ack_timeout`, every frame in flight fails with `Timeout`.
 
 There is no retransmission. A failed command must be sent again by the user.
-After the sends fall out of step with the devices (for example, when the responses did not arrive within `ack_timeout`), one `Reset` is sent before the next send to get back in step.
-If not every device responds within `ack_timeout`, that send fails with `Timeout`, and the next send tries the `Reset` again.
+A frame that failed with `Timeout` has still been processed if it reached the device (for example, when only the reply was lost).
+The devices do not drop duplicates, so a frame sent again may be processed twice together with the earlier one.
 
 ## Processing time
 

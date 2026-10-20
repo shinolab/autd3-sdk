@@ -3,14 +3,12 @@ use std::time::Instant;
 
 use anyhow::{Context, Result, bail};
 
-use autd3_rs::protocol::{Cmd, Seq};
-use autd3_rs::{DeviceState, TransportOption, UdpBus};
+use autd3_rs::protocol::Cmd;
+use autd3_rs::{DeviceState, TransportOption, UdpBus, UdpError};
 
 use crate::{Link, Session, describe};
 
-const RESET_ACK: u8 = 0xFF;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(1);
-const RETRANSMIT_INTERVAL: Duration = Duration::from_millis(20);
 const GONE_WINDOW: Duration = Duration::from_secs(5);
 const GONE_LOST_TIMEOUT: Duration = Duration::from_millis(100);
 const HEARTBEATS_UNTIL_LOST: u32 = 10;
@@ -20,28 +18,20 @@ fn verdict(ok: bool) -> &'static str {
     if ok { "[OK]" } else { "[FAIL]" }
 }
 
-fn not_before(msg_id: u16, first: u16) -> bool {
-    msg_id.wrapping_sub(first) < 0x8000
-}
-
-fn request(bus: &UdpBus, cmd: Cmd, seq: Seq, ack: u8) -> Result<()> {
-    let frame = [seq.get(), cmd.as_u8(), 0, 0, 0, 0];
+fn request(bus: &UdpBus, cmd: Cmd) -> Result<()> {
+    let frame = [0, cmd.as_u8(), 0, 0, 0, 0];
     let mut status: Vec<Option<u8>> = vec![None; bus.num_devices()];
-    let first = bus.peek_next_msg_id();
+    let sent = bus.broadcast(bus.reserve_msg_id(), &frame)?;
+    if let Some(unsent) = sent.unsent {
+        return Err(UdpError::from(unsent).into());
+    }
+    let msg_id = sent.msg_id;
     let end = Instant::now() + REQUEST_TIMEOUT;
-    while Instant::now() < end {
-        bus.broadcast(bus.reserve_msg_id(), &frame)?;
-        let retransmit_at = (Instant::now() + RETRANSMIT_INTERVAL).min(end);
-        while let Some(reply) = bus.recv(retransmit_at)? {
-            if not_before(reply.msg_id, first) && reply.acked_seq == ack {
-                status[reply.device].get_or_insert(reply.error_code);
-            }
-            if status.iter().all(Option::is_some) {
-                break;
-            }
-        }
-        if status.iter().all(Option::is_some) {
-            break;
+    while status.iter().any(Option::is_none)
+        && let Some(reply) = bus.recv(end)?
+    {
+        if reply.msg_id == msg_id {
+            status[reply.device].get_or_insert(reply.error_code);
         }
     }
     for (device, status) in status.iter().enumerate() {
@@ -80,8 +70,7 @@ fn reboot_all(
         ..option.clone()
     };
     let bus = UdpBus::open_unsynchronized(&option, devices).context("enumerating the devices")?;
-    request(&bus, Cmd::Reset, Seq::ZERO, RESET_ACK)?;
-    request(&bus, Cmd::Reboot, Seq::ZERO, Seq::ZERO.get())?;
+    request(&bus, Cmd::Reboot)?;
     let outcome = gone(&bus);
     bus.close()?;
     outcome

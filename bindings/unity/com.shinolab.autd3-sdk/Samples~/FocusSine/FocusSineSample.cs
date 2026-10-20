@@ -22,7 +22,7 @@ namespace AUTD3.Samples
         {
             _geometry = new Geometry(new List<Autd3> { new Autd3(Vector3.zero) });
             _emulator = new UdpEmulator(1);
-            _client = await Client.OpenAsync(_geometry, _emulator.Option());
+            _client = Client.Open(_geometry, _emulator.Option());
             await _client.SendAsync(Command.Sequence(new Clear(), new Synchronize()));
 
             var target = _geometry.Center + new Vector3(0f, 0f, -0.15f);

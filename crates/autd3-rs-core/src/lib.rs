@@ -22,5 +22,5 @@ pub use geometry::{
 };
 pub use protocol::{
     Cmd, DeviceErrorCode, FRAME_BYTES_MAX, MAX_DEVICES, MAX_INFLIGHT, PAYLOAD_BYTES,
-    REPLY_DATA_BYTES_MAX, Seq, describe_device_error,
+    REPLY_DATA_BYTES_MAX, describe_device_error,
 };

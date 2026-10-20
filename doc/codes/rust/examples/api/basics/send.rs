@@ -13,7 +13,7 @@ use autd3_rs_pattern::{focus, wavelength};
 async fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default(), Autd3::default()]);
     let option = TransportOption::default();
-    let client = Client::open(&geometry, &option).await?;
+    let client = Client::open(&geometry, &option)?;
 
     let wavelength = wavelength(340.0 * m / s);
 

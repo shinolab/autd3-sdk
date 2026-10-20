@@ -20,14 +20,12 @@ const SIZE: u32 = 64;
 #[test]
 fn config_takes_effect_only_at_the_bank_activation_latch() {
     let mut device = Device::new(NUM_TRANSDUCERS);
-    device.send(&frame(0, Cmd::Reset, &[]));
     let cycle_at_boot = device.fpga().modulation_cycle(BANK as usize);
     let div_at_boot = device.fpga().modulation_freq_div(BANK as usize);
 
     assert_eq!(
         device
             .send(&frame(
-                0,
                 Cmd::ConfigModulation,
                 &config_modulation(BANK, DIVIDER, SIZE, REP_INFINITE)
             ))
@@ -47,7 +45,6 @@ fn config_takes_effect_only_at_the_bank_activation_latch() {
     assert_eq!(
         device
             .send(&frame(
-                1,
                 Cmd::ActivateModulationBank,
                 &activate_modulation_bank(BANK, TransitionMode::Immediate, 0)
             ))

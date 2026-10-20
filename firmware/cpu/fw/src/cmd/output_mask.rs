@@ -27,7 +27,7 @@ mod tests {
     fn output_mask_writes_words_verbatim() {
         let mut h = Harness::new();
         let mask: Vec<bool> = (0..NUM_TRANSDUCERS).map(|i| i % 3 == 0).collect();
-        h.deliver(&output_mask(0, &mask));
+        h.deliver(&output_mask(&mask));
         assert_eq!(h.status(), Error::None);
         for i in 0..OUTPUT_MASK_WORDS {
             let expected = mask[i * 16..]

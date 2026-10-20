@@ -16,24 +16,10 @@ struct TelemetryCounter {
     absolute: bool,
 }
 
-const TELEMETRY_COUNTERS: [TelemetryCounter; 11] = [
+const TELEMETRY_COUNTERS: [TelemetryCounter; 9] = [
     TelemetryCounter {
         name: "fifo_drop",
         read: |t| t.fifo_drop,
-        mask: u32::MAX,
-        per_device: true,
-        absolute: false,
-    },
-    TelemetryCounter {
-        name: "dedup",
-        read: |t| t.dedup,
-        mask: u32::MAX,
-        per_device: true,
-        absolute: false,
-    },
-    TelemetryCounter {
-        name: "seq_mismatch",
-        read: |t| t.seq_mismatch,
         mask: u32::MAX,
         per_device: true,
         absolute: false,
@@ -233,7 +219,6 @@ pub(crate) fn print_summary(s: &Summary) {
             println!("    code {code:#04x} : {count}");
         }
     }
-    println!("  resets since open       : {}", s.resets);
     println!("  recoveries since open   : {}", s.recoveries);
 
     println!();

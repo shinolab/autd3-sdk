@@ -40,7 +40,7 @@ mod tests {
         let mut h = Harness::new();
         let latches_at_boot = h.latch_count(CtlFlags::PATTERN_SET);
 
-        h.deliver(&activate_pattern_bank(0, 1, TransitionMode::Immediate, 0));
+        h.deliver(&activate_pattern_bank(1, TransitionMode::Immediate, 0));
 
         assert_eq!(h.status(), Error::None);
         assert_eq!(
@@ -58,7 +58,6 @@ mod tests {
 
         h.deliver(&config_pattern_rep(
             0,
-            0,
             EmissionType::Raw.as_u8(),
             2,
             EMISSION_MAX_INDICES,
@@ -69,7 +68,6 @@ mod tests {
         assert_eq!(h.status(), Error::None);
 
         h.deliver(&activate_pattern_bank(
-            1,
             0,
             TransitionMode::SysTime,
             0x0123_4567_89AB_CDEF,
@@ -90,7 +88,6 @@ mod tests {
     fn activate_pattern_bank_rejects_invalid_bank() {
         let mut h = Harness::new();
         h.deliver(&activate_pattern_bank(
-            0,
             invalid_bank(),
             TransitionMode::Immediate,
             0,
@@ -103,11 +100,11 @@ mod tests {
     fn activate_pattern_bank_rejects_timed_transition_on_infinite_loop() {
         let mut h = Harness::new();
 
-        h.deliver(&activate_pattern_bank(0, 1, TransitionMode::Gpio, 0));
+        h.deliver(&activate_pattern_bank(1, TransitionMode::Gpio, 0));
         assert_eq!(h.status(), Error::InvalidTransitionMode);
         assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 0);
 
-        h.deliver(&activate_pattern_bank(1, 1, TransitionMode::Immediate, 0));
+        h.deliver(&activate_pattern_bank(1, TransitionMode::Immediate, 0));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 1);
     }
@@ -116,7 +113,6 @@ mod tests {
     fn activate_pattern_bank_rejects_immediate_transition_on_finite_loop() {
         let mut h = Harness::new();
         h.deliver(&config_pattern_rep(
-            0,
             1,
             EmissionType::Raw.as_u8(),
             2,
@@ -127,11 +123,11 @@ mod tests {
         ));
         assert_eq!(h.status(), Error::None);
 
-        h.deliver(&activate_pattern_bank(1, 1, TransitionMode::Ext, 0));
+        h.deliver(&activate_pattern_bank(1, TransitionMode::Ext, 0));
         assert_eq!(h.status(), Error::InvalidTransitionMode);
         assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 0);
 
-        h.deliver(&activate_pattern_bank(2, 1, TransitionMode::SyncIdx, 0));
+        h.deliver(&activate_pattern_bank(1, TransitionMode::SyncIdx, 0));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 1);
     }
@@ -140,7 +136,6 @@ mod tests {
     fn activate_pattern_bank_rejects_sys_time_transition_within_margin() {
         let mut h = Harness::new();
         h.deliver(&config_pattern_rep(
-            0,
             1,
             EmissionType::Raw.as_u8(),
             2,
@@ -154,7 +149,6 @@ mod tests {
 
         h.deliver(&activate_pattern_bank(
             1,
-            1,
             TransitionMode::SysTime,
             2_000_000_000,
         ));
@@ -162,7 +156,6 @@ mod tests {
         assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 0);
 
         h.deliver(&activate_pattern_bank(
-            2,
             1,
             TransitionMode::SysTime,
             2_000_000_000 + SYS_TIME_TRANSITION_MARGIN_NS + 1,

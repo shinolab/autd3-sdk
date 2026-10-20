@@ -22,5 +22,4 @@ macro_rules! context_cell {
     };
 }
 
-context_cell!(IsrCell);
 context_cell!(MainCell);

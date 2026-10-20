@@ -73,10 +73,10 @@ mod tests {
     #[test]
     fn activate_bank_sys_time_is_rejected_when_the_device_time_is_unreadable() {
         let mut h = Harness::new();
-        h.deliver(&config_mod_rep(0, 1, 10, 100, 4));
+        h.deliver(&config_mod_rep(1, 10, 100, 4));
         h.port.sys_time = None;
 
-        h.deliver(&activate_mod_bank(1, 1, TransitionMode::SysTime, u64::MAX));
+        h.deliver(&activate_mod_bank(1, TransitionMode::SysTime, u64::MAX));
         assert_eq!(h.status(), Error::MissTransitionTime);
         assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 0);
     }
@@ -87,13 +87,13 @@ mod tests {
         let unknown = 0x03;
         assert_eq!(TransitionMode::from_u8(unknown), None);
 
-        let mut frame = activate_mod_bank(0, 1, TransitionMode::Ext, 0);
+        let mut frame = activate_mod_bank(1, TransitionMode::Ext, 0);
         frame.set_payload_byte(offset_of!(ActivateModBankPayload, transition_mode), unknown);
         h.deliver(&frame);
         assert_eq!(h.status(), Error::InvalidPayload);
         assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 0);
 
-        let mut frame = activate_pattern_bank(1, 1, TransitionMode::Immediate, 0);
+        let mut frame = activate_pattern_bank(1, TransitionMode::Immediate, 0);
         frame.set_payload_byte(
             offset_of!(ActivatePatternBankPayload, transition_mode),
             unknown,
