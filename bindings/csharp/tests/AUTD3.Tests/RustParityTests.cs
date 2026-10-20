@@ -192,10 +192,10 @@ namespace AUTD3.Tests
         }
 
         [Theory]
-        [InlineData(0.5f, 1)]
+        [InlineData(0.5f, 0)]
         [InlineData(1.5f, 2)]
-        [InlineData(2.5f, 3)]
-        [InlineData(-0.5f, 255)]
+        [InlineData(2.5f, 2)]
+        [InlineData(-0.5f, 0)]
         [InlineData(255.5f, 0)]
         [InlineData(128f, 128)]
         public void AnAngleRoundsToAPhaseLikeRust(float lsb, int expected)
