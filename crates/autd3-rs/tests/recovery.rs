@@ -9,7 +9,7 @@ use autd3_rs::{Client, Error, Frames, MAX_INFLIGHT, Telemetry};
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 use zerocopy::IntoBytes;
 
-use common::{PATIENCE, emulator, open, open_with, option, patient_config};
+use common::{PATIENCE, emulator, open, open_with, patient_option};
 
 const FOREIGN_SEQ: u8 = 0x80;
 
@@ -205,7 +205,7 @@ async fn a_reset_dropped_by_a_stalled_device_is_sent_again_once_the_device_runs(
 #[ignore = "depends on real time"]
 async fn a_frame_dropped_by_a_full_device_queue_desynchronizes_the_next_one() {
     let emulator = emulator(2);
-    let client = open_with(&emulator, &option(&emulator), patient_config()).await;
+    let client = open_with(&emulator, &patient_option(&emulator)).await;
     let stats = client.bus_stats();
     let before = telemetry(&client).await;
     let on = Frames::encode(client.geometry(), ForceFan { value: true }).unwrap();

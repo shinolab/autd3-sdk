@@ -1,5 +1,6 @@
 """Hardware-free tests: pattern/modulation/holo computation and datagram building."""
 
+import gc
 from typing import Any
 
 import numpy as np
@@ -1022,3 +1023,23 @@ def test_a_buffer_being_written_rejects_other_access() -> None:
 
     view[0] = 1
     assert int(view[0].value) == 1
+
+
+def test_the_mutable_capsule_keeps_its_buffer_alive() -> None:
+    geo = geometry()
+    phases = geo.phase_buffer()
+    intensities = geo.intensity_buffer()
+    phase_capsule = loose(phases._capsule())
+    intensity_capsule = loose(intensities._capsule())
+    del phases
+    del intensities
+    gc.collect()
+
+    holo.naive(
+        geo,
+        [holo.AmplitudeTarget(np.array([0.0, 0.0, 150.0]), 5e3 * Pa)],
+        pattern.wavelength(340 * autd3.units.m / autd3.units.s),
+        holo.NaiveOption(),
+        phase_capsule,
+        intensity_capsule,
+    )

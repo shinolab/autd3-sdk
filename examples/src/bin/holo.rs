@@ -9,7 +9,7 @@ use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::SamplingConfig;
-use autd3_rs::{Client, ClientConfig, TransportOption};
+use autd3_rs::{Client, TransportOption};
 use autd3_rs_pattern_holo::{AmplitudeTarget, GspatOption, NalgebraBackend, Pa, gspat};
 
 #[tokio::main(flavor = "multi_thread")]
@@ -18,12 +18,7 @@ async fn main() -> Result<()> {
 
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let client = Client::open(
-        &geometry,
-        &TransportOption::default(),
-        ClientConfig::default(),
-    )
-    .await?;
+    let client = Client::open(&geometry, &TransportOption::default()).await?;
     client.send((Clear, Synchronize)).await?;
 
     println!("devices: {}", client.num_devices());

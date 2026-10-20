@@ -17,7 +17,7 @@ mod sealed {
 mod test_utils;
 
 pub use autd3_rs_core::{bus, common, geometry, nalgebra, params, protocol, rt, units, value};
-pub use error::{ClientConfigError, Error, NetworkCause, PayloadError};
+pub use error::{Error, NetworkCause, PayloadError};
 
 #[cfg(feature = "serde")]
 pub use autd3_rs_core::LayoutError;
@@ -27,7 +27,7 @@ pub use autd3_rs_core::{
     EncodeError, Freq, Geometry, Interface, Length, MAX_INFLIGHT, Point3, Quaternion,
     UnitQuaternion, UnitVector3, Vector3, Velocity, offset, point,
 };
-pub use client::{Client, ClientConfig, Controller, Driver, ExecAt, MAX_DEVICES, ResponseFuture};
+pub use client::{Client, Controller, Driver, ExecAt, MAX_DEVICES, ResponseFuture};
 pub use datagram::{Datagram, Frame, FrameIter, Frames};
 pub use firmware_version::{FirmwareVersion, Version};
 pub use fpga_state::FpgaState;

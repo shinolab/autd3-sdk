@@ -25,10 +25,6 @@ name = "api_advanced_controller"
 path = "examples/api/advanced/controller.rs"
 
 [[example]]
-name = "api_basics_client_config"
-path = "examples/api/basics/client-config.rs"
-
-[[example]]
 name = "api_basics_client"
 path = "examples/api/basics/client.rs"
 

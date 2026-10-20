@@ -27,7 +27,6 @@ async def main() -> None:
     async with await autd3.Client.open(
         geometry,
         autd3.TransportOption(),
-        autd3.ClientConfig(),
     ) as client:
         await client.send((Clear(), Synchronize()))
         print("devices:", client.num_devices())

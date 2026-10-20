@@ -1,13 +1,13 @@
 import asyncio
 
-from autd3 import Client, ClientConfig, Duration, TransportOption
+from autd3 import Client, Duration, TransportOption
 from autd3.geometry import Autd3, Geometry
 from autd3.value import SysTime
 
 
 async def main() -> None:
     geometry = Geometry([Autd3()])
-    async with await Client.open(geometry, TransportOption(), ClientConfig()) as client:
+    async with await Client.open(geometry, TransportOption()) as client:
         # ANCHOR: construct
         opened = SysTime.ZERO
         now = client.device_time_now()

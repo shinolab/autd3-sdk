@@ -2,7 +2,6 @@ use pyo3::prelude::*;
 
 mod client;
 mod commands;
-mod config;
 mod datagram;
 mod future;
 mod logging;
@@ -60,7 +59,6 @@ fn _autd3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<udp::UdpEmulator>()?;
     m.add_class::<client::FpgaState>()?;
     m.add_class::<client::Telemetry>()?;
-    m.add_class::<config::ClientConfig>()?;
     m.add_class::<datagram::Each>()?;
     m.add_function(wrap_pyfunction!(datagram::each, m)?)?;
     m.add_class::<datagram::Frames>()?;

@@ -8,11 +8,8 @@ sidebar:
 import CodeTabs from "@components/CodeTabs.astro";
 import Install from "@components/Install.astro";
 import { excerpt } from "@lib/excerpt";
-import open from "@codes/rust/examples/api/basics/client-config.rs?raw";
-import pyOpen from "@codes/python/examples/api/basics/client-config.py?raw";
 import methods from "@codes/rust/examples/api/basics/client.rs?raw";
 import pyMethods from "@codes/python/examples/api/basics/client.py?raw";
-import csOpen from "@codes/csharp/examples/api/basics/client-config.cs?raw";
 import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 import sample from "@codes/rust/examples/api/basics/send.rs?raw";
 import pySample from "@codes/python/examples/api/basics/send.py?raw";
@@ -22,13 +19,12 @@ import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
 
 <Install rust="autd3-rs" python="autd3" csharp="AUTD3" />
 
-<CodeTabs rust={excerpt(open, "api")} python={excerpt(pyOpen, "api")} csharp={excerpt(csOpen, "api")} />
+<CodeTabs rust={excerpt(methods, "open")} python={excerpt(pyMethods, "open")} csharp={excerpt(csMethods, "open")} />
 
 | Parameter  | Type              | Description                                                                  |
 | ---------- | ----------------- | ---------------------------------------------------------------------------- |
 | `geometry` | `&Geometry`       | Physical layout of the devices                                               |
 | `option`   | `&TransportOption`      | Connection settings. See [`TransportOption`](/autd3-sdk/en/api/basics/transport-option/) |
-| `config`   | `ClientConfig`    | See below                                                                    |
 
 The `Client` connects to the devices (or the [Simulator](/autd3-sdk/en/guide/simulator/)) directly over UDP.
 
@@ -47,8 +43,6 @@ To continuously monitor the operating state of the devices, drive the `StateChec
 | `read_fpga_state()`       | ✓     | `Result<Vec<FpgaState>, Error>`       | FPGA state of each device                                  |
 | `read_telemetry()`        | ✓     | `Result<Vec<Telemetry>, Error>`       | CPU diagnostic counters of each device                     |
 | `device_time_now()`       | —     | `Result<SysTime, Error>`              | Current time of the devices (see [SysTime](/autd3-sdk/en/api/basics/sys-time/)). `DeviceTimeUnknown` if no reply carrying the time has been received yet |
-| `config()`                | —     | `ClientConfig`                        | The current [ClientConfig](#clientconfig)                  |
-| `set_config(config)`      | —     | `Result<(), Error>`                   | Replace the ClientConfig |
 | `send(cmd)`               | ✓     | `Result<(), Error>`                   | Send a command, confirming the response frame by frame     |
 | `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | Send one frame (see [streaming](#streaming))                |
 | `send_frame_at(frame, exec)` | ✓  | `Result<ResponseFuture, Error>`       | Send one frame at a given processing time (see [Processing time](#processing-time)) |
@@ -65,6 +59,11 @@ To avoid the noise of dropping the amplitude at once, `close()` first sets the [
 To keep sending without waiting for the responses, convert the command into frames with `Frames::encode`, collect the `ResponseFuture`s that `send_frame` returns, and then await them in order.
 
 <CodeTabs rust={excerpt(sample, "streaming")} python={excerpt(pySample, "streaming")} csharp={excerpt(csSample, "streaming")} />
+
+The number of frames that may be sent without waiting for a reply is fixed at `MAX_INFLIGHT (7)` (Python: `autd3.params.MAX_INFLIGHT`, C#: `Params.MaxInflight`).
+This equals `DEVICE_QUEUE_FRAMES`, the number of frames in the receive queue of each device (Python: `autd3.params.DEVICE_QUEUE_FRAMES`, C#: `Params.DeviceQueueFrames`).
+While `MAX_INFLIGHT` frames are waiting for their replies, `send_frame` waits until the replies of one of them are complete.
+To keep fewer frames in flight, await an earlier `ResponseFuture` before sending the next frame.
 
 ## Liveness check
 
@@ -149,19 +148,10 @@ The `u32` fields wrap around to 0 on overflow, and the `u16` / `u8` fields stop 
 | `worst_ack_latency_ns()`     | `u64` | Maximum time from sending to the reply [ns]  |
 | `mean_ack_latency_ns()`      | `u64` | Mean time from sending to the reply [ns]     |
 
-## ClientConfig
+## Response-wait timeout
 
-<CodeTabs rust={excerpt(open, "config")} python={excerpt(pyOpen, "config")} csharp={excerpt(csOpen, "config")} />
-
-| Field                        | Type           | Default | Description                                                                         |
-| ---------------------------- | -------------- | ------- | ----------------------------------------------------------------------------------- |
-| `ack_timeout`                | `Duration`     | 10 ms   | Response-wait timeout. Once it elapses, the frames in flight fail with `Timeout`.   |
-| `max_inflight`               | `NonZeroUsize` | `7`     | Number of frames that may be sent without waiting for a reply (see [streaming](#streaming)) |
-
-`max_inflight` errors if it exceeds `MAX_INFLIGHT (7)` (Python: `autd3.params.MAX_INFLIGHT`, C#: `Params.MaxInflight`).
-The default is also `MAX_INFLIGHT`, which equals `DEVICE_QUEUE_FRAMES`, the number of frames in the receive queue of each device (Python: `autd3.params.DEVICE_QUEUE_FRAMES`, C#: `Params.DeviceQueueFrames`).
-Setting `ack_timeout` to 0 makes opening the `Client` fail with an error (`InvalidConfig`; the `code` of the Python `Autd3Error` is `INVALID_ARGUMENT`, and the `Code` of the C# `Autd3Exception` is `InvalidArgument`).
-The Python defaults are the same as in Rust.
+The response-wait timeout is `ack_timeout` of [`TransportOption`](/autd3-sdk/en/api/basics/transport-option/) (10 ms by default). It is fixed when the `Client` opens and cannot be changed afterwards.
+If the replies to the frame at the head of the wait do not all arrive within `ack_timeout`, every frame in flight fails with `Timeout`.
 
 There is no retransmission. A failed command must be sent again by the user.
 After the sends fall out of step with the devices (for example, when the responses did not arrive within `ack_timeout`), one `Reset` is sent before the next send to get back in step.

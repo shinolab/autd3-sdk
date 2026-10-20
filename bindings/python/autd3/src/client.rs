@@ -1,6 +1,5 @@
 use std::sync::{Arc, Mutex};
 
-use crate::config::ClientConfig;
 use crate::datagram::{Expand, Frame, command_of};
 use crate::future::{Completed, completed_into_py, future_into_py};
 use crate::ops::SysTime;
@@ -489,13 +488,11 @@ impl Client {
         py: Python<'py>,
         geometry: &Bound<'py, PyAny>,
         option: &crate::udp::TransportOption,
-        config: &ClientConfig,
     ) -> PyResult<Bound<'py, PyAny>> {
         let geometry = geometry_from_capsule(&capsule_of(geometry)?)?.clone();
         let option = option.0.clone();
-        let config = config.0;
         future_into_py(py, async move {
-            let client = autd3_rs::Client::open(&geometry, &option, config)
+            let client = autd3_rs::Client::open(&geometry, &option)
                 .await
                 .map_err(client_pyerr_gil)?;
             Ok(Client {
@@ -519,16 +516,6 @@ impl Client {
 
     fn geometry<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         geometry_to_py(py, &self.geometry)
-    }
-
-    fn config(&self) -> ClientConfig {
-        ClientConfig(self.inner.config())
-    }
-
-    fn set_config(&self, py: Python<'_>, config: &ClientConfig) -> PyResult<()> {
-        self.inner
-            .set_config(config.0)
-            .map_err(|e| client_pyerr(py, &e))
     }
 
     fn device_time_now(&self, py: Python<'_>) -> PyResult<SysTime> {

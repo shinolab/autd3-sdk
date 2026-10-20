@@ -9,7 +9,10 @@ internal static class Sample
     internal static async Task Run()
     {
         var layout = new Geometry(new[] { new Autd3() });
-        var client = await Client.OpenAsync(layout, new TransportOption(), new ClientConfig());
+        // ANCHOR: open
+        var client = await Client.OpenAsync(layout, new TransportOption());
+        await client.SendAsync(Command.Sequence(new Clear(), new Synchronize()));
+        // ANCHOR_END: open
 
         // ANCHOR: exec_at
         using var frames = Frames.Encode(client.Geometry, new Nop());
@@ -41,9 +44,6 @@ internal static class Sample
 
         client.Heartbeat();
 
-        var config = client.Config;
-        client.SetConfig(new ClientConfig { AckTimeout = TimeSpan.FromMilliseconds(20) });
-
         var firmware = await client.ReadFirmwareVersionAsync();
         var fpgaState = await client.ReadFpgaStateAsync();
 
@@ -53,12 +53,12 @@ internal static class Sample
         await client.CloseAsync();
         // ANCHOR_END: api
 
-        _ = (numDevices, geometry, config, firmware, fpgaState, resp);
+        _ = (numDevices, geometry, firmware, fpgaState, resp);
 
         var scopedLayout = new Geometry(new[] { new Autd3() });
 
         // ANCHOR: context_manager
-        await using (var scoped = await Client.OpenAsync(scopedLayout, new TransportOption(), new ClientConfig()))
+        await using (var scoped = await Client.OpenAsync(scopedLayout, new TransportOption()))
         {
             await scoped.SendAsync(new Nop());
         }

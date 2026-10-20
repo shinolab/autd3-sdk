@@ -13,9 +13,7 @@ use autd3_rs::commands::{Clear, Command, FixedCompletionTime, Pattern, SetSilenc
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::rt::{LogWriter, TracingOption, init_tracing};
 use autd3_rs::value::Intensity;
-use autd3_rs::{
-    Client, ClientConfig, Error, ExecAt, Frames, Interface, StateChecker, TransportOption,
-};
+use autd3_rs::{Client, Error, ExecAt, Frames, Interface, StateChecker, TransportOption};
 
 use crate::cli::Cli;
 use crate::io::{check, prompt, wait_enter};
@@ -75,7 +73,6 @@ impl Drop for Session {
 pub struct Link<'a> {
     pub geometry: &'a Geometry,
     pub option: &'a TransportOption,
-    pub config: ClientConfig,
     pub heartbeat: Duration,
     pub mute: bool,
     pub exec: ExecAt,
@@ -83,7 +80,7 @@ pub struct Link<'a> {
 
 impl Link<'_> {
     async fn open(&self) -> Result<Session, Error> {
-        let client = Client::open(self.geometry, self.option, self.config).await?;
+        let client = Client::open(self.geometry, self.option).await?;
         client.send((Clear, Synchronize)).await?;
         Ok(Session::new(client, self.heartbeat))
     }
@@ -247,12 +244,12 @@ async fn run(cli: &Cli) -> Result<()> {
         lost_timeout: cli
             .lost_timeout_ms
             .map_or(default.lost_timeout, Duration::from_millis),
+        ack_timeout: cli.ack_timeout(),
         ..default
     };
     let link = Link {
         geometry: &geometry,
         option: &option,
-        config: cli.client_config(),
         heartbeat,
         mute: cli.mute,
         exec: cli.exec(),

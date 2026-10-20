@@ -226,9 +226,7 @@ mod client_error {
             Error::Timeout { .. } | Error::SeqMismatch { .. } => error_code::TIMEOUT,
             Error::DeviceError { .. } | Error::UnexpectedReply { .. } => error_code::DEVICE,
             Error::Network(_) | Error::DeviceLost { .. } => error_code::NETWORK,
-            Error::InvalidPayload(_) | Error::InvalidConfig(_) | Error::Encode(_) => {
-                error_code::INVALID_ARGUMENT
-            }
+            Error::InvalidPayload(_) | Error::Encode(_) => error_code::INVALID_ARGUMENT,
             Error::DeviceTimeUnknown | Error::Closed => error_code::GENERIC,
             _ => unreachable!(),
         }

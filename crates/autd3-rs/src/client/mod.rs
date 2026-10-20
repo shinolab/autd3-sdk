@@ -1,12 +1,11 @@
 pub(crate) mod completion;
-mod config;
 mod controller;
 mod driver;
 mod exec_at;
 pub(crate) mod pool;
 
+pub use crate::udp::bus::MAX_DEVICES;
 pub use completion::ResponseFuture;
-pub use config::{ClientConfig, MAX_DEVICES};
 pub use controller::Controller;
 pub use driver::Driver;
 pub use exec_at::ExecAt;
@@ -35,17 +34,12 @@ impl Client {
     pub fn open<'a>(
         geometry: &'a Geometry,
         option: &TransportOption,
-        config: ClientConfig,
     ) -> impl Future<Output = Result<Self, Error>> + Send + use<'a> {
-        Box::pin(Self::open_impl(geometry, option.clone(), config))
+        Box::pin(Self::open_impl(geometry, option.clone()))
     }
 
-    async fn open_impl(
-        geometry: &Geometry,
-        option: TransportOption,
-        config: ClientConfig,
-    ) -> Result<Self, Error> {
-        let (controller, driver) = Controller::open(geometry, &option, config)?;
+    async fn open_impl(geometry: &Geometry, option: TransportOption) -> Result<Self, Error> {
+        let (controller, driver) = Controller::open(geometry, &option)?;
         let thread = std::thread::Builder::new()
             .name("autd3-io".into())
             .spawn(move || driver.run())
@@ -89,15 +83,6 @@ impl Client {
 
     pub fn device_time_now(&self) -> Result<SysTime, Error> {
         self.controller.device_time_now()
-    }
-
-    #[must_use]
-    pub fn config(&self) -> ClientConfig {
-        self.controller.config()
-    }
-
-    pub fn set_config(&self, config: ClientConfig) -> Result<(), Error> {
-        self.controller.set_config(config)
     }
 
     pub fn send<'a, C: Command<'a>>(

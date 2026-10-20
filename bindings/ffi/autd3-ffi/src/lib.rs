@@ -1,6 +1,6 @@
 use std::ffi::{c_char, c_void};
 use std::future::Future;
-use std::num::{NonZeroU16, NonZeroU32, NonZeroUsize};
+use std::num::{NonZeroU16, NonZeroU32};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
@@ -31,9 +31,9 @@ use autd3_rs::value::{
     PatternBank, Phase, PulseWidth, SamplingConfig, SysTime, TransitionMode,
 };
 use autd3_rs::{
-    BusStats, Client, ClientConfig, DeviceState, Error, ExecAt, FirmwareVersion, FpgaState, Frames,
-    Geometry, Length, NetworkCause, Point3, Response, ResponseFuture, Telemetry, UnitVector3,
-    Vector3, Velocity,
+    BusStats, Client, DeviceState, Error, ExecAt, FirmwareVersion, FpgaState, Frames, Geometry,
+    Length, NetworkCause, Point3, Response, ResponseFuture, Telemetry, UnitVector3, Vector3,
+    Velocity,
 };
 
 pub(crate) fn executor() -> &'static Executor {
@@ -390,67 +390,6 @@ pub unsafe extern "C" fn autd3_stm_line(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_client_config_new() -> *mut ClientConfig {
-    into_handle(ClientConfig::default())
-}
-
-macro_rules! client_config_setter {
-    ($set:ident, $field:ident, $raw:ty, $nonzero:ty) => {
-        #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn $set(config: *mut ClientConfig, value: $raw) -> i32 {
-            let (Some(config), Some(value)) =
-                (unsafe { handle_mut(config) }, <$nonzero>::new(value))
-            else {
-                return AUTD3_ERR_INVALID_ARGUMENT;
-            };
-            config.$field = value;
-            AUTD3_OK
-        }
-    };
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_config_set_ack_timeout_ns(
-    config: *mut ClientConfig,
-    ns: u64,
-) -> i32 {
-    let Some(config) = (unsafe { handle_mut(config) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    config.ack_timeout = Duration::from_nanos(ns);
-    AUTD3_OK
-}
-
-client_config_setter!(
-    autd3_client_config_set_max_inflight,
-    max_inflight,
-    usize,
-    NonZeroUsize
-);
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_config_get_ack_timeout_ns(
-    config: *const ClientConfig,
-    out: *mut u64,
-) -> i32 {
-    let Some(config) = (unsafe { handle_ref(config) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    unsafe { write_out(out, to_ns(config.ack_timeout)) }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_config_get_max_inflight(
-    config: *const ClientConfig,
-    out: *mut usize,
-) -> i32 {
-    let Some(config) = (unsafe { handle_ref(config) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    unsafe { write_out(out, config.max_inflight.get()) }
-}
-
-#[unsafe(no_mangle)]
 pub extern "C" fn autd3_params_max_devices() -> usize {
     autd3_rs::MAX_DEVICES
 }
@@ -532,11 +471,6 @@ pub extern "C" fn autd3_fpga_state_is_transition_pending(raw: u8) -> bool {
 #[unsafe(no_mangle)]
 pub extern "C" fn autd3_fpga_state_is_failsafe_active(raw: u8) -> bool {
     FpgaState(raw).is_failsafe_active()
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_config_free(config: *mut ClientConfig) {
-    unsafe { drop_handle(config) }
 }
 
 pub enum OwnedPatternIntensity {
@@ -1925,9 +1859,7 @@ pub(crate) fn error_code(e: &Error) -> i32 {
         Error::Timeout { .. } | Error::SeqMismatch { .. } => AUTD3_ERR_TIMEOUT,
         Error::DeviceError { .. } | Error::UnexpectedReply { .. } => AUTD3_ERR_DEVICE,
         Error::Network(_) | Error::DeviceLost { .. } => AUTD3_ERR_NETWORK,
-        Error::InvalidPayload(_) | Error::InvalidConfig(_) | Error::Encode(_) => {
-            AUTD3_ERR_INVALID_ARGUMENT
-        }
+        Error::InvalidPayload(_) | Error::Encode(_) => AUTD3_ERR_INVALID_ARGUMENT,
         Error::DeviceTimeUnknown | Error::Closed => AUTD3_ERR,
         _ => unreachable!(),
     }
@@ -1994,7 +1926,6 @@ fn frame_at(frames: &Frames, index: usize) -> Result<autd3_rs::Frame<'_>, Error>
 pub unsafe extern "C" fn autd3_client_open(
     geometry: *const Geometry,
     option: *mut udp::TransportOptionHandle,
-    config: *const ClientConfig,
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
@@ -2006,9 +1937,7 @@ pub unsafe extern "C" fn autd3_client_open(
         ctx.invalid_argument("null argument");
         return;
     };
-    let (Some(geometry), Some(config)) = (unsafe { handle_ref(geometry) }, unsafe {
-        handle_ref::<ClientConfig>(config)
-    }) else {
+    let Some(geometry) = (unsafe { handle_ref::<Geometry>(geometry) }) else {
         ctx.invalid_argument("null argument");
         return;
     };
@@ -2022,10 +1951,9 @@ pub unsafe extern "C" fn autd3_client_open(
     }
 
     let geometry = geometry.clone();
-    let config = *config;
     spawn_completion(
         ctx,
-        async move { Client::open(&geometry, &option, config).await },
+        async move { Client::open(&geometry, &option).await },
         |client| into_handle(ClientHandle(Arc::new(client))).cast(),
     );
 }
@@ -2082,37 +2010,6 @@ pub unsafe extern "C" fn autd3_client_heartbeat(
     };
 
     match client.0.heartbeat() {
-        Ok(()) => AUTD3_OK,
-        Err(e) => {
-            unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
-            error_code(&e)
-        }
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_get_config(client: *const ClientHandle) -> *mut ClientConfig {
-    let Some(client) = (unsafe { handle_ref(client) }) else {
-        return std::ptr::null_mut();
-    };
-    into_handle(client.0.config())
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_set_config(
-    client: *const ClientHandle,
-    config: *const ClientConfig,
-    out_err: *mut c_char,
-    out_err_len: usize,
-) -> i32 {
-    let (Some(client), Some(config)) = (unsafe { handle_ref(client) }, unsafe {
-        handle_ref::<ClientConfig>(config)
-    }) else {
-        unsafe { write_cstr(out_err, out_err_len, "null argument") };
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-
-    match client.0.set_config(*config) {
         Ok(()) => AUTD3_OK,
         Err(e) => {
             unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
@@ -2600,35 +2497,6 @@ autd3_ffi_abi::export_abi_version!();
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn a_new_client_config_matches_the_rust_default() {
-        let handle = autd3_client_config_new();
-        let config = unsafe { take_handle(handle) }.unwrap();
-        let expected = ClientConfig::default();
-
-        assert_eq!(expected.ack_timeout, config.ack_timeout);
-        assert_eq!(expected.max_inflight, config.max_inflight);
-    }
-
-    #[test]
-    fn a_zero_nonzero_setter_argument_is_rejected() {
-        let handle = autd3_client_config_new();
-        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
-            autd3_client_config_set_max_inflight(handle, 0)
-        });
-        unsafe { autd3_client_config_free(handle) };
-    }
-
-    #[test]
-    fn a_zero_ack_timeout_is_left_to_the_open_time_validation() {
-        let handle = autd3_client_config_new();
-        assert_eq!(AUTD3_OK, unsafe {
-            autd3_client_config_set_ack_timeout_ns(handle, 0)
-        });
-        let config = unsafe { take_handle(handle) }.unwrap();
-        assert_eq!(Duration::ZERO, config.ack_timeout);
-    }
 
     fn pending_error(pending: *mut Pending) -> (i32, String) {
         let geometry = Geometry::new(vec![autd3_rs::geometry::Autd3::default()]);
@@ -3305,23 +3173,6 @@ mod tests {
     }
 
     #[test]
-    fn the_client_config_getters_read_the_rust_default() {
-        let handle = autd3_client_config_new();
-        let expected = ClientConfig::default();
-        let mut ns = 0u64;
-        let mut inflight = 0usize;
-        assert_eq!(AUTD3_OK, unsafe {
-            autd3_client_config_get_ack_timeout_ns(handle, &raw mut ns)
-        });
-        assert_eq!(AUTD3_OK, unsafe {
-            autd3_client_config_get_max_inflight(handle, &raw mut inflight)
-        });
-        assert_eq!(expected.ack_timeout, Duration::from_nanos(ns));
-        assert_eq!(expected.max_inflight.get(), inflight);
-        unsafe { autd3_client_config_free(handle) };
-    }
-
-    #[test]
     fn the_silencer_default_matches_rust() {
         let expected = FixedCompletionTime::default();
         let (mut intensity, mut phase, mut strict) = (0u64, 0u64, false);
@@ -3659,20 +3510,6 @@ mod tests {
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
             autd3_client_heartbeat(std::ptr::null(), std::ptr::null_mut(), 0)
         });
-    }
-
-    #[test]
-    fn the_config_of_a_null_client_is_null() {
-        assert!(unsafe { autd3_client_get_config(std::ptr::null()) }.is_null());
-    }
-
-    #[test]
-    fn setting_the_config_of_a_null_client_is_an_error() {
-        let config = autd3_client_config_new();
-        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
-            autd3_client_set_config(std::ptr::null(), config, std::ptr::null_mut(), 0)
-        });
-        unsafe { autd3_client_config_free(config) };
     }
 
     #[test]

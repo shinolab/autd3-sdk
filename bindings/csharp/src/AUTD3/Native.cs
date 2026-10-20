@@ -75,6 +75,12 @@ namespace AUTD3
         internal static extern int autd3_transport_option_get_sync_timeout(IntPtr option, out ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_transport_option_set_ack_timeout(IntPtr option, ulong ns);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_transport_option_get_ack_timeout(IntPtr option, out ulong ns);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_transport_option_free(IntPtr option);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
@@ -94,24 +100,6 @@ namespace AUTD3
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_udp_emulator_free(IntPtr emulator);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_client_config_new();
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_client_config_set_ack_timeout_ns(IntPtr config, ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_client_config_set_max_inflight(IntPtr config, UIntPtr value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_client_config_get_ack_timeout_ns(IntPtr config, out ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_client_config_get_max_inflight(IntPtr config, out UIntPtr value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_client_config_free(IntPtr config);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern UIntPtr autd3_params_max_devices();
@@ -181,7 +169,7 @@ namespace AUTD3
         internal static extern void autd3_frames_free(IntPtr frames);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_client_open(GeometryHandle geometry, IntPtr option, IntPtr config, CompletionCallback cb, IntPtr userData);
+        internal static extern void autd3_client_open(GeometryHandle geometry, IntPtr option, CompletionCallback cb, IntPtr userData);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_client_state_checker(ClientHandle client);
@@ -201,12 +189,6 @@ namespace AUTD3
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_client_heartbeat(ClientHandle client, byte[] outErr, UIntPtr outErrLen);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_client_get_config(ClientHandle client);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_client_set_config(ClientHandle client, IntPtr config, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_client_send_checked(ClientHandle client, FramesHandle frames, long frame, CompletionCallback cb, IntPtr userData);

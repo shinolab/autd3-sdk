@@ -7,10 +7,10 @@ _emulators = []
 _orig_client_open = autd3.Client.open
 
 
-def _patched_client_open(geometry, option, config):
+def _patched_client_open(geometry, option):
     emulator = autd3.UdpEmulator(geometry.num_devices())
     _emulators.append(emulator)
-    return _orig_client_open(geometry, emulator.option(), config)
+    return _orig_client_open(geometry, emulator.option())
 
 
 autd3.Client.open = staticmethod(_patched_client_open)

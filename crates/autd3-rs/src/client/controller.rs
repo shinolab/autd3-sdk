@@ -20,8 +20,8 @@ use crate::value::{Intensity, SysTime};
 use autd3_rs_core::{BusStats, DeviceClock, DeviceMask};
 use futures_channel::oneshot;
 
+use super::MAX_DEVICES;
 use super::completion::{self, ResponseFuture};
-use super::config::{ClientConfig, MAX_DEVICES};
 use super::driver::{Driver, Inflight, Settlement, Shared, sent_devices};
 use super::exec_at::{self, ExecAt};
 use super::pool::{Slot, SlotPool};
@@ -40,13 +40,8 @@ pub struct Controller {
 }
 
 impl Controller {
-    pub fn open(
-        geometry: &Geometry,
-        option: &TransportOption,
-        config: ClientConfig,
-    ) -> Result<(Self, Driver), Error> {
+    pub fn open(geometry: &Geometry, option: &TransportOption) -> Result<(Self, Driver), Error> {
         let lost_timeout = option.lost_timeout;
-        let config = config.validate()?;
         let num_devices = geometry.num_devices();
         if num_devices == 0 || num_devices > MAX_DEVICES {
             return Err(PayloadError::DeviceCountOutOfRange {
@@ -56,11 +51,11 @@ impl Controller {
             .into());
         }
         let bus = Arc::new(UdpBus::open_with_geometry(option, geometry)?);
-        let shared = Shared::new(config);
+        let shared = Shared::new(option.ack_timeout);
         let driver = Driver::new(Arc::clone(&bus), Arc::clone(&shared));
         let controller = Self {
             geometry: Arc::new(geometry.clone()),
-            pool: SlotPool::new(num_devices, config.max_inflight.get()),
+            pool: SlotPool::new(num_devices),
             gate: AsyncMutex::new(()),
             bufs: Mutex::new(vec![FrameBuf::new(); num_devices]),
             lost_timeout,
@@ -98,27 +93,6 @@ impl Controller {
     #[must_use]
     pub fn state_checker(&self) -> StateChecker {
         self.bus.state_checker()
-    }
-
-    #[must_use]
-    pub fn config(&self) -> ClientConfig {
-        self.shared.pending().config
-    }
-
-    pub fn set_config(&self, config: ClientConfig) -> Result<(), Error> {
-        let config = config.validate()?;
-        {
-            let mut pending = self.shared.pending();
-            pending.reconfigure(config);
-            self.pool.set_limit(config.max_inflight.get());
-        }
-        tracing::debug!(?config, "client config replaced");
-        if !self.bus.wake() {
-            tracing::debug!(
-                "could not wake the driver; the new ack timeout applies at its next deadline"
-            );
-        }
-        Ok(())
     }
 
     pub fn device_time_now(&self) -> Result<SysTime, Error> {
@@ -255,7 +229,7 @@ impl Controller {
     fn settle(&self, msg_id: u16, sent: Result<Sent, UdpError>) -> Result<bool, Error> {
         let (settlement, driver_waits_too_long, ack_timeout) = {
             let mut pending = self.shared.pending();
-            let ack_timeout = pending.config.ack_timeout;
+            let ack_timeout = pending.ack_timeout;
             let settlement = pending.settle(msg_id, sent_devices(sent));
             let driver_waits_too_long = matches!(settlement, Settlement::Reached(_))
                 && pending.ack_deadline_precedes_driver_wake(msg_id, ack_timeout);
@@ -343,7 +317,7 @@ impl Controller {
                 stale = stale.len(),
                 "failing the frames left in flight before the reset"
             );
-            let timeout = self.config().ack_timeout;
+            let timeout = self.shared.pending().ack_timeout;
             for entry in stale {
                 entry.tx.send(Err(Error::Timeout { timeout }));
             }
@@ -372,7 +346,7 @@ impl Controller {
         self.stats.record_reset();
         if !reached {
             return Err(Error::Timeout {
-                timeout: self.config().ack_timeout,
+                timeout: self.shared.pending().ack_timeout,
             });
         }
         if let Err(e) = rx.await {

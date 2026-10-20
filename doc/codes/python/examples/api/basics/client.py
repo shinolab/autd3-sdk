@@ -1,13 +1,16 @@
 import asyncio
 
-from autd3 import Client, ClientConfig, Duration, ExecAt, Frames, TransportOption
-from autd3.commands import Nop
+from autd3 import Client, Duration, ExecAt, Frames, TransportOption
+from autd3.commands import Clear, Nop, Synchronize
 from autd3.geometry import Autd3, Geometry
 
 
 async def main() -> None:
     geometry = Geometry([Autd3()])
-    client = await Client.open(geometry, TransportOption(), ClientConfig())
+    # ANCHOR: open
+    client = await Client.open(geometry, TransportOption())
+    await client.send((Clear(), Synchronize()))
+    # ANCHOR_END: open
 
     # ANCHOR: exec_at
     frames = Frames.encode(client.geometry(), Nop())
@@ -34,9 +37,6 @@ async def main() -> None:
 
     client.heartbeat()
 
-    config = client.config()
-    client.set_config(ClientConfig(ack_timeout=Duration.from_millis(20)))
-
     firmware = await client.read_firmware_version()
     fpga_state = await client.read_fpga_state()
 
@@ -46,12 +46,12 @@ async def main() -> None:
     await client.close()
     # ANCHOR_END: api
 
-    _ = (num_devices, geometry, config, firmware, fpga_state, resp)
+    _ = (num_devices, geometry, firmware, fpga_state, resp)
 
     geometry = Geometry([Autd3()])
 
     # ANCHOR: context_manager
-    async with await Client.open(geometry, TransportOption(), ClientConfig()) as client:
+    async with await Client.open(geometry, TransportOption()) as client:
         await client.send(Nop())
     # ANCHOR_END: context_manager
 

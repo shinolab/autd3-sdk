@@ -1,19 +1,15 @@
 mod common;
 
-use std::num::NonZeroUsize;
 use std::time::Duration;
 
 use autd3_rs::commands::{Clear, ForceFan, Nop};
 use autd3_rs::udp::{TransportOption, UdpError};
-use autd3_rs::{
-    Client, ClientConfig, ClientConfigError, Error, FirmwareVersion, MAX_DEVICES, MAX_INFLIGHT,
-    PayloadError,
-};
+use autd3_rs::{Client, Error, FirmwareVersion, MAX_DEVICES, PayloadError};
 
-use common::{config, emulator, geometry, open_with, option, udp_error};
+use common::{emulator, geometry, open_with, option, udp_error};
 
-async fn open_error(num_devices: usize, option: &TransportOption, config: ClientConfig) -> Error {
-    Client::open(&geometry(num_devices), option, config)
+async fn open_error(num_devices: usize, option: &TransportOption) -> Error {
+    Client::open(&geometry(num_devices), option)
         .await
         .err()
         .unwrap()
@@ -24,7 +20,7 @@ async fn open_error(num_devices: usize, option: &TransportOption, config: Client
 async fn an_empty_geometry_is_rejected() {
     let emulator = emulator(1);
 
-    let error = open_error(0, &option(&emulator), config()).await;
+    let error = open_error(0, &option(&emulator)).await;
 
     assert!(matches!(
         error,
@@ -37,36 +33,16 @@ async fn an_empty_geometry_is_rejected() {
 
 #[tokio::test]
 #[ignore = "depends on real time"]
-async fn a_window_wider_than_the_device_queue_is_rejected() {
-    let emulator = emulator(1);
-    let config = ClientConfig {
-        max_inflight: NonZeroUsize::new(MAX_INFLIGHT + 1).unwrap(),
-        ..config()
-    };
-
-    let error = open_error(1, &option(&emulator), config).await;
-
-    assert!(matches!(
-        error,
-        Error::InvalidConfig(ClientConfigError::MaxInflightTooLarge { max: MAX_INFLIGHT })
-    ));
-}
-
-#[tokio::test]
-#[ignore = "depends on real time"]
 async fn a_zero_ack_timeout_is_rejected() {
     let emulator = emulator(1);
-    let config = ClientConfig {
+    let option = TransportOption {
         ack_timeout: Duration::ZERO,
-        ..config()
+        ..option(&emulator)
     };
 
-    let error = open_error(1, &option(&emulator), config).await;
+    let error = open_error(1, &option).await;
 
-    assert!(matches!(
-        error,
-        Error::InvalidConfig(ClientConfigError::ZeroAckTimeout)
-    ));
+    assert!(matches!(udp_error(&error), Some(UdpError::ZeroAckTimeout)));
 }
 
 #[tokio::test]
@@ -78,7 +54,7 @@ async fn an_invalid_transport_option_is_rejected() {
         ..option(&emulator)
     };
 
-    let error = open_error(1, &option, config()).await;
+    let error = open_error(1, &option).await;
 
     assert!(matches!(
         udp_error(&error),
@@ -95,7 +71,7 @@ async fn a_geometry_with_more_devices_than_attached_times_out_the_enumeration() 
         ..option(&emulator)
     };
 
-    let error = open_error(2, &option, config()).await;
+    let error = open_error(2, &option).await;
 
     assert!(matches!(
         udp_error(&error),
@@ -111,7 +87,7 @@ async fn a_geometry_with_more_devices_than_attached_times_out_the_enumeration() 
 async fn a_geometry_with_fewer_devices_than_attached_is_a_count_mismatch() {
     let emulator = emulator(2);
 
-    let error = open_error(1, &option(&emulator), config()).await;
+    let error = open_error(1, &option(&emulator)).await;
 
     assert!(matches!(
         udp_error(&error),
@@ -132,7 +108,7 @@ async fn open_fails_when_a_device_never_locks_to_the_grandmaster() {
         ..option(&emulator)
     };
 
-    let error = open_error(2, &option, config()).await;
+    let error = open_error(2, &option).await;
 
     assert!(matches!(
         udp_error(&error),
@@ -144,7 +120,7 @@ async fn open_fails_when_a_device_never_locks_to_the_grandmaster() {
 #[ignore = "depends on real time"]
 async fn the_bundled_firmware_is_in_the_supported_series() {
     let emulator = emulator(2);
-    let client = open_with(&emulator, &option(&emulator), config()).await;
+    let client = open_with(&emulator, &option(&emulator)).await;
 
     let versions = client.read_firmware_version().await.unwrap();
 
@@ -157,11 +133,11 @@ async fn the_bundled_firmware_is_in_the_supported_series() {
 #[ignore = "depends on real time"]
 async fn open_keeps_what_a_previous_session_left_until_the_user_clears_it() {
     let emulator = emulator(2);
-    let first = open_with(&emulator, &option(&emulator), config()).await;
+    let first = open_with(&emulator, &option(&emulator)).await;
     first.send(ForceFan { value: true }).await.unwrap();
     drop(first);
 
-    let second = open_with(&emulator, &option(&emulator), config()).await;
+    let second = open_with(&emulator, &option(&emulator)).await;
 
     assert!(emulator.with_devices(|devices| devices.iter().all(|d| d.fpga().force_fan())));
     assert_eq!(second.bus_stats().resets(), 1);
@@ -176,7 +152,7 @@ async fn open_keeps_what_a_previous_session_left_until_the_user_clears_it() {
 async fn the_devices_can_be_opened_again_after_a_close() {
     let emulator = emulator(3);
     for _ in 0..2 {
-        let client = open_with(&emulator, &option(&emulator), config()).await;
+        let client = open_with(&emulator, &option(&emulator)).await;
         client.send(Nop).await.unwrap();
         assert_eq!(client.read_firmware_version().await.unwrap().len(), 3);
         client.close().await.unwrap();
@@ -190,7 +166,7 @@ async fn open_survives_a_lost_unit_info_reply() {
     emulator.drop_next_unit_infos(0, 1);
     emulator.drop_next_unit_infos(1, 1);
 
-    let client = open_with(&emulator, &option(&emulator), config()).await;
+    let client = open_with(&emulator, &option(&emulator)).await;
 
     client.send(Nop).await.unwrap();
     client.close().await.unwrap();
@@ -202,10 +178,10 @@ async fn open_times_out_without_sending_the_reset_again_when_its_reply_is_lost()
     let emulator = emulator(2);
     emulator.drop_next_replies(1, 1);
 
-    let error = open_error(2, &option(&emulator), config()).await;
+    let error = open_error(2, &option(&emulator)).await;
 
     assert!(matches!(error, Error::Timeout { .. }));
-    let client = open_with(&emulator, &option(&emulator), config()).await;
+    let client = open_with(&emulator, &option(&emulator)).await;
     assert_eq!(client.bus_stats().resets(), 1);
     client.send(Nop).await.unwrap();
     client.close().await.unwrap();

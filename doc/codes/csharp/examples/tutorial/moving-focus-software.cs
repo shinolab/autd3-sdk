@@ -11,7 +11,7 @@ internal static class Sample
     {
         var geometry = new Geometry(new[] { new Autd3() });
 
-        var client = await Client.OpenAsync(geometry, new TransportOption(), new ClientConfig());
+        var client = await Client.OpenAsync(geometry, new TransportOption());
         await client.SendAsync(Command.Sequence(new Clear(), new Synchronize()));
 
         var center = geometry.Center + Offset(0.0f * mm, 0.0f * mm, 150.0f * mm);

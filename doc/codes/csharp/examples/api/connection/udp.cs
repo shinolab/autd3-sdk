@@ -13,6 +13,7 @@ internal static class Sample
         var responseTimeout = TimeSpan.FromMilliseconds(200);
         var enumerationTimeout = TimeSpan.FromSeconds(10);
         var syncTimeout = TimeSpan.FromSeconds(30);
+        var ackTimeout = TimeSpan.FromMilliseconds(10);
         float? sendRateLimit = null;
         ulong sendBuffer = 8192;
         // ANCHOR: api
@@ -24,6 +25,7 @@ internal static class Sample
             ResponseTimeout = responseTimeout,
             EnumerationTimeout = enumerationTimeout,
             SyncTimeout = syncTimeout,
+            AckTimeout = ackTimeout,
             SendRateLimit = sendRateLimit,
             SendBuffer = sendBuffer,
         };

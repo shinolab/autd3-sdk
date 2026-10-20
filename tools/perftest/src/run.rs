@@ -1,5 +1,4 @@
 use std::collections::VecDeque;
-use std::num::NonZeroUsize;
 use std::ops::ControlFlow;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -16,8 +15,8 @@ use autd3_rs::value::{
     Intensity, LoopBehavior, ModulationBank, PatternBank, Phase, SamplingConfig, TransitionMode,
 };
 use autd3_rs::{
-    BusStats, Client, ClientConfig, Error as ClientError, ExecAt, Frame, Frames, Interface,
-    ResponseFuture, StateChecker, Telemetry, TransportOption,
+    BusStats, Client, Error as ClientError, ExecAt, Frame, Frames, Interface, ResponseFuture,
+    StateChecker, Telemetry, TransportOption,
 };
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
@@ -233,6 +232,7 @@ pub(crate) fn transport_option(cli: &Cli, emulator: Option<&UdpEmulator>) -> Tra
             ..Default::default()
         },
     };
+    option.ack_timeout = cli.ack_timeout;
     option.send_rate_limit = cli.send_rate_limit;
     if let Some(bytes) = cli.send_buffer {
         option.send_buffer = std::num::NonZeroUsize::new(bytes);
@@ -252,21 +252,10 @@ async fn run_with_option(option: &TransportOption, cli: &Cli) -> Result<RunOutpu
     let num_devices = cli.devices.get();
     eprintln!("devices: {num_devices}");
 
-    let max_inflight = match cli.mode {
-        Mode::StopAndWait if !cli.command.is_bulk() => 1,
-        _ => cli.max_inflight.max(1),
-    };
     let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()));
-    let client = Box::pin(Client::open(
-        &geometry,
-        option,
-        ClientConfig {
-            ack_timeout: cli.ack_timeout,
-            max_inflight: NonZeroUsize::new(max_inflight).unwrap(),
-        },
-    ))
-    .await
-    .context("opening the devices")?;
+    let client = Box::pin(Client::open(&geometry, option))
+        .await
+        .context("opening the devices")?;
     let checker = client.state_checker();
     let guard = spawn_state_check(checker, STATE_CHECK_INTERVAL);
     client
@@ -318,7 +307,15 @@ async fn run_with_option(option: &TransportOption, cli: &Cli) -> Result<RunOutpu
             run_stop_and_wait(&client, cli, exec, sender, shutdown, measurement).await
         }
         Mode::Streaming => {
-            run_streaming(&client, exec, sender, shutdown, max_inflight, measurement).await
+            run_streaming(
+                &client,
+                exec,
+                sender,
+                shutdown,
+                cli.max_inflight.max(1),
+                measurement,
+            )
+            .await
         }
         Mode::BankSwitch => unreachable!("bank-switch runs without the Client"),
     };

@@ -1,6 +1,6 @@
 import asyncio
 
-from autd3 import Client, ClientConfig, TransportOption
+from autd3 import Client, TransportOption
 from autd3.commands import Clear, FociStm, FociStmOption, Synchronize
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import Hz, mm
@@ -12,7 +12,6 @@ async def main() -> None:
     async with await Client.open(
         geometry,
         TransportOption(),
-        ClientConfig(),
     ) as client:
         await client.send((Clear(), Synchronize()))
 

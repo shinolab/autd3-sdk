@@ -11,7 +11,6 @@ use crate::protocol::Seq;
 use crate::udp::{Reply, Sent, UdpBus, UdpError};
 
 use super::completion::CompletionSender;
-use super::config::ClientConfig;
 use super::pool::Slot;
 
 const RESET_ACK: u8 = 0xFF;
@@ -79,7 +78,7 @@ pub(crate) struct Pending {
     pub(crate) head_since: Instant,
     pub(crate) need_reset: bool,
     pub(crate) recovery: Option<RecoverySender>,
-    pub(crate) config: ClientConfig,
+    pub(crate) ack_timeout: Duration,
     pub(crate) next_seq: Seq,
     pub(crate) failure: Option<NetworkCause>,
     pub(crate) closed: bool,
@@ -174,10 +173,6 @@ impl Pending {
             .and_then(|_| self.head_since.checked_add(ack_timeout))
     }
 
-    pub(crate) fn reconfigure(&mut self, config: ClientConfig) {
-        self.config = config;
-    }
-
     pub(crate) fn take_all(&mut self) -> Vec<Inflight> {
         self.entries.drain(..).collect()
     }
@@ -195,14 +190,14 @@ pub(crate) struct Shared {
 }
 
 impl Shared {
-    pub(crate) fn new(config: ClientConfig) -> Arc<Self> {
+    pub(crate) fn new(ack_timeout: Duration) -> Arc<Self> {
         Arc::new(Self {
             pending: Mutex::new(Pending {
                 entries: VecDeque::new(),
                 head_since: Instant::now(),
                 need_reset: true,
                 recovery: None,
-                config,
+                ack_timeout,
                 next_seq: Seq::ZERO,
                 failure: None,
                 closed: false,
@@ -343,7 +338,7 @@ impl Driver {
             deadline = deadline.min(due);
         }
         let mut pending = self.session.shared.pending();
-        let ack_timeout = pending.config.ack_timeout;
+        let ack_timeout = pending.ack_timeout;
         if let Some(expiry) = pending.ack_deadline(ack_timeout) {
             deadline = deadline.min(expiry);
         }
@@ -356,7 +351,7 @@ impl Session {
     fn ack_overdue(&self, now: Instant) -> bool {
         let pending = self.shared.pending();
         pending
-            .ack_deadline(pending.config.ack_timeout)
+            .ack_deadline(pending.ack_timeout)
             .is_some_and(|deadline| now >= deadline)
     }
 
@@ -367,7 +362,7 @@ impl Session {
         let (entries, timeout) = {
             let mut pending = self.shared.pending();
             pending.need_reset = true;
-            (pending.take_all(), pending.config.ack_timeout)
+            (pending.take_all(), pending.ack_timeout)
         };
         tracing::warn!(
             pending = entries.len(),
@@ -470,7 +465,7 @@ mod tests {
     use super::*;
 
     fn pending() -> Arc<Shared> {
-        Shared::new(ClientConfig::default())
+        Shared::new(Duration::from_millis(10))
     }
 
     fn inflight(msg_id: u16, replied: u128) -> (Inflight, completion::ResponseFuture) {

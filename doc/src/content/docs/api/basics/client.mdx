@@ -8,11 +8,8 @@ sidebar:
 import CodeTabs from "@components/CodeTabs.astro";
 import Install from "@components/Install.astro";
 import { excerpt } from "@lib/excerpt";
-import open from "@codes/rust/examples/api/basics/client-config.rs?raw";
-import pyOpen from "@codes/python/examples/api/basics/client-config.py?raw";
 import methods from "@codes/rust/examples/api/basics/client.rs?raw";
 import pyMethods from "@codes/python/examples/api/basics/client.py?raw";
-import csOpen from "@codes/csharp/examples/api/basics/client-config.cs?raw";
 import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 import sample from "@codes/rust/examples/api/basics/send.rs?raw";
 import pySample from "@codes/python/examples/api/basics/send.py?raw";
@@ -22,13 +19,12 @@ import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
 
 <Install rust="autd3-rs" python="autd3" csharp="AUTD3" />
 
-<CodeTabs rust={excerpt(open, "api")} python={excerpt(pyOpen, "api")} csharp={excerpt(csOpen, "api")} />
+<CodeTabs rust={excerpt(methods, "open")} python={excerpt(pyMethods, "open")} csharp={excerpt(csMethods, "open")} />
 
 | 引数       | 型                | 説明                                                         |
 | ---------- | ----------------- | ------------------------------------------------------------ |
 | `geometry` | `&Geometry`       | デバイスの物理配置                                           |
 | `option`   | `&TransportOption`      | 接続の設定. [`TransportOption`](/autd3-sdk/api/basics/transport-option/) 参照 |
-| `config`   | `ClientConfig`    | 下記参照                                                     |
 
 `Client` は実機 (または [Simulator](/autd3-sdk/guide/simulator/)) へ UDP で直接つなぐ.
 
@@ -47,8 +43,6 @@ import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
 | `read_fpga_state()`       | ✓     | `Result<Vec<FpgaState>, Error>`       | 各デバイスの FPGA 状態                                     |
 | `read_telemetry()`        | ✓     | `Result<Vec<Telemetry>, Error>`       | 各デバイスの CPU の診断カウンタ                            |
 | `device_time_now()`       | —     | `Result<SysTime, Error>`              | 現在のデバイスの時刻 ([SysTime](/autd3-sdk/api/basics/sys-time/) 参照). 時刻を載せた返信をまだ受けていなければ `DeviceTimeUnknown` |
-| `config()`                | —     | `ClientConfig`                        | 現在の [ClientConfig](#clientconfig)                        |
-| `set_config(config)`      | —     | `Result<(), Error>`                   | ClientConfig を更新する | 
 | `send(cmd)`               | ✓     | `Result<(), Error>`                   | コマンドを送信し, 1 フレームずつ応答確認まで行う           |
 | `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | フレームを 1 つ送る ([streaming](#streaming) 参照)          |
 | `send_frame_at(frame, exec)` | ✓  | `Result<ResponseFuture, Error>`       | 処理時刻を指定してフレームを 1 つ送る ([処理時刻](#処理時刻) 参照) |
@@ -65,6 +59,11 @@ import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
 応答を待たずに続けて送るには, `Frames::encode` でコマンドをフレーム列に変換し, `send_frame` が返す `ResponseFuture` を貯めてから順に await する.
 
 <CodeTabs rust={excerpt(sample, "streaming")} python={excerpt(pySample, "streaming")} csharp={excerpt(csSample, "streaming")} />
+
+応答を待たずに送ってよいフレーム数は `MAX_INFLIGHT (7)` (Python: `autd3.params.MAX_INFLIGHT`, C#: `Params.MaxInflight`) で固定である.
+これは各デバイスの受信キューのフレーム数 `DEVICE_QUEUE_FRAMES` (Python: `autd3.params.DEVICE_QUEUE_FRAMES`, C#: `Params.DeviceQueueFrames`) に等しい.
+`MAX_INFLIGHT` 個のフレームが応答待ちの間, `send_frame` は応答が揃ってどれかが空くまで待つ.
+同時に送るフレーム数をこれより少なくしたい場合は, 先に返った `ResponseFuture` を await してから次のフレームを送る.
 
 ## 生存確認
 
@@ -149,19 +148,10 @@ CPU の診断カウンタ. `Clear` で `boot_failure` 以外は 0 に戻る (`Cl
 | `worst_ack_latency_ns()`     | `u64` | 送信から返信までの最大時間 [ns]              |
 | `mean_ack_latency_ns()`      | `u64` | 送信から返信までの平均時間 [ns]              |
 
-## ClientConfig
+## 応答待ちのタイムアウト
 
-<CodeTabs rust={excerpt(open, "config")} python={excerpt(pyOpen, "config")} csharp={excerpt(csOpen, "config")} />
-
-| フィールド             | 型                    | デフォルト          | 説明                                                       |
-| ---------------------- | --------------------- | ------------------- | ---------------------------------------------------------- |
-| `ack_timeout`          | `Duration`            | 10 ms               | 応答待ちのタイムアウト. 過ぎると送信中のフレームは `Timeout` で失敗する. |
-| `max_inflight`         | `NonZeroUsize`        | `7`                 | 応答を待たずに送ってよいフレーム数 ([streaming](#streaming) 参照) |
-
-`max_inflight` は `MAX_INFLIGHT (7)` (Python: `autd3.params.MAX_INFLIGHT`, C#: `Params.MaxInflight`) を超えるとエラーになる.
-既定値も `MAX_INFLIGHT` で, これは各デバイスの受信キューのフレーム数 `DEVICE_QUEUE_FRAMES` (Python: `autd3.params.DEVICE_QUEUE_FRAMES`, C#: `Params.DeviceQueueFrames`) に等しい.
-`ack_timeout` を 0 にすると, `Client` を開くときにエラー (`InvalidConfig`. Python の `Autd3Error.code` は `INVALID_ARGUMENT`, C# の `Autd3Exception.Code` は `InvalidArgument`) になる.
-Python の既定値は Rust と同じ.
+応答待ちのタイムアウトは [`TransportOption`](/autd3-sdk/api/basics/transport-option/) の `ack_timeout` (既定 10 ms) で, `Client` を開くときに決まり, 開いた後には変えられない.
+応答待ちの先頭のフレームの応答が `ack_timeout` の間揃わなければ, 送信中のフレームはすべて `Timeout` で失敗する.
 
 再送処理は行われない. 失敗したコマンドはユーザが送り直す必要がある.
 送受信の足並みが崩れた (応答が `ack_timeout` の間揃わなかったなど) 後は, 次の送信の前に `Reset` を 1 回送って揃え直す.

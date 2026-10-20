@@ -18,6 +18,7 @@ async fn main() -> Result<()> {
     let response_timeout = Duration::from_millis(200);
     let enumeration_timeout = Duration::from_secs(10);
     let sync_timeout = Duration::from_secs(30);
+    let ack_timeout = Duration::from_millis(10);
     let send_rate_limit = None;
     let send_buffer = NonZeroUsize::new(8192);
     // ANCHOR: api
@@ -28,6 +29,7 @@ async fn main() -> Result<()> {
         response_timeout,
         enumeration_timeout,
         sync_timeout,
+        ack_timeout,
         send_rate_limit,
         send_buffer,
         ..Default::default()

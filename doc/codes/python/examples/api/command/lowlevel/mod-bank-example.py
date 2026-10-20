@@ -1,6 +1,6 @@
 import asyncio
 
-from autd3 import Client, ClientConfig, TransportOption
+from autd3 import Client, TransportOption
 from autd3.commands import ActivateModulationBank, Clear, ConfigModulation, Synchronize, WriteModulationBuffer
 from autd3.geometry import Autd3, Geometry
 from autd3.units import Hz
@@ -10,7 +10,7 @@ from autd3_modulation import SineOption, modulation_buffer, sine
 
 async def main() -> None:
     geometry = Geometry([Autd3()])
-    async with await Client.open(geometry, TransportOption(), ClientConfig()) as client:
+    async with await Client.open(geometry, TransportOption()) as client:
         await client.send((Clear(), Synchronize()))
 
         data = modulation_buffer()

@@ -6,7 +6,7 @@ use autd3_rs::value::Intensity;
 use autd3_rs::{Client, Error, Frames};
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
-use common::{emulator, open, open_with, option, patient_config};
+use common::{emulator, open, open_with, patient_option};
 
 fn intensities(emulator: &UdpEmulator, device: usize) -> Vec<Intensity> {
     emulator.with_device(device, |d| d.fpga().emissions().1)
@@ -120,7 +120,7 @@ async fn concurrent_closes_send_the_stop_frames_once() {
 #[ignore = "depends on real time"]
 async fn a_frame_still_in_flight_resolves_with_closed_when_the_client_closes() {
     let emulator = emulator(1);
-    let client = open_with(&emulator, &option(&emulator), patient_config()).await;
+    let client = open_with(&emulator, &patient_option(&emulator)).await;
     let frames = Frames::encode(client.geometry(), ForceFan { value: true }).unwrap();
 
     emulator.drop_next_replies(0, 1);
@@ -134,7 +134,7 @@ async fn a_frame_still_in_flight_resolves_with_closed_when_the_client_closes() {
 #[ignore = "depends on real time"]
 async fn a_frame_still_in_flight_resolves_with_closed_when_the_client_is_dropped() {
     let emulator = emulator(1);
-    let client = open_with(&emulator, &option(&emulator), patient_config()).await;
+    let client = open_with(&emulator, &patient_option(&emulator)).await;
     let frames = Frames::encode(client.geometry(), ForceFan { value: true }).unwrap();
 
     emulator.drop_next_replies(0, 1);
