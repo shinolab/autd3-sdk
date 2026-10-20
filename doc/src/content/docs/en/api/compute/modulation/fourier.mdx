@@ -27,11 +27,12 @@ import { excerpt } from "@lib/excerpt";
 | ------------ | --------------------- | ------------------------- |
 | `components` | `&[SineComponent]`    | array of sine-wave components to synthesize |
 | `option`     | `&FourierOption`      | additional options (see below) |
+| `config`     | `SamplingConfig`      | sampling configuration (see [Modulation](/autd3-sdk/en/api/compute/modulation/#samplingconfig)) |
 | `dst`        | `&mut Vec<u8>`        | output buffer             |
 
 Each `SineComponent` is a pair of a frequency `freq` and a `SineOption`.
 An empty `components` is an error.
-The `sampling_config` of all components must be identical, otherwise an error occurs.
+All components are computed with the same `config`.
 The length of the synthesized waveform is the least common multiple of the periods of the components.
 It is an error if this exceeds `MOD_BUFFER_SAMPLES` (65536).
 

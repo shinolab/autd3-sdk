@@ -25,6 +25,7 @@ Modulation.Fourier(
         Clamp = false,
         Offset = 0x00,
     },
+    SamplingConfig.Freq4k,
     dst
 );
         // HIDE

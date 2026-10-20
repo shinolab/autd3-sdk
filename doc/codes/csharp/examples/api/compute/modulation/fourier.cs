@@ -33,8 +33,9 @@ internal static class Sample
         {
             new SineComponent(100 * Hz, new SineOption()),
         };
+        var samplingConfig = SamplingConfig.Freq4k;
         // ANCHOR: api
-        Modulation.Fourier(components, option, dst);
+        Modulation.Fourier(components, option, samplingConfig, dst);
         // ANCHOR_END: api
     }
 }

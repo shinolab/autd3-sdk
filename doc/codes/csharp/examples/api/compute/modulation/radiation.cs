@@ -8,7 +8,7 @@ internal static class Sample
     internal static void Run()
     {
         var src = Modulation.ModulationBuffer();
-        Modulation.Sine(150 * Hz, new SineOption(), src);
+        Modulation.Sine(150 * Hz, new SineOption(), SamplingConfig.Freq4k, src);
 
         var dst = Modulation.ModulationBuffer();
         // ANCHOR: api

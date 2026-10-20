@@ -36,11 +36,12 @@ internal static class Program
         Holo.Gspat(geometry, foci, wavelength, new GspatOption(), phases, intensities);
 
         using var modulation = Modulation.ModulationBuffer();
-        Modulation.Sine(200 * Hz, new SineOption(), modulation);
+        var samplingConfig = SamplingConfig.Freq4k;
+        Modulation.Sine(200 * Hz, new SineOption(), samplingConfig, modulation);
 
         await client.SendAsync(new SetSilencer());
         await client.SendAsync(new Pattern(phases, intensities));
-        await client.SendAsync(new Modulation(SamplingConfig.Freq4k, modulation));
+        await client.SendAsync(new Modulation(samplingConfig, modulation));
 
         Console.WriteLine("emitting two GS-PAT foci with a 200 Hz AM — press Ctrl+C to stop");
 

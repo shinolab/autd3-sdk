@@ -10,7 +10,7 @@ internal static class Sample
         var bank = ModulationBank.B0;
         var offset = 0u;
         var data = Modulation.ModulationBuffer();
-        Modulation.Sine(150 * Hz, new SineOption(), data);
+        Modulation.Sine(150 * Hz, new SineOption(), SamplingConfig.Freq4k, data);
         // ANCHOR: write
         new WriteModulationBuffer(bank: bank, offset: offset, data: data);
         // ANCHOR_END: write

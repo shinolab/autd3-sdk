@@ -1,6 +1,4 @@
-use autd3_python_capsule::extract::{
-    angle_to_py, extract_angle, extract_sampling_config, sampling_config_to_py,
-};
+use autd3_python_capsule::extract::{angle_to_py, extract_angle, extract_sampling_config};
 use autd3_python_capsule::numpy;
 use autd3_python_capsule::{modulation_into_capsule, to_pyerr};
 use autd3_rs_core::common::Angle;
@@ -66,21 +64,18 @@ impl SineOption {
         offset = CoreSineOption::default().offset,
         phase = CoreSineOption::default().phase,
         clamp = CoreSineOption::default().clamp,
-        sampling_config = CoreSineOption::default().sampling_config,
     ))]
     fn new(
         amplitude: u8,
         offset: u8,
         #[pyo3(from_py_with = extract_angle)] phase: Angle,
         clamp: bool,
-        #[pyo3(from_py_with = extract_sampling_config)] sampling_config: SamplingConfig,
     ) -> Self {
         Self(CoreSineOption {
             amplitude,
             offset,
             phase,
             clamp,
-            sampling_config,
         })
     }
 
@@ -102,11 +97,6 @@ impl SineOption {
     #[getter]
     fn clamp(&self) -> bool {
         self.0.clamp
-    }
-
-    #[getter]
-    fn sampling_config<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        sampling_config_to_py(py, self.0.sampling_config)
     }
 
     fn __repr__(&self) -> String {
@@ -211,20 +201,9 @@ impl SquareOption {
         low = CoreSquareOption::default().low,
         high = CoreSquareOption::default().high,
         duty = CoreSquareOption::default().duty,
-        sampling_config = CoreSquareOption::default().sampling_config,
     ))]
-    fn new(
-        low: u8,
-        high: u8,
-        duty: f32,
-        #[pyo3(from_py_with = extract_sampling_config)] sampling_config: SamplingConfig,
-    ) -> Self {
-        Self(CoreSquareOption {
-            low,
-            high,
-            duty,
-            sampling_config,
-        })
+    fn new(low: u8, high: u8, duty: f32) -> Self {
+        Self(CoreSquareOption { low, high, duty })
     }
 
     #[getter]
@@ -240,11 +219,6 @@ impl SquareOption {
     #[getter]
     fn duty(&self) -> f32 {
         self.0.duty
-    }
-
-    #[getter]
-    fn sampling_config<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        sampling_config_to_py(py, self.0.sampling_config)
     }
 
     fn __repr__(&self) -> String {
@@ -323,27 +297,29 @@ impl SineComponent {
 }
 
 #[pyfunction]
-#[pyo3(signature = (freq, option, dst))]
+#[pyo3(signature = (freq, option, config, dst))]
 fn sine(
     py: Python<'_>,
     freq: &Bound<'_, PyAny>,
     option: &SineOption,
+    #[pyo3(from_py_with = extract_sampling_config)] config: SamplingConfig,
     mut dst: PyRefMut<'_, ModulationBuffer>,
 ) -> PyResult<()> {
-    autd3_rs_modulation::sine(freq_mode(freq)?, &option.0, &mut dst.data)
+    autd3_rs_modulation::sine(freq_mode(freq)?, &option.0, config, &mut dst.data)
         .map_err(|e| to_pyerr(py, e))?;
     Ok(())
 }
 
 #[pyfunction]
-#[pyo3(signature = (freq, option, dst))]
+#[pyo3(signature = (freq, option, config, dst))]
 fn square(
     py: Python<'_>,
     freq: &Bound<'_, PyAny>,
     option: &SquareOption,
+    #[pyo3(from_py_with = extract_sampling_config)] config: SamplingConfig,
     mut dst: PyRefMut<'_, ModulationBuffer>,
 ) -> PyResult<()> {
-    autd3_rs_modulation::square(freq_mode(freq)?, &option.0, &mut dst.data)
+    autd3_rs_modulation::square(freq_mode(freq)?, &option.0, config, &mut dst.data)
         .map_err(|e| to_pyerr(py, e))?;
     Ok(())
 }
@@ -358,10 +334,11 @@ fn fourier(
     py: Python<'_>,
     components: Vec<PyRef<'_, SineComponent>>,
     option: &FourierOption,
+    #[pyo3(from_py_with = extract_sampling_config)] config: SamplingConfig,
     mut dst: PyRefMut<'_, ModulationBuffer>,
 ) -> PyResult<()> {
     let components = components.iter().map(|c| c.0).collect::<Vec<_>>();
-    autd3_rs_modulation::fourier(&components, &option.0, &mut dst.data)
+    autd3_rs_modulation::fourier(&components, &option.0, config, &mut dst.data)
         .map_err(|e| to_pyerr(py, e))?;
     Ok(())
 }

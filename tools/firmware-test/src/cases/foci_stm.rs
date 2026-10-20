@@ -90,7 +90,12 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
         })
         .collect();
     let mut sine150 = modulation_buffer();
-    sine(150 * Hz, &SineOption::default(), &mut sine150)?;
+    sine(
+        150 * Hz,
+        &SineOption::default(),
+        SamplingConfig::FREQ_4K,
+        &mut sine150,
+    )?;
     ctx.send(autd3_rs::commands::Modulation::new(
         SamplingConfig::FREQ_4K,
         &sine150,

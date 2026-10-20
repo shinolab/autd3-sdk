@@ -1,6 +1,7 @@
 use anyhow::Result;
 
 use autd3_rs::units::Hz;
+use autd3_rs::value::SamplingConfig;
 use autd3_rs_modulation::{fourier, modulation_buffer, FourierOption, SineComponent, SineOption};
 
 fn main() -> Result<()> {
@@ -30,8 +31,9 @@ fn main() -> Result<()> {
         freq: (100 * Hz).into(),
         option: SineOption::default(),
     }];
+    let sampling_config = SamplingConfig::FREQ_4K;
     // ANCHOR: api
-    fourier(&components, &option, &mut dst)?;
+    fourier(&components, &option, sampling_config, &mut dst)?;
     // ANCHOR_END: api
     Ok(())
 }

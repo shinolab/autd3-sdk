@@ -50,14 +50,7 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     let focus = focus_at(ctx.geometry, [0.0, 0.0, 150.0], 0xFF);
     let mod_config = SamplingConfig::new(NonZeroU16::new(20).unwrap());
     let mut sine150 = modulation_buffer();
-    sine(
-        150 * Hz,
-        &SineOption {
-            sampling_config: mod_config,
-            ..Default::default()
-        },
-        &mut sine150,
-    )?;
+    sine(150 * Hz, &SineOption::default(), mod_config, &mut sine150)?;
     send_pattern_mod(ctx, &focus, &sine150, mod_config).await?;
     wait_enter("150 Hz AM is applied").await;
     sweep_silencer(ctx).await?;

@@ -301,17 +301,14 @@ def test_modulation_options_expose_their_fields() -> None:
     sine = modulation.SineOption()
     assert (sine.amplitude, sine.offset, sine.clamp) == (0xFF, 0x80, False)
     assert sine.phase == Angle.ZERO
-    assert sine.sampling_config == SamplingConfig.FREQ_4K
     assert sine == modulation.SineOption()
     assert sine != modulation.SineOption(amplitude=0x80)
     assert "amplitude: 255" in repr(sine)
-    custom = modulation.SineOption(phase=90 * deg, sampling_config=SamplingConfig.FREQ_40K)
+    custom = modulation.SineOption(phase=90 * deg)
     assert custom.phase == 90 * deg
-    assert custom.sampling_config == SamplingConfig(1)
 
     square = modulation.SquareOption()
     assert (square.low, square.high, square.duty) == (0x00, 0xFF, 0.5)
-    assert square.sampling_config == SamplingConfig.FREQ_4K
     assert square == modulation.SquareOption()
     assert square != modulation.SquareOption(duty=0.25)
     assert "duty: 0.5" in repr(square)

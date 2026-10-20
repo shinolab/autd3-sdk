@@ -38,7 +38,12 @@ fn all_on(ctx: &Ctx<'_>) -> Vec<Vec<bool>> {
 pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     let focus = focus_at(ctx.geometry, [0.0, 0.0, 150.0], 0xFF);
     let mut sine150 = modulation_buffer();
-    sine(150 * Hz, &SineOption::default(), &mut sine150)?;
+    sine(
+        150 * Hz,
+        &SineOption::default(),
+        SamplingConfig::FREQ_4K,
+        &mut sine150,
+    )?;
     send_pattern_mod(ctx, &focus, &sine150, SamplingConfig::FREQ_4K).await?;
     wait_enter("A focus is formed 150 mm above the centre of each device").await;
 

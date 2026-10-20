@@ -18,8 +18,8 @@ Modulation.Square(
         Low = byte.MinValue,
         High = byte.MaxValue,
         Duty = 0.5f,
-        SamplingConfig = SamplingConfig.Freq4k,
     },
+    SamplingConfig.Freq4k,
     dst
 );
         // HIDE

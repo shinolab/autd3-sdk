@@ -13,10 +13,11 @@ internal static class Sample
 var geometry = new Geometry(new[] { new Autd3() });
 await using var client = await Client.OpenAsync(geometry, new UdpOption(), new ClientConfig());
 
+var config = SamplingConfig.Freq4k;
 var data = Modulation.ModulationBuffer();
-Modulation.Sine(150 * Hz, new SineOption(), data);
+Modulation.Sine(150 * Hz, new SineOption(), config, data);
 
-await client.SendAsync(new Modulation(SamplingConfig.Freq4k, data));
+await client.SendAsync(new Modulation(config, data));
         // HIDE
     }
 }

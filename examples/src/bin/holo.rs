@@ -47,17 +47,19 @@ async fn main() -> Result<()> {
         &mut intensities,
     )?;
 
+    let sampling_config = SamplingConfig::FREQ_4K;
     let mut modulation = autd3_rs_modulation::modulation_buffer();
     autd3_rs_modulation::sine(
         200 * Hz,
         &autd3_rs_modulation::SineOption::default(),
+        sampling_config,
         &mut modulation,
     )?;
 
     client.send(SetSilencer::default()).await?;
     client.send(Pattern::new(&phases, &intensities)).await?;
     client
-        .send(Modulation::new(SamplingConfig::FREQ_4K, &modulation))
+        .send(Modulation::new(sampling_config, &modulation))
         .await?;
 
     println!("emitting two GSPAT foci with a 200 Hz AM — press Ctrl+C to stop");

@@ -10,7 +10,6 @@ pub struct SquareOption {
     pub low: u8,
     pub high: u8,
     pub duty: f32,
-    pub sampling_config: SamplingConfig,
 }
 
 impl Default for SquareOption {
@@ -19,7 +18,6 @@ impl Default for SquareOption {
             low: u8::MIN,
             high: u8::MAX,
             duty: 0.5,
-            sampling_config: SamplingConfig::FREQ_4K,
         }
     }
 }
@@ -27,6 +25,7 @@ impl Default for SquareOption {
 pub fn square<S: Into<SamplingMode>>(
     freq: S,
     option: &SquareOption,
+    config: SamplingConfig,
     dst: &mut Vec<u8>,
 ) -> Result<(), ModulationError> {
     if !(0.0..=1.0).contains(&option.duty) {
@@ -34,7 +33,7 @@ pub fn square<S: Into<SamplingMode>>(
     }
 
     let mode: SamplingMode = freq.into();
-    let (n, rep) = mode.validate(option.sampling_config)?;
+    let (n, rep) = mode.validate(config)?;
 
     dst.clear();
     dst.reserve(n);
@@ -56,7 +55,13 @@ mod tests {
     #[test]
     fn square_matches_legacy_vectors() {
         let mut buf = Vec::new();
-        square(200 * Hz, &SquareOption::default(), &mut buf).unwrap();
+        square(
+            200 * Hz,
+            &SquareOption::default(),
+            SamplingConfig::FREQ_4K,
+            &mut buf,
+        )
+        .unwrap();
         assert_eq!(
             buf.as_slice(),
             &[
@@ -68,7 +73,13 @@ mod tests {
     #[test]
     fn square_uneven_segments_match_legacy() {
         let mut buf = Vec::new();
-        square(781.25 * Hz, &SquareOption::default(), &mut buf).unwrap();
+        square(
+            781.25 * Hz,
+            &SquareOption::default(),
+            SamplingConfig::FREQ_4K,
+            &mut buf,
+        )
+        .unwrap();
         assert_eq!(
             buf.as_slice(),
             &[
@@ -91,6 +102,7 @@ mod tests {
                 duty: 0.0,
                 ..Default::default()
             },
+            SamplingConfig::FREQ_4K,
             &mut buf,
         )
         .unwrap();
@@ -102,6 +114,7 @@ mod tests {
                 duty: 1.0,
                 ..Default::default()
             },
+            SamplingConfig::FREQ_4K,
             &mut buf,
         )
         .unwrap();
@@ -117,6 +130,7 @@ mod tests {
                 low: u8::MAX,
                 ..Default::default()
             },
+            SamplingConfig::FREQ_4K,
             &mut buf,
         )
         .unwrap();
@@ -134,6 +148,7 @@ mod tests {
                         duty,
                         ..Default::default()
                     },
+                    SamplingConfig::FREQ_4K,
                     &mut buf,
                 )
                 .is_err()
@@ -144,6 +159,14 @@ mod tests {
     #[test]
     fn square_zero_frequency_errors() {
         let mut buf = Vec::new();
-        assert!(square(0 * Hz, &SquareOption::default(), &mut buf).is_err());
+        assert!(
+            square(
+                0 * Hz,
+                &SquareOption::default(),
+                SamplingConfig::FREQ_4K,
+                &mut buf
+            )
+            .is_err()
+        );
     }
 }

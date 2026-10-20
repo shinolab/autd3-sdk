@@ -30,6 +30,7 @@ import { excerpt } from "@lib/excerpt";
 | --------- | -------------- | -------------------------------------------- |
 | `freq`    | `Freq<u32>` etc. | modulation frequency                       |
 | `option`  | `&SineOption`  | additional options (see below)               |
+| `config`  | `SamplingConfig` | sampling configuration (see [Modulation](/autd3-sdk/en/api/compute/modulation/#samplingconfig)) |
 | `dst`     | `&mut Vec<u8>` | output buffer                                |
 
 The value of each sample <Math tex="i" /> is given by the following equation, for amplitude <Math tex="A" /> (`amplitude`), offset <Math tex="b" /> (`offset`), and phase <Math tex="\theta" /> (`phase`).
@@ -51,7 +52,6 @@ In Python, `+` / `-` / `*` of `Freq` stay integers between integers, but `/` alw
 | `offset`          | `u8`             | `0x80`                  | DC offset                                                |
 | `phase`           | `Angle`          | `Angle::ZERO`           | phase                                                    |
 | `clamp`           | `bool`           | `false`                 | whether to clamp out-of-range values to [0, 255]         |
-| `sampling_config` | `SamplingConfig` | `SamplingConfig::FREQ_4K` | sampling configuration                                 |
 
 If the combination of `amplitude` and `offset` causes the waveform to fall outside the [0, 255] range, an error occurs when `clamp` is `false`.
 Choose values that stay within range, or set `clamp` to `true`.

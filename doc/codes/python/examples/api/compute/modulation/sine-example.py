@@ -11,7 +11,7 @@ sine(
         offset=0x80,
         phase=0.0 * rad,
         clamp=False,
-        sampling_config=SamplingConfig.FREQ_4K,
     ),
+    SamplingConfig.FREQ_4K,
     dst,
 )

@@ -1,4 +1,5 @@
 from autd3.units import Hz
+from autd3.value import SamplingConfig
 from autd3_modulation import (
     FourierOption,
     SineComponent,
@@ -35,6 +36,7 @@ components = [
         SineOption(),
     )
 ]
+sampling_config = SamplingConfig.FREQ_4K
 # ANCHOR: api
-fourier(components, option, dst)
+fourier(components, option, sampling_config, dst)
 # ANCHOR_END: api

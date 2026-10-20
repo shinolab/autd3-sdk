@@ -202,13 +202,11 @@ namespace AUTD3.Tests
             Assert.Equal(0x80, sine.Offset);
             Assert.Equal(0f, sine.Phase.Rad);
             Assert.False(sine.Clamp);
-            Assert.Equal(SamplingConfig.Freq4k, sine.SamplingConfig);
 
             var square = new SquareOption();
             Assert.Equal(0x00, square.Low);
             Assert.Equal(0xFF, square.High);
             Assert.Equal(0.5f, square.Duty);
-            Assert.Equal(SamplingConfig.Freq4k, square.SamplingConfig);
 
             var fourier = new FourierOption();
             Assert.Null(fourier.ScaleFactor);

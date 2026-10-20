@@ -10,7 +10,6 @@ fn main() -> Result<()> {
     let offset = 0x80;
     let phase = 0.0 * rad;
     let clamp = false;
-    let sampling_config = SamplingConfig::FREQ_4K;
     let option =
         // ANCHOR: option
         SineOption {
@@ -18,18 +17,18 @@ fn main() -> Result<()> {
             offset,
             phase,
             clamp,
-            sampling_config,
             ..Default::default()
         }
         // ANCHOR_END: option
         ;
+    let sampling_config = SamplingConfig::FREQ_4K;
     let mut dst = modulation_buffer();
     // ANCHOR: api
-    sine(freq, &option, &mut dst)?;
+    sine(freq, &option, sampling_config, &mut dst)?;
     // ANCHOR_END: api
 
     // ANCHOR: nearest
-    sine(Nearest(150.5 * Hz), &option, &mut dst)?;
+    sine(Nearest(150.5 * Hz), &option, sampling_config, &mut dst)?;
     // ANCHOR_END: nearest
     Ok(())
 }

@@ -19,8 +19,8 @@ Modulation.Sine(
         Offset = 0x80,
         Phase = 0.0f * rad,
         Clamp = false,
-        SamplingConfig = SamplingConfig.Freq4k,
     },
+    SamplingConfig.Freq4k,
     dst
 );
         // HIDE

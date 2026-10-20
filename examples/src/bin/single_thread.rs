@@ -51,10 +51,12 @@ async fn main() -> Result<()> {
     let mut phases = geometry.phase_buffer();
     autd3_rs_pattern::focus(&geometry, target, wavelength, &mut phases);
 
+    let sampling_config = SamplingConfig::FREQ_4K;
     let mut modulation = autd3_rs_modulation::modulation_buffer();
     autd3_rs_modulation::sine(
         200 * Hz,
         &autd3_rs_modulation::SineOption::default(),
+        sampling_config,
         &mut modulation,
     )?;
 
@@ -63,7 +65,7 @@ async fn main() -> Result<()> {
         .send(Pattern::new(&phases, Intensity::MAX))
         .await?;
     controller
-        .send(Modulation::new(SamplingConfig::FREQ_4K, &modulation))
+        .send(Modulation::new(sampling_config, &modulation))
         .await?;
 
     println!("press Ctrl+C to stop");

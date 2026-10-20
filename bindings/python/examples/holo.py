@@ -42,11 +42,12 @@ async def main() -> None:
         holo.gspat(geometry, foci, wavelength, holo.GspatOption(), phases, intensities)
 
         mod_buf = modulation.modulation_buffer()
-        modulation.sine(200 * Hz, modulation.SineOption(), mod_buf)
+        sampling_config = SamplingConfig.FREQ_4K
+        modulation.sine(200 * Hz, modulation.SineOption(), sampling_config, mod_buf)
 
         await client.send(SetSilencer())
         await client.send(Pattern(phases, intensities))
-        await client.send(Modulation(SamplingConfig.FREQ_4K, mod_buf))
+        await client.send(Modulation(sampling_config, mod_buf))
 
         print("emitting two GS-PAT foci with a 200 Hz AM — press Ctrl+C to stop")
         stop = asyncio.Event()

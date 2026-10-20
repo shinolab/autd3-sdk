@@ -26,7 +26,7 @@ async fn main() -> Result<()> {
     focus(&geometry, right_target, wavelength, &mut right);
 
     let mut modulation = modulation_buffer();
-    sine(150 * Hz, &SineOption::default(), &mut modulation)?;
+    sine(150 * Hz, &SineOption::default(), SamplingConfig::FREQ_4K, &mut modulation)?;
 
     // ANCHOR: api
     client.send(SetSilencer::default()).await?;

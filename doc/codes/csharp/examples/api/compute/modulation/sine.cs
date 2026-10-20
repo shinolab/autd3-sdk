@@ -12,7 +12,6 @@ internal static class Sample
         byte offset = 0x80;
         var phase = 0.0f * rad;
         var clamp = false;
-        var samplingConfig = SamplingConfig.Freq4k;
         var option =
             // ANCHOR: option
             new SineOption
@@ -21,17 +20,17 @@ internal static class Sample
                 Offset = offset,
                 Phase = phase,
                 Clamp = clamp,
-                SamplingConfig = samplingConfig,
             }
             // ANCHOR_END: option
             ;
+        var samplingConfig = SamplingConfig.Freq4k;
         var dst = Modulation.ModulationBuffer();
         // ANCHOR: api
-        Modulation.Sine(freq, option, dst);
+        Modulation.Sine(freq, option, samplingConfig, dst);
         // ANCHOR_END: api
 
         // ANCHOR: nearest
-        Modulation.Sine(Nearest(150.5f * Hz), option, dst);
+        Modulation.Sine(Nearest(150.5f * Hz), option, samplingConfig, dst);
         // ANCHOR_END: nearest
     }
 }

@@ -13,9 +13,6 @@ pub enum ModulationError {
     #[error("fourier components must not be empty")]
     FourierComponentsEmpty,
 
-    #[error("all fourier components must have the same sampling config")]
-    FourierSamplingConfigMismatch,
-
     #[error("fourier modulation value is out of range [0, 255]")]
     FourierValueOutOfRange,
 
