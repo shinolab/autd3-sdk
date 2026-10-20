@@ -183,7 +183,6 @@ dependencies = [
  "anyhow",
  "autd3-rs",
  "autd3-rs-emulator",
- "autd3-rs-firmware-emulator",
  "autd3-rs-modulation",
  "autd3-rs-pattern",
  "autd3-rs-pattern-holo",
@@ -239,10 +238,7 @@ name = "autd3-rs-firmware-emulator"
 version = "0.12.0"
 dependencies = [
  "autd3-cpu-fw",
- "autd3-cpu-wire",
  "autd3-rs-core",
- "tracing",
- "zerocopy",
 ]
 
 [[package]]

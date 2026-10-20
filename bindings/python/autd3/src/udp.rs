@@ -307,7 +307,14 @@ impl UdpEmulator {
 
     fn option(&self, py: Python<'_>) -> PyResult<UdpOption> {
         self.with(py, |emulator| {
-            UdpOption(CoreOption::for_emulator(emulator.interface()))
+            UdpOption(CoreOption {
+                iface: emulator.interface(),
+                reply_timeout: Duration::from_millis(50),
+                response_timeout: Duration::from_millis(50),
+                enumeration_timeout: Duration::from_secs(1),
+                sync_timeout: Duration::from_secs(5),
+                ..CoreOption::default()
+            })
         })
     }
 

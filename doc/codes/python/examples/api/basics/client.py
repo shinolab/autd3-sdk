@@ -1,14 +1,13 @@
 import asyncio
 
-from autd3 import Client, ClientConfig, Duration, ExecAt, Frames, UdpEmulator
+from autd3 import Client, ClientConfig, Duration, ExecAt, Frames, UdpOption
 from autd3.commands import Nop
 from autd3.geometry import Autd3, Geometry
 
 
 async def main() -> None:
     geometry = Geometry([Autd3()])
-    emulator = UdpEmulator(geometry.num_devices())
-    client = await Client.open(geometry, emulator.option(), ClientConfig())
+    client = await Client.open(geometry, UdpOption(), ClientConfig())
 
     frame = next(iter(Frames.encode(geometry, Nop())))
 
@@ -45,8 +44,7 @@ async def main() -> None:
     geometry = Geometry([Autd3()])
 
     # ANCHOR: context_manager
-    emulator = UdpEmulator(geometry.num_devices())
-    async with await Client.open(geometry, emulator.option(), ClientConfig()) as client:
+    async with await Client.open(geometry, UdpOption(), ClientConfig()) as client:
         await client.send(Nop())
     # ANCHOR_END: context_manager
 

@@ -13,8 +13,7 @@ internal static class Sample
     {
         // HIDE_END
 var geometry = new Geometry(new[] { new Autd3() });
-using var emulator = new UdpEmulator(geometry.NumDevices);
-await using var client = await Client.OpenAsync(geometry, emulator.Option(), new ClientConfig());
+await using var client = await Client.OpenAsync(geometry, new UdpOption(), new ClientConfig());
 
 var center = geometry.Center + Offset(0.0f * mm, 0.0f * mm, 150.0f * mm);
 var dst = new List<ControlPoints>();

@@ -16,7 +16,15 @@ fn bus_with(emulator: &UdpEmulator, option: &UdpOption) -> UdpBus {
 }
 
 fn bus(emulator: &UdpEmulator) -> UdpBus {
-    bus_with(emulator, &UdpOption::for_emulator(emulator.interface()))
+    let option = UdpOption {
+        iface: emulator.interface(),
+        reply_timeout: Duration::from_millis(50),
+        response_timeout: Duration::from_millis(50),
+        enumeration_timeout: Duration::from_secs(1),
+        sync_timeout: Duration::from_secs(5),
+        ..UdpOption::default()
+    };
+    bus_with(emulator, &option)
 }
 
 fn open(emulator: &UdpEmulator) -> Driver<UdpBus> {
@@ -71,8 +79,13 @@ fn a_lost_reply_is_recovered() {
 fn a_lost_reset_reply_is_recovered_when_the_lost_timeout_outlasts_the_retransmission() {
     let emulator = UdpEmulator::spawn(2).unwrap();
     let option = UdpOption {
+        iface: emulator.interface(),
         lost_timeout: Duration::from_secs(1),
-        ..UdpOption::for_emulator(emulator.interface())
+        reply_timeout: Duration::from_millis(50),
+        response_timeout: Duration::from_millis(50),
+        enumeration_timeout: Duration::from_secs(1),
+        sync_timeout: Duration::from_secs(5),
+        ..UdpOption::default()
     };
     let bus = bus_with(&emulator, &option);
 

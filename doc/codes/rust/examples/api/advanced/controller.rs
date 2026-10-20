@@ -5,7 +5,6 @@ use anyhow::Result;
 use autd3_rs::commands::SetSilencer;
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::{ClientConfig, Controller, Driver, Error, UdpOption};
-use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
 const POLL_INTERVAL: Duration = Duration::from_millis(1);
 
@@ -87,8 +86,7 @@ async fn drive_at_interval(mut driver: Driver) -> Result<()> {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
-    let emulator = UdpEmulator::spawn(geometry.num_devices())?;
-    let option = UdpOption::for_emulator(emulator.interface());
+    let option = UdpOption::default();
 
     with_run(&geometry, &option).await?;
     println!("run: ok");

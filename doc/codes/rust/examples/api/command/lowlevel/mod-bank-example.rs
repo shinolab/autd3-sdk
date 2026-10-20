@@ -4,7 +4,6 @@ use autd3_rs::units::Hz;
 use autd3_rs::value::{LoopBehavior, ModulationBank, SamplingConfig, TransitionMode};
 use autd3_rs::{Client, ClientConfig};
 use autd3_rs::udp::UdpOption;
-use autd3_rs_firmware_emulator::udp::UdpEmulator;
 use autd3_rs_modulation::{SineOption, modulation_buffer, sine};
 
 // HIDE
@@ -12,8 +11,7 @@ use autd3_rs_modulation::{SineOption, modulation_buffer, sine};
 async fn main() -> anyhow::Result<()> {
     // HIDE_END
     let geometry = Geometry::new(vec![Autd3::default()]);
-    let emulator = UdpEmulator::spawn(geometry.num_devices())?;
-    let option = UdpOption::for_emulator(emulator.interface());
+    let option = UdpOption::default();
     let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
 
     let mut data = modulation_buffer();
