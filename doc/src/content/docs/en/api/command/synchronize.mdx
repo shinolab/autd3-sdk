@@ -1,0 +1,28 @@
+---
+title: Synchronize
+description: Synchronize, which aligns the output phase across the devices
+sidebar:
+  order: 10.1
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/synchronize.rs?raw";
+import pySample from "@codes/python/examples/api/command/synchronize.py?raw";
+import fullSample from "@codes/rust/examples/api/command/synchronize-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/synchronize-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/synchronize.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/synchronize-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`Synchronize` is a command that reinitializes the synchronization clock the FPGA uses to generate PWM and aligns the output phase across the devices.
+
+It is sent after [Clear](/autd3-sdk/en/api/command/clear/) when the `Client` opens.
+It is not sent automatically to a device recovered from `Lost` by `recover()`, so send it again yourself if needed (see [State Monitoring](/autd3-sdk/en/guide/state-check/#recovery-from-lost)).
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

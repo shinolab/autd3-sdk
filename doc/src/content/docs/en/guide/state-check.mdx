@@ -62,7 +62,7 @@ The following is an example that calls `recover` when `check` finds a `Lost` dev
 Note the following when a device is recovered.
 
 - `recover` sends neither `Synchronize` nor `ReleaseFailsafe`. Nothing reaches a device while it is `Lost`, so its output might have been stopped by the failsafe if the failsafe is enabled (see [SetCpuConfig](/autd3-sdk/en/api/command/cpu-config/)).
-  - Send [`Synchronize`](/autd3-sdk/en/api/command/clear/#synchronize--nop) yourself to realign the output phase
+  - Send [`Synchronize`](/autd3-sdk/en/api/command/synchronize/) yourself to realign the output phase
   - Send [`ReleaseFailsafe`](/autd3-sdk/en/api/command/release-failsafe/) to resume the stopped output. `ReleaseFailsafe` does nothing to a device that is not stopped by the failsafe, so it can be sent to all devices.
 - If a recovered device is `Syncing`, wait with `check` until it becomes `Ready` before sending `Synchronize`.
 - Other sends wait while `recover` runs. Frames still waiting for a reply when the `Reset` is sent fail with `Timeout`.
