@@ -25,7 +25,7 @@ impl Phase {
     }
 }
 
-const RAD_PER_LSB: f32 = 2.0 * PI / 256.0;
+const LSB_PER_RAD: f32 = 256.0 / (2.0 * PI);
 const LSB_LIMIT: f32 = 2_147_483_648.0;
 const ROUND_TO_MULTIPLE_OF_512: f32 = 6_442_450_944.0;
 const ROUND_TO_INTEGER: f32 = 12_582_912.0;
@@ -34,17 +34,11 @@ impl From<Angle> for Phase {
     #[inline]
     fn from(v: Angle) -> Self {
         #[allow(clippy::manual_clamp)]
-        let lsb = (v.rad() / RAD_PER_LSB).max(-LSB_LIMIT).min(LSB_LIMIT);
+        let lsb = (v.rad() * LSB_PER_RAD).max(-LSB_LIMIT).min(LSB_LIMIT);
         let turns = (lsb + ROUND_TO_MULTIPLE_OF_512) - ROUND_TO_MULTIPLE_OF_512;
-        let within_turns = lsb - turns;
-        let rounded = within_turns + ROUND_TO_INTEGER;
-        #[allow(clippy::float_cmp)]
-        let away_from_zero = {
-            let frac = within_turns - (rounded - ROUND_TO_INTEGER);
-            i32::from(frac == 0.5 && lsb > 0.0) - i32::from(frac == -0.5 && lsb < 0.0)
-        };
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        Self(rounded.to_bits().wrapping_add(away_from_zero as u32) as u8)
+        let rounded = (lsb - turns) + ROUND_TO_INTEGER;
+        #[allow(clippy::cast_possible_truncation)]
+        Self(rounded.to_bits() as u8)
     }
 }
 
@@ -152,26 +146,19 @@ mod tests {
         approx::assert_abs_diff_eq!(expect, Phase(value).rad());
     }
 
+    const RAD_PER_LSB: f32 = 2.0 * PI / 256.0;
+
     fn quantized_exactly(v: Angle) -> Phase {
-        let lsb = f64::from(v.rad() / RAD_PER_LSB);
+        let lsb = f64::from(v.rad() * LSB_PER_RAD);
         if !lsb.is_finite() || lsb.abs() >= f64::from(LSB_LIMIT) {
             return Phase::ZERO;
         }
-        let truncated = lsb.trunc();
-        let frac = lsb - truncated;
-        let rounded = if frac >= 0.5 {
-            truncated + 1.0
-        } else if frac <= -0.5 {
-            truncated - 1.0
-        } else {
-            truncated
-        };
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        Phase(((rounded as i64) & 0xFF) as u8)
+        Phase(((lsb.round_ties_even() as i64) & 0xFF) as u8)
     }
 
     fn quantized_by_saturating_round(v: Angle) -> Phase {
-        let p = (v.rad() / (2.0 * PI) * 256.0).round();
+        let p = (v.rad() * LSB_PER_RAD).round_ties_even();
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         Phase(((p as i32) & 0xFF) as u8)
     }

@@ -18,6 +18,9 @@ all-features = true
 logging = ["dep:tracing-appender", "dep:tracing-subscriber"]
 serde = ["dep:serde", "dep:serde_json"]
 
+[lib]
+bench = false
+
 [dependencies]
 autd3-cpu-wire.workspace = true
 nalgebra.workspace = true
@@ -35,6 +38,11 @@ approx.workspace = true
 async-lock.workspace = true
 futures-channel.workspace = true
 pollster.workspace = true
+criterion = { version = "0.8.2", default-features = false }
+
+[[bench]]
+name = "phase"
+harness = false
 
 [lints]
 workspace = true

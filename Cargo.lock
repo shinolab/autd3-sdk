@@ -135,6 +135,7 @@ dependencies = [
  "approx",
  "async-lock",
  "autd3-cpu-wire",
+ "criterion",
  "futures-channel",
  "nalgebra",
  "pollster",
