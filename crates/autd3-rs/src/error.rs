@@ -102,12 +102,6 @@ impl From<crate::udp::UdpError> for Error {
     }
 }
 
-impl From<crate::link::LinkError> for Error {
-    fn from(e: crate::link::LinkError) -> Self {
-        Error::Network(NetworkCause::new(e))
-    }
-}
-
 impl<E> From<E> for Error
 where
     E: Into<PayloadError>,
@@ -148,6 +142,13 @@ pub enum PayloadError {
 
     #[error("expected {expected} datagram(s) (one per device), got {got}")]
     DatagramCountMismatch { expected: usize, got: usize },
+
+    #[error("datagram {index} has a payload of {len} bytes, more than {max}")]
+    DatagramPayloadTooLong {
+        index: usize,
+        len: usize,
+        max: usize,
+    },
 
     #[error("the execution lead must be at least {min:?}, got {got:?}")]
     ExecLeadTooShort { got: Duration, min: Duration },

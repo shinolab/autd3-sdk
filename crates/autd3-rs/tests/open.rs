@@ -4,14 +4,14 @@ use std::num::{NonZeroU32, NonZeroUsize};
 use std::time::Duration;
 
 use autd3_rs::commands::{ForceFan, Nop};
-use autd3_rs::udp::{UdpError, UdpOption};
+use autd3_rs::udp::{TransportOption, UdpError};
 use autd3_rs::{
     Client, ClientConfig, ClientConfigError, Error, MAX_DEVICES, MAX_INFLIGHT, PayloadError,
 };
 
 use common::{config, emulator, geometry, open_with, option, udp_error};
 
-async fn open_error(num_devices: usize, option: &UdpOption, config: ClientConfig) -> Error {
+async fn open_error(num_devices: usize, option: &TransportOption, config: ClientConfig) -> Error {
     Client::open(&geometry(num_devices), option, config)
         .await
         .err()
@@ -88,9 +88,9 @@ async fn an_exec_lead_not_below_lost_timeout_is_rejected() {
 
 #[tokio::test]
 #[ignore = "depends on real time"]
-async fn an_invalid_udp_option_is_rejected() {
+async fn an_invalid_transport_option_is_rejected() {
     let emulator = emulator(1);
-    let option = UdpOption {
+    let option = TransportOption {
         reply_timeout: Duration::ZERO,
         ..option(&emulator)
     };
@@ -107,7 +107,7 @@ async fn an_invalid_udp_option_is_rejected() {
 #[ignore = "depends on real time"]
 async fn a_geometry_with_more_devices_than_attached_times_out_the_enumeration() {
     let emulator = emulator(1);
-    let option = UdpOption {
+    let option = TransportOption {
         enumeration_timeout: Duration::from_millis(200),
         ..option(&emulator)
     };
@@ -144,7 +144,7 @@ async fn a_geometry_with_fewer_devices_than_attached_is_a_count_mismatch() {
 async fn open_fails_when_a_device_never_locks_to_the_grandmaster() {
     let emulator = emulator(2);
     emulator.set_ptp_lock_blocked(1, true);
-    let option = UdpOption {
+    let option = TransportOption {
         sync_timeout: Duration::from_millis(200),
         ..option(&emulator)
     };

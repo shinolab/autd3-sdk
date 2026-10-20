@@ -9,7 +9,7 @@ internal static class Sample
     internal static async Task Run()
     {
         var layout = new Geometry(new[] { new Autd3() });
-        var client = await Client.OpenAsync(layout, new UdpOption(), new ClientConfig());
+        var client = await Client.OpenAsync(layout, new TransportOption(), new ClientConfig());
 
         using var frames = Frames.Encode(layout, new Nop());
         var frame = frames[0];
@@ -46,7 +46,7 @@ internal static class Sample
         var scopedLayout = new Geometry(new[] { new Autd3() });
 
         // ANCHOR: context_manager
-        await using (var scoped = await Client.OpenAsync(scopedLayout, new UdpOption(), new ClientConfig()))
+        await using (var scoped = await Client.OpenAsync(scopedLayout, new TransportOption(), new ClientConfig()))
         {
             await scoped.SendAsync(new Nop());
         }

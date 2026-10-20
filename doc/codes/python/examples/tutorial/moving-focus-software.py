@@ -2,7 +2,7 @@ import asyncio
 
 import autd3_modulation as modulation
 import autd3_pattern as pattern
-from autd3 import Client, ClientConfig, UdpOption
+from autd3 import Client, ClientConfig, TransportOption
 from autd3.commands import Pattern, SetSilencer
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import m, mm, s
@@ -16,7 +16,7 @@ async def main() -> None:
 
     async with await Client.open(
         geometry,
-        UdpOption(),
+        TransportOption(),
         ClientConfig(),
     ) as client:
         center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm)

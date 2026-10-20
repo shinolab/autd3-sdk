@@ -4,13 +4,13 @@ use std::time::Duration;
 
 use autd3_rs::commands::Nop;
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::{Client, ClientConfig, ExecAt, Frames};
-use autd3_rs::udp::UdpOption;
+use autd3_rs::{Client, ClientConfig, Datagram, ExecAt, Frame, Frames};
+use autd3_rs::udp::TransportOption;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
-    let option = UdpOption::default();
+    let option = TransportOption::default();
     let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
 
     let frames = Frames::encode(&geometry, Nop)?;
@@ -25,7 +25,6 @@ async fn main() -> Result<()> {
 
     client.send_frame_at(frame, ExecAt::Immediate).await?.await?.check()?;
     // ANCHOR_END: exec_at
-
     // ANCHOR: api
     let num_devices = client.num_devices();
     let geometry = client.geometry();

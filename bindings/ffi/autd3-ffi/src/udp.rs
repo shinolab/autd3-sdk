@@ -8,35 +8,34 @@ use autd3_ffi_abi::{
     handle_ref, into_handle, into_handle_or_err, write_out,
 };
 use autd3_rs::Interface;
-use autd3_rs::ServerLink as CoreServerLink;
-use autd3_rs::udp::UdpOption as CoreOption;
+use autd3_rs::udp::TransportOption as CoreOption;
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
-pub struct UdpOptionHandle(pub(crate) CoreOption);
+pub struct TransportOptionHandle(pub(crate) CoreOption);
 
 #[unsafe(no_mangle)]
-pub(crate) extern "C" fn autd3_udp_option_new() -> *mut UdpOptionHandle {
-    into_handle(UdpOptionHandle(CoreOption::default()))
+pub(crate) extern "C" fn autd3_transport_option_new() -> *mut TransportOptionHandle {
+    into_handle(TransportOptionHandle(CoreOption::default()))
 }
 
 autd3_ffi_abi::option_handle_field!(
-    UdpOptionHandle,
+    TransportOptionHandle,
     [heartbeat],
     optional_duration,
-    autd3_udp_option_set_heartbeat,
-    autd3_udp_option_get_heartbeat
+    autd3_transport_option_set_heartbeat,
+    autd3_transport_option_get_heartbeat
 );
 autd3_ffi_abi::option_handle_field!(
-    UdpOptionHandle,
+    TransportOptionHandle,
     [timer_resolution],
     optional_duration,
-    autd3_udp_option_set_timer_resolution,
-    autd3_udp_option_get_timer_resolution
+    autd3_transport_option_set_timer_resolution,
+    autd3_transport_option_get_timer_resolution
 );
 
 #[unsafe(no_mangle)]
-pub(crate) unsafe extern "C" fn autd3_udp_option_set_send_rate_limit(
-    handle: *mut UdpOptionHandle,
+pub(crate) unsafe extern "C" fn autd3_transport_option_set_send_rate_limit(
+    handle: *mut TransportOptionHandle,
     has_value: bool,
     percent: f32,
 ) -> i32 {
@@ -48,8 +47,8 @@ pub(crate) unsafe extern "C" fn autd3_udp_option_set_send_rate_limit(
 }
 
 #[unsafe(no_mangle)]
-pub(crate) unsafe extern "C" fn autd3_udp_option_get_send_rate_limit(
-    handle: *const UdpOptionHandle,
+pub(crate) unsafe extern "C" fn autd3_transport_option_get_send_rate_limit(
+    handle: *const TransportOptionHandle,
     out_has_value: *mut bool,
     out: *mut f32,
 ) -> i32 {
@@ -65,8 +64,8 @@ pub(crate) unsafe extern "C" fn autd3_udp_option_get_send_rate_limit(
 }
 
 #[unsafe(no_mangle)]
-pub(crate) unsafe extern "C" fn autd3_udp_option_set_send_buffer(
-    handle: *mut UdpOptionHandle,
+pub(crate) unsafe extern "C" fn autd3_transport_option_set_send_buffer(
+    handle: *mut TransportOptionHandle,
     bytes: u64,
 ) -> i32 {
     let Some(option) = (unsafe { autd3_ffi_abi::handle_mut(handle) }) else {
@@ -80,8 +79,8 @@ pub(crate) unsafe extern "C" fn autd3_udp_option_set_send_buffer(
 }
 
 #[unsafe(no_mangle)]
-pub(crate) unsafe extern "C" fn autd3_udp_option_get_send_buffer(
-    handle: *const UdpOptionHandle,
+pub(crate) unsafe extern "C" fn autd3_transport_option_get_send_buffer(
+    handle: *const TransportOptionHandle,
     out: *mut u64,
 ) -> i32 {
     let Some(option) = (unsafe { autd3_ffi_abi::handle_ref(handle) }) else {
@@ -95,100 +94,45 @@ pub(crate) unsafe extern "C" fn autd3_udp_option_get_send_buffer(
     }
 }
 autd3_ffi_abi::option_handle_field!(
-    UdpOptionHandle,
+    TransportOptionHandle,
     [reply_timeout],
     duration,
-    autd3_udp_option_set_reply_timeout,
-    autd3_udp_option_get_reply_timeout
+    autd3_transport_option_set_reply_timeout,
+    autd3_transport_option_get_reply_timeout
 );
 autd3_ffi_abi::option_handle_field!(
-    UdpOptionHandle,
+    TransportOptionHandle,
     [lost_timeout],
     duration,
-    autd3_udp_option_set_lost_timeout,
-    autd3_udp_option_get_lost_timeout
+    autd3_transport_option_set_lost_timeout,
+    autd3_transport_option_get_lost_timeout
 );
 autd3_ffi_abi::option_handle_field!(
-    UdpOptionHandle,
+    TransportOptionHandle,
     [response_timeout],
     duration,
-    autd3_udp_option_set_response_timeout,
-    autd3_udp_option_get_response_timeout
+    autd3_transport_option_set_response_timeout,
+    autd3_transport_option_get_response_timeout
 );
 autd3_ffi_abi::option_handle_field!(
-    UdpOptionHandle,
+    TransportOptionHandle,
     [enumeration_timeout],
     duration,
-    autd3_udp_option_set_enumeration_timeout,
-    autd3_udp_option_get_enumeration_timeout
+    autd3_transport_option_set_enumeration_timeout,
+    autd3_transport_option_get_enumeration_timeout
 );
 autd3_ffi_abi::option_handle_field!(
-    UdpOptionHandle,
+    TransportOptionHandle,
     [sync_timeout],
     duration,
-    autd3_udp_option_set_sync_timeout,
-    autd3_udp_option_get_sync_timeout
+    autd3_transport_option_set_sync_timeout,
+    autd3_transport_option_get_sync_timeout
 );
-autd3_ffi_abi::option_handle_lifecycle!(UdpOptionHandle, autd3_udp_option_free);
-
-pub struct ServerLinkHandle(pub(crate) CoreServerLink);
+autd3_ffi_abi::option_handle_lifecycle!(TransportOptionHandle, autd3_transport_option_free);
 
 #[unsafe(no_mangle)]
-pub(crate) extern "C" fn autd3_server_link_new() -> *mut ServerLinkHandle {
-    into_handle(ServerLinkHandle(CoreServerLink::default()))
-}
-
-#[unsafe(no_mangle)]
-pub(crate) unsafe extern "C" fn autd3_server_link_set_port(
-    handle: *mut ServerLinkHandle,
-    port: u16,
-) -> i32 {
-    let Some(link) = (unsafe { handle_mut(handle) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    link.0.port = port;
-    AUTD3_OK
-}
-
-#[unsafe(no_mangle)]
-pub(crate) unsafe extern "C" fn autd3_server_link_get_port(
-    handle: *const ServerLinkHandle,
-    out: *mut u16,
-) -> i32 {
-    let Some(link) = (unsafe { handle_ref(handle) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    unsafe { write_out(out, link.0.port) }
-}
-
-#[unsafe(no_mangle)]
-pub(crate) unsafe extern "C" fn autd3_server_link_set_timeout_ns(
-    handle: *mut ServerLinkHandle,
-    ns: u64,
-) -> i32 {
-    let Some(link) = (unsafe { handle_mut(handle) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    link.0.timeout = Duration::from_nanos(ns);
-    AUTD3_OK
-}
-
-#[unsafe(no_mangle)]
-pub(crate) unsafe extern "C" fn autd3_server_link_get_timeout_ns(
-    handle: *const ServerLinkHandle,
-    out: *mut u64,
-) -> i32 {
-    let Some(link) = (unsafe { handle_ref(handle) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    unsafe { write_out(out, autd3_ffi_abi::to_ns(link.0.timeout)) }
-}
-
-autd3_ffi_abi::option_handle_lifecycle!(ServerLinkHandle, autd3_server_link_free);
-
-#[unsafe(no_mangle)]
-pub(crate) unsafe extern "C" fn autd3_udp_option_set_iface(
-    handle: *mut UdpOptionHandle,
+pub(crate) unsafe extern "C" fn autd3_transport_option_set_iface(
+    handle: *mut TransportOptionHandle,
     iface: *const c_char,
 ) -> i32 {
     let Some(option) = (unsafe { handle_mut(handle) }) else {
@@ -199,8 +143,8 @@ pub(crate) unsafe extern "C" fn autd3_udp_option_set_iface(
 }
 
 #[unsafe(no_mangle)]
-pub(crate) unsafe extern "C" fn autd3_udp_option_set_iface_simulator(
-    handle: *mut UdpOptionHandle,
+pub(crate) unsafe extern "C" fn autd3_transport_option_set_iface_simulator(
+    handle: *mut TransportOptionHandle,
     port: u16,
 ) -> i32 {
     let Some(option) = (unsafe { handle_mut(handle) }) else {
@@ -211,8 +155,8 @@ pub(crate) unsafe extern "C" fn autd3_udp_option_set_iface_simulator(
 }
 
 #[unsafe(no_mangle)]
-pub(crate) unsafe extern "C" fn autd3_udp_option_set_iface_addr(
-    handle: *mut UdpOptionHandle,
+pub(crate) unsafe extern "C" fn autd3_transport_option_set_iface_addr(
+    handle: *mut TransportOptionHandle,
     addr: *const c_char,
 ) -> i32 {
     let Some(option) = (unsafe { handle_mut(handle) }) else {
@@ -227,8 +171,8 @@ pub(crate) unsafe extern "C" fn autd3_udp_option_set_iface_addr(
 }
 
 #[unsafe(no_mangle)]
-pub(crate) unsafe extern "C" fn autd3_udp_option_get_iface_addr(
-    handle: *const UdpOptionHandle,
+pub(crate) unsafe extern "C" fn autd3_transport_option_get_iface_addr(
+    handle: *const TransportOptionHandle,
     out: *mut *mut c_char,
 ) -> i32 {
     let Some(option) = (unsafe { handle_ref(handle) }) else {
@@ -271,11 +215,11 @@ pub(crate) unsafe extern "C" fn autd3_udp_emulator_spawn(
 #[unsafe(no_mangle)]
 pub(crate) unsafe extern "C" fn autd3_udp_emulator_option(
     handle: *const UdpEmulatorHandle,
-) -> *mut UdpOptionHandle {
+) -> *mut TransportOptionHandle {
     let Some(emulator) = (unsafe { handle_ref(handle) }) else {
         return std::ptr::null_mut();
     };
-    into_handle(UdpOptionHandle(CoreOption {
+    into_handle(TransportOptionHandle(CoreOption {
         iface: emulator.0.interface(),
         reply_timeout: Duration::from_millis(50),
         response_timeout: Duration::from_millis(50),
@@ -322,8 +266,8 @@ mod tests {
     use super::*;
 
     fn optional(
-        get: unsafe extern "C" fn(*const UdpOptionHandle, *mut bool, *mut u64) -> i32,
-        handle: *const UdpOptionHandle,
+        get: unsafe extern "C" fn(*const TransportOptionHandle, *mut bool, *mut u64) -> i32,
+        handle: *const TransportOptionHandle,
     ) -> Option<Duration> {
         let mut has_value = false;
         let mut ns = u64::MAX;
@@ -334,49 +278,49 @@ mod tests {
         has_value.then(|| Duration::from_nanos(ns))
     }
 
-    fn heartbeat(handle: *const UdpOptionHandle) -> Option<Duration> {
-        optional(autd3_udp_option_get_heartbeat, handle)
+    fn heartbeat(handle: *const TransportOptionHandle) -> Option<Duration> {
+        optional(autd3_transport_option_get_heartbeat, handle)
     }
 
-    fn timer_resolution(handle: *const UdpOptionHandle) -> Option<Duration> {
-        optional(autd3_udp_option_get_timer_resolution, handle)
+    fn timer_resolution(handle: *const TransportOptionHandle) -> Option<Duration> {
+        optional(autd3_transport_option_get_timer_resolution, handle)
     }
 
     #[test]
     fn the_heartbeat_presence_is_explicit_and_a_zero_heartbeat_is_kept_for_validation() {
-        let handle = autd3_udp_option_new();
+        let handle = autd3_transport_option_new();
         assert_eq!(heartbeat(handle), Some(Duration::from_millis(10)));
         assert_eq!(
-            unsafe { autd3_udp_option_set_heartbeat(handle, false, 0) },
+            unsafe { autd3_transport_option_set_heartbeat(handle, false, 0) },
             AUTD3_OK
         );
         assert_eq!(heartbeat(handle), None);
         assert_eq!(
-            unsafe { autd3_udp_option_set_heartbeat(handle, true, 0) },
+            unsafe { autd3_transport_option_set_heartbeat(handle, true, 0) },
             AUTD3_OK
         );
         assert_eq!(heartbeat(handle), Some(Duration::ZERO));
         assert!(unsafe { &*handle }.0.validate().is_err());
         assert_eq!(
-            unsafe { autd3_udp_option_set_heartbeat(handle, true, 2_000_000) },
+            unsafe { autd3_transport_option_set_heartbeat(handle, true, 2_000_000) },
             AUTD3_OK
         );
         assert_eq!(heartbeat(handle), Some(Duration::from_millis(2)));
-        unsafe { autd3_udp_option_free(handle) };
+        unsafe { autd3_transport_option_free(handle) };
     }
 
     #[test]
     fn the_timer_resolution_presence_is_explicit() {
-        let handle = autd3_udp_option_new();
+        let handle = autd3_transport_option_new();
         assert_eq!(timer_resolution(handle), Some(Duration::from_millis(1)));
         assert_eq!(
-            unsafe { autd3_udp_option_set_timer_resolution(handle, false, 0) },
+            unsafe { autd3_transport_option_set_timer_resolution(handle, false, 0) },
             AUTD3_OK
         );
         assert_eq!(unsafe { &*handle }.0.timer_resolution, None);
         assert_eq!(timer_resolution(handle), None);
         assert_eq!(
-            unsafe { autd3_udp_option_set_timer_resolution(handle, true, 2_000_000) },
+            unsafe { autd3_transport_option_set_timer_resolution(handle, true, 2_000_000) },
             AUTD3_OK
         );
         assert_eq!(
@@ -384,21 +328,21 @@ mod tests {
             Some(Duration::from_millis(2))
         );
         assert_eq!(
-            unsafe { autd3_udp_option_set_timer_resolution(std::ptr::null_mut(), true, 1) },
+            unsafe { autd3_transport_option_set_timer_resolution(std::ptr::null_mut(), true, 1) },
             AUTD3_ERR_INVALID_ARGUMENT
         );
-        unsafe { autd3_udp_option_free(handle) };
+        unsafe { autd3_transport_option_free(handle) };
     }
 
     #[test]
     fn the_send_rate_limit_presence_is_explicit() {
-        let handle = autd3_udp_option_new();
+        let handle = autd3_transport_option_new();
         let read = || {
             let mut has_value = true;
             let mut percent = f32::NAN;
             assert_eq!(
                 unsafe {
-                    autd3_udp_option_get_send_rate_limit(
+                    autd3_transport_option_get_send_rate_limit(
                         handle,
                         &raw mut has_value,
                         &raw mut percent,
@@ -410,42 +354,42 @@ mod tests {
         };
         assert_eq!(read(), None);
         assert_eq!(
-            unsafe { autd3_udp_option_set_send_rate_limit(handle, true, 95.0) },
+            unsafe { autd3_transport_option_set_send_rate_limit(handle, true, 95.0) },
             AUTD3_OK
         );
         assert_eq!(read(), Some(95.0));
         assert_eq!(unsafe { &*handle }.0.send_rate_limit, Some(95.0));
         assert_eq!(
-            unsafe { autd3_udp_option_set_send_rate_limit(handle, true, 0.0) },
+            unsafe { autd3_transport_option_set_send_rate_limit(handle, true, 0.0) },
             AUTD3_OK
         );
         assert_eq!(unsafe { &*handle }.0.send_rate_limit, Some(0.0));
         assert!(unsafe { &*handle }.0.validate().is_err());
         assert_eq!(
-            unsafe { autd3_udp_option_set_send_rate_limit(handle, false, 0.0) },
+            unsafe { autd3_transport_option_set_send_rate_limit(handle, false, 0.0) },
             AUTD3_OK
         );
         assert_eq!(unsafe { &*handle }.0.send_rate_limit, None);
         assert_eq!(
-            unsafe { autd3_udp_option_set_send_rate_limit(std::ptr::null_mut(), true, 1.0) },
+            unsafe { autd3_transport_option_set_send_rate_limit(std::ptr::null_mut(), true, 1.0) },
             AUTD3_ERR_INVALID_ARGUMENT
         );
-        unsafe { autd3_udp_option_free(handle) };
+        unsafe { autd3_transport_option_free(handle) };
     }
 
-    fn lost_timeout(handle: *const UdpOptionHandle) -> Duration {
+    fn lost_timeout(handle: *const TransportOptionHandle) -> Duration {
         let mut ns = 0u64;
         assert_eq!(
-            unsafe { autd3_udp_option_get_lost_timeout(handle, &raw mut ns) },
+            unsafe { autd3_transport_option_get_lost_timeout(handle, &raw mut ns) },
             AUTD3_OK
         );
         Duration::from_nanos(ns)
     }
 
-    fn iface_addr(handle: *const UdpOptionHandle) -> Option<String> {
+    fn iface_addr(handle: *const TransportOptionHandle) -> Option<String> {
         let mut out: *mut c_char = std::ptr::null_mut();
         assert_eq!(
-            unsafe { autd3_udp_option_get_iface_addr(handle, &raw mut out) },
+            unsafe { autd3_transport_option_get_iface_addr(handle, &raw mut out) },
             AUTD3_OK
         );
         if out.is_null() {
@@ -460,54 +404,54 @@ mod tests {
 
     #[test]
     fn the_defaults_reach_c_unchanged() {
-        let handle = autd3_udp_option_new();
+        let handle = autd3_transport_option_new();
         let option = CoreOption::default();
         assert_eq!(heartbeat(handle), option.heartbeat);
         assert_eq!(lost_timeout(handle), option.lost_timeout);
         let mut ns = 0u64;
         assert_eq!(
-            unsafe { autd3_udp_option_get_sync_timeout(handle, &raw mut ns) },
+            unsafe { autd3_transport_option_get_sync_timeout(handle, &raw mut ns) },
             AUTD3_OK
         );
         assert_eq!(Duration::from_nanos(ns), option.sync_timeout);
         assert_eq!(iface_addr(handle), None);
-        unsafe { autd3_udp_option_free(handle) };
+        unsafe { autd3_transport_option_free(handle) };
     }
 
     #[test]
     fn the_address_round_trips_and_rejects_garbage() {
-        let handle = autd3_udp_option_new();
+        let handle = autd3_transport_option_new();
         let addr = CString::new("[::1]:44336").unwrap();
         assert_eq!(
-            unsafe { autd3_udp_option_set_iface_addr(handle, addr.as_ptr()) },
+            unsafe { autd3_transport_option_set_iface_addr(handle, addr.as_ptr()) },
             AUTD3_OK
         );
         assert_eq!(iface_addr(handle).as_deref(), Some("[::1]:44336"));
 
         let garbage = CString::new("127.0.0.1:1").unwrap();
         assert_eq!(
-            unsafe { autd3_udp_option_set_iface_addr(handle, garbage.as_ptr()) },
+            unsafe { autd3_transport_option_set_iface_addr(handle, garbage.as_ptr()) },
             AUTD3_ERR_INVALID_ARGUMENT
         );
         assert_eq!(
-            unsafe { autd3_udp_option_set_iface_addr(handle, std::ptr::null()) },
+            unsafe { autd3_transport_option_set_iface_addr(handle, std::ptr::null()) },
             AUTD3_ERR_INVALID_ARGUMENT
         );
         assert_eq!(iface_addr(handle).as_deref(), Some("[::1]:44336"));
 
         assert_eq!(
-            unsafe { autd3_udp_option_set_iface(handle, std::ptr::null()) },
+            unsafe { autd3_transport_option_set_iface(handle, std::ptr::null()) },
             AUTD3_OK
         );
         assert_eq!(iface_addr(handle), None);
-        unsafe { autd3_udp_option_free(handle) };
+        unsafe { autd3_transport_option_free(handle) };
     }
 
     #[test]
     fn the_simulator_interface_reaches_the_option() {
-        let handle = autd3_udp_option_new();
+        let handle = autd3_transport_option_new();
         assert_eq!(
-            unsafe { autd3_udp_option_set_iface_simulator(handle, 50000) },
+            unsafe { autd3_transport_option_set_iface_simulator(handle, 50000) },
             AUTD3_OK
         );
         assert_eq!(
@@ -516,44 +460,10 @@ mod tests {
         );
         assert_eq!(iface_addr(handle), None);
         assert_eq!(
-            unsafe { autd3_udp_option_set_iface_simulator(std::ptr::null_mut(), 50000) },
+            unsafe { autd3_transport_option_set_iface_simulator(std::ptr::null_mut(), 50000) },
             AUTD3_ERR_INVALID_ARGUMENT
         );
-        unsafe { autd3_udp_option_free(handle) };
-    }
-
-    #[test]
-    fn the_server_link_round_trips() {
-        let handle = autd3_server_link_new();
-        let mut port = 0u16;
-        let mut ns = 0u64;
-        assert_eq!(
-            unsafe { autd3_server_link_get_port(handle, &raw mut port) },
-            AUTD3_OK
-        );
-        assert_eq!(port, autd3_rs::SERVER_PORT);
-        assert_eq!(
-            unsafe { autd3_server_link_set_port(handle, 5000) },
-            AUTD3_OK
-        );
-        assert_eq!(
-            unsafe { autd3_server_link_set_timeout_ns(handle, 2_000_000_000) },
-            AUTD3_OK
-        );
-        assert_eq!(
-            unsafe { autd3_server_link_get_port(handle, &raw mut port) },
-            AUTD3_OK
-        );
-        assert_eq!(
-            unsafe { autd3_server_link_get_timeout_ns(handle, &raw mut ns) },
-            AUTD3_OK
-        );
-        assert_eq!((port, ns), (5000, 2_000_000_000));
-        assert_eq!(
-            unsafe { autd3_server_link_set_port(std::ptr::null_mut(), 1) },
-            AUTD3_ERR_INVALID_ARGUMENT
-        );
-        unsafe { autd3_server_link_free(handle) };
+        unsafe { autd3_transport_option_free(handle) };
     }
 
     #[test]
@@ -562,7 +472,11 @@ mod tests {
         let mut ns = 0u64;
         assert_eq!(
             unsafe {
-                autd3_udp_option_get_heartbeat(std::ptr::null(), &raw mut has_value, &raw mut ns)
+                autd3_transport_option_get_heartbeat(
+                    std::ptr::null(),
+                    &raw mut has_value,
+                    &raw mut ns,
+                )
             },
             AUTD3_ERR_INVALID_ARGUMENT
         );
@@ -571,7 +485,7 @@ mod tests {
 
     #[test]
     fn a_rejected_client_open_consumes_the_option() {
-        let option = autd3_udp_option_new();
+        let option = autd3_transport_option_new();
         let config = crate::autd3_client_config_new();
         let (code, client) = complete(|cb, user_data| unsafe {
             crate::autd3_client_open(std::ptr::null(), option, config, cb, user_data);
@@ -594,47 +508,9 @@ mod tests {
     }
 
     #[test]
-    fn a_server_open_with_a_null_geometry_consumes_the_link() {
-        let config = crate::autd3_client_config_new();
-        let live = LIVE_ALLOCATIONS.get();
-        let link = autd3_server_link_new();
-        assert!(live < LIVE_ALLOCATIONS.get());
-        let (code, client) = complete(|cb, user_data| unsafe {
-            crate::autd3_client_open_server(std::ptr::null(), link, config, cb, user_data);
-        });
-        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
-        assert_eq!(0, client);
-        assert_eq!(live, LIVE_ALLOCATIONS.get());
-        unsafe { crate::autd3_client_config_free(config) };
-    }
-
-    #[test]
-    fn a_zero_server_timeout_fails_the_open_not_the_setter() {
-        let geometry = Geometry::new(vec![Autd3::default()]);
-        let config = crate::autd3_client_config_new();
-        let link = autd3_server_link_new();
-        assert_eq!(
-            unsafe { autd3_server_link_set_timeout_ns(link, 0) },
-            AUTD3_OK
-        );
-        let mut ns = u64::MAX;
-        assert_eq!(
-            unsafe { autd3_server_link_get_timeout_ns(link, &raw mut ns) },
-            AUTD3_OK
-        );
-        assert_eq!(ns, 0);
-        let (code, client) = complete(|cb, user_data| unsafe {
-            crate::autd3_client_open_server(&raw const geometry, link, config, cb, user_data);
-        });
-        assert_eq!(autd3_ffi_abi::AUTD3_ERR_NETWORK, code);
-        assert_eq!(0, client);
-        unsafe { crate::autd3_client_config_free(config) };
-    }
-
-    #[test]
     fn an_out_of_range_device_count_fails_the_open_through_the_callback() {
         let geometry = Geometry::new(Vec::<Autd3>::new());
-        let option = autd3_udp_option_new();
+        let option = autd3_transport_option_new();
         let config = crate::autd3_client_config_new();
         let (code, client) = complete(|cb, user_data| unsafe {
             crate::autd3_client_open(&raw const geometry, option, config, cb, user_data);
@@ -649,7 +525,7 @@ mod tests {
         let geometry = Geometry::new(vec![Autd3::default()]);
         let config = crate::autd3_client_config_new();
         let live = LIVE_ALLOCATIONS.get();
-        let option = autd3_udp_option_new();
+        let option = autd3_transport_option_new();
         assert!(live < LIVE_ALLOCATIONS.get());
         unsafe {
             crate::autd3_client_open(
@@ -697,7 +573,7 @@ mod tests {
         assert_eq!(0, unsafe {
             autd3_udp_emulator_num_devices(std::ptr::null())
         });
-        unsafe { autd3_udp_option_free(option) };
+        unsafe { autd3_transport_option_free(option) };
         unsafe { autd3_udp_emulator_free(emulator) };
     }
 

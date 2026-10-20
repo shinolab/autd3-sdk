@@ -16,8 +16,8 @@ use autd3_rs::value::{
     Intensity, LoopBehavior, ModulationBank, PatternBank, Phase, SamplingConfig, TransitionMode,
 };
 use autd3_rs::{
-    BusStats, Client, ClientConfig, Error as ClientError, Frame, Frames, Interface, Link,
-    ResponseFuture, ServerLink, StateChecker, Telemetry, UdpOption,
+    BusStats, Client, ClientConfig, Error as ClientError, Frame, Frames, Interface, ResponseFuture,
+    StateChecker, Telemetry, TransportOption,
 };
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
@@ -215,9 +215,9 @@ pub(crate) fn spawn_emulator(cli: &Cli) -> Result<Option<UdpEmulator>> {
         .context("starting the UDP device emulator")
 }
 
-pub(crate) fn udp_option(cli: &Cli, emulator: Option<&UdpEmulator>) -> UdpOption {
+pub(crate) fn transport_option(cli: &Cli, emulator: Option<&UdpEmulator>) -> TransportOption {
     let mut option = match emulator {
-        Some(emulator) => UdpOption {
+        Some(emulator) => TransportOption {
             iface: emulator.interface(),
             reply_timeout: Duration::from_millis(50),
             response_timeout: Duration::from_millis(50),
@@ -225,7 +225,7 @@ pub(crate) fn udp_option(cli: &Cli, emulator: Option<&UdpEmulator>) -> UdpOption
             sync_timeout: Duration::from_secs(5),
             ..Default::default()
         },
-        None => UdpOption {
+        None => TransportOption {
             iface: match cli.simulator {
                 Some(port) => Interface::Simulator(port),
                 None => cli.interface.clone().into(),
@@ -246,20 +246,13 @@ pub(crate) fn udp_option(cli: &Cli, emulator: Option<&UdpEmulator>) -> UdpOption
 
 pub(crate) async fn run(cli: &Cli) -> Result<RunOutput> {
     let emulator = spawn_emulator(cli)?;
-    let option = udp_option(cli, emulator.as_ref());
-    let link = match cli.server {
-        Some(port) => Link::from(ServerLink {
-            port,
-            ..ServerLink::default()
-        }),
-        None => Link::from(option),
-    };
-    let out = Box::pin(run_with_link(link, cli)).await;
+    let option = transport_option(cli, emulator.as_ref());
+    let out = Box::pin(run_with_option(&option, cli)).await;
     drop(emulator);
     out
 }
 
-async fn run_with_link(link: Link, cli: &Cli) -> Result<RunOutput> {
+async fn run_with_option(option: &TransportOption, cli: &Cli) -> Result<RunOutput> {
     let num_devices = cli.devices.get();
     eprintln!("devices: {num_devices}");
 
@@ -270,7 +263,7 @@ async fn run_with_link(link: Link, cli: &Cli) -> Result<RunOutput> {
     let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()));
     let client = Box::pin(Client::open(
         &geometry,
-        link,
+        option,
         ClientConfig {
             ack_timeout: cli.ack_timeout,
             max_inflight: NonZeroUsize::new(max_inflight).unwrap(),

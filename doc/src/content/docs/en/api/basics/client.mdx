@@ -17,9 +17,6 @@ import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 import sample from "@codes/rust/examples/api/basics/send.rs?raw";
 import pySample from "@codes/python/examples/api/basics/send.py?raw";
 import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
-import serverSample from "@codes/rust/examples/api/connection/server-link.rs?raw";
-import pyServerSample from "@codes/python/examples/api/connection/server-link.py?raw";
-import csServerSample from "@codes/csharp/examples/api/connection/server-link.cs?raw";
 
 `Client` is the central object that sends commands and reads state.
 
@@ -30,13 +27,10 @@ import csServerSample from "@codes/csharp/examples/api/connection/server-link.cs
 | Parameter  | Type              | Description                                                                  |
 | ---------- | ----------------- | ---------------------------------------------------------------------------- |
 | `geometry` | `&Geometry`       | Physical layout of the devices                                               |
-| `link`     | `impl Into<Link>` | Destination. [`UdpOption`](/autd3-sdk/en/api/basics/transport-option/) or `ServerLink` |
+| `option`   | `&TransportOption`      | Connection settings. See [`TransportOption`](/autd3-sdk/en/api/basics/transport-option/) |
 | `config`   | `ClientConfig`    | See below                                                                    |
 
-A `UdpOption` connects to the devices (or the [Simulator](/autd3-sdk/en/guide/simulator/)) directly.
-A `ServerLink` connects through the [Server](/autd3-sdk/en/guide/server/) running on the same host.
-
-<CodeTabs rust={excerpt(serverSample, "api")} python={excerpt(pyServerSample, "api")} csharp={excerpt(csServerSample, "api")} />
+The `Client` connects to the devices (or the [Simulator](/autd3-sdk/en/guide/simulator/)) directly over UDP.
 
 To continuously monitor the operating state of the devices, drive the `StateChecker` taken from `Client::state_checker` (see [State Monitoring](/autd3-sdk/en/guide/state-check/)).
 
@@ -167,7 +161,7 @@ Note the following:
   - With `send_streaming`, the stamped time of a frame can come while the device is still processing the previous one; that frame is processed late (and counted in `exec_late`).
   - Even when it succeeds, only the start of the processing inside the CPU board is aligned; it does not guarantee that the start of the processing on the FPGA is aligned (that is, for example, that the phase of the emitted ultrasound is updated at the same timing)
 - A send completes `exec_lead` later
-- It must be at least 100 µs and shorter than 2^31 µs (about 35.8 minutes), and shorter than `lost_timeout` of [`UdpOption`](/autd3-sdk/en/api/basics/transport-option/)
+- It must be at least 100 µs and shorter than 2^31 µs (about 35.8 minutes), and shorter than `lost_timeout` of [`TransportOption`](/autd3-sdk/en/api/basics/transport-option/)
 - Keep `ack_timeout` (10 ms by default) longer than `exec_lead` + the processing time
 
 ### Overriding the processing time

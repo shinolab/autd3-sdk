@@ -31,7 +31,7 @@ impl Default for ClientConfig {
 }
 
 impl ClientConfig {
-    pub(super) fn validate(self, lost_timeout: Option<Duration>) -> Result<Self, Error> {
+    pub(super) fn validate(self, lost_timeout: Duration) -> Result<Self, Error> {
         if self.max_inflight.get() > MAX_INFLIGHT {
             return Err(Error::InvalidConfig(
                 ClientConfigError::MaxInflightTooLarge { max: MAX_INFLIGHT },
@@ -51,7 +51,7 @@ impl ClientConfig {
                 },
             ));
         }
-        if let (Some(exec_lead), Some(lost_timeout)) = (self.exec_lead, lost_timeout)
+        if let Some(exec_lead) = self.exec_lead
             && exec_lead >= lost_timeout
         {
             return Err(Error::InvalidConfig(
@@ -71,7 +71,7 @@ mod tests {
 
     #[test]
     fn the_default_passes_validation() {
-        assert!(ClientConfig::default().validate(None).is_ok());
+        assert!(ClientConfig::default().validate(Duration::MAX).is_ok());
     }
 
     #[test]
@@ -85,9 +85,13 @@ mod tests {
             exec_lead: Some(exec_lead),
             ..ClientConfig::default()
         };
-        assert!(with(Duration::from_micros(100)).validate(None).is_ok());
+        assert!(
+            with(Duration::from_micros(100))
+                .validate(Duration::MAX)
+                .is_ok()
+        );
         assert!(matches!(
-            with(Duration::from_nanos(99_999)).validate(None),
+            with(Duration::from_nanos(99_999)).validate(Duration::MAX),
             Err(Error::InvalidConfig(
                 ClientConfigError::ExecLeadOutOfRange { .. }
             ))
@@ -103,17 +107,11 @@ mod tests {
         let limit = Duration::from_micros(1 << 31);
         assert!(
             with(Duration::from_nanos((1 << 31) * 1_000 - 1))
-                .validate(None)
+                .validate(Duration::MAX)
                 .is_ok()
         );
         assert!(matches!(
-            with(limit).validate(None),
-            Err(Error::InvalidConfig(
-                ClientConfigError::ExecLeadOutOfRange { .. }
-            ))
-        ));
-        assert!(matches!(
-            with(limit).validate(Some(Duration::MAX)),
+            with(limit).validate(Duration::MAX),
             Err(Error::InvalidConfig(
                 ClientConfigError::ExecLeadOutOfRange { .. }
             ))
@@ -129,16 +127,16 @@ mod tests {
         };
         assert!(
             with(Duration::from_millis(99))
-                .validate(Some(LOST_TIMEOUT))
+                .validate(LOST_TIMEOUT)
                 .is_ok()
         );
         assert!(matches!(
-            with(LOST_TIMEOUT).validate(Some(LOST_TIMEOUT)),
+            with(LOST_TIMEOUT).validate(LOST_TIMEOUT),
             Err(Error::InvalidConfig(
                 ClientConfigError::ExecLeadNotBelowLostTimeout { .. }
             ))
         ));
-        assert!(with(LOST_TIMEOUT).validate(None).is_ok());
+        assert!(with(LOST_TIMEOUT).validate(Duration::MAX).is_ok());
     }
 
     #[test]
@@ -148,7 +146,7 @@ mod tests {
             ..ClientConfig::default()
         };
         assert!(matches!(
-            config.validate(None),
+            config.validate(Duration::MAX),
             Err(Error::InvalidConfig(
                 ClientConfigError::MaxInflightTooLarge { max: MAX_INFLIGHT }
             ))

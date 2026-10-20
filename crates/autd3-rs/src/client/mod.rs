@@ -4,7 +4,6 @@ mod controller;
 mod driver;
 mod exec_at;
 pub(crate) mod pool;
-mod transport;
 
 pub use completion::{ResponseFuture, StreamFuture};
 pub use config::{ClientConfig, MAX_DEVICES};
@@ -23,9 +22,8 @@ use crate::error::{Error, NetworkCause};
 use crate::firmware_version::FirmwareVersion;
 use crate::fpga_state::FpgaState;
 use crate::geometry::Geometry;
-use crate::link::Link;
 use crate::telemetry::Telemetry;
-use crate::udp::StateChecker;
+use crate::udp::{StateChecker, TransportOption};
 use crate::value::SysTime;
 
 pub struct Client {
@@ -34,20 +32,20 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn open(
-        geometry: &Geometry,
-        link: impl Into<Link>,
+    pub fn open<'a>(
+        geometry: &'a Geometry,
+        option: &TransportOption,
         config: ClientConfig,
-    ) -> impl Future<Output = Result<Self, Error>> + Send + '_ {
-        Box::pin(Self::open_impl(geometry, link.into(), config))
+    ) -> impl Future<Output = Result<Self, Error>> + Send + use<'a> {
+        Box::pin(Self::open_impl(geometry, option.clone(), config))
     }
 
     async fn open_impl(
         geometry: &Geometry,
-        link: Link,
+        option: TransportOption,
         config: ClientConfig,
     ) -> Result<Self, Error> {
-        let (controller, driver) = Controller::open(geometry, link, config)?;
+        let (controller, driver) = Controller::open(geometry, &option, config)?;
         let thread = std::thread::Builder::new()
             .name("autd3-io".into())
             .spawn(move || driver.run())

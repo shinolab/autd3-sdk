@@ -18,7 +18,7 @@ internal static class Sample
         ulong sendBuffer = 8192;
         var timerResolution = TimeSpan.FromMilliseconds(1);
         // ANCHOR: api
-        new UdpOption
+        new TransportOption
         {
             Iface = iface,
             Heartbeat = heartbeat,
@@ -36,7 +36,7 @@ internal static class Sample
         // ANCHOR: iface
         _ = Interface.Auto;
         _ = Interface.Name("eth0");
-        _ = Interface.Simulator(UdpOption.SimulatorPort);
+        _ = Interface.Simulator(TransportOption.SimulatorPort);
         _ = Interface.Addr("[::1]:44336");
         // ANCHOR_END: iface
     }

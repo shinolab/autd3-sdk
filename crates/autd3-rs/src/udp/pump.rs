@@ -12,26 +12,24 @@ struct HeartbeatWait {
     replied: u128,
 }
 
-pub struct Pump {
+pub(crate) struct Pump {
     bus: Arc<UdpBus>,
     heartbeat: Option<HeartbeatWait>,
 }
 
 impl Pump {
-    #[must_use]
-    pub fn new(bus: Arc<UdpBus>) -> Self {
+    pub(crate) fn new(bus: Arc<UdpBus>) -> Self {
         Self {
             bus,
             heartbeat: None,
         }
     }
 
-    #[must_use]
-    pub fn bus(&self) -> &Arc<UdpBus> {
+    pub(crate) fn bus(&self) -> &Arc<UdpBus> {
         &self.bus
     }
 
-    pub fn recv(&mut self) -> Result<Option<Reply>, UdpError> {
+    pub(crate) fn recv(&mut self) -> Result<Option<Reply>, UdpError> {
         loop {
             let Some(reply) = self.bus.recv(Instant::now())? else {
                 return Ok(None);
@@ -56,7 +54,7 @@ impl Pump {
         true
     }
 
-    pub fn maintain(&mut self, now: Instant, active: bool) -> Result<Option<Instant>, UdpError> {
+    pub(crate) fn maintain(&mut self, now: Instant) -> Result<Option<Instant>, UdpError> {
         if let Some(wait) = &self.heartbeat
             && wait.deadline.is_some_and(|deadline| now >= deadline)
         {
@@ -69,7 +67,7 @@ impl Pump {
             }
             self.heartbeat = None;
         }
-        let interval = self.bus.heartbeat_interval().filter(|_| active);
+        let interval = self.bus.heartbeat_interval();
         if let Some(interval) = interval
             && self.heartbeat.is_none()
             && now.saturating_duration_since(self.bus.last_send()) >= interval
@@ -92,8 +90,7 @@ impl Pump {
         .min())
     }
 
-    #[must_use]
-    pub fn settle_recovery(&self, now: Instant) -> Option<u128> {
+    pub(crate) fn settle_recovery(&self, now: Instant) -> Option<u128> {
         self.bus.settle_recovery(now)
     }
 }

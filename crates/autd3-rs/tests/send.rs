@@ -3,8 +3,9 @@ mod common;
 use std::time::Duration;
 
 use autd3_rs::commands::{Distribution, ForceFan, Modulation, Nop, each};
+use autd3_rs::protocol::{Cmd, PAYLOAD_BYTES};
 use autd3_rs::value::SamplingConfig;
-use autd3_rs::{ClientConfig, Error, ExecAt, Frames, PayloadError, Version};
+use autd3_rs::{ClientConfig, Datagram, Error, ExecAt, Frame, Frames, PayloadError, Version};
 use autd3_rs_firmware_emulator::autd3_cpu_fw::{
     FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH,
 };
@@ -367,6 +368,91 @@ async fn a_frame_encoded_for_another_geometry_is_rejected_before_it_is_sent() {
         })
     ));
     assert_eq!(client.bus_stats().frames(), before);
+    client.close().await.unwrap();
+}
+
+#[tokio::test]
+#[ignore = "depends on real time"]
+async fn a_frame_rebuilt_from_its_datagrams_is_sent_like_the_original() {
+    let (emulator, client) = open(2).await;
+    let frames = Frames::encode(
+        client.geometry(),
+        each(|device| (device.idx() == 1).then_some(ForceFan { value: true })),
+    )
+    .unwrap();
+    let encoded = frames.frame(0).unwrap();
+    let datagrams = encoded.datagrams().to_vec();
+
+    client
+        .send_frame(Frame::new(encoded.distribution(), &datagrams))
+        .await
+        .unwrap()
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
+
+    assert_eq!(fans(&emulator), [false, true]);
+    client.close().await.unwrap();
+}
+
+#[tokio::test]
+#[ignore = "depends on real time"]
+async fn a_frame_built_with_malformed_datagrams_is_rejected_before_it_is_sent() {
+    let (_emulator, client) = open(2).await;
+    let nop = Datagram::no_payload(Cmd::Nop);
+    let before = client.bus_stats().frames();
+
+    let broadcast = client
+        .send_frame(Frame::new(
+            Distribution::Broadcast,
+            &[nop.clone(), nop.clone()],
+        ))
+        .await
+        .err()
+        .unwrap();
+    let per_device = client
+        .send_frame(Frame::new(
+            Distribution::PerDevice,
+            std::slice::from_ref(&nop),
+        ))
+        .await
+        .err()
+        .unwrap();
+    let oversized = Datagram {
+        payload_len: PAYLOAD_BYTES + 1,
+        ..nop.clone()
+    };
+    let too_long = client
+        .send_frame(Frame::new(Distribution::PerDevice, &[nop, oversized]))
+        .await
+        .err()
+        .unwrap();
+
+    assert!(matches!(
+        broadcast,
+        Error::InvalidPayload(PayloadError::DatagramCountMismatch {
+            expected: 1,
+            got: 2
+        })
+    ));
+    assert!(matches!(
+        per_device,
+        Error::InvalidPayload(PayloadError::DatagramCountMismatch {
+            expected: 2,
+            got: 1
+        })
+    ));
+    assert!(matches!(
+        too_long,
+        Error::InvalidPayload(PayloadError::DatagramPayloadTooLong {
+            index: 1,
+            len,
+            max: PAYLOAD_BYTES
+        }) if len == PAYLOAD_BYTES + 1
+    ));
+    assert_eq!(client.bus_stats().frames(), before);
+    client.send(Nop).await.unwrap();
     client.close().await.unwrap();
 }
 

@@ -18,7 +18,7 @@ async def main() -> None:
 
     geometry = Geometry([Autd3([0.0, 0.0, 0.0])])
 
-    client = await autd3.Client.open(geometry, autd3.UdpOption(), autd3.ClientConfig())
+    client = await autd3.Client.open(geometry, autd3.TransportOption(), autd3.ClientConfig())
     checker = client.state_checker()
 
     async with client:

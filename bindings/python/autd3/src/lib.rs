@@ -41,7 +41,6 @@ fn _autd3(m: &Bound<'_, PyModule>) -> PyResult<()> {
         "ROTATION_NORM_TOLERANCE",
         autd3_rs::Autd3::ROTATION_NORM_TOLERANCE,
     )?;
-    m.add("SERVER_PORT", autd3_rs::SERVER_PORT)?;
     m.add("SIMULATOR_PORT", autd3_rs::SIMULATOR_PORT)?;
     m.add("PORT", autd3_rs::udp::PORT)?;
     m.add("DEVICE_QUEUE_FRAMES", autd3_rs::udp::DEVICE_QUEUE_FRAMES)?;
@@ -58,8 +57,7 @@ fn _autd3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<client::StreamFuture>()?;
     m.add_class::<client::DeviceStatus>()?;
     m.add_class::<udp::Interface>()?;
-    m.add_class::<udp::UdpOption>()?;
-    m.add_class::<udp::ServerLink>()?;
+    m.add_class::<udp::TransportOption>()?;
     m.add_class::<udp::UdpEmulator>()?;
     m.add_class::<client::FpgaState>()?;
     m.add_class::<client::Telemetry>()?;

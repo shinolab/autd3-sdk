@@ -34,8 +34,8 @@ use autd3_rs::value::{
 };
 use autd3_rs::{
     BusStats, Client, ClientConfig, DeviceState, Error, ExecAt, FirmwareVersion, FpgaState, Frames,
-    Geometry, Length, Link, NetworkCause, Point3, Response, ResponseFuture, StreamFuture,
-    Telemetry, UnitVector3, Vector3, Velocity,
+    Geometry, Length, NetworkCause, Point3, Response, ResponseFuture, StreamFuture, Telemetry,
+    UnitVector3, Vector3, Velocity,
 };
 
 pub(crate) fn executor() -> &'static Executor {
@@ -532,11 +532,6 @@ pub extern "C" fn autd3_params_max_devices() -> usize {
 #[unsafe(no_mangle)]
 pub extern "C" fn autd3_params_pwe_table_size() -> usize {
     PWE_TABLE_SIZE
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn autd3_params_server_port() -> u16 {
-    autd3_rs::SERVER_PORT
 }
 
 #[unsafe(no_mangle)]
@@ -2075,7 +2070,7 @@ fn frame_at(frames: &Frames, index: usize) -> Result<autd3_rs::Frame<'_>, Error>
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_client_open(
     geometry: *const Geometry,
-    option: *mut udp::UdpOptionHandle,
+    option: *mut udp::TransportOptionHandle,
     config: *const ClientConfig,
     cb: CompletionCallback,
     user_data: *mut c_void,
@@ -2084,38 +2079,10 @@ pub unsafe extern "C" fn autd3_client_open(
     let Some(ctx) = CompletionCtx::new(cb, user_data) else {
         return;
     };
-    let Some(udp::UdpOptionHandle(option)) = option else {
+    let Some(udp::TransportOptionHandle(option)) = option else {
         ctx.invalid_argument("null argument");
         return;
     };
-    unsafe { open_client(geometry, Link::Udp(option), config, ctx) };
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_open_server(
-    geometry: *const Geometry,
-    link: *mut udp::ServerLinkHandle,
-    config: *const ClientConfig,
-    cb: CompletionCallback,
-    user_data: *mut c_void,
-) {
-    let link = unsafe { take_handle(link) };
-    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
-        return;
-    };
-    let Some(udp::ServerLinkHandle(link)) = link else {
-        ctx.invalid_argument("null argument");
-        return;
-    };
-    unsafe { open_client(geometry, Link::Server(link), config, ctx) };
-}
-
-unsafe fn open_client(
-    geometry: *const Geometry,
-    link: Link,
-    config: *const ClientConfig,
-    ctx: CompletionCtx,
-) {
     let (Some(geometry), Some(config)) = (unsafe { handle_ref(geometry) }, unsafe {
         handle_ref::<ClientConfig>(config)
     }) else {
@@ -2135,7 +2102,7 @@ unsafe fn open_client(
     let config = *config;
     spawn_completion(
         ctx,
-        async move { Client::open(&geometry, link, config).await },
+        async move { Client::open(&geometry, &option, config).await },
         |client| into_handle(ClientHandle(Arc::new(client))).cast(),
     );
 }
@@ -2943,7 +2910,6 @@ mod tests {
 
     #[test]
     fn the_client_constants_match_the_rust_constants() {
-        assert_eq!(autd3_rs::SERVER_PORT, autd3_params_server_port());
         assert_eq!(autd3_rs::SIMULATOR_PORT, autd3_params_simulator_port());
         assert_eq!(
             FociStmOption::default().sound_speed.m_s(),

@@ -81,20 +81,13 @@ fn answers(target: Target, name: &str, response_timeout: Duration) -> bool {
     }
 }
 
-pub(crate) fn resolve_with(
-    iface: &Interface,
-    response_timeout: Duration,
-    allow_simulator: bool,
-) -> Result<Target, UdpError> {
+pub(crate) fn resolve(iface: &Interface, response_timeout: Duration) -> Result<Target, UdpError> {
     match iface {
         Interface::Addr(addr) => Ok(Target {
             group: *addr,
             scope: (addr.scope_id() != 0).then_some(addr.scope_id()),
             simulator_control: None,
         }),
-        Interface::Simulator(_) if !allow_simulator => {
-            Err(UdpError::UnsupportedInterface(iface.clone()))
-        }
         Interface::Simulator(port) => {
             let simulator = Simulator::at(*port)
                 .map(Target::simulator)
@@ -110,34 +103,29 @@ pub(crate) fn resolve_with(
             .find(|c| c.name == *name)
             .map(Target::interface)
             .ok_or_else(|| UdpError::InterfaceNotFound(name.clone())),
-        Interface::Auto => resolve_auto(
-            response_timeout,
-            allow_simulator.then_some(Target::simulator(Simulator::DEFAULT)),
-        ),
+        Interface::Auto => resolve_auto(response_timeout, Target::simulator(Simulator::DEFAULT)),
         _ => unreachable!(),
     }
 }
 
-fn resolve_auto(response_timeout: Duration, simulator: Option<Target>) -> Result<Target, UdpError> {
+fn resolve_auto(response_timeout: Duration, simulator: Target) -> Result<Target, UdpError> {
     let candidates = link_local_interfaces()?;
     let (simulator_answered, answered): (bool, Vec<bool>) = std::thread::scope(|s| {
-        let simulator_probe = simulator
-            .map(|simulator| s.spawn(move || answers(simulator, "simulator", response_timeout)));
+        let simulator_probe = s.spawn(move || answers(simulator, "simulator", response_timeout));
         let probes: Vec<_> = candidates
             .iter()
             .map(|c| s.spawn(move || answers(Target::interface(c), &c.name, response_timeout)))
             .collect();
         (
-            simulator_probe.is_some_and(|probe| probe.join().unwrap_or(false)),
+            simulator_probe.join().unwrap_or(false),
             probes
                 .into_iter()
                 .map(|probe| probe.join().unwrap_or(false))
                 .collect(),
         )
     });
-    let answering: Vec<(String, Target)> = simulator
-        .filter(|_| simulator_answered)
-        .map(|simulator| ("simulator".to_owned(), simulator))
+    let answering: Vec<(String, Target)> = simulator_answered
+        .then(|| ("simulator".to_owned(), simulator))
         .into_iter()
         .chain(
             candidates
@@ -176,13 +164,9 @@ mod tests {
     #[test]
     fn the_address_of_the_simulator_given_directly_is_not_a_simulator() {
         assert_eq!(
-            resolve_with(
-                &Interface::Addr(Simulator::DEFAULT.group),
-                RESPONSE_TIMEOUT,
-                true
-            )
-            .unwrap()
-            .simulator_control,
+            resolve(&Interface::Addr(Simulator::DEFAULT.group), RESPONSE_TIMEOUT)
+                .unwrap()
+                .simulator_control,
             None
         );
     }
@@ -191,7 +175,7 @@ mod tests {
     fn a_scoped_address_sends_through_its_interface() {
         let scoped = SocketAddrV6::new(Ipv6Addr::from(ALL_NODES), PORT, 0, 7);
         assert_eq!(
-            resolve_with(&Interface::Addr(scoped), RESPONSE_TIMEOUT, true).unwrap(),
+            resolve(&Interface::Addr(scoped), RESPONSE_TIMEOUT).unwrap(),
             Target {
                 group: scoped,
                 scope: Some(7),
@@ -255,18 +239,10 @@ mod tests {
     }
 
     #[test]
-    fn a_bus_for_the_devices_only_refuses_the_simulator() {
-        assert!(matches!(
-            resolve_with(&Interface::Simulator(44336), RESPONSE_TIMEOUT, false),
-            Err(UdpError::UnsupportedInterface(Interface::Simulator(44336)))
-        ));
-    }
-
-    #[test]
     fn a_simulator_port_without_a_control_port_is_refused() {
         for port in [0, u16::MAX] {
             assert!(matches!(
-                resolve_with(&Interface::Simulator(port), RESPONSE_TIMEOUT, true),
+                resolve(&Interface::Simulator(port), RESPONSE_TIMEOUT),
                 Err(UdpError::InvalidSimulatorPort(p)) if p == port
             ));
         }

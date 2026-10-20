@@ -63,7 +63,7 @@ The following example uses `AsyncFd` of tokio to run on a single-threaded tokio 
 When running on a single thread, that thread is blocked during the following, and no other task makes progress.
 
 - `Controller::open` (waiting for the device enumeration and the synchronization)
-- Waiting to send when `send_rate_limit` of [`UdpOption`](/autd3-sdk/en/api/basics/transport-option/) is set
+- Waiting to send when `send_rate_limit` of [`TransportOption`](/autd3-sdk/en/api/basics/transport-option/) is set
 - Waiting for the socket send buffer to drain
 :::
 

@@ -41,4 +41,4 @@ AUTD3 SDK は次の層から構成される.
 - **Pattern** — 各振動子の位相と振幅 (位相バッファ・振幅バッファ) を束ねたもの. 
 - **Modulation** — 出力振幅を時間方向に変調する (AM). 
 - **STM** — Pattern をハードウェアタイマにより切り替える機能. 
-- **Client** — 上記をPattern/Modulationなどのデータを, UDP でデバイスへ送信する. 接続先は `UdpOption` (実機・デバイスエミュレータ・Simulator へ直接つなぐ) か `ServerLink` ([Server](/autd3-sdk/guide/server/) 経由でつなぐ) で指定する. 
+- **Client** — 上記をPattern/Modulationなどのデータを, UDP でデバイスへ送信する. 接続先は `TransportOption` (実機・デバイスエミュレータ・Simulator) で指定する. 

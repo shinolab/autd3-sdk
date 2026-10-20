@@ -1,5 +1,5 @@
 ---
-title: UdpOption
+title: TransportOption
 description: UDP/IPv6 リンクローカルで AUTD3 と直接通信する
 sidebar:
   order: 1
@@ -32,7 +32,7 @@ import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
 
 Python の既定値は Rust と同じ具体値で, 型が `Option` の項目だけ `None` (無効) を渡せる. それ以外の項目に `None` を渡すと `TypeError` になる.
 C# では型が `Option` の項目を `null` にすると無効になる.
-`send_buffer` の `0` は, Python では `UdpOption` を作るときに `ValueError`, C# では `Client` を開くときに `Autd3Exception` (`InvalidArgument`) になる (Rust は `NonZeroUsize` の型で `0` を渡せない).
+`send_buffer` の `0` は, Python では `TransportOption` を作るときに `ValueError`, C# では `Client` を開くときに `Autd3Exception` (`InvalidArgument`) になる (Rust は `NonZeroUsize` の型で `0` を渡せない).
 
 ## Interface
 

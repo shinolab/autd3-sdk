@@ -18,6 +18,8 @@ export default defineConfig({
     "/en/api/link/udp": "/autd3-sdk/en/api/basics/transport-option/",
     "/api/link/remote": "/autd3-sdk/guide/simulator/",
     "/en/api/link/remote": "/autd3-sdk/en/guide/simulator/",
+    "/guide/server": "/autd3-sdk/api/basics/client/",
+    "/en/guide/server": "/autd3-sdk/en/api/basics/client/",
   },
   vite: {
     resolve: {

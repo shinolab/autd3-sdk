@@ -11,7 +11,7 @@ use autd3_rs::commands::{Command, FixedCompletionTime, Pattern, SetSilencer};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::rt::{LogWriter, TracingOption, init_tracing};
 use autd3_rs::value::Intensity;
-use autd3_rs::{Client, ClientConfig, Error, Frames, Interface, StateChecker, UdpOption};
+use autd3_rs::{Client, ClientConfig, Error, Frames, Interface, StateChecker, TransportOption};
 
 use crate::cli::Cli;
 use crate::io::{check, prompt, wait_enter};
@@ -30,7 +30,7 @@ pub struct Ctx<'a> {
 
 pub struct Link<'a> {
     pub geometry: &'a Geometry,
-    pub option: &'a UdpOption,
+    pub option: &'a TransportOption,
     pub config: ClientConfig,
     pub mute: bool,
 }
@@ -186,8 +186,8 @@ async fn run(cli: &Cli) -> Result<()> {
     let geometry = Geometry::new((0..cli.devices).map(|_| Autd3::default()));
     let heartbeat = Duration::from_micros(cli.heartbeat_us);
 
-    let default = UdpOption::default();
-    let option = UdpOption {
+    let default = TransportOption::default();
+    let option = TransportOption {
         iface: match cli.simulator {
             Some(port) => Interface::Simulator(port),
             None => cli.interface.clone().into(),

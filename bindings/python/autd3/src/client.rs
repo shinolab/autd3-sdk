@@ -493,14 +493,14 @@ impl Client {
     fn open<'py>(
         py: Python<'py>,
         geometry: &Bound<'py, PyAny>,
-        link: &Bound<'py, PyAny>,
+        option: &crate::udp::TransportOption,
         config: &ClientConfig,
     ) -> PyResult<Bound<'py, PyAny>> {
         let geometry = geometry_from_capsule(&capsule_of(geometry)?)?.clone();
-        let link = crate::udp::extract_link(link)?;
+        let option = option.0.clone();
         let config = config.0;
         future_into_py(py, async move {
-            let client = autd3_rs::Client::open(&geometry, link, config)
+            let client = autd3_rs::Client::open(&geometry, &option, config)
                 .await
                 .map_err(client_pyerr_gil)?;
             Ok(Client {

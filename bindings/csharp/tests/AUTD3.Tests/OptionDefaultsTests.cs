@@ -219,8 +219,7 @@ namespace AUTD3.Tests
 
         [Theory]
         [InlineData(typeof(ClientConfig))]
-        [InlineData(typeof(UdpOption))]
-        [InlineData(typeof(ServerLink))]
+        [InlineData(typeof(TransportOption))]
         [InlineData(typeof(CpuConfig))]
         [InlineData(typeof(PtpConfig))]
         [InlineData(typeof(FpgaConfig))]
@@ -249,7 +248,7 @@ namespace AUTD3.Tests
         public void TheDefaultValueCarriesTheRustDefaults()
         {
             Assert.Equal(7u, default(ClientConfig).MaxInflight);
-            Assert.Equal(TimeSpan.FromMilliseconds(100), default(UdpOption).LostTimeout);
+            Assert.Equal(TimeSpan.FromMilliseconds(100), default(TransportOption).LostTimeout);
             Assert.Equal(new PtpConfig().SyncInterval, default(CpuConfig).Ptp.SyncInterval);
             Assert.NotEqual(TimeSpan.Zero, default(PtpConfig).SyncInterval);
             Assert.Equal((byte)0xFF, default(SineOption).Amplitude);
