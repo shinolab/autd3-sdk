@@ -41,7 +41,6 @@ async def main() -> None:
 
         await stop_and_wait(client, geometry, targets, wavelength)
         await streaming(client, geometry, targets, wavelength)
-        await client.silent_stop()
 
 
 async def stop_and_wait(client, geometry, targets, wavelength) -> None:

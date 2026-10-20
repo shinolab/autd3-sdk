@@ -35,7 +35,6 @@ async def main() -> None:
     done = await client.send_streaming(Nop())
     resp = await (await client.send_frame(frame))
 
-    await client.silent_stop()
     await client.close()
     # ANCHOR_END: api
 

@@ -46,10 +46,7 @@ async def main() -> None:
         await client.send(Pattern(phases, Intensity.MAX))
         await client.send(Modulation(sampling_config, mod_buf))
 
-        try:
-            await asyncio.Event().wait()
-        finally:
-            await client.silent_stop()
+        await asyncio.Event().wait()
 
 
 if __name__ == "__main__":

@@ -270,7 +270,7 @@ async fn halts(ctx: &Ctx<'_>, target: usize) -> Result<()> {
     .await;
     ctx.send(Clear).await?;
     ctx.send(Synchronize).await?;
-    ctx.client.silent_stop().await?;
+    ctx.stop_output().await?;
     outcome
 }
 

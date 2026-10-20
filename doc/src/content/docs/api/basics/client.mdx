@@ -60,11 +60,9 @@ import csServerSample from "@codes/csharp/examples/api/connection/server-link.cs
 | `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | フレームを 1 つ送る                                        |
 | `send_frame_at(frame, exec)` | ✓  | `Result<ResponseFuture, Error>`       | 処理時刻を指定してフレームを 1 つ送る ([処理時刻の上書き](#処理時刻の上書き) 参照) |
 | `state_checker()`         | —     | `StateChecker`                         | `StateChecker`を取得. 詳細は[状態監視](/autd3-sdk/guide/state-check/)を参照. |
-| `silent_stop()`           | ✓     | `Result<(), Error>`                   | Silencer を設定してから全振動子を停止                      |
 | `close()`                 | ✓     | `Result<(), Error>`                   | 停止して接続を閉じる                                       |
 
-`silent_stop()` は, 振幅を一気に落としてノイズが出るのを避けるため, まず [Silencer](/autd3-sdk/api/command/silencer/) を設定してから全振動子の振幅を 0 にする.
-Silencer の設定は上書きされたままになるので, 別の設定で出力を再開する場合は `SetSilencer` を送り直すこと.
+`close()` は, 振幅を一気に落としてノイズが出るのを避けるため, まず [Silencer](/autd3-sdk/api/command/silencer/) を設定してから全振動子の振幅を 0 にし, その後に接続を閉じる.
 
 ## 読み出し結果の型
 

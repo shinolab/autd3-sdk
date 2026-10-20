@@ -35,8 +35,6 @@ internal static class Sample
 
         await StopAndWait(client, geometry, targets, wavelength);
         await Streaming(client, geometry, targets, wavelength);
-
-        await client.SilentStopAsync();
     }
 
     private static async Task StopAndWait(Client client, Geometry geometry, Vector3[] targets, Length wavelength)

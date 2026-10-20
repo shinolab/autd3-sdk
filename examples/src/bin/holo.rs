@@ -65,7 +65,6 @@ async fn main() -> Result<()> {
     println!("emitting two GSPAT foci with a 200 Hz AM — press Ctrl+C to stop");
     tokio::signal::ctrl_c().await?;
 
-    client.silent_stop().await?;
     client.close().await?;
     Ok(())
 }

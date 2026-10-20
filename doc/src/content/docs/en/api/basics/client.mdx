@@ -60,11 +60,9 @@ To continuously monitor the operating state of the devices, drive the `StateChec
 | `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | Send one frame                                             |
 | `send_frame_at(frame, exec)` | ✓  | `Result<ResponseFuture, Error>`       | Send one frame at a given processing time (see [Overriding the processing time](#overriding-the-processing-time)) |
 | `state_checker()`         | —     | `StateChecker`                        | Get a `StateChecker`. See [State Monitoring](/autd3-sdk/en/guide/state-check/) for details. |
-| `silent_stop()`           | ✓     | `Result<(), Error>`                   | Set the Silencer, then stop all transducers                |
 | `close()`                 | ✓     | `Result<(), Error>`                   | Stop and close the connection                              |
 
-To avoid the noise of dropping the amplitude at once, `silent_stop()` first sets the [Silencer](/autd3-sdk/en/api/command/silencer/) and then drives every transducer to zero amplitude.
-The Silencer setting stays overwritten, so send `SetSilencer` again before resuming the output with a different setting.
+To avoid the noise of dropping the amplitude at once, `close()` first sets the [Silencer](/autd3-sdk/en/api/command/silencer/), then drives every transducer to zero amplitude, and then closes the connection.
 
 ## Types of the Read Results
 

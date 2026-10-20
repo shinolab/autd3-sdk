@@ -756,9 +756,6 @@ namespace AUTD3
             }
         }
 
-        public Task SilentStopAsync() =>
-            AsyncOps.InvokeAsync((cb, ud) => NativeClient.autd3_client_silent_stop(Handle, cb, ud));
-
         public Task CloseAsync() =>
             AsyncOps.InvokeAsync((cb, ud) => NativeClient.autd3_client_close(Handle, cb, ud));
 

@@ -15,7 +15,7 @@ use crate::cases::pattern_util::{activate_mod_bank, expect_firmware_error, expec
 use crate::cases::{ERR_FPGA_TIMEOUT, ERR_INVALID_PAYLOAD, ERR_MISS_TRANSITION_TIME};
 
 pub(crate) async fn silence(ctx: &Ctx<'_>) -> Result<()> {
-    ctx.client.silent_stop().await?;
+    ctx.stop_output().await?;
     let masks: Vec<Vec<bool>> = ctx
         .geometry
         .iter()
@@ -365,6 +365,6 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     }
     .await;
     ctx.send(Clear).await?;
-    ctx.client.silent_stop().await?;
+    ctx.stop_output().await?;
     outcome
 }

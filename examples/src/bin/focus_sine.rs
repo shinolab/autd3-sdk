@@ -50,7 +50,6 @@ async fn main() -> Result<()> {
     );
     tokio::signal::ctrl_c().await?;
 
-    client.silent_stop().await?;
     client.close().await?;
     Ok(())
 }

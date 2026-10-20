@@ -7,9 +7,10 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use clap::Parser;
 
-use autd3_rs::commands::Command;
+use autd3_rs::commands::{Command, FixedCompletionTime, Pattern, SetSilencer};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::rt::{LogWriter, TracingOption, init_tracing};
+use autd3_rs::value::Intensity;
 use autd3_rs::{Client, ClientConfig, Error, Frames, Interface, StateChecker, UdpOption};
 
 use crate::cli::Cli;
@@ -90,6 +91,16 @@ impl Ctx<'_> {
     pub async fn send<'a, C: Command<'a>>(&self, cmd: C) -> Result<()> {
         self.send_frames(&Frames::encode(self.client.geometry(), cmd)?)
             .await
+    }
+
+    pub async fn stop_output(&self) -> Result<()> {
+        self.send(SetSilencer::new(FixedCompletionTime {
+            strict_mode: false,
+            ..Default::default()
+        }))
+        .await?;
+        let phases = self.client.geometry().phase_buffer();
+        self.send(Pattern::new(&phases, Intensity::MIN)).await
     }
 }
 
@@ -363,8 +374,7 @@ async fn report_exec_late(client: &Client) {
 }
 
 async fn reset(ctx: &Ctx<'_>) -> Result<()> {
-    use autd3_rs::commands::{Clear, Pattern, SetSilencer};
-    use autd3_rs::value::Intensity;
+    use autd3_rs::commands::Clear;
     use autd3_rs_pattern::set_intensity;
 
     let phases = ctx.geometry.phase_buffer();

@@ -569,13 +569,6 @@ impl Client {
         })
     }
 
-    fn silent_stop<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let client = Arc::clone(&self.inner);
-        future_into_py(py, async move {
-            client.silent_stop().await.map_err(client_pyerr_gil)
-        })
-    }
-
     fn close<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let client = Arc::clone(&self.inner);
         future_into_py(

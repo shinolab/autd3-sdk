@@ -43,7 +43,6 @@ async fn main() -> Result<()> {
     let done = client.send_streaming(Nop).await?;
     let resp = client.send_frame(frame).await?.await?;
 
-    client.silent_stop().await?;
     client.close().await?;
     // ANCHOR_END: api
 

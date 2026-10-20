@@ -481,7 +481,7 @@ impl Controller {
         })
     }
 
-    pub async fn silent_stop(&self) -> Result<(), Error> {
+    async fn silent_stop(&self) -> Result<(), Error> {
         tracing::debug!("sending silent stop");
         let silenced = self
             .send(SetSilencer::new(FixedCompletionTime {

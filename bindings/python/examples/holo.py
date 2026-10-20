@@ -56,8 +56,6 @@ async def main() -> None:
             loop.add_signal_handler(sig, stop.set)
         await stop.wait()
 
-        await client.silent_stop()
-
 
 if __name__ == "__main__":
     asyncio.run(main())
