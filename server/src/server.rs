@@ -167,8 +167,8 @@ fn relay(hub: &Hub, session: &Session, request: Request<'_>) {
                     let bus_msg_id = bus.reserve_msg_id();
                     lock(&session.ids).remember(bus_msg_id, msg_id);
                     match (broadcast, frames.first()) {
-                        (true, Some(frame)) => bus.send_broadcast_as(bus_msg_id, frame),
-                        _ => bus.send_as(bus_msg_id, &frames),
+                        (true, Some(frame)) => bus.broadcast(bus_msg_id, frame),
+                        _ => bus.send(bus_msg_id, &frames),
                     }
                 }
                 None => Err(UdpError::Closed),

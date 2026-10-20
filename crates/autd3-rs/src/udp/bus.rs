@@ -240,11 +240,7 @@ impl UdpBus {
         self.msg_id.fetch_add(1, Ordering::Relaxed).wrapping_add(1)
     }
 
-    pub fn send<F: AsRef<[u8]>>(&self, frames: &[F]) -> Result<Sent, UdpError> {
-        self.send_as(self.reserve_msg_id(), frames)
-    }
-
-    pub fn send_as<F: AsRef<[u8]>>(&self, msg_id: u16, frames: &[F]) -> Result<Sent, UdpError> {
+    pub fn send<F: AsRef<[u8]>>(&self, msg_id: u16, frames: &[F]) -> Result<Sent, UdpError> {
         self.ensure_open()?;
         if frames.len() != self.units.len() {
             return Err(UdpError::FrameCountMismatch {
@@ -264,11 +260,7 @@ impl UdpBus {
         })
     }
 
-    pub fn send_broadcast(&self, frame: &[u8]) -> Result<Sent, UdpError> {
-        self.send_broadcast_as(self.reserve_msg_id(), frame)
-    }
-
-    pub fn send_broadcast_as(&self, msg_id: u16, frame: &[u8]) -> Result<Sent, UdpError> {
+    pub fn broadcast(&self, msg_id: u16, frame: &[u8]) -> Result<Sent, UdpError> {
         self.ensure_open()?;
         if !(size_of::<FrameHeader>()..=FRAME_BYTES_MAX).contains(&frame.len()) {
             return Err(UdpError::InvalidFrameLength(frame.len()));
