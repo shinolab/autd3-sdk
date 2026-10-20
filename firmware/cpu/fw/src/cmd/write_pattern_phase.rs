@@ -95,7 +95,6 @@ mod tests {
             .flat_map(|g| (0..NUM_TRANSDUCERS).map(move |t| bits8_phase(g, t)))
             .collect();
         h.deliver(&write_pattern_phase(
-            0,
             1,
             5,
             PhaseDepth::Bits8 as u8,
@@ -124,7 +123,6 @@ mod tests {
 
         let count = PhaseDepth::Bits4.max_count();
         h.deliver(&write_pattern_phase(
-            0,
             0,
             7,
             PhaseDepth::Bits4 as u8,
@@ -158,7 +156,6 @@ mod tests {
         let count = depth.max_count();
         let data = vec![0x21u8; count * depth.bytes_per_pattern()];
         h.deliver(&write_pattern_phase(
-            0,
             1,
             5,
             depth as u8,
@@ -200,7 +197,6 @@ mod tests {
         h.port.ram_switches.clear();
         h.port.barriers = 0;
         h.deliver(&write_pattern_phase(
-            0,
             1,
             first as u16,
             depth as u8,
@@ -224,7 +220,6 @@ mod tests {
         for g in 0..count {
             let pattern = &data[g * depth.bytes_per_pattern()..][..depth.bytes_per_pattern()];
             reference.deliver(&write_pattern_phase(
-                g as u8,
                 1,
                 (first + g) as u16,
                 depth as u8,
@@ -256,7 +251,6 @@ mod tests {
 
         h.deliver(&write_pattern_phase(
             0,
-            0,
             2,
             PhaseDepth::Bits8 as u8,
             1,
@@ -279,7 +273,6 @@ mod tests {
         let before = fpga_snapshot(&h);
 
         h.deliver(&write_pattern_phase(
-            0,
             invalid_bank(),
             0,
             bits8,
@@ -289,18 +282,17 @@ mod tests {
         ));
         assert_eq!(h.status(), Error::InvalidPayload);
 
-        h.deliver(&write_pattern_phase(1, 0, 0, 0, 1, 0xFF, &one));
+        h.deliver(&write_pattern_phase(0, 0, 0, 1, 0xFF, &one));
         assert_eq!(h.status(), Error::InvalidPayload);
 
-        h.deliver(&write_pattern_phase(2, 0, 0, 3, 1, 0xFF, &one));
+        h.deliver(&write_pattern_phase(0, 0, 3, 1, 0xFF, &one));
         assert_eq!(h.status(), Error::InvalidPayload);
 
-        h.deliver(&write_pattern_phase(3, 0, 0, bits8, 0, 0xFF, &[]));
+        h.deliver(&write_pattern_phase(0, 0, bits8, 0, 0xFF, &[]));
         assert_eq!(h.status(), Error::InvalidPayload);
 
         let bits8_full = vec![0x12u8; PhaseDepth::Bits8.max_count() * NUM_TRANSDUCERS];
         h.deliver(&write_pattern_phase(
-            4,
             0,
             0,
             bits8,
@@ -312,7 +304,6 @@ mod tests {
 
         let bits4_full = pack_bits4(PhaseDepth::Bits4.max_count());
         h.deliver(&write_pattern_phase(
-            5,
             0,
             0,
             PhaseDepth::Bits4 as u8,
@@ -324,7 +315,6 @@ mod tests {
 
         let two = [0x12u8; 2 * NUM_TRANSDUCERS];
         h.deliver(&write_pattern_phase(
-            6,
             0,
             u16::try_from(EMISSION_MAX_INDICES - 1).unwrap(),
             bits8,
@@ -334,7 +324,7 @@ mod tests {
         ));
         assert_eq!(h.status(), Error::InvalidPayload);
 
-        h.deliver(&write_pattern_phase(7, 0, u16::MAX, bits8, 1, 0xFF, &one));
+        h.deliver(&write_pattern_phase(0, u16::MAX, bits8, 1, 0xFF, &one));
         assert_eq!(h.status(), Error::InvalidPayload);
 
         assert_fpga_unchanged(&before, &h);
@@ -349,7 +339,6 @@ mod tests {
         h.deliver(&write_pattern_phase(
             0,
             0,
-            0,
             bits8,
             1,
             0xFF,
@@ -358,7 +347,6 @@ mod tests {
         assert_eq!(h.status(), Error::InvalidPayload);
 
         h.deliver(&write_pattern_phase(
-            1,
             0,
             0,
             bits8,
@@ -369,7 +357,6 @@ mod tests {
         assert_eq!(h.status(), Error::InvalidPayload);
 
         h.deliver(&write_pattern_phase(
-            2,
             0,
             0,
             PhaseDepth::Bits4 as u8,

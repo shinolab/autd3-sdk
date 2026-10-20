@@ -51,7 +51,6 @@ async fn a_user_thread_polling_and_waiting_drives_the_controller() {
     let (controller, driver) = open(&emulator, &option(&emulator));
     let thread = drive(driver);
 
-    controller.initialize().await.unwrap();
     controller.send(ForceFan { value: true }).await.unwrap();
     assert_eq!(fans(&emulator), [true, true]);
     assert_eq!(controller.read_firmware_version().await.unwrap().len(), 2);
@@ -70,7 +69,6 @@ fn one_thread_can_run_both_the_controller_and_the_driver() {
     let emulator = emulator(2);
     let (controller, mut driver) = open(&emulator, &option(&emulator));
 
-    drive_until_ready(&mut driver, controller.initialize()).unwrap();
     drive_until_ready(&mut driver, controller.send(ForceFan { value: true })).unwrap();
     let telemetry = drive_until_ready(&mut driver, controller.read_telemetry()).unwrap();
     drive_until_ready(&mut driver, controller.close()).unwrap();
@@ -78,20 +76,6 @@ fn one_thread_can_run_both_the_controller_and_the_driver() {
     assert_eq!(telemetry.len(), 2);
     assert_eq!(fans(&emulator), [true, true]);
     assert!(matches!(driver.poll(), Ok(None)));
-}
-
-#[test]
-#[ignore = "depends on real time"]
-fn a_controller_resynchronizes_by_itself_when_initialize_is_skipped() {
-    let emulator = emulator(1);
-    let (controller, mut driver) = open(&emulator, &option(&emulator));
-    assert_eq!(controller.bus_stats().resets(), 0);
-
-    drive_until_ready(&mut driver, controller.send(ForceFan { value: true })).unwrap();
-
-    assert_eq!(controller.bus_stats().resets(), 1);
-    assert_eq!(controller.bus_stats().frames(), 1);
-    assert_eq!(fans(&emulator), [true]);
 }
 
 #[test]
@@ -112,7 +96,6 @@ fn dropping_the_driver_fails_the_frames_in_flight_and_later_sends_with_closed() 
     let emulator = emulator(1);
     let (controller, mut driver) =
         Controller::open(&geometry(1), &patient_option(&emulator)).unwrap();
-    drive_until_ready(&mut driver, controller.initialize()).unwrap();
     let frames = Frames::encode(controller.geometry(), Nop).unwrap();
     let checker = controller.state_checker();
 

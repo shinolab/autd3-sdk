@@ -26,7 +26,7 @@ mod tests {
     fn phase_corr_packs_bytes_into_words() {
         let mut h = Harness::new();
         let phases: Vec<u8> = (0..NUM_TRANSDUCERS).map(|i| (i & 0xFF) as u8).collect();
-        h.deliver(&phase_corr(0, &phases));
+        h.deliver(&phase_corr(&phases));
         assert_eq!(h.status(), Error::None);
         assert_eq!(
             h.port.phase_corr[0],

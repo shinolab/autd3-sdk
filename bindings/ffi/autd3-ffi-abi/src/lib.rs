@@ -135,8 +135,6 @@ pub struct Autd3FirmwareVersion {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Autd3Telemetry {
     pub fifo_drop: u32,
-    pub dedup: u32,
-    pub seq_mismatch: u32,
     pub dispatch_error: u32,
     pub processed: u32,
     pub send_failure: u32,

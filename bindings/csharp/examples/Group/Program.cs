@@ -20,7 +20,7 @@ internal static class Program
             new Autd3(new Vector3(Autd3.DeviceWidth, 0f, 0f)),
         });
 
-        await using var client = await Client.OpenAsync(geometry, new TransportOption());
+        await using var client = Client.Open(geometry, new TransportOption());
         await client.SendAsync(Command.Sequence(new Clear(), new Synchronize()));
 
         Console.WriteLine($"devices: {client.NumDevices}");

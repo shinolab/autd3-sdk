@@ -47,17 +47,11 @@ impl Audit {
     pub fn send(&mut self, frames: &[&[u8]], msg_id: u16) -> Vec<AuditReply> {
         let mut replies = Vec::new();
         for (device, frame) in frames.iter().enumerate().take(self.devices.len()) {
-            match self.devices[device].recv(frame, msg_id) {
-                Disposition::Reply => self.deliver(&mut replies, device, msg_id),
-                Disposition::Deferred => loop {
-                    match self.devices[device].process_one() {
-                        Drained::Empty => break,
-                        Drained::Completed { msg_id } => {
-                            self.deliver(&mut replies, device, msg_id);
-                        }
-                    }
-                },
-                Disposition::Dropped => {}
+            if self.devices[device].recv(frame, msg_id) == Disposition::Dropped {
+                continue;
+            }
+            while let Drained::Completed { msg_id } = self.devices[device].process_one() {
+                self.deliver(&mut replies, device, msg_id);
             }
         }
         replies

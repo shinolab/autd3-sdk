@@ -377,9 +377,8 @@ mod tests {
     use crate::test_utils::builders::output_mask;
     use crate::test_utils::mock::{Frame, Harness};
 
-    fn begin(seq: u8, length: u32, crc: u32) -> Frame {
+    fn begin(length: u32, crc: u32) -> Frame {
         Frame::from_payload(
-            seq,
             Cmd::FpgaUpdateBegin,
             &UpdateBeginPayload {
                 length: U32::new(length),
@@ -388,9 +387,8 @@ mod tests {
         )
     }
 
-    fn chunk(seq: u8, offset: u32, data: &[u8]) -> Frame {
+    fn chunk(offset: u32, data: &[u8]) -> Frame {
         Frame::from_parts(
-            seq,
             Cmd::FpgaUpdateChunk,
             &UpdateChunkPayload {
                 offset: U32::new(offset),
@@ -420,22 +418,19 @@ mod tests {
         h
     }
 
-    fn send_image(h: &mut Harness, seq: &mut u8, img: &[u8]) {
+    fn send_image(h: &mut Harness, img: &[u8]) {
         for (i, piece) in img.chunks(UPDATE_CHUNK_MAX_DATA_LEN).enumerate() {
-            h.deliver(&chunk(*seq, (i * UPDATE_CHUNK_MAX_DATA_LEN) as u32, piece));
+            h.deliver(&chunk((i * UPDATE_CHUNK_MAX_DATA_LEN) as u32, piece));
             assert_eq!(h.status(), Error::None, "chunk {i}");
-            *seq = seq.wrapping_add(1);
         }
     }
 
-    fn run_update(h: &mut Harness, seq: &mut u8, img: &[u8]) {
-        h.deliver(&begin(*seq, img.len() as u32, crc32(img)));
+    fn run_update(h: &mut Harness, img: &[u8]) {
+        h.deliver(&begin(img.len() as u32, crc32(img)));
         assert_eq!(h.status(), Error::None);
-        *seq = seq.wrapping_add(1);
-        send_image(h, seq, img);
-        h.deliver(&Frame::new(*seq, Cmd::FpgaUpdateCommit));
+        send_image(h, img);
+        h.deliver(&Frame::new(Cmd::FpgaUpdateCommit));
         assert_eq!(h.status(), Error::None);
-        *seq = seq.wrapping_add(1);
     }
 
     fn slot(h: &Harness, len: usize) -> &[u8] {
@@ -462,7 +457,7 @@ mod tests {
     #[test]
     fn an_fpga_without_flash_access_is_left_alone() {
         let mut h = Harness::new();
-        h.deliver(&begin(0, 100, 0));
+        h.deliver(&begin(100, 0));
         assert_eq!(h.status(), Error::UpdateUnsupported);
         assert!(!h.cpu.fpga_update.is_locked());
         assert_eq!(h.port.fpga_flash_ops, []);
@@ -472,9 +467,9 @@ mod tests {
     #[test]
     fn begin_rejects_implausible_lengths() {
         let mut h = ota_capable();
-        h.deliver(&begin(0, 0, 0));
+        h.deliver(&begin(0, 0));
         assert_eq!(h.status(), Error::InvalidPayload);
-        h.deliver(&begin(1, FPGA_IMAGE_CAPACITY + 1, 0));
+        h.deliver(&begin(FPGA_IMAGE_CAPACITY + 1, 0));
         assert_eq!(h.status(), Error::InvalidPayload);
         assert!(!h.cpu.fpga_update.is_locked());
         assert_eq!(h.port.fpga_flash_ops, []);
@@ -483,7 +478,7 @@ mod tests {
     #[test]
     fn begin_mutes_the_output_and_erases_only_the_first_slot_sector() {
         let mut h = ota_capable();
-        h.deliver(&begin(0, 0x30_0000, 0));
+        h.deliver(&begin(0x30_0000, 0));
         assert_eq!(h.status(), Error::None);
         assert!(h.cpu.fpga_update.is_locked());
         assert!(output_muted(&h));
@@ -502,8 +497,7 @@ mod tests {
     fn a_full_update_writes_the_slot_and_erases_sectors_as_it_goes() {
         let mut h = ota_capable();
         let img = image(3 * FPGA_SECTOR_BYTES as usize, 7);
-        let mut seq = 0;
-        run_update(&mut h, &mut seq, &img);
+        run_update(&mut h, &img);
         assert_eq!(slot(&h, img.len()), &img[..]);
         assert_eq!(
             h.port.fpga_flash[FPGA_IMAGE_BASE as usize + img.len()],
@@ -539,9 +533,9 @@ mod tests {
     fn a_chunk_longer_than_the_flash_buffer_is_programmed_in_parts() {
         let mut h = ota_capable();
         let img = image(UPDATE_CHUNK_MAX_DATA_LEN, 11);
-        h.deliver(&begin(0, img.len() as u32, crc32(&img)));
+        h.deliver(&begin(img.len() as u32, crc32(&img)));
         h.port.fpga_flash_ops.clear();
-        h.deliver(&chunk(1, 0, &img));
+        h.deliver(&chunk(0, &img));
         assert_eq!(h.status(), Error::None);
         let programs: Vec<(u32, u32)> = h
             .port
@@ -565,35 +559,35 @@ mod tests {
     fn a_retransmitted_chunk_is_harmless() {
         let mut h = ota_capable();
         let img = image(2000, 3);
-        h.deliver(&begin(0, img.len() as u32, crc32(&img)));
-        h.deliver(&chunk(1, 0, &img[..600]));
+        h.deliver(&begin(img.len() as u32, crc32(&img)));
+        h.deliver(&chunk(0, &img[..600]));
         assert_eq!(h.status(), Error::None);
         let erases = erased_sectors(&h).len();
-        h.deliver(&chunk(2, 0, &img[..600]));
+        h.deliver(&chunk(0, &img[..600]));
         assert_eq!(h.status(), Error::None);
         assert_eq!(erased_sectors(&h).len(), erases);
-        h.deliver(&chunk(3, 600, &img[600..1200]));
-        h.deliver(&chunk(4, 1200, &img[1200..1800]));
-        h.deliver(&chunk(5, 1800, &img[1800..]));
-        h.deliver(&Frame::new(6, Cmd::FpgaUpdateCommit));
+        h.deliver(&chunk(600, &img[600..1200]));
+        h.deliver(&chunk(1200, &img[1200..1800]));
+        h.deliver(&chunk(1800, &img[1800..]));
+        h.deliver(&Frame::new(Cmd::FpgaUpdateCommit));
         assert_eq!(h.status(), Error::None);
     }
 
     #[test]
     fn chunks_are_validated() {
         let mut h = ota_capable();
-        h.deliver(&chunk(0, 0, &[1, 2, 3]));
+        h.deliver(&chunk(0, &[1, 2, 3]));
         assert_eq!(h.status(), Error::UpdateNotStarted);
-        h.deliver(&begin(1, 10, 0));
-        h.deliver(&chunk(2, 8, &[1, 2, 3]));
+        h.deliver(&begin(10, 0));
+        h.deliver(&chunk(8, &[1, 2, 3]));
         assert_eq!(h.status(), Error::InvalidPayload);
-        h.deliver(&chunk(3, 11, &[]));
+        h.deliver(&chunk(11, &[]));
         assert_eq!(h.status(), Error::InvalidPayload);
         let before = h.port.fpga_flash_ops.len();
-        h.deliver(&chunk(4, 10, &[]));
+        h.deliver(&chunk(10, &[]));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.port.fpga_flash_ops.len(), before);
-        h.deliver(&chunk(5, u32::MAX - 1, &[1, 2, 3]));
+        h.deliver(&chunk(u32::MAX - 1, &[1, 2, 3]));
         assert_eq!(h.status(), Error::InvalidPayload);
         assert_eq!(h.port.fpga_flash_ops.len(), before);
     }
@@ -602,8 +596,7 @@ mod tests {
     fn an_odd_sized_chunk_pads_the_last_word_with_erased_bits() {
         let mut h = ota_capable();
         let img = image(5, 9);
-        let mut seq = 0;
-        run_update(&mut h, &mut seq, &img);
+        run_update(&mut h, &img);
         assert_eq!(slot(&h, 6), &[img[0], img[1], img[2], img[3], img[4], 0xFF]);
     }
 
@@ -611,16 +604,15 @@ mod tests {
     fn a_crc_mismatch_keeps_the_device_locked_and_needs_a_new_session() {
         let mut h = ota_capable();
         let img = image(1000, 5);
-        h.deliver(&begin(0, img.len() as u32, crc32(&img) ^ 1));
-        let mut seq = 1;
-        send_image(&mut h, &mut seq, &img);
-        h.deliver(&Frame::new(seq, Cmd::FpgaUpdateCommit));
+        h.deliver(&begin(img.len() as u32, crc32(&img) ^ 1));
+        send_image(&mut h, &img);
+        h.deliver(&Frame::new(Cmd::FpgaUpdateCommit));
         assert_eq!(h.status(), Error::UpdateImageInvalid);
         assert_eq!(h.cpu.fpga_update.state(), State::Locked);
         assert!(h.cpu.fpga_update.is_locked());
-        h.deliver(&chunk(seq + 1, 0, &img[..10]));
+        h.deliver(&chunk(0, &img[..10]));
         assert_eq!(h.status(), Error::UpdateNotStarted);
-        h.deliver(&Frame::new(seq + 2, Cmd::FpgaUpdateActivate));
+        h.deliver(&Frame::new(Cmd::FpgaUpdateActivate));
         assert_eq!(h.status(), Error::UpdateNotCommitted);
     }
 
@@ -628,41 +620,39 @@ mod tests {
     fn a_new_session_after_a_crc_mismatch_completes_without_a_power_cycle() {
         let mut h = ota_capable();
         let img = image(1000, 6);
-        h.deliver(&begin(0, img.len() as u32, crc32(&img) ^ 1));
-        let mut seq = 1;
-        send_image(&mut h, &mut seq, &img);
-        h.deliver(&Frame::new(seq, Cmd::FpgaUpdateCommit));
+        h.deliver(&begin(img.len() as u32, crc32(&img) ^ 1));
+        send_image(&mut h, &img);
+        h.deliver(&Frame::new(Cmd::FpgaUpdateCommit));
         assert_eq!(h.status(), Error::UpdateImageInvalid);
-        seq = seq.wrapping_add(1);
 
         let retry = image(1000, 7);
-        run_update(&mut h, &mut seq, &retry);
+        run_update(&mut h, &retry);
         assert_eq!(h.cpu.fpga_update.state(), State::Committed);
         assert_eq!(slot(&h, retry.len()), retry.as_slice());
-        h.deliver(&Frame::new(seq, Cmd::FpgaUpdateActivate));
+        h.deliver(&Frame::new(Cmd::FpgaUpdateActivate));
         assert_eq!(h.status(), Error::None);
         h.tick_1ms(u32::from(FPGA_REBOOT_DELAY_MS) + u32::from(FPGA_RECONFIG_SETTLE_MS));
         assert_eq!(h.port.fpga_reboots, 1);
         assert!(!h.cpu.fpga_update.is_locked());
-        h.deliver(&Frame::new(seq.wrapping_add(1), Cmd::Clear));
+        h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.status(), Error::None);
     }
 
     #[test]
     fn commit_without_a_session_is_rejected() {
         let mut h = ota_capable();
-        h.deliver(&Frame::new(0, Cmd::FpgaUpdateCommit));
+        h.deliver(&Frame::new(Cmd::FpgaUpdateCommit));
         assert_eq!(h.status(), Error::UpdateNotStarted);
-        h.deliver(&Frame::new(1, Cmd::FpgaUpdateActivate));
+        h.deliver(&Frame::new(Cmd::FpgaUpdateActivate));
         assert_eq!(h.status(), Error::UpdateNotCommitted);
     }
 
     #[test]
     fn the_failsafe_cannot_be_released_while_locked() {
         let mut h = ota_capable();
-        h.deliver(&begin(0, 100, 0));
+        h.deliver(&begin(100, 0));
         assert!(output_muted(&h));
-        h.deliver(&Frame::new(1, Cmd::ReleaseFailsafe));
+        h.deliver(&Frame::new(Cmd::ReleaseFailsafe));
         assert_eq!(h.status(), Error::FpgaUpdateInProgress);
         assert!(output_muted(&h));
     }
@@ -670,9 +660,9 @@ mod tests {
     #[test]
     fn raw_fpga_memory_access_is_rejected_while_locked() {
         let mut h = ota_capable();
-        h.deliver(&begin(0, 100, 0));
-        for (seq, cmd) in [(1, Cmd::WriteFpgaMemory), (2, Cmd::ReadFpgaMemory)] {
-            h.deliver(&Frame::new(seq, cmd));
+        h.deliver(&begin(100, 0));
+        for cmd in [Cmd::WriteFpgaMemory, Cmd::ReadFpgaMemory] {
+            h.deliver(&Frame::new(cmd));
             assert_eq!(h.status(), Error::FpgaUpdateInProgress);
         }
         assert!(output_muted(&h));
@@ -681,64 +671,52 @@ mod tests {
     #[test]
     fn output_commands_are_rejected_while_locked() {
         let mut h = ota_capable();
-        h.deliver(&begin(0, 100, 0));
+        h.deliver(&begin(100, 0));
         let before = h.port.output_mask.clone();
-        h.deliver(&output_mask(1, &[true; 249]));
+        h.deliver(&output_mask(&[true; 249]));
         assert_eq!(h.status(), Error::FpgaUpdateInProgress);
         assert_eq!(h.port.output_mask, before);
-        h.deliver(&Frame::new(2, Cmd::Clear));
+        h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.status(), Error::FpgaUpdateInProgress);
         assert_eq!(h.port.output_mask, before);
-        h.deliver(&Frame::new(3, Cmd::Synchronize));
+        h.deliver(&Frame::new(Cmd::Synchronize));
         assert_eq!(h.status(), Error::FpgaUpdateInProgress);
-        h.deliver(&Frame::new(4, Cmd::Nop));
+        h.deliver(&Frame::new(Cmd::Nop));
         assert_eq!(h.status(), Error::None);
-        h.deliver(&Frame::new(5, Cmd::ReadFirmwareInfo));
-        assert_eq!(h.ack(), 5);
-        h.deliver(&Frame::new(6, Cmd::UpdateActivate));
+        h.deliver(&Frame::new(Cmd::ReadFirmwareInfo));
+        assert_eq!(h.status(), Error::None);
+        h.deliver(&Frame::new(Cmd::UpdateActivate));
         assert_eq!(h.status(), Error::FpgaUpdateInProgress);
         assert_eq!(h.port.reset_count, 0);
-        h.deliver(&begin(7, 100, 0));
+        h.deliver(&begin(100, 0));
         assert_eq!(h.status(), Error::None);
-    }
-
-    #[test]
-    fn a_protocol_reset_is_answered_while_locked() {
-        let mut h = ota_capable();
-        h.deliver(&begin(0, 100, 0));
-        h.deliver(&Frame::new(5, Cmd::Reset));
-        assert_eq!(h.ack(), 0xFF);
-        assert_eq!(h.status(), Error::None);
-        assert_eq!(h.expected_seq(), 0);
-        assert!(h.cpu.fpga_update.is_locked());
     }
 
     #[test]
     fn a_rejected_begin_does_not_release_the_lock() {
         let mut h = ota_capable();
-        h.deliver(&begin(0, 100, 0));
+        h.deliver(&begin(100, 0));
         assert_eq!(h.status(), Error::None);
-        h.deliver(&begin(1, 0, 0));
+        h.deliver(&begin(0, 0));
         assert_eq!(h.status(), Error::InvalidPayload);
         assert_eq!(h.cpu.fpga_update.state(), State::Locked);
         h.set_ctl(ADDR_FUNCTION_BITS, 0);
-        h.deliver(&begin(2, 100, 0));
+        h.deliver(&begin(100, 0));
         assert_eq!(h.status(), Error::UpdateUnsupported);
         assert_eq!(h.cpu.fpga_update.state(), State::Locked);
         assert!(output_muted(&h));
-        h.deliver(&Frame::new(3, Cmd::Clear));
+        h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.status(), Error::FpgaUpdateInProgress);
     }
 
     #[test]
     fn a_rejected_begin_discards_a_committed_image() {
         let mut h = ota_capable();
-        let mut seq = 0;
-        run_update(&mut h, &mut seq, &image(700, 13));
-        h.deliver(&begin(seq, 0, 0));
+        run_update(&mut h, &image(700, 13));
+        h.deliver(&begin(0, 0));
         assert_eq!(h.status(), Error::InvalidPayload);
         assert_eq!(h.cpu.fpga_update.state(), State::Locked);
-        h.deliver(&Frame::new(seq + 1, Cmd::FpgaUpdateActivate));
+        h.deliver(&Frame::new(Cmd::FpgaUpdateActivate));
         assert_eq!(h.status(), Error::UpdateNotCommitted);
         h.tick_1ms(u32::from(FPGA_REBOOT_DELAY_MS));
         assert_eq!(h.port.fpga_reboots, 0);
@@ -748,9 +726,9 @@ mod tests {
     fn a_floating_bus_is_not_mistaken_for_flash_support() {
         let mut h = Harness::new();
         h.set_ctl(ADDR_FUNCTION_BITS, 0xFFFF);
-        h.deliver(&begin(0, 100, 0));
+        h.deliver(&begin(100, 0));
         assert_eq!(h.status(), Error::UpdateUnsupported);
-        h.deliver(&Frame::new(1, Cmd::ReadFirmwareInfo));
+        h.deliver(&Frame::new(Cmd::ReadFirmwareInfo));
         assert_eq!(
             h.firmware_info().fpga_boot_image,
             FpgaBootImage::Unknown as u8
@@ -761,9 +739,8 @@ mod tests {
     fn activation_reboots_the_fpga_and_reinitializes_it_later() {
         let mut h = ota_capable();
         let img = image(700, 11);
-        let mut seq = 0;
-        run_update(&mut h, &mut seq, &img);
-        h.deliver(&Frame::new(seq, Cmd::FpgaUpdateActivate));
+        run_update(&mut h, &img);
+        h.deliver(&Frame::new(Cmd::FpgaUpdateActivate));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.port.fpga_reboots, 0);
 
@@ -783,13 +760,13 @@ mod tests {
             }
         );
 
-        h.deliver(&Frame::new(seq + 1, Cmd::FpgaUpdateActivate));
+        h.deliver(&Frame::new(Cmd::FpgaUpdateActivate));
         assert_eq!(h.status(), Error::FpgaUpdateInProgress);
-        h.deliver(&begin(seq + 2, 100, 0));
+        h.deliver(&begin(100, 0));
         assert_eq!(h.status(), Error::FpgaUpdateInProgress);
-        h.deliver(&chunk(seq + 3, 0, &img[..10]));
+        h.deliver(&chunk(0, &img[..10]));
         assert_eq!(h.status(), Error::UpdateNotStarted);
-        h.deliver(&Frame::new(seq + 4, Cmd::FpgaUpdateCommit));
+        h.deliver(&Frame::new(Cmd::FpgaUpdateCommit));
         assert_eq!(h.status(), Error::UpdateNotStarted);
 
         h.tick_1ms(u32::from(FPGA_RECONFIG_SETTLE_MS) - 1);
@@ -802,18 +779,17 @@ mod tests {
         h.tick_1ms(10_000);
         assert_eq!(h.port.fpga_reboots, 1);
 
-        h.deliver(&Frame::new(seq + 5, Cmd::Clear));
+        h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.status(), Error::None);
     }
 
-    fn activated(seed: u32) -> (Harness, u8) {
+    fn activated(seed: u32) -> Harness {
         let mut h = ota_capable();
         let img = image(700, seed);
-        let mut seq = 0;
-        run_update(&mut h, &mut seq, &img);
-        h.deliver(&Frame::new(seq, Cmd::FpgaUpdateActivate));
+        run_update(&mut h, &img);
+        h.deliver(&Frame::new(Cmd::FpgaUpdateActivate));
         assert_eq!(h.status(), Error::None);
-        (h, seq.wrapping_add(1))
+        h
     }
 
     fn reboot_requests(h: &Harness) -> usize {
@@ -824,14 +800,14 @@ mod tests {
             .count()
     }
 
-    fn boot_image(h: &mut Harness, seq: u8) -> u8 {
-        h.deliver(&Frame::new(seq, Cmd::ReadFirmwareInfo));
+    fn boot_image(h: &mut Harness) -> u8 {
+        h.deliver(&Frame::new(Cmd::ReadFirmwareInfo));
         h.firmware_info().fpga_boot_image
     }
 
     #[test]
     fn an_ignored_reboot_is_retried_after_the_settle_time() {
-        let (mut h, seq) = activated(43);
+        let mut h = activated(43);
         h.port.fpga_reboots_to_ignore = 1;
         h.tick_1ms(u32::from(FPGA_REBOOT_DELAY_MS) + u32::from(FPGA_RECONFIG_SETTLE_MS));
         assert_eq!(reboot_requests(&h), 1);
@@ -853,12 +829,12 @@ mod tests {
         assert!(!h.cpu.fpga_update.is_locked());
         assert_eq!(h.cpu.fpga_update.state(), State::Idle);
         assert!((0..OUTPUT_MASK_WORDS).all(|i| h.output_mask(i) == 0xFFFF));
-        assert_ne!(boot_image(&mut h, seq), FpgaBootImage::ReconfigFailed as u8);
+        assert_ne!(boot_image(&mut h), FpgaBootImage::ReconfigFailed as u8);
     }
 
     #[test]
     fn a_reinitialization_that_times_out_after_reconfiguration_counts_a_boot_failure() {
-        let (mut h, seq) = activated(47);
+        let mut h = activated(47);
         h.tick_1ms(u32::from(FPGA_REBOOT_DELAY_MS) + u32::from(FPGA_RECONFIG_SETTLE_MS) - 1);
         assert_eq!(h.telemetry().boot_failure, 0);
         h.port.latch_stuck = true;
@@ -868,7 +844,7 @@ mod tests {
         assert!(!h.cpu.fpga_update.is_locked());
         assert!(output_muted(&h));
 
-        h.deliver(&Frame::new(seq, Cmd::Clear));
+        h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.status(), Error::None);
         assert!(!output_muted(&h));
         assert_eq!(h.telemetry().boot_failure, 1);
@@ -877,10 +853,10 @@ mod tests {
     #[test]
     fn the_watchdog_is_suspended_from_begin_until_the_reinitialization() {
         let mut h = ota_capable();
-        h.deliver(&begin(0, 100, 0));
+        h.deliver(&begin(100, 0));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.port.watchdog_timeout, Some(0));
-        let (mut h, _) = activated(61);
+        let mut h = activated(61);
         assert_eq!(h.port.watchdog_timeout, Some(0));
         h.tick_1ms(u32::from(FPGA_REBOOT_DELAY_MS) + u32::from(FPGA_RECONFIG_SETTLE_MS) - 1);
         assert_eq!(h.port.watchdog_timeout, Some(0));
@@ -894,7 +870,7 @@ mod tests {
 
     #[test]
     fn a_clean_reinitialization_after_reconfiguration_counts_no_boot_failure() {
-        let (mut h, _) = activated(48);
+        let mut h = activated(48);
         h.tick_1ms(u32::from(FPGA_REBOOT_DELAY_MS) + u32::from(FPGA_RECONFIG_SETTLE_MS));
         assert!(!h.cpu.fpga_update.is_locked());
         assert!(!output_muted(&h));
@@ -903,7 +879,7 @@ mod tests {
 
     #[test]
     fn an_fpga_that_never_reconfigures_is_reported_and_released() {
-        let (mut h, seq) = activated(47);
+        let mut h = activated(47);
         h.port.fpga_reboots_to_ignore = u32::MAX;
         h.tick_1ms(FPGA_RECONFIG_WORST_MS - 1);
         assert_eq!(reboot_requests(&h), usize::from(FPGA_REBOOT_ATTEMPTS));
@@ -912,7 +888,7 @@ mod tests {
         assert!(!h.cpu.fpga_update.is_locked());
         assert_eq!(h.cpu.fpga_update.state(), State::Idle);
         assert!((0..OUTPUT_MASK_WORDS).all(|i| h.output_mask(i) == 0xFFFF));
-        assert_eq!(boot_image(&mut h, seq), FpgaBootImage::ReconfigFailed as u8);
+        assert_eq!(boot_image(&mut h), FpgaBootImage::ReconfigFailed as u8);
         h.tick_1ms(10_000);
         assert_eq!(reboot_requests(&h), usize::from(FPGA_REBOOT_ATTEMPTS));
         assert_eq!(h.port.fpga_reboots, 0);
@@ -920,27 +896,23 @@ mod tests {
 
     #[test]
     fn a_later_successful_reconfiguration_clears_the_failure() {
-        let (mut h, mut seq) = activated(59);
+        let mut h = activated(59);
         h.port.fpga_reboots_to_ignore = u32::MAX;
         h.tick_1ms(FPGA_RECONFIG_WORST_MS);
-        assert_eq!(boot_image(&mut h, seq), FpgaBootImage::ReconfigFailed as u8);
-        seq = seq.wrapping_add(1);
+        assert_eq!(boot_image(&mut h), FpgaBootImage::ReconfigFailed as u8);
 
         h.port.fpga_reboots_to_ignore = 0;
-        run_update(&mut h, &mut seq, &image(700, 61));
-        h.deliver(&Frame::new(seq, Cmd::FpgaUpdateActivate));
+        run_update(&mut h, &image(700, 61));
+        h.deliver(&Frame::new(Cmd::FpgaUpdateActivate));
         assert_eq!(h.status(), Error::None);
         h.tick_1ms(u32::from(FPGA_REBOOT_DELAY_MS) + u32::from(FPGA_RECONFIG_SETTLE_MS));
         assert!(!h.cpu.fpga_update.is_locked());
-        assert_ne!(
-            boot_image(&mut h, seq.wrapping_add(1)),
-            FpgaBootImage::ReconfigFailed as u8
-        );
+        assert_ne!(boot_image(&mut h), FpgaBootImage::ReconfigFailed as u8);
     }
 
     #[test]
     fn a_reboot_write_ignored_while_busy_is_detected() {
-        let (mut h, seq) = activated(53);
+        let mut h = activated(53);
         h.tick_1ms(u32::from(FPGA_REBOOT_DELAY_MS) - 1);
         h.port.fpga_flash_dropped_reg = Some(ADDR_FLASH_CMD);
         h.tick_1ms(1 + u32::from(FPGA_RECONFIG_SETTLE_MS));
@@ -956,19 +928,19 @@ mod tests {
         h.tick_1ms(1 + u32::from(FPGA_RECONFIG_SETTLE_MS));
         assert_eq!(h.port.fpga_reboots, 1);
         assert!(!h.cpu.fpga_update.is_locked());
-        assert_ne!(boot_image(&mut h, seq), FpgaBootImage::ReconfigFailed as u8);
+        assert_ne!(boot_image(&mut h), FpgaBootImage::ReconfigFailed as u8);
     }
 
     #[test]
     fn flash_errors_surface_as_update_flash() {
         let mut h = ota_capable();
         h.port.fpga_flash_err = Some(FlashErr::Protected);
-        h.deliver(&begin(0, 100, 0));
+        h.deliver(&begin(100, 0));
         assert_eq!(h.status(), Error::UpdateFlash);
         assert_eq!(h.cpu.fpga_update.state(), State::Locked);
         assert!(h.cpu.fpga_update.is_locked());
         assert!(output_muted(&h));
-        h.deliver(&Frame::new(1, Cmd::Clear));
+        h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.status(), Error::FpgaUpdateInProgress);
     }
 
@@ -976,14 +948,13 @@ mod tests {
     fn an_erase_failure_mid_chunk_keeps_the_session_and_the_erased_range() {
         let mut h = ota_capable();
         let img = image(FPGA_SECTOR_BYTES as usize + 100, 36);
-        h.deliver(&begin(0, img.len() as u32, crc32(&img)));
+        h.deliver(&begin(img.len() as u32, crc32(&img)));
         assert_eq!(h.status(), Error::None);
         let State::Receiving { erased_end, .. } = h.cpu.fpga_update.state() else {
             panic!("session did not open");
         };
         h.port.fpga_flash_err = Some(FlashErr::Protected);
         h.deliver(&chunk(
-            1,
             FPGA_SECTOR_BYTES,
             &img[FPGA_SECTOR_BYTES as usize..],
         ));
@@ -1004,9 +975,8 @@ mod tests {
     fn every_flash_command_is_issued_after_its_target_is_flushed() {
         let mut h = ota_capable();
         let img = image(3 * FPGA_SECTOR_BYTES as usize, 41);
-        let mut seq = 0;
-        run_update(&mut h, &mut seq, &img);
-        h.deliver(&Frame::new(seq, Cmd::FpgaUpdateActivate));
+        run_update(&mut h, &img);
+        h.deliver(&Frame::new(Cmd::FpgaUpdateActivate));
         h.tick_1ms(u32::from(FPGA_REBOOT_DELAY_MS));
         assert_eq!(h.port.fpga_reboots, 1);
         assert!(h.port.fpga_flash_ops.len() > 3);
@@ -1016,11 +986,11 @@ mod tests {
     #[test]
     fn a_lost_target_write_stops_the_command() {
         let mut h = ota_capable();
-        h.deliver(&begin(0, 100, 0));
+        h.deliver(&begin(100, 0));
         assert_eq!(h.status(), Error::None);
         let ops = h.port.fpga_flash_ops.len();
         h.port.fpga_flash_dropped_reg = Some(ADDR_FLASH_LEN_0);
-        h.deliver(&chunk(1, 0, &[0xAB; 16]));
+        h.deliver(&chunk(0, &[0xAB; 16]));
         assert_eq!(h.status(), Error::UpdateFlash);
         assert_eq!(h.port.fpga_flash_ops.len(), ops);
     }
@@ -1029,11 +999,11 @@ mod tests {
     fn a_hung_fpga_times_out() {
         let mut h = ota_capable();
         h.port.fpga_flash_hang = true;
-        h.deliver(&begin(0, 100, 0));
+        h.deliver(&begin(100, 0));
         assert_eq!(h.status(), Error::FpgaTimeout);
         assert_eq!(h.cpu.fpga_update.state(), State::Locked);
         let ops = h.port.fpga_flash_ops.len();
-        h.deliver(&begin(1, 100, 0));
+        h.deliver(&begin(100, 0));
         assert_eq!(h.status(), Error::FpgaTimeout);
         assert_eq!(h.port.fpga_flash_ops.len(), ops);
     }
@@ -1045,17 +1015,14 @@ mod tests {
         use crate::test_utils::builders::set_cpu_config;
 
         let mut h = ota_capable();
-        h.deliver(&set_cpu_config(
-            0,
-            &CpuConfig {
-                fpga_flash_max_polls: core::num::NonZeroU32::new(7).unwrap(),
-                ..CpuConfig::default()
-            },
-        ));
+        h.deliver(&set_cpu_config(&CpuConfig {
+            fpga_flash_max_polls: core::num::NonZeroU32::new(7).unwrap(),
+            ..CpuConfig::default()
+        }));
         assert_eq!(h.status(), Error::None);
         h.port.fpga_flash_hang = true;
         let reads = h.port.fpga_flash_status_reads;
-        h.deliver(&begin(1, 100, 0));
+        h.deliver(&begin(100, 0));
         assert_eq!(h.status(), Error::FpgaTimeout);
         assert_eq!(h.port.fpga_flash_status_reads - reads, 1 + 7);
     }
@@ -1064,9 +1031,9 @@ mod tests {
     fn a_chunk_erases_every_sector_it_reaches() {
         let mut h = ota_capable();
         let length = 3 * FPGA_SECTOR_BYTES;
-        h.deliver(&begin(0, length, 0));
+        h.deliver(&begin(length, 0));
         let far = 2 * FPGA_SECTOR_BYTES + 10;
-        h.deliver(&chunk(1, far, &[0xAB; 16]));
+        h.deliver(&chunk(far, &[0xAB; 16]));
         assert_eq!(h.status(), Error::None);
         assert_eq!(
             erased_sectors(&h),
@@ -1076,7 +1043,7 @@ mod tests {
                 FPGA_GOLDEN_REGION_END + 2 * FPGA_SECTOR_BYTES
             ]
         );
-        h.deliver(&chunk(2, 0, &[0xCD; 16]));
+        h.deliver(&chunk(0, &[0xCD; 16]));
         assert_eq!(erased_sectors(&h).len(), 3);
     }
 
@@ -1084,7 +1051,7 @@ mod tests {
     fn boot_image_reports_the_usr_access_value() {
         let mut h = Harness::new();
         h.port.fpga_usr_access = FPGA_USR_ACCESS_UPDATE;
-        h.deliver(&Frame::new(0, Cmd::ReadFirmwareInfo));
+        h.deliver(&Frame::new(Cmd::ReadFirmwareInfo));
         assert_eq!(
             h.firmware_info().fpga_boot_image,
             FpgaBootImage::Unknown as u8
@@ -1094,19 +1061,19 @@ mod tests {
             ADDR_FUNCTION_BITS,
             u16::from(FunctionBits::FLASH_OTA.bits()),
         );
-        h.deliver(&Frame::new(1, Cmd::ReadFirmwareInfo));
+        h.deliver(&Frame::new(Cmd::ReadFirmwareInfo));
         assert_eq!(
             h.firmware_info().fpga_boot_image,
             FpgaBootImage::Update as u8
         );
         h.port.fpga_usr_access = FPGA_USR_ACCESS_GOLDEN;
-        h.deliver(&Frame::new(2, Cmd::ReadFirmwareInfo));
+        h.deliver(&Frame::new(Cmd::ReadFirmwareInfo));
         assert_eq!(
             h.firmware_info().fpga_boot_image,
             FpgaBootImage::Golden as u8
         );
         h.port.fpga_usr_access = 0xFFFF_FFFF;
-        h.deliver(&Frame::new(3, Cmd::ReadFirmwareInfo));
+        h.deliver(&Frame::new(Cmd::ReadFirmwareInfo));
         assert_eq!(
             h.firmware_info().fpga_boot_image,
             FpgaBootImage::Unknown as u8
@@ -1116,7 +1083,7 @@ mod tests {
     #[test]
     fn a_cpu_boot_clears_the_fpga_session() {
         let mut h = ota_capable();
-        h.deliver(&begin(0, 100, 0));
+        h.deliver(&begin(100, 0));
         assert!(h.cpu.fpga_update.is_locked());
         h.reboot();
         assert!(!h.cpu.fpga_update.is_locked());

@@ -15,7 +15,7 @@ from autd3_core import Duration
 async def main() -> None:
     geometry = Geometry([Autd3()])
 
-    async with await Client.open(
+    async with Client.open(
         geometry,
         TransportOption(),
     ) as client:

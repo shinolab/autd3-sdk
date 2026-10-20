@@ -31,15 +31,8 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn open<'a>(
-        geometry: &'a Geometry,
-        option: &TransportOption,
-    ) -> impl Future<Output = Result<Self, Error>> + Send + use<'a> {
-        Box::pin(Self::open_impl(geometry, option.clone()))
-    }
-
-    async fn open_impl(geometry: &Geometry, option: TransportOption) -> Result<Self, Error> {
-        let (controller, driver) = Controller::open(geometry, &option)?;
+    pub fn open(geometry: &Geometry, option: &TransportOption) -> Result<Self, Error> {
+        let (controller, driver) = Controller::open(geometry, option)?;
         let thread = std::thread::Builder::new()
             .name("autd3-io".into())
             .spawn(move || driver.run())
@@ -48,7 +41,6 @@ impl Client {
             controller,
             driver: Mutex::new(Some(thread)),
         };
-        client.controller.initialize().await?;
         tracing::info!(num_devices = client.num_devices(), "client opened");
         Ok(client)
     }

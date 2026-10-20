@@ -40,22 +40,19 @@ fn modulation_buffer_and_index_follow_time() {
     let change = activate_modulation_bank(bank, TransitionMode::Immediate, 0);
 
     let mut device = Device::new(NUM_TRANSDUCERS);
-    device.send(&frame(0, Cmd::Reset, &[]));
     assert_eq!(
         device
-            .send(&frame(0, Cmd::WriteModulationBuffer, &write))
+            .send(&frame(Cmd::WriteModulationBuffer, &write))
             .status,
         DeviceErrorCode::None
     );
     assert_eq!(
-        device
-            .send(&frame(1, Cmd::ConfigModulation, &config))
-            .status,
+        device.send(&frame(Cmd::ConfigModulation, &config)).status,
         DeviceErrorCode::None
     );
     assert_eq!(
         device
-            .send(&frame(2, Cmd::ActivateModulationBank, &change))
+            .send(&frame(Cmd::ActivateModulationBank, &change))
             .status,
         DeviceErrorCode::None
     );
@@ -88,10 +85,9 @@ fn modulation_finite_loop_stops_after_rep() {
     let change = activate_modulation_bank(bank, TransitionMode::SyncIdx, 0);
 
     let mut device = Device::new(NUM_TRANSDUCERS);
-    device.send(&frame(0, Cmd::Reset, &[]));
-    device.send(&frame(0, Cmd::WriteModulationBuffer, &write));
-    device.send(&frame(1, Cmd::ConfigModulation, &config));
-    device.send(&frame(2, Cmd::ActivateModulationBank, &change));
+    device.send(&frame(Cmd::WriteModulationBuffer, &write));
+    device.send(&frame(Cmd::ConfigModulation, &config));
+    device.send(&frame(Cmd::ActivateModulationBank, &change));
 
     let mut indices = Vec::new();
     for i in 0..24u64 {
@@ -123,15 +119,13 @@ fn sys_time_transition_within_margin_is_rejected() {
     let change = |value: u64| activate_modulation_bank(bank, TransitionMode::SysTime, value);
 
     let mut device = Device::new(NUM_TRANSDUCERS);
-    device.send(&frame(0, Cmd::Reset, &[]));
-    device.send(&frame(0, Cmd::WriteModulationBuffer, &write));
-    device.send(&frame(1, Cmd::ConfigModulation, &config));
+    device.send(&frame(Cmd::WriteModulationBuffer, &write));
+    device.send(&frame(Cmd::ConfigModulation, &config));
     device.fpga_mut().update_with_sys_time(sys_time);
 
     assert_eq!(
         device
             .send(&frame(
-                2,
                 Cmd::ActivateModulationBank,
                 &change(sys_time + MARGIN_NS - 1)
             ))
@@ -143,7 +137,6 @@ fn sys_time_transition_within_margin_is_rejected() {
     assert_eq!(
         device
             .send(&frame(
-                3,
                 Cmd::ActivateModulationBank,
                 &change(sys_time + MARGIN_NS)
             ))
@@ -176,12 +169,11 @@ fn sys_time_transition_margin_follows_the_cpu_config() {
     .unwrap();
 
     let mut device = Device::new(NUM_TRANSDUCERS);
-    device.send(&frame(0, Cmd::Reset, &[]));
-    device.send(&frame(0, Cmd::WriteModulationBuffer, &write));
-    device.send(&frame(1, Cmd::ConfigModulation, &config));
+    device.send(&frame(Cmd::WriteModulationBuffer, &write));
+    device.send(&frame(Cmd::ConfigModulation, &config));
     assert_eq!(
         device
-            .send(&frame(2, Cmd::SetCpuConfig, cpu_config.as_bytes()))
+            .send(&frame(Cmd::SetCpuConfig, cpu_config.as_bytes()))
             .status,
         DeviceErrorCode::None
     );
@@ -190,7 +182,6 @@ fn sys_time_transition_margin_follows_the_cpu_config() {
     assert_eq!(
         device
             .send(&frame(
-                3,
                 Cmd::ActivateModulationBank,
                 &change(sys_time + u64::from(MARGIN_NS) - 1)
             ))
@@ -200,7 +191,6 @@ fn sys_time_transition_margin_follows_the_cpu_config() {
     assert_eq!(
         device
             .send(&frame(
-                4,
                 Cmd::ActivateModulationBank,
                 &change(sys_time + u64::from(MARGIN_NS))
             ))
@@ -222,12 +212,11 @@ fn gpio_transition_waits_for_emulated_gpio_in() {
     let change = activate_modulation_bank(bank, TransitionMode::Gpio, GPIO_IN_PIN);
 
     let mut device = Device::new(NUM_TRANSDUCERS);
-    device.send(&frame(0, Cmd::Reset, &[]));
-    device.send(&frame(0, Cmd::WriteModulationBuffer, &write));
-    device.send(&frame(1, Cmd::ConfigModulation, &config));
+    device.send(&frame(Cmd::WriteModulationBuffer, &write));
+    device.send(&frame(Cmd::ConfigModulation, &config));
     assert_eq!(
         device
-            .send(&frame(2, Cmd::ActivateModulationBank, &change))
+            .send(&frame(Cmd::ActivateModulationBank, &change))
             .status,
         DeviceErrorCode::None
     );
@@ -251,7 +240,7 @@ fn gpio_transition_waits_for_emulated_gpio_in() {
     };
     assert_eq!(
         device
-            .send(&frame(3, Cmd::EmulateGpioIn, gpio_in.as_bytes()))
+            .send(&frame(Cmd::EmulateGpioIn, gpio_in.as_bytes()))
             .status,
         DeviceErrorCode::None
     );

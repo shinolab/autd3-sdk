@@ -149,7 +149,6 @@ namespace AUTD3
         }
 
         public ulong Frames => NativeClient.autd3_bus_stats_frames(Handle);
-        public ulong Resets => NativeClient.autd3_bus_stats_resets(Handle);
         public ulong Heartbeats => NativeClient.autd3_bus_stats_heartbeats(Handle);
         public ulong Recoveries => NativeClient.autd3_bus_stats_recoveries(Handle);
         public ulong AckedFrames => NativeClient.autd3_bus_stats_acked_frames(Handle);
@@ -159,15 +158,13 @@ namespace AUTD3
         public void Dispose() => _handle.Dispose();
 
         public override string ToString() =>
-            $"BusStats {{ Frames = {Frames}, Resets = {Resets}, Heartbeats = {Heartbeats}, " +
+            $"BusStats {{ Frames = {Frames}, Heartbeats = {Heartbeats}, " +
             $"Recoveries = {Recoveries}, AckedFrames = {AckedFrames}, WorstAckLatencyNs = {WorstAckLatencyNs}, MeanAckLatencyNs = {MeanAckLatencyNs} }}";
     }
 
     public readonly struct Telemetry : IEquatable<Telemetry>
     {
         public uint FifoDrop { get; }
-        public uint Dedup { get; }
-        public uint SeqMismatch { get; }
         public uint DispatchError { get; }
         public uint Processed { get; }
         public uint SendFailure { get; }
@@ -181,8 +178,6 @@ namespace AUTD3
         internal Telemetry(NativeClient.TelemetryNative native)
         {
             FifoDrop = native.FifoDrop;
-            Dedup = native.Dedup;
-            SeqMismatch = native.SeqMismatch;
             DispatchError = native.DispatchError;
             Processed = native.Processed;
             SendFailure = native.SendFailure;
@@ -195,12 +190,12 @@ namespace AUTD3
         }
 
         public override string ToString() =>
-            $"Telemetry {{ FifoDrop = {FifoDrop}, Dedup = {Dedup}, SeqMismatch = {SeqMismatch}, DispatchError = {DispatchError}, " +
+            $"Telemetry {{ FifoDrop = {FifoDrop}, DispatchError = {DispatchError}, " +
             $"Processed = {Processed}, SendFailure = {SendFailure}, Failsafe = {Failsafe}, PtpUnlockFailsafe = {PtpUnlockFailsafe}, " +
             $"SyncResync = {SyncResync}, BootFailure = {BootFailure}, CpuWatchdog = {CpuWatchdog}, ExecLate = {ExecLate} }}";
 
         public bool Equals(Telemetry other) =>
-            FifoDrop == other.FifoDrop && Dedup == other.Dedup && SeqMismatch == other.SeqMismatch &&
+            FifoDrop == other.FifoDrop &&
             DispatchError == other.DispatchError && Processed == other.Processed && SendFailure == other.SendFailure &&
             Failsafe == other.Failsafe && PtpUnlockFailsafe == other.PtpUnlockFailsafe &&
             SyncResync == other.SyncResync && BootFailure == other.BootFailure && CpuWatchdog == other.CpuWatchdog &&
@@ -212,8 +207,6 @@ namespace AUTD3
         {
             var hash = new HashCode();
             hash.Add(FifoDrop);
-            hash.Add(Dedup);
-            hash.Add(SeqMismatch);
             hash.Add(DispatchError);
             hash.Add(Processed);
             hash.Add(SendFailure);
@@ -464,7 +457,7 @@ namespace AUTD3
             _geometry = geometry;
         }
 
-        public static async Task<Client> OpenAsync(Geometry geometry, TransportOption option)
+        public static Client Open(Geometry geometry, TransportOption option)
         {
             var owned = geometry.Clone();
             IntPtr optionHandle;
@@ -478,11 +471,12 @@ namespace AUTD3
                 throw;
             }
 
-            Task<IntPtr> task;
+            var err = new byte[NativeAbi.ErrorBufferLength];
+            int code;
+            IntPtr value;
             try
             {
-                task = AsyncOps.InvokeAsync((cb, ud) =>
-                    NativeClient.autd3_client_open(geometry.Handle, optionHandle, cb, ud));
+                code = NativeClient.autd3_client_open(geometry.Handle, optionHandle, out value, err, (UIntPtr)err.Length);
             }
             catch
             {
@@ -490,15 +484,10 @@ namespace AUTD3
                 owned.Dispose();
                 throw;
             }
-            IntPtr value;
-            try
-            {
-                value = await task.ConfigureAwait(false);
-            }
-            catch
+            if (code != 0)
             {
                 owned.Dispose();
-                throw;
+                throw Autd3Exception.FromNative(code, err);
             }
             return new Client(value, owned);
         }

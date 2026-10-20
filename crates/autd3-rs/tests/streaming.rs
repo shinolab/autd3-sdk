@@ -16,7 +16,7 @@ fn samples(len: u32) -> Vec<u8> {
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn frames_sent_without_waiting_arrive_whole_on_every_device() {
-    let (emulator, client) = open(2).await;
+    let (emulator, client) = open(2);
     let data = samples(30_000);
     let frames = Frames::encode(
         client.geometry(),
@@ -44,7 +44,6 @@ async fn frames_sent_without_waiting_arrive_whole_on_every_device() {
     }
     let telemetry = client.read_telemetry().await.unwrap();
     assert!(telemetry.iter().all(|t| t.fifo_drop == 0));
-    assert_eq!(client.bus_stats().resets(), 1);
     client.close().await.unwrap();
 }
 
@@ -52,7 +51,7 @@ async fn frames_sent_without_waiting_arrive_whole_on_every_device() {
 #[ignore = "depends on real time"]
 async fn send_frame_waits_while_the_window_is_full() {
     let emulator = emulator(1);
-    let client = open_with(&emulator, &option(&emulator)).await;
+    let client = open_with(&emulator, &option(&emulator));
     let nop = Frames::encode(client.geometry(), Nop).unwrap();
     let before = client.bus_stats().frames();
 
@@ -79,14 +78,13 @@ async fn send_frame_waits_while_the_window_is_full() {
     }
     emulator.resume_main_loop(0);
     client.send(Nop).await.unwrap();
-    assert_eq!(client.bus_stats().resets(), 2);
     client.close().await.unwrap();
 }
 
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn a_rejected_frame_sent_without_waiting_fails_only_its_own_response() {
-    let (_emulator, client) = open(2).await;
+    let (_emulator, client) = open(2);
     let frames =
         Frames::encode(client.geometry(), (Nop, REJECTED_BY_THE_DEVICE, Nop, Nop)).unwrap();
 
@@ -114,7 +112,7 @@ async fn a_rejected_frame_sent_without_waiting_fails_only_its_own_response() {
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn a_command_that_cannot_be_encoded_sends_nothing() {
-    let (_emulator, client) = open(1).await;
+    let (_emulator, client) = open(1);
     let before = client.bus_stats().frames();
 
     let sent = client

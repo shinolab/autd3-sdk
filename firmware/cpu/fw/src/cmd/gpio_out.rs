@@ -39,7 +39,7 @@ mod tests {
             0x2122_2324_2526_2728,
             0x3132_3334_3536_3738,
         ];
-        h.deliver(&gpio_out(0, &values));
+        h.deliver(&gpio_out(&values));
         assert_eq!(h.status(), Error::None);
         for (v, value) in values.iter().enumerate() {
             for w in 0..4u32 {

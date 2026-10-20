@@ -60,18 +60,17 @@ fn raw_pattern_round_trips_to_emissions() {
     let change = activate_pattern_bank(BANK, TransitionMode::Immediate);
 
     let mut device = Device::new(NUM_TRANSDUCERS);
-    device.send(&frame(0, Cmd::Reset, &[]));
     assert_eq!(
-        device.send(&frame(0, Cmd::WritePatternRaw, &write)).status,
+        device.send(&frame(Cmd::WritePatternRaw, &write)).status,
         DeviceErrorCode::None
     );
     assert_eq!(
-        device.send(&frame(1, Cmd::ConfigPattern, &config)).status,
+        device.send(&frame(Cmd::ConfigPattern, &config)).status,
         DeviceErrorCode::None
     );
     assert_eq!(
         device
-            .send(&frame(2, Cmd::ActivatePatternBank, &change))
+            .send(&frame(Cmd::ActivatePatternBank, &change))
             .status,
         DeviceErrorCode::None
     );
@@ -99,8 +98,7 @@ fn a_fused_pattern_leaves_the_fpga_as_write_config_activate_does() {
     write.extend(&phases);
     write.extend(&intensities);
     let mut split = Device::new(NUM_TRANSDUCERS);
-    split.send(&frame(0, Cmd::Reset, &[]));
-    for (seq, (cmd, payload)) in [
+    for (cmd, payload) in [
         (Cmd::WritePatternRaw, write),
         (
             Cmd::ConfigPattern,
@@ -113,12 +111,9 @@ fn a_fused_pattern_leaves_the_fpga_as_write_config_activate_does() {
             Cmd::ActivatePatternBank,
             activate_pattern_bank(BANK, TransitionMode::Immediate),
         ),
-    ]
-    .into_iter()
-    .enumerate()
-    {
+    ] {
         assert_eq!(
-            split.send(&frame(seq as u8, cmd, &payload)).status,
+            split.send(&frame(cmd, &payload)).status,
             DeviceErrorCode::None
         );
     }
@@ -129,10 +124,9 @@ fn a_fused_pattern_leaves_the_fpga_as_write_config_activate_does() {
     fused_payload.extend(&phases);
     fused_payload.extend(&intensities);
     let mut fused = Device::new(NUM_TRANSDUCERS);
-    fused.send(&frame(0, Cmd::Reset, &[]));
     assert_eq!(
         fused
-            .send(&frame(0, Cmd::WritePatternFused, &fused_payload))
+            .send(&frame(Cmd::WritePatternFused, &fused_payload))
             .status,
         DeviceErrorCode::None
     );
@@ -155,18 +149,17 @@ fn send_phase_pattern(write: &[u8]) -> Device {
     let config = config_pattern(BANK, EmissionType::Raw, 4, 0, 0, 0);
     let change = activate_pattern_bank(BANK, TransitionMode::SyncIdx);
     let mut device = Device::new(NUM_TRANSDUCERS);
-    device.send(&frame(0, Cmd::Reset, &[]));
     assert_eq!(
-        device.send(&frame(0, Cmd::WritePatternPhase, write)).status,
+        device.send(&frame(Cmd::WritePatternPhase, write)).status,
         DeviceErrorCode::None
     );
     assert_eq!(
-        device.send(&frame(1, Cmd::ConfigPattern, &config)).status,
+        device.send(&frame(Cmd::ConfigPattern, &config)).status,
         DeviceErrorCode::None
     );
     assert_eq!(
         device
-            .send(&frame(2, Cmd::ActivatePatternBank, &change))
+            .send(&frame(Cmd::ActivatePatternBank, &change))
             .status,
         DeviceErrorCode::None
     );
@@ -221,9 +214,8 @@ fn phase_bits4_pattern_expands_nibbles_to_full_range() {
 #[test]
 fn unknown_command_reports_error() {
     let mut device = Device::new(NUM_TRANSDUCERS);
-    device.send(&frame(0, Cmd::Reset, &[]));
 
-    let mut bad = frame(0, Cmd::Nop, &[]);
+    let mut bad = frame(Cmd::Nop, &[]);
     bad[1] = 0x7F;
     let rx = device.send(&bad);
 

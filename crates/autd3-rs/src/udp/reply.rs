@@ -4,7 +4,6 @@ use autd3_rs_core::REPLY_DATA_BYTES_MAX;
 pub struct Reply {
     pub device: usize,
     pub msg_id: u16,
-    pub acked_seq: u8,
     pub error_code: u8,
     len: u8,
     data: [u8; REPLY_DATA_BYTES_MAX],
@@ -12,14 +11,13 @@ pub struct Reply {
 
 impl Reply {
     #[must_use]
-    pub fn new(device: usize, msg_id: u16, acked_seq: u8, error_code: u8, data: &[u8]) -> Self {
+    pub fn new(device: usize, msg_id: u16, error_code: u8, data: &[u8]) -> Self {
         let len = data.len().min(REPLY_DATA_BYTES_MAX);
         let mut buf = [0; REPLY_DATA_BYTES_MAX];
         buf[..len].copy_from_slice(&data[..len]);
         Self {
             device,
             msg_id,
-            acked_seq,
             error_code,
             len: u8::try_from(len).unwrap_or(u8::MAX),
             data: buf,
@@ -38,8 +36,8 @@ mod tests {
 
     #[test]
     fn data_is_clamped_to_the_reply_limit() {
-        let reply = Reply::new(1, 2, 3, 0, &[7; REPLY_DATA_BYTES_MAX + 5]);
+        let reply = Reply::new(1, 2, 0, &[7; REPLY_DATA_BYTES_MAX + 5]);
         assert_eq!(reply.data().len(), REPLY_DATA_BYTES_MAX);
-        assert_eq!(Reply::new(0, 0, 0, 0, &[]).data(), [0u8; 0]);
+        assert_eq!(Reply::new(0, 0, 0, &[]).data(), [0u8; 0]);
     }
 }

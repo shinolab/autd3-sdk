@@ -446,17 +446,12 @@ mod tests {
         .unwrap();
 
         let mut device = autd3_rs_firmware_emulator::Device::new(Autd3::NUM_TRANSDUCERS);
-        device.send(&[0, Cmd::Reset.as_u8(), 0, 0, 0, 0]);
-        for (seq, cmd) in cmds(&datagrams).into_iter().enumerate() {
-            let tx = [
-                &[u8::try_from(seq).unwrap(), cmd.as_u8(), 0, 0, 0, 0],
-                payload(&datagrams, seq, 0),
-            ]
-            .concat();
+        for (index, cmd) in cmds(&datagrams).into_iter().enumerate() {
+            let tx = [&[0, cmd.as_u8(), 0, 0, 0, 0], payload(&datagrams, index, 0)].concat();
             assert_eq!(
                 device.send(&tx).status,
                 crate::protocol::DeviceErrorCode::None,
-                "frame {seq} {cmd:?}"
+                "frame {index} {cmd:?}"
             );
         }
         device

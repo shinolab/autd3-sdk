@@ -29,7 +29,7 @@ impl RxFrame {
         len: 0,
         payload: [0; PAYLOAD_BYTES],
         header: FrameHeader {
-            seq: 0,
+            reserved: 0,
             cmd: 0,
             exec_at: U32::ZERO,
         },
@@ -72,17 +72,16 @@ impl ReplyData {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Reply {
-    pub ack: u8,
     pub status: Error,
     data: ReplyData,
 }
 
 impl Reply {
-    pub const RESET: Self = Self::new(0xFF, Error::None, ReplyData::EMPTY);
+    pub const EMPTY: Self = Self::new(Error::None, ReplyData::EMPTY);
 
     #[must_use]
-    pub const fn new(ack: u8, status: Error, data: ReplyData) -> Self {
-        Self { ack, status, data }
+    pub const fn new(status: Error, data: ReplyData) -> Self {
+        Self { status, data }
     }
 
     #[must_use]
@@ -93,7 +92,6 @@ impl Reply {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Disposition {
-    Reply,
     Deferred,
     Dropped,
 }

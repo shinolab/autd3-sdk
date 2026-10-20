@@ -13,7 +13,7 @@ internal static class Sample
         var geometry = new Geometry(new[] { new Autd3() });
 
         // ANCHOR: open
-        var client = await Client.OpenAsync(geometry, new TransportOption());
+        var client = Client.Open(geometry, new TransportOption());
         using var checker = client.StateChecker();
         // ANCHOR_END: open
 

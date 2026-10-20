@@ -15,10 +15,8 @@ const POLL_INTERVAL: Duration = Duration::from_secs(1);
 
 type Read = fn(&Telemetry) -> u32;
 
-const COUNTERS: [(&str, Read); 12] = [
+const COUNTERS: [(&str, Read); 10] = [
     ("fifo_drop", |t| t.fifo_drop),
-    ("dedup", |t| t.dedup),
-    ("seq_mismatch", |t| t.seq_mismatch),
     ("dispatch_error", |t| t.dispatch_error),
     ("processed", |t| t.processed),
     ("send_failure", |t| t.send_failure),
@@ -35,7 +33,7 @@ async fn main() -> Result<()> {
     let _log_guard = init_tracing(TracingOption::default());
 
     let geometry = Geometry::new(vec![Autd3::default()]);
-    let client = Client::open(&geometry, &TransportOption::default()).await?;
+    let client = Client::open(&geometry, &TransportOption::default())?;
     client.send((Clear, Synchronize)).await?;
 
     println!("devices: {}", client.num_devices());

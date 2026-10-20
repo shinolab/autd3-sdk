@@ -26,7 +26,7 @@ mod tests {
     #[test]
     fn emulate_gpio_in_maps_values() {
         let mut h = Harness::new();
-        h.deliver(&gpio_in(0, [0, 1, 0, 1]));
+        h.deliver(&gpio_in([0, 1, 0, 1]));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.ctl_flags(), CtlFlags::GPIO_IN_1 | CtlFlags::GPIO_IN_3);
     }
@@ -34,7 +34,7 @@ mod tests {
     #[test]
     fn emulate_gpio_in_rejects_out_of_range() {
         let mut h = Harness::new();
-        h.deliver(&gpio_in(0, [0, 0, 2, 0]));
+        h.deliver(&gpio_in([0, 0, 2, 0]));
         assert_eq!(h.status(), Error::InvalidPayload);
     }
 }

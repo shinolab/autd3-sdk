@@ -9,8 +9,6 @@ POLL_INTERVAL = 1.0
 
 COUNTERS = (
     "fifo_drop",
-    "dedup",
-    "seq_mismatch",
     "dispatch_error",
     "processed",
     "send_failure",
@@ -28,7 +26,7 @@ async def main() -> None:
 
     geometry = Geometry([Autd3([0.0, 0.0, 0.0])])
 
-    async with await autd3.Client.open(
+    async with autd3.Client.open(
         geometry,
         autd3.TransportOption(),
     ) as client:

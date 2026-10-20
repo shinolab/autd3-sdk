@@ -12,7 +12,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
     // ANCHOR: open
-    let client = Client::open(&geometry, &TransportOption::default()).await?;
+    let client = Client::open(&geometry, &TransportOption::default())?;
     let checker = client.state_checker();
     // ANCHOR_END: open
 

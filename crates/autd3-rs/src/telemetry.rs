@@ -4,8 +4,6 @@ use zerocopy::FromBytes;
 #[non_exhaustive]
 pub struct Telemetry {
     pub fifo_drop: u32,
-    pub dedup: u32,
-    pub seq_mismatch: u32,
     pub dispatch_error: u32,
     pub processed: u32,
     pub send_failure: u32,
@@ -22,8 +20,6 @@ impl Telemetry {
         let (wire, _) = autd3_cpu_wire::payload::Telemetry::read_from_prefix(value).ok()?;
         Some(Self {
             fifo_drop: wire.fifo_drop.get(),
-            dedup: wire.dedup.get(),
-            seq_mismatch: wire.seq_mismatch.get(),
             dispatch_error: wire.dispatch_error.get(),
             processed: wire.processed.get(),
             send_failure: wire.send_failure.get(),
@@ -46,8 +42,6 @@ mod tests {
     fn wire() -> autd3_cpu_wire::payload::Telemetry {
         autd3_cpu_wire::payload::Telemetry {
             fifo_drop: 1.into(),
-            dedup: 2.into(),
-            seq_mismatch: 3.into(),
             dispatch_error: 4.into(),
             processed: 0x1234_5678.into(),
             send_failure: 6.into(),
@@ -67,8 +61,6 @@ mod tests {
             telemetry,
             Telemetry {
                 fifo_drop: 1,
-                dedup: 2,
-                seq_mismatch: 3,
                 dispatch_error: 4,
                 processed: 0x1234_5678,
                 send_failure: 6,
@@ -94,6 +86,6 @@ mod tests {
 
     #[test]
     fn a_short_reply_is_rejected() {
-        assert!(Telemetry::parse(&[0; 34]).is_none());
+        assert!(Telemetry::parse(&[0; 26]).is_none());
     }
 }

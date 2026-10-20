@@ -80,7 +80,7 @@ pub struct Link<'a> {
 
 impl Link<'_> {
     async fn open(&self) -> Result<Session, Error> {
-        let client = Client::open(self.geometry, self.option).await?;
+        let client = Client::open(self.geometry, self.option)?;
         client.send((Clear, Synchronize)).await?;
         Ok(Session::new(client, self.heartbeat))
     }

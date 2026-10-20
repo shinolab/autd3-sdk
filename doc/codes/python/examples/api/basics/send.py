@@ -10,7 +10,7 @@ from autd3.value import Intensity, SamplingConfig
 
 async def main() -> None:
     geometry = Geometry([Autd3(), Autd3()])
-    async with await Client.open(geometry, TransportOption()) as client:
+    async with Client.open(geometry, TransportOption()) as client:
         wavelength = pattern.wavelength(340 * m / s)
         left = geometry.phase_buffer()
         pattern.focus(geometry, geometry.center() + offset(-40.0 * mm, 0.0 * mm, 150.0 * mm), wavelength, left)

@@ -59,9 +59,9 @@ mod tests {
         let mut h = Harness::new();
         let (phases, intensities) = raw_pattern();
 
-        h.deliver(&write_pattern_raw(0, 1, 3, &phases, &intensities));
+        h.deliver(&write_pattern_raw(1, 3, &phases, &intensities));
         assert_eq!(h.status(), Error::None);
-        assert_eq!(h.expected_seq(), 1);
+        assert_eq!(h.processed(), 1);
 
         let slot = 3 * EMISSION_SLOT_WORDS as usize;
         for i in 0..NUM_TRANSDUCERS {
@@ -81,7 +81,6 @@ mod tests {
         let reversed: Vec<u8> = phases.iter().rev().copied().collect();
 
         h.deliver(&write_pattern_raw_multi(
-            0,
             0,
             7,
             &[(&phases, &intensities), (&reversed, &phases)],
@@ -108,18 +107,17 @@ mod tests {
         let (phases, intensities) = raw_pattern();
         let before = fpga_snapshot(&h);
 
-        h.deliver(&write_pattern_raw_multi(0, 0, 0, &[]));
+        h.deliver(&write_pattern_raw_multi(0, 0, &[]));
         assert_eq!(h.status(), Error::InvalidPayload);
 
         h.deliver(&write_pattern_raw_multi(
-            1,
             0,
             u16::try_from(EMISSION_MAX_INDICES - 1).unwrap(),
             &[(&phases, &intensities), (&phases, &intensities)],
         ));
         assert_eq!(h.status(), Error::InvalidPayload);
 
-        let mut frame = write_pattern_raw(2, 0, 0, &phases, &intensities);
+        let mut frame = write_pattern_raw(0, 0, &phases, &intensities);
         frame.set_payload_byte(1, 3);
         h.deliver(&frame);
         assert_eq!(h.status(), Error::InvalidPayload);
@@ -133,7 +131,6 @@ mod tests {
         let index = FPGA_PAGE_WORDS / EMISSION_SLOT_WORDS;
 
         h.deliver(&write_pattern_raw(
-            0,
             0,
             u16::try_from(index).unwrap(),
             &phases,
@@ -152,17 +149,10 @@ mod tests {
         let (phases, intensities) = raw_pattern();
         let before = fpga_snapshot(&h);
 
-        h.deliver(&write_pattern_raw(
-            0,
-            invalid_bank(),
-            0,
-            &phases,
-            &intensities,
-        ));
+        h.deliver(&write_pattern_raw(invalid_bank(), 0, &phases, &intensities));
         assert_eq!(h.status(), Error::InvalidPayload);
 
         h.deliver(&write_pattern_raw(
-            1,
             0,
             u16::try_from(EMISSION_MAX_INDICES).unwrap(),
             &phases,
@@ -178,12 +168,12 @@ mod tests {
         let (phases, intensities) = raw_pattern();
         let before = fpga_snapshot(&h);
 
-        let mut long = write_pattern_raw(0, 0, 0, &phases, &intensities);
+        let mut long = write_pattern_raw(0, 0, &phases, &intensities);
         long.set_payload_byte(4 + 2 * NUM_TRANSDUCERS, 0);
         h.deliver(&long);
         assert_eq!(h.status(), Error::InvalidPayload);
 
-        let mut short = write_pattern_raw(1, 0, 0, &phases, &intensities);
+        let mut short = write_pattern_raw(0, 0, &phases, &intensities);
         short.set_len(4 + 2 * NUM_TRANSDUCERS - 1);
         h.deliver(&short);
         assert_eq!(h.status(), Error::InvalidPayload);

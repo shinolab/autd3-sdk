@@ -223,7 +223,7 @@ mod client_error {
     #[must_use]
     pub fn client_error_code(e: &Error) -> i32 {
         match e {
-            Error::Timeout { .. } | Error::SeqMismatch { .. } => error_code::TIMEOUT,
+            Error::Timeout { .. } => error_code::TIMEOUT,
             Error::DeviceError { .. } | Error::UnexpectedReply { .. } => error_code::DEVICE,
             Error::Network(_) | Error::DeviceLost { .. } => error_code::NETWORK,
             Error::InvalidPayload(_) | Error::Encode(_) => error_code::INVALID_ARGUMENT,

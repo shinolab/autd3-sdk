@@ -26,7 +26,7 @@ mod tests {
     fn pwe_writes_table() {
         let mut h = Harness::new();
         let table: Vec<u16> = (0..PWE_TABLE_SIZE).map(|i| i as u16).collect();
-        h.deliver(&pwe(0, &table));
+        h.deliver(&pwe(&table));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.port.pwe[0], 0);
         assert_eq!(h.port.pwe[1], 1);

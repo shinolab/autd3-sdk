@@ -47,18 +47,17 @@ fn single_focus_synthesizes_phases() {
     let change = activate_pattern_bank(BANK, TransitionMode::Immediate);
 
     let mut device = Device::new(NUM_TRANSDUCERS);
-    device.send(&frame(0, Cmd::Reset, &[]));
     assert_eq!(
-        device.send(&frame(0, Cmd::WriteFociBuffer, &write)).status,
+        device.send(&frame(Cmd::WriteFociBuffer, &write)).status,
         DeviceErrorCode::None
     );
     assert_eq!(
-        device.send(&frame(1, Cmd::ConfigPattern, &config)).status,
+        device.send(&frame(Cmd::ConfigPattern, &config)).status,
         DeviceErrorCode::None
     );
     assert_eq!(
         device
-            .send(&frame(2, Cmd::ActivatePatternBank, &change))
+            .send(&frame(Cmd::ActivatePatternBank, &change))
             .status,
         DeviceErrorCode::None
     );

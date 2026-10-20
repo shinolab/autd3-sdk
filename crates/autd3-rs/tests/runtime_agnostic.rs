@@ -12,11 +12,7 @@ use pollster::block_on;
 use common::{emulator, geometry, option};
 
 fn open(emulator: &UdpEmulator) -> Client {
-    block_on(Client::open(
-        &geometry(emulator.num_devices()),
-        &option(emulator),
-    ))
-    .unwrap()
+    Client::open(&geometry(emulator.num_devices()), &option(emulator)).unwrap()
 }
 
 async fn stream_silencer(client: &Client, rounds: usize) -> Result<(), Error> {
@@ -31,9 +27,7 @@ async fn stream_silencer(client: &Client, rounds: usize) -> Result<(), Error> {
 fn a_client_opens_sends_and_closes_without_an_async_runtime() {
     let emulator = emulator(2);
     block_on(async {
-        let client = Client::open(&geometry(2), &option(&emulator))
-            .await
-            .unwrap();
+        let client = Client::open(&geometry(2), &option(&emulator)).unwrap();
         assert_eq!(client.num_devices(), 2);
         stream_silencer(&client, 4).await.unwrap();
         client.send(ForceFan { value: true }).await.unwrap();
@@ -111,6 +105,5 @@ fn several_os_threads_share_one_client() {
         client.bus_stats().frames() - before,
         u64::try_from(THREADS * ROUNDS).unwrap()
     );
-    assert_eq!(client.bus_stats().resets(), 1);
     block_on(client.close()).unwrap();
 }

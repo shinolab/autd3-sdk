@@ -40,7 +40,7 @@ mod tests {
         let mut h = Harness::new();
         h.set_ctl(ADDR_FUNCTION_BITS, 0xA5);
 
-        h.deliver(&Frame::new(0, Cmd::ReadFirmwareInfo));
+        h.deliver(&Frame::new(Cmd::ReadFirmwareInfo));
         assert_eq!(h.firmware_info().fpga_functions, 0xA5);
     }
 
@@ -51,7 +51,7 @@ mod tests {
         h.set_ctl(ADDR_VERSION_NUM_MINOR, 0x0B);
         h.set_ctl(ADDR_VERSION_NUM_PATCH, 0x0C);
 
-        h.deliver(&Frame::new(0, Cmd::ReadFirmwareInfo));
+        h.deliver(&Frame::new(Cmd::ReadFirmwareInfo));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.firmware_info().fpga_version, [0x0A, 0x0B, 0x0C]);
     }

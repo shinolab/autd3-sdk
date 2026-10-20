@@ -48,10 +48,10 @@ mod tests {
     #[test]
     fn clear_resets_telemetry_counters() {
         let mut h = Harness::new();
-        h.deliver(&force_fan(0, 2));
+        h.deliver(&force_fan(2));
         assert_eq!(h.telemetry().dispatch_error, 1);
 
-        h.deliver(&Frame::new(1, Cmd::Clear));
+        h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.telemetry().dispatch_error, 0);
     }
 
@@ -60,7 +60,7 @@ mod tests {
         let mut h = Harness::new();
         h.port.latch_stuck = true;
 
-        h.deliver(&Frame::new(0, Cmd::Clear));
+        h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.status(), Error::FpgaTimeout);
 
         h.port.latch_stuck = false;
@@ -70,7 +70,7 @@ mod tests {
     fn clear_latches_the_silencer_before_the_bank_settings() {
         let mut h = Harness::new();
         h.port.latch_log.clear();
-        h.deliver(&Frame::new(0, Cmd::Clear));
+        h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.status(), Error::None);
         assert_eq!(
             h.port.latch_log,
@@ -84,21 +84,14 @@ mod tests {
     #[test]
     fn clear_restores_silencer_and_bank_baseline() {
         let mut h = Harness::new();
-        h.deliver(&set_silencer(
-            0,
-            SilencerFlags::STRICT_MODE,
-            256,
-            256,
-            20,
-            30,
-        ));
+        h.deliver(&set_silencer(SilencerFlags::STRICT_MODE, 256, 256, 20, 30));
         assert_eq!(h.status(), Error::None);
-        h.deliver(&config_mod(1, 1, 50, 100));
+        h.deliver(&config_mod(1, 50, 100));
         assert_eq!(h.status(), Error::None);
-        h.deliver(&activate_mod_bank(2, 1, TransitionMode::Immediate, 0));
+        h.deliver(&activate_mod_bank(1, TransitionMode::Immediate, 0));
         assert_eq!(h.status(), Error::None);
 
-        h.deliver(&Frame::new(3, Cmd::Clear));
+        h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.status(), Error::None);
 
         assert_eq!(h.ctl(ADDR_SILENCER_FLAG), 0);
@@ -114,17 +107,17 @@ mod tests {
     #[test]
     fn clear_resets_force_fan() {
         let mut h = Harness::new();
-        h.deliver(&force_fan(0, 1));
-        h.deliver(&Frame::new(1, Cmd::Clear));
+        h.deliver(&force_fan(1));
+        h.deliver(&Frame::new(Cmd::Clear));
         assert!(!h.ctl_flags().contains(CtlFlags::FORCE_FAN));
     }
 
     #[test]
     fn clear_restores_the_default_fpga_config() {
         let mut h = Harness::new();
-        h.deliver(&fpga_config(0, 0));
+        h.deliver(&fpga_config(0));
         assert_eq!(h.port.sync_ps_ctl, Some(0));
-        h.deliver(&Frame::new(1, Cmd::Clear));
+        h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.port.sync_ps_ctl, Some(1));
     }
@@ -132,9 +125,9 @@ mod tests {
     #[test]
     fn clear_leaves_the_fpga_config_alone_when_a_latch_times_out() {
         let mut h = Harness::new();
-        h.deliver(&fpga_config(0, 0));
+        h.deliver(&fpga_config(0));
         h.port.latch_stuck = true;
-        h.deliver(&Frame::new(1, Cmd::Clear));
+        h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.status(), Error::FpgaTimeout);
         assert_eq!(h.port.sync_ps_ctl, Some(0));
     }
@@ -149,12 +142,12 @@ mod tests {
     #[test]
     fn clear_keeps_the_failsafe_gate_closed_until_the_latches_complete() {
         let mut h = armed();
-        h.deliver(&force_fan(0, 1));
+        h.deliver(&force_fan(1));
         trip_failsafe(&mut h);
         h.port.ctl_flag_writes.clear();
         h.port.latch_log.clear();
 
-        h.deliver(&Frame::new(1, Cmd::Clear));
+        h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.status(), Error::None);
 
         assert_eq!(
@@ -180,12 +173,12 @@ mod tests {
         trip_failsafe(&mut h);
         h.port.latch_stuck = true;
 
-        h.deliver(&Frame::new(0, Cmd::Clear));
+        h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.status(), Error::FpgaTimeout);
         assert!(h.ctl_flags().contains(CtlFlags::FAILSAFE));
 
         h.port.latch_stuck = false;
-        h.deliver(&Frame::new(1, Cmd::Clear));
+        h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.ctl_flags(), CtlFlags::empty());
     }
@@ -195,7 +188,7 @@ mod tests {
         let mut h = Harness::new();
         h.port.ctl_flag_writes.clear();
 
-        h.deliver(&Frame::new(0, Cmd::Clear));
+        h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.status(), Error::None);
         assert_eq!(
             h.port.ctl_flag_writes,
@@ -214,7 +207,7 @@ mod tests {
         h.tick_1ms(1);
         assert_eq!(h.telemetry().failsafe, 1);
 
-        h.deliver(&Frame::new(0, Cmd::Clear));
+        h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.status(), Error::None);
         assert!(!h.ctl_flags().contains(CtlFlags::FAILSAFE));
         assert_eq!(h.telemetry().failsafe, 0);
@@ -227,20 +220,17 @@ mod tests {
     #[test]
     fn clear_releases_a_ptp_unlock_failsafe_even_while_the_lock_is_still_lost() {
         let mut h = Harness::new();
-        h.deliver(&set_cpu_config(
-            0,
-            &CpuConfig {
-                ptp_unlock_failsafe_timeout: Some(Duration::from_millis(50)),
-                ..default_config()
-            },
-        ));
+        h.deliver(&set_cpu_config(&CpuConfig {
+            ptp_unlock_failsafe_timeout: Some(Duration::from_millis(50)),
+            ..default_config()
+        }));
         assert_eq!(h.status(), Error::None);
         h.port.ptp_unlocked_ms = Some(50);
         h.tick_1ms(1);
         assert!(h.ctl_flags().contains(CtlFlags::FAILSAFE));
 
         h.port.ptp_unlocked_ms = Some(500);
-        h.deliver(&Frame::new(1, Cmd::Clear));
+        h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.status(), Error::None);
         assert!(!h.ctl_flags().contains(CtlFlags::FAILSAFE));
 

@@ -111,7 +111,7 @@ pub(crate) struct MockPort {
     pub watchdog_state: u16,
     pub watchdog_log: Vec<WatchdogEvent>,
     pub sync_ps_ctl: Option<u16>,
-    isr_frame: Option<(Rc<Cpu>, u8, u8)>,
+    isr_frame: Option<(Rc<Cpu>, u8)>,
     pub isr_seen_reply: Option<Reply>,
 }
 
@@ -359,11 +359,11 @@ impl MockPort {
     }
 
     fn fire_isr_frame(&mut self) {
-        let Some((cpu, seq, cmd)) = self.isr_frame.take() else {
+        let Some((cpu, cmd)) = self.isr_frame.take() else {
             return;
         };
         self.isr_seen_reply = Some(cpu.reply());
-        let _ = cpu.recv_frame(&[seq, cmd, 0, 0, 0, 0], 0);
+        let _ = cpu.recv_frame(&[0, cmd, 0, 0, 0, 0], 0);
     }
 }
 
@@ -511,7 +511,6 @@ impl Port for MockPort {
 }
 
 pub(crate) struct Frame {
-    seq: u8,
     cmd: u8,
     exec_at: u32,
     len: usize,
@@ -519,13 +518,12 @@ pub(crate) struct Frame {
 }
 
 impl Frame {
-    pub(crate) fn new(seq: u8, cmd: Cmd) -> Self {
-        Self::raw(seq, cmd as u8)
+    pub(crate) fn new(cmd: Cmd) -> Self {
+        Self::raw(cmd as u8)
     }
 
-    pub(crate) fn raw(seq: u8, cmd: u8) -> Self {
+    pub(crate) fn raw(cmd: u8) -> Self {
         Self {
-            seq,
             cmd,
             exec_at: 0,
             len: 0,
@@ -533,25 +531,16 @@ impl Frame {
         }
     }
 
-    pub(crate) fn from_payload<P: IntoBytes + Immutable + ?Sized>(
-        seq: u8,
-        cmd: Cmd,
-        payload: &P,
-    ) -> Self {
-        let mut f = Self::new(seq, cmd);
+    pub(crate) fn from_payload<P: IntoBytes + Immutable + ?Sized>(cmd: Cmd, payload: &P) -> Self {
+        let mut f = Self::new(cmd);
         let bytes = payload.as_bytes();
         f.payload[..bytes.len()].copy_from_slice(bytes);
         f.len = bytes.len();
         f
     }
 
-    pub(crate) fn from_parts<H: IntoBytes + Immutable>(
-        seq: u8,
-        cmd: Cmd,
-        header: &H,
-        data: &[u8],
-    ) -> Self {
-        let mut f = Self::from_payload(seq, cmd, header);
+    pub(crate) fn from_parts<H: IntoBytes + Immutable>(cmd: Cmd, header: &H, data: &[u8]) -> Self {
+        let mut f = Self::from_payload(cmd, header);
         let h = core::mem::size_of::<H>();
         f.payload[h..][..data.len()].copy_from_slice(data);
         f.len = h + data.len();
@@ -575,7 +564,7 @@ impl Frame {
         let mut bytes = std::vec::Vec::with_capacity(size_of::<FrameHeader>() + self.len);
         bytes.extend_from_slice(
             FrameHeader {
-                seq: self.seq,
+                reserved: 0,
                 cmd: self.cmd,
                 exec_at: self.exec_at.into(),
             }
@@ -623,8 +612,8 @@ impl Harness {
         self.cpu.reply()
     }
 
-    pub(crate) fn ack(&self) -> u8 {
-        self.reply().ack
+    pub(crate) fn processed(&self) -> u32 {
+        self.telemetry().processed.get()
     }
 
     pub(crate) fn status(&self) -> Error {
@@ -639,10 +628,6 @@ impl Harness {
         use zerocopy::FromBytes;
         autd3_cpu_wire::payload::FirmwareInfo::read_from_bytes(&self.reply_data()[..])
             .expect("a firmware info reply")
-    }
-
-    pub(crate) fn expected_seq(&self) -> u8 {
-        self.cpu.expected_seq()
     }
 
     pub(crate) fn ctl(&self, addr: u16) -> u16 {
@@ -673,8 +658,8 @@ impl Harness {
         self.port.em_ram[bank as usize][idx]
     }
 
-    pub(crate) fn arm_isr_frame(&mut self, seq: u8, cmd: Cmd) {
-        self.port.isr_frame = Some((Rc::clone(&self.cpu), seq, cmd as u8));
+    pub(crate) fn arm_isr_frame(&mut self, cmd: Cmd) {
+        self.port.isr_frame = Some((Rc::clone(&self.cpu), cmd as u8));
     }
 
     pub(crate) fn telemetry(&self) -> Telemetry {
@@ -685,9 +670,8 @@ impl Harness {
         self.port.output_mask[idx]
     }
 
-    pub(crate) fn step_backlogged(&mut self, seq: &mut u8, elapsed_ms: u32) {
-        self.deliver_no_drain(&Frame::new(*seq, Cmd::Nop));
-        *seq = seq.wrapping_add(1);
+    pub(crate) fn step_backlogged(&mut self, elapsed_ms: u32) {
+        self.deliver_no_drain(&Frame::new(Cmd::Nop));
         let mut work = RxFrame::ZERO;
         assert_ne!(
             self.cpu.step(&mut self.port, &mut work, elapsed_ms),

@@ -8,7 +8,7 @@ use autd3_rs::error::Error;
 use autd3_rs::{Frame, Frames};
 use autd3_rs_core::common::ULTRASOUND_PERIOD;
 use autd3_rs_core::geometry::Geometry;
-use autd3_rs_core::protocol::{Cmd, DeviceErrorCode, FRAME_BYTES_MAX, FrameHeader, Seq};
+use autd3_rs_core::protocol::{Cmd, DeviceErrorCode, FRAME_BYTES_MAX, FrameHeader};
 use autd3_rs_firmware_emulator::{Device, SilencerEmulator};
 
 use crate::client_api::ClientApi;
@@ -28,7 +28,6 @@ pub struct Recorder {
     geometry: Arc<Geometry>,
     devices: Vec<Device>,
     records: Vec<Vec<RawTransducerRecord>>,
-    seq: Seq,
     start_ns: u64,
     current_ns: u64,
 }
@@ -59,7 +58,6 @@ impl Recorder {
             geometry: Arc::new(geometry.clone()),
             devices,
             records,
-            seq: Seq::ZERO,
             start_ns,
             current_ns: start_ns,
         }
@@ -115,8 +113,6 @@ impl Recorder {
     }
 
     fn stage_and_send(&mut self, frame: &Frame<'_>) -> Result<(), EmulatorError> {
-        let seq = self.seq;
-        self.seq = seq.next();
         let touches_silencer = frame
             .datagrams()
             .iter()
@@ -128,7 +124,7 @@ impl Recorder {
             let len = size_of::<FrameHeader>() + payload.len();
             let mut buf = [0u8; FRAME_BYTES_MAX];
             let (header, body) = buf.split_at_mut(size_of::<FrameHeader>());
-            header.copy_from_slice(&[seq.get(), dg.cmd.as_u8(), 0, 0, 0, 0]);
+            header.copy_from_slice(&[0, dg.cmd.as_u8(), 0, 0, 0, 0]);
             body[..payload.len()].copy_from_slice(payload);
             let status = dev.send(&buf[..len]).status;
             if status != DeviceErrorCode::None && rejected.is_none() {

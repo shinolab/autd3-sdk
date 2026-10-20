@@ -16,7 +16,7 @@ async def main() -> None:
     geometry = Geometry([Autd3()])
 
     # Open the client.
-    async with await Client.open(
+    async with Client.open(
         geometry,
         TransportOption(),
     ) as client:

@@ -41,7 +41,6 @@ async fn main() -> Result<()> {
 
     let (controller, driver) = Controller::open(&geometry, &TransportOption::default())?;
     let driving = tokio::spawn(drive(driver));
-    controller.initialize().await?;
     controller.send((Clear, Synchronize)).await?;
 
     println!("devices: {}", controller.num_devices());

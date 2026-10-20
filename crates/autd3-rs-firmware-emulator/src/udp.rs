@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use autd3_cpu_fw::proto::{Disposition, Drained, FrameHeader, Reply};
+use autd3_cpu_fw::proto::{Drained, FrameHeader, Reply};
 use autd3_cpu_fw::ptp::Config as PtpConfig;
 use autd3_cpu_wire::udp::{
     AssignIdBody, Flags, FrameReply, Header, Kind, PROTOCOL_VERSION, RESET_ID_CLOSE_DELAY_MS, Role,
@@ -440,28 +440,12 @@ impl Chain {
             .count()
     }
 
-    fn frame_while_paused(
-        &mut self,
-        index: usize,
-        src: SocketAddr,
-        header: Header,
-        body: &[u8],
-        now: Instant,
-    ) {
-        let msg_id = header.msg_id.get();
-        let mut answer = self.units[index].device.recv(body, msg_id) == Disposition::Reply;
+    fn enqueue(&mut self, index: usize, body: &[u8], msg_id: u16) {
+        let _ = self.units[index].device.recv(body, msg_id);
         if self.units[index].duplicate_frames > 0 {
             self.units[index].duplicate_frames -= 1;
-            answer |= self.units[index].device.recv(body, msg_id) == Disposition::Reply;
+            let _ = self.units[index].device.recv(body, msg_id);
         }
-        if !answer {
-            return;
-        }
-        if self.units[index].drop_replies > 0 {
-            self.units[index].drop_replies -= 1;
-            return;
-        }
-        self.frame_reply(index, src, header, now);
     }
 
     fn frame_reply(&self, index: usize, dst: SocketAddr, header: Header, now: Instant) {
@@ -470,7 +454,7 @@ impl Chain {
         };
         let state: Reply = self.units[index].device.reply();
         let head = FrameReply {
-            ack: state.ack,
+            reserved: 0,
             status: state.status.as_u8(),
             flags: self.flags(index, now),
             unit_id,
@@ -527,42 +511,28 @@ impl Chain {
         if self.units[index].id.is_none() {
             return;
         }
+        self.enqueue(index, body, header.msg_id.get());
         if self.units[index].main_loop_paused {
-            self.frame_while_paused(index, src, header, body, now);
             return;
         }
-        let disposition = self.units[index].device.recv(body, header.msg_id.get());
         let silent = self.units[index].drop_replies > 0;
         if silent {
             self.units[index].drop_replies -= 1;
         }
-        if self.units[index].duplicate_frames > 0 {
-            self.units[index].duplicate_frames -= 1;
-            if self.units[index].device.recv(body, header.msg_id.get()) == Disposition::Reply
-                && !silent
-            {
-                self.frame_reply(index, src, header, now);
-            }
-        }
-        match disposition {
-            Disposition::Reply if silent => {}
-            Disposition::Reply => self.frame_reply(index, src, header, now),
-            Disposition::Deferred => loop {
-                let drained = self.units[index].device.process_one();
-                self.apply_ptp_config(index, now);
-                match drained {
-                    Drained::Empty => break,
-                    Drained::Completed { .. } if silent => {}
-                    Drained::Completed { msg_id } => {
-                        let header = Header {
-                            msg_id: zerocopy::little_endian::U16::new(msg_id),
-                            ..header
-                        };
-                        self.frame_reply(index, src, header, now);
-                    }
+        loop {
+            let drained = self.units[index].device.process_one();
+            self.apply_ptp_config(index, now);
+            match drained {
+                Drained::Empty => break,
+                Drained::Completed { .. } if silent => {}
+                Drained::Completed { msg_id } => {
+                    let header = Header {
+                        msg_id: zerocopy::little_endian::U16::new(msg_id),
+                        ..header
+                    };
+                    self.frame_reply(index, src, header, now);
                 }
-            },
-            Disposition::Dropped => {}
+            }
         }
     }
 }

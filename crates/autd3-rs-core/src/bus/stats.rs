@@ -4,7 +4,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 #[derive(Debug, Default)]
 struct Counters {
     frames: AtomicU64,
-    resets: AtomicU64,
     heartbeats: AtomicU64,
     recoveries: AtomicU64,
     acked_frames: AtomicU64,
@@ -19,11 +18,6 @@ impl BusStats {
     #[must_use]
     pub fn frames(&self) -> u64 {
         self.0.frames.load(Ordering::Acquire)
-    }
-
-    #[must_use]
-    pub fn resets(&self) -> u64 {
-        self.0.resets.load(Ordering::Acquire)
     }
 
     #[must_use]
@@ -60,10 +54,6 @@ impl BusStats {
         self.0.frames.fetch_add(1, Ordering::Relaxed);
     }
 
-    pub fn record_reset(&self) {
-        self.0.resets.fetch_add(1, Ordering::Relaxed);
-    }
-
     pub fn record_heartbeat(&self) {
         self.0.heartbeats.fetch_add(1, Ordering::Relaxed);
     }
@@ -95,10 +85,8 @@ mod tests {
         let observer = stats.clone();
         stats.record_frame();
         stats.record_frame();
-        stats.record_reset();
         stats.record_heartbeat();
         assert_eq!(observer.frames(), 2);
-        assert_eq!(observer.resets(), 1);
         assert_eq!(observer.heartbeats(), 1);
     }
 

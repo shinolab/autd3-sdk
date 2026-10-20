@@ -12,7 +12,7 @@ async fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
     let option = TransportOption::default();
     // ANCHOR: open
-    let client = Client::open(&geometry, &option).await?;
+    let client = Client::open(&geometry, &option)?;
     client.send((Clear, Synchronize)).await?;
     // ANCHOR_END: open
 

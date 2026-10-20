@@ -11,7 +11,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
     // Open the client.
-    let client = Client::open(&geometry, &TransportOption::default()).await?;
+    let client = Client::open(&geometry, &TransportOption::default())?;
     client.send((Clear, Synchronize)).await?;
 
     // Generate a focus 150 mm above the array center.

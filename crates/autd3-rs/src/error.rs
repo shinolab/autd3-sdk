@@ -57,15 +57,6 @@ pub enum Error {
     #[error("the devices did not reply within {timeout:?}")]
     Timeout { timeout: std::time::Duration },
 
-    #[error(
-        "device {device} did not accept the frame: it acknowledged sequence {got} where {expected} was sent"
-    )]
-    SeqMismatch {
-        device: usize,
-        expected: u8,
-        got: u8,
-    },
-
     #[error("network error: {0}")]
     Network(#[source] NetworkCause),
 

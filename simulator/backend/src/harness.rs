@@ -13,7 +13,6 @@ pub(crate) struct Harness {
     pub geometry: Arc<Geometry>,
     pub devices: Vec<EmuDevice>,
     pub mod_enabled: bool,
-    seq: u8,
     boot: Instant,
 }
 
@@ -28,7 +27,6 @@ impl Harness {
             geometry,
             devices,
             mod_enabled: true,
-            seq: 0,
             boot: Instant::now(),
         }
     }
@@ -42,15 +40,10 @@ impl Harness {
             let sys_time_ns = u64::try_from(self.boot.elapsed().as_nanos()).unwrap_or(u64::MAX);
             for (index, device) in self.devices.iter_mut().enumerate() {
                 let datagram = frame.datagram_for(index);
-                let bytes = [
-                    &[self.seq, datagram.cmd.as_u8(), 0, 0, 0, 0],
-                    datagram.payload(),
-                ]
-                .concat();
+                let bytes = [&[0, datagram.cmd.as_u8(), 0, 0, 0, 0], datagram.payload()].concat();
                 device.fpga_mut().update_with_sys_time(sys_time_ns);
                 let _ = device.send(&bytes);
             }
-            self.seq = self.seq.wrapping_add(1);
         }
     }
 

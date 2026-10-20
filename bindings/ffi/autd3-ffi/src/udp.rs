@@ -409,32 +409,49 @@ mod tests {
         assert!(unsafe { autd3_udp_emulator_option(std::ptr::null()) }.is_null());
     }
 
-    #[test]
-    fn a_rejected_client_open_consumes_the_option() {
-        let option = autd3_transport_option_new();
-        let (code, client) = complete(|cb, user_data| unsafe {
-            crate::autd3_client_open(std::ptr::null(), option, cb, user_data);
-        });
-        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
-        assert_eq!(0, client);
-
-        let geometry = Geometry::new(vec![Autd3::default()]);
-        let (code, client) = complete(|cb, user_data| unsafe {
-            crate::autd3_client_open(&raw const geometry, std::ptr::null_mut(), cb, user_data);
-        });
-        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
-        assert_eq!(0, client);
+    fn open(
+        geometry: *const Geometry,
+        option: *mut TransportOptionHandle,
+    ) -> (i32, *mut crate::ClientHandle, String) {
+        let mut client = std::ptr::NonNull::<crate::ClientHandle>::dangling().as_ptr();
+        let mut err = [0 as c_char; 256];
+        let code = unsafe {
+            crate::autd3_client_open(
+                geometry,
+                option,
+                &raw mut client,
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        };
+        let message = unsafe { std::ffi::CStr::from_ptr(err.as_ptr()) }
+            .to_string_lossy()
+            .into_owned();
+        (code, client, message)
     }
 
     #[test]
-    fn an_out_of_range_device_count_fails_the_open_through_the_callback() {
+    fn a_rejected_client_open_consumes_the_option() {
+        let option = autd3_transport_option_new();
+        let (code, client, message) = open(std::ptr::null(), option);
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
+        assert!(client.is_null());
+        assert_eq!("null argument", message);
+
+        let geometry = Geometry::new(vec![Autd3::default()]);
+        let (code, client, _) = open(&raw const geometry, std::ptr::null_mut());
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
+        assert!(client.is_null());
+    }
+
+    #[test]
+    fn an_out_of_range_device_count_fails_the_open() {
         let geometry = Geometry::new(Vec::<Autd3>::new());
         let option = autd3_transport_option_new();
-        let (code, client) = complete(|cb, user_data| unsafe {
-            crate::autd3_client_open(&raw const geometry, option, cb, user_data);
-        });
+        let (code, client, message) = open(&raw const geometry, option);
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
-        assert_eq!(0, client);
+        assert!(client.is_null());
+        assert!(message.contains("device count 0"), "{message}");
     }
 
     fn open_error_with_zero(
@@ -443,16 +460,9 @@ mod tests {
         let geometry = Geometry::new(vec![Autd3::default()]);
         let option = autd3_transport_option_new();
         assert_eq!(unsafe { set(option, 0) }, AUTD3_OK);
-        let (tx, rx) = std::sync::mpsc::channel::<(i32, String)>();
-        unsafe {
-            crate::autd3_client_open(
-                &raw const geometry,
-                option,
-                Some(report_message),
-                Box::into_raw(Box::new(tx)).cast(),
-            );
-        }
-        rx.recv().unwrap()
+        let (code, client, message) = open(&raw const geometry, option);
+        assert!(client.is_null());
+        (code, message)
     }
 
     #[test]
@@ -470,14 +480,21 @@ mod tests {
     }
 
     #[test]
-    fn a_client_open_without_a_callback_still_consumes_the_option() {
+    fn a_client_open_without_an_out_pointer_still_consumes_the_option() {
         let geometry = Geometry::new(vec![Autd3::default()]);
         let live = LIVE_ALLOCATIONS.get();
         let option = autd3_transport_option_new();
         assert!(live < LIVE_ALLOCATIONS.get());
-        unsafe {
-            crate::autd3_client_open(&raw const geometry, option, None, std::ptr::null_mut());
-        }
+        let code = unsafe {
+            crate::autd3_client_open(
+                &raw const geometry,
+                option,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                0,
+            )
+        };
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
         assert_eq!(live, LIVE_ALLOCATIONS.get());
     }
 
@@ -538,42 +555,4 @@ mod tests {
 
     #[global_allocator]
     static ALLOCATOR: CountingAllocator = CountingAllocator;
-
-    type Completion = (i32, usize);
-
-    extern "C" fn report(
-        code: i32,
-        value: *mut std::ffi::c_void,
-        _msg: *const c_char,
-        user_data: *mut std::ffi::c_void,
-    ) {
-        let tx = unsafe { Box::from_raw(user_data.cast::<std::sync::mpsc::Sender<Completion>>()) };
-        tx.send((code, value as usize)).unwrap();
-    }
-
-    extern "C" fn report_message(
-        code: i32,
-        _value: *mut std::ffi::c_void,
-        msg: *const c_char,
-        user_data: *mut std::ffi::c_void,
-    ) {
-        let tx =
-            unsafe { Box::from_raw(user_data.cast::<std::sync::mpsc::Sender<(i32, String)>>()) };
-        let message = if msg.is_null() {
-            String::new()
-        } else {
-            unsafe { std::ffi::CStr::from_ptr(msg) }
-                .to_string_lossy()
-                .into_owned()
-        };
-        tx.send((code, message)).unwrap();
-    }
-
-    fn complete(
-        call: impl FnOnce(autd3_ffi_abi::CompletionCallback, *mut std::ffi::c_void),
-    ) -> Completion {
-        let (tx, rx) = std::sync::mpsc::channel::<Completion>();
-        call(Some(report), Box::into_raw(Box::new(tx)).cast());
-        rx.recv().unwrap()
-    }
 }

@@ -36,9 +36,9 @@ mod tests {
         let mut h = Harness::new();
         let latches_at_boot = h.latch_count(CtlFlags::MOD_SET);
 
-        h.deliver(&config_mod(0, 1, 10, 4000));
+        h.deliver(&config_mod(1, 10, 4000));
 
-        assert_eq!(h.ack(), 0);
+        assert_eq!(h.processed(), 1);
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.ctl(ADDR_MOD_CYCLE0 + 1), 3999);
         assert_eq!(h.ctl(ADDR_MOD_FREQ_DIV0 + 1), 10);
@@ -56,7 +56,7 @@ mod tests {
     fn config_mod_writes_finite_loop_rep() {
         let mut h = Harness::new();
 
-        h.deliver(&config_mod_rep(0, 0, 10, 4000, 9));
+        h.deliver(&config_mod_rep(0, 10, 4000, 9));
 
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.ctl(ADDR_MOD_REP0), 9);
@@ -65,16 +65,16 @@ mod tests {
     #[test]
     fn config_mod_rejects_invalid_fields_and_leaves_registers_untouched() {
         let mut h = Harness::new();
-        h.deliver(&config_mod(0, 1, 2, 100));
+        h.deliver(&config_mod(1, 2, 100));
         assert_eq!(h.status(), Error::None);
 
-        h.deliver(&config_mod(1, invalid_bank(), 1, 1));
+        h.deliver(&config_mod(invalid_bank(), 1, 1));
         assert_eq!(h.status(), Error::InvalidPayload);
-        h.deliver(&config_mod(2, 0, 0, 1));
+        h.deliver(&config_mod(0, 0, 1));
         assert_eq!(h.status(), Error::InvalidPayload);
-        h.deliver(&config_mod(3, 0, 1, 0));
+        h.deliver(&config_mod(0, 1, 0));
         assert_eq!(h.status(), Error::InvalidPayload);
-        h.deliver(&config_mod(4, 0, 1, MOD_BUFFER_SAMPLES + 1));
+        h.deliver(&config_mod(0, 1, MOD_BUFFER_SAMPLES + 1));
         assert_eq!(h.status(), Error::InvalidPayload);
 
         assert_eq!(h.ctl(ADDR_MOD_CYCLE0 + 1), 99);
@@ -85,17 +85,17 @@ mod tests {
     #[test]
     fn config_mod_rejects_single_sample_buffer() {
         let mut h = Harness::new();
-        h.deliver(&config_mod(0, 0, 1, 1));
+        h.deliver(&config_mod(0, 1, 1));
         assert_eq!(h.status(), Error::InvalidPayload);
 
-        h.deliver(&config_mod(1, 0, 1, BUFFER_SIZE_MIN));
+        h.deliver(&config_mod(0, 1, BUFFER_SIZE_MIN));
         assert_eq!(h.status(), Error::None);
     }
 
     #[test]
     fn config_mod_accepts_full_buffer_size() {
         let mut h = Harness::new();
-        h.deliver(&config_mod(0, 0, 1, MOD_BUFFER_SAMPLES));
+        h.deliver(&config_mod(0, 1, MOD_BUFFER_SAMPLES));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.ctl(ADDR_MOD_CYCLE0), 0xFFFF);
     }

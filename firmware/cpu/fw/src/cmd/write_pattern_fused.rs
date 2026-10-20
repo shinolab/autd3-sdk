@@ -73,21 +73,13 @@ mod tests {
         let (phases, intensities) = raw_pattern();
 
         let mut fused = Harness::new();
-        fused.deliver(&write_pattern_fused(
-            0,
-            bank,
-            mode,
-            0,
-            &phases,
-            &intensities,
-        ));
+        fused.deliver(&write_pattern_fused(bank, mode, 0, &phases, &intensities));
         assert_eq!(fused.status(), Error::None);
 
         let mut split = Harness::new();
-        split.deliver(&write_pattern_raw(0, bank, 0, &phases, &intensities));
+        split.deliver(&write_pattern_raw(bank, 0, &phases, &intensities));
         assert_eq!(split.status(), Error::None);
         split.deliver(&config_pattern(
-            1,
             bank,
             EmissionType::Raw.as_u8(),
             u16::MAX,
@@ -96,7 +88,7 @@ mod tests {
             0,
         ));
         assert_eq!(split.status(), Error::None);
-        split.deliver(&activate_pattern_bank(2, bank, mode, 0));
+        split.deliver(&activate_pattern_bank(bank, mode, 0));
         assert_eq!(split.status(), Error::None);
 
         assert_eq!(fpga_snapshot(&fused), fpga_snapshot(&split));
@@ -110,7 +102,6 @@ mod tests {
         let before = fpga_snapshot(&h);
 
         h.deliver(&write_pattern_fused(
-            0,
             invalid_bank(),
             TransitionMode::Immediate,
             0,
@@ -119,14 +110,13 @@ mod tests {
         ));
         assert_eq!(h.status(), Error::InvalidPayload);
 
-        let mut short =
-            write_pattern_fused(1, 0, TransitionMode::Immediate, 0, &phases, &intensities);
+        let mut short = write_pattern_fused(0, TransitionMode::Immediate, 0, &phases, &intensities);
         short.set_len(size_of::<WritePatternFusedPayload>() + 2 * NUM_TRANSDUCERS - 1);
         h.deliver(&short);
         assert_eq!(h.status(), Error::InvalidPayload);
 
         let mut unknown_mode =
-            write_pattern_fused(2, 0, TransitionMode::Immediate, 0, &phases, &intensities);
+            write_pattern_fused(0, TransitionMode::Immediate, 0, &phases, &intensities);
         unknown_mode.set_payload_byte(1, 0x03);
         h.deliver(&unknown_mode);
         assert_eq!(h.status(), Error::InvalidPayload);
@@ -146,14 +136,7 @@ mod tests {
         let mut h = Harness::new();
         let before = fpga_snapshot(&h);
 
-        h.deliver(&write_pattern_fused(
-            0,
-            1,
-            mode,
-            value,
-            &phases,
-            &intensities,
-        ));
+        h.deliver(&write_pattern_fused(1, mode, value, &phases, &intensities));
 
         assert_eq!(h.status(), Error::InvalidTransitionMode);
         assert_fpga_unchanged(&before, &h);
@@ -166,7 +149,6 @@ mod tests {
         h.port.reject_latch = CtlFlags::PATTERN_SET;
 
         h.deliver(&write_pattern_fused(
-            0,
             1,
             TransitionMode::Immediate,
             0,

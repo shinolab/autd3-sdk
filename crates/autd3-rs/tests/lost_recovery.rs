@@ -16,9 +16,9 @@ const SETTLE: Duration = Duration::from_millis(200);
 const POLL_INTERVAL: Duration = Duration::from_millis(5);
 const FAILSAFE_TIMEOUT: Duration = Duration::from_millis(500);
 
-async fn open_monitoring(num_devices: usize) -> (UdpEmulator, Client) {
+fn open_monitoring(num_devices: usize) -> (UdpEmulator, Client) {
     let emulator = emulator(num_devices);
-    let client = open_with(&emulator, &monitoring_option(&emulator)).await;
+    let client = open_with(&emulator, &monitoring_option(&emulator));
     (emulator, client)
 }
 
@@ -95,7 +95,7 @@ fn sync_times(emulator: &UdpEmulator) -> Vec<Vec<u16>> {
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn a_device_that_answers_again_stays_lost_until_recovered() {
-    let (emulator, client) = open_monitoring(2).await;
+    let (emulator, client) = open_monitoring(2);
 
     emulator.set_muted(1, true);
     wait_until_lost(&client, 1).await;
@@ -110,7 +110,7 @@ async fn a_device_that_answers_again_stays_lost_until_recovered() {
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn recover_brings_back_a_device_that_answers_again_and_it_takes_frames() {
-    let (emulator, client) = open_monitoring(3).await;
+    let (emulator, client) = open_monitoring(3);
 
     emulator.set_muted(1, true);
     wait_until_lost(&client, 1).await;
@@ -134,19 +134,17 @@ async fn recover_brings_back_a_device_that_answers_again_and_it_takes_frames() {
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn recover_with_nothing_lost_brings_back_nothing() {
-    let (_emulator, client) = open_monitoring(2).await;
-    let resets = client.bus_stats().resets();
+    let (_emulator, client) = open_monitoring(2);
 
     assert_eq!(client.recover().await.unwrap(), DeviceMask::default());
 
-    assert_eq!(client.bus_stats().resets(), resets);
     client.close().await.unwrap();
 }
 
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn recover_leaves_a_device_that_is_still_silent_lost() {
-    let (emulator, client) = open_monitoring(2).await;
+    let (emulator, client) = open_monitoring(2);
 
     emulator.set_muted(1, true);
     wait_until_lost(&client, 1).await;
@@ -160,7 +158,7 @@ async fn recover_leaves_a_device_that_is_still_silent_lost() {
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn a_rebooted_device_is_not_recovered() {
-    let (emulator, client) = open_monitoring(3).await;
+    let (emulator, client) = open_monitoring(3);
 
     emulator.reboot(1);
     wait_until_lost(&client, 1).await;
@@ -175,7 +173,7 @@ async fn a_rebooted_device_is_not_recovered() {
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn every_device_cut_off_at_once_is_recovered() {
-    let (emulator, client) = open_monitoring(3).await;
+    let (emulator, client) = open_monitoring(3);
 
     for device in 0..3 {
         emulator.set_muted(device, true);
@@ -203,7 +201,7 @@ async fn every_device_cut_off_at_once_is_recovered() {
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn a_recovered_device_is_neither_synchronized_nor_released_by_itself() {
-    let (emulator, client) = open_monitoring(3).await;
+    let (emulator, client) = open_monitoring(3);
     let before = sync_times(&emulator);
 
     cut_off_until_failsafe(&emulator, &client, 1).await;
@@ -221,7 +219,7 @@ async fn a_recovered_device_is_neither_synchronized_nor_released_by_itself() {
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn the_user_synchronizes_and_releases_only_the_recovered_device() {
-    let (emulator, client) = open_monitoring(3).await;
+    let (emulator, client) = open_monitoring(3);
     let before = sync_times(&emulator);
 
     cut_off_until_failsafe(&emulator, &client, 1).await;

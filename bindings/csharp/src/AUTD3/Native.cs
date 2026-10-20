@@ -169,7 +169,7 @@ namespace AUTD3
         internal static extern void autd3_frames_free(IntPtr frames);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_client_open(GeometryHandle geometry, IntPtr option, CompletionCallback cb, IntPtr userData);
+        internal static extern int autd3_client_open(GeometryHandle geometry, IntPtr option, out IntPtr client, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_client_state_checker(ClientHandle client);
@@ -228,9 +228,6 @@ namespace AUTD3
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern ulong autd3_bus_stats_frames(BusStatsHandle stats);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern ulong autd3_bus_stats_resets(BusStatsHandle stats);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern ulong autd3_bus_stats_heartbeats(BusStatsHandle stats);
@@ -310,7 +307,7 @@ namespace AUTD3
         [StructLayout(LayoutKind.Sequential)]
         internal struct TelemetryNative
         {
-            public uint FifoDrop, Dedup, SeqMismatch, DispatchError, Processed, SendFailure;
+            public uint FifoDrop, DispatchError, Processed, SendFailure;
             public ushort Failsafe, PtpUnlockFailsafe;
             public byte SyncResync, BootFailure, CpuWatchdog;
             public uint ExecLate;

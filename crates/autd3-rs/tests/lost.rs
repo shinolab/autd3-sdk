@@ -7,16 +7,16 @@ use common::{emulator, monitoring_option, open_with};
 
 const READY: DeviceState = DeviceState::Ready;
 
-async fn open_monitored(num_devices: usize) -> (UdpEmulator, Client) {
+fn open_monitored(num_devices: usize) -> (UdpEmulator, Client) {
     let emulator = emulator(num_devices);
-    let client = open_with(&emulator, &monitoring_option(&emulator)).await;
+    let client = open_with(&emulator, &monitoring_option(&emulator));
     (emulator, client)
 }
 
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn every_device_is_ready_after_open() {
-    let (_emulator, client) = open_monitored(3).await;
+    let (_emulator, client) = open_monitored(3);
 
     let status = client.state_checker().check().unwrap();
 
