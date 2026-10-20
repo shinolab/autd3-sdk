@@ -21,6 +21,7 @@ internal static class Program
         });
 
         await using var client = await Client.OpenAsync(geometry, new TransportOption(), new ClientConfig());
+        await client.SendAsync(Command.Sequence(new Clear(), new Synchronize()));
 
         Console.WriteLine($"devices: {client.NumDevices}");
 

@@ -27,9 +27,7 @@ pub use autd3_rs_core::{
     EncodeError, Freq, Geometry, Interface, Length, MAX_INFLIGHT, Point3, Quaternion,
     UnitQuaternion, UnitVector3, Vector3, Velocity, offset, point,
 };
-pub use client::{
-    Client, ClientConfig, Controller, Driver, ExecAt, MAX_DEVICES, ResponseFuture, StreamFuture,
-};
+pub use client::{Client, ClientConfig, Controller, Driver, ExecAt, MAX_DEVICES, ResponseFuture};
 pub use datagram::{Datagram, Frame, FrameIter, Frames};
 pub use firmware_version::{FirmwareVersion, Version};
 pub use fpga_state::FpgaState;

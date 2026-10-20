@@ -81,7 +81,6 @@ pub(crate) fn udp_error(error: &Error) -> Option<&UdpError> {
     match error {
         Error::Network(cause) => (**cause).downcast_ref::<UdpError>(),
         Error::DeviceError { .. }
-        | Error::UnsupportedFirmware { .. }
         | Error::UnexpectedReply { .. }
         | Error::DeviceLost { .. }
         | Error::Timeout { .. }

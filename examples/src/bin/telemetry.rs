@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 
+use autd3_rs::commands::{Clear, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs::{Client, ClientConfig, Telemetry, TransportOption};
@@ -40,6 +41,7 @@ async fn main() -> Result<()> {
         ClientConfig::default(),
     )
     .await?;
+    client.send((Clear, Synchronize)).await?;
 
     println!("devices: {}", client.num_devices());
     let mut baseline: Option<Vec<Telemetry>> = None;

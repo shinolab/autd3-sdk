@@ -5,7 +5,7 @@ use async_lock::Mutex as AsyncMutex;
 use autd3_cpu_wire::payload::FirmwareInfo;
 use zerocopy::FromBytes;
 
-use crate::commands::operation::{Clear, Distribution, FixedCompletionTime, Synchronize};
+use crate::commands::operation::{Distribution, FixedCompletionTime};
 use crate::commands::{Command, Pattern, SetSilencer};
 use crate::datagram::{Datagram, Frame, Frames};
 use crate::error::{Error, PayloadError};
@@ -20,7 +20,7 @@ use crate::value::{Intensity, SysTime};
 use autd3_rs_core::{BusStats, DeviceClock, DeviceMask};
 use futures_channel::oneshot;
 
-use super::completion::{self, ResponseFuture, StreamFuture};
+use super::completion::{self, ResponseFuture};
 use super::config::{ClientConfig, MAX_DEVICES};
 use super::driver::{Driver, Inflight, Settlement, Shared, sent_devices};
 use super::exec_at::{self, ExecAt};
@@ -46,7 +46,7 @@ impl Controller {
         config: ClientConfig,
     ) -> Result<(Self, Driver), Error> {
         let lost_timeout = option.lost_timeout;
-        let config = config.validate(lost_timeout)?;
+        let config = config.validate()?;
         let num_devices = geometry.num_devices();
         if num_devices == 0 || num_devices > MAX_DEVICES {
             return Err(PayloadError::DeviceCountOutOfRange {
@@ -74,16 +74,9 @@ impl Controller {
     }
 
     pub async fn initialize(&self) -> Result<(), Error> {
-        {
-            let _gate = self.gate.lock().await;
-            self.reset().await?;
-        }
-        tracing::debug!("handshake complete");
-        self.check_firmware_version(self.config().require_supported_firmware)
-            .await?;
-        self.send(Clear).await?;
-        self.send(Synchronize).await?;
-        tracing::info!(num_devices = self.num_devices(), "controller initialized");
+        let _gate = self.gate.lock().await;
+        self.reset().await?;
+        tracing::info!(num_devices = self.num_devices(), "handshake complete");
         Ok(())
     }
 
@@ -113,7 +106,7 @@ impl Controller {
     }
 
     pub fn set_config(&self, config: ClientConfig) -> Result<(), Error> {
-        let config = config.validate(self.lost_timeout)?;
+        let config = config.validate()?;
         {
             let mut pending = self.shared.pending();
             pending.reconfigure(config);
@@ -145,35 +138,8 @@ impl Controller {
         }
     }
 
-    pub fn send_streaming<'a, C: Command<'a>>(
-        &self,
-        cmd: C,
-    ) -> impl Future<Output = Result<StreamFuture, Error>> + use<'_, C> {
-        let frames = Frames::encode(&self.geometry, cmd);
-        async move {
-            let frames = frames?;
-            let mut stream = StreamFuture::default();
-            for frame in &frames {
-                if stream.in_flight() >= self.config().max_inflight.get() {
-                    stream.settle_oldest().await;
-                }
-                if stream.has_failed() {
-                    break;
-                }
-                match self.send_frame(frame).await {
-                    Ok(response) => stream.push(response),
-                    Err(e) => {
-                        stream.fail(e);
-                        break;
-                    }
-                }
-            }
-            Ok(stream)
-        }
-    }
-
     pub async fn send_frame(&self, frame: Frame<'_>) -> Result<ResponseFuture, Error> {
-        self.enqueue(frame.distribution(), frame.datagrams(), None)
+        self.enqueue(frame.distribution(), frame.datagrams(), ExecAt::Immediate)
             .await
     }
 
@@ -182,7 +148,7 @@ impl Controller {
         frame: Frame<'_>,
         exec: ExecAt,
     ) -> Result<ResponseFuture, Error> {
-        self.enqueue(frame.distribution(), frame.datagrams(), Some(exec))
+        self.enqueue(frame.distribution(), frame.datagrams(), exec)
             .await
     }
 
@@ -202,7 +168,7 @@ impl Controller {
         &self,
         dist: Distribution,
         datagrams: &[Datagram],
-        exec: Option<ExecAt>,
+        exec: ExecAt,
     ) -> Result<ResponseFuture, Error> {
         let expected = match dist {
             Distribution::Broadcast => 1,
@@ -235,13 +201,8 @@ impl Controller {
         if self.shared.pending().need_reset {
             self.reset().await?;
         }
-        let exec_at = self.exec_at(exec)?;
+        let exec_at = exec_at::schedule(exec, self.lost_timeout, || self.device_clock.now())?;
         self.transmit(slot, dist, datagrams, exec_at)
-    }
-
-    fn exec_at(&self, exec: Option<ExecAt>) -> Result<u32, Error> {
-        let exec = exec.unwrap_or_else(|| ExecAt::from_exec_lead(self.config().exec_lead));
-        exec_at::schedule(exec, self.lost_timeout, || self.device_clock.now())
     }
 
     fn transmit(
@@ -387,51 +348,44 @@ impl Controller {
                 entry.tx.send(Err(Error::Timeout { timeout }));
             }
         }
-        let rounds = self.config().max_resync_rounds.get();
-        for round in 0..rounds {
-            if let Some(e) = self.closed_error() {
-                return Err(e);
-            }
-            tracing::debug!(round, "sending reset");
-            let (tx, rx) = completion::channel();
-            let msg_id = self.bus.reserve_msg_id();
-            self.shared.pending().push(Inflight {
-                msg_id,
-                seq: None,
-                expected: None,
-                replied: 0,
-                sent_at: Instant::now(),
-                slot: None,
-                tx,
-            });
-            let sent = {
-                let mut bufs = self.bufs.lock().unwrap_or_else(PoisonError::into_inner);
-                bufs[0].stage(Seq::ZERO, Cmd::Reset, 0, &[]);
-                self.bus.broadcast(msg_id, bufs[0].as_ref())
-            };
-            let reached = self.settle(msg_id, sent)?;
-            self.stats.record_reset();
-            if !reached {
-                return Err(Error::Timeout {
-                    timeout: self.config().ack_timeout,
-                });
-            }
-            match rx.await {
-                Ok(_) => {
-                    let mut pending = self.shared.pending();
-                    pending.next_seq = Seq::ZERO;
-                    pending.need_reset = false;
-                    tracing::debug!("reset confirmed by every device");
-                    return Ok(());
-                }
-                Err(Error::Timeout { .. }) => {}
-                Err(e) => return Err(e),
-            }
+        if let Some(e) = self.closed_error() {
+            return Err(e);
         }
-        tracing::warn!(rounds, "the devices did not acknowledge the reset");
-        Err(Error::Timeout {
-            timeout: self.config().ack_timeout,
-        })
+        tracing::debug!("sending reset");
+        let (tx, rx) = completion::channel();
+        let msg_id = self.bus.reserve_msg_id();
+        self.shared.pending().push(Inflight {
+            msg_id,
+            seq: None,
+            expected: None,
+            replied: 0,
+            sent_at: Instant::now(),
+            slot: None,
+            tx,
+        });
+        let sent = {
+            let mut bufs = self.bufs.lock().unwrap_or_else(PoisonError::into_inner);
+            bufs[0].stage(Seq::ZERO, Cmd::Reset, 0, &[]);
+            self.bus.broadcast(msg_id, bufs[0].as_ref())
+        };
+        let reached = self.settle(msg_id, sent)?;
+        self.stats.record_reset();
+        if !reached {
+            return Err(Error::Timeout {
+                timeout: self.config().ack_timeout,
+            });
+        }
+        if let Err(e) = rx.await {
+            if matches!(e, Error::Timeout { .. }) {
+                tracing::warn!("the devices did not acknowledge the reset");
+            }
+            return Err(e);
+        }
+        let mut pending = self.shared.pending();
+        pending.next_seq = Seq::ZERO;
+        pending.need_reset = false;
+        tracing::debug!("reset confirmed by every device");
+        Ok(())
     }
 
     async fn silent_stop(&self) -> Result<(), Error> {
@@ -456,7 +410,11 @@ impl Controller {
         parse: impl Fn(&[u8]) -> Option<T>,
     ) -> Result<Vec<T>, Error> {
         let response = self
-            .enqueue(Distribution::Broadcast, &[Datagram::no_payload(cmd)], None)
+            .enqueue(
+                Distribution::Broadcast,
+                &[Datagram::no_payload(cmd)],
+                ExecAt::Immediate,
+            )
             .await?
             .await?;
         response.check()?;
@@ -464,50 +422,12 @@ impl Controller {
     }
 
     pub async fn read_firmware_version(&self) -> Result<Vec<FirmwareVersion>, Error> {
-        let versions = self
-            .read_values(Cmd::ReadFirmwareInfo, |value| {
-                FirmwareInfo::read_from_prefix(value)
-                    .ok()
-                    .map(|(info, _)| FirmwareVersion::from_info(info))
-            })
-            .await?;
-
-        let (major, minor) = FirmwareVersion::SUPPORTED_SERIES;
-        for (device, version) in versions.iter().enumerate() {
-            if !version.is_supported() {
-                tracing::warn!(
-                    device,
-                    "firmware {version} is outside the series supported by this SDK ({major}.{minor}.x); correct operation is not guaranteed"
-                );
-            }
-        }
-
-        Ok(versions)
-    }
-
-    async fn check_firmware_version(&self, require_supported: bool) -> Result<(), Error> {
-        let versions = match self.read_firmware_version().await {
-            Ok(versions) => versions,
-            Err(e) if require_supported => return Err(e),
-            Err(e) => {
-                tracing::warn!(
-                    error = %e,
-                    "could not read the firmware version, so the series check was skipped"
-                );
-                return Ok(());
-            }
-        };
-        if !require_supported {
-            return Ok(());
-        }
-        match versions
-            .into_iter()
-            .enumerate()
-            .find(|(_, version)| !version.is_supported())
-        {
-            Some((device, version)) => Err(Error::UnsupportedFirmware { device, version }),
-            None => Ok(()),
-        }
+        self.read_values(Cmd::ReadFirmwareInfo, |value| {
+            FirmwareInfo::read_from_prefix(value)
+                .ok()
+                .map(|(info, _)| FirmwareVersion::from_info(info))
+        })
+        .await
     }
 
     pub async fn read_fpga_state(&self) -> Result<Vec<FpgaState>, Error> {

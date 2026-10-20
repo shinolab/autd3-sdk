@@ -25,7 +25,6 @@ import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
 | `sync_timeout`        | `Duration`             | 30 s    | Upper bound on waiting for all devices to synchronize with one another on open                |
 | `send_rate_limit`     | `Option<f32>`          | `None`    | Upper bound on the share of the line the host's transmission may occupy [%], relative to the device line rate (100 Mbps). `None` applies no limit |
 | `send_buffer`         | `Option<NonZeroUsize>` | 8192    | Size of the socket send buffer [B]. `None` leaves the OS default                              |
-| `timer_resolution`    | `Option<Duration>`     | 1 ms    | Windows timer resolution. `None` leaves it unchanged.                                         |
 
 Changing anything other than `iface` is generally not recommended.
 The liveness check is not configured in `TransportOption`; the user sends it by calling [`heartbeat()`](/autd3-sdk/en/api/basics/client/#liveness-check) of the `Client`.
@@ -33,6 +32,11 @@ The liveness check is not configured in `TransportOption`; the user sends it by 
 The Python defaults are the same concrete values as in Rust, and only the fields whose type is an `Option` accept `None` (disabled). Passing `None` to any other field raises `TypeError`.
 In C#, setting a field whose type is an `Option` to `null` disables it.
 A `0` for `send_buffer` raises `ValueError` when the `TransportOption` is built in Python, and makes opening the `Client` fail with `Autd3Exception` (`InvalidArgument`) in C# (Rust cannot pass `0` because the type is `NonZeroUsize`).
+
+:::caution[Windows timer resolution]
+At the default timer resolution in Windows (typically 15.6 ms), waiting for the replies (the socket receive timeout) and the waits of `send_rate_limit` are rounded to that granularity, so the judgement of `ack_timeout` of [`ClientConfig`](/autd3-sdk/en/api/basics/client/#clientconfig) and of `lost_timeout` may come late.
+If needed, call `timeBeginPeriod(1)` in your process yourself.
+:::
 
 ## Interface
 

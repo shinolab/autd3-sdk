@@ -4,7 +4,7 @@
 
 use anyhow::Result;
 
-use autd3_rs::commands::{FociStm, FociStmOption, SetSilencer, circle};
+use autd3_rs::commands::{Clear, FociStm, FociStmOption, SetSilencer, Synchronize, circle};
 use autd3_rs::geometry::{Autd3, Geometry, Vector3, offset};
 use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs::units::{Hz, mm};
@@ -23,6 +23,7 @@ async fn main() -> Result<()> {
         ClientConfig::default(),
     )
     .await?;
+    client.send((Clear, Synchronize)).await?;
 
     println!("devices: {}", client.num_devices());
 
@@ -40,8 +41,7 @@ async fn main() -> Result<()> {
 
     client.send(SetSilencer::default()).await?;
     client
-        .send_streaming(FociStm::new(1.0 * Hz, &points, FociStmOption::default()))
-        .await?
+        .send(FociStm::new(1.0 * Hz, &points, FociStmOption::default()))
         .await?;
 
     println!("running a 1 Hz circular foci STM — press Ctrl+C to stop");

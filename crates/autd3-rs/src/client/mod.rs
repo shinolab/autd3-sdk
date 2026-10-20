@@ -5,7 +5,7 @@ mod driver;
 mod exec_at;
 pub(crate) mod pool;
 
-pub use completion::{ResponseFuture, StreamFuture};
+pub use completion::ResponseFuture;
 pub use config::{ClientConfig, MAX_DEVICES};
 pub use controller::Controller;
 pub use driver::Driver;
@@ -105,13 +105,6 @@ impl Client {
         cmd: C,
     ) -> impl Future<Output = Result<(), Error>> + use<'_, C> {
         self.controller.send(cmd)
-    }
-
-    pub fn send_streaming<'a, C: Command<'a>>(
-        &self,
-        cmd: C,
-    ) -> impl Future<Output = Result<StreamFuture, Error>> + use<'_, C> {
-        self.controller.send_streaming(cmd)
     }
 
     pub async fn send_frame(&self, frame: Frame<'_>) -> Result<ResponseFuture, Error> {

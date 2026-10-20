@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 
-use autd3_rs::commands::SetSilencer;
+use autd3_rs::commands::{Clear, SetSilencer, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::{ClientConfig, Controller, Driver, Error, TransportOption};
 
@@ -14,6 +14,7 @@ async fn with_run(geometry: &Geometry, option: &TransportOption) -> Result<()> {
     let driving = std::thread::spawn(move || driver.run());
 
     controller.initialize().await?;
+    controller.send((Clear, Synchronize)).await?;
     controller.send(SetSilencer::default()).await?;
     controller.close().await?;
 
@@ -36,6 +37,7 @@ async fn with_poll(geometry: &Geometry, option: &TransportOption) -> Result<()> 
     let driving = std::thread::spawn(move || drive(driver));
 
     controller.initialize().await?;
+    controller.send((Clear, Synchronize)).await?;
     controller.send(SetSilencer::default()).await?;
     controller.close().await?;
 
@@ -66,6 +68,7 @@ async fn on_single_thread(geometry: &Geometry, option: &TransportOption) -> Resu
     let driving = tokio::spawn(drive_on_reactor(driver));
 
     controller.initialize().await?;
+    controller.send((Clear, Synchronize)).await?;
     controller.send(SetSilencer::default()).await?;
     controller.close().await?;
 

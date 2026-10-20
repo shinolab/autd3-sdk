@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::Result;
 
-use autd3_rs::commands::{ConfigPattern, WritePatternBuffer};
+use autd3_rs::commands::{Clear, ConfigPattern, Synchronize, WritePatternBuffer};
 use autd3_rs::geometry::{Autd3, Geometry, Point3, offset};
 use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs::units::{m, mm, s};
@@ -31,6 +31,7 @@ async fn main() -> Result<()> {
         ClientConfig::default(),
     )
     .await?;
+    client.send((Clear, Synchronize)).await?;
 
     configure(&client).await?;
 

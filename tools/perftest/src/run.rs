@@ -7,8 +7,8 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use autd3_rs::commands::{
-    ActivatePatternBank, ConfigPattern, GpioOut, Nop, Pattern, SetGpioOut, WriteModulationBuffer,
-    WritePatternBuffer,
+    ActivatePatternBank, Clear, ConfigPattern, GpioOut, Nop, Pattern, SetGpioOut, Synchronize,
+    WriteModulationBuffer, WritePatternBuffer,
 };
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::params::MOD_BUFFER_SAMPLES;
@@ -16,8 +16,8 @@ use autd3_rs::value::{
     Intensity, LoopBehavior, ModulationBank, PatternBank, Phase, SamplingConfig, TransitionMode,
 };
 use autd3_rs::{
-    BusStats, Client, ClientConfig, Error as ClientError, Frame, Frames, Interface, ResponseFuture,
-    StateChecker, Telemetry, TransportOption,
+    BusStats, Client, ClientConfig, Error as ClientError, ExecAt, Frame, Frames, Interface,
+    ResponseFuture, StateChecker, Telemetry, TransportOption,
 };
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
@@ -263,15 +263,16 @@ async fn run_with_option(option: &TransportOption, cli: &Cli) -> Result<RunOutpu
         ClientConfig {
             ack_timeout: cli.ack_timeout,
             max_inflight: NonZeroUsize::new(max_inflight).unwrap(),
-            max_resync_rounds: cli.max_resync_rounds,
-            exec_lead: cli.exec_lead,
-            ..Default::default()
         },
     ))
     .await
     .context("opening the devices")?;
     let checker = client.state_checker();
     let guard = spawn_state_check(checker, STATE_CHECK_INTERVAL);
+    client
+        .send((Clear, Synchronize))
+        .await
+        .context("initial Clear + Synchronize")?;
 
     let fw = client
         .read_firmware_version()
@@ -311,10 +312,13 @@ async fn run_with_option(option: &TransportOption, cli: &Cli) -> Result<RunOutpu
     let bus_stats = client.bus_stats();
 
     let measurement = Measurement::start(cli, &bus_stats, telemetry_start);
+    let exec = cli.exec_lead.map_or(ExecAt::Immediate, ExecAt::Lead);
     let mut output = match cli.mode {
-        Mode::StopAndWait => run_stop_and_wait(&client, cli, sender, shutdown, measurement).await,
+        Mode::StopAndWait => {
+            run_stop_and_wait(&client, cli, exec, sender, shutdown, measurement).await
+        }
         Mode::Streaming => {
-            run_streaming(&client, sender, shutdown, max_inflight, measurement).await
+            run_streaming(&client, exec, sender, shutdown, max_inflight, measurement).await
         }
         Mode::BankSwitch => unreachable!("bank-switch runs without the Client"),
     };
@@ -335,6 +339,7 @@ async fn run_with_option(option: &TransportOption, cli: &Cli) -> Result<RunOutpu
 
 async fn send_all(
     client: &Client,
+    exec: ExecAt,
     frames: &Frames,
     window: usize,
     traffic: &mut Traffic,
@@ -346,7 +351,7 @@ async fn send_all(
             fut.await?.check()?;
             traffic.replied();
         }
-        pending.push_back(client.send_frame(frame).await?);
+        pending.push_back(client.send_frame_at(frame, exec).await?);
         traffic.sent(&frame);
     }
     for fut in pending {
@@ -508,6 +513,7 @@ impl Measurement {
 async fn run_stop_and_wait(
     client: &Client,
     cli: &Cli,
+    exec: ExecAt,
     mut sender: Sender,
     shutdown: Arc<AtomicBool>,
     mut measurement: Measurement,
@@ -521,7 +527,14 @@ async fn run_stop_and_wait(
     while !shutdown.load(Ordering::Relaxed) {
         sender.prepare(client)?;
         let t0 = Instant::now();
-        let res = send_all(client, &sender.frames, window, &mut measurement.traffic).await;
+        let res = send_all(
+            client,
+            exec,
+            &sender.frames,
+            window,
+            &mut measurement.traffic,
+        )
+        .await;
         let rtt = t0.elapsed();
 
         if measurement.record(index, rtt, classify(res)?).is_break() {
@@ -535,6 +548,7 @@ async fn run_stop_and_wait(
 
 async fn run_streaming(
     client: &Client,
+    exec: ExecAt,
     mut sender: Sender,
     shutdown: Arc<AtomicBool>,
     max_inflight: usize,
@@ -546,7 +560,7 @@ async fn run_streaming(
         if pending.len() < max_inflight {
             let frame = sender.next_frame(client)?;
             let sent_at = Instant::now();
-            let fut = match client.send_frame(frame).await {
+            let fut = match client.send_frame_at(frame, exec).await {
                 Ok(fut) => fut,
                 Err(ClientError::Closed) => {
                     eprintln!("the client closed unexpectedly");

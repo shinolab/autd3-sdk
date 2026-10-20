@@ -25,7 +25,6 @@ import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
 | `sync_timeout`        | `Duration`  | 30 s    | open時の全台がデバイス間の同期を待つ上限                                                         |
 | `send_rate_limit`     | `Option<f32>` | `None` | ホストの送信が回線を占める量の上限 [%]. デバイスの回線速度 (100 Mbps) に対する割合. `None` で抑えない |
 | `send_buffer`         | `Option<NonZeroUsize>` | 8192 | ソケットの送信バッファの大きさ [B]. `None` で OS の既定のままにする |
-| `timer_resolution`    | `Option<Duration>`  | 1 ms    | Windows のタイマ分解能. `None` で変更しない. |
 
 基本的に `iface` 以外を変更することは推奨しない.
 生存確認は `TransportOption` では設定せず, ユーザーが `Client` の [`heartbeat()`](/autd3-sdk/api/basics/client/#生存確認) を呼んで送る.
@@ -33,6 +32,12 @@ import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
 Python の既定値は Rust と同じ具体値で, 型が `Option` の項目だけ `None` (無効) を渡せる. それ以外の項目に `None` を渡すと `TypeError` になる.
 C# では型が `Option` の項目を `null` にすると無効になる.
 `send_buffer` の `0` は, Python では `TransportOption` を作るときに `ValueError`, C# では `Client` を開くときに `Autd3Exception` (`InvalidArgument`) になる (Rust は `NonZeroUsize` の型で `0` を渡せない).
+
+:::caution[Windows のタイマ分解能]
+ライブラリは Windows のタイマ分解能 (`timeBeginPeriod`) を変更しない.
+既定の分解能 (典型的には 15.6 ms) では, 返信の待ち (ソケットの受信タイムアウト) や `send_rate_limit` の待ちがその粒度に丸められ, [`ClientConfig`](/autd3-sdk/api/basics/client/#clientconfig) の `ack_timeout` や `lost_timeout` の判定が遅れることがある.
+必要であれば, ユーザーがプロセスで `timeBeginPeriod(1)` を呼ぶ.
+:::
 
 ## Interface
 

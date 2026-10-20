@@ -4,7 +4,7 @@ import math
 import numpy as np
 
 from autd3 import Client, ClientConfig, TransportOption
-from autd3.commands import FociStm, FociStmOption
+from autd3.commands import Clear, FociStm, FociStmOption, Synchronize
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import Hz, mm
 from autd3.value import ControlPoint, ControlPoints, Intensity, LoopBehavior, PatternBank, Phase, TransitionMode
@@ -18,6 +18,8 @@ async def main() -> None:
         TransportOption(),
         ClientConfig(),
     ) as client:
+        await client.send((Clear(), Synchronize()))
+
         center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm)
         radius = (30.0 * mm).mm
         foci = []

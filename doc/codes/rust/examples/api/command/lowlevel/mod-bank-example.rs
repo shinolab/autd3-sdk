@@ -1,4 +1,6 @@
-use autd3_rs::commands::{ActivateModulationBank, ConfigModulation, WriteModulationBuffer};
+use autd3_rs::commands::{
+    ActivateModulationBank, Clear, ConfigModulation, Synchronize, WriteModulationBuffer,
+};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::units::Hz;
 use autd3_rs::value::{LoopBehavior, ModulationBank, SamplingConfig, TransitionMode};
@@ -13,6 +15,7 @@ async fn main() -> anyhow::Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
     let option = TransportOption::default();
     let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
+    client.send((Clear, Synchronize)).await?;
 
     let mut data = modulation_buffer();
     sine(150 * Hz, &SineOption::default(), SamplingConfig::FREQ_4K, &mut data)?;

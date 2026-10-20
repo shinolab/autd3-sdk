@@ -9,7 +9,7 @@ import signal
 
 import autd3
 import autd3_pattern as pattern
-from autd3.commands import Pattern, SetSilencer, each
+from autd3.commands import Clear, Pattern, SetSilencer, Synchronize, each
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import m, mm, s
 from autd3.value import Intensity
@@ -30,6 +30,7 @@ async def main() -> None:
         autd3.TransportOption(),
         autd3.ClientConfig(),
     ) as client:
+        await client.send((Clear(), Synchronize()))
         print("devices:", client.num_devices())
 
         wavelength = pattern.wavelength(340 * m / s)

@@ -600,22 +600,6 @@ impl Client {
         })
     }
 
-    fn send_streaming<'py>(
-        &self,
-        py: Python<'py>,
-        command: &Bound<'py, PyAny>,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let client = Arc::clone(&self.inner);
-        let command = command_of(command, &self.geometry)?;
-        future_into_py(py, async move {
-            let fut = client
-                .send_streaming(Expand(command.as_ref()))
-                .await
-                .map_err(client_pyerr_gil)?;
-            Ok(StreamFuture(Mutex::new(Some(fut))))
-        })
-    }
-
     fn send_frame<'py>(
         &self,
         py: Python<'py>,
@@ -713,25 +697,6 @@ impl ResponseFuture {
         let awaitable = future_into_py(py, async move {
             let inner = fut.await.map_err(client_pyerr_gil)?;
             Ok(Response(inner))
-        })?;
-        awaitable.getattr("__await__")?.call0()
-    }
-}
-
-#[pyclass(name = "StreamFuture", module = "autd3")]
-pub struct StreamFuture(Mutex<Option<autd3_rs::StreamFuture>>);
-
-#[pymethods]
-impl StreamFuture {
-    fn __await__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let fut = self
-            .0
-            .lock_py_attached(py)
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .take()
-            .ok_or_else(|| PyValueError::new_err("StreamFuture has already been awaited"))?;
-        let awaitable = future_into_py(py, async move {
-            fut.await.map(|()| Completed).map_err(client_pyerr_gil)
         })?;
         awaitable.getattr("__await__")?.call0()
     }

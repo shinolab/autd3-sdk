@@ -1,6 +1,8 @@
 use core::num::NonZeroU16;
 
-use autd3_rs::commands::{ActivatePatternBank, ConfigPattern, WritePatternBuffer};
+use autd3_rs::commands::{
+    ActivatePatternBank, Clear, ConfigPattern, Synchronize, WritePatternBuffer,
+};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode};
@@ -15,6 +17,7 @@ async fn main() -> anyhow::Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
     let option = TransportOption::default();
     let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
+    client.send((Clear, Synchronize)).await?;
 
     let mut phases = geometry.phase_buffer();
     focus(

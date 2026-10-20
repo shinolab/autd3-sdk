@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use autd3_rs::commands::{Pattern, SetSilencer};
+use autd3_rs::commands::{Clear, Pattern, SetSilencer, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry, TransducerGroups, offset};
 use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs::units::{m, mm, s};
@@ -26,6 +26,7 @@ async fn main() -> Result<()> {
         ClientConfig::default(),
     )
     .await?;
+    client.send((Clear, Synchronize)).await?;
 
     println!("devices: {}", client.num_devices());
 

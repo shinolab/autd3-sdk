@@ -28,7 +28,6 @@ def test_defaults_follow_the_spec() -> None:
     assert option.sync_timeout == autd3.Duration.from_secs(30)
     assert option.send_rate_limit is None
     assert option.send_buffer == 8192
-    assert option.timer_resolution == autd3.Duration.from_millis(1)
 
 
 def test_fields_round_trip() -> None:
@@ -42,12 +41,8 @@ def test_fields_round_trip() -> None:
     assert option.lost_timeout == autd3.Duration.from_millis(50)
     assert option.sync_timeout == autd3.Duration.from_secs(3)
     assert option.send_rate_limit == 95.0
-    assert autd3.TransportOption(timer_resolution=None).timer_resolution is None
     assert autd3.TransportOption(send_buffer=None).send_buffer is None
     assert autd3.TransportOption(send_buffer=65536).send_buffer == 65536
-    assert autd3.TransportOption(
-        timer_resolution=autd3.Duration.from_millis(2)
-    ).timer_resolution == autd3.Duration.from_millis(2)
 
 
 def test_the_interface_selects_where_to_connect() -> None:
@@ -94,23 +89,13 @@ def test_the_client_config_reads_back_its_fields() -> None:
     default = autd3.ClientConfig()
     assert default.ack_timeout == autd3.Duration.from_millis(10)
     assert default.max_inflight == 7
-    assert default.max_resync_rounds == 8
-    assert default.require_supported_firmware is False
-    assert default.exec_lead is None
 
     config = autd3.ClientConfig(
         ack_timeout=autd3.Duration.from_millis(3),
         max_inflight=2,
-        max_resync_rounds=5,
-        require_supported_firmware=True,
-        exec_lead=autd3.Duration.from_millis(5),
     )
     assert config.ack_timeout == autd3.Duration.from_millis(3)
     assert config.max_inflight == 2
-    assert config.max_resync_rounds == 5
-    assert config.require_supported_firmware is True
-    assert config.exec_lead == autd3.Duration.from_millis(5)
-    assert autd3.ClientConfig(exec_lead=None).exec_lead is None
 
 
 def test_the_emulator_option_only_shortens_the_timeouts() -> None:
@@ -125,7 +110,6 @@ def test_the_emulator_option_only_shortens_the_timeouts() -> None:
     assert option.lost_timeout == default.lost_timeout
     assert option.send_rate_limit == default.send_rate_limit
     assert option.send_buffer == default.send_buffer
-    assert option.timer_resolution == default.timer_resolution
 
 
 def test_client_open_takes_a_transport_option() -> None:

@@ -13,18 +13,20 @@ async fn main() -> Result<()> {
     let option = TransportOption::default();
     let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
 
-    let frames = Frames::encode(&geometry, Nop)?;
-    let frame = frames.iter().next().unwrap();
-
     // ANCHOR: exec_at
-    let at = client.device_time_now()? + Duration::from_millis(5);
-    client.send_frame_at(frame, ExecAt::At(at)).await?.await?.check()?;
+    let frames = Frames::encode(client.geometry(), Nop)?;
 
     let lead = ExecAt::Lead(Duration::from_millis(1));
-    client.send_frame_at(frame, lead).await?.await?.check()?;
+    for frame in &frames {
+        client.send_frame_at(frame, lead).await?.await?.check()?;
+    }
 
-    client.send_frame_at(frame, ExecAt::Immediate).await?.await?.check()?;
+    let at = client.device_time_now()? + Duration::from_millis(5);
+    for frame in &frames {
+        client.send_frame_at(frame, ExecAt::At(at)).await?.await?.check()?;
+    }
     // ANCHOR_END: exec_at
+    let frame = frames.iter().next().unwrap();
     // ANCHOR: heartbeat
     let mut heartbeat = tokio::time::interval(Duration::from_millis(10));
     for _ in 0..100 {
@@ -48,12 +50,11 @@ async fn main() -> Result<()> {
     let fpga_state = client.read_fpga_state().await?;
 
     client.send(Nop).await?;
-    let done = client.send_streaming(Nop).await?;
     let resp = client.send_frame(frame).await?.await?;
 
     client.close().await?;
     // ANCHOR_END: api
 
-    let _ = (num_devices, geometry, config, firmware, fpga_state, done, resp);
+    let _ = (num_devices, geometry, config, firmware, fpga_state, resp);
     Ok(())
 }

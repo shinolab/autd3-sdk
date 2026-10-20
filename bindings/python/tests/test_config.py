@@ -20,11 +20,6 @@ def geometry() -> autd3.geometry.Geometry:
     return autd3.geometry.Geometry([autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0])])
 
 
-def test_require_supported_firmware_is_settable() -> None:
-    autd3.ClientConfig(require_supported_firmware=True)
-    autd3.ClientConfig(require_supported_firmware=False)
-
-
 def test_zero_valued_config_fields_are_rejected() -> None:
     assert autd3.ClientConfig(ack_timeout=autd3.Duration.from_millis(0)).ack_timeout == autd3.Duration.from_millis(0)
     with pytest.raises(ValueError):

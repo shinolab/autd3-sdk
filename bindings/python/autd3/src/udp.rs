@@ -111,7 +111,6 @@ impl TransportOption {
         sync_timeout = CoreOption::default().sync_timeout,
         send_rate_limit = CoreOption::default().send_rate_limit,
         send_buffer = CoreOption::default().send_buffer,
-        timer_resolution = CoreOption::default().timer_resolution,
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -123,7 +122,6 @@ impl TransportOption {
         #[pyo3(from_py_with = extract_duration)] sync_timeout: Duration,
         send_rate_limit: Option<f32>,
         send_buffer: Option<NonZeroUsize>,
-        #[pyo3(from_py_with = none_or_duration)] timer_resolution: Option<Duration>,
     ) -> Self {
         Self(CoreOption {
             iface,
@@ -134,7 +132,6 @@ impl TransportOption {
             sync_timeout,
             send_rate_limit,
             send_buffer,
-            timer_resolution,
         })
     }
 
@@ -176,14 +173,6 @@ impl TransportOption {
     #[getter]
     fn send_buffer(&self) -> Option<NonZeroUsize> {
         self.0.send_buffer
-    }
-
-    #[getter]
-    fn timer_resolution<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
-        self.0
-            .timer_resolution
-            .map(|resolution| duration_to_py(py, resolution))
-            .transpose()
     }
 
     fn __repr__(&self) -> String {

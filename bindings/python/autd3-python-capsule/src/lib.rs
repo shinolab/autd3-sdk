@@ -27,7 +27,6 @@ pub mod error_code {
     pub const DEVICE: i32 = -3;
     pub const NETWORK: i32 = -4;
     pub const INVALID_ARGUMENT: i32 = -5;
-    pub const UNSUPPORTED_FIRMWARE: i32 = -6;
 }
 
 #[must_use]
@@ -227,7 +226,6 @@ mod client_error {
             Error::Timeout { .. } | Error::SeqMismatch { .. } => error_code::TIMEOUT,
             Error::DeviceError { .. } | Error::UnexpectedReply { .. } => error_code::DEVICE,
             Error::Network(_) | Error::DeviceLost { .. } => error_code::NETWORK,
-            Error::UnsupportedFirmware { .. } => error_code::UNSUPPORTED_FIRMWARE,
             Error::InvalidPayload(_) | Error::InvalidConfig(_) | Error::Encode(_) => {
                 error_code::INVALID_ARGUMENT
             }

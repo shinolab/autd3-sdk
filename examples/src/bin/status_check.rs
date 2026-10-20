@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 
+use autd3_rs::commands::{Clear, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs::{Client, ClientConfig, DeviceStatus, TransportOption};
@@ -24,6 +25,7 @@ async fn main() -> Result<()> {
         ClientConfig::default(),
     )
     .await?;
+    client.send((Clear, Synchronize)).await?;
     let checker = client.state_checker();
 
     println!("watching device status — press Ctrl+C to stop");

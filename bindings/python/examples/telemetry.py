@@ -2,6 +2,7 @@ import asyncio
 import signal
 
 import autd3
+from autd3.commands import Clear, Synchronize
 from autd3.geometry import Autd3, Geometry
 
 POLL_INTERVAL = 1.0
@@ -32,6 +33,7 @@ async def main() -> None:
         autd3.TransportOption(),
         autd3.ClientConfig(),
     ) as client:
+        await client.send((Clear(), Synchronize()))
         print("devices:", client.num_devices())
         stop = asyncio.Event()
         loop = asyncio.get_running_loop()

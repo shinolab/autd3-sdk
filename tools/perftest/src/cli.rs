@@ -130,7 +130,7 @@ pub(crate) struct Cli {
         long = "exec-lead",
         value_parser = humantime::parse_duration,
         help = "Process every frame at the device time this far ahead of the send, e.g. 1ms \
-                (maps to ClientConfig.exec_lead). Omit to process every frame on arrival."
+                (sends each frame with ExecAt::Lead). Omit to process every frame on arrival."
     )]
     pub exec_lead: Option<Duration>,
     #[arg(
@@ -159,8 +159,12 @@ pub(crate) struct Cli {
                 which pipelines the frames of one sample up to this depth."
     )]
     pub max_inflight: usize,
-    #[arg(long, default_value_t = NonZeroU32::new(8).unwrap(), help = "maps to ClientConfig.max_resync_rounds")]
-    pub max_resync_rounds: NonZeroU32,
+    #[arg(
+        long = "reset-rounds",
+        default_value_t = NonZeroU32::new(8).unwrap(),
+        help = "bank-switch: Reset rounds tried before giving up"
+    )]
+    pub reset_rounds: NonZeroU32,
 }
 
 impl Cli {

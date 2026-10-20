@@ -1,6 +1,7 @@
 import asyncio
 
 from autd3 import Client, ClientConfig, Duration, TransportOption
+from autd3.commands import Clear, Synchronize
 from autd3.geometry import Autd3, Geometry
 from autd3.params import DEVICE_QUEUE_FRAMES
 
@@ -14,14 +15,12 @@ async def main() -> None:
         ClientConfig(
             ack_timeout=Duration.from_millis(10),
             max_inflight=DEVICE_QUEUE_FRAMES,
-            max_resync_rounds=8,
-            require_supported_firmware=False,
-            exec_lead=None,
         )
         # ANCHOR_END: config
     )
     # ANCHOR: api
     client = await Client.open(geometry, udp, option)
+    await client.send((Clear(), Synchronize()))
     # ANCHOR_END: api
 
 

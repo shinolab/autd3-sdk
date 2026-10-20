@@ -19,7 +19,6 @@ namespace AUTD3.Tests
             Assert.Equal(TimeSpan.FromSeconds(30), option.SyncTimeout);
             Assert.Null(option.SendRateLimit);
             Assert.Equal(8192ul, option.SendBuffer);
-            Assert.Equal(TimeSpan.FromMilliseconds(1), option.TimerResolution);
         }
 
         [Fact]
@@ -60,14 +59,6 @@ namespace AUTD3.Tests
         }
 
         [Fact]
-        public async Task AZeroExecLeadFailsTheOpenWithTheRustError()
-        {
-            var error = await OpenFails(new TransportOption(), new ClientConfig { ExecLead = TimeSpan.Zero });
-            Assert.Equal(Autd3ErrorCode.InvalidArgument, error.Code);
-            Assert.Contains("exec_lead must be within", error.Message);
-        }
-
-        [Fact]
         public void ANegativeAckTimeoutIsRejected()
         {
             var config = new ClientConfig { AckTimeout = TimeSpan.FromTicks(-1) };
@@ -81,27 +72,6 @@ namespace AUTD3.Tests
             var error = await OpenFails(new TransportOption { LostTimeout = TimeSpan.Zero }, new ClientConfig());
             Assert.Equal(Autd3ErrorCode.Network, error.Code);
             Assert.Contains("lost_timeout", error.Message);
-        }
-
-        [Fact]
-        public void ATimerResolutionReachesTheNativeOption()
-        {
-            Assert.Equal(TimeSpan.FromMilliseconds(1), default(TransportOption).TimerResolution);
-            foreach (var resolution in new TimeSpan?[] { null, TimeSpan.Zero, TimeSpan.FromMilliseconds(2) })
-            {
-                var handle = new TransportOption { TimerResolution = resolution }.CreateHandle();
-                try
-                {
-                    Assert.Equal(resolution, TransportOption.FromHandle(handle).TimerResolution);
-                }
-                finally
-                {
-                    NativeClient.autd3_transport_option_free(handle);
-                }
-            }
-
-            var negative = new TransportOption { TimerResolution = TimeSpan.FromTicks(-1) };
-            Assert.Throws<Autd3Exception>(() => negative.CreateHandle());
         }
 
         [Fact]

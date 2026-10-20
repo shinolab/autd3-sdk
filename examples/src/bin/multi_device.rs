@@ -4,6 +4,7 @@
 
 use anyhow::Result;
 
+use autd3_rs::commands::{Clear, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry, Point3, UnitQuaternion};
 use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs::{Client, ClientConfig, TransportOption};
@@ -26,6 +27,7 @@ async fn main() -> Result<()> {
         ClientConfig::default(),
     )
     .await?;
+    client.send((Clear, Synchronize)).await?;
 
     println!("devices: {}", client.num_devices());
     for (i, fw) in client.read_firmware_version().await?.iter().enumerate() {

@@ -344,6 +344,7 @@ pub(crate) async fn run(client: Session, link: &Link<'_>) -> Result<Session> {
         heartbeat: link.heartbeat,
         lost_timeout: link.option.lost_timeout,
         mute: link.mute,
+        exec: link.exec,
     };
     if let Err(e) = halts(&ctx, target).await {
         println!("  [FAIL] the halt checks stopped: {e:#}");

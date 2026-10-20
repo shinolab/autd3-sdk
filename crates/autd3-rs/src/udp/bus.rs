@@ -20,7 +20,6 @@ use super::recovery::Recovery;
 use super::reply::Reply;
 use super::simulator;
 use super::state::{SharedState, StateChecker, Tracker};
-use super::timer::TimerResolutionGuard;
 
 pub use autd3_rs_core::MAX_DEVICES;
 
@@ -72,7 +71,6 @@ pub struct UdpBus {
     msg_id: AtomicU16,
     heartbeat_from: AtomicUsize,
     closed: AtomicBool,
-    _timer_resolution: TimerResolutionGuard,
 }
 
 impl UdpBus {
@@ -111,7 +109,6 @@ impl UdpBus {
         geometry: Option<&Geometry>,
     ) -> Result<Self, UdpError> {
         option.validate()?;
-        let timer_resolution = TimerResolutionGuard::new(option.timer_resolution);
         if let Units::Exactly(num_devices) = expected
             && !(1..=MAX_DEVICES).contains(&num_devices)
         {
@@ -143,7 +140,6 @@ impl UdpBus {
             msg_id: AtomicU16::new(0),
             heartbeat_from: AtomicUsize::new(last),
             closed: AtomicBool::new(false),
-            _timer_resolution: timer_resolution,
         })
     }
 

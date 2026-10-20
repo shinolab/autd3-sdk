@@ -164,7 +164,7 @@ impl Session {
             next_seq: Seq::ZERO,
             ack_timeout: cli.ack_timeout,
             exec_lead: cli.exec_lead,
-            reset_rounds: cli.max_resync_rounds,
+            reset_rounds: cli.reset_rounds,
         })
     }
 

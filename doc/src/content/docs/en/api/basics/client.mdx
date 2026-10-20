@@ -50,15 +50,21 @@ To continuously monitor the operating state of the devices, drive the `StateChec
 | `config()`                | —     | `ClientConfig`                        | The current [ClientConfig](#clientconfig)                  |
 | `set_config(config)`      | —     | `Result<(), Error>`                   | Replace the ClientConfig |
 | `send(cmd)`               | ✓     | `Result<(), Error>`                   | Send a command, confirming the response frame by frame     |
-| `send_streaming(cmd)`     | ✓     | `Result<StreamFuture, Error>`         | Streaming version of `send`                                |
-| `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | Send one frame                                             |
-| `send_frame_at(frame, exec)` | ✓  | `Result<ResponseFuture, Error>`       | Send one frame at a given processing time (see [Overriding the processing time](#overriding-the-processing-time)) |
+| `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | Send one frame (see [streaming](#streaming))                |
+| `send_frame_at(frame, exec)` | ✓  | `Result<ResponseFuture, Error>`       | Send one frame at a given processing time (see [Processing time](#processing-time)) |
 | `state_checker()`         | —     | `StateChecker`                        | Get a `StateChecker`. See [State Monitoring](/autd3-sdk/en/guide/state-check/) for details. |
 | `heartbeat()`             | —     | `Result<(), Error>`                   | Send one liveness check to every device that is not `Lost` (see [Liveness check](#liveness-check)) |
 | `recover()`               | ✓     | `Result<DeviceMask, Error>`           | Look for the `Lost` devices and recover the ones that answer again. See [State Monitoring](/autd3-sdk/en/guide/state-check/#recovery-from-lost) for details. |
 | `close()`                 | ✓     | `Result<(), Error>`                   | Stop and close the connection                              |
 
 To avoid the noise of dropping the amplitude at once, `close()` first sets the [Silencer](/autd3-sdk/en/api/command/silencer/), then drives every transducer to zero amplitude, and then closes the connection.
+
+## streaming
+
+`send` waits for the response frame by frame (stop-and-wait).
+To keep sending without waiting for the responses, convert the command into frames with `Frames::encode`, collect the `ResponseFuture`s that `send_frame` returns, and then await them in order.
+
+<CodeTabs rust={excerpt(sample, "streaming")} python={excerpt(pySample, "streaming")} csharp={excerpt(csSample, "streaming")} />
 
 ## Liveness check
 
@@ -110,7 +116,7 @@ In C#, they are PascalCase properties (`is_thermal_asserted()` → `IsThermalAss
 
 ### Telemetry
 
-CPU diagnostic counters. `Clear` resets all of them to 0 except `boot_failure` (the `Client` sends `Clear` when it opens).
+CPU diagnostic counters. `Clear` resets all of them to 0 except `boot_failure` (the `Client` does not send `Clear` when it opens, so the values from the previous session remain).
 Reading them does not clear them.
 
 | Field                 | Type  | Description                                            |
@@ -150,51 +156,44 @@ The `u32` fields wrap around to 0 on overflow, and the `u16` / `u8` fields stop 
 | Field                        | Type           | Default | Description                                                                         |
 | ---------------------------- | -------------- | ------- | ----------------------------------------------------------------------------------- |
 | `ack_timeout`                | `Duration`     | 10 ms   | Response-wait timeout. Once it elapses, the frames in flight fail with `Timeout`.   |
-| `max_inflight`               | `NonZeroUsize` | `7`     | Number of frames that may be sent without waiting for a reply (for streaming sends) |
-| `max_resync_rounds`          | `NonZeroU32`   | `8`     | Maximum number of attempts to get back in step with the devices                     |
-| `require_supported_firmware` | `bool`         | `false` | If `true`, check on open that the firmware is supported                             |
-| `exec_lead`           | `Option<Duration>`     | `None`    | Makes every device start processing a sent frame at the same time (see below). `None` lets each device process a frame as soon as it arrives |
+| `max_inflight`               | `NonZeroUsize` | `7`     | Number of frames that may be sent without waiting for a reply (see [streaming](#streaming)) |
 
 `max_inflight` errors if it exceeds `MAX_INFLIGHT (7)` (Python: `autd3.params.MAX_INFLIGHT`, C#: `Params.MaxInflight`).
 The default is also `MAX_INFLIGHT`, which equals `DEVICE_QUEUE_FRAMES`, the number of frames in the receive queue of each device (Python: `autd3.params.DEVICE_QUEUE_FRAMES`, C#: `Params.DeviceQueueFrames`).
 Setting `ack_timeout` to 0 makes opening the `Client` fail with an error (`InvalidConfig`; the `code` of the Python `Autd3Error` is `INVALID_ARGUMENT`, and the `Code` of the C# `Autd3Exception` is `InvalidArgument`).
-The Python defaults are the same as in Rust, and only `exec_lead`, whose type is an `Option`, accepts `None`.
+The Python defaults are the same as in Rust.
 
 There is no retransmission. A failed command must be sent again by the user.
+After the sends fall out of step with the devices (for example, when the responses did not arrive within `ack_timeout`), one `Reset` is sent before the next send to get back in step.
+If not every device responds within `ack_timeout`, that send fails with `Timeout`, and the next send tries the `Reset` again.
 
-### exec_lead
+## Processing time
 
 Frames are sent to the devices one at a time, so they reach the devices at slightly different times.
-With `exec_lead` set, every send carries "the current device time + `exec_lead`" rounded up to a whole microsecond, and each device holds the frame until that time.
+Sending a frame with `send_frame_at` and an `ExecAt` stamps it with a processing time (a device time rounded up to a whole microsecond), and each device holds the frame until that time.
 Every device thus starts processing what one send carries at the same timing.
-
-Note the following:
-- It does not guarantee that every device always starts processing at the same time
-  - If a send does not complete within `exec_lead`, a late device processes the frame after the stamped time. `exec_late` of `read_telemetry` counts how often that happened.
-  - With `send_streaming`, the stamped time of a frame can come while the device is still processing the previous one; that frame is processed late (and counted in `exec_late`).
-  - Even when it succeeds, only the start of the processing inside the CPU board is aligned; it does not guarantee that the start of the processing on the FPGA is aligned (that is, for example, that the phase of the emitted ultrasound is updated at the same timing)
-- A send completes `exec_lead` later
-- It must be at least 100 µs and shorter than 2^31 µs (about 35.8 minutes), and shorter than `lost_timeout` of [`TransportOption`](/autd3-sdk/en/api/basics/transport-option/)
-- Keep `ack_timeout` (10 ms by default) longer than `exec_lead` + the processing time
-
-### Overriding the processing time
-
-`exec_lead` stamps every frame by the same rule.
-To give only a particular frame a different processing time, send it with `send_frame_at` and an `ExecAt`.
-`send` / `send_streaming` / `send_frame` follow `exec_lead`.
+`send` / `send_frame` stamp no processing time (each device processes a frame as soon as it arrives).
+To send a command with a processing time, convert it into frames with `Frames::encode` and send each frame with `send_frame_at`.
 
 <CodeTabs rust={excerpt(methods, "exec_at")} python={excerpt(pyMethods, "exec_at")} csharp={excerpt(csMethods, "exec_at")} />
 
 | `ExecAt`         | Processing time                                                              |
 | ---------------- | ---------------------------------------------------------------------------- |
-| `Immediate`      | None (each device processes the frame as soon as it arrives, even with `exec_lead` set) |
-| `Lead(lead)`     | The current device time + `lead` (used instead of `exec_lead` for this frame only) |
+| `Immediate`      | None (each device processes the frame as soon as it arrives; the same as `send_frame`) |
+| `Lead(lead)`     | The current device time at the send + `lead`                                 |
 | `At(sys_time)`   | The device time `sys_time` (see [SysTime](/autd3-sdk/en/api/basics/sys-time/)) |
 
-- `Lead` takes the same range as `exec_lead` (at least 100 µs, shorter than 2^31 µs and than `lost_timeout`). Outside it the send fails with `InvalidPayload` and the frame is not sent
+Note the following:
+- It does not guarantee that every device always starts processing at the same time
+  - If sending to every device does not finish by the stamped time, a late device processes the frame after the stamped time. `exec_late` of `read_telemetry` counts how often that happened.
+  - When frames are sent one after another without waiting for the responses ([streaming](#streaming)), the stamped time of a frame can come while the device is still processing the previous one; that frame is processed late (and counted in `exec_late`).
+  - Even when it succeeds, only the start of the processing inside the CPU board is aligned; it does not guarantee that the start of the processing on the FPGA is aligned (that is, for example, that the phase of the emitted ultrasound is updated at the same timing)
+- The response comes back after the processing, so a send completes only after the stamped time. Waiting for the response frame by frame, a command of several frames takes about the number of frames × `lead`
+- `Lead` must be at least 100 µs and shorter than 2^31 µs (about 35.8 minutes), and shorter than `lost_timeout` of [`TransportOption`](/autd3-sdk/en/api/basics/transport-option/). Outside it the send fails with `InvalidPayload` and the frame is not sent
 - `At` fails if it is 2^31 µs or more ahead of the current time, 2^30 µs (about 17.9 minutes) or more behind it, or `lost_timeout` or more ahead. A past time within the range is accepted; the devices process the frame at once and count it in `exec_late`
 - Keep `ack_timeout` (10 ms by default) longer than the time from the send to the given time + the processing time
 - `Lead` / `At` fail with `DeviceTimeUnknown` while the device time is unknown (no reply carrying it has been received yet)
+- The [Simulator](/autd3-sdk/en/guide/simulator/) ignores the processing time and processes the frame at once
 
 ## each
 

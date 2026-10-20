@@ -3,7 +3,7 @@ use std::f32::consts::PI;
 
 use anyhow::Result;
 
-use autd3_rs::commands::{FociStm, FociStmOption};
+use autd3_rs::commands::{Clear, FociStm, FociStmOption, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry, Vector3, offset};
 use autd3_rs::units::{Hz, mm};
 use autd3_rs::value::{
@@ -18,6 +18,7 @@ async fn main() -> Result<()> {
 
     let option = TransportOption::default();
     let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
+    client.send((Clear, Synchronize)).await?;
 
     let center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
     let radius = (30.0 * mm).mm();

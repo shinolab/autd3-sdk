@@ -7,6 +7,7 @@ Run with: cargo xtask py example multi_device
 import asyncio
 
 import autd3
+from autd3.commands import Clear, Synchronize
 from autd3.geometry import Autd3, Geometry
 
 
@@ -25,6 +26,7 @@ async def main() -> None:
         autd3.TransportOption(),
         autd3.ClientConfig(),
     ) as client:
+        await client.send((Clear(), Synchronize()))
         print("devices:", client.num_devices())
         for i, fw in enumerate(await client.read_firmware_version()):
             print(f"device[{i}] firmware version: {fw}")

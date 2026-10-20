@@ -3,7 +3,7 @@ use std::f32::consts::PI;
 
 use anyhow::Result;
 
-use autd3_rs::commands::{Pattern, SetSilencer};
+use autd3_rs::commands::{Clear, Pattern, SetSilencer, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry, Point3, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::Intensity;
@@ -19,6 +19,7 @@ async fn main() -> Result<()> {
 
     let option = TransportOption::default();
     let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
+    client.send((Clear, Synchronize)).await?;
 
     client.send(SetSilencer::default()).await?;
 

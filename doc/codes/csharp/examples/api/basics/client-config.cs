@@ -17,14 +17,12 @@ internal static class Sample
             {
                 AckTimeout = TimeSpan.FromMilliseconds(10),
                 MaxInflight = (uint)Params.DeviceQueueFrames,
-                MaxResyncRounds = 8,
-                RequireSupportedFirmware = false,
-                ExecLead = null,
             }
             // ANCHOR_END: config
             ;
         // ANCHOR: api
         var client = await Client.OpenAsync(geometry, udp, option);
+        await client.SendAsync(Command.Sequence(new Clear(), new Synchronize()));
         // ANCHOR_END: api
     }
 }

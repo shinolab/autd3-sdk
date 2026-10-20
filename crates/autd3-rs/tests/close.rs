@@ -75,8 +75,6 @@ async fn everything_fails_with_closed_after_a_close() {
         client.send_frame(frames.frame(0).unwrap()).await.err(),
         Some(Error::Closed)
     ));
-    let stream = client.send_streaming(Nop).await.unwrap();
-    assert!(matches!(stream.await, Err(Error::Closed)));
     assert!(matches!(
         client.read_firmware_version().await,
         Err(Error::Closed)

@@ -18,14 +18,6 @@ pub(crate) extern "C" fn autd3_transport_option_new() -> *mut TransportOptionHan
     into_handle(TransportOptionHandle(CoreOption::default()))
 }
 
-autd3_ffi_abi::option_handle_field!(
-    TransportOptionHandle,
-    [timer_resolution],
-    optional_duration,
-    autd3_transport_option_set_timer_resolution,
-    autd3_transport_option_get_timer_resolution
-);
-
 #[unsafe(no_mangle)]
 pub(crate) unsafe extern "C" fn autd3_transport_option_set_send_rate_limit(
     handle: *mut TransportOptionHandle,
@@ -258,60 +250,6 @@ mod tests {
 
     use super::*;
 
-    fn optional(
-        get: unsafe extern "C" fn(*const TransportOptionHandle, *mut bool, *mut u64) -> i32,
-        handle: *const TransportOptionHandle,
-    ) -> Option<Duration> {
-        let mut has_value = false;
-        let mut ns = u64::MAX;
-        assert_eq!(
-            unsafe { get(handle, &raw mut has_value, &raw mut ns) },
-            AUTD3_OK
-        );
-        has_value.then(|| Duration::from_nanos(ns))
-    }
-
-    fn timer_resolution(handle: *const TransportOptionHandle) -> Option<Duration> {
-        optional(autd3_transport_option_get_timer_resolution, handle)
-    }
-
-    #[test]
-    fn a_zero_timer_resolution_is_kept_for_validation() {
-        let handle = autd3_transport_option_new();
-        assert_eq!(
-            unsafe { autd3_transport_option_set_timer_resolution(handle, true, 0) },
-            AUTD3_OK
-        );
-        assert_eq!(timer_resolution(handle), Some(Duration::ZERO));
-        assert!(unsafe { &*handle }.0.validate().is_err());
-        unsafe { autd3_transport_option_free(handle) };
-    }
-
-    #[test]
-    fn the_timer_resolution_presence_is_explicit() {
-        let handle = autd3_transport_option_new();
-        assert_eq!(timer_resolution(handle), Some(Duration::from_millis(1)));
-        assert_eq!(
-            unsafe { autd3_transport_option_set_timer_resolution(handle, false, 0) },
-            AUTD3_OK
-        );
-        assert_eq!(unsafe { &*handle }.0.timer_resolution, None);
-        assert_eq!(timer_resolution(handle), None);
-        assert_eq!(
-            unsafe { autd3_transport_option_set_timer_resolution(handle, true, 2_000_000) },
-            AUTD3_OK
-        );
-        assert_eq!(
-            unsafe { &*handle }.0.timer_resolution,
-            Some(Duration::from_millis(2))
-        );
-        assert_eq!(
-            unsafe { autd3_transport_option_set_timer_resolution(std::ptr::null_mut(), true, 1) },
-            AUTD3_ERR_INVALID_ARGUMENT
-        );
-        unsafe { autd3_transport_option_free(handle) };
-    }
-
     #[test]
     fn the_send_rate_limit_presence_is_explicit() {
         let handle = autd3_transport_option_new();
@@ -384,7 +322,6 @@ mod tests {
     fn the_defaults_reach_c_unchanged() {
         let handle = autd3_transport_option_new();
         let option = CoreOption::default();
-        assert_eq!(timer_resolution(handle), option.timer_resolution);
         assert_eq!(lost_timeout(handle), option.lost_timeout);
         let mut ns = 0u64;
         assert_eq!(
@@ -446,16 +383,9 @@ mod tests {
 
     #[test]
     fn a_null_handle_is_an_argument_error_not_a_crash() {
-        let mut has_value = false;
         let mut ns = 0u64;
         assert_eq!(
-            unsafe {
-                autd3_transport_option_get_timer_resolution(
-                    std::ptr::null(),
-                    &raw mut has_value,
-                    &raw mut ns,
-                )
-            },
+            unsafe { autd3_transport_option_get_lost_timeout(std::ptr::null(), &raw mut ns) },
             AUTD3_ERR_INVALID_ARGUMENT
         );
         assert!(unsafe { autd3_udp_emulator_option(std::ptr::null()) }.is_null());
@@ -552,48 +482,6 @@ mod tests {
             autd3_udp_emulator_num_devices(std::ptr::null())
         });
         unsafe { autd3_transport_option_free(option) };
-        unsafe { autd3_udp_emulator_free(emulator) };
-    }
-
-    #[test]
-    fn a_length_mismatch_leaves_the_streamed_command_with_the_caller() {
-        let emulator = unsafe { autd3_udp_emulator_spawn(1, std::ptr::null_mut(), 0) };
-        let geometry = Geometry::new(vec![Autd3::default()]);
-        let config = crate::autd3_client_config_new();
-        let option = unsafe { autd3_udp_emulator_option(emulator) };
-        let (code, client) = complete(|cb, user_data| unsafe {
-            crate::autd3_client_open(&raw const geometry, option, config, cb, user_data);
-        });
-        assert_eq!(AUTD3_OK, code);
-        let client = client as *mut crate::ClientHandle;
-
-        let per_device = [crate::autd3_op_nop(), crate::autd3_op_nop()];
-        let command = unsafe { crate::autd3_command_each(per_device.as_ptr(), per_device.len()) };
-        let (code, stream) = complete(|cb, user_data| unsafe {
-            crate::autd3_client_send_streaming(client, command, cb, user_data);
-        });
-        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
-        assert_eq!(0, stream);
-
-        let two = Geometry::new(vec![Autd3::default(), Autd3::default()]);
-        let frames = crate::autd3_frames_new();
-        assert_eq!(AUTD3_OK, unsafe {
-            crate::autd3_frames_encode_into(
-                frames,
-                &raw const two,
-                command,
-                std::ptr::null_mut(),
-                0,
-            )
-        });
-        unsafe { crate::autd3_frames_free(frames) };
-
-        let (code, _) = complete(|cb, user_data| unsafe {
-            crate::autd3_client_close(client, cb, user_data);
-        });
-        assert_eq!(AUTD3_OK, code);
-        unsafe { crate::autd3_client_free(client) };
-        unsafe { crate::autd3_client_config_free(config) };
         unsafe { autd3_udp_emulator_free(emulator) };
     }
 
