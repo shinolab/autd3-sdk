@@ -79,16 +79,6 @@ pub struct UdpBus {
 }
 
 impl UdpBus {
-    pub fn open(option: &UdpOption, num_devices: usize) -> Result<Self, UdpError> {
-        Self::open_with(
-            option,
-            Units::Exactly(num_devices),
-            Bringup::Synchronized,
-            None,
-            true,
-        )
-    }
-
     pub fn open_with_geometry(option: &UdpOption, geometry: &Geometry) -> Result<Self, UdpError> {
         Self::open_with(
             option,
