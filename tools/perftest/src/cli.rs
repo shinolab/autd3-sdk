@@ -137,7 +137,7 @@ pub(crate) struct Cli {
         long,
         value_enum,
         default_value_t = Mode::StopAndWait,
-        help = "stop-and-wait, streaming, or bank-switch. bank-switch drives the devices without the \
+        help = "stop-and-wait, streaming, or bank-switch. bank-switch sends raw frames through the \
                 Client: it alternates zero-amplitude Patterns between bank B0 and B1 with GPIO[0] on \
                 PatternBank and records, per device, the reply's device time minus the device time \
                 right before the send."

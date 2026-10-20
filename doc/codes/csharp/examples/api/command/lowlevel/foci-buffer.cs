@@ -1,5 +1,5 @@
-using System.Collections.Generic;
-using System.Numerics;
+using System;
+using System.Linq;
 using AUTD3;
 using static AUTD3.Units;
 
@@ -10,9 +10,10 @@ internal static class Sample
     internal static void Run()
     {
         var bank = PatternBank.B0;
-        var dst = new List<ControlPoints>();
-        Stm.Circle(Vector3.Zero, 30.0f * mm, 200, Vector3.UnitZ, Intensity.Max, dst);
-        var points = dst.ToArray();
+        var points = Enumerable.Range(0, 200)
+            .Select(i => 2.0f * MathF.PI * i / 200)
+            .Select(theta => (ControlPoints)Offset(MathF.Cos(theta) * 30.0f * mm, MathF.Sin(theta) * 30.0f * mm, 0.0f * mm))
+            .ToArray();
         var config = new StmConfig(1.0f * Hz).IntoSamplingConfig(points.Length);
 
         var startIndex = 0u;

@@ -1,7 +1,9 @@
-use autd3_rs::commands::{Clear, FociStm, FociStmOption, Synchronize, circle};
-use autd3_rs::geometry::{Autd3, Geometry, Vector3, offset};
+use std::f32::consts::PI;
+
+use autd3_rs::commands::{Clear, FociStm, FociStmOption, Synchronize};
+use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
-use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, TransitionMode};
+use autd3_rs::value::{ControlPoints, LoopBehavior, PatternBank, TransitionMode};
 use autd3_rs::Client;
 use autd3_rs::udp::TransportOption;
 
@@ -15,15 +17,12 @@ async fn main() -> anyhow::Result<()> {
     client.send((Clear, Synchronize)).await?;
 
     let center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
-    let mut points = Vec::new();
-    circle(
-        center,
-        30.0 * mm,
-        200,
-        Vector3::z_axis(),
-        Intensity::MAX,
-        &mut points,
-    );
+    let points: Vec<ControlPoints<1>> = (0..200)
+        .map(|i| {
+            let theta = 2.0 * PI * i as f32 / 200.0;
+            ControlPoints::from(center + offset(30.0 * mm * theta.cos(), 30.0 * mm * theta.sin(), 0.0 * mm))
+        })
+        .collect();
 
     client.send(FociStm::new(
         1.0 * Hz,

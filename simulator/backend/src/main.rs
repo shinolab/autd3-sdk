@@ -12,12 +12,12 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs_core::rt::{TracingOption, init_tracing};
 use autd3_rs_core::simulator::control_port;
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 use autd3_rs_simulator_protocol::ServerMsg;
 use clap::Parser;
 use tokio::sync::watch;
+use tracing_subscriber::EnvFilter;
 
 use crate::control::Scene;
 use crate::emulator::{extract_device_states, extract_states};
@@ -40,7 +40,11 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let _log_guard = init_tracing(TracingOption::default());
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
+        .init();
     let args = Args::parse();
 
     let mod_enabled = Arc::new(AtomicBool::new(true));

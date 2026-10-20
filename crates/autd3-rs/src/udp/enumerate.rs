@@ -4,17 +4,17 @@ use std::time::{Duration, Instant};
 use autd3_cpu_wire::udp::{
     AssignIdBody, Flags, Kind, Role, SetTimeBody, Status, UnblockReply, UnitInfo,
 };
-use autd3_rs_core::DeviceClock;
 use autd3_rs_core::value::SysTime;
+use autd3_rs_core::{DeviceClock, MAX_DEVICES};
 use zerocopy::little_endian::U64;
 use zerocopy::{FromBytes, IntoBytes};
 
-use super::bus::MAX_DEVICES;
 use super::channel::{Channel, ControlResponse};
 use super::error::UdpError;
 use super::option::TransportOption;
 use super::state::SYNCED_FLAGS;
 
+pub(crate) const REQUEST_REPLY_WAIT: Duration = Duration::from_millis(200);
 const EXCHANGE_ATTEMPTS: usize = 3;
 const VERIFY_ASSIGNMENTS_ATTEMPTS: usize = 3;
 const RESET_SETTLE: Duration = Duration::from_millis(100);
@@ -64,7 +64,8 @@ const fn role_of(unit_id: u8) -> Role {
 
 struct Enumerator<'a> {
     channel: &'a Channel,
-    option: &'a TransportOption,
+    open_timeout: Duration,
+    deadline: Option<Instant>,
 }
 
 impl Enumerator<'_> {
@@ -81,7 +82,7 @@ impl Enumerator<'_> {
         self.channel.collect_responses(
             Kind::ReadUnitInfo,
             msg_id,
-            self.option.control_request_timeout,
+            REQUEST_REPLY_WAIT,
             max_responses,
         )
     }
@@ -95,7 +96,7 @@ impl Enumerator<'_> {
         for _ in 0..EXCHANGE_ATTEMPTS {
             if let Some(response) =
                 self.channel
-                    .request_once(dst, kind, body, self.option.control_request_timeout)?
+                    .request_once(dst, kind, body, REQUEST_REPLY_WAIT)?
             {
                 return Ok(Some(response));
             }
@@ -105,12 +106,9 @@ impl Enumerator<'_> {
 
     fn reset_all_unit_ids(&mut self) -> Result<(), UdpError> {
         let msg_id = self.request_all_devices(Kind::ResetId)?;
-        let replies = self.channel.collect_responses(
-            Kind::ResetId,
-            msg_id,
-            self.option.control_request_timeout,
-            None,
-        )?;
+        let replies =
+            self.channel
+                .collect_responses(Kind::ResetId, msg_id, REQUEST_REPLY_WAIT, None)?;
         tracing::debug!(replies = replies.len(), "reset the unit ids");
         std::thread::sleep(RESET_SETTLE);
         Ok(())
@@ -120,12 +118,7 @@ impl Enumerator<'_> {
         let msg_id = self.request_all_devices(Kind::Discover)?;
         let Some(first) = self
             .channel
-            .collect_responses(
-                Kind::Discover,
-                msg_id,
-                self.option.control_request_timeout,
-                Some(1),
-            )?
+            .collect_responses(Kind::Discover, msg_id, REQUEST_REPLY_WAIT, Some(1))?
             .pop()
         else {
             return Ok(None);
@@ -183,7 +176,7 @@ impl Enumerator<'_> {
         min_count: usize,
         max_count: usize,
     ) -> Result<Vec<SocketAddrV6>, UdpError> {
-        let deadline = Instant::now().checked_add(self.option.enumeration_timeout);
+        let deadline = self.deadline;
         let mut device_addrs: Vec<SocketAddrV6> = Vec::with_capacity(min_count);
         loop {
             let Some(discovered) = self.discover()? else {
@@ -238,12 +231,8 @@ impl Enumerator<'_> {
         }
         for &addr in &stale {
             tracing::debug!(%addr, "releasing a unit left assigned by a previous enumeration");
-            self.channel.request_once(
-                addr,
-                Kind::ResetId,
-                &[],
-                self.option.control_request_timeout,
-            )?;
+            self.channel
+                .request_once(addr, Kind::ResetId, &[], REQUEST_REPLY_WAIT)?;
         }
         std::thread::sleep(RESET_SETTLE);
         Ok(true)
@@ -302,7 +291,7 @@ impl Enumerator<'_> {
                 grandmaster,
                 Kind::SetTime,
                 body.as_bytes(),
-                self.option.control_request_timeout,
+                REQUEST_REPLY_WAIT,
             )?;
             if answered.is_some() {
                 break;
@@ -318,7 +307,7 @@ impl Enumerator<'_> {
     }
 
     fn wait_sync(&mut self, device_addrs: &[SocketAddrV6]) -> Result<(), UdpError> {
-        let deadline = Instant::now().checked_add(self.option.sync_timeout);
+        let deadline = self.deadline;
         loop {
             let mut ready = vec![false; device_addrs.len()];
             for response in self.read_unit_info(Some(device_addrs.len()))? {
@@ -345,7 +334,7 @@ impl Enumerator<'_> {
             if deadline_passed(deadline) {
                 return Err(UdpError::SyncTimeout {
                     not_ready,
-                    timeout: self.option.sync_timeout,
+                    timeout: self.open_timeout,
                 });
             }
             std::thread::sleep(SYNC_POLL_INTERVAL);
@@ -384,11 +373,16 @@ pub(crate) enum SyncOnOpen {
 pub(crate) fn bring_up(
     channel: &Channel,
     option: &TransportOption,
+    deadline: Option<Instant>,
     expected: ExpectedCount,
     sync_on_open: SyncOnOpen,
     device_clock: &DeviceClock,
 ) -> Result<Vec<SocketAddrV6>, UdpError> {
-    let mut enumerator = Enumerator { channel, option };
+    let mut enumerator = Enumerator {
+        channel,
+        open_timeout: option.open_timeout,
+        deadline,
+    };
     enumerator.reset_all_unit_ids()?;
     let device_addrs = enumerator.enumerate(expected.at_least(), expected.at_most())?;
     enumerator.verify_assignments(&device_addrs)?;

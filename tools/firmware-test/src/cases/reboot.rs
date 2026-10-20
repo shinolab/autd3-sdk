@@ -1,79 +1,48 @@
 use core::time::Duration;
 use std::time::Instant;
 
-use anyhow::{Context, Result, bail};
+use anyhow::Result;
 
+use autd3_rs::commands::Distribution;
 use autd3_rs::protocol::Cmd;
-use autd3_rs::{DeviceState, TransportOption, UdpBus, UdpError};
+use autd3_rs::{Client, Datagram, DeviceState, Frame};
 
 use crate::{Link, Session, describe};
 
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(1);
 const GONE_WINDOW: Duration = Duration::from_secs(5);
-const GONE_LOST_TIMEOUT: Duration = Duration::from_millis(100);
-const HEARTBEATS_UNTIL_LOST: u32 = 10;
 const POLL: Duration = Duration::from_millis(10);
 
 fn verdict(ok: bool) -> &'static str {
     if ok { "[OK]" } else { "[FAIL]" }
 }
 
-fn request(bus: &UdpBus, cmd: Cmd) -> Result<()> {
-    let frame = [0, cmd.as_u8(), 0, 0, 0, 0];
-    let mut status: Vec<Option<u8>> = vec![None; bus.num_devices()];
-    let sent = bus.broadcast(bus.reserve_msg_id(), &frame)?;
-    if let Some(unsent) = sent.unsent {
-        return Err(UdpError::from(unsent).into());
-    }
-    let msg_id = sent.msg_id;
-    let end = Instant::now() + REQUEST_TIMEOUT;
-    while status.iter().any(Option::is_none)
-        && let Some(reply) = bus.recv(end)?
-    {
-        if reply.msg_id == msg_id {
-            status[reply.device].get_or_insert(reply.error_code);
-        }
-    }
-    for (device, status) in status.iter().enumerate() {
-        match status {
-            None => {
-                bail!("device[{device}] did not acknowledge {cmd:?} within {REQUEST_TIMEOUT:?}")
-            }
-            Some(0) => {}
-            Some(code) => bail!("device[{device}] rejected {cmd:?} with code {code:#04x}"),
-        }
-    }
+async fn request_reboot(client: &Client) -> Result<()> {
+    let datagrams = [Datagram::no_payload(Cmd::Reboot)];
+    client
+        .send_frame(Frame::new(Distribution::Broadcast, &datagrams))
+        .await?
+        .await?
+        .check()?;
     Ok(())
 }
 
-fn gone(bus: &UdpBus) -> Result<(bool, Vec<DeviceState>)> {
-    let states = bus.state_checker();
+async fn gone(client: &Client, window: Duration) -> Result<(bool, Vec<DeviceState>)> {
+    let states = client.state_checker();
     let started = Instant::now();
     loop {
-        bus.send_heartbeat()?;
-        while bus.recv(Instant::now() + POLL)?.is_some() {}
+        client.send_heartbeat()?;
+        tokio::time::sleep(POLL).await;
         let seen = states.check()?.devices().to_vec();
         let all_lost = seen.iter().all(|d| *d == DeviceState::Lost);
-        if all_lost || started.elapsed() >= GONE_WINDOW {
+        if all_lost || started.elapsed() >= window {
             return Ok((all_lost, seen));
         }
     }
 }
 
-fn reboot_all(
-    option: &TransportOption,
-    heartbeat: Duration,
-    devices: usize,
-) -> Result<(bool, Vec<DeviceState>)> {
-    let option = TransportOption {
-        lost_timeout: GONE_LOST_TIMEOUT.max(heartbeat.saturating_mul(HEARTBEATS_UNTIL_LOST)),
-        ..option.clone()
-    };
-    let bus = UdpBus::open_unsynchronized(&option, devices).context("enumerating the devices")?;
-    request(&bus, Cmd::Reboot)?;
-    let outcome = gone(&bus);
-    bus.close()?;
-    outcome
+async fn reboot_all(client: &Client, window: Duration) -> Result<(bool, Vec<DeviceState>)> {
+    request_reboot(client).await?;
+    gone(client, window).await
 }
 
 pub(crate) async fn run(client: Session, link: &Link<'_>) -> Result<Session> {
@@ -82,19 +51,16 @@ pub(crate) async fn run(client: Session, link: &Link<'_>) -> Result<Session> {
     if let Err(e) = &before {
         println!("  reading the firmware version before the reboot failed: {e}");
     }
-    if let Err(e) = client.close().await {
-        println!("  closing the client before the reboot reported: {e}");
-    }
-    drop(client);
 
-    let option = link.option.clone();
-    let heartbeat = link.heartbeat;
+    let window = GONE_WINDOW.max(link.option.lost_timeout.saturating_mul(2));
     let started = Instant::now();
-    match tokio::task::spawn_blocking(move || reboot_all(&option, heartbeat, devices)).await? {
+    let outcome = reboot_all(&client, window).await;
+    drop(client);
+    match outcome {
         Ok((all_lost, seen)) => {
             println!("  [OK] every device acknowledged Reboot");
             println!(
-                "  {} every device stopped answering under its unit ID within {GONE_WINDOW:?} of the acknowledgement: {seen:?}",
+                "  {} every device stopped answering under its unit ID within {window:?} of the acknowledgement: {seen:?}",
                 verdict(all_lost)
             );
         }

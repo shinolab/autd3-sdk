@@ -21,6 +21,7 @@ exclude = [
     "firmware/cpu/board",
     "bindings/python",
     "bindings/ffi",
+    "bindings/autd3-binding-rt",
     "simulator",
     "extras/autd3-rs-emulator",
     "extras/autd3-rs-pattern-holo-wgpu",

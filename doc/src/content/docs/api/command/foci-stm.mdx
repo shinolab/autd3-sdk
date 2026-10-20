@@ -56,38 +56,11 @@ Python にはこの短い書き方が無いので, `ControlPoints([ControlPoint(
 
 `loop_behavior` と `transition_mode` の挙動は[再生制御](/autd3-sdk/api/command/lowlevel/activate-pattern-bank/) を参照. 
 
-## ヘルパ関数
+## 点列の作り方
 
-典型的な軌道を生成するヘルパ関数が用意されている. 
-
-### circle
+軌道を生成するヘルパ関数は無い. 点列はユーザーが作って渡す. 以下は半径 30 mm の円周上に 200 点を等間隔に並べる例である.
 
 <CodeTabs rust={excerpt(sample, "circle")} python={excerpt(pySample, "circle")} csharp={excerpt(csSample, "circle")} />
-
-| 引数         | 型                           | 説明                        |
-| ------------ | ---------------------------- | --------------------------- |
-| `center`     | `Point3<f32>`                | 円の中心 [mm]               |
-| `radius`     | `Length`                     | 円の半径                    |
-| `num_points` | `usize`                      | 生成する点の数              |
-| `normal`     | `UnitVector3<f32>`           | 円平面の法線 (単位ベクトル) |
-| `intensity`  | `Intensity`                  | 各点の振幅                  |
-| `dst`        | `&mut Vec<ControlPoints<1>>` | 出力バッファ                |
-
-`normal` を法線とする円周上に等間隔で `num_points` 個の点を並べる. 
-
-### line
-
-<CodeTabs rust={excerpt(sample, "line")} python={excerpt(pySample, "line")} csharp={excerpt(csSample, "line")} />
-
-| 引数         | 型                           | 説明           |
-| ------------ | ---------------------------- | -------------- |
-| `start`      | `Point3<f32>`                | 始点 [mm]      |
-| `end`        | `Point3<f32>`                | 終点 [mm]      |
-| `num_points` | `usize`                      | 生成する点の数 |
-| `intensity`  | `Intensity`                  | 各点の振幅     |
-| `dst`        | `&mut Vec<ControlPoints<1>>` | 出力バッファ   |
-
-始点・終点を含む等間隔の直線上に `num_points` 個の点を並べる. 
 
 ## 等価な低レベルコマンド
 

@@ -12,8 +12,9 @@ mod simulator;
 pub(crate) mod state;
 
 pub use autd3_cpu_wire::udp::{DEVICE_QUEUE_FRAMES, PORT};
-pub use bus::{Sent, UdpBus, Unsent};
+pub use bus::discover;
+pub(crate) use bus::{Sent, UdpBus};
 pub use error::UdpError;
 pub use option::TransportOption;
-pub use reply::Reply;
+pub(crate) use reply::Reply;
 pub use state::StateChecker;

@@ -22,8 +22,11 @@ namespace AUTD3.Tests
             Assert.Equal((ushort)divide, config.IntoSamplingConfig(size).Divide());
 
             using var geometry = Fixture.SingleDevice();
-            var points = new List<ControlPoints>();
-            Stm.Circle(geometry.Center + new Vector3(0f, 0f, 150f), 30f * mm, size, new Vector3(0f, 0f, 1f), Intensity.Max, points);
+            var center = geometry.Center + new Vector3(0f, 0f, 150f);
+            var points = Enumerable.Range(0, size)
+                .Select(i => 2f * MathF.PI * i / size)
+                .Select(theta => new ControlPoints(new[] { new ControlPoint(center + 30f * new Vector3(MathF.Cos(theta), MathF.Sin(theta), 0f), Phase.Zero) }, Intensity.Max))
+                .ToList();
             using var frames = Frames.Encode(geometry, new FociStm(TimeSpan.FromMilliseconds(millis), points, new FociStmOption()));
             Assert.True(frames.Length > 0);
         }

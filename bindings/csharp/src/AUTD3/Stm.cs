@@ -95,12 +95,6 @@ namespace AUTD3
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern float autd3_foci_stm_option_default_sound_speed();
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_stm_circle(float[] center, float radiusMm, UIntPtr numPoints, float[] normal, byte intensity, Autd3StmControlPointNative[] outPoints, byte[] outIntensities);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_stm_line(float[] start, float[] end, UIntPtr numPoints, byte intensity, Autd3StmControlPointNative[] outPoints, byte[] outIntensities);
     }
 
     public readonly struct StmConfig
@@ -402,43 +396,6 @@ namespace AUTD3
         {
             var (points, intensities, numFoci) = FociPoints.Flatten(_points, "WriteFociBuffer");
             return NativeStm.autd3_op_write_foci_buffer((byte)_bank, _startIndex, points, (UIntPtr)_points.Count, numFoci, intensities);
-        }
-    }
-
-    public static class Stm
-    {
-        private static void Fill(List<ControlPoints> dst, Autd3StmControlPointNative[] points, byte[] intensities)
-        {
-            dst.Clear();
-            for (var i = 0; i < points.Length; i++)
-            {
-                var cp = new ControlPoint(Coords.FromPointArray(new[] { points[i].X, points[i].Y, points[i].Z }), new Phase(points[i].PhaseOffset));
-                dst.Add(new ControlPoints(new[] { cp }, new Intensity(intensities[i])));
-            }
-        }
-
-        public static void Circle(Vector3 center, Length radius, int numPoints, Vector3 normal, Intensity intensity, List<ControlPoints> dst)
-        {
-            var outPoints = new Autd3StmControlPointNative[numPoints];
-            var outIntensities = new byte[numPoints];
-            if (NativeStm.autd3_stm_circle(Coords.PointArray(center), radius.Mm, (UIntPtr)numPoints,
-                Coords.DirArray(normal), intensity.Value, outPoints, outIntensities) != 0)
-            {
-                throw new Autd3Exception("circle failed", Autd3ErrorCode.InvalidArgument);
-            }
-            Fill(dst, outPoints, outIntensities);
-        }
-
-        public static void Line(Vector3 start, Vector3 end, int numPoints, Intensity intensity, List<ControlPoints> dst)
-        {
-            var outPoints = new Autd3StmControlPointNative[numPoints];
-            var outIntensities = new byte[numPoints];
-            if (NativeStm.autd3_stm_line(Coords.PointArray(start), Coords.PointArray(end), (UIntPtr)numPoints,
-                intensity.Value, outPoints, outIntensities) != 0)
-            {
-                throw new Autd3Exception("line failed", Autd3ErrorCode.InvalidArgument);
-            }
-            Fill(dst, outPoints, outIntensities);
         }
     }
 }

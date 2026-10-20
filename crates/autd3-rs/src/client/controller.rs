@@ -17,10 +17,9 @@ use crate::telemetry::Telemetry;
 use crate::udp::frame_buf::FrameBuf;
 use crate::udp::{Sent, StateChecker, TransportOption, UdpBus, UdpError};
 use crate::value::{Intensity, SysTime};
-use autd3_rs_core::{BusStats, DeviceClock, DeviceMask};
+use autd3_rs_core::{BusStats, DeviceClock, DeviceMask, MAX_DEVICES};
 use futures_channel::oneshot;
 
-use super::MAX_DEVICES;
 use super::completion::{self, ResponseFuture};
 use super::driver::{Driver, InflightRequest, SendOutcome, SharedSession, devices_sent_to};
 use super::exec_at::{self, ExecAt};

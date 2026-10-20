@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use autd3_python_capsule::extract::{
-    extract_direction, extract_duration, extract_length, extract_point, extract_sampling_config,
-    extract_u8, extract_velocity, intensity_to_py, is_duration, nanos_to_duration, phase_to_py,
-    sampling_config_to_py, velocity_to_py,
+    extract_duration, extract_point, extract_sampling_config, extract_u8, extract_velocity,
+    intensity_to_py, is_duration, nanos_to_duration, phase_to_py, sampling_config_to_py,
+    velocity_to_py,
 };
 use autd3_python_capsule::numpy::f32_vec3;
 use autd3_rs::Velocity;
@@ -12,7 +12,7 @@ use autd3_rs::commands::WriteFociBuffer as CoreWriteFociBuffer;
 use autd3_rs::commands::{
     FociStm as CoreFociStm, FociStmOption as CoreFociStmOption, PatternStm as CorePatternStm,
     PatternStmOption as CorePatternStmOption, StmConfig as CoreStmConfig,
-    StmIntensity as CoreStmIntensity, circle as core_circle, line as core_line,
+    StmIntensity as CoreStmIntensity,
 };
 use autd3_rs::value::{
     ControlPoint as CoreControlPoint, ControlPoints as CoreControlPoints, Intensity, Nearest,
@@ -21,7 +21,6 @@ use autd3_rs::value::{
 use autd3_rs_core::units::Hz;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::PyList;
 
 use crate::datagram::PushCommand;
 use crate::ops;
@@ -150,15 +149,6 @@ impl ControlPoints {
             "ControlPoints {{ points: {:?}, intensity: {:?} }}",
             self.points, self.intensity
         )
-    }
-}
-
-impl ControlPoints {
-    fn from_core(cp: CoreControlPoints<1>) -> Self {
-        Self {
-            points: cp.points.to_vec(),
-            intensity: cp.intensity,
-        }
     }
 }
 
@@ -484,58 +474,6 @@ impl PatternStm {
     }
 }
 
-#[pyfunction]
-#[pyo3(signature = (center, radius, num_points, normal, intensity, dst))]
-fn circle(
-    center: &Bound<'_, PyAny>,
-    radius: &Bound<'_, PyAny>,
-    num_points: usize,
-    normal: &Bound<'_, PyAny>,
-    intensity: &Bound<'_, PyAny>,
-    dst: &Bound<'_, PyList>,
-) -> PyResult<()> {
-    let intensity = Intensity(extract_u8(intensity)?);
-    let mut pts = Vec::new();
-    core_circle(
-        extract_point(center)?,
-        extract_length(radius)?,
-        num_points,
-        extract_direction(normal)?,
-        intensity,
-        &mut pts,
-    );
-    dst.call_method0("clear")?;
-    for cp in pts {
-        dst.append(ControlPoints::from_core(cp))?;
-    }
-    Ok(())
-}
-
-#[pyfunction]
-#[pyo3(signature = (start, end, num_points, intensity, dst))]
-fn line(
-    start: &Bound<'_, PyAny>,
-    end: &Bound<'_, PyAny>,
-    num_points: usize,
-    intensity: &Bound<'_, PyAny>,
-    dst: &Bound<'_, PyList>,
-) -> PyResult<()> {
-    let intensity = Intensity(extract_u8(intensity)?);
-    let mut pts = Vec::new();
-    core_line(
-        extract_point(start)?,
-        extract_point(end)?,
-        num_points,
-        intensity,
-        &mut pts,
-    );
-    dst.call_method0("clear")?;
-    for cp in pts {
-        dst.append(ControlPoints::from_core(cp))?;
-    }
-    Ok(())
-}
-
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<StmConfig>()?;
     m.add_class::<ControlPoint>()?;
@@ -545,7 +483,5 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<FociStm>()?;
     m.add_class::<WriteFociBuffer>()?;
     m.add_class::<PatternStm>()?;
-    m.add_function(wrap_pyfunction!(circle, m)?)?;
-    m.add_function(wrap_pyfunction!(line, m)?)?;
     Ok(())
 }

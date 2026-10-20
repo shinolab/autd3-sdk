@@ -12,9 +12,8 @@ name = "autd3capi"
 crate-type = ["cdylib"]
 
 [dependencies]
-autd3-rs = { workspace = true, features = ["logging"] }
-autd3-rs-core.workspace = true
-autd3-rs-firmware-emulator = { workspace = true, features = ["udp"] }
+autd3-rs.workspace = true
+autd3-binding-rt.workspace = true
 autd3-ffi-abi.workspace = true
 
 [lints]

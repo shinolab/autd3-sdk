@@ -6,8 +6,7 @@ use serde::{Deserialize, Serialize};
 pub(crate) struct UdpConfig {
     pub interface: String,
     pub heartbeat_us: Option<u64>,
-    pub response_timeout_ms: Option<u64>,
-    pub enumeration_timeout_ms: Option<u64>,
+    pub open_timeout_ms: Option<u64>,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
@@ -27,8 +26,7 @@ impl Default for OtaConfig {
 }
 
 const DEFAULT_HEARTBEAT_US: u64 = 10_000;
-const DEFAULT_RESPONSE_TIMEOUT_MS: u64 = 200;
-const DEFAULT_ENUMERATION_TIMEOUT_MS: u64 = 10_000;
+const DEFAULT_OPEN_TIMEOUT_MS: u64 = 40_000;
 const DEVICE_PORT: u16 = 44336;
 
 fn push_opt(args: &mut Vec<String>, flag: &str, value: Option<u64>) {
@@ -60,8 +58,7 @@ impl OtaConfig {
             args.push(interface.to_string());
         }
         push_opt(args, "--heartbeat-us", u.heartbeat_us);
-        push_opt(args, "--response-timeout-ms", u.response_timeout_ms);
-        push_opt(args, "--enumeration-timeout-ms", u.enumeration_timeout_ms);
+        push_opt(args, "--open-timeout-ms", u.open_timeout_ms);
     }
 
     pub(crate) fn ui(&mut self, ui: &mut egui::Ui, enabled: bool) {
@@ -114,16 +111,9 @@ impl OtaConfig {
         let u = &mut self.udp;
         optional_row(
             ui,
-            "Response timeout",
-            &mut u.response_timeout_ms,
-            DEFAULT_RESPONSE_TIMEOUT_MS,
-            " ms",
-        );
-        optional_row(
-            ui,
-            "Enumeration timeout",
-            &mut u.enumeration_timeout_ms,
-            DEFAULT_ENUMERATION_TIMEOUT_MS,
+            "Open timeout",
+            &mut u.open_timeout_ms,
+            DEFAULT_OPEN_TIMEOUT_MS,
             " ms",
         );
     }
@@ -193,8 +183,7 @@ mod tests {
             udp: UdpConfig {
                 interface: "  eth0 ".to_string(),
                 heartbeat_us: Some(20_000),
-                response_timeout_ms: Some(300),
-                enumeration_timeout_ms: Some(20_000),
+                open_timeout_ms: Some(20_000),
             },
             ..OtaConfig::default()
         };
@@ -205,9 +194,7 @@ mod tests {
                 "eth0",
                 "--heartbeat-us",
                 "20000",
-                "--response-timeout-ms",
-                "300",
-                "--enumeration-timeout-ms",
+                "--open-timeout-ms",
                 "20000",
             ]
         );
@@ -227,7 +214,7 @@ mod tests {
     #[test]
     fn a_config_saved_with_the_removed_udp_timeouts_still_loads() {
         let config: OtaConfig = serde_json::from_str(
-            r#"{"reboot_wait_secs":30,"udp":{"heartbeat_us":20000,"reply_timeout_us":1500,"sync_timeout_ms":8000}}"#,
+            r#"{"reboot_wait_secs":30,"udp":{"heartbeat_us":20000,"reply_timeout_us":1500,"sync_timeout_ms":8000,"response_timeout_ms":300,"enumeration_timeout_ms":20000}}"#,
         )
         .unwrap();
         assert_eq!(config.reboot_wait_secs, 30);

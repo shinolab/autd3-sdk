@@ -230,7 +230,7 @@ mod tests {
     fn each_on_an_empty_geometry_is_rejected_like_a_plain_command() {
         let expected = PayloadError::DeviceCountOutOfRange {
             got: 0,
-            max: crate::client::MAX_DEVICES,
+            max: autd3_rs_core::MAX_DEVICES,
         };
 
         let plain = build(0, Marker(0));

@@ -37,7 +37,7 @@ impl Exchange for Chain {
         self.0.num_devices()
     }
 
-    fn exchange(&mut self, frame: &Frame, _timeout: Duration) -> Result<Replies, Self::Error> {
+    fn exchange(&mut self, frame: &Frame) -> Result<Replies, Self::Error> {
         let bytes = frame.bytes();
         let frames = vec![&bytes[..]; self.0.num_devices()];
         let mut replies: Vec<Option<DeviceReply>> = vec![None; self.0.num_devices()];
@@ -47,10 +47,7 @@ impl Exchange for Chain {
                 value: r.reply.data().to_vec(),
             });
         }
-        Ok(match replies.iter().position(Option::is_none) {
-            Some(device) => Err(device),
-            None => Ok(replies.into_iter().map(Option::unwrap).collect()),
-        })
+        Ok(replies.into_iter().collect::<Option<Vec<_>>>().ok_or(()))
     }
 
     fn idle(&mut self, _duration: Duration) -> Result<(), Self::Error> {
@@ -293,9 +290,7 @@ mod fpga {
     use super::Chain;
     use autd3_rs_firmware_emulator::autd3_cpu_fw::Port;
     use autd3_rs_firmware_emulator::autd3_cpu_fw::fpga_params::ADDR_FUNCTION_BITS;
-    use autd3_rs_firmware_ota::{
-        DEFAULT_TIMEOUT, Driver, DriverError, FpgaFirmwareImage, Frame, boot_image,
-    };
+    use autd3_rs_firmware_ota::{Driver, DriverError, FpgaFirmwareImage, Frame, boot_image};
 
     use super::NUM_TRANSDUCERS;
 
@@ -465,7 +460,7 @@ mod fpga {
         let mut driver = Driver::new(Chain::from(audit));
         driver.update_fpga(&bitstream(10, 4), |_| {}).unwrap();
         assert!(matches!(
-            driver.send_checked(&Frame::new(Cmd::Clear), DEFAULT_TIMEOUT),
+            driver.send_checked(&Frame::new(Cmd::Clear)),
             Err(DriverError::Device { code: 0x10, .. })
         ));
     }

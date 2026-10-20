@@ -8,11 +8,9 @@ internal static class Sample
     internal static void Run()
     {
         var iface = Interface.Auto;
+        var openTimeout = TimeSpan.FromSeconds(40);
         var recoveryReplyTimeout = TimeSpan.FromMilliseconds(1);
         var lostTimeout = TimeSpan.FromMilliseconds(100);
-        var controlRequestTimeout = TimeSpan.FromMilliseconds(200);
-        var enumerationTimeout = TimeSpan.FromSeconds(10);
-        var syncTimeout = TimeSpan.FromSeconds(30);
         var ackTimeout = TimeSpan.FromMilliseconds(10);
         float? sendRateLimitPercent = null;
         ulong sendBufferBytes = 8192;
@@ -20,11 +18,9 @@ internal static class Sample
         new TransportOption
         {
             Iface = iface,
+            OpenTimeout = openTimeout,
             RecoveryReplyTimeout = recoveryReplyTimeout,
             LostTimeout = lostTimeout,
-            ControlRequestTimeout = controlRequestTimeout,
-            EnumerationTimeout = enumerationTimeout,
-            SyncTimeout = syncTimeout,
             AckTimeout = ackTimeout,
             SendRateLimitPercent = sendRateLimitPercent,
             SendBufferBytes = sendBufferBytes,

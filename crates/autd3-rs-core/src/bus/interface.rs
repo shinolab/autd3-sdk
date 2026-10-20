@@ -10,16 +10,6 @@ pub enum Interface {
     Addr(SocketAddrV6),
 }
 
-impl Interface {
-    #[must_use]
-    pub fn name(&self) -> Option<&str> {
-        match self {
-            Interface::Name(name) => Some(name),
-            Interface::Auto | Interface::Simulator(_) | Interface::Addr(_) => None,
-        }
-    }
-}
-
 impl From<String> for Interface {
     fn from(name: String) -> Self {
         Interface::Name(name)

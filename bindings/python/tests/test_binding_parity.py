@@ -370,11 +370,6 @@ def test_emulator_options_default_to_rust() -> None:
     assert emu.RmsRecordOption().sound_speed == 340 * m / s
 
 
-def test_the_emulator_reports_its_device_count_by_method() -> None:
-    emulator = autd3.UdpEmulator(1)
-    assert emulator.num_devices() == 1
-
-
 def test_unit_types_are_reexported() -> None:
     assert isinstance(1 * Hz, Freq)
     assert isinstance(1 * mm, Length)

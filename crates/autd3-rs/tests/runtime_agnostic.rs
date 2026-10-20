@@ -1,10 +1,6 @@
 mod common;
 
-use std::sync::Arc;
-use std::sync::mpsc;
-
 use autd3_rs::commands::{ForceFan, Nop, SetSilencer};
-use autd3_rs::rt::Executor;
 use autd3_rs::{Client, Error};
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 use pollster::block_on;
@@ -57,24 +53,22 @@ fn a_timeout_is_noticed_without_an_async_runtime() {
 
 #[test]
 #[ignore = "depends on real time"]
-fn more_concurrent_sends_than_slots_all_complete_on_one_executor_thread() {
+fn more_concurrent_sends_than_slots_all_complete() {
     const SENDERS: usize = 12;
     let emulator = emulator(1);
-    let client = Arc::new(open(&emulator));
+    let client = open(&emulator);
     let before = client.bus_stats().frames();
 
-    let executor = Executor::new();
-    let (done_tx, done_rx) = mpsc::channel::<Result<(), Error>>();
-    for _ in 0..SENDERS {
-        let client = Arc::clone(&client);
-        let done_tx = done_tx.clone();
-        assert!(executor.spawn(async move {
-            let _ = done_tx.send(stream_silencer(&client, 2).await);
-        }));
-    }
-    drop(done_tx);
+    let outcomes: Vec<Result<(), Error>> = std::thread::scope(|scope| {
+        let senders: Vec<_> = (0..SENDERS)
+            .map(|_| scope.spawn(|| block_on(stream_silencer(&client, 2))))
+            .collect();
+        senders
+            .into_iter()
+            .map(|sender| sender.join().unwrap())
+            .collect()
+    });
 
-    let outcomes: Vec<_> = done_rx.iter().collect();
     assert_eq!(outcomes.len(), SENDERS);
     assert!(outcomes.iter().all(Result::is_ok));
     assert_eq!(
@@ -82,7 +76,6 @@ fn more_concurrent_sends_than_slots_all_complete_on_one_executor_thread() {
         u64::try_from(SENDERS * 2).unwrap()
     );
 
-    executor.shutdown();
     block_on(client.close()).unwrap();
 }
 

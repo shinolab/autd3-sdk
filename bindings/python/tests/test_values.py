@@ -460,11 +460,3 @@ def test_signatures_are_introspectable() -> None:
     assert list(inspect.signature(autd3.commands.FociStm).parameters) == ["config", "points", "option"]
     assert list(inspect.signature(modulation.constant).parameters) == ["amplitude", "dst"]
     assert list(inspect.signature(modulation.samples_per_period).parameters) == ["divider", "freq"]
-    assert list(inspect.signature(autd3.commands.circle).parameters) == [
-        "center",
-        "radius",
-        "num_points",
-        "normal",
-        "intensity",
-        "dst",
-    ]

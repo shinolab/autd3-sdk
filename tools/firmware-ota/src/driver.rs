@@ -1,4 +1,9 @@
-use std::time::{Duration, Instant};
+use std::pin::pin;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::task::{Context, Poll, Wake, Waker};
+use std::thread::{JoinHandle, Thread};
+use std::time::Duration;
 
 use autd3_cpu_wire::describe_device_error;
 use autd3_cpu_wire::fpga_params::FunctionBits;
@@ -6,23 +11,21 @@ use autd3_cpu_wire::fpga_update::FpgaBootImage;
 use autd3_cpu_wire::layout::UPDATE_CHUNK_MAX_DATA_LEN;
 use autd3_cpu_wire::payload::{FirmwareInfo, UpdateBeginPayload, UpdateChunkPayload};
 use autd3_cpu_wire::update::RunningImage;
+use autd3_rs::commands::Distribution;
+use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::protocol::{Cmd, FrameHeader, PAYLOAD_BYTES};
-use autd3_rs::{UdpBus, UdpError};
+use autd3_rs::{
+    Client, Datagram, Error, Frame as ClientFrame, NetworkCause, Response, ResponseFuture,
+    StateChecker, TransportOption,
+};
 use zerocopy::little_endian::U32;
 use zerocopy::{FromBytes, Immutable, IntoBytes};
 
 use crate::fpga_image::FpgaFirmwareImage;
 use crate::image::CpuFirmwareImage;
 
-pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(1);
 pub const DEFAULT_HEARTBEAT: Duration = Duration::from_millis(10);
-const UPDATE_BEGIN_TIMEOUT: Duration = Duration::from_secs(30);
-const UPDATE_CHUNK_TIMEOUT: Duration = Duration::from_secs(4);
-const UPDATE_COMMIT_TIMEOUT: Duration = Duration::from_secs(30);
-const UPDATE_CONFIRM_TIMEOUT: Duration = Duration::from_secs(4);
-const FPGA_UPDATE_BEGIN_TIMEOUT: Duration = Duration::from_secs(20);
-const FPGA_UPDATE_CHUNK_TIMEOUT: Duration = Duration::from_secs(20);
-const FPGA_UPDATE_COMMIT_TIMEOUT: Duration = Duration::from_secs(120);
+pub const ACK_TIMEOUT: Duration = Duration::from_secs(120);
 pub const FPGA_RECONFIG_WAIT: Duration =
     Duration::from_millis(autd3_cpu_wire::fpga_update::FPGA_RECONFIG_WORST_MS as u64 + 2000);
 pub const MIN_CPU_FIRMWARE_VERSION: [u8; 3] = [0, 10, 0];
@@ -31,12 +34,8 @@ pub const MIN_CPU_FIRMWARE_VERSION: [u8; 3] = [0, 10, 0];
 pub enum DriverError {
     #[error("network error: {0}")]
     Network(#[source] Box<dyn core::error::Error + Send + Sync>),
-    #[error("device {device} did not acknowledge {cmd:?} within {timeout:?}; {}", timeout_hint(*cmd))]
-    Timeout {
-        device: usize,
-        cmd: Cmd,
-        timeout: Duration,
-    },
+    #[error("not every device acknowledged {cmd:?}; {}", timeout_hint(*cmd))]
+    Timeout { cmd: Cmd },
     #[error("device {device} rejected {cmd:?} with firmware error {code:#04x}: {}{}", describe_device_error(*code), device_hint(*cmd, *code))]
     Device { device: usize, cmd: Cmd, code: u8 },
     #[error("device {device} returned a shorter reply to {cmd:?} than the command defines")]
@@ -228,14 +227,14 @@ impl Frame {
     }
 }
 
-pub type Replies = Result<Vec<DeviceReply>, usize>;
+pub type Replies = Result<Vec<DeviceReply>, ()>;
 
 pub trait Exchange {
     type Error: core::error::Error + Send + Sync + 'static;
 
     fn num_devices(&self) -> usize;
 
-    fn exchange(&mut self, frame: &Frame, timeout: Duration) -> Result<Replies, Self::Error>;
+    fn exchange(&mut self, frame: &Frame) -> Result<Replies, Self::Error>;
 
     fn idle(&mut self, duration: Duration) -> Result<(), Self::Error>;
 
@@ -244,71 +243,133 @@ pub trait Exchange {
     }
 }
 
-pub struct UdpLink {
-    bus: UdpBus,
-    heartbeat: Duration,
-}
+struct ThreadWaker(Thread);
 
-impl UdpLink {
-    #[must_use]
-    pub fn new(bus: UdpBus, heartbeat: Duration) -> Self {
-        Self { bus, heartbeat }
+impl Wake for ThreadWaker {
+    fn wake(self: Arc<Self>) {
+        self.0.unpark();
     }
 }
 
-impl From<UdpBus> for UdpLink {
-    fn from(bus: UdpBus) -> Self {
-        Self::new(bus, DEFAULT_HEARTBEAT)
+pub struct UdpLink {
+    client: Option<Arc<Client>>,
+    states: StateChecker,
+    lost_poll_interval: Duration,
+    keepalive_stop: Arc<AtomicBool>,
+    keepalive: Option<JoinHandle<()>>,
+}
+
+impl UdpLink {
+    pub fn open(
+        option: &TransportOption,
+        num_devices: usize,
+        heartbeat: Duration,
+    ) -> Result<Self, Error> {
+        let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()));
+        let client = Arc::new(Client::open(&geometry, option)?);
+        let keepalive_stop = Arc::new(AtomicBool::new(false));
+        let keepalive = {
+            let client = Arc::clone(&client);
+            let stop = Arc::clone(&keepalive_stop);
+            std::thread::Builder::new()
+                .name("autd3-ota-keepalive".to_owned())
+                .spawn(move || {
+                    while !stop.load(Ordering::Acquire) && client.send_heartbeat().is_ok() {
+                        std::thread::park_timeout(heartbeat);
+                    }
+                })
+                .map_err(|e| Error::Network(NetworkCause::new(e)))?
+        };
+        Ok(Self {
+            states: client.state_checker(),
+            client: Some(client),
+            lost_poll_interval: heartbeat,
+            keepalive_stop,
+            keepalive: Some(keepalive),
+        })
+    }
+
+    fn stop_keepalive(&mut self) {
+        self.keepalive_stop.store(true, Ordering::Release);
+        if let Some(keepalive) = self.keepalive.take() {
+            keepalive.thread().unpark();
+            let _ = keepalive.join();
+        }
+    }
+
+    fn any_lost(&self) -> Result<bool, Error> {
+        Ok(self.states.check()?.any_lost())
+    }
+
+    fn wait_for_every_reply(&self, response: ResponseFuture) -> Result<Option<Response>, Error> {
+        let waker = Waker::from(Arc::new(ThreadWaker(std::thread::current())));
+        let mut cx = Context::from_waker(&waker);
+        let mut response = pin!(response);
+        loop {
+            match response.as_mut().poll(&mut cx) {
+                Poll::Ready(Ok(response)) => return Ok(Some(response)),
+                Poll::Ready(Err(Error::Timeout { .. })) => return Ok(None),
+                Poll::Ready(Err(e)) => return Err(e),
+                Poll::Pending if self.any_lost()? => return Ok(None),
+                Poll::Pending => std::thread::park_timeout(self.lost_poll_interval),
+            }
+        }
+    }
+}
+
+impl Drop for UdpLink {
+    fn drop(&mut self) {
+        self.stop_keepalive();
     }
 }
 
 impl Exchange for UdpLink {
-    type Error = UdpError;
+    type Error = Error;
 
     fn num_devices(&self) -> usize {
-        self.bus.num_devices()
+        self.client
+            .as_ref()
+            .map_or(0, |client| client.num_devices())
     }
 
-    fn exchange(&mut self, frame: &Frame, timeout: Duration) -> Result<Replies, UdpError> {
-        let frames = vec![frame.bytes(); self.num_devices()];
-        let mut replies: Vec<Option<DeviceReply>> = vec![None; self.num_devices()];
-        let sent = self.bus.send(self.bus.reserve_msg_id(), &frames)?;
-        if let Some(unsent) = sent.unsent {
-            return Err(unsent.into());
+    fn exchange(&mut self, frame: &Frame) -> Result<Replies, Error> {
+        let client = self.client.as_ref().ok_or(Error::Closed)?;
+        let datagrams = [Datagram {
+            cmd: frame.cmd,
+            payload: frame.payload,
+            payload_len: frame.payload_len,
+        }];
+        let sent = pollster::block_on(
+            client.send_frame(ClientFrame::new(Distribution::Broadcast, &datagrams)),
+        );
+        let response = match sent {
+            Ok(response) => response,
+            Err(Error::Timeout { .. }) => return Ok(Err(())),
+            Err(e) => return Err(e),
+        };
+        let Some(response) = self.wait_for_every_reply(response)? else {
+            return Ok(Err(()));
+        };
+        if self.any_lost()? {
+            return Ok(Err(()));
         }
-        let msg_id = sent.msg_id;
-        let end = Instant::now() + timeout;
-        while replies.iter().any(Option::is_none) && Instant::now() < end {
-            let keepalive = (Instant::now() + self.heartbeat).min(end);
-            let Some(reply) = self.bus.recv(keepalive)? else {
-                self.bus.send_heartbeat()?;
-                continue;
-            };
-            if reply.msg_id == msg_id {
-                replies[reply.device].get_or_insert(DeviceReply {
-                    status: reply.error_code,
-                    value: reply.data().to_vec(),
-                });
-            }
-        }
-        Ok(match replies.iter().position(Option::is_none) {
-            Some(device) => Err(device),
-            None => Ok(replies.into_iter().flatten().collect()),
-        })
+        Ok(Ok((0..response.error_codes().len())
+            .map(|device| DeviceReply {
+                status: response.error_codes()[device],
+                value: response.reply_data_of(device).to_vec(),
+            })
+            .collect()))
     }
 
-    fn idle(&mut self, duration: Duration) -> Result<(), UdpError> {
-        let start = Instant::now();
-        while start.elapsed() < duration {
-            self.bus.send_heartbeat()?;
-            let deadline = (Instant::now() + self.heartbeat).min(start + duration);
-            while self.bus.recv(deadline)?.is_some() {}
-        }
+    fn idle(&mut self, duration: Duration) -> Result<(), Error> {
+        std::thread::sleep(duration);
         Ok(())
     }
 
-    fn close(&mut self) -> Result<(), UdpError> {
-        self.bus.close()
+    fn close(&mut self) -> Result<(), Error> {
+        self.stop_keepalive();
+        self.client = None;
+        Ok(())
     }
 }
 
@@ -341,28 +402,20 @@ impl<L: Exchange> Driver<L> {
         self.inner.num_devices()
     }
 
-    fn send(&mut self, frame: &Frame, timeout: Duration) -> Result<Vec<DeviceReply>, DriverError> {
-        match self.inner.exchange(frame, timeout).map_err(network_err)? {
+    fn send(&mut self, frame: &Frame) -> Result<Vec<DeviceReply>, DriverError> {
+        match self.inner.exchange(frame).map_err(network_err)? {
             Ok(replies) => Ok(replies),
-            Err(device) => Err(DriverError::Timeout {
-                device,
-                cmd: frame.cmd,
-                timeout,
-            }),
+            Err(()) => Err(DriverError::Timeout { cmd: frame.cmd }),
         }
     }
 
-    pub fn send_checked(
-        &mut self,
-        frame: &Frame,
-        timeout: Duration,
-    ) -> Result<Vec<DeviceReply>, DriverError> {
-        let replies = self.send(frame, timeout)?;
+    pub fn send_checked(&mut self, frame: &Frame) -> Result<Vec<DeviceReply>, DriverError> {
+        let replies = self.send(frame)?;
         all_accepted(frame.cmd, replies)
     }
 
     pub fn read_firmware_info(&mut self) -> Result<Vec<FirmwareInfo>, DriverError> {
-        self.send_checked(&Frame::new(Cmd::ReadFirmwareInfo), DEFAULT_TIMEOUT)?
+        self.send_checked(&Frame::new(Cmd::ReadFirmwareInfo))?
             .into_iter()
             .enumerate()
             .map(|(device, reply)| {
@@ -378,7 +431,7 @@ impl<L: Exchange> Driver<L> {
 
     pub fn read_running_image(&mut self) -> Result<Vec<Option<RunningImage>>, DriverError> {
         let cmd = Cmd::ReadRunningImage;
-        self.send(&Frame::new(cmd), DEFAULT_TIMEOUT)?
+        self.send(&Frame::new(cmd))?
             .into_iter()
             .enumerate()
             .map(
@@ -456,17 +509,12 @@ impl<L: Exchange> Driver<L> {
                 Cmd::FpgaUpdateChunk,
                 Cmd::FpgaUpdateCommit,
             ],
-            [
-                FPGA_UPDATE_BEGIN_TIMEOUT,
-                FPGA_UPDATE_CHUNK_TIMEOUT,
-                FPGA_UPDATE_COMMIT_TIMEOUT,
-            ],
             on_progress,
         )
     }
 
     pub fn activate_fpga(&mut self) -> Result<(), DriverError> {
-        self.send_checked(&Frame::new(Cmd::FpgaUpdateActivate), DEFAULT_TIMEOUT)
+        self.send_checked(&Frame::new(Cmd::FpgaUpdateActivate))
             .map(drop)
     }
 
@@ -484,11 +532,6 @@ impl<L: Exchange> Driver<L> {
             image.as_bytes(),
             image.crc32(),
             [Cmd::UpdateBegin, Cmd::UpdateChunk, Cmd::UpdateCommit],
-            [
-                UPDATE_BEGIN_TIMEOUT,
-                UPDATE_CHUNK_TIMEOUT,
-                UPDATE_COMMIT_TIMEOUT,
-            ],
             on_progress,
         )
     }
@@ -498,7 +541,6 @@ impl<L: Exchange> Driver<L> {
         bytes: &[u8],
         crc32: u32,
         [begin_cmd, chunk_cmd, commit_cmd]: [Cmd; 3],
-        [begin_timeout, chunk_timeout, commit_timeout]: [Duration; 3],
         mut on_progress: impl FnMut(UpdateProgress),
     ) -> Result<(), DriverError> {
         let total = bytes.len();
@@ -510,7 +552,7 @@ impl<L: Exchange> Driver<L> {
             },
             &[],
         );
-        self.send_checked(&begin, begin_timeout)?;
+        self.send_checked(&begin)?;
         on_progress(UpdateProgress { sent: 0, total });
 
         for (index, data) in bytes.chunks(UPDATE_CHUNK_MAX_DATA_LEN).enumerate() {
@@ -522,29 +564,27 @@ impl<L: Exchange> Driver<L> {
                 },
                 data,
             );
-            self.send_checked(&chunk, chunk_timeout)?;
+            self.send_checked(&chunk)?;
             on_progress(UpdateProgress {
                 sent: offset + data.len(),
                 total,
             });
         }
 
-        self.send_checked(&Frame::new(commit_cmd), commit_timeout)
-            .map(drop)
+        self.send_checked(&Frame::new(commit_cmd)).map(drop)
     }
 
     pub fn confirm(&mut self) -> Result<(), DriverError> {
-        self.send_checked(&Frame::new(Cmd::UpdateConfirm), UPDATE_CONFIRM_TIMEOUT)
-            .map(drop)
+        self.send_checked(&Frame::new(Cmd::UpdateConfirm)).map(drop)
     }
 
     pub fn activate(&mut self) -> Result<(), DriverError> {
-        let replies = self.send(&Frame::new(Cmd::UpdateActivate), DEFAULT_TIMEOUT)?;
+        let replies = self.send(&Frame::new(Cmd::UpdateActivate))?;
         all_accepted(Cmd::UpdateActivate, replies).map(drop)
     }
 
     pub fn activate_unrebooted(&mut self) -> Result<Vec<usize>, DriverError> {
-        let replies = self.send(&Frame::new(Cmd::UpdateActivate), DEFAULT_TIMEOUT)?;
+        let replies = self.send(&Frame::new(Cmd::UpdateActivate))?;
         let mut activated = Vec::new();
         for (device, reply) in replies.iter().enumerate() {
             match autd3_cpu_wire::Error::from_u8(reply.status) {
@@ -583,7 +623,7 @@ impl<L: Exchange> Driver<L> {
     }
 
     pub fn reboot(&mut self) -> Result<(), DriverError> {
-        let replies = self.send(&Frame::new(Cmd::Reboot), DEFAULT_TIMEOUT)?;
+        let replies = self.send(&Frame::new(Cmd::Reboot))?;
         all_accepted(Cmd::Reboot, replies).map(drop)
     }
 
@@ -622,7 +662,7 @@ mod tests {
             self.0.len()
         }
 
-        fn exchange(&mut self, _frame: &Frame, _timeout: Duration) -> Result<Replies, Self::Error> {
+        fn exchange(&mut self, _frame: &Frame) -> Result<Replies, Self::Error> {
             Ok(Ok(self.0.clone()))
         }
 

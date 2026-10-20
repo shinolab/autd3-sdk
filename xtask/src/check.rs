@@ -17,7 +17,7 @@ const MUTANTS_PACKAGES: &[&str] = &[
     "autd3-rs-modulation",
 ];
 
-const LEAK_SKIP: &[&str] = &["shutdown_does_not_wait_for_a_pending_task"];
+const LEAK_SKIP: &[&str] = &[];
 
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub(crate) enum SanitizerKind {

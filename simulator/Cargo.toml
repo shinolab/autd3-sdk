@@ -25,7 +25,7 @@ cast_precision_loss = "allow"
 [workspace.dependencies]
 approx = { version = "0.5.1", default-features = false, features = ["std"] }
 rstest = { version = "0.27.0", default-features = false }
-autd3-rs = { path = "../crates/autd3-rs", default-features = false, features = ["serde"] }
+autd3-rs = { path = "../crates/autd3-rs", default-features = false }
 autd3-cpu-wire = { path = "../firmware/cpu/wire" }
 autd3-rs-core = { path = "../crates/autd3-rs-core" }
 autd3-rs-firmware-emulator = { path = "../crates/autd3-rs-firmware-emulator" }
@@ -54,3 +54,9 @@ axum = { version = "0.8.9", default-features = false, features = [
 tower-http = { version = "0.7.0", default-features = false, features = ["fs"] }
 rust-embed = { version = "8.12.0", default-features = false, features = ["mime-guess"] }
 tracing = { version = "0.1.44", default-features = false }
+tracing-subscriber = { version = "0.3.23", default-features = false, features = [
+    "std",
+    "fmt",
+    "ansi",
+    "env-filter",
+] }

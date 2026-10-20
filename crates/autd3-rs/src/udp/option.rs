@@ -9,42 +9,40 @@ use super::pacer::MIN_SEND_RATE_PERCENT;
 #[derive(Clone, Debug, PartialEq)]
 pub struct TransportOption {
     pub iface: Interface,
+    pub open_timeout: Duration,
     pub recovery_reply_timeout: Duration,
     pub lost_timeout: Duration,
-    pub control_request_timeout: Duration,
-    pub enumeration_timeout: Duration,
-    pub sync_timeout: Duration,
     pub ack_timeout: Duration,
     pub send_rate_limit_percent: Option<f32>,
     pub send_buffer_bytes: Option<NonZeroUsize>,
+    pub sync_on_open: bool,
 }
 
 impl Default for TransportOption {
     fn default() -> Self {
         Self {
             iface: Interface::Auto,
+            open_timeout: Duration::from_secs(40),
             recovery_reply_timeout: Duration::from_millis(1),
             lost_timeout: Duration::from_millis(100),
-            control_request_timeout: Duration::from_millis(200),
-            enumeration_timeout: Duration::from_secs(10),
-            sync_timeout: Duration::from_secs(30),
             ack_timeout: Duration::from_millis(10),
             send_rate_limit_percent: None,
             send_buffer_bytes: NonZeroUsize::new(8 * 1024),
+            sync_on_open: true,
         }
     }
 }
 
 impl TransportOption {
     pub fn validate(&self) -> Result<(), UdpError> {
+        if self.open_timeout.is_zero() {
+            return Err(UdpError::ZeroOpenTimeout);
+        }
         if self.recovery_reply_timeout.is_zero() {
             return Err(UdpError::ZeroRecoveryReplyTimeout);
         }
         if self.lost_timeout.is_zero() {
             return Err(UdpError::ZeroLostTimeout);
-        }
-        if self.control_request_timeout.is_zero() {
-            return Err(UdpError::ZeroControlRequestTimeout);
         }
         if self.ack_timeout.is_zero() {
             return Err(UdpError::ZeroAckTimeout);
@@ -75,14 +73,13 @@ mod tests {
     fn the_defaults_follow_the_spec() {
         let option = TransportOption::default();
         assert_eq!(option.iface, Interface::Auto);
+        assert_eq!(option.open_timeout, Duration::from_secs(40));
         assert_eq!(option.recovery_reply_timeout, Duration::from_millis(1));
         assert_eq!(option.lost_timeout, Duration::from_millis(100));
-        assert_eq!(option.control_request_timeout, Duration::from_millis(200));
-        assert_eq!(option.enumeration_timeout, Duration::from_secs(10));
-        assert_eq!(option.sync_timeout, Duration::from_secs(30));
         assert_eq!(option.ack_timeout, Duration::from_millis(10));
         assert_eq!(option.send_rate_limit_percent, None);
         assert_eq!(option.send_buffer_bytes, NonZeroUsize::new(8192));
+        assert!(option.sync_on_open);
         assert!(option.validate().is_ok());
     }
 
@@ -122,6 +119,13 @@ mod tests {
     }
 
     #[rstest]
+    #[case::zero_open_timeout(
+        TransportOption {
+            open_timeout: Duration::ZERO,
+            ..TransportOption::default()
+        },
+        |e: &UdpError| matches!(e, UdpError::ZeroOpenTimeout)
+    )]
     #[case::zero_reply_timeout(
         TransportOption {
             recovery_reply_timeout: Duration::ZERO,
@@ -135,13 +139,6 @@ mod tests {
             ..TransportOption::default()
         },
         |e: &UdpError| matches!(e, UdpError::ZeroLostTimeout)
-    )]
-    #[case::zero_response_timeout(
-        TransportOption {
-            control_request_timeout: Duration::ZERO,
-            ..TransportOption::default()
-        },
-        |e: &UdpError| matches!(e, UdpError::ZeroControlRequestTimeout)
     )]
     #[case::zero_ack_timeout(
         TransportOption {
@@ -160,11 +157,9 @@ mod tests {
     #[test]
     fn the_durations_have_no_upper_bound() {
         let option = TransportOption {
+            open_timeout: Duration::MAX,
             recovery_reply_timeout: Duration::MAX,
             lost_timeout: Duration::MAX,
-            control_request_timeout: Duration::MAX,
-            enumeration_timeout: Duration::MAX,
-            sync_timeout: Duration::MAX,
             ack_timeout: Duration::MAX,
             ..TransportOption::default()
         };
@@ -175,15 +170,6 @@ mod tests {
     fn the_shortest_lost_timeout_is_allowed() {
         let option = TransportOption {
             lost_timeout: Duration::from_nanos(1),
-            ..TransportOption::default()
-        };
-        assert!(option.validate().is_ok());
-    }
-
-    #[test]
-    fn a_zero_enumeration_timeout_is_allowed() {
-        let option = TransportOption {
-            enumeration_timeout: Duration::ZERO,
             ..TransportOption::default()
         };
         assert!(option.validate().is_ok());

@@ -1,10 +1,10 @@
 use std::ffi::c_char;
 
+use autd3_binding_rt::{LogWriter, TracingGuard, TracingOption, try_init_tracing};
 use autd3_ffi_abi::{
     AUTD3_ERR_INVALID_ARGUMENT, AUTD3_OK, cstr_to_string, drop_handle, into_handle, write_cstr,
     write_out,
 };
-use autd3_rs::rt::{LogWriter, TracingGuard, TracingOption, try_init_tracing};
 
 pub(crate) const AUTD3_LOG_WRITER_STDOUT: u8 = 0;
 pub(crate) const AUTD3_LOG_WRITER_STDERR: u8 = 1;

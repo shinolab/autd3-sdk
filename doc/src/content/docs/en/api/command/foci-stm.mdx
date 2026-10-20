@@ -56,38 +56,11 @@ Python has no such shorthand, so write it out, as in `ControlPoints([ControlPoin
 
 For the behavior of `loop_behavior` and `transition_mode`, see [playback control](/autd3-sdk/en/api/command/lowlevel/activate-pattern-bank/).
 
-## Helper Functions
+## Building the Points
 
-Helper functions are provided to generate typical trajectories.
-
-### circle
+There are no helper functions that generate trajectories; build the points yourself and pass them. The following places 200 points at equal intervals on a circle of radius 30 mm.
 
 <CodeTabs rust={excerpt(sample, "circle")} python={excerpt(pySample, "circle")} csharp={excerpt(csSample, "circle")} />
-
-| Parameter    | Type                         | Description                          |
-| ------------ | ---------------------------- | ------------------------------------ |
-| `center`     | `Point3<f32>`                | Center of the circle [mm]            |
-| `radius`     | `Length`                     | Radius of the circle                 |
-| `num_points` | `usize`                      | Number of points to generate         |
-| `normal`     | `UnitVector3<f32>`           | Normal of the circle plane (unit vector) |
-| `intensity`  | `Intensity`                  | Amplitude of each point              |
-| `dst`        | `&mut Vec<ControlPoints<1>>` | Output buffer                        |
-
-Places `num_points` points at equal intervals on a circle whose normal is `normal`.
-
-### line
-
-<CodeTabs rust={excerpt(sample, "line")} python={excerpt(pySample, "line")} csharp={excerpt(csSample, "line")} />
-
-| Parameter    | Type                         | Description                  |
-| ------------ | ---------------------------- | ---------------------------- |
-| `start`      | `Point3<f32>`                | Start point [mm]             |
-| `end`        | `Point3<f32>`                | End point [mm]               |
-| `num_points` | `usize`                      | Number of points to generate |
-| `intensity`  | `Intensity`                  | Amplitude of each point      |
-| `dst`        | `&mut Vec<ControlPoints<1>>` | Output buffer                |
-
-Places `num_points` points at equal intervals along a line including the start and end points.
 
 ## Equivalent Low-Level Commands
 

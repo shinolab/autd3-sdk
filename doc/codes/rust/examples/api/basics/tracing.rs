@@ -1,11 +1,11 @@
-use autd3_rs::rt::{LogWriter, TracingOption, init_tracing};
+use tracing_subscriber::EnvFilter;
 
 fn main() {
     // ANCHOR: api
-    let option = TracingOption {
-        default_filter: "info",
-        writer: LogWriter::Stdout,
-    };
-    let _log_guard = init_tracing(option);
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
+        .init();
     // ANCHOR_END: api
 }

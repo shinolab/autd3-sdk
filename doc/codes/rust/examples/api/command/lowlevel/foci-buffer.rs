@@ -1,19 +1,18 @@
-use autd3_rs::commands::{ActivatePatternBank, ConfigFociStm, StmConfig, WriteFociBuffer, circle};
-use autd3_rs::geometry::{Autd3, Geometry, Vector3, offset};
+use std::f32::consts::PI;
+
+use autd3_rs::commands::{ActivatePatternBank, ConfigFociStm, StmConfig, WriteFociBuffer};
+use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
-use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, TransitionMode};
+use autd3_rs::value::{ControlPoints, LoopBehavior, PatternBank, TransitionMode};
 
 fn main() {
     let bank = PatternBank::B0;
-    let mut _points = Vec::new();
-    circle(
-        autd3_rs::Point3::origin(),
-        30.0 * mm,
-        200,
-        Vector3::z_axis(),
-        Intensity::MAX,
-        &mut _points,
-    );
+    let _points: Vec<ControlPoints<1>> = (0..200)
+        .map(|i| {
+            let theta = 2.0 * PI * i as f32 / 200.0;
+            ControlPoints::from(autd3_rs::Point3::origin() + offset(30.0 * mm * theta.cos(), 30.0 * mm * theta.sin(), 0.0 * mm))
+        })
+        .collect();
     let config = StmConfig::new(1.0 * Hz).into_sampling_config(_points.len());
 
     let start_index = 0;

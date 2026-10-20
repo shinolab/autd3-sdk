@@ -1,10 +1,12 @@
+use std::net::{Ipv6Addr, SocketAddrV6};
 use std::time::Duration;
 
 use clap::Args;
 
-use autd3_rs::{Interface, TransportOption, UdpBus, UdpError};
+use autd3_rs::udp::discover;
+use autd3_rs::{Error, Interface, TransportOption, UdpError};
 
-use crate::driver::{DEFAULT_HEARTBEAT, UdpLink};
+use crate::driver::{ACK_TIMEOUT, DEFAULT_HEARTBEAT, UdpLink};
 
 const LOST_AFTER_HEARTBEATS: u32 = 10;
 
@@ -26,14 +28,9 @@ pub struct UdpArgs {
     pub heartbeat_us: Option<u64>,
     #[arg(
         long,
-        help = "How long a management request waits for its reply, milliseconds"
+        help = "How long opening the connection may take, enumeration included, milliseconds"
     )]
-    pub response_timeout_ms: Option<u64>,
-    #[arg(
-        long,
-        help = "How long the enumeration waits for the chain to reach the device count, milliseconds"
-    )]
-    pub enumeration_timeout_ms: Option<u64>,
+    pub open_timeout_ms: Option<u64>,
 }
 
 fn ms(value: Option<u64>) -> Option<Duration> {
@@ -55,32 +52,34 @@ impl UdpArgs {
         let default = TransportOption::default();
         TransportOption {
             iface: match self.simulator {
-                Some(port) => Interface::Simulator(port),
+                Some(port) => Interface::Addr(SocketAddrV6::new(Ipv6Addr::LOCALHOST, port, 0, 0)),
                 None => self.interface.clone().into(),
             },
             lost_timeout: default
                 .lost_timeout
                 .max(self.heartbeat().saturating_mul(LOST_AFTER_HEARTBEATS)),
-            control_request_timeout: ms(self.response_timeout_ms)
-                .unwrap_or(default.control_request_timeout),
-            enumeration_timeout: ms(self.enumeration_timeout_ms)
-                .unwrap_or(default.enumeration_timeout),
+            open_timeout: ms(self.open_timeout_ms).unwrap_or(default.open_timeout),
+            ack_timeout: ACK_TIMEOUT,
+            sync_on_open: false,
             ..default
         }
     }
 
     pub fn open(&self, expected: Option<usize>) -> Result<UdpLink, OpenError> {
-        enumerate(&self.option(), expected)
-            .map(|bus| UdpLink::new(bus, self.heartbeat()))
-            .map_err(OpenError)
+        open(&self.option(), expected, self.heartbeat())
     }
 }
 
-fn enumerate(option: &TransportOption, expected: Option<usize>) -> Result<UdpBus, UdpError> {
-    match expected {
-        Some(devices) => UdpBus::open_unsynchronized(option, devices),
-        None => UdpBus::open_unsynchronized_all(option),
-    }
+fn open(
+    option: &TransportOption,
+    expected: Option<usize>,
+    heartbeat: Duration,
+) -> Result<UdpLink, OpenError> {
+    let num_devices = match expected {
+        Some(num_devices) => num_devices,
+        None => discover(option).map_err(Error::from)?,
+    };
+    Ok(UdpLink::open(option, num_devices, heartbeat)?)
 }
 
 fn udp_found_nothing(e: &UdpError) -> bool {
@@ -104,10 +103,17 @@ fn firewall_hint() -> String {
 
 #[derive(Debug, thiserror::Error)]
 #[error("{0}{hint}", hint = hint(.0))]
-pub struct OpenError(UdpError);
+pub struct OpenError(#[from] Error);
 
-fn hint(e: &UdpError) -> String {
-    if udp_found_nothing(e) {
+fn udp_cause(e: &Error) -> Option<&UdpError> {
+    match e {
+        Error::Network(cause) => (**cause).downcast_ref::<UdpError>(),
+        _ => None,
+    }
+}
+
+fn hint(e: &Error) -> String {
+    if udp_cause(e).is_some_and(udp_found_nothing) {
         format!("; {}", firewall_hint())
     } else {
         String::new()
@@ -118,6 +124,8 @@ fn hint(e: &UdpError) -> String {
 mod tests {
     use autd3_rs_firmware_emulator::udp::UdpEmulator;
     use clap::Parser;
+
+    use crate::driver::Exchange;
 
     use super::*;
 
@@ -136,7 +144,14 @@ mod tests {
     #[test]
     fn no_udp_arguments_mean_the_library_defaults() {
         let args = parse(&[]);
-        assert_eq!(args.option(), TransportOption::default());
+        assert_eq!(
+            args.option(),
+            TransportOption {
+                ack_timeout: ACK_TIMEOUT,
+                sync_on_open: false,
+                ..TransportOption::default()
+            }
+        );
         assert_eq!(args.heartbeat(), DEFAULT_HEARTBEAT);
     }
 
@@ -147,9 +162,7 @@ mod tests {
             "eth1",
             "--heartbeat-us",
             "20000",
-            "--response-timeout-ms",
-            "300",
-            "--enumeration-timeout-ms",
+            "--open-timeout-ms",
             "20000",
         ]);
         assert_eq!(
@@ -157,8 +170,9 @@ mod tests {
             TransportOption {
                 iface: Interface::Name("eth1".to_string()),
                 lost_timeout: Duration::from_millis(200),
-                control_request_timeout: Duration::from_millis(300),
-                enumeration_timeout: Duration::from_secs(20),
+                open_timeout: Duration::from_secs(20),
+                ack_timeout: ACK_TIMEOUT,
+                sync_on_open: false,
                 ..TransportOption::default()
             }
         );
@@ -167,20 +181,19 @@ mod tests {
 
     #[test]
     #[ignore = "depends on real time"]
-    fn the_device_count_is_found_in_a_single_enumeration() {
+    fn the_device_count_is_discovered_before_the_client_opens() {
         for devices in [1, 2, 5] {
             let emulator = UdpEmulator::spawn(devices).unwrap();
             let option = TransportOption {
                 iface: emulator.interface(),
                 recovery_reply_timeout: Duration::from_millis(50),
-                control_request_timeout: Duration::from_millis(50),
-                enumeration_timeout: Duration::from_secs(1),
-                sync_timeout: Duration::from_secs(5),
+                open_timeout: Duration::from_secs(6),
+                sync_on_open: false,
                 ..TransportOption::default()
             };
-            let bus = enumerate(&option, None).unwrap();
-            assert_eq!(bus.num_devices(), devices);
-            assert_eq!(emulator.id_resets_received(0), 1, "{devices} devices");
+            let link = open(&option, None, DEFAULT_HEARTBEAT).unwrap();
+            assert_eq!(link.num_devices(), devices);
+            assert_eq!(emulator.id_resets_received(0), 2, "{devices} devices");
         }
     }
 
@@ -191,19 +204,18 @@ mod tests {
         let option = TransportOption {
             iface: emulator.interface(),
             recovery_reply_timeout: Duration::from_millis(50),
-            control_request_timeout: Duration::from_millis(50),
-            enumeration_timeout: Duration::from_secs(1),
-            sync_timeout: Duration::from_secs(5),
+            open_timeout: Duration::from_secs(6),
+            sync_on_open: false,
             ..TransportOption::default()
         };
-        let err = enumerate(&option, Some(2)).err().unwrap();
+        let err = open(&option, Some(2), DEFAULT_HEARTBEAT).err().unwrap();
         assert!(
             matches!(
-                err,
-                UdpError::DeviceCountMismatch {
+                udp_cause(&err.0),
+                Some(UdpError::DeviceCountMismatch {
                     expected: 2,
                     found: 3
-                }
+                })
             ),
             "{err}"
         );
@@ -219,30 +231,32 @@ mod tests {
                 found: 0,
             },
         ] {
-            let message = OpenError(nothing).to_string();
+            let message = OpenError(nothing.into()).to_string();
             assert!(
                 message.contains("firewall") && message.contains("44336"),
                 "{message}"
             );
         }
 
-        let message = OpenError(UdpError::DeviceCountMismatch {
-            expected: 2,
-            found: 3,
-        })
+        let message = OpenError(
+            UdpError::DeviceCountMismatch {
+                expected: 2,
+                found: 3,
+            }
+            .into(),
+        )
         .to_string();
         assert!(!message.contains("firewall"), "{message}");
     }
 
     #[test]
-    fn the_simulator_flag_reaches_the_option_and_excludes_an_interface() {
+    fn the_simulator_flag_reaches_the_simulator_address_without_sending_a_geometry() {
+        let simulator_at =
+            |port| Interface::Addr(SocketAddrV6::new(Ipv6Addr::LOCALHOST, port, 0, 0));
         let args = parse(&["--simulator"]);
-        assert_eq!(
-            args.option().iface,
-            Interface::Simulator(autd3_rs::SIMULATOR_PORT)
-        );
+        assert_eq!(args.option().iface, simulator_at(autd3_rs::SIMULATOR_PORT));
         let args = parse(&["--simulator", "50000"]);
-        assert_eq!(args.option().iface, Interface::Simulator(50000));
+        assert_eq!(args.option().iface, simulator_at(50000));
         assert!(Cli::try_parse_from(["ota", "--simulator", "--interface", "eth0"]).is_err());
     }
 }

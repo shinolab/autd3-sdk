@@ -1,12 +1,12 @@
 use std::collections::BTreeMap;
 use std::net::{Ipv6Addr, SocketAddrV6};
-use std::time::Duration;
 
 use autd3_cpu_wire::udp::{ALL_NODES, Kind, PORT};
 use autd3_rs_core::Interface;
 use if_addrs::IfAddr;
 
 use super::channel::Channel;
+use super::enumerate::REQUEST_REPLY_WAIT;
 use super::error::UdpError;
 use super::simulator::SimulatorAddrs;
 
@@ -66,11 +66,7 @@ fn link_local_interfaces() -> Result<Vec<LinkLocalInterface>, UdpError> {
         .collect())
 }
 
-fn devices_respond_at(
-    endpoint: ResolvedEndpoint,
-    name: &str,
-    control_request_timeout: Duration,
-) -> bool {
+fn devices_respond_at(endpoint: ResolvedEndpoint, name: &str) -> bool {
     let result = (|| -> Result<bool, UdpError> {
         let channel = Channel::open(endpoint.all_devices_dst, endpoint.scope_id, None, None)?;
         Ok(channel
@@ -78,7 +74,7 @@ fn devices_respond_at(
                 endpoint.all_devices_dst,
                 Kind::ReadUnitInfo,
                 &[],
-                control_request_timeout,
+                REQUEST_REPLY_WAIT,
             )?
             .is_some())
     })();
@@ -95,10 +91,7 @@ fn devices_respond_at(
     }
 }
 
-pub(crate) fn resolve(
-    iface: &Interface,
-    control_request_timeout: Duration,
-) -> Result<ResolvedEndpoint, UdpError> {
+pub(crate) fn resolve(iface: &Interface) -> Result<ResolvedEndpoint, UdpError> {
     match iface {
         Interface::Addr(addr) => Ok(ResolvedEndpoint {
             all_devices_dst: *addr,
@@ -109,7 +102,7 @@ pub(crate) fn resolve(
             let simulator = SimulatorAddrs::at(*port)
                 .map(ResolvedEndpoint::simulator)
                 .ok_or(UdpError::InvalidSimulatorPort(*port))?;
-            if devices_respond_at(simulator, "simulator", control_request_timeout) {
+            if devices_respond_at(simulator, "simulator") {
                 Ok(simulator)
             } else {
                 Err(UdpError::SimulatorNotFound(simulator.all_devices_dst))
@@ -120,32 +113,19 @@ pub(crate) fn resolve(
             .find(|c| c.name == *name)
             .map(ResolvedEndpoint::all_nodes_on)
             .ok_or_else(|| UdpError::InterfaceNotFound(name.clone())),
-        Interface::Auto => resolve_auto(
-            control_request_timeout,
-            ResolvedEndpoint::simulator(SimulatorAddrs::DEFAULT),
-        ),
+        Interface::Auto => resolve_auto(ResolvedEndpoint::simulator(SimulatorAddrs::DEFAULT)),
         _ => unreachable!(),
     }
 }
 
-fn resolve_auto(
-    control_request_timeout: Duration,
-    simulator: ResolvedEndpoint,
-) -> Result<ResolvedEndpoint, UdpError> {
+fn resolve_auto(simulator: ResolvedEndpoint) -> Result<ResolvedEndpoint, UdpError> {
     let candidates = link_local_interfaces()?;
     let (simulator_answered, answered): (bool, Vec<bool>) = std::thread::scope(|s| {
-        let simulator_probe =
-            s.spawn(move || devices_respond_at(simulator, "simulator", control_request_timeout));
+        let simulator_probe = s.spawn(move || devices_respond_at(simulator, "simulator"));
         let probes: Vec<_> = candidates
             .iter()
             .map(|c| {
-                s.spawn(move || {
-                    devices_respond_at(
-                        ResolvedEndpoint::all_nodes_on(c),
-                        &c.name,
-                        control_request_timeout,
-                    )
-                })
+                s.spawn(move || devices_respond_at(ResolvedEndpoint::all_nodes_on(c), &c.name))
             })
             .collect();
         (
@@ -193,17 +173,12 @@ fn pick_sole_responder(
 mod tests {
     use super::*;
 
-    const CONTROL_REQUEST_TIMEOUT: Duration = Duration::from_millis(50);
-
     #[test]
     fn the_address_of_the_simulator_given_directly_is_not_a_simulator() {
         assert_eq!(
-            resolve(
-                &Interface::Addr(SimulatorAddrs::DEFAULT.data),
-                CONTROL_REQUEST_TIMEOUT
-            )
-            .unwrap()
-            .simulator_control,
+            resolve(&Interface::Addr(SimulatorAddrs::DEFAULT.data))
+                .unwrap()
+                .simulator_control,
             None
         );
     }
@@ -212,7 +187,7 @@ mod tests {
     fn a_scoped_address_sends_through_its_interface() {
         let scoped = SocketAddrV6::new(Ipv6Addr::from(ALL_NODES), PORT, 0, 7);
         assert_eq!(
-            resolve(&Interface::Addr(scoped), CONTROL_REQUEST_TIMEOUT).unwrap(),
+            resolve(&Interface::Addr(scoped)).unwrap(),
             ResolvedEndpoint {
                 all_devices_dst: scoped,
                 scope_id: Some(7),
@@ -282,7 +257,7 @@ mod tests {
     fn a_simulator_port_without_a_control_port_is_refused() {
         for port in [0, u16::MAX] {
             assert!(matches!(
-                resolve(&Interface::Simulator(port), CONTROL_REQUEST_TIMEOUT),
+                resolve(&Interface::Simulator(port)),
                 Err(UdpError::InvalidSimulatorPort(p)) if p == port
             ));
         }

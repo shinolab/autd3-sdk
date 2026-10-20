@@ -6,19 +6,21 @@ mod run;
 mod stats;
 
 use anyhow::Result;
-use autd3_rs::rt::{LogWriter, TracingOption, init_tracing};
 use clap::Parser;
 
 use crate::cli::{Cli, Mode};
 use crate::report::{print_mem, print_summary, print_telemetry};
 use crate::run::{RunOutput, run};
+use tracing_subscriber::EnvFilter;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
-    let _log_guard = init_tracing(TracingOption {
-        default_filter: "info",
-        writer: LogWriter::Stderr,
-    });
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
+        .with_writer(std::io::stderr)
+        .init();
 
     let cli = Cli::parse();
     if let Err(msg) = cli.validate() {

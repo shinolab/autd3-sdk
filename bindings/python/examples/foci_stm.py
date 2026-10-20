@@ -7,11 +7,13 @@ Run with: cargo xtask py example foci_stm
 import asyncio
 import signal
 
+import numpy as np
+
 import autd3
-from autd3.commands import Clear, FociStm, FociStmOption, SetSilencer, Synchronize, circle
+from autd3.commands import Clear, FociStm, FociStmOption, SetSilencer, Synchronize
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import Hz, mm
-from autd3.value import ControlPoints, Intensity
+from autd3.value import ControlPoint, ControlPoints, Intensity, Phase
 
 
 async def main() -> None:
@@ -27,8 +29,13 @@ async def main() -> None:
         print("devices:", client.num_devices())
 
         center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm)
-        points: list[ControlPoints] = []
-        circle(center, 30.0 * mm, 200, [0.0, 0.0, 1.0], Intensity.MAX, points)
+        points = [
+            ControlPoints(
+                [ControlPoint(center + 30.0 * np.array([np.cos(theta), np.sin(theta), 0.0]), Phase.ZERO)],
+                Intensity.MAX,
+            )
+            for theta in np.linspace(0.0, 2.0 * np.pi, 200, endpoint=False)
+        ]
 
         await client.send(SetSilencer())
         await client.send(FociStm(1.0 * Hz, points, FociStmOption()))
