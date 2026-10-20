@@ -4,23 +4,23 @@ use autd3_rs_core::REPLY_DATA_BYTES_MAX;
 pub struct Reply {
     pub device: usize,
     pub msg_id: u16,
-    pub ack: u8,
-    pub status: u8,
+    pub acked_seq: u8,
+    pub error_code: u8,
     len: u8,
     data: [u8; REPLY_DATA_BYTES_MAX],
 }
 
 impl Reply {
     #[must_use]
-    pub fn new(device: usize, msg_id: u16, ack: u8, status: u8, data: &[u8]) -> Self {
+    pub fn new(device: usize, msg_id: u16, acked_seq: u8, error_code: u8, data: &[u8]) -> Self {
         let len = data.len().min(REPLY_DATA_BYTES_MAX);
         let mut buf = [0; REPLY_DATA_BYTES_MAX];
         buf[..len].copy_from_slice(&data[..len]);
         Self {
             device,
             msg_id,
-            ack,
-            status,
+            acked_seq,
+            error_code,
             len: u8::try_from(len).unwrap_or(u8::MAX),
             data: buf,
         }

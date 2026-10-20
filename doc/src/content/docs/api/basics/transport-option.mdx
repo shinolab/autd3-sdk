@@ -18,26 +18,26 @@ import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
 | フィールド            | 型          | 既定値  | 説明                                                                                          |
 | --------------------- | ----------- | ------- | --------------------------------------------------------------------------------------------- |
 | `iface`               | `Interface` | `Auto`  | 接続先                                                                                        |
-| `reply_timeout`       | `Duration`  | 1 ms    | `recover()` で `Lost` のデバイスの返信を待つ上限                                               |
+| `recovery_reply_timeout`       | `Duration`  | 1 ms    | `recover()` で `Lost` のデバイスの返信を待つ上限                                               |
 | `lost_timeout`        | `Duration`  | 100 ms  | この時間返信が無いデバイスを `Lost` とする                                                     |
-| `response_timeout`    | `Duration`  | 200 ms  | 列挙などの管理メッセージの返信を待つ時間                                                       |
+| `control_request_timeout`    | `Duration`  | 200 ms  | 列挙などの管理メッセージの返信を待つ時間                                                       |
 | `enumeration_timeout` | `Duration`  | 10 s    | open時のデバイス列挙処理の試行時間上限                                                         |
 | `sync_timeout`        | `Duration`  | 30 s    | open時の全台がデバイス間の同期を待つ上限                                                         |
 | `ack_timeout`         | `Duration`  | 10 ms   | 応答待ちのタイムアウト. 応答待ちの先頭のフレームの応答がこの時間揃わなければ, 送信中のフレームはすべて `Timeout` で失敗する ([Client](/autd3-sdk/api/basics/client/#応答待ちのタイムアウト) 参照) |
-| `send_rate_limit`     | `Option<f32>` | `None` | ホストの送信が回線を占める量の上限 [%]. デバイスの回線速度 (100 Mbps) に対する割合. `None` で抑えない |
-| `send_buffer`         | `Option<NonZeroUsize>` | 8192 | ソケットの送信バッファの大きさ [B]. `None` で OS の既定のままにする |
+| `send_rate_limit_percent`     | `Option<f32>` | `None` | ホストの送信が回線を占める量の上限 [%]. デバイスの回線速度 (100 Mbps) に対する割合. `None` で抑えない |
+| `send_buffer_bytes`         | `Option<NonZeroUsize>` | 8192 | ソケットの送信バッファの大きさ [B]. `None` で OS の既定のままにする |
 
 基本的に `iface` 以外を変更することは推奨しない.
-生存確認は `TransportOption` では設定せず, ユーザーが `Client` の [`heartbeat()`](/autd3-sdk/api/basics/client/#生存確認) を呼んで送る.
+生存確認は `TransportOption` では設定せず, ユーザーが `Client` の [`send_heartbeat()`](/autd3-sdk/api/basics/client/#生存確認) を呼んで送る.
 
 Python の既定値は Rust と同じ具体値で, 型が `Option` の項目だけ `None` (無効) を渡せる. それ以外の項目に `None` を渡すと `TypeError` になる.
 C# では型が `Option` の項目を `null` にすると無効になる.
-`reply_timeout` / `lost_timeout` / `response_timeout` / `ack_timeout` を 0 にすると, `Client` を開くときにエラー (`Network`. Python の `Autd3Error.code` は `NETWORK`, C# の `Autd3Exception.Code` は `Network`) になる.
-`send_buffer` の `0` は, Python では `TransportOption` を作るときに `ValueError`, C# では `Client` を開くときに `Autd3Exception` (`InvalidArgument`) になる (Rust は `NonZeroUsize` の型で `0` を渡せない).
+`recovery_reply_timeout` / `lost_timeout` / `control_request_timeout` / `ack_timeout` を 0 にすると, `Client` を開くときにエラー (`Network`. Python の `Autd3Error.code` は `NETWORK`, C# の `Autd3Exception.Code` は `Network`) になる.
+`send_buffer_bytes` の `0` は, Python では `TransportOption` を作るときに `ValueError`, C# では `Client` を開くときに `Autd3Exception` (`InvalidArgument`) になる (Rust は `NonZeroUsize` の型で `0` を渡せない).
 
 :::caution[Windows のタイマ分解能]
 ライブラリは Windows のタイマ分解能 (`timeBeginPeriod`) を変更しない.
-既定の分解能 (典型的には 15.6 ms) では, 返信の待ち (ソケットの受信タイムアウト) や `send_rate_limit` の待ちがその粒度に丸められ, `ack_timeout` や `lost_timeout` の判定が遅れることがある.
+既定の分解能 (典型的には 15.6 ms) では, 返信の待ち (ソケットの受信タイムアウト) や `send_rate_limit_percent` の待ちがその粒度に丸められ, `ack_timeout` や `lost_timeout` の判定が遅れることがある.
 必要であれば, ユーザーがプロセスで `timeBeginPeriod(1)` を呼ぶ.
 :::
 

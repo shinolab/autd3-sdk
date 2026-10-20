@@ -7,7 +7,7 @@ use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::PulseWidth;
 
-use super::{Encoded, Operation, encode_fixed};
+use super::{Encoded, Operation, encode_header_only};
 
 pub use autd3_cpu_wire::layout::PWE_TABLE_SIZE;
 
@@ -49,7 +49,7 @@ impl Operation for SetPulseWidthTable<'_> {
         for (dst, &v) in table.iter_mut().zip(self.table.iter()) {
             dst.set(v.pulse_width()?);
         }
-        Ok(encode_fixed(
+        Ok(encode_header_only(
             out,
             Cmd::SetPulseWidthTable,
             &PwePayload { table },

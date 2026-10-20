@@ -64,7 +64,7 @@ import sample from "@codes/rust/examples/api/advanced/controller.rs?raw";
 シングルスレッドで動かす場合, 以下の間はそのスレッドがブロックされ, 他のタスクも進まない.
 
 - `Controller::open` (デバイスの列挙と同期の待ち)
-- [`TransportOption`](/autd3-sdk/api/basics/transport-option/) の `send_rate_limit` を指定しているときの送信の待ち
+- [`TransportOption`](/autd3-sdk/api/basics/transport-option/) の `send_rate_limit_percent` を指定しているときの送信の待ち
 - ソケットの送信バッファが空くのを待つ間
 :::
 

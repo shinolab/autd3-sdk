@@ -7,7 +7,7 @@ use crate::error::{Error, PayloadError};
 use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
-use super::{Encoded, Operation, encode_fixed};
+use super::{Encoded, Operation, encode_header_only};
 
 impl From<CpuConfigOutOfRange> for PayloadError {
     fn from(e: CpuConfigOutOfRange) -> Self {
@@ -38,7 +38,7 @@ impl crate::sealed::Sealed for SetCpuConfig {}
 impl Operation for SetCpuConfig {
     fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         let payload = SetCpuConfigPayload::encode(&self.config)?;
-        Ok(encode_fixed(out, Cmd::SetCpuConfig, &payload))
+        Ok(encode_header_only(out, Cmd::SetCpuConfig, &payload))
     }
 }
 

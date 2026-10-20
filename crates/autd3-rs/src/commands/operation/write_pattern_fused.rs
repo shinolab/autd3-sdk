@@ -7,7 +7,7 @@ use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{PatternBank, PatternIntensity, Phase, TransitionMode};
 
-use super::write_pattern_buffer::encode_raw_slot;
+use super::write_pattern_buffer::encode_raw_pattern_entry;
 use super::{Distribution, Encoded, Operation, write_header};
 
 #[derive(Clone, Copy, Debug)]
@@ -30,7 +30,7 @@ impl Operation for WritePatternFused<'_> {
         let rest = write_header(out, &header);
         let (dst_phases, dst_intensities) =
             rest[..PATTERN_RAW_DATA_LEN].split_at_mut(NUM_TRANSDUCERS);
-        encode_raw_slot(
+        encode_raw_pattern_entry(
             self.phases,
             self.intensities,
             device,

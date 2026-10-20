@@ -4,47 +4,47 @@ use std::time::Duration;
 use autd3_rs_core::{Interface, simulator};
 
 use super::error::UdpError;
-use super::pacer::MIN_PERCENT;
+use super::pacer::MIN_SEND_RATE_PERCENT;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TransportOption {
     pub iface: Interface,
-    pub reply_timeout: Duration,
+    pub recovery_reply_timeout: Duration,
     pub lost_timeout: Duration,
-    pub response_timeout: Duration,
+    pub control_request_timeout: Duration,
     pub enumeration_timeout: Duration,
     pub sync_timeout: Duration,
     pub ack_timeout: Duration,
-    pub send_rate_limit: Option<f32>,
-    pub send_buffer: Option<NonZeroUsize>,
+    pub send_rate_limit_percent: Option<f32>,
+    pub send_buffer_bytes: Option<NonZeroUsize>,
 }
 
 impl Default for TransportOption {
     fn default() -> Self {
         Self {
             iface: Interface::Auto,
-            reply_timeout: Duration::from_millis(1),
+            recovery_reply_timeout: Duration::from_millis(1),
             lost_timeout: Duration::from_millis(100),
-            response_timeout: Duration::from_millis(200),
+            control_request_timeout: Duration::from_millis(200),
             enumeration_timeout: Duration::from_secs(10),
             sync_timeout: Duration::from_secs(30),
             ack_timeout: Duration::from_millis(10),
-            send_rate_limit: None,
-            send_buffer: NonZeroUsize::new(8 * 1024),
+            send_rate_limit_percent: None,
+            send_buffer_bytes: NonZeroUsize::new(8 * 1024),
         }
     }
 }
 
 impl TransportOption {
     pub fn validate(&self) -> Result<(), UdpError> {
-        if self.reply_timeout.is_zero() {
-            return Err(UdpError::ZeroReplyTimeout);
+        if self.recovery_reply_timeout.is_zero() {
+            return Err(UdpError::ZeroRecoveryReplyTimeout);
         }
         if self.lost_timeout.is_zero() {
             return Err(UdpError::ZeroLostTimeout);
         }
-        if self.response_timeout.is_zero() {
-            return Err(UdpError::ZeroResponseTimeout);
+        if self.control_request_timeout.is_zero() {
+            return Err(UdpError::ZeroControlRequestTimeout);
         }
         if self.ack_timeout.is_zero() {
             return Err(UdpError::ZeroAckTimeout);
@@ -54,12 +54,12 @@ impl TransportOption {
         {
             return Err(UdpError::InvalidSimulatorPort(port));
         }
-        if let Some(percent) = self.send_rate_limit
-            && !(MIN_PERCENT..=100.0).contains(&percent)
+        if let Some(percent) = self.send_rate_limit_percent
+            && !(MIN_SEND_RATE_PERCENT..=100.0).contains(&percent)
         {
             return Err(UdpError::InvalidSendRateLimit {
                 value: percent,
-                min: MIN_PERCENT,
+                min: MIN_SEND_RATE_PERCENT,
             });
         }
         Ok(())
@@ -75,14 +75,14 @@ mod tests {
     fn the_defaults_follow_the_spec() {
         let option = TransportOption::default();
         assert_eq!(option.iface, Interface::Auto);
-        assert_eq!(option.reply_timeout, Duration::from_millis(1));
+        assert_eq!(option.recovery_reply_timeout, Duration::from_millis(1));
         assert_eq!(option.lost_timeout, Duration::from_millis(100));
-        assert_eq!(option.response_timeout, Duration::from_millis(200));
+        assert_eq!(option.control_request_timeout, Duration::from_millis(200));
         assert_eq!(option.enumeration_timeout, Duration::from_secs(10));
         assert_eq!(option.sync_timeout, Duration::from_secs(30));
         assert_eq!(option.ack_timeout, Duration::from_millis(10));
-        assert_eq!(option.send_rate_limit, None);
-        assert_eq!(option.send_buffer, NonZeroUsize::new(8192));
+        assert_eq!(option.send_rate_limit_percent, None);
+        assert_eq!(option.send_buffer_bytes, NonZeroUsize::new(8192));
         assert!(option.validate().is_ok());
     }
 
@@ -107,10 +107,10 @@ mod tests {
     #[test]
     fn a_send_rate_limit_outside_the_percent_range_is_rejected() {
         let with = |percent: f32| TransportOption {
-            send_rate_limit: Some(percent),
+            send_rate_limit_percent: Some(percent),
             ..TransportOption::default()
         };
-        assert!(with(MIN_PERCENT).validate().is_ok());
+        assert!(with(MIN_SEND_RATE_PERCENT).validate().is_ok());
         assert!(with(95.0).validate().is_ok());
         assert!(with(100.0).validate().is_ok());
         for rejected in [0.0, 0.95, 3.0, 100.1, f32::NAN, f32::INFINITY] {
@@ -124,10 +124,10 @@ mod tests {
     #[rstest]
     #[case::zero_reply_timeout(
         TransportOption {
-            reply_timeout: Duration::ZERO,
+            recovery_reply_timeout: Duration::ZERO,
             ..TransportOption::default()
         },
-        |e: &UdpError| matches!(e, UdpError::ZeroReplyTimeout)
+        |e: &UdpError| matches!(e, UdpError::ZeroRecoveryReplyTimeout)
     )]
     #[case::zero_lost_timeout(
         TransportOption {
@@ -138,10 +138,10 @@ mod tests {
     )]
     #[case::zero_response_timeout(
         TransportOption {
-            response_timeout: Duration::ZERO,
+            control_request_timeout: Duration::ZERO,
             ..TransportOption::default()
         },
-        |e: &UdpError| matches!(e, UdpError::ZeroResponseTimeout)
+        |e: &UdpError| matches!(e, UdpError::ZeroControlRequestTimeout)
     )]
     #[case::zero_ack_timeout(
         TransportOption {
@@ -160,9 +160,9 @@ mod tests {
     #[test]
     fn the_durations_have_no_upper_bound() {
         let option = TransportOption {
-            reply_timeout: Duration::MAX,
+            recovery_reply_timeout: Duration::MAX,
             lost_timeout: Duration::MAX,
-            response_timeout: Duration::MAX,
+            control_request_timeout: Duration::MAX,
             enumeration_timeout: Duration::MAX,
             sync_timeout: Duration::MAX,
             ack_timeout: Duration::MAX,

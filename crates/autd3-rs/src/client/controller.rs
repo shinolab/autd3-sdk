@@ -22,19 +22,19 @@ use futures_channel::oneshot;
 
 use super::MAX_DEVICES;
 use super::completion::{self, ResponseFuture};
-use super::driver::{Driver, Inflight, Settlement, Shared, sent_devices};
+use super::driver::{Driver, InflightRequest, SendOutcome, SharedSession, devices_sent_to};
 use super::exec_at::{self, ExecAt};
-use super::pool::{Slot, SlotPool};
+use super::pool::{ReplySlot, ReplySlotPool};
 
 pub struct Controller {
     geometry: Arc<Geometry>,
     bus: Arc<UdpBus>,
-    shared: Arc<Shared>,
-    pool: Arc<SlotPool>,
-    gate: AsyncMutex<()>,
-    bufs: Mutex<Vec<FrameBuf>>,
+    session: Arc<SharedSession>,
+    reply_slots: Arc<ReplySlotPool>,
+    send_serializer: AsyncMutex<()>,
+    tx_frame_bufs: Mutex<Vec<FrameBuf>>,
     lost_timeout: Duration,
-    stopped: AsyncMutex<bool>,
+    silent_stop_sent: AsyncMutex<bool>,
     device_clock: DeviceClock,
     stats: BusStats,
 }
@@ -51,25 +51,25 @@ impl Controller {
             .into());
         }
         let bus = Arc::new(UdpBus::open_with_geometry(option, geometry)?);
-        let shared = Shared::new(option.ack_timeout);
-        let driver = Driver::new(Arc::clone(&bus), Arc::clone(&shared));
+        let session = SharedSession::new(option.ack_timeout);
+        let driver = Driver::new(Arc::clone(&bus), Arc::clone(&session));
         let controller = Self {
             geometry: Arc::new(geometry.clone()),
-            pool: SlotPool::new(num_devices),
-            gate: AsyncMutex::new(()),
-            bufs: Mutex::new(vec![FrameBuf::new(); num_devices]),
+            reply_slots: ReplySlotPool::new(num_devices),
+            send_serializer: AsyncMutex::new(()),
+            tx_frame_bufs: Mutex::new(vec![FrameBuf::new(); num_devices]),
             lost_timeout,
-            stopped: AsyncMutex::new(false),
+            silent_stop_sent: AsyncMutex::new(false),
             device_clock: bus.device_clock(),
             stats: bus.stats(),
-            shared,
+            session,
             bus,
         };
         Ok((controller, driver))
     }
 
     pub async fn initialize(&self) -> Result<(), Error> {
-        let _gate = self.gate.lock().await;
+        let _serialized = self.send_serializer.lock().await;
         self.reset().await?;
         tracing::info!(num_devices = self.num_devices(), "handshake complete");
         Ok(())
@@ -113,7 +113,7 @@ impl Controller {
     }
 
     pub async fn send_frame(&self, frame: Frame<'_>) -> Result<ResponseFuture, Error> {
-        self.enqueue(frame.distribution(), frame.datagrams(), ExecAt::Immediate)
+        self.validate_and_send(frame.distribution(), frame.datagrams(), ExecAt::Immediate)
             .await
     }
 
@@ -122,23 +122,23 @@ impl Controller {
         frame: Frame<'_>,
         exec: ExecAt,
     ) -> Result<ResponseFuture, Error> {
-        self.enqueue(frame.distribution(), frame.datagrams(), exec)
+        self.validate_and_send(frame.distribution(), frame.datagrams(), exec)
             .await
     }
 
     fn closed_error(&self) -> Option<Error> {
-        if self.shared.is_stopping() {
+        if self.session.is_stopping() {
             return Some(
-                self.shared
-                    .pending()
+                self.session
+                    .lock_state()
                     .closed_error()
                     .unwrap_or(Error::Closed),
             );
         }
-        self.shared.pending().closed_error()
+        self.session.lock_state().closed_error()
     }
 
-    async fn enqueue(
+    async fn validate_and_send(
         &self,
         dist: Distribution,
         datagrams: &[Datagram],
@@ -167,90 +167,93 @@ impl Controller {
             }
             .into());
         }
-        let _gate = self.gate.lock().await;
+        let _serialized = self.send_serializer.lock().await;
         if let Some(e) = self.closed_error() {
             return Err(e);
         }
-        let slot = self.pool.acquire().await;
-        if self.shared.pending().need_reset {
+        let reply_slot = self.reply_slots.acquire().await;
+        if self.session.lock_state().reset_required {
             self.reset().await?;
         }
         let exec_at = exec_at::schedule(exec, self.lost_timeout, || self.device_clock.now())?;
-        self.transmit(slot, dist, datagrams, exec_at)
+        self.send_with_next_seq(reply_slot, dist, datagrams, exec_at)
     }
 
-    fn transmit(
+    fn send_with_next_seq(
         &self,
-        mut slot: Slot,
+        mut reply_slot: ReplySlot,
         dist: Distribution,
         datagrams: &[Datagram],
         exec_at: u32,
     ) -> Result<ResponseFuture, Error> {
-        slot.reset();
+        reply_slot.reset();
         let seq = {
-            let mut pending = self.shared.pending();
-            let seq = pending.next_seq;
-            pending.next_seq = seq.next();
+            let mut state = self.session.lock_state();
+            let seq = state.next_seq;
+            state.next_seq = seq.next();
             seq
         };
         tracing::trace!(seq = seq.get(), cmd = ?datagrams[0].cmd, ?dist, "sending frame");
         let (tx, rx) = completion::channel();
         let msg_id = self.bus.reserve_msg_id();
-        self.shared.pending().push(Inflight {
+        self.session.lock_state().push_awaiting(InflightRequest {
             msg_id,
             seq: Some(seq),
-            expected: None,
-            replied: 0,
+            sent_to: None,
+            replied_devices: 0,
             sent_at: Instant::now(),
-            slot: Some(slot),
-            tx,
+            reply_slot: Some(reply_slot),
+            completion: tx,
         });
         let sent = {
-            let mut bufs = self.bufs.lock().unwrap_or_else(PoisonError::into_inner);
+            let mut bufs = self
+                .tx_frame_bufs
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
             match dist {
                 Distribution::Broadcast => {
-                    bufs[0].stage(seq, datagrams[0].cmd, exec_at, datagrams[0].payload());
+                    bufs[0].write_frame(seq, datagrams[0].cmd, exec_at, datagrams[0].payload());
                     self.bus.broadcast(msg_id, bufs[0].as_ref())
                 }
                 Distribution::PerDevice => {
                     for (buf, datagram) in bufs.iter_mut().zip(datagrams) {
-                        buf.stage(seq, datagram.cmd, exec_at, datagram.payload());
+                        buf.write_frame(seq, datagram.cmd, exec_at, datagram.payload());
                     }
                     self.bus.send(msg_id, &bufs)
                 }
             }
         };
-        if self.settle(msg_id, sent)? {
+        if self.apply_send_result(msg_id, sent)? {
             self.stats.record_frame();
         }
         Ok(rx)
     }
 
-    fn settle(&self, msg_id: u16, sent: Result<Sent, UdpError>) -> Result<bool, Error> {
-        let (settlement, driver_waits_too_long, ack_timeout) = {
-            let mut pending = self.shared.pending();
-            let ack_timeout = pending.ack_timeout;
-            let settlement = pending.settle(msg_id, sent_devices(sent));
-            let driver_waits_too_long = matches!(settlement, Settlement::Reached(_))
-                && pending.ack_deadline_precedes_driver_wake(msg_id, ack_timeout);
-            (settlement, driver_waits_too_long, ack_timeout)
+    fn apply_send_result(&self, msg_id: u16, sent: Result<Sent, UdpError>) -> Result<bool, Error> {
+        let (outcome, driver_waits_too_long, ack_timeout) = {
+            let mut state = self.session.lock_state();
+            let ack_timeout = state.ack_timeout;
+            let outcome = state.apply_send_result(msg_id, devices_sent_to(sent));
+            let driver_waits_too_long = matches!(outcome, SendOutcome::SentToSome(_))
+                && state.ack_deadline_precedes_driver_wake(msg_id, ack_timeout);
+            (outcome, driver_waits_too_long, ack_timeout)
         };
-        match settlement {
-            Settlement::Failed(entry, e) => {
-                drop(entry);
+        match outcome {
+            SendOutcome::Failed(request, e) => {
+                drop(request);
                 return Err(e);
             }
-            Settlement::Unreached(entry) => {
-                if let Some(entry) = entry {
-                    entry.tx.send(Err(Error::Timeout {
+            SendOutcome::SentToNone(request) => {
+                if let Some(request) = request {
+                    request.completion.send(Err(Error::Timeout {
                         timeout: ack_timeout,
                     }));
                 }
                 return Ok(false);
             }
-            Settlement::Reached(answered) => {
-                if let Some(entry) = answered {
-                    entry.complete(&self.stats);
+            SendOutcome::SentToSome(answered) => {
+                if let Some(request) = answered {
+                    request.complete(&self.stats);
                 }
             }
         }
@@ -263,19 +266,19 @@ impl Controller {
         Ok(true)
     }
 
-    pub fn heartbeat(&self) -> Result<(), Error> {
+    pub fn send_heartbeat(&self) -> Result<(), Error> {
         if let Some(e) = self.closed_error() {
             return Err(e);
         }
-        if let Err(e) = self.bus.heartbeat() {
+        if let Err(e) = self.bus.send_heartbeat() {
             return Err(match e {
                 UdpError::Closed => self.closed_error().unwrap_or(Error::Closed),
                 e => e.into(),
             });
         }
         let driver_waits_too_long = self.bus.lost_deadline().is_some_and(|deadline| {
-            self.shared
-                .pending()
+            self.session
+                .lock_state()
                 .driver_wakes_at
                 .is_none_or(|wakes_at| deadline < wakes_at)
         });
@@ -288,38 +291,40 @@ impl Controller {
     }
 
     pub async fn recover(&self) -> Result<DeviceMask, Error> {
-        let _gate = self.gate.lock().await;
+        let _serialized = self.send_serializer.lock().await;
         if let Some(e) = self.closed_error() {
             return Err(e);
         }
         let (tx, rx) = oneshot::channel();
-        self.shared.pending().await_recovery(tx)?;
-        if let Err(e) = self.bus.probe() {
-            self.shared.pending().recovery = None;
+        self.session.lock_state().register_recovery_waiter(tx)?;
+        if let Err(e) = self.bus.start_recovery() {
+            self.session.lock_state().recovery_waiter = None;
             return Err(e.into());
         }
         if !self.bus.wake() {
-            tracing::debug!("could not wake the driver; the recovery settles at its next deadline");
+            tracing::debug!(
+                "could not wake the driver; the recovery finishes at its next deadline"
+            );
         }
-        let recovered = rx.await.unwrap_or(Err(Error::Closed))?;
-        tracing::debug!(recovered, "recovery settled");
-        if recovered != 0 {
+        let recovered_devices = rx.await.unwrap_or(Err(Error::Closed))?;
+        tracing::debug!(recovered_devices, "recovery finished");
+        if recovered_devices != 0 {
             self.reset().await?;
         }
-        Ok(DeviceMask::from_bits(recovered))
+        Ok(DeviceMask::from_bits(recovered_devices))
     }
 
     async fn reset(&self) -> Result<(), Error> {
-        self.bus.admit_recovered();
-        let stale = self.shared.pending().take_all();
-        if !stale.is_empty() {
+        self.bus.readmit_recovered();
+        let stale_requests = self.session.lock_state().take_all_awaiting();
+        if !stale_requests.is_empty() {
             tracing::debug!(
-                stale = stale.len(),
+                stale = stale_requests.len(),
                 "failing the frames left in flight before the reset"
             );
-            let timeout = self.shared.pending().ack_timeout;
-            for entry in stale {
-                entry.tx.send(Err(Error::Timeout { timeout }));
+            let timeout = self.session.lock_state().ack_timeout;
+            for request in stale_requests {
+                request.completion.send(Err(Error::Timeout { timeout }));
             }
         }
         if let Some(e) = self.closed_error() {
@@ -328,25 +333,28 @@ impl Controller {
         tracing::debug!("sending reset");
         let (tx, rx) = completion::channel();
         let msg_id = self.bus.reserve_msg_id();
-        self.shared.pending().push(Inflight {
+        self.session.lock_state().push_awaiting(InflightRequest {
             msg_id,
             seq: None,
-            expected: None,
-            replied: 0,
+            sent_to: None,
+            replied_devices: 0,
             sent_at: Instant::now(),
-            slot: None,
-            tx,
+            reply_slot: None,
+            completion: tx,
         });
         let sent = {
-            let mut bufs = self.bufs.lock().unwrap_or_else(PoisonError::into_inner);
-            bufs[0].stage(Seq::ZERO, Cmd::Reset, 0, &[]);
+            let mut bufs = self
+                .tx_frame_bufs
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            bufs[0].write_frame(Seq::ZERO, Cmd::Reset, 0, &[]);
             self.bus.broadcast(msg_id, bufs[0].as_ref())
         };
-        let reached = self.settle(msg_id, sent)?;
+        let reached = self.apply_send_result(msg_id, sent)?;
         self.stats.record_reset();
         if !reached {
             return Err(Error::Timeout {
-                timeout: self.shared.pending().ack_timeout,
+                timeout: self.session.lock_state().ack_timeout,
             });
         }
         if let Err(e) = rx.await {
@@ -355,9 +363,9 @@ impl Controller {
             }
             return Err(e);
         }
-        let mut pending = self.shared.pending();
-        pending.next_seq = Seq::ZERO;
-        pending.need_reset = false;
+        let mut state = self.session.lock_state();
+        state.next_seq = Seq::ZERO;
+        state.reset_required = false;
         tracing::debug!("reset confirmed by every device");
         Ok(())
     }
@@ -384,7 +392,7 @@ impl Controller {
         parse: impl Fn(&[u8]) -> Option<T>,
     ) -> Result<Vec<T>, Error> {
         let response = self
-            .enqueue(
+            .validate_and_send(
                 Distribution::Broadcast,
                 &[Datagram::no_payload(cmd)],
                 ExecAt::Immediate,
@@ -392,7 +400,7 @@ impl Controller {
             .await?
             .await?;
         response.check()?;
-        response.decode(parse)
+        response.parse_each_device(parse)
     }
 
     pub async fn read_firmware_version(&self) -> Result<Vec<FirmwareVersion>, Error> {
@@ -417,17 +425,17 @@ impl Controller {
 
     pub async fn close(&self) -> Result<(), Error> {
         tracing::debug!("closing controller");
-        let mut stopped = self.stopped.lock().await;
-        if !*stopped {
+        let mut silent_stop_sent = self.silent_stop_sent.lock().await;
+        if !*silent_stop_sent {
             self.silent_stop().await?;
-            *stopped = true;
+            *silent_stop_sent = true;
         }
         self.shutdown();
         Ok(())
     }
 
     pub(crate) fn shutdown(&self) {
-        self.shared.request_stop();
+        self.session.request_stop();
         if !self.bus.wake() {
             tracing::warn!("could not wake the driver; it stops at its next deadline");
         }

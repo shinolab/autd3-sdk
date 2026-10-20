@@ -15,11 +15,11 @@ internal static class Sample
         var points = dst.ToArray();
         var config = new StmConfig(1.0f * Hz).IntoSamplingConfig(points.Length);
 
-        var indexOffset = 0u;
+        var startIndex = 0u;
         // ANCHOR: write
         new WriteFociBuffer(
             bank: bank,
-            indexOffset: indexOffset,
+            startIndex: startIndex,
             points: points
         );
         // ANCHOR_END: write

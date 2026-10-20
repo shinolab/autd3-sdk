@@ -218,8 +218,8 @@ pub(crate) fn transport_option(cli: &Cli, emulator: Option<&UdpEmulator>) -> Tra
     let mut option = match emulator {
         Some(emulator) => TransportOption {
             iface: emulator.interface(),
-            reply_timeout: Duration::from_millis(50),
-            response_timeout: Duration::from_millis(50),
+            recovery_reply_timeout: Duration::from_millis(50),
+            control_request_timeout: Duration::from_millis(50),
             enumeration_timeout: Duration::from_secs(1),
             sync_timeout: Duration::from_secs(5),
             ..Default::default()
@@ -233,9 +233,9 @@ pub(crate) fn transport_option(cli: &Cli, emulator: Option<&UdpEmulator>) -> Tra
         },
     };
     option.ack_timeout = cli.ack_timeout;
-    option.send_rate_limit = cli.send_rate_limit;
+    option.send_rate_limit_percent = cli.send_rate_limit;
     if let Some(bytes) = cli.send_buffer {
-        option.send_buffer = std::num::NonZeroUsize::new(bytes);
+        option.send_buffer_bytes = std::num::NonZeroUsize::new(bytes);
     }
     option
 }
@@ -291,7 +291,7 @@ async fn run_with_option(option: &TransportOption, cli: &Cli) -> Result<RunOutpu
         let mut heartbeat = tokio::time::interval(cli.heartbeat);
         while tokio::time::Instant::now() < until {
             tokio::select! {
-                _ = heartbeat.tick() => client.heartbeat().context("sending a heartbeat")?,
+                _ = heartbeat.tick() => client.send_heartbeat().context("sending a heartbeat")?,
                 () = tokio::time::sleep_until(until) => {}
             }
         }

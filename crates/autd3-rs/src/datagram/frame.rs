@@ -62,7 +62,7 @@ impl<'a> Frame<'a> {
 }
 
 #[derive(Debug)]
-struct FrameDesc {
+struct FrameRange {
     dist: Distribution,
     start: usize,
     len: usize,
@@ -70,8 +70,8 @@ struct FrameDesc {
 
 #[derive(Debug, Default)]
 pub struct Frames {
-    payloads: Vec<Datagram>,
-    descs: Vec<FrameDesc>,
+    datagrams: Vec<Datagram>,
+    frame_ranges: Vec<FrameRange>,
 }
 
 impl Frames {
@@ -102,7 +102,7 @@ impl Frames {
 
         let encoded = ops
             .iter()
-            .try_for_each(|op| self.push_op(op.as_ref(), geometry));
+            .try_for_each(|op| self.encode_op(op.as_ref(), geometry));
         if encoded.is_err() {
             self.clear();
         }
@@ -112,19 +112,19 @@ impl Frames {
 
     #[must_use]
     pub fn len(&self) -> usize {
-        self.descs.len()
+        self.frame_ranges.len()
     }
 
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.descs.is_empty()
+        self.frame_ranges.is_empty()
     }
 
     #[must_use]
     pub fn frame(&self, index: usize) -> Option<Frame<'_>> {
-        self.descs.get(index).map(|desc| Frame {
-            dist: desc.dist,
-            datagrams: &self.payloads[desc.start..][..desc.len],
+        self.frame_ranges.get(index).map(|range| Frame {
+            dist: range.dist,
+            datagrams: &self.datagrams[range.start..][..range.len],
         })
     }
 
@@ -137,21 +137,21 @@ impl Frames {
     }
 
     fn clear(&mut self) {
-        self.payloads.clear();
-        self.descs.clear();
+        self.datagrams.clear();
+        self.frame_ranges.clear();
     }
 
-    fn push_op(&mut self, op: &dyn Operation, geometry: &Geometry) -> Result<(), Error> {
-        fn encode_slots(
-            slots: &mut [Datagram],
+    fn encode_op(&mut self, op: &dyn Operation, geometry: &Geometry) -> Result<(), Error> {
+        fn encode_into_datagrams(
+            per_device: &mut [Datagram],
             op: &dyn Operation,
             geometry: &Geometry,
         ) -> Result<(), Error> {
-            for (device, slot) in slots.iter_mut().enumerate() {
-                let encoded = op.encode(&geometry[device], &mut slot.payload)?;
+            for (device, datagram) in per_device.iter_mut().enumerate() {
+                let encoded = op.encode(&geometry[device], &mut datagram.payload)?;
                 debug_assert!(encoded.len <= PAYLOAD_BYTES);
-                slot.cmd = encoded.cmd;
-                slot.payload_len = encoded.len;
+                datagram.cmd = encoded.cmd;
+                datagram.payload_len = encoded.len;
             }
             Ok(())
         }
@@ -162,20 +162,20 @@ impl Frames {
             Distribution::Broadcast => 1,
             Distribution::PerDevice => geometry.num_devices(),
         };
-        let start = self.payloads.len();
-        self.payloads
+        let start = self.datagrams.len();
+        self.datagrams
             .resize_with(start + len, || Datagram::no_payload(Cmd::Nop));
-        if let Err(e) = encode_slots(&mut self.payloads[start..], op, geometry) {
-            self.payloads.truncate(start);
+        if let Err(e) = encode_into_datagrams(&mut self.datagrams[start..], op, geometry) {
+            self.datagrams.truncate(start);
             return Err(e);
         }
         tracing::trace!(
-            cmd = ?self.payloads[start].cmd,
+            cmd = ?self.datagrams[start].cmd,
             dist = ?dist,
             devices = len,
             "encoded frame"
         );
-        self.descs.push(FrameDesc { dist, start, len });
+        self.frame_ranges.push(FrameRange { dist, start, len });
         Ok(())
     }
 }
@@ -235,8 +235,8 @@ mod tests {
     };
 
     impl Frames {
-        pub(crate) fn payload_capacity(&self) -> usize {
-            self.payloads.capacity()
+        pub(crate) fn datagram_capacity(&self) -> usize {
+            self.datagrams.capacity()
         }
     }
 
@@ -303,11 +303,11 @@ mod tests {
         let geometry = test_geometry(1);
         let mut frames = Frames::default();
         frames.encode_into(&geometry, CONFIG).unwrap();
-        let capacity = frames.payload_capacity();
+        let capacity = frames.datagram_capacity();
         frames.encode_into(&geometry, CONFIG).unwrap();
 
         assert_eq!(frames.len(), 1);
-        assert_eq!(frames.payload_capacity(), capacity);
+        assert_eq!(frames.datagram_capacity(), capacity);
     }
 
     #[test]

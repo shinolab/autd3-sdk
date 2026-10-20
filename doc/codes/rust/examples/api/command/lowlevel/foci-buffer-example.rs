@@ -31,7 +31,7 @@ async fn main() -> anyhow::Result<()> {
 
     client.send(WriteFociBuffer {
         bank,
-        index_offset: 0,
+        start_index: 0,
         points: &points,
     }).await?;
     client.send(ConfigFociStm {

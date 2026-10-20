@@ -17,7 +17,7 @@ impl FrameBuf {
         }
     }
 
-    pub(crate) fn stage(&mut self, seq: Seq, cmd: Cmd, exec_at: u32, payload: &[u8]) {
+    pub(crate) fn write_frame(&mut self, seq: Seq, cmd: Cmd, exec_at: u32, payload: &[u8]) {
         let (header, body) = FrameHeader::mut_from_prefix(self.bytes.as_mut_slice()).unwrap();
         *header = FrameHeader {
             seq: seq.get(),
@@ -40,9 +40,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn stage_writes_exec_at_into_the_header() {
+    fn write_frame_puts_exec_at_into_the_header() {
         let mut buf = FrameBuf::new();
-        buf.stage(Seq::ZERO, Cmd::Nop, 0x0403_0201, &[0xAA]);
+        buf.write_frame(Seq::ZERO, Cmd::Nop, 0x0403_0201, &[0xAA]);
         assert_eq!(
             buf.as_ref(),
             &[0, Cmd::Nop.as_u8(), 0x01, 0x02, 0x03, 0x04, 0xAA]

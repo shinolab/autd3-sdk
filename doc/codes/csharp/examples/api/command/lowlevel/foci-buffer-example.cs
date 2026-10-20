@@ -32,7 +32,7 @@ var bank = PatternBank.B0;
 
 await client.SendAsync(new WriteFociBuffer(
     bank: bank,
-    indexOffset: 0,
+    startIndex: 0,
     points: points
 ));
 await client.SendAsync(new ConfigFociStm(

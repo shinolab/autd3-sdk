@@ -34,14 +34,14 @@ async fn main() -> Result<()> {
     let mut heartbeat = tokio::time::interval(Duration::from_millis(10));
     for _ in 0..100 {
         heartbeat.tick().await;
-        client.heartbeat()?;
+        client.send_heartbeat()?;
     }
     // ANCHOR_END: heartbeat
     // ANCHOR: api
     let num_devices = client.num_devices();
     let geometry = client.geometry();
 
-    client.heartbeat()?;
+    client.send_heartbeat()?;
 
     let firmware = client.read_firmware_version().await?;
     let fpga_state = client.read_fpga_state().await?;

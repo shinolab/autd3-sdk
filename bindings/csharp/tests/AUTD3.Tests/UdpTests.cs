@@ -12,14 +12,14 @@ namespace AUTD3.Tests
         {
             var option = TransportOption.Defaults();
             Assert.Equal(Interface.Auto, option.Iface);
-            Assert.Equal(TimeSpan.FromMilliseconds(1), option.ReplyTimeout);
+            Assert.Equal(TimeSpan.FromMilliseconds(1), option.RecoveryReplyTimeout);
             Assert.Equal(TimeSpan.FromMilliseconds(100), option.LostTimeout);
-            Assert.Equal(TimeSpan.FromMilliseconds(200), option.ResponseTimeout);
+            Assert.Equal(TimeSpan.FromMilliseconds(200), option.ControlRequestTimeout);
             Assert.Equal(TimeSpan.FromSeconds(10), option.EnumerationTimeout);
             Assert.Equal(TimeSpan.FromSeconds(30), option.SyncTimeout);
             Assert.Equal(TimeSpan.FromMilliseconds(10), option.AckTimeout);
-            Assert.Null(option.SendRateLimit);
-            Assert.Equal(8192ul, option.SendBuffer);
+            Assert.Null(option.SendRateLimitPercent);
+            Assert.Equal(8192ul, option.SendBufferBytes);
         }
 
         [Fact]
@@ -27,8 +27,8 @@ namespace AUTD3.Tests
         {
             var defaults = TransportOption.Defaults();
             var option = new TransportOption();
-            Assert.Equal(defaults.SendRateLimit, option.SendRateLimit);
-            Assert.Equal(90f, new TransportOption { SendRateLimit = 90f }.SendRateLimit);
+            Assert.Equal(defaults.SendRateLimitPercent, option.SendRateLimitPercent);
+            Assert.Equal(90f, new TransportOption { SendRateLimitPercent = 90f }.SendRateLimitPercent);
         }
 
         [Fact]
@@ -36,9 +36,9 @@ namespace AUTD3.Tests
         {
             var option = new TransportOption();
             Assert.Equal(Interface.Auto, option.Iface);
-            Assert.Equal(TimeSpan.FromMilliseconds(1), option.ReplyTimeout);
+            Assert.Equal(TimeSpan.FromMilliseconds(1), option.RecoveryReplyTimeout);
             Assert.Equal(TimeSpan.FromMilliseconds(100), option.LostTimeout);
-            Assert.Equal(TimeSpan.FromMilliseconds(200), option.ResponseTimeout);
+            Assert.Equal(TimeSpan.FromMilliseconds(200), option.ControlRequestTimeout);
             Assert.Equal(TimeSpan.FromSeconds(10), option.EnumerationTimeout);
             Assert.Equal(TimeSpan.FromSeconds(30), option.SyncTimeout);
             Assert.Equal(TimeSpan.FromMilliseconds(10), option.AckTimeout);
@@ -79,13 +79,13 @@ namespace AUTD3.Tests
         [Fact]
         public void ASendBufferReachesTheNativeOption()
         {
-            Assert.Equal(8192ul, default(TransportOption).SendBuffer);
+            Assert.Equal(8192ul, default(TransportOption).SendBufferBytes);
             foreach (var bytes in new ulong?[] { null, 65536, 1ul << 32 })
             {
-                var handle = new TransportOption { SendBuffer = bytes }.CreateHandle();
+                var handle = new TransportOption { SendBufferBytes = bytes }.CreateHandle();
                 try
                 {
-                    Assert.Equal(bytes, TransportOption.FromHandle(handle).SendBuffer);
+                    Assert.Equal(bytes, TransportOption.FromHandle(handle).SendBufferBytes);
                 }
                 finally
                 {
@@ -93,28 +93,28 @@ namespace AUTD3.Tests
                 }
             }
 
-            var zero = new TransportOption { SendBuffer = 0 };
+            var zero = new TransportOption { SendBufferBytes = 0 };
             Assert.Throws<Autd3Exception>(() => zero.CreateHandle());
         }
 
         [Fact]
         public void ASendRateLimitReachesTheNativeOption()
         {
-            Assert.Null(default(TransportOption).SendRateLimit);
-            var handle = new TransportOption { SendRateLimit = 95 }.CreateHandle();
+            Assert.Null(default(TransportOption).SendRateLimitPercent);
+            var handle = new TransportOption { SendRateLimitPercent = 95 }.CreateHandle();
             try
             {
-                Assert.Equal(95f, TransportOption.FromHandle(handle).SendRateLimit);
+                Assert.Equal(95f, TransportOption.FromHandle(handle).SendRateLimitPercent);
             }
             finally
             {
                 NativeClient.autd3_transport_option_free(handle);
             }
 
-            handle = new TransportOption { SendRateLimit = 0 }.CreateHandle();
+            handle = new TransportOption { SendRateLimitPercent = 0 }.CreateHandle();
             try
             {
-                Assert.Equal(0f, TransportOption.FromHandle(handle).SendRateLimit);
+                Assert.Equal(0f, TransportOption.FromHandle(handle).SendRateLimitPercent);
             }
             finally
             {
@@ -125,7 +125,7 @@ namespace AUTD3.Tests
         [Fact]
         public async Task AZeroSendRateLimitFailsTheOpen()
         {
-            var error = await OpenFails(new TransportOption { SendRateLimit = 0 });
+            var error = await OpenFails(new TransportOption { SendRateLimitPercent = 0 });
             Assert.Equal(Autd3ErrorCode.Network, error.Code);
         }
 

@@ -40,13 +40,13 @@ p1 = geometry.phase_buffer()
 p2 = geometry.phase_buffer()
 p3 = geometry.phase_buffer()
 patterns = [p0, p1, p2, p3]
-index = 0
+start_index = 0
 depth = PhaseDepth.Bits4
 intensity = Intensity.MAX
 # ANCHOR: compressed
 WritePatternPhase(
     bank=bank,
-    index=index,
+    start_index=start_index,
     depth=depth,
     intensity=intensity,
     patterns=patterns,

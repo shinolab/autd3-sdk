@@ -3,7 +3,7 @@ use crate::commands::operation::Operation;
 use crate::error::Error;
 use crate::geometry::{Device, Geometry};
 
-use super::each::{EachFrame, EachOps};
+use super::each::{OpsPerDevice, PerDeviceOpsAt};
 
 pub struct Expansion<'g, 'a> {
     geometry: &'g Geometry,
@@ -40,15 +40,15 @@ impl<'g, 'a> Expansion<'g, 'a> {
         F: FnMut(&Device) -> Option<C>,
     {
         let geometry = self.geometry;
-        let devices: EachOps<'a> = geometry
+        let ops_per_device: OpsPerDevice<'a> = geometry
             .iter()
             .map(|device| {
                 assign(device).map_or_else(
                     || Ok(Vec::new()),
                     |cmd| {
-                        let mut sub = Expansion::new(geometry);
-                        cmd.expand(&mut sub)?;
-                        Ok(sub.ops)
+                        let mut device_expansion = Expansion::new(geometry);
+                        cmd.expand(&mut device_expansion)?;
+                        Ok(device_expansion.ops)
                     },
                 )
             })
@@ -56,13 +56,14 @@ impl<'g, 'a> Expansion<'g, 'a> {
 
         tracing::trace!(
             command = std::any::type_name::<C>(),
-            assigned = devices.iter().filter(|ops| !ops.is_empty()).count(),
+            assigned = ops_per_device.iter().filter(|ops| !ops.is_empty()).count(),
             num_devices = geometry.num_devices(),
             "expanding per-device commands"
         );
 
         self.ops.extend(
-            EachFrame::flatten(devices).map(|frame| Box::new(frame) as Box<dyn Operation + 'a>),
+            PerDeviceOpsAt::transpose(ops_per_device)
+                .map(|op| Box::new(op) as Box<dyn Operation + 'a>),
         );
         Ok(self)
     }

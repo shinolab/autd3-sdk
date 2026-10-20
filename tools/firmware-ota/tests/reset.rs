@@ -13,8 +13,8 @@ fn reset_is_confirmed_by_a_device_that_stays_silent_past_the_lost_timeout() {
     let emulator = UdpEmulator::spawn(2).unwrap();
     let option = TransportOption {
         iface: emulator.interface(),
-        reply_timeout: Duration::from_millis(50),
-        response_timeout: Duration::from_millis(50),
+        recovery_reply_timeout: Duration::from_millis(50),
+        control_request_timeout: Duration::from_millis(50),
         enumeration_timeout: Duration::from_secs(1),
         sync_timeout: Duration::from_secs(5),
         ..TransportOption::default()
@@ -40,8 +40,8 @@ fn the_handshake_survives_a_lost_reset_reply_with_the_default_lost_timeout() {
     let emulator = UdpEmulator::spawn(2).unwrap();
     let option = TransportOption {
         iface: emulator.interface(),
-        reply_timeout: Duration::from_millis(50),
-        response_timeout: Duration::from_millis(50),
+        recovery_reply_timeout: Duration::from_millis(50),
+        control_request_timeout: Duration::from_millis(50),
         enumeration_timeout: Duration::from_secs(1),
         sync_timeout: Duration::from_secs(5),
         ..TransportOption::default()
@@ -63,8 +63,8 @@ fn reset_reports_a_device_that_never_answers() {
     let emulator = UdpEmulator::spawn(2).unwrap();
     let option = TransportOption {
         iface: emulator.interface(),
-        reply_timeout: Duration::from_millis(50),
-        response_timeout: Duration::from_millis(50),
+        recovery_reply_timeout: Duration::from_millis(50),
+        control_request_timeout: Duration::from_millis(50),
         enumeration_timeout: Duration::from_secs(1),
         sync_timeout: Duration::from_secs(5),
         ..TransportOption::default()

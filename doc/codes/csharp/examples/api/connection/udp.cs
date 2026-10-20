@@ -8,26 +8,26 @@ internal static class Sample
     internal static void Run()
     {
         var iface = Interface.Auto;
-        var replyTimeout = TimeSpan.FromMilliseconds(1);
+        var recoveryReplyTimeout = TimeSpan.FromMilliseconds(1);
         var lostTimeout = TimeSpan.FromMilliseconds(100);
-        var responseTimeout = TimeSpan.FromMilliseconds(200);
+        var controlRequestTimeout = TimeSpan.FromMilliseconds(200);
         var enumerationTimeout = TimeSpan.FromSeconds(10);
         var syncTimeout = TimeSpan.FromSeconds(30);
         var ackTimeout = TimeSpan.FromMilliseconds(10);
-        float? sendRateLimit = null;
-        ulong sendBuffer = 8192;
+        float? sendRateLimitPercent = null;
+        ulong sendBufferBytes = 8192;
         // ANCHOR: api
         new TransportOption
         {
             Iface = iface,
-            ReplyTimeout = replyTimeout,
+            RecoveryReplyTimeout = recoveryReplyTimeout,
             LostTimeout = lostTimeout,
-            ResponseTimeout = responseTimeout,
+            ControlRequestTimeout = controlRequestTimeout,
             EnumerationTimeout = enumerationTimeout,
             SyncTimeout = syncTimeout,
             AckTimeout = ackTimeout,
-            SendRateLimit = sendRateLimit,
-            SendBuffer = sendBuffer,
+            SendRateLimitPercent = sendRateLimitPercent,
+            SendBufferBytes = sendBufferBytes,
         };
         // ANCHOR_END: api
 

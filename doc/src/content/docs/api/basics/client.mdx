@@ -47,7 +47,7 @@ import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
 | `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | フレームを 1 つ送る ([streaming](#streaming) 参照)          |
 | `send_frame_at(frame, exec)` | ✓  | `Result<ResponseFuture, Error>`       | 処理時刻を指定してフレームを 1 つ送る ([処理時刻](#処理時刻) 参照) |
 | `state_checker()`         | —     | `StateChecker`                         | `StateChecker`を取得. 詳細は[状態監視](/autd3-sdk/guide/state-check/)を参照. |
-| `heartbeat()`             | —     | `Result<(), Error>`                   | `Lost` でない全デバイスへ生存確認を 1 回送る ([生存確認](#生存確認) 参照) |
+| `send_heartbeat()`             | —     | `Result<(), Error>`                   | `Lost` でない全デバイスへ生存確認を 1 回送る ([生存確認](#生存確認) 参照) |
 | `recover()`               | ✓     | `Result<DeviceMask, Error>`           | `Lost` のデバイスを探し, 応答が戻ったデバイスを復帰させる. 詳細は[状態監視](/autd3-sdk/guide/state-check/#lost-からの復帰)を参照. |
 | `close()`                 | ✓     | `Result<(), Error>`                   | 停止して接続を閉じる                                       |
 
@@ -68,13 +68,13 @@ import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
 ## 生存確認
 
 `Client` は, 送るものが無い間, 自分からはデバイスへ何も送らない.
-[CpuConfig](/autd3-sdk/api/command/cpu-config/) の `failsafe_timeout` (既定は無効) を指定すると, デバイスはホストからの通信がその時間途絶えたときに出力を止めるので, 出力を保ったまま待つ間は `heartbeat()` を周期的に呼んで生存確認を送る.
+[CpuConfig](/autd3-sdk/api/command/cpu-config/) の `failsafe_timeout` (既定は無効) を指定すると, デバイスはホストからの通信がその時間途絶えたときに出力を止めるので, 出力を保ったまま待つ間は `send_heartbeat()` を周期的に呼んで生存確認を送る.
 周期は `failsafe_timeout` の半分より十分短くする (例えば 10 ms). failsafe で出力を止めないようにするのはユーザーの責任である.
-なお, `failsafe_timeout` の既定が 500 ms だった旧ファームウェアのデバイスでは, 指定しなくても 500 ms で出力が止まるので, 同様に `heartbeat()` を呼ぶ.
+なお, `failsafe_timeout` の既定が 500 ms だった旧ファームウェアのデバイスでは, 指定しなくても 500 ms で出力が止まるので, 同様に `send_heartbeat()` を呼ぶ.
 
 <CodeTabs rust={excerpt(methods, "heartbeat")} python={excerpt(pyMethods, "heartbeat")} csharp={excerpt(csMethods, "heartbeat")} />
 
-`heartbeat()` は `Lost` でない全デバイスへ生存確認を 1 回送り, 返信を待たずに返る.
+`send_heartbeat()` は `Lost` でない全デバイスへ生存確認を 1 回送り, 返信を待たずに返る.
 返信は[状態監視](/autd3-sdk/guide/state-check/)とデバイスの時刻 (`device_time_now()`) の更新に使われるので, 送らない間はデバイスの途絶や再起動に気付けず, デバイスの時刻の推定もずれていく.
 `send` などの送信と並行に呼んでもよい.
 
@@ -142,7 +142,7 @@ CPU の診断カウンタ. `Clear` で `boot_failure` 以外は 0 に戻る (`Cl
 | ---------------------------- | ----- | -------------------------------------------- |
 | `frames()`                   | `u64` | 送ったフレーム数                             |
 | `resets()`                   | `u64` | 送った `Reset` の数                          |
-| `heartbeats()`               | `u64` | `heartbeat()` で送った生存確認の数           |
+| `heartbeats()`               | `u64` | `send_heartbeat()` で送った生存確認の数           |
 | `recoveries()`               | `u64` | `recover()` で `Lost` から復帰したデバイスの数 |
 | `acked_frames()`             | `u64` | 返信を受けたフレーム数                       |
 | `worst_ack_latency_ns()`     | `u64` | 送信から返信までの最大時間 [ns]              |

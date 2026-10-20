@@ -88,7 +88,7 @@ namespace AUTD3
         internal static extern IntPtr autd3_op_foci_stm(IntPtr config, Autd3StmControlPointNative[] points, UIntPtr numSamples, byte numFoci, byte[] intensities, byte bank, float soundSpeedMS, ushort loopRep, byte transitionMode, ulong transitionValue);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_write_foci_buffer(byte bank, uint indexOffset, Autd3StmControlPointNative[] points, UIntPtr numSamples, byte numFoci, byte[] intensities);
+        internal static extern IntPtr autd3_op_write_foci_buffer(byte bank, uint startIndex, Autd3StmControlPointNative[] points, UIntPtr numSamples, byte numFoci, byte[] intensities);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_pattern_stm(IntPtr config, IntPtr[] phases, UIntPtr numPatterns, byte intensityKind, IntPtr[] intensities, UIntPtr numIntensities, byte uniformIntensity, byte bank, byte phaseDepth, ushort loopRep, byte transitionMode, ulong transitionValue);
@@ -300,7 +300,7 @@ namespace AUTD3
     public readonly struct StmIntensity
     {
         internal const byte KindUniform = 0;
-        internal const byte KindShared = 1;
+        internal const byte KindSameForAllIndices = 1;
         internal const byte KindPerIndex = 2;
 
         private readonly IntensityBuffer[]? _buffers;
@@ -314,11 +314,11 @@ namespace AUTD3
             _kind = KindUniform;
         }
 
-        public StmIntensity(IntensityBuffer shared)
+        public StmIntensity(IntensityBuffer sameForAllIndices)
         {
-            _buffers = new[] { shared ?? throw new ArgumentNullException(nameof(shared)) };
+            _buffers = new[] { sameForAllIndices ?? throw new ArgumentNullException(nameof(sameForAllIndices)) };
             _uniform = default;
-            _kind = KindShared;
+            _kind = KindSameForAllIndices;
         }
 
         public StmIntensity(IntensityBuffer[] perIndex)
@@ -336,7 +336,7 @@ namespace AUTD3
 
         public static implicit operator StmIntensity(Intensity uniform) => new StmIntensity(uniform);
 
-        public static implicit operator StmIntensity(IntensityBuffer shared) => new StmIntensity(shared);
+        public static implicit operator StmIntensity(IntensityBuffer sameForAllIndices) => new StmIntensity(sameForAllIndices);
 
         public static implicit operator StmIntensity(IntensityBuffer[] perIndex) => new StmIntensity(perIndex);
     }
@@ -388,20 +388,20 @@ namespace AUTD3
     public sealed class WriteFociBuffer : ICommand
     {
         private readonly PatternBank _bank;
-        private readonly uint _indexOffset;
+        private readonly uint _startIndex;
         private readonly IReadOnlyList<ControlPoints> _points;
 
-        public WriteFociBuffer(PatternBank bank, uint indexOffset, IReadOnlyList<ControlPoints> points)
+        public WriteFociBuffer(PatternBank bank, uint startIndex, IReadOnlyList<ControlPoints> points)
         {
             _bank = bank;
-            _indexOffset = indexOffset;
+            _startIndex = startIndex;
             _points = points;
         }
 
         IntPtr ICommand.CreateOp(Geometry geometry)
         {
             var (points, intensities, numFoci) = FociPoints.Flatten(_points, "WriteFociBuffer");
-            return NativeStm.autd3_op_write_foci_buffer((byte)_bank, _indexOffset, points, (UIntPtr)_points.Count, numFoci, intensities);
+            return NativeStm.autd3_op_write_foci_buffer((byte)_bank, _startIndex, points, (UIntPtr)_points.Count, numFoci, intensities);
         }
     }
 

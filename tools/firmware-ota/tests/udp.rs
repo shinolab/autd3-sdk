@@ -18,8 +18,8 @@ fn bus_with(emulator: &UdpEmulator, option: &TransportOption) -> UdpBus {
 fn bus(emulator: &UdpEmulator) -> UdpBus {
     let option = TransportOption {
         iface: emulator.interface(),
-        reply_timeout: Duration::from_millis(50),
-        response_timeout: Duration::from_millis(50),
+        recovery_reply_timeout: Duration::from_millis(50),
+        control_request_timeout: Duration::from_millis(50),
         enumeration_timeout: Duration::from_secs(1),
         sync_timeout: Duration::from_secs(5),
         ..TransportOption::default()
@@ -81,8 +81,8 @@ fn a_lost_reset_reply_is_recovered_when_the_lost_timeout_outlasts_the_retransmis
     let option = TransportOption {
         iface: emulator.interface(),
         lost_timeout: Duration::from_secs(1),
-        reply_timeout: Duration::from_millis(50),
-        response_timeout: Duration::from_millis(50),
+        recovery_reply_timeout: Duration::from_millis(50),
+        control_request_timeout: Duration::from_millis(50),
         enumeration_timeout: Duration::from_secs(1),
         sync_timeout: Duration::from_secs(5),
         ..TransportOption::default()

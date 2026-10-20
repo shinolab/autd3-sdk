@@ -280,7 +280,7 @@ fn await_replies(
                 if Instant::now() >= retransmit_at {
                     break;
                 }
-                bus.heartbeat()?;
+                bus.send_heartbeat()?;
                 continue;
             };
             if complete(&sent, reply) {
@@ -326,7 +326,7 @@ impl Exchange for UdpLink {
             timeout,
             RETRANSMIT_INTERVAL,
             |sent, reply| {
-                if sent.contains(&reply.msg_id) && reply.ack == 0xFF {
+                if sent.contains(&reply.msg_id) && reply.acked_seq == 0xFF {
                     confirmed[reply.device] = true;
                 }
                 !confirmed.contains(&false)
@@ -343,7 +343,7 @@ impl Exchange for UdpLink {
     ) -> Result<Replies, UdpError> {
         let frames = vec![frame.bytes(seq); self.num_devices()];
         let mut replies: Vec<Option<DeviceReply>> = vec![None; self.num_devices()];
-        let first = self.bus.next_msg_id();
+        let first = self.bus.peek_next_msg_id();
         await_replies(
             &self.bus,
             self.heartbeat,
@@ -352,11 +352,11 @@ impl Exchange for UdpLink {
             retransmit,
             |_, reply| {
                 if not_before(reply.msg_id, first)
-                    && reply.ack == seq.get()
+                    && reply.acked_seq == seq.get()
                     && replies[reply.device].is_none()
                 {
                     replies[reply.device] = Some(DeviceReply {
-                        status: reply.status,
+                        status: reply.error_code,
                         value: reply.data().to_vec(),
                     });
                 }
@@ -372,7 +372,7 @@ impl Exchange for UdpLink {
     fn idle(&mut self, duration: Duration) -> Result<(), UdpError> {
         let start = Instant::now();
         while start.elapsed() < duration {
-            self.bus.heartbeat()?;
+            self.bus.send_heartbeat()?;
             let deadline = (Instant::now() + self.heartbeat).min(start + duration);
             while self.bus.recv(deadline)?.is_some() {}
         }

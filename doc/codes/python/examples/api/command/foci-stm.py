@@ -43,7 +43,7 @@ num_foci = 1
 # ANCHOR: equivalent
 WriteFociBuffer(
     bank=option.bank,
-    index_offset=0,
+    start_index=0,
     points=points,
 )
 ConfigFociStm(

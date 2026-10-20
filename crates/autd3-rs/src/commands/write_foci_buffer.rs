@@ -12,7 +12,7 @@ use super::operation::WriteFociChunk;
 #[derive(Clone, Debug)]
 pub struct WriteFociBuffer<'a, const N: usize> {
     pub bank: PatternBank,
-    pub index_offset: usize,
+    pub start_index: usize,
     pub points: &'a [ControlPoints<N>],
 }
 
@@ -29,10 +29,10 @@ impl<'a, const N: usize> Command<'a> for WriteFociBuffer<'a, N> {
             let focus_len = max_foci_per_frame.min(total - start);
             expansion.push(WriteFociChunk {
                 bank: self.bank,
-                index_offset: self.index_offset,
+                start_pattern_index: self.start_index,
                 points: self.points,
-                focus_start: start,
-                focus_len,
+                flat_focus_start: start,
+                flat_focus_count: focus_len,
             })?;
             start += focus_len;
         }
@@ -59,7 +59,7 @@ mod tests {
             1,
             WriteFociBuffer {
                 bank: PatternBank::B0,
-                index_offset: 10,
+                start_index: 10,
                 points: &points,
             },
         )
@@ -104,7 +104,7 @@ mod tests {
                 1,
                 WriteFociBuffer {
                     bank: PatternBank::B0,
-                    index_offset: 0,
+                    start_index: 0,
                     points: &empty,
                 }
             ),
@@ -117,7 +117,7 @@ mod tests {
                 1,
                 WriteFociBuffer {
                     bank: PatternBank::B0,
-                    index_offset: 0,
+                    start_index: 0,
                     points: &out_of_range,
                 }
             ),
@@ -130,7 +130,7 @@ mod tests {
                 1,
                 WriteFociBuffer {
                     bank: PatternBank::B0,
-                    index_offset: MAX_FOCI_TOTAL - 1,
+                    start_index: MAX_FOCI_TOTAL - 1,
                     points: &two,
                 }
             ),

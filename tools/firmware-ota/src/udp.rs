@@ -61,7 +61,8 @@ impl UdpArgs {
             lost_timeout: default
                 .lost_timeout
                 .max(self.heartbeat().saturating_mul(LOST_AFTER_HEARTBEATS)),
-            response_timeout: ms(self.response_timeout_ms).unwrap_or(default.response_timeout),
+            control_request_timeout: ms(self.response_timeout_ms)
+                .unwrap_or(default.control_request_timeout),
             enumeration_timeout: ms(self.enumeration_timeout_ms)
                 .unwrap_or(default.enumeration_timeout),
             ..default
@@ -156,7 +157,7 @@ mod tests {
             TransportOption {
                 iface: Interface::Name("eth1".to_string()),
                 lost_timeout: Duration::from_millis(200),
-                response_timeout: Duration::from_millis(300),
+                control_request_timeout: Duration::from_millis(300),
                 enumeration_timeout: Duration::from_secs(20),
                 ..TransportOption::default()
             }
@@ -171,8 +172,8 @@ mod tests {
             let emulator = UdpEmulator::spawn(devices).unwrap();
             let option = TransportOption {
                 iface: emulator.interface(),
-                reply_timeout: Duration::from_millis(50),
-                response_timeout: Duration::from_millis(50),
+                recovery_reply_timeout: Duration::from_millis(50),
+                control_request_timeout: Duration::from_millis(50),
                 enumeration_timeout: Duration::from_secs(1),
                 sync_timeout: Duration::from_secs(5),
                 ..TransportOption::default()
@@ -189,8 +190,8 @@ mod tests {
         let emulator = UdpEmulator::spawn(3).unwrap();
         let option = TransportOption {
             iface: emulator.interface(),
-            reply_timeout: Duration::from_millis(50),
-            response_timeout: Duration::from_millis(50),
+            recovery_reply_timeout: Duration::from_millis(50),
+            control_request_timeout: Duration::from_millis(50),
             enumeration_timeout: Duration::from_secs(1),
             sync_timeout: Duration::from_secs(5),
             ..TransportOption::default()

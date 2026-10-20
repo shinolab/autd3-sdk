@@ -3,22 +3,22 @@ use std::time::{Duration, Instant};
 use autd3_cpu_wire::udp::Header;
 use autd3_rs_core::FRAME_BYTES_MAX;
 
-const BURST: Duration = Duration::from_millis(4);
+const BURST_ALLOWANCE: Duration = Duration::from_millis(4);
 const DATAGRAM_OVERHEAD_BYTES: usize = 8 + 40 + 14 + 4 + 8 + 12;
 
 const LINK_BITS_PER_SEC: u32 = 100_000_000;
 const MIN_BITS_PER_SEC: u32 = 3_076_000;
 
-pub(crate) const MIN_PERCENT: f32 = 3.076;
+pub(crate) const MIN_SEND_RATE_PERCENT: f32 = 3.076;
 
 const _: () = assert!(
     (size_of::<Header>() + FRAME_BYTES_MAX + DATAGRAM_OVERHEAD_BYTES) as u128 * 8 * 1000
-        == MIN_BITS_PER_SEC as u128 * BURST.as_millis()
+        == MIN_BITS_PER_SEC as u128 * BURST_ALLOWANCE.as_millis()
 );
 
 pub(crate) struct Pacer {
     bits_per_sec: u64,
-    busy_until: Instant,
+    line_busy_until: Instant,
 }
 
 impl Pacer {
@@ -27,7 +27,7 @@ impl Pacer {
         let bits_per_sec = f64::from(LINK_BITS_PER_SEC) * f64::from(percent) / 100.0;
         Self {
             bits_per_sec: (bits_per_sec.round() as u64).max(1),
-            busy_until: Instant::now(),
+            line_busy_until: Instant::now(),
         }
     }
 
@@ -36,11 +36,11 @@ impl Pacer {
         Duration::from_nanos(wire_bits * 1_000_000_000 / self.bits_per_sec)
     }
 
-    pub(crate) fn reserve(&mut self, now: Instant, datagram_bytes: usize) -> Duration {
-        self.busy_until = self.busy_until.max(now) + self.wire_time(datagram_bytes);
-        self.busy_until
+    pub(crate) fn reserve_send_slot(&mut self, now: Instant, datagram_bytes: usize) -> Duration {
+        self.line_busy_until = self.line_busy_until.max(now) + self.wire_time(datagram_bytes);
+        self.line_busy_until
             .saturating_duration_since(now)
-            .saturating_sub(BURST)
+            .saturating_sub(BURST_ALLOWANCE)
     }
 }
 
@@ -63,9 +63,9 @@ mod tests {
 
     #[test]
     fn the_wire_time_follows_the_rate() {
-        let slowest = Pacer::new(MIN_PERCENT);
+        let slowest = Pacer::new(MIN_SEND_RATE_PERCENT);
         assert_eq!(slowest.bits_per_sec, u64::from(MIN_BITS_PER_SEC));
-        assert_eq!(slowest.wire_time(FULL), BURST);
+        assert_eq!(slowest.wire_time(FULL), BURST_ALLOWANCE);
         let saturated = Pacer::new(100.0);
         assert_eq!(saturated.bits_per_sec, u64::from(LINK_BITS_PER_SEC));
         assert!(saturated.wire_time(0) > Duration::ZERO);
@@ -75,11 +75,11 @@ mod tests {
     fn a_burst_within_the_allowance_does_not_wait() {
         let mut pacer = Pacer::new(RATE);
         let now = Instant::now();
-        let fits = (BURST.as_nanos() / wire_time(FULL).as_nanos()) as usize;
+        let fits = (BURST_ALLOWANCE.as_nanos() / wire_time(FULL).as_nanos()) as usize;
         for _ in 0..fits {
-            assert_eq!(pacer.reserve(now, FULL), Duration::ZERO);
+            assert_eq!(pacer.reserve_send_slot(now, FULL), Duration::ZERO);
         }
-        assert!(pacer.reserve(now, FULL) > Duration::ZERO);
+        assert!(pacer.reserve_send_slot(now, FULL) > Duration::ZERO);
     }
 
     #[test]
@@ -89,9 +89,9 @@ mod tests {
         let mut now = start;
         let count = 10_000u32;
         for _ in 0..count {
-            now += pacer.reserve(now, FULL);
+            now += pacer.reserve_send_slot(now, FULL);
         }
-        let elapsed = now - start + BURST;
+        let elapsed = now - start + BURST_ALLOWANCE;
         assert!(elapsed >= wire_time(FULL) * count);
         assert!(elapsed < wire_time(FULL) * count + wire_time(FULL));
     }
@@ -101,11 +101,11 @@ mod tests {
         let mut pacer = Pacer::new(RATE);
         let start = Instant::now();
         let later = start + Duration::from_secs(10);
-        let fits = (BURST.as_nanos() / wire_time(FULL).as_nanos()) as usize;
+        let fits = (BURST_ALLOWANCE.as_nanos() / wire_time(FULL).as_nanos()) as usize;
         for _ in 0..fits {
-            assert_eq!(pacer.reserve(later, FULL), Duration::ZERO);
+            assert_eq!(pacer.reserve_send_slot(later, FULL), Duration::ZERO);
         }
-        assert!(pacer.reserve(later, FULL) > Duration::ZERO);
+        assert!(pacer.reserve_send_slot(later, FULL) > Duration::ZERO);
     }
 
     #[test]
@@ -114,7 +114,7 @@ mod tests {
         let now = Instant::now();
         let mut wait = Duration::ZERO;
         while wait.is_zero() {
-            wait = pacer.reserve(now, FULL);
+            wait = pacer.reserve_send_slot(now, FULL);
         }
         assert!(wait <= wire_time(FULL));
     }

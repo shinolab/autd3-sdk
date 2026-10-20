@@ -131,7 +131,7 @@ async fn a_broadcast_frame_reaches_every_device() {
     assert_eq!(frame.distribution(), Distribution::Broadcast);
     let response = client.send_frame(frame).await.unwrap().await.unwrap();
 
-    assert_eq!(response.status(), [0, 0, 0]);
+    assert_eq!(response.error_codes(), [0, 0, 0]);
     assert_eq!(fans(&emulator), [true, true, true]);
     client.close().await.unwrap();
 }
@@ -152,7 +152,7 @@ async fn a_per_device_frame_delivers_each_device_its_own_payload() {
     assert_eq!(frame.distribution(), Distribution::PerDevice);
     let response = client.send_frame(frame).await.unwrap().await.unwrap();
 
-    assert_eq!(response.status(), [0, 0, 0]);
+    assert_eq!(response.error_codes(), [0, 0, 0]);
     assert_eq!(fans(&emulator), [false, true, false]);
     client.close().await.unwrap();
 }
@@ -332,7 +332,7 @@ async fn the_response_of_a_frame_carries_the_status_of_every_device() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), [0, INVALID_TRANSITION_MODE, 0]);
+    assert_eq!(response.error_codes(), [0, INVALID_TRANSITION_MODE, 0]);
     assert!(matches!(
         response.check(),
         Err(Error::DeviceError { device: 1, .. })

@@ -23,7 +23,7 @@ import { excerpt } from "@lib/excerpt";
 | フィールド  | 型                    | 説明                                                   |
 | ----------- | --------------------- | ------------------------------------------------------ |
 | `bank`      | `PatternBank`         | 書き込み先バンク                                       |
-| `index`     | `usize`               | バンク内の書き込み開始インデックス                     |
+| `start_index` | `usize`             | バンク内の書き込み開始インデックス                     |
 | `depth`     | `PhaseDepth`          | 位相のビット幅 (下記参照)                              |
 | `intensity` | `Intensity`           | 全振動子・全 Pattern に共通の強度                      |
 | `patterns`  | `&[Vec<Vec<Phase>>]`  | 書き込む位相の列 (1 個以上 `depth.max_count()` 個以下) |

@@ -41,9 +41,9 @@ The run continues until Ctrl+C, then prints the summary.
 | `--interface <NAME>`  | Network interface the devices hang off (`TransportOption.iface`). Omit to pick the one whose devices answer. |
 | `--simulator [PORT]`  | Connect to the simulator on this host only, listening on `PORT` (default 44336; `Interface::Simulator(PORT)`). Without it `Interface::Auto` fails when both the simulator and devices answer. |
 | `--devices <N>`       | Device count of the geometry. Default = 1. Opening fails when it does not match the chain. |
-| `--heartbeat <DUR>`   | Interval of `Client::heartbeat` while `--hold` keeps the connection idle. Default = `10ms`. The library sends no heartbeat by itself. |
-| `--send-rate-limit <PERCENT>` | Cap on the line occupancy of the sends in percent of the device link speed (`TransportOption.send_rate_limit`). Omit to send without a limit. |
-| `--send-buffer <BYTES>` | Socket send buffer (`TransportOption.send_buffer`). `0` keeps the OS default. Omit to use the library default. |
+| `--heartbeat <DUR>`   | Interval of `Client::send_heartbeat` while `--hold` keeps the connection idle. Default = `10ms`. The library sends no heartbeat by itself. |
+| `--send-rate-limit <PERCENT>` | Cap on the line occupancy of the sends in percent of the device link speed (`TransportOption.send_rate_limit_percent`). Omit to send without a limit. |
+| `--send-buffer <BYTES>` | Socket send buffer (`TransportOption.send_buffer_bytes`). `0` keeps the OS default. Omit to use the library default. |
 | `--stop-on-error`     | Stop at the first failed send and exit non-zero. The summary is still printed. Default: off. |
 | `--hold <DUR>`        | Keep the connection idle (heartbeats every `--heartbeat` only) this long before measuring, e.g. `3s`. |
 | `--ack-timeout <DUR>` | How long a request waits for its ACK before raising `Timeout` (`TransportOption.ack_timeout`). Default = `10ms`. Must exceed `--exec-lead` (plus the processing time). |

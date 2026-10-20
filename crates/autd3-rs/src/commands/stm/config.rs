@@ -7,16 +7,16 @@ use crate::units::Hz;
 use crate::value::{Nearest, SamplingConfig, SamplingConfigError};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-enum StmConfigInner {
-    Freq(Freq<f32>),
-    Period(Duration),
+enum StmRate {
+    CycleFreq(Freq<f32>),
+    CyclePeriod(Duration),
     Sampling(SamplingConfig),
-    FreqNearest(Freq<f32>),
-    PeriodNearest(Duration),
+    CycleFreqNearest(Freq<f32>),
+    CyclePeriodNearest(Duration),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct StmConfig(StmConfigInner);
+pub struct StmConfig(StmRate);
 
 impl StmConfig {
     #[must_use]
@@ -28,17 +28,17 @@ impl StmConfig {
     pub fn into_sampling_config(self, size: usize) -> SamplingConfig {
         let size = size.max(1);
         match self.0 {
-            StmConfigInner::Freq(freq) => SamplingConfig::new(freq * size as f32),
-            StmConfigInner::Period(period) => {
+            StmRate::CycleFreq(freq) => SamplingConfig::new(freq * size as f32),
+            StmRate::CyclePeriod(period) => {
                 if period.as_nanos() % size as u128 == 0 {
                     SamplingConfig::new(period / size as u32)
                 } else {
                     SamplingConfig::new(SamplingConfigError::StmPeriodIndivisible(period, size))
                 }
             }
-            StmConfigInner::Sampling(config) => config,
-            StmConfigInner::FreqNearest(freq) => SamplingConfig::new(Nearest(freq * size as f32)),
-            StmConfigInner::PeriodNearest(period) => {
+            StmRate::Sampling(config) => config,
+            StmRate::CycleFreqNearest(freq) => SamplingConfig::new(Nearest(freq * size as f32)),
+            StmRate::CyclePeriodNearest(period) => {
                 SamplingConfig::new(Nearest(period / size as u32))
             }
         }
@@ -47,43 +47,43 @@ impl StmConfig {
 
 impl From<Freq<f32>> for StmConfig {
     fn from(freq: Freq<f32>) -> Self {
-        Self(StmConfigInner::Freq(freq))
+        Self(StmRate::CycleFreq(freq))
     }
 }
 
 impl From<Freq<u32>> for StmConfig {
     fn from(freq: Freq<u32>) -> Self {
-        Self(StmConfigInner::Freq(freq.hz() as f32 * Hz))
+        Self(StmRate::CycleFreq(freq.hz() as f32 * Hz))
     }
 }
 
 impl From<Duration> for StmConfig {
     fn from(period: Duration) -> Self {
-        Self(StmConfigInner::Period(period))
+        Self(StmRate::CyclePeriod(period))
     }
 }
 
 impl From<SamplingConfig> for StmConfig {
     fn from(config: SamplingConfig) -> Self {
-        Self(StmConfigInner::Sampling(config))
+        Self(StmRate::Sampling(config))
     }
 }
 
 impl From<Nearest<Freq<f32>>> for StmConfig {
     fn from(freq: Nearest<Freq<f32>>) -> Self {
-        Self(StmConfigInner::FreqNearest(freq.0))
+        Self(StmRate::CycleFreqNearest(freq.0))
     }
 }
 
 impl From<Nearest<Freq<u32>>> for StmConfig {
     fn from(freq: Nearest<Freq<u32>>) -> Self {
-        Self(StmConfigInner::FreqNearest(freq.0.hz() as f32 * Hz))
+        Self(StmRate::CycleFreqNearest(freq.0.hz() as f32 * Hz))
     }
 }
 
 impl From<Nearest<Duration>> for StmConfig {
     fn from(period: Nearest<Duration>) -> Self {
-        Self(StmConfigInner::PeriodNearest(period.0))
+        Self(StmRate::CyclePeriodNearest(period.0))
     }
 }
 

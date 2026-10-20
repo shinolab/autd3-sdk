@@ -33,7 +33,7 @@ internal static class Sample
         // ANCHOR: heartbeat
         for (var i = 0; i < 100; i++)
         {
-            client.Heartbeat();
+            client.SendHeartbeat();
             await Task.Delay(TimeSpan.FromMilliseconds(10));
         }
         // ANCHOR_END: heartbeat
@@ -42,7 +42,7 @@ internal static class Sample
         var numDevices = client.NumDevices;
         var geometry = client.Geometry;
 
-        client.Heartbeat();
+        client.SendHeartbeat();
 
         var firmware = await client.ReadFirmwareVersionAsync();
         var fpgaState = await client.ReadFpgaStateAsync();

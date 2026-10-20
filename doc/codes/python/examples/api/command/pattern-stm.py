@@ -48,13 +48,13 @@ PatternStm(freq, patterns, intensities, option)
 
 # ANCHOR: equivalent
 max_count = option.phase_depth.max_count()
-for index in range(0, len(patterns), max_count):
+for start_index in range(0, len(patterns), max_count):
     WritePatternPhase(
         bank=option.bank,
-        index=index,
+        start_index=start_index,
         depth=option.phase_depth,
         intensity=intensities,
-        patterns=patterns[index : index + max_count],
+        patterns=patterns[start_index : start_index + max_count],
     )
 ConfigPattern(
     bank=option.bank,

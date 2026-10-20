@@ -314,14 +314,14 @@ macro_rules! foci_points {
             fn push_write_foci<'a>(
                 &'a self,
                 bank: CorePatternBank,
-                index_offset: usize,
+                start_index: usize,
                 expansion: &mut Expansion<'_, 'a>,
             ) -> Result<(), autd3_rs::Error> {
                 match self {
                     $(FociPoints::$variant(v) => {
                         expansion.push(CoreWriteFociBuffer {
                             bank,
-                            index_offset,
+                            start_index,
                             points: v.as_slice(),
                         })?;
                     })*
@@ -368,14 +368,14 @@ impl FociStm {
 
 pub(crate) struct WriteFociBufferData {
     bank: CorePatternBank,
-    index_offset: usize,
+    start_index: usize,
     points: FociPoints,
 }
 
 impl PushCommand for WriteFociBufferData {
     fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
         self.points
-            .push_write_foci(self.bank, self.index_offset, expansion)
+            .push_write_foci(self.bank, self.start_index, expansion)
     }
 }
 
@@ -387,12 +387,12 @@ impl WriteFociBuffer {
     #[new]
     fn new(
         bank: ops::PatternBank,
-        index_offset: usize,
+        start_index: usize,
         points: Vec<PyRef<'_, ControlPoints>>,
     ) -> PyResult<Self> {
         Ok(Self(Arc::new(WriteFociBufferData {
             bank: bank.0,
-            index_offset,
+            start_index,
             points: FociPoints::from_samples(&points)?,
         })))
     }
@@ -400,7 +400,7 @@ impl WriteFociBuffer {
 
 pub(crate) enum OwnedStmIntensity {
     Uniform(Intensity),
-    Shared(Vec<Vec<Intensity>>),
+    SameForAllIndices(Vec<Vec<Intensity>>),
     PerIndex(Vec<Vec<Vec<Intensity>>>),
 }
 
@@ -408,7 +408,9 @@ impl OwnedStmIntensity {
     fn as_ref(&self) -> CoreStmIntensity<'_> {
         match self {
             OwnedStmIntensity::Uniform(intensity) => CoreStmIntensity::Uniform(*intensity),
-            OwnedStmIntensity::Shared(intensities) => CoreStmIntensity::Shared(intensities),
+            OwnedStmIntensity::SameForAllIndices(intensities) => {
+                CoreStmIntensity::SameForAllIndices(intensities)
+            }
             OwnedStmIntensity::PerIndex(intensities) => CoreStmIntensity::PerIndex(intensities),
         }
     }
@@ -419,7 +421,7 @@ fn extract_stm_intensity(obj: &Bound<'_, PyAny>) -> PyResult<OwnedStmIntensity> 
         return Ok(OwnedStmIntensity::Uniform(intensity));
     }
     if obj.hasattr("_capsule")? {
-        return Ok(OwnedStmIntensity::Shared(
+        return Ok(OwnedStmIntensity::SameForAllIndices(
             crate::datagram::extract_intensities(obj)?,
         ));
     }
@@ -430,7 +432,7 @@ fn extract_stm_intensity(obj: &Bound<'_, PyAny>) -> PyResult<OwnedStmIntensity> 
             .collect::<PyResult<Vec<_>>>()
             .map(OwnedStmIntensity::PerIndex);
     }
-    Ok(OwnedStmIntensity::Shared(
+    Ok(OwnedStmIntensity::SameForAllIndices(
         crate::datagram::extract_intensities(obj)?,
     ))
 }

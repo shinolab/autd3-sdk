@@ -4,7 +4,7 @@ use crate::error::Error;
 use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
-use super::{Distribution, Encoded, Operation, device_slot, encode_fixed};
+use super::{Distribution, Encoded, Operation, checked_device_row, encode_header_only};
 
 #[derive(Clone, Copy, Debug)]
 pub struct SetOutputMask<'a> {
@@ -19,10 +19,10 @@ impl Operation for SetOutputMask<'_> {
     }
 
     fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
-        Ok(encode_fixed(
+        Ok(encode_header_only(
             out,
             Cmd::SetOutputMask,
-            &OutputMaskPayload::new(device_slot(self.masks, device)?),
+            &OutputMaskPayload::new(checked_device_row(self.masks, device)?),
         ))
     }
 }

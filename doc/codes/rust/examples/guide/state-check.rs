@@ -33,7 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ANCHOR: poll
     let mut last: Option<DeviceStatus> = None;
     loop {
-        client.heartbeat()?;
+        client.send_heartbeat()?;
         let status = checker.check()?;
         if last.as_ref() != Some(&status) {
             for (i, state) in status.devices().iter().enumerate() {

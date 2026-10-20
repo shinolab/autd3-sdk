@@ -5,7 +5,7 @@ use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{ModulationBank, TransitionMode};
 
-use super::{Encoded, Operation, encode_fixed};
+use super::{Encoded, Operation, encode_header_only};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ActivateModulationBank {
@@ -17,7 +17,7 @@ impl crate::sealed::Sealed for ActivateModulationBank {}
 
 impl Operation for ActivateModulationBank {
     fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
-        Ok(encode_fixed(
+        Ok(encode_header_only(
             out,
             Cmd::ActivateModulationBank,
             &ActivateModBankPayload::new(self.bank, self.transition_mode.try_as_wire()?),

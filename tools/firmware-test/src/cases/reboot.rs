@@ -27,14 +27,14 @@ fn not_before(msg_id: u16, first: u16) -> bool {
 fn request(bus: &UdpBus, cmd: Cmd, seq: Seq, ack: u8) -> Result<()> {
     let frame = [seq.get(), cmd.as_u8(), 0, 0, 0, 0];
     let mut status: Vec<Option<u8>> = vec![None; bus.num_devices()];
-    let first = bus.next_msg_id();
+    let first = bus.peek_next_msg_id();
     let end = Instant::now() + REQUEST_TIMEOUT;
     while Instant::now() < end {
         bus.broadcast(bus.reserve_msg_id(), &frame)?;
         let retransmit_at = (Instant::now() + RETRANSMIT_INTERVAL).min(end);
         while let Some(reply) = bus.recv(retransmit_at)? {
-            if not_before(reply.msg_id, first) && reply.ack == ack {
-                status[reply.device].get_or_insert(reply.status);
+            if not_before(reply.msg_id, first) && reply.acked_seq == ack {
+                status[reply.device].get_or_insert(reply.error_code);
             }
             if status.iter().all(Option::is_some) {
                 break;
@@ -60,7 +60,7 @@ fn gone(bus: &UdpBus) -> Result<(bool, Vec<DeviceState>)> {
     let states = bus.state_checker();
     let started = Instant::now();
     loop {
-        bus.heartbeat()?;
+        bus.send_heartbeat()?;
         while bus.recv(Instant::now() + POLL)?.is_some() {}
         let seen = states.check()?.devices().to_vec();
         let all_lost = seen.iter().all(|d| *d == DeviceState::Lost);

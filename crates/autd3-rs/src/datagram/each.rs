@@ -8,7 +8,7 @@ use crate::protocol::PAYLOAD_BYTES;
 
 use super::expansion::Expansion;
 
-pub(crate) type EachOps<'a> = Vec<Vec<Box<dyn Operation + 'a>>>;
+pub(crate) type OpsPerDevice<'a> = Vec<Vec<Box<dyn Operation + 'a>>>;
 
 pub struct Each<F>(F);
 
@@ -32,32 +32,32 @@ where
     }
 }
 
-pub(crate) struct EachFrame<'a> {
-    devices: Rc<EachOps<'a>>,
-    frame: usize,
+pub(crate) struct PerDeviceOpsAt<'a> {
+    ops_per_device: Rc<OpsPerDevice<'a>>,
+    op_index: usize,
 }
 
-impl<'a> EachFrame<'a> {
-    pub(crate) fn flatten(devices: EachOps<'a>) -> impl Iterator<Item = Self> {
-        let frames = devices.iter().map(Vec::len).max().unwrap_or(0);
-        let devices = Rc::new(devices);
-        (0..frames).map(move |frame| Self {
-            devices: Rc::clone(&devices),
-            frame,
+impl<'a> PerDeviceOpsAt<'a> {
+    pub(crate) fn transpose(ops_per_device: OpsPerDevice<'a>) -> impl Iterator<Item = Self> {
+        let max_ops_per_device = ops_per_device.iter().map(Vec::len).max().unwrap_or(0);
+        let ops_per_device = Rc::new(ops_per_device);
+        (0..max_ops_per_device).map(move |op_index| Self {
+            ops_per_device: Rc::clone(&ops_per_device),
+            op_index,
         })
     }
 
     fn op(&self, device: usize) -> Option<&(dyn Operation + 'a)> {
-        self.devices
+        self.ops_per_device
             .get(device)
-            .and_then(|ops| ops.get(self.frame))
+            .and_then(|ops| ops.get(self.op_index))
             .map(Box::as_ref)
     }
 }
 
-impl crate::sealed::Sealed for EachFrame<'_> {}
+impl crate::sealed::Sealed for PerDeviceOpsAt<'_> {}
 
-impl Operation for EachFrame<'_> {
+impl Operation for PerDeviceOpsAt<'_> {
     fn distribution(&self) -> Distribution {
         Distribution::PerDevice
     }
@@ -314,10 +314,10 @@ mod tests {
 
         let mut frames = Frames::default();
         frames.encode_into(&geometry, per_device()).unwrap();
-        let capacity = frames.payload_capacity();
+        let capacity = frames.datagram_capacity();
         frames.encode_into(&geometry, per_device()).unwrap();
 
         assert_eq!(frames.len(), 3);
-        assert_eq!(frames.payload_capacity(), capacity);
+        assert_eq!(frames.datagram_capacity(), capacity);
     }
 }

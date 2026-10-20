@@ -37,7 +37,7 @@ async fn main() -> anyhow::Result<()> {
 
     client.send(WritePatternPhase {
         bank,
-        index: 0,
+        start_index: 0,
         depth: PhaseDepth::Bits4,
         intensity: Intensity::MAX,
         patterns: &patterns,

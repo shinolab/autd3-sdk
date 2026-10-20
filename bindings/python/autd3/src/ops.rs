@@ -369,7 +369,7 @@ impl PhaseDepth {
 
 pub(crate) struct WritePatternPhaseData {
     bank: CorePatternBank,
-    index: usize,
+    start_index: usize,
     depth: CorePhaseDepth,
     intensity: Intensity,
     patterns: Vec<Vec<Vec<Phase>>>,
@@ -379,7 +379,7 @@ impl PushCommand for WritePatternPhaseData {
     fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
         expansion.push(CoreWritePatternPhase {
             bank: self.bank,
-            index: self.index,
+            start_index: self.start_index,
             depth: self.depth,
             intensity: self.intensity,
             patterns: &self.patterns,
@@ -396,7 +396,7 @@ impl WritePatternPhase {
     #[new]
     fn new(
         bank: PatternBank,
-        index: u16,
+        start_index: u16,
         depth: PhaseDepth,
         intensity: u8,
         patterns: Vec<Bound<'_, PyAny>>,
@@ -407,7 +407,7 @@ impl WritePatternPhase {
             .collect::<PyResult<Vec<_>>>()?;
         Ok(Self(Arc::new(WritePatternPhaseData {
             bank: bank.0,
-            index: usize::from(index),
+            start_index: usize::from(start_index),
             depth: depth.0,
             intensity: Intensity(intensity),
             patterns,

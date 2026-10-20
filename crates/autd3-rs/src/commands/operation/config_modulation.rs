@@ -5,7 +5,7 @@ use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{LoopBehavior, ModulationBank, SamplingConfig};
 
-use super::{Encoded, Operation, encode_fixed};
+use super::{Encoded, Operation, encode_header_only};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ConfigModulation {
@@ -25,7 +25,7 @@ impl Operation for ConfigModulation {
             self.size,
             self.loop_behavior.rep(),
         )?;
-        Ok(encode_fixed(out, Cmd::ConfigModulation, &payload))
+        Ok(encode_header_only(out, Cmd::ConfigModulation, &payload))
     }
 }
 

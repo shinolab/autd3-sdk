@@ -34,7 +34,7 @@ async fn each_heartbeat_reaches_every_device_once() {
     let (emulator, client) = open(3).await;
 
     for _ in 0..5 {
-        client.heartbeat().unwrap();
+        client.send_heartbeat().unwrap();
     }
     client.send(Nop).await.unwrap();
 
@@ -55,7 +55,7 @@ async fn a_heartbeat_reply_updates_the_device_state() {
         [DeviceState::Ready, DeviceState::Ready]
     );
 
-    client.heartbeat().unwrap();
+    client.send_heartbeat().unwrap();
     let give_up = Instant::now() + PATIENCE;
     while checker.check().unwrap().devices()[1] != DeviceState::Syncing {
         assert!(
@@ -75,6 +75,6 @@ async fn a_heartbeat_after_close_is_refused() {
     let (emulator, client) = open(1).await;
     client.close().await.unwrap();
 
-    assert!(matches!(client.heartbeat(), Err(Error::Closed)));
+    assert!(matches!(client.send_heartbeat(), Err(Error::Closed)));
     assert_eq!(heartbeats(&emulator), [0]);
 }

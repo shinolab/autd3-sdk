@@ -35,7 +35,7 @@ internal static class Sample
             DeviceStatus? last = null;
             while (true)
             {
-                client.Heartbeat();
+                client.SendHeartbeat();
                 var status = checker.Check();
                 if (status != last)
                 {

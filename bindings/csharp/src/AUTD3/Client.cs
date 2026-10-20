@@ -348,13 +348,13 @@ namespace AUTD3
 
     public sealed class Response
     {
-        private readonly byte[] _status;
-        private readonly byte[][] _values;
+        private readonly byte[] _errorCodes;
+        private readonly byte[][] _replyData;
 
-        internal Response(byte[] status, byte[][] values)
+        internal Response(byte[] errorCodes, byte[][] replyData)
         {
-            _status = status;
-            _values = values;
+            _errorCodes = errorCodes;
+            _replyData = replyData;
         }
 
         internal static Response FromNative(IntPtr handle)
@@ -362,22 +362,22 @@ namespace AUTD3
             try
             {
                 var count = (int)NativeClient.autd3_response_num_devices(handle);
-                var status = new byte[count];
+                var errorCodes = new byte[count];
                 if (count > 0)
                 {
-                    Marshal.Copy(NativeClient.autd3_response_status(handle), status, 0, count);
+                    Marshal.Copy(NativeClient.autd3_response_error_codes(handle), errorCodes, 0, count);
                 }
-                var values = new byte[count][];
+                var replyData = new byte[count][];
                 for (var i = 0; i < count; i++)
                 {
-                    var len = (int)NativeClient.autd3_response_value_len(handle, (UIntPtr)i);
-                    values[i] = new byte[len];
+                    var len = (int)NativeClient.autd3_response_reply_data_of_len(handle, (UIntPtr)i);
+                    replyData[i] = new byte[len];
                     if (len > 0)
                     {
-                        Marshal.Copy(NativeClient.autd3_response_value_data(handle, (UIntPtr)i), values[i], 0, len);
+                        Marshal.Copy(NativeClient.autd3_response_reply_data_of(handle, (UIntPtr)i), replyData[i], 0, len);
                     }
                 }
-                return new Response(status, values);
+                return new Response(errorCodes, replyData);
             }
             finally
             {
@@ -385,17 +385,17 @@ namespace AUTD3
             }
         }
 
-        public IReadOnlyList<byte> Status => _status;
+        public IReadOnlyList<byte> ErrorCodes => _errorCodes;
 
-        public IReadOnlyList<IReadOnlyList<byte>> Values => _values;
+        public IReadOnlyList<IReadOnlyList<byte>> ReplyData => _replyData;
 
-        public IReadOnlyList<byte> Value(int device) =>
-            device >= 0 && device < _values.Length ? _values[device] : Array.Empty<byte>();
+        public IReadOnlyList<byte> ReplyDataOf(int device) =>
+            device >= 0 && device < _replyData.Length ? _replyData[device] : Array.Empty<byte>();
 
         public void Check()
         {
             var err = new byte[NativeAbi.ErrorBufferLength];
-            var code = NativeClient.autd3_response_check(_status, (UIntPtr)_status.Length, err, (UIntPtr)err.Length);
+            var code = NativeClient.autd3_response_check(_errorCodes, (UIntPtr)_errorCodes.Length, err, (UIntPtr)err.Length);
             if (code != 0)
             {
                 throw Autd3Exception.FromNative(code, err);
@@ -538,10 +538,10 @@ namespace AUTD3
             return SysTime.FromNanos(ns);
         }
 
-        public void Heartbeat()
+        public void SendHeartbeat()
         {
             var err = new byte[NativeAbi.ErrorBufferLength];
-            var code = NativeClient.autd3_client_heartbeat(Handle, err, (UIntPtr)err.Length);
+            var code = NativeClient.autd3_client_send_heartbeat(Handle, err, (UIntPtr)err.Length);
             if (code != 0)
             {
                 throw Autd3Exception.FromNative(code, err);

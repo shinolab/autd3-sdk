@@ -49,8 +49,8 @@ mod tests {
     #[tokio::test]
     async fn a_sent_result_reaches_the_future() {
         let (tx, rx) = channel();
-        tx.send(Ok(Response::from_status(&[0x42])));
-        assert_eq!(rx.await.unwrap().status(), [0x42]);
+        tx.send(Ok(Response::from_error_codes(&[0x42])));
+        assert_eq!(rx.await.unwrap().error_codes(), [0x42]);
     }
 
     #[tokio::test]
@@ -65,15 +65,15 @@ mod tests {
         let (tx, rx) = channel();
         let joined = tokio::spawn(rx);
         tokio::task::yield_now().await;
-        tx.send(Ok(Response::from_status(&[7])));
-        assert_eq!(joined.await.unwrap().unwrap().status(), [7]);
+        tx.send(Ok(Response::from_error_codes(&[7])));
+        assert_eq!(joined.await.unwrap().unwrap().error_codes(), [7]);
     }
 
     #[tokio::test]
     async fn polling_after_completion_reports_a_closed_driver() {
         let (tx, mut rx) = channel();
-        tx.send(Ok(Response::from_status(&[1])));
-        assert_eq!((&mut rx).await.unwrap().status(), [1]);
+        tx.send(Ok(Response::from_error_codes(&[1])));
+        assert_eq!((&mut rx).await.unwrap().error_codes(), [1]);
         assert!(matches!(rx.await, Err(Error::Closed)));
     }
 }

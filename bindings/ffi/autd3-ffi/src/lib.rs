@@ -209,13 +209,13 @@ macro_rules! foci_points {
             fn boxed_write_foci(
                 &self,
                 bank: PatternBank,
-                index_offset: usize,
+                start_index: usize,
             ) -> BoxedCommand<'_> {
                 match self {
                     $(FociPoints::$variant(v) => {
                         WriteFociBuffer {
                             bank,
-                            index_offset,
+                            start_index,
                             points: v.as_slice(),
                         }
                         .boxed()
@@ -491,7 +491,7 @@ impl OwnedPatternIntensity {
 
 pub enum OwnedStmIntensity {
     Uniform(Intensity),
-    Shared(Vec<Vec<Intensity>>),
+    SameForAllIndices(Vec<Vec<Intensity>>),
     PerIndex(Vec<Vec<Vec<Intensity>>>),
 }
 
@@ -499,15 +499,17 @@ impl OwnedStmIntensity {
     fn as_ref(&self) -> StmIntensity<'_> {
         match self {
             OwnedStmIntensity::Uniform(intensity) => StmIntensity::Uniform(*intensity),
-            OwnedStmIntensity::Shared(intensities) => StmIntensity::Shared(intensities),
+            OwnedStmIntensity::SameForAllIndices(intensities) => {
+                StmIntensity::SameForAllIndices(intensities)
+            }
             OwnedStmIntensity::PerIndex(intensities) => StmIntensity::PerIndex(intensities),
         }
     }
 }
 
-pub enum Pending {
-    Each(Vec<Option<Pending>>),
-    Sequence(Vec<Pending>),
+pub enum OwnedCommand {
+    Each(Vec<Option<OwnedCommand>>),
+    Sequence(Vec<OwnedCommand>),
     Pattern {
         phases: Vec<Vec<Phase>>,
         intensities: OwnedPatternIntensity,
@@ -529,12 +531,12 @@ pub enum Pending {
     },
     WriteFociBuffer {
         bank: PatternBank,
-        index_offset: usize,
+        start_index: usize,
         points: FociPoints,
     },
     WritePatternPhase {
         bank: PatternBank,
-        index: u16,
+        start_index: u16,
         depth: PhaseDepth,
         intensity: Intensity,
         patterns: Vec<Vec<Vec<Phase>>>,
@@ -625,7 +627,7 @@ unsafe fn owned_pattern_intensity(
 }
 
 pub const AUTD3_STM_INTENSITY_UNIFORM: u8 = 0;
-pub const AUTD3_STM_INTENSITY_SHARED: u8 = 1;
+pub const AUTD3_STM_INTENSITY_SAME_FOR_ALL_INDICES: u8 = 1;
 pub const AUTD3_STM_INTENSITY_PER_INDEX: u8 = 2;
 
 unsafe fn owned_stm_intensity(
@@ -638,9 +640,12 @@ unsafe fn owned_stm_intensity(
         AUTD3_STM_INTENSITY_UNIFORM => {
             Some(OwnedStmIntensity::Uniform(Intensity(uniform_intensity)))
         }
-        AUTD3_STM_INTENSITY_SHARED if num_intensities == 1 => {
+        AUTD3_STM_INTENSITY_SAME_FOR_ALL_INDICES if num_intensities == 1 => {
             let buffers = unsafe { clone_buffers(intensities, num_intensities) }?;
-            buffers.into_iter().next().map(OwnedStmIntensity::Shared)
+            buffers
+                .into_iter()
+                .next()
+                .map(OwnedStmIntensity::SameForAllIndices)
         }
         AUTD3_STM_INTENSITY_PER_INDEX => {
             unsafe { clone_buffers(intensities, num_intensities) }.map(OwnedStmIntensity::PerIndex)
@@ -657,7 +662,7 @@ pub unsafe extern "C" fn autd3_op_pattern(
     uniform_intensity: u8,
     transition_mode: u8,
     transition_value: u64,
-) -> *mut Pending {
+) -> *mut OwnedCommand {
     let Some(phases) = (unsafe { handle_ref(phases) }) else {
         return std::ptr::null_mut();
     };
@@ -672,7 +677,7 @@ pub unsafe extern "C" fn autd3_op_pattern(
         return std::ptr::null_mut();
     };
 
-    into_handle(Pending::Pattern {
+    into_handle(OwnedCommand::Pattern {
         phases: phases.0.clone(),
         intensities,
         bank,
@@ -688,7 +693,7 @@ pub unsafe extern "C" fn autd3_op_modulation(
     loop_rep: u16,
     transition_mode: u8,
     transition_value: u64,
-) -> *mut Pending {
+) -> *mut OwnedCommand {
     let (Some(sampling_config), Some(modulation_buffer)) =
         (unsafe { handle_ref(sampling_config) }, unsafe {
             handle_ref(modulation_buffer)
@@ -704,7 +709,7 @@ pub unsafe extern "C" fn autd3_op_modulation(
     };
 
     let data = modulation_buffer.0.clone();
-    into_handle(Pending::Modulation {
+    into_handle(OwnedCommand::Modulation {
         config: *sampling_config,
         data,
         bank,
@@ -720,7 +725,7 @@ pub unsafe extern "C" fn autd3_op_write_pattern_buffer(
     phases: *const PhaseBuffer,
     intensities: *const IntensityBuffer,
     uniform_intensity: u8,
-) -> *mut Pending {
+) -> *mut OwnedCommand {
     let Some(phases) = (unsafe { handle_ref(phases) }) else {
         return std::ptr::null_mut();
     };
@@ -732,7 +737,7 @@ pub unsafe extern "C" fn autd3_op_write_pattern_buffer(
         return std::ptr::null_mut();
     };
 
-    into_handle(Pending::WritePatternBuffer {
+    into_handle(OwnedCommand::WritePatternBuffer {
         bank,
         index,
         phases: phases.0.clone(),
@@ -743,12 +748,12 @@ pub unsafe extern "C" fn autd3_op_write_pattern_buffer(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_op_write_foci_buffer(
     bank: u8,
-    index_offset: u32,
+    start_index: u32,
     points: *const Autd3StmControlPoint,
     num_samples: usize,
     num_foci: u8,
     intensities: *const u8,
-) -> *mut Pending {
+) -> *mut OwnedCommand {
     let Some(bank) = to_pattern_bank(bank) else {
         return std::ptr::null_mut();
     };
@@ -756,9 +761,9 @@ pub unsafe extern "C" fn autd3_op_write_foci_buffer(
     let Some(points) = (unsafe { foci_points(points, num_samples, num_foci, intensities) }) else {
         return std::ptr::null_mut();
     };
-    into_handle(Pending::WriteFociBuffer {
+    into_handle(OwnedCommand::WriteFociBuffer {
         bank,
-        index_offset: index_offset as usize,
+        start_index: start_index as usize,
         points,
     })
 }
@@ -766,21 +771,21 @@ pub unsafe extern "C" fn autd3_op_write_foci_buffer(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_op_write_pattern_phase(
     bank: u8,
-    index: u16,
+    start_index: u16,
     depth: u8,
     intensity: u8,
     patterns: *const *const PhaseBuffer,
     num_patterns: usize,
-) -> *mut Pending {
+) -> *mut OwnedCommand {
     let (Some(bank), Some(depth)) = (to_pattern_bank(bank), PhaseDepth::from_u8(depth)) else {
         return std::ptr::null_mut();
     };
     let Some(patterns) = (unsafe { clone_buffers(patterns, num_patterns) }) else {
         return std::ptr::null_mut();
     };
-    into_handle(Pending::WritePatternPhase {
+    into_handle(OwnedCommand::WritePatternPhase {
         bank,
-        index,
+        start_index,
         depth,
         intensity: Intensity(intensity),
         patterns,
@@ -801,14 +806,14 @@ pub unsafe extern "C" fn autd3_op_config_pattern(
     sampling_config: *const SamplingConfig,
     size: u32,
     rep: u16,
-) -> *mut Pending {
+) -> *mut OwnedCommand {
     let Some(sampling_config) = (unsafe { handle_ref(sampling_config) }) else {
         return std::ptr::null_mut();
     };
     let Some(bank) = to_pattern_bank(bank) else {
         return std::ptr::null_mut();
     };
-    into_handle(Pending::ConfigPattern {
+    into_handle(OwnedCommand::ConfigPattern {
         bank,
         config: *sampling_config,
         size,
@@ -824,14 +829,14 @@ pub unsafe extern "C" fn autd3_op_config_foci_stm(
     num_foci: u8,
     sound_speed_m_s: f32,
     rep: u16,
-) -> *mut Pending {
+) -> *mut OwnedCommand {
     let Some(sampling_config) = (unsafe { handle_ref(sampling_config) }) else {
         return std::ptr::null_mut();
     };
     let Some(bank) = to_pattern_bank(bank) else {
         return std::ptr::null_mut();
     };
-    into_handle(Pending::ConfigFociStm {
+    into_handle(OwnedCommand::ConfigFociStm {
         bank,
         config: *sampling_config,
         size,
@@ -846,14 +851,14 @@ pub extern "C" fn autd3_op_activate_pattern_bank(
     bank: u8,
     transition_mode: u8,
     transition_value: u64,
-) -> *mut Pending {
+) -> *mut OwnedCommand {
     let (Some(bank), Some(transition_mode)) = (
         to_pattern_bank(bank),
         to_transition_mode(transition_mode, transition_value),
     ) else {
         return std::ptr::null_mut();
     };
-    into_handle(Pending::ActivatePatternBank {
+    into_handle(OwnedCommand::ActivatePatternBank {
         bank,
         transition_mode,
     })
@@ -864,7 +869,7 @@ pub unsafe extern "C" fn autd3_op_write_modulation_buffer(
     bank: u8,
     offset: u32,
     modulation_buffer: *const ModulationBuffer,
-) -> *mut Pending {
+) -> *mut OwnedCommand {
     let Some(modulation_buffer) = (unsafe { handle_ref(modulation_buffer) }) else {
         return std::ptr::null_mut();
     };
@@ -873,7 +878,7 @@ pub unsafe extern "C" fn autd3_op_write_modulation_buffer(
     };
 
     let data = modulation_buffer.0.clone();
-    into_handle(Pending::WriteModulationBuffer { bank, offset, data })
+    into_handle(OwnedCommand::WriteModulationBuffer { bank, offset, data })
 }
 
 #[unsafe(no_mangle)]
@@ -882,14 +887,14 @@ pub unsafe extern "C" fn autd3_op_config_modulation(
     sampling_config: *const SamplingConfig,
     size: u32,
     rep: u16,
-) -> *mut Pending {
+) -> *mut OwnedCommand {
     let Some(sampling_config) = (unsafe { handle_ref(sampling_config) }) else {
         return std::ptr::null_mut();
     };
     let Some(bank) = to_modulation_bank(bank) else {
         return std::ptr::null_mut();
     };
-    into_handle(Pending::ConfigModulation {
+    into_handle(OwnedCommand::ConfigModulation {
         bank,
         config: *sampling_config,
         size,
@@ -902,47 +907,47 @@ pub extern "C" fn autd3_op_activate_modulation_bank(
     bank: u8,
     transition_mode: u8,
     transition_value: u64,
-) -> *mut Pending {
+) -> *mut OwnedCommand {
     let (Some(bank), Some(transition_mode)) = (
         to_modulation_bank(bank),
         to_transition_mode(transition_mode, transition_value),
     ) else {
         return std::ptr::null_mut();
     };
-    into_handle(Pending::ActivateModulationBank {
+    into_handle(OwnedCommand::ActivateModulationBank {
         bank,
         transition_mode,
     })
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_op_clear() -> *mut Pending {
-    into_handle(Pending::Clear)
+pub extern "C" fn autd3_op_clear() -> *mut OwnedCommand {
+    into_handle(OwnedCommand::Clear)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_op_synchronize() -> *mut Pending {
-    into_handle(Pending::Synchronize)
+pub extern "C" fn autd3_op_synchronize() -> *mut OwnedCommand {
+    into_handle(OwnedCommand::Synchronize)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_op_release_failsafe() -> *mut Pending {
-    into_handle(Pending::ReleaseFailsafe)
+pub extern "C" fn autd3_op_release_failsafe() -> *mut OwnedCommand {
+    into_handle(OwnedCommand::ReleaseFailsafe)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_op_nop() -> *mut Pending {
-    into_handle(Pending::Nop)
+pub extern "C" fn autd3_op_nop() -> *mut OwnedCommand {
+    into_handle(OwnedCommand::Nop)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_op_force_fan(value: bool) -> *mut Pending {
-    into_handle(Pending::ForceFan(value))
+pub extern "C" fn autd3_op_force_fan(value: bool) -> *mut OwnedCommand {
+    into_handle(OwnedCommand::ForceFan(value))
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_op_force_fan_default() -> *mut Pending {
-    into_handle(Pending::ForceFan(ForceFan::default().value))
+pub extern "C" fn autd3_op_force_fan_default() -> *mut OwnedCommand {
+    into_handle(OwnedCommand::ForceFan(ForceFan::default().value))
 }
 
 pub struct CpuConfigHandle(pub(crate) CpuConfig);
@@ -1180,11 +1185,13 @@ autd3_ffi_abi::option_handle_field!(
 autd3_ffi_abi::option_handle_lifecycle!(CpuConfigHandle, autd3_cpu_config_free);
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_op_set_cpu_config(config: *const CpuConfigHandle) -> *mut Pending {
+pub unsafe extern "C" fn autd3_op_set_cpu_config(
+    config: *const CpuConfigHandle,
+) -> *mut OwnedCommand {
     let Some(config) = (unsafe { handle_ref(config) }) else {
         return std::ptr::null_mut();
     };
-    into_handle(Pending::SetCpuConfig(Box::new(config.0)))
+    into_handle(OwnedCommand::SetCpuConfig(Box::new(config.0)))
 }
 
 pub struct FpgaConfigHandle(pub(crate) FpgaConfig);
@@ -1204,11 +1211,13 @@ autd3_ffi_abi::option_handle_field!(
 autd3_ffi_abi::option_handle_lifecycle!(FpgaConfigHandle, autd3_fpga_config_free);
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_op_set_fpga_config(config: *const FpgaConfigHandle) -> *mut Pending {
+pub unsafe extern "C" fn autd3_op_set_fpga_config(
+    config: *const FpgaConfigHandle,
+) -> *mut OwnedCommand {
     let Some(config) = (unsafe { handle_ref(config) }) else {
         return std::ptr::null_mut();
     };
-    into_handle(Pending::SetFpgaConfig(config.0))
+    into_handle(OwnedCommand::SetFpgaConfig(config.0))
 }
 
 #[unsafe(no_mangle)]
@@ -1216,8 +1225,8 @@ pub extern "C" fn autd3_op_set_silencer_completion_time(
     intensity_ns: u64,
     phase_ns: u64,
     strict: bool,
-) -> *mut Pending {
-    into_handle(Pending::SetSilencerCompletion {
+) -> *mut OwnedCommand {
+    into_handle(OwnedCommand::SetSilencerCompletion {
         intensity: Duration::from_nanos(intensity_ns),
         phase: Duration::from_nanos(phase_ns),
         strict,
@@ -1225,21 +1234,24 @@ pub extern "C" fn autd3_op_set_silencer_completion_time(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_op_set_silencer_update_rate(intensity: u16, phase: u16) -> *mut Pending {
+pub extern "C" fn autd3_op_set_silencer_update_rate(
+    intensity: u16,
+    phase: u16,
+) -> *mut OwnedCommand {
     let (Some(intensity), Some(phase)) = (NonZeroU16::new(intensity), NonZeroU16::new(phase))
     else {
         return std::ptr::null_mut();
     };
-    into_handle(Pending::SetSilencerUpdateRate { intensity, phase })
+    into_handle(OwnedCommand::SetSilencerUpdateRate { intensity, phase })
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_op_set_silencer_disable() -> *mut Pending {
-    into_handle(Pending::SetSilencerDisable)
+pub extern "C" fn autd3_op_set_silencer_disable() -> *mut OwnedCommand {
+    into_handle(OwnedCommand::SetSilencerDisable)
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_op_set_gpio_out(outputs: *const Autd3GpioOut) -> *mut Pending {
+pub unsafe extern "C" fn autd3_op_set_gpio_out(outputs: *const Autd3GpioOut) -> *mut OwnedCommand {
     let Some(outputs) = (unsafe { slice_ref(outputs, 4) }) else {
         return std::ptr::null_mut();
     };
@@ -1252,21 +1264,21 @@ pub unsafe extern "C" fn autd3_op_set_gpio_out(outputs: *const Autd3GpioOut) -> 
     ) else {
         return std::ptr::null_mut();
     };
-    into_handle(Pending::SetGpioOut([o0, o1, o2, o3]))
+    into_handle(OwnedCommand::SetGpioOut([o0, o1, o2, o3]))
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_op_set_gpio_out_default() -> *mut Pending {
-    into_handle(Pending::SetGpioOut(SetGpioOut::default().outputs))
+pub extern "C" fn autd3_op_set_gpio_out_default() -> *mut OwnedCommand {
+    into_handle(OwnedCommand::SetGpioOut(SetGpioOut::default().outputs))
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_op_emulate_gpio_in(values: *const u8) -> *mut Pending {
+pub unsafe extern "C" fn autd3_op_emulate_gpio_in(values: *const u8) -> *mut OwnedCommand {
     let Some(values) = (unsafe { slice_ref(values, 4) }) else {
         return std::ptr::null_mut();
     };
 
-    into_handle(Pending::EmulateGpioIn([
+    into_handle(OwnedCommand::EmulateGpioIn([
         values[0] != 0,
         values[1] != 0,
         values[2] != 0,
@@ -1275,8 +1287,8 @@ pub unsafe extern "C" fn autd3_op_emulate_gpio_in(values: *const u8) -> *mut Pen
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_op_emulate_gpio_in_default() -> *mut Pending {
-    into_handle(Pending::EmulateGpioIn(EmulateGpioIn::default().values))
+pub extern "C" fn autd3_op_emulate_gpio_in_default() -> *mut OwnedCommand {
+    into_handle(OwnedCommand::EmulateGpioIn(EmulateGpioIn::default().values))
 }
 
 fn total_len(lens: &[usize]) -> Option<usize> {
@@ -1308,9 +1320,9 @@ pub unsafe extern "C" fn autd3_op_set_output_mask(
     masks: *const u8,
     lens: *const usize,
     num_devices: usize,
-) -> *mut Pending {
+) -> *mut OwnedCommand {
     match unsafe { per_device(masks, lens, num_devices, |v| v != 0) } {
-        Some(masks) => into_handle(Pending::SetOutputMask(masks)),
+        Some(masks) => into_handle(OwnedCommand::SetOutputMask(masks)),
         None => std::ptr::null_mut(),
     }
 }
@@ -1320,9 +1332,9 @@ pub unsafe extern "C" fn autd3_op_set_phase_correction(
     phases: *const u8,
     lens: *const usize,
     num_devices: usize,
-) -> *mut Pending {
+) -> *mut OwnedCommand {
     match unsafe { per_device(phases, lens, num_devices, Phase) } {
-        Some(phases) => into_handle(Pending::SetPhaseCorrection(phases)),
+        Some(phases) => into_handle(OwnedCommand::SetPhaseCorrection(phases)),
         None => std::ptr::null_mut(),
     }
 }
@@ -1349,7 +1361,7 @@ fn to_pulse_width(value: Autd3PulseWidth) -> Option<PulseWidth> {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_op_set_pulse_width_table(
     table: *const Autd3PulseWidth,
-) -> *mut Pending {
+) -> *mut OwnedCommand {
     let Some(slice) = (unsafe { slice_ref(table, PWE_TABLE_SIZE) }) else {
         return std::ptr::null_mut();
     };
@@ -1361,12 +1373,12 @@ pub unsafe extern "C" fn autd3_op_set_pulse_width_table(
         };
         *dst = value;
     }
-    into_handle(Pending::SetPulseWidthTable(t))
+    into_handle(OwnedCommand::SetPulseWidthTable(t))
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_op_set_pulse_width_table_default() -> *mut Pending {
-    into_handle(Pending::SetPulseWidthTable(Box::new(
+pub extern "C" fn autd3_op_set_pulse_width_table_default() -> *mut OwnedCommand {
+    into_handle(OwnedCommand::SetPulseWidthTable(Box::new(
         *SetPulseWidthTable::default().table,
     )))
 }
@@ -1403,7 +1415,7 @@ pub unsafe extern "C" fn autd3_op_foci_stm(
     loop_rep: u16,
     transition_mode: u8,
     transition_value: u64,
-) -> *mut Pending {
+) -> *mut OwnedCommand {
     let Some(config) = (unsafe { handle_ref(config) }) else {
         return std::ptr::null_mut();
     };
@@ -1417,7 +1429,7 @@ pub unsafe extern "C" fn autd3_op_foci_stm(
     let Some(points) = (unsafe { foci_points(points, num_samples, num_foci, intensities) }) else {
         return std::ptr::null_mut();
     };
-    into_handle(Pending::FociStm {
+    into_handle(OwnedCommand::FociStm {
         config: *config,
         points,
         bank,
@@ -1441,7 +1453,7 @@ pub unsafe extern "C" fn autd3_op_pattern_stm(
     loop_rep: u16,
     transition_mode: u8,
     transition_value: u64,
-) -> *mut Pending {
+) -> *mut OwnedCommand {
     let Some(config) = (unsafe { handle_ref(config) }) else {
         return std::ptr::null_mut();
     };
@@ -1466,7 +1478,7 @@ pub unsafe extern "C" fn autd3_op_pattern_stm(
     }) else {
         return std::ptr::null_mut();
     };
-    into_handle(Pending::PatternStm {
+    into_handle(OwnedCommand::PatternStm {
         config: *config,
         phases,
         intensities,
@@ -1478,22 +1490,22 @@ pub unsafe extern "C" fn autd3_op_pattern_stm(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_op_free(op: *mut Pending) {
+pub unsafe extern "C" fn autd3_op_free(op: *mut OwnedCommand) {
     unsafe { drop_handle(op) }
 }
 
-impl Pending {
+impl OwnedCommand {
     fn check_each_lengths(&self, num_devices: usize) -> Result<(), String> {
         match self {
-            Pending::Each(devices) if devices.len() != num_devices => Err(format!(
+            OwnedCommand::Each(devices) if devices.len() != num_devices => Err(format!(
                 "per-device command holds {} entries for {num_devices} devices",
                 devices.len()
             )),
-            Pending::Each(devices) => devices
+            OwnedCommand::Each(devices) => devices
                 .iter()
                 .flatten()
                 .try_for_each(|op| op.check_each_lengths(num_devices)),
-            Pending::Sequence(ops) => ops
+            OwnedCommand::Sequence(ops) => ops
                 .iter()
                 .try_for_each(|op| op.check_each_lengths(num_devices)),
             _ => Ok(()),
@@ -1503,15 +1515,15 @@ impl Pending {
     #[allow(clippy::too_many_lines)]
     fn boxed(&self) -> BoxedCommand<'_> {
         match self {
-            Pending::Each(devices) => each(|device| {
+            OwnedCommand::Each(devices) => each(|device| {
                 devices
                     .get(device.idx())
                     .and_then(Option::as_ref)
-                    .map(Pending::boxed)
+                    .map(OwnedCommand::boxed)
             })
             .boxed(),
-            Pending::Sequence(ops) => Sequence(ops).boxed(),
-            Pending::Pattern {
+            OwnedCommand::Sequence(ops) => Sequence(ops).boxed(),
+            OwnedCommand::Pattern {
                 phases,
                 intensities,
                 bank,
@@ -1521,7 +1533,7 @@ impl Pending {
                 ..Pattern::with_bank(*bank, phases, intensities.as_ref())
             }
             .boxed(),
-            Pending::Modulation {
+            OwnedCommand::Modulation {
                 config,
                 data,
                 bank,
@@ -1535,14 +1547,14 @@ impl Pending {
                 transition_mode: *transition_mode,
             }
             .boxed(),
-            Pending::WritePatternBuffer {
+            OwnedCommand::WritePatternBuffer {
                 bank,
                 index,
                 phases,
                 intensities,
             } => WritePatternBuffer::new(*bank, usize::from(*index), phases, intensities.as_ref())
                 .boxed(),
-            Pending::ConfigPattern {
+            OwnedCommand::ConfigPattern {
                 bank,
                 config,
                 size,
@@ -1554,7 +1566,7 @@ impl Pending {
                 loop_behavior: *loop_behavior,
             }
             .boxed(),
-            Pending::ConfigFociStm {
+            OwnedCommand::ConfigFociStm {
                 bank,
                 config,
                 size,
@@ -1570,7 +1582,7 @@ impl Pending {
                 loop_behavior: *loop_behavior,
             }
             .boxed(),
-            Pending::ActivatePatternBank {
+            OwnedCommand::ActivatePatternBank {
                 bank,
                 transition_mode,
             } => ActivatePatternBank {
@@ -1578,13 +1590,13 @@ impl Pending {
                 transition_mode: *transition_mode,
             }
             .boxed(),
-            Pending::WriteModulationBuffer { bank, offset, data } => WriteModulationBuffer {
+            OwnedCommand::WriteModulationBuffer { bank, offset, data } => WriteModulationBuffer {
                 bank: *bank,
                 offset: usize::try_from(*offset).unwrap_or(usize::MAX),
                 data,
             }
             .boxed(),
-            Pending::ConfigModulation {
+            OwnedCommand::ConfigModulation {
                 bank,
                 config,
                 size,
@@ -1596,7 +1608,7 @@ impl Pending {
                 loop_behavior: *loop_behavior,
             }
             .boxed(),
-            Pending::ActivateModulationBank {
+            OwnedCommand::ActivateModulationBank {
                 bank,
                 transition_mode,
             } => ActivateModulationBank {
@@ -1604,14 +1616,14 @@ impl Pending {
                 transition_mode: *transition_mode,
             }
             .boxed(),
-            Pending::Clear => Clear.boxed(),
-            Pending::Synchronize => Synchronize.boxed(),
-            Pending::ReleaseFailsafe => ReleaseFailsafe.boxed(),
-            Pending::Nop => Nop.boxed(),
-            Pending::ForceFan(value) => ForceFan { value: *value }.boxed(),
-            Pending::SetCpuConfig(config) => SetCpuConfig::new(**config).boxed(),
-            Pending::SetFpgaConfig(config) => SetFpgaConfig::new(*config).boxed(),
-            Pending::SetSilencerCompletion {
+            OwnedCommand::Clear => Clear.boxed(),
+            OwnedCommand::Synchronize => Synchronize.boxed(),
+            OwnedCommand::ReleaseFailsafe => ReleaseFailsafe.boxed(),
+            OwnedCommand::Nop => Nop.boxed(),
+            OwnedCommand::ForceFan(value) => ForceFan { value: *value }.boxed(),
+            OwnedCommand::SetCpuConfig(config) => SetCpuConfig::new(**config).boxed(),
+            OwnedCommand::SetFpgaConfig(config) => SetFpgaConfig::new(*config).boxed(),
+            OwnedCommand::SetSilencerCompletion {
                 intensity,
                 phase,
                 strict,
@@ -1621,39 +1633,39 @@ impl Pending {
                 strict_mode: *strict,
             })
             .boxed(),
-            Pending::SetSilencerUpdateRate { intensity, phase } => {
+            OwnedCommand::SetSilencerUpdateRate { intensity, phase } => {
                 SetSilencer::new(FixedUpdateRate {
                     intensity: *intensity,
                     phase: *phase,
                 })
                 .boxed()
             }
-            Pending::SetSilencerDisable => SetSilencer::disable().boxed(),
-            Pending::SetGpioOut(outputs) => SetGpioOut { outputs: *outputs }.boxed(),
-            Pending::EmulateGpioIn(values) => EmulateGpioIn { values: *values }.boxed(),
-            Pending::SetOutputMask(masks) => SetOutputMask { masks }.boxed(),
-            Pending::SetPhaseCorrection(phases) => SetPhaseCorrection { phases }.boxed(),
-            Pending::SetPulseWidthTable(t) => SetPulseWidthTable { table: t }.boxed(),
-            Pending::WriteFociBuffer {
+            OwnedCommand::SetSilencerDisable => SetSilencer::disable().boxed(),
+            OwnedCommand::SetGpioOut(outputs) => SetGpioOut { outputs: *outputs }.boxed(),
+            OwnedCommand::EmulateGpioIn(values) => EmulateGpioIn { values: *values }.boxed(),
+            OwnedCommand::SetOutputMask(masks) => SetOutputMask { masks }.boxed(),
+            OwnedCommand::SetPhaseCorrection(phases) => SetPhaseCorrection { phases }.boxed(),
+            OwnedCommand::SetPulseWidthTable(t) => SetPulseWidthTable { table: t }.boxed(),
+            OwnedCommand::WriteFociBuffer {
                 bank,
-                index_offset,
+                start_index,
                 points,
-            } => points.boxed_write_foci(*bank, *index_offset),
-            Pending::WritePatternPhase {
+            } => points.boxed_write_foci(*bank, *start_index),
+            OwnedCommand::WritePatternPhase {
                 bank,
-                index,
+                start_index,
                 depth,
                 intensity,
                 patterns,
             } => WritePatternPhase {
                 bank: *bank,
-                index: usize::from(*index),
+                start_index: usize::from(*start_index),
                 depth: *depth,
                 intensity: *intensity,
                 patterns,
             }
             .boxed(),
-            Pending::FociStm {
+            OwnedCommand::FociStm {
                 config,
                 points,
                 bank,
@@ -1669,7 +1681,7 @@ impl Pending {
                     transition_mode: *transition_mode,
                 },
             ),
-            Pending::PatternStm {
+            OwnedCommand::PatternStm {
                 config,
                 phases,
                 intensities,
@@ -1693,7 +1705,7 @@ impl Pending {
     }
 }
 
-struct Sequence<'a>(&'a [Pending]);
+struct Sequence<'a>(&'a [OwnedCommand]);
 
 impl<'a> Command<'a> for Sequence<'a> {
     fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
@@ -1704,7 +1716,7 @@ impl<'a> Command<'a> for Sequence<'a> {
     }
 }
 
-fn is_distinct(ops: &[*mut Pending]) -> bool {
+fn is_distinct(ops: &[*mut OwnedCommand]) -> bool {
     ops.iter()
         .enumerate()
         .all(|(i, p)| p.is_null() || !ops[..i].contains(p))
@@ -1712,9 +1724,9 @@ fn is_distinct(ops: &[*mut Pending]) -> bool {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_command_each(
-    ops: *const *mut Pending,
+    ops: *const *mut OwnedCommand,
     num_devices: usize,
-) -> *mut Pending {
+) -> *mut OwnedCommand {
     let Some(ops) = (unsafe { slice_ref(ops, num_devices) }) else {
         return std::ptr::null_mut();
     };
@@ -1722,16 +1734,16 @@ pub unsafe extern "C" fn autd3_command_each(
         return std::ptr::null_mut();
     }
 
-    into_handle(Pending::Each(
+    into_handle(OwnedCommand::Each(
         ops.iter().map(|&p| unsafe { take_handle(p) }).collect(),
     ))
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_command_sequence(
-    ops: *const *mut Pending,
+    ops: *const *mut OwnedCommand,
     len: usize,
-) -> *mut Pending {
+) -> *mut OwnedCommand {
     let Some(ops) = (unsafe { slice_ref(ops, len) }) else {
         return std::ptr::null_mut();
     };
@@ -1739,7 +1751,7 @@ pub unsafe extern "C" fn autd3_command_sequence(
         return std::ptr::null_mut();
     }
 
-    into_handle(Pending::Sequence(
+    into_handle(OwnedCommand::Sequence(
         ops.iter()
             .filter_map(|&p| unsafe { take_handle(p) })
             .collect(),
@@ -1749,7 +1761,7 @@ pub unsafe extern "C" fn autd3_command_sequence(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_frames_encode(
     geometry: *const Geometry,
-    command: *mut Pending,
+    command: *mut OwnedCommand,
     out_code: *mut i32,
     out_err: *mut c_char,
     out_err_len: usize,
@@ -1767,7 +1779,7 @@ pub unsafe extern "C" fn autd3_frames_encode(
 unsafe fn encode_into(
     frames: &mut Frames,
     geometry: *const Geometry,
-    command: *mut Pending,
+    command: *mut OwnedCommand,
     out_err: *mut c_char,
     out_err_len: usize,
 ) -> i32 {
@@ -1802,7 +1814,7 @@ pub extern "C" fn autd3_frames_new() -> *mut Arc<Frames> {
 pub unsafe extern "C" fn autd3_frames_encode_into(
     frames: *mut Arc<Frames>,
     geometry: *const Geometry,
-    command: *mut Pending,
+    command: *mut OwnedCommand,
     out_err: *mut c_char,
     out_err_len: usize,
 ) -> i32 {
@@ -1999,7 +2011,7 @@ pub unsafe extern "C" fn autd3_client_device_time_now(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_heartbeat(
+pub unsafe extern "C" fn autd3_client_send_heartbeat(
     client: *const ClientHandle,
     out_err: *mut c_char,
     out_err_len: usize,
@@ -2009,7 +2021,7 @@ pub unsafe extern "C" fn autd3_client_heartbeat(
         return AUTD3_ERR_INVALID_ARGUMENT;
     };
 
-    match client.0.heartbeat() {
+    match client.0.send_heartbeat() {
         Ok(()) => AUTD3_OK,
         Err(e) => {
             unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
@@ -2127,7 +2139,7 @@ pub unsafe extern "C" fn autd3_response_token_await(
                 let response = future.await?;
                 match merged.as_mut() {
                     None => merged = Some(response),
-                    Some(m) => m.merge(&response),
+                    Some(merged) => merged.keep_first_errors_from(&response),
                 }
             }
             Ok(merged.unwrap_or_default())
@@ -2138,28 +2150,28 @@ pub unsafe extern "C" fn autd3_response_token_await(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_response_num_devices(response: *const ResponseHandle) -> usize {
-    unsafe { handle_ref(response) }.map_or(0, |r| r.0.status().len())
+    unsafe { handle_ref(response) }.map_or(0, |r| r.0.error_codes().len())
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_response_status(response: *const ResponseHandle) -> *const u8 {
-    unsafe { handle_ref(response) }.map_or(std::ptr::null(), |r| r.0.status().as_ptr())
+pub unsafe extern "C" fn autd3_response_error_codes(response: *const ResponseHandle) -> *const u8 {
+    unsafe { handle_ref(response) }.map_or(std::ptr::null(), |r| r.0.error_codes().as_ptr())
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_response_value_len(
+pub unsafe extern "C" fn autd3_response_reply_data_of_len(
     response: *const ResponseHandle,
     device: usize,
 ) -> usize {
-    unsafe { handle_ref(response) }.map_or(0, |r| r.0.value(device).len())
+    unsafe { handle_ref(response) }.map_or(0, |r| r.0.reply_data_of(device).len())
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_response_value_data(
+pub unsafe extern "C" fn autd3_response_reply_data_of(
     response: *const ResponseHandle,
     device: usize,
 ) -> *const u8 {
-    unsafe { handle_ref(response) }.map_or(std::ptr::null(), |r| r.0.value(device).as_ptr())
+    unsafe { handle_ref(response) }.map_or(std::ptr::null(), |r| r.0.reply_data_of(device).as_ptr())
 }
 
 #[unsafe(no_mangle)]
@@ -2180,7 +2192,7 @@ pub unsafe extern "C" fn autd3_response_check(
     out_err_len: usize,
 ) -> i32 {
     let response = match unsafe { slice_ref(data, len) } {
-        Some(data) if !data.is_empty() => Response::from_status(data),
+        Some(data) if !data.is_empty() => Response::from_error_codes(data),
         _ => Response::default(),
     };
     match response.check() {
@@ -2498,7 +2510,7 @@ autd3_ffi_abi::export_abi_version!();
 mod tests {
     use super::*;
 
-    fn pending_error(pending: *mut Pending) -> (i32, String) {
+    fn pending_error(pending: *mut OwnedCommand) -> (i32, String) {
         let geometry = Geometry::new(vec![autd3_rs::geometry::Autd3::default()]);
         let mut err = [0 as c_char; 256];
         let mut code = AUTD3_OK;
@@ -2539,7 +2551,7 @@ mod tests {
     }
 
     #[test]
-    fn a_per_index_stm_intensity_of_one_buffer_is_not_treated_as_shared() {
+    fn a_per_index_stm_intensity_of_one_buffer_is_not_treated_as_same_for_all_indices() {
         let geometry = Geometry::new(vec![autd3_rs::geometry::Autd3::default()]);
         let phases = autd3_ffi_abi::Buffer(geometry.phase_buffer());
         let intensities = autd3_ffi_abi::Buffer(geometry.intensity_buffer());
@@ -2566,7 +2578,7 @@ mod tests {
             assert!(!pending.is_null());
             pending_error(pending)
         };
-        assert_eq!(AUTD3_OK, encode(AUTD3_STM_INTENSITY_SHARED).0);
+        assert_eq!(AUTD3_OK, encode(AUTD3_STM_INTENSITY_SAME_FOR_ALL_INDICES).0);
         let (code, message) = encode(AUTD3_STM_INTENSITY_PER_INDEX);
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code, "{message}");
         assert!(
@@ -3034,7 +3046,7 @@ mod tests {
         let op = unsafe { autd3_op_set_fpga_config(handle) };
         assert!(matches!(
             unsafe { take_handle(op) },
-            Some(Pending::SetFpgaConfig(config)) if config == FpgaConfig { sync_phase_lock: false }
+            Some(OwnedCommand::SetFpgaConfig(config)) if config == FpgaConfig { sync_phase_lock: false }
         ));
         let config = unsafe { take_handle(handle) }.unwrap().0;
         assert_eq!(
@@ -3192,15 +3204,15 @@ mod tests {
     fn the_gpio_and_fan_default_ops_match_rust() {
         assert!(matches!(
             unsafe { take_handle(autd3_op_force_fan_default()) },
-            Some(Pending::ForceFan(value)) if value == ForceFan::default().value
+            Some(OwnedCommand::ForceFan(value)) if value == ForceFan::default().value
         ));
         assert!(matches!(
             unsafe { take_handle(autd3_op_set_gpio_out_default()) },
-            Some(Pending::SetGpioOut(outputs)) if outputs == SetGpioOut::default().outputs
+            Some(OwnedCommand::SetGpioOut(outputs)) if outputs == SetGpioOut::default().outputs
         ));
         assert!(matches!(
             unsafe { take_handle(autd3_op_emulate_gpio_in_default()) },
-            Some(Pending::EmulateGpioIn(values)) if values == EmulateGpioIn::default().values
+            Some(OwnedCommand::EmulateGpioIn(values)) if values == EmulateGpioIn::default().values
         ));
     }
 
@@ -3282,7 +3294,7 @@ mod tests {
         })))
     }
 
-    fn encode(geometry: *const Geometry, command: *mut Pending) -> *mut Arc<Frames> {
+    fn encode(geometry: *const Geometry, command: *mut OwnedCommand) -> *mut Arc<Frames> {
         unsafe {
             autd3_frames_encode(
                 geometry,
@@ -3294,7 +3306,7 @@ mod tests {
         }
     }
 
-    fn num_frames_of(geometry: *const Geometry, command: *mut Pending) -> usize {
+    fn num_frames_of(geometry: *const Geometry, command: *mut OwnedCommand) -> usize {
         let frames = encode(geometry, command);
         assert!(!frames.is_null());
         let len = unsafe { autd3_frames_num_frames(frames) };
@@ -3302,7 +3314,7 @@ mod tests {
         len
     }
 
-    fn two_entries_for_one_device() -> *mut Pending {
+    fn two_entries_for_one_device() -> *mut OwnedCommand {
         let per_device = [autd3_op_nop(), autd3_op_nop()];
         unsafe { autd3_command_each(per_device.as_ptr(), per_device.len()) }
     }
@@ -3508,7 +3520,7 @@ mod tests {
     #[test]
     fn a_heartbeat_through_a_null_client_is_an_error() {
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
-            autd3_client_heartbeat(std::ptr::null(), std::ptr::null_mut(), 0)
+            autd3_client_send_heartbeat(std::ptr::null(), std::ptr::null_mut(), 0)
         });
     }
 
@@ -3592,7 +3604,7 @@ mod tests {
         unsafe { drop_handle(geometry) };
     }
 
-    fn encode_error(geometry: *const Geometry, command: *mut Pending) -> String {
+    fn encode_error(geometry: *const Geometry, command: *mut OwnedCommand) -> String {
         let mut err = [0 as c_char; 128];
         let frames = unsafe {
             autd3_frames_encode(

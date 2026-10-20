@@ -14,11 +14,11 @@ circle(
 )
 config = StmConfig(1.0 * Hz).into_sampling_config(len(points))
 
-index_offset = 0
+start_index = 0
 # ANCHOR: write
 WriteFociBuffer(
     bank=bank,
-    index_offset=index_offset,
+    start_index=start_index,
     points=points,
 )
 # ANCHOR_END: write
