@@ -17,7 +17,7 @@ let option = TransportOption {
     iface: Interface::Simulator(SIMULATOR_PORT),
     ..Default::default()
 };
-let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
+let client = Client::open(&geometry, &option).await?;
 ```
 
 The client sends its geometry to the simulator when it opens (control port `[::1]:port + 1`, `[::1]:44337` by default), and the simulator rebuilds

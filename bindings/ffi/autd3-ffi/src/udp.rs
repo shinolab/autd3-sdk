@@ -113,6 +113,13 @@ autd3_ffi_abi::option_handle_field!(
     autd3_transport_option_set_sync_timeout,
     autd3_transport_option_get_sync_timeout
 );
+autd3_ffi_abi::option_handle_field!(
+    TransportOptionHandle,
+    [ack_timeout],
+    duration,
+    autd3_transport_option_set_ack_timeout,
+    autd3_transport_option_get_ack_timeout
+);
 autd3_ffi_abi::option_handle_lifecycle!(TransportOptionHandle, autd3_transport_option_free);
 
 #[unsafe(no_mangle)]
@@ -329,6 +336,11 @@ mod tests {
             AUTD3_OK
         );
         assert_eq!(Duration::from_nanos(ns), option.sync_timeout);
+        assert_eq!(
+            unsafe { autd3_transport_option_get_ack_timeout(handle, &raw mut ns) },
+            AUTD3_OK
+        );
+        assert_eq!(Duration::from_nanos(ns), option.ack_timeout);
         assert_eq!(iface_addr(handle), None);
         unsafe { autd3_transport_option_free(handle) };
     }
@@ -394,22 +406,15 @@ mod tests {
     #[test]
     fn a_rejected_client_open_consumes_the_option() {
         let option = autd3_transport_option_new();
-        let config = crate::autd3_client_config_new();
         let (code, client) = complete(|cb, user_data| unsafe {
-            crate::autd3_client_open(std::ptr::null(), option, config, cb, user_data);
+            crate::autd3_client_open(std::ptr::null(), option, cb, user_data);
         });
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
         assert_eq!(0, client);
-        unsafe { crate::autd3_client_config_free(config) };
 
+        let geometry = Geometry::new(vec![Autd3::default()]);
         let (code, client) = complete(|cb, user_data| unsafe {
-            crate::autd3_client_open(
-                std::ptr::null(),
-                std::ptr::null_mut(),
-                std::ptr::null(),
-                cb,
-                user_data,
-            );
+            crate::autd3_client_open(&raw const geometry, std::ptr::null_mut(), cb, user_data);
         });
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
         assert_eq!(0, client);
@@ -419,33 +424,55 @@ mod tests {
     fn an_out_of_range_device_count_fails_the_open_through_the_callback() {
         let geometry = Geometry::new(Vec::<Autd3>::new());
         let option = autd3_transport_option_new();
-        let config = crate::autd3_client_config_new();
         let (code, client) = complete(|cb, user_data| unsafe {
-            crate::autd3_client_open(&raw const geometry, option, config, cb, user_data);
+            crate::autd3_client_open(&raw const geometry, option, cb, user_data);
         });
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
         assert_eq!(0, client);
-        unsafe { crate::autd3_client_config_free(config) };
+    }
+
+    fn open_error_with_zero(
+        set: unsafe extern "C" fn(*mut TransportOptionHandle, u64) -> i32,
+    ) -> (i32, String) {
+        let geometry = Geometry::new(vec![Autd3::default()]);
+        let option = autd3_transport_option_new();
+        assert_eq!(unsafe { set(option, 0) }, AUTD3_OK);
+        let (tx, rx) = std::sync::mpsc::channel::<(i32, String)>();
+        unsafe {
+            crate::autd3_client_open(
+                &raw const geometry,
+                option,
+                Some(report_message),
+                Box::into_raw(Box::new(tx)).cast(),
+            );
+        }
+        rx.recv().unwrap()
+    }
+
+    #[test]
+    fn a_zero_lost_timeout_fails_the_open_with_the_rust_error() {
+        let (code, message) = open_error_with_zero(autd3_transport_option_set_lost_timeout);
+        assert_eq!(crate::AUTD3_ERR_NETWORK, code);
+        assert!(message.contains("lost_timeout"), "{message}");
+    }
+
+    #[test]
+    fn a_zero_ack_timeout_fails_the_open_with_the_rust_error() {
+        let (code, message) = open_error_with_zero(autd3_transport_option_set_ack_timeout);
+        assert_eq!(crate::AUTD3_ERR_NETWORK, code);
+        assert!(message.contains("ack_timeout"), "{message}");
     }
 
     #[test]
     fn a_client_open_without_a_callback_still_consumes_the_option() {
         let geometry = Geometry::new(vec![Autd3::default()]);
-        let config = crate::autd3_client_config_new();
         let live = LIVE_ALLOCATIONS.get();
         let option = autd3_transport_option_new();
         assert!(live < LIVE_ALLOCATIONS.get());
         unsafe {
-            crate::autd3_client_open(
-                &raw const geometry,
-                option,
-                config,
-                None,
-                std::ptr::null_mut(),
-            );
+            crate::autd3_client_open(&raw const geometry, option, None, std::ptr::null_mut());
         }
         assert_eq!(live, LIVE_ALLOCATIONS.get());
-        unsafe { crate::autd3_client_config_free(config) };
     }
 
     #[test]
@@ -516,6 +543,24 @@ mod tests {
     ) {
         let tx = unsafe { Box::from_raw(user_data.cast::<std::sync::mpsc::Sender<Completion>>()) };
         tx.send((code, value as usize)).unwrap();
+    }
+
+    extern "C" fn report_message(
+        code: i32,
+        _value: *mut std::ffi::c_void,
+        msg: *const c_char,
+        user_data: *mut std::ffi::c_void,
+    ) {
+        let tx =
+            unsafe { Box::from_raw(user_data.cast::<std::sync::mpsc::Sender<(i32, String)>>()) };
+        let message = if msg.is_null() {
+            String::new()
+        } else {
+            unsafe { std::ffi::CStr::from_ptr(msg) }
+                .to_string_lossy()
+                .into_owned()
+        };
+        tx.send((code, message)).unwrap();
     }
 
     fn complete(

@@ -10,10 +10,10 @@ use autd3_rs::udp::{TransportOption, UdpError};
 use autd3_rs::{Controller, Driver, Error, Frames};
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
-use common::{config, emulator, geometry, option, patient_config};
+use common::{emulator, geometry, option, patient_option};
 
 fn open(emulator: &UdpEmulator, option: &TransportOption) -> (Controller, Driver) {
-    Controller::open(&geometry(emulator.num_devices()), option, config()).unwrap()
+    Controller::open(&geometry(emulator.num_devices()), option).unwrap()
 }
 
 fn drive(mut driver: Driver) -> JoinHandle<Result<(), Error>> {
@@ -111,7 +111,7 @@ fn dropping_the_controller_stops_the_driver() {
 fn dropping_the_driver_fails_the_frames_in_flight_and_later_sends_with_closed() {
     let emulator = emulator(1);
     let (controller, mut driver) =
-        Controller::open(&geometry(1), &option(&emulator), patient_config()).unwrap();
+        Controller::open(&geometry(1), &patient_option(&emulator)).unwrap();
     drive_until_ready(&mut driver, controller.initialize()).unwrap();
     let frames = Frames::encode(controller.geometry(), Nop).unwrap();
     let checker = controller.state_checker();

@@ -26,6 +26,7 @@ def test_defaults_follow_the_spec() -> None:
     assert option.response_timeout == autd3.Duration.from_millis(200)
     assert option.enumeration_timeout == autd3.Duration.from_secs(10)
     assert option.sync_timeout == autd3.Duration.from_secs(30)
+    assert option.ack_timeout == autd3.Duration.from_millis(10)
     assert option.send_rate_limit is None
     assert option.send_buffer == 8192
 
@@ -35,11 +36,13 @@ def test_fields_round_trip() -> None:
         iface="eth1",
         lost_timeout=autd3.Duration.from_millis(50),
         sync_timeout=autd3.Duration.from_secs(3),
+        ack_timeout=autd3.Duration.from_millis(3),
         send_rate_limit=95.0,
     )
     assert option.iface == autd3.Interface.Name("eth1")
     assert option.lost_timeout == autd3.Duration.from_millis(50)
     assert option.sync_timeout == autd3.Duration.from_secs(3)
+    assert option.ack_timeout == autd3.Duration.from_millis(3)
     assert option.send_rate_limit == 95.0
     assert autd3.TransportOption(send_buffer=None).send_buffer is None
     assert autd3.TransportOption(send_buffer=65536).send_buffer == 65536
@@ -85,17 +88,10 @@ def test_device_states_are_values() -> None:
     assert str(autd3.DeviceState.Lost) == "LOST"
 
 
-def test_the_client_config_reads_back_its_fields() -> None:
-    default = autd3.ClientConfig()
-    assert default.ack_timeout == autd3.Duration.from_millis(10)
-    assert default.max_inflight == 7
-
-    config = autd3.ClientConfig(
-        ack_timeout=autd3.Duration.from_millis(3),
-        max_inflight=2,
-    )
-    assert config.ack_timeout == autd3.Duration.from_millis(3)
-    assert config.max_inflight == 2
+def test_a_zero_ack_timeout_is_constructible_and_a_non_duration_is_rejected() -> None:
+    assert autd3.TransportOption(ack_timeout=autd3.Duration.from_millis(0)).ack_timeout == autd3.Duration.from_millis(0)
+    with pytest.raises(TypeError):
+        autd3.TransportOption(ack_timeout=loose(None))
 
 
 def test_the_emulator_option_only_shortens_the_timeouts() -> None:
@@ -108,10 +104,11 @@ def test_the_emulator_option_only_shortens_the_timeouts() -> None:
     assert option.enumeration_timeout == autd3.Duration.from_secs(1)
     assert option.sync_timeout == autd3.Duration.from_secs(5)
     assert option.lost_timeout == default.lost_timeout
+    assert option.ack_timeout == default.ack_timeout
     assert option.send_rate_limit == default.send_rate_limit
     assert option.send_buffer == default.send_buffer
 
 
 def test_client_open_takes_a_transport_option() -> None:
     with pytest.raises(TypeError):
-        autd3.Client.open(geometry(1), loose(autd3.Interface.Auto), autd3.ClientConfig())
+        autd3.Client.open(geometry(1), loose(autd3.Interface.Auto))

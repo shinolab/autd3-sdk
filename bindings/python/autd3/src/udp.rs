@@ -109,6 +109,7 @@ impl TransportOption {
         response_timeout = CoreOption::default().response_timeout,
         enumeration_timeout = CoreOption::default().enumeration_timeout,
         sync_timeout = CoreOption::default().sync_timeout,
+        ack_timeout = CoreOption::default().ack_timeout,
         send_rate_limit = CoreOption::default().send_rate_limit,
         send_buffer = CoreOption::default().send_buffer,
     ))]
@@ -120,6 +121,7 @@ impl TransportOption {
         #[pyo3(from_py_with = extract_duration)] response_timeout: Duration,
         #[pyo3(from_py_with = extract_duration)] enumeration_timeout: Duration,
         #[pyo3(from_py_with = extract_duration)] sync_timeout: Duration,
+        #[pyo3(from_py_with = extract_duration)] ack_timeout: Duration,
         send_rate_limit: Option<f32>,
         send_buffer: Option<NonZeroUsize>,
     ) -> Self {
@@ -130,6 +132,7 @@ impl TransportOption {
             response_timeout,
             enumeration_timeout,
             sync_timeout,
+            ack_timeout,
             send_rate_limit,
             send_buffer,
         })
@@ -163,6 +166,11 @@ impl TransportOption {
     #[getter]
     fn sync_timeout<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         duration_to_py(py, self.0.sync_timeout)
+    }
+
+    #[getter]
+    fn ack_timeout<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        duration_to_py(py, self.0.ack_timeout)
     }
 
     #[getter]

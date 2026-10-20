@@ -18,8 +18,7 @@ var geometry = new Geometry(new[] { new Autd3() });
 // Open the client.
 await using var client = await Client.OpenAsync(
     geometry,
-    new TransportOption(),
-    new ClientConfig()
+    new TransportOption()
 );
 await client.SendAsync(Command.Sequence(new Clear(), new Synchronize()));
 

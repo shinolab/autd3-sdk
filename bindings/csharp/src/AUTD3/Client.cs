@@ -464,7 +464,7 @@ namespace AUTD3
             _geometry = geometry;
         }
 
-        public static async Task<Client> OpenAsync(Geometry geometry, TransportOption option, ClientConfig config)
+        public static async Task<Client> OpenAsync(Geometry geometry, TransportOption option)
         {
             var owned = geometry.Clone();
             IntPtr optionHandle;
@@ -481,16 +481,8 @@ namespace AUTD3
             Task<IntPtr> task;
             try
             {
-                var configHandle = config.CreateHandle();
-                try
-                {
-                    task = AsyncOps.InvokeAsync((cb, ud) =>
-                        NativeClient.autd3_client_open(geometry.Handle, optionHandle, configHandle, cb, ud));
-                }
-                finally
-                {
-                    NativeClient.autd3_client_config_free(configHandle);
-                }
+                task = AsyncOps.InvokeAsync((cb, ud) =>
+                    NativeClient.autd3_client_open(geometry.Handle, optionHandle, cb, ud));
             }
             catch
             {
@@ -553,44 +545,6 @@ namespace AUTD3
             if (code != 0)
             {
                 throw Autd3Exception.FromNative(code, err);
-            }
-        }
-
-        public ClientConfig Config
-        {
-            get
-            {
-                var config = NativeClient.autd3_client_get_config(Handle);
-                if (config == IntPtr.Zero)
-                {
-                    throw new Autd3Exception("failed to read the client config");
-                }
-                try
-                {
-                    return ClientConfig.FromHandle(config);
-                }
-                finally
-                {
-                    NativeClient.autd3_client_config_free(config);
-                }
-            }
-        }
-
-        public void SetConfig(ClientConfig config)
-        {
-            var handle = config.CreateHandle();
-            try
-            {
-                var err = new byte[NativeAbi.ErrorBufferLength];
-                var code = NativeClient.autd3_client_set_config(Handle, handle, err, (UIntPtr)err.Length);
-                if (code != 0)
-                {
-                    throw Autd3Exception.FromNative(code, err);
-                }
-            }
-            finally
-            {
-                NativeClient.autd3_client_config_free(handle);
             }
         }
 

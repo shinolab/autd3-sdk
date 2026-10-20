@@ -2,16 +2,19 @@ use anyhow::Result;
 
 use std::time::Duration;
 
-use autd3_rs::commands::Nop;
+use autd3_rs::commands::{Clear, Nop, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::{Client, ClientConfig, Datagram, ExecAt, Frame, Frames};
+use autd3_rs::{Client, Datagram, ExecAt, Frame, Frames};
 use autd3_rs::udp::TransportOption;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
     let option = TransportOption::default();
-    let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
+    // ANCHOR: open
+    let client = Client::open(&geometry, &option).await?;
+    client.send((Clear, Synchronize)).await?;
+    // ANCHOR_END: open
 
     // ANCHOR: exec_at
     let frames = Frames::encode(client.geometry(), Nop)?;
@@ -40,12 +43,6 @@ async fn main() -> Result<()> {
 
     client.heartbeat()?;
 
-    let config = client.config();
-    client.set_config(ClientConfig {
-        ack_timeout: Duration::from_millis(20),
-        ..ClientConfig::default()
-    })?;
-
     let firmware = client.read_firmware_version().await?;
     let fpga_state = client.read_fpga_state().await?;
 
@@ -55,6 +52,6 @@ async fn main() -> Result<()> {
     client.close().await?;
     // ANCHOR_END: api
 
-    let _ = (num_devices, geometry, config, firmware, fpga_state, resp);
+    let _ = (num_devices, geometry, firmware, fpga_state, resp);
     Ok(())
 }

@@ -11,6 +11,7 @@ namespace AUTD3
         internal static readonly TimeSpan ResponseTimeout;
         internal static readonly TimeSpan EnumerationTimeout;
         internal static readonly TimeSpan SyncTimeout;
+        internal static readonly TimeSpan AckTimeout;
         internal static readonly float? SendRateLimit;
         internal static readonly ulong? SendBuffer;
 
@@ -24,6 +25,7 @@ namespace AUTD3
                 ResponseTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_response_timeout);
                 EnumerationTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_enumeration_timeout);
                 SyncTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_sync_timeout);
+                AckTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_ack_timeout);
                 SendRateLimit = TransportOption.ReadSendRateLimit(handle);
                 SendBuffer = TransportOption.ReadSendBuffer(handle);
             }
@@ -51,6 +53,8 @@ namespace AUTD3
         public TimeSpan EnumerationTimeout { get => _enumerationTimeout ?? TransportOptionDefaults.EnumerationTimeout; init => _enumerationTimeout = value; }
         private readonly TimeSpan? _syncTimeout;
         public TimeSpan SyncTimeout { get => _syncTimeout ?? TransportOptionDefaults.SyncTimeout; init => _syncTimeout = value; }
+        private readonly TimeSpan? _ackTimeout;
+        public TimeSpan AckTimeout { get => _ackTimeout ?? TransportOptionDefaults.AckTimeout; init => _ackTimeout = value; }
 
         private readonly bool _sendRateLimitSet;
         private readonly float? _sendRateLimit;
@@ -104,6 +108,7 @@ namespace AUTD3
                 OptionNative.SetRequiredDuration(handle, "responseTimeout", ResponseTimeout, NativeClient.autd3_transport_option_set_response_timeout);
                 OptionNative.SetRequiredDuration(handle, "enumerationTimeout", EnumerationTimeout, NativeClient.autd3_transport_option_set_enumeration_timeout);
                 OptionNative.SetRequiredDuration(handle, "syncTimeout", SyncTimeout, NativeClient.autd3_transport_option_set_sync_timeout);
+                OptionNative.SetRequiredDuration(handle, "ackTimeout", AckTimeout, NativeClient.autd3_transport_option_set_ack_timeout);
                 OptionNative.Apply("sendRateLimit", SendRateLimit switch
                 {
                     null => NativeClient.autd3_transport_option_set_send_rate_limit(handle, false, 0),
@@ -132,6 +137,7 @@ namespace AUTD3
             ResponseTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_response_timeout),
             EnumerationTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_enumeration_timeout),
             SyncTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_sync_timeout),
+            AckTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_ack_timeout),
             SendRateLimit = ReadSendRateLimit(handle),
             SendBuffer = ReadSendBuffer(handle),
         };

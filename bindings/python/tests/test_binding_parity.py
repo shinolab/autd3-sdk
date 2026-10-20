@@ -178,7 +178,7 @@ def test_rust_required_fields_cannot_be_omitted() -> None:
     "build",
     [
         lambda: autd3.TransportOption(reply_timeout=loose(None)),
-        lambda: autd3.ClientConfig(max_inflight=loose(None)),
+        lambda: autd3.TransportOption(ack_timeout=loose(None)),
         lambda: FociStmOption(bank=loose(None)),
         lambda: FociStmOption(sound_speed=loose(None)),
         lambda: PatternStmOption(transition_mode=loose(None)),
@@ -327,21 +327,21 @@ def test_command_contents_are_checked_when_encoded() -> None:
 
 
 def test_a_zero_ack_timeout_is_rejected_at_open() -> None:
-    config = autd3.ClientConfig(ack_timeout=Duration.from_nanos(0))
+    option = autd3.TransportOption(ack_timeout=Duration.from_nanos(0))
 
     async def open_client() -> None:
-        await autd3.Client.open(one_device(), autd3.TransportOption(), config)
+        await autd3.Client.open(one_device(), option)
 
     with pytest.raises(autd3.Autd3Error, match="ack_timeout") as err:
         asyncio.run(open_client())
-    assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
+    assert err.value.code == autd3.Autd3Error.NETWORK
 
 
 def test_a_zero_lost_timeout_is_rejected_at_open() -> None:
     option = autd3.TransportOption(lost_timeout=Duration.from_nanos(0))
 
     async def open_client() -> None:
-        await autd3.Client.open(one_device(), option, autd3.ClientConfig())
+        await autd3.Client.open(one_device(), option)
 
     with pytest.raises(autd3.Autd3Error, match="lost_timeout") as err:
         asyncio.run(open_client())

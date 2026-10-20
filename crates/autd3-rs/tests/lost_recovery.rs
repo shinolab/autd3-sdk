@@ -9,7 +9,7 @@ use autd3_rs::{Client, DeviceMask, DeviceState};
 use autd3_rs_firmware_emulator::test_utils::FpgaEmulatorTestExt;
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
-use common::{PATIENCE, config, emulator, monitoring_option, open_with};
+use common::{PATIENCE, emulator, monitoring_option, open_with};
 
 const ADDR_SYNC_TIME_0: u16 = 0x10;
 const SETTLE: Duration = Duration::from_millis(200);
@@ -18,7 +18,7 @@ const FAILSAFE_TIMEOUT: Duration = Duration::from_millis(500);
 
 async fn open_monitoring(num_devices: usize) -> (UdpEmulator, Client) {
     let emulator = emulator(num_devices);
-    let client = open_with(&emulator, &monitoring_option(&emulator), config()).await;
+    let client = open_with(&emulator, &monitoring_option(&emulator)).await;
     (emulator, client)
 }
 

@@ -123,7 +123,7 @@ pub(crate) struct Cli {
         long = "ack-timeout",
         value_parser = humantime::parse_duration,
         default_value = DEFAULT_ACK_TIMEOUT,
-        help = "maps to ClientConfig.ack_timeout"
+        help = "maps to TransportOption.ack_timeout"
     )]
     pub ack_timeout: Duration,
     #[arg(
@@ -154,7 +154,7 @@ pub(crate) struct Cli {
         long = "max-inflight",
         alias = "inflight",
         default_value_t = DEVICE_QUEUE_FRAMES,
-        help = "Pipeline depth in streaming mode (maps to ClientConfig.max_inflight). \
+        help = "Pipeline depth in streaming mode: frames sent before awaiting the oldest response. \
                 Stop-and-wait ignores it except with --command write-modulation-buffer, \
                 which pipelines the frames of one sample up to this depth."
     )]

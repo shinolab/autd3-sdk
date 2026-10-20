@@ -6,7 +6,7 @@ use autd3_rs::commands::ActivateModulationBank;
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::udp::{TransportOption, UdpError};
 use autd3_rs::value::{ModulationBank, TransitionMode};
-use autd3_rs::{Client, ClientConfig, Error};
+use autd3_rs::{Client, Error};
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
 pub(crate) const ACK_TIMEOUT: Duration = Duration::from_millis(250);
@@ -36,6 +36,7 @@ pub(crate) fn option(emulator: &UdpEmulator) -> TransportOption {
         response_timeout: Duration::from_millis(50),
         enumeration_timeout: Duration::from_secs(1),
         sync_timeout: Duration::from_secs(5),
+        ack_timeout: ACK_TIMEOUT,
         ..TransportOption::default()
     }
 }
@@ -47,33 +48,22 @@ pub(crate) fn monitoring_option(emulator: &UdpEmulator) -> TransportOption {
     }
 }
 
-pub(crate) fn config() -> ClientConfig {
-    ClientConfig {
-        ack_timeout: ACK_TIMEOUT,
-        ..ClientConfig::default()
-    }
-}
-
-pub(crate) fn patient_config() -> ClientConfig {
-    ClientConfig {
+pub(crate) fn patient_option(emulator: &UdpEmulator) -> TransportOption {
+    TransportOption {
         ack_timeout: LONG_ACK_TIMEOUT,
-        ..ClientConfig::default()
+        ..option(emulator)
     }
 }
 
-pub(crate) async fn open_with(
-    emulator: &UdpEmulator,
-    option: &TransportOption,
-    config: ClientConfig,
-) -> Client {
-    Client::open(&geometry(emulator.num_devices()), option, config)
+pub(crate) async fn open_with(emulator: &UdpEmulator, option: &TransportOption) -> Client {
+    Client::open(&geometry(emulator.num_devices()), option)
         .await
         .unwrap()
 }
 
 pub(crate) async fn open(num_devices: usize) -> (UdpEmulator, Client) {
     let emulator = emulator(num_devices);
-    let client = open_with(&emulator, &option(&emulator), config()).await;
+    let client = open_with(&emulator, &option(&emulator)).await;
     (emulator, client)
 }
 
@@ -87,7 +77,6 @@ pub(crate) fn udp_error(error: &Error) -> Option<&UdpError> {
         | Error::SeqMismatch { .. }
         | Error::DeviceTimeUnknown
         | Error::InvalidPayload(_)
-        | Error::InvalidConfig(_)
         | Error::Encode(_)
         | Error::Closed => None,
         _ => unreachable!(),

@@ -9,7 +9,7 @@ internal static class Sample
     internal static async Task Run()
     {
         var geometry = new Geometry(new[] { new Autd3() });
-        await using var client = await Client.OpenAsync(geometry, new TransportOption(), new ClientConfig());
+        await using var client = await Client.OpenAsync(geometry, new TransportOption());
 
         // ANCHOR: construct
         var opened = SysTime.Zero;

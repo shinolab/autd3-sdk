@@ -4,13 +4,13 @@ use anyhow::Result;
 
 use autd3_rs::commands::{Clear, SetSilencer, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::{ClientConfig, Controller, Driver, Error, TransportOption};
+use autd3_rs::{Controller, Driver, Error, TransportOption};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(1);
 
 async fn with_run(geometry: &Geometry, option: &TransportOption) -> Result<()> {
     // ANCHOR: run
-    let (controller, driver) = Controller::open(geometry, option, ClientConfig::default())?;
+    let (controller, driver) = Controller::open(geometry, option)?;
     let driving = std::thread::spawn(move || driver.run());
 
     controller.initialize().await?;
@@ -33,7 +33,7 @@ fn drive(mut driver: Driver) -> Result<(), Error> {
 // ANCHOR_END: poll
 
 async fn with_poll(geometry: &Geometry, option: &TransportOption) -> Result<()> {
-    let (controller, driver) = Controller::open(geometry, option, ClientConfig::default())?;
+    let (controller, driver) = Controller::open(geometry, option)?;
     let driving = std::thread::spawn(move || drive(driver));
 
     controller.initialize().await?;
@@ -64,7 +64,7 @@ async fn on_single_thread(geometry: &Geometry, option: &TransportOption) -> Resu
         Ok(())
     }
 
-    let (controller, driver) = Controller::open(geometry, option, ClientConfig::default())?;
+    let (controller, driver) = Controller::open(geometry, option)?;
     let driving = tokio::spawn(drive_on_reactor(driver));
 
     controller.initialize().await?;

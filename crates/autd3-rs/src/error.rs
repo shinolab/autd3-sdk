@@ -75,9 +75,6 @@ pub enum Error {
     #[error("invalid payload: {0}")]
     InvalidPayload(PayloadError),
 
-    #[error("invalid client config: {0}")]
-    InvalidConfig(ClientConfigError),
-
     #[error(transparent)]
     Encode(#[from] EncodeError),
 
@@ -98,16 +95,6 @@ where
     fn from(value: E) -> Self {
         Error::InvalidPayload(value.into())
     }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
-#[non_exhaustive]
-pub enum ClientConfigError {
-    #[error("max_inflight must be <= {max}")]
-    MaxInflightTooLarge { max: usize },
-
-    #[error("ack_timeout must be longer than zero")]
-    ZeroAckTimeout,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Error)]

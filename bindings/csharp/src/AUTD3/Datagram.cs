@@ -6,67 +6,6 @@ namespace AUTD3
 {
 
 
-    internal static class ClientConfigDefaults
-    {
-        internal static readonly ClientConfig Preset;
-
-        static ClientConfigDefaults()
-        {
-            var handle = NativeClient.autd3_client_config_new();
-            if (handle == IntPtr.Zero)
-            {
-                throw new Autd3Exception("failed to create client config");
-            }
-            try
-            {
-                Preset = ClientConfig.FromHandle(handle);
-            }
-            finally
-            {
-                NativeClient.autd3_client_config_free(handle);
-            }
-        }
-    }
-
-    public readonly struct ClientConfig
-    {
-        private readonly TimeSpan? _ackTimeout;
-        public TimeSpan AckTimeout { get => _ackTimeout ?? ClientConfigDefaults.Preset.AckTimeout; init => _ackTimeout = value; }
-        private readonly uint? _maxInflight;
-        public uint MaxInflight { get => _maxInflight ?? ClientConfigDefaults.Preset.MaxInflight; init => _maxInflight = value; }
-
-        internal static ClientConfig FromHandle(IntPtr handle)
-        {
-            var ackTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_client_config_get_ack_timeout_ns);
-            OptionNative.Apply("preset", NativeClient.autd3_client_config_get_max_inflight(handle, out var maxInflight));
-            return new ClientConfig
-            {
-                AckTimeout = ackTimeout,
-                MaxInflight = (uint)maxInflight,
-            };
-        }
-
-        internal IntPtr CreateHandle()
-        {
-            var handle = NativeClient.autd3_client_config_new();
-            if (handle == IntPtr.Zero)
-            {
-                throw new Autd3Exception("failed to create client config");
-            }
-            try
-            {
-                OptionNative.SetRequiredDuration(handle, "ackTimeout", AckTimeout, NativeClient.autd3_client_config_set_ack_timeout_ns);
-                OptionNative.Apply("maxInflight", NativeClient.autd3_client_config_set_max_inflight(handle, (UIntPtr)MaxInflight));
-            }
-            catch
-            {
-                NativeClient.autd3_client_config_free(handle);
-                throw;
-            }
-            return handle;
-        }
-    }
-
     public readonly struct Frame
     {
         internal Frames Frames { get; }

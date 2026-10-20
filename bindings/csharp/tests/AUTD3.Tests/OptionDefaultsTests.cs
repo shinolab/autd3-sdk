@@ -7,33 +7,20 @@ namespace AUTD3.Tests
     public class OptionDefaultsTests
     {
         [Fact]
-        public void ClientConfigMatchesTheRustDefault()
+        public void ATransportOptionReadBackFromTheNativeOptionKeepsTheAckTimeout()
         {
-            var config = new ClientConfig();
-            Assert.Equal(TimeSpan.FromMilliseconds(10), config.AckTimeout);
-            Assert.Equal(7u, config.MaxInflight);
-        }
-
-        [Fact]
-        public void AClientConfigReadBackFromTheNativeConfigKeepsEveryField()
-        {
-            var config = new ClientConfig
-            {
-                AckTimeout = TimeSpan.FromMilliseconds(25),
-                MaxInflight = 3,
-            };
-            var handle = config.CreateHandle();
-            ClientConfig back;
+            var option = new TransportOption { AckTimeout = TimeSpan.FromMilliseconds(25) };
+            var handle = option.CreateHandle();
+            TransportOption back;
             try
             {
-                back = ClientConfig.FromHandle(handle);
+                back = TransportOption.FromHandle(handle);
             }
             finally
             {
-                NativeClient.autd3_client_config_free(handle);
+                NativeClient.autd3_transport_option_free(handle);
             }
-            Assert.Equal(config.AckTimeout, back.AckTimeout);
-            Assert.Equal(config.MaxInflight, back.MaxInflight);
+            Assert.Equal(option.AckTimeout, back.AckTimeout);
         }
 
         [Fact]
@@ -108,9 +95,9 @@ namespace AUTD3.Tests
         [Fact]
         public void InitializerKeepsTheOtherDefaults()
         {
-            var config = new ClientConfig { MaxInflight = 4 };
-            Assert.Equal(4u, config.MaxInflight);
-            Assert.Equal(TimeSpan.FromMilliseconds(10), config.AckTimeout);
+            var option = new TransportOption { AckTimeout = TimeSpan.FromMilliseconds(4) };
+            Assert.Equal(TimeSpan.FromMilliseconds(4), option.AckTimeout);
+            Assert.Equal(TimeSpan.FromMilliseconds(100), option.LostTimeout);
 
             var gs = new GsOption { Repeat = 5 };
             Assert.Equal(5u, gs.Repeat);
@@ -186,7 +173,6 @@ namespace AUTD3.Tests
         }
 
         [Theory]
-        [InlineData(typeof(ClientConfig))]
         [InlineData(typeof(TransportOption))]
         [InlineData(typeof(CpuConfig))]
         [InlineData(typeof(PtpConfig))]
@@ -215,7 +201,7 @@ namespace AUTD3.Tests
         [Fact]
         public void TheDefaultValueCarriesTheRustDefaults()
         {
-            Assert.Equal(7u, default(ClientConfig).MaxInflight);
+            Assert.Equal(TimeSpan.FromMilliseconds(10), default(TransportOption).AckTimeout);
             Assert.Equal(TimeSpan.FromMilliseconds(100), default(TransportOption).LostTimeout);
             Assert.Equal(new PtpConfig().SyncInterval, default(CpuConfig).Ptp.SyncInterval);
             Assert.NotEqual(TimeSpan.Zero, default(PtpConfig).SyncInterval);

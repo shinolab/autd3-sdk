@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use autd3_rs::{ClientConfig, ExecAt};
+use autd3_rs::{ExecAt, TransportOption};
 use clap::Parser;
 
 #[derive(Parser, Debug, Clone)]
@@ -30,7 +30,7 @@ pub(crate) struct Cli {
     pub exec_lead_us: Option<u64>,
     #[arg(
         long,
-        help = "Maps to ClientConfig::ack_timeout. Must exceed --exec-lead-us"
+        help = "Maps to TransportOption::ack_timeout. Must exceed --exec-lead-us"
     )]
     pub ack_timeout_ms: Option<u64>,
     #[arg(
@@ -55,26 +55,22 @@ impl Cli {
         if self.ack_timeout_ms == Some(0) {
             return Err("--ack-timeout-ms must be at least 1".to_string());
         }
-        let config = self.client_config();
+        let ack_timeout = self.ack_timeout();
         if let ExecAt::Lead(exec_lead) = self.exec()
-            && config.ack_timeout <= exec_lead
+            && ack_timeout <= exec_lead
         {
             return Err(format!(
-                "the ack timeout {:?} must exceed --exec-lead-us {exec_lead:?}; raise --ack-timeout-ms",
-                config.ack_timeout
+                "the ack timeout {ack_timeout:?} must exceed --exec-lead-us {exec_lead:?}; raise --ack-timeout-ms"
             ));
         }
         Ok(())
     }
 
-    pub(crate) fn client_config(&self) -> ClientConfig {
-        let default = ClientConfig::default();
-        ClientConfig {
-            ack_timeout: self
-                .ack_timeout_ms
-                .map_or(default.ack_timeout, Duration::from_millis),
-            ..default
-        }
+    pub(crate) fn ack_timeout(&self) -> Duration {
+        self.ack_timeout_ms.map_or(
+            TransportOption::default().ack_timeout,
+            Duration::from_millis,
+        )
     }
 
     pub(crate) fn exec(&self) -> ExecAt {

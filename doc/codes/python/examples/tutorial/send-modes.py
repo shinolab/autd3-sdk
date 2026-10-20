@@ -3,7 +3,7 @@ import collections
 import math
 
 import autd3_pattern as pattern
-from autd3 import Client, ClientConfig, Frames, MAX_INFLIGHT, TransportOption
+from autd3 import Client, Frames, MAX_INFLIGHT, TransportOption
 from autd3.commands import Clear, Pattern, SetSilencer, Synchronize
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import m, mm, s
@@ -19,7 +19,6 @@ async def main() -> None:
     async with await Client.open(
         geometry,
         TransportOption(),
-        ClientConfig(),
     ) as client:
         await client.send((Clear(), Synchronize()))
 

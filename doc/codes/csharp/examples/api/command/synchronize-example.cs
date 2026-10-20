@@ -10,7 +10,7 @@ internal static class Sample
     {
         // HIDE_END
 var geometry = new Geometry(new[] { new Autd3() });
-await using var client = await Client.OpenAsync(geometry, new TransportOption(), new ClientConfig());
+await using var client = await Client.OpenAsync(geometry, new TransportOption());
 
 await client.SendAsync(new Synchronize());
         // HIDE

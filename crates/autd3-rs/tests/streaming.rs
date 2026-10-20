@@ -1,16 +1,13 @@
 mod common;
 
-use std::num::NonZeroUsize;
 use std::pin::pin;
 use std::task::{Context, Waker};
 
 use autd3_rs::commands::{Modulation, Nop};
 use autd3_rs::value::SamplingConfig;
-use autd3_rs::{ClientConfig, Error, Frames, MAX_INFLIGHT, PayloadError};
+use autd3_rs::{Error, Frames, MAX_INFLIGHT, PayloadError};
 
-use common::{
-    INVALID_TRANSITION_MODE, REJECTED_BY_THE_DEVICE, config, emulator, open, open_with, option,
-};
+use common::{INVALID_TRANSITION_MODE, REJECTED_BY_THE_DEVICE, emulator, open, open_with, option};
 
 fn samples(len: u32) -> Vec<u8> {
     (0..len).map(|i| i.to_le_bytes()[0] ^ 0x5A).collect()
@@ -54,42 +51,36 @@ async fn frames_sent_without_waiting_arrive_whole_on_every_device() {
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn send_frame_waits_while_the_window_is_full() {
-    for window in [1, 3, MAX_INFLIGHT] {
-        let emulator = emulator(1);
-        let config = ClientConfig {
-            max_inflight: NonZeroUsize::new(window).unwrap(),
-            ..config()
-        };
-        let client = open_with(&emulator, &option(&emulator), config).await;
-        let nop = Frames::encode(client.geometry(), Nop).unwrap();
-        let before = client.bus_stats().frames();
+    let emulator = emulator(1);
+    let client = open_with(&emulator, &option(&emulator)).await;
+    let nop = Frames::encode(client.geometry(), Nop).unwrap();
+    let before = client.bus_stats().frames();
 
-        emulator.pause_main_loop(0);
-        let mut queued = Vec::with_capacity(window);
-        for _ in 0..window {
-            queued.push(client.send_frame(nop.frame(0).unwrap()).await.unwrap());
-        }
-        {
-            let mut next = pin!(client.send_frame(nop.frame(0).unwrap()));
-            assert!(
-                next.as_mut()
-                    .poll(&mut Context::from_waker(Waker::noop()))
-                    .is_pending()
-            );
-        }
-
-        assert_eq!(
-            client.bus_stats().frames() - before,
-            u64::try_from(window).unwrap()
-        );
-        for response in queued {
-            assert!(matches!(response.await, Err(Error::Timeout { .. })));
-        }
-        emulator.resume_main_loop(0);
-        client.send(Nop).await.unwrap();
-        assert_eq!(client.bus_stats().resets(), 2);
-        client.close().await.unwrap();
+    emulator.pause_main_loop(0);
+    let mut queued = Vec::with_capacity(MAX_INFLIGHT);
+    for _ in 0..MAX_INFLIGHT {
+        queued.push(client.send_frame(nop.frame(0).unwrap()).await.unwrap());
     }
+    {
+        let mut next = pin!(client.send_frame(nop.frame(0).unwrap()));
+        assert!(
+            next.as_mut()
+                .poll(&mut Context::from_waker(Waker::noop()))
+                .is_pending()
+        );
+    }
+
+    assert_eq!(
+        client.bus_stats().frames() - before,
+        u64::try_from(MAX_INFLIGHT).unwrap()
+    );
+    for response in queued {
+        assert!(matches!(response.await, Err(Error::Timeout { .. })));
+    }
+    emulator.resume_main_loop(0);
+    client.send(Nop).await.unwrap();
+    assert_eq!(client.bus_stats().resets(), 2);
+    client.close().await.unwrap();
 }
 
 #[tokio::test]

@@ -14,6 +14,7 @@ pub struct TransportOption {
     pub response_timeout: Duration,
     pub enumeration_timeout: Duration,
     pub sync_timeout: Duration,
+    pub ack_timeout: Duration,
     pub send_rate_limit: Option<f32>,
     pub send_buffer: Option<NonZeroUsize>,
 }
@@ -27,6 +28,7 @@ impl Default for TransportOption {
             response_timeout: Duration::from_millis(200),
             enumeration_timeout: Duration::from_secs(10),
             sync_timeout: Duration::from_secs(30),
+            ack_timeout: Duration::from_millis(10),
             send_rate_limit: None,
             send_buffer: NonZeroUsize::new(8 * 1024),
         }
@@ -43,6 +45,9 @@ impl TransportOption {
         }
         if self.response_timeout.is_zero() {
             return Err(UdpError::ZeroResponseTimeout);
+        }
+        if self.ack_timeout.is_zero() {
+            return Err(UdpError::ZeroAckTimeout);
         }
         if let Interface::Simulator(port) = self.iface
             && simulator::control_port(port).is_none()
@@ -75,6 +80,7 @@ mod tests {
         assert_eq!(option.response_timeout, Duration::from_millis(200));
         assert_eq!(option.enumeration_timeout, Duration::from_secs(10));
         assert_eq!(option.sync_timeout, Duration::from_secs(30));
+        assert_eq!(option.ack_timeout, Duration::from_millis(10));
         assert_eq!(option.send_rate_limit, None);
         assert_eq!(option.send_buffer, NonZeroUsize::new(8192));
         assert!(option.validate().is_ok());
@@ -137,6 +143,13 @@ mod tests {
         },
         |e: &UdpError| matches!(e, UdpError::ZeroResponseTimeout)
     )]
+    #[case::zero_ack_timeout(
+        TransportOption {
+            ack_timeout: Duration::ZERO,
+            ..TransportOption::default()
+        },
+        |e: &UdpError| matches!(e, UdpError::ZeroAckTimeout)
+    )]
     fn a_duration_at_or_below_its_bound_is_rejected(
         #[case] option: TransportOption,
         #[case] is_expected: fn(&UdpError) -> bool,
@@ -152,6 +165,7 @@ mod tests {
             response_timeout: Duration::MAX,
             enumeration_timeout: Duration::MAX,
             sync_timeout: Duration::MAX,
+            ack_timeout: Duration::MAX,
             ..TransportOption::default()
         };
         assert!(option.validate().is_ok());
