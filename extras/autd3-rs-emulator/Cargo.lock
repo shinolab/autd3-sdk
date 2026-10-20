@@ -207,10 +207,7 @@ version = "0.12.0"
 dependencies = [
  "autd3-cpu-wire",
  "nalgebra",
- "serde",
- "serde_json",
  "thiserror",
- "tracing",
  "zerocopy",
 ]
 
