@@ -30,7 +30,7 @@ fn request(bus: &UdpBus, cmd: Cmd, seq: Seq, ack: u8) -> Result<()> {
     let first = bus.next_msg_id();
     let end = Instant::now() + REQUEST_TIMEOUT;
     while Instant::now() < end {
-        bus.send_broadcast(&frame)?;
+        bus.broadcast(bus.reserve_msg_id(), &frame)?;
         let retransmit_at = (Instant::now() + RETRANSMIT_INTERVAL).min(end);
         while let Some(reply) = bus.recv(retransmit_at)? {
             if not_before(reply.msg_id, first) && reply.ack == ack {

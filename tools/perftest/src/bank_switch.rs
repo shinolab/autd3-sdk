@@ -212,7 +212,7 @@ impl Session {
     fn reset(&mut self) -> Result<()> {
         let reset = stage(Seq::ZERO, 0, &Datagram::no_payload(Cmd::Reset));
         for _ in 0..self.reset_rounds.get() {
-            let sent = self.bus.send_broadcast(&reset)?;
+            let sent = self.bus.broadcast(self.bus.reserve_msg_id(), &reset)?;
             let mut confirmed = vec![false; self.bus.num_devices()];
             let deadline = Instant::now() + self.ack_timeout;
             while confirmed.contains(&false) && Instant::now() < deadline {
@@ -255,7 +255,7 @@ impl Session {
             let seq = self.next_seq;
             self.next_seq = seq.next();
             let bytes: Vec<Vec<u8>> = datagrams.iter().map(|d| stage(seq, exec_at, d)).collect();
-            match self.bus.send(&bytes) {
+            match self.bus.send(self.bus.reserve_msg_id(), &bytes) {
                 Ok(sent) => {
                     if let Some(unsent) = sent.unsent {
                         eprintln!(

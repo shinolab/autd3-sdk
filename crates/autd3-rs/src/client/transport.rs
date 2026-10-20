@@ -51,9 +51,9 @@ impl Transport {
     pub(crate) fn send(&self, msg_id: u16, broadcast: bool, frames: &[FrameBuf]) -> Dispatch {
         match self {
             Transport::Udp(bus) => Dispatch::Settled(if broadcast {
-                bus.send_broadcast_as(msg_id, frames[0].as_ref())
+                bus.broadcast(msg_id, frames[0].as_ref())
             } else {
-                bus.send_as(msg_id, frames)
+                bus.send(msg_id, frames)
             }),
             Transport::Server(conn) => {
                 let frames = if broadcast { &frames[..1] } else { frames };

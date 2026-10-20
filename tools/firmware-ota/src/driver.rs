@@ -270,7 +270,7 @@ fn await_replies(
     let mut sent = Vec::new();
     let end = Instant::now() + timeout;
     while Instant::now() < end {
-        sent.push(bus.send(frames)?.msg_id);
+        sent.push(bus.send(bus.reserve_msg_id(), frames)?.msg_id);
         let retransmit_at = (Instant::now() + retransmit).min(end);
         loop {
             let keepalive = (Instant::now()
