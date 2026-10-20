@@ -6,7 +6,7 @@ use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{LoopBehavior, PatternBank, SamplingConfig};
 
-use super::{Encoded, Operation, encode_fixed};
+use super::{Encoded, Operation, encode_header_only};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ConfigPattern {
@@ -36,7 +36,7 @@ impl Operation for ConfigPattern {
             self.size,
             self.loop_behavior.rep(),
         )?;
-        Ok(encode_fixed(out, Cmd::ConfigPattern, &payload))
+        Ok(encode_header_only(out, Cmd::ConfigPattern, &payload))
     }
 }
 
@@ -52,7 +52,7 @@ impl Operation for ConfigFociStm {
             self.sound_speed.m_s(),
             self.loop_behavior.rep(),
         )?;
-        Ok(encode_fixed(out, Cmd::ConfigPattern, &payload))
+        Ok(encode_header_only(out, Cmd::ConfigPattern, &payload))
     }
 }
 

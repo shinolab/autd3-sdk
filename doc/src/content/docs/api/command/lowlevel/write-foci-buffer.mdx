@@ -23,7 +23,7 @@ import { excerpt } from "@lib/excerpt";
 | フィールド     | 型                    | 説明                               |
 | -------------- | --------------------- | ---------------------------------- |
 | `bank`         | `PatternBank`         | 書き込み先バンク                   |
-| `index_offset` | `usize`               | バンク内の書き込み開始インデックス |
+| `start_index` | `usize`               | バンク内の書き込み開始インデックス |
 | `points`       | `&[ControlPoints<N>]` | 焦点サンプルの列                   |
 
 `ControlPoints<N>` は `N` 個の焦点 (`ControlPoint`) と振幅を持つ 1 サンプル.

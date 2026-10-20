@@ -31,7 +31,7 @@ async def main() -> None:
         await client.send(
             WritePatternPhase(
                 bank=bank,
-                index=0,
+                start_index=0,
                 depth=PhaseDepth.Bits4,
                 intensity=Intensity.MAX,
                 patterns=patterns,

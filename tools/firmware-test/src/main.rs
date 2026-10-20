@@ -46,7 +46,7 @@ impl Session {
                 ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
                 loop {
                     ticker.tick().await;
-                    if client.heartbeat().is_err() {
+                    if client.send_heartbeat().is_err() {
                         break;
                     }
                 }

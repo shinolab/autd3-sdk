@@ -59,7 +59,7 @@ fn main() {
     for (k, chunk) in patterns.chunks(max_count).enumerate() {
         WritePatternPhase {
             bank: option.bank,
-            index: k * max_count,
+            start_index: k * max_count,
             depth: option.phase_depth,
             intensity: intensities,
             patterns: chunk,

@@ -65,7 +65,7 @@ In C#, the `Duration` fields are passed as `TimeSpan`, so they can only be speci
 :::danger
 `failsafe_timeout` is `None` (disabled) by default, so a device keeps emitting ultrasound even when communication is lost because the host crashed or a cable was unplugged.
 Set `failsafe_timeout` if the output should stop when communication is lost.
-If you set it, call [`heartbeat()`](/autd3-sdk/en/api/basics/client/#liveness-check) periodically while there is nothing to send, and keep `failsafe_timeout` well above twice that interval. If it is too short, the output stops even while the host is running.
+If you set it, call [`send_heartbeat()`](/autd3-sdk/en/api/basics/client/#liveness-check) periodically while there is nothing to send, and keep `failsafe_timeout` well above twice that interval. If it is too short, the output stops even while the host is running.
 With `ptp_unlock_failsafe_timeout` set, a device that loses its PTP lock (any device but the first one) stops its output the same way as the failsafe once this long has passed since the loss.
 Locking again takes about 1 s with the default settings, so a shorter value stops the output on every loss of the lock.
 

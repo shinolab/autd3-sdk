@@ -41,13 +41,13 @@ async fn main() -> Result<()> {
 
     let _patterns = vec![geometry.phase_buffer(); 4];
     let patterns = &_patterns;
-    let index = 0;
+    let start_index = 0;
     let depth = PhaseDepth::Bits4;
     let intensity = Intensity::MAX;
     // ANCHOR: compressed
     WritePatternPhase {
         bank,
-        index,
+        start_index,
         depth,
         intensity,
         patterns,

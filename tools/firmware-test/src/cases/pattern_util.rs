@@ -276,7 +276,7 @@ pub(crate) async fn write_foci_bank(
         (
             WriteFociBuffer {
                 bank,
-                index_offset: 0,
+                start_index: 0,
                 points,
             },
             ConfigFociStm {

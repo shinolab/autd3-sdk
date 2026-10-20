@@ -50,7 +50,7 @@ internal static class Sample
         // ANCHOR: equivalent
         new WriteFociBuffer(
             bank: option.Bank,
-            indexOffset: 0,
+            startIndex: 0,
             points: points
         );
         new ConfigFociStm(

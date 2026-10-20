@@ -37,7 +37,7 @@ pub use set_pulse_width_table::{PWE_TABLE_SIZE, SetPulseWidthTable};
 pub use set_silencer::{FixedCompletionTime, FixedUpdateRate, SetSilencer, SilencerConfig};
 pub(crate) use write_foci_chunk::WriteFociChunk;
 pub(crate) use write_modulation_chunk::WriteModulationChunk;
-pub(crate) use write_pattern_buffer::WritePatternBuffers;
+pub(crate) use write_pattern_buffer::WritePatternChunk;
 pub use write_pattern_buffer::{StmIntensity, WritePatternBuffer};
 pub(crate) use write_pattern_fused::WritePatternFused;
 pub use write_pattern_phase::{PhaseDepth, WritePatternPhase};
@@ -80,7 +80,7 @@ pub(crate) fn write_header<'a, H: IntoBytes + Immutable>(
     rest
 }
 
-pub(crate) fn encode_fixed<H: IntoBytes + Immutable>(
+pub(crate) fn encode_header_only<H: IntoBytes + Immutable>(
     out: &mut [u8; PAYLOAD_BYTES],
     cmd: Cmd,
     header: &H,
@@ -89,22 +89,25 @@ pub(crate) fn encode_fixed<H: IntoBytes + Immutable>(
     Encoded::new(cmd, size_of::<H>())
 }
 
-pub(crate) fn device_slot<'a, T>(data: &'a [Vec<T>], device: &Device) -> Result<&'a [T], Error> {
-    let slot = data
+pub(crate) fn checked_device_row<'a, T>(
+    data: &'a [Vec<T>],
+    device: &Device,
+) -> Result<&'a [T], Error> {
+    let row = data
         .get(device.idx())
         .ok_or(PayloadError::DeviceDataOutOfRange {
             device: device.idx(),
             len: data.len(),
         })?;
-    if slot.len() != device.num_transducers() {
+    if row.len() != device.num_transducers() {
         return Err(PayloadError::TransducerCountMismatch {
             device: device.idx(),
-            got: slot.len(),
+            got: row.len(),
             expected: device.num_transducers(),
         }
         .into());
     }
-    Ok(slot)
+    Ok(row)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -133,21 +136,21 @@ mod tests {
             &SetPhaseCorrection { phases: &[] },
             &WriteFociChunk::<1> {
                 bank: PatternBank::B0,
-                index_offset: 0,
+                start_pattern_index: 0,
                 points: &[],
-                focus_start: 0,
-                focus_len: 0,
+                flat_focus_start: 0,
+                flat_focus_count: 0,
             },
             &WritePatternBuffer::new(PatternBank::B0, 0, &[], Intensity::MAX),
-            &WritePatternBuffers {
+            &WritePatternChunk {
                 bank: PatternBank::B0,
-                index: 0,
-                phases: &[],
+                start_index: 0,
+                patterns: &[],
                 intensities: StmIntensity::default(),
             },
             &WritePatternPhase {
                 bank: PatternBank::B0,
-                index: 0,
+                start_index: 0,
                 depth: PhaseDepth::Bits8,
                 intensity: Intensity::MAX,
                 patterns: &[],

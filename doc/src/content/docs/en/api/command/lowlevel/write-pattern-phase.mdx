@@ -23,7 +23,7 @@ import { excerpt } from "@lib/excerpt";
 | Field       | Type                  | Description                                                  |
 | ----------- | --------------------- | ------------------------------------------------------------ |
 | `bank`      | `PatternBank`         | Destination bank                                             |
-| `index`     | `usize`               | Start index for writing within the bank                      |
+| `start_index` | `usize`             | Start index for writing within the bank                      |
 | `depth`     | `PhaseDepth`          | Bit depth of the phase (see below)                           |
 | `intensity` | `Intensity`           | Intensity shared by every transducer and Pattern             |
 | `patterns`  | `&[Vec<Vec<Phase>>]`  | Sequence of phases to write (1 to `depth.max_count()` items) |

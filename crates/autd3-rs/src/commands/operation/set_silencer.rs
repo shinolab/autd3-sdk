@@ -11,7 +11,7 @@ use crate::params::{
 };
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
-use super::{Encoded, Operation, encode_fixed};
+use super::{Encoded, Operation, encode_header_only};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FixedCompletionTime {
@@ -109,7 +109,7 @@ impl Operation for SetSilencer {
             SilencerConfig::FixedCompletionTime(config) => config.payload()?,
             SilencerConfig::FixedUpdateRate(config) => config.payload(),
         };
-        Ok(encode_fixed(out, Cmd::SetSilencer, &payload))
+        Ok(encode_header_only(out, Cmd::SetSilencer, &payload))
     }
 }
 

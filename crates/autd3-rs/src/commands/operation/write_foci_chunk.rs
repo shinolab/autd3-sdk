@@ -11,10 +11,10 @@ use autd3_cpu_wire::payload::WriteFociPayload;
 #[derive(Clone, Debug)]
 pub(crate) struct WriteFociChunk<'a, const N: usize> {
     pub bank: PatternBank,
-    pub index_offset: usize,
+    pub start_pattern_index: usize,
     pub points: &'a [ControlPoints<N>],
-    pub focus_start: usize,
-    pub focus_len: usize,
+    pub flat_focus_start: usize,
+    pub flat_focus_count: usize,
 }
 
 impl<const N: usize> crate::sealed::Sealed for WriteFociChunk<'_, N> {}
@@ -25,25 +25,25 @@ impl<const N: usize> Operation for WriteFociChunk<'_, N> {
     }
 
     fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
-        let start = self.focus_start;
+        let start = self.flat_focus_start;
         let header = WriteFociPayload::new(
             self.bank,
-            (self.index_offset * N).saturating_add(start),
-            self.focus_len,
+            (self.start_pattern_index * N).saturating_add(start),
+            self.flat_focus_count,
         )?;
         let rest = write_header(out, &header);
         for (dst, k) in rest
             .as_chunks_mut::<8>()
             .0
             .iter_mut()
-            .zip(start..start + self.focus_len)
+            .zip(start..start + self.flat_focus_count)
         {
             let focus = self.points[k / N].focus(device, k % N);
             *dst = focus.encode().map_err(EncodeError::from)?.to_le_bytes();
         }
         Ok(Encoded::header_with_data::<WriteFociPayload>(
             Cmd::WriteFociBuffer,
-            self.focus_len * FOCUS_WORDS * 2,
+            self.flat_focus_count * FOCUS_WORDS * 2,
         ))
     }
 }
@@ -61,10 +61,10 @@ mod tests {
             .collect();
         let op = WriteFociChunk {
             bank: PatternBank::B0,
-            index_offset: 10,
+            start_pattern_index: 10,
             points: &points,
-            focus_start: 2,
-            focus_len: 2,
+            flat_focus_start: 2,
+            flat_focus_count: 2,
         };
 
         let (cmd, out) = encode(&op).unwrap();
@@ -93,10 +93,10 @@ mod tests {
         let points = [ControlPoints::from(global)];
         let op = WriteFociChunk {
             bank: PatternBank::B0,
-            index_offset: 0,
+            start_pattern_index: 0,
             points: &points,
-            focus_start: 0,
-            focus_len: 1,
+            flat_focus_start: 0,
+            flat_focus_count: 1,
         };
 
         let mut out = [0u8; PAYLOAD_BYTES];

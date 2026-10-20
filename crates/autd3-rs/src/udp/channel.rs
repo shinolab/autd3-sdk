@@ -15,36 +15,36 @@ use super::pacer::Pacer;
 const RECV_BUFFER_BYTES: usize = 2048;
 
 #[derive(Clone, Debug)]
-pub(crate) struct Response {
+pub(crate) struct ControlResponse {
     pub(crate) src: SocketAddrV6,
     pub(crate) status: u8,
     pub(crate) body: Vec<u8>,
 }
 
-pub(crate) struct Datagram<'a> {
+pub(crate) struct ReceivedPacket<'a> {
     pub(crate) src: SocketAddrV6,
     pub(crate) header: Header,
     pub(crate) body: &'a [u8],
 }
 
-struct Tx {
-    msg_id: u16,
+struct SendState {
+    last_request_msg_id: u16,
     pacer: Option<Pacer>,
 }
 
-struct Rx {
-    nonblocking: bool,
+struct RecvState {
+    socket_is_nonblocking: bool,
     buf: Box<[u8; RECV_BUFFER_BYTES]>,
 }
 
 pub(crate) struct Channel {
     socket: UdpSocket,
-    waker: UdpSocket,
-    group: SocketAddrV6,
-    local_port: u16,
-    waker_port: u16,
-    tx: Mutex<Tx>,
-    rx: Mutex<Rx>,
+    waker_socket: UdpSocket,
+    all_devices_dst: SocketAddrV6,
+    main_socket_port: u16,
+    waker_socket_port: u16,
+    send_state: Mutex<SendState>,
+    recv_state: Mutex<RecvState>,
 }
 
 #[cfg(unix)]
@@ -149,7 +149,7 @@ fn is_transient(e: &io::Error) -> bool {
 }
 
 fn send_until_accepted(
-    give_up: Option<Instant>,
+    retry_full_socket_until: Option<Instant>,
     mut attempt: impl FnMut() -> io::Result<usize>,
     mut wait_writable: impl FnMut(Duration) -> io::Result<()>,
 ) -> io::Result<()> {
@@ -158,8 +158,10 @@ fn send_until_accepted(
             Ok(_) => return Ok(()),
             Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                let remaining = give_up
-                    .map(|give_up| give_up.saturating_duration_since(Instant::now()))
+                let remaining = retry_full_socket_until
+                    .map(|retry_full_socket_until| {
+                        retry_full_socket_until.saturating_duration_since(Instant::now())
+                    })
                     .unwrap_or_default();
                 if remaining.is_zero() {
                     return Err(e);
@@ -173,19 +175,19 @@ fn send_until_accepted(
 
 impl Channel {
     pub(crate) fn open(
-        group: SocketAddrV6,
-        scope: Option<u32>,
-        send_rate_limit: Option<f32>,
-        send_buffer: Option<NonZeroUsize>,
+        all_devices_dst: SocketAddrV6,
+        scope_id: Option<u32>,
+        send_rate_limit_percent: Option<f32>,
+        send_buffer_bytes: Option<NonZeroUsize>,
     ) -> io::Result<Self> {
         let socket = Socket::new(Domain::IPV6, Type::DGRAM, Some(Protocol::UDP))?;
         socket.set_only_v6(true)?;
-        if let Some(scope) = scope {
-            socket.set_multicast_if_v6(scope)?;
+        if let Some(scope_id) = scope_id {
+            socket.set_multicast_if_v6(scope_id)?;
         }
         socket.set_multicast_hops_v6(1)?;
         socket.bind(&SocketAddrV6::new(Ipv6Addr::UNSPECIFIED, 0, 0, 0).into())?;
-        if let Some(bytes) = send_buffer {
+        if let Some(bytes) = send_buffer_bytes {
             socket.set_send_buffer_size(bytes.get())?;
             tracing::debug!(
                 requested = bytes,
@@ -194,68 +196,76 @@ impl Channel {
             );
         }
         let socket: UdpSocket = socket.into();
-        let local_port = socket.local_addr()?.port();
-        let waker = UdpSocket::bind(SocketAddrV6::new(Ipv6Addr::LOCALHOST, 0, 0, 0))?;
-        waker.set_nonblocking(true)?;
-        let waker_port = waker.local_addr()?.port();
+        let main_socket_port = socket.local_addr()?.port();
+        let waker_socket = UdpSocket::bind(SocketAddrV6::new(Ipv6Addr::LOCALHOST, 0, 0, 0))?;
+        waker_socket.set_nonblocking(true)?;
+        let waker_socket_port = waker_socket.local_addr()?.port();
         Ok(Self {
             socket,
-            waker,
-            group,
-            local_port,
-            waker_port,
-            tx: Mutex::new(Tx {
-                msg_id: 0,
-                pacer: send_rate_limit.map(Pacer::new),
+            waker_socket,
+            all_devices_dst,
+            main_socket_port,
+            waker_socket_port,
+            send_state: Mutex::new(SendState {
+                last_request_msg_id: 0,
+                pacer: send_rate_limit_percent.map(Pacer::new),
             }),
-            rx: Mutex::new(Rx {
-                nonblocking: false,
+            recv_state: Mutex::new(RecvState {
+                socket_is_nonblocking: false,
                 buf: Box::new([0; RECV_BUFFER_BYTES]),
             }),
         })
     }
 
-    fn tx(&self) -> MutexGuard<'_, Tx> {
-        self.tx.lock().unwrap_or_else(PoisonError::into_inner)
+    fn lock_send_state(&self) -> MutexGuard<'_, SendState> {
+        self.send_state
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
     }
 
-    fn rx(&self) -> MutexGuard<'_, Rx> {
-        self.rx.lock().unwrap_or_else(PoisonError::into_inner)
+    fn lock_recv_state(&self) -> MutexGuard<'_, RecvState> {
+        self.recv_state
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
     }
 
-    pub(crate) fn group(&self) -> SocketAddrV6 {
-        self.group
+    pub(crate) fn all_devices_dst(&self) -> SocketAddrV6 {
+        self.all_devices_dst
     }
 
-    pub(crate) fn is_wake(&self, src: SocketAddrV6) -> bool {
-        src.ip().is_loopback() && src.port() == self.waker_port
+    pub(crate) fn is_from_waker(&self, src: SocketAddrV6) -> bool {
+        src.ip().is_loopback() && src.port() == self.waker_socket_port
     }
 
     pub(crate) fn wake(&self) -> io::Result<()> {
-        let dst = SocketAddrV6::new(Ipv6Addr::LOCALHOST, self.local_port, 0, 0);
-        self.waker.send_to(&[], dst).map(|_| ())
+        let dst = SocketAddrV6::new(Ipv6Addr::LOCALHOST, self.main_socket_port, 0, 0);
+        self.waker_socket.send_to(&[], dst).map(|_| ())
     }
 
-    fn arm(&self, rx: &mut Rx, deadline: Option<Instant>) -> io::Result<()> {
+    fn apply_recv_deadline(
+        &self,
+        recv_state: &mut RecvState,
+        deadline: Option<Instant>,
+    ) -> io::Result<()> {
         let remaining = deadline.map(|deadline| deadline.saturating_duration_since(Instant::now()));
         if remaining.is_some_and(|remaining| remaining.is_zero()) {
-            if !rx.nonblocking {
+            if !recv_state.socket_is_nonblocking {
                 self.socket.set_nonblocking(true)?;
-                rx.nonblocking = true;
+                recv_state.socket_is_nonblocking = true;
             }
             return Ok(());
         }
-        if rx.nonblocking {
+        if recv_state.socket_is_nonblocking {
             self.socket.set_nonblocking(false)?;
-            rx.nonblocking = false;
+            recv_state.socket_is_nonblocking = false;
         }
         self.socket.set_read_timeout(remaining)
     }
 
-    pub(crate) fn next_msg_id(&self) -> u16 {
-        let mut tx = self.tx();
-        tx.msg_id = tx.msg_id.wrapping_add(1);
-        tx.msg_id
+    pub(crate) fn allocate_request_msg_id(&self) -> u16 {
+        let mut send_state = self.lock_send_state();
+        send_state.last_request_msg_id = send_state.last_request_msg_id.wrapping_add(1);
+        send_state.last_request_msg_id
     }
 
     pub(crate) fn send(
@@ -264,7 +274,7 @@ impl Channel {
         kind: Kind,
         msg_id: u16,
         body: &[u8],
-        give_up: Option<Instant>,
+        retry_full_socket_until: Option<Instant>,
         before_attempt: impl FnMut(),
     ) -> io::Result<()> {
         let mut datagram = [0u8; size_of::<Header>() + FRAME_BYTES_MAX];
@@ -272,14 +282,21 @@ impl Channel {
         datagram[..size_of::<Header>()].copy_from_slice(Header::new(kind, msg_id).as_bytes());
         datagram[size_of::<Header>()..len].copy_from_slice(body);
         let wait = self
-            .tx()
+            .lock_send_state()
             .pacer
             .as_mut()
-            .map_or(Duration::ZERO, |pacer| pacer.reserve(Instant::now(), len));
+            .map_or(Duration::ZERO, |pacer| {
+                pacer.reserve_send_slot(Instant::now(), len)
+            });
         if !wait.is_zero() {
             std::thread::sleep(wait);
         }
-        match self.transmit(&datagram[..len], dst, give_up, before_attempt) {
+        match self.send_with_retry(
+            &datagram[..len],
+            dst,
+            retry_full_socket_until,
+            before_attempt,
+        ) {
             Ok(()) => Ok(()),
             Err(e) if is_undeliverable(&e) => {
                 tracing::debug!(%dst, ?kind, "sending a datagram failed: {e}");
@@ -289,15 +306,15 @@ impl Channel {
         }
     }
 
-    fn transmit(
+    fn send_with_retry(
         &self,
         datagram: &[u8],
         dst: SocketAddrV6,
-        give_up: Option<Instant>,
+        retry_full_socket_until: Option<Instant>,
         mut before_attempt: impl FnMut(),
     ) -> io::Result<()> {
         send_until_accepted(
-            give_up,
+            retry_full_socket_until,
             || {
                 before_attempt();
                 sys::send_now(&self.socket, datagram, dst)
@@ -306,8 +323,13 @@ impl Channel {
         )
     }
 
-    pub(crate) fn request(&self, dst: SocketAddrV6, kind: Kind, body: &[u8]) -> io::Result<u16> {
-        let msg_id = self.next_msg_id();
+    pub(crate) fn send_request(
+        &self,
+        dst: SocketAddrV6,
+        kind: Kind,
+        body: &[u8],
+    ) -> io::Result<u16> {
+        let msg_id = self.allocate_request_msg_id();
         self.send(dst, kind, msg_id, body, None, || {})?;
         Ok(msg_id)
     }
@@ -315,19 +337,19 @@ impl Channel {
     pub(crate) fn recv<R>(
         &self,
         deadline: Option<Instant>,
-        parse: impl FnOnce(&Datagram<'_>) -> R,
+        classify: impl FnOnce(&ReceivedPacket<'_>) -> R,
     ) -> io::Result<Option<R>> {
-        let mut rx = self.rx();
+        let mut recv_state = self.lock_recv_state();
         let (len, src) = loop {
-            self.arm(&mut rx, deadline)?;
-            match self.socket.recv_from(&mut rx.buf[..]) {
+            self.apply_recv_deadline(&mut recv_state, deadline)?;
+            match self.socket.recv_from(&mut recv_state.buf[..]) {
                 Ok((len, src)) if len >= RECV_BUFFER_BYTES => {
                     tracing::debug!(%src, "dropped a datagram that does not fit the receive buffer");
                 }
                 Ok((len, SocketAddr::V6(src))) if len >= size_of::<Header>() => break (len, src),
-                Ok((_, SocketAddr::V6(src))) if self.is_wake(src) => {
+                Ok((_, SocketAddr::V6(src))) if self.is_from_waker(src) => {
                     let header = Header::new(Kind::Heartbeat, 0);
-                    return Ok(Some(parse(&Datagram {
+                    return Ok(Some(classify(&ReceivedPacket {
                         src,
                         header,
                         body: &[],
@@ -342,16 +364,16 @@ impl Channel {
                 Err(e) => return Err(e),
             }
         };
-        let datagram = &rx.buf[..len];
+        let datagram = &recv_state.buf[..len];
         let (header, body) = Header::read_from_prefix(datagram)
             .map_err(|_| io::Error::from(io::ErrorKind::InvalidData))?;
-        Ok(Some(parse(&Datagram { src, header, body })))
+        Ok(Some(classify(&ReceivedPacket { src, header, body })))
     }
 
     pub(crate) fn wait_readable(&self, deadline: Instant) -> io::Result<()> {
-        let mut rx = self.rx();
-        self.arm(&mut rx, Some(deadline))?;
-        match self.socket.peek_from(&mut rx.buf[..]) {
+        let mut recv_state = self.lock_recv_state();
+        self.apply_recv_deadline(&mut recv_state, Some(deadline))?;
+        match self.socket.peek_from(&mut recv_state.buf[..]) {
             Ok(_) => Ok(()),
             Err(e) if is_timeout(&e) || is_transient(&e) || sys::is_oversized(&e) => Ok(()),
             Err(e) => Err(e),
@@ -362,18 +384,18 @@ impl Channel {
         &self.socket
     }
 
-    pub(crate) fn collect(
+    pub(crate) fn collect_responses(
         &self,
         kind: Kind,
         msg_id: u16,
-        window: Duration,
-        enough: Option<usize>,
-    ) -> Result<Vec<Response>, UdpError> {
-        let deadline = Instant::now().checked_add(window);
+        wait: Duration,
+        max_responses: Option<usize>,
+    ) -> Result<Vec<ControlResponse>, UdpError> {
+        let deadline = Instant::now().checked_add(wait);
         let mut responses = Vec::new();
-        while enough.is_none_or(|n| responses.len() < n) {
+        while max_responses.is_none_or(|n| responses.len() < n) {
             let Some(parsed) =
-                self.recv(deadline, |datagram| parse_response(datagram, kind, msg_id))?
+                self.recv(deadline, |packet| parse_response(packet, kind, msg_id))?
             else {
                 break;
             };
@@ -384,37 +406,39 @@ impl Channel {
         Ok(responses)
     }
 
-    pub(crate) fn exchange(
+    pub(crate) fn request_once(
         &self,
         dst: SocketAddrV6,
         kind: Kind,
         body: &[u8],
         timeout: Duration,
-    ) -> Result<Option<Response>, UdpError> {
-        let msg_id = self.request(dst, kind, body)?;
-        Ok(self.collect(kind, msg_id, timeout, Some(1))?.pop())
+    ) -> Result<Option<ControlResponse>, UdpError> {
+        let msg_id = self.send_request(dst, kind, body)?;
+        Ok(self
+            .collect_responses(kind, msg_id, timeout, Some(1))?
+            .pop())
     }
 }
 
 fn parse_response(
-    datagram: &Datagram<'_>,
+    packet: &ReceivedPacket<'_>,
     kind: Kind,
     msg_id: u16,
-) -> Result<Option<Response>, UdpError> {
-    if datagram.header.kind != kind.as_u8() || datagram.header.msg_id.get() != msg_id {
+) -> Result<Option<ControlResponse>, UdpError> {
+    if packet.header.kind != kind.as_u8() || packet.header.msg_id.get() != msg_id {
         return Ok(None);
     }
-    if datagram.header.version != PROTOCOL_VERSION {
+    if packet.header.version != PROTOCOL_VERSION {
         return Err(UdpError::UnsupportedVersion {
-            device: datagram.header.version,
-            host: PROTOCOL_VERSION,
+            device_version: packet.header.version,
+            host_version: PROTOCOL_VERSION,
         });
     }
-    let Some((&status, body)) = datagram.body.split_first() else {
+    let Some((&status, body)) = packet.body.split_first() else {
         return Ok(None);
     };
-    Ok(Some(Response {
-        src: datagram.src,
+    Ok(Some(ControlResponse {
+        src: packet.src,
         status,
         body: body.to_vec(),
     }))

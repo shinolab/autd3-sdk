@@ -32,7 +32,7 @@ internal static class Program
         DeviceStatus? last = null;
         while (!cts.IsCancellationRequested)
         {
-            client.Heartbeat();
+            client.SendHeartbeat();
             var status = checker.Check();
             if (status != last)
             {

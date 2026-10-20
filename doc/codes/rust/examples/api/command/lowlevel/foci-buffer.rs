@@ -16,12 +16,12 @@ fn main() {
     );
     let config = StmConfig::new(1.0 * Hz).into_sampling_config(_points.len());
 
-    let index_offset = 0;
+    let start_index = 0;
     let points = &_points;
     // ANCHOR: write
     WriteFociBuffer {
         bank,
-        index_offset,
+        start_index,
         points,
     };
     // ANCHOR_END: write

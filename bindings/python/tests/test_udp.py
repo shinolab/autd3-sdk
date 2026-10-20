@@ -21,14 +21,14 @@ def loose(value: object) -> Any:
 def test_defaults_follow_the_spec() -> None:
     option = autd3.TransportOption()
     assert option.iface == autd3.Interface.Auto
-    assert option.reply_timeout == autd3.Duration.from_millis(1)
+    assert option.recovery_reply_timeout == autd3.Duration.from_millis(1)
     assert option.lost_timeout == autd3.Duration.from_millis(100)
-    assert option.response_timeout == autd3.Duration.from_millis(200)
+    assert option.control_request_timeout == autd3.Duration.from_millis(200)
     assert option.enumeration_timeout == autd3.Duration.from_secs(10)
     assert option.sync_timeout == autd3.Duration.from_secs(30)
     assert option.ack_timeout == autd3.Duration.from_millis(10)
-    assert option.send_rate_limit is None
-    assert option.send_buffer == 8192
+    assert option.send_rate_limit_percent is None
+    assert option.send_buffer_bytes == 8192
 
 
 def test_fields_round_trip() -> None:
@@ -37,15 +37,15 @@ def test_fields_round_trip() -> None:
         lost_timeout=autd3.Duration.from_millis(50),
         sync_timeout=autd3.Duration.from_secs(3),
         ack_timeout=autd3.Duration.from_millis(3),
-        send_rate_limit=95.0,
+        send_rate_limit_percent=95.0,
     )
     assert option.iface == autd3.Interface.Name("eth1")
     assert option.lost_timeout == autd3.Duration.from_millis(50)
     assert option.sync_timeout == autd3.Duration.from_secs(3)
     assert option.ack_timeout == autd3.Duration.from_millis(3)
-    assert option.send_rate_limit == 95.0
-    assert autd3.TransportOption(send_buffer=None).send_buffer is None
-    assert autd3.TransportOption(send_buffer=65536).send_buffer == 65536
+    assert option.send_rate_limit_percent == 95.0
+    assert autd3.TransportOption(send_buffer_bytes=None).send_buffer_bytes is None
+    assert autd3.TransportOption(send_buffer_bytes=65536).send_buffer_bytes == 65536
 
 
 def test_the_interface_selects_where_to_connect() -> None:
@@ -99,14 +99,14 @@ def test_the_emulator_option_only_shortens_the_timeouts() -> None:
     option = emulator.option()
     default = autd3.TransportOption()
     assert option.iface != default.iface
-    assert option.reply_timeout == autd3.Duration.from_millis(50)
-    assert option.response_timeout == autd3.Duration.from_millis(50)
+    assert option.recovery_reply_timeout == autd3.Duration.from_millis(50)
+    assert option.control_request_timeout == autd3.Duration.from_millis(50)
     assert option.enumeration_timeout == autd3.Duration.from_secs(1)
     assert option.sync_timeout == autd3.Duration.from_secs(5)
     assert option.lost_timeout == default.lost_timeout
     assert option.ack_timeout == default.ack_timeout
-    assert option.send_rate_limit == default.send_rate_limit
-    assert option.send_buffer == default.send_buffer
+    assert option.send_rate_limit_percent == default.send_rate_limit_percent
+    assert option.send_buffer_bytes == default.send_buffer_bytes
 
 
 def test_client_open_takes_a_transport_option() -> None:

@@ -26,12 +26,17 @@ pub enum UdpError {
     SimulatorRejected { status: u8 },
     #[error("interface {0} does not exist or has no IPv6 link-local address")]
     InterfaceNotFound(String),
-    #[error("the device speaks UDP protocol version {device}, but this host speaks version {host}")]
-    UnsupportedVersion { device: u8, host: u8 },
-    #[error("unit {unit} rejected {kind:?} with status {status:#04x}")]
-    Rejected { kind: Kind, unit: u8, status: u8 },
-    #[error("unit {unit} did not answer {kind:?}")]
-    NoResponse { kind: Kind, unit: u8 },
+    #[error(
+        "the device speaks UDP protocol version {device_version}, but this host speaks version {host_version}"
+    )]
+    UnsupportedVersion {
+        device_version: u8,
+        host_version: u8,
+    },
+    #[error("unit {unit_id} rejected {kind:?} with status {status:#04x}")]
+    Rejected { kind: Kind, unit_id: u8, status: u8 },
+    #[error("unit {unit_id} did not answer {kind:?}")]
+    NoResponse { kind: Kind, unit_id: u8 },
     #[error(
         "{replies} unassigned devices answered one Discover; a device failed to close its downstream port"
     )]
@@ -51,15 +56,15 @@ pub enum UdpError {
         not_ready: Vec<u8>,
         timeout: Duration,
     },
-    #[error("reply_timeout must be longer than zero")]
-    ZeroReplyTimeout,
+    #[error("recovery_reply_timeout must be longer than zero")]
+    ZeroRecoveryReplyTimeout,
     #[error("lost_timeout must be longer than zero")]
     ZeroLostTimeout,
-    #[error("response_timeout must be longer than zero")]
-    ZeroResponseTimeout,
+    #[error("control_request_timeout must be longer than zero")]
+    ZeroControlRequestTimeout,
     #[error("ack_timeout must be longer than zero")]
     ZeroAckTimeout,
-    #[error("send_rate_limit must be within {min}..=100 %, but {value} % was given")]
+    #[error("send_rate_limit_percent must be within {min}..=100 %, but {value} % was given")]
     InvalidSendRateLimit { value: f32, min: f32 },
     #[error("the number of devices must be 1..=128, but {0} was given")]
     InvalidDeviceCount(usize),

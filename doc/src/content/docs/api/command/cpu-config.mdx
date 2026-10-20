@@ -65,7 +65,7 @@ C# では `Duration` の項目を `TimeSpan` で渡すので, 100 ns 単位で�
 :::danger
 `failsafe_timeout` は既定で `None` (無効) で, ホストのクラッシュやケーブル断で通信が途絶えてもデバイスは超音波を出力し続ける.
 途絶えたときに出力を止めたい場合は `failsafe_timeout` を指定する.
-指定した場合, 送るものが無い間は [`heartbeat()`](/autd3-sdk/api/basics/client/#生存確認) を周期的に呼び, `failsafe_timeout` はその間隔の 2 倍より十分長く保つこと. 短すぎるとホストが動いていても出力が止まる.
+指定した場合, 送るものが無い間は [`send_heartbeat()`](/autd3-sdk/api/basics/client/#生存確認) を周期的に呼び, `failsafe_timeout` はその間隔の 2 倍より十分長く保つこと. 短すぎるとホストが動いていても出力が止まる.
 `ptp_unlock_failsafe_timeout` を指定すると, PTP のロックを失ったデバイス (先頭のデバイス以外) は, 失ってからこの時間が経つと failsafe と同じ方法で出力を止める.
 再ロックには既定の設定で 1 s 程度かかるので, それより短い値を指定するとロックを失うたびに必ず出力が止まる.
 

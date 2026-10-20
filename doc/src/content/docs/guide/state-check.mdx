@@ -44,7 +44,7 @@ import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 <CodeTabs rust={excerpt(sample, "poll")} python={excerpt(pySample, "poll")} csharp={excerpt(csSample, "poll")} />
 
 `check` を呼ぶ頻度はユーザー次第である.
-状態はデバイスからの返信で更新されるので, フレームを送らない間は [`heartbeat()`](/autd3-sdk/api/basics/client/#生存確認) で生存確認を送る (上の例ではループの先頭で送っている).
+状態はデバイスからの返信で更新されるので, フレームを送らない間は [`send_heartbeat()`](/autd3-sdk/api/basics/client/#生存確認) で生存確認を送る (上の例ではループの先頭で送っている).
 送らない間は, デバイスとの通信が途絶えても `Lost` にならない.
 
 ## Lost からの復帰

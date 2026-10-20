@@ -5,7 +5,7 @@ use crate::error::Error;
 use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
-use super::{Encoded, Operation, encode_fixed};
+use super::{Encoded, Operation, encode_header_only};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct SetFpgaConfig {
@@ -23,7 +23,7 @@ impl crate::sealed::Sealed for SetFpgaConfig {}
 
 impl Operation for SetFpgaConfig {
     fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
-        Ok(encode_fixed(
+        Ok(encode_header_only(
             out,
             Cmd::SetFpgaConfig,
             &SetFpgaConfigPayload::encode(&self.config),

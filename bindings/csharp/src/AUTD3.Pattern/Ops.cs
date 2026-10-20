@@ -37,15 +37,15 @@ namespace AUTD3
     public sealed class WritePatternPhase : ICommand
     {
         private readonly PatternBank _bank;
-        private readonly ushort _index;
+        private readonly ushort _startIndex;
         private readonly PhaseDepth _depth;
         private readonly Intensity _intensity;
         private readonly PhaseBuffer[] _patterns;
 
-        public WritePatternPhase(PatternBank bank, ushort index, PhaseDepth depth, Intensity intensity, PhaseBuffer[] patterns)
+        public WritePatternPhase(PatternBank bank, ushort startIndex, PhaseDepth depth, Intensity intensity, PhaseBuffer[] patterns)
         {
             _bank = bank;
-            _index = index;
+            _startIndex = startIndex;
             _depth = depth;
             _intensity = intensity;
             _patterns = patterns;
@@ -59,7 +59,7 @@ namespace AUTD3
                 handles[i] = _patterns[i].Handle;
             }
             using var lease = new HandleArray(handles);
-            return NativePattern.autd3_op_write_pattern_phase((byte)_bank, _index, _depth.ToBits(), _intensity.Value, lease.Pointers, (UIntPtr)lease.Pointers.Length);
+            return NativePattern.autd3_op_write_pattern_phase((byte)_bank, _startIndex, _depth.ToBits(), _intensity.Value, lease.Pointers, (UIntPtr)lease.Pointers.Length);
         }
     }
 

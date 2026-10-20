@@ -97,12 +97,12 @@ pub(crate) struct Cli {
     #[arg(
         long = "send-rate-limit",
         help = "Cap on the line occupancy of the sends in percent of the device link speed, e.g. 95 \
-                (maps to TransportOption.send_rate_limit). Omit to send without a limit."
+                (maps to TransportOption.send_rate_limit_percent). Omit to send without a limit."
     )]
     pub send_rate_limit: Option<f32>,
     #[arg(
         long = "send-buffer",
-        help = "Socket send buffer in bytes (maps to TransportOption.send_buffer). 0 keeps the OS \
+        help = "Socket send buffer in bytes (maps to TransportOption.send_buffer_bytes). 0 keeps the OS \
                 default. Omit to use the library default."
     )]
     pub send_buffer: Option<usize>,

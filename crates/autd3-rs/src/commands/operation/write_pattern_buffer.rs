@@ -3,7 +3,7 @@ use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{Intensity, PatternBank, PatternIntensity, Phase};
 
-use super::{Distribution, Encoded, Operation, device_slot, write_header};
+use super::{Distribution, Encoded, Operation, checked_device_row, write_header};
 use autd3_cpu_wire::fpga_params::NUM_TRANSDUCERS;
 use autd3_cpu_wire::layout::PATTERN_RAW_DATA_LEN;
 use autd3_cpu_wire::payload::WritePatternRawPayload;
@@ -12,7 +12,7 @@ use zerocopy::IntoBytes;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StmIntensity<'a> {
     Uniform(Intensity),
-    Shared(&'a [Vec<Intensity>]),
+    SameForAllIndices(&'a [Vec<Intensity>]),
     PerIndex(&'a [Vec<Vec<Intensity>>]),
 }
 
@@ -24,17 +24,19 @@ impl Default for StmIntensity<'_> {
 
 impl<'a> StmIntensity<'a> {
     #[must_use]
-    pub(crate) fn at(self, index: usize) -> PatternIntensity<'a> {
+    pub(crate) fn for_pattern(self, index: usize) -> PatternIntensity<'a> {
         match self {
             StmIntensity::Uniform(intensity) => PatternIntensity::Uniform(intensity),
-            StmIntensity::Shared(intensities) => PatternIntensity::PerDevice(intensities),
+            StmIntensity::SameForAllIndices(intensities) => {
+                PatternIntensity::PerDevice(intensities)
+            }
             StmIntensity::PerIndex(intensities) => PatternIntensity::PerDevice(&intensities[index]),
         }
     }
 
     pub(crate) const fn per_index_len(self) -> Option<usize> {
         match self {
-            StmIntensity::Uniform(_) | StmIntensity::Shared(_) => None,
+            StmIntensity::Uniform(_) | StmIntensity::SameForAllIndices(_) => None,
             StmIntensity::PerIndex(intensities) => Some(intensities.len()),
         }
     }
@@ -48,13 +50,13 @@ impl From<Intensity> for StmIntensity<'_> {
 
 impl<'a> From<&'a [Vec<Intensity>]> for StmIntensity<'a> {
     fn from(value: &'a [Vec<Intensity>]) -> Self {
-        StmIntensity::Shared(value)
+        StmIntensity::SameForAllIndices(value)
     }
 }
 
 impl<'a> From<&'a Vec<Vec<Intensity>>> for StmIntensity<'a> {
     fn from(value: &'a Vec<Vec<Intensity>>) -> Self {
-        StmIntensity::Shared(value.as_slice())
+        StmIntensity::SameForAllIndices(value.as_slice())
     }
 }
 
@@ -97,44 +99,44 @@ impl<'a> WritePatternBuffer<'a> {
 
 impl crate::sealed::Sealed for WritePatternBuffer<'_> {}
 
-pub(super) fn encode_raw_slot(
+pub(super) fn encode_raw_pattern_entry(
     phases: &[Vec<Phase>],
     intensities: PatternIntensity<'_>,
     device: &Device,
     dst_phases: &mut [u8],
     dst_intensities: &mut [u8],
 ) -> Result<(), Error> {
-    let phases = device_slot(phases, device)?.as_bytes();
+    let phases = checked_device_row(phases, device)?.as_bytes();
     dst_phases[..phases.len()].copy_from_slice(phases);
     match intensities {
         PatternIntensity::Uniform(intensity) => {
             dst_intensities[..device.num_transducers()].fill(intensity.0);
         }
         PatternIntensity::PerDevice(intensities) => {
-            let intensities = device_slot(intensities, device)?.as_bytes();
+            let intensities = checked_device_row(intensities, device)?.as_bytes();
             dst_intensities[..intensities.len()].copy_from_slice(intensities);
         }
     }
     Ok(())
 }
 
-fn encode_raw_frame<'a>(
+fn encode_raw_patterns<'a>(
     bank: PatternBank,
-    index: usize,
-    slots: impl ExactSizeIterator<Item = (&'a [Vec<Phase>], PatternIntensity<'a>)>,
+    start_index: usize,
+    patterns: impl ExactSizeIterator<Item = (&'a [Vec<Phase>], PatternIntensity<'a>)>,
     device: &Device,
     out: &mut [u8; PAYLOAD_BYTES],
 ) -> Result<Encoded, Error> {
-    let count = slots.len();
-    let header = WritePatternRawPayload::new(bank, count, index)?;
+    let num_patterns = patterns.len();
+    let header = WritePatternRawPayload::new(bank, num_patterns, start_index)?;
     let rest = write_header(out, &header);
-    for ((phases, intensities), data) in slots.zip(rest.chunks_mut(PATTERN_RAW_DATA_LEN)) {
+    for ((phases, intensities), data) in patterns.zip(rest.chunks_mut(PATTERN_RAW_DATA_LEN)) {
         let (dst_phases, dst_intensities) = data.split_at_mut(NUM_TRANSDUCERS);
-        encode_raw_slot(phases, intensities, device, dst_phases, dst_intensities)?;
+        encode_raw_pattern_entry(phases, intensities, device, dst_phases, dst_intensities)?;
     }
     Ok(Encoded::header_with_data::<WritePatternRawPayload>(
         Cmd::WritePatternRaw,
-        count * PATTERN_RAW_DATA_LEN,
+        num_patterns * PATTERN_RAW_DATA_LEN,
     ))
 }
 
@@ -144,7 +146,7 @@ impl Operation for WritePatternBuffer<'_> {
     }
 
     fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
-        encode_raw_frame(
+        encode_raw_patterns(
             self.bank,
             self.index,
             core::iter::once((self.phases, self.intensities)),
@@ -155,28 +157,30 @@ impl Operation for WritePatternBuffer<'_> {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct WritePatternBuffers<'a> {
+pub(crate) struct WritePatternChunk<'a> {
     pub(crate) bank: PatternBank,
-    pub(crate) index: usize,
-    pub(crate) phases: &'a [Vec<Vec<Phase>>],
+    pub(crate) start_index: usize,
+    pub(crate) patterns: &'a [Vec<Vec<Phase>>],
     pub(crate) intensities: StmIntensity<'a>,
 }
 
-impl crate::sealed::Sealed for WritePatternBuffers<'_> {}
+impl crate::sealed::Sealed for WritePatternChunk<'_> {}
 
-impl Operation for WritePatternBuffers<'_> {
+impl Operation for WritePatternChunk<'_> {
     fn distribution(&self) -> Distribution {
         Distribution::PerDevice
     }
 
     fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
-        encode_raw_frame(
+        encode_raw_patterns(
             self.bank,
-            self.index,
-            self.phases
-                .iter()
-                .enumerate()
-                .map(|(k, phases)| (phases.as_slice(), self.intensities.at(self.index + k))),
+            self.start_index,
+            self.patterns.iter().enumerate().map(|(k, phases)| {
+                (
+                    phases.as_slice(),
+                    self.intensities.for_pattern(self.start_index + k),
+                )
+            }),
             device,
             out,
         )
@@ -291,10 +295,10 @@ mod tests {
         let mut intensities = vec![vec![vec![Intensity::MIN; n]]; 10];
         intensities.push(vec![vec![Intensity(0x11); n]]);
         intensities.push(vec![vec![Intensity(0x22); n]]);
-        let op = WritePatternBuffers {
+        let op = WritePatternChunk {
             bank: PatternBank::B0,
-            index: 10,
-            phases: &phases,
+            start_index: 10,
+            patterns: &phases,
             intensities: StmIntensity::PerIndex(&intensities),
         };
         let (encoded, out) = encode(&op).unwrap();
@@ -317,10 +321,10 @@ mod tests {
     fn two_indices_must_fit_below_the_last_slot() {
         let dev = test_device(0);
         let phases = vec![vec![vec![Phase::ZERO; dev.num_transducers()]]; 2];
-        let op = WritePatternBuffers {
+        let op = WritePatternChunk {
             bank: PatternBank::B0,
-            index: EMISSION_MAX_INDICES - 1,
-            phases: &phases,
+            start_index: EMISSION_MAX_INDICES - 1,
+            patterns: &phases,
             intensities: StmIntensity::default(),
         };
         assert!(matches!(

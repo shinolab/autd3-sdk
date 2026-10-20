@@ -29,7 +29,7 @@ async def main() -> None:
         # ANCHOR: poll
         last = None
         while True:
-            client.heartbeat()
+            client.send_heartbeat()
             status = checker.check()
             if status != last:
                 for i, state in enumerate(status.devices):

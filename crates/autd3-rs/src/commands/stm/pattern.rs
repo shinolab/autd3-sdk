@@ -1,7 +1,7 @@
 use super::StmConfig;
 use crate::commands::Command;
 use crate::commands::operation::{
-    ActivatePatternBank, ConfigPattern, PhaseDepth, StmIntensity, WritePatternBuffers,
+    ActivatePatternBank, ConfigPattern, PhaseDepth, StmIntensity, WritePatternChunk,
     WritePatternPhase,
 };
 use crate::datagram::Expansion;
@@ -73,7 +73,7 @@ impl<'a> Command<'a> for PatternStm<'a> {
                 for (k, patterns) in self.phases.chunks(per_frame).enumerate() {
                     expansion.push(WritePatternPhase {
                         bank,
-                        index: k * per_frame,
+                        start_index: k * per_frame,
                         depth,
                         intensity,
                         patterns,
@@ -82,10 +82,10 @@ impl<'a> Command<'a> for PatternStm<'a> {
             }
             (_, PhaseDepth::Bits8) => {
                 for (k, phases) in self.phases.chunks(PATTERN_RAW_MAX_COUNT).enumerate() {
-                    expansion.push(WritePatternBuffers {
+                    expansion.push(WritePatternChunk {
                         bank,
-                        index: k * PATTERN_RAW_MAX_COUNT,
-                        phases,
+                        start_index: k * PATTERN_RAW_MAX_COUNT,
+                        patterns: phases,
                         intensities: self.intensities,
                     })?;
                 }
@@ -228,11 +228,11 @@ mod tests {
         .unwrap();
 
         let header = core::mem::size_of::<autd3_cpu_wire::payload::WritePatternRawPayload>();
-        let slot = autd3_cpu_wire::layout::PATTERN_RAW_DATA_LEN;
+        let entry_len = autd3_cpu_wire::layout::PATTERN_RAW_DATA_LEN;
         for (i, phases) in phases.iter().enumerate() {
             let (frame, k) = (i / PATTERN_RAW_MAX_COUNT, i % PATTERN_RAW_MAX_COUNT);
             let write = payload(&datagrams, frame, 0);
-            let base = header + k * slot;
+            let base = header + k * entry_len;
             assert_eq!(write[base], phases[0][0].0, "index {i} phase");
             assert_eq!(
                 write[base + Autd3::NUM_TRANSDUCERS],
@@ -359,7 +359,7 @@ mod tests {
         let (patterns, per_index) = make_patterns(4);
         let shared = vec![vec![Intensity(0x80); Autd3::NUM_TRANSDUCERS]];
         for intensities in [
-            StmIntensity::Shared(&shared),
+            StmIntensity::SameForAllIndices(&shared),
             StmIntensity::PerIndex(&per_index),
         ] {
             let datagrams = build(
@@ -468,7 +468,7 @@ mod tests {
         let uniform = vec![vec![Intensity(0x80); Autd3::NUM_TRANSDUCERS]];
         for (intensities, depth) in [
             (StmIntensity::Uniform(Intensity(0x80)), PhaseDepth::Bits8),
-            (StmIntensity::Shared(&uniform), PhaseDepth::Bits8),
+            (StmIntensity::SameForAllIndices(&uniform), PhaseDepth::Bits8),
             (StmIntensity::Uniform(Intensity(0x80)), PhaseDepth::Bits4),
         ] {
             let device = play_on_emulator(&phases, intensities, depth);

@@ -23,7 +23,7 @@ import { excerpt } from "@lib/excerpt";
 | Field          | Type                  | Description                        |
 | -------------- | --------------------- | ---------------------------------- |
 | `bank`         | `PatternBank`         | Destination bank                   |
-| `index_offset` | `usize`               | Start index for writing within the bank |
+| `start_index` | `usize`               | Start index for writing within the bank |
 | `points`       | `&[ControlPoints<N>]` | Sequence of focal point samples    |
 
 `ControlPoints<N>` is one sample holding `N` focal points (`ControlPoint`) and an amplitude.

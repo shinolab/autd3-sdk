@@ -7,7 +7,7 @@ use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::Phase;
 
-use super::{Distribution, Encoded, Operation, device_slot, encode_fixed};
+use super::{Distribution, Encoded, Operation, checked_device_row, encode_header_only};
 
 #[derive(Clone, Copy, Debug)]
 pub struct SetPhaseCorrection<'a> {
@@ -22,10 +22,10 @@ impl Operation for SetPhaseCorrection<'_> {
     }
 
     fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
-        let phases = device_slot(self.phases, device)?.as_bytes();
+        let phases = checked_device_row(self.phases, device)?.as_bytes();
         let mut data = [0u8; NUM_TRANSDUCERS];
         data[..phases.len()].copy_from_slice(phases);
-        Ok(encode_fixed(
+        Ok(encode_header_only(
             out,
             Cmd::SetPhaseCorrection,
             &PhaseCorrPayload { data },

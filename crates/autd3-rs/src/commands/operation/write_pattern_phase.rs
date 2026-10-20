@@ -3,7 +3,7 @@ use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{Intensity, PatternBank, Phase};
 
-use super::{Distribution, Encoded, Operation, device_slot, write_header};
+use super::{Distribution, Encoded, Operation, checked_device_row, write_header};
 pub use autd3_cpu_wire::payload::PhaseDepth;
 use autd3_cpu_wire::payload::WritePatternPhasePayload;
 use zerocopy::IntoBytes;
@@ -11,7 +11,7 @@ use zerocopy::IntoBytes;
 #[derive(Clone, Copy, Debug)]
 pub struct WritePatternPhase<'a> {
     pub bank: PatternBank,
-    pub index: usize,
+    pub start_index: usize,
     pub depth: PhaseDepth,
     pub intensity: Intensity,
     pub patterns: &'a [Vec<Vec<Phase>>],
@@ -31,7 +31,7 @@ impl Operation for WritePatternPhase<'_> {
             self.depth,
             count,
             self.intensity.0,
-            self.index,
+            self.start_index,
         )?;
         let rest = write_header(out, &header);
         for (pattern, dst) in self
@@ -39,7 +39,7 @@ impl Operation for WritePatternPhase<'_> {
             .iter()
             .zip(rest.chunks_mut(self.depth.bytes_per_pattern()))
         {
-            let phases = device_slot(pattern, device)?.as_bytes();
+            let phases = checked_device_row(pattern, device)?.as_bytes();
             self.depth.pack(phases, dst);
         }
         Ok(Encoded::header_with_data::<WritePatternPhasePayload>(
@@ -72,7 +72,7 @@ mod tests {
             .collect();
         let op = WritePatternPhase {
             bank: PatternBank::B0,
-            index: 4,
+            start_index: 4,
             depth: PhaseDepth::Bits8,
             intensity: Intensity(0x80),
             patterns: &patterns,
@@ -108,7 +108,7 @@ mod tests {
             .collect();
         let op = WritePatternPhase {
             bank: PatternBank::B0,
-            index: 8,
+            start_index: 8,
             depth: PhaseDepth::Bits4,
             intensity: Intensity::MAX,
             patterns: &patterns,
@@ -144,7 +144,7 @@ mod tests {
     fn rejects_an_empty_pattern_list() {
         let op = WritePatternPhase {
             bank: PatternBank::B0,
-            index: 0,
+            start_index: 0,
             depth: PhaseDepth::Bits8,
             intensity: Intensity::MAX,
             patterns: &[],
@@ -163,7 +163,7 @@ mod tests {
             let patterns = vec![ramp(0); depth.max_count() + 1];
             let op = WritePatternPhase {
                 bank: PatternBank::B0,
-                index: 0,
+                start_index: 0,
                 depth,
                 intensity: Intensity::MAX,
                 patterns: &patterns,
@@ -184,7 +184,7 @@ mod tests {
         let patterns = vec![ramp(0); 2];
         let op = WritePatternPhase {
             bank: PatternBank::B0,
-            index: EMISSION_MAX_INDICES - 1,
+            start_index: EMISSION_MAX_INDICES - 1,
             depth: PhaseDepth::Bits8,
             intensity: Intensity::MAX,
             patterns: &patterns,
@@ -202,7 +202,7 @@ mod tests {
         let patterns = vec![ramp(0)];
         let op = WritePatternPhase {
             bank: PatternBank::B0,
-            index: 0,
+            start_index: 0,
             depth: PhaseDepth::Bits8,
             intensity: Intensity::MAX,
             patterns: &patterns,

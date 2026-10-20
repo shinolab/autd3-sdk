@@ -525,8 +525,8 @@ impl Client {
             .map_err(|e| client_pyerr(py, &e))
     }
 
-    fn heartbeat(&self, py: Python<'_>) -> PyResult<()> {
-        py.detach(|| self.inner.heartbeat())
+    fn send_heartbeat(&self, py: Python<'_>) -> PyResult<()> {
+        py.detach(|| self.inner.send_heartbeat())
             .map_err(|e| client_pyerr(py, &e))
     }
 
@@ -651,17 +651,17 @@ pub struct Response(autd3_rs::Response);
 #[pymethods]
 impl Response {
     #[getter]
-    fn status(&self) -> Vec<u8> {
-        self.0.status().to_vec()
+    fn error_codes(&self) -> Vec<u8> {
+        self.0.error_codes().to_vec()
     }
 
     #[getter]
-    fn values(&self) -> Vec<Vec<u8>> {
-        self.0.values().to_vec()
+    fn reply_data(&self) -> Vec<Vec<u8>> {
+        self.0.reply_data().to_vec()
     }
 
-    fn value(&self, device: usize) -> Vec<u8> {
-        self.0.value(device).to_vec()
+    fn reply_data_of(&self, device: usize) -> Vec<u8> {
+        self.0.reply_data_of(device).to_vec()
     }
 
     fn check(&self, py: Python<'_>) -> PyResult<()> {

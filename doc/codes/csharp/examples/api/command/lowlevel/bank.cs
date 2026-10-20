@@ -50,13 +50,13 @@ internal static class Sample
         var p2 = geometry.PhaseBuffer();
         var p3 = geometry.PhaseBuffer();
         var patterns = new[] { p0, p1, p2, p3 };
-        ushort index = 0;
+        ushort startIndex = 0;
         var depth = PhaseDepth.Bits4;
         var intensity = Intensity.Max;
         // ANCHOR: compressed
         new WritePatternPhase(
             bank: bank,
-            index: index,
+            startIndex: startIndex,
             depth: depth,
             intensity: intensity,
             patterns: patterns

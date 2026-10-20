@@ -34,7 +34,7 @@ async fn wait_until(client: &Client, what: &str, reached: impl Fn(&[DeviceState]
             "{what} was not reached: {:?}",
             states(client)
         );
-        client.heartbeat().unwrap();
+        client.send_heartbeat().unwrap();
         tokio::time::sleep(POLL_INTERVAL).await;
     }
 }
@@ -58,7 +58,7 @@ async fn wait_until_failsafe(emulator: &UdpEmulator, client: &Client, device: us
     let give_up = Instant::now() + PATIENCE;
     while !failsafes(emulator)[device] {
         assert!(Instant::now() < give_up, "the failsafe did not trip");
-        client.heartbeat().unwrap();
+        client.send_heartbeat().unwrap();
         tokio::time::sleep(POLL_INTERVAL).await;
     }
 }

@@ -104,37 +104,37 @@ impl TransportOption {
     #[new]
     #[pyo3(signature = (
         iface = CoreOption::default().iface,
-        reply_timeout = CoreOption::default().reply_timeout,
+        recovery_reply_timeout = CoreOption::default().recovery_reply_timeout,
         lost_timeout = CoreOption::default().lost_timeout,
-        response_timeout = CoreOption::default().response_timeout,
+        control_request_timeout = CoreOption::default().control_request_timeout,
         enumeration_timeout = CoreOption::default().enumeration_timeout,
         sync_timeout = CoreOption::default().sync_timeout,
         ack_timeout = CoreOption::default().ack_timeout,
-        send_rate_limit = CoreOption::default().send_rate_limit,
-        send_buffer = CoreOption::default().send_buffer,
+        send_rate_limit_percent = CoreOption::default().send_rate_limit_percent,
+        send_buffer_bytes = CoreOption::default().send_buffer_bytes,
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         #[pyo3(from_py_with = extract_iface)] iface: CoreInterface,
-        #[pyo3(from_py_with = extract_duration)] reply_timeout: Duration,
+        #[pyo3(from_py_with = extract_duration)] recovery_reply_timeout: Duration,
         #[pyo3(from_py_with = extract_duration)] lost_timeout: Duration,
-        #[pyo3(from_py_with = extract_duration)] response_timeout: Duration,
+        #[pyo3(from_py_with = extract_duration)] control_request_timeout: Duration,
         #[pyo3(from_py_with = extract_duration)] enumeration_timeout: Duration,
         #[pyo3(from_py_with = extract_duration)] sync_timeout: Duration,
         #[pyo3(from_py_with = extract_duration)] ack_timeout: Duration,
-        send_rate_limit: Option<f32>,
-        send_buffer: Option<NonZeroUsize>,
+        send_rate_limit_percent: Option<f32>,
+        send_buffer_bytes: Option<NonZeroUsize>,
     ) -> Self {
         Self(CoreOption {
             iface,
-            reply_timeout,
+            recovery_reply_timeout,
             lost_timeout,
-            response_timeout,
+            control_request_timeout,
             enumeration_timeout,
             sync_timeout,
             ack_timeout,
-            send_rate_limit,
-            send_buffer,
+            send_rate_limit_percent,
+            send_buffer_bytes,
         })
     }
 
@@ -144,8 +144,8 @@ impl TransportOption {
     }
 
     #[getter]
-    fn reply_timeout<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        duration_to_py(py, self.0.reply_timeout)
+    fn recovery_reply_timeout<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        duration_to_py(py, self.0.recovery_reply_timeout)
     }
 
     #[getter]
@@ -154,8 +154,8 @@ impl TransportOption {
     }
 
     #[getter]
-    fn response_timeout<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        duration_to_py(py, self.0.response_timeout)
+    fn control_request_timeout<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        duration_to_py(py, self.0.control_request_timeout)
     }
 
     #[getter]
@@ -174,13 +174,13 @@ impl TransportOption {
     }
 
     #[getter]
-    fn send_rate_limit(&self) -> Option<f32> {
-        self.0.send_rate_limit
+    fn send_rate_limit_percent(&self) -> Option<f32> {
+        self.0.send_rate_limit_percent
     }
 
     #[getter]
-    fn send_buffer(&self) -> Option<NonZeroUsize> {
-        self.0.send_buffer
+    fn send_buffer_bytes(&self) -> Option<NonZeroUsize> {
+        self.0.send_buffer_bytes
     }
 
     fn __repr__(&self) -> String {
@@ -244,8 +244,8 @@ impl UdpEmulator {
         self.with(py, |emulator| {
             TransportOption(CoreOption {
                 iface: emulator.interface(),
-                reply_timeout: Duration::from_millis(50),
-                response_timeout: Duration::from_millis(50),
+                recovery_reply_timeout: Duration::from_millis(50),
+                control_request_timeout: Duration::from_millis(50),
                 enumeration_timeout: Duration::from_secs(1),
                 sync_timeout: Duration::from_secs(5),
                 ..CoreOption::default()

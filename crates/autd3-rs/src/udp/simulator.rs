@@ -7,12 +7,12 @@ use autd3_rs_core::simulator::{self, Status};
 use super::error::UdpError;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Simulator {
-    pub(crate) group: SocketAddrV6,
+pub(crate) struct SimulatorAddrs {
+    pub(crate) data: SocketAddrV6,
     pub(crate) control: SocketAddrV6,
 }
 
-impl Simulator {
+impl SimulatorAddrs {
     pub(crate) const DEFAULT: Self = Self::at(simulator::DEFAULT_PORT).unwrap();
 
     pub(crate) const fn at(port: u16) -> Option<Self> {
@@ -20,13 +20,13 @@ impl Simulator {
             return None;
         };
         Some(Self {
-            group: SocketAddrV6::new(Ipv6Addr::LOCALHOST, port, 0, 0),
+            data: SocketAddrV6::new(Ipv6Addr::LOCALHOST, port, 0, 0),
             control: SocketAddrV6::new(Ipv6Addr::LOCALHOST, control, 0, 0),
         })
     }
 }
 
-pub(crate) fn configure(
+pub(crate) fn send_geometry(
     control: SocketAddrV6,
     geometry: &Geometry,
     timeout: Duration,

@@ -173,7 +173,7 @@ impl Session {
             return None;
         };
         self.bus
-            .units()
+            .device_addrs()
             .iter()
             .position(|unit| unit.ip() == src.ip() && unit.port() == src.port())
     }
@@ -218,7 +218,7 @@ impl Session {
             while confirmed.contains(&false) && Instant::now() < deadline {
                 if let Some((reply, _)) = self.receive(deadline)?
                     && reply.msg_id == sent.msg_id
-                    && reply.ack == RESET_ACK
+                    && reply.acked_seq == RESET_ACK
                 {
                     confirmed[reply.device] = true;
                 }
@@ -260,7 +260,7 @@ impl Session {
                     if let Some(unsent) = sent.unsent {
                         eprintln!(
                             "device[{}] was not sent to: {}",
-                            unsent.device, unsent.cause
+                            unsent.first_failed_device, unsent.cause
                         );
                         exchange.unsent = true;
                     }
@@ -294,8 +294,8 @@ impl Session {
                 .find(|f| f.msg_id == reply.msg_id)
             {
                 frame.answers[reply.device].get_or_insert(Answer {
-                    status: reply.status,
-                    ack: reply.ack,
+                    status: reply.error_code,
+                    ack: reply.acked_seq,
                     sys_time,
                     data: reply.data().to_vec(),
                 });

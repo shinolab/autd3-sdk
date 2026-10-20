@@ -27,7 +27,7 @@ async def main() -> None:
 
     # ANCHOR: heartbeat
     for _ in range(100):
-        client.heartbeat()
+        client.send_heartbeat()
         await asyncio.sleep(0.01)
     # ANCHOR_END: heartbeat
 
@@ -35,7 +35,7 @@ async def main() -> None:
     num_devices = client.num_devices()
     geometry = client.geometry()
 
-    client.heartbeat()
+    client.send_heartbeat()
 
     firmware = await client.read_firmware_version()
     fpga_state = await client.read_fpga_state()

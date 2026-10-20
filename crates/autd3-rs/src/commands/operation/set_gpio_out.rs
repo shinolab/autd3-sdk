@@ -4,7 +4,7 @@ use crate::error::Error;
 use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
-use super::{Encoded, Operation, encode_fixed};
+use super::{Encoded, Operation, encode_header_only};
 
 pub use autd3_cpu_wire::value::GpioOut;
 
@@ -17,7 +17,7 @@ impl crate::sealed::Sealed for SetGpioOut {}
 
 impl Operation for SetGpioOut {
     fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
-        Ok(encode_fixed(
+        Ok(encode_header_only(
             out,
             Cmd::SetGpioOut,
             &GpioOutPayload::new(self.outputs),

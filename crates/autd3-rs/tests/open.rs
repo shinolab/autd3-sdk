@@ -50,7 +50,7 @@ async fn a_zero_ack_timeout_is_rejected() {
 async fn an_invalid_transport_option_is_rejected() {
     let emulator = emulator(1);
     let option = TransportOption {
-        reply_timeout: Duration::ZERO,
+        recovery_reply_timeout: Duration::ZERO,
         ..option(&emulator)
     };
 
@@ -58,7 +58,7 @@ async fn an_invalid_transport_option_is_rejected() {
 
     assert!(matches!(
         udp_error(&error),
-        Some(UdpError::ZeroReplyTimeout)
+        Some(UdpError::ZeroRecoveryReplyTimeout)
     ));
 }
 

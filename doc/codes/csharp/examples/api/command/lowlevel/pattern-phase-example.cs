@@ -33,7 +33,7 @@ var bank = PatternBank.B0;
 
 await client.SendAsync(new WritePatternPhase(
     bank: bank,
-    index: 0,
+    startIndex: 0,
     depth: PhaseDepth.Bits4,
     intensity: Intensity.Max,
     patterns: patterns
