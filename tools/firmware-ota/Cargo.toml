@@ -21,6 +21,7 @@ autd3-rs.workspace = true
 autd3-firmware-writer.workspace = true
 clap.workspace = true
 anyhow.workspace = true
+pollster.workspace = true
 thiserror.workspace = true
 zerocopy.workspace = true
 

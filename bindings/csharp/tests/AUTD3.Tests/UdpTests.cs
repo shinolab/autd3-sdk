@@ -11,11 +11,9 @@ namespace AUTD3.Tests
         {
             var option = TransportOption.Defaults();
             Assert.Equal(Interface.Auto, option.Iface);
+            Assert.Equal(TimeSpan.FromSeconds(40), option.OpenTimeout);
             Assert.Equal(TimeSpan.FromMilliseconds(1), option.RecoveryReplyTimeout);
             Assert.Equal(TimeSpan.FromMilliseconds(100), option.LostTimeout);
-            Assert.Equal(TimeSpan.FromMilliseconds(200), option.ControlRequestTimeout);
-            Assert.Equal(TimeSpan.FromSeconds(10), option.EnumerationTimeout);
-            Assert.Equal(TimeSpan.FromSeconds(30), option.SyncTimeout);
             Assert.Equal(TimeSpan.FromMilliseconds(10), option.AckTimeout);
             Assert.Null(option.SendRateLimitPercent);
             Assert.Equal(8192ul, option.SendBufferBytes);
@@ -35,11 +33,9 @@ namespace AUTD3.Tests
         {
             var option = new TransportOption();
             Assert.Equal(Interface.Auto, option.Iface);
+            Assert.Equal(TimeSpan.FromSeconds(40), option.OpenTimeout);
             Assert.Equal(TimeSpan.FromMilliseconds(1), option.RecoveryReplyTimeout);
             Assert.Equal(TimeSpan.FromMilliseconds(100), option.LostTimeout);
-            Assert.Equal(TimeSpan.FromMilliseconds(200), option.ControlRequestTimeout);
-            Assert.Equal(TimeSpan.FromSeconds(10), option.EnumerationTimeout);
-            Assert.Equal(TimeSpan.FromSeconds(30), option.SyncTimeout);
             Assert.Equal(TimeSpan.FromMilliseconds(10), option.AckTimeout);
         }
 
@@ -65,6 +61,14 @@ namespace AUTD3.Tests
             var option = new TransportOption { AckTimeout = TimeSpan.FromTicks(-1) };
             var error = Assert.Throws<Autd3Exception>(() => option.CreateHandle());
             Assert.Equal(Autd3ErrorCode.InvalidArgument, error.Code);
+        }
+
+        [Fact]
+        public void AZeroOpenTimeoutFailsTheOpenWithTheRustError()
+        {
+            var error = OpenFails(new TransportOption { OpenTimeout = TimeSpan.Zero });
+            Assert.Equal(Autd3ErrorCode.Network, error.Code);
+            Assert.Contains("open_timeout", error.Message);
         }
 
         [Fact]

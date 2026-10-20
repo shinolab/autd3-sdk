@@ -21,12 +21,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "arrayvec"
-version = "0.7.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
-
-[[package]]
 name = "async-lock"
 version = "3.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -38,14 +32,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "autd3-cpu-fw"
+name = "autd3-binding-rt"
 version = "0.12.0"
 dependencies = [
- "autd3-cpu-wire",
- "bitflags",
- "const_fn",
- "etherparse",
- "zerocopy",
+ "async-lock",
+ "futures-channel",
+ "pollster",
+ "thiserror",
+ "tracing-appender",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -61,10 +56,9 @@ dependencies = [
 name = "autd3-ffi"
 version = "0.12.0"
 dependencies = [
+ "autd3-binding-rt",
  "autd3-ffi-abi",
  "autd3-rs",
- "autd3-rs-core",
- "autd3-rs-firmware-emulator",
 ]
 
 [[package]]
@@ -136,20 +130,6 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
- "zerocopy",
-]
-
-[[package]]
-name = "autd3-rs-firmware-emulator"
-version = "0.12.0"
-dependencies = [
- "autd3-cpu-fw",
- "autd3-cpu-wire",
- "autd3-rs-core",
- "tracing",
  "zerocopy",
 ]
 
@@ -214,12 +194,6 @@ dependencies = [
  "cpufeatures",
  "rand_core",
 ]
-
-[[package]]
-name = "const_fn"
-version = "0.4.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "413d67b29ef1021b4d60f4aa1e925ca031751e213832b4b1d588fae623c05c60"
 
 [[package]]
 name = "cpufeatures"
@@ -290,15 +264,6 @@ name = "either"
 version = "1.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "91622ff5e7162018101f2fea40d6ebf4a78bbe5a49736a2020649edf9693679e"
-
-[[package]]
-name = "etherparse"
-version = "0.21.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17304d06addb3283cdc4bd528e42dd95e73c8ee2d6492ffce415e93660885449"
-dependencies = [
- "arrayvec",
-]
 
 [[package]]
 name = "event-listener"
@@ -523,6 +488,12 @@ name = "pin-project-lite"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
+
+[[package]]
+name = "pollster"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc6355899e1c9462875b6757c79f3caa011a1fdae12bbb1a2e72dd1f234f8336"
 
 [[package]]
 name = "powerfmt"

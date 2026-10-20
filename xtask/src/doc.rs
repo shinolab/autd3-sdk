@@ -1,6 +1,9 @@
 use std::fs;
+use std::io::{BufRead, BufReader};
+use std::net::{Ipv6Addr, UdpSocket};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command};
+use std::process::{Child, Command, Stdio};
+use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
@@ -22,6 +25,9 @@ const EXPECT_ERROR_MARKER: &str = "# xtask:expect-error";
 const LONG_RUNNING_MARKER: &str = "# xtask:long-running";
 const SAMPLE_TIMEOUT: Duration = Duration::from_secs(30);
 const LONG_RUNNING_TIMEOUT: Duration = Duration::from_secs(8);
+const SIMULATOR_STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
+const SIMULATOR_PORT_ENV: &str = "AUTD3_SIMULATOR_PORT";
+const SIMULATOR_READY_MARKER: &str = "simulator http listening";
 
 #[derive(Subcommand)]
 pub(crate) enum DocCmd {
@@ -1095,6 +1101,7 @@ fn run_python_samples(root: &Path, doc: &Path) -> Result<()> {
     let mut rels = collect_py(&examples_dir)?;
     rels.sort();
 
+    let simulator = SimulatorProcess::spawn(&crate::simulator::build_backend(root, true)?)?;
     let python = venv_python(&venv);
     let mut failures = Vec::new();
     for rel in &rels {
@@ -1113,6 +1120,7 @@ fn run_python_samples(root: &Path, doc: &Path) -> Result<()> {
             .arg("-B")
             .arg(&runner)
             .arg(&script)
+            .env(SIMULATOR_PORT_ENV, simulator.port.to_string())
             .current_dir(&py_codes)
             .spawn()
             .with_context(|| format!("failed to spawn python for {}", script.display()))?;
@@ -1148,6 +1156,72 @@ fn run_python_samples(root: &Path, doc: &Path) -> Result<()> {
     }
     println!("doc: {} python samples passed", rels.len());
     Ok(())
+}
+
+struct SimulatorProcess {
+    child: Child,
+    port: u16,
+}
+
+impl SimulatorProcess {
+    fn spawn(bin: &Path) -> Result<Self> {
+        let port = free_simulator_port()?;
+        let mut child = Command::new(bin)
+            .args(["--port", &port.to_string(), "--http-port", "0"])
+            .stdout(Stdio::piped())
+            .spawn()
+            .with_context(|| format!("failed to spawn {}", bin.display()))?;
+        let stdout = child
+            .stdout
+            .take()
+            .context("the simulator stdout is not captured")?;
+        let (ready_tx, ready_rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let mut ready_tx = Some(ready_tx);
+            for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+                if line.contains(SIMULATOR_READY_MARKER)
+                    && let Some(ready_tx) = ready_tx.take()
+                {
+                    let _ = ready_tx.send(());
+                }
+            }
+        });
+        let mut simulator = Self { child, port };
+        match ready_rx.recv_timeout(SIMULATOR_STARTUP_TIMEOUT) {
+            Ok(()) => Ok(simulator),
+            Err(RecvTimeoutError::Disconnected) => bail!(
+                "the simulator exited before listening: {}",
+                simulator.child.wait()?
+            ),
+            Err(RecvTimeoutError::Timeout) => bail!(
+                "the simulator did not listen on [::1]:{port} within {}s",
+                SIMULATOR_STARTUP_TIMEOUT.as_secs()
+            ),
+        }
+    }
+}
+
+impl Drop for SimulatorProcess {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+fn udp_port_is_free(port: u16) -> bool {
+    UdpSocket::bind((Ipv6Addr::LOCALHOST, port)).is_ok()
+}
+
+fn free_simulator_port() -> Result<u16> {
+    for _ in 0..64 {
+        let port = UdpSocket::bind((Ipv6Addr::LOCALHOST, 0))?
+            .local_addr()?
+            .port();
+        if port < u16::MAX && udp_port_is_free(port + 1) {
+            return Ok(port);
+        }
+    }
+    bail!("no free UDP port pair on [::1] for the simulator")
 }
 
 fn wait_timeout(child: &mut Child, limit: Duration) -> Result<Option<std::process::ExitStatus>> {

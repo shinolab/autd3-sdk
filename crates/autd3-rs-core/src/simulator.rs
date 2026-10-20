@@ -2,10 +2,10 @@ use nalgebra::{Point3, Quaternion, UnitQuaternion};
 use thiserror::Error;
 
 use crate::geometry::{Autd3, Geometry};
+use crate::protocol::MAX_DEVICES;
 
 pub const DEFAULT_PORT: u16 = autd3_cpu_wire::udp::PORT;
 pub const VERSION: u8 = 1;
-pub const MAX_DEVICES: usize = 128;
 pub const REPLY_BYTES: usize = 2;
 
 const DEVICE_BYTES: usize = 28;

@@ -1,6 +1,6 @@
 use std::sync::{Mutex, PoisonError};
 
-use autd3_rs::rt::{
+use autd3_binding_rt::{
     LogWriter as CoreLogWriter, TracingGuard as CoreTracingGuard, TracingOption, try_init_tracing,
 };
 use pyo3::prelude::*;

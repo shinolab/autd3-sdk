@@ -7,11 +7,12 @@ use std::time::Duration;
 mod logging;
 mod udp;
 
+use autd3_binding_rt::Executor;
 use autd3_ffi_abi::{
     AUTD3_ERR, AUTD3_ERR_DEVICE, AUTD3_ERR_INVALID_ARGUMENT, AUTD3_ERR_NETWORK, AUTD3_ERR_TIMEOUT,
     AUTD3_OK, Autd3FirmwareVersion, Autd3Telemetry, Buffer, CompletionCallback, CompletionCtx,
     IntensityBuffer, ModulationBuffer, PhaseBuffer, drop_handle, handle_mut, handle_ref,
-    into_handle, slice_mut, slice_ref, take_handle, to_ns, write_cstr, write_out,
+    into_handle, slice_ref, take_handle, to_ns, write_cstr, write_out,
 };
 use autd3_rs::commands::{
     ActivateModulationBank, ActivatePatternBank, BoxedCommand, Clear, Command, ConfigFociStm,
@@ -21,9 +22,8 @@ use autd3_rs::commands::{
     PatternIntensity, PatternStm, PatternStmOption, PhaseDepth, ReleaseFailsafe, SetCpuConfig,
     SetFpgaConfig, SetGpioOut, SetOutputMask, SetPhaseCorrection, SetPulseWidthTable, SetSilencer,
     StmConfig, StmIntensity, Synchronize, WriteFociBuffer, WriteModulationBuffer,
-    WritePatternBuffer, WritePatternPhase, circle, each, line,
+    WritePatternBuffer, WritePatternPhase, each,
 };
-use autd3_rs::rt::Executor;
 use autd3_rs::udp::StateChecker;
 use autd3_rs::units::Hz;
 use autd3_rs::value::{
@@ -32,8 +32,7 @@ use autd3_rs::value::{
 };
 use autd3_rs::{
     BusStats, Client, DeviceState, Error, ExecAt, FirmwareVersion, FpgaState, Frames, Geometry,
-    Length, NetworkCause, Point3, Response, ResponseFuture, Telemetry, UnitVector3, Vector3,
-    Velocity,
+    NetworkCause, Point3, Response, ResponseFuture, Telemetry, Velocity,
 };
 
 pub(crate) fn executor() -> &'static Executor {
@@ -311,80 +310,6 @@ pub unsafe extern "C" fn autd3_stm_config_into_sampling_config(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_stm_config_free(config: *mut StmConfig) {
     unsafe { drop_handle(config) }
-}
-
-unsafe fn write_control_points(
-    points: &[ControlPoints<1>],
-    out_points: *mut Autd3StmControlPoint,
-    out_intensities: *mut u8,
-) -> i32 {
-    let (Some(out_points), Some(out_intensities)) =
-        (unsafe { slice_mut(out_points, points.len()) }, unsafe {
-            slice_mut(out_intensities, points.len())
-        })
-    else {
-        return -1;
-    };
-    for ((out_point, out_intensity), cp) in out_points.iter_mut().zip(out_intensities).zip(points) {
-        let p = cp.points[0];
-        *out_point = Autd3StmControlPoint {
-            point: [p.point.x, p.point.y, p.point.z],
-            phase_offset: p.phase_offset.0,
-        };
-        *out_intensity = cp.intensity.0;
-    }
-    0
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_stm_circle(
-    center: *const f32,
-    radius_mm: f32,
-    num_points: usize,
-    normal: *const f32,
-    intensity: u8,
-    out_points: *mut Autd3StmControlPoint,
-    out_intensities: *mut u8,
-) -> i32 {
-    let (Some(center), Some(normal)) = (unsafe { slice_ref(center, 3) }, unsafe {
-        slice_ref(normal, 3)
-    }) else {
-        return -1;
-    };
-    let mut points = Vec::new();
-    circle(
-        Point3::new(center[0], center[1], center[2]),
-        Length::from_mm(radius_mm),
-        num_points,
-        UnitVector3::new_normalize(Vector3::new(normal[0], normal[1], normal[2])),
-        Intensity(intensity),
-        &mut points,
-    );
-    unsafe { write_control_points(&points, out_points, out_intensities) }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_stm_line(
-    start: *const f32,
-    end: *const f32,
-    num_points: usize,
-    intensity: u8,
-    out_points: *mut Autd3StmControlPoint,
-    out_intensities: *mut u8,
-) -> i32 {
-    let (Some(start), Some(end)) = (unsafe { slice_ref(start, 3) }, unsafe { slice_ref(end, 3) })
-    else {
-        return -1;
-    };
-    let mut points = Vec::new();
-    line(
-        Point3::new(start[0], start[1], start[2]),
-        Point3::new(end[0], end[1], end[2]),
-        num_points,
-        Intensity(intensity),
-        &mut points,
-    );
-    unsafe { write_control_points(&points, out_points, out_intensities) }
 }
 
 #[unsafe(no_mangle)]
@@ -2118,6 +2043,17 @@ pub unsafe extern "C" fn autd3_client_send_at(
     );
 }
 
+fn keep_first_error_codes(merged: Response, next: &Response) -> Response {
+    let pairs = || merged.error_codes().iter().zip(next.error_codes());
+    if pairs().all(|(&kept, &next)| kept != 0 || next == 0) {
+        return merged;
+    }
+    let error_codes: Vec<u8> = pairs()
+        .map(|(&kept, &next)| if kept == 0 { next } else { kept })
+        .collect();
+    Response::from_error_codes(&error_codes)
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_response_token_await(
     token: *mut ResponseToken,
@@ -2138,10 +2074,10 @@ pub unsafe extern "C" fn autd3_response_token_await(
             let mut merged: Option<Response> = None;
             for future in futures {
                 let response = future.await?;
-                match merged.as_mut() {
-                    None => merged = Some(response),
-                    Some(merged) => merged.keep_first_errors_from(&response),
-                }
+                merged = Some(match merged {
+                    None => response,
+                    Some(merged) => keep_first_error_codes(merged, &response),
+                });
             }
             Ok(merged.unwrap_or_default())
         },
@@ -2505,6 +2441,24 @@ autd3_ffi_abi::export_abi_version!();
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_first_error_of_each_device_is_kept_across_frames() {
+        let merged = keep_first_error_codes(
+            Response::from_error_codes(&[0, 0x02, 0]),
+            &Response::from_error_codes(&[0x05, 0x06, 0]),
+        );
+        assert_eq!(merged.error_codes(), [0x05, 0x02, 0]);
+    }
+
+    #[test]
+    fn a_frame_without_new_errors_keeps_the_merged_response() {
+        let first = Response::from_error_codes(&[0, 0x02]);
+        assert_eq!(
+            keep_first_error_codes(first.clone(), &Response::from_error_codes(&[0, 0x06])),
+            first
+        );
+    }
 
     fn pending_error(pending: *mut OwnedCommand) -> (i32, String) {
         let geometry = Geometry::new(vec![autd3_rs::geometry::Autd3::default()]);

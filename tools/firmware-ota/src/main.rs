@@ -250,9 +250,9 @@ fn request_activation<L: Exchange>(driver: &mut Driver<L>) -> Result<bool> {
             println!("activation acknowledged; the devices reboot in about 100 ms");
             Ok(true)
         }
-        Err(DriverError::Timeout { device, .. }) => {
+        Err(DriverError::Timeout { .. }) => {
             eprintln!(
-                "warning: device {device} did not acknowledge the activation; the devices that \
+                "warning: not every device acknowledged the activation; the devices that \
                  have not rebooted are activated after the reconnection"
             );
             Ok(false)

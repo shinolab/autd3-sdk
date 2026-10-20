@@ -391,12 +391,5 @@ namespace AUTD3.Tests
             using var mismatched = single.PhaseBuffer();
             Assert.Throws<Autd3Exception>(() => Pattern.GroupDevice(geometry[0], groups, key => mismatched, dst));
         }
-
-        [Fact]
-        public void AnEmulatorReportsItsDeviceCount()
-        {
-            using var emulator = new UdpEmulator(2);
-            Assert.Equal(2, emulator.NumDevices);
-        }
     }
 }

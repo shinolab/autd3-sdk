@@ -7,6 +7,7 @@ members = [
     "autd3-ffi-pattern",
     "autd3-ffi-pattern-holo",
     "autd3-ffi-modulation",
+    "../autd3-binding-rt",
 ]
 
 [workspace.package]
@@ -20,12 +21,25 @@ repository = "https://github.com/shinolab/autd3-sdk"
 autd3-rs = { path = "../../crates/autd3-rs" }
 autd3-rs-core = { path = "../../crates/autd3-rs-core" }
 autd3-cpu-wire = { path = "../../firmware/cpu/wire" }
-autd3-rs-firmware-emulator = { path = "../../crates/autd3-rs-firmware-emulator" }
 autd3-rs-pattern = { path = "../../crates/autd3-rs-pattern" }
 autd3-rs-pattern-holo = { path = "../../crates/autd3-rs-pattern-holo" }
 autd3-rs-modulation = { path = "../../crates/autd3-rs-modulation" }
 autd3-ffi-abi = { path = "autd3-ffi-abi" }
+autd3-binding-rt = { path = "../autd3-binding-rt" }
 zerocopy = { version = "0.8.52", default-features = false }
+thiserror = { version = "2.0.18", default-features = false, features = ["std"] }
+tracing-appender = { version = "0.2.3", default-features = false }
+tracing-subscriber = { version = "0.3.23", default-features = false, features = [
+    "std",
+    "fmt",
+    "ansi",
+    "env-filter",
+] }
+async-lock = { version = "3.4.2", default-features = false, features = ["std"] }
+futures-channel = { version = "0.3.34", default-features = false, features = [
+    "alloc",
+] }
+pollster = { version = "1.0.1", default-features = false }
 
 [profile.release]
 panic = "abort"

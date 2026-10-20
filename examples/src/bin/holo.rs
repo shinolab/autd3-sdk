@@ -6,15 +6,19 @@ use anyhow::Result;
 
 use autd3_rs::commands::{Clear, Modulation, Pattern, SetSilencer, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
-use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::SamplingConfig;
 use autd3_rs::{Client, TransportOption};
 use autd3_rs_pattern_holo::{AmplitudeTarget, GspatOption, NalgebraBackend, Pa, gspat};
+use tracing_subscriber::EnvFilter;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
-    let _log_guard = init_tracing(TracingOption::default());
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
+        .init();
 
     let geometry = Geometry::new(vec![Autd3::default()]);
 

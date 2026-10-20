@@ -4,7 +4,6 @@ mod driver;
 mod exec_at;
 pub(crate) mod pool;
 
-pub use crate::udp::bus::MAX_DEVICES;
 pub use completion::ResponseFuture;
 pub use controller::Controller;
 pub use driver::Driver;

@@ -13,26 +13,23 @@ async fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
     let iface = Interface::Auto;
+    let open_timeout = Duration::from_secs(40);
     let recovery_reply_timeout = Duration::from_millis(1);
     let lost_timeout = Duration::from_millis(100);
-    let control_request_timeout = Duration::from_millis(200);
-    let enumeration_timeout = Duration::from_secs(10);
-    let sync_timeout = Duration::from_secs(30);
     let ack_timeout = Duration::from_millis(10);
     let send_rate_limit_percent = None;
     let send_buffer_bytes = NonZeroUsize::new(8192);
+    let sync_on_open = true;
     // ANCHOR: api
     TransportOption {
         iface,
+        open_timeout,
         recovery_reply_timeout,
         lost_timeout,
-        control_request_timeout,
-        enumeration_timeout,
-        sync_timeout,
         ack_timeout,
         send_rate_limit_percent,
         send_buffer_bytes,
-        ..Default::default()
+        sync_on_open,
     };
     // ANCHOR_END: api
 

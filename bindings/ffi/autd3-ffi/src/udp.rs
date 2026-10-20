@@ -1,15 +1,13 @@
 use std::ffi::c_char;
 use std::net::SocketAddrV6;
 use std::num::NonZeroUsize;
-use std::time::Duration;
 
 use autd3_ffi_abi::{
     AUTD3_ERR_INVALID_ARGUMENT, AUTD3_OK, alloc_cstring, cstr_to_string, free_cstring, handle_mut,
-    handle_ref, into_handle, into_handle_or_err, write_out,
+    handle_ref, into_handle, write_out,
 };
 use autd3_rs::Interface;
 use autd3_rs::udp::TransportOption as CoreOption;
-use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
 pub struct TransportOptionHandle(pub(crate) CoreOption);
 
@@ -98,24 +96,10 @@ autd3_ffi_abi::option_handle_field!(
 );
 autd3_ffi_abi::option_handle_field!(
     TransportOptionHandle,
-    [control_request_timeout],
+    [open_timeout],
     duration,
-    autd3_transport_option_set_control_request_timeout,
-    autd3_transport_option_get_control_request_timeout
-);
-autd3_ffi_abi::option_handle_field!(
-    TransportOptionHandle,
-    [enumeration_timeout],
-    duration,
-    autd3_transport_option_set_enumeration_timeout,
-    autd3_transport_option_get_enumeration_timeout
-);
-autd3_ffi_abi::option_handle_field!(
-    TransportOptionHandle,
-    [sync_timeout],
-    duration,
-    autd3_transport_option_set_sync_timeout,
-    autd3_transport_option_get_sync_timeout
+    autd3_transport_option_set_open_timeout,
+    autd3_transport_option_get_open_timeout
 );
 autd3_ffi_abi::option_handle_field!(
     TransportOptionHandle,
@@ -190,64 +174,6 @@ pub(crate) unsafe extern "C" fn autd3_transport_option_get_iface_addr(
 pub(crate) unsafe extern "C" fn autd3_udp_free_string(ptr: *mut c_char) {
     unsafe { free_cstring(ptr) };
 }
-
-pub(crate) struct UdpEmulatorHandle(UdpEmulator);
-
-#[unsafe(no_mangle)]
-pub(crate) unsafe extern "C" fn autd3_udp_emulator_spawn(
-    num_devices: usize,
-    out_err: *mut c_char,
-    out_err_len: usize,
-) -> *mut UdpEmulatorHandle {
-    unsafe {
-        into_handle_or_err(
-            UdpEmulator::spawn(num_devices).map(UdpEmulatorHandle),
-            out_err,
-            out_err_len,
-        )
-    }
-}
-
-#[unsafe(no_mangle)]
-pub(crate) unsafe extern "C" fn autd3_udp_emulator_option(
-    handle: *const UdpEmulatorHandle,
-) -> *mut TransportOptionHandle {
-    let Some(emulator) = (unsafe { handle_ref(handle) }) else {
-        return std::ptr::null_mut();
-    };
-    into_handle(TransportOptionHandle(CoreOption {
-        iface: emulator.0.interface(),
-        recovery_reply_timeout: Duration::from_millis(50),
-        control_request_timeout: Duration::from_millis(50),
-        enumeration_timeout: Duration::from_secs(1),
-        sync_timeout: Duration::from_secs(5),
-        ..CoreOption::default()
-    }))
-}
-
-#[unsafe(no_mangle)]
-pub(crate) unsafe extern "C" fn autd3_udp_emulator_num_devices(
-    handle: *const UdpEmulatorHandle,
-) -> usize {
-    unsafe { handle_ref(handle) }.map_or(0, |emulator| emulator.0.num_devices())
-}
-
-#[unsafe(no_mangle)]
-pub(crate) unsafe extern "C" fn autd3_udp_emulator_reboot(
-    handle: *const UdpEmulatorHandle,
-    index: usize,
-) -> i32 {
-    let Some(emulator) = (unsafe { handle_ref(handle) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    if index >= emulator.0.num_devices() {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    }
-    emulator.0.reboot(index);
-    AUTD3_OK
-}
-
-autd3_ffi_abi::option_handle_lifecycle!(UdpEmulatorHandle, autd3_udp_emulator_free);
 
 #[cfg(test)]
 mod tests {
@@ -338,10 +264,10 @@ mod tests {
         assert_eq!(lost_timeout(handle), option.lost_timeout);
         let mut ns = 0u64;
         assert_eq!(
-            unsafe { autd3_transport_option_get_sync_timeout(handle, &raw mut ns) },
+            unsafe { autd3_transport_option_get_open_timeout(handle, &raw mut ns) },
             AUTD3_OK
         );
-        assert_eq!(Duration::from_nanos(ns), option.sync_timeout);
+        assert_eq!(Duration::from_nanos(ns), option.open_timeout);
         assert_eq!(
             unsafe { autd3_transport_option_get_ack_timeout(handle, &raw mut ns) },
             AUTD3_OK
@@ -406,7 +332,6 @@ mod tests {
             unsafe { autd3_transport_option_get_lost_timeout(std::ptr::null(), &raw mut ns) },
             AUTD3_ERR_INVALID_ARGUMENT
         );
-        assert!(unsafe { autd3_udp_emulator_option(std::ptr::null()) }.is_null());
     }
 
     fn open(
@@ -473,6 +398,13 @@ mod tests {
     }
 
     #[test]
+    fn a_zero_open_timeout_fails_the_open_with_the_rust_error() {
+        let (code, message) = open_error_with_zero(autd3_transport_option_set_open_timeout);
+        assert_eq!(crate::AUTD3_ERR_NETWORK, code);
+        assert!(message.contains("open_timeout"), "{message}");
+    }
+
+    #[test]
     fn a_zero_ack_timeout_fails_the_open_with_the_rust_error() {
         let (code, message) = open_error_with_zero(autd3_transport_option_set_ack_timeout);
         assert_eq!(crate::AUTD3_ERR_NETWORK, code);
@@ -505,34 +437,6 @@ mod tests {
         assert!(live < LIVE_ALLOCATIONS.get());
         unsafe { crate::autd3_response_token_await(token, None, std::ptr::null_mut()) };
         assert_eq!(live, LIVE_ALLOCATIONS.get());
-    }
-
-    #[test]
-    fn the_emulator_option_is_the_shared_emulator_option() {
-        let emulator = unsafe { autd3_udp_emulator_spawn(1, std::ptr::null_mut(), 0) };
-        assert!(!emulator.is_null());
-        let option = unsafe { autd3_udp_emulator_option(emulator) };
-        let interface = unsafe { handle_ref(emulator.cast_const()) }
-            .unwrap()
-            .0
-            .interface();
-        assert_eq!(
-            CoreOption {
-                iface: interface,
-                recovery_reply_timeout: Duration::from_millis(50),
-                control_request_timeout: Duration::from_millis(50),
-                enumeration_timeout: Duration::from_secs(1),
-                sync_timeout: Duration::from_secs(5),
-                ..CoreOption::default()
-            },
-            unsafe { handle_ref(option.cast_const()) }.unwrap().0
-        );
-        assert_eq!(1, unsafe { autd3_udp_emulator_num_devices(emulator) });
-        assert_eq!(0, unsafe {
-            autd3_udp_emulator_num_devices(std::ptr::null())
-        });
-        unsafe { autd3_transport_option_free(option) };
-        unsafe { autd3_udp_emulator_free(emulator) };
     }
 
     struct CountingAllocator;

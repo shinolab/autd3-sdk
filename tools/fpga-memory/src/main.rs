@@ -4,7 +4,7 @@ use clap::{Args, Parser, Subcommand};
 use autd3_cpu_wire::config::{CpuConfig, FpgaBusWait};
 use autd3_cpu_wire::payload::{ReadFpgaMemoryPayload, SetCpuConfigPayload, WriteFpgaMemoryPayload};
 use autd3_cpu_wire::{Cmd, PAYLOAD_BYTES, REPLY_DATA_BYTES_MAX};
-use autd3_rs_firmware_ota::{DEFAULT_TIMEOUT, Driver, Exchange, Frame, UdpArgs};
+use autd3_rs_firmware_ota::{Driver, Exchange, Frame, UdpArgs};
 
 const WORDS_PER_LINE: usize = 8;
 const REPORTED_ERRORS_PER_DEVICE: usize = 8;
@@ -142,10 +142,8 @@ fn read<L: Exchange>(driver: &mut Driver<L>, addr: u16, count: usize) -> Result<
         let len = (count - start).min(per_frame);
         let payload = ReadFpgaMemoryPayload::new(addr, u16::try_from(len)?)
             .context("the read request does not fit the bus")?;
-        let replies = driver.send_checked(
-            &Frame::with_payload(Cmd::ReadFpgaMemory, &payload, &[]),
-            DEFAULT_TIMEOUT,
-        )?;
+        let replies =
+            driver.send_checked(&Frame::with_payload(Cmd::ReadFpgaMemory, &payload, &[]))?;
         for (device, reply) in replies.iter().enumerate() {
             ensure!(
                 reply.value.len() == len * size_of::<u16>(),
@@ -174,10 +172,7 @@ fn write<L: Exchange>(driver: &mut Driver<L>, addr: u16, words: &[u16]) -> Resul
         let payload = WriteFpgaMemoryPayload::new(addr, chunk.len())
             .context("the write request does not fit the bus")?;
         let data: Vec<u8> = chunk.iter().flat_map(|word| word.to_le_bytes()).collect();
-        driver.send_checked(
-            &Frame::with_payload(Cmd::WriteFpgaMemory, &payload, &data),
-            DEFAULT_TIMEOUT,
-        )?;
+        driver.send_checked(&Frame::with_payload(Cmd::WriteFpgaMemory, &payload, &data))?;
     }
     Ok(())
 }
@@ -188,10 +183,7 @@ fn set_bus_wait<L: Exchange>(driver: &mut Driver<L>, wait: FpgaBusWait) -> Resul
         ..CpuConfig::default()
     };
     let payload = SetCpuConfigPayload::encode(&config).map_err(|e| anyhow!("{e:?}"))?;
-    driver.send_checked(
-        &Frame::with_payload(Cmd::SetCpuConfig, &payload, &[]),
-        DEFAULT_TIMEOUT,
-    )?;
+    driver.send_checked(&Frame::with_payload(Cmd::SetCpuConfig, &payload, &[]))?;
     println!("FPGA bus wait: {} cycles", wait.as_u8());
     Ok(())
 }

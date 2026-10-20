@@ -219,9 +219,7 @@ pub(crate) fn transport_option(cli: &Cli, emulator: Option<&UdpEmulator>) -> Tra
         Some(emulator) => TransportOption {
             iface: emulator.interface(),
             recovery_reply_timeout: Duration::from_millis(50),
-            control_request_timeout: Duration::from_millis(50),
-            enumeration_timeout: Duration::from_secs(1),
-            sync_timeout: Duration::from_secs(5),
+            open_timeout: Duration::from_secs(6),
             ..Default::default()
         },
         None => TransportOption {

@@ -28,6 +28,12 @@ pub(crate) fn build_backend_and_frontend(
     Ok((bin, public))
 }
 
+pub(crate) fn build_backend(root: &Path, debug: bool) -> Result<PathBuf> {
+    let sim = root.join("simulator");
+    run_cargo(cargo_build_args("autd3-rs-simulator", None, debug), &sim)?;
+    Ok(cargo_bin(&sim, None, debug, "autd3-simulator"))
+}
+
 fn frontend_public(frontend: &Path, debug: bool) -> PathBuf {
     frontend
         .join("target")

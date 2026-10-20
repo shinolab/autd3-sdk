@@ -15,7 +15,6 @@ categories.workspace = true
 all-features = true
 
 [features]
-logging = ["dep:tracing-appender", "dep:tracing-subscriber"]
 serde = ["dep:serde", "dep:serde_json"]
 
 [lib]
@@ -27,17 +26,11 @@ nalgebra.workspace = true
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 thiserror.workspace = true
-tracing.workspace = true
-tracing-appender = { workspace = true, optional = true }
-tracing-subscriber = { workspace = true, optional = true }
 zerocopy.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true
 approx.workspace = true
-async-lock.workspace = true
-futures-channel.workspace = true
-pollster.workspace = true
 criterion = { version = "0.8.2", default-features = false }
 
 [[bench]]

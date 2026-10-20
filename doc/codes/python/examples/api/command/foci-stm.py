@@ -1,24 +1,21 @@
-from autd3.commands import ActivatePatternBank, ConfigFociStm, FociStm, FociStmOption, StmConfig, WriteFociBuffer, circle, line
+import math
+
+from autd3.commands import ActivatePatternBank, ConfigFociStm, FociStm, FociStmOption, StmConfig, WriteFociBuffer
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import Hz, m, mm, s
-from autd3.value import Intensity, LoopBehavior, PatternBank, TransitionMode
+from autd3.value import ControlPoint, ControlPoints, Intensity, LoopBehavior, PatternBank, Phase, TransitionMode
 
 geometry = Geometry([Autd3()])
 center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm)
 radius = 30.0 * mm
 num_points = 200
-normal = [0.0, 0.0, 1.0]
-intensity = Intensity.MAX
-dst = []
 # ANCHOR: circle
-circle(center, radius, num_points, normal, intensity, dst)
+points = []
+for i in range(num_points):
+    theta = 2.0 * math.pi * i / num_points
+    p = center + offset(radius * math.cos(theta), radius * math.sin(theta), 0.0 * mm)
+    points.append(ControlPoints([ControlPoint(p, Phase.ZERO)], Intensity.MAX))
 # ANCHOR_END: circle
-
-start = center + offset(-15.0 * mm, 0.0 * mm, 0.0 * mm)
-end = center + offset(15.0 * mm, 0.0 * mm, 0.0 * mm)
-# ANCHOR: line
-line(start, end, num_points, intensity, dst)
-# ANCHOR_END: line
 freq = 1.0 * Hz
 bank = PatternBank.B0
 sound_speed = 340 * m / s
@@ -34,7 +31,6 @@ option = (
     )
     # ANCHOR_END: option
 )
-points = dst
 # ANCHOR: api
 FociStm(freq, points, option)
 # ANCHOR_END: api

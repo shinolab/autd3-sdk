@@ -1,9 +1,9 @@
-use crate::client::MAX_DEVICES;
 use crate::commands::Command;
 use crate::commands::operation::{Distribution, Operation};
 use crate::error::{Error, PayloadError};
 use crate::geometry::Geometry;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
+use autd3_rs_core::MAX_DEVICES;
 
 use super::expansion::Expansion;
 

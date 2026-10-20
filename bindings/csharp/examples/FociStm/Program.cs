@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
@@ -22,8 +23,10 @@ internal static class Program
         Console.WriteLine($"devices: {client.NumDevices}");
 
         var center = geometry.Center + new Vector3(0f, 0f, 150f);
-        var points = new List<ControlPoints>();
-        Stm.Circle(center, 30f * mm, 200, new Vector3(0f, 0f, 1f), Intensity.Max, points);
+        var points = Enumerable.Range(0, 200)
+            .Select(i => 2f * MathF.PI * i / 200)
+            .Select(theta => new ControlPoints(new[] { new ControlPoint(center + 30f * new Vector3(MathF.Cos(theta), MathF.Sin(theta), 0f), Phase.Zero) }, Intensity.Max))
+            .ToList();
 
         await client.SendAsync(new SetSilencer());
         await client.SendAsync(new FociStm(1 * Hz, points.ToArray(), new FociStmOption()));

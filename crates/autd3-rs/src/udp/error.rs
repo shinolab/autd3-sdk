@@ -19,7 +19,7 @@ pub enum UdpError {
     #[error("no simulator answers at {0}")]
     SimulatorNotFound(SocketAddrV6),
     #[error(
-        "the simulator did not answer the geometry at {0} within enumeration_timeout; is it an older simulator?"
+        "the simulator did not answer the geometry at {0} within open_timeout; is it an older simulator?"
     )]
     SimulatorControlNoResponse(SocketAddrV6),
     #[error("the simulator refused the geometry with status {status:#04x}")]
@@ -41,7 +41,9 @@ pub enum UdpError {
         "{replies} unassigned devices answered one Discover; a device failed to close its downstream port"
     )]
     DownstreamNotClosed { replies: usize },
-    #[error("only {found} of the {expected} devices declared by the geometry were enumerated")]
+    #[error(
+        "only {found} of the {expected} devices declared by the geometry were enumerated within open_timeout"
+    )]
     EnumerationTimeout { expected: usize, found: usize },
     #[error("geometry declares {expected} devices but {found} are attached")]
     DeviceCountMismatch { expected: usize, found: usize },
@@ -56,12 +58,12 @@ pub enum UdpError {
         not_ready: Vec<u8>,
         timeout: Duration,
     },
+    #[error("open_timeout must be longer than zero")]
+    ZeroOpenTimeout,
     #[error("recovery_reply_timeout must be longer than zero")]
     ZeroRecoveryReplyTimeout,
     #[error("lost_timeout must be longer than zero")]
     ZeroLostTimeout,
-    #[error("control_request_timeout must be longer than zero")]
-    ZeroControlRequestTimeout,
     #[error("ack_timeout must be longer than zero")]
     ZeroAckTimeout,
     #[error("send_rate_limit_percent must be within {min}..=100 %, but {value} % was given")]

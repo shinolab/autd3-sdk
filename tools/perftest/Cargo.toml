@@ -16,13 +16,15 @@ path = "src/main.rs"
 mem-profile = []
 
 [dependencies]
-autd3-rs = { workspace = true, features = ["logging"] }
+autd3-rs.workspace = true
+tracing-subscriber.workspace = true
 autd3-cpu-wire.workspace = true
 autd3-rs-firmware-emulator = { workspace = true, features = ["udp"] }
 clap.workspace = true
 humantime.workspace = true
 anyhow.workspace = true
 tokio = { workspace = true, features = ["time", "macros", "rt", "rt-multi-thread", "signal"] }
+pollster.workspace = true
 zerocopy.workspace = true
 
 [lints]

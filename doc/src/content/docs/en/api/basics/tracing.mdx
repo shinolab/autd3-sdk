@@ -1,6 +1,6 @@
 ---
 title: Logging
-description: init_tracing, which writes the library's logs to standard output or standard error
+description: Writing the library's logs to standard output or standard error
 sidebar:
   order: 6
 ---
@@ -12,18 +12,17 @@ import pySample from "@codes/python/examples/api/basics/tracing.py?raw";
 import csSample from "@codes/csharp/examples/api/basics/tracing.cs?raw";
 
 The library's logs are emitted through the `tracing` crate.
-`init_tracing` is provided as a utility for initializing logging.
-
-In Rust, enable the `logging` feature of `autd3-rs`.
+In Rust, the library has no logging initialization API; initialize a subscriber directly, e.g. with `tracing-subscriber`.
+Python and C# provide `init_tracing` for initializing logging.
 
 ## API
 
 <CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
 
-`init_tracing` returns a guard.
+`init_tracing` in Python and C# returns a guard.
 Keep the guard until the end of the program.
 
-## TracingOption
+## TracingOption (Python / C#)
 
 | Field            | Type           | Default  | Description                                                  |
 | ---------------- | -------------- | -------- | ------------------------------------------------------------ |

@@ -1,5 +1,5 @@
-using System.Collections.Generic;
-using System.Numerics;
+using System;
+using System.Linq;
 using System.Threading.Tasks;
 using AUTD3;
 using static AUTD3.Units;
@@ -17,16 +17,10 @@ await using var client = Client.Open(geometry, new TransportOption());
 await client.SendAsync(Command.Sequence(new Clear(), new Synchronize()));
 
 var center = geometry.Center + Offset(0.0f * mm, 0.0f * mm, 150.0f * mm);
-var dst = new List<ControlPoints>();
-Stm.Circle(
-    center,
-    30.0f * mm,
-    200,
-    Vector3.UnitZ,
-    Intensity.Max,
-    dst
-);
-var points = dst.ToArray();
+var points = Enumerable.Range(0, 200)
+    .Select(i => 2.0f * MathF.PI * i / 200)
+    .Select(theta => (ControlPoints)(center + Offset(MathF.Cos(theta) * 30.0f * mm, MathF.Sin(theta) * 30.0f * mm, 0.0f * mm)))
+    .ToArray();
 
 await client.SendAsync(new FociStm(
     1.0f * Hz,

@@ -13,7 +13,8 @@ name = "autd3-rs-firmware-test"
 path = "src/main.rs"
 
 [dependencies]
-autd3-rs = { workspace = true, features = ["logging"] }
+autd3-rs.workspace = true
+tracing-subscriber.workspace = true
 autd3-rs-pattern.workspace = true
 autd3-rs-modulation.workspace = true
 clap.workspace = true

@@ -8,8 +8,8 @@ use anyhow::Result;
 
 use autd3_rs::commands::{Clear, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs::{Client, Telemetry, TransportOption};
+use tracing_subscriber::EnvFilter;
 
 const POLL_INTERVAL: Duration = Duration::from_secs(1);
 
@@ -30,7 +30,11 @@ const COUNTERS: [(&str, Read); 10] = [
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
-    let _log_guard = init_tracing(TracingOption::default());
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
+        .init();
 
     let geometry = Geometry::new(vec![Autd3::default()]);
     let client = Client::open(&geometry, &TransportOption::default())?;

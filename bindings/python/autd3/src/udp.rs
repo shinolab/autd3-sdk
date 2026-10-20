@@ -4,11 +4,8 @@ use std::time::Duration;
 use autd3_python_capsule::extract::{duration_to_py, extract_duration};
 use autd3_rs::Interface as CoreInterface;
 use autd3_rs::udp::TransportOption as CoreOption;
-use autd3_rs_firmware_emulator::udp::UdpEmulator as CoreEmulator;
-use pyo3::exceptions::{PyIndexError, PyRuntimeError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::sync::MutexExt;
-use std::sync::{Mutex, PoisonError};
 
 pub(crate) fn none_or_duration(obj: &Bound<'_, PyAny>) -> PyResult<Option<Duration>> {
     if obj.is_none() {
@@ -61,7 +58,11 @@ impl Interface {
 
     #[pyo3(name = "name")]
     fn interface_name(&self) -> Option<&str> {
-        self.0.name()
+        match &self.0 {
+            CoreInterface::Name(name) => Some(name),
+            CoreInterface::Auto | CoreInterface::Simulator(_) | CoreInterface::Addr(_) => None,
+            _ => unreachable!(),
+        }
     }
 
     fn simulator_port(&self) -> Option<u16> {
@@ -104,11 +105,9 @@ impl TransportOption {
     #[new]
     #[pyo3(signature = (
         iface = CoreOption::default().iface,
+        open_timeout = CoreOption::default().open_timeout,
         recovery_reply_timeout = CoreOption::default().recovery_reply_timeout,
         lost_timeout = CoreOption::default().lost_timeout,
-        control_request_timeout = CoreOption::default().control_request_timeout,
-        enumeration_timeout = CoreOption::default().enumeration_timeout,
-        sync_timeout = CoreOption::default().sync_timeout,
         ack_timeout = CoreOption::default().ack_timeout,
         send_rate_limit_percent = CoreOption::default().send_rate_limit_percent,
         send_buffer_bytes = CoreOption::default().send_buffer_bytes,
@@ -116,31 +115,33 @@ impl TransportOption {
     #[allow(clippy::too_many_arguments)]
     fn new(
         #[pyo3(from_py_with = extract_iface)] iface: CoreInterface,
+        #[pyo3(from_py_with = extract_duration)] open_timeout: Duration,
         #[pyo3(from_py_with = extract_duration)] recovery_reply_timeout: Duration,
         #[pyo3(from_py_with = extract_duration)] lost_timeout: Duration,
-        #[pyo3(from_py_with = extract_duration)] control_request_timeout: Duration,
-        #[pyo3(from_py_with = extract_duration)] enumeration_timeout: Duration,
-        #[pyo3(from_py_with = extract_duration)] sync_timeout: Duration,
         #[pyo3(from_py_with = extract_duration)] ack_timeout: Duration,
         send_rate_limit_percent: Option<f32>,
         send_buffer_bytes: Option<NonZeroUsize>,
     ) -> Self {
         Self(CoreOption {
             iface,
+            open_timeout,
             recovery_reply_timeout,
             lost_timeout,
-            control_request_timeout,
-            enumeration_timeout,
-            sync_timeout,
             ack_timeout,
             send_rate_limit_percent,
             send_buffer_bytes,
+            ..CoreOption::default()
         })
     }
 
     #[getter]
     fn iface(&self) -> Interface {
         Interface(self.0.iface.clone())
+    }
+
+    #[getter]
+    fn open_timeout<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        duration_to_py(py, self.0.open_timeout)
     }
 
     #[getter]
@@ -151,21 +152,6 @@ impl TransportOption {
     #[getter]
     fn lost_timeout<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         duration_to_py(py, self.0.lost_timeout)
-    }
-
-    #[getter]
-    fn control_request_timeout<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        duration_to_py(py, self.0.control_request_timeout)
-    }
-
-    #[getter]
-    fn enumeration_timeout<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        duration_to_py(py, self.0.enumeration_timeout)
-    }
-
-    #[getter]
-    fn sync_timeout<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        duration_to_py(py, self.0.sync_timeout)
     }
 
     #[getter]
@@ -185,81 +171,5 @@ impl TransportOption {
 
     fn __repr__(&self) -> String {
         format!("{:?}", self.0)
-    }
-}
-
-static EMULATORS: Mutex<Vec<std::sync::Weak<Mutex<Option<CoreEmulator>>>>> = Mutex::new(Vec::new());
-
-pub(crate) fn shutdown_emulators() {
-    let emulators = std::mem::take(&mut *EMULATORS.lock().unwrap_or_else(PoisonError::into_inner));
-    for emulator in emulators.iter().filter_map(std::sync::Weak::upgrade) {
-        drop(
-            emulator
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .take(),
-        );
-    }
-}
-
-#[pyclass(name = "UdpEmulator", module = "autd3")]
-pub struct UdpEmulator(std::sync::Arc<Mutex<Option<CoreEmulator>>>);
-
-impl UdpEmulator {
-    fn with<R>(&self, py: Python<'_>, f: impl FnOnce(&CoreEmulator) -> R) -> PyResult<R> {
-        self.0
-            .lock_py_attached(py)
-            .unwrap_or_else(PoisonError::into_inner)
-            .as_ref()
-            .map(f)
-            .ok_or_else(|| PyRuntimeError::new_err("the UDP emulator has been shut down"))
-    }
-}
-
-#[pymethods]
-impl UdpEmulator {
-    #[new]
-    fn new(py: Python<'_>, num_devices: usize) -> PyResult<Self> {
-        let emulator = CoreEmulator::spawn(num_devices).map_err(|e| {
-            autd3_python_capsule::to_pyerr_with_code(
-                py,
-                autd3_python_capsule::error_code::NETWORK,
-                e.to_string(),
-            )
-        })?;
-        let inner = std::sync::Arc::new(Mutex::new(Some(emulator)));
-        let mut registry = EMULATORS
-            .lock_py_attached(py)
-            .unwrap_or_else(PoisonError::into_inner);
-        registry.retain(|weak| weak.strong_count() > 0);
-        registry.push(std::sync::Arc::downgrade(&inner));
-        Ok(Self(inner))
-    }
-
-    fn num_devices(&self, py: Python<'_>) -> PyResult<usize> {
-        self.with(py, CoreEmulator::num_devices)
-    }
-
-    fn option(&self, py: Python<'_>) -> PyResult<TransportOption> {
-        self.with(py, |emulator| {
-            TransportOption(CoreOption {
-                iface: emulator.interface(),
-                recovery_reply_timeout: Duration::from_millis(50),
-                control_request_timeout: Duration::from_millis(50),
-                enumeration_timeout: Duration::from_secs(1),
-                sync_timeout: Duration::from_secs(5),
-                ..CoreOption::default()
-            })
-        })
-    }
-
-    fn reboot(&self, py: Python<'_>, index: usize) -> PyResult<()> {
-        let num_devices = self.with(py, CoreEmulator::num_devices)?;
-        if index >= num_devices {
-            return Err(PyIndexError::new_err(format!(
-                "device index {index} is out of range for {num_devices} devices"
-            )));
-        }
-        self.with(py, |emulator| emulator.reboot(index))
     }
 }

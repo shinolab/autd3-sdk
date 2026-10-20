@@ -43,7 +43,7 @@ pub(crate) fn devices_sent_to(sent: Result<Sent, UdpError>) -> Result<u128, Erro
     let sent = sent?;
     match sent.unsent {
         Some(unsent) => Err(UdpError::from(unsent).into()),
-        None => Ok(sent.sent_to),
+        None => Ok(sent.accepted_devices),
     }
 }
 
@@ -281,7 +281,7 @@ impl Driver {
             let _ = recovery_waiter.send(Err(error()));
         }
         fail_all(requests, error);
-        let _ = self.bus.close();
+        self.bus.close();
         tracing::debug!("driver stopped");
     }
 
@@ -378,9 +378,12 @@ impl ReplyHandler {
             );
             return;
         }
-        request
-            .reply_slot
-            .record_reply(reply.device, reply.error_code, reply.data());
+        request.reply_slot.record_reply(
+            reply.device,
+            reply.error_code,
+            reply.sys_time,
+            reply.data(),
+        );
         request.replied_devices |= reply_bit;
         if !request.has_all_replies() {
             return;
@@ -404,14 +407,14 @@ impl Drop for Driver {
 #[cfg(unix)]
 impl std::os::fd::AsFd for Driver {
     fn as_fd(&self) -> std::os::fd::BorrowedFd<'_> {
-        std::os::fd::AsFd::as_fd(&*self.bus)
+        std::os::fd::AsFd::as_fd(self.bus.socket())
     }
 }
 
 #[cfg(windows)]
 impl std::os::windows::io::AsSocket for Driver {
     fn as_socket(&self) -> std::os::windows::io::BorrowedSocket<'_> {
-        std::os::windows::io::AsSocket::as_socket(&*self.bus)
+        std::os::windows::io::AsSocket::as_socket(self.bus.socket())
     }
 }
 
@@ -546,9 +549,9 @@ mod tests {
             stats: BusStats::default(),
         };
 
-        reply_handler.handle_reply(&Reply::new(0, 7, 0, &[]));
-        reply_handler.handle_reply(&Reply::new(0, 7, 5, &[]));
-        reply_handler.handle_reply(&Reply::new(1, 7, 0, &[]));
+        reply_handler.handle_reply(&Reply::new(0, 7, 0, 0, &[]));
+        reply_handler.handle_reply(&Reply::new(0, 7, 5, 0, &[]));
+        reply_handler.handle_reply(&Reply::new(1, 7, 0, 0, &[]));
 
         assert_eq!(pollster::block_on(rx).unwrap().error_codes(), [0, 0]);
     }

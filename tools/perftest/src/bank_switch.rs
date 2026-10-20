@@ -1,4 +1,3 @@
-use std::net::{SocketAddr, UdpSocket};
 use std::num::NonZeroU16;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -6,24 +5,25 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use autd3_cpu_wire::payload::Telemetry;
-use autd3_cpu_wire::udp::{FrameReply, Header, Kind, PROTOCOL_VERSION};
 use autd3_rs::commands::{
-    ActivatePatternBank, Clear, ConfigPattern, GpioOut, Pattern, SetGpioOut, Synchronize,
-    WritePatternBuffer,
+    ActivatePatternBank, Clear, ConfigPattern, Distribution, GpioOut, Pattern, SetGpioOut,
+    Synchronize, WritePatternBuffer,
 };
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::protocol::{Cmd, EXEC_AT_UNIT_NS, FrameHeader};
+use autd3_rs::protocol::{Cmd, EXEC_AT_UNIT_NS};
 use autd3_rs::value::{
     Intensity, LoopBehavior, PatternBank, SamplingConfig, SysTime, TransitionMode,
 };
-use autd3_rs::{Datagram, DeviceState, Frames, Reply, TransportOption, UdpBus};
-use zerocopy::{FromBytes, IntoBytes};
+use autd3_rs::{
+    Client, Datagram, DeviceState, Error, ExecAt, Frame, Frames, Response, TransportOption,
+};
+use pollster::block_on;
+use zerocopy::FromBytes;
 
 use crate::cli::{Cli, Framing};
 use crate::run::{spawn_emulator, spawn_signal_listener, transport_option};
 use crate::stats::{Counters, SampleStatus};
 
-const RECV_BUFFER_BYTES: usize = 2048;
 const REPORT_INTERVAL: Duration = Duration::from_secs(1);
 const BIN_NS: i64 = 1_000;
 const ORIGIN_NS: i64 = -10_000_000;
@@ -42,8 +42,8 @@ pub(crate) async fn run(cli: &Cli) -> Result<()> {
     measured
 }
 
-fn exec_at(now: SysTime, lead: Duration) -> u32 {
-    let us = (now + lead).sys_time().div_ceil(EXEC_AT_UNIT_NS);
+fn exec_at_stamp(at: SysTime) -> u32 {
+    let us = at.sys_time().div_ceil(EXEC_AT_UNIT_NS);
     match u32::try_from(us & u64::from(u32::MAX)) {
         Ok(0) | Err(_) => 1,
         Ok(us) => us,
@@ -56,43 +56,6 @@ fn after_boundary(sys_time: u64, exec_at: u32) -> i64 {
     behind * EXEC_AT_UNIT_NS.cast_signed() + (sys_time % EXEC_AT_UNIT_NS).cast_signed()
 }
 
-#[cfg(unix)]
-fn clone_socket(bus: &UdpBus) -> std::io::Result<UdpSocket> {
-    use std::os::fd::AsFd;
-    Ok(UdpSocket::from(bus.as_fd().try_clone_to_owned()?))
-}
-
-#[cfg(windows)]
-fn clone_socket(bus: &UdpBus) -> std::io::Result<UdpSocket> {
-    use std::os::windows::io::AsSocket;
-    Ok(UdpSocket::from(bus.as_socket().try_clone_to_owned()?))
-}
-
-fn stage(exec_at: u32, datagram: &Datagram) -> Vec<u8> {
-    let mut bytes = FrameHeader {
-        reserved: 0,
-        cmd: datagram.cmd.as_u8(),
-        exec_at: exec_at.into(),
-    }
-    .as_bytes()
-    .to_vec();
-    bytes.extend_from_slice(datagram.payload());
-    bytes
-}
-
-fn requests(frames: &Frames, devices: usize) -> Vec<Vec<&Datagram>> {
-    frames
-        .iter()
-        .map(|frame| (0..devices).map(|d| frame.datagram_for(d)).collect())
-        .collect()
-}
-
-struct Peeked {
-    device: usize,
-    msg_id: u16,
-    sys_time: u64,
-}
-
 struct Answer {
     status: u8,
     sys_time: Option<u64>,
@@ -100,9 +63,32 @@ struct Answer {
 }
 
 struct Sent {
-    msg_id: u16,
     exec_at: u32,
     answers: Vec<Option<Answer>>,
+}
+
+impl Sent {
+    fn answered(exec_at: u32, response: &Response, lost: &[usize]) -> Self {
+        Self {
+            exec_at,
+            answers: (0..response.error_codes().len())
+                .map(|device| {
+                    (!lost.contains(&device)).then(|| Answer {
+                        status: response.error_codes()[device],
+                        sys_time: response.sys_time_of(device).map(SysTime::sys_time),
+                        data: response.reply_data_of(device).to_vec(),
+                    })
+                })
+                .collect(),
+        }
+    }
+
+    fn unanswered(exec_at: u32, devices: usize) -> Self {
+        Self {
+            exec_at,
+            answers: (0..devices).map(|_| None).collect(),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -137,101 +123,46 @@ impl Exchange {
 }
 
 struct Session {
-    bus: UdpBus,
-    peek: UdpSocket,
-    buf: Box<[u8; RECV_BUFFER_BYTES]>,
-    ack_timeout: Duration,
+    client: Client,
     exec_lead: Option<Duration>,
 }
 
 impl Session {
     fn open(cli: &Cli, option: &TransportOption, geometry: &Geometry) -> Result<Self> {
-        let bus = UdpBus::open_with_geometry(option, geometry).context("opening the devices")?;
-        let peek = clone_socket(&bus).context("duplicating the socket")?;
+        let client = Client::open(geometry, option).context("opening the devices")?;
         Ok(Self {
-            bus,
-            peek,
-            buf: Box::new([0; RECV_BUFFER_BYTES]),
-            ack_timeout: cli.ack_timeout,
+            client,
             exec_lead: cli.exec_lead,
         })
     }
 
-    fn device_of(&self, src: SocketAddr) -> Option<usize> {
-        let SocketAddr::V6(src) = src else {
-            return None;
-        };
-        self.bus
-            .device_addrs()
-            .iter()
-            .position(|unit| unit.ip() == src.ip() && unit.port() == src.port())
-    }
-
-    fn peek(&mut self) -> Option<Peeked> {
-        let (len, src) = self.peek.peek_from(&mut self.buf[..]).ok()?;
-        let (header, body) = Header::read_from_prefix(&self.buf[..len]).ok()?;
-        if header.version != PROTOCOL_VERSION || header.kind != Kind::Frame.as_u8() {
-            return None;
-        }
-        let (reply, _) = FrameReply::read_from_prefix(body).ok()?;
-        Some(Peeked {
-            device: self.device_of(src)?,
-            msg_id: header.msg_id.get(),
-            sys_time: reply.sys_time.get(),
-        })
-    }
-
-    fn receive(&mut self, deadline: Instant) -> Result<Option<(Reply, Option<u64>)>> {
-        self.bus.wait_readable(deadline)?;
-        let peeked = if Instant::now() < deadline {
-            self.peek()
-        } else {
-            None
-        };
-        let Some(reply) = self.bus.recv(deadline)? else {
-            return Ok(None);
-        };
-        let sys_time = peeked
-            .filter(|p| p.device == reply.device && p.msg_id == reply.msg_id)
-            .map(|p| p.sys_time)
-            .filter(|&t| t != 0);
-        Ok(Some((reply, sys_time)))
-    }
-
-    fn exchange(&mut self, requests: &[Vec<&Datagram>], scheduled: bool) -> Result<Exchange> {
+    fn exchange<'a>(
+        &self,
+        frames: impl IntoIterator<Item = Frame<'a>>,
+        scheduled: bool,
+    ) -> Result<Exchange> {
         let lead = self.exec_lead.filter(|_| scheduled);
+        let devices = self.client.num_devices();
         let mut exchange = Exchange {
-            started: self.bus.device_clock().now(),
-            frames: Vec::with_capacity(requests.len()),
+            started: self.client.device_time_now().ok(),
+            frames: Vec::new(),
             unsent: false,
         };
-        for datagrams in requests {
-            let exec_at = match lead {
-                None => 0,
-                Some(lead) => exec_at(
-                    self.bus
-                        .device_clock()
-                        .now()
-                        .context("the device time is unknown")?,
-                    lead,
-                ),
-            };
-            let bytes: Vec<Vec<u8>> = datagrams.iter().map(|d| stage(exec_at, d)).collect();
-            match self.bus.send(self.bus.reserve_msg_id(), &bytes) {
-                Ok(sent) => {
-                    if let Some(unsent) = sent.unsent {
-                        eprintln!(
-                            "device[{}] was not sent to: {}",
-                            unsent.first_failed_device, unsent.cause
-                        );
-                        exchange.unsent = true;
-                    }
-                    exchange.frames.push(Sent {
-                        msg_id: sent.msg_id,
-                        exec_at,
-                        answers: datagrams.iter().map(|_| None).collect(),
-                    });
+        let mut pending = Vec::new();
+        for frame in frames {
+            let (exec, exec_at) = match lead {
+                None => (ExecAt::Immediate, 0),
+                Some(lead) => {
+                    let at = self
+                        .client
+                        .device_time_now()
+                        .context("the device time is unknown")?
+                        + lead;
+                    (ExecAt::At(at), exec_at_stamp(at))
                 }
+            };
+            match block_on(self.client.send_frame_at(frame, exec)) {
+                Ok(response) => pending.push((exec_at, response)),
                 Err(e) => {
                     eprintln!("sending failed: {e}");
                     exchange.unsent = true;
@@ -239,33 +170,23 @@ impl Session {
                 }
             }
         }
-        let deadline = Instant::now() + self.ack_timeout;
-        while exchange
-            .frames
-            .iter()
-            .any(|f| f.answers.iter().any(Option::is_none))
-            && Instant::now() < deadline
-        {
-            let Some((reply, sys_time)) = self.receive(deadline)? else {
-                continue;
+        for (exec_at, response) in pending {
+            let sent = match block_on(response) {
+                Ok(response) => Sent::answered(exec_at, &response, &self.lost_devices()),
+                Err(Error::Timeout { .. }) => Sent::unanswered(exec_at, devices),
+                Err(e) => {
+                    eprintln!("waiting for the replies failed: {e}");
+                    exchange.unsent = true;
+                    Sent::unanswered(exec_at, devices)
+                }
             };
-            if let Some(frame) = exchange
-                .frames
-                .iter_mut()
-                .find(|f| f.msg_id == reply.msg_id)
-            {
-                frame.answers[reply.device].get_or_insert(Answer {
-                    status: reply.error_code,
-                    sys_time,
-                    data: reply.data().to_vec(),
-                });
-            }
+            exchange.frames.push(sent);
         }
         Ok(exchange)
     }
 
     fn lost_devices(&self) -> Vec<usize> {
-        self.bus
+        self.client
             .state_checker()
             .check()
             .map(|states| {
@@ -280,19 +201,17 @@ impl Session {
             .unwrap_or_default()
     }
 
-    fn run_unscheduled(&mut self, frames: &Frames, what: &str) -> Result<Exchange> {
-        let devices = self.bus.num_devices();
-        let exchange = self.exchange(&requests(frames, devices), false)?;
+    fn run_unscheduled(&self, frames: &Frames, what: &str) -> Result<Exchange> {
+        let exchange = self.exchange(frames, false)?;
         if let Some(failure) = exchange.failure() {
             bail!("{what} failed: {failure:?}");
         }
         Ok(exchange)
     }
 
-    fn read_telemetry(&mut self) -> Result<Vec<Telemetry>> {
-        let read = Datagram::no_payload(Cmd::ReadTelemetry);
-        let devices = self.bus.num_devices();
-        let exchange = self.exchange(&[vec![&read; devices]], false)?;
+    fn read_telemetry(&self) -> Result<Vec<Telemetry>> {
+        let read = [Datagram::no_payload(Cmd::ReadTelemetry)];
+        let exchange = self.exchange([Frame::new(Distribution::Broadcast, &read)], false)?;
         if let Some(failure) = exchange.failure() {
             bail!("reading the telemetry failed: {failure:?}");
         }
@@ -576,7 +495,7 @@ fn encode_switch(
 }
 
 fn prepare(
-    session: &mut Session,
+    session: &Session,
     geometry: &Geometry,
     phases: &[Vec<autd3_rs::value::Phase>],
     intensities: &[Vec<Intensity>],
@@ -622,13 +541,13 @@ fn measure(cli: &Cli, option: &TransportOption, shutdown: &AtomicBool) -> Result
         );
     }
     let geometry = Geometry::new((0..devices).map(|_| Autd3::default()));
-    let mut session = Session::open(cli, option, &geometry)?;
+    let session = Session::open(cli, option, &geometry)?;
     let phases = geometry.phase_buffer();
     let intensities: Vec<Vec<Intensity>> = geometry
         .iter()
         .map(|d| vec![Intensity::MIN; d.num_transducers()])
         .collect();
-    prepare(&mut session, &geometry, &phases, &intensities)?;
+    prepare(&session, &geometry, &phases, &intensities)?;
     eprintln!("GPIO[0]: PatternBank (toggles on every switch; probe it on two or more devices)");
     let telemetry_start = session.read_telemetry()?;
 
@@ -647,7 +566,7 @@ fn measure(cli: &Cli, option: &TransportOption, shutdown: &AtomicBool) -> Result
             stopped = Some(e);
             break;
         }
-        let exchange = match session.exchange(&requests(&frames, devices), true) {
+        let exchange = match session.exchange(&frames, true) {
             Ok(exchange) => exchange,
             Err(e) => {
                 stopped = Some(e);
@@ -659,6 +578,13 @@ fn measure(cli: &Cli, option: &TransportOption, shutdown: &AtomicBool) -> Result
             None => stats.record(&exchange),
             Some(failure) => {
                 stats.fail(failure);
+                let lost = session.lost_devices();
+                if !lost.is_empty() {
+                    stopped = Some(anyhow::anyhow!(
+                        "stopped because devices {lost:?} are Lost: the client no longer sends to them"
+                    ));
+                    break;
+                }
                 if cli.stop_on_error {
                     stopped = Some(anyhow::anyhow!(
                         "stopped at the first failure: {failure:?} (--stop-on-error)"
@@ -688,7 +614,7 @@ fn measure(cli: &Cli, option: &TransportOption, shutdown: &AtomicBool) -> Result
         Err(e) => eprintln!("reading the telemetry at the end failed: {e}"),
     }
     let lost = session.lost_devices();
-    session.bus.close()?;
+    drop(session);
     match stopped {
         Some(e) if lost.is_empty() => Err(e),
         Some(e) => Err(e.context(format!("devices {lost:?} are Lost"))),

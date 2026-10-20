@@ -20,6 +20,7 @@ impl DeviceReplyData {
 
 pub(crate) struct ReplyBuffers {
     error_codes: Box<[u8]>,
+    sys_times: Box<[u64]>,
     reply_data: Box<[DeviceReplyData]>,
 }
 
@@ -27,17 +28,26 @@ impl ReplyBuffers {
     fn new(num_devices: usize) -> Self {
         Self {
             error_codes: vec![0u8; num_devices].into_boxed_slice(),
+            sys_times: vec![0u64; num_devices].into_boxed_slice(),
             reply_data: vec![DeviceReplyData::EMPTY; num_devices].into_boxed_slice(),
         }
     }
 
     pub(crate) fn reset(&mut self) {
         self.error_codes.fill(0);
+        self.sys_times.fill(0);
         self.reply_data.fill(DeviceReplyData::EMPTY);
     }
 
-    pub(crate) fn record_reply(&mut self, device: usize, error_code: u8, data: &[u8]) {
+    pub(crate) fn record_reply(
+        &mut self,
+        device: usize,
+        error_code: u8,
+        sys_time: u64,
+        data: &[u8],
+    ) {
         self.error_codes[device] = error_code;
+        self.sys_times[device] = sys_time;
         let len = data.len().min(REPLY_DATA_BYTES_MAX);
         let device_data = &mut self.reply_data[device];
         device_data.len = u8::try_from(len).expect("bounded by REPLY_DATA_BYTES_MAX");
@@ -45,18 +55,20 @@ impl ReplyBuffers {
     }
 
     pub(crate) fn response(&self, replied_devices: u128) -> Response {
-        if self.reply_data.iter().all(|v| v.len == 0) {
-            return Response::from_error_codes(&self.error_codes)
-                .with_replied_devices(replied_devices);
-        }
-        Response::with_reply_data(
-            &self.error_codes,
-            self.reply_data
-                .iter()
-                .map(|v| v.bytes[..usize::from(v.len)].to_vec())
-                .collect(),
-        )
-        .with_replied_devices(replied_devices)
+        let response = if self.reply_data.iter().all(|v| v.len == 0) {
+            Response::from_error_codes(&self.error_codes)
+        } else {
+            Response::with_reply_data(
+                &self.error_codes,
+                self.reply_data
+                    .iter()
+                    .map(|v| v.bytes[..usize::from(v.len)].to_vec())
+                    .collect(),
+            )
+        };
+        response
+            .with_sys_times(&self.sys_times)
+            .with_replied_devices(replied_devices)
     }
 }
 
@@ -143,6 +155,24 @@ mod tests {
 
     fn acquire(pool: &Arc<ReplySlotPool>, n: usize) -> Vec<ReplySlot> {
         (0..n).map(|_| pollster::block_on(pool.acquire())).collect()
+    }
+
+    #[test]
+    fn a_reused_slot_forgets_the_device_times_of_its_previous_frame() {
+        let mut buffers = ReplyBuffers::new(2);
+        buffers.record_reply(0, 0, 1_000, &[]);
+        assert_eq!(
+            buffers.response(0b01).sys_time_of(0),
+            Some(crate::value::SysTime::from_nanos(1_000))
+        );
+        buffers.reset();
+        buffers.record_reply(1, 0, 2_000, &[]);
+        let response = buffers.response(0b11);
+        assert_eq!(response.sys_time_of(0), None);
+        assert_eq!(
+            response.sys_time_of(1),
+            Some(crate::value::SysTime::from_nanos(2_000))
+        );
     }
 
     #[test]

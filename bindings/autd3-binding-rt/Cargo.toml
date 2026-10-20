@@ -1,0 +1,23 @@
+[package]
+name = "autd3-binding-rt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+workspace = "../ffi"
+publish = false
+description = "Runtime shared by the AUTD3 language bindings: the executor that drives client futures and the tracing initialization."
+
+[dependencies]
+thiserror.workspace = true
+tracing-appender.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+async-lock.workspace = true
+futures-channel.workspace = true
+pollster.workspace = true
+
+[lints]
+workspace = true

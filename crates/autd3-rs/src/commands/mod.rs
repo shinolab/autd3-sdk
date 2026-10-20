@@ -18,7 +18,7 @@ pub use operation::{
     SetCpuConfig, SetFpgaConfig, SetGpioOut, SetOutputMask, SetPhaseCorrection, SetPulseWidthTable,
     SetSilencer, SilencerConfig, StmIntensity, Synchronize, WritePatternBuffer, WritePatternPhase,
 };
-pub use stm::{FociStm, FociStmOption, PatternStm, PatternStmOption, StmConfig, circle, line};
+pub use stm::{FociStm, FociStmOption, PatternStm, PatternStmOption, StmConfig};
 
 pub use crate::datagram::{Each, Expansion, each};
 use crate::error::Error;

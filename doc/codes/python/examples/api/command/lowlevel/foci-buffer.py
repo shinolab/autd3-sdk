@@ -1,17 +1,16 @@
-from autd3.commands import ConfigFociStm, StmConfig, WriteFociBuffer, circle
+import math
+
+from autd3.commands import ConfigFociStm, StmConfig, WriteFociBuffer
+from autd3.geometry import offset
 from autd3.units import Hz, m, mm, s
-from autd3.value import Intensity, LoopBehavior, PatternBank
+from autd3.value import ControlPoint, ControlPoints, Intensity, LoopBehavior, PatternBank, Phase
 
 bank = PatternBank.B0
 points = []
-circle(
-    [0.0, 0.0, 0.0],
-    30.0 * mm,
-    200,
-    [0.0, 0.0, 1.0],
-    Intensity.MAX,
-    points,
-)
+for i in range(200):
+    theta = 2.0 * math.pi * i / 200
+    p = offset(30.0 * mm * math.cos(theta), 30.0 * mm * math.sin(theta), 0.0 * mm)
+    points.append(ControlPoints([ControlPoint(p, Phase.ZERO)], Intensity.MAX))
 config = StmConfig(1.0 * Hz).into_sampling_config(len(points))
 
 start_index = 0

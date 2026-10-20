@@ -10,7 +10,6 @@ from autd3_core import (
     Duration,
     Geometry,
     Intensity,
-    Length,
     Nearest,
     Freq,
     Phase,
@@ -215,11 +214,9 @@ class TransportOption:
     def __new__(
         cls,
         iface: Interface | str = ...,
+        open_timeout: Duration = ...,
         recovery_reply_timeout: Duration = ...,
         lost_timeout: Duration = ...,
-        control_request_timeout: Duration = ...,
-        enumeration_timeout: Duration = ...,
-        sync_timeout: Duration = ...,
         ack_timeout: Duration = ...,
         send_rate_limit_percent: float | None = ...,
         send_buffer_bytes: int | None = ...,
@@ -227,15 +224,11 @@ class TransportOption:
     @property
     def iface(self) -> Interface: ...
     @property
+    def open_timeout(self) -> Duration: ...
+    @property
     def recovery_reply_timeout(self) -> Duration: ...
     @property
     def lost_timeout(self) -> Duration: ...
-    @property
-    def control_request_timeout(self) -> Duration: ...
-    @property
-    def enumeration_timeout(self) -> Duration: ...
-    @property
-    def sync_timeout(self) -> Duration: ...
     @property
     def ack_timeout(self) -> Duration: ...
     @property
@@ -243,13 +236,6 @@ class TransportOption:
     @property
     def send_buffer_bytes(self) -> int | None: ...
     def __eq__(self, other: object) -> bool: ...
-
-@final
-class UdpEmulator:
-    def __new__(cls, num_devices: int) -> UdpEmulator: ...
-    def num_devices(self) -> int: ...
-    def option(self) -> TransportOption: ...
-    def reboot(self, index: int) -> None: ...
 
 @final
 class Response:
@@ -576,22 +562,6 @@ class PatternStm:
         intensities: Intensity | int | IntensityBuffer | Sequence[IntensityBuffer],
         option: PatternStmOption,
     ) -> PatternStm: ...
-
-def circle(
-    center: _Vec3,
-    radius: Length,
-    num_points: int,
-    normal: _Vec3,
-    intensity: Intensity | int,
-    dst: list[ControlPoints],
-) -> None: ...
-def line(
-    start: _Vec3,
-    end: _Vec3,
-    num_points: int,
-    intensity: Intensity | int,
-    dst: list[ControlPoints],
-) -> None: ...
 
 @final
 class Clear:

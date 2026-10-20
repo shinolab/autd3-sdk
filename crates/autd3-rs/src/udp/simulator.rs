@@ -6,6 +6,8 @@ use autd3_rs_core::simulator::{self, Status};
 
 use super::error::UdpError;
 
+const READ_TIMEOUT_WITHOUT_DEADLINE: Duration = Duration::from_secs(1);
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct SimulatorAddrs {
     pub(crate) data: SocketAddrV6,
@@ -29,14 +31,16 @@ impl SimulatorAddrs {
 pub(crate) fn send_geometry(
     control: SocketAddrV6,
     geometry: &Geometry,
-    timeout: Duration,
+    deadline: Option<Instant>,
 ) -> Result<(), UdpError> {
     let socket = UdpSocket::bind((Ipv6Addr::LOCALHOST, 0))?;
     socket.send_to(&simulator::encode_geometry(geometry), control)?;
-    let deadline = Instant::now() + timeout;
     let mut buf = [0u8; 16];
     loop {
-        let remaining = deadline.saturating_duration_since(Instant::now());
+        let remaining = match deadline {
+            Some(deadline) => deadline.saturating_duration_since(Instant::now()),
+            None => READ_TIMEOUT_WITHOUT_DEADLINE,
+        };
         if remaining.is_zero() {
             return Err(UdpError::SimulatorControlNoResponse(control));
         }

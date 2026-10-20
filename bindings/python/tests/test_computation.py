@@ -498,12 +498,13 @@ def test_stm_foci_and_pattern() -> None:
     geo = geometry()
     commands: list[autd3.commands.Command] = []
 
-    points: list[autd3.value.ControlPoints] = []
-    autd3.commands.circle([0.0, 0.0, 150.0], 30.0 * mm, 8, [0.0, 0.0, 1.0], autd3.value.Intensity.MAX, points)
-    assert len(points) == 8
-    assert all(len(sample.points) == 1 and sample.intensity == autd3.value.Intensity.MAX for sample in points)
-    with pytest.raises(TypeError, match="Length"):
-        autd3.commands.circle([0.0, 0.0, 150.0], loose(30.0), 8, [0.0, 0.0, 1.0], autd3.value.Intensity.MAX, points)
+    points = [
+        autd3.value.ControlPoints(
+            [autd3.value.ControlPoint([30.0 * np.cos(theta), 30.0 * np.sin(theta), 150.0], autd3.value.Phase.ZERO)],
+            autd3.value.Intensity.MAX,
+        )
+        for theta in np.linspace(0.0, 2.0 * np.pi, 8, endpoint=False)
+    ]
     commands.append(autd3.commands.FociStm(1.0 * Hz, points, autd3.commands.FociStmOption()))
     with pytest.raises(TypeError):
         loose(autd3.commands.FociStm)(1.0 * Hz, points)

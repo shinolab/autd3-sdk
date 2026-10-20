@@ -9,7 +9,7 @@ use autd3_cpu_wire::udp::{Flags, FrameReply, Kind, PROTOCOL_VERSION};
 use autd3_rs_core::geometry::Geometry;
 use autd3_rs_core::protocol::FrameHeader;
 use autd3_rs_core::value::SysTime;
-use autd3_rs_core::{BusStats, DeviceClock, FRAME_BYTES_MAX};
+use autd3_rs_core::{BusStats, DeviceClock, FRAME_BYTES_MAX, MAX_DEVICES};
 use zerocopy::FromBytes;
 
 use super::channel::{Channel, ReceivedPacket};
@@ -22,20 +22,17 @@ use super::reply::Reply;
 use super::simulator;
 use super::state::{DeviceLiveness, PublishedDeviceStates, StateChecker};
 
-pub use autd3_rs_core::MAX_DEVICES;
-
 #[derive(Debug)]
-pub struct Sent {
-    pub msg_id: u16,
-    pub sent_to: u128,
-    pub unsent: Option<Unsent>,
+pub(crate) struct Sent {
+    pub(crate) accepted_devices: u128,
+    pub(crate) unsent: Option<Unsent>,
 }
 
 #[derive(Debug)]
-pub struct Unsent {
-    pub failed_devices: u128,
-    pub first_failed_device: usize,
-    pub cause: std::io::Error,
+pub(crate) struct Unsent {
+    pub(crate) failed_devices: u128,
+    pub(crate) first_failed_device: usize,
+    pub(crate) cause: std::io::Error,
 }
 
 impl From<Unsent> for UdpError {
@@ -54,11 +51,10 @@ enum ClassifiedPacket {
         reply: Reply,
         reported_unit_id: u8,
         flags: Flags,
-        sys_time: u64,
     },
 }
 
-pub struct UdpBus {
+pub(crate) struct UdpBus {
     channel: Channel,
     device_addrs: Vec<SocketAddrV6>,
     liveness: Mutex<Vec<DeviceLiveness>>,
@@ -73,38 +69,31 @@ pub struct UdpBus {
     closed: AtomicBool,
 }
 
+pub fn discover(option: &TransportOption) -> Result<usize, UdpError> {
+    UdpBus::open_with(option, ExpectedCount::All, SyncOnOpen::Skip, None)
+        .map(|bus| bus.num_devices())
+}
+
 fn session_msg_id_origin() -> u16 {
     let [low, high, ..] = RandomState::new().hash_one(()).to_le_bytes();
     u16::from_le_bytes([low, high])
 }
 
 impl UdpBus {
-    pub fn open_with_geometry(
+    pub(crate) fn open_with_geometry(
         option: &TransportOption,
         geometry: &Geometry,
     ) -> Result<Self, UdpError> {
         Self::open_with(
             option,
             ExpectedCount::Exactly(geometry.num_devices()),
-            SyncOnOpen::Synchronize,
+            if option.sync_on_open {
+                SyncOnOpen::Synchronize
+            } else {
+                SyncOnOpen::Skip
+            },
             Some(geometry),
         )
-    }
-
-    pub fn open_unsynchronized(
-        option: &TransportOption,
-        num_devices: usize,
-    ) -> Result<Self, UdpError> {
-        Self::open_with(
-            option,
-            ExpectedCount::Exactly(num_devices),
-            SyncOnOpen::Skip,
-            None,
-        )
-    }
-
-    pub fn open_unsynchronized_all(option: &TransportOption) -> Result<Self, UdpError> {
-        Self::open_with(option, ExpectedCount::All, SyncOnOpen::Skip, None)
     }
 
     fn open_with(
@@ -114,14 +103,15 @@ impl UdpBus {
         geometry: Option<&Geometry>,
     ) -> Result<Self, UdpError> {
         option.validate()?;
+        let deadline = Instant::now().checked_add(option.open_timeout);
         if let ExpectedCount::Exactly(num_devices) = expected
             && !(1..=MAX_DEVICES).contains(&num_devices)
         {
             return Err(UdpError::InvalidDeviceCount(num_devices));
         }
-        let target = iface::resolve(&option.iface, option.control_request_timeout)?;
+        let target = iface::resolve(&option.iface)?;
         if let (Some(control), Some(geometry)) = (target.simulator_control, geometry) {
-            simulator::send_geometry(control, geometry, option.enumeration_timeout)?;
+            simulator::send_geometry(control, geometry, deadline)?;
         }
         let channel = Channel::open(
             target.all_devices_dst,
@@ -130,7 +120,14 @@ impl UdpBus {
             option.send_buffer_bytes,
         )?;
         let device_clock = DeviceClock::new();
-        let device_addrs = bring_up(&channel, option, expected, sync_on_open, &device_clock)?;
+        let device_addrs = bring_up(
+            &channel,
+            option,
+            deadline,
+            expected,
+            sync_on_open,
+            &device_clock,
+        )?;
         let last_device = device_addrs.len() - 1;
         Ok(Self {
             channel,
@@ -152,33 +149,32 @@ impl UdpBus {
         self.liveness.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    #[must_use]
-    pub fn device_addrs(&self) -> &[SocketAddrV6] {
-        &self.device_addrs
+    pub(crate) fn socket(&self) -> &std::net::UdpSocket {
+        self.channel.socket()
     }
 
     #[must_use]
-    pub fn num_devices(&self) -> usize {
+    pub(crate) fn num_devices(&self) -> usize {
         self.device_addrs.len()
     }
 
     #[must_use]
-    pub fn stats(&self) -> BusStats {
+    pub(crate) fn stats(&self) -> BusStats {
         self.stats.clone()
     }
 
     #[must_use]
-    pub fn state_checker(&self) -> StateChecker {
+    pub(crate) fn state_checker(&self) -> StateChecker {
         StateChecker::new(Arc::clone(&self.published_states))
     }
 
     #[must_use]
-    pub fn device_clock(&self) -> DeviceClock {
+    pub(crate) fn device_clock(&self) -> DeviceClock {
         self.device_clock.clone()
     }
 
     #[must_use]
-    pub fn is_closed(&self) -> bool {
+    pub(crate) fn is_closed(&self) -> bool {
         self.closed.load(Ordering::Acquire)
     }
 
@@ -190,13 +186,13 @@ impl UdpBus {
     }
 
     #[must_use]
-    pub fn reserve_msg_id(&self) -> u16 {
+    pub(crate) fn reserve_msg_id(&self) -> u16 {
         self.last_msg_id
             .fetch_add(1, Ordering::Relaxed)
             .wrapping_add(1)
     }
 
-    pub fn send<F: AsRef<[u8]>>(&self, msg_id: u16, frames: &[F]) -> Result<Sent, UdpError> {
+    pub(crate) fn send<F: AsRef<[u8]>>(&self, msg_id: u16, frames: &[F]) -> Result<Sent, UdpError> {
         self.ensure_open()?;
         if frames.len() != self.device_addrs.len() {
             return Err(UdpError::FrameCountMismatch {
@@ -216,7 +212,7 @@ impl UdpBus {
         })
     }
 
-    pub fn broadcast(&self, msg_id: u16, frame: &[u8]) -> Result<Sent, UdpError> {
+    pub(crate) fn broadcast(&self, msg_id: u16, frame: &[u8]) -> Result<Sent, UdpError> {
         self.ensure_open()?;
         if !(size_of::<FrameHeader>()..=FRAME_BYTES_MAX).contains(&frame.len()) {
             return Err(UdpError::InvalidFrameLength(frame.len()));
@@ -224,7 +220,7 @@ impl UdpBus {
         self.send_to_each_device(Kind::Frame, msg_id, self.device_addrs.len() - 1, |_| frame)
     }
 
-    pub fn send_heartbeat(&self) -> Result<Sent, UdpError> {
+    pub(crate) fn send_heartbeat(&self) -> Result<Sent, UdpError> {
         self.ensure_open()?;
         let sent = self.send_to_each_device(
             Kind::Heartbeat,
@@ -232,7 +228,7 @@ impl UdpBus {
             self.heartbeat_resume_device.load(Ordering::Relaxed),
             |_| &[],
         )?;
-        if sent.sent_to != 0 {
+        if sent.accepted_devices != 0 {
             self.stats.record_heartbeat();
         }
         Ok(sent)
@@ -340,8 +336,7 @@ impl UdpBus {
         match unsent {
             Some(unsent) if kind == Kind::Frame && accepted_devices == 0 => Err(unsent.into()),
             unsent => Ok(Sent {
-                msg_id,
-                sent_to: accepted_devices,
+                accepted_devices,
                 unsent,
             }),
         }
@@ -368,10 +363,15 @@ impl UdpBus {
             return ClassifiedPacket::Irrelevant;
         };
         ClassifiedPacket::DeviceReply {
-            reply: Reply::new(device, packet.header.msg_id.get(), head.status, data),
+            reply: Reply::new(
+                device,
+                packet.header.msg_id.get(),
+                head.status,
+                head.sys_time.get(),
+                data,
+            ),
             reported_unit_id: head.unit_id,
             flags: head.flags,
-            sys_time: head.sys_time.get(),
         }
     }
 
@@ -389,7 +389,7 @@ impl UdpBus {
             .unwrap_or_else(PoisonError::into_inner)
     }
 
-    pub fn start_recovery(&self) -> Result<(), UdpError> {
+    pub(crate) fn start_recovery(&self) -> Result<(), UdpError> {
         self.ensure_open()?;
         let now = Instant::now();
         let lost_devices = self.device_mask_where(DeviceLiveness::is_lost);
@@ -428,14 +428,14 @@ impl UdpBus {
     }
 
     #[must_use]
-    pub fn recovery_deadline(&self) -> Option<Instant> {
+    pub(crate) fn recovery_deadline(&self) -> Option<Instant> {
         self.lock_recovery_window()
             .as_ref()
             .and_then(RecoveryWindow::deadline)
     }
 
     #[must_use]
-    pub fn take_finished_recovery(&self, now: Instant) -> Option<u128> {
+    pub(crate) fn take_finished_recovery(&self, now: Instant) -> Option<u128> {
         let mut window = self.lock_recovery_window();
         if !window.as_ref()?.is_finished(now) {
             return None;
@@ -443,13 +443,13 @@ impl UdpBus {
         window.take().map(|window| window.recovered_devices())
     }
 
-    pub fn readmit_recovered(&self) {
+    pub(crate) fn readmit_recovered(&self) {
         for liveness in self.lock_liveness().iter_mut() {
             liveness.readmit();
         }
     }
 
-    pub fn recv(&self, deadline: Instant) -> Result<Option<Reply>, UdpError> {
+    pub(crate) fn recv(&self, deadline: Instant) -> Result<Option<Reply>, UdpError> {
         self.ensure_open()?;
         loop {
             let Some(classified) = self
@@ -466,7 +466,6 @@ impl UdpBus {
                     reply,
                     reported_unit_id,
                     flags,
-                    sys_time,
                 } => {
                     let device = reply.device;
                     let (accepted, revived) = {
@@ -501,7 +500,7 @@ impl UdpBus {
                         continue;
                     }
                     if device == 0
-                        && let Some(sys_time) = NonZeroU64::new(sys_time)
+                        && let Some(sys_time) = NonZeroU64::new(reply.sys_time)
                     {
                         self.device_clock
                             .observe(SysTime::from_nanos(sys_time.get()));
@@ -512,12 +511,12 @@ impl UdpBus {
         }
     }
 
-    pub fn wait_readable(&self, deadline: Instant) -> Result<(), UdpError> {
+    pub(crate) fn wait_readable(&self, deadline: Instant) -> Result<(), UdpError> {
         self.ensure_open()?;
         Ok(self.channel.wait_readable(deadline)?)
     }
 
-    pub fn wake(&self) -> bool {
+    pub(crate) fn wake(&self) -> bool {
         match self.channel.wake() {
             Ok(()) => true,
             Err(e) => {
@@ -536,30 +535,15 @@ impl UdpBus {
         }
     }
 
-    pub fn close(&self) -> Result<(), UdpError> {
+    pub(crate) fn close(&self) {
         if !self.closed.swap(true, Ordering::AcqRel) {
             self.published_states.close();
         }
-        Ok(())
-    }
-}
-
-#[cfg(unix)]
-impl std::os::fd::AsFd for UdpBus {
-    fn as_fd(&self) -> std::os::fd::BorrowedFd<'_> {
-        self.channel.socket().as_fd()
-    }
-}
-
-#[cfg(windows)]
-impl std::os::windows::io::AsSocket for UdpBus {
-    fn as_socket(&self) -> std::os::windows::io::BorrowedSocket<'_> {
-        self.channel.socket().as_socket()
     }
 }
 
 impl Drop for UdpBus {
     fn drop(&mut self) {
-        let _ = self.close();
+        self.close();
     }
 }

@@ -14,15 +14,13 @@ namespace AUTD3.Samples
     // The UdpEmulator and its option runs without hardware; swap it for new TransportOption() on a real device.
     public sealed class FocusSineSample : MonoBehaviour
     {
-        private UdpEmulator _emulator;
         private Client _client;
         private Geometry _geometry;
 
         private async void Start()
         {
             _geometry = new Geometry(new List<Autd3> { new Autd3(Vector3.zero) });
-            _emulator = new UdpEmulator(1);
-            _client = Client.Open(_geometry, _emulator.Option());
+            _client = Client.Open(_geometry, new TransportOption { Iface = Interface.Simulator(TransportOption.SimulatorPort) });
             await _client.SendAsync(Command.Sequence(new Clear(), new Synchronize()));
 
             var target = _geometry.Center + new Vector3(0f, 0f, -0.15f);
@@ -51,8 +49,6 @@ namespace AUTD3.Samples
             }
             _geometry?.Dispose();
             _geometry = null;
-            _emulator?.Dispose();
-            _emulator = null;
         }
     }
 }

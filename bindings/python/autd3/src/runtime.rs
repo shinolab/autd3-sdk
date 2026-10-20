@@ -4,7 +4,7 @@ use std::sync::{Mutex, PoisonError};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use autd3_rs::rt::Executor;
+use autd3_binding_rt::Executor;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use pyo3::sync::MutexExt;
@@ -94,7 +94,6 @@ pub(crate) fn spawn<F: Future<Output = ()> + Send + 'static>(
 
 #[pyfunction]
 pub(crate) fn _shutdown_runtime(py: Python<'_>) {
-    py.detach(crate::udp::shutdown_emulators);
     let runtime = {
         let mut state = STATE
             .lock_py_attached(py)

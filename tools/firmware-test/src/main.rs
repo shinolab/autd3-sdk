@@ -11,12 +11,12 @@ use clap::Parser;
 
 use autd3_rs::commands::{Clear, Command, FixedCompletionTime, Pattern, SetSilencer, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::rt::{LogWriter, TracingOption, init_tracing};
 use autd3_rs::value::Intensity;
 use autd3_rs::{Client, Error, ExecAt, Frames, Interface, StateChecker, TransportOption};
 
 use crate::cli::Cli;
 use crate::io::{check, prompt, wait_enter};
+use tracing_subscriber::EnvFilter;
 
 const REOPEN_ATTEMPTS: u32 = 5;
 const REOPEN_INTERVAL: Duration = Duration::from_secs(2);
@@ -208,10 +208,12 @@ async fn dispatch(index: usize, ctx: &Ctx<'_>) -> Result<()> {
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
-    let _log_guard = init_tracing(TracingOption {
-        default_filter: "warn",
-        writer: LogWriter::Stderr,
-    });
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn")),
+        )
+        .with_writer(std::io::stderr)
+        .init();
 
     let cli = Cli::parse();
     if let Err(msg) = cli.validate() {

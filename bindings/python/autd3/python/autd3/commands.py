@@ -42,9 +42,7 @@ from ._autd3 import (
     WriteModulationBuffer,
     WritePatternBuffer,
     WritePatternPhase,
-    circle,
     each,
-    line,
 )
 
 Command: TypeAlias = Union[
@@ -118,7 +116,5 @@ __all__ = [
     "WriteModulationBuffer",
     "WritePatternBuffer",
     "WritePatternPhase",
-    "circle",
     "each",
-    "line",
 ]

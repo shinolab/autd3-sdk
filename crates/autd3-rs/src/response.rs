@@ -1,9 +1,11 @@
-use crate::client::MAX_DEVICES;
 use crate::error::Error;
+use autd3_rs_core::MAX_DEVICES;
+use autd3_rs_core::value::SysTime;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Response {
     error_codes: [u8; MAX_DEVICES],
+    sys_times: [u64; MAX_DEVICES],
     num_devices: usize,
     reply_data: Vec<Vec<u8>>,
     replied_devices: u128,
@@ -21,6 +23,7 @@ impl Default for Response {
     fn default() -> Self {
         Self {
             error_codes: [0; MAX_DEVICES],
+            sys_times: [0; MAX_DEVICES],
             num_devices: 0,
             reply_data: Vec::new(),
             replied_devices: 0,
@@ -36,10 +39,18 @@ impl Response {
         buf[..num_devices].copy_from_slice(&error_codes[..num_devices]);
         Self {
             error_codes: buf,
+            sys_times: [0; MAX_DEVICES],
             num_devices,
             reply_data: Vec::new(),
             replied_devices: first_n_devices_mask(num_devices),
         }
+    }
+
+    #[must_use]
+    pub(crate) fn with_sys_times(mut self, sys_times: &[u64]) -> Self {
+        let len = sys_times.len().min(self.num_devices);
+        self.sys_times[..len].copy_from_slice(&sys_times[..len]);
+        self
     }
 
     #[must_use]
@@ -88,15 +99,13 @@ impl Response {
         self.reply_data.get(device).map_or(&[], Vec::as_slice)
     }
 
-    pub fn keep_first_errors_from(&mut self, other: &Response) {
-        self.error_codes[..self.num_devices]
-            .iter_mut()
-            .zip(other.error_codes().iter().copied())
-            .for_each(|(kept, other)| {
-                if *kept == 0 {
-                    *kept = other;
-                }
-            });
+    #[must_use]
+    pub fn sys_time_of(&self, device: usize) -> Option<SysTime> {
+        let replied = device < self.num_devices && self.replied_devices >> device & 1 == 1;
+        replied
+            .then(|| self.sys_times[device])
+            .filter(|&sys_time| sys_time != 0)
+            .map(SysTime::from_nanos)
     }
 
     pub fn check(&self) -> Result<(), Error> {
@@ -115,6 +124,8 @@ impl Response {
 #[cfg(test)]
 mod tests {
     use super::Response;
+    use autd3_rs_core::MAX_DEVICES;
+    use autd3_rs_core::value::SysTime;
 
     #[test]
     fn error_codes_expose_only_the_recorded_devices() {
@@ -127,8 +138,20 @@ mod tests {
 
     #[test]
     fn from_error_codes_clamps_to_the_device_limit() {
-        let response = Response::from_error_codes(&[1u8; crate::client::MAX_DEVICES + 4]);
-        assert_eq!(response.error_codes().len(), crate::client::MAX_DEVICES);
+        let response = Response::from_error_codes(&[1u8; MAX_DEVICES + 4]);
+        assert_eq!(response.error_codes().len(), MAX_DEVICES);
+    }
+
+    #[test]
+    fn the_device_time_of_a_reply_is_per_device() {
+        let response = Response::from_error_codes(&[0, 0, 0])
+            .with_sys_times(&[5_000, 0, 7_000])
+            .with_replied_devices(0b011);
+        assert_eq!(response.sys_time_of(0), Some(SysTime::from_nanos(5_000)));
+        assert_eq!(response.sys_time_of(1), None);
+        assert_eq!(response.sys_time_of(2), None);
+        assert_eq!(response.sys_time_of(3), None);
+        assert_eq!(Response::from_error_codes(&[0]).sys_time_of(0), None);
     }
 
     #[test]
@@ -174,10 +197,10 @@ mod tests {
 
     #[test]
     fn the_replied_mask_covers_every_device_up_to_the_limit() {
-        let full = Response::from_error_codes(&[0u8; crate::client::MAX_DEVICES]);
+        let full = Response::from_error_codes(&[0u8; MAX_DEVICES]);
         assert_eq!(
             full.parse_each_device(|_| Some(())).unwrap().len(),
-            crate::client::MAX_DEVICES
+            MAX_DEVICES
         );
         assert_eq!(
             Response::default()
@@ -212,12 +235,5 @@ mod tests {
                 code: 0x07
             }
         ));
-    }
-
-    #[test]
-    fn keep_first_errors_from_keeps_the_first_error_of_each_device() {
-        let mut merged = Response::from_error_codes(&[0, 0x02, 0]);
-        merged.keep_first_errors_from(&Response::from_error_codes(&[0x05, 0x06, 0]));
-        assert_eq!(merged.error_codes(), [0x05, 0x02, 0]);
     }
 }

@@ -1,5 +1,5 @@
-using System.Collections.Generic;
-using System.Numerics;
+using System;
+using System.Linq;
 using AUTD3;
 using static AUTD3.Units;
 
@@ -13,19 +13,12 @@ internal static class Sample
         var center = geometry.Center + Offset(0.0f * mm, 0.0f * mm, 150.0f * mm);
         var radius = 30.0f * mm;
         var numPoints = 200;
-        var normal = Vector3.UnitZ;
-        var intensity = Intensity.Max;
-        var dst = new List<ControlPoints>();
         // ANCHOR: circle
-        Stm.Circle(center, radius, numPoints, normal, intensity, dst);
+        var points = Enumerable.Range(0, numPoints)
+            .Select(i => 2.0f * MathF.PI * i / numPoints)
+            .Select(theta => (ControlPoints)(center + Offset(MathF.Cos(theta) * radius, MathF.Sin(theta) * radius, 0.0f * mm)))
+            .ToArray();
         // ANCHOR_END: circle
-
-        var start = center + Offset(-15.0f * mm, 0.0f * mm, 0.0f * mm);
-        var end = center + Offset(15.0f * mm, 0.0f * mm, 0.0f * mm);
-        // ANCHOR: line
-        Stm.Line(start, end, numPoints, intensity, dst);
-        // ANCHOR_END: line
-        var points = dst.ToArray();
         var freq = 1.0f * Hz;
         var bank = PatternBank.B0;
         var soundSpeed = 340.0f * m / s;

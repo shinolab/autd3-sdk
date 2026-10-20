@@ -57,22 +57,10 @@ namespace AUTD3
         internal static extern int autd3_transport_option_get_lost_timeout(IntPtr option, out ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_set_control_request_timeout(IntPtr option, ulong ns);
+        internal static extern int autd3_transport_option_set_open_timeout(IntPtr option, ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_get_control_request_timeout(IntPtr option, out ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_set_enumeration_timeout(IntPtr option, ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_get_enumeration_timeout(IntPtr option, out ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_set_sync_timeout(IntPtr option, ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_get_sync_timeout(IntPtr option, out ulong ns);
+        internal static extern int autd3_transport_option_get_open_timeout(IntPtr option, out ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_transport_option_set_ack_timeout(IntPtr option, ulong ns);
@@ -86,20 +74,10 @@ namespace AUTD3
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_udp_free_string(IntPtr ptr);
 
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_udp_emulator_spawn(UIntPtr numDevices, byte[] outErr, UIntPtr outErrLen);
 
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_udp_emulator_option(UdpEmulatorHandle emulator);
 
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_udp_emulator_reboot(UdpEmulatorHandle emulator, UIntPtr index);
 
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern UIntPtr autd3_udp_emulator_num_devices(UdpEmulatorHandle emulator);
 
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_udp_emulator_free(IntPtr emulator);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern UIntPtr autd3_params_max_devices();

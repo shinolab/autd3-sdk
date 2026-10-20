@@ -15,7 +15,7 @@ path = "src/main.rs"
 [dependencies]
 autd3-cpu-wire.workspace = true
 autd3-rs.workspace = true
-autd3-rs-core = { workspace = true, features = ["logging"] }
+autd3-rs-core.workspace = true
 autd3-rs-firmware-emulator = { workspace = true, features = ["udp"] }
 autd3-rs-simulator-protocol.workspace = true
 axum.workspace = true
@@ -26,6 +26,7 @@ serde_json.workspace = true
 clap.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
+tracing-subscriber.workspace = true
 tokio = { workspace = true, features = [
     "rt-multi-thread",
     "net",
