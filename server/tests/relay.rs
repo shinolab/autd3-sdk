@@ -63,9 +63,13 @@ impl Harness {
         let server = Arc::new(
             Server::bind(ServerOption {
                 transport: transport(UdpOption {
+                    iface: emulator.interface(),
                     sync_timeout: SYNC_TIMEOUT,
                     lost_timeout: LOST_TIMEOUT,
-                    ..UdpOption::for_emulator(emulator.interface())
+                    reply_timeout: Duration::from_millis(50),
+                    response_timeout: Duration::from_millis(50),
+                    enumeration_timeout: Duration::from_secs(1),
+                    ..UdpOption::default()
                 }),
                 listen: "[::1]:0".parse().unwrap(),
                 monitor_interval: MONITOR_INTERVAL,

@@ -8,14 +8,12 @@ use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::{Intensity, SamplingConfig};
 use autd3_rs::{Client, ClientConfig};
 use autd3_rs::udp::UdpOption;
-use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let emulator = UdpEmulator::spawn(geometry.num_devices())?;
-    let option = UdpOption::for_emulator(emulator.interface());
+    let option = UdpOption::default();
     let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
 
     let center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);

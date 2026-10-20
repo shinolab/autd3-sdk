@@ -2,15 +2,13 @@ use core::time::Duration;
 
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::udp::UdpOption;
-use autd3_rs_firmware_emulator::udp::UdpEmulator;
 use autd3_rs::value::SysTime;
 use autd3_rs::{Client, ClientConfig};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> anyhow::Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
-    let emulator = UdpEmulator::spawn(geometry.num_devices())?;
-    let option = UdpOption::for_emulator(emulator.interface());
+    let option = UdpOption::default();
     let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
 
     // ANCHOR: construct

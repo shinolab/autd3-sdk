@@ -10,7 +10,6 @@ autoexamples = false
 
 [dependencies]
 autd3-rs = { path = "../../../crates/autd3-rs", features = ["logging"] }
-autd3-rs-firmware-emulator = { path = "../../../crates/autd3-rs-firmware-emulator", features = ["udp"] }
 autd3-rs-pattern = { path = "../../../crates/autd3-rs-pattern" }
 autd3-rs-pattern-holo = { path = "../../../crates/autd3-rs-pattern-holo" }
 autd3-rs-modulation = { path = "../../../crates/autd3-rs-modulation" }
@@ -332,10 +331,6 @@ path = "examples/api/compute/pattern/set-example.rs"
 [[example]]
 name = "api_compute_pattern_set"
 path = "examples/api/compute/pattern/set.rs"
-
-[[example]]
-name = "api_connection_device_emulator"
-path = "examples/api/connection/device-emulator.rs"
 
 [[example]]
 name = "api_connection_server_link"

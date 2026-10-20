@@ -281,9 +281,14 @@ pub unsafe extern "C" fn autd3_udp_emulator_option(
     let Some(emulator) = (unsafe { handle_ref(handle) }) else {
         return std::ptr::null_mut();
     };
-    into_handle(UdpOptionHandle(CoreOption::for_emulator(
-        emulator.0.interface(),
-    )))
+    into_handle(UdpOptionHandle(CoreOption {
+        iface: emulator.0.interface(),
+        reply_timeout: Duration::from_millis(50),
+        response_timeout: Duration::from_millis(50),
+        enumeration_timeout: Duration::from_secs(1),
+        sync_timeout: Duration::from_secs(5),
+        ..CoreOption::default()
+    }))
 }
 
 #[unsafe(no_mangle)]
@@ -707,7 +712,14 @@ mod tests {
             .0
             .interface();
         assert_eq!(
-            CoreOption::for_emulator(interface),
+            CoreOption {
+                iface: interface,
+                reply_timeout: Duration::from_millis(50),
+                response_timeout: Duration::from_millis(50),
+                enumeration_timeout: Duration::from_secs(1),
+                sync_timeout: Duration::from_secs(5),
+                ..CoreOption::default()
+            },
             unsafe { handle_ref(option.cast_const()) }.unwrap().0
         );
         assert_eq!(1, unsafe { autd3_udp_emulator_num_devices(emulator) });

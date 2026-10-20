@@ -1,14 +1,13 @@
 import asyncio
 
-from autd3 import Client, ClientConfig, Duration, UdpEmulator
+from autd3 import Client, ClientConfig, Duration, UdpOption
 from autd3.geometry import Autd3, Geometry
 from autd3.value import SysTime
 
 
 async def main() -> None:
     geometry = Geometry([Autd3()])
-    emulator = UdpEmulator(geometry.num_devices())
-    async with await Client.open(geometry, emulator.option(), ClientConfig()) as client:
+    async with await Client.open(geometry, UdpOption(), ClientConfig()) as client:
         # ANCHOR: construct
         opened = SysTime.ZERO
         now = client.device_time_now()

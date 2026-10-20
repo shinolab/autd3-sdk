@@ -162,7 +162,14 @@ mod tests {
     fn the_device_count_is_found_in_a_single_enumeration() {
         for devices in [1, 2, 5] {
             let emulator = UdpEmulator::spawn(devices).unwrap();
-            let option = UdpOption::for_emulator(emulator.interface());
+            let option = UdpOption {
+                iface: emulator.interface(),
+                reply_timeout: Duration::from_millis(50),
+                response_timeout: Duration::from_millis(50),
+                enumeration_timeout: Duration::from_secs(1),
+                sync_timeout: Duration::from_secs(5),
+                ..UdpOption::default()
+            };
             let bus = enumerate(&option, None).unwrap();
             assert_eq!(bus.num_devices(), devices);
             assert_eq!(emulator.id_resets_received(0), 1, "{devices} devices");
@@ -173,7 +180,14 @@ mod tests {
     #[ignore = "depends on real time"]
     fn a_given_device_count_must_match_the_chain() {
         let emulator = UdpEmulator::spawn(3).unwrap();
-        let option = UdpOption::for_emulator(emulator.interface());
+        let option = UdpOption {
+            iface: emulator.interface(),
+            reply_timeout: Duration::from_millis(50),
+            response_timeout: Duration::from_millis(50),
+            enumeration_timeout: Duration::from_secs(1),
+            sync_timeout: Duration::from_secs(5),
+            ..UdpOption::default()
+        };
         let err = enumerate(&option, Some(2)).err().unwrap();
         assert!(
             matches!(

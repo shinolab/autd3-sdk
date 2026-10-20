@@ -6,7 +6,6 @@ use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode};
 use autd3_rs::{Client, ClientConfig};
 use autd3_rs::udp::UdpOption;
-use autd3_rs_firmware_emulator::udp::UdpEmulator;
 use autd3_rs_pattern::{focus, wavelength};
 
 // HIDE
@@ -14,8 +13,7 @@ use autd3_rs_pattern::{focus, wavelength};
 async fn main() -> anyhow::Result<()> {
     // HIDE_END
     let geometry = Geometry::new(vec![Autd3::default()]);
-    let emulator = UdpEmulator::spawn(geometry.num_devices())?;
-    let option = UdpOption::for_emulator(emulator.interface());
+    let option = UdpOption::default();
     let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
 
     let mut phases = geometry.phase_buffer();

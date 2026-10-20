@@ -9,8 +9,7 @@ internal static class Sample
     internal static async Task Run()
     {
         var layout = new Geometry(new[] { new Autd3() });
-        using var emulator = new UdpEmulator(layout.NumDevices);
-        var client = await Client.OpenAsync(layout, emulator.Option(), new ClientConfig());
+        var client = await Client.OpenAsync(layout, new UdpOption(), new ClientConfig());
 
         using var frames = Frames.Encode(layout, new Nop());
         var frame = frames[0];
@@ -48,8 +47,7 @@ internal static class Sample
         var scopedLayout = new Geometry(new[] { new Autd3() });
 
         // ANCHOR: context_manager
-        using var scopedEmulator = new UdpEmulator(scopedLayout.NumDevices);
-        await using (var scoped = await Client.OpenAsync(scopedLayout, scopedEmulator.Option(), new ClientConfig()))
+        await using (var scoped = await Client.OpenAsync(scopedLayout, new UdpOption(), new ClientConfig()))
         {
             await scoped.SendAsync(new Nop());
         }

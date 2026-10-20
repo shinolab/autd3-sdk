@@ -40,18 +40,6 @@ impl Default for UdpOption {
 }
 
 impl UdpOption {
-    #[must_use]
-    pub fn for_emulator(iface: Interface) -> Self {
-        Self {
-            iface,
-            reply_timeout: Duration::from_millis(50),
-            response_timeout: Duration::from_millis(50),
-            enumeration_timeout: Duration::from_secs(1),
-            sync_timeout: Duration::from_secs(5),
-            ..Self::default()
-        }
-    }
-
     pub fn validate(&self) -> Result<(), UdpError> {
         fn check(field: &'static str, value: Duration, min: Duration) -> Result<(), UdpError> {
             if value < min {
@@ -136,24 +124,6 @@ mod tests {
             Err(UdpError::InvalidSimulatorPort(p)) => assert!(!valid && p == port),
             Err(e) => panic!("unexpected error: {e}"),
         }
-    }
-
-    #[test]
-    fn the_emulator_option_only_shortens_the_timeouts() {
-        let iface = Interface::Addr("[::1]:44336".parse().unwrap());
-        let option = UdpOption::for_emulator(iface.clone());
-        assert_eq!(
-            option,
-            UdpOption {
-                iface,
-                reply_timeout: Duration::from_millis(50),
-                response_timeout: Duration::from_millis(50),
-                enumeration_timeout: Duration::from_secs(1),
-                sync_timeout: Duration::from_secs(5),
-                ..UdpOption::default()
-            }
-        );
-        assert!(option.validate().is_ok());
     }
 
     #[test]
