@@ -19,9 +19,8 @@ import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
 | --------------------- | ----------- | ------- | --------------------------------------------------------------------------------------------- |
 | `iface`               | `Interface` | `Auto`  | 接続先                                                                                        |
 | `heartbeat`           | `Option<Duration>`  | 10 ms   | 生存確認用のコマンド送信間隔. `None` で生存確認を送らない |
-| `reply_timeout`       | `Duration`  | 1 ms    | 返信を待つ上限                                                                                 |
+| `reply_timeout`       | `Duration`  | 1 ms    | 返信を待つ上限                                                    |
 | `lost_timeout`        | `Duration`  | 100 ms  | この時間返信が無いデバイスを `Lost` とする. `heartbeat` より長くする                           |
-| `recovery_interval`   | `Option<Duration>`  | `None`    | `Lost` のデバイスがある間, この間隔で探して, 応答が戻ったデバイスを自動で復帰させる (電源を入れ直したデバイスは対象外). `None` で自動復帰しない ([状態監視](/autd3-sdk/guide/state-check/) 参照) |
 | `response_timeout`    | `Duration`  | 200 ms  | 列挙などの管理メッセージの返信を待つ時間                                                       |
 | `enumeration_timeout` | `Duration`  | 10 s    | open時のデバイス列挙処理の試行時間上限                                                         |
 | `sync_timeout`        | `Duration`  | 30 s    | open時の全台がデバイス間の同期を待つ上限                                                         |
@@ -33,7 +32,6 @@ import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
 
 Python の既定値は Rust と同じ具体値で, 型が `Option` の項目だけ `None` (無効) を渡せる. それ以外の項目に `None` を渡すと `TypeError` になる.
 C# では型が `Option` の項目を `null` にすると無効になる.
-`Option<Duration>` の項目 (`heartbeat` / `recovery_interval` / `timer_resolution`) と `send_rate_limit` に `0` (C#: `TimeSpan.Zero`) を渡しても無効の意味にはならず, 範囲外として `Client` を開くときにエラー (`Network`) になる.
 `send_buffer` の `0` は, Python では `UdpOption` を作るときに `ValueError`, C# では `Client` を開くときに `Autd3Exception` (`InvalidArgument`) になる (Rust は `NonZeroUsize` の型で `0` を渡せない).
 
 ## Interface

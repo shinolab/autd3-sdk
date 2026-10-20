@@ -2,7 +2,7 @@ use std::io::{self, Read};
 
 use autd3_rs_core::DeviceState;
 
-pub const LINK_VERSION: u16 = 1;
+pub const LINK_VERSION: u16 = 2;
 pub const MESSAGE_BYTES_MAX: usize = 1 << 20;
 
 const LEN_BYTES: usize = size_of::<u32>();
@@ -12,6 +12,7 @@ const HELLO: u8 = 0x01;
 const SEND: u8 = 0x02;
 const ADMIT: u8 = 0x03;
 const WAKE_REQUEST: u8 = 0x04;
+const RECOVER: u8 = 0x05;
 const WELCOME: u8 = 0x81;
 const REJECT: u8 = 0x82;
 const SETTLED: u8 = 0x83;
@@ -55,6 +56,7 @@ pub enum Request<'a> {
     },
     Admit,
     Wake,
+    Recover,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -216,6 +218,10 @@ impl<'a> Request<'a> {
                 let start = begin(out, WAKE_REQUEST);
                 finish(out, start);
             }
+            Request::Recover => {
+                let start = begin(out, RECOVER);
+                finish(out, start);
+            }
         }
     }
 
@@ -242,6 +248,7 @@ impl<'a> Request<'a> {
             }
             ADMIT => Ok(Request::Admit),
             WAKE_REQUEST => Ok(Request::Wake),
+            RECOVER => Ok(Request::Recover),
             kind => Err(MessageError::UnknownKind(kind)),
         }
     }
@@ -447,6 +454,7 @@ mod tests {
             },
             Request::Admit,
             Request::Wake,
+            Request::Recover,
         ];
         let mut bytes = Vec::new();
         for request in &sent {

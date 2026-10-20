@@ -19,6 +19,18 @@ internal static class Sample
 
         await using (client)
         {
+            // ANCHOR: recover
+            if (checker.Check().AnyLost)
+            {
+                var recovered = await client.RecoverAsync();
+                if (!recovered.IsEmpty)
+                {
+                    await client.SendAsync(Command.Each(device => recovered[device.Idx] ? new Synchronize() : null));
+                    await client.SendAsync(new ReleaseFailsafe());
+                }
+            }
+            // ANCHOR_END: recover
+
             // ANCHOR: poll
             DeviceStatus? last = null;
             while (true)

@@ -10,7 +10,7 @@ pub mod value;
 
 pub use nalgebra;
 
-pub use bus::{BusStats, DeviceClock, DeviceState, DeviceStatus, Interface};
+pub use bus::{BusStats, DeviceClock, DeviceMask, DeviceState, DeviceStatus, Interface};
 pub use common::units;
 pub use common::{Angle, Freq, Length, Velocity};
 pub use error::EncodeError;

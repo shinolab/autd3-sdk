@@ -24,9 +24,9 @@ pub use error::{ClientConfigError, Error, NetworkCause, PayloadError};
 pub use autd3_rs_core::LayoutError;
 pub use autd3_rs_core::simulator::DEFAULT_PORT as SIMULATOR_PORT;
 pub use autd3_rs_core::{
-    Angle, Autd3, BusStats, Device, DeviceClock, DeviceState, DeviceStatus, EncodeError, Freq,
-    Geometry, Interface, Length, MAX_INFLIGHT, Point3, Quaternion, UnitQuaternion, UnitVector3,
-    Vector3, Velocity, offset, point,
+    Angle, Autd3, BusStats, Device, DeviceClock, DeviceMask, DeviceState, DeviceStatus,
+    EncodeError, Freq, Geometry, Interface, Length, MAX_INFLIGHT, Point3, Quaternion,
+    UnitQuaternion, UnitVector3, Vector3, Velocity, offset, point,
 };
 pub use client::{
     Client, ClientConfig, Controller, Driver, ExecAt, MAX_DEVICES, ResponseFuture, StreamFuture,

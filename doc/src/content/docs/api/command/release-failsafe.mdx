@@ -23,7 +23,7 @@ import { excerpt } from "@lib/excerpt";
 止まっているかどうかは `read_fpga_state()` が返す `FpgaState` の `is_failsafe_active()` (C#: `IsFailsafeActive`) で確認できる.
 
 [Clear](/autd3-sdk/api/command/clear/) でも解除されるが, すべての状態が既定値に戻る.
-`Lost` から自動復帰したデバイスには, `ClientConfig` の `release_failsafe_on_recovery` が既定で `ReleaseFailsafe` を送る ([Client](/autd3-sdk/api/basics/client/#clientconfig) 参照).
+`recover()` で `Lost` から復帰したデバイスには自動では送られないので, 出力を再開させるならユーザが送る ([状態監視](/autd3-sdk/guide/state-check/#lost-からの復帰) 参照).
 
 ## API
 

@@ -3,13 +3,13 @@ use std::time::Instant;
 
 use anyhow::{Context, Result};
 
-use autd3_rs::commands::{ForceFan, ReleaseFailsafe};
-use autd3_rs::{Client, ClientConfig, DeviceState, StateChecker, UdpOption};
+use autd3_rs::commands::{ForceFan, ReleaseFailsafe, Synchronize, each};
+use autd3_rs::{Client, DeviceMask, DeviceState, StateChecker};
 
 use crate::io::{check, prompt};
 use crate::{Link, describe, mute, restore_gpio_out};
 
-const RECOVERY_INTERVAL: Duration = Duration::from_millis(100);
+const RECOVER_INTERVAL: Duration = Duration::from_millis(100);
 const DETECTION_WINDOW: Duration = Duration::from_secs(30);
 const RECOVERY_WINDOW: Duration = Duration::from_secs(60);
 const FAILSAFE_TRIP: Duration = Duration::from_secs(2);
@@ -79,19 +79,32 @@ fn cut_off(count: usize, first: usize) -> Vec<DeviceState> {
         .collect()
 }
 
-async fn open(link: &Link<'_>, config: ClientConfig) -> Result<Client> {
-    let option = UdpOption {
-        recovery_interval: Some(RECOVERY_INTERVAL),
-        ..link.option.clone()
-    };
-    let client = Client::open(link.geometry, &option, config)
+async fn open(link: &Link<'_>) -> Result<Client> {
+    let client = Client::open(link.geometry, link.option, link.config)
         .await
-        .context("opening the devices with the automatic recovery")?;
+        .context("opening the devices")?;
     restore_gpio_out(&client).await;
     if link.mute && !mute(&client).await {
         anyhow::bail!("muting the devices failed");
     }
     Ok(client)
+}
+
+async fn recover_until(
+    client: &Client,
+    expected: DeviceMask,
+    window: Duration,
+) -> (DeviceMask, Duration) {
+    let started = Instant::now();
+    let mut recovered = DeviceMask::default();
+    while started.elapsed() < window && recovered != expected {
+        match client.recover().await {
+            Ok(devices) => recovered |= devices,
+            Err(e) => println!("  recover() reported: {e}"),
+        }
+        tokio::time::sleep(RECOVER_INTERVAL).await;
+    }
+    (recovered, started.elapsed())
 }
 
 async fn lose(states: &StateChecker, count: usize, first: usize, how: &str) -> bool {
@@ -112,12 +125,9 @@ async fn lose(states: &StateChecker, count: usize, first: usize, how: &str) -> b
     reached.is_some()
 }
 
-async fn by_cable(link: &Link<'_>, first: usize, config: ClientConfig) -> Result<()> {
-    println!(
-        "-- cable unplugged and plugged back: resynchronize_on_recovery={:?} release_failsafe_on_recovery={:?}",
-        config.resynchronize_on_recovery, config.release_failsafe_on_recovery
-    );
-    let client = open(link, config).await?;
+async fn by_cable(link: &Link<'_>, first: usize) -> Result<()> {
+    println!("-- cable unplugged and plugged back");
+    let client = open(link).await?;
     let count = client.num_devices();
     let states = client.state_checker();
     let ready = vec![DeviceState::Ready; count];
@@ -143,17 +153,20 @@ async fn by_cable(link: &Link<'_>, first: usize, config: ClientConfig) -> Result
         return Ok(());
     }
     tokio::time::sleep(FAILSAFE_TRIP).await;
-    check(&format!("Plug the cable back within {RECOVERY_WINDOW:?}"));
-    match reaches(&states, &ready, RECOVERY_WINDOW).await {
-        Some(elapsed) => println!(
-            "  [OK] every device came back to Ready without a reopen ({:.1} s after the prompt)",
-            elapsed.as_secs_f32()
-        ),
-        None => println!(
-            "  [FAIL] expected {ready:?} within {RECOVERY_WINDOW:?}, got {:?}",
-            snapshot(&states)
-        ),
-    }
+    check("Plug the cable back and wait until the link LEDs are on");
+    println!(
+        "  {} the devices stay Lost until recover() is called: {:?}",
+        verdict(holds(&states, &cut_off(count, first), STICKY_WINDOW).await),
+        snapshot(&states)
+    );
+    let expected: DeviceMask = (first..count).collect();
+    let (recovered, elapsed) = recover_until(&client, expected, RECOVERY_WINDOW).await;
+    println!(
+        "  {} recover() brought back the devices that were cut off ({:.1} s): {:?}",
+        verdict(recovered == expected),
+        elapsed.as_secs_f32(),
+        recovered.iter().collect::<Vec<_>>()
+    );
     let recoveries = client.bus_stats().recoveries();
     println!(
         "  {} the recoveries count the devices that were cut off: {recoveries}",
@@ -172,39 +185,44 @@ async fn by_cable(link: &Link<'_>, first: usize, config: ClientConfig) -> Result
         before.host_trips,
         after.host_trips
     );
-    if config.release_failsafe_on_recovery.is_some() {
-        println!(
-            "  {} the gate of every device is down again: gates {:?}",
-            verdict(after.gates.iter().all(|g| !g)),
-            after.gates
-        );
-    } else {
-        println!(
-            "  {} the gate stays up on the devices that were cut off and down on the others: gates {:?}",
-            verdict(after.gates == (0..count).map(|device| device >= first).collect::<Vec<_>>()),
-            after.gates
-        );
-        let released = client.send(ReleaseFailsafe).await;
-        let gates = observe(&client).await?.gates;
-        println!(
-            "  {} an explicit ReleaseFailsafe lowers every gate: {released:?} gates {gates:?}",
-            verdict(released.is_ok() && gates.iter().all(|g| !g))
-        );
+    println!(
+        "  {} the gate stays up on the devices that were cut off and down on the others: gates {:?}",
+        verdict(after.gates == (0..count).map(|device| device >= first).collect::<Vec<_>>()),
+        after.gates
+    );
+    check(
+        "On the oscilloscope, look at the GPIO[0] outputs: Synchronize has not been sent again, so a long cut may leave them apart",
+    );
+
+    match reaches(&states, &ready, RECOVERY_WINDOW).await {
+        Some(elapsed) => println!(
+            "  [OK] every device is Ready again ({:.1} s)",
+            elapsed.as_secs_f32()
+        ),
+        None => println!(
+            "  [FAIL] expected {ready:?} within {RECOVERY_WINDOW:?}, got {:?}",
+            snapshot(&states)
+        ),
     }
-    if config.resynchronize_on_recovery.is_some() {
-        check("On the oscilloscope, the GPIO[0] output is synchronised across every device again");
-    } else {
-        check(
-            "On the oscilloscope, look at the GPIO[0] outputs: Synchronize was not sent again, so a long cut may leave them apart",
-        );
-    }
+    let synchronized = client
+        .send(each(|device| {
+            recovered[device.idx()].then_some(Synchronize)
+        }))
+        .await;
+    let released = client.send(ReleaseFailsafe).await;
+    let gates = observe(&client).await?.gates;
+    println!(
+        "  {} Synchronize to the recovered devices and ReleaseFailsafe lower every gate: {synchronized:?} {released:?} gates {gates:?}",
+        verdict(synchronized.is_ok() && released.is_ok() && gates.iter().all(|g| !g))
+    );
+    check("On the oscilloscope, the GPIO[0] output is synchronised across every device again");
     client.close().await?;
     Ok(())
 }
 
 async fn by_power(link: &Link<'_>) -> Result<()> {
     println!("-- power-cycled device");
-    let client = open(link, link.config).await?;
+    let client = open(link).await?;
     let count = client.num_devices();
     let states = client.state_checker();
     let last = count - 1;
@@ -217,6 +235,11 @@ async fn by_power(link: &Link<'_>) -> Result<()> {
     .await
     {
         check("Wait until the device has booted and its link LED is on");
+        let recovered = client.recover().await;
+        println!(
+            "  {} recover() does not bring back a power-cycled device: {recovered:?}",
+            verdict(matches!(&recovered, Ok(mask) if mask.is_empty()))
+        );
         println!(
             "  {} a power-cycled device stays Lost for {STICKY_WINDOW:?} after it has booted: {:?} recoveries {}",
             verdict(
@@ -258,24 +281,8 @@ pub(crate) async fn run(client: Client, link: &Link<'_>) -> Result<Client> {
         .filter(|device| *device < count)
         .unwrap_or(count - 1);
 
-    let rounds = [
-        link.config,
-        ClientConfig {
-            release_failsafe_on_recovery: None,
-            ..link.config
-        },
-        ClientConfig {
-            resynchronize_on_recovery: None,
-            ..link.config
-        },
-    ];
-    for (round, config) in rounds.into_iter().enumerate() {
-        if round > 0 && !confirmed("Run the next round with one of the options turned off?").await {
-            break;
-        }
-        if let Err(e) = by_cable(link, first, config).await {
-            println!("  [FAIL] the round stopped: {e:#}");
-        }
+    if let Err(e) = by_cable(link, first).await {
+        println!("  [FAIL] the round stopped: {e:#}");
     }
     if confirmed("Check that a power-cycled device stays Lost?").await
         && let Err(e) = by_power(link).await

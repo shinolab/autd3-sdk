@@ -37,21 +37,32 @@ The meaning of each state is as follows.
 | `Lost`    | No reply for a certain period of time                                                 |
 
 When a device in the middle of the chain becomes `Lost`, every device beyond it also becomes `Lost`.
-By default there is no automatic recovery from `Lost`, so the client must be reopened with `Client::open`.
-
-## Automatic recovery from Lost
-
-When `recovery_interval` of `UdpOption` is set, the client looks for the devices at that interval while any device is `Lost`, and recovers the devices that answer again.
-Only a device whose communication was cut off, for example by an unplugged cable, is recovered; a power-cycled device is not (reopen the client with `Client::open`). The total number of recovered devices can be read from `recoveries` of `BusStats`.
-
-Note the following when a device is recovered.
-
-- By default, `Synchronize` is sent again to the recovered device only, before the first send after it becomes `Ready`. Setting `resynchronize_on_recovery` of `ClientConfig` to `None` turns this off.
-- By default, `ReleaseFailsafe` is sent to the recovered device only. Setting `release_failsafe_on_recovery` of `ClientConfig` to `None` turns this off.
-- If one of these sends fails, the send in progress returns the error and the next send tries again. After the configured number of failures (3 by default) the client gives up and lets later sends through; send `Synchronize` or `ReleaseFailsafe` yourself if needed.
+A `Lost` device is never recovered automatically (see [Recovery from Lost](#recovery-from-lost)).
 
 The following is an example that calls `check` at fixed intervals and outputs only when the state changes.
 
 <CodeTabs rust={excerpt(sample, "poll")} python={excerpt(pySample, "poll")} csharp={excerpt(csSample, "poll")} />
 
 How often to call `check` is up to the user.
+
+## Recovery from Lost
+
+`Client::recover` looks for the `Lost` devices once and recovers the devices that answer again.
+If any device came back, it sends `Reset` to bring the devices back in step, and then returns the recovered devices.
+The return value is the set of recovered devices, a `DeviceMask`. `recovered[i]` returns a `bool` telling whether device `i` came back (`false` for an out-of-range index). 
+If no device is `Lost`, it sends nothing and returns immediately.
+
+Only a device whose communication was cut off, for example by an unplugged cable, is recovered; a power-cycled device is not (reopen the client with `Client::open`).
+The total number of recovered devices can be read from `recoveries` of `BusStats`.
+
+The following is an example that calls `recover` when `check` finds a `Lost` device, and then sends `Synchronize` to the recovered devices and `ReleaseFailsafe`.
+
+<CodeTabs rust={excerpt(sample, "recover")} python={excerpt(pySample, "recover")} csharp={excerpt(csSample, "recover")} />
+
+Note the following when a device is recovered.
+
+- `recover` sends neither `Synchronize` nor `ReleaseFailsafe`. Nothing reaches a device while it is `Lost`, so its output might have been stopped by the failsafe if the failsafe is enabled (see [SetCpuConfig](/autd3-sdk/en/api/command/cpu-config/)).
+  - Send [`Synchronize`](/autd3-sdk/en/api/command/clear/#synchronize--nop) yourself to realign the output phase
+  - Send [`ReleaseFailsafe`](/autd3-sdk/en/api/command/release-failsafe/) to resume the stopped output. `ReleaseFailsafe` does nothing to a device that is not stopped by the failsafe, so it can be sent to all devices.
+- If a recovered device is `Syncing`, wait with `check` until it becomes `Ready` before sending `Synchronize`.
+- Other sends wait while `recover` runs. Frames still waiting for a reply when the `Reset` is sent fail with `Timeout`.

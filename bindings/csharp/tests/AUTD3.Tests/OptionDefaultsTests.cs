@@ -14,31 +14,7 @@ namespace AUTD3.Tests
             Assert.Equal(7u, config.MaxInflight);
             Assert.Equal(8u, config.MaxResyncRounds);
             Assert.False(config.RequireSupportedFirmware);
-            Assert.Equal(3u, config.ResynchronizeOnRecovery);
-            Assert.Equal(3u, config.ReleaseFailsafeOnRecovery);
             Assert.Null(config.ExecLead);
-        }
-
-        [Fact]
-        public void TheRestorationsOfARecoveredDeviceCanBeTurnedOff()
-        {
-            Assert.Equal(3u, default(ClientConfig).ResynchronizeOnRecovery);
-            var config = new ClientConfig { ResynchronizeOnRecovery = null, ReleaseFailsafeOnRecovery = 5 };
-            Assert.Null(config.ResynchronizeOnRecovery);
-            Assert.Equal(5u, config.ReleaseFailsafeOnRecovery);
-            var handle = config.CreateHandle();
-            try
-            {
-                Assert.Equal(0, NativeClient.autd3_client_config_get_resynchronize_on_recovery(handle, out var resynchronize));
-                Assert.Equal(0u, resynchronize);
-                Assert.Equal(0, NativeClient.autd3_client_config_get_release_failsafe_on_recovery(handle, out var release));
-                Assert.Equal(5u, release);
-            }
-            finally
-            {
-                NativeClient.autd3_client_config_free(handle);
-            }
-            Assert.ThrowsAny<Exception>(() => new ClientConfig { ResynchronizeOnRecovery = 0 }.CreateHandle());
         }
 
         [Fact]
@@ -50,8 +26,6 @@ namespace AUTD3.Tests
                 MaxInflight = 3,
                 MaxResyncRounds = 2,
                 RequireSupportedFirmware = true,
-                ResynchronizeOnRecovery = null,
-                ReleaseFailsafeOnRecovery = 5,
                 ExecLead = TimeSpan.FromMilliseconds(4),
             };
             var handle = config.CreateHandle();
@@ -68,8 +42,6 @@ namespace AUTD3.Tests
             Assert.Equal(config.MaxInflight, back.MaxInflight);
             Assert.Equal(config.MaxResyncRounds, back.MaxResyncRounds);
             Assert.Equal(config.RequireSupportedFirmware, back.RequireSupportedFirmware);
-            Assert.Equal(config.ResynchronizeOnRecovery, back.ResynchronizeOnRecovery);
-            Assert.Equal(config.ReleaseFailsafeOnRecovery, back.ReleaseFailsafeOnRecovery);
             Assert.Equal(config.ExecLead, back.ExecLead);
         }
 

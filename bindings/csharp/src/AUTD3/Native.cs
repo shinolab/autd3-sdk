@@ -39,12 +39,6 @@ namespace AUTD3
         internal static extern int autd3_udp_option_get_heartbeat(IntPtr option, [MarshalAs(UnmanagedType.I1)] out bool hasValue, out ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_udp_option_set_recovery_interval(IntPtr option, [MarshalAs(UnmanagedType.I1)] bool hasValue, ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_udp_option_get_recovery_interval(IntPtr option, [MarshalAs(UnmanagedType.I1)] out bool hasValue, out ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_udp_option_set_timer_resolution(IntPtr option, [MarshalAs(UnmanagedType.I1)] bool hasValue, ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
@@ -120,12 +114,6 @@ namespace AUTD3
         internal static extern int autd3_client_config_set_require_supported_firmware(IntPtr config, [MarshalAs(UnmanagedType.I1)] bool value);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_client_config_set_resynchronize_on_recovery(IntPtr config, uint value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_client_config_set_release_failsafe_on_recovery(IntPtr config, uint value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_client_config_set_ack_timeout_ns(IntPtr config, ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
@@ -148,12 +136,6 @@ namespace AUTD3
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_client_config_get_require_supported_firmware(IntPtr config, [MarshalAs(UnmanagedType.I1)] out bool value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_client_config_get_resynchronize_on_recovery(IntPtr config, out uint value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_client_config_get_release_failsafe_on_recovery(IntPtr config, out uint value);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_client_config_get_exec_lead(IntPtr config, [MarshalAs(UnmanagedType.I1)] out bool hasValue, out ulong ns);
@@ -390,6 +372,9 @@ namespace AUTD3
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_client_read_fpga_state(ClientHandle client, CompletionCallback cb, IntPtr userData);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void autd3_client_recover(ClientHandle client, CompletionCallback cb, IntPtr userData);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_client_read_telemetry(ClientHandle client, CompletionCallback cb, IntPtr userData);

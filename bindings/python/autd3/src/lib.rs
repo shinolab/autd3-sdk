@@ -50,6 +50,7 @@ fn _autd3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<client::StateChecker>()?;
     m.add_class::<client::DeviceState>()?;
     m.add_class::<client::BusStats>()?;
+    m.add_class::<client::DeviceMask>()?;
     m.add_class::<client::Version>()?;
     m.add_class::<client::FirmwareVersion>()?;
     m.add_class::<client::Response>()?;

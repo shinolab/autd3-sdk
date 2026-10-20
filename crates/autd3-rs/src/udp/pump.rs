@@ -15,7 +15,6 @@ struct HeartbeatWait {
 pub struct Pump {
     bus: Arc<UdpBus>,
     heartbeat: Option<HeartbeatWait>,
-    next_recovery: Option<Instant>,
 }
 
 impl Pump {
@@ -24,7 +23,6 @@ impl Pump {
         Self {
             bus,
             heartbeat: None,
-            next_recovery: None,
         }
     }
 
@@ -84,11 +82,10 @@ impl Pump {
                 replied: 0,
             });
         }
-        self.next_recovery = if active { self.bus.recover(now) } else { None };
         Ok([
             interval.and_then(|interval| self.bus.last_send().checked_add(interval)),
             self.heartbeat.as_ref().and_then(|wait| wait.deadline),
-            self.next_recovery,
+            self.bus.recovery_deadline(),
         ]
         .into_iter()
         .flatten()
@@ -96,7 +93,7 @@ impl Pump {
     }
 
     #[must_use]
-    pub fn take_recovered(&self) -> u128 {
-        self.bus.take_recovered()
+    pub fn settle_recovery(&self, now: Instant) -> Option<u128> {
+        self.bus.settle_recovery(now)
     }
 }

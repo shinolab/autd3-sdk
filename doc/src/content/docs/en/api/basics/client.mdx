@@ -60,6 +60,7 @@ To continuously monitor the operating state of the devices, drive the `StateChec
 | `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | Send one frame                                             |
 | `send_frame_at(frame, exec)` | ✓  | `Result<ResponseFuture, Error>`       | Send one frame at a given processing time (see [Overriding the processing time](#overriding-the-processing-time)) |
 | `state_checker()`         | —     | `StateChecker`                        | Get a `StateChecker`. See [State Monitoring](/autd3-sdk/en/guide/state-check/) for details. |
+| `recover()`               | ✓     | `Result<DeviceMask, Error>`           | Look for the `Lost` devices and recover the ones that answer again. See [State Monitoring](/autd3-sdk/en/guide/state-check/#recovery-from-lost) for details. |
 | `close()`                 | ✓     | `Result<(), Error>`                   | Stop and close the connection                              |
 
 To avoid the noise of dropping the amplitude at once, `close()` first sets the [Silencer](/autd3-sdk/en/api/command/silencer/), then drives every transducer to zero amplitude, and then closes the connection.
@@ -130,7 +131,7 @@ The `u32` fields wrap around to 0 on overflow, and the `u16` / `u8` fields stop 
 | `resets()`                   | `u64` | `Reset`s sent                                |
 | `heartbeats()`               | `u64` | Heartbeats sent                              |
 | `missed_heartbeat_replies()` | `u64` | Heartbeat replies that did not arrive within `reply_timeout` |
-| `recoveries()`               | `u64` | Devices automatically recovered from `Lost`  |
+| `recoveries()`               | `u64` | Devices recovered from `Lost` by `recover()` |
 | `acked_frames()`             | `u64` | Frames that received a reply                 |
 | `worst_ack_latency_ns()`     | `u64` | Maximum time from sending to the reply [ns]  |
 | `mean_ack_latency_ns()`      | `u64` | Mean time from sending to the reply [ns]     |
@@ -145,14 +146,12 @@ The `u32` fields wrap around to 0 on overflow, and the `u16` / `u8` fields stop 
 | `max_inflight`               | `NonZeroUsize` | `7`     | Number of frames that may be sent without waiting for a reply (for streaming sends) |
 | `max_resync_rounds`          | `NonZeroU32`   | `8`     | Maximum number of attempts to get back in step with the devices                     |
 | `require_supported_firmware` | `bool`         | `false` | If `true`, check on open that the firmware is supported                             |
-| `resynchronize_on_recovery`  | `Option<NonZeroU32>` | `Some(3)` | Send `Synchronize` again to a device recovered from `Lost`, before the next send. The value is the maximum number of attempts; `None` sends nothing (see [State check](/autd3-sdk/en/guide/state-check/)) |
-| `release_failsafe_on_recovery` | `Option<NonZeroU32>` | `Some(3)` | Send `ReleaseFailsafe` to a device recovered from `Lost`, before the next send, to resume the output stopped by the failsafe. The value is the maximum number of attempts; `None` sends nothing (see [State check](/autd3-sdk/en/guide/state-check/)) |
 | `exec_lead`           | `Option<Duration>`     | `None`    | Makes every device start processing a sent frame at the same time (see below). `None` lets each device process a frame as soon as it arrives |
 
 `max_inflight` errors if it exceeds `MAX_INFLIGHT (7)` (Python: `autd3.params.MAX_INFLIGHT`, C#: `Params.MaxInflight`).
 The default is also `MAX_INFLIGHT`, which equals `DEVICE_QUEUE_FRAMES`, the number of frames in the receive queue of each device (Python: `autd3.params.DEVICE_QUEUE_FRAMES`, C#: `Params.DeviceQueueFrames`).
 Setting `ack_timeout` to 0 makes opening the `Client` fail with an error (`InvalidConfig`; the `code` of the Python `Autd3Error` is `INVALID_ARGUMENT`, and the `Code` of the C# `Autd3Exception` is `InvalidArgument`).
-The Python defaults are the same as in Rust, and only `resynchronize_on_recovery` / `release_failsafe_on_recovery`, whose type is an `Option`, accept `None`.
+The Python defaults are the same as in Rust, and only `exec_lead`, whose type is an `Option`, accepts `None`.
 
 There is no retransmission. A failed command must be sent again by the user.
 

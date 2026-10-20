@@ -6,7 +6,6 @@ use crate::process::{LogLines, ManagedProcess};
 const BIN: &str = "autd3-server";
 const DEFAULT_PORT: u16 = 44338;
 const MAX_DEVICES: u32 = 128;
-const MAX_RECOVERY_INTERVAL_MS: u32 = 60_000;
 const DEFAULT_HEARTBEAT_US: u64 = 10_000;
 const DEFAULT_REPLY_TIMEOUT_US: u64 = 1_000;
 const DEFAULT_LOST_TIMEOUT_MS: u64 = 100;
@@ -34,7 +33,6 @@ pub(crate) struct ServerConfig {
     pub devices: u32,
     pub iface: String,
     pub port: u16,
-    pub recovery_interval_ms: u32,
     pub heartbeat_us: Setting<u64>,
     pub reply_timeout_us: Option<u64>,
     pub lost_timeout_ms: Option<u64>,
@@ -54,7 +52,6 @@ impl Default for ServerConfig {
             devices: 0,
             iface: String::new(),
             port: DEFAULT_PORT,
-            recovery_interval_ms: 0,
             heartbeat_us: Setting::Default,
             reply_timeout_us: None,
             lost_timeout_ms: None,
@@ -84,13 +81,6 @@ impl ServerConfig {
         let iface = self.iface.trim();
         if !iface.is_empty() {
             push(&mut args, "--iface", iface.to_string());
-        }
-        if self.recovery_interval_ms > 0 {
-            push(
-                &mut args,
-                "--recovery-interval",
-                format!("{}ms", self.recovery_interval_ms),
-            );
         }
         match self.heartbeat_us {
             Setting::Default => {}
@@ -176,13 +166,6 @@ impl ServerConfig {
 
         ui.label("Port");
         ui.add(egui::DragValue::new(&mut self.port).range(1..=65535));
-        ui.end_row();
-
-        ui.label("Recovery interval [ms] (0 = off)");
-        ui.add(
-            egui::DragValue::new(&mut self.recovery_interval_ms)
-                .range(0..=MAX_RECOVERY_INTERVAL_MS),
-        );
         ui.end_row();
 
         setting_row(
@@ -606,7 +589,6 @@ mod tests {
             devices: 4,
             iface: " eth0 ".to_string(),
             port: 5000,
-            recovery_interval_ms: 100,
             heartbeat_us: Setting::Custom(20_000),
             reply_timeout_us: Some(1_500),
             lost_timeout_ms: Some(150),
@@ -628,8 +610,6 @@ mod tests {
                 "4",
                 "--iface",
                 "eth0",
-                "--recovery-interval",
-                "100ms",
                 "--heartbeat",
                 "20000us",
                 "--reply-timeout",
@@ -701,16 +681,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             config.args(),
-            [
-                "--port",
-                "5000",
-                "--devices",
-                "4",
-                "--iface",
-                "eth0",
-                "--recovery-interval",
-                "100ms"
-            ]
+            ["--port", "5000", "--devices", "4", "--iface", "eth0"]
         );
     }
 

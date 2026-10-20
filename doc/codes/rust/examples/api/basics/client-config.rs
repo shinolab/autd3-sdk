@@ -19,8 +19,6 @@ async fn main() -> Result<()> {
             max_inflight: NonZeroUsize::new(DEVICE_QUEUE_FRAMES).unwrap(),
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
             require_supported_firmware: false,
-            resynchronize_on_recovery: NonZeroU32::new(3),
-            release_failsafe_on_recovery: NonZeroU32::new(3),
             exec_lead: None,
         }
         // ANCHOR_END: config

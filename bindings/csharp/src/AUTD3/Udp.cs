@@ -9,7 +9,6 @@ namespace AUTD3
         internal static readonly TimeSpan? Heartbeat;
         internal static readonly TimeSpan ReplyTimeout;
         internal static readonly TimeSpan LostTimeout;
-        internal static readonly TimeSpan? RecoveryInterval;
         internal static readonly TimeSpan ResponseTimeout;
         internal static readonly TimeSpan EnumerationTimeout;
         internal static readonly TimeSpan SyncTimeout;
@@ -25,7 +24,6 @@ namespace AUTD3
                 Heartbeat = OptionNative.GetOptionalDuration(handle, NativeClient.autd3_udp_option_get_heartbeat);
                 ReplyTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_udp_option_get_reply_timeout);
                 LostTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_udp_option_get_lost_timeout);
-                RecoveryInterval = OptionNative.GetOptionalDuration(handle, NativeClient.autd3_udp_option_get_recovery_interval);
                 ResponseTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_udp_option_get_response_timeout);
                 EnumerationTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_udp_option_get_enumeration_timeout);
                 SyncTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_udp_option_get_sync_timeout);
@@ -63,19 +61,6 @@ namespace AUTD3
         public TimeSpan ReplyTimeout { get => _replyTimeout ?? UdpOptionDefaults.ReplyTimeout; init => _replyTimeout = value; }
         private readonly TimeSpan? _lostTimeout;
         public TimeSpan LostTimeout { get => _lostTimeout ?? UdpOptionDefaults.LostTimeout; init => _lostTimeout = value; }
-
-        private readonly bool _recoveryIntervalSet;
-        private readonly TimeSpan? _recoveryInterval;
-
-        public TimeSpan? RecoveryInterval
-        {
-            get => _recoveryIntervalSet ? _recoveryInterval : UdpOptionDefaults.RecoveryInterval;
-            init
-            {
-                _recoveryInterval = value;
-                _recoveryIntervalSet = true;
-            }
-        }
 
         private readonly TimeSpan? _responseTimeout;
         public TimeSpan ResponseTimeout { get => _responseTimeout ?? UdpOptionDefaults.ResponseTimeout; init => _responseTimeout = value; }
@@ -147,7 +132,6 @@ namespace AUTD3
                 OptionNative.SetOptionalDuration(handle, "heartbeat", Heartbeat, NativeClient.autd3_udp_option_set_heartbeat);
                 OptionNative.SetRequiredDuration(handle, "replyTimeout", ReplyTimeout, NativeClient.autd3_udp_option_set_reply_timeout);
                 OptionNative.SetRequiredDuration(handle, "lostTimeout", LostTimeout, NativeClient.autd3_udp_option_set_lost_timeout);
-                OptionNative.SetOptionalDuration(handle, "recoveryInterval", RecoveryInterval, NativeClient.autd3_udp_option_set_recovery_interval);
                 OptionNative.SetRequiredDuration(handle, "responseTimeout", ResponseTimeout, NativeClient.autd3_udp_option_set_response_timeout);
                 OptionNative.SetRequiredDuration(handle, "enumerationTimeout", EnumerationTimeout, NativeClient.autd3_udp_option_set_enumeration_timeout);
                 OptionNative.SetRequiredDuration(handle, "syncTimeout", SyncTimeout, NativeClient.autd3_udp_option_set_sync_timeout);
@@ -178,7 +162,6 @@ namespace AUTD3
             Heartbeat = OptionNative.GetOptionalDuration(handle, NativeClient.autd3_udp_option_get_heartbeat),
             ReplyTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_udp_option_get_reply_timeout),
             LostTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_udp_option_get_lost_timeout),
-            RecoveryInterval = OptionNative.GetOptionalDuration(handle, NativeClient.autd3_udp_option_get_recovery_interval),
             ResponseTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_udp_option_get_response_timeout),
             EnumerationTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_udp_option_get_enumeration_timeout),
             SyncTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_udp_option_get_sync_timeout),

@@ -28,13 +28,6 @@ autd3_ffi_abi::option_handle_field!(
 );
 autd3_ffi_abi::option_handle_field!(
     UdpOptionHandle,
-    [recovery_interval],
-    optional_duration,
-    autd3_udp_option_set_recovery_interval,
-    autd3_udp_option_get_recovery_interval
-);
-autd3_ffi_abi::option_handle_field!(
-    UdpOptionHandle,
     [timer_resolution],
     optional_duration,
     autd3_udp_option_set_timer_resolution,
@@ -345,33 +338,8 @@ mod tests {
         optional(autd3_udp_option_get_heartbeat, handle)
     }
 
-    fn recovery_interval(handle: *const UdpOptionHandle) -> Option<Duration> {
-        optional(autd3_udp_option_get_recovery_interval, handle)
-    }
-
     fn timer_resolution(handle: *const UdpOptionHandle) -> Option<Duration> {
         optional(autd3_udp_option_get_timer_resolution, handle)
-    }
-
-    #[test]
-    fn the_recovery_is_off_until_an_interval_is_set() {
-        let handle = autd3_udp_option_new();
-        assert_eq!(recovery_interval(handle), None);
-        assert_eq!(
-            unsafe { autd3_udp_option_set_recovery_interval(handle, true, 100_000_000) },
-            AUTD3_OK
-        );
-        assert_eq!(recovery_interval(handle), Some(Duration::from_millis(100)));
-        assert_eq!(
-            unsafe { autd3_udp_option_set_recovery_interval(handle, false, 100_000_000) },
-            AUTD3_OK
-        );
-        assert_eq!(recovery_interval(handle), None);
-        assert_eq!(
-            unsafe { autd3_udp_option_set_recovery_interval(std::ptr::null_mut(), true, 1) },
-            AUTD3_ERR_INVALID_ARGUMENT
-        );
-        unsafe { autd3_udp_option_free(handle) };
     }
 
     #[test]

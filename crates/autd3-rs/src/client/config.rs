@@ -15,8 +15,6 @@ pub struct ClientConfig {
     pub max_inflight: NonZeroUsize,
     pub max_resync_rounds: NonZeroU32,
     pub require_supported_firmware: bool,
-    pub resynchronize_on_recovery: Option<NonZeroU32>,
-    pub release_failsafe_on_recovery: Option<NonZeroU32>,
     pub exec_lead: Option<Duration>,
 }
 
@@ -27,8 +25,6 @@ impl Default for ClientConfig {
             max_inflight: NonZeroUsize::new(MAX_INFLIGHT).unwrap(),
             max_resync_rounds: NonZeroU32::new(8).unwrap(),
             require_supported_firmware: false,
-            resynchronize_on_recovery: NonZeroU32::new(3),
-            release_failsafe_on_recovery: NonZeroU32::new(3),
             exec_lead: None,
         }
     }
