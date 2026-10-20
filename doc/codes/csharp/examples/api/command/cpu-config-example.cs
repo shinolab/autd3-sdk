@@ -12,6 +12,7 @@ internal static class Sample
         // HIDE_END
 var geometry = new Geometry(new[] { new Autd3() });
 await using var client = await Client.OpenAsync(geometry, new TransportOption(), new ClientConfig());
+await client.SendAsync(Command.Sequence(new Clear(), new Synchronize()));
 
 await client.SendAsync(new SetCpuConfig(new CpuConfig { SysTimeTransitionMargin = TimeSpan.FromMilliseconds(20) }));
         // HIDE

@@ -10,7 +10,6 @@ mod recovery;
 mod reply;
 mod simulator;
 pub(crate) mod state;
-mod timer;
 
 pub use autd3_cpu_wire::udp::{DEVICE_QUEUE_FRAMES, PORT};
 pub use bus::{Sent, UdpBus, Unsent};

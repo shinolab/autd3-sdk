@@ -16,7 +16,6 @@ pub struct TransportOption {
     pub sync_timeout: Duration,
     pub send_rate_limit: Option<f32>,
     pub send_buffer: Option<NonZeroUsize>,
-    pub timer_resolution: Option<Duration>,
 }
 
 impl Default for TransportOption {
@@ -30,7 +29,6 @@ impl Default for TransportOption {
             sync_timeout: Duration::from_secs(30),
             send_rate_limit: None,
             send_buffer: NonZeroUsize::new(8 * 1024),
-            timer_resolution: Some(Duration::from_millis(1)),
         }
     }
 }
@@ -45,12 +43,6 @@ impl TransportOption {
         }
         if self.response_timeout.is_zero() {
             return Err(UdpError::ZeroResponseTimeout);
-        }
-        let min = Duration::from_millis(1);
-        if let Some(got) = self.timer_resolution
-            && got < min
-        {
-            return Err(UdpError::TimerResolutionTooShort { got, min });
         }
         if let Interface::Simulator(port) = self.iface
             && simulator::control_port(port).is_none()
@@ -85,7 +77,6 @@ mod tests {
         assert_eq!(option.sync_timeout, Duration::from_secs(30));
         assert_eq!(option.send_rate_limit, None);
         assert_eq!(option.send_buffer, NonZeroUsize::new(8192));
-        assert_eq!(option.timer_resolution, Some(Duration::from_millis(1)));
         assert!(option.validate().is_ok());
     }
 
@@ -146,13 +137,6 @@ mod tests {
         },
         |e: &UdpError| matches!(e, UdpError::ZeroResponseTimeout)
     )]
-    #[case::sub_millisecond_timer_resolution(
-        TransportOption {
-            timer_resolution: Some(Duration::from_micros(999)),
-            ..TransportOption::default()
-        },
-        |e: &UdpError| matches!(e, UdpError::TimerResolutionTooShort { .. })
-    )]
     fn a_duration_at_or_below_its_bound_is_rejected(
         #[case] option: TransportOption,
         #[case] is_expected: fn(&UdpError) -> bool,
@@ -168,7 +152,6 @@ mod tests {
             response_timeout: Duration::MAX,
             enumeration_timeout: Duration::MAX,
             sync_timeout: Duration::MAX,
-            timer_resolution: Some(Duration::MAX),
             ..TransportOption::default()
         };
         assert!(option.validate().is_ok());
@@ -178,15 +161,6 @@ mod tests {
     fn the_shortest_lost_timeout_is_allowed() {
         let option = TransportOption {
             lost_timeout: Duration::from_nanos(1),
-            ..TransportOption::default()
-        };
-        assert!(option.validate().is_ok());
-    }
-
-    #[test]
-    fn a_disabled_timer_resolution_is_allowed() {
-        let option = TransportOption {
-            timer_resolution: None,
             ..TransportOption::default()
         };
         assert!(option.validate().is_ok());

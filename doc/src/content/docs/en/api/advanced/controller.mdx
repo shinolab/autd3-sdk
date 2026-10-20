@@ -25,8 +25,9 @@ It takes the same arguments as `Client::open`.
 
 <CodeTabs rust={excerpt(sample, "run")} />
 
-Unlike `Client::open`, `Controller::open` does not initialize the devices (handshake, firmware version check, `Clear`, `Synchronize`).
+Unlike `Client::open`, `Controller::open` does not perform the handshake (`Reset`) with the devices.
 Start driving the `Driver` first, then call `controller.initialize().await`, and send commands only after it completes.
+As with `Client::open`, `Clear` and `Synchronize` are not sent, so to start from the initial state, send them after `initialize`.
 `initialize` waits for replies, so it does not complete if called before the `Driver` is driven.
 
 ## Driver

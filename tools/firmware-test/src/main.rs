@@ -9,11 +9,13 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use clap::Parser;
 
-use autd3_rs::commands::{Command, FixedCompletionTime, Pattern, SetSilencer};
+use autd3_rs::commands::{Clear, Command, FixedCompletionTime, Pattern, SetSilencer, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::rt::{LogWriter, TracingOption, init_tracing};
 use autd3_rs::value::Intensity;
-use autd3_rs::{Client, ClientConfig, Error, Frames, Interface, StateChecker, TransportOption};
+use autd3_rs::{
+    Client, ClientConfig, Error, ExecAt, Frames, Interface, StateChecker, TransportOption,
+};
 
 use crate::cli::Cli;
 use crate::io::{check, prompt, wait_enter};
@@ -28,6 +30,7 @@ pub struct Ctx<'a> {
     pub heartbeat: Duration,
     pub lost_timeout: Duration,
     pub mute: bool,
+    pub exec: ExecAt,
 }
 
 pub struct Session {
@@ -75,13 +78,14 @@ pub struct Link<'a> {
     pub config: ClientConfig,
     pub heartbeat: Duration,
     pub mute: bool,
+    pub exec: ExecAt,
 }
 
 impl Link<'_> {
     async fn open(&self) -> Result<Session, Error> {
-        Client::open(self.geometry, self.option, self.config)
-            .await
-            .map(|client| Session::new(client, self.heartbeat))
+        let client = Client::open(self.geometry, self.option, self.config).await?;
+        client.send((Clear, Synchronize)).await?;
+        Ok(Session::new(client, self.heartbeat))
     }
 
     pub async fn reopen(&self) -> Result<Session> {
@@ -123,7 +127,11 @@ enum Selected {
 impl Ctx<'_> {
     pub async fn try_send_frames(&self, frames: &Frames) -> Result<(), Error> {
         for frame in frames {
-            self.client.send_frame(frame).await?.await?.check()?;
+            self.client
+                .send_frame_at(frame, self.exec)
+                .await?
+                .await?
+                .check()?;
         }
         Ok(())
     }
@@ -247,6 +255,7 @@ async fn run(cli: &Cli) -> Result<()> {
         config: cli.client_config(),
         heartbeat,
         mute: cli.mute,
+        exec: cli.exec(),
     };
     let mut client = link.open().await.context("opening the devices")?;
     if cli.mute && !mute(&client).await {
@@ -267,6 +276,7 @@ async fn run(cli: &Cli) -> Result<()> {
             heartbeat,
             lost_timeout: option.lost_timeout,
             mute: cli.mute,
+            exec: link.exec,
         };
         client = match select(&ctx).await {
             Selected::Quit => break,
@@ -386,7 +396,7 @@ async fn select(ctx: &Ctx<'_>) -> Selected {
         if let Err(e) = dispatch(i, ctx).await {
             eprintln!("test failed: {e:?}");
         }
-        if ctx.client.config().exec_lead.is_some() {
+        if ctx.exec != ExecAt::Immediate {
             report_exec_late(ctx.client).await;
         }
 
@@ -418,7 +428,6 @@ async fn report_exec_late(client: &Client) {
 }
 
 async fn reset(ctx: &Ctx<'_>) -> Result<()> {
-    use autd3_rs::commands::Clear;
     use autd3_rs_pattern::set_intensity;
 
     let phases = ctx.geometry.phase_buffer();

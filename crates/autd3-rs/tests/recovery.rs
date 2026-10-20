@@ -1,16 +1,15 @@
 mod common;
 
 use std::net::{Ipv6Addr, SocketAddrV6, UdpSocket};
-use std::num::NonZeroU32;
 
 use autd3_cpu_wire::Cmd;
 use autd3_cpu_wire::udp::{Header, Kind};
 use autd3_rs::commands::{ForceFan, Nop};
-use autd3_rs::{Client, ClientConfig, Error, Frames, MAX_INFLIGHT, Telemetry};
+use autd3_rs::{Client, Error, Frames, MAX_INFLIGHT, Telemetry};
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 use zerocopy::IntoBytes;
 
-use common::{PATIENCE, config, emulator, open, open_with, option, patient_config};
+use common::{PATIENCE, emulator, open, open_with, option, patient_config};
 
 const FOREIGN_SEQ: u8 = 0x80;
 
@@ -159,47 +158,24 @@ async fn a_frame_answered_while_an_older_one_is_unanswered_still_completes() {
 
 #[tokio::test]
 #[ignore = "depends on real time"]
-async fn a_reset_whose_reply_is_lost_is_sent_again() {
+async fn an_unacknowledged_reset_fails_the_send_and_the_next_send_sends_it_again() {
     let (emulator, client) = open(1).await;
+    let stats = client.bus_stats();
 
     emulator.drop_next_replies(0, 2);
     assert!(matches!(client.send(Nop).await, Err(Error::Timeout { .. })));
+    assert!(matches!(client.send(Nop).await, Err(Error::Timeout { .. })));
+    assert_eq!(stats.resets(), 2);
+
     client.send(Nop).await.unwrap();
-
-    assert_eq!(client.bus_stats().resets(), 3);
-    client.close().await.unwrap();
-}
-
-#[tokio::test]
-#[ignore = "depends on real time"]
-async fn the_resynchronization_gives_up_after_the_configured_rounds() {
-    let emulator = emulator(1);
-    let config = ClientConfig {
-        max_resync_rounds: NonZeroU32::new(2).unwrap(),
-        ..config()
-    };
-    let client = open_with(&emulator, &option(&emulator), config).await;
-    let stats = client.bus_stats();
-
-    emulator.drop_next_replies(0, 3);
-    assert!(matches!(client.send(Nop).await, Err(Error::Timeout { .. })));
-    assert!(matches!(client.send(Nop).await, Err(Error::Timeout { .. })));
     assert_eq!(stats.resets(), 3);
-
-    client.send(Nop).await.unwrap();
-    assert_eq!(stats.resets(), 4);
     client.close().await.unwrap();
 }
 
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn a_reset_dropped_by_a_stalled_device_is_sent_again_once_the_device_runs() {
-    let emulator = emulator(1);
-    let config = ClientConfig {
-        max_resync_rounds: NonZeroU32::new(1).unwrap(),
-        ..config()
-    };
-    let client = open_with(&emulator, &option(&emulator), config).await;
+    let (emulator, client) = open(1).await;
     let stats = client.bus_stats();
     let before = telemetry(&client).await;
     let nop = Frames::encode(client.geometry(), Nop).unwrap();

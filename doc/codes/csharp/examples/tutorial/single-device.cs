@@ -21,6 +21,7 @@ await using var client = await Client.OpenAsync(
     new TransportOption(),
     new ClientConfig()
 );
+await client.SendAsync(Command.Sequence(new Clear(), new Synchronize()));
 
 // Generate a focus 150 mm above the array center.
 var target = geometry.Center + Offset(0.0f * mm, 0.0f * mm, 150.0f * mm);

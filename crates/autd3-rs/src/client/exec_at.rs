@@ -4,8 +4,8 @@ use crate::error::{Error, PayloadError};
 use crate::protocol::EXEC_AT_UNIT_NS;
 use crate::value::SysTime;
 
-use super::config::{EXEC_LEAD_LIMIT, EXEC_LEAD_MIN};
-
+const EXEC_LEAD_MIN: Duration = Duration::from_micros(100);
+const EXEC_LEAD_LIMIT: Duration = Duration::from_nanos(EXEC_AT_UNIT_NS << 31);
 const EXEC_BEHIND_LIMIT: Duration = Duration::from_nanos(EXEC_AT_UNIT_NS << 30);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -13,12 +13,6 @@ pub enum ExecAt {
     Immediate,
     Lead(Duration),
     At(SysTime),
-}
-
-impl ExecAt {
-    pub(crate) fn from_exec_lead(exec_lead: Option<Duration>) -> Self {
-        exec_lead.map_or(Self::Immediate, Self::Lead)
-    }
 }
 
 pub(crate) fn schedule(
@@ -99,15 +93,6 @@ mod tests {
         assert_eq!(stamp(SysTime::from_nanos((wrap + 1) * US)), 1);
         assert_eq!(stamp(SysTime::from_nanos((wrap + 2) * US)), 2);
         assert_eq!(stamp(SysTime::ZERO), 1);
-    }
-
-    #[test]
-    fn the_config_lead_maps_to_lead_or_immediate() {
-        assert_eq!(ExecAt::from_exec_lead(None), ExecAt::Immediate);
-        assert_eq!(
-            ExecAt::from_exec_lead(Some(Duration::from_millis(1))),
-            ExecAt::Lead(Duration::from_millis(1))
-        );
     }
 
     #[test]

@@ -19,7 +19,6 @@ class Autd3Error(Exception):
     DEVICE: ClassVar[int]
     NETWORK: ClassVar[int]
     INVALID_ARGUMENT: ClassVar[int]
-    UNSUPPORTED_FIRMWARE: ClassVar[int]
     code: int
 
 @final

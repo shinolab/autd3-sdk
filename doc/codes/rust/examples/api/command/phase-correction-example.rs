@@ -1,4 +1,4 @@
-use autd3_rs::commands::SetPhaseCorrection;
+use autd3_rs::commands::{Clear, SetPhaseCorrection, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::value::Phase;
 use autd3_rs::{Client, ClientConfig};
@@ -11,6 +11,7 @@ async fn main() -> anyhow::Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
     let option = TransportOption::default();
     let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
+    client.send((Clear, Synchronize)).await?;
 
     let phases: Vec<Vec<Phase>> = geometry
         .iter()

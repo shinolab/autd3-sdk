@@ -33,12 +33,6 @@ namespace AUTD3
         internal static extern int autd3_transport_option_get_iface_addr(IntPtr option, out IntPtr addr);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_set_timer_resolution(IntPtr option, [MarshalAs(UnmanagedType.I1)] bool hasValue, ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_get_timer_resolution(IntPtr option, [MarshalAs(UnmanagedType.I1)] out bool hasValue, out ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_transport_option_set_send_buffer(IntPtr option, ulong bytes);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
@@ -105,34 +99,16 @@ namespace AUTD3
         internal static extern IntPtr autd3_client_config_new();
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_client_config_set_require_supported_firmware(IntPtr config, [MarshalAs(UnmanagedType.I1)] bool value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_client_config_set_ack_timeout_ns(IntPtr config, ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_client_config_set_exec_lead(IntPtr config, [MarshalAs(UnmanagedType.I1)] bool hasValue, ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_client_config_set_max_inflight(IntPtr config, UIntPtr value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_client_config_set_max_resync_rounds(IntPtr config, uint value);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_client_config_get_ack_timeout_ns(IntPtr config, out ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_client_config_get_max_inflight(IntPtr config, out UIntPtr value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_client_config_get_max_resync_rounds(IntPtr config, out uint value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_client_config_get_require_supported_firmware(IntPtr config, [MarshalAs(UnmanagedType.I1)] out bool value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_client_config_get_exec_lead(IntPtr config, [MarshalAs(UnmanagedType.I1)] out bool hasValue, out ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_client_config_free(IntPtr config);
@@ -240,15 +216,6 @@ namespace AUTD3
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_client_send_at(ClientHandle client, FramesHandle frames, long frame, ExecAtNative exec, CompletionCallback cb, IntPtr userData);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_client_send_streaming(ClientHandle client, IntPtr command, CompletionCallback cb, IntPtr userData);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_stream_token_await(IntPtr token, CompletionCallback cb, IntPtr userData);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_stream_token_free(IntPtr token);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_response_token_await(IntPtr token, CompletionCallback cb, IntPtr userData);

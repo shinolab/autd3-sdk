@@ -81,14 +81,12 @@ fn cut_off(count: usize, first: usize) -> Vec<DeviceState> {
 }
 
 async fn open(link: &Link<'_>) -> Result<Session> {
-    let client = Client::open(link.geometry, link.option, link.config)
-        .await
-        .context("opening the devices")?;
+    let client = link.open().await.context("opening the devices")?;
     restore_gpio_out(&client).await;
     if link.mute && !mute(&client).await {
         anyhow::bail!("muting the devices failed");
     }
-    Ok(Session::new(client, link.heartbeat))
+    Ok(client)
 }
 
 async fn recover_until(

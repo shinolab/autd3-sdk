@@ -1,21 +1,15 @@
-use std::num::{NonZeroU32, NonZeroUsize};
+use std::num::NonZeroUsize;
 use std::time::Duration;
 
 use crate::error::{ClientConfigError, Error};
-use crate::protocol::{EXEC_AT_UNIT_NS, MAX_INFLIGHT};
+use crate::protocol::MAX_INFLIGHT;
 
 pub use crate::udp::bus::MAX_DEVICES;
-
-pub(super) const EXEC_LEAD_MIN: Duration = Duration::from_micros(100);
-pub(super) const EXEC_LEAD_LIMIT: Duration = Duration::from_nanos(EXEC_AT_UNIT_NS << 31);
 
 #[derive(Clone, Copy, Debug)]
 pub struct ClientConfig {
     pub ack_timeout: Duration,
     pub max_inflight: NonZeroUsize,
-    pub max_resync_rounds: NonZeroU32,
-    pub require_supported_firmware: bool,
-    pub exec_lead: Option<Duration>,
 }
 
 impl Default for ClientConfig {
@@ -23,15 +17,12 @@ impl Default for ClientConfig {
         Self {
             ack_timeout: Duration::from_millis(10),
             max_inflight: NonZeroUsize::new(MAX_INFLIGHT).unwrap(),
-            max_resync_rounds: NonZeroU32::new(8).unwrap(),
-            require_supported_firmware: false,
-            exec_lead: None,
         }
     }
 }
 
 impl ClientConfig {
-    pub(super) fn validate(self, lost_timeout: Duration) -> Result<Self, Error> {
+    pub(super) fn validate(self) -> Result<Self, Error> {
         if self.max_inflight.get() > MAX_INFLIGHT {
             return Err(Error::InvalidConfig(
                 ClientConfigError::MaxInflightTooLarge { max: MAX_INFLIGHT },
@@ -39,27 +30,6 @@ impl ClientConfig {
         }
         if self.ack_timeout.is_zero() {
             return Err(Error::InvalidConfig(ClientConfigError::ZeroAckTimeout));
-        }
-        if let Some(exec_lead) = self.exec_lead
-            && !(EXEC_LEAD_MIN..EXEC_LEAD_LIMIT).contains(&exec_lead)
-        {
-            return Err(Error::InvalidConfig(
-                ClientConfigError::ExecLeadOutOfRange {
-                    got: exec_lead,
-                    min: EXEC_LEAD_MIN,
-                    limit: EXEC_LEAD_LIMIT,
-                },
-            ));
-        }
-        if let Some(exec_lead) = self.exec_lead
-            && exec_lead >= lost_timeout
-        {
-            return Err(Error::InvalidConfig(
-                ClientConfigError::ExecLeadNotBelowLostTimeout {
-                    exec_lead,
-                    lost_timeout,
-                },
-            ));
         }
         Ok(self)
     }
@@ -71,72 +41,7 @@ mod tests {
 
     #[test]
     fn the_default_passes_validation() {
-        assert!(ClientConfig::default().validate(Duration::MAX).is_ok());
-    }
-
-    #[test]
-    fn exec_lead_is_off_by_default() {
-        assert_eq!(ClientConfig::default().exec_lead, None);
-    }
-
-    #[test]
-    fn an_exec_lead_below_100_microseconds_is_rejected() {
-        let with = |exec_lead| ClientConfig {
-            exec_lead: Some(exec_lead),
-            ..ClientConfig::default()
-        };
-        assert!(
-            with(Duration::from_micros(100))
-                .validate(Duration::MAX)
-                .is_ok()
-        );
-        assert!(matches!(
-            with(Duration::from_nanos(99_999)).validate(Duration::MAX),
-            Err(Error::InvalidConfig(
-                ClientConfigError::ExecLeadOutOfRange { .. }
-            ))
-        ));
-    }
-
-    #[test]
-    fn an_exec_lead_not_below_2_pow_31_microseconds_is_rejected() {
-        let with = |exec_lead| ClientConfig {
-            exec_lead: Some(exec_lead),
-            ..ClientConfig::default()
-        };
-        let limit = Duration::from_micros(1 << 31);
-        assert!(
-            with(Duration::from_nanos((1 << 31) * 1_000 - 1))
-                .validate(Duration::MAX)
-                .is_ok()
-        );
-        assert!(matches!(
-            with(limit).validate(Duration::MAX),
-            Err(Error::InvalidConfig(
-                ClientConfigError::ExecLeadOutOfRange { .. }
-            ))
-        ));
-    }
-
-    #[test]
-    fn an_exec_lead_not_below_the_lost_timeout_is_rejected() {
-        const LOST_TIMEOUT: Duration = Duration::from_millis(100);
-        let with = |exec_lead| ClientConfig {
-            exec_lead: Some(exec_lead),
-            ..ClientConfig::default()
-        };
-        assert!(
-            with(Duration::from_millis(99))
-                .validate(LOST_TIMEOUT)
-                .is_ok()
-        );
-        assert!(matches!(
-            with(LOST_TIMEOUT).validate(LOST_TIMEOUT),
-            Err(Error::InvalidConfig(
-                ClientConfigError::ExecLeadNotBelowLostTimeout { .. }
-            ))
-        ));
-        assert!(with(LOST_TIMEOUT).validate(Duration::MAX).is_ok());
+        assert!(ClientConfig::default().validate().is_ok());
     }
 
     #[test]
@@ -146,10 +51,22 @@ mod tests {
             ..ClientConfig::default()
         };
         assert!(matches!(
-            config.validate(Duration::MAX),
+            config.validate(),
             Err(Error::InvalidConfig(
                 ClientConfigError::MaxInflightTooLarge { max: MAX_INFLIGHT }
             ))
+        ));
+    }
+
+    #[test]
+    fn a_zero_ack_timeout_is_rejected() {
+        let config = ClientConfig {
+            ack_timeout: Duration::ZERO,
+            ..ClientConfig::default()
+        };
+        assert!(matches!(
+            config.validate(),
+            Err(Error::InvalidConfig(ClientConfigError::ZeroAckTimeout))
         ));
     }
 }

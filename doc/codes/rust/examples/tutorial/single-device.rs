@@ -1,4 +1,4 @@
-use autd3_rs::commands::{Modulation, Pattern, SetSilencer};
+use autd3_rs::commands::{Clear, Modulation, Pattern, SetSilencer, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::{Intensity, SamplingConfig};
@@ -12,6 +12,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Open the client.
     let client = Client::open(&geometry, &TransportOption::default(), ClientConfig::default()).await?;
+    client.send((Clear, Synchronize)).await?;
 
     // Generate a focus 150 mm above the array center.
     let target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);

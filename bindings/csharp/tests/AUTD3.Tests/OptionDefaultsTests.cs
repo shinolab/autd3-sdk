@@ -12,9 +12,6 @@ namespace AUTD3.Tests
             var config = new ClientConfig();
             Assert.Equal(TimeSpan.FromMilliseconds(10), config.AckTimeout);
             Assert.Equal(7u, config.MaxInflight);
-            Assert.Equal(8u, config.MaxResyncRounds);
-            Assert.False(config.RequireSupportedFirmware);
-            Assert.Null(config.ExecLead);
         }
 
         [Fact]
@@ -24,9 +21,6 @@ namespace AUTD3.Tests
             {
                 AckTimeout = TimeSpan.FromMilliseconds(25),
                 MaxInflight = 3,
-                MaxResyncRounds = 2,
-                RequireSupportedFirmware = true,
-                ExecLead = TimeSpan.FromMilliseconds(4),
             };
             var handle = config.CreateHandle();
             ClientConfig back;
@@ -40,32 +34,6 @@ namespace AUTD3.Tests
             }
             Assert.Equal(config.AckTimeout, back.AckTimeout);
             Assert.Equal(config.MaxInflight, back.MaxInflight);
-            Assert.Equal(config.MaxResyncRounds, back.MaxResyncRounds);
-            Assert.Equal(config.RequireSupportedFirmware, back.RequireSupportedFirmware);
-            Assert.Equal(config.ExecLead, back.ExecLead);
-        }
-
-        [Fact]
-        public void AnExecLeadReachesTheNativeConfig()
-        {
-            Assert.Null(default(ClientConfig).ExecLead);
-            foreach (var lead in new TimeSpan?[] { null, TimeSpan.Zero, TimeSpan.FromMilliseconds(5) })
-            {
-                var config = new ClientConfig { ExecLead = lead };
-                Assert.Equal(lead, config.ExecLead);
-                var handle = config.CreateHandle();
-                try
-                {
-                    Assert.Equal(lead, OptionNative.GetOptionalDuration(handle, NativeClient.autd3_client_config_get_exec_lead));
-                }
-                finally
-                {
-                    NativeClient.autd3_client_config_free(handle);
-                }
-            }
-
-            var negative = new ClientConfig { ExecLead = TimeSpan.FromTicks(-1) };
-            Assert.Throws<Autd3Exception>(() => negative.CreateHandle());
         }
 
         [Fact]

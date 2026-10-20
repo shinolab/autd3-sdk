@@ -2,7 +2,7 @@ import asyncio
 
 import autd3_pattern as pattern
 from autd3 import Client, ClientConfig, TransportOption
-from autd3.commands import Pattern
+from autd3.commands import Clear, Pattern, Synchronize
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import m, mm, s
 from autd3.value import Intensity, PatternBank
@@ -15,6 +15,8 @@ async def main() -> None:
         TransportOption(),
         ClientConfig(),
     ) as client:
+        await client.send((Clear(), Synchronize()))
+
         wavelength = pattern.wavelength(340 * m / s)
 
 

@@ -19,7 +19,7 @@ for frame in &frames {
 ```
 
 これは 1 フレームずつ応答を待つ stop-and-wait である.
-`send_frame` の返す `ResponseFuture` を貯めれば, 応答を待たずに次を送る streaming になる (`Client::send_streaming` がこれを行う).
+`send_frame` の返す `ResponseFuture` を貯めれば, 応答を待たずに次を送る streaming になる (ライブラリに専用の API は無く, ユーザーがこの形で組む).
 
 以下ではまず stop-and-wait が 1 フレームを送り終えるまでを順に追い, そのあと streaming と障害時の処理へ進む.
 
@@ -71,7 +71,7 @@ let sent = self.bus.send(msg_id, &bufs)?;          // 全デバイスへ unicast
 ```
 
 `FrameBuf` は 1448 byte の固定長バッファと実際の長さの組で, フレームの先頭 6 byte が `Seq` と `Cmd` と処理時刻 `exec_at`, 残りがペイロードである.
-`exec_at` は `ClientConfig::exec_lead` を指定したときだけ, 送る直前のデバイス時刻の推定値 + `exec_lead` を µs 単位に切り上げて求め, 全デバイスに同じ値を書く (指定しなければ 0).
+`exec_at` は `send_frame_at` で `ExecAt::Lead(lead)` / `ExecAt::At(t)` を渡したときだけ, それぞれ送る直前のデバイス時刻の推定値 + `lead` / `t` を µs 単位に切り上げて求め, 全デバイスに同じ値を書く (`send` / `send_frame` と `ExecAt::Immediate` では 0).
 ペイロードは `encode` が返した長さのまま送る (末尾の 0 も省かない). デバイスはデータグラムの長さをペイロード長として扱う.
 
 `UdpBus::send` は `Lost` でない全デバイスへ UDP のデータグラムを `reserve_msg_id` で採った `msg_id` で送り, その `msg_id` と実際に送った機体のビットマスクを返す.
@@ -278,28 +278,24 @@ fn check_timeouts(&mut self, now: Instant) {
 
 ```rust
 async fn reset(&self) -> Result<(), Error> {
-    for round in 0..self.config.max_resync_rounds.get() {
-        /* 全デバイスへ (SEQ 0, Reset) を送り, msg_id で照合する Inflight を積む */
-        match rx.await {
-            Ok(_) => { pending.next_seq = Seq::ZERO; pending.need_reset = false; return Ok(()); }
-            Err(Error::Timeout { .. }) => {}       // ack_timeout で送り直す
-            Err(e) => return Err(e),
-        }
-    }
-    Err(Error::Timeout { .. })
+    /* 全デバイスへ (SEQ 0, Reset) を送り, msg_id で照合する Inflight を積む */
+    rx.await?;
+    pending.next_seq = Seq::ZERO;
+    pending.need_reset = false;
+    Ok(())
 }
 ```
 
 デバイス側は `Cmd::Reset` を受けると `expected_seq` を 0 に戻し, `ack` を `0xFF` にして返信する.
 `Reset` は SEQ 一致チェックを bypass するので, 届けば 1 回で足りる.
-ホストはその `msg_id` の返信が `ack = 0xFF` で全機体から揃うまで `ack_timeout` ごとに新しい `msg_id` で送り直し,
-`max_resync_rounds` 回で揃わなければ `send_frame` は `Error::Timeout` を返す (印は残り, 次の `send_frame` が再び試みる).
+ホストは `Reset` を 1 回だけ送り, その `msg_id` の返信が `ack = 0xFF` で全機体から `ack_timeout` 以内に揃うのを待つ.
+揃わなければ `send_frame` は `Error::Timeout` を返す (送り直さない. 印は残り, 次の `send_frame` が再び試みる).
 
 `Reset` は FPGA の出力状態には触らないので, 回復のための `Reset` で出力は乱れない.
 失敗したコマンドは呼び出し側が送り直す.
 
 :::note
-`Client::open` の handshake もこの `reset` を使う.
+`Client::open` の handshake もこの `reset` を使う (open がデバイスへ送るのはこの `Reset` だけで, `Clear` や `Synchronize` は送らない).
 前回のセッションの `expected_seq` や dedup の状態がデバイスに残っていても, ここで揃え直される.
 :::
 

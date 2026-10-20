@@ -20,7 +20,6 @@ async fn main() -> Result<()> {
     let sync_timeout = Duration::from_secs(30);
     let send_rate_limit = None;
     let send_buffer = NonZeroUsize::new(8192);
-    let timer_resolution = Some(Duration::from_millis(1));
     // ANCHOR: api
     TransportOption {
         iface,
@@ -31,7 +30,6 @@ async fn main() -> Result<()> {
         sync_timeout,
         send_rate_limit,
         send_buffer,
-        timer_resolution,
         ..Default::default()
     };
     // ANCHOR_END: api

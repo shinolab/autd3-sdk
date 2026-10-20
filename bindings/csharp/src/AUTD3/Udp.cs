@@ -13,7 +13,6 @@ namespace AUTD3
         internal static readonly TimeSpan SyncTimeout;
         internal static readonly float? SendRateLimit;
         internal static readonly ulong? SendBuffer;
-        internal static readonly TimeSpan? TimerResolution;
 
         static TransportOptionDefaults()
         {
@@ -27,7 +26,6 @@ namespace AUTD3
                 SyncTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_sync_timeout);
                 SendRateLimit = TransportOption.ReadSendRateLimit(handle);
                 SendBuffer = TransportOption.ReadSendBuffer(handle);
-                TimerResolution = OptionNative.GetOptionalDuration(handle, NativeClient.autd3_transport_option_get_timer_resolution);
             }
             finally
             {
@@ -80,19 +78,6 @@ namespace AUTD3
             }
         }
 
-        private readonly bool _timerResolutionSet;
-        private readonly TimeSpan? _timerResolution;
-
-        public TimeSpan? TimerResolution
-        {
-            get => _timerResolutionSet ? _timerResolution : TransportOptionDefaults.TimerResolution;
-            init
-            {
-                _timerResolution = value;
-                _timerResolutionSet = true;
-            }
-        }
-
         internal static IntPtr NewHandle()
         {
             var handle = NativeClient.autd3_transport_option_new();
@@ -130,7 +115,6 @@ namespace AUTD3
                     { } bytes when bytes > 0 => NativeClient.autd3_transport_option_set_send_buffer(handle, bytes),
                     _ => -1,
                 });
-                OptionNative.SetOptionalDuration(handle, "timerResolution", TimerResolution, NativeClient.autd3_transport_option_set_timer_resolution);
             }
             catch
             {
@@ -150,7 +134,6 @@ namespace AUTD3
             SyncTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_sync_timeout),
             SendRateLimit = ReadSendRateLimit(handle),
             SendBuffer = ReadSendBuffer(handle),
-            TimerResolution = OptionNative.GetOptionalDuration(handle, NativeClient.autd3_transport_option_get_timer_resolution),
         };
 
         internal static TransportOption Defaults()

@@ -120,7 +120,6 @@ pub const AUTD3_ERR_TIMEOUT: i32 = -2;
 pub const AUTD3_ERR_DEVICE: i32 = -3;
 pub const AUTD3_ERR_NETWORK: i32 = -4;
 pub const AUTD3_ERR_INVALID_ARGUMENT: i32 = -5;
-pub const AUTD3_ERR_UNSUPPORTED_FIRMWARE: i32 = -6;
 pub const AUTD3_ERR_ABORTED: i32 = -7;
 
 #[repr(C)]

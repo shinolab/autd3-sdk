@@ -10,7 +10,7 @@ import signal
 import autd3
 import autd3_modulation as modulation
 import autd3_pattern as pattern
-from autd3.commands import Modulation, Pattern, SetSilencer
+from autd3.commands import Clear, Modulation, Pattern, SetSilencer, Synchronize
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import Hz, m, mm, s
 from autd3.value import Intensity, SamplingConfig
@@ -26,6 +26,7 @@ async def main() -> None:
         autd3.TransportOption(),
         autd3.ClientConfig(),
     ) as client:
+        await client.send((Clear(), Synchronize()))
         print("devices:", client.num_devices())
         for i, fw in enumerate(await client.read_firmware_version()):
             print(f"device[{i}] firmware version: {fw}")

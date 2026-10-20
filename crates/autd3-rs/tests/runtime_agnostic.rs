@@ -39,8 +39,7 @@ fn a_client_opens_sends_and_closes_without_an_async_runtime() {
         assert_eq!(client.num_devices(), 2);
         stream_silencer(&client, 4).await.unwrap();
         client.send(ForceFan { value: true }).await.unwrap();
-        let stream = client.send_streaming((Nop, Nop, Nop)).await.unwrap();
-        stream.await.unwrap();
+        client.send((Nop, Nop, Nop)).await.unwrap();
         assert_eq!(client.read_firmware_version().await.unwrap().len(), 2);
         client.close().await.unwrap();
         assert!(client.close().await.is_ok());

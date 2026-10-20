@@ -47,8 +47,8 @@ The run continues until Ctrl+C, then prints the summary.
 | `--stop-on-error`     | Stop at the first failed send and exit non-zero. The summary is still printed. Default: off. |
 | `--hold <DUR>`        | Keep the connection idle (heartbeats every `--heartbeat` only) this long before measuring, e.g. `3s`. |
 | `--ack-timeout <DUR>` | How long a request waits for its ACK before raising `Timeout` (`ClientConfig.ack_timeout`). Default = `10ms`. Must exceed `--exec-lead` (plus the processing time). |
-| `--exec-lead <DUR>`   | Stamp every frame with `EXEC_AT` = the device time this far ahead, rounded up to 1 µs (`ClientConfig.exec_lead`), e.g. `1ms`. At least `100us`. Omit to process every frame on arrival. |
-| `--max-resync-rounds <N>` | Resync rounds allowed before the client gives up (`ClientConfig.max_resync_rounds`). Default = 8. |
+| `--exec-lead <DUR>`   | Stamp every frame with `EXEC_AT` = the device time this far ahead, rounded up to 1 µs (each frame is sent with `send_frame_at(frame, ExecAt::Lead(..))`), e.g. `1ms`. At least `100us`. Omit to process every frame on arrival. |
+| `--reset-rounds <N>` | bank-switch only: Reset rounds tried before giving up after a failed switch. Default = 8. |
 | `--mode <MODE>`       | `stop-and-wait` (default), `streaming`, or `bank-switch`. See below. |
 | `--framing <FRAMING>` | `bank-switch` only: `fused` (default; `Pattern`, 1 `WritePatternFused` frame) or `split` (`WritePatternBuffer` + `ConfigPattern` + `ActivatePatternBank`, 3 frames pipelined). |
 | `--max-inflight <N>`  | Pipeline depth in `streaming` mode (`ClientConfig.max_inflight`). Default = 7 (`DEVICE_QUEUE_FRAMES`, the device's receive queue). `stop-and-wait` ignores it except with `--command write-modulation-buffer`, which pipelines the frames of one sample up to this depth. Alias: `--inflight`. |
@@ -87,10 +87,10 @@ The difference shows up in throughput, not latency: many requests are in flight 
 
 Alternates zero-amplitude Patterns between bank B0 and B1, waiting for every reply of one switch before the next, with GPIO[0] on `PatternBank`, so the switch can be probed on two or more devices.
 It sends `Clear` first, so the pulse width table is the default one, whose entry for amplitude 0 is 0: no transducer emits.
-It then sends `Synchronize`, as `Client::open` does: opening the bus restarts PTP, and without it the FPGA clocks of the devices keep the offsets they had before, so the edges of different devices would land on different 25 µs grids.
+It then sends `Synchronize`, as the client modes do right after opening: opening the bus restarts PTP, and without it the FPGA clocks of the devices keep the offsets they had before, so the edges of different devices would land on different 25 µs grids.
 
 It drives `UdpBus` directly instead of the `Client` to read the device time each device puts in its reply (`FrameReply.sys_time`, taken right after the frame was processed).
-It stamps `EXEC_AT` the way `ClientConfig.exec_lead` does (per frame, from the device time right before that frame is sent), and resets the sequence after every failed switch.
+It stamps `EXEC_AT` the way `ExecAt::Lead` does (per frame, from the device time right before that frame is sent), and resets the sequence after every failed switch.
 `--command`, `--max-inflight` and `--hold` do not apply.
 
 Printed on Ctrl+C:

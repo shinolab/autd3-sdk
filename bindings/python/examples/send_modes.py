@@ -15,7 +15,7 @@ import numpy.typing as npt
 
 import autd3
 import autd3_pattern as pattern
-from autd3.commands import ConfigPattern, WritePatternBuffer
+from autd3.commands import Clear, ConfigPattern, Synchronize, WritePatternBuffer
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import Length, m, mm, s
 from autd3.value import Intensity, LoopBehavior, PatternBank, SamplingConfig
@@ -33,6 +33,7 @@ async def main() -> None:
         autd3.TransportOption(),
         autd3.ClientConfig(),
     ) as client:
+        await client.send((Clear(), Synchronize()))
         await configure(client)
 
         center = geometry.center()

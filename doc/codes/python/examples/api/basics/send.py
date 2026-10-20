@@ -23,8 +23,12 @@ async def main() -> None:
         # ANCHOR: api
         await client.send(SetSilencer())
 
-        done = await client.send_streaming(Modulation(SamplingConfig.FREQ_4K, data))
-        await done
+        # ANCHOR: streaming
+        frames = Frames.encode(geometry, Modulation(SamplingConfig.FREQ_4K, data))
+        responses = [await client.send_frame(frame) for frame in frames]
+        for response in responses:
+            (await response).check()
+        # ANCHOR_END: streaming
 
         frames = Frames.encode(geometry, Pattern(left, Intensity.MAX))
         for frame in frames:

@@ -10,7 +10,6 @@ namespace AUTD3
         Device = -3,
         Network = -4,
         InvalidArgument = -5,
-        UnsupportedFirmware = -6,
         Aborted = -7,
     }
 

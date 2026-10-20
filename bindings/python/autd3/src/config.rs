@@ -1,4 +1,4 @@
-use core::num::{NonZeroU32, NonZeroUsize};
+use core::num::NonZeroUsize;
 use core::time::Duration;
 
 use autd3_python_capsule::extract::extract_duration;
@@ -17,25 +17,15 @@ impl ClientConfig {
     #[pyo3(signature = (
         ack_timeout = CoreClientConfig::default().ack_timeout,
         max_inflight = CoreClientConfig::default().max_inflight.get(),
-        max_resync_rounds = CoreClientConfig::default().max_resync_rounds.get(),
-        require_supported_firmware = CoreClientConfig::default().require_supported_firmware,
-        exec_lead = CoreClientConfig::default().exec_lead,
     ))]
     fn new(
         #[pyo3(from_py_with = extract_duration)] ack_timeout: Duration,
         max_inflight: usize,
-        max_resync_rounds: u32,
-        require_supported_firmware: bool,
-        #[pyo3(from_py_with = crate::udp::none_or_duration)] exec_lead: Option<Duration>,
     ) -> PyResult<Self> {
         Ok(Self(CoreClientConfig {
             ack_timeout,
             max_inflight: NonZeroUsize::new(max_inflight)
                 .ok_or_else(|| PyValueError::new_err("max_inflight must be >= 1"))?,
-            max_resync_rounds: NonZeroU32::new(max_resync_rounds)
-                .ok_or_else(|| PyValueError::new_err("max_resync_rounds must be >= 1"))?,
-            require_supported_firmware,
-            exec_lead,
         }))
     }
 
@@ -47,23 +37,5 @@ impl ClientConfig {
     #[getter]
     fn max_inflight(&self) -> NonZeroUsize {
         self.0.max_inflight
-    }
-
-    #[getter]
-    fn max_resync_rounds(&self) -> NonZeroU32 {
-        self.0.max_resync_rounds
-    }
-
-    #[getter]
-    fn require_supported_firmware(&self) -> bool {
-        self.0.require_supported_firmware
-    }
-
-    #[getter]
-    fn exec_lead<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
-        self.0
-            .exec_lead
-            .map(|lead| autd3_python_capsule::extract::duration_to_py(py, lead))
-            .transpose()
     }
 }

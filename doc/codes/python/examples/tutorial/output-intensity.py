@@ -3,7 +3,7 @@ import asyncio
 import autd3_modulation as modulation
 import autd3_pattern as pattern
 from autd3 import Client, ClientConfig, TransportOption
-from autd3.commands import Modulation, Pattern, SetSilencer
+from autd3.commands import Clear, Modulation, Pattern, SetSilencer, Synchronize
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import Hz, m, mm, s
 from autd3.value import Intensity, SamplingConfig
@@ -16,6 +16,8 @@ async def main() -> None:
         TransportOption(),
         ClientConfig(),
     ) as client:
+        await client.send((Clear(), Synchronize()))
+
         target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm)
         wavelength = pattern.wavelength(340 * m / s)
 

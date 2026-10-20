@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using AUTD3;
 using static AUTD3.Units;
@@ -27,8 +28,18 @@ internal static class Sample
         // ANCHOR: api
         await client.SendAsync(new SetSilencer());
 
-        var done = await client.SendStreamingAsync(new Modulation(SamplingConfig.Freq4k, modulation));
-        await done;
+        // ANCHOR: streaming
+        using var modulationFrames = Frames.Encode(geometry, new Modulation(SamplingConfig.Freq4k, modulation));
+        var responses = new List<ResponseFuture>();
+        foreach (var frame in modulationFrames)
+        {
+            responses.Add(await client.SendFrameAsync(frame));
+        }
+        foreach (var response in responses)
+        {
+            (await response).Check();
+        }
+        // ANCHOR_END: streaming
 
         using var frames = Frames.Encode(geometry, new Pattern(left, Intensity.Max));
         foreach (var frame in frames)

@@ -21,6 +21,5 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     ty.setattr("DEVICE", error_code::DEVICE)?;
     ty.setattr("NETWORK", error_code::NETWORK)?;
     ty.setattr("INVALID_ARGUMENT", error_code::INVALID_ARGUMENT)?;
-    ty.setattr("UNSUPPORTED_FIRMWARE", error_code::UNSUPPORTED_FIRMWARE)?;
     m.add("Autd3Error", ty)
 }

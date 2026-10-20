@@ -1,4 +1,3 @@
-use std::collections::VecDeque;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
@@ -38,61 +37,6 @@ impl Future for ResponseFuture {
         Pin::new(&mut self.receiver)
             .poll(cx)
             .map(|received| received.unwrap_or(Err(Error::Closed)))
-    }
-}
-
-#[derive(Default)]
-pub struct StreamFuture {
-    pending: VecDeque<ResponseFuture>,
-    failed: Option<Error>,
-    finished: bool,
-}
-
-impl StreamFuture {
-    pub(crate) fn in_flight(&self) -> usize {
-        self.pending.len()
-    }
-
-    pub(crate) fn has_failed(&self) -> bool {
-        self.failed.is_some()
-    }
-
-    pub(crate) fn push(&mut self, response: ResponseFuture) {
-        self.pending.push_back(response);
-    }
-
-    pub(crate) fn fail(&mut self, e: Error) {
-        self.failed.get_or_insert(e);
-    }
-
-    pub(crate) async fn settle_oldest(&mut self) {
-        if let Some(oldest) = self.pending.pop_front()
-            && let Err(e) = oldest.await.and_then(|response| response.check())
-        {
-            self.fail(e);
-        }
-    }
-}
-
-impl Future for StreamFuture {
-    type Output = Result<(), Error>;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = &mut *self;
-        if this.finished {
-            return Poll::Ready(Err(Error::Closed));
-        }
-        while let Some(front) = this.pending.front_mut() {
-            let Poll::Ready(result) = Pin::new(front).poll(cx) else {
-                return Poll::Pending;
-            };
-            this.pending.pop_front();
-            if let Err(e) = result.and_then(|response| response.check()) {
-                this.fail(e);
-            }
-        }
-        this.finished = true;
-        Poll::Ready(this.failed.take().map_or(Ok(()), Err))
     }
 }
 

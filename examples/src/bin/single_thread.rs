@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use autd3_rs::commands::{Modulation, Pattern, SetSilencer};
+use autd3_rs::commands::{Clear, Modulation, Pattern, SetSilencer, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs::units::{Hz, m, mm, s};
@@ -46,6 +46,7 @@ async fn main() -> Result<()> {
     )?;
     let driving = tokio::spawn(drive(driver));
     controller.initialize().await?;
+    controller.send((Clear, Synchronize)).await?;
 
     println!("devices: {}", controller.num_devices());
 

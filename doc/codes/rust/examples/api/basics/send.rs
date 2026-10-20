@@ -31,10 +31,16 @@ async fn main() -> Result<()> {
     // ANCHOR: api
     client.send(SetSilencer::default()).await?;
 
-    let done = client
-        .send_streaming(Modulation::new(SamplingConfig::FREQ_4K, &modulation))
-        .await?;
-    done.await?;
+    // ANCHOR: streaming
+    let frames = Frames::encode(&geometry, Modulation::new(SamplingConfig::FREQ_4K, &modulation))?;
+    let mut responses = Vec::with_capacity(frames.len());
+    for frame in &frames {
+        responses.push(client.send_frame(frame).await?);
+    }
+    for response in responses {
+        response.await?.check()?;
+    }
+    // ANCHOR_END: streaming
 
     let frames = Frames::encode(&geometry, Pattern::new(&left, Intensity::MAX))?;
     for frame in &frames {

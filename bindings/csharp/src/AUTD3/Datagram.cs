@@ -34,35 +34,15 @@ namespace AUTD3
         public TimeSpan AckTimeout { get => _ackTimeout ?? ClientConfigDefaults.Preset.AckTimeout; init => _ackTimeout = value; }
         private readonly uint? _maxInflight;
         public uint MaxInflight { get => _maxInflight ?? ClientConfigDefaults.Preset.MaxInflight; init => _maxInflight = value; }
-        private readonly uint? _maxResyncRounds;
-        public uint MaxResyncRounds { get => _maxResyncRounds ?? ClientConfigDefaults.Preset.MaxResyncRounds; init => _maxResyncRounds = value; }
-        private readonly bool? _requireSupportedFirmware;
-        public bool RequireSupportedFirmware { get => _requireSupportedFirmware ?? ClientConfigDefaults.Preset.RequireSupportedFirmware; init => _requireSupportedFirmware = value; }
-        private readonly bool _execLeadSet;
-        private readonly TimeSpan? _execLead;
-        public TimeSpan? ExecLead
-        {
-            get => _execLeadSet ? _execLead : ClientConfigDefaults.Preset.ExecLead;
-            init
-            {
-                _execLead = value;
-                _execLeadSet = true;
-            }
-        }
 
         internal static ClientConfig FromHandle(IntPtr handle)
         {
             var ackTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_client_config_get_ack_timeout_ns);
             OptionNative.Apply("preset", NativeClient.autd3_client_config_get_max_inflight(handle, out var maxInflight));
-            OptionNative.Apply("preset", NativeClient.autd3_client_config_get_max_resync_rounds(handle, out var maxResyncRounds));
-            OptionNative.Apply("preset", NativeClient.autd3_client_config_get_require_supported_firmware(handle, out var requireSupportedFirmware));
             return new ClientConfig
             {
                 AckTimeout = ackTimeout,
                 MaxInflight = (uint)maxInflight,
-                MaxResyncRounds = maxResyncRounds,
-                RequireSupportedFirmware = requireSupportedFirmware,
-                ExecLead = OptionNative.GetOptionalDuration(handle, NativeClient.autd3_client_config_get_exec_lead),
             };
         }
 
@@ -77,9 +57,6 @@ namespace AUTD3
             {
                 OptionNative.SetRequiredDuration(handle, "ackTimeout", AckTimeout, NativeClient.autd3_client_config_set_ack_timeout_ns);
                 OptionNative.Apply("maxInflight", NativeClient.autd3_client_config_set_max_inflight(handle, (UIntPtr)MaxInflight));
-                OptionNative.Apply("maxResyncRounds", NativeClient.autd3_client_config_set_max_resync_rounds(handle, MaxResyncRounds));
-                OptionNative.Apply("requireSupportedFirmware", NativeClient.autd3_client_config_set_require_supported_firmware(handle, RequireSupportedFirmware));
-                OptionNative.SetOptionalDuration(handle, "execLead", ExecLead, NativeClient.autd3_client_config_set_exec_lead);
             }
             catch
             {

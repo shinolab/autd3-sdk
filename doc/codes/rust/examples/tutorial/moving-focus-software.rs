@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 
-use autd3_rs::commands::{Modulation, Pattern, SetSilencer};
+use autd3_rs::commands::{Clear, Modulation, Pattern, SetSilencer, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::{Intensity, SamplingConfig};
@@ -15,6 +15,7 @@ async fn main() -> Result<()> {
 
     let option = TransportOption::default();
     let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
+    client.send((Clear, Synchronize)).await?;
 
     let center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
     let wavelength = autd3_rs_pattern::wavelength(340.0 * m / s);

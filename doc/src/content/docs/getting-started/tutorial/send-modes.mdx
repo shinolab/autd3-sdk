@@ -33,15 +33,15 @@ import csSample from "@codes/csharp/examples/tutorial/send-modes.cs?raw";
 1 フレームごとに応答を待たないため, スループットが高い. 
 
 下の例のように, `Frames::encode_into` でフレームに変換してから `send_frame` で 1 フレームずつ送る.
-`send_frame` はフレームをキューに積んだ時点で `ResponseFuture` を返し, その `ResponseFuture` を await するとデバイスの応答 (`Response`) が得られる.
+`send_frame` はフレームを送り終えた時点で `ResponseFuture` を返し, その `ResponseFuture` を await するとデバイスの応答 (`Response`) が得られる.
 `Response` は `check` でデバイスエラーの有無を検証できる.
 送信キューの最大サイズは `MAX_INFLIGHT (7)`である.
 `ResponseFuture` を FIFO で保持し, キューが埋まったら最古の応答を回収する.
 
 <CodeTabs rust={excerpt(sample, "streaming")} python={excerpt(pySample, "streaming")} csharp={excerpt(csSample, "streaming")} />
 
-なお, 1 つのコマンドを送るだけなら, `send_streaming` も使える.
+1 つのコマンドを streaming で送る場合も同様に, `Frames::encode` で変換したフレームを `send_frame` で送り, `ResponseFuture` を貯めてから順に await する ([streaming](/autd3-sdk/api/basics/client/#streaming) 参照).
 
 初期化や設定など, 確実に 1 つずつ反映させたいコマンドは stop-and-wait.
 焦点を高頻度で更新するなど, スループットが重要な場面では streaming を使う.
-`send` / `send_streaming` / `send_frame` の詳細は [送信](/autd3-sdk/api/basics/client/) を参照. 
+`send` / `send_frame` の詳細は [送信](/autd3-sdk/api/basics/client/) を参照. 

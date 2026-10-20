@@ -4,7 +4,7 @@
 
 use anyhow::Result;
 
-use autd3_rs::commands::{PatternStm, PatternStmOption, SetSilencer};
+use autd3_rs::commands::{Clear, PatternStm, PatternStmOption, SetSilencer, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs::units::{Hz, m, mm, s};
@@ -26,6 +26,7 @@ async fn main() -> Result<()> {
         ClientConfig::default(),
     )
     .await?;
+    client.send((Clear, Synchronize)).await?;
 
     println!("devices: {}", client.num_devices());
 
@@ -48,13 +49,12 @@ async fn main() -> Result<()> {
 
     client.send(SetSilencer::default()).await?;
     client
-        .send_streaming(PatternStm::new(
+        .send(PatternStm::new(
             1.0 * Hz,
             &patterns,
             Intensity::MAX,
             PatternStmOption::default(),
         ))
-        .await?
         .await?;
 
     println!("running a 1 Hz circular pattern STM — press Ctrl+C to stop");

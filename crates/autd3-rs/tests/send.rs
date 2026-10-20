@@ -5,17 +5,13 @@ use std::time::Duration;
 use autd3_rs::commands::{Distribution, ForceFan, Modulation, Nop, each};
 use autd3_rs::protocol::{Cmd, PAYLOAD_BYTES};
 use autd3_rs::value::SamplingConfig;
-use autd3_rs::{ClientConfig, Datagram, Error, ExecAt, Frame, Frames, PayloadError, Version};
+use autd3_rs::{Datagram, Error, ExecAt, Frame, Frames, PayloadError, Version};
 use autd3_rs_firmware_emulator::autd3_cpu_fw::{
     FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH,
 };
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
-use common::{
-    INVALID_TRANSITION_MODE, REJECTED_BY_THE_DEVICE, config, emulator, geometry, open, open_with,
-};
-
-const FRAMES_SENT_BY_OPEN: u64 = 3;
+use common::{INVALID_TRANSITION_MODE, REJECTED_BY_THE_DEVICE, geometry, open};
 
 fn fans(emulator: &UdpEmulator) -> Vec<bool> {
     emulator.with_devices(|devices| devices.iter().map(|d| d.fpga().force_fan()).collect())
@@ -37,15 +33,18 @@ async fn a_single_device_receives_what_is_sent() {
 
 #[tokio::test]
 #[ignore = "depends on real time"]
-async fn the_emulator_processes_frames_with_exec_lead_without_waiting() {
-    let emulator = emulator(3);
-    let config = ClientConfig {
-        exec_lead: Some(Duration::from_millis(5)),
-        ..config()
-    };
-    let client = open_with(&emulator, &common::option(&emulator), config).await;
+async fn the_emulator_processes_frames_with_an_execution_time_without_waiting() {
+    let (emulator, client) = open(3).await;
+    let on = Frames::encode(client.geometry(), ForceFan { value: true }).unwrap();
 
-    client.send(ForceFan { value: true }).await.unwrap();
+    client
+        .send_frame_at(on.frame(0).unwrap(), ExecAt::Lead(Duration::from_secs(5)))
+        .await
+        .unwrap()
+        .await
+        .unwrap()
+        .check()
+        .unwrap();
     assert_eq!(fans(&emulator), [true, true, true]);
     let telemetry = client.read_telemetry().await.unwrap();
     assert!(telemetry.iter().all(|t| t.exec_late == 0), "{telemetry:?}");
@@ -55,13 +54,8 @@ async fn the_emulator_processes_frames_with_exec_lead_without_waiting() {
 
 #[tokio::test]
 #[ignore = "depends on real time"]
-async fn a_frame_sent_with_an_overridden_execution_time_completes() {
-    let emulator = emulator(2);
-    let config = ClientConfig {
-        exec_lead: Some(Duration::from_millis(5)),
-        ..config()
-    };
-    let client = open_with(&emulator, &common::option(&emulator), config).await;
+async fn a_frame_sent_with_each_execution_time_completes() {
+    let (emulator, client) = open(2).await;
     let on = Frames::encode(client.geometry(), ForceFan { value: true }).unwrap();
     let off = Frames::encode(client.geometry(), ForceFan { value: false }).unwrap();
 
@@ -209,14 +203,14 @@ async fn the_statistics_count_the_frames_and_their_acknowledgements() {
     let (_emulator, client) = open(2).await;
     let stats = client.bus_stats();
     assert_eq!(stats.resets(), 1);
-    assert_eq!(stats.frames(), FRAMES_SENT_BY_OPEN);
+    assert_eq!(stats.frames(), 0);
     assert_eq!(stats.heartbeats(), 0);
 
     for _ in 0..5 {
         client.send(Nop).await.unwrap();
     }
 
-    assert_eq!(stats.frames(), FRAMES_SENT_BY_OPEN + 5);
+    assert_eq!(stats.frames(), 5);
     assert_eq!(stats.acked_frames(), stats.resets() + stats.frames());
     assert_eq!(stats.resets(), 1);
     client.close().await.unwrap();

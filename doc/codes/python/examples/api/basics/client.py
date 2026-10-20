@@ -9,17 +9,18 @@ async def main() -> None:
     geometry = Geometry([Autd3()])
     client = await Client.open(geometry, TransportOption(), ClientConfig())
 
-    frame = next(iter(Frames.encode(geometry, Nop())))
-
     # ANCHOR: exec_at
-    at = client.device_time_now() + Duration.from_millis(5)
-    (await (await client.send_frame_at(frame, ExecAt.At(at)))).check()
+    frames = Frames.encode(client.geometry(), Nop())
 
     lead = ExecAt.Lead(Duration.from_millis(1))
-    (await (await client.send_frame_at(frame, lead))).check()
+    for frame in frames:
+        (await (await client.send_frame_at(frame, lead))).check()
 
-    (await (await client.send_frame_at(frame, ExecAt.Immediate))).check()
+    at = client.device_time_now() + Duration.from_millis(5)
+    for frame in frames:
+        (await (await client.send_frame_at(frame, ExecAt.At(at)))).check()
     # ANCHOR_END: exec_at
+    frame = next(iter(frames))
 
     # ANCHOR: heartbeat
     for _ in range(100):
@@ -40,13 +41,12 @@ async def main() -> None:
     fpga_state = await client.read_fpga_state()
 
     await client.send(Nop())
-    done = await client.send_streaming(Nop())
     resp = await (await client.send_frame(frame))
 
     await client.close()
     # ANCHOR_END: api
 
-    _ = (num_devices, geometry, config, firmware, fpga_state, done, resp)
+    _ = (num_devices, geometry, config, firmware, fpga_state, resp)
 
     geometry = Geometry([Autd3()])
 

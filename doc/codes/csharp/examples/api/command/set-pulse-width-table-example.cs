@@ -11,6 +11,7 @@ internal static class Sample
         // HIDE_END
 var geometry = new Geometry(new[] { new Autd3() });
 await using var client = await Client.OpenAsync(geometry, new TransportOption(), new ClientConfig());
+await client.SendAsync(Command.Sequence(new Clear(), new Synchronize()));
 
 var table = SetPulseWidthTable.EmptyTable();
 for (var i = 0; i < table.Length; i++)

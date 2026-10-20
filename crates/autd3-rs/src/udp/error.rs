@@ -57,8 +57,6 @@ pub enum UdpError {
     ZeroLostTimeout,
     #[error("response_timeout must be longer than zero")]
     ZeroResponseTimeout,
-    #[error("timer_resolution must be at least {min:?}, but {got:?} was given")]
-    TimerResolutionTooShort { got: Duration, min: Duration },
     #[error("send_rate_limit must be within {min}..=100 %, but {value} % was given")]
     InvalidSendRateLimit { value: f32, min: f32 },
     #[error("the number of devices must be 1..=128, but {0} was given")]

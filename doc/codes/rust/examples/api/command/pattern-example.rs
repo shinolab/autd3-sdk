@@ -1,4 +1,4 @@
-use autd3_rs::commands::Pattern;
+use autd3_rs::commands::{Clear, Pattern, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::Intensity;
@@ -13,6 +13,7 @@ async fn main() -> anyhow::Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
     let option = TransportOption::default();
     let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
+    client.send((Clear, Synchronize)).await?;
 
     let mut phases = geometry.phase_buffer();
     focus(

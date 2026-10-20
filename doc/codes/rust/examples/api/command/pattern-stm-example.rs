@@ -1,4 +1,4 @@
-use autd3_rs::commands::{PatternStm, PatternStmOption, PhaseDepth};
+use autd3_rs::commands::{Clear, PatternStm, PatternStmOption, PhaseDepth, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, TransitionMode};
@@ -13,6 +13,7 @@ async fn main() -> anyhow::Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
     let option = TransportOption::default();
     let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
+    client.send((Clear, Synchronize)).await?;
 
     let center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
     let wavelength = wavelength(340.0 * m / s);

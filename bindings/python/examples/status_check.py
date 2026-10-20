@@ -8,6 +8,7 @@ import asyncio
 import signal
 
 import autd3
+from autd3.commands import Clear, Synchronize
 from autd3.geometry import Autd3, Geometry
 
 CHECK_INTERVAL = 0.1
@@ -19,6 +20,7 @@ async def main() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0])])
 
     client = await autd3.Client.open(geometry, autd3.TransportOption(), autd3.ClientConfig())
+    await client.send((Clear(), Synchronize()))
     checker = client.state_checker()
 
     async with client:

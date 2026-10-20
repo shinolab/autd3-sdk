@@ -445,47 +445,6 @@ namespace AUTD3
         ~ResponseFuture() => Release();
     }
 
-    public sealed class StreamFuture : IDisposable
-    {
-        private IntPtr _handle;
-
-        internal StreamFuture(IntPtr handle)
-        {
-            _handle = handle;
-        }
-
-        public async Task AwaitAsync()
-        {
-            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
-            if (handle == IntPtr.Zero)
-            {
-                throw new Autd3Exception("StreamFuture has already been awaited");
-            }
-            GC.SuppressFinalize(this);
-            await AsyncOps.InvokeAsync((cb, ud) =>
-                NativeClient.autd3_stream_token_await(handle, cb, ud)).ConfigureAwait(false);
-        }
-
-        public TaskAwaiter GetAwaiter() => AwaitAsync().GetAwaiter();
-
-        private void Release()
-        {
-            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
-            if (handle != IntPtr.Zero)
-            {
-                NativeClient.autd3_stream_token_free(handle);
-            }
-        }
-
-        public void Dispose()
-        {
-            Release();
-            GC.SuppressFinalize(this);
-        }
-
-        ~StreamFuture() => Release();
-    }
-
     public sealed class Client : IDisposable, IAsyncDisposable
     {
         public static readonly int MaxInflight = Params.MaxInflight;
@@ -640,27 +599,6 @@ namespace AUTD3
             using var frames = Frames.Encode(_geometry, command);
             await AsyncOps.InvokeAsync((cb, ud) =>
                 NativeClient.autd3_client_send_checked(Handle, frames.Handle, AllFrames, cb, ud)).ConfigureAwait(false);
-        }
-
-        public async Task<StreamFuture> SendStreamingAsync(ICommand command)
-        {
-            if (command == null)
-            {
-                throw new ArgumentNullException(nameof(command));
-            }
-            var op = Command.CreateOp(command, _geometry);
-            IntPtr stream;
-            try
-            {
-                stream = await AsyncOps.InvokeAsync((cb, ud) =>
-                    NativeClient.autd3_client_send_streaming(Handle, op, cb, ud)).ConfigureAwait(false);
-            }
-            catch
-            {
-                NativeClient.autd3_op_free(op);
-                throw;
-            }
-            return new StreamFuture(stream);
         }
 
         public async Task<ResponseFuture> SendFrameAsync(Frame frame)

@@ -1,6 +1,5 @@
 use std::ffi::{c_char, c_void};
 use std::future::Future;
-use std::mem::ManuallyDrop;
 use std::num::{NonZeroU16, NonZeroU32, NonZeroUsize};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
@@ -10,10 +9,9 @@ mod udp;
 
 use autd3_ffi_abi::{
     AUTD3_ERR, AUTD3_ERR_DEVICE, AUTD3_ERR_INVALID_ARGUMENT, AUTD3_ERR_NETWORK, AUTD3_ERR_TIMEOUT,
-    AUTD3_ERR_UNSUPPORTED_FIRMWARE, AUTD3_OK, Autd3FirmwareVersion, Autd3Telemetry, Buffer,
-    CompletionCallback, CompletionCtx, IntensityBuffer, ModulationBuffer, PhaseBuffer, drop_handle,
-    handle_mut, handle_ref, into_handle, slice_mut, slice_ref, take_handle, to_ns, write_cstr,
-    write_out,
+    AUTD3_OK, Autd3FirmwareVersion, Autd3Telemetry, Buffer, CompletionCallback, CompletionCtx,
+    IntensityBuffer, ModulationBuffer, PhaseBuffer, drop_handle, handle_mut, handle_ref,
+    into_handle, slice_mut, slice_ref, take_handle, to_ns, write_cstr, write_out,
 };
 use autd3_rs::commands::{
     ActivateModulationBank, ActivatePatternBank, BoxedCommand, Clear, Command, ConfigFociStm,
@@ -34,8 +32,8 @@ use autd3_rs::value::{
 };
 use autd3_rs::{
     BusStats, Client, ClientConfig, DeviceState, Error, ExecAt, FirmwareVersion, FpgaState, Frames,
-    Geometry, Length, NetworkCause, Point3, Response, ResponseFuture, StreamFuture, Telemetry,
-    UnitVector3, Vector3, Velocity,
+    Geometry, Length, NetworkCause, Point3, Response, ResponseFuture, Telemetry, UnitVector3,
+    Vector3, Velocity,
 };
 
 pub(crate) fn executor() -> &'static Executor {
@@ -397,16 +395,6 @@ pub extern "C" fn autd3_client_config_new() -> *mut ClientConfig {
 }
 
 macro_rules! client_config_setter {
-    ($set:ident, $field:ident, bool) => {
-        #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn $set(config: *mut ClientConfig, value: bool) -> i32 {
-            let Some(config) = (unsafe { handle_mut(config) }) else {
-                return AUTD3_ERR_INVALID_ARGUMENT;
-            };
-            config.$field = value;
-            AUTD3_OK
-        }
-    };
     ($set:ident, $field:ident, $raw:ty, $nonzero:ty) => {
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $set(config: *mut ClientConfig, value: $raw) -> i32 {
@@ -421,11 +409,6 @@ macro_rules! client_config_setter {
     };
 }
 
-client_config_setter!(
-    autd3_client_config_set_require_supported_firmware,
-    require_supported_firmware,
-    bool
-);
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_client_config_set_ack_timeout_ns(
     config: *mut ClientConfig,
@@ -438,30 +421,11 @@ pub unsafe extern "C" fn autd3_client_config_set_ack_timeout_ns(
     AUTD3_OK
 }
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_config_set_exec_lead(
-    config: *mut ClientConfig,
-    has_value: bool,
-    ns: u64,
-) -> i32 {
-    let Some(config) = (unsafe { handle_mut(config) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    config.exec_lead = has_value.then(|| Duration::from_nanos(ns));
-    AUTD3_OK
-}
-
 client_config_setter!(
     autd3_client_config_set_max_inflight,
     max_inflight,
     usize,
     NonZeroUsize
-);
-client_config_setter!(
-    autd3_client_config_set_max_resync_rounds,
-    max_resync_rounds,
-    u32,
-    NonZeroU32
 );
 
 #[unsafe(no_mangle)]
@@ -484,44 +448,6 @@ pub unsafe extern "C" fn autd3_client_config_get_max_inflight(
         return AUTD3_ERR_INVALID_ARGUMENT;
     };
     unsafe { write_out(out, config.max_inflight.get()) }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_config_get_max_resync_rounds(
-    config: *const ClientConfig,
-    out: *mut u32,
-) -> i32 {
-    let Some(config) = (unsafe { handle_ref(config) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    unsafe { write_out(out, config.max_resync_rounds.get()) }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_config_get_require_supported_firmware(
-    config: *const ClientConfig,
-    out: *mut bool,
-) -> i32 {
-    let Some(config) = (unsafe { handle_ref(config) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    unsafe { write_out(out, config.require_supported_firmware) }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_config_get_exec_lead(
-    config: *const ClientConfig,
-    out_has_value: *mut bool,
-    out: *mut u64,
-) -> i32 {
-    let Some(config) = (unsafe { handle_ref(config) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    let code = unsafe { write_out(out_has_value, config.exec_lead.is_some()) };
-    if code != AUTD3_OK {
-        return code;
-    }
-    unsafe { write_out(out, config.exec_lead.map_or(0, to_ns)) }
 }
 
 #[unsafe(no_mangle)]
@@ -1980,8 +1906,6 @@ pub struct CheckerHandle(pub(crate) StateChecker);
 
 pub struct ResponseToken(Vec<ResponseFuture>);
 
-pub struct StreamToken(StreamFuture);
-
 pub struct ByteArray(Vec<u8>);
 
 pub struct ResponseHandle(Response);
@@ -2001,7 +1925,6 @@ pub(crate) fn error_code(e: &Error) -> i32 {
         Error::Timeout { .. } | Error::SeqMismatch { .. } => AUTD3_ERR_TIMEOUT,
         Error::DeviceError { .. } | Error::UnexpectedReply { .. } => AUTD3_ERR_DEVICE,
         Error::Network(_) | Error::DeviceLost { .. } => AUTD3_ERR_NETWORK,
-        Error::UnsupportedFirmware { .. } => AUTD3_ERR_UNSUPPORTED_FIRMWARE,
         Error::InvalidPayload(_) | Error::InvalidConfig(_) | Error::Encode(_) => {
             AUTD3_ERR_INVALID_ARGUMENT
         }
@@ -2283,63 +2206,6 @@ pub unsafe extern "C" fn autd3_client_send_at(
         },
         |futures| into_handle(ResponseToken(futures)).cast(),
     );
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_send_streaming(
-    client: *const ClientHandle,
-    command: *mut Pending,
-    cb: CompletionCallback,
-    user_data: *mut c_void,
-) {
-    let Some((client, ctx)) = (unsafe { client_ctx(client, cb, user_data) }) else {
-        return;
-    };
-    let Some(pending) = (unsafe { handle_ref(command.cast_const()) }) else {
-        ctx.invalid_argument("null command");
-        return;
-    };
-    if let Err(message) = pending.check_each_lengths(client.num_devices()) {
-        ctx.invalid_argument(&message);
-        return;
-    }
-
-    let command = ManuallyDrop::new(unsafe { Box::from_raw(command) });
-    executor().spawn(async move {
-        let queued = {
-            let queued = client.send_streaming(command.boxed());
-            queued.await
-        };
-        match queued {
-            Ok(stream) => {
-                drop(ManuallyDrop::into_inner(command));
-                ctx.ok(into_handle(StreamToken(stream)).cast());
-            }
-            Err(e) => ctx.fail(error_code(&e), &e.to_string()),
-        }
-    });
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_stream_token_await(
-    token: *mut StreamToken,
-    cb: CompletionCallback,
-    user_data: *mut c_void,
-) {
-    let token = unsafe { take_handle(token) };
-    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
-        return;
-    };
-    let Some(StreamToken(stream)) = token else {
-        ctx.err("null token");
-        return;
-    };
-    spawn_completion(ctx, stream, |()| std::ptr::null_mut());
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_stream_token_free(token: *mut StreamToken) {
-    unsafe { drop_handle(token) }
 }
 
 #[unsafe(no_mangle)]
@@ -2743,12 +2609,6 @@ mod tests {
 
         assert_eq!(expected.ack_timeout, config.ack_timeout);
         assert_eq!(expected.max_inflight, config.max_inflight);
-        assert_eq!(expected.max_resync_rounds, config.max_resync_rounds);
-        assert_eq!(
-            expected.require_supported_firmware,
-            config.require_supported_firmware
-        );
-        assert_eq!(expected.exec_lead, config.exec_lead);
     }
 
     #[test]
@@ -3450,60 +3310,14 @@ mod tests {
         let expected = ClientConfig::default();
         let mut ns = 0u64;
         let mut inflight = 0usize;
-        let mut rounds = 0u32;
-        let mut require = true;
         assert_eq!(AUTD3_OK, unsafe {
             autd3_client_config_get_ack_timeout_ns(handle, &raw mut ns)
         });
         assert_eq!(AUTD3_OK, unsafe {
             autd3_client_config_get_max_inflight(handle, &raw mut inflight)
         });
-        assert_eq!(AUTD3_OK, unsafe {
-            autd3_client_config_get_max_resync_rounds(handle, &raw mut rounds)
-        });
-        assert_eq!(AUTD3_OK, unsafe {
-            autd3_client_config_get_require_supported_firmware(handle, &raw mut require)
-        });
         assert_eq!(expected.ack_timeout, Duration::from_nanos(ns));
         assert_eq!(expected.max_inflight.get(), inflight);
-        assert_eq!(expected.max_resync_rounds.get(), rounds);
-        assert_eq!(expected.require_supported_firmware, require);
-        unsafe { autd3_client_config_free(handle) };
-    }
-
-    #[test]
-    fn the_exec_lead_presence_is_explicit_and_zero_reaches_the_validation() {
-        let handle = autd3_client_config_new();
-        let exec_lead = |handle: *const ClientConfig| {
-            let mut has_value = true;
-            let mut ns = u64::MAX;
-            assert_eq!(AUTD3_OK, unsafe {
-                autd3_client_config_get_exec_lead(handle, &raw mut has_value, &raw mut ns)
-            });
-            has_value.then(|| Duration::from_nanos(ns))
-        };
-        assert_eq!(ClientConfig::default().exec_lead, exec_lead(handle));
-        assert_eq!(exec_lead(handle), None);
-        assert_eq!(AUTD3_OK, unsafe {
-            autd3_client_config_set_exec_lead(handle, true, 5_000_000)
-        });
-        assert_eq!(exec_lead(handle), Some(Duration::from_millis(5)));
-        assert_eq!(AUTD3_OK, unsafe {
-            autd3_client_config_set_exec_lead(handle, true, 0)
-        });
-        assert_eq!(exec_lead(handle), Some(Duration::ZERO));
-        assert_eq!(AUTD3_OK, unsafe {
-            autd3_client_config_set_exec_lead(handle, false, 1)
-        });
-        assert_eq!(exec_lead(handle), None);
-        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
-            autd3_client_config_set_exec_lead(std::ptr::null_mut(), true, 1)
-        });
-        let mut has_value = false;
-        let mut ns = 0u64;
-        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
-            autd3_client_config_get_exec_lead(std::ptr::null(), &raw mut has_value, &raw mut ns)
-        });
         unsafe { autd3_client_config_free(handle) };
     }
 

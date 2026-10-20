@@ -16,7 +16,6 @@ import { excerpt } from "@lib/excerpt";
 
 `Synchronize` は, FPGA が PWM 生成に使う同期クロックを初期化し直し, デバイス間の出力の位相を揃えるコマンド.
 
-`Client` を開くときに [Clear](/autd3-sdk/api/command/clear/) の後に送られる.
 `recover()` で `Lost` から復帰したデバイスには自動では送られないので, 必要ならユーザが送り直す ([状態監視](/autd3-sdk/guide/state-check/#lost-からの復帰) 参照).
 
 ## API

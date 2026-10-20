@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use autd3_rs::ClientConfig;
+use autd3_rs::{ClientConfig, ExecAt};
 use clap::Parser;
 
 #[derive(Parser, Debug, Clone)]
@@ -25,7 +25,7 @@ pub(crate) struct Cli {
     pub lost_timeout_ms: Option<u64>,
     #[arg(
         long,
-        help = "Maps to ClientConfig::exec_lead. At least 100. Omit to process every frame on arrival"
+        help = "Sends every case frame with ExecAt::Lead of this many microseconds. At least 100. Omit to process every frame on arrival"
     )]
     pub exec_lead_us: Option<u64>,
     #[arg(
@@ -56,7 +56,7 @@ impl Cli {
             return Err("--ack-timeout-ms must be at least 1".to_string());
         }
         let config = self.client_config();
-        if let Some(exec_lead) = config.exec_lead
+        if let ExecAt::Lead(exec_lead) = self.exec()
             && config.ack_timeout <= exec_lead
         {
             return Err(format!(
@@ -73,8 +73,13 @@ impl Cli {
             ack_timeout: self
                 .ack_timeout_ms
                 .map_or(default.ack_timeout, Duration::from_millis),
-            exec_lead: self.exec_lead_us.map(Duration::from_micros),
             ..default
         }
+    }
+
+    pub(crate) fn exec(&self) -> ExecAt {
+        self.exec_lead_us.map_or(ExecAt::Immediate, |us| {
+            ExecAt::Lead(Duration::from_micros(us))
+        })
     }
 }

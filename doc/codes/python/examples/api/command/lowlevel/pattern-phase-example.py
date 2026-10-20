@@ -1,7 +1,7 @@
 import asyncio
 
 from autd3 import Client, ClientConfig, TransportOption
-from autd3.commands import ActivatePatternBank, ConfigPattern, PhaseDepth, StmConfig, WritePatternPhase
+from autd3.commands import ActivatePatternBank, Clear, ConfigPattern, PhaseDepth, StmConfig, Synchronize, WritePatternPhase
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import Hz, m, mm, s
 from autd3.value import Intensity, LoopBehavior, PatternBank, TransitionMode
@@ -12,6 +12,8 @@ from autd3_pattern import wavelength as calc_wavelength
 async def main() -> None:
     geometry = Geometry([Autd3()])
     async with await Client.open(geometry, TransportOption(), ClientConfig()) as client:
+        await client.send((Clear(), Synchronize()))
+
         wavelength = calc_wavelength(340 * m / s)
         patterns = []
         for x in (-30.0, -10.0, 10.0, 30.0):

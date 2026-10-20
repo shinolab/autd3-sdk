@@ -1,4 +1,4 @@
-use autd3_rs::commands::{FociStm, FociStmOption, circle};
+use autd3_rs::commands::{Clear, FociStm, FociStmOption, Synchronize, circle};
 use autd3_rs::geometry::{Autd3, Geometry, Vector3, offset};
 use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, TransitionMode};
@@ -12,6 +12,7 @@ async fn main() -> anyhow::Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
     let option = TransportOption::default();
     let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
+    client.send((Clear, Synchronize)).await?;
 
     let center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
     let mut points = Vec::new();

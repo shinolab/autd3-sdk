@@ -8,7 +8,6 @@ use autd3_rs_core::error::EncodeError;
 use autd3_rs_core::protocol::describe_device_error;
 
 use crate::commands::PhaseDepth;
-use crate::firmware_version::FirmwareVersion;
 use autd3_rs_core::value::{PulseWidthError, SamplingConfigError};
 
 #[derive(Clone)]
@@ -46,16 +45,6 @@ impl core::fmt::Display for NetworkCause {
 pub enum Error {
     #[error("device {device} firmware error {code:#04x}: {}", describe_device_error(*code))]
     DeviceError { device: usize, code: u8 },
-
-    #[error(
-        "device {device} runs firmware {version}, which is outside the series supported by this SDK ({}.{}.x)",
-        FirmwareVersion::SUPPORTED_SERIES.0,
-        FirmwareVersion::SUPPORTED_SERIES.1
-    )]
-    UnsupportedFirmware {
-        device: usize,
-        version: FirmwareVersion,
-    },
 
     #[error("device {device} returned a shorter reply than the command defines")]
     UnexpectedReply { device: usize },
@@ -119,19 +108,6 @@ pub enum ClientConfigError {
 
     #[error("ack_timeout must be longer than zero")]
     ZeroAckTimeout,
-
-    #[error("exec_lead must be within {min:?}..{limit:?}, got {got:?}")]
-    ExecLeadOutOfRange {
-        got: Duration,
-        min: Duration,
-        limit: Duration,
-    },
-
-    #[error("exec_lead ({exec_lead:?}) must be shorter than lost_timeout ({lost_timeout:?})")]
-    ExecLeadNotBelowLostTimeout {
-        exec_lead: Duration,
-        lost_timeout: Duration,
-    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Error)]

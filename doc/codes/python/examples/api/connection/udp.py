@@ -10,7 +10,6 @@ enumeration_timeout = Duration.from_secs(10)
 sync_timeout = Duration.from_secs(30)
 send_rate_limit = None
 send_buffer = 8192
-timer_resolution = Duration.from_millis(1)
 # ANCHOR: api
 TransportOption(
     iface=iface,
@@ -21,7 +20,6 @@ TransportOption(
     sync_timeout=sync_timeout,
     send_rate_limit=send_rate_limit,
     send_buffer=send_buffer,
-    timer_resolution=timer_resolution,
 )
 # ANCHOR_END: api
 
