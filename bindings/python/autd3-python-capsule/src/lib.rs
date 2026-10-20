@@ -231,7 +231,8 @@ mod client_error {
             Error::InvalidPayload(_) | Error::InvalidConfig(_) | Error::Encode(_) => {
                 error_code::INVALID_ARGUMENT
             }
-            _ => error_code::GENERIC,
+            Error::DeviceTimeUnknown | Error::Closed => error_code::GENERIC,
+            _ => unreachable!(),
         }
     }
 

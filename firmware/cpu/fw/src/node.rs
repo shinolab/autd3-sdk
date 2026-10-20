@@ -424,7 +424,8 @@ impl Node {
                 let status = self.set_time(nic, body);
                 self.status(nic, &reply, status);
             }
-            _ => {}
+            Some(Kind::AssignId | Kind::UnblockDownstream | Kind::SetTime) | None => {}
+            Some(_) => unreachable!(),
         }
         Received::Nothing
     }

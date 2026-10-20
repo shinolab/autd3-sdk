@@ -82,6 +82,17 @@ pub(crate) async fn open(num_devices: usize) -> (UdpEmulator, Client) {
 pub(crate) fn udp_error(error: &Error) -> Option<&UdpError> {
     match error {
         Error::Network(cause) => (**cause).downcast_ref::<UdpError>(),
-        _ => None,
+        Error::DeviceError { .. }
+        | Error::UnsupportedFirmware { .. }
+        | Error::UnexpectedReply { .. }
+        | Error::DeviceLost { .. }
+        | Error::Timeout { .. }
+        | Error::SeqMismatch { .. }
+        | Error::DeviceTimeUnknown
+        | Error::InvalidPayload(_)
+        | Error::InvalidConfig(_)
+        | Error::Encode(_)
+        | Error::Closed => None,
+        _ => unreachable!(),
     }
 }

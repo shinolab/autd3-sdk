@@ -477,7 +477,8 @@ mod tests {
                     .iter()
                     .map(|p| match depth {
                         PhaseDepth::Bits8 => *p,
-                        _ => Phase((p.0 >> 4) * 0x11),
+                        PhaseDepth::Bits4 => Phase((p.0 >> 4) * 0x11),
+                        _ => unreachable!(),
                     })
                     .collect();
                 assert_eq!(

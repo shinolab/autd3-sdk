@@ -50,7 +50,8 @@ impl UnitState {
         match state {
             DeviceState::Ready => UnitState::Ready,
             DeviceState::Syncing => UnitState::Syncing,
-            _ => UnitState::Lost,
+            DeviceState::Lost => UnitState::Lost,
+            _ => unreachable!(),
         }
     }
 }

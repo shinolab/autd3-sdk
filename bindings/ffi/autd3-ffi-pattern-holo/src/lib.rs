@@ -59,8 +59,9 @@ unsafe fn finish(
 
 fn from_directivity(d: Directivity) -> u8 {
     match d {
+        Directivity::Sphere => 0,
         Directivity::T4010A1 => 1,
-        _ => 0,
+        _ => unreachable!(),
     }
 }
 
@@ -70,7 +71,7 @@ fn from_constraint(c: IntensityConstraint) -> Autd3IntensityConstraint {
         IntensityConstraint::Multiply(value) => (1, 0, 0, value),
         IntensityConstraint::Uniform(value) => (2, value.0, 0, 0.0),
         IntensityConstraint::Clamp(min, max) => (3, min.0, max.0, 0.0),
-        _ => (u8::MAX, 0, 0, 0.0),
+        _ => unreachable!(),
     };
     Autd3IntensityConstraint {
         kind,

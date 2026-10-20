@@ -243,7 +243,8 @@ pub(crate) unsafe extern "C" fn autd3_udp_option_get_iface_addr(
     };
     let value = match &option.0.iface {
         Interface::Addr(addr) => alloc_cstring(&addr.to_string()),
-        _ => std::ptr::null_mut(),
+        Interface::Auto | Interface::Name(_) | Interface::Simulator(_) => std::ptr::null_mut(),
+        _ => unreachable!(),
     };
     let code = unsafe { write_out(out, value) };
     if code != AUTD3_OK {

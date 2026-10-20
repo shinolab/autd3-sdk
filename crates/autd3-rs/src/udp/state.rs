@@ -124,7 +124,8 @@ impl SharedState {
         let encoded = match state {
             DeviceState::Ready => STATE_READY,
             DeviceState::Lost => STATE_LOST,
-            _ => STATE_SYNCING,
+            DeviceState::Syncing => STATE_SYNCING,
+            _ => unreachable!(),
         };
         self.states[device].store(encoded, Ordering::Relaxed);
     }

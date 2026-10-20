@@ -2064,7 +2064,8 @@ pub(crate) fn error_code(e: &Error) -> i32 {
         Error::InvalidPayload(_) | Error::InvalidConfig(_) | Error::Encode(_) => {
             AUTD3_ERR_INVALID_ARGUMENT
         }
-        _ => AUTD3_ERR,
+        Error::DeviceTimeUnknown | Error::Closed => AUTD3_ERR,
+        _ => unreachable!(),
     }
 }
 
@@ -2774,7 +2775,8 @@ fn device_state_code(state: DeviceState) -> u8 {
     match state {
         DeviceState::Ready => 0,
         DeviceState::Syncing => 1,
-        _ => 2,
+        DeviceState::Lost => 2,
+        _ => unreachable!(),
     }
 }
 

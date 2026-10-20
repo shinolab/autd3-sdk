@@ -190,7 +190,8 @@ impl core::hash::Hash for IntensityConstraint {
             CoreIntensityConstraint::Multiply(value) => hash_f32(value, state),
             CoreIntensityConstraint::Uniform(intensity) => intensity.hash(state),
             CoreIntensityConstraint::Clamp(min, max) => (min, max).hash(state),
-            _ => {}
+            CoreIntensityConstraint::Normalize => {}
+            _ => unreachable!(),
         }
     }
 }

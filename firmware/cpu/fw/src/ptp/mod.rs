@@ -301,7 +301,8 @@ impl Ptp {
         match self.role {
             Some(Role::Grandmaster) => self.tick_master(nic, now_ms),
             Some(Role::Slave) => self.tick_slave(nic, now_ms),
-            _ => {}
+            None => {}
+            Some(_) => unreachable!(),
         }
     }
 
@@ -539,7 +540,8 @@ impl Ptp {
         match self.role {
             Some(Role::Grandmaster) => self.on_master_message(nic, &msg, rx),
             Some(Role::Slave) => self.on_slave_message(nic, &msg, rx, now_ms),
-            _ => {}
+            None => {}
+            Some(_) => unreachable!(),
         }
     }
 
@@ -643,7 +645,10 @@ impl Ptp {
                     self.sample(nic, difference / 2, t2, now_ms);
                 }
             }
-            _ => {}
+            MessageType::Sync
+            | MessageType::DelayReq
+            | MessageType::FollowUp
+            | MessageType::DelayResp => {}
         }
     }
 

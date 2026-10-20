@@ -25,7 +25,7 @@ pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error>
                 )
             }),
         ),
-        _ => fpga::write_ram_at(
+        autd3_cpu_wire::payload::PhaseDepth::Bits4 => fpga::write_ram_at(
             port,
             &EMISSION_RAM,
             p.bank.as_u8(),
@@ -39,6 +39,7 @@ pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error>
                 )
             }),
         ),
+        _ => unreachable!(),
     }
     Ok(())
 }
@@ -188,11 +189,13 @@ mod tests {
             PhaseDepth::Bits8 => (0..count)
                 .flat_map(|g| (0..NUM_TRANSDUCERS).map(move |t| bits8_phase(g, t)))
                 .collect(),
-            _ => pack_bits4(count),
+            PhaseDepth::Bits4 => pack_bits4(count),
+            _ => unreachable!(),
         };
         let expected = |g: usize, t: usize| match depth {
             PhaseDepth::Bits8 => 0x4200 | u16::from(bits8_phase(g, t)),
-            _ => 0x4200 | u16::from(bits4_phase(g, t) * 0x11),
+            PhaseDepth::Bits4 => 0x4200 | u16::from(bits4_phase(g, t) * 0x11),
+            _ => unreachable!(),
         };
         h.port.ram_switches.clear();
         h.port.barriers = 0;

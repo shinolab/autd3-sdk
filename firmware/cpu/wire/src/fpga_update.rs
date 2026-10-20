@@ -209,7 +209,9 @@ pub fn validate_update_image(bytes: &[u8]) -> Result<BitstreamSummary, FpgaImage
     }
     match summary.boot_image() {
         FpgaBootImage::Update => Ok(summary),
-        boot_image => Err(FpgaImageError::NotAnUpdateImage { boot_image }),
+        boot_image @ (FpgaBootImage::Unknown
+        | FpgaBootImage::Golden
+        | FpgaBootImage::ReconfigFailed) => Err(FpgaImageError::NotAnUpdateImage { boot_image }),
     }
 }
 

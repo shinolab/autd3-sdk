@@ -469,7 +469,8 @@ impl Cpu {
             Cmd::FpgaUpdateActivate => self.fpga_update_activate(),
             Cmd::Synchronize => cmd::sync::handle(port, &config),
             Cmd::Clear => self.clear(port),
-            _ => Err(Error::UnknownCmd),
+            Cmd::Reset => Err(Error::UnknownCmd),
+            _ => unreachable!(),
         };
         result.map(|()| ReplyData::EMPTY)
     }

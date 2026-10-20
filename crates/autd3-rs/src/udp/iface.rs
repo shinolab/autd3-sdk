@@ -110,10 +110,11 @@ pub(crate) fn resolve_with(
             .find(|c| c.name == *name)
             .map(Target::interface)
             .ok_or_else(|| UdpError::InterfaceNotFound(name.clone())),
-        _ => resolve_auto(
+        Interface::Auto => resolve_auto(
             response_timeout,
             allow_simulator.then_some(Target::simulator(Simulator::DEFAULT)),
         ),
+        _ => unreachable!(),
     }
 }
 
