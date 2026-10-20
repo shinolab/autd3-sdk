@@ -2,7 +2,7 @@ use crate::commands::Command;
 use crate::commands::operation::{Distribution, Operation};
 use crate::error::{Error, PayloadError};
 use crate::geometry::Geometry;
-use crate::protocol::{Cmd, PAYLOAD_BYTES};
+use crate::protocol::{Cmd, FrameHeader, PAYLOAD_BYTES};
 use autd3_rs_core::MAX_DEVICES;
 
 use super::expansion::Expansion;
@@ -27,6 +27,15 @@ impl Datagram {
     #[must_use]
     pub fn payload(&self) -> &[u8] {
         &self.payload[..self.payload_len]
+    }
+
+    #[must_use]
+    pub(crate) fn frame_header(&self, exec_at: u32) -> FrameHeader {
+        FrameHeader {
+            reserved: 0,
+            cmd: self.cmd.as_u8(),
+            exec_at: exec_at.into(),
+        }
     }
 }
 
@@ -224,6 +233,16 @@ mod tests {
         Intensity, LoopBehavior, ModulationBank, PatternBank, Phase, SamplingConfig, SysTime,
         TransitionMode,
     };
+
+    #[test]
+    fn the_frame_header_carries_the_cmd_and_exec_at() {
+        use zerocopy::IntoBytes;
+        let datagram = super::Datagram::no_payload(Cmd::Nop);
+        assert_eq!(
+            datagram.frame_header(0x0403_0201).as_bytes(),
+            &[0, Cmd::Nop.as_u8(), 0x01, 0x02, 0x03, 0x04]
+        );
+    }
 
     const DEVICE_TIME: SysTime = SysTime::from_nanos(2_000_000_000);
 

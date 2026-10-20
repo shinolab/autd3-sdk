@@ -1,12 +1,8 @@
+use std::io;
 use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6, UdpSocket};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use autd3_rs_core::geometry::Geometry;
-use autd3_rs_core::simulator::{self, Status};
-
-use super::error::UdpError;
-
-const READ_TIMEOUT_WITHOUT_DEADLINE: Duration = Duration::from_secs(1);
+use autd3_rs_core::simulator;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct SimulatorAddrs {
@@ -28,59 +24,55 @@ impl SimulatorAddrs {
     }
 }
 
-pub(crate) fn send_geometry(
+pub(crate) struct SimulatorControlSocket {
+    socket: UdpSocket,
     control: SocketAddrV6,
-    geometry: &Geometry,
-    deadline: Option<Instant>,
-) -> Result<(), UdpError> {
-    let socket = UdpSocket::bind((Ipv6Addr::LOCALHOST, 0))?;
-    socket.send_to(&simulator::encode_geometry(geometry), control)?;
-    let mut buf = [0u8; 16];
-    loop {
-        let remaining = match deadline {
-            Some(deadline) => deadline.saturating_duration_since(Instant::now()),
-            None => READ_TIMEOUT_WITHOUT_DEADLINE,
-        };
-        if remaining.is_zero() {
-            return Err(UdpError::SimulatorControlNoResponse(control));
-        }
-        socket.set_read_timeout(Some(remaining))?;
-        let (len, src) = match socket.recv_from(&mut buf) {
-            Ok(received) => received,
+}
+
+impl SimulatorControlSocket {
+    pub(crate) fn open(control: SocketAddrV6) -> io::Result<Self> {
+        Ok(Self {
+            socket: UdpSocket::bind((Ipv6Addr::LOCALHOST, 0))?,
+            control,
+        })
+    }
+
+    pub(crate) fn send(&self, datagram: &[u8]) -> io::Result<()> {
+        self.socket.send_to(datagram, self.control).map(|_| ())
+    }
+
+    pub(crate) fn recv(&self, buf: &mut [u8], timeout: Duration) -> io::Result<Option<usize>> {
+        self.socket.set_read_timeout(Some(timeout))?;
+        match self.socket.recv_from(buf) {
+            Ok((len, src)) if src == SocketAddr::V6(self.control) => Ok(Some(len)),
+            Ok(_) => Ok(None),
             Err(e)
                 if matches!(
                     e.kind(),
-                    std::io::ErrorKind::WouldBlock
-                        | std::io::ErrorKind::TimedOut
-                        | std::io::ErrorKind::Interrupted
-                        | std::io::ErrorKind::ConnectionReset
-                        | std::io::ErrorKind::ConnectionRefused
+                    io::ErrorKind::WouldBlock
+                        | io::ErrorKind::TimedOut
+                        | io::ErrorKind::Interrupted
+                        | io::ErrorKind::ConnectionReset
+                        | io::ErrorKind::ConnectionRefused
                 ) =>
             {
-                continue;
+                Ok(None)
             }
-            Err(e) => return Err(e.into()),
-        };
-        if src != SocketAddr::V6(control) {
-            continue;
+            Err(e) => Err(e),
         }
-        let &[version, status] = &buf[..len] else {
-            continue;
-        };
-        if version != simulator::VERSION {
-            return Err(UdpError::SimulatorRejected {
-                status: Status::Invalid.as_u8(),
-            });
-        }
-        return match Status::from_u8(status) {
-            Some(Status::Ok) => {
-                tracing::debug!(
-                    num_devices = geometry.num_devices(),
-                    "the simulator took the geometry"
-                );
-                Ok(())
-            }
-            _ => Err(UdpError::SimulatorRejected { status }),
-        };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_simulator_at_a_port_controls_through_the_next_port() {
+        let simulator = SimulatorAddrs::at(50000).unwrap();
+        assert_eq!(simulator.data.port(), 50000);
+        assert_eq!(simulator.control.port(), 50001);
+        assert_eq!(SimulatorAddrs::DEFAULT.data.port(), 44336);
+        assert_eq!(SimulatorAddrs::DEFAULT.control.port(), 44337);
     }
 }

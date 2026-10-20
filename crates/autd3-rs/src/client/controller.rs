@@ -1,5 +1,5 @@
-use std::sync::{Arc, Mutex, PoisonError};
-use std::time::{Duration, Instant};
+use std::future::poll_fn;
+use std::sync::Arc;
 
 use async_lock::Mutex as AsyncMutex;
 use autd3_cpu_wire::payload::FirmwareInfo;
@@ -14,33 +14,25 @@ use crate::fpga_state::FpgaState;
 use crate::geometry::Geometry;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::telemetry::Telemetry;
-use crate::udp::frame_buf::FrameBuf;
-use crate::udp::{Sent, StateChecker, TransportOption, UdpBus, UdpError};
+use crate::udp::{StateChecker, TransportOption};
 use crate::value::{Intensity, SysTime};
-use autd3_rs_core::{BusStats, DeviceClock, DeviceMask, MAX_DEVICES};
+use autd3_rs_core::{BusStats, DeviceMask, MAX_DEVICES};
 use futures_channel::oneshot;
 
 use super::completion::{self, ResponseFuture};
-use super::driver::{Driver, InflightRequest, SendOutcome, SharedSession, devices_sent_to};
+use super::driver::Driver;
 use super::exec_at::{self, ExecAt};
-use super::pool::{ReplySlot, ReplySlotPool};
+use super::session::Session;
 
 pub struct Controller {
     geometry: Arc<Geometry>,
-    bus: Arc<UdpBus>,
-    session: Arc<SharedSession>,
-    reply_slots: Arc<ReplySlotPool>,
+    session: Arc<Session>,
     send_serializer: AsyncMutex<()>,
-    tx_frame_bufs: Mutex<Vec<FrameBuf>>,
-    lost_timeout: Duration,
     silent_stop_sent: AsyncMutex<bool>,
-    device_clock: DeviceClock,
-    stats: BusStats,
 }
 
 impl Controller {
     pub fn open(geometry: &Geometry, option: &TransportOption) -> Result<(Self, Driver), Error> {
-        let lost_timeout = option.lost_timeout;
         let num_devices = geometry.num_devices();
         if num_devices == 0 || num_devices > MAX_DEVICES {
             return Err(PayloadError::DeviceCountOutOfRange {
@@ -49,20 +41,13 @@ impl Controller {
             }
             .into());
         }
-        let bus = Arc::new(UdpBus::open_with_geometry(option, geometry)?);
-        let session = SharedSession::new(option.ack_timeout);
-        let driver = Driver::new(Arc::clone(&bus), Arc::clone(&session));
+        let session = Arc::new(Session::open(geometry, option)?);
+        let driver = Driver::new(Arc::clone(&session));
         let controller = Self {
             geometry: Arc::new(geometry.clone()),
-            reply_slots: ReplySlotPool::new(num_devices),
-            send_serializer: AsyncMutex::new(()),
-            tx_frame_bufs: Mutex::new(vec![FrameBuf::new(); num_devices]),
-            lost_timeout,
-            silent_stop_sent: AsyncMutex::new(false),
-            device_clock: bus.device_clock(),
-            stats: bus.stats(),
             session,
-            bus,
+            send_serializer: AsyncMutex::new(()),
+            silent_stop_sent: AsyncMutex::new(false),
         };
         Ok((controller, driver))
     }
@@ -79,16 +64,16 @@ impl Controller {
 
     #[must_use]
     pub fn bus_stats(&self) -> BusStats {
-        self.stats.clone()
+        self.session.stats()
     }
 
     #[must_use]
     pub fn state_checker(&self) -> StateChecker {
-        self.bus.state_checker()
+        self.session.state_checker()
     }
 
     pub fn device_time_now(&self) -> Result<SysTime, Error> {
-        self.device_clock.now().ok_or(Error::DeviceTimeUnknown)
+        self.session.device_time().ok_or(Error::DeviceTimeUnknown)
     }
 
     pub fn send<'a, C: Command<'a>>(
@@ -116,18 +101,6 @@ impl Controller {
     ) -> Result<ResponseFuture, Error> {
         self.validate_and_send(frame.distribution(), frame.datagrams(), exec)
             .await
-    }
-
-    fn closed_error(&self) -> Option<Error> {
-        if self.session.is_stopping() {
-            return Some(
-                self.session
-                    .lock_state()
-                    .closed_error()
-                    .unwrap_or(Error::Closed),
-            );
-        }
-        self.session.lock_state().closed_error()
     }
 
     async fn validate_and_send(
@@ -160,137 +133,43 @@ impl Controller {
             .into());
         }
         let _serialized = self.send_serializer.lock().await;
-        if let Some(e) = self.closed_error() {
+        if let Some(e) = self.session.closed_error() {
             return Err(e);
         }
-        let reply_slot = self.reply_slots.acquire().await;
-        let exec_at = exec_at::schedule(exec, self.lost_timeout, || self.device_clock.now())?;
-        self.send_with_reply_slot(reply_slot, dist, datagrams, exec_at)
-    }
-
-    fn send_with_reply_slot(
-        &self,
-        mut reply_slot: ReplySlot,
-        dist: Distribution,
-        datagrams: &[Datagram],
-        exec_at: u32,
-    ) -> Result<ResponseFuture, Error> {
-        reply_slot.reset();
-        let (tx, rx) = completion::channel();
-        let msg_id = self.bus.reserve_msg_id();
-        tracing::trace!(msg_id, cmd = ?datagrams[0].cmd, ?dist, "sending frame");
-        self.session.lock_state().push_awaiting(InflightRequest {
-            msg_id,
-            sent_to: None,
-            replied_devices: 0,
-            sent_at: Instant::now(),
-            reply_slot,
-            completion: tx,
-        });
-        let sent = {
-            let mut bufs = self
-                .tx_frame_bufs
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner);
-            match dist {
-                Distribution::Broadcast => {
-                    bufs[0].write_frame(datagrams[0].cmd, exec_at, datagrams[0].payload());
-                    self.bus.broadcast(msg_id, bufs[0].as_ref())
-                }
-                Distribution::PerDevice => {
-                    for (buf, datagram) in bufs.iter_mut().zip(datagrams) {
-                        buf.write_frame(datagram.cmd, exec_at, datagram.payload());
-                    }
-                    self.bus.send(msg_id, &bufs)
-                }
-            }
-        };
-        if self.apply_send_result(msg_id, sent)? {
-            self.stats.record_frame();
-        }
-        Ok(rx)
-    }
-
-    fn apply_send_result(&self, msg_id: u16, sent: Result<Sent, UdpError>) -> Result<bool, Error> {
-        let (outcome, driver_waits_too_long, ack_timeout) = {
-            let mut state = self.session.lock_state();
-            let ack_timeout = state.ack_timeout;
-            let outcome = state.apply_send_result(msg_id, devices_sent_to(sent));
-            let driver_waits_too_long = matches!(outcome, SendOutcome::SentToSome(_))
-                && state.ack_deadline_precedes_driver_wake(msg_id, ack_timeout);
-            (outcome, driver_waits_too_long, ack_timeout)
-        };
-        match outcome {
-            SendOutcome::Failed(request, e) => {
-                drop(request);
+        let (completion, response) = completion::channel();
+        let mut completion = Some(completion);
+        let msg_id = poll_fn(|cx| self.session.poll_enqueue(cx, &mut completion)).await?;
+        let exec_at = match exec_at::schedule(exec, self.session.lost_timeout(), || {
+            self.session.device_time()
+        }) {
+            Ok(exec_at) => exec_at,
+            Err(e) => {
+                self.session.cancel(msg_id);
                 return Err(e);
             }
-            SendOutcome::SentToNone(request) => {
-                if let Some(request) = request {
-                    request.completion.send(Err(Error::Timeout {
-                        timeout: ack_timeout,
-                    }));
-                }
-                return Ok(false);
-            }
-            SendOutcome::SentToSome(answered) => {
-                if let Some(request) = answered {
-                    request.complete(&self.stats);
-                }
-            }
-        }
-        if driver_waits_too_long && !self.bus.wake() {
-            tracing::debug!(
-                msg_id,
-                "could not wake the driver; the ack timeout is noticed at its next deadline"
-            );
-        }
-        Ok(true)
+        };
+        tracing::trace!(msg_id, cmd = ?datagrams[0].cmd, ?dist, "sending frame");
+        self.session.send_frame(msg_id, dist, datagrams, exec_at)?;
+        Ok(response)
     }
 
     pub fn send_heartbeat(&self) -> Result<(), Error> {
-        if let Some(e) = self.closed_error() {
+        if let Some(e) = self.session.closed_error() {
             return Err(e);
         }
-        if let Err(e) = self.bus.send_heartbeat() {
-            return Err(match e {
-                UdpError::Closed => self.closed_error().unwrap_or(Error::Closed),
-                e => e.into(),
-            });
-        }
-        let driver_waits_too_long = self.bus.lost_deadline().is_some_and(|deadline| {
-            self.session
-                .lock_state()
-                .driver_wakes_at
-                .is_none_or(|wakes_at| deadline < wakes_at)
-        });
-        if driver_waits_too_long && !self.bus.wake() {
-            tracing::debug!(
-                "could not wake the driver; a silent device is noticed at its next deadline"
-            );
-        }
-        Ok(())
+        self.session.send_heartbeat()
     }
 
     pub async fn recover(&self) -> Result<DeviceMask, Error> {
         let _serialized = self.send_serializer.lock().await;
-        if let Some(e) = self.closed_error() {
+        if let Some(e) = self.session.closed_error() {
             return Err(e);
         }
         let (tx, rx) = oneshot::channel();
-        self.session.lock_state().register_recovery_waiter(tx)?;
-        if let Err(e) = self.bus.start_recovery() {
-            self.session.lock_state().recovery_waiter = None;
-            return Err(e.into());
-        }
-        if !self.bus.wake() {
-            tracing::debug!(
-                "could not wake the driver; the recovery finishes at its next deadline"
-            );
-        }
+        self.session.start_recovery(tx)?;
         let recovered_devices = rx.await.unwrap_or(Err(Error::Closed))?;
         tracing::debug!(recovered_devices, "recovery finished");
-        self.bus.readmit_recovered();
+        self.session.readmit_recovered();
         Ok(DeviceMask::from_bits(recovered_devices))
     }
 
@@ -360,7 +239,7 @@ impl Controller {
 
     pub(crate) fn shutdown(&self) {
         self.session.request_stop();
-        if !self.bus.wake() {
+        if !self.session.wake() {
             tracing::warn!("could not wake the driver; it stops at its next deadline");
         }
     }

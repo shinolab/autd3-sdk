@@ -6,24 +6,11 @@ use futures_channel::oneshot;
 use crate::error::Error;
 use crate::response::Response;
 
-pub(crate) struct CompletionSender {
-    sender: oneshot::Sender<Result<Response, Error>>,
-}
+pub(crate) type ResponseSender = oneshot::Sender<Result<Response, Error>>;
 
-impl CompletionSender {
-    pub(crate) fn send(self, result: Result<Response, Error>) {
-        if let Ok(response) = &result
-            && let Err(e) = response.check()
-        {
-            tracing::warn!(error = %e, "device reported an error");
-        }
-        let _ = self.sender.send(result);
-    }
-}
-
-pub(crate) fn channel() -> (CompletionSender, ResponseFuture) {
+pub(crate) fn channel() -> (ResponseSender, ResponseFuture) {
     let (sender, receiver) = oneshot::channel();
-    (CompletionSender { sender }, ResponseFuture { receiver })
+    (sender, ResponseFuture { receiver })
 }
 
 pub struct ResponseFuture {
@@ -49,7 +36,7 @@ mod tests {
     #[tokio::test]
     async fn a_sent_result_reaches_the_future() {
         let (tx, rx) = channel();
-        tx.send(Ok(Response::from_error_codes(&[0x42])));
+        tx.send(Ok(Response::from_error_codes(&[0x42]))).unwrap();
         assert_eq!(rx.await.unwrap().error_codes(), [0x42]);
     }
 
@@ -65,14 +52,14 @@ mod tests {
         let (tx, rx) = channel();
         let joined = tokio::spawn(rx);
         tokio::task::yield_now().await;
-        tx.send(Ok(Response::from_error_codes(&[7])));
+        tx.send(Ok(Response::from_error_codes(&[7]))).unwrap();
         assert_eq!(joined.await.unwrap().unwrap().error_codes(), [7]);
     }
 
     #[tokio::test]
     async fn polling_after_completion_reports_a_closed_driver() {
         let (tx, mut rx) = channel();
-        tx.send(Ok(Response::from_error_codes(&[1])));
+        tx.send(Ok(Response::from_error_codes(&[1]))).unwrap();
         assert_eq!((&mut rx).await.unwrap().error_codes(), [1]);
         assert!(matches!(rx.await, Err(Error::Closed)));
     }

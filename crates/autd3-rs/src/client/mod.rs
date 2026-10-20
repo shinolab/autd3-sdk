@@ -2,7 +2,10 @@ pub(crate) mod completion;
 mod controller;
 mod driver;
 mod exec_at;
-pub(crate) mod pool;
+mod liveness;
+pub(crate) mod open;
+mod recovery;
+mod session;
 
 pub use completion::ResponseFuture;
 pub use controller::Controller;
