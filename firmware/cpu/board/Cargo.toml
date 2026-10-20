@@ -33,6 +33,7 @@ codegen-units = 1
 
 [lints.rust]
 warnings = "deny"
+unreachable_pub = "warn"
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }

@@ -10,7 +10,7 @@ use autd3_firmware_writer::bundle::{self, Bundle};
 use crate::Target;
 use crate::util::{run, which};
 
-pub fn write(version: &str, target: Option<Target>, force_download: bool) -> Result<()> {
+pub(crate) fn write(version: &str, target: Option<Target>, force_download: bool) -> Result<()> {
     let version = version.trim_start_matches('v');
 
     let Bundle {

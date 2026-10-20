@@ -13,7 +13,7 @@ const SUB_BUCKETS: usize = 1 << SUB_BUCKET_BITS;
 const BUCKETS: usize = (u64::BITS - SUB_BUCKET_BITS + 1) as usize * SUB_BUCKETS;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SampleStatus {
+pub(crate) enum SampleStatus {
     Ok,
     DeviceError(u8),
     Timeout,
@@ -21,7 +21,7 @@ pub enum SampleStatus {
 }
 
 #[derive(Debug, Default)]
-pub struct Counters {
+pub(crate) struct Counters {
     pub ok: u64,
     pub timeouts: u64,
     pub device_errors: BTreeMap<u8, u64>,
@@ -29,7 +29,7 @@ pub struct Counters {
 }
 
 impl Counters {
-    pub fn observe(&mut self, status: SampleStatus) {
+    pub(crate) fn observe(&mut self, status: SampleStatus) {
         match status {
             SampleStatus::Ok => self.ok += 1,
             SampleStatus::Timeout => self.timeouts += 1,
@@ -38,17 +38,17 @@ impl Counters {
         }
     }
 
-    pub fn device_error_total(&self) -> u64 {
+    pub(crate) fn device_error_total(&self) -> u64 {
         self.device_errors.values().sum()
     }
 
-    pub fn total(&self) -> u64 {
+    pub(crate) fn total(&self) -> u64 {
         self.ok + self.timeouts + self.network_errors + self.device_error_total()
     }
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct Traffic {
+pub(crate) struct Traffic {
     devices: usize,
     tx_datagrams: u64,
     tx_bytes: u64,
@@ -57,7 +57,7 @@ pub struct Traffic {
 }
 
 impl Traffic {
-    pub const fn new(devices: usize) -> Self {
+    pub(crate) const fn new(devices: usize) -> Self {
         Self {
             devices,
             tx_datagrams: 0,
@@ -67,7 +67,7 @@ impl Traffic {
         }
     }
 
-    pub fn sent(&mut self, frame: &Frame<'_>) {
+    pub(crate) fn sent(&mut self, frame: &Frame<'_>) {
         for device in 0..self.devices {
             self.tx_datagrams += 1;
             self.tx_bytes += (size_of::<Header>()
@@ -76,12 +76,12 @@ impl Traffic {
         }
     }
 
-    pub fn replied(&mut self) {
+    pub(crate) fn replied(&mut self) {
         self.rx_datagrams += self.devices as u64;
         self.rx_bytes += (self.devices * (size_of::<Header>() + size_of::<FrameReply>())) as u64;
     }
 
-    pub const fn since(self, before: Self) -> Self {
+    pub(crate) const fn since(self, before: Self) -> Self {
         Self {
             devices: self.devices,
             tx_datagrams: self.tx_datagrams.saturating_sub(before.tx_datagrams),
@@ -91,7 +91,7 @@ impl Traffic {
         }
     }
 
-    pub fn rate(self, elapsed: Duration) -> TrafficRate {
+    pub(crate) fn rate(self, elapsed: Duration) -> TrafficRate {
         let secs = elapsed.as_secs_f64();
         if secs <= 0.0 {
             return TrafficRate::default();
@@ -109,14 +109,14 @@ impl Traffic {
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub struct TrafficRate {
+pub(crate) struct TrafficRate {
     pub tx_byte_per_sec: f64,
     pub line_down_percent: f64,
     pub line_up_percent: f64,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
-pub struct LatencyStats {
+pub(crate) struct LatencyStats {
     pub mean: Duration,
     pub p50: Duration,
     pub p95: Duration,
@@ -125,7 +125,7 @@ pub struct LatencyStats {
     pub max: Duration,
 }
 
-pub struct Histogram {
+pub(crate) struct Histogram {
     buckets: Vec<u64>,
     count: u64,
     sum_ns: u128,
@@ -134,7 +134,7 @@ pub struct Histogram {
 }
 
 impl Histogram {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             buckets: vec![0; BUCKETS],
             count: 0,
@@ -144,7 +144,7 @@ impl Histogram {
         }
     }
 
-    pub fn record(&mut self, rtt: Duration) {
+    pub(crate) fn record(&mut self, rtt: Duration) {
         let ns = u64::try_from(rtt.as_nanos()).unwrap_or(u64::MAX);
         self.buckets[bucket_index(ns)] += 1;
         self.count += 1;
@@ -153,7 +153,7 @@ impl Histogram {
         self.max_ns = self.max_ns.max(ns);
     }
 
-    pub fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         self.buckets.fill(0);
         self.count = 0;
         self.sum_ns = 0;
@@ -161,11 +161,11 @@ impl Histogram {
         self.max_ns = 0;
     }
 
-    pub const fn count(&self) -> u64 {
+    pub(crate) const fn count(&self) -> u64 {
         self.count
     }
 
-    pub fn latency(&self) -> LatencyStats {
+    pub(crate) fn latency(&self) -> LatencyStats {
         if self.count == 0 {
             return LatencyStats::default();
         }
@@ -221,14 +221,14 @@ const fn bucket_upper_ns(index: usize) -> u64 {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct DriverAckLatency {
+pub(crate) struct DriverAckLatency {
     pub frames: u64,
     pub mean: Duration,
     pub worst: Duration,
 }
 
 #[derive(Debug)]
-pub struct Summary {
+pub(crate) struct Summary {
     pub elapsed: Duration,
     pub counters: Counters,
     pub missed_heartbeat_replies: u64,

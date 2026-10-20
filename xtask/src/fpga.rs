@@ -13,10 +13,10 @@ use crate::util::{copy_dir, files_under, on_path, run, which};
 
 const PROJECT_NAME: &str = "autd3-fpga";
 
-pub const VERIBLE_COLUMN_LIMIT: &str = "--column_limit=150";
+pub(crate) const VERIBLE_COLUMN_LIMIT: &str = "--column_limit=150";
 
 #[derive(Subcommand)]
-pub enum FpgaCmd {
+pub(crate) enum FpgaCmd {
     #[command(about = "Generate the Vivado project")]
     Project,
     #[command(
@@ -55,7 +55,7 @@ pub enum FpgaCmd {
     Clean(CleanArgs),
 }
 
-pub fn run_fpga(root: &Path, cmd: &FpgaCmd) -> Result<()> {
+pub(crate) fn run_fpga(root: &Path, cmd: &FpgaCmd) -> Result<()> {
     let fpga_dir = root.join("firmware/fpga");
     match cmd {
         FpgaCmd::Project => fpga_project(&fpga_dir),
@@ -144,15 +144,15 @@ fn fpga_project(fpga_dir: &Path) -> Result<()> {
     )
 }
 
-pub struct FpgaArtifacts {
+pub(crate) struct FpgaArtifacts {
     pub mcs: PathBuf,
     pub update_image: PathBuf,
 }
 
-pub const UPDATE_IMAGE_NAME: &str = "autd3-fpga-update.img";
+pub(crate) const UPDATE_IMAGE_NAME: &str = "autd3-fpga-update.img";
 const BARRIER_IMAGE_NAME: &str = "autd3-fpga-barrier.bin";
 
-pub fn fpga_build(root: &Path, force: bool) -> Result<FpgaArtifacts> {
+pub(crate) fn fpga_build(root: &Path, force: bool) -> Result<FpgaArtifacts> {
     let fpga_dir = root.join("firmware/fpga");
     let vivado = resolve_vivado()?;
 
@@ -322,7 +322,7 @@ fn fpga_flash(root: &Path, force: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn resolve_vivado() -> Result<String> {
+pub(crate) fn resolve_vivado() -> Result<String> {
     if let Some(path) = which("vivado") {
         return Ok(path.to_string_lossy().into_owned());
     }
@@ -424,7 +424,7 @@ fn fpga_commit_ips(fpga_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
+pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {
     const FILE_EXTS: [&str; 12] = [
         "jou", "log", "zip", "prm", "str", "pb", "mcs", "xpr", "bit", "img", "stamp", "bin",
     ];

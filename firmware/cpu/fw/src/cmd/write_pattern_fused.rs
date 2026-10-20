@@ -1,4 +1,4 @@
-pub use autd3_cpu_wire::payload::WritePatternFusedPayload;
+pub(crate) use autd3_cpu_wire::payload::WritePatternFusedPayload;
 
 use autd3_cpu_wire::payload::ConfigPatternPayload;
 use zerocopy::little_endian::{U16, U32};

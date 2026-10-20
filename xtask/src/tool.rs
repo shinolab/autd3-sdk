@@ -6,7 +6,7 @@ use clap::Subcommand;
 use crate::util::{cargo_bin, cargo_build_args, run};
 
 #[derive(Subcommand)]
-pub enum ToolCmd {
+pub(crate) enum ToolCmd {
     #[command(about = "Measure the communication performance")]
     Perftest {
         #[arg(long, help = "Build the dev profile instead of release")]
@@ -60,7 +60,7 @@ pub enum ToolCmd {
     },
 }
 
-pub fn run_tool(root: &Path, cmd: ToolCmd) -> Result<()> {
+pub(crate) fn run_tool(root: &Path, cmd: ToolCmd) -> Result<()> {
     match cmd {
         ToolCmd::Perftest {
             debug,

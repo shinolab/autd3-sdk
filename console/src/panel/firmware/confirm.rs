@@ -5,19 +5,19 @@ use crate::process::FINISHED;
 use super::Target;
 
 #[derive(Default, Clone, PartialEq, Eq, Debug)]
-pub struct DeviceVersions {
+pub(super) struct DeviceVersions {
     pub cpu: Option<String>,
     pub fpga: Option<String>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Answer {
+pub(super) enum Answer {
     Pending,
     Update,
     Cancel,
 }
 
-pub struct Confirm {
+pub(super) struct Confirm {
     pub version: String,
     pub target: Target,
     pub devices: Vec<DeviceVersions>,
@@ -38,7 +38,7 @@ fn parse_line(line: &str) -> Option<(usize, Part, String)> {
     Some((device, part, version.trim().to_string()))
 }
 
-pub fn parse(logs: &[String]) -> Vec<DeviceVersions> {
+pub(super) fn parse(logs: &[String]) -> Vec<DeviceVersions> {
     let mut devices: Vec<DeviceVersions> = Vec::new();
     for (device, part, version) in logs.iter().filter_map(|line| parse_line(line)) {
         if devices.len() <= device {
@@ -52,7 +52,7 @@ pub fn parse(logs: &[String]) -> Vec<DeviceVersions> {
     devices
 }
 
-pub fn outcome(logs: &[String]) -> Result<Vec<DeviceVersions>, String> {
+pub(super) fn outcome(logs: &[String]) -> Result<Vec<DeviceVersions>, String> {
     if logs.last().map(String::as_str) != Some(FINISHED) {
         return Err("reading the current firmware version failed; see the log below".to_string());
     }
@@ -64,7 +64,7 @@ pub fn outcome(logs: &[String]) -> Result<Vec<DeviceVersions>, String> {
 }
 
 impl Confirm {
-    pub fn ui(&self, ui: &egui::Ui) -> Answer {
+    pub(super) fn ui(&self, ui: &egui::Ui) -> Answer {
         let mut answer = Answer::Pending;
         let modal =
             egui::Modal::new(egui::Id::unique("firmware-ota-confirm")).show(ui.ctx(), |ui| {

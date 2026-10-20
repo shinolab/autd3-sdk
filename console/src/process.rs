@@ -4,24 +4,24 @@ use std::path::Path;
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 
-pub const FINISHED: &str = "[process finished]";
+pub(crate) const FINISHED: &str = "[process finished]";
 
 const LOG_CAPACITY: NonZeroUsize = NonZeroUsize::new(10_000).unwrap();
 
-pub struct LogLines {
+pub(crate) struct LogLines {
     lines: Vec<String>,
     capacity: NonZeroUsize,
 }
 
 impl LogLines {
-    pub fn new(capacity: NonZeroUsize) -> Self {
+    pub(crate) fn new(capacity: NonZeroUsize) -> Self {
         Self {
             lines: Vec::new(),
             capacity,
         }
     }
 
-    pub fn push(&mut self, line: String) {
+    pub(crate) fn push(&mut self, line: String) {
         let capacity = self.capacity.get();
         if self.lines.len() >= 2 * capacity {
             self.lines.drain(..self.lines.len() - capacity);
@@ -29,7 +29,7 @@ impl LogLines {
         self.lines.push(line);
     }
 
-    pub fn as_slice(&self) -> &[String] {
+    pub(crate) fn as_slice(&self) -> &[String] {
         &self.lines[self.lines.len().saturating_sub(self.capacity.get())..]
     }
 }
@@ -40,7 +40,7 @@ impl Default for LogLines {
     }
 }
 
-pub struct ManagedProcess {
+pub(crate) struct ManagedProcess {
     child: Child,
     rx: Receiver<String>,
     logs: LogLines,
@@ -48,7 +48,7 @@ pub struct ManagedProcess {
 }
 
 impl ManagedProcess {
-    pub fn spawn(program: &Path, args: &[String]) -> std::io::Result<Self> {
+    pub(crate) fn spawn(program: &Path, args: &[String]) -> std::io::Result<Self> {
         let mut command = Command::new(program);
         command
             .args(args)
@@ -72,11 +72,11 @@ impl ManagedProcess {
         })
     }
 
-    pub fn pump(&mut self) {
+    pub(crate) fn pump(&mut self) {
         self.pump_with(|_| false);
     }
 
-    pub fn pump_with(&mut self, mut divert: impl FnMut(&str) -> bool) {
+    pub(crate) fn pump_with(&mut self, mut divert: impl FnMut(&str) -> bool) {
         if self.exited {
             return;
         }
@@ -104,16 +104,16 @@ impl ManagedProcess {
         }
     }
 
-    pub fn is_running(&self) -> bool {
+    pub(crate) fn is_running(&self) -> bool {
         !self.exited
     }
 
-    pub fn kill(&mut self) {
+    pub(crate) fn kill(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
 
-    pub fn logs(&self) -> &[String] {
+    pub(crate) fn logs(&self) -> &[String] {
         self.logs.as_slice()
     }
 }
@@ -125,14 +125,14 @@ impl Drop for ManagedProcess {
 }
 
 #[cfg(windows)]
-pub fn no_window(command: &mut Command) {
+pub(crate) fn no_window(command: &mut Command) {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     command.creation_flags(CREATE_NO_WINDOW);
 }
 
 #[cfg(not(windows))]
-pub fn no_window(_command: &mut Command) {}
+pub(crate) fn no_window(_command: &mut Command) {}
 
 fn exit_marker(status: ExitStatus) -> String {
     match status.code() {

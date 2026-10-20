@@ -30,7 +30,7 @@ const BIN_NS: i64 = 1_000;
 const ORIGIN_NS: i64 = -10_000_000;
 const HISTOGRAM_HEADROOM: Duration = Duration::from_millis(10);
 
-pub async fn run(cli: &Cli) -> Result<()> {
+pub(crate) async fn run(cli: &Cli) -> Result<()> {
     let emulator = spawn_emulator(cli)?;
     let option = udp_option(cli, emulator.as_ref());
     let shutdown = Arc::new(AtomicBool::new(false));

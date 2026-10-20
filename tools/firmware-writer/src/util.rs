@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
-pub fn which(name: &str) -> Option<PathBuf> {
+pub(crate) fn which(name: &str) -> Option<PathBuf> {
     let paths = std::env::var_os("PATH")?;
     let exts: Vec<String> = if cfg!(windows) {
         std::env::var("PATHEXT")
@@ -21,7 +21,7 @@ pub fn which(name: &str) -> Option<PathBuf> {
     })
 }
 
-pub fn run<I, S>(program: &str, args: I, cwd: &Path) -> Result<()>
+pub(crate) fn run<I, S>(program: &str, args: I, cwd: &Path) -> Result<()>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,

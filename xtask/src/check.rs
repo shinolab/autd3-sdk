@@ -20,7 +20,7 @@ const MUTANTS_PACKAGES: &[&str] = &[
 const LEAK_SKIP: &[&str] = &["shutdown_does_not_wait_for_a_pending_task"];
 
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
-pub enum SanitizerKind {
+pub(crate) enum SanitizerKind {
     Address,
     Leak,
     Thread,
@@ -37,7 +37,7 @@ impl SanitizerKind {
 }
 
 #[derive(Subcommand)]
-pub enum CheckCmd {
+pub(crate) enum CheckCmd {
     #[command(
         about = "Detect undefined behavior with Miri (nightly toolchain + the `miri` component)"
     )]
@@ -85,7 +85,7 @@ pub enum CheckCmd {
     },
 }
 
-pub fn run_check(root: &Path, cmd: &CheckCmd) -> Result<()> {
+pub(crate) fn run_check(root: &Path, cmd: &CheckCmd) -> Result<()> {
     match cmd {
         CheckCmd::Miri { package, filter } => run_miri(root, package, filter.as_deref()),
         CheckCmd::Sanitizer { kind, package } => run_sanitizer(root, *kind, package),

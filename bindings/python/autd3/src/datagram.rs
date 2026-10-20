@@ -196,7 +196,7 @@ impl PushCommand for Sequence {
 }
 
 #[pyclass(name = "Each", module = "autd3.commands", frozen)]
-pub struct Each {
+pub(crate) struct Each {
     assign: Py<PyAny>,
 }
 

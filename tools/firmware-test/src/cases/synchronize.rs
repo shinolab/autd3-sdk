@@ -175,7 +175,7 @@ async fn repeated(ctx: &Ctx<'_>, count: usize) -> Result<usize> {
     Ok(failures)
 }
 
-pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
+pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     silence(ctx).await?;
     let outcome = async {
         let mut failures = phase_sweep(ctx, 3).await?;

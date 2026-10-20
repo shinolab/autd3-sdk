@@ -12,12 +12,12 @@ const RELEASES_URL: &str = "https://github.com/shinolab/autd3-sdk/releases";
 
 static RESTART_AFTER_EXIT: AtomicBool = AtomicBool::new(false);
 
-pub fn restart_requested() -> bool {
+pub(crate) fn restart_requested() -> bool {
     RESTART_AFTER_EXIT.load(Ordering::Relaxed)
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct UpdateConfig {
+pub(crate) struct UpdateConfig {
     pub auto_check: bool,
 }
 
@@ -48,14 +48,14 @@ enum Msg {
 }
 
 #[derive(Default)]
-pub struct Updater {
+pub(crate) struct Updater {
     pub config: UpdateConfig,
     state: State,
     rx: Option<Receiver<Msg>>,
 }
 
 impl Updater {
-    pub fn check(&mut self) {
+    pub(crate) fn check(&mut self) {
         if self.is_busy() {
             return;
         }
@@ -63,7 +63,7 @@ impl Updater {
         self.spawn(|| Msg::Checked(query()));
     }
 
-    pub fn update(&mut self) {
+    pub(crate) fn update(&mut self) {
         if self.is_busy() {
             return;
         }
@@ -71,11 +71,11 @@ impl Updater {
         self.spawn(|| Msg::Updated(install()));
     }
 
-    pub fn is_busy(&self) -> bool {
+    pub(crate) fn is_busy(&self) -> bool {
         matches!(self.state, State::Checking | State::Updating)
     }
 
-    pub fn pump(&mut self) {
+    pub(crate) fn pump(&mut self) {
         let Some(rx) = &self.rx else {
             return;
         };
@@ -97,7 +97,7 @@ impl Updater {
         self.rx = None;
     }
 
-    pub fn banner(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn banner(&mut self, ui: &mut egui::Ui) {
         match &self.state {
             State::Available {
                 version,
@@ -157,7 +157,7 @@ impl Updater {
         }
     }
 
-    pub fn settings_ui(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn settings_ui(&mut self, ui: &mut egui::Ui) {
         ui.checkbox(&mut self.config.auto_check, "Check for updates on startup");
         ui.horizontal(|ui| {
             if ui

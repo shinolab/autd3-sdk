@@ -15,7 +15,7 @@ enum Tab {
 }
 
 #[derive(Default)]
-pub struct ConsoleApp {
+pub(crate) struct ConsoleApp {
     tab: Tab,
     simulator: SimulatorPanel,
     server: ServerPanel,
@@ -24,7 +24,7 @@ pub struct ConsoleApp {
 }
 
 impl ConsoleApp {
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+    pub(crate) fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let mut app = Self::default();
         if let Some(storage) = cc.storage {
             if let Some(config) = eframe::get_value(storage, "simulator") {

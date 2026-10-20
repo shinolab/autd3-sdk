@@ -9,7 +9,7 @@ use crate::clean::{CleanArgs, Cleaner};
 use crate::cs::{BindingPkg, PACKAGES, RIDS, host_rid, rid_affix};
 use crate::util::{on_path, run, run_tool};
 
-pub const PKG_PREFIX: &str = "com.shinolab.autd3-sdk";
+pub(crate) const PKG_PREFIX: &str = "com.shinolab.autd3-sdk";
 
 const CLIENT_SAMPLE: &str = "Samples~/FocusSine";
 
@@ -23,7 +23,7 @@ const DOC_FILES: &[&str] = &[
 ];
 
 #[derive(Subcommand)]
-pub enum UnityCmd {
+pub(crate) enum UnityCmd {
     #[command(about = "Stage the C# sources and the host-RID native libs into the UPM packages")]
     Build {
         #[arg(
@@ -56,7 +56,7 @@ pub enum UnityCmd {
     Clean(CleanArgs),
 }
 
-pub fn run_unity(root: &Path, cmd: UnityCmd) -> Result<()> {
+pub(crate) fn run_unity(root: &Path, cmd: UnityCmd) -> Result<()> {
     match cmd {
         UnityCmd::Build { manifest } => build(root, manifest),
         UnityCmd::Pack {
@@ -69,7 +69,7 @@ pub fn run_unity(root: &Path, cmd: UnityCmd) -> Result<()> {
     }
 }
 
-pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
+pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {
     cleaner.path("bindings/unity/dist")?;
     cleaner.in_each_subdir(
         "bindings/unity",

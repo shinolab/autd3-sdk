@@ -1,6 +1,6 @@
 use core::num::NonZeroU32;
 
-pub use autd3_cpu_wire::fpga_update::{
+pub(crate) use autd3_cpu_wire::fpga_update::{
     FPGA_IMAGE_BASE, FPGA_REBOOT_ATTEMPTS, FPGA_REBOOT_DELAY_MS, FPGA_RECONFIG_SETTLE_MS,
     FPGA_SECTOR_BYTES, FpgaBootImage, is_plausible_fpga_length,
 };

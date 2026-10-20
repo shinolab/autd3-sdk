@@ -7,7 +7,7 @@ use wgpu::util::DeviceExt;
 
 use crate::settings::Settings;
 use camera::Camera;
-pub use gizmo::{DragUpdate, GizmoMode};
+pub(crate) use gizmo::{DragUpdate, GizmoMode};
 use gizmo::{Gizmo, RING_SEGMENTS};
 
 const SLICE_MARGIN_MM: f32 = 40.0;
@@ -20,16 +20,16 @@ const MAX_DIM: u32 = 4096;
 const MAX_DPR: f64 = 2.0;
 const MAX_PIXELS: f64 = 4.0e6;
 const FIELD_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
-pub const FIELD_TEXELS_PER_MM: f32 = 2.0;
-pub const FIELD_MAX_DIM: u32 = 1024;
-pub const SLICE_MIN_MM: f32 = 1.0;
-pub const SLICE_MAX_MM: f32 = 1024.0;
-pub const RESOLUTION_MIN: f32 = 0.25;
-pub const RESOLUTION_MAX: f32 = 8.0;
+pub(crate) const FIELD_TEXELS_PER_MM: f32 = 2.0;
+pub(crate) const FIELD_MAX_DIM: u32 = 1024;
+pub(crate) const SLICE_MIN_MM: f32 = 1.0;
+pub(crate) const SLICE_MAX_MM: f32 = 1024.0;
+pub(crate) const RESOLUTION_MIN: f32 = 0.25;
+pub(crate) const RESOLUTION_MAX: f32 = 8.0;
 const FIELD_WORKGROUP: u32 = 8;
 const SCENE_STAGES: wgpu::ShaderStages =
     wgpu::ShaderStages::VERTEX_FRAGMENT.union(wgpu::ShaderStages::COMPUTE);
-pub const DEFAULT_BG_RGB: [f32; 3] = [0.467, 0.463, 0.482];
+pub(crate) const DEFAULT_BG_RGB: [f32; 3] = [0.467, 0.463, 0.482];
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -51,7 +51,7 @@ struct SceneUniforms {
     _pad: [u32; 3],
 }
 
-pub struct Renderer {
+pub(crate) struct Renderer {
     canvas: web_sys::HtmlCanvasElement,
     surface: wgpu::Surface<'static>,
     config: wgpu::SurfaceConfiguration,
@@ -96,7 +96,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub async fn new(
+    pub(crate) async fn new(
         canvas: web_sys::HtmlCanvasElement,
         settings: &Settings,
     ) -> Result<Self, String> {
@@ -200,7 +200,7 @@ impl Renderer {
         Ok(renderer)
     }
 
-    pub fn apply_settings(&mut self, s: &Settings) {
+    pub(crate) fn apply_settings(&mut self, s: &Settings) {
         self.set_max_pressure(s.max_pressure);
         self.set_sound_speed(s.sound_speed);
         self.set_show_markers(s.show_markers);
@@ -214,7 +214,7 @@ impl Renderer {
         self.set_slice_resolution(s.slice_resolution);
     }
 
-    pub fn sync_size(&mut self) {
+    pub(crate) fn sync_size(&mut self) {
         let (width, height) = backing_size(&self.canvas);
         if width == self.config.width && height == self.config.height {
             return;
@@ -247,7 +247,7 @@ impl Renderer {
     }
 
     #[must_use]
-    pub fn to_ndc(&self, x: f64, y: f64) -> Vec2 {
+    pub(crate) fn to_ndc(&self, x: f64, y: f64) -> Vec2 {
         let width = f64::from(self.canvas.client_width().max(1));
         let height = f64::from(self.canvas.client_height().max(1));
         Vec2::new(
@@ -256,7 +256,7 @@ impl Renderer {
         )
     }
 
-    pub fn set_geometry(&mut self, positions: &[[f32; 4]], directions: &[[f32; 4]]) {
+    pub(crate) fn set_geometry(&mut self, positions: &[[f32; 4]], directions: &[[f32; 4]]) {
         if positions.is_empty() {
             return;
         }
@@ -311,7 +311,7 @@ impl Renderer {
         self.configure_scene(positions);
     }
 
-    pub fn set_states(&self, states: &[[f32; 4]]) {
+    pub(crate) fn set_states(&self, states: &[[f32; 4]]) {
         if let Some(buf) = &self.states_buf
             && states.len() == self.num_trans as usize
         {
@@ -320,15 +320,15 @@ impl Renderer {
         }
     }
 
-    pub fn orbit(&mut self, dx: f32, dy: f32) {
+    pub(crate) fn orbit(&mut self, dx: f32, dy: f32) {
         self.camera.orbit(dx, dy);
     }
 
-    pub fn zoom(&mut self, delta: f32) {
+    pub(crate) fn zoom(&mut self, delta: f32) {
         self.camera.dolly(delta);
     }
 
-    pub fn reset_camera(&mut self) {
+    pub(crate) fn reset_camera(&mut self) {
         self.camera.pos = self.initial_camera.pos;
         self.camera.rot = self.initial_camera.rot;
         self.camera.pivot = self.initial_camera.pivot;
@@ -337,41 +337,41 @@ impl Renderer {
         }
     }
 
-    pub fn set_camera_free(&mut self, free: bool) {
+    pub(crate) fn set_camera_free(&mut self, free: bool) {
         self.camera.free = free;
         if !free {
             self.camera.aim_at_pivot();
         }
     }
 
-    pub fn set_fov(&mut self, deg: f32) {
+    pub(crate) fn set_fov(&mut self, deg: f32) {
         self.camera.fov = deg.clamp(5.0, 150.0);
     }
 
-    pub fn set_near(&mut self, value: f32) {
+    pub(crate) fn set_near(&mut self, value: f32) {
         self.camera.near = value.max(0.01);
         self.camera.far = self.camera.far.max(self.camera.near + 1.0);
     }
 
-    pub fn set_far(&mut self, value: f32) {
+    pub(crate) fn set_far(&mut self, value: f32) {
         self.camera.far = value.max(self.camera.near + 1.0);
     }
 
-    pub fn set_move_speed(&mut self, value: f32) {
+    pub(crate) fn set_move_speed(&mut self, value: f32) {
         self.camera.move_speed = value.max(0.0);
     }
 
     #[must_use]
-    pub fn camera_pos(&self) -> [f32; 3] {
+    pub(crate) fn camera_pos(&self) -> [f32; 3] {
         self.camera.pos.to_array()
     }
 
     #[must_use]
-    pub fn camera_rot(&self) -> [f32; 3] {
+    pub(crate) fn camera_rot(&self) -> [f32; 3] {
         self.camera.rot.to_array()
     }
 
-    pub fn set_camera_pos(&mut self, axis: usize, value: f32) {
+    pub(crate) fn set_camera_pos(&mut self, axis: usize, value: f32) {
         if axis < 3 {
             self.camera.pos[axis] = value;
             if !self.camera.free {
@@ -380,55 +380,55 @@ impl Renderer {
         }
     }
 
-    pub fn set_camera_rot(&mut self, axis: usize, degrees: f32) {
+    pub(crate) fn set_camera_rot(&mut self, axis: usize, degrees: f32) {
         if axis < 3 {
             self.camera.rot[axis] = degrees;
         }
     }
 
-    pub fn set_max_pressure(&mut self, value: f32) {
+    pub(crate) fn set_max_pressure(&mut self, value: f32) {
         self.uniforms.max_pressure = value.max(1.0);
     }
 
-    pub fn set_sound_speed(&mut self, value: f32) {
+    pub(crate) fn set_sound_speed(&mut self, value: f32) {
         self.uniforms.sound_speed = value.max(1.0);
     }
 
-    pub fn set_colormap(&mut self, index: u32) {
+    pub(crate) fn set_colormap(&mut self, index: u32) {
         self.uniforms.colormap = index;
     }
 
-    pub fn set_show_markers(&mut self, show: bool) {
+    pub(crate) fn set_show_markers(&mut self, show: bool) {
         self.show_markers = show;
     }
 
-    pub fn set_background(&mut self, rgb: [f32; 3]) {
+    pub(crate) fn set_background(&mut self, rgb: [f32; 3]) {
         self.bg = clear_color(rgb);
     }
 
-    pub fn set_gizmo_visible(&mut self, visible: bool) {
+    pub(crate) fn set_gizmo_visible(&mut self, visible: bool) {
         self.gizmo.set_visible(visible);
     }
 
-    pub fn set_gizmo_mode(&mut self, mode: GizmoMode) {
+    pub(crate) fn set_gizmo_mode(&mut self, mode: GizmoMode) {
         self.gizmo.set_mode(mode);
     }
 
-    pub fn set_slice_coord(&mut self, axis: usize, value: f32) {
+    pub(crate) fn set_slice_coord(&mut self, axis: usize, value: f32) {
         if axis < 3 {
             self.slice_center[axis] = value;
             self.apply_slice();
         }
     }
 
-    pub fn set_slice_rot(&mut self, axis: usize, degrees: f32) {
+    pub(crate) fn set_slice_rot(&mut self, axis: usize, degrees: f32) {
         if axis < 3 {
             self.slice_rot[axis] = degrees;
             self.apply_slice();
         }
     }
 
-    pub fn set_slice_size(&mut self, axis: usize, value: f32) {
+    pub(crate) fn set_slice_size(&mut self, axis: usize, value: f32) {
         let value = value.clamp(SLICE_MIN_MM, SLICE_MAX_MM);
         match axis {
             0 => self.slice_size.x = value,
@@ -439,33 +439,33 @@ impl Renderer {
         self.create_field();
     }
 
-    pub fn set_slice_resolution(&mut self, texels_per_mm: f32) {
+    pub(crate) fn set_slice_resolution(&mut self, texels_per_mm: f32) {
         self.texels_per_mm = texels_per_mm.clamp(RESOLUTION_MIN, RESOLUTION_MAX);
         self.create_field();
     }
 
     #[must_use]
-    pub fn slice_size(&self) -> [f32; 2] {
+    pub(crate) fn slice_size(&self) -> [f32; 2] {
         self.slice_size.to_array()
     }
 
     #[must_use]
-    pub fn field_dims(&self) -> [u32; 2] {
+    pub(crate) fn field_dims(&self) -> [u32; 2] {
         [self.uniforms.slice_w, self.uniforms.slice_h]
     }
 
     #[must_use]
-    pub fn slice_center(&self) -> [f32; 3] {
+    pub(crate) fn slice_center(&self) -> [f32; 3] {
         self.slice_center.to_array()
     }
 
     #[must_use]
-    pub fn slice_rot(&self) -> [f32; 3] {
+    pub(crate) fn slice_rot(&self) -> [f32; 3] {
         self.slice_rot.to_array()
     }
 
     #[must_use]
-    pub fn axis_bounds(&self) -> [(f32, f32); 3] {
+    pub(crate) fn axis_bounds(&self) -> [(f32, f32); 3] {
         self.axis_range
     }
 
@@ -542,25 +542,25 @@ impl Renderer {
         self.uniforms.v = v.extend(0.0).to_array();
     }
 
-    pub fn pick_gizmo_axis(&self, ndc: Vec2) -> Option<usize> {
+    pub(crate) fn pick_gizmo_axis(&self, ndc: Vec2) -> Option<usize> {
         self.bind_group.as_ref()?;
         let (o, rd) = self.camera.ray(ndc, self.aspect);
         self.gizmo.pick(self.slice_center, self.slice_rot, o, rd)
     }
 
-    pub fn set_hover(&mut self, ndc: Vec2) {
+    pub(crate) fn set_hover(&mut self, ndc: Vec2) {
         let (o, rd) = self.camera.ray(ndc, self.aspect);
         self.gizmo
             .set_hover(self.slice_center, self.slice_rot, o, rd);
     }
 
-    pub fn begin_gizmo_drag(&mut self, axis: usize, ndc: Vec2) {
+    pub(crate) fn begin_gizmo_drag(&mut self, axis: usize, ndc: Vec2) {
         let (o, rd) = self.camera.ray(ndc, self.aspect);
         self.gizmo
             .begin_drag(axis, self.slice_center, self.slice_rot, o, rd);
     }
 
-    pub fn update_gizmo_drag(&mut self, ndc: Vec2, snap: bool) -> Option<DragUpdate> {
+    pub(crate) fn update_gizmo_drag(&mut self, ndc: Vec2, snap: bool) -> Option<DragUpdate> {
         let (o, rd) = self.camera.ray(ndc, self.aspect);
         let update = self.gizmo.update_drag(o, rd, snap)?;
         match &update {
@@ -571,11 +571,11 @@ impl Renderer {
         Some(update)
     }
 
-    pub fn end_gizmo_drag(&mut self) {
+    pub(crate) fn end_gizmo_drag(&mut self) {
         self.gizmo.end_drag();
     }
 
-    pub fn render(&mut self) {
+    pub(crate) fn render(&mut self) {
         let (Some(bind_group), Some(field_compute_bg), Some(field_render_bg)) = (
             &self.bind_group,
             &self.field_compute_bg,

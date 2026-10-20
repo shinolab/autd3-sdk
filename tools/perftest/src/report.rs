@@ -109,20 +109,20 @@ impl TelemetryCounter {
     }
 }
 
-pub struct LiveBlock {
+pub(crate) struct LiveBlock {
     terminal: bool,
     drawn_lines: usize,
 }
 
 impl LiveBlock {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             terminal: std::io::stdout().is_terminal(),
             drawn_lines: 0,
         }
     }
 
-    pub fn draw(&mut self, lines: &[String]) {
+    pub(crate) fn draw(&mut self, lines: &[String]) {
         let mut block = String::new();
         if self.terminal {
             if self.drawn_lines > 0 {
@@ -144,7 +144,7 @@ impl LiveBlock {
     }
 }
 
-pub fn interval_lines(
+pub(crate) fn interval_lines(
     elapsed: Duration,
     cmd_per_sec: f64,
     counters: &Counters,
@@ -176,7 +176,7 @@ pub fn interval_lines(
     ]
 }
 
-pub fn telemetry_lines(start: &[Telemetry], now: &[Telemetry]) -> Vec<String> {
+pub(crate) fn telemetry_lines(start: &[Telemetry], now: &[Telemetry]) -> Vec<String> {
     TELEMETRY_COUNTERS
         .chunks(TELEMETRY_COUNTERS.len().div_ceil(2))
         .enumerate()
@@ -201,7 +201,7 @@ pub fn telemetry_lines(start: &[Telemetry], now: &[Telemetry]) -> Vec<String> {
         .collect()
 }
 
-pub fn print_telemetry(start: &[Telemetry], end: &[Telemetry]) {
+pub(crate) fn print_telemetry(start: &[Telemetry], end: &[Telemetry]) {
     println!();
     println!(
         "telemetry (per device, at start -> delta over the run; sync_resync: at start -> at end, cleared by Synchronize):"
@@ -216,7 +216,7 @@ pub fn print_telemetry(start: &[Telemetry], end: &[Telemetry]) {
     }
 }
 
-pub fn print_summary(s: &Summary) {
+pub(crate) fn print_summary(s: &Summary) {
     let c = &s.counters;
 
     println!();
@@ -275,7 +275,7 @@ pub fn print_summary(s: &Summary) {
     }
 }
 
-pub fn print_mem(m: &MemProfile) {
+pub(crate) fn print_mem(m: &MemProfile) {
     let per_send = |n: u64| {
         if m.sends == 0 {
             0.0

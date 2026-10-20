@@ -355,7 +355,7 @@ async fn failsafe(ctx: &Ctx<'_>) -> Result<()> {
     Ok(())
 }
 
-pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
+pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     silence(ctx).await?;
     let outcome = async {
         margin(ctx).await?;

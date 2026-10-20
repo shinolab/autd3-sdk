@@ -36,6 +36,7 @@ thiserror = { version = "2.0.18", default-features = false, features = ["std"] }
 
 [workspace.lints.rust]
 warnings = "deny"
+unreachable_pub = "warn"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }

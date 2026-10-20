@@ -501,7 +501,7 @@ fn render() -> Result<String> {
     String::from_utf8(output.stdout).context("verible-verilog-format wrote non-UTF-8 output")
 }
 
-pub fn gen_controller(fpga_dir: &Path, check: bool) -> Result<()> {
+pub(crate) fn gen_controller(fpga_dir: &Path, check: bool) -> Result<()> {
     let path = fpga_dir.join("rtl/sources_1/new/controller/controller.sv");
     let contents = render()?;
 

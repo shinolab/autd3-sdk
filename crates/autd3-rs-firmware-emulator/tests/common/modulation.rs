@@ -3,7 +3,12 @@ use autd3_cpu_wire::payload::{ActivateModBankPayload, ConfigModPayload, Transiti
 use zerocopy::IntoBytes;
 use zerocopy::little_endian::{U16, U32, U64};
 
-pub fn config_modulation(bank: ModulationBank, divider: u16, size: u32, rep: u16) -> Vec<u8> {
+pub(crate) fn config_modulation(
+    bank: ModulationBank,
+    divider: u16,
+    size: u32,
+    rep: u16,
+) -> Vec<u8> {
     ConfigModPayload {
         bank,
         reserved: 0,
@@ -15,7 +20,11 @@ pub fn config_modulation(bank: ModulationBank, divider: u16, size: u32, rep: u16
     .to_vec()
 }
 
-pub fn activate_modulation_bank(bank: ModulationBank, mode: TransitionMode, value: u64) -> Vec<u8> {
+pub(crate) fn activate_modulation_bank(
+    bank: ModulationBank,
+    mode: TransitionMode,
+    value: u64,
+) -> Vec<u8> {
     ActivateModBankPayload {
         bank,
         transition_mode: mode,

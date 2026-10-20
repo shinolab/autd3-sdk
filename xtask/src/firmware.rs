@@ -7,7 +7,7 @@ use crate::clean::{CleanArgs, Cleaner};
 use crate::util::{cargo_bin, cargo_build_args, on_path, run};
 
 #[derive(Subcommand)]
-pub enum FirmwareCmd {
+pub(crate) enum FirmwareCmd {
     #[command(
         about = "Download a released firmware bundle and write it to the device (J-Link / Vivado)"
     )]
@@ -19,7 +19,7 @@ pub enum FirmwareCmd {
 }
 
 #[derive(clap::Args)]
-pub struct BundleArgs {
+pub(crate) struct BundleArgs {
     #[arg(
         long,
         help = "Re-synthesize the FPGA even when a bitstream already exists"
@@ -33,7 +33,7 @@ pub struct BundleArgs {
 }
 
 #[derive(clap::Args)]
-pub struct WriteArgs {
+pub(crate) struct WriteArgs {
     #[arg(long, help = "Firmware version to write (e.g. 1.2.3)")]
     version: Option<String>,
     #[arg(long, help = "What to write: `both` (default), `cpu`, or `fpga`")]
@@ -44,7 +44,7 @@ pub struct WriteArgs {
     list: bool,
 }
 
-pub fn run_firmware(root: &Path, cmd: FirmwareCmd) -> Result<()> {
+pub(crate) fn run_firmware(root: &Path, cmd: FirmwareCmd) -> Result<()> {
     match cmd {
         FirmwareCmd::Write(args) => write(root, &args),
         FirmwareCmd::Bundle(args) => bundle(root, &args),
@@ -52,7 +52,7 @@ pub fn run_firmware(root: &Path, cmd: FirmwareCmd) -> Result<()> {
     }
 }
 
-pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
+pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {
     cleaner.path("firmware/dist")
 }
 

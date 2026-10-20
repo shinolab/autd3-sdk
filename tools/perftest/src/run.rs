@@ -29,7 +29,7 @@ use crate::stats::{Counters, DriverAckLatency, Histogram, SampleStatus, Summary,
 const REPORT_INTERVAL: Duration = Duration::from_secs(1);
 const STATE_CHECK_INTERVAL: Duration = Duration::from_millis(100);
 
-pub struct RunOutput {
+pub(crate) struct RunOutput {
     pub summary: Summary,
     pub stopped_on_error: Option<(u64, SampleStatus)>,
     pub driver_closed: bool,
@@ -208,14 +208,14 @@ fn spawn_state_check(checker: StateChecker, interval: Duration) -> StateCheckGua
     StateCheckGuard { stop, join }
 }
 
-pub fn spawn_emulator(cli: &Cli) -> Result<Option<UdpEmulator>> {
+pub(crate) fn spawn_emulator(cli: &Cli) -> Result<Option<UdpEmulator>> {
     cli.emulator
         .then(|| UdpEmulator::spawn(cli.devices.get()))
         .transpose()
         .context("starting the UDP device emulator")
 }
 
-pub fn udp_option(cli: &Cli, emulator: Option<&UdpEmulator>) -> UdpOption {
+pub(crate) fn udp_option(cli: &Cli, emulator: Option<&UdpEmulator>) -> UdpOption {
     let mut option = match emulator {
         Some(emulator) => UdpOption {
             iface: emulator.interface(),
@@ -244,7 +244,7 @@ pub fn udp_option(cli: &Cli, emulator: Option<&UdpEmulator>) -> UdpOption {
     option
 }
 
-pub async fn run(cli: &Cli) -> Result<RunOutput> {
+pub(crate) async fn run(cli: &Cli) -> Result<RunOutput> {
     let emulator = spawn_emulator(cli)?;
     let option = udp_option(cli, emulator.as_ref());
     let link = match cli.server {
@@ -653,7 +653,7 @@ impl Live {
     }
 }
 
-pub fn spawn_signal_listener(flag: Arc<AtomicBool>) {
+pub(crate) fn spawn_signal_listener(flag: Arc<AtomicBool>) {
     tokio::spawn(async move {
         if tokio::signal::ctrl_c().await.is_ok() {
             flag.store(true, Ordering::Relaxed);

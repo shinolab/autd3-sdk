@@ -15,7 +15,7 @@ use autd3_rs_firmware_emulator::udp::UdpEmulator;
 pub struct UdpOptionHandle(pub(crate) CoreOption);
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_udp_option_new() -> *mut UdpOptionHandle {
+pub(crate) extern "C" fn autd3_udp_option_new() -> *mut UdpOptionHandle {
     into_handle(UdpOptionHandle(CoreOption::default()))
 }
 
@@ -42,7 +42,7 @@ autd3_ffi_abi::option_handle_field!(
 );
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_udp_option_set_send_rate_limit(
+pub(crate) unsafe extern "C" fn autd3_udp_option_set_send_rate_limit(
     handle: *mut UdpOptionHandle,
     has_value: bool,
     percent: f32,
@@ -55,7 +55,7 @@ pub unsafe extern "C" fn autd3_udp_option_set_send_rate_limit(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_udp_option_get_send_rate_limit(
+pub(crate) unsafe extern "C" fn autd3_udp_option_get_send_rate_limit(
     handle: *const UdpOptionHandle,
     out_has_value: *mut bool,
     out: *mut f32,
@@ -72,7 +72,7 @@ pub unsafe extern "C" fn autd3_udp_option_get_send_rate_limit(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_udp_option_set_send_buffer(
+pub(crate) unsafe extern "C" fn autd3_udp_option_set_send_buffer(
     handle: *mut UdpOptionHandle,
     bytes: u64,
 ) -> i32 {
@@ -87,7 +87,7 @@ pub unsafe extern "C" fn autd3_udp_option_set_send_buffer(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_udp_option_get_send_buffer(
+pub(crate) unsafe extern "C" fn autd3_udp_option_get_send_buffer(
     handle: *const UdpOptionHandle,
     out: *mut u64,
 ) -> i32 {
@@ -141,12 +141,12 @@ autd3_ffi_abi::option_handle_lifecycle!(UdpOptionHandle, autd3_udp_option_free);
 pub struct ServerLinkHandle(pub(crate) CoreServerLink);
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_server_link_new() -> *mut ServerLinkHandle {
+pub(crate) extern "C" fn autd3_server_link_new() -> *mut ServerLinkHandle {
     into_handle(ServerLinkHandle(CoreServerLink::default()))
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_server_link_set_port(
+pub(crate) unsafe extern "C" fn autd3_server_link_set_port(
     handle: *mut ServerLinkHandle,
     port: u16,
 ) -> i32 {
@@ -158,7 +158,7 @@ pub unsafe extern "C" fn autd3_server_link_set_port(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_server_link_get_port(
+pub(crate) unsafe extern "C" fn autd3_server_link_get_port(
     handle: *const ServerLinkHandle,
     out: *mut u16,
 ) -> i32 {
@@ -169,7 +169,7 @@ pub unsafe extern "C" fn autd3_server_link_get_port(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_server_link_set_timeout_ns(
+pub(crate) unsafe extern "C" fn autd3_server_link_set_timeout_ns(
     handle: *mut ServerLinkHandle,
     ns: u64,
 ) -> i32 {
@@ -181,7 +181,7 @@ pub unsafe extern "C" fn autd3_server_link_set_timeout_ns(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_server_link_get_timeout_ns(
+pub(crate) unsafe extern "C" fn autd3_server_link_get_timeout_ns(
     handle: *const ServerLinkHandle,
     out: *mut u64,
 ) -> i32 {
@@ -194,7 +194,7 @@ pub unsafe extern "C" fn autd3_server_link_get_timeout_ns(
 autd3_ffi_abi::option_handle_lifecycle!(ServerLinkHandle, autd3_server_link_free);
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_udp_option_set_iface(
+pub(crate) unsafe extern "C" fn autd3_udp_option_set_iface(
     handle: *mut UdpOptionHandle,
     iface: *const c_char,
 ) -> i32 {
@@ -206,7 +206,7 @@ pub unsafe extern "C" fn autd3_udp_option_set_iface(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_udp_option_set_iface_simulator(
+pub(crate) unsafe extern "C" fn autd3_udp_option_set_iface_simulator(
     handle: *mut UdpOptionHandle,
     port: u16,
 ) -> i32 {
@@ -218,7 +218,7 @@ pub unsafe extern "C" fn autd3_udp_option_set_iface_simulator(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_udp_option_set_iface_addr(
+pub(crate) unsafe extern "C" fn autd3_udp_option_set_iface_addr(
     handle: *mut UdpOptionHandle,
     addr: *const c_char,
 ) -> i32 {
@@ -234,7 +234,7 @@ pub unsafe extern "C" fn autd3_udp_option_set_iface_addr(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_udp_option_get_iface_addr(
+pub(crate) unsafe extern "C" fn autd3_udp_option_get_iface_addr(
     handle: *const UdpOptionHandle,
     out: *mut *mut c_char,
 ) -> i32 {
@@ -253,14 +253,14 @@ pub unsafe extern "C" fn autd3_udp_option_get_iface_addr(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_udp_free_string(ptr: *mut c_char) {
+pub(crate) unsafe extern "C" fn autd3_udp_free_string(ptr: *mut c_char) {
     unsafe { free_cstring(ptr) };
 }
 
-pub struct UdpEmulatorHandle(UdpEmulator);
+pub(crate) struct UdpEmulatorHandle(UdpEmulator);
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_udp_emulator_spawn(
+pub(crate) unsafe extern "C" fn autd3_udp_emulator_spawn(
     num_devices: usize,
     out_err: *mut c_char,
     out_err_len: usize,
@@ -275,7 +275,7 @@ pub unsafe extern "C" fn autd3_udp_emulator_spawn(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_udp_emulator_option(
+pub(crate) unsafe extern "C" fn autd3_udp_emulator_option(
     handle: *const UdpEmulatorHandle,
 ) -> *mut UdpOptionHandle {
     let Some(emulator) = (unsafe { handle_ref(handle) }) else {
@@ -292,12 +292,14 @@ pub unsafe extern "C" fn autd3_udp_emulator_option(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_udp_emulator_num_devices(handle: *const UdpEmulatorHandle) -> usize {
+pub(crate) unsafe extern "C" fn autd3_udp_emulator_num_devices(
+    handle: *const UdpEmulatorHandle,
+) -> usize {
     unsafe { handle_ref(handle) }.map_or(0, |emulator| emulator.0.num_devices())
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_udp_emulator_reboot(
+pub(crate) unsafe extern "C" fn autd3_udp_emulator_reboot(
     handle: *const UdpEmulatorHandle,
     index: usize,
 ) -> i32 {

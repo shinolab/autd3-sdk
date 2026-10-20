@@ -458,7 +458,7 @@ impl AngleUnit {
 
 #[pyclass(name = "_SecUnit", module = "autd3_core")]
 #[derive(Clone, Copy)]
-pub struct SecUnit;
+pub(crate) struct SecUnit;
 
 impl Freq {
     pub(crate) fn hz_f32(self) -> f32 {

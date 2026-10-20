@@ -288,7 +288,7 @@ async fn pattern_transition_rejections(ctx: &Ctx<'_>) -> Result<()> {
     Ok(())
 }
 
-pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
+pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     println!("firmware error-detail checks:");
 
     config_bank(ctx, PatternBank::B1, 1, LoopBehavior::Infinite).await?;

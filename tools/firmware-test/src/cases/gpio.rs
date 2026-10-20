@@ -40,7 +40,7 @@ fn custom_drive(ctx: &Ctx<'_>) -> Buffers {
     (phases, intensities)
 }
 
-pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
+pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     let em = custom_drive(ctx);
     let mut static_ff = modulation_buffer();
     constant(0xFF, &mut static_ff);

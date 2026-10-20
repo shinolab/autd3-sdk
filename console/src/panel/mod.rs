@@ -2,9 +2,9 @@ mod firmware;
 mod server;
 mod simulator;
 
-pub use firmware::FirmwarePanel;
-pub use server::ServerPanel;
-pub use simulator::SimulatorPanel;
+pub(crate) use firmware::FirmwarePanel;
+pub(crate) use server::ServerPanel;
+pub(crate) use simulator::SimulatorPanel;
 
 use std::io;
 use std::path::Path;

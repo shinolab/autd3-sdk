@@ -9,7 +9,7 @@ use zerocopy::little_endian::{U16, U32, U64};
 
 const DIVIDER: u16 = 512;
 
-pub fn config_pattern(
+pub(crate) fn config_pattern(
     bank: PatternBank,
     emission_type: EmissionType,
     size: u32,
@@ -31,7 +31,7 @@ pub fn config_pattern(
     .to_vec()
 }
 
-pub fn activate_pattern_bank(bank: PatternBank, mode: TransitionMode) -> Vec<u8> {
+pub(crate) fn activate_pattern_bank(bank: PatternBank, mode: TransitionMode) -> Vec<u8> {
     ActivatePatternBankPayload {
         bank,
         transition_mode: mode,

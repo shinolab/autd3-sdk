@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 
 use autd3_firmware_writer::bundle::{RELEASES_API, TAG_PREFIX};
 
-pub fn print_available_versions() -> Result<()> {
+pub(crate) fn print_available_versions() -> Result<()> {
     for version in fetch_versions()? {
         println!("{version}");
     }

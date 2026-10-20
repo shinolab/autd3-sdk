@@ -1,11 +1,11 @@
 use zerocopy::{FromBytes, IntoBytes};
 
-pub use autd3_cpu_wire::payload::{UpdateBeginPayload, UpdateChunkPayload};
+pub(crate) use autd3_cpu_wire::payload::{UpdateBeginPayload, UpdateChunkPayload};
 use autd3_cpu_wire::update::{
     CRC32, IMAGE_HEADER_ATTEMPTS_OFFSET, IMAGE_HEADER_STATUS_OFFSET, IMAGE_MAX_ATTEMPTS,
     ImageStatus, RunningImage, next_attempts, select_boot_slot,
 };
-pub use autd3_cpu_wire::update::{
+pub(crate) use autd3_cpu_wire::update::{
     FLASH_PAGE_BYTES, FLASH_SECTOR_BYTES, ImageHeader, SLOT_BYTES, SLOT_HEADER_BYTES, Slot,
     is_plausible_length, select_slot,
 };

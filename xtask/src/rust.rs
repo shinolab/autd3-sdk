@@ -10,7 +10,7 @@ use crate::util::{
 };
 
 #[derive(Subcommand)]
-pub enum RustCmd {
+pub(crate) enum RustCmd {
     #[command(about = "Build the `crates/` workspace")]
     Build,
     #[command(about = "Run the `crates/` workspace tests")]
@@ -75,6 +75,18 @@ pub enum RustCmd {
         #[arg(long, help = "Run every check without uploading")]
         dry_run: bool,
     },
+    #[command(
+        about = "List public items no indexed workspace references (rust-analyzer SCIP), narrowed by a repository-wide grep"
+    )]
+    Deadcode {
+        #[arg(
+            long,
+            help = "Reuse the indexes left in `target/deadcode/` instead of regenerating them"
+        )]
+        reuse: bool,
+        #[arg(long, short, help = "Print every grep hit instead of the first few")]
+        verbose: bool,
+    },
     #[command(about = "Build and run an example from `examples/`")]
     Example {
         #[arg(help = "Example binary name (one binary per feature; see `examples/`)")]
@@ -92,7 +104,7 @@ pub enum RustCmd {
     Clean(CleanArgs),
 }
 
-pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
+pub(crate) fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
     match cmd {
         RustCmd::Build => run("cargo", ["build", "--workspace", "--all-targets"], root),
         RustCmd::Test {
@@ -116,12 +128,15 @@ pub fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
         ),
         RustCmd::Semver { baseline } => run_semver(root, baseline.as_deref()),
         RustCmd::Publish { dry_run } => publish_workspace(root, *dry_run),
+        RustCmd::Deadcode { reuse, verbose } => {
+            crate::deadcode::run_deadcode(root, *reuse, *verbose)
+        }
         RustCmd::Example { name, debug, args } => run_example(root, name, *debug, args),
         RustCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
 }
 
-pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
+pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {
     cleaner.paths(&["target"])
 }
 
@@ -164,7 +179,7 @@ fn run_lint(root: &Path) -> Result<()> {
 
 const COVERAGE_IGNORE: &str = "/(tools|examples)/";
 
-pub fn coverage(dir: &Path, test_args: &[&str], filter: &[&str], open: bool) -> Result<()> {
+pub(crate) fn coverage(dir: &Path, test_args: &[&str], filter: &[&str], open: bool) -> Result<()> {
     if !on_path("cargo-llvm-cov") {
         bail!("`cargo-llvm-cov` is required (`cargo install cargo-llvm-cov --locked`)");
     }

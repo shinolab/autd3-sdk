@@ -16,7 +16,7 @@ use crate::cases::pattern_util::{
 };
 use crate::io::wait_enter;
 
-pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
+pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     let focus = focus_at(ctx.geometry, [0.0, 0.0, 150.0], 0xFF);
 
     let mut sine150 = modulation_buffer();

@@ -24,7 +24,7 @@ fn supports_ota(version: &str) -> bool {
 }
 
 #[derive(Default, Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
-pub enum Method {
+pub(crate) enum Method {
     #[default]
     Ota,
     Jtag,
@@ -47,7 +47,7 @@ impl Method {
 }
 
 #[derive(Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum Target {
+pub(crate) enum Target {
     #[default]
     Both,
     Fpga,
@@ -82,7 +82,7 @@ impl Target {
 
 #[derive(Default, Clone, Serialize, Deserialize)]
 #[serde(default)]
-pub struct FirmwareConfig {
+pub(crate) struct FirmwareConfig {
     pub version: Option<String>,
     pub target: Target,
     pub method: Method,
@@ -127,7 +127,7 @@ enum Phase {
 }
 
 #[derive(Default)]
-pub struct FirmwarePanel {
+pub(crate) struct FirmwarePanel {
     pub config: FirmwareConfig,
     phase: Phase,
     proc: Option<ManagedProcess>,
@@ -138,7 +138,7 @@ pub struct FirmwarePanel {
 }
 
 impl FirmwarePanel {
-    pub fn pump(&mut self) {
+    pub(crate) fn pump(&mut self) {
         let finished = self.proc.as_mut().is_some_and(|proc| {
             proc.pump();
             !proc.is_running()
@@ -167,7 +167,7 @@ impl FirmwarePanel {
         }
     }
 
-    pub fn is_running(&self) -> bool {
+    pub(crate) fn is_running(&self) -> bool {
         self.proc.as_ref().is_some_and(ManagedProcess::is_running)
             || self
                 .list_proc
@@ -175,7 +175,7 @@ impl FirmwarePanel {
                 .is_some_and(ManagedProcess::is_running)
     }
 
-    pub fn ui(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn ui(&mut self, ui: &mut egui::Ui) {
         if !self.listed {
             self.refresh_versions();
             self.listed = true;

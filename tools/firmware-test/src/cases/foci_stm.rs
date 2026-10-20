@@ -43,7 +43,7 @@ async fn send_foci(
     .await
 }
 
-pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
+pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     let center = ctx.geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
     let foci = circle_foci(center, POINT_NUM);
 

@@ -8,7 +8,7 @@ use crate::component::{COMPONENTS, Component, detect, release_sections};
 use crate::util::{capture, capture_lenient};
 
 #[derive(Args)]
-pub struct ChangelogCmd {
+pub(crate) struct ChangelogCmd {
     #[arg(
         long,
         help = "Tag to write the release notes for (e.g. v1.2.3). Required with `--release-notes`"
@@ -27,7 +27,7 @@ pub struct ChangelogCmd {
     output: Option<String>,
 }
 
-pub fn run_changelog(root: &Path, cmd: &ChangelogCmd) -> Result<()> {
+pub(crate) fn run_changelog(root: &Path, cmd: &ChangelogCmd) -> Result<()> {
     if cmd.release_notes {
         let tag = cmd
             .tag
@@ -137,7 +137,7 @@ fn write_release_notes(root: &Path, tag: &str, output: Option<&str>) -> Result<(
     Ok(())
 }
 
-pub fn write_changelog_file(root: &Path, output: &str) -> Result<()> {
+pub(crate) fn write_changelog_file(root: &Path, output: &str) -> Result<()> {
     let mut doc = String::from("# Changelog\n");
     for component in COMPONENTS {
         let mut args: Vec<String> = Vec::new();

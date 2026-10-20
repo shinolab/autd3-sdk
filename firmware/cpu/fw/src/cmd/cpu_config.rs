@@ -1,5 +1,5 @@
-pub use autd3_cpu_wire::config::{CpuConfig, FpgaBusWait};
-pub use autd3_cpu_wire::payload::SetCpuConfigPayload;
+pub(crate) use autd3_cpu_wire::config::{CpuConfig, FpgaBusWait};
+pub(crate) use autd3_cpu_wire::payload::SetCpuConfigPayload;
 
 use autd3_cpu_wire::cpu_params;
 

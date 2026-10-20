@@ -240,7 +240,7 @@ async fn confirmed(question: &str) -> bool {
         .eq_ignore_ascii_case("y")
 }
 
-pub async fn run(client: Client, link: &Link<'_>) -> Result<Client> {
+pub(crate) async fn run(client: Client, link: &Link<'_>) -> Result<Client> {
     let count = client.num_devices();
     if let Err(e) = client.close().await {
         println!("  closing the client before the case reported: {e}");

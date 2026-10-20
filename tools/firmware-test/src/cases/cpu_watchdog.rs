@@ -332,7 +332,7 @@ async fn target(devices: usize) -> Option<usize> {
     answer.parse::<usize>().ok().filter(|i| *i < devices)
 }
 
-pub async fn run(client: Client, link: &Link<'_>) -> Result<Client> {
+pub(crate) async fn run(client: Client, link: &Link<'_>) -> Result<Client> {
     let Some(target) = target(client.num_devices()).await else {
         println!("  [SKIP] not a device index");
         return Ok(client);

@@ -635,7 +635,7 @@ fn generate(
     (wire, fw)
 }
 
-pub fn gen_param(root: &Path) -> Result<()> {
+pub(crate) fn gen_param(root: &Path) -> Result<()> {
     let svh = root.join(PARAMS_SVH_REL);
     let text = std::fs::read_to_string(&svh)
         .with_context(|| format!("failed to read {}", svh.display()))?;

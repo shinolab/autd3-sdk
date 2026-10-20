@@ -6,10 +6,10 @@ use autd3_ffi_abi::{
 };
 use autd3_rs::rt::{LogWriter, TracingGuard, TracingOption, try_init_tracing};
 
-pub const AUTD3_LOG_WRITER_STDOUT: u8 = 0;
-pub const AUTD3_LOG_WRITER_STDERR: u8 = 1;
+pub(crate) const AUTD3_LOG_WRITER_STDOUT: u8 = 0;
+pub(crate) const AUTD3_LOG_WRITER_STDERR: u8 = 1;
 
-pub struct TracingGuardHandle(#[expect(dead_code)] TracingGuard);
+pub(crate) struct TracingGuardHandle(#[expect(dead_code)] TracingGuard);
 
 fn to_log_writer(v: u8) -> Option<LogWriter> {
     match v {
@@ -27,7 +27,7 @@ fn from_log_writer(writer: LogWriter) -> u8 {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_tracing_option_default(
+pub(crate) unsafe extern "C" fn autd3_tracing_option_default(
     out_default_filter: *mut c_char,
     out_default_filter_len: usize,
     out_writer: *mut u8,
@@ -51,7 +51,7 @@ pub unsafe extern "C" fn autd3_tracing_option_default(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_init_tracing(
+pub(crate) unsafe extern "C" fn autd3_init_tracing(
     default_filter: *const c_char,
     writer: u8,
     out_err: *mut c_char,
@@ -79,7 +79,7 @@ pub unsafe extern "C" fn autd3_init_tracing(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_tracing_guard_free(guard: *mut TracingGuardHandle) {
+pub(crate) unsafe extern "C" fn autd3_tracing_guard_free(guard: *mut TracingGuardHandle) {
     unsafe { drop_handle(guard) }
 }
 

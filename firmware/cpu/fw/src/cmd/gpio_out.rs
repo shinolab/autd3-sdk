@@ -1,4 +1,4 @@
-pub use autd3_cpu_wire::payload::GpioOutPayload;
+pub(crate) use autd3_cpu_wire::payload::GpioOutPayload;
 
 use core::num::NonZeroU32;
 

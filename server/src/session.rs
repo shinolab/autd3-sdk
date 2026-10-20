@@ -2,15 +2,15 @@ use std::collections::VecDeque;
 
 use autd3_rs::link::message::LINK_VERSION;
 
-pub const REMEMBERED_SENDS: usize = 64;
+pub(crate) const REMEMBERED_SENDS: usize = 64;
 
 #[derive(Debug, Default)]
-pub struct MsgIds {
+pub(crate) struct MsgIds {
     sent: VecDeque<(u16, u16)>,
 }
 
 impl MsgIds {
-    pub fn remember(&mut self, bus: u16, client: u16) {
+    pub(crate) fn remember(&mut self, bus: u16, client: u16) {
         if self.sent.len() == REMEMBERED_SENDS {
             self.sent.pop_front();
         }
@@ -18,7 +18,7 @@ impl MsgIds {
     }
 
     #[must_use]
-    pub fn client_of(&self, bus: u16) -> Option<u16> {
+    pub(crate) fn client_of(&self, bus: u16) -> Option<u16> {
         self.sent
             .iter()
             .rev()
@@ -28,7 +28,7 @@ impl MsgIds {
 }
 
 #[derive(Debug)]
-pub struct Attachment<B, S> {
+pub(crate) struct Attachment<B, S> {
     bus: Option<B>,
     session: Option<S>,
 }
@@ -44,12 +44,12 @@ impl<B, S> Default for Attachment<B, S> {
 
 impl<B, S> Attachment<B, S> {
     #[must_use]
-    pub fn session(&self) -> Option<&S> {
+    pub(crate) fn session(&self) -> Option<&S> {
         self.session.as_ref()
     }
 
     #[must_use]
-    pub fn bus_of(&self, attached: impl FnOnce(&S) -> bool) -> Option<&B> {
+    pub(crate) fn bus_of(&self, attached: impl FnOnce(&S) -> bool) -> Option<&B> {
         self.session
             .as_ref()
             .is_some_and(attached)
@@ -57,16 +57,16 @@ impl<B, S> Attachment<B, S> {
             .flatten()
     }
 
-    pub fn serve(&mut self, bus: B) {
+    pub(crate) fn serve(&mut self, bus: B) {
         self.bus = Some(bus);
     }
 
-    pub fn retire(&mut self) -> Option<S> {
+    pub(crate) fn retire(&mut self) -> Option<S> {
         self.bus = None;
         self.session.take()
     }
 
-    pub fn detach(&mut self, attached: impl FnOnce(&S) -> bool) {
+    pub(crate) fn detach(&mut self, attached: impl FnOnce(&S) -> bool) {
         if self.session.as_ref().is_some_and(attached) {
             self.session = None;
         }
@@ -74,7 +74,7 @@ impl<B, S> Attachment<B, S> {
 }
 
 impl<B: Clone, S> Attachment<B, S> {
-    pub fn attach<E>(
+    pub(crate) fn attach<E>(
         &mut self,
         session: S,
         admit: impl FnOnce(Option<&B>, bool) -> Result<(), E>,
@@ -88,7 +88,7 @@ impl<B: Clone, S> Attachment<B, S> {
     }
 }
 
-pub fn admission(
+pub(crate) fn admission(
     version: u16,
     num_devices: u16,
     serving: Option<usize>,

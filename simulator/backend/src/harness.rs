@@ -9,7 +9,7 @@ use autd3_rs_simulator_protocol::{DeviceState, TransState};
 
 use crate::emulator::{extract_device_states, extract_states};
 
-pub struct Harness {
+pub(crate) struct Harness {
     pub geometry: Arc<Geometry>,
     pub devices: Vec<EmuDevice>,
     pub mod_enabled: bool,
@@ -18,7 +18,7 @@ pub struct Harness {
 }
 
 impl Harness {
-    pub fn new(num_devices: usize) -> Self {
+    pub(crate) fn new(num_devices: usize) -> Self {
         let geometry = Arc::new(Geometry::new((0..num_devices).map(|_| Autd3::default())));
         let devices = geometry
             .iter()
@@ -33,7 +33,7 @@ impl Harness {
         }
     }
 
-    pub fn send<'a, C: Command<'a>>(&mut self, cmd: C) {
+    pub(crate) fn send<'a, C: Command<'a>>(&mut self, cmd: C) {
         self.drive(&Frames::encode(&self.geometry, cmd).unwrap());
     }
 
@@ -58,19 +58,19 @@ impl Harness {
         self.devices.iter().collect()
     }
 
-    pub fn fpga(&self) -> &FpgaEmulator {
+    pub(crate) fn fpga(&self) -> &FpgaEmulator {
         self.devices[0].fpga()
     }
 
-    pub fn fpga_mut(&mut self) -> &mut FpgaEmulator {
+    pub(crate) fn fpga_mut(&mut self) -> &mut FpgaEmulator {
         self.devices[0].fpga_mut()
     }
 
-    pub fn states(&self) -> Vec<TransState> {
+    pub(crate) fn states(&self) -> Vec<TransState> {
         extract_states(&self.device_refs(), self.mod_enabled)
     }
 
-    pub fn device_states(&self) -> Vec<DeviceState> {
+    pub(crate) fn device_states(&self) -> Vec<DeviceState> {
         extract_device_states(&self.device_refs())
     }
 }

@@ -1,4 +1,4 @@
-pub use autd3_cpu_wire::payload::PhaseCorrPayload;
+pub(crate) use autd3_cpu_wire::payload::PhaseCorrPayload;
 
 use crate::fpga;
 use crate::fpga_params::BramSelect;
