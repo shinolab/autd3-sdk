@@ -17,7 +17,12 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
     let nullbuf = buffers(ctx.geometry, Intensity::MIN);
 
     let mut modbuf = modulation_buffer();
-    sine(150 * Hz, &SineOption::default(), &mut modbuf)?;
+    sine(
+        150 * Hz,
+        &SineOption::default(),
+        SamplingConfig::FREQ_4K,
+        &mut modbuf,
+    )?;
     send_pattern_mod(ctx, &focus, &modbuf, SamplingConfig::FREQ_4K).await?;
     wait_enter("A focus is formed 150 mm above the centre of each device").await;
     report_fpga_state(ctx, "B0 focus", None, Some(PatternBank::B0), Some(true)).await?;

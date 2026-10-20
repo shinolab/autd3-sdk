@@ -26,21 +26,22 @@ async def main() -> None:
         # ANCHOR_END: pattern_intensity
 
         # ANCHOR: modulation
+        sampling_config = SamplingConfig.FREQ_4K
         mod_buf = modulation.modulation_buffer()
         modulation.sine(
             200 * Hz,
             modulation.SineOption(
                 amplitude=0xFF,
                 offset=0x80,
-                sampling_config=SamplingConfig.FREQ_4K,
             ),
+            sampling_config,
             mod_buf,
         )
         # ANCHOR_END: modulation
 
         await client.send(SetSilencer())
         await client.send(Pattern(phases, intensity))
-        await client.send(Modulation(SamplingConfig.FREQ_4K, mod_buf))
+        await client.send(Modulation(sampling_config, mod_buf))
 
 
 if __name__ == "__main__":

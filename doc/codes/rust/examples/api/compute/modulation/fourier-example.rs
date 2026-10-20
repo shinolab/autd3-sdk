@@ -1,4 +1,5 @@
 use autd3_rs::units::Hz;
+use autd3_rs::value::SamplingConfig;
 use autd3_rs_modulation::{FourierOption, SineComponent, SineOption, fourier, modulation_buffer};
 
 // HIDE
@@ -17,6 +18,7 @@ fn main() -> anyhow::Result<()> {
             offset: 0x00,
             ..Default::default()
         },
+        SamplingConfig::FREQ_4K,
         &mut dst,
     )?;
 

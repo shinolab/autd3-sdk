@@ -1,4 +1,5 @@
 from autd3.units import Hz
+from autd3.value import SamplingConfig
 from autd3_modulation import (
     FourierOption,
     SineComponent,
@@ -21,5 +22,6 @@ fourier(
         clamp=False,
         offset=0x00,
     ),
+    SamplingConfig.FREQ_4K,
     dst,
 )

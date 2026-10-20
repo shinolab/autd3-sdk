@@ -19,7 +19,6 @@ pub struct SineOption {
     pub offset: u8,
     pub phase: Angle,
     pub clamp: bool,
-    pub sampling_config: SamplingConfig,
 }
 
 impl Default for SineOption {
@@ -29,17 +28,17 @@ impl Default for SineOption {
             offset: 0x80,
             phase: Angle::ZERO,
             clamp: false,
-            sampling_config: SamplingConfig::FREQ_4K,
         }
     }
 }
 
 pub(crate) fn sine_samples<S: Into<SamplingMode>>(
     freq: S,
-    option: &SineOption,
+    option: SineOption,
+    config: SamplingConfig,
 ) -> Result<impl ExactSizeIterator<Item = f32> + use<S>, ModulationError> {
     let mode: SamplingMode = freq.into();
-    let (n, rep) = mode.validate(option.sampling_config)?;
+    let (n, rep) = mode.validate(config)?;
 
     let amplitude = f32::from(option.amplitude);
     let offset = f32::from(option.offset);
@@ -54,9 +53,10 @@ pub(crate) fn sine_samples<S: Into<SamplingMode>>(
 pub fn sine<S: Into<SamplingMode>>(
     freq: S,
     option: &SineOption,
+    config: SamplingConfig,
     dst: &mut Vec<u8>,
 ) -> Result<(), ModulationError> {
-    if quantize(sine_samples(freq, option)?, option.clamp, dst) {
+    if quantize(sine_samples(freq, *option, config)?, option.clamp, dst) {
         return Err(ModulationError::SineValueOutOfRange);
     }
     Ok(())
@@ -76,21 +76,39 @@ mod tests {
     #[test]
     fn sine_200hz_default_matches_reference() {
         let mut buf = Vec::new();
-        sine(200 * Hz, &SineOption::default(), &mut buf).unwrap();
+        sine(
+            200 * Hz,
+            &SineOption::default(),
+            SamplingConfig::FREQ_4K,
+            &mut buf,
+        )
+        .unwrap();
         assert_eq!(buf.as_slice(), SINE_200HZ_DEFAULT);
     }
 
     #[test]
     fn sine_nearest_frequency_matches_exact() {
         let mut buf = Vec::new();
-        sine(Nearest(200.0 * Hz), &SineOption::default(), &mut buf).unwrap();
+        sine(
+            Nearest(200.0 * Hz),
+            &SineOption::default(),
+            SamplingConfig::FREQ_4K,
+            &mut buf,
+        )
+        .unwrap();
         assert_eq!(buf.as_slice(), SINE_200HZ_DEFAULT);
     }
 
     #[test]
     fn sine_nearest_rounds_to_integer_sample_count() {
         let mut buf = Vec::new();
-        sine(Nearest(190.0 * Hz), &SineOption::default(), &mut buf).unwrap();
+        sine(
+            Nearest(190.0 * Hz),
+            &SineOption::default(),
+            SamplingConfig::FREQ_4K,
+            &mut buf,
+        )
+        .unwrap();
         assert_eq!(buf.len(), 21);
         assert_eq!(buf[0], 0x80);
     }
@@ -98,15 +116,42 @@ mod tests {
     #[test]
     fn sine_float_frequency() {
         let mut buf = Vec::new();
-        sine(200.0 * Hz, &SineOption::default(), &mut buf).unwrap();
+        sine(
+            200.0 * Hz,
+            &SineOption::default(),
+            SamplingConfig::FREQ_4K,
+            &mut buf,
+        )
+        .unwrap();
         assert_eq!(buf.len(), 20);
         assert_eq!(buf.as_slice()[0], 128);
     }
 
     #[test]
+    fn sine_sample_count_follows_the_sampling_config() {
+        let mut buf = Vec::new();
+        sine(
+            200 * Hz,
+            &SineOption::default(),
+            SamplingConfig::FREQ_40K,
+            &mut buf,
+        )
+        .unwrap();
+        assert_eq!(buf.len(), 200);
+    }
+
+    #[test]
     fn sine_zero_frequency_errors() {
         let mut buf = Vec::new();
-        assert!(sine(0 * Hz, &SineOption::default(), &mut buf).is_err());
+        assert!(
+            sine(
+                0 * Hz,
+                &SineOption::default(),
+                SamplingConfig::FREQ_4K,
+                &mut buf
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -116,14 +161,14 @@ mod tests {
             offset: 0x00,
             ..Default::default()
         };
-        assert!(sine(200 * Hz, &opt, &mut buf).is_err());
+        assert!(sine(200 * Hz, &opt, SamplingConfig::FREQ_4K, &mut buf).is_err());
 
         let opt = SineOption {
             offset: 0x00,
             clamp: true,
             ..Default::default()
         };
-        sine(200 * Hz, &opt, &mut buf).unwrap();
+        sine(200 * Hz, &opt, SamplingConfig::FREQ_4K, &mut buf).unwrap();
         assert_eq!(
             buf.as_slice(),
             &[
@@ -140,7 +185,7 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(
-            sine(200 * Hz, &opt, &mut buf),
+            sine(200 * Hz, &opt, SamplingConfig::FREQ_4K, &mut buf),
             Err(ModulationError::SineValueOutOfRange)
         );
         assert_eq!(

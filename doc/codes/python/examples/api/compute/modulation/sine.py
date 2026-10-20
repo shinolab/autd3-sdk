@@ -7,7 +7,6 @@ amplitude = 0xFF
 offset = 0x80
 phase = 0.0 * rad
 clamp = False
-sampling_config = SamplingConfig.FREQ_4K
 option = (
     # ANCHOR: option
     SineOption(
@@ -15,15 +14,15 @@ option = (
         offset,
         phase,
         clamp,
-        sampling_config,
     )
     # ANCHOR_END: option
 )
+sampling_config = SamplingConfig.FREQ_4K
 dst = modulation_buffer()
 # ANCHOR: api
-sine(freq, option, dst)
+sine(freq, option, sampling_config, dst)
 # ANCHOR_END: api
 
 # ANCHOR: nearest
-sine(Nearest(150.5 * Hz), option, dst)
+sine(Nearest(150.5 * Hz), option, sampling_config, dst)
 # ANCHOR_END: nearest

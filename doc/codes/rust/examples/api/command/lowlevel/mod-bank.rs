@@ -10,7 +10,7 @@ async fn main() -> Result<()> {
     let bank = ModulationBank::B0;
     let offset = 0;
     let mut buffer = modulation_buffer();
-    sine(150 * Hz, &SineOption::default(), &mut buffer)?;
+    sine(150 * Hz, &SineOption::default(), SamplingConfig::FREQ_4K, &mut buffer)?;
     let data = &buffer;
     // ANCHOR: write
     WriteModulationBuffer { bank, offset, data };

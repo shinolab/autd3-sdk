@@ -30,7 +30,7 @@ def geometry(n: int = DEVICES) -> autd3.geometry.Geometry:
 
 def sine() -> autd3.commands.Modulation:
     buf = modulation.modulation_buffer()
-    modulation.sine(150 * Hz, modulation.SineOption(), buf)
+    modulation.sine(150 * Hz, modulation.SineOption(), autd3.value.SamplingConfig.FREQ_4K, buf)
     return autd3.commands.Modulation(autd3.value.SamplingConfig.FREQ_4K, buf)
 
 

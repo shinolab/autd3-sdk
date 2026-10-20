@@ -18,7 +18,7 @@ async def main() -> None:
         pattern.focus(geometry, geometry.center() + offset(40.0 * mm, 0.0 * mm, 150.0 * mm), wavelength, right)
 
         data = modulation.modulation_buffer()
-        modulation.sine(150 * Hz, modulation.SineOption(), data)
+        modulation.sine(150 * Hz, modulation.SineOption(), SamplingConfig.FREQ_4K, data)
 
         # ANCHOR: api
         await client.send(SetSilencer())

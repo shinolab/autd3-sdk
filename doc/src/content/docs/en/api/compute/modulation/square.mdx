@@ -29,6 +29,7 @@ import { excerpt } from "@lib/excerpt";
 | --------- | --------------- | ------------------------- |
 | `freq`    | `Freq<u32>` etc.  | modulation frequency    |
 | `option`  | `&SquareOption` | additional options (see below) |
+| `config`  | `SamplingConfig` | sampling configuration (see [Modulation](/autd3-sdk/en/api/compute/modulation/#samplingconfig)) |
 | `dst`     | `&mut Vec<u8>`  | output buffer             |
 
 `freq` is specified in the same way as [sine](/autd3-sdk/en/api/compute/modulation/sine/).
@@ -42,7 +43,6 @@ import { excerpt } from "@lib/excerpt";
 | `low`             | `u8`             | `u8::MIN`                 | amplitude of the low level  |
 | `high`            | `u8`             | `u8::MAX`                 | amplitude of the high level |
 | `duty`            | `f32`            | `0.5`                     | fraction of the period occupied by `high` |
-| `sampling_config` | `SamplingConfig` | `SamplingConfig::FREQ_4K` | sampling configuration      |
 
 Within one period, the `duty` fraction is `high` and the remainder is `low`.
 

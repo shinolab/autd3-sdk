@@ -33,16 +33,18 @@ async def main() -> None:
         )
 
         # Apply a 200 Hz sine-wave AM.
+        sampling_config = SamplingConfig.FREQ_4K
         mod_buf = modulation.modulation_buffer()
         modulation.sine(
             200 * Hz,
-            modulation.SineOption(sampling_config=SamplingConfig.FREQ_4K),
+            modulation.SineOption(),
+            sampling_config,
             mod_buf,
         )
 
         await client.send(SetSilencer())
         await client.send(Pattern(phases, Intensity.MAX))
-        await client.send(Modulation(SamplingConfig.FREQ_4K, mod_buf))
+        await client.send(Modulation(sampling_config, mod_buf))
 
         try:
             await asyncio.Event().wait()

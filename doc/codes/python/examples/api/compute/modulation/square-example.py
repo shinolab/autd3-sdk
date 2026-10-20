@@ -10,7 +10,7 @@ square(
         low=0x00,
         high=0xFF,
         duty=0.5,
-        sampling_config=SamplingConfig.FREQ_4K,
     ),
+    SamplingConfig.FREQ_4K,
     dst,
 )

@@ -22,6 +22,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     autd3_rs_modulation::sine(
         200 * autd3_rs::units::Hz,
         &autd3_rs_modulation::SineOption::default(),
+        SamplingConfig::FREQ_4K,
         &mut modulation,
     )?;
 

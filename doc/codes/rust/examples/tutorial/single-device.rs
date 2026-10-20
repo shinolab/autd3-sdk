@@ -25,19 +25,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Apply a 200 Hz sine-wave AM.
+    let sampling_config = SamplingConfig::FREQ_4K;
     let mut modulation = autd3_rs_modulation::modulation_buffer();
     autd3_rs_modulation::sine(
         200 * Hz,
-        &autd3_rs_modulation::SineOption {
-            sampling_config: SamplingConfig::FREQ_4K,
-            ..Default::default()
-        },
+        &autd3_rs_modulation::SineOption::default(),
+        sampling_config,
         &mut modulation,
     )?;
 
     client.send(SetSilencer::default()).await?;
     client.send(Pattern::new(&phases, Intensity::MAX)).await?;
-    client.send(Modulation::new(SamplingConfig::FREQ_4K, &modulation)).await?;
+    client.send(Modulation::new(sampling_config, &modulation)).await?;
 
     tokio::signal::ctrl_c().await?;
 

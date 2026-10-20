@@ -200,7 +200,7 @@ namespace AUTD3.Tests
         public void SineProducesSamples()
         {
             using var modulation = Modulation.ModulationBuffer();
-            Modulation.Sine(200 * Hz, new SineOption { SamplingConfig = SamplingConfig.Freq4k }, modulation);
+            Modulation.Sine(200 * Hz, new SineOption(), SamplingConfig.Freq4k, modulation);
             Assert.True(modulation.Length > 0);
         }
 
@@ -226,7 +226,7 @@ namespace AUTD3.Tests
             using var intensities = geometry.IntensityBuffer();
             Pattern.Focus(geometry, geometry.Center + new Vector3(0f, 0f, 150f), Pattern.Wavelength(340 * m / s), phases);
             using var modulation = Modulation.ModulationBuffer();
-            Modulation.Sine(200 * Hz, new SineOption(), modulation);
+            Modulation.Sine(200 * Hz, new SineOption(), SamplingConfig.Freq4k, modulation);
 
             using var frames = Frames.Encode(geometry, Command.Sequence(
                 new Pattern(phases, intensities),

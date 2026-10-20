@@ -24,22 +24,23 @@ async fn main() -> Result<()> {
     // ANCHOR_END: pattern_intensity
 
     // ANCHOR: modulation
+    let sampling_config = SamplingConfig::FREQ_4K;
     let mut modulation = autd3_rs_modulation::modulation_buffer();
     autd3_rs_modulation::sine(
         200 * Hz,
         &autd3_rs_modulation::SineOption {
             amplitude: 0xFF,
             offset: 0x80,
-            sampling_config: SamplingConfig::FREQ_4K,
             ..Default::default()
         },
+        sampling_config,
         &mut modulation,
     )?;
     // ANCHOR_END: modulation
 
     client.send(SetSilencer::default()).await?;
     client.send(Pattern::new(&phases, intensity)).await?;
-    client.send(Modulation::new(SamplingConfig::FREQ_4K, &modulation)).await?;
+    client.send(Modulation::new(sampling_config, &modulation)).await?;
 
     client.silent_stop().await?;
     client.close().await?;

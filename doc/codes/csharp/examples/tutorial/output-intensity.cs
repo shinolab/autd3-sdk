@@ -22,6 +22,7 @@ internal static class Sample
         // ANCHOR_END: pattern_intensity
 
         // ANCHOR: modulation
+        var samplingConfig = SamplingConfig.Freq4k;
         var modulation = Modulation.ModulationBuffer();
         Modulation.Sine(
             200 * Hz,
@@ -29,14 +30,14 @@ internal static class Sample
             {
                 Amplitude = 0xFF,
                 Offset = 0x80,
-                SamplingConfig = SamplingConfig.Freq4k,
             },
+            samplingConfig,
             modulation
         );
         // ANCHOR_END: modulation
 
         await client.SendAsync(new SetSilencer());
         await client.SendAsync(new Pattern(phases, intensity));
-        await client.SendAsync(new Modulation(SamplingConfig.Freq4k, modulation));
+        await client.SendAsync(new Modulation(samplingConfig, modulation));
     }
 }

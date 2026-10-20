@@ -19,7 +19,7 @@ Each sample is an 8 bit amplitude coefficient <Math tex="0 \le m \le 255" />, wh
 ## SamplingConfig
 
 Each sample in the buffer is applied in order at the period of the `SamplingConfig` passed to `Modulation::new`.
-The `sampling_config` held by the Option of a waveform computation function determines the length of the waveform (number of samples), and it must match the `SamplingConfig` passed to `Modulation::new`.
+The `config` passed to a waveform computation function (`sine` / `square` / `fourier`) determines the length of the waveform (number of samples), and it must match the `SamplingConfig` passed to `Modulation::new`.
 For example, with `SamplingConfig::FREQ_4K` (4 kHz, sampling period 250 µs), one period of a 200 Hz sine wave is 20 samples.
 
 ## Function List

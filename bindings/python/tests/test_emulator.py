@@ -216,7 +216,7 @@ def test_a_recorder_sends_commands_and_encoded_frames() -> None:
 def test_a_recorder_reports_a_frame_the_firmware_rejects() -> None:
     geo = geometry()
     buf = modulation.modulation_buffer()
-    modulation.sine(150 * Hz, modulation.SineOption(), buf)
+    modulation.sine(150 * Hz, modulation.SineOption(), autd3.value.SamplingConfig.FREQ_4K, buf)
     strict = autd3.commands.SetSilencer(
         autd3.commands.FixedCompletionTime(
             intensity=Duration.from_micros(500),

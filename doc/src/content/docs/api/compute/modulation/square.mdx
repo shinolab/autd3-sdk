@@ -29,6 +29,7 @@ import { excerpt } from "@lib/excerpt";
 | --------- | --------------- | ------------------------- |
 | `freq`    | `Freq<u32>` 等  | 変調周波数                |
 | `option`  | `&SquareOption` | 追加オプション (下記参照) |
+| `config`  | `SamplingConfig` | サンプリング設定 ([Modulation](/autd3-sdk/api/compute/modulation/#samplingconfig) 参照) |
 | `dst`     | `&mut Vec<u8>`  | 出力バッファ              |
 
 `freq` の指定方法は [sine](/autd3-sdk/api/compute/modulation/sine/) と同じ. 
@@ -42,7 +43,6 @@ import { excerpt } from "@lib/excerpt";
 | `low`             | `u8`             | `u8::MIN`                 | 低レベルの振幅              |
 | `high`            | `u8`             | `u8::MAX`                 | 高レベルの振幅              |
 | `duty`            | `f32`            | `0.5`                     | 1 周期に占める `high` の割合 |
-| `sampling_config` | `SamplingConfig` | `SamplingConfig::FREQ_4K` | サンプリング設定            |
 
 1 周期のうち `duty` の割合が `high`, 残りが `low` になる. 
 

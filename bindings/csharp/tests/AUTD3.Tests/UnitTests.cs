@@ -51,15 +51,15 @@ namespace AUTD3.Tests
         public void IntAndFloatFreqBothDriveSine()
         {
             using var intMod = Modulation.ModulationBuffer();
-            Modulation.Sine(200 * Hz, new SineOption(), intMod);
+            Modulation.Sine(200 * Hz, new SineOption(), SamplingConfig.Freq4k, intMod);
             Assert.True(intMod.Length > 0);
 
             using var floatMod = Modulation.ModulationBuffer();
-            Modulation.Sine(200.0f * Hz, new SineOption(), floatMod);
+            Modulation.Sine(200.0f * Hz, new SineOption(), SamplingConfig.Freq4k, floatMod);
             Assert.True(floatMod.Length > 0);
 
             using var nearestMod = Modulation.ModulationBuffer();
-            Modulation.Sine(Nearest(200 * Hz), new SineOption(), nearestMod);
+            Modulation.Sine(Nearest(200 * Hz), new SineOption(), SamplingConfig.Freq4k, nearestMod);
             Assert.True(nearestMod.Length > 0);
         }
 

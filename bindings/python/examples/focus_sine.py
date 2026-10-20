@@ -37,11 +37,12 @@ async def main() -> None:
         pattern.focus(geometry, target, wavelength, phases)
 
         mod_buf = modulation.modulation_buffer()
-        modulation.sine(200 * Hz, modulation.SineOption(), mod_buf)
+        sampling_config = SamplingConfig.FREQ_4K
+        modulation.sine(200 * Hz, modulation.SineOption(), sampling_config, mod_buf)
 
         await client.send(SetSilencer())
         await client.send(Pattern(phases, Intensity.MAX))
-        await client.send(Modulation(SamplingConfig.FREQ_4K, mod_buf))
+        await client.send(Modulation(sampling_config, mod_buf))
 
         print(
             f"emitting a 200 Hz AM focus at "

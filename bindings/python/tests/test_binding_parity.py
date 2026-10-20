@@ -308,12 +308,9 @@ def test_sampling_configs_are_resolved_when_encoded() -> None:
     with pytest.raises(autd3.Autd3Error, match="ultrasound frequency"):
         config.into_sampling_config(2).divide()
 
-    option = modulation.SineOption(sampling_config=unresolvable)
     buffer = modulation.modulation_buffer()
     with pytest.raises(autd3.Autd3Error):
-        modulation.sine(150 * Hz, option, buffer)
-    with pytest.raises(autd3.Autd3Error):
-        option.sampling_config.divide()
+        modulation.sine(150 * Hz, modulation.SineOption(), unresolvable, buffer)
 
 
 def test_command_contents_are_checked_when_encoded() -> None:

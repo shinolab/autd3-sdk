@@ -15,7 +15,7 @@ async fn main() -> anyhow::Result<()> {
     let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
 
     let mut data = modulation_buffer();
-    sine(150 * Hz, &SineOption::default(), &mut data)?;
+    sine(150 * Hz, &SineOption::default(), SamplingConfig::FREQ_4K, &mut data)?;
 
     let bank = ModulationBank::B0;
 

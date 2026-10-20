@@ -11,10 +11,11 @@ from autd3_modulation import SineOption, modulation_buffer, sine
 async def main() -> None:
     geometry = Geometry([Autd3()])
     async with await Client.open(geometry, UdpOption(), ClientConfig()) as client:
+        config = SamplingConfig.FREQ_4K
         data = modulation_buffer()
-        sine(150 * Hz, SineOption(), data)
+        sine(150 * Hz, SineOption(), config, data)
 
-        await client.send(Modulation(SamplingConfig.FREQ_4K, data))
+        await client.send(Modulation(config, data))
 
 
 asyncio.run(main())

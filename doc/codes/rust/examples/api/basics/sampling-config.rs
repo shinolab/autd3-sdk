@@ -26,7 +26,7 @@ async fn main() -> Result<()> {
     let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
 
     let mut modulation = autd3_rs_modulation::modulation_buffer();
-    sine(150 * Hz, &SineOption::default(), &mut modulation)?;
+    sine(150 * Hz, &SineOption::default(), SamplingConfig::FREQ_4K, &mut modulation)?;
 
     // ANCHOR: modulation
     client

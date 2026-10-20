@@ -389,7 +389,7 @@ def test_fourier_mixes_exact_and_nearest_components() -> None:
     assert components[0].freq == 100 * Hz
     assert components[1].freq == Nearest(150.0 * Hz)
     buffer = modulation.modulation_buffer()
-    modulation.fourier(components, modulation.FourierOption(), buffer)
+    modulation.fourier(components, modulation.FourierOption(), autd3.value.SamplingConfig.FREQ_4K, buffer)
     assert len(buffer) > 0
 
 

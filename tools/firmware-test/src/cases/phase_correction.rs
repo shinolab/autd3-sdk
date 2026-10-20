@@ -34,7 +34,12 @@ pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
 
     let emissions = buffers(ctx.geometry, Intensity::MAX);
     let mut modbuf = modulation_buffer();
-    sine(150 * Hz, &SineOption::default(), &mut modbuf)?;
+    sine(
+        150 * Hz,
+        &SineOption::default(),
+        SamplingConfig::FREQ_4K,
+        &mut modbuf,
+    )?;
     send_pattern_mod(ctx, &emissions, &modbuf, SamplingConfig::FREQ_4K).await?;
     wait_enter("Phase correction alone forms a focus 150 mm above the centre of each device").await;
 

@@ -91,7 +91,12 @@ fn vertex(center: Point3<f32>, dx: f32, dy: f32) -> ControlPoints<1> {
 
 async fn ext_square(ctx: &Ctx<'_>, center: Point3<f32>) -> Result<()> {
     let mut sine150 = modulation_buffer();
-    sine(150 * Hz, &SineOption::default(), &mut sine150)?;
+    sine(
+        150 * Hz,
+        &SineOption::default(),
+        SamplingConfig::FREQ_4K,
+        &mut sine150,
+    )?;
     ctx.send(Modulation::new(SamplingConfig::FREQ_4K, &sine150))
         .await?;
     let square_a = vec![vertex(center, 30.0, 0.0), vertex(center, 0.0, 30.0)];

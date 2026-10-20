@@ -81,10 +81,6 @@ namespace AUTD3.Tests
             var e = Assert.Throws<Autd3Exception>(() =>
                 Frames.Encode(geometry, new ConfigModulation(ModulationBank.B0, unset, 2, LoopBehavior.Infinite)));
             Assert.Equal(Autd3ErrorCode.InvalidArgument, e.Code);
-
-            Assert.Equal(SamplingConfig.Freq4k, new SineOption().SamplingConfig);
-            Assert.Equal(SamplingConfig.Freq4k, default(SineOption).SamplingConfig);
-            Assert.Equal(SamplingConfig.Freq4k, default(SquareOption).SamplingConfig);
         }
 
         [Fact]

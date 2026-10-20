@@ -22,7 +22,7 @@ internal static class Sample
         Pattern.Focus(geometry, rightTarget, wavelength, right);
 
         var modulation = Modulation.ModulationBuffer();
-        Modulation.Sine(150 * Hz, new SineOption(), modulation);
+        Modulation.Sine(150 * Hz, new SineOption(), SamplingConfig.Freq4k, modulation);
         {
         // ANCHOR: api
         await client.SendAsync(new SetSilencer());

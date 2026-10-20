@@ -14,10 +14,11 @@ async fn main() -> anyhow::Result<()> {
     let option = UdpOption::default();
     let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
 
+    let config = SamplingConfig::FREQ_4K;
     let mut data = modulation_buffer();
-    sine(150 * Hz, &SineOption::default(), &mut data)?;
+    sine(150 * Hz, &SineOption::default(), config, &mut data)?;
 
-    client.send(Modulation::new(SamplingConfig::FREQ_4K, &data)).await?;
+    client.send(Modulation::new(config, &data)).await?;
 
     client.close().await?;
     // HIDE

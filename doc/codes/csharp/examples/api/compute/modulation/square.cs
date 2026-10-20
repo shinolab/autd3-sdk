@@ -11,7 +11,6 @@ internal static class Sample
         var low = byte.MinValue;
         var high = byte.MaxValue;
         var duty = 0.5f;
-        var samplingConfig = SamplingConfig.Freq4k;
         var option =
             // ANCHOR: option
             new SquareOption
@@ -19,13 +18,13 @@ internal static class Sample
                 Low = low,
                 High = high,
                 Duty = duty,
-                SamplingConfig = samplingConfig,
             }
             // ANCHOR_END: option
             ;
+        var samplingConfig = SamplingConfig.Freq4k;
         var dst = Modulation.ModulationBuffer();
         // ANCHOR: api
-        Modulation.Square(freq, option, dst);
+        Modulation.Square(freq, option, samplingConfig, dst);
         // ANCHOR_END: api
     }
 }

@@ -6,18 +6,17 @@ freq = 150 * Hz
 low = 0x00
 high = 0xFF
 duty = 0.5
-sampling_config = SamplingConfig.FREQ_4K
 option = (
     # ANCHOR: option
     SquareOption(
         low,
         high,
         duty,
-        sampling_config,
     )
     # ANCHOR_END: option
 )
+sampling_config = SamplingConfig.FREQ_4K
 dst = modulation_buffer()
 # ANCHOR: api
-square(freq, option, dst)
+square(freq, option, sampling_config, dst)
 # ANCHOR_END: api

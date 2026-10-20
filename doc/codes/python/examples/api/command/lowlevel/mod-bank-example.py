@@ -12,7 +12,7 @@ async def main() -> None:
     geometry = Geometry([Autd3()])
     async with await Client.open(geometry, UdpOption(), ClientConfig()) as client:
         data = modulation_buffer()
-        sine(150 * Hz, SineOption(), data)
+        sine(150 * Hz, SineOption(), SamplingConfig.FREQ_4K, data)
 
         bank = ModulationBank.B0
 

@@ -244,7 +244,7 @@ namespace AUTD3.Tests
         public void SquareProducesSamples()
         {
             using var modulation = Modulation.ModulationBuffer();
-            Modulation.Square(200 * Hz, new SquareOption(), modulation);
+            Modulation.Square(200 * Hz, new SquareOption(), SamplingConfig.Freq4k, modulation);
             Assert.True(modulation.Length > 0);
         }
 
@@ -256,7 +256,7 @@ namespace AUTD3.Tests
             {
                 new SineComponent(100 * Hz, new SineOption()),
                 new SineComponent(200 * Hz, new SineOption()),
-            }, new FourierOption(), modulation);
+            }, new FourierOption(), SamplingConfig.Freq4k, modulation);
             Assert.True(modulation.Length > 0);
         }
 
@@ -264,7 +264,7 @@ namespace AUTD3.Tests
         public void RadiationPressureKeepsLength()
         {
             using var modulation = Modulation.ModulationBuffer();
-            Modulation.Sine(200 * Hz, new SineOption(), modulation);
+            Modulation.Sine(200 * Hz, new SineOption(), SamplingConfig.Freq4k, modulation);
             var before = modulation.Length;
 
             using var pressure = Modulation.ModulationBuffer();
@@ -299,7 +299,7 @@ namespace AUTD3.Tests
         {
             using var geometry = Fixture.SingleDevice();
             using var modulation = Modulation.ModulationBuffer();
-            Modulation.Sine(200 * Hz, new SineOption(), modulation);
+            Modulation.Sine(200 * Hz, new SineOption(), SamplingConfig.Freq4k, modulation);
 
             using var frames = Frames.Encode(geometry, new Modulation(ModulationBank.B1, SamplingConfig.Freq4k, modulation,
                 transitionMode: TransitionMode.Later));

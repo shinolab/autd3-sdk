@@ -30,10 +30,12 @@ fn main() -> Result<()> {
     let mut phases = geometry.phase_buffer();
     autd3_rs_pattern::focus(&geometry, target, wavelength, &mut phases);
 
+    let sampling_config = SamplingConfig::FREQ_4K;
     let mut modulation = Vec::new();
     autd3_rs_modulation::sine(
         200 * Hz,
         &autd3_rs_modulation::SineOption::default(),
+        sampling_config,
         &mut modulation,
     )?;
 
@@ -41,7 +43,7 @@ fn main() -> Result<()> {
     let record = emulator.record(async move |r| {
         r.send(SetSilencer::default()).await?;
         r.send(Pattern::new(&phases, Intensity::MAX)).await?;
-        r.send(Modulation::new(SamplingConfig::FREQ_4K, &modulation))
+        r.send(Modulation::new(sampling_config, &modulation))
             .await?;
         r.tick(Duration::from_millis(10))?;
         Ok(())

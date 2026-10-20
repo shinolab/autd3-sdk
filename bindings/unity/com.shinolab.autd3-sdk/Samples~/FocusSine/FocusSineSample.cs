@@ -31,10 +31,11 @@ namespace AUTD3.Samples
             Pattern.Focus(_geometry, target, wavelength, phases);
 
             using var modulation = Modulation.ModulationBuffer();
-            Modulation.Sine(200 * Hz, new SineOption(), modulation);
+            var samplingConfig = SamplingConfig.Freq4k;
+            Modulation.Sine(200 * Hz, new SineOption(), samplingConfig, modulation);
 
             await _client.SendAsync(new Pattern(phases, intensities));
-            await _client.SendAsync(new Modulation(SamplingConfig.Freq4k, modulation));
+            await _client.SendAsync(new Modulation(samplingConfig, modulation));
 
             Debug.Log($"AUTD3: emitting a 200 Hz AM focus at {target} (Unity frame, metres)");
         }

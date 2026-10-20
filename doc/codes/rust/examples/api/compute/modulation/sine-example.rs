@@ -14,9 +14,9 @@ fn main() -> anyhow::Result<()> {
             offset: 0x80,
             phase: 0.0 * rad,
             clamp: false,
-            sampling_config: SamplingConfig::FREQ_4K,
             ..Default::default()
         },
+        SamplingConfig::FREQ_4K,
         &mut dst,
     )?;
 

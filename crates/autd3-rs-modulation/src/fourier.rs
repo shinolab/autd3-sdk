@@ -1,6 +1,7 @@
 #![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 
 use autd3_rs_core::params::MOD_BUFFER_SAMPLES;
+use autd3_rs_core::value::SamplingConfig;
 
 use crate::error::ModulationError;
 use crate::quantize::quantize;
@@ -25,22 +26,16 @@ pub struct FourierOption {
 pub fn fourier(
     components: &[SineComponent],
     option: &FourierOption,
+    config: SamplingConfig,
     dst: &mut Vec<u8>,
 ) -> Result<(), ModulationError> {
-    let Some(first) = components.first() else {
+    if components.is_empty() {
         return Err(ModulationError::FourierComponentsEmpty);
-    };
-    let sampling_config = first.option.sampling_config;
-    if components
-        .iter()
-        .any(|c| c.option.sampling_config != sampling_config)
-    {
-        return Err(ModulationError::FourierSamplingConfigMismatch);
     }
 
     let buffers = components
         .iter()
-        .map(|c| sine_samples(c.freq, &c.option).map(Iterator::collect::<Vec<f32>>))
+        .map(|c| sine_samples(c.freq, c.option, config).map(Iterator::collect::<Vec<f32>>))
         .collect::<Result<Vec<_>, ModulationError>>()?;
 
     let scale = option.scale_factor.unwrap_or(1.0 / buffers.len() as f32);
@@ -90,6 +85,7 @@ mod tests {
                 clamp: true,
                 ..Default::default()
             },
+            SamplingConfig::FREQ_4K,
             &mut buf,
         )
         .unwrap();
@@ -118,12 +114,18 @@ mod tests {
             },
         ];
         let mut buf = Vec::new();
-        fourier(&components, &FourierOption::default(), &mut buf).unwrap();
+        fourier(
+            &components,
+            &FourierOption::default(),
+            SamplingConfig::FREQ_4K,
+            &mut buf,
+        )
+        .unwrap();
 
         let raws = components
             .iter()
             .map(|c| {
-                sine_samples(c.freq, &c.option)
+                sine_samples(c.freq, c.option, SamplingConfig::FREQ_4K)
                     .unwrap()
                     .collect::<Vec<f32>>()
             })
@@ -164,8 +166,20 @@ mod tests {
         ];
         let mut mixed_buf = Vec::new();
         let mut exact_buf = Vec::new();
-        fourier(&mixed, &FourierOption::default(), &mut mixed_buf).unwrap();
-        fourier(&exact, &FourierOption::default(), &mut exact_buf).unwrap();
+        fourier(
+            &mixed,
+            &FourierOption::default(),
+            SamplingConfig::FREQ_4K,
+            &mut mixed_buf,
+        )
+        .unwrap();
+        fourier(
+            &exact,
+            &FourierOption::default(),
+            SamplingConfig::FREQ_4K,
+            &mut exact_buf,
+        )
+        .unwrap();
         assert_eq!(mixed_buf, exact_buf);
     }
 
@@ -184,7 +198,11 @@ mod tests {
     fn periods(components: &[SineComponent]) -> Vec<usize> {
         components
             .iter()
-            .map(|c| sine_samples(c.freq, &c.option).unwrap().len())
+            .map(|c| {
+                sine_samples(c.freq, c.option, SamplingConfig::FREQ_4K)
+                    .unwrap()
+                    .len()
+            })
             .collect()
     }
 
@@ -208,7 +226,12 @@ mod tests {
 
         let mut buf = Vec::new();
         assert_eq!(
-            fourier(&components, &FourierOption::default(), &mut buf),
+            fourier(
+                &components,
+                &FourierOption::default(),
+                SamplingConfig::FREQ_4K,
+                &mut buf
+            ),
             Err(ModulationError::FourierPeriodTooLong {
                 max: MOD_BUFFER_SAMPLES
             })
@@ -220,12 +243,23 @@ mod tests {
         let mut buf = Vec::new();
 
         let fits = nearest_components(&[256.0, 65536.0]);
-        fourier(&fits, &FourierOption::default(), &mut buf).unwrap();
+        fourier(
+            &fits,
+            &FourierOption::default(),
+            SamplingConfig::FREQ_4K,
+            &mut buf,
+        )
+        .unwrap();
         assert_eq!(buf.len(), MOD_BUFFER_SAMPLES);
 
         let too_long = nearest_components(&[3.0, 65536.0]);
         assert_eq!(
-            fourier(&too_long, &FourierOption::default(), &mut buf),
+            fourier(
+                &too_long,
+                &FourierOption::default(),
+                SamplingConfig::FREQ_4K,
+                &mut buf
+            ),
             Err(ModulationError::FourierPeriodTooLong {
                 max: MOD_BUFFER_SAMPLES
             })
@@ -233,33 +267,40 @@ mod tests {
     }
 
     #[test]
-    fn fourier_empty_components_errors() {
+    fn fourier_applies_the_sampling_config_to_every_component() {
+        let components = [
+            SineComponent {
+                freq: (100 * Hz).into(),
+                option: SineOption::default(),
+            },
+            SineComponent {
+                freq: (160 * Hz).into(),
+                option: SineOption::default(),
+            },
+        ];
         let mut buf = Vec::new();
-        assert!(fourier(&[], &FourierOption::default(), &mut buf).is_err());
+        fourier(
+            &components,
+            &FourierOption::default(),
+            SamplingConfig::FREQ_40K,
+            &mut buf,
+        )
+        .unwrap();
+        assert_eq!(buf.len(), 2000);
     }
 
     #[test]
-    fn fourier_sampling_config_mismatch_errors() {
-        use autd3_rs_core::value::SamplingConfig;
-
+    fn fourier_empty_components_errors() {
         let mut buf = Vec::new();
-        let components = [
-            SineComponent {
-                freq: (50 * Hz).into(),
-                option: SineOption {
-                    sampling_config: SamplingConfig::FREQ_4K,
-                    ..Default::default()
-                },
-            },
-            SineComponent {
-                freq: (50 * Hz).into(),
-                option: SineOption {
-                    sampling_config: SamplingConfig::FREQ_40K,
-                    ..Default::default()
-                },
-            },
-        ];
-        assert!(fourier(&components, &FourierOption::default(), &mut buf).is_err());
+        assert!(
+            fourier(
+                &[],
+                &FourierOption::default(),
+                SamplingConfig::FREQ_4K,
+                &mut buf
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -278,6 +319,7 @@ mod tests {
                     scale_factor: scale,
                     offset: 0,
                 },
+                SamplingConfig::FREQ_4K,
                 buf,
             )
         };
@@ -307,6 +349,7 @@ mod tests {
                 clamp: false,
                 offset: 0,
             },
+            SamplingConfig::FREQ_4K,
             &mut buf,
         );
         assert_eq!(result, Err(ModulationError::FourierValueOutOfRange));

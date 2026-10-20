@@ -34,16 +34,18 @@ Pattern.Focus(
 );
 
 // Apply a 200 Hz sine-wave AM.
+var samplingConfig = SamplingConfig.Freq4k;
 var modulation = Modulation.ModulationBuffer();
 Modulation.Sine(
     200 * Hz,
-    new SineOption { SamplingConfig = SamplingConfig.Freq4k },
+    new SineOption(),
+    samplingConfig,
     modulation
 );
 
 await client.SendAsync(new SetSilencer());
 await client.SendAsync(new Pattern(phases, Intensity.Max));
-await client.SendAsync(new Modulation(SamplingConfig.Freq4k, modulation));
+await client.SendAsync(new Modulation(samplingConfig, modulation));
 
 using var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>

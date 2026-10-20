@@ -56,7 +56,7 @@ def test_phase_from_angle() -> None:
     with pytest.raises(TypeError):
         pattern.wavelength(loose(340_000.0))
     with pytest.raises(ValueError):
-        modulation.sine(loose(200.0), modulation.SineOption(), modulation.modulation_buffer())
+        modulation.sine(loose(200.0), modulation.SineOption(), autd3.value.SamplingConfig.FREQ_4K, modulation.modulation_buffer())
 
 
 def test_pattern_focus_plane_bessel_write_phase() -> None:
@@ -291,11 +291,11 @@ def test_pattern_laguerre_hermite_gaussian() -> None:
 
 def test_modulation_sine_square_fourier_radiation() -> None:
     buf = modulation.modulation_buffer()
-    modulation.sine(200 * Hz, modulation.SineOption(), buf)
+    modulation.sine(200 * Hz, modulation.SineOption(), autd3.value.SamplingConfig.FREQ_4K, buf)
     assert len(buf) > 0
 
     sq = modulation.modulation_buffer()
-    modulation.square(150 * Hz, modulation.SquareOption(), sq)
+    modulation.square(150 * Hz, modulation.SquareOption(), autd3.value.SamplingConfig.FREQ_4K, sq)
     assert len(sq) > 0
 
     c = modulation.modulation_buffer()
@@ -307,12 +307,13 @@ def test_modulation_sine_square_fourier_radiation() -> None:
         [modulation.SineComponent(100 * Hz, modulation.SineOption()),
          modulation.SineComponent(200 * Hz, modulation.SineOption())],
         modulation.FourierOption(),
+        autd3.value.SamplingConfig.FREQ_4K,
         fo,
     )
     assert len(fo) > 0
 
     rp = modulation.modulation_buffer()
-    modulation.sine(200 * Hz, modulation.SineOption(), rp)
+    modulation.sine(200 * Hz, modulation.SineOption(), autd3.value.SamplingConfig.FREQ_4K, rp)
     before = len(rp)
 
     dst = modulation.modulation_buffer()
@@ -575,7 +576,7 @@ def test_each() -> None:
     pattern.focus(geo, geo.center() + np.array([40.0, 0.0, 150.0]), wavelength, right)
     amps = geo.intensity_buffer()
     mod_buf = modulation.modulation_buffer()
-    modulation.sine(150 * Hz, modulation.SineOption(), mod_buf)
+    modulation.sine(150 * Hz, modulation.SineOption(), autd3.value.SamplingConfig.FREQ_4K, mod_buf)
 
     # homogeneous per-device command
     commands: list[autd3.commands.Command] = []
@@ -600,7 +601,7 @@ def test_each() -> None:
 def test_later_stages_a_bank_without_changing_it() -> None:
     geo = geometry()
     buf = modulation.modulation_buffer()
-    modulation.sine(200 * Hz, modulation.SineOption(), buf)
+    modulation.sine(200 * Hz, modulation.SineOption(), autd3.value.SamplingConfig.FREQ_4K, buf)
 
     commands: list[autd3.commands.Command] = []
     commands.append(
@@ -973,7 +974,7 @@ def test_an_unresolvable_sampling_config_is_rejected_when_encoded() -> None:
             return 0
 
     buf = modulation.modulation_buffer()
-    modulation.sine(150 * Hz, modulation.SineOption(), buf)
+    modulation.sine(150 * Hz, modulation.SineOption(), autd3.value.SamplingConfig.FREQ_4K, buf)
     with pytest.raises(TypeError, match="SamplingConfig"):
         autd3.commands.Modulation(loose(ZeroDivider()), buf)
 

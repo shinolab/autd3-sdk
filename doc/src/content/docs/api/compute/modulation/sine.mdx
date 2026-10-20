@@ -30,6 +30,7 @@ import { excerpt } from "@lib/excerpt";
 | --------- | -------------- | -------------------------------------------- |
 | `freq`    | `Freq<u32>` 等 | 変調周波数                                   |
 | `option`  | `&SineOption`  | 追加オプション (下記参照)                    |
+| `config`  | `SamplingConfig` | サンプリング設定 ([Modulation](/autd3-sdk/api/compute/modulation/#samplingconfig) 参照) |
 | `dst`     | `&mut Vec<u8>` | 出力バッファ                                 |
 
 各サンプル <Math tex="i" /> の値は, 振幅 <Math tex="A" />（`amplitude`）, オフセット <Math tex="b" />（`offset`）, 位相 <Math tex="\theta" />（`phase`）に対して次式で与えられる. 
@@ -51,7 +52,6 @@ Python の `Freq` の `+` / `-` / `*` は整数同士なら整数のままだが
 | `offset`          | `u8`             | `0x80`                  | 直流オフセット                                           |
 | `phase`           | `Angle`          | `Angle::ZERO`           | 位相                                                     |
 | `clamp`           | `bool`           | `false`                 | 範囲外の値を [0, 255] clampするか                        |
-| `sampling_config` | `SamplingConfig` | `SamplingConfig::FREQ_4K` | サンプリング設定                                       |
 
 `amplitude` と `offset` の組み合わせで波形が [0, 255] の範囲を外れる場合, `clamp` が `false` だとエラーになる.
 範囲内に収まるよう値を選ぶか, `clamp` を `true` にする. 

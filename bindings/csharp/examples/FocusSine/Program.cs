@@ -31,10 +31,11 @@ internal static class Program
         Pattern.Focus(geometry, target, wavelength, phases);
 
         using var modulation = Modulation.ModulationBuffer();
-        Modulation.Sine(200 * Hz, new SineOption(), modulation);
+        var samplingConfig = SamplingConfig.Freq4k;
+        Modulation.Sine(200 * Hz, new SineOption(), samplingConfig, modulation);
 
         await client.SendAsync(new Pattern(phases, Intensity.Max));
-        await client.SendAsync(new Modulation(SamplingConfig.Freq4k, modulation));
+        await client.SendAsync(new Modulation(samplingConfig, modulation));
 
         Console.WriteLine(
             $"emitting a 200 Hz AM focus at ({target.X:F2}, {target.Y:F2}, {target.Z:F2}) mm — press Ctrl+C to stop");
