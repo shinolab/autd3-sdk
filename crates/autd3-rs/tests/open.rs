@@ -99,10 +99,7 @@ async fn an_invalid_udp_option_is_rejected() {
 
     assert!(matches!(
         udp_error(&error),
-        Some(UdpError::InvalidOption {
-            field: "reply_timeout",
-            ..
-        })
+        Some(UdpError::ZeroReplyTimeout)
     ));
 }
 

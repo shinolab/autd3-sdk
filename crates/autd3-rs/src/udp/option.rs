@@ -41,33 +41,32 @@ impl Default for UdpOption {
 
 impl UdpOption {
     pub fn validate(&self) -> Result<(), UdpError> {
-        fn check(field: &'static str, value: Duration, min: Duration) -> Result<(), UdpError> {
-            if value < min {
-                return Err(UdpError::InvalidOption { field, value, min });
-            }
-            Ok(())
+        if self.heartbeat.is_some_and(|heartbeat| heartbeat.is_zero()) {
+            return Err(UdpError::ZeroHeartbeat);
         }
-
-        let tick = Duration::from_micros(1);
-        if let Some(heartbeat) = self.heartbeat {
-            check("heartbeat", heartbeat, tick)?;
+        if self.reply_timeout.is_zero() {
+            return Err(UdpError::ZeroReplyTimeout);
         }
-        check("reply_timeout", self.reply_timeout, tick)?;
-        check(
-            "lost_timeout",
-            self.lost_timeout,
-            self.heartbeat.unwrap_or_default().saturating_add(tick),
-        )?;
-        if let Some(recovery_interval) = self.recovery_interval {
-            check("recovery_interval", recovery_interval, tick)?;
+        if self.lost_timeout <= self.heartbeat.unwrap_or_default() {
+            return Err(UdpError::LostTimeoutNotAboveHeartbeat {
+                lost_timeout: self.lost_timeout,
+                heartbeat: self.heartbeat,
+            });
         }
-        check("response_timeout", self.response_timeout, tick)?;
-        if let Some(timer_resolution) = self.timer_resolution {
-            check(
-                "timer_resolution",
-                timer_resolution,
-                Duration::from_millis(1),
-            )?;
+        if self
+            .recovery_interval
+            .is_some_and(|recovery_interval| recovery_interval.is_zero())
+        {
+            return Err(UdpError::ZeroRecoveryInterval);
+        }
+        if self.response_timeout.is_zero() {
+            return Err(UdpError::ZeroResponseTimeout);
+        }
+        let min = Duration::from_millis(1);
+        if let Some(got) = self.timer_resolution
+            && got < min
+        {
+            return Err(UdpError::TimerResolutionTooShort { got, min });
         }
         if let Interface::Simulator(port) = self.iface
             && simulator::control_port(port).is_none()
@@ -149,47 +148,47 @@ mod tests {
             heartbeat: Some(Duration::ZERO),
             ..UdpOption::default()
         },
-        "heartbeat"
+        |e: &UdpError| matches!(e, UdpError::ZeroHeartbeat)
     )]
     #[case::zero_reply_timeout(
         UdpOption {
             reply_timeout: Duration::ZERO,
             ..UdpOption::default()
         },
-        "reply_timeout"
+        |e: &UdpError| matches!(e, UdpError::ZeroReplyTimeout)
     )]
     #[case::zero_recovery_interval(
         UdpOption {
             recovery_interval: Some(Duration::ZERO),
             ..UdpOption::default()
         },
-        "recovery_interval"
+        |e: &UdpError| matches!(e, UdpError::ZeroRecoveryInterval)
     )]
     #[case::zero_response_timeout(
         UdpOption {
             response_timeout: Duration::ZERO,
             ..UdpOption::default()
         },
-        "response_timeout"
+        |e: &UdpError| matches!(e, UdpError::ZeroResponseTimeout)
     )]
     #[case::sub_millisecond_timer_resolution(
         UdpOption {
             timer_resolution: Some(Duration::from_micros(999)),
             ..UdpOption::default()
         },
-        "timer_resolution"
+        |e: &UdpError| matches!(e, UdpError::TimerResolutionTooShort { .. })
     )]
-    fn a_duration_below_its_minimum_is_rejected(#[case] option: UdpOption, #[case] rejected: &str) {
-        assert!(matches!(
-            option.validate(),
-            Err(UdpError::InvalidOption { field, .. }) if field == rejected
-        ));
+    fn a_duration_at_or_below_its_bound_is_rejected(
+        #[case] option: UdpOption,
+        #[case] is_expected: fn(&UdpError) -> bool,
+    ) {
+        assert!(option.validate().is_err_and(|e| is_expected(&e)));
     }
 
     #[test]
     fn the_durations_have_no_upper_bound() {
         let option = UdpOption {
-            heartbeat: Some(Duration::MAX),
+            heartbeat: Duration::MAX.checked_sub(Duration::from_nanos(1)),
             reply_timeout: Duration::MAX,
             lost_timeout: Duration::MAX,
             recovery_interval: Some(Duration::MAX),
@@ -216,7 +215,7 @@ mod tests {
     fn a_disabled_heartbeat_is_allowed() {
         let option = UdpOption {
             heartbeat: None,
-            lost_timeout: Duration::from_micros(1),
+            lost_timeout: Duration::from_nanos(1),
             ..UdpOption::default()
         };
         assert!(option.validate().is_ok());
@@ -227,10 +226,7 @@ mod tests {
         };
         assert!(matches!(
             option.validate(),
-            Err(UdpError::InvalidOption {
-                field: "lost_timeout",
-                ..
-            })
+            Err(UdpError::LostTimeoutNotAboveHeartbeat { .. })
         ));
     }
 
@@ -252,10 +248,7 @@ mod tests {
         };
         assert!(matches!(
             option.validate(),
-            Err(UdpError::InvalidOption {
-                field: "lost_timeout",
-                ..
-            })
+            Err(UdpError::LostTimeoutNotAboveHeartbeat { .. })
         ));
     }
 
