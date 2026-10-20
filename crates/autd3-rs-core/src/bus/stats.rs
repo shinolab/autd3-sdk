@@ -6,7 +6,6 @@ struct Counters {
     frames: AtomicU64,
     resets: AtomicU64,
     heartbeats: AtomicU64,
-    missed_heartbeat_replies: AtomicU64,
     recoveries: AtomicU64,
     acked_frames: AtomicU64,
     ack_latency_ns_total: AtomicU64,
@@ -30,11 +29,6 @@ impl BusStats {
     #[must_use]
     pub fn heartbeats(&self) -> u64 {
         self.0.heartbeats.load(Ordering::Acquire)
-    }
-
-    #[must_use]
-    pub fn missed_heartbeat_replies(&self) -> u64 {
-        self.0.missed_heartbeat_replies.load(Ordering::Acquire)
     }
 
     #[must_use]
@@ -74,12 +68,6 @@ impl BusStats {
         self.0.heartbeats.fetch_add(1, Ordering::Relaxed);
     }
 
-    pub fn record_missed_heartbeat_replies(&self, count: u64) {
-        self.0
-            .missed_heartbeat_replies
-            .fetch_add(count, Ordering::Relaxed);
-    }
-
     pub fn record_recovery(&self) {
         self.0.recoveries.fetch_add(1, Ordering::Relaxed);
     }
@@ -109,11 +97,9 @@ mod tests {
         stats.record_frame();
         stats.record_reset();
         stats.record_heartbeat();
-        stats.record_missed_heartbeat_replies(2);
         assert_eq!(observer.frames(), 2);
         assert_eq!(observer.resets(), 1);
         assert_eq!(observer.heartbeats(), 1);
-        assert_eq!(observer.missed_heartbeat_replies(), 2);
     }
 
     #[test]

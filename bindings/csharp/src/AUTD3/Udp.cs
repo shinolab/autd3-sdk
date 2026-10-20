@@ -6,7 +6,6 @@ namespace AUTD3
 {
     internal static class TransportOptionDefaults
     {
-        internal static readonly TimeSpan? Heartbeat;
         internal static readonly TimeSpan ReplyTimeout;
         internal static readonly TimeSpan LostTimeout;
         internal static readonly TimeSpan ResponseTimeout;
@@ -21,7 +20,6 @@ namespace AUTD3
             var handle = TransportOption.NewHandle();
             try
             {
-                Heartbeat = OptionNative.GetOptionalDuration(handle, NativeClient.autd3_transport_option_get_heartbeat);
                 ReplyTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_reply_timeout);
                 LostTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_lost_timeout);
                 ResponseTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_response_timeout);
@@ -42,20 +40,7 @@ namespace AUTD3
     {
         public static readonly ushort SimulatorPort = NativeClient.autd3_params_simulator_port();
 
-        private readonly bool _heartbeatSet;
-        private readonly TimeSpan? _heartbeat;
-
         public Interface Iface { get; init; }
-
-        public TimeSpan? Heartbeat
-        {
-            get => _heartbeatSet ? _heartbeat : TransportOptionDefaults.Heartbeat;
-            init
-            {
-                _heartbeat = value;
-                _heartbeatSet = true;
-            }
-        }
 
         private readonly TimeSpan? _replyTimeout;
         public TimeSpan ReplyTimeout { get => _replyTimeout ?? TransportOptionDefaults.ReplyTimeout; init => _replyTimeout = value; }
@@ -129,7 +114,6 @@ namespace AUTD3
                     { AddrValue: { } addr } => NativeClient.autd3_transport_option_set_iface_addr(handle, addr),
                     _ => NativeClient.autd3_transport_option_set_iface(handle, Iface.NameValue),
                 });
-                OptionNative.SetOptionalDuration(handle, "heartbeat", Heartbeat, NativeClient.autd3_transport_option_set_heartbeat);
                 OptionNative.SetRequiredDuration(handle, "replyTimeout", ReplyTimeout, NativeClient.autd3_transport_option_set_reply_timeout);
                 OptionNative.SetRequiredDuration(handle, "lostTimeout", LostTimeout, NativeClient.autd3_transport_option_set_lost_timeout);
                 OptionNative.SetRequiredDuration(handle, "responseTimeout", ResponseTimeout, NativeClient.autd3_transport_option_set_response_timeout);
@@ -159,7 +143,6 @@ namespace AUTD3
         internal static TransportOption FromHandle(IntPtr handle) => new TransportOption
         {
             Iface = ReadAddr(handle) is { } addr ? Interface.Addr(addr) : Interface.Auto,
-            Heartbeat = OptionNative.GetOptionalDuration(handle, NativeClient.autd3_transport_option_get_heartbeat),
             ReplyTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_reply_timeout),
             LostTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_lost_timeout),
             ResponseTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_response_timeout),

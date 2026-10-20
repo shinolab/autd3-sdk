@@ -17,8 +17,6 @@ impl Cpu {
 mod tests {
     use core::time::Duration;
 
-    use autd3_cpu_wire::cpu_params;
-
     use crate::cmd::cpu_config::{CpuConfig, default_config};
     use crate::cmd::silencer::SilencerFlags;
     use crate::fpga::TransitionMode;
@@ -33,7 +31,19 @@ mod tests {
     };
     use crate::test_utils::mock::{Frame, Harness};
 
-    const FAILSAFE_TIMEOUT_MS: u32 = cpu_params::FAILSAFE_TIMEOUT.as_millis() as u32;
+    const FAILSAFE_TIMEOUT_MS: u32 = 500;
+
+    fn armed() -> Harness {
+        let mut h = Harness::new();
+        h.cpu.apply_config(
+            &mut h.port,
+            CpuConfig {
+                failsafe_timeout: Some(Duration::from_millis(u64::from(FAILSAFE_TIMEOUT_MS))),
+                ..default_config()
+            },
+        );
+        h
+    }
 
     #[test]
     fn clear_resets_telemetry_counters() {
@@ -138,7 +148,7 @@ mod tests {
 
     #[test]
     fn clear_keeps_the_failsafe_gate_closed_until_the_latches_complete() {
-        let mut h = Harness::new();
+        let mut h = armed();
         h.deliver(&force_fan(0, 1));
         trip_failsafe(&mut h);
         h.port.ctl_flag_writes.clear();
@@ -166,7 +176,7 @@ mod tests {
 
     #[test]
     fn clear_leaves_the_failsafe_gate_closed_when_the_latch_times_out() {
-        let mut h = Harness::new();
+        let mut h = armed();
         trip_failsafe(&mut h);
         h.port.latch_stuck = true;
 
@@ -198,8 +208,8 @@ mod tests {
     }
 
     #[test]
-    fn clear_releases_the_gate_and_a_still_silent_host_trips_it_again_on_the_next_tick() {
-        let mut h = Harness::new();
+    fn clear_releases_the_gate_and_a_still_silent_host_no_longer_trips_it() {
+        let mut h = armed();
         h.port.host_idle_ms = Some(FAILSAFE_TIMEOUT_MS);
         h.tick_1ms(1);
         assert_eq!(h.telemetry().failsafe, 1);
@@ -210,8 +220,8 @@ mod tests {
         assert_eq!(h.telemetry().failsafe, 0);
 
         h.tick_1ms(1);
-        assert!(h.ctl_flags().contains(CtlFlags::FAILSAFE));
-        assert_eq!(h.telemetry().failsafe, 1);
+        assert!(!h.ctl_flags().contains(CtlFlags::FAILSAFE));
+        assert_eq!(h.telemetry().failsafe, 0);
     }
 
     #[test]

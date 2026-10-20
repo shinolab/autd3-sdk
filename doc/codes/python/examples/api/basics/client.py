@@ -21,9 +21,17 @@ async def main() -> None:
     (await (await client.send_frame_at(frame, ExecAt.Immediate))).check()
     # ANCHOR_END: exec_at
 
+    # ANCHOR: heartbeat
+    for _ in range(100):
+        client.heartbeat()
+        await asyncio.sleep(0.01)
+    # ANCHOR_END: heartbeat
+
     # ANCHOR: api
     num_devices = client.num_devices()
     geometry = client.geometry()
+
+    client.heartbeat()
 
     config = client.config()
     client.set_config(ClientConfig(ack_timeout=Duration.from_millis(20)))

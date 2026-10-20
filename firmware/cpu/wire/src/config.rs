@@ -145,7 +145,7 @@ impl Default for CpuConfig {
             fpga_flash_max_polls: cpu_params::FPGA_FLASH_MAX_POLLS,
             sync_guard: cpu_params::SYNC_GUARD,
             update_activate_delay: cpu_params::UPDATE_ACTIVATE_DELAY,
-            failsafe_timeout: Some(cpu_params::FAILSAFE_TIMEOUT),
+            failsafe_timeout: None,
             ptp_unlock_failsafe_timeout: None,
             fpga_bus_wait: FpgaBusWait::Cycles3,
             cpu_watchdog_timeout: Some(cpu_params::CPU_WATCHDOG_TIMEOUT),

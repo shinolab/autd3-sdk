@@ -20,13 +20,6 @@ pub(crate) extern "C" fn autd3_transport_option_new() -> *mut TransportOptionHan
 
 autd3_ffi_abi::option_handle_field!(
     TransportOptionHandle,
-    [heartbeat],
-    optional_duration,
-    autd3_transport_option_set_heartbeat,
-    autd3_transport_option_get_heartbeat
-);
-autd3_ffi_abi::option_handle_field!(
-    TransportOptionHandle,
     [timer_resolution],
     optional_duration,
     autd3_transport_option_set_timer_resolution,
@@ -278,34 +271,19 @@ mod tests {
         has_value.then(|| Duration::from_nanos(ns))
     }
 
-    fn heartbeat(handle: *const TransportOptionHandle) -> Option<Duration> {
-        optional(autd3_transport_option_get_heartbeat, handle)
-    }
-
     fn timer_resolution(handle: *const TransportOptionHandle) -> Option<Duration> {
         optional(autd3_transport_option_get_timer_resolution, handle)
     }
 
     #[test]
-    fn the_heartbeat_presence_is_explicit_and_a_zero_heartbeat_is_kept_for_validation() {
+    fn a_zero_timer_resolution_is_kept_for_validation() {
         let handle = autd3_transport_option_new();
-        assert_eq!(heartbeat(handle), Some(Duration::from_millis(10)));
         assert_eq!(
-            unsafe { autd3_transport_option_set_heartbeat(handle, false, 0) },
+            unsafe { autd3_transport_option_set_timer_resolution(handle, true, 0) },
             AUTD3_OK
         );
-        assert_eq!(heartbeat(handle), None);
-        assert_eq!(
-            unsafe { autd3_transport_option_set_heartbeat(handle, true, 0) },
-            AUTD3_OK
-        );
-        assert_eq!(heartbeat(handle), Some(Duration::ZERO));
+        assert_eq!(timer_resolution(handle), Some(Duration::ZERO));
         assert!(unsafe { &*handle }.0.validate().is_err());
-        assert_eq!(
-            unsafe { autd3_transport_option_set_heartbeat(handle, true, 2_000_000) },
-            AUTD3_OK
-        );
-        assert_eq!(heartbeat(handle), Some(Duration::from_millis(2)));
         unsafe { autd3_transport_option_free(handle) };
     }
 
@@ -406,7 +384,7 @@ mod tests {
     fn the_defaults_reach_c_unchanged() {
         let handle = autd3_transport_option_new();
         let option = CoreOption::default();
-        assert_eq!(heartbeat(handle), option.heartbeat);
+        assert_eq!(timer_resolution(handle), option.timer_resolution);
         assert_eq!(lost_timeout(handle), option.lost_timeout);
         let mut ns = 0u64;
         assert_eq!(
@@ -472,7 +450,7 @@ mod tests {
         let mut ns = 0u64;
         assert_eq!(
             unsafe {
-                autd3_transport_option_get_heartbeat(
+                autd3_transport_option_get_timer_resolution(
                     std::ptr::null(),
                     &raw mut has_value,
                     &raw mut ns,

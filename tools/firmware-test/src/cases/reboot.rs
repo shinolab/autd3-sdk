@@ -4,9 +4,9 @@ use std::time::Instant;
 use anyhow::{Context, Result, bail};
 
 use autd3_rs::protocol::{Cmd, Seq};
-use autd3_rs::{Client, DeviceState, TransportOption, UdpBus};
+use autd3_rs::{DeviceState, TransportOption, UdpBus};
 
-use crate::{Link, describe};
+use crate::{Link, Session, describe};
 
 const RESET_ACK: u8 = 0xFF;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(1);
@@ -70,14 +70,13 @@ fn gone(bus: &UdpBus) -> Result<(bool, Vec<DeviceState>)> {
     }
 }
 
-fn reboot_all(option: &TransportOption, devices: usize) -> Result<(bool, Vec<DeviceState>)> {
+fn reboot_all(
+    option: &TransportOption,
+    heartbeat: Duration,
+    devices: usize,
+) -> Result<(bool, Vec<DeviceState>)> {
     let option = TransportOption {
-        lost_timeout: GONE_LOST_TIMEOUT.max(
-            option
-                .heartbeat
-                .unwrap_or_default()
-                .saturating_mul(HEARTBEATS_UNTIL_LOST),
-        ),
+        lost_timeout: GONE_LOST_TIMEOUT.max(heartbeat.saturating_mul(HEARTBEATS_UNTIL_LOST)),
         ..option.clone()
     };
     let bus = UdpBus::open_unsynchronized(&option, devices).context("enumerating the devices")?;
@@ -88,7 +87,7 @@ fn reboot_all(option: &TransportOption, devices: usize) -> Result<(bool, Vec<Dev
     outcome
 }
 
-pub(crate) async fn run(client: Client, link: &Link<'_>) -> Result<Client> {
+pub(crate) async fn run(client: Session, link: &Link<'_>) -> Result<Session> {
     let devices = client.num_devices();
     let before = client.read_firmware_version().await;
     if let Err(e) = &before {
@@ -100,8 +99,9 @@ pub(crate) async fn run(client: Client, link: &Link<'_>) -> Result<Client> {
     drop(client);
 
     let option = link.option.clone();
+    let heartbeat = link.heartbeat;
     let started = Instant::now();
-    match tokio::task::spawn_blocking(move || reboot_all(&option, devices)).await? {
+    match tokio::task::spawn_blocking(move || reboot_all(&option, heartbeat, devices)).await? {
         Ok((all_lost, seen)) => {
             println!("  [OK] every device acknowledged Reboot");
             println!(

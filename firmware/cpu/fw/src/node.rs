@@ -1772,7 +1772,7 @@ mod tests {
         use crate::test_utils::mock::Harness as CpuHarness;
 
         let stale = CpuConfig {
-            failsafe_timeout: None,
+            failsafe_timeout: Some(core::time::Duration::from_millis(500)),
             ptp: autd3_cpu_wire::config::PtpConfig {
                 holdover: core::time::Duration::from_millis(123),
                 ..autd3_cpu_wire::config::PtpConfig::default()

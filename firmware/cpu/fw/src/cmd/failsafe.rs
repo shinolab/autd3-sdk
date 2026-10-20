@@ -52,16 +52,28 @@ mod tests {
     use crate::test_utils::builders::{force_fan, output_mask, set_cpu_config};
     use crate::test_utils::mock::{Frame, Harness, WatchdogEvent};
 
-    const FAILSAFE_TIMEOUT_MS: u32 = cpu_params::FAILSAFE_TIMEOUT.as_millis() as u32;
+    const FAILSAFE_TIMEOUT_MS: u32 = 500;
+    const FAILSAFE_TIMEOUT: Duration = Duration::from_millis(FAILSAFE_TIMEOUT_MS as u64);
 
-    const _: () = assert!(FAILSAFE_TIMEOUT_MS == 500);
+    fn armed() -> Harness {
+        let mut h = Harness::new();
+        h.cpu.apply_config(
+            &mut h.port,
+            CpuConfig {
+                failsafe_timeout: Some(FAILSAFE_TIMEOUT),
+                ..default_config()
+            },
+        );
+        h
+    }
 
     fn set_failsafe_timeout(h: &mut Harness, seq: u8, failsafe_timeout: Option<Duration>) {
+        let config = h.cpu.config();
         h.deliver(&set_cpu_config(
             seq,
             &CpuConfig {
                 failsafe_timeout,
-                ..default_config()
+                ..config
             },
         ));
         assert_eq!(h.status(), Error::None);
@@ -96,7 +108,7 @@ mod tests {
 
     #[test]
     fn failsafe_trips_once_the_host_is_silent_for_the_timeout() {
-        let mut h = Harness::new();
+        let mut h = armed();
         set_mask(&mut h, 0);
 
         h.port.host_idle_ms = Some(FAILSAFE_TIMEOUT_MS - 1);
@@ -116,7 +128,7 @@ mod tests {
 
     #[test]
     fn failsafe_never_trips_before_the_host_is_seen() {
-        let mut h = Harness::new();
+        let mut h = armed();
         set_mask(&mut h, 0);
         h.port.host_idle_ms = None;
 
@@ -127,7 +139,7 @@ mod tests {
 
     #[test]
     fn failsafe_rearms_after_the_host_comes_back() {
-        let mut h = Harness::new();
+        let mut h = armed();
         set_mask(&mut h, 0);
 
         h.port.host_idle_ms = Some(FAILSAFE_TIMEOUT_MS);
@@ -162,7 +174,7 @@ mod tests {
     }
 
     #[test]
-    fn a_longer_timeout_outlasts_the_default() {
+    fn a_long_timeout_is_honoured() {
         let mut h = Harness::new();
         set_mask(&mut h, 0);
         set_failsafe_timeout(&mut h, 1, Some(Duration::from_secs(2)));
@@ -178,8 +190,20 @@ mod tests {
     }
 
     #[test]
-    fn a_disabled_failsafe_never_trips() {
+    fn the_host_failsafe_is_disabled_by_default() {
         let mut h = Harness::new();
+        set_mask(&mut h, 0);
+        assert_eq!(h.cpu.config().failsafe_timeout, None);
+
+        h.port.host_idle_ms = Some(u32::MAX);
+        h.tick_1ms(10);
+        assert_not_muted(&h);
+        assert_eq!(h.telemetry().failsafe, 0);
+    }
+
+    #[test]
+    fn a_disabled_failsafe_never_trips() {
+        let mut h = armed();
         set_mask(&mut h, 0);
         set_failsafe_timeout(&mut h, 1, None);
 
@@ -191,7 +215,7 @@ mod tests {
 
     #[test]
     fn disabling_after_a_trip_does_not_unmute_and_reenabling_trips_again() {
-        let mut h = Harness::new();
+        let mut h = armed();
         set_mask(&mut h, 0);
         h.port.host_idle_ms = Some(FAILSAFE_TIMEOUT_MS);
         h.tick_1ms(1);
@@ -203,32 +227,33 @@ mod tests {
         assert_eq!(h.telemetry().failsafe, 1);
 
         release(&mut h, 2);
-        set_failsafe_timeout(&mut h, 3, Some(cpu_params::FAILSAFE_TIMEOUT));
+        set_failsafe_timeout(&mut h, 3, Some(FAILSAFE_TIMEOUT));
         h.tick_1ms(1);
         assert_muted(&h);
         assert_eq!(h.telemetry().failsafe, 2);
     }
 
     #[test]
-    fn clear_reenables_a_disabled_failsafe() {
-        let mut h = Harness::new();
-        set_failsafe_timeout(&mut h, 0, None);
-        h.deliver(&Frame::new(1, Cmd::Clear));
+    fn clear_disables_an_enabled_failsafe() {
+        let mut h = armed();
+        h.deliver(&Frame::new(0, Cmd::Clear));
         assert_eq!(h.status(), Error::None);
         assert_not_muted(&h);
+        assert_eq!(h.cpu.config().failsafe_timeout, None);
 
-        h.port.host_idle_ms = Some(FAILSAFE_TIMEOUT_MS);
+        h.port.host_idle_ms = Some(u32::MAX);
         h.tick_1ms(1);
-        assert_muted(&h);
-        assert_eq!(h.telemetry().failsafe, 1);
+        assert_not_muted(&h);
+        assert_eq!(h.telemetry().failsafe, 0);
     }
 
     fn set_ptp_unlock_failsafe_timeout(h: &mut Harness, seq: u8, timeout: Option<Duration>) {
+        let config = h.cpu.config();
         h.deliver(&set_cpu_config(
             seq,
             &CpuConfig {
                 ptp_unlock_failsafe_timeout: timeout,
-                ..default_config()
+                ..config
             },
         ));
         assert_eq!(h.status(), Error::None);
@@ -296,7 +321,7 @@ mod tests {
 
     #[test]
     fn the_host_failsafe_stays_quiet_while_the_fifo_never_empties() {
-        let mut h = Harness::new();
+        let mut h = armed();
         set_mask(&mut h, 0);
         let mut seq = 1;
         h.deliver_no_drain(&Frame::new(seq, Cmd::Nop));
@@ -344,7 +369,7 @@ mod tests {
 
     #[test]
     fn the_host_and_ptp_failsafes_trip_independently() {
-        let mut h = Harness::new();
+        let mut h = armed();
         set_mask(&mut h, 0);
         set_ptp_unlock_failsafe_timeout(&mut h, 1, Some(Duration::from_millis(50)));
         h.port.host_idle_ms = Some(FAILSAFE_TIMEOUT_MS);
@@ -376,7 +401,7 @@ mod tests {
 
     #[test]
     fn the_failsafe_leaves_the_output_mask_as_the_user_wrote_it() {
-        let mut h = Harness::new();
+        let mut h = armed();
         let mask: std::vec::Vec<bool> = (0..NUM_TRANSDUCERS).map(|i| i % 3 == 0).collect();
         h.deliver(&output_mask(0, &mask));
         let before = h.port.output_mask.clone();
@@ -395,7 +420,7 @@ mod tests {
 
     #[test]
     fn neither_the_host_coming_back_nor_set_output_mask_releases_the_failsafe() {
-        let mut h = Harness::new();
+        let mut h = armed();
         set_mask(&mut h, 0);
         h.port.host_idle_ms = Some(FAILSAFE_TIMEOUT_MS);
         h.tick_1ms(1);
@@ -412,7 +437,7 @@ mod tests {
 
     #[test]
     fn clear_releases_the_failsafe() {
-        let mut h = Harness::new();
+        let mut h = armed();
         h.port.host_idle_ms = Some(FAILSAFE_TIMEOUT_MS);
         h.tick_1ms(1);
         assert!(h.ctl_flags().contains(CtlFlags::FAILSAFE));
@@ -435,7 +460,7 @@ mod tests {
 
     #[test]
     fn the_failsafe_and_its_release_keep_the_other_persistent_flags() {
-        let mut h = Harness::new();
+        let mut h = armed();
         h.deliver(&force_fan(0, 1));
         h.port.host_idle_ms = Some(FAILSAFE_TIMEOUT_MS);
         h.tick_1ms(1);
@@ -467,7 +492,7 @@ mod tests {
 
     #[test]
     fn a_release_is_refused_while_the_host_still_counts_as_silent() {
-        let mut h = Harness::new();
+        let mut h = armed();
         set_mask(&mut h, 0);
         h.port.host_idle_ms = Some(FAILSAFE_TIMEOUT_MS);
         h.tick_1ms(1);
@@ -495,7 +520,7 @@ mod tests {
 
     #[test]
     fn a_release_ignores_a_ptp_unlock_shorter_than_the_timeout() {
-        let mut h = Harness::new();
+        let mut h = armed();
         set_mask(&mut h, 0);
         set_ptp_unlock_failsafe_timeout(&mut h, 1, Some(Duration::from_millis(50)));
         h.port.host_idle_ms = Some(FAILSAFE_TIMEOUT_MS);
@@ -633,7 +658,7 @@ mod tests {
 
     #[test]
     fn a_latch_keeps_the_failsafe() {
-        let mut h = Harness::new();
+        let mut h = armed();
         h.port.host_idle_ms = Some(FAILSAFE_TIMEOUT_MS);
         h.tick_1ms(1);
         h.port.host_idle_ms = Some(0);

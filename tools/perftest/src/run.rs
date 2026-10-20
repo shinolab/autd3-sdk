@@ -233,10 +233,6 @@ pub(crate) fn transport_option(cli: &Cli, emulator: Option<&UdpEmulator>) -> Tra
             ..Default::default()
         },
     };
-    option.heartbeat = Some(cli.heartbeat);
-    if let Some(reply_timeout) = cli.reply_timeout {
-        option.reply_timeout = reply_timeout;
-    }
     option.send_rate_limit = cli.send_rate_limit;
     if let Some(bytes) = cli.send_buffer {
         option.send_buffer = std::num::NonZeroUsize::new(bytes);
@@ -301,7 +297,14 @@ async fn run_with_option(option: &TransportOption, cli: &Cli) -> Result<RunOutpu
     let telemetry_start = client.read_telemetry().await.context("reading telemetry")?;
     if let Some(hold) = cli.hold {
         eprintln!("holding the connection idle for {hold:?}");
-        tokio::time::sleep(hold).await;
+        let until = tokio::time::Instant::now() + hold;
+        let mut heartbeat = tokio::time::interval(cli.heartbeat);
+        while tokio::time::Instant::now() < until {
+            tokio::select! {
+                _ = heartbeat.tick() => client.heartbeat().context("sending a heartbeat")?,
+                () = tokio::time::sleep_until(until) => {}
+            }
+        }
     }
 
     let sender = Sender::new(&geometry, cli)?;
@@ -470,13 +473,7 @@ impl Measurement {
 
     async fn report(&mut self, client: &Client) {
         self.live
-            .report_if_due(
-                client,
-                &self.counters,
-                self.traffic,
-                &self.bus_stats,
-                self.start,
-            )
+            .report_if_due(client, &self.counters, self.traffic, self.start)
             .await;
     }
 
@@ -491,7 +488,6 @@ impl Measurement {
         RunOutput {
             summary: Summary {
                 elapsed,
-                missed_heartbeat_replies: bus_stats.missed_heartbeat_replies(),
                 resets: bus_stats.resets(),
                 recoveries: bus_stats.recoveries(),
                 throughput_cmd_per_sec: per_sec(self.counters.ok),
@@ -613,7 +609,6 @@ impl Live {
         client: &Client,
         counters: &Counters,
         traffic: Traffic,
-        bus_stats: &BusStats,
         start: Instant,
     ) {
         let interval = self.last_report.elapsed();
@@ -630,7 +625,6 @@ impl Live {
             start.elapsed(),
             cmd_per_sec,
             counters,
-            bus_stats.missed_heartbeat_replies(),
             &latency,
             &traffic_rate,
         )

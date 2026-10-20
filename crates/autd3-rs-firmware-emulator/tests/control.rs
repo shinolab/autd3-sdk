@@ -1,9 +1,9 @@
 mod common;
 
 use autd3_cpu_wire::PatternBank;
-use autd3_cpu_wire::cpu_params;
+use autd3_cpu_wire::config::CpuConfig;
 use autd3_cpu_wire::fpga_params::FpgaStateFlags;
-use autd3_cpu_wire::payload::WritePatternRawPayload;
+use autd3_cpu_wire::payload::{SetCpuConfigPayload, WritePatternRawPayload};
 use autd3_rs_core::protocol::Cmd;
 use autd3_rs_core::value::Intensity;
 use autd3_rs_firmware_emulator::Device;
@@ -140,9 +140,24 @@ fn read_fpga_state_reports_thermal_and_default_banks() {
     assert_eq!(rx.data(), [pattern_mode]);
 }
 
+const FAILSAFE_TIMEOUT_MS: u32 = 500;
+
+fn enable_failsafe(device: &mut Device, seq: u8) {
+    let payload = SetCpuConfigPayload::encode(&CpuConfig {
+        failsafe_timeout: Some(std::time::Duration::from_millis(u64::from(
+            FAILSAFE_TIMEOUT_MS,
+        ))),
+        ..CpuConfig::default()
+    })
+    .unwrap();
+    let rx = device.send(&frame(seq, Cmd::SetCpuConfig, payload.as_bytes()));
+    assert_eq!(rx.status, autd3_cpu_wire::Error::None);
+}
+
 fn trip_failsafe(device: &mut Device) {
-    let timeout = u32::try_from(cpu_params::FAILSAFE_TIMEOUT.as_millis()).unwrap();
-    device.fpga_mut().set_host_idle_ms(Some(timeout));
+    device
+        .fpga_mut()
+        .set_host_idle_ms(Some(FAILSAFE_TIMEOUT_MS));
     device.tick_1ms();
     device.fpga_mut().set_host_idle_ms(Some(0));
     device.tick_1ms();
@@ -175,6 +190,7 @@ fn the_failsafe_gates_the_output_and_keeps_the_output_mask() {
     assert_eq!(emitting[1], Intensity::MIN);
     assert_eq!(emitting[2], Intensity::MAX);
 
+    enable_failsafe(&mut device, 2);
     trip_failsafe(&mut device);
     assert!(device.fpga().failsafe());
     assert!(
@@ -187,17 +203,17 @@ fn the_failsafe_gates_the_output_and_keeps_the_output_mask() {
     );
     assert!(device.fpga().output_mask_enabled(0));
     assert!(!device.fpga().output_mask_enabled(1));
-    let rx = device.send(&frame(2, Cmd::ReadFpgaState, &[]));
+    let rx = device.send(&frame(3, Cmd::ReadFpgaState, &[]));
     assert_ne!(rx.data()[0] & FpgaStateFlags::FAILSAFE.bits(), 0);
 
-    device.send(&frame(3, Cmd::SetOutputMask, &mask));
+    device.send(&frame(4, Cmd::SetOutputMask, &mask));
     assert!(device.fpga().failsafe());
 
-    let rx = device.send(&frame(4, Cmd::ReleaseFailsafe, &[]));
+    let rx = device.send(&frame(5, Cmd::ReleaseFailsafe, &[]));
     assert_eq!(rx.status, autd3_cpu_wire::Error::None);
     assert!(!device.fpga().failsafe());
     assert_eq!(device.fpga().emissions().1, emitting);
-    let rx = device.send(&frame(5, Cmd::ReadFpgaState, &[]));
+    let rx = device.send(&frame(6, Cmd::ReadFpgaState, &[]));
     assert_eq!(rx.data()[0] & FpgaStateFlags::FAILSAFE.bits(), 0);
 }
 
@@ -205,9 +221,18 @@ fn the_failsafe_gates_the_output_and_keeps_the_output_mask() {
 fn clear_releases_the_failsafe() {
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(0, Cmd::Reset, &[]));
+    enable_failsafe(&mut device, 0);
     trip_failsafe(&mut device);
     assert!(device.fpga().failsafe());
 
-    device.send(&frame(0, Cmd::Clear, &[]));
+    device.send(&frame(1, Cmd::Clear, &[]));
+    assert!(!device.fpga().failsafe());
+}
+
+#[test]
+fn a_silent_host_never_trips_the_failsafe_by_default() {
+    let mut device = Device::new(NUM_TRANSDUCERS);
+    device.send(&frame(0, Cmd::Reset, &[]));
+    trip_failsafe(&mut device);
     assert!(!device.fpga().failsafe());
 }

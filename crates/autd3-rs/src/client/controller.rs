@@ -15,7 +15,6 @@ use crate::geometry::Geometry;
 use crate::protocol::{Cmd, PAYLOAD_BYTES, Seq};
 use crate::telemetry::Telemetry;
 use crate::udp::frame_buf::FrameBuf;
-use crate::udp::pump::Pump;
 use crate::udp::{Sent, StateChecker, TransportOption, UdpBus, UdpError};
 use crate::value::{Intensity, SysTime};
 use autd3_rs_core::{BusStats, DeviceClock, DeviceMask};
@@ -58,7 +57,7 @@ impl Controller {
         }
         let bus = Arc::new(UdpBus::open_with_geometry(option, geometry)?);
         let shared = Shared::new(config);
-        let driver = Driver::new(Pump::new(Arc::clone(&bus)), Arc::clone(&shared));
+        let driver = Driver::new(Arc::clone(&bus), Arc::clone(&shared));
         let controller = Self {
             geometry: Arc::new(geometry.clone()),
             pool: SlotPool::new(num_devices, config.max_inflight.get()),
@@ -327,6 +326,30 @@ impl Controller {
             );
         }
         Ok(true)
+    }
+
+    pub fn heartbeat(&self) -> Result<(), Error> {
+        if let Some(e) = self.closed_error() {
+            return Err(e);
+        }
+        if let Err(e) = self.bus.heartbeat() {
+            return Err(match e {
+                UdpError::Closed => self.closed_error().unwrap_or(Error::Closed),
+                e => e.into(),
+            });
+        }
+        let driver_waits_too_long = self.bus.lost_deadline().is_some_and(|deadline| {
+            self.shared
+                .pending()
+                .driver_wakes_at
+                .is_none_or(|wakes_at| deadline < wakes_at)
+        });
+        if driver_waits_too_long && !self.bus.wake() {
+            tracing::debug!(
+                "could not wake the driver; a silent device is noticed at its next deadline"
+            );
+        }
+        Ok(())
     }
 
     pub async fn recover(&self) -> Result<DeviceMask, Error> {

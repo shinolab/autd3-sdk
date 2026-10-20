@@ -51,15 +51,10 @@ pub enum UdpError {
         not_ready: Vec<u8>,
         timeout: Duration,
     },
-    #[error("heartbeat must be longer than zero")]
-    ZeroHeartbeat,
     #[error("reply_timeout must be longer than zero")]
     ZeroReplyTimeout,
-    #[error("lost_timeout ({lost_timeout:?}) must be longer than heartbeat ({heartbeat:?})")]
-    LostTimeoutNotAboveHeartbeat {
-        lost_timeout: Duration,
-        heartbeat: Option<Duration>,
-    },
+    #[error("lost_timeout must be longer than zero")]
+    ZeroLostTimeout,
     #[error("response_timeout must be longer than zero")]
     ZeroResponseTimeout,
     #[error("timer_resolution must be at least {min:?}, but {got:?} was given")]

@@ -6,7 +6,6 @@ pub(crate) mod frame_buf;
 mod iface;
 mod option;
 mod pacer;
-pub(crate) mod pump;
 mod recovery;
 mod reply;
 mod simulator;

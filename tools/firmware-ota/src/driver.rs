@@ -15,6 +15,7 @@ use crate::fpga_image::FpgaFirmwareImage;
 use crate::image::CpuFirmwareImage;
 
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(1);
+pub const DEFAULT_HEARTBEAT: Duration = Duration::from_millis(10);
 const RETRANSMIT_INTERVAL: Duration = Duration::from_millis(100);
 const RESET_RETRANSMIT_INTERVAL: Duration = Duration::from_millis(20);
 const UPDATE_BEGIN_TIMEOUT: Duration = Duration::from_secs(30);
@@ -262,6 +263,7 @@ fn not_before(msg_id: u16, first: u16) -> bool {
 
 fn await_replies(
     bus: &UdpBus,
+    heartbeat: Duration,
     frames: &[Vec<u8>],
     timeout: Duration,
     retransmit: Duration,
@@ -273,9 +275,7 @@ fn await_replies(
         sent.push(bus.send(bus.reserve_msg_id(), frames)?.msg_id);
         let retransmit_at = (Instant::now() + retransmit).min(end);
         loop {
-            let keepalive = (Instant::now()
-                + bus.heartbeat_interval().unwrap_or(RETRANSMIT_INTERVAL))
-            .min(retransmit_at);
+            let keepalive = (Instant::now() + heartbeat).min(retransmit_at);
             let Some(reply) = bus.recv(keepalive)? else {
                 if Instant::now() >= retransmit_at {
                     break;
@@ -291,18 +291,37 @@ fn await_replies(
     Ok(false)
 }
 
-impl Exchange for UdpBus {
+pub struct UdpLink {
+    bus: UdpBus,
+    heartbeat: Duration,
+}
+
+impl UdpLink {
+    #[must_use]
+    pub fn new(bus: UdpBus, heartbeat: Duration) -> Self {
+        Self { bus, heartbeat }
+    }
+}
+
+impl From<UdpBus> for UdpLink {
+    fn from(bus: UdpBus) -> Self {
+        Self::new(bus, DEFAULT_HEARTBEAT)
+    }
+}
+
+impl Exchange for UdpLink {
     type Error = UdpError;
 
     fn num_devices(&self) -> usize {
-        UdpBus::num_devices(self)
+        self.bus.num_devices()
     }
 
     fn reset(&mut self, timeout: Duration) -> Result<bool, UdpError> {
         let frames = vec![Frame::new(Cmd::Reset).bytes(Seq::ZERO); self.num_devices()];
         let mut confirmed = vec![false; self.num_devices()];
         await_replies(
-            self,
+            &self.bus,
+            self.heartbeat,
             &frames,
             timeout,
             RETRANSMIT_INTERVAL,
@@ -324,19 +343,26 @@ impl Exchange for UdpBus {
     ) -> Result<Replies, UdpError> {
         let frames = vec![frame.bytes(seq); self.num_devices()];
         let mut replies: Vec<Option<DeviceReply>> = vec![None; self.num_devices()];
-        let first = self.next_msg_id();
-        await_replies(self, &frames, timeout, retransmit, |_, reply| {
-            if not_before(reply.msg_id, first)
-                && reply.ack == seq.get()
-                && replies[reply.device].is_none()
-            {
-                replies[reply.device] = Some(DeviceReply {
-                    status: reply.status,
-                    value: reply.data().to_vec(),
-                });
-            }
-            replies.iter().all(Option::is_some)
-        })?;
+        let first = self.bus.next_msg_id();
+        await_replies(
+            &self.bus,
+            self.heartbeat,
+            &frames,
+            timeout,
+            retransmit,
+            |_, reply| {
+                if not_before(reply.msg_id, first)
+                    && reply.ack == seq.get()
+                    && replies[reply.device].is_none()
+                {
+                    replies[reply.device] = Some(DeviceReply {
+                        status: reply.status,
+                        value: reply.data().to_vec(),
+                    });
+                }
+                replies.iter().all(Option::is_some)
+            },
+        )?;
         Ok(match replies.iter().position(Option::is_none) {
             Some(device) => Err(device),
             None => Ok(replies.into_iter().flatten().collect()),
@@ -346,17 +372,15 @@ impl Exchange for UdpBus {
     fn idle(&mut self, duration: Duration) -> Result<(), UdpError> {
         let start = Instant::now();
         while start.elapsed() < duration {
-            self.heartbeat()?;
-            let deadline = (Instant::now()
-                + self.heartbeat_interval().unwrap_or(RETRANSMIT_INTERVAL))
-            .min(start + duration);
-            while self.recv(deadline)?.is_some() {}
+            self.bus.heartbeat()?;
+            let deadline = (Instant::now() + self.heartbeat).min(start + duration);
+            while self.bus.recv(deadline)?.is_some() {}
         }
         Ok(())
     }
 
     fn close(&mut self) -> Result<(), UdpError> {
-        UdpBus::close(self)
+        self.bus.close()
     }
 }
 

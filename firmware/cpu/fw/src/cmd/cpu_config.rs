@@ -23,7 +23,7 @@ pub(crate) const fn default_config() -> CpuConfig {
         fpga_flash_max_polls: FPGA_FLASH_MAX_POLLS,
         sync_guard: cpu_params::SYNC_GUARD,
         update_activate_delay: cpu_params::UPDATE_ACTIVATE_DELAY,
-        failsafe_timeout: Some(cpu_params::FAILSAFE_TIMEOUT),
+        failsafe_timeout: None,
         ptp_unlock_failsafe_timeout: None,
         fpga_bus_wait: FpgaBusWait::Cycles3,
         cpu_watchdog_timeout: Some(cpu_params::CPU_WATCHDOG_TIMEOUT),
@@ -314,7 +314,7 @@ mod tests {
         h.deliver(&set_cpu_config(
             0,
             &CpuConfig {
-                failsafe_timeout: None,
+                failsafe_timeout: Some(Duration::from_millis(500)),
                 fpga_bus_wait: FpgaBusWait::Cycles2,
                 ptp: PtpConfig {
                     holdover: Duration::from_millis(500),
@@ -340,7 +340,7 @@ mod tests {
         h.cpu.tick_1ms(&mut h.port);
 
         let config = CpuConfig {
-            failsafe_timeout: None,
+            failsafe_timeout: Some(Duration::from_millis(500)),
             ..DEFAULT
         };
         h.deliver(&set_cpu_config(0, &config));
@@ -354,7 +354,7 @@ mod tests {
         h.deliver(&set_cpu_config(
             0,
             &CpuConfig {
-                failsafe_timeout: None,
+                failsafe_timeout: Some(Duration::from_millis(500)),
                 fpga_bus_wait: FpgaBusWait::Cycles2,
                 ..DEFAULT
             },
@@ -376,7 +376,7 @@ mod tests {
     fn a_frame_queued_before_a_requested_reset_is_processed_after_it() {
         let mut h = Harness::new();
         let config = CpuConfig {
-            failsafe_timeout: None,
+            failsafe_timeout: Some(Duration::from_millis(500)),
             ..DEFAULT
         };
         h.deliver_no_drain(&set_cpu_config(0, &config));
@@ -386,28 +386,49 @@ mod tests {
     }
 
     #[test]
-    fn a_requested_reset_re_enables_a_disabled_failsafe_and_keeps_the_gate_closed() {
+    fn a_requested_reset_disables_an_enabled_failsafe_and_keeps_the_gate_closed() {
         let mut h = Harness::new();
         h.deliver(&set_cpu_config(
             0,
             &CpuConfig {
-                failsafe_timeout: None,
+                failsafe_timeout: Some(Duration::from_millis(500)),
                 ..DEFAULT
             },
         ));
         h.port.host_idle_ms = Some(1000);
         h.cpu.tick_1ms(&mut h.port);
+        assert_eq!(h.telemetry().failsafe, 1);
+        assert!(CtlFlags::from_bits_retain(h.ctl(ADDR_CTL_FLAG)).contains(CtlFlags::FAILSAFE));
+
+        h.cpu.request_config_reset();
+        h.cpu.tick_1ms(&mut h.port);
+        assert_eq!(h.cpu.config().failsafe_timeout, None);
+        assert_eq!(h.telemetry().failsafe, 1);
+        assert!(CtlFlags::from_bits_retain(h.ctl(ADDR_CTL_FLAG)).contains(CtlFlags::FAILSAFE));
+
+        h.cpu.tick_1ms(&mut h.port);
+        assert_eq!(h.telemetry().failsafe, 1);
+    }
+
+    #[test]
+    fn a_requested_reset_stops_a_silent_host_from_tripping_an_enabled_failsafe() {
+        let mut h = Harness::new();
+        h.deliver(&set_cpu_config(
+            0,
+            &CpuConfig {
+                failsafe_timeout: Some(Duration::from_millis(500)),
+                ..DEFAULT
+            },
+        ));
+        h.port.host_idle_ms = Some(499);
+        h.cpu.tick_1ms(&mut h.port);
         assert_eq!(h.telemetry().failsafe, 0);
 
         h.cpu.request_config_reset();
+        h.port.host_idle_ms = Some(u32::MAX);
         h.cpu.tick_1ms(&mut h.port);
-        assert_eq!(h.telemetry().failsafe, 1);
-        assert!(CtlFlags::from_bits_retain(h.ctl(ADDR_CTL_FLAG)).contains(CtlFlags::FAILSAFE));
-
-        h.cpu.request_config_reset();
-        h.cpu.tick_1ms(&mut h.port);
-        assert_eq!(h.telemetry().failsafe, 1);
-        assert!(CtlFlags::from_bits_retain(h.ctl(ADDR_CTL_FLAG)).contains(CtlFlags::FAILSAFE));
+        assert_eq!(h.telemetry().failsafe, 0);
+        assert!(!CtlFlags::from_bits_retain(h.ctl(ADDR_CTL_FLAG)).contains(CtlFlags::FAILSAFE));
     }
 
     #[test]

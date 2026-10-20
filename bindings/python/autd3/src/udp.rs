@@ -104,7 +104,6 @@ impl TransportOption {
     #[new]
     #[pyo3(signature = (
         iface = CoreOption::default().iface,
-        heartbeat = CoreOption::default().heartbeat,
         reply_timeout = CoreOption::default().reply_timeout,
         lost_timeout = CoreOption::default().lost_timeout,
         response_timeout = CoreOption::default().response_timeout,
@@ -117,7 +116,6 @@ impl TransportOption {
     #[allow(clippy::too_many_arguments)]
     fn new(
         #[pyo3(from_py_with = extract_iface)] iface: CoreInterface,
-        #[pyo3(from_py_with = none_or_duration)] heartbeat: Option<Duration>,
         #[pyo3(from_py_with = extract_duration)] reply_timeout: Duration,
         #[pyo3(from_py_with = extract_duration)] lost_timeout: Duration,
         #[pyo3(from_py_with = extract_duration)] response_timeout: Duration,
@@ -129,7 +127,6 @@ impl TransportOption {
     ) -> Self {
         Self(CoreOption {
             iface,
-            heartbeat,
             reply_timeout,
             lost_timeout,
             response_timeout,
@@ -144,14 +141,6 @@ impl TransportOption {
     #[getter]
     fn iface(&self) -> Interface {
         Interface(self.0.iface.clone())
-    }
-
-    #[getter]
-    fn heartbeat<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
-        self.0
-            .heartbeat
-            .map(|interval| duration_to_py(py, interval))
-            .transpose()
     }
 
     #[getter]

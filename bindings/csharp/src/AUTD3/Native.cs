@@ -33,12 +33,6 @@ namespace AUTD3
         internal static extern int autd3_transport_option_get_iface_addr(IntPtr option, out IntPtr addr);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_set_heartbeat(IntPtr option, [MarshalAs(UnmanagedType.I1)] bool hasValue, ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_get_heartbeat(IntPtr option, [MarshalAs(UnmanagedType.I1)] out bool hasValue, out ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_transport_option_set_timer_resolution(IntPtr option, [MarshalAs(UnmanagedType.I1)] bool hasValue, ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
@@ -230,6 +224,9 @@ namespace AUTD3
         internal static extern int autd3_client_device_time_now(ClientHandle client, out ulong ns, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_client_heartbeat(ClientHandle client, byte[] outErr, UIntPtr outErrLen);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_client_get_config(ClientHandle client);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
@@ -288,9 +285,6 @@ namespace AUTD3
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern ulong autd3_bus_stats_heartbeats(BusStatsHandle stats);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern ulong autd3_bus_stats_missed_heartbeat_replies(BusStatsHandle stats);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern ulong autd3_bus_stats_recoveries(BusStatsHandle stats);

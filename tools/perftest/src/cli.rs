@@ -91,16 +91,9 @@ pub(crate) struct Cli {
         long,
         value_parser = humantime::parse_duration,
         default_value = DEFAULT_HEARTBEAT,
-        help = "Heartbeat interval while nothing is sent, e.g. 10ms (maps to TransportOption.heartbeat)."
+        help = "Interval of Client::heartbeat while --hold keeps the connection idle, e.g. 10ms."
     )]
     pub heartbeat: Duration,
-    #[arg(
-        long = "reply-timeout",
-        value_parser = humantime::parse_duration,
-        help = "How long a heartbeat waits for every reply (maps to TransportOption.reply_timeout). \
-                Omit to keep the library default."
-    )]
-    pub reply_timeout: Option<Duration>,
     #[arg(
         long = "send-rate-limit",
         help = "Cap on the line occupancy of the sends in percent of the device link speed, e.g. 95 \

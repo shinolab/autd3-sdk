@@ -7,7 +7,7 @@ use autd3_rs_firmware_emulator::autd3_cpu_fw::{
     FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH,
 };
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
-use autd3_rs_firmware_ota::{Driver, DriverError};
+use autd3_rs_firmware_ota::{Driver, DriverError, UdpLink};
 
 const CONFIRMED: Option<RunningImage> = Some(RunningImage::Confirmed);
 
@@ -27,8 +27,8 @@ fn bus(emulator: &UdpEmulator) -> UdpBus {
     bus_with(emulator, &option)
 }
 
-fn open(emulator: &UdpEmulator) -> Driver<UdpBus> {
-    Driver::open(bus(emulator)).unwrap()
+fn open(emulator: &UdpEmulator) -> Driver<UdpLink> {
+    Driver::open(UdpLink::from(bus(emulator))).unwrap()
 }
 
 #[test]
@@ -90,7 +90,7 @@ fn a_lost_reset_reply_is_recovered_when_the_lost_timeout_outlasts_the_retransmis
     let bus = bus_with(&emulator, &option);
 
     emulator.drop_next_replies(1, 1);
-    let mut driver = Driver::open(bus).unwrap();
+    let mut driver = Driver::open(UdpLink::from(bus)).unwrap();
 
     assert_eq!(driver.read_firmware_info().unwrap().len(), 2);
 }
@@ -104,7 +104,7 @@ fn a_handshake_nobody_answers_is_reported_as_an_unconfirmed_reset() {
     emulator.set_muted(1, true);
 
     assert!(matches!(
-        Driver::open(bus),
+        Driver::open(UdpLink::from(bus)),
         Err(DriverError::ResetUnconfirmed)
     ));
 }
@@ -135,5 +135,8 @@ fn a_closed_bus_fails_the_next_request_with_a_network_error() {
     let bus = bus(&emulator);
     bus.close().unwrap();
 
-    assert!(matches!(Driver::open(bus), Err(DriverError::Network(_))));
+    assert!(matches!(
+        Driver::open(UdpLink::from(bus)),
+        Err(DriverError::Network(_))
+    ));
 }

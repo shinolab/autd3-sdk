@@ -70,9 +70,9 @@ mod tests {
     }
 
     #[test]
-    fn a_disabled_failsafe_is_carried_as_none() {
+    fn an_enabled_failsafe_is_carried_as_some() {
         let config = CpuConfig {
-            failsafe_timeout: None,
+            failsafe_timeout: Some(Duration::from_millis(500)),
             ..CpuConfig::default()
         };
         let (encoded, out) = encode(&SetCpuConfig::new(config)).unwrap();

@@ -6,12 +6,12 @@ use std::time::Instant;
 use anyhow::{Context, Result, bail};
 
 use autd3_rs::commands::{Clear, CpuConfig, ReleaseFailsafe, SetCpuConfig, Synchronize};
-use autd3_rs::{Client, DeviceState, Frames};
+use autd3_rs::{DeviceState, Frames};
 
 use crate::cases::cpu_config::{silence, states};
 use crate::cases::pattern_util::expect_firmware_ok;
 use crate::io::prompt;
-use crate::{Ctx, Link};
+use crate::{Ctx, Link, Session};
 
 const TIMEOUT: Duration = Duration::from_secs(1);
 const LONGER_TIMEOUT: Duration = Duration::from_secs(3);
@@ -139,7 +139,6 @@ async fn all_ready_within(ctx: &Ctx<'_>, window: Duration) -> (bool, Duration) {
 
 async fn config(ctx: &Ctx<'_>, cpu_watchdog_timeout: Option<Duration>) -> Result<()> {
     ctx.send(SetCpuConfig::new(CpuConfig {
-        failsafe_timeout: None,
         cpu_watchdog_timeout,
         ..CpuConfig::default()
     }))
@@ -274,7 +273,7 @@ async fn halts(ctx: &Ctx<'_>, target: usize) -> Result<()> {
     outcome
 }
 
-async fn reset(client: Client, link: &Link<'_>, target: usize) -> Result<Client> {
+async fn reset(client: Session, link: &Link<'_>, target: usize) -> Result<Session> {
     println!("-- a CPU reset longer than the timeout");
     let before = client.read_telemetry().await?;
     if let Err(e) = client.close().await {
@@ -332,7 +331,7 @@ async fn target(devices: usize) -> Option<usize> {
     answer.parse::<usize>().ok().filter(|i| *i < devices)
 }
 
-pub(crate) async fn run(client: Client, link: &Link<'_>) -> Result<Client> {
+pub(crate) async fn run(client: Session, link: &Link<'_>) -> Result<Session> {
     let Some(target) = target(client.num_devices()).await else {
         println!("  [SKIP] not a device index");
         return Ok(client);
@@ -342,7 +341,7 @@ pub(crate) async fn run(client: Client, link: &Link<'_>) -> Result<Client> {
         client: &client,
         geometry: link.geometry,
         states: &states,
-        heartbeat: link.option.heartbeat.unwrap_or_default(),
+        heartbeat: link.heartbeat,
         lost_timeout: link.option.lost_timeout,
         mute: link.mute,
     };

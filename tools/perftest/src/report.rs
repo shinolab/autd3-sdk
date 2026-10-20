@@ -148,13 +148,12 @@ pub(crate) fn interval_lines(
     elapsed: Duration,
     cmd_per_sec: f64,
     counters: &Counters,
-    missed_heartbeat_replies: u64,
     latency: &LatencyStats,
     traffic: &TrafficRate,
 ) -> [String; 3] {
     [
         format!(
-            "[{:>8.1}s] {cmd_per_sec:>10.1} cmd/s  ok {}  timeout {}  dev_err {}  net_err {}  missed {missed_heartbeat_replies}",
+            "[{:>8.1}s] {cmd_per_sec:>10.1} cmd/s  ok {}  timeout {}  dev_err {}  net_err {}",
             elapsed.as_secs_f64(),
             counters.ok,
             counters.timeouts,
@@ -234,7 +233,6 @@ pub(crate) fn print_summary(s: &Summary) {
             println!("    code {code:#04x} : {count}");
         }
     }
-    println!("  missed heartbeat replies: {}", s.missed_heartbeat_replies);
     println!("  resets since open       : {}", s.resets);
     println!("  recoveries since open   : {}", s.recoveries);
 

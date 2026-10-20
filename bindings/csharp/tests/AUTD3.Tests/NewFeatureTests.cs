@@ -394,8 +394,8 @@ namespace AUTD3.Tests
             using var withoutPauseFrames = Frames.Encode(geometry, new SetCpuConfig(new CpuConfig { Ptp = new PtpConfig { PauseQuanta = null } }));
             Assert.Equal(1, withoutPauseFrames.Length);
 
-            using var disabledFrames = Frames.Encode(geometry, new SetCpuConfig(new CpuConfig { FailsafeTimeout = null }));
-            Assert.Equal(1, disabledFrames.Length);
+            using var enabledFrames = Frames.Encode(geometry, new SetCpuConfig(new CpuConfig { FailsafeTimeout = TimeSpan.FromMilliseconds(500) }));
+            Assert.Equal(1, enabledFrames.Length);
         }
 
         [Fact]

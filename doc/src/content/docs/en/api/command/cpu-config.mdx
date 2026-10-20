@@ -34,7 +34,7 @@ Behavior is not guaranteed when any other field is changed from its default.
 | `fpga_flash_max_polls`       | `NonZeroU32` | 2,000,000,000 | Maximum number of polls while waiting for an FPGA flash operation (FPGA firmware update) to complete |
 | `sync_guard`                 | `Duration`   | 250 μs        | Margin for choosing the synchronization start time |
 | `update_activate_delay`      | `Duration`   | 100 ms        | Grace period between the CPU firmware update activation and the reboot. |
-| `failsafe_timeout`           | `Option<Duration>` | 500 ms  | A device stops its output once nothing has arrived from the host for this long (failsafe). `None` disables the failsafe |
+| `failsafe_timeout`           | `Option<Duration>` | `None`  | A device stops its output once nothing has arrived from the host for this long (failsafe). `None` disables the failsafe |
 | `ptp_unlock_failsafe_timeout` | `Option<Duration>` | `None` | A device stops its output once it has been without its PTP lock for this long. `None` disables it |
 | `fpga_bus_wait`              | `FpgaBusWait` | `Cycles3`    | Wait cycles of the bus the CPU reads and writes the FPGA through. `Cycles2` or `Cycles3` |
 | `cpu_watchdog_timeout`       | `Option<Duration>` | 1 s     | Once the CPU firmware has stopped for this long, the device stops the output. `None` disables it |
@@ -63,8 +63,9 @@ Behavior is not guaranteed when any other field is changed from its default.
 In C#, the `Duration` fields are passed as `TimeSpan`, so they can only be specified in 100 ns units (the default 100 ns of `lock_threshold` is `TimeSpan.FromTicks(1)`).
 
 :::danger
-With `failsafe_timeout` set to `None`, a device keeps emitting ultrasound even when communication is lost because the host crashed or a cable was unplugged.
-Keep `failsafe_timeout` well above twice the `heartbeat`. If it is too short, the output stops even while the host is running.
+`failsafe_timeout` is `None` (disabled) by default, so a device keeps emitting ultrasound even when communication is lost because the host crashed or a cable was unplugged.
+Set `failsafe_timeout` if the output should stop when communication is lost.
+If you set it, call [`heartbeat()`](/autd3-sdk/en/api/basics/client/#liveness-check) periodically while there is nothing to send, and keep `failsafe_timeout` well above twice that interval. If it is too short, the output stops even while the host is running.
 With `ptp_unlock_failsafe_timeout` set, a device that loses its PTP lock (any device but the first one) stops its output the same way as the failsafe once this long has passed since the loss.
 Locking again takes about 1 s with the default settings, so a shorter value stops the output on every loss of the lock.
 

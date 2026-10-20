@@ -9,7 +9,6 @@ use super::pacer::MIN_PERCENT;
 #[derive(Clone, Debug, PartialEq)]
 pub struct TransportOption {
     pub iface: Interface,
-    pub heartbeat: Option<Duration>,
     pub reply_timeout: Duration,
     pub lost_timeout: Duration,
     pub response_timeout: Duration,
@@ -24,7 +23,6 @@ impl Default for TransportOption {
     fn default() -> Self {
         Self {
             iface: Interface::Auto,
-            heartbeat: Some(Duration::from_millis(10)),
             reply_timeout: Duration::from_millis(1),
             lost_timeout: Duration::from_millis(100),
             response_timeout: Duration::from_millis(200),
@@ -39,17 +37,11 @@ impl Default for TransportOption {
 
 impl TransportOption {
     pub fn validate(&self) -> Result<(), UdpError> {
-        if self.heartbeat.is_some_and(|heartbeat| heartbeat.is_zero()) {
-            return Err(UdpError::ZeroHeartbeat);
-        }
         if self.reply_timeout.is_zero() {
             return Err(UdpError::ZeroReplyTimeout);
         }
-        if self.lost_timeout <= self.heartbeat.unwrap_or_default() {
-            return Err(UdpError::LostTimeoutNotAboveHeartbeat {
-                lost_timeout: self.lost_timeout,
-                heartbeat: self.heartbeat,
-            });
+        if self.lost_timeout.is_zero() {
+            return Err(UdpError::ZeroLostTimeout);
         }
         if self.response_timeout.is_zero() {
             return Err(UdpError::ZeroResponseTimeout);
@@ -86,7 +78,6 @@ mod tests {
     fn the_defaults_follow_the_spec() {
         let option = TransportOption::default();
         assert_eq!(option.iface, Interface::Auto);
-        assert_eq!(option.heartbeat, Some(Duration::from_millis(10)));
         assert_eq!(option.reply_timeout, Duration::from_millis(1));
         assert_eq!(option.lost_timeout, Duration::from_millis(100));
         assert_eq!(option.response_timeout, Duration::from_millis(200));
@@ -134,19 +125,19 @@ mod tests {
     }
 
     #[rstest]
-    #[case::zero_heartbeat(
-        TransportOption {
-            heartbeat: Some(Duration::ZERO),
-            ..TransportOption::default()
-        },
-        |e: &UdpError| matches!(e, UdpError::ZeroHeartbeat)
-    )]
     #[case::zero_reply_timeout(
         TransportOption {
             reply_timeout: Duration::ZERO,
             ..TransportOption::default()
         },
         |e: &UdpError| matches!(e, UdpError::ZeroReplyTimeout)
+    )]
+    #[case::zero_lost_timeout(
+        TransportOption {
+            lost_timeout: Duration::ZERO,
+            ..TransportOption::default()
+        },
+        |e: &UdpError| matches!(e, UdpError::ZeroLostTimeout)
     )]
     #[case::zero_response_timeout(
         TransportOption {
@@ -172,7 +163,6 @@ mod tests {
     #[test]
     fn the_durations_have_no_upper_bound() {
         let option = TransportOption {
-            heartbeat: Duration::MAX.checked_sub(Duration::from_nanos(1)),
             reply_timeout: Duration::MAX,
             lost_timeout: Duration::MAX,
             response_timeout: Duration::MAX,
@@ -185,32 +175,12 @@ mod tests {
     }
 
     #[test]
-    fn a_heartbeat_longer_than_the_default_failsafe_is_allowed() {
+    fn the_shortest_lost_timeout_is_allowed() {
         let option = TransportOption {
-            heartbeat: Some(Duration::from_secs(1)),
-            lost_timeout: Duration::from_secs(2),
-            ..TransportOption::default()
-        };
-        assert!(option.validate().is_ok());
-    }
-
-    #[test]
-    fn a_disabled_heartbeat_is_allowed() {
-        let option = TransportOption {
-            heartbeat: None,
             lost_timeout: Duration::from_nanos(1),
             ..TransportOption::default()
         };
         assert!(option.validate().is_ok());
-        let option = TransportOption {
-            heartbeat: None,
-            lost_timeout: Duration::ZERO,
-            ..TransportOption::default()
-        };
-        assert!(matches!(
-            option.validate(),
-            Err(UdpError::LostTimeoutNotAboveHeartbeat { .. })
-        ));
     }
 
     #[test]
@@ -220,19 +190,6 @@ mod tests {
             ..TransportOption::default()
         };
         assert!(option.validate().is_ok());
-    }
-
-    #[test]
-    fn the_lost_timeout_must_outlast_the_heartbeat() {
-        let option = TransportOption {
-            heartbeat: Some(Duration::from_millis(20)),
-            lost_timeout: Duration::from_millis(20),
-            ..TransportOption::default()
-        };
-        assert!(matches!(
-            option.validate(),
-            Err(UdpError::LostTimeoutNotAboveHeartbeat { .. })
-        ));
     }
 
     #[test]

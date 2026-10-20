@@ -2,6 +2,8 @@ mod cases;
 mod cli;
 mod io;
 
+use std::ops::Deref;
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -28,19 +30,61 @@ pub struct Ctx<'a> {
     pub mute: bool,
 }
 
+pub struct Session {
+    client: Arc<Client>,
+    keepalive: tokio::task::JoinHandle<()>,
+}
+
+impl Session {
+    pub fn new(client: Client, heartbeat: Duration) -> Self {
+        let client = Arc::new(client);
+        let keepalive = tokio::spawn({
+            let client = Arc::clone(&client);
+            async move {
+                let mut ticker = tokio::time::interval(heartbeat);
+                ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+                loop {
+                    ticker.tick().await;
+                    if client.heartbeat().is_err() {
+                        break;
+                    }
+                }
+            }
+        });
+        Self { client, keepalive }
+    }
+}
+
+impl Deref for Session {
+    type Target = Client;
+
+    fn deref(&self) -> &Client {
+        &self.client
+    }
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
+        self.keepalive.abort();
+    }
+}
+
 pub struct Link<'a> {
     pub geometry: &'a Geometry,
     pub option: &'a TransportOption,
     pub config: ClientConfig,
+    pub heartbeat: Duration,
     pub mute: bool,
 }
 
 impl Link<'_> {
-    async fn open(&self) -> Result<Client, Error> {
-        Client::open(self.geometry, self.option, self.config).await
+    async fn open(&self) -> Result<Session, Error> {
+        Client::open(self.geometry, self.option, self.config)
+            .await
+            .map(|client| Session::new(client, self.heartbeat))
     }
 
-    pub async fn reopen(&self) -> Result<Client> {
+    pub async fn reopen(&self) -> Result<Session> {
         let mut attempt = 1;
         loop {
             match self.open().await {
@@ -192,7 +236,6 @@ async fn run(cli: &Cli) -> Result<()> {
             Some(port) => Interface::Simulator(port),
             None => cli.interface.clone().into(),
         },
-        heartbeat: Some(heartbeat),
         lost_timeout: cli
             .lost_timeout_ms
             .map_or(default.lost_timeout, Duration::from_millis),
@@ -202,6 +245,7 @@ async fn run(cli: &Cli) -> Result<()> {
         geometry: &geometry,
         option: &option,
         config: cli.client_config(),
+        heartbeat,
         mute: cli.mute,
     };
     let mut client = link.open().await.context("opening the devices")?;

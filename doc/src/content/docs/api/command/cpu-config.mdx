@@ -34,7 +34,7 @@ import csFullSample from "@codes/csharp/examples/api/command/cpu-config-example.
 | `fpga_flash_max_polls`       | `NonZeroU32` | 2,000,000,000 | FPGA フラッシュ操作 (FPGA ファームウェア更新) の完了待ちのポーリング上限回数 |
 | `sync_guard`                 | `Duration`   | 250 μs        | 同期開始時刻の選択マージン                                                   |
 | `update_activate_delay`      | `Duration`   | 100 ms        | CPU ファームウェア更新の適用指示から再起動までの猶予  |
-| `failsafe_timeout`           | `Option<Duration>` | 500 ms  | ホストからの通信がこの時間途絶えるとデバイスが出力を止める (failsafe). `None` は failsafe 無効 |
+| `failsafe_timeout`           | `Option<Duration>` | `None`  | ホストからの通信がこの時間途絶えるとデバイスが出力を止める (failsafe). `None` は failsafe 無効 |
 | `ptp_unlock_failsafe_timeout` | `Option<Duration>` | `None` | PTP のロックを失ったままこの時間が経つと, そのデバイスが出力を止める. `None` は無効 |
 | `fpga_bus_wait`              | `FpgaBusWait` | `Cycles3`    | CPU が FPGA を読み書きするバスのウェイト周期数. `Cycles2` または `Cycles3` |
 | `cpu_watchdog_timeout`       | `Option<Duration>` | 1 s     | CPU ファームウェアがこの時間止まると出力を止める. `None` は無効 |
@@ -63,8 +63,9 @@ import csFullSample from "@codes/csharp/examples/api/command/cpu-config-example.
 C# では `Duration` の項目を `TimeSpan` で渡すので, 100 ns 単位でしか指定できない (`lock_threshold` の既定値 100 ns は `TimeSpan.FromTicks(1)`).
 
 :::danger
-`failsafe_timeout` を `None` にすると, ホストのクラッシュやケーブル断で通信が途絶えてもデバイスは超音波を出力し続ける.
-`failsafe_timeout` は `heartbeat` の 2 倍より十分長く保つこと. 短すぎるとホストが動いていても出力が止まる.
+`failsafe_timeout` は既定で `None` (無効) で, ホストのクラッシュやケーブル断で通信が途絶えてもデバイスは超音波を出力し続ける.
+途絶えたときに出力を止めたい場合は `failsafe_timeout` を指定する.
+指定した場合, 送るものが無い間は [`heartbeat()`](/autd3-sdk/api/basics/client/#生存確認) を周期的に呼び, `failsafe_timeout` はその間隔の 2 倍より十分長く保つこと. 短すぎるとホストが動いていても出力が止まる.
 `ptp_unlock_failsafe_timeout` を指定すると, PTP のロックを失ったデバイス (先頭のデバイス以外) は, 失ってからこの時間が経つと failsafe と同じ方法で出力を止める.
 再ロックには既定の設定で 1 s 程度かかるので, それより短い値を指定するとロックを失うたびに必ず出力が止まる.
 

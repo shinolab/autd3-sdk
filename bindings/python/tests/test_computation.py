@@ -664,7 +664,7 @@ def test_cpu_config_defaults() -> None:
     assert config.fpga_flash_max_polls == 2_000_000_000
     assert config.sync_guard.as_nanos() == autd3.Duration.from_micros(250).as_nanos()
     assert config.update_activate_delay.as_millis() == 100
-    assert config.failsafe_timeout == autd3.Duration.from_millis(500)
+    assert config.failsafe_timeout is None
     assert config.ptp_unlock_failsafe_timeout is None
     assert config.fpga_bus_wait == autd3.commands.FpgaBusWait.Cycles3
     assert config.fpga_bus_wait.cycles == 3
@@ -755,15 +755,15 @@ def test_cpu_config_fields() -> None:
     assert partial.sync_guard.as_nanos() == 500_000
     assert partial.fpga_wait_update_max_polls == autd3.commands.CpuConfig().fpga_wait_update_max_polls
     assert partial.ptp == autd3.commands.PtpConfig()
-    assert partial.failsafe_timeout == autd3.Duration.from_millis(500)
+    assert partial.failsafe_timeout is None
 
-    disabled = autd3.commands.CpuConfig(failsafe_timeout=None)
-    assert disabled.failsafe_timeout is None
-    assert disabled != autd3.commands.CpuConfig()
+    enabled = autd3.commands.CpuConfig(failsafe_timeout=autd3.Duration.from_millis(500))
+    assert enabled.failsafe_timeout == autd3.Duration.from_millis(500)
+    assert enabled != autd3.commands.CpuConfig()
 
     guarded = autd3.commands.CpuConfig(ptp_unlock_failsafe_timeout=autd3.Duration.from_secs(2))
     assert guarded.ptp_unlock_failsafe_timeout == autd3.Duration.from_secs(2)
-    assert guarded.failsafe_timeout == autd3.Duration.from_millis(500)
+    assert guarded.failsafe_timeout is None
     assert guarded != autd3.commands.CpuConfig()
 
     fast = autd3.commands.CpuConfig(fpga_bus_wait=autd3.commands.FpgaBusWait.Cycles2)
@@ -802,7 +802,7 @@ def test_set_cpu_config_builds() -> None:
     commands: list[autd3.commands.Command] = []
     commands.append(autd3.commands.SetCpuConfig())
     commands.append(autd3.commands.SetCpuConfig(autd3.commands.CpuConfig(sync_guard=autd3.Duration.from_micros(500))))
-    commands.append(autd3.commands.SetCpuConfig(autd3.commands.CpuConfig(failsafe_timeout=None)))
+    commands.append(autd3.commands.SetCpuConfig(autd3.commands.CpuConfig(failsafe_timeout=autd3.Duration.from_millis(500))))
     assert len(autd3.Frames.encode(geo, commands)) == 3
 
     commands = []
@@ -919,7 +919,7 @@ def test_device_accessors() -> None:
 
 def test_transport_options_construct() -> None:
     autd3.TransportOption()
-    autd3.TransportOption(iface="eth0", heartbeat=autd3.Duration.from_millis(2))
+    autd3.TransportOption(iface="eth0", lost_timeout=autd3.Duration.from_millis(2))
 
 
 def test_loop_behavior_and_transition_mode() -> None:

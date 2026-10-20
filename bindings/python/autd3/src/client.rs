@@ -108,10 +108,6 @@ impl BusStats {
         self.0.heartbeats()
     }
 
-    fn missed_heartbeat_replies(&self) -> u64 {
-        self.0.missed_heartbeat_replies()
-    }
-
     fn recoveries(&self) -> u64 {
         self.0.recoveries()
     }
@@ -130,11 +126,10 @@ impl BusStats {
 
     fn __repr__(&self) -> String {
         format!(
-            "BusStats(frames={}, resets={}, heartbeats={}, missed_heartbeat_replies={}, recoveries={}, acked_frames={}, worst_ack_latency_ns={}, mean_ack_latency_ns={})",
+            "BusStats(frames={}, resets={}, heartbeats={}, recoveries={}, acked_frames={}, worst_ack_latency_ns={}, mean_ack_latency_ns={})",
             self.0.frames(),
             self.0.resets(),
             self.0.heartbeats(),
-            self.0.missed_heartbeat_replies(),
             self.0.recoveries(),
             self.0.acked_frames(),
             self.0.worst_ack_latency_ns(),
@@ -540,6 +535,11 @@ impl Client {
         self.inner
             .device_time_now()
             .map(SysTime)
+            .map_err(|e| client_pyerr(py, &e))
+    }
+
+    fn heartbeat(&self, py: Python<'_>) -> PyResult<()> {
+        py.detach(|| self.inner.heartbeat())
             .map_err(|e| client_pyerr(py, &e))
     }
 

@@ -44,6 +44,8 @@ The following is an example that calls `check` at fixed intervals and outputs on
 <CodeTabs rust={excerpt(sample, "poll")} python={excerpt(pySample, "poll")} csharp={excerpt(csSample, "poll")} />
 
 How often to call `check` is up to the user.
+The state is updated from the replies of the devices, so while you send no frame, send liveness checks with [`heartbeat()`](/autd3-sdk/en/api/basics/client/#liveness-check) (the example above sends one at the top of the loop).
+While nothing is sent, a device does not become `Lost` even if the communication with it is cut off.
 
 ## Recovery from Lost
 
