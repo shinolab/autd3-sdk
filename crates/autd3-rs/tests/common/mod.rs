@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use autd3_rs::commands::ActivateModulationBank;
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::udp::{UdpError, UdpOption};
+use autd3_rs::udp::{TransportOption, UdpError};
 use autd3_rs::value::{ModulationBank, TransitionMode};
 use autd3_rs::{Client, ClientConfig, Error};
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
@@ -28,8 +28,8 @@ pub(crate) fn emulator(num_devices: usize) -> UdpEmulator {
     UdpEmulator::spawn(num_devices).unwrap()
 }
 
-pub(crate) fn option(emulator: &UdpEmulator) -> UdpOption {
-    UdpOption {
+pub(crate) fn option(emulator: &UdpEmulator) -> TransportOption {
+    TransportOption {
         iface: emulator.interface(),
         heartbeat: None,
         lost_timeout: PATIENCE,
@@ -37,12 +37,12 @@ pub(crate) fn option(emulator: &UdpEmulator) -> UdpOption {
         response_timeout: Duration::from_millis(50),
         enumeration_timeout: Duration::from_secs(1),
         sync_timeout: Duration::from_secs(5),
-        ..UdpOption::default()
+        ..TransportOption::default()
     }
 }
 
-pub(crate) fn monitoring_option(emulator: &UdpEmulator) -> UdpOption {
-    UdpOption {
+pub(crate) fn monitoring_option(emulator: &UdpEmulator) -> TransportOption {
+    TransportOption {
         heartbeat: Some(Duration::from_millis(10)),
         lost_timeout: LOST_TIMEOUT,
         ..option(emulator)
@@ -65,7 +65,7 @@ pub(crate) fn patient_config() -> ClientConfig {
 
 pub(crate) async fn open_with(
     emulator: &UdpEmulator,
-    option: &UdpOption,
+    option: &TransportOption,
     config: ClientConfig,
 ) -> Client {
     Client::open(&geometry(emulator.num_devices()), option, config)

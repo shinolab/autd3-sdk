@@ -8,7 +8,7 @@ use anyhow::Result;
 
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::rt::{TracingOption, init_tracing};
-use autd3_rs::{Client, ClientConfig, Telemetry, UdpOption};
+use autd3_rs::{Client, ClientConfig, Telemetry, TransportOption};
 
 const POLL_INTERVAL: Duration = Duration::from_secs(1);
 
@@ -34,7 +34,12 @@ async fn main() -> Result<()> {
     let _log_guard = init_tracing(TracingOption::default());
 
     let geometry = Geometry::new(vec![Autd3::default()]);
-    let client = Client::open(&geometry, UdpOption::default(), ClientConfig::default()).await?;
+    let client = Client::open(
+        &geometry,
+        &TransportOption::default(),
+        ClientConfig::default(),
+    )
+    .await?;
 
     println!("devices: {}", client.num_devices());
     let mut baseline: Option<Vec<Telemetry>> = None;

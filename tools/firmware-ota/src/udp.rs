@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use clap::Args;
 
-use autd3_rs::{Interface, UdpBus, UdpError, UdpOption};
+use autd3_rs::{Interface, TransportOption, UdpBus, UdpError};
 
 const LOST_AFTER_HEARTBEATS: u32 = 10;
 
@@ -44,10 +44,10 @@ fn us(value: Option<u64>) -> Option<Duration> {
 
 impl UdpArgs {
     #[must_use]
-    pub fn option(&self) -> UdpOption {
-        let default = UdpOption::default();
+    pub fn option(&self) -> TransportOption {
+        let default = TransportOption::default();
         let heartbeat = us(self.heartbeat_us).or(default.heartbeat);
-        UdpOption {
+        TransportOption {
             iface: match self.simulator {
                 Some(port) => Interface::Simulator(port),
                 None => self.interface.clone().into(),
@@ -70,7 +70,7 @@ impl UdpArgs {
     }
 }
 
-fn enumerate(option: &UdpOption, expected: Option<usize>) -> Result<UdpBus, UdpError> {
+fn enumerate(option: &TransportOption, expected: Option<usize>) -> Result<UdpBus, UdpError> {
     match expected {
         Some(devices) => UdpBus::open_unsynchronized(option, devices),
         None => UdpBus::open_unsynchronized_all(option),
@@ -129,7 +129,7 @@ mod tests {
 
     #[test]
     fn no_udp_arguments_mean_the_library_defaults() {
-        assert_eq!(parse(&[]).option(), UdpOption::default());
+        assert_eq!(parse(&[]).option(), TransportOption::default());
     }
 
     #[test]
@@ -146,13 +146,13 @@ mod tests {
         ]);
         assert_eq!(
             args.option(),
-            UdpOption {
+            TransportOption {
                 iface: Interface::Name("eth1".to_string()),
                 heartbeat: Some(Duration::from_millis(20)),
                 lost_timeout: Duration::from_millis(200),
                 response_timeout: Duration::from_millis(300),
                 enumeration_timeout: Duration::from_secs(20),
-                ..UdpOption::default()
+                ..TransportOption::default()
             }
         );
     }
@@ -162,13 +162,13 @@ mod tests {
     fn the_device_count_is_found_in_a_single_enumeration() {
         for devices in [1, 2, 5] {
             let emulator = UdpEmulator::spawn(devices).unwrap();
-            let option = UdpOption {
+            let option = TransportOption {
                 iface: emulator.interface(),
                 reply_timeout: Duration::from_millis(50),
                 response_timeout: Duration::from_millis(50),
                 enumeration_timeout: Duration::from_secs(1),
                 sync_timeout: Duration::from_secs(5),
-                ..UdpOption::default()
+                ..TransportOption::default()
             };
             let bus = enumerate(&option, None).unwrap();
             assert_eq!(bus.num_devices(), devices);
@@ -180,13 +180,13 @@ mod tests {
     #[ignore = "depends on real time"]
     fn a_given_device_count_must_match_the_chain() {
         let emulator = UdpEmulator::spawn(3).unwrap();
-        let option = UdpOption {
+        let option = TransportOption {
             iface: emulator.interface(),
             reply_timeout: Duration::from_millis(50),
             response_timeout: Duration::from_millis(50),
             enumeration_timeout: Duration::from_secs(1),
             sync_timeout: Duration::from_secs(5),
-            ..UdpOption::default()
+            ..TransportOption::default()
         };
         let err = enumerate(&option, Some(2)).err().unwrap();
         assert!(

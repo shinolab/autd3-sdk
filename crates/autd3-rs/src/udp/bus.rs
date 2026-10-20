@@ -15,7 +15,7 @@ use super::channel::{Channel, Datagram};
 use super::enumerate::{Bringup, Units, bring_up, same_endpoint};
 use super::error::UdpError;
 use super::iface;
-use super::option::UdpOption;
+use super::option::TransportOption;
 use super::recovery::Recovery;
 use super::reply::Reply;
 use super::simulator;
@@ -70,7 +70,6 @@ pub struct UdpBus {
     heartbeat: Option<Duration>,
     reply_timeout: Duration,
     lost_timeout: Duration,
-    response_timeout: Duration,
     msg_id: AtomicU16,
     heartbeat_from: AtomicUsize,
     last_send: Mutex<Instant>,
@@ -79,46 +78,39 @@ pub struct UdpBus {
 }
 
 impl UdpBus {
-    pub fn open_with_geometry(option: &UdpOption, geometry: &Geometry) -> Result<Self, UdpError> {
+    pub fn open_with_geometry(
+        option: &TransportOption,
+        geometry: &Geometry,
+    ) -> Result<Self, UdpError> {
         Self::open_with(
             option,
             Units::Exactly(geometry.num_devices()),
             Bringup::Synchronized,
             Some(geometry),
-            true,
         )
     }
 
-    pub fn open_unsynchronized(option: &UdpOption, num_devices: usize) -> Result<Self, UdpError> {
+    pub fn open_unsynchronized(
+        option: &TransportOption,
+        num_devices: usize,
+    ) -> Result<Self, UdpError> {
         Self::open_with(
             option,
             Units::Exactly(num_devices),
             Bringup::Unsynchronized,
             None,
-            true,
         )
     }
 
-    pub fn open_unsynchronized_all(option: &UdpOption) -> Result<Self, UdpError> {
-        Self::open_with(option, Units::All, Bringup::Unsynchronized, None, true)
-    }
-
-    pub fn open_devices(option: &UdpOption, num_devices: Option<usize>) -> Result<Self, UdpError> {
-        Self::open_with(
-            option,
-            num_devices.map_or(Units::All, Units::Exactly),
-            Bringup::Synchronized,
-            None,
-            false,
-        )
+    pub fn open_unsynchronized_all(option: &TransportOption) -> Result<Self, UdpError> {
+        Self::open_with(option, Units::All, Bringup::Unsynchronized, None)
     }
 
     fn open_with(
-        option: &UdpOption,
+        option: &TransportOption,
         expected: Units,
         bringup: Bringup,
         geometry: Option<&Geometry>,
-        allow_simulator: bool,
     ) -> Result<Self, UdpError> {
         option.validate()?;
         let timer_resolution = TimerResolutionGuard::new(option.timer_resolution);
@@ -127,7 +119,7 @@ impl UdpBus {
         {
             return Err(UdpError::InvalidDeviceCount(num_devices));
         }
-        let target = iface::resolve_with(&option.iface, option.response_timeout, allow_simulator)?;
+        let target = iface::resolve(&option.iface, option.response_timeout)?;
         if let (Some(control), Some(geometry)) = (target.simulator_control, geometry) {
             simulator::configure(control, geometry, option.enumeration_timeout)?;
         }
@@ -151,22 +143,12 @@ impl UdpBus {
             heartbeat: option.heartbeat,
             reply_timeout: option.reply_timeout,
             lost_timeout: option.lost_timeout,
-            response_timeout: option.response_timeout,
             msg_id: AtomicU16::new(0),
             heartbeat_from: AtomicUsize::new(last),
             last_send: Mutex::new(Instant::now()),
             closed: AtomicBool::new(false),
             _timer_resolution: timer_resolution,
         })
-    }
-
-    pub(crate) fn channel(&self) -> &Channel {
-        &self.channel
-    }
-
-    #[must_use]
-    pub fn response_timeout(&self) -> Duration {
-        self.response_timeout
     }
 
     fn trackers(&self) -> MutexGuard<'_, Vec<Tracker>> {

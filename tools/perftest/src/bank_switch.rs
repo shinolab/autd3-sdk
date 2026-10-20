@@ -16,11 +16,11 @@ use autd3_rs::protocol::{Cmd, EXEC_AT_UNIT_NS, FrameHeader, Seq};
 use autd3_rs::value::{
     Intensity, LoopBehavior, PatternBank, SamplingConfig, SysTime, TransitionMode,
 };
-use autd3_rs::{Datagram, DeviceState, Frames, Reply, UdpBus, UdpOption};
+use autd3_rs::{Datagram, DeviceState, Frames, Reply, TransportOption, UdpBus};
 use zerocopy::{FromBytes, IntoBytes};
 
 use crate::cli::{Cli, Framing};
-use crate::run::{spawn_emulator, spawn_signal_listener, udp_option};
+use crate::run::{spawn_emulator, spawn_signal_listener, transport_option};
 use crate::stats::{Counters, SampleStatus};
 
 const RESET_ACK: u8 = 0xFF;
@@ -32,7 +32,7 @@ const HISTOGRAM_HEADROOM: Duration = Duration::from_millis(10);
 
 pub(crate) async fn run(cli: &Cli) -> Result<()> {
     let emulator = spawn_emulator(cli)?;
-    let option = udp_option(cli, emulator.as_ref());
+    let option = transport_option(cli, emulator.as_ref());
     let shutdown = Arc::new(AtomicBool::new(false));
     spawn_signal_listener(Arc::clone(&shutdown));
     let cli = cli.clone();
@@ -154,7 +154,7 @@ struct Session {
 }
 
 impl Session {
-    fn open(cli: &Cli, option: &UdpOption, geometry: &Geometry) -> Result<Self> {
+    fn open(cli: &Cli, option: &TransportOption, geometry: &Geometry) -> Result<Self> {
         let bus = UdpBus::open_with_geometry(option, geometry).context("opening the devices")?;
         let peek = clone_socket(&bus).context("duplicating the socket")?;
         Ok(Self {
@@ -662,7 +662,7 @@ fn prepare(
     Ok(())
 }
 
-fn measure(cli: &Cli, option: &UdpOption, shutdown: &AtomicBool) -> Result<()> {
+fn measure(cli: &Cli, option: &TransportOption, shutdown: &AtomicBool) -> Result<()> {
     let devices = cli.devices.get();
     let framing = cli.framing.unwrap_or_default();
     eprintln!(

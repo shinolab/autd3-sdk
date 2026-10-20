@@ -1,4 +1,3 @@
-import asyncio
 import sys
 from typing import Any
 
@@ -20,7 +19,7 @@ def loose(value: object) -> Any:
 
 
 def test_defaults_follow_the_spec() -> None:
-    option = autd3.UdpOption()
+    option = autd3.TransportOption()
     assert option.iface == autd3.Interface.Auto
     assert option.heartbeat == autd3.Duration.from_millis(10)
     assert option.reply_timeout == autd3.Duration.from_millis(1)
@@ -34,7 +33,7 @@ def test_defaults_follow_the_spec() -> None:
 
 
 def test_fields_round_trip() -> None:
-    option = autd3.UdpOption(
+    option = autd3.TransportOption(
         iface="eth1",
         heartbeat=autd3.Duration.from_millis(2),
         lost_timeout=autd3.Duration.from_millis(50),
@@ -43,24 +42,24 @@ def test_fields_round_trip() -> None:
     )
     assert option.iface == autd3.Interface.Name("eth1")
     assert option.heartbeat == autd3.Duration.from_millis(2)
-    assert autd3.UdpOption(heartbeat=None).heartbeat is None
-    assert autd3.UdpOption(iface="eth0").heartbeat == autd3.Duration.from_millis(10)
+    assert autd3.TransportOption(heartbeat=None).heartbeat is None
+    assert autd3.TransportOption(iface="eth0").heartbeat == autd3.Duration.from_millis(10)
     assert option.lost_timeout == autd3.Duration.from_millis(50)
     assert option.sync_timeout == autd3.Duration.from_secs(3)
     assert option.send_rate_limit == 95.0
-    assert autd3.UdpOption(timer_resolution=None).timer_resolution is None
-    assert autd3.UdpOption(send_buffer=None).send_buffer is None
-    assert autd3.UdpOption(send_buffer=65536).send_buffer == 65536
-    assert autd3.UdpOption(
+    assert autd3.TransportOption(timer_resolution=None).timer_resolution is None
+    assert autd3.TransportOption(send_buffer=None).send_buffer is None
+    assert autd3.TransportOption(send_buffer=65536).send_buffer == 65536
+    assert autd3.TransportOption(
         timer_resolution=autd3.Duration.from_millis(2)
     ).timer_resolution == autd3.Duration.from_millis(2)
 
 
 def test_the_interface_selects_where_to_connect() -> None:
-    assert autd3.UdpOption().iface == autd3.Interface.Auto
+    assert autd3.TransportOption().iface == autd3.Interface.Auto
     with pytest.raises(TypeError):
-        autd3.UdpOption(iface=loose(None))
-    simulator = autd3.UdpOption(iface=autd3.Interface.Simulator(44336))
+        autd3.TransportOption(iface=loose(None))
+    simulator = autd3.TransportOption(iface=autd3.Interface.Simulator(44336))
     assert simulator.iface == autd3.Interface.Simulator(44336)
     assert simulator.iface != autd3.Interface.Simulator(50000)
     assert simulator.iface != autd3.Interface.Auto
@@ -76,13 +75,13 @@ def test_the_interface_selects_where_to_connect() -> None:
     assert hash(autd3.Interface.Name("eth0")) == hash(autd3.Interface.Name("eth0"))
     assert len({autd3.Interface.Auto, autd3.Interface.Simulator(44336), autd3.Interface.Auto}) == 2
     with pytest.raises(TypeError):
-        autd3.UdpOption(iface=loose(1))
+        autd3.TransportOption(iface=loose(1))
 
 
 def test_an_address_interface_round_trips_and_rejects_garbage() -> None:
     iface = autd3.Interface.Addr("[::1]:44336")
     assert repr(iface) == 'Interface.Addr("[::1]:44336")'
-    assert autd3.UdpOption(iface=iface).iface == iface
+    assert autd3.TransportOption(iface=iface).iface == iface
     assert iface != autd3.Interface.Simulator(44336)
     with pytest.raises(ValueError):
         autd3.Interface.Addr("127.0.0.1:1")
@@ -122,7 +121,7 @@ def test_the_client_config_reads_back_its_fields() -> None:
 def test_the_emulator_option_only_shortens_the_timeouts() -> None:
     emulator = autd3.UdpEmulator(1)
     option = emulator.option()
-    default = autd3.UdpOption()
+    default = autd3.TransportOption()
     assert option.iface != default.iface
     assert option.reply_timeout == autd3.Duration.from_millis(50)
     assert option.response_timeout == autd3.Duration.from_millis(50)
@@ -135,47 +134,6 @@ def test_the_emulator_option_only_shortens_the_timeouts() -> None:
     assert option.timer_resolution == default.timer_resolution
 
 
-def test_a_server_link_defaults_to_the_well_known_port() -> None:
-    link = autd3.ServerLink()
-    assert link.port == 44338
-    assert link.timeout == autd3.Duration.from_secs(1)
-    assert autd3.ServerLink(port=5000, timeout=autd3.Duration.from_millis(200)) == autd3.ServerLink(
-        5000, autd3.Duration.from_millis(200)
-    )
-    assert autd3.ServerLink(5000) != autd3.ServerLink()
-    assert repr(autd3.ServerLink(5000)) == "ServerLink(port=5000, timeout=Duration(1s))"
-    assert (
-        repr(autd3.ServerLink(timeout=autd3.Duration.from_millis(200)))
-        == "ServerLink(port=44338, timeout=Duration(200ms))"
-    )
-    assert autd3.ServerLink(timeout=autd3.Duration.from_secs(0)).timeout == autd3.Duration.from_secs(0)
-    with pytest.raises(OverflowError):
-        autd3.ServerLink(65536)
-
-
-def test_client_open_takes_a_udp_option_or_a_server_link() -> None:
+def test_client_open_takes_a_transport_option() -> None:
     with pytest.raises(TypeError):
         autd3.Client.open(geometry(1), loose(autd3.Interface.Auto), autd3.ClientConfig())
-
-
-def test_a_client_without_a_server_fails_at_once() -> None:
-    import socket
-
-    with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as probe:
-        probe.bind(("::1", 0))
-        port = probe.getsockname()[1]
-
-    async def open_client() -> None:
-        await autd3.Client.open(geometry(1), autd3.ServerLink(port), autd3.ClientConfig())
-
-    with pytest.raises(autd3.Autd3Error, match="no server accepts"):
-        asyncio.run(open_client())
-
-
-def test_a_zero_server_timeout_fails_the_open() -> None:
-    async def open_client() -> None:
-        link = autd3.ServerLink(timeout=autd3.Duration.from_secs(0))
-        await autd3.Client.open(geometry(1), link, autd3.ClientConfig())
-
-    with pytest.raises(autd3.Autd3Error, match="must not be zero"):
-        asyncio.run(open_client())

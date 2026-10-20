@@ -333,10 +333,6 @@ name = "api_compute_pattern_set"
 path = "examples/api/compute/pattern/set.rs"
 
 [[example]]
-name = "api_connection_server_link"
-path = "examples/api/connection/server-link.rs"
-
-[[example]]
 name = "api_connection_udp"
 path = "examples/api/connection/udp.rs"
 

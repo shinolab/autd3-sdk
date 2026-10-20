@@ -3,7 +3,7 @@ use std::time::Duration;
 use autd3_rs::commands::{ReleaseFailsafe, Synchronize, each};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::{Client, ClientConfig, DeviceStatus};
-use autd3_rs::UdpOption;
+use autd3_rs::TransportOption;
 
 const CHECK_INTERVAL: Duration = Duration::from_millis(100);
 
@@ -12,7 +12,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
     // ANCHOR: open
-    let client = Client::open(&geometry, UdpOption::default(), ClientConfig::default()).await?;
+    let client = Client::open(&geometry, &TransportOption::default(), ClientConfig::default()).await?;
     let checker = client.state_checker();
     // ANCHOR_END: open
 

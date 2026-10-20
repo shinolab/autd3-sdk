@@ -1,6 +1,6 @@
 import asyncio
 
-from autd3 import Client, ClientConfig, UdpOption
+from autd3 import Client, ClientConfig, TransportOption
 from autd3.commands import ReleaseFailsafe, Synchronize, each
 from autd3.geometry import Autd3, Geometry
 
@@ -13,7 +13,7 @@ async def main() -> None:
     geometry = Geometry([Autd3()])
 
     # ANCHOR: open
-    client = await Client.open(geometry, UdpOption(), ClientConfig())
+    client = await Client.open(geometry, TransportOption(), ClientConfig())
     checker = client.state_checker()
     # ANCHOR_END: open
 

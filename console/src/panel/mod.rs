@@ -1,9 +1,7 @@
 mod firmware;
-mod server;
 mod simulator;
 
 pub(crate) use firmware::FirmwarePanel;
-pub(crate) use server::ServerPanel;
 pub(crate) use simulator::SimulatorPanel;
 
 use std::io;

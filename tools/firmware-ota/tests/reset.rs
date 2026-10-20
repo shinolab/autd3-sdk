@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use autd3_rs::{UdpBus, UdpOption};
+use autd3_rs::{TransportOption, UdpBus};
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 use autd3_rs_firmware_ota::{Driver, Exchange};
 
@@ -11,13 +11,13 @@ const RESETS_LEFT_UNANSWERED: u32 = 3;
 #[ignore = "depends on real time"]
 fn reset_is_confirmed_by_a_device_that_stays_silent_past_the_lost_timeout() {
     let emulator = UdpEmulator::spawn(2).unwrap();
-    let option = UdpOption {
+    let option = TransportOption {
         iface: emulator.interface(),
         reply_timeout: Duration::from_millis(50),
         response_timeout: Duration::from_millis(50),
         enumeration_timeout: Duration::from_secs(1),
         sync_timeout: Duration::from_secs(5),
-        ..UdpOption::default()
+        ..TransportOption::default()
     };
     assert!(option.lost_timeout <= Duration::from_millis(100));
     let mut bus = UdpBus::open_unsynchronized_all(&option).unwrap();
@@ -36,15 +36,15 @@ fn reset_is_confirmed_by_a_device_that_stays_silent_past_the_lost_timeout() {
 #[ignore = "depends on real time"]
 fn the_handshake_survives_a_lost_reset_reply_with_the_default_lost_timeout() {
     let emulator = UdpEmulator::spawn(2).unwrap();
-    let option = UdpOption {
+    let option = TransportOption {
         iface: emulator.interface(),
         reply_timeout: Duration::from_millis(50),
         response_timeout: Duration::from_millis(50),
         enumeration_timeout: Duration::from_secs(1),
         sync_timeout: Duration::from_secs(5),
-        ..UdpOption::default()
+        ..TransportOption::default()
     };
-    assert_eq!(option.lost_timeout, UdpOption::default().lost_timeout);
+    assert_eq!(option.lost_timeout, TransportOption::default().lost_timeout);
     let bus = UdpBus::open_unsynchronized_all(&option).unwrap();
     let states = bus.state_checker();
 
@@ -59,13 +59,13 @@ fn the_handshake_survives_a_lost_reset_reply_with_the_default_lost_timeout() {
 #[ignore = "depends on real time"]
 fn reset_reports_a_device_that_never_answers() {
     let emulator = UdpEmulator::spawn(2).unwrap();
-    let option = UdpOption {
+    let option = TransportOption {
         iface: emulator.interface(),
         reply_timeout: Duration::from_millis(50),
         response_timeout: Duration::from_millis(50),
         enumeration_timeout: Duration::from_secs(1),
         sync_timeout: Duration::from_secs(5),
-        ..UdpOption::default()
+        ..TransportOption::default()
     };
     let mut bus = UdpBus::open_unsynchronized_all(&option).unwrap();
 

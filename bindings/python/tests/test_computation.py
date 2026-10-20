@@ -917,9 +917,9 @@ def test_device_accessors() -> None:
     assert len(dev.center()) == 3
 
 
-def test_udp_options_construct() -> None:
-    autd3.UdpOption()
-    autd3.UdpOption(iface="eth0", heartbeat=autd3.Duration.from_millis(2))
+def test_transport_options_construct() -> None:
+    autd3.TransportOption()
+    autd3.TransportOption(iface="eth0", heartbeat=autd3.Duration.from_millis(2))
 
 
 def test_loop_behavior_and_transition_mode() -> None:

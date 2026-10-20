@@ -10,7 +10,7 @@ internal static class Sample
     {
         var geometry = new Geometry(new[] { new Autd3() });
 
-        var udp = new UdpOption();
+        var udp = new TransportOption();
         var option =
             // ANCHOR: config
             new ClientConfig

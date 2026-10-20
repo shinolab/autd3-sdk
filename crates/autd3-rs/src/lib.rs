@@ -5,7 +5,6 @@ mod client;
 mod datagram;
 mod firmware_version;
 mod fpga_state;
-pub mod link;
 mod response;
 mod telemetry;
 pub mod udp;
@@ -34,7 +33,6 @@ pub use client::{
 pub use datagram::{Datagram, Frame, FrameIter, Frames};
 pub use firmware_version::{FirmwareVersion, Version};
 pub use fpga_state::FpgaState;
-pub use link::{Link, LinkError, SERVER_PORT, ServerLink};
 pub use response::Response;
 pub use telemetry::Telemetry;
-pub use udp::{Reply, Sent, StateChecker, UdpBus, UdpError, UdpOption, Unsent};
+pub use udp::{Reply, Sent, StateChecker, TransportOption, UdpBus, UdpError, Unsent};

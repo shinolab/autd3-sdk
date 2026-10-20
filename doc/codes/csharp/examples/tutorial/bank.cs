@@ -10,7 +10,7 @@ internal static class Sample
     {
         var geometry = new Geometry(new[] { new Autd3() });
 
-        await using var client = await Client.OpenAsync(geometry, new UdpOption(), new ClientConfig());
+        await using var client = await Client.OpenAsync(geometry, new TransportOption(), new ClientConfig());
 
         var wavelength = Pattern.Wavelength(340.0f * m / s);
 

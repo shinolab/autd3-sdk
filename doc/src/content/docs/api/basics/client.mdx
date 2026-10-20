@@ -17,9 +17,6 @@ import csMethods from "@codes/csharp/examples/api/basics/client.cs?raw";
 import sample from "@codes/rust/examples/api/basics/send.rs?raw";
 import pySample from "@codes/python/examples/api/basics/send.py?raw";
 import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
-import serverSample from "@codes/rust/examples/api/connection/server-link.rs?raw";
-import pyServerSample from "@codes/python/examples/api/connection/server-link.py?raw";
-import csServerSample from "@codes/csharp/examples/api/connection/server-link.cs?raw";
 
 `Client` はコマンドの送信・状態の読み出しを行う中心的なオブジェクト.
 
@@ -30,13 +27,10 @@ import csServerSample from "@codes/csharp/examples/api/connection/server-link.cs
 | 引数       | 型                | 説明                                                         |
 | ---------- | ----------------- | ------------------------------------------------------------ |
 | `geometry` | `&Geometry`       | デバイスの物理配置                                           |
-| `link`     | `impl Into<Link>` | 接続先. [`UdpOption`](/autd3-sdk/api/basics/transport-option/) か `ServerLink` |
+| `option`   | `&TransportOption`      | 接続の設定. [`TransportOption`](/autd3-sdk/api/basics/transport-option/) 参照 |
 | `config`   | `ClientConfig`    | 下記参照                                                     |
 
-`UdpOption` を渡すと実機 (または [Simulator](/autd3-sdk/guide/simulator/)) へ直接つなぐ.
-`ServerLink` を渡すと同じホストで動いている [Server](/autd3-sdk/guide/server/) を経由してつなぐ.
-
-<CodeTabs rust={excerpt(serverSample, "api")} python={excerpt(pyServerSample, "api")} csharp={excerpt(csServerSample, "api")} />
+`Client` は実機 (または [Simulator](/autd3-sdk/guide/simulator/)) へ UDP で直接つなぐ.
 
 デバイスの稼働状態を継続的に監視したい場合は `Client::state_checker` で取った `StateChecker` を駆動する ([状態監視](/autd3-sdk/guide/state-check/) 参照).
 
@@ -167,7 +161,7 @@ Python の既定値は Rust と同じで, `None` を渡せるのは型が `Optio
   - streaming で送ると, 前のフレームの処理中に次のフレームの指定時刻が来ることがあり, そのフレームは遅れて処理される (`exec_late` にカウントされる).
   - また, 成功したとしてもCPUボード内部の処理の開始が揃うだけであり, FPGAの処理の開始が揃うこと (すなわち, 出力される超音波の位相の更新タイミングが揃うことなど) は保証しない
 - 送信完了が`exec_lead` だけ遅れる
-- 100 µs 以上, 2^31 µs (約 35.8 分) 未満でなければならない. また, [`UdpOption`](/autd3-sdk/api/basics/transport-option/) の `lost_timeout` 未満でなければならない
+- 100 µs 以上, 2^31 µs (約 35.8 分) 未満でなければならない. また, [`TransportOption`](/autd3-sdk/api/basics/transport-option/) の `lost_timeout` 未満でなければならない
 - `ack_timeout` (既定 10 ms) は `exec_lead` + 処理時間より長くする
 
 ### 処理時刻の上書き

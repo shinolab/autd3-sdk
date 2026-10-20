@@ -12,7 +12,7 @@ internal static class Sample
     {
         // HIDE_END
 var geometry = new Geometry(new[] { new Autd3() });
-await using var client = await Client.OpenAsync(geometry, new UdpOption(), new ClientConfig());
+await using var client = await Client.OpenAsync(geometry, new TransportOption(), new ClientConfig());
 
 var center = geometry.Center + Offset(0.0f * mm, 0.0f * mm, 150.0f * mm);
 var wavelength = Pattern.Wavelength(340.0f * m / s);

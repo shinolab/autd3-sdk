@@ -1,5 +1,5 @@
 ---
-title: UdpOption
+title: TransportOption
 description: Communicate directly with AUTD3 over UDP/IPv6 link-local
 sidebar:
   order: 1
@@ -32,7 +32,7 @@ Changing anything other than `iface` is generally not recommended.
 
 The Python defaults are the same concrete values as in Rust, and only the fields whose type is an `Option` accept `None` (disabled). Passing `None` to any other field raises `TypeError`.
 In C#, setting a field whose type is an `Option` to `null` disables it.
-A `0` for `send_buffer` raises `ValueError` when the `UdpOption` is built in Python, and makes opening the `Client` fail with `Autd3Exception` (`InvalidArgument`) in C# (Rust cannot pass `0` because the type is `NonZeroUsize`).
+A `0` for `send_buffer` raises `ValueError` when the `TransportOption` is built in Python, and makes opening the `Client` fail with `Autd3Exception` (`InvalidArgument`) in C# (Rust cannot pass `0` because the type is `NonZeroUsize`).
 
 ## Interface
 

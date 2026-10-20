@@ -73,21 +73,13 @@ impl ManagedProcess {
     }
 
     pub(crate) fn pump(&mut self) {
-        self.pump_with(|_| false);
-    }
-
-    pub(crate) fn pump_with(&mut self, mut divert: impl FnMut(&str) -> bool) {
         if self.exited {
             return;
         }
         let mut disconnected = false;
         loop {
             match self.rx.try_recv() {
-                Ok(line) => {
-                    if !divert(&line) {
-                        self.logs.push(line);
-                    }
-                }
+                Ok(line) => self.logs.push(line),
                 Err(TryRecvError::Empty) => break,
                 Err(TryRecvError::Disconnected) => {
                     disconnected = true;
@@ -96,10 +88,7 @@ impl ManagedProcess {
             }
         }
         if disconnected && let Ok(Some(status)) = self.child.try_wait() {
-            let marker = exit_marker(status);
-            if !divert(&marker) {
-                self.logs.push(marker);
-            }
+            self.logs.push(exit_marker(status));
             self.exited = true;
         }
     }

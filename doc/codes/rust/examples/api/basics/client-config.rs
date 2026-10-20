@@ -5,13 +5,13 @@ use std::time::Duration;
 
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::udp::DEVICE_QUEUE_FRAMES;
-use autd3_rs::{Client, ClientConfig, UdpOption};
+use autd3_rs::{Client, ClientConfig, TransportOption};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let udp = UdpOption::default();
+    let udp = TransportOption::default();
     let option =
         // ANCHOR: config
         ClientConfig {

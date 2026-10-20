@@ -506,21 +506,13 @@ namespace AUTD3
             _geometry = geometry;
         }
 
-        public static Task<Client> OpenAsync(Geometry geometry, UdpOption option, ClientConfig config) =>
-            OpenAsync(geometry, option.CreateHandle, NativeClient.autd3_udp_option_free, NativeClient.autd3_client_open, config);
-
-        public static Task<Client> OpenAsync(Geometry geometry, ServerLink link, ClientConfig config) =>
-            OpenAsync(geometry, link.CreateHandle, NativeClient.autd3_server_link_free, NativeClient.autd3_client_open_server, config);
-
-        private delegate void OpenFn(GeometryHandle geometry, IntPtr link, IntPtr config, CompletionCallback cb, IntPtr userData);
-
-        private static async Task<Client> OpenAsync(Geometry geometry, Func<IntPtr> createLink, Action<IntPtr> freeLink, OpenFn open, ClientConfig config)
+        public static async Task<Client> OpenAsync(Geometry geometry, TransportOption option, ClientConfig config)
         {
             var owned = geometry.Clone();
-            IntPtr linkHandle;
+            IntPtr optionHandle;
             try
             {
-                linkHandle = createLink();
+                optionHandle = option.CreateHandle();
             }
             catch
             {
@@ -535,7 +527,7 @@ namespace AUTD3
                 try
                 {
                     task = AsyncOps.InvokeAsync((cb, ud) =>
-                        open(geometry.Handle, linkHandle, configHandle, cb, ud));
+                        NativeClient.autd3_client_open(geometry.Handle, optionHandle, configHandle, cb, ud));
                 }
                 finally
                 {
@@ -544,7 +536,7 @@ namespace AUTD3
             }
             catch
             {
-                freeLink(linkHandle);
+                NativeClient.autd3_transport_option_free(optionHandle);
                 owned.Dispose();
                 throw;
             }

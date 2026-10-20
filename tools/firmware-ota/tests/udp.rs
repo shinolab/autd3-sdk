@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use autd3_cpu_wire::update::RunningImage;
 use autd3_rs::protocol::Cmd;
-use autd3_rs::{UdpBus, UdpOption};
+use autd3_rs::{TransportOption, UdpBus};
 use autd3_rs_firmware_emulator::autd3_cpu_fw::{
     FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH,
 };
@@ -11,18 +11,18 @@ use autd3_rs_firmware_ota::{Driver, DriverError};
 
 const CONFIRMED: Option<RunningImage> = Some(RunningImage::Confirmed);
 
-fn bus_with(emulator: &UdpEmulator, option: &UdpOption) -> UdpBus {
+fn bus_with(emulator: &UdpEmulator, option: &TransportOption) -> UdpBus {
     UdpBus::open_unsynchronized(option, emulator.num_devices()).unwrap()
 }
 
 fn bus(emulator: &UdpEmulator) -> UdpBus {
-    let option = UdpOption {
+    let option = TransportOption {
         iface: emulator.interface(),
         reply_timeout: Duration::from_millis(50),
         response_timeout: Duration::from_millis(50),
         enumeration_timeout: Duration::from_secs(1),
         sync_timeout: Duration::from_secs(5),
-        ..UdpOption::default()
+        ..TransportOption::default()
     };
     bus_with(emulator, &option)
 }
@@ -78,14 +78,14 @@ fn a_lost_reply_is_recovered() {
 #[ignore = "depends on real time"]
 fn a_lost_reset_reply_is_recovered_when_the_lost_timeout_outlasts_the_retransmission() {
     let emulator = UdpEmulator::spawn(2).unwrap();
-    let option = UdpOption {
+    let option = TransportOption {
         iface: emulator.interface(),
         lost_timeout: Duration::from_secs(1),
         reply_timeout: Duration::from_millis(50),
         response_timeout: Duration::from_millis(50),
         enumeration_timeout: Duration::from_secs(1),
         sync_timeout: Duration::from_secs(5),
-        ..UdpOption::default()
+        ..TransportOption::default()
     };
     let bus = bus_with(&emulator, &option);
 

@@ -38,14 +38,13 @@ The run continues until Ctrl+C, then prints the summary.
 |-----------------------|-------------|
 | `--emulator`          | Run against the in-process UDP device emulator (firmware emulator behind real UDP sockets on `::1`) instead of real devices. Default: off. |
 | `--command <CMD>`     | `pattern` (default), `write-pattern-buffer`, `write-modulation-buffer`, or `nop`. See the table below. |
-| `--interface <NAME>`  | Network interface the devices hang off (`UdpOption.iface`). Omit to pick the one whose devices answer. |
+| `--interface <NAME>`  | Network interface the devices hang off (`TransportOption.iface`). Omit to pick the one whose devices answer. |
 | `--simulator [PORT]`  | Connect to the simulator on this host only, listening on `PORT` (default 44336; `Interface::Simulator(PORT)`). Without it `Interface::Auto` fails when both the simulator and devices answer. |
-| `--server <PORT>`     | Connect through the `autd3-server` on this loopback port (`ServerLink`). The UDP options come from the server, so `--heartbeat` / `--reply-timeout` / `--send-rate-limit` / `--send-buffer` are ignored. |
 | `--devices <N>`       | Device count of the geometry. Default = 1. Opening fails when it does not match the chain. |
-| `--heartbeat <DUR>`   | Heartbeat interval while nothing is sent (`UdpOption.heartbeat`). Default = `10ms`. |
-| `--reply-timeout <DUR>` | How long a heartbeat waits for every reply (`UdpOption.reply_timeout`). Omit to keep the library default. |
-| `--send-rate-limit <PERCENT>` | Cap on the line occupancy of the sends in percent of the device link speed (`UdpOption.send_rate_limit`). Omit to send without a limit. |
-| `--send-buffer <BYTES>` | Socket send buffer (`UdpOption.send_buffer`). `0` keeps the OS default. Omit to use the library default. |
+| `--heartbeat <DUR>`   | Heartbeat interval while nothing is sent (`TransportOption.heartbeat`). Default = `10ms`. |
+| `--reply-timeout <DUR>` | How long a heartbeat waits for every reply (`TransportOption.reply_timeout`). Omit to keep the library default. |
+| `--send-rate-limit <PERCENT>` | Cap on the line occupancy of the sends in percent of the device link speed (`TransportOption.send_rate_limit`). Omit to send without a limit. |
+| `--send-buffer <BYTES>` | Socket send buffer (`TransportOption.send_buffer`). `0` keeps the OS default. Omit to use the library default. |
 | `--stop-on-error`     | Stop at the first failed send and exit non-zero. The summary is still printed. Default: off. |
 | `--hold <DUR>`        | Keep the connection idle (heartbeats only) this long before measuring, e.g. `3s`. |
 | `--ack-timeout <DUR>` | How long a request waits for its ACK before raising `Timeout` (`ClientConfig.ack_timeout`). Default = `10ms`. Must exceed `--exec-lead` (plus the processing time). |
@@ -93,7 +92,7 @@ It then sends `Synchronize`, as `Client::open` does: opening the bus restarts PT
 
 It drives `UdpBus` directly instead of the `Client` to read the device time each device puts in its reply (`FrameReply.sys_time`, taken right after the frame was processed).
 It stamps `EXEC_AT` the way `ClientConfig.exec_lead` does (per frame, from the device time right before that frame is sent), and resets the sequence after every failed switch.
-`--command`, `--server`, `--max-inflight` and `--hold` do not apply.
+`--command`, `--max-inflight` and `--hold` do not apply.
 
 Printed on Ctrl+C:
 

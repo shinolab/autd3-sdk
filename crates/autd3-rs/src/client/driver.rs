@@ -1,5 +1,4 @@
 use std::collections::VecDeque;
-use std::num::NonZeroU64;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
@@ -8,16 +7,13 @@ use autd3_rs_core::BusStats;
 use futures_channel::oneshot;
 
 use crate::error::{Error, NetworkCause};
-use crate::link::LinkError;
-use crate::link::message::{Notice, Outcome};
 use crate::protocol::Seq;
+use crate::udp::pump::Pump;
 use crate::udp::{Reply, Sent, UdpError};
-use crate::value::SysTime;
 
 use super::completion::CompletionSender;
 use super::config::ClientConfig;
 use super::pool::Slot;
-use super::transport::{Port, Transport};
 
 const RESET_ACK: u8 = 0xFF;
 const IDLE_WAIT: Duration = Duration::from_secs(1);
@@ -236,22 +232,20 @@ struct Session {
 }
 
 pub struct Driver {
-    transport: Arc<Transport>,
-    port: Port,
+    pump: Pump,
     session: Session,
     maintenance_due: Option<Instant>,
     finished: bool,
 }
 
 impl Driver {
-    pub(crate) fn new(transport: Arc<Transport>, port: Port, shared: Arc<Shared>) -> Self {
+    pub(crate) fn new(pump: Pump, shared: Arc<Shared>) -> Self {
         Self {
             session: Session {
-                stats: transport.stats(),
+                stats: pump.bus().stats(),
                 shared,
             },
-            transport,
-            port,
+            pump,
             maintenance_due: None,
             finished: false,
         }
@@ -285,22 +279,9 @@ impl Driver {
         if self.finished {
             return self.outcome();
         }
-        self.port.wait_readable(deadline).map_err(|e| {
+        self.pump.bus().wait_readable(deadline).map_err(|e| {
             tracing::error!("waiting for a reply failed: {e}");
-            let cause = match e {
-                Error::Network(cause) => cause,
-                e @ (Error::DeviceError { .. }
-                | Error::UnsupportedFirmware { .. }
-                | Error::UnexpectedReply { .. }
-                | Error::DeviceLost { .. }
-                | Error::Timeout { .. }
-                | Error::SeqMismatch { .. }
-                | Error::DeviceTimeUnknown
-                | Error::InvalidPayload(_)
-                | Error::InvalidConfig(_)
-                | Error::Encode(_)
-                | Error::Closed) => NetworkCause::new(e),
-            };
+            let cause = NetworkCause::new(e);
             self.finish(Some(&cause));
             Error::Network(cause)
         })
@@ -326,7 +307,7 @@ impl Driver {
             let _ = recovery.send(Err(error()));
         }
         fail(entries, error);
-        self.transport.close();
+        let _ = self.pump.bus().close();
         tracing::debug!("driver stopped");
     }
 
@@ -342,37 +323,23 @@ impl Driver {
     }
 
     fn drain(&mut self) -> Result<(), NetworkCause> {
-        match &mut self.port {
-            Port::Udp(pump) => loop {
-                match pump.recv() {
-                    Ok(Some(reply)) => self.session.dispatch(&reply),
-                    Ok(None) => return Ok(()),
-                    Err(e) => {
-                        tracing::error!("receiving failed: {e}");
-                        return Err(NetworkCause::new(e));
-                    }
+        loop {
+            match self.pump.recv() {
+                Ok(Some(reply)) => self.session.dispatch(&reply),
+                Ok(None) => return Ok(()),
+                Err(e) => {
+                    tracing::error!("receiving failed: {e}");
+                    return Err(NetworkCause::new(e));
                 }
-            },
-            Port::Server(reader) => {
-                let session = &mut self.session;
-                let transport = &*self.transport;
-                reader
-                    .drain(|notice| session.notice(transport, notice))
-                    .map_err(|e| {
-                        tracing::error!("receiving from the server failed: {e}");
-                        NetworkCause::new(e)
-                    })
             }
         }
     }
 
     fn maintain(&mut self, now: Instant) -> Result<(), NetworkCause> {
-        if let Port::Udp(pump) = &mut self.port {
-            if let Some(recovered) = pump.settle_recovery(now) {
-                self.session.recovered(recovered);
-            }
-            self.maintenance_due = pump.maintain(now, true).map_err(NetworkCause::new)?;
+        if let Some(recovered) = self.pump.settle_recovery(now) {
+            self.session.recovered(recovered);
         }
+        self.maintenance_due = self.pump.maintain(now).map_err(NetworkCause::new)?;
         Ok(())
     }
 
@@ -422,91 +389,6 @@ impl Session {
         }
         if let Some(recovery) = pending.recovery.take() {
             let _ = recovery.send(Ok(recovered));
-        }
-    }
-
-    fn notice(&mut self, transport: &Transport, notice: Notice<'_>) -> Result<(), LinkError> {
-        let Transport::Server(conn) = transport else {
-            return Ok(());
-        };
-        match notice {
-            Notice::Reply {
-                msg_id,
-                device,
-                ack,
-                status,
-                data,
-            } => self.dispatch(&Reply::new(usize::from(device), msg_id, ack, status, data)),
-            Notice::Settled { msg_id, outcome } => self.settle_deferred(msg_id, outcome),
-            Notice::States(states) => {
-                for (device, state) in states.into_iter().enumerate() {
-                    conn.state().publish(device, state);
-                }
-            }
-            Notice::Recovered(recovered) => {
-                for _ in 0..recovered.count_ones() {
-                    self.stats.record_recovery();
-                }
-                self.recovered(recovered);
-            }
-            Notice::Clock(sys_time) => {
-                if let Some(sys_time) = NonZeroU64::new(sys_time) {
-                    conn.device_clock()
-                        .observe(SysTime::from_nanos(sys_time.get()));
-                }
-            }
-            Notice::Wake => {}
-            Notice::Failure(reason) => return Err(LinkError::ServerFailed(reason.to_owned())),
-            Notice::Welcome { .. } | Notice::Reject { .. } => {
-                return Err(LinkError::Unexpected(
-                    "a handshake answer after the handshake",
-                ));
-            }
-        }
-        Ok(())
-    }
-
-    fn settle_deferred(&mut self, msg_id: u16, outcome: Outcome<'_>) {
-        let sent = match outcome {
-            Outcome::Sent { devices } => Ok(devices),
-            Outcome::Unsent { device, reason, .. } => Err(SendFailure::from(UdpError::Unsent {
-                device: usize::from(device),
-                source: std::io::Error::other(reason.to_owned()),
-            })),
-            Outcome::Failed { reason } => Err(SendFailure {
-                error: Error::Network(NetworkCause::new(LinkError::SendFailed(reason.to_owned()))),
-                unsent: false,
-            }),
-        };
-        let (is_frame, settlement, timeout) = {
-            let mut pending = self.shared.pending();
-            let is_frame = pending
-                .entries
-                .iter()
-                .find(|entry| entry.msg_id == msg_id)
-                .is_some_and(|entry| entry.seq.is_some());
-            let settlement = pending.settle(msg_id, sent);
-            (is_frame, settlement, pending.config.ack_timeout)
-        };
-        match settlement {
-            Settlement::Failed(entry, error) => {
-                if let Some(entry) = entry {
-                    entry.tx.send(Err(error));
-                }
-            }
-            Settlement::Unreached(entry) => {
-                if let Some(entry) = entry {
-                    entry.tx.send(Err(Error::Timeout { timeout }));
-                }
-            }
-            Settlement::Reached(answered) => {
-                if is_frame {
-                    self.stats.record_frame();
-                }
-                if let Some(entry) = answered {
-                    entry.complete(&self.stats);
-                }
-            }
         }
     }
 
@@ -577,14 +459,14 @@ impl Drop for Driver {
 #[cfg(unix)]
 impl std::os::fd::AsFd for Driver {
     fn as_fd(&self) -> std::os::fd::BorrowedFd<'_> {
-        std::os::fd::AsFd::as_fd(&self.port)
+        std::os::fd::AsFd::as_fd(&**self.pump.bus())
     }
 }
 
 #[cfg(windows)]
 impl std::os::windows::io::AsSocket for Driver {
     fn as_socket(&self) -> std::os::windows::io::BorrowedSocket<'_> {
-        std::os::windows::io::AsSocket::as_socket(&self.port)
+        std::os::windows::io::AsSocket::as_socket(&**self.pump.bus())
     }
 }
 

@@ -23,10 +23,10 @@ impl ExecAt {
 
 pub(crate) fn schedule(
     exec: ExecAt,
-    lost_timeout: Option<Duration>,
+    lost_timeout: Duration,
     now: impl FnOnce() -> Option<SysTime>,
 ) -> Result<u32, Error> {
-    let limit = lost_timeout.map_or(EXEC_LEAD_LIMIT, |t| t.min(EXEC_LEAD_LIMIT));
+    let limit = lost_timeout.min(EXEC_LEAD_LIMIT);
     match exec {
         ExecAt::Immediate => Ok(0),
         ExecAt::Lead(lead) => {
@@ -81,7 +81,7 @@ mod tests {
     const US: u64 = EXEC_AT_UNIT_NS;
     const NOW: SysTime = SysTime::from_nanos(20_000 * US);
 
-    fn at_now(exec: ExecAt, lost_timeout: Option<Duration>) -> Result<u32, Error> {
+    fn at_now(exec: ExecAt, lost_timeout: Duration) -> Result<u32, Error> {
         schedule(exec, lost_timeout, || Some(NOW))
     }
 
@@ -113,7 +113,7 @@ mod tests {
     #[test]
     fn immediate_is_zero_and_does_not_read_the_device_time() {
         assert_eq!(
-            schedule(ExecAt::Immediate, None, || unreachable!(
+            schedule(ExecAt::Immediate, Duration::MAX, || unreachable!(
                 "the device time is read"
             ))
             .unwrap(),
@@ -124,22 +124,35 @@ mod tests {
     #[test]
     fn a_lead_is_added_to_the_device_time() {
         assert_eq!(
-            at_now(ExecAt::Lead(Duration::from_millis(5)), None).unwrap(),
+            at_now(ExecAt::Lead(Duration::from_millis(5)), Duration::MAX).unwrap(),
             25_000
         );
         assert_eq!(
-            at_now(ExecAt::Lead(Duration::from_nanos(100 * US + 1)), None).unwrap(),
+            at_now(
+                ExecAt::Lead(Duration::from_nanos(100 * US + 1)),
+                Duration::MAX
+            )
+            .unwrap(),
             20_101
         );
     }
 
     #[test]
     fn a_lead_below_100_microseconds_is_rejected_before_reading_the_device_time() {
-        assert!(schedule(ExecAt::Lead(Duration::from_micros(100)), None, || Some(NOW)).is_ok());
+        assert!(
+            schedule(
+                ExecAt::Lead(Duration::from_micros(100)),
+                Duration::MAX,
+                || Some(NOW)
+            )
+            .is_ok()
+        );
         assert!(matches!(
-            schedule(ExecAt::Lead(Duration::from_nanos(99_999)), None, || {
-                unreachable!("the device time is read")
-            }),
+            schedule(
+                ExecAt::Lead(Duration::from_nanos(99_999)),
+                Duration::MAX,
+                || { unreachable!("the device time is read") }
+            ),
             Err(Error::InvalidPayload(PayloadError::ExecLeadTooShort { .. }))
         ));
     }
@@ -147,9 +160,15 @@ mod tests {
     #[test]
     fn a_lead_not_below_2_pow_31_microseconds_is_rejected() {
         let limit = Duration::from_micros(1 << 31);
-        assert!(at_now(ExecAt::Lead(Duration::from_nanos((1 << 31) * US - 1)), None).is_ok());
+        assert!(
+            at_now(
+                ExecAt::Lead(Duration::from_nanos((1 << 31) * US - 1)),
+                Duration::MAX
+            )
+            .is_ok()
+        );
         assert!(matches!(
-            at_now(ExecAt::Lead(limit), Some(Duration::MAX)),
+            at_now(ExecAt::Lead(limit), Duration::MAX),
             Err(Error::InvalidPayload(PayloadError::ExecTooFarAhead { ahead, limit: l }))
                 if ahead == limit && l == limit
         ));
@@ -158,15 +177,9 @@ mod tests {
     #[test]
     fn a_lead_not_below_the_lost_timeout_is_rejected() {
         let lost_timeout = Duration::from_millis(100);
-        assert!(
-            at_now(
-                ExecAt::Lead(Duration::from_micros(99_999)),
-                Some(lost_timeout)
-            )
-            .is_ok()
-        );
+        assert!(at_now(ExecAt::Lead(Duration::from_micros(99_999)), lost_timeout).is_ok());
         assert!(matches!(
-            at_now(ExecAt::Lead(lost_timeout), Some(lost_timeout)),
+            at_now(ExecAt::Lead(lost_timeout), lost_timeout),
             Err(Error::InvalidPayload(PayloadError::ExecTooFarAhead { limit, .. }))
                 if limit == lost_timeout
         ));
@@ -175,20 +188,24 @@ mod tests {
     #[test]
     fn an_absolute_time_is_stamped_as_is() {
         assert_eq!(
-            at_now(ExecAt::At(SysTime::from_nanos(25_000 * US)), None).unwrap(),
+            at_now(ExecAt::At(SysTime::from_nanos(25_000 * US)), Duration::MAX).unwrap(),
             25_000
         );
         assert_eq!(
-            at_now(ExecAt::At(SysTime::from_nanos(25_000 * US + 1)), None).unwrap(),
+            at_now(
+                ExecAt::At(SysTime::from_nanos(25_000 * US + 1)),
+                Duration::MAX
+            )
+            .unwrap(),
             25_001
         );
-        assert_eq!(at_now(ExecAt::At(NOW), None).unwrap(), 20_000);
+        assert_eq!(at_now(ExecAt::At(NOW), Duration::MAX).unwrap(), 20_000);
     }
 
     #[test]
     fn an_absolute_time_has_no_lower_bound_on_its_lead() {
         assert_eq!(
-            at_now(ExecAt::At(NOW + Duration::from_nanos(1)), None).unwrap(),
+            at_now(ExecAt::At(NOW + Duration::from_nanos(1)), Duration::MAX).unwrap(),
             20_001
         );
     }
@@ -196,7 +213,7 @@ mod tests {
     #[test]
     fn a_past_absolute_time_within_the_limit_is_accepted() {
         assert_eq!(
-            at_now(ExecAt::At(SysTime::from_nanos(19_000 * US)), None).unwrap(),
+            at_now(ExecAt::At(SysTime::from_nanos(19_000 * US)), Duration::MAX).unwrap(),
             19_000
         );
     }
@@ -204,15 +221,21 @@ mod tests {
     #[test]
     fn an_absolute_time_too_far_ahead_is_rejected() {
         let limit = Duration::from_micros(1 << 31);
-        assert!(at_now(ExecAt::At(NOW + limit - Duration::from_nanos(1)), None).is_ok());
+        assert!(
+            at_now(
+                ExecAt::At(NOW + limit - Duration::from_nanos(1)),
+                Duration::MAX
+            )
+            .is_ok()
+        );
         assert!(matches!(
-            at_now(ExecAt::At(NOW + limit), None),
+            at_now(ExecAt::At(NOW + limit), Duration::MAX),
             Err(Error::InvalidPayload(PayloadError::ExecTooFarAhead { ahead, .. }))
                 if ahead == limit
         ));
         let lost_timeout = Duration::from_millis(100);
         assert!(matches!(
-            at_now(ExecAt::At(NOW + lost_timeout), Some(lost_timeout)),
+            at_now(ExecAt::At(NOW + lost_timeout), lost_timeout),
             Err(Error::InvalidPayload(PayloadError::ExecTooFarAhead { limit, .. }))
                 if limit == lost_timeout
         ));
@@ -222,7 +245,7 @@ mod tests {
     fn an_absolute_time_2_pow_30_microseconds_or_more_behind_is_rejected() {
         let limit = Duration::from_micros(1 << 30);
         let now = SysTime::ZERO + limit + Duration::from_secs(1);
-        let schedule_at = |at| schedule(ExecAt::At(at), None, || Some(now));
+        let schedule_at = |at| schedule(ExecAt::At(at), Duration::MAX, || Some(now));
         assert!(schedule_at(now - limit + Duration::from_nanos(1)).is_ok());
         assert!(matches!(
             schedule_at(now - limit),
@@ -234,11 +257,15 @@ mod tests {
     #[test]
     fn a_lead_or_an_absolute_time_with_an_unknown_device_time_fails() {
         assert!(matches!(
-            schedule(ExecAt::Lead(Duration::from_millis(5)), None, || None),
+            schedule(
+                ExecAt::Lead(Duration::from_millis(5)),
+                Duration::MAX,
+                || None
+            ),
             Err(Error::DeviceTimeUnknown)
         ));
         assert!(matches!(
-            schedule(ExecAt::At(NOW), None, || None),
+            schedule(ExecAt::At(NOW), Duration::MAX, || None),
             Err(Error::DeviceTimeUnknown)
         ));
     }

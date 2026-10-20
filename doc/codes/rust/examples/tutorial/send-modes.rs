@@ -8,7 +8,7 @@ use autd3_rs::geometry::{Autd3, Geometry, Point3, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::Intensity;
 use autd3_rs::{Client, ClientConfig, Frames, Length, MAX_INFLIGHT, ResponseFuture};
-use autd3_rs::udp::UdpOption;
+use autd3_rs::udp::TransportOption;
 
 const NUM_POINTS: usize = 1000;
 const RADIUS_MM: f32 = 30.0;
@@ -17,7 +17,7 @@ const RADIUS_MM: f32 = 30.0;
 async fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let option = UdpOption::default();
+    let option = TransportOption::default();
     let client = Client::open(&geometry, &option, ClientConfig::default()).await?;
 
     client.send(SetSilencer::default()).await?;

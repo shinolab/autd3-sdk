@@ -69,7 +69,7 @@ mod sys {
         )
     }
 
-    pub(crate) fn wait_writable(socket: &impl AsRawFd, timeout: Duration) -> io::Result<()> {
+    pub(super) fn wait_writable(socket: &impl AsRawFd, timeout: Duration) -> io::Result<()> {
         let mut fd = libc::pollfd {
             fd: socket.as_raw_fd(),
             events: libc::POLLOUT,
@@ -124,8 +124,6 @@ mod sys {
         false
     }
 }
-
-pub(crate) use sys::wait_writable;
 
 pub(super) fn is_timeout(e: &io::Error) -> bool {
     matches!(

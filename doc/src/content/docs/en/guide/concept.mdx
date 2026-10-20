@@ -41,4 +41,4 @@ The AUTD3 SDK consists of the following layers.
 - **Pattern** — a bundle of the phase and amplitude of each transducer (a phase buffer and an intensity buffer).
 - **Modulation** — modulates the output amplitude in the time direction (AM).
 - **STM** — a feature that switches Patterns using a hardware timer.
-- **Client** — transmits data such as Pattern and Modulation to the device over UDP. The destination is given by `UdpOption` (a direct connection to real devices, the device emulator, or the Simulator) or `ServerLink` (a connection through the [Server](/autd3-sdk/en/guide/server/)).
+- **Client** — transmits data such as Pattern and Modulation to the device over UDP. The destination is given by `TransportOption` (real devices, the device emulator, or the Simulator).

@@ -2,7 +2,7 @@ import asyncio
 
 import autd3_modulation as modulation
 import autd3_pattern as pattern
-from autd3 import Client, ClientConfig, UdpOption
+from autd3 import Client, ClientConfig, TransportOption
 from autd3.commands import Modulation, Pattern, SetSilencer
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import Hz, m, mm, s
@@ -18,7 +18,7 @@ async def main() -> None:
     # Open the client.
     async with await Client.open(
         geometry,
-        UdpOption(),
+        TransportOption(),
         ClientConfig(),
     ) as client:
         # Generate a focus 150 mm above the array center.

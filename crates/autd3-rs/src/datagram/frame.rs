@@ -38,6 +38,11 @@ pub struct Frame<'a> {
 
 impl<'a> Frame<'a> {
     #[must_use]
+    pub const fn new(dist: Distribution, datagrams: &'a [Datagram]) -> Self {
+        Self { dist, datagrams }
+    }
+
+    #[must_use]
     pub fn distribution(&self) -> Distribution {
         self.dist
     }

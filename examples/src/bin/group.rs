@@ -9,7 +9,7 @@ use autd3_rs::geometry::{Autd3, Geometry, Point3, UnitQuaternion, offset};
 use autd3_rs::rt::{TracingOption, init_tracing};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::Intensity;
-use autd3_rs::{Client, ClientConfig, UdpOption};
+use autd3_rs::{Client, ClientConfig, TransportOption};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
@@ -23,7 +23,12 @@ async fn main() -> Result<()> {
         ),
     ]);
 
-    let client = Client::open(&geometry, UdpOption::default(), ClientConfig::default()).await?;
+    let client = Client::open(
+        &geometry,
+        &TransportOption::default(),
+        ClientConfig::default(),
+    )
+    .await?;
 
     println!("devices: {}", client.num_devices());
 

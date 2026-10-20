@@ -1,6 +1,6 @@
 import asyncio
 
-from autd3 import Client, ClientConfig, Duration, UdpOption
+from autd3 import Client, ClientConfig, Duration, TransportOption
 from autd3.geometry import Autd3, Geometry
 from autd3.params import DEVICE_QUEUE_FRAMES
 
@@ -8,7 +8,7 @@ from autd3.params import DEVICE_QUEUE_FRAMES
 async def main() -> None:
     geometry = Geometry([Autd3()])
 
-    udp = UdpOption()
+    udp = TransportOption()
     option = (
         # ANCHOR: config
         ClientConfig(

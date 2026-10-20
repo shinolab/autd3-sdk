@@ -132,7 +132,6 @@ def test_amplitude_arithmetic_and_ordering() -> None:
 
 def test_constants_come_from_rust() -> None:
     assert params.ULTRASOUND_FREQ_HZ == 40000
-    assert params.SERVER_PORT == autd3.ServerLink().port
     assert params.SIMULATOR_PORT == 44336
     assert params.PORT > 0
     assert params.DEVICE_QUEUE_FRAMES > 0
@@ -178,8 +177,7 @@ def test_rust_required_fields_cannot_be_omitted() -> None:
 @pytest.mark.parametrize(
     "build",
     [
-        lambda: autd3.UdpOption(reply_timeout=loose(None)),
-        lambda: autd3.ServerLink(timeout=loose(None)),
+        lambda: autd3.TransportOption(reply_timeout=loose(None)),
         lambda: autd3.ClientConfig(require_supported_firmware=loose(None)),
         lambda: FociStmOption(bank=loose(None)),
         lambda: FociStmOption(sound_speed=loose(None)),
@@ -199,8 +197,8 @@ def test_none_is_not_a_default_for_rust_non_option_fields(build: Any) -> None:
 
 
 def test_option_defaults_and_equality() -> None:
-    assert autd3.UdpOption() == autd3.UdpOption()
-    assert autd3.UdpOption() != autd3.UdpOption(reply_timeout=Duration.from_millis(2))
+    assert autd3.TransportOption() == autd3.TransportOption()
+    assert autd3.TransportOption() != autd3.TransportOption(reply_timeout=Duration.from_millis(2))
     assert FociStmOption() == FociStmOption(sound_speed=340 * m / s)
     assert FociStmOption() != FociStmOption(bank=PatternBank.B1)
     assert PatternStmOption() == PatternStmOption(phase_depth=PhaseDepth.Bits8)
@@ -332,7 +330,7 @@ def test_a_zero_ack_timeout_is_rejected_at_open() -> None:
     config = autd3.ClientConfig(ack_timeout=Duration.from_nanos(0))
 
     async def open_client() -> None:
-        await autd3.Client.open(one_device(), autd3.UdpOption(), config)
+        await autd3.Client.open(one_device(), autd3.TransportOption(), config)
 
     with pytest.raises(autd3.Autd3Error, match="ack_timeout") as err:
         asyncio.run(open_client())
@@ -344,7 +342,7 @@ def test_a_zero_exec_lead_is_rejected_at_open() -> None:
     assert config.exec_lead == Duration.from_millis(0)
 
     async def open_client() -> None:
-        await autd3.Client.open(one_device(), autd3.UdpOption(), config)
+        await autd3.Client.open(one_device(), autd3.TransportOption(), config)
 
     with pytest.raises(autd3.Autd3Error, match="exec_lead must be within") as err:
         asyncio.run(open_client())

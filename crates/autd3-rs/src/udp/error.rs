@@ -2,7 +2,6 @@ use std::net::SocketAddrV6;
 use std::time::Duration;
 
 use autd3_cpu_wire::udp::Kind;
-use autd3_rs_core::Interface;
 
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
@@ -19,8 +18,6 @@ pub enum UdpError {
     InvalidSimulatorPort(u16),
     #[error("no simulator answers at {0}")]
     SimulatorNotFound(SocketAddrV6),
-    #[error("the server drives AUTD3 devices only and cannot open {0:?}")]
-    UnsupportedInterface(Interface),
     #[error(
         "the simulator did not answer the geometry at {0} within enumeration_timeout; is it an older simulator?"
     )]
