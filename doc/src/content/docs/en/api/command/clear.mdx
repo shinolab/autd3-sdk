@@ -24,10 +24,3 @@ All settings such as Silencer / Pattern / Modulation are reinitialized.
 ## Example
 
 <CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />
-
-## Synchronize / Nop
-
-Other commands without a payload are `Synchronize` and `Nop`.
-
-- `Synchronize` reinitializes the synchronization clock the FPGA uses to generate PWM and aligns the output phase across the devices. It is sent after `Clear` when the `Client` opens. It is not sent automatically to a device recovered from `Lost` by `recover()`, so send it again yourself if needed (see [State Monitoring](/autd3-sdk/en/guide/state-check/#recovery-from-lost)).
-- `Nop` changes nothing and always returns success.

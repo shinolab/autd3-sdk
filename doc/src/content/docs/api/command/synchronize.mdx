@@ -1,0 +1,28 @@
+---
+title: Synchronize
+description: デバイス間の出力の位相を揃える Synchronize
+sidebar:
+  order: 10.1
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import sample from "@codes/rust/examples/api/command/synchronize.rs?raw";
+import pySample from "@codes/python/examples/api/command/synchronize.py?raw";
+import fullSample from "@codes/rust/examples/api/command/synchronize-example.rs?raw";
+import pyFullSample from "@codes/python/examples/api/command/synchronize-example.py?raw";
+import csSample from "@codes/csharp/examples/api/command/synchronize.cs?raw";
+import csFullSample from "@codes/csharp/examples/api/command/synchronize-example.cs?raw";
+import { excerpt } from "@lib/excerpt";
+
+`Synchronize` は, FPGA が PWM 生成に使う同期クロックを初期化し直し, デバイス間の出力の位相を揃えるコマンド.
+
+`Client` を開くときに [Clear](/autd3-sdk/api/command/clear/) の後に送られる.
+`recover()` で `Lost` から復帰したデバイスには自動では送られないので, 必要ならユーザが送り直す ([状態監視](/autd3-sdk/guide/state-check/#lost-からの復帰) 参照).
+
+## API
+
+<CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
+
+## Example
+
+<CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

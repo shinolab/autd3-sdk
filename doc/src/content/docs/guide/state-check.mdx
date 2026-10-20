@@ -61,7 +61,7 @@ import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 復帰の際には以下の点に注意されたい.
 
 - `recover` は `Synchronize` も `ReleaseFailsafe` も送らない. `Lost` の間はデバイスに何も届かないので, フェイルセーフ ([SetCpuConfig](/autd3-sdk/api/command/cpu-config/) 参照) を有効にしていると出力は止まっている可能性がある.
-  - 出力の位相を揃え直すには [`Synchronize`](/autd3-sdk/api/command/clear/#synchronize--nop) を送る
+  - 出力の位相を揃え直すには [`Synchronize`](/autd3-sdk/api/command/synchronize/) を送る
   - 止まった出力を再開させるには [`ReleaseFailsafe`](/autd3-sdk/api/command/release-failsafe/) を送る. `ReleaseFailsafe` はフェイルセーフで止まっていないデバイスには何もしないので, 全デバイスへ送ってよい.
 - 復帰したデバイスが `Syncing` の場合は, `check` で `Ready` になるのを待ってから `Synchronize` を送る.
 - `recover` の間, 他の送信は待たされる. また, `Reset` の時点で返信待ちのフレームは `Timeout` で失敗する.
