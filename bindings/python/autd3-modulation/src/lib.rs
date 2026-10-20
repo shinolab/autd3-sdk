@@ -48,7 +48,7 @@ fn mode_to_py(py: Python<'_>, mode: SamplingMode) -> PyResult<Bound<'_, PyAny>> 
         SamplingMode::NearestFreq(f) => core
             .getattr("Nearest")?
             .call1((freq.call_method1("from_hz", (f.hz(),))?,)),
-        _ => Err(PyValueError::new_err("unsupported sampling mode")),
+        _ => unreachable!(),
     }
 }
 

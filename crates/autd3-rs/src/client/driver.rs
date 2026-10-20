@@ -316,7 +316,17 @@ impl Driver {
             tracing::error!("waiting for a reply failed: {e}");
             let cause = match e {
                 Error::Network(cause) => cause,
-                e => NetworkCause::new(e),
+                e @ (Error::DeviceError { .. }
+                | Error::UnsupportedFirmware { .. }
+                | Error::UnexpectedReply { .. }
+                | Error::DeviceLost { .. }
+                | Error::Timeout { .. }
+                | Error::SeqMismatch { .. }
+                | Error::DeviceTimeUnknown
+                | Error::InvalidPayload(_)
+                | Error::InvalidConfig(_)
+                | Error::Encode(_)
+                | Error::Closed) => NetworkCause::new(e),
             };
             self.finish(Some(&cause));
             Error::Network(cause)

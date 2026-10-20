@@ -67,7 +67,8 @@ impl Interface {
     fn simulator_port(&self) -> Option<u16> {
         match self.0 {
             CoreInterface::Simulator(port) => Some(port),
-            _ => None,
+            CoreInterface::Auto | CoreInterface::Name(_) | CoreInterface::Addr(_) => None,
+            _ => unreachable!(),
         }
     }
 
@@ -76,7 +77,8 @@ impl Interface {
             CoreInterface::Name(name) => format!("Interface.Name({name:?})"),
             CoreInterface::Simulator(port) => format!("Interface.Simulator({port})"),
             CoreInterface::Addr(addr) => format!("Interface.Addr({:?})", addr.to_string()),
-            _ => "Interface.Auto".to_owned(),
+            CoreInterface::Auto => "Interface.Auto".to_owned(),
+            _ => unreachable!(),
         }
     }
 }

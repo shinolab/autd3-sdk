@@ -60,7 +60,11 @@ fn gpio_waveform(fpga: &FpgaEmulator, raw: u64) -> Vec<u8> {
         }
         Some(GpioOutType::PwmOut) => pwm_waveform(fpga, value as usize),
         Some(GpioOutType::Direct) => constant_wave(u8::from(value != 0)),
-        _ => constant_wave(0),
+        Some(
+            GpioOutType::None | GpioOutType::Sync | GpioOutType::SyncRaw | GpioOutType::SyncDiff,
+        )
+        | None => constant_wave(0),
+        Some(_) => unreachable!(),
     }
 }
 

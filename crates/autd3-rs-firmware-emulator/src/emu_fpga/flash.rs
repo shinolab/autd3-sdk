@@ -125,7 +125,8 @@ impl FlashEmulator {
                 self.reboot_requested = true;
                 (FlashErr::None, 0)
             }
-            _ => (FlashErr::Invalid, 0),
+            Some(FlashOp::Crc32) | None => (FlashErr::Invalid, 0),
+            Some(_) => unreachable!(),
         };
         self.reg[fw::ADDR_FLASH_STATUS as usize] = u16::from(err.as_u8()) << 8;
         self.reg[fw::ADDR_FLASH_RESULT_0 as usize] = result as u16;

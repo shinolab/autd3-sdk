@@ -300,11 +300,25 @@ impl UdpBus {
         let now = Instant::now();
         let mut give_up = match kind {
             Kind::Frame => now.checked_add(self.lost_timeout),
-            _ => None,
+            Kind::ReadUnitInfo
+            | Kind::ResetId
+            | Kind::Discover
+            | Kind::AssignId
+            | Kind::UnblockDownstream
+            | Kind::SetTime
+            | Kind::Heartbeat => None,
+            _ => unreachable!(),
         };
         let live = self.devices_where(match kind {
             Kind::Frame => Tracker::takes_frames,
-            _ => |tracker: Tracker| !tracker.is_lost(),
+            Kind::ReadUnitInfo
+            | Kind::ResetId
+            | Kind::Discover
+            | Kind::AssignId
+            | Kind::UnblockDownstream
+            | Kind::SetTime
+            | Kind::Heartbeat => |tracker: Tracker| !tracker.is_lost(),
+            _ => unreachable!(),
         });
         let mut devices = 0u128;
         let mut unsent: Option<Unsent> = None;

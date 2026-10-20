@@ -54,7 +54,18 @@ fn config() -> ClientConfig {
 fn link_error(error: &Error) -> Option<&LinkError> {
     match error {
         Error::Network(cause) => (**cause).downcast_ref::<LinkError>(),
-        _ => None,
+        Error::DeviceError { .. }
+        | Error::UnsupportedFirmware { .. }
+        | Error::UnexpectedReply { .. }
+        | Error::DeviceLost { .. }
+        | Error::Timeout { .. }
+        | Error::SeqMismatch { .. }
+        | Error::DeviceTimeUnknown
+        | Error::InvalidPayload(_)
+        | Error::InvalidConfig(_)
+        | Error::Encode(_)
+        | Error::Closed => None,
+        _ => unreachable!(),
     }
 }
 

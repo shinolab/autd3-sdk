@@ -257,7 +257,10 @@ impl MockPort {
             Some(BramSelect::SyncPs) if addr & 0xFF == ADDR_SYNC_PS_CTL => {
                 self.sync_ps_ctl = Some(value);
             }
-            _ => {}
+            Some(
+                BramSelect::FlashBuf | BramSelect::SyncPs | BramSelect::Mod | BramSelect::Emission,
+            )
+            | None => {}
         }
     }
 
@@ -344,7 +347,7 @@ impl MockPort {
                 self.fpga_flash_reg = [0; 16];
                 return;
             }
-            _ => err = FlashErr::Invalid,
+            None => err = FlashErr::Invalid,
         }
         if let Some(injected) = self.fpga_flash_err {
             err = injected;

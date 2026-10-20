@@ -329,7 +329,7 @@ impl Chain {
                     self.reply_status(i, src, header, Status::Ok, reply.as_bytes());
                 }
                 Kind::SetTime => self.set_time(i, src, header, body, now),
-                _ => {}
+                _ => unreachable!(),
             }
         }
     }

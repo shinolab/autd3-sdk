@@ -27,7 +27,7 @@ impl MessageType {
     const fn len(self) -> usize {
         match self {
             Self::DelayResp => size_of::<DelayResp>(),
-            _ => size_of::<TimestampedMessage>(),
+            Self::Sync | Self::DelayReq | Self::FollowUp => size_of::<TimestampedMessage>(),
         }
     }
 

@@ -120,7 +120,8 @@ const fn state_code(state: DeviceState) -> u8 {
     match state {
         DeviceState::Ready => 0,
         DeviceState::Syncing => 1,
-        _ => 2,
+        DeviceState::Lost => 2,
+        _ => unreachable!(),
     }
 }
 

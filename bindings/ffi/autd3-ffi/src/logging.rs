@@ -21,8 +21,9 @@ fn to_log_writer(v: u8) -> Option<LogWriter> {
 
 fn from_log_writer(writer: LogWriter) -> u8 {
     match writer {
+        LogWriter::Stdout => AUTD3_LOG_WRITER_STDOUT,
         LogWriter::Stderr => AUTD3_LOG_WRITER_STDERR,
-        _ => AUTD3_LOG_WRITER_STDOUT,
+        _ => unreachable!(),
     }
 }
 

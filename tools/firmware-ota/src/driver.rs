@@ -80,7 +80,37 @@ fn timeout_hint(cmd: Cmd) -> &'static str {
         Cmd::Reboot => {
             "the devices that received the request are resetting and come back unassigned; rerun `--reboot-only` to reset the rest"
         }
-        _ => "check the cable and the host firewall, then rerun",
+        Cmd::Reset
+        | Cmd::Synchronize
+        | Cmd::Clear
+        | Cmd::Nop
+        | Cmd::SetCpuConfig
+        | Cmd::ReleaseFailsafe
+        | Cmd::SetFpgaConfig
+        | Cmd::WriteFociBuffer
+        | Cmd::ConfigPattern
+        | Cmd::ActivatePatternBank
+        | Cmd::WritePatternPhase
+        | Cmd::WritePatternRaw
+        | Cmd::WritePatternFused
+        | Cmd::WriteModulationBuffer
+        | Cmd::ConfigModulation
+        | Cmd::ActivateModulationBank
+        | Cmd::SetSilencer
+        | Cmd::SetPhaseCorrection
+        | Cmd::SetOutputMask
+        | Cmd::SetPulseWidthTable
+        | Cmd::EmulateGpioIn
+        | Cmd::SetGpioOut
+        | Cmd::ForceFan
+        | Cmd::FpgaUpdateActivate
+        | Cmd::ReadFpgaState
+        | Cmd::ReadTelemetry
+        | Cmd::ReadFirmwareInfo
+        | Cmd::ReadRunningImage
+        | Cmd::WriteFpgaMemory
+        | Cmd::ReadFpgaMemory => "check the cable and the host firewall, then rerun",
+        _ => unreachable!(),
     }
 }
 
@@ -96,7 +126,31 @@ fn device_hint(cmd: Cmd, code: u8) -> &'static str {
         (_, Some(autd3_cpu_wire::Error::UpdateImageInvalid)) => {
             " (nothing was activated; the previous image keeps running, rerun the update)"
         }
-        _ => "",
+        (
+            _,
+            None
+            | Some(
+                autd3_cpu_wire::Error::None
+                | autd3_cpu_wire::Error::UnknownCmd
+                | autd3_cpu_wire::Error::InvalidPayload
+                | autd3_cpu_wire::Error::InvalidSilencerSetting
+                | autd3_cpu_wire::Error::InvalidTransitionMode
+                | autd3_cpu_wire::Error::MissTransitionTime
+                | autd3_cpu_wire::Error::FpgaTimeout
+                | autd3_cpu_wire::Error::SyncNotReady
+                | autd3_cpu_wire::Error::UpdateNotStarted
+                | autd3_cpu_wire::Error::UpdateFlash
+                | autd3_cpu_wire::Error::UpdateNotCommitted
+                | autd3_cpu_wire::Error::UpdateNothingToConfirm
+                | autd3_cpu_wire::Error::UpdateUnsupported
+                | autd3_cpu_wire::Error::FpgaUpdateInProgress
+                | autd3_cpu_wire::Error::UpdateActivating
+                | autd3_cpu_wire::Error::SyncMissed
+                | autd3_cpu_wire::Error::FailsafeConditionActive
+                | autd3_cpu_wire::Error::FpgaUnsupported,
+            ),
+        ) => "",
+        (_, Some(_)) => unreachable!(),
     }
 }
 
@@ -419,11 +473,31 @@ impl<L: Exchange> Driver<L> {
                         )),
                         None => Err(DriverError::ShortReply { device, cmd }),
                     },
-                    _ => Err(DriverError::Device {
+                    None
+                    | Some(
+                        autd3_cpu_wire::Error::InvalidPayload
+                        | autd3_cpu_wire::Error::InvalidSilencerSetting
+                        | autd3_cpu_wire::Error::InvalidTransitionMode
+                        | autd3_cpu_wire::Error::MissTransitionTime
+                        | autd3_cpu_wire::Error::FpgaTimeout
+                        | autd3_cpu_wire::Error::SyncNotReady
+                        | autd3_cpu_wire::Error::UpdateNotStarted
+                        | autd3_cpu_wire::Error::UpdateImageInvalid
+                        | autd3_cpu_wire::Error::UpdateFlash
+                        | autd3_cpu_wire::Error::UpdateNotCommitted
+                        | autd3_cpu_wire::Error::UpdateNothingToConfirm
+                        | autd3_cpu_wire::Error::UpdateUnsupported
+                        | autd3_cpu_wire::Error::FpgaUpdateInProgress
+                        | autd3_cpu_wire::Error::UpdateActivating
+                        | autd3_cpu_wire::Error::SyncMissed
+                        | autd3_cpu_wire::Error::FailsafeConditionActive
+                        | autd3_cpu_wire::Error::FpgaUnsupported,
+                    ) => Err(DriverError::Device {
                         device,
                         cmd,
                         code: reply.status,
                     }),
+                    Some(_) => unreachable!(),
                 },
             )
             .collect()
@@ -559,13 +633,33 @@ impl<L: Exchange> Driver<L> {
             match autd3_cpu_wire::Error::from_u8(reply.status) {
                 Some(autd3_cpu_wire::Error::None) => activated.push(device),
                 Some(autd3_cpu_wire::Error::UpdateNotCommitted) => {}
-                _ => {
+                None
+                | Some(
+                    autd3_cpu_wire::Error::UnknownCmd
+                    | autd3_cpu_wire::Error::InvalidPayload
+                    | autd3_cpu_wire::Error::InvalidSilencerSetting
+                    | autd3_cpu_wire::Error::InvalidTransitionMode
+                    | autd3_cpu_wire::Error::MissTransitionTime
+                    | autd3_cpu_wire::Error::FpgaTimeout
+                    | autd3_cpu_wire::Error::SyncNotReady
+                    | autd3_cpu_wire::Error::UpdateNotStarted
+                    | autd3_cpu_wire::Error::UpdateImageInvalid
+                    | autd3_cpu_wire::Error::UpdateFlash
+                    | autd3_cpu_wire::Error::UpdateNothingToConfirm
+                    | autd3_cpu_wire::Error::UpdateUnsupported
+                    | autd3_cpu_wire::Error::FpgaUpdateInProgress
+                    | autd3_cpu_wire::Error::UpdateActivating
+                    | autd3_cpu_wire::Error::SyncMissed
+                    | autd3_cpu_wire::Error::FailsafeConditionActive
+                    | autd3_cpu_wire::Error::FpgaUnsupported,
+                ) => {
                     return Err(DriverError::Device {
                         device,
                         cmd: Cmd::UpdateActivate,
                         code: reply.status,
                     });
                 }
+                Some(_) => unreachable!(),
             }
         }
         Ok(activated)
