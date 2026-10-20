@@ -327,7 +327,7 @@ impl UdpBus {
             let mut attempted_at = None;
             let result = self
                 .channel
-                .send_with(dst, kind, msg_id, body(index), give_up, || {
+                .send(dst, kind, msg_id, body(index), give_up, || {
                     let now = Instant::now();
                     let mut trackers = self.trackers();
                     if let Some(previous) = attempted_at.replace(now) {
@@ -450,10 +450,14 @@ impl UdpBus {
             return recovery.next_at();
         }
         let group = self.channel.group();
-        if let Err(e) = self
-            .channel
-            .send(group, Kind::Heartbeat, self.reserve_msg_id(), &[], None)
-        {
+        if let Err(e) = self.channel.send(
+            group,
+            Kind::Heartbeat,
+            self.reserve_msg_id(),
+            &[],
+            None,
+            || {},
+        ) {
             tracing::debug!(%group, "probing for the lost devices failed: {e}");
         }
         recovery.probed(now)

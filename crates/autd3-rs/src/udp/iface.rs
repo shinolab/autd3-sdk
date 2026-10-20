@@ -1,12 +1,12 @@
 use std::collections::BTreeMap;
-use std::net::SocketAddrV6;
+use std::net::{Ipv6Addr, SocketAddrV6};
 use std::time::Duration;
 
-use autd3_cpu_wire::udp::Kind;
+use autd3_cpu_wire::udp::{ALL_NODES, Kind, PORT};
 use autd3_rs_core::Interface;
 use if_addrs::IfAddr;
 
-use super::channel::{Channel, all_nodes};
+use super::channel::Channel;
 use super::error::UdpError;
 use super::simulator::Simulator;
 
@@ -34,7 +34,7 @@ impl Target {
 
     fn interface(candidate: &Candidate) -> Self {
         Self {
-            group: all_nodes(candidate.scope),
+            group: SocketAddrV6::new(Ipv6Addr::from(ALL_NODES), PORT, 0, candidate.scope),
             scope: Some(candidate.scope),
             simulator_control: None,
         }
@@ -188,7 +188,7 @@ mod tests {
 
     #[test]
     fn a_scoped_address_sends_through_its_interface() {
-        let scoped = all_nodes(7);
+        let scoped = SocketAddrV6::new(Ipv6Addr::from(ALL_NODES), PORT, 0, 7);
         assert_eq!(
             resolve_with(&Interface::Addr(scoped), RESPONSE_TIMEOUT, true).unwrap(),
             Target {
