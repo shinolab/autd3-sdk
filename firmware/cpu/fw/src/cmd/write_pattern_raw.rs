@@ -1,4 +1,4 @@
-pub use autd3_cpu_wire::payload::WritePatternRawPayload;
+pub(crate) use autd3_cpu_wire::payload::WritePatternRawPayload;
 
 use autd3_cpu_wire::PatternBank;
 use autd3_cpu_wire::layout::PATTERN_RAW_DATA_LEN;

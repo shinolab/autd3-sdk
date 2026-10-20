@@ -1,4 +1,4 @@
-pub use autd3_cpu_wire::payload::{SilencerFlags, SilencerPayload};
+pub(crate) use autd3_cpu_wire::payload::{SilencerFlags, SilencerPayload};
 
 use core::num::NonZeroU32;
 

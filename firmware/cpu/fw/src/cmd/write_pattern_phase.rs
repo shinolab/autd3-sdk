@@ -1,4 +1,4 @@
-pub use autd3_cpu_wire::payload::WritePatternPhasePayload;
+pub(crate) use autd3_cpu_wire::payload::WritePatternPhasePayload;
 
 use crate::fpga::{self, EMISSION_RAM};
 use crate::fpga_params::NUM_TRANSDUCERS;

@@ -14,7 +14,7 @@ use crate::Ctx;
 use crate::cases::pattern_util::{SOUND_SPEED_M_S, buffers, send_pattern_mod};
 use crate::io::wait_enter;
 
-pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
+pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     let wavenumber = 2.0 * PI / wavelength(SOUND_SPEED_M_S * m / s).mm();
 
     let phases: Vec<Vec<Phase>> = ctx

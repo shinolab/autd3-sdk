@@ -273,7 +273,7 @@ async fn by_cable(ctx: &Ctx<'_>) -> Result<()> {
     Ok(())
 }
 
-pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
+pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     if ctx.client.num_devices() < 2 {
         println!("  [SKIP] needs at least 2 devices: only a slave can lose the PTP lock");
         return Ok(());

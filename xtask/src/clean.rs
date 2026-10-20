@@ -7,7 +7,7 @@ use walkdir::WalkDir;
 const WALK_SKIP: &[&str] = &[".git", "target", "node_modules", ".venv"];
 
 #[derive(Args, Clone, Copy)]
-pub struct CleanArgs {
+pub(crate) struct CleanArgs {
     #[arg(
         long,
         short = 'n',
@@ -21,7 +21,7 @@ pub struct CleanArgs {
     pub deps: bool,
 }
 
-pub struct Cleaner<'a> {
+pub(crate) struct Cleaner<'a> {
     root: &'a Path,
     args: CleanArgs,
     removed: usize,
@@ -29,7 +29,7 @@ pub struct Cleaner<'a> {
 }
 
 impl<'a> Cleaner<'a> {
-    pub fn new(root: &'a Path, args: CleanArgs) -> Self {
+    pub(crate) fn new(root: &'a Path, args: CleanArgs) -> Self {
         Self {
             root,
             args,
@@ -38,11 +38,11 @@ impl<'a> Cleaner<'a> {
         }
     }
 
-    pub fn root(&self) -> &Path {
+    pub(crate) fn root(&self) -> &Path {
         self.root
     }
 
-    pub fn remove(&mut self, path: &Path) -> Result<()> {
+    pub(crate) fn remove(&mut self, path: &Path) -> Result<()> {
         let Ok(meta) = std::fs::symlink_metadata(path) else {
             return Ok(());
         };
@@ -65,23 +65,23 @@ impl<'a> Cleaner<'a> {
         Ok(())
     }
 
-    pub fn path(&mut self, rel: &str) -> Result<()> {
+    pub(crate) fn path(&mut self, rel: &str) -> Result<()> {
         let path = self.root.join(rel);
         self.remove(&path)
     }
 
-    pub fn paths(&mut self, rels: &[&str]) -> Result<()> {
+    pub(crate) fn paths(&mut self, rels: &[&str]) -> Result<()> {
         rels.iter().try_for_each(|rel| self.path(rel))
     }
 
-    pub fn deps(&mut self, rel: &str) -> Result<()> {
+    pub(crate) fn deps(&mut self, rel: &str) -> Result<()> {
         if self.args.deps {
             self.path(rel)?;
         }
         Ok(())
     }
 
-    pub fn children(&mut self, rel: &str, keep: &[&str]) -> Result<()> {
+    pub(crate) fn children(&mut self, rel: &str, keep: &[&str]) -> Result<()> {
         for path in sorted_entries(&self.root.join(rel)) {
             if path
                 .file_name()
@@ -95,14 +95,14 @@ impl<'a> Cleaner<'a> {
         Ok(())
     }
 
-    pub fn subdirs(&self, rel: &str) -> Vec<PathBuf> {
+    pub(crate) fn subdirs(&self, rel: &str) -> Vec<PathBuf> {
         sorted_entries(&self.root.join(rel))
             .into_iter()
             .filter(|path| path.is_dir())
             .collect()
     }
 
-    pub fn in_each_subdir(&mut self, rel: &str, names: &[&str]) -> Result<()> {
+    pub(crate) fn in_each_subdir(&mut self, rel: &str, names: &[&str]) -> Result<()> {
         for dir in self.subdirs(rel) {
             for name in names {
                 let path = dir.join(name);
@@ -112,7 +112,7 @@ impl<'a> Cleaner<'a> {
         Ok(())
     }
 
-    pub fn matching_in_each_subdir(
+    pub(crate) fn matching_in_each_subdir(
         &mut self,
         rel: &str,
         matches: impl Fn(&str) -> bool,
@@ -131,14 +131,14 @@ impl<'a> Cleaner<'a> {
         Ok(())
     }
 
-    pub fn nested(&mut self, rel: &str, names: &[&str]) -> Result<()> {
+    pub(crate) fn nested(&mut self, rel: &str, names: &[&str]) -> Result<()> {
         for path in collect_nested(&self.root.join(rel), names) {
             self.remove(&path)?;
         }
         Ok(())
     }
 
-    pub fn finish(self) {
+    pub(crate) fn finish(self) {
         if self.removed == 0 {
             println!("nothing to clean");
             return;
@@ -161,7 +161,7 @@ impl<'a> Cleaner<'a> {
     }
 }
 
-pub fn scope(
+pub(crate) fn scope(
     root: &Path,
     args: CleanArgs,
     clean: impl FnOnce(&mut Cleaner) -> Result<()>,

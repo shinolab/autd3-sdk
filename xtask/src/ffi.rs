@@ -5,7 +5,7 @@ use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
 use crate::clean::{CleanArgs, Cleaner};
-use crate::util::{cargo_clippy, cargo_fmt, files_under, run};
+use crate::util::{cargo_clippy, cargo_fmt, files_under, run, strip_visibility};
 
 const CSHARP_SRC: &str = "bindings/csharp/src";
 
@@ -17,7 +17,7 @@ const CSHARP_UNUSED_EXPORTS: &[&str] = &[
 const OPTION_GETTER_MARKER: &str = "_option_get_";
 
 #[derive(Subcommand)]
-pub enum FfiCmd {
+pub(crate) enum FfiCmd {
     #[command(about = "Build the C ABI cdylibs")]
     Build {
         #[arg(long, help = "Build the dev profile instead of release")]
@@ -43,7 +43,7 @@ pub enum FfiCmd {
     Clean(CleanArgs),
 }
 
-pub fn run_ffi(root: &Path, cmd: &FfiCmd) -> Result<()> {
+pub(crate) fn run_ffi(root: &Path, cmd: &FfiCmd) -> Result<()> {
     let dir = root.join("bindings").join("ffi");
     match cmd {
         FfiCmd::Build { debug } => build(&dir, *debug),
@@ -69,7 +69,7 @@ fn build(dir: &Path, debug: bool) -> Result<()> {
     run("cargo", args, dir)
 }
 
-pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
+pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {
     cleaner.path("bindings/ffi/target")
 }
 
@@ -276,7 +276,7 @@ fn collect_plain_exports(text: &str, symbols: &mut BTreeSet<String>) {
 }
 
 fn extern_fn_name(line: &str) -> Option<&str> {
-    let rest = line.strip_prefix("pub ")?.trim_start();
+    let rest = strip_visibility(line);
     let rest = rest.strip_prefix("unsafe ").unwrap_or(rest).trim_start();
     let rest = rest.strip_prefix("extern \"C\" fn ")?.trim_start();
     let end = rest.find(|c: char| !is_ident_char(c)).unwrap_or(rest.len());

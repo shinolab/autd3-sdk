@@ -88,7 +88,7 @@ fn reboot_all(option: &UdpOption, devices: usize) -> Result<(bool, Vec<DeviceSta
     outcome
 }
 
-pub async fn run(client: Client, link: &Link<'_>) -> Result<Client> {
+pub(crate) async fn run(client: Client, link: &Link<'_>) -> Result<Client> {
     let devices = client.num_devices();
     let before = client.read_firmware_version().await;
     if let Err(e) = &before {

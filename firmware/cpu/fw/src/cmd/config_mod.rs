@@ -1,4 +1,4 @@
-pub use autd3_cpu_wire::payload::ConfigModPayload;
+pub(crate) use autd3_cpu_wire::payload::ConfigModPayload;
 
 use crate::fpga;
 use crate::fpga_params::{ADDR_MOD_CYCLE0, ADDR_MOD_FREQ_DIV0, ADDR_MOD_REP0};

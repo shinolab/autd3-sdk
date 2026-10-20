@@ -61,7 +61,7 @@ async fn send_stm(
     .await
 }
 
-pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
+pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     let mut static_ff = modulation_buffer();
     constant(0xFF, &mut static_ff);
     ctx.send(autd3_rs::commands::Modulation::new(

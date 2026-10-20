@@ -45,7 +45,7 @@ async fn sweep_silencer(ctx: &Ctx<'_>) -> Result<()> {
     Ok(())
 }
 
-pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
+pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     ctx.send(SetSilencer::default()).await?;
     let focus = focus_at(ctx.geometry, [0.0, 0.0, 150.0], 0xFF);
     let mod_config = SamplingConfig::new(NonZeroU16::new(20).unwrap());

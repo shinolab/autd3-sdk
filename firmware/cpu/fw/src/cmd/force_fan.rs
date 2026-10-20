@@ -1,4 +1,4 @@
-pub use autd3_cpu_wire::payload::ForceFanPayload;
+pub(crate) use autd3_cpu_wire::payload::ForceFanPayload;
 
 use crate::fpga;
 use crate::fpga_params::{ADDR_CTL_FLAG, CtlFlags};

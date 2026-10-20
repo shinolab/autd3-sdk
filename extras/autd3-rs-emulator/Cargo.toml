@@ -12,6 +12,7 @@ homepage = "https://hapislab.org/en/airborne-ultrasound-tactile-display"
 
 [workspace.lints.rust]
 warnings = "deny"
+unreachable_pub = "warn"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }

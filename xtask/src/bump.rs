@@ -13,7 +13,7 @@ use crate::util::{capture, package_version};
 
 const DOC_COMPONENT: &str = "doc";
 
-pub const FIRMWARE_VERSIONED_CRATES: &[&str] = &["autd3-cpu-wire", "autd3-cpu-fw"];
+pub(crate) const FIRMWARE_VERSIONED_CRATES: &[&str] = &["autd3-cpu-wire", "autd3-cpu-fw"];
 
 const LOCK_WORKSPACES: &[&str] = &[
     ".",
@@ -28,7 +28,7 @@ const LOCK_WORKSPACES: &[&str] = &[
 ];
 
 #[derive(Args)]
-pub struct BumpVersionCmd {
+pub(crate) struct BumpVersionCmd {
     #[arg(
         help = "Component to bump: software, python, cs, unity, simulator, console, firmware, or doc"
     )]
@@ -39,7 +39,7 @@ pub struct BumpVersionCmd {
     no_changelog: bool,
 }
 
-pub fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
+pub(crate) fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
     if cmd.component.as_deref() == Some(DOC_COMPONENT) {
         return bump_doc(root, cmd.version.as_deref());
     }
@@ -611,7 +611,7 @@ fn bump_csharp_props(path: &Path, version: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn firmware_series(root: &Path) -> Result<String> {
+pub(crate) fn firmware_series(root: &Path) -> Result<String> {
     let version = package_version(&root.join("firmware/cpu/fw/Cargo.toml"))?;
     let [major, minor, _] = version_parts(&version)?;
 

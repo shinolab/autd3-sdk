@@ -21,7 +21,7 @@ use tower_http::services::ServeDir;
 use autd3_rs_simulator_protocol::ClientMsg;
 
 #[derive(Clone)]
-pub struct AppState {
+pub(crate) struct AppState {
     pub geometry_rx: watch::Receiver<Arc<str>>,
     pub state_rx: watch::Receiver<Arc<str>>,
     pub device_rx: watch::Receiver<Arc<str>>,
@@ -32,7 +32,7 @@ pub struct AppState {
 #[folder = "web/"]
 struct WebAssets;
 
-pub fn router(state: AppState, web_dir: Option<PathBuf>) -> Router {
+pub(crate) fn router(state: AppState, web_dir: Option<PathBuf>) -> Router {
     let router = Router::new().route("/ws", get(ws_handler));
     let router = match web_dir {
         Some(dir) => router.fallback_service(ServeDir::new(dir)),

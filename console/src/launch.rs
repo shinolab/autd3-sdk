@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-pub fn tool_bin(name: &str) -> std::io::Result<PathBuf> {
+pub(crate) fn tool_bin(name: &str) -> std::io::Result<PathBuf> {
     let exe_name = if cfg!(windows) {
         format!("{name}.exe")
     } else {

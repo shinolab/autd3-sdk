@@ -12,6 +12,7 @@ repository = "https://github.com/shinolab/autd3-sdk"
 
 [workspace.lints.rust]
 warnings = "deny"
+unreachable_pub = "warn"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }

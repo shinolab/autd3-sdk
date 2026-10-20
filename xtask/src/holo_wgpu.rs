@@ -7,7 +7,7 @@ use crate::clean::{CleanArgs, Cleaner};
 use crate::util::{cargo_clippy, cargo_fmt, publish_workspace, run};
 
 #[derive(Subcommand)]
-pub enum HoloWgpuCmd {
+pub(crate) enum HoloWgpuCmd {
     #[command(about = "Build the wgpu holo backend")]
     Build,
     #[command(
@@ -37,7 +37,7 @@ pub enum HoloWgpuCmd {
     Clean(CleanArgs),
 }
 
-pub fn run_holo_wgpu(root: &Path, cmd: &HoloWgpuCmd) -> Result<()> {
+pub(crate) fn run_holo_wgpu(root: &Path, cmd: &HoloWgpuCmd) -> Result<()> {
     let dir = root.join("extras").join("autd3-rs-pattern-holo-wgpu");
     match cmd {
         HoloWgpuCmd::Build => run("cargo", vec!["build", "--all-targets"], &dir),
@@ -59,6 +59,6 @@ fn bench(dir: &Path, filter: Option<&str>) -> Result<()> {
     run("cargo", args, dir)
 }
 
-pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
+pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {
     cleaner.path("extras/autd3-rs-pattern-holo-wgpu/target")
 }

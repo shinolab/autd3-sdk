@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::process::Command;
 
-pub fn visualize(csv: &Path) {
+pub(crate) fn visualize(csv: &Path) {
     if std::env::args().any(|a| a == "--no-plot") {
         println!(
             "--no-plot specified; skipping matplotlib (CSV: {})",

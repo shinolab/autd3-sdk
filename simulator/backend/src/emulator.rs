@@ -65,7 +65,7 @@ fn gpio_waveform(fpga: &FpgaEmulator, raw: u64) -> Vec<u8> {
 }
 
 #[must_use]
-pub fn geometry_msg(geometry: &Geometry) -> ServerMsg {
+pub(crate) fn geometry_msg(geometry: &Geometry) -> ServerMsg {
     let transducers = geometry
         .iter()
         .flat_map(|dev| {
@@ -81,7 +81,7 @@ pub fn geometry_msg(geometry: &Geometry) -> ServerMsg {
     ServerMsg::Geometry { transducers }
 }
 
-pub fn extract_device_states(devices: &[&EmuDevice]) -> Vec<DeviceState> {
+pub(crate) fn extract_device_states(devices: &[&EmuDevice]) -> Vec<DeviceState> {
     devices
         .iter()
         .map(|dev| {
@@ -122,7 +122,7 @@ pub fn extract_device_states(devices: &[&EmuDevice]) -> Vec<DeviceState> {
         .collect()
 }
 
-pub fn extract_states(devices: &[&EmuDevice], mod_enabled: bool) -> Vec<TransState> {
+pub(crate) fn extract_states(devices: &[&EmuDevice], mod_enabled: bool) -> Vec<TransState> {
     let mut out = Vec::new();
     for dev in devices {
         let fpga = dev.fpga();

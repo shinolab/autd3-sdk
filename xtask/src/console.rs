@@ -11,7 +11,7 @@ use crate::util::{
 };
 
 #[derive(Subcommand)]
-pub enum ConsoleCmd {
+pub(crate) enum ConsoleCmd {
     #[command(about = "Build the console workspace")]
     Build {
         #[arg(long, help = "Build the dev profile instead of release")]
@@ -55,7 +55,7 @@ const BINARIES: &[&str] = &[
     "autd3-server",
 ];
 
-pub fn run_console(root: &Path, cmd: &ConsoleCmd) -> Result<()> {
+pub(crate) fn run_console(root: &Path, cmd: &ConsoleCmd) -> Result<()> {
     let dir = root.join("console");
     match cmd {
         ConsoleCmd::Build { debug } => cargo_with_profile(&dir, "build", *debug),
@@ -76,7 +76,7 @@ fn cargo_with_profile(dir: &Path, subcommand: &str, debug: bool) -> Result<()> {
     run("cargo", args, dir)
 }
 
-pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
+pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {
     cleaner.paths(&[
         "console/target",
         "console/THIRD-PARTY-LICENSES.md",

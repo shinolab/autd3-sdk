@@ -20,21 +20,21 @@ use autd3_rs_pattern::{focus, set_intensity, wavelength};
 use crate::Ctx;
 use crate::cases::ERR_INVALID_TRANSITION_MODE;
 
-pub const SOUND_SPEED_M_S: f32 = 340.0;
-pub const POINT_NUM: usize = 200;
-pub const RADIUS_MM: f32 = 30.0;
-pub const TR_A: u8 = 0;
-pub const TR_B: u8 = 248;
+pub(crate) const SOUND_SPEED_M_S: f32 = 340.0;
+pub(crate) const POINT_NUM: usize = 200;
+pub(crate) const RADIUS_MM: f32 = 30.0;
+pub(crate) const TR_A: u8 = 0;
+pub(crate) const TR_B: u8 = 248;
 
-pub type Buffers = (Vec<Vec<Phase>>, Vec<Vec<Intensity>>);
+pub(crate) type Buffers = (Vec<Vec<Phase>>, Vec<Vec<Intensity>>);
 
-pub fn buffers(geometry: &Geometry, intensity: Intensity) -> Buffers {
+pub(crate) fn buffers(geometry: &Geometry, intensity: Intensity) -> Buffers {
     let mut intensities = geometry.intensity_buffer();
     set_intensity(intensity, &mut intensities);
     (geometry.phase_buffer(), intensities)
 }
 
-pub fn focus_at(geometry: &Geometry, off: [f32; 3], intensity: u8) -> Buffers {
+pub(crate) fn focus_at(geometry: &Geometry, off: [f32; 3], intensity: u8) -> Buffers {
     let (mut phases, intensities) = buffers(geometry, Intensity(intensity));
     let target = geometry.center() + offset(off[0] * mm, off[1] * mm, off[2] * mm);
     let wl = wavelength(SOUND_SPEED_M_S * m / s);
@@ -42,7 +42,7 @@ pub fn focus_at(geometry: &Geometry, off: [f32; 3], intensity: u8) -> Buffers {
     (phases, intensities)
 }
 
-pub fn circle_foci(center: Point3<f32>, n: usize) -> Vec<ControlPoints<1>> {
+pub(crate) fn circle_foci(center: Point3<f32>, n: usize) -> Vec<ControlPoints<1>> {
     (0..n)
         .map(|i| {
             let theta = 2.0 * PI * i as f32 / n as f32;
@@ -52,7 +52,7 @@ pub fn circle_foci(center: Point3<f32>, n: usize) -> Vec<ControlPoints<1>> {
         .collect()
 }
 
-pub async fn resyncs(ctx: &Ctx<'_>) -> Result<Vec<u32>> {
+pub(crate) async fn resyncs(ctx: &Ctx<'_>) -> Result<Vec<u32>> {
     Ok(ctx
         .client
         .read_telemetry()
@@ -62,7 +62,7 @@ pub async fn resyncs(ctx: &Ctx<'_>) -> Result<Vec<u32>> {
         .collect())
 }
 
-pub async fn send_pattern_mod(
+pub(crate) async fn send_pattern_mod(
     ctx: &Ctx<'_>,
     pattern: &Buffers,
     modulation: &[u8],
@@ -79,7 +79,11 @@ pub async fn send_pattern_mod(
     .await
 }
 
-pub async fn write_pattern_bank(ctx: &Ctx<'_>, bank: PatternBank, pattern: &Buffers) -> Result<()> {
+pub(crate) async fn write_pattern_bank(
+    ctx: &Ctx<'_>,
+    bank: PatternBank,
+    pattern: &Buffers,
+) -> Result<()> {
     ctx.send_frames(&Frames::encode(
         ctx.client.geometry(),
         (
@@ -95,7 +99,7 @@ pub async fn write_pattern_bank(ctx: &Ctx<'_>, bank: PatternBank, pattern: &Buff
     .await
 }
 
-pub async fn activate_pattern_bank(
+pub(crate) async fn activate_pattern_bank(
     ctx: &Ctx<'_>,
     bank: PatternBank,
     transition_mode: TransitionMode,
@@ -107,7 +111,7 @@ pub async fn activate_pattern_bank(
     .await
 }
 
-pub async fn write_mod_bank(
+pub(crate) async fn write_mod_bank(
     ctx: &Ctx<'_>,
     bank: ModulationBank,
     config: SamplingConfig,
@@ -132,7 +136,7 @@ pub async fn write_mod_bank(
     .await
 }
 
-pub async fn report_fpga_state(
+pub(crate) async fn report_fpga_state(
     ctx: &Ctx<'_>,
     label: &str,
     mod_bank: Option<ModulationBank>,
@@ -191,7 +195,7 @@ async fn send_built(
     }
 }
 
-pub async fn expect_firmware_ok(ctx: &Ctx<'_>, label: &str, built: Result<Frames, Error>) {
+pub(crate) async fn expect_firmware_ok(ctx: &Ctx<'_>, label: &str, built: Result<Frames, Error>) {
     match send_built(ctx, label, built).await {
         Some(Ok(())) => println!("  [OK] {label}: firmware accepted the command"),
         Some(Err(e)) => println!("  [FAIL] {label}: firmware rejected the command ({e:?})"),
@@ -199,7 +203,7 @@ pub async fn expect_firmware_ok(ctx: &Ctx<'_>, label: &str, built: Result<Frames
     }
 }
 
-pub async fn expect_firmware_error(
+pub(crate) async fn expect_firmware_error(
     ctx: &Ctx<'_>,
     label: &str,
     built: Result<Frames, Error>,
@@ -224,7 +228,7 @@ pub async fn expect_firmware_error(
     }
 }
 
-pub async fn expect_transition_mode_rejections(
+pub(crate) async fn expect_transition_mode_rejections(
     ctx: &Ctx<'_>,
     name: &str,
     build: impl Fn(LoopBehavior, TransitionMode) -> Result<Frames, Error>,
@@ -246,7 +250,7 @@ pub async fn expect_transition_mode_rejections(
     .await;
 }
 
-pub async fn activate_mod_bank(
+pub(crate) async fn activate_mod_bank(
     ctx: &Ctx<'_>,
     bank: ModulationBank,
     transition_mode: TransitionMode,
@@ -258,7 +262,7 @@ pub async fn activate_mod_bank(
     .await
 }
 
-pub async fn write_foci_bank(
+pub(crate) async fn write_foci_bank(
     ctx: &Ctx<'_>,
     bank: PatternBank,
     config: impl Into<StmConfig>,
@@ -288,7 +292,7 @@ pub async fn write_foci_bank(
     .await
 }
 
-pub async fn write_pattern_stm_bank(
+pub(crate) async fn write_pattern_stm_bank(
     ctx: &Ctx<'_>,
     bank: PatternBank,
     config: impl Into<StmConfig>,

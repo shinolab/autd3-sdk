@@ -6,9 +6,9 @@ mod settings;
 mod slice;
 mod state;
 
-pub use about::AboutPanel;
-pub use camera::CameraPanel;
-pub use environment::EnvironmentPanel;
-pub use settings::SettingsPanel;
-pub use slice::SlicePanel;
-pub use state::StatePanel;
+pub(crate) use about::AboutPanel;
+pub(crate) use camera::CameraPanel;
+pub(crate) use environment::EnvironmentPanel;
+pub(crate) use settings::SettingsPanel;
+pub(crate) use slice::SlicePanel;
+pub(crate) use state::StatePanel;

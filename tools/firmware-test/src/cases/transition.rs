@@ -14,7 +14,7 @@ use crate::Ctx;
 use crate::cases::pattern_util::{POINT_NUM, activate_pattern_bank, circle_foci, write_foci_bank};
 use crate::io::wait_enter;
 
-pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
+pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     let center = ctx.geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
     let foci = circle_foci(center, POINT_NUM);
     let mut reversed = foci.clone();

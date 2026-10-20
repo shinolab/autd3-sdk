@@ -15,16 +15,16 @@ const DATAGRAM_BYTES_MAX: usize = 8192;
 const ERROR_BACKOFF_MIN: Duration = Duration::from_millis(1);
 const ERROR_BACKOFF_MAX: Duration = Duration::from_secs(1);
 
-pub type Spawn = Box<dyn Fn(usize) -> io::Result<UdpEmulator> + Send + Sync>;
+pub(crate) type Spawn = Box<dyn Fn(usize) -> io::Result<UdpEmulator> + Send + Sync>;
 
-pub struct Scene {
+pub(crate) struct Scene {
     spawn: Spawn,
     emulator: Mutex<Option<UdpEmulator>>,
     geometry: watch::Sender<Arc<str>>,
 }
 
 impl Scene {
-    pub fn new(spawn: Spawn, geometry: &Geometry) -> io::Result<Arc<Self>> {
+    pub(crate) fn new(spawn: Spawn, geometry: &Geometry) -> io::Result<Arc<Self>> {
         let emulator = spawn(geometry.num_devices())?;
         let (geometry, _) = watch::channel(geometry_json(geometry)?);
         Ok(Arc::new(Self {
@@ -38,11 +38,11 @@ impl Scene {
         self.emulator.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    pub fn geometry(&self) -> watch::Receiver<Arc<str>> {
+    pub(crate) fn geometry(&self) -> watch::Receiver<Arc<str>> {
         self.geometry.subscribe()
     }
 
-    pub fn replace(&self, geometry: &Geometry) -> io::Result<()> {
+    pub(crate) fn replace(&self, geometry: &Geometry) -> io::Result<()> {
         let json = geometry_json(geometry)?;
         let mut emulator = self.emulator();
         let previous = emulator.take().map(|old| old.num_devices());
@@ -59,7 +59,7 @@ impl Scene {
         }
     }
 
-    pub fn sample<R>(&self, f: impl FnOnce(&[&EmuDevice]) -> R) -> Option<R> {
+    pub(crate) fn sample<R>(&self, f: impl FnOnce(&[&EmuDevice]) -> R) -> Option<R> {
         self.emulator()
             .as_ref()
             .map(|emulator| emulator.with_devices(f))
@@ -99,7 +99,7 @@ fn next_backoff(previous: Option<Duration>) -> Duration {
     })
 }
 
-pub fn spawn(scene: Arc<Scene>, addr: SocketAddrV6) -> io::Result<SocketAddrV6> {
+pub(crate) fn spawn(scene: Arc<Scene>, addr: SocketAddrV6) -> io::Result<SocketAddrV6> {
     let socket = UdpSocket::bind(addr)?;
     let SocketAddr::V6(addr) = socket.local_addr()? else {
         return Err(io::Error::from(io::ErrorKind::AddrNotAvailable));

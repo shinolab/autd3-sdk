@@ -3,12 +3,12 @@ use glam::{EulerRot, Quat, Vec3};
 pub(crate) const RING_SEGMENTS: u32 = 64;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub enum GizmoMode {
+pub(crate) enum GizmoMode {
     Move,
     Rotate,
 }
 
-pub enum DragUpdate {
+pub(crate) enum DragUpdate {
     Translate([f32; 3]),
     Rotate([f32; 3]),
 }

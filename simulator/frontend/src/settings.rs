@@ -4,7 +4,7 @@ const STORAGE_KEY: &str = "autd3-simulator-settings";
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]
 #[serde(default)]
-pub struct Settings {
+pub(crate) struct Settings {
     pub max_pressure: f32,
     pub show_markers: bool,
     pub sound_speed: f32,
@@ -50,14 +50,14 @@ fn storage() -> Option<web_sys::Storage> {
 
 impl Settings {
     #[must_use]
-    pub fn load() -> Self {
+    pub(crate) fn load() -> Self {
         storage()
             .and_then(|s| s.get_item(STORAGE_KEY).ok().flatten())
             .and_then(|json| serde_json::from_str(&json).ok())
             .unwrap_or_default()
     }
 
-    pub fn save(&self) {
+    pub(crate) fn save(&self) {
         if let Some(s) = storage()
             && let Ok(json) = serde_json::to_string(self)
         {
@@ -67,13 +67,13 @@ impl Settings {
 }
 
 #[must_use]
-pub fn rgb_to_hex(rgb: [f32; 3]) -> String {
+pub(crate) fn rgb_to_hex(rgb: [f32; 3]) -> String {
     let c = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
     format!("#{:02x}{:02x}{:02x}", c(rgb[0]), c(rgb[1]), c(rgb[2]))
 }
 
 #[must_use]
-pub fn hex_to_rgb(hex: &str) -> Option<[f32; 3]> {
+pub(crate) fn hex_to_rgb(hex: &str) -> Option<[f32; 3]> {
     let h = hex.strip_prefix('#').unwrap_or(hex);
     if h.len() != 6 {
         return None;

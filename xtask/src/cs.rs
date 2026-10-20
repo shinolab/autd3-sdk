@@ -52,7 +52,7 @@ pub(crate) const PACKAGES: &[BindingPkg] = &[
 pub(crate) const RIDS: &[&str] = &["win-x64", "linux-x64", "osx-arm64"];
 
 #[derive(Subcommand)]
-pub enum CsCmd {
+pub(crate) enum CsCmd {
     #[command(about = "Build the C# solution")]
     Build {
         #[arg(long, help = "Build the Debug configuration instead of Release")]
@@ -94,7 +94,7 @@ pub enum CsCmd {
     Clean(CleanArgs),
 }
 
-pub fn run_cs(root: &Path, cmd: CsCmd) -> Result<()> {
+pub(crate) fn run_cs(root: &Path, cmd: CsCmd) -> Result<()> {
     let dir = root.join("bindings").join("csharp");
     match cmd {
         CsCmd::Build { debug } => build(&dir, debug),
@@ -106,7 +106,7 @@ pub fn run_cs(root: &Path, cmd: CsCmd) -> Result<()> {
     }
 }
 
-pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
+pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {
     cleaner.path("bindings/csharp/dist")?;
     cleaner.in_each_subdir(
         "bindings/csharp/src",

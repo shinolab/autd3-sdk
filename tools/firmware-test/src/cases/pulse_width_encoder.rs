@@ -20,7 +20,7 @@ fn drive_pair(ctx: &Ctx<'_>, dev0: (u8, u8), other: (u8, u8)) -> Buffers {
     (phases, intensities)
 }
 
-pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
+pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     ctx.send(SetGpioOut {
         outputs: [
             GpioOut::PwmOut(TR_A),

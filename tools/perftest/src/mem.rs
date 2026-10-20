@@ -1,9 +1,9 @@
-pub struct SizeBucket {
+pub(crate) struct SizeBucket {
     pub size: usize,
     pub count: u64,
 }
 
-pub struct MemProfile {
+pub(crate) struct MemProfile {
     pub allocations: u64,
     pub deallocations: u64,
     pub reallocations: u64,
@@ -120,15 +120,15 @@ mod imp {
 mod imp {
     use super::MemProfile;
 
-    pub struct Recorder;
+    pub(crate) struct Recorder;
 
-    pub fn start() -> Recorder {
+    pub(crate) fn start() -> Recorder {
         Recorder
     }
 
-    pub fn profile(_recorder: Recorder, _sends: u64) -> Option<MemProfile> {
+    pub(crate) fn profile(_recorder: Recorder, _sends: u64) -> Option<MemProfile> {
         None
     }
 }
 
-pub use imp::{Recorder, profile, start};
+pub(crate) use imp::{Recorder, profile, start};

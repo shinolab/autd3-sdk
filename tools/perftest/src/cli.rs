@@ -9,7 +9,7 @@ const DEFAULT_HEARTBEAT: &str = "10ms";
 const DEFAULT_ACK_TIMEOUT: &str = "10ms";
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
-pub enum Mode {
+pub(crate) enum Mode {
     #[default]
     StopAndWait,
     Streaming,
@@ -17,14 +17,14 @@ pub enum Mode {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
-pub enum Framing {
+pub(crate) enum Framing {
     #[default]
     Fused,
     Split,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
-pub enum Command {
+pub(crate) enum Command {
     Nop,
     WritePatternBuffer,
     #[default]
@@ -33,18 +33,18 @@ pub enum Command {
 }
 
 impl Command {
-    pub const fn is_pattern(self) -> bool {
+    pub(crate) const fn is_pattern(self) -> bool {
         matches!(self, Self::WritePatternBuffer | Self::Pattern)
     }
 
-    pub const fn is_bulk(self) -> bool {
+    pub(crate) const fn is_bulk(self) -> bool {
         matches!(self, Self::WriteModulationBuffer)
     }
 }
 
 #[derive(Parser, Debug, Clone)]
 #[command(name = "autd3-rs-perftest", about)]
-pub struct Cli {
+pub(crate) struct Cli {
     #[arg(
         long,
         default_value_t = false,
@@ -179,7 +179,7 @@ pub struct Cli {
 }
 
 impl Cli {
-    pub fn validate(&self) -> Result<(), String> {
+    pub(crate) fn validate(&self) -> Result<(), String> {
         if (self.mode == Mode::Streaming || self.command.is_bulk())
             && (self.max_inflight == 0 || self.max_inflight > MAX_INFLIGHT)
         {

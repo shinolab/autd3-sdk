@@ -21,7 +21,7 @@ const MIN_SEND_RATE_LIMIT: f32 = 3.076;
 const SUGGESTED_SEND_RATE_LIMIT: f32 = 95.0;
 
 #[derive(Clone, Copy, Default, PartialEq, Eq, Debug, Serialize, Deserialize)]
-pub enum Setting<T> {
+pub(crate) enum Setting<T> {
     #[default]
     Default,
     Custom(T),
@@ -30,7 +30,7 @@ pub enum Setting<T> {
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
-pub struct ServerConfig {
+pub(crate) struct ServerConfig {
     pub devices: u32,
     pub iface: String,
     pub port: u16,
@@ -429,7 +429,7 @@ impl Output {
 }
 
 #[derive(Default)]
-pub struct ServerPanel {
+pub(crate) struct ServerPanel {
     pub config: ServerConfig,
     proc: Option<ManagedProcess>,
     output: Output,
@@ -445,7 +445,7 @@ fn mark(ui: &mut egui::Ui, good: bool) {
 }
 
 impl ServerPanel {
-    pub fn pump(&mut self) {
+    pub(crate) fn pump(&mut self) {
         if let Some(proc) = &mut self.proc {
             proc.pump_with(|line| {
                 self.output.take(line);
@@ -454,11 +454,11 @@ impl ServerPanel {
         }
     }
 
-    pub fn is_running(&self) -> bool {
+    pub(crate) fn is_running(&self) -> bool {
         self.proc.as_ref().is_some_and(ManagedProcess::is_running)
     }
 
-    pub fn ui(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn ui(&mut self, ui: &mut egui::Ui) {
         let running = self.is_running();
 
         ui.add_enabled_ui(!running, |ui| self.config.ui(ui));

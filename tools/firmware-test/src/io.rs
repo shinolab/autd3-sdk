@@ -5,19 +5,19 @@ const GREEN: &str = "\x1b[32m";
 const BOLD: &str = "\x1b[1m";
 const RESET: &str = "\x1b[0m";
 
-pub fn check(msg: &str) {
+pub(crate) fn check(msg: &str) {
     for line in msg.lines() {
         println!("{YELLOW}{BOLD}Check{RESET}: {line}");
     }
 }
 
-pub async fn wait_enter(msg: &str) {
+pub(crate) async fn wait_enter(msg: &str) {
     check(msg);
     println!("Press Enter to continue...");
     read_line().await;
 }
 
-pub async fn prompt(msg: &str) -> String {
+pub(crate) async fn prompt(msg: &str) -> String {
     print!("{GREEN}{BOLD}{msg}{RESET}: ");
     let _ = std::io::stdout().flush();
     read_line().await

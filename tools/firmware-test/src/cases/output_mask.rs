@@ -35,7 +35,7 @@ fn all_on(ctx: &Ctx<'_>) -> Vec<Vec<bool>> {
         .collect()
 }
 
-pub async fn run(ctx: &Ctx<'_>) -> Result<()> {
+pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     let focus = focus_at(ctx.geometry, [0.0, 0.0, 150.0], 0xFF);
     let mut sine150 = modulation_buffer();
     sine(

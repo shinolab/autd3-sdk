@@ -11,7 +11,7 @@ use crate::util::{
     run, run_cargo, run_env, run_tool,
 };
 
-pub fn build_backend_and_frontend(
+pub(crate) fn build_backend_and_frontend(
     root: &Path,
     debug: bool,
     target: Option<&str>,
@@ -60,7 +60,7 @@ fn stage_web_assets(sim: &Path, public: &Path) -> Result<()> {
 }
 
 #[derive(Subcommand)]
-pub enum SimulatorCmd {
+pub(crate) enum SimulatorCmd {
     #[command(about = "Build the backend workspace and the browser frontend bundle")]
     Build {
         #[arg(long, help = "Build the dev profile instead of release")]
@@ -103,7 +103,7 @@ pub enum SimulatorCmd {
     Clean(CleanArgs),
 }
 
-pub fn run_simulator(root: &Path, cmd: &SimulatorCmd) -> Result<()> {
+pub(crate) fn run_simulator(root: &Path, cmd: &SimulatorCmd) -> Result<()> {
     let sim = root.join("simulator");
     let frontend = sim.join("frontend");
     match cmd {
@@ -135,7 +135,7 @@ pub fn run_simulator(root: &Path, cmd: &SimulatorCmd) -> Result<()> {
     }
 }
 
-pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
+pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {
     cleaner.paths(&[
         "simulator/target",
         "simulator/THIRD-PARTY-LICENSES.md",

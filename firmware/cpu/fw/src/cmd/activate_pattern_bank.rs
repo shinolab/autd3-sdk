@@ -1,4 +1,4 @@
-pub use autd3_cpu_wire::payload::ActivatePatternBankPayload;
+pub(crate) use autd3_cpu_wire::payload::ActivatePatternBankPayload;
 
 use crate::cmd::bank::{PATTERN_BANK_REGS, activate_bank};
 use crate::cmd::cpu_config::CpuConfig;

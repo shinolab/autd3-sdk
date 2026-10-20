@@ -7,7 +7,7 @@ const BIN: &str = "autd3-simulator";
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default)]
-pub struct SimulatorConfig {
+pub(crate) struct SimulatorConfig {
     pub port: u16,
     pub http_port: u16,
 }
@@ -33,24 +33,24 @@ impl SimulatorConfig {
 }
 
 #[derive(Default)]
-pub struct SimulatorPanel {
+pub(crate) struct SimulatorPanel {
     pub config: SimulatorConfig,
     proc: Option<ManagedProcess>,
     error: Option<String>,
 }
 
 impl SimulatorPanel {
-    pub fn pump(&mut self) {
+    pub(crate) fn pump(&mut self) {
         if let Some(proc) = &mut self.proc {
             proc.pump();
         }
     }
 
-    pub fn is_running(&self) -> bool {
+    pub(crate) fn is_running(&self) -> bool {
         self.proc.as_ref().is_some_and(ManagedProcess::is_running)
     }
 
-    pub fn ui(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn ui(&mut self, ui: &mut egui::Ui) {
         let running = self.is_running();
 
         egui::Grid::new("simulator-config")

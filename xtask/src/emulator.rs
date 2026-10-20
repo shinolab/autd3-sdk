@@ -7,7 +7,7 @@ use crate::clean::{CleanArgs, Cleaner};
 use crate::util::{cargo_clippy, cargo_fmt, publish_workspace, run};
 
 #[derive(Subcommand)]
-pub enum EmulatorCmd {
+pub(crate) enum EmulatorCmd {
     #[command(about = "Build the emulator workspace")]
     Build {
         #[arg(long, help = "Enable the GPU-accelerated field computation")]
@@ -54,7 +54,7 @@ pub enum EmulatorCmd {
     Clean(CleanArgs),
 }
 
-pub fn run_emulator(root: &Path, cmd: &EmulatorCmd) -> Result<()> {
+pub(crate) fn run_emulator(root: &Path, cmd: &EmulatorCmd) -> Result<()> {
     let dir = root.join("extras").join("autd3-rs-emulator");
     match cmd {
         EmulatorCmd::Build { gpu } => build(&dir, *gpu),
@@ -81,7 +81,7 @@ pub fn run_emulator(root: &Path, cmd: &EmulatorCmd) -> Result<()> {
     }
 }
 
-pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
+pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {
     cleaner.path("extras/autd3-rs-emulator/target")
 }
 

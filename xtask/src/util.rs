@@ -4,14 +4,14 @@ use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 
-pub fn workspace_root() -> PathBuf {
+pub(crate) fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("xtask crate lives one directory below the workspace root")
         .to_path_buf()
 }
 
-pub fn exe_name(name: &str) -> String {
+pub(crate) fn exe_name(name: &str) -> String {
     if cfg!(windows) {
         format!("{name}.exe")
     } else {
@@ -19,13 +19,18 @@ pub fn exe_name(name: &str) -> String {
     }
 }
 
-pub fn dist_target() -> Option<String> {
+pub(crate) fn dist_target() -> Option<String> {
     std::env::var("CARGO_DIST_TARGET")
         .ok()
         .filter(|target| !target.is_empty())
 }
 
-pub fn cargo_bin(workspace: &Path, target: Option<&str>, debug: bool, name: &str) -> PathBuf {
+pub(crate) fn cargo_bin(
+    workspace: &Path,
+    target: Option<&str>,
+    debug: bool,
+    name: &str,
+) -> PathBuf {
     let mut dir = workspace.join("target");
     if let Some(target) = target {
         dir = dir.join(target);
@@ -34,7 +39,7 @@ pub fn cargo_bin(workspace: &Path, target: Option<&str>, debug: bool, name: &str
         .join(exe_name(name))
 }
 
-pub fn run_cargo<I, S>(args: I, cwd: &Path) -> Result<()>
+pub(crate) fn run_cargo<I, S>(args: I, cwd: &Path) -> Result<()>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
@@ -55,7 +60,7 @@ where
     Ok(())
 }
 
-pub fn cargo_build_args<'a>(
+pub(crate) fn cargo_build_args<'a>(
     package: &'a str,
     target: Option<&'a str>,
     debug: bool,
@@ -71,7 +76,7 @@ pub fn cargo_build_args<'a>(
     args
 }
 
-pub fn copy_file(src: &Path, dst: &Path) -> Result<()> {
+pub(crate) fn copy_file(src: &Path, dst: &Path) -> Result<()> {
     if let Some(parent) = dst.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -80,7 +85,7 @@ pub fn copy_file(src: &Path, dst: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn copy_dir(src: &Path, dst: &Path) -> Result<()> {
+pub(crate) fn copy_dir(src: &Path, dst: &Path) -> Result<()> {
     std::fs::create_dir_all(dst)?;
     for entry in std::fs::read_dir(src).with_context(|| format!("reading {}", src.display()))? {
         let entry = entry?;
@@ -95,7 +100,7 @@ pub fn copy_dir(src: &Path, dst: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn files_under(dir: &Path, descend: impl Fn(&str) -> bool) -> Result<Vec<PathBuf>> {
+pub(crate) fn files_under(dir: &Path, descend: impl Fn(&str) -> bool) -> Result<Vec<PathBuf>> {
     walkdir::WalkDir::new(dir)
         .follow_links(true)
         .into_iter()
@@ -113,7 +118,7 @@ pub fn files_under(dir: &Path, descend: impl Fn(&str) -> bool) -> Result<Vec<Pat
         .with_context(|| format!("reading {}", dir.display()))
 }
 
-pub fn which(name: &str) -> Option<PathBuf> {
+pub(crate) fn which(name: &str) -> Option<PathBuf> {
     let paths = std::env::var_os("PATH")?;
     let exts: Vec<String> = if cfg!(windows) {
         std::env::var("PATHEXT")
@@ -131,7 +136,7 @@ pub fn which(name: &str) -> Option<PathBuf> {
     })
 }
 
-pub fn on_path(name: &str) -> bool {
+pub(crate) fn on_path(name: &str) -> bool {
     which(name).is_some()
 }
 
@@ -149,7 +154,7 @@ fn trimmed_stdout(program: &str, stdout: Vec<u8>) -> Result<String> {
     Ok(stdout.trim().to_string())
 }
 
-pub fn capture(program: &str, args: &[&str], cwd: &Path) -> Result<String> {
+pub(crate) fn capture(program: &str, args: &[&str], cwd: &Path) -> Result<String> {
     let output = output(program, args, cwd)?;
     if !output.status.success() {
         bail!("`{program}` exited with {}", output.status);
@@ -157,11 +162,11 @@ pub fn capture(program: &str, args: &[&str], cwd: &Path) -> Result<String> {
     trimmed_stdout(program, output.stdout)
 }
 
-pub fn capture_lenient(program: &str, args: &[&str], cwd: &Path) -> Result<String> {
+pub(crate) fn capture_lenient(program: &str, args: &[&str], cwd: &Path) -> Result<String> {
     trimmed_stdout(program, output(program, args, cwd)?.stdout)
 }
 
-pub fn package_version(manifest: &Path) -> Result<String> {
+pub(crate) fn package_version(manifest: &Path) -> Result<String> {
     let text = std::fs::read_to_string(manifest)
         .with_context(|| format!("reading {}", manifest.display()))?;
     let doc: toml_edit::DocumentMut = text
@@ -174,7 +179,7 @@ pub fn package_version(manifest: &Path) -> Result<String> {
         .with_context(|| format!("no [package] version in {}", manifest.display()))
 }
 
-pub struct MemberPackage {
+pub(crate) struct MemberPackage {
     name: String,
     version: String,
     publishable: bool,
@@ -229,20 +234,20 @@ fn read_member_package(
 }
 
 impl MemberPackage {
-    pub fn name(&self) -> &str {
+    pub(crate) fn name(&self) -> &str {
         &self.name
     }
 
-    pub fn dir(&self) -> &Path {
+    pub(crate) fn dir(&self) -> &Path {
         &self.dir
     }
 
-    pub fn publishable(&self) -> bool {
+    pub(crate) fn publishable(&self) -> bool {
         self.publishable
     }
 }
 
-pub fn workspace_members(workspace_dir: &Path) -> Result<Vec<MemberPackage>> {
+pub(crate) fn workspace_members(workspace_dir: &Path) -> Result<Vec<MemberPackage>> {
     let manifest = workspace_dir.join("Cargo.toml");
     let text = std::fs::read_to_string(&manifest)
         .with_context(|| format!("failed to read {}", manifest.display()))?;
@@ -297,7 +302,7 @@ fn is_published(package: &MemberPackage, cwd: &Path) -> Result<bool> {
     )
 }
 
-pub fn publish_workspace(workspace_dir: &Path, dry_run: bool) -> Result<()> {
+pub(crate) fn publish_workspace(workspace_dir: &Path, dry_run: bool) -> Result<()> {
     let mut args = vec![
         "publish".to_string(),
         "--workspace".to_string(),
@@ -330,7 +335,7 @@ pub fn publish_workspace(workspace_dir: &Path, dry_run: bool) -> Result<()> {
     run("cargo", args, workspace_dir)
 }
 
-pub fn cargo_fmt(dir: &Path, scope: &[&str], fix: bool) -> Result<()> {
+pub(crate) fn cargo_fmt(dir: &Path, scope: &[&str], fix: bool) -> Result<()> {
     let mut args = vec!["fmt"];
     args.extend_from_slice(scope);
     if !fix {
@@ -339,14 +344,14 @@ pub fn cargo_fmt(dir: &Path, scope: &[&str], fix: bool) -> Result<()> {
     run("cargo", args, dir)
 }
 
-pub fn cargo_clippy(dir: &Path, args: &[&str]) -> Result<()> {
+pub(crate) fn cargo_clippy(dir: &Path, args: &[&str]) -> Result<()> {
     let mut full = vec!["clippy"];
     full.extend_from_slice(args);
     full.extend(["--", "-D", "warnings"]);
     run("cargo", full, dir)
 }
 
-pub fn run<I, S>(program: &str, args: I, cwd: &Path) -> Result<()>
+pub(crate) fn run<I, S>(program: &str, args: I, cwd: &Path) -> Result<()>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
@@ -354,7 +359,12 @@ where
     run_env(program, args, cwd, &[])
 }
 
-pub fn run_env<I, S>(program: &str, args: I, cwd: &Path, env: &[(&str, &OsStr)]) -> Result<()>
+pub(crate) fn run_env<I, S>(
+    program: &str,
+    args: I,
+    cwd: &Path,
+    env: &[(&str, &OsStr)],
+) -> Result<()>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
@@ -373,7 +383,7 @@ where
     Ok(())
 }
 
-pub fn run_tool<I, S>(program: &str, args: I, cwd: &Path) -> Result<()>
+pub(crate) fn run_tool<I, S>(program: &str, args: I, cwd: &Path) -> Result<()>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
@@ -387,11 +397,25 @@ where
     }
 }
 
-pub fn host_triple() -> Result<String> {
+pub(crate) fn host_triple() -> Result<String> {
     let verbose = capture("rustc", &["-vV"], &workspace_root())?;
     verbose
         .lines()
         .find_map(|line| line.strip_prefix("host: "))
         .map(str::to_string)
         .context("`rustc -vV` reported no host triple")
+}
+
+pub(crate) fn strip_visibility(line: &str) -> &str {
+    let Some(rest) = line.strip_prefix("pub") else {
+        return line;
+    };
+    if let Some(rest) = rest.strip_prefix('(') {
+        rest.split_once(')')
+            .map_or(line, |(_, rest)| rest.trim_start())
+    } else if rest.starts_with(char::is_whitespace) {
+        rest.trim_start()
+    } else {
+        line
+    }
 }

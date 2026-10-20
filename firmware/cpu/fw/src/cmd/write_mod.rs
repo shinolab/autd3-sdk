@@ -1,4 +1,4 @@
-pub use autd3_cpu_wire::payload::WriteModPayload;
+pub(crate) use autd3_cpu_wire::payload::WriteModPayload;
 
 use crate::fpga::{self, MOD_RAM};
 use crate::port::Port;

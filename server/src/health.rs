@@ -1,10 +1,10 @@
 use autd3_cpu_wire::udp::{Flags, UnitInfo};
 
-pub const MISSES_BEFORE_SILENT: u32 = 3;
+pub(crate) const MISSES_BEFORE_SILENT: u32 = 3;
 const SYNCED: Flags = Flags::PTP_LOCKED.union(Flags::SYNC_READY);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Change {
+pub(crate) enum Change {
     Silent(usize),
     Answering(usize),
     Unlocked(usize),
@@ -12,7 +12,7 @@ pub enum Change {
 }
 
 #[derive(Clone, Debug)]
-pub struct Health {
+pub(crate) struct Health {
     known: Vec<Option<UnitInfo>>,
     misses: Vec<u32>,
 }
@@ -23,7 +23,7 @@ fn is_synced(info: Option<&UnitInfo>) -> Option<bool> {
 
 impl Health {
     #[must_use]
-    pub fn new(devices: Vec<Option<UnitInfo>>) -> Self {
+    pub(crate) fn new(devices: Vec<Option<UnitInfo>>) -> Self {
         Self {
             misses: devices
                 .iter()
@@ -40,18 +40,18 @@ impl Health {
     }
 
     #[must_use]
-    pub fn known(&self) -> &[Option<UnitInfo>] {
+    pub(crate) fn known(&self) -> &[Option<UnitInfo>] {
         &self.known
     }
 
     #[must_use]
-    pub fn any_silent(&self) -> bool {
+    pub(crate) fn any_silent(&self) -> bool {
         self.misses
             .iter()
             .any(|&misses| misses >= MISSES_BEFORE_SILENT)
     }
 
-    pub fn observe(&mut self, devices: &[Option<UnitInfo>]) -> Vec<Change> {
+    pub(crate) fn observe(&mut self, devices: &[Option<UnitInfo>]) -> Vec<Change> {
         let mut changes = Vec::new();
         for (index, device) in devices.iter().enumerate().take(self.known.len()) {
             let answered = device.filter(|info| info.flags.contains(Flags::ASSIGNED));

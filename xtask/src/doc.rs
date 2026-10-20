@@ -24,7 +24,7 @@ const SAMPLE_TIMEOUT: Duration = Duration::from_secs(30);
 const LONG_RUNNING_TIMEOUT: Duration = Duration::from_secs(8);
 
 #[derive(Subcommand)]
-pub enum DocCmd {
+pub(crate) enum DocCmd {
     #[command(about = "Build the static site into `doc/dist/`")]
     Build {
         #[arg(long, help = "Skip compiling the Rust samples")]
@@ -75,7 +75,7 @@ pub enum DocCmd {
     Clean(CleanArgs),
 }
 
-pub fn run_doc(root: &Path, cmd: &DocCmd) -> Result<()> {
+pub(crate) fn run_doc(root: &Path, cmd: &DocCmd) -> Result<()> {
     let doc = root.join("doc");
     let samples = doc.join("codes").join("rust");
     match cmd {
@@ -95,7 +95,7 @@ pub fn run_doc(root: &Path, cmd: &DocCmd) -> Result<()> {
     }
 }
 
-pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
+pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {
     cleaner.paths(&[
         "doc/dist",
         "doc/.astro",
@@ -223,7 +223,7 @@ fn file_uri(path: &Path) -> String {
     }
 }
 
-pub fn add_version(root: &Path, slug: &str) -> Result<bool> {
+pub(crate) fn add_version(root: &Path, slug: &str) -> Result<bool> {
     let doc = root.join("doc");
     if version_slugs(&doc)?.iter().any(|s| s == slug) {
         println!("doc: version {slug} is already declared in astro.config.mjs");
@@ -240,7 +240,7 @@ pub fn add_version(root: &Path, slug: &str) -> Result<bool> {
     Ok(true)
 }
 
-pub fn remove_version(doc: &Path, slug: &str) -> Result<()> {
+pub(crate) fn remove_version(doc: &Path, slug: &str) -> Result<()> {
     let slugs = version_slugs(doc)?;
     if !slugs.iter().any(|s| s == slug) {
         bail!("version {slug} is not declared in astro.config.mjs");
@@ -829,24 +829,24 @@ fn component_version(root: &Path, name: &str) -> Result<String> {
     crate::component::find(name)?.current_version(root)
 }
 
-pub fn rewrite_firmware_series(root: &Path, series: &str) -> Result<usize> {
+pub(crate) fn rewrite_firmware_series(root: &Path, series: &str) -> Result<usize> {
     rewrite_spans(root, firmware_series_spans, &format!("{series}.x"))
 }
 
-pub fn rewrite_unity_version(root: &Path, version: &str) -> Result<usize> {
+pub(crate) fn rewrite_unity_version(root: &Path, version: &str) -> Result<usize> {
     rewrite_spans(root, unity_version_spans, version)
 }
 
-pub fn rewrite_console_version(root: &Path, version: &str) -> Result<usize> {
+pub(crate) fn rewrite_console_version(root: &Path, version: &str) -> Result<usize> {
     rewrite_spans(root, console_version_spans, version)
 }
 
-pub fn rewrite_crate_version(root: &Path, version: &str) -> Result<usize> {
+pub(crate) fn rewrite_crate_version(root: &Path, version: &str) -> Result<usize> {
     let files = crate_pin_files(root, &root.join("doc"))?;
     rewrite_spans_in(&files, crate_version_spans, &|old| crate_pin(old, version))
 }
 
-pub fn sync_snapshot_versions(root: &Path, slug: &str) -> Result<usize> {
+pub(crate) fn sync_snapshot_versions(root: &Path, slug: &str) -> Result<usize> {
     let doc = root.join("doc");
     if !version_slugs(&doc)?.iter().any(|s| s == slug) {
         bail!(

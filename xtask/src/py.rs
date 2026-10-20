@@ -20,7 +20,7 @@ const FREE_THREADED_UNMET_DEPS: &[&str] = &["autd3-emulator"];
 const FREE_THREADED_UNAVAILABLE: &[&str] = &["polars"];
 
 #[derive(Subcommand)]
-pub enum PyCmd {
+pub(crate) enum PyCmd {
     #[command(about = "Build the wheels into `bindings/python/target/wheels`")]
     Build {
         #[arg(long, help = "Build the dev profile instead of release")]
@@ -78,7 +78,7 @@ pub enum PyCmd {
     Clean(CleanArgs),
 }
 
-pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
+pub(crate) fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
     let dir = root.join("bindings").join("python");
     match cmd {
         PyCmd::Build {
@@ -98,7 +98,7 @@ pub fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
     }
 }
 
-pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
+pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {
     cleaner.paths(&[
         "bindings/python/target",
         "bindings/python/.pytest_cache",

@@ -5,7 +5,7 @@ use clap::Parser;
 
 #[derive(Parser, Debug, Clone)]
 #[command(name = "autd3-rs-firmware-test", about)]
-pub struct Cli {
+pub(crate) struct Cli {
     #[arg(long, default_value = None)]
     pub interface: Option<String>,
     #[arg(
@@ -42,7 +42,7 @@ pub struct Cli {
 }
 
 impl Cli {
-    pub fn validate(&self) -> Result<(), String> {
+    pub(crate) fn validate(&self) -> Result<(), String> {
         if self.devices == 0 {
             return Err("--devices must be at least 1".to_string());
         }
@@ -67,7 +67,7 @@ impl Cli {
         Ok(())
     }
 
-    pub fn client_config(&self) -> ClientConfig {
+    pub(crate) fn client_config(&self) -> ClientConfig {
         let default = ClientConfig::default();
         ClientConfig {
             ack_timeout: self

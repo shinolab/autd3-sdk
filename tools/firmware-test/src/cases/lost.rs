@@ -109,7 +109,7 @@ async fn detect(client: &Client, states: &StateChecker, first: usize) {
     );
 }
 
-pub async fn run(client: Client, link: &Link<'_>) -> Result<Client> {
+pub(crate) async fn run(client: Client, link: &Link<'_>) -> Result<Client> {
     let count = client.num_devices();
     let states = client.state_checker();
     let before = snapshot(&states);

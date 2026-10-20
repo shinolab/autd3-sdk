@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 
 use crate::util::capture;
 
-pub struct Component {
+pub(crate) struct Component {
     pub name: &'static str,
     pub section: &'static str,
     pub tag_prefix: &'static str,
@@ -14,7 +14,7 @@ pub struct Component {
     pub version_table: &'static [&'static str],
 }
 
-pub const COMPONENTS: &[Component] = &[
+pub(crate) const COMPONENTS: &[Component] = &[
     Component {
         name: "software",
         section: "Rust",
@@ -86,7 +86,7 @@ pub const COMPONENTS: &[Component] = &[
     },
 ];
 
-pub fn find(name: &str) -> Result<&'static Component> {
+pub(crate) fn find(name: &str) -> Result<&'static Component> {
     COMPONENTS
         .iter()
         .find(|c| c.name == name)
@@ -94,14 +94,14 @@ pub fn find(name: &str) -> Result<&'static Component> {
 }
 
 impl Component {
-    pub fn tag_prefixes(&self) -> Vec<&'static str> {
+    pub(crate) fn tag_prefixes(&self) -> Vec<&'static str> {
         let mut prefixes = vec![self.tag_prefix];
         prefixes.extend_from_slice(self.also_shipped_by);
         prefixes.sort_by_key(|p| std::cmp::Reverse(p.len()));
         prefixes
     }
 
-    pub fn current_version(&self, root: &Path) -> Result<String> {
+    pub(crate) fn current_version(&self, root: &Path) -> Result<String> {
         let file = root.join(self.version_file);
         let text = std::fs::read_to_string(&file)
             .with_context(|| format!("reading {}", file.display()))?;
@@ -113,7 +113,7 @@ impl Component {
         version.with_context(|| format!("no version found in {}", file.display()))
     }
 
-    pub fn is_released(&self, root: &Path, version: &str) -> Result<bool> {
+    pub(crate) fn is_released(&self, root: &Path, version: &str) -> Result<bool> {
         let tags = capture("git", &["tag", "--list"], root)?;
         Ok(tags.lines().any(|tag| {
             self.tag_prefixes()
@@ -122,7 +122,7 @@ impl Component {
         }))
     }
 
-    pub fn pending_tag(&self, root: &Path) -> Result<Option<String>> {
+    pub(crate) fn pending_tag(&self, root: &Path) -> Result<Option<String>> {
         let version = self.current_version(root)?;
         if version.is_empty() {
             bail!("empty version in {}", self.version_file);
@@ -158,7 +158,7 @@ pub(crate) fn after_quoted(text: &str, key: &str) -> Option<String> {
     Some(rest[..end].to_string())
 }
 
-pub fn release_sections(primary: &'static Component) -> Vec<&'static Component> {
+pub(crate) fn release_sections(primary: &'static Component) -> Vec<&'static Component> {
     let names: &[&str] = match primary.name {
         "software" => &["software", "python", "cs"],
         "console" => &["console", "simulator"],
@@ -167,7 +167,7 @@ pub fn release_sections(primary: &'static Component) -> Vec<&'static Component> 
     names.iter().filter_map(|name| find(name).ok()).collect()
 }
 
-pub fn detect<'a>(versioned: &'a str) -> Option<(&'static Component, &'a str)> {
+pub(crate) fn detect<'a>(versioned: &'a str) -> Option<(&'static Component, &'a str)> {
     let mut best: Option<(&'static Component, &'a str)> = None;
     for c in COMPONENTS {
         if let Some(rest) = versioned.strip_prefix(c.tag_prefix)

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(default)]
-pub struct UdpConfig {
+pub(crate) struct UdpConfig {
     pub interface: String,
     pub heartbeat_us: Option<u64>,
     pub response_timeout_ms: Option<u64>,
@@ -12,7 +12,7 @@ pub struct UdpConfig {
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(default)]
-pub struct OtaConfig {
+pub(crate) struct OtaConfig {
     pub reboot_wait_secs: u64,
     pub udp: UdpConfig,
 }
@@ -39,7 +39,7 @@ fn push_opt(args: &mut Vec<String>, flag: &str, value: Option<u64>) {
 }
 
 impl OtaConfig {
-    pub fn args(&self, version: &str, target: &str) -> Vec<String> {
+    pub(crate) fn args(&self, version: &str, target: &str) -> Vec<String> {
         let mut args = vec![
             "--version".to_string(),
             version.to_string(),
@@ -64,7 +64,7 @@ impl OtaConfig {
         push_opt(args, "--enumeration-timeout-ms", u.enumeration_timeout_ms);
     }
 
-    pub fn ui(&mut self, ui: &mut egui::Ui, enabled: bool) {
+    pub(crate) fn ui(&mut self, ui: &mut egui::Ui, enabled: bool) {
         ui.add_enabled_ui(enabled, |ui| {
             egui::Grid::new("ota-common")
                 .num_columns(2)
@@ -128,7 +128,7 @@ impl OtaConfig {
         );
     }
 
-    pub fn hint() -> String {
+    pub(crate) fn hint() -> String {
         format!(
             "Devices on the UDP firmware (v0.10.0 or newer) need the host firewall to accept \
              UDP from fe80::/10 port {DEVICE_PORT} on the interface they hang off; no \

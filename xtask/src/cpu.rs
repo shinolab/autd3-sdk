@@ -10,7 +10,7 @@ use crate::cpu_codegen::gen_param;
 use crate::util::{cargo_clippy, cargo_fmt, run, run_env, which};
 
 #[derive(Subcommand)]
-pub enum CpuCmd {
+pub(crate) enum CpuCmd {
     #[command(
         about = "Build the loader and the application from `board` and merge them into the flashable `.bin`"
     )]
@@ -48,7 +48,7 @@ pub enum CpuCmd {
     Clean(CleanArgs),
 }
 
-pub fn run_cpu(root: &Path, cmd: &CpuCmd) -> Result<()> {
+pub(crate) fn run_cpu(root: &Path, cmd: &CpuCmd) -> Result<()> {
     match cmd {
         CpuCmd::Build => cpu_build(root).map(|_| ()),
         CpuCmd::Flash => cpu_flash(root),
@@ -64,11 +64,11 @@ pub fn run_cpu(root: &Path, cmd: &CpuCmd) -> Result<()> {
     }
 }
 
-pub fn clean(cleaner: &mut Cleaner) -> Result<()> {
+pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {
     cleaner.paths(&["firmware/cpu/build", "firmware/cpu/board/target"])
 }
 
-pub const CPU_TARGET: &str = "armv7r-none-eabi";
+pub(crate) const CPU_TARGET: &str = "armv7r-none-eabi";
 
 const CPU_LINK_FLAGS: &[&str] = &[
     "-mcpu=cortex-r4f",
@@ -175,7 +175,7 @@ fn tee_lines(reader: impl std::io::Read, log: &mut String) {
     }
 }
 
-pub fn cpu_build(root: &Path) -> Result<PathBuf> {
+pub(crate) fn cpu_build(root: &Path) -> Result<PathBuf> {
     gen_param(root)?;
 
     let prefix = std::env::var("CROSS_COMPILE").unwrap_or_else(|_| "arm-none-eabi-".to_string());
@@ -274,7 +274,7 @@ fn objcopy_binary(objcopy: &str, elf: &Path, bin: &Path, cwd: &Path) -> Result<V
     std::fs::read(bin).with_context(|| format!("reading {}", bin.display()))
 }
 
-pub fn stamp_image(bin: &Path) -> Result<()> {
+pub(crate) fn stamp_image(bin: &Path) -> Result<()> {
     use autd3_cpu_wire::update::{ImageHeader, SLOT_IMAGE_CAPACITY, Slot, crc32};
     use zerocopy::IntoBytes;
 

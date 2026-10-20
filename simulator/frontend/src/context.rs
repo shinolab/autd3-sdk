@@ -10,11 +10,11 @@ use crate::render::Renderer;
 use crate::settings::Settings;
 use crate::tabs::Tab;
 
-pub type SharedRenderer = Rc<RefCell<Option<Renderer>>>;
-pub type ControlRx = Rc<RefCell<Option<UnboundedReceiver<ClientMsg>>>>;
+pub(crate) type SharedRenderer = Rc<RefCell<Option<Renderer>>>;
+pub(crate) type ControlRx = Rc<RefCell<Option<UnboundedReceiver<ClientMsg>>>>;
 
 #[derive(Clone, Copy, PartialEq)]
-pub enum Field {
+pub(crate) enum Field {
     SliceCenter,
     SliceRot,
     CameraPos,
@@ -22,7 +22,7 @@ pub enum Field {
 }
 
 #[derive(Clone)]
-pub struct Ctx {
+pub(crate) struct Ctx {
     pub renderer: SharedRenderer,
     pub control_rx: ControlRx,
     pub control_tx: UnboundedSender<ClientMsg>,
@@ -61,7 +61,7 @@ pub struct Ctx {
     pub move_speed: Signal<f32>,
 }
 
-pub fn use_app_ctx(saved: Settings) -> Ctx {
+pub(crate) fn use_app_ctx(saved: Settings) -> Ctx {
     let renderer: SharedRenderer = use_hook(|| Rc::new(RefCell::new(None)));
     let control: (UnboundedSender<ClientMsg>, ControlRx) = use_hook(|| {
         let (tx, rx) = unbounded::<ClientMsg>();
@@ -109,7 +109,7 @@ fn set<T: 'static>(mut signal: Signal<T>, value: T) {
 }
 
 impl Ctx {
-    pub fn settings(&self) -> Settings {
+    pub(crate) fn settings(&self) -> Settings {
         Settings {
             max_pressure: (self.max_pressure)(),
             show_markers: (self.show_markers)(),
@@ -129,7 +129,7 @@ impl Ctx {
         }
     }
 
-    pub fn set_settings(&self, s: Settings) {
+    pub(crate) fn set_settings(&self, s: Settings) {
         set(self.max_pressure, s.max_pressure);
         set(self.show_markers, s.show_markers);
         set(self.sound_speed, s.sound_speed);
@@ -147,11 +147,11 @@ impl Ctx {
         set(self.slice_res, s.slice_resolution);
     }
 
-    pub fn with_renderer<R>(&self, f: impl FnOnce(&mut Renderer) -> R) -> Option<R> {
+    pub(crate) fn with_renderer<R>(&self, f: impl FnOnce(&mut Renderer) -> R) -> Option<R> {
         self.renderer.borrow_mut().as_mut().map(f)
     }
 
-    pub fn apply_field(&self, field: Field, axis: usize, value: f32) {
+    pub(crate) fn apply_field(&self, field: Field, axis: usize, value: f32) {
         let (mut slice_center, mut slice_rot, mut cam_pos, mut cam_rot) = (
             self.slice_center,
             self.slice_rot,
@@ -195,7 +195,7 @@ impl Ctx {
         }
     }
 
-    pub fn clamp_field(&self, field: Field, axis: usize, v: f32) -> f32 {
+    pub(crate) fn clamp_field(&self, field: Field, axis: usize, v: f32) -> f32 {
         let bounds = self.slice_bounds;
         match field {
             Field::SliceRot | Field::CameraRot => v.clamp(-180.0, 180.0),
@@ -207,7 +207,7 @@ impl Ctx {
         }
     }
 
-    pub fn field_handler(
+    pub(crate) fn field_handler(
         &self,
         field: Field,
         axis: usize,
@@ -221,7 +221,11 @@ impl Ctx {
         }
     }
 
-    pub fn num_down(&self, field: Field, axis: usize) -> impl FnMut(Event<MouseData>) + 'static {
+    pub(crate) fn num_down(
+        &self,
+        field: Field,
+        axis: usize,
+    ) -> impl FnMut(Event<MouseData>) + 'static {
         let ctx = self.clone();
         move |e: Event<MouseData>| {
             let (sc, sr, cp, cr) = (ctx.slice_center, ctx.slice_rot, ctx.cam_pos, ctx.cam_rot);

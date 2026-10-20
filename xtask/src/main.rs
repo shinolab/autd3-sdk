@@ -7,6 +7,7 @@ mod console;
 mod cpu;
 mod cpu_codegen;
 mod cs;
+mod deadcode;
 mod doc;
 mod emulator;
 mod ffi;

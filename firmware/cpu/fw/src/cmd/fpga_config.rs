@@ -1,4 +1,4 @@
-pub use autd3_cpu_wire::payload::SetFpgaConfigPayload;
+pub(crate) use autd3_cpu_wire::payload::SetFpgaConfigPayload;
 
 use crate::fpga;
 use crate::fpga_params::FunctionBits;

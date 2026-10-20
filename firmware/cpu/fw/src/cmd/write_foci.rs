@@ -1,4 +1,4 @@
-pub use autd3_cpu_wire::payload::WriteFociPayload;
+pub(crate) use autd3_cpu_wire::payload::WriteFociPayload;
 
 use crate::fpga::{self, EMISSION_RAM};
 use crate::port::Port;

@@ -32,7 +32,7 @@ const THIRD_PARTY: &str = "THIRD-PARTY-LICENSES.md";
 const PLACEHOLDER: &str = "# Third-party licenses\n\nThis notice was not generated for this build.\nRun `cargo xtask license generate`, or pass `--license` to the packaging command,\nto produce the real notices with cargo-about.\n";
 
 #[derive(Subcommand)]
-pub enum LicenseCmd {
+pub(crate) enum LicenseCmd {
     #[command(about = "Generate the third-party license notices with cargo-about")]
     Generate {
         #[arg(value_enum, default_value_t = GenTarget::All, help = "Artifact to generate the notices for")]
@@ -47,7 +47,7 @@ pub enum LicenseCmd {
 }
 
 #[derive(Clone, Copy, ValueEnum)]
-pub enum GenTarget {
+pub(crate) enum GenTarget {
     All,
     Python,
     Csharp,
@@ -56,7 +56,7 @@ pub enum GenTarget {
     Simulator,
 }
 
-pub fn run_license(root: &Path, cmd: &LicenseCmd) -> Result<()> {
+pub(crate) fn run_license(root: &Path, cmd: &LicenseCmd) -> Result<()> {
     match cmd {
         LicenseCmd::Generate { target } => generate(root, *target),
         LicenseCmd::Check => check(root),
@@ -169,7 +169,7 @@ fn ensure_about(generate: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn generate_python(root: &Path, generate: bool) -> Result<()> {
+pub(crate) fn generate_python(root: &Path, generate: bool) -> Result<()> {
     ensure_about(generate)?;
     let mit_license = root.join("LICENSE");
 
@@ -187,7 +187,7 @@ pub fn generate_python(root: &Path, generate: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn generate_csharp(root: &Path, generate: bool) -> Result<()> {
+pub(crate) fn generate_csharp(root: &Path, generate: bool) -> Result<()> {
     ensure_about(generate)?;
 
     let ffi = root.join("bindings/ffi");
@@ -205,7 +205,7 @@ pub fn generate_csharp(root: &Path, generate: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn generate_unity(root: &Path, generate: bool) -> Result<()> {
+pub(crate) fn generate_unity(root: &Path, generate: bool) -> Result<()> {
     ensure_about(generate)?;
     let mit_license = root.join("LICENSE");
 
@@ -225,7 +225,7 @@ pub fn generate_unity(root: &Path, generate: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn generate_console(root: &Path, generate: bool) -> Result<()> {
+pub(crate) fn generate_console(root: &Path, generate: bool) -> Result<()> {
     ensure_about(generate)?;
     let console = root.join("console");
     let out = console.join(THIRD_PARTY);
@@ -286,7 +286,7 @@ pub fn generate_console(root: &Path, generate: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn generate_simulator(root: &Path, generate: bool) -> Result<()> {
+pub(crate) fn generate_simulator(root: &Path, generate: bool) -> Result<()> {
     ensure_about(generate)?;
     let sim = root.join("simulator");
     let out = sim.join(THIRD_PARTY);
