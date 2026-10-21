@@ -7,11 +7,10 @@ mod regs;
 
 use core::cell::UnsafeCell;
 use core::num::{NonZeroU32, NonZeroU64};
-use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use autd3_cpu_fw::net::Mac;
 use autd3_cpu_fw::nic::{Nic, RxMeta, TxStamp};
-use autd3_cpu_fw::node::{Node, Received};
+use autd3_cpu_fw::node::Node;
 use autd3_cpu_fw::udp::SYNC_CYCLE_NS;
 
 use self::regs::{VIC_INTNO_ETHDMAIR, VIC_INTNO_TGIA0};
@@ -36,10 +35,11 @@ struct HwNic {
     tx: [Option<NonZeroU32>; TX_RING],
     next_tx: usize,
     frame_id: u32,
+    send_failures: u32,
 }
 
-impl Nic for HwNic {
-    fn send(&mut self, frame: &[u8], port: u8, timestamp: bool) -> bool {
+impl HwNic {
+    fn transmit(&mut self, frame: &[u8], port: u8, timestamp: bool) -> bool {
         let Some(buffer) = (0..TX_RING)
             .map(|k| (self.next_tx + k) % TX_RING)
             .find_map(|slot| self.tx[slot].map(|buffer| (slot, buffer)))
@@ -52,6 +52,16 @@ impl Nic for HwNic {
         };
         self.frame_id = self.frame_id.wrapping_add(1);
         gmac::send(buffer.get(), frame, self.frame_id, port, timestamp)
+    }
+}
+
+impl Nic for HwNic {
+    fn send(&mut self, frame: &[u8], port: u8, timestamp: bool) -> bool {
+        let sent = self.transmit(frame, port, timestamp);
+        if !sent {
+            self.send_failures = self.send_failures.wrapping_add(1);
+        }
+        sent
     }
 
     fn now(&mut self) -> Option<u64> {
@@ -103,6 +113,10 @@ impl Nic for HwNic {
     fn pulse_ready(&mut self) -> bool {
         pulse::is_ready()
     }
+
+    fn take_send_failures(&mut self) -> u32 {
+        core::mem::take(&mut self.send_failures)
+    }
 }
 
 struct Net {
@@ -121,12 +135,10 @@ static NET: IsrOnly = IsrOnly(UnsafeCell::new(Net {
         tx: [None; TX_RING],
         next_tx: 0,
         frame_id: 0,
+        send_failures: 0,
     },
     rx: gmac::RxBuffer([0; gmac::RX_BUFFER_BYTES]),
 }));
-
-static HOST_SEEN: AtomicBool = AtomicBool::new(false);
-static LAST_HOST_FRAME_MS: AtomicU32 = AtomicU32::new(0);
 
 fn net() -> &'static mut Net {
     unsafe { &mut *NET.0.get() }
@@ -222,17 +234,13 @@ extern "C" fn ethdmair_isr() {
                     port: (net.rx.0[RX_TAG_PORT_BYTE] >> RX_TAG_PORT_BIT) & 1,
                     timestamp_ns: u32::from_le_bytes(timestamp),
                 };
-                let received = net.node.on_frame(
+                net.node.on_frame(
                     &mut net.nic,
                     now_ms,
                     &net.rx.0[..len],
                     meta,
                     &mut crate::cpu(),
                 );
-                if received == Received::HostMessage {
-                    LAST_HOST_FRAME_MS.store(now_ms, Ordering::Relaxed);
-                    HOST_SEEN.store(true, Ordering::Release);
-                }
             }
         }
         gmac::release(rx.buffer);
@@ -276,16 +284,4 @@ pub(crate) fn next_sync_edge(guard_ns: u32) -> Option<NonZeroU64> {
 
 pub(crate) fn sys_time() -> Option<u64> {
     ethsw::capture()
-}
-
-pub(crate) fn host_idle_ms() -> Option<u32> {
-    if !HOST_SEEN.load(Ordering::Acquire) {
-        return None;
-    }
-    let last = LAST_HOST_FRAME_MS.load(Ordering::Relaxed);
-    Some(timer::now_ms().wrapping_sub(last))
-}
-
-pub(crate) fn ptp_unlocked_ms() -> Option<u32> {
-    crate::cpu().ptp_unlocked_ms()
 }

@@ -1,4 +1,4 @@
-use core::cell::Cell;
+use core::cell::{Cell, RefCell};
 use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU16, AtomicU32, Ordering};
 
 use crate::cmd;
@@ -7,28 +7,27 @@ use crate::fifo::{FIFO_DEPTH, Fifo};
 use crate::fpga;
 use crate::port::Port;
 use crate::proto::{
-    Cmd, Disposition, Drained, EXEC_AT_UNIT_NS, Error, FrameHeader, PAYLOAD_BYTES, Reply,
-    ReplyData, RxFrame,
+    Cmd, Disposition, Drained, EXEC_AT_UNIT_NS, Error, FrameHeader, PAYLOAD_BYTES, Reply, ReplyData,
 };
 use autd3_cpu_wire::payload::Telemetry;
 use zerocopy::little_endian::U32;
 
-#[repr(C, align(4))]
+#[repr(align(4))]
+struct SlotPayload([u8; PAYLOAD_BYTES]);
+
 struct Slot {
     msg_id: Cell<u16>,
     len: Cell<u16>,
-    payload: Cell<[u8; PAYLOAD_BYTES]>,
+    payload: RefCell<SlotPayload>,
     header: Cell<FrameHeader>,
 }
-
-const _: () = assert!(core::mem::offset_of!(Slot, payload).is_multiple_of(4));
 
 impl Slot {
     const fn new() -> Self {
         Self {
             msg_id: Cell::new(0),
             len: Cell::new(0),
-            payload: Cell::new([0; PAYLOAD_BYTES]),
+            payload: RefCell::new(SlotPayload([0; PAYLOAD_BYTES])),
             header: Cell::new(FrameHeader {
                 reserved: 0,
                 cmd: 0,
@@ -37,28 +36,16 @@ impl Slot {
         }
     }
 
-    fn store(&self, header: FrameHeader, payload: &[u8], msg_id: u16) {
-        let cells = self.payload.as_array_of_cells();
-        let len = payload.len().min(cells.len());
-        for (cell, byte) in cells.iter().zip(&payload[..len]) {
-            cell.set(*byte);
-        }
+    fn store(&self, header: FrameHeader, payload: &[u8], msg_id: u16) -> bool {
+        let Ok(mut dst) = self.payload.try_borrow_mut() else {
+            return false;
+        };
+        let len = payload.len().min(PAYLOAD_BYTES);
+        dst.0[..len].copy_from_slice(&payload[..len]);
         self.len.set(len as u16);
         self.msg_id.set(msg_id);
         self.header.set(header);
-    }
-
-    fn load(&self, frame: &mut RxFrame) {
-        let len = usize::from(self.len.get()).min(PAYLOAD_BYTES);
-        for (byte, cell) in frame.payload[..len]
-            .iter_mut()
-            .zip(self.payload.as_array_of_cells())
-        {
-            *byte = cell.get();
-        }
-        frame.len = len as u16;
-        frame.msg_id = self.msg_id.get();
-        frame.header = self.header.get();
+        true
     }
 }
 
@@ -113,6 +100,36 @@ impl Counters {
     }
 }
 
+struct OptionalMs {
+    present: AtomicBool,
+    ms: AtomicU32,
+}
+
+impl OptionalMs {
+    const fn new() -> Self {
+        Self {
+            present: AtomicBool::new(false),
+            ms: AtomicU32::new(0),
+        }
+    }
+
+    fn store(&self, ms: Option<u32>) {
+        match ms {
+            Some(ms) => {
+                self.ms.store(ms, Ordering::Relaxed);
+                self.present.store(true, Ordering::Release);
+            }
+            None => self.present.store(false, Ordering::Release),
+        }
+    }
+
+    fn load(&self) -> Option<u32> {
+        self.present
+            .load(Ordering::Acquire)
+            .then(|| self.ms.load(Ordering::Relaxed))
+    }
+}
+
 fn bump(counter: &AtomicU32) {
     counter.fetch_add(1, Ordering::Relaxed);
 }
@@ -138,8 +155,9 @@ pub struct Cpu {
     ptp_failsafe_active: AtomicBool,
     pub(crate) config: MainCell<cmd::cpu_config::CpuConfig>,
     pub(crate) config_reset_requested: AtomicBool,
-    ptp_unlocked: AtomicBool,
-    ptp_unlocked_ms: AtomicU32,
+    ptp_unlocked_ms: OptionalMs,
+    last_host_frame_ms: OptionalMs,
+    host_idle_ms: OptionalMs,
     pub(crate) update: cmd::update::UpdateSession,
     pub(crate) fpga_update: cmd::fpga_update::FpgaUpdateSession,
     results: [Cell<Reply>; FIFO_DEPTH as usize],
@@ -177,8 +195,9 @@ impl Cpu {
             ptp_failsafe_active: AtomicBool::new(false),
             config: MainCell::new(cmd::cpu_config::default_config()),
             config_reset_requested: AtomicBool::new(false),
-            ptp_unlocked: AtomicBool::new(false),
-            ptp_unlocked_ms: AtomicU32::new(0),
+            ptp_unlocked_ms: OptionalMs::new(),
+            last_host_frame_ms: OptionalMs::new(),
+            host_idle_ms: OptionalMs::new(),
             update: cmd::update::UpdateSession::new(),
             fpga_update: cmd::fpga_update::FpgaUpdateSession::new(),
             results: [const { Cell::new(Reply::EMPTY) }; FIFO_DEPTH as usize],
@@ -214,13 +233,20 @@ impl Cpu {
     }
 
     pub fn publish_ptp_unlocked(&self, elapsed_ms: Option<u32>) {
-        match elapsed_ms {
-            Some(ms) => {
-                self.ptp_unlocked_ms.store(ms, Ordering::Relaxed);
-                self.ptp_unlocked.store(true, Ordering::Release);
-            }
-            None => self.ptp_unlocked.store(false, Ordering::Release),
-        }
+        self.ptp_unlocked_ms.store(elapsed_ms);
+    }
+
+    pub fn record_host_frame(&self, now_ms: u32) {
+        self.last_host_frame_ms.store(Some(now_ms));
+        self.host_idle_ms.store(Some(0));
+    }
+
+    pub fn publish_host_idle(&self, now_ms: u32) {
+        self.host_idle_ms.store(
+            self.last_host_frame_ms
+                .load()
+                .map(|last| now_ms.wrapping_sub(last)),
+        );
     }
 
     #[must_use]
@@ -234,9 +260,12 @@ impl Cpu {
 
     #[must_use]
     pub fn ptp_unlocked_ms(&self) -> Option<u32> {
-        self.ptp_unlocked
-            .load(Ordering::Acquire)
-            .then(|| self.ptp_unlocked_ms.load(Ordering::Relaxed))
+        self.ptp_unlocked_ms.load()
+    }
+
+    #[must_use]
+    pub fn host_idle_ms(&self) -> Option<u32> {
+        self.host_idle_ms.load()
     }
 
     #[must_use]
@@ -260,9 +289,9 @@ impl Cpu {
         self.update_tick(port);
         self.fpga_update_tick(port);
         let config = self.config();
-        let silent = cmd::failsafe::host_silent(port, &config);
+        let silent = cmd::failsafe::host_silent(self, &config);
         Self::failsafe(port, silent, &self.failsafe_fired, &self.counters.failsafe);
-        let unlocked = cmd::failsafe::ptp_unlock_expired(port, &config);
+        let unlocked = cmd::failsafe::ptp_unlock_expired(self, &config);
         if Self::failsafe(
             port,
             unlocked,
@@ -306,31 +335,42 @@ impl Cpu {
             return Disposition::Dropped;
         };
         let head = self.fifo.head();
-        if Fifo::is_full(head, self.fifo.tail_acquire()) {
+        if Fifo::is_full(head, self.fifo.tail_acquire())
+            || !self.slots[Fifo::slot(head)].store(*header, payload, msg_id)
+        {
             bump(&self.counters.fifo_drop);
             return Disposition::Dropped;
         }
-        self.slots[Fifo::slot(head)].store(*header, payload, msg_id);
         self.fifo.publish(head);
         Disposition::Deferred
     }
 
-    pub fn process_one<P: Port>(&self, port: &mut P, work: &mut RxFrame) -> Drained {
+    pub fn process_one<P: Port>(&self, port: &mut P) -> Drained {
         let Some(tail) = self.fifo.next() else {
             return Drained::Empty;
         };
         let slot = &self.slots[Fifo::slot(tail)];
-        if !self.is_due(port, slot.header.get().exec_at.get()) {
+        let header = slot.header.get();
+        if !self.is_due(port, header.exec_at.get()) {
             return Drained::Empty;
         }
-        slot.load(work);
-        self.apply_requested_config_reset(port);
-        let result = self.handle_frame(port, work);
+        let msg_id = slot.msg_id.get();
+        let Some(result) = self.handle_slot(port, slot, header.cmd) else {
+            bump(&self.counters.fifo_drop);
+            self.results[Fifo::slot(tail)].set(self.result_before(tail));
+            self.fifo.commit(tail);
+            return Drained::Empty;
+        };
         self.results[Fifo::slot(tail)].set(result);
         self.fifo.commit(tail);
-        Drained::Completed {
-            msg_id: work.msg_id,
-        }
+        Drained::Completed { msg_id }
+    }
+
+    fn handle_slot<P: Port>(&self, port: &mut P, slot: &Slot, cmd: u8) -> Option<Reply> {
+        let payload = slot.payload.try_borrow().ok()?;
+        self.apply_requested_config_reset(port);
+        let len = usize::from(slot.len.get()).min(PAYLOAD_BYTES);
+        Some(self.handle_frame(port, cmd, &payload.0[..len]))
     }
 
     fn is_due<P: Port>(&self, port: &mut P, exec_at: u32) -> bool {
@@ -361,21 +401,20 @@ impl Cpu {
         true
     }
 
-    pub fn step<P: Port>(&self, port: &mut P, work: &mut RxFrame, elapsed_ms: u32) -> Drained {
+    pub fn step<P: Port>(&self, port: &mut P, elapsed_ms: u32) -> Drained {
         for _ in 0..elapsed_ms {
             self.tick_1ms(port);
         }
-        self.process_one(port, work)
+        self.process_one(port)
     }
 
     pub fn process_pending<P: Port>(&self, port: &mut P) {
-        let mut work = RxFrame::ZERO;
-        while self.process_one(port, &mut work) != Drained::Empty {}
+        while self.process_one(port) != Drained::Empty {}
     }
 
-    fn handle_frame<P: Port>(&self, port: &mut P, in_frame: &RxFrame) -> Reply {
-        let outcome = match Cmd::from_u8(in_frame.header.cmd) {
-            Some(cmd) => self.dispatch(port, cmd, in_frame.payload()),
+    fn handle_frame<P: Port>(&self, port: &mut P, cmd: u8, payload: &[u8]) -> Reply {
+        let outcome = match Cmd::from_u8(cmd) {
+            Some(cmd) => self.dispatch(port, cmd, payload),
             None => Err(Error::UnknownCmd),
         };
         let result = match outcome {
@@ -426,7 +465,7 @@ impl Cpu {
             Cmd::ForceFan => cmd::force_fan::handle(port, payload),
             Cmd::SetFpgaConfig => cmd::fpga_config::handle(port, payload),
             Cmd::ReleaseFailsafe => {
-                cmd::failsafe::release(port, &config).inspect(|()| self.lower_ptp_failsafe())
+                cmd::failsafe::release(port, self, &config).inspect(|()| self.lower_ptp_failsafe())
             }
             Cmd::UpdateBegin => self.update_begin(port, payload),
             Cmd::UpdateChunk => self.update_chunk(port, payload),
@@ -466,7 +505,6 @@ mod tests {
     };
     use crate::proto::{
         Cmd, Disposition, Drained, EXEC_AT_UNIT_NS, Error, FRAME_BYTES_MAX, OUTPUT_MASK_WORDS,
-        RxFrame,
     };
     use crate::test_utils::builders::{config_mod, force_fan, write_foci_buffer};
     use crate::test_utils::mock::{Frame, Harness};
@@ -607,17 +645,13 @@ mod tests {
     fn fifo_mode_drains_in_order() {
         let h = Harness::new();
         let mut port = crate::test_utils::mock::MockPort::new();
-        let mut work = RxFrame::ZERO;
         for msg_id in 1..=3 {
             let _ = h.cpu.recv_frame(&Frame::new(Cmd::Nop).bytes(), msg_id);
         }
         for msg_id in 1..=3 {
-            assert_eq!(
-                h.cpu.process_one(&mut port, &mut work),
-                Drained::Completed { msg_id }
-            );
+            assert_eq!(h.cpu.process_one(&mut port), Drained::Completed { msg_id });
         }
-        assert_eq!(h.cpu.process_one(&mut port, &mut work), Drained::Empty);
+        assert_eq!(h.cpu.process_one(&mut port), Drained::Empty);
     }
 
     #[test]
@@ -700,6 +734,51 @@ mod tests {
     }
 
     #[test]
+    fn a_frame_into_a_slot_still_borrowed_is_dropped_and_counted() {
+        let h = Harness::new();
+        let borrowed = h.cpu.slots[0].payload.borrow();
+        assert_eq!(
+            h.cpu.recv_frame(&Frame::new(Cmd::Nop).bytes(), 1),
+            Disposition::Dropped
+        );
+        drop(borrowed);
+        assert_eq!(h.telemetry().fifo_drop, 1);
+
+        let mut port = crate::test_utils::mock::MockPort::new();
+        assert_eq!(h.cpu.process_one(&mut port), Drained::Empty);
+        assert_eq!(
+            h.cpu.recv_frame(&Frame::new(Cmd::Nop).bytes(), 2),
+            Disposition::Deferred
+        );
+        assert_eq!(
+            h.cpu.process_one(&mut port),
+            Drained::Completed { msg_id: 2 }
+        );
+    }
+
+    #[test]
+    fn a_queued_frame_whose_slot_is_still_borrowed_is_dropped_and_counted() {
+        let mut h = Harness::new();
+        h.deliver(&Frame::new(Cmd::ReadFpgaState));
+        let previous = h.cpu.reply();
+        let _ = h.cpu.recv_frame(&Frame::new(Cmd::Nop).bytes(), 1);
+        let _ = h.cpu.recv_frame(&Frame::new(Cmd::Nop).bytes(), 2);
+
+        let borrowed = h.cpu.slots[1].payload.borrow_mut();
+        assert_eq!(h.cpu.process_one(&mut h.port), Drained::Empty);
+        drop(borrowed);
+        assert_eq!(h.telemetry().fifo_drop, 1);
+        assert_eq!(h.processed(), 1);
+        assert_eq!(h.cpu.reply(), previous);
+
+        assert_eq!(
+            h.cpu.process_one(&mut h.port),
+            Drained::Completed { msg_id: 2 }
+        );
+        assert_eq!(h.processed(), 2);
+    }
+
+    #[test]
     fn a_fifo_frame_completes_with_its_msg_id() {
         let h = Harness::new();
         let frame = Frame::new(Cmd::Nop).bytes();
@@ -708,30 +787,28 @@ mod tests {
             crate::proto::Disposition::Deferred
         );
         let mut port = crate::test_utils::mock::MockPort::new();
-        let mut work = RxFrame::ZERO;
         assert_eq!(
-            h.cpu.process_one(&mut port, &mut work),
+            h.cpu.process_one(&mut port),
             Drained::Completed { msg_id: 0x1234 }
         );
-        assert_eq!(h.cpu.process_one(&mut port, &mut work), Drained::Empty);
+        assert_eq!(h.cpu.process_one(&mut port), Drained::Empty);
     }
 
     #[test]
     fn a_step_completes_one_frame_per_call_with_its_msg_id() {
         let h = Harness::new();
         let mut port = crate::test_utils::mock::MockPort::new();
-        let mut work = RxFrame::ZERO;
         let _ = h.cpu.recv_frame(&[0, Cmd::Nop as u8, 0, 0, 0, 0], 0x11);
         let _ = h.cpu.recv_frame(&[0, Cmd::Nop as u8, 0, 0, 0, 0], 0x22);
         assert_eq!(
-            h.cpu.step(&mut port, &mut work, 0),
+            h.cpu.step(&mut port, 0),
             Drained::Completed { msg_id: 0x11 }
         );
         assert_eq!(
-            h.cpu.step(&mut port, &mut work, 3),
+            h.cpu.step(&mut port, 3),
             Drained::Completed { msg_id: 0x22 }
         );
-        assert_eq!(h.cpu.step(&mut port, &mut work, 0), Drained::Empty);
+        assert_eq!(h.cpu.step(&mut port, 0), Drained::Empty);
     }
 
     #[test]
@@ -829,8 +906,7 @@ mod tests {
         h.port.sys_time = Some(0);
         h.deliver(&scheduled(LATER));
         let kicks = h.port.watchdog_kicks;
-        let mut work = RxFrame::ZERO;
-        assert_eq!(h.cpu.step(&mut h.port, &mut work, 3), Drained::Empty);
+        assert_eq!(h.cpu.step(&mut h.port, 3), Drained::Empty);
         assert_eq!(h.port.watchdog_kicks, kicks + 3);
         assert_eq!(h.processed(), 0);
     }

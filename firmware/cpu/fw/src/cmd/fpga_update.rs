@@ -886,10 +886,10 @@ mod tests {
             ..config
         }));
         assert_eq!(h.status(), Error::None);
-        h.port.ptp_unlocked_ms = Some(50);
+        h.cpu.publish_ptp_unlocked(Some(50));
         h.tick_1ms(1);
         assert!(h.cpu.ptp_failsafe_active());
-        h.port.ptp_unlocked_ms = None;
+        h.cpu.publish_ptp_unlocked(None);
         run_update(&mut h, &image(700, seed));
         h.deliver(&Frame::new(Cmd::FpgaUpdateActivate));
         assert_eq!(h.status(), Error::None);

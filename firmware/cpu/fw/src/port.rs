@@ -22,10 +22,6 @@ pub trait Port {
 
     fn without_irq<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R;
 
-    fn host_idle_ms(&mut self) -> Option<u32>;
-
-    fn ptp_unlocked_ms(&mut self) -> Option<u32>;
-
     fn flash_read(&mut self, addr: u32, buf: &mut [u8]) -> Result<(), FlashError>;
 
     fn flash_write(&mut self, addr: u32, data: &[u8]) -> Result<(), FlashError>;

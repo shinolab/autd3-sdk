@@ -1,11 +1,10 @@
 use crate::emu_fpga::FpgaEmulator;
 use autd3_cpu_fw::Cpu;
-use autd3_cpu_fw::proto::{Disposition, Drained, Reply, RxFrame};
+use autd3_cpu_fw::proto::{Disposition, Drained, Reply};
 
 pub struct Device {
     pub(crate) cpu: Cpu,
     fpga: FpgaEmulator,
-    work: Box<RxFrame>,
 }
 
 impl Device {
@@ -13,11 +12,7 @@ impl Device {
     pub fn new(num_transducers: usize) -> Self {
         let mut fpga = FpgaEmulator::new(num_transducers);
         let cpu = boot(&mut fpga);
-        Self {
-            cpu,
-            fpga,
-            work: Box::new(RxFrame::ZERO),
-        }
+        Self { cpu, fpga }
     }
 
     pub fn reset_cpu(&mut self) {
@@ -29,7 +24,7 @@ impl Device {
     }
 
     pub fn process_one(&mut self) -> Drained {
-        self.cpu.process_one(&mut self.fpga, &mut self.work)
+        self.cpu.process_one(&mut self.fpga)
     }
 
     fn process_pending(&mut self) {

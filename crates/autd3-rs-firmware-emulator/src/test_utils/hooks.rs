@@ -9,6 +9,8 @@ pub trait DeviceTestExt {
 
     #[must_use]
     fn booted_slot(&self) -> Option<Slot>;
+
+    fn set_host_idle_ms(&mut self, ms: u32);
 }
 
 impl DeviceTestExt for Device {
@@ -20,6 +22,11 @@ impl DeviceTestExt for Device {
     fn booted_slot(&self) -> Option<Slot> {
         self.cpu.booted_slot()
     }
+
+    fn set_host_idle_ms(&mut self, ms: u32) {
+        self.cpu.record_host_frame(0);
+        self.cpu.publish_host_idle(ms);
+    }
 }
 
 pub trait FpgaEmulatorTestExt {
@@ -30,8 +37,6 @@ pub trait FpgaEmulatorTestExt {
     fn set_next_sync_edge(&mut self, sys_time_ns: u64);
 
     fn set_thermal(&mut self, asserted: bool);
-
-    fn set_host_idle_ms(&mut self, ms: Option<u32>);
 
     #[must_use]
     fn controller_reg(&self, addr: u16) -> u16;
@@ -58,10 +63,6 @@ impl FpgaEmulatorTestExt for FpgaEmulator {
 
     fn set_thermal(&mut self, asserted: bool) {
         self.thermal = asserted;
-    }
-
-    fn set_host_idle_ms(&mut self, ms: Option<u32>) {
-        self.host_idle_ms = ms;
     }
 
     fn controller_reg(&self, addr: u16) -> u16 {
