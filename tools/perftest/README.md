@@ -39,7 +39,7 @@ The run continues until Ctrl+C, then prints the summary.
 | `--emulator`          | Run against the in-process UDP device emulator (firmware emulator behind real UDP sockets on `::1`) instead of real devices. Default: off. |
 | `--command <CMD>`     | `pattern` (default), `write-pattern-buffer`, `write-modulation-buffer`, or `nop`. See the table below. |
 | `--interface <NAME>`  | Network interface the devices hang off (`TransportOption.iface`). Omit to pick the one whose devices answer. |
-| `--simulator [PORT]`  | Connect to the simulator on this host only, listening on `PORT` (default 44336; `Interface::Simulator(PORT)`). Without it `Interface::Auto` fails when both the simulator and devices answer. |
+| `--simulator [PORT]`  | Connect to the simulator on this host, listening on `PORT` (default 44336): sends the geometry to its control port `PORT + 1`, then opens `Interface::Addr([::1]:PORT)`. `Interface::Auto` never finds the simulator. |
 | `--devices <N>`       | Device count of the geometry. Default = 1. Opening fails when it does not match the chain. |
 | `--heartbeat <DUR>`   | Interval of `Client::send_heartbeat` while `--hold` keeps the connection idle. Default = `10ms`. The library sends no heartbeat by itself. |
 | `--send-rate-limit <PERCENT>` | Cap on the line occupancy of the sends in percent of the device link speed (`TransportOption.send_rate_limit_percent`). Omit to send without a limit. |

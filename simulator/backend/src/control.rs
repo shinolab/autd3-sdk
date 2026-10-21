@@ -4,9 +4,9 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use autd3_rs::geometry::Geometry;
-use autd3_rs_core::simulator::{Status, decode_geometry, encode_reply};
 use autd3_rs_firmware_emulator::Device as EmuDevice;
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
+use autd3_rs_simulator_control::{Status, decode_geometry, encode_reply};
 use tokio::sync::watch;
 
 use crate::emulator::geometry_msg;

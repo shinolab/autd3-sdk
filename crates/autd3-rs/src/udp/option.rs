@@ -1,7 +1,7 @@
 use std::num::NonZeroUsize;
 use std::time::Duration;
 
-use autd3_rs_core::{Interface, simulator};
+use autd3_rs_core::Interface;
 
 use super::error::UdpError;
 use super::pacer::MIN_SEND_RATE_PERCENT;
@@ -47,11 +47,6 @@ impl TransportOption {
         if self.ack_timeout.is_zero() {
             return Err(UdpError::ZeroAckTimeout);
         }
-        if let Interface::Simulator(port) = self.iface
-            && simulator::control_port(port).is_none()
-        {
-            return Err(UdpError::InvalidSimulatorPort(port));
-        }
         if let Some(percent) = self.send_rate_limit_percent
             && !(MIN_SEND_RATE_PERCENT..=100.0).contains(&percent)
         {
@@ -81,24 +76,6 @@ mod tests {
         assert_eq!(option.send_buffer_bytes, NonZeroUsize::new(8192));
         assert!(option.sync_on_open);
         assert!(option.validate().is_ok());
-    }
-
-    #[rstest]
-    #[case(0, false)]
-    #[case(1, true)]
-    #[case(44336, true)]
-    #[case(65534, true)]
-    #[case(65535, false)]
-    fn the_simulator_port_needs_room_for_the_control_port(#[case] port: u16, #[case] valid: bool) {
-        let option = TransportOption {
-            iface: Interface::Simulator(port),
-            ..Default::default()
-        };
-        match option.validate() {
-            Ok(()) => assert!(valid),
-            Err(UdpError::InvalidSimulatorPort(p)) => assert!(!valid && p == port),
-            Err(e) => panic!("unexpected error: {e}"),
-        }
     }
 
     #[test]

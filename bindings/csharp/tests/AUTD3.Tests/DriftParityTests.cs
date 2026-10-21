@@ -154,7 +154,7 @@ namespace AUTD3.Tests
         {
             _ = Interface.Auto;
             _ = Interface.Name("eth0");
-            _ = Interface.Simulator(44336);
+            _ = Interface.Addr("[::1]:44336");
         }
 
         [Fact]

@@ -97,6 +97,7 @@ autd3-firmware-writer = { path = "tools/firmware-writer" }
 autd3-rs-firmware-ota = { path = "tools/firmware-ota" }
 autd3-rs-firmware-emulator = { version = "0.12.0", path = "crates/autd3-rs-firmware-emulator" }
 autd3-rs-pattern = { version = "0.12.0", path = "crates/autd3-rs-pattern" }
+autd3-rs-simulator-control = { path = "simulator/control" }
 autd3-rs-pattern-holo = { version = "0.12.0", path = "crates/autd3-rs-pattern-holo" }
 autd3-rs-modulation = { version = "0.12.0", path = "crates/autd3-rs-modulation" }
 

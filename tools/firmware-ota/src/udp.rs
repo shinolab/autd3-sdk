@@ -254,7 +254,7 @@ mod tests {
         let simulator_at =
             |port| Interface::Addr(SocketAddrV6::new(Ipv6Addr::LOCALHOST, port, 0, 0));
         let args = parse(&["--simulator"]);
-        assert_eq!(args.option().iface, simulator_at(autd3_rs::SIMULATOR_PORT));
+        assert_eq!(args.option().iface, simulator_at(autd3_rs::udp::PORT));
         let args = parse(&["--simulator", "50000"]);
         assert_eq!(args.option().iface, simulator_at(50000));
         assert!(Cli::try_parse_from(["ota", "--simulator", "--interface", "eth0"]).is_err());

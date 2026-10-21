@@ -5,7 +5,6 @@ use autd3_cpu_wire::udp::{ALL_NODES, PORT};
 use if_addrs::IfAddr;
 
 use super::error::UdpError;
-use super::simulator::SimulatorAddrs;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct LinkLocalInterface {
@@ -17,7 +16,6 @@ pub(crate) struct LinkLocalInterface {
 pub(crate) struct ResolvedEndpoint {
     pub(crate) all_devices_dst: SocketAddrV6,
     pub(crate) scope_id: Option<u32>,
-    pub(crate) simulator_control: Option<SocketAddrV6>,
 }
 
 impl ResolvedEndpoint {
@@ -25,15 +23,6 @@ impl ResolvedEndpoint {
         Self {
             all_devices_dst: addr,
             scope_id: (addr.scope_id() != 0).then_some(addr.scope_id()),
-            simulator_control: None,
-        }
-    }
-
-    pub(crate) const fn simulator(simulator: SimulatorAddrs) -> Self {
-        Self {
-            all_devices_dst: simulator.data,
-            scope_id: None,
-            simulator_control: Some(simulator.control),
         }
     }
 
@@ -41,7 +30,6 @@ impl ResolvedEndpoint {
         Self {
             all_devices_dst: SocketAddrV6::new(Ipv6Addr::from(ALL_NODES), PORT, 0, scope_id),
             scope_id: Some(scope_id),
-            simulator_control: None,
         }
     }
 }

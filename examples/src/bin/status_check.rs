@@ -8,7 +8,7 @@ use anyhow::Result;
 
 use autd3_rs::commands::{Clear, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::{Client, DeviceStatus, TransportOption};
+use autd3_rs::{Client, DeviceStatus};
 use tracing_subscriber::EnvFilter;
 
 const CHECK_INTERVAL: Duration = Duration::from_millis(100);
@@ -23,7 +23,7 @@ async fn main() -> Result<()> {
 
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let client = Client::open(&geometry, &TransportOption::default())?;
+    let client = Client::open(&geometry, &autd3_rs_examples::transport_option(&geometry)?)?;
     client.send((Clear, Synchronize)).await?;
     let checker = client.state_checker();
 

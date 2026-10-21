@@ -1,7 +1,6 @@
 mod enumerate;
 mod iface_probe;
 mod requester;
-mod simulator;
 
 use std::time::Instant;
 
@@ -17,7 +16,6 @@ pub fn discover(option: &TransportOption) -> Result<usize, UdpError> {
         option,
         ExpectedCount::All,
         SyncOnOpen::Skip,
-        None,
         &DeviceClock::new(),
     )
     .map(|channel| channel.num_devices())
@@ -36,7 +34,6 @@ pub(crate) fn open_channel(
         } else {
             SyncOnOpen::Skip
         },
-        Some(geometry),
         device_clock,
     )
 }
@@ -45,7 +42,6 @@ fn open_with(
     option: &TransportOption,
     expected: ExpectedCount,
     sync_on_open: SyncOnOpen,
-    geometry: Option<&Geometry>,
     device_clock: &DeviceClock,
 ) -> Result<Channel, UdpError> {
     option.validate()?;
@@ -56,9 +52,6 @@ fn open_with(
         return Err(UdpError::InvalidDeviceCount(num_devices));
     }
     let target = iface_probe::resolve(&option.iface)?;
-    if let (Some(control), Some(geometry)) = (target.simulator_control, geometry) {
-        simulator::send_geometry(control, geometry, deadline)?;
-    }
     let mut channel = Channel::open(
         target.all_devices_dst,
         target.scope_id,

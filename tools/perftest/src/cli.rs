@@ -76,9 +76,8 @@ pub(crate) struct Cli {
         num_args = 0..=1,
         default_missing_value = "44336",
         conflicts_with = "interface",
-        help = "Connect to the simulator on this host only, listening on PORT (default 44336; \
-                maps to Interface::Simulator(PORT)). Without it Interface::Auto fails when both \
-                the simulator and devices answer."
+        help = "Connect to the simulator on this host, listening on PORT (default 44336): \
+                sends the geometry to its control port PORT + 1, then opens Interface::Addr([::1]:PORT)."
     )]
     pub simulator: Option<u16>,
     #[arg(

@@ -131,7 +131,6 @@ def test_amplitude_arithmetic_and_ordering() -> None:
 
 def test_constants_come_from_rust() -> None:
     assert params.ULTRASOUND_FREQ_HZ == 40000
-    assert params.SIMULATOR_PORT == 44336
     assert params.PORT > 0
     assert params.DEVICE_QUEUE_FRAMES > 0
     assert params.ROTATION_NORM_TOLERANCE == Autd3.ROTATION_NORM_TOLERANCE

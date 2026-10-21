@@ -281,7 +281,6 @@ namespace AUTD3.Tests
             Assert.Equal((ushort)44336, Params.Port);
             Assert.Equal(Params.MaxInflight, Params.DeviceQueueFrames);
             Assert.Equal(1e-3f, Autd3.RotationNormTolerance);
-            Assert.Equal((ushort)44336, TransportOption.SimulatorPort);
         }
 
         [Fact]

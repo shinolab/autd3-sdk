@@ -22,11 +22,27 @@ import CodeTabs from "@components/CodeTabs.astro";
 
 Simulator は既定でポート 44336 (制御用に次の 44337 も) で待ち受ける. ポートはコンソールの Simulator タブの「UDP port」で変えられる.
 
-既定の [`TransportOption`](/autd3-sdk/api/basics/transport-option/) (`iface` が `Auto`) は, 実機がつながっていなければ既定ポートの Simulator につながる.
-Simulator と実機の両方が見つかった場合はエラーになるため, `iface` に `Simulator(..)` で Simulator のポートを指定するか, `Name(..)` で実機の NIC を指定すること.
+クライアントライブラリは Simulator を特別扱いしない. [`TransportOption`](/autd3-sdk/api/basics/transport-option/) の `iface` に `Addr(..)` で Simulator のアドレス `[::1]:44336` を指定してつなぐ (`Auto` は Simulator を探さない).
 
 <CodeTabs
-  rust={'let option = TransportOption {\n    iface: Interface::Simulator(SIMULATOR_PORT),\n    ..Default::default()\n};'}
-  python={'option = TransportOption(iface=Interface.Simulator(SIMULATOR_PORT))'}
-  csharp={'var option = new TransportOption { Iface = Interface.Simulator(TransportOption.SimulatorPort) };'}
+  rust={'let option = TransportOption {\n    iface: Interface::Addr("[::1]:44336".parse()?),\n    ..Default::default()\n};'}
+  python={'option = TransportOption(iface=Interface.Addr("[::1]:44336"))'}
+  csharp={'var option = new TransportOption { Iface = Interface.Addr("[::1]:44336") };'}
 />
+
+## ジオメトリ
+
+Simulator は起動直後, 原点に 1 台のデバイスを置いている. 台数・配置を変えるには, クライアントを開く前に制御ポート (`[::1]:44337`) へジオメトリを送る.
+Simulator は受け取った台数・配置でデバイスを作り直す (それまでの状態は消える).
+
+Rust では `autd3-rs-simulator-control` crate (リポジトリの `simulator/control`. crates.io には未公開) の `send_geometry` を使う.
+
+```rust
+autd3_rs_simulator_control::send_geometry(44336, &geometry, Duration::from_secs(5))?;
+let client = Client::open(&geometry, &option)?;
+```
+
+ほかの言語では, 次の UDP データグラムを制御ポートへ送り, 返信を待つ.
+
+- 要求: 版数 `1` (1 バイト) に続けて, デバイスごとに原点 `x, y, z` と回転の四元数 `w, x, y, z` (各 `f32` リトルエンディアン, 1 台 28 バイト)
+- 返信: `[版数, 状態]` の 2 バイト. 状態 `0` が成功

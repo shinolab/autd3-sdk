@@ -1,5 +1,4 @@
 from autd3 import Duration, Interface, TransportOption
-from autd3.params import SIMULATOR_PORT
 
 
 iface = Interface.Auto
@@ -24,6 +23,5 @@ TransportOption(
 # ANCHOR: iface
 Interface.Auto
 Interface.Name("eth0")
-Interface.Simulator(SIMULATOR_PORT)
 Interface.Addr("[::1]:44336")
 # ANCHOR_END: iface

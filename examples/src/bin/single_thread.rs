@@ -4,7 +4,7 @@ use autd3_rs::commands::{Clear, Modulation, Pattern, SetSilencer, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::{Intensity, SamplingConfig};
-use autd3_rs::{Controller, Driver, TransportOption};
+use autd3_rs::{Controller, Driver};
 use tracing_subscriber::EnvFilter;
 
 #[cfg(unix)]
@@ -43,7 +43,8 @@ async fn main() -> Result<()> {
 
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let (controller, driver) = Controller::open(&geometry, &TransportOption::default())?;
+    let (controller, driver) =
+        Controller::open(&geometry, &autd3_rs_examples::transport_option(&geometry)?)?;
     let driving = tokio::spawn(drive(driver));
     controller.send((Clear, Synchronize)).await?;
 

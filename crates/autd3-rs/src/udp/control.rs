@@ -3,7 +3,6 @@ use std::net::SocketAddrV6;
 use autd3_cpu_wire::udp::{
     AssignIdBody, Kind, PROTOCOL_VERSION, Role, SetTimeBody, Status, UnblockReply, UnitInfo,
 };
-use autd3_rs_core::simulator;
 use autd3_rs_core::value::SysTime;
 use zerocopy::FromBytes;
 use zerocopy::little_endian::U64;
@@ -78,21 +77,6 @@ pub(crate) fn set_time_body(sys_time: SysTime) -> SetTimeBody {
     SetTimeBody {
         sys_time: U64::new(sys_time.sys_time()),
     }
-}
-
-pub(crate) fn parse_simulator_reply(reply: &[u8]) -> Option<Result<(), UdpError>> {
-    let &[version, status] = reply else {
-        return None;
-    };
-    if version != simulator::VERSION {
-        return Some(Err(UdpError::SimulatorRejected {
-            status: simulator::Status::Invalid.as_u8(),
-        }));
-    }
-    Some(match simulator::Status::from_u8(status) {
-        Some(simulator::Status::Ok) => Ok(()),
-        _ => Err(UdpError::SimulatorRejected { status }),
-    })
 }
 
 #[cfg(test)]
@@ -253,24 +237,5 @@ mod tests {
             set_time_body(SysTime::from_nanos(1_234)).sys_time.get(),
             1_234
         );
-    }
-
-    #[test]
-    fn the_simulator_reply_is_read_as_its_version_and_status() {
-        assert!(parse_simulator_reply(&[simulator::VERSION]).is_none());
-        assert!(parse_simulator_reply(&[simulator::VERSION, 0, 0]).is_none());
-        assert!(matches!(
-            parse_simulator_reply(&[simulator::VERSION, simulator::Status::Ok.as_u8()]),
-            Some(Ok(()))
-        ));
-        assert!(matches!(
-            parse_simulator_reply(&[simulator::VERSION.wrapping_add(1), simulator::Status::Ok.as_u8()]),
-            Some(Err(UdpError::SimulatorRejected { status })) if status == simulator::Status::Invalid.as_u8()
-        ));
-        let rejected = simulator::Status::Invalid.as_u8();
-        assert!(matches!(
-            parse_simulator_reply(&[simulator::VERSION, rejected]),
-            Some(Err(UdpError::SimulatorRejected { status })) if status == rejected
-        ));
     }
 }

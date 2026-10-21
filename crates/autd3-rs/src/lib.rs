@@ -19,7 +19,6 @@ mod test_utils;
 pub use autd3_rs_core::{bus, common, geometry, nalgebra, params, protocol, units, value};
 pub use error::{Error, NetworkCause, PayloadError};
 
-pub use autd3_rs_core::simulator::DEFAULT_PORT as SIMULATOR_PORT;
 pub use autd3_rs_core::{
     Angle, Autd3, BusStats, Device, DeviceClock, DeviceMask, DeviceState, DeviceStatus,
     EncodeError, Freq, Geometry, Interface, Length, MAX_DEVICES, MAX_INFLIGHT, Point3, Quaternion,

@@ -14,7 +14,9 @@ tracing-subscriber.workspace = true
 autd3-rs-pattern.workspace = true
 autd3-rs-pattern-holo.workspace = true
 autd3-rs-modulation.workspace = true
+autd3-rs-simulator-control.workspace = true
 anyhow.workspace = true
+clap.workspace = true
 tokio = { workspace = true, features = [
     "time",
     "macros",

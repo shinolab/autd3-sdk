@@ -8,7 +8,7 @@ use anyhow::Result;
 
 use autd3_rs::commands::{Clear, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::{Client, Telemetry, TransportOption};
+use autd3_rs::{Client, Telemetry};
 use tracing_subscriber::EnvFilter;
 
 const POLL_INTERVAL: Duration = Duration::from_secs(1);
@@ -37,7 +37,7 @@ async fn main() -> Result<()> {
         .init();
 
     let geometry = Geometry::new(vec![Autd3::default()]);
-    let client = Client::open(&geometry, &TransportOption::default())?;
+    let client = Client::open(&geometry, &autd3_rs_examples::transport_option(&geometry)?)?;
     client.send((Clear, Synchronize)).await?;
 
     println!("devices: {}", client.num_devices());

@@ -22,12 +22,27 @@ The client must run on the same host as the Simulator.
 
 The Simulator listens on port 44336 by default (and on the next port, 44337, for control). Change the port with "UDP port" in the Simulator tab of the console.
 
-The default [`TransportOption`](/autd3-sdk/en/api/basics/transport-option/) (`iface` set to `Auto`) connects to the Simulator on the default port when no real devices are attached.
-If both the Simulator and real devices are found, opening fails; set `iface` to `Simulator(..)` with the Simulator's port, or specify the NIC of the real devices with `Name(..)`.
+The client library does not treat the Simulator specially. Set `iface` of [`TransportOption`](/autd3-sdk/en/api/basics/transport-option/) to `Addr(..)` with the Simulator's address `[::1]:44336` (`Auto` does not look for the Simulator).
 
 <CodeTabs
-  rust={'let option = TransportOption {\n    iface: Interface::Simulator(SIMULATOR_PORT),\n    ..Default::default()\n};'}
-  python={'option = TransportOption(iface=Interface.Simulator(SIMULATOR_PORT))'}
-  csharp={'var option = new TransportOption { Iface = Interface.Simulator(TransportOption.SimulatorPort) };'}
+  rust={'let option = TransportOption {\n    iface: Interface::Addr("[::1]:44336".parse()?),\n    ..Default::default()\n};'}
+  python={'option = TransportOption(iface=Interface.Addr("[::1]:44336"))'}
+  csharp={'var option = new TransportOption { Iface = Interface.Addr("[::1]:44336") };'}
 />
 
+## Geometry
+
+Right after launch, the Simulator holds one device at the origin. To change the number or placement of devices, send the geometry to the control port (`[::1]:44337`) before opening the client.
+The Simulator rebuilds its devices with the received number and placement (their previous state is lost).
+
+In Rust, use `send_geometry` of the `autd3-rs-simulator-control` crate (`simulator/control` in the repository; not published on crates.io).
+
+```rust
+autd3_rs_simulator_control::send_geometry(44336, &geometry, Duration::from_secs(5))?;
+let client = Client::open(&geometry, &option)?;
+```
+
+In other languages, send the following UDP datagram to the control port and wait for the reply.
+
+- Request: version `1` (1 byte), followed by the origin `x, y, z` and the rotation quaternion `w, x, y, z` of each device (each an `f32` in little endian; 28 bytes per device)
+- Reply: 2 bytes `[version, status]`. Status `0` means success

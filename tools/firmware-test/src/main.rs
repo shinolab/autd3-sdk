@@ -2,6 +2,7 @@ mod cases;
 mod cli;
 mod io;
 
+use std::net::{Ipv6Addr, SocketAddrV6};
 use std::ops::Deref;
 use std::sync::Arc;
 use std::time::Duration;
@@ -73,13 +74,22 @@ impl Drop for Session {
 pub struct Link<'a> {
     pub geometry: &'a Geometry,
     pub option: &'a TransportOption,
+    pub simulator: Option<u16>,
     pub heartbeat: Duration,
     pub mute: bool,
     pub exec: ExecAt,
 }
 
 impl Link<'_> {
-    async fn open(&self) -> Result<Session, Error> {
+    async fn open(&self) -> Result<Session> {
+        if let Some(port) = self.simulator {
+            autd3_rs_simulator_control::send_geometry(
+                port,
+                self.geometry,
+                self.option.open_timeout,
+            )
+            .context("sending the geometry to the simulator")?;
+        }
         let client = Client::open(self.geometry, self.option)?;
         client.send((Clear, Synchronize)).await?;
         Ok(Session::new(client, self.heartbeat))
@@ -240,7 +250,7 @@ async fn run(cli: &Cli) -> Result<()> {
     let default = TransportOption::default();
     let option = TransportOption {
         iface: match cli.simulator {
-            Some(port) => Interface::Simulator(port),
+            Some(port) => Interface::Addr(SocketAddrV6::new(Ipv6Addr::LOCALHOST, port, 0, 0)),
             None => cli.interface.clone().into(),
         },
         lost_timeout: cli
@@ -252,6 +262,7 @@ async fn run(cli: &Cli) -> Result<()> {
     let link = Link {
         geometry: &geometry,
         option: &option,
+        simulator: cli.simulator,
         heartbeat,
         mute: cli.mute,
         exec: cli.exec(),

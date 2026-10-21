@@ -140,12 +140,12 @@ namespace AUTD3.Tests
         }
 
         [Fact]
-        public void TheSimulatorInterfaceIsDistinctAndReachesTheNativeOption()
+        public void TheAddrInterfaceIsDistinctAndReachesTheNativeOption()
         {
-            Assert.NotEqual(Interface.Auto, Interface.Simulator(44336));
-            Assert.NotEqual(Interface.Name("eth0"), Interface.Simulator(44336));
-            Assert.NotEqual(Interface.Simulator(44336), Interface.Simulator(50000));
-            var handle = new TransportOption { Iface = Interface.Simulator(50000) }.CreateHandle();
+            Assert.NotEqual(Interface.Auto, Interface.Addr("[::1]:44336"));
+            Assert.NotEqual(Interface.Name("[::1]:44336"), Interface.Addr("[::1]:44336"));
+            Assert.NotEqual(Interface.Addr("[::1]:44336"), Interface.Addr("[::1]:50000"));
+            var handle = new TransportOption { Iface = Interface.Addr("[::1]:50000") }.CreateHandle();
             NativeClient.autd3_transport_option_free(handle);
         }
     }
