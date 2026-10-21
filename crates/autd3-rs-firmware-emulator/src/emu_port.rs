@@ -45,12 +45,6 @@ impl Port for FpgaEmulator {
         NonZeroU64::new(FpgaEmulator::next_sync_edge(self))
     }
 
-    #[cfg(feature = "udp")]
-    fn configure_ptp(&mut self, config: autd3_cpu_fw::ptp::Config) {
-        self.note_ptp_config(config);
-    }
-
-    #[cfg(not(feature = "udp"))]
     fn configure_ptp(&mut self, _config: autd3_cpu_fw::ptp::Config) {}
 
     fn set_fpga_bus_wait(&mut self, _wait: autd3_cpu_fw::port::FpgaBusWait) {}
