@@ -8,19 +8,13 @@ use autd3_cpu_wire::udp::{
 };
 
 use crate::net::{self, Endpoint, Ipv6, Mac, NDP_HOP_LIMIT, Packet, UDP_PAYLOAD_OFFSET, Udp};
-use crate::nic::{Nic, RxMeta, TxStamp, other_port};
+use crate::nic::{Nic, RxMeta, other_port};
 use crate::proto::{Disposition, FRAME_BYTES_MAX, FrameHeader, REPLY_DATA_BYTES_MAX, Reply};
 use crate::ptp::Ptp;
 use crate::version::{FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH};
 
 pub const TX_BUF_BYTES: usize = 320;
 const MAX_ECHO_BODY: usize = TX_BUF_BYTES - UDP_PAYLOAD_OFFSET - 4;
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Received {
-    Nothing,
-    HostMessage,
-}
 
 pub trait CommandLayer {
     fn recv_frame(&mut self, frame: &[u8], msg_id: u16) -> Disposition;
@@ -29,6 +23,8 @@ pub trait CommandLayer {
     fn unassigned(&mut self);
     fn ptp_unlocked(&mut self, elapsed_ms: Option<u32>);
     fn ptp_failsafe_active(&mut self) -> bool;
+    fn host_frame(&mut self, now_ms: u32);
+    fn publish_host_idle(&mut self, now_ms: u32);
 }
 
 impl CommandLayer for &crate::Cpu {
@@ -55,83 +51,20 @@ impl CommandLayer for &crate::Cpu {
     fn ptp_failsafe_active(&mut self) -> bool {
         crate::Cpu::ptp_failsafe_active(self)
     }
-}
 
-struct Counted<'a, N> {
-    nic: &'a mut N,
-    send_failures: u32,
-}
-
-impl<'a, N: Nic> Counted<'a, N> {
-    const fn new(nic: &'a mut N) -> Self {
-        Self {
-            nic,
-            send_failures: 0,
-        }
+    fn host_frame(&mut self, now_ms: u32) {
+        crate::Cpu::record_host_frame(self, now_ms);
     }
 
-    fn report<C: CommandLayer>(&self, cmds: &mut C) {
-        if self.send_failures != 0 {
-            cmds.send_failed(self.send_failures);
-        }
+    fn publish_host_idle(&mut self, now_ms: u32) {
+        crate::Cpu::publish_host_idle(self, now_ms);
     }
 }
 
-impl<N: Nic> Nic for Counted<'_, N> {
-    fn send(&mut self, frame: &[u8], port: u8, timestamp: bool) -> bool {
-        let sent = self.nic.send(frame, port, timestamp);
-        if !sent {
-            self.send_failures = self.send_failures.wrapping_add(1);
-        }
-        sent
-    }
-
-    fn now(&mut self) -> Option<u64> {
-        self.nic.now()
-    }
-
-    fn step(&mut self, offset_ns: i64) -> bool {
-        self.nic.step(offset_ns)
-    }
-
-    fn set_time(&mut self, ns: u64) -> bool {
-        self.nic.set_time(ns)
-    }
-
-    fn set_drift(&mut self, ppb: i32) {
-        self.nic.set_drift(ppb);
-    }
-
-    fn clear_tx_timestamps(&mut self) {
-        self.nic.clear_tx_timestamps();
-    }
-
-    fn take_tx_timestamp(&mut self, port: u8) -> Option<TxStamp> {
-        self.nic.take_tx_timestamp(port)
-    }
-
-    fn set_forwarding(&mut self, open: bool) {
-        self.nic.set_forwarding(open);
-    }
-
-    fn set_mac(&mut self, mac: Mac) {
-        self.nic.set_mac(mac);
-    }
-
-    fn downstream_link(&mut self, port: u8) -> bool {
-        self.nic.downstream_link(port)
-    }
-
-    fn arm_pulse(&mut self) -> bool {
-        self.nic.arm_pulse()
-    }
-
-    fn stop_pulse(&mut self) {
-        self.nic.stop_pulse();
-    }
-
-    fn pulse_ready(&mut self) -> bool {
-        self.nic.pulse_ready()
+fn report_send_failures<N: Nic, C: CommandLayer>(nic: &mut N, cmds: &mut C) {
+    let failures = nic.take_send_failures();
+    if failures != 0 {
+        cmds.send_failed(failures);
     }
 }
 
@@ -250,16 +183,16 @@ impl Node {
     }
 
     pub fn tick<N: Nic, C: CommandLayer>(&mut self, nic: &mut N, now_ms: u32, cmds: &mut C) {
-        let mut nic = Counted::new(nic);
         if let Some(at) = self.close_at
             && now_ms.wrapping_sub(at).cast_signed() >= 0
         {
-            self.unassign(&mut nic);
+            self.unassign(nic);
             cmds.unassigned();
         }
-        self.ptp.tick(&mut nic, now_ms);
+        self.ptp.tick(nic, now_ms);
         cmds.ptp_unlocked(self.ptp.unlocked_ms(now_ms));
-        nic.report(cmds);
+        cmds.publish_host_idle(now_ms);
+        report_send_failures(nic, cmds);
     }
 
     pub fn send_completion<N: Nic, C: CommandLayer>(
@@ -277,11 +210,10 @@ impl Node {
             kind: Kind::Frame.as_u8(),
             msg_id,
         };
-        let mut nic = Counted::new(nic);
         let state = cmds.reply();
         let ptp_failsafe = cmds.ptp_failsafe_active();
-        self.frame_reply(&mut nic, &reply_to, &state, ptp_failsafe);
-        nic.report(cmds);
+        self.frame_reply(nic, &reply_to, &state, ptp_failsafe);
+        report_send_failures(nic, cmds);
     }
 
     pub fn on_frame<N: Nic, C: CommandLayer>(
@@ -291,11 +223,9 @@ impl Node {
         frame: &[u8],
         rx: RxMeta,
         cmds: &mut C,
-    ) -> Received {
-        let mut nic = Counted::new(nic);
-        let received = self.dispatch(&mut nic, now_ms, frame, rx, cmds);
-        nic.report(cmds);
-        received
+    ) {
+        self.dispatch(nic, now_ms, frame, rx, cmds);
+        report_send_failures(nic, cmds);
     }
 
     fn dispatch<N: Nic, C: CommandLayer>(
@@ -305,14 +235,13 @@ impl Node {
         frame: &[u8],
         rx: RxMeta,
         cmds: &mut C,
-    ) -> Received {
+    ) {
         match net::parse(frame) {
             Some(Packet::Ptp { message }) => {
                 if self.is_assigned() {
                     self.ptp.on_message(nic, message, rx, now_ms);
                     cmds.ptp_unlocked(self.ptp.unlocked_ms(now_ms));
                 }
-                Received::Nothing
             }
             Some(Packet::NeighborSolicitation {
                 src_mac,
@@ -335,7 +264,6 @@ impl Node {
                 {
                     let _ = nic.send(&self.buf[..len], rx.port, false);
                 }
-                Received::Nothing
             }
             Some(Packet::EchoRequest {
                 src_mac,
@@ -350,19 +278,15 @@ impl Node {
                 {
                     let _ = nic.send(&self.buf[..len], rx.port, false);
                 }
-                Received::Nothing
             }
-            Some(Packet::Udp(udp)) => {
+            Some(Packet::Udp(udp))
                 if udp.dst_port == PORT
                     && (udp.dst_ip == self.addr || udp.dst_ip == ALL_NODES)
-                    && net::is_link_local_unicast(&udp.src_ip)
-                {
-                    self.on_udp(nic, now_ms, &udp, rx, cmds)
-                } else {
-                    Received::Nothing
-                }
+                    && net::is_link_local_unicast(&udp.src_ip) =>
+            {
+                self.on_udp(nic, now_ms, &udp, rx, cmds);
             }
-            None => Received::Nothing,
+            Some(Packet::Udp(_)) | None => {}
         }
     }
 
@@ -373,9 +297,9 @@ impl Node {
         udp: &Udp<'_>,
         rx: RxMeta,
         cmds: &mut C,
-    ) -> Received {
+    ) {
         let Ok((header, body)) = Header::ref_from_prefix(udp.payload) else {
-            return Received::Nothing;
+            return;
         };
         let reply = ReplyTo {
             port: rx.port,
@@ -389,7 +313,7 @@ impl Node {
         };
         if header.version != PROTOCOL_VERSION {
             self.status(nic, &reply, Status::UnsupportedVersion);
-            return Received::Nothing;
+            return;
         }
         let unicast = udp.dst_ip == self.addr;
         match Kind::from_u8(header.kind) {
@@ -400,9 +324,10 @@ impl Node {
                         && (!unicast
                             || !(size_of::<FrameHeader>()..=FRAME_BYTES_MAX).contains(&body.len())))
                 {
-                    return Received::Nothing;
+                    return;
                 }
                 self.host = Some((reply.port, reply.to));
+                cmds.host_frame(now_ms);
                 if is_frame {
                     let _ = cmds.recv_frame(body, reply.msg_id);
                 } else {
@@ -410,7 +335,6 @@ impl Node {
                     let ptp_failsafe = cmds.ptp_failsafe_active();
                     self.frame_reply(nic, &reply, &state, ptp_failsafe);
                 }
-                return Received::HostMessage;
             }
             Some(Kind::ReadUnitInfo) => {
                 let info = self.unit_info(nic, cmds.ptp_failsafe_active());
@@ -439,7 +363,6 @@ impl Node {
             Some(Kind::AssignId | Kind::UnblockDownstream | Kind::SetTime) | None => {}
             Some(_) => unreachable!(),
         }
-        Received::Nothing
     }
 
     fn assign<N: Nic>(&mut self, nic: &mut N, body: &[u8], upstream: u8) -> Status {
@@ -597,7 +520,7 @@ mod tests {
     use zerocopy::little_endian::U64;
     use zerocopy::{FromBytes, IntoBytes};
 
-    use super::{CommandLayer, Node, Received};
+    use super::{CommandLayer, Node};
     use crate::net::{
         self, ETH_HEADER, ETHERTYPE_PTP, Endpoint, IPV6_HEADER, Ipv6, MAX_FRAME, Mac, Packet,
         UDP_PAYLOAD_OFFSET,
@@ -624,6 +547,7 @@ mod tests {
         unassigned: u32,
         ptp_unlocked: Vec<Option<u32>>,
         ptp_failsafe: bool,
+        host_frames: Vec<u32>,
     }
 
     impl CommandLayer for FakeCommands {
@@ -651,6 +575,12 @@ mod tests {
         fn ptp_failsafe_active(&mut self) -> bool {
             self.ptp_failsafe
         }
+
+        fn host_frame(&mut self, now_ms: u32) {
+            self.host_frames.push(now_ms);
+        }
+
+        fn publish_host_idle(&mut self, _now_ms: u32) {}
     }
 
     struct Harness {
@@ -691,23 +621,17 @@ mod tests {
                     unassigned: 0,
                     ptp_unlocked: Vec::new(),
                     ptp_failsafe: false,
+                    host_frames: Vec::new(),
                 },
             }
         }
 
-        fn request(
-            &mut self,
-            dst: Ipv6,
-            version: u8,
-            kind: u8,
-            msg_id: u16,
-            body: &[u8],
-        ) -> Received {
+        fn request(&mut self, dst: Ipv6, version: u8, kind: u8, msg_id: u16, body: &[u8]) -> bool {
             let frame = encode_request(dst, version, kind, msg_id, body);
             self.deliver(&frame)
         }
 
-        fn deliver(&mut self, frame: &[u8]) -> Received {
+        fn deliver(&mut self, frame: &[u8]) -> bool {
             let rx = RxMeta {
                 port: UPSTREAM,
                 timestamp_ns: 0,
@@ -753,12 +677,14 @@ mod tests {
     }
 
     impl Harness {
-        fn deliver_at(&mut self, frame: &[u8], rx: RxMeta) -> Received {
+        fn deliver_at(&mut self, frame: &[u8], rx: RxMeta) -> bool {
+            let host_frames = self.cmds.host_frames.len();
             self.node
-                .on_frame(&mut self.nic, self.now_ms, frame, rx, &mut self.cmds)
+                .on_frame(&mut self.nic, self.now_ms, frame, rx, &mut self.cmds);
+            self.cmds.host_frames.len() > host_frames
         }
 
-        fn send(&mut self, dst: Ipv6, kind: Kind, body: &[u8]) -> Received {
+        fn send(&mut self, dst: Ipv6, kind: Kind, body: &[u8]) -> bool {
             self.request(dst, PROTOCOL_VERSION, kind.as_u8(), 0x4242, body)
         }
 
@@ -1012,26 +938,17 @@ mod tests {
     fn a_frame_reaches_the_command_layer_and_is_answered_by_its_completion() {
         let mut h = Harness::new();
         let body = frame_body();
-        assert_eq!(
-            h.send(unit_address(UNASSIGNED_ID), Kind::Frame, &body),
-            Received::Nothing
-        );
+        assert!(!h.send(unit_address(UNASSIGNED_ID), Kind::Frame, &body));
         assert_eq!(h.cmds.frames, []);
         assert!(h.replies().is_empty());
 
         h.assign(1);
-        assert_eq!(h.send(ALL_NODES, Kind::Frame, &body), Received::Nothing);
+        assert!(!h.send(ALL_NODES, Kind::Frame, &body));
         assert!(h.replies().is_empty());
-        assert_eq!(
-            h.send(unit_address(1), Kind::Frame, &body[..1]),
-            Received::Nothing
-        );
+        assert!(!h.send(unit_address(1), Kind::Frame, &body[..1]));
         assert!(h.replies().is_empty());
 
-        assert_eq!(
-            h.send(unit_address(1), Kind::Frame, &body),
-            Received::HostMessage
-        );
+        assert!(h.send(unit_address(1), Kind::Frame, &body));
         assert_eq!(h.cmds.frames.len(), 1);
         assert_eq!(h.cmds.frames[0].0, body);
         assert_eq!(h.cmds.frames[0].1, 0x4242);
@@ -1061,7 +978,7 @@ mod tests {
         for kind in [Kind::ReadUnitInfo, Kind::Discover, Kind::ResetId] {
             let request =
                 encode_request_from(src_ip, ALL_NODES, PROTOCOL_VERSION, kind.as_u8(), 1, &[]);
-            assert_eq!(h.deliver(&request), Received::Nothing);
+            assert!(!h.deliver(&request));
         }
         let unsupported = encode_request_from(
             src_ip,
@@ -1071,7 +988,7 @@ mod tests {
             1,
             &[],
         );
-        assert_eq!(h.deliver(&unsupported), Received::Nothing);
+        assert!(!h.deliver(&unsupported));
         assert!(h.nic.sent.is_empty());
 
         h.assign(1);
@@ -1087,7 +1004,7 @@ mod tests {
                 2,
                 body,
             );
-            assert_eq!(h.deliver(&request), Received::Nothing);
+            assert!(!h.deliver(&request));
         }
         assert_eq!(h.cmds.frames.len(), 1);
         assert!(h.nic.sent.is_empty());
@@ -1119,10 +1036,7 @@ mod tests {
         let mut h = Harness::new();
         h.assign(1);
         let body = [0, 0x04, 0, 0, 0, 0, 1, 2];
-        assert_eq!(
-            h.send(unit_address(1), Kind::Frame, &body),
-            Received::HostMessage
-        );
+        assert!(h.send(unit_address(1), Kind::Frame, &body));
         assert_eq!(h.cmds.frames[0].0, body);
     }
 
@@ -1130,16 +1044,13 @@ mod tests {
     fn a_deferred_frame_is_answered_by_the_completion() {
         let mut h = Harness::new();
         h.assign(2);
-        assert_eq!(
-            h.request(
-                unit_address(2),
-                PROTOCOL_VERSION,
-                Kind::Frame.as_u8(),
-                0x0101,
-                &frame_body()
-            ),
-            Received::HostMessage
-        );
+        assert!(h.request(
+            unit_address(2),
+            PROTOCOL_VERSION,
+            Kind::Frame.as_u8(),
+            0x0101,
+            &frame_body()
+        ));
         assert!(h.replies().is_empty());
 
         h.cmds.reply = CmdReply::new(Error::InvalidPayload, ReplyData::EMPTY);
@@ -1246,14 +1157,11 @@ mod tests {
     #[test]
     fn a_heartbeat_to_all_nodes_is_answered_only_by_an_assigned_unit() {
         let mut h = Harness::new();
-        assert_eq!(h.send(ALL_NODES, Kind::Heartbeat, &[]), Received::Nothing);
+        assert!(!h.send(ALL_NODES, Kind::Heartbeat, &[]));
         assert!(h.replies().is_empty());
 
         h.assign(4);
-        assert_eq!(
-            h.send(ALL_NODES, Kind::Heartbeat, &[]),
-            Received::HostMessage
-        );
+        assert!(h.send(ALL_NODES, Kind::Heartbeat, &[]));
         let r = h.only_reply();
         assert_eq!(r.header, Header::new(Kind::Heartbeat, 0x4242));
         let (reply, _) = parse_frame_reply(&r.body);
@@ -1295,18 +1203,12 @@ mod tests {
     #[test]
     fn a_heartbeat_is_answered_with_the_current_result() {
         let mut h = Harness::new();
-        assert_eq!(
-            h.send(unit_address(UNASSIGNED_ID), Kind::Heartbeat, &[]),
-            Received::Nothing
-        );
+        assert!(!h.send(unit_address(UNASSIGNED_ID), Kind::Heartbeat, &[]));
         assert!(h.replies().is_empty());
 
         h.assign(4);
         h.cmds.reply = CmdReply::new(Error::None, ReplyData::from_slice(&[1, 2, 3]));
-        assert_eq!(
-            h.send(unit_address(4), Kind::Heartbeat, &[]),
-            Received::HostMessage
-        );
+        assert!(h.send(unit_address(4), Kind::Heartbeat, &[]));
         assert_eq!(h.cmds.frames, []);
         let r = h.only_reply();
         assert_eq!(r.header, Header::new(Kind::Heartbeat, 0x4242));
@@ -1447,6 +1349,19 @@ mod tests {
         icmp.resize(400, 0);
         h.deliver(&icmp_frame(own, 64, &icmp));
         assert!(h.nic.sent.is_empty());
+    }
+
+    #[test]
+    fn refused_neighbor_and_echo_replies_are_reported_to_the_command_layer() {
+        let mut h = Harness::new();
+        h.assign(4);
+        let own = unit_address(4);
+        h.nic.send_refusals = 2;
+        h.deliver(&icmp_frame(solicited_node(own), 255, &solicitation(own)));
+        let icmp = [icmpv6::TYPE_ECHO_REQUEST, 0, 0, 0, 0, 1, 0, 2, b'x'];
+        h.deliver(&icmp_frame(own, 64, &icmp));
+        assert!(h.nic.sent.is_empty());
+        assert_eq!(h.cmds.send_failures, 2);
     }
 
     const WIRE_DELAY_NS: f64 = 700.0;
@@ -1808,7 +1723,7 @@ mod tests {
             ..default_config()
         }));
         assert_eq!(c.status(), CmdError::None);
-        c.port.ptp_unlocked_ms = Some(50);
+        c.cpu.publish_ptp_unlocked(Some(50));
         c.tick_1ms(1);
 
         let mut h = Harness::new();
@@ -1829,13 +1744,150 @@ mod tests {
         let (reply, _) = parse_frame_reply(&h.only_reply().body);
         assert!(reply.flags.contains(Flags::PTP_FAILSAFE));
 
-        c.port.ptp_unlocked_ms = None;
+        c.cpu.publish_ptp_unlocked(None);
         c.deliver(&Frame::new(Cmd::ReleaseFailsafe));
         assert_eq!(c.status(), CmdError::None);
         h.node
             .on_frame(&mut h.nic, h.now_ms, &heartbeat, rx, &mut &*c.cpu);
         let (reply, _) = parse_frame_reply(&h.only_reply().body);
         assert!(!reply.flags.contains(Flags::PTP_FAILSAFE));
+    }
+
+    #[cfg(not(loom))]
+    fn run_with_cpu(h: &mut Harness, cpu: &crate::Cpu, ms: u32, host_frame: Option<&[u8]>) {
+        let rx = RxMeta {
+            port: UPSTREAM,
+            timestamp_ns: 0,
+        };
+        for _ in 0..ms {
+            h.now_ms += 1;
+            if let Some(frame) = host_frame {
+                h.node.on_frame(&mut h.nic, h.now_ms, frame, rx, &mut &*cpu);
+            }
+            h.node.tick(&mut h.nic, h.now_ms, &mut &*cpu);
+        }
+        h.nic.sent.clear();
+    }
+
+    #[cfg(not(loom))]
+    #[test]
+    fn a_host_that_keeps_sending_through_a_main_loop_backlog_does_not_trip_the_failsafe() {
+        use crate::cmd::cpu_config::{CpuConfig, default_config};
+        use crate::fpga_params::CtlFlags;
+        use crate::proto::Error as CmdError;
+        use crate::test_utils::builders::set_cpu_config;
+        use crate::test_utils::mock::Harness as CpuHarness;
+
+        let mut c = CpuHarness::new();
+        c.deliver(&set_cpu_config(&CpuConfig {
+            failsafe_timeout: Some(core::time::Duration::from_millis(500)),
+            ..default_config()
+        }));
+        assert_eq!(c.status(), CmdError::None);
+
+        let mut h = Harness::new();
+        h.assign(4);
+        let heartbeat = encode_request(
+            unit_address(4),
+            PROTOCOL_VERSION,
+            Kind::Heartbeat.as_u8(),
+            1,
+            &[],
+        );
+        run_with_cpu(&mut h, &c.cpu, 2000, Some(&heartbeat));
+        c.step_backlogged(2000);
+        assert!(!c.ctl_flags().contains(CtlFlags::FAILSAFE));
+        assert_eq!(c.telemetry().failsafe, 0);
+
+        run_with_cpu(&mut h, &c.cpu, 500, None);
+        c.step_backlogged(500);
+        assert!(c.ctl_flags().contains(CtlFlags::FAILSAFE));
+        assert_eq!(c.telemetry().failsafe, 1);
+    }
+
+    #[cfg(not(loom))]
+    #[test]
+    fn a_release_failsafe_from_a_returning_host_is_accepted_before_the_next_tick() {
+        use crate::cmd::cpu_config::{CpuConfig, default_config};
+        use crate::fpga_params::CtlFlags;
+        use crate::proto::{Cmd, Error as CmdError};
+        use crate::test_utils::builders::set_cpu_config;
+        use crate::test_utils::mock::{Frame, Harness as CpuHarness};
+
+        let mut c = CpuHarness::new();
+        c.deliver(&set_cpu_config(&CpuConfig {
+            failsafe_timeout: Some(core::time::Duration::from_millis(500)),
+            ..default_config()
+        }));
+        let mut h = Harness::new();
+        h.assign(4);
+        let heartbeat = encode_request(
+            unit_address(4),
+            PROTOCOL_VERSION,
+            Kind::Heartbeat.as_u8(),
+            1,
+            &[],
+        );
+        run_with_cpu(&mut h, &c.cpu, 1, Some(&heartbeat));
+        run_with_cpu(&mut h, &c.cpu, 1000, None);
+        c.tick_1ms(1);
+        assert!(c.ctl_flags().contains(CtlFlags::FAILSAFE));
+
+        let release = encode_request(
+            unit_address(4),
+            PROTOCOL_VERSION,
+            Kind::Frame.as_u8(),
+            2,
+            &Frame::new(Cmd::ReleaseFailsafe).bytes(),
+        );
+        h.node.on_frame(
+            &mut h.nic,
+            h.now_ms,
+            &release,
+            RxMeta {
+                port: UPSTREAM,
+                timestamp_ns: 0,
+            },
+            &mut &*c.cpu,
+        );
+        c.cpu.process_pending(&mut c.port);
+        assert_eq!(c.status(), CmdError::None);
+        assert!(!c.ctl_flags().contains(CtlFlags::FAILSAFE));
+    }
+
+    #[cfg(not(loom))]
+    #[test]
+    fn reset_id_keeps_the_time_of_the_last_host_frame() {
+        use crate::test_utils::mock::Harness as CpuHarness;
+
+        let c = CpuHarness::new();
+        let mut h = Harness::new();
+        h.assign(4);
+        let heartbeat = encode_request(
+            unit_address(4),
+            PROTOCOL_VERSION,
+            Kind::Heartbeat.as_u8(),
+            1,
+            &[],
+        );
+        run_with_cpu(&mut h, &c.cpu, 10, Some(&heartbeat));
+        assert_eq!(c.cpu.host_idle_ms(), Some(0));
+        let last_host_frame_ms = h.now_ms;
+
+        let reset_id = encode_request(ALL_NODES, PROTOCOL_VERSION, Kind::ResetId.as_u8(), 2, &[]);
+        h.node.on_frame(
+            &mut h.nic,
+            h.now_ms,
+            &reset_id,
+            RxMeta {
+                port: UPSTREAM,
+                timestamp_ns: 0,
+            },
+            &mut &*c.cpu,
+        );
+        run_with_cpu(&mut h, &c.cpu, 50, None);
+        assert!(!h.node.is_assigned());
+        assert_eq!(c.cpu.host_idle_ms(), Some(h.now_ms - last_host_frame_ms));
     }
 
     #[cfg(not(loom))]

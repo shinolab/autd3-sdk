@@ -12,7 +12,7 @@ use core::arch::asm;
 use core::panic::PanicInfo;
 
 use autd3_cpu_fw::Cpu;
-use autd3_cpu_fw::proto::{Drained, RxFrame};
+use autd3_cpu_fw::proto::Drained;
 
 use crate::port::HwPort;
 
@@ -45,11 +45,8 @@ pub extern "C" fn main() -> ! {
     cpu().init(&mut HwPort);
     udp::start();
     bsp::vic::irq_enable();
-    let mut work = RxFrame::ZERO;
     loop {
-        if let Drained::Completed { msg_id } =
-            cpu().step(&mut HwPort, &mut work, bsp::timer::elapsed_ms())
-        {
+        if let Drained::Completed { msg_id } = cpu().step(&mut HwPort, bsp::timer::elapsed_ms()) {
             udp::complete(msg_id);
         }
     }

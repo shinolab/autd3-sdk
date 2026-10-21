@@ -115,6 +115,7 @@ pub(crate) struct SimNic {
     pub(crate) pulse_stopped: u32,
     pub(crate) pulse_ready: bool,
     pub(crate) send_refusals: u32,
+    send_failures: u32,
 }
 
 impl SimNic {
@@ -139,6 +140,7 @@ impl SimNic {
             pulse_stopped: 0,
             pulse_ready: false,
             send_refusals: 0,
+            send_failures: 0,
         }
     }
 
@@ -165,6 +167,7 @@ impl Nic for SimNic {
     fn send(&mut self, frame: &[u8], port: u8, timestamp: bool) -> bool {
         if self.send_refusals > 0 {
             self.send_refusals -= 1;
+            self.send_failures += 1;
             return false;
         }
         if timestamp {
@@ -249,5 +252,9 @@ impl Nic for SimNic {
 
     fn pulse_ready(&mut self) -> bool {
         self.pulse_ready
+    }
+
+    fn take_send_failures(&mut self) -> u32 {
+        core::mem::take(&mut self.send_failures)
     }
 }

@@ -47,7 +47,6 @@ struct Unit {
     lock_blocked: bool,
     ptp_config: PtpConfig,
     last_tick: Instant,
-    last_host: Option<Instant>,
     host: Option<SocketAddr>,
     main_loop_paused: bool,
     drop_frames: u32,
@@ -96,15 +95,6 @@ impl Unit {
         self.unlocked_since.map(|at| millis_since(at, now))
     }
 
-    fn forget_host(&mut self) {
-        self.last_host = None;
-        self.device.fpga_mut().host_idle_ms = None;
-    }
-
-    fn host_idle_ms(&self, now: Instant) -> Option<u32> {
-        self.last_host.map(|at| millis_since(at, now))
-    }
-
     fn can_lock(&self) -> bool {
         !self.lock_blocked && !self.ptp_config.lock_threshold.is_zero()
     }
@@ -120,6 +110,11 @@ impl Unit {
 
 fn millis_since(at: Instant, now: Instant) -> u32 {
     u32::try_from(now.saturating_duration_since(at).as_millis()).unwrap_or(u32::MAX)
+}
+
+fn wrapping_millis_since(at: Instant, now: Instant) -> u32 {
+    let ms = now.saturating_duration_since(at).as_millis();
+    u32::try_from(ms & u128::from(u32::MAX)).unwrap_or(u32::MAX)
 }
 
 struct Chain {
@@ -394,19 +389,18 @@ impl Chain {
 
     fn advance(&mut self, index: usize, now: Instant) {
         let bus = self.unit_now(index);
+        let now_ms = wrapping_millis_since(self.boot, now);
         let unit = &mut self.units[index];
         let resets = unit.device.fpga().reset_count();
-        unit.device.fpga_mut().host_idle_ms = unit.host_idle_ms(now);
-        unit.device.fpga_mut().ptp_unlocked_ms = unit.ptp_unlocked_ms(now);
+        unit.device.cpu.publish_host_idle(now_ms);
+        unit.device
+            .cpu
+            .publish_ptp_unlocked(unit.ptp_unlocked_ms(now));
         let elapsed = now.saturating_duration_since(unit.last_tick).as_millis();
         if elapsed > 0 && !unit.main_loop_paused {
             unit.last_tick = now;
             for _ in 0..elapsed.min(MAX_CATCH_UP_TICKS) {
-                let before = unit.device.fpga().reset_count();
                 unit.device.tick_1ms();
-                if unit.device.fpga().reset_count() != before {
-                    unit.forget_host();
-                }
             }
         }
         if unit.device.fpga().reset_count() != resets {
@@ -471,7 +465,10 @@ impl Chain {
             self.advance(index, now);
             return false;
         }
-        self.units[index].last_host = Some(now);
+        self.units[index]
+            .device
+            .cpu
+            .record_host_frame(wrapping_millis_since(self.boot, now));
         self.units[index].host = Some(src);
         self.advance(index, now);
         true
@@ -617,7 +614,6 @@ impl UdpEmulator {
                 lock_blocked: false,
                 ptp_config: PtpConfig::default(),
                 last_tick: now,
-                last_host: None,
                 host: None,
                 main_loop_paused: false,
                 drop_frames: 0,
@@ -758,7 +754,6 @@ impl UdpEmulator {
         let mut chain = lock(&self.chain);
         let unit = &mut chain.units[index];
         unit.device.reset_cpu();
-        unit.forget_host();
         unit.forget();
     }
 }

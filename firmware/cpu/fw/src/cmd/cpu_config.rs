@@ -359,7 +359,7 @@ mod tests {
             failsafe_timeout: Some(Duration::from_millis(500)),
             ..DEFAULT
         }));
-        h.port.host_idle_ms = Some(1000);
+        h.set_host_idle_ms(1000);
         h.cpu.tick_1ms(&mut h.port);
         assert_eq!(h.telemetry().failsafe, 1);
         assert!(CtlFlags::from_bits_retain(h.ctl(ADDR_CTL_FLAG)).contains(CtlFlags::FAILSAFE));
@@ -381,12 +381,12 @@ mod tests {
             failsafe_timeout: Some(Duration::from_millis(500)),
             ..DEFAULT
         }));
-        h.port.host_idle_ms = Some(499);
+        h.set_host_idle_ms(499);
         h.cpu.tick_1ms(&mut h.port);
         assert_eq!(h.telemetry().failsafe, 0);
 
         h.cpu.request_config_reset();
-        h.port.host_idle_ms = Some(u32::MAX);
+        h.set_host_idle_ms(u32::MAX);
         h.cpu.tick_1ms(&mut h.port);
         assert_eq!(h.telemetry().failsafe, 0);
         assert!(!CtlFlags::from_bits_retain(h.ctl(ADDR_CTL_FLAG)).contains(CtlFlags::FAILSAFE));

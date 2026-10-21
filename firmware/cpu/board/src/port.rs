@@ -58,14 +58,6 @@ impl Port for HwPort {
         udp::irq::without_irq(|| f(self))
     }
 
-    fn host_idle_ms(&mut self) -> Option<u32> {
-        udp::host_idle_ms()
-    }
-
-    fn ptp_unlocked_ms(&mut self) -> Option<u32> {
-        udp::ptp_unlocked_ms()
-    }
-
     fn flash_read(&mut self, addr: u32, buf: &mut [u8]) -> Result<(), FlashError> {
         if !flash_range_ok(addr, buf.len()) {
             return Err(FlashError);
