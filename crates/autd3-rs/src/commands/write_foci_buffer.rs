@@ -121,7 +121,7 @@ mod tests {
                     points: &out_of_range,
                 }
             ),
-            Err(Error::Encode(_))
+            Err(Error::InvalidPayload(PayloadError::Focus(_)))
         ));
 
         let two = [ControlPoints::from(Point3::origin()); 2];

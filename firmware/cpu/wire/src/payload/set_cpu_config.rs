@@ -8,7 +8,8 @@ use super::try_read_exact;
 use crate::Error;
 use crate::config::{CpuConfig, FpgaBusWait, MaxFreqPpb, PathDelayFilterShift, PtpConfig};
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, thiserror::Error)]
+#[error("CPU config `{field}` = {value:?} must be a multiple of {unit:?} within {min:?}..={max:?}")]
 pub struct CpuConfigOutOfRange {
     pub field: &'static str,
     pub value: Duration,

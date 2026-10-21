@@ -1790,7 +1790,7 @@ pub(crate) fn error_code(e: &Error) -> i32 {
         Error::Timeout { .. } => AUTD3_ERR_TIMEOUT,
         Error::DeviceError { .. } | Error::UnexpectedReply { .. } => AUTD3_ERR_DEVICE,
         Error::Network(_) | Error::DeviceLost { .. } => AUTD3_ERR_NETWORK,
-        Error::InvalidPayload(_) | Error::Encode(_) => AUTD3_ERR_INVALID_ARGUMENT,
+        Error::InvalidPayload(_) => AUTD3_ERR_INVALID_ARGUMENT,
         Error::DeviceTimeUnknown | Error::Closed => AUTD3_ERR,
         _ => unreachable!(),
     }

@@ -193,6 +193,7 @@ mod tests {
     use crate::error::PayloadError;
     use crate::params::EMISSION_MAX_INDICES;
     use crate::test_utils::{encode, test_device};
+    use autd3_cpu_wire::payload::PayloadBuildError;
     const PHASES_OFFSET: usize = size_of::<WritePatternRawPayload>();
     const INTENSITIES_OFFSET: usize = size_of::<WritePatternRawPayload>() + NUM_TRANSDUCERS;
 
@@ -329,9 +330,9 @@ mod tests {
         };
         assert!(matches!(
             encode(&op),
-            Err(Error::InvalidPayload(
-                PayloadError::PatternIndexOutOfRange { .. }
-            ))
+            Err(Error::InvalidPayload(PayloadError::Build(
+                PayloadBuildError::PatternIndexOutOfRange { .. }
+            )))
         ));
     }
 

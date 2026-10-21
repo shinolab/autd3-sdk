@@ -1,6 +1,5 @@
 pub mod bus;
 pub mod common;
-pub mod error;
 pub mod geometry;
 pub mod params;
 pub mod protocol;
@@ -11,7 +10,6 @@ pub use nalgebra;
 pub use bus::{BusStats, DeviceClock, DeviceMask, DeviceState, DeviceStatus, Interface};
 pub use common::units;
 pub use common::{Angle, Freq, Length, Velocity};
-pub use error::EncodeError;
 #[cfg(feature = "serde")]
 pub use geometry::LayoutError;
 pub use geometry::{

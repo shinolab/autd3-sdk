@@ -56,6 +56,7 @@ mod tests {
     use crate::geometry::Autd3;
     use crate::params::EMISSION_MAX_INDICES;
     use crate::test_utils::{encode, test_device};
+    use autd3_cpu_wire::payload::PayloadBuildError;
 
     fn ramp(offset: usize) -> Vec<Vec<Phase>> {
         vec![
@@ -151,9 +152,9 @@ mod tests {
         };
         assert!(matches!(
             encode(&op),
-            Err(Error::InvalidPayload(
-                PayloadError::PatternSizeTooSmall { .. }
-            ))
+            Err(Error::InvalidPayload(PayloadError::Build(
+                PayloadBuildError::PatternSizeTooSmall { .. }
+            )))
         ));
     }
 
@@ -172,7 +173,9 @@ mod tests {
             assert!(
                 matches!(
                     err,
-                    Error::InvalidPayload(PayloadError::PatternCountExceedsDepth { .. })
+                    Error::InvalidPayload(PayloadError::Build(
+                        PayloadBuildError::PatternCountExceedsDepth { .. }
+                    ))
                 ),
                 "{err}"
             );
@@ -191,9 +194,9 @@ mod tests {
         };
         assert!(matches!(
             encode(&op),
-            Err(Error::InvalidPayload(
-                PayloadError::PatternIndexOutOfRange { .. }
-            ))
+            Err(Error::InvalidPayload(PayloadError::Build(
+                PayloadBuildError::PatternIndexOutOfRange { .. }
+            )))
         ));
     }
 

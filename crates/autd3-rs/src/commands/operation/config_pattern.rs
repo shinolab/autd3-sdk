@@ -62,6 +62,7 @@ mod tests {
     use crate::error::PayloadError;
     use crate::params::{EMISSION_MAX_INDICES, MAX_FOCI_TOTAL, NUM_FOCI_MAX};
     use crate::test_utils::encode;
+    use autd3_cpu_wire::payload::PayloadBuildError;
     use core::num::NonZeroU16;
 
     const ENCODED: Encoded = Encoded::new(Cmd::ConfigPattern, size_of::<ConfigPatternPayload>());
@@ -195,9 +196,9 @@ mod tests {
             assert!(
                 matches!(
                     encode(&foci(2, 1, Velocity::from_m_s(too_fast))),
-                    Err(Error::InvalidPayload(
-                        PayloadError::SoundSpeedTooLarge { .. }
-                    ))
+                    Err(Error::InvalidPayload(PayloadError::Build(
+                        PayloadBuildError::SoundSpeedTooLarge { .. }
+                    )))
                 ),
                 "{too_fast} m/s must not saturate silently"
             );

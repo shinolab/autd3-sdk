@@ -82,7 +82,6 @@ pub(crate) fn udp_error(error: &Error) -> Option<&UdpError> {
         | Error::Timeout { .. }
         | Error::DeviceTimeUnknown
         | Error::InvalidPayload(_)
-        | Error::Encode(_)
         | Error::Closed => None,
         _ => unreachable!(),
     }

@@ -119,6 +119,7 @@ mod tests {
     use crate::error::PayloadError;
     use crate::params::{SILENCER_DEFAULT_UPDATE_RATE, SilencerFlags};
     use crate::test_utils::encode;
+    use autd3_cpu_wire::payload::PayloadBuildError;
     use rstest::rstest;
 
     const ENCODED: Encoded = Encoded::new(Cmd::SetSilencer, size_of::<SilencerPayload>());
@@ -205,9 +206,9 @@ mod tests {
                 phase: ULTRASOUND_PERIOD,
                 strict_mode: true,
             })),
-            Err(Error::InvalidPayload(
-                PayloadError::SilencerCompletionTimeNotMultiple(_)
-            ))
+            Err(Error::InvalidPayload(PayloadError::Build(
+                PayloadBuildError::SilencerCompletionTimeNotMultiple(_)
+            )))
         ));
     }
 
@@ -221,9 +222,9 @@ mod tests {
                 phase: ULTRASOUND_PERIOD,
                 strict_mode: true,
             })),
-            Err(Error::InvalidPayload(
-                PayloadError::SilencerCompletionTimeOutOfRange(_)
-            ))
+            Err(Error::InvalidPayload(PayloadError::Build(
+                PayloadBuildError::SilencerCompletionTimeOutOfRange(_)
+            )))
         ));
     }
 }
