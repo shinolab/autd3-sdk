@@ -9,6 +9,7 @@ use crate::error::{Error, PayloadError};
 use crate::params::{BUFFER_SIZE_MIN, EMISSION_MAX_INDICES};
 use crate::value::{LoopBehavior, PatternBank, Phase, TransitionMode};
 use autd3_cpu_wire::layout::PATTERN_RAW_MAX_COUNT;
+use autd3_cpu_wire::payload::PayloadBuildError;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PatternStmOption {
@@ -56,7 +57,7 @@ impl<'a> Command<'a> for PatternStm<'a> {
             .into());
         }
         if !(BUFFER_SIZE_MIN..=EMISSION_MAX_INDICES).contains(&size) {
-            return Err(PayloadError::StmSizeOutOfRange {
+            return Err(PayloadBuildError::StmSizeOutOfRange {
                 size,
                 min: BUFFER_SIZE_MIN,
                 max: EMISSION_MAX_INDICES,
@@ -275,9 +276,9 @@ mod tests {
             let result = build(1, stm);
             assert!(matches!(
                 result,
-                Err(Error::InvalidPayload(
-                    PayloadError::StmSizeOutOfRange { .. }
-                ))
+                Err(Error::InvalidPayload(PayloadError::Build(
+                    PayloadBuildError::StmSizeOutOfRange { .. }
+                )))
             ));
         }
     }

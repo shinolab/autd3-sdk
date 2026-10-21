@@ -1,4 +1,3 @@
-use crate::EncodeError;
 use crate::error::Error;
 use crate::geometry::Device;
 use crate::params::FOCUS_WORDS;
@@ -39,7 +38,7 @@ impl<const N: usize> Operation for WriteFociChunk<'_, N> {
             .zip(start..start + self.flat_focus_count)
         {
             let focus = self.points[k / N].focus(device, k % N);
-            *dst = focus.encode().map_err(EncodeError::from)?.to_le_bytes();
+            *dst = focus.encode()?.to_le_bytes();
         }
         Ok(Encoded::header_with_data::<WriteFociPayload>(
             Cmd::WriteFociBuffer,

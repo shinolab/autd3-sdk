@@ -390,9 +390,6 @@ fn classify(res: Result<(), ClientError>) -> Result<Outcome> {
         Err(ClientError::InvalidPayload(e)) => {
             anyhow::bail!("payload rejected by the local encoder: {e}");
         }
-        Err(ClientError::Encode(e)) => {
-            anyhow::bail!("value rejected by the local encoder: {e}");
-        }
         Err(ClientError::Closed) => {
             eprintln!("the client closed unexpectedly");
             return Ok(Outcome::DriverClosed);

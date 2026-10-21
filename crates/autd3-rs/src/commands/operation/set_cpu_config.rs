@@ -1,25 +1,13 @@
 pub use autd3_cpu_wire::config::{
     CpuConfig, FpgaBusWait, MaxFreqPpb, PathDelayFilterShift, PtpConfig,
 };
-use autd3_cpu_wire::payload::{CpuConfigOutOfRange, SetCpuConfigPayload};
+use autd3_cpu_wire::payload::SetCpuConfigPayload;
 
-use crate::error::{Error, PayloadError};
+use crate::error::Error;
 use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 
 use super::{Encoded, Operation, encode_header_only};
-
-impl From<CpuConfigOutOfRange> for PayloadError {
-    fn from(e: CpuConfigOutOfRange) -> Self {
-        PayloadError::CpuConfigOutOfRange {
-            field: e.field,
-            value: e.value,
-            unit: e.unit,
-            min: e.min,
-            max: e.max,
-        }
-    }
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct SetCpuConfig {
@@ -48,7 +36,9 @@ mod tests {
 
     use super::*;
     use crate::commands::operation::Distribution;
+    use crate::error::PayloadError;
     use crate::test_utils::encode;
+    use autd3_cpu_wire::payload::CpuConfigOutOfRange;
 
     #[test]
     fn the_config_is_encoded_as_a_broadcast_payload() {
@@ -89,10 +79,10 @@ mod tests {
 
         assert!(matches!(
             err,
-            Error::InvalidPayload(PayloadError::CpuConfigOutOfRange {
+            Error::InvalidPayload(PayloadError::CpuConfig(CpuConfigOutOfRange {
                 field: "failsafe_timeout",
                 ..
-            })
+            }))
         ));
         assert_eq!(
             err.to_string(),
@@ -110,10 +100,10 @@ mod tests {
 
         assert!(matches!(
             err,
-            Error::InvalidPayload(PayloadError::CpuConfigOutOfRange {
+            Error::InvalidPayload(PayloadError::CpuConfig(CpuConfigOutOfRange {
                 field: "update_activate_delay",
                 ..
-            })
+            }))
         ));
     }
 }

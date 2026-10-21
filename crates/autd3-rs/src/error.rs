@@ -3,11 +3,12 @@ use std::time::Duration;
 
 use thiserror::Error;
 
-use autd3_cpu_wire::payload::PayloadBuildError;
-use autd3_rs_core::error::EncodeError;
+use autd3_cpu_wire::payload::{CpuConfigOutOfRange, PayloadBuildError};
+use autd3_cpu_wire::value::FocusOutOfRange;
 use autd3_rs_core::protocol::describe_device_error;
 
 use crate::commands::PhaseDepth;
+
 use autd3_rs_core::value::{PulseWidthError, SamplingConfigError};
 
 #[derive(Clone)]
@@ -66,9 +67,6 @@ pub enum Error {
     #[error("invalid payload: {0}")]
     InvalidPayload(PayloadError),
 
-    #[error(transparent)]
-    Encode(#[from] EncodeError),
-
     #[error("the client is closed")]
     Closed,
 }
@@ -117,80 +115,11 @@ pub enum PayloadError {
     )]
     ExecTooFarBehind { behind: Duration, limit: Duration },
 
-    #[error(
-        "CPU config `{field}` = {value:?} must be a multiple of {unit:?} within {min:?}..={max:?}"
-    )]
-    CpuConfigOutOfRange {
-        field: &'static str,
-        value: Duration,
-        unit: Duration,
-        min: Duration,
-        max: Duration,
-    },
-
-    #[error("modulation size {size} out of range {min}..={max}")]
-    ModulationSizeOutOfRange { size: usize, min: usize, max: usize },
-
     #[error("modulation data must not be empty")]
     ModulationDataEmpty,
 
-    #[error("modulation offset {offset} must be even (word-write-only RAM)")]
-    ModulationOffsetNotEven { offset: usize },
-
-    #[error("modulation write [{offset}, {end}) exceeds buffer capacity {capacity}")]
-    ModulationWriteExceedsCapacity {
-        offset: usize,
-        end: usize,
-        capacity: usize,
-    },
-
     #[error("foci must not be empty")]
     FociEmpty,
-
-    #[error("foci write [{offset}, {end}) exceeds capacity {capacity}")]
-    FociWriteExceedsCapacity {
-        offset: usize,
-        end: usize,
-        capacity: usize,
-    },
-
-    #[error("silencer completion time {0:?} must be a multiple of the ultrasound period")]
-    SilencerCompletionTimeNotMultiple(core::time::Duration),
-
-    #[error("silencer completion time {0:?} is out of range (1..=65535 ultrasound periods)")]
-    SilencerCompletionTimeOutOfRange(core::time::Duration),
-
-    #[error("pattern size {size} must be >= {min}")]
-    PatternSizeTooSmall { size: usize, min: usize },
-
-    #[error("{count} patterns do not fit the {depth:?} phase depth, which carries {max} per frame")]
-    PatternCountExceedsDepth {
-        count: usize,
-        depth: PhaseDepth,
-        max: usize,
-    },
-
-    #[error("a {size}-sample bank never advances its index, so it requires an infinite loop")]
-    FiniteLoopNeedsMultipleSamples { size: usize },
-
-    #[error("num_foci {num_foci} out of range 1..={max}")]
-    NumFociOutOfRange { num_foci: u8, max: u8 },
-
-    #[error("STM size {size} x num_foci {num_foci} exceeds capacity {capacity}")]
-    StmFociExceedCapacity {
-        size: usize,
-        num_foci: u8,
-        capacity: usize,
-    },
-
-    #[error("sound_speed must be >= 1")]
-    SoundSpeedZero,
-
-    #[error("sound_speed {m_s} m/s exceeds the representable maximum {max} m/s")]
-    SoundSpeedTooLarge { m_s: f32, max: f32 },
-
-    #[error("STM size {size} out of range {min}..={max}")]
-    StmSizeOutOfRange { size: usize, min: usize, max: usize },
 
     #[error("per-device data has {len} entr(ies) but device {device} was requested")]
     DeviceDataOutOfRange { device: usize, len: usize },
@@ -210,88 +139,20 @@ pub enum PayloadError {
     )]
     PhaseDepthRequiresUniformIntensity { depth: PhaseDepth },
 
-    #[error("pattern STM index {index} out of range 0..{max}")]
-    PatternIndexOutOfRange { index: usize, max: usize },
+    #[error(transparent)]
+    Build(#[from] PayloadBuildError),
 
-    #[error("{count} patterns do not fit one frame, which carries {max}")]
-    PatternCountExceedsFrame { count: usize, max: usize },
+    #[error(transparent)]
+    CpuConfig(#[from] CpuConfigOutOfRange),
+
+    #[error(transparent)]
+    Focus(#[from] FocusOutOfRange),
 
     #[error(transparent)]
     SamplingConfig(#[from] SamplingConfigError),
 
     #[error(transparent)]
     PulseWidth(#[from] PulseWidthError),
-}
-
-impl From<PayloadBuildError> for PayloadError {
-    fn from(e: PayloadBuildError) -> Self {
-        match e {
-            PayloadBuildError::ModulationSizeOutOfRange { size, min, max } => {
-                Self::ModulationSizeOutOfRange { size, min, max }
-            }
-            PayloadBuildError::ModulationOffsetNotEven { offset } => {
-                Self::ModulationOffsetNotEven { offset }
-            }
-            PayloadBuildError::ModulationWriteExceedsCapacity {
-                offset,
-                end,
-                capacity,
-            } => Self::ModulationWriteExceedsCapacity {
-                offset,
-                end,
-                capacity,
-            },
-            PayloadBuildError::FociWriteExceedsCapacity {
-                offset,
-                end,
-                capacity,
-            } => Self::FociWriteExceedsCapacity {
-                offset,
-                end,
-                capacity,
-            },
-            PayloadBuildError::StmSizeOutOfRange { size, min, max } => {
-                Self::StmSizeOutOfRange { size, min, max }
-            }
-            PayloadBuildError::FiniteLoopNeedsMultipleSamples { size } => {
-                Self::FiniteLoopNeedsMultipleSamples { size }
-            }
-            PayloadBuildError::PatternSizeTooSmall { size, min } => {
-                Self::PatternSizeTooSmall { size, min }
-            }
-            PayloadBuildError::NumFociOutOfRange { num_foci, max } => {
-                Self::NumFociOutOfRange { num_foci, max }
-            }
-            PayloadBuildError::StmFociExceedCapacity {
-                size,
-                num_foci,
-                capacity,
-            } => Self::StmFociExceedCapacity {
-                size,
-                num_foci,
-                capacity,
-            },
-            PayloadBuildError::SoundSpeedZero => Self::SoundSpeedZero,
-            PayloadBuildError::SoundSpeedTooLarge { m_s, max } => {
-                Self::SoundSpeedTooLarge { m_s, max }
-            }
-            PayloadBuildError::SilencerCompletionTimeNotMultiple(time) => {
-                Self::SilencerCompletionTimeNotMultiple(time)
-            }
-            PayloadBuildError::SilencerCompletionTimeOutOfRange(time) => {
-                Self::SilencerCompletionTimeOutOfRange(time)
-            }
-            PayloadBuildError::PatternCountExceedsDepth { count, depth, max } => {
-                Self::PatternCountExceedsDepth { count, depth, max }
-            }
-            PayloadBuildError::PatternCountExceedsFrame { count, max } => {
-                Self::PatternCountExceedsFrame { count, max }
-            }
-            PayloadBuildError::PatternIndexOutOfRange { index, max } => {
-                Self::PatternIndexOutOfRange { index, max }
-            }
-        }
-    }
 }
 
 #[cfg(test)]
