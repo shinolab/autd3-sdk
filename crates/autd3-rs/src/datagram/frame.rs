@@ -1,7 +1,7 @@
 use crate::commands::Command;
 use crate::commands::operation::{Distribution, Operation};
 use crate::error::{Error, PayloadError};
-use crate::geometry::Geometry;
+use crate::geometry::{Device, Geometry};
 use crate::protocol::{Cmd, FrameHeader, PAYLOAD_BYTES};
 use autd3_rs_core::MAX_DEVICES;
 
@@ -85,6 +85,7 @@ struct FrameRange {
 pub struct Frames {
     datagrams: Vec<Datagram>,
     frame_ranges: Vec<FrameRange>,
+    encode_error: Option<Error>,
 }
 
 impl Frames {
@@ -100,26 +101,12 @@ impl Frames {
         cmd: impl Command<'a>,
     ) -> Result<(), Error> {
         self.clear();
-
-        let mut expansion = Expansion::new(geometry);
-        expansion.push(cmd)?;
-        let ops = expansion.ops;
-
-        if geometry.is_empty() && !ops.is_empty() {
-            return Err(PayloadError::DeviceCountOutOfRange {
-                got: 0,
-                max: MAX_DEVICES,
-            }
-            .into());
-        }
-
-        let encoded = ops
-            .iter()
-            .try_for_each(|op| self.encode_op(op.as_ref(), geometry));
+        let expanded = Expansion::new(geometry, self).push(cmd).map(|_| ());
+        let encoded = expanded.and_then(|()| self.encode_error.take().map_or(Ok(()), Err));
         if encoded.is_err() {
             self.clear();
         }
-        tracing::trace!(ops = ops.len(), frames = self.len(), "encoded frames");
+        tracing::trace!(frames = self.len(), "encoded frames");
         encoded
     }
 
@@ -152,42 +139,76 @@ impl Frames {
     fn clear(&mut self) {
         self.datagrams.clear();
         self.frame_ranges.clear();
+        self.encode_error = None;
     }
 
-    fn encode_op(&mut self, op: &dyn Operation, geometry: &Geometry) -> Result<(), Error> {
-        fn encode_into_datagrams(
-            per_device: &mut [Datagram],
-            op: &dyn Operation,
-            geometry: &Geometry,
-        ) -> Result<(), Error> {
-            for (device, datagram) in per_device.iter_mut().enumerate() {
-                let encoded = op.encode(&geometry[device], &mut datagram.payload)?;
-                debug_assert!(encoded.len <= PAYLOAD_BYTES);
-                datagram.cmd = encoded.cmd;
-                datagram.payload_len = encoded.len;
-            }
-            Ok(())
-        }
+    pub(super) fn record_encode_error(&mut self, e: Error) {
+        self.encode_error.get_or_insert(e);
+    }
 
-        debug_assert!(!geometry.is_empty());
-        let dist = op.distribution();
-        let len = dist.num_datagrams(geometry.num_devices());
+    fn push_frame(&mut self, dist: Distribution, num_devices: usize) -> usize {
+        let len = dist.num_datagrams(num_devices);
         let start = self.datagrams.len();
         self.datagrams
             .resize_with(start + len, || Datagram::no_payload(Cmd::Nop));
-        if let Err(e) = encode_into_datagrams(&mut self.datagrams[start..], op, geometry) {
-            self.datagrams.truncate(start);
-            return Err(e);
+        self.frame_ranges.push(FrameRange { dist, start, len });
+        start
+    }
+
+    pub(super) fn push_encoded(
+        &mut self,
+        op: &impl Operation,
+        geometry: &Geometry,
+    ) -> Result<(), Error> {
+        if geometry.is_empty() {
+            return Err(PayloadError::DeviceCountOutOfRange {
+                got: 0,
+                max: MAX_DEVICES,
+            }
+            .into());
+        }
+        let dist = op.distribution();
+        let start = self.push_frame(dist, geometry.num_devices());
+        for (device, datagram) in self.datagrams[start..].iter_mut().enumerate() {
+            encode_datagram(datagram, op, &geometry[device])?;
         }
         tracing::trace!(
             cmd = ?self.datagrams[start].cmd,
             dist = ?dist,
-            devices = len,
+            devices = self.datagrams.len() - start,
             "encoded frame"
         );
-        self.frame_ranges.push(FrameRange { dist, start, len });
         Ok(())
     }
+
+    pub(super) fn pad_per_device(&mut self, frames: usize, num_devices: usize) {
+        while self.len() < frames {
+            self.push_frame(Distribution::PerDevice, num_devices);
+        }
+    }
+
+    pub(super) fn encode_for_device(
+        &mut self,
+        frame: usize,
+        op: &impl Operation,
+        device: &Device,
+    ) -> Result<(), Error> {
+        let range = &self.frame_ranges[frame];
+        debug_assert_eq!(range.dist, Distribution::PerDevice);
+        encode_datagram(&mut self.datagrams[range.start + device.idx()], op, device)
+    }
+}
+
+fn encode_datagram(
+    datagram: &mut Datagram,
+    op: &impl Operation,
+    device: &Device,
+) -> Result<(), Error> {
+    let encoded = op.encode(device, &mut datagram.payload)?;
+    debug_assert!(encoded.len <= PAYLOAD_BYTES);
+    datagram.cmd = encoded.cmd;
+    datagram.payload_len = encoded.len;
+    Ok(())
 }
 
 pub struct FrameIter<'a> {
@@ -221,11 +242,11 @@ mod tests {
     };
 
     use super::Frames;
-    use crate::commands::Modulation;
     use crate::commands::operation::{
         ActivatePatternBank, ConfigPattern, Distribution, GpioOut, SetGpioOut, WritePatternBuffer,
     };
-    use crate::datagram::each;
+    use crate::commands::{Command, Modulation};
+    use crate::datagram::{Expansion, each};
     use crate::error::Error;
     use crate::geometry::Autd3;
     use crate::protocol::Cmd;
@@ -303,6 +324,28 @@ mod tests {
         assert!(matches!(result, Err(Error::InvalidPayload(_))));
         assert!(frames.is_empty());
         assert_eq!(frames.iter().count(), 0);
+    }
+
+    #[test]
+    fn an_encode_error_fails_the_encoding_even_when_the_command_ignores_its_push_result() {
+        struct IgnoresPushResult;
+
+        impl<'a> Command<'a> for IgnoresPushResult {
+            fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
+                let _ = expansion.push(FailAt(1));
+                let _ = expansion.push(each(|_| Some(FailAt(0))));
+                expansion.push(Marker(1))?;
+                Ok(())
+            }
+        }
+
+        let mut frames = Frames::default();
+        let result = frames.encode_into(&test_geometry(2), IgnoresPushResult);
+
+        assert!(matches!(result, Err(Error::InvalidPayload(_))));
+        assert!(frames.is_empty());
+        frames.encode_into(&test_geometry(2), Marker(2)).unwrap();
+        assert_eq!(frames.len(), 1);
     }
 
     #[test]

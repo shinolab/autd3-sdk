@@ -9,11 +9,6 @@ pub(crate) struct ReplyData {
 }
 
 impl ReplyData {
-    pub(crate) const EMPTY: Self = Self {
-        len: 0,
-        bytes: [0; REPLY_DATA_BYTES_MAX],
-    };
-
     #[must_use]
     pub(crate) fn new(data: &[u8]) -> Self {
         let len = data.len().min(REPLY_DATA_BYTES_MAX);
@@ -28,11 +23,6 @@ impl ReplyData {
     #[must_use]
     pub(crate) fn as_slice(&self) -> &[u8] {
         &self.bytes[..usize::from(self.len)]
-    }
-
-    #[must_use]
-    pub(crate) const fn is_empty(&self) -> bool {
-        self.len == 0
     }
 }
 
