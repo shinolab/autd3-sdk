@@ -11,6 +11,14 @@ pub struct Version {
 }
 
 impl Version {
+    const fn from_triple([major, minor, patch]: [u8; 3]) -> Self {
+        Self {
+            major,
+            minor,
+            patch,
+        }
+    }
+
     #[must_use]
     pub const fn is_unknown(self) -> bool {
         self.major == 0 && self.minor == 0 && self.patch == 0
@@ -34,21 +42,9 @@ impl FirmwareVersion {
     pub const SUPPORTED_SERIES: (u8, u8) = (VERSION_NUM_MAJOR, VERSION_NUM_MINOR);
 
     pub(crate) fn from_info(info: FirmwareInfo) -> Self {
-        let [major, minor, patch] = info.cpu_version;
-        let cpu = Version {
-            major,
-            minor,
-            patch,
-        };
-        let [major, minor, patch] = info.fpga_version;
-        let fpga = Version {
-            major,
-            minor,
-            patch,
-        };
         Self {
-            cpu,
-            fpga,
+            cpu: Version::from_triple(info.cpu_version),
+            fpga: Version::from_triple(info.fpga_version),
             function_bits: info.fpga_functions,
         }
     }
