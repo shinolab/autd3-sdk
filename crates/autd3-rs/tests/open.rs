@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use autd3_rs::commands::{Clear, ForceFan, Nop};
 use autd3_rs::udp::{TransportOption, UdpError};
-use autd3_rs::{Client, DeviceState, Error, FirmwareVersion, MAX_DEVICES, PayloadError};
+use autd3_rs::{Client, DeviceState, Error, FirmwareVersion};
 
 use common::{emulator, geometry, open_with, option, udp_error};
 
@@ -20,11 +20,8 @@ async fn an_empty_geometry_is_rejected() {
     let error = open_error(0, &option(&emulator));
 
     assert!(matches!(
-        error,
-        Error::InvalidPayload(PayloadError::DeviceCountOutOfRange {
-            got: 0,
-            max: MAX_DEVICES
-        })
+        udp_error(&error),
+        Some(UdpError::InvalidDeviceCount(0))
     ));
 }
 

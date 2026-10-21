@@ -16,7 +16,7 @@ use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::telemetry::Telemetry;
 use crate::udp::{StateChecker, TransportOption};
 use crate::value::{Intensity, SysTime};
-use autd3_rs_core::{BusStats, DeviceMask, MAX_DEVICES};
+use autd3_rs_core::{BusStats, DeviceMask};
 use futures_channel::oneshot;
 
 use super::completion::{self, ResponseFuture};
@@ -33,14 +33,6 @@ pub struct Controller {
 
 impl Controller {
     pub fn open(geometry: &Geometry, option: &TransportOption) -> Result<(Self, Driver), Error> {
-        let num_devices = geometry.num_devices();
-        if num_devices == 0 || num_devices > MAX_DEVICES {
-            return Err(PayloadError::DeviceCountOutOfRange {
-                got: num_devices,
-                max: MAX_DEVICES,
-            }
-            .into());
-        }
         let session = Arc::new(Session::open(geometry, option)?);
         let driver = Driver::new(Arc::clone(&session));
         let controller = Self {
