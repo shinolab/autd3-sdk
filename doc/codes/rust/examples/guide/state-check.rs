@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use autd3_rs::commands::{ReleaseFailsafe, Synchronize, each};
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::{Client, DeviceStatus};
+use autd3_rs::{Client, DeviceMask, DeviceStatus};
 use autd3_rs::TransportOption;
 
 const CHECK_INTERVAL: Duration = Duration::from_millis(100);
@@ -29,6 +29,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     // ANCHOR_END: recover
+
+    // ANCHOR: ptp_failsafe
+    client.send_heartbeat()?;
+    tokio::time::sleep(CHECK_INTERVAL).await;
+    let status = checker.check()?;
+    if status.any_ptp_failsafe() {
+        let releasable: DeviceMask = status
+            .ptp_failsafe()
+            .iter()
+            .filter(|&device| status.ptp_locked()[device])
+            .collect();
+        if !releasable.is_empty() {
+            client
+                .send(each(|device| {
+                    releasable[device.idx()].then_some(ReleaseFailsafe)
+                }))
+                .await?;
+        }
+    }
+    // ANCHOR_END: ptp_failsafe
 
     // ANCHOR: poll
     let mut last: Option<DeviceStatus> = None;

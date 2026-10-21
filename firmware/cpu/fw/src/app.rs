@@ -135,6 +135,7 @@ pub struct Cpu {
     counters: Counters,
     failsafe_fired: MainCell<bool>,
     ptp_unlock_failsafe_fired: MainCell<bool>,
+    ptp_failsafe_active: AtomicBool,
     pub(crate) config: MainCell<cmd::cpu_config::CpuConfig>,
     pub(crate) config_reset_requested: AtomicBool,
     ptp_unlocked: AtomicBool,
@@ -173,6 +174,7 @@ impl Cpu {
             counters: Counters::new(),
             failsafe_fired: MainCell::new(false),
             ptp_unlock_failsafe_fired: MainCell::new(false),
+            ptp_failsafe_active: AtomicBool::new(false),
             config: MainCell::new(cmd::cpu_config::default_config()),
             config_reset_requested: AtomicBool::new(false),
             ptp_unlocked: AtomicBool::new(false),
@@ -187,7 +189,9 @@ impl Cpu {
 impl Cpu {
     pub fn init<P: Port>(&self, port: &mut P) {
         let config = self.config();
-        if fpga::init(port, config.fpga_wait_update_max_polls).is_err() {
+        if fpga::init(port, config.fpga_wait_update_max_polls).is_ok() {
+            self.lower_ptp_failsafe();
+        } else {
             self.count_boot_failure();
         }
         fpga::set_watchdog_timeout(port, config.cpu_watchdog_timeout);
@@ -217,6 +221,15 @@ impl Cpu {
             }
             None => self.ptp_unlocked.store(false, Ordering::Release),
         }
+    }
+
+    #[must_use]
+    pub fn ptp_failsafe_active(&self) -> bool {
+        self.ptp_failsafe_active.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn lower_ptp_failsafe(&self) {
+        self.ptp_failsafe_active.store(false, Ordering::Relaxed);
     }
 
     #[must_use]
@@ -250,24 +263,33 @@ impl Cpu {
         let silent = cmd::failsafe::host_silent(port, &config);
         Self::failsafe(port, silent, &self.failsafe_fired, &self.counters.failsafe);
         let unlocked = cmd::failsafe::ptp_unlock_expired(port, &config);
-        Self::failsafe(
+        if Self::failsafe(
             port,
             unlocked,
             &self.ptp_unlock_failsafe_fired,
             &self.counters.ptp_unlock_failsafe,
-        );
+        ) {
+            self.ptp_failsafe_active.store(true, Ordering::Relaxed);
+        }
     }
 
-    fn failsafe<P: Port>(port: &mut P, tripped: bool, fired: &MainCell<bool>, counter: &AtomicU16) {
+    fn failsafe<P: Port>(
+        port: &mut P,
+        tripped: bool,
+        fired: &MainCell<bool>,
+        counter: &AtomicU16,
+    ) -> bool {
         if !tripped {
             fired.set(false);
-            return;
+            return false;
         }
-        if !fired.get() {
-            fired.set(true);
-            cmd::failsafe::mute(port);
-            bump_saturating_u16(counter);
+        if fired.get() {
+            return false;
         }
+        fired.set(true);
+        cmd::failsafe::mute(port);
+        bump_saturating_u16(counter);
+        true
     }
 
     #[must_use]
@@ -403,7 +425,9 @@ impl Cpu {
             Cmd::SetGpioOut => cmd::gpio_out::handle(port, payload, max_polls),
             Cmd::ForceFan => cmd::force_fan::handle(port, payload),
             Cmd::SetFpgaConfig => cmd::fpga_config::handle(port, payload),
-            Cmd::ReleaseFailsafe => cmd::failsafe::release(port, &config),
+            Cmd::ReleaseFailsafe => {
+                cmd::failsafe::release(port, &config).inspect(|()| self.lower_ptp_failsafe())
+            }
             Cmd::UpdateBegin => self.update_begin(port, payload),
             Cmd::UpdateChunk => self.update_chunk(port, payload),
             Cmd::UpdateCommit => self.update_commit(port),

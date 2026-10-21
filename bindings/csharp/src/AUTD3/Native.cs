@@ -308,6 +308,14 @@ namespace AUTD3
         internal static extern bool autd3_device_status_device_state(IntPtr status, UIntPtr index, out byte outKind);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        internal static extern bool autd3_device_status_ptp_locked(IntPtr status, UIntPtr index);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        internal static extern bool autd3_device_status_ptp_failsafe(IntPtr status, UIntPtr index);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_device_status_free(IntPtr status);
     }
 }

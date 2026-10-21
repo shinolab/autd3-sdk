@@ -481,6 +481,56 @@ mod tests {
     }
 
     #[test]
+    fn the_ptp_failsafe_flag_rises_on_a_ptp_trip_and_stays_until_a_release() {
+        let mut h = Harness::new();
+        set_mask(&mut h);
+        set_ptp_unlock_failsafe_timeout(&mut h, Some(Duration::from_millis(50)));
+        h.port.ptp_unlocked_ms = Some(49);
+        h.tick_1ms(1);
+        assert!(!h.cpu.ptp_failsafe_active());
+
+        h.port.ptp_unlocked_ms = Some(50);
+        h.tick_1ms(1);
+        assert!(h.cpu.ptp_failsafe_active());
+
+        h.deliver(&Frame::new(Cmd::ReleaseFailsafe));
+        assert_eq!(h.status(), Error::FailsafeConditionActive);
+        assert!(h.cpu.ptp_failsafe_active());
+
+        h.port.ptp_unlocked_ms = None;
+        h.tick_1ms(1);
+        assert!(h.cpu.ptp_failsafe_active());
+
+        release(&mut h);
+        assert!(!h.cpu.ptp_failsafe_active());
+    }
+
+    #[test]
+    fn the_ptp_failsafe_flag_rises_even_when_the_host_failsafe_already_muted() {
+        let mut h = armed();
+        set_mask(&mut h);
+        set_ptp_unlock_failsafe_timeout(&mut h, Some(Duration::from_millis(50)));
+        h.port.host_idle_ms = Some(FAILSAFE_TIMEOUT_MS);
+        h.tick_1ms(1);
+        assert_muted(&h);
+        assert!(!h.cpu.ptp_failsafe_active());
+
+        h.port.ptp_unlocked_ms = Some(50);
+        h.tick_1ms(1);
+        assert!(h.cpu.ptp_failsafe_active());
+    }
+
+    #[test]
+    fn a_host_failsafe_never_raises_the_ptp_failsafe_flag() {
+        let mut h = armed();
+        set_mask(&mut h);
+        h.port.host_idle_ms = Some(FAILSAFE_TIMEOUT_MS);
+        h.tick_1ms(1);
+        assert_muted(&h);
+        assert!(!h.cpu.ptp_failsafe_active());
+    }
+
+    #[test]
     fn a_release_is_refused_while_the_host_still_counts_as_silent() {
         let mut h = armed();
         set_mask(&mut h);

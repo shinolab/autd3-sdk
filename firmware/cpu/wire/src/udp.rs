@@ -44,6 +44,7 @@ bitflags::bitflags! {
         const SYNC_READY = 1 << 3;
         const PTP_LOCKED = 1 << 4;
         const GRANDMASTER = 1 << 5;
+        const PTP_FAILSAFE = 1 << 6;
     }
 }
 

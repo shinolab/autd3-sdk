@@ -27,6 +27,11 @@ import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 - `devices`: デバイスごとの状態 (`DeviceState`).
 - `all_ready`: 全デバイスが `Ready` 状態か.
 - `any_lost`: いずれかのデバイスが `Lost` 状態か.
+- `ptp_locked`: PTP がロックしているデバイスの集合 (`DeviceMask`).
+- `ptp_failsafe`: PTP のロックを失ったことで出力を止め, まだ解除されていないデバイスの集合 (`DeviceMask`).
+- `any_ptp_failsafe`: `ptp_failsafe` が空でないか.
+
+`ptp_locked` と `ptp_failsafe` はデバイスからの最後の返信の値で, `Lost` のデバイスはどちらにも含まれない.
 
 状態の意味は以下の通り. 
 
@@ -46,6 +51,20 @@ import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 `check` を呼ぶ頻度はユーザー次第である.
 状態はデバイスからの返信で更新されるので, フレームを送らない間は [`send_heartbeat()`](/autd3-sdk/api/basics/client/#生存確認) で生存確認を送る (上の例ではループの先頭で送っている).
 送らない間は, デバイスとの通信が途絶えても `Lost` にならない.
+
+## PTP failsafe の検出と解除
+
+[SetCpuConfig](/autd3-sdk/api/command/cpu-config/) で `ptp_unlock_failsafe_timeout` を指定すると, PTP のロックを失ったまま指定の時間が経ったデバイスは出力を止める.
+止まったデバイスは `ptp_failsafe` に入り, [`ReleaseFailsafe`](/autd3-sdk/api/command/release-failsafe/) か [Clear](/autd3-sdk/api/command/clear/) で解除されるまで入ったままになる (再ロックしても自動では戻らない).
+
+以下は, `ptp_failsafe` のうち再ロックしたデバイスへ `ReleaseFailsafe` を送る例.
+`send_heartbeat()` は返信を待たずに戻るので, 返信が届くまで待ってから `check` を呼ぶ (直後に呼ぶと, その前の返信の値が返る).
+PTP failsafe は `Client` を開き直しても解除されないが, 開いた直後の `check` は最初の返信が届くまで `ptp_failsafe` が空になる.
+
+<CodeTabs rust={excerpt(sample, "ptp_failsafe")} python={excerpt(pySample, "ptp_failsafe")} csharp={excerpt(csSample, "ptp_failsafe")} />
+
+ロックを失ったままのデバイスへ `ReleaseFailsafe` を送るとエラーになり, 出力は止まったままになる. `ptp_locked` に入るのを待ってから送る.
+ホストとの通信の途絶など, PTP 以外の原因で止まった出力は `ptp_failsafe` には現れない (`read_fpga_state()` の `is_failsafe_active()` で確認する).
 
 ## Lost からの復帰
 
