@@ -52,28 +52,26 @@ impl Geometry {
         self.devices.len()
     }
 
-    #[must_use]
-    pub fn phase_buffer(&self) -> Vec<Vec<Phase>> {
+    fn buffer_filled_with<T: Clone>(&self, value: T) -> Vec<Vec<T>> {
         self.devices
             .iter()
-            .map(|d| vec![Phase::ZERO; d.num_transducers()])
+            .map(|d| vec![value.clone(); d.num_transducers()])
             .collect()
+    }
+
+    #[must_use]
+    pub fn phase_buffer(&self) -> Vec<Vec<Phase>> {
+        self.buffer_filled_with(Phase::ZERO)
     }
 
     #[must_use]
     pub fn intensity_buffer(&self) -> Vec<Vec<Intensity>> {
-        self.devices
-            .iter()
-            .map(|d| vec![Intensity::MAX; d.num_transducers()])
-            .collect()
+        self.buffer_filled_with(Intensity::MAX)
     }
 
     #[must_use]
     pub fn output_mask_buffer(&self) -> Vec<Vec<bool>> {
-        self.devices
-            .iter()
-            .map(|d| vec![true; d.num_transducers()])
-            .collect()
+        self.buffer_filled_with(true)
     }
 
     #[must_use]
