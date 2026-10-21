@@ -44,7 +44,7 @@ pub(crate) struct Channel {
     device_addrs: Vec<SocketAddrV6>,
     main_socket_port: u16,
     waker_socket_port: u16,
-    pacer: Mutex<Option<Pacer>>,
+    pacer: Option<Mutex<Pacer>>,
     recv_state: Mutex<RecvState>,
 }
 
@@ -210,16 +210,12 @@ impl Channel {
             device_addrs: Vec::new(),
             main_socket_port,
             waker_socket_port,
-            pacer: Mutex::new(send_rate_limit_percent.map(Pacer::new)),
+            pacer: send_rate_limit_percent.map(|percent| Mutex::new(Pacer::new(percent))),
             recv_state: Mutex::new(RecvState {
                 socket_is_nonblocking: false,
                 buf: Box::new([0; RECV_BUFFER_BYTES]),
             }),
         })
-    }
-
-    fn lock_pacer(&self) -> MutexGuard<'_, Option<Pacer>> {
-        self.pacer.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     fn lock_recv_state(&self) -> MutexGuard<'_, RecvState> {
@@ -305,8 +301,11 @@ impl Channel {
             IoSlice::new(body[1]),
         ];
         let len = size_of::<Header>() + body[0].len() + body[1].len();
-        let wait = self.lock_pacer().as_mut().map_or(Duration::ZERO, |pacer| {
-            pacer.reserve_send_slot(Instant::now(), len)
+        let wait = self.pacer.as_ref().map_or(Duration::ZERO, |pacer| {
+            pacer
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .reserve_send_slot(Instant::now(), len)
         });
         if !wait.is_zero() {
             std::thread::sleep(wait);
