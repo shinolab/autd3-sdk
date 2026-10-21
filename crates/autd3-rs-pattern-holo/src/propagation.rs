@@ -113,10 +113,10 @@ pub(crate) fn max_coefficient(q: &[Complex<f32>]) -> f32 {
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn quantize<B, P, I>(
     backend: &B,
-    geometry: &Geometry,
     q: &B::Vector,
     constraint: IntensityConstraint,
     mask: TransducerMask<'_>,
+    enabled: usize,
     parallel: bool,
     phases: &mut [P],
     intensities: &mut [I],
@@ -125,35 +125,17 @@ pub(crate) fn quantize<B, P, I>(
     P: AsMut<[Vec<Phase>]>,
     I: AsMut<[Vec<Intensity>]>,
 {
-    let n = mask.num_enabled(geometry);
-    let devices = geometry.num_devices();
-    assert_eq!(
-        phases.len(),
-        intensities.len(),
-        "phases and intensities must have one entry per problem"
-    );
     let (p, i) = backend.quantize(q, constraint, parallel);
     debug_assert_eq!(
         p.len(),
-        n * phases.len(),
+        enabled * phases.len(),
         "backend must return one phase per enabled transducer per problem"
     );
     debug_assert_eq!(p.len(), i.len());
     for (k, (phases, intensities)) in phases.iter_mut().zip(intensities.iter_mut()).enumerate() {
-        let (phases, intensities) = (phases.as_mut(), intensities.as_mut());
-        assert_eq!(
-            phases.len(),
-            devices,
-            "phases must have one slot per device"
-        );
-        assert_eq!(
-            intensities.len(),
-            devices,
-            "intensities must have one slot per device"
-        );
-        let range = n * k..n * (k + 1);
-        scatter(&p[range.clone()], mask, Phase::ZERO, phases);
-        scatter(&i[range], mask, Intensity::MIN, intensities);
+        let range = enabled * k..enabled * (k + 1);
+        scatter(&p[range.clone()], mask, Phase::ZERO, phases.as_mut());
+        scatter(&i[range], mask, Intensity::MIN, intensities.as_mut());
     }
 }
 

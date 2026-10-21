@@ -64,10 +64,10 @@ where
         let q = solve(backend, &g, &amps, problems, enabled);
         quantize(
             backend,
-            geometry,
             &q,
             setup.constraint,
             mask,
+            enabled,
             setup.parallel,
             phases,
             intensities,
