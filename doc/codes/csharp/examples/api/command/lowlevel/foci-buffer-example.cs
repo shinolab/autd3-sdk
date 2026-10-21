@@ -31,7 +31,7 @@ await client.SendAsync(new WriteFociBuffer(
 ));
 await client.SendAsync(new ConfigFociStm(
     bank: bank,
-    config: new StmConfig(1.0f * Hz).IntoSamplingConfig(points.Length),
+    config: new SamplingConfig(1.0f * Hz * points.Length),
     size: (uint)points.Length,
     numFoci: 1,
     soundSpeed: 340.0f * m / s,

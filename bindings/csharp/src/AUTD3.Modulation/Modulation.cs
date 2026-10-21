@@ -71,7 +71,7 @@ namespace AUTD3
         internal static extern int autd3_modulation_fourier_option_default([MarshalAs(UnmanagedType.I1)] out bool hasScaleFactor, out float scaleFactor, [MarshalAs(UnmanagedType.I1)] out bool clamp, out byte offset);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_modulation_sine(byte mode, float freq, uint freqInt, IntPtr option, IntPtr samplingConfig, ModulationBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
+        internal static extern int autd3_modulation_sine(byte mode, float freq, uint freqInt, IntPtr option, ushort samplingDivide, ModulationBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_modulation_square_option_new(byte low, byte high, float duty);
@@ -80,7 +80,7 @@ namespace AUTD3
         internal static extern void autd3_modulation_square_option_free(IntPtr option);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_modulation_square(byte mode, float freq, uint freqInt, IntPtr option, IntPtr samplingConfig, ModulationBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
+        internal static extern int autd3_modulation_square(byte mode, float freq, uint freqInt, IntPtr option, ushort samplingDivide, ModulationBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_modulation_fourier_option_new([MarshalAs(UnmanagedType.I1)] bool hasScaleFactor, float scaleFactor, [MarshalAs(UnmanagedType.I1)] bool clamp, byte offset);
@@ -89,7 +89,7 @@ namespace AUTD3
         internal static extern void autd3_modulation_fourier_option_free(IntPtr option);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_modulation_fourier(SineComponentNative[] components, UIntPtr numComponents, IntPtr option, IntPtr samplingConfig, ModulationBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
+        internal static extern int autd3_modulation_fourier(SineComponentNative[] components, UIntPtr numComponents, IntPtr option, ushort samplingDivide, ModulationBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_modulation_buffer_copy_to(ModulationBufferHandle buffer, [Out] byte[] dst, UIntPtr len);
@@ -104,13 +104,13 @@ namespace AUTD3
         internal static extern int autd3_modulation_radiation_pressure_inplace(ModulationBufferHandle buffer);
 
         [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_modulation(byte bank, IntPtr samplingConfig, ModulationBufferHandle modulationBuffer, ushort loopRep, byte transitionMode, ulong transitionValue);
+        internal static extern IntPtr autd3_op_modulation(byte bank, ushort samplingDivide, ModulationBufferHandle modulationBuffer, ushort loopRep, byte transitionMode, ulong transitionValue);
 
         [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_write_modulation_buffer(byte bank, uint offset, ModulationBufferHandle modulationBuffer);
 
         [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_config_modulation(byte bank, IntPtr samplingConfig, uint size, ushort rep);
+        internal static extern IntPtr autd3_op_config_modulation(byte bank, ushort samplingDivide, uint size, ushort rep);
 
         [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_activate_modulation_bank(byte bank, byte transitionMode, ulong transitionValue);
@@ -322,19 +322,9 @@ namespace AUTD3
             return NativeModulation.autd3_modulation_samples_per_period(divider, freq.HzIntValue, out var value) ? value : null;
         }
 
-        IntPtr ICommand.CreateOp(Geometry geometry)
-        {
-            var sampling = _samplingConfig.CreateHandle();
-            try
-            {
-                return NativeModulation.autd3_op_modulation(
-                    (byte)_bank, sampling, _buffer.Handle, _loopBehavior.Rep, _transitionMode.Mode, _transitionMode.Value);
-            }
-            finally
-            {
-                NativeCore.autd3_core_sampling_config_free(sampling);
-            }
-        }
+        IntPtr ICommand.CreateOp(Geometry geometry) =>
+            NativeModulation.autd3_op_modulation(
+                (byte)_bank, _samplingConfig.DivideForNative(), _buffer.Handle, _loopBehavior.Rep, _transitionMode.Mode, _transitionMode.Value);
 
         public static void Sine(Nearest<Freq> freq, SineOption option, SamplingConfig config, ModulationBuffer dst) =>
             Sine(freq.Value, 2, option, config, dst);
@@ -344,28 +334,21 @@ namespace AUTD3
 
         private static void Sine(Freq freq, byte modeCode, SineOption option, SamplingConfig config, ModulationBuffer dst)
         {
-            var sampling = config.CreateHandle();
+            var sampling = config.DivideForNative();
+            var optionHandle = NativeModulation.autd3_modulation_sine_option_new(
+                option.Amplitude, option.Offset, option.Phase.Rad, option.Clamp);
             try
             {
-                var optionHandle = NativeModulation.autd3_modulation_sine_option_new(
-                    option.Amplitude, option.Offset, option.Phase.Rad, option.Clamp);
-                try
+                var err = new byte[NativeAbi.ErrorBufferLength];
+                var code = NativeModulation.autd3_modulation_sine(modeCode, freq.HzValue, freq.HzIntValue, optionHandle, sampling, dst.Handle, err, (UIntPtr)err.Length);
+                if (code != 0)
                 {
-                    var err = new byte[NativeAbi.ErrorBufferLength];
-                    var code = NativeModulation.autd3_modulation_sine(modeCode, freq.HzValue, freq.HzIntValue, optionHandle, sampling, dst.Handle, err, (UIntPtr)err.Length);
-                    if (code != 0)
-                    {
-                        throw Autd3Exception.FromNative(code, err);
-                    }
-                }
-                finally
-                {
-                    NativeModulation.autd3_modulation_sine_option_free(optionHandle);
+                    throw Autd3Exception.FromNative(code, err);
                 }
             }
             finally
             {
-                NativeCore.autd3_core_sampling_config_free(sampling);
+                NativeModulation.autd3_modulation_sine_option_free(optionHandle);
             }
         }
 
@@ -377,28 +360,21 @@ namespace AUTD3
 
         private static void Square(Freq freq, byte modeCode, SquareOption option, SamplingConfig config, ModulationBuffer dst)
         {
-            var sampling = config.CreateHandle();
+            var sampling = config.DivideForNative();
+            var optionHandle = NativeModulation.autd3_modulation_square_option_new(
+                option.Low, option.High, option.Duty);
             try
             {
-                var optionHandle = NativeModulation.autd3_modulation_square_option_new(
-                    option.Low, option.High, option.Duty);
-                try
+                var err = new byte[NativeAbi.ErrorBufferLength];
+                var code = NativeModulation.autd3_modulation_square(modeCode, freq.HzValue, freq.HzIntValue, optionHandle, sampling, dst.Handle, err, (UIntPtr)err.Length);
+                if (code != 0)
                 {
-                    var err = new byte[NativeAbi.ErrorBufferLength];
-                    var code = NativeModulation.autd3_modulation_square(modeCode, freq.HzValue, freq.HzIntValue, optionHandle, sampling, dst.Handle, err, (UIntPtr)err.Length);
-                    if (code != 0)
-                    {
-                        throw Autd3Exception.FromNative(code, err);
-                    }
-                }
-                finally
-                {
-                    NativeModulation.autd3_modulation_square_option_free(optionHandle);
+                    throw Autd3Exception.FromNative(code, err);
                 }
             }
             finally
             {
-                NativeCore.autd3_core_sampling_config_free(sampling);
+                NativeModulation.autd3_modulation_square_option_free(optionHandle);
             }
         }
 
@@ -412,7 +388,7 @@ namespace AUTD3
 
         public static void Fourier(SineComponent[] components, FourierOption option, SamplingConfig config, ModulationBuffer dst)
         {
-            var sampling = config.CreateHandle();
+            var sampling = config.DivideForNative();
             var optionHandles = new List<IntPtr>();
             var native = new SineComponentNative[components.Length];
             try
@@ -454,7 +430,6 @@ namespace AUTD3
                 {
                     NativeModulation.autd3_modulation_sine_option_free(optionHandle);
                 }
-                NativeCore.autd3_core_sampling_config_free(sampling);
             }
         }
 

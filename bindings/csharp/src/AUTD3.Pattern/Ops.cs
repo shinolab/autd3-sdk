@@ -100,18 +100,8 @@ namespace AUTD3
             _loopBehavior = loopBehavior;
         }
 
-        IntPtr ICommand.CreateOp(Geometry geometry)
-        {
-            var sampling = _config.CreateHandle();
-            try
-            {
-                return NativePattern.autd3_op_config_pattern((byte)_bank, sampling, _size, _loopBehavior.Rep);
-            }
-            finally
-            {
-                NativeCore.autd3_core_sampling_config_free(sampling);
-            }
-        }
+        IntPtr ICommand.CreateOp(Geometry geometry) =>
+            NativePattern.autd3_op_config_pattern((byte)_bank, _config.DivideForNative(), _size, _loopBehavior.Rep);
     }
 
     public sealed class ConfigFociStm : ICommand
@@ -133,18 +123,8 @@ namespace AUTD3
             _loopBehavior = loopBehavior;
         }
 
-        IntPtr ICommand.CreateOp(Geometry geometry)
-        {
-            var sampling = _config.CreateHandle();
-            try
-            {
-                return NativePattern.autd3_op_config_foci_stm((byte)_bank, sampling, _size, _numFoci, _soundSpeed.MS, _loopBehavior.Rep);
-            }
-            finally
-            {
-                NativeCore.autd3_core_sampling_config_free(sampling);
-            }
-        }
+        IntPtr ICommand.CreateOp(Geometry geometry) =>
+            NativePattern.autd3_op_config_foci_stm((byte)_bank, _config.DivideForNative(), _size, _numFoci, _soundSpeed.MS, _loopBehavior.Rep);
     }
 
     public sealed class ActivatePatternBank : ICommand

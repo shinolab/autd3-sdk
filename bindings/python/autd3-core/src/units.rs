@@ -3,7 +3,7 @@ use core::hash::{Hash, Hasher};
 use autd3_python_capsule::extract::number_f32;
 use autd3_rs_core::common::units::Hz;
 use autd3_rs_core::common::{Angle as CoreAngle, Length as CoreLength, Velocity as CoreVelocity};
-use autd3_rs_core::value::SamplingConfig as CoreSamplingConfig;
+use autd3_rs_core::value::{SamplingConfig as CoreSamplingConfig, SamplingConfigError};
 use pyo3::exceptions::{PyOverflowError, PyValueError, PyZeroDivisionError};
 use pyo3::prelude::*;
 
@@ -469,10 +469,10 @@ impl Freq {
         Self(FreqVal::Float(hz))
     }
 
-    pub(crate) fn sampling_config(self) -> CoreSamplingConfig {
+    pub(crate) fn sampling_config(self) -> Result<CoreSamplingConfig, SamplingConfigError> {
         match self.0 {
-            FreqVal::Int(v) => CoreSamplingConfig::new(v * Hz),
-            FreqVal::Float(f) => CoreSamplingConfig::new(f * Hz),
+            FreqVal::Int(v) => CoreSamplingConfig::from_freq(v * Hz),
+            FreqVal::Float(f) => CoreSamplingConfig::from_freq(f * Hz),
         }
     }
 }

@@ -18,8 +18,8 @@ namespace AUTD3.Tests
         [InlineData(1.0, 2, 20)]
         public void AnStmPeriodKeepsNanosecondPrecision(double millis, int size, int divide)
         {
-            var config = new StmConfig(TimeSpan.FromMilliseconds(millis));
-            Assert.Equal((ushort)divide, config.IntoSamplingConfig(size).Divide());
+            var config = new SamplingConfig(TimeSpan.FromMilliseconds(millis) / size);
+            Assert.Equal((ushort)divide, config.Divide());
 
             using var geometry = Fixture.SingleDevice();
             var center = geometry.Center + new Vector3(0f, 0f, 150f);
@@ -27,16 +27,15 @@ namespace AUTD3.Tests
                 .Select(i => 2f * MathF.PI * i / size)
                 .Select(theta => new ControlPoints(new[] { new ControlPoint(center + 30f * new Vector3(MathF.Cos(theta), MathF.Sin(theta), 0f), Phase.Zero) }, Intensity.Max))
                 .ToList();
-            using var frames = Frames.Encode(geometry, new FociStm(TimeSpan.FromMilliseconds(millis), points, new FociStmOption()));
+            using var frames = Frames.Encode(geometry, new FociStm(config, points, new FociStmOption()));
             Assert.True(frames.Length > 0);
         }
 
         [Fact]
-        public void AnIndivisibleStmPeriodCarriesTheRustMessage()
+        public void AnInvalidSamplingPeriodCarriesTheRustMessage()
         {
-            var config = new StmConfig(TimeSpan.FromMilliseconds(100));
-            var e = Assert.Throws<Autd3Exception>(() => config.IntoSamplingConfig(3));
-            Assert.Contains("must be divisible by the number of samples", e.Message);
+            var e = Assert.Throws<Autd3Exception>(() => new SamplingConfig(TimeSpan.FromTicks(2501)));
+            Assert.Contains("must be a multiple of the ultrasound period", e.Message);
             Assert.Equal(Autd3ErrorCode.InvalidArgument, e.Code);
         }
 
@@ -80,7 +79,7 @@ namespace AUTD3.Tests
             Assert.Equal(Autd3ErrorCode.InvalidArgument, Assert.Throws<Autd3Exception>(() => unset.Period()).Code);
             Assert.Equal(Autd3ErrorCode.InvalidArgument, Assert.Throws<Autd3Exception>(() => new SamplingConfig().Divide()).Code);
             Assert.NotEqual(SamplingConfig.Freq4k, unset);
-            Assert.NotEqual(unset, default(SamplingConfig));
+            Assert.Equal(unset, default(SamplingConfig));
             var e = Assert.Throws<Autd3Exception>(() =>
                 Frames.Encode(geometry, new ConfigModulation(ModulationBank.B0, unset, 2, LoopBehavior.Infinite)));
             Assert.Equal(Autd3ErrorCode.InvalidArgument, e.Code);
@@ -163,12 +162,11 @@ namespace AUTD3.Tests
         [Fact]
         public void ASamplingConfigErrorCarriesTheRustMessage()
         {
-            var config = new SamplingConfig(4001f * Hz);
-            var e = Assert.Throws<Autd3Exception>(() => config.Divide());
+            var e = Assert.Throws<Autd3Exception>(() => new SamplingConfig(4001f * Hz));
             Assert.Contains("must divide the ultrasound frequency", e.Message);
             Assert.Equal(Autd3ErrorCode.InvalidArgument, e.Code);
-            Assert.Throws<Autd3Exception>(() => config.Freq());
-            Assert.Throws<Autd3Exception>(() => config.Period());
+            Assert.Throws<Autd3Exception>(() => new SamplingConfig(Nearest(float.NaN * Hz)));
+            Assert.Throws<Autd3Exception>(() => new SamplingConfig(TimeSpan.FromTicks(-1)));
         }
 
         [Fact]
@@ -183,8 +181,7 @@ namespace AUTD3.Tests
             Assert.True(byFreq != new SamplingConfig(20));
             Assert.Equal(SamplingConfig.Freq4k, byFreq);
 
-            var invalid = new SamplingConfig(4001f * Hz);
-            Assert.False(invalid.Equals(new SamplingConfig(4001f * Hz)));
+            Assert.Equal(SamplingConfig.Freq40k, new SamplingConfig(1));
 
             Assert.Equal(4000f, byDivide.Freq().Hz);
             Assert.Equal(TimeSpan.FromTicks(2500), byFreq.Period());

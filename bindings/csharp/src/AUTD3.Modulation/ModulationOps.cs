@@ -40,18 +40,8 @@ namespace AUTD3
             _loopBehavior = loopBehavior;
         }
 
-        IntPtr ICommand.CreateOp(Geometry geometry)
-        {
-            var sampling = _config.CreateHandle();
-            try
-            {
-                return NativeModulation.autd3_op_config_modulation((byte)_bank, sampling, _size, _loopBehavior.Rep);
-            }
-            finally
-            {
-                NativeCore.autd3_core_sampling_config_free(sampling);
-            }
-        }
+        IntPtr ICommand.CreateOp(Geometry geometry) =>
+            NativeModulation.autd3_op_config_modulation((byte)_bank, _config.DivideForNative(), _size, _loopBehavior.Rep);
     }
 
     public sealed class ActivateModulationBank : ICommand

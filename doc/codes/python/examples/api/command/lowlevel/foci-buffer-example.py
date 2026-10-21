@@ -2,10 +2,10 @@ import asyncio
 import math
 
 from autd3 import Client, TransportOption
-from autd3.commands import ActivatePatternBank, Clear, ConfigFociStm, StmConfig, Synchronize, WriteFociBuffer
+from autd3.commands import ActivatePatternBank, Clear, ConfigFociStm, Synchronize, WriteFociBuffer
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import Hz, m, mm, s
-from autd3.value import ControlPoint, ControlPoints, Intensity, LoopBehavior, PatternBank, Phase, TransitionMode
+from autd3.value import ControlPoint, ControlPoints, Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig, TransitionMode
 
 
 async def main() -> None:
@@ -32,7 +32,7 @@ async def main() -> None:
         await client.send(
             ConfigFociStm(
                 bank=bank,
-                config=StmConfig(1.0 * Hz).into_sampling_config(len(points)),
+                config=SamplingConfig(1.0 * Hz * len(points)),
                 size=len(points),
                 num_foci=1,
                 sound_speed=340.0 * m / s,

@@ -21,14 +21,13 @@ use autd3_rs::commands::{
     GpioOut, MaxFreqPpb, Modulation, Nop, PWE_TABLE_SIZE, PathDelayFilterShift, Pattern,
     PatternIntensity, PatternStm, PatternStmOption, PhaseDepth, ReleaseFailsafe, SetCpuConfig,
     SetFpgaConfig, SetGpioOut, SetOutputMask, SetPhaseCorrection, SetPulseWidthTable, SetSilencer,
-    StmConfig, StmIntensity, Synchronize, WriteFociBuffer, WriteModulationBuffer,
-    WritePatternBuffer, WritePatternPhase, each,
+    StmIntensity, Synchronize, WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer,
+    WritePatternPhase, each,
 };
 use autd3_rs::udp::StateChecker;
-use autd3_rs::units::Hz;
 use autd3_rs::value::{
-    ControlPoint, ControlPoints, GpioIn, Intensity, LoopBehavior, ModulationBank, Nearest,
-    PatternBank, Phase, PulseWidth, SamplingConfig, SysTime, TransitionMode,
+    ControlPoint, ControlPoints, GpioIn, Intensity, LoopBehavior, ModulationBank, PatternBank,
+    Phase, PulseWidth, SamplingConfig, SysTime, TransitionMode,
 };
 use autd3_rs::{
     BusStats, Client, DeviceMask, DeviceState, Error, ExecAt, FirmwareVersion, FpgaState, Frames,
@@ -192,7 +191,7 @@ macro_rules! foci_points {
 
             fn boxed_stm(
                 &self,
-                config: StmConfig,
+                config: SamplingConfig,
                 option: FociStmOption,
             ) -> BoxedCommand<'_> {
                 match self {
@@ -245,70 +244,8 @@ unsafe fn clone_buffers<T: Clone>(
         .collect()
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn autd3_stm_config_freq(hz: f32) -> *mut StmConfig {
-    into_handle(StmConfig::new(hz * Hz))
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn autd3_stm_config_freq_nearest(hz: f32) -> *mut StmConfig {
-    into_handle(StmConfig::new(Nearest(hz * Hz)))
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn autd3_stm_config_period(period_ns: u64) -> *mut StmConfig {
-    into_handle(StmConfig::new(Duration::from_nanos(period_ns)))
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn autd3_stm_config_period_nearest(period_ns: u64) -> *mut StmConfig {
-    into_handle(StmConfig::new(Nearest(Duration::from_nanos(period_ns))))
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn autd3_stm_config_sampling(divide: u16) -> *mut StmConfig {
-    match NonZeroU16::new(divide) {
-        Some(divide) => into_handle(StmConfig::new(SamplingConfig::new(divide))),
-        None => std::ptr::null_mut(),
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_stm_config_into_sampling_config(
-    config: *const StmConfig,
-    size: usize,
-    out: *mut u16,
-    out_err: *mut c_char,
-    out_err_len: usize,
-) -> i32 {
-    let Some(config) = (unsafe { handle_ref(config) }) else {
-        unsafe { write_cstr(out_err, out_err_len, "null stm config") };
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-
-    if u32::try_from(size).is_err() {
-        unsafe {
-            write_cstr(
-                out_err,
-                out_err_len,
-                "the number of samples is out of range",
-            );
-        };
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    }
-
-    match config.into_sampling_config(size).divide() {
-        Ok(value) => unsafe { write_out(out, value.get()) },
-        Err(e) => {
-            unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
-            AUTD3_ERR
-        }
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_stm_config_free(config: *mut StmConfig) {
-    unsafe { drop_handle(config) }
+fn to_sampling_config(divide: u16) -> Option<SamplingConfig> {
+    NonZeroU16::new(divide).map(SamplingConfig::new)
 }
 
 #[unsafe(no_mangle)]
@@ -514,7 +451,7 @@ pub enum OwnedCommand {
     SetPhaseCorrection(Vec<Vec<Phase>>),
     SetPulseWidthTable(Box<[PulseWidth; PWE_TABLE_SIZE]>),
     FociStm {
-        config: StmConfig,
+        config: SamplingConfig,
         points: FociPoints,
         bank: PatternBank,
         sound_speed: f32,
@@ -522,7 +459,7 @@ pub enum OwnedCommand {
         transition_mode: TransitionMode,
     },
     PatternStm {
-        config: StmConfig,
+        config: SamplingConfig,
         phases: Vec<Vec<Vec<Phase>>>,
         intensities: OwnedStmIntensity,
         bank: PatternBank,
@@ -605,14 +542,14 @@ pub unsafe extern "C" fn autd3_op_pattern(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_op_modulation(
     bank: u8,
-    sampling_config: *const SamplingConfig,
+    sampling_divide: u16,
     modulation_buffer: *const ModulationBuffer,
     loop_rep: u16,
     transition_mode: u8,
     transition_value: u64,
 ) -> *mut OwnedCommand {
     let (Some(sampling_config), Some(modulation_buffer)) =
-        (unsafe { handle_ref(sampling_config) }, unsafe {
+        (to_sampling_config(sampling_divide), unsafe {
             handle_ref(modulation_buffer)
         })
     else {
@@ -627,7 +564,7 @@ pub unsafe extern "C" fn autd3_op_modulation(
 
     let data = modulation_buffer.0.clone();
     into_handle(OwnedCommand::Modulation {
-        config: *sampling_config,
+        config: sampling_config,
         data,
         bank,
         loop_behavior: rep_to_loop_behavior(loop_rep),
@@ -720,11 +657,11 @@ pub unsafe extern "C" fn autd3_phase_depth_max_count(depth: u8, out: *mut usize)
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_op_config_pattern(
     bank: u8,
-    sampling_config: *const SamplingConfig,
+    sampling_divide: u16,
     size: u32,
     rep: u16,
 ) -> *mut OwnedCommand {
-    let Some(sampling_config) = (unsafe { handle_ref(sampling_config) }) else {
+    let Some(sampling_config) = to_sampling_config(sampling_divide) else {
         return std::ptr::null_mut();
     };
     let Some(bank) = to_pattern_bank(bank) else {
@@ -732,7 +669,7 @@ pub unsafe extern "C" fn autd3_op_config_pattern(
     };
     into_handle(OwnedCommand::ConfigPattern {
         bank,
-        config: *sampling_config,
+        config: sampling_config,
         size,
         loop_behavior: rep_to_loop_behavior(rep),
     })
@@ -741,13 +678,13 @@ pub unsafe extern "C" fn autd3_op_config_pattern(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_op_config_foci_stm(
     bank: u8,
-    sampling_config: *const SamplingConfig,
+    sampling_divide: u16,
     size: u32,
     num_foci: u8,
     sound_speed_m_s: f32,
     rep: u16,
 ) -> *mut OwnedCommand {
-    let Some(sampling_config) = (unsafe { handle_ref(sampling_config) }) else {
+    let Some(sampling_config) = to_sampling_config(sampling_divide) else {
         return std::ptr::null_mut();
     };
     let Some(bank) = to_pattern_bank(bank) else {
@@ -755,7 +692,7 @@ pub unsafe extern "C" fn autd3_op_config_foci_stm(
     };
     into_handle(OwnedCommand::ConfigFociStm {
         bank,
-        config: *sampling_config,
+        config: sampling_config,
         size,
         num_foci,
         sound_speed: Velocity::from_m_s(sound_speed_m_s),
@@ -801,11 +738,11 @@ pub unsafe extern "C" fn autd3_op_write_modulation_buffer(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_op_config_modulation(
     bank: u8,
-    sampling_config: *const SamplingConfig,
+    sampling_divide: u16,
     size: u32,
     rep: u16,
 ) -> *mut OwnedCommand {
-    let Some(sampling_config) = (unsafe { handle_ref(sampling_config) }) else {
+    let Some(sampling_config) = to_sampling_config(sampling_divide) else {
         return std::ptr::null_mut();
     };
     let Some(bank) = to_modulation_bank(bank) else {
@@ -813,7 +750,7 @@ pub unsafe extern "C" fn autd3_op_config_modulation(
     };
     into_handle(OwnedCommand::ConfigModulation {
         bank,
-        config: *sampling_config,
+        config: sampling_config,
         size,
         loop_behavior: rep_to_loop_behavior(rep),
     })
@@ -1256,36 +1193,15 @@ pub unsafe extern "C" fn autd3_op_set_phase_correction(
     }
 }
 
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct Autd3PulseWidth {
-    pub kind: u8,
-    pub raw: u16,
-    pub duty: f32,
-}
-
-pub const AUTD3_PULSE_WIDTH_RAW: u8 = 0;
-pub const AUTD3_PULSE_WIDTH_DUTY: u8 = 1;
-
-fn to_pulse_width(value: Autd3PulseWidth) -> Option<PulseWidth> {
-    match value.kind {
-        AUTD3_PULSE_WIDTH_RAW => Some(PulseWidth::new(value.raw)),
-        AUTD3_PULSE_WIDTH_DUTY => Some(PulseWidth::from_duty(value.duty)),
-        _ => None,
-    }
-}
-
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_op_set_pulse_width_table(
-    table: *const Autd3PulseWidth,
-) -> *mut OwnedCommand {
+pub unsafe extern "C" fn autd3_op_set_pulse_width_table(table: *const u16) -> *mut OwnedCommand {
     let Some(slice) = (unsafe { slice_ref(table, PWE_TABLE_SIZE) }) else {
         return std::ptr::null_mut();
     };
 
     let mut t = Box::new(SetPulseWidthTable::empty_table());
     for (dst, &src) in t.iter_mut().zip(slice.iter()) {
-        let Some(value) = to_pulse_width(src) else {
+        let Ok(value) = PulseWidth::new(src) else {
             return std::ptr::null_mut();
         };
         *dst = value;
@@ -1301,18 +1217,29 @@ pub extern "C" fn autd3_op_set_pulse_width_table_default() -> *mut OwnedCommand 
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pulse_width_resolve(
-    pulse_width: Autd3PulseWidth,
+pub unsafe extern "C" fn autd3_pulse_width_new(
+    raw: u16,
+    out_err: *mut c_char,
+    out_err_len: usize,
+) -> i32 {
+    match PulseWidth::new(raw) {
+        Ok(_) => AUTD3_OK,
+        Err(e) => {
+            unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
+            AUTD3_ERR_INVALID_ARGUMENT
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_pulse_width_from_duty(
+    duty: f32,
     out: *mut u16,
     out_err: *mut c_char,
     out_err_len: usize,
 ) -> i32 {
-    let Some(pulse_width) = to_pulse_width(pulse_width) else {
-        unsafe { write_cstr(out_err, out_err_len, "unknown pulse width kind") };
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    match pulse_width.pulse_width() {
-        Ok(value) => unsafe { write_out(out, value) },
+    match PulseWidth::from_duty(duty) {
+        Ok(value) => unsafe { write_out(out, value.pulse_width()) },
         Err(e) => {
             unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
             AUTD3_ERR_INVALID_ARGUMENT
@@ -1322,7 +1249,7 @@ pub unsafe extern "C" fn autd3_pulse_width_resolve(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_op_foci_stm(
-    config: *const StmConfig,
+    config_divide: u16,
     points: *const Autd3StmControlPoint,
     num_samples: usize,
     num_foci: u8,
@@ -1333,7 +1260,7 @@ pub unsafe extern "C" fn autd3_op_foci_stm(
     transition_mode: u8,
     transition_value: u64,
 ) -> *mut OwnedCommand {
-    let Some(config) = (unsafe { handle_ref(config) }) else {
+    let Some(config) = to_sampling_config(config_divide) else {
         return std::ptr::null_mut();
     };
     let (Some(bank), Some(transition_mode)) = (
@@ -1347,7 +1274,7 @@ pub unsafe extern "C" fn autd3_op_foci_stm(
         return std::ptr::null_mut();
     };
     into_handle(OwnedCommand::FociStm {
-        config: *config,
+        config,
         points,
         bank,
         sound_speed: sound_speed_m_s,
@@ -1358,7 +1285,7 @@ pub unsafe extern "C" fn autd3_op_foci_stm(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_op_pattern_stm(
-    config: *const StmConfig,
+    config_divide: u16,
     phases: *const *const PhaseBuffer,
     num_patterns: usize,
     intensity_kind: u8,
@@ -1371,7 +1298,7 @@ pub unsafe extern "C" fn autd3_op_pattern_stm(
     transition_mode: u8,
     transition_value: u64,
 ) -> *mut OwnedCommand {
-    let Some(config) = (unsafe { handle_ref(config) }) else {
+    let Some(config) = to_sampling_config(config_divide) else {
         return std::ptr::null_mut();
     };
     let (Some(bank), Some(phase_depth), Some(transition_mode)) = (
@@ -1396,7 +1323,7 @@ pub unsafe extern "C" fn autd3_op_pattern_stm(
         return std::ptr::null_mut();
     };
     into_handle(OwnedCommand::PatternStm {
-        config: *config,
+        config,
         phases,
         intensities,
         bank,
@@ -2499,27 +2426,11 @@ mod tests {
     }
 
     #[test]
-    fn an_unresolvable_modulation_sampling_config_fails_at_encode_with_the_rust_message() {
-        let config = SamplingConfig::new(39_999. * Hz);
-        let buffer = autd3_ffi_abi::ModulationBuffer(vec![0xFF; 10]);
-        let pending = unsafe {
-            autd3_op_modulation(0, &raw const config, &raw const buffer, 0xFFFF, 0xFF, 0)
-        };
-        assert!(!pending.is_null());
-        let (code, message) = pending_error(pending);
-        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
-        assert!(
-            message.contains("must divide the ultrasound frequency"),
-            "{message}"
-        );
-    }
-
-    #[test]
     fn a_per_index_stm_intensity_of_one_buffer_is_not_treated_as_same_for_all_indices() {
         let geometry = Geometry::new(vec![autd3_rs::geometry::Autd3::default()]);
         let phases = autd3_ffi_abi::Buffer(geometry.phase_buffer());
         let intensities = autd3_ffi_abi::Buffer(geometry.intensity_buffer());
-        let config = autd3_stm_config_freq(1.0);
+        let config = SamplingConfig::FREQ_4K.divide().get();
         let phase_ptrs = [&raw const phases, &raw const phases];
         let intensity_ptrs = [&raw const intensities];
         let encode = |kind: u8| {
@@ -2564,65 +2475,32 @@ mod tests {
             }
             .is_null()
         );
-        unsafe { autd3_stm_config_free(config) };
     }
 
     #[test]
-    fn a_pulse_width_resolves_with_the_rust_message() {
+    fn a_pulse_width_is_validated_with_the_rust_message() {
         let mut out = 0u16;
         let mut err = [0 as c_char; 256];
-        let raw = |raw| Autd3PulseWidth {
-            kind: AUTD3_PULSE_WIDTH_RAW,
-            raw,
-            duty: 0.0,
-        };
         assert_eq!(AUTD3_OK, unsafe {
-            autd3_pulse_width_resolve(raw(256), &raw mut out, err.as_mut_ptr(), err.len())
+            autd3_pulse_width_new(256, err.as_mut_ptr(), err.len())
         });
-        assert_eq!(256, out);
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
-            autd3_pulse_width_resolve(raw(512), &raw mut out, err.as_mut_ptr(), err.len())
+            autd3_pulse_width_new(512, err.as_mut_ptr(), err.len())
         });
         let message = unsafe { std::ffi::CStr::from_ptr(err.as_ptr()) }.to_string_lossy();
-        assert_eq!(
-            message,
-            PulseWidth::new(512).pulse_width().unwrap_err().to_string()
-        );
-        let duty = Autd3PulseWidth {
-            kind: AUTD3_PULSE_WIDTH_DUTY,
-            raw: 0,
-            duty: 0.5,
-        };
+        assert_eq!(message, PulseWidth::new(512).unwrap_err().to_string());
         assert_eq!(AUTD3_OK, unsafe {
-            autd3_pulse_width_resolve(duty, &raw mut out, err.as_mut_ptr(), err.len())
+            autd3_pulse_width_from_duty(0.5, &raw mut out, err.as_mut_ptr(), err.len())
         });
         assert_eq!(256, out);
-        let unknown = Autd3PulseWidth {
-            kind: 2,
-            raw: 0,
-            duty: 0.0,
-        };
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
-            autd3_pulse_width_resolve(unknown, &raw mut out, err.as_mut_ptr(), err.len())
+            autd3_pulse_width_from_duty(1.0, &raw mut out, err.as_mut_ptr(), err.len())
         });
-    }
-
-    #[test]
-    fn an_out_of_range_pulse_width_in_the_table_fails_at_encode() {
-        let mut table = [Autd3PulseWidth {
-            kind: AUTD3_PULSE_WIDTH_RAW,
-            raw: 0,
-            duty: 0.0,
-        }; PWE_TABLE_SIZE];
-        table[3].raw = 512;
-        let pending = unsafe { autd3_op_set_pulse_width_table(table.as_ptr()) };
-        assert!(!pending.is_null());
-        let (code, message) = pending_error(pending);
-        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
-        assert!(
-            message.contains(&PulseWidth::new(512).pulse_width().unwrap_err().to_string()),
-            "{message}"
-        );
+        let table = [0u16; PWE_TABLE_SIZE];
+        assert!(!unsafe { autd3_op_set_pulse_width_table(table.as_ptr()) }.is_null());
+        let mut out_of_range = [0u16; PWE_TABLE_SIZE];
+        out_of_range[3] = 512;
+        assert!(unsafe { autd3_op_set_pulse_width_table(out_of_range.as_ptr()) }.is_null());
     }
 
     #[test]
@@ -3105,49 +2983,6 @@ mod tests {
     }
 
     #[test]
-    fn a_period_crosses_the_boundary_in_nanoseconds() {
-        let mut err = [0 as c_char; 256];
-        for (period_ns, size, expected) in [
-            (100_000_000u64, 4usize, 1000u16),
-            (333_000_000, 3, 4440),
-            (1_000_000, 1, 40),
-        ] {
-            let handle = autd3_stm_config_period(period_ns);
-            let mut out = 0u16;
-            assert_eq!(AUTD3_OK, unsafe {
-                autd3_stm_config_into_sampling_config(
-                    handle,
-                    size,
-                    &raw mut out,
-                    err.as_mut_ptr(),
-                    err.len(),
-                )
-            });
-            assert_eq!(expected, out);
-            unsafe { autd3_stm_config_free(handle) };
-        }
-    }
-
-    #[test]
-    fn an_indivisible_period_reports_the_rust_message() {
-        let mut err = [0 as c_char; 256];
-        let handle = autd3_stm_config_period(100_000_001);
-        let mut out = 0u16;
-        assert_eq!(AUTD3_ERR, unsafe {
-            autd3_stm_config_into_sampling_config(
-                handle,
-                4,
-                &raw mut out,
-                err.as_mut_ptr(),
-                err.len(),
-            )
-        });
-        let message = unsafe { std::ffi::CStr::from_ptr(err.as_ptr()) }.to_string_lossy();
-        assert!(message.contains("must be divisible"), "{message}");
-        unsafe { autd3_stm_config_free(handle) };
-    }
-
-    #[test]
     fn the_silencer_default_matches_rust() {
         let expected = FixedCompletionTime::default();
         let (mut intensity, mut phase, mut strict) = (0u64, 0u64, false);
@@ -3213,22 +3048,6 @@ mod tests {
                 autd3_fpga_state_is_failsafe_active(raw)
             );
         }
-    }
-
-    #[test]
-    fn a_size_wider_than_u32_is_rejected_instead_of_dividing_by_zero() {
-        let handle = autd3_stm_config_period(1_000_000_000);
-        let mut out = 0u16;
-        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
-            autd3_stm_config_into_sampling_config(
-                handle,
-                1usize << 32,
-                &raw mut out,
-                std::ptr::null_mut(),
-                0,
-            )
-        });
-        unsafe { autd3_stm_config_free(handle) };
     }
 
     #[test]

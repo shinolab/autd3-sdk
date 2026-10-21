@@ -64,136 +64,16 @@ namespace AUTD3
         private static extern uint autd3_abi_version();
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_stm_config_freq(float hz);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_stm_config_freq_nearest(float hz);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_stm_config_period(ulong periodNs);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_stm_config_period_nearest(ulong periodNs);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_stm_config_sampling(ushort divide);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_stm_config_into_sampling_config(IntPtr config, UIntPtr size, out ushort @out, byte[] outErr, UIntPtr outErrLen);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_stm_config_free(IntPtr config);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_foci_stm(IntPtr config, Autd3StmControlPointNative[] points, UIntPtr numSamples, byte numFoci, byte[] intensities, byte bank, float soundSpeedMS, ushort loopRep, byte transitionMode, ulong transitionValue);
+        internal static extern IntPtr autd3_op_foci_stm(ushort configDivide, Autd3StmControlPointNative[] points, UIntPtr numSamples, byte numFoci, byte[] intensities, byte bank, float soundSpeedMS, ushort loopRep, byte transitionMode, ulong transitionValue);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_write_foci_buffer(byte bank, uint startIndex, Autd3StmControlPointNative[] points, UIntPtr numSamples, byte numFoci, byte[] intensities);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_pattern_stm(IntPtr config, IntPtr[] phases, UIntPtr numPatterns, byte intensityKind, IntPtr[] intensities, UIntPtr numIntensities, byte uniformIntensity, byte bank, byte phaseDepth, ushort loopRep, byte transitionMode, ulong transitionValue);
+        internal static extern IntPtr autd3_op_pattern_stm(ushort configDivide, IntPtr[] phases, UIntPtr numPatterns, byte intensityKind, IntPtr[] intensities, UIntPtr numIntensities, byte uniformIntensity, byte bank, byte phaseDepth, ushort loopRep, byte transitionMode, ulong transitionValue);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern float autd3_foci_stm_option_default_sound_speed();
-    }
-
-    public readonly struct StmConfig
-    {
-        private enum ConfigKind : byte
-        {
-            Freq,
-            FreqNearest,
-            Period,
-            PeriodNearest,
-            Sampling,
-        }
-
-        private readonly ConfigKind _kind;
-        private readonly float _value;
-        private readonly ulong _periodNs;
-        private readonly SamplingConfig _sampling;
-
-        private StmConfig(ConfigKind kind, float value, ulong periodNs, SamplingConfig sampling)
-        {
-            _kind = kind;
-            _value = value;
-            _periodNs = periodNs;
-            _sampling = sampling;
-        }
-
-        private static ulong PeriodNanos(TimeSpan period)
-        {
-            if (period < TimeSpan.Zero)
-            {
-                throw new Autd3Exception("an STM period must not be negative", Autd3ErrorCode.InvalidArgument);
-            }
-            return OptionNative.ToNanos(period);
-        }
-
-        public StmConfig(Freq freq) : this(ConfigKind.Freq, freq.Hz, 0, default)
-        {
-        }
-
-        public StmConfig(Nearest<Freq> freq) : this(ConfigKind.FreqNearest, freq.Value.Hz, 0, default)
-        {
-        }
-
-        public StmConfig(TimeSpan period) : this(ConfigKind.Period, 0f, PeriodNanos(period), default)
-        {
-        }
-
-        public StmConfig(Nearest<TimeSpan> period) : this(ConfigKind.PeriodNearest, 0f, PeriodNanos(period.Value), default)
-        {
-        }
-
-        public StmConfig(SamplingConfig sampling) : this(ConfigKind.Sampling, 0f, 0, sampling)
-        {
-        }
-
-        public static implicit operator StmConfig(Freq freq) => new StmConfig(freq);
-
-        public static implicit operator StmConfig(Nearest<Freq> freq) => new StmConfig(freq);
-
-        public static implicit operator StmConfig(TimeSpan period) => new StmConfig(period);
-
-        public static implicit operator StmConfig(Nearest<TimeSpan> period) => new StmConfig(period);
-
-        public static implicit operator StmConfig(SamplingConfig sampling) => new StmConfig(sampling);
-
-        public SamplingConfig IntoSamplingConfig(int size)
-        {
-            var handle = CreateHandle();
-            try
-            {
-                var err = new byte[NativeAbi.ErrorBufferLength];
-                if (NativeStm.autd3_stm_config_into_sampling_config(handle, (UIntPtr)Math.Max(size, 1), out var divide, err, (UIntPtr)err.Length) != 0)
-                {
-                    throw new Autd3Exception(NativeUtil.Utf8(err), Autd3ErrorCode.InvalidArgument);
-                }
-                return new SamplingConfig(divide);
-            }
-            finally
-            {
-                NativeStm.autd3_stm_config_free(handle);
-            }
-        }
-
-        internal IntPtr CreateHandle()
-        {
-            var handle = _kind switch
-            {
-                ConfigKind.Freq => NativeStm.autd3_stm_config_freq(_value),
-                ConfigKind.FreqNearest => NativeStm.autd3_stm_config_freq_nearest(_value),
-                ConfigKind.Period => NativeStm.autd3_stm_config_period(_periodNs),
-                ConfigKind.PeriodNearest => NativeStm.autd3_stm_config_period_nearest(_periodNs),
-                _ => NativeStm.autd3_stm_config_sampling(_sampling.Divide()),
-            };
-            if (handle == IntPtr.Zero)
-            {
-                throw new Autd3Exception("failed to create stm config");
-            }
-            return handle;
-        }
     }
 
     public readonly struct ControlPoint
@@ -264,11 +144,11 @@ namespace AUTD3
 
     public sealed class FociStm : ICommand
     {
-        private readonly StmConfig _config;
+        private readonly SamplingConfig _config;
         private readonly IReadOnlyList<ControlPoints> _points;
         private readonly FociStmOption _option;
 
-        public FociStm(StmConfig config, IReadOnlyList<ControlPoints> points, FociStmOption option)
+        public FociStm(SamplingConfig config, IReadOnlyList<ControlPoints> points, FociStmOption option)
         {
             _config = config;
             _points = points;
@@ -278,16 +158,8 @@ namespace AUTD3
         IntPtr ICommand.CreateOp(Geometry geometry)
         {
             var (points, intensities, numFoci) = FociPoints.Flatten(_points, "FociStm");
-            var configHandle = _config.CreateHandle();
-            try
-            {
-                return NativeStm.autd3_op_foci_stm(configHandle, points, (UIntPtr)_points.Count, numFoci, intensities,
-                    (byte)_option.Bank, _option.SoundSpeed.MS, _option.LoopBehavior.Rep, _option.TransitionMode.Mode, _option.TransitionMode.Value);
-            }
-            finally
-            {
-                NativeStm.autd3_stm_config_free(configHandle);
-            }
+            return NativeStm.autd3_op_foci_stm(_config.DivideForNative(), points, (UIntPtr)_points.Count, numFoci, intensities,
+                (byte)_option.Bank, _option.SoundSpeed.MS, _option.LoopBehavior.Rep, _option.TransitionMode.Mode, _option.TransitionMode.Value);
         }
     }
 
@@ -337,12 +209,12 @@ namespace AUTD3
 
     public sealed class PatternStm : ICommand
     {
-        private readonly StmConfig _config;
+        private readonly SamplingConfig _config;
         private readonly PhaseBuffer[] _phases;
         private readonly StmIntensity _intensities;
         private readonly PatternStmOption _option;
 
-        public PatternStm(StmConfig config, PhaseBuffer[] phases, StmIntensity intensities, PatternStmOption option)
+        public PatternStm(SamplingConfig config, PhaseBuffer[] phases, StmIntensity intensities, PatternStmOption option)
         {
             _config = config;
             _phases = phases ?? throw new ArgumentNullException(nameof(phases));
@@ -365,17 +237,9 @@ namespace AUTD3
             }
             using var phaseLease = new HandleArray(phaseHandles);
             using var intensityLease = new HandleArray(intensityHandles);
-            var configHandle = _config.CreateHandle();
-            try
-            {
-                return NativeStm.autd3_op_pattern_stm(configHandle, phaseLease.Pointers, (UIntPtr)phaseLease.Pointers.Length,
-                    _intensities.Kind, intensityLease.Pointers, (UIntPtr)intensityLease.Pointers.Length, _intensities.Uniform,
-                    (byte)_option.Bank, _option.PhaseDepth.ToBits(), _option.LoopBehavior.Rep, _option.TransitionMode.Mode, _option.TransitionMode.Value);
-            }
-            finally
-            {
-                NativeStm.autd3_stm_config_free(configHandle);
-            }
+            return NativeStm.autd3_op_pattern_stm(_config.DivideForNative(), phaseLease.Pointers, (UIntPtr)phaseLease.Pointers.Length,
+                _intensities.Kind, intensityLease.Pointers, (UIntPtr)intensityLease.Pointers.Length, _intensities.Uniform,
+                (byte)_option.Bank, _option.PhaseDepth.ToBits(), _option.LoopBehavior.Rep, _option.TransitionMode.Mode, _option.TransitionMode.Value);
         }
     }
 

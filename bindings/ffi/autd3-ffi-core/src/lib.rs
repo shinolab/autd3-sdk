@@ -1,16 +1,15 @@
 use std::ffi::c_char;
-use std::num::NonZeroU16;
 use std::time::Duration;
 
 use autd3_ffi_abi::{
-    AUTD3_ERR, AUTD3_ERR_INVALID_ARGUMENT, AUTD3_OK, alloc_cstring, cstr_to_string, drop_handle,
-    free_cstring, handle_ref, into_handle, into_handle_or_err, slice_mut, slice_ref, to_ns,
-    write_cstr, write_out,
+    AUTD3_ERR_INVALID_ARGUMENT, AUTD3_OK, alloc_cstring, cstr_to_string, drop_handle, free_cstring,
+    handle_ref, into_handle, into_handle_or_err, slice_mut, slice_ref, to_ns, write_cstr,
+    write_out,
 };
 use autd3_rs_core::common::ULTRASOUND_PERIOD;
 use autd3_rs_core::geometry::Device;
 use autd3_rs_core::units::{Hz, rad};
-use autd3_rs_core::value::{Nearest, PULSE_WIDTH_PERIOD, Phase, SamplingConfig};
+use autd3_rs_core::value::{PULSE_WIDTH_PERIOD, Phase, SamplingConfig, SamplingConfigError};
 use autd3_rs_core::{
     Autd3, Geometry, MAX_DEVICES, MAX_INFLIGHT, Point3, Quaternion, UnitQuaternion, params,
 };
@@ -398,67 +397,86 @@ pub extern "C" fn autd3_core_params_device_height_mm() -> f32 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_core_sampling_config_freq_4k() -> *mut SamplingConfig {
-    into_handle(SamplingConfig::FREQ_4K)
+pub extern "C" fn autd3_core_sampling_config_freq_4k() -> u16 {
+    SamplingConfig::FREQ_4K.divide().get()
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_core_sampling_config_freq_40k() -> *mut SamplingConfig {
-    into_handle(SamplingConfig::FREQ_40K)
+pub extern "C" fn autd3_core_sampling_config_freq_40k() -> u16 {
+    SamplingConfig::FREQ_40K.divide().get()
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn autd3_core_sampling_config_divide(divide: u16) -> *mut SamplingConfig {
-    match NonZeroU16::new(divide) {
-        Some(divide) => into_handle(SamplingConfig::new(divide)),
-        None => std::ptr::null_mut(),
-    }
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn autd3_core_sampling_config_freq(hz: f32) -> *mut SamplingConfig {
-    into_handle(SamplingConfig::new(hz * Hz))
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn autd3_core_sampling_config_freq_nearest(hz: f32) -> *mut SamplingConfig {
-    into_handle(SamplingConfig::new(Nearest(hz * Hz)))
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn autd3_core_sampling_config_period(nanos: u64) -> *mut SamplingConfig {
-    into_handle(SamplingConfig::new(Duration::from_nanos(nanos)))
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn autd3_core_sampling_config_period_nearest(nanos: u64) -> *mut SamplingConfig {
-    into_handle(SamplingConfig::new(Nearest(Duration::from_nanos(nanos))))
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_core_sampling_config_resolve(
-    config: *const SamplingConfig,
+unsafe fn write_sampling_config(
+    config: Result<SamplingConfig, SamplingConfigError>,
     out: *mut u16,
     out_err: *mut c_char,
     out_err_len: usize,
 ) -> i32 {
-    let Some(config) = (unsafe { handle_ref(config) }) else {
-        unsafe { write_cstr(out_err, out_err_len, "null sampling config") };
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-
-    match config.divide() {
-        Ok(divide) => unsafe { write_out(out, divide.get()) },
+    match config {
+        Ok(config) => unsafe { write_out(out, config.divide().get()) },
         Err(e) => {
             unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
-            AUTD3_ERR
+            AUTD3_ERR_INVALID_ARGUMENT
         }
     }
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_core_sampling_config_free(config: *mut SamplingConfig) {
-    unsafe { drop_handle(config) }
+pub unsafe extern "C" fn autd3_core_sampling_config_from_freq(
+    hz: f32,
+    out: *mut u16,
+    out_err: *mut c_char,
+    out_err_len: usize,
+) -> i32 {
+    unsafe {
+        write_sampling_config(
+            SamplingConfig::from_freq(hz * Hz),
+            out,
+            out_err,
+            out_err_len,
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_core_sampling_config_from_freq_nearest(
+    hz: f32,
+    out: *mut u16,
+    out_err: *mut c_char,
+    out_err_len: usize,
+) -> i32 {
+    unsafe {
+        write_sampling_config(
+            SamplingConfig::from_freq_nearest(hz * Hz),
+            out,
+            out_err,
+            out_err_len,
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_core_sampling_config_from_period(
+    nanos: u64,
+    out: *mut u16,
+    out_err: *mut c_char,
+    out_err_len: usize,
+) -> i32 {
+    unsafe {
+        write_sampling_config(
+            SamplingConfig::from_period(Duration::from_nanos(nanos)),
+            out,
+            out_err,
+            out_err_len,
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_core_sampling_config_from_period_nearest(nanos: u64) -> u16 {
+    SamplingConfig::from_period_nearest(Duration::from_nanos(nanos))
+        .divide()
+        .get()
 }
 
 autd3_ffi_abi::export_abi_version!();
@@ -563,23 +581,50 @@ mod tests {
     }
 
     #[test]
-    fn resolve_reports_the_divider_or_the_rust_message() {
+    fn a_sampling_config_is_built_from_a_frequency_or_reports_the_rust_message() {
         let mut err = [0 as c_char; 256];
         let mut out = 0u16;
 
-        let config = autd3_core_sampling_config_freq(4000.0);
         assert_eq!(AUTD3_OK, unsafe {
-            autd3_core_sampling_config_resolve(config, &raw mut out, err.as_mut_ptr(), err.len())
+            autd3_core_sampling_config_from_freq(4000.0, &raw mut out, err.as_mut_ptr(), err.len())
         });
         assert_eq!(10, out);
-        unsafe { autd3_core_sampling_config_free(config) };
 
-        let config = autd3_core_sampling_config_freq(4001.0);
-        assert_eq!(AUTD3_ERR, unsafe {
-            autd3_core_sampling_config_resolve(config, &raw mut out, err.as_mut_ptr(), err.len())
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_core_sampling_config_from_freq(4001.0, &raw mut out, err.as_mut_ptr(), err.len())
         });
         assert!(message(&err).contains("must divide the ultrasound frequency"));
-        unsafe { autd3_core_sampling_config_free(config) };
+
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_core_sampling_config_from_freq_nearest(
+                4001.0,
+                &raw mut out,
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        });
+        assert_eq!(10, out);
+
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_core_sampling_config_from_period(
+                250_000,
+                &raw mut out,
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        });
+        assert_eq!(10, out);
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_core_sampling_config_from_period(
+                250_001,
+                &raw mut out,
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        });
+        assert_eq!(10, autd3_core_sampling_config_from_period_nearest(250_001));
+        assert_eq!(10, autd3_core_sampling_config_freq_4k());
+        assert_eq!(1, autd3_core_sampling_config_freq_40k());
     }
 
     #[test]

@@ -12,7 +12,7 @@ import autd3
 import autd3_modulation as modulation
 import autd3_pattern as pattern
 import autd3_pattern_holo as holo
-from autd3.commands import FixedCompletionTime, FixedUpdateRate, SetSilencer, StmConfig
+from autd3.commands import FixedCompletionTime, FixedUpdateRate, SetSilencer
 from autd3.geometry import Autd3, Device, EulerAngles, Geometry, offset, point
 from autd3.units import Hz, deg, m, mm, s
 from autd3.value import ControlPoint, Nearest, Phase, SysTime
@@ -106,8 +106,6 @@ def test_time_arguments_accept_only_a_duration(value: object) -> None:
 )
 def test_sampling_periods_accept_only_a_duration(value: object) -> None:
     with pytest.raises(ValueError):
-        StmConfig(loose(value))
-    with pytest.raises(ValueError):
         Nearest(loose(value))
     with pytest.raises(ValueError):
         autd3.value.SamplingConfig(loose(value))
@@ -116,8 +114,8 @@ def test_sampling_periods_accept_only_a_duration(value: object) -> None:
 def test_a_duration_is_accepted_wherever_time_is_taken() -> None:
     period = autd3.Duration.from_millis(1)
     assert SysTime.from_nanos(0) + period == SysTime.from_nanos(1_000_000)
-    assert StmConfig(period).into_sampling_config(4) == autd3.value.SamplingConfig(autd3.Duration.from_micros(250))
-    StmConfig(Nearest(period))
+    assert autd3.value.SamplingConfig(period) == autd3.value.SamplingConfig(40)
+    assert autd3.value.SamplingConfig(Nearest(period)) == autd3.value.SamplingConfig(40)
     FixedCompletionTime(intensity=period, phase=period)
     autd3.TransportOption(ack_timeout=period)
 

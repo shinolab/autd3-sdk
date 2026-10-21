@@ -13,7 +13,7 @@ import autd3
 from autd3.commands import Clear, FociStm, FociStmOption, SetSilencer, Synchronize
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import Hz, mm
-from autd3.value import ControlPoint, ControlPoints, Intensity, Phase
+from autd3.value import ControlPoint, ControlPoints, Intensity, Phase, SamplingConfig
 
 
 async def main() -> None:
@@ -38,7 +38,8 @@ async def main() -> None:
         ]
 
         await client.send(SetSilencer())
-        await client.send(FociStm(1.0 * Hz, points, FociStmOption()))
+        config = SamplingConfig(1.0 * Hz * len(points))
+        await client.send(FociStm(config, points, FociStmOption()))
 
         print("running a 1 Hz circular foci STM — press Ctrl+C to stop")
         stop = asyncio.Event()

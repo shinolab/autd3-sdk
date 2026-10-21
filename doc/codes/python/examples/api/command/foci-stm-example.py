@@ -5,7 +5,7 @@ from autd3 import Client, TransportOption
 from autd3.commands import Clear, FociStm, FociStmOption, Synchronize
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import Hz, m, mm, s
-from autd3.value import ControlPoint, ControlPoints, Intensity, LoopBehavior, PatternBank, Phase, TransitionMode
+from autd3.value import ControlPoint, ControlPoints, Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig, TransitionMode
 
 
 async def main() -> None:
@@ -22,7 +22,7 @@ async def main() -> None:
 
         await client.send(
             FociStm(
-                1.0 * Hz,
+                SamplingConfig(1.0 * Hz * len(points)),
                 points,
                 FociStmOption(
                     bank=PatternBank.B0,

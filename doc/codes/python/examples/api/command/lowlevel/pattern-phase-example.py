@@ -1,10 +1,10 @@
 import asyncio
 
 from autd3 import Client, TransportOption
-from autd3.commands import ActivatePatternBank, Clear, ConfigPattern, PhaseDepth, StmConfig, Synchronize, WritePatternPhase
+from autd3.commands import ActivatePatternBank, Clear, ConfigPattern, PhaseDepth, Synchronize, WritePatternPhase
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import Hz, m, mm, s
-from autd3.value import Intensity, LoopBehavior, PatternBank, TransitionMode
+from autd3.value import Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode
 from autd3_pattern import focus
 from autd3_pattern import wavelength as calc_wavelength
 
@@ -40,7 +40,7 @@ async def main() -> None:
         await client.send(
             ConfigPattern(
                 bank=bank,
-                config=StmConfig(1.0 * Hz).into_sampling_config(len(patterns)),
+                config=SamplingConfig(1.0 * Hz * len(patterns)),
                 size=len(patterns),
                 loop_behavior=LoopBehavior.Infinite,
             )

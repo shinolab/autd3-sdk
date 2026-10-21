@@ -38,6 +38,9 @@ EQUAL_PAIRS: list[tuple[Hashable, Hashable]] = [
     (Intensity(0x80), Intensity(128)),
     (SamplingConfig(4000 * Hz), SamplingConfig(10)),
     (SamplingConfig(autd3.Duration.from_micros(250)), SamplingConfig.FREQ_4K),
+    (SamplingConfig(Nearest(3000 * Hz)), SamplingConfig(13)),
+    (SamplingConfig(Nearest(autd3.Duration.from_nanos(50_001))), SamplingConfig(2)),
+    (SamplingConfig(Nearest(autd3.Duration.from_nanos(1))), SamplingConfig.FREQ_40K),
     (SysTime.from_nanos(5), SysTime.from_nanos(5)),
     (TransitionMode.SysTime(SysTime.from_nanos(5)), TransitionMode.SysTime(SysTime.from_nanos(5))),
     (TransitionMode.Gpio(GpioIn.I1), TransitionMode.Gpio(GpioIn.I1)),
@@ -81,6 +84,7 @@ DISTINCT_PAIRS: list[tuple[object, object]] = [
     (Phase(1), 1),
     (Intensity(1), Intensity(2)),
     (SamplingConfig(10), SamplingConfig(20)),
+    (SamplingConfig(Nearest(3000 * Hz)), SamplingConfig(Nearest(4000 * Hz))),
     (SysTime.from_nanos(5), SysTime.from_nanos(6)),
     (TransitionMode.Immediate, TransitionMode.Ext),
     (TransitionMode.Gpio(GpioIn.I1), TransitionMode.Gpio(GpioIn.I2)),
@@ -128,13 +132,23 @@ def test_distinct_values_compare_unequal(lhs: object, rhs: object) -> None:
     assert not (lhs == rhs)
 
 
-def test_an_invalid_sampling_config_equals_nothing() -> None:
-    invalid = SamplingConfig(3000 * Hz)
-    with pytest.raises(autd3.Autd3Error):
-        invalid.divide()
-    assert invalid != invalid
-    assert invalid != SamplingConfig(3000 * Hz)
-    hash(invalid)
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        (3000 * Hz, "must divide the ultrasound frequency"),
+        (3000.5 * Hz, "must divide the ultrasound frequency"),
+        (80_000 * Hz, "is out of range"),
+        (0.0 * Hz, "is out of range"),
+        (autd3.Duration.from_nanos(50_001), "must be a multiple of the ultrasound period"),
+        (autd3.Duration.from_nanos(1), "is out of range"),
+        (Nearest(float("nan") * Hz), "must be a number"),
+        (0, "non-zero"),
+    ],
+)
+def test_an_invalid_sampling_config_cannot_be_constructed(value: object, message: str) -> None:
+    with pytest.raises(autd3.Autd3Error, match=message) as err:
+        SamplingConfig(loose(value))
+    assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
 
 
 def test_value_types_are_immutable() -> None:

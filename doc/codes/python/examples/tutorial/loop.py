@@ -7,7 +7,7 @@ from autd3 import Client, TransportOption
 from autd3.commands import Clear, FociStm, FociStmOption, Synchronize
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import Hz, mm
-from autd3.value import ControlPoint, ControlPoints, Intensity, LoopBehavior, PatternBank, Phase, TransitionMode
+from autd3.value import ControlPoint, ControlPoints, Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig, TransitionMode
 
 
 async def main() -> None:
@@ -26,10 +26,11 @@ async def main() -> None:
             theta = 2.0 * math.pi * i / 20.0
             p = center + np.array([radius * math.cos(theta), radius * math.sin(theta), 0.0])
             foci.append(ControlPoints([ControlPoint(p, Phase.ZERO)], Intensity.MAX))
+        config = SamplingConfig(50.0 * Hz * len(foci))
 
         # ANCHOR: infinite
         # By default the playback loops infinitely; B0 keeps circling the focus.
-        await client.send(FociStm(50.0 * Hz, foci, FociStmOption()))
+        await client.send(FociStm(config, foci, FociStmOption()))
         # ANCHOR_END: infinite
 
         # ANCHOR: finite
@@ -38,7 +39,7 @@ async def main() -> None:
         # different bank, so write to bank B1 instead of the current B0.
         await client.send(
             FociStm(
-                50.0 * Hz,
+                config,
                 foci,
                 FociStmOption(
                     loop_behavior=LoopBehavior.Finite(3),

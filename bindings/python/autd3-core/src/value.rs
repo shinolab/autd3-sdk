@@ -5,7 +5,7 @@ use core::time::Duration as StdDuration;
 use autd3_rs_core::nalgebra::Complex;
 use autd3_rs_core::units::Hz;
 use autd3_rs_core::value::{
-    Intensity as CoreIntensity, Nearest, Phase as CorePhase, SamplingConfig as CoreSamplingConfig,
+    Intensity as CoreIntensity, Phase as CorePhase, SamplingConfig as CoreSamplingConfig,
 };
 use pyo3::exceptions::{PyValueError, PyZeroDivisionError};
 use pyo3::prelude::*;
@@ -220,7 +220,7 @@ pub struct SamplingConfig(pub CoreSamplingConfig);
 
 impl Hash for SamplingConfig {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.divide().ok().hash(state);
+        self.0.divide().hash(state);
     }
 }
 
@@ -240,17 +240,27 @@ impl SamplingConfig {
 
     #[new]
     fn new(value: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let py = value.py();
         if let Ok(nearest) = value.cast::<PyNearest>() {
-            return Ok(Self(match nearest.get().0 {
-                NearestInner::Freq(hz) => CoreSamplingConfig::new(Nearest(hz * Hz)),
-                NearestInner::Period(period) => CoreSamplingConfig::new(Nearest(period)),
-            }));
+            return match nearest.get().0 {
+                NearestInner::Freq(hz) => CoreSamplingConfig::from_freq_nearest(hz * Hz)
+                    .map(Self)
+                    .map_err(|e| invalid_argument(py, e)),
+                NearestInner::Period(period) => {
+                    Ok(Self(CoreSamplingConfig::from_period_nearest(period)))
+                }
+            };
         }
         if let Ok(freq) = value.extract::<Freq>() {
-            return Ok(Self(freq.sampling_config()));
+            return freq
+                .sampling_config()
+                .map(Self)
+                .map_err(|e| invalid_argument(py, e));
         }
         if let Ok(period) = value.extract::<Duration>() {
-            return Ok(Self(CoreSamplingConfig::new(period.0)));
+            return CoreSamplingConfig::from_period(period.0)
+                .map(Self)
+                .map_err(|e| invalid_argument(py, e));
         }
         let divide: u16 = value.extract().map_err(|_| {
             PyValueError::new_err(
@@ -258,29 +268,20 @@ impl SamplingConfig {
             )
         })?;
         let divide = NonZeroU16::new(divide)
-            .ok_or_else(|| PyValueError::new_err("divide must be non-zero"))?;
+            .ok_or_else(|| invalid_argument(py, "divide must be non-zero"))?;
         Ok(Self(CoreSamplingConfig::new(divide)))
     }
 
-    fn divide(&self, py: Python<'_>) -> PyResult<u16> {
-        self.0
-            .divide()
-            .map(NonZeroU16::get)
-            .map_err(|e| invalid_argument(py, e))
+    fn divide(&self) -> u16 {
+        self.0.divide().get()
     }
 
-    fn freq(&self, py: Python<'_>) -> PyResult<Freq> {
-        self.0
-            .freq()
-            .map(|f| Freq::from_hz_f32(f.hz()))
-            .map_err(|e| invalid_argument(py, e))
+    fn freq(&self) -> Freq {
+        Freq::from_hz_f32(self.0.freq().hz())
     }
 
-    fn period(&self, py: Python<'_>) -> PyResult<Duration> {
-        self.0
-            .period()
-            .map(Duration)
-            .map_err(|e| invalid_argument(py, e))
+    fn period(&self) -> Duration {
+        Duration(self.0.period())
     }
 
     fn _sampling_config_capsule<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyCapsule>> {
