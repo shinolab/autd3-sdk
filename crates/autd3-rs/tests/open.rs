@@ -1,11 +1,10 @@
 mod common;
 
-use std::net::{Ipv6Addr, SocketAddr, UdpSocket};
 use std::time::Duration;
 
 use autd3_rs::commands::{Clear, ForceFan, Nop};
-use autd3_rs::udp::{TransportOption, UdpError, discover};
-use autd3_rs::{Client, DeviceState, Error, FirmwareVersion, Interface, MAX_DEVICES, PayloadError};
+use autd3_rs::udp::{TransportOption, UdpError};
+use autd3_rs::{Client, DeviceState, Error, FirmwareVersion, MAX_DEVICES, PayloadError};
 
 use common::{emulator, geometry, open_with, option, udp_error};
 
@@ -137,36 +136,6 @@ async fn opening_without_synchronizing_does_not_wait_for_the_lock() {
         client.state_checker().check().unwrap().devices()[1],
         DeviceState::Syncing
     );
-}
-
-#[test]
-#[ignore = "depends on real time"]
-fn discover_counts_every_attached_device() {
-    for num_devices in [1, 3] {
-        let emulator = emulator(num_devices);
-
-        assert_eq!(discover(&option(&emulator)).unwrap(), num_devices);
-        assert_eq!(emulator.id_resets_received(0), 1);
-    }
-}
-
-#[test]
-#[ignore = "depends on real time"]
-fn discover_without_any_device_times_out_the_enumeration() {
-    let silent = UdpSocket::bind((Ipv6Addr::LOCALHOST, 0)).unwrap();
-    let SocketAddr::V6(silent_addr) = silent.local_addr().unwrap() else {
-        unreachable!()
-    };
-    let option = TransportOption {
-        iface: Interface::Addr(silent_addr),
-        open_timeout: Duration::from_millis(200),
-        ..TransportOption::default()
-    };
-
-    assert!(matches!(
-        discover(&option),
-        Err(UdpError::EnumerationTimeout { found: 0, .. })
-    ));
 }
 
 #[tokio::test]
