@@ -18,14 +18,10 @@ pub(crate) struct ReceivedPacket<'a> {
     pub(crate) body: &'a [u8],
 }
 
-pub(crate) enum Received<'a> {
+pub(crate) enum Polled<R> {
+    Empty,
     Wake,
-    Device {
-        device: usize,
-        header: Header,
-        body: &'a [u8],
-    },
-    Other,
+    Device(R),
 }
 
 pub(crate) fn same_endpoint(a: SocketAddrV6, b: SocketAddrV6) -> bool {
@@ -337,28 +333,31 @@ impl Channel {
         )
     }
 
-    pub(crate) fn recv_from_device<R>(
+    pub(crate) fn try_recv_from_device<R>(
         &self,
-        deadline: Instant,
-        classify: impl FnOnce(Received<'_>) -> R,
-    ) -> io::Result<Option<R>> {
-        self.recv(Some(deadline), |packet| {
-            if self.is_from_waker(packet.src) {
-                return classify(Received::Wake);
+        mut parse: impl FnMut(usize, Header, &[u8]) -> Option<R>,
+    ) -> io::Result<Polled<R>> {
+        let mut recv_state = self.lock_recv_state();
+        let deadline = Some(Instant::now());
+        while let Some((src, datagram)) = self.recv_datagram(&mut recv_state, deadline)? {
+            if self.is_from_waker(src) {
+                return Ok(Polled::Wake);
             }
-            match self
+            let Some(device) = self
                 .device_addrs
                 .iter()
-                .position(|&addr| same_endpoint(addr, packet.src))
-            {
-                Some(device) => classify(Received::Device {
-                    device,
-                    header: packet.header,
-                    body: packet.body,
-                }),
-                None => classify(Received::Other),
+                .position(|&addr| same_endpoint(addr, src))
+            else {
+                continue;
+            };
+            let Ok((header, body)) = Header::read_from_prefix(datagram) else {
+                continue;
+            };
+            if let Some(parsed) = parse(device, header, body) {
+                return Ok(Polled::Device(parsed));
             }
-        })
+        }
+        Ok(Polled::Empty)
     }
 
     pub(crate) fn recv<R>(
@@ -367,21 +366,26 @@ impl Channel {
         classify: impl FnOnce(&ReceivedPacket<'_>) -> R,
     ) -> io::Result<Option<R>> {
         let mut recv_state = self.lock_recv_state();
+        while let Some((src, datagram)) = self.recv_datagram(&mut recv_state, deadline)? {
+            if let Ok((header, body)) = Header::read_from_prefix(datagram) {
+                return Ok(Some(classify(&ReceivedPacket { src, header, body })));
+            }
+        }
+        Ok(None)
+    }
+
+    fn recv_datagram<'a>(
+        &self,
+        recv_state: &'a mut RecvState,
+        deadline: Option<Instant>,
+    ) -> io::Result<Option<(SocketAddrV6, &'a [u8])>> {
         let (len, src) = loop {
-            self.apply_recv_deadline(&mut recv_state, deadline)?;
+            self.apply_recv_deadline(recv_state, deadline)?;
             match self.socket.recv_from(&mut recv_state.buf[..]) {
                 Ok((len, src)) if len >= RECV_BUFFER_BYTES => {
                     tracing::debug!(%src, "dropped a datagram that does not fit the receive buffer");
                 }
-                Ok((len, SocketAddr::V6(src))) if len >= size_of::<Header>() => break (len, src),
-                Ok((_, SocketAddr::V6(src))) if self.is_from_waker(src) => {
-                    let header = Header::new(Kind::Heartbeat, 0);
-                    return Ok(Some(classify(&ReceivedPacket {
-                        src,
-                        header,
-                        body: &[],
-                    })));
-                }
+                Ok((len, SocketAddr::V6(src))) => break (len, src),
                 Ok(_) => {}
                 Err(e) if is_timeout(&e) => return Ok(None),
                 Err(e) if is_transient(&e) => {}
@@ -391,10 +395,7 @@ impl Channel {
                 Err(e) => return Err(e),
             }
         };
-        let datagram = &recv_state.buf[..len];
-        let (header, body) = Header::read_from_prefix(datagram)
-            .map_err(|_| io::Error::from(io::ErrorKind::InvalidData))?;
-        Ok(Some(classify(&ReceivedPacket { src, header, body })))
+        Ok(Some((src, &recv_state.buf[..len])))
     }
 
     pub(crate) fn wait_readable(&self, deadline: Instant) -> io::Result<()> {
