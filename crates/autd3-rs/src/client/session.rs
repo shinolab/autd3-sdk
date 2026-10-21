@@ -15,7 +15,7 @@ use crate::geometry::Geometry;
 use crate::protocol::{FrameHeader, MAX_INFLIGHT};
 use crate::response::{ReplyBuffers, Response};
 use crate::udp::state::PublishedDeviceStates;
-use crate::udp::{Channel, DeviceReply, Received, Reply, StateChecker, TransportOption, UdpError};
+use crate::udp::{Channel, DeviceReply, Polled, Reply, StateChecker, TransportOption, UdpError};
 use crate::value::SysTime;
 
 use super::completion::ResponseSender;
@@ -170,15 +170,12 @@ impl InflightQueue {
     }
 }
 
-pub(crate) struct ReplyAcceptance {
-    accepted: bool,
-    revived: bool,
-}
-
 pub(crate) struct SessionState {
     inflight: InflightQueue,
     liveness: Vec<DeviceLiveness>,
     published_states: Arc<PublishedDeviceStates>,
+    device_clock: DeviceClock,
+    stats: BusStats,
     recovery_window: Option<RecoveryWindow>,
     recovery_waiter: Option<RecoveryResultSender>,
     network_failure: Option<NetworkCause>,
@@ -199,12 +196,16 @@ impl SessionState {
         num_devices: usize,
         timeouts: Timeouts,
         published_states: Arc<PublishedDeviceStates>,
+        device_clock: DeviceClock,
+        stats: BusStats,
         now: Instant,
     ) -> Self {
         Self {
             inflight: InflightQueue::new(num_devices, now),
             liveness: vec![DeviceLiveness::new(); num_devices],
             published_states,
+            device_clock,
+            stats,
             recovery_window: None,
             recovery_waiter: None,
             network_failure: None,
@@ -291,7 +292,7 @@ impl SessionState {
         None
     }
 
-    pub(crate) fn record_reply(&mut self, reply: &Reply, now: Instant) -> Option<AnsweredRequest> {
+    fn record_reply(&mut self, reply: &Reply, now: Instant) -> Option<AnsweredRequest> {
         let Some(index) = self.inflight.position(reply.msg_id) else {
             tracing::trace!(msg_id = reply.msg_id, "dropping a reply nothing waits for");
             return None;
@@ -348,7 +349,11 @@ impl SessionState {
         self.publish(device);
     }
 
-    pub(crate) fn accept_reply(&mut self, reply: &DeviceReply) -> ReplyAcceptance {
+    pub(crate) fn receive_reply(
+        &mut self,
+        reply: &DeviceReply,
+        now: Instant,
+    ) -> Option<AnsweredRequest> {
         let device = reply.reply.device;
         let expected_unit_id = u8::try_from(device).expect("a device index is below MAX_DEVICES");
         let liveness = &mut self.liveness[device];
@@ -356,11 +361,23 @@ impl SessionState {
         let revived = !accepted
             && self.recovery_window.is_some()
             && liveness.try_revive(expected_unit_id, reply.reported_unit_id, reply.flags);
-        if revived && let Some(window) = &mut self.recovery_window {
-            window.mark_recovered(device);
-        }
         self.publish(device);
-        ReplyAcceptance { accepted, revived }
+        if revived {
+            if let Some(window) = &mut self.recovery_window {
+                window.mark_recovered(device);
+            }
+            self.stats.record_recovery();
+            tracing::info!(device, "a lost device answers again");
+        } else if !accepted {
+            return None;
+        }
+        if device == 0
+            && let Some(sys_time) = NonZeroU64::new(reply.reply.sys_time)
+        {
+            self.device_clock
+                .observe(SysTime::from_nanos(sys_time.get()));
+        }
+        self.record_reply(&reply.reply, now)
     }
 
     pub(crate) fn mark_unanswered_devices_lost(&mut self, now: Instant) {
@@ -463,12 +480,6 @@ impl ClosedSession {
     }
 }
 
-enum Incoming {
-    Wake,
-    Reply(DeviceReply),
-    Irrelevant,
-}
-
 pub(crate) struct Session {
     channel: Channel,
     state: Mutex<SessionState>,
@@ -491,11 +502,14 @@ impl Session {
             recovery_reply: option.recovery_reply_timeout,
         };
         let published_states = PublishedDeviceStates::new(num_devices);
+        let stats = BusStats::default();
         Ok(Self {
             state: Mutex::new(SessionState::new(
                 num_devices,
                 timeouts,
                 Arc::clone(&published_states),
+                device_clock.clone(),
+                stats.clone(),
                 Instant::now(),
             )),
             stop_requested: AtomicBool::new(false),
@@ -503,7 +517,7 @@ impl Session {
             published_states,
             channel,
             device_clock,
-            stats: BusStats::default(),
+            stats,
             timeouts,
         })
     }
@@ -789,53 +803,29 @@ impl Session {
 
     fn receive_available(&self) -> Result<(), NetworkCause> {
         loop {
-            let incoming = self
+            let polled = self
                 .channel
-                .recv_from_device(Instant::now(), |received| match received {
-                    Received::Wake => Incoming::Wake,
-                    Received::Device {
-                        device,
-                        header,
-                        body,
-                    } => DeviceReply::parse(device, header, body)
-                        .map_or(Incoming::Irrelevant, Incoming::Reply),
-                    Received::Other => Incoming::Irrelevant,
-                })
+                .try_recv_from_device(DeviceReply::parse)
                 .map_err(|e| {
                     tracing::error!("receiving failed: {e}");
                     NetworkCause::new(UdpError::from(e))
                 })?;
-            match incoming {
-                None => {
+            match polled {
+                Polled::Empty => {
                     self.lock_state()
                         .mark_unanswered_devices_lost(Instant::now());
                     return Ok(());
                 }
-                Some(Incoming::Wake) => return Ok(()),
-                Some(Incoming::Irrelevant) => {}
-                Some(Incoming::Reply(reply)) => self.handle_reply(&reply),
+                Polled::Wake => return Ok(()),
+                Polled::Device(reply) => self.handle_reply(&reply),
             }
         }
     }
 
     fn handle_reply(&self, reply: &DeviceReply) {
         let mut state = self.lock_state();
-        let ReplyAcceptance { accepted, revived } = state.accept_reply(reply);
-        if !(accepted || revived) {
-            return;
-        }
-        if reply.reply.device == 0
-            && let Some(sys_time) = NonZeroU64::new(reply.reply.sys_time)
-        {
-            self.device_clock
-                .observe(SysTime::from_nanos(sys_time.get()));
-        }
-        let answered = state.record_reply(&reply.reply, Instant::now());
+        let answered = state.receive_reply(reply, Instant::now());
         Self::release(state);
-        if revived {
-            self.stats.record_recovery();
-            tracing::info!(device = reply.reply.device, "a lost device answers again");
-        }
         if let Some(answered) = answered {
             answered.deliver(&self.stats);
         }
@@ -900,6 +890,8 @@ mod tests {
             num_devices,
             TIMEOUTS,
             PublishedDeviceStates::new(num_devices),
+            DeviceClock::default(),
+            BusStats::default(),
             now,
         )
     }
@@ -1218,12 +1210,16 @@ mod tests {
         assert!(state.take_finished_recovery(now).is_none());
         assert_eq!(state.next_deadline(now), now + TIMEOUTS.recovery_reply);
 
-        let acceptance = state.accept_reply(&DeviceReply {
-            reply: reply(1, 0, 0),
-            reported_unit_id: 1,
-            flags: READY,
-        });
-        assert!(acceptance.revived);
+        let answered = state.receive_reply(
+            &DeviceReply {
+                reply: reply(1, 0, 0),
+                reported_unit_id: 1,
+                flags: READY,
+            },
+            now,
+        );
+        assert!(answered.is_none());
+        assert_eq!(state.stats.recoveries(), 1);
         let (waiter, recovered_devices) = state.take_finished_recovery(now).unwrap();
         assert_eq!(recovered_devices, 0b10);
         waiter.unwrap().send(Ok(recovered_devices)).unwrap();
@@ -1239,6 +1235,44 @@ mod tests {
             state.device_mask_where(DeviceLiveness::accepts_frames),
             0b11
         );
+    }
+
+    fn timed_reply(device: usize, reported_unit_id: u8, sys_time: u64) -> DeviceReply {
+        DeviceReply {
+            reply: Reply::new(device, 0, 0, sys_time, &[]),
+            reported_unit_id,
+            flags: READY,
+        }
+    }
+
+    const DEVICE_TIME_NS: u64 = 1 << 50;
+
+    #[test]
+    fn only_an_accepted_timed_reply_of_device_0_observes_the_device_clock() {
+        let now = Instant::now();
+        let mut state = session_state(2, now);
+
+        state.receive_reply(&timed_reply(1, 1, DEVICE_TIME_NS), now);
+        assert!(state.device_clock.now().is_none());
+        state.receive_reply(&timed_reply(0, 0, 0), now);
+        assert!(state.device_clock.now().is_none());
+        state.receive_reply(&timed_reply(0, 0, DEVICE_TIME_NS), now);
+        assert!(state.device_clock.now().is_some());
+    }
+
+    #[test]
+    fn a_reply_under_a_foreign_id_observes_nothing_and_counts_no_recovery() {
+        let now = Instant::now();
+        let mut state = session_state(1, now);
+
+        assert!(
+            state
+                .receive_reply(&timed_reply(0, 1, DEVICE_TIME_NS), now)
+                .is_none()
+        );
+        assert!(state.liveness[0].is_lost());
+        assert!(state.device_clock.now().is_none());
+        assert_eq!(state.stats.recoveries(), 0);
     }
 
     #[test]
@@ -1268,7 +1302,14 @@ mod tests {
         let now = Instant::now();
         let published_states = PublishedDeviceStates::new(1);
         let checker = StateChecker::new(Arc::clone(&published_states));
-        let mut state = SessionState::new(1, TIMEOUTS, published_states, now);
+        let mut state = SessionState::new(
+            1,
+            TIMEOUTS,
+            published_states,
+            DeviceClock::default(),
+            BusStats::default(),
+            now,
+        );
         assert!(checker.check().is_ok());
         state.close(None).resolve();
         assert!(matches!(checker.check(), Err(UdpError::Closed)));
