@@ -9,18 +9,12 @@ use autd3_rs::{Client, DeviceMask, DeviceState};
 use autd3_rs_firmware_emulator::test_utils::FpgaEmulatorTestExt;
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
-use common::{PATIENCE, emulator, monitoring_option, open_with};
+use common::{PATIENCE, fans, open_monitored};
 
 const ADDR_SYNC_TIME_0: u16 = 0x10;
 const SETTLE: Duration = Duration::from_millis(200);
 const POLL_INTERVAL: Duration = Duration::from_millis(5);
 const FAILSAFE_TIMEOUT: Duration = Duration::from_millis(500);
-
-fn open_monitoring(num_devices: usize) -> (UdpEmulator, Client) {
-    let emulator = emulator(num_devices);
-    let client = open_with(&emulator, &monitoring_option(&emulator));
-    (emulator, client)
-}
 
 fn states(client: &Client) -> Vec<DeviceState> {
     client.state_checker().check().unwrap().devices().to_vec()
@@ -44,10 +38,6 @@ async fn wait_until_lost(client: &Client, device: usize) {
         states[device] == DeviceState::Lost
     })
     .await;
-}
-
-fn fans(emulator: &UdpEmulator) -> Vec<bool> {
-    emulator.with_devices(|devices| devices.iter().map(|d| d.fpga().force_fan()).collect())
 }
 
 fn failsafes(emulator: &UdpEmulator) -> Vec<bool> {
@@ -95,7 +85,7 @@ fn sync_times(emulator: &UdpEmulator) -> Vec<Vec<u16>> {
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn a_device_that_answers_again_stays_lost_until_recovered() {
-    let (emulator, client) = open_monitoring(2);
+    let (emulator, client) = open_monitored(2);
 
     emulator.set_muted(1, true);
     wait_until_lost(&client, 1).await;
@@ -110,7 +100,7 @@ async fn a_device_that_answers_again_stays_lost_until_recovered() {
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn recover_brings_back_a_device_that_answers_again_and_it_takes_frames() {
-    let (emulator, client) = open_monitoring(3);
+    let (emulator, client) = open_monitored(3);
 
     emulator.set_muted(1, true);
     wait_until_lost(&client, 1).await;
@@ -134,7 +124,7 @@ async fn recover_brings_back_a_device_that_answers_again_and_it_takes_frames() {
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn recover_with_nothing_lost_brings_back_nothing() {
-    let (_emulator, client) = open_monitoring(2);
+    let (_emulator, client) = open_monitored(2);
 
     assert_eq!(client.recover().await.unwrap(), DeviceMask::default());
 
@@ -144,7 +134,7 @@ async fn recover_with_nothing_lost_brings_back_nothing() {
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn recover_leaves_a_device_that_is_still_silent_lost() {
-    let (emulator, client) = open_monitoring(2);
+    let (emulator, client) = open_monitored(2);
 
     emulator.set_muted(1, true);
     wait_until_lost(&client, 1).await;
@@ -158,7 +148,7 @@ async fn recover_leaves_a_device_that_is_still_silent_lost() {
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn a_rebooted_device_is_not_recovered() {
-    let (emulator, client) = open_monitoring(3);
+    let (emulator, client) = open_monitored(3);
 
     emulator.reboot(1);
     wait_until_lost(&client, 1).await;
@@ -173,7 +163,7 @@ async fn a_rebooted_device_is_not_recovered() {
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn every_device_cut_off_at_once_is_recovered() {
-    let (emulator, client) = open_monitoring(3);
+    let (emulator, client) = open_monitored(3);
 
     for device in 0..3 {
         emulator.set_muted(device, true);
@@ -201,7 +191,7 @@ async fn every_device_cut_off_at_once_is_recovered() {
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn a_recovered_device_is_neither_synchronized_nor_released_by_itself() {
-    let (emulator, client) = open_monitoring(3);
+    let (emulator, client) = open_monitored(3);
     let before = sync_times(&emulator);
 
     cut_off_until_failsafe(&emulator, &client, 1).await;
@@ -219,7 +209,7 @@ async fn a_recovered_device_is_neither_synchronized_nor_released_by_itself() {
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn the_user_synchronizes_and_releases_only_the_recovered_device() {
-    let (emulator, client) = open_monitoring(3);
+    let (emulator, client) = open_monitored(3);
     let before = sync_times(&emulator);
 
     cut_off_until_failsafe(&emulator, &client, 1).await;

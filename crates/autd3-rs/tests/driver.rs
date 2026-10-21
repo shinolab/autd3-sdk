@@ -10,7 +10,7 @@ use autd3_rs::udp::{TransportOption, UdpError};
 use autd3_rs::{Controller, Driver, Error, Frames};
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
-use common::{emulator, geometry, option, patient_option};
+use common::{emulator, fans, geometry, option, patient_option};
 
 fn open(emulator: &UdpEmulator, option: &TransportOption) -> (Controller, Driver) {
     Controller::open(&geometry(emulator.num_devices()), option).unwrap()
@@ -23,10 +23,6 @@ fn drive(mut driver: Driver) -> JoinHandle<Result<(), Error>> {
         }
         Ok(())
     })
-}
-
-fn fans(emulator: &UdpEmulator) -> Vec<bool> {
-    emulator.with_devices(|devices| devices.iter().map(|d| d.fpga().force_fan()).collect())
 }
 
 fn drive_until_ready<T>(driver: &mut Driver, future: impl Future<Output = T>) -> T {

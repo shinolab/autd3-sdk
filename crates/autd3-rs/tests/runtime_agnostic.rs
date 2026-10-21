@@ -5,10 +5,10 @@ use autd3_rs::{Client, Error};
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 use pollster::block_on;
 
-use common::{emulator, geometry, option};
+use common::{emulator, geometry, open_with, option};
 
 fn open(emulator: &UdpEmulator) -> Client {
-    Client::open(&geometry(emulator.num_devices()), &option(emulator)).unwrap()
+    open_with(emulator, &option(emulator))
 }
 
 async fn stream_silencer(client: &Client, rounds: usize) -> Result<(), Error> {
