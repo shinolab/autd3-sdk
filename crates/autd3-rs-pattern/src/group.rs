@@ -1,6 +1,9 @@
 use autd3_rs_core::geometry::{Device, Geometry, TransducerGroups, TransducerMask};
 use autd3_rs_core::value::{Intensity, Phase};
 
+use crate::each::for_each_device;
+use crate::set::{set_intensity, set_phase};
+
 fn sources_of<K, S, F>(groups: &TransducerGroups<K>, mut source: F) -> Vec<S>
 where
     K: Copy + Eq,
@@ -52,9 +55,9 @@ pub fn group<K, T, S, F>(
     F: FnMut(K) -> S,
 {
     let sources = sources_of(groups, source);
-    for (device, slot) in geometry.iter().zip(dst.iter_mut()) {
+    for_each_device(geometry, dst, |device, slot| {
         write_device(device, groups, &sources, slot);
-    }
+    });
 }
 
 pub fn group_compute<K, E, F>(
@@ -71,12 +74,8 @@ where
     let mut scratch_phases = geometry.phase_buffer();
     let mut scratch_intensities = geometry.intensity_buffer();
     for (index, (key, mask)) in groups.masks().enumerate() {
-        for slot in &mut scratch_phases {
-            slot.fill(Phase::ZERO);
-        }
-        for slot in &mut scratch_intensities {
-            slot.fill(Intensity::MAX);
-        }
+        set_phase(Phase::ZERO, &mut scratch_phases);
+        set_intensity(Intensity::MAX, &mut scratch_intensities);
         compute(key, mask, &mut scratch_phases, &mut scratch_intensities)?;
         assert_same_shape(&scratch_phases, phases);
         assert_same_shape(&scratch_intensities, intensities);
