@@ -34,8 +34,6 @@ namespace AUTD3
 
     public readonly struct TransportOption
     {
-        public static readonly ushort SimulatorPort = NativeClient.autd3_params_simulator_port();
-
         public Interface Iface { get; init; }
 
         private readonly TimeSpan? _openTimeout;
@@ -90,7 +88,6 @@ namespace AUTD3
             {
                 OptionNative.Apply("iface", Iface switch
                 {
-                    { SimulatorPort: { } port } => NativeClient.autd3_transport_option_set_iface_simulator(handle, port),
                     { AddrValue: { } addr } => NativeClient.autd3_transport_option_set_iface_addr(handle, addr),
                     _ => NativeClient.autd3_transport_option_set_iface(handle, Iface.NameValue),
                 });

@@ -120,8 +120,8 @@ dependencies = [
  "approx",
  "autd3-cpu-wire",
  "autd3-rs",
- "autd3-rs-core",
  "autd3-rs-firmware-emulator",
+ "autd3-rs-simulator-control",
  "autd3-rs-simulator-protocol",
  "axum",
  "clap",
@@ -133,6 +133,17 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "autd3-rs-simulator-control"
+version = "0.12.0"
+dependencies = [
+ "approx",
+ "autd3-cpu-wire",
+ "autd3-rs-core",
+ "thiserror",
+ "tracing",
 ]
 
 [[package]]

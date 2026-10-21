@@ -175,6 +175,8 @@ fn format(sim: &Path, frontend: &Path, fix: bool) -> Result<()> {
             "-p",
             "autd3-rs-simulator",
             "-p",
+            "autd3-rs-simulator-control",
+            "-p",
             "autd3-rs-simulator-protocol",
         ],
         fix,

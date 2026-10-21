@@ -6,7 +6,6 @@ pub enum Interface {
     #[default]
     Auto,
     Name(String),
-    Simulator(u16),
     Addr(SocketAddrV6),
 }
 

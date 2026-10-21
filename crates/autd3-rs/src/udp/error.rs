@@ -10,20 +10,8 @@ pub enum UdpError {
     Io(#[from] std::io::Error),
     #[error("no interface has an AUTD3 device answering ReadUnitInfo")]
     NoInterfaceFound,
-    #[error("AUTD3 devices answered on several destinations ({}); choose one with `iface`", .0.join(", "))]
+    #[error("AUTD3 devices answered on several interfaces ({}); choose one with `iface`", .0.join(", "))]
     AmbiguousInterface(Vec<String>),
-    #[error(
-        "the simulator port must be within 1..=65534 (its control port is port + 1), but {0} was given"
-    )]
-    InvalidSimulatorPort(u16),
-    #[error("no simulator answers at {0}")]
-    SimulatorNotFound(SocketAddrV6),
-    #[error(
-        "the simulator did not answer the geometry at {0} within open_timeout; is it an older simulator?"
-    )]
-    SimulatorControlNoResponse(SocketAddrV6),
-    #[error("the simulator refused the geometry with status {status:#04x}")]
-    SimulatorRejected { status: u8 },
     #[error("interface {0} does not exist or has no IPv6 link-local address")]
     InterfaceNotFound(String),
     #[error(

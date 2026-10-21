@@ -1,8 +1,7 @@
-use nalgebra::{Point3, Quaternion, UnitQuaternion};
+use autd3_rs_core::MAX_DEVICES;
+use autd3_rs_core::geometry::{Autd3, Geometry};
+use autd3_rs_core::nalgebra::{Point3, Quaternion, UnitQuaternion};
 use thiserror::Error;
-
-use crate::geometry::{Autd3, Geometry};
-use crate::protocol::MAX_DEVICES;
 
 pub const DEFAULT_PORT: u16 = autd3_cpu_wire::udp::PORT;
 pub const VERSION: u8 = 1;
@@ -125,7 +124,7 @@ mod tests {
             Autd3::new(
                 Point3::new(192.0, -10.5, 300.0),
                 UnitQuaternion::from_axis_angle(
-                    &nalgebra::Vector3::y_axis(),
+                    &autd3_rs_core::nalgebra::Vector3::y_axis(),
                     core::f32::consts::FRAC_PI_2,
                 ),
             ),

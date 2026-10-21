@@ -4,7 +4,6 @@ pub mod error;
 pub mod geometry;
 pub mod params;
 pub mod protocol;
-pub mod simulator;
 pub mod value;
 
 pub use nalgebra;

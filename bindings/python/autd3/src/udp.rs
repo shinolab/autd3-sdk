@@ -33,12 +33,6 @@ impl Interface {
     }
 
     #[staticmethod]
-    #[pyo3(name = "Simulator")]
-    fn simulator(port: u16) -> Self {
-        Self(CoreInterface::Simulator(port))
-    }
-
-    #[staticmethod]
     #[pyo3(name = "Name")]
     fn name(name: String) -> Self {
         Self(CoreInterface::Name(name))
@@ -60,15 +54,7 @@ impl Interface {
     fn interface_name(&self) -> Option<&str> {
         match &self.0 {
             CoreInterface::Name(name) => Some(name),
-            CoreInterface::Auto | CoreInterface::Simulator(_) | CoreInterface::Addr(_) => None,
-            _ => unreachable!(),
-        }
-    }
-
-    fn simulator_port(&self) -> Option<u16> {
-        match self.0 {
-            CoreInterface::Simulator(port) => Some(port),
-            CoreInterface::Auto | CoreInterface::Name(_) | CoreInterface::Addr(_) => None,
+            CoreInterface::Auto | CoreInterface::Addr(_) => None,
             _ => unreachable!(),
         }
     }
@@ -76,7 +62,6 @@ impl Interface {
     fn __repr__(&self) -> String {
         match &self.0 {
             CoreInterface::Name(name) => format!("Interface.Name({name:?})"),
-            CoreInterface::Simulator(port) => format!("Interface.Simulator({port})"),
             CoreInterface::Addr(addr) => format!("Interface.Addr({:?})", addr.to_string()),
             CoreInterface::Auto => "Interface.Auto".to_owned(),
             _ => unreachable!(),

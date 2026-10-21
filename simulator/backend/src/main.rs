@@ -12,8 +12,8 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs_core::simulator::control_port;
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
+use autd3_rs_simulator_control::{DEFAULT_PORT, control_port};
 use autd3_rs_simulator_protocol::ServerMsg;
 use clap::Parser;
 use tokio::sync::watch;
@@ -30,7 +30,7 @@ type JsonReceiver = watch::Receiver<Arc<str>>;
 
 #[derive(Parser)]
 struct Args {
-    #[arg(long, default_value_t = autd3_rs::SIMULATOR_PORT)]
+    #[arg(long, default_value_t = DEFAULT_PORT)]
     port: u16,
     #[arg(long, default_value_t = 8081)]
     http_port: u16,

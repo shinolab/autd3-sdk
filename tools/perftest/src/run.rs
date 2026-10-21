@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::net::{Ipv6Addr, SocketAddrV6};
 use std::ops::ControlFlow;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -214,6 +215,22 @@ pub(crate) fn spawn_emulator(cli: &Cli) -> Result<Option<UdpEmulator>> {
         .context("starting the UDP device emulator")
 }
 
+pub(crate) fn simulator_iface(port: u16) -> Interface {
+    Interface::Addr(SocketAddrV6::new(Ipv6Addr::LOCALHOST, port, 0, 0))
+}
+
+pub(crate) fn send_simulator_geometry(
+    cli: &Cli,
+    geometry: &Geometry,
+    option: &TransportOption,
+) -> Result<()> {
+    if let Some(port) = cli.simulator {
+        autd3_rs_simulator_control::send_geometry(port, geometry, option.open_timeout)
+            .context("sending the geometry to the simulator")?;
+    }
+    Ok(())
+}
+
 pub(crate) fn transport_option(cli: &Cli, emulator: Option<&UdpEmulator>) -> TransportOption {
     let mut option = match emulator {
         Some(emulator) => TransportOption {
@@ -224,7 +241,7 @@ pub(crate) fn transport_option(cli: &Cli, emulator: Option<&UdpEmulator>) -> Tra
         },
         None => TransportOption {
             iface: match cli.simulator {
-                Some(port) => Interface::Simulator(port),
+                Some(port) => simulator_iface(port),
                 None => cli.interface.clone().into(),
             },
             ..Default::default()
@@ -251,6 +268,7 @@ async fn run_with_option(option: &TransportOption, cli: &Cli) -> Result<RunOutpu
     eprintln!("devices: {num_devices}");
 
     let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()));
+    send_simulator_geometry(cli, &geometry, option)?;
     let client = Client::open(&geometry, option).context("opening the devices")?;
     let checker = client.state_checker();
     let guard = spawn_state_check(checker, STATE_CHECK_INTERVAL);

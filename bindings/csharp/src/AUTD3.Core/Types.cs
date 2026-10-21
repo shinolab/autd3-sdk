@@ -198,23 +198,18 @@ namespace AUTD3
     public readonly struct Interface : IEquatable<Interface>
     {
         private const byte KindNic = 0;
-        private const byte KindSimulator = 1;
-        private const byte KindAddr = 2;
+        private const byte KindAddr = 1;
 
         private readonly byte _kind;
         private readonly string? _value;
-        private readonly ushort _port;
 
-        private Interface(byte kind, string? value, ushort port = 0)
+        private Interface(byte kind, string? value)
         {
             _kind = kind;
             _value = value;
-            _port = port;
         }
 
         public static Interface Auto => default;
-
-        public static Interface Simulator(ushort port) => new Interface(KindSimulator, null, port);
 
         public static Interface Name(string name) => new Interface(KindNic, name);
 
@@ -224,15 +219,13 @@ namespace AUTD3
 
         public bool IsAuto => _kind == KindNic && _value == null;
 
-        public ushort? SimulatorPort => _kind == KindSimulator ? _port : null;
-
         public string? AddrValue => _kind == KindAddr ? _value : null;
 
-        public bool Equals(Interface other) => _kind == other._kind && _port == other._port && string.Equals(_value, other._value, StringComparison.Ordinal);
+        public bool Equals(Interface other) => _kind == other._kind && string.Equals(_value, other._value, StringComparison.Ordinal);
 
         public override bool Equals(object? obj) => obj is Interface other && Equals(other);
 
-        public override int GetHashCode() => HashCode.Combine(_kind, _port, _value is null ? 0 : StringComparer.Ordinal.GetHashCode(_value));
+        public override int GetHashCode() => HashCode.Combine(_kind, _value is null ? 0 : StringComparer.Ordinal.GetHashCode(_value));
 
         public static bool operator ==(Interface left, Interface right) => left.Equals(right);
 

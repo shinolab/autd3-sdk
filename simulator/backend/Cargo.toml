@@ -15,8 +15,8 @@ path = "src/main.rs"
 [dependencies]
 autd3-cpu-wire.workspace = true
 autd3-rs.workspace = true
-autd3-rs-core.workspace = true
 autd3-rs-firmware-emulator = { workspace = true, features = ["udp"] }
+autd3-rs-simulator-control.workspace = true
 autd3-rs-simulator-protocol.workspace = true
 axum.workspace = true
 futures-util.workspace = true

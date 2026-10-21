@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["backend", "protocol"]
+members = ["backend", "control", "protocol"]
 exclude = ["frontend"]
 
 [workspace.package]
@@ -29,7 +29,9 @@ autd3-rs = { path = "../crates/autd3-rs", default-features = false }
 autd3-cpu-wire = { path = "../firmware/cpu/wire" }
 autd3-rs-core = { path = "../crates/autd3-rs-core" }
 autd3-rs-firmware-emulator = { path = "../crates/autd3-rs-firmware-emulator" }
+autd3-rs-simulator-control = { path = "control" }
 autd3-rs-simulator-protocol = { path = "protocol" }
+thiserror = { version = "2.0.18", default-features = false, features = ["std"] }
 tokio = { version = "1.52.3", default-features = false, features = [
     "sync",
     "macros",

@@ -1,0 +1,21 @@
+[package]
+name = "autd3-rs-simulator-control"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Control-port messages of the AUTD3 simulator and a sender for the geometry."
+publish = false
+
+[dependencies]
+autd3-cpu-wire.workspace = true
+autd3-rs-core.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+approx.workspace = true
+
+[lints]
+workspace = true

@@ -4,9 +4,9 @@
 
 use anyhow::Result;
 
+use autd3_rs::Client;
 use autd3_rs::commands::{Clear, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry, Point3, UnitQuaternion};
-use autd3_rs::{Client, TransportOption};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main(flavor = "multi_thread")]
@@ -25,7 +25,7 @@ async fn main() -> Result<()> {
         ),
     ]);
 
-    let client = Client::open(&geometry, &TransportOption::default())?;
+    let client = Client::open(&geometry, &autd3_rs_examples::transport_option(&geometry)?)?;
     client.send((Clear, Synchronize)).await?;
 
     println!("devices: {}", client.num_devices());

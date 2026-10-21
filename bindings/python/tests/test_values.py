@@ -106,7 +106,7 @@ DISTINCT_PAIRS: list[tuple[object, object]] = [
     (holo.IntensityConstraint.Normalize, holo.IntensityConstraint.Uniform(0)),
     (holo.Directivity.Sphere, holo.Directivity.T4010A1),
     (1.0 * Pa, 2.0 * Pa),
-    (autd3.Interface.Auto, autd3.Interface.Simulator(44336)),
+    (autd3.Interface.Auto, autd3.Interface.Name("eth0")),
     (10 * mm, 11 * mm),
     (10 * mm, 10.0),
     (200 * Hz, 201 * Hz),
