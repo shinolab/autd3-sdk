@@ -1,11 +1,9 @@
-use core::f32::consts::PI;
-
-use autd3_rs_core::common::units::rad;
 use autd3_rs_core::common::{Angle, Length};
 use autd3_rs_core::geometry::{Device, Geometry, Point3, UnitVector3};
 use autd3_rs_core::value::Phase;
 
 use crate::each::{fill_from_positions, for_each_device};
+use crate::focus::propagation_phase;
 
 fn bessel_phase(
     position: Point3<f32>,
@@ -18,7 +16,7 @@ fn bessel_phase(
     let z = direction.dot(&r);
     let rho = (r - direction.into_inner() * z).norm();
     let dist = cos * rho - sin * z;
-    Phase::from(-dist / wavelength.mm() * 2.0 * PI * rad)
+    Phase::from(propagation_phase(dist, wavelength))
 }
 
 #[must_use]
@@ -62,6 +60,9 @@ pub fn bessel(
 
 #[cfg(test)]
 mod tests {
+    use core::f32::consts::PI;
+
+    use autd3_rs_core::common::units::rad;
     use autd3_rs_core::geometry::{Autd3, Vector3};
     use autd3_rs_core::units::mm;
 
