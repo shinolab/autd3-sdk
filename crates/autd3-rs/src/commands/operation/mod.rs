@@ -116,6 +116,15 @@ pub enum Distribution {
     PerDevice,
 }
 
+impl Distribution {
+    pub(crate) const fn num_datagrams(self, num_devices: usize) -> usize {
+        match self {
+            Self::Broadcast => 1,
+            Self::PerDevice => num_devices,
+        }
+    }
+}
+
 pub trait Operation: crate::sealed::Sealed {
     fn distribution(&self) -> Distribution {
         Distribution::Broadcast
