@@ -72,6 +72,14 @@ pub(crate) fn write_foci_buffer(bank: u8, offset_words: u32, words: &[u16]) -> F
     f
 }
 
+fn interleave<'a>(phases: &'a [u8], intensities: &'a [u8]) -> impl Iterator<Item = u8> + 'a {
+    assert_eq!(phases.len(), intensities.len());
+    phases
+        .iter()
+        .zip(intensities)
+        .flat_map(|(&phase, &intensity)| [phase, intensity])
+}
+
 pub(crate) fn write_pattern_raw(bank: u8, index: u16, phases: &[u8], intensities: &[u8]) -> Frame {
     write_pattern_raw_multi(bank, index, &[(phases, intensities)])
 }
@@ -84,7 +92,7 @@ pub(crate) fn write_pattern_raw_multi(bank: u8, index: u16, slots: &[(&[u8], &[u
     };
     let data: std::vec::Vec<u8> = slots
         .iter()
-        .flat_map(|(phases, intensities)| phases.iter().chain(intensities.iter()).copied())
+        .flat_map(|(phases, intensities)| interleave(phases, intensities))
         .collect();
     let mut f = Frame::from_parts(Cmd::WritePatternRaw, &header, &data);
     f.set_payload_byte(offset_of!(WritePatternRawPayload, bank), bank);
@@ -103,7 +111,7 @@ pub(crate) fn write_pattern_fused(
         transition_mode,
         transition_value: U64::new(transition_value),
     };
-    let data: std::vec::Vec<u8> = phases.iter().chain(intensities).copied().collect();
+    let data: std::vec::Vec<u8> = interleave(phases, intensities).collect();
     let mut f = Frame::from_parts(Cmd::WritePatternFused, &header, &data);
     f.set_payload_byte(offset_of!(WritePatternFusedPayload, bank), bank);
     f

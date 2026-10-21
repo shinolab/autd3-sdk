@@ -28,10 +28,7 @@ impl ActivateModBankPayload {
     }
 }
 
-const _: () = assert!(core::mem::offset_of!(ActivateModBankPayload, bank) == 0);
-const _: () = assert!(core::mem::offset_of!(ActivateModBankPayload, transition_mode) == 1);
-const _: () = assert!(core::mem::offset_of!(ActivateModBankPayload, transition_value) == 2);
-const _: () = assert!(core::mem::size_of::<ActivateModBankPayload>() == 10);
+assert_layout!(ActivateModBankPayload { bank: 0, transition_mode: 1, transition_value: 2 } size 10);
 
 #[cfg(test)]
 mod tests {

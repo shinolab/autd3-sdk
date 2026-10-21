@@ -65,8 +65,8 @@ impl ReadFpgaMemoryPayload {
     }
 }
 
-const _: () = assert!(core::mem::size_of::<WriteFpgaMemoryPayload>() == 2);
-const _: () = assert!(core::mem::size_of::<ReadFpgaMemoryPayload>() == 4);
+assert_layout!(WriteFpgaMemoryPayload { addr: 0 } size 2);
+assert_layout!(ReadFpgaMemoryPayload { addr: 0, count: 2 } size 4);
 
 #[cfg(test)]
 mod tests {

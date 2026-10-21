@@ -202,25 +202,6 @@ pub fn write_ram<P: Port>(port: &mut P, ram: &Ram, bank: u8, offset: u32, src: &
     write_ram_words(port, ram, bank, offset, le_words(src, 0));
 }
 
-pub fn write_ram_interleaved<P: Port>(
-    port: &mut P,
-    ram: &Ram,
-    bank: u8,
-    offset: u32,
-    lo: &[u8; NUM_TRANSDUCERS],
-    hi: &[u8; NUM_TRANSDUCERS],
-) {
-    write_ram_words(
-        port,
-        ram,
-        bank,
-        offset,
-        lo.iter()
-            .zip(hi)
-            .map(|(&lo, &hi)| u16::from_le_bytes([lo, hi])),
-    );
-}
-
 pub fn write_ram_words<P: Port>(
     port: &mut P,
     ram: &Ram,

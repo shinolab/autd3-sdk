@@ -26,4 +26,5 @@ impl GpioOutPayload {
     }
 }
 
+assert_layout!(GpioOutPayload { values: 0 } size 8 * GPIO_OUT_NUM);
 const _: () = assert!(core::mem::size_of::<GpioOutPayload>() <= PAYLOAD_BYTES);

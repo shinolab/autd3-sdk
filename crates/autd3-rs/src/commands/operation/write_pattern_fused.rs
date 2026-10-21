@@ -1,4 +1,3 @@
-use autd3_cpu_wire::fpga_params::NUM_TRANSDUCERS;
 use autd3_cpu_wire::layout::PATTERN_RAW_DATA_LEN;
 use autd3_cpu_wire::payload::WritePatternFusedPayload;
 
@@ -28,15 +27,10 @@ impl Operation for WritePatternFused<'_> {
     fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         let header = WritePatternFusedPayload::new(self.bank, self.transition_mode.as_wire());
         let rest = write_header(out, &header);
-        let (dst_phases, dst_intensities) =
-            rest[..PATTERN_RAW_DATA_LEN].split_at_mut(NUM_TRANSDUCERS);
-        encode_raw_pattern_entry(
-            self.phases,
-            self.intensities,
-            device,
-            dst_phases,
-            dst_intensities,
-        )?;
+        let (data, _) = rest
+            .split_first_chunk_mut::<PATTERN_RAW_DATA_LEN>()
+            .expect("the pattern fits in the payload");
+        encode_raw_pattern_entry(self.phases, self.intensities, device, data)?;
         Ok(Encoded::header_with_data::<WritePatternFusedPayload>(
             Cmd::WritePatternFused,
             PATTERN_RAW_DATA_LEN,
@@ -67,7 +61,7 @@ mod tests {
     }
 
     #[test]
-    fn the_transition_comes_first_then_phases_then_intensities() {
+    fn the_transition_comes_first_then_phase_and_intensity_per_transducer() {
         let n = test_device(0).num_transducers();
         let phases = [(0..n)
             .map(|i| Phase(u8::try_from(i % 251).unwrap()))
@@ -86,8 +80,8 @@ mod tests {
         assert_eq!(out[1], 0xF0, "EXT");
         assert_eq!(&out[2..10], &0u64.to_le_bytes());
         for i in 0..n {
-            assert_eq!(out[HEADER + i], phases[0][i].0);
-            assert_eq!(out[HEADER + NUM_TRANSDUCERS + i], intensities[0][i].0);
+            assert_eq!(out[HEADER + 2 * i], phases[0][i].0);
+            assert_eq!(out[HEADER + 2 * i + 1], intensities[0][i].0);
         }
     }
 
@@ -100,8 +94,10 @@ mod tests {
 
         assert_eq!(out[1], 0xFF, "IMMEDIATE");
         assert!(
-            out[HEADER + NUM_TRANSDUCERS..HEADER + PATTERN_RAW_DATA_LEN]
+            out[HEADER..HEADER + PATTERN_RAW_DATA_LEN]
                 .iter()
+                .skip(1)
+                .step_by(2)
                 .all(|&b| b == 0x7A)
         );
     }

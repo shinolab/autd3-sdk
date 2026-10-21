@@ -281,9 +281,8 @@ fn activation_without_a_committed_image_is_a_device_error() {
 }
 
 mod fpga {
-    use autd3_cpu_wire::fpga_update::{
-        FPGA_IMAGE_BASE, FPGA_USR_ACCESS_UPDATE, FpgaBootImage, SYNC_WORD,
-    };
+    use autd3_cpu_wire::fpga_bitstream::SYNC_WORD;
+    use autd3_cpu_wire::fpga_update::{FPGA_IMAGE_BASE, FPGA_USR_ACCESS_UPDATE, FpgaBootImage};
     use autd3_rs::protocol::Cmd;
     use autd3_rs_firmware_emulator::test_utils::{Audit, FpgaEmulatorTestExt};
 

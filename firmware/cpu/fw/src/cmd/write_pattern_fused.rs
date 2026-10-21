@@ -16,7 +16,7 @@ pub(crate) fn handle<P: Port>(
     payload: &[u8],
 ) -> Result<(), Error> {
     let (p, data) = WritePatternFusedPayload::parse(payload)?;
-    write_pattern_raw::write_slot(port, p.bank, 0, data)?;
+    write_pattern_raw::write_slot(port, p.bank, 0, data);
     config_pattern::write(
         port,
         &ConfigPatternPayload {

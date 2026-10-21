@@ -60,10 +60,7 @@ impl WritePatternRawPayload {
     }
 }
 
-const _: () = assert!(core::mem::offset_of!(WritePatternRawPayload, bank) == 0);
-const _: () = assert!(core::mem::offset_of!(WritePatternRawPayload, count) == 1);
-const _: () = assert!(core::mem::offset_of!(WritePatternRawPayload, index) == 2);
-const _: () = assert!(core::mem::size_of::<WritePatternRawPayload>() == 4);
+assert_layout!(WritePatternRawPayload { bank: 0, count: 1, index: 2 } size 4);
 const _: () = assert!(PATTERN_RAW_MAX_COUNT >= 1 && PATTERN_RAW_MAX_COUNT <= u8::MAX as usize);
 
 #[cfg(test)]

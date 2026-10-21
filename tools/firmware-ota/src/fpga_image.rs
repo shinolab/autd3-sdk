@@ -1,6 +1,5 @@
-use autd3_cpu_wire::fpga_update::{
-    FPGA_IMAGE_CAPACITY, FpgaBootImage, FpgaImageError, validate_update_image,
-};
+use autd3_cpu_wire::fpga_bitstream::{FpgaImageError, validate_update_image};
+use autd3_cpu_wire::fpga_update::{FPGA_IMAGE_CAPACITY, FpgaBootImage};
 use autd3_cpu_wire::update::crc32;
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -77,7 +76,8 @@ impl FpgaFirmwareImage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use autd3_cpu_wire::fpga_update::{FPGA_USR_ACCESS_GOLDEN, FPGA_USR_ACCESS_UPDATE, SYNC_WORD};
+    use autd3_cpu_wire::fpga_bitstream::SYNC_WORD;
+    use autd3_cpu_wire::fpga_update::{FPGA_USR_ACCESS_GOLDEN, FPGA_USR_ACCESS_UPDATE};
 
     fn bitstream(usr_access: u32, reboot: bool, payload: u32) -> Vec<u8> {
         let mut words = vec![

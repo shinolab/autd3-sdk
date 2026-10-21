@@ -230,11 +230,7 @@ mod tests {
             let write = payload(&datagrams, frame, 0);
             let base = header + k * entry_len;
             assert_eq!(write[base], phases[0][0].0, "index {i} phase");
-            assert_eq!(
-                write[base + Autd3::NUM_TRANSDUCERS],
-                0x42,
-                "index {i} intensity"
-            );
+            assert_eq!(write[base + 1], 0x42, "index {i} intensity");
         }
     }
 
@@ -457,9 +453,15 @@ mod tests {
     fn pattern_stm_emission_ram_matches_on_every_path() {
         let (phases, _) = make_patterns(13);
         let uniform = vec![vec![Intensity(0x80); Autd3::NUM_TRANSDUCERS]];
+        let varied = vec![
+            (0..Autd3::NUM_TRANSDUCERS)
+                .map(|t| Intensity(u8::try_from(0xFF - t).unwrap()))
+                .collect::<Vec<_>>(),
+        ];
         for (intensities, depth) in [
             (StmIntensity::Uniform(Intensity(0x80)), PhaseDepth::Bits8),
             (StmIntensity::SameForAllIndices(&uniform), PhaseDepth::Bits8),
+            (StmIntensity::SameForAllIndices(&varied), PhaseDepth::Bits8),
             (StmIntensity::Uniform(Intensity(0x80)), PhaseDepth::Bits4),
         ] {
             let device = play_on_emulator(&phases, intensities, depth);
@@ -472,9 +474,13 @@ mod tests {
                         _ => unreachable!(),
                     })
                     .collect();
+                let expected_intensities = match intensities {
+                    StmIntensity::SameForAllIndices(rows) => rows[0].clone(),
+                    _ => vec![Intensity(0x80); Autd3::NUM_TRANSDUCERS],
+                };
                 assert_eq!(
                     device.fpga().emissions_at(1, index),
-                    (expected, vec![Intensity(0x80); Autd3::NUM_TRANSDUCERS]),
+                    (expected, expected_intensities),
                     "{intensities:?} {depth:?} index {index}"
                 );
             }

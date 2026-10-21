@@ -47,9 +47,7 @@ impl WriteModPayload {
     }
 }
 
-const _: () = assert!(core::mem::offset_of!(WriteModPayload, bank) == 0);
-const _: () = assert!(core::mem::offset_of!(WriteModPayload, offset) == 2);
-const _: () = assert!(core::mem::size_of::<WriteModPayload>() == 6);
+assert_layout!(WriteModPayload { bank: 0, reserved: 1, offset: 2 } size 6);
 
 #[cfg(test)]
 mod tests {
