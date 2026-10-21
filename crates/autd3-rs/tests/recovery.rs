@@ -9,11 +9,7 @@ use autd3_rs::{Client, Error, Frames, MAX_INFLIGHT, Telemetry};
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 use zerocopy::IntoBytes;
 
-use common::{PATIENCE, emulator, open, open_with, patient_option};
-
-fn fans(emulator: &UdpEmulator) -> Vec<bool> {
-    emulator.with_devices(|devices| devices.iter().map(|d| d.fpga().force_fan()).collect())
-}
+use common::{PATIENCE, emulator, fans, open, open_with, patient_option};
 
 async fn telemetry(client: &Client) -> Vec<Telemetry> {
     client.read_telemetry().await.unwrap()

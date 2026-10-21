@@ -63,6 +63,16 @@ pub(crate) fn open(num_devices: usize) -> (UdpEmulator, Client) {
     (emulator, client)
 }
 
+pub(crate) fn open_monitored(num_devices: usize) -> (UdpEmulator, Client) {
+    let emulator = emulator(num_devices);
+    let client = open_with(&emulator, &monitoring_option(&emulator));
+    (emulator, client)
+}
+
+pub(crate) fn fans(emulator: &UdpEmulator) -> Vec<bool> {
+    emulator.with_devices(|devices| devices.iter().map(|d| d.fpga().force_fan()).collect())
+}
+
 pub(crate) fn udp_error(error: &Error) -> Option<&UdpError> {
     match error {
         Error::Network(cause) => (**cause).downcast_ref::<UdpError>(),

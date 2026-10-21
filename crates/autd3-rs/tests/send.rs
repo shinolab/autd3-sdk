@@ -9,13 +9,8 @@ use autd3_rs::{Datagram, Error, ExecAt, Frame, Frames, PayloadError, Version};
 use autd3_rs_firmware_emulator::autd3_cpu_fw::{
     FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH,
 };
-use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
-use common::{INVALID_TRANSITION_MODE, REJECTED_BY_THE_DEVICE, geometry, open};
-
-fn fans(emulator: &UdpEmulator) -> Vec<bool> {
-    emulator.with_devices(|devices| devices.iter().map(|d| d.fpga().force_fan()).collect())
-}
+use common::{INVALID_TRANSITION_MODE, REJECTED_BY_THE_DEVICE, fans, geometry, open};
 
 #[tokio::test]
 #[ignore = "depends on real time"]

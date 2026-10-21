@@ -1,17 +1,10 @@
 mod common;
 
-use autd3_rs::{Client, DeviceState};
-use autd3_rs_firmware_emulator::udp::UdpEmulator;
+use autd3_rs::DeviceState;
 
-use common::{emulator, monitoring_option, open_with};
+use common::open_monitored;
 
 const READY: DeviceState = DeviceState::Ready;
-
-fn open_monitored(num_devices: usize) -> (UdpEmulator, Client) {
-    let emulator = emulator(num_devices);
-    let client = open_with(&emulator, &monitoring_option(&emulator));
-    (emulator, client)
-}
 
 #[tokio::test]
 #[ignore = "depends on real time"]
