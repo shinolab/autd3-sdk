@@ -25,7 +25,7 @@ const UNACKNOWLEDGED_ACTIVATION_HINT: &str = "the activation was not acknowledge
      runs with `--verify-only` and confirm it with `--confirm-only` (or simply run the \
      update again)";
 
-type Connect<'a, L> = &'a dyn Fn(Option<usize>) -> Result<L>;
+type Connect<'a, L> = &'a dyn Fn(usize) -> Result<L>;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 enum Target {
@@ -99,11 +99,8 @@ struct Cli {
         help = "Treat <IMAGE> as a bare slot image (body only) instead of a full flash image"
     )]
     slot_image: bool,
-    #[arg(
-        long,
-        help = "Number of devices on the chain (default: whatever the enumeration finds)"
-    )]
-    devices: Option<usize>,
+    #[arg(long, help = "Number of devices on the chain")]
+    devices: usize,
     #[arg(
         long,
         help = "Write and commit the image but do not reboot into it (it boots as a trial at the next reset)"
@@ -238,7 +235,7 @@ fn describe_running_image(image: Option<RunningImage>) -> &'static str {
 
 fn open_and_run<L: Exchange>(
     connect: Connect<'_, L>,
-    devices: Option<usize>,
+    devices: usize,
     stage: Stage<'_>,
 ) -> Result<Outcome> {
     run(connect(devices)?, stage)
@@ -532,7 +529,7 @@ fn reconnect_and_run<L: Exchange>(
     let mut attempt = 0;
     loop {
         attempt += 1;
-        match open_and_run(connect, Some(devices), stage) {
+        match open_and_run(connect, devices, stage) {
             Ok(outcome) => return Ok(outcome),
             Err(e) if is_final(&e) => return Err(e),
             Err(e) if attempt < attempts => {
@@ -724,7 +721,7 @@ fn main_release(cli: &Cli, version: &str) -> Result<()> {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    if cli.devices == Some(0) {
+    if cli.devices == 0 {
         bail!("--devices must be at least 1");
     }
     if cli.reboot_only {

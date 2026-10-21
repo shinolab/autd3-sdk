@@ -35,11 +35,8 @@ struct Cli {
 
 #[derive(Args, Debug)]
 struct Chain {
-    #[arg(
-        long,
-        help = "Number of devices on the chain (default: whatever the enumeration finds)"
-    )]
-    devices: Option<usize>,
+    #[arg(long, help = "Number of devices on the chain")]
+    devices: usize,
     #[arg(
         long,
         value_parser = parse_bus_wait,

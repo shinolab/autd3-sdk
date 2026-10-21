@@ -10,7 +10,15 @@ fn ota(args: &[&str]) -> std::process::Output {
 #[test]
 fn a_release_older_than_the_udp_firmware_is_refused_before_anything_is_fetched_or_sent() {
     for target in ["both", "cpu", "fpga"] {
-        let output = ota(&["--version", "0.9.0", "--target", target, "--simulator"]);
+        let output = ota(&[
+            "--version",
+            "0.9.0",
+            "--target",
+            target,
+            "--devices",
+            "1",
+            "--simulator",
+        ]);
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(!output.status.success(), "{stderr}");
         assert!(stderr.contains("J-Link"), "{stderr}");

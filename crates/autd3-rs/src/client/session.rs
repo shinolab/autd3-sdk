@@ -486,7 +486,7 @@ pub(crate) struct Session {
 impl Session {
     pub(crate) fn open(geometry: &Geometry, option: &TransportOption) -> Result<Self, UdpError> {
         let device_clock = DeviceClock::new();
-        let channel = super::open::open_channel(option, geometry, &device_clock)?;
+        let channel = super::open::open(option, geometry.num_devices(), &device_clock)?;
         let num_devices = channel.num_devices();
         let timeouts = Timeouts {
             ack: option.ack_timeout,

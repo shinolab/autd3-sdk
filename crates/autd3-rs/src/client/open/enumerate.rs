@@ -2,8 +2,8 @@ use std::net::SocketAddrV6;
 use std::time::{Duration, Instant};
 
 use autd3_cpu_wire::udp::{Flags, Kind, Role};
+use autd3_rs_core::DeviceClock;
 use autd3_rs_core::value::SysTime;
-use autd3_rs_core::{DeviceClock, MAX_DEVICES};
 use zerocopy::IntoBytes;
 
 use crate::udp::state::SYNCED_FLAGS;
@@ -139,33 +139,29 @@ impl Enumerator<'_> {
         Ok(response.opened_downstream_link())
     }
 
-    fn enumerate(
-        &mut self,
-        min_count: usize,
-        max_count: usize,
-    ) -> Result<Vec<SocketAddrV6>, UdpError> {
+    fn enumerate(&mut self, num_devices: usize) -> Result<Vec<SocketAddrV6>, UdpError> {
         let deadline = self.deadline;
-        let mut device_addrs: Vec<SocketAddrV6> = Vec::with_capacity(min_count);
+        let mut device_addrs: Vec<SocketAddrV6> = Vec::with_capacity(num_devices);
         loop {
             let Some(discovered) = self.discover()? else {
                 if !deadline_passed(deadline) && self.release_stale_assignments(&device_addrs)? {
                     continue;
                 }
-                if device_addrs.len() >= min_count {
+                if device_addrs.len() >= num_devices {
                     break;
                 }
                 if deadline_passed(deadline) {
                     return Err(UdpError::EnumerationTimeout {
-                        expected: min_count,
+                        expected: num_devices,
                         found: device_addrs.len(),
                     });
                 }
                 std::thread::sleep(DISCOVER_RETRY_INTERVAL);
                 continue;
             };
-            if device_addrs.len() >= max_count {
+            if device_addrs.len() >= num_devices {
                 return Err(UdpError::DeviceCountMismatch {
-                    expected: max_count,
+                    expected: num_devices,
                     found: device_addrs.len() + 1,
                 });
             }
@@ -174,7 +170,7 @@ impl Enumerator<'_> {
             let has_downstream_link = self.unblock_downstream(addr, unit_id)?;
             tracing::debug!(unit_id, %addr, downstream_link = has_downstream_link, "assigned a unit");
             device_addrs.push(addr);
-            if device_addrs.len() >= min_count && !has_downstream_link {
+            if device_addrs.len() >= num_devices && !has_downstream_link {
                 break;
             }
         }
@@ -309,40 +305,11 @@ impl Enumerator<'_> {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum ExpectedCount {
-    Exactly(usize),
-    All,
-}
-
-impl ExpectedCount {
-    const fn at_least(self) -> usize {
-        match self {
-            Self::Exactly(count) => count,
-            Self::All => 1,
-        }
-    }
-
-    const fn at_most(self) -> usize {
-        match self {
-            Self::Exactly(count) => count,
-            Self::All => MAX_DEVICES,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum SyncOnOpen {
-    Synchronize,
-    Skip,
-}
-
 pub(super) fn bring_up(
     channel: &Channel,
     option: &TransportOption,
     deadline: Option<Instant>,
-    expected: ExpectedCount,
-    sync_on_open: SyncOnOpen,
+    num_devices: usize,
     device_clock: &DeviceClock,
 ) -> Result<Vec<SocketAddrV6>, UdpError> {
     let mut enumerator = Enumerator {
@@ -351,9 +318,9 @@ pub(super) fn bring_up(
         deadline,
     };
     enumerator.reset_all_unit_ids()?;
-    let device_addrs = enumerator.enumerate(expected.at_least(), expected.at_most())?;
+    let device_addrs = enumerator.enumerate(num_devices)?;
     enumerator.verify_assignments(&device_addrs)?;
-    if sync_on_open == SyncOnOpen::Skip {
+    if !option.sync_on_open {
         tracing::info!(
             units = device_addrs.len(),
             "enumerated the units without synchronizing them"

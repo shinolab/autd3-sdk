@@ -3,7 +3,6 @@ use std::time::Duration;
 
 use clap::Args;
 
-use autd3_rs::udp::discover;
 use autd3_rs::{Error, Interface, TransportOption, UdpError};
 
 use crate::driver::{ACK_TIMEOUT, DEFAULT_HEARTBEAT, UdpLink};
@@ -65,21 +64,13 @@ impl UdpArgs {
         }
     }
 
-    pub fn open(&self, expected: Option<usize>) -> Result<UdpLink, OpenError> {
-        open(&self.option(), expected, self.heartbeat())
+    pub fn open(&self, num_devices: usize) -> Result<UdpLink, OpenError> {
+        Ok(UdpLink::open(
+            &self.option(),
+            num_devices,
+            self.heartbeat(),
+        )?)
     }
-}
-
-fn open(
-    option: &TransportOption,
-    expected: Option<usize>,
-    heartbeat: Duration,
-) -> Result<UdpLink, OpenError> {
-    let num_devices = match expected {
-        Some(num_devices) => num_devices,
-        None => discover(option).map_err(Error::from)?,
-    };
-    Ok(UdpLink::open(option, num_devices, heartbeat)?)
 }
 
 fn udp_found_nothing(e: &UdpError) -> bool {
@@ -124,8 +115,6 @@ fn hint(e: &Error) -> String {
 mod tests {
     use autd3_rs_firmware_emulator::udp::UdpEmulator;
     use clap::Parser;
-
-    use crate::driver::Exchange;
 
     use super::*;
 
@@ -181,24 +170,6 @@ mod tests {
 
     #[test]
     #[ignore = "depends on real time"]
-    fn the_device_count_is_discovered_before_the_client_opens() {
-        for devices in [1, 2, 5] {
-            let emulator = UdpEmulator::spawn(devices).unwrap();
-            let option = TransportOption {
-                iface: emulator.interface(),
-                recovery_reply_timeout: Duration::from_millis(50),
-                open_timeout: Duration::from_secs(6),
-                sync_on_open: false,
-                ..TransportOption::default()
-            };
-            let link = open(&option, None, DEFAULT_HEARTBEAT).unwrap();
-            assert_eq!(link.num_devices(), devices);
-            assert_eq!(emulator.id_resets_received(0), 2, "{devices} devices");
-        }
-    }
-
-    #[test]
-    #[ignore = "depends on real time"]
     fn a_given_device_count_must_match_the_chain() {
         let emulator = UdpEmulator::spawn(3).unwrap();
         let option = TransportOption {
@@ -208,7 +179,7 @@ mod tests {
             sync_on_open: false,
             ..TransportOption::default()
         };
-        let err = open(&option, Some(2), DEFAULT_HEARTBEAT).err().unwrap();
+        let err = OpenError::from(UdpLink::open(&option, 2, DEFAULT_HEARTBEAT).err().unwrap());
         assert!(
             matches!(
                 udp_cause(&err.0),

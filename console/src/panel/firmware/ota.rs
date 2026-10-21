@@ -12,6 +12,7 @@ pub(crate) struct UdpConfig {
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct OtaConfig {
+    pub devices: usize,
     pub reboot_wait_secs: u64,
     pub udp: UdpConfig,
 }
@@ -19,6 +20,7 @@ pub(crate) struct OtaConfig {
 impl Default for OtaConfig {
     fn default() -> Self {
         Self {
+            devices: 1,
             reboot_wait_secs: 10,
             udp: UdpConfig::default(),
         }
@@ -28,6 +30,7 @@ impl Default for OtaConfig {
 const DEFAULT_HEARTBEAT_US: u64 = 10_000;
 const DEFAULT_OPEN_TIMEOUT_MS: u64 = 40_000;
 const DEVICE_PORT: u16 = 44336;
+const MAX_DEVICES: usize = 128;
 
 fn push_opt(args: &mut Vec<String>, flag: &str, value: Option<u64>) {
     if let Some(value) = value {
@@ -43,6 +46,8 @@ impl OtaConfig {
             version.to_string(),
             "--target".to_string(),
             target.to_string(),
+            "--devices".to_string(),
+            self.devices.to_string(),
             "--reboot-wait-secs".to_string(),
             self.reboot_wait_secs.to_string(),
         ];
@@ -67,6 +72,10 @@ impl OtaConfig {
                 .num_columns(2)
                 .spacing([12.0, 6.0])
                 .show(ui, |ui| {
+                    ui.label("Devices");
+                    ui.add(egui::DragValue::new(&mut self.devices).range(1..=MAX_DEVICES));
+                    ui.end_row();
+
                     ui.label("Reboot wait");
                     ui.add(
                         egui::DragValue::new(&mut self.reboot_wait_secs)
@@ -156,11 +165,12 @@ fn optional_row(
 mod tests {
     use super::*;
 
-    const COMMON: usize = 6;
+    const COMMON: usize = 8;
 
     #[test]
     fn the_common_arguments_lead_every_invocation() {
         let config = OtaConfig {
+            devices: 3,
             reboot_wait_secs: 20,
             ..OtaConfig::default()
         };
@@ -171,6 +181,8 @@ mod tests {
                 "0.10.0",
                 "--target",
                 "both",
+                "--devices",
+                "3",
                 "--reboot-wait-secs",
                 "20",
             ]
@@ -208,6 +220,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(config.reboot_wait_secs, 30);
+        assert_eq!(config.devices, 1);
         assert_eq!(config.udp, UdpConfig::default());
     }
 
