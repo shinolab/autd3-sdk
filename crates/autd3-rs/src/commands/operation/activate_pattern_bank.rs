@@ -20,7 +20,7 @@ impl Operation for ActivatePatternBank {
         Ok(encode_header_only(
             out,
             Cmd::ActivatePatternBank,
-            &ActivatePatternBankPayload::new(self.bank, self.transition_mode.try_as_wire()?),
+            &ActivatePatternBankPayload::new(self.bank, self.transition_mode.as_wire()),
         ))
     }
 }
@@ -80,19 +80,5 @@ mod tests {
         assert_eq!(encoded, ENCODED);
         assert_eq!(payload[1], 0x02);
         assert_eq!(&payload[2..10], &2u64.to_le_bytes());
-    }
-
-    #[test]
-    fn activate_pattern_bank_refuses_to_not_transition() {
-        let err = encode(&ActivatePatternBank {
-            bank: PatternBank::B1,
-            transition_mode: TransitionMode::Later,
-        })
-        .unwrap_err();
-
-        assert!(matches!(
-            err,
-            Error::Encode(crate::EncodeError::TransitionLaterNotEncodable)
-        ));
     }
 }

@@ -46,11 +46,9 @@ namespace AUTD3.Tests
         public void EachSpansTheLongestPerDeviceCommand()
         {
             using var geometry = Fixture.Devices(2);
-            using var phases = geometry.PhaseBuffer();
-            using var intensities = geometry.IntensityBuffer();
 
             using var frames = Frames.Encode(geometry, Command.Each(device =>
-                device.Idx == 0 ? new Pattern(PatternBank.B0, phases, intensities, TransitionMode.Later) : (ICommand)new Nop()));
+                device.Idx == 0 ? Command.Sequence(new Nop(), new Nop()) : (ICommand)new Nop()));
 
             Assert.Equal(2, frames.Length);
         }

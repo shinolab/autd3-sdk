@@ -90,7 +90,6 @@ pub(crate) fn to_transition_mode(mode: u8, value: u64) -> Option<TransitionMode>
         #[allow(clippy::cast_possible_truncation)]
         0x02 => to_gpio_in(value as u8).map(TransitionMode::Gpio),
         0xF0 => Some(TransitionMode::Ext),
-        0xFE => Some(TransitionMode::Later),
         0xFF => Some(TransitionMode::Immediate),
         _ => None,
     }

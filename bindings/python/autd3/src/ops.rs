@@ -218,12 +218,6 @@ impl TransitionMode {
         Self(CoreTransitionMode::Immediate)
     }
 
-    #[classattr]
-    #[pyo3(name = "Later")]
-    fn later() -> Self {
-        Self(CoreTransitionMode::Later)
-    }
-
     #[staticmethod]
     #[pyo3(name = "SysTime")]
     fn sys_time(sys_time: SysTime) -> Self {
@@ -234,10 +228,6 @@ impl TransitionMode {
     #[pyo3(name = "Gpio")]
     fn gpio(gpio: GpioIn) -> Self {
         Self(CoreTransitionMode::Gpio(gpio.0))
-    }
-
-    fn is_later(&self) -> bool {
-        self.0.is_later()
     }
 
     fn __repr__(&self) -> String {

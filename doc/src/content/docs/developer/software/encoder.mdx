@@ -127,16 +127,12 @@ impl<'a> Command<'a> for Modulation<'a> {
     fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
         expansion
             .push(WriteModulationBuffer { bank: self.bank, offset: 0, data: self.data })?
-            .push(ConfigModulation { .. })?;
-        if !self.transition_mode.is_later() {
-            expansion.push(ActivateModulationBank { .. })?;
-        }
+            .push(ConfigModulation { .. })?
+            .push(ActivateModulationBank { .. })?;
         Ok(())
     }
 }
 ```
-
-`transition_mode` が `Later` のときは, バンク切り替えを積まない.
 
 さらに `WriteModulationBuffer` 自身も `Command` であり, `WriteModulationChunk` へ分割される.
 したがって, 1 フレームに収まらないサイズの `Modulation` を 1 つ渡すと, `ops` は次のようになる.

@@ -234,14 +234,6 @@ namespace AUTD3.Tests
         }
 
         [Fact]
-        public void OnlyLaterIsLater()
-        {
-            Assert.True(TransitionMode.Later.IsLater);
-            Assert.False(TransitionMode.Immediate.IsLater);
-            Assert.False(TransitionMode.Ext.IsLater);
-        }
-
-        [Fact]
         public void TheInterfaceIsReadable()
         {
             Assert.True(Interface.Auto.IsAuto);

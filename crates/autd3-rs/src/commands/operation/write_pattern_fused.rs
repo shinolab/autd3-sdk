@@ -26,7 +26,7 @@ impl Operation for WritePatternFused<'_> {
     }
 
     fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
-        let header = WritePatternFusedPayload::new(self.bank, self.transition_mode.try_as_wire()?);
+        let header = WritePatternFusedPayload::new(self.bank, self.transition_mode.as_wire());
         let rest = write_header(out, &header);
         let (dst_phases, dst_intensities) =
             rest[..PATTERN_RAW_DATA_LEN].split_at_mut(NUM_TRANSDUCERS);
@@ -47,7 +47,6 @@ impl Operation for WritePatternFused<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::EncodeError;
     use crate::error::PayloadError;
     use crate::test_utils::{encode, test_device};
     use crate::value::Intensity;
@@ -115,16 +114,6 @@ mod tests {
             Err(Error::InvalidPayload(
                 PayloadError::DeviceDataOutOfRange { .. }
             ))
-        ));
-    }
-
-    #[test]
-    fn later_is_not_encodable() {
-        let n = test_device(0).num_transducers();
-        let phases = [vec![Phase::ZERO; n]];
-        assert!(matches!(
-            encode(&op(&phases, Intensity::MAX, TransitionMode::Later)),
-            Err(Error::Encode(EncodeError::TransitionLaterNotEncodable))
         ));
     }
 }

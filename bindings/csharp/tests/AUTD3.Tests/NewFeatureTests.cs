@@ -290,39 +290,6 @@ namespace AUTD3.Tests
         }
 
         [Fact]
-        public void LaterStagesAModulationBankWithoutChangingIt()
-        {
-            using var geometry = Fixture.SingleDevice();
-            using var modulation = Modulation.ModulationBuffer();
-            Modulation.Sine(200 * Hz, new SineOption(), SamplingConfig.Freq4k, modulation);
-
-            using var frames = Frames.Encode(geometry, new Modulation(ModulationBank.B1, SamplingConfig.Freq4k, modulation,
-                transitionMode: TransitionMode.Later));
-            Assert.Equal(2, frames.Length);
-        }
-
-        [Fact]
-        public void LaterStagesAPatternBankWithoutChangingIt()
-        {
-            using var geometry = Fixture.SingleDevice();
-            using var phases = geometry.PhaseBuffer();
-            Pattern.SetPhase(Phase.Pi, phases);
-            using var intensities = geometry.IntensityBuffer();
-
-            using var frames = Frames.Encode(geometry, new Pattern(PatternBank.B1, phases, intensities, TransitionMode.Later));
-            Assert.Equal(2, frames.Length);
-        }
-
-        [Fact]
-        public void ABankActivationRefusesToNotTransition()
-        {
-            using var geometry = Fixture.SingleDevice();
-            var e = Assert.Throws<Autd3Exception>(() =>
-                Frames.Encode(geometry, new ActivateModulationBank(ModulationBank.B1, TransitionMode.Later)));
-            Assert.Contains("Later", e.Message);
-        }
-
-        [Fact]
         public void CommandsBuildDatagrams()
         {
             using var geometry = Fixture.SingleDevice();
