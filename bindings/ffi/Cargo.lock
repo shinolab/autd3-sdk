@@ -119,6 +119,7 @@ dependencies = [
  "socket2",
  "thiserror",
  "tracing",
+ "windows-sys",
  "zerocopy",
 ]
 

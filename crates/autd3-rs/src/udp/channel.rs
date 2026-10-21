@@ -1,7 +1,7 @@
 use std::io::{self, IoSlice};
 use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6, UdpSocket};
 use std::num::NonZeroUsize;
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use autd3_cpu_wire::udp::{Header, Kind};
@@ -28,9 +28,10 @@ pub(crate) fn same_endpoint(a: SocketAddrV6, b: SocketAddrV6) -> bool {
     a.ip() == b.ip() && a.port() == b.port()
 }
 
-struct RecvState {
-    socket_is_nonblocking: bool,
-    buf: Box<[u8; RECV_BUFFER_BYTES]>,
+#[derive(Clone, Copy)]
+enum Interest {
+    Readable,
+    Writable,
 }
 
 pub(crate) struct Channel {
@@ -41,7 +42,6 @@ pub(crate) struct Channel {
     main_socket_port: u16,
     waker_socket_port: u16,
     pacer: Option<Mutex<Pacer>>,
-    recv_state: Mutex<RecvState>,
 }
 
 #[cfg(unix)]
@@ -53,6 +53,8 @@ mod sys {
     use std::time::Duration;
 
     use socket2::SockRef;
+
+    use super::Interest;
 
     pub(super) fn send_now(
         socket: &UdpSocket,
@@ -66,20 +68,34 @@ mod sys {
         )
     }
 
-    pub(super) fn wait_writable(socket: &impl AsRawFd, timeout: Duration) -> io::Result<()> {
+    pub(super) fn wait(
+        socket: &impl AsRawFd,
+        interest: Interest,
+        timeout: Option<Duration>,
+    ) -> io::Result<bool> {
         let mut fd = libc::pollfd {
             fd: socket.as_raw_fd(),
-            events: libc::POLLOUT,
+            events: match interest {
+                Interest::Readable => libc::POLLIN,
+                Interest::Writable => libc::POLLOUT,
+            },
             revents: 0,
         };
-        let millis = c_int::try_from(timeout.as_micros().div_ceil(1000)).unwrap_or(c_int::MAX);
-        if unsafe { libc::poll(&raw mut fd, 1, millis) } < 0 {
-            let e = io::Error::last_os_error();
-            if e.kind() != io::ErrorKind::Interrupted {
-                return Err(e);
+        let millis = timeout.map_or(-1, |timeout| {
+            c_int::try_from(timeout.as_micros().div_ceil(1000)).unwrap_or(c_int::MAX)
+        });
+        loop {
+            match unsafe { libc::poll(&raw mut fd, 1, millis) } {
+                0 => return Ok(false),
+                ready if ready > 0 => return Ok(true),
+                _ => {
+                    let e = io::Error::last_os_error();
+                    if e.kind() != io::ErrorKind::Interrupted {
+                        return Err(e);
+                    }
+                }
             }
         }
-        Ok(())
     }
 
     pub(super) fn is_oversized(_e: &io::Error) -> bool {
@@ -87,17 +103,19 @@ mod sys {
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
 mod sys {
     use std::io::{self, IoSlice};
     use std::net::{SocketAddr, SocketAddrV6, UdpSocket};
+    use std::os::windows::io::AsRawSocket;
     use std::time::Duration;
 
     use socket2::SockRef;
+    use windows_sys::Win32::Networking::WinSock::{
+        POLLRDNORM, POLLWRNORM, SOCKET_ERROR, WSAEMSGSIZE, WSAPOLLFD, WSAPoll,
+    };
 
-    const RETRY_INTERVAL: Duration = Duration::from_millis(1);
-    #[cfg(windows)]
-    const WSAEMSGSIZE: i32 = 10040;
+    use super::Interest;
 
     pub(super) fn send_now(
         socket: &UdpSocket,
@@ -107,28 +125,39 @@ mod sys {
         SockRef::from(socket).send_to_vectored(datagram, &SocketAddr::V6(dst).into())
     }
 
-    #[allow(clippy::unnecessary_wraps)]
-    pub(crate) fn wait_writable<S: ?Sized>(_socket: &S, timeout: Duration) -> io::Result<()> {
-        std::thread::sleep(timeout.min(RETRY_INTERVAL));
-        Ok(())
+    pub(super) fn wait(
+        socket: &impl AsRawSocket,
+        interest: Interest,
+        timeout: Option<Duration>,
+    ) -> io::Result<bool> {
+        let mut fd = WSAPOLLFD {
+            fd: usize::try_from(socket.as_raw_socket()).expect("a socket handle fits in a pointer"),
+            events: match interest {
+                Interest::Readable => POLLRDNORM,
+                Interest::Writable => POLLWRNORM,
+            },
+            revents: 0,
+        };
+        let millis = timeout.map_or(-1, |timeout| {
+            i32::try_from(timeout.as_micros().div_ceil(1000)).unwrap_or(i32::MAX)
+        });
+        loop {
+            match unsafe { WSAPoll(&raw mut fd, 1, millis) } {
+                0 => return Ok(false),
+                SOCKET_ERROR => {
+                    let e = io::Error::last_os_error();
+                    if e.kind() != io::ErrorKind::Interrupted {
+                        return Err(e);
+                    }
+                }
+                _ => return Ok(true),
+            }
+        }
     }
 
-    #[cfg(windows)]
     pub(super) fn is_oversized(e: &io::Error) -> bool {
         e.raw_os_error() == Some(WSAEMSGSIZE)
     }
-
-    #[cfg(not(windows))]
-    pub(super) fn is_oversized(_e: &io::Error) -> bool {
-        false
-    }
-}
-
-pub(super) fn is_timeout(e: &io::Error) -> bool {
-    matches!(
-        e.kind(),
-        io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
-    )
 }
 
 fn is_undeliverable(e: &io::Error) -> bool {
@@ -186,6 +215,7 @@ impl Channel {
         }
         socket.set_multicast_hops_v6(1)?;
         socket.bind(&SocketAddrV6::new(Ipv6Addr::UNSPECIFIED, 0, 0, 0).into())?;
+        socket.set_nonblocking(true)?;
         if let Some(bytes) = send_buffer_bytes {
             socket.set_send_buffer_size(bytes.get())?;
             tracing::debug!(
@@ -207,17 +237,7 @@ impl Channel {
             main_socket_port,
             waker_socket_port,
             pacer: send_rate_limit_percent.map(|percent| Mutex::new(Pacer::new(percent))),
-            recv_state: Mutex::new(RecvState {
-                socket_is_nonblocking: false,
-                buf: Box::new([0; RECV_BUFFER_BYTES]),
-            }),
         })
-    }
-
-    fn lock_recv_state(&self) -> MutexGuard<'_, RecvState> {
-        self.recv_state
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
     }
 
     pub(crate) fn attach_devices(&mut self, device_addrs: Vec<SocketAddrV6>) {
@@ -240,26 +260,6 @@ impl Channel {
     pub(crate) fn wake(&self) -> io::Result<()> {
         let dst = SocketAddrV6::new(Ipv6Addr::LOCALHOST, self.main_socket_port, 0, 0);
         self.waker_socket.send_to(&[], dst).map(|_| ())
-    }
-
-    fn apply_recv_deadline(
-        &self,
-        recv_state: &mut RecvState,
-        deadline: Option<Instant>,
-    ) -> io::Result<()> {
-        let remaining = deadline.map(|deadline| deadline.saturating_duration_since(Instant::now()));
-        if remaining.is_some_and(|remaining| remaining.is_zero()) {
-            if !recv_state.socket_is_nonblocking {
-                self.socket.set_nonblocking(true)?;
-                recv_state.socket_is_nonblocking = true;
-            }
-            return Ok(());
-        }
-        if recv_state.socket_is_nonblocking {
-            self.socket.set_nonblocking(false)?;
-            recv_state.socket_is_nonblocking = false;
-        }
-        self.socket.set_read_timeout(remaining)
     }
 
     pub(crate) fn send_to_device(
@@ -329,7 +329,7 @@ impl Channel {
                 before_attempt();
                 sys::send_now(&self.socket, datagram, dst)
             },
-            |remaining| sys::wait_writable(&self.socket, remaining),
+            |remaining| sys::wait(&self.socket, Interest::Writable, Some(remaining)).map(|_| ()),
         )
     }
 
@@ -337,9 +337,9 @@ impl Channel {
         &self,
         mut parse: impl FnMut(usize, Header, &[u8]) -> Option<R>,
     ) -> io::Result<Polled<R>> {
-        let mut recv_state = self.lock_recv_state();
+        let mut buf = [0; RECV_BUFFER_BYTES];
         let deadline = Some(Instant::now());
-        while let Some((src, datagram)) = self.recv_datagram(&mut recv_state, deadline)? {
+        while let Some((src, datagram)) = self.recv_datagram(&mut buf, deadline)? {
             if self.is_from_waker(src) {
                 return Ok(Polled::Wake);
             }
@@ -365,8 +365,8 @@ impl Channel {
         deadline: Option<Instant>,
         classify: impl FnOnce(&ReceivedPacket<'_>) -> R,
     ) -> io::Result<Option<R>> {
-        let mut recv_state = self.lock_recv_state();
-        while let Some((src, datagram)) = self.recv_datagram(&mut recv_state, deadline)? {
+        let mut buf = [0; RECV_BUFFER_BYTES];
+        while let Some((src, datagram)) = self.recv_datagram(&mut buf, deadline)? {
             if let Ok((header, body)) = Header::read_from_prefix(datagram) {
                 return Ok(Some(classify(&ReceivedPacket { src, header, body })));
             }
@@ -376,18 +376,25 @@ impl Channel {
 
     fn recv_datagram<'a>(
         &self,
-        recv_state: &'a mut RecvState,
+        buf: &'a mut [u8; RECV_BUFFER_BYTES],
         deadline: Option<Instant>,
     ) -> io::Result<Option<(SocketAddrV6, &'a [u8])>> {
         let (len, src) = loop {
-            self.apply_recv_deadline(recv_state, deadline)?;
-            match self.socket.recv_from(&mut recv_state.buf[..]) {
+            match self.socket.recv_from(&mut buf[..]) {
                 Ok((len, src)) if len >= RECV_BUFFER_BYTES => {
                     tracing::debug!(%src, "dropped a datagram that does not fit the receive buffer");
                 }
                 Ok((len, SocketAddr::V6(src))) => break (len, src),
                 Ok(_) => {}
-                Err(e) if is_timeout(&e) => return Ok(None),
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    let remaining =
+                        deadline.map(|deadline| deadline.saturating_duration_since(Instant::now()));
+                    if remaining.is_some_and(|remaining| remaining.is_zero())
+                        || !sys::wait(&self.socket, Interest::Readable, remaining)?
+                    {
+                        return Ok(None);
+                    }
+                }
                 Err(e) if is_transient(&e) => {}
                 Err(e) if sys::is_oversized(&e) => {
                     tracing::debug!("dropped a datagram that does not fit the receive buffer");
@@ -395,17 +402,12 @@ impl Channel {
                 Err(e) => return Err(e),
             }
         };
-        Ok(Some((src, &recv_state.buf[..len])))
+        Ok(Some((src, &buf[..len])))
     }
 
     pub(crate) fn wait_readable(&self, deadline: Instant) -> io::Result<()> {
-        let mut recv_state = self.lock_recv_state();
-        self.apply_recv_deadline(&mut recv_state, Some(deadline))?;
-        match self.socket.peek_from(&mut recv_state.buf[..]) {
-            Ok(_) => Ok(()),
-            Err(e) if is_timeout(&e) || is_transient(&e) || sys::is_oversized(&e) => Ok(()),
-            Err(e) => Err(e),
-        }
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        sys::wait(&self.socket, Interest::Readable, Some(remaining)).map(|_| ())
     }
 
     pub(crate) fn socket(&self) -> &UdpSocket {

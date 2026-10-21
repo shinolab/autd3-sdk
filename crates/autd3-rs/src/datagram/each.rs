@@ -1,14 +1,8 @@
-use std::rc::Rc;
-
 use crate::commands::Command;
-use crate::commands::operation::{Distribution, Encoded, Nop, Operation};
 use crate::error::Error;
 use crate::geometry::Device;
-use crate::protocol::PAYLOAD_BYTES;
 
 use super::expansion::Expansion;
-
-pub(crate) type OpsPerDevice<'a> = Vec<Vec<Box<dyn Operation + 'a>>>;
 
 pub struct Each<F>(F);
 
@@ -29,44 +23,6 @@ where
     fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
         expansion.push_per_device(self.0)?;
         Ok(())
-    }
-}
-
-pub(crate) struct PerDeviceOpsAt<'a> {
-    ops_per_device: Rc<OpsPerDevice<'a>>,
-    op_index: usize,
-}
-
-impl<'a> PerDeviceOpsAt<'a> {
-    pub(crate) fn transpose(ops_per_device: OpsPerDevice<'a>) -> impl Iterator<Item = Self> {
-        let max_ops_per_device = ops_per_device.iter().map(Vec::len).max().unwrap_or(0);
-        let ops_per_device = Rc::new(ops_per_device);
-        (0..max_ops_per_device).map(move |op_index| Self {
-            ops_per_device: Rc::clone(&ops_per_device),
-            op_index,
-        })
-    }
-
-    fn op(&self, device: usize) -> Option<&(dyn Operation + 'a)> {
-        self.ops_per_device
-            .get(device)
-            .and_then(|ops| ops.get(self.op_index))
-            .map(Box::as_ref)
-    }
-}
-
-impl crate::sealed::Sealed for PerDeviceOpsAt<'_> {}
-
-impl Operation for PerDeviceOpsAt<'_> {
-    fn distribution(&self) -> Distribution {
-        Distribution::PerDevice
-    }
-
-    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
-        match self.op(device.idx()) {
-            Some(op) => op.encode(device, out),
-            None => Nop.encode(device, out),
-        }
     }
 }
 
@@ -162,6 +118,34 @@ mod tests {
             assert_eq!(cmd_at(&frames, frame, 1), Cmd::ConfigModulation);
             assert_eq!(payload(&frames, frame, 1)[0] as usize, frame);
         }
+    }
+
+    #[test]
+    fn a_nested_each_spans_its_longest_inner_device_even_outside_the_outer_device() {
+        struct Nested;
+
+        impl<'a> Command<'a> for Nested {
+            fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
+                expansion.push(each(|device| {
+                    Some(if device.idx() == 0 {
+                        Multi(3)
+                    } else {
+                        Multi(1)
+                    })
+                }))?;
+                Ok(())
+            }
+        }
+
+        let frames = build(2, each(|device| (device.idx() == 1).then_some(Nested))).unwrap();
+
+        assert_eq!(frames.len(), 3);
+        for frame in 0..3 {
+            assert_eq!(cmd_at(&frames, frame, 0), Cmd::Nop);
+        }
+        assert_eq!(cmd_at(&frames, 0, 1), Cmd::ConfigModulation);
+        assert_eq!(cmd_at(&frames, 1, 1), Cmd::Nop);
+        assert_eq!(cmd_at(&frames, 2, 1), Cmd::Nop);
     }
 
     #[test]

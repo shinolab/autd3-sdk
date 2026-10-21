@@ -1,5 +1,4 @@
 use crate::error::Error;
-use crate::udp::ReplyData;
 use autd3_rs_core::MAX_DEVICES;
 use autd3_rs_core::value::SysTime;
 
@@ -48,16 +47,32 @@ impl Response {
     }
 
     #[must_use]
-    pub(crate) fn with_sys_times(mut self, sys_times: &[u64]) -> Self {
-        let len = sys_times.len().min(self.num_devices);
-        self.sys_times[..len].copy_from_slice(&sys_times[..len]);
-        self
+    pub(crate) fn for_devices(num_devices: usize) -> Self {
+        Self {
+            num_devices: num_devices.min(MAX_DEVICES),
+            ..Self::default()
+        }
+    }
+
+    pub(crate) fn record_reply(
+        &mut self,
+        device: usize,
+        error_code: u8,
+        sys_time: u64,
+        data: &[u8],
+    ) {
+        self.error_codes[device] = error_code;
+        self.sys_times[device] = sys_time;
+        self.replied_devices |= 1 << device;
+        if !data.is_empty() {
+            self.reply_data.resize_with(self.num_devices, Vec::new);
+            self.reply_data[device] = data.to_vec();
+        }
     }
 
     #[must_use]
-    pub(crate) fn with_replied_devices(mut self, replied_devices: u128) -> Self {
-        self.replied_devices = replied_devices & first_n_devices_mask(self.num_devices);
-        self
+    pub(crate) const fn replied_devices(&self) -> u128 {
+        self.replied_devices
     }
 
     pub(crate) fn parse_each_device<T>(
@@ -75,14 +90,6 @@ impl Response {
                 parse(self.reply_data_of(device)).ok_or(Error::UnexpectedReply { device })
             })
             .collect()
-    }
-
-    #[must_use]
-    pub(crate) fn with_reply_data(error_codes: &[u8], reply_data: Vec<Vec<u8>>) -> Self {
-        let mut response = Self::from_error_codes(error_codes);
-        response.reply_data = reply_data;
-        response.reply_data.truncate(response.num_devices);
-        response
     }
 
     #[must_use]
@@ -122,77 +129,40 @@ impl Response {
     }
 }
 
-pub(crate) struct ReplyBuffers {
-    error_codes: Box<[u8]>,
-    sys_times: Box<[u64]>,
-    reply_data: Box<[ReplyData]>,
-}
-
-impl ReplyBuffers {
-    pub(crate) fn new(num_devices: usize) -> Self {
-        Self {
-            error_codes: vec![0u8; num_devices].into_boxed_slice(),
-            sys_times: vec![0u64; num_devices].into_boxed_slice(),
-            reply_data: vec![ReplyData::EMPTY; num_devices].into_boxed_slice(),
-        }
-    }
-
-    pub(crate) fn reset(&mut self) {
-        self.error_codes.fill(0);
-        self.sys_times.fill(0);
-        self.reply_data.fill(ReplyData::EMPTY);
-    }
-
-    pub(crate) fn record_reply(
-        &mut self,
-        device: usize,
-        error_code: u8,
-        sys_time: u64,
-        data: ReplyData,
-    ) {
-        self.error_codes[device] = error_code;
-        self.sys_times[device] = sys_time;
-        self.reply_data[device] = data;
-    }
-
-    pub(crate) fn response(&self, replied_devices: u128) -> Response {
-        let response = if self.reply_data.iter().all(ReplyData::is_empty) {
-            Response::from_error_codes(&self.error_codes)
-        } else {
-            Response::with_reply_data(
-                &self.error_codes,
-                self.reply_data
-                    .iter()
-                    .map(|data| data.as_slice().to_vec())
-                    .collect(),
-            )
-        };
-        response
-            .with_sys_times(&self.sys_times)
-            .with_replied_devices(replied_devices)
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{ReplyBuffers, Response};
-    use crate::udp::ReplyData;
+    use super::Response;
     use autd3_rs_core::MAX_DEVICES;
     use autd3_rs_core::value::SysTime;
 
+    fn replied(num_devices: usize, replies: &[(usize, u64, &[u8])]) -> Response {
+        let mut response = Response::for_devices(num_devices);
+        for &(device, sys_time, data) in replies {
+            response.record_reply(device, 0, sys_time, data);
+        }
+        response
+    }
+
     #[test]
-    fn a_reused_reply_buffer_forgets_the_device_times_of_its_previous_frame() {
-        let mut buffers = ReplyBuffers::new(2);
-        buffers.record_reply(0, 0, 1_000, ReplyData::EMPTY);
-        assert_eq!(
-            buffers.response(0b01).sys_time_of(0),
-            Some(SysTime::from_nanos(1_000))
-        );
-        buffers.reset();
-        buffers.record_reply(1, 0, 2_000, ReplyData::EMPTY);
-        let response = buffers.response(0b11);
+    fn a_recorded_reply_marks_only_its_device_as_replied() {
+        let mut response = Response::for_devices(3);
+        response.record_reply(1, 0x07, 2_000, &[]);
+        assert_eq!(response.replied_devices(), 0b010);
+        assert_eq!(response.error_codes(), [0, 0x07, 0]);
         assert_eq!(response.sys_time_of(0), None);
         assert_eq!(response.sys_time_of(1), Some(SysTime::from_nanos(2_000)));
+    }
+
+    #[test]
+    fn reply_data_stays_empty_until_a_device_sends_some() {
+        assert_eq!(
+            replied(2, &[(0, 0, &[]), (1, 0, &[])]).reply_data().len(),
+            0
+        );
+        assert_eq!(
+            replied(3, &[(1, 0, &[9])]).reply_data(),
+            [vec![], vec![9], vec![]]
+        );
     }
 
     #[test]
@@ -212,9 +182,7 @@ mod tests {
 
     #[test]
     fn the_device_time_of_a_reply_is_per_device() {
-        let response = Response::from_error_codes(&[0, 0, 0])
-            .with_sys_times(&[5_000, 0, 7_000])
-            .with_replied_devices(0b011);
+        let response = replied(3, &[(0, 5_000, &[]), (1, 0, &[])]);
         assert_eq!(response.sys_time_of(0), Some(SysTime::from_nanos(5_000)));
         assert_eq!(response.sys_time_of(1), None);
         assert_eq!(response.sys_time_of(2), None);
@@ -224,7 +192,7 @@ mod tests {
 
     #[test]
     fn reply_data_is_per_device() {
-        let response = Response::with_reply_data(&[0, 0], vec![vec![1, 2], vec![3]]);
+        let response = replied(2, &[(0, 0, &[1, 2]), (1, 0, &[3])]);
         assert_eq!(response.reply_data_of(0), [1, 2]);
         assert_eq!(response.reply_data_of(1), [3]);
         assert_eq!(response.reply_data_of(2), [0u8; 0]);
@@ -233,7 +201,7 @@ mod tests {
 
     #[test]
     fn parse_each_device_returns_one_value_per_device() {
-        let response = Response::with_reply_data(&[0, 0], vec![vec![1, 2], vec![3]]);
+        let response = replied(2, &[(0, 0, &[1, 2]), (1, 0, &[3])]);
         let firsts = response
             .parse_each_device(|value| value.first().copied())
             .unwrap();
@@ -242,7 +210,7 @@ mod tests {
 
     #[test]
     fn parse_each_device_reports_a_short_reply_as_unexpected() {
-        let response = Response::with_reply_data(&[0, 0, 0], vec![vec![1], vec![], vec![]]);
+        let response = replied(3, &[(0, 0, &[1]), (1, 0, &[]), (2, 0, &[])]);
         let err = response
             .parse_each_device(|value| value.first().copied())
             .unwrap_err();
@@ -254,9 +222,7 @@ mod tests {
 
     #[test]
     fn parse_each_device_reports_the_lowest_device_that_did_not_reply_as_lost() {
-        let response =
-            Response::with_reply_data(&[0, 0, 0, 0], vec![vec![], vec![], vec![], vec![4]])
-                .with_replied_devices(0b1001);
+        let response = replied(4, &[(0, 0, &[]), (3, 0, &[4])]);
         let err = response
             .parse_each_device(|value| value.first().copied())
             .unwrap_err();
@@ -278,12 +244,10 @@ mod tests {
             0
         );
         assert!(matches!(
-            Response::from_error_codes(&[0, 0, 0])
-                .with_replied_devices(0b1101)
-                .parse_each_device(|_| Some(())),
+            replied(3, &[(0, 0, &[]), (2, 0, &[])]).parse_each_device(|_| Some(())),
             Err(crate::error::Error::DeviceLost { device: 1 })
         ));
-        let unsent = Response::from_error_codes(&[0, 0]).with_replied_devices(0);
+        let unsent = Response::for_devices(2);
         assert!(matches!(
             unsent.parse_each_device(|_| Some(())),
             Err(crate::error::Error::DeviceLost { device: 0 })
