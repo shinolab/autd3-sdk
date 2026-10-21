@@ -12,8 +12,7 @@ use crate::udp::{
     set_time_body,
 };
 
-use super::requester::{REQUEST_REPLY_WAIT, Requester};
-
+pub(super) const REQUEST_REPLY_WAIT: Duration = Duration::from_millis(200);
 const EXCHANGE_ATTEMPTS: usize = 3;
 const VERIFY_ASSIGNMENTS_ATTEMPTS: usize = 3;
 const RESET_SETTLE: Duration = Duration::from_millis(100);
@@ -40,18 +39,70 @@ const fn role_of(unit_id: u8) -> Role {
 }
 
 struct Enumerator<'a> {
-    requester: Requester<'a>,
+    channel: &'a Channel,
+    last_msg_id: u16,
     open_timeout: Duration,
     deadline: Option<Instant>,
 }
 
 impl Enumerator<'_> {
+    fn send_request(
+        &mut self,
+        dst: SocketAddrV6,
+        kind: Kind,
+        body: &[u8],
+    ) -> Result<u16, UdpError> {
+        self.last_msg_id = self.last_msg_id.wrapping_add(1);
+        self.channel
+            .send(dst, kind, self.last_msg_id, [body, &[]], None, || {})?;
+        Ok(self.last_msg_id)
+    }
+
+    fn request_all_devices(&mut self, kind: Kind) -> Result<u16, UdpError> {
+        self.send_request(self.channel.all_devices_dst(), kind, &[])
+    }
+
+    fn collect_responses(
+        &self,
+        kind: Kind,
+        msg_id: u16,
+        wait: Duration,
+        max_responses: Option<usize>,
+    ) -> Result<Vec<ControlResponse>, UdpError> {
+        let deadline = Instant::now().checked_add(wait);
+        let mut responses = Vec::new();
+        while max_responses.is_none_or(|n| responses.len() < n) {
+            let Some(parsed) = self.channel.recv(deadline, |packet| {
+                ControlResponse::parse(packet, kind, msg_id)
+            })?
+            else {
+                break;
+            };
+            if let Some(response) = parsed? {
+                responses.push(response);
+            }
+        }
+        Ok(responses)
+    }
+
+    fn request_once(
+        &mut self,
+        dst: SocketAddrV6,
+        kind: Kind,
+        body: &[u8],
+    ) -> Result<Option<ControlResponse>, UdpError> {
+        let msg_id = self.send_request(dst, kind, body)?;
+        Ok(self
+            .collect_responses(kind, msg_id, REQUEST_REPLY_WAIT, Some(1))?
+            .pop())
+    }
+
     fn read_unit_info(
         &mut self,
         max_responses: Option<usize>,
     ) -> Result<Vec<ControlResponse>, UdpError> {
-        let msg_id = self.requester.request_all_devices(Kind::ReadUnitInfo)?;
-        self.requester.collect_responses(
+        let msg_id = self.request_all_devices(Kind::ReadUnitInfo)?;
+        self.collect_responses(
             Kind::ReadUnitInfo,
             msg_id,
             REQUEST_REPLY_WAIT,
@@ -66,10 +117,7 @@ impl Enumerator<'_> {
         body: &[u8],
     ) -> Result<Option<ControlResponse>, UdpError> {
         for _ in 0..EXCHANGE_ATTEMPTS {
-            if let Some(response) =
-                self.requester
-                    .request_once(dst, kind, body, REQUEST_REPLY_WAIT)?
-            {
+            if let Some(response) = self.request_once(dst, kind, body)? {
                 return Ok(Some(response));
             }
         }
@@ -77,27 +125,22 @@ impl Enumerator<'_> {
     }
 
     fn reset_all_unit_ids(&mut self) -> Result<(), UdpError> {
-        let msg_id = self.requester.request_all_devices(Kind::ResetId)?;
-        let replies =
-            self.requester
-                .collect_responses(Kind::ResetId, msg_id, REQUEST_REPLY_WAIT, None)?;
+        let msg_id = self.request_all_devices(Kind::ResetId)?;
+        let replies = self.collect_responses(Kind::ResetId, msg_id, REQUEST_REPLY_WAIT, None)?;
         tracing::debug!(replies = replies.len(), "reset the unit ids");
         std::thread::sleep(RESET_SETTLE);
         Ok(())
     }
 
     fn discover(&mut self) -> Result<Option<SocketAddrV6>, UdpError> {
-        let msg_id = self.requester.request_all_devices(Kind::Discover)?;
+        let msg_id = self.request_all_devices(Kind::Discover)?;
         let Some(first) = self
-            .requester
             .collect_responses(Kind::Discover, msg_id, REQUEST_REPLY_WAIT, Some(1))?
             .pop()
         else {
             return Ok(None);
         };
-        let others =
-            self.requester
-                .collect_responses(Kind::Discover, msg_id, DISCOVER_LINGER, None)?;
+        let others = self.collect_responses(Kind::Discover, msg_id, DISCOVER_LINGER, None)?;
         if !others.is_empty() {
             return Err(UdpError::DownstreamNotClosed {
                 replies: others.len() + 1,
@@ -196,8 +239,7 @@ impl Enumerator<'_> {
         }
         for &addr in &stale {
             tracing::debug!(%addr, "releasing a unit left assigned by a previous enumeration");
-            self.requester
-                .request_once(addr, Kind::ResetId, &[], REQUEST_REPLY_WAIT)?;
+            self.request_once(addr, Kind::ResetId, &[])?;
         }
         std::thread::sleep(RESET_SETTLE);
         Ok(true)
@@ -248,22 +290,12 @@ impl Enumerator<'_> {
         device_clock: &DeviceClock,
     ) -> Result<(), UdpError> {
         let body = set_time_body(DEVICE_TIME_AT_OPEN);
-        let mut answered = None;
-        for _ in 0..EXCHANGE_ATTEMPTS {
-            answered = self.requester.request_once(
-                grandmaster,
-                Kind::SetTime,
-                body.as_bytes(),
-                REQUEST_REPLY_WAIT,
-            )?;
-            if answered.is_some() {
-                break;
-            }
-        }
-        let response = answered.ok_or(UdpError::NoResponse {
-            kind: Kind::SetTime,
-            unit_id: GRANDMASTER_UNIT_ID,
-        })?;
+        let response = self
+            .exchange_with_retries(grandmaster, Kind::SetTime, body.as_bytes())?
+            .ok_or(UdpError::NoResponse {
+                kind: Kind::SetTime,
+                unit_id: GRANDMASTER_UNIT_ID,
+            })?;
         response.check_status(Kind::SetTime, GRANDMASTER_UNIT_ID)?;
         device_clock.observe(DEVICE_TIME_AT_OPEN);
         Ok(())
@@ -313,7 +345,8 @@ pub(super) fn bring_up(
     device_clock: &DeviceClock,
 ) -> Result<Vec<SocketAddrV6>, UdpError> {
     let mut enumerator = Enumerator {
-        requester: Requester::new(channel),
+        channel,
+        last_msg_id: 0,
         open_timeout: option.open_timeout,
         deadline,
     };
