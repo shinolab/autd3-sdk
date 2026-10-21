@@ -28,7 +28,6 @@ pub struct Controller {
     geometry: Arc<Geometry>,
     session: Arc<Session>,
     send_serializer: AsyncMutex<()>,
-    silent_stop_sent: AsyncMutex<bool>,
 }
 
 impl Controller {
@@ -39,7 +38,6 @@ impl Controller {
             geometry: Arc::new(geometry.clone()),
             session,
             send_serializer: AsyncMutex::new(()),
-            silent_stop_sent: AsyncMutex::new(false),
         };
         Ok((controller, driver))
     }
@@ -204,13 +202,12 @@ impl Controller {
 
     pub async fn close(&self) -> Result<(), Error> {
         tracing::debug!("closing controller");
-        let mut silent_stop_sent = self.silent_stop_sent.lock().await;
-        if !*silent_stop_sent {
-            self.silent_stop().await?;
-            *silent_stop_sent = true;
+        if let Some(e) = self.session.closed_error() {
+            return Err(e);
         }
+        let stopped = self.silent_stop().await;
         self.shutdown();
-        Ok(())
+        stopped
     }
 
     pub(crate) fn shutdown(&self) {
