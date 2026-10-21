@@ -5,17 +5,29 @@ use autd3_cpu_fw::Port;
 use autd3_cpu_fw::port::FlashError;
 use autd3_cpu_fw::update::{FLASH_SECTOR_BYTES, LOADER_REGION_END};
 
-fn flash_span(
+fn flash_range(
     flash_len: usize,
     addr: u32,
     len: usize,
 ) -> Result<core::ops::Range<usize>, FlashError> {
     let start = usize::try_from(addr).map_err(|_| FlashError)?;
     let end = start.checked_add(len).ok_or(FlashError)?;
-    if start < LOADER_REGION_END as usize || end > flash_len {
+    if end > flash_len {
         return Err(FlashError);
     }
     Ok(start..end)
+}
+
+fn flash_span(
+    flash_len: usize,
+    addr: u32,
+    len: usize,
+) -> Result<core::ops::Range<usize>, FlashError> {
+    let range = flash_range(flash_len, addr, len)?;
+    if range.start < LOADER_REGION_END as usize {
+        return Err(FlashError);
+    }
+    Ok(range)
 }
 
 impl Port for FpgaEmulator {
@@ -60,13 +72,8 @@ impl Port for FpgaEmulator {
     }
 
     fn flash_read(&mut self, addr: u32, buf: &mut [u8]) -> Result<(), FlashError> {
-        let start = usize::try_from(addr).map_err(|_| FlashError)?;
-        let end = start.checked_add(buf.len()).ok_or(FlashError)?;
         let flash = self.cpu_flash();
-        if end > flash.len() {
-            return Err(FlashError);
-        }
-        buf.copy_from_slice(&flash[start..end]);
+        buf.copy_from_slice(&flash[flash_range(flash.len(), addr, buf.len())?]);
         Ok(())
     }
 

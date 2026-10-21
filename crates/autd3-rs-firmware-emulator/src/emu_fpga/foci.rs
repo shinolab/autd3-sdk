@@ -8,7 +8,7 @@
 
 use autd3_rs_core::value::{Intensity, Phase};
 
-use super::FpgaEmulator;
+use super::{FpgaEmulator, u64_at};
 use crate::fw;
 
 pub(super) static SIN_TABLE: &[u8; 256] = include_bytes!("sin.dat");
@@ -76,12 +76,6 @@ fn sign_extend_18(v: u64) -> i32 {
     }
 }
 
-fn read_focus(ram: &[u16], word_base: usize) -> u64 {
-    (0..4)
-        .map(|k| u64::from(ram[word_base + k]) << (16 * k))
-        .sum()
-}
-
 impl FpgaEmulator {
     #[must_use]
     pub fn sound_speed(&self, bank: usize) -> u16 {
@@ -98,6 +92,12 @@ impl FpgaEmulator {
         let sound_speed = u32::from(self.sound_speed(bank));
         let num_foci = self.num_foci(bank);
         let ram = &self.em_ram[bank];
+        let foci: Vec<(i32, i32, i32, u8)> = (0..num_foci)
+            .map(|f| {
+                let focus = StmFocus(u64_at(ram, 4 * (idx * num_foci + f)));
+                (focus.x(), focus.y(), focus.z(), focus.intensity())
+            })
+            .collect();
         (0..self.num_transducers)
             .map(|i| {
                 let tr = TR_POS[i];
@@ -105,24 +105,26 @@ impl FpgaEmulator {
                 let tr_y = i32::from((tr & 0xFFFF) as i16);
                 let tr_z = 0i32;
                 let mut intensity = 0u8;
-                let (sin, cos) = (0..num_foci).fold((0u16, 0u16), |acc, f| {
-                    let focus = StmFocus(read_focus(ram, 4 * (idx * num_foci + f)));
-                    let (x, y, z) = (focus.x(), focus.y(), focus.z());
-                    let offset = if f == 0 {
-                        intensity = focus.intensity();
-                        0
-                    } else {
-                        focus.intensity()
-                    };
-                    let d2 =
-                        (x - tr_x) * (x - tr_x) + (y - tr_y) * (y - tr_y) + (z - tr_z) * (z - tr_z);
-                    let dist = d2.isqrt() as u32;
-                    let q = ((dist << 14) / sound_speed) as usize + offset as usize;
-                    (
-                        acc.0 + u16::from(SIN_TABLE[q % 256]),
-                        acc.1 + u16::from(SIN_TABLE[(q + 64) % 256]),
-                    )
-                });
+                let (sin, cos) = foci.iter().enumerate().fold(
+                    (0u16, 0u16),
+                    |acc, (f, &(x, y, z, focus_intensity))| {
+                        let offset = if f == 0 {
+                            intensity = focus_intensity;
+                            0
+                        } else {
+                            focus_intensity
+                        };
+                        let d2 = (x - tr_x) * (x - tr_x)
+                            + (y - tr_y) * (y - tr_y)
+                            + (z - tr_z) * (z - tr_z);
+                        let dist = d2.isqrt() as u32;
+                        let q = ((dist << 14) / sound_speed) as usize + offset as usize;
+                        (
+                            acc.0 + u16::from(SIN_TABLE[q % 256]),
+                            acc.1 + u16::from(SIN_TABLE[(q + 64) % 256]),
+                        )
+                    },
+                );
                 let sin = ((sin / num_foci as u16) >> 1) as usize;
                 let cos = ((cos / num_foci as u16) >> 1) as usize;
                 let phase = Phase(ATAN_TABLE[(sin << 7) | cos]) + self.phase_correction(i);
