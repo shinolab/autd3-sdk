@@ -10,8 +10,7 @@ use autd3_rs_core::{BusStats, DeviceClock, MAX_DEVICES};
 use futures_channel::oneshot;
 use zerocopy::{FromZeros, IntoBytes};
 
-use crate::commands::operation::Distribution;
-use crate::datagram::Datagram;
+use crate::datagram::Frame;
 use crate::error::{Error, NetworkCause};
 use crate::geometry::Geometry;
 use crate::protocol::{FrameHeader, MAX_INFLIGHT};
@@ -51,20 +50,23 @@ impl InflightRequest {
 }
 
 pub(crate) struct AnsweredRequest {
-    msg_id: u16,
-    sent_at: Instant,
+    request: InflightRequest,
     response: Response,
-    completion: ResponseSender,
 }
 
 impl AnsweredRequest {
     fn deliver(self, stats: &BusStats) {
-        tracing::trace!(msg_id = self.msg_id, "frame answered by every device");
-        stats.record_ack(u64::try_from(self.sent_at.elapsed().as_nanos()).unwrap_or(u64::MAX));
+        tracing::trace!(
+            msg_id = self.request.msg_id,
+            "frame answered by every device"
+        );
+        stats.record_ack(
+            u64::try_from(self.request.sent_at.elapsed().as_nanos()).unwrap_or(u64::MAX),
+        );
         if let Err(e) = self.response.check() {
             tracing::warn!(error = %e, "device reported an error");
         }
-        let _ = self.completion.send(Ok(self.response));
+        let _ = self.request.completion.send(Ok(self.response));
     }
 }
 
@@ -190,6 +192,7 @@ pub(crate) struct ClosedSession {
     requests: Vec<InflightRequest>,
     recovery_waiter: Option<RecoveryResultSender>,
     slot_waiter: Option<Waker>,
+    network_failure: Option<NetworkCause>,
 }
 
 impl SessionState {
@@ -269,12 +272,7 @@ impl SessionState {
         let replied_devices = self.inflight.slots[index].request.as_ref()?.replied_devices;
         let response = self.inflight.slots[index].reply.response(replied_devices);
         let request = self.inflight.take(index, now)?;
-        Some(AnsweredRequest {
-            msg_id: request.msg_id,
-            sent_at: request.sent_at,
-            response,
-            completion: request.completion,
-        })
+        Some(AnsweredRequest { request, response })
     }
 
     pub(crate) fn record_sent_to(
@@ -312,7 +310,7 @@ impl SessionState {
             return None;
         }
         slot.reply
-            .record_reply(reply.device, reply.error_code, reply.sys_time, reply.data());
+            .record_reply(reply.device, reply.error_code, reply.sys_time, reply.data);
         request.replied_devices |= reply_bit;
         if !request.has_all_replies() {
             return None;
@@ -443,12 +441,18 @@ impl SessionState {
             requests: self.inflight.take_all(),
             recovery_waiter: self.recovery_waiter.take(),
             slot_waiter: self.inflight.slot_waiter.take(),
+            network_failure: self.network_failure.clone(),
         }
     }
 }
 
 impl ClosedSession {
-    fn resolve(self, error: impl Fn() -> Error) {
+    fn resolve(self) {
+        let error = || {
+            self.network_failure
+                .clone()
+                .map_or(Error::Closed, Error::Network)
+        };
         if let Some(recovery_waiter) = self.recovery_waiter {
             let _ = recovery_waiter.send(Err(error()));
         }
@@ -680,10 +684,10 @@ impl Session {
     pub(crate) fn send_frame(
         &self,
         msg_id: u16,
-        dist: Distribution,
-        datagrams: &[Datagram],
+        frame: Frame<'_>,
         exec_at: u32,
     ) -> Result<(), Error> {
+        let datagrams = frame.datagrams();
         let target_devices = self
             .lock_state()
             .device_mask_where(DeviceLiveness::accepts_frames);
@@ -691,17 +695,13 @@ impl Session {
         for (header, datagram) in headers.iter_mut().zip(datagrams) {
             *header = datagram.frame_header(exec_at);
         }
-        let datagram_index = |device: usize| match dist {
-            Distribution::Broadcast => 0,
-            Distribution::PerDevice => device,
-        };
         let (sent, started_lost_clock) = self.send_to_each_device(
             Kind::Frame,
             msg_id,
             target_devices,
             self.channel.num_devices() - 1,
             |device| {
-                let index = datagram_index(device);
+                let index = frame.datagram_index(device);
                 [headers[index].as_bytes(), datagrams[index].payload()]
             },
         );
@@ -883,11 +883,7 @@ impl Session {
 
     pub(crate) fn close(&self, network_failure: Option<&NetworkCause>) {
         let closed = self.lock_state().close(network_failure);
-        closed.resolve(|| {
-            network_failure
-                .cloned()
-                .map_or(Error::Closed, Error::Network)
-        });
+        closed.resolve();
     }
 }
 
@@ -1055,9 +1051,7 @@ mod tests {
         let (_msg_id, response) = enqueue(&mut state, now);
         let cause = NetworkCause::new(UdpError::Closed);
 
-        state
-            .close(Some(&cause))
-            .resolve(|| Error::Network(cause.clone()));
+        state.close(Some(&cause)).resolve();
 
         assert!(matches!(
             pollster::block_on(response),
@@ -1083,7 +1077,7 @@ mod tests {
 
         let closed = state.close(None);
         assert!(closed.slot_waiter.is_some());
-        closed.resolve(|| Error::Closed);
+        closed.resolve();
 
         assert!(matches!(
             pollster::block_on(enqueued.remove(0).1),
@@ -1105,7 +1099,10 @@ mod tests {
 
         let answered = state.record_sent_to(msg_id, 0b11, now);
 
-        assert_eq!(answered.map(|answered| answered.msg_id), Some(msg_id));
+        assert_eq!(
+            answered.map(|answered| answered.request.msg_id),
+            Some(msg_id)
+        );
         assert_eq!(state.inflight.len, 0);
     }
 
@@ -1266,7 +1263,7 @@ mod tests {
     fn a_recovery_is_refused_once_closed() {
         let now = Instant::now();
         let mut state = session_state(1, now);
-        state.close(None).resolve(|| Error::Closed);
+        state.close(None).resolve();
         let (waiter, _result) = oneshot::channel();
         assert!(matches!(
             state.start_recovery(waiter, now),
@@ -1282,7 +1279,7 @@ mod tests {
         let checker = StateChecker::new(Arc::clone(&published_states));
         let mut state = SessionState::new(1, TIMEOUTS, published_states, 0, now);
         assert!(checker.check().is_ok());
-        state.close(None).resolve(|| Error::Closed);
+        state.close(None).resolve();
         assert!(matches!(checker.check(), Err(UdpError::Closed)));
         assert_eq!(state.liveness[0].state(), DeviceState::Ready);
     }

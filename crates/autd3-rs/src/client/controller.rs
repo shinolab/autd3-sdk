@@ -82,8 +82,7 @@ impl Controller {
     }
 
     pub async fn send_frame(&self, frame: Frame<'_>) -> Result<ResponseFuture, Error> {
-        self.validate_and_send(frame.distribution(), frame.datagrams(), ExecAt::Immediate)
-            .await
+        self.send_frame_at(frame, ExecAt::Immediate).await
     }
 
     pub async fn send_frame_at(
@@ -91,20 +90,8 @@ impl Controller {
         frame: Frame<'_>,
         exec: ExecAt,
     ) -> Result<ResponseFuture, Error> {
-        self.validate_and_send(frame.distribution(), frame.datagrams(), exec)
-            .await
-    }
-
-    async fn validate_and_send(
-        &self,
-        dist: Distribution,
-        datagrams: &[Datagram],
-        exec: ExecAt,
-    ) -> Result<ResponseFuture, Error> {
-        let expected = match dist {
-            Distribution::Broadcast => 1,
-            Distribution::PerDevice => self.num_devices(),
-        };
+        let datagrams = frame.datagrams();
+        let expected = frame.distribution().num_datagrams(self.num_devices());
         if datagrams.len() != expected {
             return Err(PayloadError::DatagramCountMismatch {
                 expected,
@@ -140,8 +127,8 @@ impl Controller {
                 return Err(e);
             }
         };
-        tracing::trace!(msg_id, cmd = ?datagrams[0].cmd, ?dist, "sending frame");
-        self.session.send_frame(msg_id, dist, datagrams, exec_at)?;
+        tracing::trace!(msg_id, cmd = ?datagrams[0].cmd, dist = ?frame.distribution(), "sending frame");
+        self.session.send_frame(msg_id, frame, exec_at)?;
         Ok(response)
     }
 
@@ -186,12 +173,9 @@ impl Controller {
         cmd: Cmd,
         parse: impl Fn(&[u8]) -> Option<T>,
     ) -> Result<Vec<T>, Error> {
+        let datagram = [Datagram::no_payload(cmd)];
         let response = self
-            .validate_and_send(
-                Distribution::Broadcast,
-                &[Datagram::no_payload(cmd)],
-                ExecAt::Immediate,
-            )
+            .send_frame(Frame::new(Distribution::Broadcast, &datagram))
             .await?
             .await?;
         response.check()?;

@@ -13,5 +13,5 @@ pub(crate) use control::{ControlResponse, assign_id_body, set_time_body};
 pub use error::UdpError;
 pub(crate) use iface::{ResolvedEndpoint, link_local_interfaces};
 pub use option::TransportOption;
-pub(crate) use reply::{DeviceReply, Reply};
+pub(crate) use reply::{DeviceReply, Reply, ReplyData};
 pub use state::StateChecker;

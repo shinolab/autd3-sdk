@@ -1,6 +1,7 @@
 use crate::error::Error;
+use crate::udp::ReplyData;
+use autd3_rs_core::MAX_DEVICES;
 use autd3_rs_core::value::SysTime;
-use autd3_rs_core::{MAX_DEVICES, REPLY_DATA_BYTES_MAX};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Response {
@@ -121,23 +122,10 @@ impl Response {
     }
 }
 
-#[derive(Clone, Copy)]
-struct DeviceReplyData {
-    len: u8,
-    bytes: [u8; REPLY_DATA_BYTES_MAX],
-}
-
-impl DeviceReplyData {
-    const EMPTY: Self = Self {
-        len: 0,
-        bytes: [0; REPLY_DATA_BYTES_MAX],
-    };
-}
-
 pub(crate) struct ReplyBuffers {
     error_codes: Box<[u8]>,
     sys_times: Box<[u64]>,
-    reply_data: Box<[DeviceReplyData]>,
+    reply_data: Box<[ReplyData]>,
 }
 
 impl ReplyBuffers {
@@ -145,14 +133,14 @@ impl ReplyBuffers {
         Self {
             error_codes: vec![0u8; num_devices].into_boxed_slice(),
             sys_times: vec![0u64; num_devices].into_boxed_slice(),
-            reply_data: vec![DeviceReplyData::EMPTY; num_devices].into_boxed_slice(),
+            reply_data: vec![ReplyData::EMPTY; num_devices].into_boxed_slice(),
         }
     }
 
     pub(crate) fn reset(&mut self) {
         self.error_codes.fill(0);
         self.sys_times.fill(0);
-        self.reply_data.fill(DeviceReplyData::EMPTY);
+        self.reply_data.fill(ReplyData::EMPTY);
     }
 
     pub(crate) fn record_reply(
@@ -160,25 +148,22 @@ impl ReplyBuffers {
         device: usize,
         error_code: u8,
         sys_time: u64,
-        data: &[u8],
+        data: ReplyData,
     ) {
         self.error_codes[device] = error_code;
         self.sys_times[device] = sys_time;
-        let len = data.len().min(REPLY_DATA_BYTES_MAX);
-        let device_data = &mut self.reply_data[device];
-        device_data.len = u8::try_from(len).expect("bounded by REPLY_DATA_BYTES_MAX");
-        device_data.bytes[..len].copy_from_slice(&data[..len]);
+        self.reply_data[device] = data;
     }
 
     pub(crate) fn response(&self, replied_devices: u128) -> Response {
-        let response = if self.reply_data.iter().all(|v| v.len == 0) {
+        let response = if self.reply_data.iter().all(ReplyData::is_empty) {
             Response::from_error_codes(&self.error_codes)
         } else {
             Response::with_reply_data(
                 &self.error_codes,
                 self.reply_data
                     .iter()
-                    .map(|v| v.bytes[..usize::from(v.len)].to_vec())
+                    .map(|data| data.as_slice().to_vec())
                     .collect(),
             )
         };
@@ -191,19 +176,20 @@ impl ReplyBuffers {
 #[cfg(test)]
 mod tests {
     use super::{ReplyBuffers, Response};
+    use crate::udp::ReplyData;
     use autd3_rs_core::MAX_DEVICES;
     use autd3_rs_core::value::SysTime;
 
     #[test]
     fn a_reused_reply_buffer_forgets_the_device_times_of_its_previous_frame() {
         let mut buffers = ReplyBuffers::new(2);
-        buffers.record_reply(0, 0, 1_000, &[]);
+        buffers.record_reply(0, 0, 1_000, ReplyData::EMPTY);
         assert_eq!(
             buffers.response(0b01).sys_time_of(0),
             Some(SysTime::from_nanos(1_000))
         );
         buffers.reset();
-        buffers.record_reply(1, 0, 2_000, &[]);
+        buffers.record_reply(1, 0, 2_000, ReplyData::EMPTY);
         let response = buffers.response(0b11);
         assert_eq!(response.sys_time_of(0), None);
         assert_eq!(response.sys_time_of(1), Some(SysTime::from_nanos(2_000)));

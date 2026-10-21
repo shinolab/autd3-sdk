@@ -63,9 +63,13 @@ impl<'a> Frame<'a> {
 
     #[must_use]
     pub fn datagram_for(&self, device: usize) -> &'a Datagram {
+        &self.datagrams[self.datagram_index(device)]
+    }
+
+    pub(crate) const fn datagram_index(&self, device: usize) -> usize {
         match self.dist {
-            Distribution::Broadcast => &self.datagrams[0],
-            Distribution::PerDevice => &self.datagrams[device],
+            Distribution::Broadcast => 0,
+            Distribution::PerDevice => device,
         }
     }
 }
@@ -167,10 +171,7 @@ impl Frames {
 
         debug_assert!(!geometry.is_empty());
         let dist = op.distribution();
-        let len = match dist {
-            Distribution::Broadcast => 1,
-            Distribution::PerDevice => geometry.num_devices(),
-        };
+        let len = dist.num_datagrams(geometry.num_devices());
         let start = self.datagrams.len();
         self.datagrams
             .resize_with(start + len, || Datagram::no_payload(Cmd::Nop));
