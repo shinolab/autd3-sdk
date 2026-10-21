@@ -7,10 +7,9 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use autd3_cpu_fw::proto::{Drained, FrameHeader, Reply};
-use autd3_cpu_fw::ptp::Config as PtpConfig;
 use autd3_cpu_wire::udp::{
-    AssignIdBody, Flags, FrameReply, Header, Kind, PROTOCOL_VERSION, RESET_ID_CLOSE_DELAY_MS, Role,
-    SetTimeBody, Status, UNASSIGNED_ID, UPSTREAM_UNKNOWN, UnblockReply, UnitInfo,
+    AssignIdBody, Flags, FrameReply, Header, Kind, PROTOCOL_VERSION, Role, SetTimeBody, Status,
+    UNASSIGNED_ID, UPSTREAM_UNKNOWN, UnblockReply, UnitInfo,
 };
 use autd3_rs_core::geometry::Autd3;
 use autd3_rs_core::{FRAME_BYTES_MAX, Interface};
@@ -21,8 +20,6 @@ use crate::Device;
 
 const LOOPBACK_ANY: SocketAddrV6 = SocketAddrV6::new(Ipv6Addr::LOCALHOST, 0, 0, 0);
 const POLL_INTERVAL: Duration = Duration::from_millis(10);
-const PULSE_DELAY: Duration = Duration::from_millis(50);
-const LOCK_DELAY: Duration = Duration::from_millis(50);
 const MAX_CATCH_UP_TICKS: u128 = 60_000;
 const UPSTREAM_PORT: u8 = 0;
 const NS_PER_SEC: u64 = 1_000_000_000;
@@ -36,16 +33,10 @@ enum Via {
 struct Unit {
     device: Device,
     socket: Arc<UdpSocket>,
-    retired: Option<Arc<UdpSocket>>,
     id: Option<u8>,
     grandmaster: bool,
-    clock_offset_ns: i64,
     open: bool,
-    close_at: Option<Instant>,
-    locked_at: Option<Instant>,
-    unlocked_since: Option<Instant>,
-    lock_blocked: bool,
-    ptp_config: PtpConfig,
+    lock_blocked_since: Option<Instant>,
     last_tick: Instant,
     host: Option<SocketAddr>,
     main_loop_paused: bool,
@@ -55,7 +46,6 @@ struct Unit {
     duplicate_frames: u32,
     muted: bool,
     heartbeats: u64,
-    id_resets: u64,
 }
 
 impl Unit {
@@ -63,48 +53,7 @@ impl Unit {
         self.id = None;
         self.grandmaster = false;
         self.open = false;
-        self.close_at = None;
-        self.device.fpga_mut().take_ptp_config();
-        self.ptp_config = PtpConfig::default();
-        self.unlock();
-        self.unlocked_since = None;
         self.host = None;
-        self.readdress();
-    }
-
-    fn readdress(&mut self) {
-        match bind(LOOPBACK_ANY) {
-            Ok((socket, _)) => {
-                self.retired = Some(core::mem::replace(&mut self.socket, socket));
-            }
-            Err(e) => tracing::debug!("emulated device keeps its address: {e}"),
-        }
-    }
-
-    fn lose_lock(&mut self, now: Instant) {
-        if self.locked_at.is_some_and(|at| at <= now) {
-            self.unlocked_since = Some(now);
-        }
-        self.unlock();
-    }
-
-    fn ptp_unlocked_ms(&self, now: Instant) -> Option<u32> {
-        if self.locked_at.is_some_and(|at| at <= now) {
-            return None;
-        }
-        self.unlocked_since.map(|at| millis_since(at, now))
-    }
-
-    fn can_lock(&self) -> bool {
-        !self.lock_blocked && !self.ptp_config.lock_threshold.is_zero()
-    }
-
-    fn unlock(&mut self) {
-        self.locked_at = None;
-    }
-
-    fn lock_at(&mut self, at: Instant) {
-        self.locked_at = Some(at);
     }
 }
 
@@ -120,6 +69,7 @@ fn wrapping_millis_since(at: Instant, now: Instant) -> u32 {
 struct Chain {
     units: Vec<Unit>,
     boot: Instant,
+    clock_offset_ns: Option<i64>,
 }
 
 impl Chain {
@@ -127,51 +77,30 @@ impl Chain {
         i64::try_from(self.boot.elapsed().as_nanos()).unwrap_or(i64::MAX)
     }
 
-    fn unit_now(&self, index: usize) -> u64 {
+    fn device_now(&self) -> u64 {
         u64::try_from(
             self.host_now_ns()
-                .saturating_add(self.units[index].clock_offset_ns),
+                .saturating_add(self.clock_offset_ns.unwrap_or(0)),
         )
         .unwrap_or(0)
     }
 
-    fn grandmaster_offset(&self) -> Option<i64> {
-        self.units
-            .iter()
-            .find(|u| u.id.is_some() && u.grandmaster && u.locked_at.is_some())
-            .map(|u| u.clock_offset_ns)
+    fn assigned_after_time_set(&self, index: usize) -> bool {
+        self.units[index].id.is_some() && self.clock_offset_ns.is_some()
     }
 
-    fn follow_grandmaster(&mut self, index: usize, now: Instant) {
-        let Some(offset) = self.grandmaster_offset() else {
-            return;
-        };
-        let unit = &mut self.units[index];
-        if unit.id.is_none() || unit.grandmaster || !unit.can_lock() {
-            return;
-        }
-        unit.clock_offset_ns = offset;
-        unit.lock_at(now + LOCK_DELAY);
+    fn locked(&self, index: usize) -> bool {
+        let unit = &self.units[index];
+        self.assigned_after_time_set(index)
+            && (unit.grandmaster || unit.lock_blocked_since.is_none())
     }
 
-    fn apply_ptp_config(&mut self, index: usize, now: Instant) {
-        let unit = &mut self.units[index];
-        let Some(config) = unit.device.fpga_mut().take_ptp_config() else {
-            return;
-        };
-        unit.ptp_config = config;
-        if unit.locked_at.is_none() {
-            self.follow_grandmaster(index, now);
+    fn ptp_unlocked_ms(&self, index: usize, now: Instant) -> Option<u32> {
+        let unit = &self.units[index];
+        if !self.assigned_after_time_set(index) || unit.grandmaster {
+            return None;
         }
-    }
-
-    fn apply_pending(&mut self, now: Instant) {
-        for unit in &mut self.units {
-            if unit.close_at.is_some_and(|at| at <= now) {
-                unit.forget();
-                unit.device.cpu.request_config_reset();
-            }
-        }
+        unit.lock_blocked_since.map(|at| millis_since(at, now))
     }
 
     fn reachable_end(&self) -> usize {
@@ -190,7 +119,7 @@ impl Chain {
         }
     }
 
-    fn flags(&self, index: usize, now: Instant) -> Flags {
+    fn flags(&self, index: usize) -> Flags {
         let unit = &self.units[index];
         let mut flags = Flags::empty();
         if unit.id.is_some() {
@@ -202,11 +131,8 @@ impl Chain {
         if index + 1 < self.units.len() {
             flags |= Flags::DOWNSTREAM_LINK;
         }
-        if unit.locked_at.is_some_and(|at| at + PULSE_DELAY <= now) {
-            flags |= Flags::SYNC_READY;
-        }
-        if unit.locked_at.is_some_and(|at| at <= now) {
-            flags |= Flags::PTP_LOCKED;
+        if self.locked(index) {
+            flags |= Flags::PTP_LOCKED | Flags::SYNC_READY;
         }
         if unit.grandmaster {
             flags |= Flags::GRANDMASTER;
@@ -239,11 +165,11 @@ impl Chain {
         self.reply(index, dst, header, &[&[status.as_u8()], extra]);
     }
 
-    fn unit_info(&self, index: usize, now: Instant) -> UnitInfo {
+    fn unit_info(&self, index: usize) -> UnitInfo {
         let unit = &self.units[index];
         UnitInfo {
             unit_id: unit.id.unwrap_or(UNASSIGNED_ID),
-            flags: self.flags(index, now),
+            flags: self.flags(index),
             upstream_port: if unit.id.is_some() {
                 UPSTREAM_PORT
             } else {
@@ -256,19 +182,13 @@ impl Chain {
                 autd3_cpu_fw::FW_VERSION_PATCH,
             ],
             reserved2: 0,
-            sys_time: U64::new(self.unit_now(index)),
+            sys_time: U64::new(self.device_now()),
             ptp_offset_ns: I32::new(0),
         }
     }
 
-    fn handle(&mut self, via: Via, socket: &Arc<UdpSocket>, src: SocketAddr, datagram: &[u8]) {
+    fn handle(&mut self, via: Via, src: SocketAddr, datagram: &[u8]) {
         let now = Instant::now();
-        self.apply_pending(now);
-        if let Via::Unit(index) = via
-            && !Arc::ptr_eq(&self.units[index].socket, socket)
-        {
-            return;
-        }
         let Ok((header, body)) = Header::read_from_prefix(datagram) else {
             return;
         };
@@ -302,22 +222,20 @@ impl Chain {
                         self.units[i].drop_unit_infos -= 1;
                         continue;
                     }
-                    let info = self.unit_info(i, now);
+                    let info = self.unit_info(i);
                     self.reply_status(i, src, header, Status::Ok, info.as_bytes());
                 }
                 Kind::ResetId => {
-                    self.units[i].id_resets += 1;
                     self.reply_status(i, src, header, Status::Ok, &[]);
-                    self.units[i].close_at.get_or_insert(
-                        now + Duration::from_millis(u64::from(RESET_ID_CLOSE_DELAY_MS)),
-                    );
+                    self.units[i].forget();
+                    self.units[i].device.cpu.request_config_reset();
                 }
                 Kind::Discover => {
                     if self.units[i].id.is_none() {
                         self.reply_status(i, src, header, Status::Ok, &[]);
                     }
                 }
-                Kind::AssignId => self.assign(i, src, header, body, now),
+                Kind::AssignId => self.assign(i, src, header, body),
                 Kind::UnblockDownstream => {
                     if self.units[i].id.is_none() {
                         self.reply_status(i, src, header, Status::NotAssigned, &[]);
@@ -329,13 +247,13 @@ impl Chain {
                     };
                     self.reply_status(i, src, header, Status::Ok, reply.as_bytes());
                 }
-                Kind::SetTime => self.set_time(i, src, header, body, now),
+                Kind::SetTime => self.set_time(i, src, header, body),
                 _ => unreachable!(),
             }
         }
     }
 
-    fn assign(&mut self, index: usize, src: SocketAddr, header: Header, body: &[u8], now: Instant) {
+    fn assign(&mut self, index: usize, src: SocketAddr, header: Header, body: &[u8]) {
         if self.units[index].id.is_some() {
             return;
         }
@@ -351,20 +269,10 @@ impl Chain {
         let unit = &mut self.units[index];
         unit.id = Some(request.unit_id);
         unit.grandmaster = role == Role::Grandmaster;
-        unit.close_at = None;
-        unit.readdress();
-        self.follow_grandmaster(index, now);
         self.reply_status(index, src, header, Status::Ok, &[]);
     }
 
-    fn set_time(
-        &mut self,
-        index: usize,
-        src: SocketAddr,
-        header: Header,
-        body: &[u8],
-        now: Instant,
-    ) {
+    fn set_time(&mut self, index: usize, src: SocketAddr, header: Header, body: &[u8]) {
         let status = if self.units[index].id.is_none() {
             Status::NotAssigned
         } else if !self.units[index].grandmaster {
@@ -373,13 +281,7 @@ impl Chain {
             && u32::try_from(request.sys_time.get() / NS_PER_SEC).is_ok()
         {
             let target = i64::try_from(request.sys_time.get()).unwrap_or(i64::MAX);
-            let host = self.host_now_ns();
-            let unit = &mut self.units[index];
-            unit.clock_offset_ns = target.saturating_sub(host);
-            unit.lock_at(now);
-            for slave in 0..self.units.len() {
-                self.follow_grandmaster(slave, now);
-            }
+            self.clock_offset_ns = Some(target.saturating_sub(self.host_now_ns()));
             Status::Ok
         } else {
             Status::InvalidPayload
@@ -388,14 +290,13 @@ impl Chain {
     }
 
     fn advance(&mut self, index: usize, now: Instant) {
-        let bus = self.unit_now(index);
+        let bus = self.device_now();
         let now_ms = wrapping_millis_since(self.boot, now);
+        let ptp_unlocked_ms = self.ptp_unlocked_ms(index, now);
         let unit = &mut self.units[index];
         let resets = unit.device.fpga().reset_count();
         unit.device.cpu.publish_host_idle(now_ms);
-        unit.device
-            .cpu
-            .publish_ptp_unlocked(unit.ptp_unlocked_ms(now));
+        unit.device.cpu.publish_ptp_unlocked(ptp_unlocked_ms);
         let elapsed = now.saturating_duration_since(unit.last_tick).as_millis();
         if elapsed > 0 && !unit.main_loop_paused {
             unit.last_tick = now;
@@ -409,32 +310,22 @@ impl Chain {
         unit.device.fpga_mut().update_with_sys_time(bus);
     }
 
-    fn idle(&mut self, index: usize, now: Instant) {
-        self.apply_pending(now);
-        self.advance(index, now);
-    }
-
-    fn complete_one(&mut self, index: usize, now: Instant) -> bool {
+    fn complete_one(&mut self, index: usize) -> bool {
         let Drained::Completed { msg_id } = self.units[index].device.process_one() else {
             return false;
         };
-        self.apply_ptp_config(index, now);
         if self.units[index].drop_replies > 0 {
             self.units[index].drop_replies -= 1;
         } else if let Some(host) = self.units[index].host {
-            self.frame_reply(index, host, Header::new(Kind::Frame, msg_id), now);
+            self.frame_reply(index, host, Header::new(Kind::Frame, msg_id));
         }
         true
     }
 
-    fn run_main_loop(&mut self, index: usize, now: Instant, frames: usize) -> usize {
-        self.apply_pending(now);
-        let paused = core::mem::replace(&mut self.units[index].main_loop_paused, false);
+    fn resume_main_loop(&mut self, index: usize, now: Instant) {
+        self.units[index].main_loop_paused = false;
         self.advance(index, now);
-        self.units[index].main_loop_paused = paused;
-        (0..frames)
-            .take_while(|_| self.complete_one(index, now))
-            .count()
+        while self.complete_one(index) {}
     }
 
     fn enqueue(&mut self, index: usize, body: &[u8], msg_id: u16) {
@@ -445,7 +336,7 @@ impl Chain {
         }
     }
 
-    fn frame_reply(&self, index: usize, dst: SocketAddr, header: Header, now: Instant) {
+    fn frame_reply(&self, index: usize, dst: SocketAddr, header: Header) {
         let Some(unit_id) = self.units[index].id else {
             return;
         };
@@ -453,9 +344,9 @@ impl Chain {
         let head = FrameReply {
             reserved: 0,
             status: state.status.as_u8(),
-            flags: self.flags(index, now),
+            flags: self.flags(index),
             unit_id,
-            sys_time: U64::new(self.unit_now(index)),
+            sys_time: U64::new(self.device_now()),
         };
         self.reply(index, dst, header, &[head.as_bytes(), state.data()]);
     }
@@ -486,7 +377,7 @@ impl Chain {
             self.units[index].drop_replies -= 1;
             return;
         }
-        self.frame_reply(index, src, header, now);
+        self.frame_reply(index, src, header);
     }
 
     fn frame(&mut self, index: usize, src: SocketAddr, header: Header, frame: &[u8], now: Instant) {
@@ -521,9 +412,7 @@ impl Chain {
             self.units[index].drop_replies -= 1;
         }
         loop {
-            let drained = self.units[index].device.process_one();
-            self.apply_ptp_config(index, now);
-            match drained {
+            match self.units[index].device.process_one() {
                 Drained::Empty => break,
                 Drained::Completed { .. } if silent => {}
                 Drained::Completed { msg_id } => {
@@ -531,7 +420,7 @@ impl Chain {
                         msg_id: zerocopy::little_endian::U16::new(msg_id),
                         ..header
                     };
-                    self.frame_reply(index, src, header, now);
+                    self.frame_reply(index, src, header);
                 }
             }
         }
@@ -543,6 +432,7 @@ pub struct UdpEmulator {
     stop: Arc<AtomicBool>,
     threads: Vec<JoinHandle<()>>,
     group: SocketAddrV6,
+    device_addrs: Vec<SocketAddrV6>,
 }
 
 fn bind(addr: SocketAddrV6) -> io::Result<(Arc<UdpSocket>, SocketAddrV6)> {
@@ -558,15 +448,11 @@ fn lock(chain: &Mutex<Chain>) -> MutexGuard<'_, Chain> {
     chain.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-fn serve(chain: &Mutex<Chain>, socket: &Arc<UdpSocket>, via: Via, stop: &AtomicBool) {
+fn serve(chain: &Mutex<Chain>, socket: &UdpSocket, via: Via, stop: &AtomicBool) {
     let mut buf = vec![0u8; 2048];
     while !stop.load(Ordering::Acquire) {
-        let socket = match via {
-            Via::Group => Arc::clone(socket),
-            Via::Unit(index) => Arc::clone(&lock(chain).units[index].socket),
-        };
         match socket.recv_from(&mut buf) {
-            Ok((len, src)) => lock(chain).handle(via, &socket, src, &buf[..len]),
+            Ok((len, src)) => lock(chain).handle(via, src, &buf[..len]),
             Err(e)
                 if matches!(
                     e.kind(),
@@ -574,7 +460,7 @@ fn serve(chain: &Mutex<Chain>, socket: &Arc<UdpSocket>, via: Via, stop: &AtomicB
                 ) =>
             {
                 if let Via::Unit(index) = via {
-                    lock(chain).idle(index, Instant::now());
+                    lock(chain).advance(index, Instant::now());
                 }
             }
             Err(e) => tracing::debug!("emulated device socket error: {e}"),
@@ -598,21 +484,19 @@ impl UdpEmulator {
         let (group_socket, group) = bind(group)?;
         let now = Instant::now();
         let mut units = Vec::with_capacity(num_devices);
-        for _ in 0..num_devices {
-            let (socket, _) = bind(LOOPBACK_ANY)?;
+        let mut endpoints = vec![(group_socket, Via::Group)];
+        let mut device_addrs = Vec::with_capacity(num_devices);
+        for index in 0..num_devices {
+            let (socket, addr) = bind(LOOPBACK_ANY)?;
+            endpoints.push((Arc::clone(&socket), Via::Unit(index)));
+            device_addrs.push(addr);
             units.push(Unit {
                 device: Device::new(Autd3::NUM_TRANSDUCERS),
                 socket,
-                retired: None,
                 id: None,
                 grandmaster: false,
-                clock_offset_ns: 0,
                 open: false,
-                close_at: None,
-                locked_at: None,
-                unlocked_since: None,
-                lock_blocked: false,
-                ptp_config: PtpConfig::default(),
+                lock_blocked_since: None,
                 last_tick: now,
                 host: None,
                 main_loop_paused: false,
@@ -622,19 +506,15 @@ impl UdpEmulator {
                 duplicate_frames: 0,
                 muted: false,
                 heartbeats: 0,
-                id_resets: 0,
             });
         }
-        let sockets: Vec<Arc<UdpSocket>> = units.iter().map(|u| Arc::clone(&u.socket)).collect();
-        let chain = Arc::new(Mutex::new(Chain { units, boot: now }));
+        let chain = Arc::new(Mutex::new(Chain {
+            units,
+            boot: now,
+            clock_offset_ns: None,
+        }));
         let stop = Arc::new(AtomicBool::new(false));
         let mut threads = Vec::with_capacity(num_devices + 1);
-        let endpoints = std::iter::once((group_socket, Via::Group)).chain(
-            sockets
-                .into_iter()
-                .enumerate()
-                .map(|(i, s)| (s, Via::Unit(i))),
-        );
         for (socket, via) in endpoints {
             let chain = Arc::clone(&chain);
             let serving = Arc::clone(&stop);
@@ -657,20 +537,18 @@ impl UdpEmulator {
             stop,
             threads,
             group,
+            device_addrs,
         })
     }
 
     #[must_use]
     pub fn num_devices(&self) -> usize {
-        lock(&self.chain).units.len()
+        self.device_addrs.len()
     }
 
     #[must_use]
     pub fn device_addr(&self, index: usize) -> SocketAddrV6 {
-        match lock(&self.chain).units[index].socket.local_addr() {
-            Ok(SocketAddr::V6(addr)) => addr,
-            _ => unreachable!("emulated devices bind IPv6 loopback"),
-        }
+        self.device_addrs[index]
     }
 
     #[must_use]
@@ -695,13 +573,11 @@ impl UdpEmulator {
 
     pub fn set_ptp_lock_blocked(&self, index: usize, blocked: bool) {
         let mut chain = lock(&self.chain);
-        chain.units[index].lock_blocked = blocked;
+        let since = &mut chain.units[index].lock_blocked_since;
         if blocked {
-            if !chain.units[index].grandmaster {
-                chain.units[index].lose_lock(Instant::now());
-            }
-        } else if chain.units[index].locked_at.is_none() {
-            chain.follow_grandmaster(index, Instant::now());
+            since.get_or_insert_with(Instant::now);
+        } else {
+            *since = None;
         }
     }
 
@@ -710,14 +586,7 @@ impl UdpEmulator {
     }
 
     pub fn resume_main_loop(&self, index: usize) {
-        let mut chain = lock(&self.chain);
-        chain.units[index].main_loop_paused = false;
-        chain.run_main_loop(index, Instant::now(), usize::MAX);
-    }
-
-    #[must_use]
-    pub fn step_main_loop(&self, index: usize) -> bool {
-        lock(&self.chain).run_main_loop(index, Instant::now(), 1) == 1
+        lock(&self.chain).resume_main_loop(index, Instant::now());
     }
 
     pub fn drop_next_frames(&self, index: usize, count: u32) {
@@ -743,11 +612,6 @@ impl UdpEmulator {
     #[must_use]
     pub fn heartbeats_received(&self, index: usize) -> u64 {
         lock(&self.chain).units[index].heartbeats
-    }
-
-    #[must_use]
-    pub fn id_resets_received(&self, index: usize) -> u64 {
-        lock(&self.chain).units[index].id_resets
     }
 
     pub fn reboot(&self, index: usize) {

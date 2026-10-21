@@ -568,47 +568,92 @@ fn a_muted_unit_hears_the_host_but_neither_executes_nor_answers() {
     assert!(fan(&emulator, 0));
 }
 
-fn silent_at(host: &mut Host, addr: SocketAddrV6) -> bool {
-    host.ask(addr, Kind::ReadUnitInfo, &[]).is_empty()
-        && host.ask(addr, Kind::Heartbeat, &[]).is_empty()
-        && host
-            .ask(addr, Kind::Frame, &frame(Cmd::Nop, &[]))
-            .is_empty()
-}
-
 #[test]
 #[ignore = "depends on real time"]
-fn an_assignment_moves_the_unit_to_a_new_address() {
-    let emulator = UdpEmulator::spawn(1).unwrap();
+fn a_unit_keeps_its_address_across_assignment_reset_and_reboot() {
+    let emulator = UdpEmulator::spawn(2).unwrap();
     let mut host = Host::new();
-    let unassigned = emulator.device_addr(0);
+    let addrs: Vec<SocketAddrV6> = (0..2).map(|i| emulator.device_addr(i)).collect();
 
-    host.assign(&emulator, 0);
-
-    let assigned = emulator.device_addr(0);
-    assert_ne!(assigned.port(), unassigned.port());
-    assert!(silent_at(&mut host, unassigned));
-    assert_eq!(emulator.heartbeats_received(0), 0);
-    let info = host.ask_one(assigned, Kind::ReadUnitInfo, &[]);
-    assert_eq!(info.src, assigned);
+    host.enumerate(&emulator);
+    assert!(
+        (0..2)
+            .map(|i| emulator.device_addr(i))
+            .eq(addrs.iter().copied())
+    );
+    let info = host.ask_one(addrs[0], Kind::ReadUnitInfo, &[]);
+    assert_eq!(info.src, addrs[0]);
     assert_eq!(info.unit_info().unit_id, 0);
-}
-
-#[test]
-#[ignore = "depends on real time"]
-fn a_reboot_abandons_the_address_of_the_unit() {
-    let (emulator, mut host) = enumerated(2);
-    let assigned = emulator.device_addr(0);
-    let behind = emulator.device_addr(1);
 
     emulator.reboot(0);
-
-    assert_ne!(emulator.device_addr(0).port(), assigned.port());
-    assert_eq!(emulator.device_addr(1), behind);
-    assert!(silent_at(&mut host, assigned));
-    assert!(!fan(&emulator, 0));
-    let rebooted = host.ask_one(emulator.device_addr(0), Kind::ReadUnitInfo, &[]);
+    assert_eq!(emulator.device_addr(0), addrs[0]);
+    let rebooted = host.ask_one(addrs[0], Kind::ReadUnitInfo, &[]);
     assert_eq!(rebooted.unit_info().unit_id, UNASSIGNED_ID);
+    assert!(host.ask(addrs[0], Kind::Heartbeat, &[]).is_empty());
+
+    host.assign(&emulator, 0);
+    assert_eq!(host.ask(addrs[0], Kind::ResetId, &[]).len(), 1);
+    let reset = host.ask_one(addrs[0], Kind::ReadUnitInfo, &[]);
+    assert_eq!(reset.src, addrs[0]);
+    assert_eq!(reset.unit_info().unit_id, UNASSIGNED_ID);
+}
+
+#[test]
+#[ignore = "depends on real time"]
+fn a_reset_id_returns_every_reachable_unit_to_unassigned_at_once() {
+    let (emulator, mut host) = enumerated(3);
+
+    let answers = host.ask(emulator.addr(), Kind::ResetId, &[]);
+
+    assert_eq!(answers.len(), 3);
+    assert!(answers.iter().all(|a| a.status() == Status::Ok.as_u8()));
+    let infos = host.unit_infos(&emulator);
+    assert_eq!(infos.len(), 1);
+    assert_eq!(infos[0].unit_id, UNASSIGNED_ID);
+    let discovered = host.ask_one(emulator.addr(), Kind::Discover, &[]);
+    assert_eq!(discovered.src, emulator.device_addr(0));
+}
+
+#[test]
+#[ignore = "depends on real time"]
+fn setting_the_time_locks_every_assigned_unit_at_once_unless_blocked() {
+    let (emulator, mut host) = enumerated(3);
+    emulator.set_ptp_lock_blocked(2, true);
+
+    assert_eq!(host.set_time(&emulator, 1_000_000_000), Status::Ok.as_u8());
+
+    let synced: Vec<bool> = host
+        .unit_infos(&emulator)
+        .iter()
+        .map(|info| info.flags.contains(SYNCED))
+        .collect();
+    assert_eq!(synced, [true, true, false]);
+
+    emulator.set_ptp_lock_blocked(2, false);
+    assert!(
+        host.unit_infos(&emulator)
+            .iter()
+            .all(|info| info.flags.contains(SYNCED))
+    );
+
+    emulator.set_ptp_lock_blocked(0, true);
+    assert!(host.unit_infos(&emulator)[0].flags.contains(SYNCED));
+}
+
+#[test]
+#[ignore = "depends on real time"]
+fn a_unit_assigned_after_the_time_is_set_locks_on_assignment() {
+    let emulator = UdpEmulator::spawn(3).unwrap();
+    let mut host = Host::new();
+    host.assign(&emulator, 0);
+    host.assign(&emulator, 1);
+
+    assert_eq!(host.set_time(&emulator, 1_000_000_000), Status::Ok.as_u8());
+    host.assign(&emulator, 2);
+
+    let infos = host.unit_infos(&emulator);
+    assert_eq!(infos.len(), 3);
+    assert!(infos.iter().all(|info| info.flags.contains(SYNCED)));
 }
 
 #[test]
@@ -628,20 +673,19 @@ fn a_paused_main_loop_queues_frames_and_drops_the_one_past_the_queue() {
     assert_eq!(heartbeat.frame_reply().0.status, 0);
     assert_eq!(emulator.heartbeats_received(0), 1);
 
-    assert!(emulator.step_main_loop(0));
-    let first = host.receive(PATIENCE).unwrap();
-    assert_eq!(first.header.kind, Kind::Frame.as_u8());
-    assert_eq!(first.header.msg_id.get(), queued[0]);
-    assert!(host.collect().is_empty());
-
     emulator.resume_main_loop(0);
-    let rest = host.collect();
+    let answers = host.collect();
     assert!(
-        rest.iter()
-            .map(|answer| answer.header.msg_id.get())
-            .eq(queued[1..].iter().copied())
+        answers
+            .iter()
+            .all(|answer| answer.header.kind == Kind::Frame.as_u8())
     );
-    assert!(!emulator.step_main_loop(0));
+    assert!(
+        answers
+            .iter()
+            .map(|answer| answer.header.msg_id.get())
+            .eq(queued.iter().copied())
+    );
     assert!(!fan(&emulator, 0));
 
     let telemetry = host.telemetry(&emulator, 0);

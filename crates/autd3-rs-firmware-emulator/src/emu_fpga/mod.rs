@@ -177,8 +177,6 @@ pub struct FpgaEmulator {
     pub(crate) next_sync_edge: u64,
     sys_time_ns: u64,
     pub(crate) thermal: bool,
-    #[cfg(feature = "udp")]
-    pending_ptp_config: Option<autd3_cpu_fw::ptp::Config>,
     mod_swapchain: Swapchain,
     pattern_swapchain: Swapchain,
     cpu_flash: Box<[u8]>,
@@ -223,8 +221,6 @@ impl FpgaEmulator {
             next_sync_edge: 0,
             sys_time_ns: 0,
             thermal: false,
-            #[cfg(feature = "udp")]
-            pending_ptp_config: None,
             mod_swapchain: Swapchain::new(),
             pattern_swapchain: Swapchain::new(),
             cpu_flash,
@@ -278,16 +274,6 @@ impl FpgaEmulator {
 
     pub(crate) fn note_reset(&mut self) {
         self.reset_count += 1;
-    }
-
-    #[cfg(feature = "udp")]
-    pub(crate) const fn note_ptp_config(&mut self, config: autd3_cpu_fw::ptp::Config) {
-        self.pending_ptp_config = Some(config);
-    }
-
-    #[cfg(feature = "udp")]
-    pub(crate) const fn take_ptp_config(&mut self) -> Option<autd3_cpu_fw::ptp::Config> {
-        self.pending_ptp_config.take()
     }
 
     pub(crate) fn write(&mut self, addr: u16, value: u16) {
