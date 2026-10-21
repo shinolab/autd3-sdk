@@ -48,7 +48,7 @@ impl LaguerreGaussianMode {
         let gouy_order = (2 * self.p) as f32 + self.alpha() + 1.0;
         let azimuth = s.y.atan2(s.x);
         let phase = Phase::from(
-            self.beam.focus_phase(&s) + (self.l as f32 * azimuth - gouy_order * s.gouy) * rad,
+            self.beam.focus_phase(&s) + (self.l as f32 * azimuth - gouy_order * s.gouy()) * rad,
         );
         let radial = laguerre(
             self.p,
@@ -71,7 +71,7 @@ impl LaguerreGaussianMode {
         } else {
             0.5 * alpha * arg.ln()
         };
-        s.log_waist_ratio + vortex_core + laguerre(self.p, alpha, arg).abs().ln() - 0.5 * arg
+        s.log_waist_ratio() + vortex_core + laguerre(self.p, alpha, arg).abs().ln() - 0.5 * arg
     }
 }
 

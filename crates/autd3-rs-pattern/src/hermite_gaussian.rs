@@ -66,7 +66,7 @@ impl HermiteGaussianMode {
     fn phase(&self, position: Point3<f32>) -> Phase {
         let s = self.beam.sample(position);
         let gouy_order = (self.m + self.n) as f32 + 1.0;
-        let phase = Phase::from(self.beam.focus_phase(&s) - gouy_order * s.gouy * rad);
+        let phase = Phase::from(self.beam.focus_phase(&s) - gouy_order * s.gouy() * rad);
         let (polynomial, _) = self.envelope(s.x, s.y, s.width_mm);
         if polynomial < 0.0 {
             phase + Phase::PI
@@ -78,7 +78,7 @@ impl HermiteGaussianMode {
     fn log_amplitude(&self, position: Point3<f32>) -> f32 {
         let s = self.beam.sample(position);
         let (polynomial, decay) = self.envelope(s.x, s.y, s.width_mm);
-        s.log_waist_ratio + polynomial.abs().ln() - decay
+        s.log_waist_ratio() + polynomial.abs().ln() - decay
     }
 }
 

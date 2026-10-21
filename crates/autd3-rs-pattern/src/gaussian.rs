@@ -4,7 +4,7 @@ use autd3_rs_core::common::{Angle, Length};
 use autd3_rs_core::geometry::{Device, Geometry, Point3, UnitVector3, Vector3};
 use autd3_rs_core::value::Intensity;
 
-use crate::each::{assert_one_slot_per_device, fill_from_positions};
+use crate::each::assert_one_slot_per_device;
 use crate::focus::focus_phase;
 
 pub(crate) struct AzimuthBasis {
@@ -40,8 +40,18 @@ pub(crate) struct BeamSample {
     pub(crate) x: f32,
     pub(crate) y: f32,
     pub(crate) width_mm: f32,
-    pub(crate) gouy: f32,
-    pub(crate) log_waist_ratio: f32,
+    zeta: f32,
+    spread: f32,
+}
+
+impl BeamSample {
+    pub(crate) fn gouy(&self) -> f32 {
+        self.zeta.atan()
+    }
+
+    pub(crate) fn log_waist_ratio(&self) -> f32 {
+        -self.spread.ln()
+    }
 }
 
 impl GaussianBeam {
@@ -76,8 +86,8 @@ impl GaussianBeam {
             x: self.basis.u.dot(&offset),
             y: self.basis.v.dot(&offset),
             width_mm: self.waist_mm * spread,
-            gouy: zeta.atan(),
-            log_waist_ratio: -spread.ln(),
+            zeta,
+            spread,
         }
     }
 
@@ -115,13 +125,18 @@ pub(crate) fn hermite(n: u32, x: f32) -> f32 {
     cur
 }
 
-fn max_log_amplitude(
-    positions: &[Point3<f32>],
-    log_amplitude: &impl Fn(Point3<f32>) -> f32,
-) -> f32 {
-    positions
+fn device_log_amplitudes(device: &Device, log_amplitude: &impl Fn(Point3<f32>) -> f32) -> Vec<f32> {
+    device
+        .positions()
         .iter()
         .map(|&p| log_amplitude(p))
+        .collect()
+}
+
+fn max_log_amplitude<'a>(log_amplitudes: impl IntoIterator<Item = &'a f32>) -> f32 {
+    log_amplitudes
+        .into_iter()
+        .copied()
         .fold(f32::NEG_INFINITY, f32::max)
 }
 
@@ -134,15 +149,10 @@ fn scaled_intensity(log_amplitude: f32, log_max: f32) -> Intensity {
     Intensity((relative * 255.0).round().clamp(0.0, 255.0) as u8)
 }
 
-fn write_scaled(
-    device: &Device,
-    log_amplitude: &impl Fn(Point3<f32>) -> f32,
-    log_max: f32,
-    dst: &mut [Intensity],
-) {
-    fill_from_positions(device, dst, |pos| {
-        scaled_intensity(log_amplitude(pos), log_max)
-    });
+fn write_scaled(log_amplitudes: &[f32], log_max: f32, dst: &mut [Intensity]) {
+    for (slot, &log_amplitude) in dst.iter_mut().zip(log_amplitudes) {
+        *slot = scaled_intensity(log_amplitude, log_max);
+    }
 }
 
 pub(crate) fn write_intensity_device(
@@ -150,8 +160,8 @@ pub(crate) fn write_intensity_device(
     log_amplitude: impl Fn(Point3<f32>) -> f32,
     dst: &mut [Intensity],
 ) {
-    let log_max = max_log_amplitude(device.positions(), &log_amplitude);
-    write_scaled(device, &log_amplitude, log_max, dst);
+    let log_amplitudes = device_log_amplitudes(device, &log_amplitude);
+    write_scaled(&log_amplitudes, max_log_amplitude(&log_amplitudes), dst);
 }
 
 pub(crate) fn write_intensity(
@@ -160,12 +170,13 @@ pub(crate) fn write_intensity(
     dst: &mut [Vec<Intensity>],
 ) {
     assert_one_slot_per_device(geometry, dst);
-    let log_max = geometry
+    let log_amplitudes: Vec<Vec<f32>> = geometry
         .iter()
-        .map(|dev| max_log_amplitude(dev.positions(), &log_amplitude))
-        .fold(f32::NEG_INFINITY, f32::max);
-    for (slot, dev) in dst.iter_mut().zip(geometry.iter()) {
-        write_scaled(dev, &log_amplitude, log_max, slot);
+        .map(|dev| device_log_amplitudes(dev, &log_amplitude))
+        .collect();
+    let log_max = max_log_amplitude(log_amplitudes.iter().flatten());
+    for (slot, device_log_amplitudes) in dst.iter_mut().zip(&log_amplitudes) {
+        write_scaled(device_log_amplitudes, log_max, slot);
     }
 }
 
