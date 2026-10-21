@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using AUTD3;
 
@@ -30,6 +31,20 @@ internal static class Sample
                 }
             }
             // ANCHOR_END: recover
+
+            // ANCHOR: ptp_failsafe
+            client.SendHeartbeat();
+            await Task.Delay(CheckInterval);
+            var current = checker.Check();
+            if (current.AnyPtpFailsafe)
+            {
+                var releasable = DeviceMask.FromDevices(current.PtpFailsafe.Where(i => current.PtpLocked[i]));
+                if (!releasable.IsEmpty)
+                {
+                    await client.SendAsync(Command.Each(device => releasable[device.Idx] ? new ReleaseFailsafe() : null));
+                }
+            }
+            // ANCHOR_END: ptp_failsafe
 
             // ANCHOR: poll
             DeviceStatus? last = null;

@@ -228,9 +228,15 @@ namespace AUTD3
     {
         public IReadOnlyList<DeviceState> Devices { get; }
 
-        internal DeviceStatus(IReadOnlyList<DeviceState> devices)
+        public DeviceMask PtpLocked { get; }
+
+        public DeviceMask PtpFailsafe { get; }
+
+        internal DeviceStatus(IReadOnlyList<DeviceState> devices, DeviceMask ptpLocked, DeviceMask ptpFailsafe)
         {
             Devices = devices;
+            PtpLocked = ptpLocked;
+            PtpFailsafe = ptpFailsafe;
         }
 
         public bool AllReady
@@ -263,13 +269,15 @@ namespace AUTD3
             }
         }
 
+        public bool AnyPtpFailsafe => !PtpFailsafe.IsEmpty;
+
         public override bool Equals(object? obj)
         {
             if (obj is not DeviceStatus other)
             {
                 return false;
             }
-            if (Devices.Count != other.Devices.Count)
+            if (Devices.Count != other.Devices.Count || PtpLocked != other.PtpLocked || PtpFailsafe != other.PtpFailsafe)
             {
                 return false;
             }
@@ -290,6 +298,8 @@ namespace AUTD3
             {
                 hash.Add(state);
             }
+            hash.Add(PtpLocked);
+            hash.Add(PtpFailsafe);
             return hash.ToHashCode();
         }
 
@@ -320,6 +330,8 @@ namespace AUTD3
             {
                 var count = (int)NativeClient.autd3_device_status_num_devices(status);
                 var devices = new List<DeviceState>(count);
+                var ptpLocked = new List<int>();
+                var ptpFailsafe = new List<int>();
                 for (var i = 0; i < count; i++)
                 {
                     if (!NativeClient.autd3_device_status_device_state(status, (UIntPtr)i, out var kind))
@@ -327,8 +339,16 @@ namespace AUTD3
                         throw new Autd3Exception("failed to read device state");
                     }
                     devices.Add(DeviceState.FromNative(kind));
+                    if (NativeClient.autd3_device_status_ptp_locked(status, (UIntPtr)i))
+                    {
+                        ptpLocked.Add(i);
+                    }
+                    if (NativeClient.autd3_device_status_ptp_failsafe(status, (UIntPtr)i))
+                    {
+                        ptpFailsafe.Add(i);
+                    }
                 }
-                return new DeviceStatus(devices);
+                return new DeviceStatus(devices, DeviceMask.FromDevices(ptpLocked), DeviceMask.FromDevices(ptpFailsafe));
             }
             finally
             {

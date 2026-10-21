@@ -1,6 +1,6 @@
 import asyncio
 
-from autd3 import Client, TransportOption
+from autd3 import Client, DeviceMask, TransportOption
 from autd3.commands import ReleaseFailsafe, Synchronize, each
 from autd3.geometry import Autd3, Geometry
 
@@ -25,6 +25,16 @@ async def main() -> None:
                 await client.send(each(lambda device: Synchronize() if recovered[device.idx()] else None))
                 await client.send(ReleaseFailsafe())
         # ANCHOR_END: recover
+
+        # ANCHOR: ptp_failsafe
+        client.send_heartbeat()
+        await asyncio.sleep(CHECK_INTERVAL)
+        status = checker.check()
+        if status.any_ptp_failsafe:
+            releasable = DeviceMask.from_devices(i for i in status.ptp_failsafe if status.ptp_locked[i])
+            if releasable:
+                await client.send(each(lambda device: ReleaseFailsafe() if releasable[device.idx()] else None))
+        # ANCHOR_END: ptp_failsafe
 
         # ANCHOR: poll
         last = None

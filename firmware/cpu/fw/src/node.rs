@@ -28,6 +28,7 @@ pub trait CommandLayer {
     fn send_failed(&mut self, count: u32);
     fn unassigned(&mut self);
     fn ptp_unlocked(&mut self, elapsed_ms: Option<u32>);
+    fn ptp_failsafe_active(&mut self) -> bool;
 }
 
 impl CommandLayer for &crate::Cpu {
@@ -49,6 +50,10 @@ impl CommandLayer for &crate::Cpu {
 
     fn ptp_unlocked(&mut self, elapsed_ms: Option<u32>) {
         crate::Cpu::publish_ptp_unlocked(self, elapsed_ms);
+    }
+
+    fn ptp_failsafe_active(&mut self) -> bool {
+        crate::Cpu::ptp_failsafe_active(self)
     }
 }
 
@@ -210,7 +215,7 @@ impl Node {
         self.ptp.set_config(config);
     }
 
-    pub fn flags<N: Nic>(&self, nic: &mut N) -> Flags {
+    pub fn flags<N: Nic>(&self, nic: &mut N, ptp_failsafe: bool) -> Flags {
         let mut flags = Flags::empty();
         if self.is_assigned() {
             flags |= Flags::ASSIGNED;
@@ -229,6 +234,9 @@ impl Node {
         }
         if self.is_grandmaster() {
             flags |= Flags::GRANDMASTER;
+        }
+        if ptp_failsafe {
+            flags |= Flags::PTP_FAILSAFE;
         }
         flags
     }
@@ -271,7 +279,8 @@ impl Node {
         };
         let mut nic = Counted::new(nic);
         let state = cmds.reply();
-        self.frame_reply(&mut nic, &reply_to, &state);
+        let ptp_failsafe = cmds.ptp_failsafe_active();
+        self.frame_reply(&mut nic, &reply_to, &state, ptp_failsafe);
         nic.report(cmds);
     }
 
@@ -398,12 +407,13 @@ impl Node {
                     let _ = cmds.recv_frame(body, reply.msg_id);
                 } else {
                     let state = cmds.reply();
-                    self.frame_reply(nic, &reply, &state);
+                    let ptp_failsafe = cmds.ptp_failsafe_active();
+                    self.frame_reply(nic, &reply, &state, ptp_failsafe);
                 }
                 return Received::HostMessage;
             }
             Some(Kind::ReadUnitInfo) => {
-                let info = self.unit_info(nic);
+                let info = self.unit_info(nic, cmds.ptp_failsafe_active());
                 self.send_reply(nic, &reply, Some(Status::Ok), info.as_bytes());
             }
             Some(Kind::ResetId) => {
@@ -488,10 +498,10 @@ impl Node {
         Status::Ok
     }
 
-    fn unit_info<N: Nic>(&self, nic: &mut N) -> UnitInfo {
+    fn unit_info<N: Nic>(&self, nic: &mut N, ptp_failsafe: bool) -> UnitInfo {
         UnitInfo {
             unit_id: self.unit_id,
-            flags: self.flags(nic),
+            flags: self.flags(nic, ptp_failsafe),
             upstream_port: self.upstream.unwrap_or(UPSTREAM_UNKNOWN),
             reserved: 0,
             fw_version: [FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH],
@@ -510,11 +520,17 @@ impl Node {
             .clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32
     }
 
-    fn frame_reply<N: Nic>(&mut self, nic: &mut N, reply: &ReplyTo, state: &Reply) {
+    fn frame_reply<N: Nic>(
+        &mut self,
+        nic: &mut N,
+        reply: &ReplyTo,
+        state: &Reply,
+        ptp_failsafe: bool,
+    ) {
         let head = FrameReply {
             reserved: 0,
             status: state.status.as_u8(),
-            flags: self.flags(nic),
+            flags: self.flags(nic, ptp_failsafe),
             unit_id: self.unit_id,
             sys_time: U64::new(nic.now().unwrap_or(0)),
         };
@@ -607,6 +623,7 @@ mod tests {
         send_failures: u32,
         unassigned: u32,
         ptp_unlocked: Vec<Option<u32>>,
+        ptp_failsafe: bool,
     }
 
     impl CommandLayer for FakeCommands {
@@ -629,6 +646,10 @@ mod tests {
 
         fn ptp_unlocked(&mut self, elapsed_ms: Option<u32>) {
             self.ptp_unlocked.push(elapsed_ms);
+        }
+
+        fn ptp_failsafe_active(&mut self) -> bool {
+            self.ptp_failsafe
         }
     }
 
@@ -669,6 +690,7 @@ mod tests {
                     send_failures: 0,
                     unassigned: 0,
                     ptp_unlocked: Vec::new(),
+                    ptp_failsafe: false,
                 },
             }
         }
@@ -1240,6 +1262,37 @@ mod tests {
     }
 
     #[test]
+    fn every_reply_carries_the_ptp_failsafe_of_the_command_layer() {
+        let mut h = Harness::new();
+        h.assign(4);
+        h.cmds.ptp_failsafe = true;
+
+        h.send(unit_address(4), Kind::Heartbeat, &[]);
+        let (reply, _) = parse_frame_reply(&h.only_reply().body);
+        assert!(reply.flags.contains(Flags::PTP_FAILSAFE));
+
+        h.node.send_completion(&mut h.nic, 0x4242, &mut h.cmds);
+        let (reply, _) = parse_frame_reply(&h.only_reply().body);
+        assert!(reply.flags.contains(Flags::PTP_FAILSAFE));
+
+        assert!(
+            h.unit_info(unit_address(4))
+                .flags
+                .contains(Flags::PTP_FAILSAFE)
+        );
+
+        h.cmds.ptp_failsafe = false;
+        h.send(unit_address(4), Kind::Heartbeat, &[]);
+        let (reply, _) = parse_frame_reply(&h.only_reply().body);
+        assert!(!reply.flags.contains(Flags::PTP_FAILSAFE));
+        assert!(
+            !h.unit_info(unit_address(4))
+                .flags
+                .contains(Flags::PTP_FAILSAFE)
+        );
+    }
+
+    #[test]
     fn a_heartbeat_is_answered_with_the_current_result() {
         let mut h = Harness::new();
         assert_eq!(
@@ -1739,6 +1792,50 @@ mod tests {
             wired.slave.node.ptp.config(),
             autd3_cpu_wire::config::PtpConfig::default()
         );
+    }
+
+    #[cfg(not(loom))]
+    #[test]
+    fn a_heartbeat_reply_carries_the_ptp_failsafe_of_the_cpu() {
+        use crate::cmd::cpu_config::{CpuConfig, default_config};
+        use crate::proto::{Cmd, Error as CmdError};
+        use crate::test_utils::builders::set_cpu_config;
+        use crate::test_utils::mock::{Frame, Harness as CpuHarness};
+
+        let mut c = CpuHarness::new();
+        c.deliver(&set_cpu_config(&CpuConfig {
+            ptp_unlock_failsafe_timeout: Some(core::time::Duration::from_millis(50)),
+            ..default_config()
+        }));
+        assert_eq!(c.status(), CmdError::None);
+        c.port.ptp_unlocked_ms = Some(50);
+        c.tick_1ms(1);
+
+        let mut h = Harness::new();
+        h.assign(4);
+        let heartbeat = encode_request(
+            unit_address(4),
+            PROTOCOL_VERSION,
+            Kind::Heartbeat.as_u8(),
+            0x4242,
+            &[],
+        );
+        let rx = RxMeta {
+            port: UPSTREAM,
+            timestamp_ns: 0,
+        };
+        h.node
+            .on_frame(&mut h.nic, h.now_ms, &heartbeat, rx, &mut &*c.cpu);
+        let (reply, _) = parse_frame_reply(&h.only_reply().body);
+        assert!(reply.flags.contains(Flags::PTP_FAILSAFE));
+
+        c.port.ptp_unlocked_ms = None;
+        c.deliver(&Frame::new(Cmd::ReleaseFailsafe));
+        assert_eq!(c.status(), CmdError::None);
+        h.node
+            .on_frame(&mut h.nic, h.now_ms, &heartbeat, rx, &mut &*c.cpu);
+        let (reply, _) = parse_frame_reply(&h.only_reply().body);
+        assert!(!reply.flags.contains(Flags::PTP_FAILSAFE));
     }
 
     #[cfg(not(loom))]

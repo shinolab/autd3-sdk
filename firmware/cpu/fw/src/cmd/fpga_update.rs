@@ -368,13 +368,14 @@ mod tests {
     use zerocopy::little_endian::U32;
 
     use super::{FPGA_REBOOT_ATTEMPTS, FPGA_REBOOT_DELAY_MS, FPGA_RECONFIG_SETTLE_MS, State};
+    use crate::cmd::cpu_config::CpuConfig;
     use crate::cmd::update::{UpdateBeginPayload, UpdateChunkPayload};
     use crate::fpga_params::{
         ADDR_FLASH_CMD, ADDR_FLASH_LEN_0, ADDR_FUNCTION_BITS, CtlFlags, FLASH_BUF_BYTES, FlashErr,
         FlashOp, FunctionBits,
     };
     use crate::proto::{Cmd, Error, OUTPUT_MASK_WORDS};
-    use crate::test_utils::builders::output_mask;
+    use crate::test_utils::builders::{output_mask, set_cpu_config};
     use crate::test_utils::mock::{Frame, Harness};
 
     fn begin(length: u32, crc: u32) -> Frame {
@@ -875,6 +876,45 @@ mod tests {
         assert!(!h.cpu.fpga_update.is_locked());
         assert!(!output_muted(&h));
         assert_eq!(h.telemetry().boot_failure, 0);
+    }
+
+    fn ptp_failsafe_then_activated(seed: u32) -> Harness {
+        let mut h = ota_capable();
+        let config = h.cpu.config();
+        h.deliver(&set_cpu_config(&CpuConfig {
+            ptp_unlock_failsafe_timeout: Some(core::time::Duration::from_millis(50)),
+            ..config
+        }));
+        assert_eq!(h.status(), Error::None);
+        h.port.ptp_unlocked_ms = Some(50);
+        h.tick_1ms(1);
+        assert!(h.cpu.ptp_failsafe_active());
+        h.port.ptp_unlocked_ms = None;
+        run_update(&mut h, &image(700, seed));
+        h.deliver(&Frame::new(Cmd::FpgaUpdateActivate));
+        assert_eq!(h.status(), Error::None);
+        h
+    }
+
+    #[test]
+    fn a_clean_reinitialization_after_reconfiguration_lowers_the_ptp_failsafe_flag() {
+        let mut h = ptp_failsafe_then_activated(63);
+        h.tick_1ms(u32::from(FPGA_REBOOT_DELAY_MS) + u32::from(FPGA_RECONFIG_SETTLE_MS) - 1);
+        assert!(h.cpu.ptp_failsafe_active());
+        h.tick_1ms(1);
+        assert!(!output_muted(&h));
+        assert!(!h.cpu.ptp_failsafe_active());
+    }
+
+    #[test]
+    fn a_reinitialization_that_times_out_keeps_the_ptp_failsafe_flag() {
+        let mut h = ptp_failsafe_then_activated(64);
+        h.tick_1ms(u32::from(FPGA_REBOOT_DELAY_MS) + u32::from(FPGA_RECONFIG_SETTLE_MS) - 1);
+        h.port.latch_stuck = true;
+        h.tick_1ms(1);
+        h.port.latch_stuck = false;
+        assert!(output_muted(&h));
+        assert!(h.cpu.ptp_failsafe_active());
     }
 
     #[test]

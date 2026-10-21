@@ -31,8 +31,8 @@ use autd3_rs::value::{
     PatternBank, Phase, PulseWidth, SamplingConfig, SysTime, TransitionMode,
 };
 use autd3_rs::{
-    BusStats, Client, DeviceState, Error, ExecAt, FirmwareVersion, FpgaState, Frames, Geometry,
-    NetworkCause, Point3, Response, ResponseFuture, Telemetry, Velocity,
+    BusStats, Client, DeviceMask, DeviceState, Error, ExecAt, FirmwareVersion, FpgaState, Frames,
+    Geometry, NetworkCause, Point3, Response, ResponseFuture, Telemetry, Velocity,
 };
 
 pub(crate) fn executor() -> &'static Executor {
@@ -1782,6 +1782,8 @@ pub struct TelemetryArray(Vec<Autd3Telemetry>);
 
 pub struct DeviceStatus {
     devices: Vec<DeviceState>,
+    ptp_locked: DeviceMask,
+    ptp_failsafe: DeviceMask,
 }
 
 pub(crate) fn error_code(e: &Error) -> i32 {
@@ -2359,6 +2361,8 @@ pub unsafe extern "C" fn autd3_checker_check(
     match checker.0.check().map_err(Error::from) {
         Ok(status) => into_handle(DeviceStatus {
             devices: status.devices().to_vec(),
+            ptp_locked: status.ptp_locked(),
+            ptp_failsafe: status.ptp_failsafe(),
         }),
         Err(e) => {
             unsafe { write_out(out_code, error_code(&e)) };
@@ -2415,6 +2419,22 @@ pub unsafe extern "C" fn autd3_device_status_device_state(
         return false;
     };
     unsafe { write_out(out_kind, device_state_code(*state)) == AUTD3_OK }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_device_status_ptp_locked(
+    status: *const DeviceStatus,
+    index: usize,
+) -> bool {
+    unsafe { handle_ref(status) }.is_some_and(|status| status.ptp_locked.contains(index))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_device_status_ptp_failsafe(
+    status: *const DeviceStatus,
+    index: usize,
+) -> bool {
+    unsafe { handle_ref(status) }.is_some_and(|status| status.ptp_failsafe.contains(index))
 }
 
 fn device_state_code(state: DeviceState) -> u8 {

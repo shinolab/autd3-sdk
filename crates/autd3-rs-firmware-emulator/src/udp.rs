@@ -213,6 +213,9 @@ impl Chain {
         if unit.grandmaster {
             flags |= Flags::GRANDMASTER;
         }
+        if unit.device.cpu.ptp_failsafe_active() {
+            flags |= Flags::PTP_FAILSAFE;
+        }
         flags
     }
 

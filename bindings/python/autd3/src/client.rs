@@ -80,12 +80,29 @@ impl DeviceStatus {
         self.0.any_lost()
     }
 
+    #[getter]
+    fn ptp_locked(&self) -> DeviceMask {
+        DeviceMask(self.0.ptp_locked())
+    }
+
+    #[getter]
+    fn ptp_failsafe(&self) -> DeviceMask {
+        DeviceMask(self.0.ptp_failsafe())
+    }
+
+    #[getter]
+    fn any_ptp_failsafe(&self) -> bool {
+        self.0.any_ptp_failsafe()
+    }
+
     fn __repr__(&self) -> String {
         format!(
-            "DeviceStatus(devices={:?}, all_ready={}, any_lost={})",
+            "DeviceStatus(devices={:?}, all_ready={}, any_lost={}, ptp_locked={:?}, ptp_failsafe={:?})",
             self.0.devices(),
             self.0.all_ready(),
-            self.0.any_lost()
+            self.0.any_lost(),
+            self.0.ptp_locked().iter().collect::<Vec<_>>(),
+            self.0.ptp_failsafe().iter().collect::<Vec<_>>()
         )
     }
 }

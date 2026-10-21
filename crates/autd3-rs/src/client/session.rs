@@ -329,8 +329,9 @@ impl SessionState {
     }
 
     fn publish(&self, device: usize) {
+        let liveness = self.liveness[device];
         self.published_states
-            .publish(device, self.liveness[device].state());
+            .publish(device, liveness.state(), liveness.ptp_flags());
     }
 
     fn start_unanswered_clock(
