@@ -1,4 +1,4 @@
-use super::{Device, Geometry};
+use super::Geometry;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
@@ -75,7 +75,7 @@ impl TransducerMask<'_> {
     #[must_use]
     pub fn num_enabled(self, geometry: &Geometry) -> usize {
         match self {
-            Self::AllEnabled => geometry.iter().map(Device::num_transducers).sum(),
+            Self::AllEnabled => geometry.num_transducers(),
             Self::Masked(m) => m.iter().flatten().filter(|&&b| b).count(),
             Self::Group { indices, index } => {
                 indices.iter().flatten().filter(|&&i| i == index).count()
