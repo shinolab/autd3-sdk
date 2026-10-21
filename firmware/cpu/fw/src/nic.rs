@@ -80,6 +80,8 @@ pub trait Nic {
     fn stop_pulse(&mut self);
 
     fn pulse_ready(&mut self) -> bool;
+
+    fn take_send_failures(&mut self) -> u32;
 }
 
 // This assumes a time of less than one second from recording to readout.

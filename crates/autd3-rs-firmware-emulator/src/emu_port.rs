@@ -63,14 +63,6 @@ impl Port for FpgaEmulator {
         f(self)
     }
 
-    fn host_idle_ms(&mut self) -> Option<u32> {
-        FpgaEmulator::host_idle_ms(self)
-    }
-
-    fn ptp_unlocked_ms(&mut self) -> Option<u32> {
-        self.ptp_unlocked_ms
-    }
-
     fn flash_read(&mut self, addr: u32, buf: &mut [u8]) -> Result<(), FlashError> {
         let flash = self.cpu_flash();
         buf.copy_from_slice(&flash[flash_range(flash.len(), addr, buf.len())?]);

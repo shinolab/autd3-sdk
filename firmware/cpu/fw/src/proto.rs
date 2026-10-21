@@ -2,7 +2,6 @@ pub use autd3_cpu_wire::{
     Cmd, EXEC_AT_UNIT_NS, Error, FRAME_BYTES_MAX, FrameHeader, PAYLOAD_BYTES, REPLY_DATA_BYTES_MAX,
     wire_enum_u8,
 };
-use zerocopy::little_endian::U32;
 
 pub const MOD_BUFFER_SAMPLES: u32 = autd3_cpu_wire::layout::MOD_BUFFER_SAMPLES as u32;
 pub const EMISSION_RAM_WORDS: u32 = autd3_cpu_wire::layout::EMISSION_RAM_WORDS as u32;
@@ -11,35 +10,6 @@ pub const EMISSION_SLOT_WORDS: u32 = autd3_cpu_wire::layout::EMISSION_SLOT_WORDS
 pub const OUTPUT_MASK_WORDS: usize = autd3_cpu_wire::layout::OUTPUT_MASK_WORDS;
 
 const _: () = assert!(crate::fpga_params::NUM_TRANSDUCERS <= EMISSION_SLOT_WORDS as usize);
-
-#[derive(Clone, Copy)]
-#[repr(C, align(4))]
-pub struct RxFrame {
-    pub msg_id: u16,
-    pub len: u16,
-    pub payload: [u8; PAYLOAD_BYTES],
-    pub header: FrameHeader,
-}
-
-const _: () = assert!(core::mem::offset_of!(RxFrame, payload).is_multiple_of(4));
-
-impl RxFrame {
-    pub const ZERO: Self = Self {
-        msg_id: 0,
-        len: 0,
-        payload: [0; PAYLOAD_BYTES],
-        header: FrameHeader {
-            reserved: 0,
-            cmd: 0,
-            exec_at: U32::ZERO,
-        },
-    };
-
-    #[must_use]
-    pub fn payload(&self) -> &[u8] {
-        &self.payload[..usize::from(self.len)]
-    }
-}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct ReplyData {

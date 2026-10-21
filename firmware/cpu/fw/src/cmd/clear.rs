@@ -136,10 +136,10 @@ mod tests {
     }
 
     fn trip_failsafe(h: &mut Harness) {
-        h.port.host_idle_ms = Some(FAILSAFE_TIMEOUT_MS);
+        h.set_host_idle_ms(FAILSAFE_TIMEOUT_MS);
         h.tick_1ms(1);
         assert!(h.ctl_flags().contains(CtlFlags::FAILSAFE));
-        h.port.host_idle_ms = Some(0);
+        h.set_host_idle_ms(0);
     }
 
     #[test]
@@ -206,7 +206,7 @@ mod tests {
     #[test]
     fn clear_releases_the_gate_and_a_still_silent_host_no_longer_trips_it() {
         let mut h = armed();
-        h.port.host_idle_ms = Some(FAILSAFE_TIMEOUT_MS);
+        h.set_host_idle_ms(FAILSAFE_TIMEOUT_MS);
         h.tick_1ms(1);
         assert_eq!(h.telemetry().failsafe, 1);
 
@@ -228,7 +228,7 @@ mod tests {
             ..default_config()
         }));
         assert_eq!(h.status(), Error::None);
-        h.port.ptp_unlocked_ms = Some(50);
+        h.cpu.publish_ptp_unlocked(Some(50));
         h.tick_1ms(1);
         assert!(h.cpu.ptp_failsafe_active());
 
@@ -253,11 +253,11 @@ mod tests {
             ..default_config()
         }));
         assert_eq!(h.status(), Error::None);
-        h.port.ptp_unlocked_ms = Some(50);
+        h.cpu.publish_ptp_unlocked(Some(50));
         h.tick_1ms(1);
         assert!(h.ctl_flags().contains(CtlFlags::FAILSAFE));
 
-        h.port.ptp_unlocked_ms = Some(500);
+        h.cpu.publish_ptp_unlocked(Some(500));
         h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.status(), Error::None);
         assert!(!h.ctl_flags().contains(CtlFlags::FAILSAFE));

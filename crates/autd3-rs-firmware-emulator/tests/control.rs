@@ -7,7 +7,7 @@ use autd3_cpu_wire::payload::{SetCpuConfigPayload, WritePatternRawPayload};
 use autd3_rs_core::protocol::Cmd;
 use autd3_rs_core::value::Intensity;
 use autd3_rs_firmware_emulator::Device;
-use autd3_rs_firmware_emulator::test_utils::FpgaEmulatorTestExt;
+use autd3_rs_firmware_emulator::test_utils::{DeviceTestExt, FpgaEmulatorTestExt};
 use zerocopy::IntoBytes;
 use zerocopy::little_endian::U16;
 
@@ -148,11 +148,9 @@ fn enable_failsafe(device: &mut Device) {
 }
 
 fn trip_failsafe(device: &mut Device) {
-    device
-        .fpga_mut()
-        .set_host_idle_ms(Some(FAILSAFE_TIMEOUT_MS));
+    device.set_host_idle_ms(FAILSAFE_TIMEOUT_MS);
     device.tick_1ms();
-    device.fpga_mut().set_host_idle_ms(Some(0));
+    device.set_host_idle_ms(0);
     device.tick_1ms();
 }
 

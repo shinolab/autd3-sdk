@@ -24,7 +24,7 @@ use crate::fpga_params::{
 use crate::port::{FlashError, Port};
 use crate::proto::{
     Cmd, Drained, EMISSION_RAM_WORDS, Error, FrameHeader, MOD_BUFFER_SAMPLES, OUTPUT_MASK_WORDS,
-    PAYLOAD_BYTES, Reply, RxFrame,
+    PAYLOAD_BYTES, Reply,
 };
 use autd3_cpu_wire::fpga_update::{FPGA_FLASH_BYTES, FPGA_GOLDEN_REGION_END, FPGA_SECTOR_BYTES};
 use autd3_cpu_wire::payload::Telemetry;
@@ -82,8 +82,6 @@ pub(crate) struct MockPort {
     pub irq_masked: bool,
     pub sys_time_reads_masked: u32,
     pub next_sync_edges: VecDeque<Option<NonZeroU64>>,
-    pub host_idle_ms: Option<u32>,
-    pub ptp_unlocked_ms: Option<u32>,
     pub latch_stuck: bool,
     pub ram_switches: Vec<(u16, u16)>,
     pub barriers: u32,
@@ -147,8 +145,6 @@ impl MockPort {
             irq_masked: false,
             sys_time_reads_masked: 0,
             next_sync_edges: VecDeque::new(),
-            host_idle_ms: None,
-            ptp_unlocked_ms: None,
             latch_stuck: false,
             ram_switches: Vec::new(),
             barriers: 0,
@@ -454,14 +450,6 @@ impl Port for MockPort {
         result
     }
 
-    fn host_idle_ms(&mut self) -> Option<u32> {
-        self.host_idle_ms
-    }
-
-    fn ptp_unlocked_ms(&mut self) -> Option<u32> {
-        self.ptp_unlocked_ms
-    }
-
     fn flash_read(&mut self, addr: u32, buf: &mut [u8]) -> Result<(), FlashError> {
         if self.flash_fail {
             return Err(FlashError);
@@ -604,8 +592,7 @@ impl Harness {
     }
 
     pub(crate) fn process_one(&mut self) -> bool {
-        let mut work = RxFrame::ZERO;
-        self.cpu.process_one(&mut self.port, &mut work) != Drained::Empty
+        self.cpu.process_one(&mut self.port) != Drained::Empty
     }
 
     fn reply(&self) -> Reply {
@@ -672,11 +659,12 @@ impl Harness {
 
     pub(crate) fn step_backlogged(&mut self, elapsed_ms: u32) {
         self.deliver_no_drain(&Frame::new(Cmd::Nop));
-        let mut work = RxFrame::ZERO;
-        assert_ne!(
-            self.cpu.step(&mut self.port, &mut work, elapsed_ms),
-            Drained::Empty
-        );
+        assert_ne!(self.cpu.step(&mut self.port, elapsed_ms), Drained::Empty);
+    }
+
+    pub(crate) fn set_host_idle_ms(&self, ms: u32) {
+        self.cpu.record_host_frame(0);
+        self.cpu.publish_host_idle(ms);
     }
 
     pub(crate) fn tick_1ms(&mut self, count: u32) {
