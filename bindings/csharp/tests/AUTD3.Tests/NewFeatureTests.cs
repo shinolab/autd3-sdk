@@ -285,7 +285,7 @@ namespace AUTD3.Tests
                 .Select(i => 2f * MathF.PI * i / 4)
                 .Select(theta => new ControlPoints(new[] { new ControlPoint(center + 30f * new Vector3(MathF.Cos(theta), MathF.Sin(theta), 0f), Phase.Zero) }, Intensity.Max))
                 .ToList();
-            using var frames = Frames.Encode(geometry, new FociStm(1 * Hz, points.ToArray(), new FociStmOption()));
+            using var frames = Frames.Encode(geometry, new FociStm(new SamplingConfig(1 * Hz * points.Count), points.ToArray(), new FociStmOption()));
             Assert.True(frames.Length > 0);
         }
 
@@ -459,8 +459,7 @@ namespace AUTD3.Tests
         {
             Assert.Equal(0, PulseWidth.FromDuty(0f).Value);
             Assert.True(PulseWidth.FromDuty(0.5f).Value > 0);
-            var outOfRange = PulseWidth.FromDuty(1f);
-            var error = Assert.Throws<Autd3Exception>(() => outOfRange.Value);
+            var error = Assert.Throws<Autd3Exception>(() => PulseWidth.FromDuty(1f));
             Assert.Equal(Autd3ErrorCode.InvalidArgument, error.Code);
             Assert.Contains("duty", error.Message);
         }

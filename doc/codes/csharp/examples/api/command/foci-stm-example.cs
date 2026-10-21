@@ -23,7 +23,7 @@ var points = Enumerable.Range(0, 200)
     .ToArray();
 
 await client.SendAsync(new FociStm(
-    1.0f * Hz,
+    new SamplingConfig(1.0f * Hz * points.Length),
     points,
     new FociStmOption
     {

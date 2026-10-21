@@ -25,7 +25,7 @@ internal static class Sample
             Pattern.Focus(geometry, target, wavelength, buffer);
             patterns[i] = buffer;
         }
-        var freq = 1.0f * Hz;
+        var config = new SamplingConfig(1.0f * Hz * NumPoints);
         var bank = PatternBank.B0;
         var phaseDepth = PhaseDepth.Bits8;
         var loopBehavior = LoopBehavior.Infinite;
@@ -42,7 +42,7 @@ internal static class Sample
             // ANCHOR_END: option
             ;
         // ANCHOR: api
-        new PatternStm(freq, patterns, intensities, option);
+        new PatternStm(config, patterns, intensities, option);
         // ANCHOR_END: api
 
         // ANCHOR: equivalent
@@ -59,7 +59,7 @@ internal static class Sample
         }
         new ConfigPattern(
             bank: option.Bank,
-            config: new StmConfig(freq).IntoSamplingConfig(patterns.Length),
+            config: config,
             size: (uint)patterns.Length,
             loopBehavior: option.LoopBehavior
         );

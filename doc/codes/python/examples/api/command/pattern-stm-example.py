@@ -5,7 +5,7 @@ from autd3 import Client, TransportOption
 from autd3.commands import Clear, PatternStm, PatternStmOption, PhaseDepth, Synchronize
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import Hz, m, mm, s
-from autd3.value import Intensity, LoopBehavior, PatternBank, TransitionMode
+from autd3.value import Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode
 from autd3_pattern import focus
 from autd3_pattern import wavelength as calc_wavelength
 
@@ -32,7 +32,7 @@ async def main() -> None:
 
         await client.send(
             PatternStm(
-                1.0 * Hz,
+                SamplingConfig(1.0 * Hz * len(patterns)),
                 patterns,
                 Intensity.MAX,
                 PatternStmOption(

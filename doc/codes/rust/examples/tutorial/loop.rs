@@ -7,7 +7,8 @@ use autd3_rs::commands::{Clear, FociStm, FociStmOption, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry, Vector3, offset};
 use autd3_rs::units::{Hz, mm};
 use autd3_rs::value::{
-    ControlPoint, ControlPoints, Intensity, LoopBehavior, PatternBank, TransitionMode,
+    ControlPoint, ControlPoints, Intensity, LoopBehavior, PatternBank, SamplingConfig,
+    TransitionMode,
 };
 use autd3_rs::Client;
 use autd3_rs::udp::TransportOption;

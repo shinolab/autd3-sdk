@@ -25,7 +25,6 @@ from autd3.commands import (
     SetOutputMask,
     SetPhaseCorrection,
     SetSilencer,
-    StmConfig,
     WriteFociBuffer,
 )
 from autd3.geometry import Autd3, Geometry, offset
@@ -35,6 +34,7 @@ from autd3.value import (
     Intensity,
     LoopBehavior,
     ModulationBank,
+    Nearest,
     PatternBank,
     Phase,
     SamplingConfig,
@@ -200,8 +200,6 @@ def test_option_defaults_and_equality() -> None:
     assert FociStmOption() == FociStmOption(sound_speed=340 * m / s)
     assert FociStmOption() != FociStmOption(bank=PatternBank.B1)
     assert PatternStmOption() == PatternStmOption(phase_depth=PhaseDepth.Bits8)
-    assert StmConfig(1.0 * Hz) == StmConfig(1.0 * Hz)
-    assert StmConfig(1.0 * Hz) != StmConfig(2.0 * Hz)
 
     fixed = FixedCompletionTime()
     assert fixed.intensity == Duration.from_micros(250)
@@ -264,7 +262,7 @@ def test_holo_errors_carry_an_error_code() -> None:
 
 def test_core_value_errors_are_invalid_arguments() -> None:
     with pytest.raises(autd3.Autd3Error) as err:
-        SamplingConfig(3000.5 * Hz).freq()
+        SamplingConfig(3000.5 * Hz)
     assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
     mask = pattern.TransducerMask.masked([[True] * 3])
     with pytest.raises(autd3.Autd3Error) as err:
@@ -282,31 +280,38 @@ def test_a_shared_intensity_buffer_is_shared_by_every_index() -> None:
         phases.append(buffer)
     shared = geometry.intensity_buffer()
     pattern.set_intensity(Intensity(0x80), shared)
-    assert len(autd3.Frames.encode(geometry, PatternStm(1.0 * Hz, phases, shared, PatternStmOption()))) > 0
+    config = SamplingConfig(1.0 * Hz * len(phases))
+    assert len(autd3.Frames.encode(geometry, PatternStm(config, phases, shared, PatternStmOption()))) > 0
     with pytest.raises(autd3.Autd3Error, match="intensit"):
-        autd3.Frames.encode(geometry, PatternStm(1.0 * Hz, phases, [shared], PatternStmOption()))
+        autd3.Frames.encode(geometry, PatternStm(config, phases, [shared], PatternStmOption()))
 
 
-def test_sampling_configs_are_resolved_when_encoded() -> None:
+def test_sampling_configs_are_resolved_when_constructed() -> None:
+    with pytest.raises(autd3.Autd3Error, match="ultrasound frequency") as err:
+        SamplingConfig(3000.5 * Hz)
+    assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
+    with pytest.raises(autd3.Autd3Error, match="ultrasound period") as err:
+        SamplingConfig(Duration.from_nanos(50_001))
+    assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
+    with pytest.raises(autd3.Autd3Error, match="out of range") as err:
+        SamplingConfig(80_000 * Hz)
+    assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
+    with pytest.raises(autd3.Autd3Error, match="non-zero") as err:
+        SamplingConfig(0)
+    assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
+    with pytest.raises(ValueError, match="SamplingConfig expects"):
+        SamplingConfig(loose("4000"))
+
     geometry = one_device()
-    unresolvable = SamplingConfig(3000.5 * Hz)
+    resolved = SamplingConfig(Nearest(3000.5 * Hz))
+    assert resolved.divide() == 13
     commands: list[autd3.commands.Command] = [
-        ConfigModulation(ModulationBank.B0, unresolvable, 2, LoopBehavior.Infinite),
-        ConfigPattern(PatternBank.B0, unresolvable, 2, LoopBehavior.Infinite),
-        ConfigFociStm(PatternBank.B0, unresolvable, 2, 1, 340 * m / s, LoopBehavior.Infinite),
+        ConfigModulation(ModulationBank.B0, resolved, 2, LoopBehavior.Infinite),
+        ConfigPattern(PatternBank.B0, resolved, 2, LoopBehavior.Infinite),
+        ConfigFociStm(PatternBank.B0, resolved, 2, 1, 340 * m / s, LoopBehavior.Infinite),
     ]
     for command in commands:
-        with pytest.raises(autd3.Autd3Error, match="ultrasound frequency") as err:
-            autd3.Frames.encode(geometry, command)
-        assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
-
-    config = StmConfig(unresolvable)
-    with pytest.raises(autd3.Autd3Error, match="ultrasound frequency"):
-        config.into_sampling_config(2).divide()
-
-    buffer = modulation.modulation_buffer()
-    with pytest.raises(autd3.Autd3Error):
-        modulation.sine(150 * Hz, modulation.SineOption(), unresolvable, buffer)
+        assert len(autd3.Frames.encode(geometry, command)) > 0
 
 
 def test_command_contents_are_checked_when_encoded() -> None:
@@ -314,14 +319,14 @@ def test_command_contents_are_checked_when_encoded() -> None:
     for command in (
         SetOutputMask([[True] * 3]),
         SetPhaseCorrection([[Phase.ZERO] * 3]),
-        FociStm(1.0 * Hz, [], FociStmOption()),
+        FociStm(SamplingConfig.FREQ_4K, [], FociStmOption()),
         WriteFociBuffer(PatternBank.B0, 0, []),
     ):
         with pytest.raises(autd3.Autd3Error) as err:
             autd3.Frames.encode(geometry, loose(command))
         assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
     with pytest.raises(ValueError):
-        FociStm(1.0 * Hz, [ControlPoints([], 0xFF)], FociStmOption())
+        FociStm(SamplingConfig.FREQ_4K, [ControlPoints([], 0xFF)], FociStmOption())
 
 
 def test_a_zero_ack_timeout_is_rejected_at_open() -> None:

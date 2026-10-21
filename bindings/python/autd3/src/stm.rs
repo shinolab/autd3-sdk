@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
 use autd3_python_capsule::extract::{
-    extract_duration, extract_point, extract_sampling_config, extract_u8, extract_velocity,
-    intensity_to_py, is_duration, nanos_to_duration, phase_to_py, sampling_config_to_py,
-    velocity_to_py,
+    extract_point, extract_sampling_config, extract_u8, extract_velocity, intensity_to_py,
+    phase_to_py, velocity_to_py,
 };
 use autd3_python_capsule::numpy::f32_vec3;
 use autd3_rs::Velocity;
@@ -11,79 +10,17 @@ use autd3_rs::commands::Expansion;
 use autd3_rs::commands::WriteFociBuffer as CoreWriteFociBuffer;
 use autd3_rs::commands::{
     FociStm as CoreFociStm, FociStmOption as CoreFociStmOption, PatternStm as CorePatternStm,
-    PatternStmOption as CorePatternStmOption, StmConfig as CoreStmConfig,
-    StmIntensity as CoreStmIntensity,
+    PatternStmOption as CorePatternStmOption, StmIntensity as CoreStmIntensity,
 };
 use autd3_rs::value::{
-    ControlPoint as CoreControlPoint, ControlPoints as CoreControlPoints, Intensity, Nearest,
-    PatternBank as CorePatternBank, Phase,
+    ControlPoint as CoreControlPoint, ControlPoints as CoreControlPoints, Intensity,
+    PatternBank as CorePatternBank, Phase, SamplingConfig,
 };
-use autd3_rs_core::units::Hz;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 use crate::datagram::PushCommand;
 use crate::ops;
-
-#[pyclass(
-    name = "StmConfig",
-    module = "autd3.commands",
-    eq,
-    frozen,
-    from_py_object
-)]
-#[derive(Clone, Copy, PartialEq)]
-pub struct StmConfig(pub(crate) CoreStmConfig);
-
-pub(crate) fn extract_stm_config(value: &Bound<'_, PyAny>) -> PyResult<CoreStmConfig> {
-    if let Ok(config) = value.cast::<StmConfig>() {
-        return Ok(config.borrow().0);
-    }
-    if let Ok(hz) = value.call_method0("nearest_hz") {
-        let nanos = value.call_method0("nearest_nanos")?;
-        return match (
-            hz.extract::<Option<f32>>()?,
-            nanos.extract::<Option<u128>>()?,
-        ) {
-            (Some(hz), _) => Ok(CoreStmConfig::new(Nearest(hz * Hz))),
-            (_, Some(nanos)) => Ok(CoreStmConfig::new(Nearest(nanos_to_duration(nanos)?))),
-            _ => Err(PyValueError::new_err("invalid Nearest")),
-        };
-    }
-    if value.hasattr("_sampling_config_capsule")? {
-        return Ok(CoreStmConfig::new(extract_sampling_config(value)?));
-    }
-    if let Ok(hz) = value.getattr("hz") {
-        return Ok(CoreStmConfig::new(hz.extract::<f32>()? * Hz));
-    }
-    if is_duration(value)? {
-        return Ok(CoreStmConfig::new(extract_duration(value)?));
-    }
-    Err(PyValueError::new_err(
-        "StmConfig expects a frequency (e.g. 1.0 * Hz), a Duration, a SamplingConfig, or Nearest(...)",
-    ))
-}
-
-#[pymethods]
-impl StmConfig {
-    #[new]
-    fn new(value: &Bound<'_, PyAny>) -> PyResult<Self> {
-        Ok(Self(extract_stm_config(value)?))
-    }
-
-    #[allow(clippy::wrong_self_convention)]
-    fn into_sampling_config<'py>(
-        &self,
-        py: Python<'py>,
-        size: usize,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        sampling_config_to_py(py, self.0.into_sampling_config(size))
-    }
-
-    fn __repr__(&self) -> String {
-        format!("{:?}", self.0)
-    }
-}
 
 #[pyclass(name = "ControlPoint", module = "autd3.value", eq, frozen)]
 #[derive(Clone, Copy, PartialEq)]
@@ -289,7 +226,7 @@ macro_rules! foci_points {
 
             fn push_into<'a>(
                 &'a self,
-                config: CoreStmConfig,
+                config: SamplingConfig,
                 option: CoreFociStmOption,
                 expansion: &mut Expansion<'_, 'a>,
             ) -> Result<(), autd3_rs::Error> {
@@ -325,7 +262,7 @@ macro_rules! foci_points {
 foci_points!(1 => N1, 2 => N2, 3 => N3, 4 => N4, 5 => N5, 6 => N6, 7 => N7, 8 => N8);
 
 pub(crate) struct FociStmData {
-    config: CoreStmConfig,
+    config: SamplingConfig,
     points: FociPoints,
     option: CoreFociStmOption,
 }
@@ -344,12 +281,12 @@ impl FociStm {
     #[new]
     #[pyo3(signature = (config, points, option))]
     fn new(
-        config: &Bound<'_, PyAny>,
+        #[pyo3(from_py_with = extract_sampling_config)] config: SamplingConfig,
         points: Vec<PyRef<'_, ControlPoints>>,
         option: PyRef<'_, FociStmOption>,
     ) -> PyResult<Self> {
         Ok(Self(Arc::new(FociStmData {
-            config: extract_stm_config(config)?,
+            config,
             points: FociPoints::from_samples(&points)?,
             option: option.0,
         })))
@@ -428,7 +365,7 @@ fn extract_stm_intensity(obj: &Bound<'_, PyAny>) -> PyResult<OwnedStmIntensity> 
 }
 
 pub(crate) struct PatternStmData {
-    config: CoreStmConfig,
+    config: SamplingConfig,
     phases: Vec<Vec<Vec<Phase>>>,
     intensities: OwnedStmIntensity,
     option: CorePatternStmOption,
@@ -454,19 +391,18 @@ impl PatternStm {
     #[new]
     #[pyo3(signature = (config, phases, intensities, option))]
     fn new(
-        config: &Bound<'_, PyAny>,
+        #[pyo3(from_py_with = extract_sampling_config)] config: SamplingConfig,
         phases: Vec<Bound<'_, PyAny>>,
         intensities: &Bound<'_, PyAny>,
         option: PyRef<'_, PatternStmOption>,
     ) -> PyResult<Self> {
-        let stm_config = extract_stm_config(config)?;
         let phases = phases
             .iter()
             .map(crate::datagram::extract_phases)
             .collect::<PyResult<Vec<_>>>()?;
         let intensities = extract_stm_intensity(intensities)?;
         Ok(Self(Arc::new(PatternStmData {
-            config: stm_config,
+            config,
             phases,
             intensities,
             option: option.0,
@@ -475,7 +411,6 @@ impl PatternStm {
 }
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<StmConfig>()?;
     m.add_class::<ControlPoint>()?;
     m.add_class::<ControlPoints>()?;
     m.add_class::<FociStmOption>()?;

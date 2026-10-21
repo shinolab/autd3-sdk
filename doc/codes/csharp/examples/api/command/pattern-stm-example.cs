@@ -33,7 +33,7 @@ for (var i = 0; i < 200; i++)
 }
 
 await client.SendAsync(new PatternStm(
-    1.0f * Hz,
+    new SamplingConfig(1.0f * Hz * patterns.Length),
     patterns,
     Intensity.Max,
     new PatternStmOption

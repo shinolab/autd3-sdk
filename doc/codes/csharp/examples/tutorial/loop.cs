@@ -28,7 +28,7 @@ internal static class Sample
         {
         // ANCHOR: infinite
         // By default the playback loops infinitely; B0 keeps circling the focus.
-        await client.SendAsync(new FociStm(50.0f * Hz, foci, new FociStmOption()));
+        await client.SendAsync(new FociStm(new SamplingConfig(50.0f * Hz * foci.Length), foci, new FociStmOption()));
         // ANCHOR_END: infinite
         }
 
@@ -37,7 +37,7 @@ internal static class Sample
         // A finite loop (and non-immediate transition) only fires when switching to a
         // different bank, so write to bank B1 instead of the current B0.
         await client.SendAsync(new FociStm(
-            50.0f * Hz,
+            new SamplingConfig(50.0f * Hz * foci.Length),
             foci,
             new FociStmOption
             {
