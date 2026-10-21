@@ -600,47 +600,6 @@ def test_each() -> None:
     assert len(autd3.Frames.encode(geo, commands)) > 0
 
 
-def test_later_stages_a_bank_without_changing_it() -> None:
-    geo = geometry()
-    buf = modulation.modulation_buffer()
-    modulation.sine(200 * Hz, modulation.SineOption(), autd3.value.SamplingConfig.FREQ_4K, buf)
-
-    commands: list[autd3.commands.Command] = []
-    commands.append(
-        autd3.commands.Modulation(
-            autd3.value.SamplingConfig.FREQ_4K,
-            buf,
-            bank=autd3.value.ModulationBank.B1,
-            transition_mode=autd3.value.TransitionMode.Later,
-        )
-    )
-    assert len(autd3.Frames.encode(geo, commands)) == 2
-
-    pat = geo.phase_buffer()
-    pat_i = geo.intensity_buffer()
-    pattern.set_intensity(autd3.value.Intensity(0x80), pat_i)
-    commands = []
-    commands.append(
-        autd3.commands.Pattern(
-            pat,
-            pat_i,
-            bank=autd3.value.PatternBank.B1,
-            transition_mode=autd3.value.TransitionMode.Later,
-        )
-    )
-    assert len(autd3.Frames.encode(geo, commands)) == 2
-
-    commands = []
-    commands.append(
-        autd3.commands.ActivateModulationBank(
-            autd3.value.ModulationBank.B1,
-            transition_mode=autd3.value.TransitionMode.Later,
-        )
-    )
-    with pytest.raises(autd3.Autd3Error, match="Later"):
-        autd3.Frames.encode(geo, commands)
-
-
 def test_commands_build() -> None:
     geo = geometry()
     commands: list[autd3.commands.Command] = []

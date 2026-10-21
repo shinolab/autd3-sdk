@@ -1,11 +1,8 @@
 use super::Command;
-use crate::commands::operation::{
-    ConfigPattern, PatternIntensity, WritePatternBuffer, WritePatternFused,
-};
+use crate::commands::operation::{PatternIntensity, WritePatternFused};
 use crate::datagram::Expansion;
 use crate::error::Error;
-use crate::value::{LoopBehavior, PatternBank, Phase, SamplingConfig, TransitionMode};
-use core::num::NonZeroU16;
+use crate::value::{PatternBank, Phase, TransitionMode};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Pattern<'a> {
@@ -38,28 +35,12 @@ impl<'a> Pattern<'a> {
 
 impl<'a> Command<'a> for Pattern<'a> {
     fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
-        if !self.transition_mode.is_later() {
-            expansion.push(WritePatternFused {
-                bank: self.bank,
-                phases: self.phases,
-                intensities: self.intensities,
-                transition_mode: self.transition_mode,
-            })?;
-            return Ok(());
-        }
-        expansion
-            .push(WritePatternBuffer::new(
-                self.bank,
-                0,
-                self.phases,
-                self.intensities,
-            ))?
-            .push(ConfigPattern {
-                bank: self.bank,
-                config: SamplingConfig::new(NonZeroU16::MAX),
-                size: 1,
-                loop_behavior: LoopBehavior::Infinite,
-            })?;
+        expansion.push(WritePatternFused {
+            bank: self.bank,
+            phases: self.phases,
+            intensities: self.intensities,
+            transition_mode: self.transition_mode,
+        })?;
         Ok(())
     }
 }
@@ -67,6 +48,7 @@ impl<'a> Command<'a> for Pattern<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::operation::WritePatternBuffer;
     use crate::geometry::Autd3;
     use crate::protocol::Cmd;
     use crate::test_utils::{build, cmds, payload};
@@ -112,12 +94,9 @@ mod tests {
             Pattern::with_bank(PatternBank::B1, &phases, &intensities),
         )
         .unwrap();
-        let later = build(
+        let raw = build(
             2,
-            Pattern {
-                transition_mode: TransitionMode::Later,
-                ..Pattern::with_bank(PatternBank::B1, &phases, &intensities)
-            },
+            WritePatternBuffer::new(PatternBank::B1, 0, &phases, &intensities),
         )
         .unwrap();
 
@@ -125,34 +104,9 @@ mod tests {
             assert_eq!(payload(&fused, 0, device)[0], 1, "bank B1");
             assert_eq!(
                 &payload(&fused, 0, device)[size_of::<WritePatternFusedPayload>()..],
-                &payload(&later, 0, device)[size_of::<WritePatternRawPayload>()..]
+                &payload(&raw, 0, device)[size_of::<WritePatternRawPayload>()..]
             );
         }
-    }
-
-    #[test]
-    fn later_writes_the_bank_without_changing_it() {
-        let phases = vec![vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]; 2];
-        let intensities = vec![vec![Intensity::MAX; Autd3::NUM_TRANSDUCERS]; 2];
-        let datagrams = build(
-            2,
-            Pattern {
-                transition_mode: TransitionMode::Later,
-                ..Pattern::with_bank(PatternBank::B1, &phases, &intensities)
-            },
-        )
-        .unwrap();
-
-        assert_eq!(
-            cmds(&datagrams),
-            [Cmd::WritePatternRaw, Cmd::ConfigPattern],
-            "write + config, no activate"
-        );
-        let config = payload(&datagrams, 1, 0);
-        assert_eq!(config[0], 1, "bank B1");
-        assert_eq!(&config[2..4], &u16::MAX.to_le_bytes());
-        assert_eq!(&config[4..8], &1u32.to_le_bytes(), "size = 1 index");
-        assert_eq!(&config[12..14], &0xFFFFu16.to_le_bytes(), "infinite rep");
     }
 
     #[test]

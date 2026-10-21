@@ -100,12 +100,10 @@ impl<'a> Command<'a> for PatternStm<'a> {
             size,
             loop_behavior: self.option.loop_behavior,
         })?;
-        if !self.option.transition_mode.is_later() {
-            expansion.push(ActivatePatternBank {
-                bank,
-                transition_mode: self.option.transition_mode,
-            })?;
-        }
+        expansion.push(ActivatePatternBank {
+            bank,
+            transition_mode: self.option.transition_mode,
+        })?;
         Ok(())
     }
 }
@@ -482,28 +480,5 @@ mod tests {
                 );
             }
         }
-    }
-
-    #[test]
-    fn later_writes_the_bank_without_changing_it() {
-        let (patterns, intensities) = make_patterns(3);
-        let datagrams = build(
-            1,
-            PatternStm::new(
-                SamplingConfig::FREQ_4K,
-                &patterns,
-                &intensities,
-                PatternStmOption {
-                    bank: PatternBank::B1,
-                    transition_mode: TransitionMode::Later,
-                    ..Default::default()
-                },
-            ),
-        )
-        .unwrap();
-
-        assert_eq!(datagrams.len(), 3, "2 writes + config, no activate");
-        assert_eq!(cmds(&datagrams)[2], Cmd::ConfigPattern);
-        assert_eq!(payload(&datagrams, 2, 0)[0], 1, "bank B1");
     }
 }

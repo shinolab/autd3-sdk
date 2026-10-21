@@ -56,8 +56,7 @@ Several [helper functions](/autd3-sdk/en/api/compute/pattern/) are provided for 
 The two differ only when the device rejects an invalid transition mode (`Pattern` writes nothing, while with the low-level commands the writes before the rejected `ActivatePatternBank` remain).
 The following is equivalent to `Pattern { bank, phases, intensities }`.
 
-When `transition_mode` is `TransitionMode::Later`, only the two frames `WritePatternBuffer` + `ConfigPattern` are sent and no `ActivatePatternBank` is sent.
-See the `TransitionMode` section of [ActivatePatternBank](/autd3-sdk/en/api/command/lowlevel/activate-pattern-bank/) for details.
+To write a bank without switching to it (and send `ActivatePatternBank` later), send `WritePatternBuffer` + `ConfigPattern` directly instead of `Pattern`.
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />
 

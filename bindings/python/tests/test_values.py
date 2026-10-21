@@ -41,7 +41,6 @@ EQUAL_PAIRS: list[tuple[Hashable, Hashable]] = [
     (SysTime.from_nanos(5), SysTime.from_nanos(5)),
     (TransitionMode.SysTime(SysTime.from_nanos(5)), TransitionMode.SysTime(SysTime.from_nanos(5))),
     (TransitionMode.Gpio(GpioIn.I1), TransitionMode.Gpio(GpioIn.I1)),
-    (TransitionMode.Later, TransitionMode.Later),
     (LoopBehavior.Once, LoopBehavior.Finite(1)),
     (LoopBehavior.Infinite, LoopBehavior.Infinite),
     (GpioIn.I2, GpioIn.I2),
@@ -83,7 +82,7 @@ DISTINCT_PAIRS: list[tuple[object, object]] = [
     (Intensity(1), Intensity(2)),
     (SamplingConfig(10), SamplingConfig(20)),
     (SysTime.from_nanos(5), SysTime.from_nanos(6)),
-    (TransitionMode.Immediate, TransitionMode.Later),
+    (TransitionMode.Immediate, TransitionMode.Ext),
     (TransitionMode.Gpio(GpioIn.I1), TransitionMode.Gpio(GpioIn.I2)),
     (LoopBehavior.Finite(2), LoopBehavior.Finite(3)),
     (LoopBehavior.Infinite, LoopBehavior.Once),
@@ -182,9 +181,7 @@ def test_phase_conversions() -> None:
 def test_loop_behavior_and_transition_mode_names() -> None:
     assert LoopBehavior.Once.rep() == 0
     assert not hasattr(LoopBehavior, "ONCE")
-    assert TransitionMode.Later.is_later()
-    assert not TransitionMode.Immediate.is_later()
-    assert not TransitionMode.Gpio(GpioIn.I0).is_later()
+    assert not hasattr(TransitionMode, "Later")
 
 
 def test_params_mirror_the_rust_constants() -> None:

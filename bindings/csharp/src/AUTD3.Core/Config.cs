@@ -68,11 +68,7 @@ namespace AUTD3
 
         public static TransitionMode Ext => new TransitionMode(0xF0, 0);
 
-        public static TransitionMode Later => new TransitionMode(0xFE, 0);
-
         public static TransitionMode Immediate => new TransitionMode(ImmediateMode, 0);
-
-        public bool IsLater => Mode == 0xFE;
 
         public bool Equals(TransitionMode other) => _modeFromImmediate == other._modeFromImmediate && Value == other.Value;
 

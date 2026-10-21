@@ -34,16 +34,13 @@ import { excerpt } from "@lib/excerpt";
 | `SysTime { time }`   | 指定した デバイス時刻 `time` (`SysTime`) |
 | `Gpio(GpioIn)`       | 指定 GPIO 入力ピンのトリガ        |
 | `Ext`                | 拡張モード (バンク内の再生が終わると次のバンクに自動で切り替え) |
-| `Later`              | 遷移しない (バンクへの書き込みだけを行う) |
 
 Python / C# では `SysTime` を `TransitionMode.SysTime(time)` と書く.
 
 `SysTime` は指定時刻が近すぎると FPGA が遷移を取りこぼす可能性があるため, 「現在時刻 + マージン」より前の指定を `MISS_TRANSITION_TIME` エラーで拒否する.
 マージンはデフォルトで 10 ms であり, [SetCpuConfig](/autd3-sdk/api/command/cpu-config/) の `sys_time_transition_margin` で変更できる.
 
-`Later` は「バンクへ書き込むだけで遷移しない」ことを表す.
-`Modulation` / `FociStm` / `PatternStm` の `transition_mode` に指定すると, 末尾のバンク切り替えを送らず書き込みと設定だけを行う.
-遷移コマンドである `ActivateModulationBank` / `ActivatePatternBank` 自身に指定した場合はエンコード時エラーになる.
+バンクへ書き込むだけで遷移しない場合は, 高レベルコマンドではなく `Write*` + `Config*` の低レベルコマンドだけを送り, 後からこのコマンドで切り替える.
 
 `Gpio(GpioIn)` の詳細は [GPIO ピン](/autd3-sdk/hardware/gpio/) を参照.
 

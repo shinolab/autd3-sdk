@@ -44,13 +44,11 @@ impl<'a> Command<'a> for Modulation<'a> {
                 config: self.config,
                 size: self.data.len(),
                 loop_behavior: self.loop_behavior,
-            })?;
-        if !self.transition_mode.is_later() {
-            expansion.push(ActivateModulationBank {
+            })?
+            .push(ActivateModulationBank {
                 bank: self.bank,
                 transition_mode: self.transition_mode,
             })?;
-        }
         Ok(())
     }
 }
@@ -135,45 +133,5 @@ mod tests {
             ..Modulation::new(SamplingConfig::FREQ_4K, &data)
         });
         assert_eq!(&config[8..10], &9u16.to_le_bytes());
-    }
-
-    #[test]
-    fn later_writes_the_bank_without_changing_it() {
-        let data = vec![0x80u8; 4];
-        let datagrams = build(
-            1,
-            Modulation {
-                bank: ModulationBank::B1,
-                transition_mode: TransitionMode::Later,
-                ..Modulation::new(SamplingConfig::FREQ_4K, &data)
-            },
-        )
-        .unwrap();
-
-        assert_eq!(
-            cmds(&datagrams),
-            [Cmd::WriteModulationBuffer, Cmd::ConfigModulation],
-            "write + config, no activate"
-        );
-        let config = payload(&datagrams, 1, 0);
-        assert_eq!(config[0], 1, "bank B1");
-        assert_eq!(&config[4..8], &4u32.to_le_bytes());
-    }
-
-    #[test]
-    fn later_skips_the_loop_behavior_constraint() {
-        use core::num::NonZeroU16;
-
-        let data = vec![0x80u8; 4];
-        let result = build(
-            1,
-            Modulation {
-                bank: ModulationBank::B1,
-                loop_behavior: LoopBehavior::Finite(NonZeroU16::new(10).unwrap()),
-                transition_mode: TransitionMode::Later,
-                ..Modulation::new(SamplingConfig::FREQ_4K, &data)
-            },
-        );
-        assert!(result.is_ok(), "no transition, so no constraint applies");
     }
 }

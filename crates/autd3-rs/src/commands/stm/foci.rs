@@ -67,13 +67,11 @@ impl<'a, const N: usize> Command<'a> for FociStm<'a, N> {
                 num_foci,
                 sound_speed: self.option.sound_speed,
                 loop_behavior: self.option.loop_behavior,
-            })?;
-        if !self.option.transition_mode.is_later() {
-            expansion.push(ActivatePatternBank {
+            })?
+            .push(ActivatePatternBank {
                 bank,
                 transition_mode: self.option.transition_mode,
             })?;
-        }
         Ok(())
     }
 }
@@ -311,35 +309,5 @@ mod tests {
         )
         .unwrap();
         assert_eq!(&payload(&frames, 1, 0)[2..4], &10u16.to_le_bytes());
-    }
-
-    #[test]
-    fn later_writes_the_bank_without_changing_it() {
-        let points = [
-            ControlPoints::from(Point3::new(0.0, 0.0, 1.0)),
-            ControlPoints::from(Point3::new(0.0, 0.0, 2.0)),
-        ];
-        let datagrams = build(
-            1,
-            FociStm::new(
-                SamplingConfig::FREQ_4K,
-                &points,
-                FociStmOption {
-                    bank: PatternBank::B1,
-                    transition_mode: TransitionMode::Later,
-                    ..Default::default()
-                },
-            ),
-        )
-        .unwrap();
-
-        assert_eq!(
-            cmds(&datagrams),
-            [Cmd::WriteFociBuffer, Cmd::ConfigPattern],
-            "write + config, no activate"
-        );
-        let config = payload(&datagrams, 1, 0);
-        assert_eq!(config[0], 1, "bank B1");
-        assert_eq!(&config[4..8], &2u32.to_le_bytes());
     }
 }

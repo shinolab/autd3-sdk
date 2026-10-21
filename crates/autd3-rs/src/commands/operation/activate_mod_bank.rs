@@ -20,7 +20,7 @@ impl Operation for ActivateModulationBank {
         Ok(encode_header_only(
             out,
             Cmd::ActivateModulationBank,
-            &ActivateModBankPayload::new(self.bank, self.transition_mode.try_as_wire()?),
+            &ActivateModBankPayload::new(self.bank, self.transition_mode.as_wire()),
         ))
     }
 }
@@ -64,20 +64,5 @@ mod tests {
         assert_eq!(encoded, ENCODED);
         assert_eq!(payload[1], 0x01);
         assert_eq!(&payload[2..10], &0x0123_4567_89AB_CDEFu64.to_le_bytes());
-    }
-
-    #[test]
-    fn activate_mod_bank_refuses_to_not_transition() {
-        use autd3_rs_core::error::EncodeError;
-
-        let e = encode(&ActivateModulationBank {
-            bank: ModulationBank::B1,
-            transition_mode: TransitionMode::Later,
-        })
-        .unwrap_err();
-        assert!(matches!(
-            e,
-            Error::Encode(EncodeError::TransitionLaterNotEncodable)
-        ));
     }
 }

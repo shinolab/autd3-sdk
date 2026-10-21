@@ -72,7 +72,9 @@ impl Operation for PerDeviceOpsAt<'_> {
 
 #[cfg(test)]
 mod tests {
-    use crate::commands::operation::{ConfigModulation, Distribution, Operation};
+    use crate::commands::operation::{
+        ConfigModulation, ConfigPattern, Distribution, Operation, WritePatternBuffer,
+    };
     use crate::commands::{Command, Pattern, WriteModulationBuffer};
     use crate::datagram::{Expansion, Frames, each};
     use crate::error::{Error, PayloadError};
@@ -80,7 +82,7 @@ mod tests {
     use crate::protocol::{Cmd, PAYLOAD_BYTES};
     use crate::test_utils::{FailAt, Marker, Multi, build, cmd_at, payload, test_geometry};
     use crate::value::{
-        Intensity, LoopBehavior, ModulationBank, Phase, SamplingConfig, TransitionMode,
+        Intensity, LoopBehavior, ModulationBank, PatternBank, Phase, SamplingConfig,
     };
 
     #[test]
@@ -251,9 +253,16 @@ mod tests {
             size: 2,
             loop_behavior: LoopBehavior::Infinite,
         };
-        let staged = || Pattern {
-            transition_mode: TransitionMode::Later,
-            ..Pattern::new(&phases, &intensities)
+        let staged = || {
+            (
+                WritePatternBuffer::new(PatternBank::B0, 0, &phases, &intensities),
+                ConfigPattern {
+                    bank: PatternBank::B0,
+                    config: SamplingConfig::FREQ_40K,
+                    size: 1,
+                    loop_behavior: LoopBehavior::Infinite,
+                },
+            )
         };
 
         let frames = Frames::encode(

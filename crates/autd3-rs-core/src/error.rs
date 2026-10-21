@@ -10,11 +10,6 @@ pub enum EncodeError {
         min: i32,
         max: i32,
     },
-
-    #[error(
-        "transition mode `Later` only writes a bank without transitioning, so it cannot be encoded into a transition"
-    )]
-    TransitionLaterNotEncodable,
 }
 
 impl From<autd3_cpu_wire::value::FocusOutOfRange> for EncodeError {
