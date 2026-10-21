@@ -30,7 +30,7 @@ fn a_client_opens_sends_and_closes_without_an_async_runtime() {
         client.send((Nop, Nop, Nop)).await.unwrap();
         assert_eq!(client.read_firmware_version().await.unwrap().len(), 2);
         client.close().await.unwrap();
-        assert!(client.close().await.is_ok());
+        assert!(matches!(client.close().await, Err(Error::Closed)));
     });
     assert!(emulator.with_devices(|devices| devices.iter().all(|d| d.fpga().force_fan())));
 }
