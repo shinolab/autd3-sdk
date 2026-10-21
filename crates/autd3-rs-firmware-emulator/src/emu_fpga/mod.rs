@@ -87,6 +87,8 @@ struct SwapchainRegs {
     cycle: u16,
     freq_div: u16,
     rep: u16,
+    set_flag: CtlFlags,
+    config: &'static [u16],
 }
 
 const MOD_SWAPCHAIN_REGS: SwapchainRegs = SwapchainRegs {
@@ -96,6 +98,8 @@ const MOD_SWAPCHAIN_REGS: SwapchainRegs = SwapchainRegs {
     cycle: fw::ADDR_MOD_CYCLE0,
     freq_div: fw::ADDR_MOD_FREQ_DIV0,
     rep: fw::ADDR_MOD_REP0,
+    set_flag: CtlFlags::MOD_SET,
+    config: &MOD_CONFIG_REGS,
 };
 const PATTERN_SWAPCHAIN_REGS: SwapchainRegs = SwapchainRegs {
     req_rd_bank: fw::ADDR_PATTERN_REQ_RD_BANK,
@@ -104,6 +108,8 @@ const PATTERN_SWAPCHAIN_REGS: SwapchainRegs = SwapchainRegs {
     cycle: fw::ADDR_PATTERN_CYCLE0,
     freq_div: fw::ADDR_PATTERN_FREQ_DIV0,
     rep: fw::ADDR_PATTERN_REP0,
+    set_flag: CtlFlags::PATTERN_SET,
+    config: &PATTERN_CONFIG_REGS,
 };
 
 #[derive(Clone, Copy)]
@@ -120,20 +126,6 @@ impl Chain {
         }
     }
 
-    const fn config_regs(self) -> &'static [u16] {
-        match self {
-            Self::Mod => &MOD_CONFIG_REGS,
-            Self::Pattern => &PATTERN_CONFIG_REGS,
-        }
-    }
-
-    const fn set_flag(self) -> CtlFlags {
-        match self {
-            Self::Mod => CtlFlags::MOD_SET,
-            Self::Pattern => CtlFlags::PATTERN_SET,
-        }
-    }
-
     fn guard_steps(self, intensity: u16, phase: u16) -> u16 {
         match self {
             Self::Mod => intensity,
@@ -146,6 +138,10 @@ struct BankRequest {
     req: usize,
     finite: bool,
     all: bool,
+}
+
+fn u64_at(words: &[u16], base: usize) -> u64 {
+    (0..4).map(|i| u64::from(words[base + i]) << (16 * i)).sum()
 }
 
 fn byte_at(words: &[u16], i: usize) -> u8 {
@@ -197,6 +193,10 @@ pub struct FpgaEmulator {
 impl FpgaEmulator {
     #[must_use]
     pub(crate) fn new(num_transducers: usize) -> Self {
+        Self::with_cpu_flash(num_transducers, fresh_cpu_flash())
+    }
+
+    fn with_cpu_flash(num_transducers: usize, cpu_flash: Box<[u8]>) -> Self {
         let mut controller = Box::new([0u16; 256]);
 
         controller[reg(fw::ADDR_VERSION_NUM_MAJOR)] = fw::VERSION_NUM_MAJOR as u16;
@@ -231,7 +231,7 @@ impl FpgaEmulator {
             pending_ptp_config: None,
             mod_swapchain: Swapchain::new(),
             pattern_swapchain: Swapchain::new(),
-            cpu_flash: fresh_cpu_flash(),
+            cpu_flash,
             reset_count: 0,
             flash: flash::FlashEmulator::new(),
             reconfig_count: 0,
@@ -244,12 +244,12 @@ impl FpgaEmulator {
     }
 
     fn reload(&mut self) {
-        let mut next = Self::new(self.num_transducers);
+        let mut next =
+            Self::with_cpu_flash(self.num_transducers, core::mem::take(&mut self.cpu_flash));
         next.next_sync_edge = self.next_sync_edge;
         next.sys_time_ns = self.sys_time_ns;
         next.thermal = self.thermal;
         let old = core::mem::replace(self, next);
-        self.cpu_flash = old.cpu_flash;
         self.reset_count = old.reset_count;
         self.flash = old.flash;
         self.flash.configure_from_flash();
@@ -326,14 +326,15 @@ impl FpgaEmulator {
                         self.controller[reg(fw::ADDR_SILENCER_SET_RESULT)],
                     ) & !flags;
                     for chain in [Chain::Mod, Chain::Pattern] {
-                        if !flags.contains(chain.set_flag()) {
+                        let regs = chain.regs();
+                        if !flags.contains(regs.set_flag) {
                             continue;
                         }
                         if self.swapchain_latch_rejected(chain) {
-                            rejected |= chain.set_flag();
+                            rejected |= regs.set_flag;
                         } else {
-                            self.latch_config(chain.config_regs());
-                            self.latch_swapchain_request(chain.regs());
+                            self.latch_config(regs.config);
+                            self.latch_swapchain_request(regs);
                             self.arm_swapchain(chain);
                         }
                     }
@@ -386,14 +387,12 @@ impl FpgaEmulator {
         }
     }
 
-    pub(crate) fn next_sync_edge(&mut self) -> u64 {
+    pub(crate) fn next_sync_edge(&self) -> u64 {
         self.next_sync_edge.max(self.sys_time_ns + 500_000)
     }
 
     fn reg_u64(&self, base: usize) -> u64 {
-        (0..4)
-            .map(|i| u64::from(self.controller[base + i]) << (16 * i))
-            .sum()
+        u64_at(&*self.controller, base)
     }
 
     fn latch_config(&mut self, regs: &[u16]) {
@@ -423,28 +422,30 @@ impl FpgaEmulator {
         }
     }
 
-    fn latched_request(&self, chain: Chain) -> BankRequest {
+    fn bank_request(
+        config: &[u16; 256],
+        chain: Chain,
+        all_when_finite: impl FnOnce() -> bool,
+    ) -> BankRequest {
         let regs = chain.regs();
-        let req = self.latched_config[reg(regs.req_rd_bank)] as usize & 1;
-        let finite = self.latched_config[reg(regs.rep) + req] != fw::REP_INFINITE;
+        let req = config[reg(regs.req_rd_bank)] as usize & 1;
+        let finite = config[reg(regs.rep) + req] != fw::REP_INFINITE;
         let all = if finite {
-            self.swapchain(chain).ext_active()
+            all_when_finite()
         } else {
-            self.latched_config[reg(regs.transition_mode)] == TRANSITION_MODE_EXT
+            config[reg(regs.transition_mode)] == TRANSITION_MODE_EXT
         };
         BankRequest { req, finite, all }
     }
 
+    fn latched_request(&self, chain: Chain) -> BankRequest {
+        Self::bank_request(&self.latched_config, chain, || {
+            self.swapchain(chain).ext_active()
+        })
+    }
+
     fn staged_request(&self, chain: Chain) -> BankRequest {
-        let regs = chain.regs();
-        let req = self.controller[reg(regs.req_rd_bank)] as usize & 1;
-        let finite = self.controller[reg(regs.rep) + req] != fw::REP_INFINITE;
-        let all = if finite {
-            self.latched_request(chain).all
-        } else {
-            self.controller[reg(regs.transition_mode)] == TRANSITION_MODE_EXT
-        };
-        BankRequest { req, finite, all }
+        Self::bank_request(&self.controller, chain, || self.latched_request(chain).all)
     }
 
     fn div_below(
@@ -501,9 +502,13 @@ impl FpgaEmulator {
             .set(sys_time_ns, rep, freq_div, cycle, req, mode, value);
     }
 
+    fn ctl_flags(&self) -> CtlFlags {
+        CtlFlags::from_bits_retain(self.controller[reg(fw::ADDR_CTL_FLAG)])
+    }
+
     fn effective_gpio_in(&self) -> [bool; 4] {
-        let ctl = self.controller[reg(fw::ADDR_CTL_FLAG)];
-        CTL_FLAG_GPIO_IN.map(|flag| CtlFlags::from_bits_retain(ctl).contains(flag))
+        let ctl_flags = self.ctl_flags();
+        CTL_FLAG_GPIO_IN.map(|flag| ctl_flags.contains(flag))
     }
 
     pub fn update_with_sys_time(&mut self, sys_time_ns: u64) {
@@ -520,14 +525,12 @@ impl FpgaEmulator {
 
     #[must_use]
     pub fn force_fan(&self) -> bool {
-        CtlFlags::from_bits_retain(self.controller[reg(fw::ADDR_CTL_FLAG)])
-            .contains(CtlFlags::FORCE_FAN)
+        self.ctl_flags().contains(CtlFlags::FORCE_FAN)
     }
 
     #[must_use]
     pub fn failsafe(&self) -> bool {
-        CtlFlags::from_bits_retain(self.controller[reg(fw::ADDR_CTL_FLAG)])
-            .contains(CtlFlags::FAILSAFE)
+        self.ctl_flags().contains(CtlFlags::FAILSAFE)
     }
 
     #[must_use]
@@ -732,8 +735,7 @@ impl FpgaEmulator {
 
     #[must_use]
     pub fn to_pulse_width(&self, intensity: Intensity, modulation: u8) -> u16 {
-        let key = (intensity.0 as usize * modulation as usize) / 255;
-        self.pwe[key & (PWE_TABLE_SIZE - 1)]
+        self.pulse_width_table((intensity.0 as usize * modulation as usize) / 255)
     }
 
     #[must_use]

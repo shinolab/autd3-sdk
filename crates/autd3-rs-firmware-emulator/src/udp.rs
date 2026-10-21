@@ -1,5 +1,6 @@
 use std::io;
 use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6, UdpSocket};
+use std::ops::Range;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread::JoinHandle;
@@ -92,9 +93,7 @@ impl Unit {
         if self.locked_at.is_some_and(|at| at <= now) {
             return None;
         }
-        self.unlocked_since.map(|at| {
-            u32::try_from(now.saturating_duration_since(at).as_millis()).unwrap_or(u32::MAX)
-        })
+        self.unlocked_since.map(|at| millis_since(at, now))
     }
 
     fn forget_host(&mut self) {
@@ -103,9 +102,7 @@ impl Unit {
     }
 
     fn host_idle_ms(&self, now: Instant) -> Option<u32> {
-        self.last_host.map(|at| {
-            u32::try_from(now.saturating_duration_since(at).as_millis()).unwrap_or(u32::MAX)
-        })
+        self.last_host.map(|at| millis_since(at, now))
     }
 
     fn can_lock(&self) -> bool {
@@ -119,6 +116,10 @@ impl Unit {
     fn lock_at(&mut self, at: Instant) {
         self.locked_at = Some(at);
     }
+}
+
+fn millis_since(at: Instant, now: Instant) -> u32 {
+    u32::try_from(now.saturating_duration_since(at).as_millis()).unwrap_or(u32::MAX)
 }
 
 struct Chain {
@@ -178,17 +179,19 @@ impl Chain {
         }
     }
 
-    fn reachable(&self, index: usize) -> bool {
-        self.units[..index].iter().all(|u| u.open)
+    fn reachable_end(&self) -> usize {
+        self.units
+            .iter()
+            .position(|u| !u.open)
+            .map_or(self.units.len(), |closed| closed + 1)
     }
 
-    fn targets(&self, via: Via) -> Vec<usize> {
+    fn targets(&self, via: Via) -> Range<usize> {
+        let end = self.reachable_end();
         match via {
-            Via::Group => (0..self.units.len())
-                .take_while(|&i| self.reachable(i))
-                .collect(),
-            Via::Unit(i) if self.reachable(i) => vec![i],
-            Via::Unit(_) => Vec::new(),
+            Via::Group => 0..end,
+            Via::Unit(i) if i < end => i..i + 1,
+            Via::Unit(_) => 0..0,
         }
     }
 
@@ -219,9 +222,11 @@ impl Chain {
         flags
     }
 
-    fn reply(&self, index: usize, dst: SocketAddr, header: Header, body: &[u8]) {
+    fn reply(&self, index: usize, dst: SocketAddr, header: Header, body_parts: &[&[u8]]) {
         let mut datagram = header.as_bytes().to_vec();
-        datagram.extend_from_slice(body);
+        for part in body_parts {
+            datagram.extend_from_slice(part);
+        }
         let unit = &self.units[index];
         if unit.socket.send_to(&datagram, dst).is_err() {
             unit.device.cpu.count_send_failures(1);
@@ -236,9 +241,7 @@ impl Chain {
         status: Status,
         extra: &[u8],
     ) {
-        let mut body = vec![status.as_u8()];
-        body.extend_from_slice(extra);
-        self.reply(index, dst, header, &body);
+        self.reply(index, dst, header, &[&[status.as_u8()], extra]);
     }
 
     fn unit_info(&self, index: usize, now: Instant) -> UnitInfo {
@@ -280,7 +283,7 @@ impl Chain {
                 version: PROTOCOL_VERSION,
                 ..header
             };
-            for &i in &targets {
+            for i in targets {
                 self.reply_status(i, src, reply, Status::UnsupportedVersion, &[]);
             }
             return;
@@ -341,18 +344,15 @@ impl Chain {
         if self.units[index].id.is_some() {
             return;
         }
-        let Ok((request, _)) = AssignIdBody::read_from_prefix(body) else {
+        let Some((request, role)) = AssignIdBody::read_from_prefix(body)
+            .ok()
+            .map(|(request, _)| request)
+            .filter(|request| request.unit_id != UNASSIGNED_ID)
+            .and_then(|request| Role::from_u8(request.role).map(|role| (request, role)))
+        else {
             self.reply_status(index, src, header, Status::InvalidPayload, &[]);
             return;
         };
-        let Some(role) = Role::from_u8(request.role) else {
-            self.reply_status(index, src, header, Status::InvalidPayload, &[]);
-            return;
-        };
-        if request.unit_id == UNASSIGNED_ID {
-            self.reply_status(index, src, header, Status::InvalidPayload, &[]);
-            return;
-        }
         let unit = &mut self.units[index];
         unit.id = Some(request.unit_id);
         unit.grandmaster = role == Role::Grandmaster;
@@ -463,9 +463,18 @@ impl Chain {
             unit_id,
             sys_time: U64::new(self.unit_now(index)),
         };
-        let mut body = head.as_bytes().to_vec();
-        body.extend_from_slice(state.data());
-        self.reply(index, dst, header, &body);
+        self.reply(index, dst, header, &[head.as_bytes(), state.data()]);
+    }
+
+    fn note_host_contact(&mut self, index: usize, src: SocketAddr, now: Instant) -> bool {
+        if self.units[index].muted {
+            self.advance(index, now);
+            return false;
+        }
+        self.units[index].last_host = Some(now);
+        self.units[index].host = Some(src);
+        self.advance(index, now);
+        true
     }
 
     fn heartbeat(&mut self, index: usize, src: SocketAddr, header: Header, now: Instant) {
@@ -473,13 +482,9 @@ impl Chain {
             return;
         }
         self.units[index].heartbeats += 1;
-        if self.units[index].muted {
-            self.advance(index, now);
+        if !self.note_host_contact(index, src, now) {
             return;
         }
-        self.units[index].last_host = Some(now);
-        self.units[index].host = Some(src);
-        self.advance(index, now);
         if self.units[index].drop_replies > 0 {
             self.units[index].drop_replies -= 1;
             return;
@@ -504,13 +509,9 @@ impl Chain {
             self.units[index].drop_frames -= 1;
             return;
         }
-        if self.units[index].muted {
-            self.advance(index, now);
+        if !self.note_host_contact(index, src, now) {
             return;
         }
-        self.units[index].last_host = Some(now);
-        self.units[index].host = Some(src);
-        self.advance(index, now);
         if self.units[index].id.is_none() {
             return;
         }

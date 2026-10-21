@@ -1,8 +1,5 @@
 use crate::fw;
-
-const FPGA_MAIN_CLK_FREQ: u32 = fw::FPGA_CLK_FREQ_HZ;
-const NUM_BANKS: usize = fw::NUM_BANKS;
-const REP_INFINITE: u16 = fw::REP_INFINITE;
+use crate::fw::{FPGA_CLK_FREQ_HZ, NUM_BANKS, REP_INFINITE};
 
 const MODE_SYNC_IDX: u8 = fw::TransitionMode::SyncIdx.as_u8();
 const MODE_SYS_TIME: u8 = fw::TransitionMode::SysTime.as_u8();
@@ -174,7 +171,7 @@ impl Swapchain {
     }
 
     fn fpga_sys_time(sys_time_ns: u64) -> u64 {
-        ((u128::from(sys_time_ns) * u128::from(FPGA_MAIN_CLK_FREQ)) / 1_000_000_000) as u64
+        ((u128::from(sys_time_ns) * u128::from(FPGA_CLK_FREQ_HZ)) / 1_000_000_000) as u64
     }
 
     fn lap_and_idx(&self, bank: usize, sys_time_ns: u64) -> (usize, usize) {
