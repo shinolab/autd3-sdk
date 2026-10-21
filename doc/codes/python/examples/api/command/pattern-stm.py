@@ -1,9 +1,9 @@
 import math
 
-from autd3.commands import ActivatePatternBank, ConfigPattern, PatternStm, PatternStmOption, PhaseDepth, StmConfig, WritePatternPhase
+from autd3.commands import ActivatePatternBank, ConfigPattern, PatternStm, PatternStmOption, PhaseDepth, WritePatternPhase
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import Hz, m, mm, s
-from autd3.value import Intensity, LoopBehavior, PatternBank, TransitionMode
+from autd3.value import Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode
 from autd3_pattern import focus, wavelength
 
 NUM_POINTS = 200
@@ -27,7 +27,7 @@ for i in range(NUM_POINTS):
     )
     patterns.append(buffer)
 intensities = Intensity.MAX
-freq = 1.0 * Hz
+config = SamplingConfig(1.0 * Hz * NUM_POINTS)
 bank = PatternBank.B0
 phase_depth = PhaseDepth.Bits8
 loop_behavior = LoopBehavior.Infinite
@@ -43,7 +43,7 @@ option = (
     # ANCHOR_END: option
 )
 # ANCHOR: api
-PatternStm(freq, patterns, intensities, option)
+PatternStm(config, patterns, intensities, option)
 # ANCHOR_END: api
 
 # ANCHOR: equivalent
@@ -58,7 +58,7 @@ for start_index in range(0, len(patterns), max_count):
     )
 ConfigPattern(
     bank=option.bank,
-    config=StmConfig(freq).into_sampling_config(len(patterns)),
+    config=config,
     size=len(patterns),
     loop_behavior=option.loop_behavior,
 )

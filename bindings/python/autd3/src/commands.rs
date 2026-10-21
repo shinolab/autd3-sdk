@@ -3,6 +3,7 @@ use core::time::Duration;
 use std::sync::Arc;
 
 use autd3_python_capsule::extract::{duration_to_py, extract_duration, extract_u8};
+use autd3_python_capsule::invalid_argument;
 use autd3_rs::commands::Expansion;
 use autd3_rs::commands::{
     Clear as CoreClear, CpuConfig as CoreCpuConfig, EmulateGpioIn, FixedCompletionTime,
@@ -824,31 +825,27 @@ impl SetPulseWidthTablePy {
     frozen,
     from_py_object
 )]
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PulseWidth(pub(crate) CorePulseWidth);
-
-impl core::hash::Hash for PulseWidth {
-    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
-        self.0.pulse_width().ok().hash(state);
-    }
-}
 
 #[pymethods]
 impl PulseWidth {
     #[new]
-    fn new(pulse_width: u16) -> Self {
-        Self(CorePulseWidth::new(pulse_width))
+    fn new(py: Python<'_>, pulse_width: u16) -> PyResult<Self> {
+        CorePulseWidth::new(pulse_width)
+            .map(Self)
+            .map_err(|e| invalid_argument(py, e))
     }
 
     #[staticmethod]
-    fn from_duty(duty: f32) -> Self {
-        Self(CorePulseWidth::from_duty(duty))
+    fn from_duty(py: Python<'_>, duty: f32) -> PyResult<Self> {
+        CorePulseWidth::from_duty(duty)
+            .map(Self)
+            .map_err(|e| invalid_argument(py, e))
     }
 
-    fn pulse_width(&self) -> PyResult<u16> {
-        self.0
-            .pulse_width()
-            .map_err(|e| PyValueError::new_err(e.to_string()))
+    fn pulse_width(&self) -> u16 {
+        self.0.pulse_width()
     }
 
     fn __repr__(&self) -> String {

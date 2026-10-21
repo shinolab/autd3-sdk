@@ -21,34 +21,13 @@ namespace AUTD3.Tests
         }
 
         [Fact]
-        public void StmConfigConstructors()
+        public void AnStmSamplingConfigIsTheLoopFrequencyTimesTheSampleCount()
         {
-            _ = new StmConfig(1 * Hz);
-            _ = new StmConfig(Nearest(1.5f * Hz));
-            _ = new StmConfig(TimeSpan.FromSeconds(1));
-            _ = new StmConfig(Nearest(TimeSpan.FromSeconds(1)));
-            _ = new StmConfig(SamplingConfig.Freq4k);
-
-            StmConfig fromFreq = 1 * Hz;
-            StmConfig fromNearestFreq = Nearest(1.5f * Hz);
-            StmConfig fromPeriod = TimeSpan.FromSeconds(1);
-            StmConfig fromNearestPeriod = Nearest(TimeSpan.FromSeconds(1));
-            StmConfig fromSampling = SamplingConfig.Freq4k;
-            Assert.Equal(40000, fromFreq.IntoSamplingConfig(1).Divide());
-            Assert.True(fromNearestFreq.IntoSamplingConfig(1).Divide() > 0);
-            Assert.Equal(40000, fromPeriod.IntoSamplingConfig(1).Divide());
-            Assert.True(fromNearestPeriod.IntoSamplingConfig(1).Divide() > 0);
-            Assert.Equal(10, fromSampling.IntoSamplingConfig(1).Divide());
-        }
-
-        [Fact]
-        public void StmConfigIntoSamplingConfig()
-        {
-            Assert.Equal(100, new StmConfig(100.0f * Hz).IntoSamplingConfig(4).Divide());
-            Assert.Equal(10, new StmConfig(TimeSpan.FromMilliseconds(1)).IntoSamplingConfig(4).Divide());
-            Assert.Equal(10, new StmConfig(SamplingConfig.Freq4k).IntoSamplingConfig(7).Divide());
-            Assert.True(new StmConfig(Nearest(4001.0f * Hz)).IntoSamplingConfig(1).Divide() > 0);
-            Assert.Throws<Autd3Exception>(() => new StmConfig(4001.0f * Hz).IntoSamplingConfig(1));
+            Assert.Equal(40000, new SamplingConfig(1 * Hz * 1).Divide());
+            Assert.Equal(100, new SamplingConfig(100.0f * Hz * 4).Divide());
+            Assert.Equal(10, new SamplingConfig(TimeSpan.FromMilliseconds(1) / 4).Divide());
+            Assert.True(new SamplingConfig(Nearest(4001.0f * Hz)).Divide() > 0);
+            Assert.Throws<Autd3Exception>(() => new SamplingConfig(4001.0f * Hz));
         }
 
         [Fact]

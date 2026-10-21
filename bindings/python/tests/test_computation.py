@@ -505,9 +505,12 @@ def test_stm_foci_and_pattern() -> None:
         )
         for theta in np.linspace(0.0, 2.0 * np.pi, 8, endpoint=False)
     ]
-    commands.append(autd3.commands.FociStm(1.0 * Hz, points, autd3.commands.FociStmOption()))
+    stm_config = autd3.value.SamplingConfig(1.0 * Hz * len(points))
+    commands.append(autd3.commands.FociStm(stm_config, points, autd3.commands.FociStmOption()))
     with pytest.raises(TypeError):
-        loose(autd3.commands.FociStm)(1.0 * Hz, points)
+        loose(autd3.commands.FociStm)(stm_config, points)
+    with pytest.raises(TypeError, match="SamplingConfig"):
+        autd3.commands.FociStm(loose(1.0 * Hz), points, autd3.commands.FociStmOption())
 
     wavelength = pattern.wavelength(340 * m / s)
     frames = []
@@ -516,14 +519,11 @@ def test_stm_foci_and_pattern() -> None:
         pattern.focus(geo, geo.center() + np.array([x, 0.0, 150.0]), wavelength, buf)
         frames.append(buf)
     amps = [geo.intensity_buffer() for _ in frames]
-    commands.append(
-        autd3.commands.PatternStm(autd3.commands.StmConfig(1.0 * Hz), frames, amps, autd3.commands.PatternStmOption())
-    )
-    commands.append(
-        autd3.commands.PatternStm(
-            autd3.commands.StmConfig(1.0 * Hz), frames, geo.intensity_buffer(), autd3.commands.PatternStmOption()
-        )
-    )
+    stm_config = autd3.value.SamplingConfig(1.0 * Hz * len(frames))
+    commands.append(autd3.commands.PatternStm(stm_config, frames, amps, autd3.commands.PatternStmOption()))
+    commands.append(autd3.commands.PatternStm(stm_config, frames, geo.intensity_buffer(), autd3.commands.PatternStmOption()))
+    with pytest.raises(TypeError, match="SamplingConfig"):
+        autd3.commands.PatternStm(loose(1.0 * Hz), frames, amps, autd3.commands.PatternStmOption())
 
     datagrams = autd3.Frames.encode(geo, commands)
     assert len(datagrams) > 0
@@ -544,7 +544,7 @@ def test_pattern_stm_phase_depth() -> None:
     commands: list[autd3.commands.Command] = []
     commands.append(
         autd3.commands.PatternStm(
-            autd3.commands.StmConfig(autd3.value.SamplingConfig.FREQ_4K),
+            autd3.value.SamplingConfig.FREQ_4K,
             frames,
             autd3.value.Intensity.MAX,
             autd3.commands.PatternStmOption(phase_depth=autd3.commands.PhaseDepth.Bits4),
@@ -556,7 +556,7 @@ def test_pattern_stm_phase_depth() -> None:
     commands = []
     commands.append(
         autd3.commands.PatternStm(
-            autd3.commands.StmConfig(autd3.value.SamplingConfig.FREQ_4K),
+            autd3.value.SamplingConfig.FREQ_4K,
             frames,
             amps,
             autd3.commands.PatternStmOption(phase_depth=autd3.commands.PhaseDepth.Bits4),
@@ -853,17 +853,18 @@ def test_pulse_width_table_and_pulse_width() -> None:
     assert autd3.value.PulseWidth(12) != autd3.value.PulseWidth(13)
     assert half == autd3.value.PulseWidth.from_duty(0.5)
     assert hash(half) == hash(autd3.value.PulseWidth.from_duty(0.5))
-    with pytest.raises(ValueError):
-        autd3.value.PulseWidth.from_duty(1.0).pulse_width()
-    with pytest.raises(ValueError):
-        autd3.value.PulseWidth.from_duty(-0.5).pulse_width()
-    with pytest.raises(ValueError):
-        autd3.value.PulseWidth(autd3.params.PULSE_WIDTH_PERIOD).pulse_width()
-
-    out_of_range = table.copy()
-    out_of_range[0] = autd3.value.PulseWidth(autd3.params.PULSE_WIDTH_PERIOD)
-    with pytest.raises(autd3.Autd3Error):
-        autd3.Frames.encode(geo, autd3.commands.SetPulseWidthTable(out_of_range))
+    assert autd3.value.PulseWidth(autd3.params.PULSE_WIDTH_PERIOD - 1).pulse_width() == autd3.params.PULSE_WIDTH_PERIOD - 1
+    with pytest.raises(autd3.Autd3Error, match="duty ratio") as err:
+        autd3.value.PulseWidth.from_duty(1.0)
+    assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
+    with pytest.raises(autd3.Autd3Error, match="duty ratio") as err:
+        autd3.value.PulseWidth.from_duty(-0.5)
+    assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
+    with pytest.raises(autd3.Autd3Error, match="pulse width") as err:
+        autd3.value.PulseWidth(autd3.params.PULSE_WIDTH_PERIOD)
+    assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
+    with pytest.raises(OverflowError):
+        autd3.value.PulseWidth(-1)
 
 
 def test_device_accessors() -> None:
@@ -929,7 +930,7 @@ def test_sys_time_feeds_transition_mode_and_gpio() -> None:
     autd3.commands.GpioOut.SysTimeEq(time)
 
 
-def test_an_unresolvable_sampling_config_is_rejected_when_encoded() -> None:
+def test_an_unresolvable_sampling_config_is_rejected_when_constructed() -> None:
     class ZeroDivider:
         def divide(self) -> int:
             return 0
@@ -939,14 +940,12 @@ def test_an_unresolvable_sampling_config_is_rejected_when_encoded() -> None:
     with pytest.raises(TypeError, match="SamplingConfig"):
         autd3.commands.Modulation(loose(ZeroDivider()), buf)
 
-    unresolvable = autd3.value.SamplingConfig(3000.5 * Hz)
-    command = autd3.commands.Modulation(unresolvable, buf)
     with pytest.raises(autd3.Autd3Error, match="must divide the ultrasound frequency") as err:
-        autd3.Frames.encode(geometry(), command)
+        autd3.value.SamplingConfig(3000.5 * Hz)
     assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
-    with pytest.raises(autd3.Autd3Error) as err:
-        unresolvable.divide()
-    assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
+    nearest = autd3.value.SamplingConfig(autd3.value.Nearest(3000.5 * Hz))
+    assert nearest.divide() == 13
+    assert len(autd3.Frames.encode(geometry(), autd3.commands.Modulation(nearest, buf))) > 0
 
 
 class _ProbingWavelength:

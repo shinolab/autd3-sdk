@@ -19,7 +19,7 @@ internal static class Sample
             .Select(theta => (ControlPoints)(center + Offset(MathF.Cos(theta) * radius, MathF.Sin(theta) * radius, 0.0f * mm)))
             .ToArray();
         // ANCHOR_END: circle
-        var freq = 1.0f * Hz;
+        var config = new SamplingConfig(1.0f * Hz * numPoints);
         var bank = PatternBank.B0;
         var soundSpeed = 340.0f * m / s;
         var loopBehavior = LoopBehavior.Infinite;
@@ -36,7 +36,7 @@ internal static class Sample
             // ANCHOR_END: option
             ;
         // ANCHOR: api
-        new FociStm(freq, points, option);
+        new FociStm(config, points, option);
         // ANCHOR_END: api
 
         byte numFoci = 1;
@@ -48,7 +48,7 @@ internal static class Sample
         );
         new ConfigFociStm(
             bank: option.Bank,
-            config: new StmConfig(freq).IntoSamplingConfig(points.Length),
+            config: config,
             size: (uint)points.Length,
             numFoci: numFoci,
             soundSpeed: option.SoundSpeed,

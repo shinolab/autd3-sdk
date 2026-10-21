@@ -40,7 +40,7 @@ await client.SendAsync(new WritePatternPhase(
 ));
 await client.SendAsync(new ConfigPattern(
     bank: bank,
-    config: new StmConfig(1.0f * Hz).IntoSamplingConfig(patterns.Length),
+    config: new SamplingConfig(1.0f * Hz * patterns.Length),
     size: (uint)patterns.Length,
     loopBehavior: LoopBehavior.Infinite
 ));

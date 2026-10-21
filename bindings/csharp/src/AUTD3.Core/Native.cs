@@ -138,25 +138,22 @@ namespace AUTD3
         internal static extern float autd3_core_params_device_height_mm();
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_core_sampling_config_divide(ushort divide);
+        internal static extern ushort autd3_core_sampling_config_freq_4k();
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_core_sampling_config_freq(float hz);
+        internal static extern ushort autd3_core_sampling_config_freq_40k();
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_core_sampling_config_freq_nearest(float hz);
+        internal static extern int autd3_core_sampling_config_from_freq(float hz, out ushort @out, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_core_sampling_config_period(ulong nanos);
+        internal static extern int autd3_core_sampling_config_from_freq_nearest(float hz, out ushort @out, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_core_sampling_config_period_nearest(ulong nanos);
+        internal static extern int autd3_core_sampling_config_from_period(ulong nanos, out ushort @out, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_core_sampling_config_resolve(IntPtr config, out ushort @out, byte[] outErr, UIntPtr outErrLen);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_core_sampling_config_free(IntPtr config);
+        internal static extern ushort autd3_core_sampling_config_from_period_nearest(ulong nanos);
     }
 
     internal static class NativeAbi

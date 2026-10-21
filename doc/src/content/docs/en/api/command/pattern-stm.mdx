@@ -23,14 +23,12 @@ Unlike [FociStm](/autd3-sdk/en/api/command/foci-stm/), it can handle arbitrary P
 
 | Parameter  | Type                                  | Description                                          |
 | ---------- | ------------------------------------- | --------------------------------------------------- |
-| `config`   | `impl Into<StmConfig>`                | Playback rate (`Freq` / `Duration` / `SamplingConfig`) |
+| `config`   | `SamplingConfig`                      | Sampling configuration per sample                     |
 | `phases`      | `&[Vec<Vec<Phase>>]`     | Phases of each sample (at least 2 samples)                  |
 | `intensities` | `impl Into<StmIntensity>` | Intensities for every sample (a uniform value, one buffer shared by all indices, or one buffer per index) |
 | `option`   | `PatternStmOption`                    | Options such as phase depth, loop, and transition |
 
-Passing a `Freq` / `Duration` to `config` represents "the frequency/period for one full cycle over all samples".
-A sampling frequency can also be specified.
-A `Duration` that is not divisible by the number of samples is an error (use `Nearest` to round it).
+`config` is the sampling configuration per sample. To derive it from "the frequency of one full cycle over all samples", multiply that frequency by the number of samples (e.g. 200 samples at 1 Hz is 200 Hz).
 
 `intensities` accepts the following three types.
 

@@ -23,13 +23,11 @@ import { excerpt } from "@lib/excerpt";
 
 | 引数      | 型                       | 説明                                       |
 | --------- | ------------------------ | ------------------------------------------ |
-| `config`  | `impl Into<StmConfig>`   | 再生レート (`Freq` / `Duration` / `SamplingConfig`)  |
+| `config`  | `SamplingConfig`         | サンプル毎のサンプリング設定                        |
 | `points`  | `&[ControlPoints<N>]`    | 焦点サンプルの列 (2 サンプル以上)          |
 | `option`  | `FociStmOption`          | 音速・ループ・遷移などのオプション         |
 
-`config` に `Freq` / `Duration` を渡すと「全サンプルを 1 周する周波数/周期」を表す.
-サンプリング周波数を指定することもできる.
-`Duration` がサンプル数で割り切れない場合はエラーになる (丸めたいときは `Nearest` を使う).
+`config` は 1 サンプルあたりのサンプリング設定である. 「全サンプルを 1 周する周波数」から決めたいときは, 周波数にサンプル数を掛けて `SamplingConfig` を作る (例: 200 サンプルを 1 Hz で回すなら 200 Hz).
 
 ## ControlPoint / ControlPoints
 

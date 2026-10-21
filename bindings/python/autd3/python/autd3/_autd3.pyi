@@ -10,8 +10,6 @@ from autd3_core import (
     Duration,
     Geometry,
     Intensity,
-    Nearest,
-    Freq,
     Phase,
     SamplingConfig,
     Velocity,
@@ -20,7 +18,6 @@ from autd3_modulation import ModulationBuffer
 from autd3_pattern import IntensityBuffer, PhaseBuffer
 
 _Vec3: TypeAlias = Sequence[float] | npt.NDArray[np.floating[Any]]
-_StmConfigLike: TypeAlias = StmConfig | Freq | Duration | SamplingConfig | Nearest
 _SingleCommand: TypeAlias = (
     ActivateModulationBank
     | ActivatePatternBank
@@ -497,12 +494,6 @@ class ActivateModulationBank:
     def __new__(cls, bank: ModulationBank, transition_mode: TransitionMode) -> ActivateModulationBank: ...
 
 @final
-class StmConfig:
-    def __new__(cls, value: Freq | Duration | SamplingConfig | Nearest | StmConfig) -> StmConfig: ...
-    def into_sampling_config(self, size: int) -> SamplingConfig: ...
-    def __eq__(self, other: object) -> bool: ...
-
-@final
 class FociStmOption:
     def __new__(
         cls,
@@ -544,7 +535,7 @@ class PatternStmOption:
 class FociStm:
     def __new__(
         cls,
-        config: _StmConfigLike,
+        config: SamplingConfig,
         points: Sequence[ControlPoints],
         option: FociStmOption,
     ) -> FociStm: ...
@@ -557,7 +548,7 @@ class WriteFociBuffer:
 class PatternStm:
     def __new__(
         cls,
-        config: _StmConfigLike,
+        config: SamplingConfig,
         phases: Sequence[PhaseBuffer],
         intensities: Intensity | int | IntensityBuffer | Sequence[IntensityBuffer],
         option: PatternStmOption,

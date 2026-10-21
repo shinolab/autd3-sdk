@@ -6,7 +6,7 @@ from autd3 import Client, TransportOption
 from autd3.commands import Clear, FixedCompletionTime, FociStm, FociStmOption, SetSilencer, Synchronize
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import Hz, mm
-from autd3.value import ControlPoint, ControlPoints, Intensity, Phase
+from autd3.value import ControlPoint, ControlPoints, Intensity, Phase, SamplingConfig
 from autd3_core import Duration
 
 # xtask:expect-error
@@ -33,7 +33,7 @@ async def main() -> None:
         await client.send(SetSilencer.disable())
         await client.send(
             FociStm(
-                50.0 * Hz,
+                SamplingConfig(50.0 * Hz * len(foci)),
                 foci,
                 FociStmOption(),
             )
@@ -49,7 +49,7 @@ async def main() -> None:
         await client.send(SetSilencer())
         await client.send(
             FociStm(
-                50.0 * Hz,
+                SamplingConfig(50.0 * Hz * len(foci)),
                 foci,
                 FociStmOption(),
             )
@@ -71,7 +71,8 @@ async def main() -> None:
                 )
             )
         )
-        await client.send(FociStm(50.0 * Hz, foci, FociStmOption()))
+        config = SamplingConfig(50.0 * Hz * len(foci))
+        await client.send(FociStm(config, foci, FociStmOption()))
         # ANCHOR_END: workaround
 
 

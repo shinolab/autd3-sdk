@@ -61,7 +61,7 @@ namespace AUTD3.Tests
             using var phases = geometry.PhaseBuffer();
             foreach (var depth in new[] { PhaseDepth.Bits8, PhaseDepth.Bits4 })
             {
-                using var frames = Frames.Encode(geometry, new PatternStm(1 * Hz, new[] { phases, phases }, Intensity.Max, new PatternStmOption { PhaseDepth = depth }));
+                using var frames = Frames.Encode(geometry, new PatternStm(new SamplingConfig(1 * Hz * 2), new[] { phases, phases }, Intensity.Max, new PatternStmOption { PhaseDepth = depth }));
                 Assert.False(frames.IsEmpty);
             }
         }
@@ -124,18 +124,18 @@ namespace AUTD3.Tests
             using var intensities = geometry.IntensityBuffer();
             var patterns = new[] { phases, phases };
 
-            using var shared = Frames.Encode(geometry, new PatternStm(1 * Hz, patterns, intensities, new PatternStmOption()));
+            using var shared = Frames.Encode(geometry, new PatternStm(new SamplingConfig(1 * Hz * patterns.Length), patterns, intensities, new PatternStmOption()));
             Assert.False(shared.IsEmpty);
 
             var perIndex = Assert.Throws<Autd3Exception>(() =>
-                Frames.Encode(geometry, new PatternStm(1 * Hz, patterns, new[] { intensities }, new PatternStmOption())));
+                Frames.Encode(geometry, new PatternStm(new SamplingConfig(1 * Hz * patterns.Length), patterns, new[] { intensities }, new PatternStmOption())));
             Assert.Equal(Autd3ErrorCode.InvalidArgument, perIndex.Code);
 
             var mismatched = Assert.Throws<Autd3Exception>(() =>
-                Frames.Encode(geometry, new PatternStm(1 * Hz, patterns, new[] { intensities, intensities, intensities }, new PatternStmOption())));
+                Frames.Encode(geometry, new PatternStm(new SamplingConfig(1 * Hz * patterns.Length), patterns, new[] { intensities, intensities, intensities }, new PatternStmOption())));
             Assert.Equal(Autd3ErrorCode.InvalidArgument, mismatched.Code);
 
-            using var matched = Frames.Encode(geometry, new PatternStm(1 * Hz, patterns, new[] { intensities, intensities }, new PatternStmOption()));
+            using var matched = Frames.Encode(geometry, new PatternStm(new SamplingConfig(1 * Hz * patterns.Length), patterns, new[] { intensities, intensities }, new PatternStmOption()));
             Assert.False(matched.IsEmpty);
         }
 
@@ -156,29 +156,29 @@ namespace AUTD3.Tests
         {
             using var geometry = Fixture.SingleDevice();
             using var data = ModulationBuffer.FromBytes(new byte[] { 0xFF, 0xFF });
-            var error = Assert.Throws<Autd3Exception>(() =>
-                Frames.Encode(geometry, new Modulation(new SamplingConfig(39999f * Hz), data)));
+            var error = Assert.Throws<Autd3Exception>(() => new Modulation(new SamplingConfig(39999f * Hz), data));
             Assert.Equal(Autd3ErrorCode.InvalidArgument, error.Code);
             Assert.Contains("must divide the ultrasound frequency", error.Message);
         }
 
         [Fact]
-        public void APulseWidthIsValidatedWhenItIsUsed()
+        public void APulseWidthIsValidatedWhenItIsConstructed()
         {
-            var outOfRange = new PulseWidth(512);
-            var error = Assert.Throws<Autd3Exception>(() => outOfRange.Value);
+            var error = Assert.Throws<Autd3Exception>(() => new PulseWidth(512));
             Assert.Equal(Autd3ErrorCode.InvalidArgument, error.Code);
             Assert.Contains("512", error.Message);
 
             using var geometry = Fixture.SingleDevice();
             var table = SetPulseWidthTable.EmptyTable();
-            table[1] = outOfRange;
-            var encode = Assert.Throws<Autd3Exception>(() => Frames.Encode(geometry, new SetPulseWidthTable(table)));
-            Assert.Equal(Autd3ErrorCode.InvalidArgument, encode.Code);
+            table[1] = new PulseWidth(511);
+            using var frames = Frames.Encode(geometry, new SetPulseWidthTable(table));
+            Assert.False(frames.IsEmpty);
 
             Assert.Equal((ushort)256, PulseWidth.FromDuty(0.5f).Value);
-            Assert.NotEqual(PulseWidth.FromDuty(0.5f), new PulseWidth(256));
+            Assert.Equal(PulseWidth.FromDuty(0.5f), new PulseWidth(256));
             Assert.Equal(new PulseWidth(256), new PulseWidth(256));
+            Assert.NotEqual(new PulseWidth(255), new PulseWidth(256));
+            Assert.Equal(new PulseWidth(256).GetHashCode(), PulseWidth.FromDuty(0.5f).GetHashCode());
             Assert.Equal(new PulseWidth(0), default(PulseWidth));
         }
 
@@ -203,7 +203,7 @@ namespace AUTD3.Tests
             using var geometry = Fixture.SingleDevice();
             var tooMany = Enumerable.Range(0, Params.NumFociMax + 1).Select(_ => (ControlPoint)Vector3.Zero).ToArray();
             var foci = Assert.Throws<Autd3Exception>(() =>
-                Frames.Encode(geometry, new FociStm(1 * Hz, new[] { new ControlPoints(tooMany, Intensity.Max) }, new FociStmOption())));
+                Frames.Encode(geometry, new FociStm(new SamplingConfig(1 * Hz), new[] { new ControlPoints(tooMany, Intensity.Max) }, new FociStmOption())));
             Assert.Equal(Autd3ErrorCode.InvalidArgument, foci.Code);
             Assert.Contains($"1..={Params.NumFociMax}", foci.Message);
         }

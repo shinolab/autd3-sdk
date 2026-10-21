@@ -14,7 +14,7 @@ internal static class Sample
             .Select(i => 2.0f * MathF.PI * i / 200)
             .Select(theta => (ControlPoints)Offset(MathF.Cos(theta) * 30.0f * mm, MathF.Sin(theta) * 30.0f * mm, 0.0f * mm))
             .ToArray();
-        var config = new StmConfig(1.0f * Hz).IntoSamplingConfig(points.Length);
+        var config = new SamplingConfig(1.0f * Hz * points.Length);
 
         var startIndex = 0u;
         // ANCHOR: write

@@ -255,21 +255,16 @@ namespace AUTD3
         internal static extern IntPtr autd3_op_set_phase_correction(byte[] phases, UIntPtr[] lens, UIntPtr numDevices);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_set_pulse_width_table(PulseWidthNative[] table);
+        internal static extern IntPtr autd3_op_set_pulse_width_table(ushort[] table);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_set_pulse_width_table_default();
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_pulse_width_resolve(PulseWidthNative pulseWidth, out ushort @out, byte[] outErr, UIntPtr outErrLen);
-    }
+        internal static extern int autd3_pulse_width_new(ushort raw, byte[] outErr, UIntPtr outErrLen);
 
-    [StructLayout(LayoutKind.Sequential)]
-    internal struct PulseWidthNative
-    {
-        public byte Kind;
-        public ushort Raw;
-        public float Duty;
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_pulse_width_from_duty(float duty, out ushort @out, byte[] outErr, UIntPtr outErrLen);
     }
 
     public readonly struct GpioOut
@@ -845,51 +840,35 @@ namespace AUTD3
 
     public readonly struct PulseWidth : IEquatable<PulseWidth>
     {
-        private const byte KindRaw = 0;
-        private const byte KindDuty = 1;
-
-        private readonly byte _kind;
-        private readonly ushort _raw;
-        private readonly float _duty;
+        private readonly ushort _value;
 
         public PulseWidth(ushort pulseWidth)
         {
-            _kind = KindRaw;
-            _raw = pulseWidth;
-            _duty = 0f;
-        }
-
-        private PulseWidth(float duty)
-        {
-            _kind = KindDuty;
-            _raw = 0;
-            _duty = duty;
-        }
-
-        public static PulseWidth FromDuty(float duty) => new PulseWidth(duty);
-
-        public ushort Value
-        {
-            get
+            var err = new byte[NativeAbi.ErrorBufferLength];
+            if (NativeCommand.autd3_pulse_width_new(pulseWidth, err, (UIntPtr)err.Length) != 0)
             {
-                var err = new byte[NativeAbi.ErrorBufferLength];
-                var code = NativeCommand.autd3_pulse_width_resolve(ToNative(), out var value, err, (UIntPtr)err.Length);
-                if (code != 0)
-                {
-                    throw Autd3Exception.FromNative(code, err);
-                }
-                return value;
+                throw new Autd3Exception(NativeUtil.Utf8(err), Autd3ErrorCode.InvalidArgument);
             }
+            _value = pulseWidth;
         }
 
-        internal PulseWidthNative ToNative() => new PulseWidthNative { Kind = _kind, Raw = _raw, Duty = _duty };
+        public static PulseWidth FromDuty(float duty)
+        {
+            var err = new byte[NativeAbi.ErrorBufferLength];
+            if (NativeCommand.autd3_pulse_width_from_duty(duty, out var value, err, (UIntPtr)err.Length) != 0)
+            {
+                throw new Autd3Exception(NativeUtil.Utf8(err), Autd3ErrorCode.InvalidArgument);
+            }
+            return new PulseWidth(value);
+        }
 
-        public bool Equals(PulseWidth other) =>
-            _kind == other._kind && (_kind == KindRaw ? _raw == other._raw : _duty.Equals(other._duty));
+        public ushort Value => _value;
+
+        public bool Equals(PulseWidth other) => _value == other._value;
 
         public override bool Equals(object? obj) => obj is PulseWidth other && Equals(other);
 
-        public override int GetHashCode() => _kind == KindRaw ? HashCode.Combine(_kind, _raw) : HashCode.Combine(_kind, _duty);
+        public override int GetHashCode() => _value;
 
         public static bool operator ==(PulseWidth left, PulseWidth right) => left.Equals(right);
 
@@ -924,10 +903,10 @@ namespace AUTD3
             {
                 return NativeCommand.autd3_op_set_pulse_width_table_default();
             }
-            var native = new PulseWidthNative[TableSize];
+            var native = new ushort[TableSize];
             for (var i = 0; i < TableSize; i++)
             {
-                native[i] = _table[i].ToNative();
+                native[i] = _table[i].Value;
             }
             return NativeCommand.autd3_op_set_pulse_width_table(native);
         }

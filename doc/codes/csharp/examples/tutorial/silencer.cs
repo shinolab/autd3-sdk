@@ -28,7 +28,7 @@ internal static class Sample
                 foci[i] = new ControlPoints(new[] { (ControlPoint)p }, Intensity.Max);
             }
             await client.SendAsync(SetSilencer.Disable());
-            await client.SendAsync(new FociStm(50.0f * Hz, foci, new FociStmOption()));
+            await client.SendAsync(new FociStm(new SamplingConfig(50.0f * Hz * foci.Length), foci, new FociStmOption()));
             // ANCHOR_END: disable
         }
 
@@ -42,7 +42,7 @@ internal static class Sample
                 foci[i] = new ControlPoints(new[] { (ControlPoint)p }, Intensity.Max);
             }
             await client.SendAsync(new SetSilencer());
-            await client.SendAsync(new FociStm(50.0f * Hz, foci, new FociStmOption()));
+            await client.SendAsync(new FociStm(new SamplingConfig(50.0f * Hz * foci.Length), foci, new FociStmOption()));
             // ANCHOR_END: err
         }
 
@@ -61,7 +61,7 @@ internal static class Sample
                 Phase = TimeSpan.FromMicroseconds(500),
                 StrictMode = true,
             }));
-            await client.SendAsync(new FociStm(50.0f * Hz, foci, new FociStmOption()));
+            await client.SendAsync(new FociStm(new SamplingConfig(50.0f * Hz * foci.Length), foci, new FociStmOption()));
             // ANCHOR_END: workaround
         }
     }

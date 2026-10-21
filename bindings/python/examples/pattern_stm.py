@@ -13,7 +13,7 @@ import autd3_pattern as pattern
 from autd3.commands import Clear, PatternStm, PatternStmOption, SetSilencer, Synchronize
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import Hz, m, mm, s
-from autd3.value import Intensity
+from autd3.value import Intensity, SamplingConfig
 
 NUM_POINTS = 200
 RADIUS_MM = 30.0
@@ -46,7 +46,8 @@ async def main() -> None:
             patterns.append(phases)
 
         await client.send(SetSilencer())
-        await client.send(PatternStm(1.0 * Hz, patterns, Intensity.MAX, PatternStmOption()))
+        config = SamplingConfig(1.0 * Hz * len(patterns))
+        await client.send(PatternStm(config, patterns, Intensity.MAX, PatternStmOption()))
 
         print("running a 1 Hz circular pattern STM — press Ctrl+C to stop")
         stop = asyncio.Event()

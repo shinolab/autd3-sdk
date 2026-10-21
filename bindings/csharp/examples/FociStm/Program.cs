@@ -29,7 +29,7 @@ internal static class Program
             .ToList();
 
         await client.SendAsync(new SetSilencer());
-        await client.SendAsync(new FociStm(1 * Hz, points.ToArray(), new FociStmOption()));
+        await client.SendAsync(new FociStm(new SamplingConfig(1 * Hz * points.Count), points.ToArray(), new FociStmOption()));
 
         Console.WriteLine("sweeping a focus around a 30 mm circle at 1 Hz — press Ctrl+C to stop");
 

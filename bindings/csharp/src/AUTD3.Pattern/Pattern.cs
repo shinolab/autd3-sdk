@@ -385,10 +385,10 @@ namespace AUTD3
         internal static extern IntPtr autd3_op_write_pattern_phase(byte bank, ushort startIndex, byte depth, byte intensity, IntPtr[] patterns, UIntPtr numPatterns);
 
         [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_config_pattern(byte bank, IntPtr samplingConfig, uint size, ushort rep);
+        internal static extern IntPtr autd3_op_config_pattern(byte bank, ushort samplingDivide, uint size, ushort rep);
 
         [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_config_foci_stm(byte bank, IntPtr samplingConfig, uint size, byte numFoci, float soundSpeedMPerS, ushort rep);
+        internal static extern IntPtr autd3_op_config_foci_stm(byte bank, ushort samplingDivide, uint size, byte numFoci, float soundSpeedMPerS, ushort rep);
 
         [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_activate_pattern_bank(byte bank, byte transitionMode, ulong transitionValue);
