@@ -8,8 +8,13 @@ use autd3_rs_core::value::Phase;
 use crate::each::{fill_from_positions, for_each_device};
 
 #[inline]
+pub(crate) fn propagation_phase(distance_mm: f32, wavelength: Length) -> Angle {
+    -distance_mm / wavelength.mm() * 2.0 * PI * rad
+}
+
+#[inline]
 pub(crate) fn focus_phase(offset: Vector3<f32>, wavelength: Length) -> Angle {
-    -offset.norm() / wavelength.mm() * 2.0 * PI * rad
+    propagation_phase(offset.norm(), wavelength)
 }
 
 #[must_use]

@@ -1,11 +1,9 @@
-use core::f32::consts::PI;
-
 use autd3_rs_core::common::Length;
-use autd3_rs_core::common::units::rad;
 use autd3_rs_core::geometry::{Device, Geometry, Point3, UnitVector3};
 use autd3_rs_core::value::Phase;
 
 use crate::each::{fill_from_positions, for_each_device};
+use crate::focus::propagation_phase;
 
 #[must_use]
 #[inline]
@@ -14,7 +12,10 @@ pub fn plane_transducer(
     direction: UnitVector3<f32>,
     wavelength: Length,
 ) -> Phase {
-    Phase::from(-direction.dot(&position.coords) / wavelength.mm() * 2.0 * PI * rad)
+    Phase::from(propagation_phase(
+        direction.dot(&position.coords),
+        wavelength,
+    ))
 }
 
 pub fn plane_device(
@@ -41,6 +42,9 @@ pub fn plane(
 
 #[cfg(test)]
 mod tests {
+    use core::f32::consts::PI;
+
+    use autd3_rs_core::common::units::rad;
     use autd3_rs_core::geometry::{Autd3, UnitQuaternion, Vector3};
     use autd3_rs_core::units::mm;
 
