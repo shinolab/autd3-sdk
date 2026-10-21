@@ -2,6 +2,18 @@ use zerocopy::{Immutable, KnownLayout, TryFromBytes};
 
 use crate::Error;
 
+macro_rules! assert_layout {
+    ($ty:ident { $($field:ident: $offset:expr),* $(,)? } size $size:expr) => {
+        const _: () = {
+            fn _all_fields_listed(value: $ty) {
+                let $ty { $($field: _),* } = value;
+            }
+            $(assert!(core::mem::offset_of!($ty, $field) == $offset);)*
+            assert!(core::mem::size_of::<$ty>() == $size);
+        };
+    };
+}
+
 mod activate_mod_bank;
 mod activate_pattern_bank;
 mod build_error;

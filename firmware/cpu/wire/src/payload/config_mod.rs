@@ -55,11 +55,13 @@ impl ConfigModPayload {
     }
 }
 
-const _: () = assert!(core::mem::offset_of!(ConfigModPayload, bank) == 0);
-const _: () = assert!(core::mem::offset_of!(ConfigModPayload, divider) == 2);
-const _: () = assert!(core::mem::offset_of!(ConfigModPayload, size) == 4);
-const _: () = assert!(core::mem::offset_of!(ConfigModPayload, rep) == 8);
-const _: () = assert!(core::mem::size_of::<ConfigModPayload>() == 10);
+assert_layout!(ConfigModPayload {
+    bank: 0,
+    reserved: 1,
+    divider: 2,
+    size: 4,
+    rep: 8,
+} size 10);
 
 #[cfg(test)]
 mod tests {

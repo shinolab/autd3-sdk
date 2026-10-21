@@ -4,7 +4,6 @@ use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{Intensity, PatternBank, PatternIntensity, Phase};
 
 use super::{Distribution, Encoded, Operation, checked_device_row, write_header};
-use autd3_cpu_wire::fpga_params::NUM_TRANSDUCERS;
 use autd3_cpu_wire::layout::PATTERN_RAW_DATA_LEN;
 use autd3_cpu_wire::payload::WritePatternRawPayload;
 use zerocopy::IntoBytes;
@@ -103,18 +102,21 @@ pub(super) fn encode_raw_pattern_entry(
     phases: &[Vec<Phase>],
     intensities: PatternIntensity<'_>,
     device: &Device,
-    dst_phases: &mut [u8],
-    dst_intensities: &mut [u8],
+    dst: &mut [u8; PATTERN_RAW_DATA_LEN],
 ) -> Result<(), Error> {
     let phases = checked_device_row(phases, device)?.as_bytes();
-    dst_phases[..phases.len()].copy_from_slice(phases);
+    let (dst, _) = dst.as_chunks_mut::<2>();
     match intensities {
         PatternIntensity::Uniform(intensity) => {
-            dst_intensities[..device.num_transducers()].fill(intensity.0);
+            for (pair, &phase) in dst.iter_mut().zip(phases) {
+                *pair = [phase, intensity.0];
+            }
         }
         PatternIntensity::PerDevice(intensities) => {
             let intensities = checked_device_row(intensities, device)?.as_bytes();
-            dst_intensities[..intensities.len()].copy_from_slice(intensities);
+            for (pair, (&phase, &intensity)) in dst.iter_mut().zip(phases.iter().zip(intensities)) {
+                *pair = [phase, intensity];
+            }
         }
     }
     Ok(())
@@ -130,9 +132,9 @@ fn encode_raw_patterns<'a>(
     let num_patterns = patterns.len();
     let header = WritePatternRawPayload::new(bank, num_patterns, start_index)?;
     let rest = write_header(out, &header);
-    for ((phases, intensities), data) in patterns.zip(rest.chunks_mut(PATTERN_RAW_DATA_LEN)) {
-        let (dst_phases, dst_intensities) = data.split_at_mut(NUM_TRANSDUCERS);
-        encode_raw_pattern_entry(phases, intensities, device, dst_phases, dst_intensities)?;
+    let (slots, _) = rest.as_chunks_mut::<PATTERN_RAW_DATA_LEN>();
+    for ((phases, intensities), data) in patterns.zip(slots) {
+        encode_raw_pattern_entry(phases, intensities, device, data)?;
     }
     Ok(Encoded::header_with_data::<WritePatternRawPayload>(
         Cmd::WritePatternRaw,
@@ -195,10 +197,10 @@ mod tests {
     use crate::test_utils::{encode, test_device};
     use autd3_cpu_wire::payload::PayloadBuildError;
     const PHASES_OFFSET: usize = size_of::<WritePatternRawPayload>();
-    const INTENSITIES_OFFSET: usize = size_of::<WritePatternRawPayload>() + NUM_TRANSDUCERS;
+    const INTENSITIES_OFFSET: usize = size_of::<WritePatternRawPayload>() + 1;
 
     #[test]
-    fn write_pattern_lays_out_phases_then_intensities() {
+    fn write_pattern_interleaves_phase_and_intensity_per_transducer() {
         let dev = test_device(0);
         let n = dev.num_transducers();
         let phases = [(0..n)
@@ -222,8 +224,8 @@ mod tests {
         assert_eq!(out[1], 1, "count");
         assert_eq!(&out[2..4], &3u16.to_le_bytes());
         for i in 0..n {
-            assert_eq!(out[PHASES_OFFSET + i], phases[0][i].0);
-            assert_eq!(out[INTENSITIES_OFFSET + i], intensities[0][i].0);
+            assert_eq!(out[PHASES_OFFSET + 2 * i], phases[0][i].0);
+            assert_eq!(out[INTENSITIES_OFFSET + 2 * i], intensities[0][i].0);
         }
     }
 

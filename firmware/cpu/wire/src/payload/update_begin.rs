@@ -17,6 +17,4 @@ impl UpdateBeginPayload {
     }
 }
 
-const _: () = assert!(core::mem::offset_of!(UpdateBeginPayload, length) == 0);
-const _: () = assert!(core::mem::offset_of!(UpdateBeginPayload, crc32) == 4);
-const _: () = assert!(core::mem::size_of::<UpdateBeginPayload>() == 8);
+assert_layout!(UpdateBeginPayload { length: 0, crc32: 4 } size 8);

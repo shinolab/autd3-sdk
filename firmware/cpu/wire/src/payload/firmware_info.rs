@@ -13,5 +13,10 @@ pub struct FirmwareInfo {
     pub fpga_boot_image: u8,
 }
 
-const _: () = assert!(core::mem::size_of::<FirmwareInfo>() == 8);
+assert_layout!(FirmwareInfo {
+    cpu_version: 0,
+    fpga_version: 3,
+    fpga_functions: 6,
+    fpga_boot_image: 7,
+} size 8);
 const _: () = assert!(core::mem::size_of::<FirmwareInfo>() <= REPLY_DATA_BYTES_MAX);

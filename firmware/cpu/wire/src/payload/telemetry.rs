@@ -20,7 +20,18 @@ pub struct Telemetry {
     pub exec_late: U32,
 }
 
-const _: () = assert!(core::mem::size_of::<Telemetry>() == 27);
+assert_layout!(Telemetry {
+    fifo_drop: 0,
+    dispatch_error: 4,
+    processed: 8,
+    send_failure: 12,
+    failsafe: 16,
+    ptp_unlock_failsafe: 18,
+    sync_resync: 20,
+    boot_failure: 21,
+    cpu_watchdog: 22,
+    exec_late: 23,
+} size 27);
 const _: () = assert!(core::mem::size_of::<Telemetry>() <= REPLY_DATA_BYTES_MAX);
 
 #[cfg(test)]

@@ -17,4 +17,5 @@ impl PhaseCorrPayload {
     }
 }
 
+assert_layout!(PhaseCorrPayload { data: 0 } size NUM_TRANSDUCERS);
 const _: () = assert!(core::mem::size_of::<PhaseCorrPayload>() <= PAYLOAD_BYTES);

@@ -77,6 +77,7 @@ mod cmd;
 pub mod config;
 pub mod cpu_params;
 mod error;
+pub mod fpga_bitstream;
 pub mod fpga_params;
 pub mod fpga_update;
 mod frame;

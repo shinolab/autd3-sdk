@@ -47,9 +47,7 @@ impl WriteFociPayload {
     }
 }
 
-const _: () = assert!(core::mem::offset_of!(WriteFociPayload, bank) == 0);
-const _: () = assert!(core::mem::offset_of!(WriteFociPayload, offset) == 2);
-const _: () = assert!(core::mem::size_of::<WriteFociPayload>() == 6);
+assert_layout!(WriteFociPayload { bank: 0, reserved: 1, offset: 2 } size 6);
 
 #[cfg(test)]
 mod tests {

@@ -26,7 +26,7 @@ impl SetFpgaConfigPayload {
     }
 }
 
-const _: () = assert!(core::mem::size_of::<SetFpgaConfigPayload>() == 1);
+assert_layout!(SetFpgaConfigPayload { sync_phase_lock: 0 } size 1);
 
 #[cfg(test)]
 mod tests {

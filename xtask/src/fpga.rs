@@ -3,10 +3,10 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
 
-use autd3_cpu_wire::fpga_update::{
-    FPGA_BARRIER_BASE, FPGA_IMAGE_BASE, FpgaBootImage, fpga_barrier_image, summarize_bitstream,
-    validate_update_image,
+use autd3_cpu_wire::fpga_bitstream::{
+    fpga_barrier_image, summarize_bitstream, validate_update_image,
 };
+use autd3_cpu_wire::fpga_update::{FPGA_BARRIER_BASE, FPGA_IMAGE_BASE, FpgaBootImage};
 
 use crate::clean::{CleanArgs, Cleaner};
 use crate::util::{copy_dir, files_under, on_path, run, which};
