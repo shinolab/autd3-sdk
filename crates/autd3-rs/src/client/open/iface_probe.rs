@@ -1,11 +1,9 @@
-use std::time::Instant;
-
 use autd3_cpu_wire::udp::Kind;
 use autd3_rs_core::Interface;
 
-use crate::udp::{Channel, ControlResponse, ResolvedEndpoint, UdpError, link_local_interfaces};
+use crate::udp::{Channel, ResolvedEndpoint, UdpError, link_local_interfaces};
 
-use super::enumerate::REQUEST_REPLY_WAIT;
+use super::enumerate::{REQUEST_REPLY_WAIT, collect_responses};
 
 fn devices_respond_at(endpoint: ResolvedEndpoint) -> Result<bool, UdpError> {
     let channel = Channel::open(endpoint.all_devices_dst, endpoint.scope_id, None, None)?;
@@ -17,18 +15,11 @@ fn devices_respond_at(endpoint: ResolvedEndpoint) -> Result<bool, UdpError> {
         None,
         || {},
     )?;
-    let deadline = Instant::now().checked_add(REQUEST_REPLY_WAIT);
-    while let Some(parsed) = channel.recv(deadline, |packet| {
-        ControlResponse::parse(packet, Kind::ReadUnitInfo, 0)
-    })? {
-        if matches!(
-            parsed,
-            Ok(Some(_)) | Err(UdpError::UnsupportedVersion { .. })
-        ) {
-            return Ok(true);
-        }
+    match collect_responses(&channel, Kind::ReadUnitInfo, 0, REQUEST_REPLY_WAIT, Some(1)) {
+        Ok(responses) => Ok(!responses.is_empty()),
+        Err(UdpError::UnsupportedVersion { .. }) => Ok(true),
+        Err(e) => Err(e),
     }
-    Ok(false)
 }
 
 pub(super) fn resolve(iface: &Interface) -> Result<ResolvedEndpoint, UdpError> {

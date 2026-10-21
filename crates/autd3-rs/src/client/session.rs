@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::num::NonZeroU64;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -13,7 +14,7 @@ use crate::datagram::Frame;
 use crate::error::{Error, NetworkCause};
 use crate::geometry::Geometry;
 use crate::protocol::{FrameHeader, MAX_INFLIGHT};
-use crate::response::{ReplyBuffers, Response};
+use crate::response::Response;
 use crate::udp::state::PublishedDeviceStates;
 use crate::udp::{Channel, DeviceReply, Polled, Reply, StateChecker, TransportOption, UdpError};
 use crate::value::SysTime;
@@ -36,92 +37,68 @@ pub(crate) struct Timeouts {
 struct InflightRequest {
     msg_id: u16,
     sent_to: Option<u128>,
-    replied_devices: u128,
     sent_at: Instant,
     completion: ResponseSender,
+    response: Response,
 }
 
 impl InflightRequest {
     fn has_all_replies(&self) -> bool {
         self.sent_to
-            .is_some_and(|sent_to| self.replied_devices & sent_to == sent_to)
+            .is_some_and(|sent_to| self.response.replied_devices() & sent_to == sent_to)
     }
 }
 
 pub(crate) struct AnsweredRequest {
     request: InflightRequest,
-    response: Response,
 }
 
 impl AnsweredRequest {
     fn deliver(self, stats: &BusStats) {
-        tracing::trace!(
-            msg_id = self.request.msg_id,
-            "frame answered by every device"
-        );
-        stats.record_ack(
-            u64::try_from(self.request.sent_at.elapsed().as_nanos()).unwrap_or(u64::MAX),
-        );
-        if let Err(e) = self.response.check() {
+        let InflightRequest {
+            msg_id,
+            sent_at,
+            completion,
+            response,
+            ..
+        } = self.request;
+        tracing::trace!(msg_id, "frame answered by every device");
+        stats.record_ack(u64::try_from(sent_at.elapsed().as_nanos()).unwrap_or(u64::MAX));
+        if let Err(e) = response.check() {
             tracing::warn!(error = %e, "device reported an error");
         }
-        let _ = self.request.completion.send(Ok(self.response));
+        let _ = completion.send(Ok(response));
     }
 }
 
-struct InflightSlot {
-    request: Option<InflightRequest>,
-    reply: ReplyBuffers,
-}
-
 struct InflightQueue {
-    slots: Box<[InflightSlot]>,
-    head: usize,
-    len: usize,
+    requests: VecDeque<Option<InflightRequest>>,
     head_ack_clock_started_at: Instant,
     slot_waiter: Option<Waker>,
 }
 
 impl InflightQueue {
-    fn new(num_devices: usize, now: Instant) -> Self {
+    fn new(now: Instant) -> Self {
         Self {
-            slots: (0..MAX_INFLIGHT)
-                .map(|_| InflightSlot {
-                    request: None,
-                    reply: ReplyBuffers::new(num_devices),
-                })
-                .collect(),
-            head: 0,
-            len: 0,
+            requests: VecDeque::with_capacity(MAX_INFLIGHT),
             head_ack_clock_started_at: now,
             slot_waiter: None,
         }
     }
 
     fn is_full(&self) -> bool {
-        self.len == self.slots.len()
-    }
-
-    fn slot_index(&self, offset: usize) -> usize {
-        (self.head + offset) % self.slots.len()
+        self.requests.len() == MAX_INFLIGHT
     }
 
     fn push(&mut self, request: InflightRequest) {
-        if self.len == 0 {
+        if self.requests.is_empty() {
             self.head_ack_clock_started_at = request.sent_at;
         }
-        let index = self.slot_index(self.len);
-        let slot = &mut self.slots[index];
-        slot.reply.reset();
-        slot.request = Some(request);
-        self.len += 1;
+        self.requests.push_back(Some(request));
     }
 
     fn head(&self) -> Option<&InflightRequest> {
-        if self.len == 0 {
-            return None;
-        }
-        self.slots[self.head].request.as_ref()
+        self.requests.front()?.as_ref()
     }
 
     fn is_head(&self, msg_id: u16) -> bool {
@@ -129,38 +106,27 @@ impl InflightQueue {
     }
 
     fn position(&self, msg_id: u16) -> Option<usize> {
-        (0..self.len)
-            .map(|offset| self.slot_index(offset))
-            .find(|&index| {
-                self.slots[index]
-                    .request
-                    .as_ref()
-                    .is_some_and(|request| request.msg_id == msg_id)
-            })
+        self.requests.iter().position(|request| {
+            request
+                .as_ref()
+                .is_some_and(|request| request.msg_id == msg_id)
+        })
     }
 
     fn take(&mut self, index: usize, now: Instant) -> Option<InflightRequest> {
-        let request = self.slots[index].request.take();
-        while self.len > 0 && self.slots[self.head].request.is_none() {
-            self.head = (self.head + 1) % self.slots.len();
-            self.len -= 1;
+        let request = self.requests[index].take();
+        while matches!(self.requests.front(), Some(None)) {
+            self.requests.pop_front();
             self.head_ack_clock_started_at = now;
         }
-        while self.len > 0 && self.slots[self.slot_index(self.len - 1)].request.is_none() {
-            self.len -= 1;
+        while matches!(self.requests.back(), Some(None)) {
+            self.requests.pop_back();
         }
         request
     }
 
     fn take_all(&mut self) -> Vec<InflightRequest> {
-        let requests = (0..self.len)
-            .filter_map(|offset| {
-                let index = self.slot_index(offset);
-                self.slots[index].request.take()
-            })
-            .collect();
-        self.len = 0;
-        requests
+        self.requests.drain(..).flatten().collect()
     }
 
     fn head_ack_deadline(&self, ack_timeout: Duration) -> Option<Instant> {
@@ -201,7 +167,7 @@ impl SessionState {
         now: Instant,
     ) -> Self {
         Self {
-            inflight: InflightQueue::new(num_devices, now),
+            inflight: InflightQueue::new(now),
             liveness: vec![DeviceLiveness::new(); num_devices],
             published_states,
             device_clock,
@@ -244,11 +210,11 @@ impl SessionState {
         self.inflight.push(InflightRequest {
             msg_id,
             sent_to: None,
-            replied_devices: 0,
             sent_at: now,
             completion: completion
                 .take()
                 .expect("an enqueued frame is not polled again"),
+            response: Response::for_devices(self.liveness.len()),
         });
         Poll::Ready(Ok(msg_id))
     }
@@ -268,10 +234,8 @@ impl SessionState {
     }
 
     fn answer(&mut self, index: usize, now: Instant) -> Option<AnsweredRequest> {
-        let replied_devices = self.inflight.slots[index].request.as_ref()?.replied_devices;
-        let response = self.inflight.slots[index].reply.response(replied_devices);
         let request = self.inflight.take(index, now)?;
-        Some(AnsweredRequest { request, response })
+        Some(AnsweredRequest { request })
     }
 
     pub(crate) fn record_sent_to(
@@ -281,12 +245,12 @@ impl SessionState {
         now: Instant,
     ) -> Option<AnsweredRequest> {
         let index = self.inflight.position(msg_id)?;
-        let request = self.inflight.slots[index].request.as_mut()?;
+        let request = self.inflight.requests[index].as_mut()?;
         request.sent_to = Some(sent_to);
         if request.has_all_replies() {
             return self.answer(index, now);
         }
-        if index == self.inflight.head {
+        if index == 0 {
             self.inflight.head_ack_clock_started_at = now;
         }
         None
@@ -297,10 +261,8 @@ impl SessionState {
             tracing::trace!(msg_id = reply.msg_id, "dropping a reply nothing waits for");
             return None;
         };
-        let reply_bit = 1u128 << reply.device;
-        let slot = &mut self.inflight.slots[index];
-        let request = slot.request.as_mut()?;
-        if request.replied_devices & reply_bit != 0 {
+        let request = self.inflight.requests[index].as_mut()?;
+        if request.response.replied_devices() & 1 << reply.device != 0 {
             tracing::trace!(
                 msg_id = reply.msg_id,
                 device = reply.device,
@@ -308,9 +270,12 @@ impl SessionState {
             );
             return None;
         }
-        slot.reply
-            .record_reply(reply.device, reply.error_code, reply.sys_time, reply.data);
-        request.replied_devices |= reply_bit;
+        request.response.record_reply(
+            reply.device,
+            reply.error_code,
+            reply.sys_time,
+            reply.data.as_slice(),
+        );
         if !request.has_all_replies() {
             return None;
         }
@@ -952,19 +917,19 @@ mod tests {
 
         let head = enqueued[0].0;
         assert!(state.remove(head, now).is_some());
-        assert_eq!(state.inflight.len, MAX_INFLIGHT - 2);
+        assert_eq!(state.inflight.requests.len(), MAX_INFLIGHT - 2);
         assert!(state.inflight.is_head(enqueued[2].0));
     }
 
     #[test]
-    fn the_ring_wraps_around_and_keeps_the_order() {
+    fn the_queue_keeps_the_order_over_many_rounds() {
         let now = Instant::now();
         let mut state = session_state(1, now);
         for _ in 0..MAX_INFLIGHT * 2 + 3 {
             let (msg_id, _response) = enqueue(&mut state, now);
             assert!(state.inflight.is_head(msg_id));
             assert!(state.remove(msg_id, now).is_some());
-            assert_eq!(state.inflight.len, 0);
+            assert_eq!(state.inflight.requests.len(), 0);
         }
         let first = enqueue(&mut state, now).0;
         let second = enqueue(&mut state, now).0;
@@ -993,13 +958,10 @@ mod tests {
 
         assert!(state.remove(enqueued[MAX_INFLIGHT - 1], now).is_some());
 
-        assert_eq!(state.inflight.len, MAX_INFLIGHT - 1);
+        assert_eq!(state.inflight.requests.len(), MAX_INFLIGHT - 1);
         assert!(state.take_released_slot_waiter().is_some());
         let (msg_id, _response) = enqueue(&mut state, now);
-        assert_eq!(
-            state.inflight.position(msg_id),
-            Some(state.inflight.slot_index(MAX_INFLIGHT - 1))
-        );
+        assert_eq!(state.inflight.position(msg_id), Some(MAX_INFLIGHT - 1));
     }
 
     #[test]
@@ -1012,7 +974,7 @@ mod tests {
 
         assert!(state.remove(enqueued[MAX_INFLIGHT - 1], now).is_some());
 
-        assert_eq!(state.inflight.len, MAX_INFLIGHT - 2);
+        assert_eq!(state.inflight.requests.len(), MAX_INFLIGHT - 2);
         assert!(state.take_released_slot_waiter().is_some());
     }
 
@@ -1086,7 +1048,7 @@ mod tests {
             answered.map(|answered| answered.request.msg_id),
             Some(msg_id)
         );
-        assert_eq!(state.inflight.len, 0);
+        assert_eq!(state.inflight.requests.len(), 0);
     }
 
     #[test]
@@ -1098,7 +1060,7 @@ mod tests {
 
         assert!(state.record_sent_to(msg_id, 0b11, now).is_none());
 
-        assert_eq!(state.inflight.len, 1);
+        assert_eq!(state.inflight.requests.len(), 1);
         assert_eq!(state.inflight.head().unwrap().sent_to, Some(0b11));
     }
 
@@ -1108,7 +1070,7 @@ mod tests {
         let mut state = session_state(1, now);
         let (msg_id, _response) = enqueue(&mut state, now);
         assert!(state.record_reply(&reply(0, msg_id, 0), now).is_none());
-        assert_eq!(state.inflight.len, 1);
+        assert_eq!(state.inflight.requests.len(), 1);
     }
 
     #[test]
@@ -1149,7 +1111,7 @@ mod tests {
                 .record_reply(&reply(0, msg_id.wrapping_add(1), 0), now)
                 .is_none()
         );
-        assert_eq!(state.inflight.len, 1);
+        assert_eq!(state.inflight.requests.len(), 1);
     }
 
     #[test]

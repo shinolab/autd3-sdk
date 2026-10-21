@@ -38,6 +38,29 @@ const fn role_of(unit_id: u8) -> Role {
     }
 }
 
+pub(super) fn collect_responses(
+    channel: &Channel,
+    kind: Kind,
+    msg_id: u16,
+    wait: Duration,
+    max_responses: Option<usize>,
+) -> Result<Vec<ControlResponse>, UdpError> {
+    let deadline = Instant::now().checked_add(wait);
+    let mut responses = Vec::new();
+    while max_responses.is_none_or(|n| responses.len() < n) {
+        let Some(parsed) = channel.recv(deadline, |packet| {
+            ControlResponse::parse(packet, kind, msg_id)
+        })?
+        else {
+            break;
+        };
+        if let Some(response) = parsed? {
+            responses.push(response);
+        }
+    }
+    Ok(responses)
+}
+
 struct Enumerator<'a> {
     channel: &'a Channel,
     last_msg_id: u16,
@@ -62,29 +85,6 @@ impl Enumerator<'_> {
         self.send_request(self.channel.all_devices_dst(), kind, &[])
     }
 
-    fn collect_responses(
-        &self,
-        kind: Kind,
-        msg_id: u16,
-        wait: Duration,
-        max_responses: Option<usize>,
-    ) -> Result<Vec<ControlResponse>, UdpError> {
-        let deadline = Instant::now().checked_add(wait);
-        let mut responses = Vec::new();
-        while max_responses.is_none_or(|n| responses.len() < n) {
-            let Some(parsed) = self.channel.recv(deadline, |packet| {
-                ControlResponse::parse(packet, kind, msg_id)
-            })?
-            else {
-                break;
-            };
-            if let Some(response) = parsed? {
-                responses.push(response);
-            }
-        }
-        Ok(responses)
-    }
-
     fn request_once(
         &mut self,
         dst: SocketAddrV6,
@@ -92,9 +92,7 @@ impl Enumerator<'_> {
         body: &[u8],
     ) -> Result<Option<ControlResponse>, UdpError> {
         let msg_id = self.send_request(dst, kind, body)?;
-        Ok(self
-            .collect_responses(kind, msg_id, REQUEST_REPLY_WAIT, Some(1))?
-            .pop())
+        Ok(collect_responses(self.channel, kind, msg_id, REQUEST_REPLY_WAIT, Some(1))?.pop())
     }
 
     fn read_unit_info(
@@ -102,7 +100,8 @@ impl Enumerator<'_> {
         max_responses: Option<usize>,
     ) -> Result<Vec<ControlResponse>, UdpError> {
         let msg_id = self.request_all_devices(Kind::ReadUnitInfo)?;
-        self.collect_responses(
+        collect_responses(
+            self.channel,
             Kind::ReadUnitInfo,
             msg_id,
             REQUEST_REPLY_WAIT,
@@ -126,7 +125,13 @@ impl Enumerator<'_> {
 
     fn reset_all_unit_ids(&mut self) -> Result<(), UdpError> {
         let msg_id = self.request_all_devices(Kind::ResetId)?;
-        let replies = self.collect_responses(Kind::ResetId, msg_id, REQUEST_REPLY_WAIT, None)?;
+        let replies = collect_responses(
+            self.channel,
+            Kind::ResetId,
+            msg_id,
+            REQUEST_REPLY_WAIT,
+            None,
+        )?;
         tracing::debug!(replies = replies.len(), "reset the unit ids");
         std::thread::sleep(RESET_SETTLE);
         Ok(())
@@ -134,13 +139,18 @@ impl Enumerator<'_> {
 
     fn discover(&mut self) -> Result<Option<SocketAddrV6>, UdpError> {
         let msg_id = self.request_all_devices(Kind::Discover)?;
-        let Some(first) = self
-            .collect_responses(Kind::Discover, msg_id, REQUEST_REPLY_WAIT, Some(1))?
-            .pop()
-        else {
+        let Some(first) = collect_responses(
+            self.channel,
+            Kind::Discover,
+            msg_id,
+            REQUEST_REPLY_WAIT,
+            Some(1),
+        )?
+        .pop() else {
             return Ok(None);
         };
-        let others = self.collect_responses(Kind::Discover, msg_id, DISCOVER_LINGER, None)?;
+        let others =
+            collect_responses(self.channel, Kind::Discover, msg_id, DISCOVER_LINGER, None)?;
         if !others.is_empty() {
             return Err(UdpError::DownstreamNotClosed {
                 replies: others.len() + 1,
