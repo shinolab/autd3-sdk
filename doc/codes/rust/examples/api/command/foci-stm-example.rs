@@ -3,7 +3,7 @@ use std::f32::consts::PI;
 use autd3_rs::commands::{Clear, FociStm, FociStmOption, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
-use autd3_rs::value::{ControlPoints, LoopBehavior, PatternBank, TransitionMode};
+use autd3_rs::value::{ControlPoints, LoopBehavior, PatternBank, SamplingConfig, TransitionMode};
 use autd3_rs::Client;
 use autd3_rs::udp::TransportOption;
 
@@ -25,7 +25,7 @@ async fn main() -> anyhow::Result<()> {
         .collect();
 
     client.send(FociStm::new(
-        1.0 * Hz,
+        SamplingConfig::from_freq(1.0 * Hz * points.len() as f32)?,
         &points,
         FociStmOption {
             bank: PatternBank::B0,

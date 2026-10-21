@@ -139,7 +139,7 @@ mod tests {
 
     #[test]
     fn fourier_mixes_exact_and_nearest_components_in_one_slice() {
-        use autd3_rs_core::value::Nearest;
+        use crate::Nearest;
 
         let mixed = [
             SineComponent {
@@ -181,7 +181,7 @@ mod tests {
     }
 
     fn nearest_components(periods: &[f32]) -> Vec<SineComponent> {
-        use autd3_rs_core::value::Nearest;
+        use crate::Nearest;
 
         periods
             .iter()

@@ -21,7 +21,7 @@ impl Operation for ConfigModulation {
     fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         let payload = ConfigModPayload::new(
             self.bank,
-            self.config.divide()?,
+            self.config.divide(),
             self.size,
             self.loop_behavior.rep(),
         )?;
@@ -65,13 +65,6 @@ mod tests {
             size: 2,
             loop_behavior: LoopBehavior::Infinite,
         };
-        assert!(matches!(
-            encode(&ConfigModulation {
-                config: SamplingConfig::new(core::time::Duration::from_nanos(1)),
-                ..base
-            }),
-            Err(Error::InvalidPayload(_))
-        ));
         assert!(matches!(
             encode(&ConfigModulation { size: 0, ..base }),
             Err(Error::InvalidPayload(_))

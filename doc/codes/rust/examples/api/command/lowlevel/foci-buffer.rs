@@ -1,11 +1,11 @@
 use std::f32::consts::PI;
 
-use autd3_rs::commands::{ActivatePatternBank, ConfigFociStm, StmConfig, WriteFociBuffer};
+use autd3_rs::commands::{ActivatePatternBank, ConfigFociStm, WriteFociBuffer};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
-use autd3_rs::value::{ControlPoints, LoopBehavior, PatternBank, TransitionMode};
+use autd3_rs::value::{ControlPoints, LoopBehavior, PatternBank, SamplingConfig, TransitionMode};
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let bank = PatternBank::B0;
     let _points: Vec<ControlPoints<1>> = (0..200)
         .map(|i| {
@@ -13,7 +13,7 @@ fn main() {
             ControlPoints::from(autd3_rs::Point3::origin() + offset(30.0 * mm * theta.cos(), 30.0 * mm * theta.sin(), 0.0 * mm))
         })
         .collect();
-    let config = StmConfig::new(1.0 * Hz).into_sampling_config(_points.len());
+    let config = SamplingConfig::from_freq(1.0 * Hz * _points.len() as f32)?;
 
     let start_index = 0;
     let points = &_points;
@@ -38,4 +38,5 @@ fn main() {
         loop_behavior,
     };
     // ANCHOR_END: config
+    Ok(())
 }

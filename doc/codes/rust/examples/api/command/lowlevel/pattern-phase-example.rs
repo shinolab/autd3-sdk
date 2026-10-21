@@ -1,10 +1,9 @@
 use autd3_rs::commands::{
-    ActivatePatternBank, Clear, ConfigPattern, PhaseDepth, StmConfig, Synchronize,
-    WritePatternPhase,
+    ActivatePatternBank, Clear, ConfigPattern, PhaseDepth, Synchronize, WritePatternPhase,
 };
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
-use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, TransitionMode};
+use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode};
 use autd3_rs::Client;
 use autd3_rs::udp::TransportOption;
 use autd3_rs_pattern::{focus, wavelength};
@@ -44,7 +43,7 @@ async fn main() -> anyhow::Result<()> {
     }).await?;
     client.send(ConfigPattern {
         bank,
-        config: StmConfig::new(1.0 * Hz).into_sampling_config(patterns.len()),
+        config: SamplingConfig::from_freq(1.0 * Hz * patterns.len() as f32)?,
         size: patterns.len(),
         loop_behavior: LoopBehavior::Infinite,
     }).await?;

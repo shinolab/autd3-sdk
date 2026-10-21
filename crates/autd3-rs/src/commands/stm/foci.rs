@@ -1,10 +1,9 @@
-use super::StmConfig;
 use crate::Velocity;
 use crate::commands::operation::{ActivatePatternBank, ConfigFociStm};
 use crate::commands::{Command, WriteFociBuffer};
 use crate::datagram::Expansion;
 use crate::error::Error;
-use crate::value::{ControlPoints, LoopBehavior, PatternBank, TransitionMode};
+use crate::value::{ControlPoints, LoopBehavior, PatternBank, SamplingConfig, TransitionMode};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FociStmOption {
@@ -27,20 +26,20 @@ impl Default for FociStmOption {
 
 #[derive(Clone, Copy, Debug)]
 pub struct FociStm<'a, const N: usize> {
-    pub config: StmConfig,
+    pub config: SamplingConfig,
     pub points: &'a [ControlPoints<N>],
     pub option: FociStmOption,
 }
 
 impl<'a, const N: usize> FociStm<'a, N> {
     #[must_use]
-    pub fn new(
-        config: impl Into<StmConfig>,
+    pub const fn new(
+        config: SamplingConfig,
         points: &'a [ControlPoints<N>],
         option: FociStmOption,
     ) -> Self {
         Self {
-            config: config.into(),
+            config,
             points,
             option,
         }
@@ -50,7 +49,6 @@ impl<'a, const N: usize> FociStm<'a, N> {
 impl<'a, const N: usize> Command<'a> for FociStm<'a, N> {
     fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
         let size = self.points.len();
-        let config = self.config.into_sampling_config(size);
         let num_foci = u8::try_from(N).unwrap_or(u8::MAX);
 
         let bank = self.option.bank;
@@ -62,7 +60,7 @@ impl<'a, const N: usize> Command<'a> for FociStm<'a, N> {
             })?
             .push(ConfigFociStm {
                 bank,
-                config,
+                config: self.config,
                 size,
                 num_foci,
                 sound_speed: self.option.sound_speed,
@@ -83,7 +81,7 @@ mod tests {
     use crate::params::FOCUS_WORDS;
     use crate::protocol::{Cmd, PAYLOAD_BYTES};
     use crate::test_utils::{build, cmds, payload};
-    use crate::value::{Intensity, Phase, SamplingConfig};
+    use crate::value::{Intensity, Phase};
     use core::num::NonZeroU16;
 
     use crate::value::{ControlPoint, Focus};
@@ -294,20 +292,5 @@ mod tests {
 
         assert_eq!(activate[1], 0x02, "GPIO");
         assert_eq!(&activate[2..10], &1u64.to_le_bytes());
-    }
-
-    #[test]
-    fn foci_stm_frequency_is_per_loop_over_all_points() {
-        use crate::units::Hz;
-
-        let points: Vec<ControlPoints<1>> = (0..4)
-            .map(|i| ControlPoints::from(Point3::new(0.0, 0.0, i as f32)))
-            .collect();
-        let frames = build(
-            1,
-            FociStm::new(1000.0 * Hz, &points, FociStmOption::default()),
-        )
-        .unwrap();
-        assert_eq!(&payload(&frames, 1, 0)[2..4], &10u16.to_le_bytes());
     }
 }

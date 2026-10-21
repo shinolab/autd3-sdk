@@ -9,8 +9,6 @@ use autd3_rs_core::protocol::describe_device_error;
 
 use crate::commands::PhaseDepth;
 
-use autd3_rs_core::value::{PulseWidthError, SamplingConfigError};
-
 #[derive(Clone)]
 pub struct NetworkCause(Arc<dyn core::error::Error + Send + Sync>);
 
@@ -147,12 +145,6 @@ pub enum PayloadError {
 
     #[error(transparent)]
     Focus(#[from] FocusOutOfRange),
-
-    #[error(transparent)]
-    SamplingConfig(#[from] SamplingConfigError),
-
-    #[error(transparent)]
-    PulseWidth(#[from] PulseWidthError),
 }
 
 #[cfg(test)]

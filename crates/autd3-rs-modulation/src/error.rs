@@ -1,4 +1,3 @@
-use autd3_rs_core::value::SamplingConfigError;
 use thiserror::Error;
 
 #[derive(Clone, Copy, Debug, PartialEq, Error)]
@@ -35,7 +34,4 @@ pub enum ModulationError {
 
     #[error("modulation frequency must be a valid value")]
     FrequencyNaN,
-
-    #[error(transparent)]
-    SamplingConfig(#[from] SamplingConfigError),
 }

@@ -16,11 +16,18 @@ pub struct SetPulseWidthTable<'a> {
     pub table: &'a [PulseWidth; PWE_TABLE_SIZE],
 }
 
+const fn boot_pulse_width(i: usize) -> PulseWidth {
+    match PulseWidth::new(PWE_DEFAULT_TABLE[i]) {
+        Ok(pulse_width) => pulse_width,
+        Err(_) => panic!("the boot table is within the pulse width period"),
+    }
+}
+
 static DEFAULT_TABLE: [PulseWidth; PWE_TABLE_SIZE] = {
-    let mut table = [PulseWidth::new(0); PWE_TABLE_SIZE];
+    let mut table = [PulseWidth::ZERO; PWE_TABLE_SIZE];
     let mut i = 0;
     while i < PWE_TABLE_SIZE {
-        table[i] = PulseWidth::new(PWE_DEFAULT_TABLE[i]);
+        table[i] = boot_pulse_width(i);
         i += 1;
     }
     table
@@ -29,7 +36,7 @@ static DEFAULT_TABLE: [PulseWidth; PWE_TABLE_SIZE] = {
 impl SetPulseWidthTable<'_> {
     #[must_use]
     pub const fn empty_table() -> [PulseWidth; PWE_TABLE_SIZE] {
-        [PulseWidth::new(0); PWE_TABLE_SIZE]
+        [PulseWidth::ZERO; PWE_TABLE_SIZE]
     }
 }
 
@@ -47,7 +54,7 @@ impl Operation for SetPulseWidthTable<'_> {
     fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         let mut table = [U16::ZERO; PWE_TABLE_SIZE];
         for (dst, &v) in table.iter_mut().zip(self.table.iter()) {
-            dst.set(v.pulse_width()?);
+            dst.set(v.pulse_width());
         }
         Ok(encode_header_only(
             out,
@@ -67,7 +74,7 @@ mod tests {
     fn pwe_lays_out_le_words() {
         let mut table = SetPulseWidthTable::empty_table();
         for (i, v) in table.iter_mut().enumerate() {
-            *v = PulseWidth::new(u16::try_from(i).unwrap());
+            *v = PulseWidth::new(u16::try_from(i).unwrap()).unwrap();
         }
         let (cmd, out) = encode(&SetPulseWidthTable { table: &table }).unwrap();
         assert_eq!(
@@ -80,13 +87,9 @@ mod tests {
     }
 
     #[test]
-    fn pwe_rejects_out_of_range() {
-        let mut table = SetPulseWidthTable::empty_table();
-        table[0] = PulseWidth::new(PULSE_WIDTH_PERIOD);
-        assert!(matches!(
-            encode(&SetPulseWidthTable { table: &table }),
-            Err(Error::InvalidPayload(_))
-        ));
+    fn a_pulse_width_at_the_period_cannot_be_built() {
+        assert!(PulseWidth::new(PULSE_WIDTH_PERIOD).is_err());
+        assert!(PulseWidth::new(PULSE_WIDTH_PERIOD - 1).is_ok());
     }
 
     #[test]
@@ -97,7 +100,7 @@ mod tests {
             let expected = ((i as f32 / 255.0).asin() / core::f32::consts::PI
                 * f32::from(PULSE_WIDTH_PERIOD))
             .round() as u16;
-            assert_eq!(v.pulse_width(), Ok(expected));
+            assert_eq!(v.pulse_width(), expected);
         }
     }
 
@@ -114,7 +117,7 @@ mod tests {
         assert!(
             SetPulseWidthTable::empty_table()
                 .iter()
-                .all(|v| v.pulse_width() == Ok(0))
+                .all(|v| v.pulse_width() == 0)
         );
     }
 }

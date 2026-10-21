@@ -16,7 +16,7 @@ use autd3_rs_modulation::{SineOption, constant, modulation_buffer, sine};
 use crate::Ctx;
 use crate::cases::pattern_util::{
     POINT_NUM, RADIUS_MM, activate_pattern_bank, circle_foci, expect_transition_mode_rejections,
-    report_fpga_state, write_foci_bank,
+    report_fpga_state, stm_sampling, write_foci_bank,
 };
 use crate::io::wait_enter;
 
@@ -31,7 +31,7 @@ async fn send_foci(
         (
             SetSilencer::disable(),
             FociStm::new(
-                config * Hz,
+                stm_sampling(config * Hz, points.len())?,
                 points,
                 FociStmOption {
                     bank,
@@ -71,7 +71,14 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     let mut rev = foci.clone();
     rev.reverse();
     rev[POINT_NUM - 1].intensity = Intensity::MIN;
-    write_foci_bank(ctx, PatternBank::B1, 0.5 * Hz, &rev, LoopBehavior::ONCE).await?;
+    write_foci_bank(
+        ctx,
+        PatternBank::B1,
+        stm_sampling(0.5 * Hz, rev.len())?,
+        &rev,
+        LoopBehavior::ONCE,
+    )
+    .await?;
     wait_enter("Nothing changed. Press Enter when the focus reaches the device's left edge").await;
     activate_pattern_bank(ctx, PatternBank::B1, TransitionMode::SyncIdx).await?;
     wait_enter("The trajectory reverses at the right edge, then stops after one cycle").await;
@@ -134,16 +141,17 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     ))
     .await;
 
-    transition_asserts(ctx, &foci).await;
+    transition_asserts(ctx, &foci).await?;
     Ok(())
 }
 
-async fn transition_asserts(ctx: &Ctx<'_>, foci: &[ControlPoints<1>]) {
+async fn transition_asserts(ctx: &Ctx<'_>, foci: &[ControlPoints<1>]) -> Result<()> {
+    let config = stm_sampling(0.5 * Hz, foci.len())?;
     expect_transition_mode_rejections(ctx, "FociSTM", |loop_behavior, transition_mode| {
         Frames::encode(
             ctx.client.geometry(),
             FociStm::new(
-                0.5 * Hz,
+                config,
                 foci,
                 FociStmOption {
                     loop_behavior,
@@ -154,4 +162,5 @@ async fn transition_asserts(ctx: &Ctx<'_>, foci: &[ControlPoints<1>]) {
         )
     })
     .await;
+    Ok(())
 }

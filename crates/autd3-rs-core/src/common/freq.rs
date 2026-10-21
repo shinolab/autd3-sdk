@@ -78,6 +78,14 @@ where
     }
 }
 
+impl From<Freq<u32>> for Freq<f32> {
+    fn from(freq: Freq<u32>) -> Self {
+        Self {
+            freq: freq.freq as f32,
+        }
+    }
+}
+
 impl core::ops::Mul<Hz> for u32 {
     type Output = Freq<u32>;
     fn mul(self, _rhs: Hz) -> Self::Output {

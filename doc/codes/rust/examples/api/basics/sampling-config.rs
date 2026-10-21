@@ -9,16 +9,16 @@ use autd3_rs::units::{Hz, kHz};
 use autd3_rs::value::SamplingConfig;
 use autd3_rs::Client;
 use autd3_rs::udp::TransportOption;
-use autd3_rs_modulation::{Nearest, SineOption, sine};
+use autd3_rs_modulation::{SineOption, sine};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
     // ANCHOR: api
     SamplingConfig::new(NonZeroU16::new(10).unwrap());
-    SamplingConfig::new(4. * kHz);
-    SamplingConfig::new(Duration::from_micros(250));
-    SamplingConfig::new(Nearest(4. * kHz));
-    SamplingConfig::new(Nearest(Duration::from_micros(250)));
+    SamplingConfig::from_freq(4. * kHz)?;
+    SamplingConfig::from_period(Duration::from_micros(250))?;
+    SamplingConfig::from_freq_nearest(4. * kHz)?;
+    SamplingConfig::from_period_nearest(Duration::from_micros(250));
     // ANCHOR_END: api
 
     let geometry = Geometry::new(vec![Autd3::default()]);

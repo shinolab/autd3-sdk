@@ -32,7 +32,7 @@ impl Operation for ConfigPattern {
     fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         let payload = ConfigPatternPayload::raw(
             self.bank,
-            self.config.divide()?,
+            self.config.divide(),
             self.size,
             self.loop_behavior.rep(),
         )?;
@@ -46,7 +46,7 @@ impl Operation for ConfigFociStm {
     fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         let payload = ConfigPatternPayload::foci(
             self.bank,
-            self.config.divide()?,
+            self.config.divide(),
             self.size,
             self.num_foci,
             self.sound_speed.m_s(),
@@ -117,16 +117,6 @@ mod tests {
             loop_behavior: LoopBehavior::Infinite,
         };
         assert!(matches!(encode(&raw(0)), Err(Error::InvalidPayload(_))));
-        assert!(
-            matches!(
-                encode(&ConfigPattern {
-                    config: SamplingConfig::new(core::time::Duration::from_nanos(1)),
-                    ..raw(1)
-                }),
-                Err(Error::InvalidPayload(_))
-            ),
-            "an unrepresentable sampling config is rejected"
-        );
         assert!(matches!(
             encode(&raw(EMISSION_MAX_INDICES + 1)),
             Err(Error::InvalidPayload(_))

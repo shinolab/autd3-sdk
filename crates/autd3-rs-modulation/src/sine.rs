@@ -61,8 +61,8 @@ pub fn sine<S: Into<SamplingMode>>(
 
 #[cfg(test)]
 mod tests {
+    use crate::Nearest;
     use autd3_rs_core::units::Hz;
-    use autd3_rs_core::value::Nearest;
 
     use super::*;
 

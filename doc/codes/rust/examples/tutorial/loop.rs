@@ -32,7 +32,8 @@ async fn main() -> Result<()> {
 
     // ANCHOR: infinite
     // By default the playback loops infinitely; B0 keeps circling the focus.
-    client.send(FociStm::new(50.0 * Hz, &foci, FociStmOption::default())).await?;
+    let config = SamplingConfig::from_freq(50.0 * Hz * foci.len() as f32)?;
+    client.send(FociStm::new(config, &foci, FociStmOption::default())).await?;
     // ANCHOR_END: infinite
 
     // ANCHOR: finite
@@ -40,7 +41,7 @@ async fn main() -> Result<()> {
     // A finite loop (and non-immediate transition) only fires when switching to a
     // different bank, so write to bank B1 instead of the current B0.
     client.send(FociStm::new(
-        50.0 * Hz,
+        config,
         &foci,
         FociStmOption {
             loop_behavior: LoopBehavior::Finite(NonZeroU16::new(3).unwrap()),

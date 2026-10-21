@@ -1,15 +1,14 @@
 use autd3_rs::commands::{
-    ActivatePatternBank, ConfigPattern, PatternStm, PatternStmOption, PhaseDepth, StmConfig,
-    WritePatternPhase,
+    ActivatePatternBank, ConfigPattern, PatternStm, PatternStmOption, PhaseDepth, WritePatternPhase,
 };
 use autd3_rs::geometry::{offset, Autd3, Geometry};
 use autd3_rs::units::{m, mm, s, Hz};
-use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, TransitionMode};
+use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode};
 
 const NUM_POINTS: usize = 200;
 const RADIUS_MM: f32 = 30.0;
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
     let center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
@@ -34,7 +33,7 @@ fn main() {
         })
         .collect::<Vec<_>>();
     let intensities = Intensity::MAX;
-    let freq = 1.0 * Hz;
+    let config = SamplingConfig::from_freq(1.0 * Hz * NUM_POINTS as f32)?;
     let bank = PatternBank::B0;
     let phase_depth = PhaseDepth::Bits8;
     let loop_behavior = LoopBehavior::Infinite;
@@ -51,7 +50,7 @@ fn main() {
         // ANCHOR_END: option
         ;
     // ANCHOR: api
-    PatternStm::new(freq, &patterns, intensities, option);
+    PatternStm::new(config, &patterns, intensities, option);
     // ANCHOR_END: api
 
     // ANCHOR: equivalent
@@ -67,7 +66,7 @@ fn main() {
     }
     ConfigPattern {
         bank: option.bank,
-        config: StmConfig::new(freq).into_sampling_config(patterns.len()),
+        config,
         size: patterns.len(),
         loop_behavior: option.loop_behavior,
     };
@@ -76,4 +75,5 @@ fn main() {
         transition_mode: option.transition_mode,
     };
     // ANCHOR_END: equivalent
+    Ok(())
 }

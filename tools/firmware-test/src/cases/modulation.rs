@@ -6,7 +6,7 @@ use autd3_rs::Frames;
 use autd3_rs::commands::{Modulation, SetSilencer};
 use autd3_rs::params::MOD_BUFFER_SAMPLES;
 use autd3_rs::units::Hz;
-use autd3_rs::value::{LoopBehavior, ModulationBank, Nearest, SamplingConfig, TransitionMode};
+use autd3_rs::value::{LoopBehavior, ModulationBank, SamplingConfig, TransitionMode};
 use autd3_rs_modulation::{SineOption, constant, modulation_buffer, sine};
 
 use crate::Ctx;
@@ -78,7 +78,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
 
     activate_mod_bank(ctx, ModulationBank::B1, TransitionMode::Immediate).await?;
 
-    let saw_config = SamplingConfig::new(Nearest(256.0 * Hz));
+    let saw_config = SamplingConfig::from_freq_nearest(256.0 * Hz)?;
     let ramp: Vec<u8> = (0..=255u8).collect();
     ctx.send(Modulation {
         loop_behavior: LoopBehavior::ONCE,
