@@ -34,6 +34,7 @@ impl OutputMaskPayload {
     }
 }
 
+assert_layout!(OutputMaskPayload { words: 0 } size 2 * OUTPUT_MASK_WORDS);
 const _: () = assert!(core::mem::size_of::<OutputMaskPayload>() <= PAYLOAD_BYTES);
 
 #[cfg(test)]

@@ -28,10 +28,11 @@ impl ActivatePatternBankPayload {
     }
 }
 
-const _: () = assert!(core::mem::offset_of!(ActivatePatternBankPayload, bank) == 0);
-const _: () = assert!(core::mem::offset_of!(ActivatePatternBankPayload, transition_mode) == 1);
-const _: () = assert!(core::mem::offset_of!(ActivatePatternBankPayload, transition_value) == 2);
-const _: () = assert!(core::mem::size_of::<ActivatePatternBankPayload>() == 10);
+assert_layout!(ActivatePatternBankPayload {
+    bank: 0,
+    transition_mode: 1,
+    transition_value: 2,
+} size 10);
 
 #[cfg(test)]
 mod tests {

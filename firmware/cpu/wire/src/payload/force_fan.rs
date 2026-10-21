@@ -15,4 +15,4 @@ impl ForceFanPayload {
     }
 }
 
-const _: () = assert!(core::mem::size_of::<ForceFanPayload>() == 1);
+assert_layout!(ForceFanPayload { value: 0 } size 1);

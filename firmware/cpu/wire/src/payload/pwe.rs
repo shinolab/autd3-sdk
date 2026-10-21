@@ -18,4 +18,5 @@ impl PwePayload {
     }
 }
 
+assert_layout!(PwePayload { table: 0 } size 2 * PWE_TABLE_SIZE);
 const _: () = assert!(core::mem::size_of::<PwePayload>() <= PAYLOAD_BYTES);

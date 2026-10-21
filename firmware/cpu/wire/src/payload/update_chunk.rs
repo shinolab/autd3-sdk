@@ -26,5 +26,4 @@ impl UpdateChunkPayload {
     }
 }
 
-const _: () = assert!(core::mem::offset_of!(UpdateChunkPayload, offset) == 0);
-const _: () = assert!(core::mem::size_of::<UpdateChunkPayload>() == 4);
+assert_layout!(UpdateChunkPayload { offset: 0 } size 4);

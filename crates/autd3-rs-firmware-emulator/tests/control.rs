@@ -161,7 +161,11 @@ fn write_full_intensity_pattern(device: &mut Device) {
         index: U16::new(0),
     };
     let mut samples = [0u8; NUM_TRANSDUCERS * 2];
-    samples[NUM_TRANSDUCERS..].fill(0xFF);
+    samples
+        .iter_mut()
+        .skip(1)
+        .step_by(2)
+        .for_each(|b| *b = 0xFF);
     let payload = [header.as_bytes(), &samples].concat();
     let rx = device.send(&frame(Cmd::WritePatternRaw, &payload));
     assert_eq!(rx.status, autd3_cpu_wire::Error::None);

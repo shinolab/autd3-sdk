@@ -260,35 +260,32 @@ impl SetCpuConfigPayload {
     }
 }
 
-const _: () =
-    assert!(core::mem::offset_of!(SetCpuConfigPayload, sys_time_transition_margin_ns) == 0);
-const _: () = assert!(core::mem::offset_of!(SetCpuConfigPayload, fpga_wait_update_max_polls) == 4);
-const _: () = assert!(core::mem::offset_of!(SetCpuConfigPayload, fpga_flash_max_polls) == 8);
-const _: () = assert!(core::mem::offset_of!(SetCpuConfigPayload, sync_guard_ns) == 12);
-const _: () = assert!(core::mem::offset_of!(SetCpuConfigPayload, update_activate_delay_ms) == 16);
-const _: () = assert!(core::mem::offset_of!(SetCpuConfigPayload, ptp_sync_interval_ms) == 18);
-const _: () =
-    assert!(core::mem::offset_of!(SetCpuConfigPayload, ptp_tx_timestamp_timeout_ms) == 20);
-const _: () = assert!(core::mem::offset_of!(SetCpuConfigPayload, ptp_delay_resp_timeout_ms) == 22);
-const _: () = assert!(core::mem::offset_of!(SetCpuConfigPayload, ptp_holdover_ms) == 24);
-const _: () = assert!(core::mem::offset_of!(SetCpuConfigPayload, ptp_lock_samples) == 26);
-const _: () = assert!(core::mem::offset_of!(SetCpuConfigPayload, ptp_step_threshold_ns) == 28);
-const _: () = assert!(core::mem::offset_of!(SetCpuConfigPayload, ptp_lock_threshold_ns) == 32);
-const _: () = assert!(core::mem::offset_of!(SetCpuConfigPayload, ptp_kp_milli) == 36);
-const _: () = assert!(core::mem::offset_of!(SetCpuConfigPayload, ptp_ki_milli) == 40);
-const _: () = assert!(core::mem::offset_of!(SetCpuConfigPayload, ptp_max_freq_ppb) == 44);
-const _: () = assert!(core::mem::offset_of!(SetCpuConfigPayload, failsafe_timeout_ms) == 48);
-const _: () = assert!(core::mem::offset_of!(SetCpuConfigPayload, ptp_delay_req_syncs) == 50);
-const _: () =
-    assert!(core::mem::offset_of!(SetCpuConfigPayload, ptp_path_delay_filter_shift) == 52);
-const _: () = assert!(core::mem::offset_of!(SetCpuConfigPayload, ptp_pause_quanta) == 54);
-const _: () = assert!(core::mem::offset_of!(SetCpuConfigPayload, ptp_pause_hold_syncs) == 56);
-const _: () = assert!(core::mem::offset_of!(SetCpuConfigPayload, ptp_pause_retry_ms) == 58);
-const _: () =
-    assert!(core::mem::offset_of!(SetCpuConfigPayload, ptp_unlock_failsafe_timeout_ms) == 60);
-const _: () = assert!(core::mem::offset_of!(SetCpuConfigPayload, fpga_bus_wait) == 62);
-const _: () = assert!(core::mem::offset_of!(SetCpuConfigPayload, cpu_watchdog_timeout_ms) == 64);
-const _: () = assert!(core::mem::size_of::<SetCpuConfigPayload>() == 66);
+assert_layout!(SetCpuConfigPayload {
+    sys_time_transition_margin_ns: 0,
+    fpga_wait_update_max_polls: 4,
+    fpga_flash_max_polls: 8,
+    sync_guard_ns: 12,
+    update_activate_delay_ms: 16,
+    ptp_sync_interval_ms: 18,
+    ptp_tx_timestamp_timeout_ms: 20,
+    ptp_delay_resp_timeout_ms: 22,
+    ptp_holdover_ms: 24,
+    ptp_lock_samples: 26,
+    ptp_step_threshold_ns: 28,
+    ptp_lock_threshold_ns: 32,
+    ptp_kp_milli: 36,
+    ptp_ki_milli: 40,
+    ptp_max_freq_ppb: 44,
+    failsafe_timeout_ms: 48,
+    ptp_delay_req_syncs: 50,
+    ptp_path_delay_filter_shift: 52,
+    ptp_pause_quanta: 54,
+    ptp_pause_hold_syncs: 56,
+    ptp_pause_retry_ms: 58,
+    ptp_unlock_failsafe_timeout_ms: 60,
+    fpga_bus_wait: 62,
+    cpu_watchdog_timeout_ms: 64,
+} size 66);
 
 #[cfg(test)]
 mod tests {

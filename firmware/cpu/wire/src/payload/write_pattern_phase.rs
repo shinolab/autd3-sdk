@@ -47,12 +47,16 @@ impl PhaseDepth {
         }
     }
 
-    #[must_use]
-    pub const fn phase(self, phases: &[u8], t: usize) -> u8 {
-        match self {
-            Self::Bits8 => phases[t],
-            Self::Bits4 => ((phases[t / 2] >> (4 * (t % 2))) & 0x0F) * 0x11,
-        }
+    pub fn unpack_bits8(pattern: &[u8]) -> impl Iterator<Item = u8> + '_ {
+        pattern.iter().copied()
+    }
+
+    pub fn unpack_bits4(pattern: &[u8]) -> impl Iterator<Item = u8> + '_ {
+        pattern
+            .iter()
+            .flat_map(|byte| [byte & 0x0F, byte >> 4])
+            .take(NUM_TRANSDUCERS)
+            .map(|nibble| nibble * 0x11)
     }
 }
 
@@ -116,12 +120,13 @@ impl WritePatternPhasePayload {
     }
 }
 
-const _: () = assert!(core::mem::offset_of!(WritePatternPhasePayload, bank) == 0);
-const _: () = assert!(core::mem::offset_of!(WritePatternPhasePayload, depth) == 1);
-const _: () = assert!(core::mem::offset_of!(WritePatternPhasePayload, count) == 2);
-const _: () = assert!(core::mem::offset_of!(WritePatternPhasePayload, intensity) == 3);
-const _: () = assert!(core::mem::offset_of!(WritePatternPhasePayload, index) == 4);
-const _: () = assert!(core::mem::size_of::<WritePatternPhasePayload>() == 6);
+assert_layout!(WritePatternPhasePayload {
+    bank: 0,
+    depth: 1,
+    count: 2,
+    intensity: 3,
+    index: 4,
+} size 6);
 const _: () = assert!(PhaseDepth::Bits8.max_count() <= u8::MAX as usize);
 const _: () = assert!(PhaseDepth::Bits4.max_count() <= u8::MAX as usize);
 
@@ -185,6 +190,19 @@ mod tests {
         let mut dst = [0xFF; 4];
         depth.pack(phases, &mut dst);
         assert_eq!(dst, expected);
+    }
+
+    #[test]
+    fn unpack_restores_what_pack_keeps() {
+        let phases: [u8; NUM_TRANSDUCERS] = core::array::from_fn(|t| (t * 37 + 11) as u8);
+
+        let mut bits8 = [0u8; PhaseDepth::Bits8.bytes_per_pattern()];
+        PhaseDepth::Bits8.pack(&phases, &mut bits8);
+        assert!(PhaseDepth::unpack_bits8(&bits8).eq(phases));
+
+        let mut bits4 = [0u8; PhaseDepth::Bits4.bytes_per_pattern()];
+        PhaseDepth::Bits4.pack(&phases, &mut bits4);
+        assert!(PhaseDepth::unpack_bits4(&bits4).eq(phases.iter().map(|p| (p >> 4) * 0x11)));
     }
 
     #[test]

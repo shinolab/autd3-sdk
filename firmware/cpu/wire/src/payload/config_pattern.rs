@@ -139,14 +139,16 @@ impl ConfigPatternPayload {
     }
 }
 
-const _: () = assert!(core::mem::offset_of!(ConfigPatternPayload, bank) == 0);
-const _: () = assert!(core::mem::offset_of!(ConfigPatternPayload, emission_type) == 1);
-const _: () = assert!(core::mem::offset_of!(ConfigPatternPayload, divider) == 2);
-const _: () = assert!(core::mem::offset_of!(ConfigPatternPayload, size) == 4);
-const _: () = assert!(core::mem::offset_of!(ConfigPatternPayload, num_foci) == 8);
-const _: () = assert!(core::mem::offset_of!(ConfigPatternPayload, sound_speed) == 10);
-const _: () = assert!(core::mem::offset_of!(ConfigPatternPayload, rep) == 12);
-const _: () = assert!(core::mem::size_of::<ConfigPatternPayload>() == 14);
+assert_layout!(ConfigPatternPayload {
+    bank: 0,
+    emission_type: 1,
+    divider: 2,
+    size: 4,
+    num_foci: 8,
+    reserved: 9,
+    sound_speed: 10,
+    rep: 12,
+} size 14);
 
 #[cfg(test)]
 mod tests {

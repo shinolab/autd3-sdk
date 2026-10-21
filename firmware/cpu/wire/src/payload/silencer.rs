@@ -110,12 +110,14 @@ impl SilencerPayload {
     }
 }
 
-const _: () = assert!(core::mem::offset_of!(SilencerPayload, flag) == 0);
-const _: () = assert!(core::mem::offset_of!(SilencerPayload, update_rate_intensity) == 2);
-const _: () = assert!(core::mem::offset_of!(SilencerPayload, update_rate_phase) == 4);
-const _: () = assert!(core::mem::offset_of!(SilencerPayload, completion_steps_intensity) == 6);
-const _: () = assert!(core::mem::offset_of!(SilencerPayload, completion_steps_phase) == 8);
-const _: () = assert!(core::mem::size_of::<SilencerPayload>() == 10);
+assert_layout!(SilencerPayload {
+    flag: 0,
+    reserved: 1,
+    update_rate_intensity: 2,
+    update_rate_phase: 4,
+    completion_steps_intensity: 6,
+    completion_steps_phase: 8,
+} size 10);
 
 #[cfg(test)]
 mod tests {

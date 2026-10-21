@@ -37,6 +37,13 @@ fn write_phase_header(depth: PhaseDepth, count: u8, intensity: u8) -> Vec<u8> {
     .to_vec()
 }
 
+fn interleave<'a>(phases: &'a [u8], intensities: &'a [u8]) -> impl Iterator<Item = u8> + 'a {
+    phases
+        .iter()
+        .zip(intensities)
+        .flat_map(|(&phase, &intensity)| [phase, intensity])
+}
+
 #[test]
 fn raw_pattern_round_trips_to_emissions() {
     let expected: (Vec<Phase>, Vec<Intensity>) = (
@@ -53,8 +60,13 @@ fn raw_pattern_round_trips_to_emissions() {
     }
     .as_bytes()
     .to_vec();
-    write.extend(expected.0.iter().map(|p| p.0));
-    write.extend(expected.1.iter().map(|i| i.0));
+    write.extend(
+        expected
+            .0
+            .iter()
+            .zip(&expected.1)
+            .flat_map(|(p, i)| [p.0, i.0]),
+    );
 
     let config = config_pattern(BANK, EmissionType::Raw, 1, 0, 0, REP_INFINITE);
     let change = activate_pattern_bank(BANK, TransitionMode::Immediate);
@@ -95,8 +107,7 @@ fn a_fused_pattern_leaves_the_fpga_as_write_config_activate_does() {
     }
     .as_bytes()
     .to_vec();
-    write.extend(&phases);
-    write.extend(&intensities);
+    write.extend(interleave(&phases, &intensities));
     let mut split = Device::new(NUM_TRANSDUCERS);
     for (cmd, payload) in [
         (Cmd::WritePatternRaw, write),
@@ -121,8 +132,7 @@ fn a_fused_pattern_leaves_the_fpga_as_write_config_activate_does() {
     let mut fused_payload = WritePatternFusedPayload::new(BANK, Transition::Immediate)
         .as_bytes()
         .to_vec();
-    fused_payload.extend(&phases);
-    fused_payload.extend(&intensities);
+    fused_payload.extend(interleave(&phases, &intensities));
     let mut fused = Device::new(NUM_TRANSDUCERS);
     assert_eq!(
         fused
@@ -191,14 +201,10 @@ fn phase_bits4_pattern_expands_nibbles_to_full_range() {
 
     let mut write = write_phase_header(PhaseDepth::Bits4, 4, 0xFF);
     for g in 0..4 {
-        write.extend((0..NUM_TRANSDUCERS.div_ceil(2)).map(|i| {
-            let hi = if 2 * i + 1 < NUM_TRANSDUCERS {
-                nibble(g, 2 * i + 1)
-            } else {
-                0
-            };
-            (hi << 4) | nibble(g, 2 * i)
-        }));
+        let phases: Vec<u8> = (0..NUM_TRANSDUCERS).map(|t| nibble(g, t) * 0x11).collect();
+        let mut packed = vec![0u8; PhaseDepth::Bits4.bytes_per_pattern()];
+        PhaseDepth::Bits4.pack(&phases, &mut packed);
+        write.extend(packed);
     }
 
     let device = send_phase_pattern(&write);

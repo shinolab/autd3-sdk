@@ -24,6 +24,6 @@ mod test_utils;
 pub mod version;
 
 pub use app::Cpu;
-pub use autd3_cpu_wire::{fpga_update, udp, update};
+pub use autd3_cpu_wire::{udp, update};
 pub use port::Port;
 pub use version::{FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH};

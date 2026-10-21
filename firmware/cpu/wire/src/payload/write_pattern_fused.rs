@@ -37,10 +37,11 @@ impl WritePatternFusedPayload {
     }
 }
 
-const _: () = assert!(core::mem::offset_of!(WritePatternFusedPayload, bank) == 0);
-const _: () = assert!(core::mem::offset_of!(WritePatternFusedPayload, transition_mode) == 1);
-const _: () = assert!(core::mem::offset_of!(WritePatternFusedPayload, transition_value) == 2);
-const _: () = assert!(core::mem::size_of::<WritePatternFusedPayload>() == 10);
+assert_layout!(WritePatternFusedPayload {
+    bank: 0,
+    transition_mode: 1,
+    transition_value: 2,
+} size 10);
 const _: () = assert!(
     core::mem::size_of::<WritePatternFusedPayload>() + PATTERN_RAW_DATA_LEN
         <= crate::frame::PAYLOAD_BYTES

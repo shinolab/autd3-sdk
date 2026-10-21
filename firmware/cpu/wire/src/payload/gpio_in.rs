@@ -18,4 +18,9 @@ impl GpioInPayload {
     }
 }
 
-const _: () = assert!(core::mem::size_of::<GpioInPayload>() == 4);
+assert_layout!(GpioInPayload {
+    gpio_in_0: 0,
+    gpio_in_1: 1,
+    gpio_in_2: 2,
+    gpio_in_3: 3,
+} size 4);

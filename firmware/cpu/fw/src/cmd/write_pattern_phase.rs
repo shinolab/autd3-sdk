@@ -1,7 +1,6 @@
-pub(crate) use autd3_cpu_wire::payload::WritePatternPhasePayload;
+pub(crate) use autd3_cpu_wire::payload::{PhaseDepth, WritePatternPhasePayload};
 
 use crate::fpga::{self, EMISSION_RAM};
-use crate::fpga_params::NUM_TRANSDUCERS;
 use crate::port::Port;
 use crate::proto::{EMISSION_SLOT_WORDS, Error};
 
@@ -13,29 +12,25 @@ pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error>
         .map(|index| index * EMISSION_SLOT_WORDS)
         .zip(data.chunks_exact(depth.bytes_per_pattern()));
     match depth {
-        autd3_cpu_wire::payload::PhaseDepth::Bits8 => fpga::write_ram_at(
+        PhaseDepth::Bits8 => fpga::write_ram_at(
             port,
             &EMISSION_RAM,
             p.bank.as_u8(),
             patterns.flat_map(|(offset, pattern)| {
                 (offset..).zip(
-                    pattern
-                        .iter()
-                        .map(move |phase| u16::from_le_bytes([*phase, intensity])),
+                    PhaseDepth::unpack_bits8(pattern)
+                        .map(move |phase| u16::from_le_bytes([phase, intensity])),
                 )
             }),
         ),
-        autd3_cpu_wire::payload::PhaseDepth::Bits4 => fpga::write_ram_at(
+        PhaseDepth::Bits4 => fpga::write_ram_at(
             port,
             &EMISSION_RAM,
             p.bank.as_u8(),
             patterns.flat_map(|(offset, pattern)| {
                 (offset..).zip(
-                    pattern
-                        .iter()
-                        .flat_map(|byte| [byte & 0x0F, byte >> 4])
-                        .take(NUM_TRANSDUCERS)
-                        .map(move |nibble| u16::from_le_bytes([nibble * 0x11, intensity])),
+                    PhaseDepth::unpack_bits4(pattern)
+                        .map(move |phase| u16::from_le_bytes([phase, intensity])),
                 )
             }),
         ),
@@ -70,18 +65,14 @@ mod tests {
         ((t + g) & 0x0F) as u8
     }
 
-    fn pack_bits4(count: usize) -> Vec<u8> {
+    fn bits4_patterns(count: usize) -> Vec<u8> {
         (0..count)
             .flat_map(|g| {
-                (0..NUM_TRANSDUCERS.div_ceil(2)).map(move |i| {
-                    let lo = bits4_phase(g, 2 * i);
-                    let hi = if 2 * i + 1 < NUM_TRANSDUCERS {
-                        bits4_phase(g, 2 * i + 1)
-                    } else {
-                        0
-                    };
-                    (hi << 4) | lo
-                })
+                let phases: [u8; NUM_TRANSDUCERS] =
+                    core::array::from_fn(|t| bits4_phase(g, t) * 0x11);
+                let mut packed = [0u8; PhaseDepth::Bits4.bytes_per_pattern()];
+                PhaseDepth::Bits4.pack(&phases, &mut packed);
+                packed
             })
             .collect()
     }
@@ -128,7 +119,7 @@ mod tests {
             PhaseDepth::Bits4 as u8,
             count as u8,
             0x42,
-            &pack_bits4(count),
+            &bits4_patterns(count),
         ));
         assert_eq!(h.status(), Error::None);
 
@@ -142,6 +133,25 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn write_pattern_phase_bits4_ignores_the_unused_high_nibble_of_the_last_byte() {
+        let mut h = Harness::new();
+        let data = [0xF5u8; NUM_TRANSDUCERS.div_ceil(2)];
+
+        h.deliver(&write_pattern_phase(
+            0,
+            0,
+            PhaseDepth::Bits4 as u8,
+            1,
+            0x42,
+            &data,
+        ));
+        assert_eq!(h.status(), Error::None);
+
+        assert_eq!(h.emission_word(0, NUM_TRANSDUCERS - 1), 0x4255);
+        assert_eq!(h.emission_word(0, NUM_TRANSDUCERS), 0);
     }
 
     #[rstest]
@@ -186,7 +196,7 @@ mod tests {
             PhaseDepth::Bits8 => (0..count)
                 .flat_map(|g| (0..NUM_TRANSDUCERS).map(move |t| bits8_phase(g, t)))
                 .collect(),
-            PhaseDepth::Bits4 => pack_bits4(count),
+            PhaseDepth::Bits4 => bits4_patterns(count),
             _ => unreachable!(),
         };
         let expected = |g: usize, t: usize| match depth {
@@ -302,7 +312,7 @@ mod tests {
         ));
         assert_eq!(h.status(), Error::InvalidPayload);
 
-        let bits4_full = pack_bits4(PhaseDepth::Bits4.max_count());
+        let bits4_full = bits4_patterns(PhaseDepth::Bits4.max_count());
         h.deliver(&write_pattern_phase(
             0,
             0,
