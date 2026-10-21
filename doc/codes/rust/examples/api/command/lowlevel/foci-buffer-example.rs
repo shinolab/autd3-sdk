@@ -1,11 +1,11 @@
 use std::f32::consts::PI;
 
 use autd3_rs::commands::{
-    ActivatePatternBank, Clear, ConfigFociStm, StmConfig, Synchronize, WriteFociBuffer,
+    ActivatePatternBank, Clear, ConfigFociStm, Synchronize, WriteFociBuffer,
 };
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
-use autd3_rs::value::{ControlPoints, LoopBehavior, PatternBank, TransitionMode};
+use autd3_rs::value::{ControlPoints, LoopBehavior, PatternBank, SamplingConfig, TransitionMode};
 use autd3_rs::Client;
 use autd3_rs::udp::TransportOption;
 
@@ -35,7 +35,7 @@ async fn main() -> anyhow::Result<()> {
     }).await?;
     client.send(ConfigFociStm {
         bank,
-        config: StmConfig::new(1.0 * Hz).into_sampling_config(points.len()),
+        config: SamplingConfig::from_freq(1.0 * Hz * points.len() as f32)?,
         size: points.len(),
         num_foci: 1,
         sound_speed: 340.0 * m / s,

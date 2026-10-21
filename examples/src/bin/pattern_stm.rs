@@ -8,7 +8,7 @@ use autd3_rs::Client;
 use autd3_rs::commands::{Clear, PatternStm, PatternStmOption, SetSilencer, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
-use autd3_rs::value::Intensity;
+use autd3_rs::value::{Intensity, SamplingConfig};
 use tracing_subscriber::EnvFilter;
 
 const NUM_POINTS: usize = 200;
@@ -49,7 +49,7 @@ async fn main() -> Result<()> {
     client.send(SetSilencer::default()).await?;
     client
         .send(PatternStm::new(
-            1.0 * Hz,
+            SamplingConfig::from_freq(1.0 * Hz * patterns.len() as f32)?,
             &patterns,
             Intensity::MAX,
             PatternStmOption::default(),

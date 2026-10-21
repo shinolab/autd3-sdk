@@ -15,7 +15,7 @@ async fn main() -> anyhow::Result<()> {
 
     let mut table = SetPulseWidthTable::empty_table();
     for (width, i) in table.iter_mut().zip(0..) {
-        *width = PulseWidth::new(i);
+        *width = PulseWidth::new(i)?;
     }
 
     client.send(SetPulseWidthTable { table: &table }).await?;

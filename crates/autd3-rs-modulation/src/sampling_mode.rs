@@ -6,9 +6,12 @@
 
 use autd3_rs_core::common::Freq;
 use autd3_rs_core::params::{MOD_BUFFER_SAMPLES, ULTRASOUND_FREQ_HZ};
-use autd3_rs_core::value::{Nearest, SamplingConfig, is_integer};
+use autd3_rs_core::value::{SamplingConfig, is_integer};
 
 use crate::error::ModulationError;
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct Nearest<T>(pub T);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[non_exhaustive]
@@ -55,7 +58,7 @@ impl SamplingMode {
         freq: Freq<u32>,
         config: SamplingConfig,
     ) -> Result<(usize, u64), ModulationError> {
-        let nyquist = config.freq()?.hz() / 2.;
+        let nyquist = config.freq().hz() / 2.;
         if freq.hz() as f32 >= nyquist {
             return Err(ModulationError::FrequencyAboveNyquist {
                 hz: freq.hz() as f32,
@@ -65,7 +68,7 @@ impl SamplingMode {
         if freq.hz() == 0 {
             return Err(ModulationError::FrequencyZero);
         }
-        let fd = u64::from(freq.hz()) * u64::from(config.divide()?.get());
+        let fd = u64::from(freq.hz()) * u64::from(config.divide().get());
         let fs = u64::from(ULTRASOUND_FREQ_HZ);
         let k = num_integer::gcd(fs, fd);
         Ok(((fs / k) as usize, fd / k))
@@ -81,14 +84,14 @@ impl SamplingMode {
         if freq.hz() == 0. {
             return Err(ModulationError::FrequencyZero);
         }
-        let nyquist = config.freq()?.hz() / 2.;
+        let nyquist = config.freq().hz() / 2.;
         if freq.hz() >= nyquist {
             return Err(ModulationError::FrequencyAboveNyquist {
                 hz: freq.hz(),
                 nyquist,
             });
         }
-        let fd = f64::from(freq.hz()) * f64::from(config.divide()?.get());
+        let fd = f64::from(freq.hz()) * f64::from(config.divide().get());
         let fs = u64::from(ULTRASOUND_FREQ_HZ);
         ((f64::from(ULTRASOUND_FREQ_HZ) / fd).floor() as u32..=MOD_BUFFER_SAMPLES as u32)
             .find_map(|n| {
@@ -108,7 +111,7 @@ impl SamplingMode {
         freq: Freq<f32>,
         config: SamplingConfig,
     ) -> Result<(usize, u64), ModulationError> {
-        let cfg_freq = config.freq()?.hz();
+        let cfg_freq = config.freq().hz();
         let freq_min = cfg_freq / MOD_BUFFER_SAMPLES as f32;
         let freq_max = cfg_freq / 2.;
         let freq = freq.hz().clamp(freq_min, freq_max);

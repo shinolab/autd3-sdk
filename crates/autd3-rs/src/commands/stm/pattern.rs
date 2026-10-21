@@ -1,4 +1,3 @@
-use super::StmConfig;
 use crate::commands::Command;
 use crate::commands::operation::{
     ActivatePatternBank, ConfigPattern, PhaseDepth, StmIntensity, WritePatternChunk,
@@ -7,7 +6,7 @@ use crate::commands::operation::{
 use crate::datagram::Expansion;
 use crate::error::{Error, PayloadError};
 use crate::params::{BUFFER_SIZE_MIN, EMISSION_MAX_INDICES};
-use crate::value::{LoopBehavior, PatternBank, Phase, TransitionMode};
+use crate::value::{LoopBehavior, PatternBank, Phase, SamplingConfig, TransitionMode};
 use autd3_cpu_wire::layout::PATTERN_RAW_MAX_COUNT;
 use autd3_cpu_wire::payload::PayloadBuildError;
 
@@ -21,7 +20,7 @@ pub struct PatternStmOption {
 
 #[derive(Clone, Copy, Debug)]
 pub struct PatternStm<'a> {
-    pub config: StmConfig,
+    pub config: SamplingConfig,
     pub phases: &'a [Vec<Vec<Phase>>],
     pub intensities: StmIntensity<'a>,
     pub option: PatternStmOption,
@@ -30,13 +29,13 @@ pub struct PatternStm<'a> {
 impl<'a> PatternStm<'a> {
     #[must_use]
     pub fn new(
-        config: impl Into<StmConfig>,
+        config: SamplingConfig,
         phases: &'a [Vec<Vec<Phase>>],
         intensities: impl Into<StmIntensity<'a>>,
         option: PatternStmOption,
     ) -> Self {
         Self {
-            config: config.into(),
+            config,
             phases,
             intensities: intensities.into(),
             option,
@@ -64,7 +63,6 @@ impl<'a> Command<'a> for PatternStm<'a> {
             }
             .into());
         }
-        let config = self.config.into_sampling_config(size);
         let bank = self.option.bank;
 
         match (self.intensities, self.option.phase_depth) {
@@ -97,7 +95,7 @@ impl<'a> Command<'a> for PatternStm<'a> {
 
         expansion.push(ConfigPattern {
             bank,
-            config,
+            config: self.config,
             size,
             loop_behavior: self.option.loop_behavior,
         })?;
@@ -115,7 +113,7 @@ mod tests {
     use crate::geometry::Autd3;
     use crate::protocol::Cmd;
     use crate::test_utils::{build, cmds, payload};
-    use crate::value::{Intensity, SamplingConfig};
+    use crate::value::Intensity;
     use zerocopy::IntoBytes;
 
     #[test]

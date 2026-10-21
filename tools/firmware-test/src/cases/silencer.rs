@@ -13,7 +13,7 @@ use autd3_rs::value::SamplingConfig;
 use autd3_rs_modulation::{SineOption, constant, modulation_buffer, sine};
 
 use crate::Ctx;
-use crate::cases::pattern_util::{circle_foci, focus_at, send_pattern_mod};
+use crate::cases::pattern_util::{circle_foci, focus_at, send_pattern_mod, stm_sampling};
 use crate::io::wait_enter;
 
 fn completion_time(intensity_mul: u32, phase_mul: u32) -> FixedCompletionTime {
@@ -65,8 +65,12 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
         &static_ff,
     ))
     .await?;
-    ctx.send(FociStm::new(50.0 * Hz, &foci, FociStmOption::default()))
-        .await?;
+    ctx.send(FociStm::new(
+        stm_sampling(50.0 * Hz, foci.len())?,
+        &foci,
+        FociStmOption::default(),
+    ))
+    .await?;
     wait_enter("A 50 Hz STM is applied").await;
     sweep_silencer(ctx).await?;
     Ok(())

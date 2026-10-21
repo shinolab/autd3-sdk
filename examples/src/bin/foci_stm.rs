@@ -10,7 +10,7 @@ use autd3_rs::Client;
 use autd3_rs::commands::{Clear, FociStm, FociStmOption, SetSilencer, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, mm};
-use autd3_rs::value::ControlPoints;
+use autd3_rs::value::{ControlPoints, SamplingConfig};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main(flavor = "multi_thread")]
@@ -41,7 +41,11 @@ async fn main() -> Result<()> {
 
     client.send(SetSilencer::default()).await?;
     client
-        .send(FociStm::new(1.0 * Hz, &points, FociStmOption::default()))
+        .send(FociStm::new(
+            SamplingConfig::from_freq(1.0 * Hz * points.len() as f32)?,
+            &points,
+            FociStmOption::default(),
+        ))
         .await?;
 
     println!("running a 1 Hz circular foci STM — press Ctrl+C to stop");

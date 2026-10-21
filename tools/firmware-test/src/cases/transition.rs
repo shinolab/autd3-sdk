@@ -11,7 +11,9 @@ use autd3_rs::value::{
 use autd3_rs_modulation::{SineOption, constant, modulation_buffer, sine};
 
 use crate::Ctx;
-use crate::cases::pattern_util::{POINT_NUM, activate_pattern_bank, circle_foci, write_foci_bank};
+use crate::cases::pattern_util::{
+    POINT_NUM, activate_pattern_bank, circle_foci, stm_sampling, write_foci_bank,
+};
 use crate::io::wait_enter;
 
 pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
@@ -30,7 +32,11 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
         ctx.client.geometry(),
         (
             SetSilencer::disable(),
-            FociStm::new(0.5 * Hz, &foci, FociStmOption::default()),
+            FociStm::new(
+                stm_sampling(0.5 * Hz, foci.len())?,
+                &foci,
+                FociStmOption::default(),
+            ),
         ),
     )?)
     .await?;
@@ -39,7 +45,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     write_foci_bank(
         ctx,
         PatternBank::B1,
-        0.5 * Hz,
+        stm_sampling(0.5 * Hz, reversed.len())?,
         &reversed,
         LoopBehavior::ONCE,
     )
@@ -58,7 +64,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     write_foci_bank(
         ctx,
         PatternBank::B1,
-        0.5 * Hz,
+        stm_sampling(0.5 * Hz, reversed.len())?,
         &reversed,
         LoopBehavior::ONCE,
     )
@@ -101,10 +107,14 @@ async fn ext_square(ctx: &Ctx<'_>, center: Point3<f32>) -> Result<()> {
         .await?;
     let square_a = vec![vertex(center, 30.0, 0.0), vertex(center, 0.0, 30.0)];
     let square_b = vec![vertex(center, -30.0, 0.0), vertex(center, 0.0, -30.0)];
-    ctx.send(FociStm::new(0.5 * Hz, &square_a, FociStmOption::default()))
-        .await?;
     ctx.send(FociStm::new(
-        0.5 * Hz,
+        stm_sampling(0.5 * Hz, square_a.len())?,
+        &square_a,
+        FociStmOption::default(),
+    ))
+    .await?;
+    ctx.send(FociStm::new(
+        stm_sampling(0.5 * Hz, square_b.len())?,
         &square_b,
         FociStmOption {
             bank: PatternBank::B1,

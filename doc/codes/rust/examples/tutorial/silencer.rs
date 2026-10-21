@@ -8,7 +8,7 @@ use autd3_rs::commands::{
 };
 use autd3_rs::geometry::{Autd3, Geometry, Vector3, offset};
 use autd3_rs::units::{Hz, mm};
-use autd3_rs::value::{ControlPoint, ControlPoints, Intensity};
+use autd3_rs::value::{ControlPoint, ControlPoints, Intensity, SamplingConfig};
 use autd3_rs::Client;
 use autd3_rs::udp::TransportOption;
 
@@ -33,7 +33,7 @@ async fn main() -> Result<()> {
         .collect();
     client.send(SetSilencer::disable()).await?;
     client.send(FociStm::new(
-        50.0 * Hz,
+        SamplingConfig::from_freq(50.0 * Hz * foci.len() as f32)?,
         &foci,
         FociStmOption::default(),
     )).await?;
@@ -49,7 +49,7 @@ async fn main() -> Result<()> {
         .collect();
     client.send(SetSilencer::default()).await?;
     client.send(FociStm::new(
-        50.0 * Hz,
+        SamplingConfig::from_freq(50.0 * Hz * foci.len() as f32)?,
         &foci,
         FociStmOption::default(),
     )).await?;
@@ -68,7 +68,8 @@ async fn main() -> Result<()> {
         phase: Duration::from_micros(500),
         strict_mode: true,
     })).await?;
-    client.send(FociStm::new(50.0 * Hz, &foci, FociStmOption::default())).await?;
+    let config = SamplingConfig::from_freq(50.0 * Hz * foci.len() as f32)?;
+    client.send(FociStm::new(config, &foci, FociStmOption::default())).await?;
     // ANCHOR_END: workaround
 
     client.close().await?;

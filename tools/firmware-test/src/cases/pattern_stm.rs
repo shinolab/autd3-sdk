@@ -13,7 +13,8 @@ use autd3_rs_modulation::{constant, modulation_buffer};
 use crate::Ctx;
 use crate::cases::pattern_util::{
     Buffers, POINT_NUM, RADIUS_MM, activate_pattern_bank, buffers,
-    expect_transition_mode_rejections, focus_at, report_fpga_state, write_pattern_stm_bank,
+    expect_transition_mode_rejections, focus_at, report_fpga_state, stm_sampling,
+    write_pattern_stm_bank,
 };
 use crate::io::wait_enter;
 
@@ -48,7 +49,7 @@ async fn send_stm(
         (
             SetSilencer::default(),
             PatternStm::new(
-                config * Hz,
+                stm_sampling(config * Hz, phases.len())?,
                 &phases,
                 &intensities,
                 PatternStmOption {
@@ -88,19 +89,27 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     let mut rev = patterns.clone();
     rev.reverse();
     rev[POINT_NUM - 1] = buffers(ctx.geometry, Intensity::MIN);
-    write_pattern_stm_bank(ctx, PatternBank::B1, 0.5 * Hz, &rev, LoopBehavior::ONCE).await?;
+    write_pattern_stm_bank(
+        ctx,
+        PatternBank::B1,
+        stm_sampling(0.5 * Hz, rev.len())?,
+        &rev,
+        LoopBehavior::ONCE,
+    )
+    .await?;
     wait_enter("Nothing changed. Press Enter when the focus reaches the device's left edge").await;
     activate_pattern_bank(ctx, PatternBank::B1, TransitionMode::SyncIdx).await?;
     wait_enter("The trajectory reverses at the right edge, then stops after one cycle").await;
 
     let (phases, intensities) = split(&patterns);
+    let config = stm_sampling(0.5 * Hz, phases.len())?;
     expect_transition_mode_rejections(ctx, "PatternSTM", |loop_behavior, transition_mode| {
         Frames::encode(
             ctx.client.geometry(),
             (
                 SetSilencer::default(),
                 PatternStm::new(
-                    0.5 * Hz,
+                    config,
                     &phases,
                     &intensities,
                     PatternStmOption {

@@ -1,7 +1,7 @@
 use autd3_rs::commands::{Clear, PatternStm, PatternStmOption, PhaseDepth, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
-use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, TransitionMode};
+use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode};
 use autd3_rs::Client;
 use autd3_rs::udp::TransportOption;
 use autd3_rs_pattern::{focus, wavelength};
@@ -33,7 +33,7 @@ async fn main() -> anyhow::Result<()> {
         })
         .collect::<Vec<_>>();
     client.send(PatternStm::new(
-        1.0 * Hz,
+        SamplingConfig::from_freq(1.0 * Hz * patterns.len() as f32)?,
         &patterns,
         Intensity::MAX,
         PatternStmOption {

@@ -5,8 +5,7 @@ use anyhow::Result;
 
 use autd3_rs::commands::{
     ActivateModulationBank, ActivatePatternBank, ConfigFociStm, ConfigModulation, ConfigPattern,
-    Modulation, Pattern, SetSilencer, StmConfig, WriteFociBuffer, WriteModulationBuffer,
-    WritePatternBuffer,
+    Modulation, Pattern, SetSilencer, WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer,
 };
 use autd3_rs::geometry::{Geometry, Point3, Vector3, offset};
 use autd3_rs::units::{m, mm, s};
@@ -14,7 +13,7 @@ use autd3_rs::value::{
     ControlPoint, ControlPoints, Intensity, LoopBehavior, ModulationBank, PatternBank, Phase,
     SamplingConfig, TransitionMode,
 };
-use autd3_rs::{Error, Frames, Velocity};
+use autd3_rs::{Error, Frames, Freq, Velocity};
 use autd3_rs_pattern::{focus, set_intensity, wavelength};
 
 use crate::Ctx;
@@ -262,15 +261,18 @@ pub(crate) async fn activate_mod_bank(
     .await
 }
 
+pub(crate) fn stm_sampling(loop_freq: Freq<f32>, size: usize) -> Result<SamplingConfig> {
+    Ok(SamplingConfig::from_freq(loop_freq * size as f32)?)
+}
+
 pub(crate) async fn write_foci_bank(
     ctx: &Ctx<'_>,
     bank: PatternBank,
-    config: impl Into<StmConfig>,
+    config: SamplingConfig,
     points: &[ControlPoints<1>],
     loop_behavior: LoopBehavior,
 ) -> Result<()> {
     let size = points.len();
-    let config = config.into().into_sampling_config(size);
     ctx.send_frames(&Frames::encode(
         ctx.client.geometry(),
         (
@@ -295,12 +297,11 @@ pub(crate) async fn write_foci_bank(
 pub(crate) async fn write_pattern_stm_bank(
     ctx: &Ctx<'_>,
     bank: PatternBank,
-    config: impl Into<StmConfig>,
+    config: SamplingConfig,
     patterns: &[Buffers],
     loop_behavior: LoopBehavior,
 ) -> Result<()> {
     let size = patterns.len();
-    let config = config.into().into_sampling_config(size);
     for (index, (phases, intensities)) in patterns.iter().enumerate() {
         ctx.send(WritePatternBuffer::new(bank, index, phases, intensities))
             .await?;

@@ -34,11 +34,11 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     let mut static_ff = modulation_buffer();
     constant(0xFF, &mut static_ff);
 
-    let mut table = [PulseWidth::from_duty(0.5); PWE_TABLE_SIZE];
-    table[0] = PulseWidth::from_duty(6.25 / 100.0);
-    table[1] = PulseWidth::from_duty(12.5 / 100.0);
-    table[2] = PulseWidth::from_duty(18.75 / 100.0);
-    table[3] = PulseWidth::from_duty(25.0 / 100.0);
+    let mut table = [PulseWidth::from_duty(0.5)?; PWE_TABLE_SIZE];
+    table[0] = PulseWidth::from_duty(6.25 / 100.0)?;
+    table[1] = PulseWidth::from_duty(12.5 / 100.0)?;
+    table[2] = PulseWidth::from_duty(18.75 / 100.0)?;
+    table[3] = PulseWidth::from_duty(25.0 / 100.0)?;
     ctx.send(SetPulseWidthTable { table: &table }).await?;
 
     let em = drive_pair(ctx, (0, 1), (2, 3));
