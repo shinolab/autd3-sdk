@@ -164,6 +164,9 @@ impl Scan {
         if is_excluded(path) || source.is_some_and(is_generated) {
             return;
         }
+        let source_lines: Vec<&str> = source
+            .map(|source| source.lines().collect())
+            .unwrap_or_default();
         for info in &document.symbols {
             let Some(&line) = lines.get(info.symbol.as_str()) else {
                 continue;
@@ -171,6 +174,13 @@ impl Scan {
             let Some(signature) = public_signature(info) else {
                 continue;
             };
+            let definition_line = source_lines.get(line).copied().unwrap_or_default();
+            if is_macro_invocation(definition_line)
+                || (info.kind.enum_value_or_default() == Kind::EnumMember
+                    && definition_line.contains("#[from]"))
+            {
+                continue;
+            }
             let Some((qualified, owner)) = qualified_name(&info.symbol) else {
                 continue;
             };
@@ -204,7 +214,8 @@ fn public_signature(info: &SymbolInformation) -> Option<String> {
         return None;
     }
     let signature = info.signature_documentation.as_ref()?.text.trim();
-    (signature.starts_with("pub ") && !signature.contains("extern \"C\""))
+    let variant = info.kind.enum_value_or_default() == Kind::EnumMember;
+    ((variant || signature.starts_with("pub ")) && !signature.contains("extern \"C\""))
         .then(|| signature.lines().next().unwrap_or_default().to_string())
 }
 
@@ -271,6 +282,16 @@ fn implemented_trait_method(symbol: &str) -> Option<(String, String)> {
         }
         _ => None,
     }
+}
+
+fn is_macro_invocation(line: &str) -> bool {
+    line.match_indices('!').any(|(index, _)| {
+        line[..index]
+            .chars()
+            .next_back()
+            .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_')
+            && line[index + 1..].trim_start().starts_with(['(', '{', '['])
+    })
 }
 
 fn is_generated(source: &str) -> bool {
