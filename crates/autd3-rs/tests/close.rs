@@ -91,33 +91,6 @@ async fn everything_fails_with_closed_after_a_close() {
 
 #[tokio::test]
 #[ignore = "depends on real time"]
-async fn a_second_close_succeeds_without_sending_the_stop_frames_again() {
-    let (emulator, client) = open(1);
-    client.close().await.unwrap();
-    let sent = client.bus_stats().frames();
-    emulator.with_device(0, |d| assert!(!d.fpga().force_fan()));
-
-    client.close().await.unwrap();
-    client.close().await.unwrap();
-
-    assert_eq!(client.bus_stats().frames(), sent);
-}
-
-#[tokio::test]
-#[ignore = "depends on real time"]
-async fn concurrent_closes_send_the_stop_frames_once() {
-    let (_emulator, client) = open(2);
-    let frames = client.bus_stats().frames();
-
-    let (first, second) = tokio::join!(client.close(), client.close());
-
-    first.unwrap();
-    second.unwrap();
-    assert_eq!(client.bus_stats().frames() - frames, stop_frames(&client));
-}
-
-#[tokio::test]
-#[ignore = "depends on real time"]
 async fn a_frame_still_in_flight_resolves_with_closed_when_the_client_closes() {
     let emulator = emulator(1);
     let client = open_with(&emulator, &patient_option(&emulator));
@@ -166,7 +139,20 @@ async fn dropping_the_client_closes_the_connection_without_sending_the_stop_fram
 
 #[tokio::test]
 #[ignore = "depends on real time"]
-async fn a_close_whose_stop_frame_fails_leaves_the_client_open_for_another_try() {
+async fn a_second_close_reports_the_closed_client() {
+    let (emulator, client) = open(1);
+    client.close().await.unwrap();
+    let sent = client.bus_stats().frames();
+    emulator.with_device(0, |d| assert!(!d.fpga().force_fan()));
+
+    assert!(matches!(client.close().await, Err(Error::Closed)));
+
+    assert_eq!(client.bus_stats().frames(), sent);
+}
+
+#[tokio::test]
+#[ignore = "depends on real time"]
+async fn a_close_whose_stop_frame_fails_still_closes_the_client() {
     let (emulator, client) = open(1);
     emit(&client).await;
     let checker = client.state_checker();
@@ -175,15 +161,7 @@ async fn a_close_whose_stop_frame_fails_leaves_the_client_open_for_another_try()
     let failed = client.close().await;
 
     assert!(matches!(failed, Err(Error::Timeout { .. })));
-    assert!(checker.check().is_ok());
-    client.send(Nop).await.unwrap();
-
-    client.close().await.unwrap();
-
     assert!(matches!(checker.check(), Err(UdpError::Closed)));
-    assert!(
-        intensities(&emulator, 0)
-            .iter()
-            .all(|&i| i == Intensity::MIN)
-    );
+    assert!(matches!(client.send(Nop).await, Err(Error::Closed)));
+    assert!(matches!(client.close().await, Err(Error::Closed)));
 }

@@ -111,8 +111,9 @@ impl Client {
     }
 
     pub async fn close(&self) -> Result<(), Error> {
-        self.controller.close().await?;
-        self.join()
+        let stopped = self.controller.close().await;
+        let joined = self.join();
+        stopped.and(joined)
     }
 
     fn join(&self) -> Result<(), Error> {
