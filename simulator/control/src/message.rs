@@ -42,6 +42,12 @@ pub enum DecodeError {
     UnsupportedVersion { got: u8 },
     #[error("the message body of {0} bytes is not a whole number of devices")]
     Truncated(usize),
+    #[error(transparent)]
+    Geometry(#[from] GeometryError),
+}
+
+#[derive(Debug, Error, PartialEq)]
+pub enum GeometryError {
     #[error("the number of devices must be 1..={MAX_DEVICES}, but {0} were given")]
     DeviceCountOutOfRange(usize),
     #[error("device {device} has a non-finite origin or rotation")]
@@ -75,25 +81,32 @@ pub fn decode_geometry(bytes: &[u8]) -> Result<Geometry, DecodeError> {
     if !rest.is_empty() {
         return Err(DecodeError::Truncated(body.len()));
     }
+    Ok(build_geometry(devices.iter().map(|raw| {
+        let (values, _) = raw.as_chunks::<4>();
+        let v: [f32; 7] = core::array::from_fn(|i| f32::from_le_bytes(values[i]));
+        ([v[0], v[1], v[2]], [v[3], v[4], v[5], v[6]])
+    }))?)
+}
+
+pub fn build_geometry(
+    devices: impl ExactSizeIterator<Item = ([f32; 3], [f32; 4])>,
+) -> Result<Geometry, GeometryError> {
     if !(1..=MAX_DEVICES).contains(&devices.len()) {
-        return Err(DecodeError::DeviceCountOutOfRange(devices.len()));
+        return Err(GeometryError::DeviceCountOutOfRange(devices.len()));
     }
     devices
-        .iter()
         .enumerate()
-        .map(|(device, raw)| {
-            let (values, _) = raw.as_chunks::<4>();
-            let v: [f32; 7] = core::array::from_fn(|i| f32::from_le_bytes(values[i]));
-            if v.iter().any(|x| !x.is_finite()) {
-                return Err(DecodeError::NonFinite { device });
+        .map(|(device, (origin, [w, x, y, z]))| {
+            if origin.iter().chain(&[w, x, y, z]).any(|v| !v.is_finite()) {
+                return Err(GeometryError::NonFinite { device });
             }
-            let rotation = Quaternion::new(v[3], v[4], v[5], v[6]);
+            let rotation = Quaternion::new(w, x, y, z);
             let norm = rotation.norm();
             if (norm - 1.0).abs() > Autd3::ROTATION_NORM_TOLERANCE {
-                return Err(DecodeError::RotationNotUnit { device, norm });
+                return Err(GeometryError::RotationNotUnit { device, norm });
             }
             Ok(Autd3::new(
-                Point3::new(v[0], v[1], v[2]),
+                Point3::from(origin),
                 UnitQuaternion::from_quaternion(rotation),
             ))
         })
@@ -193,7 +206,7 @@ mod tests {
     fn no_device_is_rejected() {
         assert_eq!(
             decode_geometry(&[VERSION]).unwrap_err(),
-            DecodeError::DeviceCountOutOfRange(0)
+            DecodeError::Geometry(GeometryError::DeviceCountOutOfRange(0))
         );
     }
 
@@ -202,7 +215,7 @@ mod tests {
         let geometry = Geometry::new(vec![Autd3::default(); MAX_DEVICES + 1]);
         assert_eq!(
             decode_geometry(&encode_geometry(&geometry)).unwrap_err(),
-            DecodeError::DeviceCountOutOfRange(MAX_DEVICES + 1)
+            DecodeError::Geometry(GeometryError::DeviceCountOutOfRange(MAX_DEVICES + 1))
         );
     }
 
@@ -223,7 +236,7 @@ mod tests {
         bytes[13..17].copy_from_slice(&2.0_f32.to_le_bytes());
         assert!(matches!(
             decode_geometry(&bytes).unwrap_err(),
-            DecodeError::RotationNotUnit { device: 0, .. }
+            DecodeError::Geometry(GeometryError::RotationNotUnit { device: 0, .. })
         ));
     }
 
@@ -233,8 +246,60 @@ mod tests {
         bytes[29..33].copy_from_slice(&f32::NAN.to_le_bytes());
         assert_eq!(
             decode_geometry(&bytes).unwrap_err(),
-            DecodeError::NonFinite { device: 1 }
+            DecodeError::Geometry(GeometryError::NonFinite { device: 1 })
         );
+    }
+
+    #[test]
+    fn a_built_geometry_places_each_device_by_its_origin_and_rotation() {
+        let geometry = build_geometry(
+            [
+                ([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]),
+                (
+                    [192.0, -10.5, 300.0],
+                    [
+                        core::f32::consts::FRAC_1_SQRT_2,
+                        0.0,
+                        core::f32::consts::FRAC_1_SQRT_2,
+                        0.0,
+                    ],
+                ),
+            ]
+            .into_iter(),
+        )
+        .unwrap();
+        let expected = sample();
+        assert_eq!(geometry.num_devices(), expected.num_devices());
+        for (expected, actual) in expected.iter().zip(geometry.iter()) {
+            approx::assert_abs_diff_eq!(expected.position(0), actual.position(0), epsilon = 1e-4);
+            approx::assert_abs_diff_eq!(
+                expected.rotation().angle_to(&actual.rotation()),
+                0.0,
+                epsilon = 1e-4
+            );
+        }
+    }
+
+    #[test]
+    fn building_checks_the_same_rules_as_decoding() {
+        let identity = ([0.0; 3], [1.0, 0.0, 0.0, 0.0]);
+        assert_eq!(
+            build_geometry(core::iter::empty()).unwrap_err(),
+            GeometryError::DeviceCountOutOfRange(0)
+        );
+        assert_eq!(
+            build_geometry(vec![identity; MAX_DEVICES + 1].into_iter()).unwrap_err(),
+            GeometryError::DeviceCountOutOfRange(MAX_DEVICES + 1)
+        );
+        assert_eq!(
+            build_geometry([identity, ([f32::INFINITY, 0.0, 0.0], identity.1)].into_iter())
+                .unwrap_err(),
+            GeometryError::NonFinite { device: 1 }
+        );
+        assert!(matches!(
+            build_geometry([([0.0; 3], [0.5, 0.0, 0.0, 0.0])].into_iter()).unwrap_err(),
+            GeometryError::RotationNotUnit { device: 0, .. }
+        ));
     }
 
     #[test]

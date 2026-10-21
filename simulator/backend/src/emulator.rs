@@ -3,7 +3,16 @@ use core::f32::consts::PI;
 use autd3_cpu_wire::fpga_params::GpioOutType;
 use autd3_rs::geometry::Geometry;
 use autd3_rs_firmware_emulator::{Device as EmuDevice, FpgaEmulator};
-use autd3_rs_simulator_protocol::{DeviceState, ServerMsg, TransState, TransducerInfo};
+use autd3_rs_simulator_control::{GeometryError, build_geometry};
+use autd3_rs_simulator_protocol::{DevicePose, DeviceState, ServerMsg, TransState, TransducerInfo};
+
+const _: () = assert!(autd3_rs_simulator_protocol::MAX_DEVICES == autd3_rs::MAX_DEVICES);
+const _: () =
+    assert!(autd3_rs_simulator_protocol::DEVICE_WIDTH == autd3_rs::geometry::Autd3::DEVICE_WIDTH);
+const _: () = assert!(
+    autd3_rs_simulator_protocol::ROTATION_NORM_TOLERANCE
+        == autd3_rs::geometry::Autd3::ROTATION_NORM_TOLERANCE
+);
 
 const ULTRASOUND_PERIOD_COUNT: f32 = 512.0;
 const GPIO_SAMPLES: usize = 512;
@@ -82,7 +91,28 @@ pub(crate) fn geometry_msg(geometry: &Geometry) -> ServerMsg {
                 })
         })
         .collect();
-    ServerMsg::Geometry { transducers }
+    ServerMsg::Geometry {
+        transducers,
+        devices: device_poses(geometry),
+    }
+}
+
+pub(crate) fn device_poses(geometry: &Geometry) -> Vec<DevicePose> {
+    geometry
+        .iter()
+        .map(|dev| {
+            let origin = dev.position(0);
+            let rotation = dev.rotation();
+            DevicePose {
+                origin: [origin.x, origin.y, origin.z],
+                rotation: [rotation.w, rotation.i, rotation.j, rotation.k],
+            }
+        })
+        .collect()
+}
+
+pub(crate) fn geometry_from_poses(poses: &[DevicePose]) -> Result<Geometry, GeometryError> {
+    build_geometry(poses.iter().map(|pose| (pose.origin, pose.rotation)))
 }
 
 pub(crate) fn extract_device_states(devices: &[&EmuDevice]) -> Vec<DeviceState> {
@@ -311,9 +341,14 @@ mod tests {
             Autd3::default(),
             Autd3::new(Point3::new(0.0, 200.0, 0.0), UnitQuaternion::identity()),
         ]);
-        let ServerMsg::Geometry { transducers } = geometry_msg(&geometry) else {
+        let ServerMsg::Geometry {
+            transducers,
+            devices,
+        } = geometry_msg(&geometry)
+        else {
             panic!("expected a geometry message");
         };
+        assert_eq!(devices, device_poses(&geometry));
         assert_eq!(transducers.len(), 2 * Autd3::NUM_TRANSDUCERS);
         let second = geometry.iter().nth(1).unwrap().position(0);
         assert_relative_eq!(
@@ -321,6 +356,46 @@ mod tests {
             [second.x, second.y, second.z][..]
         );
         assert_relative_eq!(transducers[0].dir[..], [0.0, 0.0, 1.0][..]);
+    }
+
+    #[test]
+    fn device_poses_round_trip_through_the_geometry() {
+        let geometry = Geometry::new(vec![
+            Autd3::default(),
+            Autd3::new(
+                Point3::new(192.0, -10.5, 300.0),
+                UnitQuaternion::from_euler_angles(0.3, -0.7, 1.1),
+            ),
+        ]);
+        let poses = device_poses(&geometry);
+        assert_eq!(poses[0].origin, [0.0; 3]);
+        assert_eq!(poses[0].rotation, [1.0, 0.0, 0.0, 0.0]);
+        let restored = geometry_from_poses(&poses).unwrap();
+        assert_eq!(restored.num_devices(), 2);
+        for (expected, actual) in geometry.iter().zip(restored.iter()) {
+            assert_relative_eq!(expected.position(0), actual.position(0), epsilon = 1e-4);
+            assert_relative_eq!(
+                expected.rotation().angle_to(&actual.rotation()),
+                0.0,
+                epsilon = 1e-4
+            );
+        }
+    }
+
+    #[test]
+    fn an_invalid_pose_is_refused() {
+        let pose = DevicePose {
+            origin: [0.0; 3],
+            rotation: [2.0, 0.0, 0.0, 0.0],
+        };
+        assert!(matches!(
+            geometry_from_poses(&[pose]),
+            Err(GeometryError::RotationNotUnit { device: 0, .. })
+        ));
+        assert_eq!(
+            geometry_from_poses(&[]).unwrap_err(),
+            GeometryError::DeviceCountOutOfRange(0)
+        );
     }
 
     #[test]

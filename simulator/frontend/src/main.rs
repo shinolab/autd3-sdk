@@ -1,4 +1,5 @@
 mod context;
+mod geometry;
 mod panels;
 mod render;
 mod settings;
@@ -14,7 +15,7 @@ use autd3_rs_simulator_protocol::{ClientMsg, ServerMsg};
 
 use crate::context::use_app_ctx;
 use crate::panels::{
-    AboutPanel, CameraPanel, EnvironmentPanel, SettingsPanel, SlicePanel, StatePanel,
+    AboutPanel, CameraPanel, EnvironmentPanel, GeometryPanel, SettingsPanel, SlicePanel, StatePanel,
 };
 use crate::render::{DragUpdate, GizmoMode, Renderer};
 use crate::settings::Settings;
@@ -77,6 +78,7 @@ fn App() -> Element {
     let renderer = ctx.renderer.clone();
     let control_rx = ctx.control_rx.clone();
     let control_tx = ctx.control_tx.clone();
+    let unanswered_geometries = ctx.unanswered_geometries.clone();
     let mut dragging = ctx.dragging;
     let mut gizmo_drag = ctx.gizmo_drag;
     let mut last_pos = ctx.last_pos;
@@ -89,6 +91,7 @@ fn App() -> Element {
     let mut cam_pos = ctx.cam_pos;
     let mut cam_rot = ctx.cam_rot;
     let mut device_states = ctx.device_states;
+    let mut geometry_draft = ctx.geometry_draft;
     let playing = ctx.playing;
 
     let gizmo_on = ctx.gizmo_on;
@@ -122,6 +125,7 @@ fn App() -> Element {
             let renderer = renderer.clone();
             let control_rx = control_rx.clone();
             let control_tx = control_tx.clone();
+            let unanswered_geometries = unanswered_geometries.clone();
             async move {
                 let ws = match WebSocket::open(&ws_url()) {
                     Ok(ws) => ws,
@@ -172,7 +176,17 @@ fn App() -> Element {
 
                 while let Some(Ok(Message::Text(text))) = ws_read.next().await {
                     match serde_json::from_str::<ServerMsg>(&text) {
-                        Ok(ServerMsg::Geometry { transducers }) => {
+                        Ok(ServerMsg::Geometry {
+                            transducers,
+                            devices,
+                        }) => {
+                            if unanswered_geometries
+                                .borrow_mut()
+                                .consume_broadcast_is_current(&devices)
+                            {
+                                let merged = geometry::merge(&geometry_draft.peek(), &devices);
+                                geometry_draft.set(merged);
+                            }
                             let positions: Vec<[f32; 4]> = transducers
                                 .iter()
                                 .map(|t| [t.pos[0], t.pos[1], t.pos[2], 0.0])
@@ -330,6 +344,7 @@ fn App() -> Element {
             }
             div { class: "max-h-[45vh] shrink-0 overflow-y-auto",
                 match active_tab() {
+                    Tab::Geometry => rsx! { GeometryPanel {} },
                     Tab::Slice => rsx! { SlicePanel {} },
                     Tab::Camera => rsx! { CameraPanel {} },
                     Tab::Field => rsx! { EnvironmentPanel {} },

@@ -6,12 +6,14 @@ use futures_channel::mpsc::{UnboundedReceiver, UnboundedSender, unbounded};
 
 use autd3_rs_simulator_protocol::{ClientMsg, DeviceState};
 
+use crate::geometry::{DeviceDraft, UnansweredGeometries};
 use crate::render::Renderer;
 use crate::settings::Settings;
 use crate::tabs::Tab;
 
 pub(crate) type SharedRenderer = Rc<RefCell<Option<Renderer>>>;
 pub(crate) type ControlRx = Rc<RefCell<Option<UnboundedReceiver<ClientMsg>>>>;
+pub(crate) type SharedUnansweredGeometries = Rc<RefCell<UnansweredGeometries>>;
 
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) enum Field {
@@ -26,10 +28,12 @@ pub(crate) struct Ctx {
     pub renderer: SharedRenderer,
     pub control_rx: ControlRx,
     pub control_tx: UnboundedSender<ClientMsg>,
+    pub unanswered_geometries: SharedUnansweredGeometries,
 
     pub connected: Signal<bool>,
     pub error: Signal<Option<String>>,
     pub device_states: Signal<Vec<DeviceState>>,
+    pub geometry_draft: Signal<Vec<DeviceDraft>>,
     pub active_tab: Signal<Tab>,
 
     pub dragging: Signal<bool>,
@@ -63,6 +67,8 @@ pub(crate) struct Ctx {
 
 pub(crate) fn use_app_ctx(saved: Settings) -> Ctx {
     let renderer: SharedRenderer = use_hook(|| Rc::new(RefCell::new(None)));
+    let unanswered_geometries: SharedUnansweredGeometries =
+        use_hook(|| Rc::new(RefCell::new(UnansweredGeometries::default())));
     let control: (UnboundedSender<ClientMsg>, ControlRx) = use_hook(|| {
         let (tx, rx) = unbounded::<ClientMsg>();
         (tx, Rc::new(RefCell::new(Some(rx))))
@@ -71,9 +77,11 @@ pub(crate) fn use_app_ctx(saved: Settings) -> Ctx {
         renderer,
         control_rx: control.1.clone(),
         control_tx: control.0.clone(),
+        unanswered_geometries,
         connected: use_signal(|| false),
         error: use_signal(|| None),
         device_states: use_signal(Vec::new),
+        geometry_draft: use_signal(Vec::new),
         active_tab: use_signal(|| Tab::Home),
         dragging: use_signal(|| false),
         gizmo_drag: use_signal(|| false),
