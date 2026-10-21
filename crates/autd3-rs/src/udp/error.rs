@@ -58,10 +58,6 @@ pub enum UdpError {
     InvalidSendRateLimit { value: f32, min: f32 },
     #[error("the number of devices must be 1..=128, but {0} was given")]
     InvalidDeviceCount(usize),
-    #[error("{expected} frames are needed (one per device), but {got} were given")]
-    FrameCountMismatch { expected: usize, got: usize },
-    #[error("a frame must be 6..=1448 bytes, but {0} bytes were given")]
-    InvalidFrameLength(usize),
     #[error("the frame could not be sent to device {device}: {source}")]
     Unsent {
         device: usize,
