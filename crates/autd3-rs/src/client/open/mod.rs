@@ -1,6 +1,5 @@
 mod enumerate;
 mod iface_probe;
-mod requester;
 
 use std::time::Instant;
 

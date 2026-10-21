@@ -10,8 +10,6 @@ pub enum UdpError {
     Io(#[from] std::io::Error),
     #[error("no interface has an AUTD3 device answering ReadUnitInfo")]
     NoInterfaceFound,
-    #[error("AUTD3 devices answered on several interfaces ({}); choose one with `iface`", .0.join(", "))]
-    AmbiguousInterface(Vec<String>),
     #[error("interface {0} does not exist or has no IPv6 link-local address")]
     InterfaceNotFound(String),
     #[error(

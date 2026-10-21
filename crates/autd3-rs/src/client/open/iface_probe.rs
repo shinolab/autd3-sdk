@@ -1,33 +1,34 @@
+use std::time::Instant;
+
 use autd3_cpu_wire::udp::Kind;
 use autd3_rs_core::Interface;
 
-use crate::udp::{Channel, ResolvedEndpoint, UdpError, link_local_interfaces};
+use crate::udp::{Channel, ControlResponse, ResolvedEndpoint, UdpError, link_local_interfaces};
 
-use super::requester::{REQUEST_REPLY_WAIT, Requester};
+use super::enumerate::REQUEST_REPLY_WAIT;
 
-fn devices_respond_at(endpoint: ResolvedEndpoint, name: &str) -> bool {
-    let result = (|| -> Result<bool, UdpError> {
-        let channel = Channel::open(endpoint.all_devices_dst, endpoint.scope_id, None, None)?;
-        Ok(Requester::new(&channel)
-            .request_once(
-                endpoint.all_devices_dst,
-                Kind::ReadUnitInfo,
-                &[],
-                REQUEST_REPLY_WAIT,
-            )?
-            .is_some())
-    })();
-    match result {
-        Ok(found) => found,
-        Err(e @ UdpError::UnsupportedVersion { .. }) => {
-            tracing::debug!(interface = %name, "an AUTD3 device answered: {e}");
-            true
-        }
-        Err(e) => {
-            tracing::debug!(interface = %name, "asking an interface for AUTD3 devices failed: {e}");
-            false
+fn devices_respond_at(endpoint: ResolvedEndpoint) -> Result<bool, UdpError> {
+    let channel = Channel::open(endpoint.all_devices_dst, endpoint.scope_id, None, None)?;
+    channel.send(
+        endpoint.all_devices_dst,
+        Kind::ReadUnitInfo,
+        0,
+        [&[], &[]],
+        None,
+        || {},
+    )?;
+    let deadline = Instant::now().checked_add(REQUEST_REPLY_WAIT);
+    while let Some(parsed) = channel.recv(deadline, |packet| {
+        ControlResponse::parse(packet, Kind::ReadUnitInfo, 0)
+    })? {
+        if matches!(
+            parsed,
+            Ok(Some(_)) | Err(UdpError::UnsupportedVersion { .. })
+        ) {
+            return Ok(true);
         }
     }
+    Ok(false)
 }
 
 pub(super) fn resolve(iface: &Interface) -> Result<ResolvedEndpoint, UdpError> {
@@ -44,43 +45,17 @@ pub(super) fn resolve(iface: &Interface) -> Result<ResolvedEndpoint, UdpError> {
 }
 
 fn resolve_auto() -> Result<ResolvedEndpoint, UdpError> {
-    let candidates = link_local_interfaces()?;
-    let answered: Vec<bool> = std::thread::scope(|s| {
-        let probes: Vec<_> = candidates
-            .iter()
-            .map(|c| {
-                s.spawn(move || {
-                    devices_respond_at(ResolvedEndpoint::all_nodes_on(c.scope_id), &c.name)
-                })
+    let found = link_local_interfaces()?
+        .into_iter()
+        .find(|c| {
+            devices_respond_at(ResolvedEndpoint::all_nodes_on(c.scope_id)).unwrap_or_else(|e| {
+                tracing::debug!(interface = %c.name, "asking an interface for AUTD3 devices failed: {e}");
+                false
             })
-            .collect();
-        probes
-            .into_iter()
-            .map(|probe| probe.join().unwrap_or(false))
-            .collect()
-    });
-    let answering: Vec<(String, ResolvedEndpoint)> = candidates
-        .iter()
-        .zip(answered)
-        .filter(|&(_, answered)| answered)
-        .map(|(c, _)| (c.name.clone(), ResolvedEndpoint::all_nodes_on(c.scope_id)))
-        .collect();
-    pick_sole_responder(answering)
-}
-
-fn pick_sole_responder(
-    answering: Vec<(String, ResolvedEndpoint)>,
-) -> Result<ResolvedEndpoint, UdpError> {
-    match answering.as_slice() {
-        [] => Err(UdpError::NoInterfaceFound),
-        [(name, target)] => {
-            tracing::info!(interface = %name, "found AUTD3 devices");
-            Ok(*target)
-        }
-        _ => Err(UdpError::AmbiguousInterface(
-            answering.into_iter().map(|(name, _)| name).collect(),
-        )),
-    }
+        })
+        .ok_or(UdpError::NoInterfaceFound)?;
+    tracing::info!(interface = %found.name, "found AUTD3 devices");
+    Ok(ResolvedEndpoint::all_nodes_on(found.scope_id))
 }
 
 #[cfg(test)]
@@ -101,33 +76,5 @@ mod tests {
                 scope_id: Some(7),
             }
         );
-    }
-
-    fn interface(name: &str, scope_id: u32) -> (String, ResolvedEndpoint) {
-        (name.to_owned(), ResolvedEndpoint::all_nodes_on(scope_id))
-    }
-
-    #[test]
-    fn auto_picks_the_interface_when_only_it_answers() {
-        assert_eq!(
-            pick_sole_responder(vec![interface("eth0", 3)]).unwrap(),
-            interface("eth0", 3).1
-        );
-    }
-
-    #[test]
-    fn auto_refuses_when_several_interfaces_answer() {
-        assert!(matches!(
-            pick_sole_responder(vec![interface("eth0", 3), interface("eth1", 4)]),
-            Err(UdpError::AmbiguousInterface(names)) if names == ["eth0", "eth1"]
-        ));
-    }
-
-    #[test]
-    fn auto_fails_when_nothing_answers() {
-        assert!(matches!(
-            pick_sole_responder(vec![]),
-            Err(UdpError::NoInterfaceFound)
-        ));
     }
 }
