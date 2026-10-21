@@ -1,4 +1,3 @@
-use std::hash::{BuildHasher, RandomState};
 use std::num::NonZeroU64;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -200,7 +199,6 @@ impl SessionState {
         num_devices: usize,
         timeouts: Timeouts,
         published_states: Arc<PublishedDeviceStates>,
-        msg_id_origin: u16,
         now: Instant,
     ) -> Self {
         Self {
@@ -211,7 +209,7 @@ impl SessionState {
             recovery_waiter: None,
             network_failure: None,
             is_closed: false,
-            last_msg_id: msg_id_origin,
+            last_msg_id: 0,
             timeouts,
         }
     }
@@ -471,11 +469,6 @@ enum Incoming {
     Irrelevant,
 }
 
-fn session_msg_id_origin() -> u16 {
-    let [low, high, ..] = RandomState::new().hash_one(()).to_le_bytes();
-    u16::from_le_bytes([low, high])
-}
-
 pub(crate) struct Session {
     channel: Channel,
     state: Mutex<SessionState>,
@@ -503,7 +496,6 @@ impl Session {
                 num_devices,
                 timeouts,
                 Arc::clone(&published_states),
-                session_msg_id_origin(),
                 Instant::now(),
             )),
             stop_requested: AtomicBool::new(false),
@@ -908,7 +900,6 @@ mod tests {
             num_devices,
             TIMEOUTS,
             PublishedDeviceStates::new(num_devices),
-            0,
             now,
         )
     }
@@ -1277,7 +1268,7 @@ mod tests {
         let now = Instant::now();
         let published_states = PublishedDeviceStates::new(1);
         let checker = StateChecker::new(Arc::clone(&published_states));
-        let mut state = SessionState::new(1, TIMEOUTS, published_states, 0, now);
+        let mut state = SessionState::new(1, TIMEOUTS, published_states, now);
         assert!(checker.check().is_ok());
         state.close(None).resolve();
         assert!(matches!(checker.check(), Err(UdpError::Closed)));
