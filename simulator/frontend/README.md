@@ -9,11 +9,9 @@ The backend emulates AUTD3 devices over UDP on the host (IPv6 loopback): it answ
 The browser UI is on a separate port (default **8081**).
 
 The client library does not know about the simulator: a client on the same host connects with `Interface::Addr([::1]:port)`
-(`Interface::Auto` does not look at the loopback). To change the number or placement of the emulated devices, send the geometry
-to the control port (`[::1]:port + 1`, `[::1]:44337` by default) first with `autd3-rs-simulator-control` (`simulator/control`):
+(`Interface::Auto` does not look at the loopback):
 
 ```rust
-autd3_rs_simulator_control::send_geometry(44336, &geometry, Duration::from_secs(5))?;
 let option = TransportOption {
     iface: Interface::Addr("[::1]:44336".parse()?),
     ..Default::default()
@@ -21,13 +19,21 @@ let option = TransportOption {
 let client = Client::open(&geometry, &option)?;
 ```
 
-The simulator rebuilds the emulated devices and the view to match. Until a geometry has been sent, a single AUTD3 at the origin is shown.
+The number and placement of the emulated devices are set only in the **Geometry** tab of the UI; the client does not send them.
+Make them match the client's geometry before opening it (`open` fails on another number of devices).
+Add (appended one device width along the last device's +x), remove and reorder the devices, and enter each origin (mm) and orientation (ZYZ Euler angles, degrees).
+Device n in the tab is the n-th device of the daisy chain (`geometry[n]` of the client).
+"Save to file" downloads the geometry as JSON (an array of `{ "origin": [x, y, z], "rotation": [w, x, y, z] }`, the same format as the saved `geometry.json`) and "Load from file" loads such a file (invalid files are refused with the reason shown).
+Changing the number of devices rebuilds the emulated devices (reopen the client); changing only the placement, orientation or order keeps their state (the state stays with the n-th position).
+Every open browser tab shows the same geometry.
+The geometry is saved to `autd3-simulator/geometry.json` under the OS configuration directory and restored at the next start;
+without a saved (or with a broken) file, the simulator starts with a single AUTD3 at the origin and logs a warning.
 
 ```bash
 # 1) Start the simulator (in autd3-sdk/)
 cargo xtask simulator run --open                        # UI=8081, devices on [::1]:44336
 
-# 2) Connect a client (in another terminal; example that sends a focus)
+# 2) Connect a client (in another terminal; example that sends a focus to one device)
 cargo xtask rust example focus_sine -- --simulator
 ```
 
@@ -45,7 +51,7 @@ npm install
 cargo xtask simulator run
 cargo xtask simulator run --open          # open the browser automatically after start
 cargo xtask simulator run --http-port 9000  # serve the UI on another port
-cargo xtask simulator run --port 50000      # devices on [::1]:50000, control on [::1]:50001
+cargo xtask simulator run --port 50000      # devices on [::1]:50000
 ```
 
 ## Browser requirements

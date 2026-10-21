@@ -20,7 +20,7 @@ import CodeTabs from "@components/CodeTabs.astro";
 
 クライアントは Simulator と同じホストで動かす必要がある.
 
-Simulator は既定でポート 44336 (制御用に次の 44337 も) で待ち受ける. ポートはコンソールの Simulator タブの「UDP port」で変えられる.
+Simulator は既定でポート 44336 で待ち受ける. ポートはコンソールの Simulator タブの「UDP port」で変えられる.
 
 クライアントライブラリは Simulator を特別扱いしない. [`TransportOption`](/autd3-sdk/api/basics/transport-option/) の `iface` に `Addr(..)` で Simulator のアドレス `[::1]:44336` を指定してつなぐ (`Auto` は Simulator を探さない).
 
@@ -32,17 +32,18 @@ Simulator は既定でポート 44336 (制御用に次の 44337 も) で待ち�
 
 ## ジオメトリ
 
-Simulator は起動直後, 原点に 1 台のデバイスを置いている. 台数・配置を変えるには, クライアントを開く前に制御ポート (`[::1]:44337`) へジオメトリを送る.
-Simulator は受け取った台数・配置でデバイスを作り直す (それまでの状態は消える).
+台数・配置は Simulator の画面 (Geometry タブ) で設定する. クライアントからジオメトリを送る手段は無い. クライアントを開く前に, Geometry タブの台数と配置をクライアントのジオメトリに合わせておく.
 
-Rust では `autd3-rs-simulator-control` crate (リポジトリの `simulator/control`. crates.io には未公開) の `send_geometry` を使う.
+Geometry タブには, デバイスがデイジーチェーンの順に並ぶ. n 番目のデバイスがクライアントの `geometry[n]` にあたる.
 
-```rust
-autd3_rs_simulator_control::send_geometry(44336, &geometry, Duration::from_secs(5))?;
-let client = Client::open(&geometry, &option)?;
-```
+- 「Add device」で末尾にデバイスを足す (最後のデバイスの +x 方向に 1 台分ずらした位置)
+- 「Up」「Down」で順番を入れ替え, 「Remove」で削除する
+- 各デバイスの原点 (mm) と姿勢 (ZYZ オイラー角, 度) を入力する
+- 「Save to file」で今のジオメトリを JSON ファイル (`geometry.json`) に保存し, 「Load from file」で読み込む. 読めないファイル・不正な内容 (台数が 1〜128 でない, 回転が単位四元数でない など) は読み込まず, 理由を表示する
 
-ほかの言語では, 次の UDP データグラムを制御ポートへ送り, 返信を待つ.
+台数がクライアントのジオメトリと違うと `open` は失敗する. 配置がずれていると, クライアントが計算した位相と表示される音場が食い違う.
 
-- 要求: 版数 `1` (1 バイト) に続けて, デバイスごとに原点 `x, y, z` と回転の四元数 `w, x, y, z` (各 `f32` リトルエンディアン, 1 台 28 バイト)
-- 返信: `[版数, 状態]` の 2 バイト. 状態 `0` が成功
+台数を変えるとデバイスは作り直される (それまでの状態は消える) ので, クライアントを開き直す. 台数を変えずに配置・姿勢・順番だけを変えた場合は, デバイスの状態はそのままで表示だけが新しい配置に追従する (状態は n 番目という位置に付いたままで, 並べ替えたデバイスには付いていかない).
+複数のブラウザタブで開いていても, 編集結果は全タブに反映される.
+
+設定したジオメトリは保存され, 次に Simulator を起動したときに復元される (保存先は OS の設定ディレクトリ配下の `autd3-simulator/geometry.json`. 保存が無ければ原点に 1 台).

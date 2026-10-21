@@ -1,5 +1,6 @@
 mod control;
 mod emulator;
+mod geometry_file;
 #[cfg(test)]
 mod harness;
 mod server;
@@ -11,7 +12,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
-use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 use autd3_rs_simulator_control::{DEFAULT_PORT, control_port};
 use autd3_rs_simulator_protocol::ServerMsg;
@@ -55,9 +55,20 @@ async fn main() -> Result<()> {
             "--port must be within 1..=65534 (the control port is port + 1), but {port} was given"
         );
     };
+    let saved_geometry = geometry_file::default_path();
+    if let Some(path) = &saved_geometry {
+        tracing::info!(
+            "the geometry set from the GUI is saved to {}",
+            path.display()
+        );
+    } else {
+        tracing::warn!("no configuration directory; the geometry set from the GUI is not saved");
+    }
+    let geometry = geometry_file::load_or_default(saved_geometry.as_deref());
     let scene = Scene::new(
         Box::new(move |num_devices| UdpEmulator::spawn_simulator(port, num_devices)),
-        &Geometry::new(vec![Autd3::default()]),
+        &geometry,
+        saved_geometry,
     )
     .context("binding the emulated devices; is another simulator running?")?;
     let control = control::spawn(
@@ -65,11 +76,10 @@ async fn main() -> Result<()> {
         SocketAddrV6::new(Ipv6Addr::LOCALHOST, control_port, 0, 0),
     )
     .context("binding the control port; is another simulator running?")?;
-    tracing::info!(
-        "emulated devices on [::1]:{port}; a client sets the geometry through {control}"
-    );
+    tracing::info!("emulated devices on [::1]:{port}; set the geometry in the Geometry tab");
+    tracing::debug!("control port on {control}");
     let geometry_rx = scene.geometry();
-    let (state_rx, device_rx) = spawn_sampler(scene, Arc::clone(&mod_enabled))?;
+    let (state_rx, device_rx) = spawn_sampler(Arc::clone(&scene), Arc::clone(&mod_enabled))?;
 
     let app = router(
         AppState {
@@ -77,6 +87,7 @@ async fn main() -> Result<()> {
             state_rx,
             device_rx,
             mod_enabled,
+            scene,
         },
         args.web_dir,
     );

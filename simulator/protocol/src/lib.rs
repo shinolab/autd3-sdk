@@ -1,9 +1,19 @@
 use serde::{Deserialize, Serialize};
 
+pub const MAX_DEVICES: usize = 128;
+pub const DEVICE_WIDTH: f32 = 192.0;
+pub const ROTATION_NORM_TOLERANCE: f32 = 1e-3;
+
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 pub struct TransducerInfo {
     pub pos: [f32; 3],
     pub dir: [f32; 3],
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+pub struct DevicePose {
+    pub origin: [f32; 3],
+    pub rotation: [f32; 4],
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
@@ -33,20 +43,30 @@ pub struct DeviceState {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ServerMsg {
-    Geometry { transducers: Vec<TransducerInfo> },
-    State { states: Vec<TransState> },
-    DeviceStates { devices: Vec<DeviceState> },
+    Geometry {
+        transducers: Vec<TransducerInfo>,
+        devices: Vec<DevicePose>,
+    },
+    State {
+        states: Vec<TransState>,
+    },
+    DeviceStates {
+        devices: Vec<DeviceState>,
+    },
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClientMsg {
     SetModulationEnabled { enabled: bool },
+    SetGeometry { devices: Vec<DevicePose> },
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use core::f32::consts::FRAC_1_SQRT_2;
 
     fn round_trip_server(msg: &ServerMsg) -> ServerMsg {
         let json = serde_json::to_string(msg).unwrap();
@@ -71,6 +91,19 @@ mod tests {
         }
     }
 
+    fn sample_poses() -> Vec<DevicePose> {
+        vec![
+            DevicePose {
+                origin: [0.0, 0.0, 0.0],
+                rotation: [1.0, 0.0, 0.0, 0.0],
+            },
+            DevicePose {
+                origin: [192.0, -10.5, 300.25],
+                rotation: [FRAC_1_SQRT_2, 0.0, FRAC_1_SQRT_2, 0.0],
+            },
+        ]
+    }
+
     #[test]
     fn geometry_round_trips() {
         let msg = ServerMsg::Geometry {
@@ -84,6 +117,7 @@ mod tests {
                     dir: [-1.0, 0.0, 0.0],
                 },
             ],
+            devices: sample_poses(),
         };
         assert_eq!(msg, round_trip_server(&msg));
     }
@@ -120,6 +154,7 @@ mod tests {
         for msg in [
             ServerMsg::Geometry {
                 transducers: Vec::new(),
+                devices: Vec::new(),
             },
             ServerMsg::State { states: Vec::new() },
             ServerMsg::DeviceStates {
@@ -137,6 +172,27 @@ mod tests {
             let json = serde_json::to_string(&msg).unwrap();
             assert_eq!(msg, serde_json::from_str(&json).unwrap());
         }
+    }
+
+    #[test]
+    fn set_geometry_round_trips() {
+        for devices in [sample_poses(), Vec::new()] {
+            let msg = ClientMsg::SetGeometry { devices };
+            let json = serde_json::to_string(&msg).unwrap();
+            assert!(json.contains(r#""type":"set_geometry""#));
+            assert_eq!(msg, serde_json::from_str(&json).unwrap());
+        }
+    }
+
+    #[test]
+    fn device_poses_round_trip_as_a_json_array() {
+        let poses = sample_poses();
+        let json = serde_json::to_string(&poses).unwrap();
+        assert!(json.starts_with('['));
+        assert_eq!(
+            poses,
+            serde_json::from_str::<Vec<DevicePose>>(&json).unwrap()
+        );
     }
 
     #[test]

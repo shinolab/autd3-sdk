@@ -25,7 +25,7 @@ async fn main() -> Result<()> {
         ),
     ]);
 
-    let client = Client::open(&geometry, &autd3_rs_examples::transport_option(&geometry)?)?;
+    let client = Client::open(&geometry, &autd3_rs_examples::transport_option())?;
     client.send((Clear, Synchronize)).await?;
 
     println!("devices: {}", client.num_devices());

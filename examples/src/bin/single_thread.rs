@@ -43,8 +43,7 @@ async fn main() -> Result<()> {
 
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let (controller, driver) =
-        Controller::open(&geometry, &autd3_rs_examples::transport_option(&geometry)?)?;
+    let (controller, driver) = Controller::open(&geometry, &autd3_rs_examples::transport_option())?;
     let driving = tokio::spawn(drive(driver));
     controller.send((Clear, Synchronize)).await?;
 

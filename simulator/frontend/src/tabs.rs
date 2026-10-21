@@ -1,6 +1,7 @@
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Tab {
     Home,
+    Geometry,
     Slice,
     Camera,
     Field,
@@ -10,8 +11,9 @@ pub(crate) enum Tab {
 }
 
 impl Tab {
-    pub(crate) const ALL: [Tab; 7] = [
+    pub(crate) const ALL: [Tab; 8] = [
         Tab::Home,
+        Tab::Geometry,
         Tab::Slice,
         Tab::Camera,
         Tab::Field,
@@ -23,6 +25,7 @@ impl Tab {
     pub(crate) fn label(self) -> &'static str {
         match self {
             Tab::Home => "Home",
+            Tab::Geometry => "Geometry",
             Tab::Slice => "Slice",
             Tab::Field => "Environment",
             Tab::State => "State",

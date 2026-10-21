@@ -152,7 +152,6 @@ dependencies = [
  "autd3-rs-modulation",
  "autd3-rs-pattern",
  "autd3-rs-pattern-holo",
- "autd3-rs-simulator-control",
  "clap",
  "tokio",
  "tracing-subscriber",
