@@ -45,26 +45,25 @@ impl<'a> PatternStm<'a> {
 
 impl<'a> Command<'a> for PatternStm<'a> {
     fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
-        let n = self.phases.len();
+        let size = self.phases.len();
         if let Some(len) = self.intensities.per_index_len()
-            && len != n
+            && len != size
         {
             return Err(PayloadError::PatternStmLengthMismatch {
-                phases: n,
+                phases: size,
                 intensities: len,
             }
             .into());
         }
-        if !(BUFFER_SIZE_MIN..=EMISSION_MAX_INDICES).contains(&n) {
+        if !(BUFFER_SIZE_MIN..=EMISSION_MAX_INDICES).contains(&size) {
             return Err(PayloadError::StmSizeOutOfRange {
-                size: n,
+                size,
                 min: BUFFER_SIZE_MIN,
                 max: EMISSION_MAX_INDICES,
             }
             .into());
         }
-        let config = self.config.into_sampling_config(n);
-        let size = n;
+        let config = self.config.into_sampling_config(size);
         let bank = self.option.bank;
 
         match (self.intensities, self.option.phase_depth) {

@@ -49,9 +49,8 @@ impl<'a, const N: usize> FociStm<'a, N> {
 
 impl<'a, const N: usize> Command<'a> for FociStm<'a, N> {
     fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
-        let n = self.points.len();
-        let config = self.config.into_sampling_config(n);
-        let size = n;
+        let size = self.points.len();
+        let config = self.config.into_sampling_config(size);
         let num_foci = u8::try_from(N).unwrap_or(u8::MAX);
 
         let bank = self.option.bank;
