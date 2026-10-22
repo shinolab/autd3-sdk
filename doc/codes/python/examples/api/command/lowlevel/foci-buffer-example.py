@@ -22,13 +22,15 @@ async def main() -> None:
 
         bank = PatternBank.B0
 
-        await client.send(
-            WriteFociBuffer(
-                bank=bank,
-                start_index=0,
-                points=points,
+        max_len = WriteFociBuffer.max_len(1)
+        for start_index in range(0, len(points), max_len):
+            await client.send(
+                WriteFociBuffer(
+                    bank=bank,
+                    start_index=start_index,
+                    points=points[start_index : start_index + max_len],
+                )
             )
-        )
         await client.send(
             ConfigFociStm(
                 bank=bank,

@@ -10,6 +10,8 @@ namespace AUTD3
 
     public sealed class WriteModulationBuffer : ICommand
     {
+        public static readonly int MaxLen = (int)NativeModulation.autd3_op_write_modulation_buffer_max_len();
+
         private readonly ModulationBank _bank;
         private readonly uint _offset;
         private readonly ModulationBuffer _buffer;

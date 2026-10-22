@@ -42,8 +42,8 @@ pub trait Operation {
 `impl<'a, O: Operation + 'a> Command<'a> for O` のブランケット実装があるため, 単一の `Operation` はそのまま `Command` として扱える.
 
 `Operation` は 1 フレームに対応する.
-ペイロード長を超えるデータを送る可能性があるものは, `Operation` ではなく `Command` として実装される.
-例えば, `WriteModualtionBuffer`は `Command` であり, `expand` の時点で単一, または, 複数の `WriteModulationChunk` へ分割される.
+バッファ書き込み (`WriteModulationBuffer` / `WriteFociBuffer`) も `Operation` であり, 1 フレームに収まる分 (`MAX_LEN`) しか書かない.
+1 フレームに収まらないデータの分割は, 高レベルの `Modulation` / `FociStm` が `expand` の中で行う.
 
 ### Distribution
 
@@ -121,12 +121,19 @@ ops = [ Clear ]
 #### 例: 複数の Operation へ展開されるコマンド
 
 `Modulation` は「バッファ書き込み → 設定 → バンク切り替え」の 3 段に展開される.
+バッファ書き込みは 1 フレームに収まる `WriteModulationBuffer::MAX_LEN` サンプルごとに分割する.
 
 ```rust
 impl<'a> Command<'a> for Modulation<'a> {
     fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
+        for (i, data) in self.data.chunks(WriteModulationBuffer::MAX_LEN).enumerate() {
+            expansion.push(WriteModulationBuffer {
+                bank: self.bank,
+                offset: i * WriteModulationBuffer::MAX_LEN,
+                data,
+            })?;
+        }
         expansion
-            .push(WriteModulationBuffer { bank: self.bank, offset: 0, data: self.data })?
             .push(ConfigModulation { .. })?
             .push(ActivateModulationBank { .. })?;
         Ok(())
@@ -134,12 +141,11 @@ impl<'a> Command<'a> for Modulation<'a> {
 }
 ```
 
-さらに `WriteModulationBuffer` 自身も `Command` であり, `WriteModulationChunk` へ分割される.
 したがって, 1 フレームに収まらないサイズの `Modulation` を 1 つ渡すと, `ops` は次のようになる.
 
 ```
-ops = [ WriteModulationChunk { offset: 0 }
-      , WriteModulationChunk { offset: PAYLOAD_BYTES - size_of::<WriteModPayload>() }
+ops = [ WriteModulationBuffer { offset: 0 }
+      , WriteModulationBuffer { offset: WriteModulationBuffer::MAX_LEN }
       , ...
       , ConfigModulation
       , ActivateModulationBank ]
@@ -242,7 +248,7 @@ frames:   [ { PerDevice, start: 0, len: 2 }
 `expand` は `Result<(), Error>` を返し, 展開の時点で分かる不正はその場でエラーにする.
 `push` は引数の `expand` の結果をそのまま伝播するので, 最初の 1 件で展開が止まる.
 
-たとえば `WriteModulationBuffer` は空データを弾く.
+たとえば `Modulation` は空データを弾く.
 
 ```rust
 if self.data.is_empty() {

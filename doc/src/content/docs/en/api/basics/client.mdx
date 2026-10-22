@@ -195,7 +195,7 @@ Nothing is assigned to a device for which `None` is returned (it receives a `Nop
 <CodeTabs rust={excerpt(sample, "each")} python={excerpt(pySample, "each")} csharp={excerpt(csSample, "each")} />
 
 `each` always makes a single frame.
-A multi-frame command such as `Modulation` / `FociStm` / `PatternStm` / `WriteModulationBuffer` / `WriteFociBuffer`, a sequence of commands, or `each` itself cannot be assigned.
+A multi-frame command such as `Modulation` / `FociStm` / `PatternStm`, a sequence of commands, or `each` itself cannot be assigned.
 Rust rejects it at compile time, Python raises `TypeError`, and C# throws `Autd3Exception` (`InvalidArgument`).
 When each device needs different multi-frame content, in Rust, build the frames yourself with `Frame::new` and send them with `send_frame` (Python / C# have no equivalent API).
 

@@ -2,13 +2,9 @@ mod modulation;
 pub(crate) mod operation;
 mod pattern;
 pub(crate) mod stm;
-mod write_foci_buffer;
-mod write_modulation_buffer;
 
 pub use modulation::Modulation;
 pub use pattern::Pattern;
-pub use write_foci_buffer::WriteFociBuffer;
-pub use write_modulation_buffer::WriteModulationBuffer;
 
 pub use operation::{
     ActivateModulationBank, ActivatePatternBank, Clear, ConfigFociStm, ConfigModulation,
@@ -16,7 +12,8 @@ pub use operation::{
     FixedUpdateRate, ForceFan, FpgaBusWait, FpgaConfig, GpioOut, MaxFreqPpb, Nop, Operation,
     PWE_TABLE_SIZE, PathDelayFilterShift, PatternIntensity, PhaseDepth, PtpConfig, ReleaseFailsafe,
     SetCpuConfig, SetFpgaConfig, SetGpioOut, SetOutputMask, SetPhaseCorrection, SetPulseWidthTable,
-    SetSilencer, SilencerConfig, StmIntensity, Synchronize, WritePatternBuffer, WritePatternPhase,
+    SetSilencer, SilencerConfig, StmIntensity, Synchronize, WriteFociBuffer, WriteModulationBuffer,
+    WritePatternBuffer, WritePatternPhase,
 };
 pub use stm::{FociStm, FociStmOption, PatternStm, PatternStmOption};
 

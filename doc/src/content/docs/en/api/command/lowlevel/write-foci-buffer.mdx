@@ -29,8 +29,13 @@ import { excerpt } from "@lib/excerpt";
 `ControlPoints<N>` is one sample holding `N` focal points (`ControlPoint`) and an amplitude.
 For details see [FociStm](/autd3-sdk/en/api/command/foci-stm/#controlpoint--controlpoints).
 
+`WriteFociBuffer` is sent as a single frame and writes only what fits in one frame.
+The limit (in `ControlPoints`) depends on the number of foci `N`: `WriteFociBuffer::<N>::MAX_LEN` in Rust, `WriteFociBuffer.max_len(num_foci)` in Python, and `WriteFociBuffer.MaxLen(numFoci)` in C#; exceeding it is an error when sending.
+Split a longer sequence and send it with `start_index` advanced by the limit (the high-level [FociStm](/autd3-sdk/en/api/command/foci-stm/) does this split automatically).
+Since it is a single-frame command, [each](/autd3-sdk/en/api/basics/client/#each) can assign a different sequence to each device.
+
 ## Example
 
-An example of playing a focal point sequence as Foci STM via `WriteFociBuffer` → `ConfigFociStm` → `ActivatePatternBank` (equivalent to the high-level [FociStm](/autd3-sdk/en/api/command/foci-stm/)).
+An example of playing a focal point sequence as Foci STM via `WriteFociBuffer` → `ConfigFociStm` → `ActivatePatternBank` (equivalent to the high-level [FociStm](/autd3-sdk/en/api/command/foci-stm/)). The 200 points do not fit in one frame, so they are written in pieces.
 
 <CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

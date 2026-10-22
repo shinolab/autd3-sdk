@@ -4,8 +4,9 @@ use core::num::NonZeroU16;
 use anyhow::Result;
 
 use autd3_rs::commands::{
-    ActivateModulationBank, ActivatePatternBank, ConfigFociStm, ConfigModulation, ConfigPattern,
-    Modulation, Pattern, SetSilencer, WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer,
+    ActivateModulationBank, ActivatePatternBank, Command, ConfigFociStm, ConfigModulation,
+    ConfigPattern, Expansion, Modulation, Pattern, SetSilencer, WriteFociBuffer,
+    WriteModulationBuffer, WritePatternBuffer,
 };
 use autd3_rs::geometry::{Geometry, Point3, Vector3, offset};
 use autd3_rs::units::{m, mm, s};
@@ -110,6 +111,46 @@ pub(crate) async fn activate_pattern_bank(
     .await
 }
 
+struct WholeModulationWrite<'a> {
+    bank: ModulationBank,
+    data: &'a [u8],
+}
+
+impl<'a> Command<'a> for WholeModulationWrite<'a> {
+    fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
+        for (i, data) in self.data.chunks(WriteModulationBuffer::MAX_LEN).enumerate() {
+            expansion.push(WriteModulationBuffer {
+                bank: self.bank,
+                offset: i * WriteModulationBuffer::MAX_LEN,
+                data,
+            })?;
+        }
+        Ok(())
+    }
+}
+
+struct WholeFociWrite<'a> {
+    bank: PatternBank,
+    points: &'a [ControlPoints<1>],
+}
+
+impl<'a> Command<'a> for WholeFociWrite<'a> {
+    fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
+        for (i, points) in self
+            .points
+            .chunks(WriteFociBuffer::<1>::MAX_LEN)
+            .enumerate()
+        {
+            expansion.push(WriteFociBuffer {
+                bank: self.bank,
+                start_index: i * WriteFociBuffer::<1>::MAX_LEN,
+                points,
+            })?;
+        }
+        Ok(())
+    }
+}
+
 pub(crate) async fn write_mod_bank(
     ctx: &Ctx<'_>,
     bank: ModulationBank,
@@ -119,11 +160,7 @@ pub(crate) async fn write_mod_bank(
     ctx.send_frames(&Frames::encode(
         ctx.client.geometry(),
         (
-            WriteModulationBuffer {
-                bank,
-                offset: 0,
-                data,
-            },
+            WholeModulationWrite { bank, data },
             ConfigModulation {
                 bank,
                 config,
@@ -276,11 +313,7 @@ pub(crate) async fn write_foci_bank(
     ctx.send_frames(&Frames::encode(
         ctx.client.geometry(),
         (
-            WriteFociBuffer {
-                bank,
-                start_index: 0,
-                points,
-            },
+            WholeFociWrite { bank, points },
             ConfigFociStm {
                 bank,
                 config,

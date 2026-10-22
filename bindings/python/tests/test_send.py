@@ -85,6 +85,44 @@ def test_each_rejects_what_is_not_a_single_frame_operation() -> None:
             autd3.Frames.encode(geo, each(assign))
 
 
+def test_each_takes_the_buffer_writes_as_single_frame_operations() -> None:
+    geo = geometry()
+    data = modulation.ModulationBuffer(4)
+    points = [autd3.value.ControlPoints([autd3.value.ControlPoint([0.0, 0.0, 150.0], autd3.value.Phase.ZERO)], 0xFF)]
+    write_modulation = each(lambda _: autd3.commands.WriteModulationBuffer(autd3.value.ModulationBank.B0, 0, data))
+    write_foci = each(
+        lambda device: autd3.commands.WriteFociBuffer(autd3.value.PatternBank.B0, 0, points) if device.idx() == 1 else None
+    )
+    assert len(autd3.Frames.encode(geo, (write_modulation, write_foci))) == 2
+
+
+def test_buffer_writes_longer_than_one_frame_are_rejected_when_encoded() -> None:
+    geo = geometry()
+    max_len = autd3.commands.WriteModulationBuffer.MAX_LEN
+    fits = modulation.ModulationBuffer(max_len)
+    too_long = modulation.ModulationBuffer(max_len + 1)
+    bank = autd3.value.ModulationBank.B0
+    assert len(autd3.Frames.encode(geo, autd3.commands.WriteModulationBuffer(bank, 0, fits))) == 1
+    with pytest.raises(autd3.Autd3Error, match="fit in one frame") as err:
+        autd3.Frames.encode(geo, autd3.commands.WriteModulationBuffer(bank, 0, too_long))
+    assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
+
+    point = autd3.value.ControlPoint([0.0, 0.0, 150.0], autd3.value.Phase.ZERO)
+    foci_max_len = autd3.commands.WriteFociBuffer.max_len(2)
+    points = [autd3.value.ControlPoints([point, point], 0xFF) for _ in range(foci_max_len + 1)]
+    pattern_bank = autd3.value.PatternBank.B0
+    assert len(autd3.Frames.encode(geo, autd3.commands.WriteFociBuffer(pattern_bank, 0, points[:-1]))) == 1
+    with pytest.raises(autd3.Autd3Error, match="fit in one frame"):
+        autd3.Frames.encode(geo, autd3.commands.WriteFociBuffer(pattern_bank, 0, points))
+
+
+def test_the_write_foci_buffer_max_len_shrinks_with_the_number_of_foci() -> None:
+    assert autd3.commands.WriteFociBuffer.max_len(1) > autd3.commands.WriteFociBuffer.max_len(8) > 0
+    for num_foci in (0, 9):
+        with pytest.raises(ValueError):
+            autd3.commands.WriteFociBuffer.max_len(num_foci)
+
+
 def test_each_rejects_what_is_not_a_command() -> None:
     geo = geometry()
     with pytest.raises(TypeError):
