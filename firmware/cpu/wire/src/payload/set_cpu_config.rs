@@ -18,21 +18,21 @@ pub struct CpuConfigOutOfRange {
     pub max: Duration,
 }
 
-const fn to_nanos(field: &'static str, value: Duration) -> Result<U32, CpuConfigOutOfRange> {
+fn to_nanos(field: &'static str, value: Duration) -> Result<U32, CpuConfigOutOfRange> {
     let nanos = value.as_nanos();
-    if nanos > u32::MAX as u128 {
+    if nanos > u128::from(u32::MAX) {
         return Err(CpuConfigOutOfRange {
             field,
             value,
             unit: Duration::from_nanos(1),
             min: Duration::ZERO,
-            max: Duration::from_nanos(u32::MAX as u64),
+            max: Duration::from_nanos(u64::from(u32::MAX)),
         });
     }
     Ok(U32::new(nanos as u32))
 }
 
-const fn to_millis_at_least(
+fn to_millis_at_least(
     field: &'static str,
     value: Duration,
     min: Duration,
@@ -40,20 +40,20 @@ const fn to_millis_at_least(
     let millis = value.as_millis();
     if !value.subsec_nanos().is_multiple_of(1_000_000)
         || millis < min.as_millis()
-        || millis > u16::MAX as u128
+        || millis > u128::from(u16::MAX)
     {
         return Err(CpuConfigOutOfRange {
             field,
             value,
             unit: Duration::from_millis(1),
             min,
-            max: Duration::from_millis(u16::MAX as u64),
+            max: Duration::from_millis(u64::from(u16::MAX)),
         });
     }
     Ok(U16::new(millis as u16))
 }
 
-const fn to_millis(field: &'static str, value: Duration) -> Result<U16, CpuConfigOutOfRange> {
+fn to_millis(field: &'static str, value: Duration) -> Result<U16, CpuConfigOutOfRange> {
     to_millis_at_least(field, value, Duration::ZERO)
 }
 
@@ -61,21 +61,12 @@ const FAILSAFE_DISABLED: u16 = 0;
 const WATCHDOG_DISABLED: u16 = 0;
 const PAUSE_DISABLED: u16 = 0;
 
-const fn from_nanos(value: U32) -> Duration {
-    Duration::from_nanos(value.get() as u64)
+fn from_nanos(value: U32) -> Duration {
+    Duration::from_nanos(u64::from(value.get()))
 }
 
-const fn from_millis(value: U16) -> Duration {
-    Duration::from_millis(value.get() as u64)
-}
-
-macro_rules! tri {
-    ($e:expr) => {
-        match $e {
-            Ok(v) => v,
-            Err(e) => return Err(e),
-        }
-    };
+fn from_millis(value: U16) -> Duration {
+    Duration::from_millis(u64::from(value.get()))
 }
 
 #[derive(
@@ -110,107 +101,75 @@ pub struct SetCpuConfigPayload {
 }
 
 impl SetCpuConfigPayload {
-    pub const fn encode(config: &CpuConfig) -> Result<Self, CpuConfigOutOfRange> {
+    pub fn encode(config: &CpuConfig) -> Result<Self, CpuConfigOutOfRange> {
         let ptp = &config.ptp;
         Ok(Self {
-            sys_time_transition_margin_ns: tri!(to_nanos(
+            sys_time_transition_margin_ns: to_nanos(
                 "sys_time_transition_margin",
-                config.sys_time_transition_margin
-            )),
+                config.sys_time_transition_margin,
+            )?,
             fpga_wait_update_max_polls: U32::new(config.fpga_wait_update_max_polls.get()),
             fpga_flash_max_polls: U32::new(config.fpga_flash_max_polls.get()),
-            sync_guard_ns: tri!(to_nanos("sync_guard", config.sync_guard)),
-            update_activate_delay_ms: tri!(to_millis(
+            sync_guard_ns: to_nanos("sync_guard", config.sync_guard)?,
+            update_activate_delay_ms: to_millis(
                 "update_activate_delay",
-                config.update_activate_delay
-            )),
-            ptp_sync_interval_ms: tri!(to_millis("ptp.sync_interval", ptp.sync_interval)),
-            ptp_tx_timestamp_timeout_ms: tri!(to_millis(
+                config.update_activate_delay,
+            )?,
+            ptp_sync_interval_ms: to_millis("ptp.sync_interval", ptp.sync_interval)?,
+            ptp_tx_timestamp_timeout_ms: to_millis(
                 "ptp.tx_timestamp_timeout",
-                ptp.tx_timestamp_timeout
-            )),
-            ptp_delay_resp_timeout_ms: tri!(to_millis(
-                "ptp.delay_resp_timeout",
-                ptp.delay_resp_timeout
-            )),
-            ptp_holdover_ms: tri!(to_millis("ptp.holdover", ptp.holdover)),
+                ptp.tx_timestamp_timeout,
+            )?,
+            ptp_delay_resp_timeout_ms: to_millis("ptp.delay_resp_timeout", ptp.delay_resp_timeout)?,
+            ptp_holdover_ms: to_millis("ptp.holdover", ptp.holdover)?,
             ptp_lock_samples: U16::new(ptp.lock_samples.get()),
-            ptp_step_threshold_ns: tri!(to_nanos("ptp.step_threshold", ptp.step_threshold)),
-            ptp_lock_threshold_ns: tri!(to_nanos("ptp.lock_threshold", ptp.lock_threshold)),
+            ptp_step_threshold_ns: to_nanos("ptp.step_threshold", ptp.step_threshold)?,
+            ptp_lock_threshold_ns: to_nanos("ptp.lock_threshold", ptp.lock_threshold)?,
             ptp_kp_milli: U32::new(ptp.kp_milli),
             ptp_ki_milli: U32::new(ptp.ki_milli),
             ptp_max_freq_ppb: U32::new(ptp.max_freq_ppb.get()),
             failsafe_timeout_ms: match config.failsafe_timeout {
-                Some(timeout) => tri!(to_millis_at_least(
-                    "failsafe_timeout",
-                    timeout,
-                    Duration::from_millis(1)
-                )),
+                Some(timeout) => {
+                    to_millis_at_least("failsafe_timeout", timeout, Duration::from_millis(1))?
+                }
                 None => U16::new(FAILSAFE_DISABLED),
             },
             ptp_delay_req_syncs: U16::new(ptp.delay_req_syncs.get()),
-            ptp_path_delay_filter_shift: U16::new(ptp.path_delay_filter_shift.get() as u16),
+            ptp_path_delay_filter_shift: U16::new(u16::from(ptp.path_delay_filter_shift.get())),
             ptp_pause_quanta: U16::new(match ptp.pause_quanta {
                 Some(quanta) => quanta.get(),
                 None => PAUSE_DISABLED,
             }),
             ptp_pause_hold_syncs: U16::new(ptp.pause_hold_syncs),
-            ptp_pause_retry_ms: tri!(to_millis("ptp.pause_retry", ptp.pause_retry)),
+            ptp_pause_retry_ms: to_millis("ptp.pause_retry", ptp.pause_retry)?,
             ptp_unlock_failsafe_timeout_ms: match config.ptp_unlock_failsafe_timeout {
-                Some(timeout) => tri!(to_millis_at_least(
+                Some(timeout) => to_millis_at_least(
                     "ptp_unlock_failsafe_timeout",
                     timeout,
-                    Duration::from_millis(1)
-                )),
+                    Duration::from_millis(1),
+                )?,
                 None => U16::new(FAILSAFE_DISABLED),
             },
-            fpga_bus_wait: U16::new(config.fpga_bus_wait.as_u8() as u16),
+            fpga_bus_wait: U16::new(u16::from(config.fpga_bus_wait.as_u8())),
             cpu_watchdog_timeout_ms: match config.cpu_watchdog_timeout {
-                Some(timeout) => tri!(to_millis_at_least(
-                    "cpu_watchdog_timeout",
-                    timeout,
-                    Duration::from_millis(1)
-                )),
+                Some(timeout) => {
+                    to_millis_at_least("cpu_watchdog_timeout", timeout, Duration::from_millis(1))?
+                }
                 None => U16::new(WATCHDOG_DISABLED),
             },
         })
     }
 
     #[must_use]
-    pub const fn decode(&self) -> Option<CpuConfig> {
-        let (
-            Some(fpga_wait_update_max_polls),
-            Some(fpga_flash_max_polls),
-            Some(lock_samples),
-            Some(delay_req_syncs),
-        ) = (
-            NonZeroU32::new(self.fpga_wait_update_max_polls.get()),
-            NonZeroU32::new(self.fpga_flash_max_polls.get()),
-            NonZeroU16::new(self.ptp_lock_samples.get()),
-            NonZeroU16::new(self.ptp_delay_req_syncs.get()),
-        )
-        else {
-            return None;
-        };
-        let fpga_bus_wait = self.fpga_bus_wait.get();
-        let Some(fpga_bus_wait) = (if fpga_bus_wait > u8::MAX as u16 {
-            None
-        } else {
-            FpgaBusWait::from_u8(fpga_bus_wait as u8)
-        }) else {
-            return None;
-        };
-        let Some(max_freq_ppb) = MaxFreqPpb::new(self.ptp_max_freq_ppb.get()) else {
-            return None;
-        };
-        let path_delay_filter_shift = self.ptp_path_delay_filter_shift.get();
-        let Some(path_delay_filter_shift) = (if path_delay_filter_shift > u8::MAX as u16 {
-            None
-        } else {
-            PathDelayFilterShift::new(path_delay_filter_shift as u8)
-        }) else {
-            return None;
-        };
+    pub fn decode(&self) -> Option<CpuConfig> {
+        let fpga_wait_update_max_polls = NonZeroU32::new(self.fpga_wait_update_max_polls.get())?;
+        let fpga_flash_max_polls = NonZeroU32::new(self.fpga_flash_max_polls.get())?;
+        let lock_samples = NonZeroU16::new(self.ptp_lock_samples.get())?;
+        let delay_req_syncs = NonZeroU16::new(self.ptp_delay_req_syncs.get())?;
+        let fpga_bus_wait = FpgaBusWait::from_u8(u8::try_from(self.fpga_bus_wait.get()).ok()?)?;
+        let max_freq_ppb = MaxFreqPpb::new(self.ptp_max_freq_ppb.get())?;
+        let path_delay_filter_shift =
+            PathDelayFilterShift::new(u8::try_from(self.ptp_path_delay_filter_shift.get()).ok()?)?;
         if self.update_activate_delay_ms.get() == 0 || self.ptp_sync_interval_ms.get() == 0 {
             return None;
         }
