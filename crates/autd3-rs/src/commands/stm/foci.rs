@@ -46,8 +46,8 @@ impl<'a, const N: usize> FociStm<'a, N> {
     }
 }
 
-impl<'a, const N: usize> Command<'a> for FociStm<'a, N> {
-    fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
+impl<const N: usize> Command for FociStm<'_, N> {
+    fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
         let size = self.points.len();
         let num_foci = u8::try_from(N).unwrap_or(u8::MAX);
 

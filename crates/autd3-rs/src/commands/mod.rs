@@ -20,11 +20,11 @@ pub use stm::{FociStm, FociStmOption, PatternStm, PatternStmOption};
 pub use crate::datagram::{Each, Expansion, each};
 use crate::error::Error;
 
-pub trait Command<'a> {
-    fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error>;
+pub trait Command {
+    fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error>;
 
     #[must_use]
-    fn boxed(self) -> BoxedCommand<'a>
+    fn boxed<'a>(self) -> BoxedCommand<'a>
     where
         Self: Sized + 'a,
     {
@@ -32,36 +32,36 @@ pub trait Command<'a> {
     }
 }
 
-impl<'a, O: Operation + 'a> Command<'a> for O {
-    fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
+impl<O: Operation> Command for O {
+    fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
         expansion.push_op(&self)?;
         Ok(())
     }
 }
 
-trait DynCommand<'a> {
-    fn expand_boxed(self: Box<Self>, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error>;
+trait DynCommand {
+    fn expand_boxed(self: Box<Self>, expansion: &mut Expansion<'_>) -> Result<(), Error>;
 }
 
-impl<'a, C: Command<'a>> DynCommand<'a> for C {
-    fn expand_boxed(self: Box<Self>, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
+impl<C: Command> DynCommand for C {
+    fn expand_boxed(self: Box<Self>, expansion: &mut Expansion<'_>) -> Result<(), Error> {
         (*self).expand(expansion)
     }
 }
 
-pub struct BoxedCommand<'a>(Box<dyn DynCommand<'a> + 'a>);
+pub struct BoxedCommand<'a>(Box<dyn DynCommand + 'a>);
 
-impl<'a> Command<'a> for BoxedCommand<'a> {
-    fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
+impl Command for BoxedCommand<'_> {
+    fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
         self.0.expand_boxed(expansion)
     }
 }
 
 macro_rules! impl_command_for_tuple {
     ($($name:ident),+) => {
-        impl<'a, $($name: Command<'a>),+> Command<'a> for ($($name,)+) {
+        impl<$($name: Command),+> Command for ($($name,)+) {
             #[allow(non_snake_case)]
-            fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
+            fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
                 let ($($name,)+) = self;
                 $(expansion.push($name)?;)+
                 Ok(())

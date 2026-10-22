@@ -31,8 +31,8 @@ impl<'a> Modulation<'a> {
     }
 }
 
-impl<'a> Command<'a> for Modulation<'a> {
-    fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
+impl Command for Modulation<'_> {
+    fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
         if self.data.is_empty() {
             return Err(PayloadError::ModulationDataEmpty.into());
         }

@@ -224,11 +224,11 @@ macro_rules! foci_points {
                 }
             }
 
-            fn push_into<'a>(
-                &'a self,
+            fn push_into(
+                &self,
                 config: SamplingConfig,
                 option: CoreFociStmOption,
-                expansion: &mut Expansion<'_, 'a>,
+                expansion: &mut Expansion<'_>,
             ) -> Result<(), autd3_rs::Error> {
                 match self {
                     $(FociPoints::$variant(v) => {
@@ -267,7 +267,7 @@ pub(crate) struct FociStmData {
 }
 
 impl PushCommand for FociStmData {
-    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
+    fn push_into(&self, expansion: &mut Expansion<'_>) -> Result<(), autd3_rs::Error> {
         self.points.push_into(self.config, self.option, expansion)
     }
 }
@@ -379,7 +379,7 @@ pub(crate) struct PatternStmData {
 }
 
 impl PushCommand for PatternStmData {
-    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
+    fn push_into(&self, expansion: &mut Expansion<'_>) -> Result<(), autd3_rs::Error> {
         expansion.push(CorePatternStm::new(
             self.config,
             self.phases.as_slice(),
