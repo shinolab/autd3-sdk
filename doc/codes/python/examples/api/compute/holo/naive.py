@@ -30,14 +30,12 @@ wavelength = calc_wavelength(340 * m / s)
 constraint = IntensityConstraint.Clamp(Intensity.MIN, Intensity.MAX)
 directivity = Directivity.Sphere
 mask = TransducerMask.AllEnabled
-parallel = True
 option = (
     # ANCHOR: option
     NaiveOption(
         constraint,
         directivity,
         mask,
-        parallel,
     )
     # ANCHOR_END: option
 )

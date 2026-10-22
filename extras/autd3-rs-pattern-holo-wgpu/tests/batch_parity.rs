@@ -201,7 +201,6 @@ fn batch_matches_nalgebra_on_pool_size_collision() {
         constraint: IntensityConstraint::Normalize,
         directivity: Directivity::T4010A1,
         mask: TransducerMask::AllEnabled,
-        ..Default::default()
     };
     naive_batch(&gpu, &g, &foci, wl, &opt, &mut batched.0, &mut batched.1).unwrap();
     for (k, (f, got)) in owned
@@ -298,7 +297,6 @@ fn batch_matches_nalgebra_per_problem() {
                             constraint,
                             directivity,
                             mask,
-                            ..Default::default()
                         };
                         naive_batch(&gpu, &g, &foci, wl, &opt, &mut batched.0, &mut batched.1)
                             .unwrap();

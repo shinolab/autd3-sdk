@@ -230,7 +230,6 @@ def test_holo_options_expose_their_fields() -> None:
     assert gspat.repeat == 100
     assert gspat.constraint == holo.IntensityConstraint.Clamp(0x00, 0xFF)
     assert gspat.directivity == holo.Directivity.Sphere
-    assert gspat.parallel is True
     assert gspat.mask.num_enabled(one_device()) == Autd3.NUM_TRANSDUCERS
     assert gspat == holo.GspatOption(mask=pattern.TransducerMask.AllEnabled)
     assert gspat != holo.GspatOption(repeat=10)

@@ -665,7 +665,6 @@ impl LinAlgBackend for WgpuBackend {
         &self,
         v: &Self::Vector,
         constraint: IntensityConstraint,
-        _parallel: bool,
     ) -> (Vec<Phase>, Vec<Intensity>) {
         self.materialize(v);
         let (len, batch) = (v.len, v.batch.max(1));

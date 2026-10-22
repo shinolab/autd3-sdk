@@ -32,8 +32,6 @@ fn main() -> anyhow::Result<()> {
             constraint: IntensityConstraint::Clamp(Intensity::MIN, Intensity::MAX),
             directivity: Directivity::Sphere,
             mask: TransducerMask::AllEnabled,
-            parallel: true,
-            ..Default::default()
         },
         &mut phases,
         &mut intensities,
