@@ -24,7 +24,7 @@ use super::exec_at::{self, ExecAt};
 use super::session::Session;
 
 pub struct Controller {
-    geometry: Arc<Geometry>,
+    geometry: Geometry,
     session: Arc<Session>,
     send_serializer: AsyncMutex<()>,
 }
@@ -34,7 +34,7 @@ impl Controller {
         let session = Arc::new(Session::open(geometry, option)?);
         let driver = Driver::new(Arc::clone(&session));
         let controller = Self {
-            geometry: Arc::new(geometry.clone()),
+            geometry: geometry.clone(),
             session,
             send_serializer: AsyncMutex::new(()),
         };
