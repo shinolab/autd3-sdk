@@ -1,6 +1,6 @@
 use crate::commands::Command;
-use crate::commands::operation::{Distribution, Encoded, Operation};
-use crate::datagram::Frames;
+use crate::commands::operation::{Distribution, Operation, set_cmd};
+use crate::datagram::{Datagram, Frames};
 use crate::error::{Error, PayloadError};
 use crate::geometry::{Autd3, Device, Geometry};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
@@ -13,10 +13,10 @@ pub(crate) fn test_device(idx: usize) -> Device {
     test_geometry(idx + 1)[idx].clone()
 }
 
-pub(crate) fn encode(op: &impl Operation) -> Result<(Encoded, [u8; PAYLOAD_BYTES]), Error> {
-    let mut out = [0u8; PAYLOAD_BYTES];
-    let encoded = op.encode(&test_device(0), &mut out)?;
-    Ok((encoded, out))
+pub(crate) fn encode(op: &impl Operation) -> Result<((Cmd, usize), [u8; PAYLOAD_BYTES]), Error> {
+    let mut out = Datagram::no_payload(Cmd::Nop);
+    op.encode(&test_device(0), &mut out)?;
+    Ok(((out.cmd, out.payload_len), out.payload))
 }
 
 pub(crate) fn build<'a>(num_devices: usize, cmd: impl Command<'a>) -> Result<Frames, Error> {
@@ -48,9 +48,10 @@ impl Operation for Marker {
         Distribution::PerDevice
     }
 
-    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
-        out[0] = self.0;
-        Ok(Encoded::new(Cmd::ConfigModulation, 1))
+    fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
+        out.payload[0] = self.0;
+        set_cmd(out, Cmd::ConfigModulation, 1);
+        Ok(())
     }
 }
 
@@ -60,7 +61,7 @@ pub(crate) struct FailBroadcast;
 impl crate::sealed::Sealed for FailBroadcast {}
 
 impl Operation for FailBroadcast {
-    fn encode(&self, _device: &Device, _out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
+    fn encode(&self, _device: &Device, _out: &mut Datagram) -> Result<(), Error> {
         Err(PayloadError::ModulationDataEmpty.into())
     }
 }
@@ -75,11 +76,12 @@ impl Operation for FailAt {
         Distribution::PerDevice
     }
 
-    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
+    fn encode(&self, device: &Device, out: &mut Datagram) -> Result<(), Error> {
         if device.idx() == self.0 {
             return Err(PayloadError::ModulationDataEmpty.into());
         }
-        out[0] = 0xFF;
-        Ok(Encoded::new(Cmd::ConfigModulation, 1))
+        out.payload[0] = 0xFF;
+        set_cmd(out, Cmd::ConfigModulation, 1);
+        Ok(())
     }
 }

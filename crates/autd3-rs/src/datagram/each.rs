@@ -34,7 +34,7 @@ mod tests {
         WritePatternBuffer,
     };
     use crate::commands::{Pattern, SetSilencer};
-    use crate::datagram::{Frames, each};
+    use crate::datagram::{Datagram, Frames, each};
     use crate::error::{Error, PayloadError};
     use crate::geometry::{Autd3, Point3};
     use crate::protocol::{Cmd, PAYLOAD_BYTES};
@@ -210,10 +210,10 @@ mod tests {
         )
         .unwrap();
 
-        let mut pattern_payload = [0u8; PAYLOAD_BYTES];
-        let pattern_encoded = pattern.encode(&geometry[0], &mut pattern_payload).unwrap();
-        let mut config_payload = [0u8; PAYLOAD_BYTES];
-        let config_encoded = config.encode(&geometry[1], &mut config_payload).unwrap();
+        let mut pattern_datagram = Datagram::no_payload(Cmd::Nop);
+        pattern.encode(&geometry[0], &mut pattern_datagram).unwrap();
+        let mut config_datagram = Datagram::no_payload(Cmd::Nop);
+        config.encode(&geometry[1], &mut config_datagram).unwrap();
 
         assert_eq!(frames.len(), 1);
         let frame = frames.frame(0).unwrap();
@@ -221,13 +221,11 @@ mod tests {
         let datagrams = frame.datagrams();
         assert_eq!(datagrams.len(), 3);
 
-        assert_eq!(datagrams[0].cmd, pattern_encoded.cmd);
-        assert_eq!(datagrams[0].payload_len, pattern_encoded.len);
-        assert_eq!(datagrams[0].payload, pattern_payload);
+        assert_eq!(datagrams[0].cmd, pattern_datagram.cmd);
+        assert_eq!(datagrams[0].payload(), pattern_datagram.payload());
 
-        assert_eq!(datagrams[1].cmd, config_encoded.cmd);
-        assert_eq!(datagrams[1].payload_len, config_encoded.len);
-        assert_eq!(datagrams[1].payload, config_payload);
+        assert_eq!(datagrams[1].cmd, config_datagram.cmd);
+        assert_eq!(datagrams[1].payload(), config_datagram.payload());
 
         assert_eq!(datagrams[2].cmd, Cmd::Nop);
         assert_eq!(datagrams[2].payload_len, 0);

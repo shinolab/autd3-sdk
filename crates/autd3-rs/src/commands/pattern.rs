@@ -2,11 +2,12 @@ use autd3_cpu_wire::layout::PATTERN_RAW_DATA_LEN;
 use autd3_cpu_wire::payload::WritePatternFusedPayload;
 
 use crate::commands::operation::{
-    Distribution, Encoded, Operation, PatternIntensity, encode_raw_pattern_entry, write_header,
+    Distribution, Operation, PatternIntensity, encode_raw_pattern_entry, set_cmd, write_header,
 };
+use crate::datagram::Datagram;
 use crate::error::Error;
 use crate::geometry::Device;
-use crate::protocol::{Cmd, PAYLOAD_BYTES};
+use crate::protocol::Cmd;
 use crate::value::{PatternBank, Phase, TransitionMode};
 
 #[derive(Clone, Copy, Debug)]
@@ -45,17 +46,19 @@ impl Operation for Pattern<'_> {
         Distribution::PerDevice
     }
 
-    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
+    fn encode(&self, device: &Device, out: &mut Datagram) -> Result<(), Error> {
         let header = WritePatternFusedPayload::new(self.bank, self.transition_mode.as_wire());
         let rest = write_header(out, &header);
         let (data, _) = rest
             .split_first_chunk_mut::<PATTERN_RAW_DATA_LEN>()
             .expect("the pattern fits in the payload");
         encode_raw_pattern_entry(self.phases, self.intensities, device, data)?;
-        Ok(Encoded::header_with_data::<WritePatternFusedPayload>(
+        set_cmd(
+            out,
             Cmd::WritePatternFused,
-            PATTERN_RAW_DATA_LEN,
-        ))
+            size_of::<WritePatternFusedPayload>() + PATTERN_RAW_DATA_LEN,
+        );
+        Ok(())
     }
 }
 
@@ -142,7 +145,7 @@ mod tests {
 
         assert_eq!(
             cmd,
-            Encoded::new(
+            (
                 Cmd::WritePatternFused,
                 size_of::<WritePatternFusedPayload>() + PATTERN_RAW_DATA_LEN
             )

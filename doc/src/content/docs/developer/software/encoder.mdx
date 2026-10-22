@@ -24,7 +24,7 @@ import Mermaid from "@components/Mermaid.astro";
 |              | 型             | 内容                                                                      |
 | ------------ | -------------- | ------------------------------------------------------------------------- |
 | ユーザー向け | `Command<'a>`  | 複数の`Operation`を束ねたもの. `expand` で自身を `Operation` の列へ展開.  |
-| 中間         | `Operation`    | 1 フレーム分の処理に対応. `encode` でペイロードに内容を書き出し, `Cmd` と書いた長さ (`Encoded`) を返す. |
+| 中間         | `Operation`    | 1 フレーム分の処理に対応. `encode` で `Datagram` に `Cmd`・ペイロード・長さを直接書き出す. |
 | 出力         | `Frames`       | 実際に送出する `Datagram` の連結バッファとフレーム境界.                   |
 
 ```rust
@@ -35,7 +35,7 @@ pub trait Command<'a> {
 
 pub trait Operation {
     fn distribution(&self) -> Distribution { Distribution::Broadcast }
-    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error>;
+    fn encode(&self, device: &Device, out: &mut Datagram) -> Result<(), Error>;
 }
 ```
 
@@ -195,21 +195,23 @@ let encode_devices = match op.distribution() {
 };
 let start = self.payloads.len();
 for device in 0..encode_devices {
-    let mut payload = [0u8; PAYLOAD_BYTES];
-    let cmd = op.encode(&geometry[device], &mut payload)?;
-    self.payloads.push(Datagram { cmd, payload });
+    let mut datagram = Datagram::no_payload(Cmd::Nop);
+    op.encode(&geometry[device], &mut datagram)?;
+    self.payloads.push(datagram);
 }
 self.frames.push(FrameDesc { dist, start, len: encode_devices });
 ```
 
 `Broadcast` では `encode` がデバイス 0 に対して 1 回しか呼ばれず, ペイロードも 1 部しか保持しない.
+`encode` が `Err` を返したときの `Datagram` の中身は不定で, 使ってはならない.
 
 ### Frames の構造
 
 ```rust
-pub struct Datagram { 
-    pub cmd: Cmd, 
-    pub payload: [u8; PAYLOAD_BYTES] 
+pub struct Datagram {
+    pub cmd: Cmd,
+    pub payload: [u8; PAYLOAD_BYTES],
+    pub payload_len: usize,
 }
 
 struct FrameDesc {

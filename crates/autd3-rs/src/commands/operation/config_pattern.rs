@@ -1,12 +1,13 @@
 use autd3_cpu_wire::payload::ConfigPatternPayload;
 
 use crate::Velocity;
+use crate::datagram::Datagram;
 use crate::error::Error;
 use crate::geometry::Device;
-use crate::protocol::{Cmd, PAYLOAD_BYTES};
+use crate::protocol::Cmd;
 use crate::value::{LoopBehavior, PatternBank, SamplingConfig};
 
-use super::{Encoded, Operation, encode_header_only};
+use super::{Operation, encode_header_only};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ConfigPattern {
@@ -29,21 +30,22 @@ pub struct ConfigFociStm {
 impl crate::sealed::Sealed for ConfigPattern {}
 
 impl Operation for ConfigPattern {
-    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
+    fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
         let payload = ConfigPatternPayload::raw(
             self.bank,
             self.config.divide(),
             self.size,
             self.loop_behavior.rep(),
         )?;
-        Ok(encode_header_only(out, Cmd::ConfigPattern, &payload))
+        encode_header_only(out, Cmd::ConfigPattern, &payload);
+        Ok(())
     }
 }
 
 impl crate::sealed::Sealed for ConfigFociStm {}
 
 impl Operation for ConfigFociStm {
-    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
+    fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
         let payload = ConfigPatternPayload::foci(
             self.bank,
             self.config.divide(),
@@ -52,7 +54,8 @@ impl Operation for ConfigFociStm {
             self.sound_speed.m_s(),
             self.loop_behavior.rep(),
         )?;
-        Ok(encode_header_only(out, Cmd::ConfigPattern, &payload))
+        encode_header_only(out, Cmd::ConfigPattern, &payload);
+        Ok(())
     }
 }
 
@@ -65,7 +68,7 @@ mod tests {
     use autd3_cpu_wire::payload::PayloadBuildError;
     use core::num::NonZeroU16;
 
-    const ENCODED: Encoded = Encoded::new(Cmd::ConfigPattern, size_of::<ConfigPatternPayload>());
+    const ENCODED: (Cmd, usize) = (Cmd::ConfigPattern, size_of::<ConfigPatternPayload>());
 
     #[test]
     fn config_pattern_lays_out_raw_fields() {

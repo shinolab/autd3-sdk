@@ -1,8 +1,9 @@
+use crate::datagram::Datagram;
 use crate::error::Error;
 use crate::geometry::Device;
-use crate::protocol::{Cmd, PAYLOAD_BYTES};
+use crate::protocol::Cmd;
 
-use super::{Encoded, Operation};
+use super::{Operation, set_cmd};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Clear;
@@ -19,32 +20,36 @@ pub struct ReleaseFailsafe;
 impl crate::sealed::Sealed for Clear {}
 
 impl Operation for Clear {
-    fn encode(&self, _device: &Device, _out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
-        Ok(Encoded::no_payload(Cmd::Clear))
+    fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
+        set_cmd(out, Cmd::Clear, 0);
+        Ok(())
     }
 }
 
 impl crate::sealed::Sealed for Nop {}
 
 impl Operation for Nop {
-    fn encode(&self, _device: &Device, _out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
-        Ok(Encoded::no_payload(Cmd::Nop))
+    fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
+        set_cmd(out, Cmd::Nop, 0);
+        Ok(())
     }
 }
 
 impl crate::sealed::Sealed for Synchronize {}
 
 impl Operation for Synchronize {
-    fn encode(&self, _device: &Device, _out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
-        Ok(Encoded::no_payload(Cmd::Synchronize))
+    fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
+        set_cmd(out, Cmd::Synchronize, 0);
+        Ok(())
     }
 }
 
 impl crate::sealed::Sealed for ReleaseFailsafe {}
 
 impl Operation for ReleaseFailsafe {
-    fn encode(&self, _device: &Device, _out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
-        Ok(Encoded::no_payload(Cmd::ReleaseFailsafe))
+    fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
+        set_cmd(out, Cmd::ReleaseFailsafe, 0);
+        Ok(())
     }
 }
 
@@ -63,11 +68,9 @@ mod tests {
             (&ReleaseFailsafe, Cmd::ReleaseFailsafe),
         ];
         for (op, cmd) in ops {
-            let mut out = [0xAAu8; PAYLOAD_BYTES];
-            assert_eq!(
-                op.encode(&test_device(0), &mut out).unwrap(),
-                Encoded::no_payload(cmd)
-            );
+            let mut out = Datagram::no_payload(Cmd::Nop);
+            op.encode(&test_device(0), &mut out).unwrap();
+            assert_eq!((out.cmd, out.payload_len), (cmd, 0));
             assert_eq!(op.distribution(), Distribution::Broadcast);
         }
     }

@@ -1,9 +1,10 @@
+use crate::datagram::Datagram;
 use crate::error::Error;
 use crate::geometry::Device;
-use crate::protocol::{Cmd, PAYLOAD_BYTES};
+use crate::protocol::Cmd;
 use crate::value::{Intensity, PatternBank, Phase};
 
-use super::{Distribution, Encoded, Operation, checked_device_row, write_header};
+use super::{Distribution, Operation, checked_device_row, set_cmd, write_header};
 pub use autd3_cpu_wire::payload::PhaseDepth;
 use autd3_cpu_wire::payload::WritePatternPhasePayload;
 use zerocopy::IntoBytes;
@@ -24,7 +25,7 @@ impl Operation for WritePatternPhase<'_> {
         Distribution::PerDevice
     }
 
-    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
+    fn encode(&self, device: &Device, out: &mut Datagram) -> Result<(), Error> {
         let count = self.patterns.len();
         let header = WritePatternPhasePayload::new(
             self.bank,
@@ -42,10 +43,12 @@ impl Operation for WritePatternPhase<'_> {
             let phases = checked_device_row(pattern, device)?.as_bytes();
             self.depth.pack(phases, dst);
         }
-        Ok(Encoded::header_with_data::<WritePatternPhasePayload>(
+        set_cmd(
+            out,
             Cmd::WritePatternPhase,
-            count * self.depth.bytes_per_pattern(),
-        ))
+            size_of::<WritePatternPhasePayload>() + count * self.depth.bytes_per_pattern(),
+        );
+        Ok(())
     }
 }
 
@@ -83,9 +86,9 @@ mod tests {
 
         assert_eq!(
             cmd,
-            Encoded::header_with_data::<WritePatternPhasePayload>(
+            (
                 Cmd::WritePatternPhase,
-                5 * Autd3::NUM_TRANSDUCERS
+                size_of::<WritePatternPhasePayload>() + 5 * Autd3::NUM_TRANSDUCERS
             )
         );
         assert_eq!(out[1], 8, "depth");
@@ -120,9 +123,9 @@ mod tests {
         let per_pattern = Autd3::NUM_TRANSDUCERS.div_ceil(2);
         assert_eq!(
             cmd,
-            Encoded::header_with_data::<WritePatternPhasePayload>(
+            (
                 Cmd::WritePatternPhase,
-                11 * per_pattern
+                size_of::<WritePatternPhasePayload>() + 11 * per_pattern
             )
         );
         assert_eq!(out[1], 4, "depth");
@@ -210,7 +213,7 @@ mod tests {
             intensity: Intensity::MAX,
             patterns: &patterns,
         };
-        let mut out = [0u8; PAYLOAD_BYTES];
+        let mut out = Datagram::no_payload(Cmd::Nop);
         assert!(op.encode(&test_device(0), &mut out).is_ok());
         assert!(matches!(
             op.encode(&test_device(1), &mut out),

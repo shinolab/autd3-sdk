@@ -8,11 +8,11 @@ pub use pattern::Pattern;
 
 pub use operation::{
     ActivateModulationBank, ActivatePatternBank, Clear, ConfigFociStm, ConfigModulation,
-    ConfigPattern, CpuConfig, Distribution, EmulateGpioIn, Encoded, FixedCompletionTime,
-    FixedUpdateRate, ForceFan, FpgaBusWait, FpgaConfig, GpioOut, MaxFreqPpb, Nop, Operation,
-    PWE_TABLE_SIZE, PathDelayFilterShift, PatternIntensity, PhaseDepth, PtpConfig, ReleaseFailsafe,
-    SetCpuConfig, SetFpgaConfig, SetGpioOut, SetOutputMask, SetPhaseCorrection, SetPulseWidthTable,
-    SetSilencer, SilencerConfig, StmIntensity, Synchronize, WriteFociBuffer, WriteModulationBuffer,
+    ConfigPattern, CpuConfig, Distribution, EmulateGpioIn, FixedCompletionTime, FixedUpdateRate,
+    ForceFan, FpgaBusWait, FpgaConfig, GpioOut, MaxFreqPpb, Nop, Operation, PWE_TABLE_SIZE,
+    PathDelayFilterShift, PatternIntensity, PhaseDepth, PtpConfig, ReleaseFailsafe, SetCpuConfig,
+    SetFpgaConfig, SetGpioOut, SetOutputMask, SetPhaseCorrection, SetPulseWidthTable, SetSilencer,
+    SilencerConfig, StmIntensity, Synchronize, WriteFociBuffer, WriteModulationBuffer,
     WritePatternBuffer, WritePatternPhase,
 };
 pub use stm::{FociStm, FociStmOption, PatternStm, PatternStmOption};

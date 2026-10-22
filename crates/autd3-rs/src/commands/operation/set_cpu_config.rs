@@ -3,11 +3,12 @@ pub use autd3_cpu_wire::config::{
 };
 use autd3_cpu_wire::payload::SetCpuConfigPayload;
 
+use crate::datagram::Datagram;
 use crate::error::Error;
 use crate::geometry::Device;
-use crate::protocol::{Cmd, PAYLOAD_BYTES};
+use crate::protocol::Cmd;
 
-use super::{Encoded, Operation, encode_header_only};
+use super::{Operation, encode_header_only};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct SetCpuConfig {
@@ -24,9 +25,10 @@ impl SetCpuConfig {
 impl crate::sealed::Sealed for SetCpuConfig {}
 
 impl Operation for SetCpuConfig {
-    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
+    fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
         let payload = SetCpuConfigPayload::encode(&self.config)?;
-        Ok(encode_header_only(out, Cmd::SetCpuConfig, &payload))
+        encode_header_only(out, Cmd::SetCpuConfig, &payload);
+        Ok(())
     }
 }
 
@@ -50,9 +52,9 @@ mod tests {
 
         assert_eq!(
             encoded,
-            Encoded::new(Cmd::SetCpuConfig, size_of::<SetCpuConfigPayload>())
+            (Cmd::SetCpuConfig, size_of::<SetCpuConfigPayload>())
         );
-        assert_eq!(SetCpuConfigPayload::parse(&out[..encoded.len]), Ok(config));
+        assert_eq!(SetCpuConfigPayload::parse(&out[..encoded.1]), Ok(config));
         assert_eq!(
             SetCpuConfig::default().distribution(),
             Distribution::Broadcast
@@ -66,7 +68,7 @@ mod tests {
             ..CpuConfig::default()
         };
         let (encoded, out) = encode(&SetCpuConfig::new(config)).unwrap();
-        assert_eq!(SetCpuConfigPayload::parse(&out[..encoded.len]), Ok(config));
+        assert_eq!(SetCpuConfigPayload::parse(&out[..encoded.1]), Ok(config));
     }
 
     #[test]
