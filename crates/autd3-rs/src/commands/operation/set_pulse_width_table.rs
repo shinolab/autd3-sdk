@@ -2,12 +2,13 @@ use autd3_cpu_wire::cpu_params::PWE_DEFAULT_TABLE;
 use autd3_cpu_wire::payload::PwePayload;
 use zerocopy::little_endian::U16;
 
+use crate::datagram::Datagram;
 use crate::error::Error;
 use crate::geometry::Device;
-use crate::protocol::{Cmd, PAYLOAD_BYTES};
+use crate::protocol::Cmd;
 use crate::value::PulseWidth;
 
-use super::{Encoded, Operation, encode_header_only};
+use super::{Operation, encode_header_only};
 
 pub use autd3_cpu_wire::layout::PWE_TABLE_SIZE;
 
@@ -51,16 +52,13 @@ impl Default for SetPulseWidthTable<'static> {
 impl crate::sealed::Sealed for SetPulseWidthTable<'_> {}
 
 impl Operation for SetPulseWidthTable<'_> {
-    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
+    fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
         let mut table = [U16::ZERO; PWE_TABLE_SIZE];
         for (dst, &v) in table.iter_mut().zip(self.table.iter()) {
             dst.set(v.pulse_width());
         }
-        Ok(encode_header_only(
-            out,
-            Cmd::SetPulseWidthTable,
-            &PwePayload { table },
-        ))
+        encode_header_only(out, Cmd::SetPulseWidthTable, &PwePayload { table });
+        Ok(())
     }
 }
 
@@ -77,10 +75,7 @@ mod tests {
             *v = PulseWidth::new(u16::try_from(i).unwrap()).unwrap();
         }
         let (cmd, out) = encode(&SetPulseWidthTable { table: &table }).unwrap();
-        assert_eq!(
-            cmd,
-            Encoded::new(Cmd::SetPulseWidthTable, size_of::<PwePayload>())
-        );
+        assert_eq!(cmd, (Cmd::SetPulseWidthTable, size_of::<PwePayload>()));
         assert_eq!(&out[0..2], &0u16.to_le_bytes());
         assert_eq!(&out[2..4], &1u16.to_le_bytes());
         assert_eq!(&out[510..512], &255u16.to_le_bytes());

@@ -2,12 +2,13 @@ use autd3_cpu_wire::fpga_params::NUM_TRANSDUCERS;
 use autd3_cpu_wire::payload::PhaseCorrPayload;
 use zerocopy::IntoBytes;
 
+use crate::datagram::Datagram;
 use crate::error::Error;
 use crate::geometry::Device;
-use crate::protocol::{Cmd, PAYLOAD_BYTES};
+use crate::protocol::Cmd;
 use crate::value::Phase;
 
-use super::{Distribution, Encoded, Operation, checked_device_row, encode_header_only};
+use super::{Distribution, Operation, checked_device_row, encode_header_only};
 
 #[derive(Clone, Copy, Debug)]
 pub struct SetPhaseCorrection<'a> {
@@ -21,15 +22,12 @@ impl Operation for SetPhaseCorrection<'_> {
         Distribution::PerDevice
     }
 
-    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
+    fn encode(&self, device: &Device, out: &mut Datagram) -> Result<(), Error> {
         let phases = checked_device_row(self.phases, device)?.as_bytes();
         let mut data = [0u8; NUM_TRANSDUCERS];
         data[..phases.len()].copy_from_slice(phases);
-        Ok(encode_header_only(
-            out,
-            Cmd::SetPhaseCorrection,
-            &PhaseCorrPayload { data },
-        ))
+        encode_header_only(out, Cmd::SetPhaseCorrection, &PhaseCorrPayload { data });
+        Ok(())
     }
 }
 
@@ -49,7 +47,7 @@ mod tests {
         let (cmd, out) = encode(&SetPhaseCorrection { phases: &data }).unwrap();
         assert_eq!(
             cmd,
-            Encoded::new(Cmd::SetPhaseCorrection, size_of::<PhaseCorrPayload>())
+            (Cmd::SetPhaseCorrection, size_of::<PhaseCorrPayload>())
         );
         for (i, p) in phases.iter().enumerate() {
             assert_eq!(out[i], p.0);
@@ -60,7 +58,7 @@ mod tests {
     fn phase_corr_rejects_device_out_of_range() {
         let dev = test_device(1);
         let data = vec![vec![Phase::ZERO; dev.num_transducers()]];
-        let mut out = [0u8; PAYLOAD_BYTES];
+        let mut out = Datagram::no_payload(Cmd::Nop);
         assert!(matches!(
             SetPhaseCorrection { phases: &data }.encode(&dev, &mut out),
             Err(Error::InvalidPayload(_))

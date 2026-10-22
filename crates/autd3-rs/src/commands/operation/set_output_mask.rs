@@ -1,10 +1,11 @@
 use autd3_cpu_wire::payload::OutputMaskPayload;
 
+use crate::datagram::Datagram;
 use crate::error::Error;
 use crate::geometry::Device;
-use crate::protocol::{Cmd, PAYLOAD_BYTES};
+use crate::protocol::Cmd;
 
-use super::{Distribution, Encoded, Operation, checked_device_row, encode_header_only};
+use super::{Distribution, Operation, checked_device_row, encode_header_only};
 
 #[derive(Clone, Copy, Debug)]
 pub struct SetOutputMask<'a> {
@@ -18,12 +19,13 @@ impl Operation for SetOutputMask<'_> {
         Distribution::PerDevice
     }
 
-    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
-        Ok(encode_header_only(
+    fn encode(&self, device: &Device, out: &mut Datagram) -> Result<(), Error> {
+        encode_header_only(
             out,
             Cmd::SetOutputMask,
             &OutputMaskPayload::new(checked_device_row(self.masks, device)?),
-        ))
+        );
+        Ok(())
     }
 }
 
@@ -45,10 +47,7 @@ mod tests {
         mask[n - 1] = true;
         let data = vec![mask];
         let (cmd, out) = encode(&SetOutputMask { masks: &data }).unwrap();
-        assert_eq!(
-            cmd,
-            Encoded::new(Cmd::SetOutputMask, size_of::<OutputMaskPayload>())
-        );
+        assert_eq!(cmd, (Cmd::SetOutputMask, size_of::<OutputMaskPayload>()));
         let mut expected = [0u8; size_of::<OutputMaskPayload>()];
         expected[0] = 0b0000_1001;
         expected[1] = 0b0000_0001;
@@ -61,7 +60,7 @@ mod tests {
     fn output_mask_rejects_device_out_of_range() {
         let dev = test_device(1);
         let data = vec![vec![true; dev.num_transducers()]];
-        let mut out = [0u8; PAYLOAD_BYTES];
+        let mut out = Datagram::no_payload(Cmd::Nop);
         assert!(matches!(
             SetOutputMask { masks: &data }.encode(&dev, &mut out),
             Err(Error::InvalidPayload(_))

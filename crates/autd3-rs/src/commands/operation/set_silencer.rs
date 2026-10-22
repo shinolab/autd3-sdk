@@ -4,14 +4,15 @@ use core::time::Duration;
 use autd3_cpu_wire::payload::SilencerPayload;
 
 use crate::common::ULTRASOUND_PERIOD;
+use crate::datagram::Datagram;
 use crate::error::Error;
 use crate::geometry::Device;
 use crate::params::{
     SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY, SILENCER_DEFAULT_COMPLETION_STEPS_PHASE,
 };
-use crate::protocol::{Cmd, PAYLOAD_BYTES};
+use crate::protocol::Cmd;
 
-use super::{Encoded, Operation, encode_header_only};
+use super::{Operation, encode_header_only};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FixedCompletionTime {
@@ -104,12 +105,13 @@ impl SetSilencer {
 impl crate::sealed::Sealed for SetSilencer {}
 
 impl Operation for SetSilencer {
-    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
+    fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
         let payload = match self.config {
             SilencerConfig::FixedCompletionTime(config) => config.payload()?,
             SilencerConfig::FixedUpdateRate(config) => config.payload(),
         };
-        Ok(encode_header_only(out, Cmd::SetSilencer, &payload))
+        encode_header_only(out, Cmd::SetSilencer, &payload);
+        Ok(())
     }
 }
 
@@ -122,7 +124,7 @@ mod tests {
     use autd3_cpu_wire::payload::{SILENCER_DEFAULT_UPDATE_RATE, SilencerFlags};
     use rstest::rstest;
 
-    const ENCODED: Encoded = Encoded::new(Cmd::SetSilencer, size_of::<SilencerPayload>());
+    const ENCODED: (Cmd, usize) = (Cmd::SetSilencer, size_of::<SilencerPayload>());
 
     fn nz(v: u16) -> NonZeroU16 {
         NonZeroU16::new(v).unwrap()
