@@ -17,7 +17,7 @@ async fn main() -> anyhow::Result<()> {
         client.send(ReleaseFailsafe).await?;
     }
 
-    client.close().await?;
+    client.close()?;
     // HIDE
     Ok(())
 }

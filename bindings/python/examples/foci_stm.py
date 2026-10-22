@@ -10,7 +10,7 @@ import signal
 import numpy as np
 
 import autd3
-from autd3.commands import Clear, FociStm, FociStmOption, SetSilencer, Synchronize
+from autd3.commands import Clear, FociStm, FociStmOption, Pattern, SetSilencer, Synchronize
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import Hz, mm
 from autd3.value import ControlPoint, ControlPoints, Intensity, Phase, SamplingConfig
@@ -21,7 +21,7 @@ async def main() -> None:
 
     geometry = Geometry([Autd3([0.0, 0.0, 0.0])])
 
-    async with autd3.Client.open(
+    with autd3.Client.open(
         geometry,
         autd3.TransportOption(),
     ) as client:
@@ -47,6 +47,8 @@ async def main() -> None:
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, stop.set)
         await stop.wait()
+
+        await client.send(Pattern(geometry.phase_buffer(), Intensity.MIN))
 
 
 if __name__ == "__main__":

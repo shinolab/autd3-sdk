@@ -4,7 +4,7 @@ use std::time::Duration;
 use anyhow::Result;
 
 use autd3_rs::commands::{
-    Clear, FixedCompletionTime, FociStm, FociStmOption, SetSilencer, Synchronize,
+    Clear, FixedCompletionTime, FociStm, FociStmOption, Pattern, SetSilencer, Synchronize,
 };
 use autd3_rs::geometry::{Autd3, Geometry, Vector3, offset};
 use autd3_rs::units::{Hz, mm};
@@ -72,6 +72,7 @@ async fn main() -> Result<()> {
     client.send(FociStm::new(config, &foci, FociStmOption::default())).await?;
     // ANCHOR_END: workaround
 
-    client.close().await?;
+    client.send(Pattern::new(&geometry.phase_buffer(), Intensity::MIN)).await?;
+    client.close()?;
     Ok(())
 }

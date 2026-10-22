@@ -55,6 +55,9 @@ async fn main() -> Result<()> {
     );
     tokio::signal::ctrl_c().await?;
 
-    client.close().await?;
+    client
+        .send(Pattern::new(&geometry.phase_buffer(), Intensity::MIN))
+        .await?;
+    client.close()?;
     Ok(())
 }

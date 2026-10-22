@@ -53,7 +53,7 @@ async fn a_user_thread_polling_and_waiting_drives_the_controller() {
     assert_eq!(controller.num_devices(), 2);
     assert_eq!(controller.geometry().num_devices(), 2);
     assert!(controller.device_time_now().is_ok());
-    controller.close().await.unwrap();
+    controller.close().unwrap();
 
     assert!(thread.join().unwrap().is_ok());
     assert!(matches!(controller.send(Nop).await, Err(Error::Closed)));
@@ -67,7 +67,7 @@ fn one_thread_can_run_both_the_controller_and_the_driver() {
 
     drive_until_ready(&mut driver, controller.send(ForceFan { value: true })).unwrap();
     let telemetry = drive_until_ready(&mut driver, controller.read_telemetry()).unwrap();
-    drive_until_ready(&mut driver, controller.close()).unwrap();
+    controller.close().unwrap();
 
     assert_eq!(telemetry.len(), 2);
     assert_eq!(fans(&emulator), [true, true]);
@@ -105,9 +105,6 @@ fn dropping_the_driver_fails_the_frames_in_flight_and_later_sends_with_closed() 
         pollster::block_on(controller.send(Nop)),
         Err(Error::Closed)
     ));
-    assert!(matches!(
-        pollster::block_on(controller.close()),
-        Err(Error::Closed)
-    ));
+    assert!(matches!(controller.close(), Err(Error::Closed)));
     assert!(matches!(checker.check(), Err(UdpError::Closed)));
 }

@@ -8,7 +8,7 @@ from autd3.value import Phase
 
 async def main() -> None:
     geometry = Geometry([Autd3()])
-    async with Client.open(geometry, TransportOption()) as client:
+    with Client.open(geometry, TransportOption()) as client:
         await client.send((Clear(), Synchronize()))
 
         phases = [

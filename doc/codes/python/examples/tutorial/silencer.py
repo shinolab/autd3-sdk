@@ -3,7 +3,7 @@ import asyncio
 import numpy as np
 
 from autd3 import Client, TransportOption
-from autd3.commands import Clear, FixedCompletionTime, FociStm, FociStmOption, SetSilencer, Synchronize
+from autd3.commands import Clear, FixedCompletionTime, FociStm, FociStmOption, Pattern, SetSilencer, Synchronize
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import Hz, mm
 from autd3.value import ControlPoint, ControlPoints, Intensity, Phase, SamplingConfig
@@ -15,7 +15,7 @@ from autd3_core import Duration
 async def main() -> None:
     geometry = Geometry([Autd3()])
 
-    async with Client.open(
+    with Client.open(
         geometry,
         TransportOption(),
     ) as client:
@@ -74,6 +74,8 @@ async def main() -> None:
         config = SamplingConfig(50.0 * Hz * len(foci))
         await client.send(FociStm(config, foci, FociStmOption()))
         # ANCHOR_END: workaround
+
+        await client.send(Pattern(geometry.phase_buffer(), Intensity.MIN))
 
 
 if __name__ == "__main__":

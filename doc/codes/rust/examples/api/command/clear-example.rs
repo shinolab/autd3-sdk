@@ -13,7 +13,7 @@ async fn main() -> anyhow::Result<()> {
 
     client.send(Clear).await?;
 
-    client.close().await?;
+    client.close()?;
     // HIDE
     Ok(())
 }

@@ -10,7 +10,7 @@ internal static class Sample
     {
         var geometry = new Geometry(new[] { new Autd3() });
 
-        await using var client = Client.Open(geometry, new TransportOption());
+        using var client = Client.Open(geometry, new TransportOption());
         await client.SendAsync(Command.Sequence(new Clear(), new Synchronize()));
 
         var wavelength = Pattern.Wavelength(340.0f * m / s);
@@ -40,5 +40,7 @@ internal static class Sample
         );
         await client.SendAsync(new Pattern(PatternBank.B1, patB, Intensity.Max));
         // ANCHOR_END: switch
+
+        await client.SendAsync(new Pattern(geometry.PhaseBuffer(), Intensity.Min));
     }
 }

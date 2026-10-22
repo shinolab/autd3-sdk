@@ -16,7 +16,7 @@ internal static class Sample
 var geometry = new Geometry(new[] { new Autd3() });
 
 // Open the client.
-await using var client = Client.Open(
+using var client = Client.Open(
     geometry,
     new TransportOption()
 );
@@ -61,6 +61,8 @@ try
 catch (OperationCanceledException)
 {
 }
+
+await client.SendAsync(new Pattern(geometry.PhaseBuffer(), Intensity.Min));
         // HIDE
     }
 }

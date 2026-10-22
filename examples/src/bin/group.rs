@@ -56,6 +56,9 @@ async fn main() -> Result<()> {
     println!("even devices -> left target, odd devices -> right target — press Ctrl+C to stop");
     tokio::signal::ctrl_c().await?;
 
-    client.close().await?;
+    client
+        .send(Pattern::new(&geometry.phase_buffer(), Intensity::MIN))
+        .await?;
+    client.close()?;
     Ok(())
 }

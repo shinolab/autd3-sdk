@@ -20,7 +20,7 @@ async fn main() -> anyhow::Result<()> {
 
     client.send(SetPulseWidthTable { table: &table }).await?;
 
-    client.close().await?;
+    client.close()?;
     // HIDE
     Ok(())
 }

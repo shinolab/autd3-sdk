@@ -293,7 +293,7 @@ async fn run(cli: &Cli) -> Result<()> {
         };
     }
 
-    client.close().await.context("closing client")?;
+    client.close().context("closing client")?;
     println!("Ok!");
     Ok(())
 }

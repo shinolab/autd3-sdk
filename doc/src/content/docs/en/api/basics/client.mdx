@@ -48,9 +48,13 @@ To continuously monitor the operating state of the devices, drive the `StateChec
 | `send_frame_at(frame, exec)` | ✓  | `Result<ResponseFuture, Error>`       | Send one frame at a given processing time (see [Processing time](#processing-time)) |
 | `state_checker()`         | —     | `StateChecker`                        | Get a `StateChecker`. See [State Monitoring](/autd3-sdk/en/guide/state-check/) for details. |
 | `send_heartbeat()`             | —     | `Result<(), Error>`                   | Send one liveness check to every device that is not `Lost` (see [Liveness check](#liveness-check)) |
-| `close()`                 | ✓     | `Result<(), Error>`                   | Stop and close the connection                              |
+| `close()`                 | —     | `Result<(), Error>`                   | Close the connection                                       |
 
-To avoid the noise of dropping the amplitude at once, `close()` first sets the [Silencer](/autd3-sdk/en/api/command/silencer/), then drives every transducer to zero amplitude, and then closes the connection.
+`close()` only stops the I/O thread and closes the connection; it sends nothing to the devices.
+The same holds for `Dispose` (`using`) in C#, leaving a `with` block in Python, and drop in Rust.
+The devices keep their last output after the client is closed, so stopping the output is the user's responsibility.
+To stop it, send, for example, a zero-amplitude [Pattern](/autd3-sdk/en/api/command/pattern/) (in Rust, `Pattern::new(&geometry.phase_buffer(), Intensity::MIN)`) before closing.
+To avoid the noise of dropping the amplitude at once, set the [Silencer](/autd3-sdk/en/api/command/silencer/) beforehand.
 
 ## streaming
 

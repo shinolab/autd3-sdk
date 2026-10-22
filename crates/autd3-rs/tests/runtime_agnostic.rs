@@ -29,8 +29,8 @@ fn a_client_opens_sends_and_closes_without_an_async_runtime() {
         client.send(ForceFan { value: true }).await.unwrap();
         client.send((Nop, Nop, Nop)).await.unwrap();
         assert_eq!(client.read_firmware_version().await.unwrap().len(), 2);
-        client.close().await.unwrap();
-        assert!(matches!(client.close().await, Err(Error::Closed)));
+        client.close().unwrap();
+        assert!(matches!(client.close(), Err(Error::Closed)));
     });
     assert!(emulator.with_devices(|devices| devices.iter().all(|d| d.fpga().force_fan())));
 }
@@ -48,7 +48,7 @@ fn a_timeout_is_noticed_without_an_async_runtime() {
     ));
     block_on(client.send(Nop)).unwrap();
 
-    block_on(client.close()).unwrap();
+    client.close().unwrap();
 }
 
 #[test]
@@ -76,7 +76,7 @@ fn more_concurrent_sends_than_slots_all_complete() {
         u64::try_from(SENDERS * 2).unwrap()
     );
 
-    block_on(client.close()).unwrap();
+    client.close().unwrap();
 }
 
 #[test]
@@ -98,5 +98,5 @@ fn several_os_threads_share_one_client() {
         client.bus_stats().frames() - before,
         u64::try_from(THREADS * ROUNDS).unwrap()
     );
-    block_on(client.close()).unwrap();
+    client.close().unwrap();
 }

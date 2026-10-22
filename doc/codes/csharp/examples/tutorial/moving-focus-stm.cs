@@ -10,7 +10,7 @@ internal static class Sample
     {
         var geometry = new Geometry(new[] { new Autd3() });
 
-        await using var client = Client.Open(geometry, new TransportOption());
+        using var client = Client.Open(geometry, new TransportOption());
         await client.SendAsync(Command.Sequence(new Clear(), new Synchronize()));
 
         var center = geometry.Center + Offset(0.0f * mm, 0.0f * mm, 150.0f * mm);
@@ -23,5 +23,7 @@ internal static class Sample
         };
         await client.SendAsync(new FociStm(new SamplingConfig(0.5f * Hz * points.Length), points, new FociStmOption()));
         // ANCHOR_END: stm
+
+        await client.SendAsync(new Pattern(geometry.PhaseBuffer(), Intensity.Min));
     }
 }

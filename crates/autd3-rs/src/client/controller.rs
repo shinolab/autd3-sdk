@@ -5,8 +5,8 @@ use async_lock::Mutex as AsyncMutex;
 use autd3_cpu_wire::payload::FirmwareInfo;
 use zerocopy::FromBytes;
 
-use crate::commands::operation::{Distribution, FixedCompletionTime};
-use crate::commands::{Command, Pattern, SetSilencer};
+use crate::commands::Command;
+use crate::commands::operation::Distribution;
 use crate::datagram::{Datagram, Frame, Frames};
 use crate::error::{Error, PayloadError};
 use crate::firmware_version::FirmwareVersion;
@@ -15,7 +15,7 @@ use crate::geometry::Geometry;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::telemetry::Telemetry;
 use crate::udp::{StateChecker, TransportOption};
-use crate::value::{Intensity, SysTime};
+use crate::value::SysTime;
 use autd3_rs_core::BusStats;
 
 use super::completion::{self, ResponseFuture};
@@ -133,22 +133,6 @@ impl Controller {
         self.session.send_heartbeat()
     }
 
-    async fn silent_stop(&self) -> Result<(), Error> {
-        tracing::debug!("sending silent stop");
-        let silenced = self
-            .send(SetSilencer::new(FixedCompletionTime {
-                strict_mode: false,
-                ..Default::default()
-            }))
-            .await;
-        if let Err(e) = &silenced {
-            tracing::warn!(error = %e, "could not set the silencer before stopping");
-        }
-        let phases = self.geometry.phase_buffer();
-        let stopped = self.send(Pattern::new(&phases, Intensity::MIN)).await;
-        silenced.and(stopped)
-    }
-
     async fn read_values<T>(
         &self,
         cmd: Cmd,
@@ -183,14 +167,13 @@ impl Controller {
         self.read_values(Cmd::ReadTelemetry, Telemetry::parse).await
     }
 
-    pub async fn close(&self) -> Result<(), Error> {
+    pub fn close(&self) -> Result<(), Error> {
         tracing::debug!("closing controller");
         if let Some(e) = self.session.closed_error() {
             return Err(e);
         }
-        let stopped = self.silent_stop().await;
         self.shutdown();
-        stopped
+        Ok(())
     }
 
     pub(crate) fn shutdown(&self) {

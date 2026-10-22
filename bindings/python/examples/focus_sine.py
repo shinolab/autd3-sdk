@@ -21,7 +21,7 @@ async def main() -> None:
 
     geometry = Geometry([Autd3([0.0, 0.0, 0.0])])
 
-    async with autd3.Client.open(
+    with autd3.Client.open(
         geometry,
         autd3.TransportOption(),
     ) as client:
@@ -53,6 +53,8 @@ async def main() -> None:
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, stop.set)
         await stop.wait()
+
+        await client.send(Pattern(geometry.phase_buffer(), Intensity.MIN))
 
 
 if __name__ == "__main__":

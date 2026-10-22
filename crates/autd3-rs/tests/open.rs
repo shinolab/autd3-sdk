@@ -142,7 +142,7 @@ async fn the_bundled_firmware_is_in_the_supported_series() {
 
     assert_eq!(versions.len(), 2);
     assert!(versions.iter().all(FirmwareVersion::is_supported));
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -159,7 +159,7 @@ async fn open_keeps_what_a_previous_session_left_until_the_user_clears_it() {
     assert_eq!(second.bus_stats().frames(), 0);
     second.send(Clear).await.unwrap();
     assert!(emulator.with_devices(|devices| devices.iter().all(|d| !d.fpga().force_fan())));
-    second.close().await.unwrap();
+    second.close().unwrap();
 }
 
 #[tokio::test]
@@ -170,7 +170,7 @@ async fn the_devices_can_be_opened_again_after_a_close() {
         let client = open_with(&emulator, &option(&emulator));
         client.send(Nop).await.unwrap();
         assert_eq!(client.read_firmware_version().await.unwrap().len(), 3);
-        client.close().await.unwrap();
+        client.close().unwrap();
     }
 }
 
@@ -184,5 +184,5 @@ async fn open_survives_a_lost_unit_info_reply() {
     let client = open_with(&emulator, &option(&emulator));
 
     client.send(Nop).await.unwrap();
-    client.close().await.unwrap();
+    client.close().unwrap();
 }

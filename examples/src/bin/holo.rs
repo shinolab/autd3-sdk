@@ -8,7 +8,7 @@ use autd3_rs::Client;
 use autd3_rs::commands::{Clear, Modulation, Pattern, SetSilencer, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
-use autd3_rs::value::SamplingConfig;
+use autd3_rs::value::{Intensity, SamplingConfig};
 use autd3_rs_pattern_holo::{AmplitudeTarget, GspatOption, NalgebraBackend, Pa, gspat};
 use tracing_subscriber::EnvFilter;
 
@@ -70,6 +70,9 @@ async fn main() -> Result<()> {
     println!("emitting two GSPAT foci with a 200 Hz AM — press Ctrl+C to stop");
     tokio::signal::ctrl_c().await?;
 
-    client.close().await?;
+    client
+        .send(Pattern::new(&geometry.phase_buffer(), Intensity::MIN))
+        .await?;
+    client.close()?;
     Ok(())
 }

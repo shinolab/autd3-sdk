@@ -48,9 +48,13 @@ import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
 | `send_frame_at(frame, exec)` | ✓  | `Result<ResponseFuture, Error>`       | 処理時刻を指定してフレームを 1 つ送る ([処理時刻](#処理時刻) 参照) |
 | `state_checker()`         | —     | `StateChecker`                         | `StateChecker`を取得. 詳細は[状態監視](/autd3-sdk/guide/state-check/)を参照. |
 | `send_heartbeat()`             | —     | `Result<(), Error>`                   | `Lost` でない全デバイスへ生存確認を 1 回送る ([生存確認](#生存確認) 参照) |
-| `close()`                 | ✓     | `Result<(), Error>`                   | 停止して接続を閉じる                                       |
+| `close()`                 | —     | `Result<(), Error>`                   | 接続を閉じる                                               |
 
-`close()` は, 振幅を一気に落としてノイズが出るのを避けるため, まず [Silencer](/autd3-sdk/api/command/silencer/) を設定してから全振動子の振幅を 0 にし, その後に接続を閉じる.
+`close()` は I/O スレッドを止めて接続を閉じるだけで, デバイスへは何も送らない.
+C# の `Dispose` (`using`), Python の `with` を抜けたとき, Rust の Drop も同じである.
+デバイスは閉じた後も直前の出力を続けるので, 出力を止めるのはユーザーの責任である.
+止めるには, 閉じる前に振幅 0 の [Pattern](/autd3-sdk/api/command/pattern/) (Rust なら `Pattern::new(&geometry.phase_buffer(), Intensity::MIN)`) を送るなどする.
+振幅を一気に落とすことによるノイズを避けたい場合は, その前に [Silencer](/autd3-sdk/api/command/silencer/) を設定しておく.
 
 ## streaming
 

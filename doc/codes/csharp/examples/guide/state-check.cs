@@ -18,7 +18,7 @@ internal static class Sample
         using var checker = client.StateChecker();
         // ANCHOR_END: open
 
-        await using (client)
+        using (client)
         {
             // ANCHOR: ptp_failsafe
             client.SendHeartbeat();
