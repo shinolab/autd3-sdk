@@ -24,6 +24,7 @@ use autd3_rs::commands::{
     StmIntensity, Synchronize, WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer,
     WritePatternPhase, each,
 };
+use autd3_rs::params::NUM_FOCI_MAX;
 use autd3_rs::udp::StateChecker;
 use autd3_rs::value::{
     ControlPoint, ControlPoints, GpioIn, Intensity, LoopBehavior, ModulationBank, PatternBank,
@@ -158,85 +159,35 @@ fn to_control_point(p: &Autd3StmControlPoint) -> ControlPoint {
     )
 }
 
-macro_rules! foci_points {
-    ($($n:literal => $variant:ident),* $(,)?) => {
-        pub enum FociPoints {
-            $($variant(Vec<ControlPoints<$n>>)),*
-        }
-
-        impl FociPoints {
-            fn from_flat(
-                points: &[Autd3StmControlPoint],
-                intensities: &[u8],
-                num_foci: usize,
-            ) -> Option<Self> {
-                match num_foci {
-                    $($n => Some(FociPoints::$variant(
-                        points
-                            .as_chunks::<$n>()
-                            .0
-                            .iter()
-                            .zip(intensities)
-                            .map(|(chunk, &intensity)| {
-                                ControlPoints::new(
-                                    chunk.each_ref().map(to_control_point),
-                                    Intensity(intensity),
-                                )
-                            })
-                            .collect(),
-                    )),)*
-                    _ => None,
-                }
-            }
-
-            fn boxed_stm(
-                &self,
-                config: SamplingConfig,
-                option: FociStmOption,
-            ) -> BoxedCommand<'_> {
-                match self {
-                    $(FociPoints::$variant(v) => {
-                        CoreFociStm::new(config, v.as_slice(), option).boxed()
-                    })*
-                }
-            }
-
-            fn write_foci(
-                &self,
-                bank: PatternBank,
-                start_index: usize,
-            ) -> Box<dyn Operation + '_> {
-                match self {
-                    $(FociPoints::$variant(v) => Box::new(WriteFociBuffer {
-                        bank,
-                        start_index,
-                        points: v.as_slice(),
-                    }),)*
-                }
-            }
-        }
-
-        #[unsafe(no_mangle)]
-        pub extern "C" fn autd3_op_write_foci_buffer_max_len(num_foci: u8) -> usize {
-            match num_foci {
-                $($n => WriteFociBuffer::<$n>::MAX_LEN,)*
-                _ => 0,
-            }
-        }
-    };
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_op_write_foci_buffer_max_len(num_foci: u8) -> usize {
+    WriteFociBuffer::max_len(num_foci)
 }
-foci_points!(1 => N1, 2 => N2, 3 => N3, 4 => N4, 5 => N5, 6 => N6, 7 => N7, 8 => N8);
 
 unsafe fn foci_points(
     points: *const Autd3StmControlPoint,
     num_samples: usize,
     num_foci: u8,
     intensities: *const u8,
-) -> Option<FociPoints> {
+) -> Option<Vec<ControlPoints>> {
+    if !(1..=NUM_FOCI_MAX).contains(&num_foci) {
+        return None;
+    }
     let n = usize::from(num_foci);
-    let points = unsafe { slice_ref(points, num_samples * n) }?;
+    let points = unsafe { slice_ref(points, num_samples.checked_mul(n)?) }?;
     let intensities = unsafe { slice_ref(intensities, num_samples) }?;
-    FociPoints::from_flat(points, intensities, n)
+    Some(
+        points
+            .chunks_exact(n)
+            .zip(intensities)
+            .map(|(chunk, &intensity)| {
+                ControlPoints::new(
+                    chunk.iter().map(to_control_point).collect::<Vec<_>>(),
+                    Intensity(intensity),
+                )
+            })
+            .collect(),
+    )
 }
 
 unsafe fn clone_buffers<T: Clone>(
@@ -391,7 +342,7 @@ pub enum OwnedCommand {
     WriteFociBuffer {
         bank: PatternBank,
         start_index: usize,
-        points: FociPoints,
+        points: Vec<ControlPoints>,
     },
     WritePatternPhase {
         bank: PatternBank,
@@ -457,7 +408,7 @@ pub enum OwnedCommand {
     SetPulseWidthTable(Box<[PulseWidth; PWE_TABLE_SIZE]>),
     FociStm {
         config: SamplingConfig,
-        points: FociPoints,
+        points: Vec<ControlPoints>,
         bank: PatternBank,
         sound_speed: f32,
         loop_behavior: LoopBehavior,
@@ -1541,7 +1492,11 @@ impl OwnedCommand {
                 bank,
                 start_index,
                 points,
-            } => Lowered::Operation(points.write_foci(*bank, *start_index)),
+            } => Lowered::Operation(Box::new(WriteFociBuffer {
+                bank: *bank,
+                start_index: *start_index,
+                points,
+            })),
             OwnedCommand::WritePatternPhase {
                 bank,
                 start_index,
@@ -1562,15 +1517,19 @@ impl OwnedCommand {
                 sound_speed,
                 loop_behavior,
                 transition_mode,
-            } => Lowered::Command(points.boxed_stm(
-                *config,
-                FociStmOption {
-                    bank: *bank,
-                    sound_speed: Velocity::from_m_s(*sound_speed),
-                    loop_behavior: *loop_behavior,
-                    transition_mode: *transition_mode,
-                },
-            )),
+            } => Lowered::Command(
+                CoreFociStm::new(
+                    *config,
+                    points,
+                    FociStmOption {
+                        bank: *bank,
+                        sound_speed: Velocity::from_m_s(*sound_speed),
+                        loop_behavior: *loop_behavior,
+                        transition_mode: *transition_mode,
+                    },
+                )
+                .boxed(),
+            ),
             OwnedCommand::PatternStm {
                 config,
                 phases,
@@ -3525,11 +3484,11 @@ mod tests {
     fn the_write_foci_buffer_max_len_shrinks_with_the_number_of_foci() {
         assert_eq!(
             autd3_op_write_foci_buffer_max_len(1),
-            WriteFociBuffer::<1>::MAX_LEN
+            WriteFociBuffer::max_len(1)
         );
         assert_eq!(
             autd3_op_write_foci_buffer_max_len(8),
-            WriteFociBuffer::<8>::MAX_LEN
+            WriteFociBuffer::max_len(8)
         );
         assert_eq!(autd3_op_write_foci_buffer_max_len(0), 0);
         assert_eq!(autd3_op_write_foci_buffer_max_len(9), 0);

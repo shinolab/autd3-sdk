@@ -24,13 +24,13 @@ import { excerpt } from "@lib/excerpt";
 | -------------- | --------------------- | ---------------------------------- |
 | `bank`         | `PatternBank`         | 書き込み先バンク                   |
 | `start_index` | `usize`               | バンク内の書き込み開始インデックス |
-| `points`       | `&[ControlPoints<N>]` | 焦点サンプルの列                   |
+| `points`       | `&[ControlPoints]`    | 焦点サンプルの列                   |
 
-`ControlPoints<N>` は `N` 個の焦点 (`ControlPoint`) と振幅を持つ 1 サンプル.
+`ControlPoints` は焦点 (`ControlPoint`) の列と振幅を持つ 1 サンプル. 焦点数は全サンプルで揃える.
 詳細は [FociStm](/autd3-sdk/api/command/foci-stm/#controlpoint--controlpoints) を参照.
 
 `WriteFociBuffer` は 1 フレームで送られ, 1 フレームに収まる分しか書けない.
-上限 (`ControlPoints` の数) は焦点数 `N` で変わり, Rust では `WriteFociBuffer::<N>::MAX_LEN`, Python では `WriteFociBuffer.max_len(num_foci)`, C# では `WriteFociBuffer.MaxLen(numFoci)` で, 超えると送信時にエラーになる.
+上限 (`ControlPoints` の数) は焦点数で変わり, Rust では `WriteFociBuffer::max_len(num_foci)`, Python では `WriteFociBuffer.max_len(num_foci)`, C# では `WriteFociBuffer.MaxLen(numFoci)` で, 超えると送信時にエラーになる.
 それより長い焦点列は `start_index` を上限ずつずらして分割して送る (高レベルの [FociStm](/autd3-sdk/api/command/foci-stm/) はこの分割を自動で行う).
 1 フレームのコマンドなので, [each](/autd3-sdk/api/basics/client/#each) でデバイスごとに異なる焦点列を割り当てられる.
 

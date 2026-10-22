@@ -24,7 +24,7 @@ async fn main() -> Result<()> {
     let radius = (30.0 * mm).mm();
 
     // ANCHOR: disable
-    let foci: Vec<ControlPoints<1>> = (0..20)
+    let foci: Vec<ControlPoints> = (0..20)
         .map(|i| {
             let theta = 2.0 * PI * i as f32 / 20.0;
             let p = center + Vector3::new(radius * theta.cos(), radius * theta.sin(), 0.0);
@@ -40,7 +40,7 @@ async fn main() -> Result<()> {
     // ANCHOR_END: disable
 
     // ANCHOR: err
-    let foci: Vec<ControlPoints<1>> = (0..40)
+    let foci: Vec<ControlPoints> = (0..40)
         .map(|i| {
             let theta = 2.0 * PI * i as f32 / 40.0;
             let p = center + Vector3::new(radius * theta.cos(), radius * theta.sin(), 0.0);
@@ -56,7 +56,7 @@ async fn main() -> Result<()> {
     // ANCHOR_END: err
 
     // ANCHOR: workaround
-    let foci: Vec<ControlPoints<1>> = (0..40)
+    let foci: Vec<ControlPoints> = (0..40)
         .map(|i| {
             let theta = 2.0 * PI * i as f32 / 40.0;
             let p = center + Vector3::new(radius * theta.cos(), radius * theta.sin(), 0.0);

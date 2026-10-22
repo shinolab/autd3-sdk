@@ -7,7 +7,7 @@ use autd3_rs::value::{ControlPoints, LoopBehavior, PatternBank, SamplingConfig, 
 
 fn main() -> anyhow::Result<()> {
     let bank = PatternBank::B0;
-    let _points: Vec<ControlPoints<1>> = (0..200)
+    let _points: Vec<ControlPoints> = (0..200)
         .map(|i| {
             let theta = 2.0 * PI * i as f32 / 200.0;
             ControlPoints::from(autd3_rs::Point3::origin() + offset(30.0 * mm * theta.cos(), 30.0 * mm * theta.sin(), 0.0 * mm))

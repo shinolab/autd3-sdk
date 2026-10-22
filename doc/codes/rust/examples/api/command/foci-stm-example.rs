@@ -17,7 +17,7 @@ async fn main() -> anyhow::Result<()> {
     client.send((Clear, Synchronize)).await?;
 
     let center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
-    let points: Vec<ControlPoints<1>> = (0..200)
+    let points: Vec<ControlPoints> = (0..200)
         .map(|i| {
             let theta = 2.0 * PI * i as f32 / 200.0;
             ControlPoints::from(center + offset(30.0 * mm * theta.cos(), 30.0 * mm * theta.sin(), 0.0 * mm))
