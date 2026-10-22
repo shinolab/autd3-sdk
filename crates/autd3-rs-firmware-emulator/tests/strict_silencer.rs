@@ -6,12 +6,12 @@ use core::num::NonZeroU8;
 
 use autd3_cpu_wire::ModulationBank::{self, B0, B1};
 use autd3_cpu_wire::PatternBank;
+use autd3_cpu_wire::fpga_params::REP_INFINITE;
 use autd3_cpu_wire::payload::{
     ActivatePatternBankPayload, ConfigPatternPayload, EmissionType,
     SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY, SILENCER_DEFAULT_COMPLETION_STEPS_PHASE,
     SILENCER_DEFAULT_UPDATE_RATE, SilencerFlags, SilencerPayload, TransitionMode,
 };
-use autd3_rs_core::params::REP_INFINITE;
 use autd3_rs_core::protocol::{Cmd, DeviceErrorCode};
 use autd3_rs_firmware_emulator::Device;
 use autd3_rs_firmware_emulator::test_utils::FpgaEmulatorTestExt;

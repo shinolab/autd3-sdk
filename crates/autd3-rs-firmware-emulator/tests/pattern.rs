@@ -7,12 +7,12 @@ mod pattern;
 use core::num::NonZeroU16;
 
 use autd3_cpu_wire::PatternBank;
+use autd3_cpu_wire::fpga_params::REP_INFINITE;
 use autd3_cpu_wire::payload::{
     ConfigPatternPayload, EmissionType, PhaseDepth, TransitionMode, WritePatternFusedPayload,
     WritePatternPhasePayload, WritePatternRawPayload,
 };
 use autd3_cpu_wire::value::Transition;
-use autd3_rs_core::params::REP_INFINITE;
 use autd3_rs_core::protocol::{Cmd, DeviceErrorCode};
 use autd3_rs_core::value::{Intensity, Phase};
 use autd3_rs_firmware_emulator::Device;

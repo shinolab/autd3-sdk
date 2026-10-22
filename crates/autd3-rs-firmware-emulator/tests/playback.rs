@@ -6,8 +6,9 @@ mod modulation;
 
 use autd3_cpu_wire::ModulationBank;
 use autd3_cpu_wire::cpu_params::SYS_TIME_TRANSITION_MARGIN;
+use autd3_cpu_wire::fpga_params::REP_INFINITE;
 use autd3_cpu_wire::payload::{GpioInPayload, TransitionMode, WriteModPayload};
-use autd3_rs_core::params::{REP_INFINITE, ULTRASOUND_FREQ_HZ};
+use autd3_rs_core::params::ULTRASOUND_FREQ_HZ;
 use autd3_rs_core::protocol::{Cmd, DeviceErrorCode};
 use autd3_rs_firmware_emulator::Device;
 use zerocopy::IntoBytes;

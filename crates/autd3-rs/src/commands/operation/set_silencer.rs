@@ -117,9 +117,9 @@ impl Operation for SetSilencer {
 mod tests {
     use super::*;
     use crate::error::PayloadError;
-    use crate::params::{SILENCER_DEFAULT_UPDATE_RATE, SilencerFlags};
     use crate::test_utils::encode;
     use autd3_cpu_wire::payload::PayloadBuildError;
+    use autd3_cpu_wire::payload::{SILENCER_DEFAULT_UPDATE_RATE, SilencerFlags};
     use rstest::rstest;
 
     const ENCODED: Encoded = Encoded::new(Cmd::SetSilencer, size_of::<SilencerPayload>());

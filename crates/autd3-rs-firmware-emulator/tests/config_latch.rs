@@ -5,8 +5,8 @@ mod common;
 mod modulation;
 
 use autd3_cpu_wire::ModulationBank;
+use autd3_cpu_wire::fpga_params::REP_INFINITE;
 use autd3_cpu_wire::payload::TransitionMode;
-use autd3_rs_core::params::REP_INFINITE;
 use autd3_rs_core::protocol::{Cmd, DeviceErrorCode};
 use autd3_rs_firmware_emulator::Device;
 

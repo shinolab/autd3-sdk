@@ -7,11 +7,11 @@ mod modulation;
 mod pattern;
 
 use autd3_cpu_wire::fpga_params::FpgaStateFlags;
+use autd3_cpu_wire::fpga_params::REP_INFINITE;
 use autd3_cpu_wire::payload::{
     EmissionType, TransitionMode, WriteModPayload, WritePatternRawPayload,
 };
 use autd3_cpu_wire::{ModulationBank, PatternBank};
-use autd3_rs_core::params::REP_INFINITE;
 use autd3_rs_core::protocol::Cmd;
 use autd3_rs_firmware_emulator::Device;
 use autd3_rs_firmware_emulator::test_utils::FpgaEmulatorTestExt;
