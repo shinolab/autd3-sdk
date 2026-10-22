@@ -85,7 +85,6 @@ struct FrameRange {
 pub struct Frames {
     datagrams: Vec<Datagram>,
     frame_ranges: Vec<FrameRange>,
-    encode_error: Option<Error>,
 }
 
 impl Frames {
@@ -101,8 +100,7 @@ impl Frames {
         cmd: impl Command<'a>,
     ) -> Result<(), Error> {
         self.clear();
-        let expanded = Expansion::new(geometry, self).push(cmd).map(|_| ());
-        let encoded = expanded.and_then(|()| self.encode_error.take().map_or(Ok(()), Err));
+        let encoded = Expansion::new(geometry, self).push(cmd).map(|_| ());
         if encoded.is_err() {
             self.clear();
         }
@@ -139,11 +137,6 @@ impl Frames {
     fn clear(&mut self) {
         self.datagrams.clear();
         self.frame_ranges.clear();
-        self.encode_error = None;
-    }
-
-    pub(super) fn record_encode_error(&mut self, e: Error) {
-        self.encode_error.get_or_insert(e);
     }
 
     fn push_frame(&mut self, dist: Distribution, num_devices: usize) -> usize {
@@ -250,7 +243,9 @@ mod tests {
     use crate::error::Error;
     use crate::geometry::Autd3;
     use crate::protocol::Cmd;
-    use crate::test_utils::{FailAt, Marker, build, cmd_at, cmds, payload, test_geometry};
+    use crate::test_utils::{
+        FailAt, FailBroadcast, Marker, build, cmd_at, cmds, payload, test_geometry,
+    };
     use crate::value::{
         Intensity, LoopBehavior, ModulationBank, PatternBank, Phase, SamplingConfig, SysTime,
         TransitionMode,
@@ -327,25 +322,52 @@ mod tests {
     }
 
     #[test]
-    fn an_encode_error_fails_the_encoding_even_when_the_command_ignores_its_push_result() {
-        struct IgnoresPushResult;
+    fn a_failing_op_stops_the_expansion_at_once() {
+        struct Expanded<'c>(&'c std::cell::Cell<bool>);
 
-        impl<'a> Command<'a> for IgnoresPushResult {
-            fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
-                let _ = expansion.push(FailAt(1));
-                let _ = expansion.push(each(|_| Some(FailAt(0))));
-                expansion.push(Marker(1))?;
+        impl<'a> Command<'a> for Expanded<'_> {
+            fn expand(self, _expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
+                self.0.set(true);
                 Ok(())
             }
         }
 
-        let mut frames = Frames::default();
-        let result = frames.encode_into(&test_geometry(2), IgnoresPushResult);
+        let expanded = std::cell::Cell::new(false);
+        let result = build(2, (FailAt(0), Expanded(&expanded)));
 
         assert!(matches!(result, Err(Error::InvalidPayload(_))));
-        assert!(frames.is_empty());
-        frames.encode_into(&test_geometry(2), Marker(2)).unwrap();
-        assert_eq!(frames.len(), 1);
+        assert!(!expanded.get());
+    }
+
+    #[test]
+    fn a_swallowed_failure_leaves_its_frame_in_place_for_the_commands_that_follow() {
+        struct SwallowsFailures;
+
+        impl<'a> Command<'a> for SwallowsFailures {
+            fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
+                assert!(expansion.push(FailBroadcast).is_err());
+                assert!(expansion.push(FailAt(1)).is_err());
+                assert!(expansion.push(each(|_| Some(FailAt(0)))).is_err());
+                expansion.push(Marker(5))?;
+                expansion.push(each(|d| Some(Marker(u8::try_from(d.idx()).unwrap() + 7))))?;
+                Ok(())
+            }
+        }
+
+        let frames = build(2, SwallowsFailures).unwrap();
+
+        assert_eq!(frames.len(), 5);
+        let failed_broadcast = frames.frame(0).unwrap();
+        assert_eq!(failed_broadcast.distribution(), Distribution::Broadcast);
+        assert_eq!(failed_broadcast.datagrams()[0].cmd, Cmd::Nop);
+        assert_eq!(cmd_at(&frames, 1, 0), Cmd::ConfigModulation);
+        assert_eq!(cmd_at(&frames, 1, 1), Cmd::Nop);
+        assert_eq!(cmd_at(&frames, 2, 0), Cmd::Nop);
+        assert_eq!(cmd_at(&frames, 2, 1), Cmd::Nop);
+        assert_eq!(payload(&frames, 3, 0)[0], 5);
+        assert_eq!(payload(&frames, 3, 1)[0], 5);
+        assert_eq!(payload(&frames, 4, 0)[0], 7);
+        assert_eq!(payload(&frames, 4, 1)[0], 8);
     }
 
     #[test]

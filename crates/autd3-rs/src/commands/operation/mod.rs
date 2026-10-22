@@ -15,7 +15,6 @@ mod set_silencer;
 mod write_foci_chunk;
 mod write_modulation_chunk;
 mod write_pattern_buffer;
-mod write_pattern_fused;
 mod write_pattern_phase;
 
 pub use crate::value::PatternIntensity;
@@ -37,9 +36,8 @@ pub use set_pulse_width_table::{PWE_TABLE_SIZE, SetPulseWidthTable};
 pub use set_silencer::{FixedCompletionTime, FixedUpdateRate, SetSilencer, SilencerConfig};
 pub(crate) use write_foci_chunk::WriteFociChunk;
 pub(crate) use write_modulation_chunk::WriteModulationChunk;
-pub(crate) use write_pattern_buffer::WritePatternChunk;
 pub use write_pattern_buffer::{StmIntensity, WritePatternBuffer};
-pub(crate) use write_pattern_fused::WritePatternFused;
+pub(crate) use write_pattern_buffer::{WritePatternChunk, encode_raw_pattern_entry};
 pub use write_pattern_phase::{PhaseDepth, WritePatternPhase};
 
 use zerocopy::{Immutable, IntoBytes};
@@ -140,7 +138,7 @@ mod tests {
 
     #[test]
     fn ops_whose_payload_depends_on_the_device_are_per_device() {
-        let ops: [&dyn Operation; 6] = [
+        let ops: [&dyn Operation; 7] = [
             &SetOutputMask { masks: &[] },
             &SetPhaseCorrection { phases: &[] },
             &WriteFociChunk::<1> {
@@ -151,6 +149,7 @@ mod tests {
                 flat_focus_count: 0,
             },
             &WritePatternBuffer::new(PatternBank::B0, 0, &[], Intensity::MAX),
+            &crate::commands::Pattern::new(&[], Intensity::MAX),
             &WritePatternChunk {
                 bank: PatternBank::B0,
                 start_index: 0,
