@@ -39,6 +39,7 @@ struct Unit {
     lock_blocked_since: Option<Instant>,
     last_tick: Instant,
     host: Option<SocketAddr>,
+    last_host_frame_ms: Option<u32>,
     main_loop_paused: bool,
     drop_frames: u32,
     drop_replies: u32,
@@ -295,7 +296,10 @@ impl Chain {
         let ptp_unlocked_ms = self.ptp_unlocked_ms(index, now);
         let unit = &mut self.units[index];
         let resets = unit.device.fpga().reset_count();
-        unit.device.cpu.publish_host_idle(now_ms);
+        unit.device.cpu.publish_host_idle(
+            unit.last_host_frame_ms
+                .map(|last| now_ms.wrapping_sub(last)),
+        );
         unit.device.cpu.publish_ptp_unlocked(ptp_unlocked_ms);
         let elapsed = now.saturating_duration_since(unit.last_tick).as_millis();
         if elapsed > 0 && !unit.main_loop_paused {
@@ -305,6 +309,7 @@ impl Chain {
             }
         }
         if unit.device.fpga().reset_count() != resets {
+            unit.last_host_frame_ms = None;
             unit.forget();
         }
         unit.device.fpga_mut().update_with_sys_time(bus);
@@ -356,10 +361,7 @@ impl Chain {
             self.advance(index, now);
             return false;
         }
-        self.units[index]
-            .device
-            .cpu
-            .record_host_frame(wrapping_millis_since(self.boot, now));
+        self.units[index].last_host_frame_ms = Some(wrapping_millis_since(self.boot, now));
         self.units[index].host = Some(src);
         self.advance(index, now);
         true
@@ -499,6 +501,7 @@ impl UdpEmulator {
                 lock_blocked_since: None,
                 last_tick: now,
                 host: None,
+                last_host_frame_ms: None,
                 main_loop_paused: false,
                 drop_frames: 0,
                 drop_replies: 0,
@@ -618,6 +621,7 @@ impl UdpEmulator {
         let mut chain = lock(&self.chain);
         let unit = &mut chain.units[index];
         unit.device.reset_cpu();
+        unit.last_host_frame_ms = None;
         unit.forget();
     }
 }

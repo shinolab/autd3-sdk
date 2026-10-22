@@ -1,8 +1,7 @@
 use core::cell::{Cell, RefCell};
-use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU16, AtomicU32, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use crate::cmd;
-use crate::ctx::MainCell;
 use crate::fifo::{FIFO_DEPTH, Fifo};
 use crate::fpga;
 use crate::port::Port;
@@ -51,51 +50,51 @@ impl Slot {
 
 struct Counters {
     fifo_drop: AtomicU32,
-    dispatch_error: AtomicU32,
-    processed: AtomicU32,
+    dispatch_error: Cell<u32>,
+    processed: Cell<u32>,
     send_failure: AtomicU32,
-    exec_late: AtomicU32,
-    failsafe: AtomicU16,
-    ptp_unlock_failsafe: AtomicU16,
-    boot_failure: AtomicU8,
+    exec_late: Cell<u32>,
+    failsafe: Cell<u16>,
+    ptp_unlock_failsafe: Cell<u16>,
+    boot_failure: Cell<u8>,
 }
 
 impl Counters {
     const fn new() -> Self {
         Self {
             fifo_drop: AtomicU32::new(0),
-            dispatch_error: AtomicU32::new(0),
-            processed: AtomicU32::new(0),
+            dispatch_error: Cell::new(0),
+            processed: Cell::new(0),
             send_failure: AtomicU32::new(0),
-            exec_late: AtomicU32::new(0),
-            failsafe: AtomicU16::new(0),
-            ptp_unlock_failsafe: AtomicU16::new(0),
-            boot_failure: AtomicU8::new(0),
+            exec_late: Cell::new(0),
+            failsafe: Cell::new(0),
+            ptp_unlock_failsafe: Cell::new(0),
+            boot_failure: Cell::new(0),
         }
     }
 
     fn reset_all_but_boot_failure(&self) {
         self.fifo_drop.store(0, Ordering::Relaxed);
-        self.dispatch_error.store(0, Ordering::Relaxed);
-        self.processed.store(0, Ordering::Relaxed);
+        self.dispatch_error.set(0);
+        self.processed.set(0);
         self.send_failure.store(0, Ordering::Relaxed);
-        self.exec_late.store(0, Ordering::Relaxed);
-        self.failsafe.store(0, Ordering::Relaxed);
-        self.ptp_unlock_failsafe.store(0, Ordering::Relaxed);
+        self.exec_late.set(0);
+        self.failsafe.set(0);
+        self.ptp_unlock_failsafe.set(0);
     }
 
     fn telemetry(&self, sync_resync: u8, cpu_watchdog: u8) -> Telemetry {
         Telemetry {
             fifo_drop: self.fifo_drop.load(Ordering::Relaxed).into(),
-            dispatch_error: self.dispatch_error.load(Ordering::Relaxed).into(),
-            processed: self.processed.load(Ordering::Relaxed).into(),
+            dispatch_error: self.dispatch_error.get().into(),
+            processed: self.processed.get().into(),
             send_failure: self.send_failure.load(Ordering::Relaxed).into(),
-            failsafe: self.failsafe.load(Ordering::Relaxed).into(),
-            ptp_unlock_failsafe: self.ptp_unlock_failsafe.load(Ordering::Relaxed).into(),
+            failsafe: self.failsafe.get().into(),
+            ptp_unlock_failsafe: self.ptp_unlock_failsafe.get().into(),
             sync_resync,
-            boot_failure: self.boot_failure.load(Ordering::Relaxed),
+            boot_failure: self.boot_failure.get(),
             cpu_watchdog,
-            exec_late: self.exec_late.load(Ordering::Relaxed).into(),
+            exec_late: self.exec_late.get().into(),
         }
     }
 }
@@ -130,33 +129,24 @@ impl OptionalMs {
     }
 }
 
-fn bump(counter: &AtomicU32) {
+fn bump(counter: &Cell<u32>) {
+    counter.set(counter.get().wrapping_add(1));
+}
+
+fn bump_shared(counter: &AtomicU32) {
     counter.fetch_add(1, Ordering::Relaxed);
-}
-
-fn bump_saturating_u16(counter: &AtomicU16) {
-    let _ = counter.try_update(Ordering::Relaxed, Ordering::Relaxed, |count| {
-        count.checked_add(1)
-    });
-}
-
-fn bump_saturating_u8(counter: &AtomicU8) {
-    let _ = counter.try_update(Ordering::Relaxed, Ordering::Relaxed, |count| {
-        count.checked_add(1)
-    });
 }
 
 pub struct Cpu {
     slots: [Slot; FIFO_DEPTH as usize],
     fifo: Fifo,
     counters: Counters,
-    failsafe_fired: MainCell<bool>,
-    ptp_unlock_failsafe_fired: MainCell<bool>,
+    failsafe_fired: Cell<bool>,
+    ptp_unlock_failsafe_fired: Cell<bool>,
     ptp_failsafe_active: AtomicBool,
-    pub(crate) config: MainCell<cmd::cpu_config::CpuConfig>,
+    pub(crate) config: Cell<cmd::cpu_config::CpuConfig>,
     pub(crate) config_reset_requested: AtomicBool,
     ptp_unlocked_ms: OptionalMs,
-    last_host_frame_ms: OptionalMs,
     host_idle_ms: OptionalMs,
     pub(crate) update: cmd::update::UpdateSession,
     pub(crate) fpga_update: cmd::fpga_update::FpgaUpdateSession,
@@ -190,13 +180,12 @@ impl Cpu {
             slots: [const { Slot::new() }; FIFO_DEPTH as usize],
             fifo: Fifo::new(),
             counters: Counters::new(),
-            failsafe_fired: MainCell::new(false),
-            ptp_unlock_failsafe_fired: MainCell::new(false),
+            failsafe_fired: Cell::new(false),
+            ptp_unlock_failsafe_fired: Cell::new(false),
             ptp_failsafe_active: AtomicBool::new(false),
-            config: MainCell::new(cmd::cpu_config::default_config()),
+            config: Cell::new(cmd::cpu_config::default_config()),
             config_reset_requested: AtomicBool::new(false),
             ptp_unlocked_ms: OptionalMs::new(),
-            last_host_frame_ms: OptionalMs::new(),
             host_idle_ms: OptionalMs::new(),
             update: cmd::update::UpdateSession::new(),
             fpga_update: cmd::fpga_update::FpgaUpdateSession::new(),
@@ -223,7 +212,8 @@ impl Cpu {
     }
 
     pub fn count_boot_failure(&self) {
-        bump_saturating_u8(&self.counters.boot_failure);
+        let count = &self.counters.boot_failure;
+        count.set(count.get().saturating_add(1));
     }
 
     pub fn count_send_failures(&self, count: u32) {
@@ -236,17 +226,8 @@ impl Cpu {
         self.ptp_unlocked_ms.store(elapsed_ms);
     }
 
-    pub fn record_host_frame(&self, now_ms: u32) {
-        self.last_host_frame_ms.store(Some(now_ms));
-        self.host_idle_ms.store(Some(0));
-    }
-
-    pub fn publish_host_idle(&self, now_ms: u32) {
-        self.host_idle_ms.store(
-            self.last_host_frame_ms
-                .load()
-                .map(|last| now_ms.wrapping_sub(last)),
-        );
+    pub fn publish_host_idle(&self, idle_ms: Option<u32>) {
+        self.host_idle_ms.store(idle_ms);
     }
 
     #[must_use]
@@ -305,8 +286,8 @@ impl Cpu {
     fn failsafe<P: Port>(
         port: &mut P,
         tripped: bool,
-        fired: &MainCell<bool>,
-        counter: &AtomicU16,
+        fired: &Cell<bool>,
+        counter: &Cell<u16>,
     ) -> bool {
         if !tripped {
             fired.set(false);
@@ -317,7 +298,7 @@ impl Cpu {
         }
         fired.set(true);
         cmd::failsafe::mute(port);
-        bump_saturating_u16(counter);
+        counter.set(counter.get().saturating_add(1));
         true
     }
 
@@ -338,7 +319,7 @@ impl Cpu {
         if Fifo::is_full(head, self.fifo.tail_acquire())
             || !self.slots[Fifo::slot(head)].store(*header, payload, msg_id)
         {
-            bump(&self.counters.fifo_drop);
+            bump_shared(&self.counters.fifo_drop);
             return Disposition::Dropped;
         }
         self.fifo.publish(head);
@@ -356,7 +337,7 @@ impl Cpu {
         }
         let msg_id = slot.msg_id.get();
         let Some(result) = self.handle_slot(port, slot, header.cmd) else {
-            bump(&self.counters.fifo_drop);
+            bump_shared(&self.counters.fifo_drop);
             self.results[Fifo::slot(tail)].set(self.result_before(tail));
             self.fifo.commit(tail);
             return Drained::Empty;
