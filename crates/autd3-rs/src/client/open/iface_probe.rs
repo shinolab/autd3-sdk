@@ -6,7 +6,7 @@ use crate::udp::{Channel, ResolvedEndpoint, UdpError, link_local_interfaces};
 use super::enumerate::{REQUEST_REPLY_WAIT, collect_responses};
 
 fn devices_respond_at(endpoint: ResolvedEndpoint) -> Result<bool, UdpError> {
-    let channel = Channel::open(endpoint.all_devices_dst, endpoint.scope_id, None, None)?;
+    let channel = Channel::open(endpoint.all_devices_dst, endpoint.scope_id, None)?;
     channel.send(
         endpoint.all_devices_dst,
         Kind::ReadUnitInfo,

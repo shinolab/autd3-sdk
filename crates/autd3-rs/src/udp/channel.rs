@@ -1,14 +1,11 @@
 use std::io::{self, IoSlice};
 use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6, UdpSocket};
 use std::num::NonZeroUsize;
-use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use autd3_cpu_wire::udp::{Header, Kind};
 use socket2::{Domain, Protocol, Socket, Type};
 use zerocopy::{FromBytes, IntoBytes};
-
-use super::pacer::Pacer;
 
 const RECV_BUFFER_BYTES: usize = 2048;
 
@@ -40,7 +37,6 @@ pub(crate) struct Channel {
     all_devices_dst: SocketAddrV6,
     device_addrs: Vec<SocketAddrV6>,
     waker_socket_port: u16,
-    pacer: Option<Mutex<Pacer>>,
 }
 
 #[cfg(unix)]
@@ -204,7 +200,6 @@ impl Channel {
     pub(crate) fn open(
         all_devices_dst: SocketAddrV6,
         scope_id: Option<u32>,
-        send_rate_limit_percent: Option<f32>,
         send_buffer_bytes: Option<NonZeroUsize>,
     ) -> io::Result<Self> {
         let socket = Socket::new(Domain::IPV6, Type::DGRAM, Some(Protocol::UDP))?;
@@ -239,7 +234,6 @@ impl Channel {
             all_devices_dst,
             device_addrs: Vec::new(),
             waker_socket_port,
-            pacer: send_rate_limit_percent.map(|percent| Mutex::new(Pacer::new(percent))),
         })
     }
 
@@ -295,16 +289,6 @@ impl Channel {
             IoSlice::new(body[0]),
             IoSlice::new(body[1]),
         ];
-        let len = size_of::<Header>() + body[0].len() + body[1].len();
-        let wait = self.pacer.as_ref().map_or(Duration::ZERO, |pacer| {
-            pacer
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .reserve_send_slot(Instant::now(), len)
-        });
-        if !wait.is_zero() {
-            std::thread::sleep(wait);
-        }
         let mut attempted_at = Instant::now();
         let sent = send_until_accepted(
             retry_full_socket_until,

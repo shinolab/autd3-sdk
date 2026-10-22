@@ -15,7 +15,6 @@ namespace AUTD3.Tests
             Assert.Equal(TimeSpan.FromMilliseconds(1), option.RecoveryReplyTimeout);
             Assert.Equal(TimeSpan.FromMilliseconds(100), option.LostTimeout);
             Assert.Equal(TimeSpan.FromMilliseconds(10), option.AckTimeout);
-            Assert.Null(option.SendRateLimitPercent);
             Assert.Equal(8192ul, option.SendBufferBytes);
         }
 
@@ -24,8 +23,8 @@ namespace AUTD3.Tests
         {
             var defaults = TransportOption.Defaults();
             var option = new TransportOption();
-            Assert.Equal(defaults.SendRateLimitPercent, option.SendRateLimitPercent);
-            Assert.Equal(90f, new TransportOption { SendRateLimitPercent = 90f }.SendRateLimitPercent);
+            Assert.Equal(defaults.SendBufferBytes, option.SendBufferBytes);
+            Assert.Null(new TransportOption { SendBufferBytes = null }.SendBufferBytes);
         }
 
         [Fact]
@@ -98,38 +97,6 @@ namespace AUTD3.Tests
 
             var zero = new TransportOption { SendBufferBytes = 0 };
             Assert.Throws<Autd3Exception>(() => zero.CreateHandle());
-        }
-
-        [Fact]
-        public void ASendRateLimitReachesTheNativeOption()
-        {
-            Assert.Null(default(TransportOption).SendRateLimitPercent);
-            var handle = new TransportOption { SendRateLimitPercent = 95 }.CreateHandle();
-            try
-            {
-                Assert.Equal(95f, TransportOption.FromHandle(handle).SendRateLimitPercent);
-            }
-            finally
-            {
-                NativeClient.autd3_transport_option_free(handle);
-            }
-
-            handle = new TransportOption { SendRateLimitPercent = 0 }.CreateHandle();
-            try
-            {
-                Assert.Equal(0f, TransportOption.FromHandle(handle).SendRateLimitPercent);
-            }
-            finally
-            {
-                NativeClient.autd3_transport_option_free(handle);
-            }
-        }
-
-        [Fact]
-        public void AZeroSendRateLimitFailsTheOpen()
-        {
-            var error = OpenFails(new TransportOption { SendRateLimitPercent = 0 });
-            Assert.Equal(Autd3ErrorCode.Network, error.Code);
         }
 
         [Fact]
