@@ -47,21 +47,15 @@ impl InflightRequest {
         self.sent_to
             .is_some_and(|sent_to| self.response.replied_devices() & sent_to == sent_to)
     }
-}
 
-pub(crate) struct AnsweredRequest {
-    request: InflightRequest,
-}
-
-impl AnsweredRequest {
     fn deliver(self, stats: &BusStats) {
-        let InflightRequest {
+        let Self {
             msg_id,
             sent_at,
             completion,
             response,
             ..
-        } = self.request;
+        } = self;
         tracing::trace!(msg_id, "frame answered by every device");
         stats.record_ack(u64::try_from(sent_at.elapsed().as_nanos()).unwrap_or(u64::MAX));
         if let Err(e) = response.check() {
@@ -233,22 +227,17 @@ impl SessionState {
             .map(|request| request.completion)
     }
 
-    fn answer(&mut self, index: usize, now: Instant) -> Option<AnsweredRequest> {
-        let request = self.inflight.take(index, now)?;
-        Some(AnsweredRequest { request })
-    }
-
-    pub(crate) fn record_sent_to(
+    fn record_sent_to(
         &mut self,
         msg_id: u16,
         sent_to: u128,
         now: Instant,
-    ) -> Option<AnsweredRequest> {
+    ) -> Option<InflightRequest> {
         let index = self.inflight.position(msg_id)?;
         let request = self.inflight.requests[index].as_mut()?;
         request.sent_to = Some(sent_to);
         if request.has_all_replies() {
-            return self.answer(index, now);
+            return self.inflight.take(index, now);
         }
         if index == 0 {
             self.inflight.head_ack_clock_started_at = now;
@@ -256,7 +245,7 @@ impl SessionState {
         None
     }
 
-    fn record_reply(&mut self, reply: &Reply, now: Instant) -> Option<AnsweredRequest> {
+    fn record_reply(&mut self, reply: &Reply, now: Instant) -> Option<InflightRequest> {
         let Some(index) = self.inflight.position(reply.msg_id) else {
             tracing::trace!(msg_id = reply.msg_id, "dropping a reply nothing waits for");
             return None;
@@ -279,7 +268,7 @@ impl SessionState {
         if !request.has_all_replies() {
             return None;
         }
-        self.answer(index, now)
+        self.inflight.take(index, now)
     }
 
     fn device_mask_where(&self, holds: impl Fn(DeviceLiveness) -> bool) -> u128 {
@@ -314,11 +303,7 @@ impl SessionState {
         self.publish(device);
     }
 
-    pub(crate) fn receive_reply(
-        &mut self,
-        reply: &DeviceReply,
-        now: Instant,
-    ) -> Option<AnsweredRequest> {
+    fn receive_reply(&mut self, reply: &DeviceReply, now: Instant) -> Option<InflightRequest> {
         let device = reply.reply.device;
         let expected_unit_id = u8::try_from(device).expect("a device index is below MAX_DEVICES");
         let liveness = &mut self.liveness[device];
@@ -1044,10 +1029,7 @@ mod tests {
 
         let answered = state.record_sent_to(msg_id, 0b11, now);
 
-        assert_eq!(
-            answered.map(|answered| answered.request.msg_id),
-            Some(msg_id)
-        );
+        assert_eq!(answered.map(|answered| answered.msg_id), Some(msg_id));
         assert_eq!(state.inflight.requests.len(), 0);
     }
 

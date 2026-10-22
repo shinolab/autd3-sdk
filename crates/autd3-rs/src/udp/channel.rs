@@ -39,7 +39,6 @@ pub(crate) struct Channel {
     waker_socket: UdpSocket,
     all_devices_dst: SocketAddrV6,
     device_addrs: Vec<SocketAddrV6>,
-    main_socket_port: u16,
     waker_socket_port: u16,
     pacer: Option<Mutex<Pacer>>,
 }
@@ -225,16 +224,20 @@ impl Channel {
             );
         }
         let socket: UdpSocket = socket.into();
-        let main_socket_port = socket.local_addr()?.port();
         let waker_socket = UdpSocket::bind(SocketAddrV6::new(Ipv6Addr::LOCALHOST, 0, 0, 0))?;
         waker_socket.set_nonblocking(true)?;
+        waker_socket.connect(SocketAddrV6::new(
+            Ipv6Addr::LOCALHOST,
+            socket.local_addr()?.port(),
+            0,
+            0,
+        ))?;
         let waker_socket_port = waker_socket.local_addr()?.port();
         Ok(Self {
             socket,
             waker_socket,
             all_devices_dst,
             device_addrs: Vec::new(),
-            main_socket_port,
             waker_socket_port,
             pacer: send_rate_limit_percent.map(|percent| Mutex::new(Pacer::new(percent))),
         })
@@ -258,8 +261,7 @@ impl Channel {
     }
 
     pub(crate) fn wake(&self) -> io::Result<()> {
-        let dst = SocketAddrV6::new(Ipv6Addr::LOCALHOST, self.main_socket_port, 0, 0);
-        self.waker_socket.send_to(&[], dst).map(|_| ())
+        self.waker_socket.send(&[]).map(|_| ())
     }
 
     pub(crate) fn send_to_device(
