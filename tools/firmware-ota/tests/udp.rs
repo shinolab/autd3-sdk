@@ -14,7 +14,6 @@ const CONFIRMED: Option<RunningImage> = Some(RunningImage::Confirmed);
 fn link(emulator: &UdpEmulator) -> UdpLink {
     let option = TransportOption {
         iface: emulator.interface(),
-        recovery_reply_timeout: Duration::from_millis(50),
         open_timeout: Duration::from_secs(6),
         ack_timeout: Duration::from_millis(300),
         sync_on_open: false,

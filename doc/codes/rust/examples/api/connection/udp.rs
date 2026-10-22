@@ -13,7 +13,6 @@ async fn main() -> Result<()> {
 
     let iface = Interface::Auto;
     let open_timeout = Duration::from_secs(40);
-    let recovery_reply_timeout = Duration::from_millis(1);
     let lost_timeout = Duration::from_millis(100);
     let ack_timeout = Duration::from_millis(10);
     let send_buffer_bytes = NonZeroUsize::new(8192);
@@ -22,7 +21,6 @@ async fn main() -> Result<()> {
     TransportOption {
         iface,
         open_timeout,
-        recovery_reply_timeout,
         lost_timeout,
         ack_timeout,
         send_buffer_bytes,

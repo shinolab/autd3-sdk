@@ -219,7 +219,6 @@ pub(crate) fn print_summary(s: &Summary) {
             println!("    code {code:#04x} : {count}");
         }
     }
-    println!("  recoveries since open   : {}", s.recoveries);
 
     println!();
     println!("throughput      :");

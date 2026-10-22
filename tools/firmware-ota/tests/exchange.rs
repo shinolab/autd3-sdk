@@ -10,7 +10,6 @@ const SILENT_DEVICE: usize = 1;
 fn option(emulator: &UdpEmulator) -> TransportOption {
     TransportOption {
         iface: emulator.interface(),
-        recovery_reply_timeout: Duration::from_millis(50),
         open_timeout: Duration::from_secs(6),
         ack_timeout: Duration::from_millis(300),
         sync_on_open: false,

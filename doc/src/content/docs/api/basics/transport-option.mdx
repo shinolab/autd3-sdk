@@ -19,7 +19,6 @@ import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
 | --------------------- | ----------- | ------- | --------------------------------------------------------------------------------------------- |
 | `iface`               | `Interface` | `Auto`  | 接続先                                                                                        |
 | `open_timeout`        | `Duration`  | 40 s    | open 全体 (デバイスの列挙と, 全台がデバイス間の同期を終えるまでの待ち) の上限                     |
-| `recovery_reply_timeout`       | `Duration`  | 1 ms    | `recover()` で `Lost` のデバイスの返信を待つ上限                                               |
 | `lost_timeout`        | `Duration`  | 100 ms  | この時間返信が無いデバイスを `Lost` とする                                                     |
 | `ack_timeout`         | `Duration`  | 10 ms   | 応答待ちのタイムアウト. 応答待ちの先頭のフレームの応答がこの時間揃わなければ, 送信中のフレームはすべて `Timeout` で失敗する ([Client](/autd3-sdk/api/basics/client/#応答待ちのタイムアウト) 参照) |
 | `send_buffer_bytes`         | `Option<NonZeroUsize>` | 8192 | ソケットの送信バッファの大きさ [B]. `None` で OS の既定のままにする |
@@ -30,7 +29,7 @@ import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
 
 Python の既定値は Rust と同じ具体値で, 型が `Option` の項目だけ `None` (無効) を渡せる. それ以外の項目に `None` を渡すと `TypeError` になる.
 C# では型が `Option` の項目を `null` にすると無効になる.
-`open_timeout` / `recovery_reply_timeout` / `lost_timeout` / `ack_timeout` を 0 にすると, `Client` を開くときにエラー (`Network`. Python の `Autd3Error.code` は `NETWORK`, C# の `Autd3Exception.Code` は `Network`) になる.
+`open_timeout` / `lost_timeout` / `ack_timeout` を 0 にすると, `Client` を開くときにエラー (`Network`. Python の `Autd3Error.code` は `NETWORK`, C# の `Autd3Exception.Code` は `Network`) になる.
 `send_buffer_bytes` の `0` は, Python では `TransportOption` を作るときに `ValueError`, C# では `Client` を開くときに `Autd3Exception` (`InvalidArgument`) になる (Rust は `NonZeroUsize` の型で `0` を渡せない).
 
 :::caution[Windows のタイマ分解能]

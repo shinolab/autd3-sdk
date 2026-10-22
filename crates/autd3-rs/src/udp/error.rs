@@ -46,8 +46,6 @@ pub enum UdpError {
     },
     #[error("open_timeout must be longer than zero")]
     ZeroOpenTimeout,
-    #[error("recovery_reply_timeout must be longer than zero")]
-    ZeroRecoveryReplyTimeout,
     #[error("lost_timeout must be longer than zero")]
     ZeroLostTimeout,
     #[error("ack_timeout must be longer than zero")]

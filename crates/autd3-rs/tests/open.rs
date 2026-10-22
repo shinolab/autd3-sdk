@@ -44,16 +44,13 @@ async fn a_zero_ack_timeout_is_rejected() {
 async fn an_invalid_transport_option_is_rejected() {
     let emulator = emulator(1);
     let option = TransportOption {
-        recovery_reply_timeout: Duration::ZERO,
+        lost_timeout: Duration::ZERO,
         ..option(&emulator)
     };
 
     let error = open_error(1, &option);
 
-    assert!(matches!(
-        udp_error(&error),
-        Some(UdpError::ZeroRecoveryReplyTimeout)
-    ));
+    assert!(matches!(udp_error(&error), Some(UdpError::ZeroLostTimeout)));
 }
 
 #[tokio::test]

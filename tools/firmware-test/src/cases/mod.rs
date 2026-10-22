@@ -13,7 +13,6 @@ pub(crate) mod force_fan;
 pub(crate) mod fpga_state;
 pub(crate) mod gpio;
 pub(crate) mod lost;
-pub(crate) mod lost_recovery;
 pub(crate) mod modulation;
 pub(crate) mod output_mask;
 pub(crate) mod pattern;

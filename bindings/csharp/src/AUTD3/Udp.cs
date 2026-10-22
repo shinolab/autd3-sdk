@@ -7,7 +7,6 @@ namespace AUTD3
     internal static class TransportOptionDefaults
     {
         internal static readonly TimeSpan OpenTimeout;
-        internal static readonly TimeSpan RecoveryReplyTimeout;
         internal static readonly TimeSpan LostTimeout;
         internal static readonly TimeSpan AckTimeout;
         internal static readonly ulong? SendBufferBytes;
@@ -18,7 +17,6 @@ namespace AUTD3
             try
             {
                 OpenTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_open_timeout);
-                RecoveryReplyTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_recovery_reply_timeout);
                 LostTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_lost_timeout);
                 AckTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_ack_timeout);
                 SendBufferBytes = TransportOption.ReadSendBufferBytes(handle);
@@ -36,8 +34,6 @@ namespace AUTD3
 
         private readonly TimeSpan? _openTimeout;
         public TimeSpan OpenTimeout { get => _openTimeout ?? TransportOptionDefaults.OpenTimeout; init => _openTimeout = value; }
-        private readonly TimeSpan? _recoveryReplyTimeout;
-        public TimeSpan RecoveryReplyTimeout { get => _recoveryReplyTimeout ?? TransportOptionDefaults.RecoveryReplyTimeout; init => _recoveryReplyTimeout = value; }
         private readonly TimeSpan? _lostTimeout;
         public TimeSpan LostTimeout { get => _lostTimeout ?? TransportOptionDefaults.LostTimeout; init => _lostTimeout = value; }
         private readonly TimeSpan? _ackTimeout;
@@ -77,7 +73,6 @@ namespace AUTD3
                     _ => NativeClient.autd3_transport_option_set_iface(handle, Iface.NameValue),
                 });
                 OptionNative.SetRequiredDuration(handle, "openTimeout", OpenTimeout, NativeClient.autd3_transport_option_set_open_timeout);
-                OptionNative.SetRequiredDuration(handle, "recoveryReplyTimeout", RecoveryReplyTimeout, NativeClient.autd3_transport_option_set_recovery_reply_timeout);
                 OptionNative.SetRequiredDuration(handle, "lostTimeout", LostTimeout, NativeClient.autd3_transport_option_set_lost_timeout);
                 OptionNative.SetRequiredDuration(handle, "ackTimeout", AckTimeout, NativeClient.autd3_transport_option_set_ack_timeout);
                 OptionNative.Apply("sendBufferBytes", SendBufferBytes switch
@@ -99,7 +94,6 @@ namespace AUTD3
         {
             Iface = ReadAddr(handle) is { } addr ? Interface.Addr(addr) : Interface.Auto,
             OpenTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_open_timeout),
-            RecoveryReplyTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_recovery_reply_timeout),
             LostTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_lost_timeout),
             AckTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_ack_timeout),
             SendBufferBytes = ReadSendBufferBytes(handle),

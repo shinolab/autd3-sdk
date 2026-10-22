@@ -42,7 +42,7 @@ The meaning of each state is as follows.
 | `Lost`    | No reply for a certain period of time                                                 |
 
 When a device in the middle of the chain becomes `Lost`, every device beyond it also becomes `Lost`.
-A `Lost` device is never recovered automatically (see [Recovery from Lost](#recovery-from-lost)).
+A `Lost` device does not come back while the `Client` is open. It stays `Lost` even if the communication comes back, for example after replugging a cable, so `close` the client and reopen it with `Client::open`.
 
 The following is an example that calls `check` at fixed intervals and outputs only when the state changes.
 
@@ -65,25 +65,3 @@ The PTP failsafe is not released by reopening the `Client`, but right after open
 
 Sending `ReleaseFailsafe` to a device that is still without the lock returns an error, and its output stays stopped. Wait until it enters `ptp_locked` before sending.
 Output stopped for a reason other than PTP, such as a lost connection to the host, does not appear in `ptp_failsafe` (check it with `is_failsafe_active()` of `read_fpga_state()`).
-
-## Recovery from Lost
-
-`Client::recover` looks for the `Lost` devices once and recovers the devices that answer again.
-The recovered devices become destinations of later sends again, and `recover` returns them. `recover` itself sends no command.
-The return value is the set of recovered devices, a `DeviceMask`. `recovered[i]` returns a `bool` telling whether device `i` came back (`false` for an out-of-range index). 
-If no device is `Lost`, it sends nothing and returns immediately.
-
-Only a device whose communication was cut off, for example by an unplugged cable, is recovered; a power-cycled device is not (reopen the client with `Client::open`).
-The total number of recovered devices can be read from `recoveries` of `BusStats`.
-
-The following is an example that calls `recover` when `check` finds a `Lost` device, and then sends `Synchronize` to the recovered devices and `ReleaseFailsafe`.
-
-<CodeTabs rust={excerpt(sample, "recover")} python={excerpt(pySample, "recover")} csharp={excerpt(csSample, "recover")} />
-
-Note the following when a device is recovered.
-
-- `recover` sends neither `Synchronize` nor `ReleaseFailsafe`. Nothing reaches a device while it is `Lost`, so its output might have been stopped by the failsafe if the failsafe is enabled (see [SetCpuConfig](/autd3-sdk/en/api/command/cpu-config/)).
-  - Send [`Synchronize`](/autd3-sdk/en/api/command/synchronize/) yourself to realign the output phase
-  - Send [`ReleaseFailsafe`](/autd3-sdk/en/api/command/release-failsafe/) to resume the stopped output. `ReleaseFailsafe` does nothing to a device that is not stopped by the failsafe, so it can be sent to all devices.
-- If a recovered device is `Syncing`, wait with `check` until it becomes `Ready` before sending `Synchronize`.
-- Other sends wait while `recover` runs. Frames waiting for a reply keep waiting (a recovered device is not expected to reply to a frame that was sent while it was not a destination).
