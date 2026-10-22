@@ -42,7 +42,7 @@ pub trait Operation {
 `impl<O: Operation> Command for O` のブランケット実装があるため, 単一の `Operation` はそのまま `Command` として扱える.
 
 `Operation` は 1 フレームに対応する.
-バッファ書き込み (`WriteModulationBuffer` / `WriteFociBuffer`) も `Operation` であり, 1 フレームに収まる分 (`MAX_LEN`) しか書かない.
+バッファ書き込み (`WriteModulationBuffer` / `WriteFociBuffer`) も `Operation` であり, 1 フレームに収まる分 (`WriteModulationBuffer::MAX_LEN` / `WriteFociBuffer::max_len(num_foci)`) しか書かない.
 1 フレームに収まらないデータの分割は, 高レベルの `Modulation` / `FociStm` が `expand` の中で行う.
 
 ### Distribution

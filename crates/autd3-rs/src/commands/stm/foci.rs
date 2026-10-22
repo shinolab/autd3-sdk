@@ -1,8 +1,8 @@
 use crate::Velocity;
 use crate::commands::Command;
-use crate::commands::operation::{ActivatePatternBank, ConfigFociStm, WriteFociBuffer};
+use crate::commands::operation::{ActivatePatternBank, ConfigFociStm, WriteFociBuffer, num_foci};
 use crate::datagram::Expansion;
-use crate::error::{Error, PayloadError};
+use crate::error::Error;
 use crate::value::{ControlPoints, LoopBehavior, PatternBank, SamplingConfig, TransitionMode};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -25,17 +25,17 @@ impl Default for FociStmOption {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct FociStm<'a, const N: usize> {
+pub struct FociStm<'a> {
     pub config: SamplingConfig,
-    pub points: &'a [ControlPoints<N>],
+    pub points: &'a [ControlPoints],
     pub option: FociStmOption,
 }
 
-impl<'a, const N: usize> FociStm<'a, N> {
+impl<'a> FociStm<'a> {
     #[must_use]
     pub const fn new(
         config: SamplingConfig,
-        points: &'a [ControlPoints<N>],
+        points: &'a [ControlPoints],
         option: FociStmOption,
     ) -> Self {
         Self {
@@ -46,23 +46,17 @@ impl<'a, const N: usize> FociStm<'a, N> {
     }
 }
 
-impl<const N: usize> Command for FociStm<'_, N> {
+impl Command for FociStm<'_> {
     fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
         let size = self.points.len();
-        let num_foci = u8::try_from(N).unwrap_or(u8::MAX);
+        let num_foci = num_foci(self.points)?;
+        let max_len = WriteFociBuffer::max_len(num_foci);
 
         let bank = self.option.bank;
-        if self.points.is_empty() {
-            return Err(PayloadError::FociEmpty.into());
-        }
-        for (i, points) in self
-            .points
-            .chunks(WriteFociBuffer::<N>::MAX_LEN)
-            .enumerate()
-        {
+        for (i, points) in self.points.chunks(max_len).enumerate() {
             expansion.push(WriteFociBuffer {
                 bank,
-                start_index: i * WriteFociBuffer::<N>::MAX_LEN,
+                start_index: i * max_len,
                 points,
             })?;
         }
@@ -93,6 +87,7 @@ mod tests {
     use crate::value::{Intensity, Phase};
     use core::num::NonZeroU16;
 
+    use crate::error::PayloadError;
     use crate::value::{ControlPoint, Focus};
     use autd3_cpu_wire::payload::WriteFociPayload;
 
@@ -193,8 +188,8 @@ mod tests {
 
     #[test]
     fn foci_stm_auto_splits_write_frames() {
-        let max_foci_per_frame = WriteFociBuffer::<1>::MAX_LEN;
-        let points: Vec<ControlPoints<1>> = (0..max_foci_per_frame + 5)
+        let max_foci_per_frame = WriteFociBuffer::max_len(1);
+        let points: Vec<ControlPoints> = (0..max_foci_per_frame + 5)
             .map(|i| ControlPoints::from(Point3::new(0.0, 0.0, i as f32 * 0.1)))
             .collect();
         let stm = FociStm::new(SamplingConfig::FREQ_4K, &points, FociStmOption::default());
@@ -216,7 +211,7 @@ mod tests {
 
     #[test]
     fn foci_stm_splits_on_control_point_boundaries() {
-        let max = WriteFociBuffer::<7>::MAX_LEN;
+        let max = WriteFociBuffer::max_len(7);
         let points =
             vec![
                 ControlPoints::new([ControlPoint::from(Point3::origin()); 7], Intensity::MAX);
@@ -246,13 +241,29 @@ mod tests {
 
     #[test]
     fn foci_stm_rejects_empty_points() {
-        let points: [ControlPoints<1>; 0] = [];
+        let points: [ControlPoints; 0] = [];
         assert!(matches!(
             build(
                 1,
                 FociStm::new(SamplingConfig::FREQ_4K, &points, FociStmOption::default())
             ),
             Err(Error::InvalidPayload(PayloadError::FociEmpty))
+        ));
+    }
+
+    #[test]
+    fn foci_stm_rejects_a_num_foci_mismatch_across_frames() {
+        let max = WriteFociBuffer::max_len(2);
+        let pair = ControlPoints::new([ControlPoint::from(Point3::origin()); 2], Intensity::MAX);
+        let mut points = vec![pair; max + 1];
+        points[max] = ControlPoints::from(Point3::origin());
+        assert!(matches!(
+            build(
+                1,
+                FociStm::new(SamplingConfig::FREQ_4K, &points, FociStmOption::default())
+            ),
+            Err(Error::InvalidPayload(PayloadError::NumFociMismatch { index, expected: 2, got: 1 }))
+                if index == max
         ));
     }
 

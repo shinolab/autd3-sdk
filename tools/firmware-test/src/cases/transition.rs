@@ -85,7 +85,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     Ok(())
 }
 
-fn vertex(center: Point3<f32>, dx: f32, dy: f32) -> ControlPoints<1> {
+fn vertex(center: Point3<f32>, dx: f32, dy: f32) -> ControlPoints {
     ControlPoints::new(
         [ControlPoint::new(
             center + Vector3::new(dx, dy, 0.0),

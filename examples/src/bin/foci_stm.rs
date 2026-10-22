@@ -30,7 +30,7 @@ async fn main() -> Result<()> {
 
     // 200-point circle of radius 30 mm, 150 mm above the array center.
     let center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
-    let points: Vec<ControlPoints<1>> = (0..200)
+    let points: Vec<ControlPoints> = (0..200)
         .map(|i| {
             let theta = 2.0 * PI * i as f32 / 200.0;
             ControlPoints::from(

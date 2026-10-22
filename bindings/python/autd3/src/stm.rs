@@ -12,6 +12,7 @@ use autd3_rs::commands::{
     FociStm as CoreFociStm, FociStmOption as CoreFociStmOption, PatternStm as CorePatternStm,
     PatternStmOption as CorePatternStmOption, StmIntensity as CoreStmIntensity,
 };
+use autd3_rs::params::NUM_FOCI_MAX;
 use autd3_rs::value::{
     ControlPoint as CoreControlPoint, ControlPoints as CoreControlPoints, Intensity,
     PatternBank as CorePatternBank, Phase, SamplingConfig,
@@ -55,36 +56,33 @@ impl ControlPoint {
 
 #[pyclass(name = "ControlPoints", module = "autd3.value", eq, frozen)]
 #[derive(Clone, PartialEq)]
-pub struct ControlPoints {
-    pub(crate) points: Vec<CoreControlPoint>,
-    pub(crate) intensity: Intensity,
-}
+pub struct ControlPoints(pub(crate) CoreControlPoints);
 
 #[pymethods]
 impl ControlPoints {
     #[new]
     #[pyo3(signature = (points, intensity))]
     fn new(points: Vec<PyRef<'_, ControlPoint>>, intensity: &Bound<'_, PyAny>) -> PyResult<Self> {
-        Ok(Self {
-            points: points.iter().map(|p| p.0).collect(),
-            intensity: Intensity(extract_u8(intensity)?),
-        })
+        Ok(Self(CoreControlPoints::new(
+            points.iter().map(|p| p.0).collect::<Vec<_>>(),
+            Intensity(extract_u8(intensity)?),
+        )))
     }
 
     #[getter]
     fn points(&self) -> Vec<ControlPoint> {
-        self.points.iter().copied().map(ControlPoint).collect()
+        self.0.points.iter().copied().map(ControlPoint).collect()
     }
 
     #[getter]
     fn intensity<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        intensity_to_py(py, self.intensity)
+        intensity_to_py(py, self.0.intensity)
     }
 
     fn __repr__(&self) -> String {
         format!(
             "ControlPoints {{ points: {:?}, intensity: {:?} }}",
-            self.points, self.intensity
+            self.0.points, self.0.intensity
         )
     }
 }
@@ -193,83 +191,21 @@ impl PatternStmOption {
     }
 }
 
-macro_rules! foci_points {
-    ($($n:literal => $variant:ident),* $(,)?) => {
-        pub(crate) enum FociPoints {
-            $($variant(Vec<CoreControlPoints<$n>>)),*
-        }
-
-        impl FociPoints {
-            fn from_samples(samples: &[PyRef<'_, ControlPoints>]) -> PyResult<Self> {
-                let Some(num_foci) = samples.first().map(|s| s.points.len()) else {
-                    return Ok(FociPoints::N1(Vec::new()));
-                };
-                if samples.iter().any(|s| s.points.len() != num_foci) {
-                    return Err(PyValueError::new_err("every FociStm sample must have the same number of foci"));
-                }
-                match num_foci {
-                    $($n => {
-                        let v = samples
-                            .iter()
-                            .map(|s| {
-                                let arr: [CoreControlPoint; $n] = core::array::from_fn(|k| s.points[k]);
-                                CoreControlPoints::new(arr, s.intensity)
-                            })
-                            .collect();
-                        Ok(FociPoints::$variant(v))
-                    })*
-                    other => Err(PyValueError::new_err(format!(
-                        "number of foci per sample must be 1..=8, got {other}"
-                    ))),
-                }
-            }
-
-            fn push_into(
-                &self,
-                config: SamplingConfig,
-                option: CoreFociStmOption,
-                expansion: &mut Expansion<'_>,
-            ) -> Result<(), autd3_rs::Error> {
-                match self {
-                    $(FociPoints::$variant(v) => {
-                        expansion.push(CoreFociStm::new(config, v.as_slice(), option))?;
-                    })*
-                }
-                Ok(())
-            }
-
-            fn write_foci(&self, bank: CorePatternBank, start_index: usize) -> Box<dyn Operation + '_> {
-                match self {
-                    $(FociPoints::$variant(v) => Box::new(CoreWriteFociBuffer {
-                        bank,
-                        start_index,
-                        points: v.as_slice(),
-                    }),)*
-                }
-            }
-        }
-
-        fn write_foci_max_len(num_foci: usize) -> Option<usize> {
-            match num_foci {
-                $($n => Some(CoreWriteFociBuffer::<$n>::MAX_LEN),)*
-                _ => None,
-            }
-        }
-    };
-}
-
-foci_points!(1 => N1, 2 => N2, 3 => N3, 4 => N4, 5 => N5, 6 => N6, 7 => N7, 8 => N8);
-
 pub(crate) struct FociStmData {
     config: SamplingConfig,
-    points: FociPoints,
+    points: Vec<CoreControlPoints>,
     option: CoreFociStmOption,
 }
 
 impl PushCommand for FociStmData {
     fn push_into(&self, expansion: &mut Expansion<'_>) -> Result<(), autd3_rs::Error> {
-        self.points.push_into(self.config, self.option, expansion)
+        expansion.push(CoreFociStm::new(self.config, &self.points, self.option))?;
+        Ok(())
     }
+}
+
+fn core_points(points: &[PyRef<'_, ControlPoints>]) -> Vec<CoreControlPoints> {
+    points.iter().map(|p| p.0.clone()).collect()
 }
 
 #[pyclass(name = "FociStm", module = "autd3.commands", frozen)]
@@ -283,24 +219,28 @@ impl FociStm {
         #[pyo3(from_py_with = extract_sampling_config)] config: SamplingConfig,
         points: Vec<PyRef<'_, ControlPoints>>,
         option: PyRef<'_, FociStmOption>,
-    ) -> PyResult<Self> {
-        Ok(Self(Arc::new(FociStmData {
+    ) -> Self {
+        Self(Arc::new(FociStmData {
             config,
-            points: FociPoints::from_samples(&points)?,
+            points: core_points(&points),
             option: option.0,
-        })))
+        }))
     }
 }
 
 pub(crate) struct WriteFociBufferData {
     bank: CorePatternBank,
     start_index: usize,
-    points: FociPoints,
+    points: Vec<CoreControlPoints>,
 }
 
 impl PushOperation for WriteFociBufferData {
     fn operation(&self) -> Box<dyn Operation + '_> {
-        self.points.write_foci(self.bank, self.start_index)
+        Box::new(CoreWriteFociBuffer {
+            bank: self.bank,
+            start_index: self.start_index,
+            points: &self.points,
+        })
     }
 }
 
@@ -311,11 +251,15 @@ pub struct WriteFociBuffer(pub(crate) Arc<WriteFociBufferData>);
 impl WriteFociBuffer {
     #[staticmethod]
     fn max_len(num_foci: usize) -> PyResult<usize> {
-        write_foci_max_len(num_foci).ok_or_else(|| {
-            PyValueError::new_err(format!(
-                "number of foci per sample must be 1..=8, got {num_foci}"
-            ))
-        })
+        u8::try_from(num_foci)
+            .ok()
+            .map(CoreWriteFociBuffer::max_len)
+            .filter(|&len| len > 0)
+            .ok_or_else(|| {
+                PyValueError::new_err(format!(
+                    "number of foci per sample must be 1..={NUM_FOCI_MAX}, got {num_foci}"
+                ))
+            })
     }
 
     #[new]
@@ -323,12 +267,12 @@ impl WriteFociBuffer {
         bank: ops::PatternBank,
         start_index: usize,
         points: Vec<PyRef<'_, ControlPoints>>,
-    ) -> PyResult<Self> {
-        Ok(Self(Arc::new(WriteFociBufferData {
+    ) -> Self {
+        Self(Arc::new(WriteFociBufferData {
             bank: bank.0,
             start_index,
-            points: FociPoints::from_samples(&points)?,
-        })))
+            points: core_points(&points),
+        }))
     }
 }
 

@@ -24,7 +24,7 @@ fn slow_sampling() -> SamplingConfig {
     SamplingConfig::new(NonZeroU16::new(SAMPLING_DIVIDER).unwrap())
 }
 
-fn quiet_foci(center: Point3<f32>) -> Vec<ControlPoints<1>> {
+fn quiet_foci(center: Point3<f32>) -> Vec<ControlPoints> {
     (0..4)
         .map(|i| {
             let p = center + Vector3::new(i as f32, 0.0, 0.0);
