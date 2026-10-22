@@ -334,10 +334,10 @@ impl Chain {
     }
 
     fn enqueue(&mut self, index: usize, body: &[u8], msg_id: u16) {
-        let _ = self.units[index].device.recv(body, msg_id);
+        self.units[index].device.recv(body, msg_id);
         if self.units[index].duplicate_frames > 0 {
             self.units[index].duplicate_frames -= 1;
-            let _ = self.units[index].device.recv(body, msg_id);
+            self.units[index].device.recv(body, msg_id);
         }
     }
 

@@ -359,7 +359,7 @@ impl MockPort {
             return;
         };
         self.isr_seen_reply = Some(cpu.reply());
-        let _ = cpu.recv_frame(&[0, cmd, 0, 0, 0, 0], 0);
+        cpu.recv_frame(&[0, cmd, 0, 0, 0, 0], 0);
     }
 }
 
@@ -588,7 +588,7 @@ impl Harness {
     }
 
     pub(crate) fn deliver_no_drain(&mut self, frame: &Frame) {
-        let _ = self.cpu.recv_frame(&frame.bytes()[..], 0);
+        self.cpu.recv_frame(&frame.bytes()[..], 0);
     }
 
     pub(crate) fn process_one(&mut self) -> bool {

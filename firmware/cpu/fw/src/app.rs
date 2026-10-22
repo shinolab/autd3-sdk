@@ -6,7 +6,7 @@ use crate::fifo::{FIFO_DEPTH, Fifo};
 use crate::fpga;
 use crate::port::Port;
 use crate::proto::{
-    Cmd, Disposition, Drained, EXEC_AT_UNIT_NS, Error, FrameHeader, PAYLOAD_BYTES, Reply, ReplyData,
+    Cmd, Drained, EXEC_AT_UNIT_NS, Error, FrameHeader, PAYLOAD_BYTES, Reply, ReplyData,
 };
 use autd3_cpu_wire::payload::Telemetry;
 use zerocopy::little_endian::U32;
@@ -240,12 +240,12 @@ impl Cpu {
     }
 
     #[must_use]
-    pub fn ptp_unlocked_ms(&self) -> Option<u32> {
+    pub(crate) fn ptp_unlocked_ms(&self) -> Option<u32> {
         self.ptp_unlocked_ms.load()
     }
 
     #[must_use]
-    pub fn host_idle_ms(&self) -> Option<u32> {
+    pub(crate) fn host_idle_ms(&self) -> Option<u32> {
         self.host_idle_ms.load()
     }
 
@@ -311,19 +311,18 @@ impl Cpu {
         self.results[Fifo::slot(tail.wrapping_sub(1))].get()
     }
 
-    pub fn recv_frame(&self, frame: &[u8], msg_id: u16) -> Disposition {
+    pub fn recv_frame(&self, frame: &[u8], msg_id: u16) {
         let Some((header, payload)) = FrameHeader::parse(frame) else {
-            return Disposition::Dropped;
+            return;
         };
         let head = self.fifo.head();
         if Fifo::is_full(head, self.fifo.tail_acquire())
             || !self.slots[Fifo::slot(head)].store(*header, payload, msg_id)
         {
             bump_shared(&self.counters.fifo_drop);
-            return Disposition::Dropped;
+            return;
         }
         self.fifo.publish(head);
-        Disposition::Deferred
     }
 
     pub fn process_one<P: Port>(&self, port: &mut P) -> Drained {
@@ -484,9 +483,7 @@ mod tests {
         ADDR_SILENCER_UPDATE_RATE_INTENSITY, ADDR_SILENCER_UPDATE_RATE_PHASE, CtlFlags,
         EmissionType, NUM_BANKS, NUM_TRANSDUCERS,
     };
-    use crate::proto::{
-        Cmd, Disposition, Drained, EXEC_AT_UNIT_NS, Error, FRAME_BYTES_MAX, OUTPUT_MASK_WORDS,
-    };
+    use crate::proto::{Cmd, Drained, EXEC_AT_UNIT_NS, Error, FRAME_BYTES_MAX, OUTPUT_MASK_WORDS};
     use crate::test_utils::builders::{config_mod, force_fan, write_foci_buffer};
     use crate::test_utils::mock::{Frame, Harness};
 
@@ -604,10 +601,11 @@ mod tests {
 
     #[test]
     fn an_oversized_frame_is_dropped() {
-        let h = Harness::new();
+        let mut h = Harness::new();
         let mut frame = std::vec![0u8; FRAME_BYTES_MAX + 1];
         frame[1] = Cmd::Nop as u8;
-        assert_eq!(h.cpu.recv_frame(&frame, 0), Disposition::Dropped);
+        h.cpu.recv_frame(&frame, 0);
+        assert!(!h.process_one());
         assert_eq!(h.processed(), 0);
     }
 
@@ -627,7 +625,7 @@ mod tests {
         let h = Harness::new();
         let mut port = crate::test_utils::mock::MockPort::new();
         for msg_id in 1..=3 {
-            let _ = h.cpu.recv_frame(&Frame::new(Cmd::Nop).bytes(), msg_id);
+            h.cpu.recv_frame(&Frame::new(Cmd::Nop).bytes(), msg_id);
         }
         for msg_id in 1..=3 {
             assert_eq!(h.cpu.process_one(&mut port), Drained::Completed { msg_id });
@@ -650,7 +648,7 @@ mod tests {
         let mut h = Harness::new();
         let mut bytes = Frame::new(Cmd::ReadFpgaState).bytes();
         bytes[0] = 0xFF;
-        let _ = h.cpu.recv_frame(&bytes, 0);
+        h.cpu.recv_frame(&bytes, 0);
         h.cpu.process_pending(&mut h.port);
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.processed(), 1);
@@ -718,19 +716,13 @@ mod tests {
     fn a_frame_into_a_slot_still_borrowed_is_dropped_and_counted() {
         let h = Harness::new();
         let borrowed = h.cpu.slots[0].payload.borrow();
-        assert_eq!(
-            h.cpu.recv_frame(&Frame::new(Cmd::Nop).bytes(), 1),
-            Disposition::Dropped
-        );
+        h.cpu.recv_frame(&Frame::new(Cmd::Nop).bytes(), 1);
         drop(borrowed);
         assert_eq!(h.telemetry().fifo_drop, 1);
 
         let mut port = crate::test_utils::mock::MockPort::new();
         assert_eq!(h.cpu.process_one(&mut port), Drained::Empty);
-        assert_eq!(
-            h.cpu.recv_frame(&Frame::new(Cmd::Nop).bytes(), 2),
-            Disposition::Deferred
-        );
+        h.cpu.recv_frame(&Frame::new(Cmd::Nop).bytes(), 2);
         assert_eq!(
             h.cpu.process_one(&mut port),
             Drained::Completed { msg_id: 2 }
@@ -742,8 +734,8 @@ mod tests {
         let mut h = Harness::new();
         h.deliver(&Frame::new(Cmd::ReadFpgaState));
         let previous = h.cpu.reply();
-        let _ = h.cpu.recv_frame(&Frame::new(Cmd::Nop).bytes(), 1);
-        let _ = h.cpu.recv_frame(&Frame::new(Cmd::Nop).bytes(), 2);
+        h.cpu.recv_frame(&Frame::new(Cmd::Nop).bytes(), 1);
+        h.cpu.recv_frame(&Frame::new(Cmd::Nop).bytes(), 2);
 
         let borrowed = h.cpu.slots[1].payload.borrow_mut();
         assert_eq!(h.cpu.process_one(&mut h.port), Drained::Empty);
@@ -763,10 +755,7 @@ mod tests {
     fn a_fifo_frame_completes_with_its_msg_id() {
         let h = Harness::new();
         let frame = Frame::new(Cmd::Nop).bytes();
-        assert_eq!(
-            h.cpu.recv_frame(&frame, 0x1234),
-            crate::proto::Disposition::Deferred
-        );
+        h.cpu.recv_frame(&frame, 0x1234);
         let mut port = crate::test_utils::mock::MockPort::new();
         assert_eq!(
             h.cpu.process_one(&mut port),
@@ -779,8 +768,8 @@ mod tests {
     fn a_step_completes_one_frame_per_call_with_its_msg_id() {
         let h = Harness::new();
         let mut port = crate::test_utils::mock::MockPort::new();
-        let _ = h.cpu.recv_frame(&[0, Cmd::Nop as u8, 0, 0, 0, 0], 0x11);
-        let _ = h.cpu.recv_frame(&[0, Cmd::Nop as u8, 0, 0, 0, 0], 0x22);
+        h.cpu.recv_frame(&[0, Cmd::Nop as u8, 0, 0, 0, 0], 0x11);
+        h.cpu.recv_frame(&[0, Cmd::Nop as u8, 0, 0, 0, 0], 0x22);
         assert_eq!(
             h.cpu.step(&mut port, 0),
             Drained::Completed { msg_id: 0x11 }
@@ -794,17 +783,15 @@ mod tests {
 
     #[test]
     fn a_full_fifo_drops_the_frame_without_a_reply() {
-        let h = Harness::new();
+        let mut h = Harness::new();
         for _ in 0..FIFO_DEPTH - 1 {
-            assert_eq!(
-                h.cpu.recv_frame(&[0, Cmd::Nop as u8, 0, 0, 0, 0], 0),
-                crate::proto::Disposition::Deferred
-            );
+            h.cpu.recv_frame(&[0, Cmd::Nop as u8, 0, 0, 0, 0], 0);
         }
-        assert_eq!(
-            h.cpu.recv_frame(&[0, Cmd::Nop as u8, 0, 0, 0, 0], 0),
-            crate::proto::Disposition::Dropped
-        );
+        assert_eq!(h.telemetry().fifo_drop, 0);
+        h.cpu.recv_frame(&[0, Cmd::Nop as u8, 0, 0, 0, 0], 0);
+        assert_eq!(h.telemetry().fifo_drop, 1);
+        h.cpu.process_pending(&mut h.port);
+        assert_eq!(h.processed(), u32::from(FIFO_DEPTH - 1));
     }
 
     fn scheduled(exec_at: u32) -> Frame {
@@ -869,10 +856,7 @@ mod tests {
         let mut h = Harness::new();
         h.port.sys_time = Some(0);
         h.deliver(&scheduled(LATER));
-        assert_eq!(
-            h.cpu.recv_frame(&scheduled(0).bytes(), 0),
-            Disposition::Deferred
-        );
+        h.cpu.recv_frame(&scheduled(0).bytes(), 0);
         assert!(!h.process_one());
         assert_eq!(h.processed(), 0);
 

@@ -37,12 +37,9 @@ autd3-rs-firmware-emulator = { workspace = true, features = ["udp"] }
 pollster.workspace = true
 tracing = { workspace = true, features = ["std"] }
 tokio = { workspace = true, features = [
-    "sync",
     "time",
     "macros",
-    "net",
     "rt",
-    "rt-multi-thread",
 ] }
 
 [lints]

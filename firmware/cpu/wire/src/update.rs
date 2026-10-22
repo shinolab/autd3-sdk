@@ -103,12 +103,15 @@ pub struct ImageHeader {
     pub attempts: U32,
 }
 
-const _: () = assert!(core::mem::size_of::<ImageHeader>() == 24);
+assert_layout!(ImageHeader {
+    magic: 0,
+    generation: 4,
+    length: 8,
+    crc32: 12,
+    status: IMAGE_HEADER_STATUS_OFFSET as usize,
+    attempts: IMAGE_HEADER_ATTEMPTS_OFFSET as usize,
+} size 24);
 const _: () = assert!(core::mem::size_of::<ImageHeader>() <= SLOT_HEADER_BYTES as usize);
-const _: () =
-    assert!(core::mem::offset_of!(ImageHeader, status) == IMAGE_HEADER_STATUS_OFFSET as usize);
-const _: () =
-    assert!(core::mem::offset_of!(ImageHeader, attempts) == IMAGE_HEADER_ATTEMPTS_OFFSET as usize);
 
 impl ImageHeader {
     #[must_use]

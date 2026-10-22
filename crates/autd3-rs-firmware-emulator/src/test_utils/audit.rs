@@ -1,4 +1,4 @@
-use autd3_cpu_fw::proto::{Disposition, Drained, Reply};
+use autd3_cpu_fw::proto::{Drained, Reply};
 
 use crate::device::Device;
 
@@ -47,9 +47,7 @@ impl Audit {
     pub fn send(&mut self, frames: &[&[u8]], msg_id: u16) -> Vec<AuditReply> {
         let mut replies = Vec::new();
         for (device, frame) in frames.iter().enumerate().take(self.devices.len()) {
-            if self.devices[device].recv(frame, msg_id) == Disposition::Dropped {
-                continue;
-            }
+            self.devices[device].recv(frame, msg_id);
             while let Drained::Completed { msg_id } = self.devices[device].process_one() {
                 self.deliver(&mut replies, device, msg_id);
             }
