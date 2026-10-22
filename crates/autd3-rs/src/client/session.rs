@@ -5,8 +5,8 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::task::{Context, Poll, Waker};
 use std::time::{Duration, Instant};
 
-use autd3_cpu_wire::udp::Kind;
-use autd3_rs_core::{BusStats, DeviceClock, MAX_DEVICES};
+use autd3_cpu_wire::udp::{Flags, Kind};
+use autd3_rs_core::{BusStats, DeviceClock, DeviceMask, DeviceStatus, MAX_DEVICES};
 use zerocopy::{FromZeros, IntoBytes};
 
 use crate::datagram::Frame;
@@ -14,7 +14,6 @@ use crate::error::{Error, NetworkCause};
 use crate::geometry::Geometry;
 use crate::protocol::{FrameHeader, MAX_INFLIGHT};
 use crate::response::Response;
-use crate::udp::state::PublishedDeviceStates;
 use crate::udp::{Channel, DeviceReply, Polled, Reply, StateChecker, TransportOption, UdpError};
 use crate::value::SysTime;
 
@@ -128,7 +127,6 @@ impl InflightQueue {
 pub(crate) struct SessionState {
     inflight: InflightQueue,
     liveness: Vec<DeviceLiveness>,
-    published_states: Arc<PublishedDeviceStates>,
     device_clock: DeviceClock,
     network_failure: Option<NetworkCause>,
     is_closed: bool,
@@ -146,14 +144,12 @@ impl SessionState {
     pub(crate) fn new(
         num_devices: usize,
         timeouts: Timeouts,
-        published_states: Arc<PublishedDeviceStates>,
         device_clock: DeviceClock,
         now: Instant,
     ) -> Self {
         Self {
             inflight: InflightQueue::new(now),
             liveness: vec![DeviceLiveness::new(); num_devices],
-            published_states,
             device_clock,
             network_failure: None,
             is_closed: false,
@@ -266,10 +262,24 @@ impl SessionState {
             .fold(0u128, |mask, (device, _)| mask | 1 << device)
     }
 
-    fn publish(&self, device: usize) {
-        let liveness = self.liveness[device];
-        self.published_states
-            .publish(device, liveness.state(), liveness.ptp_flags());
+    fn devices_with_ptp_flag(&self, flag: Flags) -> DeviceMask {
+        self.liveness
+            .iter()
+            .enumerate()
+            .filter(|(_, liveness)| liveness.ptp_flags().contains(flag))
+            .map(|(device, _)| device)
+            .collect()
+    }
+
+    fn device_status(&self) -> DeviceStatus {
+        DeviceStatus::new(
+            self.liveness
+                .iter()
+                .map(|liveness| liveness.state())
+                .collect(),
+            self.devices_with_ptp_flag(Flags::PTP_LOCKED),
+            self.devices_with_ptp_flag(Flags::PTP_FAILSAFE),
+        )
     }
 
     fn start_unanswered_clock(&mut self, device: usize, requested_at: Instant) -> bool {
@@ -278,7 +288,6 @@ impl SessionState {
 
     fn record_send_failure(&mut self, device: usize, now: Instant) {
         self.liveness[device].record_send_failure(now, self.timeouts.lost);
-        self.publish(device);
     }
 
     fn receive_reply(&mut self, reply: &DeviceReply, now: Instant) -> Option<InflightRequest> {
@@ -287,7 +296,6 @@ impl SessionState {
         let liveness = &mut self.liveness[device];
         let accepted =
             liveness.accept_reply(expected_unit_id, reply.reported_unit_id, reply.flags, now);
-        self.publish(device);
         if !accepted {
             return None;
         }
@@ -301,9 +309,8 @@ impl SessionState {
     }
 
     pub(crate) fn mark_unanswered_devices_lost(&mut self, now: Instant) {
-        for device in 0..self.liveness.len() {
-            self.liveness[device].mark_lost_if_unanswered(now, self.timeouts.lost);
-            self.publish(device);
+        for liveness in &mut self.liveness {
+            liveness.mark_lost_if_unanswered(now, self.timeouts.lost);
         }
     }
 
@@ -333,7 +340,6 @@ impl SessionState {
     pub(crate) fn close(&mut self, network_failure: Option<&NetworkCause>) -> ClosedSession {
         self.network_failure = network_failure.cloned();
         self.is_closed = true;
-        self.published_states.close();
         ClosedSession {
             requests: self.inflight.take_all(),
             slot_waiter: self.inflight.slot_waiter.take(),
@@ -369,7 +375,6 @@ pub(crate) struct Session {
     state: Mutex<SessionState>,
     stop_requested: AtomicBool,
     heartbeat_resume_device: AtomicUsize,
-    published_states: Arc<PublishedDeviceStates>,
     device_clock: DeviceClock,
     stats: BusStats,
     timeouts: Timeouts,
@@ -384,18 +389,15 @@ impl Session {
             ack: option.ack_timeout,
             lost: option.lost_timeout,
         };
-        let published_states = PublishedDeviceStates::new(num_devices);
         Ok(Self {
             state: Mutex::new(SessionState::new(
                 num_devices,
                 timeouts,
-                Arc::clone(&published_states),
                 device_clock.clone(),
                 Instant::now(),
             )),
             stop_requested: AtomicBool::new(false),
             heartbeat_resume_device: AtomicUsize::new(num_devices - 1),
-            published_states,
             channel,
             device_clock,
             stats: BusStats::default(),
@@ -423,8 +425,19 @@ impl Session {
         self.stats.clone()
     }
 
-    pub(crate) fn state_checker(&self) -> StateChecker {
-        StateChecker::new(Arc::clone(&self.published_states))
+    pub(crate) fn state_checker(self: &Arc<Self>) -> StateChecker {
+        StateChecker::new(Arc::downgrade(self))
+    }
+
+    pub(crate) fn device_status(&self) -> Result<DeviceStatus, UdpError> {
+        if self.is_stopping() {
+            return Err(UdpError::Closed);
+        }
+        let state = self.lock_state();
+        if state.is_closed {
+            return Err(UdpError::Closed);
+        }
+        Ok(state.device_status())
     }
 
     pub(crate) fn device_time(&self) -> Option<SysTime> {
@@ -732,13 +745,7 @@ mod tests {
         .union(Flags::SYNC_READY);
 
     fn session_state(num_devices: usize, now: Instant) -> SessionState {
-        SessionState::new(
-            num_devices,
-            TIMEOUTS,
-            PublishedDeviceStates::new(num_devices),
-            DeviceClock::default(),
-            now,
-        )
+        SessionState::new(num_devices, TIMEOUTS, DeviceClock::default(), now)
     }
 
     fn enqueue(state: &mut SessionState, now: Instant) -> (u16, crate::client::ResponseFuture) {
@@ -1097,16 +1104,69 @@ mod tests {
         assert!(state.device_clock.now().is_none());
     }
 
+    fn flagged_reply(device: usize, reported_unit_id: u8, flags: Flags) -> DeviceReply {
+        DeviceReply {
+            reply: reply(device, 0, 0),
+            reported_unit_id,
+            flags,
+        }
+    }
+
     #[test]
-    fn closing_publishes_the_close_to_the_state_checker() {
+    fn the_device_status_reports_each_device_liveness() {
         let now = Instant::now();
-        let published_states = PublishedDeviceStates::new(1);
-        let checker = StateChecker::new(Arc::clone(&published_states));
-        let mut state =
-            SessionState::new(1, TIMEOUTS, published_states, DeviceClock::default(), now);
-        assert!(checker.check().is_ok());
+        let mut state = session_state(3, now);
+        state.receive_reply(&flagged_reply(1, 1, Flags::ASSIGNED), now);
+        state.receive_reply(&flagged_reply(2, 0, READY), now);
+
+        let status = state.device_status();
+
+        assert_eq!(
+            status.devices(),
+            [DeviceState::Ready, DeviceState::Syncing, DeviceState::Lost]
+        );
+        assert_eq!(status.ptp_locked(), DeviceMask::from_iter([0]));
+        assert!(!status.any_ptp_failsafe());
+    }
+
+    #[test]
+    fn the_device_status_reports_the_ptp_flags_of_the_last_reply() {
+        let now = Instant::now();
+        let mut state = session_state(3, now);
+        state.receive_reply(
+            &flagged_reply(0, 0, Flags::ASSIGNED | Flags::PTP_LOCKED),
+            now,
+        );
+        state.receive_reply(
+            &flagged_reply(
+                1,
+                1,
+                Flags::ASSIGNED | Flags::PTP_FAILSAFE | Flags::SYNC_READY,
+            ),
+            now,
+        );
+        state.receive_reply(&flagged_reply(2, 2, READY | Flags::PTP_FAILSAFE), now);
+
+        let status = state.device_status();
+
+        assert_eq!(
+            status.devices(),
+            [
+                DeviceState::Syncing,
+                DeviceState::Syncing,
+                DeviceState::Ready
+            ]
+        );
+        assert_eq!(status.ptp_locked(), DeviceMask::from_iter([0, 2]));
+        assert_eq!(status.ptp_failsafe(), DeviceMask::from_iter([1, 2]));
+    }
+
+    #[test]
+    fn a_closed_session_keeps_the_device_liveness() {
+        let now = Instant::now();
+        let mut state = session_state(1, now);
         state.close(None).resolve();
-        assert!(matches!(checker.check(), Err(UdpError::Closed)));
+        assert!(state.is_closed);
         assert_eq!(state.liveness[0].state(), DeviceState::Ready);
     }
 }

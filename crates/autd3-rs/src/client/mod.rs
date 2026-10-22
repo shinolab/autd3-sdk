@@ -5,11 +5,13 @@ mod exec_at;
 mod liveness;
 pub(crate) mod open;
 mod session;
+mod state_checker;
 
 pub use completion::ResponseFuture;
 pub use controller::Controller;
 pub use driver::Driver;
 pub use exec_at::ExecAt;
+pub use state_checker::StateChecker;
 
 use std::sync::{Mutex, PoisonError};
 use std::thread::JoinHandle;
@@ -23,7 +25,7 @@ use crate::firmware_version::FirmwareVersion;
 use crate::fpga_state::FpgaState;
 use crate::geometry::Geometry;
 use crate::telemetry::Telemetry;
-use crate::udp::{StateChecker, TransportOption};
+use crate::udp::TransportOption;
 use crate::value::SysTime;
 
 pub struct Client {
