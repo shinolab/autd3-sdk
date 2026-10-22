@@ -337,7 +337,7 @@ pub fn init<P: Port>(port: &mut P, max_polls: NonZeroU32) -> Result<(), Error> {
         write_ctl(port, ADDR_CTL_FLAG, 0);
     }
     release_watchdog(port);
-    apply_fpga_config(port, &FpgaConfig::default());
+    apply_fpga_config(port, &FpgaConfig::DEFAULT);
     Ok(())
 }
 

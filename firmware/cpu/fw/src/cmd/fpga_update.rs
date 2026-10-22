@@ -1037,7 +1037,16 @@ mod tests {
 
     #[test]
     fn a_hung_fpga_times_out() {
+        use autd3_cpu_wire::config::CpuConfig;
+
+        use crate::test_utils::builders::set_cpu_config;
+
         let mut h = ota_capable();
+        h.deliver(&set_cpu_config(&CpuConfig {
+            fpga_flash_max_polls: core::num::NonZeroU32::new(10_000).unwrap(),
+            ..CpuConfig::default()
+        }));
+        assert_eq!(h.status(), Error::None);
         h.port.fpga_flash_hang = true;
         h.deliver(&begin(100, 0));
         assert_eq!(h.status(), Error::FpgaTimeout);

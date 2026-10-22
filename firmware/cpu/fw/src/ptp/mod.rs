@@ -10,28 +10,6 @@ use message::{
 use servo::Servo;
 
 pub use autd3_cpu_wire::config::PtpConfig as Config;
-use autd3_cpu_wire::cpu_params;
-
-#[must_use]
-pub const fn default_config() -> Config {
-    Config {
-        sync_interval: cpu_params::PTP_SYNC_INTERVAL,
-        tx_timestamp_timeout: cpu_params::PTP_TX_TIMESTAMP_TIMEOUT,
-        delay_resp_timeout: cpu_params::PTP_DELAY_RESP_TIMEOUT,
-        holdover: cpu_params::PTP_HOLDOVER,
-        lock_samples: cpu_params::PTP_LOCK_SAMPLES,
-        step_threshold: cpu_params::PTP_STEP_THRESHOLD,
-        lock_threshold: cpu_params::PTP_LOCK_THRESHOLD,
-        kp_milli: cpu_params::PTP_KP_MILLI,
-        ki_milli: cpu_params::PTP_KI_MILLI,
-        max_freq_ppb: cpu_params::PTP_MAX_FREQ_PPB,
-        delay_req_syncs: cpu_params::PTP_DELAY_REQ_SYNCS,
-        path_delay_filter_shift: cpu_params::PTP_PATH_DELAY_FILTER_SHIFT,
-        pause_quanta: Some(cpu_params::PTP_PAUSE_QUANTA),
-        pause_hold_syncs: cpu_params::PTP_PAUSE_HOLD_SYNCS,
-        pause_retry: cpu_params::PTP_PAUSE_RETRY,
-    }
-}
 
 const PATH_DELAY_FRACTION_BITS: u32 = 16;
 const NS_PER_SEC: u128 = 1_000_000_000;
@@ -148,7 +126,7 @@ impl Ptp {
     #[must_use]
     pub const fn new() -> Self {
         Self {
-            config: default_config(),
+            config: Config::DEFAULT,
             role: None,
             mac: [0; 6],
             clock_id: [0; 8],
