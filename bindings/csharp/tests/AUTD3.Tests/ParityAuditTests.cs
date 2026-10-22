@@ -361,34 +361,5 @@ namespace AUTD3.Tests
             Assert.Single(cps.Points);
             Assert.Equal(2, ((ControlPoints)new[] { point, point }).Points.Length);
         }
-
-        [Fact]
-        public void GroupDeviceWritesTheSourceOfEachKeyForOneDevice()
-        {
-            using var geometry = Fixture.Devices(2);
-            var groups = new TransducerGroups<int>(geometry, (device, tr) => device.Idx == 1 && tr % 3 == 1 ? 1 : 0);
-            using var zero = geometry.PhaseBuffer();
-            using var one = geometry.PhaseBuffer();
-            Pattern.SetPhase(new Phase(0x10), zero);
-            Pattern.SetPhase(new Phase(0x20), one);
-            var dst = new Phase[Autd3.NumTransducers];
-            Pattern.GroupDevice(geometry[1], groups, key => key == 0 ? zero : one, dst);
-            for (var tr = 0; tr < dst.Length; tr++)
-            {
-                Assert.Equal(tr % 3 == 1 ? new Phase(0x20) : new Phase(0x10), dst[tr]);
-            }
-
-            using var low = geometry.IntensityBuffer();
-            using var high = geometry.IntensityBuffer();
-            Pattern.SetIntensity(new Intensity(0x30), low);
-            Pattern.SetIntensity(new Intensity(0x40), high);
-            var dstI = new Intensity[Autd3.NumTransducers];
-            Pattern.GroupDevice(geometry[0], groups, key => key == 0 ? low : high, dstI);
-            Assert.All(dstI, i => Assert.Equal(new Intensity(0x30), i));
-
-            using var single = Fixture.SingleDevice();
-            using var mismatched = single.PhaseBuffer();
-            Assert.Throws<Autd3Exception>(() => Pattern.GroupDevice(geometry[0], groups, key => mismatched, dst));
-        }
     }
 }

@@ -7,13 +7,11 @@ use autd3_python_capsule::numpy;
 use autd3_python_capsule::{capsule_of, device_from_capsule, geometry_from_capsule};
 use autd3_rs_core::Length;
 use autd3_rs_core::geometry::Autd3;
-use autd3_rs_core::geometry::{
-    TransducerGroups as CoreTransducerGroups, TransducerMask as CoreTransducerMask,
-};
+use autd3_rs_core::geometry::TransducerMask as CoreTransducerMask;
 use autd3_rs_core::value::{Intensity, Phase};
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyCapsule, PyDict};
+use pyo3::types::PyCapsule;
 use zerocopy::{FromBytes, IntoBytes};
 
 fn phase_to_py(py: Python<'_>, phase: Phase) -> PyResult<Py<PyAny>> {
@@ -666,14 +664,6 @@ fn add_phase(phase: &Bound<'_, PyAny>, dst: PyRef<'_, PhaseBuffer>) -> PyResult<
     Ok(())
 }
 
-fn matches_geometry<T>(geometry: &autd3_rs_core::Geometry, buffer: &[Vec<T>]) -> bool {
-    buffer.len() == geometry.num_devices()
-        && geometry
-            .iter()
-            .zip(buffer)
-            .all(|(device, slot)| slot.len() == device.num_transducers())
-}
-
 #[pyclass(name = "TransducerMask", module = "autd3_pattern", from_py_object)]
 #[derive(Clone)]
 pub struct TransducerMask {
@@ -729,351 +719,6 @@ impl TransducerMask {
     }
 }
 
-#[pyclass(name = "TransducerGroups", module = "autd3_pattern")]
-pub struct TransducerGroups {
-    inner: CoreTransducerGroups<usize>,
-    keys: Vec<Py<PyAny>>,
-    lookup: Py<PyDict>,
-}
-
-#[pymethods]
-impl TransducerGroups {
-    #[new]
-    fn new(geometry: &Bound<'_, PyAny>, key: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let py = geometry.py();
-        let capsule = capsule_of(geometry)?;
-        let core_geometry = geometry_from_capsule(&capsule)?;
-        let devices = (0..core_geometry.num_devices())
-            .map(|dev| geometry.get_item(dev))
-            .collect::<PyResult<Vec<_>>>()?;
-        let lookup = PyDict::new(py);
-        let mut keys = Vec::new();
-        let mut error = None;
-        let inner = CoreTransducerGroups::new(core_geometry, |device, tr| {
-            if error.is_some() {
-                return 0;
-            }
-            key.call1((&devices[device.idx()], tr))
-                .and_then(|k| {
-                    if k.is_none() {
-                        return Err(PyValueError::new_err(
-                            "every transducer must be assigned a key (the key function returned None)",
-                        ));
-                    }
-                    if let Some(index) = lookup.get_item(&k)? {
-                        return index.extract::<usize>();
-                    }
-                    let index = keys.len();
-                    lookup.set_item(&k, index)?;
-                    keys.push(k.unbind());
-                    Ok(index)
-                })
-                .unwrap_or_else(|e| {
-                    error = Some(e);
-                    0
-                })
-        });
-        if let Some(e) = error {
-            return Err(e);
-        }
-        Ok(Self {
-            inner,
-            keys,
-            lookup: lookup.unbind(),
-        })
-    }
-
-    fn keys(&self, py: Python<'_>) -> Vec<Py<PyAny>> {
-        self.keys.iter().map(|key| key.clone_ref(py)).collect()
-    }
-
-    fn key(&self, py: Python<'_>, device: usize, transducer: usize) -> PyResult<Py<PyAny>> {
-        self.check_transducer(device, transducer)?;
-        Ok(self.keys[self.inner.index(device, transducer)].clone_ref(py))
-    }
-
-    fn index(&self, device: usize, transducer: usize) -> PyResult<usize> {
-        self.check_transducer(device, transducer)?;
-        Ok(self.inner.index(device, transducer))
-    }
-
-    fn indices(&self, device: usize) -> PyResult<Vec<usize>> {
-        self.check_device(device)?;
-        Ok(self.inner.indices(device).to_vec())
-    }
-
-    fn num_devices(&self) -> usize {
-        self.inner.num_devices()
-    }
-
-    fn num_transducers(&self, device: usize) -> PyResult<usize> {
-        self.check_device(device)?;
-        Ok(self.inner.num_transducers(device))
-    }
-
-    fn num_transducers_in(&self, key: &Bound<'_, PyAny>) -> PyResult<usize> {
-        Ok(match self.lookup.bind(key.py()).get_item(key)? {
-            Some(index) => self.inner.num_transducers_in(index.extract()?),
-            None => 0,
-        })
-    }
-
-    fn masks(&self, py: Python<'_>) -> Vec<(Py<PyAny>, TransducerMask)> {
-        self.keys
-            .iter()
-            .enumerate()
-            .map(|(index, key)| (key.clone_ref(py), self.mask_at(index)))
-            .collect()
-    }
-
-    fn mask(&self, key: &Bound<'_, PyAny>) -> PyResult<Option<TransducerMask>> {
-        self.lookup
-            .bind(key.py())
-            .get_item(key)?
-            .map(|index| Ok(self.mask_at(index.extract()?)))
-            .transpose()
-    }
-}
-
-impl TransducerGroups {
-    fn check_device(&self, device: usize) -> PyResult<()> {
-        if device >= self.inner.num_devices() {
-            return Err(PyIndexError::new_err("device index out of range"));
-        }
-        Ok(())
-    }
-
-    fn check_transducer(&self, device: usize, transducer: usize) -> PyResult<()> {
-        self.check_device(device)?;
-        if transducer >= self.inner.num_transducers(device) {
-            return Err(PyIndexError::new_err("transducer index out of range"));
-        }
-        Ok(())
-    }
-
-    fn mask_at(&self, index: usize) -> TransducerMask {
-        TransducerMask {
-            mask: Some(
-                (0..self.inner.num_devices())
-                    .map(|dev| {
-                        (0..self.inner.num_transducers(dev))
-                            .map(|tr| self.inner.key(dev, tr) == index)
-                            .collect()
-                    })
-                    .collect(),
-            ),
-        }
-    }
-}
-
-fn groups_match(geometry: &autd3_rs_core::Geometry, groups: &CoreTransducerGroups<usize>) -> bool {
-    groups.num_devices() == geometry.num_devices()
-        && geometry
-            .iter()
-            .enumerate()
-            .all(|(dev, device)| groups.num_transducers(dev) == device.num_transducers())
-}
-
-macro_rules! group_into {
-    ($py:expr, $geometry:expr, $groups:expr, $sources:expr, $dst:expr, $buffer:ty) => {{
-        let buffers = $groups
-            .keys
-            .iter()
-            .map(|key| {
-                let source = $sources
-                    .get_item(key.bind($py))?
-                    .cast_into::<$buffer>()
-                    .map_err(|_| {
-                        PyTypeError::new_err("every source must have the same buffer type as dst")
-                    })?;
-                if source.is($dst) {
-                    return Err(PyValueError::new_err("dst must not be one of the sources"));
-                }
-                Ok(source)
-            })
-            .collect::<PyResult<Vec<_>>>()?;
-        let borrowed = buffers
-            .iter()
-            .map(|buffer| buffer.get().read())
-            .collect::<PyResult<Vec<_>>>()?;
-        let mut dst = $dst.get().write()?;
-        if !groups_match($geometry, &$groups.inner)
-            || !matches_geometry($geometry, &dst)
-            || !borrowed
-                .iter()
-                .all(|source| matches_geometry($geometry, source))
-        {
-            return Err(PyValueError::new_err(
-                "the groups and every buffer must match the geometry",
-            ));
-        }
-        autd3_rs_pattern::group(
-            $geometry,
-            &$groups.inner,
-            |index| borrowed[index].as_slice(),
-            &mut dst,
-        );
-        Ok(())
-    }};
-}
-
-#[pyfunction]
-#[pyo3(signature = (geometry, groups, sources, dst))]
-fn group(
-    geometry: &Bound<'_, PyAny>,
-    groups: PyRef<'_, TransducerGroups>,
-    sources: &Bound<'_, PyAny>,
-    dst: &Bound<'_, PyAny>,
-) -> PyResult<()> {
-    let py = geometry.py();
-    let capsule = capsule_of(geometry)?;
-    let core_geometry = geometry_from_capsule(&capsule)?;
-    if let Ok(dst) = dst.cast::<PhaseBuffer>() {
-        return group_into!(py, core_geometry, groups, sources, dst, PhaseBuffer);
-    }
-    if let Ok(dst) = dst.cast::<IntensityBuffer>() {
-        return group_into!(py, core_geometry, groups, sources, dst, IntensityBuffer);
-    }
-    Err(PyTypeError::new_err(
-        "dst must be a PhaseBuffer or an IntensityBuffer",
-    ))
-}
-
-macro_rules! group_device_into {
-    ($py:expr, $device:expr, $groups:expr, $sources:expr, $dst:expr, $buffer:ty) => {{
-        let buffers = $groups
-            .keys
-            .iter()
-            .map(|key| {
-                $sources
-                    .get_item(key.bind($py))?
-                    .cast_into::<$buffer>()
-                    .map_err(|_| {
-                        PyTypeError::new_err("every source must have the same buffer type")
-                    })
-            })
-            .collect::<PyResult<Vec<_>>>()?;
-        let borrowed = buffers
-            .iter()
-            .map(|buffer| buffer.get().read())
-            .collect::<PyResult<Vec<_>>>()?;
-        let dev = $device.idx();
-        let len = $device.num_transducers();
-        if dev >= $groups.inner.num_devices()
-            || $groups.inner.num_transducers(dev) != len
-            || !borrowed
-                .iter()
-                .all(|source| source.get(dev).is_some_and(|slot| slot.len() == len))
-        {
-            return Err(PyValueError::new_err(
-                "the groups and every source must cover the device",
-            ));
-        }
-        let mut values = borrowed[0][dev].clone();
-        autd3_rs_pattern::group_device(
-            $device,
-            &$groups.inner,
-            |index| borrowed[index].as_slice(),
-            &mut values,
-        );
-        numpy::u8_vector_write($dst, values.as_bytes())
-    }};
-}
-
-#[pyfunction]
-#[pyo3(signature = (device, groups, sources, dst))]
-fn group_device(
-    device: &Bound<'_, PyAny>,
-    groups: PyRef<'_, TransducerGroups>,
-    sources: &Bound<'_, PyAny>,
-    dst: &Bound<'_, PyAny>,
-) -> PyResult<()> {
-    let py = device.py();
-    let capsule = capsule_of(device)?;
-    let core_device = device_from_capsule(&capsule)?;
-    let dst = numpy::u8_vector_dst(dst, core_device.num_transducers())?;
-    let Some(first) = groups.keys.first() else {
-        return Ok(());
-    };
-    if sources
-        .get_item(first.bind(py))?
-        .cast::<IntensityBuffer>()
-        .is_ok()
-    {
-        return group_device_into!(py, core_device, groups, sources, dst, IntensityBuffer);
-    }
-    group_device_into!(py, core_device, groups, sources, dst, PhaseBuffer)
-}
-
-fn copy_group<T: Copy>(
-    groups: &CoreTransducerGroups<usize>,
-    index: usize,
-    source: &[Vec<T>],
-    dst: &mut [Vec<T>],
-) {
-    for (dev, (slot, src)) in dst.iter_mut().zip(source).enumerate() {
-        for (tr, (o, &v)) in slot.iter_mut().zip(src).enumerate() {
-            if groups.key(dev, tr) == index {
-                *o = v;
-            }
-        }
-    }
-}
-
-#[pyfunction]
-#[pyo3(signature = (geometry, groups, compute, phases, intensities))]
-fn group_compute(
-    geometry: &Bound<'_, PyAny>,
-    groups: PyRef<'_, TransducerGroups>,
-    compute: &Bound<'_, PyAny>,
-    phases: &Bound<'_, PhaseBuffer>,
-    intensities: &Bound<'_, IntensityBuffer>,
-) -> PyResult<()> {
-    let py = geometry.py();
-    let capsule = capsule_of(geometry)?;
-    let core_geometry = geometry_from_capsule(&capsule)?;
-    if !compute.is_callable() {
-        return Err(PyTypeError::new_err("compute must be callable"));
-    }
-    if !groups_match(core_geometry, &groups.inner)
-        || !matches_geometry(core_geometry, &phases.get().read()?)
-        || !matches_geometry(core_geometry, &intensities.get().read()?)
-    {
-        return Err(PyValueError::new_err(
-            "the groups, phases and intensities must match the geometry",
-        ));
-    }
-
-    let scratch_phases = Bound::new(py, PhaseBuffer::from_vec(core_geometry.phase_buffer()))?;
-    let scratch_intensities = Bound::new(
-        py,
-        IntensityBuffer::from_vec(core_geometry.intensity_buffer()),
-    )?;
-    for (index, key) in groups.keys.iter().enumerate() {
-        autd3_rs_pattern::set_phase(Phase::ZERO, &mut scratch_phases.get().write()?);
-        autd3_rs_pattern::set_intensity(Intensity::MAX, &mut scratch_intensities.get().write()?);
-        compute.call1((
-            key.bind(py),
-            groups.mask_at(index),
-            &scratch_phases,
-            &scratch_intensities,
-        ))?;
-        copy_group(
-            &groups.inner,
-            index,
-            &scratch_phases.get().read()?,
-            &mut phases.get().write()?,
-        );
-        copy_group(
-            &groups.inner,
-            index,
-            &scratch_intensities.get().read()?,
-            &mut intensities.get().write()?,
-        );
-    }
-    Ok(())
-}
-
 #[pymodule(gil_used = false)]
 fn autd3_pattern(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PhaseBuffer>()?;
@@ -1081,7 +726,6 @@ fn autd3_pattern(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<IntensityBuffer>()?;
     m.add_class::<DeviceIntensityView>()?;
     m.add_class::<TransducerMask>()?;
-    m.add_class::<TransducerGroups>()?;
     m.add_class::<LaguerreGaussianOption>()?;
     m.add_class::<HermiteGaussianOption>()?;
     m.add_function(wrap_pyfunction!(wavelength, m)?)?;
@@ -1104,11 +748,8 @@ fn autd3_pattern(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(hermite_gaussian_phase_device, m)?)?;
     m.add_function(wrap_pyfunction!(hermite_gaussian_phase_transducer, m)?)?;
     m.add_function(wrap_pyfunction!(hermite_gaussian_intensity_device, m)?)?;
-    m.add_function(wrap_pyfunction!(group_device, m)?)?;
     m.add_function(wrap_pyfunction!(set_intensity, m)?)?;
     m.add_function(wrap_pyfunction!(set_phase, m)?)?;
     m.add_function(wrap_pyfunction!(add_phase, m)?)?;
-    m.add_function(wrap_pyfunction!(group, m)?)?;
-    m.add_function(wrap_pyfunction!(group_compute, m)?)?;
     Ok(())
 }

@@ -97,39 +97,6 @@ namespace AUTD3.Tests
         }
 
         [Fact]
-        public void GroupsAcceptReferenceTypeKeys()
-        {
-            using var geometry = Fixture.Devices(2);
-            var groups = new TransducerGroups<string>(geometry, (device, tr) => device.Idx == 0 && tr < 10 ? "near" : "far");
-            Assert.Equal(new[] { "near", "far" }, groups.Keys);
-            Assert.Equal("near", groups.Key(0, 0));
-            Assert.Equal("far", groups.Key(1, 0));
-            Assert.Equal(10, groups.NumTransducersIn("near"));
-            Assert.Equal(10, groups.Mask("near")!.Value.NumEnabled(geometry));
-            Assert.Null(groups.Mask("missing"));
-            Assert.Equal(0, groups.NumTransducersIn("missing"));
-
-            using var near = geometry.PhaseBuffer();
-            Pattern.SetPhase(new Phase(0x10), near);
-            using var far = geometry.PhaseBuffer();
-            Pattern.SetPhase(new Phase(0x20), far);
-            using var dst = geometry.PhaseBuffer();
-            Pattern.Group(geometry, groups, key => key == "near" ? near : far, dst);
-            Assert.Equal(new Phase(0x10), dst[0][0]);
-            Assert.Equal(new Phase(0x20), dst[0][10]);
-            Assert.Equal(new Phase(0x20), dst[1][0]);
-
-            var seen = new List<string>();
-            using var intensities = geometry.IntensityBuffer();
-            Pattern.GroupCompute(geometry, groups, (key, mask, _, _) =>
-            {
-                seen.Add(key);
-                Assert.Equal(groups.NumTransducersIn(key), mask.NumEnabled(geometry));
-            }, dst, intensities);
-            Assert.Equal(groups.Keys, seen);
-        }
-
-        [Fact]
         public void TracingIsInitializedOncePerProcess()
         {
             Assert.Equal("info", new TracingOption().DefaultFilter);
@@ -310,30 +277,6 @@ namespace AUTD3.Tests
             Assert.Contains("the mask has 1 device slots but the geometry has 2 devices", e.Message);
             e = Assert.Throws<Autd3Exception>(() => TransducerMask.Masked(new[] { new bool[Autd3.NumTransducers], new bool[3] }).Validate(geometry));
             Assert.Contains("the mask slot for device 1 has 3 transducers", e.Message);
-        }
-
-        [Fact]
-        public void TransducerGroupsExposeTheirIndices()
-        {
-            using var geometry = Fixture.Devices(2);
-            var groups = new TransducerGroups<int>(geometry, (device, tr) => device.Idx == 1 && tr < 5 ? 7 : 3);
-            Assert.Equal(new[] { 3, 7 }, groups.Keys);
-            Assert.Equal(2, groups.NumDevices);
-            Assert.Equal(Autd3.NumTransducers, groups.NumTransducers(1));
-            Assert.Equal(5, groups.NumTransducersIn(7));
-            Assert.Equal(geometry.NumTransducers - 5, groups.NumTransducersIn(3));
-            Assert.Equal(0, groups.NumTransducersIn(99));
-            Assert.Equal(1, groups.Index(1, 0));
-            Assert.Equal(0, groups.Index(1, 5));
-            Assert.All(groups.Indices(0), index => Assert.Equal(0, index));
-            Assert.Equal(Autd3.NumTransducers, groups.Indices(1).Count);
-            Assert.Equal(5, groups.Indices(1).Count(index => index == 1));
-
-            var masks = groups.Masks().ToArray();
-            Assert.Equal(new[] { 3, 7 }, masks.Select(m => m.Key));
-            Assert.Equal(5, masks[1].Mask.NumEnabled(geometry));
-            Assert.True(masks[1].Mask.IsEnabled(1, 4));
-            Assert.False(masks[1].Mask.IsEnabled(1, 5));
         }
 
         [Fact]

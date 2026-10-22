@@ -72,7 +72,7 @@ Holo は複数の焦点 (制御点) を同時に生成するための Pattern �
 - `TransducerMask::Masked(&[Vec<bool>])` — 各振動子ごとに有効/無効を指定する. 
 
 Python では `TransducerMask.AllEnabled` / `TransducerMask.masked(rows)`, C# では `TransducerMask.AllEnabled` / `TransducerMask.Masked(bool[][])` と書く.
-Python の `mask` に `None` は渡せない (`TypeError`). [`TransducerGroups.mask(key)`](/autd3-sdk/api/compute/pattern/group/) がどの振動子にも割り当てられていないキーで返す `None` が, 全振動子の指定として黙って通ることはない.
+Python の `mask` に `None` は渡せない (`TypeError`).
 
 ### LinAlgBackend (NalgebraBackend)
 

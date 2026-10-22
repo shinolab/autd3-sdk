@@ -2,7 +2,6 @@ mod bessel;
 mod each;
 mod focus;
 mod gaussian;
-mod group;
 mod hermite_gaussian;
 mod laguerre_gaussian;
 mod plane;
@@ -11,7 +10,6 @@ mod wavelength;
 
 pub use bessel::{bessel, bessel_device, bessel_transducer};
 pub use focus::{focus, focus_device, focus_transducer};
-pub use group::{group, group_compute, group_device};
 pub use hermite_gaussian::{
     HermiteGaussianOption, hermite_gaussian_intensity, hermite_gaussian_intensity_device,
     hermite_gaussian_phase, hermite_gaussian_phase_device, hermite_gaussian_phase_transducer,
