@@ -10,7 +10,7 @@ internal static class Sample
     {
         // HIDE_END
 var geometry = new Geometry(new[] { new Autd3() });
-await using var client = Client.Open(geometry, new TransportOption());
+using var client = Client.Open(geometry, new TransportOption());
 await client.SendAsync(Command.Sequence(new Clear(), new Synchronize()));
 
 await client.SendAsync(new SetGpioOut(new[]

@@ -23,7 +23,7 @@ async def main() -> None:
     await client.send((Clear(), Synchronize()))
     checker = client.state_checker()
 
-    async with client:
+    with client:
         print("watching device status — press Ctrl+C to stop")
         stop = asyncio.Event()
         loop = asyncio.get_running_loop()

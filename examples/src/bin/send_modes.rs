@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::Result;
 
-use autd3_rs::commands::{Clear, ConfigPattern, Synchronize, WritePatternBuffer};
+use autd3_rs::commands::{Clear, ConfigPattern, Pattern, Synchronize, WritePatternBuffer};
 use autd3_rs::geometry::{Autd3, Geometry, Point3, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::{Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig};
@@ -50,7 +50,10 @@ async fn main() -> Result<()> {
     let elapsed = run_streaming(&client, &targets, wavelength, MAX_INFLIGHT).await?;
     report("streaming", elapsed);
 
-    client.close().await?;
+    client
+        .send(Pattern::new(&geometry.phase_buffer(), Intensity::MIN))
+        .await?;
+    client.close()?;
 
     Ok(())
 }

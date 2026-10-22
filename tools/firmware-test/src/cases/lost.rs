@@ -131,7 +131,7 @@ pub(crate) async fn run(client: Session, link: &Link<'_>) -> Result<Session> {
 
     detect(&client, &states, first).await;
 
-    if let Err(e) = client.close().await {
+    if let Err(e) = client.close() {
         println!("  closing the client with Lost devices reported: {e}");
     }
     drop(client);

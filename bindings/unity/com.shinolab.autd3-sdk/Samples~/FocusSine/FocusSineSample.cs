@@ -43,9 +43,17 @@ namespace AUTD3.Samples
         {
             if (_client != null)
             {
-                await _client.CloseAsync();
-                _client.Dispose();
-                _client = null;
+                try
+                {
+                    using var zeroPhases = _geometry.PhaseBuffer();
+                    await _client.SendAsync(new Pattern(zeroPhases, Intensity.Min));
+                    _client.Close();
+                }
+                finally
+                {
+                    _client.Dispose();
+                    _client = null;
+                }
             }
             _geometry?.Dispose();
             _geometry = null;

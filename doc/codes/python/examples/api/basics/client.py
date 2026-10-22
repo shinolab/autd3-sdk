@@ -43,7 +43,7 @@ async def main() -> None:
     await client.send(Nop())
     resp = await (await client.send_frame(frame))
 
-    await client.close()
+    client.close()
     # ANCHOR_END: api
 
     _ = (num_devices, geometry, firmware, fpga_state, resp)
@@ -51,7 +51,7 @@ async def main() -> None:
     geometry = Geometry([Autd3()])
 
     # ANCHOR: context_manager
-    async with Client.open(geometry, TransportOption()) as client:
+    with Client.open(geometry, TransportOption()) as client:
         await client.send(Nop())
     # ANCHOR_END: context_manager
 

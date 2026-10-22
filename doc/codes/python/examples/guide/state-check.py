@@ -17,7 +17,7 @@ async def main() -> None:
     checker = client.state_checker()
     # ANCHOR_END: open
 
-    async with client:
+    with client:
         # ANCHOR: ptp_failsafe
         client.send_heartbeat()
         await asyncio.sleep(CHECK_INTERVAL)

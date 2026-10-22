@@ -276,7 +276,7 @@ async fn halts(ctx: &Ctx<'_>, target: usize) -> Result<()> {
 async fn reset(client: Session, link: &Link<'_>, target: usize) -> Result<Session> {
     println!("-- a CPU reset longer than the timeout");
     let before = client.read_telemetry().await?;
-    if let Err(e) = client.close().await {
+    if let Err(e) = client.close() {
         println!("  closing the client before the reset reported: {e}");
     }
     drop(client);

@@ -4,7 +4,7 @@ import math
 import numpy as np
 
 from autd3 import Client, TransportOption
-from autd3.commands import Clear, FociStm, FociStmOption, Synchronize
+from autd3.commands import Clear, FociStm, FociStmOption, Pattern, Synchronize
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import Hz, mm
 from autd3.value import ControlPoint, ControlPoints, Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig, TransitionMode
@@ -13,7 +13,7 @@ from autd3.value import ControlPoint, ControlPoints, Intensity, LoopBehavior, Pa
 async def main() -> None:
     geometry = Geometry([Autd3()])
 
-    async with Client.open(
+    with Client.open(
         geometry,
         TransportOption(),
     ) as client:
@@ -49,6 +49,8 @@ async def main() -> None:
             )
         )
         # ANCHOR_END: finite
+
+        await client.send(Pattern(geometry.phase_buffer(), Intensity.MIN))
 
 
 if __name__ == "__main__":

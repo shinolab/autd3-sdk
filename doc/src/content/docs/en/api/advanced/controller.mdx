@@ -73,6 +73,6 @@ Without a reactor, call `poll` at a short interval.
 
 ## Notes
 
-- If the `Controller` is dropped first, `poll` of the `Driver` returns `Ok(None)`. The output of the devices is not stopped in this case, so call `close` when you finish.
+- If the `Controller` is dropped first, `poll` of the `Driver` returns `Ok(None)`, the same as with `close`. Neither stops the output of the devices, so to stop it, send, for example, a zero-amplitude [Pattern](/autd3-sdk/en/api/command/pattern/) before dropping or closing.
 - If the `Driver` is dropped first, the commands being sent and all later sends fail with `Error::Closed`.
 - The async methods of `Controller` never complete unless the `Driver` is polled.

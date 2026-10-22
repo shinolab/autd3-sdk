@@ -298,6 +298,6 @@ Linux の既定では 1 宛先のキューの上限 (`unres_qlen_bytes`) と送�
 
 ### 終了
 
-`Client::close` は停止フレームを送ったあと I/O スレッドを止めて join し, `UdpBus::close` を呼ぶ.
+`Client::close` はデバイスへ何も送らず, I/O スレッドを止めて join し, `UdpBus::close` を呼ぶ. デバイスは close 前の出力を続ける.
 I/O スレッドは終わるときに `awaiting_reply` の全要求を `Error::Closed` で失敗させる.
 以後の `send_frame` は `Error::Closed` を返す.

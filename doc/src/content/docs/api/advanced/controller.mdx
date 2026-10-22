@@ -73,6 +73,6 @@ import sample from "@codes/rust/examples/api/advanced/controller.rs?raw";
 
 ## 注意点
 
-- `Controller` を先に破棄すると, `Driver` の `poll` は `Ok(None)` を返す. このときデバイスの出力は止まらないので, 終了時は `close` を呼ぶこと.
+- `Controller` を先に破棄すると, `close` と同じく `Driver` の `poll` は `Ok(None)` を返す. どちらでもデバイスの出力は止まらないので, 出力を止めるには破棄や `close` の前に振幅 0 の [Pattern](/autd3-sdk/api/command/pattern/) を送るなどすること.
 - `Driver` を先に破棄すると, 送信中のコマンドと以後の送信は `Error::Closed` で失敗する.
 - `Driver` を`poll` しない限り, `Controller` の非同期メソッドは完了しない.

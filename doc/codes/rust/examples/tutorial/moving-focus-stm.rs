@@ -1,9 +1,9 @@
 use anyhow::Result;
 
-use autd3_rs::commands::{Clear, FociStm, FociStmOption, Modulation, SetSilencer, Synchronize};
+use autd3_rs::commands::{Clear, FociStm, FociStmOption, Modulation, Pattern, SetSilencer, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, mm};
-use autd3_rs::value::{ControlPoints, SamplingConfig};
+use autd3_rs::value::{ControlPoints, Intensity, SamplingConfig};
 use autd3_rs::Client;
 use autd3_rs::udp::TransportOption;
 
@@ -26,6 +26,7 @@ async fn main() -> Result<()> {
     client.send(FociStm::new(config, &points, FociStmOption::default())).await?;
     // ANCHOR_END: stm
 
-    client.close().await?;
+    client.send(Pattern::new(&geometry.phase_buffer(), Intensity::MIN)).await?;
+    client.close()?;
     Ok(())
 }

@@ -20,7 +20,7 @@ async fn main() -> anyhow::Result<()> {
 
     client.send(SetPhaseCorrection { phases: &phases }).await?;
 
-    client.close().await?;
+    client.close()?;
     // HIDE
     Ok(())
 }

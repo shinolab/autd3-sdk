@@ -34,7 +34,7 @@ internal static class Program
         using var logGuard = Tracing.Init(new TracingOption());
 
         using var geometry = new Geometry(new List<Autd3> { new Autd3(Vector3.Zero) });
-        await using var client = Client.Open(geometry, new TransportOption());
+        using var client = Client.Open(geometry, new TransportOption());
         await client.SendAsync(Command.Sequence(new Clear(), new Synchronize()));
 
         var center = geometry.Center;
@@ -84,5 +84,8 @@ internal static class Program
             (await pending.Dequeue()).Check();
         }
         Report("streaming", sw.Elapsed.TotalSeconds);
+
+        using var zeroPhases = geometry.PhaseBuffer();
+        await client.SendAsync(new Pattern(zeroPhases, Intensity.Min));
     }
 }

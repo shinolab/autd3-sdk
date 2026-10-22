@@ -58,7 +58,7 @@ async fn a_lost_frame_times_out_without_reaching_the_device_and_the_next_send_go
     client.send(ForceFan { value: true }).await.unwrap();
 
     assert_eq!(fans(&emulator), [true, true]);
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -75,7 +75,7 @@ async fn the_frame_after_a_lost_one_is_still_processed() {
     assert!(processed.await.unwrap().check().is_ok());
     assert_eq!(fans(&emulator), [true, true]);
     assert!(matches!(lost.await, Err(Error::Timeout { .. })));
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -96,7 +96,7 @@ async fn a_frame_delivered_twice_is_processed_twice() {
         per_send + 1
     );
     assert_eq!(duplicated[1].processed - undisturbed[1].processed, per_send);
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -113,7 +113,7 @@ async fn a_frame_answered_while_an_older_one_is_unanswered_still_completes() {
     assert!(answered.await.unwrap().check().is_ok());
     assert!(matches!(unanswered.await, Err(Error::Timeout { .. })));
     client.send(Nop).await.unwrap();
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -138,7 +138,7 @@ async fn a_frame_dropped_by_a_stalled_device_times_out_and_the_next_send_goes_th
 
     let after = telemetry(&client).await;
     assert_eq!(after[0].fifo_drop - before[0].fifo_drop, 1);
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -174,5 +174,5 @@ async fn a_frame_dropped_by_a_full_device_queue_does_not_hold_back_the_next_one(
     assert_eq!(after[0].fifo_drop, before[0].fifo_drop);
     assert_eq!(after[1].fifo_drop - before[1].fifo_drop, 1);
     drop(dropped);
-    client.close().await.unwrap();
+    client.close().unwrap();
 }

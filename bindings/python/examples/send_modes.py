@@ -15,7 +15,7 @@ import numpy.typing as npt
 
 import autd3
 import autd3_pattern as pattern
-from autd3.commands import Clear, ConfigPattern, Synchronize, WritePatternBuffer
+from autd3.commands import Clear, ConfigPattern, Pattern, Synchronize, WritePatternBuffer
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import Length, m, mm, s
 from autd3.value import Intensity, LoopBehavior, PatternBank, SamplingConfig
@@ -28,7 +28,7 @@ async def main() -> None:
 
     geometry = Geometry([Autd3([0.0, 0.0, 0.0])])
 
-    async with autd3.Client.open(
+    with autd3.Client.open(
         geometry,
         autd3.TransportOption(),
     ) as client:
@@ -52,6 +52,8 @@ async def main() -> None:
 
         elapsed = await run_streaming(client, targets, wavelength, autd3.MAX_INFLIGHT)
         report("streaming", elapsed)
+
+        await client.send(Pattern(geometry.phase_buffer(), Intensity.MIN))
 
 
 async def run_stop_and_wait(

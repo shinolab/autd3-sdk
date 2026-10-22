@@ -5,7 +5,7 @@
 use anyhow::Result;
 
 use autd3_rs::Client;
-use autd3_rs::commands::{Clear, PatternStm, PatternStmOption, SetSilencer, Synchronize};
+use autd3_rs::commands::{Clear, Pattern, PatternStm, PatternStmOption, SetSilencer, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::{Intensity, SamplingConfig};
@@ -59,6 +59,9 @@ async fn main() -> Result<()> {
     println!("running a 1 Hz circular pattern STM — press Ctrl+C to stop");
     tokio::signal::ctrl_c().await?;
 
-    client.close().await?;
+    client
+        .send(Pattern::new(&geometry.phase_buffer(), Intensity::MIN))
+        .await?;
+    client.close()?;
     Ok(())
 }

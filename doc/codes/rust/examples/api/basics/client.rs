@@ -49,7 +49,7 @@ async fn main() -> Result<()> {
     client.send(Nop).await?;
     let resp = client.send_frame(frame).await?.await?;
 
-    client.close().await?;
+    client.close()?;
     // ANCHOR_END: api
 
     let _ = (num_devices, geometry, firmware, fpga_state, resp);

@@ -43,6 +43,7 @@ async fn main() -> Result<()> {
     client.send(Pattern::new(&phases, intensity)).await?;
     client.send(Modulation::new(sampling_config, &modulation)).await?;
 
-    client.close().await?;
+    client.send(Pattern::new(&geometry.phase_buffer(), Intensity::MIN)).await?;
+    client.close()?;
     Ok(())
 }

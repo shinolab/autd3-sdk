@@ -21,7 +21,7 @@ async def main() -> None:
         ]
     )
 
-    async with autd3.Client.open(
+    with autd3.Client.open(
         geometry,
         autd3.TransportOption(),
     ) as client:

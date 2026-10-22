@@ -11,7 +11,7 @@ from autd3.value import Intensity, SamplingConfig
 async def main() -> None:
     geometry = Geometry([Autd3()])
 
-    async with Client.open(
+    with Client.open(
         geometry,
         TransportOption(),
     ) as client:
@@ -43,6 +43,8 @@ async def main() -> None:
         await client.send(SetSilencer())
         await client.send(Pattern(phases, intensity))
         await client.send(Modulation(sampling_config, mod_buf))
+
+        await client.send(Pattern(geometry.phase_buffer(), Intensity.MIN))
 
 
 if __name__ == "__main__":

@@ -346,7 +346,7 @@ async fn run_with_option(option: &TransportOption, cli: &Cli) -> Result<RunOutpu
         output.telemetry_end = telemetry;
     }
 
-    if let Err(e) = client.close().await {
+    if let Err(e) = client.close() {
         eprintln!("the client closed with an error: {e}");
     }
     guard.stop().await;

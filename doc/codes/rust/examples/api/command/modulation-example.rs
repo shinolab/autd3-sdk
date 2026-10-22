@@ -21,7 +21,7 @@ async fn main() -> anyhow::Result<()> {
 
     client.send(Modulation::new(config, &data)).await?;
 
-    client.close().await?;
+    client.close()?;
     // HIDE
     Ok(())
 }

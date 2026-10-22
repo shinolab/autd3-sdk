@@ -102,10 +102,10 @@ impl Client {
         self.controller.read_telemetry().await
     }
 
-    pub async fn close(&self) -> Result<(), Error> {
-        let stopped = self.controller.close().await;
+    pub fn close(&self) -> Result<(), Error> {
+        let closed = self.controller.close();
         let joined = self.join();
-        stopped.and(joined)
+        closed.and(joined)
     }
 
     fn join(&self) -> Result<(), Error> {
