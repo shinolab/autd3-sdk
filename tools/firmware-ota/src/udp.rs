@@ -174,7 +174,6 @@ mod tests {
         let emulator = UdpEmulator::spawn(3).unwrap();
         let option = TransportOption {
             iface: emulator.interface(),
-            recovery_reply_timeout: Duration::from_millis(50),
             open_timeout: Duration::from_secs(6),
             sync_on_open: false,
             ..TransportOption::default()

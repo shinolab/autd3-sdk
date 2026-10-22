@@ -9,7 +9,6 @@ use super::error::UdpError;
 pub struct TransportOption {
     pub iface: Interface,
     pub open_timeout: Duration,
-    pub recovery_reply_timeout: Duration,
     pub lost_timeout: Duration,
     pub ack_timeout: Duration,
     pub send_buffer_bytes: Option<NonZeroUsize>,
@@ -21,7 +20,6 @@ impl Default for TransportOption {
         Self {
             iface: Interface::Auto,
             open_timeout: Duration::from_secs(40),
-            recovery_reply_timeout: Duration::from_millis(1),
             lost_timeout: Duration::from_millis(100),
             ack_timeout: Duration::from_millis(10),
             send_buffer_bytes: NonZeroUsize::new(8 * 1024),
@@ -34,9 +32,6 @@ impl TransportOption {
     pub fn validate(&self) -> Result<(), UdpError> {
         if self.open_timeout.is_zero() {
             return Err(UdpError::ZeroOpenTimeout);
-        }
-        if self.recovery_reply_timeout.is_zero() {
-            return Err(UdpError::ZeroRecoveryReplyTimeout);
         }
         if self.lost_timeout.is_zero() {
             return Err(UdpError::ZeroLostTimeout);
@@ -58,7 +53,6 @@ mod tests {
         let option = TransportOption::default();
         assert_eq!(option.iface, Interface::Auto);
         assert_eq!(option.open_timeout, Duration::from_secs(40));
-        assert_eq!(option.recovery_reply_timeout, Duration::from_millis(1));
         assert_eq!(option.lost_timeout, Duration::from_millis(100));
         assert_eq!(option.ack_timeout, Duration::from_millis(10));
         assert_eq!(option.send_buffer_bytes, NonZeroUsize::new(8192));
@@ -73,13 +67,6 @@ mod tests {
             ..TransportOption::default()
         },
         |e: &UdpError| matches!(e, UdpError::ZeroOpenTimeout)
-    )]
-    #[case::zero_reply_timeout(
-        TransportOption {
-            recovery_reply_timeout: Duration::ZERO,
-            ..TransportOption::default()
-        },
-        |e: &UdpError| matches!(e, UdpError::ZeroRecoveryReplyTimeout)
     )]
     #[case::zero_lost_timeout(
         TransportOption {
@@ -106,7 +93,6 @@ mod tests {
     fn the_durations_have_no_upper_bound() {
         let option = TransportOption {
             open_timeout: Duration::MAX,
-            recovery_reply_timeout: Duration::MAX,
             lost_timeout: Duration::MAX,
             ack_timeout: Duration::MAX,
             ..TransportOption::default()

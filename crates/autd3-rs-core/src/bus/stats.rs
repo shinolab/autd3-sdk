@@ -5,7 +5,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 struct Counters {
     frames: AtomicU64,
     heartbeats: AtomicU64,
-    recoveries: AtomicU64,
     acked_frames: AtomicU64,
     ack_latency_ns_total: AtomicU64,
     worst_ack_latency_ns: AtomicU64,
@@ -23,11 +22,6 @@ impl BusStats {
     #[must_use]
     pub fn heartbeats(&self) -> u64 {
         self.0.heartbeats.load(Ordering::Acquire)
-    }
-
-    #[must_use]
-    pub fn recoveries(&self) -> u64 {
-        self.0.recoveries.load(Ordering::Acquire)
     }
 
     #[must_use]
@@ -56,10 +50,6 @@ impl BusStats {
 
     pub fn record_heartbeat(&self) {
         self.0.heartbeats.fetch_add(1, Ordering::Relaxed);
-    }
-
-    pub fn record_recovery(&self) {
-        self.0.recoveries.fetch_add(1, Ordering::Relaxed);
     }
 
     pub fn record_ack(&self, latency_ns: u64) {

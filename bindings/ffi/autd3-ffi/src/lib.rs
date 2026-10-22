@@ -2140,11 +2140,6 @@ pub unsafe extern "C" fn autd3_bus_stats_heartbeats(stats: *const BusStatsHandle
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_bus_stats_recoveries(stats: *const BusStatsHandle) -> u64 {
-    unsafe { handle_ref(stats) }.map_or(0, |stats| stats.0.recoveries())
-}
-
-#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_bus_stats_acked_frames(stats: *const BusStatsHandle) -> u64 {
     unsafe { handle_ref(stats) }.map_or(0, |stats| stats.0.acked_frames())
 }
@@ -2162,24 +2157,6 @@ pub unsafe extern "C" fn autd3_bus_stats_mean_ack_latency_ns(stats: *const BusSt
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_bus_stats_free(stats: *mut BusStatsHandle) {
     unsafe { drop_handle(stats) }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_recover(
-    client: *const ClientHandle,
-    cb: CompletionCallback,
-    user_data: *mut c_void,
-) {
-    let Some((client, ctx)) = (unsafe { client_ctx(client, cb, user_data) }) else {
-        return;
-    };
-    spawn_completion(ctx, async move { client.recover().await }, |recovered| {
-        let devices = recovered
-            .iter()
-            .filter_map(|device| u8::try_from(device).ok())
-            .collect();
-        into_handle(ByteArray(devices)).cast()
-    });
 }
 
 #[unsafe(no_mangle)]

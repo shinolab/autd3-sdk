@@ -12,7 +12,6 @@ pub(crate) struct DeviceLiveness {
     send_failing_since: Option<Instant>,
     state: DeviceState,
     last_flags: Flags,
-    awaits_readmission: bool,
 }
 
 impl DeviceLiveness {
@@ -23,16 +22,7 @@ impl DeviceLiveness {
             send_failing_since: None,
             state: DeviceState::Ready,
             last_flags: SYNCED_FLAGS,
-            awaits_readmission: false,
         }
-    }
-
-    pub(crate) fn readmit(&mut self) {
-        self.awaits_readmission = false;
-    }
-
-    pub(crate) fn accepts_frames(self) -> bool {
-        !self.is_lost() && !self.awaits_readmission
     }
 
     pub(crate) fn record_send_failure(&mut self, now: Instant, lost_timeout: Duration) {
@@ -69,24 +59,6 @@ impl DeviceLiveness {
             return false;
         }
         self.apply_reply_flags(flags, now);
-        true
-    }
-
-    pub(crate) fn try_revive(
-        &mut self,
-        expected_unit_id: u8,
-        reported_unit_id: u8,
-        flags: Flags,
-        now: Instant,
-    ) -> bool {
-        if !self.is_lost()
-            || !flags.contains(Flags::ASSIGNED)
-            || reported_unit_id != expected_unit_id
-        {
-            return false;
-        }
-        self.apply_reply_flags(flags, now);
-        self.awaits_readmission = true;
         true
     }
 
@@ -284,51 +256,6 @@ mod tests {
         assert_eq!(liveness.state(), DeviceState::Lost);
         assert!(!liveness.accept_reply(1, 1, READY, later + LOST_AFTER));
         assert_eq!(liveness.state(), DeviceState::Lost);
-    }
-
-    #[test]
-    fn a_recovered_device_counts_its_silence_afresh() {
-        let start = Instant::now();
-        let mut liveness = DeviceLiveness::new();
-        liveness.start_unanswered_clock(start);
-        liveness.mark_lost_if_unanswered(start + LOST_AFTER, LOST_AFTER);
-        assert_eq!(liveness.state(), DeviceState::Lost);
-        assert!(liveness.try_revive(1, 1, Flags::ASSIGNED, start + LOST_AFTER));
-        assert_eq!(liveness.state(), DeviceState::Syncing);
-        liveness.mark_lost_if_unanswered(start + LOST_AFTER * 2, LOST_AFTER);
-        assert_eq!(liveness.state(), DeviceState::Syncing);
-        assert!(liveness.accept_reply(1, 1, READY, start + LOST_AFTER * 2));
-        assert_eq!(liveness.state(), DeviceState::Ready);
-    }
-
-    #[test]
-    fn a_recovered_device_takes_no_frame_until_it_is_readmitted() {
-        let start = Instant::now();
-        let mut liveness = DeviceLiveness::new();
-        assert!(liveness.accepts_frames());
-        liveness.start_unanswered_clock(start);
-        liveness.mark_lost_if_unanswered(start + LOST_AFTER, LOST_AFTER);
-        assert!(!liveness.accepts_frames());
-        assert!(liveness.try_revive(1, 1, READY, start + LOST_AFTER));
-        assert!(!liveness.is_lost());
-        assert!(!liveness.accepts_frames());
-        liveness.readmit();
-        assert!(liveness.accepts_frames());
-    }
-
-    #[test]
-    fn only_a_lost_device_answering_under_its_own_id_is_revived() {
-        let start = Instant::now();
-        let mut liveness = DeviceLiveness::new();
-        assert!(!liveness.try_revive(1, 1, READY, start));
-        assert!(liveness.accepts_frames());
-        liveness.start_unanswered_clock(start);
-        liveness.mark_lost_if_unanswered(start + LOST_AFTER, LOST_AFTER);
-        assert!(!liveness.try_revive(1, 1, Flags::SYNC_READY, start + LOST_AFTER));
-        assert!(!liveness.try_revive(1, 2, READY, start + LOST_AFTER));
-        assert_eq!(liveness.state(), DeviceState::Lost);
-        assert!(liveness.try_revive(1, 1, READY, start + LOST_AFTER));
-        assert_eq!(liveness.state(), DeviceState::Ready);
     }
 
     #[test]

@@ -16,8 +16,7 @@ use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::telemetry::Telemetry;
 use crate::udp::{StateChecker, TransportOption};
 use crate::value::{Intensity, SysTime};
-use autd3_rs_core::{BusStats, DeviceMask};
-use futures_channel::oneshot;
+use autd3_rs_core::BusStats;
 
 use super::completion::{self, ResponseFuture};
 use super::driver::Driver;
@@ -135,19 +134,6 @@ impl Controller {
             return Err(e);
         }
         self.session.send_heartbeat()
-    }
-
-    pub async fn recover(&self) -> Result<DeviceMask, Error> {
-        let _serialized = self.send_serializer.lock().await;
-        if let Some(e) = self.session.closed_error() {
-            return Err(e);
-        }
-        let (tx, rx) = oneshot::channel();
-        self.session.start_recovery(tx)?;
-        let recovered_devices = rx.await.unwrap_or(Err(Error::Closed))?;
-        tracing::debug!(recovered_devices, "recovery finished");
-        self.session.readmit_recovered();
-        Ok(DeviceMask::from_bits(recovered_devices))
     }
 
     async fn silent_stop(&self) -> Result<(), Error> {

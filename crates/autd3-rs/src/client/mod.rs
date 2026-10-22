@@ -4,7 +4,6 @@ mod driver;
 mod exec_at;
 mod liveness;
 pub(crate) mod open;
-mod recovery;
 mod session;
 
 pub use completion::ResponseFuture;
@@ -15,7 +14,7 @@ pub use exec_at::ExecAt;
 use std::sync::{Mutex, PoisonError};
 use std::thread::JoinHandle;
 
-use autd3_rs_core::{BusStats, DeviceMask};
+use autd3_rs_core::BusStats;
 
 use crate::commands::Command;
 use crate::datagram::Frame;
@@ -69,10 +68,6 @@ impl Client {
 
     pub fn send_heartbeat(&self) -> Result<(), Error> {
         self.controller.send_heartbeat()
-    }
-
-    pub async fn recover(&self) -> Result<DeviceMask, Error> {
-        self.controller.recover().await
     }
 
     pub fn device_time_now(&self) -> Result<SysTime, Error> {

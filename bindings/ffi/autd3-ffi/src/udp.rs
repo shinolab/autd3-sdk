@@ -51,13 +51,6 @@ pub(crate) unsafe extern "C" fn autd3_transport_option_get_send_buffer_bytes(
 }
 autd3_ffi_abi::option_handle_field!(
     TransportOptionHandle,
-    [recovery_reply_timeout],
-    duration,
-    autd3_transport_option_set_recovery_reply_timeout,
-    autd3_transport_option_get_recovery_reply_timeout
-);
-autd3_ffi_abi::option_handle_field!(
-    TransportOptionHandle,
     [lost_timeout],
     duration,
     autd3_transport_option_set_lost_timeout,

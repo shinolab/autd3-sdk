@@ -23,7 +23,6 @@ A device whose firing condition still holds (for example, one that is still with
 Whether the output is stopped can be checked with `is_failsafe_active()` (C#: `IsFailsafeActive`) of the `FpgaState` returned by `read_fpga_state()`.
 
 [Clear](/autd3-sdk/en/api/command/clear/) also releases it, but it resets every state to the defaults.
-It is not sent automatically to a device recovered from `Lost` by `recover()`; send it yourself to resume the output (see [State Monitoring](/autd3-sdk/en/guide/state-check/#recovery-from-lost)).
 
 ## API
 

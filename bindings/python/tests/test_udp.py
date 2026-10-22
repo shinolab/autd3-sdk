@@ -22,7 +22,6 @@ def test_defaults_follow_the_spec() -> None:
     option = autd3.TransportOption()
     assert option.iface == autd3.Interface.Auto
     assert option.open_timeout == autd3.Duration.from_secs(40)
-    assert option.recovery_reply_timeout == autd3.Duration.from_millis(1)
     assert option.lost_timeout == autd3.Duration.from_millis(100)
     assert option.ack_timeout == autd3.Duration.from_millis(10)
     assert option.send_buffer_bytes == 8192

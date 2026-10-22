@@ -235,7 +235,6 @@ pub(crate) fn transport_option(cli: &Cli, emulator: Option<&UdpEmulator>) -> Tra
     let mut option = match emulator {
         Some(emulator) => TransportOption {
             iface: emulator.interface(),
-            recovery_reply_timeout: Duration::from_millis(50),
             open_timeout: Duration::from_secs(6),
             ..Default::default()
         },
@@ -500,7 +499,6 @@ impl Measurement {
         RunOutput {
             summary: Summary {
                 elapsed,
-                recoveries: bus_stats.recoveries(),
                 throughput_cmd_per_sec: per_sec(self.counters.ok),
                 traffic: self.traffic.rate(elapsed),
                 latency: self.rtts.latency(),

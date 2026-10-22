@@ -19,7 +19,6 @@ import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
 | --------------------- | ---------------------- | ------- | --------------------------------------------------------------------------------------------- |
 | `iface`               | `Interface`            | `Auto`  | Destination                                                                                   |
 | `open_timeout`        | `Duration`             | 40 s    | Upper bound on the whole open (enumerating the devices and waiting for all of them to synchronize with one another) |
-| `recovery_reply_timeout`       | `Duration`             | 1 ms    | Upper bound on waiting for the replies of the `Lost` devices in `recover()`          |
 | `lost_timeout`        | `Duration`             | 100 ms  | A device that has not replied for this long is treated as `Lost` |
 | `ack_timeout`         | `Duration`             | 10 ms   | Response-wait timeout. If the replies to the frame at the head of the wait do not all arrive within this time, every frame in flight fails with `Timeout` (see [Client](/autd3-sdk/en/api/basics/client/#response-wait-timeout)) |
 | `send_buffer_bytes`         | `Option<NonZeroUsize>` | 8192    | Size of the socket send buffer [B]. `None` leaves the OS default                              |
@@ -30,7 +29,7 @@ The liveness check is not configured in `TransportOption`; the user sends it by 
 
 The Python defaults are the same concrete values as in Rust, and only the fields whose type is an `Option` accept `None` (disabled). Passing `None` to any other field raises `TypeError`.
 In C#, setting a field whose type is an `Option` to `null` disables it.
-Setting `open_timeout` / `recovery_reply_timeout` / `lost_timeout` / `ack_timeout` to 0 makes opening the `Client` fail with an error (`Network`; the `code` of the Python `Autd3Error` is `NETWORK`, and the `Code` of the C# `Autd3Exception` is `Network`).
+Setting `open_timeout` / `lost_timeout` / `ack_timeout` to 0 makes opening the `Client` fail with an error (`Network`; the `code` of the Python `Autd3Error` is `NETWORK`, and the `Code` of the C# `Autd3Exception` is `Network`).
 A `0` for `send_buffer_bytes` raises `ValueError` when the `TransportOption` is built in Python, and makes opening the `Client` fail with `Autd3Exception` (`InvalidArgument`) in C# (Rust cannot pass `0` because the type is `NonZeroUsize`).
 
 :::caution[Windows timer resolution]

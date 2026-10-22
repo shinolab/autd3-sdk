@@ -32,7 +32,6 @@ pub(crate) fn option(emulator: &UdpEmulator) -> TransportOption {
     TransportOption {
         iface: emulator.interface(),
         lost_timeout: PATIENCE,
-        recovery_reply_timeout: Duration::from_millis(50),
         open_timeout: Duration::from_secs(6),
         ack_timeout: ACK_TIMEOUT,
         ..TransportOption::default()

@@ -7,7 +7,6 @@ use std::time::{Duration, Instant};
 
 use autd3_cpu_wire::udp::Kind;
 use autd3_rs_core::{BusStats, DeviceClock, MAX_DEVICES};
-use futures_channel::oneshot;
 use zerocopy::{FromZeros, IntoBytes};
 
 use crate::datagram::Frame;
@@ -21,17 +20,13 @@ use crate::value::SysTime;
 
 use super::completion::ResponseSender;
 use super::liveness::DeviceLiveness;
-use super::recovery::RecoveryWindow;
 
 const IDLE_WAIT: Duration = Duration::from_secs(1);
-
-pub(crate) type RecoveryResultSender = oneshot::Sender<Result<u128, Error>>;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Timeouts {
     pub(crate) ack: Duration,
     pub(crate) lost: Duration,
-    pub(crate) recovery_reply: Duration,
 }
 
 struct InflightRequest {
@@ -135,9 +130,6 @@ pub(crate) struct SessionState {
     liveness: Vec<DeviceLiveness>,
     published_states: Arc<PublishedDeviceStates>,
     device_clock: DeviceClock,
-    stats: BusStats,
-    recovery_window: Option<RecoveryWindow>,
-    recovery_waiter: Option<RecoveryResultSender>,
     network_failure: Option<NetworkCause>,
     is_closed: bool,
     last_msg_id: u16,
@@ -146,7 +138,6 @@ pub(crate) struct SessionState {
 
 pub(crate) struct ClosedSession {
     requests: Vec<InflightRequest>,
-    recovery_waiter: Option<RecoveryResultSender>,
     slot_waiter: Option<Waker>,
     network_failure: Option<NetworkCause>,
 }
@@ -157,7 +148,6 @@ impl SessionState {
         timeouts: Timeouts,
         published_states: Arc<PublishedDeviceStates>,
         device_clock: DeviceClock,
-        stats: BusStats,
         now: Instant,
     ) -> Self {
         Self {
@@ -165,9 +155,6 @@ impl SessionState {
             liveness: vec![DeviceLiveness::new(); num_devices],
             published_states,
             device_clock,
-            stats,
-            recovery_window: None,
-            recovery_waiter: None,
             network_failure: None,
             is_closed: false,
             last_msg_id: 0,
@@ -300,17 +287,8 @@ impl SessionState {
         let liveness = &mut self.liveness[device];
         let accepted =
             liveness.accept_reply(expected_unit_id, reply.reported_unit_id, reply.flags, now);
-        let revived = !accepted
-            && self.recovery_window.is_some()
-            && liveness.try_revive(expected_unit_id, reply.reported_unit_id, reply.flags, now);
         self.publish(device);
-        if revived {
-            if let Some(window) = &mut self.recovery_window {
-                window.mark_recovered(device);
-            }
-            self.stats.record_recovery();
-            tracing::info!(device, "a lost device answers again");
-        } else if !accepted {
+        if !accepted {
             return None;
         }
         if device == 0
@@ -344,9 +322,6 @@ impl SessionState {
 
     pub(crate) fn next_deadline(&self, now: Instant) -> Instant {
         [
-            self.recovery_window
-                .as_ref()
-                .and_then(RecoveryWindow::deadline),
             self.lost_deadline(),
             self.inflight.head_ack_deadline(self.timeouts.ack),
         ]
@@ -355,48 +330,12 @@ impl SessionState {
         .fold(now + IDLE_WAIT, Instant::min)
     }
 
-    pub(crate) fn start_recovery(
-        &mut self,
-        waiter: RecoveryResultSender,
-        now: Instant,
-    ) -> Result<Option<u16>, Error> {
-        if let Some(error) = self.closed_error() {
-            return Err(error);
-        }
-        self.recovery_waiter = Some(waiter);
-        let lost_devices = self.device_mask_where(DeviceLiveness::is_lost);
-        let window = self.timeouts.recovery_reply;
-        match &mut self.recovery_window {
-            Some(open) => open.restart_with(now, window, lost_devices),
-            none @ None => *none = Some(RecoveryWindow::new(now, window, lost_devices)),
-        }
-        Ok((lost_devices != 0).then(|| self.next_msg_id()))
-    }
-
-    pub(crate) fn take_finished_recovery(
-        &mut self,
-        now: Instant,
-    ) -> Option<(Option<RecoveryResultSender>, u128)> {
-        if !self.recovery_window.as_ref()?.is_finished(now) {
-            return None;
-        }
-        let recovered_devices = self.recovery_window.take()?.recovered_devices();
-        Some((self.recovery_waiter.take(), recovered_devices))
-    }
-
-    pub(crate) fn readmit_recovered(&mut self) {
-        for liveness in &mut self.liveness {
-            liveness.readmit();
-        }
-    }
-
     pub(crate) fn close(&mut self, network_failure: Option<&NetworkCause>) -> ClosedSession {
         self.network_failure = network_failure.cloned();
         self.is_closed = true;
         self.published_states.close();
         ClosedSession {
             requests: self.inflight.take_all(),
-            recovery_waiter: self.recovery_waiter.take(),
             slot_waiter: self.inflight.slot_waiter.take(),
             network_failure: self.network_failure.clone(),
         }
@@ -410,9 +349,6 @@ impl ClosedSession {
                 .clone()
                 .map_or(Error::Closed, Error::Network)
         };
-        if let Some(recovery_waiter) = self.recovery_waiter {
-            let _ = recovery_waiter.send(Err(error()));
-        }
         for request in self.requests {
             let _ = request.completion.send(Err(error()));
         }
@@ -447,17 +383,14 @@ impl Session {
         let timeouts = Timeouts {
             ack: option.ack_timeout,
             lost: option.lost_timeout,
-            recovery_reply: option.recovery_reply_timeout,
         };
         let published_states = PublishedDeviceStates::new(num_devices);
-        let stats = BusStats::default();
         Ok(Self {
             state: Mutex::new(SessionState::new(
                 num_devices,
                 timeouts,
                 Arc::clone(&published_states),
                 device_clock.clone(),
-                stats.clone(),
                 Instant::now(),
             )),
             stop_requested: AtomicBool::new(false),
@@ -465,7 +398,7 @@ impl Session {
             published_states,
             channel,
             device_clock,
-            stats,
+            stats: BusStats::default(),
             timeouts,
         })
     }
@@ -634,7 +567,7 @@ impl Session {
         let datagrams = frame.datagrams();
         let target_devices = self
             .lock_state()
-            .device_mask_where(DeviceLiveness::accepts_frames);
+            .device_mask_where(|liveness| !liveness.is_lost());
         let mut headers = [FrameHeader::new_zeroed(); MAX_DEVICES];
         for (header, datagram) in headers.iter_mut().zip(datagrams) {
             *header = datagram.frame_header(exec_at);
@@ -719,25 +652,6 @@ impl Session {
         Ok(())
     }
 
-    pub(crate) fn start_recovery(&self, waiter: RecoveryResultSender) -> Result<(), Error> {
-        let probe_msg_id = self.lock_state().start_recovery(waiter, Instant::now())?;
-        if let Some(msg_id) = probe_msg_id {
-            let all_devices_dst = self.channel.all_devices_dst();
-            if let Err(e) =
-                self.channel
-                    .send(all_devices_dst, Kind::Heartbeat, msg_id, [&[], &[]], None)
-            {
-                tracing::debug!(%all_devices_dst, "calling the lost devices back failed: {e}");
-            }
-        }
-        self.wake_driver("the recovery finishes at its next deadline");
-        Ok(())
-    }
-
-    pub(crate) fn readmit_recovered(&self) {
-        self.lock_state().readmit_recovered();
-    }
-
     fn receive_available(&self) -> Result<(), NetworkCause> {
         loop {
             let polled = self
@@ -775,10 +689,6 @@ impl Session {
             self.receive_available()?;
         }
         self.fail_all_if_head_ack_overdue(now);
-        let finished_recovery = self.lock_state().take_finished_recovery(now);
-        if let Some((Some(waiter), recovered_devices)) = finished_recovery {
-            let _ = waiter.send(Ok(recovered_devices));
-        }
         Ok(self.lock_state().next_deadline(now))
     }
 
@@ -816,7 +726,6 @@ mod tests {
     const TIMEOUTS: Timeouts = Timeouts {
         ack: Duration::from_millis(10),
         lost: Duration::from_millis(100),
-        recovery_reply: Duration::from_millis(1),
     };
     const READY: Flags = Flags::ASSIGNED
         .union(Flags::PTP_LOCKED)
@@ -828,7 +737,6 @@ mod tests {
             TIMEOUTS,
             PublishedDeviceStates::new(num_devices),
             DeviceClock::default(),
-            BusStats::default(),
             now,
         )
     }
@@ -1130,16 +1038,11 @@ mod tests {
     }
 
     #[test]
-    fn a_recovery_is_reported_once_its_window_closes() {
+    fn a_lost_device_stays_lost_and_takes_no_frame() {
         let now = Instant::now();
         let mut state = session_state(2, now);
         state.start_unanswered_clock(1, now);
         state.mark_unanswered_devices_lost(now + TIMEOUTS.lost);
-        let (waiter, mut result) = oneshot::channel();
-
-        assert!(state.start_recovery(waiter, now).unwrap().is_some());
-        assert!(state.take_finished_recovery(now).is_none());
-        assert_eq!(state.next_deadline(now), now + TIMEOUTS.recovery_reply);
 
         let answered = state.receive_reply(
             &DeviceReply {
@@ -1147,24 +1050,13 @@ mod tests {
                 reported_unit_id: 1,
                 flags: READY,
             },
-            now,
+            now + TIMEOUTS.lost,
         );
         assert!(answered.is_none());
-        assert_eq!(state.stats.recoveries(), 1);
-        let (waiter, recovered_devices) = state.take_finished_recovery(now).unwrap();
-        assert_eq!(recovered_devices, 0b10);
-        waiter.unwrap().send(Ok(recovered_devices)).unwrap();
-        assert_eq!(result.try_recv().unwrap().unwrap().unwrap(), 0b10);
-        assert!(state.recovery_waiter.is_none());
-
+        assert_eq!(state.liveness[1].state(), DeviceState::Lost);
         assert_eq!(
-            state.device_mask_where(DeviceLiveness::accepts_frames),
+            state.device_mask_where(|liveness| !liveness.is_lost()),
             0b01
-        );
-        state.readmit_recovered();
-        assert_eq!(
-            state.device_mask_where(DeviceLiveness::accepts_frames),
-            0b11
         );
     }
 
@@ -1192,7 +1084,7 @@ mod tests {
     }
 
     #[test]
-    fn a_reply_under_a_foreign_id_observes_nothing_and_counts_no_recovery() {
+    fn a_reply_under_a_foreign_id_observes_nothing() {
         let now = Instant::now();
         let mut state = session_state(1, now);
 
@@ -1203,29 +1095,6 @@ mod tests {
         );
         assert!(state.liveness[0].is_lost());
         assert!(state.device_clock.now().is_none());
-        assert_eq!(state.stats.recoveries(), 0);
-    }
-
-    #[test]
-    fn a_recovery_without_a_lost_device_sends_no_probe_and_finishes_at_once() {
-        let now = Instant::now();
-        let mut state = session_state(1, now);
-        let (waiter, _result) = oneshot::channel();
-        assert_eq!(state.start_recovery(waiter, now).unwrap(), None);
-        assert_eq!(state.take_finished_recovery(now).unwrap().1, 0);
-    }
-
-    #[test]
-    fn a_recovery_is_refused_once_closed() {
-        let now = Instant::now();
-        let mut state = session_state(1, now);
-        state.close(None).resolve();
-        let (waiter, _result) = oneshot::channel();
-        assert!(matches!(
-            state.start_recovery(waiter, now),
-            Err(Error::Closed)
-        ));
-        assert!(state.recovery_waiter.is_none());
     }
 
     #[test]
@@ -1233,14 +1102,8 @@ mod tests {
         let now = Instant::now();
         let published_states = PublishedDeviceStates::new(1);
         let checker = StateChecker::new(Arc::clone(&published_states));
-        let mut state = SessionState::new(
-            1,
-            TIMEOUTS,
-            published_states,
-            DeviceClock::default(),
-            BusStats::default(),
-            now,
-        );
+        let mut state =
+            SessionState::new(1, TIMEOUTS, published_states, DeviceClock::default(), now);
         assert!(checker.check().is_ok());
         state.close(None).resolve();
         assert!(matches!(checker.check(), Err(UdpError::Closed)));

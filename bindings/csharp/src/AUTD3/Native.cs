@@ -36,12 +36,6 @@ namespace AUTD3
         internal static extern int autd3_transport_option_get_send_buffer_bytes(IntPtr option, out ulong bytes);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_set_recovery_reply_timeout(IntPtr option, ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_get_recovery_reply_timeout(IntPtr option, out ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_transport_option_set_lost_timeout(IntPtr option, ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
@@ -199,9 +193,6 @@ namespace AUTD3
         internal static extern ulong autd3_bus_stats_heartbeats(BusStatsHandle stats);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern ulong autd3_bus_stats_recoveries(BusStatsHandle stats);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern ulong autd3_bus_stats_acked_frames(BusStatsHandle stats);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
@@ -254,9 +245,6 @@ namespace AUTD3
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_client_read_fpga_state(ClientHandle client, CompletionCallback cb, IntPtr userData);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_client_recover(ClientHandle client, CompletionCallback cb, IntPtr userData);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_client_read_telemetry(ClientHandle client, CompletionCallback cb, IntPtr userData);
