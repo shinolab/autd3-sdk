@@ -1,6 +1,6 @@
 use crate::commands::Command;
 use crate::commands::operation::{Distribution, Encoded, Operation};
-use crate::datagram::{Expansion, Frames};
+use crate::datagram::Frames;
 use crate::error::{Error, PayloadError};
 use crate::geometry::{Autd3, Device, Geometry};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
@@ -51,18 +51,6 @@ impl Operation for Marker {
     fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
         out[0] = self.0;
         Ok(Encoded::new(Cmd::ConfigModulation, 1))
-    }
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct Multi(pub(crate) usize);
-
-impl<'a> Command<'a> for Multi {
-    fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
-        for frame in 0..self.0 {
-            expansion.push(Marker(u8::try_from(frame).unwrap()))?;
-        }
-        Ok(())
     }
 }
 

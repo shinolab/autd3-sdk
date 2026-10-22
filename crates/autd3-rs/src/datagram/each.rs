@@ -1,4 +1,5 @@
 use crate::commands::Command;
+use crate::commands::operation::Operation;
 use crate::error::Error;
 use crate::geometry::Device;
 
@@ -7,18 +8,18 @@ use super::expansion::Expansion;
 pub struct Each<F>(F);
 
 #[must_use]
-pub fn each<'a, C, F>(assign: F) -> Each<F>
+pub fn each<'a, O, F>(assign: F) -> Each<F>
 where
-    C: Command<'a>,
-    F: FnMut(&Device) -> Option<C>,
+    O: Operation + 'a,
+    F: FnMut(&Device) -> Option<O>,
 {
     Each(assign)
 }
 
-impl<'a, C, F> Command<'a> for Each<F>
+impl<'a, O, F> Command<'a> for Each<F>
 where
-    C: Command<'a>,
-    F: FnMut(&Device) -> Option<C>,
+    O: Operation + 'a,
+    F: FnMut(&Device) -> Option<O>,
 {
     fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
         expansion.push_per_device(self.0)?;
@@ -29,14 +30,14 @@ where
 #[cfg(test)]
 mod tests {
     use crate::commands::operation::{
-        ConfigModulation, ConfigPattern, Distribution, Operation, WritePatternBuffer,
+        ConfigModulation, Distribution, Operation, WritePatternBuffer,
     };
-    use crate::commands::{Command, Pattern, WriteModulationBuffer};
-    use crate::datagram::{Expansion, Frames, each};
+    use crate::commands::{Pattern, SetSilencer};
+    use crate::datagram::{Frames, each};
     use crate::error::{Error, PayloadError};
     use crate::geometry::Autd3;
     use crate::protocol::{Cmd, PAYLOAD_BYTES};
-    use crate::test_utils::{FailAt, Marker, Multi, build, cmd_at, payload, test_geometry};
+    use crate::test_utils::{FailAt, Marker, build, cmd_at, payload, test_geometry};
     use crate::value::{
         Intensity, LoopBehavior, ModulationBank, PatternBank, Phase, SamplingConfig,
     };
@@ -71,118 +72,44 @@ mod tests {
     fn each_fills_unassigned_with_nop() {
         let frames = build(2, each(|device| (device.idx() == 0).then_some(Marker(0)))).unwrap();
 
+        assert_eq!(frames.len(), 1);
         assert_eq!(cmd_at(&frames, 0, 0), Cmd::ConfigModulation);
         assert_eq!(cmd_at(&frames, 0, 1), Cmd::Nop, "unassigned -> Nop");
     }
 
     #[test]
-    fn each_pads_shorter_device_with_nop() {
-        let frames = build(
-            2,
-            each(|device| {
-                Some(if device.idx() == 0 {
-                    Multi(1)
-                } else {
-                    Multi(3)
-                })
-            }),
-        )
-        .unwrap();
+    fn each_without_any_assignment_emits_no_frame() {
+        let frames = build(2, (Marker(0), each(|_| None::<Marker>))).unwrap();
 
-        assert_eq!(frames.len(), 3, "frame count = max over devices");
-        assert_eq!(cmd_at(&frames, 0, 0), Cmd::ConfigModulation);
-        assert_eq!(cmd_at(&frames, 1, 0), Cmd::Nop);
-        assert_eq!(cmd_at(&frames, 2, 0), Cmd::Nop);
-        for frame in 0..3 {
-            assert_eq!(cmd_at(&frames, frame, 1), Cmd::ConfigModulation);
-            assert_eq!(payload(&frames, frame, 1)[0] as usize, frame);
-        }
+        assert_eq!(frames.len(), 1);
     }
 
     #[test]
-    fn nested_each_keeps_every_frame() {
-        struct Nested;
-
-        impl<'a> Command<'a> for Nested {
-            fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
-                expansion.push(each(|device| (device.idx() == 1).then_some(Multi(2))))?;
-                Ok(())
-            }
-        }
-
-        let frames = build(2, each(|device| (device.idx() == 1).then_some(Nested))).unwrap();
-
-        assert_eq!(frames.len(), 2, "inner frames must not collapse");
-        for frame in 0..2 {
-            assert_eq!(cmd_at(&frames, frame, 0), Cmd::Nop);
-            assert_eq!(cmd_at(&frames, frame, 1), Cmd::ConfigModulation);
-            assert_eq!(payload(&frames, frame, 1)[0] as usize, frame);
-        }
-    }
-
-    #[test]
-    fn a_nested_each_spans_its_longest_inner_device_even_outside_the_outer_device() {
-        struct Nested;
-
-        impl<'a> Command<'a> for Nested {
-            fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
-                expansion.push(each(|device| {
-                    Some(if device.idx() == 0 {
-                        Multi(3)
-                    } else {
-                        Multi(1)
-                    })
-                }))?;
-                Ok(())
-            }
-        }
-
-        let frames = build(2, each(|device| (device.idx() == 1).then_some(Nested))).unwrap();
-
-        assert_eq!(frames.len(), 3);
-        for frame in 0..3 {
-            assert_eq!(cmd_at(&frames, frame, 0), Cmd::Nop);
-        }
-        assert_eq!(cmd_at(&frames, 0, 1), Cmd::ConfigModulation);
-        assert_eq!(cmd_at(&frames, 1, 1), Cmd::Nop);
-        assert_eq!(cmd_at(&frames, 2, 1), Cmd::Nop);
-    }
-
-    #[test]
-    fn each_propagates_rejection_from_the_per_device_command() {
-        let result = build(
-            2,
-            each(|device| {
-                (device.idx() == 1).then_some(WriteModulationBuffer {
-                    bank: ModulationBank::B0,
-                    offset: 0,
-                    data: &[],
-                })
-            }),
-        );
+    fn each_propagates_rejection_from_the_per_device_operation() {
+        let result = build(2, each(|device| (device.idx() == 1).then_some(FailAt(1))));
 
         assert!(matches!(result, Err(Error::InvalidPayload(_))));
     }
 
     #[test]
-    fn each_accepts_heterogeneous_boxed_commands() {
+    fn each_accepts_heterogeneous_boxed_operations() {
         let phases = vec![vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]; 2];
         let intensities = vec![vec![Intensity::MAX; Autd3::NUM_TRANSDUCERS]; 2];
         let frames = build(
             2,
             each(|device| {
                 Some(if device.idx() == 0 {
-                    Pattern::new(&phases, &intensities).boxed()
+                    Box::new(Pattern::new(&phases, &intensities)) as Box<dyn Operation>
                 } else {
-                    Marker(0).boxed()
+                    Box::new(SetSilencer::default())
                 })
             }),
         )
         .unwrap();
 
-        assert_eq!(frames.len(), 1, "the pattern is a single fused frame");
+        assert_eq!(frames.len(), 1);
         assert_eq!(cmd_at(&frames, 0, 0), Cmd::WritePatternFused);
-        assert_eq!(cmd_at(&frames, 0, 1), Cmd::ConfigModulation);
+        assert_eq!(cmd_at(&frames, 0, 1), Cmd::SetSilencer);
     }
 
     #[test]
@@ -227,90 +154,63 @@ mod tests {
     }
 
     #[test]
-    fn each_frames_are_the_per_device_encodings_padded_with_untouched_nops() {
+    fn each_frame_holds_the_per_device_encodings_and_untouched_nops() {
         let geometry = test_geometry(3);
         let phases = vec![vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]; 3];
         let intensities = vec![vec![Intensity::MAX; Autd3::NUM_TRANSDUCERS]; 3];
+        let pattern = WritePatternBuffer::new(PatternBank::B0, 0, &phases, &intensities);
         let config = ConfigModulation {
             bank: ModulationBank::B1,
             config: SamplingConfig::FREQ_40K,
             size: 2,
             loop_behavior: LoopBehavior::Infinite,
         };
-        let staged = || {
-            (
-                WritePatternBuffer::new(PatternBank::B0, 0, &phases, &intensities),
-                ConfigPattern {
-                    bank: PatternBank::B0,
-                    config: SamplingConfig::FREQ_40K,
-                    size: 1,
-                    loop_behavior: LoopBehavior::Infinite,
-                },
-            )
-        };
 
         let frames = Frames::encode(
             &geometry,
             each(|device| match device.idx() {
-                0 => Some(staged().boxed()),
-                1 => Some(config.boxed()),
+                0 => Some(Box::new(pattern) as Box<dyn Operation>),
+                1 => Some(Box::new(config)),
                 _ => None,
             }),
         )
         .unwrap();
 
-        let reference = build(3, staged()).unwrap();
-
+        let mut pattern_payload = [0u8; PAYLOAD_BYTES];
+        let pattern_encoded = pattern.encode(&geometry[0], &mut pattern_payload).unwrap();
         let mut config_payload = [0u8; PAYLOAD_BYTES];
         let config_encoded = config.encode(&geometry[1], &mut config_payload).unwrap();
 
-        assert_eq!(frames.len(), 2);
-        assert_eq!(frames.len(), reference.len());
-        for (index, frame) in frames.iter().enumerate() {
-            assert_eq!(frame.distribution(), Distribution::PerDevice);
-            let datagrams = frame.datagrams();
-            assert_eq!(datagrams.len(), 3);
+        assert_eq!(frames.len(), 1);
+        let frame = frames.frame(0).unwrap();
+        assert_eq!(frame.distribution(), Distribution::PerDevice);
+        let datagrams = frame.datagrams();
+        assert_eq!(datagrams.len(), 3);
 
-            let expected = &reference.frame(index).unwrap().datagrams()[0];
-            assert_eq!(datagrams[0].cmd, expected.cmd);
-            assert_eq!(datagrams[0].payload_len, expected.payload_len);
-            assert_eq!(datagrams[0].payload, expected.payload);
+        assert_eq!(datagrams[0].cmd, pattern_encoded.cmd);
+        assert_eq!(datagrams[0].payload_len, pattern_encoded.len);
+        assert_eq!(datagrams[0].payload, pattern_payload);
 
-            if index == 0 {
-                assert_eq!(datagrams[1].cmd, config_encoded.cmd);
-                assert_eq!(datagrams[1].payload_len, config_encoded.len);
-                assert_eq!(datagrams[1].payload, config_payload);
-            } else {
-                assert_eq!(datagrams[1].cmd, Cmd::Nop);
-                assert_eq!(datagrams[1].payload_len, 0);
-                assert_eq!(datagrams[1].payload, [0u8; PAYLOAD_BYTES]);
-            }
+        assert_eq!(datagrams[1].cmd, config_encoded.cmd);
+        assert_eq!(datagrams[1].payload_len, config_encoded.len);
+        assert_eq!(datagrams[1].payload, config_payload);
 
-            assert_eq!(datagrams[2].cmd, Cmd::Nop);
-            assert_eq!(datagrams[2].payload_len, 0);
-            assert_eq!(datagrams[2].payload, [0u8; PAYLOAD_BYTES]);
-        }
+        assert_eq!(datagrams[2].cmd, Cmd::Nop);
+        assert_eq!(datagrams[2].payload_len, 0);
+        assert_eq!(datagrams[2].payload, [0u8; PAYLOAD_BYTES]);
     }
 
     #[test]
     fn re_encoding_each_reuses_the_buffer_without_growing() {
         let geometry = test_geometry(2);
-        let per_device = || {
-            each(|device| {
-                Some(if device.idx() == 0 {
-                    Multi(1)
-                } else {
-                    Multi(3)
-                })
-            })
-        };
+        let per_device = || each(|device| (device.idx() == 1).then_some(Marker(1)));
 
         let mut frames = Frames::default();
         frames.encode_into(&geometry, per_device()).unwrap();
         let capacity = frames.datagram_capacity();
         frames.encode_into(&geometry, per_device()).unwrap();
 
-        assert_eq!(frames.len(), 3);
+        assert_eq!(frames.len(), 1);
         assert_eq!(frames.datagram_capacity(), capacity);
     }
 }

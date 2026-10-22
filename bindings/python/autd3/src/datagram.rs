@@ -6,8 +6,8 @@ use autd3_python_capsule::{
     modulation_from_capsule, phases_from_capsule,
 };
 use autd3_rs::commands::{
-    Command as CoreCommand, Expansion, Modulation as CoreModulation, Pattern as CorePattern,
-    PatternIntensity as CorePatternIntensity, each as core_each,
+    Command as CoreCommand, Expansion, Modulation as CoreModulation, Operation,
+    Pattern as CorePattern, PatternIntensity as CorePatternIntensity, each as core_each,
 };
 use autd3_rs::value::{
     Intensity, LoopBehavior as CoreLoopBehavior, ModulationBank as CoreModulationBank,
@@ -22,15 +22,33 @@ use crate::{commands, ops, stm};
 
 pub(crate) trait PushCommand: Send + Sync {
     fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error>;
+
+    fn as_operation(&self) -> Option<Box<dyn Operation + '_>> {
+        None
+    }
 }
 
-impl<C> PushCommand for C
+pub(crate) trait PushOperation: Send + Sync {
+    fn operation(&self) -> Box<dyn Operation + '_>;
+}
+
+impl<O> PushOperation for O
 where
-    C: for<'a> CoreCommand<'a> + Copy + Send + Sync,
+    O: Operation + Copy + Send + Sync + 'static,
 {
+    fn operation(&self) -> Box<dyn Operation + '_> {
+        Box::new(*self)
+    }
+}
+
+impl<O: PushOperation> PushCommand for O {
     fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
-        expansion.push(*self)?;
+        expansion.push(self.operation())?;
         Ok(())
+    }
+
+    fn as_operation(&self) -> Option<Box<dyn Operation + '_>> {
+        Some(self.operation())
     }
 }
 
@@ -78,13 +96,12 @@ pub(crate) struct PatternData {
     transition_mode: CoreTransitionMode,
 }
 
-impl PushCommand for PatternData {
-    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
-        expansion.push(CorePattern {
+impl PushOperation for PatternData {
+    fn operation(&self) -> Box<dyn Operation + '_> {
+        Box::new(CorePattern {
             transition_mode: self.transition_mode,
             ..CorePattern::with_bank(self.bank, &self.phases, self.intensities.as_ref())
-        })?;
-        Ok(())
+        })
     }
 }
 
@@ -180,7 +197,9 @@ impl<'a> CoreCommand<'a> for Expand<'a> {
 impl PushCommand for PerDevice {
     fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
         expansion.push(core_each(|device| {
-            self.0[device.idx()].as_deref().map(Expand)
+            self.0[device.idx()]
+                .as_deref()
+                .and_then(PushCommand::as_operation)
         }))?;
         Ok(())
     }
@@ -286,10 +305,16 @@ fn nested_command_of(
             .map(|device| {
                 let assigned = assign.call1((devices.get_item(device)?,))?;
                 if assigned.is_none() {
-                    Ok(None)
-                } else {
-                    nested_command_of(&assigned, geometry, depth + 1).map(Some)
+                    return Ok(None);
                 }
+                let command = nested_command_of(&assigned, geometry, depth + 1)?;
+                if command.as_operation().is_none() {
+                    return Err(PyTypeError::new_err(format!(
+                        "each expects a single-frame operation for device {device}, got {}",
+                        assigned.get_type().name()?
+                    )));
+                }
+                Ok(Some(command))
             })
             .collect::<PyResult<Vec<_>>>()?;
         return Ok(Arc::new(PerDevice(commands)));

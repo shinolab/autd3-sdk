@@ -470,20 +470,16 @@ def test_each() -> None:
     right = geo.phase_buffer()
     pattern.focus(geo, geo.center() + np.array([40.0, 0.0, 150.0]), wavelength, right)
     amps = geo.intensity_buffer()
-    mod_buf = modulation.modulation_buffer()
-    modulation.sine(150 * Hz, modulation.SineOption(), autd3.value.SamplingConfig.FREQ_4K, mod_buf)
 
     # homogeneous per-device command
     commands: list[autd3.commands.Command] = []
     commands.append(autd3.commands.each(lambda device: autd3.commands.Pattern(left if device.idx() % 2 == 0 else right, amps)))
     assert len(autd3.Frames.encode(geo, commands)) > 0
 
-    # heterogeneous per-device command (Python is dynamically typed, no boxing needed)
+    # heterogeneous per-device operation (Python is dynamically typed, no boxing needed)
     commands = []
     commands.append(autd3.commands.each(
-        lambda device: autd3.commands.Pattern(left, amps)
-        if device.idx() % 2 == 0
-        else autd3.commands.Modulation(autd3.value.SamplingConfig.FREQ_4K, mod_buf)
+        lambda device: autd3.commands.Pattern(left, amps) if device.idx() % 2 == 0 else autd3.commands.SetSilencer()
     ))
     assert len(autd3.Frames.encode(geo, commands)) > 0
 

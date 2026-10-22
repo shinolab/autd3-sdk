@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use autd3_rs::commands::{Command, Modulation, Pattern, SetSilencer, each};
+use autd3_rs::commands::{Modulation, Operation, Pattern, SetSilencer, each};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::{Intensity, SamplingConfig};
@@ -64,9 +64,9 @@ async fn main() -> Result<()> {
     client
         .send(each(|device| {
             Some(if device.idx() % 2 == 0 {
-                Pattern::new(&left, Intensity::MAX).boxed()
+                Box::new(Pattern::new(&left, Intensity::MAX)) as Box<dyn Operation>
             } else {
-                Modulation::new(SamplingConfig::FREQ_4K, &modulation).boxed()
+                Box::new(SetSilencer::default())
             })
         }))
         .await?;
