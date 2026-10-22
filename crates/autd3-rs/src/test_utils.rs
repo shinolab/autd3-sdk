@@ -67,6 +67,17 @@ impl<'a> Command<'a> for Multi {
 }
 
 #[derive(Clone, Copy)]
+pub(crate) struct FailBroadcast;
+
+impl crate::sealed::Sealed for FailBroadcast {}
+
+impl Operation for FailBroadcast {
+    fn encode(&self, _device: &Device, _out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
+        Err(PayloadError::ModulationDataEmpty.into())
+    }
+}
+
+#[derive(Clone, Copy)]
 pub(crate) struct FailAt(pub(crate) usize);
 
 impl crate::sealed::Sealed for FailAt {}

@@ -45,7 +45,7 @@ impl<'g, 'a> Expansion<'g, 'a> {
         Ok(self)
     }
 
-    pub(crate) fn push_op<O: Operation>(&mut self, op: &O) -> &mut Self {
+    pub(crate) fn push_op<O: Operation>(&mut self, op: &O) -> Result<&mut Self, Error> {
         let encoded = match self.column {
             Column::AllDevices => self.frames.push_encoded(op, self.geometry),
             Column::Device(device) => {
@@ -56,11 +56,9 @@ impl<'g, 'a> Expansion<'g, 'a> {
             }
             Column::Discarded => Ok(()),
         };
-        if let Err(e) = encoded {
-            self.frames.record_encode_error(e);
-        }
         self.next_frame += 1;
-        self
+        encoded?;
+        Ok(self)
     }
 
     pub(crate) fn push_per_device<C, F>(&mut self, mut assign: F) -> Result<&mut Self, Error>
@@ -72,6 +70,7 @@ impl<'g, 'a> Expansion<'g, 'a> {
         let start = self.next_frame;
         let mut end = start;
         let mut assigned = 0;
+        let mut expanded = Ok(());
         for device in geometry {
             let Some(cmd) = assign(device) else {
                 continue;
@@ -89,8 +88,11 @@ impl<'g, 'a> Expansion<'g, 'a> {
                 next_frame: start,
                 commands: PhantomData,
             };
-            cmd.expand(&mut device_expansion)?;
+            expanded = cmd.expand(&mut device_expansion);
             end = end.max(device_expansion.next_frame);
+            if expanded.is_err() {
+                break;
+            }
         }
 
         tracing::trace!(
@@ -104,6 +106,7 @@ impl<'g, 'a> Expansion<'g, 'a> {
             self.frames.pad_per_device(end, geometry.num_devices());
         }
         self.next_frame = end;
+        expanded?;
         Ok(self)
     }
 }

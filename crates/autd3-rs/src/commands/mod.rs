@@ -37,7 +37,7 @@ pub trait Command<'a> {
 
 impl<'a, O: Operation + 'a> Command<'a> for O {
     fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
-        expansion.push_op(&self);
+        expansion.push_op(&self)?;
         Ok(())
     }
 }
