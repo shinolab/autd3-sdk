@@ -30,6 +30,7 @@ from autd3.commands import (
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import Angle, Freq, Hz, Length, deg, kHz, m, mm, rad, s
 from autd3.value import (
+    ControlPoint,
     ControlPoints,
     Intensity,
     LoopBehavior,
@@ -315,17 +316,19 @@ def test_sampling_configs_are_resolved_when_constructed() -> None:
 
 def test_command_contents_are_checked_when_encoded() -> None:
     geometry = one_device()
+    point = ControlPoint([0.0, 0.0, 150.0], Phase.ZERO)
     for command in (
         SetOutputMask([[True] * 3]),
         SetPhaseCorrection([[Phase.ZERO] * 3]),
         FociStm(SamplingConfig.FREQ_4K, [], FociStmOption()),
         WriteFociBuffer(PatternBank.B0, 0, []),
+        FociStm(SamplingConfig.FREQ_4K, [ControlPoints([], 0xFF)], FociStmOption()),
+        FociStm(SamplingConfig.FREQ_4K, [ControlPoints([point], 0xFF), ControlPoints([point, point], 0xFF)], FociStmOption()),
+        WriteFociBuffer(PatternBank.B0, 0, [ControlPoints([point] * 9, 0xFF)]),
     ):
         with pytest.raises(autd3.Autd3Error) as err:
             autd3.Frames.encode(geometry, loose(command))
         assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
-    with pytest.raises(ValueError):
-        FociStm(SamplingConfig.FREQ_4K, [ControlPoints([], 0xFF)], FociStmOption())
 
 
 def test_a_zero_ack_timeout_is_rejected_at_open() -> None:

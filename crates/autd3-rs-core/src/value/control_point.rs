@@ -32,16 +32,19 @@ impl From<Point3<f32>> for ControlPoint {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct ControlPoints<const N: usize> {
-    pub points: [ControlPoint; N],
+#[derive(Clone, Debug, PartialEq)]
+pub struct ControlPoints {
+    pub points: Vec<ControlPoint>,
     pub intensity: Intensity,
 }
 
-impl<const N: usize> ControlPoints<N> {
+impl ControlPoints {
     #[must_use]
-    pub const fn new(points: [ControlPoint; N], intensity: Intensity) -> Self {
-        Self { points, intensity }
+    pub fn new(points: impl Into<Vec<ControlPoint>>, intensity: Intensity) -> Self {
+        Self {
+            points: points.into(),
+            intensity,
+        }
     }
 
     #[doc(hidden)]
@@ -62,28 +65,25 @@ impl<const N: usize> ControlPoints<N> {
     }
 }
 
-impl From<Point3<f32>> for ControlPoints<1> {
+impl From<Point3<f32>> for ControlPoints {
     fn from(point: Point3<f32>) -> Self {
-        Self {
-            points: [ControlPoint::from(point)],
-            intensity: Intensity::MAX,
-        }
+        Self::from(ControlPoint::from(point))
     }
 }
 
-impl From<ControlPoint> for ControlPoints<1> {
+impl From<ControlPoint> for ControlPoints {
     fn from(point: ControlPoint) -> Self {
         Self {
-            points: [point],
+            points: vec![point],
             intensity: Intensity::MAX,
         }
     }
 }
 
-impl<const N: usize> From<[Point3<f32>; N]> for ControlPoints<N> {
+impl<const N: usize> From<[Point3<f32>; N]> for ControlPoints {
     fn from(points: [Point3<f32>; N]) -> Self {
         Self {
-            points: points.map(ControlPoint::from),
+            points: points.map(ControlPoint::from).into(),
             intensity: Intensity::MAX,
         }
     }

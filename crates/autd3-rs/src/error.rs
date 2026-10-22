@@ -125,6 +125,19 @@ pub enum PayloadError {
     #[error("{len} control points exceed the {max} that fit in one frame")]
     FociWriteTooLong { len: usize, max: usize },
 
+    #[error(
+        "number of foci per sample must be 1..={}, got {num_foci}",
+        crate::params::NUM_FOCI_MAX
+    )]
+    NumFociOutOfRange { num_foci: usize },
+
+    #[error("sample {index} has {got} foci but sample 0 has {expected}")]
+    NumFociMismatch {
+        index: usize,
+        expected: usize,
+        got: usize,
+    },
+
     #[error("per-device data has {len} entr(ies) but device {device} was requested")]
     DeviceDataOutOfRange { device: usize, len: usize },
 

@@ -22,7 +22,7 @@ use crate::io::wait_enter;
 
 async fn send_foci(
     ctx: &Ctx<'_>,
-    points: &[ControlPoints<1>],
+    points: &[ControlPoints],
     config: f32,
     bank: PatternBank,
 ) -> Result<()> {
@@ -84,7 +84,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     wait_enter("The trajectory reverses at the right edge, then stops after one cycle").await;
 
     let indices = MAX_FOCI_TOTAL / 8;
-    let foci8: Vec<ControlPoints<8>> = (0..indices)
+    let foci8: Vec<ControlPoints> = (0..indices)
         .map(|i| {
             let theta = 2.0 * PI * i as f32 / indices as f32;
             let d = Vector3::new(RADIUS_MM * theta.cos(), RADIUS_MM * theta.sin(), 0.0);
@@ -145,7 +145,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     Ok(())
 }
 
-async fn transition_asserts(ctx: &Ctx<'_>, foci: &[ControlPoints<1>]) -> Result<()> {
+async fn transition_asserts(ctx: &Ctx<'_>, foci: &[ControlPoints]) -> Result<()> {
     let config = stm_sampling(0.5 * Hz, foci.len())?;
     expect_transition_mode_rejections(ctx, "FociSTM", |loop_behavior, transition_mode| {
         Frames::encode(

@@ -23,7 +23,7 @@ async fn main() -> Result<()> {
 
     let center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
     let radius = (30.0 * mm).mm();
-    let foci: Vec<ControlPoints<1>> = (0..20)
+    let foci: Vec<ControlPoints> = (0..20)
         .map(|i| {
             let theta = 2.0 * PI * i as f32 / 20.0;
             let p = center + Vector3::new(radius * theta.cos(), radius * theta.sin(), 0.0);

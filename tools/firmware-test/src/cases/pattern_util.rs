@@ -42,7 +42,7 @@ pub(crate) fn focus_at(geometry: &Geometry, off: [f32; 3], intensity: u8) -> Buf
     (phases, intensities)
 }
 
-pub(crate) fn circle_foci(center: Point3<f32>, n: usize) -> Vec<ControlPoints<1>> {
+pub(crate) fn circle_foci(center: Point3<f32>, n: usize) -> Vec<ControlPoints> {
     (0..n)
         .map(|i| {
             let theta = 2.0 * PI * i as f32 / n as f32;
@@ -131,19 +131,17 @@ impl Command for WholeModulationWrite<'_> {
 
 struct WholeFociWrite<'a> {
     bank: PatternBank,
-    points: &'a [ControlPoints<1>],
+    num_foci: u8,
+    points: &'a [ControlPoints],
 }
 
 impl Command for WholeFociWrite<'_> {
     fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
-        for (i, points) in self
-            .points
-            .chunks(WriteFociBuffer::<1>::MAX_LEN)
-            .enumerate()
-        {
+        let max_len = WriteFociBuffer::max_len(self.num_foci).max(1);
+        for (i, points) in self.points.chunks(max_len).enumerate() {
             expansion.push(WriteFociBuffer {
                 bank: self.bank,
-                start_index: i * WriteFociBuffer::<1>::MAX_LEN,
+                start_index: i * max_len,
                 points,
             })?;
         }
@@ -306,19 +304,24 @@ pub(crate) async fn write_foci_bank(
     ctx: &Ctx<'_>,
     bank: PatternBank,
     config: SamplingConfig,
-    points: &[ControlPoints<1>],
+    points: &[ControlPoints],
     loop_behavior: LoopBehavior,
 ) -> Result<()> {
     let size = points.len();
+    let num_foci = u8::try_from(points.first().map_or(0, |p| p.points.len()))?;
     ctx.send_frames(&Frames::encode(
         ctx.client.geometry(),
         (
-            WholeFociWrite { bank, points },
+            WholeFociWrite {
+                bank,
+                num_foci,
+                points,
+            },
             ConfigFociStm {
                 bank,
                 config,
                 size,
-                num_foci: 1,
+                num_foci,
                 sound_speed: Velocity::from_m_s(SOUND_SPEED_M_S),
                 loop_behavior,
             },

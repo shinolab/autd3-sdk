@@ -35,6 +35,7 @@ pub use set_phase_correction::SetPhaseCorrection;
 pub use set_pulse_width_table::{PWE_TABLE_SIZE, SetPulseWidthTable};
 pub use set_silencer::{FixedCompletionTime, FixedUpdateRate, SetSilencer, SilencerConfig};
 pub use write_foci_buffer::WriteFociBuffer;
+pub(crate) use write_foci_buffer::num_foci;
 pub use write_modulation_buffer::WriteModulationBuffer;
 pub use write_pattern_buffer::{StmIntensity, WritePatternBuffer};
 pub(crate) use write_pattern_buffer::{WritePatternChunk, encode_raw_pattern_entry};
@@ -136,7 +137,7 @@ mod tests {
         let ops: [&dyn Operation; 7] = [
             &SetOutputMask { masks: &[] },
             &SetPhaseCorrection { phases: &[] },
-            &WriteFociBuffer::<1> {
+            &WriteFociBuffer {
                 bank: PatternBank::B0,
                 start_index: 0,
                 points: &[],

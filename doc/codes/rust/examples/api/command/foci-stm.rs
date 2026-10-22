@@ -13,10 +13,12 @@ fn main() -> anyhow::Result<()> {
     let radius = 30.0 * mm;
     let num_points = 200;
     // ANCHOR: circle
-    let points: Vec<ControlPoints<1>> = (0..num_points)
+    let points: Vec<ControlPoints> = (0..num_points)
         .map(|i| {
             let theta = 2.0 * PI * i as f32 / num_points as f32;
-            ControlPoints::from(center + offset(radius * theta.cos(), radius * theta.sin(), 0.0 * mm))
+            ControlPoints::from(
+                center + offset(radius * theta.cos(), radius * theta.sin(), 0.0 * mm),
+            )
         })
         .collect();
     // ANCHOR_END: circle
@@ -40,9 +42,9 @@ fn main() -> anyhow::Result<()> {
     FociStm::new(config, &points, option);
     // ANCHOR_END: api
 
-    const N: u8 = 1;
+    let num_foci = 1;
     // ANCHOR: equivalent
-    let max_len = WriteFociBuffer::<1>::MAX_LEN;
+    let max_len = WriteFociBuffer::max_len(num_foci);
     for (i, chunk) in points.chunks(max_len).enumerate() {
         WriteFociBuffer {
             bank: option.bank,
@@ -54,7 +56,7 @@ fn main() -> anyhow::Result<()> {
         bank: option.bank,
         config,
         size: points.len(),
-        num_foci: N, // N is the number of foci in the points
+        num_foci,
         sound_speed: option.sound_speed,
         loop_behavior: option.loop_behavior,
     };

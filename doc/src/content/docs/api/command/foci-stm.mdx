@@ -24,17 +24,17 @@ import { excerpt } from "@lib/excerpt";
 | 引数      | 型                       | 説明                                       |
 | --------- | ------------------------ | ------------------------------------------ |
 | `config`  | `SamplingConfig`         | サンプル毎のサンプリング設定                        |
-| `points`  | `&[ControlPoints<N>]`    | 焦点サンプルの列 (2 サンプル以上)          |
+| `points`  | `&[ControlPoints]`       | 焦点サンプルの列 (2 サンプル以上)          |
 | `option`  | `FociStmOption`          | 音速・ループ・遷移などのオプション         |
 
 `config` は 1 サンプルあたりのサンプリング設定である. 「全サンプルを 1 周する周波数」から決めたいときは, 周波数にサンプル数を掛けて `SamplingConfig` を作る (例: 200 サンプルを 1 Hz で回すなら 200 Hz).
 
 ## ControlPoint / ControlPoints
 
-1 サンプルは `ControlPoints<N>` で表される. `N` は同時に出す焦点の数 (最大 8) である. 
+1 サンプルは `ControlPoints` で表される. `points` の長さが同時に出す焦点の数 (1 以上 8 以下) で, 全サンプルで揃っていなければならない (揃っていないと送信時にエラーになる). 
 
 - `ControlPoint { point, phase_offset }` — 焦点座標 [mm] と位相オフセット. 
-- `ControlPoints<N> { points: [ControlPoint; N], intensity }` — `N` 個の焦点と振幅. 
+- `ControlPoints { points: Vec<ControlPoint>, intensity }` — 焦点の列と振幅. 
 
 `ControlPoint::new(point, phase_offset)` / `ControlPoints::new(points, intensity)` の引数はすべて必須 (Python / C# も同じ).
 Rust では `From` で座標から変換でき, 位相オフセットは `Phase::ZERO`, 振幅は `Intensity::MAX` になる (`ControlPoint::from(p)`, `ControlPoints::from(p)` / `ControlPoints::from(cp)` / `ControlPoints::from([p0, p1])`).

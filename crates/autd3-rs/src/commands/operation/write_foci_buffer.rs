@@ -1,7 +1,7 @@
 use crate::datagram::Datagram;
 use crate::error::{Error, PayloadError};
 use crate::geometry::Device;
-use crate::params::FOCUS_WORDS;
+use crate::params::{FOCUS_WORDS, NUM_FOCI_MAX};
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{ControlPoints, PatternBank};
 
@@ -9,50 +9,78 @@ use super::{Distribution, Operation, set_cmd, write_header};
 use autd3_cpu_wire::payload::WriteFociPayload;
 
 #[derive(Clone, Copy, Debug)]
-pub struct WriteFociBuffer<'a, const N: usize> {
+pub struct WriteFociBuffer<'a> {
     pub bank: PatternBank,
     pub start_index: usize,
-    pub points: &'a [ControlPoints<N>],
+    pub points: &'a [ControlPoints],
 }
 
-impl<const N: usize> WriteFociBuffer<'_, N> {
-    pub const MAX_LEN: usize =
-        (PAYLOAD_BYTES - size_of::<WriteFociPayload>()) / (FOCUS_WORDS * 2) / N;
+impl WriteFociBuffer<'_> {
+    #[must_use]
+    pub const fn max_len(num_foci: u8) -> usize {
+        if num_foci == 0 || num_foci > NUM_FOCI_MAX {
+            return 0;
+        }
+        (PAYLOAD_BYTES - size_of::<WriteFociPayload>()) / (FOCUS_WORDS * 2) / num_foci as usize
+    }
 }
 
-impl<const N: usize> crate::sealed::Sealed for WriteFociBuffer<'_, N> {}
+pub(crate) fn num_foci(points: &[ControlPoints]) -> Result<u8, PayloadError> {
+    let Some(first) = points.first() else {
+        return Err(PayloadError::FociEmpty);
+    };
+    let expected = first.points.len();
+    let num_foci = u8::try_from(expected)
+        .ok()
+        .filter(|n| (1..=NUM_FOCI_MAX).contains(n))
+        .ok_or(PayloadError::NumFociOutOfRange { num_foci: expected })?;
+    if let Some((index, got)) = points
+        .iter()
+        .map(|cp| cp.points.len())
+        .enumerate()
+        .find(|&(_, len)| len != expected)
+    {
+        return Err(PayloadError::NumFociMismatch {
+            index,
+            expected,
+            got,
+        });
+    }
+    Ok(num_foci)
+}
 
-impl<const N: usize> Operation for WriteFociBuffer<'_, N> {
+impl crate::sealed::Sealed for WriteFociBuffer<'_> {}
+
+impl Operation for WriteFociBuffer<'_> {
     fn distribution(&self) -> Distribution {
         Distribution::PerDevice
     }
 
     fn encode(&self, device: &Device, out: &mut Datagram) -> Result<(), Error> {
-        if self.points.is_empty() {
-            return Err(PayloadError::FociEmpty.into());
-        }
-        if self.points.len() > Self::MAX_LEN {
+        let num_foci = num_foci(self.points)?;
+        let max = Self::max_len(num_foci);
+        if self.points.len() > max {
             return Err(PayloadError::FociWriteTooLong {
                 len: self.points.len(),
-                max: Self::MAX_LEN,
+                max,
             }
             .into());
         }
-        let num_foci = self.points.len() * N;
-        let header =
-            WriteFociPayload::new(self.bank, self.start_index.saturating_mul(N), num_foci)?;
+        let n = usize::from(num_foci);
+        let total = self.points.len() * n;
+        let header = WriteFociPayload::new(self.bank, self.start_index.saturating_mul(n), total)?;
         let rest = write_header(out, &header);
         let foci = self
             .points
             .iter()
-            .flat_map(|points| (0..N).map(move |j| points.focus(device, j)));
+            .flat_map(|points| (0..n).map(move |j| points.focus(device, j)));
         for (dst, focus) in rest.as_chunks_mut::<8>().0.iter_mut().zip(foci) {
             *dst = focus.encode()?.to_le_bytes();
         }
         set_cmd(
             out,
             Cmd::WriteFociBuffer,
-            size_of::<WriteFociPayload>() + num_foci * FOCUS_WORDS * 2,
+            size_of::<WriteFociPayload>() + total * FOCUS_WORDS * 2,
         );
         Ok(())
     }
@@ -68,7 +96,7 @@ mod tests {
 
     #[test]
     fn write_foci_buffer_writes_foci_at_the_start_index() {
-        let points: Vec<ControlPoints<1>> = (0..4)
+        let points: Vec<ControlPoints> = (0..4)
             .map(|i| ControlPoints::from(Point3::new(0.0, 0.0, i as f32)))
             .collect();
         let op = WriteFociBuffer {
@@ -135,7 +163,7 @@ mod tests {
         let points =
             vec![
                 ControlPoints::new([ControlPoint::from(Point3::origin()); 3], Intensity::MAX);
-                WriteFociBuffer::<3>::MAX_LEN + 1
+                WriteFociBuffer::max_len(3) + 1
             ];
         let write = |points| {
             encode(&WriteFociBuffer {
@@ -145,17 +173,17 @@ mod tests {
             })
         };
 
-        assert!(write(&points[..WriteFociBuffer::<3>::MAX_LEN]).is_ok());
+        assert!(write(&points[..WriteFociBuffer::max_len(3)]).is_ok());
         assert!(matches!(
             write(&points),
             Err(Error::InvalidPayload(PayloadError::FociWriteTooLong { len, max }))
-                if len == WriteFociBuffer::<3>::MAX_LEN + 1 && max == WriteFociBuffer::<3>::MAX_LEN
+                if len == WriteFociBuffer::max_len(3) + 1 && max == WriteFociBuffer::max_len(3)
         ));
     }
 
     #[test]
     fn write_foci_buffer_rejects_invalid_inputs() {
-        let write = |start_index, points: &[ControlPoints<1>]| {
+        let write = |start_index, points: &[ControlPoints]| {
             encode(&WriteFociBuffer {
                 bank: PatternBank::B0,
                 start_index,
@@ -174,10 +202,58 @@ mod tests {
         assert!(matches!(
             write(
                 MAX_FOCI_TOTAL - 1,
-                &[ControlPoints::from(Point3::origin()); 2]
+                &[
+                    ControlPoints::from(Point3::origin()),
+                    ControlPoints::from(Point3::origin())
+                ]
             ),
             Err(Error::InvalidPayload(_))
         ));
+    }
+
+    #[test]
+    fn write_foci_buffer_rejects_invalid_num_foci() {
+        let write = |points: &[ControlPoints]| {
+            encode(&WriteFociBuffer {
+                bank: PatternBank::B0,
+                start_index: 0,
+                points,
+            })
+        };
+        let with = |n: usize| {
+            ControlPoints::new(
+                vec![ControlPoint::from(Point3::origin()); n],
+                Intensity::MAX,
+            )
+        };
+
+        assert!(matches!(
+            write(&[with(0)]),
+            Err(Error::InvalidPayload(PayloadError::NumFociOutOfRange {
+                num_foci: 0
+            }))
+        ));
+        let too_many = usize::from(NUM_FOCI_MAX) + 1;
+        assert!(matches!(
+            write(&[with(too_many)]),
+            Err(Error::InvalidPayload(PayloadError::NumFociOutOfRange { num_foci }))
+                if num_foci == too_many
+        ));
+        assert!(matches!(
+            write(&[with(2), with(2), with(3)]),
+            Err(Error::InvalidPayload(PayloadError::NumFociMismatch {
+                index: 2,
+                expected: 2,
+                got: 3
+            }))
+        ));
+    }
+
+    #[test]
+    fn write_foci_buffer_max_len_is_zero_outside_the_num_foci_range() {
+        assert_eq!(WriteFociBuffer::max_len(0), 0);
+        assert_eq!(WriteFociBuffer::max_len(NUM_FOCI_MAX + 1), 0);
+        assert!(WriteFociBuffer::max_len(NUM_FOCI_MAX) > 0);
     }
 
     #[test]
