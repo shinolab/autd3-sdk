@@ -6,11 +6,6 @@ pub enum TransducerMask<'a> {
     #[default]
     AllEnabled,
     Masked(&'a [Vec<bool>]),
-    #[non_exhaustive]
-    Group {
-        indices: &'a [Vec<usize>],
-        index: usize,
-    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -57,9 +52,6 @@ impl TransducerMask<'_> {
         match self {
             Self::AllEnabled => Ok(()),
             Self::Masked(m) => validate_shape(geometry, m.len(), |device| m[device].len()),
-            Self::Group { indices, .. } => {
-                validate_shape(geometry, indices.len(), |device| indices[device].len())
-            }
         }
     }
 
@@ -68,7 +60,6 @@ impl TransducerMask<'_> {
         match self {
             Self::AllEnabled => true,
             Self::Masked(m) => m[device][transducer],
-            Self::Group { indices, index } => indices[device][transducer] == index,
         }
     }
 
@@ -77,16 +68,13 @@ impl TransducerMask<'_> {
         match self {
             Self::AllEnabled => geometry.num_transducers(),
             Self::Masked(m) => m.iter().flatten().filter(|&&b| b).count(),
-            Self::Group { indices, index } => {
-                indices.iter().flatten().filter(|&&i| i == index).count()
-            }
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::super::{Autd3, TransducerGroups};
+    use super::super::Autd3;
     use super::*;
 
     fn geometry() -> Geometry {
@@ -133,33 +121,6 @@ mod tests {
                 device: 1,
                 got: 3,
                 expected: Autd3::NUM_TRANSDUCERS
-            })
-        );
-    }
-
-    #[test]
-    fn group_mask_selects_the_key() {
-        let geometry = geometry();
-        let groups = TransducerGroups::new(
-            &geometry,
-            |device, tr| if tr < 10 { device.idx() } else { 2 },
-        );
-        let mask = groups.mask(1).unwrap();
-        assert_eq!(mask.validate(&geometry), Ok(()));
-        assert!(mask.is_enabled(1, 9));
-        assert!(!mask.is_enabled(1, 10));
-        assert!(!mask.is_enabled(0, 0));
-        assert_eq!(mask.num_enabled(&geometry), 10);
-    }
-
-    #[test]
-    fn group_mask_from_another_geometry_is_an_error() {
-        let groups = TransducerGroups::new(&Geometry::new(vec![Autd3::default()]), |_, _| 0);
-        assert_eq!(
-            groups.mask(0).unwrap().validate(&geometry()),
-            Err(TransducerMaskError::DeviceCountMismatch {
-                got: 1,
-                expected: 2
             })
         );
     }

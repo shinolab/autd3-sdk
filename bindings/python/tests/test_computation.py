@@ -95,139 +95,32 @@ def test_pattern_set_and_add_phase() -> None:
         pattern.set_intensity(0x80, loose(phases))
 
 
-def test_pattern_group() -> None:
+def test_pattern_masked_holo() -> None:
     geo = autd3.geometry.Geometry(
         [
             autd3.geometry.Autd3([0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]),
             autd3.geometry.Autd3([200.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]),
         ]
     )
-    left = geo.phase_buffer()
-    pattern.set_phase(autd3.value.Phase(0x10), left)
-    right = geo.phase_buffer()
-    pattern.set_phase(autd3.value.Phase(0x30), right)
-    dst = geo.phase_buffer()
-    pattern.set_phase(autd3.value.Phase(0xFF), dst)
 
-    left_i = geo.intensity_buffer()
-    pattern.set_intensity(0x20, left_i)
-    right_i = geo.intensity_buffer()
-    pattern.set_intensity(0x40, right_i)
-    dst_i = geo.intensity_buffer()
-    pattern.set_intensity(0x60, dst_i)
+    def enabled(dev: int, tr: int) -> bool:
+        return dev == 1 and tr % 3 == 1
 
-    def side(dev: int, tr: int) -> str:
-        if dev == 1 and tr % 3 == 1:
-            return "right"
-        return "left"
-
-    def key(device: autd3.geometry.Device, tr: int) -> str:
-        return side(device.idx(), tr)
-
-    groups = pattern.TransducerGroups(geo, key)
-    assert groups.keys() == ["left", "right"]
-    assert groups.key(1, 1) == "right"
-    assert groups.key(0, 1) == "left"
-
-    pattern.group(geo, groups, {"left": left, "right": right}, dst)
-    pattern.group(geo, groups, {"left": left_i, "right": right_i}, dst_i)
-
-    for dev in range(2):
-        for tr in range(len(dst[dev])):
-            expected = {"left": (autd3.value.Phase(0x10), autd3.value.Intensity(0x20)), "right": (autd3.value.Phase(0x30), autd3.value.Intensity(0x40))}[side(dev, tr)]
-            assert (dst[dev][tr], dst_i[dev][tr]) == expected
-
-    with pytest.raises(ValueError):
-        pattern.group(geo, groups, {"left": left, "right": dst}, dst)
-    with pytest.raises(KeyError):
-        pattern.group(geo, groups, {"left": left}, dst)
-    single = geometry().phase_buffer()
-    with pytest.raises(ValueError):
-        pattern.group(geo, groups, {"left": left, "right": single}, dst)
-    with pytest.raises(TypeError):
-        pattern.group(geo, groups, loose({"left": left, "right": 1}), dst)
-    with pytest.raises(TypeError):
-        pattern.group(geo, groups, loose({"left": left, "right": right_i}), dst)
-    with pytest.raises(TypeError):
-        pattern.group(geo, groups, {"left": left, "right": right}, loose(1))
-    with pytest.raises(TypeError):
-        pattern.TransducerGroups(geo, loose(lambda device, tr: []))
-    with pytest.raises(ValueError):
-        pattern.TransducerGroups(geo, lambda device, tr: None)
-    assert groups.mask("center") is None
-    right_mask = groups.mask("right")
-    assert right_mask is not None
-
+    mask = pattern.TransducerMask.masked([[enabled(device.idx(), tr) for tr in range(device.num_transducers())] for device in geo])
     holo_phases = geo.phase_buffer()
     holo_intensities = geo.intensity_buffer()
     holo.gspat(
         geo,
         [holo.AmplitudeTarget(point=geo.center() + np.array([0.0, 0.0, 150.0]), amplitude=5e3 * Pa)],
         pattern.wavelength(340 * m / s),
-        holo.GspatOption(constraint=holo.IntensityConstraint.Uniform(0xFF), mask=right_mask),
+        holo.GspatOption(constraint=holo.IntensityConstraint.Uniform(0xFF), mask=mask),
         holo_phases,
         holo_intensities,
     )
     for dev in range(2):
         for tr in range(len(holo_intensities[dev])):
-            enabled = autd3.value.Intensity.MAX if side(dev, tr) == "right" else autd3.value.Intensity.MIN
-            assert holo_intensities[dev][tr] == enabled
-
-    seen: list[str] = []
-
-    def compute(
-        key: str,
-        mask: pattern.TransducerMask,
-        phases: pattern.PhaseBuffer,
-        intensities: pattern.IntensityBuffer,
-    ) -> None:
-        seen.append(key)
-        if key == "left":
-            holo.gspat(
-                geo,
-                [holo.AmplitudeTarget(point=geo.center() + np.array([0.0, 0.0, 150.0]), amplitude=5e3 * Pa)],
-                pattern.wavelength(340 * m / s),
-                holo.GspatOption(constraint=holo.IntensityConstraint.Uniform(0xFF), mask=mask),
-                phases,
-                intensities,
-            )
-        else:
-            pattern.set_phase(autd3.value.Phase(0x30), phases)
-            pattern.set_intensity(autd3.value.Intensity(0x40), intensities)
-
-    computed = geo.phase_buffer()
-    pattern.set_phase(autd3.value.Phase(0xFF), computed)
-    computed_i = geo.intensity_buffer()
-    pattern.set_intensity(0x60, computed_i)
-    pattern.group_compute(geo, groups, compute, computed, computed_i)
-    assert seen == ["left", "right"]
-    for dev in range(2):
-        for tr in range(len(computed[dev])):
-            p, i = computed[dev][tr], computed_i[dev][tr]
-            if side(dev, tr) == "left":
-                assert i == autd3.value.Intensity.MAX
-            else:
-                assert (p, i) == (autd3.value.Phase(0x30), autd3.value.Intensity(0x40))
-
-    def fail(
-        key: str,
-        mask: pattern.TransducerMask,
-        phases: pattern.PhaseBuffer,
-        intensities: pattern.IntensityBuffer,
-    ) -> None:
-        raise RuntimeError(key)
-
-    with pytest.raises(RuntimeError):
-        pattern.group_compute(geo, groups, fail, computed, computed_i)
-    with pytest.raises(ValueError):
-        pattern.group_compute(geometry(), groups, compute, single, geometry().intensity_buffer())
-    with pytest.raises(TypeError):
-        pattern.group_compute(geo, groups, loose(None), computed, computed_i)
-
-    pattern.group_compute(geo, groups, lambda key, mask, phases, intensities: None, computed, computed_i)
-    for dev in range(2):
-        for tr in range(len(computed[dev])):
-            assert (computed[dev][tr], computed_i[dev][tr]) == (autd3.value.Phase.ZERO, autd3.value.Intensity.MAX)
+            expected = autd3.value.Intensity.MAX if enabled(dev, tr) else autd3.value.Intensity.MIN
+            assert holo_intensities[dev][tr] == expected
 
 
 def test_pattern_laguerre_hermite_gaussian() -> None:

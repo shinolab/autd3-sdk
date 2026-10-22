@@ -74,7 +74,7 @@ It is specified via the `mask` field of each Option (the default is `AllEnabled`
 - `TransducerMask::Masked(&[Vec<bool>])` — specifies enabled/disabled for each transducer individually.
 
 In Python they are written as `TransducerMask.AllEnabled` / `TransducerMask.masked(rows)`, and in C# as `TransducerMask.AllEnabled` / `TransducerMask.Masked(bool[][])`.
-In Python, `mask` does not accept `None` (`TypeError`), so the `None` that [`TransducerGroups.mask(key)`](/autd3-sdk/en/api/compute/pattern/group/) returns for a key assigned to no transducer never silently passes as "all transducers".
+In Python, `mask` does not accept `None` (`TypeError`).
 
 ### LinAlgBackend (NalgebraBackend)
 

@@ -266,30 +266,6 @@ def test_transducer_mask_queries() -> None:
         short.validate(geometry)
 
 
-def test_transducer_groups_queries() -> None:
-    geometry = Geometry([Autd3([0.0, 0.0, 0.0]), Autd3([Autd3.DEVICE_WIDTH, 0.0, 0.0])])
-    groups = pattern.TransducerGroups(geometry, lambda device, tr: "head" if tr < 10 else "tail")
-    assert groups.keys() == ["head", "tail"]
-    assert groups.num_devices() == 2
-    assert groups.num_transducers(1) == Autd3.NUM_TRANSDUCERS
-    assert groups.num_transducers_in("head") == 20
-    assert groups.num_transducers_in("tail") == geometry.num_transducers() - 20
-    assert groups.num_transducers_in("missing") == 0
-    assert groups.indices(0) == [0] * 10 + [1] * (Autd3.NUM_TRANSDUCERS - 10)
-    assert groups.index(1, 9) == 0
-    assert groups.index(1, 10) == 1
-    masks = groups.masks()
-    assert [key for key, _ in masks] == groups.keys()
-    assert [mask.num_enabled(geometry) for _, mask in masks] == [20, geometry.num_transducers() - 20]
-    assert masks[0][1].is_enabled(1, 9)
-    assert not masks[0][1].is_enabled(1, 10)
-    with pytest.raises(IndexError):
-        groups.indices(2)
-    with pytest.raises(IndexError):
-        groups.num_transducers(2)
-    assert groups.mask("missing") is None
-
-
 def test_control_points_expose_their_fields() -> None:
     control_point = ControlPoint([1.0, 2.0, 3.0], Phase(0x20))
     np.testing.assert_array_equal(control_point.point, [1.0, 2.0, 3.0])

@@ -13,8 +13,8 @@ pub use common::{Angle, Freq, Length, Velocity};
 #[cfg(feature = "serde")]
 pub use geometry::LayoutError;
 pub use geometry::{
-    Autd3, Device, Geometry, Point3, Quaternion, TransducerGroups, TransducerMask,
-    TransducerMaskError, UnitQuaternion, UnitVector3, Vector3, offset, point,
+    Autd3, Device, Geometry, Point3, Quaternion, TransducerMask, TransducerMaskError,
+    UnitQuaternion, UnitVector3, Vector3, offset, point,
 };
 pub use protocol::{
     Cmd, DeviceErrorCode, FRAME_BYTES_MAX, MAX_DEVICES, MAX_INFLIGHT, PAYLOAD_BYTES,
