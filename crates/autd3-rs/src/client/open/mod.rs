@@ -23,7 +23,6 @@ pub(crate) fn open(
     let mut channel = Channel::open(
         target.all_devices_dst,
         target.scope_id,
-        option.send_rate_limit_percent,
         option.send_buffer_bytes,
     )?;
     let device_addrs = bring_up(&channel, option, deadline, num_devices, device_clock)?;

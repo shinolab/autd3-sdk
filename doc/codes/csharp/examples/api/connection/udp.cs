@@ -12,7 +12,6 @@ internal static class Sample
         var recoveryReplyTimeout = TimeSpan.FromMilliseconds(1);
         var lostTimeout = TimeSpan.FromMilliseconds(100);
         var ackTimeout = TimeSpan.FromMilliseconds(10);
-        float? sendRateLimitPercent = null;
         ulong sendBufferBytes = 8192;
         // ANCHOR: api
         new TransportOption
@@ -22,7 +21,6 @@ internal static class Sample
             RecoveryReplyTimeout = recoveryReplyTimeout,
             LostTimeout = lostTimeout,
             AckTimeout = ackTimeout,
-            SendRateLimitPercent = sendRateLimitPercent,
             SendBufferBytes = sendBufferBytes,
         };
         // ANCHOR_END: api

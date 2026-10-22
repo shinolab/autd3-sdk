@@ -10,7 +10,6 @@ namespace AUTD3
         internal static readonly TimeSpan RecoveryReplyTimeout;
         internal static readonly TimeSpan LostTimeout;
         internal static readonly TimeSpan AckTimeout;
-        internal static readonly float? SendRateLimitPercent;
         internal static readonly ulong? SendBufferBytes;
 
         static TransportOptionDefaults()
@@ -22,7 +21,6 @@ namespace AUTD3
                 RecoveryReplyTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_recovery_reply_timeout);
                 LostTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_lost_timeout);
                 AckTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_ack_timeout);
-                SendRateLimitPercent = TransportOption.ReadSendRateLimitPercent(handle);
                 SendBufferBytes = TransportOption.ReadSendBufferBytes(handle);
             }
             finally
@@ -44,19 +42,6 @@ namespace AUTD3
         public TimeSpan LostTimeout { get => _lostTimeout ?? TransportOptionDefaults.LostTimeout; init => _lostTimeout = value; }
         private readonly TimeSpan? _ackTimeout;
         public TimeSpan AckTimeout { get => _ackTimeout ?? TransportOptionDefaults.AckTimeout; init => _ackTimeout = value; }
-
-        private readonly bool _sendRateLimitPercentSet;
-        private readonly float? _sendRateLimitPercent;
-
-        public float? SendRateLimitPercent
-        {
-            get => _sendRateLimitPercentSet ? _sendRateLimitPercent : TransportOptionDefaults.SendRateLimitPercent;
-            init
-            {
-                _sendRateLimitPercent = value;
-                _sendRateLimitPercentSet = true;
-            }
-        }
 
         private readonly bool _sendBufferBytesSet;
         private readonly ulong? _sendBufferBytes;
@@ -95,11 +80,6 @@ namespace AUTD3
                 OptionNative.SetRequiredDuration(handle, "recoveryReplyTimeout", RecoveryReplyTimeout, NativeClient.autd3_transport_option_set_recovery_reply_timeout);
                 OptionNative.SetRequiredDuration(handle, "lostTimeout", LostTimeout, NativeClient.autd3_transport_option_set_lost_timeout);
                 OptionNative.SetRequiredDuration(handle, "ackTimeout", AckTimeout, NativeClient.autd3_transport_option_set_ack_timeout);
-                OptionNative.Apply("sendRateLimitPercent", SendRateLimitPercent switch
-                {
-                    null => NativeClient.autd3_transport_option_set_send_rate_limit_percent(handle, false, 0),
-                    { } percent => NativeClient.autd3_transport_option_set_send_rate_limit_percent(handle, true, percent),
-                });
                 OptionNative.Apply("sendBufferBytes", SendBufferBytes switch
                 {
                     null => NativeClient.autd3_transport_option_set_send_buffer_bytes(handle, 0),
@@ -122,7 +102,6 @@ namespace AUTD3
             RecoveryReplyTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_recovery_reply_timeout),
             LostTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_lost_timeout),
             AckTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_ack_timeout),
-            SendRateLimitPercent = ReadSendRateLimitPercent(handle),
             SendBufferBytes = ReadSendBufferBytes(handle),
         };
 
@@ -143,12 +122,6 @@ namespace AUTD3
         {
             OptionNative.Apply("sendBufferBytes", NativeClient.autd3_transport_option_get_send_buffer_bytes(handle, out var bytes));
             return bytes == 0 ? null : bytes;
-        }
-
-        internal static float? ReadSendRateLimitPercent(IntPtr handle)
-        {
-            OptionNative.Apply("sendRateLimitPercent", NativeClient.autd3_transport_option_get_send_rate_limit_percent(handle, out var hasValue, out var percent));
-            return hasValue ? percent : (float?)null;
         }
 
         private static string? ReadAddr(IntPtr handle)

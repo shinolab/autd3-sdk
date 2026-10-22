@@ -52,8 +52,6 @@ pub enum UdpError {
     ZeroLostTimeout,
     #[error("ack_timeout must be longer than zero")]
     ZeroAckTimeout,
-    #[error("send_rate_limit_percent must be within {min}..=100 %, but {value} % was given")]
-    InvalidSendRateLimit { value: f32, min: f32 },
     #[error("the number of devices must be 1..=128, but {0} was given")]
     InvalidDeviceCount(usize),
     #[error("the frame could not be sent to device {device}: {source}")]

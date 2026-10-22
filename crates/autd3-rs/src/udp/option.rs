@@ -4,16 +4,14 @@ use std::time::Duration;
 use autd3_rs_core::Interface;
 
 use super::error::UdpError;
-use super::pacer::MIN_SEND_RATE_PERCENT;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TransportOption {
     pub iface: Interface,
     pub open_timeout: Duration,
     pub recovery_reply_timeout: Duration,
     pub lost_timeout: Duration,
     pub ack_timeout: Duration,
-    pub send_rate_limit_percent: Option<f32>,
     pub send_buffer_bytes: Option<NonZeroUsize>,
     pub sync_on_open: bool,
 }
@@ -26,7 +24,6 @@ impl Default for TransportOption {
             recovery_reply_timeout: Duration::from_millis(1),
             lost_timeout: Duration::from_millis(100),
             ack_timeout: Duration::from_millis(10),
-            send_rate_limit_percent: None,
             send_buffer_bytes: NonZeroUsize::new(8 * 1024),
             sync_on_open: true,
         }
@@ -47,14 +44,6 @@ impl TransportOption {
         if self.ack_timeout.is_zero() {
             return Err(UdpError::ZeroAckTimeout);
         }
-        if let Some(percent) = self.send_rate_limit_percent
-            && !(MIN_SEND_RATE_PERCENT..=100.0).contains(&percent)
-        {
-            return Err(UdpError::InvalidSendRateLimit {
-                value: percent,
-                min: MIN_SEND_RATE_PERCENT,
-            });
-        }
         Ok(())
     }
 }
@@ -72,27 +61,9 @@ mod tests {
         assert_eq!(option.recovery_reply_timeout, Duration::from_millis(1));
         assert_eq!(option.lost_timeout, Duration::from_millis(100));
         assert_eq!(option.ack_timeout, Duration::from_millis(10));
-        assert_eq!(option.send_rate_limit_percent, None);
         assert_eq!(option.send_buffer_bytes, NonZeroUsize::new(8192));
         assert!(option.sync_on_open);
         assert!(option.validate().is_ok());
-    }
-
-    #[test]
-    fn a_send_rate_limit_outside_the_percent_range_is_rejected() {
-        let with = |percent: f32| TransportOption {
-            send_rate_limit_percent: Some(percent),
-            ..TransportOption::default()
-        };
-        assert!(with(MIN_SEND_RATE_PERCENT).validate().is_ok());
-        assert!(with(95.0).validate().is_ok());
-        assert!(with(100.0).validate().is_ok());
-        for rejected in [0.0, 0.95, 3.0, 100.1, f32::NAN, f32::INFINITY] {
-            assert!(matches!(
-                with(rejected).validate(),
-                Err(UdpError::InvalidSendRateLimit { .. })
-            ));
-        }
     }
 
     #[rstest]

@@ -248,7 +248,6 @@ pub(crate) fn transport_option(cli: &Cli, emulator: Option<&UdpEmulator>) -> Tra
         },
     };
     option.ack_timeout = cli.ack_timeout;
-    option.send_rate_limit_percent = cli.send_rate_limit;
     if let Some(bytes) = cli.send_buffer {
         option.send_buffer_bytes = std::num::NonZeroUsize::new(bytes);
     }
