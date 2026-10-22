@@ -1,3 +1,4 @@
+use core::cell::Cell;
 use core::num::NonZeroU32;
 
 pub(crate) use autd3_cpu_wire::fpga_update::{
@@ -8,7 +9,6 @@ use autd3_cpu_wire::payload::{UpdateBeginPayload, UpdateChunkPayload};
 
 use crate::app::Cpu;
 use crate::cmd::failsafe;
-use crate::ctx::MainCell;
 use crate::fpga;
 use crate::fpga_params::{
     ADDR_FLASH_ADDR_0, ADDR_FLASH_ADDR_1, ADDR_FLASH_CMD, ADDR_FLASH_LEN_0, ADDR_FLASH_LEN_1,
@@ -48,15 +48,15 @@ pub(crate) enum State {
 }
 
 pub(crate) struct FpgaUpdateSession {
-    state: MainCell<State>,
-    reconfig_failed: MainCell<bool>,
+    state: Cell<State>,
+    reconfig_failed: Cell<bool>,
 }
 
 impl FpgaUpdateSession {
     pub(crate) const fn new() -> Self {
         Self {
-            state: MainCell::new(State::Idle),
-            reconfig_failed: MainCell::new(false),
+            state: Cell::new(State::Idle),
+            reconfig_failed: Cell::new(false),
         }
     }
 

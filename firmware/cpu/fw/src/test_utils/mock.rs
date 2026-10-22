@@ -663,8 +663,7 @@ impl Harness {
     }
 
     pub(crate) fn set_host_idle_ms(&self, ms: u32) {
-        self.cpu.record_host_frame(0);
-        self.cpu.publish_host_idle(ms);
+        self.cpu.publish_host_idle(Some(ms));
     }
 
     pub(crate) fn tick_1ms(&mut self, count: u32) {
