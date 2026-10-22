@@ -22,7 +22,7 @@ import Figure from "@components/Figure.astro";
 そのため, SDKには実装されていない.
 
 :::note
-アレイを分割すること自体は, [`TransducerGroups` と `group_compute`](/autd3-sdk/api/compute/pattern/group/) を使えば可能である. 各グループの計算では, holo の `mask` に `groups.mask(key)` を渡せばそのグループの振動子だけで最適化できる.
+アレイを分割すること自体は, 各グループの振動子だけを有効にした `bool` マスクを作り, holo の `mask` に [`TransducerMask::Masked`](/autd3-sdk/api/compute/holo/) として渡せば可能である. グループ毎の結果を 1 つのバッファへ合成する処理はユーザが書く.
 :::
 
 この手法は焦点の数が増えてきたらどうすべきか, といった問題や, 各焦点同士の干渉などを一切考慮していない, などの問題がある.

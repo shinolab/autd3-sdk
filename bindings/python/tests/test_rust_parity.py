@@ -73,15 +73,6 @@ def test_a_masked_transducer_mask_is_validated_on_use_not_on_construction() -> N
             holo.greedy(geometry, foci, wavelength, intensities, holo.GreedyOption(mask=mask), phases)
 
 
-def test_an_unknown_group_key_has_no_mask() -> None:
-    geometry = two_devices()
-    groups = pattern.TransducerGroups(geometry, lambda device, tr: "left" if device.idx() == 0 else "right")
-    assert groups.mask("center") is None
-    left = groups.mask("left")
-    assert left is not None
-    assert left.num_enabled(geometry) == Autd3.NUM_TRANSDUCERS
-
-
 @pytest.mark.parametrize(
     "value",
     [NanosLookalike(), datetime.timedelta(milliseconds=1), 1_000_000, 0.001, "1ms", None],
@@ -341,42 +332,6 @@ def test_device_functions_reject_a_dst_that_is_not_one_device_slot() -> None:
     with pytest.raises(ValueError):
         pattern.focus_device(device, loose([0.0, 0.0]), wavelength, untouched)
     np.testing.assert_array_equal(untouched, device_slot())
-
-
-def test_group_device_matches_group() -> None:
-    geometry = two_devices()
-    groups = pattern.TransducerGroups(geometry, lambda device, tr: "low" if tr < 100 else "high")
-    wavelength = pattern.wavelength(340 * m / s)
-    low = geometry.phase_buffer()
-    high = geometry.phase_buffer()
-    pattern.focus(geometry, [0.0, 0.0, 150.0], wavelength, low)
-    pattern.plane(geometry, [0.0, 0.0, 1.0], wavelength, high)
-    sources = {"low": low, "high": high}
-    expected = geometry.phase_buffer()
-    pattern.group(geometry, groups, sources, expected)
-
-    for device in geometry:
-        slot = device_slot()
-        pattern.group_device(device, groups, sources, slot)
-        np.testing.assert_array_equal(slot, expected.to_numpy()[device.idx()])
-
-    low_i = geometry.intensity_buffer()
-    high_i = geometry.intensity_buffer()
-    pattern.set_intensity(0x10, low_i)
-    pattern.set_intensity(0x20, high_i)
-    slot = device_slot()
-    pattern.group_device(geometry[1], groups, {"low": low_i, "high": high_i}, slot)
-    np.testing.assert_array_equal(slot, [0x10] * 100 + [0x20] * (Autd3.NUM_TRANSDUCERS - 100))
-
-    with pytest.raises(KeyError):
-        pattern.group_device(geometry[0], groups, {"low": low}, device_slot())
-    with pytest.raises(TypeError):
-        pattern.group_device(geometry[0], groups, loose({"low": low, "high": high_i}), device_slot())
-    with pytest.raises(ValueError, match="shape"):
-        pattern.group_device(geometry[0], groups, sources, np.zeros(3, dtype=np.uint8))
-    single = pattern.PhaseBuffer(1)
-    with pytest.raises(ValueError, match="cover the device"):
-        pattern.group_device(geometry[1], groups, {"low": single, "high": single}, device_slot())
 
 
 def test_fourier_mixes_exact_and_nearest_components() -> None:
