@@ -215,7 +215,6 @@ mod tests {
                 constraint: IntensityConstraint::Uniform(Intensity::MAX),
                 directivity: Directivity::Sphere,
                 mask,
-                ..Default::default()
             },
             &mut phases,
             &mut intensities,

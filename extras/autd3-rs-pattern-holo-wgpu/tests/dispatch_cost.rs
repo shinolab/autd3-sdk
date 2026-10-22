@@ -157,17 +157,17 @@ fn quantize_cost() {
             ),
             ("normalize", IntensityConstraint::Normalize),
         ] {
-            let _ = gpu.quantize(&gpu_v, c, false);
+            let _ = gpu.quantize(&gpu_v, c);
             let t = Instant::now();
             for _ in 0..QUANTIZE_ITERS {
-                let _ = gpu.quantize(&gpu_v, c, false);
+                let _ = gpu.quantize(&gpu_v, c);
             }
             let gpu_ms = t.elapsed().as_secs_f64() * 1e3 / QUANTIZE_ITERS as f64;
 
-            let _ = NalgebraBackend.quantize(&cpu_v, c, true);
+            let _ = NalgebraBackend.quantize(&cpu_v, c);
             let t = Instant::now();
             for _ in 0..QUANTIZE_ITERS {
-                let _ = NalgebraBackend.quantize(&cpu_v, c, true);
+                let _ = NalgebraBackend.quantize(&cpu_v, c);
             }
             let cpu_ms = t.elapsed().as_secs_f64() * 1e3 / QUANTIZE_ITERS as f64;
 

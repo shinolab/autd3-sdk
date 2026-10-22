@@ -148,7 +148,6 @@ fn matches_nalgebra_backend() {
                             constraint,
                             directivity,
                             mask,
-                            ..Default::default()
                         };
                         naive(&NalgebraBackend, &g, &f, wl, &opt, &mut a.0, &mut a.1).unwrap();
                         naive(&gpu, &g, &f, wl, &opt, &mut b.0, &mut b.1).unwrap();

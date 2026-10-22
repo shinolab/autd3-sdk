@@ -34,7 +34,6 @@ gs(
         constraint=IntensityConstraint.Clamp(Intensity.MIN, Intensity.MAX),
         directivity=Directivity.Sphere,
         mask=TransducerMask.AllEnabled,
-        parallel=True,
     ),
     phases,
     intensities,

@@ -31,7 +31,6 @@ repeat = 100
 constraint = IntensityConstraint.Clamp(Intensity.MIN, Intensity.MAX)
 directivity = Directivity.Sphere
 mask = TransducerMask.AllEnabled
-parallel = True
 option = (
     # ANCHOR: option
     GsOption(
@@ -39,7 +38,6 @@ option = (
         constraint,
         directivity,
         mask,
-        parallel,
     )
     # ANCHOR_END: option
 )

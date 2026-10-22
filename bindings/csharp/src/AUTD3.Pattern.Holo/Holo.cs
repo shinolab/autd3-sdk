@@ -159,28 +159,25 @@ namespace AUTD3.Holo
     {
         internal static readonly IntensityConstraint NaiveConstraint;
         internal static readonly Directivity NaiveDirectivity;
-        internal static readonly bool NaiveParallel;
         internal static readonly uint GsRepeat;
         internal static readonly IntensityConstraint GsConstraint;
         internal static readonly Directivity GsDirectivity;
-        internal static readonly bool GsParallel;
         internal static readonly uint GspatRepeat;
         internal static readonly IntensityConstraint GspatConstraint;
         internal static readonly Directivity GspatDirectivity;
-        internal static readonly bool GspatParallel;
         internal static readonly byte GreedyPhaseQuantizationLevels;
         internal static readonly Directivity GreedyDirectivity;
 
         static HoloOptionDefaults()
         {
-            OptionNative.Apply("preset", NativeHolo.autd3_holo_naive_option_default(out var naiveConstraint, out var naiveDirectivity, out NaiveParallel));
+            OptionNative.Apply("preset", NativeHolo.autd3_holo_naive_option_default(out var naiveConstraint, out var naiveDirectivity));
             NaiveConstraint = IntensityConstraint.FromNative(naiveConstraint);
             NaiveDirectivity = (Directivity)naiveDirectivity;
-            OptionNative.Apply("preset", NativeHolo.autd3_holo_gs_option_default(out var gsRepeat, out var gsConstraint, out var gsDirectivity, out GsParallel));
+            OptionNative.Apply("preset", NativeHolo.autd3_holo_gs_option_default(out var gsRepeat, out var gsConstraint, out var gsDirectivity));
             GsRepeat = (uint)gsRepeat;
             GsConstraint = IntensityConstraint.FromNative(gsConstraint);
             GsDirectivity = (Directivity)gsDirectivity;
-            OptionNative.Apply("preset", NativeHolo.autd3_holo_gspat_option_default(out var gspatRepeat, out var gspatConstraint, out var gspatDirectivity, out GspatParallel));
+            OptionNative.Apply("preset", NativeHolo.autd3_holo_gspat_option_default(out var gspatRepeat, out var gspatConstraint, out var gspatDirectivity));
             GspatRepeat = (uint)gspatRepeat;
             GspatConstraint = IntensityConstraint.FromNative(gspatConstraint);
             GspatDirectivity = (Directivity)gspatDirectivity;
@@ -196,8 +193,6 @@ namespace AUTD3.Holo
         private readonly Directivity? _directivity;
         public Directivity Directivity { get => _directivity ?? HoloOptionDefaults.NaiveDirectivity; init => _directivity = value; }
         public TransducerMask Mask { get; init; }
-        private readonly bool? _parallel;
-        public bool Parallel { get => _parallel ?? HoloOptionDefaults.NaiveParallel; init => _parallel = value; }
     }
 
     public readonly struct GsOption
@@ -209,8 +204,6 @@ namespace AUTD3.Holo
         private readonly Directivity? _directivity;
         public Directivity Directivity { get => _directivity ?? HoloOptionDefaults.GsDirectivity; init => _directivity = value; }
         public TransducerMask Mask { get; init; }
-        private readonly bool? _parallel;
-        public bool Parallel { get => _parallel ?? HoloOptionDefaults.GsParallel; init => _parallel = value; }
     }
 
     public readonly struct GspatOption
@@ -222,8 +215,6 @@ namespace AUTD3.Holo
         private readonly Directivity? _directivity;
         public Directivity Directivity { get => _directivity ?? HoloOptionDefaults.GspatDirectivity; init => _directivity = value; }
         public TransducerMask Mask { get; init; }
-        private readonly bool? _parallel;
-        public bool Parallel { get => _parallel ?? HoloOptionDefaults.GspatParallel; init => _parallel = value; }
     }
 
     public readonly struct GreedyOption
@@ -263,34 +254,34 @@ namespace AUTD3.Holo
         internal static extern float autd3_holo_amplitude_from_db(float value);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_holo_naive_option_default(out IntensityConstraintNative constraint, out byte directivity, [MarshalAs(UnmanagedType.I1)] out bool parallel);
+        internal static extern int autd3_holo_naive_option_default(out IntensityConstraintNative constraint, out byte directivity);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_holo_gs_option_default(out UIntPtr repeat, out IntensityConstraintNative constraint, out byte directivity, [MarshalAs(UnmanagedType.I1)] out bool parallel);
+        internal static extern int autd3_holo_gs_option_default(out UIntPtr repeat, out IntensityConstraintNative constraint, out byte directivity);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_holo_gspat_option_default(out UIntPtr repeat, out IntensityConstraintNative constraint, out byte directivity, [MarshalAs(UnmanagedType.I1)] out bool parallel);
+        internal static extern int autd3_holo_gspat_option_default(out UIntPtr repeat, out IntensityConstraintNative constraint, out byte directivity);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_holo_greedy_option_default(out byte phaseQuantizationLevels, out byte directivity);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_holo_naive(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, in IntensityConstraintNative constraint, byte directivity, byte[]? mask, [MarshalAs(UnmanagedType.I1)] bool parallel, PhaseBufferHandle phases, IntensityBufferHandle intensities, byte[] outErr, UIntPtr outErrLen);
+        internal static extern int autd3_holo_naive(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, in IntensityConstraintNative constraint, byte directivity, byte[]? mask, PhaseBufferHandle phases, IntensityBufferHandle intensities, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_holo_gs(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, UIntPtr repeat, in IntensityConstraintNative constraint, byte directivity, byte[]? mask, [MarshalAs(UnmanagedType.I1)] bool parallel, PhaseBufferHandle phases, IntensityBufferHandle intensities, byte[] outErr, UIntPtr outErrLen);
+        internal static extern int autd3_holo_gs(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, UIntPtr repeat, in IntensityConstraintNative constraint, byte directivity, byte[]? mask, PhaseBufferHandle phases, IntensityBufferHandle intensities, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_holo_gspat(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, UIntPtr repeat, in IntensityConstraintNative constraint, byte directivity, byte[]? mask, [MarshalAs(UnmanagedType.I1)] bool parallel, PhaseBufferHandle phases, IntensityBufferHandle intensities, byte[] outErr, UIntPtr outErrLen);
+        internal static extern int autd3_holo_gspat(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, UIntPtr repeat, in IntensityConstraintNative constraint, byte directivity, byte[]? mask, PhaseBufferHandle phases, IntensityBufferHandle intensities, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_holo_naive_batch(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, in IntensityConstraintNative constraint, byte directivity, byte[]? mask, [MarshalAs(UnmanagedType.I1)] bool parallel, IntPtr[] phases, IntPtr[] intensities, UIntPtr numProblems, byte[] outErr, UIntPtr outErrLen);
+        internal static extern int autd3_holo_naive_batch(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, in IntensityConstraintNative constraint, byte directivity, byte[]? mask, IntPtr[] phases, IntPtr[] intensities, UIntPtr numProblems, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_holo_gs_batch(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, UIntPtr repeat, in IntensityConstraintNative constraint, byte directivity, byte[]? mask, [MarshalAs(UnmanagedType.I1)] bool parallel, IntPtr[] phases, IntPtr[] intensities, UIntPtr numProblems, byte[] outErr, UIntPtr outErrLen);
+        internal static extern int autd3_holo_gs_batch(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, UIntPtr repeat, in IntensityConstraintNative constraint, byte directivity, byte[]? mask, IntPtr[] phases, IntPtr[] intensities, UIntPtr numProblems, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_holo_gspat_batch(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, UIntPtr repeat, in IntensityConstraintNative constraint, byte directivity, byte[]? mask, [MarshalAs(UnmanagedType.I1)] bool parallel, IntPtr[] phases, IntPtr[] intensities, UIntPtr numProblems, byte[] outErr, UIntPtr outErrLen);
+        internal static extern int autd3_holo_gspat_batch(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, UIntPtr repeat, in IntensityConstraintNative constraint, byte directivity, byte[]? mask, IntPtr[] phases, IntPtr[] intensities, UIntPtr numProblems, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_holo_greedy(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, IntPtr intensities, byte uniformIntensity, byte phaseQuantizationLevels, byte directivity, byte[]? mask, PhaseBufferHandle dst, byte[] outErr, UIntPtr outErrLen);
@@ -355,7 +346,7 @@ namespace AUTD3.Holo
         {
             var c = option.Constraint.ToNative();
             var err = new byte[NativeAbi.ErrorBufferLength];
-            var code = NativeHolo.autd3_holo_naive(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, geometry.NumDevices), option.Parallel, phases.Handle, intensities.Handle, err, (UIntPtr)err.Length);
+            var code = NativeHolo.autd3_holo_naive(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, geometry.NumDevices), phases.Handle, intensities.Handle, err, (UIntPtr)err.Length);
             if (code != 0)
             {
                 throw Autd3Exception.FromNative(code, err);
@@ -366,7 +357,7 @@ namespace AUTD3.Holo
         {
             var c = option.Constraint.ToNative();
             var err = new byte[NativeAbi.ErrorBufferLength];
-            var code = NativeHolo.autd3_holo_gs(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, geometry.NumDevices), option.Parallel, phases.Handle, intensities.Handle, err, (UIntPtr)err.Length);
+            var code = NativeHolo.autd3_holo_gs(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, geometry.NumDevices), phases.Handle, intensities.Handle, err, (UIntPtr)err.Length);
             if (code != 0)
             {
                 throw Autd3Exception.FromNative(code, err);
@@ -377,7 +368,7 @@ namespace AUTD3.Holo
         {
             var c = option.Constraint.ToNative();
             var err = new byte[NativeAbi.ErrorBufferLength];
-            var code = NativeHolo.autd3_holo_gspat(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, geometry.NumDevices), option.Parallel, phases.Handle, intensities.Handle, err, (UIntPtr)err.Length);
+            var code = NativeHolo.autd3_holo_gspat(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, geometry.NumDevices), phases.Handle, intensities.Handle, err, (UIntPtr)err.Length);
             if (code != 0)
             {
                 throw Autd3Exception.FromNative(code, err);
@@ -411,7 +402,7 @@ namespace AUTD3.Holo
             var err = new byte[NativeAbi.ErrorBufferLength];
             using var p = Lease(phases, b => b.Handle);
             using var i = Lease(intensities, b => b.Handle);
-            var code = NativeHolo.autd3_holo_naive_batch(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, geometry.NumDevices), option.Parallel, p.Pointers, i.Pointers, (UIntPtr)phases.Count, err, (UIntPtr)err.Length);
+            var code = NativeHolo.autd3_holo_naive_batch(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, geometry.NumDevices), p.Pointers, i.Pointers, (UIntPtr)phases.Count, err, (UIntPtr)err.Length);
             if (code != 0)
             {
                 throw Autd3Exception.FromNative(code, err);
@@ -425,7 +416,7 @@ namespace AUTD3.Holo
             var err = new byte[NativeAbi.ErrorBufferLength];
             using var p = Lease(phases, b => b.Handle);
             using var i = Lease(intensities, b => b.Handle);
-            var code = NativeHolo.autd3_holo_gs_batch(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, geometry.NumDevices), option.Parallel, p.Pointers, i.Pointers, (UIntPtr)phases.Count, err, (UIntPtr)err.Length);
+            var code = NativeHolo.autd3_holo_gs_batch(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, geometry.NumDevices), p.Pointers, i.Pointers, (UIntPtr)phases.Count, err, (UIntPtr)err.Length);
             if (code != 0)
             {
                 throw Autd3Exception.FromNative(code, err);
@@ -439,7 +430,7 @@ namespace AUTD3.Holo
             var err = new byte[NativeAbi.ErrorBufferLength];
             using var p = Lease(phases, b => b.Handle);
             using var i = Lease(intensities, b => b.Handle);
-            var code = NativeHolo.autd3_holo_gspat_batch(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, geometry.NumDevices), option.Parallel, p.Pointers, i.Pointers, (UIntPtr)phases.Count, err, (UIntPtr)err.Length);
+            var code = NativeHolo.autd3_holo_gspat_batch(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, geometry.NumDevices), p.Pointers, i.Pointers, (UIntPtr)phases.Count, err, (UIntPtr)err.Length);
             if (code != 0)
             {
                 throw Autd3Exception.FromNative(code, err);

@@ -93,13 +93,11 @@ fn first_error(codes: &[i32]) -> i32 {
 pub unsafe extern "C" fn autd3_holo_naive_option_default(
     out_constraint: *mut Autd3IntensityConstraint,
     out_directivity: *mut u8,
-    out_parallel: *mut bool,
 ) -> i32 {
     let default = NaiveOption::default();
     first_error(&[
         unsafe { write_out(out_constraint, from_constraint(default.constraint)) },
         unsafe { write_out(out_directivity, from_directivity(default.directivity)) },
-        unsafe { write_out(out_parallel, default.parallel) },
     ])
 }
 
@@ -108,14 +106,12 @@ pub unsafe extern "C" fn autd3_holo_gs_option_default(
     out_repeat: *mut usize,
     out_constraint: *mut Autd3IntensityConstraint,
     out_directivity: *mut u8,
-    out_parallel: *mut bool,
 ) -> i32 {
     let default = GsOption::default();
     first_error(&[
         unsafe { write_out(out_repeat, default.repeat.get()) },
         unsafe { write_out(out_constraint, from_constraint(default.constraint)) },
         unsafe { write_out(out_directivity, from_directivity(default.directivity)) },
-        unsafe { write_out(out_parallel, default.parallel) },
     ])
 }
 
@@ -124,14 +120,12 @@ pub unsafe extern "C" fn autd3_holo_gspat_option_default(
     out_repeat: *mut usize,
     out_constraint: *mut Autd3IntensityConstraint,
     out_directivity: *mut u8,
-    out_parallel: *mut bool,
 ) -> i32 {
     let default = GspatOption::default();
     first_error(&[
         unsafe { write_out(out_repeat, default.repeat.get()) },
         unsafe { write_out(out_constraint, from_constraint(default.constraint)) },
         unsafe { write_out(out_directivity, from_directivity(default.directivity)) },
-        unsafe { write_out(out_parallel, default.parallel) },
     ])
 }
 
@@ -282,7 +276,6 @@ pub unsafe extern "C" fn autd3_holo_naive(
     constraint: *const Autd3IntensityConstraint,
     directivity: u8,
     mask: *const u8,
-    parallel: bool,
     phases: *mut PhaseBuffer,
     intensities: *mut IntensityBuffer,
     out_err: *mut c_char,
@@ -309,7 +302,6 @@ pub unsafe extern "C" fn autd3_holo_naive(
         constraint: common.constraint,
         directivity: common.directivity,
         mask: mask_ref(common.mask.as_deref()),
-        parallel,
     };
     let result = naive(
         &NalgebraBackend,
@@ -334,7 +326,6 @@ pub unsafe extern "C" fn autd3_holo_gs(
     constraint: *const Autd3IntensityConstraint,
     directivity: u8,
     mask: *const u8,
-    parallel: bool,
     phases: *mut PhaseBuffer,
     intensities: *mut IntensityBuffer,
     out_err: *mut c_char,
@@ -366,7 +357,6 @@ pub unsafe extern "C" fn autd3_holo_gs(
         constraint: common.constraint,
         directivity: common.directivity,
         mask: mask_ref(common.mask.as_deref()),
-        parallel,
     };
     let result = gs(
         &NalgebraBackend,
@@ -391,7 +381,6 @@ pub unsafe extern "C" fn autd3_holo_gspat(
     constraint: *const Autd3IntensityConstraint,
     directivity: u8,
     mask: *const u8,
-    parallel: bool,
     phases: *mut PhaseBuffer,
     intensities: *mut IntensityBuffer,
     out_err: *mut c_char,
@@ -423,7 +412,6 @@ pub unsafe extern "C" fn autd3_holo_gspat(
         constraint: common.constraint,
         directivity: common.directivity,
         mask: mask_ref(common.mask.as_deref()),
-        parallel,
     };
     let result = gspat(
         &NalgebraBackend,
@@ -491,7 +479,6 @@ unsafe fn solve_batch(
     constraint: *const Autd3IntensityConstraint,
     directivity: u8,
     mask: *const u8,
-    parallel: bool,
     phases: *const *mut PhaseBuffer,
     intensities: *const *mut IntensityBuffer,
     num_problems: usize,
@@ -542,7 +529,6 @@ unsafe fn solve_batch(
                 constraint,
                 directivity,
                 mask,
-                parallel,
             },
             &mut phase_buffers,
             &mut intensity_buffers,
@@ -557,7 +543,6 @@ unsafe fn solve_batch(
                 constraint,
                 directivity,
                 mask,
-                parallel,
             },
             &mut phase_buffers,
             &mut intensity_buffers,
@@ -572,7 +557,6 @@ unsafe fn solve_batch(
                 constraint,
                 directivity,
                 mask,
-                parallel,
             },
             &mut phase_buffers,
             &mut intensity_buffers,
@@ -593,7 +577,6 @@ pub unsafe extern "C" fn autd3_holo_naive_batch(
     constraint: *const Autd3IntensityConstraint,
     directivity: u8,
     mask: *const u8,
-    parallel: bool,
     phases: *const *mut PhaseBuffer,
     intensities: *const *mut IntensityBuffer,
     num_problems: usize,
@@ -610,7 +593,6 @@ pub unsafe extern "C" fn autd3_holo_naive_batch(
             constraint,
             directivity,
             mask,
-            parallel,
             phases,
             intensities,
             num_problems,
@@ -631,7 +613,6 @@ pub unsafe extern "C" fn autd3_holo_gs_batch(
     constraint: *const Autd3IntensityConstraint,
     directivity: u8,
     mask: *const u8,
-    parallel: bool,
     phases: *const *mut PhaseBuffer,
     intensities: *const *mut IntensityBuffer,
     num_problems: usize,
@@ -652,7 +633,6 @@ pub unsafe extern "C" fn autd3_holo_gs_batch(
             constraint,
             directivity,
             mask,
-            parallel,
             phases,
             intensities,
             num_problems,
@@ -673,7 +653,6 @@ pub unsafe extern "C" fn autd3_holo_gspat_batch(
     constraint: *const Autd3IntensityConstraint,
     directivity: u8,
     mask: *const u8,
-    parallel: bool,
     phases: *const *mut PhaseBuffer,
     intensities: *const *mut IntensityBuffer,
     num_problems: usize,
@@ -694,7 +673,6 @@ pub unsafe extern "C" fn autd3_holo_gspat_batch(
             constraint,
             directivity,
             mask,
-            parallel,
             phases,
             intensities,
             num_problems,
@@ -818,7 +796,6 @@ mod tests {
                 &raw const NORMALIZE,
                 0,
                 std::ptr::null(),
-                false,
                 phase_handles.as_ptr(),
                 intensity_handles.as_ptr(),
                 2,
@@ -839,7 +816,6 @@ mod tests {
                     &raw const NORMALIZE,
                     0,
                     std::ptr::null(),
-                    false,
                     &raw mut single_phases,
                     &raw mut single_intensities,
                     err.as_mut_ptr(),
@@ -870,7 +846,6 @@ mod tests {
                 &raw const NORMALIZE,
                 0,
                 std::ptr::null(),
-                false,
                 phase_handles.as_ptr(),
                 intensity_handles.as_ptr(),
                 2,
@@ -905,7 +880,6 @@ mod tests {
                 &raw const NORMALIZE,
                 0,
                 std::ptr::null(),
-                false,
                 &raw mut phases,
                 &raw mut intensities,
                 err.as_mut_ptr(),
@@ -938,7 +912,6 @@ mod tests {
                 &raw const NORMALIZE,
                 0,
                 std::ptr::null(),
-                false,
                 &raw mut phases,
                 &raw mut intensities,
                 err.as_mut_ptr(),
@@ -960,39 +933,26 @@ mod tests {
             multiply: 0.0,
         };
         let mut directivity = u8::MAX;
-        let mut parallel = false;
         let mut repeat = 0usize;
         assert_eq!(AUTD3_OK, unsafe {
-            autd3_holo_gs_option_default(
-                &raw mut repeat,
-                &raw mut constraint,
-                &raw mut directivity,
-                &raw mut parallel,
-            )
+            autd3_holo_gs_option_default(&raw mut repeat, &raw mut constraint, &raw mut directivity)
         });
         let default = GsOption::default();
         assert_eq!(default.repeat.get(), repeat);
         assert_eq!(Some(default.constraint), to_constraint(&constraint));
         assert_eq!(Some(default.directivity), to_directivity(directivity));
-        assert_eq!(default.parallel, parallel);
 
         assert_eq!(AUTD3_OK, unsafe {
-            autd3_holo_naive_option_default(
-                &raw mut constraint,
-                &raw mut directivity,
-                &raw mut parallel,
-            )
+            autd3_holo_naive_option_default(&raw mut constraint, &raw mut directivity)
         });
         let default = NaiveOption::default();
         assert_eq!(Some(default.constraint), to_constraint(&constraint));
-        assert_eq!(default.parallel, parallel);
 
         assert_eq!(AUTD3_OK, unsafe {
             autd3_holo_gspat_option_default(
                 &raw mut repeat,
                 &raw mut constraint,
                 &raw mut directivity,
-                &raw mut parallel,
             )
         });
         assert_eq!(GspatOption::default().repeat.get(), repeat);

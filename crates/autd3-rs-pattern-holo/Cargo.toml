@@ -14,10 +14,6 @@ categories.workspace = true
 [package.metadata.docs.rs]
 all-features = true
 
-[features]
-default = ["parallel"]
-parallel = ["dep:rayon"]
-
 [lib]
 bench = false
 
@@ -25,7 +21,6 @@ bench = false
 autd3-rs-core.workspace = true
 nalgebra.workspace = true
 rand = { version = "0.10.1", default-features = false, features = ["std", "thread_rng"] }
-rayon = { workspace = true, optional = true }
 thiserror.workspace = true
 
 [dev-dependencies]
