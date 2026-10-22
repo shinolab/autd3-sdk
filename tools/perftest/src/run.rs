@@ -40,8 +40,8 @@ pub(crate) struct RunOutput {
 
 struct WholeModulationWrite<'a>(&'a [u8]);
 
-impl<'a> AutdCommand<'a> for WholeModulationWrite<'a> {
-    fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), ClientError> {
+impl AutdCommand for WholeModulationWrite<'_> {
+    fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), ClientError> {
         for (i, data) in self.0.chunks(WriteModulationBuffer::MAX_LEN).enumerate() {
             expansion.push(WriteModulationBuffer {
                 bank: ModulationBank::B1,

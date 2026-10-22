@@ -43,8 +43,8 @@ impl<'a> PatternStm<'a> {
     }
 }
 
-impl<'a> Command<'a> for PatternStm<'a> {
-    fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
+impl Command for PatternStm<'_> {
+    fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
         let size = self.phases.len();
         if let Some(len) = self.intensities.per_index_len()
             && len != size

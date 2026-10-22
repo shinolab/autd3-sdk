@@ -31,7 +31,7 @@ impl Harness {
         }
     }
 
-    pub(crate) fn send<'a, C: Command<'a>>(&mut self, cmd: C) {
+    pub(crate) fn send<C: Command>(&mut self, cmd: C) {
         self.drive(&Frames::encode(&self.geometry, cmd).unwrap());
     }
 

@@ -149,10 +149,7 @@ impl Recorder {
 impl ClientApi for Recorder {
     type Error = EmulatorError;
 
-    fn send<'a, C: Command<'a>>(
-        &mut self,
-        cmd: C,
-    ) -> impl Future<Output = Result<(), Self::Error>> {
+    fn send<C: Command>(&mut self, cmd: C) -> impl Future<Output = Result<(), Self::Error>> {
         let sent = Frames::encode(&self.geometry, cmd)
             .map_err(EmulatorError::from)
             .and_then(|frames| {

@@ -1604,8 +1604,8 @@ enum Lowered<'a> {
 
 struct Sequence<'a>(&'a [OwnedCommand]);
 
-impl<'a> Command<'a> for Sequence<'a> {
-    fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
+impl Command for Sequence<'_> {
+    fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), autd3_rs::Error> {
         for op in self.0 {
             expansion.push(op.boxed())?;
         }

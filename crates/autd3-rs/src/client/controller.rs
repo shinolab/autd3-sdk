@@ -65,10 +65,7 @@ impl Controller {
         self.session.device_time().ok_or(Error::DeviceTimeUnknown)
     }
 
-    pub fn send<'a, C: Command<'a>>(
-        &self,
-        cmd: C,
-    ) -> impl Future<Output = Result<(), Error>> + use<'_, C> {
+    pub fn send<C: Command>(&self, cmd: C) -> impl Future<Output = Result<(), Error>> + use<'_, C> {
         let frames = Frames::encode(&self.geometry, cmd);
         async move {
             for frame in &frames? {

@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use crate::commands::Command;
 use crate::commands::operation::Operation;
 use crate::error::Error;
@@ -7,19 +5,14 @@ use crate::geometry::{Device, Geometry};
 
 use super::frame::Frames;
 
-pub struct Expansion<'g, 'a> {
+pub struct Expansion<'g> {
     geometry: &'g Geometry,
     frames: &'g mut Frames,
-    commands: PhantomData<&'a ()>,
 }
 
-impl<'g, 'a> Expansion<'g, 'a> {
+impl<'g> Expansion<'g> {
     pub(crate) fn new(geometry: &'g Geometry, frames: &'g mut Frames) -> Self {
-        Self {
-            geometry,
-            frames,
-            commands: PhantomData,
-        }
+        Self { geometry, frames }
     }
 
     #[must_use]
@@ -27,7 +20,7 @@ impl<'g, 'a> Expansion<'g, 'a> {
         self.geometry
     }
 
-    pub fn push<C: Command<'a>>(&mut self, cmd: C) -> Result<&mut Self, Error> {
+    pub fn push<C: Command>(&mut self, cmd: C) -> Result<&mut Self, Error> {
         tracing::trace!(command = std::any::type_name::<C>(), "expanding command");
         cmd.expand(self)?;
         Ok(self)

@@ -116,8 +116,8 @@ struct WholeModulationWrite<'a> {
     data: &'a [u8],
 }
 
-impl<'a> Command<'a> for WholeModulationWrite<'a> {
-    fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
+impl Command for WholeModulationWrite<'_> {
+    fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
         for (i, data) in self.data.chunks(WriteModulationBuffer::MAX_LEN).enumerate() {
             expansion.push(WriteModulationBuffer {
                 bank: self.bank,
@@ -134,8 +134,8 @@ struct WholeFociWrite<'a> {
     points: &'a [ControlPoints<1>],
 }
 
-impl<'a> Command<'a> for WholeFociWrite<'a> {
-    fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
+impl Command for WholeFociWrite<'_> {
+    fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
         for (i, points) in self
             .points
             .chunks(WriteFociBuffer::<1>::MAX_LEN)
