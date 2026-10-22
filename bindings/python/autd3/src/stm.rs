@@ -6,8 +6,8 @@ use autd3_python_capsule::extract::{
 };
 use autd3_python_capsule::numpy::f32_vec3;
 use autd3_rs::Velocity;
-use autd3_rs::commands::Expansion;
 use autd3_rs::commands::WriteFociBuffer as CoreWriteFociBuffer;
+use autd3_rs::commands::{Expansion, Operation};
 use autd3_rs::commands::{
     FociStm as CoreFociStm, FociStmOption as CoreFociStmOption, PatternStm as CorePatternStm,
     PatternStmOption as CorePatternStmOption, StmIntensity as CoreStmIntensity,
@@ -19,7 +19,7 @@ use autd3_rs::value::{
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-use crate::datagram::PushCommand;
+use crate::datagram::{PushCommand, PushOperation};
 use crate::ops;
 
 #[pyclass(name = "ControlPoint", module = "autd3.value", eq, frozen)]
@@ -238,22 +238,21 @@ macro_rules! foci_points {
                 Ok(())
             }
 
-            fn push_write_foci<'a>(
-                &'a self,
-                bank: CorePatternBank,
-                start_index: usize,
-                expansion: &mut Expansion<'_, 'a>,
-            ) -> Result<(), autd3_rs::Error> {
+            fn write_foci(&self, bank: CorePatternBank, start_index: usize) -> Box<dyn Operation + '_> {
                 match self {
-                    $(FociPoints::$variant(v) => {
-                        expansion.push(CoreWriteFociBuffer {
-                            bank,
-                            start_index,
-                            points: v.as_slice(),
-                        })?;
-                    })*
+                    $(FociPoints::$variant(v) => Box::new(CoreWriteFociBuffer {
+                        bank,
+                        start_index,
+                        points: v.as_slice(),
+                    }),)*
                 }
-                Ok(())
+            }
+        }
+
+        fn write_foci_max_len(num_foci: usize) -> Option<usize> {
+            match num_foci {
+                $($n => Some(CoreWriteFociBuffer::<$n>::MAX_LEN),)*
+                _ => None,
             }
         }
     };
@@ -299,10 +298,9 @@ pub(crate) struct WriteFociBufferData {
     points: FociPoints,
 }
 
-impl PushCommand for WriteFociBufferData {
-    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
-        self.points
-            .push_write_foci(self.bank, self.start_index, expansion)
+impl PushOperation for WriteFociBufferData {
+    fn operation(&self) -> Box<dyn Operation + '_> {
+        self.points.write_foci(self.bank, self.start_index)
     }
 }
 
@@ -311,6 +309,15 @@ pub struct WriteFociBuffer(pub(crate) Arc<WriteFociBufferData>);
 
 #[pymethods]
 impl WriteFociBuffer {
+    #[staticmethod]
+    fn max_len(num_foci: usize) -> PyResult<usize> {
+        write_foci_max_len(num_foci).ok_or_else(|| {
+            PyValueError::new_err(format!(
+                "number of foci per sample must be 1..=8, got {num_foci}"
+            ))
+        })
+    }
+
     #[new]
     fn new(
         bank: ops::PatternBank,

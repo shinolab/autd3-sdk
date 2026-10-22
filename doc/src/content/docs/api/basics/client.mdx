@@ -195,7 +195,7 @@ Rust では `FnMut(&Device) -> Option<O>` (`O: Operation`), Python では `Calla
 <CodeTabs rust={excerpt(sample, "each")} python={excerpt(pySample, "each")} csharp={excerpt(csSample, "each")} />
 
 `each` は常に 1 フレームになる.
-`Modulation` / `FociStm` / `PatternStm` / `WriteModulationBuffer` / `WriteFociBuffer` のような複数フレームのコマンドや, コマンドの列, `each` 自身は割り当てられない.
+`Modulation` / `FociStm` / `PatternStm` のような複数フレームのコマンドや, コマンドの列, `each` 自身は割り当てられない.
 Rust ではコンパイルエラーになり, Python は `TypeError`, C# は `Autd3Exception` (`InvalidArgument`) になる.
 デバイスごとに異なる複数フレームの内容が必要な場合, Rust では `Frame::new` でフレームを自分で組み立てて `send_frame` で送る (Python / C# には相当する API は無い).
 

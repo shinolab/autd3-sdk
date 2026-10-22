@@ -37,11 +37,13 @@ FociStm(config, points, option)
 
 num_foci = 1
 # ANCHOR: equivalent
-WriteFociBuffer(
-    bank=option.bank,
-    start_index=0,
-    points=points,
-)
+max_len = WriteFociBuffer.max_len(num_foci)
+for start_index in range(0, len(points), max_len):
+    WriteFociBuffer(
+        bank=option.bank,
+        start_index=start_index,
+        points=points[start_index : start_index + max_len],
+    )
 ConfigFociStm(
     bank=option.bank,
     config=config,

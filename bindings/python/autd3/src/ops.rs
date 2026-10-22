@@ -7,6 +7,7 @@ use autd3_python_capsule::extract::{
 };
 use autd3_python_capsule::{capsule_of, modulation_from_capsule};
 use autd3_rs::Velocity;
+use autd3_rs::commands::Operation;
 use autd3_rs::commands::{
     ActivateModulationBank as CoreActivateModulationBank,
     ActivatePatternBank as CoreActivatePatternBank, ConfigFociStm as CoreConfigFociStm,
@@ -14,7 +15,6 @@ use autd3_rs::commands::{
     PhaseDepth as CorePhaseDepth, WriteModulationBuffer as CoreWriteModulationBuffer,
     WritePatternBuffer as CoreWritePatternBuffer, WritePatternPhase as CoreWritePatternPhase,
 };
-use autd3_rs::commands::{Expansion, Operation};
 use autd3_rs::value::{
     GpioIn as CoreGpioIn, Intensity, LoopBehavior as CoreLoopBehavior,
     ModulationBank as CoreModulationBank, PatternBank as CorePatternBank, Phase, SamplingConfig,
@@ -23,7 +23,7 @@ use autd3_rs::value::{
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-use crate::datagram::{OwnedPatternIntensity, PushCommand, PushOperation};
+use crate::datagram::{OwnedPatternIntensity, PushOperation};
 
 #[pyclass(
     name = "PatternBank",
@@ -472,14 +472,13 @@ pub(crate) struct WriteModulationBufferData {
     data: Vec<u8>,
 }
 
-impl PushCommand for WriteModulationBufferData {
-    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
-        expansion.push(CoreWriteModulationBuffer {
+impl PushOperation for WriteModulationBufferData {
+    fn operation(&self) -> Box<dyn Operation + '_> {
+        Box::new(CoreWriteModulationBuffer {
             bank: self.bank,
             offset: self.offset,
             data: &self.data,
-        })?;
-        Ok(())
+        })
     }
 }
 
@@ -488,6 +487,9 @@ pub struct WriteModulationBuffer(pub(crate) Arc<WriteModulationBufferData>);
 
 #[pymethods]
 impl WriteModulationBuffer {
+    #[classattr]
+    const MAX_LEN: usize = CoreWriteModulationBuffer::MAX_LEN;
+
     #[new]
     fn new(bank: ModulationBank, offset: usize, data: &Bound<'_, PyAny>) -> PyResult<Self> {
         let capsule = capsule_of(data)?;

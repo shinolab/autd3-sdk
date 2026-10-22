@@ -63,6 +63,7 @@ There are no helper functions that generate trajectories; build the points yours
 ## Equivalent Low-Level Commands
 
 `FociStm` is equivalent to the three commands [WriteFociBuffer](/autd3-sdk/en/api/command/lowlevel/write-foci-buffer/) + [ConfigFociStm](/autd3-sdk/en/api/command/lowlevel/config-foci-stm/) + [ActivatePatternBank](/autd3-sdk/en/api/command/lowlevel/activate-pattern-bank/), and is sent expanded in that order.
+`WriteFociBuffer` writes only one frame, so a sequence that does not fit in one frame is split into several `WriteFociBuffer`s with advancing `start_index`.
 The following is equivalent to `FociStm::new(config, &points, option)`.
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />

@@ -41,11 +41,15 @@ internal static class Sample
 
         byte numFoci = 1;
         // ANCHOR: equivalent
-        new WriteFociBuffer(
-            bank: option.Bank,
-            startIndex: 0,
-            points: points
-        );
+        var maxLen = WriteFociBuffer.MaxLen(numFoci);
+        for (var startIndex = 0; startIndex < points.Length; startIndex += maxLen)
+        {
+            new WriteFociBuffer(
+                bank: option.Bank,
+                startIndex: (uint)startIndex,
+                points: points[startIndex..Math.Min(startIndex + maxLen, points.Length)]
+            );
+        }
         new ConfigFociStm(
             bank: option.Bank,
             config: config,

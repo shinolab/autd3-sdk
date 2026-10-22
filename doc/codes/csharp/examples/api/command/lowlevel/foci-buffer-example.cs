@@ -24,11 +24,15 @@ var points = Enumerable.Range(0, 200)
 
 var bank = PatternBank.B0;
 
-await client.SendAsync(new WriteFociBuffer(
-    bank: bank,
-    startIndex: 0,
-    points: points
-));
+var maxLen = WriteFociBuffer.MaxLen(1);
+for (var startIndex = 0; startIndex < points.Length; startIndex += maxLen)
+{
+    await client.SendAsync(new WriteFociBuffer(
+        bank: bank,
+        startIndex: (uint)startIndex,
+        points: points[startIndex..Math.Min(startIndex + maxLen, points.Length)]
+    ));
+}
 await client.SendAsync(new ConfigFociStm(
     bank: bank,
     config: new SamplingConfig(1.0f * Hz * points.Length),

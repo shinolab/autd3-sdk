@@ -26,6 +26,11 @@ import { excerpt } from "@lib/excerpt";
 | `offset`   | `usize`          | バンク内の書き込み開始オフセット |
 | `data`     | `&[u8]`          | AM 波形サンプル列                |
 
+`WriteModulationBuffer` は 1 フレームで送られ, 1 フレームに収まる分しか書けない.
+上限は Rust では `WriteModulationBuffer::MAX_LEN`, Python では `WriteModulationBuffer.MAX_LEN`, C# では `WriteModulationBuffer.MaxLen` (サンプル数) で, 超えると送信時にエラーになる.
+それより長い波形は `offset` を `MAX_LEN` ずつずらして分割して送る (高レベルの [Modulation](/autd3-sdk/api/command/modulation/) はこの分割を自動で行う).
+1 フレームのコマンドなので, [each](/autd3-sdk/api/basics/client/#each) でデバイスごとに異なる波形を割り当てられる.
+
 ## Example
 
 `WriteModulationBuffer` → `ConfigModulation` → `ActivateModulationBank` で AM 波形を再生する例 (高レベルの [Modulation](/autd3-sdk/api/command/modulation/) と等価).

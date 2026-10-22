@@ -70,6 +70,9 @@ namespace AUTD3
         internal static extern IntPtr autd3_op_write_foci_buffer(byte bank, uint startIndex, Autd3StmControlPointNative[] points, UIntPtr numSamples, byte numFoci, byte[] intensities);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern UIntPtr autd3_op_write_foci_buffer_max_len(byte numFoci);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_pattern_stm(ushort configDivide, IntPtr[] phases, UIntPtr numPatterns, byte intensityKind, IntPtr[] intensities, UIntPtr numIntensities, byte uniformIntensity, byte bank, byte phaseDepth, ushort loopRep, byte transitionMode, ulong transitionValue);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
@@ -248,6 +251,15 @@ namespace AUTD3
         private readonly PatternBank _bank;
         private readonly uint _startIndex;
         private readonly IReadOnlyList<ControlPoints> _points;
+
+        public static int MaxLen(int numFoci)
+        {
+            if (numFoci < 1 || numFoci > Params.NumFociMax)
+            {
+                throw new Autd3Exception($"number of foci per sample must be 1..={Params.NumFociMax}", Autd3ErrorCode.InvalidArgument);
+            }
+            return (int)NativeStm.autd3_op_write_foci_buffer_max_len((byte)numFoci);
+        }
 
         public WriteFociBuffer(PatternBank bank, uint startIndex, IReadOnlyList<ControlPoints> points)
         {

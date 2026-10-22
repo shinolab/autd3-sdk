@@ -60,6 +60,7 @@ Several [helper functions](/autd3-sdk/en/api/compute/modulation/) are provided f
 ## Equivalent Low-Level Commands
 
 `Modulation` is equivalent to the three commands [WriteModulationBuffer](/autd3-sdk/en/api/command/lowlevel/write-modulation-buffer/) + [ConfigModulation](/autd3-sdk/en/api/command/lowlevel/config-modulation/) + [ActivateModulationBank](/autd3-sdk/en/api/command/lowlevel/activate-modulation-bank/), and is sent expanded in that order.
+`WriteModulationBuffer` writes only one frame, so a waveform that does not fit in one frame is split into several `WriteModulationBuffer`s with advancing `offset`.
 The following is equivalent to `Modulation { bank, config, data, loop_behavior, transition_mode }`
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />
