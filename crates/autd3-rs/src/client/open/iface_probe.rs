@@ -13,7 +13,6 @@ fn devices_respond_at(endpoint: ResolvedEndpoint) -> Result<bool, UdpError> {
         0,
         [&[], &[]],
         None,
-        || {},
     )?;
     match collect_responses(&channel, Kind::ReadUnitInfo, 0, REQUEST_REPLY_WAIT, Some(1)) {
         Ok(responses) => Ok(!responses.is_empty()),

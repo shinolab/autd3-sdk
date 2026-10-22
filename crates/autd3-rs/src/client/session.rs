@@ -285,17 +285,8 @@ impl SessionState {
             .publish(device, liveness.state(), liveness.ptp_flags());
     }
 
-    fn start_unanswered_clock(
-        &mut self,
-        device: usize,
-        now: Instant,
-        previous: Option<Instant>,
-    ) -> bool {
-        let liveness = &mut self.liveness[device];
-        if let Some(previous) = previous {
-            liveness.cancel_unanswered_clock(previous);
-        }
-        liveness.start_unanswered_clock(now)
+    fn start_unanswered_clock(&mut self, device: usize, requested_at: Instant) -> bool {
+        self.liveness[device].start_unanswered_clock(requested_at)
     }
 
     fn record_send_failure(&mut self, device: usize, now: Instant) {
@@ -307,10 +298,11 @@ impl SessionState {
         let device = reply.reply.device;
         let expected_unit_id = u8::try_from(device).expect("a device index is below MAX_DEVICES");
         let liveness = &mut self.liveness[device];
-        let accepted = liveness.accept_reply(expected_unit_id, reply.reported_unit_id, reply.flags);
+        let accepted =
+            liveness.accept_reply(expected_unit_id, reply.reported_unit_id, reply.flags, now);
         let revived = !accepted
             && self.recovery_window.is_some()
-            && liveness.try_revive(expected_unit_id, reply.reported_unit_id, reply.flags);
+            && liveness.try_revive(expected_unit_id, reply.reported_unit_id, reply.flags, now);
         self.publish(device);
         if revived {
             if let Some(window) = &mut self.recovery_window {
@@ -574,29 +566,20 @@ impl Session {
             if target_devices & (1 << device) == 0 {
                 continue;
             }
-            let mut attempted_at = None;
             let result = self.channel.send_to_device(
                 device,
                 kind,
                 msg_id,
                 body_for_device(device),
                 retry_full_socket_until,
-                || {
-                    let now = Instant::now();
-                    started_lost_clock |= self.lock_state().start_unanswered_clock(
-                        device,
-                        now,
-                        attempted_at.replace(now),
-                    );
-                },
             );
-            if result.is_err()
-                && let Some(attempted_at) = attempted_at
-            {
-                self.lock_state().liveness[device].cancel_unanswered_clock(attempted_at);
-            }
             match result {
-                Ok(()) => accepted_devices |= 1 << device,
+                Ok(attempted_at) => {
+                    started_lost_clock |= self
+                        .lock_state()
+                        .start_unanswered_clock(device, attempted_at);
+                    accepted_devices |= 1 << device;
+                }
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                     if kind == Kind::Frame {
                         if retry_full_socket_until.take().is_some() {
@@ -732,14 +715,10 @@ impl Session {
         let probe_msg_id = self.lock_state().start_recovery(waiter, Instant::now())?;
         if let Some(msg_id) = probe_msg_id {
             let all_devices_dst = self.channel.all_devices_dst();
-            if let Err(e) = self.channel.send(
-                all_devices_dst,
-                Kind::Heartbeat,
-                msg_id,
-                [&[], &[]],
-                None,
-                || {},
-            ) {
+            if let Err(e) =
+                self.channel
+                    .send(all_devices_dst, Kind::Heartbeat, msg_id, [&[], &[]], None)
+            {
                 tracing::debug!(%all_devices_dst, "calling the lost devices back failed: {e}");
             }
         }
@@ -1134,7 +1113,7 @@ mod tests {
         let mut state = session_state(1, now);
         assert_eq!(state.next_deadline(now), now + IDLE_WAIT);
 
-        state.start_unanswered_clock(0, now, None);
+        state.start_unanswered_clock(0, now);
         assert_eq!(state.next_deadline(now), now + TIMEOUTS.lost);
 
         let (msg_id, _response) = enqueue(&mut state, now);
@@ -1146,7 +1125,7 @@ mod tests {
     fn a_recovery_is_reported_once_its_window_closes() {
         let now = Instant::now();
         let mut state = session_state(2, now);
-        state.start_unanswered_clock(1, now, None);
+        state.start_unanswered_clock(1, now);
         state.mark_unanswered_devices_lost(now + TIMEOUTS.lost);
         let (waiter, mut result) = oneshot::channel();
 

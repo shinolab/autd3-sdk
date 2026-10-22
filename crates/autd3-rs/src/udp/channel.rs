@@ -271,15 +271,13 @@ impl Channel {
         msg_id: u16,
         body: [&[u8]; 2],
         retry_full_socket_until: Option<Instant>,
-        before_attempt: impl FnMut(),
-    ) -> io::Result<()> {
+    ) -> io::Result<Instant> {
         self.send(
             self.device_addrs[device],
             kind,
             msg_id,
             body,
             retry_full_socket_until,
-            before_attempt,
         )
     }
 
@@ -290,8 +288,7 @@ impl Channel {
         msg_id: u16,
         body: [&[u8]; 2],
         retry_full_socket_until: Option<Instant>,
-        before_attempt: impl FnMut(),
-    ) -> io::Result<()> {
+    ) -> io::Result<Instant> {
         let header = Header::new(kind, msg_id);
         let datagram = [
             IoSlice::new(header.as_bytes()),
@@ -308,31 +305,23 @@ impl Channel {
         if !wait.is_zero() {
             std::thread::sleep(wait);
         }
-        match self.send_with_retry(&datagram, dst, retry_full_socket_until, before_attempt) {
-            Ok(()) => Ok(()),
+        let mut attempted_at = Instant::now();
+        let sent = send_until_accepted(
+            retry_full_socket_until,
+            || {
+                attempted_at = Instant::now();
+                sys::send_now(&self.socket, &datagram, dst)
+            },
+            |remaining| sys::wait(&self.socket, Interest::Writable, Some(remaining)).map(|_| ()),
+        );
+        match sent {
+            Ok(()) => Ok(attempted_at),
             Err(e) if is_undeliverable(&e) => {
                 tracing::debug!(%dst, ?kind, "sending a datagram failed: {e}");
-                Ok(())
+                Ok(attempted_at)
             }
             Err(e) => Err(e),
         }
-    }
-
-    fn send_with_retry(
-        &self,
-        datagram: &[IoSlice<'_>],
-        dst: SocketAddrV6,
-        retry_full_socket_until: Option<Instant>,
-        mut before_attempt: impl FnMut(),
-    ) -> io::Result<()> {
-        send_until_accepted(
-            retry_full_socket_until,
-            || {
-                before_attempt();
-                sys::send_now(&self.socket, datagram, dst)
-            },
-            |remaining| sys::wait(&self.socket, Interest::Writable, Some(remaining)).map(|_| ()),
-        )
     }
 
     pub(crate) fn try_recv_from_device<R>(
