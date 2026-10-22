@@ -153,9 +153,18 @@ pub struct UnblockReply {
     pub downstream_link: u8,
 }
 
-const _: () = assert!(core::mem::size_of::<Header>() == 4);
-const _: () = assert!(core::mem::size_of::<UnitInfo>() == 20);
-const _: () = assert!(core::mem::size_of::<FrameReply>() == 12);
+assert_layout!(Header { version: 0, kind: 1, msg_id: 2 } size 4);
+assert_layout!(UnitInfo {
+    unit_id: 0,
+    flags: 1,
+    upstream_port: 2,
+    reserved: 3,
+    fw_version: 4,
+    reserved2: 7,
+    sys_time: 8,
+    ptp_offset_ns: 16,
+} size 20);
+assert_layout!(FrameReply { reserved: 0, status: 1, flags: 2, unit_id: 3, sys_time: 4 } size 12);
 const _: () = assert!(core::mem::size_of::<Header>() + FRAME_BYTES_MAX == 1452);
 
 #[must_use]

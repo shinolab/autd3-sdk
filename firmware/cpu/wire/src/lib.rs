@@ -72,6 +72,18 @@ macro_rules! wire_enum_u32 {
     };
 }
 
+macro_rules! assert_layout {
+    ($ty:ident { $($field:ident: $offset:expr),* $(,)? } size $size:expr) => {
+        const _: () = {
+            fn _all_fields_listed(value: $ty) {
+                let $ty { $($field: _),* } = value;
+            }
+            $(assert!(core::mem::offset_of!($ty, $field) == $offset);)*
+            assert!(core::mem::size_of::<$ty>() == $size);
+        };
+    };
+}
+
 mod bank;
 mod cmd;
 pub mod config;

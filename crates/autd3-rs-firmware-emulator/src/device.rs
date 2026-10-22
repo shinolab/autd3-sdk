@@ -1,6 +1,6 @@
 use crate::emu_fpga::FpgaEmulator;
 use autd3_cpu_fw::Cpu;
-use autd3_cpu_fw::proto::{Disposition, Drained, Reply};
+use autd3_cpu_fw::proto::{Drained, Reply};
 
 pub struct Device {
     pub(crate) cpu: Cpu,
@@ -19,8 +19,8 @@ impl Device {
         self.cpu = boot(&mut self.fpga);
     }
 
-    pub fn recv(&mut self, frame: &[u8], msg_id: u16) -> Disposition {
-        self.cpu.recv_frame(frame, msg_id)
+    pub fn recv(&mut self, frame: &[u8], msg_id: u16) {
+        self.cpu.recv_frame(frame, msg_id);
     }
 
     pub fn process_one(&mut self) -> Drained {
@@ -45,7 +45,7 @@ impl Device {
     }
 
     pub fn send(&mut self, frame: &[u8]) -> Reply {
-        let _ = self.recv(frame, 0);
+        self.recv(frame, 0);
         self.process_pending();
         self.reply()
     }
