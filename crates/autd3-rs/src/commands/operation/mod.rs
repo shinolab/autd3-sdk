@@ -131,6 +131,18 @@ pub trait Operation: crate::sealed::Sealed {
     fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error>;
 }
 
+impl<O: Operation + ?Sized> crate::sealed::Sealed for Box<O> {}
+
+impl<O: Operation + ?Sized> Operation for Box<O> {
+    fn distribution(&self) -> Distribution {
+        (**self).distribution()
+    }
+
+    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
+        (**self).encode(device, out)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

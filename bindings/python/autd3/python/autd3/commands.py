@@ -44,7 +44,7 @@ from ._autd3 import (
     each,
 )
 
-Command: TypeAlias = Union[
+Operation: TypeAlias = Union[
     ActivateModulationBank,
     ActivatePatternBank,
     Clear,
@@ -52,12 +52,9 @@ Command: TypeAlias = Union[
     ConfigModulation,
     ConfigPattern,
     EmulateGpioIn,
-    FociStm,
     ForceFan,
-    Modulation,
     Nop,
     Pattern,
-    PatternStm,
     ReleaseFailsafe,
     SetCpuConfig,
     SetFpgaConfig,
@@ -67,10 +64,17 @@ Command: TypeAlias = Union[
     SetPulseWidthTable,
     SetSilencer,
     Synchronize,
-    WriteFociBuffer,
-    WriteModulationBuffer,
     WritePatternBuffer,
     WritePatternPhase,
+]
+
+Command: TypeAlias = Union[
+    Operation,
+    FociStm,
+    Modulation,
+    PatternStm,
+    WriteFociBuffer,
+    WriteModulationBuffer,
     Each,
     Sequence["Command"],
 ]
@@ -96,6 +100,7 @@ __all__ = [
     "GpioOut",
     "Modulation",
     "Nop",
+    "Operation",
     "Pattern",
     "PatternStm",
     "PatternStmOption",

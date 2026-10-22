@@ -43,27 +43,34 @@ namespace AUTD3.Tests
         }
 
         [Fact]
-        public void EachSpansTheLongestPerDeviceCommand()
+        public void EachTakesOneFrameAndFillsTheUnassignedDevicesWithNop()
         {
             using var geometry = Fixture.Devices(2);
 
             using var frames = Frames.Encode(geometry, Command.Each(device =>
-                device.Idx == 0 ? Command.Sequence(new Nop(), new Nop()) : (ICommand)new Nop()));
+                device.Idx == 0 ? new Clear() : (ICommand?)null));
 
-            Assert.Equal(2, frames.Length);
+            Assert.Equal(1, frames.Length);
         }
 
         [Fact]
-        public void EachNests()
+        public void EachRejectsWhatIsNotASingleFrameOperation()
         {
             using var geometry = Fixture.Devices(2);
+            using var modulation = ModulationBuffer.FromBytes(new byte[] { 0xFF, 0xFF });
+            var notSingleFrame = new ICommand[]
+            {
+                new Modulation(SamplingConfig.Freq4k, modulation),
+                Command.Sequence(new Nop()),
+                Command.Each(_ => new Nop()),
+            };
 
-            using var frames = Frames.Encode(geometry, Command.Each(outer =>
-                outer.Idx == 1
-                    ? Command.Each(inner => inner.Idx == 1 ? Command.Sequence(new Nop(), new Nop()) : null)
-                    : null));
-
-            Assert.Equal(2, frames.Length);
+            foreach (var command in notSingleFrame)
+            {
+                var error = Assert.Throws<Autd3Exception>(() => Frames.Encode(geometry, Command.Each(device =>
+                    device.Idx == 1 ? command : null)));
+                Assert.Equal(Autd3ErrorCode.InvalidArgument, error.Code);
+            }
         }
 
         [Fact]

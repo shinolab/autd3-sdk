@@ -18,7 +18,7 @@ use autd3_rs::commands::{
     ActivateModulationBank, ActivatePatternBank, BoxedCommand, Clear, Command, ConfigFociStm,
     ConfigModulation, ConfigPattern, CpuConfig, EmulateGpioIn, Expansion, FixedCompletionTime,
     FixedUpdateRate, FociStm as CoreFociStm, FociStmOption, ForceFan, FpgaBusWait, FpgaConfig,
-    GpioOut, MaxFreqPpb, Modulation, Nop, PWE_TABLE_SIZE, PathDelayFilterShift, Pattern,
+    GpioOut, MaxFreqPpb, Modulation, Nop, Operation, PWE_TABLE_SIZE, PathDelayFilterShift, Pattern,
     PatternIntensity, PatternStm, PatternStmOption, PhaseDepth, ReleaseFailsafe, SetCpuConfig,
     SetFpgaConfig, SetGpioOut, SetOutputMask, SetPhaseCorrection, SetPulseWidthTable, SetSilencer,
     StmIntensity, Synchronize, WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer,
@@ -1339,7 +1339,7 @@ pub unsafe extern "C" fn autd3_op_free(op: *mut OwnedCommand) {
 }
 
 impl OwnedCommand {
-    fn check_each_lengths(&self, num_devices: usize) -> Result<(), String> {
+    fn check_each(&self, num_devices: usize) -> Result<(), String> {
         match self {
             OwnedCommand::Each(devices) if devices.len() != num_devices => Err(format!(
                 "per-device command holds {} entries for {num_devices} devices",
@@ -1347,69 +1347,93 @@ impl OwnedCommand {
             )),
             OwnedCommand::Each(devices) => devices
                 .iter()
-                .flatten()
-                .try_for_each(|op| op.check_each_lengths(num_devices)),
-            OwnedCommand::Sequence(ops) => ops
-                .iter()
-                .try_for_each(|op| op.check_each_lengths(num_devices)),
+                .enumerate()
+                .filter_map(|(device, op)| op.as_ref().map(|op| (device, op)))
+                .try_for_each(|(device, op)| match op.operation() {
+                    Some(_) => Ok(()),
+                    None => Err(format!(
+                        "per-device command entry for device {device} is not a single-frame operation"
+                    )),
+                }),
+            OwnedCommand::Sequence(ops) => ops.iter().try_for_each(|op| op.check_each(num_devices)),
             _ => Ok(()),
         }
     }
 
-    #[allow(clippy::too_many_lines)]
     fn boxed(&self) -> BoxedCommand<'_> {
+        match self.lower() {
+            Lowered::Operation(op) => op.boxed(),
+            Lowered::Command(command) => command,
+        }
+    }
+
+    fn operation(&self) -> Option<Box<dyn Operation + '_>> {
+        match self.lower() {
+            Lowered::Operation(op) => Some(op),
+            Lowered::Command(_) => None,
+        }
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn lower(&self) -> Lowered<'_> {
         match self {
-            OwnedCommand::Each(devices) => each(|device| {
-                devices
-                    .get(device.idx())
-                    .and_then(Option::as_ref)
-                    .map(OwnedCommand::boxed)
-            })
-            .boxed(),
-            OwnedCommand::Sequence(ops) => Sequence(ops).boxed(),
+            OwnedCommand::Each(devices) => Lowered::Command(
+                each(|device| {
+                    devices
+                        .get(device.idx())
+                        .and_then(Option::as_ref)
+                        .and_then(OwnedCommand::operation)
+                })
+                .boxed(),
+            ),
+            OwnedCommand::Sequence(ops) => Lowered::Command(Sequence(ops).boxed()),
             OwnedCommand::Pattern {
                 phases,
                 intensities,
                 bank,
                 transition_mode,
-            } => Pattern {
+            } => Lowered::Operation(Box::new(Pattern {
                 transition_mode: *transition_mode,
                 ..Pattern::with_bank(*bank, phases, intensities.as_ref())
-            }
-            .boxed(),
+            })),
             OwnedCommand::Modulation {
                 config,
                 data,
                 bank,
                 loop_behavior,
                 transition_mode,
-            } => Modulation {
-                bank: *bank,
-                config: *config,
-                data,
-                loop_behavior: *loop_behavior,
-                transition_mode: *transition_mode,
-            }
-            .boxed(),
+            } => Lowered::Command(
+                Modulation {
+                    bank: *bank,
+                    config: *config,
+                    data,
+                    loop_behavior: *loop_behavior,
+                    transition_mode: *transition_mode,
+                }
+                .boxed(),
+            ),
             OwnedCommand::WritePatternBuffer {
                 bank,
                 index,
                 phases,
                 intensities,
-            } => WritePatternBuffer::new(*bank, usize::from(*index), phases, intensities.as_ref())
-                .boxed(),
+            } => Lowered::Operation(Box::new(WritePatternBuffer::new(
+                *bank,
+                usize::from(*index),
+                phases,
+                intensities.as_ref(),
+            ))),
             OwnedCommand::ConfigPattern {
                 bank,
                 config,
                 size,
                 loop_behavior,
-            } => ConfigPattern {
+            } => Lowered::Operation(Box::new(ConfigPattern {
                 bank: *bank,
                 config: *config,
                 size: usize::try_from(*size).unwrap_or(usize::MAX),
                 loop_behavior: *loop_behavior,
-            }
-            .boxed(),
+            })),
             OwnedCommand::ConfigFociStm {
                 bank,
                 config,
@@ -1417,98 +1441,111 @@ impl OwnedCommand {
                 num_foci,
                 sound_speed,
                 loop_behavior,
-            } => ConfigFociStm {
+            } => Lowered::Operation(Box::new(ConfigFociStm {
                 bank: *bank,
                 config: *config,
                 size: usize::try_from(*size).unwrap_or(usize::MAX),
                 num_foci: *num_foci,
                 sound_speed: *sound_speed,
                 loop_behavior: *loop_behavior,
-            }
-            .boxed(),
+            })),
             OwnedCommand::ActivatePatternBank {
                 bank,
                 transition_mode,
-            } => ActivatePatternBank {
+            } => Lowered::Operation(Box::new(ActivatePatternBank {
                 bank: *bank,
                 transition_mode: *transition_mode,
-            }
-            .boxed(),
-            OwnedCommand::WriteModulationBuffer { bank, offset, data } => WriteModulationBuffer {
-                bank: *bank,
-                offset: usize::try_from(*offset).unwrap_or(usize::MAX),
-                data,
-            }
-            .boxed(),
+            })),
+            OwnedCommand::WriteModulationBuffer { bank, offset, data } => Lowered::Command(
+                WriteModulationBuffer {
+                    bank: *bank,
+                    offset: usize::try_from(*offset).unwrap_or(usize::MAX),
+                    data,
+                }
+                .boxed(),
+            ),
             OwnedCommand::ConfigModulation {
                 bank,
                 config,
                 size,
                 loop_behavior,
-            } => ConfigModulation {
+            } => Lowered::Operation(Box::new(ConfigModulation {
                 bank: *bank,
                 config: *config,
                 size: usize::try_from(*size).unwrap_or(usize::MAX),
                 loop_behavior: *loop_behavior,
-            }
-            .boxed(),
+            })),
             OwnedCommand::ActivateModulationBank {
                 bank,
                 transition_mode,
-            } => ActivateModulationBank {
+            } => Lowered::Operation(Box::new(ActivateModulationBank {
                 bank: *bank,
                 transition_mode: *transition_mode,
+            })),
+            OwnedCommand::Clear => Lowered::Operation(Box::new(Clear)),
+            OwnedCommand::Synchronize => Lowered::Operation(Box::new(Synchronize)),
+            OwnedCommand::ReleaseFailsafe => Lowered::Operation(Box::new(ReleaseFailsafe)),
+            OwnedCommand::Nop => Lowered::Operation(Box::new(Nop)),
+            OwnedCommand::ForceFan(value) => {
+                Lowered::Operation(Box::new(ForceFan { value: *value }))
             }
-            .boxed(),
-            OwnedCommand::Clear => Clear.boxed(),
-            OwnedCommand::Synchronize => Synchronize.boxed(),
-            OwnedCommand::ReleaseFailsafe => ReleaseFailsafe.boxed(),
-            OwnedCommand::Nop => Nop.boxed(),
-            OwnedCommand::ForceFan(value) => ForceFan { value: *value }.boxed(),
-            OwnedCommand::SetCpuConfig(config) => SetCpuConfig::new(**config).boxed(),
-            OwnedCommand::SetFpgaConfig(config) => SetFpgaConfig::new(*config).boxed(),
+            OwnedCommand::SetCpuConfig(config) => {
+                Lowered::Operation(Box::new(SetCpuConfig::new(**config)))
+            }
+            OwnedCommand::SetFpgaConfig(config) => {
+                Lowered::Operation(Box::new(SetFpgaConfig::new(*config)))
+            }
             OwnedCommand::SetSilencerCompletion {
                 intensity,
                 phase,
                 strict,
-            } => SetSilencer::new(FixedCompletionTime {
+            } => Lowered::Operation(Box::new(SetSilencer::new(FixedCompletionTime {
                 intensity: *intensity,
                 phase: *phase,
                 strict_mode: *strict,
-            })
-            .boxed(),
+            }))),
             OwnedCommand::SetSilencerUpdateRate { intensity, phase } => {
-                SetSilencer::new(FixedUpdateRate {
+                Lowered::Operation(Box::new(SetSilencer::new(FixedUpdateRate {
                     intensity: *intensity,
                     phase: *phase,
-                })
-                .boxed()
+                })))
             }
-            OwnedCommand::SetSilencerDisable => SetSilencer::disable().boxed(),
-            OwnedCommand::SetGpioOut(outputs) => SetGpioOut { outputs: *outputs }.boxed(),
-            OwnedCommand::EmulateGpioIn(values) => EmulateGpioIn { values: *values }.boxed(),
-            OwnedCommand::SetOutputMask(masks) => SetOutputMask { masks }.boxed(),
-            OwnedCommand::SetPhaseCorrection(phases) => SetPhaseCorrection { phases }.boxed(),
-            OwnedCommand::SetPulseWidthTable(t) => SetPulseWidthTable { table: t }.boxed(),
+            OwnedCommand::SetSilencerDisable => {
+                Lowered::Operation(Box::new(SetSilencer::disable()))
+            }
+            OwnedCommand::SetGpioOut(outputs) => {
+                Lowered::Operation(Box::new(SetGpioOut { outputs: *outputs }))
+            }
+            OwnedCommand::EmulateGpioIn(values) => {
+                Lowered::Operation(Box::new(EmulateGpioIn { values: *values }))
+            }
+            OwnedCommand::SetOutputMask(masks) => {
+                Lowered::Operation(Box::new(SetOutputMask { masks }))
+            }
+            OwnedCommand::SetPhaseCorrection(phases) => {
+                Lowered::Operation(Box::new(SetPhaseCorrection { phases }))
+            }
+            OwnedCommand::SetPulseWidthTable(t) => {
+                Lowered::Operation(Box::new(SetPulseWidthTable { table: t }))
+            }
             OwnedCommand::WriteFociBuffer {
                 bank,
                 start_index,
                 points,
-            } => points.boxed_write_foci(*bank, *start_index),
+            } => Lowered::Command(points.boxed_write_foci(*bank, *start_index)),
             OwnedCommand::WritePatternPhase {
                 bank,
                 start_index,
                 depth,
                 intensity,
                 patterns,
-            } => WritePatternPhase {
+            } => Lowered::Operation(Box::new(WritePatternPhase {
                 bank: *bank,
                 start_index: usize::from(*start_index),
                 depth: *depth,
                 intensity: *intensity,
                 patterns,
-            }
-            .boxed(),
+            })),
             OwnedCommand::FociStm {
                 config,
                 points,
@@ -1516,7 +1553,7 @@ impl OwnedCommand {
                 sound_speed,
                 loop_behavior,
                 transition_mode,
-            } => points.boxed_stm(
+            } => Lowered::Command(points.boxed_stm(
                 *config,
                 FociStmOption {
                     bank: *bank,
@@ -1524,7 +1561,7 @@ impl OwnedCommand {
                     loop_behavior: *loop_behavior,
                     transition_mode: *transition_mode,
                 },
-            ),
+            )),
             OwnedCommand::PatternStm {
                 config,
                 phases,
@@ -1533,20 +1570,27 @@ impl OwnedCommand {
                 phase_depth,
                 loop_behavior,
                 transition_mode,
-            } => PatternStm::new(
-                *config,
-                phases,
-                intensities.as_ref(),
-                PatternStmOption {
-                    bank: *bank,
-                    phase_depth: *phase_depth,
-                    loop_behavior: *loop_behavior,
-                    transition_mode: *transition_mode,
-                },
-            )
-            .boxed(),
+            } => Lowered::Command(
+                PatternStm::new(
+                    *config,
+                    phases,
+                    intensities.as_ref(),
+                    PatternStmOption {
+                        bank: *bank,
+                        phase_depth: *phase_depth,
+                        loop_behavior: *loop_behavior,
+                        transition_mode: *transition_mode,
+                    },
+                )
+                .boxed(),
+            ),
         }
     }
+}
+
+enum Lowered<'a> {
+    Operation(Box<dyn Operation + 'a>),
+    Command(BoxedCommand<'a>),
 }
 
 struct Sequence<'a>(&'a [OwnedCommand]);
@@ -1636,7 +1680,7 @@ unsafe fn encode_into(
         return AUTD3_ERR_INVALID_ARGUMENT;
     };
 
-    if let Err(message) = pending.check_each_lengths(geometry.num_devices()) {
+    if let Err(message) = pending.check_each(geometry.num_devices()) {
         unsafe { write_cstr(out_err, out_err_len, &message) };
         return AUTD3_ERR_INVALID_ARGUMENT;
     }
@@ -3285,18 +3329,6 @@ mod tests {
     }
 
     #[test]
-    fn each_spans_the_longest_per_device_command() {
-        let geometry = geometry_of(2);
-        let long = [autd3_op_clear(), autd3_op_nop(), autd3_op_synchronize()];
-        let long = unsafe { autd3_command_sequence(long.as_ptr(), long.len()) };
-        let ops = [autd3_op_nop(), long];
-        let command = unsafe { autd3_command_each(ops.as_ptr(), ops.len()) };
-
-        assert_eq!(3, num_frames_of(geometry, command));
-        unsafe { drop_handle(geometry) };
-    }
-
-    #[test]
     fn a_sequence_expands_its_commands_in_order() {
         let geometry = geometry_of(2);
         let per_device = [autd3_op_nop(), std::ptr::null_mut()];
@@ -3389,20 +3421,40 @@ mod tests {
     }
 
     #[test]
-    fn a_nested_each_that_does_not_match_the_device_count_fails_to_encode() {
+    fn an_each_inside_a_sequence_that_does_not_match_the_device_count_fails_to_encode() {
         let geometry = geometry_of(2);
-
-        let inner = [autd3_op_nop()];
-        let inner = unsafe { autd3_command_each(inner.as_ptr(), inner.len()) };
-        let outer = [std::ptr::null_mut(), inner];
-        let outer = unsafe { autd3_command_each(outer.as_ptr(), outer.len()) };
-        assert!(encode_error(geometry, outer).contains("1 entries for 2 devices"));
 
         let inner = [autd3_op_nop(), autd3_op_nop(), autd3_op_nop()];
         let inner = unsafe { autd3_command_each(inner.as_ptr(), inner.len()) };
         let sequence = [autd3_op_clear(), inner];
         let sequence = unsafe { autd3_command_sequence(sequence.as_ptr(), sequence.len()) };
         assert!(encode_error(geometry, sequence).contains("3 entries for 2 devices"));
+
+        unsafe { drop_handle(geometry) };
+    }
+
+    #[test]
+    fn an_each_holding_a_command_that_is_not_a_single_frame_operation_fails_to_encode() {
+        let geometry = geometry_of(2);
+        let not_single_frame = "entry for device 1 is not a single-frame operation";
+
+        let buffer = ModulationBuffer(vec![0xFF; 2]);
+        let modulation = unsafe { autd3_op_write_modulation_buffer(0, 0, &raw const buffer) };
+        let ops = [autd3_op_nop(), modulation];
+        let command = unsafe { autd3_command_each(ops.as_ptr(), ops.len()) };
+        assert!(encode_error(geometry, command).contains(not_single_frame));
+
+        let sequence = [autd3_op_clear()];
+        let sequence = unsafe { autd3_command_sequence(sequence.as_ptr(), sequence.len()) };
+        let ops = [std::ptr::null_mut(), sequence];
+        let command = unsafe { autd3_command_each(ops.as_ptr(), ops.len()) };
+        assert!(encode_error(geometry, command).contains(not_single_frame));
+
+        let inner = [autd3_op_nop(), autd3_op_nop()];
+        let inner = unsafe { autd3_command_each(inner.as_ptr(), inner.len()) };
+        let ops = [std::ptr::null_mut(), inner];
+        let command = unsafe { autd3_command_each(ops.as_ptr(), ops.len()) };
+        assert!(encode_error(geometry, command).contains(not_single_frame));
 
         unsafe { drop_handle(geometry) };
     }

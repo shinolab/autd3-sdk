@@ -174,21 +174,24 @@ impl Frames {
         Ok(())
     }
 
-    pub(super) fn pad_per_device(&mut self, frames: usize, num_devices: usize) {
-        while self.len() < frames {
-            self.push_frame(Distribution::PerDevice, num_devices);
-        }
-    }
-
-    pub(super) fn encode_for_device(
+    pub(super) fn push_per_device<O: Operation>(
         &mut self,
-        frame: usize,
-        op: &impl Operation,
-        device: &Device,
-    ) -> Result<(), Error> {
-        let range = &self.frame_ranges[frame];
-        debug_assert_eq!(range.dist, Distribution::PerDevice);
-        encode_datagram(&mut self.datagrams[range.start + device.idx()], op, device)
+        geometry: &Geometry,
+        mut assign: impl FnMut(&Device) -> Option<O>,
+    ) -> Result<usize, Error> {
+        let mut start = None;
+        let mut assigned = 0;
+        for device in geometry {
+            let Some(op) = assign(device) else {
+                continue;
+            };
+            assigned += 1;
+            let start = *start.get_or_insert_with(|| {
+                self.push_frame(Distribution::PerDevice, geometry.num_devices())
+            });
+            encode_datagram(&mut self.datagrams[start + device.idx()], &op, device)?;
+        }
+        Ok(assigned)
     }
 }
 

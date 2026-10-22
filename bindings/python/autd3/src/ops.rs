@@ -7,7 +7,6 @@ use autd3_python_capsule::extract::{
 };
 use autd3_python_capsule::{capsule_of, modulation_from_capsule};
 use autd3_rs::Velocity;
-use autd3_rs::commands::Expansion;
 use autd3_rs::commands::{
     ActivateModulationBank as CoreActivateModulationBank,
     ActivatePatternBank as CoreActivatePatternBank, ConfigFociStm as CoreConfigFociStm,
@@ -15,6 +14,7 @@ use autd3_rs::commands::{
     PhaseDepth as CorePhaseDepth, WriteModulationBuffer as CoreWriteModulationBuffer,
     WritePatternBuffer as CoreWritePatternBuffer, WritePatternPhase as CoreWritePatternPhase,
 };
+use autd3_rs::commands::{Expansion, Operation};
 use autd3_rs::value::{
     GpioIn as CoreGpioIn, Intensity, LoopBehavior as CoreLoopBehavior,
     ModulationBank as CoreModulationBank, PatternBank as CorePatternBank, Phase, SamplingConfig,
@@ -23,7 +23,7 @@ use autd3_rs::value::{
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-use crate::datagram::{OwnedPatternIntensity, PushCommand};
+use crate::datagram::{OwnedPatternIntensity, PushCommand, PushOperation};
 
 #[pyclass(
     name = "PatternBank",
@@ -284,15 +284,14 @@ pub(crate) struct WritePatternBufferData {
     intensities: OwnedPatternIntensity,
 }
 
-impl PushCommand for WritePatternBufferData {
-    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
-        expansion.push(CoreWritePatternBuffer::new(
+impl PushOperation for WritePatternBufferData {
+    fn operation(&self) -> Box<dyn Operation + '_> {
+        Box::new(CoreWritePatternBuffer::new(
             self.bank,
             self.index,
             &self.phases,
             self.intensities.as_ref(),
-        ))?;
-        Ok(())
+        ))
     }
 }
 
@@ -365,16 +364,15 @@ pub(crate) struct WritePatternPhaseData {
     patterns: Vec<Vec<Vec<Phase>>>,
 }
 
-impl PushCommand for WritePatternPhaseData {
-    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
-        expansion.push(CoreWritePatternPhase {
+impl PushOperation for WritePatternPhaseData {
+    fn operation(&self) -> Box<dyn Operation + '_> {
+        Box::new(CoreWritePatternPhase {
             bank: self.bank,
             start_index: self.start_index,
             depth: self.depth,
             intensity: self.intensity,
             patterns: &self.patterns,
-        })?;
-        Ok(())
+        })
     }
 }
 

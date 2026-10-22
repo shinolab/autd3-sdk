@@ -18,7 +18,7 @@ from autd3_modulation import ModulationBuffer
 from autd3_pattern import IntensityBuffer, PhaseBuffer
 
 _Vec3: TypeAlias = Sequence[float] | npt.NDArray[np.floating[Any]]
-_SingleCommand: TypeAlias = (
+_Operation: TypeAlias = (
     ActivateModulationBank
     | ActivatePatternBank
     | Clear
@@ -26,12 +26,9 @@ _SingleCommand: TypeAlias = (
     | ConfigModulation
     | ConfigPattern
     | EmulateGpioIn
-    | FociStm
     | ForceFan
-    | Modulation
     | Nop
     | Pattern
-    | PatternStm
     | ReleaseFailsafe
     | SetCpuConfig
     | SetFpgaConfig
@@ -41,10 +38,16 @@ _SingleCommand: TypeAlias = (
     | SetPulseWidthTable
     | SetSilencer
     | Synchronize
-    | WriteFociBuffer
-    | WriteModulationBuffer
     | WritePatternBuffer
     | WritePatternPhase
+)
+_SingleCommand: TypeAlias = (
+    _Operation
+    | FociStm
+    | Modulation
+    | PatternStm
+    | WriteFociBuffer
+    | WriteModulationBuffer
 )
 _Command: TypeAlias = _SingleCommand | Each | Sequence[_Command]
 
@@ -397,7 +400,7 @@ class ControlPoints:
 @final
 class Each: ...
 
-def each(assign: Callable[[Device], _Command | None]) -> Each: ...
+def each(assign: Callable[[Device], _Operation | None]) -> Each: ...
 
 @final
 class Pattern:
