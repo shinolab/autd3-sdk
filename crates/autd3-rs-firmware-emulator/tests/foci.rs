@@ -5,8 +5,8 @@ mod common;
 mod pattern;
 
 use autd3_cpu_wire::PatternBank;
+use autd3_cpu_wire::fpga_params::REP_INFINITE;
 use autd3_cpu_wire::payload::{EmissionType, TransitionMode, WriteFociPayload};
-use autd3_rs_core::params::REP_INFINITE;
 use autd3_rs_core::protocol::{Cmd, DeviceErrorCode};
 use autd3_rs_core::value::Intensity;
 use autd3_rs_firmware_emulator::Device;
