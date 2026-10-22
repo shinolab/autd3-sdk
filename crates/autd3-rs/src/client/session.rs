@@ -582,13 +582,12 @@ impl Session {
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                     if kind == Kind::Frame {
-                        if retry_full_socket_until.take().is_some() {
-                            tracing::warn!(
-                                device,
-                                "the socket stayed full past the lost timeout; the frame goes unanswered"
-                            );
-                        }
-                        accepted_devices |= 1 << device;
+                        retry_full_socket_until = None;
+                        tracing::warn!(
+                            device,
+                            "the socket stayed full past the lost timeout; skipping the device"
+                        );
+                        first_failure.get_or_insert(UdpError::Unsent { device, source: e });
                     } else {
                         tracing::trace!(
                             device,
