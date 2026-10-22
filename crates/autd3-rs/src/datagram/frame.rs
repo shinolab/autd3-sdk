@@ -88,17 +88,13 @@ pub struct Frames {
 }
 
 impl Frames {
-    pub fn encode<'a>(geometry: &Geometry, cmd: impl Command<'a>) -> Result<Self, Error> {
+    pub fn encode(geometry: &Geometry, cmd: impl Command) -> Result<Self, Error> {
         let mut frames = Self::default();
         frames.encode_into(geometry, cmd)?;
         Ok(frames)
     }
 
-    pub fn encode_into<'a>(
-        &mut self,
-        geometry: &Geometry,
-        cmd: impl Command<'a>,
-    ) -> Result<(), Error> {
+    pub fn encode_into(&mut self, geometry: &Geometry, cmd: impl Command) -> Result<(), Error> {
         self.clear();
         let encoded = Expansion::new(geometry, self).push(cmd).map(|_| ());
         if encoded.is_err() {
@@ -316,8 +312,8 @@ mod tests {
     fn a_failing_op_stops_the_expansion_at_once() {
         struct Expanded<'c>(&'c std::cell::Cell<bool>);
 
-        impl<'a> Command<'a> for Expanded<'_> {
-            fn expand(self, _expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
+        impl Command for Expanded<'_> {
+            fn expand(self, _expansion: &mut Expansion<'_>) -> Result<(), Error> {
                 self.0.set(true);
                 Ok(())
             }
@@ -334,8 +330,8 @@ mod tests {
     fn a_swallowed_failure_leaves_its_frame_in_place_for_the_commands_that_follow() {
         struct SwallowsFailures;
 
-        impl<'a> Command<'a> for SwallowsFailures {
-            fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
+        impl Command for SwallowsFailures {
+            fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
                 assert!(expansion.push(FailBroadcast).is_err());
                 assert!(expansion.push(FailAt(1)).is_err());
                 assert!(expansion.push(each(|_| Some(FailAt(0)))).is_err());

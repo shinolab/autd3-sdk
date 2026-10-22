@@ -146,7 +146,7 @@ impl Ctx<'_> {
         Ok(self.try_send_frames(frames).await?)
     }
 
-    pub async fn send<'a, C: Command<'a>>(&self, cmd: C) -> Result<()> {
+    pub async fn send<C: Command>(&self, cmd: C) -> Result<()> {
         self.send_frames(&Frames::encode(self.client.geometry(), cmd)?)
             .await
     }

@@ -74,10 +74,7 @@ impl Client {
         self.controller.device_time_now()
     }
 
-    pub fn send<'a, C: Command<'a>>(
-        &self,
-        cmd: C,
-    ) -> impl Future<Output = Result<(), Error>> + use<'_, C> {
+    pub fn send<C: Command>(&self, cmd: C) -> impl Future<Output = Result<(), Error>> + use<'_, C> {
         self.controller.send(cmd)
     }
 

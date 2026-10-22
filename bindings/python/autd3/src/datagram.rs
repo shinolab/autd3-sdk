@@ -21,7 +21,7 @@ use pyo3::types::{PyList, PyTuple};
 use crate::{commands, ops, stm};
 
 pub(crate) trait PushCommand: Send + Sync {
-    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error>;
+    fn push_into(&self, expansion: &mut Expansion<'_>) -> Result<(), autd3_rs::Error>;
 
     fn as_operation(&self) -> Option<Box<dyn Operation + '_>> {
         None
@@ -42,7 +42,7 @@ where
 }
 
 impl<O: PushOperation> PushCommand for O {
-    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
+    fn push_into(&self, expansion: &mut Expansion<'_>) -> Result<(), autd3_rs::Error> {
         expansion.push(self.operation())?;
         Ok(())
     }
@@ -141,7 +141,7 @@ pub(crate) struct ModulationData {
 }
 
 impl PushCommand for ModulationData {
-    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
+    fn push_into(&self, expansion: &mut Expansion<'_>) -> Result<(), autd3_rs::Error> {
         let mut cmd = CoreModulation::with_bank(self.bank, self.config, &self.data);
         cmd.loop_behavior = self.loop_behavior;
         cmd.transition_mode = self.transition_mode;
@@ -188,14 +188,14 @@ struct Sequence(Vec<Arc<dyn PushCommand>>);
 
 pub(crate) struct Expand<'a>(pub(crate) &'a dyn PushCommand);
 
-impl<'a> CoreCommand<'a> for Expand<'a> {
-    fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
+impl CoreCommand for Expand<'_> {
+    fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), autd3_rs::Error> {
         self.0.push_into(expansion)
     }
 }
 
 impl PushCommand for PerDevice {
-    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
+    fn push_into(&self, expansion: &mut Expansion<'_>) -> Result<(), autd3_rs::Error> {
         expansion.push(core_each(|device| {
             self.0[device.idx()]
                 .as_deref()
@@ -206,7 +206,7 @@ impl PushCommand for PerDevice {
 }
 
 impl PushCommand for Sequence {
-    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
+    fn push_into(&self, expansion: &mut Expansion<'_>) -> Result<(), autd3_rs::Error> {
         for command in &self.0 {
             command.push_into(expansion)?;
         }

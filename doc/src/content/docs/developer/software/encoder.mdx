@@ -23,14 +23,14 @@ import Mermaid from "@components/Mermaid.astro";
 
 |              | 型             | 内容                                                                      |
 | ------------ | -------------- | ------------------------------------------------------------------------- |
-| ユーザー向け | `Command<'a>`  | 複数の`Operation`を束ねたもの. `expand` で自身を `Operation` の列へ展開.  |
+| ユーザー向け | `Command`      | 複数の`Operation`を束ねたもの. `expand` で自身を `Operation` の列へ展開.  |
 | 中間         | `Operation`    | 1 フレーム分の処理に対応. `encode` で `Datagram` に `Cmd`・ペイロード・長さを直接書き出す. |
 | 出力         | `Frames`       | 実際に送出する `Datagram` の連結バッファとフレーム境界.                   |
 
 ```rust
-pub trait Command<'a> {
-    fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error>;
-    fn boxed(self) -> BoxedCommand<'a> where Self: Sized + 'a;
+pub trait Command {
+    fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error>;
+    fn boxed<'a>(self) -> BoxedCommand<'a> where Self: Sized + 'a;
 }
 
 pub trait Operation {
@@ -39,7 +39,7 @@ pub trait Operation {
 }
 ```
 
-`impl<'a, O: Operation + 'a> Command<'a> for O` のブランケット実装があるため, 単一の `Operation` はそのまま `Command` として扱える.
+`impl<O: Operation> Command for O` のブランケット実装があるため, 単一の `Operation` はそのまま `Command` として扱える.
 
 `Operation` は 1 フレームに対応する.
 バッファ書き込み (`WriteModulationBuffer` / `WriteFociBuffer`) も `Operation` であり, 1 フレームに収まる分 (`MAX_LEN`) しか書かない.
@@ -67,16 +67,16 @@ pub enum Distribution { Broadcast, PerDevice }
 ### `Expansion` の構造
 
 ```rust
-pub struct Expansion<'g, 'a> {
+pub struct Expansion<'g> {
     geometry: &'g Geometry,
-    ops: Vec<Box<dyn Operation + 'a>>,
+    frames: &'g mut Frames,
 }
 ```
 
-| フィールド | 役割                                                             |
-| ---------- | ---------------------------------------------------------------- |
-| `geometry` | `each` がデバイス毎にコマンドを割り当てるために参照する.         |
-| `ops`      | 展開された `Operation` の列.                                     |
+| フィールド | 役割                                                                         |
+| ---------- | ---------------------------------------------------------------------------- |
+| `geometry` | `Operation` の `encode` と, `each` がデバイス毎にコマンドを割り当てるために参照する. |
+| `frames`   | 展開された `Operation` をエンコードして書き込む先.                           |
 
 `Expansion` は `Command` の展開先となる入れ物で, `Frames::encode_into` の中で作られる.
 ユーザーが直接作ることはなく, `Command` を自作するときに `push` を呼ぶ相手としてだけ現れる.
@@ -84,19 +84,19 @@ pub struct Expansion<'g, 'a> {
 ### push
 
 ```rust
-pub fn push<C: Command<'a>>(&mut self, cmd: C) -> Result<&mut Self, Error> {
+pub fn push<C: Command>(&mut self, cmd: C) -> Result<&mut Self, Error> {
     cmd.expand(self)?;
     Ok(self)
 }
 
-pub(crate) fn push_op<O: Operation + 'a>(&mut self, op: O) -> &mut Self {
-    self.ops.push(Box::new(op));
-    self
+pub(crate) fn push_op<O: Operation>(&mut self, op: &O) -> Result<&mut Self, Error> {
+    self.frames.push_encoded(op, self.geometry)?;
+    Ok(self)
 }
 
-impl<'a, O: Operation + 'a> Command<'a> for O {
-    fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
-        expansion.push_op(self);
+impl<O: Operation> Command for O {
+    fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
+        expansion.push_op(&self)?;
         Ok(())
     }
 }
@@ -104,7 +104,8 @@ impl<'a, O: Operation + 'a> Command<'a> for O {
 
 `push`が呼ばれると, その引数の `Command` の `expand` が呼ばれる.
 `Command` は `expand` の中で, 自身を複数の `Command`/`Operation` に展開し, 再帰的に`push` する.
-最終的には `Operation` に対する, `Command` のブランケット実装で `push_op` が呼ばれ再帰が止まり, `ops` に `Operation` が積まれる.
+最終的には `Operation` に対する, `Command` のブランケット実装で `push_op` が呼ばれ再帰が止まり, その `Operation` がその場で 1 フレームとして `Frames` へエンコードされる.
+`Operation` を溜めておく中間段は持たないので, `Command` が借用するデータ (`Modulation` の `data` など) は `expand` から戻った時点で不要になる.
 
 #### 例: 単一の Operation
 
@@ -115,7 +116,7 @@ Frames::encode(&geometry, Clear)?;
 `Clear` は `Operation` なので, ブランケット実装経由で `push_op` が 1 回呼ばれる.
 
 ```
-ops = [ Clear ]
+frames = [ Clear ]
 ```
 
 #### 例: 複数の Operation へ展開されるコマンド
@@ -124,8 +125,8 @@ ops = [ Clear ]
 バッファ書き込みは 1 フレームに収まる `WriteModulationBuffer::MAX_LEN` サンプルごとに分割する.
 
 ```rust
-impl<'a> Command<'a> for Modulation<'a> {
-    fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
+impl Command for Modulation<'_> {
+    fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
         for (i, data) in self.data.chunks(WriteModulationBuffer::MAX_LEN).enumerate() {
             expansion.push(WriteModulationBuffer {
                 bank: self.bank,
@@ -141,14 +142,14 @@ impl<'a> Command<'a> for Modulation<'a> {
 }
 ```
 
-したがって, 1 フレームに収まらないサイズの `Modulation` を 1 つ渡すと, `ops` は次のようになる.
+したがって, 1 フレームに収まらないサイズの `Modulation` を 1 つ渡すと, フレーム列は次のようになる.
 
 ```
-ops = [ WriteModulationBuffer { offset: 0 }
-      , WriteModulationBuffer { offset: WriteModulationBuffer::MAX_LEN }
-      , ...
-      , ConfigModulation
-      , ActivateModulationBank ]
+frames = [ WriteModulationBuffer { offset: 0 }
+         , WriteModulationBuffer { offset: WriteModulationBuffer::MAX_LEN }
+         , ...
+         , ConfigModulation
+         , ActivateModulationBank ]
 ```
 
 #### 例: タプル
@@ -160,46 +161,40 @@ Frames::encode(&geometry, (SetSilencer::default(), Clear))?;
 ```
 
 ```
-ops = [ SetSilencer, Clear ]
+frames = [ SetSilencer, Clear ]
 ```
 
 ### encode
 
 ```rust
-pub fn encode<'a>(geometry: &Geometry, cmd: impl Command<'a>) -> Result<Frames, Error>;
-pub fn encode_into<'a>(&mut self, geometry: &Geometry, cmd: impl Command<'a>) -> Result<(), Error>;
+pub fn encode(geometry: &Geometry, cmd: impl Command) -> Result<Frames, Error>;
+pub fn encode_into(&mut self, geometry: &Geometry, cmd: impl Command) -> Result<(), Error>;
 ```
 
 `encode` は `Frames` を新規に作って, `encode_into` を呼び出すだけ.
 
-`encode_into` はコマンドを展開し, `ops` を先頭から順に `Frames` へ書き出す.
+`encode_into` は自身を書き込み先とする `Expansion` を作り, コマンドを `push` する.
+展開とエンコードは同時に進むので, どちらかが失敗した時点でそれまでに書いたフレームが残っている.
+失敗したら `clear` して, 中途半端なフレーム列を残さない.
 
 ```rust
 self.clear();
-let mut expansion = Expansion::new(geometry);
-expansion.push(cmd)?;                            // 展開に失敗すればここでエラー
-let ops = expansion.finish();
-let encoded = ops.iter().try_for_each(|op| self.push_op(op.as_ref(), geometry));
+let encoded = Expansion::new(geometry, self).push(cmd).map(|_| ());
 if encoded.is_err() {
-    self.clear();                                // 中途半端なフレーム列を残さない
+    self.clear();
 }
 ```
 
 `Operation` 1 つがフレーム 1 つに対応する.
-`Distribution` によって, そのフレームが持つ `Datagram` の数が変わる.
+`Distribution` によって, そのフレームが持つ `Datagram` の数が変わる (`Broadcast` は 1, `PerDevice` はデバイス数).
+`push_frame` がその数の `Datagram` を確保してフレーム境界を記録し, 各 `Datagram` へ `encode` する.
 
 ```rust
-let encode_devices = match op.distribution() {
-    Distribution::Broadcast => 1,
-    Distribution::PerDevice => geometry.num_devices(),
-};
-let start = self.payloads.len();
-for device in 0..encode_devices {
-    let mut datagram = Datagram::no_payload(Cmd::Nop);
-    op.encode(&geometry[device], &mut datagram)?;
-    self.payloads.push(datagram);
+let dist = op.distribution();
+let start = self.push_frame(dist, geometry.num_devices());
+for (device, datagram) in self.datagrams[start..].iter_mut().enumerate() {
+    op.encode(&geometry[device], datagram)?;
 }
-self.frames.push(FrameDesc { dist, start, len: encode_devices });
 ```
 
 `Broadcast` では `encode` がデバイス 0 に対して 1 回しか呼ばれず, ペイロードも 1 部しか保持しない.
@@ -214,15 +209,15 @@ pub struct Datagram {
     pub payload_len: usize,
 }
 
-struct FrameDesc {
+struct FrameRange {
     dist: Distribution,
     start: usize, 
     len: usize
 }
 
 pub struct Frames {
-    payloads: Vec<Datagram>,   // 全フレームのペイロードを連結
-    frames: Vec<FrameDesc>,    // 各フレームの (distribution, 開始位置, 長さ)
+    datagrams: Vec<Datagram>,        // 全フレームのペイロードを連結
+    frame_ranges: Vec<FrameRange>,   // 各フレームの (distribution, 開始位置, 長さ)
 }
 
 pub struct Frame<'a> { 
@@ -236,10 +231,10 @@ pub struct Frame<'a> {
 デバイス 2 台で `Pattern` (`PerDevice`) と `ConfigModulation` (`Broadcast`) を積んだ場合は次のようになる.
 
 ```
-payloads: [ P(dev0), P(dev1), C ]
-           └──── frame 0 ───┘ └ frame 1
-frames:   [ { PerDevice, start: 0, len: 2 }
-          , { Broadcast, start: 2, len: 1 } ]
+datagrams:    [ P(dev0), P(dev1), C ]
+               └──── frame 0 ───┘ └ frame 1
+frame_ranges: [ { PerDevice, start: 0, len: 2 }
+              , { Broadcast, start: 2, len: 1 } ]
 ```
 
 `Frames` は `IntoIterator` を実装しており, `Frame` を順に取り出して送信する.
@@ -269,9 +264,9 @@ if self.data.is_empty() {
 `each` はデバイス毎に異なる `Operation` を割り当てる.
 
 ```rust
-pub fn each<'a, O, F>(assign: F) -> Each<F>
+pub fn each<O, F>(assign: F) -> Each<F>
 where
-    O: Operation + 'a,
+    O: Operation,
     F: FnMut(&Device) -> Option<O>;
 ```
 

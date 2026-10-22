@@ -8,20 +8,20 @@ use super::expansion::Expansion;
 pub struct Each<F>(F);
 
 #[must_use]
-pub fn each<'a, O, F>(assign: F) -> Each<F>
+pub fn each<O, F>(assign: F) -> Each<F>
 where
-    O: Operation + 'a,
+    O: Operation,
     F: FnMut(&Device) -> Option<O>,
 {
     Each(assign)
 }
 
-impl<'a, O, F> Command<'a> for Each<F>
+impl<O, F> Command for Each<F>
 where
-    O: Operation + 'a,
+    O: Operation,
     F: FnMut(&Device) -> Option<O>,
 {
-    fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), Error> {
+    fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
         expansion.push_per_device(self.0)?;
         Ok(())
     }

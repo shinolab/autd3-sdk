@@ -19,7 +19,7 @@ pub(crate) fn encode(op: &impl Operation) -> Result<((Cmd, usize), [u8; PAYLOAD_
     Ok(((out.cmd, out.payload_len), out.payload))
 }
 
-pub(crate) fn build<'a>(num_devices: usize, cmd: impl Command<'a>) -> Result<Frames, Error> {
+pub(crate) fn build(num_devices: usize, cmd: impl Command) -> Result<Frames, Error> {
     Frames::encode(&test_geometry(num_devices), cmd)
 }
 
