@@ -470,7 +470,7 @@ impl ExecAt {
 #[pyclass(name = "Client", module = "autd3")]
 pub struct Client {
     inner: Arc<autd3_rs::Client>,
-    geometry: Arc<Geometry>,
+    geometry: Geometry,
     closed: Arc<AtomicBool>,
 }
 
@@ -493,7 +493,7 @@ impl Client {
             .map_err(|e| client_pyerr(py, &e))?;
         Ok(Client {
             inner: Arc::new(client),
-            geometry: Arc::new(geometry),
+            geometry,
             closed: Arc::new(AtomicBool::new(false)),
         })
     }

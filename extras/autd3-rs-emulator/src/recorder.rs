@@ -1,6 +1,5 @@
 #![allow(clippy::cast_possible_truncation)]
 
-use std::sync::Arc;
 use std::time::Duration;
 
 use autd3_rs::commands::Command;
@@ -25,7 +24,7 @@ struct RawTransducerRecord {
 }
 
 pub struct Recorder {
-    geometry: Arc<Geometry>,
+    geometry: Geometry,
     devices: Vec<Device>,
     records: Vec<Vec<RawTransducerRecord>>,
     start_ns: u64,
@@ -55,7 +54,7 @@ impl Recorder {
             })
             .collect();
         Self {
-            geometry: Arc::new(geometry.clone()),
+            geometry: geometry.clone(),
             devices,
             records,
             start_ns,
