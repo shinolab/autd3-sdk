@@ -24,8 +24,7 @@ impl DeviceTestExt for Device {
     }
 
     fn set_host_idle_ms(&mut self, ms: u32) {
-        self.cpu.record_host_frame(0);
-        self.cpu.publish_host_idle(ms);
+        self.cpu.publish_host_idle(Some(ms));
     }
 }
 

@@ -23,8 +23,7 @@ pub trait CommandLayer {
     fn unassigned(&mut self);
     fn ptp_unlocked(&mut self, elapsed_ms: Option<u32>);
     fn ptp_failsafe_active(&mut self) -> bool;
-    fn host_frame(&mut self, now_ms: u32);
-    fn publish_host_idle(&mut self, now_ms: u32);
+    fn host_idle(&mut self, idle_ms: Option<u32>);
 }
 
 impl CommandLayer for &crate::Cpu {
@@ -52,12 +51,8 @@ impl CommandLayer for &crate::Cpu {
         crate::Cpu::ptp_failsafe_active(self)
     }
 
-    fn host_frame(&mut self, now_ms: u32) {
-        crate::Cpu::record_host_frame(self, now_ms);
-    }
-
-    fn publish_host_idle(&mut self, now_ms: u32) {
-        crate::Cpu::publish_host_idle(self, now_ms);
+    fn host_idle(&mut self, idle_ms: Option<u32>) {
+        crate::Cpu::publish_host_idle(self, idle_ms);
     }
 }
 
@@ -96,6 +91,7 @@ pub struct Node {
     mac: Mac,
     addr: Ipv6,
     host: Option<(u8, Endpoint)>,
+    last_host_frame_ms: Option<u32>,
     ptp: Ptp,
     buf: [u8; TX_BUF_BYTES],
 }
@@ -126,6 +122,7 @@ impl Node {
             mac: mac(UNASSIGNED_ID),
             addr: link_local(mac(UNASSIGNED_ID)),
             host: None,
+            last_host_frame_ms: None,
             ptp: Ptp::new(),
             buf: [0; TX_BUF_BYTES],
         }
@@ -176,7 +173,10 @@ impl Node {
 
     fn unassign<N: Nic>(&mut self, nic: &mut N) {
         nic.set_forwarding(false);
-        *self = Self::new();
+        *self = Self {
+            last_host_frame_ms: self.last_host_frame_ms,
+            ..Self::new()
+        };
         nic.set_mac(self.mac);
         self.ptp.reset(nic);
         nic.stop_pulse();
@@ -191,7 +191,10 @@ impl Node {
         }
         self.ptp.tick(nic, now_ms);
         cmds.ptp_unlocked(self.ptp.unlocked_ms(now_ms));
-        cmds.publish_host_idle(now_ms);
+        cmds.host_idle(
+            self.last_host_frame_ms
+                .map(|last| now_ms.wrapping_sub(last)),
+        );
         report_send_failures(nic, cmds);
     }
 
@@ -327,7 +330,8 @@ impl Node {
                     return;
                 }
                 self.host = Some((reply.port, reply.to));
-                cmds.host_frame(now_ms);
+                self.last_host_frame_ms = Some(now_ms);
+                cmds.host_idle(Some(0));
                 if is_frame {
                     let _ = cmds.recv_frame(body, reply.msg_id);
                 } else {
@@ -547,7 +551,7 @@ mod tests {
         unassigned: u32,
         ptp_unlocked: Vec<Option<u32>>,
         ptp_failsafe: bool,
-        host_frames: Vec<u32>,
+        host_idle: Vec<Option<u32>>,
     }
 
     impl CommandLayer for FakeCommands {
@@ -576,11 +580,9 @@ mod tests {
             self.ptp_failsafe
         }
 
-        fn host_frame(&mut self, now_ms: u32) {
-            self.host_frames.push(now_ms);
+        fn host_idle(&mut self, idle_ms: Option<u32>) {
+            self.host_idle.push(idle_ms);
         }
-
-        fn publish_host_idle(&mut self, _now_ms: u32) {}
     }
 
     struct Harness {
@@ -621,7 +623,7 @@ mod tests {
                     unassigned: 0,
                     ptp_unlocked: Vec::new(),
                     ptp_failsafe: false,
-                    host_frames: Vec::new(),
+                    host_idle: Vec::new(),
                 },
             }
         }
@@ -678,10 +680,10 @@ mod tests {
 
     impl Harness {
         fn deliver_at(&mut self, frame: &[u8], rx: RxMeta) -> bool {
-            let host_frames = self.cmds.host_frames.len();
+            let published = self.cmds.host_idle.len();
             self.node
                 .on_frame(&mut self.nic, self.now_ms, frame, rx, &mut self.cmds);
-            self.cmds.host_frames.len() > host_frames
+            self.cmds.host_idle.len() > published
         }
 
         fn send(&mut self, dst: Ipv6, kind: Kind, body: &[u8]) -> bool {

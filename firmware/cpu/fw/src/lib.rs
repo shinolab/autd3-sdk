@@ -6,7 +6,6 @@ extern crate std;
 
 mod app;
 mod cmd;
-mod ctx;
 mod fifo;
 pub mod fpga;
 pub mod fpga_params;

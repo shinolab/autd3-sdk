@@ -1,3 +1,5 @@
+use core::cell::Cell;
+
 use zerocopy::{FromBytes, IntoBytes};
 
 pub(crate) use autd3_cpu_wire::payload::{UpdateBeginPayload, UpdateChunkPayload};
@@ -12,7 +14,6 @@ pub(crate) use autd3_cpu_wire::update::{
 
 use crate::app::Cpu;
 use crate::cmd::failsafe;
-use crate::ctx::MainCell;
 use crate::fpga;
 use crate::port::{FlashError, Port};
 use crate::proto::Error;
@@ -45,15 +46,15 @@ pub(crate) struct BootImage {
 }
 
 pub(crate) struct UpdateSession {
-    state: MainCell<State>,
-    boot: MainCell<Option<BootImage>>,
+    state: Cell<State>,
+    boot: Cell<Option<BootImage>>,
 }
 
 impl UpdateSession {
     pub(crate) const fn new() -> Self {
         Self {
-            state: MainCell::new(State::Idle),
-            boot: MainCell::new(None),
+            state: Cell::new(State::Idle),
+            boot: Cell::new(None),
         }
     }
 
