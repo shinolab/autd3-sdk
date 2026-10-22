@@ -7,10 +7,10 @@ use std::f32::consts::PI;
 use anyhow::Result;
 
 use autd3_rs::Client;
-use autd3_rs::commands::{Clear, FociStm, FociStmOption, SetSilencer, Synchronize};
+use autd3_rs::commands::{Clear, FociStm, FociStmOption, Pattern, SetSilencer, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, mm};
-use autd3_rs::value::{ControlPoints, SamplingConfig};
+use autd3_rs::value::{ControlPoints, Intensity, SamplingConfig};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main(flavor = "multi_thread")]
@@ -51,6 +51,9 @@ async fn main() -> Result<()> {
     println!("running a 1 Hz circular foci STM — press Ctrl+C to stop");
     tokio::signal::ctrl_c().await?;
 
-    client.close().await?;
+    client
+        .send(Pattern::new(&geometry.phase_buffer(), Intensity::MIN))
+        .await?;
+    client.close()?;
     Ok(())
 }

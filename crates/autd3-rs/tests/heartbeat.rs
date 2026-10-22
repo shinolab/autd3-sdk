@@ -25,7 +25,7 @@ async fn the_client_sends_no_heartbeat_by_itself() {
 
     assert_eq!(heartbeats(&emulator), [0, 0]);
     assert_eq!(client.bus_stats().heartbeats(), 0);
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -40,7 +40,7 @@ async fn each_heartbeat_reaches_every_device_once() {
 
     assert_eq!(heartbeats(&emulator), [5, 5, 5]);
     assert_eq!(client.bus_stats().heartbeats(), 5);
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -66,14 +66,14 @@ async fn a_heartbeat_reply_updates_the_device_state() {
     }
 
     assert_eq!(checker.check().unwrap().devices()[0], DeviceState::Ready);
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn a_heartbeat_after_close_is_refused() {
     let (emulator, client) = open(1);
-    client.close().await.unwrap();
+    client.close().unwrap();
 
     assert!(matches!(client.send_heartbeat(), Err(Error::Closed)));
     assert_eq!(heartbeats(&emulator), [0]);

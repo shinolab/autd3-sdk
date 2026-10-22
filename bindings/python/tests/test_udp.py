@@ -86,3 +86,10 @@ def test_a_zero_ack_timeout_is_constructible_and_a_non_duration_is_rejected() ->
 def test_client_open_takes_a_transport_option() -> None:
     with pytest.raises(TypeError):
         autd3.Client.open(geometry(1), loose(autd3.Interface.Auto))
+
+
+def test_client_is_a_synchronous_context_manager() -> None:
+    assert callable(getattr(autd3.Client, "__enter__", None))
+    assert callable(getattr(autd3.Client, "__exit__", None))
+    assert not hasattr(autd3.Client, "__aenter__")
+    assert not hasattr(autd3.Client, "__aexit__")

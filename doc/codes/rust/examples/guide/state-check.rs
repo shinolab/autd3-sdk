@@ -56,6 +56,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     // ANCHOR_END: poll
 
-    client.close().await?;
+    client.close()?;
     Ok(())
 }

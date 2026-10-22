@@ -15,7 +15,7 @@ async fn with_run(geometry: &Geometry, option: &TransportOption) -> Result<()> {
 
     controller.send((Clear, Synchronize)).await?;
     controller.send(SetSilencer::default()).await?;
-    controller.close().await?;
+    controller.close()?;
 
     driving.join().unwrap()?;
     // ANCHOR_END: run
@@ -37,7 +37,7 @@ async fn with_poll(geometry: &Geometry, option: &TransportOption) -> Result<()> 
 
     controller.send((Clear, Synchronize)).await?;
     controller.send(SetSilencer::default()).await?;
-    controller.close().await?;
+    controller.close()?;
 
     driving.join().unwrap()?;
     Ok(())
@@ -67,7 +67,7 @@ async fn on_single_thread(geometry: &Geometry, option: &TransportOption) -> Resu
 
     controller.send((Clear, Synchronize)).await?;
     controller.send(SetSilencer::default()).await?;
-    controller.close().await?;
+    controller.close()?;
 
     driving.await??;
     // ANCHOR_END: single_thread

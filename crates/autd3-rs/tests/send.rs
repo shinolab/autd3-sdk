@@ -23,7 +23,7 @@ async fn a_single_device_receives_what_is_sent() {
     client.send(ForceFan { value: true }).await.unwrap();
     assert_eq!(fans(&emulator), [true]);
 
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -44,7 +44,7 @@ async fn the_emulator_processes_frames_with_an_execution_time_without_waiting() 
     let telemetry = client.read_telemetry().await.unwrap();
     assert!(telemetry.iter().all(|t| t.exec_late == 0), "{telemetry:?}");
 
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -86,7 +86,7 @@ async fn a_frame_sent_with_each_execution_time_completes() {
         .unwrap();
     assert_eq!(fans(&emulator), [true, true]);
 
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -111,7 +111,7 @@ async fn a_rejected_execution_time_sends_nothing() {
     ));
     assert_eq!(client.bus_stats().frames(), before);
     client.send(Nop).await.unwrap();
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -127,7 +127,7 @@ async fn a_broadcast_frame_reaches_every_device() {
 
     assert_eq!(response.error_codes(), [0, 0, 0]);
     assert_eq!(fans(&emulator), [true, true, true]);
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -148,7 +148,7 @@ async fn a_per_device_frame_delivers_each_device_its_own_payload() {
 
     assert_eq!(response.error_codes(), [0, 0, 0]);
     assert_eq!(fans(&emulator), [false, true, false]);
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -165,7 +165,7 @@ async fn a_device_left_out_of_a_per_device_command_keeps_its_state() {
         .unwrap();
 
     assert_eq!(fans(&emulator), [false, true]);
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -188,7 +188,7 @@ async fn a_command_spanning_many_frames_arrives_whole_on_every_device() {
         let written = emulator.with_device(device, |d| d.fpga().modulation_buffer(0));
         assert_eq!(written, data);
     }
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -205,7 +205,7 @@ async fn the_statistics_count_the_frames_and_their_acknowledgements() {
 
     assert_eq!(stats.frames(), 5);
     assert_eq!(stats.acked_frames(), stats.frames());
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -229,7 +229,7 @@ async fn the_firmware_version_is_read_from_every_device() {
         assert!(version.is_emulator());
         assert!(version.is_supported());
     }
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -242,7 +242,7 @@ async fn the_fpga_state_is_read_from_every_device() {
     let expected: Vec<u8> =
         emulator.with_devices(|devices| devices.iter().map(|d| d.fpga().fpga_state()).collect());
     assert_eq!(states.iter().map(|s| s.0).collect::<Vec<_>>(), expected);
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -261,7 +261,7 @@ async fn the_telemetry_counts_the_frames_each_device_processed() {
         assert_eq!(after.processed - before.processed, 5);
         assert_eq!(after.fifo_drop, 0);
     }
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -279,7 +279,7 @@ async fn an_error_reported_by_a_device_fails_only_that_send() {
         }
     ));
     client.send(Nop).await.unwrap();
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -301,7 +301,7 @@ async fn a_per_device_error_names_the_device_that_reported_it() {
             code: INVALID_TRANSITION_MODE
         }
     ));
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -326,7 +326,7 @@ async fn the_response_of_a_frame_carries_the_status_of_every_device() {
         response.check(),
         Err(Error::DeviceError { device: 1, .. })
     ));
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -350,7 +350,7 @@ async fn a_frame_encoded_for_another_geometry_is_rejected_before_it_is_sent() {
         })
     ));
     assert_eq!(client.bus_stats().frames(), before);
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -375,7 +375,7 @@ async fn a_frame_rebuilt_from_its_datagrams_is_sent_like_the_original() {
         .unwrap();
 
     assert_eq!(fans(&emulator), [false, true]);
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -435,7 +435,7 @@ async fn a_frame_built_with_malformed_datagrams_is_rejected_before_it_is_sent() 
     ));
     assert_eq!(client.bus_stats().frames(), before);
     client.send(Nop).await.unwrap();
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -458,5 +458,5 @@ async fn concurrent_senders_all_complete() {
     another_nop.unwrap();
 
     assert_eq!(client.bus_stats().frames() - before, 5);
-    client.close().await.unwrap();
+    client.close().unwrap();
 }

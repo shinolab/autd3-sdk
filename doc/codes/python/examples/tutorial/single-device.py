@@ -16,7 +16,7 @@ async def main() -> None:
     geometry = Geometry([Autd3()])
 
     # Open the client.
-    async with Client.open(
+    with Client.open(
         geometry,
         TransportOption(),
     ) as client:
@@ -47,7 +47,10 @@ async def main() -> None:
         await client.send(Pattern(phases, Intensity.MAX))
         await client.send(Modulation(sampling_config, mod_buf))
 
-        await asyncio.Event().wait()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            await client.send(Pattern(geometry.phase_buffer(), Intensity.MIN))
 
 
 if __name__ == "__main__":

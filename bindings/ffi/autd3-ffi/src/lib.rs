@@ -2327,15 +2327,21 @@ pub unsafe extern "C" fn autd3_checker_free(checker: *mut CheckerHandle) {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_client_close(
     client: *const ClientHandle,
-    cb: CompletionCallback,
-    user_data: *mut c_void,
-) {
-    let Some((client, ctx)) = (unsafe { client_ctx(client, cb, user_data) }) else {
-        return;
+    out_err: *mut c_char,
+    out_err_len: usize,
+) -> i32 {
+    let Some(client) = (unsafe { handle_ref(client) }) else {
+        unsafe { write_cstr(out_err, out_err_len, "null client") };
+        return AUTD3_ERR_INVALID_ARGUMENT;
     };
-    spawn_completion(ctx, async move { client.close().await }, |()| {
-        std::ptr::null_mut()
-    });
+
+    match client.0.close() {
+        Ok(()) => AUTD3_OK,
+        Err(e) => {
+            unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
+            error_code(&e)
+        }
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -3537,6 +3543,13 @@ mod tests {
 
     #[test]
     fn a_null_completion_callback_is_ignored() {
-        unsafe { autd3_client_close(std::ptr::null(), None, std::ptr::null_mut()) };
+        unsafe { autd3_client_read_fpga_state(std::ptr::null(), None, std::ptr::null_mut()) };
+    }
+
+    #[test]
+    fn closing_a_null_client_is_an_error() {
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_client_close(std::ptr::null(), std::ptr::null_mut(), 0)
+        });
     }
 }

@@ -37,7 +37,7 @@ async fn every_device_is_ready_after_open() {
     assert_eq!(status.devices(), [READY; 3]);
     assert!(status.all_ready());
     assert!(!status.any_lost());
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -52,5 +52,5 @@ async fn a_device_that_answers_again_stays_lost() {
     tokio::time::sleep(SETTLE).await;
 
     assert_eq!(states(&client)[1], DeviceState::Lost);
-    client.close().await.unwrap();
+    client.close().unwrap();
 }

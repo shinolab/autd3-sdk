@@ -72,6 +72,6 @@ async fn main() -> Result<()> {
         .await?;
     // ANCHOR_END: each_boxed
 
-    client.close().await?;
+    client.close()?;
     Ok(())
 }

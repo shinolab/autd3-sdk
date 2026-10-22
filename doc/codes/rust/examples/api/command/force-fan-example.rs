@@ -15,7 +15,7 @@ async fn main() -> anyhow::Result<()> {
 
     client.send(ForceFan { value: true }).await?;
 
-    client.close().await?;
+    client.close()?;
     // HIDE
     Ok(())
 }

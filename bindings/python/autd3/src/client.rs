@@ -2,7 +2,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::datagram::{Expand, Frame, command_of};
-use crate::future::{Completed, completed_into_py, future_into_py};
+use crate::future::{Completed, future_into_py};
 use crate::ops::SysTime;
 use autd3_python_capsule::extract::{extract_duration, geometry_to_py};
 use autd3_python_capsule::{capsule_of, client_pyerr, client_pyerr_gil, geometry_from_capsule};
@@ -471,7 +471,7 @@ impl ExecAt {
 pub struct Client {
     inner: Arc<autd3_rs::Client>,
     geometry: Geometry,
-    closed: Arc<AtomicBool>,
+    closed: AtomicBool,
 }
 
 fn frame_out_of_range() -> PyErr {
@@ -494,7 +494,7 @@ impl Client {
         Ok(Client {
             inner: Arc::new(client),
             geometry,
-            closed: Arc::new(AtomicBool::new(false)),
+            closed: AtomicBool::new(false),
         })
     }
 
@@ -606,30 +606,26 @@ impl Client {
         })
     }
 
-    fn close<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let client = Arc::clone(&self.inner);
-        let closed = Arc::clone(&self.closed);
-        future_into_py(py, async move {
-            let result = client.close().await;
-            closed.store(true, Ordering::Release);
-            result.map(|()| Completed).map_err(client_pyerr_gil)
-        })
+    fn close(&self, py: Python<'_>) -> PyResult<()> {
+        let result = py.detach(|| self.inner.close());
+        self.closed.store(true, Ordering::Release);
+        result.map_err(|e| client_pyerr(py, &e))
     }
 
-    fn __aenter__(slf: Bound<'_, Self>) -> PyResult<Bound<'_, PyAny>> {
-        completed_into_py(slf.py(), slf.clone().into_any())
+    fn __enter__(slf: Bound<'_, Self>) -> Bound<'_, Self> {
+        slf
     }
 
     #[pyo3(signature = (_exc_type = None, _exc_value = None, _traceback = None))]
-    fn __aexit__<'py>(
+    fn __exit__<'py>(
         &self,
         py: Python<'py>,
         _exc_type: Option<Bound<'py, PyAny>>,
         _exc_value: Option<Bound<'py, PyAny>>,
         _traceback: Option<Bound<'py, PyAny>>,
-    ) -> PyResult<Bound<'py, PyAny>> {
+    ) -> PyResult<()> {
         if self.closed.load(Ordering::Acquire) {
-            return completed_into_py(py, Completed);
+            return Ok(());
         }
         self.close(py)
     }

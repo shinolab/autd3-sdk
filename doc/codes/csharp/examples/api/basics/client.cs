@@ -50,7 +50,7 @@ internal static class Sample
         await client.SendAsync(new Nop());
         var resp = await await client.SendFrameAsync(frames[0]);
 
-        await client.CloseAsync();
+        client.Close();
         // ANCHOR_END: api
 
         _ = (numDevices, geometry, firmware, fpgaState, resp);
@@ -58,7 +58,7 @@ internal static class Sample
         var scopedLayout = new Geometry(new[] { new Autd3() });
 
         // ANCHOR: context_manager
-        await using (var scoped = Client.Open(scopedLayout, new TransportOption()))
+        using (var scoped = Client.Open(scopedLayout, new TransportOption()))
         {
             await scoped.SendAsync(new Nop());
         }

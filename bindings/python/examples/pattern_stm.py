@@ -10,7 +10,7 @@ import signal
 
 import autd3
 import autd3_pattern as pattern
-from autd3.commands import Clear, PatternStm, PatternStmOption, SetSilencer, Synchronize
+from autd3.commands import Clear, Pattern, PatternStm, PatternStmOption, SetSilencer, Synchronize
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import Hz, m, mm, s
 from autd3.value import Intensity, SamplingConfig
@@ -24,7 +24,7 @@ async def main() -> None:
 
     geometry = Geometry([Autd3([0.0, 0.0, 0.0])])
 
-    async with autd3.Client.open(
+    with autd3.Client.open(
         geometry,
         autd3.TransportOption(),
     ) as client:
@@ -55,6 +55,8 @@ async def main() -> None:
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, stop.set)
         await stop.wait()
+
+        await client.send(Pattern(geometry.phase_buffer(), Intensity.MIN))
 
 
 if __name__ == "__main__":

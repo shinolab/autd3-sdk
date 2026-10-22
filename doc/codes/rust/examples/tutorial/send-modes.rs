@@ -44,7 +44,8 @@ async fn main() -> Result<()> {
     stop_and_wait(&client, &geometry, &targets, wavelength).await?;
     streaming(&client, &geometry, &targets, wavelength).await?;
 
-    client.close().await?;
+    client.send(Pattern::new(&geometry.phase_buffer(), Intensity::MIN)).await?;
+    client.close()?;
     Ok(())
 }
 

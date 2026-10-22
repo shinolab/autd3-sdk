@@ -457,7 +457,7 @@ namespace AUTD3
         ~ResponseFuture() => Release();
     }
 
-    public sealed class Client : IDisposable, IAsyncDisposable
+    public sealed class Client : IDisposable
     {
         public static readonly int MaxInflight = Params.MaxInflight;
 
@@ -658,11 +658,16 @@ namespace AUTD3
             }
         }
 
-        public async Task CloseAsync()
+        public void Close()
         {
             try
             {
-                await AsyncOps.InvokeAsync((cb, ud) => NativeClient.autd3_client_close(Handle, cb, ud)).ConfigureAwait(false);
+                var err = new byte[NativeAbi.ErrorBufferLength];
+                var code = NativeClient.autd3_client_close(Handle, err, (UIntPtr)err.Length);
+                if (code != 0)
+                {
+                    throw Autd3Exception.FromNative(code, err);
+                }
             }
             finally
             {
@@ -680,27 +685,7 @@ namespace AUTD3
             {
                 if (!_closed)
                 {
-                    CloseAsync().GetAwaiter().GetResult();
-                }
-            }
-            finally
-            {
-                _handle.Dispose();
-                _geometry.Dispose();
-            }
-        }
-
-        public async ValueTask DisposeAsync()
-        {
-            if (_handle.IsClosed)
-            {
-                return;
-            }
-            try
-            {
-                if (!_closed)
-                {
-                    await CloseAsync().ConfigureAwait(false);
+                    Close();
                 }
             }
             finally

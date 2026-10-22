@@ -44,7 +44,7 @@ async fn frames_sent_without_waiting_arrive_whole_on_every_device() {
     }
     let telemetry = client.read_telemetry().await.unwrap();
     assert!(telemetry.iter().all(|t| t.fifo_drop == 0));
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -78,7 +78,7 @@ async fn send_frame_waits_while_the_window_is_full() {
     }
     emulator.resume_main_loop(0);
     client.send(Nop).await.unwrap();
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -106,7 +106,7 @@ async fn a_rejected_frame_sent_without_waiting_fails_only_its_own_response() {
         })
     ));
     assert!(outcomes[2..].iter().all(Result::is_ok));
-    client.close().await.unwrap();
+    client.close().unwrap();
 }
 
 #[tokio::test]
@@ -124,5 +124,5 @@ async fn a_command_that_cannot_be_encoded_sends_nothing() {
         Err(Error::InvalidPayload(PayloadError::ModulationDataEmpty))
     ));
     assert_eq!(client.bus_stats().frames(), before);
-    client.close().await.unwrap();
+    client.close().unwrap();
 }

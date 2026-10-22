@@ -21,7 +21,7 @@ async fn main() -> anyhow::Result<()> {
         ],
     }).await?;
 
-    client.close().await?;
+    client.close()?;
     // HIDE
     Ok(())
 }

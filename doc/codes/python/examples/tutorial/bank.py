@@ -10,7 +10,7 @@ from autd3.value import Intensity, PatternBank
 async def main() -> None:
     geometry = Geometry([Autd3()])
 
-    async with Client.open(
+    with Client.open(
         geometry,
         TransportOption(),
     ) as client:
@@ -43,6 +43,8 @@ async def main() -> None:
         )
         await client.send(Pattern(pat_b, Intensity.MAX, bank=PatternBank.B1))
         # ANCHOR_END: switch
+
+        await client.send(Pattern(geometry.phase_buffer(), Intensity.MIN))
 
 
 if __name__ == "__main__":

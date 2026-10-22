@@ -14,7 +14,7 @@ async fn main() -> anyhow::Result<()> {
 
     client.send(SetSilencer::default()).await?;
 
-    client.close().await?;
+    client.close()?;
     // HIDE
     Ok(())
 }

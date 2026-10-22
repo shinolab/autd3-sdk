@@ -39,6 +39,6 @@ async fn main() -> Result<()> {
         center.x, center.y, center.z
     );
 
-    client.close().await?;
+    client.close()?;
     Ok(())
 }

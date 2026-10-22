@@ -3,7 +3,7 @@ use std::f32::consts::PI;
 
 use anyhow::Result;
 
-use autd3_rs::commands::{Clear, FociStm, FociStmOption, Synchronize};
+use autd3_rs::commands::{Clear, FociStm, FociStmOption, Pattern, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry, Vector3, offset};
 use autd3_rs::units::{Hz, mm};
 use autd3_rs::value::{
@@ -53,6 +53,7 @@ async fn main() -> Result<()> {
     )).await?;
     // ANCHOR_END: finite
 
-    client.close().await?;
+    client.send(Pattern::new(&geometry.phase_buffer(), Intensity::MIN)).await?;
+    client.close()?;
     Ok(())
 }

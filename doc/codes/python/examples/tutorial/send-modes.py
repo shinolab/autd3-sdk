@@ -16,7 +16,7 @@ RADIUS_MM = 30.0
 async def main() -> None:
     geometry = Geometry([Autd3()])
 
-    async with Client.open(
+    with Client.open(
         geometry,
         TransportOption(),
     ) as client:
@@ -42,6 +42,8 @@ async def main() -> None:
 
         await stop_and_wait(client, geometry, targets, wavelength)
         await streaming(client, geometry, targets, wavelength)
+
+        await client.send(Pattern(geometry.phase_buffer(), Intensity.MIN))
 
 
 async def stop_and_wait(client, geometry, targets, wavelength) -> None:
