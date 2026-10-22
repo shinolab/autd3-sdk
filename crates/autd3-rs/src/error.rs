@@ -116,8 +116,14 @@ pub enum PayloadError {
     #[error("modulation data must not be empty")]
     ModulationDataEmpty,
 
+    #[error("modulation data of {len} samples exceeds the {max} that fit in one frame")]
+    ModulationWriteTooLong { len: usize, max: usize },
+
     #[error("foci must not be empty")]
     FociEmpty,
+
+    #[error("{len} control points exceed the {max} that fit in one frame")]
+    FociWriteTooLong { len: usize, max: usize },
 
     #[error("per-device data has {len} entr(ies) but device {device} was requested")]
     DeviceDataOutOfRange { device: usize, len: usize },

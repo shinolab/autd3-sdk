@@ -26,6 +26,11 @@ import { excerpt } from "@lib/excerpt";
 | `offset`   | `usize`          | Start offset for writing within the bank |
 | `data`     | `&[u8]`          | Sequence of AM waveform samples    |
 
+`WriteModulationBuffer` is sent as a single frame and writes only what fits in one frame.
+The limit is `WriteModulationBuffer::MAX_LEN` in Rust, `WriteModulationBuffer.MAX_LEN` in Python, and `WriteModulationBuffer.MaxLen` in C# (in samples); exceeding it is an error when sending.
+Split a longer waveform and send it with `offset` advanced by `MAX_LEN` (the high-level [Modulation](/autd3-sdk/en/api/command/modulation/) does this split automatically).
+Since it is a single-frame command, [each](/autd3-sdk/en/api/basics/client/#each) can assign a different waveform to each device.
+
 ## Example
 
 An example of playing an AM waveform via `WriteModulationBuffer` → `ConfigModulation` → `ActivateModulationBank` (equivalent to the high-level [Modulation](/autd3-sdk/en/api/command/modulation/)).

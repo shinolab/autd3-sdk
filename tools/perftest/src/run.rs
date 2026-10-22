@@ -7,8 +7,8 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use autd3_rs::commands::{
-    ActivatePatternBank, Clear, ConfigPattern, GpioOut, Nop, Pattern, SetGpioOut, Synchronize,
-    WriteModulationBuffer, WritePatternBuffer,
+    ActivatePatternBank, Clear, Command as AutdCommand, ConfigPattern, Expansion, GpioOut, Nop,
+    Pattern, SetGpioOut, Synchronize, WriteModulationBuffer, WritePatternBuffer,
 };
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::params::MOD_BUFFER_SAMPLES;
@@ -36,6 +36,21 @@ pub(crate) struct RunOutput {
     pub mem: Option<MemProfile>,
     pub telemetry_start: Vec<Telemetry>,
     pub telemetry_end: Vec<Telemetry>,
+}
+
+struct WholeModulationWrite<'a>(&'a [u8]);
+
+impl<'a> AutdCommand<'a> for WholeModulationWrite<'a> {
+    fn expand(self, expansion: &mut Expansion<'_, 'a>) -> Result<(), ClientError> {
+        for (i, data) in self.0.chunks(WriteModulationBuffer::MAX_LEN).enumerate() {
+            expansion.push(WriteModulationBuffer {
+                bank: ModulationBank::B1,
+                offset: i * WriteModulationBuffer::MAX_LEN,
+                data,
+            })?;
+        }
+        Ok(())
+    }
 }
 
 struct Sender {
@@ -95,14 +110,7 @@ impl Sender {
             }
             self.tick = self.tick.wrapping_add(1);
             self.frames
-                .encode_into(
-                    client.geometry(),
-                    WriteModulationBuffer {
-                        bank: ModulationBank::B1,
-                        offset: 0,
-                        data: &self.modulation,
-                    },
-                )
+                .encode_into(client.geometry(), WholeModulationWrite(&self.modulation))
                 .context("encoding modulation write")?;
             return Ok(());
         }

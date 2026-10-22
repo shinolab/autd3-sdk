@@ -1,6 +1,6 @@
 from autd3.commands import ActivateModulationBank, ConfigModulation, Modulation, WriteModulationBuffer
 from autd3.value import LoopBehavior, ModulationBank, SamplingConfig, TransitionMode
-from autd3_modulation import modulation_buffer
+from autd3_modulation import ModulationBuffer, modulation_buffer
 
 bank = ModulationBank.B0
 config = SamplingConfig.FREQ_4K
@@ -24,11 +24,13 @@ Modulation(
 # ANCHOR_END: api
 
 # ANCHOR: equivalent
-WriteModulationBuffer(
-    bank=bank,
-    offset=0,
-    data=data,
-)
+samples = data.to_numpy()
+for offset in range(0, len(samples), WriteModulationBuffer.MAX_LEN):
+    WriteModulationBuffer(
+        bank=bank,
+        offset=offset,
+        data=ModulationBuffer.from_array(samples[offset : offset + WriteModulationBuffer.MAX_LEN]),
+    )
 ConfigModulation(
     bank=bank,
     config=config,

@@ -63,6 +63,7 @@ Python にはこの短い書き方が無いので, `ControlPoints([ControlPoint(
 ## 等価な低レベルコマンド
 
 `FociStm` は [WriteFociBuffer](/autd3-sdk/api/command/lowlevel/write-foci-buffer/) + [ConfigFociStm](/autd3-sdk/api/command/lowlevel/config-foci-stm/) + [ActivatePatternBank](/autd3-sdk/api/command/lowlevel/activate-pattern-bank/) の 3 つと等価であり, この順に展開して送られる.
+`WriteFociBuffer` は 1 フレーム分しか書けないので, 1 フレームに収まらない焦点列は `start_index` をずらした複数の `WriteFociBuffer` に分割される.
 以下は `FociStm::new(config, &points, option)` と等価な組み合わせである.
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />

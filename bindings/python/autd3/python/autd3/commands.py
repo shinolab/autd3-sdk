@@ -64,6 +64,8 @@ Operation: TypeAlias = Union[
     SetPulseWidthTable,
     SetSilencer,
     Synchronize,
+    WriteFociBuffer,
+    WriteModulationBuffer,
     WritePatternBuffer,
     WritePatternPhase,
 ]
@@ -73,8 +75,6 @@ Command: TypeAlias = Union[
     FociStm,
     Modulation,
     PatternStm,
-    WriteFociBuffer,
-    WriteModulationBuffer,
     Each,
     Sequence["Command"],
 ]

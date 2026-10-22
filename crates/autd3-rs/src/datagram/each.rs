@@ -30,16 +30,17 @@ where
 #[cfg(test)]
 mod tests {
     use crate::commands::operation::{
-        ConfigModulation, Distribution, Operation, WritePatternBuffer,
+        ConfigModulation, Distribution, Operation, WriteFociBuffer, WriteModulationBuffer,
+        WritePatternBuffer,
     };
     use crate::commands::{Pattern, SetSilencer};
     use crate::datagram::{Frames, each};
     use crate::error::{Error, PayloadError};
-    use crate::geometry::Autd3;
+    use crate::geometry::{Autd3, Point3};
     use crate::protocol::{Cmd, PAYLOAD_BYTES};
     use crate::test_utils::{FailAt, Marker, build, cmd_at, payload, test_geometry};
     use crate::value::{
-        Intensity, LoopBehavior, ModulationBank, PatternBank, Phase, SamplingConfig,
+        ControlPoints, Intensity, LoopBehavior, ModulationBank, PatternBank, Phase, SamplingConfig,
     };
 
     #[test]
@@ -110,6 +111,39 @@ mod tests {
         assert_eq!(frames.len(), 1);
         assert_eq!(cmd_at(&frames, 0, 0), Cmd::WritePatternFused);
         assert_eq!(cmd_at(&frames, 0, 1), Cmd::SetSilencer);
+    }
+
+    #[test]
+    fn each_takes_the_buffer_writes_as_single_frame_operations() {
+        let low = [0x11u8; 4];
+        let high = [0x22u8; 4];
+        let points = [ControlPoints::from(Point3::new(0.0, 0.0, 150.0))];
+        let frames = build(
+            2,
+            (
+                each(|device| {
+                    Some(WriteModulationBuffer {
+                        bank: ModulationBank::B0,
+                        offset: 0,
+                        data: if device.idx() == 0 { &low } else { &high },
+                    })
+                }),
+                each(|device| {
+                    (device.idx() == 1).then_some(WriteFociBuffer {
+                        bank: PatternBank::B0,
+                        start_index: 0,
+                        points: &points,
+                    })
+                }),
+            ),
+        )
+        .unwrap();
+
+        assert_eq!(frames.len(), 2);
+        assert_eq!(&payload(&frames, 0, 0)[6..], &low);
+        assert_eq!(&payload(&frames, 0, 1)[6..], &high);
+        assert_eq!(cmd_at(&frames, 1, 0), Cmd::Nop);
+        assert_eq!(cmd_at(&frames, 1, 1), Cmd::WriteFociBuffer);
     }
 
     #[test]

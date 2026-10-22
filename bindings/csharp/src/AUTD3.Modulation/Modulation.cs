@@ -110,6 +110,9 @@ namespace AUTD3
         internal static extern IntPtr autd3_op_write_modulation_buffer(byte bank, uint offset, ModulationBufferHandle modulationBuffer);
 
         [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern UIntPtr autd3_op_write_modulation_buffer_max_len();
+
+        [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_config_modulation(byte bank, ushort samplingDivide, uint size, ushort rep);
 
         [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]

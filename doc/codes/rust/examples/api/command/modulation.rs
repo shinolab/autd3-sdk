@@ -26,11 +26,13 @@ fn main() {
     // ANCHOR_END: api
 
     // ANCHOR: equivalent
-    WriteModulationBuffer {
-        bank,
-        offset: 0,
-        data: &data,
-    };
+    for (i, chunk) in data.chunks(WriteModulationBuffer::MAX_LEN).enumerate() {
+        WriteModulationBuffer {
+            bank,
+            offset: i * WriteModulationBuffer::MAX_LEN,
+            data: chunk,
+        };
+    }
     ConfigModulation {
         bank,
         config,

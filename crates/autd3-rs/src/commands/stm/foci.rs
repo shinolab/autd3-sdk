@@ -1,8 +1,8 @@
 use crate::Velocity;
-use crate::commands::operation::{ActivatePatternBank, ConfigFociStm};
-use crate::commands::{Command, WriteFociBuffer};
+use crate::commands::Command;
+use crate::commands::operation::{ActivatePatternBank, ConfigFociStm, WriteFociBuffer};
 use crate::datagram::Expansion;
-use crate::error::Error;
+use crate::error::{Error, PayloadError};
 use crate::value::{ControlPoints, LoopBehavior, PatternBank, SamplingConfig, TransitionMode};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -52,12 +52,21 @@ impl<'a, const N: usize> Command<'a> for FociStm<'a, N> {
         let num_foci = u8::try_from(N).unwrap_or(u8::MAX);
 
         let bank = self.option.bank;
-        expansion
-            .push(WriteFociBuffer {
+        if self.points.is_empty() {
+            return Err(PayloadError::FociEmpty.into());
+        }
+        for (i, points) in self
+            .points
+            .chunks(WriteFociBuffer::<N>::MAX_LEN)
+            .enumerate()
+        {
+            expansion.push(WriteFociBuffer {
                 bank,
-                start_index: 0,
-                points: self.points,
-            })?
+                start_index: i * WriteFociBuffer::<N>::MAX_LEN,
+                points,
+            })?;
+        }
+        expansion
             .push(ConfigFociStm {
                 bank,
                 config: self.config,
@@ -79,7 +88,7 @@ mod tests {
     use super::*;
     use crate::geometry::Point3;
     use crate::params::FOCUS_WORDS;
-    use crate::protocol::{Cmd, PAYLOAD_BYTES};
+    use crate::protocol::Cmd;
     use crate::test_utils::{build, cmds, payload};
     use crate::value::{Intensity, Phase};
     use core::num::NonZeroU16;
@@ -184,8 +193,7 @@ mod tests {
 
     #[test]
     fn foci_stm_auto_splits_write_frames() {
-        let max_foci_per_frame =
-            (PAYLOAD_BYTES - size_of::<WriteFociPayload>()) / (FOCUS_WORDS * 2);
+        let max_foci_per_frame = WriteFociBuffer::<1>::MAX_LEN;
         let points: Vec<ControlPoints<1>> = (0..max_foci_per_frame + 5)
             .map(|i| ControlPoints::from(Point3::new(0.0, 0.0, i as f32 * 0.1)))
             .collect();
@@ -204,6 +212,48 @@ mod tests {
         );
         let size = u32::try_from(max_foci_per_frame + 5).unwrap();
         assert_eq!(&payload(&datagrams, 2, 0)[4..8], &size.to_le_bytes());
+    }
+
+    #[test]
+    fn foci_stm_splits_on_control_point_boundaries() {
+        let max = WriteFociBuffer::<7>::MAX_LEN;
+        let points =
+            vec![
+                ControlPoints::new([ControlPoint::from(Point3::origin()); 7], Intensity::MAX);
+                max + 1
+            ];
+        let frames = build(
+            1,
+            FociStm::new(SamplingConfig::FREQ_4K, &points, FociStmOption::default()),
+        )
+        .unwrap();
+
+        let first = payload(&frames, 0, 0);
+        assert_eq!(
+            first.len(),
+            size_of::<WriteFociPayload>() + max * 7 * FOCUS_WORDS * 2
+        );
+        let second = payload(&frames, 1, 0);
+        assert_eq!(
+            &second[2..6],
+            &u32::try_from(max * 7 * FOCUS_WORDS).unwrap().to_le_bytes()
+        );
+        assert_eq!(
+            second.len(),
+            size_of::<WriteFociPayload>() + 7 * FOCUS_WORDS * 2
+        );
+    }
+
+    #[test]
+    fn foci_stm_rejects_empty_points() {
+        let points: [ControlPoints<1>; 0] = [];
+        assert!(matches!(
+            build(
+                1,
+                FociStm::new(SamplingConfig::FREQ_4K, &points, FociStmOption::default())
+            ),
+            Err(Error::InvalidPayload(PayloadError::FociEmpty))
+        ));
     }
 
     #[test]
