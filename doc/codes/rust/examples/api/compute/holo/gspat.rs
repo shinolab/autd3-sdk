@@ -29,7 +29,6 @@ fn main() -> Result<()> {
     let constraint = IntensityConstraint::Clamp(Intensity::MIN, Intensity::MAX);
     let directivity = Directivity::Sphere;
     let mask = TransducerMask::AllEnabled;
-    let parallel = true;
     let option =
         // ANCHOR: option
         GspatOption {
@@ -37,8 +36,6 @@ fn main() -> Result<()> {
             constraint,
             directivity,
             mask,
-            parallel,
-            ..Default::default()
         }
         // ANCHOR_END: option
         ;

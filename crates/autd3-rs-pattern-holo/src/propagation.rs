@@ -117,7 +117,6 @@ pub(crate) fn quantize<B, P, I>(
     constraint: IntensityConstraint,
     mask: TransducerMask<'_>,
     enabled: usize,
-    parallel: bool,
     phases: &mut [P],
     intensities: &mut [I],
 ) where
@@ -125,7 +124,7 @@ pub(crate) fn quantize<B, P, I>(
     P: AsMut<[Vec<Phase>]>,
     I: AsMut<[Vec<Intensity>]>,
 {
-    let (p, i) = backend.quantize(q, constraint, parallel);
+    let (p, i) = backend.quantize(q, constraint);
     debug_assert_eq!(
         p.len(),
         enabled * phases.len(),

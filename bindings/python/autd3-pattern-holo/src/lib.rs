@@ -312,19 +312,16 @@ impl NaiveOption {
         constraint = IntensityConstraint(CoreNaiveOption::default().constraint),
         directivity = Directivity(CoreNaiveOption::default().directivity),
         mask = all_enabled(),
-        parallel = CoreNaiveOption::default().parallel,
     ))]
     fn new(
         constraint: IntensityConstraint,
         directivity: Directivity,
         #[pyo3(from_py_with = extract_mask)] mask: Mask,
-        parallel: bool,
     ) -> PyResult<Self> {
         Ok(Self {
             inner: CoreNaiveOption {
                 constraint: constraint.0,
                 directivity: directivity.0,
-                parallel,
                 ..CoreNaiveOption::default()
             },
             mask,
@@ -346,18 +343,12 @@ impl NaiveOption {
         mask_to_py(py, &self.mask)
     }
 
-    #[getter]
-    fn parallel(&self) -> bool {
-        self.inner.parallel
-    }
-
     fn __repr__(&self) -> String {
         format!(
-            "NaiveOption(constraint={:?}, directivity={:?}, mask={}, parallel={})",
+            "NaiveOption(constraint={:?}, directivity={:?}, mask={})",
             self.inner.constraint,
             self.inner.directivity,
-            mask_repr(&self.mask),
-            if self.inner.parallel { "True" } else { "False" }
+            mask_repr(&self.mask)
         )
     }
 }
@@ -377,14 +368,12 @@ impl GsOption {
         constraint = IntensityConstraint(CoreGsOption::default().constraint),
         directivity = Directivity(CoreGsOption::default().directivity),
         mask = all_enabled(),
-        parallel = CoreGsOption::default().parallel,
     ))]
     fn new(
         repeat: usize,
         constraint: IntensityConstraint,
         directivity: Directivity,
         #[pyo3(from_py_with = extract_mask)] mask: Mask,
-        parallel: bool,
     ) -> PyResult<Self> {
         Ok(Self {
             inner: CoreGsOption {
@@ -392,7 +381,6 @@ impl GsOption {
                     .ok_or_else(|| PyValueError::new_err("repeat must be >= 1"))?,
                 constraint: constraint.0,
                 directivity: directivity.0,
-                parallel,
                 ..CoreGsOption::default()
             },
             mask,
@@ -419,19 +407,13 @@ impl GsOption {
         mask_to_py(py, &self.mask)
     }
 
-    #[getter]
-    fn parallel(&self) -> bool {
-        self.inner.parallel
-    }
-
     fn __repr__(&self) -> String {
         format!(
-            "GsOption(repeat={}, constraint={:?}, directivity={:?}, mask={}, parallel={})",
+            "GsOption(repeat={}, constraint={:?}, directivity={:?}, mask={})",
             self.inner.repeat,
             self.inner.constraint,
             self.inner.directivity,
-            mask_repr(&self.mask),
-            if self.inner.parallel { "True" } else { "False" }
+            mask_repr(&self.mask)
         )
     }
 }
@@ -451,14 +433,12 @@ impl GspatOption {
         constraint = IntensityConstraint(CoreGspatOption::default().constraint),
         directivity = Directivity(CoreGspatOption::default().directivity),
         mask = all_enabled(),
-        parallel = CoreGspatOption::default().parallel,
     ))]
     fn new(
         repeat: usize,
         constraint: IntensityConstraint,
         directivity: Directivity,
         #[pyo3(from_py_with = extract_mask)] mask: Mask,
-        parallel: bool,
     ) -> PyResult<Self> {
         Ok(Self {
             inner: CoreGspatOption {
@@ -466,7 +446,6 @@ impl GspatOption {
                     .ok_or_else(|| PyValueError::new_err("repeat must be >= 1"))?,
                 constraint: constraint.0,
                 directivity: directivity.0,
-                parallel,
                 ..CoreGspatOption::default()
             },
             mask,
@@ -493,19 +472,13 @@ impl GspatOption {
         mask_to_py(py, &self.mask)
     }
 
-    #[getter]
-    fn parallel(&self) -> bool {
-        self.inner.parallel
-    }
-
     fn __repr__(&self) -> String {
         format!(
-            "GspatOption(repeat={}, constraint={:?}, directivity={:?}, mask={}, parallel={})",
+            "GspatOption(repeat={}, constraint={:?}, directivity={:?}, mask={})",
             self.inner.repeat,
             self.inner.constraint,
             self.inner.directivity,
-            mask_repr(&self.mask),
-            if self.inner.parallel { "True" } else { "False" }
+            mask_repr(&self.mask)
         )
     }
 }

@@ -15,7 +15,6 @@ pub(crate) struct BatchSetup<'a> {
     pub constraint: IntensityConstraint,
     pub directivity: Directivity,
     pub mask: TransducerMask<'a>,
-    pub parallel: bool,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -68,7 +67,6 @@ where
             setup.constraint,
             mask,
             enabled,
-            setup.parallel,
             phases,
             intensities,
         );
@@ -85,7 +83,7 @@ mod tests {
     use crate::amplitude_target::AmplitudeTarget;
     use crate::backend::NalgebraBackend;
     use crate::error::HoloError;
-    use crate::linear_synthesis::{GsOption, gs, gs_batch};
+    use crate::linear_synthesis::{GsOption, gs_batch};
     use crate::test_utils::{ALGORITHMS, Batch, Slot, geometry, slot, wavelength};
 
     fn problem(g: &Geometry, seed: usize, nf: usize) -> Vec<AmplitudeTarget> {
@@ -134,86 +132,6 @@ mod tests {
                     assert_eq!(one, want, "{name} {nf} foci");
                 }
             }
-        }
-    }
-
-    #[test]
-    fn parallel_flag_does_not_change_the_result() {
-        let g = geometry(2);
-        let masked: Vec<Vec<bool>> = (0..g.num_devices())
-            .map(|d| {
-                (0..Autd3::NUM_TRANSDUCERS)
-                    .map(|t| (d + t) % 3 != 0)
-                    .collect()
-            })
-            .collect();
-        let owned: Vec<Vec<AmplitudeTarget>> = (0..3).map(|k| problem(&g, k, 4)).collect();
-        let foci: Vec<AmplitudeTarget> = owned.concat();
-
-        for mask in [TransducerMask::AllEnabled, TransducerMask::Masked(&masked)] {
-            let mut on = slot(&g);
-            let mut off = slot(&g);
-            gs(
-                &NalgebraBackend,
-                &g,
-                &owned[0],
-                wavelength(),
-                &GsOption {
-                    mask,
-                    parallel: true,
-                    ..Default::default()
-                },
-                &mut on.0,
-                &mut on.1,
-            )
-            .unwrap();
-            gs(
-                &NalgebraBackend,
-                &g,
-                &owned[0],
-                wavelength(),
-                &GsOption {
-                    mask,
-                    parallel: false,
-                    ..Default::default()
-                },
-                &mut off.0,
-                &mut off.1,
-            )
-            .unwrap();
-            assert_eq!(on, off, "single problem");
-
-            let mut on = batch(&slot(&g), owned.len());
-            let mut off = batch(&slot(&g), owned.len());
-            gs_batch(
-                &NalgebraBackend,
-                &g,
-                &foci,
-                wavelength(),
-                &GsOption {
-                    mask,
-                    parallel: true,
-                    ..Default::default()
-                },
-                &mut on.0,
-                &mut on.1,
-            )
-            .unwrap();
-            gs_batch(
-                &NalgebraBackend,
-                &g,
-                &foci,
-                wavelength(),
-                &GsOption {
-                    mask,
-                    parallel: false,
-                    ..Default::default()
-                },
-                &mut off.0,
-                &mut off.1,
-            )
-            .unwrap();
-            assert_eq!(on, off, "batch");
         }
     }
 

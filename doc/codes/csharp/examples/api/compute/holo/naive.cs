@@ -22,7 +22,6 @@ internal static class Sample
         var constraint = IntensityConstraint.Clamp(Intensity.Min, Intensity.Max);
         var directivity = Directivity.Sphere;
         var mask = TransducerMask.AllEnabled;
-        var parallel = true;
         var option =
             // ANCHOR: option
             new NaiveOption
@@ -30,7 +29,6 @@ internal static class Sample
                 Constraint = constraint,
                 Directivity = directivity,
                 Mask = mask,
-                Parallel = parallel,
             }
             // ANCHOR_END: option
             ;

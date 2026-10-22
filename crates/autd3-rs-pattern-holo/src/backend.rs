@@ -8,9 +8,6 @@ use crate::constraint::IntensityConstraint;
 use crate::directivity::Directivity;
 use crate::propagation::{max_coefficient, phase_and_intensity, propagate};
 
-#[cfg(feature = "parallel")]
-use rayon::prelude::*;
-
 pub trait LinAlgBackend {
     type Matrix;
     type Vector;
@@ -58,7 +55,6 @@ pub trait LinAlgBackend {
         &self,
         v: &Self::Vector,
         constraint: IntensityConstraint,
-        parallel: bool,
     ) -> (Vec<Phase>, Vec<Intensity>);
 
     fn max_batch(&self, _bytes_per_problem: usize) -> usize {
@@ -142,19 +138,7 @@ impl LinAlgBackend for NalgebraBackend {
         &self,
         v: &Self::Vector,
         constraint: IntensityConstraint,
-        parallel: bool,
     ) -> (Vec<Phase>, Vec<Intensity>) {
-        if let [q] = v.as_slice() {
-            let q = q.as_slice();
-            return quantize_slice(q, constraint, max_coefficient(q), parallel);
-        }
-        #[cfg(feature = "parallel")]
-        if parallel {
-            return v
-                .par_iter()
-                .flat_map_iter(|q| quantized(q.as_slice(), constraint))
-                .unzip();
-        }
         v.iter()
             .flat_map(|q| quantized(q.as_slice(), constraint))
             .unzip()
@@ -214,26 +198,6 @@ fn quantized(
     let max = max_coefficient(q);
     q.iter()
         .map(move |&v| phase_and_intensity(v, constraint, max))
-}
-
-fn quantize_slice(
-    q: &[Complex<f32>],
-    constraint: IntensityConstraint,
-    max: f32,
-    parallel: bool,
-) -> (Vec<Phase>, Vec<Intensity>) {
-    #[cfg(not(feature = "parallel"))]
-    let _ = parallel;
-    #[cfg(feature = "parallel")]
-    if parallel {
-        return q
-            .par_iter()
-            .map(|&v| phase_and_intensity(v, constraint, max))
-            .collect();
-    }
-    q.iter()
-        .map(|&v| phase_and_intensity(v, constraint, max))
-        .collect()
 }
 
 fn broadcast<T>(v: &[T], batch: usize) -> impl Iterator<Item = &T> {

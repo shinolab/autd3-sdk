@@ -102,7 +102,6 @@ namespace AUTD3.Tests
             var gs = new GsOption { Repeat = 5 };
             Assert.Equal(5u, gs.Repeat);
             Assert.Equal(new GsOption().Constraint, gs.Constraint);
-            Assert.True(gs.Parallel);
         }
 
         [Fact]
@@ -150,21 +149,18 @@ namespace AUTD3.Tests
             Assert.Equal(clamp, naive.Constraint);
             Assert.Equal(Directivity.Sphere, naive.Directivity);
             Assert.Equal(TransducerMask.AllEnabled, naive.Mask);
-            Assert.True(naive.Parallel);
 
             var gs = new GsOption();
             Assert.Equal(100u, gs.Repeat);
             Assert.Equal(clamp, gs.Constraint);
             Assert.Equal(Directivity.Sphere, gs.Directivity);
             Assert.Equal(TransducerMask.AllEnabled, gs.Mask);
-            Assert.True(gs.Parallel);
 
             var gspat = new GspatOption();
             Assert.Equal(100u, gspat.Repeat);
             Assert.Equal(clamp, gspat.Constraint);
             Assert.Equal(Directivity.Sphere, gspat.Directivity);
             Assert.Equal(TransducerMask.AllEnabled, gspat.Mask);
-            Assert.True(gspat.Parallel);
 
             var greedy = new GreedyOption();
             Assert.Equal(16, greedy.PhaseQuantizationLevels);

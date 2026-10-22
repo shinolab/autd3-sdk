@@ -19,7 +19,6 @@ pub struct GsOption<'a> {
     pub constraint: IntensityConstraint,
     pub directivity: Directivity,
     pub mask: TransducerMask<'a>,
-    pub parallel: bool,
 }
 
 impl Default for GsOption<'_> {
@@ -29,7 +28,6 @@ impl Default for GsOption<'_> {
             constraint: IntensityConstraint::Clamp(Intensity::MIN, Intensity::MAX),
             directivity: Directivity::Sphere,
             mask: TransducerMask::AllEnabled,
-            parallel: true,
         }
     }
 }
@@ -92,7 +90,6 @@ where
         constraint: option.constraint,
         directivity: option.directivity,
         mask: option.mask,
-        parallel: option.parallel,
     };
     solve_batched(
         backend,
