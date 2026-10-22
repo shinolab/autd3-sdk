@@ -77,7 +77,7 @@ impl Enumerator<'_> {
     ) -> Result<u16, UdpError> {
         self.last_msg_id = self.last_msg_id.wrapping_add(1);
         self.channel
-            .send(dst, kind, self.last_msg_id, [body, &[]], None, || {})?;
+            .send(dst, kind, self.last_msg_id, [body, &[]], None)?;
         Ok(self.last_msg_id)
     }
 
