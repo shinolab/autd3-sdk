@@ -48,7 +48,7 @@ mod tests {
 
     use autd3_cpu_wire::cpu_params;
 
-    use crate::cmd::cpu_config::{CpuConfig, default_config};
+    use crate::cmd::cpu_config::CpuConfig;
     use crate::fpga_params::{CtlFlags, NUM_TRANSDUCERS};
     use crate::proto::{Cmd, Error};
     use crate::test_utils::builders::{force_fan, output_mask, set_cpu_config};
@@ -63,7 +63,7 @@ mod tests {
             &mut h.port,
             CpuConfig {
                 failsafe_timeout: Some(FAILSAFE_TIMEOUT),
-                ..default_config()
+                ..CpuConfig::DEFAULT
             },
         );
         h
@@ -616,14 +616,14 @@ mod tests {
         let mut h = Harness::new();
         h.deliver(&set_cpu_config(&CpuConfig {
             cpu_watchdog_timeout: Some(Duration::from_millis(250)),
-            ..default_config()
+            ..CpuConfig::DEFAULT
         }));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.port.watchdog_timeout, Some(250));
 
         h.deliver(&set_cpu_config(&CpuConfig {
             cpu_watchdog_timeout: None,
-            ..default_config()
+            ..CpuConfig::DEFAULT
         }));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.port.watchdog_timeout, Some(0));
@@ -638,7 +638,7 @@ mod tests {
         let mut h = Harness::new();
         h.deliver(&set_cpu_config(&CpuConfig {
             cpu_watchdog_timeout: None,
-            ..default_config()
+            ..CpuConfig::DEFAULT
         }));
         assert_eq!(h.port.watchdog_timeout, Some(0));
 

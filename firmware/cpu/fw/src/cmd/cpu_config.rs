@@ -1,7 +1,5 @@
-pub(crate) use autd3_cpu_wire::config::{CpuConfig, FpgaBusWait};
+pub(crate) use autd3_cpu_wire::config::CpuConfig;
 pub(crate) use autd3_cpu_wire::payload::SetCpuConfigPayload;
-
-use autd3_cpu_wire::cpu_params;
 
 use core::sync::atomic::Ordering;
 
@@ -9,27 +7,6 @@ use crate::app::Cpu;
 use crate::fpga;
 use crate::port::Port;
 use crate::proto::Error;
-use crate::ptp;
-
-#[cfg(not(test))]
-const FPGA_FLASH_MAX_POLLS: core::num::NonZeroU32 = cpu_params::FPGA_FLASH_MAX_POLLS;
-#[cfg(test)]
-const FPGA_FLASH_MAX_POLLS: core::num::NonZeroU32 = core::num::NonZeroU32::new(10_000).unwrap();
-
-pub(crate) const fn default_config() -> CpuConfig {
-    CpuConfig {
-        sys_time_transition_margin: cpu_params::SYS_TIME_TRANSITION_MARGIN,
-        fpga_wait_update_max_polls: cpu_params::FPGA_WAIT_UPDATE_MAX_POLLS,
-        fpga_flash_max_polls: FPGA_FLASH_MAX_POLLS,
-        sync_guard: cpu_params::SYNC_GUARD,
-        update_activate_delay: cpu_params::UPDATE_ACTIVATE_DELAY,
-        failsafe_timeout: None,
-        ptp_unlock_failsafe_timeout: None,
-        fpga_bus_wait: FpgaBusWait::Cycles3,
-        cpu_watchdog_timeout: Some(cpu_params::CPU_WATCHDOG_TIMEOUT),
-        ptp: ptp::default_config(),
-    }
-}
 
 impl Cpu {
     pub(crate) fn config(&self) -> CpuConfig {
@@ -49,7 +26,7 @@ impl Cpu {
 
     pub(crate) fn apply_requested_config_reset<P: Port>(&self, port: &mut P) {
         if self.config_reset_requested.swap(false, Ordering::AcqRel) {
-            self.apply_config(port, default_config());
+            self.apply_config(port, CpuConfig::DEFAULT);
         }
     }
 
@@ -69,13 +46,12 @@ mod tests {
     use core::num::{NonZeroU16, NonZeroU32};
     use core::time::Duration;
 
-    use autd3_cpu_wire::config::{MaxFreqPpb, PathDelayFilterShift, PtpConfig};
+    use autd3_cpu_wire::config::{FpgaBusWait, MaxFreqPpb, PathDelayFilterShift, PtpConfig};
     use zerocopy::IntoBytes;
     use zerocopy::little_endian::{U16, U32};
 
-    use super::{CpuConfig, FpgaBusWait, SetCpuConfigPayload, default_config};
+    use super::{CpuConfig, SetCpuConfigPayload};
 
-    const DEFAULT: CpuConfig = default_config();
     use crate::fpga::TransitionMode;
     use crate::fpga_params::{ADDR_CTL_FLAG, ADDR_MOD_REQ_RD_BANK, CtlFlags};
     use crate::proto::{Cmd, Error};
@@ -84,14 +60,7 @@ mod tests {
 
     #[test]
     fn the_boot_config_is_the_shared_default() {
-        assert_eq!(
-            default_config(),
-            CpuConfig {
-                fpga_flash_max_polls: super::FPGA_FLASH_MAX_POLLS,
-                ..CpuConfig::default()
-            }
-        );
-        assert_eq!(Harness::new().cpu.config(), default_config());
+        assert_eq!(Harness::new().cpu.config(), CpuConfig::DEFAULT);
     }
 
     #[test]
@@ -102,7 +71,7 @@ mod tests {
 
         h.deliver(&set_cpu_config(&CpuConfig {
             sys_time_transition_margin: Duration::from_millis(1),
-            ..DEFAULT
+            ..CpuConfig::DEFAULT
         }));
         assert_eq!(h.status(), Error::None);
 
@@ -130,7 +99,7 @@ mod tests {
         h.port.sys_time = Some(1_000_000_000);
         h.deliver(&set_cpu_config(&CpuConfig {
             sys_time_transition_margin: Duration::ZERO,
-            ..DEFAULT
+            ..CpuConfig::DEFAULT
         }));
         assert_eq!(h.status(), Error::None);
 
@@ -150,7 +119,7 @@ mod tests {
     fn invalid_values_are_rejected_without_changing_anything() {
         let valid = SetCpuConfigPayload {
             sys_time_transition_margin_ns: U32::new(1),
-            ..SetCpuConfigPayload::encode(&DEFAULT).unwrap()
+            ..SetCpuConfigPayload::encode(&CpuConfig::DEFAULT).unwrap()
         };
         let rejected = [
             SetCpuConfigPayload {
@@ -170,7 +139,7 @@ mod tests {
         for payload in &rejected {
             h.deliver(&Frame::from_payload(Cmd::SetCpuConfig, payload));
             assert_eq!(h.status(), Error::InvalidPayload);
-            assert_eq!(h.cpu.config(), DEFAULT);
+            assert_eq!(h.cpu.config(), CpuConfig::DEFAULT);
             assert_eq!(h.port.ptp_config, None);
         }
 
@@ -180,7 +149,7 @@ mod tests {
             &bytes[..bytes.len() - 1],
         ));
         assert_eq!(h.status(), Error::InvalidPayload);
-        assert_eq!(h.cpu.config(), DEFAULT);
+        assert_eq!(h.cpu.config(), CpuConfig::DEFAULT);
     }
 
     #[test]
@@ -188,7 +157,7 @@ mod tests {
         let mut h = Harness::new();
         h.deliver(&set_cpu_config(&CpuConfig {
             fpga_wait_update_max_polls: NonZeroU32::new(5).unwrap(),
-            ..DEFAULT
+            ..CpuConfig::DEFAULT
         }));
         assert_eq!(h.status(), Error::None);
 
@@ -212,7 +181,7 @@ mod tests {
 
         h.deliver(&set_cpu_config(&CpuConfig {
             sync_guard: Duration::ZERO,
-            ..DEFAULT
+            ..CpuConfig::DEFAULT
         }));
         h.deliver(&Frame::new(Cmd::Synchronize));
         assert_eq!(h.status(), Error::None);
@@ -240,7 +209,10 @@ mod tests {
             pause_retry: Duration::from_millis(4),
         };
         let mut h = Harness::new();
-        h.deliver(&set_cpu_config(&CpuConfig { ptp, ..DEFAULT }));
+        h.deliver(&set_cpu_config(&CpuConfig {
+            ptp,
+            ..CpuConfig::DEFAULT
+        }));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.port.ptp_config, Some(ptp));
     }
@@ -250,7 +222,7 @@ mod tests {
         let mut h = Harness::new();
         h.deliver(&set_cpu_config(&CpuConfig {
             fpga_bus_wait: FpgaBusWait::Cycles2,
-            ..DEFAULT
+            ..CpuConfig::DEFAULT
         }));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.port.fpga_bus_wait, Some(FpgaBusWait::Cycles2));
@@ -270,14 +242,14 @@ mod tests {
                 holdover: Duration::from_millis(500),
                 ..PtpConfig::default()
             },
-            ..DEFAULT
+            ..CpuConfig::DEFAULT
         }));
         assert_eq!(h.status(), Error::None);
-        assert_ne!(h.cpu.config(), DEFAULT);
+        assert_ne!(h.cpu.config(), CpuConfig::DEFAULT);
 
         h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.status(), Error::None);
-        assert_eq!(h.cpu.config(), DEFAULT);
+        assert_eq!(h.cpu.config(), CpuConfig::DEFAULT);
         assert_eq!(h.port.ptp_config, Some(PtpConfig::default()));
     }
 
@@ -291,14 +263,14 @@ mod tests {
                 holdover: Duration::from_millis(500),
                 ..PtpConfig::default()
             },
-            ..DEFAULT
+            ..CpuConfig::DEFAULT
         }));
-        assert_ne!(h.cpu.config(), DEFAULT);
+        assert_ne!(h.cpu.config(), CpuConfig::DEFAULT);
 
         h.cpu.request_config_reset();
-        assert_ne!(h.cpu.config(), DEFAULT);
+        assert_ne!(h.cpu.config(), CpuConfig::DEFAULT);
         h.cpu.tick_1ms(&mut h.port);
-        assert_eq!(h.cpu.config(), DEFAULT);
+        assert_eq!(h.cpu.config(), CpuConfig::DEFAULT);
         assert_eq!(h.port.ptp_config, Some(PtpConfig::default()));
         assert_eq!(h.port.fpga_bus_wait, Some(FpgaBusWait::Cycles3));
     }
@@ -311,7 +283,7 @@ mod tests {
 
         let config = CpuConfig {
             failsafe_timeout: Some(Duration::from_millis(500)),
-            ..DEFAULT
+            ..CpuConfig::DEFAULT
         };
         h.deliver(&set_cpu_config(&config));
         h.cpu.tick_1ms(&mut h.port);
@@ -324,13 +296,13 @@ mod tests {
         h.deliver(&set_cpu_config(&CpuConfig {
             failsafe_timeout: Some(Duration::from_millis(500)),
             fpga_bus_wait: FpgaBusWait::Cycles2,
-            ..DEFAULT
+            ..CpuConfig::DEFAULT
         }));
 
         h.cpu.request_config_reset();
         let config = CpuConfig {
             sys_time_transition_margin: Duration::from_nanos(1),
-            ..DEFAULT
+            ..CpuConfig::DEFAULT
         };
         h.deliver(&set_cpu_config(&config));
         assert_eq!(h.status(), Error::None);
@@ -344,7 +316,7 @@ mod tests {
         let mut h = Harness::new();
         let config = CpuConfig {
             failsafe_timeout: Some(Duration::from_millis(500)),
-            ..DEFAULT
+            ..CpuConfig::DEFAULT
         };
         h.deliver_no_drain(&set_cpu_config(&config));
         h.cpu.request_config_reset();
@@ -357,7 +329,7 @@ mod tests {
         let mut h = Harness::new();
         h.deliver(&set_cpu_config(&CpuConfig {
             failsafe_timeout: Some(Duration::from_millis(500)),
-            ..DEFAULT
+            ..CpuConfig::DEFAULT
         }));
         h.set_host_idle_ms(1000);
         h.cpu.tick_1ms(&mut h.port);
@@ -379,7 +351,7 @@ mod tests {
         let mut h = Harness::new();
         h.deliver(&set_cpu_config(&CpuConfig {
             failsafe_timeout: Some(Duration::from_millis(500)),
-            ..DEFAULT
+            ..CpuConfig::DEFAULT
         }));
         h.set_host_idle_ms(499);
         h.cpu.tick_1ms(&mut h.port);

@@ -183,7 +183,7 @@ impl Cpu {
             failsafe_fired: Cell::new(false),
             ptp_unlock_failsafe_fired: Cell::new(false),
             ptp_failsafe_active: AtomicBool::new(false),
-            config: Cell::new(cmd::cpu_config::default_config()),
+            config: Cell::new(cmd::cpu_config::CpuConfig::DEFAULT),
             config_reset_requested: AtomicBool::new(false),
             ptp_unlocked_ms: OptionalMs::new(),
             host_idle_ms: OptionalMs::new(),

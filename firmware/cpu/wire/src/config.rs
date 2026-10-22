@@ -92,25 +92,29 @@ pub struct PtpConfig {
     pub pause_retry: Duration,
 }
 
+impl PtpConfig {
+    pub const DEFAULT: Self = Self {
+        sync_interval: cpu_params::PTP_SYNC_INTERVAL,
+        tx_timestamp_timeout: cpu_params::PTP_TX_TIMESTAMP_TIMEOUT,
+        delay_resp_timeout: cpu_params::PTP_DELAY_RESP_TIMEOUT,
+        holdover: cpu_params::PTP_HOLDOVER,
+        lock_samples: cpu_params::PTP_LOCK_SAMPLES,
+        step_threshold: cpu_params::PTP_STEP_THRESHOLD,
+        lock_threshold: cpu_params::PTP_LOCK_THRESHOLD,
+        kp_milli: cpu_params::PTP_KP_MILLI,
+        ki_milli: cpu_params::PTP_KI_MILLI,
+        max_freq_ppb: cpu_params::PTP_MAX_FREQ_PPB,
+        delay_req_syncs: cpu_params::PTP_DELAY_REQ_SYNCS,
+        path_delay_filter_shift: cpu_params::PTP_PATH_DELAY_FILTER_SHIFT,
+        pause_quanta: Some(cpu_params::PTP_PAUSE_QUANTA),
+        pause_hold_syncs: cpu_params::PTP_PAUSE_HOLD_SYNCS,
+        pause_retry: cpu_params::PTP_PAUSE_RETRY,
+    };
+}
+
 impl Default for PtpConfig {
     fn default() -> Self {
-        Self {
-            sync_interval: cpu_params::PTP_SYNC_INTERVAL,
-            tx_timestamp_timeout: cpu_params::PTP_TX_TIMESTAMP_TIMEOUT,
-            delay_resp_timeout: cpu_params::PTP_DELAY_RESP_TIMEOUT,
-            holdover: cpu_params::PTP_HOLDOVER,
-            lock_samples: cpu_params::PTP_LOCK_SAMPLES,
-            step_threshold: cpu_params::PTP_STEP_THRESHOLD,
-            lock_threshold: cpu_params::PTP_LOCK_THRESHOLD,
-            kp_milli: cpu_params::PTP_KP_MILLI,
-            ki_milli: cpu_params::PTP_KI_MILLI,
-            max_freq_ppb: cpu_params::PTP_MAX_FREQ_PPB,
-            delay_req_syncs: cpu_params::PTP_DELAY_REQ_SYNCS,
-            path_delay_filter_shift: cpu_params::PTP_PATH_DELAY_FILTER_SHIFT,
-            pause_quanta: Some(cpu_params::PTP_PAUSE_QUANTA),
-            pause_hold_syncs: cpu_params::PTP_PAUSE_HOLD_SYNCS,
-            pause_retry: cpu_params::PTP_PAUSE_RETRY,
-        }
+        Self::DEFAULT
     }
 }
 
@@ -137,20 +141,24 @@ pub struct CpuConfig {
     pub ptp: PtpConfig,
 }
 
+impl CpuConfig {
+    pub const DEFAULT: Self = Self {
+        sys_time_transition_margin: cpu_params::SYS_TIME_TRANSITION_MARGIN,
+        fpga_wait_update_max_polls: cpu_params::FPGA_WAIT_UPDATE_MAX_POLLS,
+        fpga_flash_max_polls: cpu_params::FPGA_FLASH_MAX_POLLS,
+        sync_guard: cpu_params::SYNC_GUARD,
+        update_activate_delay: cpu_params::UPDATE_ACTIVATE_DELAY,
+        failsafe_timeout: None,
+        ptp_unlock_failsafe_timeout: None,
+        fpga_bus_wait: FpgaBusWait::Cycles3,
+        cpu_watchdog_timeout: Some(cpu_params::CPU_WATCHDOG_TIMEOUT),
+        ptp: PtpConfig::DEFAULT,
+    };
+}
+
 impl Default for CpuConfig {
     fn default() -> Self {
-        Self {
-            sys_time_transition_margin: cpu_params::SYS_TIME_TRANSITION_MARGIN,
-            fpga_wait_update_max_polls: cpu_params::FPGA_WAIT_UPDATE_MAX_POLLS,
-            fpga_flash_max_polls: cpu_params::FPGA_FLASH_MAX_POLLS,
-            sync_guard: cpu_params::SYNC_GUARD,
-            update_activate_delay: cpu_params::UPDATE_ACTIVATE_DELAY,
-            failsafe_timeout: None,
-            ptp_unlock_failsafe_timeout: None,
-            fpga_bus_wait: FpgaBusWait::Cycles3,
-            cpu_watchdog_timeout: Some(cpu_params::CPU_WATCHDOG_TIMEOUT),
-            ptp: PtpConfig::default(),
-        }
+        Self::DEFAULT
     }
 }
 
@@ -159,11 +167,15 @@ pub struct FpgaConfig {
     pub sync_phase_lock: bool,
 }
 
+impl FpgaConfig {
+    pub const DEFAULT: Self = Self {
+        sync_phase_lock: cpu_params::SYNC_PHASE_LOCK,
+    };
+}
+
 impl Default for FpgaConfig {
     fn default() -> Self {
-        Self {
-            sync_phase_lock: cpu_params::SYNC_PHASE_LOCK,
-        }
+        Self::DEFAULT
     }
 }
 

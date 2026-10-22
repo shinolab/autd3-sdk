@@ -1714,7 +1714,7 @@ mod tests {
     #[cfg(not(loom))]
     #[test]
     fn a_heartbeat_reply_carries_the_ptp_failsafe_of_the_cpu() {
-        use crate::cmd::cpu_config::{CpuConfig, default_config};
+        use crate::cmd::cpu_config::CpuConfig;
         use crate::proto::{Cmd, Error as CmdError};
         use crate::test_utils::builders::set_cpu_config;
         use crate::test_utils::mock::{Frame, Harness as CpuHarness};
@@ -1722,7 +1722,7 @@ mod tests {
         let mut c = CpuHarness::new();
         c.deliver(&set_cpu_config(&CpuConfig {
             ptp_unlock_failsafe_timeout: Some(core::time::Duration::from_millis(50)),
-            ..default_config()
+            ..CpuConfig::DEFAULT
         }));
         assert_eq!(c.status(), CmdError::None);
         c.cpu.publish_ptp_unlocked(Some(50));
@@ -1774,7 +1774,7 @@ mod tests {
     #[cfg(not(loom))]
     #[test]
     fn a_host_that_keeps_sending_through_a_main_loop_backlog_does_not_trip_the_failsafe() {
-        use crate::cmd::cpu_config::{CpuConfig, default_config};
+        use crate::cmd::cpu_config::CpuConfig;
         use crate::fpga_params::CtlFlags;
         use crate::proto::Error as CmdError;
         use crate::test_utils::builders::set_cpu_config;
@@ -1783,7 +1783,7 @@ mod tests {
         let mut c = CpuHarness::new();
         c.deliver(&set_cpu_config(&CpuConfig {
             failsafe_timeout: Some(core::time::Duration::from_millis(500)),
-            ..default_config()
+            ..CpuConfig::DEFAULT
         }));
         assert_eq!(c.status(), CmdError::None);
 
@@ -1810,7 +1810,7 @@ mod tests {
     #[cfg(not(loom))]
     #[test]
     fn a_release_failsafe_from_a_returning_host_is_accepted_before_the_next_tick() {
-        use crate::cmd::cpu_config::{CpuConfig, default_config};
+        use crate::cmd::cpu_config::CpuConfig;
         use crate::fpga_params::CtlFlags;
         use crate::proto::{Cmd, Error as CmdError};
         use crate::test_utils::builders::set_cpu_config;
@@ -1819,7 +1819,7 @@ mod tests {
         let mut c = CpuHarness::new();
         c.deliver(&set_cpu_config(&CpuConfig {
             failsafe_timeout: Some(core::time::Duration::from_millis(500)),
-            ..default_config()
+            ..CpuConfig::DEFAULT
         }));
         let mut h = Harness::new();
         h.assign(4);
@@ -1895,7 +1895,7 @@ mod tests {
     #[cfg(not(loom))]
     #[test]
     fn reset_id_restores_the_whole_cpu_config() {
-        use crate::cmd::cpu_config::{CpuConfig, default_config};
+        use crate::cmd::cpu_config::CpuConfig;
         use crate::test_utils::builders::set_cpu_config;
         use crate::test_utils::mock::Harness as CpuHarness;
 
@@ -1905,7 +1905,7 @@ mod tests {
                 holdover: core::time::Duration::from_millis(123),
                 ..autd3_cpu_wire::config::PtpConfig::default()
             },
-            ..default_config()
+            ..CpuConfig::DEFAULT
         };
         let mut c = CpuHarness::new();
         c.deliver(&set_cpu_config(&stale));
@@ -1923,7 +1923,7 @@ mod tests {
         assert_eq!(c.cpu.config(), stale);
 
         c.cpu.tick_1ms(&mut c.port);
-        assert_eq!(c.cpu.config(), default_config());
+        assert_eq!(c.cpu.config(), CpuConfig::DEFAULT);
         assert_eq!(c.cpu.config().ptp, h.node.ptp.config());
         assert_eq!(c.port.ptp_config, Some(h.node.ptp.config()));
     }

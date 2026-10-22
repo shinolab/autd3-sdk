@@ -1,12 +1,12 @@
 use crate::app::Cpu;
-use crate::cmd::cpu_config::default_config;
+use crate::cmd::cpu_config::CpuConfig;
 use crate::fpga;
 use crate::port::Port;
 use crate::proto::Error;
 
 impl Cpu {
     pub(crate) fn clear<P: Port>(&self, port: &mut P) -> Result<(), Error> {
-        self.apply_config(port, default_config());
+        self.apply_config(port, CpuConfig::DEFAULT);
         let result = fpga::init(port, self.config().fpga_wait_update_max_polls);
         self.reset_telemetry();
         if result.is_ok() {
@@ -20,7 +20,7 @@ impl Cpu {
 mod tests {
     use core::time::Duration;
 
-    use crate::cmd::cpu_config::{CpuConfig, default_config};
+    use crate::cmd::cpu_config::CpuConfig;
     use crate::cmd::silencer::SilencerFlags;
     use crate::fpga::TransitionMode;
     use crate::fpga_params::{
@@ -42,7 +42,7 @@ mod tests {
             &mut h.port,
             CpuConfig {
                 failsafe_timeout: Some(Duration::from_millis(u64::from(FAILSAFE_TIMEOUT_MS))),
-                ..default_config()
+                ..CpuConfig::DEFAULT
             },
         );
         h
@@ -225,7 +225,7 @@ mod tests {
         let mut h = Harness::new();
         h.deliver(&set_cpu_config(&CpuConfig {
             ptp_unlock_failsafe_timeout: Some(Duration::from_millis(50)),
-            ..default_config()
+            ..CpuConfig::DEFAULT
         }));
         assert_eq!(h.status(), Error::None);
         h.cpu.publish_ptp_unlocked(Some(50));
@@ -250,7 +250,7 @@ mod tests {
         let mut h = Harness::new();
         h.deliver(&set_cpu_config(&CpuConfig {
             ptp_unlock_failsafe_timeout: Some(Duration::from_millis(50)),
-            ..default_config()
+            ..CpuConfig::DEFAULT
         }));
         assert_eq!(h.status(), Error::None);
         h.cpu.publish_ptp_unlocked(Some(50));
