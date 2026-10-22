@@ -74,7 +74,6 @@ dependencies = [
  "autd3-binding-rt",
  "autd3-python-capsule",
  "autd3-rs",
- "autd3-rs-core",
  "pyo3",
 ]
 

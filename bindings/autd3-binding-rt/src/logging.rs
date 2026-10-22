@@ -62,10 +62,6 @@ impl Write for Sink {
 #[error("failed to install the tracing subscriber: {0}")]
 pub struct TracingInitError(#[source] Box<dyn std::error::Error + Send + Sync>);
 
-pub fn init_tracing(option: TracingOption) -> TracingGuard {
-    try_init_tracing(option).expect("the tracing subscriber is installed once per process")
-}
-
 pub fn try_init_tracing(option: TracingOption) -> Result<TracingGuard, TracingInitError> {
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(option.default_filter));

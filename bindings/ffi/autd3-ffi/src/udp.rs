@@ -342,9 +342,12 @@ mod tests {
         let geometry = Geometry::new(Vec::<Autd3>::new());
         let option = autd3_transport_option_new();
         let (code, client, message) = open(&raw const geometry, option);
-        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
+        assert_eq!(crate::AUTD3_ERR_NETWORK, code);
         assert!(client.is_null());
-        assert!(message.contains("device count 0"), "{message}");
+        assert_eq!(
+            "network error: the number of devices must be 1..=128, but 0 was given",
+            message
+        );
     }
 
     fn open_error_with_zero(
