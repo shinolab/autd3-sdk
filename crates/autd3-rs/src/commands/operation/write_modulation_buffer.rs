@@ -1,9 +1,10 @@
+use crate::datagram::Datagram;
 use crate::error::{Error, PayloadError};
 use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::ModulationBank;
 
-use super::{Encoded, Operation, write_header};
+use super::{Operation, set_cmd, write_header};
 use autd3_cpu_wire::payload::WriteModPayload;
 
 #[derive(Clone, Copy, Debug)]
@@ -20,7 +21,7 @@ impl WriteModulationBuffer<'_> {
 impl crate::sealed::Sealed for WriteModulationBuffer<'_> {}
 
 impl Operation for WriteModulationBuffer<'_> {
-    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
+    fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
         if self.data.is_empty() {
             return Err(PayloadError::ModulationDataEmpty.into());
         }
@@ -34,10 +35,12 @@ impl Operation for WriteModulationBuffer<'_> {
         let header = WriteModPayload::new(self.bank, self.offset, self.data.len())?;
         let rest = write_header(out, &header);
         rest[..self.data.len()].copy_from_slice(self.data);
-        Ok(Encoded::header_with_data::<WriteModPayload>(
+        set_cmd(
+            out,
             Cmd::WriteModulationBuffer,
-            self.data.len(),
-        ))
+            size_of::<WriteModPayload>() + self.data.len(),
+        );
+        Ok(())
     }
 }
 
@@ -61,7 +64,7 @@ mod tests {
 
         assert_eq!(
             cmd,
-            Encoded::header_with_data::<WriteModPayload>(Cmd::WriteModulationBuffer, 3)
+            (Cmd::WriteModulationBuffer, size_of::<WriteModPayload>() + 3)
         );
         assert_eq!(out[0], 1);
         assert_eq!(out[1], 0);
@@ -81,7 +84,7 @@ mod tests {
             data: &data,
         })
         .unwrap();
-        assert_eq!(cmd.len, PAYLOAD_BYTES);
+        assert_eq!(cmd.1, PAYLOAD_BYTES);
         assert_eq!(&out[size_of::<WriteModPayload>()..], &data[..]);
     }
 

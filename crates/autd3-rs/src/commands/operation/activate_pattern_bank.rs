@@ -1,11 +1,12 @@
 use autd3_cpu_wire::payload::ActivatePatternBankPayload;
 
+use crate::datagram::Datagram;
 use crate::error::Error;
 use crate::geometry::Device;
-use crate::protocol::{Cmd, PAYLOAD_BYTES};
+use crate::protocol::Cmd;
 use crate::value::{PatternBank, TransitionMode};
 
-use super::{Encoded, Operation, encode_header_only};
+use super::{Operation, encode_header_only};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ActivatePatternBank {
@@ -16,12 +17,13 @@ pub struct ActivatePatternBank {
 impl crate::sealed::Sealed for ActivatePatternBank {}
 
 impl Operation for ActivatePatternBank {
-    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
-        Ok(encode_header_only(
+    fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
+        encode_header_only(
             out,
             Cmd::ActivatePatternBank,
             &ActivatePatternBankPayload::new(self.bank, self.transition_mode.as_wire()),
-        ))
+        );
+        Ok(())
     }
 }
 
@@ -30,7 +32,7 @@ mod tests {
     use super::*;
     use crate::test_utils::encode;
 
-    const ENCODED: Encoded = Encoded::new(
+    const ENCODED: (Cmd, usize) = (
         Cmd::ActivatePatternBank,
         size_of::<ActivatePatternBankPayload>(),
     );

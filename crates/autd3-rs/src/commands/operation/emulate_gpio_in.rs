@@ -1,10 +1,11 @@
 use autd3_cpu_wire::payload::GpioInPayload;
 
+use crate::datagram::Datagram;
 use crate::error::Error;
 use crate::geometry::Device;
-use crate::protocol::{Cmd, PAYLOAD_BYTES};
+use crate::protocol::Cmd;
 
-use super::{Encoded, Operation, encode_header_only};
+use super::{Operation, encode_header_only};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct EmulateGpioIn {
@@ -14,8 +15,8 @@ pub struct EmulateGpioIn {
 impl crate::sealed::Sealed for EmulateGpioIn {}
 
 impl Operation for EmulateGpioIn {
-    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
-        Ok(encode_header_only(
+    fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
+        encode_header_only(
             out,
             Cmd::EmulateGpioIn,
             &GpioInPayload {
@@ -24,7 +25,8 @@ impl Operation for EmulateGpioIn {
                 gpio_in_2: self.values[2],
                 gpio_in_3: self.values[3],
             },
-        ))
+        );
+        Ok(())
     }
 }
 
@@ -39,10 +41,7 @@ mod tests {
             values: [false, true, false, true],
         })
         .unwrap();
-        assert_eq!(
-            cmd,
-            Encoded::new(Cmd::EmulateGpioIn, size_of::<GpioInPayload>())
-        );
+        assert_eq!(cmd, (Cmd::EmulateGpioIn, size_of::<GpioInPayload>()));
         assert_eq!(&out[..4], &[0, 1, 0, 1]);
     }
 }

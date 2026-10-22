@@ -1,11 +1,12 @@
 use autd3_cpu_wire::payload::ConfigModPayload;
 
+use crate::datagram::Datagram;
 use crate::error::Error;
 use crate::geometry::Device;
-use crate::protocol::{Cmd, PAYLOAD_BYTES};
+use crate::protocol::Cmd;
 use crate::value::{LoopBehavior, ModulationBank, SamplingConfig};
 
-use super::{Encoded, Operation, encode_header_only};
+use super::{Operation, encode_header_only};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ConfigModulation {
@@ -18,14 +19,15 @@ pub struct ConfigModulation {
 impl crate::sealed::Sealed for ConfigModulation {}
 
 impl Operation for ConfigModulation {
-    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
+    fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
         let payload = ConfigModPayload::new(
             self.bank,
             self.config.divide(),
             self.size,
             self.loop_behavior.rep(),
         )?;
-        Ok(encode_header_only(out, Cmd::ConfigModulation, &payload))
+        encode_header_only(out, Cmd::ConfigModulation, &payload);
+        Ok(())
     }
 }
 
@@ -36,7 +38,7 @@ mod tests {
     use crate::test_utils::encode;
     use core::num::NonZeroU16;
 
-    const ENCODED: Encoded = Encoded::new(Cmd::ConfigModulation, size_of::<ConfigModPayload>());
+    const ENCODED: (Cmd, usize) = (Cmd::ConfigModulation, size_of::<ConfigModPayload>());
 
     #[test]
     fn config_modulation_lays_out_fields() {

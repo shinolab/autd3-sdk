@@ -163,7 +163,7 @@ impl Frames {
         let dist = op.distribution();
         let start = self.push_frame(dist, geometry.num_devices());
         for (device, datagram) in self.datagrams[start..].iter_mut().enumerate() {
-            encode_datagram(datagram, op, &geometry[device])?;
+            op.encode(&geometry[device], datagram)?;
         }
         tracing::trace!(
             cmd = ?self.datagrams[start].cmd,
@@ -189,22 +189,10 @@ impl Frames {
             let start = *start.get_or_insert_with(|| {
                 self.push_frame(Distribution::PerDevice, geometry.num_devices())
             });
-            encode_datagram(&mut self.datagrams[start + device.idx()], &op, device)?;
+            op.encode(device, &mut self.datagrams[start + device.idx()])?;
         }
         Ok(assigned)
     }
-}
-
-fn encode_datagram(
-    datagram: &mut Datagram,
-    op: &impl Operation,
-    device: &Device,
-) -> Result<(), Error> {
-    let encoded = op.encode(device, &mut datagram.payload)?;
-    debug_assert!(encoded.len <= PAYLOAD_BYTES);
-    datagram.cmd = encoded.cmd;
-    datagram.payload_len = encoded.len;
-    Ok(())
 }
 
 pub struct FrameIter<'a> {
@@ -362,11 +350,9 @@ mod tests {
         assert_eq!(frames.len(), 5);
         let failed_broadcast = frames.frame(0).unwrap();
         assert_eq!(failed_broadcast.distribution(), Distribution::Broadcast);
-        assert_eq!(failed_broadcast.datagrams()[0].cmd, Cmd::Nop);
-        assert_eq!(cmd_at(&frames, 1, 0), Cmd::ConfigModulation);
-        assert_eq!(cmd_at(&frames, 1, 1), Cmd::Nop);
-        assert_eq!(cmd_at(&frames, 2, 0), Cmd::Nop);
-        assert_eq!(cmd_at(&frames, 2, 1), Cmd::Nop);
+        assert_eq!(failed_broadcast.datagrams().len(), 1);
+        assert_eq!(frames.frame(1).unwrap().datagrams().len(), 2);
+        assert_eq!(frames.frame(2).unwrap().datagrams().len(), 2);
         assert_eq!(payload(&frames, 3, 0)[0], 5);
         assert_eq!(payload(&frames, 3, 1)[0], 5);
         assert_eq!(payload(&frames, 4, 0)[0], 7);

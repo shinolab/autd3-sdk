@@ -42,49 +42,32 @@ pub use write_pattern_phase::{PhaseDepth, WritePatternPhase};
 
 use zerocopy::{Immutable, IntoBytes};
 
+use crate::datagram::Datagram;
 use crate::error::{Error, PayloadError};
 use crate::geometry::Device;
-use crate::protocol::{Cmd, PAYLOAD_BYTES};
+use crate::protocol::Cmd;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Encoded {
-    pub cmd: Cmd,
-    pub len: usize,
-}
-
-impl Encoded {
-    #[must_use]
-    pub const fn new(cmd: Cmd, len: usize) -> Self {
-        Self { cmd, len }
-    }
-
-    #[must_use]
-    pub const fn no_payload(cmd: Cmd) -> Self {
-        Self::new(cmd, 0)
-    }
-
-    #[must_use]
-    pub const fn header_with_data<H>(cmd: Cmd, data_len: usize) -> Self {
-        Self::new(cmd, size_of::<H>() + data_len)
-    }
+pub(crate) fn set_cmd(out: &mut Datagram, cmd: Cmd, payload_len: usize) {
+    out.cmd = cmd;
+    out.payload_len = payload_len;
 }
 
 pub(crate) fn write_header<'a, H: IntoBytes + Immutable>(
-    out: &'a mut [u8; PAYLOAD_BYTES],
+    out: &'a mut Datagram,
     header: &H,
 ) -> &'a mut [u8] {
-    let (dst, rest) = out.split_at_mut(core::mem::size_of::<H>());
+    let (dst, rest) = out.payload.split_at_mut(core::mem::size_of::<H>());
     header.write_to(dst).expect("header fits in the payload");
     rest
 }
 
 pub(crate) fn encode_header_only<H: IntoBytes + Immutable>(
-    out: &mut [u8; PAYLOAD_BYTES],
+    out: &mut Datagram,
     cmd: Cmd,
     header: &H,
-) -> Encoded {
+) {
     write_header(out, header);
-    Encoded::new(cmd, size_of::<H>())
+    set_cmd(out, cmd, size_of::<H>());
 }
 
 pub(crate) fn checked_device_row<'a, T>(
@@ -128,7 +111,7 @@ pub trait Operation: crate::sealed::Sealed {
         Distribution::Broadcast
     }
 
-    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error>;
+    fn encode(&self, device: &Device, out: &mut Datagram) -> Result<(), Error>;
 }
 
 impl<O: Operation + ?Sized> crate::sealed::Sealed for Box<O> {}
@@ -138,7 +121,7 @@ impl<O: Operation + ?Sized> Operation for Box<O> {
         (**self).distribution()
     }
 
-    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
+    fn encode(&self, device: &Device, out: &mut Datagram) -> Result<(), Error> {
         (**self).encode(device, out)
     }
 }

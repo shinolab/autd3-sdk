@@ -1,9 +1,10 @@
+use crate::datagram::Datagram;
 use crate::error::Error;
 use crate::geometry::Device;
-use crate::protocol::{Cmd, PAYLOAD_BYTES};
+use crate::protocol::Cmd;
 use crate::value::{Intensity, PatternBank, PatternIntensity, Phase};
 
-use super::{Distribution, Encoded, Operation, checked_device_row, write_header};
+use super::{Distribution, Operation, checked_device_row, set_cmd, write_header};
 use autd3_cpu_wire::layout::PATTERN_RAW_DATA_LEN;
 use autd3_cpu_wire::payload::WritePatternRawPayload;
 use zerocopy::IntoBytes;
@@ -127,8 +128,8 @@ fn encode_raw_patterns<'a>(
     start_index: usize,
     patterns: impl ExactSizeIterator<Item = (&'a [Vec<Phase>], PatternIntensity<'a>)>,
     device: &Device,
-    out: &mut [u8; PAYLOAD_BYTES],
-) -> Result<Encoded, Error> {
+    out: &mut Datagram,
+) -> Result<(), Error> {
     let num_patterns = patterns.len();
     let header = WritePatternRawPayload::new(bank, num_patterns, start_index)?;
     let rest = write_header(out, &header);
@@ -136,10 +137,12 @@ fn encode_raw_patterns<'a>(
     for ((phases, intensities), data) in patterns.zip(slots) {
         encode_raw_pattern_entry(phases, intensities, device, data)?;
     }
-    Ok(Encoded::header_with_data::<WritePatternRawPayload>(
+    set_cmd(
+        out,
         Cmd::WritePatternRaw,
-        num_patterns * PATTERN_RAW_DATA_LEN,
-    ))
+        size_of::<WritePatternRawPayload>() + num_patterns * PATTERN_RAW_DATA_LEN,
+    );
+    Ok(())
 }
 
 impl Operation for WritePatternBuffer<'_> {
@@ -147,7 +150,7 @@ impl Operation for WritePatternBuffer<'_> {
         Distribution::PerDevice
     }
 
-    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
+    fn encode(&self, device: &Device, out: &mut Datagram) -> Result<(), Error> {
         encode_raw_patterns(
             self.bank,
             self.index,
@@ -173,7 +176,7 @@ impl Operation for WritePatternChunk<'_> {
         Distribution::PerDevice
     }
 
-    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
+    fn encode(&self, device: &Device, out: &mut Datagram) -> Result<(), Error> {
         encode_raw_patterns(
             self.bank,
             self.start_index,
@@ -215,9 +218,9 @@ mod tests {
 
         assert_eq!(
             cmd,
-            Encoded::header_with_data::<WritePatternRawPayload>(
+            (
                 Cmd::WritePatternRaw,
-                PATTERN_RAW_DATA_LEN
+                size_of::<WritePatternRawPayload>() + PATTERN_RAW_DATA_LEN
             )
         );
         assert_eq!(out[0], 1);
@@ -261,9 +264,9 @@ mod tests {
         let dev = test_device(1);
         let phases = vec![vec![Phase::ZERO; dev.num_transducers()]; 2];
         let op = WritePatternBuffer::new(PatternBank::B0, 0, &phases, PatternIntensity::default());
-        let mut out = [0u8; PAYLOAD_BYTES];
+        let mut out = Datagram::no_payload(Cmd::Nop);
         assert!(op.encode(&dev, &mut out).is_ok());
-        assert_eq!(out[INTENSITIES_OFFSET], Intensity::MAX.0);
+        assert_eq!(out.payload[INTENSITIES_OFFSET], Intensity::MAX.0);
     }
 
     #[test]
@@ -282,7 +285,7 @@ mod tests {
         let phases = [vec![Phase::ZERO; dev.num_transducers()]];
         let intensities = [vec![Intensity::MAX; dev.num_transducers()]];
         let op = WritePatternBuffer::new(PatternBank::B0, 0, &phases, &intensities);
-        let mut out = [0u8; PAYLOAD_BYTES];
+        let mut out = Datagram::no_payload(Cmd::Nop);
         assert!(op.encode(&dev, &mut out).is_ok());
         assert!(matches!(
             op.encode(&test_device(1), &mut out),
@@ -307,9 +310,9 @@ mod tests {
         let (encoded, out) = encode(&op).unwrap();
         assert_eq!(
             encoded,
-            Encoded::header_with_data::<WritePatternRawPayload>(
+            (
                 Cmd::WritePatternRaw,
-                2 * PATTERN_RAW_DATA_LEN
+                size_of::<WritePatternRawPayload>() + 2 * PATTERN_RAW_DATA_LEN
             )
         );
         assert_eq!(out[1], 2, "count");

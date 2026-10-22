@@ -1,10 +1,11 @@
 use autd3_cpu_wire::payload::GpioOutPayload;
 
+use crate::datagram::Datagram;
 use crate::error::Error;
 use crate::geometry::Device;
-use crate::protocol::{Cmd, PAYLOAD_BYTES};
+use crate::protocol::Cmd;
 
-use super::{Encoded, Operation, encode_header_only};
+use super::{Operation, encode_header_only};
 
 pub use autd3_cpu_wire::value::GpioOut;
 
@@ -16,12 +17,9 @@ pub struct SetGpioOut {
 impl crate::sealed::Sealed for SetGpioOut {}
 
 impl Operation for SetGpioOut {
-    fn encode(&self, _device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
-        Ok(encode_header_only(
-            out,
-            Cmd::SetGpioOut,
-            &GpioOutPayload::new(self.outputs),
-        ))
+    fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
+        encode_header_only(out, Cmd::SetGpioOut, &GpioOutPayload::new(self.outputs));
+        Ok(())
     }
 }
 
@@ -45,10 +43,7 @@ mod tests {
             ],
         })
         .unwrap();
-        assert_eq!(
-            cmd,
-            Encoded::new(Cmd::SetGpioOut, size_of::<GpioOutPayload>())
-        );
+        assert_eq!(cmd, (Cmd::SetGpioOut, size_of::<GpioOutPayload>()));
         assert_eq!(&out[0..8], &0u64.to_le_bytes());
         assert_eq!(
             &out[8..16],

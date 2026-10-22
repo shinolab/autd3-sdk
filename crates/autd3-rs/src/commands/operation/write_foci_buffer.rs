@@ -1,10 +1,11 @@
+use crate::datagram::Datagram;
 use crate::error::{Error, PayloadError};
 use crate::geometry::Device;
 use crate::params::FOCUS_WORDS;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::value::{ControlPoints, PatternBank};
 
-use super::{Distribution, Encoded, Operation, write_header};
+use super::{Distribution, Operation, set_cmd, write_header};
 use autd3_cpu_wire::payload::WriteFociPayload;
 
 #[derive(Clone, Copy, Debug)]
@@ -26,7 +27,7 @@ impl<const N: usize> Operation for WriteFociBuffer<'_, N> {
         Distribution::PerDevice
     }
 
-    fn encode(&self, device: &Device, out: &mut [u8; PAYLOAD_BYTES]) -> Result<Encoded, Error> {
+    fn encode(&self, device: &Device, out: &mut Datagram) -> Result<(), Error> {
         if self.points.is_empty() {
             return Err(PayloadError::FociEmpty.into());
         }
@@ -48,10 +49,12 @@ impl<const N: usize> Operation for WriteFociBuffer<'_, N> {
         for (dst, focus) in rest.as_chunks_mut::<8>().0.iter_mut().zip(foci) {
             *dst = focus.encode()?.to_le_bytes();
         }
-        Ok(Encoded::header_with_data::<WriteFociPayload>(
+        set_cmd(
+            out,
             Cmd::WriteFociBuffer,
-            num_foci * FOCUS_WORDS * 2,
-        ))
+            size_of::<WriteFociPayload>() + num_foci * FOCUS_WORDS * 2,
+        );
+        Ok(())
     }
 }
 
@@ -78,7 +81,7 @@ mod tests {
 
         assert_eq!(
             cmd,
-            Encoded::header_with_data::<WriteFociPayload>(Cmd::WriteFociBuffer, 4 * 8)
+            (Cmd::WriteFociBuffer, size_of::<WriteFociPayload>() + 4 * 8)
         );
         assert_eq!(out[0], 1, "bank B1");
         let word_offset = u32::try_from(10 * FOCUS_WORDS).unwrap();
@@ -116,7 +119,7 @@ mod tests {
         })
         .unwrap();
 
-        assert_eq!(cmd.len, size_of::<WriteFociPayload>() + 4 * 8);
+        assert_eq!(cmd.1, size_of::<WriteFociPayload>() + 4 * 8);
         let word_offset = u32::try_from(3 * 2 * FOCUS_WORDS).unwrap();
         assert_eq!(&out[2..6], &word_offset.to_le_bytes());
         let data = &out[size_of::<WriteFociPayload>()..];
@@ -191,10 +194,10 @@ mod tests {
             points: &points,
         };
 
-        let mut out = [0u8; PAYLOAD_BYTES];
+        let mut out = Datagram::no_payload(Cmd::Nop);
         op.encode(&device, &mut out).unwrap();
         let f = u64::from_le_bytes(
-            out[size_of::<WriteFociPayload>()..][..8]
+            out.payload[size_of::<WriteFociPayload>()..][..8]
                 .try_into()
                 .unwrap(),
         );
