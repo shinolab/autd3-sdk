@@ -25,7 +25,6 @@ def test_defaults_follow_the_spec() -> None:
     assert option.recovery_reply_timeout == autd3.Duration.from_millis(1)
     assert option.lost_timeout == autd3.Duration.from_millis(100)
     assert option.ack_timeout == autd3.Duration.from_millis(10)
-    assert option.send_rate_limit_percent is None
     assert option.send_buffer_bytes == 8192
 
 
@@ -35,13 +34,11 @@ def test_fields_round_trip() -> None:
         lost_timeout=autd3.Duration.from_millis(50),
         open_timeout=autd3.Duration.from_secs(3),
         ack_timeout=autd3.Duration.from_millis(3),
-        send_rate_limit_percent=95.0,
     )
     assert option.iface == autd3.Interface.Name("eth1")
     assert option.lost_timeout == autd3.Duration.from_millis(50)
     assert option.open_timeout == autd3.Duration.from_secs(3)
     assert option.ack_timeout == autd3.Duration.from_millis(3)
-    assert option.send_rate_limit_percent == 95.0
     assert autd3.TransportOption(send_buffer_bytes=None).send_buffer_bytes is None
     assert autd3.TransportOption(send_buffer_bytes=65536).send_buffer_bytes == 65536
 

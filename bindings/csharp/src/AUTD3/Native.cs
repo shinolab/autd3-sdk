@@ -36,12 +36,6 @@ namespace AUTD3
         internal static extern int autd3_transport_option_get_send_buffer_bytes(IntPtr option, out ulong bytes);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_set_send_rate_limit_percent(IntPtr option, [MarshalAs(UnmanagedType.I1)] bool hasValue, float percent);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_get_send_rate_limit_percent(IntPtr option, [MarshalAs(UnmanagedType.I1)] out bool hasValue, out float percent);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_transport_option_set_recovery_reply_timeout(IntPtr option, ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]

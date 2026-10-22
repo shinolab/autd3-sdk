@@ -3,7 +3,6 @@ mod control;
 mod error;
 mod iface;
 mod option;
-mod pacer;
 mod reply;
 pub(crate) mod state;
 

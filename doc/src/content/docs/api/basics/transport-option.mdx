@@ -22,7 +22,6 @@ import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
 | `recovery_reply_timeout`       | `Duration`  | 1 ms    | `recover()` で `Lost` のデバイスの返信を待つ上限                                               |
 | `lost_timeout`        | `Duration`  | 100 ms  | この時間返信が無いデバイスを `Lost` とする                                                     |
 | `ack_timeout`         | `Duration`  | 10 ms   | 応答待ちのタイムアウト. 応答待ちの先頭のフレームの応答がこの時間揃わなければ, 送信中のフレームはすべて `Timeout` で失敗する ([Client](/autd3-sdk/api/basics/client/#応答待ちのタイムアウト) 参照) |
-| `send_rate_limit_percent`     | `Option<f32>` | `None` | ホストの送信が回線を占める量の上限 [%]. デバイスの回線速度 (100 Mbps) に対する割合. `None` で抑えない |
 | `send_buffer_bytes`         | `Option<NonZeroUsize>` | 8192 | ソケットの送信バッファの大きさ [B]. `None` で OS の既定のままにする |
 | `sync_on_open`        | `bool`      | `true`  | `false` なら open でデバイス間の同期を待たない (ファームウェア更新などの保守用. Rust のみ) |
 
@@ -36,7 +35,7 @@ C# では型が `Option` の項目を `null` にすると無効になる.
 
 :::caution[Windows のタイマ分解能]
 ライブラリは Windows のタイマ分解能 (`timeBeginPeriod`) を変更しない.
-既定の分解能 (典型的には 15.6 ms) では, 返信の待ち (ソケットの受信タイムアウト) や `send_rate_limit_percent` の待ちがその粒度に丸められ, `ack_timeout` や `lost_timeout` の判定が遅れることがある.
+既定の分解能 (典型的には 15.6 ms) では, 返信の待ち (ソケットの受信タイムアウト) がその粒度に丸められ, `ack_timeout` や `lost_timeout` の判定が遅れることがある.
 必要であれば, ユーザーがプロセスで `timeBeginPeriod(1)` を呼ぶ.
 :::
 

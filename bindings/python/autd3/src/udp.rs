@@ -94,17 +94,14 @@ impl TransportOption {
         recovery_reply_timeout = CoreOption::default().recovery_reply_timeout,
         lost_timeout = CoreOption::default().lost_timeout,
         ack_timeout = CoreOption::default().ack_timeout,
-        send_rate_limit_percent = CoreOption::default().send_rate_limit_percent,
         send_buffer_bytes = CoreOption::default().send_buffer_bytes,
     ))]
-    #[allow(clippy::too_many_arguments)]
     fn new(
         #[pyo3(from_py_with = extract_iface)] iface: CoreInterface,
         #[pyo3(from_py_with = extract_duration)] open_timeout: Duration,
         #[pyo3(from_py_with = extract_duration)] recovery_reply_timeout: Duration,
         #[pyo3(from_py_with = extract_duration)] lost_timeout: Duration,
         #[pyo3(from_py_with = extract_duration)] ack_timeout: Duration,
-        send_rate_limit_percent: Option<f32>,
         send_buffer_bytes: Option<NonZeroUsize>,
     ) -> Self {
         Self(CoreOption {
@@ -113,7 +110,6 @@ impl TransportOption {
             recovery_reply_timeout,
             lost_timeout,
             ack_timeout,
-            send_rate_limit_percent,
             send_buffer_bytes,
             ..CoreOption::default()
         })
@@ -142,11 +138,6 @@ impl TransportOption {
     #[getter]
     fn ack_timeout<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         duration_to_py(py, self.0.ack_timeout)
-    }
-
-    #[getter]
-    fn send_rate_limit_percent(&self) -> Option<f32> {
-        self.0.send_rate_limit_percent
     }
 
     #[getter]

@@ -17,37 +17,6 @@ pub(crate) extern "C" fn autd3_transport_option_new() -> *mut TransportOptionHan
 }
 
 #[unsafe(no_mangle)]
-pub(crate) unsafe extern "C" fn autd3_transport_option_set_send_rate_limit_percent(
-    handle: *mut TransportOptionHandle,
-    has_value: bool,
-    percent: f32,
-) -> i32 {
-    let Some(option) = (unsafe { autd3_ffi_abi::handle_mut(handle) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    option.0.send_rate_limit_percent = has_value.then_some(percent);
-    AUTD3_OK
-}
-
-#[unsafe(no_mangle)]
-pub(crate) unsafe extern "C" fn autd3_transport_option_get_send_rate_limit_percent(
-    handle: *const TransportOptionHandle,
-    out_has_value: *mut bool,
-    out: *mut f32,
-) -> i32 {
-    let Some(option) = (unsafe { autd3_ffi_abi::handle_ref(handle) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    let code = unsafe {
-        autd3_ffi_abi::write_out(out_has_value, option.0.send_rate_limit_percent.is_some())
-    };
-    if code != AUTD3_OK {
-        return code;
-    }
-    unsafe { autd3_ffi_abi::write_out(out, option.0.send_rate_limit_percent.unwrap_or(0.0)) }
-}
-
-#[unsafe(no_mangle)]
 pub(crate) unsafe extern "C" fn autd3_transport_option_set_send_buffer_bytes(
     handle: *mut TransportOptionHandle,
     bytes: u64,
@@ -173,51 +142,6 @@ mod tests {
     use autd3_rs::geometry::Autd3;
 
     use super::*;
-
-    #[test]
-    fn the_send_rate_limit_percent_presence_is_explicit() {
-        let handle = autd3_transport_option_new();
-        let read = || {
-            let mut has_value = true;
-            let mut percent = f32::NAN;
-            assert_eq!(
-                unsafe {
-                    autd3_transport_option_get_send_rate_limit_percent(
-                        handle,
-                        &raw mut has_value,
-                        &raw mut percent,
-                    )
-                },
-                AUTD3_OK
-            );
-            has_value.then_some(percent)
-        };
-        assert_eq!(read(), None);
-        assert_eq!(
-            unsafe { autd3_transport_option_set_send_rate_limit_percent(handle, true, 95.0) },
-            AUTD3_OK
-        );
-        assert_eq!(read(), Some(95.0));
-        assert_eq!(unsafe { &*handle }.0.send_rate_limit_percent, Some(95.0));
-        assert_eq!(
-            unsafe { autd3_transport_option_set_send_rate_limit_percent(handle, true, 0.0) },
-            AUTD3_OK
-        );
-        assert_eq!(unsafe { &*handle }.0.send_rate_limit_percent, Some(0.0));
-        assert!(unsafe { &*handle }.0.validate().is_err());
-        assert_eq!(
-            unsafe { autd3_transport_option_set_send_rate_limit_percent(handle, false, 0.0) },
-            AUTD3_OK
-        );
-        assert_eq!(unsafe { &*handle }.0.send_rate_limit_percent, None);
-        assert_eq!(
-            unsafe {
-                autd3_transport_option_set_send_rate_limit_percent(std::ptr::null_mut(), true, 1.0)
-            },
-            AUTD3_ERR_INVALID_ARGUMENT
-        );
-        unsafe { autd3_transport_option_free(handle) };
-    }
 
     fn lost_timeout(handle: *const TransportOptionHandle) -> Duration {
         let mut ns = 0u64;

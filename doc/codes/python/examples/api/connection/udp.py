@@ -6,7 +6,6 @@ open_timeout = Duration.from_secs(40)
 recovery_reply_timeout = Duration.from_millis(1)
 lost_timeout = Duration.from_millis(100)
 ack_timeout = Duration.from_millis(10)
-send_rate_limit_percent = None
 send_buffer_bytes = 8192
 # ANCHOR: api
 TransportOption(
@@ -15,7 +14,6 @@ TransportOption(
     recovery_reply_timeout=recovery_reply_timeout,
     lost_timeout=lost_timeout,
     ack_timeout=ack_timeout,
-    send_rate_limit_percent=send_rate_limit_percent,
     send_buffer_bytes=send_buffer_bytes,
 )
 # ANCHOR_END: api

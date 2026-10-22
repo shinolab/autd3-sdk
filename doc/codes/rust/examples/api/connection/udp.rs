@@ -16,7 +16,6 @@ async fn main() -> Result<()> {
     let recovery_reply_timeout = Duration::from_millis(1);
     let lost_timeout = Duration::from_millis(100);
     let ack_timeout = Duration::from_millis(10);
-    let send_rate_limit_percent = None;
     let send_buffer_bytes = NonZeroUsize::new(8192);
     let sync_on_open = true;
     // ANCHOR: api
@@ -26,7 +25,6 @@ async fn main() -> Result<()> {
         recovery_reply_timeout,
         lost_timeout,
         ack_timeout,
-        send_rate_limit_percent,
         send_buffer_bytes,
         sync_on_open,
     };
