@@ -150,7 +150,6 @@ namespace AUTD3
 
         public ulong Frames => NativeClient.autd3_bus_stats_frames(Handle);
         public ulong Heartbeats => NativeClient.autd3_bus_stats_heartbeats(Handle);
-        public ulong Recoveries => NativeClient.autd3_bus_stats_recoveries(Handle);
         public ulong AckedFrames => NativeClient.autd3_bus_stats_acked_frames(Handle);
         public ulong WorstAckLatencyNs => NativeClient.autd3_bus_stats_worst_ack_latency_ns(Handle);
         public ulong MeanAckLatencyNs => NativeClient.autd3_bus_stats_mean_ack_latency_ns(Handle);
@@ -159,7 +158,7 @@ namespace AUTD3
 
         public override string ToString() =>
             $"BusStats {{ Frames = {Frames}, Heartbeats = {Heartbeats}, " +
-            $"Recoveries = {Recoveries}, AckedFrames = {AckedFrames}, WorstAckLatencyNs = {WorstAckLatencyNs}, MeanAckLatencyNs = {MeanAckLatencyNs} }}";
+            $"AckedFrames = {AckedFrames}, WorstAckLatencyNs = {WorstAckLatencyNs}, MeanAckLatencyNs = {MeanAckLatencyNs} }}";
     }
 
     public readonly struct Telemetry : IEquatable<Telemetry>
@@ -614,18 +613,6 @@ namespace AUTD3
                 states[i] = new FpgaState(bytes[i]);
             }
             return states;
-        }
-
-        public async Task<DeviceMask> RecoverAsync()
-        {
-            var bytes = await ReadByteArrayAsync((cb, ud) =>
-                NativeClient.autd3_client_recover(Handle, cb, ud)).ConfigureAwait(false);
-            var devices = new int[bytes.Length];
-            for (var i = 0; i < bytes.Length; i++)
-            {
-                devices[i] = bytes[i];
-            }
-            return DeviceMask.FromDevices(devices);
         }
 
         public async Task<IReadOnlyList<Telemetry>> ReadTelemetryAsync()

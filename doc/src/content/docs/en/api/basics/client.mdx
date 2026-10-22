@@ -48,7 +48,6 @@ To continuously monitor the operating state of the devices, drive the `StateChec
 | `send_frame_at(frame, exec)` | ✓  | `Result<ResponseFuture, Error>`       | Send one frame at a given processing time (see [Processing time](#processing-time)) |
 | `state_checker()`         | —     | `StateChecker`                        | Get a `StateChecker`. See [State Monitoring](/autd3-sdk/en/guide/state-check/) for details. |
 | `send_heartbeat()`             | —     | `Result<(), Error>`                   | Send one liveness check to every device that is not `Lost` (see [Liveness check](#liveness-check)) |
-| `recover()`               | ✓     | `Result<DeviceMask, Error>`           | Look for the `Lost` devices and recover the ones that answer again. See [State Monitoring](/autd3-sdk/en/guide/state-check/#recovery-from-lost) for details. |
 | `close()`                 | ✓     | `Result<(), Error>`                   | Stop and close the connection                              |
 
 To avoid the noise of dropping the amplitude at once, `close()` first sets the [Silencer](/autd3-sdk/en/api/command/silencer/), then drives every transducer to zero amplitude, and then closes the connection.
@@ -146,7 +145,6 @@ The `u32` fields wrap around to 0 on overflow, and the `u16` / `u8` fields stop 
 | ---------------------------- | ----- | -------------------------------------------- |
 | `frames()`                   | `u64` | Frames sent                                  |
 | `heartbeats()`               | `u64` | Liveness checks sent with `send_heartbeat()`      |
-| `recoveries()`               | `u64` | Devices recovered from `Lost` by `recover()` |
 | `acked_frames()`             | `u64` | Frames that received a reply                 |
 | `worst_ack_latency_ns()`     | `u64` | Maximum time from sending to the reply [ns]  |
 | `mean_ack_latency_ns()`      | `u64` | Mean time from sending to the reply [ns]     |

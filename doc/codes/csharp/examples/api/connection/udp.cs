@@ -9,7 +9,6 @@ internal static class Sample
     {
         var iface = Interface.Auto;
         var openTimeout = TimeSpan.FromSeconds(40);
-        var recoveryReplyTimeout = TimeSpan.FromMilliseconds(1);
         var lostTimeout = TimeSpan.FromMilliseconds(100);
         var ackTimeout = TimeSpan.FromMilliseconds(10);
         ulong sendBufferBytes = 8192;
@@ -18,7 +17,6 @@ internal static class Sample
         {
             Iface = iface,
             OpenTimeout = openTimeout,
-            RecoveryReplyTimeout = recoveryReplyTimeout,
             LostTimeout = lostTimeout,
             AckTimeout = ackTimeout,
             SendBufferBytes = sendBufferBytes,

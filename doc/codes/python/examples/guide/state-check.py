@@ -1,7 +1,7 @@
 import asyncio
 
 from autd3 import Client, DeviceMask, TransportOption
-from autd3.commands import ReleaseFailsafe, Synchronize, each
+from autd3.commands import ReleaseFailsafe, each
 from autd3.geometry import Autd3, Geometry
 
 # xtask:long-running  # [hide]
@@ -18,14 +18,6 @@ async def main() -> None:
     # ANCHOR_END: open
 
     async with client:
-        # ANCHOR: recover
-        if checker.check().any_lost:
-            recovered = await client.recover()
-            if recovered:
-                await client.send(each(lambda device: Synchronize() if recovered[device.idx()] else None))
-                await client.send(ReleaseFailsafe())
-        # ANCHOR_END: recover
-
         # ANCHOR: ptp_failsafe
         client.send_heartbeat()
         await asyncio.sleep(CHECK_INTERVAL)

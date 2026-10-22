@@ -121,10 +121,6 @@ impl BusStats {
         self.0.heartbeats()
     }
 
-    fn recoveries(&self) -> u64 {
-        self.0.recoveries()
-    }
-
     fn acked_frames(&self) -> u64 {
         self.0.acked_frames()
     }
@@ -139,10 +135,9 @@ impl BusStats {
 
     fn __repr__(&self) -> String {
         format!(
-            "BusStats(frames={}, heartbeats={}, recoveries={}, acked_frames={}, worst_ack_latency_ns={}, mean_ack_latency_ns={})",
+            "BusStats(frames={}, heartbeats={}, acked_frames={}, worst_ack_latency_ns={}, mean_ack_latency_ns={})",
             self.0.frames(),
             self.0.heartbeats(),
-            self.0.recoveries(),
             self.0.acked_frames(),
             self.0.worst_ack_latency_ns(),
             self.0.mean_ack_latency_ns()
@@ -558,17 +553,6 @@ impl Client {
         future_into_py(py, async move {
             let telemetry = client.read_telemetry().await.map_err(client_pyerr_gil)?;
             Ok(telemetry.into_iter().map(Telemetry).collect::<Vec<_>>())
-        })
-    }
-
-    fn recover<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let client = Arc::clone(&self.inner);
-        future_into_py(py, async move {
-            client
-                .recover()
-                .await
-                .map(DeviceMask)
-                .map_err(client_pyerr_gil)
         })
     }
 

@@ -48,7 +48,6 @@ import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
 | `send_frame_at(frame, exec)` | ✓  | `Result<ResponseFuture, Error>`       | 処理時刻を指定してフレームを 1 つ送る ([処理時刻](#処理時刻) 参照) |
 | `state_checker()`         | —     | `StateChecker`                         | `StateChecker`を取得. 詳細は[状態監視](/autd3-sdk/guide/state-check/)を参照. |
 | `send_heartbeat()`             | —     | `Result<(), Error>`                   | `Lost` でない全デバイスへ生存確認を 1 回送る ([生存確認](#生存確認) 参照) |
-| `recover()`               | ✓     | `Result<DeviceMask, Error>`           | `Lost` のデバイスを探し, 応答が戻ったデバイスを復帰させる. 詳細は[状態監視](/autd3-sdk/guide/state-check/#lost-からの復帰)を参照. |
 | `close()`                 | ✓     | `Result<(), Error>`                   | 停止して接続を閉じる                                       |
 
 `close()` は, 振幅を一気に落としてノイズが出るのを避けるため, まず [Silencer](/autd3-sdk/api/command/silencer/) を設定してから全振動子の振幅を 0 にし, その後に接続を閉じる.
@@ -146,7 +145,6 @@ CPU の診断カウンタ. `Clear` で `boot_failure` 以外は 0 に戻る (`Cl
 | ---------------------------- | ----- | -------------------------------------------- |
 | `frames()`                   | `u64` | 送ったフレーム数                             |
 | `heartbeats()`               | `u64` | `send_heartbeat()` で送った生存確認の数           |
-| `recoveries()`               | `u64` | `recover()` で `Lost` から復帰したデバイスの数 |
 | `acked_frames()`             | `u64` | 返信を受けたフレーム数                       |
 | `worst_ack_latency_ns()`     | `u64` | 送信から返信までの最大時間 [ns]              |
 | `mean_ack_latency_ns()`      | `u64` | 送信から返信までの平均時間 [ns]              |
