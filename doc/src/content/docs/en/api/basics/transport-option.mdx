@@ -45,7 +45,7 @@ If needed, call `timeBeginPeriod(1)` in your process yourself.
 
 | Value       | Destination                                                                                             |
 | ----------- | ------------------------------------------------------------------------------------------------------- |
-| `Auto`      | The network interface on which devices replied; an error if two or more replied                         |
+| `Auto`      | The first network interface on which devices reply, searched in interface-index order                   |
 | `Name(..)`  | The real devices connected to the network interface with the given name                                 |
 | `Addr(..)`  | The given IPv6 address and port. Connect to the [Simulator](/autd3-sdk/en/guide/simulator/) with `[::1]:44336` |
 

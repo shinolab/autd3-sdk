@@ -1800,15 +1800,6 @@ pub unsafe extern "C" fn autd3_client_open(
         unsafe { write_cstr(out_err, out_err_len, "null argument") };
         return AUTD3_ERR_INVALID_ARGUMENT;
     };
-    let num_devices = geometry.num_devices();
-    if num_devices == 0 || num_devices > autd3_rs::MAX_DEVICES {
-        let message = format!(
-            "the device count {num_devices} is outside 1..={}",
-            autd3_rs::MAX_DEVICES
-        );
-        unsafe { write_cstr(out_err, out_err_len, &message) };
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    }
 
     match Client::open(geometry, &option) {
         Ok(client) => unsafe { write_out(out, into_handle(ClientHandle(Arc::new(client)))) },

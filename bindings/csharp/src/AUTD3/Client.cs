@@ -468,6 +468,7 @@ namespace AUTD3
 
         private readonly ClientHandle _handle;
         private readonly Geometry _geometry;
+        private volatile bool _closed;
 
         internal ClientHandle Handle => _handle;
 
@@ -670,8 +671,17 @@ namespace AUTD3
             }
         }
 
-        public Task CloseAsync() =>
-            AsyncOps.InvokeAsync((cb, ud) => NativeClient.autd3_client_close(Handle, cb, ud));
+        public async Task CloseAsync()
+        {
+            try
+            {
+                await AsyncOps.InvokeAsync((cb, ud) => NativeClient.autd3_client_close(Handle, cb, ud)).ConfigureAwait(false);
+            }
+            finally
+            {
+                _closed = true;
+            }
+        }
 
         public void Dispose()
         {
@@ -681,7 +691,10 @@ namespace AUTD3
             }
             try
             {
-                CloseAsync().GetAwaiter().GetResult();
+                if (!_closed)
+                {
+                    CloseAsync().GetAwaiter().GetResult();
+                }
             }
             finally
             {
@@ -698,7 +711,10 @@ namespace AUTD3
             }
             try
             {
-                await CloseAsync().ConfigureAwait(false);
+                if (!_closed)
+                {
+                    await CloseAsync().ConfigureAwait(false);
+                }
             }
             finally
             {
