@@ -52,26 +52,37 @@ async def processed(client: autd3.Client) -> int:
     return (await client.read_telemetry())[0].processed
 
 
-def test_each_asks_every_device_and_pads_the_shorter_ones() -> None:
+def test_each_asks_every_device_and_leaves_the_unassigned_ones_out() -> None:
     geo = geometry()
     seen: list[int] = []
 
-    def assign(device: autd3.geometry.Device) -> autd3.commands.Command | None:
+    def assign(device: autd3.geometry.Device) -> autd3.commands.Operation | None:
         seen.append(device.idx())
-        return sine() if device.idx() == 0 else None
+        return autd3.commands.ForceFan(True) if device.idx() == 0 else None
 
     command = each(assign)
     assert seen == []
     frames = autd3.Frames.encode(geo, command)
     assert seen == [0, 1]
-    assert len(frames) == len(autd3.Frames.encode(geo, sine()))
+    assert len(frames) == 1
 
-    mixed = each(lambda device: sine() if device.idx() == 0 else autd3.commands.Nop())
-    assert len(autd3.Frames.encode(geo, mixed)) == len(frames)
+    mixed = each(lambda device: autd3.commands.ForceFan(True) if device.idx() == 0 else autd3.commands.Nop())
+    assert len(autd3.Frames.encode(geo, mixed)) == 1
 
     assert len(autd3.Frames.encode(geo, each(lambda _: None))) == 0
-    assert len(autd3.Frames.encode(geo, each(lambda _: (autd3.commands.Nop(), autd3.commands.Nop())))) == 2
-    assert len(autd3.Frames.encode(geo, each(lambda _: each(lambda _: autd3.commands.Nop())))) == 1
+
+
+def test_each_rejects_what_is_not_a_single_frame_operation() -> None:
+    geo = geometry()
+    nop = autd3.commands.Nop()
+    not_single_frame: list[Any] = [sine(), (nop, nop), [nop], each(lambda _: nop)]
+    for command in not_single_frame:
+
+        def assign(_: autd3.geometry.Device, command: Any = command) -> Any:
+            return command
+
+        with pytest.raises(TypeError, match="single-frame operation for device 0"):
+            autd3.Frames.encode(geo, each(assign))
 
 
 def test_each_rejects_what_is_not_a_command() -> None:
@@ -84,7 +95,7 @@ def test_each_rejects_what_is_not_a_command() -> None:
     class Marker(Exception):
         pass
 
-    def failing(_: autd3.geometry.Device) -> autd3.commands.Command | None:
+    def failing(_: autd3.geometry.Device) -> autd3.commands.Operation | None:
         raise Marker
 
     with pytest.raises(Marker):

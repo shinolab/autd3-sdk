@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use autd3_python_capsule::extract::{duration_to_py, extract_duration, extract_u8};
 use autd3_python_capsule::invalid_argument;
-use autd3_rs::commands::Expansion;
+use autd3_rs::commands::Operation;
 use autd3_rs::commands::{
     Clear as CoreClear, CpuConfig as CoreCpuConfig, EmulateGpioIn, FixedCompletionTime,
     FixedUpdateRate, ForceFan as CoreForceFan, FpgaBusWait as CoreFpgaBusWait,
@@ -17,7 +17,7 @@ use autd3_rs::commands::{
 };
 use autd3_rs::value::{Phase, PulseWidth as CorePulseWidth};
 
-use crate::datagram::PushCommand;
+use crate::datagram::PushOperation;
 use crate::ops::SysTime;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
@@ -716,12 +716,11 @@ pub(crate) struct SetOutputMaskCmd {
     masks: Vec<Vec<bool>>,
 }
 
-impl PushCommand for SetOutputMaskCmd {
-    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
-        expansion.push(SetOutputMask {
+impl PushOperation for SetOutputMaskCmd {
+    fn operation(&self) -> Box<dyn Operation + '_> {
+        Box::new(SetOutputMask {
             masks: self.masks.as_slice(),
-        })?;
-        Ok(())
+        })
     }
 }
 
@@ -740,12 +739,11 @@ pub(crate) struct SetPhaseCorrectionCmd {
     phases: Vec<Vec<Phase>>,
 }
 
-impl PushCommand for SetPhaseCorrectionCmd {
-    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
-        expansion.push(SetPhaseCorrection {
+impl PushOperation for SetPhaseCorrectionCmd {
+    fn operation(&self) -> Box<dyn Operation + '_> {
+        Box::new(SetPhaseCorrection {
             phases: self.phases.as_slice(),
-        })?;
-        Ok(())
+        })
     }
 }
 
@@ -786,10 +784,9 @@ pub(crate) struct SetPulseWidthTableCmd {
     table: [CorePulseWidth; PWE_TABLE_SIZE],
 }
 
-impl PushCommand for SetPulseWidthTableCmd {
-    fn push_into<'a>(&'a self, expansion: &mut Expansion<'_, 'a>) -> Result<(), autd3_rs::Error> {
-        expansion.push(CoreSetPulseWidthTable { table: &self.table })?;
-        Ok(())
+impl PushOperation for SetPulseWidthTableCmd {
+    fn operation(&self) -> Box<dyn Operation + '_> {
+        Box::new(CoreSetPulseWidthTable { table: &self.table })
     }
 }
 
