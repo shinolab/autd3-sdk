@@ -124,13 +124,6 @@ pub fn angle_to_py(py: Python<'_>, v: Angle) -> PyResult<Bound<'_, PyAny>> {
         .call_method1("from_rad", (v.rad(),))
 }
 
-pub fn sampling_config_to_py(py: Python<'_>, config: SamplingConfig) -> PyResult<Bound<'_, PyAny>> {
-    let capsule = crate::sampling_config_into_capsule(py, config)?;
-    py.import("autd3_core")?
-        .getattr("SamplingConfig")?
-        .call_method1("_from_sampling_config_capsule", (capsule,))
-}
-
 pub fn duration_to_py(py: Python<'_>, d: Duration) -> PyResult<Bound<'_, PyAny>> {
     py.import("autd3_core")?.getattr("Duration")?.call_method1(
         "from_nanos",

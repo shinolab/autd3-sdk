@@ -422,6 +422,12 @@ impl ClosedSession {
     }
 }
 
+struct EachDeviceSend {
+    accepted_devices: u128,
+    first_failure: Option<UdpError>,
+    started_lost_clock: bool,
+}
+
 pub(crate) struct Session {
     channel: Channel,
     state: Mutex<SessionState>,
@@ -552,7 +558,7 @@ impl Session {
         target_devices: u128,
         start_device: usize,
         body_for_device: impl Fn(usize) -> [&'a [u8]; 2],
-    ) -> (Result<u128, UdpError>, bool) {
+    ) -> EachDeviceSend {
         let mut retry_full_socket_until = match kind {
             Kind::Frame => Instant::now().checked_add(self.timeouts.lost),
             _ => None,
@@ -606,11 +612,11 @@ impl Session {
                 }
             }
         }
-        let sent = match first_failure {
-            Some(failure) if kind == Kind::Frame => Err(failure),
-            _ => Ok(accepted_devices),
-        };
-        (sent, started_lost_clock)
+        EachDeviceSend {
+            accepted_devices,
+            first_failure,
+            started_lost_clock,
+        }
     }
 
     fn wake_driver(&self, missed_wake: &str) {
@@ -633,7 +639,7 @@ impl Session {
         for (header, datagram) in headers.iter_mut().zip(datagrams) {
             *header = datagram.frame_header(exec_at);
         }
-        let (sent, started_lost_clock) = self.send_to_each_device(
+        let outcome = self.send_to_each_device(
             Kind::Frame,
             msg_id,
             target_devices,
@@ -643,10 +649,13 @@ impl Session {
                 [headers[index].as_bytes(), datagrams[index].payload()]
             },
         );
+        let sent = outcome
+            .first_failure
+            .map_or(Ok(outcome.accepted_devices), Err);
         let finished = self.finish_frame_send(msg_id, sent);
         if finished.as_ref().is_ok_and(|&became_head| became_head) {
             self.wake_driver("the ack timeout is noticed at its next deadline");
-        } else if started_lost_clock {
+        } else if outcome.started_lost_clock {
             self.wake_driver("a silent device is noticed at its next deadline");
         }
         finished.map(|_| ())
@@ -694,17 +703,17 @@ impl Session {
                 state.device_mask_where(|liveness| !liveness.is_lost()),
             )
         };
-        let (sent, started_lost_clock) = self.send_to_each_device(
+        let outcome = self.send_to_each_device(
             Kind::Heartbeat,
             msg_id,
             target_devices,
             self.heartbeat_resume_device.load(Ordering::Relaxed),
             |_| [&[][..]; 2],
         );
-        if started_lost_clock {
+        if outcome.started_lost_clock {
             self.wake_driver("a silent device is noticed at its next deadline");
         }
-        if sent? != 0 {
+        if outcome.accepted_devices != 0 {
             self.stats.record_heartbeat();
         }
         Ok(())

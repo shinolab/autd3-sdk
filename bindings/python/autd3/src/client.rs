@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::datagram::{Expand, Frame, command_of};
@@ -475,6 +476,7 @@ impl ExecAt {
 pub struct Client {
     inner: Arc<autd3_rs::Client>,
     geometry: Arc<Geometry>,
+    closed: Arc<AtomicBool>,
 }
 
 fn frame_out_of_range() -> PyErr {
@@ -497,6 +499,7 @@ impl Client {
         Ok(Client {
             inner: Arc::new(client),
             geometry: Arc::new(geometry),
+            closed: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -621,10 +624,12 @@ impl Client {
 
     fn close<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let client = Arc::clone(&self.inner);
-        future_into_py(
-            py,
-            async move { client.close().await.map_err(client_pyerr_gil) },
-        )
+        let closed = Arc::clone(&self.closed);
+        future_into_py(py, async move {
+            let result = client.close().await;
+            closed.store(true, Ordering::Release);
+            result.map(|()| Completed).map_err(client_pyerr_gil)
+        })
     }
 
     fn __aenter__(slf: Bound<'_, Self>) -> PyResult<Bound<'_, PyAny>> {
@@ -639,6 +644,9 @@ impl Client {
         _exc_value: Option<Bound<'py, PyAny>>,
         _traceback: Option<Bound<'py, PyAny>>,
     ) -> PyResult<Bound<'py, PyAny>> {
+        if self.closed.load(Ordering::Acquire) {
+            return completed_into_py(py, Completed);
+        }
         self.close(py)
     }
 }

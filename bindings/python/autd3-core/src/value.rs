@@ -288,11 +288,6 @@ impl SamplingConfig {
         autd3_python_capsule::sampling_config_into_capsule(py, self.0)
     }
 
-    #[staticmethod]
-    fn _from_sampling_config_capsule(capsule: &Bound<'_, PyCapsule>) -> PyResult<Self> {
-        autd3_python_capsule::sampling_config_from_capsule(capsule).map(Self)
-    }
-
     fn __repr__(&self) -> String {
         format!("{:?}", self.0)
     }

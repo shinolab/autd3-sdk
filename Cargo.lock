@@ -112,7 +112,6 @@ dependencies = [
 name = "autd3-rs"
 version = "0.12.0"
 dependencies = [
- "approx",
  "async-lock",
  "autd3-cpu-wire",
  "autd3-rs-core",
