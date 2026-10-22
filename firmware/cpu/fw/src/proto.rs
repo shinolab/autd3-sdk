@@ -61,12 +61,6 @@ impl Reply {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Disposition {
-    Deferred,
-    Dropped,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Drained {
     Empty,
     Completed { msg_id: u16 },

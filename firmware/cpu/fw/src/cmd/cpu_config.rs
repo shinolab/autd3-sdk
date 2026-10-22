@@ -21,11 +21,12 @@ impl Cpu {
     }
 
     pub fn request_config_reset(&self) {
-        self.config_reset_requested.store(true, Ordering::Release);
+        self.config_reset_requested.store(true, Ordering::Relaxed);
     }
 
     pub(crate) fn apply_requested_config_reset<P: Port>(&self, port: &mut P) {
-        if self.config_reset_requested.swap(false, Ordering::AcqRel) {
+        if self.config_reset_requested.load(Ordering::Relaxed) {
+            self.config_reset_requested.store(false, Ordering::Relaxed);
             self.apply_config(port, CpuConfig::DEFAULT);
         }
     }

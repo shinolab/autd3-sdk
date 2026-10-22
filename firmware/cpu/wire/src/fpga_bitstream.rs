@@ -6,7 +6,7 @@ use crate::fpga_update::{
 };
 
 pub const SYNC_WORD: u32 = 0xAA99_5566;
-pub const FPGA_BARRIER_TIMER: u32 = 0x4000_4000;
+const FPGA_BARRIER_TIMER: u32 = 0x4000_4000;
 
 const BARRIER_WORDS: [u32; 14] = [
     0xFFFF_FFFF,
@@ -24,7 +24,7 @@ const BARRIER_WORDS: [u32; 14] = [
     0x2000_0000,
     0x2000_0000,
 ];
-pub const FPGA_BARRIER_BYTES: usize = BARRIER_WORDS.len() * 4;
+const FPGA_BARRIER_BYTES: usize = BARRIER_WORDS.len() * 4;
 
 const _: () =
     assert!(FPGA_BARRIER_BASE as usize + FPGA_BARRIER_BYTES <= FPGA_GOLDEN_REGION_END as usize);

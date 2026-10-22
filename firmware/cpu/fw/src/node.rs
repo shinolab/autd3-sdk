@@ -9,7 +9,7 @@ use autd3_cpu_wire::udp::{
 
 use crate::net::{self, Endpoint, Ipv6, Mac, NDP_HOP_LIMIT, Packet, UDP_PAYLOAD_OFFSET, Udp};
 use crate::nic::{Nic, RxMeta, other_port};
-use crate::proto::{Disposition, FRAME_BYTES_MAX, FrameHeader, REPLY_DATA_BYTES_MAX, Reply};
+use crate::proto::{FRAME_BYTES_MAX, FrameHeader, REPLY_DATA_BYTES_MAX, Reply};
 use crate::ptp::Ptp;
 use crate::version::{FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH};
 
@@ -17,7 +17,7 @@ pub const TX_BUF_BYTES: usize = 320;
 const MAX_ECHO_BODY: usize = TX_BUF_BYTES - UDP_PAYLOAD_OFFSET - 4;
 
 pub trait CommandLayer {
-    fn recv_frame(&mut self, frame: &[u8], msg_id: u16) -> Disposition;
+    fn recv_frame(&mut self, frame: &[u8], msg_id: u16);
     fn reply(&mut self) -> Reply;
     fn send_failed(&mut self, count: u32);
     fn unassigned(&mut self);
@@ -27,8 +27,8 @@ pub trait CommandLayer {
 }
 
 impl CommandLayer for &crate::Cpu {
-    fn recv_frame(&mut self, frame: &[u8], msg_id: u16) -> Disposition {
-        crate::Cpu::recv_frame(self, frame, msg_id)
+    fn recv_frame(&mut self, frame: &[u8], msg_id: u16) {
+        crate::Cpu::recv_frame(self, frame, msg_id);
     }
 
     fn reply(&mut self) -> Reply {
@@ -333,7 +333,7 @@ impl Node {
                 self.last_host_frame_ms = Some(now_ms);
                 cmds.host_idle(Some(0));
                 if is_frame {
-                    let _ = cmds.recv_frame(body, reply.msg_id);
+                    cmds.recv_frame(body, reply.msg_id);
                 } else {
                     let state = cmds.reply();
                     let ptp_failsafe = cmds.ptp_failsafe_active();
@@ -530,7 +530,7 @@ mod tests {
         UDP_PAYLOAD_OFFSET,
     };
     use crate::nic::{NS_PER_SEC, Nic, RxMeta, other_port};
-    use crate::proto::{Disposition, Error, FRAME_BYTES_MAX, Reply as CmdReply, ReplyData};
+    use crate::proto::{Error, FRAME_BYTES_MAX, Reply as CmdReply, ReplyData};
     use crate::sim_nic::{SimClock, SimNic};
 
     const fn unit_address(unit_id: u8) -> Ipv6 {
@@ -551,13 +551,12 @@ mod tests {
         unassigned: u32,
         ptp_unlocked: Vec<Option<u32>>,
         ptp_failsafe: bool,
-        host_idle: Vec<Option<u32>>,
+        host_idle_publishes: u32,
     }
 
     impl CommandLayer for FakeCommands {
-        fn recv_frame(&mut self, frame: &[u8], msg_id: u16) -> Disposition {
+        fn recv_frame(&mut self, frame: &[u8], msg_id: u16) {
             self.frames.push((frame.to_vec(), msg_id));
-            Disposition::Deferred
         }
 
         fn reply(&mut self) -> CmdReply {
@@ -580,8 +579,8 @@ mod tests {
             self.ptp_failsafe
         }
 
-        fn host_idle(&mut self, idle_ms: Option<u32>) {
-            self.host_idle.push(idle_ms);
+        fn host_idle(&mut self, _idle_ms: Option<u32>) {
+            self.host_idle_publishes += 1;
         }
     }
 
@@ -623,7 +622,7 @@ mod tests {
                     unassigned: 0,
                     ptp_unlocked: Vec::new(),
                     ptp_failsafe: false,
-                    host_idle: Vec::new(),
+                    host_idle_publishes: 0,
                 },
             }
         }
@@ -680,10 +679,10 @@ mod tests {
 
     impl Harness {
         fn deliver_at(&mut self, frame: &[u8], rx: RxMeta) -> bool {
-            let published = self.cmds.host_idle.len();
+            let published = self.cmds.host_idle_publishes;
             self.node
                 .on_frame(&mut self.nic, self.now_ms, frame, rx, &mut self.cmds);
-            self.cmds.host_idle.len() > published
+            self.cmds.host_idle_publishes > published
         }
 
         fn send(&mut self, dst: Ipv6, kind: Kind, body: &[u8]) -> bool {
