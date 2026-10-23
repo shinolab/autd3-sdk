@@ -1,3 +1,4 @@
+import numpy as np
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import m, mm, s
 from autd3.value import Intensity
@@ -11,6 +12,8 @@ from autd3_pattern_holo import (
 )
 
 geometry = Geometry([Autd3()])
+
+order = np.random.default_rng().permutation(geometry.num_transducers())
 
 phases = geometry.phase_buffer()
 
@@ -28,6 +31,7 @@ greedy(
     ],
     wavelength(340 * m / s),
     Intensity.MAX,
+    order,
     GreedyOption(
         phase_quantization_levels=16,
         directivity=Directivity.Sphere,

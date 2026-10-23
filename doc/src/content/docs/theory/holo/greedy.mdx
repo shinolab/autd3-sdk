@@ -60,7 +60,7 @@ import MathBlock from "@components/MathBlock.astro";
 
 :::note
 SDK の [`greedy`](/autd3-sdk/api/compute/holo/greedy/) は位相だけを `phase_quantization_levels` 段に離散化して探索し, 振幅は探索せず入力として与える (上のアルゴリズムで <Math tex="K = 1" /> とした場合にあたる).
-振動子はランダムな順に選ぶ.
+振動子を選ぶ順序はユーザが `order` で与える. SDK 自身は乱数を使わないので, ランダムな順に選ぶにはユーザがシャッフルした順序を渡す.
 既定の評価関数は上式の二乗誤差ではなく, 二乗を外した絶対誤差の和 (`abs_objective_func`) である.
 Rust では `GreedyOption` の `objective_func` で評価関数を差し替えられる.
 :::

@@ -23,6 +23,12 @@ greedy が最適化するのは位相だけで, 振幅は最適化しない.
 `intensities` には全振動子共通の一様値 (`Intensity`) と, 振動子ごとのバッファの両方を渡せる. 
 振幅が 0 の振動子は探索から外れ, 位相は 0 になる. 
 
+振動子を訪問する順序は `order` で与える. 
+番号は Geometry 全体の通し番号 (デバイス順に `0` から `geometry.num_transducers() - 1` まで) で, 
+`order` は全振動子をちょうど 1 回ずつ含む並びでなければならない (長さが違う・範囲外・重複のいずれもエラーになる). 
+greedy 自身は乱数を使わないので, 同じ `order` を渡せば結果は毎回同じになる. 
+振動子は無作為な順に選ぶべきとされている ([理論](/autd3-sdk/theory/holo/greedy/) を参照) ので, 通常は自分の乱数でシャッフルした並びを渡す. 
+
 ## API
 
 <CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
@@ -33,6 +39,7 @@ greedy が最適化するのは位相だけで, 振幅は最適化しない.
 | `foci`       | `&[AmplitudeTarget]`      | 焦点列 (位置と目標振幅)   |
 | `wavelength` | `Length`               | 波長                      |
 | `intensities` | `impl Into<PatternIntensity>` | 振幅 (`Intensity` の一様値, または `&[Vec<Intensity>]` のデバイスごとのバッファ) |
+| `order`      | `&[usize]`             | 振動子を訪問する順序 (通し番号の並び) |
 | `option`     | `&GreedyOption`        | 追加オプション (下記参照) |
 | `dst`        | `&mut [Vec<Phase>]`    | 位相の出力バッファ        |
 

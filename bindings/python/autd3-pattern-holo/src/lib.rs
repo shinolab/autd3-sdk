@@ -823,12 +823,13 @@ fn gspat_batch(
 }
 
 #[pyfunction]
-#[pyo3(signature = (geometry, foci, wavelength, intensities, option, dst))]
+#[pyo3(signature = (geometry, foci, wavelength, intensities, order, option, dst))]
 fn greedy(
     geometry: &Bound<'_, PyAny>,
     foci: Vec<PyRef<'_, AmplitudeTarget>>,
     wavelength: &Bound<'_, PyAny>,
     intensities: &Bound<'_, PyAny>,
+    order: Vec<usize>,
     option: &GreedyOption,
     dst: &Bound<'_, PyAny>,
 ) -> PyResult<()> {
@@ -860,6 +861,7 @@ fn greedy(
         &foci,
         wavelength,
         intensities,
+        &order,
         &option,
         dst.as_mut_slice(),
     )

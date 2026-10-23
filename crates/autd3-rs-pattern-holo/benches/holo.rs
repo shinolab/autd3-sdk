@@ -43,6 +43,7 @@ fn bench(c: &mut Criterion) {
         let mut phases = geometry.phase_buffer();
         let mut intensities = geometry.intensity_buffer();
         let max_intensities = geometry.intensity_buffer();
+        let order: Vec<usize> = (0..geometry.num_transducers()).collect();
         for &n in FOCI_COUNTS {
             let foci = make_foci(&geometry, n);
             let id = format!("{d}dev-{n}foci");
@@ -96,6 +97,7 @@ fn bench(c: &mut Criterion) {
                         foci,
                         wl,
                         black_box(&max_intensities),
+                        &order,
                         &GreedyOption::default(),
                         black_box(&mut phases),
                     )
