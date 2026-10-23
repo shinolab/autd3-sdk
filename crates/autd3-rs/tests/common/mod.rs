@@ -74,7 +74,7 @@ pub(crate) fn fans(emulator: &UdpEmulator) -> Vec<bool> {
 
 pub(crate) fn udp_error(error: &Error) -> Option<&UdpError> {
     match error {
-        Error::Network(cause) => (**cause).downcast_ref::<UdpError>(),
+        Error::Network(cause) => Some(cause),
         Error::DeviceError { .. }
         | Error::UnexpectedReply { .. }
         | Error::DeviceLost { .. }

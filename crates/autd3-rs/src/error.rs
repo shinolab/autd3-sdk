@@ -8,22 +8,23 @@ use autd3_cpu_wire::value::FocusOutOfRange;
 use autd3_rs_core::protocol::describe_device_error;
 
 use crate::commands::PhaseDepth;
+use crate::udp::UdpError;
 
 #[derive(Clone)]
-pub struct NetworkCause(Arc<dyn core::error::Error + Send + Sync>);
+pub struct NetworkCause(Arc<UdpError>);
 
 impl NetworkCause {
     #[must_use]
-    pub fn new<E: core::error::Error + Send + Sync + 'static>(source: E) -> Self {
+    pub(crate) fn new(source: UdpError) -> Self {
         Self(Arc::new(source))
     }
 }
 
 impl core::ops::Deref for NetworkCause {
-    type Target = dyn core::error::Error + Send + Sync + 'static;
+    type Target = UdpError;
 
     fn deref(&self) -> &Self::Target {
-        &*self.0
+        &self.0
     }
 }
 
@@ -69,8 +70,8 @@ pub enum Error {
     Closed,
 }
 
-impl From<crate::udp::UdpError> for Error {
-    fn from(e: crate::udp::UdpError) -> Self {
+impl From<UdpError> for Error {
+    fn from(e: UdpError) -> Self {
         Error::Network(NetworkCause::new(e))
     }
 }
