@@ -22,7 +22,6 @@ use autd3_rs::{
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
 use crate::cli::{Cli, Command, Mode};
-use crate::mem::{self, MemProfile};
 use crate::report::{LiveBlock, interval_lines, telemetry_lines};
 use crate::stats::{AckLatency, Counters, Histogram, SampleStatus, Summary, Traffic};
 
@@ -32,7 +31,6 @@ pub(crate) struct RunOutput {
     pub summary: Summary,
     pub stopped_on_error: Option<(u64, SampleStatus)>,
     pub driver_closed: bool,
-    pub mem: Option<MemProfile>,
     pub telemetry_start: Vec<Telemetry>,
     pub telemetry_end: Vec<Telemetry>,
 }
@@ -381,7 +379,6 @@ struct Measurement {
     stopped_on_error: Option<(u64, SampleStatus)>,
     driver_closed: bool,
     stop_on_error: bool,
-    mem_recorder: mem::Recorder,
     start: Instant,
     heartbeats: u64,
     ack: AckLatency,
@@ -391,7 +388,6 @@ impl Measurement {
     fn start(cli: &Cli, heartbeats: u64, telemetry_start: Vec<Telemetry>) -> Self {
         let traffic = Traffic::new(cli.devices.get());
         let live = Live::new(traffic, telemetry_start);
-        let mem_recorder = mem::start();
         Self {
             counters: Counters::default(),
             traffic,
@@ -400,7 +396,6 @@ impl Measurement {
             stopped_on_error: None,
             driver_closed: false,
             stop_on_error: cli.stop_on_error,
-            mem_recorder,
             start: Instant::now(),
             heartbeats,
             ack: AckLatency::default(),
@@ -438,7 +433,6 @@ impl Measurement {
 
     fn finish(self) -> RunOutput {
         let elapsed = self.start.elapsed();
-        let mem = mem::profile(self.mem_recorder, self.counters.total());
         let secs = elapsed.as_secs_f64();
         let per_sec = |n: u64| if secs > 0.0 { n as f64 / secs } else { 0.0 };
         RunOutput {
@@ -454,7 +448,6 @@ impl Measurement {
             },
             stopped_on_error: self.stopped_on_error,
             driver_closed: self.driver_closed,
-            mem,
             telemetry_start: self.live.telemetry_start,
             telemetry_end: self.live.telemetry_last,
         }

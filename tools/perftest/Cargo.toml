@@ -12,9 +12,6 @@ description = "CLI tool for measuring communication performance."
 name = "autd3-rs-perftest"
 path = "src/main.rs"
 
-[features]
-mem-profile = []
-
 [dependencies]
 autd3-rs.workspace = true
 tracing-subscriber.workspace = true

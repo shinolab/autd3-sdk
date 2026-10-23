@@ -23,9 +23,6 @@ cargo xtask tool perftest -- --devices 2 --emulator
 # Against the simulator
 cargo xtask tool perftest -- --devices 1 --simulator
 
-# Allocation histogram on top of the usual summary
-cargo xtask tool perftest --mem-profile -- --devices 2
-
 # Bank-switch delay and inter-device spread, 5 ms exec_lead, Pattern as 3 pipelined frames
 cargo xtask tool perftest -- --devices 4 --mode bank-switch --exec-lead 5ms --framing split
 ```

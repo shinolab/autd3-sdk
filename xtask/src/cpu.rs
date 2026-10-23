@@ -1,5 +1,4 @@
 use std::ffi::OsStr;
-use std::io::BufRead;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -7,7 +6,7 @@ use clap::Subcommand;
 
 use crate::clean::{CleanArgs, Cleaner};
 use crate::cpu_codegen::gen_param;
-use crate::util::{cargo_clippy, cargo_fmt, run, run_env, which};
+use crate::util::{cargo_clippy, cargo_fmt, run, run_env};
 
 #[derive(Subcommand)]
 pub(crate) enum CpuCmd {
@@ -15,7 +14,7 @@ pub(crate) enum CpuCmd {
         about = "Build the loader and the application from `board` and merge them into the flashable `.bin`"
     )]
     Build,
-    #[command(about = "Build, then write the `.bin` to the device with J-Link")]
+    #[command(about = "Build, then write the `.bin` to the device with `firmware-writer` (J-Link)")]
     Flash,
     #[command(about = "Run the portable firmware logic (`autd3-cpu-fw`) tests on the host")]
     Test {
@@ -27,13 +26,6 @@ pub(crate) enum CpuCmd {
     },
     #[command(about = "Regenerate `fw/src/fpga_params.rs` from the FPGA `params.svh`")]
     GenParam,
-    #[command(
-        about = "Write the slot-A image header (magic/generation 0/length/CRC32) into a linked `.bin`"
-    )]
-    StampImage {
-        #[arg(help = "The flash image produced by the final link (`autd3-cpu.bin`)")]
-        bin: PathBuf,
-    },
     #[command(about = "Clippy the firmware")]
     Lint {
         #[arg(long, help = "Clippy the loom model instead of the regular targets")]
@@ -54,7 +46,6 @@ pub(crate) fn run_cpu(root: &Path, cmd: &CpuCmd) -> Result<()> {
         CpuCmd::Flash => cpu_flash(root),
         CpuCmd::Test { loom } => cpu_test(root, *loom),
         CpuCmd::GenParam => gen_param(root),
-        CpuCmd::StampImage { bin } => stamp_image(bin),
         CpuCmd::Lint { loom } => cpu_lint(root, *loom),
         CpuCmd::Format { fix } => {
             cargo_fmt(root, &["-p", "autd3-cpu-fw"], *fix)?;
@@ -86,93 +77,9 @@ fn board_dir(root: &Path) -> PathBuf {
 
 fn cpu_flash(root: &Path) -> Result<()> {
     let bin = cpu_build(root)?;
-
-    let jlink = match std::env::var("JLINK") {
-        Ok(v) if !v.is_empty() => v,
-        _ => ["JLinkExe", "JLink"]
-            .into_iter()
-            .find_map(which)
-            .map(|path| path.to_string_lossy().into_owned())
-            .context(
-                "J-Link Commander (JLinkExe) not found on PATH (install J-Link or set JLINK)",
-            )?,
-    };
-
-    let slot_b_start = 0x3000_0000 + autd3_cpu_wire::update::SLOT_B_BASE;
-    let slot_b_last = slot_b_start + autd3_cpu_wire::update::SLOT_BYTES - 1;
-    let script = format!(
-        "r\nexec EnableEraseAllFlashBanks\nerase 0x{slot_b_start:X} 0x{slot_b_last:X}\nloadfile {} 0x30000000\nr\ng\nq\n",
-        bin.to_string_lossy().replace('\\', "/")
-    );
-    let script_path = root.join("firmware/cpu/build/flash.jlink");
-    std::fs::write(&script_path, script)
-        .with_context(|| format!("writing {}", script_path.display()))?;
-
-    run_jlink(&jlink, &script_path, root)
-        .context("J-Link failed. Make sure the AUTD3 is connected and powered on.")?;
+    crate::firmware::run_writer(root, [OsStr::new("--cpu"), bin.as_os_str()])?;
     println!("flash complete: {}", bin.display());
     Ok(())
-}
-
-const JLINK_NO_FLASH_BANK: &str = "No Flash bank within given address range";
-
-fn run_jlink(jlink: &str, script: &Path, cwd: &Path) -> Result<()> {
-    let mut child = std::process::Command::new(jlink)
-        .args([
-            "-device",
-            "R7S910018_R4F",
-            "-if",
-            "JTAG",
-            "-speed",
-            "4000",
-            "-jtagconf",
-            "-1,-1",
-            "-autoconnect",
-            "1",
-            "-ExitOnError",
-            "1",
-            "-CommanderScript",
-        ])
-        .arg(script)
-        .current_dir(cwd)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .with_context(|| format!("failed to spawn `{jlink}` (is it installed and on PATH?)"))?;
-    let stdout = child.stdout.take().context("J-Link stdout is not piped")?;
-    let stderr = child.stderr.take().context("J-Link stderr is not piped")?;
-    let out = std::thread::spawn(move || {
-        let mut log = String::new();
-        tee_lines(stdout, &mut log);
-        log
-    });
-    let err = std::thread::spawn(move || {
-        let mut log = String::new();
-        tee_lines(stderr, &mut log);
-        log
-    });
-    let status = child.wait().context("waiting for J-Link")?;
-    let mut log = out.join().unwrap_or_default();
-    log.push_str(&err.join().unwrap_or_default());
-    if !status.success() {
-        bail!("`{jlink}` exited with {status}");
-    }
-    if log.contains(JLINK_NO_FLASH_BANK) {
-        bail!(
-            "J-Link did not erase the serial flash: {JLINK_NO_FLASH_BANK}. \
-             The QSPI bank stayed untouched, so an OTA image in slot B would still win the boot."
-        );
-    }
-    Ok(())
-}
-
-fn tee_lines(reader: impl std::io::Read, log: &mut String) {
-    for line in std::io::BufReader::new(reader).lines() {
-        let Ok(line) = line else { break };
-        eprintln!("{line}");
-        log.push_str(&line);
-        log.push('\n');
-    }
 }
 
 pub(crate) fn cpu_build(root: &Path) -> Result<PathBuf> {
@@ -274,7 +181,7 @@ fn objcopy_binary(objcopy: &str, elf: &Path, bin: &Path, cwd: &Path) -> Result<V
     std::fs::read(bin).with_context(|| format!("reading {}", bin.display()))
 }
 
-pub(crate) fn stamp_image(bin: &Path) -> Result<()> {
+fn stamp_image(bin: &Path) -> Result<()> {
     use autd3_cpu_wire::update::{ImageHeader, SLOT_IMAGE_CAPACITY, Slot, crc32};
     use zerocopy::IntoBytes;
 

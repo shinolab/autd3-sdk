@@ -1,12 +1,23 @@
 use autd3_cpu_wire::update::{ImageHeader, RunningImage, Slot, crc32};
 use std::time::Duration;
 
+use autd3_rs::Datagram;
+use autd3_rs::protocol::FrameHeader;
 use autd3_rs_firmware_emulator::EMULATED_CPU_IMAGE;
 use autd3_rs_firmware_emulator::test_utils::{Audit, DeviceTestExt};
 use autd3_rs_firmware_ota::{
-    CpuFirmwareImage, DeviceReply, Driver, DriverError, Exchange, Frame, Replies, UpdateProgress,
+    CpuFirmwareImage, DeviceReply, Driver, DriverError, Exchange, Replies, UpdateProgress,
 };
-use zerocopy::FromBytes;
+use zerocopy::{FromBytes, IntoBytes};
+
+fn wire_bytes(datagram: &Datagram) -> Vec<u8> {
+    let header = FrameHeader {
+        reserved: 0,
+        cmd: datagram.cmd.as_u8(),
+        exec_at: 0.into(),
+    };
+    [header.as_bytes(), datagram.payload()].concat()
+}
 
 struct Chain(Audit);
 
@@ -50,13 +61,13 @@ impl Exchange for Chain {
         self.0.num_devices()
     }
 
-    fn exchange(&mut self, frame: &Frame) -> Result<Replies, Self::Error> {
-        let bytes = frame.bytes();
+    fn exchange(&mut self, datagram: &Datagram) -> Result<Replies, Self::Error> {
+        let bytes = wire_bytes(datagram);
         Ok(self.send_bytes(&vec![&bytes[..]; self.0.num_devices()]))
     }
 
-    fn exchange_each(&mut self, frames: &[Frame]) -> Result<Replies, Self::Error> {
-        let bytes: Vec<Vec<u8>> = frames.iter().map(Frame::bytes).collect();
+    fn exchange_each(&mut self, datagrams: &[Datagram]) -> Result<Replies, Self::Error> {
+        let bytes: Vec<Vec<u8>> = datagrams.iter().map(wire_bytes).collect();
         let frames: Vec<&[u8]> = bytes.iter().map(Vec::as_slice).collect();
         Ok(self.send_bytes(&frames))
     }
@@ -313,9 +324,10 @@ mod fpga {
     use autd3_rs_firmware_emulator::test_utils::{Audit, FpgaEmulatorTestExt};
 
     use super::Chain;
+    use autd3_rs::Datagram;
     use autd3_rs_firmware_emulator::autd3_cpu_fw::Port;
     use autd3_rs_firmware_emulator::autd3_cpu_fw::fpga_params::ADDR_FUNCTION_BITS;
-    use autd3_rs_firmware_ota::{Driver, DriverError, FpgaFirmwareImage, Frame, boot_image};
+    use autd3_rs_firmware_ota::{Driver, DriverError, FpgaFirmwareImage, boot_image};
 
     use super::NUM_TRANSDUCERS;
 
@@ -497,7 +509,7 @@ mod fpga {
         let mut driver = Driver::new(Chain::from(audit));
         driver.update_fpga(&bitstream(10, 4), |_| {}).unwrap();
         assert!(matches!(
-            driver.send_checked(&Frame::new(Cmd::Clear)),
+            driver.send_checked(&Datagram::no_payload(Cmd::Clear)),
             Err(DriverError::Device { code: 0x10, .. })
         ));
     }
