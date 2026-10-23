@@ -37,7 +37,6 @@ module main #(
   settings::sync_settings_t sync_settings;
   settings::debug_settings_t debug_settings;
   settings::sync_ps_settings_t sync_ps_settings;
-  settings::sync_ps_state_t sync_ps_state;
 
   logic clk;
   logic locked;
@@ -138,8 +137,7 @@ module main #(
       .PWE_TABLE_BUS(pwe_table_bus.in_port),
       .FLASH_BUS(flash_bus.host_port),
       .CPU_WATCHDOG_FIRED(cpu_watchdog_fired),
-      .SYNC_PS_SETTINGS(sync_ps_settings),
-      .SYNC_PS_STATE(sync_ps_state)
+      .SYNC_PS_SETTINGS(sync_ps_settings)
   );
 
   assign output_gate = failsafe | cpu_watchdog_fired;
@@ -193,7 +191,7 @@ module main #(
       .SKIP_ONE_ASSERT(skip_one_assert),
       .SYNC_TIME_DIFF(sync_time_diff),
       .SYNC_RESYNC_COUNT(sync_resync_count),
-      .PS_ENABLE(sync_ps_settings.ENABLE & ~sync_ps_settings.MANUAL),
+      .PS_ENABLE(sync_ps_settings.ENABLE),
       .PS_FINE(ps_fine),
       .PS_EDGE(ps_edge),
       .PS_EDGE_DIFF(ps_edge_diff)
@@ -206,8 +204,7 @@ module main #(
       .FINE(ps_fine),
       .EDGE_DIFF(ps_edge_diff),
       .RATE(ps_rate),
-      .RATE_TOGGLE(ps_rate_toggle),
-      .STATE(sync_ps_state)
+      .RATE_TOGGLE(ps_rate_toggle)
   );
 
   sync_ps_nco sync_ps_nco (
@@ -270,8 +267,7 @@ module main #(
       .TRANSITION_PENDING(mod_transition_pending),
       .EXT_ACTIVE(mod_ext_active),
       .DEBUG_IDX(mod_idx),
-      .DEBUG_BANK(mod_bank),
-      .DEBUG_STOP()
+      .DEBUG_BANK(mod_bank)
   );
 
   silencer #(
@@ -309,8 +305,7 @@ module main #(
       .DIN_VALID(dout_valid_e),
       .PULSE_WIDTH(pulse_width_e),
       .PHASE(phase_e),
-      .PWM_OUT(PWM_OUT),
-      .DOUT_VALID()
+      .PWM_OUT(PWM_OUT)
   );
 
   gpio_output #(

@@ -91,20 +91,7 @@ package params;
     ADDR_WATCHDOG_STATE   = 8'h03
   } watchdog_addr_t;
 
-  typedef enum logic [7:0] {
-    ADDR_SYNC_PS_CTL         = 8'h00,
-    ADDR_SYNC_PS_KP          = 8'h01,
-    ADDR_SYNC_PS_KI          = 8'h02,
-    ADDR_SYNC_PS_KF          = 8'h03,
-    ADDR_SYNC_PS_MANUAL_RATE = 8'h04,
-    ADDR_SYNC_PS_STATE       = 8'h10,
-    ADDR_SYNC_PS_RATE        = 8'h11,
-    ADDR_SYNC_PS_INTEG       = 8'h12,
-    ADDR_SYNC_PS_PD_POS      = 8'h13,
-    ADDR_SYNC_PS_PD_NEG      = 8'h14,
-    ADDR_SYNC_PS_EDGE_DIFF   = 8'h15,
-    ADDR_SYNC_PS_EDGE_COUNT  = 8'h16
-  } sync_ps_addr_t;
+  typedef enum logic [7:0] {ADDR_SYNC_PS_CTL = 8'h00} sync_ps_addr_t;
 
   typedef enum logic [7:0] {
     FLASH_OP_CRC32   = 8'h02,

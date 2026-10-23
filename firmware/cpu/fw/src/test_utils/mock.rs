@@ -393,7 +393,6 @@ impl Port for MockPort {
         }
         if select == BramSelect::Watchdog.as_u8() {
             return match addr & 0xFF {
-                ADDR_WATCHDOG_TIMEOUT => self.watchdog_timeout.unwrap_or(0),
                 ADDR_WATCHDOG_STATE => self.watchdog_state,
                 _ => 0,
             };

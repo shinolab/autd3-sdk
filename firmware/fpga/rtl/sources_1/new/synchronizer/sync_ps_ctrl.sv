@@ -7,8 +7,7 @@ module sync_ps_ctrl (
     input wire FINE,
     input wire signed [13:0] EDGE_DIFF,
     output var signed [15:0] RATE,
-    output var RATE_TOGGLE,
-    output var settings::sync_ps_state_t STATE
+    output var RATE_TOGGLE
 );
 
   localparam int RateMax = 18000;
@@ -16,30 +15,16 @@ module sync_ps_ctrl (
   localparam int IntegMax = RateMax << FracBits;
   localparam int FreqWindow = 16;
   localparam int ErrMax = 31;
+  localparam logic [15:0] Kp = 16'd64;
+  localparam logic [15:0] Ki = 16'd1024;
+  localparam logic [15:0] Kf = 16'd4096;
 
   logic signed [31:0] integ = '0;
   logic signed [15:0] rate = '0;
   logic rate_toggle = 1'b0;
 
-  logic enable_prev = 1'b0;
-  logic fine_prev = 1'b0;
-  logic [7:0] fine_exit_count = '0;
-  logic [15:0] pd_pos = '0;
-  logic [15:0] pd_neg = '0;
-  logic signed [15:0] edge_diff_last = '0;
-  logic [15:0] edge_count = '0;
-
   assign RATE = rate;
   assign RATE_TOGGLE = rate_toggle;
-
-  assign STATE.FINE = FINE;
-  assign STATE.FINE_EXIT_COUNT = fine_exit_count;
-  assign STATE.RATE = rate;
-  assign STATE.INTEG = 16'(integ >>> FracBits);
-  assign STATE.PD_POS = pd_pos;
-  assign STATE.PD_NEG = pd_neg;
-  assign STATE.EDGE_DIFF = edge_diff_last;
-  assign STATE.EDGE_COUNT = edge_count;
 
   logic signed [14:0] err_raw;
   logic signed [ 5:0] err;
@@ -50,7 +35,7 @@ module sync_ps_ctrl (
   assign in_freq_window = (EDGE_DIFF <= FreqWindow) && (EDGE_DIFF >= -FreqWindow);
 
   logic [15:0] gain;
-  assign gain = FINE ? SETTINGS.KI : in_freq_window ? SETTINGS.KF : 16'd0;
+  assign gain = FINE ? Ki : in_freq_window ? Kf : 16'd0;
 
   logic signed [22:0] integ_delta;
   logic signed [32:0] integ_sum;
@@ -62,42 +47,21 @@ module sync_ps_ctrl (
   logic signed [22:0] prop;
   logic signed [23:0] rate_sum;
   logic signed [15:0] rate_next;
-  assign prop = FINE ? err * $signed({1'b0, SETTINGS.KP}) : 23'sd0;
+  assign prop = FINE ? err * $signed({1'b0, Kp}) : 23'sd0;
   assign rate_sum = 24'(integ_next >>> FracBits) + 24'(prop);
   assign rate_next = (rate_sum > RateMax) ? 16'(RateMax) : (rate_sum < -RateMax) ? 16'(-RateMax) : 16'(rate_sum);
 
-  logic signed [15:0] manual_rate;
-  assign manual_rate = (SETTINGS.MANUAL_RATE > RateMax) ? 16'(RateMax) : (SETTINGS.MANUAL_RATE < -RateMax) ? 16'(-RateMax) : SETTINGS.MANUAL_RATE;
-
   always_ff @(posedge CLK) begin
     if (SETTINGS.UPDATE) begin
-      if (~SETTINGS.ENABLE | SETTINGS.MANUAL) begin
+      if (~SETTINGS.ENABLE) begin
         integ <= '0;
-        rate <= (SETTINGS.ENABLE & SETTINGS.MANUAL) ? manual_rate : 16'sd0;
+        rate <= 16'sd0;
         rate_toggle <= ~rate_toggle;
       end
-    end else if (EDGE & SETTINGS.ENABLE & ~SETTINGS.MANUAL) begin
+    end else if (EDGE & SETTINGS.ENABLE) begin
       integ <= integ_next;
       rate <= rate_next;
       rate_toggle <= ~rate_toggle;
-    end
-  end
-
-  always_ff @(posedge CLK) begin
-    enable_prev <= SETTINGS.ENABLE;
-    fine_prev   <= FINE;
-    if (SETTINGS.ENABLE & ~enable_prev) begin
-      fine_exit_count <= '0;
-    end else if (fine_prev & ~FINE & SETTINGS.ENABLE & (fine_exit_count != 8'hFF)) begin
-      fine_exit_count <= fine_exit_count + 8'd1;
-    end
-    if (EDGE) begin
-      edge_count <= edge_count + 16'd1;
-      edge_diff_last <= 16'(EDGE_DIFF);
-      if (FINE) begin
-        if (err > 0) pd_pos <= pd_pos + 16'd1;
-        else pd_neg <= pd_neg + 16'd1;
-      end
     end
   end
 

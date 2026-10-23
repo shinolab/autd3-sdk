@@ -25,7 +25,6 @@ module sim_sync_ps_regs ();
   flash_bus_if flash_bus ();
 
   settings::sync_ps_settings_t settings;
-  settings::sync_ps_state_t state;
   int updates = 0;
 
   memory memory (
@@ -39,8 +38,7 @@ module sim_sync_ps_regs ();
       .PWE_TABLE_BUS(pwe_table_bus.in_port),
       .FLASH_BUS(flash_bus.host_port),
       .CPU_WATCHDOG_FIRED(),
-      .SYNC_PS_SETTINGS(settings),
-      .SYNC_PS_STATE(state)
+      .SYNC_PS_SETTINGS(settings)
   );
 
   assign cnt_bus.WE   = 1'b0;
@@ -60,84 +58,37 @@ module sim_sync_ps_regs ();
   logic [15:0] value;
 
   initial begin
-    state.FINE = 1'b0;
-    state.FINE_EXIT_COUNT = 8'd0;
-    state.RATE = 16'sd0;
-    state.INTEG = 16'sd0;
-    state.PD_POS = 16'd0;
-    state.PD_NEG = 16'd0;
-    state.EDGE_DIFF = 16'sd0;
-    state.EDGE_COUNT = 16'd0;
-
     @(posedge locked);
     repeat (16) @(posedge CLK);
 
     `ASSERT_EQ(1'b1, settings.ENABLE);
-    `ASSERT_EQ(1'b0, settings.MANUAL);
-    `ASSERT_EQ(16'd64, settings.KP);
-    `ASSERT_EQ(16'd1024, settings.KI);
-    `ASSERT_EQ(16'd4096, settings.KF);
-    `ASSERT_EQ(16'sd0, settings.MANUAL_RATE);
-    reg_read(ADDR_SYNC_PS_KI, value);
-    `ASSERT_EQ(16'd1024, value);
+    reg_read(ADDR_SYNC_PS_CTL, value);
+    `ASSERT_EQ(16'h0001, value);
 
-    reg_write(ADDR_SYNC_PS_KP, 16'd11);
-    reg_write(ADDR_SYNC_PS_KI, 16'd22);
-    reg_write(ADDR_SYNC_PS_KF, 16'd33);
-    reg_write(ADDR_SYNC_PS_MANUAL_RATE, 16'hFF85);
+    reg_write(ADDR_SYNC_PS_CTL, 16'hFFFE);
+    repeat (8) @(posedge CLK);
+    `ASSERT_EQ(1'b0, settings.ENABLE);
+    `ASSERT_EQ(1, updates);
+    reg_read(ADDR_SYNC_PS_CTL, value);
+    `ASSERT_EQ(16'h0000, value);
+
+    updates = 0;
     reg_write(ADDR_SYNC_PS_CTL, 16'h0003);
     repeat (8) @(posedge CLK);
     `ASSERT_EQ(1'b1, settings.ENABLE);
-    `ASSERT_EQ(1'b1, settings.MANUAL);
-    `ASSERT_EQ(16'd11, settings.KP);
-    `ASSERT_EQ(16'd22, settings.KI);
-    `ASSERT_EQ(16'd33, settings.KF);
-    `ASSERT_EQ(-16'sd123, settings.MANUAL_RATE);
-    `ASSERT_EQ(1'b1, updates > 0);
+    `ASSERT_EQ(1, updates);
+    reg_read(ADDR_SYNC_PS_CTL, value);
+    `ASSERT_EQ(16'h0001, value);
+
+    reg_read(8'h01, value);
+    `ASSERT_EQ(16'h0000, value);
 
     reg_read(ADDR_SYNC_PS_CTL, value);
-    `ASSERT_EQ(16'h0003, value);
-    reg_read(ADDR_SYNC_PS_MANUAL_RATE, value);
-    `ASSERT_EQ(16'hFF85, value);
-
-    updates = 0;
-    reg_write(ADDR_SYNC_PS_CTL, 16'h0001);
-    repeat (8) @(posedge CLK);
-    `ASSERT_EQ(1'b1, settings.ENABLE);
-    `ASSERT_EQ(1'b0, settings.MANUAL);
-    `ASSERT_EQ(1, updates);
-
-    state.FINE = 1'b1;
-    state.FINE_EXIT_COUNT = 8'd5;
-    state.RATE = -16'sd1234;
-    state.INTEG = 16'sd4321;
-    state.PD_POS = 16'd111;
-    state.PD_NEG = 16'd222;
-    state.EDGE_DIFF = -16'sd1;
-    state.EDGE_COUNT = 16'd333;
-    sim_helper_bram.bus_active = 1'b1;
-    repeat (2100) @(posedge CLK);
-    sim_helper_bram.bus_active = 1'b0;
-
-    reg_read(ADDR_SYNC_PS_STATE, value);
-    `ASSERT_EQ(16'h0501, value);
-    reg_read(ADDR_SYNC_PS_RATE, value);
-    `ASSERT_EQ(-16'sd1234, $signed(value));
-    reg_read(ADDR_SYNC_PS_INTEG, value);
-    `ASSERT_EQ(16'sd4321, $signed(value));
-    reg_read(ADDR_SYNC_PS_PD_POS, value);
-    `ASSERT_EQ(16'd111, value);
-    reg_read(ADDR_SYNC_PS_PD_NEG, value);
-    `ASSERT_EQ(16'd222, value);
-    reg_read(ADDR_SYNC_PS_EDGE_DIFF, value);
-    `ASSERT_EQ(16'hFFFF, value);
-    reg_read(ADDR_SYNC_PS_EDGE_COUNT, value);
-    `ASSERT_EQ(16'd333, value);
-
-    sim_helper_bram.bram_read(BRAM_SELECT_WATCHDOG, ADDR_WATCHDOG_TIMEOUT, value);
+    `ASSERT_EQ(16'h0001, value);
+    sim_helper_bram.bram_read(BRAM_SELECT_WATCHDOG, ADDR_WATCHDOG_STATE, value);
     `ASSERT_EQ(16'd0, value);
-    reg_read(ADDR_SYNC_PS_EDGE_COUNT, value);
-    `ASSERT_EQ(16'd333, value);
+    reg_read(ADDR_SYNC_PS_CTL, value);
+    `ASSERT_EQ(16'h0001, value);
 
     $display("OK! sim_sync_ps_regs");
     $finish();

@@ -17,9 +17,7 @@ module sim_helper_sync_ps_device #(
     output var signed [13:0] SYNC_TIME_DIFF,
     output var [7:0] SYNC_RESYNC_COUNT,
     output var FINE,
-    output var settings::sync_ps_state_t PS_STATE,
-    output var longint PS_STEPS_INC,
-    output var longint PS_STEPS_DEC
+    output var signed [15:0] PS_RATE
 );
 
   localparam real ClkPeriodNs = 1.0e9 / 20.48e6;
@@ -38,7 +36,6 @@ module sim_helper_sync_ps_device #(
 
   logic ps_edge;
   logic signed [13:0] ps_edge_diff;
-  logic signed [15:0] ps_rate;
   logic ps_rate_toggle;
   settings::sync_ps_settings_t PS_SETTINGS;
 
@@ -50,13 +47,10 @@ module sim_helper_sync_ps_device #(
       .ADDR(BUS_ADDR),
       .DATA_IN(BUS_DATA_IN),
       .DATA_OUT(BUS_DATA_OUT),
-      .SETTINGS(PS_SETTINGS),
-      .STATE(PS_STATE)
+      .SETTINGS(PS_SETTINGS)
   );
 
   initial begin
-    PS_STEPS_INC = 0;
-    PS_STEPS_DEC = 0;
     period_ns = ClkPeriodNs * (1.0 - PPM * 1.0e-6);
     CLK = 1'b0;
     next_rise = INIT_PHASE_NS;
@@ -75,13 +69,7 @@ module sim_helper_sync_ps_device #(
         $finish();
       end
       psdone_cnt <= PsDoneLatency;
-      if (psincdec) begin
-        shift_ns <= shift_ns + StepNs;
-        PS_STEPS_INC <= PS_STEPS_INC + 1;
-      end else begin
-        shift_ns <= shift_ns - StepNs;
-        PS_STEPS_DEC <= PS_STEPS_DEC + 1;
-      end
+      shift_ns   <= psincdec ? shift_ns + StepNs : shift_ns - StepNs;
     end else if (psdone_cnt != 0) begin
       psdone_cnt <= psdone_cnt - 1;
     end
@@ -97,7 +85,7 @@ module sim_helper_sync_ps_device #(
       .SKIP_ONE_ASSERT(),
       .SYNC_TIME_DIFF(SYNC_TIME_DIFF),
       .SYNC_RESYNC_COUNT(SYNC_RESYNC_COUNT),
-      .PS_ENABLE(PS_SETTINGS.ENABLE & ~PS_SETTINGS.MANUAL),
+      .PS_ENABLE(PS_SETTINGS.ENABLE),
       .PS_FINE(FINE),
       .PS_EDGE(ps_edge),
       .PS_EDGE_DIFF(ps_edge_diff)
@@ -109,14 +97,13 @@ module sim_helper_sync_ps_device #(
       .EDGE(ps_edge),
       .FINE(FINE),
       .EDGE_DIFF(ps_edge_diff),
-      .RATE(ps_rate),
-      .RATE_TOGGLE(ps_rate_toggle),
-      .STATE(PS_STATE)
+      .RATE(PS_RATE),
+      .RATE_TOGGLE(ps_rate_toggle)
   );
 
   sync_ps_nco sync_ps_nco (
       .PSCLK(PSCLK),
-      .RATE(ps_rate),
+      .RATE(PS_RATE),
       .RATE_TOGGLE(ps_rate_toggle),
       .PSDONE(psdone),
       .PSEN(psen),

@@ -337,7 +337,7 @@ impl FpgaEmulator {
             SELECT_OUTPUT_MASK => self.output_mask[a & (OUTPUT_MASK_WORDS - 1)] = value,
             SELECT_PWE_TABLE => self.pwe[a & (PWE_TABLE_SIZE - 1)] = value,
             SELECT_SYNC_PS if a & 0xFF == reg(fw::ADDR_SYNC_PS_CTL) => {
-                self.sync_ps_ctl = value & 0b11;
+                self.sync_ps_ctl = value & 1;
             }
             SELECT_FLASH => {
                 self.flash.write_reg(a & 0xFF, value);

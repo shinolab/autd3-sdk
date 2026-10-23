@@ -74,6 +74,12 @@ module sim_cpu_watchdog ();
     `ASSERT_EQ(expected_count, value[15:8]);
   endtask
 
+  task automatic expect_timeout_reads_zero();
+    logic [15:0] value;
+    reg_read(ADDR_WATCHDOG_TIMEOUT, value);
+    `ASSERT_EQ(16'd0, value);
+  endtask
+
   task automatic expect_quiet_for(input realtime duration);
     realtime deadline;
     deadline = $realtime + duration;
@@ -94,21 +100,16 @@ module sim_cpu_watchdog ();
     `ASSERT_EQ(1'b1, ($realtime - start) >= earliest);
   endtask
 
-  logic [15:0] value;
-
   initial begin
     @(posedge locked);
     repeat (16) @(posedge CLK);
 
-    reg_read(ADDR_WATCHDOG_TIMEOUT, value);
-    `ASSERT_EQ(16'd0, value);
     expect_state(1'b0, 8'd0);
     expect_quiet_for(5 * MS);
     expect_state(1'b0, 8'd0);
 
     set_timeout(16'd2);
-    reg_read(ADDR_WATCHDOG_TIMEOUT, value);
-    `ASSERT_EQ(16'd2, value);
+    expect_timeout_reads_zero();
     for (int i = 0; i < 10; i++) begin
       expect_quiet_for(1 * MS);
       kick();
