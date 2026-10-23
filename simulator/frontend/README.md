@@ -30,12 +30,11 @@ The geometry is saved to `autd3-simulator/geometry.json` under the OS configurat
 without a saved (or with a broken) file, the simulator starts with a single AUTD3 at the origin and logs a warning.
 
 ```bash
-# 1) Start the simulator (in autd3-sdk/)
+# Start the simulator (in autd3-sdk/)
 cargo xtask simulator run --open                        # UI=8081, devices on [::1]:44336
-
-# 2) Connect a client (in another terminal; example that sends a focus to one device)
-cargo xtask rust example focus_sine -- --simulator
 ```
+
+Then open a client with `Interface::Addr([::1]:44336)`.
 
 ## Required tools
 

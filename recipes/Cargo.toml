@@ -1,26 +1,23 @@
 [package]
-name = "autd3-rs-examples"
+name = "autd3-rs-recipes"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "examples for autd3-rs."
+description = "recipes for autd3-rs."
 publish = false
 
 [dependencies]
 autd3-rs.workspace = true
 tracing-subscriber.workspace = true
 autd3-rs-pattern.workspace = true
-autd3-rs-pattern-holo.workspace = true
 autd3-rs-modulation.workspace = true
 anyhow.workspace = true
-clap.workspace = true
 tokio = { workspace = true, features = [
     "time",
     "macros",
     "rt",
-    "rt-multi-thread",
     "signal",
     "net",
 ] }
