@@ -17,9 +17,9 @@ use std::ops::Deref;
 use std::sync::{Mutex, PoisonError};
 use std::thread::JoinHandle;
 
-use crate::error::{Error, NetworkCause};
+use crate::error::Error;
 use crate::geometry::Geometry;
-use crate::udp::TransportOption;
+use crate::udp::{TransportOption, UdpError};
 
 pub struct Client {
     controller: Controller,
@@ -32,7 +32,7 @@ impl Client {
         let thread = std::thread::Builder::new()
             .name("autd3-io".into())
             .spawn(move || driver.run())
-            .map_err(|e| Error::Network(NetworkCause::new(e)))?;
+            .map_err(|e| Error::from(UdpError::from(e)))?;
         let client = Self {
             controller,
             driver: Mutex::new(Some(thread)),

@@ -14,9 +14,10 @@ use autd3_cpu_wire::update::RunningImage;
 use autd3_rs::commands::Distribution;
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::protocol::{Cmd, FrameHeader, PAYLOAD_BYTES};
+use autd3_rs::udp::UdpError;
 use autd3_rs::{
-    Client, Datagram, Error, Frame as ClientFrame, NetworkCause, Response, ResponseFuture,
-    StateChecker, TransportOption,
+    Client, Datagram, Error, Frame as ClientFrame, Response, ResponseFuture, StateChecker,
+    TransportOption,
 };
 use zerocopy::little_endian::U32;
 use zerocopy::{FromBytes, Immutable, IntoBytes};
@@ -278,7 +279,7 @@ impl UdpLink {
                         std::thread::park_timeout(heartbeat);
                     }
                 })
-                .map_err(|e| Error::Network(NetworkCause::new(e)))?
+                .map_err(|e| Error::from(UdpError::from(e)))?
         };
         Ok(Self {
             states: client.state_checker(),
