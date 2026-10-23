@@ -17,6 +17,7 @@ use crate::response::Response;
 use crate::udp::{Channel, DeviceReply, Polled, Reply, TransportOption, UdpError};
 use crate::value::SysTime;
 
+use super::GRANDMASTER_UNIT_ID;
 use super::completion::ResponseSender;
 use super::device_clock::DeviceClock;
 use super::liveness::DeviceLiveness;
@@ -279,7 +280,7 @@ impl SessionState {
         if !accepted {
             return None;
         }
-        if device == 0
+        if device == usize::from(GRANDMASTER_UNIT_ID)
             && let Some(sys_time) = NonZeroU64::new(reply.reply.sys_time)
         {
             self.device_clock
