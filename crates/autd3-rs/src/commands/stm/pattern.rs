@@ -92,16 +92,17 @@ impl Command for PatternStm<'_> {
             }
         }
 
-        expansion.push(ConfigPattern {
-            bank,
-            config: self.config,
-            size,
-            loop_behavior: self.option.loop_behavior,
-        })?;
-        expansion.push(ActivatePatternBank {
-            bank,
-            transition_mode: self.option.transition_mode,
-        })?;
+        expansion
+            .push(ConfigPattern {
+                bank,
+                config: self.config,
+                size,
+                loop_behavior: self.option.loop_behavior,
+            })?
+            .push(ActivatePatternBank {
+                bank,
+                transition_mode: self.option.transition_mode,
+            })?;
         Ok(())
     }
 }

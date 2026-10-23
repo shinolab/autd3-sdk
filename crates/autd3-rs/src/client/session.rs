@@ -47,6 +47,10 @@ impl InflightRequest {
         tracing::trace!(msg_id = self.msg_id, "frame answered by every device");
         let _ = self.completion.send(Ok(self.response));
     }
+
+    fn fail(self, error: Error) {
+        let _ = self.completion.send(Err(error));
+    }
 }
 
 struct InflightQueue {
@@ -109,8 +113,8 @@ impl InflightQueue {
 
     fn head_ack_deadline(&self, ack_timeout: Duration) -> Option<Instant> {
         self.head()
-            .filter(|head| head.sent_to.is_some())
-            .and_then(|_| self.head_ack_clock_started_at.checked_add(ack_timeout))
+            .and_then(|head| head.sent_to)
+            .and(self.head_ack_clock_started_at.checked_add(ack_timeout))
     }
 }
 
@@ -118,16 +122,15 @@ pub(crate) struct SessionState {
     inflight: InflightQueue,
     liveness: Vec<DeviceLiveness>,
     device_clock: DeviceClock,
-    network_failure: Option<NetworkCause>,
-    is_closed: bool,
+    closed: Option<Error>,
     last_msg_id: u16,
     timeouts: Timeouts,
 }
 
-pub(crate) struct ClosedSession {
+pub(crate) struct FailedRequests {
     requests: Vec<InflightRequest>,
     slot_waiter: Option<Waker>,
-    network_failure: Option<NetworkCause>,
+    error: Error,
 }
 
 impl SessionState {
@@ -141,18 +144,14 @@ impl SessionState {
             inflight: InflightQueue::new(now),
             liveness: vec![DeviceLiveness::new(); num_devices],
             device_clock,
-            network_failure: None,
-            is_closed: false,
+            closed: None,
             last_msg_id: 0,
             timeouts,
         }
     }
 
     pub(crate) fn closed_error(&self) -> Option<Error> {
-        if let Some(cause) = &self.network_failure {
-            return Some(Error::Network(cause.clone()));
-        }
-        self.is_closed.then_some(Error::Closed)
+        self.closed.clone()
     }
 
     fn next_msg_id(&mut self) -> u16 {
@@ -318,26 +317,24 @@ impl SessionState {
         .fold(now + IDLE_WAIT, Instant::min)
     }
 
-    pub(crate) fn close(&mut self, network_failure: Option<&NetworkCause>) -> ClosedSession {
-        self.network_failure = network_failure.cloned();
-        self.is_closed = true;
-        ClosedSession {
+    fn fail_all(&mut self, error: Error) -> FailedRequests {
+        FailedRequests {
             requests: self.inflight.take_all(),
             slot_waiter: self.inflight.slot_waiter.take(),
-            network_failure: self.network_failure.clone(),
+            error,
         }
+    }
+
+    pub(crate) fn close(&mut self, error: Error) -> FailedRequests {
+        self.closed = Some(error.clone());
+        self.fail_all(error)
     }
 }
 
-impl ClosedSession {
+impl FailedRequests {
     fn resolve(self) {
-        let error = || {
-            self.network_failure
-                .clone()
-                .map_or(Error::Closed, Error::Network)
-        };
         for request in self.requests {
-            let _ = request.completion.send(Err(error()));
+            request.fail(self.error.clone());
         }
         if let Some(slot_waiter) = self.slot_waiter {
             slot_waiter.wake();
@@ -424,15 +421,9 @@ impl Session {
     }
 
     fn closed_error_of(&self, state: &SessionState) -> Option<Error> {
-        let error = state.closed_error();
-        if self.is_stopping() {
-            return Some(error.unwrap_or(Error::Closed));
-        }
-        error
-    }
-
-    pub(crate) fn network_failure(&self) -> Option<NetworkCause> {
-        self.lock_state().network_failure.clone()
+        state
+            .closed_error()
+            .or_else(|| self.is_stopping().then_some(Error::Closed))
     }
 
     pub(crate) fn wake(&self) -> bool {
@@ -672,21 +663,19 @@ impl Session {
         if !state.is_head_ack_overdue(now) {
             return;
         }
-        let requests = state.inflight.take_all();
         let timeout = state.timeouts.ack;
-        Self::release(state);
+        let failed = state.fail_all(Error::Timeout { timeout });
+        drop(state);
         tracing::warn!(
-            pending = requests.len(),
+            pending = failed.requests.len(),
             "the head frame got no reply within the ack timeout; failing the pending frames"
         );
-        for request in requests {
-            let _ = request.completion.send(Err(Error::Timeout { timeout }));
-        }
+        failed.resolve();
     }
 
-    pub(crate) fn close(&self, network_failure: Option<&NetworkCause>) {
-        let closed = self.lock_state().close(network_failure);
-        closed.resolve();
+    pub(crate) fn close(&self, error: Error) {
+        let failed = self.lock_state().close(error);
+        failed.resolve();
     }
 }
 
@@ -844,7 +833,7 @@ mod tests {
         let (_msg_id, response) = enqueue(&mut state, now);
         let cause = NetworkCause::new(UdpError::NoInterfaceFound);
 
-        state.close(Some(&cause)).resolve();
+        state.close(Error::Network(cause)).resolve();
 
         assert!(matches!(
             pollster::block_on(response),
@@ -868,9 +857,9 @@ mod tests {
                 .is_pending()
         );
 
-        let closed = state.close(None);
-        assert!(closed.slot_waiter.is_some());
-        closed.resolve();
+        let failed = state.close(Error::Closed);
+        assert!(failed.slot_waiter.is_some());
+        failed.resolve();
 
         assert!(matches!(
             pollster::block_on(enqueued.remove(0).1),
@@ -1139,8 +1128,8 @@ mod tests {
     fn a_closed_session_keeps_the_device_liveness() {
         let now = Instant::now();
         let mut state = session_state(1, now);
-        state.close(None).resolve();
-        assert!(state.is_closed);
+        state.close(Error::Closed).resolve();
+        assert!(matches!(state.closed_error(), Some(Error::Closed)));
         assert_eq!(state.liveness[0].state(), DeviceState::Ready);
     }
 }
