@@ -7,13 +7,7 @@ use autd3_cpu_wire::udp::{Header, Kind};
 use socket2::{Domain, Protocol, Socket, Type};
 use zerocopy::{FromBytes, IntoBytes};
 
-const RECV_BUFFER_BYTES: usize = 2048;
-
-pub(crate) struct ReceivedPacket<'a> {
-    pub(crate) src: SocketAddrV6,
-    pub(crate) header: Header,
-    pub(crate) body: &'a [u8],
-}
+pub(crate) const RECV_BUFFER_BYTES: usize = 2048;
 
 pub(crate) enum Polled<R> {
     Empty,
@@ -335,21 +329,7 @@ impl Channel {
         Ok(Polled::Empty)
     }
 
-    pub(crate) fn recv<R>(
-        &self,
-        deadline: Option<Instant>,
-        classify: impl FnOnce(&ReceivedPacket<'_>) -> R,
-    ) -> io::Result<Option<R>> {
-        let mut buf = [0; RECV_BUFFER_BYTES];
-        while let Some((src, datagram)) = self.recv_datagram(&mut buf, deadline)? {
-            if let Ok((header, body)) = Header::read_from_prefix(datagram) {
-                return Ok(Some(classify(&ReceivedPacket { src, header, body })));
-            }
-        }
-        Ok(None)
-    }
-
-    fn recv_datagram<'a>(
+    pub(crate) fn recv_datagram<'a>(
         &self,
         buf: &'a mut [u8; RECV_BUFFER_BYTES],
         deadline: Option<Instant>,

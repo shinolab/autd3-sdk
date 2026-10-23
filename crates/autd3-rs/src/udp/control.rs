@@ -1,13 +1,12 @@
 use std::net::SocketAddrV6;
 
 use autd3_cpu_wire::udp::{
-    AssignIdBody, Kind, PROTOCOL_VERSION, Role, SetTimeBody, Status, UnblockReply, UnitInfo,
+    AssignIdBody, Header, Kind, PROTOCOL_VERSION, Role, SetTimeBody, Status, UnblockReply, UnitInfo,
 };
 use autd3_rs_core::value::SysTime;
 use zerocopy::FromBytes;
 use zerocopy::little_endian::U64;
 
-use super::channel::ReceivedPacket;
 use super::error::UdpError;
 
 #[derive(Clone, Debug)]
@@ -19,24 +18,26 @@ pub(crate) struct ControlResponse {
 
 impl ControlResponse {
     pub(crate) fn parse(
-        packet: &ReceivedPacket<'_>,
+        src: SocketAddrV6,
+        header: Header,
+        body: &[u8],
         kind: Kind,
         msg_id: u16,
     ) -> Result<Option<Self>, UdpError> {
-        if packet.header.kind != kind.as_u8() || packet.header.msg_id.get() != msg_id {
+        if header.kind != kind.as_u8() || header.msg_id.get() != msg_id {
             return Ok(None);
         }
-        if packet.header.version != PROTOCOL_VERSION {
+        if header.version != PROTOCOL_VERSION {
             return Err(UdpError::UnsupportedVersion {
-                device_version: packet.header.version,
+                device_version: header.version,
                 host_version: PROTOCOL_VERSION,
             });
         }
-        let Some((&status, body)) = packet.body.split_first() else {
+        let Some((&status, body)) = body.split_first() else {
             return Ok(None);
         };
         Ok(Some(Self {
-            src: packet.src,
+            src,
             status,
             body: body.to_vec(),
         }))
@@ -83,7 +84,7 @@ pub(crate) fn set_time_body(sys_time: SysTime) -> SetTimeBody {
 mod tests {
     use std::net::Ipv6Addr;
 
-    use autd3_cpu_wire::udp::{Flags, Header};
+    use autd3_cpu_wire::udp::Flags;
     use zerocopy::IntoBytes;
     use zerocopy::little_endian::I32;
 
@@ -97,15 +98,7 @@ mod tests {
         kind: Kind,
         msg_id: u16,
     ) -> Result<Option<ControlResponse>, UdpError> {
-        ControlResponse::parse(
-            &ReceivedPacket {
-                src: SRC,
-                header,
-                body,
-            },
-            kind,
-            msg_id,
-        )
+        ControlResponse::parse(SRC, header, body, kind, msg_id)
     }
 
     #[test]
