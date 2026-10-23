@@ -3,16 +3,18 @@ mod iface_probe;
 
 use std::time::Instant;
 
-use autd3_rs_core::{DeviceClock, MAX_DEVICES};
+use autd3_rs_core::MAX_DEVICES;
 
 use crate::udp::{Channel, TransportOption, UdpError};
+
+use super::device_clock::DeviceClock;
 
 use enumerate::bring_up;
 
 pub(crate) fn open(
     option: &TransportOption,
     num_devices: usize,
-    device_clock: &DeviceClock,
+    device_clock: &mut DeviceClock,
 ) -> Result<Channel, UdpError> {
     option.validate()?;
     let deadline = Instant::now().checked_add(option.open_timeout);

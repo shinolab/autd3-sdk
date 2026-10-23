@@ -1,5 +1,6 @@
 pub(crate) mod completion;
 mod controller;
+mod device_clock;
 mod driver;
 mod exec_at;
 mod liveness;
