@@ -182,7 +182,7 @@ def test_a_command_copies_its_buffers_when_it_is_created() -> None:
 
     command = autd3.commands.Pattern(phases, intensities)
     expected = phase_of(autd3.commands.Pattern(phases, intensities))
-    pattern.add_phase(0x40, phases)
+    phases.copy_from(phases.to_numpy() + np.uint8(0x40))
     assert phase_of(command).equals(expected)
     assert not phase_of(autd3.commands.Pattern(phases, intensities)).equals(expected)
 

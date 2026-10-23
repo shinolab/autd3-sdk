@@ -77,7 +77,7 @@ An out-of-range `geometry[i]` panics in Rust, raises `IndexError` in Python (als
 
 Represents a single device.
 It is obtained via `geometry[i]` or by iterating over `&geometry`.
-The position and normal direction of each transducer, as well as the device's rotation, can be retrieved.
+The position of each transducer and the device's rotation can be retrieved. All transducers of a device share one normal direction, returned by `axial_direction()`.
 
 <CodeTabs rust={excerpt(sample, "device")} python={excerpt(pySample, "device")} csharp={excerpt(csSample, "device")} />
 
@@ -92,9 +92,7 @@ The position and normal direction of each transducer, as well as the device's ro
 | `y_direction()`      | `UnitVector3<f32>`      | Local y-axis direction                        |
 | `axial_direction()`  | `UnitVector3<f32>`      | Axial direction (ultrasound emission direction) |
 | `positions()`        | `&[Point3<f32>]`        | Positions of all transducers                  |
-| `directions()`       | `&[UnitVector3<f32>]`   | Normal directions of all transducers          |
 | `position(i)`        | `Point3<f32>`           | Position of the `i`-th transducer             |
-| `direction(i)`       | `UnitVector3<f32>`      | Direction of the `i`-th transducer            |
 | `to_local(p)`        | `Point3<f32>`           | Convert a global point `p` to the device's local coordinates (with the 0th transducer at the origin) |
 
 In Python, coordinates, directions, and rotations are all returned as `float32` numpy arrays (the same holds for `Geometry.center()` and `Autd3.origin` / `Autd3.rotation`).

@@ -188,9 +188,7 @@ impl core::hash::Hash for IntensityConstraint {
         core::mem::discriminant(&self.0).hash(state);
         match self.0 {
             CoreIntensityConstraint::Multiply(value) => hash_f32(value, state),
-            CoreIntensityConstraint::Uniform(intensity) => intensity.hash(state),
             CoreIntensityConstraint::Clamp(min, max) => (min, max).hash(state),
-            CoreIntensityConstraint::Normalize => {}
             _ => unreachable!(),
         }
     }
@@ -198,24 +196,10 @@ impl core::hash::Hash for IntensityConstraint {
 
 #[pymethods]
 impl IntensityConstraint {
-    #[classattr]
-    #[pyo3(name = "Normalize")]
-    fn normalize() -> Self {
-        Self(CoreIntensityConstraint::Normalize)
-    }
-
     #[staticmethod]
     #[pyo3(name = "Multiply")]
     fn multiply(value: f32) -> Self {
         Self(CoreIntensityConstraint::Multiply(value))
-    }
-
-    #[staticmethod]
-    #[pyo3(name = "Uniform")]
-    fn uniform(intensity: &Bound<'_, PyAny>) -> PyResult<Self> {
-        Ok(Self(CoreIntensityConstraint::Uniform(Intensity(
-            extract_u8(intensity)?,
-        ))))
     }
 
     #[staticmethod]
@@ -485,8 +469,7 @@ impl GspatOption {
 
 #[pyclass(name = "GreedyOption", module = "autd3_pattern_holo", frozen)]
 pub struct GreedyOption {
-    inner: CoreGreedyOption<'static>,
-    mask: Mask,
+    inner: CoreGreedyOption,
 }
 
 #[pymethods]
@@ -495,13 +478,8 @@ impl GreedyOption {
     #[pyo3(signature = (
         phase_quantization_levels = CoreGreedyOption::default().phase_quantization_levels.get(),
         directivity = Directivity(CoreGreedyOption::default().directivity),
-        mask = all_enabled(),
     ))]
-    fn new(
-        phase_quantization_levels: u8,
-        directivity: Directivity,
-        #[pyo3(from_py_with = extract_mask)] mask: Mask,
-    ) -> PyResult<Self> {
+    fn new(phase_quantization_levels: u8, directivity: Directivity) -> PyResult<Self> {
         Ok(Self {
             inner: CoreGreedyOption {
                 phase_quantization_levels: NonZeroU8::new(phase_quantization_levels).ok_or_else(
@@ -510,7 +488,6 @@ impl GreedyOption {
                 directivity: directivity.0,
                 ..CoreGreedyOption::default()
             },
-            mask,
         })
     }
 
@@ -524,17 +501,10 @@ impl GreedyOption {
         Directivity(self.inner.directivity)
     }
 
-    #[getter]
-    fn mask<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        mask_to_py(py, &self.mask)
-    }
-
     fn __repr__(&self) -> String {
         format!(
-            "GreedyOption(phase_quantization_levels={}, directivity={:?}, mask={})",
-            self.inner.phase_quantization_levels,
-            self.inner.directivity,
-            mask_repr(&self.mask)
+            "GreedyOption(phase_quantization_levels={}, directivity={:?})",
+            self.inner.phase_quantization_levels, self.inner.directivity,
         )
     }
 }
@@ -837,10 +807,6 @@ fn greedy(
     let geometry = geometry_from_capsule(&geo_capsule)?;
     let foci = collect_foci(&foci);
     let wavelength = extract_length(wavelength)?;
-    let option = CoreGreedyOption {
-        mask: mask_ref(option.mask.as_deref()),
-        ..option.inner
-    };
     let intensity_capsule = if intensities.hasattr("_capsule")? {
         Some(capsule_of(intensities)?)
     } else {
@@ -862,7 +828,7 @@ fn greedy(
         wavelength,
         intensities,
         &order,
-        &option,
+        &option.inner,
         dst.as_mut_slice(),
     )
     .map_err(holo_err)

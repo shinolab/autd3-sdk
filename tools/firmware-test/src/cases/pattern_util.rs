@@ -15,7 +15,7 @@ use autd3_rs::value::{
     SamplingConfig, TransitionMode,
 };
 use autd3_rs::{Error, Frames, Freq, Velocity};
-use autd3_rs_pattern::{focus, set_intensity, wavelength};
+use autd3_rs_pattern::{focus, wavelength};
 
 use crate::Ctx;
 use crate::cases::ERR_INVALID_TRANSITION_MODE;
@@ -30,7 +30,9 @@ pub(crate) type Buffers = (Vec<Vec<Phase>>, Vec<Vec<Intensity>>);
 
 pub(crate) fn buffers(geometry: &Geometry, intensity: Intensity) -> Buffers {
     let mut intensities = geometry.intensity_buffer();
-    set_intensity(intensity, &mut intensities);
+    for slot in &mut intensities {
+        slot.fill(intensity);
+    }
     (geometry.phase_buffer(), intensities)
 }
 
@@ -296,7 +298,7 @@ pub(crate) async fn activate_mod_bank(
     .await
 }
 
-pub(crate) fn stm_sampling(loop_freq: Freq<f32>, size: usize) -> Result<SamplingConfig> {
+pub(crate) fn stm_sampling(loop_freq: Freq, size: usize) -> Result<SamplingConfig> {
     Ok(SamplingConfig::from_freq(loop_freq * size as f32)?)
 }
 

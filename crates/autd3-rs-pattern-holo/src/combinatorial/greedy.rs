@@ -4,7 +4,7 @@ use core::num::NonZeroU8;
 use nalgebra::Complex;
 
 use autd3_rs_core::common::Length;
-use autd3_rs_core::geometry::{Geometry, TransducerMask};
+use autd3_rs_core::geometry::{Device, Geometry};
 use autd3_rs_core::value::{Intensity, PatternIntensity, Phase};
 
 use crate::amp::Amplitude;
@@ -19,20 +19,18 @@ pub fn abs_objective_func(c: Complex<f32>, a: Amplitude) -> f32 {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct GreedyOption<'a> {
+pub struct GreedyOption {
     pub phase_quantization_levels: NonZeroU8,
     pub directivity: Directivity,
     pub objective_func: fn(Complex<f32>, Amplitude) -> f32,
-    pub mask: TransducerMask<'a>,
 }
 
-impl Default for GreedyOption<'_> {
+impl Default for GreedyOption {
     fn default() -> Self {
         Self {
             phase_quantization_levels: NonZeroU8::new(16).unwrap(),
             directivity: Directivity::Sphere,
             objective_func: abs_objective_func,
-            mask: TransducerMask::AllEnabled,
         }
     }
 }
@@ -100,7 +98,7 @@ pub fn greedy<'a>(
     wavelength: Length,
     intensities: impl Into<PatternIntensity<'a>>,
     order: &[usize],
-    option: &GreedyOption<'_>,
+    option: &GreedyOption,
     dst: &mut [Vec<Phase>],
 ) -> Result<(), HoloError> {
     let intensities = intensities.into();
@@ -109,8 +107,6 @@ pub fn greedy<'a>(
     }
     validate_dst_len(dst.len(), geometry)?;
     validate_intensities(intensities, geometry)?;
-    let mask = option.mask;
-    mask.validate(geometry)?;
     validate_order(order, geometry)?;
 
     let k = wavenumber(wavelength);
@@ -129,6 +125,7 @@ pub fn greedy<'a>(
             Some(start)
         })
         .collect();
+    let device_directions: Vec<_> = geometry.iter().map(Device::axial_direction).collect();
 
     for slot in dst.iter_mut() {
         slot.fill(Phase::ZERO);
@@ -140,12 +137,11 @@ pub fn greedy<'a>(
     for &index in order {
         let d = device_offsets.partition_point(|&start| start <= index) - 1;
         let t = index - device_offsets[d];
-        if !mask.is_enabled(d, t) || intensity_at(intensities, d, t) == Intensity::MIN {
+        if intensity_at(intensities, d, t) == Intensity::MIN {
             continue;
         }
-        let dev = &geometry[d];
-        let pos = dev.positions()[t];
-        let dir = dev.directions()[t];
+        let pos = geometry[d].positions()[t];
+        let dir = device_directions[d];
         let amp = f32::from(intensity_at(intensities, d, t).0) / f32::from(Intensity::MAX.0);
         for (r, f) in tmp.iter_mut().zip(foci) {
             *r = propagate(pos, dir, f.point, k, option.directivity) * amp;
@@ -179,7 +175,7 @@ pub fn greedy<'a>(
 
 #[cfg(test)]
 mod tests {
-    use autd3_rs_core::geometry::{Autd3, Point3, TransducerMaskError, Vector3};
+    use autd3_rs_core::geometry::{Autd3, Point3, Vector3};
 
     use super::*;
     use crate::Pa;
@@ -219,7 +215,7 @@ mod tests {
                 let amp = f32::from(intensities[d][t].0) / f32::from(Intensity::MAX.0);
                 propagate(
                     dev.positions()[t],
-                    dev.directions()[t],
+                    dev.axial_direction(),
                     target,
                     k,
                     Directivity::Sphere,
@@ -245,58 +241,6 @@ mod tests {
                 &mut dst
             ),
             Err(HoloError::NoFoci)
-        );
-    }
-
-    #[test]
-    fn a_mask_that_does_not_match_the_geometry_is_an_error_not_a_panic() {
-        let geometry = geometry(2);
-        let intensities = uniform(&geometry, Intensity::MAX);
-        let mut dst = geometry.phase_buffer();
-
-        let one_device = vec![vec![true; Autd3::NUM_TRANSDUCERS]];
-        let option = GreedyOption {
-            mask: TransducerMask::Masked(&one_device),
-            ..GreedyOption::default()
-        };
-        assert_eq!(
-            greedy(
-                &geometry,
-                &single_focus(),
-                wavelength(),
-                &intensities,
-                &ascending(&geometry),
-                &option,
-                &mut dst
-            ),
-            Err(HoloError::Mask(TransducerMaskError::DeviceCountMismatch {
-                got: 1,
-                expected: 2
-            })),
-        );
-
-        let short_row = vec![vec![true; Autd3::NUM_TRANSDUCERS], vec![true; 3]];
-        let option = GreedyOption {
-            mask: TransducerMask::Masked(&short_row),
-            ..GreedyOption::default()
-        };
-        assert_eq!(
-            greedy(
-                &geometry,
-                &single_focus(),
-                wavelength(),
-                &intensities,
-                &ascending(&geometry),
-                &option,
-                &mut dst
-            ),
-            Err(HoloError::Mask(
-                TransducerMaskError::TransducerCountMismatch {
-                    device: 1,
-                    got: 3,
-                    expected: Autd3::NUM_TRANSDUCERS,
-                }
-            )),
         );
     }
 

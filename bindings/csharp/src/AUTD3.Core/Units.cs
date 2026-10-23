@@ -126,82 +126,42 @@ namespace AUTD3
 
     public readonly struct Freq : IEquatable<Freq>
     {
-        public enum FreqMode : byte
+        public float Hz { get; }
+
+        internal Freq(float hz)
         {
-            FloatExact = 0,
-            IntExact = 1,
+            Hz = hz;
         }
 
-        public FreqMode Mode { get; }
-        internal float HzValue { get; }
-        public uint HzIntValue { get; }
+        public static Freq FromHz(float hz) => new Freq(hz);
 
-        internal Freq(FreqMode mode, float hz, uint hzInt)
-        {
-            Mode = mode;
-            HzValue = hz;
-            HzIntValue = hzInt;
-        }
+        public static Freq operator +(Freq lhs, Freq rhs) => new Freq(lhs.Hz + rhs.Hz);
 
-        public float Hz => HzValue;
+        public static Freq operator -(Freq lhs, Freq rhs) => new Freq(lhs.Hz - rhs.Hz);
 
-        public static Freq FromHz(uint hz) => new Freq(FreqMode.IntExact, hz, hz);
+        public static Freq operator *(Freq lhs, float rhs) => new Freq(lhs.Hz * rhs);
 
-        public static Freq FromHz(float hz) => new Freq(FreqMode.FloatExact, hz, 0);
+        public static Freq operator *(float lhs, Freq rhs) => new Freq(lhs * rhs.Hz);
 
-        internal byte ModeCode => (byte)Mode;
+        public static Freq operator /(Freq lhs, float rhs) => new Freq(lhs.Hz / rhs);
 
-        public static Freq operator +(Freq lhs, Freq rhs) =>
-            lhs.Mode == FreqMode.IntExact && rhs.Mode == FreqMode.IntExact
-                ? new Freq(FreqMode.IntExact, lhs.HzValue + rhs.HzValue, lhs.HzIntValue + rhs.HzIntValue)
-                : new Freq(FreqMode.FloatExact, lhs.HzValue + rhs.HzValue, 0);
-
-        public static Freq operator -(Freq lhs, Freq rhs) =>
-            lhs.Mode == FreqMode.IntExact && rhs.Mode == FreqMode.IntExact
-                ? new Freq(FreqMode.IntExact, lhs.HzValue - rhs.HzValue, lhs.HzIntValue - rhs.HzIntValue)
-                : new Freq(FreqMode.FloatExact, lhs.HzValue - rhs.HzValue, 0);
-
-        public static Freq operator *(Freq lhs, uint rhs) =>
-            lhs.Mode == FreqMode.IntExact
-                ? new Freq(FreqMode.IntExact, lhs.HzValue * rhs, lhs.HzIntValue * rhs)
-                : new Freq(FreqMode.FloatExact, lhs.HzValue * rhs, 0);
-
-        public static Freq operator *(Freq lhs, float rhs) =>
-            new Freq(FreqMode.FloatExact, lhs.HzValue * rhs, 0);
-
-        public static Freq operator /(Freq lhs, uint rhs) =>
-            lhs.Mode == FreqMode.IntExact
-                ? new Freq(FreqMode.IntExact, lhs.HzIntValue / rhs, lhs.HzIntValue / rhs)
-                : new Freq(FreqMode.FloatExact, lhs.HzValue / rhs, 0);
-
-        public static Freq operator /(Freq lhs, float rhs) =>
-            new Freq(FreqMode.FloatExact, lhs.HzValue / rhs, 0);
-
-        private bool BothInt(Freq other) => Mode == FreqMode.IntExact && other.Mode == FreqMode.IntExact;
-
-        public bool Equals(Freq other) =>
-            Mode == other.Mode && (Mode == FreqMode.IntExact ? HzIntValue == other.HzIntValue : HzValue.Equals(other.HzValue));
+        public bool Equals(Freq other) => Hz.Equals(other.Hz);
 
         public override bool Equals(object? obj) => obj is Freq other && Equals(other);
 
-        public override int GetHashCode() => Mode == FreqMode.IntExact ? HashCode.Combine(Mode, HzIntValue) : HashCode.Combine(Mode, HzValue);
+        public override int GetHashCode() => Hz.GetHashCode();
 
-        public static bool operator ==(Freq left, Freq right) =>
-            left.Mode == right.Mode && (left.BothInt(right) ? left.HzIntValue == right.HzIntValue : left.HzValue == right.HzValue);
+        public static bool operator ==(Freq left, Freq right) => left.Hz == right.Hz;
 
-        public static bool operator !=(Freq left, Freq right) => !(left == right);
+        public static bool operator !=(Freq left, Freq right) => left.Hz != right.Hz;
 
-        public static bool operator <(Freq left, Freq right) =>
-            left.BothInt(right) ? left.HzIntValue < right.HzIntValue : left.HzValue < right.HzValue;
+        public static bool operator <(Freq left, Freq right) => left.Hz < right.Hz;
 
-        public static bool operator >(Freq left, Freq right) =>
-            left.BothInt(right) ? left.HzIntValue > right.HzIntValue : left.HzValue > right.HzValue;
+        public static bool operator >(Freq left, Freq right) => left.Hz > right.Hz;
 
-        public static bool operator <=(Freq left, Freq right) =>
-            left.BothInt(right) ? left.HzIntValue <= right.HzIntValue : left.HzValue <= right.HzValue;
+        public static bool operator <=(Freq left, Freq right) => left.Hz <= right.Hz;
 
-        public static bool operator >=(Freq left, Freq right) =>
-            left.BothInt(right) ? left.HzIntValue >= right.HzIntValue : left.HzValue >= right.HzValue;
+        public static bool operator >=(Freq left, Freq right) => left.Hz >= right.Hz;
     }
 
     public readonly struct Nearest<T>
@@ -245,25 +205,13 @@ namespace AUTD3
     public readonly struct FreqUnit
     {
         internal float HzPerUnit { get; }
-        internal uint HzPerUnitInt { get; }
 
-        internal FreqUnit(float hzPerUnit, uint hzPerUnitInt)
+        internal FreqUnit(float hzPerUnit)
         {
             HzPerUnit = hzPerUnit;
-            HzPerUnitInt = hzPerUnitInt;
         }
 
-        public static Freq operator *(int value, FreqUnit unit)
-        {
-            if (value < 0)
-            {
-                throw new Autd3Exception($"an integer frequency must not be negative, but {value} was given", Autd3ErrorCode.InvalidArgument);
-            }
-            return new Freq(Freq.FreqMode.IntExact, value * unit.HzPerUnit, checked((uint)value * unit.HzPerUnitInt));
-        }
-
-        public static Freq operator *(float value, FreqUnit unit) =>
-            new Freq(Freq.FreqMode.FloatExact, value * unit.HzPerUnit, 0);
+        public static Freq operator *(float value, FreqUnit unit) => new Freq(value * unit.HzPerUnit);
     }
 
     public readonly struct SecUnit
@@ -281,8 +229,8 @@ namespace AUTD3
         public static readonly LengthUnit mm = new LengthUnit(1f);
         public static readonly AngleUnit rad = new AngleUnit(1f);
         public static readonly AngleUnit deg = new AngleUnit((float)(Math.PI / 180.0));
-        public static readonly FreqUnit Hz = new FreqUnit(1f, 1u);
-        public static readonly FreqUnit kHz = new FreqUnit(1000f, 1000u);
+        public static readonly FreqUnit Hz = new FreqUnit(1f);
+        public static readonly FreqUnit kHz = new FreqUnit(1000f);
         public static readonly SecUnit s = default;
 
         public static Vector3 Point(Length x, Length y, Length z) => Coords.FromLengths(x, y, z);
@@ -290,7 +238,5 @@ namespace AUTD3
         public static Vector3 Offset(Length x, Length y, Length z) => Coords.FromLengths(x, y, z);
 
         public static Nearest<Freq> Nearest(Freq freq) => new Nearest<Freq>(freq);
-
-        public static Nearest<TimeSpan> Nearest(TimeSpan period) => new Nearest<TimeSpan>(period);
     }
 }

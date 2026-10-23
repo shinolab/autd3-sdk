@@ -41,11 +41,12 @@ namespace AUTD3.Tests
             var target = device.Center + new Vector3(0f, 0f, 150f);
             var option = new LaguerreGaussianOption(0, 1, 10f * mm);
 
-            var focused = new Phase[Autd3.NumTransducers];
-            Pattern.FocusDevice(device, target, wavelength, focused);
+            using var buffer = geometry.PhaseBuffer();
+            Pattern.Focus(geometry, target, wavelength, buffer);
+            var focused = buffer.ToArray()[0];
 
-            var fundamental = new Phase[Autd3.NumTransducers];
-            Pattern.LaguerreGaussianPhaseDevice(device, target, Vector3.UnitZ, new LaguerreGaussianOption(0, 0, 10f * mm), wavelength, fundamental);
+            Pattern.LaguerreGaussianPhase(geometry, target, Vector3.UnitZ, new LaguerreGaussianOption(0, 0, 10f * mm), wavelength, buffer);
+            var fundamental = buffer.ToArray()[0];
             var offset = (fundamental[0].Value - focused[0].Value + 256) % 256;
             for (var i = 0; i < Autd3.NumTransducers; i++)
             {
@@ -53,23 +54,12 @@ namespace AUTD3.Tests
                 Assert.True(Math.Min(d, 256 - d) <= 2);
             }
 
-            var lgPhases = new Phase[Autd3.NumTransducers];
-            Pattern.LaguerreGaussianPhaseDevice(device, target, Vector3.UnitZ, option, wavelength, lgPhases);
-            Assert.Equal(lgPhases[5].Value, Pattern.LaguerreGaussianPhaseTransducer(device.Position(5), target, Vector3.UnitZ, option, wavelength).Value);
-
-            var lgIntensities = new Intensity[Autd3.NumTransducers];
-            Pattern.LaguerreGaussianIntensityDevice(device, target, Vector3.UnitZ, option, wavelength, lgIntensities);
-            Assert.Equal(255, lgIntensities.Max(e => e.Value));
-
             using var phases = geometry.PhaseBuffer();
             using var intensities = geometry.IntensityBuffer();
             Pattern.LaguerreGaussianPhase(geometry, target, Vector3.UnitZ, option, wavelength, phases);
             Pattern.LaguerreGaussianIntensity(geometry, target, Vector3.UnitZ, option, wavelength, intensities);
-            for (var i = 0; i < Autd3.NumTransducers; i++)
-            {
-                Assert.Equal(lgPhases[i], phases[0][i]);
-                Assert.Equal(lgIntensities[i], intensities[0][i]);
-            }
+            Assert.Equal(phases[0][5].Value, Pattern.LaguerreGaussianPhaseTransducer(device.Position(5), target, Vector3.UnitZ, option, wavelength).Value);
+            Assert.Equal(255, intensities[0].Max(e => e.Value));
         }
 
         [Fact]
@@ -81,13 +71,15 @@ namespace AUTD3.Tests
             var target = device.Center + new Vector3(0f, 0f, 150f);
             var option = new HermiteGaussianOption(1, 0, 10f * mm);
 
-            var hg = new Phase[Autd3.NumTransducers];
-            var hgIntensities = new Intensity[Autd3.NumTransducers];
-            Pattern.HermiteGaussianPhaseDevice(device, target, Vector3.UnitZ, Vector3.UnitX, option, wavelength, hg);
-            Pattern.HermiteGaussianIntensityDevice(device, target, Vector3.UnitZ, Vector3.UnitX, option, wavelength, hgIntensities);
-            Assert.Equal(255, hgIntensities.Max(e => e.Value));
-            var focusedHg = new Phase[Autd3.NumTransducers];
-            Pattern.FocusDevice(device, target, wavelength, focusedHg);
+            using var phases = geometry.PhaseBuffer();
+            using var intensities = geometry.IntensityBuffer();
+            Pattern.HermiteGaussianPhase(geometry, target, Vector3.UnitZ, Vector3.UnitX, option, wavelength, phases);
+            Pattern.HermiteGaussianIntensity(geometry, target, Vector3.UnitZ, Vector3.UnitX, option, wavelength, intensities);
+            var hg = phases.ToArray()[0];
+            Assert.Equal(255, intensities[0].Max(e => e.Value));
+            using var focusedBuffer = geometry.PhaseBuffer();
+            Pattern.Focus(geometry, target, wavelength, focusedBuffer);
+            var focusedHg = focusedBuffer.ToArray()[0];
             var baseOffset = (hg[0].Value - focusedHg[0].Value + 256) % 256;
             var flipped = 0;
             for (var i = 0; i < Autd3.NumTransducers; i++)
@@ -101,16 +93,6 @@ namespace AUTD3.Tests
             Assert.True(flipped > 0);
             Assert.Equal(hg[7].Value, Pattern.HermiteGaussianPhaseTransducer(device.Position(7), target, Vector3.UnitZ, Vector3.UnitX, option, wavelength).Value);
 
-            using var phases = geometry.PhaseBuffer();
-            using var intensities = geometry.IntensityBuffer();
-            Pattern.HermiteGaussianPhase(geometry, target, Vector3.UnitZ, Vector3.UnitX, option, wavelength, phases);
-            Pattern.HermiteGaussianIntensity(geometry, target, Vector3.UnitZ, Vector3.UnitX, option, wavelength, intensities);
-            for (var i = 0; i < Autd3.NumTransducers; i++)
-            {
-                Assert.Equal(hg[i], phases[0][i]);
-                Assert.Equal(hgIntensities[i], intensities[0][i]);
-            }
-
             Assert.Throws<Autd3Exception>(() => Pattern.HermiteGaussianPhase(geometry, target, Vector3.UnitZ, Vector3.UnitX, new HermiteGaussianOption(), wavelength, phases));
             Assert.Throws<Autd3Exception>(() => Pattern.LaguerreGaussianIntensity(geometry, target, Vector3.UnitZ, new LaguerreGaussianOption(0, 1, -1f * mm), wavelength, intensities));
         }
@@ -123,19 +105,6 @@ namespace AUTD3.Tests
             using var intensities = geometry.IntensityBuffer();
             Assert.All(phases[0], p => Assert.Equal(Phase.Zero, p));
             Assert.All(intensities[0], i => Assert.Equal(Intensity.Max, i));
-        }
-
-        [Fact]
-        public void SetAndAddPhaseUpdateTheBuffer()
-        {
-            using var geometry = Fixture.SingleDevice();
-            using var phases = geometry.PhaseBuffer();
-            using var intensities = geometry.IntensityBuffer();
-            Pattern.SetIntensity(new Intensity(0x80), intensities);
-            Pattern.SetPhase(new Phase(0xF0), phases);
-            Pattern.AddPhase(new Phase(0x20), phases);
-            Assert.All(phases[0], p => Assert.Equal(new Phase(0x10), p));
-            Assert.All(intensities[0], i => Assert.Equal(new Intensity(0x80), i));
         }
 
         [Fact]
@@ -295,11 +264,6 @@ namespace AUTD3.Tests
             using var modulation = Modulation.ModulationBuffer();
             Modulation.Sine(200 * Hz, new SineOption(), SamplingConfig.Freq4k, modulation);
             var before = modulation.Length;
-
-            using var pressure = Modulation.ModulationBuffer();
-            Modulation.RadiationPressure(modulation, pressure);
-            Assert.Equal(before, pressure.Length);
-            Assert.Equal(before, modulation.Length);
 
             Modulation.RadiationPressureInplace(modulation);
             Assert.Equal(before, modulation.Length);

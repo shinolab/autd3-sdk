@@ -28,7 +28,7 @@ import { excerpt } from "@lib/excerpt";
 
 | 引数      | 型             | 説明                                         |
 | --------- | -------------- | -------------------------------------------- |
-| `freq`    | `Freq<u32>` 等 | 変調周波数                                   |
+| `freq`    | `Freq` 等      | 変調周波数                                   |
 | `option`  | `&SineOption`  | 追加オプション (下記参照)                    |
 | `config`  | `SamplingConfig` | サンプリング設定 ([Modulation](/autd3-sdk/api/compute/modulation/#samplingconfig) 参照) |
 | `dst`     | `&mut Vec<u8>` | 出力バッファ                                 |
@@ -37,10 +37,7 @@ import { excerpt } from "@lib/excerpt";
 
 <MathBlock tex="m_i = \frac{A}{2}\sin\!\left(2\pi f t_i + \theta\right) + b" />
 
-`freq` は `Freq<u32>`（`150 * Hz`）や `Freq<f32>`（`150.0 * Hz`）で指定する.
-整数の周波数は整数のまま, 浮動小数点の周波数は浮動小数点で波形を計算する (`SamplingMode` の `ExactFreq` / `ExactFreqFloat`).
-Python / C# でも `150 * Hz` は整数, `150.0 * Hz` (C#: `150.0f * Hz`) は浮動小数点の周波数になる.
-Python の `Freq` の `+` / `-` / `*` は整数同士なら整数のままだが, `/` は常に浮動小数点を返す. 整数のまま割るときは `//` を使う.
+`freq` は `Freq` (`150 * Hz` や `150.0 * Hz`) で指定する. `150 * Hz` と `150.0 * Hz` は同じ周波数を表す.
 
 ## SineOption
 

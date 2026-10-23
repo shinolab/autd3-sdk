@@ -15,14 +15,10 @@ sidebar:
 | `Length`   | `x * mm` / `x * m`              | `+` / `-` / 単項 `-` / `* f32` / `f32 *` / `/ f32`. `Length / s` は `Velocity` | 大小比較 |
 | `Velocity` | `Length / s` (例: `340 * m / s`) | —                                                            | 大小比較 |
 | `Angle`    | `x * deg` / `x * rad`           | `+` / `-` / 単項 `-` / `* f32` / `f32 *` / `/ f32`           | 等値のみ |
-| `Freq`     | `x * Hz` / `x * kHz`            | `+` / `-` / `*` / `/`                                        | 大小比較 |
+| `Freq`     | `x * Hz` / `x * kHz`            | `+` / `-` / `* f32` / `f32 *` / `/ f32`                      | 大小比較 |
 
 `x` は整数でも浮動小数点でもよい.
-`Freq` は, Rust では整数の `Freq<u32>` (`200 * Hz`) と浮動小数点の `Freq<f32>` (`200.0 * Hz`) が別の型になる.
-Python / C# の `Freq` は 1 つの型で整数か浮動小数点かを覚えている (C# は `200f * Hz` で浮動小数点).
-整数か浮動小数点かで Modulation の周波数の扱いが変わる ([sine](/autd3-sdk/api/compute/modulation/sine/) 参照).
-Python の `Freq` の `+` / `-` / `*` は整数同士なら整数のまま, `/` は常に浮動小数点を返す. 整数のまま割るときは `//` を使う.
-Python / C# の `Freq` の等値は整数か浮動小数点かも比べ, 値が同じでも整数と浮動小数点は等しくない (Python は `200 * Hz != 200.0 * Hz` で `hash` も別, C# は `200 * Hz != 200f * Hz`). Rust で `Freq<u32>` と `Freq<f32>` が別の型で比べられないことに合わせている. 大小比較は値だけで比べる.
+`Freq` は全言語で浮動小数点 (`f32`) の値 1 つだけを持ち, `200 * Hz` と `200.0 * Hz` は同じ値になる.
 
 ## Phase / Intensity
 
@@ -30,10 +26,9 @@ Python / C# の `Freq` の等値は整数か浮動小数点かも比べ, 値が�
 
 | 型          | 作り方                                                     | 演算                                                         | 比較     |
 | ----------- | ---------------------------------------------------------- | ------------------------------------------------------------ | -------- |
-| `Phase`     | `Phase(u8)`, `Angle` からの変換, `ZERO` / `PI`             | `+` / `-` (256 で一周する) / `* u8` / `u8 *` / `/ u8`         | 等値のみ |
-| `Intensity` | `Intensity(u8)`, `MIN` / `MAX`                             | `+` / `-` / `* u8` / `u8 *` (0–255 に飽和) / `/ u8`           | 大小比較 |
+| `Phase`     | `Phase(u8)`, `Angle` からの変換, `ZERO` / `PI`             | `+` / `-` (256 で一周する)                                    | 等値のみ |
+| `Intensity` | `Intensity(u8)`, `MIN` / `MAX`                             | —                                                            | 大小比較 |
 
 Rust の `Phase::from(angle)` は, Python では `Phase(angle)`, C# では explicit 変換 `(Phase)angle` で書く.
-Python は整数のまま割る `//` も使える.
 C# では `new Phase(byte)` / `new Intensity(byte)` で作り, 定数は `Phase.Zero` / `Phase.Pi` / `Intensity.Min` / `Intensity.Max`.
 既定値は Rust と同じく `Phase` が `ZERO`, `Intensity` が `MAX` で, Python の `Phase()` / `Intensity()` と C# の `default(Phase)` / `default(Intensity)` (と `new Intensity[n]` の各要素) もこの値になる.

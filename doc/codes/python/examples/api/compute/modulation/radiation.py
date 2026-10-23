@@ -1,11 +1,10 @@
 from autd3.units import Hz
 from autd3.value import SamplingConfig
-from autd3_modulation import SineOption, modulation_buffer, radiation_pressure, sine
+from autd3_modulation import SineOption, modulation_buffer, radiation_pressure_inplace, sine
 
-src = modulation_buffer()
-sine(150 * Hz, SineOption(), SamplingConfig.FREQ_4K, src)
+buffer = modulation_buffer()
+sine(150 * Hz, SineOption(), SamplingConfig.FREQ_4K, buffer)
 
-dst = modulation_buffer()
 # ANCHOR: api
-radiation_pressure(src, dst)
+radiation_pressure_inplace(buffer)
 # ANCHOR_END: api

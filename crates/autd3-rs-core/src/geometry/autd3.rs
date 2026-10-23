@@ -35,19 +35,17 @@ impl Default for Autd3 {
 
 impl From<Autd3> for Device {
     fn from(a: Autd3) -> Device {
-        let direction = a.rotation * Vector3::z_axis();
-        let (positions, directions): (Vec<_>, Vec<_>) = (0..Autd3::GRID_Y)
+        let positions: Vec<_> = (0..Autd3::GRID_Y)
             .flat_map(|y| (0..Autd3::GRID_X).map(move |x| (x, y)))
             .filter(|&(x, y)| !is_missing_transducer(x, y))
             .map(|(x, y)| {
-                let position = a.origin
+                a.origin
                     + a.rotation
-                        * Vector3::new(x as f32 * Autd3::PITCH_MM, y as f32 * Autd3::PITCH_MM, 0.0);
-                (position, direction)
+                        * Vector3::new(x as f32 * Autd3::PITCH_MM, y as f32 * Autd3::PITCH_MM, 0.0)
             })
-            .unzip();
+            .collect();
         debug_assert_eq!(positions.len(), Autd3::NUM_TRANSDUCERS);
-        Device::new(a.rotation, positions, directions)
+        Device::new(a.rotation, positions)
     }
 }
 
@@ -82,10 +80,7 @@ mod tests {
     #[test]
     fn autd3_default_direction_is_z() {
         let dev: Device = Autd3::new(Point3::origin(), UnitQuaternion::identity()).into();
-        let z = Vector3::z_axis();
-        for &dir in dev.directions() {
-            assert_eq!(dir, z);
-        }
+        assert_eq!(dev.axial_direction(), Vector3::z_axis());
     }
 
     #[test]
@@ -103,7 +98,7 @@ mod tests {
             epsilon = 1e-4
         );
         approx::assert_abs_diff_eq!(
-            *dev.direction(0),
+            *dev.axial_direction(),
             Vector3::new(0.0, -1.0, 0.0),
             epsilon = 1e-4
         );
@@ -122,6 +117,6 @@ mod tests {
     fn autd3_default_is_origin_no_rotation() {
         let dev: Device = Autd3::default().into();
         assert_eq!(dev.position(0), Point3::origin());
-        assert_eq!(dev.direction(0), Vector3::z_axis());
+        assert_eq!(dev.axial_direction(), Vector3::z_axis());
     }
 }

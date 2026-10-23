@@ -82,13 +82,11 @@ pub(crate) fn geometry_msg(geometry: &Geometry) -> ServerMsg {
     let transducers = geometry
         .iter()
         .flat_map(|dev| {
-            dev.positions()
-                .iter()
-                .zip(dev.directions())
-                .map(|(pos, dir)| TransducerInfo {
-                    pos: [pos.x, pos.y, pos.z],
-                    dir: [dir.x, dir.y, dir.z],
-                })
+            let dir = dev.axial_direction();
+            dev.positions().iter().map(move |pos| TransducerInfo {
+                pos: [pos.x, pos.y, pos.z],
+                dir: [dir.x, dir.y, dir.z],
+            })
         })
         .collect();
     ServerMsg::Geometry {

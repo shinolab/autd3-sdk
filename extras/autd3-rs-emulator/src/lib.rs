@@ -47,20 +47,16 @@ impl Emulator {
         let (mut x, mut y, mut z) = (Vec::new(), Vec::new(), Vec::new());
         let (mut nx, mut ny, mut nz) = (Vec::new(), Vec::new(), Vec::new());
         for (dev, device) in self.geometry.iter().enumerate() {
-            for (tr, (p, d)) in device
-                .positions()
-                .iter()
-                .zip(device.directions().iter())
-                .enumerate()
-            {
+            let dir = device.axial_direction();
+            for (tr, p) in device.positions().iter().enumerate() {
                 dev_idx.push(dev as u16);
                 tr_idx.push(tr as u8);
                 x.push(p.x);
                 y.push(p.y);
                 z.push(p.z);
-                nx.push(d.x);
-                ny.push(d.y);
-                nz.push(d.z);
+                nx.push(dir.x);
+                ny.push(dir.y);
+                nz.push(dir.z);
             }
         }
         RawFrame {

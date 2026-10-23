@@ -34,7 +34,7 @@ namespace AUTD3.Tests
             using var phases = geometry.PhaseBuffer();
             using var intensities = geometry.IntensityBuffer();
             var wavelength = Pattern.Wavelength(340 * m / s);
-            Pattern.SetIntensity(new Intensity(0x80), intensities);
+            Fixture.Fill(intensities, new Intensity(0x80));
             Pattern.Focus(geometry, geometry.Center + new Vector3(0f, 0f, 150f), wavelength, phases);
             Assert.Equal(1, phases.NumDevices);
             Assert.Equal(1, intensities.NumDevices);
@@ -63,22 +63,29 @@ namespace AUTD3.Tests
             using var intensities = geometry.IntensityBuffer();
             var foci = new[] { new AUTD3.Holo.AmplitudeTarget(geometry.Center + new Vector3(0f, 0f, 150f), 5e3f * AUTD3.Holo.HoloUnits.Pa) };
 
-            AUTD3.Holo.Holo.Naive(geometry, foci, Pattern.Wavelength(340 * m / s), new AUTD3.Holo.NaiveOption { Constraint = AUTD3.Holo.IntensityConstraint.Uniform(Intensity.Max), Mask = mask }, phases, intensities);
+            AUTD3.Holo.Holo.Naive(geometry, foci, Pattern.Wavelength(340 * m / s), new AUTD3.Holo.NaiveOption { Constraint = AUTD3.Holo.IntensityConstraint.Multiply(1f), Mask = mask }, phases, intensities);
 
             for (var dev = 0; dev < 2; dev++)
             {
                 var transducers = intensities[dev];
                 for (var tr = 0; tr < transducers.NumTransducers; tr++)
                 {
-                    var expected = dev == 1 && tr % 3 == 1 ? Intensity.Max : Intensity.Min;
-                    Assert.Equal(expected, transducers[tr]);
+                    if (dev == 1 && tr % 3 == 1)
+                    {
+                        Assert.NotEqual(Intensity.Min, transducers[tr]);
+                    }
+                    else
+                    {
+                        Assert.Equal(Intensity.Min, transducers[tr]);
+                    }
                 }
             }
+            Assert.Equal(Intensity.Max, intensities[1].Max());
 
             using var single = Fixture.SingleDevice();
             using var singlePhases = single.PhaseBuffer();
             using var singleIntensities = single.IntensityBuffer();
-            Assert.Throws<Autd3Exception>(() => AUTD3.Holo.Holo.Naive(single, foci, Pattern.Wavelength(340 * m / s), new AUTD3.Holo.NaiveOption { Constraint = AUTD3.Holo.IntensityConstraint.Uniform(Intensity.Max), Mask = mask }, singlePhases, singleIntensities));
+            Assert.Throws<Autd3Exception>(() => AUTD3.Holo.Holo.Naive(single, foci, Pattern.Wavelength(340 * m / s), new AUTD3.Holo.NaiveOption { Mask = mask }, singlePhases, singleIntensities));
         }
 
         [Fact]
@@ -134,7 +141,7 @@ namespace AUTD3.Tests
             using var geometry = Fixture.SingleDevice();
             using var phases = geometry.PhaseBuffer();
             using var intensities = geometry.IntensityBuffer();
-            Pattern.SetIntensity(Intensity.Min, intensities);
+            Fixture.Fill(intensities, Intensity.Min);
 
             using var frames = Frames.Encode(geometry, Command.Sequence(
                 new WritePatternBuffer(PatternBank.B0, 0, new[] { phases }, intensities),

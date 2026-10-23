@@ -11,7 +11,6 @@ namespace AUTD3
     {
         public byte Mode;
         public float Freq;
-        public uint FreqInt;
         public IntPtr Option;
     }
 
@@ -53,7 +52,7 @@ namespace AUTD3
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         [return: MarshalAs(UnmanagedType.I1)]
-        internal static extern bool autd3_modulation_samples_per_period(ushort divider, uint freqHz, out uint outValue);
+        internal static extern bool autd3_modulation_samples_per_period(ushort divider, float freqHz, out uint outValue);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_modulation_sine_option_new(byte amplitude, byte offset, float phase, [MarshalAs(UnmanagedType.I1)] bool clamp);
@@ -71,7 +70,7 @@ namespace AUTD3
         internal static extern int autd3_modulation_fourier_option_default([MarshalAs(UnmanagedType.I1)] out bool hasScaleFactor, out float scaleFactor, [MarshalAs(UnmanagedType.I1)] out bool clamp, out byte offset);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_modulation_sine(byte mode, float freq, uint freqInt, IntPtr option, ushort samplingDivide, ModulationBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
+        internal static extern int autd3_modulation_sine(byte mode, float freq, IntPtr option, ushort samplingDivide, ModulationBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_modulation_square_option_new(byte low, byte high, float duty);
@@ -80,7 +79,7 @@ namespace AUTD3
         internal static extern void autd3_modulation_square_option_free(IntPtr option);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_modulation_square(byte mode, float freq, uint freqInt, IntPtr option, ushort samplingDivide, ModulationBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
+        internal static extern int autd3_modulation_square(byte mode, float freq, IntPtr option, ushort samplingDivide, ModulationBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_modulation_fourier_option_new([MarshalAs(UnmanagedType.I1)] bool hasScaleFactor, float scaleFactor, [MarshalAs(UnmanagedType.I1)] bool clamp, byte offset);
@@ -96,9 +95,6 @@ namespace AUTD3
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_modulation_constant(byte amplitude, ModulationBufferHandle buffer);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_modulation_radiation_pressure(ModulationBufferHandle src, ModulationBufferHandle dst);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_modulation_radiation_pressure_inplace(ModulationBufferHandle buffer);
@@ -269,6 +265,9 @@ namespace AUTD3
 
     public readonly struct SineComponent
     {
+        internal const byte ModeExact = 0;
+        internal const byte ModeNearest = 1;
+
         public Freq Freq { get; }
         public SineOption Option { get; }
         private readonly bool _nearest;
@@ -289,7 +288,7 @@ namespace AUTD3
 
         public bool IsNearest => _nearest;
 
-        internal byte ModeCode => _nearest ? (byte)2 : Freq.ModeCode;
+        internal byte ModeCode => _nearest ? ModeNearest : ModeExact;
     }
 
     public sealed class Modulation : ICommand
@@ -316,24 +315,18 @@ namespace AUTD3
 
         public static ModulationBuffer ModulationBuffer() => new ModulationBuffer();
 
-        public static uint? SamplesPerPeriod(ushort divider, Freq freq)
-        {
-            if (freq.Mode != AUTD3.Freq.FreqMode.IntExact)
-            {
-                throw new Autd3Exception("samples_per_period requires an integer frequency", Autd3ErrorCode.InvalidArgument);
-            }
-            return NativeModulation.autd3_modulation_samples_per_period(divider, freq.HzIntValue, out var value) ? value : null;
-        }
+        public static uint? SamplesPerPeriod(ushort divider, Freq freq) =>
+            NativeModulation.autd3_modulation_samples_per_period(divider, freq.Hz, out var value) ? value : null;
 
         IntPtr ICommand.CreateOp(Geometry geometry) =>
             NativeModulation.autd3_op_modulation(
                 (byte)_bank, _samplingConfig.DivideForNative(), _buffer.Handle, _loopBehavior.Rep, _transitionMode.Mode, _transitionMode.Value);
 
         public static void Sine(Nearest<Freq> freq, SineOption option, SamplingConfig config, ModulationBuffer dst) =>
-            Sine(freq.Value, 2, option, config, dst);
+            Sine(freq.Value, SineComponent.ModeNearest, option, config, dst);
 
         public static void Sine(Freq freq, SineOption option, SamplingConfig config, ModulationBuffer dst) =>
-            Sine(freq, freq.ModeCode, option, config, dst);
+            Sine(freq, SineComponent.ModeExact, option, config, dst);
 
         private static void Sine(Freq freq, byte modeCode, SineOption option, SamplingConfig config, ModulationBuffer dst)
         {
@@ -343,7 +336,7 @@ namespace AUTD3
             try
             {
                 var err = new byte[NativeAbi.ErrorBufferLength];
-                var code = NativeModulation.autd3_modulation_sine(modeCode, freq.HzValue, freq.HzIntValue, optionHandle, sampling, dst.Handle, err, (UIntPtr)err.Length);
+                var code = NativeModulation.autd3_modulation_sine(modeCode, freq.Hz, optionHandle, sampling, dst.Handle, err, (UIntPtr)err.Length);
                 if (code != 0)
                 {
                     throw Autd3Exception.FromNative(code, err);
@@ -356,10 +349,10 @@ namespace AUTD3
         }
 
         public static void Square(Nearest<Freq> freq, SquareOption option, SamplingConfig config, ModulationBuffer dst) =>
-            Square(freq.Value, 2, option, config, dst);
+            Square(freq.Value, SineComponent.ModeNearest, option, config, dst);
 
         public static void Square(Freq freq, SquareOption option, SamplingConfig config, ModulationBuffer dst) =>
-            Square(freq, freq.ModeCode, option, config, dst);
+            Square(freq, SineComponent.ModeExact, option, config, dst);
 
         private static void Square(Freq freq, byte modeCode, SquareOption option, SamplingConfig config, ModulationBuffer dst)
         {
@@ -369,7 +362,7 @@ namespace AUTD3
             try
             {
                 var err = new byte[NativeAbi.ErrorBufferLength];
-                var code = NativeModulation.autd3_modulation_square(modeCode, freq.HzValue, freq.HzIntValue, optionHandle, sampling, dst.Handle, err, (UIntPtr)err.Length);
+                var code = NativeModulation.autd3_modulation_square(modeCode, freq.Hz, optionHandle, sampling, dst.Handle, err, (UIntPtr)err.Length);
                 if (code != 0)
                 {
                     throw Autd3Exception.FromNative(code, err);
@@ -405,8 +398,7 @@ namespace AUTD3
                     native[i] = new SineComponentNative
                     {
                         Mode = c.ModeCode,
-                        Freq = c.Freq.HzValue,
-                        FreqInt = c.Freq.HzIntValue,
+                        Freq = c.Freq.Hz,
                         Option = optionHandle,
                     };
                 }
@@ -433,18 +425,6 @@ namespace AUTD3
                 {
                     NativeModulation.autd3_modulation_sine_option_free(optionHandle);
                 }
-            }
-        }
-
-        public static void RadiationPressure(ModulationBuffer src, ModulationBuffer dst)
-        {
-            if (ReferenceEquals(src, dst))
-            {
-                throw new Autd3Exception("src and dst must be different buffers; use RadiationPressureInplace to transform a buffer in place", Autd3ErrorCode.InvalidArgument);
-            }
-            if (NativeModulation.autd3_modulation_radiation_pressure(src.Handle, dst.Handle) != 0)
-            {
-                throw new Autd3Exception("radiation pressure failed");
             }
         }
 

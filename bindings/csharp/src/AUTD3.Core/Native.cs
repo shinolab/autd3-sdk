@@ -66,9 +66,6 @@ namespace AUTD3
         internal static extern int autd3_core_transducer_position(GeometryHandle geometry, UIntPtr dev, UIntPtr tr, [Out] float[] outXyz);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_core_transducer_direction(GeometryHandle geometry, UIntPtr dev, UIntPtr tr, [Out] float[] outXyz);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_core_geometry_clone(GeometryHandle geometry);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
@@ -144,13 +141,7 @@ namespace AUTD3
         internal static extern int autd3_core_sampling_config_from_freq(float hz, out ushort @out, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_core_sampling_config_from_freq_nearest(float hz, out ushort @out, byte[] outErr, UIntPtr outErrLen);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_core_sampling_config_from_period(ulong nanos, out ushort @out, byte[] outErr, UIntPtr outErrLen);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern ushort autd3_core_sampling_config_from_period_nearest(ulong nanos);
     }
 
     internal static class NativeAbi

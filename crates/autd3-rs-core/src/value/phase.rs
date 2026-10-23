@@ -74,27 +74,6 @@ impl core::ops::SubAssign for Phase {
     }
 }
 
-impl core::ops::Mul<u8> for Phase {
-    type Output = Phase;
-    fn mul(self, rhs: u8) -> Self::Output {
-        Phase(self.0.wrapping_mul(rhs))
-    }
-}
-
-impl core::ops::Mul<Phase> for u8 {
-    type Output = Phase;
-    fn mul(self, rhs: Phase) -> Self::Output {
-        Phase(self.wrapping_mul(rhs.0))
-    }
-}
-
-impl core::ops::Div<u8> for Phase {
-    type Output = Phase;
-    fn div(self, rhs: u8) -> Self::Output {
-        Phase(self.0.wrapping_div(rhs))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -120,22 +99,6 @@ mod tests {
         let mut a = lhs;
         a -= rhs;
         assert_eq!(expected, a);
-    }
-
-    #[rstest]
-    #[case(Phase(0x02), Phase(0x01), 2)]
-    #[case(Phase(0xFE), Phase(0x7F), 2)]
-    #[case(Phase::ZERO, Phase(0x80), 2)]
-    fn mul_wraps(#[case] expected: Phase, #[case] lhs: Phase, #[case] rhs: u8) {
-        assert_eq!(expected, lhs * rhs);
-        assert_eq!(expected, rhs * lhs);
-    }
-
-    #[rstest]
-    #[case(Phase(0x01), Phase(0x02), 2)]
-    #[case(Phase(0x7F), Phase(0xFE), 2)]
-    fn div(#[case] expected: Phase, #[case] lhs: Phase, #[case] rhs: u8) {
-        assert_eq!(expected, lhs / rhs);
     }
 
     #[rstest]

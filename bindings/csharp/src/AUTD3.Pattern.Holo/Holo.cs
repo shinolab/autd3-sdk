@@ -97,10 +97,8 @@ namespace AUTD3.Holo
     public readonly struct IntensityConstraint : IEquatable<IntensityConstraint>
     {
         private const byte KindUnset = 0;
-        private const byte KindNormalize = 1;
-        private const byte KindMultiply = 2;
-        private const byte KindUniform = 3;
-        private const byte KindClamp = 4;
+        private const byte KindMultiply = 1;
+        private const byte KindClamp = 2;
 
         private readonly byte _kind;
         private readonly byte _min;
@@ -115,9 +113,7 @@ namespace AUTD3.Holo
             _multiply = multiply;
         }
 
-        public static IntensityConstraint Normalize => new IntensityConstraint(KindNormalize, 0, 0, 0);
         public static IntensityConstraint Multiply(float value) => new IntensityConstraint(KindMultiply, 0, 0, value);
-        public static IntensityConstraint Uniform(Intensity intensity) => new IntensityConstraint(KindUniform, intensity.Value, 0, 0);
         public static IntensityConstraint Clamp(Intensity min, Intensity max) => new IntensityConstraint(KindClamp, min.Value, max.Value, 0);
 
         internal IntensityConstraintNative ToNative()
@@ -223,7 +219,6 @@ namespace AUTD3.Holo
         public byte PhaseQuantizationLevels { get => _phaseQuantizationLevels ?? HoloOptionDefaults.GreedyPhaseQuantizationLevels; init => _phaseQuantizationLevels = value; }
         private readonly Directivity? _directivity;
         public Directivity Directivity { get => _directivity ?? HoloOptionDefaults.GreedyDirectivity; init => _directivity = value; }
-        public TransducerMask Mask { get; init; }
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -284,7 +279,7 @@ namespace AUTD3.Holo
         internal static extern int autd3_holo_gspat_batch(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, UIntPtr repeat, in IntensityConstraintNative constraint, byte directivity, byte[]? mask, IntPtr[] phases, IntPtr[] intensities, UIntPtr numProblems, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_holo_greedy(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, IntPtr intensities, byte uniformIntensity, uint[] order, UIntPtr orderLen, byte phaseQuantizationLevels, byte directivity, byte[]? mask, PhaseBufferHandle dst, byte[] outErr, UIntPtr outErrLen);
+        internal static extern int autd3_holo_greedy(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, IntPtr intensities, byte uniformIntensity, uint[] order, UIntPtr orderLen, byte phaseQuantizationLevels, byte directivity, PhaseBufferHandle dst, byte[] outErr, UIntPtr outErrLen);
     }
 
     public readonly struct AmplitudeTarget : IEquatable<AmplitudeTarget>
@@ -441,7 +436,7 @@ namespace AUTD3.Holo
         {
             using var intensityLease = new HandleLease(intensities.Buffer?.Handle);
             var err = new byte[NativeAbi.ErrorBufferLength];
-            var code = NativeHolo.autd3_holo_greedy(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, intensityLease.Pointer, intensities.Uniform, order, (UIntPtr)order.Length, option.PhaseQuantizationLevels, (byte)option.Directivity, FlattenMask(option.Mask.Mask, geometry.NumDevices), dst.Handle, err, (UIntPtr)err.Length);
+            var code = NativeHolo.autd3_holo_greedy(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, intensityLease.Pointer, intensities.Uniform, order, (UIntPtr)order.Length, option.PhaseQuantizationLevels, (byte)option.Directivity, dst.Handle, err, (UIntPtr)err.Length);
             if (code != 0)
             {
                 throw Autd3Exception.FromNative(code, err);

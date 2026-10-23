@@ -5,24 +5,17 @@ pub struct Device {
     idx: usize,
     rotation: UnitQuaternion<f32>,
     positions: Vec<Point3<f32>>,
-    directions: Vec<UnitVector3<f32>>,
     inv: Isometry3<f32>,
 }
 
 impl Device {
-    pub(super) fn new(
-        rotation: UnitQuaternion<f32>,
-        positions: Vec<Point3<f32>>,
-        directions: Vec<UnitVector3<f32>>,
-    ) -> Self {
-        debug_assert_eq!(positions.len(), directions.len());
+    pub(super) fn new(rotation: UnitQuaternion<f32>, positions: Vec<Point3<f32>>) -> Self {
         let origin = positions.first().copied().unwrap_or_else(Point3::origin);
         let inv = (Translation3::from(origin) * rotation).inverse();
         Self {
             idx: 0,
             rotation,
             positions,
-            directions,
             inv,
         }
     }
@@ -77,18 +70,8 @@ impl Device {
     }
 
     #[must_use]
-    pub fn directions(&self) -> &[UnitVector3<f32>] {
-        &self.directions
-    }
-
-    #[must_use]
     pub fn position(&self, index: usize) -> Point3<f32> {
         self.positions[index]
-    }
-
-    #[must_use]
-    pub fn direction(&self, index: usize) -> UnitVector3<f32> {
-        self.directions[index]
     }
 
     #[must_use]

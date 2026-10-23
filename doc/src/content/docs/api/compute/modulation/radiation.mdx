@@ -1,5 +1,5 @@
 ---
-title: radiation_pressure
+title: radiation_pressure_inplace
 description: 既存の変調波形に放射圧補正を適用する Modulation
 sidebar:
   order: 24
@@ -18,11 +18,11 @@ import csSample from "@codes/csharp/examples/api/compute/modulation/radiation.cs
 import csFullSample from "@codes/csharp/examples/api/compute/modulation/radiation-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
-`radiation_pressure` は変調波形に放射圧補正を適用する. `sine` などで計算した波形に対して補正をかける. 
+`radiation_pressure_inplace` は変調波形に放射圧補正を適用する. `sine` などで計算した波形を in-place に書き換える. 
 
 音響放射圧は音圧の 2 乗に比例する. 
 `sine` などが指定するのは音圧の振幅なので, 放射圧を目的の波形に合わせたい場合は各サンプルの平方根を取る必要がある. 
-`radiation_pressure` はこの補正を行う. 
+`radiation_pressure_inplace` はこの補正を行う. 
 
 各サンプル <Math tex="m" /> は次式で書き換えられる. 
 
@@ -34,15 +34,13 @@ import { excerpt } from "@lib/excerpt";
 
 <CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
 
-### radiation_pressure
+### radiation_pressure_inplace
 
-| 引数  | 型             | 説明                           |
-| ----- | -------------- | ------------------------------ |
-| `src` | `&[u8]`        | 補正前の変調波形               |
-| `dst` | `&mut Vec<u8>` | 補正後の波形を書き出すバッファ |
+| 引数      | 型          | 説明                             |
+| --------- | ----------- | -------------------------------- |
+| `samples` | `&mut [u8]` | 補正する変調波形 (in-place に書き換える) |
 
-in-placeに書き換える `radiation_pressure_inplace` もある.
-`src` と `dst` に同じバッファは渡せない (Rust は借用規則でコンパイルエラー, Python は `ValueError`, C# は `Autd3Exception` (`InvalidArgument`)). 同じバッファを書き換えるときは `radiation_pressure_inplace` を使う.
+補正前の波形も残したいときは, 先にバッファを複製してから渡す.
 
 ## Example
 

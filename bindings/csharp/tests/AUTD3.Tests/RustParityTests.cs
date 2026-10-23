@@ -130,7 +130,6 @@ namespace AUTD3.Tests
             var e = Assert.Throws<Autd3Exception>(() => new SamplingConfig(4001f * Hz));
             Assert.Contains("must divide the ultrasound frequency", e.Message);
             Assert.Equal(Autd3ErrorCode.InvalidArgument, e.Code);
-            Assert.Throws<Autd3Exception>(() => new SamplingConfig(Nearest(float.NaN * Hz)));
             Assert.Throws<Autd3Exception>(() => new SamplingConfig(TimeSpan.FromTicks(-1)));
         }
 
@@ -174,14 +173,11 @@ namespace AUTD3.Tests
         }
 
         [Fact]
-        public void ANegativeIntegerFrequencyIsRejected()
+        public void AnIntegerFrequencyIsTheSameAsAFloatFrequency()
         {
-            var e = Assert.Throws<Autd3Exception>(() => -1 * Hz);
-            Assert.Equal(Autd3ErrorCode.InvalidArgument, e.Code);
-            Assert.Throws<Autd3Exception>(() => -1 * kHz);
-            Assert.Equal(200u, (200 * Hz).HzIntValue);
-            Assert.Equal(200u, Freq.FromHz(200u).HzIntValue);
-            Assert.Equal(Freq.FreqMode.FloatExact, Freq.FromHz(200f).Mode);
+            Assert.Equal(200f * Hz, 200 * Hz);
+            Assert.Equal(200f, Freq.FromHz(200f).Hz);
+            Assert.Equal(-1000f, (-1 * kHz).Hz);
         }
 
         [Fact]
@@ -304,8 +300,8 @@ namespace AUTD3.Tests
         {
             Assert.Equal(20u, Modulation.SamplesPerPeriod(10, 200 * Hz));
             Assert.Null(Modulation.SamplesPerPeriod(10, 3 * Hz));
-            var e = Assert.Throws<Autd3Exception>(() => Modulation.SamplesPerPeriod(10, 200f * Hz));
-            Assert.Equal(Autd3ErrorCode.InvalidArgument, e.Code);
+            Assert.Equal(8000u, Modulation.SamplesPerPeriod(10, 0.5f * Hz));
+            Assert.Null(Modulation.SamplesPerPeriod(10, 0 * Hz));
         }
 
         [Fact]

@@ -35,9 +35,7 @@ fn main() {
     let y = device.y_direction();
     let axial = device.axial_direction();
     let positions = device.positions();
-    let directions = device.directions();
     let pos0 = device.position(0);
-    let dir0 = device.direction(0);
     // ANCHOR_END: device
 
     let _ = (num_devices, total_transducers, array_center, first);
@@ -50,8 +48,6 @@ fn main() {
         y,
         axial,
         positions,
-        directions,
         pos0,
-        dir0,
     );
 }

@@ -4,7 +4,7 @@ use autd3_python_capsule::extract::{
     length_to_py,
 };
 use autd3_python_capsule::numpy;
-use autd3_python_capsule::{capsule_of, device_from_capsule, geometry_from_capsule};
+use autd3_python_capsule::{capsule_of, geometry_from_capsule};
 use autd3_rs_core::Length;
 use autd3_rs_core::geometry::Autd3;
 use autd3_rs_core::geometry::TransducerMask as CoreTransducerMask;
@@ -475,25 +475,6 @@ fn hermite_gaussian_intensity(
     Ok(())
 }
 
-macro_rules! device_fn {
-    ($name:ident, $core:path, $ty:ty, $init:expr, ($($arg:ident: $extract:expr),*)) => {
-        #[pyfunction]
-        #[pyo3(signature = (device, $($arg,)* dst))]
-        fn $name(
-            device: &Bound<'_, PyAny>,
-            $($arg: &Bound<'_, PyAny>,)*
-            dst: &Bound<'_, PyAny>,
-        ) -> PyResult<()> {
-            let capsule = capsule_of(device)?;
-            let device = device_from_capsule(&capsule)?;
-            let dst = numpy::u8_vector_dst(dst, device.num_transducers())?;
-            let mut values: Vec<$ty> = vec![$init; device.num_transducers()];
-            $core(device, $($extract($arg)?,)* &mut values);
-            numpy::u8_vector_write(dst, values.as_bytes())
-        }
-    };
-}
-
 macro_rules! transducer_fn {
     ($name:ident, $core:path, ($($arg:ident: $extract:expr),*)) => {
         #[pyfunction]
@@ -522,41 +503,15 @@ fn extract_hg_option(
     option.cast::<HermiteGaussianOption>()?.get().checked()
 }
 
-device_fn!(
-    focus_device,
-    autd3_rs_pattern::focus_device,
-    Phase,
-    Phase::ZERO,
-    (target: extract_point, wavelength: extract_length)
-);
 transducer_fn!(
     focus_transducer,
     autd3_rs_pattern::focus_transducer,
     (target: extract_point, wavelength: extract_length)
 );
-device_fn!(
-    plane_device,
-    autd3_rs_pattern::plane_device,
-    Phase,
-    Phase::ZERO,
-    (direction: extract_direction, wavelength: extract_length)
-);
 transducer_fn!(
     plane_transducer,
     autd3_rs_pattern::plane_transducer,
     (direction: extract_direction, wavelength: extract_length)
-);
-device_fn!(
-    bessel_device,
-    autd3_rs_pattern::bessel_device,
-    Phase,
-    Phase::ZERO,
-    (
-        apex: extract_point,
-        direction: extract_direction,
-        theta: extract_angle,
-        wavelength: extract_length
-    )
 );
 transducer_fn!(
     bessel_transducer,
@@ -568,18 +523,6 @@ transducer_fn!(
         wavelength: extract_length
     )
 );
-device_fn!(
-    laguerre_gaussian_phase_device,
-    autd3_rs_pattern::laguerre_gaussian_phase_device,
-    Phase,
-    Phase::ZERO,
-    (
-        target: extract_point,
-        axis: extract_direction,
-        option: extract_lg_option,
-        wavelength: extract_length
-    )
-);
 transducer_fn!(
     laguerre_gaussian_phase_transducer,
     autd3_rs_pattern::laguerre_gaussian_phase_transducer,
@@ -587,31 +530,6 @@ transducer_fn!(
         target: extract_point,
         axis: extract_direction,
         option: extract_lg_option,
-        wavelength: extract_length
-    )
-);
-device_fn!(
-    laguerre_gaussian_intensity_device,
-    autd3_rs_pattern::laguerre_gaussian_intensity_device,
-    Intensity,
-    Intensity::MAX,
-    (
-        target: extract_point,
-        axis: extract_direction,
-        option: extract_lg_option,
-        wavelength: extract_length
-    )
-);
-device_fn!(
-    hermite_gaussian_phase_device,
-    autd3_rs_pattern::hermite_gaussian_phase_device,
-    Phase,
-    Phase::ZERO,
-    (
-        target: extract_point,
-        axis: extract_direction,
-        x_dir: extract_direction,
-        option: extract_hg_option,
         wavelength: extract_length
     )
 );
@@ -626,44 +544,6 @@ transducer_fn!(
         wavelength: extract_length
     )
 );
-device_fn!(
-    hermite_gaussian_intensity_device,
-    autd3_rs_pattern::hermite_gaussian_intensity_device,
-    Intensity,
-    Intensity::MAX,
-    (
-        target: extract_point,
-        axis: extract_direction,
-        x_dir: extract_direction,
-        option: extract_hg_option,
-        wavelength: extract_length
-    )
-);
-
-#[pyfunction]
-#[pyo3(signature = (intensity, dst))]
-fn set_intensity(intensity: &Bound<'_, PyAny>, dst: PyRef<'_, IntensityBuffer>) -> PyResult<()> {
-    let mut dst = dst.write()?;
-    autd3_rs_pattern::set_intensity(extract_intensity(intensity)?, &mut dst);
-    Ok(())
-}
-
-#[pyfunction]
-#[pyo3(signature = (phase, dst))]
-fn set_phase(phase: &Bound<'_, PyAny>, dst: PyRef<'_, PhaseBuffer>) -> PyResult<()> {
-    let mut dst = dst.write()?;
-    autd3_rs_pattern::set_phase(extract_phase(phase)?, &mut dst);
-    Ok(())
-}
-
-#[pyfunction]
-#[pyo3(signature = (phase, dst))]
-fn add_phase(phase: &Bound<'_, PyAny>, dst: PyRef<'_, PhaseBuffer>) -> PyResult<()> {
-    let mut dst = dst.write()?;
-    autd3_rs_pattern::add_phase(extract_phase(phase)?, &mut dst);
-    Ok(())
-}
-
 #[pyclass(name = "TransducerMask", module = "autd3_pattern", from_py_object)]
 #[derive(Clone)]
 pub struct TransducerMask {
@@ -736,20 +616,10 @@ fn autd3_pattern(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(laguerre_gaussian_intensity, m)?)?;
     m.add_function(wrap_pyfunction!(hermite_gaussian_phase, m)?)?;
     m.add_function(wrap_pyfunction!(hermite_gaussian_intensity, m)?)?;
-    m.add_function(wrap_pyfunction!(focus_device, m)?)?;
     m.add_function(wrap_pyfunction!(focus_transducer, m)?)?;
-    m.add_function(wrap_pyfunction!(plane_device, m)?)?;
     m.add_function(wrap_pyfunction!(plane_transducer, m)?)?;
-    m.add_function(wrap_pyfunction!(bessel_device, m)?)?;
     m.add_function(wrap_pyfunction!(bessel_transducer, m)?)?;
-    m.add_function(wrap_pyfunction!(laguerre_gaussian_phase_device, m)?)?;
     m.add_function(wrap_pyfunction!(laguerre_gaussian_phase_transducer, m)?)?;
-    m.add_function(wrap_pyfunction!(laguerre_gaussian_intensity_device, m)?)?;
-    m.add_function(wrap_pyfunction!(hermite_gaussian_phase_device, m)?)?;
     m.add_function(wrap_pyfunction!(hermite_gaussian_phase_transducer, m)?)?;
-    m.add_function(wrap_pyfunction!(hermite_gaussian_intensity_device, m)?)?;
-    m.add_function(wrap_pyfunction!(set_intensity, m)?)?;
-    m.add_function(wrap_pyfunction!(set_phase, m)?)?;
-    m.add_function(wrap_pyfunction!(add_phase, m)?)?;
     Ok(())
 }
