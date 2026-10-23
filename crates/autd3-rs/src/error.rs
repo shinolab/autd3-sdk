@@ -101,9 +101,6 @@ pub enum PayloadError {
         max: usize,
     },
 
-    #[error("the execution lead must be at least {min:?}, got {got:?}")]
-    ExecLeadTooShort { got: Duration, min: Duration },
-
     #[error(
         "the execution time must be less than {limit:?} ahead of the device time, got {ahead:?}"
     )]
@@ -151,6 +148,11 @@ pub enum PayloadError {
 
     #[error("pattern STM has {phases} phase pattern(s) but {intensities} intensity pattern(s)")]
     PatternStmLengthMismatch { phases: usize, intensities: usize },
+
+    #[error(
+        "the per-index intensities hold {len} pattern(s), but indices up to {required} are written"
+    )]
+    PerIndexIntensityTooShort { required: usize, len: usize },
 
     #[error(
         "the {depth:?} phase depth carries a single uniform intensity; per-transducer or per-index intensities are not supported"
@@ -205,9 +207,10 @@ mod tests {
 
     #[test]
     fn a_network_error_without_a_source_ends_the_chain() {
-        let e = Error::from(crate::udp::UdpError::Closed);
+        let e = Error::from(crate::udp::UdpError::NoInterfaceFound);
+        let message = "no interface has an AUTD3 device answering ReadUnitInfo";
 
-        assert_eq!(e.to_string(), "network error: the connection is closed");
-        assert_eq!(chain(&e), vec!["the connection is closed".to_owned()]);
+        assert_eq!(e.to_string(), format!("network error: {message}"));
+        assert_eq!(chain(&e), vec![message.to_owned()]);
     }
 }

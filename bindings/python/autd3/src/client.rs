@@ -7,12 +7,10 @@ use crate::ops::SysTime;
 use autd3_python_capsule::extract::{extract_duration, geometry_to_py};
 use autd3_python_capsule::{capsule_of, client_pyerr, client_pyerr_gil, geometry_from_capsule};
 use autd3_rs::Geometry;
-use autd3_rs::udp::StateChecker as CoreStateChecker;
 
-use pyo3::exceptions::{PyIndexError, PyOverflowError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::sync::MutexExt;
-use pyo3::types::{PyIterator, PyList};
 
 #[pyclass(
     name = "DeviceState",
@@ -60,157 +58,42 @@ impl DeviceState {
     }
 }
 
-#[pyclass(name = "DeviceStatus", module = "autd3", eq, frozen)]
-#[derive(PartialEq, Eq)]
+#[pyclass(name = "DeviceStatus", module = "autd3", eq, hash, frozen)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct DeviceStatus(autd3_rs::DeviceStatus);
+
+impl core::hash::Hash for DeviceStatus {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        DeviceState(self.0.state).hash(state);
+        self.0.ptp_locked.hash(state);
+        self.0.ptp_failsafe.hash(state);
+    }
+}
 
 #[pymethods]
 impl DeviceStatus {
     #[getter]
-    fn devices(&self) -> Vec<DeviceState> {
-        self.0.devices().iter().copied().map(DeviceState).collect()
+    fn state(&self) -> DeviceState {
+        DeviceState(self.0.state)
     }
 
     #[getter]
-    fn all_ready(&self) -> bool {
-        self.0.all_ready()
+    fn ptp_locked(&self) -> bool {
+        self.0.ptp_locked
     }
 
     #[getter]
-    fn any_lost(&self) -> bool {
-        self.0.any_lost()
-    }
-
-    #[getter]
-    fn ptp_locked(&self) -> DeviceMask {
-        DeviceMask(self.0.ptp_locked())
-    }
-
-    #[getter]
-    fn ptp_failsafe(&self) -> DeviceMask {
-        DeviceMask(self.0.ptp_failsafe())
-    }
-
-    #[getter]
-    fn any_ptp_failsafe(&self) -> bool {
-        self.0.any_ptp_failsafe()
+    fn ptp_failsafe(&self) -> bool {
+        self.0.ptp_failsafe
     }
 
     fn __repr__(&self) -> String {
         format!(
-            "DeviceStatus(devices={:?}, all_ready={}, any_lost={}, ptp_locked={:?}, ptp_failsafe={:?})",
-            self.0.devices(),
-            self.0.all_ready(),
-            self.0.any_lost(),
-            self.0.ptp_locked().iter().collect::<Vec<_>>(),
-            self.0.ptp_failsafe().iter().collect::<Vec<_>>()
+            "DeviceStatus(state={}, ptp_locked={}, ptp_failsafe={})",
+            DeviceState(self.0.state).__repr__(),
+            self.0.ptp_locked,
+            self.0.ptp_failsafe
         )
-    }
-}
-
-#[pyclass(name = "BusStats", module = "autd3", frozen)]
-pub struct BusStats(autd3_rs::BusStats);
-
-#[pymethods]
-impl BusStats {
-    fn frames(&self) -> u64 {
-        self.0.frames()
-    }
-
-    fn heartbeats(&self) -> u64 {
-        self.0.heartbeats()
-    }
-
-    fn acked_frames(&self) -> u64 {
-        self.0.acked_frames()
-    }
-
-    fn worst_ack_latency_ns(&self) -> u64 {
-        self.0.worst_ack_latency_ns()
-    }
-
-    fn mean_ack_latency_ns(&self) -> u64 {
-        self.0.mean_ack_latency_ns()
-    }
-
-    fn __repr__(&self) -> String {
-        format!(
-            "BusStats(frames={}, heartbeats={}, acked_frames={}, worst_ack_latency_ns={}, mean_ack_latency_ns={})",
-            self.0.frames(),
-            self.0.heartbeats(),
-            self.0.acked_frames(),
-            self.0.worst_ack_latency_ns(),
-            self.0.mean_ack_latency_ns()
-        )
-    }
-}
-
-#[pyclass(
-    name = "DeviceMask",
-    module = "autd3",
-    eq,
-    hash,
-    frozen,
-    from_py_object
-)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct DeviceMask(autd3_rs::DeviceMask);
-
-fn device_index(index: &Bound<'_, PyAny>) -> PyResult<Option<usize>> {
-    match index.extract::<usize>() {
-        Ok(index) => Ok(Some(index)),
-        Err(e) if e.is_instance_of::<PyOverflowError>(index.py()) => Ok(None),
-        Err(e) => Err(e),
-    }
-}
-
-#[pymethods]
-impl DeviceMask {
-    #[staticmethod]
-    fn from_devices(devices: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let mut indices = Vec::new();
-        for device in devices.try_iter()? {
-            if let Some(index) = device_index(&device?)? {
-                indices.push(index);
-            }
-        }
-        Ok(Self(indices.into_iter().collect()))
-    }
-
-    #[getter]
-    fn bits(&self) -> u128 {
-        self.0.bits()
-    }
-
-    fn __getitem__(&self, index: &Bound<'_, PyAny>) -> PyResult<bool> {
-        Ok(device_index(index)?.is_some_and(|index| self.0[index]))
-    }
-
-    fn __contains__(&self, index: &Bound<'_, PyAny>) -> bool {
-        device_index(index)
-            .ok()
-            .flatten()
-            .is_some_and(|index| self.0.contains(index))
-    }
-
-    fn __len__(&self) -> usize {
-        self.0.len()
-    }
-
-    fn __bool__(&self) -> bool {
-        !self.0.is_empty()
-    }
-
-    fn __iter__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyIterator>> {
-        PyList::new(py, self.0.iter())?.try_iter()
-    }
-
-    fn __or__(&self, other: Self) -> Self {
-        Self(self.0 | other.0)
-    }
-
-    fn __repr__(&self) -> String {
-        format!("DeviceMask({:?})", self.0.iter().collect::<Vec<_>>())
     }
 }
 
@@ -303,14 +186,14 @@ pub struct FpgaState(pub(crate) autd3_rs::FpgaState);
 
 impl core::hash::Hash for FpgaState {
     fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
-        self.0.raw().hash(state);
+        self.0.0.hash(state);
     }
 }
 
 #[pymethods]
 impl FpgaState {
     fn raw(&self) -> u8 {
-        self.0.raw()
+        self.0.0
     }
 
     fn is_thermal_asserted(&self) -> bool {
@@ -327,10 +210,6 @@ impl FpgaState {
 
     fn is_pattern_mode(&self) -> bool {
         self.0.is_pattern_mode()
-    }
-
-    fn is_stm_mode(&self) -> bool {
-        self.0.is_stm_mode()
     }
 
     fn is_pattern_stopped(&self) -> bool {
@@ -352,7 +231,7 @@ impl FpgaState {
     fn __repr__(&self) -> String {
         format!(
             "FpgaState(raw=0x{:02X}, thermal_asserted={}, mod_bank={:?}, pattern_bank={:?}, pattern_mode={}, pattern_stopped={}, mod_stopped={}, transition_pending={}, failsafe_active={})",
-            self.0.raw(),
+            self.0.0,
             self.0.is_thermal_asserted(),
             self.0.current_mod_bank(),
             self.0.current_pattern_bank(),
@@ -502,12 +381,11 @@ impl Client {
         self.inner.num_devices()
     }
 
-    fn state_checker(&self) -> StateChecker {
-        StateChecker(self.inner.state_checker())
-    }
-
-    fn bus_stats(&self) -> BusStats {
-        BusStats(self.inner.bus_stats())
+    fn device_status(&self, py: Python<'_>) -> PyResult<Vec<DeviceStatus>> {
+        self.inner
+            .device_status()
+            .map(|status| status.into_iter().map(DeviceStatus).collect())
+            .map_err(|e| client_pyerr(py, &e))
     }
 
     fn geometry<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
@@ -672,21 +550,5 @@ impl ResponseFuture {
             Ok(Response(inner))
         })?;
         awaitable.getattr("__await__")?.call0()
-    }
-}
-
-#[pyclass(name = "StateChecker", module = "autd3", frozen)]
-pub struct StateChecker(pub(crate) CoreStateChecker);
-
-#[pymethods]
-impl StateChecker {
-    fn check(&self, py: Python<'_>) -> PyResult<DeviceStatus> {
-        self.0.check().map(DeviceStatus).map_err(|e| {
-            autd3_python_capsule::to_pyerr_with_code(
-                py,
-                autd3_python_capsule::error_code::NETWORK,
-                e.to_string(),
-            )
-        })
     }
 }

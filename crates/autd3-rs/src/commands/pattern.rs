@@ -114,7 +114,12 @@ mod tests {
         .unwrap();
         let raw = build(
             2,
-            WritePatternBuffer::new(PatternBank::B1, 0, &phases, &intensities),
+            WritePatternBuffer::new(
+                PatternBank::B1,
+                0,
+                core::slice::from_ref(&phases),
+                &intensities,
+            ),
         )
         .unwrap();
 

@@ -30,8 +30,8 @@ internal static class Sample
         // ANCHOR: equivalent
         new WritePatternBuffer(
             bank: bank,
-            index: 0,
-            phases: phases,
+            startIndex: 0,
+            patterns: new[] { phases },
             intensities: intensities
         );
         new ConfigPattern(

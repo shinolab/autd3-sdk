@@ -32,22 +32,10 @@ fn _autd3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("NUM_FOCI_MAX", autd3_rs::params::NUM_FOCI_MAX)?;
     m.add("PWE_TABLE_SIZE", autd3_rs::commands::PWE_TABLE_SIZE)?;
     m.add("PULSE_WIDTH_PERIOD", autd3_rs::value::PULSE_WIDTH_PERIOD)?;
-    m.add("PITCH_MM", autd3_rs::Autd3::PITCH_MM)?;
-    m.add("NUM_TRANSDUCERS", autd3_rs::Autd3::NUM_TRANSDUCERS)?;
-    m.add("GRID_X", autd3_rs::Autd3::GRID_X)?;
-    m.add("GRID_Y", autd3_rs::Autd3::GRID_Y)?;
-    m.add(
-        "ROTATION_NORM_TOLERANCE",
-        autd3_rs::Autd3::ROTATION_NORM_TOLERANCE,
-    )?;
     m.add("PORT", autd3_rs::udp::PORT)?;
-    m.add("DEVICE_QUEUE_FRAMES", autd3_rs::udp::DEVICE_QUEUE_FRAMES)?;
     m.add_class::<client::Client>()?;
     m.add_class::<client::ExecAt>()?;
-    m.add_class::<client::StateChecker>()?;
     m.add_class::<client::DeviceState>()?;
-    m.add_class::<client::BusStats>()?;
-    m.add_class::<client::DeviceMask>()?;
     m.add_class::<client::Version>()?;
     m.add_class::<client::FirmwareVersion>()?;
     m.add_class::<client::Response>()?;

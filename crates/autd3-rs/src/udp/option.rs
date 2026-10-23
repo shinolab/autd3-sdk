@@ -3,8 +3,6 @@ use std::time::Duration;
 
 use autd3_rs_core::Interface;
 
-use super::error::UdpError;
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TransportOption {
     pub iface: Interface,
@@ -28,25 +26,9 @@ impl Default for TransportOption {
     }
 }
 
-impl TransportOption {
-    pub fn validate(&self) -> Result<(), UdpError> {
-        if self.open_timeout.is_zero() {
-            return Err(UdpError::ZeroOpenTimeout);
-        }
-        if self.lost_timeout.is_zero() {
-            return Err(UdpError::ZeroLostTimeout);
-        }
-        if self.ack_timeout.is_zero() {
-            return Err(UdpError::ZeroAckTimeout);
-        }
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rstest::rstest;
 
     #[test]
     fn the_defaults_follow_the_spec() {
@@ -57,55 +39,5 @@ mod tests {
         assert_eq!(option.ack_timeout, Duration::from_millis(10));
         assert_eq!(option.send_buffer_bytes, NonZeroUsize::new(8192));
         assert!(option.sync_on_open);
-        assert!(option.validate().is_ok());
-    }
-
-    #[rstest]
-    #[case::zero_open_timeout(
-        TransportOption {
-            open_timeout: Duration::ZERO,
-            ..TransportOption::default()
-        },
-        |e: &UdpError| matches!(e, UdpError::ZeroOpenTimeout)
-    )]
-    #[case::zero_lost_timeout(
-        TransportOption {
-            lost_timeout: Duration::ZERO,
-            ..TransportOption::default()
-        },
-        |e: &UdpError| matches!(e, UdpError::ZeroLostTimeout)
-    )]
-    #[case::zero_ack_timeout(
-        TransportOption {
-            ack_timeout: Duration::ZERO,
-            ..TransportOption::default()
-        },
-        |e: &UdpError| matches!(e, UdpError::ZeroAckTimeout)
-    )]
-    fn a_duration_at_or_below_its_bound_is_rejected(
-        #[case] option: TransportOption,
-        #[case] is_expected: fn(&UdpError) -> bool,
-    ) {
-        assert!(option.validate().is_err_and(|e| is_expected(&e)));
-    }
-
-    #[test]
-    fn the_durations_have_no_upper_bound() {
-        let option = TransportOption {
-            open_timeout: Duration::MAX,
-            lost_timeout: Duration::MAX,
-            ack_timeout: Duration::MAX,
-            ..TransportOption::default()
-        };
-        assert!(option.validate().is_ok());
-    }
-
-    #[test]
-    fn the_shortest_lost_timeout_is_allowed() {
-        let option = TransportOption {
-            lost_timeout: Duration::from_nanos(1),
-            ..TransportOption::default()
-        };
-        assert!(option.validate().is_ok());
     }
 }

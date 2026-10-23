@@ -14,9 +14,9 @@ use crate::fpga_state::FpgaState;
 use crate::geometry::Geometry;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::telemetry::Telemetry;
-use crate::udp::{StateChecker, TransportOption};
+use crate::udp::TransportOption;
 use crate::value::SysTime;
-use autd3_rs_core::BusStats;
+use autd3_rs_core::DeviceStatus;
 
 use super::completion::{self, ResponseFuture};
 use super::driver::Driver;
@@ -51,14 +51,8 @@ impl Controller {
         &self.geometry
     }
 
-    #[must_use]
-    pub fn bus_stats(&self) -> BusStats {
-        self.session.stats()
-    }
-
-    #[must_use]
-    pub fn state_checker(&self) -> StateChecker {
-        self.session.state_checker()
+    pub fn device_status(&self) -> Result<Vec<DeviceStatus>, Error> {
+        self.session.device_status()
     }
 
     pub fn device_time_now(&self) -> Result<SysTime, Error> {
@@ -127,9 +121,6 @@ impl Controller {
     }
 
     pub fn send_heartbeat(&self) -> Result<(), Error> {
-        if let Some(e) = self.session.closed_error() {
-            return Err(e);
-        }
         self.session.send_heartbeat()
     }
 

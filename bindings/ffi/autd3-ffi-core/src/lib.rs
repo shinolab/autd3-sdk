@@ -357,11 +357,6 @@ pub extern "C" fn autd3_core_params_port() -> u16 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_core_params_device_queue_frames() -> usize {
-    autd3_cpu_wire::udp::DEVICE_QUEUE_FRAMES
-}
-
-#[unsafe(no_mangle)]
 pub extern "C" fn autd3_core_params_rotation_norm_tolerance() -> f32 {
     Autd3::ROTATION_NORM_TOLERANCE
 }
@@ -641,10 +636,6 @@ mod tests {
         assert_eq!(MAX_INFLIGHT, autd3_core_params_max_inflight());
         assert_eq!(MAX_DEVICES, autd3_core_params_max_devices());
         assert_eq!(autd3_cpu_wire::udp::PORT, autd3_core_params_port());
-        assert_eq!(
-            autd3_cpu_wire::udp::DEVICE_QUEUE_FRAMES,
-            autd3_core_params_device_queue_frames()
-        );
         assert_eq!(
             Autd3::ROTATION_NORM_TOLERANCE.to_bits(),
             autd3_core_params_rotation_norm_tolerance().to_bits()

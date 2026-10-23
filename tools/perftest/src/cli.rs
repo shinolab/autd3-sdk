@@ -2,7 +2,6 @@ use std::num::NonZeroUsize;
 use std::time::Duration;
 
 use autd3_rs::MAX_INFLIGHT;
-use autd3_rs::udp::DEVICE_QUEUE_FRAMES;
 use clap::{Parser, ValueEnum};
 
 const DEFAULT_HEARTBEAT: &str = "10ms";
@@ -146,7 +145,7 @@ pub(crate) struct Cli {
     #[arg(
         long = "max-inflight",
         alias = "inflight",
-        default_value_t = DEVICE_QUEUE_FRAMES,
+        default_value_t = MAX_INFLIGHT,
         help = "Pipeline depth in streaming mode: frames sent before awaiting the oldest response. \
                 Stop-and-wait ignores it except with --command write-modulation-buffer, \
                 which pipelines the frames of one sample up to this depth."
@@ -173,16 +172,13 @@ impl Cli {
         if self.ack_timeout.is_zero() {
             return Err("--ack-timeout must be longer than 0".to_string());
         }
-        if let Some(exec_lead) = self.exec_lead {
-            if exec_lead < Duration::from_micros(100) {
-                return Err("--exec-lead must be at least 100us".to_string());
-            }
-            if self.ack_timeout <= exec_lead {
-                return Err(format!(
-                    "--ack-timeout {:?} must exceed --exec-lead {exec_lead:?}",
-                    self.ack_timeout
-                ));
-            }
+        if let Some(exec_lead) = self.exec_lead
+            && self.ack_timeout <= exec_lead
+        {
+            return Err(format!(
+                "--ack-timeout {:?} must exceed --exec-lead {exec_lead:?}",
+                self.ack_timeout
+            ));
         }
         if self.mode == Mode::BankSwitch {
             if self.command != Command::Pattern {

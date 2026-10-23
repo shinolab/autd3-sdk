@@ -16,7 +16,7 @@ use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::protocol::{Cmd, FrameHeader, PAYLOAD_BYTES};
 use autd3_rs::udp::UdpError;
 use autd3_rs::{
-    Client, Datagram, Error, Frame as ClientFrame, Response, ResponseFuture, StateChecker,
+    Client, Datagram, DeviceState, Error, Frame as ClientFrame, Response, ResponseFuture,
     TransportOption,
 };
 use zerocopy::little_endian::U32;
@@ -254,7 +254,6 @@ impl Wake for ThreadWaker {
 
 pub struct UdpLink {
     client: Option<Arc<Client>>,
-    states: StateChecker,
     lost_poll_interval: Duration,
     keepalive_stop: Arc<AtomicBool>,
     keepalive: Option<JoinHandle<()>>,
@@ -282,7 +281,6 @@ impl UdpLink {
                 .map_err(|e| Error::from(UdpError::from(e)))?
         };
         Ok(Self {
-            states: client.state_checker(),
             client: Some(client),
             lost_poll_interval: heartbeat,
             keepalive_stop,
@@ -299,7 +297,11 @@ impl UdpLink {
     }
 
     fn any_lost(&self) -> Result<bool, Error> {
-        Ok(self.states.check()?.any_lost())
+        let client = self.client.as_ref().ok_or(Error::Closed)?;
+        Ok(client
+            .device_status()?
+            .iter()
+            .any(|status| status.state == DeviceState::Lost))
     }
 
     fn wait_for_every_reply(&self, response: ResponseFuture) -> Result<Option<Response>, Error> {

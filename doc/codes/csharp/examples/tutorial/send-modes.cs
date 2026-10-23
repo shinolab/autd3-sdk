@@ -74,7 +74,7 @@ internal static class Sample
             frames.EncodeInto(geometry, new Pattern(phases, Intensity.Max));
             foreach (var frame in frames)
             {
-                if (pending.Count >= Client.MaxInflight)
+                if (pending.Count >= Params.MaxInflight)
                 {
                     (await pending.Dequeue()).Check();
                 }

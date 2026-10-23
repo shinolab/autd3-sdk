@@ -26,9 +26,9 @@ fn main() {
     };
     // ANCHOR_END: api
 
-    let phases = &phases;
+    let patterns = std::slice::from_ref(&phases);
     // ANCHOR: equivalent
-    WritePatternBuffer::new(bank, 0, phases, intensities);
+    WritePatternBuffer::new(bank, 0, patterns, intensities);
     ConfigPattern {
         bank,
         config: SamplingConfig::new(NonZeroU16::MAX),

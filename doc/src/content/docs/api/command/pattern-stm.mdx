@@ -64,9 +64,9 @@ index 毎のバッファ列は, 長さが 1 でも index 毎として扱い, 本
 
 ## 等価な低レベルコマンド
 
-`PatternStm` は内部で [WritePatternPhase](/autd3-sdk/api/command/lowlevel/write-pattern-phase/) または [WritePatternBuffer](/autd3-sdk/api/command/lowlevel/write-pattern-buffer/) (各 index) + [ConfigPattern](/autd3-sdk/api/command/lowlevel/config-pattern/) + [ActivatePatternBank](/autd3-sdk/api/command/lowlevel/activate-pattern-bank/) の 3 つへ展開される.
+`PatternStm` は内部で [WritePatternPhase](/autd3-sdk/api/command/lowlevel/write-pattern-phase/) または [WritePatternBuffer](/autd3-sdk/api/command/lowlevel/write-pattern-buffer/) (2 index ずつ) + [ConfigPattern](/autd3-sdk/api/command/lowlevel/config-pattern/) + [ActivatePatternBank](/autd3-sdk/api/command/lowlevel/activate-pattern-bank/) の 3 つへ展開される.
 以下は `intensities` が一様値のときの `PatternStm::new(config, &phases, intensities, option)` と等価な組み合わせである.
-`intensities` が振動子ごとの値のときは `WritePatternPhase` の代わりに `WritePatternBuffer` が各 index に使われる.
+`intensities` が振動子ごとの値のときは `WritePatternPhase` の代わりに `WritePatternBuffer` が 2 index ずつ使われる.
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />
 

@@ -189,14 +189,12 @@ impl Session {
 
     fn lost_devices(&self) -> Vec<usize> {
         self.client
-            .state_checker()
-            .check()
-            .map(|states| {
-                states
-                    .devices()
+            .device_status()
+            .map(|status| {
+                status
                     .iter()
                     .enumerate()
-                    .filter(|&(_, &state)| state == DeviceState::Lost)
+                    .filter(|(_, status)| status.state == DeviceState::Lost)
                     .map(|(device, _)| device)
                     .collect()
             })
@@ -469,17 +467,18 @@ fn encode_switch(
     geometry: &Geometry,
     framing: Framing,
     bank: PatternBank,
-    phases: &[Vec<autd3_rs::value::Phase>],
+    patterns: &[Vec<Vec<autd3_rs::value::Phase>>],
     intensities: &[Vec<Intensity>],
 ) -> Result<()> {
     match framing {
-        Framing::Fused => {
-            frames.encode_into(geometry, Pattern::with_bank(bank, phases, intensities))
-        }
+        Framing::Fused => frames.encode_into(
+            geometry,
+            Pattern::with_bank(bank, &patterns[0], intensities),
+        ),
         Framing::Split => frames.encode_into(
             geometry,
             (
-                WritePatternBuffer::new(bank, 0, phases, intensities),
+                WritePatternBuffer::new(bank, 0, patterns, intensities),
                 ConfigPattern {
                     bank,
                     config: SamplingConfig::new(NonZeroU16::MAX),
@@ -545,12 +544,12 @@ fn measure(cli: &Cli, option: &TransportOption, shutdown: &AtomicBool) -> Result
     let geometry = Geometry::new((0..devices).map(|_| Autd3::default()));
     send_simulator_geometry(cli, &geometry, option)?;
     let session = Session::open(cli, option, &geometry)?;
-    let phases = geometry.phase_buffer();
+    let patterns = [geometry.phase_buffer()];
     let intensities: Vec<Vec<Intensity>> = geometry
         .iter()
         .map(|d| vec![Intensity::MIN; d.num_transducers()])
         .collect();
-    prepare(&session, &geometry, &phases, &intensities)?;
+    prepare(&session, &geometry, &patterns[0], &intensities)?;
     eprintln!("GPIO[0]: PatternBank (toggles on every switch; probe it on two or more devices)");
     let telemetry_start = session.read_telemetry()?;
 
@@ -564,8 +563,14 @@ fn measure(cli: &Cli, option: &TransportOption, shutdown: &AtomicBool) -> Result
     let start = Instant::now();
     let mut last_report = start;
     while !shutdown.load(Ordering::Relaxed) {
-        if let Err(e) = encode_switch(&mut frames, &geometry, framing, bank, &phases, &intensities)
-        {
+        if let Err(e) = encode_switch(
+            &mut frames,
+            &geometry,
+            framing,
+            bank,
+            &patterns,
+            &intensities,
+        ) {
             stopped = Some(e);
             break;
         }

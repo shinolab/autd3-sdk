@@ -13,7 +13,7 @@ use clap::Parser;
 use autd3_rs::commands::{Clear, Command, FixedCompletionTime, Pattern, SetSilencer, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::value::Intensity;
-use autd3_rs::{Client, Error, ExecAt, Frames, Interface, StateChecker, TransportOption};
+use autd3_rs::{Client, DeviceState, Error, ExecAt, Frames, Interface, TransportOption};
 
 use crate::cli::Cli;
 use crate::io::{check, prompt, wait_enter};
@@ -22,10 +22,16 @@ use tracing_subscriber::EnvFilter;
 const REOPEN_ATTEMPTS: u32 = 5;
 const REOPEN_INTERVAL: Duration = Duration::from_secs(2);
 
+pub fn device_states(client: &Client) -> Vec<DeviceState> {
+    client
+        .device_status()
+        .map(|status| status.iter().map(|s| s.state).collect())
+        .unwrap_or_default()
+}
+
 pub struct Ctx<'a> {
     pub client: &'a Client,
     pub geometry: &'a Geometry,
-    pub states: &'a StateChecker,
     pub heartbeat: Duration,
     pub lost_timeout: Duration,
     pub mute: bool,
@@ -275,11 +281,9 @@ async fn run(cli: &Cli) -> Result<()> {
     }
 
     loop {
-        let states = client.state_checker();
         let ctx = Ctx {
             client: &client,
             geometry: &geometry,
-            states: &states,
             heartbeat,
             lost_timeout: option.lost_timeout,
             mute: cli.mute,
@@ -352,7 +356,7 @@ pub async fn describe(client: &Client) {
             for (i, s) in states.iter().enumerate() {
                 println!(
                     "  device[{i}] fpga state: raw={:#04x} thermal={} mod_bank={:?} pattern_bank={:?} mode={} pattern_stopped={} mod_stopped={} transition_pending={} failsafe={}",
-                    s.raw(),
+                    s.0,
                     s.is_thermal_asserted(),
                     s.current_mod_bank(),
                     s.current_pattern_bank(),

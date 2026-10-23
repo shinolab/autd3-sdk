@@ -47,6 +47,7 @@ struct Unit {
     duplicate_frames: u32,
     muted: bool,
     heartbeats: u64,
+    frames: u64,
 }
 
 impl Unit {
@@ -388,6 +389,7 @@ impl Chain {
         {
             return;
         }
+        self.units[index].frames += 1;
         let mut immediate = [0u8; FRAME_BYTES_MAX];
         let body = &mut immediate[..frame.len()];
         body.copy_from_slice(frame);
@@ -509,6 +511,7 @@ impl UdpEmulator {
                 duplicate_frames: 0,
                 muted: false,
                 heartbeats: 0,
+                frames: 0,
             });
         }
         let chain = Arc::new(Mutex::new(Chain {
@@ -615,6 +618,11 @@ impl UdpEmulator {
     #[must_use]
     pub fn heartbeats_received(&self, index: usize) -> u64 {
         lock(&self.chain).units[index].heartbeats
+    }
+
+    #[must_use]
+    pub fn frames_received(&self, index: usize) -> u64 {
+        lock(&self.chain).units[index].frames
     }
 
     pub fn reboot(&self, index: usize) {

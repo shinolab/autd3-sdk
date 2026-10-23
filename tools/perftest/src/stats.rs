@@ -50,6 +50,7 @@ impl Counters {
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Traffic {
     devices: usize,
+    tx_frames: u64,
     tx_datagrams: u64,
     tx_bytes: u64,
     rx_datagrams: u64,
@@ -60,6 +61,7 @@ impl Traffic {
     pub(crate) const fn new(devices: usize) -> Self {
         Self {
             devices,
+            tx_frames: 0,
             tx_datagrams: 0,
             tx_bytes: 0,
             rx_datagrams: 0,
@@ -67,7 +69,12 @@ impl Traffic {
         }
     }
 
+    pub(crate) const fn frames(&self) -> u64 {
+        self.tx_frames
+    }
+
     pub(crate) fn sent(&mut self, frame: &Frame<'_>) {
+        self.tx_frames += 1;
         for device in 0..self.devices {
             self.tx_datagrams += 1;
             self.tx_bytes += (size_of::<Header>()
@@ -84,6 +91,7 @@ impl Traffic {
     pub(crate) const fn since(self, before: Self) -> Self {
         Self {
             devices: self.devices,
+            tx_frames: self.tx_frames.saturating_sub(before.tx_frames),
             tx_datagrams: self.tx_datagrams.saturating_sub(before.tx_datagrams),
             tx_bytes: self.tx_bytes.saturating_sub(before.tx_bytes),
             rx_datagrams: self.rx_datagrams.saturating_sub(before.rx_datagrams),
@@ -220,11 +228,34 @@ const fn bucket_upper_ns(index: usize) -> u64 {
     ((sub_buckets + mantissa) << shift) + ((1u64 << shift) - 1)
 }
 
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct DriverAckLatency {
-    pub frames: u64,
-    pub mean: Duration,
-    pub worst: Duration,
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct AckLatency {
+    frames: u64,
+    total: Duration,
+    max: Duration,
+}
+
+impl AckLatency {
+    pub(crate) fn record(&mut self, latency: Duration) {
+        self.frames += 1;
+        self.total += latency;
+        self.max = self.max.max(latency);
+    }
+
+    pub(crate) const fn frames(&self) -> u64 {
+        self.frames
+    }
+
+    pub(crate) fn mean(&self) -> Option<Duration> {
+        (self.frames > 0).then(|| {
+            let nanos = self.total.as_nanos() / u128::from(self.frames);
+            Duration::from_nanos(u64::try_from(nanos).unwrap_or(u64::MAX))
+        })
+    }
+
+    pub(crate) const fn max(&self) -> Duration {
+        self.max
+    }
 }
 
 #[derive(Debug)]
@@ -234,5 +265,7 @@ pub(crate) struct Summary {
     pub throughput_cmd_per_sec: f64,
     pub traffic: TrafficRate,
     pub latency: LatencyStats,
-    pub driver_ack: Option<DriverAckLatency>,
+    pub frames: u64,
+    pub heartbeats: u64,
+    pub ack: AckLatency,
 }

@@ -16,7 +16,6 @@ pub(crate) fn open(
     num_devices: usize,
     device_clock: &mut DeviceClock,
 ) -> Result<Channel, UdpError> {
-    option.validate()?;
     let deadline = Instant::now().checked_add(option.open_timeout);
     if !(1..=MAX_DEVICES).contains(&num_devices) {
         return Err(UdpError::InvalidDeviceCount(num_devices));

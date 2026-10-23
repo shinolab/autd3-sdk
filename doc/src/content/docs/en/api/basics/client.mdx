@@ -28,7 +28,7 @@ import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
 
 The `Client` connects to the devices (or the [Simulator](/autd3-sdk/en/guide/simulator/)) directly over UDP.
 
-To continuously monitor the operating state of the devices, drive the `StateChecker` taken from `Client::state_checker` (see [State Monitoring](/autd3-sdk/en/guide/state-check/)).
+To continuously monitor the operating state of the devices, call `Client::device_status` periodically (see [State Monitoring](/autd3-sdk/en/guide/state-check/)).
 
 ## API
 
@@ -38,7 +38,6 @@ To continuously monitor the operating state of the devices, drive the `StateChec
 | ------------------------- | :---: | ------------------------------------- | ---------------------------------------------------------- |
 | `num_devices()`           | —     | `usize`                               | Number of connected devices                                |
 | `geometry()`              | —     | `&Geometry`                           | Physical layout of the devices given at open time          |
-| `bus_stats()`             | —     | `BusStats`                            | Send/receive statistics (number of frames sent, ack latency, etc.) |
 | `read_firmware_version()` | ✓     | `Result<Vec<FirmwareVersion>, Error>` | CPU/FPGA firmware version of each device                   |
 | `read_fpga_state()`       | ✓     | `Result<Vec<FpgaState>, Error>`       | FPGA state of each device                                  |
 | `read_telemetry()`        | ✓     | `Result<Vec<Telemetry>, Error>`       | CPU diagnostic counters of each device                     |
@@ -46,7 +45,7 @@ To continuously monitor the operating state of the devices, drive the `StateChec
 | `send(cmd)`               | ✓     | `Result<(), Error>`                   | Send a command, confirming the response frame by frame     |
 | `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | Send one frame (see [streaming](#streaming))                |
 | `send_frame_at(frame, exec)` | ✓  | `Result<ResponseFuture, Error>`       | Send one frame at a given processing time (see [Processing time](#processing-time)) |
-| `state_checker()`         | —     | `StateChecker`                        | Get a `StateChecker`. See [State Monitoring](/autd3-sdk/en/guide/state-check/) for details. |
+| `device_status()`         | —     | `Result<Vec<DeviceStatus>, Error>`    | State of each device. See [State Monitoring](/autd3-sdk/en/guide/state-check/) for details. |
 | `send_heartbeat()`             | —     | `Result<(), Error>`                   | Send one liveness check to every device that is not `Lost` (see [Liveness check](#liveness-check)) |
 | `close()`                 | —     | `Result<(), Error>`                   | Close the connection                                       |
 
@@ -64,7 +63,7 @@ To keep sending without waiting for the responses, convert the command into fram
 <CodeTabs rust={excerpt(sample, "streaming")} python={excerpt(pySample, "streaming")} csharp={excerpt(csSample, "streaming")} />
 
 The number of frames that may be sent without waiting for a reply is fixed at `MAX_INFLIGHT (7)` (Python: `autd3.params.MAX_INFLIGHT`, C#: `Params.MaxInflight`).
-This equals `DEVICE_QUEUE_FRAMES`, the number of frames in the receive queue of each device (Python: `autd3.params.DEVICE_QUEUE_FRAMES`, C#: `Params.DeviceQueueFrames`).
+This equals the number of frames in the receive queue of each device.
 While `MAX_INFLIGHT` frames are waiting for their replies, `send_frame` waits until the replies of one of them are complete.
 To keep fewer frames in flight, await an earlier `ResponseFuture` before sending the next frame.
 
@@ -110,12 +109,11 @@ In C#, they are PascalCase properties (`is_thermal_asserted()` → `IsThermalAss
 
 | Method                    | Type             | Description                              |
 | ------------------------- | ---------------- | ---------------------------------------- |
-| `raw()`                   | `u8`             | Raw value of the state register          |
+| `.0` (field)              | `u8`             | Raw value of the state register (Python: `raw()`, C#: `Raw`) |
 | `is_thermal_asserted()`   | `bool`           | Whether the thermal sensor is over the threshold |
 | `current_mod_bank()`      | `ModulationBank` | Current Modulation bank                  |
 | `current_pattern_bank()`  | `PatternBank`    | Current Pattern bank (shared by Pattern and STM) |
 | `is_pattern_mode()`       | `bool`           | Whether a Pattern is being output        |
-| `is_stm_mode()`           | `bool`           | Whether an STM is being output           |
 | `is_pattern_stopped()`    | `bool`           | Whether Pattern / STM playback has stopped |
 | `is_mod_stopped()`        | `bool`           | Whether Modulation playback has stopped |
 | `is_transition_pending()` | `bool`           | Whether a bank switch is waiting to take effect |
@@ -140,18 +138,6 @@ Reading them does not clear them.
 | `exec_late`           | `u32` | Frames whose processing started 1 µs or more after their [processing time](#processing-time) |
 
 The `u32` fields wrap around to 0 on overflow, and the `u16` / `u8` fields stop at their maximum.
-
-### BusStats
-
-`bus_stats()` returns the host-side send/receive statistics. The values are totals since the `Client` opened, and each read gives the latest values.
-
-| Method                       | Type  | Description                                  |
-| ---------------------------- | ----- | -------------------------------------------- |
-| `frames()`                   | `u64` | Frames sent                                  |
-| `heartbeats()`               | `u64` | Liveness checks sent with `send_heartbeat()`      |
-| `acked_frames()`             | `u64` | Frames that received a reply                 |
-| `worst_ack_latency_ns()`     | `u64` | Maximum time from sending to the reply [ns]  |
-| `mean_ack_latency_ns()`      | `u64` | Mean time from sending to the reply [ns]     |
 
 ## Response-wait timeout
 
@@ -184,7 +170,7 @@ Note the following:
   - When frames are sent one after another without waiting for the responses ([streaming](#streaming)), the stamped time of a frame can come while the device is still processing the previous one; that frame is processed late (and counted in `exec_late`).
   - Even when it succeeds, only the start of the processing inside the CPU board is aligned; it does not guarantee that the start of the processing on the FPGA is aligned (that is, for example, that the phase of the emitted ultrasound is updated at the same timing)
 - The response comes back after the processing, so a send completes only after the stamped time. Waiting for the response frame by frame, a command of several frames takes about the number of frames × `lead`
-- `Lead` must be at least 100 µs and shorter than 2^31 µs (about 35.8 minutes), and shorter than `lost_timeout` of [`TransportOption`](/autd3-sdk/en/api/basics/transport-option/). Outside it the send fails with `InvalidPayload` and the frame is not sent
+- `Lead` must be shorter than 2^31 µs (about 35.8 minutes), and shorter than `lost_timeout` of [`TransportOption`](/autd3-sdk/en/api/basics/transport-option/). Outside it the send fails with `InvalidPayload` and the frame is not sent
 - `At` fails if it is 2^31 µs or more ahead of the current time, 2^30 µs (about 17.9 minutes) or more behind it, or `lost_timeout` or more ahead. A past time within the range is accepted; the devices process the frame at once and count it in `exec_late`
 - Keep `ack_timeout` (10 ms by default) longer than the time from the send to the given time + the processing time
 - `Lead` / `At` fail with `DeviceTimeUnknown` while the device time is unknown (no reply carrying it has been received yet)

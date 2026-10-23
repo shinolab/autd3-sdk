@@ -76,6 +76,12 @@ namespace AUTD3
         internal static extern IntPtr autd3_op_pattern_stm(ushort configDivide, IntPtr[] phases, UIntPtr numPatterns, byte intensityKind, IntPtr[] intensities, UIntPtr numIntensities, byte uniformIntensity, byte bank, byte phaseDepth, ushort loopRep, byte transitionMode, ulong transitionValue);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr autd3_op_write_pattern_buffer(byte bank, ushort startIndex, IntPtr[] phases, UIntPtr numPatterns, byte intensityKind, IntPtr[] intensities, UIntPtr numIntensities, byte uniformIntensity);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern UIntPtr autd3_op_write_pattern_buffer_max_len();
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern float autd3_foci_stm_option_default_sound_speed();
     }
 
@@ -208,6 +214,43 @@ namespace AUTD3
         public static implicit operator StmIntensity(IntensityBuffer sameForAllIndices) => new StmIntensity(sameForAllIndices);
 
         public static implicit operator StmIntensity(IntensityBuffer[] perIndex) => new StmIntensity(perIndex);
+    }
+
+    public sealed class WritePatternBuffer : ICommand
+    {
+        public static readonly int MaxLen = (int)NativeStm.autd3_op_write_pattern_buffer_max_len();
+
+        private readonly PatternBank _bank;
+        private readonly ushort _startIndex;
+        private readonly PhaseBuffer[] _patterns;
+        private readonly StmIntensity _intensities;
+
+        public WritePatternBuffer(PatternBank bank, ushort startIndex, PhaseBuffer[] patterns, StmIntensity intensities)
+        {
+            _bank = bank;
+            _startIndex = startIndex;
+            _patterns = patterns ?? throw new ArgumentNullException(nameof(patterns));
+            _intensities = intensities;
+        }
+
+        IntPtr ICommand.CreateOp(Geometry geometry)
+        {
+            var buffers = _intensities.Buffers;
+            var phaseHandles = new SafeHandle[_patterns.Length];
+            var intensityHandles = new SafeHandle[buffers.Length];
+            for (var i = 0; i < _patterns.Length; i++)
+            {
+                phaseHandles[i] = _patterns[i].Handle;
+            }
+            for (var i = 0; i < buffers.Length; i++)
+            {
+                intensityHandles[i] = buffers[i].Handle;
+            }
+            using var phaseLease = new HandleArray(phaseHandles);
+            using var intensityLease = new HandleArray(intensityHandles);
+            return NativeStm.autd3_op_write_pattern_buffer((byte)_bank, _startIndex, phaseLease.Pointers, (UIntPtr)phaseLease.Pointers.Length,
+                _intensities.Kind, intensityLease.Pointers, (UIntPtr)intensityLease.Pointers.Length, _intensities.Uniform);
+        }
     }
 
     public sealed class PatternStm : ICommand

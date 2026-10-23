@@ -4,7 +4,7 @@ use std::time::Instant;
 use anyhow::Result;
 
 use autd3_rs::commands::ForceFan;
-use autd3_rs::{Client, DeviceState, Error, StateChecker};
+use autd3_rs::{Client, DeviceState, Error};
 
 use crate::io::{check, prompt, wait_enter};
 use crate::{Link, Session, describe};
@@ -17,21 +17,14 @@ fn verdict(ok: bool) -> &'static str {
     if ok { "[OK]" } else { "[FAIL]" }
 }
 
-fn snapshot(states: &StateChecker) -> Vec<DeviceState> {
-    states
-        .check()
-        .map(|s| s.devices().to_vec())
-        .unwrap_or_default()
+fn snapshot(client: &Client) -> Vec<DeviceState> {
+    crate::device_states(client)
 }
 
-async fn reaches(
-    states: &StateChecker,
-    expected: &[DeviceState],
-    window: Duration,
-) -> Option<Duration> {
+async fn reaches(client: &Client, expected: &[DeviceState], window: Duration) -> Option<Duration> {
     let started = Instant::now();
     while started.elapsed() < window {
-        if snapshot(states) == expected {
+        if snapshot(client) == expected {
             return Some(started.elapsed());
         }
         tokio::time::sleep(POLL).await;
@@ -39,10 +32,10 @@ async fn reaches(
     None
 }
 
-async fn holds(states: &StateChecker, expected: &[DeviceState], window: Duration) -> bool {
+async fn holds(client: &Client, expected: &[DeviceState], window: Duration) -> bool {
     let started = Instant::now();
     while started.elapsed() < window {
-        if snapshot(states) != expected {
+        if snapshot(client) != expected {
             return false;
         }
         tokio::time::sleep(POLL).await;
@@ -50,7 +43,7 @@ async fn holds(states: &StateChecker, expected: &[DeviceState], window: Duration
     true
 }
 
-async fn detect(client: &Client, states: &StateChecker, first: usize) {
+async fn detect(client: &Client, first: usize) {
     let count = client.num_devices();
     let expected: Vec<DeviceState> = (0..count)
         .map(|device| {
@@ -65,14 +58,14 @@ async fn detect(client: &Client, states: &StateChecker, first: usize) {
     check(&format!(
         "Unplug the cable on the host side of device[{first}], or power-cycle device[{first}], within {DETECTION_WINDOW:?}"
     ));
-    match reaches(states, &expected, DETECTION_WINDOW).await {
+    match reaches(client, &expected, DETECTION_WINDOW).await {
         Some(elapsed) => println!(
             "  [OK] device[{first}] and every device behind it turned Lost, the others stayed Ready ({:.1} s after the prompt): {expected:?}",
             elapsed.as_secs_f32()
         ),
         None => println!(
             "  [FAIL] expected {expected:?} within {DETECTION_WINDOW:?}, got {:?}",
-            snapshot(states)
+            snapshot(client)
         ),
     }
 
@@ -104,15 +97,14 @@ async fn detect(client: &Client, states: &StateChecker, first: usize) {
     .await;
     println!(
         "  {} a Lost device stays Lost for {STICKY_WINDOW:?} after the link is back: {:?}",
-        verdict(holds(states, &expected, STICKY_WINDOW).await),
-        snapshot(states)
+        verdict(holds(client, &expected, STICKY_WINDOW).await),
+        snapshot(client)
     );
 }
 
 pub(crate) async fn run(client: Session, link: &Link<'_>) -> Result<Session> {
     let count = client.num_devices();
-    let states = client.state_checker();
-    let before = snapshot(&states);
+    let before = snapshot(&client);
     println!(
         "  {} every device is Ready before the cable is touched: {before:?}",
         verdict(before.iter().all(|d| *d == DeviceState::Ready))
@@ -129,7 +121,7 @@ pub(crate) async fn run(client: Session, link: &Link<'_>) -> Result<Session> {
         .filter(|device| *device < count)
         .unwrap_or(count - 1);
 
-    detect(&client, &states, first).await;
+    detect(&client, first).await;
 
     if let Err(e) = client.close() {
         println!("  closing the client with Lost devices reported: {e}");
@@ -138,7 +130,7 @@ pub(crate) async fn run(client: Session, link: &Link<'_>) -> Result<Session> {
 
     let started = Instant::now();
     let client = link.reopen().await?;
-    let reopened = snapshot(&client.state_checker());
+    let reopened = snapshot(&client);
     println!(
         "  {} reopening brings every device back to Ready ({:.1} s): {reopened:?}",
         verdict(reopened.len() == count && reopened.iter().all(|d| *d == DeviceState::Ready)),

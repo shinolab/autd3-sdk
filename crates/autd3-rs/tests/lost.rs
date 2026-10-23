@@ -11,7 +11,12 @@ const SETTLE: Duration = Duration::from_millis(200);
 const POLL_INTERVAL: Duration = Duration::from_millis(5);
 
 fn states(client: &Client) -> Vec<DeviceState> {
-    client.state_checker().check().unwrap().devices().to_vec()
+    client
+        .device_status()
+        .unwrap()
+        .iter()
+        .map(|status| status.state)
+        .collect()
 }
 
 async fn wait_until_lost(client: &Client, device: usize) {
@@ -32,11 +37,7 @@ async fn wait_until_lost(client: &Client, device: usize) {
 async fn every_device_is_ready_after_open() {
     let (_emulator, client) = open_monitored(3);
 
-    let status = client.state_checker().check().unwrap();
-
-    assert_eq!(status.devices(), [READY; 3]);
-    assert!(status.all_ready());
-    assert!(!status.any_lost());
+    assert_eq!(states(&client), [READY; 3]);
     client.close().unwrap();
 }
 

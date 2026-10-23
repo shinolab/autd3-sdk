@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Numerics;
 using AUTD3;
 using Xunit;
@@ -136,12 +137,27 @@ namespace AUTD3.Tests
             Pattern.SetIntensity(Intensity.Min, intensities);
 
             using var frames = Frames.Encode(geometry, Command.Sequence(
-                new WritePatternBuffer(PatternBank.B0, 0, phases, intensities),
+                new WritePatternBuffer(PatternBank.B0, 0, new[] { phases }, intensities),
                 new ConfigPattern(PatternBank.B0, SamplingConfig.Freq4k, 1, LoopBehavior.Infinite)));
 
             Assert.Equal(2, frames.Length);
             _ = frames[0];
             Assert.Throws<ArgumentOutOfRangeException>(() => frames[frames.Length]);
+        }
+
+        [Fact]
+        public void WritePatternBufferWritesUpToMaxLenPatternsInOneFrame()
+        {
+            using var geometry = Fixture.SingleDevice();
+            using var phases = geometry.PhaseBuffer();
+            var full = Enumerable.Repeat(phases, WritePatternBuffer.MaxLen).ToArray();
+            var tooMany = Enumerable.Repeat(phases, WritePatternBuffer.MaxLen + 1).ToArray();
+
+            using var frames = Frames.Encode(geometry, new WritePatternBuffer(PatternBank.B0, 0, full, Intensity.Max));
+
+            Assert.Equal(1, frames.Length);
+            var error = Assert.Throws<Autd3Exception>(() => Frames.Encode(geometry, new WritePatternBuffer(PatternBank.B0, 0, tooMany, Intensity.Max)));
+            Assert.Equal(Autd3ErrorCode.InvalidArgument, error.Code);
         }
     }
 }

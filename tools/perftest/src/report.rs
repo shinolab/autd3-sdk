@@ -245,15 +245,19 @@ pub(crate) fn print_summary(s: &Summary) {
     println!("  min           : {}", format_duration(s.latency.min));
     println!("  max           : {}", format_duration(s.latency.max));
 
-    if let Some(ack) = &s.driver_ack {
+    println!();
+    println!("frames:");
+    println!("  sent          : {:>12}", s.frames);
+    println!("  heartbeats    : {:>12}   (sent by --hold)", s.heartbeats);
+
+    if let Some(mean) = s.ack.mean() {
         println!();
-        println!("driver ack latency (per frame, send -> acked by all devices):");
-        println!("  frames        : {}", ack.frames);
-        println!("  mean          : {}", format_duration(ack.mean));
         println!(
-            "  worst         : {}   (since open, start-up included)",
-            format_duration(ack.worst)
+            "ack latency (per frame, send_frame -> ResponseFuture resolved, wake-up included):"
         );
+        println!("  frames        : {}", s.ack.frames());
+        println!("  mean          : {}", format_duration(mean));
+        println!("  max           : {}", format_duration(s.ack.max()));
     }
 }
 

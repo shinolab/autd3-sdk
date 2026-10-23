@@ -27,34 +27,6 @@ async fn an_empty_geometry_is_rejected() {
 
 #[tokio::test]
 #[ignore = "depends on real time"]
-async fn a_zero_ack_timeout_is_rejected() {
-    let emulator = emulator(1);
-    let option = TransportOption {
-        ack_timeout: Duration::ZERO,
-        ..option(&emulator)
-    };
-
-    let error = open_error(1, &option);
-
-    assert!(matches!(udp_error(&error), Some(UdpError::ZeroAckTimeout)));
-}
-
-#[tokio::test]
-#[ignore = "depends on real time"]
-async fn an_invalid_transport_option_is_rejected() {
-    let emulator = emulator(1);
-    let option = TransportOption {
-        lost_timeout: Duration::ZERO,
-        ..option(&emulator)
-    };
-
-    let error = open_error(1, &option);
-
-    assert!(matches!(udp_error(&error), Some(UdpError::ZeroLostTimeout)));
-}
-
-#[tokio::test]
-#[ignore = "depends on real time"]
 async fn a_geometry_with_more_devices_than_attached_times_out_the_enumeration() {
     let emulator = emulator(1);
     let option = TransportOption {
@@ -127,7 +99,7 @@ async fn opening_without_synchronizing_does_not_wait_for_the_lock() {
     client.send(Nop).await.unwrap();
     assert!(client.device_time_now().is_ok());
     assert_eq!(
-        client.state_checker().check().unwrap().devices()[1],
+        client.device_status().unwrap()[1].state,
         DeviceState::Syncing
     );
 }
@@ -152,11 +124,12 @@ async fn open_keeps_what_a_previous_session_left_until_the_user_clears_it() {
     let first = open_with(&emulator, &option(&emulator));
     first.send(ForceFan { value: true }).await.unwrap();
     drop(first);
+    let frames = emulator.frames_received(0);
 
     let second = open_with(&emulator, &option(&emulator));
 
     assert!(emulator.with_devices(|devices| devices.iter().all(|d| d.fpga().force_fan())));
-    assert_eq!(second.bus_stats().frames(), 0);
+    assert_eq!(emulator.frames_received(0), frames);
     second.send(Clear).await.unwrap();
     assert!(emulator.with_devices(|devices| devices.iter().all(|d| !d.fpga().force_fan())));
     second.close().unwrap();

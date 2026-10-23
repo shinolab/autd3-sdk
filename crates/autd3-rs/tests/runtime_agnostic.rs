@@ -57,7 +57,7 @@ fn more_concurrent_sends_than_slots_all_complete() {
     const SENDERS: usize = 12;
     let emulator = emulator(1);
     let client = open(&emulator);
-    let before = client.bus_stats().frames();
+    let before = emulator.frames_received(0);
 
     let outcomes: Vec<Result<(), Error>> = std::thread::scope(|scope| {
         let senders: Vec<_> = (0..SENDERS)
@@ -72,7 +72,7 @@ fn more_concurrent_sends_than_slots_all_complete() {
     assert_eq!(outcomes.len(), SENDERS);
     assert!(outcomes.iter().all(Result::is_ok));
     assert_eq!(
-        client.bus_stats().frames() - before,
+        emulator.frames_received(0) - before,
         u64::try_from(SENDERS * 2).unwrap()
     );
 
@@ -86,7 +86,7 @@ fn several_os_threads_share_one_client() {
     const ROUNDS: usize = 8;
     let emulator = emulator(2);
     let client = open(&emulator);
-    let before = client.bus_stats().frames();
+    let before = emulator.frames_received(0);
 
     std::thread::scope(|scope| {
         for _ in 0..THREADS {
@@ -95,7 +95,7 @@ fn several_os_threads_share_one_client() {
     });
 
     assert_eq!(
-        client.bus_stats().frames() - before,
+        emulator.frames_received(0) - before,
         u64::try_from(THREADS * ROUNDS).unwrap()
     );
     client.close().unwrap();

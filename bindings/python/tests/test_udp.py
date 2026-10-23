@@ -1,3 +1,4 @@
+import inspect
 import sys
 from typing import Any
 
@@ -75,6 +76,25 @@ def test_device_states_are_values() -> None:
     assert len({autd3.DeviceState.Ready, autd3.DeviceState.Syncing, autd3.DeviceState.Lost}) == 3
     assert repr(autd3.DeviceState.Syncing) == "DeviceState.Syncing"
     assert str(autd3.DeviceState.Lost) == "LOST"
+
+
+def test_device_status_is_read_from_the_client_per_device() -> None:
+    assert callable(getattr(autd3.Client, "device_status", None))
+    for removed in ("state_checker", "bus_stats"):
+        assert not hasattr(autd3.Client, removed)
+    for removed in ("StateChecker", "BusStats", "DeviceMask"):
+        assert not hasattr(autd3, removed)
+    for field in ("state", "ptp_locked", "ptp_failsafe"):
+        assert inspect.isdatadescriptor(getattr(autd3.DeviceStatus, field))
+    for removed in ("devices", "all_ready", "any_lost", "any_ptp_failsafe"):
+        assert not hasattr(autd3.DeviceStatus, removed)
+    with pytest.raises(TypeError):
+        loose(autd3.DeviceStatus)()
+
+
+def test_fpga_state_has_no_stm_mode_query() -> None:
+    assert callable(getattr(autd3.FpgaState, "is_pattern_mode", None))
+    assert not hasattr(autd3.FpgaState, "is_stm_mode")
 
 
 def test_a_zero_ack_timeout_is_constructible_and_a_non_duration_is_rejected() -> None:
