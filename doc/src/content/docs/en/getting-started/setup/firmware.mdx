@@ -41,7 +41,7 @@ Complete the [host network setup](/autd3-sdk/en/getting-started/setup/network/) 
 1. Select **Version** and **Target** (`Both` / `FPGA` / `CPU`). Normally use `Both` (note that updating only the CPU leaves the FPGA on a different version, and correct operation is then not guaranteed)
 1. Make sure **Method** is OTA (the default)
 1. Enter the number of connected AUTD3 devices in **Devices**
-1. Set **Interface** and **Advanced UDP options** if needed (the defaults are fine)
+1. Set **Interface** if needed (the default is fine)
 1. Press **Flash**. Progress is shown in the log at the bottom of the panel. The CPU takes tens of seconds, the FPGA about 90 seconds per device
 1. The update is complete when `Ok!` appears in the log. No power cycle is needed (after a CPU update the devices reboot and are enumerated again)
 

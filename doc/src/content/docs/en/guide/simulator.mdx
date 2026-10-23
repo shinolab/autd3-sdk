@@ -46,4 +46,4 @@ If the number of devices differs from the client's geometry, `open` fails. If th
 Changing the number of devices rebuilds them (their previous state is lost), so reopen the client. Changing only the placement, orientation, or order keeps the state of the devices, and the view follows the new placement (the state stays with the n-th position and does not follow a reordered device).
 Edits are reflected in every browser tab that has the Simulator open.
 
-The geometry is saved and restored the next time the Simulator starts (it is saved to `autd3-simulator/geometry.json` under the OS configuration directory; without a saved geometry, the Simulator starts with one device at the origin).
+The Simulator always starts with one device at the origin. To reuse a geometry next time, save it with "Save to file" and load it with "Load from file".

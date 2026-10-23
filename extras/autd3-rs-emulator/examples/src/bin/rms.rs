@@ -2,10 +2,7 @@
 //
 // Run with: cargo xtask emulator example rms
 
-use std::fs::File;
-
 use anyhow::Result;
-use polars::prelude::{CsvWriter, SerWriter};
 
 use autd3_rs::commands::{Pattern, SetSilencer};
 use autd3_rs::common::ULTRASOUND_PERIOD;
@@ -13,7 +10,7 @@ use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::Intensity;
 
-use autd3_rs_emulator::{AxisOrder, ClientApi, Emulator, Grid, RmsRecordOption};
+use autd3_rs_emulator::{AxisOrder, Emulator, Grid, RmsRecordOption};
 
 #[path = "../plot.rs"]
 mod plot;
@@ -28,9 +25,9 @@ fn main() -> Result<()> {
 
     let center = geometry.center();
     let emulator = Emulator::new(geometry);
-    let record = emulator.record(async move |r| {
-        r.send(SetSilencer::disable()).await?;
-        r.send(Pattern::new(&phases, Intensity::MAX)).await?;
+    let record = emulator.record(|r| {
+        r.send(SetSilencer::disable())?;
+        r.send(Pattern::new(&phases, Intensity::MAX))?;
         r.tick(ULTRASOUND_PERIOD)?;
         Ok(())
     })?;
@@ -49,12 +46,9 @@ fn main() -> Result<()> {
 
     let points = rms.observe_points();
     let field = rms.next(ULTRASOUND_PERIOD)?;
-    let mut df = points.hstack(field.columns())?;
 
     let csv = std::env::temp_dir().join("autd3_emulator_rms.csv");
-    CsvWriter::new(File::create(&csv)?)
-        .include_header(true)
-        .finish(&mut df)?;
+    plot::save_csv(&csv, &[&points, &field])?;
     println!("saved: {}", csv.display());
 
     plot::visualize(&csv);

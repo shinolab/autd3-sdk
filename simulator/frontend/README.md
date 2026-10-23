@@ -23,11 +23,10 @@ The number and placement of the emulated devices are set only in the **Geometry*
 Make them match the client's geometry before opening it (`open` fails on another number of devices).
 Add (appended one device width along the last device's +x), remove and reorder the devices, and enter each origin (mm) and orientation (ZYZ Euler angles, degrees).
 Device n in the tab is the n-th device of the daisy chain (`geometry[n]` of the client).
-"Save to file" downloads the geometry as JSON (an array of `{ "origin": [x, y, z], "rotation": [w, x, y, z] }`, the same format as the saved `geometry.json`) and "Load from file" loads such a file (invalid files are refused with the reason shown).
+"Save to file" downloads the geometry as JSON (an array of `{ "origin": [x, y, z], "rotation": [w, x, y, z] }`) and "Load from file" loads such a file (invalid files are refused with the reason shown).
 Changing the number of devices rebuilds the emulated devices (reopen the client); changing only the placement, orientation or order keeps their state (the state stays with the n-th position).
 Every open browser tab shows the same geometry.
-The geometry is saved to `autd3-simulator/geometry.json` under the OS configuration directory and restored at the next start;
-without a saved (or with a broken) file, the simulator starts with a single AUTD3 at the origin and logs a warning.
+The simulator always starts with a single AUTD3 at the origin; save the geometry to a file to reuse it.
 
 ```bash
 # Start the simulator (in autd3-sdk/)

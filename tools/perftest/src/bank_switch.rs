@@ -21,9 +21,7 @@ use pollster::block_on;
 use zerocopy::FromBytes;
 
 use crate::cli::{Cli, Framing};
-use crate::run::{
-    send_simulator_geometry, spawn_emulator, spawn_signal_listener, transport_option,
-};
+use crate::run::{spawn_emulator, spawn_signal_listener, transport_option};
 use crate::stats::{Counters, SampleStatus};
 
 const REPORT_INTERVAL: Duration = Duration::from_secs(1);
@@ -542,7 +540,6 @@ fn measure(cli: &Cli, option: &TransportOption, shutdown: &AtomicBool) -> Result
         );
     }
     let geometry = Geometry::new((0..devices).map(|_| Autd3::default()));
-    send_simulator_geometry(cli, &geometry, option)?;
     let session = Session::open(cli, option, &geometry)?;
     let patterns = [geometry.phase_buffer()];
     let intensities: Vec<Vec<Intensity>> = geometry

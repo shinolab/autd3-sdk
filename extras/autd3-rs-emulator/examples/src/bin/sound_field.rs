@@ -2,17 +2,15 @@
 //
 // Run with: cargo xtask emulator example sound_field
 
-use std::fs::File;
 use std::time::Duration;
 
 use anyhow::Result;
-use polars::prelude::{CsvWriter, SerWriter};
 
 use autd3_rs::commands::{Pattern, SetSilencer};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{m, mm, s};
 
-use autd3_rs_emulator::{AxisOrder, ClientApi, Emulator, Grid, InstantRecordOption};
+use autd3_rs_emulator::{AxisOrder, Emulator, Grid, InstantRecordOption};
 
 #[path = "../plot.rs"]
 mod plot;
@@ -28,9 +26,9 @@ fn main() -> Result<()> {
 
     let center = geometry.center();
     let emulator = Emulator::new(geometry);
-    let record = emulator.record(async move |r| {
-        r.send(SetSilencer::disable()).await?;
-        r.send(Pattern::new(&phases, &intensities)).await?;
+    let record = emulator.record(|r| {
+        r.send(SetSilencer::disable())?;
+        r.send(Pattern::new(&phases, &intensities))?;
         r.tick(Duration::from_millis(1))?;
         Ok(())
     })?;
@@ -46,8 +44,6 @@ fn main() -> Result<()> {
         },
         InstantRecordOption {
             time_step: Duration::from_micros(1),
-            #[cfg(feature = "gpu")]
-            gpu: true,
             ..Default::default()
         },
     )?;
@@ -55,12 +51,9 @@ fn main() -> Result<()> {
     instant.skip(Duration::from_micros(500))?;
     let points = instant.observe_points();
     let field = instant.next(Duration::from_micros(25))?;
-    let mut df = points.hstack(field.columns())?;
 
     let csv = std::env::temp_dir().join("autd3_emulator_sound_field.csv");
-    CsvWriter::new(File::create(&csv)?)
-        .include_header(true)
-        .finish(&mut df)?;
+    plot::save_csv(&csv, &[&points, &field])?;
     println!("saved: {}", csv.display());
 
     plot::visualize(&csv);

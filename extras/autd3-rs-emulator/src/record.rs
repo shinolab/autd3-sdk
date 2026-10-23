@@ -10,9 +10,6 @@ pub(crate) const OUTPUT_VOLTAGE: f32 = 12.0;
 pub(crate) const TS: f32 = 1.0 / (ULTRASOUND_FREQ_HZ as f32 * ULTRASOUND_PERIOD_COUNT as f32);
 pub(crate) const T4010A1_AMPLITUDE: f32 = 275.574_25 * 200.0;
 
-#[cfg(feature = "polars")]
-use polars::frame::DataFrame;
-
 use crate::aabb::Aabb;
 use crate::raw::{RawColumn, RawFrame};
 
@@ -51,7 +48,7 @@ fn transposed<T>(
     RawFrame { rows, columns }
 }
 
-pub(crate) fn output_raw(label: &str, per_tr: &[Vec<f32>]) -> RawFrame {
+pub(crate) fn output_frame(label: &str, per_tr: &[Vec<f32>]) -> RawFrame {
     transposed(
         per_tr.len(),
         per_tr.first().map_or(0, Vec::len),
@@ -93,7 +90,7 @@ impl Record {
     }
 
     #[must_use]
-    pub fn phase_raw(&self) -> RawFrame {
+    pub fn phase(&self) -> RawFrame {
         transposed(
             self.num_transducers(),
             self.num_samples(),
@@ -104,7 +101,7 @@ impl Record {
     }
 
     #[must_use]
-    pub fn pulse_width_raw(&self) -> RawFrame {
+    pub fn pulse_width(&self) -> RawFrame {
         transposed(
             self.num_transducers(),
             self.num_samples(),
@@ -112,17 +109,5 @@ impl Record {
             RawColumn::U16,
             |row, col| self.records[row].pulse_width[col],
         )
-    }
-
-    #[cfg(feature = "polars")]
-    #[must_use]
-    pub fn phase(&self) -> DataFrame {
-        self.phase_raw().into_polars()
-    }
-
-    #[cfg(feature = "polars")]
-    #[must_use]
-    pub fn pulse_width(&self) -> DataFrame {
-        self.pulse_width_raw().into_polars()
     }
 }

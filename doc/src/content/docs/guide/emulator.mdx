@@ -22,13 +22,15 @@ import pySample from "@codes/python/examples/guide/emulator.py?raw";
 <CodeTabs rust={excerpt(sample, "record")} python={excerpt(pySample, "record")} />
 
 `tick` に渡す時間は超音波周期 ( 25 us ) の整数倍でなければならない.
+`record` 内の `send` は実機の `Client` と違い同期で, `.await` は付けない.
 
-出力データは [Polars](https://pola.rs/) の `DataFrame` である.
-詳細は Polars のドキュメントを参照されたい.
+出力データは列名の付いた列の集まりである.
+Rust では `RawFrame` ( 行数 `rows` と, 列名と値の組の列 `columns` ) を, Python では [Polars](https://pola.rs/) の `DataFrame` を返す.
+以下の出力例は Python の `DataFrame` を表示したものである.
 
 ## 振動子テーブル
 
-`Emulator::transducer_table` は, 全トランスデューサの一覧を `DataFrame` として返す.
+`Emulator::transducer_table` は, 全トランスデューサの一覧を表として返す.
 各行が 1 トランスデューサで, デバイスインデックス ( `dev_idx` ), デバイス内のローカルインデックス ( `tr_idx` ), 位置 ( `x/y/z[mm]` ), 法線方向 ( `nx/ny/nz` ) が格納される.
 後述の出力データ・出力信号の各行は, このテーブルの行と 1 対 1 で対応している.
 
@@ -58,7 +60,7 @@ shape: (249, 8)
 ## 出力データの取得
 
 `record` が返す `Record` から, 記録された出力データを取得できる.
-`phase` / `pulse_width` は列が時刻の `DataFrame` を返す.
+`phase` / `pulse_width` は列が時刻の表を返す.
 列名は `phase@<時刻>[ns]` / `pulse_width@<時刻>[ns]` で, 時刻は超音波周期 ( 25 us ) 刻みである.
 
 <CodeTabs rust={excerpt(sample, "emission")} python={excerpt(pySample, "emission")} />
@@ -171,7 +173,7 @@ Python の既定値も同じで, `None` は渡せない.
 いずれも `observe_points` で観測点座標を, `next` で指定時間分の音場を得られる.
 `skip` で計算せずに時間を進められる.
 
-`observe_points` が返す `DataFrame` の各行が観測点で, 音場の `DataFrame` の各行と対応する.
+`observe_points` が返す表の各行が観測点で, 音場の表の各行と対応する.
 
 <CodeTabs rust={excerpt(sample, "points")} python={excerpt(pySample, "points")} />
 
@@ -198,7 +200,7 @@ shape: (1_681, 3)
 
 ### RMS 音圧
 
-`next` が返す `DataFrame` の各列に, 観測点ごとの RMS 音圧が 25 μs 毎に格納される ( 列名 `rms[Pa]@<時刻>[ns]` ).
+`next` が返す表の各列に, 観測点ごとの RMS 音圧が 25 μs 毎に格納される ( 列名 `rms[Pa]@<時刻>[ns]` ).
 
 <CodeTabs rust={excerpt(sample, "rms")} python={excerpt(pySample, "rms")} />
 
@@ -230,7 +232,7 @@ RMS 音圧は後述の瞬時音場の RMS ではなく, 伝播遅延やトラン
 ### 瞬時音圧
 
 瞬時音圧は, `time_step` で時間分解能を指定する.
-`next` が返す `DataFrame` の各列に, 観測点ごとの瞬時音圧が `time_step` 刻みで格納される ( 列名 `p[Pa]@<時刻>[ns]` ).
+`next` が返す表の各列に, 観測点ごとの瞬時音圧が `time_step` 刻みで格納される ( 列名 `p[Pa]@<時刻>[ns]` ).
 
 <CodeTabs rust={excerpt(sample, "instant")} python={excerpt(pySample, "instant")} />
 
@@ -265,18 +267,3 @@ shape: (1_681, 25)
 Rust は `AxisOrder::XYZ` / `XZY` / `YXZ` / `YZX` / `ZXY` / `ZYX`, Python は `order="xyz"` のような文字列で指定する.
 
 また, Rust では `Point3` や `Vec<Point3>` をそのまま渡すこともできる.
-
-### GPU バックエンド (Rust 版のみ)
-
-`gpu` feature を有効にすると, 音場計算を GPU で行える.
-有効時のみ各オプションに `gpu: bool` フィールドが生え, `true` で GPU を使う ( 既定は `false` ).
-
-```rust
-let mut rms = record.sound_field(
-    range,
-    RmsRecordOption {
-        gpu: true,
-        ..Default::default()
-    },
-)?;
-```

@@ -5,7 +5,6 @@
 use std::time::Duration;
 
 use anyhow::Result;
-use polars::prelude::DataFrame;
 use textplots::{Chart, Plot, Shape};
 
 use autd3_rs::commands::{Modulation, Pattern, SetSilencer};
@@ -13,13 +12,28 @@ use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::{Intensity, SamplingConfig};
 
-use autd3_rs_emulator::{ClientApi, Emulator};
+use autd3_rs_emulator::{Emulator, RawColumn, RawFrame};
 
-fn transducer0(df: &DataFrame) -> Vec<f32> {
-    df.columns()
+fn transducer0(frame: &RawFrame) -> Vec<f32> {
+    frame
+        .columns
         .iter()
-        .map(|c| f32::from(c.u16().unwrap().get(0).unwrap()))
+        .filter_map(|(_, column)| match column {
+            RawColumn::U8(v) => v.first().copied().map(f32::from),
+            RawColumn::U16(v) => v.first().copied().map(f32::from),
+            RawColumn::F32(v) => v.first().copied(),
+        })
         .collect()
+}
+
+fn describe(name: &str, frame: &RawFrame) {
+    let first = frame.columns.first().map_or("-", |(label, _)| label);
+    let last = frame.columns.last().map_or("-", |(label, _)| label);
+    println!(
+        "{name}: {} transducers x {} columns ({first} .. {last})",
+        frame.rows,
+        frame.columns.len()
+    );
 }
 
 fn main() -> Result<()> {
@@ -40,11 +54,10 @@ fn main() -> Result<()> {
     )?;
 
     let emulator = Emulator::new(geometry);
-    let record = emulator.record(async move |r| {
-        r.send(SetSilencer::default()).await?;
-        r.send(Pattern::new(&phases, Intensity::MAX)).await?;
-        r.send(Modulation::new(sampling_config, &modulation))
-            .await?;
+    let record = emulator.record(|r| {
+        r.send(SetSilencer::default())?;
+        r.send(Pattern::new(&phases, Intensity::MAX))?;
+        r.send(Modulation::new(sampling_config, &modulation))?;
         r.tick(Duration::from_millis(10))?;
         Ok(())
     })?;
@@ -54,11 +67,11 @@ fn main() -> Result<()> {
         record.num_transducers(),
         record.num_samples()
     );
-    let pulse_width_df = record.pulse_width();
-    println!("--- phase ---\n{}", record.phase());
-    println!("--- pulse width ---\n{pulse_width_df}");
+    let pulse_width_frame = record.pulse_width();
+    describe("phase", &record.phase());
+    describe("pulse width", &pulse_width_frame);
 
-    let pulse_width: Vec<(f32, f32)> = transducer0(&pulse_width_df)
+    let pulse_width: Vec<(f32, f32)> = transducer0(&pulse_width_frame)
         .into_iter()
         .enumerate()
         .map(|(i, w)| (i as f32, w))

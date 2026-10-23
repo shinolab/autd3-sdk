@@ -28,12 +28,6 @@ pub(crate) fn build_backend_and_frontend(
     Ok((bin, public))
 }
 
-pub(crate) fn build_backend(root: &Path, debug: bool) -> Result<PathBuf> {
-    let sim = root.join("simulator");
-    run_cargo(cargo_build_args("autd3-rs-simulator", None, debug), &sim)?;
-    Ok(cargo_bin(&sim, None, debug, "autd3-simulator"))
-}
-
 fn frontend_public(frontend: &Path, debug: bool) -> PathBuf {
     frontend
         .join("target")
@@ -97,7 +91,7 @@ pub(crate) enum SimulatorCmd {
         #[arg(
             long,
             default_value_t = 44336,
-            help = "UDP port the emulated devices listen on (the control port is port + 1)"
+            help = "UDP port the emulated devices listen on"
         )]
         port: u16,
         #[arg(long, default_value_t = 8081, help = "Port the frontend is served on")]
@@ -174,8 +168,6 @@ fn format(sim: &Path, frontend: &Path, fix: bool) -> Result<()> {
         &[
             "-p",
             "autd3-rs-simulator",
-            "-p",
-            "autd3-rs-simulator-control",
             "-p",
             "autd3-rs-simulator-protocol",
         ],
