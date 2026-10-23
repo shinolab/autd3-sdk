@@ -15,15 +15,15 @@ impl Device {
         Self { cpu, fpga }
     }
 
-    pub fn reset_cpu(&mut self) {
+    pub(crate) fn reset_cpu(&mut self) {
         self.cpu = boot(&mut self.fpga);
     }
 
-    pub fn recv(&mut self, frame: &[u8], msg_id: u16) {
+    pub(crate) fn recv(&mut self, frame: &[u8], msg_id: u16) {
         self.cpu.recv_frame(frame, msg_id);
     }
 
-    pub fn process_one(&mut self) -> Drained {
+    pub(crate) fn process_one(&mut self) -> Drained {
         self.cpu.process_one(&mut self.fpga)
     }
 
@@ -40,7 +40,7 @@ impl Device {
     }
 
     #[must_use]
-    pub fn reply(&self) -> Reply {
+    pub(crate) fn reply(&self) -> Reply {
         self.cpu.reply()
     }
 

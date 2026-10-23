@@ -60,7 +60,7 @@ impl SimulatorPanel {
                 ui.label("UDP port");
                 ui.add_enabled(
                     !running,
-                    egui::DragValue::new(&mut self.config.port).range(1..=65534),
+                    egui::DragValue::new(&mut self.config.port).range(1..=65535),
                 );
                 ui.end_row();
                 ui.label("HTTP port");

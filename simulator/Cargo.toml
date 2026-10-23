@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["backend", "control", "protocol"]
+members = ["backend", "protocol"]
 exclude = ["frontend"]
 
 [workspace.package]
@@ -29,7 +29,6 @@ autd3-rs = { path = "../crates/autd3-rs", default-features = false }
 autd3-cpu-wire = { path = "../firmware/cpu/wire" }
 autd3-rs-core = { path = "../crates/autd3-rs-core" }
 autd3-rs-firmware-emulator = { path = "../crates/autd3-rs-firmware-emulator" }
-autd3-rs-simulator-control = { path = "control" }
 autd3-rs-simulator-protocol = { path = "protocol" }
 thiserror = { version = "2.0.18", default-features = false, features = ["std"] }
 tokio = { version = "1.52.3", default-features = false, features = [
@@ -45,7 +44,6 @@ clap = { version = "4.6.1", default-features = false, features = [
     "usage",
     "error-context",
 ] }
-dirs = { version = "7.0.0", default-features = false }
 anyhow = { version = "1.0.104", default-features = false, features = ["std"] }
 serde = { version = "1.0.228", default-features = false, features = ["std", "derive"] }
 serde_json = { version = "1.0.150", default-features = false, features = ["std"] }

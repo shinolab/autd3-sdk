@@ -22,13 +22,15 @@ By passing a `Geometry` to `Emulator::new`, sending data inside `record`, and ad
 <CodeTabs rust={excerpt(sample, "record")} python={excerpt(pySample, "record")} />
 
 The time passed to `tick` must be an integer multiple of the ultrasound period (25 us).
+Unlike the `Client` for real devices, `send` inside `record` is synchronous and takes no `.await`.
 
-The output data is a [Polars](https://pola.rs/) `DataFrame`.
-For details, refer to the Polars documentation.
+The output data is a set of named columns.
+Rust returns a `RawFrame` (the number of rows `rows` and the list of name and value pairs `columns`), and Python returns a [Polars](https://pola.rs/) `DataFrame`.
+The output examples below show the Python `DataFrame`.
 
 ## Transducer Table
 
-`Emulator::transducer_table` returns a list of all transducers as a `DataFrame`.
+`Emulator::transducer_table` returns a list of all transducers as a table.
 Each row is one transducer, storing the device index (`dev_idx`), the local index within the device (`tr_idx`), the position (`x/y/z[mm]`), and the normal direction (`nx/ny/nz`).
 Each row of the emission data and output signal described later corresponds one-to-one with a row of this table.
 
@@ -58,7 +60,7 @@ shape: (249, 8)
 ## Obtaining Emission Data
 
 From the `Record` returned by `record`, the recorded emission data can be obtained.
-`phase` / `pulse_width` return a `DataFrame` whose columns are times.
+`phase` / `pulse_width` return a table whose columns are times.
 The column names are `phase@<time>[ns]` / `pulse_width@<time>[ns]`, and the time is in increments of the ultrasound period (25 us).
 
 <CodeTabs rust={excerpt(sample, "emission")} python={excerpt(pySample, "emission")} />
@@ -171,7 +173,7 @@ The Python defaults are the same, and `None` is not accepted.
 For both, `observe_points` gives the observation point coordinates, and `next` gives the sound field for the specified duration.
 `skip` advances time without computing.
 
-Each row of the `DataFrame` returned by `observe_points` is an observation point and corresponds to a row of the sound field `DataFrame`.
+Each row of the table returned by `observe_points` is an observation point and corresponds to a row of the sound field table.
 
 <CodeTabs rust={excerpt(sample, "points")} python={excerpt(pySample, "points")} />
 
@@ -198,7 +200,7 @@ shape: (1_681, 3)
 
 ### RMS Sound Pressure
 
-Each column of the `DataFrame` returned by `next` stores the RMS sound pressure per observation point every 25 μs (column name `rms[Pa]@<time>[ns]`).
+Each column of the table returned by `next` stores the RMS sound pressure per observation point every 25 μs (column name `rms[Pa]@<time>[ns]`).
 
 <CodeTabs rust={excerpt(sample, "rms")} python={excerpt(pySample, "rms")} />
 
@@ -230,7 +232,7 @@ The RMS sound pressure is not the RMS of the instantaneous sound field described
 ### Instantaneous Sound Pressure
 
 For the instantaneous sound pressure, the time resolution is specified with `time_step`.
-Each column of the `DataFrame` returned by `next` stores the instantaneous sound pressure per observation point in increments of `time_step` (column name `p[Pa]@<time>[ns]`).
+Each column of the table returned by `next` stores the instantaneous sound pressure per observation point in increments of `time_step` (column name `p[Pa]@<time>[ns]`).
 
 <CodeTabs rust={excerpt(sample, "instant")} python={excerpt(pySample, "instant")} />
 
@@ -265,18 +267,3 @@ To fix an axis, set its start and end to the same value (`150.0..=150.0` in Rust
 It is `AxisOrder::XYZ` / `XZY` / `YXZ` / `YZX` / `ZXY` / `ZYX` in Rust, and a string such as `order="xyz"` in Python.
 
 In Rust, a `Point3` or a `Vec<Point3>` can also be passed directly.
-
-### GPU Backend (Rust version only)
-
-Enabling the `gpu` feature allows the sound field computation to be done on the GPU.
-Only when enabled does each option gain a `gpu: bool` field, and setting it to `true` uses the GPU (default is `false`).
-
-```rust
-let mut rms = record.sound_field(
-    range,
-    RmsRecordOption {
-        gpu: true,
-        ..Default::default()
-    },
-)?;
-```

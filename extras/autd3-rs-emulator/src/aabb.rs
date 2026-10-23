@@ -1,9 +1,9 @@
 use autd3_rs_core::geometry::{Point3, Vector3};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Aabb {
-    pub min: Point3<f32>,
-    pub max: Point3<f32>,
+pub(crate) struct Aabb {
+    pub(crate) min: Point3<f32>,
+    pub(crate) max: Point3<f32>,
 }
 
 impl Aabb {

@@ -1,10 +1,11 @@
 use core::f32::consts::PI;
 
 use autd3_cpu_wire::fpga_params::GpioOutType;
-use autd3_rs::geometry::Geometry;
-use autd3_rs_firmware_emulator::{Device as EmuDevice, FpgaEmulator};
-use autd3_rs_simulator_control::{GeometryError, build_geometry};
+use autd3_rs::MAX_DEVICES;
+use autd3_rs::geometry::{Autd3, Geometry, Point3, Quaternion, UnitQuaternion};
+use autd3_rs_firmware_emulator::{Device as EmuDevice, FpgaEmulator, pwm_levels};
 use autd3_rs_simulator_protocol::{DevicePose, DeviceState, ServerMsg, TransState, TransducerInfo};
+use thiserror::Error;
 
 const _: () = assert!(autd3_rs_simulator_protocol::MAX_DEVICES == autd3_rs::MAX_DEVICES);
 const _: () =
@@ -16,7 +17,7 @@ const _: () = assert!(
 
 const ULTRASOUND_PERIOD_COUNT: f32 = 512.0;
 const GPIO_SAMPLES: usize = 512;
-const GPIO_PERIOD: u16 = 512;
+const _: () = assert!(GPIO_SAMPLES == autd3_rs::value::PULSE_WIDTH_PERIOD as usize);
 const GPIO_VALUE_MASK: u64 = 0x00FF_FFFF_FFFF_FFFF;
 
 fn gpio_type(raw: u64) -> Option<GpioOutType> {
@@ -33,19 +34,7 @@ fn pwm_waveform(fpga: &FpgaEmulator, tr: usize) -> Vec<u8> {
         return constant_wave(0);
     };
     let pw = fpga.to_pulse_width(em_intensity, fpga.modulation());
-    let phase = u16::from(em_phase.0) * 2;
-    let rise = (GPIO_PERIOD + phase - pw / 2) % GPIO_PERIOD;
-    let fall = (phase + pw / 2 + (pw & 0x01)) % GPIO_PERIOD;
-    (0..GPIO_PERIOD)
-        .map(|i| {
-            let on = if rise <= fall {
-                rise <= i && i < fall
-            } else {
-                i < fall || rise <= i
-            };
-            u8::from(on)
-        })
-        .collect()
+    pwm_levels(pw, em_phase.0).map(u8::from).collect()
 }
 
 fn gpio_waveform(fpga: &FpgaEmulator, raw: u64) -> Vec<u8> {
@@ -109,8 +98,45 @@ pub(crate) fn device_poses(geometry: &Geometry) -> Vec<DevicePose> {
         .collect()
 }
 
+#[derive(Debug, Error, PartialEq)]
+pub(crate) enum GeometryError {
+    #[error("the number of devices must be 1..={MAX_DEVICES}, but {0} were given")]
+    DeviceCountOutOfRange(usize),
+    #[error("device {device} has a non-finite origin or rotation")]
+    NonFinite { device: usize },
+    #[error("the rotation of device {device} must be a unit quaternion, but its norm is {norm}")]
+    RotationNotUnit { device: usize, norm: f32 },
+}
+
 pub(crate) fn geometry_from_poses(poses: &[DevicePose]) -> Result<Geometry, GeometryError> {
-    build_geometry(poses.iter().map(|pose| (pose.origin, pose.rotation)))
+    if !(1..=MAX_DEVICES).contains(&poses.len()) {
+        return Err(GeometryError::DeviceCountOutOfRange(poses.len()));
+    }
+    poses
+        .iter()
+        .enumerate()
+        .map(|(device, pose)| {
+            let [w, x, y, z] = pose.rotation;
+            if pose
+                .origin
+                .iter()
+                .chain(&pose.rotation)
+                .any(|v| !v.is_finite())
+            {
+                return Err(GeometryError::NonFinite { device });
+            }
+            let rotation = Quaternion::new(w, x, y, z);
+            let norm = rotation.norm();
+            if (norm - 1.0).abs() > Autd3::ROTATION_NORM_TOLERANCE {
+                return Err(GeometryError::RotationNotUnit { device, norm });
+            }
+            Ok(Autd3::new(
+                Point3::from(pose.origin),
+                UnitQuaternion::from_quaternion(rotation),
+            ))
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map(Geometry::new)
 }
 
 pub(crate) fn extract_device_states(devices: &[&EmuDevice]) -> Vec<DeviceState> {
@@ -312,11 +338,11 @@ mod tests {
     fn pwm_gpio_wraps_around_the_period_boundary() {
         let h = driven(Phase(0), 0xFF);
         let wave = gpio_waveform(h.fpga(), raw(GpioOutType::PwmOut, 0));
-        assert_eq!(wave.len(), GPIO_PERIOD as usize);
-        let half = FULL_INTENSITY_PULSE_WIDTH / 2;
-        let rise = usize::from(GPIO_PERIOD - half);
-        let fall = usize::from(half);
-        let expected: Vec<u8> = (0..GPIO_PERIOD as usize)
+        assert_eq!(wave.len(), GPIO_SAMPLES);
+        let half = usize::from(FULL_INTENSITY_PULSE_WIDTH / 2);
+        let rise = GPIO_SAMPLES - half;
+        let fall = half;
+        let expected: Vec<u8> = (0..GPIO_SAMPLES)
             .map(|i| u8::from(i < fall || rise <= i))
             .collect();
         assert_eq!(wave, expected);
@@ -327,7 +353,7 @@ mod tests {
         let h = driven(Phase(64), 0xFF);
         let wave = gpio_waveform(h.fpga(), raw(GpioOutType::PwmOut, 0));
         let half = usize::from(FULL_INTENSITY_PULSE_WIDTH / 2);
-        let expected: Vec<u8> = (0..GPIO_PERIOD as usize)
+        let expected: Vec<u8> = (0..GPIO_SAMPLES)
             .map(|i| u8::from(i < 128 + half))
             .collect();
         assert_eq!(wave, expected);
@@ -393,6 +419,31 @@ mod tests {
         assert_eq!(
             geometry_from_poses(&[]).unwrap_err(),
             GeometryError::DeviceCountOutOfRange(0)
+        );
+        let identity = DevicePose {
+            origin: [0.0; 3],
+            rotation: [1.0, 0.0, 0.0, 0.0],
+        };
+        assert_eq!(
+            geometry_from_poses(&vec![identity; MAX_DEVICES + 1]).unwrap_err(),
+            GeometryError::DeviceCountOutOfRange(MAX_DEVICES + 1)
+        );
+        assert_eq!(
+            geometry_from_poses(&[
+                identity,
+                DevicePose {
+                    origin: [f32::INFINITY, 0.0, 0.0],
+                    ..identity
+                }
+            ])
+            .unwrap_err(),
+            GeometryError::NonFinite { device: 1 }
+        );
+        assert_eq!(
+            geometry_from_poses(&vec![identity; MAX_DEVICES])
+                .unwrap()
+                .num_devices(),
+            MAX_DEVICES
         );
     }
 

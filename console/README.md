@@ -8,9 +8,7 @@ Open the newest `console-v*` entry on the [releases page](https://github.com/shi
 
 ## Updating
 
-When installed through the installer, autd3-console checks for a newer release on startup and can update itself from the banner at the top of the window.
-The automatic check can be turned off in the "About" tab.
-The bundled `console-update` command does the same thing from a terminal.
+Run the bundled `console-update` command from a terminal, or run the install command of the newer `console-v*` release again.
 
 ## Building from source
 

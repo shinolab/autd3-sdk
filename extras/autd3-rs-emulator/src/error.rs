@@ -45,13 +45,4 @@ pub enum EmulatorError {
     NotRecorded,
     #[error("{0}")]
     Autd3(#[from] autd3_rs::error::Error),
-    #[cfg(feature = "gpu")]
-    #[error("{0}")]
-    RequestAdapter(#[from] wgpu::RequestAdapterError),
-    #[cfg(feature = "gpu")]
-    #[error("{0}")]
-    RequestDevice(#[from] wgpu::RequestDeviceError),
-    #[cfg(feature = "gpu")]
-    #[error("{0}")]
-    BufferAsync(#[from] wgpu::BufferAsyncError),
 }

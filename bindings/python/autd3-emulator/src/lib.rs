@@ -9,7 +9,7 @@ use autd3_python_capsule::{capsule_of, frame_from_capsule, geometry_from_capsule
 use autd3_rs_core::common::Velocity;
 use autd3_rs_core::geometry::Geometry;
 use autd3_rs_emulator::{
-    AxisOrder, ClientApi, Emulator as CoreEmulator, Grid as CoreGrid, Instant as CoreInstant,
+    AxisOrder, Emulator as CoreEmulator, Grid as CoreGrid, Instant as CoreInstant,
     InstantRecordOption as CoreInstantOption, RawColumn, RawFrame, Record as CoreRecord,
     Recorder as CoreRecorder, Rms as CoreRms, RmsRecordOption as CoreRmsOption,
 };
@@ -166,7 +166,7 @@ pub struct Rms(CoreRms);
 #[pymethods]
 impl Rms {
     fn observe_points<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        raw_to_polars(py, self.0.observe_points_raw())
+        raw_to_polars(py, self.0.observe_points())
     }
 
     fn next<'py>(
@@ -175,7 +175,7 @@ impl Rms {
         duration: &Bound<'_, PyAny>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let d = extract_duration(duration)?;
-        let frame = self.0.next_raw(d).map_err(to_pyerr_gil)?;
+        let frame = self.0.next(d).map_err(to_pyerr_gil)?;
         raw_to_polars(py, frame)
     }
 
@@ -200,7 +200,7 @@ self_cell::self_cell!(
 #[pymethods]
 impl Instant {
     fn observe_points<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        raw_to_polars(py, self.0.borrow_dependent().observe_points_raw())
+        raw_to_polars(py, self.0.borrow_dependent().observe_points())
     }
 
     fn next<'py>(
@@ -211,7 +211,7 @@ impl Instant {
         let d = extract_duration(duration)?;
         let frame = self
             .0
-            .with_dependent_mut(|_, instant| instant.next_raw(d))
+            .with_dependent_mut(|_, instant| instant.next(d))
             .map_err(to_pyerr_gil)?;
         raw_to_polars(py, frame)
     }
@@ -239,19 +239,19 @@ impl Record {
     }
 
     fn phase<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        raw_to_polars(py, self.0.phase_raw())
+        raw_to_polars(py, self.0.phase())
     }
 
     fn pulse_width<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        raw_to_polars(py, self.0.pulse_width_raw())
+        raw_to_polars(py, self.0.pulse_width())
     }
 
     fn output_voltage<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        raw_to_polars(py, self.0.output_voltage_raw())
+        raw_to_polars(py, self.0.output_voltage())
     }
 
     fn output_ultrasound<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        raw_to_polars(py, self.0.output_ultrasound_raw())
+        raw_to_polars(py, self.0.output_ultrasound())
     }
 
     fn sound_field(
@@ -340,7 +340,7 @@ impl Recorder {
         let f = frames
             .frame(index)
             .ok_or_else(|| PyValueError::new_err("frame index out of range"))?;
-        pollster::block_on(recorder.send_frame(f)).map_err(to_pyerr_gil)?;
+        recorder.send_frame(f).map_err(to_pyerr_gil)?;
         Ok(())
     }
 
@@ -384,7 +384,7 @@ impl Emulator {
     fn transducer_table<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         raw_to_polars(
             py,
-            CoreEmulator::new(self.geometry.clone()).transducer_table_raw(),
+            CoreEmulator::new(self.geometry.clone()).transducer_table(),
         )
     }
 

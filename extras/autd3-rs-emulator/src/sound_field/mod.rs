@@ -1,11 +1,5 @@
-#[cfg(feature = "gpu")]
-mod gpu;
 mod instant;
-#[cfg(feature = "gpu")]
-mod instant_gpu;
 mod rms;
-#[cfg(feature = "gpu")]
-mod rms_gpu;
 
 pub use instant::{Instant, InstantRecordOption};
 pub use rms::{Rms, RmsRecordOption};
@@ -68,7 +62,7 @@ pub(crate) fn num_frames(duration: Duration) -> Result<usize, EmulatorError> {
     Ok(usize::try_from(duration.as_nanos() / period).unwrap_or(usize::MAX))
 }
 
-pub(crate) fn observe_points_raw(x: &[f32], y: &[f32], z: &[f32]) -> RawFrame {
+pub(crate) fn observe_points(x: &[f32], y: &[f32], z: &[f32]) -> RawFrame {
     RawFrame {
         rows: x.len(),
         columns: vec![

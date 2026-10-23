@@ -1,10 +1,7 @@
 #![allow(clippy::unreadable_literal)]
 
-#[cfg(feature = "polars")]
-use polars::frame::DataFrame;
-
 use crate::raw::RawFrame;
-use crate::record::{OUTPUT_VOLTAGE, Record, TS, TransducerRecord, output_raw};
+use crate::record::{OUTPUT_VOLTAGE, Record, TS, TransducerRecord, output_frame};
 
 struct T4010A1BVDModel {
     state: (f32, f32, f32),
@@ -109,19 +106,13 @@ impl OutputUltrasound<'_> {
 
 impl Record {
     #[must_use]
-    pub fn output_ultrasound_raw(&self) -> RawFrame {
+    pub fn output_ultrasound(&self) -> RawFrame {
         let per_tr: Vec<Vec<f32>> = self
             .records
             .iter()
             .map(TransducerRecord::output_ultrasound)
             .collect();
-        output_raw("p[a.u.]", &per_tr)
-    }
-
-    #[cfg(feature = "polars")]
-    #[must_use]
-    pub fn output_ultrasound(&self) -> DataFrame {
-        self.output_ultrasound_raw().into_polars()
+        output_frame("p[a.u.]", &per_tr)
     }
 }
 

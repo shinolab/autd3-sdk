@@ -9,20 +9,11 @@ use crate::util::{cargo_clippy, cargo_fmt, publish_workspace, run};
 #[derive(Subcommand)]
 pub(crate) enum EmulatorCmd {
     #[command(about = "Build the emulator workspace")]
-    Build {
-        #[arg(long, help = "Enable the GPU-accelerated field computation")]
-        gpu: bool,
-    },
+    Build,
     #[command(about = "Run the emulator workspace tests")]
-    Test {
-        #[arg(long, help = "Enable the GPU-accelerated field computation")]
-        gpu: bool,
-    },
+    Test,
     #[command(about = "Clippy the emulator workspace")]
-    Lint {
-        #[arg(long, help = "Enable the GPU-accelerated field computation")]
-        gpu: bool,
-    },
+    Lint,
     #[command(about = "Rustfmt the emulator workspace")]
     Format {
         #[arg(long, help = "Rewrite the files instead of only checking them")]
@@ -57,9 +48,9 @@ pub(crate) enum EmulatorCmd {
 pub(crate) fn run_emulator(root: &Path, cmd: &EmulatorCmd) -> Result<()> {
     let dir = root.join("extras").join("autd3-rs-emulator");
     match cmd {
-        EmulatorCmd::Build { gpu } => build(&dir, *gpu),
-        EmulatorCmd::Test { gpu } => test(&dir, *gpu),
-        EmulatorCmd::Lint { gpu } => lint(&dir, *gpu),
+        EmulatorCmd::Build => run("cargo", ["build", "--workspace", "--all-targets"], &dir),
+        EmulatorCmd::Test => run("cargo", ["test", "--workspace", "--all-targets"], &dir),
+        EmulatorCmd::Lint => cargo_clippy(&dir, &["--workspace", "--all-targets"]),
         EmulatorCmd::Format { fix } => cargo_fmt(
             &dir,
             &[
@@ -83,32 +74,6 @@ pub(crate) fn run_emulator(root: &Path, cmd: &EmulatorCmd) -> Result<()> {
 
 pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {
     cleaner.path("extras/autd3-rs-emulator/target")
-}
-
-fn feature_args(gpu: bool) -> Vec<&'static str> {
-    if gpu {
-        vec!["--features", "autd3-rs-emulator/gpu"]
-    } else {
-        vec![]
-    }
-}
-
-fn build(dir: &Path, gpu: bool) -> Result<()> {
-    let mut args = vec!["build", "--workspace", "--all-targets"];
-    args.extend(feature_args(gpu));
-    run("cargo", args, dir)
-}
-
-fn test(dir: &Path, gpu: bool) -> Result<()> {
-    let mut args = vec!["test", "--workspace", "--all-targets"];
-    args.extend(feature_args(gpu));
-    run("cargo", args, dir)
-}
-
-fn lint(dir: &Path, gpu: bool) -> Result<()> {
-    let mut args = vec!["--workspace", "--all-targets"];
-    args.extend(feature_args(gpu));
-    cargo_clippy(dir, &args)
 }
 
 fn example(dir: &Path, name: &str, debug: bool, no_plot: bool, args: &[String]) -> Result<()> {

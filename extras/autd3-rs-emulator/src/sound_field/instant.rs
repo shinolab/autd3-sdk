@@ -12,16 +12,13 @@ use std::time::Duration;
 use autd3_rs_core::common::{ULTRASOUND_PERIOD, Velocity};
 use rayon::prelude::*;
 
-#[cfg(feature = "polars")]
-use polars::frame::DataFrame;
-
 use crate::aabb::{aabb_max_dist, aabb_min_dist};
 use crate::error::EmulatorError;
 use crate::output_ultrasound::OutputUltrasound;
-use crate::range::Range;
+use crate::range::{Range, RangeAabb};
 use crate::raw::{RawColumn, RawFrame};
 use crate::record::{Record, T4010A1_AMPLITUDE, TS, TransducerRecord, ULTRASOUND_PERIOD_COUNT};
-use crate::sound_field::{SoundFieldOption, distances, num_frames, observe_points_raw};
+use crate::sound_field::{SoundFieldOption, distances, num_frames, observe_points};
 
 pub(super) const P0: f32 = T4010A1_AMPLITUDE * SQRT_2 / (4.0 * PI);
 
@@ -30,8 +27,6 @@ pub struct InstantRecordOption {
     pub sound_speed: Velocity,
     pub time_step: Duration,
     pub memory_limits_hint_mb: usize,
-    #[cfg(feature = "gpu")]
-    pub gpu: bool,
 }
 
 impl Default for InstantRecordOption {
@@ -40,8 +35,6 @@ impl Default for InstantRecordOption {
             sound_speed: Velocity::from_m_s(340.0),
             time_step: Duration::from_micros(1),
             memory_limits_hint_mb: 128,
-            #[cfg(feature = "gpu")]
-            gpu: false,
         }
     }
 }
@@ -49,7 +42,6 @@ impl Default for InstantRecordOption {
 struct UltrasoundCache<'a> {
     sources: Vec<OutputUltrasound<'a>>,
     frames: Vec<VecDeque<f32>>,
-    updated: bool,
 }
 
 fn next_frame(ut: &mut OutputUltrasound<'_>) -> Vec<f32> {
@@ -74,7 +66,6 @@ impl UltrasoundCache<'_> {
                     .collect()
             })
             .collect();
-        self.updated = true;
     }
 
     fn slide(&mut self, n: usize) {
@@ -87,7 +78,6 @@ impl UltrasoundCache<'_> {
                     cache.extend(next_frame(ut));
                 }
             });
-        self.updated |= n > 0;
     }
 }
 
@@ -132,46 +122,6 @@ impl Cpu {
     }
 }
 
-enum ComputeDevice {
-    Cpu(Cpu),
-    #[cfg(feature = "gpu")]
-    Gpu(super::instant_gpu::GpuInstant),
-}
-
-impl ComputeDevice {
-    #[cfg_attr(not(feature = "gpu"), allow(clippy::unnecessary_wraps))]
-    fn compute(
-        &mut self,
-        cache: &mut UltrasoundCache<'_>,
-        start_time: Duration,
-        time_step: Duration,
-        num_points_in_frame: usize,
-        sound_speed: f32,
-        offset: isize,
-    ) -> Result<Vec<Vec<f32>>, EmulatorError> {
-        match self {
-            ComputeDevice::Cpu(cpu) => Ok(cpu.compute(
-                &cache.frames,
-                start_time,
-                time_step,
-                num_points_in_frame,
-                sound_speed,
-                offset,
-            )),
-            #[cfg(feature = "gpu")]
-            ComputeDevice::Gpu(gpu) => gpu.compute(
-                &cache.frames,
-                std::mem::take(&mut cache.updated),
-                start_time,
-                time_step,
-                num_points_in_frame,
-                sound_speed,
-                offset,
-            ),
-        }
-    }
-}
-
 pub struct Instant<'a> {
     option: InstantRecordOption,
     cursor: isize,
@@ -185,7 +135,7 @@ pub struct Instant<'a> {
     cache_size: isize,
     num_points_in_frame: usize,
     cache: UltrasoundCache<'a>,
-    device: ComputeDevice,
+    cpu: Cpu,
 }
 
 impl Instant<'_> {
@@ -238,14 +188,14 @@ impl Instant<'_> {
                 let offset = (self.cursor - self.cache_size) * ULTRASOUND_PERIOD_COUNT as isize;
                 for i in 0..local_frames {
                     let start_time = (cur_frame + i) as u32 * ULTRASOUND_PERIOD;
-                    let field = self.device.compute(
-                        &mut self.cache,
+                    let field = self.cpu.compute(
+                        &self.cache.frames,
                         start_time,
                         time_step,
                         self.num_points_in_frame,
                         sound_speed,
                         offset,
-                    )?;
+                    );
                     for (ti, pressure) in field.into_iter().enumerate() {
                         let t = (start_time + ti as u32 * time_step).as_nanos() as u64;
                         out.push((t, pressure));
@@ -264,11 +214,11 @@ impl Instant<'_> {
     }
 
     #[must_use]
-    pub fn observe_points_raw(&self) -> RawFrame {
-        observe_points_raw(&self.x, &self.y, &self.z)
+    pub fn observe_points(&self) -> RawFrame {
+        observe_points(&self.x, &self.y, &self.z)
     }
 
-    pub fn next_raw(&mut self, duration: Duration) -> Result<RawFrame, EmulatorError> {
+    pub fn next(&mut self, duration: Duration) -> Result<RawFrame, EmulatorError> {
         let rows = self.x.len();
         let columns = self
             .advance(duration, false)?
@@ -276,17 +226,6 @@ impl Instant<'_> {
             .map(|(t, pressure)| (format!("p[Pa]@{t}[ns]"), RawColumn::F32(pressure)))
             .collect::<Vec<_>>();
         Ok(RawFrame { rows, columns })
-    }
-
-    #[cfg(feature = "polars")]
-    #[must_use]
-    pub fn observe_points(&self) -> DataFrame {
-        self.observe_points_raw().into_polars()
-    }
-
-    #[cfg(feature = "polars")]
-    pub fn next(&mut self, duration: Duration) -> Result<DataFrame, EmulatorError> {
-        Ok(self.next_raw(duration)?.into_polars())
     }
 }
 
@@ -341,24 +280,10 @@ impl<'a> SoundFieldOption<'a> for InstantRecordOption {
                 .map(TransducerRecord::output_ultrasound_iter)
                 .collect(),
             frames: Vec::new(),
-            updated: false,
         };
-
-        let cpu = || {
-            ComputeDevice::Cpu(Cpu {
-                dists: distances(&x, &y, &z, &positions),
-            })
+        let cpu = Cpu {
+            dists: distances(&x, &y, &z, &positions),
         };
-        #[cfg(feature = "gpu")]
-        let device = if self.gpu {
-            ComputeDevice::Gpu(super::instant_gpu::GpuInstant::new(
-                &x, &y, &z, &positions, cache_size,
-            )?)
-        } else {
-            cpu()
-        };
-        #[cfg(not(feature = "gpu"))]
-        let device = cpu();
 
         Ok(Instant {
             option: self,
@@ -373,7 +298,7 @@ impl<'a> SoundFieldOption<'a> for InstantRecordOption {
             cache_size,
             num_points_in_frame,
             cache,
-            device,
+            cpu,
         })
     }
 }

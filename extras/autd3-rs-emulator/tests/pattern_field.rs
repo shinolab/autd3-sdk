@@ -3,7 +3,7 @@ use autd3_rs::common::ULTRASOUND_PERIOD;
 use autd3_rs::geometry::{Autd3, Geometry, Point3, UnitVector3, Vector3};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::{Intensity, Phase, SamplingConfig};
-use autd3_rs_emulator::{AxisOrder, ClientApi, Emulator, Grid, RawColumn, Record, RmsRecordOption};
+use autd3_rs_emulator::{AxisOrder, Emulator, Grid, RawColumn, Record, RmsRecordOption};
 use autd3_rs_pattern::{
     HermiteGaussianOption, LaguerreGaussianOption, focus, hermite_gaussian_intensity,
     hermite_gaussian_phase, laguerre_gaussian_intensity, laguerre_gaussian_phase, wavelength,
@@ -18,20 +18,18 @@ fn geometry() -> Geometry {
     Geometry::new(vec![Autd3::default()])
 }
 
-fn record(geometry: Geometry, phases: Vec<Vec<Phase>>, intensities: Vec<Vec<Intensity>>) -> Record {
+fn record(geometry: Geometry, phases: &[Vec<Phase>], intensities: &[Vec<Intensity>]) -> Record {
     let emulator = Emulator::new(geometry);
     let modulation = vec![0xFF, 0xFF];
     emulator
-        .record(async move |r| {
+        .record(|r| {
             r.send(SetSilencer::new(FixedCompletionTime {
                 intensity: ULTRASOUND_PERIOD,
                 phase: ULTRASOUND_PERIOD,
                 strict_mode: false,
-            }))
-            .await?;
-            r.send(Modulation::new(SamplingConfig::FREQ_4K, &modulation))
-                .await?;
-            r.send(Pattern::new(&phases, &intensities)).await?;
+            }))?;
+            r.send(Modulation::new(SamplingConfig::FREQ_4K, &modulation))?;
+            r.send(Pattern::new(phases, intensities))?;
             r.tick(4 * ULTRASOUND_PERIOD)?;
             Ok(())
         })
@@ -50,7 +48,7 @@ fn rms_grid(record: &Record, target: Point3<f32>) -> Vec<f32> {
         .sound_field(range, RmsRecordOption::default())
         .unwrap();
     rms.skip(3 * ULTRASOUND_PERIOD).unwrap();
-    let frame = rms.next_raw(ULTRASOUND_PERIOD).unwrap();
+    let frame = rms.next(ULTRASOUND_PERIOD).unwrap();
     assert_eq!(frame.rows, GRID * GRID);
     match &frame.columns[0].1 {
         RawColumn::F32(v) => v.clone(),
@@ -84,7 +82,7 @@ fn setup(f: Box<Setup<'_>>) -> Vec<f32> {
     let mut phases = geometry.phase_buffer();
     let mut intensities = geometry.intensity_buffer();
     f(&geometry, target, &mut phases, &mut intensities);
-    let record = record(geometry, phases, intensities);
+    let record = record(geometry, &phases, &intensities);
     rms_grid(&record, target)
 }
 
