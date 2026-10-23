@@ -10,6 +10,7 @@ use autd3_rs_core::{DeviceStatus, MAX_DEVICES};
 use zerocopy::{FromZeros, IntoBytes};
 
 use crate::datagram::Frame;
+use crate::device_set::DeviceSet;
 use crate::error::{Error, NetworkCause};
 use crate::geometry::Geometry;
 use crate::protocol::{FrameHeader, MAX_INFLIGHT};
@@ -32,7 +33,7 @@ pub(crate) struct Timeouts {
 
 struct InflightRequest {
     msg_id: u16,
-    sent_to: Option<u128>,
+    sent_to: Option<DeviceSet>,
     sent_at: Instant,
     completion: ResponseSender,
     response: Response,
@@ -41,7 +42,7 @@ struct InflightRequest {
 impl InflightRequest {
     fn has_all_replies(&self) -> bool {
         self.sent_to
-            .is_some_and(|sent_to| self.response.replied_devices() & sent_to == sent_to)
+            .is_some_and(|sent_to| sent_to.is_subset(&self.response.replied_devices()))
     }
 
     fn deliver(self) {
@@ -203,7 +204,7 @@ impl SessionState {
     fn record_sent_to(
         &mut self,
         msg_id: u16,
-        sent_to: u128,
+        sent_to: DeviceSet,
         now: Instant,
     ) -> Option<InflightRequest> {
         let index = self.inflight.position(msg_id)?;
@@ -224,7 +225,7 @@ impl SessionState {
             return None;
         };
         let request = self.inflight.requests[index].as_mut()?;
-        if request.response.replied_devices() & 1 << reply.device != 0 {
+        if request.response.replied_devices()[reply.device] {
             tracing::trace!(
                 msg_id = reply.msg_id,
                 device = reply.device,
@@ -244,12 +245,13 @@ impl SessionState {
         self.inflight.take(index, now)
     }
 
-    fn device_mask_where(&self, holds: impl Fn(DeviceLiveness) -> bool) -> u128 {
+    fn devices_where(&self, holds: impl Fn(DeviceLiveness) -> bool) -> DeviceSet {
         self.liveness
             .iter()
             .enumerate()
             .filter(|&(_, &liveness)| holds(liveness))
-            .fold(0u128, |mask, (device, _)| mask | 1 << device)
+            .map(|(device, _)| device)
+            .collect()
     }
 
     fn device_status(&self) -> Vec<DeviceStatus> {
@@ -344,7 +346,7 @@ impl FailedRequests {
 }
 
 struct EachDeviceSend {
-    accepted_devices: u128,
+    accepted_devices: DeviceSet,
     first_failure: Option<UdpError>,
     started_lost_clock: bool,
 }
@@ -460,7 +462,7 @@ impl Session {
         &self,
         kind: Kind,
         msg_id: u16,
-        target_devices: u128,
+        target_devices: DeviceSet,
         start_device: usize,
         body_for_device: impl Fn(usize) -> [&'a [u8]; 2],
     ) -> EachDeviceSend {
@@ -468,13 +470,13 @@ impl Session {
             Kind::Frame => Instant::now().checked_add(self.lost_timeout()),
             _ => None,
         };
-        let mut accepted_devices = 0u128;
+        let mut accepted_devices = DeviceSet::empty();
         let mut first_failure = None;
         let mut started_lost_clock = false;
         let num_devices = self.channel.num_devices();
         for device in (0..num_devices).map(|step| (start_device + num_devices - step) % num_devices)
         {
-            if target_devices & (1 << device) == 0 {
+            if !target_devices[device] {
                 continue;
             }
             let result = self.channel.send_to_device(
@@ -489,7 +491,7 @@ impl Session {
                     started_lost_clock |= self
                         .lock_state()
                         .start_unanswered_clock(device, attempted_at);
-                    accepted_devices |= 1 << device;
+                    accepted_devices.insert(device);
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                     if kind == Kind::Frame {
@@ -539,7 +541,7 @@ impl Session {
         let datagrams = frame.datagrams();
         let target_devices = self
             .lock_state()
-            .device_mask_where(|liveness| !liveness.is_lost());
+            .devices_where(|liveness| !liveness.is_lost());
         let mut headers = [FrameHeader::new_zeroed(); MAX_DEVICES];
         for (header, datagram) in headers.iter_mut().zip(datagrams) {
             *header = datagram.frame_header(exec_at);
@@ -566,7 +568,11 @@ impl Session {
         finished.map(|_| ())
     }
 
-    fn finish_frame_send(&self, msg_id: u16, sent: Result<u128, UdpError>) -> Result<bool, Error> {
+    fn finish_frame_send(
+        &self,
+        msg_id: u16,
+        sent: Result<DeviceSet, UdpError>,
+    ) -> Result<bool, Error> {
         let now = Instant::now();
         let mut state = self.lock_state();
         let sent_to = match sent {
@@ -577,7 +583,7 @@ impl Session {
                 return Err(e.into());
             }
         };
-        if sent_to == 0 {
+        if sent_to.is_empty() {
             let completion = state.remove(msg_id, now);
             let timeout = state.timeouts.ack;
             Self::release(state);
@@ -603,7 +609,7 @@ impl Session {
             }
             (
                 state.next_msg_id(),
-                state.device_mask_where(|liveness| !liveness.is_lost()),
+                state.devices_where(|liveness| !liveness.is_lost()),
             )
         };
         let outcome = self.send_to_each_device(
@@ -731,7 +737,11 @@ mod tests {
         assert!(state.take_released_slot_waiter().is_none());
 
         let head = enqueued[0].0;
-        assert!(state.record_sent_to(head, 0b1, now).is_none());
+        assert!(
+            state
+                .record_sent_to(head, DeviceSet::from_iter([0]), now)
+                .is_none()
+        );
         assert!(state.record_reply(&reply(0, head, 0), now).is_some());
 
         assert!(state.take_released_slot_waiter().is_some());
@@ -880,7 +890,7 @@ mod tests {
         assert!(state.record_reply(&reply(0, msg_id, 0), now).is_none());
         assert!(state.record_reply(&reply(1, msg_id, 0), now).is_none());
 
-        let answered = state.record_sent_to(msg_id, 0b11, now);
+        let answered = state.record_sent_to(msg_id, DeviceSet::from_iter([0, 1]), now);
 
         assert_eq!(answered.map(|answered| answered.msg_id), Some(msg_id));
         assert_eq!(state.inflight.requests.len(), 0);
@@ -893,10 +903,17 @@ mod tests {
         let (msg_id, _response) = enqueue(&mut state, now);
         assert!(state.record_reply(&reply(0, msg_id, 0), now).is_none());
 
-        assert!(state.record_sent_to(msg_id, 0b11, now).is_none());
+        assert!(
+            state
+                .record_sent_to(msg_id, DeviceSet::from_iter([0, 1]), now)
+                .is_none()
+        );
 
         assert_eq!(state.inflight.requests.len(), 1);
-        assert_eq!(state.inflight.head().unwrap().sent_to, Some(0b11));
+        assert_eq!(
+            state.inflight.head().unwrap().sent_to,
+            Some(DeviceSet::from_iter([0, 1]))
+        );
     }
 
     #[test]
@@ -914,8 +931,16 @@ mod tests {
         let mut state = session_state(1, now);
         let (head, _head_response) = enqueue(&mut state, now);
         let (next, _next_response) = enqueue(&mut state, now);
-        assert!(state.record_sent_to(head, 0b1, now).is_none());
-        assert!(state.record_sent_to(next, 0b1, now).is_none());
+        assert!(
+            state
+                .record_sent_to(head, DeviceSet::from_iter([0]), now)
+                .is_none()
+        );
+        assert!(
+            state
+                .record_sent_to(next, DeviceSet::from_iter([0]), now)
+                .is_none()
+        );
 
         assert!(state.inflight.is_head(head));
         assert!(!state.inflight.is_head(next));
@@ -926,7 +951,11 @@ mod tests {
         let now = Instant::now();
         let mut state = session_state(2, now);
         let (msg_id, response) = enqueue(&mut state, now);
-        assert!(state.record_sent_to(msg_id, 0b11, now).is_none());
+        assert!(
+            state
+                .record_sent_to(msg_id, DeviceSet::from_iter([0, 1]), now)
+                .is_none()
+        );
 
         assert!(state.record_reply(&reply(0, msg_id, 0), now).is_none());
         assert!(state.record_reply(&reply(0, msg_id, 5), now).is_none());
@@ -958,9 +987,17 @@ mod tests {
         assert_eq!(state.inflight.head_ack_deadline(TIMEOUTS.ack), None);
 
         let head_sent = start + Duration::from_millis(1);
-        assert!(state.record_sent_to(head, 0b1, head_sent).is_none());
+        assert!(
+            state
+                .record_sent_to(head, DeviceSet::from_iter([0]), head_sent)
+                .is_none()
+        );
         let next_sent = start + Duration::from_millis(2);
-        assert!(state.record_sent_to(next, 0b1, next_sent).is_none());
+        assert!(
+            state
+                .record_sent_to(next, DeviceSet::from_iter([0]), next_sent)
+                .is_none()
+        );
         assert_eq!(
             state.inflight.head_ack_deadline(TIMEOUTS.ack),
             Some(head_sent + TIMEOUTS.ack)
@@ -991,7 +1028,11 @@ mod tests {
         assert_eq!(state.next_deadline(now), now + TIMEOUTS.lost);
 
         let (msg_id, _response) = enqueue(&mut state, now);
-        assert!(state.record_sent_to(msg_id, 0b1, now).is_none());
+        assert!(
+            state
+                .record_sent_to(msg_id, DeviceSet::from_iter([0]), now)
+                .is_none()
+        );
         assert_eq!(state.next_deadline(now), now + TIMEOUTS.ack);
     }
 
@@ -1013,8 +1054,8 @@ mod tests {
         assert!(answered.is_none());
         assert_eq!(state.liveness[1].state(), DeviceState::Lost);
         assert_eq!(
-            state.device_mask_where(|liveness| !liveness.is_lost()),
-            0b01
+            state.devices_where(|liveness| !liveness.is_lost()),
+            DeviceSet::from_iter([0])
         );
     }
 
