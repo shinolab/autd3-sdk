@@ -19,10 +19,10 @@ use autd3_rs::commands::{
     ConfigModulation, ConfigPattern, CpuConfig, EmulateGpioIn, Expansion, FixedCompletionTime,
     FixedUpdateRate, FociStm as CoreFociStm, FociStmOption, ForceFan, FpgaBusWait, FpgaConfig,
     GpioOut, MaxFreqPpb, Modulation, Nop, Operation, PWE_TABLE_SIZE, PathDelayFilterShift, Pattern,
-    PatternIntensity, PatternStm, PatternStmOption, PhaseDepth, ReleaseFailsafe, SetCpuConfig,
-    SetFpgaConfig, SetGpioOut, SetOutputMask, SetPhaseCorrection, SetPulseWidthTable, SetSilencer,
-    StmIntensity, Synchronize, WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer,
-    WritePatternPhase, each,
+    PatternIntensity, PatternStm, PatternStmOption, PhaseDepth, PtpConfig, ReleaseFailsafe,
+    SetCpuConfig, SetFpgaConfig, SetGpioOut, SetOutputMask, SetPhaseCorrection, SetPulseWidthTable,
+    SetSilencer, StmIntensity, Synchronize, WriteFociBuffer, WriteModulationBuffer,
+    WritePatternBuffer, WritePatternPhase, each,
 };
 use autd3_rs::params::NUM_FOCI_MAX;
 use autd3_rs::value::{
@@ -744,251 +744,163 @@ pub extern "C" fn autd3_op_force_fan(value: bool) -> *mut OwnedCommand {
     into_handle(OwnedCommand::ForceFan(value))
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn autd3_op_force_fan_default() -> *mut OwnedCommand {
-    into_handle(OwnedCommand::ForceFan(ForceFan::default().value))
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Autd3PtpConfig {
+    pub sync_interval_ns: u64,
+    pub tx_timestamp_timeout_ns: u64,
+    pub delay_resp_timeout_ns: u64,
+    pub holdover_ns: u64,
+    pub lock_samples: u16,
+    pub step_threshold_ns: u64,
+    pub lock_threshold_ns: u64,
+    pub kp_milli: u32,
+    pub ki_milli: u32,
+    pub max_freq_ppb: u32,
+    pub delay_req_syncs: u16,
+    pub path_delay_filter_shift: u8,
+    pub pause_quanta: u16,
+    pub pause_hold_syncs: u16,
+    pub pause_retry_ns: u64,
 }
 
-pub struct CpuConfigHandle(pub(crate) CpuConfig);
-
-#[unsafe(no_mangle)]
-pub extern "C" fn autd3_cpu_config_new() -> *mut CpuConfigHandle {
-    into_handle(CpuConfigHandle(CpuConfig::default()))
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Autd3CpuConfig {
+    pub sync_guard_ns: u64,
+    pub has_failsafe_timeout: bool,
+    pub failsafe_timeout_ns: u64,
+    pub has_ptp_unlock_failsafe_timeout: bool,
+    pub ptp_unlock_failsafe_timeout_ns: u64,
+    pub fpga_bus_wait: u8,
+    pub has_cpu_watchdog_timeout: bool,
+    pub cpu_watchdog_timeout_ns: u64,
+    pub ptp: Autd3PtpConfig,
 }
 
-macro_rules! cpu_config_bounded_field {
-    ([$($field:tt).+], $ty:ty, $bounded:ty, $set:ident, $get:ident) => {
-        #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn $set(handle: *mut CpuConfigHandle, value: $ty) -> i32 {
-            let (Some(config), Some(value)) =
-                (unsafe { handle_mut(handle) }, <$bounded>::new(value))
-            else {
-                return AUTD3_ERR_INVALID_ARGUMENT;
-            };
-            config.0.$($field).+ = value;
-            AUTD3_OK
+impl From<CpuConfig> for Autd3CpuConfig {
+    fn from(config: CpuConfig) -> Self {
+        let ptp = config.ptp;
+        Self {
+            sync_guard_ns: to_ns(config.sync_guard),
+            has_failsafe_timeout: config.failsafe_timeout.is_some(),
+            failsafe_timeout_ns: config.failsafe_timeout.map_or(0, to_ns),
+            has_ptp_unlock_failsafe_timeout: config.ptp_unlock_failsafe_timeout.is_some(),
+            ptp_unlock_failsafe_timeout_ns: config.ptp_unlock_failsafe_timeout.map_or(0, to_ns),
+            fpga_bus_wait: config.fpga_bus_wait.as_u8(),
+            has_cpu_watchdog_timeout: config.cpu_watchdog_timeout.is_some(),
+            cpu_watchdog_timeout_ns: config.cpu_watchdog_timeout.map_or(0, to_ns),
+            ptp: Autd3PtpConfig {
+                sync_interval_ns: to_ns(ptp.sync_interval),
+                tx_timestamp_timeout_ns: to_ns(ptp.tx_timestamp_timeout),
+                delay_resp_timeout_ns: to_ns(ptp.delay_resp_timeout),
+                holdover_ns: to_ns(ptp.holdover),
+                lock_samples: ptp.lock_samples.get(),
+                step_threshold_ns: to_ns(ptp.step_threshold),
+                lock_threshold_ns: to_ns(ptp.lock_threshold),
+                kp_milli: ptp.kp_milli,
+                ki_milli: ptp.ki_milli,
+                max_freq_ppb: ptp.max_freq_ppb.get(),
+                delay_req_syncs: ptp.delay_req_syncs.get(),
+                path_delay_filter_shift: ptp.path_delay_filter_shift.get(),
+                pause_quanta: ptp.pause_quanta.map_or(0, NonZeroU16::get),
+                pause_hold_syncs: ptp.pause_hold_syncs,
+                pause_retry_ns: to_ns(ptp.pause_retry),
+            },
         }
-
-        #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn $get(handle: *const CpuConfigHandle, out: *mut $ty) -> i32 {
-            let Some(config) = (unsafe { handle_ref(handle) }) else {
-                return AUTD3_ERR_INVALID_ARGUMENT;
-            };
-            unsafe { autd3_ffi_abi::write_out(out, config.0.$($field).+.get()) }
-        }
-    };
+    }
 }
 
-autd3_ffi_abi::option_handle_field!(
-    CpuConfigHandle,
-    [sync_guard],
-    duration,
-    autd3_cpu_config_set_sync_guard,
-    autd3_cpu_config_get_sync_guard
-);
-autd3_ffi_abi::option_handle_field!(
-    CpuConfigHandle,
-    [failsafe_timeout],
-    optional_duration,
-    autd3_cpu_config_set_failsafe_timeout,
-    autd3_cpu_config_get_failsafe_timeout
-);
-autd3_ffi_abi::option_handle_field!(
-    CpuConfigHandle,
-    [ptp_unlock_failsafe_timeout],
-    optional_duration,
-    autd3_cpu_config_set_ptp_unlock_failsafe_timeout,
-    autd3_cpu_config_get_ptp_unlock_failsafe_timeout
-);
-autd3_ffi_abi::option_handle_field!(
-    CpuConfigHandle,
-    [cpu_watchdog_timeout],
-    optional_duration,
-    autd3_cpu_config_set_cpu_watchdog_timeout,
-    autd3_cpu_config_get_cpu_watchdog_timeout
-);
+fn out_of_range(field: &str, value: impl std::fmt::Display) -> String {
+    format!("{field} is out of range: {value}")
+}
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_cpu_config_set_fpga_bus_wait(
-    handle: *mut CpuConfigHandle,
-    cycles: u8,
-) -> i32 {
-    let (Some(config), Some(wait)) = (unsafe { handle_mut(handle) }, FpgaBusWait::from_u8(cycles))
-    else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    config.0.fpga_bus_wait = wait;
-    AUTD3_OK
+fn to_cpu_config(config: Autd3CpuConfig) -> Result<CpuConfig, String> {
+    let optional = |has: bool, ns: u64| has.then(|| Duration::from_nanos(ns));
+    let ptp = config.ptp;
+    Ok(CpuConfig {
+        sync_guard: Duration::from_nanos(config.sync_guard_ns),
+        failsafe_timeout: optional(config.has_failsafe_timeout, config.failsafe_timeout_ns),
+        ptp_unlock_failsafe_timeout: optional(
+            config.has_ptp_unlock_failsafe_timeout,
+            config.ptp_unlock_failsafe_timeout_ns,
+        ),
+        fpga_bus_wait: FpgaBusWait::from_u8(config.fpga_bus_wait)
+            .ok_or_else(|| out_of_range("fpga_bus_wait", config.fpga_bus_wait))?,
+        cpu_watchdog_timeout: optional(
+            config.has_cpu_watchdog_timeout,
+            config.cpu_watchdog_timeout_ns,
+        ),
+        ptp: PtpConfig {
+            sync_interval: Duration::from_nanos(ptp.sync_interval_ns),
+            tx_timestamp_timeout: Duration::from_nanos(ptp.tx_timestamp_timeout_ns),
+            delay_resp_timeout: Duration::from_nanos(ptp.delay_resp_timeout_ns),
+            holdover: Duration::from_nanos(ptp.holdover_ns),
+            lock_samples: NonZeroU16::new(ptp.lock_samples)
+                .ok_or_else(|| out_of_range("ptp.lock_samples", ptp.lock_samples))?,
+            step_threshold: Duration::from_nanos(ptp.step_threshold_ns),
+            lock_threshold: Duration::from_nanos(ptp.lock_threshold_ns),
+            kp_milli: ptp.kp_milli,
+            ki_milli: ptp.ki_milli,
+            max_freq_ppb: MaxFreqPpb::new(ptp.max_freq_ppb)
+                .ok_or_else(|| out_of_range("ptp.max_freq_ppb", ptp.max_freq_ppb))?,
+            delay_req_syncs: NonZeroU16::new(ptp.delay_req_syncs)
+                .ok_or_else(|| out_of_range("ptp.delay_req_syncs", ptp.delay_req_syncs))?,
+            path_delay_filter_shift: PathDelayFilterShift::new(ptp.path_delay_filter_shift)
+                .ok_or_else(|| {
+                    out_of_range("ptp.path_delay_filter_shift", ptp.path_delay_filter_shift)
+                })?,
+            pause_quanta: NonZeroU16::new(ptp.pause_quanta),
+            pause_hold_syncs: ptp.pause_hold_syncs,
+            pause_retry: Duration::from_nanos(ptp.pause_retry_ns),
+        },
+    })
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_cpu_config_get_fpga_bus_wait(
-    handle: *const CpuConfigHandle,
-    out: *mut u8,
-) -> i32 {
-    let Some(config) = (unsafe { handle_ref(handle) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    unsafe { autd3_ffi_abi::write_out(out, config.0.fpga_bus_wait.as_u8()) }
+pub unsafe extern "C" fn autd3_cpu_config_default(out: *mut Autd3CpuConfig) -> i32 {
+    unsafe { write_out(out, CpuConfig::default().into()) }
 }
-
-autd3_ffi_abi::option_handle_field!(
-    CpuConfigHandle,
-    [ptp.sync_interval],
-    duration,
-    autd3_cpu_config_set_ptp_sync_interval,
-    autd3_cpu_config_get_ptp_sync_interval
-);
-autd3_ffi_abi::option_handle_field!(
-    CpuConfigHandle,
-    [ptp.tx_timestamp_timeout],
-    duration,
-    autd3_cpu_config_set_ptp_tx_timestamp_timeout,
-    autd3_cpu_config_get_ptp_tx_timestamp_timeout
-);
-autd3_ffi_abi::option_handle_field!(
-    CpuConfigHandle,
-    [ptp.delay_resp_timeout],
-    duration,
-    autd3_cpu_config_set_ptp_delay_resp_timeout,
-    autd3_cpu_config_get_ptp_delay_resp_timeout
-);
-autd3_ffi_abi::option_handle_field!(
-    CpuConfigHandle,
-    [ptp.holdover],
-    duration,
-    autd3_cpu_config_set_ptp_holdover,
-    autd3_cpu_config_get_ptp_holdover
-);
-cpu_config_bounded_field!(
-    [ptp.lock_samples],
-    u16,
-    NonZeroU16,
-    autd3_cpu_config_set_ptp_lock_samples,
-    autd3_cpu_config_get_ptp_lock_samples
-);
-autd3_ffi_abi::option_handle_field!(
-    CpuConfigHandle,
-    [ptp.step_threshold],
-    duration,
-    autd3_cpu_config_set_ptp_step_threshold,
-    autd3_cpu_config_get_ptp_step_threshold
-);
-autd3_ffi_abi::option_handle_field!(
-    CpuConfigHandle,
-    [ptp.lock_threshold],
-    duration,
-    autd3_cpu_config_set_ptp_lock_threshold,
-    autd3_cpu_config_get_ptp_lock_threshold
-);
-autd3_ffi_abi::option_handle_field!(
-    CpuConfigHandle,
-    [ptp.kp_milli],
-    u32,
-    autd3_cpu_config_set_ptp_kp_milli,
-    autd3_cpu_config_get_ptp_kp_milli
-);
-autd3_ffi_abi::option_handle_field!(
-    CpuConfigHandle,
-    [ptp.ki_milli],
-    u32,
-    autd3_cpu_config_set_ptp_ki_milli,
-    autd3_cpu_config_get_ptp_ki_milli
-);
-cpu_config_bounded_field!(
-    [ptp.max_freq_ppb],
-    u32,
-    MaxFreqPpb,
-    autd3_cpu_config_set_ptp_max_freq_ppb,
-    autd3_cpu_config_get_ptp_max_freq_ppb
-);
-cpu_config_bounded_field!(
-    [ptp.delay_req_syncs],
-    u16,
-    NonZeroU16,
-    autd3_cpu_config_set_ptp_delay_req_syncs,
-    autd3_cpu_config_get_ptp_delay_req_syncs
-);
-cpu_config_bounded_field!(
-    [ptp.path_delay_filter_shift],
-    u8,
-    PathDelayFilterShift,
-    autd3_cpu_config_set_ptp_path_delay_filter_shift,
-    autd3_cpu_config_get_ptp_path_delay_filter_shift
-);
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_cpu_config_set_ptp_pause_quanta(
-    handle: *mut CpuConfigHandle,
-    quanta: u16,
-) -> i32 {
-    let Some(config) = (unsafe { handle_mut(handle) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    config.0.ptp.pause_quanta = NonZeroU16::new(quanta);
-    AUTD3_OK
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_cpu_config_get_ptp_pause_quanta(
-    handle: *const CpuConfigHandle,
-    out: *mut u16,
-) -> i32 {
-    let Some(config) = (unsafe { handle_ref(handle) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    unsafe { autd3_ffi_abi::write_out(out, config.0.ptp.pause_quanta.map_or(0, NonZeroU16::get)) }
-}
-
-autd3_ffi_abi::option_handle_field!(
-    CpuConfigHandle,
-    [ptp.pause_hold_syncs],
-    u16,
-    autd3_cpu_config_set_ptp_pause_hold_syncs,
-    autd3_cpu_config_get_ptp_pause_hold_syncs
-);
-autd3_ffi_abi::option_handle_field!(
-    CpuConfigHandle,
-    [ptp.pause_retry],
-    duration,
-    autd3_cpu_config_set_ptp_pause_retry,
-    autd3_cpu_config_get_ptp_pause_retry
-);
-autd3_ffi_abi::option_handle_lifecycle!(CpuConfigHandle, autd3_cpu_config_free);
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_op_set_cpu_config(
-    config: *const CpuConfigHandle,
+    config: Autd3CpuConfig,
+    out_err: *mut c_char,
+    out_err_len: usize,
 ) -> *mut OwnedCommand {
-    let Some(config) = (unsafe { handle_ref(config) }) else {
-        return std::ptr::null_mut();
-    };
-    into_handle(OwnedCommand::SetCpuConfig(Box::new(config.0)))
+    match to_cpu_config(config) {
+        Ok(config) => into_handle(OwnedCommand::SetCpuConfig(Box::new(config))),
+        Err(message) => {
+            unsafe { write_cstr(out_err, out_err_len, &message) };
+            std::ptr::null_mut()
+        }
+    }
 }
 
-pub struct FpgaConfigHandle(pub(crate) FpgaConfig);
-
-#[unsafe(no_mangle)]
-pub extern "C" fn autd3_fpga_config_new() -> *mut FpgaConfigHandle {
-    into_handle(FpgaConfigHandle(FpgaConfig::default()))
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Autd3FpgaConfig {
+    pub sync_phase_lock: bool,
 }
 
-autd3_ffi_abi::option_handle_field!(
-    FpgaConfigHandle,
-    [sync_phase_lock],
-    bool,
-    autd3_fpga_config_set_sync_phase_lock,
-    autd3_fpga_config_get_sync_phase_lock
-);
-autd3_ffi_abi::option_handle_lifecycle!(FpgaConfigHandle, autd3_fpga_config_free);
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_fpga_config_default(out: *mut Autd3FpgaConfig) -> i32 {
+    let config = FpgaConfig::default();
+    unsafe {
+        write_out(
+            out,
+            Autd3FpgaConfig {
+                sync_phase_lock: config.sync_phase_lock,
+            },
+        )
+    }
+}
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_op_set_fpga_config(
-    config: *const FpgaConfigHandle,
-) -> *mut OwnedCommand {
-    let Some(config) = (unsafe { handle_ref(config) }) else {
-        return std::ptr::null_mut();
-    };
-    into_handle(OwnedCommand::SetFpgaConfig(config.0))
+pub extern "C" fn autd3_op_set_fpga_config(config: Autd3FpgaConfig) -> *mut OwnedCommand {
+    into_handle(OwnedCommand::SetFpgaConfig(FpgaConfig {
+        sync_phase_lock: config.sync_phase_lock,
+    }))
 }
 
 #[unsafe(no_mangle)]
@@ -1039,11 +951,6 @@ pub unsafe extern "C" fn autd3_op_set_gpio_out(outputs: *const Autd3GpioOut) -> 
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_op_set_gpio_out_default() -> *mut OwnedCommand {
-    into_handle(OwnedCommand::SetGpioOut(SetGpioOut::default().outputs))
-}
-
-#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_op_emulate_gpio_in(values: *const u8) -> *mut OwnedCommand {
     let Some(values) = (unsafe { slice_ref(values, 4) }) else {
         return std::ptr::null_mut();
@@ -1055,11 +962,6 @@ pub unsafe extern "C" fn autd3_op_emulate_gpio_in(values: *const u8) -> *mut Own
         values[2] != 0,
         values[3] != 0,
     ]))
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn autd3_op_emulate_gpio_in_default() -> *mut OwnedCommand {
-    into_handle(OwnedCommand::EmulateGpioIn(EmulateGpioIn::default().values))
 }
 
 fn total_len(lens: &[usize]) -> Option<usize> {
@@ -1570,24 +1472,6 @@ pub unsafe extern "C" fn autd3_command_sequence(
     ))
 }
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_frames_encode(
-    geometry: *const Geometry,
-    command: *mut OwnedCommand,
-    out_code: *mut i32,
-    out_err: *mut c_char,
-    out_err_len: usize,
-) -> *mut Arc<Frames> {
-    let mut frames = Frames::default();
-    let code = unsafe { encode_into(&mut frames, geometry, command, out_err, out_err_len) };
-    if code == AUTD3_OK {
-        into_handle(Arc::new(frames))
-    } else {
-        unsafe { write_out(out_code, code) };
-        std::ptr::null_mut()
-    }
-}
-
 unsafe fn encode_into(
     frames: &mut Frames,
     geometry: *const Geometry,
@@ -1660,7 +1544,7 @@ pub unsafe extern "C" fn autd3_frames_free(frames: *mut Arc<Frames>) {
 
 pub struct ClientHandle(Arc<Client>);
 
-pub struct ResponseToken(Vec<ResponseFuture>);
+pub struct ResponseToken(ResponseFuture);
 
 pub struct ByteArray(Vec<u8>);
 
@@ -1715,15 +1599,12 @@ unsafe fn client_ctx(
     Some((Arc::clone(&client.0), ctx))
 }
 
-type SendCtx = (Arc<Client>, Arc<Frames>, (usize, usize), CompletionCtx);
-
 unsafe fn send_ctx(
     client: *const ClientHandle,
     frames: *const Arc<Frames>,
-    frame: i64,
     cb: CompletionCallback,
     user_data: *mut c_void,
-) -> Option<SendCtx> {
+) -> Option<(Arc<Client>, Arc<Frames>, CompletionCtx)> {
     let ctx = CompletionCtx::new(cb, user_data)?;
     let (Some(client), Some(frames)) = (unsafe { handle_ref(client) }, unsafe {
         handle_ref::<Arc<Frames>>(frames)
@@ -1731,40 +1612,49 @@ unsafe fn send_ctx(
         ctx.err("null argument");
         return None;
     };
-    let Some(span) = frame_span(frames, frame) else {
-        ctx.invalid_argument(&format!("frame {frame} out of range"));
-        return None;
-    };
-    Some((Arc::clone(&client.0), Arc::clone(frames), span, ctx))
+    Some((Arc::clone(&client.0), Arc::clone(frames), ctx))
 }
 
-fn frame_span(frames: &Frames, frame: i64) -> Option<(usize, usize)> {
-    match usize::try_from(frame) {
-        Ok(index) if index < frames.len() => Some((index, 1)),
-        Ok(_) => None,
-        Err(_) => Some((0, frames.len())),
+unsafe fn send_frame_ctx(
+    client: *const ClientHandle,
+    frames: *const Arc<Frames>,
+    frame: usize,
+    cb: CompletionCallback,
+    user_data: *mut c_void,
+) -> Option<(Arc<Client>, Arc<Frames>, CompletionCtx)> {
+    let (client, frames, ctx) = unsafe { send_ctx(client, frames, cb, user_data) }?;
+    if frame >= frames.len() {
+        ctx.invalid_argument(&format!("frame {frame} out of range"));
+        return None;
     }
+    Some((client, frames, ctx))
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_client_open(
     geometry: *const Geometry,
-    option: *mut udp::TransportOptionHandle,
+    iface_kind: u8,
+    iface: *const c_char,
+    option: udp::Autd3TransportOption,
     out: *mut *mut ClientHandle,
     out_err: *mut c_char,
     out_err_len: usize,
 ) -> i32 {
-    let option = unsafe { take_handle(option) };
     if out.is_null() {
         unsafe { write_cstr(out_err, out_err_len, "null argument") };
         return AUTD3_ERR_INVALID_ARGUMENT;
     }
     unsafe { out.write(std::ptr::null_mut()) };
-    let (Some(udp::TransportOptionHandle(option)), Some(geometry)) =
-        (option, unsafe { handle_ref::<Geometry>(geometry) })
-    else {
+    let Some(geometry) = (unsafe { handle_ref::<Geometry>(geometry) }) else {
         unsafe { write_cstr(out_err, out_err_len, "null argument") };
         return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    let option = match unsafe { udp::to_transport_option(iface_kind, iface, option) } {
+        Ok(option) => option,
+        Err(message) => {
+            unsafe { write_cstr(out_err, out_err_len, &message) };
+            return AUTD3_ERR_INVALID_ARGUMENT;
+        }
     };
 
     match Client::open(geometry, &option) {
@@ -1876,19 +1766,16 @@ pub unsafe extern "C" fn autd3_client_send_heartbeat(
 pub unsafe extern "C" fn autd3_client_send_checked(
     client: *const ClientHandle,
     frames: *const Arc<Frames>,
-    frame: i64,
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let Some((client, frames, (start, count), ctx)) =
-        (unsafe { send_ctx(client, frames, frame, cb, user_data) })
-    else {
+    let Some((client, frames, ctx)) = (unsafe { send_ctx(client, frames, cb, user_data) }) else {
         return;
     };
     spawn_completion(
         ctx,
         async move {
-            for frame in frames.iter().skip(start).take(count) {
+            for frame in frames.iter() {
                 client.send_frame(frame).await?.await?.check()?;
             }
             Ok(())
@@ -1901,25 +1788,24 @@ pub unsafe extern "C" fn autd3_client_send_checked(
 pub unsafe extern "C" fn autd3_client_send(
     client: *const ClientHandle,
     frames: *const Arc<Frames>,
-    frame: i64,
+    frame: usize,
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let Some((client, frames, (start, count), ctx)) =
-        (unsafe { send_ctx(client, frames, frame, cb, user_data) })
+    let Some((client, frames, ctx)) =
+        (unsafe { send_frame_ctx(client, frames, frame, cb, user_data) })
     else {
         return;
     };
     spawn_completion(
         ctx,
         async move {
-            let mut futures = Vec::new();
-            for frame in frames.iter().skip(start).take(count) {
-                futures.push(client.send_frame(frame).await?);
-            }
-            Ok(futures)
+            let frame = frames
+                .frame(frame)
+                .expect("send_frame_ctx checks the index");
+            client.send_frame(frame).await
         },
-        |futures| into_handle(ResponseToken(futures)).cast(),
+        |future| into_handle(ResponseToken(future)).cast(),
     );
 }
 
@@ -1927,13 +1813,13 @@ pub unsafe extern "C" fn autd3_client_send(
 pub unsafe extern "C" fn autd3_client_send_at(
     client: *const ClientHandle,
     frames: *const Arc<Frames>,
-    frame: i64,
+    frame: usize,
     exec: Autd3ExecAt,
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let Some((client, frames, (start, count), ctx)) =
-        (unsafe { send_ctx(client, frames, frame, cb, user_data) })
+    let Some((client, frames, ctx)) =
+        (unsafe { send_frame_ctx(client, frames, frame, cb, user_data) })
     else {
         return;
     };
@@ -1944,25 +1830,13 @@ pub unsafe extern "C" fn autd3_client_send_at(
     spawn_completion(
         ctx,
         async move {
-            let mut futures = Vec::new();
-            for frame in frames.iter().skip(start).take(count) {
-                futures.push(client.send_frame_at(frame, exec).await?);
-            }
-            Ok(futures)
+            let frame = frames
+                .frame(frame)
+                .expect("send_frame_ctx checks the index");
+            client.send_frame_at(frame, exec).await
         },
-        |futures| into_handle(ResponseToken(futures)).cast(),
+        |future| into_handle(ResponseToken(future)).cast(),
     );
-}
-
-fn keep_first_error_codes(merged: Response, next: &Response) -> Response {
-    let pairs = || merged.error_codes().iter().zip(next.error_codes());
-    if pairs().all(|(&kept, &next)| kept != 0 || next == 0) {
-        return merged;
-    }
-    let error_codes: Vec<u8> = pairs()
-        .map(|(&kept, &next)| if kept == 0 { next } else { kept })
-        .collect();
-    Response::from_error_codes(&error_codes)
 }
 
 #[unsafe(no_mangle)]
@@ -1975,25 +1849,13 @@ pub unsafe extern "C" fn autd3_response_token_await(
     let Some(ctx) = CompletionCtx::new(cb, user_data) else {
         return;
     };
-    let Some(ResponseToken(futures)) = token else {
+    let Some(ResponseToken(future)) = token else {
         ctx.err("null token");
         return;
     };
-    spawn_completion(
-        ctx,
-        async move {
-            let mut merged: Option<Response> = None;
-            for future in futures {
-                let response = future.await?;
-                merged = Some(match merged {
-                    None => response,
-                    Some(merged) => keep_first_error_codes(merged, &response),
-                });
-            }
-            Ok(merged.unwrap_or_default())
-        },
-        |response| into_handle(ResponseHandle(response)).cast(),
-    );
+    spawn_completion(ctx, future, |response| {
+        into_handle(ResponseHandle(response)).cast()
+    });
 }
 
 #[unsafe(no_mangle)]
@@ -2236,39 +2098,21 @@ autd3_ffi_abi::export_abi_version!();
 mod tests {
     use super::*;
 
-    #[test]
-    fn the_first_error_of_each_device_is_kept_across_frames() {
-        let merged = keep_first_error_codes(
-            Response::from_error_codes(&[0, 0x02, 0]),
-            &Response::from_error_codes(&[0x05, 0x06, 0]),
-        );
-        assert_eq!(merged.error_codes(), [0x05, 0x02, 0]);
-    }
-
-    #[test]
-    fn a_frame_without_new_errors_keeps_the_merged_response() {
-        let first = Response::from_error_codes(&[0, 0x02]);
-        assert_eq!(
-            keep_first_error_codes(first.clone(), &Response::from_error_codes(&[0, 0x06])),
-            first
-        );
-    }
-
     fn pending_error(pending: *mut OwnedCommand) -> (i32, String) {
         let geometry = Geometry::new(vec![autd3_rs::geometry::Autd3::default()]);
         let mut err = [0 as c_char; 256];
-        let mut code = AUTD3_OK;
-        let frames = unsafe {
-            autd3_frames_encode(
+        let frames = autd3_frames_new();
+        let code = unsafe {
+            autd3_frames_encode_into(
+                frames,
                 &raw const geometry,
                 pending,
-                &raw mut code,
                 err.as_mut_ptr(),
                 err.len(),
             )
         };
-        if !frames.is_null() {
-            unsafe { autd3_frames_free(frames) };
+        unsafe { autd3_frames_free(frames) };
+        if code == AUTD3_OK {
             return (AUTD3_OK, String::new());
         }
         unsafe { autd3_op_free(pending) };
@@ -2364,361 +2208,202 @@ mod tests {
         );
     }
 
-    #[test]
-    fn a_new_cpu_config_matches_the_rust_default() {
-        let handle = autd3_cpu_config_new();
-        let mut ns = 0u64;
+    fn default_cpu_config() -> Autd3CpuConfig {
+        let mut out = std::mem::MaybeUninit::<Autd3CpuConfig>::uninit();
         assert_eq!(AUTD3_OK, unsafe {
-            autd3_cpu_config_get_sync_guard(handle, &raw mut ns)
+            autd3_cpu_config_default(out.as_mut_ptr())
         });
-        assert_eq!(CpuConfig::default().sync_guard, Duration::from_nanos(ns));
-        let config = unsafe { take_handle(handle) }.unwrap();
-        assert_eq!(CpuConfig::default(), config.0);
+        unsafe { out.assume_init() }
+    }
+
+    fn set_cpu_config(config: Autd3CpuConfig) -> Result<CpuConfig, String> {
+        let mut err = [0 as c_char; 256];
+        let op = unsafe { autd3_op_set_cpu_config(config, err.as_mut_ptr(), err.len()) };
+        match unsafe { take_handle(op) } {
+            Some(OwnedCommand::SetCpuConfig(config)) => Ok(*config),
+            Some(_) => unreachable!(),
+            None => Err(unsafe { std::ffi::CStr::from_ptr(err.as_ptr()) }
+                .to_string_lossy()
+                .into_owned()),
+        }
     }
 
     #[test]
-    fn cpu_config_setters_reach_their_fields() {
-        let handle = autd3_cpu_config_new();
-        unsafe {
-            assert_eq!(AUTD3_OK, autd3_cpu_config_set_sync_guard(handle, 13));
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_set_failsafe_timeout(handle, true, 25_000_000)
-            );
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_set_ptp_unlock_failsafe_timeout(handle, true, 26_000_000)
-            );
-            assert_eq!(AUTD3_OK, autd3_cpu_config_set_fpga_bus_wait(handle, 2));
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_set_cpu_watchdog_timeout(handle, true, 27_000_000)
-            );
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_set_ptp_sync_interval(handle, 15_000_000)
-            );
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_set_ptp_tx_timestamp_timeout(handle, 16_000_000)
-            );
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_set_ptp_delay_resp_timeout(handle, 17_000_000)
-            );
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_set_ptp_holdover(handle, 18_000_000)
-            );
-            assert_eq!(AUTD3_OK, autd3_cpu_config_set_ptp_lock_samples(handle, 19));
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_set_ptp_step_threshold(handle, 20)
-            );
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_set_ptp_lock_threshold(handle, 21)
-            );
-            assert_eq!(AUTD3_OK, autd3_cpu_config_set_ptp_kp_milli(handle, 22));
-            assert_eq!(AUTD3_OK, autd3_cpu_config_set_ptp_ki_milli(handle, 23));
-            assert_eq!(AUTD3_OK, autd3_cpu_config_set_ptp_max_freq_ppb(handle, 24));
-            assert_eq!(
-                AUTD3_ERR_INVALID_ARGUMENT,
-                autd3_cpu_config_set_ptp_max_freq_ppb(handle, 0x8000_0000)
-            );
-        }
-        let op = unsafe { autd3_op_set_cpu_config(handle) };
-        assert!(!op.is_null());
-        unsafe { autd3_op_free(op) };
-
-        let config = unsafe { take_handle(handle) }.unwrap().0;
+    fn the_default_cpu_config_matches_the_rust_default() {
         assert_eq!(
-            config,
-            CpuConfig {
-                sync_guard: Duration::from_nanos(13),
-                failsafe_timeout: Some(Duration::from_millis(25)),
-                ptp_unlock_failsafe_timeout: Some(Duration::from_millis(26)),
-                fpga_bus_wait: autd3_rs::commands::FpgaBusWait::Cycles2,
-                cpu_watchdog_timeout: Some(Duration::from_millis(27)),
-                ptp: autd3_rs::commands::PtpConfig {
-                    sync_interval: Duration::from_millis(15),
-                    tx_timestamp_timeout: Duration::from_millis(16),
-                    delay_resp_timeout: Duration::from_millis(17),
-                    holdover: Duration::from_millis(18),
-                    lock_samples: NonZeroU16::new(19).unwrap(),
-                    step_threshold: Duration::from_nanos(20),
-                    lock_threshold: Duration::from_nanos(21),
-                    kp_milli: 22,
-                    ki_milli: 23,
-                    max_freq_ppb: autd3_rs::commands::MaxFreqPpb::new(24).unwrap(),
-                    ..autd3_rs::commands::PtpConfig::default()
-                },
-            }
+            Ok(CpuConfig::default()),
+            set_cpu_config(default_cpu_config())
         );
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_cpu_config_default(std::ptr::null_mut())
+        });
     }
 
     #[test]
-    fn the_ptp_delay_request_and_pause_fields_reach_the_config() {
-        let handle = autd3_cpu_config_new();
-        unsafe {
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_set_ptp_delay_req_syncs(handle, 26)
-            );
-            assert_eq!(
-                AUTD3_ERR_INVALID_ARGUMENT,
-                autd3_cpu_config_set_ptp_delay_req_syncs(handle, 0)
-            );
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_set_ptp_path_delay_filter_shift(handle, 4)
-            );
-            assert_eq!(
-                AUTD3_ERR_INVALID_ARGUMENT,
-                autd3_cpu_config_set_ptp_path_delay_filter_shift(handle, 17)
-            );
-            assert_eq!(AUTD3_OK, autd3_cpu_config_set_ptp_pause_quanta(handle, 27));
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_set_ptp_pause_hold_syncs(handle, 28)
-            );
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_set_ptp_pause_retry(handle, 29_000_000)
-            );
-        }
-        let config = unsafe { take_handle(handle) }.unwrap().0;
-        assert_eq!(
-            config.ptp,
-            autd3_rs::commands::PtpConfig {
+    fn every_cpu_config_field_reaches_the_rust_config() {
+        let config = Autd3CpuConfig {
+            sync_guard_ns: 13,
+            has_failsafe_timeout: true,
+            failsafe_timeout_ns: 25_000_000,
+            has_ptp_unlock_failsafe_timeout: true,
+            ptp_unlock_failsafe_timeout_ns: 26_000_000,
+            fpga_bus_wait: 2,
+            has_cpu_watchdog_timeout: true,
+            cpu_watchdog_timeout_ns: 27_000_000,
+            ptp: Autd3PtpConfig {
+                sync_interval_ns: 15_000_000,
+                tx_timestamp_timeout_ns: 16_000_000,
+                delay_resp_timeout_ns: 17_000_000,
+                holdover_ns: 18_000_000,
+                lock_samples: 19,
+                step_threshold_ns: 20,
+                lock_threshold_ns: 21,
+                kp_milli: 22,
+                ki_milli: 23,
+                max_freq_ppb: 24,
+                delay_req_syncs: 26,
+                path_delay_filter_shift: 4,
+                pause_quanta: 27,
+                pause_hold_syncs: 28,
+                pause_retry_ns: 29_000_000,
+            },
+        };
+        let expected = CpuConfig {
+            sync_guard: Duration::from_nanos(13),
+            failsafe_timeout: Some(Duration::from_millis(25)),
+            ptp_unlock_failsafe_timeout: Some(Duration::from_millis(26)),
+            fpga_bus_wait: FpgaBusWait::Cycles2,
+            cpu_watchdog_timeout: Some(Duration::from_millis(27)),
+            ptp: PtpConfig {
+                sync_interval: Duration::from_millis(15),
+                tx_timestamp_timeout: Duration::from_millis(16),
+                delay_resp_timeout: Duration::from_millis(17),
+                holdover: Duration::from_millis(18),
+                lock_samples: NonZeroU16::new(19).unwrap(),
+                step_threshold: Duration::from_nanos(20),
+                lock_threshold: Duration::from_nanos(21),
+                kp_milli: 22,
+                ki_milli: 23,
+                max_freq_ppb: MaxFreqPpb::new(24).unwrap(),
                 delay_req_syncs: NonZeroU16::new(26).unwrap(),
-                path_delay_filter_shift: autd3_rs::commands::PathDelayFilterShift::new(4).unwrap(),
+                path_delay_filter_shift: PathDelayFilterShift::new(4).unwrap(),
                 pause_quanta: NonZeroU16::new(27),
                 pause_hold_syncs: 28,
                 pause_retry: Duration::from_millis(29),
-                ..autd3_rs::commands::PtpConfig::default()
-            }
-        );
+            },
+        };
+        assert_eq!(Ok(expected), set_cpu_config(config));
+        assert_eq!(config, Autd3CpuConfig::from(expected));
+    }
+
+    #[test]
+    fn the_optional_durations_follow_their_presence_flag_and_zero_reaches_the_validation() {
+        let default = default_cpu_config();
+        assert!(!default.has_failsafe_timeout);
+        assert!(!default.has_ptp_unlock_failsafe_timeout);
+        assert!(default.has_cpu_watchdog_timeout);
+        assert_eq!(1_000_000_000, default.cpu_watchdog_timeout_ns);
+
+        let config = set_cpu_config(Autd3CpuConfig {
+            has_failsafe_timeout: true,
+            failsafe_timeout_ns: 0,
+            has_ptp_unlock_failsafe_timeout: false,
+            ptp_unlock_failsafe_timeout_ns: 1,
+            has_cpu_watchdog_timeout: false,
+            ..default
+        })
+        .unwrap();
+        assert_eq!(Some(Duration::ZERO), config.failsafe_timeout);
+        assert_eq!(None, config.ptp_unlock_failsafe_timeout);
+        assert_eq!(None, config.cpu_watchdog_timeout);
     }
 
     #[test]
     fn a_zero_pause_quanta_disables_the_pause() {
-        let handle = autd3_cpu_config_new();
-        let mut quanta = 0u16;
-        unsafe {
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_get_ptp_pause_quanta(handle, &raw mut quanta)
-            );
-            assert_eq!(quanta, 48);
-            assert_eq!(AUTD3_OK, autd3_cpu_config_set_ptp_pause_quanta(handle, 0));
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_get_ptp_pause_quanta(handle, &raw mut quanta)
-            );
-            assert_eq!(quanta, 0);
-        }
-        let config = unsafe { take_handle(handle) }.unwrap().0;
-        assert_eq!(config.ptp.pause_quanta, None);
+        let default = default_cpu_config();
+        assert_eq!(48, default.ptp.pause_quanta);
+        let config = set_cpu_config(Autd3CpuConfig {
+            ptp: Autd3PtpConfig {
+                pause_quanta: 0,
+                ..default.ptp
+            },
+            ..default
+        })
+        .unwrap();
+        assert_eq!(None, config.ptp.pause_quanta);
     }
 
-    fn optional_duration(
-        get: unsafe extern "C" fn(*const CpuConfigHandle, *mut bool, *mut u64) -> i32,
-        handle: *const CpuConfigHandle,
-    ) -> Option<Duration> {
-        let mut has_value = false;
-        let mut ns = u64::MAX;
+    #[test]
+    fn out_of_range_cpu_config_values_are_rejected_with_the_field_name() {
+        let default = default_cpu_config();
+        assert_eq!(3, default.fpga_bus_wait);
+        for invalid in [0, 1, 4, u8::MAX] {
+            assert_eq!(
+                Err(format!("fpga_bus_wait is out of range: {invalid}")),
+                set_cpu_config(Autd3CpuConfig {
+                    fpga_bus_wait: invalid,
+                    ..default
+                })
+            );
+        }
+        let ptp = |ptp: Autd3PtpConfig| set_cpu_config(Autd3CpuConfig { ptp, ..default });
+        assert_eq!(
+            Err("ptp.lock_samples is out of range: 0".to_owned()),
+            ptp(Autd3PtpConfig {
+                lock_samples: 0,
+                ..default.ptp
+            })
+        );
+        assert_eq!(
+            Err("ptp.delay_req_syncs is out of range: 0".to_owned()),
+            ptp(Autd3PtpConfig {
+                delay_req_syncs: 0,
+                ..default.ptp
+            })
+        );
+        assert_eq!(
+            Err("ptp.max_freq_ppb is out of range: 2147483648".to_owned()),
+            ptp(Autd3PtpConfig {
+                max_freq_ppb: 0x8000_0000,
+                ..default.ptp
+            })
+        );
+        assert_eq!(
+            Err("ptp.path_delay_filter_shift is out of range: 17".to_owned()),
+            ptp(Autd3PtpConfig {
+                path_delay_filter_shift: 17,
+                ..default.ptp
+            })
+        );
+    }
+
+    #[test]
+    fn the_default_fpga_config_matches_the_rust_default_and_reaches_the_op() {
+        let mut config = Autd3FpgaConfig {
+            sync_phase_lock: !FpgaConfig::default().sync_phase_lock,
+        };
         assert_eq!(AUTD3_OK, unsafe {
-            get(handle, &raw mut has_value, &raw mut ns)
+            autd3_fpga_config_default(&raw mut config)
         });
-        has_value.then(|| Duration::from_nanos(ns))
-    }
-
-    #[test]
-    fn the_failsafe_timeout_presence_is_explicit_and_zero_reaches_the_validation() {
-        let handle = autd3_cpu_config_new();
         assert_eq!(
-            None,
-            optional_duration(autd3_cpu_config_get_failsafe_timeout, handle)
+            FpgaConfig::default().sync_phase_lock,
+            config.sync_phase_lock
         );
-        unsafe {
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_set_failsafe_timeout(handle, true, 500_000_000)
-            );
-        }
         assert_eq!(
-            Some(Duration::from_millis(500)),
-            optional_duration(autd3_cpu_config_get_failsafe_timeout, handle)
+            SetFpgaConfig::default().config.sync_phase_lock,
+            config.sync_phase_lock
         );
-        unsafe {
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_set_failsafe_timeout(handle, false, 1)
-            );
-        }
-        assert_eq!(
-            None,
-            optional_duration(autd3_cpu_config_get_failsafe_timeout, handle)
-        );
-        unsafe {
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_set_failsafe_timeout(handle, true, 0)
-            );
-            assert_eq!(
-                AUTD3_ERR_INVALID_ARGUMENT,
-                autd3_cpu_config_set_failsafe_timeout(std::ptr::null_mut(), false, 0)
-            );
-        }
-        assert_eq!(
-            Some(Duration::ZERO),
-            optional_duration(autd3_cpu_config_get_failsafe_timeout, handle)
-        );
-        let config = unsafe { take_handle(handle) }.unwrap().0;
-        assert_eq!(config.failsafe_timeout, Some(Duration::ZERO));
-    }
-
-    #[test]
-    fn the_fpga_bus_wait_is_three_cycles_until_it_is_set_and_rejects_other_counts() {
-        let handle = autd3_cpu_config_new();
-        let mut cycles = 0u8;
-        unsafe {
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_get_fpga_bus_wait(handle, &raw mut cycles)
-            );
-            assert_eq!(cycles, 3);
-            for invalid in [0, 1, 4, u8::MAX] {
-                assert_eq!(
-                    AUTD3_ERR_INVALID_ARGUMENT,
-                    autd3_cpu_config_set_fpga_bus_wait(handle, invalid)
-                );
-            }
-            assert_eq!(AUTD3_OK, autd3_cpu_config_set_fpga_bus_wait(handle, 2));
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_get_fpga_bus_wait(handle, &raw mut cycles)
-            );
-            assert_eq!(cycles, 2);
-            assert_eq!(
-                AUTD3_ERR_INVALID_ARGUMENT,
-                autd3_cpu_config_set_fpga_bus_wait(std::ptr::null_mut(), 2)
-            );
-        }
-        let config = unsafe { take_handle(handle) }.unwrap().0;
-        assert_eq!(
-            config.fpga_bus_wait,
-            autd3_rs::commands::FpgaBusWait::Cycles2
-        );
-    }
-
-    #[test]
-    fn the_ptp_unlock_failsafe_timeout_is_none_until_it_is_set() {
-        let handle = autd3_cpu_config_new();
-        assert_eq!(
-            None,
-            optional_duration(autd3_cpu_config_get_ptp_unlock_failsafe_timeout, handle)
-        );
-        unsafe {
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_set_ptp_unlock_failsafe_timeout(handle, true, 2_000_000_000)
-            );
-            assert_eq!(
-                AUTD3_ERR_INVALID_ARGUMENT,
-                autd3_cpu_config_set_ptp_unlock_failsafe_timeout(std::ptr::null_mut(), true, 0)
-            );
-        }
-        assert_eq!(
-            Some(Duration::from_secs(2)),
-            optional_duration(autd3_cpu_config_get_ptp_unlock_failsafe_timeout, handle)
-        );
-        let config = unsafe { take_handle(handle) }.unwrap().0;
-        assert_eq!(
-            config.ptp_unlock_failsafe_timeout,
-            Some(Duration::from_secs(2))
-        );
-    }
-
-    #[test]
-    fn the_cpu_watchdog_timeout_is_one_second_until_it_is_cleared() {
-        let handle = autd3_cpu_config_new();
-        assert_eq!(
-            Some(Duration::from_secs(1)),
-            optional_duration(autd3_cpu_config_get_cpu_watchdog_timeout, handle)
-        );
-        unsafe {
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_set_cpu_watchdog_timeout(handle, false, 0)
-            );
-            assert_eq!(
-                AUTD3_ERR_INVALID_ARGUMENT,
-                autd3_cpu_config_set_cpu_watchdog_timeout(std::ptr::null_mut(), false, 0)
-            );
-        }
-        assert_eq!(
-            None,
-            optional_duration(autd3_cpu_config_get_cpu_watchdog_timeout, handle)
-        );
-        let config = unsafe { take_handle(handle) }.unwrap().0;
-        assert_eq!(config.cpu_watchdog_timeout, None);
-    }
-
-    #[test]
-    fn a_zero_cpu_config_count_is_rejected_and_keeps_the_value() {
-        let handle = autd3_cpu_config_new();
-        unsafe {
-            assert_eq!(
-                AUTD3_ERR_INVALID_ARGUMENT,
-                autd3_cpu_config_set_ptp_lock_samples(handle, 0)
-            );
-        }
-        let config = unsafe { take_handle(handle) }.unwrap().0;
-        assert_eq!(CpuConfig::default(), config);
-        assert!(unsafe { autd3_op_set_cpu_config(std::ptr::null()) }.is_null());
-    }
-
-    #[test]
-    fn a_new_fpga_config_matches_the_rust_default() {
-        let handle = autd3_fpga_config_new();
-        let mut sync_phase_lock = false;
-        assert_eq!(AUTD3_OK, unsafe {
-            autd3_fpga_config_get_sync_phase_lock(handle, &raw mut sync_phase_lock)
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_fpga_config_default(std::ptr::null_mut())
         });
-        assert_eq!(FpgaConfig::default().sync_phase_lock, sync_phase_lock);
-        let config = unsafe { take_handle(handle) }.unwrap();
-        assert_eq!(FpgaConfig::default(), config.0);
-        assert_eq!(SetFpgaConfig::default().config, config.0);
-    }
 
-    #[test]
-    fn fpga_config_setters_reach_their_fields() {
-        let handle = autd3_fpga_config_new();
-        unsafe {
-            assert_eq!(
-                AUTD3_OK,
-                autd3_fpga_config_set_sync_phase_lock(handle, false)
-            );
-            assert_eq!(
-                AUTD3_ERR_INVALID_ARGUMENT,
-                autd3_fpga_config_set_sync_phase_lock(std::ptr::null_mut(), false)
-            );
-        }
-        let op = unsafe { autd3_op_set_fpga_config(handle) };
+        let op = autd3_op_set_fpga_config(Autd3FpgaConfig {
+            sync_phase_lock: false,
+        });
         assert!(matches!(
             unsafe { take_handle(op) },
             Some(OwnedCommand::SetFpgaConfig(config)) if config == FpgaConfig { sync_phase_lock: false }
         ));
-        let config = unsafe { take_handle(handle) }.unwrap().0;
-        assert_eq!(
-            config,
-            FpgaConfig {
-                sync_phase_lock: false
-            }
-        );
-        assert!(unsafe { autd3_op_set_fpga_config(std::ptr::null()) }.is_null());
     }
 
     #[test]
@@ -2820,22 +2505,6 @@ mod tests {
     }
 
     #[test]
-    fn the_gpio_and_fan_default_ops_match_rust() {
-        assert!(matches!(
-            unsafe { take_handle(autd3_op_force_fan_default()) },
-            Some(OwnedCommand::ForceFan(value)) if value == ForceFan::default().value
-        ));
-        assert!(matches!(
-            unsafe { take_handle(autd3_op_set_gpio_out_default()) },
-            Some(OwnedCommand::SetGpioOut(outputs)) if outputs == SetGpioOut::default().outputs
-        ));
-        assert!(matches!(
-            unsafe { take_handle(autd3_op_emulate_gpio_in_default()) },
-            Some(OwnedCommand::EmulateGpioIn(values)) if values == EmulateGpioIn::default().values
-        ));
-    }
-
-    #[test]
     fn fpga_state_getters_follow_rust_for_every_raw_value() {
         for raw in 0..=u8::MAX {
             let state = FpgaState(raw);
@@ -2897,21 +2566,29 @@ mod tests {
         })))
     }
 
-    fn encode(geometry: *const Geometry, command: *mut OwnedCommand) -> *mut Arc<Frames> {
-        unsafe {
-            autd3_frames_encode(
-                geometry,
-                command,
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                0,
-            )
+    fn encode(
+        geometry: *const Geometry,
+        command: *mut OwnedCommand,
+    ) -> Result<*mut Arc<Frames>, (i32, String)> {
+        let frames = autd3_frames_new();
+        let mut err = [0 as c_char; 128];
+        let code = unsafe {
+            autd3_frames_encode_into(frames, geometry, command, err.as_mut_ptr(), err.len())
+        };
+        if code == AUTD3_OK {
+            return Ok(frames);
         }
+        unsafe { autd3_frames_free(frames) };
+        Err((
+            code,
+            unsafe { std::ffi::CStr::from_ptr(err.as_ptr()) }
+                .to_string_lossy()
+                .into_owned(),
+        ))
     }
 
     fn num_frames_of(geometry: *const Geometry, command: *mut OwnedCommand) -> usize {
-        let frames = encode(geometry, command);
-        assert!(!frames.is_null());
+        let frames = encode(geometry, command).unwrap();
         let len = unsafe { autd3_frames_num_frames(frames) };
         unsafe { autd3_frames_free(frames) };
         len
@@ -2928,22 +2605,12 @@ mod tests {
         let two = geometry_of(2);
 
         let command = two_entries_for_one_device();
-        let mut code = AUTD3_OK;
-        assert!(
-            unsafe { autd3_frames_encode(one, command, &raw mut code, std::ptr::null_mut(), 0) }
-                .is_null()
+        assert_eq!(
+            AUTD3_ERR_INVALID_ARGUMENT,
+            encode(one, command).unwrap_err().0
         );
-        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
         assert_eq!(1, num_frames_of(two, command));
 
-        let command = two_entries_for_one_device();
-        let frames = autd3_frames_new();
-        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
-            autd3_frames_encode_into(frames, one, command, std::ptr::null_mut(), 0)
-        });
-        unsafe { autd3_op_free(command) };
-
-        unsafe { autd3_frames_free(frames) };
         unsafe { drop_handle(one) };
         unsafe { drop_handle(two) };
     }
@@ -2953,31 +2620,20 @@ mod tests {
         let geometry = geometry_of(1);
         let op = autd3_op_clear();
 
-        assert!(encode(std::ptr::null(), op).is_null());
-        assert!(encode(geometry, std::ptr::null_mut()).is_null());
+        assert!(encode(std::ptr::null(), op).is_err());
+        assert!(encode(geometry, std::ptr::null_mut()).is_err());
 
         assert_eq!(1, num_frames_of(geometry, op));
         unsafe { drop_handle(geometry) };
     }
 
     #[test]
-    fn a_rejected_encode_reports_the_reason() {
+    fn a_rejected_encode_reports_the_reason_and_the_error_code() {
         let geometry = geometry_of(1);
-        let mut err = [0 as c_char; 64];
-
-        let frames = unsafe {
-            autd3_frames_encode(
-                geometry,
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                err.as_mut_ptr(),
-                err.len(),
-            )
-        };
-
-        assert!(frames.is_null());
-        let message = unsafe { std::ffi::CStr::from_ptr(err.as_ptr()) };
-        assert_eq!("null command", message.to_str().unwrap());
+        assert_eq!(
+            Err((AUTD3_ERR_INVALID_ARGUMENT, "null command".to_owned())),
+            encode(geometry, std::ptr::null_mut())
+        );
         unsafe { drop_handle(geometry) };
     }
 
@@ -2985,18 +2641,11 @@ mod tests {
     fn a_command_that_fails_to_encode_stays_with_the_caller_and_yields_no_frames() {
         let empty = geometry_of(0);
         let one = geometry_of(1);
-        let mut err = [0 as c_char; 128];
-
-        let mut code = AUTD3_OK;
         let command = autd3_op_clear();
 
-        let frames = unsafe {
-            autd3_frames_encode(empty, command, &raw mut code, err.as_mut_ptr(), err.len())
-        };
-
-        assert!(frames.is_null());
-        assert_ne!(0, err[0]);
+        let (code, message) = encode(empty, command).unwrap_err();
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
+        assert_ne!("", message);
 
         let frames = autd3_frames_new();
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
@@ -3010,47 +2659,6 @@ mod tests {
         unsafe { autd3_frames_free(frames) };
         unsafe { drop_handle(empty) };
         unsafe { drop_handle(one) };
-    }
-
-    #[test]
-    fn a_rejected_encode_reports_the_error_code() {
-        let geometry = geometry_of(1);
-        let mut code = AUTD3_OK;
-
-        let frames = unsafe {
-            autd3_frames_encode(
-                geometry,
-                std::ptr::null_mut(),
-                &raw mut code,
-                std::ptr::null_mut(),
-                0,
-            )
-        };
-
-        assert!(frames.is_null());
-        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
-        unsafe { drop_handle(geometry) };
-    }
-
-    #[test]
-    fn a_successful_encode_leaves_the_error_code_untouched() {
-        let geometry = geometry_of(1);
-        let mut code = AUTD3_OK;
-
-        let frames = unsafe {
-            autd3_frames_encode(
-                geometry,
-                autd3_op_clear(),
-                &raw mut code,
-                std::ptr::null_mut(),
-                0,
-            )
-        };
-
-        assert!(!frames.is_null());
-        assert_eq!(AUTD3_OK, code);
-        unsafe { autd3_frames_free(frames) };
-        unsafe { drop_handle(geometry) };
     }
 
     #[test]
@@ -3101,7 +2709,7 @@ mod tests {
             num_frames_of(geometry, write_pattern_buffer_of(geometry, max_len))
         );
         let too_many = write_pattern_buffer_of(geometry, max_len + 1);
-        assert!(encode(geometry, too_many).is_null());
+        assert!(encode(geometry, too_many).is_err());
         unsafe { autd3_op_free(too_many) };
         unsafe { drop_handle(geometry) };
     }
@@ -3229,25 +2837,6 @@ mod tests {
     }
 
     #[test]
-    fn a_frame_index_past_the_last_frame_is_rejected() {
-        let geometry = geometry_of(1);
-        let frames = autd3_frames_new();
-        let ops = [autd3_op_clear(), autd3_op_nop()];
-        let sequence = unsafe { autd3_command_sequence(ops.as_ptr(), ops.len()) };
-        assert_eq!(AUTD3_OK, unsafe {
-            autd3_frames_encode_into(frames, geometry, sequence, std::ptr::null_mut(), 0)
-        });
-        let encoded = unsafe { handle_ref::<Arc<Frames>>(frames) }.unwrap();
-
-        assert_eq!(Some((0, 2)), frame_span(encoded, -1));
-        assert_eq!(Some((1, 1)), frame_span(encoded, 1));
-        assert_eq!(None, frame_span(encoded, 2));
-
-        unsafe { autd3_frames_free(frames) };
-        unsafe { drop_handle(geometry) };
-    }
-
-    #[test]
     fn an_empty_sequence_encodes_to_no_frames() {
         let geometry = geometry_of(1);
         let command = unsafe { autd3_command_sequence(std::ptr::null(), 0) };
@@ -3258,22 +2847,9 @@ mod tests {
     }
 
     fn encode_error(geometry: *const Geometry, command: *mut OwnedCommand) -> String {
-        let mut err = [0 as c_char; 128];
-        let frames = unsafe {
-            autd3_frames_encode(
-                geometry,
-                command,
-                std::ptr::null_mut(),
-                err.as_mut_ptr(),
-                err.len(),
-            )
-        };
-        assert!(frames.is_null());
+        let (_, message) = encode(geometry, command).unwrap_err();
         unsafe { autd3_op_free(command) };
-        unsafe { std::ffi::CStr::from_ptr(err.as_ptr()) }
-            .to_str()
-            .unwrap()
-            .to_owned()
+        message
     }
 
     #[test]

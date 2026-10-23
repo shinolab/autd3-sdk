@@ -18,46 +18,7 @@ namespace AUTD3
         private static extern uint autd3_abi_version();
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_transport_option_new();
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_set_iface(IntPtr option, [MarshalAs(UnmanagedType.LPUTF8Str)] string? interfaceName);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_set_iface_addr(IntPtr option, [MarshalAs(UnmanagedType.LPUTF8Str)] string addr);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_get_iface_addr(IntPtr option, out IntPtr addr);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_set_send_buffer_bytes(IntPtr option, ulong bytes);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_get_send_buffer_bytes(IntPtr option, out ulong bytes);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_set_lost_timeout(IntPtr option, ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_get_lost_timeout(IntPtr option, out ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_set_open_timeout(IntPtr option, ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_get_open_timeout(IntPtr option, out ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_set_ack_timeout(IntPtr option, ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_transport_option_get_ack_timeout(IntPtr option, out ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_transport_option_free(IntPtr option);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_udp_free_string(IntPtr ptr);
+        internal static extern int autd3_transport_option_default(out TransportOptionNative option);
 
 
 
@@ -111,9 +72,6 @@ namespace AUTD3
         internal static extern void autd3_op_free(IntPtr op);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_frames_encode(GeometryHandle geometry, IntPtr command, out int outCode, byte[] outErr, UIntPtr outErrLen);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_frames_new();
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
@@ -126,7 +84,7 @@ namespace AUTD3
         internal static extern void autd3_frames_free(IntPtr frames);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_client_open(GeometryHandle geometry, IntPtr option, out IntPtr client, byte[] outErr, UIntPtr outErrLen);
+        internal static extern int autd3_client_open(GeometryHandle geometry, byte ifaceKind, [MarshalAs(UnmanagedType.LPUTF8Str)] string? iface, TransportOptionNative option, out IntPtr client, byte[] outErr, UIntPtr outErrLen);
 
         [StructLayout(LayoutKind.Sequential)]
         internal struct DeviceStatusNative
@@ -156,13 +114,13 @@ namespace AUTD3
         internal static extern int autd3_client_send_heartbeat(ClientHandle client, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_client_send_checked(ClientHandle client, FramesHandle frames, long frame, CompletionCallback cb, IntPtr userData);
+        internal static extern void autd3_client_send_checked(ClientHandle client, FramesHandle frames, CompletionCallback cb, IntPtr userData);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_client_send(ClientHandle client, FramesHandle frames, long frame, CompletionCallback cb, IntPtr userData);
+        internal static extern void autd3_client_send(ClientHandle client, FramesHandle frames, UIntPtr frame, CompletionCallback cb, IntPtr userData);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_client_send_at(ClientHandle client, FramesHandle frames, long frame, ExecAtNative exec, CompletionCallback cb, IntPtr userData);
+        internal static extern void autd3_client_send_at(ClientHandle client, FramesHandle frames, UIntPtr frame, ExecAtNative exec, CompletionCallback cb, IntPtr userData);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_response_token_await(IntPtr token, CompletionCallback cb, IntPtr userData);

@@ -37,83 +37,6 @@ macro_rules! export_abi_version {
     };
 }
 
-#[macro_export]
-macro_rules! option_handle_field {
-    ($handle:ty, [$($field:tt).+], duration, $set:ident, $get:ident) => {
-        #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn $set(handle: *mut $handle, ns: u64) -> i32 {
-            let Some(option) = (unsafe { $crate::handle_mut(handle) }) else {
-                return $crate::AUTD3_ERR_INVALID_ARGUMENT;
-            };
-            option.0.$($field).+ = ::std::time::Duration::from_nanos(ns);
-            $crate::AUTD3_OK
-        }
-
-        #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn $get(handle: *const $handle, out: *mut u64) -> i32 {
-            let Some(option) = (unsafe { $crate::handle_ref(handle) }) else {
-                return $crate::AUTD3_ERR_INVALID_ARGUMENT;
-            };
-            unsafe { $crate::write_out(out, $crate::to_ns(option.0.$($field).+)) }
-        }
-    };
-    ($handle:ty, [$($field:tt).+], optional_duration, $set:ident, $get:ident) => {
-        #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn $set(handle: *mut $handle, has_value: bool, ns: u64) -> i32 {
-            let Some(option) = (unsafe { $crate::handle_mut(handle) }) else {
-                return $crate::AUTD3_ERR_INVALID_ARGUMENT;
-            };
-            option.0.$($field).+ = has_value.then(|| ::std::time::Duration::from_nanos(ns));
-            $crate::AUTD3_OK
-        }
-
-        #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn $get(
-            handle: *const $handle,
-            out_has_value: *mut bool,
-            out: *mut u64,
-        ) -> i32 {
-            let Some(option) = (unsafe { $crate::handle_ref(handle) }) else {
-                return $crate::AUTD3_ERR_INVALID_ARGUMENT;
-            };
-            let value = option.0.$($field).+;
-            let code = unsafe { $crate::write_out(out_has_value, value.is_some()) };
-            if code != $crate::AUTD3_OK {
-                return code;
-            }
-            unsafe { $crate::write_out(out, value.map_or(0, $crate::to_ns)) }
-        }
-    };
-    ($handle:ty, [$($field:tt).+], $ty:ty, $set:ident, $get:ident) => {
-        #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn $set(handle: *mut $handle, value: $ty) -> i32 {
-            let Some(option) = (unsafe { $crate::handle_mut(handle) }) else {
-                return $crate::AUTD3_ERR_INVALID_ARGUMENT;
-            };
-            option.0.$($field).+ = value;
-            $crate::AUTD3_OK
-        }
-
-        #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn $get(handle: *const $handle, out: *mut $ty) -> i32 {
-            let Some(option) = (unsafe { $crate::handle_ref(handle) }) else {
-                return $crate::AUTD3_ERR_INVALID_ARGUMENT;
-            };
-            unsafe { $crate::write_out(out, option.0.$($field).+) }
-        }
-    };
-}
-
-#[macro_export]
-macro_rules! option_handle_lifecycle {
-    ($handle:ty, $free:ident) => {
-        #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn $free(handle: *mut $handle) {
-            unsafe { $crate::drop_handle(handle) }
-        }
-    };
-}
-
 pub const AUTD3_OK: i32 = 0;
 pub const AUTD3_ERR: i32 = -1;
 pub const AUTD3_ERR_TIMEOUT: i32 = -2;
@@ -227,20 +150,6 @@ pub unsafe fn write_out<T>(ptr: *mut T, value: T) -> i32 {
     };
     unsafe { ptr.as_ptr().write(value) };
     AUTD3_OK
-}
-
-pub unsafe fn finish<E: std::fmt::Display>(
-    result: Result<(), E>,
-    out_err: *mut c_char,
-    out_err_len: usize,
-) -> i32 {
-    match result {
-        Ok(()) => AUTD3_OK,
-        Err(e) => {
-            unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
-            AUTD3_ERR
-        }
-    }
 }
 
 pub unsafe fn into_handle_or_err<T, E: std::fmt::Display>(

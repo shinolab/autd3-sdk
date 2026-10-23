@@ -7,23 +7,6 @@ namespace AUTD3.Tests
     public class OptionDefaultsTests
     {
         [Fact]
-        public void ATransportOptionReadBackFromTheNativeOptionKeepsTheAckTimeout()
-        {
-            var option = new TransportOption { AckTimeout = TimeSpan.FromMilliseconds(25) };
-            var handle = option.CreateHandle();
-            TransportOption back;
-            try
-            {
-                back = TransportOption.FromHandle(handle);
-            }
-            finally
-            {
-                NativeClient.autd3_transport_option_free(handle);
-            }
-            Assert.Equal(option.AckTimeout, back.AckTimeout);
-        }
-
-        [Fact]
         public void CpuConfigMatchesTheRustDefault()
         {
             var config = new CpuConfig();

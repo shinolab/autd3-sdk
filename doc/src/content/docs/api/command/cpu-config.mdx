@@ -80,8 +80,7 @@ failsafe や CPU ウォッチドッグで止まった出力は, 自動では戻�
 設定値は [Clear](/autd3-sdk/api/command/clear/) と電源再投入で既定値に戻る.
 クライアントを開き直しても戻らない (前のセッションの値のまま動く) ので, 既定値に戻したい場合は `Clear` を送る.
 PTP がロックしない値を入れたまま閉じると, 次に開くときの同期待ちが `open_timeout` で失敗する (`SyncTimeout`).
-その場合は [`TransportOption`](/autd3-sdk/api/basics/transport-option/) の `sync_on_open` を `false` にして開き (Rust のみ), `Clear` を送ってから開き直す.
-Python / C# からは, `autd3-firmware-ota --reboot-only` でデバイスを再起動するか, 電源を入れ直して既定値に戻す.
+その場合は [`TransportOption`](/autd3-sdk/api/basics/transport-option/) の `sync_on_open` を `false` にして開き, `Clear` を送ってから開き直す.
 
 ## Example
 
