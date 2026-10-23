@@ -1,14 +1,14 @@
 use std::net::SocketAddrV6;
 use std::time::{Duration, Instant};
 
-use autd3_cpu_wire::udp::{Flags, Kind, Role};
+use autd3_cpu_wire::udp::{Flags, Header, Kind, Role};
 use autd3_rs_core::value::SysTime;
-use zerocopy::IntoBytes;
+use zerocopy::{FromBytes, IntoBytes};
 
 use crate::udp::state::SYNCED_FLAGS;
 use crate::udp::{
-    Channel, ControlResponse, TransportOption, UdpError, assign_id_body, same_endpoint,
-    set_time_body,
+    Channel, ControlResponse, RECV_BUFFER_BYTES, TransportOption, UdpError, assign_id_body,
+    same_endpoint, set_time_body,
 };
 
 use crate::client::device_clock::DeviceClock;
@@ -48,14 +48,15 @@ pub(super) fn collect_responses(
 ) -> Result<Vec<ControlResponse>, UdpError> {
     let deadline = Instant::now().checked_add(wait);
     let mut responses = Vec::new();
+    let mut buf = [0; RECV_BUFFER_BYTES];
     while max_responses.is_none_or(|n| responses.len() < n) {
-        let Some(parsed) = channel.recv(deadline, |packet| {
-            ControlResponse::parse(packet, kind, msg_id)
-        })?
-        else {
+        let Some((src, datagram)) = channel.recv_datagram(&mut buf, deadline)? else {
             break;
         };
-        if let Some(response) = parsed? {
+        let Ok((header, body)) = Header::read_from_prefix(datagram) else {
+            continue;
+        };
+        if let Some(response) = ControlResponse::parse(src, header, body, kind, msg_id)? {
             responses.push(response);
         }
     }
