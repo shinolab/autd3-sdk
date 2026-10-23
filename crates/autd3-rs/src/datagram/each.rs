@@ -22,8 +22,7 @@ where
     F: FnMut(&Device) -> Option<O>,
 {
     fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
-        expansion.push_per_device(self.0)?;
-        Ok(())
+        expansion.push_per_device(self.0)
     }
 }
 

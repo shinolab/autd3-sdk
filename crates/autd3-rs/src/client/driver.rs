@@ -30,16 +30,13 @@ impl Driver {
             return self.shutdown_result().map(|()| None);
         }
         if self.session.is_stopping() {
-            self.shut_down(None);
+            self.shut_down(Error::Closed);
             return Ok(None);
         }
-        match self.session.step() {
-            Ok(deadline) => Ok(Some(deadline)),
-            Err(cause) => {
-                self.shut_down(Some(&cause));
-                Err(Error::Network(cause))
-            }
-        }
+        self.session
+            .step()
+            .map(Some)
+            .map_err(|cause| self.fail(cause))
     }
 
     pub fn wait(&mut self, deadline: Instant) -> Result<(), Error> {
@@ -48,22 +45,26 @@ impl Driver {
         }
         self.session.wait_readable(deadline).map_err(|e| {
             tracing::error!("waiting for a reply failed: {e}");
-            let cause = NetworkCause::new(e);
-            self.shut_down(Some(&cause));
-            Error::Network(cause)
+            self.fail(NetworkCause::new(e))
         })
     }
 
     fn shutdown_result(&self) -> Result<(), Error> {
-        match self.session.network_failure() {
-            Some(cause) => Err(Error::Network(cause)),
-            None => Ok(()),
+        match self.session.closed_error() {
+            Some(error @ Error::Network(_)) => Err(error),
+            _ => Ok(()),
         }
     }
 
-    fn shut_down(&mut self, network_failure: Option<&NetworkCause>) {
+    fn fail(&mut self, cause: NetworkCause) -> Error {
+        let error = Error::Network(cause);
+        self.shut_down(error.clone());
+        error
+    }
+
+    fn shut_down(&mut self, error: Error) {
         self.is_shut_down = true;
-        self.session.close(network_failure);
+        self.session.close(error);
         tracing::debug!("driver stopped");
     }
 }
@@ -71,7 +72,7 @@ impl Driver {
 impl Drop for Driver {
     fn drop(&mut self) {
         if !self.is_shut_down {
-            self.shut_down(None);
+            self.shut_down(Error::Closed);
         }
     }
 }
