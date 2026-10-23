@@ -356,7 +356,7 @@ namespace AUTD3.Tests
 
             var delayReqSyncs = Assert.Throws<Autd3Exception>(() =>
                 Frames.Encode(geometry, new SetCpuConfig(new CpuConfig { Ptp = new PtpConfig { DelayReqSyncs = 0 } })));
-            Assert.Contains("ptp.delayReqSyncs", delayReqSyncs.Message);
+            Assert.Contains("ptp.delay_req_syncs", delayReqSyncs.Message);
 
             var pauseQuanta = Assert.Throws<Autd3Exception>(() =>
                 Frames.Encode(geometry, new SetCpuConfig(new CpuConfig { Ptp = new PtpConfig { PauseQuanta = 0 } })));
@@ -364,7 +364,7 @@ namespace AUTD3.Tests
 
             var lockSamples = Assert.Throws<Autd3Exception>(() =>
                 Frames.Encode(geometry, new SetCpuConfig(new CpuConfig { Ptp = new PtpConfig { LockSamples = 0 } })));
-            Assert.Contains("ptp.lockSamples", lockSamples.Message);
+            Assert.Contains("ptp.lock_samples", lockSamples.Message);
 
             var negative = Assert.Throws<Autd3Exception>(() =>
                 Frames.Encode(geometry, new SetCpuConfig(new CpuConfig { SyncGuard = TimeSpan.FromTicks(-1) })));
@@ -393,11 +393,11 @@ namespace AUTD3.Tests
 
             var maxFreqPpb = Assert.Throws<Autd3Exception>(() =>
                 Frames.Encode(geometry, new SetCpuConfig(new CpuConfig { Ptp = new PtpConfig { MaxFreqPpb = 0x8000_0000 } })));
-            Assert.Contains("ptp.maxFreqPpb", maxFreqPpb.Message);
+            Assert.Contains("ptp.max_freq_ppb", maxFreqPpb.Message);
 
             var pathDelayFilterShift = Assert.Throws<Autd3Exception>(() =>
                 Frames.Encode(geometry, new SetCpuConfig(new CpuConfig { Ptp = new PtpConfig { PathDelayFilterShift = 17 } })));
-            Assert.Contains("ptp.pathDelayFilterShift", pathDelayFilterShift.Message);
+            Assert.Contains("ptp.path_delay_filter_shift", pathDelayFilterShift.Message);
         }
 
         [Fact]

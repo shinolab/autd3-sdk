@@ -142,19 +142,61 @@ pub unsafe extern "C" fn autd3_modulation_buffer_free(buffer: *mut ModulationBuf
     unsafe { drop_handle(buffer) }
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn autd3_modulation_sine_option_new(
-    amplitude: u8,
-    offset: u8,
-    phase: f32,
-    clamp: bool,
-) -> *mut SineOption {
-    into_handle(SineOption {
-        amplitude,
-        offset,
-        phase: Angle::from_rad(phase),
-        clamp,
-    })
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Autd3SineOption {
+    pub amplitude: u8,
+    pub offset: u8,
+    pub phase_rad: f32,
+    pub clamp: bool,
+}
+
+impl From<Autd3SineOption> for SineOption {
+    fn from(option: Autd3SineOption) -> Self {
+        Self {
+            amplitude: option.amplitude,
+            offset: option.offset,
+            phase: Angle::from_rad(option.phase_rad),
+            clamp: option.clamp,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Autd3SquareOption {
+    pub low: u8,
+    pub high: u8,
+    pub duty: f32,
+}
+
+impl From<Autd3SquareOption> for SquareOption {
+    fn from(option: Autd3SquareOption) -> Self {
+        Self {
+            low: option.low,
+            high: option.high,
+            duty: option.duty,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Autd3FourierOption {
+    pub has_scale_factor: bool,
+    pub scale_factor: f32,
+    pub clamp: bool,
+    pub offset: u8,
+}
+
+impl From<Autd3FourierOption> for FourierOption {
+    fn from(option: Autd3FourierOption) -> Self {
+        Self {
+            scale_factor: option.has_scale_factor.then_some(option.scale_factor),
+            clamp: option.clamp,
+            offset: option.offset,
+        }
+    }
 }
 
 fn first_error(codes: &[i32]) -> i32 {
@@ -212,71 +254,48 @@ pub unsafe extern "C" fn autd3_modulation_fourier_option_default(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_modulation_sine_option_free(option: *mut SineOption) {
-    unsafe { drop_handle(option) }
-}
-
-#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_modulation_sine(
     mode: u8,
     freq: f32,
-    option: *const SineOption,
+    option: Autd3SineOption,
     sampling_divide: u16,
     buffer: *mut ModulationBuffer,
     out_err: *mut c_char,
     out_err_len: usize,
 ) -> i32 {
-    let (Some(option), Some(config), Some(buffer)) = (
-        unsafe { handle_ref(option) },
-        to_sampling_config(sampling_divide),
-        unsafe { handle_mut(buffer) },
-    ) else {
+    let (Some(config), Some(buffer)) = (to_sampling_config(sampling_divide), unsafe {
+        handle_mut(buffer)
+    }) else {
         return unsafe { invalid_argument(out_err, out_err_len, "null argument") };
     };
     let Some(mode) = to_sampling_mode(mode, freq) else {
         return unsafe { invalid_argument(out_err, out_err_len, "unknown sampling mode") };
     };
 
-    let result = autd3_rs_modulation::sine(mode, option, config, &mut buffer.0);
+    let result = autd3_rs_modulation::sine(mode, &option.into(), config, &mut buffer.0);
     unsafe { finish(result, out_err, out_err_len) }
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn autd3_modulation_square_option_new(
-    low: u8,
-    high: u8,
-    duty: f32,
-) -> *mut SquareOption {
-    into_handle(SquareOption { low, high, duty })
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_modulation_square_option_free(option: *mut SquareOption) {
-    unsafe { drop_handle(option) }
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_modulation_square(
     mode: u8,
     freq: f32,
-    option: *const SquareOption,
+    option: Autd3SquareOption,
     sampling_divide: u16,
     buffer: *mut ModulationBuffer,
     out_err: *mut c_char,
     out_err_len: usize,
 ) -> i32 {
-    let (Some(option), Some(config), Some(buffer)) = (
-        unsafe { handle_ref(option) },
-        to_sampling_config(sampling_divide),
-        unsafe { handle_mut(buffer) },
-    ) else {
+    let (Some(config), Some(buffer)) = (to_sampling_config(sampling_divide), unsafe {
+        handle_mut(buffer)
+    }) else {
         return unsafe { invalid_argument(out_err, out_err_len, "null argument") };
     };
     let Some(mode) = to_sampling_mode(mode, freq) else {
         return unsafe { invalid_argument(out_err, out_err_len, "unknown sampling mode") };
     };
 
-    let result = autd3_rs_modulation::square(mode, option, config, &mut buffer.0);
+    let result = autd3_rs_modulation::square(mode, &option.into(), config, &mut buffer.0);
     unsafe { finish(result, out_err, out_err_len) }
 }
 
@@ -293,45 +312,25 @@ pub unsafe extern "C" fn autd3_modulation_constant(
     0
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn autd3_modulation_fourier_option_new(
-    has_scale_factor: bool,
-    scale_factor: f32,
-    clamp: bool,
-    offset: u8,
-) -> *mut FourierOption {
-    into_handle(FourierOption {
-        scale_factor: has_scale_factor.then_some(scale_factor),
-        clamp,
-        offset,
-    })
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_modulation_fourier_option_free(option: *mut FourierOption) {
-    unsafe { drop_handle(option) }
-}
-
 #[repr(C)]
 pub struct Autd3SineComponent {
     pub mode: u8,
     pub freq: f32,
-    pub option: *const SineOption,
+    pub option: Autd3SineOption,
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_modulation_fourier(
     components: *const Autd3SineComponent,
     num_components: usize,
-    option: *const FourierOption,
+    option: Autd3FourierOption,
     sampling_divide: u16,
     buffer: *mut ModulationBuffer,
     out_err: *mut c_char,
     out_err_len: usize,
 ) -> i32 {
-    let (Some(slice), Some(option), Some(config), Some(buffer)) = (
+    let (Some(slice), Some(config), Some(buffer)) = (
         unsafe { slice_ref(components, num_components) },
-        unsafe { handle_ref(option) },
         to_sampling_config(sampling_divide),
         unsafe { handle_mut(buffer) },
     ) else {
@@ -340,18 +339,16 @@ pub unsafe extern "C" fn autd3_modulation_fourier(
 
     let mut sine_components = Vec::with_capacity(slice.len());
     for c in slice {
-        let Some(component_option) = (unsafe { handle_ref(c.option) }) else {
-            return unsafe { invalid_argument(out_err, out_err_len, "null sine option") };
-        };
         let Some(freq) = to_sampling_mode(c.mode, c.freq) else {
             return unsafe { invalid_argument(out_err, out_err_len, "unknown sampling mode") };
         };
         sine_components.push(SineComponent {
             freq,
-            option: *component_option,
+            option: c.option.into(),
         });
     }
-    let result = autd3_rs_modulation::fourier(&sine_components, option, config, &mut buffer.0);
+    let result =
+        autd3_rs_modulation::fourier(&sine_components, &option.into(), config, &mut buffer.0);
     unsafe { finish(result, out_err, out_err_len) }
 }
 
@@ -375,7 +372,12 @@ mod tests {
 
     #[test]
     fn sine_requires_a_sampling_config_and_uses_it() {
-        let option = autd3_modulation_sine_option_new(0xFF, 0x80, 0.0, false);
+        let option = Autd3SineOption {
+            amplitude: 0xFF,
+            offset: 0x80,
+            phase_rad: 0.0,
+            clamp: false,
+        };
         let buffer = autd3_modulation_buffer_new();
         let config = SamplingConfig::FREQ_40K.divide().get();
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
@@ -385,10 +387,7 @@ mod tests {
             autd3_modulation_sine(0, 200.0, option, config, buffer, std::ptr::null_mut(), 0)
         });
         assert_eq!(200, unsafe { &*buffer }.0.len());
-        unsafe {
-            autd3_modulation_sine_option_free(option);
-            autd3_modulation_buffer_free(buffer);
-        }
+        unsafe { autd3_modulation_buffer_free(buffer) };
     }
 
     #[test]

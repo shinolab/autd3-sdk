@@ -1,6 +1,5 @@
 use autd3_rs::commands::{Clear, SetPhaseCorrection, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::value::Phase;
 use autd3_rs::Client;
 use autd3_rs::udp::TransportOption;
 
@@ -13,10 +12,7 @@ async fn main() -> anyhow::Result<()> {
     let client = Client::open(&geometry, &option)?;
     client.send((Clear, Synchronize)).await?;
 
-    let phases: Vec<Vec<Phase>> = geometry
-        .iter()
-        .map(|dev| vec![Phase::ZERO; dev.num_transducers()])
-        .collect();
+    let phases = geometry.phase_buffer();
 
     client.send(SetPhaseCorrection { phases: &phases }).await?;
 

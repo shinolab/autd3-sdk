@@ -22,7 +22,7 @@ import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
 | `lost_timeout`        | `Duration`  | 100 ms  | この時間返信が無いデバイスを `Lost` とする                                                     |
 | `ack_timeout`         | `Duration`  | 10 ms   | 応答待ちのタイムアウト. 応答待ちの先頭のフレームの応答がこの時間揃わなければ, 送信中のフレームはすべて `Timeout` で失敗する ([Client](/autd3-sdk/api/basics/client/#応答待ちのタイムアウト) 参照) |
 | `send_buffer_bytes`         | `Option<NonZeroUsize>` | 8192 | ソケットの送信バッファの大きさ [B]. `None` で OS の既定のままにする |
-| `sync_on_open`        | `bool`      | `true`  | `false` なら open でデバイス間の同期を待たない (ファームウェア更新などの保守用. Rust のみ) |
+| `sync_on_open`        | `bool`      | `true`  | `false` なら open でデバイス間の同期を待たない (ファームウェア更新などの保守用) |
 
 基本的に `iface` 以外を変更することは推奨しない.
 生存確認は `TransportOption` では設定せず, ユーザーが `Client` の [`send_heartbeat()`](/autd3-sdk/api/basics/client/#生存確認) を呼んで送る.

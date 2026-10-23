@@ -237,7 +237,7 @@ def test_buffer_numpy_round_trip(buffer_type: type[pattern.PhaseBuffer] | type[p
     values = (np.arange(2 * 249) & 0xFF).astype(np.uint8).reshape(2, 249)
 
     buf = buffer_type.from_array(values)
-    assert buf.num_devices() == 2
+    assert len(buf) == 2
     assert int(buf[1][3]) == values[1, 3]
     out = buf.to_numpy()
     assert out.dtype == np.uint8
@@ -253,13 +253,13 @@ def test_buffer_numpy_round_trip(buffer_type: type[pattern.PhaseBuffer] | type[p
     np.testing.assert_array_equal(buf.to_numpy(), reversed_view)
 
     empty = buffer_type.from_array(np.zeros((0, 249), dtype=np.uint8))
-    assert empty.num_devices() == 0
+    assert len(empty) == 0
     assert empty.to_numpy().shape == (0, 249)
 
 
 @pytest.mark.parametrize("buffer_type", [pattern.PhaseBuffer, pattern.IntensityBuffer])
 def test_buffer_numpy_rejects_mismatch(buffer_type: type[pattern.PhaseBuffer] | type[pattern.IntensityBuffer]) -> None:
-    buf = buffer_type(2)
+    buf = buffer_type.from_array(np.zeros((2, 249), dtype=np.uint8))
     values = np.zeros((2, 249), dtype=np.uint8)
 
     with pytest.raises(TypeError, match="uint8"):

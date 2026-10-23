@@ -223,10 +223,9 @@ def test_geometry_helpers() -> None:
     assert geometry != Geometry([Autd3([0.0, 0.0, 0.0]), Autd3([Autd3.DEVICE_WIDTH, 0.0, 1.0])])
     assert devices[0] == geometry[0]
     assert devices[0] != geometry[1]
-    np.testing.assert_array_equal(devices[1][0], devices[1].position(0))
-    np.testing.assert_allclose(devices[1][1], [Autd3.DEVICE_WIDTH + Autd3.PITCH_MM, 0.0, 0.0])
+    np.testing.assert_allclose(devices[1].position(1), [Autd3.DEVICE_WIDTH + Autd3.PITCH_MM, 0.0, 0.0])
     with pytest.raises(IndexError):
-        devices[1][Autd3.NUM_TRANSDUCERS]
+        devices[1].position(Autd3.NUM_TRANSDUCERS)
     np.testing.assert_allclose(devices[1].to_local([Autd3.DEVICE_WIDTH + 1.0, 2.0, 3.0]), [1.0, 2.0, 3.0])
 
     rotated = Geometry([Autd3([10.0, 0.0, 0.0], [np.cos(np.pi / 4), 0.0, 0.0, np.sin(np.pi / 4)])])[0]
@@ -320,7 +319,7 @@ def test_modulation_buffer_numpy_round_trip() -> None:
     assert buf[0] == 0
 
     assert buf == modulation.ModulationBuffer.from_array(list(range(8)))
-    assert buf == modulation.ModulationBuffer.from_bytes(bytes(range(8)))
+    assert buf == modulation.ModulationBuffer.from_array(bytes(range(8)))
     assert buf != modulation.ModulationBuffer(8)
     assert buf != list(range(8))
 
@@ -395,7 +394,7 @@ def test_holo_batches_solve_one_problem_per_buffer() -> None:
             loose(solve)(geometry, problem, wavelength, option, single_phases, single_intensities)
             diff = (batched_phases.to_numpy().astype(np.int16) - single_phases.to_numpy().astype(np.int16)) & 0xFF
             assert np.all((diff <= 1) | (diff == 0xFF))
-            assert batched_intensities.num_devices() == 1
+            assert len(batched_intensities) == 1
         assert not np.array_equal(phases[0].to_numpy(), phases[1].to_numpy())
 
     phases = [geometry.phase_buffer() for _ in problems]
@@ -406,7 +405,7 @@ def test_holo_batches_solve_one_problem_per_buffer() -> None:
         holo.gs_batch(geometry, foci[:3], wavelength, holo.GsOption(), phases, intensities)
     with pytest.raises(holo.HoloError):
         holo.naive_batch(geometry, foci, wavelength, holo.NaiveOption(), [], [])
-    assert all(buffer.num_devices() == 1 for buffer in phases)
+    assert all(len(buffer) == 1 for buffer in phases)
     with pytest.raises(TypeError, match="Length"):
         holo.naive(geometry, foci, loose(8.5), holo.NaiveOption(), phases[0], intensities[0])
 

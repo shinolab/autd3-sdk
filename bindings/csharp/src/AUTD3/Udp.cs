@@ -1,35 +1,43 @@
 using System;
 using System.Runtime.InteropServices;
-using System.Threading;
 
 namespace AUTD3
 {
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct TransportOptionNative
+    {
+        public ulong OpenTimeoutNs;
+        public ulong LostTimeoutNs;
+        public ulong AckTimeoutNs;
+        public ulong SendBufferBytes;
+        public byte SyncOnOpen;
+    }
+
     internal static class TransportOptionDefaults
     {
         internal static readonly TimeSpan OpenTimeout;
         internal static readonly TimeSpan LostTimeout;
         internal static readonly TimeSpan AckTimeout;
         internal static readonly ulong? SendBufferBytes;
+        internal static readonly bool SyncOnOpen;
 
         static TransportOptionDefaults()
         {
-            var handle = TransportOption.NewHandle();
-            try
-            {
-                OpenTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_open_timeout);
-                LostTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_lost_timeout);
-                AckTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_ack_timeout);
-                SendBufferBytes = TransportOption.ReadSendBufferBytes(handle);
-            }
-            finally
-            {
-                NativeClient.autd3_transport_option_free(handle);
-            }
+            OptionNative.Apply("preset", NativeClient.autd3_transport_option_default(out var native));
+            OpenTimeout = OptionNative.FromNanos(native.OpenTimeoutNs);
+            LostTimeout = OptionNative.FromNanos(native.LostTimeoutNs);
+            AckTimeout = OptionNative.FromNanos(native.AckTimeoutNs);
+            SendBufferBytes = native.SendBufferBytes == 0 ? null : native.SendBufferBytes;
+            SyncOnOpen = native.SyncOnOpen != 0;
         }
     }
 
     public readonly struct TransportOption
     {
+        private const byte IfaceKindAuto = 0;
+        private const byte IfaceKindName = 1;
+        private const byte IfaceKindAddr = 2;
+
         public Interface Iface { get; init; }
 
         private readonly TimeSpan? _openTimeout;
@@ -52,87 +60,30 @@ namespace AUTD3
             }
         }
 
-        internal static IntPtr NewHandle()
-        {
-            var handle = NativeClient.autd3_transport_option_new();
-            if (handle == IntPtr.Zero)
-            {
-                throw new Autd3Exception("failed to create transport option");
-            }
-            return handle;
-        }
+        private readonly bool? _syncOnOpen;
+        public bool SyncOnOpen { get => _syncOnOpen ?? TransportOptionDefaults.SyncOnOpen; init => _syncOnOpen = value; }
 
-        internal IntPtr CreateHandle()
+        internal byte IfaceKind => Iface switch
         {
-            var handle = NewHandle();
-            try
-            {
-                OptionNative.Apply("iface", Iface switch
-                {
-                    { AddrValue: { } addr } => NativeClient.autd3_transport_option_set_iface_addr(handle, addr),
-                    _ => NativeClient.autd3_transport_option_set_iface(handle, Iface.NameValue),
-                });
-                OptionNative.SetRequiredDuration(handle, "openTimeout", OpenTimeout, NativeClient.autd3_transport_option_set_open_timeout);
-                OptionNative.SetRequiredDuration(handle, "lostTimeout", LostTimeout, NativeClient.autd3_transport_option_set_lost_timeout);
-                OptionNative.SetRequiredDuration(handle, "ackTimeout", AckTimeout, NativeClient.autd3_transport_option_set_ack_timeout);
-                OptionNative.Apply("sendBufferBytes", SendBufferBytes switch
-                {
-                    null => NativeClient.autd3_transport_option_set_send_buffer_bytes(handle, 0),
-                    { } bytes when bytes > 0 => NativeClient.autd3_transport_option_set_send_buffer_bytes(handle, bytes),
-                    _ => -1,
-                });
-            }
-            catch
-            {
-                NativeClient.autd3_transport_option_free(handle);
-                throw;
-            }
-            return handle;
-        }
-
-        internal static TransportOption FromHandle(IntPtr handle) => new TransportOption
-        {
-            Iface = ReadAddr(handle) is { } addr ? Interface.Addr(addr) : Interface.Auto,
-            OpenTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_open_timeout),
-            LostTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_lost_timeout),
-            AckTimeout = OptionNative.GetDuration(handle, NativeClient.autd3_transport_option_get_ack_timeout),
-            SendBufferBytes = ReadSendBufferBytes(handle),
+            { AddrValue: { } } => IfaceKindAddr,
+            { NameValue: { } } => IfaceKindName,
+            _ => IfaceKindAuto,
         };
 
-        internal static TransportOption Defaults()
-        {
-            var handle = NewHandle();
-            try
-            {
-                return FromHandle(handle);
-            }
-            finally
-            {
-                NativeClient.autd3_transport_option_free(handle);
-            }
-        }
+        internal string? IfaceValue => Iface.AddrValue ?? Iface.NameValue;
 
-        internal static ulong? ReadSendBufferBytes(IntPtr handle)
+        internal TransportOptionNative ToNative() => new TransportOptionNative
         {
-            OptionNative.Apply("sendBufferBytes", NativeClient.autd3_transport_option_get_send_buffer_bytes(handle, out var bytes));
-            return bytes == 0 ? null : bytes;
-        }
-
-        private static string? ReadAddr(IntPtr handle)
-        {
-            OptionNative.Apply("iface", NativeClient.autd3_transport_option_get_iface_addr(handle, out var addr));
-            if (addr == IntPtr.Zero)
+            OpenTimeoutNs = OptionNative.RequiredNanos("openTimeout", OpenTimeout),
+            LostTimeoutNs = OptionNative.RequiredNanos("lostTimeout", LostTimeout),
+            AckTimeoutNs = OptionNative.RequiredNanos("ackTimeout", AckTimeout),
+            SendBufferBytes = SendBufferBytes switch
             {
-                return null;
-            }
-            try
-            {
-                return Marshal.PtrToStringUTF8(addr);
-            }
-            finally
-            {
-                NativeClient.autd3_udp_free_string(addr);
-            }
-        }
+                null => 0,
+                { } bytes when bytes > 0 => bytes,
+                _ => throw OptionNative.OutOfRange("sendBufferBytes"),
+            },
+            SyncOnOpen = OptionNative.Flag(SyncOnOpen),
+        };
     }
 }

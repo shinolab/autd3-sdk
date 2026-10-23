@@ -124,7 +124,6 @@ def test_coordinates_and_rotations_are_float32() -> None:
     device = geometry[0]
     assert_float32(device.center(), (3,))
     assert_float32(device.position(0), (3,))
-    assert_float32(device[0], (3,))
     assert_float32(device.positions(), (Autd3.NUM_TRANSDUCERS, 3))
     assert_float32(device.rotation(), (4,))
     assert_float32(device.x_direction(), (3,))

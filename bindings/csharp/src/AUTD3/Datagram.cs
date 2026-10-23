@@ -9,12 +9,12 @@ namespace AUTD3
     public readonly struct Frame
     {
         internal Frames Frames { get; }
-        internal long Index { get; }
+        internal UIntPtr Index { get; }
 
-        internal Frame(Frames frames, long index)
+        internal Frame(Frames frames, int index)
         {
             Frames = frames;
-            Index = index;
+            Index = (UIntPtr)index;
         }
     }
 
@@ -35,33 +35,17 @@ namespace AUTD3
 
         public static Frames Encode(Geometry geometry, ICommand command)
         {
-            if (geometry == null)
-            {
-                throw new ArgumentNullException(nameof(geometry));
-            }
-            if (command == null)
-            {
-                throw new ArgumentNullException(nameof(command));
-            }
-            var op = CreateOp(geometry, command);
-            var err = new byte[NativeAbi.ErrorBufferLength];
-            IntPtr handle;
-            int code;
+            var frames = new Frames();
             try
             {
-                handle = NativeClient.autd3_frames_encode(geometry.Handle, op, out code, err, (UIntPtr)err.Length);
+                frames.EncodeInto(geometry, command);
             }
             catch
             {
-                NativeClient.autd3_op_free(op);
+                frames.Dispose();
                 throw;
             }
-            if (handle == IntPtr.Zero)
-            {
-                NativeClient.autd3_op_free(op);
-                throw Autd3Exception.FromNative(code, err);
-            }
-            return new Frames(handle);
+            return frames;
         }
 
         public void EncodeInto(Geometry geometry, ICommand command)
@@ -122,7 +106,7 @@ namespace AUTD3
         public IEnumerator<Frame> GetEnumerator()
         {
             var count = Length;
-            for (long i = 0; i < count; i++)
+            for (var i = 0; i < count; i++)
             {
                 yield return new Frame(this, i);
             }

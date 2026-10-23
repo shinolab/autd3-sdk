@@ -137,8 +137,6 @@ def test_a_negative_device_index_is_an_index_error() -> None:
     geometry = one_device()
     with pytest.raises(IndexError):
         geometry[-1]
-    with pytest.raises(IndexError):
-        geometry[0][-1]
 
 
 def test_rust_required_fields_cannot_be_omitted() -> None:

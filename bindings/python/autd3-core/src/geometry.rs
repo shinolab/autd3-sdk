@@ -267,30 +267,25 @@ impl Geometry {
     fn phase_buffer<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         pattern_module(py, "phase_buffer")?
             .getattr("PhaseBuffer")?
-            .call1((self.0.num_devices(),))
+            .call_method1("_with_num_devices", (self.0.num_devices(),))
     }
 
     fn intensity_buffer<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         pattern_module(py, "intensity_buffer")?
             .getattr("IntensityBuffer")?
-            .call1((self.0.num_devices(),))
+            .call_method1("_with_num_devices", (self.0.num_devices(),))
     }
 
     fn output_mask_buffer(&self) -> Vec<Vec<bool>> {
         self.0.output_mask_buffer()
     }
 
-    fn device(&self, index: usize) -> PyResult<Device> {
-        if index >= self.0.num_devices() {
-            return Err(PyIndexError::new_err("device index out of range"));
-        }
-        Ok(Device(self.0[index].clone()))
-    }
-
     fn __getitem__(&self, index: isize) -> PyResult<Device> {
-        let index = usize::try_from(index)
-            .map_err(|_| PyIndexError::new_err("device index out of range"))?;
-        self.device(index)
+        usize::try_from(index)
+            .ok()
+            .filter(|&index| index < self.0.num_devices())
+            .map(|index| Device(self.0[index].clone()))
+            .ok_or_else(|| PyIndexError::new_err("device index out of range"))
     }
 
     fn __len__(&self) -> usize {
@@ -345,16 +340,6 @@ impl Device {
 
     fn num_transducers(&self) -> usize {
         self.0.num_transducers()
-    }
-
-    fn __len__(&self) -> usize {
-        self.0.num_transducers()
-    }
-
-    fn __getitem__<'py>(&self, py: Python<'py>, index: isize) -> PyResult<Bound<'py, PyAny>> {
-        let index = usize::try_from(index)
-            .map_err(|_| PyIndexError::new_err("transducer index out of range"))?;
-        self.position(py, index)
     }
 
     fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {

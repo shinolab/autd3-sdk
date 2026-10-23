@@ -61,8 +61,8 @@ macro_rules! buffer_class {
 
         #[pymethods]
         impl $buffer {
-            #[new]
-            fn new(num_devices: usize) -> Self {
+            #[staticmethod]
+            fn _with_num_devices(num_devices: usize) -> Self {
                 Self::from_vec(vec![vec![$init; Autd3::NUM_TRANSDUCERS]; num_devices])
             }
 
@@ -120,10 +120,6 @@ macro_rules! buffer_class {
                         dst.copy_from_slice(src.as_bytes());
                     }
                 })
-            }
-
-            fn num_devices(&self) -> PyResult<usize> {
-                Ok(self.read()?.len())
             }
 
             fn __len__(&self) -> PyResult<usize> {
