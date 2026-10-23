@@ -47,7 +47,7 @@ mod tests {
     use rstest::rstest;
 
     use super::WritePatternFusedPayload;
-    use crate::fpga::TransitionMode;
+    use crate::fpga::TransitionModeKind;
     use crate::fpga_params::{ADDR_PATTERN_REQ_RD_BANK, CtlFlags, EmissionType, NUM_TRANSDUCERS};
     use crate::proto::Error;
     use crate::test_utils::builders::{
@@ -63,12 +63,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case(0, TransitionMode::Immediate)]
-    #[case(1, TransitionMode::Immediate)]
-    #[case(1, TransitionMode::Ext)]
+    #[case(0, TransitionModeKind::Immediate)]
+    #[case(1, TransitionModeKind::Immediate)]
+    #[case(1, TransitionModeKind::Ext)]
     fn the_fused_frame_leaves_the_fpga_as_write_config_activate_does(
         #[case] bank: u8,
-        #[case] mode: TransitionMode,
+        #[case] mode: TransitionModeKind,
     ) {
         let (phases, intensities) = raw_pattern();
 
@@ -103,20 +103,21 @@ mod tests {
 
         h.deliver(&write_pattern_fused(
             invalid_bank(),
-            TransitionMode::Immediate,
+            TransitionModeKind::Immediate,
             0,
             &phases,
             &intensities,
         ));
         assert_eq!(h.status(), Error::InvalidPayload);
 
-        let mut short = write_pattern_fused(0, TransitionMode::Immediate, 0, &phases, &intensities);
+        let mut short =
+            write_pattern_fused(0, TransitionModeKind::Immediate, 0, &phases, &intensities);
         short.set_len(size_of::<WritePatternFusedPayload>() + 2 * NUM_TRANSDUCERS - 1);
         h.deliver(&short);
         assert_eq!(h.status(), Error::InvalidPayload);
 
         let mut unknown_mode =
-            write_pattern_fused(0, TransitionMode::Immediate, 0, &phases, &intensities);
+            write_pattern_fused(0, TransitionModeKind::Immediate, 0, &phases, &intensities);
         unknown_mode.set_payload_byte(1, 0x03);
         h.deliver(&unknown_mode);
         assert_eq!(h.status(), Error::InvalidPayload);
@@ -125,11 +126,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case(TransitionMode::SyncIdx, 0)]
-    #[case(TransitionMode::SysTime, 4_000_000_000)]
-    #[case(TransitionMode::Gpio, 1)]
+    #[case(TransitionModeKind::SyncIdx, 0)]
+    #[case(TransitionModeKind::SysTime, 4_000_000_000)]
+    #[case(TransitionModeKind::Gpio, 1)]
     fn a_transition_needing_a_finite_loop_touches_nothing(
-        #[case] mode: TransitionMode,
+        #[case] mode: TransitionModeKind,
         #[case] value: u64,
     ) {
         let (phases, intensities) = raw_pattern();
@@ -150,7 +151,7 @@ mod tests {
 
         h.deliver(&write_pattern_fused(
             1,
-            TransitionMode::Immediate,
+            TransitionModeKind::Immediate,
             0,
             &phases,
             &intensities,

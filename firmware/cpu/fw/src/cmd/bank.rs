@@ -1,5 +1,5 @@
 use crate::cmd::cpu_config::CpuConfig;
-use crate::fpga::{self, TransitionMode, transition_register_value, validate_transition_mode};
+use crate::fpga::{self, TransitionModeKind, transition_register_value, validate_transition_mode};
 use crate::fpga_params::{
     ADDR_MOD_REP0, ADDR_MOD_REQ_RD_BANK, ADDR_MOD_TRANSITION_MODE, ADDR_MOD_TRANSITION_VALUE_0,
     ADDR_PATTERN_REP0, ADDR_PATTERN_REQ_RD_BANK, ADDR_PATTERN_TRANSITION_MODE,
@@ -36,7 +36,7 @@ pub(crate) fn activate_bank<P: Port>(
     port: &mut P,
     regs: &BankRegs,
     bank: u8,
-    mode: TransitionMode,
+    mode: TransitionModeKind,
     value: u64,
     config: &CpuConfig,
 ) -> Result<(), Error> {
@@ -64,7 +64,7 @@ mod tests {
 
     use crate::cmd::activate_mod_bank::ActivateModBankPayload;
     use crate::cmd::activate_pattern_bank::ActivatePatternBankPayload;
-    use crate::fpga::TransitionMode;
+    use crate::fpga::TransitionModeKind;
     use crate::fpga_params::{ADDR_MOD_REQ_RD_BANK, ADDR_PATTERN_REQ_RD_BANK};
     use crate::proto::Error;
     use crate::test_utils::builders::{activate_mod_bank, activate_pattern_bank, config_mod_rep};
@@ -76,7 +76,7 @@ mod tests {
         h.deliver(&config_mod_rep(1, 10, 100, 4));
         h.port.sys_time = None;
 
-        h.deliver(&activate_mod_bank(1, TransitionMode::SysTime, u64::MAX));
+        h.deliver(&activate_mod_bank(1, TransitionModeKind::SysTime, u64::MAX));
         assert_eq!(h.status(), Error::MissTransitionTime);
         assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 0);
     }
@@ -85,15 +85,15 @@ mod tests {
     fn activate_bank_rejects_unknown_transition_mode_as_invalid_payload() {
         let mut h = Harness::new();
         let unknown = 0x03;
-        assert_eq!(TransitionMode::from_u8(unknown), None);
+        assert_eq!(TransitionModeKind::from_u8(unknown), None);
 
-        let mut frame = activate_mod_bank(1, TransitionMode::Ext, 0);
+        let mut frame = activate_mod_bank(1, TransitionModeKind::Ext, 0);
         frame.set_payload_byte(offset_of!(ActivateModBankPayload, transition_mode), unknown);
         h.deliver(&frame);
         assert_eq!(h.status(), Error::InvalidPayload);
         assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 0);
 
-        let mut frame = activate_pattern_bank(1, TransitionMode::Immediate, 0);
+        let mut frame = activate_pattern_bank(1, TransitionModeKind::Immediate, 0);
         frame.set_payload_byte(
             offset_of!(ActivatePatternBankPayload, transition_mode),
             unknown,

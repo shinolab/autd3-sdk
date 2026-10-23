@@ -27,8 +27,8 @@ use autd3_rs::commands::{
 use autd3_rs::params::NUM_FOCI_MAX;
 use autd3_rs::udp::StateChecker;
 use autd3_rs::value::{
-    ControlPoint, ControlPoints, GpioIn, Intensity, LoopBehavior, ModulationBank, PatternBank,
-    Phase, PulseWidth, SamplingConfig, SysTime, TransitionMode,
+    ControlPoint, ControlPoints, Intensity, LoopBehavior, ModulationBank, PatternBank, Phase,
+    PulseWidth, SamplingConfig, SysTime, TransitionMode,
 };
 use autd3_rs::{
     BusStats, Client, DeviceMask, DeviceState, Error, ExecAt, FirmwareVersion, FpgaState, Frames,
@@ -56,16 +56,6 @@ fn to_modulation_bank(v: u8) -> Option<ModulationBank> {
     }
 }
 
-fn to_gpio_in(v: u8) -> Option<GpioIn> {
-    match v {
-        0 => Some(GpioIn::I0),
-        1 => Some(GpioIn::I1),
-        2 => Some(GpioIn::I2),
-        3 => Some(GpioIn::I3),
-        _ => None,
-    }
-}
-
 fn to_telemetry(telemetry: Telemetry) -> Autd3Telemetry {
     Autd3Telemetry {
         fifo_drop: telemetry.fifo_drop,
@@ -78,20 +68,6 @@ fn to_telemetry(telemetry: Telemetry) -> Autd3Telemetry {
         boot_failure: telemetry.boot_failure,
         cpu_watchdog: telemetry.cpu_watchdog,
         exec_late: telemetry.exec_late,
-    }
-}
-
-pub(crate) fn to_transition_mode(mode: u8, value: u64) -> Option<TransitionMode> {
-    match mode {
-        0x00 => Some(TransitionMode::SyncIdx),
-        0x01 => Some(TransitionMode::SysTime {
-            time: SysTime::from_nanos(value),
-        }),
-        #[allow(clippy::cast_possible_truncation)]
-        0x02 => to_gpio_in(value as u8).map(TransitionMode::Gpio),
-        0xF0 => Some(TransitionMode::Ext),
-        0xFF => Some(TransitionMode::Immediate),
-        _ => None,
     }
 }
 
@@ -482,7 +458,7 @@ pub unsafe extern "C" fn autd3_op_pattern(
     };
     let (Some(bank), Some(transition_mode)) = (
         to_pattern_bank(bank),
-        to_transition_mode(transition_mode, transition_value),
+        TransitionMode::from_parts(transition_mode, transition_value),
     ) else {
         return std::ptr::null_mut();
     };
@@ -513,7 +489,7 @@ pub unsafe extern "C" fn autd3_op_modulation(
     };
     let (Some(bank), Some(transition_mode)) = (
         to_modulation_bank(bank),
-        to_transition_mode(transition_mode, transition_value),
+        TransitionMode::from_parts(transition_mode, transition_value),
     ) else {
         return std::ptr::null_mut();
     };
@@ -664,7 +640,7 @@ pub extern "C" fn autd3_op_activate_pattern_bank(
 ) -> *mut OwnedCommand {
     let (Some(bank), Some(transition_mode)) = (
         to_pattern_bank(bank),
-        to_transition_mode(transition_mode, transition_value),
+        TransitionMode::from_parts(transition_mode, transition_value),
     ) else {
         return std::ptr::null_mut();
     };
@@ -725,7 +701,7 @@ pub extern "C" fn autd3_op_activate_modulation_bank(
 ) -> *mut OwnedCommand {
     let (Some(bank), Some(transition_mode)) = (
         to_modulation_bank(bank),
-        to_transition_mode(transition_mode, transition_value),
+        TransitionMode::from_parts(transition_mode, transition_value),
     ) else {
         return std::ptr::null_mut();
     };
@@ -1226,7 +1202,7 @@ pub unsafe extern "C" fn autd3_op_foci_stm(
     };
     let (Some(bank), Some(transition_mode)) = (
         to_pattern_bank(bank),
-        to_transition_mode(transition_mode, transition_value),
+        TransitionMode::from_parts(transition_mode, transition_value),
     ) else {
         return std::ptr::null_mut();
     };
@@ -1265,7 +1241,7 @@ pub unsafe extern "C" fn autd3_op_pattern_stm(
     let (Some(bank), Some(phase_depth), Some(transition_mode)) = (
         to_pattern_bank(bank),
         PhaseDepth::from_u8(phase_depth),
-        to_transition_mode(transition_mode, transition_value),
+        TransitionMode::from_parts(transition_mode, transition_value),
     ) else {
         return std::ptr::null_mut();
     };
@@ -2889,10 +2865,9 @@ mod tests {
     fn unknown_enum_discriminants_are_rejected() {
         assert!(to_pattern_bank(2).is_none());
         assert!(to_modulation_bank(2).is_none());
-        assert!(to_gpio_in(4).is_none());
         assert!(PhaseDepth::from_u8(0).is_none());
         assert!(PhaseDepth::from_u8(2).is_none());
-        assert!(to_transition_mode(0x03, 0).is_none());
+        assert!(TransitionMode::from_parts(0x03, 0).is_none());
         assert!(to_gpio_out(&Autd3GpioOut { kind: 14, value: 0 }).is_none());
         assert!(to_exec_at(Autd3ExecAt { kind: 3, ns: 0 }).is_none());
     }

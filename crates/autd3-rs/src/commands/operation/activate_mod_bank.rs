@@ -21,7 +21,7 @@ impl Operation for ActivateModulationBank {
         encode_header_only(
             out,
             Cmd::ActivateModulationBank,
-            &ActivateModBankPayload::new(self.bank, self.transition_mode.as_wire()),
+            &ActivateModBankPayload::new(self.bank, self.transition_mode),
         );
         Ok(())
     }

@@ -22,7 +22,7 @@ mod tests {
 
     use crate::cmd::cpu_config::CpuConfig;
     use crate::cmd::silencer::SilencerFlags;
-    use crate::fpga::TransitionMode;
+    use crate::fpga::TransitionModeKind;
     use crate::fpga_params::{
         ADDR_MOD_FREQ_DIV0, ADDR_MOD_REQ_RD_BANK, ADDR_PATTERN_FREQ_DIV0,
         ADDR_SILENCER_COMPLETION_STEPS_INTENSITY, ADDR_SILENCER_COMPLETION_STEPS_PHASE,
@@ -91,7 +91,7 @@ mod tests {
         assert_eq!(h.status(), Error::None);
         h.deliver(&config_mod(1, 50, 100));
         assert_eq!(h.status(), Error::None);
-        h.deliver(&activate_mod_bank(1, TransitionMode::Immediate, 0));
+        h.deliver(&activate_mod_bank(1, TransitionModeKind::Immediate, 0));
         assert_eq!(h.status(), Error::None);
 
         h.deliver(&Frame::new(Cmd::Clear));

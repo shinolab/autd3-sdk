@@ -27,7 +27,7 @@ mod write_pattern_fused;
 mod write_pattern_phase;
 mod write_pattern_raw;
 
-pub use crate::fpga_params::{EmissionType, GpioOutType, SilencerFlags, TransitionMode};
+pub use crate::fpga_params::{EmissionType, GpioOutType, SilencerFlags, TransitionModeKind};
 pub use activate_mod_bank::ActivateModBankPayload;
 pub use activate_pattern_bank::ActivatePatternBankPayload;
 pub use build_error::PayloadBuildError;

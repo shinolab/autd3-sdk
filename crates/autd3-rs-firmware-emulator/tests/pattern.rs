@@ -9,10 +9,10 @@ use core::num::NonZeroU16;
 use autd3_cpu_wire::PatternBank;
 use autd3_cpu_wire::fpga_params::REP_INFINITE;
 use autd3_cpu_wire::payload::{
-    ConfigPatternPayload, EmissionType, PhaseDepth, TransitionMode, WritePatternFusedPayload,
+    ConfigPatternPayload, EmissionType, PhaseDepth, TransitionModeKind, WritePatternFusedPayload,
     WritePatternPhasePayload, WritePatternRawPayload,
 };
-use autd3_cpu_wire::value::Transition;
+use autd3_cpu_wire::value::TransitionMode;
 use autd3_rs_core::protocol::{Cmd, DeviceErrorCode};
 use autd3_rs_core::value::{Intensity, Phase};
 use autd3_rs_firmware_emulator::Device;
@@ -69,7 +69,7 @@ fn raw_pattern_round_trips_to_emissions() {
     );
 
     let config = config_pattern(BANK, EmissionType::Raw, 1, 0, 0, REP_INFINITE);
-    let change = activate_pattern_bank(BANK, TransitionMode::Immediate);
+    let change = activate_pattern_bank(BANK, TransitionModeKind::Immediate);
 
     let mut device = Device::new(NUM_TRANSDUCERS);
     assert_eq!(
@@ -120,7 +120,7 @@ fn a_fused_pattern_leaves_the_fpga_as_write_config_activate_does() {
         ),
         (
             Cmd::ActivatePatternBank,
-            activate_pattern_bank(BANK, TransitionMode::Immediate),
+            activate_pattern_bank(BANK, TransitionModeKind::Immediate),
         ),
     ] {
         assert_eq!(
@@ -129,7 +129,7 @@ fn a_fused_pattern_leaves_the_fpga_as_write_config_activate_does() {
         );
     }
 
-    let mut fused_payload = WritePatternFusedPayload::new(BANK, Transition::Immediate)
+    let mut fused_payload = WritePatternFusedPayload::new(BANK, TransitionMode::Immediate)
         .as_bytes()
         .to_vec();
     fused_payload.extend(interleave(&phases, &intensities));
@@ -157,7 +157,7 @@ fn a_fused_pattern_leaves_the_fpga_as_write_config_activate_does() {
 
 fn send_phase_pattern(write: &[u8]) -> Device {
     let config = config_pattern(BANK, EmissionType::Raw, 4, 0, 0, 0);
-    let change = activate_pattern_bank(BANK, TransitionMode::SyncIdx);
+    let change = activate_pattern_bank(BANK, TransitionModeKind::SyncIdx);
     let mut device = Device::new(NUM_TRANSDUCERS);
     assert_eq!(
         device.send(&frame(Cmd::WritePatternPhase, write)).status,

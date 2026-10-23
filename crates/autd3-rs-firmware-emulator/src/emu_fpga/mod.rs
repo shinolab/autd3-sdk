@@ -78,7 +78,7 @@ const PATTERN_CONFIG_REGS: [u16; 6] = [
 const SILENCER_REGS: core::ops::RangeInclusive<usize> =
     fw::ADDR_SILENCER_FLAG as usize..=fw::ADDR_SILENCER_COMPLETION_STEPS_PHASE as usize;
 const SILENCER_STRICT_MODE: u16 = fw::SilencerFlags::STRICT_MODE.bits() as u16;
-const TRANSITION_MODE_EXT: u16 = fw::TransitionMode::Ext.as_u8() as u16;
+const TRANSITION_MODE_EXT: u16 = fw::TransitionModeKind::Ext.as_u8() as u16;
 
 struct SwapchainRegs {
     req_rd_bank: u16,
@@ -852,7 +852,7 @@ mod tests {
     }
 
     const INF: u16 = fw::REP_INFINITE;
-    const IMMEDIATE: u8 = fw::TransitionMode::Immediate.as_u8();
+    const IMMEDIATE: u8 = fw::TransitionModeKind::Immediate.as_u8();
 
     #[test]
     fn functions_byte_has_strict_silencer_guard_bit() {

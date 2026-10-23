@@ -9,7 +9,7 @@ mod pattern;
 use autd3_cpu_wire::fpga_params::FpgaStateFlags;
 use autd3_cpu_wire::fpga_params::REP_INFINITE;
 use autd3_cpu_wire::payload::{
-    EmissionType, TransitionMode, WriteModPayload, WritePatternRawPayload,
+    EmissionType, TransitionModeKind, WriteModPayload, WritePatternRawPayload,
 };
 use autd3_cpu_wire::{ModulationBank, PatternBank};
 use autd3_rs_core::protocol::Cmd;
@@ -88,7 +88,7 @@ fn modulation_bank_switch_reflects_in_state() {
 
     device.send(&frame(
         Cmd::ActivateModulationBank,
-        &activate_modulation_bank(ModulationBank::B1, TransitionMode::Immediate, 0),
+        &activate_modulation_bank(ModulationBank::B1, TransitionModeKind::Immediate, 0),
     ));
     assert_eq!(1, device.fpga().current_mod_bank());
     assert_eq!(BIT_MOD_BANK, read_state(&mut device) & BIT_MOD_BANK);
@@ -110,7 +110,7 @@ fn pattern_bank_switch_reflects_in_state() {
 
     device.send(&frame(
         Cmd::ActivatePatternBank,
-        &activate_pattern_bank(PatternBank::B1, TransitionMode::Immediate),
+        &activate_pattern_bank(PatternBank::B1, TransitionModeKind::Immediate),
     ));
     assert_eq!(1, device.fpga().current_pattern_bank());
     let state = read_state(&mut device);
@@ -127,7 +127,7 @@ fn multi_index_pattern_reports_stm_mode() {
     ));
     device.send(&frame(
         Cmd::ActivatePatternBank,
-        &activate_pattern_bank(PatternBank::B0, TransitionMode::Immediate),
+        &activate_pattern_bank(PatternBank::B0, TransitionModeKind::Immediate),
     ));
 
     assert!(!device.fpga().is_pattern_mode());

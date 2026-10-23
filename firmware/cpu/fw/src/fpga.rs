@@ -22,7 +22,7 @@ use crate::proto::{Error, OUTPUT_MASK_WORDS};
 
 pub const FPGA_PAGE_WORDS: u32 = 16384;
 
-pub use autd3_cpu_wire::payload::{EmissionType, TransitionMode};
+pub use autd3_cpu_wire::payload::{EmissionType, TransitionModeKind};
 
 #[must_use]
 pub const fn sys_time_ticks(ns: u64) -> u64 {
@@ -30,8 +30,11 @@ pub const fn sys_time_ticks(ns: u64) -> u64 {
 }
 
 #[must_use]
-pub fn transition_register_value(transition_mode: TransitionMode, transition_value: u64) -> u64 {
-    if transition_mode == TransitionMode::SysTime {
+pub fn transition_register_value(
+    transition_mode: TransitionModeKind,
+    transition_value: u64,
+) -> u64 {
+    if transition_mode == TransitionModeKind::SysTime {
         sys_time_ticks(transition_value)
     } else {
         transition_value
@@ -144,25 +147,25 @@ pub fn write_u64<P: Port>(port: &mut P, addr: u16, value: u64) {
 pub fn validate_transition_mode<P: Port>(
     port: &mut P,
     rep: u16,
-    transition_mode: TransitionMode,
+    transition_mode: TransitionModeKind,
     transition_value: u64,
     margin_ns: u64,
 ) -> Result<(), Error> {
     let loop_compatible = if rep == REP_INFINITE {
         matches!(
             transition_mode,
-            TransitionMode::Immediate | TransitionMode::Ext
+            TransitionModeKind::Immediate | TransitionModeKind::Ext
         )
     } else {
         matches!(
             transition_mode,
-            TransitionMode::SyncIdx | TransitionMode::SysTime | TransitionMode::Gpio
+            TransitionModeKind::SyncIdx | TransitionModeKind::SysTime | TransitionModeKind::Gpio
         )
     };
     if !loop_compatible {
         return Err(Error::InvalidTransitionMode);
     }
-    if transition_mode == TransitionMode::SysTime
+    if transition_mode == TransitionModeKind::SysTime
         && port
             .sys_time()
             .is_none_or(|now| transition_value < now + margin_ns)
@@ -263,7 +266,7 @@ fn init_mod<P: Port>(port: &mut P) {
     write_ctl(
         port,
         ADDR_MOD_TRANSITION_MODE,
-        TransitionMode::SyncIdx as u16,
+        TransitionModeKind::SyncIdx as u16,
     );
     write_u64(port, ADDR_MOD_TRANSITION_VALUE_0, 0);
     write_ctl(port, ADDR_MOD_REQ_RD_BANK, 0);
@@ -279,7 +282,7 @@ fn init_pattern<P: Port>(port: &mut P) {
     write_ctl(
         port,
         ADDR_PATTERN_TRANSITION_MODE,
-        TransitionMode::SyncIdx as u16,
+        TransitionModeKind::SyncIdx as u16,
     );
     write_u64(port, ADDR_PATTERN_TRANSITION_VALUE_0, 0);
     write_ctl(port, ADDR_PATTERN_REQ_RD_BANK, 0);

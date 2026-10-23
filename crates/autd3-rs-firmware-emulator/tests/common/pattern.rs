@@ -2,7 +2,7 @@ use core::num::NonZeroU8;
 
 use autd3_cpu_wire::PatternBank;
 use autd3_cpu_wire::payload::{
-    ActivatePatternBankPayload, ConfigPatternPayload, EmissionType, TransitionMode,
+    ActivatePatternBankPayload, ConfigPatternPayload, EmissionType, TransitionModeKind,
 };
 use zerocopy::IntoBytes;
 use zerocopy::little_endian::{U16, U32, U64};
@@ -31,7 +31,7 @@ pub(crate) fn config_pattern(
     .to_vec()
 }
 
-pub(crate) fn activate_pattern_bank(bank: PatternBank, mode: TransitionMode) -> Vec<u8> {
+pub(crate) fn activate_pattern_bank(bank: PatternBank, mode: TransitionModeKind) -> Vec<u8> {
     ActivatePatternBankPayload {
         bank,
         transition_mode: mode,
