@@ -6,7 +6,7 @@ mod modulation;
 
 use autd3_cpu_wire::ModulationBank;
 use autd3_cpu_wire::fpga_params::REP_INFINITE;
-use autd3_cpu_wire::payload::TransitionMode;
+use autd3_cpu_wire::payload::TransitionModeKind;
 use autd3_rs_core::protocol::{Cmd, DeviceErrorCode};
 use autd3_rs_firmware_emulator::Device;
 
@@ -46,7 +46,7 @@ fn config_takes_effect_only_at_the_bank_activation_latch() {
         device
             .send(&frame(
                 Cmd::ActivateModulationBank,
-                &activate_modulation_bank(BANK, TransitionMode::Immediate, 0)
+                &activate_modulation_bank(BANK, TransitionModeKind::Immediate, 0)
             ))
             .status,
         DeviceErrorCode::None

@@ -46,7 +46,7 @@ bitflags::bitflags! {
 }
 
 crate::wire_enum_u8! {
-    pub enum TransitionMode {
+    pub enum TransitionModeKind {
         SyncIdx = 0x0,
         SysTime = 0x1,
         Gpio = 0x2,

@@ -24,7 +24,7 @@ use crate::cmd::write_mod::WriteModPayload;
 use crate::cmd::write_pattern_fused::WritePatternFusedPayload;
 use crate::cmd::write_pattern_phase::WritePatternPhasePayload;
 use crate::cmd::write_pattern_raw::WritePatternRawPayload;
-use crate::fpga::{REP_INFINITE, TransitionMode};
+use crate::fpga::{REP_INFINITE, TransitionModeKind};
 use crate::fpga_params::NUM_BANKS;
 use crate::proto::Cmd;
 use crate::test_utils::mock::{Frame, Harness};
@@ -101,7 +101,7 @@ pub(crate) fn write_pattern_raw_multi(bank: u8, index: u16, slots: &[(&[u8], &[u
 
 pub(crate) fn write_pattern_fused(
     bank: u8,
-    transition_mode: TransitionMode,
+    transition_mode: TransitionModeKind,
     transition_value: u64,
     phases: &[u8],
     intensities: &[u8],
@@ -216,7 +216,7 @@ pub(crate) fn config_pattern_rep(
 
 pub(crate) fn activate_pattern_bank(
     bank: u8,
-    transition_mode: TransitionMode,
+    transition_mode: TransitionModeKind,
     transition_value: u64,
 ) -> Frame {
     let p = ActivatePatternBankPayload {
@@ -231,7 +231,7 @@ pub(crate) fn activate_pattern_bank(
 
 pub(crate) fn activate_mod_bank(
     bank: u8,
-    transition_mode: TransitionMode,
+    transition_mode: TransitionModeKind,
     transition_value: u64,
 ) -> Frame {
     let p = ActivateModBankPayload {

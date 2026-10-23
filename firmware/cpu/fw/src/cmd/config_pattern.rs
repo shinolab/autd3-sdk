@@ -45,7 +45,7 @@ pub(crate) fn write<P: Port>(port: &mut P, cfg: &ConfigPatternPayload) {
 
 #[cfg(all(test, not(loom)))]
 mod tests {
-    use crate::fpga::{REP_INFINITE, TransitionMode};
+    use crate::fpga::{REP_INFINITE, TransitionModeKind};
     use crate::fpga_params::{
         ADDR_PATTERN_CYCLE0, ADDR_PATTERN_FREQ_DIV0, ADDR_PATTERN_MODE0, ADDR_PATTERN_NUM_FOCI0,
         ADDR_PATTERN_REP0, ADDR_PATTERN_REQ_RD_BANK, ADDR_PATTERN_SOUND_SPEED0,
@@ -118,7 +118,7 @@ mod tests {
         assert_eq!(h.ctl(ADDR_PATTERN_REP0), REP_INFINITE);
         assert_eq!(
             h.ctl(ADDR_PATTERN_TRANSITION_MODE),
-            TransitionMode::SyncIdx as u16
+            TransitionModeKind::SyncIdx as u16
         );
         assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 0);
         assert_eq!(h.latch_count(CtlFlags::PATTERN_SET), latches_at_boot);

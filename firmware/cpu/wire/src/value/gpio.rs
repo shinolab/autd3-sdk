@@ -13,6 +13,17 @@ pub enum GpioIn {
 
 impl GpioIn {
     #[must_use]
+    pub const fn from_u8(value: u8) -> Option<Self> {
+        match value {
+            0 => Some(GpioIn::I0),
+            1 => Some(GpioIn::I1),
+            2 => Some(GpioIn::I2),
+            3 => Some(GpioIn::I3),
+            _ => None,
+        }
+    }
+
+    #[must_use]
     pub const fn as_u8(self) -> u8 {
         self as u8
     }
@@ -72,6 +83,14 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
+
+    #[rstest]
+    #[case(0, Some(GpioIn::I0))]
+    #[case(3, Some(GpioIn::I3))]
+    #[case(4, None)]
+    fn a_gpio_in_is_parsed_from_its_pin_number(#[case] value: u8, #[case] pin: Option<GpioIn>) {
+        assert_eq!(GpioIn::from_u8(value), pin);
+    }
 
     const fn tagged(tag: GpioOutType, value: u64) -> u64 {
         ((tag.as_u8() as u64) << 56) | value

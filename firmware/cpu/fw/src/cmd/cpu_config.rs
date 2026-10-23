@@ -53,7 +53,7 @@ mod tests {
 
     use super::{CpuConfig, SetCpuConfigPayload};
 
-    use crate::fpga::TransitionMode;
+    use crate::fpga::TransitionModeKind;
     use crate::fpga_params::{ADDR_CTL_FLAG, ADDR_MOD_REQ_RD_BANK, CtlFlags};
     use crate::proto::{Cmd, Error};
     use crate::test_utils::builders::{activate_mod_bank, config_mod_rep, set_cpu_config};
@@ -78,7 +78,7 @@ mod tests {
 
         h.deliver(&activate_mod_bank(
             1,
-            TransitionMode::SysTime,
+            TransitionModeKind::SysTime,
             1_000_000_000 + 999_999,
         ));
         assert_eq!(h.status(), Error::MissTransitionTime);
@@ -86,7 +86,7 @@ mod tests {
 
         h.deliver(&activate_mod_bank(
             1,
-            TransitionMode::SysTime,
+            TransitionModeKind::SysTime,
             1_000_000_000 + 1_000_000,
         ));
         assert_eq!(h.status(), Error::None);
@@ -104,12 +104,16 @@ mod tests {
         }));
         assert_eq!(h.status(), Error::None);
 
-        h.deliver(&activate_mod_bank(1, TransitionMode::SysTime, 999_999_999));
+        h.deliver(&activate_mod_bank(
+            1,
+            TransitionModeKind::SysTime,
+            999_999_999,
+        ));
         assert_eq!(h.status(), Error::MissTransitionTime);
 
         h.deliver(&activate_mod_bank(
             1,
-            TransitionMode::SysTime,
+            TransitionModeKind::SysTime,
             1_000_000_000,
         ));
         assert_eq!(h.status(), Error::None);

@@ -1,10 +1,10 @@
 use crate::fw;
 use crate::fw::{FPGA_CLK_FREQ_HZ, NUM_BANKS, REP_INFINITE};
 
-const MODE_SYNC_IDX: u8 = fw::TransitionMode::SyncIdx.as_u8();
-const MODE_SYS_TIME: u8 = fw::TransitionMode::SysTime.as_u8();
-const MODE_GPIO: u8 = fw::TransitionMode::Gpio.as_u8();
-const MODE_EXT: u8 = fw::TransitionMode::Ext.as_u8();
+const MODE_SYNC_IDX: u8 = fw::TransitionModeKind::SyncIdx.as_u8();
+const MODE_SYS_TIME: u8 = fw::TransitionModeKind::SysTime.as_u8();
+const MODE_GPIO: u8 = fw::TransitionModeKind::Gpio.as_u8();
+const MODE_EXT: u8 = fw::TransitionModeKind::Ext.as_u8();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum State {
@@ -186,7 +186,7 @@ impl Swapchain {
 mod tests {
     use super::*;
 
-    const MODE_IMMEDIATE: u8 = fw::TransitionMode::Immediate.as_u8();
+    const MODE_IMMEDIATE: u8 = fw::TransitionModeKind::Immediate.as_u8();
 
     #[test]
     fn cur_idx_stays_within_bank_after_switch_from_large_cycle() {

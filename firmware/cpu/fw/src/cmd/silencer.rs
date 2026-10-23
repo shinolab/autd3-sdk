@@ -52,7 +52,7 @@ pub(crate) fn handle<P: Port>(
 #[cfg(all(test, not(loom)))]
 mod tests {
     use super::SilencerFlags;
-    use crate::fpga::TransitionMode;
+    use crate::fpga::TransitionModeKind;
     use crate::fpga_params::{
         ADDR_FUNCTION_BITS, ADDR_SILENCER_COMPLETION_STEPS_INTENSITY,
         ADDR_SILENCER_COMPLETION_STEPS_PHASE, ADDR_SILENCER_FLAG,
@@ -188,13 +188,13 @@ mod tests {
         assert_eq!(h.ctl(ADDR_SILENCER_COMPLETION_STEPS_INTENSITY), 8);
         assert_eq!(h.latched(ADDR_SILENCER_COMPLETION_STEPS_INTENSITY), 10);
 
-        h.deliver(&activate_mod_bank(0, TransitionMode::Immediate, 0));
+        h.deliver(&activate_mod_bank(0, TransitionModeKind::Immediate, 0));
         assert_eq!(h.status(), Error::InvalidSilencerSetting);
-        h.deliver(&activate_pattern_bank(0, TransitionMode::Immediate, 0));
+        h.deliver(&activate_pattern_bank(0, TransitionModeKind::Immediate, 0));
         assert_eq!(h.status(), Error::InvalidSilencerSetting);
 
         h.port.reject_latch = CtlFlags::empty();
-        h.deliver(&activate_mod_bank(0, TransitionMode::Immediate, 0));
+        h.deliver(&activate_mod_bank(0, TransitionModeKind::Immediate, 0));
         assert_eq!(h.status(), Error::None);
     }
 }

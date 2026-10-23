@@ -21,7 +21,7 @@ impl Operation for ActivatePatternBank {
         encode_header_only(
             out,
             Cmd::ActivatePatternBank,
-            &ActivatePatternBankPayload::new(self.bank, self.transition_mode.as_wire()),
+            &ActivatePatternBankPayload::new(self.bank, self.transition_mode),
         );
         Ok(())
     }
