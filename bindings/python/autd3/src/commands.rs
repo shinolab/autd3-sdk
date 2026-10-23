@@ -2,7 +2,7 @@ use core::num::NonZeroU16;
 use core::time::Duration;
 use std::sync::Arc;
 
-use autd3_python_capsule::extract::{duration_to_py, extract_duration, extract_u8};
+use autd3_python_capsule::extract::{duration_to_py, extract_duration};
 use autd3_python_capsule::invalid_argument;
 use autd3_rs::commands::Operation;
 use autd3_rs::commands::{
@@ -714,17 +714,10 @@ pub struct SetPhaseCorrectionPy(pub(crate) Arc<SetPhaseCorrectionCmd>);
 #[pymethods]
 impl SetPhaseCorrectionPy {
     #[new]
-    fn new(phases: Vec<Vec<Bound<'_, PyAny>>>) -> PyResult<Self> {
-        let phases = phases
-            .into_iter()
-            .map(|device| {
-                device
-                    .iter()
-                    .map(|p| extract_u8(p).map(Phase))
-                    .collect::<PyResult<Vec<_>>>()
-            })
-            .collect::<PyResult<Vec<_>>>()?;
-        Ok(Self(Arc::new(SetPhaseCorrectionCmd { phases })))
+    fn new(phases: &Bound<'_, PyAny>) -> PyResult<Self> {
+        Ok(Self(Arc::new(SetPhaseCorrectionCmd {
+            phases: crate::datagram::extract_phases(phases)?,
+        })))
     }
 }
 

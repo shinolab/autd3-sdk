@@ -127,7 +127,7 @@ namespace AUTD3
         internal static extern IntPtr autd3_op_set_output_mask(byte[] masks, UIntPtr[] lens, UIntPtr numDevices);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_set_phase_correction(byte[] phases, UIntPtr[] lens, UIntPtr numDevices);
+        internal static extern IntPtr autd3_op_set_phase_correction(PhaseBufferHandle phases);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_set_pulse_width_table(ushort[] table);
@@ -688,18 +688,14 @@ namespace AUTD3
 
     public sealed class SetPhaseCorrection : ICommand
     {
-        private readonly Phase[][] _phases;
+        private readonly PhaseBuffer _phases;
 
-        public SetPhaseCorrection(Phase[][] phases)
+        public SetPhaseCorrection(PhaseBuffer phases)
         {
             _phases = phases;
         }
 
-        IntPtr ICommand.CreateOp(Geometry geometry)
-        {
-            var flat = NativeCommand.FlattenPerDevice(_phases, p => p.Value, out var lens);
-            return NativeCommand.autd3_op_set_phase_correction(flat, lens, (UIntPtr)_phases.Length);
-        }
+        IntPtr ICommand.CreateOp(Geometry geometry) => NativeCommand.autd3_op_set_phase_correction(_phases.Handle);
     }
 
     public static class Command

@@ -1002,12 +1002,10 @@ pub unsafe extern "C" fn autd3_op_set_output_mask(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_op_set_phase_correction(
-    phases: *const u8,
-    lens: *const usize,
-    num_devices: usize,
+    phases: *const PhaseBuffer,
 ) -> *mut OwnedCommand {
-    match unsafe { per_device(phases, lens, num_devices, Phase) } {
-        Some(phases) => into_handle(OwnedCommand::SetPhaseCorrection(phases)),
+    match unsafe { handle_ref(phases) } {
+        Some(phases) => into_handle(OwnedCommand::SetPhaseCorrection(phases.0.clone())),
         None => std::ptr::null_mut(),
     }
 }
@@ -2554,10 +2552,6 @@ mod tests {
             unsafe { autd3_op_set_output_mask(values.as_ptr(), lens.as_ptr(), lens.len()) }
                 .is_null()
         );
-        assert!(
-            unsafe { autd3_op_set_phase_correction(values.as_ptr(), lens.as_ptr(), lens.len()) }
-                .is_null()
-        );
     }
 
     fn geometry_of(num_devices: usize) -> *mut Geometry {
@@ -2712,6 +2706,26 @@ mod tests {
         assert!(encode(geometry, too_many).is_err());
         unsafe { autd3_op_free(too_many) };
         unsafe { drop_handle(geometry) };
+    }
+
+    #[test]
+    fn set_phase_correction_takes_a_phase_buffer_of_the_geometry() {
+        let geometry = geometry_of(1);
+        let two = geometry_of(2);
+        let phases = into_handle(autd3_ffi_abi::Buffer(unsafe { &*geometry }.phase_buffer()));
+
+        assert!(unsafe { autd3_op_set_phase_correction(std::ptr::null()) }.is_null());
+        assert_eq!(
+            1,
+            num_frames_of(geometry, unsafe { autd3_op_set_phase_correction(phases) })
+        );
+        let mismatched = unsafe { autd3_op_set_phase_correction(phases) };
+        unsafe { drop_handle(phases) };
+        let (code, message) = encode(two, mismatched).unwrap_err();
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code, "{message}");
+        unsafe { autd3_op_free(mismatched) };
+        unsafe { drop_handle(geometry) };
+        unsafe { drop_handle(two) };
     }
 
     #[test]
