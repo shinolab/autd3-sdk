@@ -13,20 +13,13 @@ pub use driver::Driver;
 pub use exec_at::ExecAt;
 pub use state_checker::StateChecker;
 
+use std::ops::Deref;
 use std::sync::{Mutex, PoisonError};
 use std::thread::JoinHandle;
 
-use autd3_rs_core::BusStats;
-
-use crate::commands::Command;
-use crate::datagram::Frame;
 use crate::error::{Error, NetworkCause};
-use crate::firmware_version::FirmwareVersion;
-use crate::fpga_state::FpgaState;
 use crate::geometry::Geometry;
-use crate::telemetry::Telemetry;
 use crate::udp::TransportOption;
-use crate::value::SysTime;
 
 pub struct Client {
     controller: Controller,
@@ -46,62 +39,6 @@ impl Client {
         };
         tracing::info!(num_devices = client.num_devices(), "client opened");
         Ok(client)
-    }
-
-    #[must_use]
-    pub fn num_devices(&self) -> usize {
-        self.controller.num_devices()
-    }
-
-    #[must_use]
-    pub fn geometry(&self) -> &Geometry {
-        self.controller.geometry()
-    }
-
-    #[must_use]
-    pub fn bus_stats(&self) -> BusStats {
-        self.controller.bus_stats()
-    }
-
-    #[must_use]
-    pub fn state_checker(&self) -> StateChecker {
-        self.controller.state_checker()
-    }
-
-    pub fn send_heartbeat(&self) -> Result<(), Error> {
-        self.controller.send_heartbeat()
-    }
-
-    pub fn device_time_now(&self) -> Result<SysTime, Error> {
-        self.controller.device_time_now()
-    }
-
-    pub fn send<C: Command>(&self, cmd: C) -> impl Future<Output = Result<(), Error>> + use<'_, C> {
-        self.controller.send(cmd)
-    }
-
-    pub async fn send_frame(&self, frame: Frame<'_>) -> Result<ResponseFuture, Error> {
-        self.controller.send_frame(frame).await
-    }
-
-    pub async fn send_frame_at(
-        &self,
-        frame: Frame<'_>,
-        exec: ExecAt,
-    ) -> Result<ResponseFuture, Error> {
-        self.controller.send_frame_at(frame, exec).await
-    }
-
-    pub async fn read_firmware_version(&self) -> Result<Vec<FirmwareVersion>, Error> {
-        self.controller.read_firmware_version().await
-    }
-
-    pub async fn read_fpga_state(&self) -> Result<Vec<FpgaState>, Error> {
-        self.controller.read_fpga_state().await
-    }
-
-    pub async fn read_telemetry(&self) -> Result<Vec<Telemetry>, Error> {
-        self.controller.read_telemetry().await
     }
 
     pub fn close(&self) -> Result<(), Error> {
@@ -124,6 +61,14 @@ impl Client {
             }
             None => Ok(()),
         }
+    }
+}
+
+impl Deref for Client {
+    type Target = Controller;
+
+    fn deref(&self) -> &Controller {
+        &self.controller
     }
 }
 
