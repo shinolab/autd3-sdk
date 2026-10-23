@@ -1,3 +1,4 @@
+use crate::device_set::DeviceSet;
 use crate::error::Error;
 use autd3_rs_core::MAX_DEVICES;
 use autd3_rs_core::value::SysTime;
@@ -8,15 +9,7 @@ pub struct Response {
     sys_times: [u64; MAX_DEVICES],
     num_devices: usize,
     reply_data: Vec<Vec<u8>>,
-    replied_devices: u128,
-}
-
-const _: () = assert!(MAX_DEVICES == u128::BITS as usize);
-
-fn first_n_devices_mask(num_devices: usize) -> u128 {
-    u128::MAX
-        .checked_shr(u32::try_from(MAX_DEVICES - num_devices).unwrap_or(u32::MAX))
-        .unwrap_or(0)
+    replied_devices: DeviceSet,
 }
 
 impl Default for Response {
@@ -26,7 +19,7 @@ impl Default for Response {
             sys_times: [0; MAX_DEVICES],
             num_devices: 0,
             reply_data: Vec::new(),
-            replied_devices: 0,
+            replied_devices: DeviceSet::empty(),
         }
     }
 }
@@ -42,7 +35,7 @@ impl Response {
             sys_times: [0; MAX_DEVICES],
             num_devices,
             reply_data: Vec::new(),
-            replied_devices: first_n_devices_mask(num_devices),
+            replied_devices: DeviceSet::first_n(num_devices),
         }
     }
 
@@ -63,7 +56,7 @@ impl Response {
     ) {
         self.error_codes[device] = error_code;
         self.sys_times[device] = sys_time;
-        self.replied_devices |= 1 << device;
+        self.replied_devices.insert(device);
         if !data.is_empty() {
             self.reply_data.resize_with(self.num_devices, Vec::new);
             self.reply_data[device] = data.to_vec();
@@ -71,7 +64,7 @@ impl Response {
     }
 
     #[must_use]
-    pub(crate) const fn replied_devices(&self) -> u128 {
+    pub(crate) const fn replied_devices(&self) -> DeviceSet {
         self.replied_devices
     }
 
@@ -79,11 +72,9 @@ impl Response {
         &self,
         parse: impl Fn(&[u8]) -> Option<T>,
     ) -> Result<Vec<T>, Error> {
-        let unreplied_devices = !self.replied_devices & first_n_devices_mask(self.num_devices);
-        if unreplied_devices != 0 {
-            return Err(Error::DeviceLost {
-                device: unreplied_devices.trailing_zeros() as usize,
-            });
+        let unreplied_devices = DeviceSet::first_n(self.num_devices) - self.replied_devices;
+        if let Some(device) = unreplied_devices.lowest() {
+            return Err(Error::DeviceLost { device });
         }
         (0..self.num_devices)
             .map(|device| {
@@ -109,7 +100,7 @@ impl Response {
 
     #[must_use]
     pub fn sys_time_of(&self, device: usize) -> Option<SysTime> {
-        let replied = device < self.num_devices && self.replied_devices >> device & 1 == 1;
+        let replied = device < self.num_devices && self.replied_devices[device];
         replied
             .then(|| self.sys_times[device])
             .filter(|&sys_time| sys_time != 0)
@@ -132,6 +123,7 @@ impl Response {
 #[cfg(test)]
 mod tests {
     use super::Response;
+    use crate::device_set::DeviceSet;
     use autd3_rs_core::MAX_DEVICES;
     use autd3_rs_core::value::SysTime;
 
@@ -147,7 +139,7 @@ mod tests {
     fn a_recorded_reply_marks_only_its_device_as_replied() {
         let mut response = Response::for_devices(3);
         response.record_reply(1, 0x07, 2_000, &[]);
-        assert_eq!(response.replied_devices(), 0b010);
+        assert_eq!(response.replied_devices(), DeviceSet::from_iter([1]));
         assert_eq!(response.error_codes(), [0, 0x07, 0]);
         assert_eq!(response.sys_time_of(0), None);
         assert_eq!(response.sys_time_of(1), Some(SysTime::from_nanos(2_000)));
