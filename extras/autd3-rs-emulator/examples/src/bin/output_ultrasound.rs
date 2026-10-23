@@ -4,7 +4,6 @@
 
 use anyhow::Result;
 use autd3_rs::common::ULTRASOUND_PERIOD;
-use polars::prelude::DataFrame;
 use textplots::{Chart, Plot, Shape};
 
 use autd3_rs::commands::{Pattern, SetSilencer};
@@ -12,14 +11,18 @@ use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::units::rad;
 use autd3_rs::value::{Intensity, Phase};
 
-use autd3_rs_emulator::{ClientApi, Emulator};
+use autd3_rs_emulator::{Emulator, RawColumn, RawFrame};
 
 const PLOT_SAMPLES: usize = 512 * 30;
 
-fn transducer0(df: &DataFrame) -> Vec<f32> {
-    df.columns()
+fn transducer0(frame: &RawFrame) -> Vec<f32> {
+    frame
+        .columns
         .iter()
-        .map(|c| c.f32().unwrap().get(0).unwrap())
+        .filter_map(|(_, column)| match column {
+            RawColumn::F32(v) => v.first().copied(),
+            RawColumn::U8(_) | RawColumn::U16(_) => None,
+        })
         .collect()
 }
 
@@ -45,9 +48,9 @@ fn main() -> Result<()> {
     }
 
     let emulator = Emulator::new(geometry);
-    let record = emulator.record(async move |r| {
-        r.send(SetSilencer::disable()).await?;
-        r.send(Pattern::new(&phases, Intensity::MAX)).await?;
+    let record = emulator.record(|r| {
+        r.send(SetSilencer::disable())?;
+        r.send(Pattern::new(&phases, Intensity::MAX))?;
         r.tick(ULTRASOUND_PERIOD * 30)?;
         Ok(())
     })?;

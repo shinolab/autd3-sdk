@@ -10,7 +10,6 @@ use autd3_rs_core::geometry::Geometry;
 use autd3_rs_core::protocol::{Cmd, DeviceErrorCode, FRAME_BYTES_MAX, FrameHeader};
 use autd3_rs_firmware_emulator::{Device, SilencerEmulator};
 
-use crate::client_api::ClientApi;
 use crate::error::EmulatorError;
 use crate::record::{Record, TransducerRecord};
 
@@ -111,6 +110,16 @@ impl Recorder {
         Ok(())
     }
 
+    pub fn send<C: Command>(&mut self, cmd: C) -> Result<(), EmulatorError> {
+        Frames::encode(&self.geometry, cmd)?
+            .iter()
+            .try_for_each(|frame| self.stage_and_send(&frame))
+    }
+
+    pub fn send_frame(&mut self, frame: Frame<'_>) -> Result<(), EmulatorError> {
+        self.stage_and_send(&frame)
+    }
+
     fn stage_and_send(&mut self, frame: &Frame<'_>) -> Result<(), EmulatorError> {
         let touches_silencer = frame
             .datagrams()
@@ -143,24 +152,5 @@ impl Recorder {
             }
         }
         rejected.map_or(Ok(()), |e| Err(e.into()))
-    }
-}
-
-impl ClientApi for Recorder {
-    type Error = EmulatorError;
-
-    fn send<C: Command>(&mut self, cmd: C) -> impl Future<Output = Result<(), Self::Error>> {
-        let sent = Frames::encode(&self.geometry, cmd)
-            .map_err(EmulatorError::from)
-            .and_then(|frames| {
-                frames
-                    .iter()
-                    .try_for_each(|frame| self.stage_and_send(&frame))
-            });
-        std::future::ready(sent)
-    }
-
-    fn send_frame(&mut self, frame: Frame<'_>) -> impl Future<Output = Result<(), Self::Error>> {
-        std::future::ready(self.stage_and_send(&frame))
     }
 }

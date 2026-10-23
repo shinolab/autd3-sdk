@@ -6,9 +6,7 @@ use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::{Intensity, SamplingConfig};
 
-use autd3_rs_emulator::{
-    AxisOrder, ClientApi, Emulator, Grid, InstantRecordOption, RmsRecordOption,
-};
+use autd3_rs_emulator::{AxisOrder, Emulator, Grid, InstantRecordOption, RmsRecordOption};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let geometry = Geometry::new(vec![Autd3::default()]);
@@ -28,8 +26,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // ANCHOR: record
     let emulator = Emulator::new(geometry);
-    let record = emulator.record(async move |r| {
-        r.send(Pattern::new(&phases, Intensity::MAX)).await?;
+    let record = emulator.record(|r| {
+        r.send(Pattern::new(&phases, Intensity::MAX))?;
         r.tick(Duration::from_millis(1))?;
         Ok(())
     })?;
@@ -50,10 +48,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // ANCHOR: output
     let voltage = record.output_voltage();
-    dbg!(voltage);
+    dbg!(voltage.rows, voltage.columns.len());
 
     let ultrasound = record.output_ultrasound();
-    dbg!(ultrasound);
+    dbg!(ultrasound.rows, ultrasound.columns.len());
     // ANCHOR_END: output
 
     let range = Grid {

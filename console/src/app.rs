@@ -3,7 +3,6 @@ use std::time::Duration;
 use eframe::egui;
 
 use crate::panel::{FirmwarePanel, SimulatorPanel};
-use crate::update::Updater;
 
 #[derive(Default, Clone, Copy, PartialEq, Eq)]
 enum Tab {
@@ -18,7 +17,6 @@ pub(crate) struct ConsoleApp {
     tab: Tab,
     simulator: SimulatorPanel,
     firmware: FirmwarePanel,
-    updater: Updater,
 }
 
 impl ConsoleApp {
@@ -31,12 +29,6 @@ impl ConsoleApp {
             if let Some(config) = eframe::get_value(storage, "firmware") {
                 app.firmware.config = config;
             }
-            if let Some(config) = eframe::get_value(storage, "update") {
-                app.updater.config = config;
-            }
-        }
-        if app.updater.config.auto_check {
-            app.updater.check();
         }
         app
     }
@@ -46,8 +38,7 @@ impl eframe::App for ConsoleApp {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.simulator.pump();
         self.firmware.pump();
-        self.updater.pump();
-        if self.simulator.is_running() || self.firmware.is_running() || self.updater.is_busy() {
+        if self.simulator.is_running() || self.firmware.is_running() {
             ctx.request_repaint_after(Duration::from_millis(250));
         }
     }
@@ -60,19 +51,15 @@ impl eframe::App for ConsoleApp {
                 ui.selectable_value(&mut self.tab, Tab::About, "About");
             });
         });
-        egui::CentralPanel::default().show(ui, |ui| {
-            self.updater.banner(ui);
-            match self.tab {
-                Tab::Simulator => self.simulator.ui(ui),
-                Tab::Firmware => self.firmware.ui(ui),
-                Tab::About => crate::about::ui(ui, &mut self.updater),
-            }
+        egui::CentralPanel::default().show(ui, |ui| match self.tab {
+            Tab::Simulator => self.simulator.ui(ui),
+            Tab::Firmware => self.firmware.ui(ui),
+            Tab::About => crate::about::ui(ui),
         });
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         eframe::set_value(storage, "simulator", &self.simulator.config);
         eframe::set_value(storage, "firmware", &self.firmware.config);
-        eframe::set_value(storage, "update", &self.updater.config);
     }
 }

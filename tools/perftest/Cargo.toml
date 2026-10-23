@@ -17,7 +17,6 @@ mem-profile = []
 
 [dependencies]
 autd3-rs.workspace = true
-autd3-rs-simulator-control.workspace = true
 tracing-subscriber.workspace = true
 autd3-cpu-wire.workspace = true
 autd3-rs-firmware-emulator = { workspace = true, features = ["udp"] }

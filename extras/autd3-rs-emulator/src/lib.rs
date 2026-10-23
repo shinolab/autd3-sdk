@@ -1,5 +1,4 @@
 mod aabb;
-mod client_api;
 mod error;
 mod output_ultrasound;
 mod output_voltage;
@@ -9,8 +8,6 @@ mod record;
 mod recorder;
 mod sound_field;
 
-pub use aabb::Aabb;
-pub use client_api::ClientApi;
 pub use error::{EmulatorError, GridAxis, InvalidGrid};
 pub use range::{AxisOrder, Grid, Range};
 pub use raw::{RawColumn, RawFrame};
@@ -19,9 +16,6 @@ pub use recorder::Recorder;
 pub use sound_field::{Instant, InstantRecordOption, Rms, RmsRecordOption, SoundFieldOption};
 
 use autd3_rs_core::geometry::Geometry;
-
-#[cfg(feature = "polars")]
-use polars::frame::DataFrame;
 
 pub struct Emulator {
     geometry: Geometry,
@@ -34,13 +28,8 @@ impl Emulator {
     }
 
     #[must_use]
-    pub fn geometry(&self) -> &Geometry {
-        &self.geometry
-    }
-
-    #[must_use]
     #[allow(clippy::cast_possible_truncation)]
-    pub fn transducer_table_raw(&self) -> RawFrame {
+    pub fn transducer_table(&self) -> RawFrame {
         let n = self.geometry.num_transducers();
         let mut dev_idx = Vec::with_capacity(n);
         let mut tr_idx = Vec::with_capacity(n);
@@ -74,25 +63,12 @@ impl Emulator {
         }
     }
 
-    #[cfg(feature = "polars")]
-    #[must_use]
-    pub fn transducer_table(&self) -> DataFrame {
-        self.transducer_table_raw().into_polars()
-    }
-
     pub fn record<F>(&self, f: F) -> Result<Record, EmulatorError>
     where
-        F: AsyncFnOnce(&mut Recorder) -> Result<(), EmulatorError>,
+        F: FnOnce(&mut Recorder) -> Result<(), EmulatorError>,
     {
-        self.record_from(0, f)
-    }
-
-    pub fn record_from<F>(&self, start_ns: u64, f: F) -> Result<Record, EmulatorError>
-    where
-        F: AsyncFnOnce(&mut Recorder) -> Result<(), EmulatorError>,
-    {
-        let mut recorder = Recorder::new(&self.geometry, start_ns);
-        pollster::block_on(f(&mut recorder))?;
+        let mut recorder = Recorder::new(&self.geometry, 0);
+        f(&mut recorder)?;
         Ok(recorder.into_record())
     }
 }

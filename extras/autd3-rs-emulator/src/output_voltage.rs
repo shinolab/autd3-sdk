@@ -1,30 +1,19 @@
-#![allow(clippy::cast_possible_truncation)]
-
-#[cfg(feature = "polars")]
-use polars::frame::DataFrame;
+use autd3_rs_firmware_emulator::pwm_levels;
 
 use crate::raw::RawFrame;
 use crate::record::{
-    OUTPUT_VOLTAGE, Record, TransducerRecord, ULTRASOUND_PERIOD_COUNT, output_raw,
+    OUTPUT_VOLTAGE, Record, TransducerRecord, ULTRASOUND_PERIOD_COUNT, output_frame,
 };
 
 impl TransducerRecord {
-    fn voltage_frame(pw: u16, phase: u16, out: &mut Vec<f32>) {
-        const T: u16 = ULTRASOUND_PERIOD_COUNT as u16;
-        let rise = ((T + phase * 2) - pw / 2) % T;
-        let fall = (phase * 2 + pw / 2 + (pw & 0x01)) % T;
-        for i in 0..T {
-            let high = if rise <= fall {
-                rise <= i && i < fall
-            } else {
-                i < fall || rise <= i
-            };
-            out.push(if high {
+    fn voltage_frame(pw: u16, phase: u8, out: &mut Vec<f32>) {
+        out.extend(pwm_levels(pw, phase).map(|high| {
+            if high {
                 OUTPUT_VOLTAGE
             } else {
                 -OUTPUT_VOLTAGE
-            });
-        }
+            }
+        }));
     }
 
     pub(crate) fn output_voltage_within(&self, start: usize, n: usize) -> Option<Vec<f32>> {
@@ -36,7 +25,7 @@ impl TransducerRecord {
             .iter()
             .zip(self.phase[start..][..n].iter())
         {
-            Self::voltage_frame(*pw, u16::from(*phase), &mut out);
+            Self::voltage_frame(*pw, *phase, &mut out);
         }
         Some(out)
     }
@@ -49,19 +38,13 @@ impl TransducerRecord {
 
 impl Record {
     #[must_use]
-    pub fn output_voltage_raw(&self) -> RawFrame {
+    pub fn output_voltage(&self) -> RawFrame {
         let per_tr: Vec<Vec<f32>> = self
             .records
             .iter()
             .map(TransducerRecord::output_voltage)
             .collect();
-        output_raw("voltage[V]", &per_tr)
-    }
-
-    #[cfg(feature = "polars")]
-    #[must_use]
-    pub fn output_voltage(&self) -> DataFrame {
-        self.output_voltage_raw().into_polars()
+        output_frame("voltage[V]", &per_tr)
     }
 }
 

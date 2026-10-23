@@ -6,8 +6,11 @@
 
 mod flash;
 mod foci;
+mod pwm;
 mod silencer;
 mod swapchain;
+
+pub use pwm::pwm_levels;
 
 use autd3_rs_core::value::{Intensity, Phase};
 
@@ -685,7 +688,7 @@ impl FpgaEmulator {
     }
 
     #[must_use]
-    pub fn modulation_at(&self, bank: usize, idx: usize) -> u8 {
+    pub(crate) fn modulation_at(&self, bank: usize, idx: usize) -> u8 {
         byte_at(&self.mod_ram[bank], idx)
     }
 

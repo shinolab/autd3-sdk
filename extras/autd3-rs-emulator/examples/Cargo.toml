@@ -8,9 +8,6 @@ repository.workspace = true
 description = "examples for autd3-rs-emulator."
 publish = false
 
-[features]
-gpu = ["autd3-rs-emulator/gpu"]
-
 [[bin]]
 name = "record_emission"
 path = "src/bin/record_emission.rs"
@@ -34,7 +31,6 @@ autd3-rs-pattern.workspace = true
 autd3-rs-modulation.workspace = true
 anyhow.workspace = true
 textplots.workspace = true
-polars = { workspace = true, features = ["fmt", "csv"] }
 
 [lints]
 workspace = true

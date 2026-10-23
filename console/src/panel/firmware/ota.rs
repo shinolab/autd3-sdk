@@ -5,8 +5,6 @@ use serde::{Deserialize, Serialize};
 #[serde(default)]
 pub(crate) struct UdpConfig {
     pub interface: String,
-    pub heartbeat_us: Option<u64>,
-    pub open_timeout_ms: Option<u64>,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
@@ -27,17 +25,8 @@ impl Default for OtaConfig {
     }
 }
 
-const DEFAULT_HEARTBEAT_US: u64 = 10_000;
-const DEFAULT_OPEN_TIMEOUT_MS: u64 = 40_000;
 const DEVICE_PORT: u16 = 44336;
 const MAX_DEVICES: usize = 128;
-
-fn push_opt(args: &mut Vec<String>, flag: &str, value: Option<u64>) {
-    if let Some(value) = value {
-        args.push(flag.to_string());
-        args.push(value.to_string());
-    }
-}
 
 impl OtaConfig {
     pub(crate) fn args(&self, version: &str, target: &str) -> Vec<String> {
@@ -56,14 +45,11 @@ impl OtaConfig {
     }
 
     fn udp_args(&self, args: &mut Vec<String>) {
-        let u = &self.udp;
-        let interface = u.interface.trim();
+        let interface = self.udp.interface.trim();
         if !interface.is_empty() {
             args.push("--interface".to_string());
             args.push(interface.to_string());
         }
-        push_opt(args, "--heartbeat-us", u.heartbeat_us);
-        push_opt(args, "--open-timeout-ms", u.open_timeout_ms);
     }
 
     pub(crate) fn ui(&mut self, ui: &mut egui::Ui, enabled: bool) {
@@ -86,45 +72,17 @@ impl OtaConfig {
 
                     self.udp_ui(ui);
                 });
-            egui::CollapsingHeader::new("Advanced UDP options")
-                .id_salt("ota-udp-advanced")
-                .show(ui, |ui| {
-                    egui::Grid::new("ota-udp-advanced-grid")
-                        .num_columns(2)
-                        .spacing([12.0, 6.0])
-                        .show(ui, |ui| self.udp_advanced_ui(ui));
-                });
         });
     }
 
     fn udp_ui(&mut self, ui: &mut egui::Ui) {
-        let u = &mut self.udp;
         ui.label("Interface");
         ui.add(
-            egui::TextEdit::singleline(&mut u.interface)
+            egui::TextEdit::singleline(&mut self.udp.interface)
                 .hint_text("auto")
                 .desired_width(240.0),
         );
         ui.end_row();
-
-        optional_row(
-            ui,
-            "Heartbeat",
-            &mut u.heartbeat_us,
-            DEFAULT_HEARTBEAT_US,
-            " µs",
-        );
-    }
-
-    fn udp_advanced_ui(&mut self, ui: &mut egui::Ui) {
-        let u = &mut self.udp;
-        optional_row(
-            ui,
-            "Open timeout",
-            &mut u.open_timeout_ms,
-            DEFAULT_OPEN_TIMEOUT_MS,
-            " ms",
-        );
     }
 
     pub(crate) fn hint() -> String {
@@ -134,31 +92,6 @@ impl OtaConfig {
              administrator rights or IP address are needed."
         )
     }
-}
-
-fn optional_row(
-    ui: &mut egui::Ui,
-    label: &str,
-    value: &mut Option<u64>,
-    default: u64,
-    suffix: &str,
-) {
-    ui.label(label);
-    ui.horizontal(|ui| {
-        let mut custom = value.is_some();
-        if ui.checkbox(&mut custom, "").changed() {
-            *value = custom.then_some(default);
-        }
-        match value {
-            Some(v) => {
-                ui.add(egui::DragValue::new(v).suffix(suffix));
-            }
-            None => {
-                ui.weak(format!("default ({default}{suffix})"));
-            }
-        }
-    });
-    ui.end_row();
 }
 
 #[cfg(test)]
@@ -190,25 +123,16 @@ mod tests {
     }
 
     #[test]
-    fn only_customized_udp_options_are_passed() {
+    fn only_a_named_interface_is_passed() {
         let config = OtaConfig {
             udp: UdpConfig {
                 interface: "  eth0 ".to_string(),
-                heartbeat_us: Some(20_000),
-                open_timeout_ms: Some(20_000),
             },
             ..OtaConfig::default()
         };
         assert_eq!(
             config.args("1.0.0", "cpu")[COMMON..],
-            [
-                "--interface",
-                "eth0",
-                "--heartbeat-us",
-                "20000",
-                "--open-timeout-ms",
-                "20000",
-            ]
+            ["--interface", "eth0"]
         );
         assert_eq!(OtaConfig::default().args("1.0.0", "cpu").len(), COMMON);
     }
@@ -231,11 +155,20 @@ mod tests {
         )
         .unwrap();
         assert_eq!(config.reboot_wait_secs, 30);
+        assert_eq!(config.udp, UdpConfig::default());
+    }
+
+    #[test]
+    fn a_config_saved_with_the_removed_heartbeat_and_open_timeout_still_loads() {
+        let config: OtaConfig = serde_json::from_str(
+            r#"{"devices":2,"udp":{"interface":"eth0","heartbeat_us":20000,"open_timeout_ms":20000}}"#,
+        )
+        .unwrap();
+        assert_eq!(config.devices, 2);
         assert_eq!(
             config.udp,
             UdpConfig {
-                heartbeat_us: Some(20_000),
-                ..UdpConfig::default()
+                interface: "eth0".to_string(),
             }
         );
     }

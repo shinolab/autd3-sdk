@@ -7,35 +7,54 @@ use autd3_rs_core::geometry::Point3;
 use crate::aabb::Aabb;
 use crate::error::{EmulatorError, GridAxis, InvalidGrid};
 
-pub trait Range {
-    fn points(&self) -> impl Iterator<Item = (f32, f32, f32)>;
-    fn aabb(&self) -> Aabb;
+pub(crate) mod sealed {
+    use autd3_rs_core::geometry::Point3;
 
-    fn validate(&self) -> Result<(), EmulatorError> {
-        Ok(())
-    }
-}
+    use crate::error::EmulatorError;
 
-impl Range for Point3<f32> {
-    fn points(&self) -> impl Iterator<Item = (f32, f32, f32)> {
-        std::iter::once((self.x, self.y, self.z))
-    }
+    pub trait Sealed {
+        fn points(&self) -> impl Iterator<Item = (f32, f32, f32)>;
+        fn bounding_points(&self) -> impl Iterator<Item = Point3<f32>>;
 
-    fn aabb(&self) -> Aabb {
-        Aabb {
-            min: *self,
-            max: *self,
+        fn validate(&self) -> Result<(), EmulatorError> {
+            Ok(())
         }
     }
 }
 
-impl Range for Vec<Point3<f32>> {
+use sealed::Sealed;
+
+pub trait Range: Sealed {}
+
+impl<T: Sealed> Range for T {}
+
+pub(crate) trait RangeAabb {
+    fn aabb(&self) -> Aabb;
+}
+
+impl<T: Sealed> RangeAabb for T {
+    fn aabb(&self) -> Aabb {
+        Aabb::from_points(self.bounding_points())
+    }
+}
+
+impl Sealed for Point3<f32> {
+    fn points(&self) -> impl Iterator<Item = (f32, f32, f32)> {
+        std::iter::once((self.x, self.y, self.z))
+    }
+
+    fn bounding_points(&self) -> impl Iterator<Item = Point3<f32>> {
+        std::iter::once(*self)
+    }
+}
+
+impl Sealed for Vec<Point3<f32>> {
     fn points(&self) -> impl Iterator<Item = (f32, f32, f32)> {
         self.iter().map(|v| (v.x, v.y, v.z))
     }
 
-    fn aabb(&self) -> Aabb {
-        Aabb::from_points(self.iter().copied())
+    fn bounding_points(&self) -> impl Iterator<Item = Point3<f32>> {
+        self.iter().copied()
     }
 }
 
@@ -101,7 +120,7 @@ impl Grid {
     }
 }
 
-impl Range for Grid {
+impl Sealed for Grid {
     fn validate(&self) -> Result<(), EmulatorError> {
         Ok(Grid::validate(self)?)
     }
@@ -129,11 +148,12 @@ impl Range for Grid {
         })
     }
 
-    fn aabb(&self) -> Aabb {
-        Aabb::from_points([
+    fn bounding_points(&self) -> impl Iterator<Item = Point3<f32>> {
+        [
             Point3::new(*self.x.start(), *self.y.start(), *self.z.start()),
             Point3::new(*self.x.end(), *self.y.end(), *self.z.end()),
-        ])
+        ]
+        .into_iter()
     }
 }
 
@@ -263,7 +283,146 @@ mod tests {
 
     #[test]
     fn point_ranges_are_always_valid() {
-        assert!(Range::validate(&Point3::new(f32::NAN, 0.0, 0.0)).is_ok());
-        assert!(Range::validate(&vec![Point3::new(0.0, 0.0, 0.0)]).is_ok());
+        assert!(Sealed::validate(&Point3::new(f32::NAN, 0.0, 0.0)).is_ok());
+        assert!(Sealed::validate(&vec![Point3::new(0.0, 0.0, 0.0)]).is_ok());
+    }
+
+    const ORDERS: [(AxisOrder, [usize; 3]); 6] = [
+        (AxisOrder::XYZ, [0, 1, 2]),
+        (AxisOrder::XZY, [0, 2, 1]),
+        (AxisOrder::YXZ, [1, 0, 2]),
+        (AxisOrder::YZX, [1, 2, 0]),
+        (AxisOrder::ZXY, [2, 0, 1]),
+        (AxisOrder::ZYX, [2, 1, 0]),
+    ];
+
+    fn grid_of(axes: [RangeInclusive<f32>; 3], order: AxisOrder) -> Grid {
+        let [x, y, z] = axes;
+        Grid {
+            x,
+            y,
+            z,
+            resolution: 1.0,
+            order,
+        }
+    }
+
+    fn nested_loops(
+        values: [&[f32]; 3],
+        [inner, middle, outer]: [usize; 3],
+    ) -> Vec<(f32, f32, f32)> {
+        let mut out = Vec::new();
+        for &c in values[outer] {
+            for &b in values[middle] {
+                for &a in values[inner] {
+                    let mut p = [0.0; 3];
+                    p[inner] = a;
+                    p[middle] = b;
+                    p[outer] = c;
+                    out.push((p[0], p[1], p[2]));
+                }
+            }
+        }
+        out
+    }
+
+    fn assert_enumerates(axes: &[RangeInclusive<f32>; 3], values: [&[f32]; 3]) {
+        for (order, loops) in ORDERS {
+            let g = grid_of(axes.clone(), order);
+            assert_eq!(
+                g.points().collect::<Vec<_>>(),
+                nested_loops(values, loops),
+                "{order:?}"
+            );
+            assert_eq!(
+                g.aabb().min,
+                Point3::new(*axes[0].start(), *axes[1].start(), *axes[2].start())
+            );
+            assert_eq!(
+                g.aabb().max,
+                Point3::new(*axes[0].end(), *axes[1].end(), *axes[2].end())
+            );
+        }
+    }
+
+    #[test]
+    fn line_has_one_point_on_each_fixed_axis() {
+        assert_enumerates(
+            &[0.0..=3.0, 1.0..=1.0, 2.0..=2.0],
+            [&[0., 1., 2., 3.], &[1.], &[2.]],
+        );
+        assert_enumerates(
+            &[5.0..=5.0, -1.0..=1.0, 2.0..=2.0],
+            [&[5.], &[-1., 0., 1.], &[2.]],
+        );
+        assert_enumerates(
+            &[5.0..=5.0, 1.0..=1.0, 10.0..=12.0],
+            [&[5.], &[1.], &[10., 11., 12.]],
+        );
+    }
+
+    #[test]
+    fn plane_follows_the_axis_order() {
+        assert_enumerates(
+            &[0.0..=1.0, 10.0..=12.0, 150.0..=150.0],
+            [&[0., 1.], &[10., 11., 12.], &[150.]],
+        );
+        assert_enumerates(
+            &[0.0..=1.0, 7.0..=7.0, 10.0..=12.0],
+            [&[0., 1.], &[7.], &[10., 11., 12.]],
+        );
+        assert_enumerates(
+            &[7.0..=7.0, 0.0..=1.0, 10.0..=12.0],
+            [&[7.], &[0., 1.], &[10., 11., 12.]],
+        );
+    }
+
+    #[test]
+    fn volume_follows_the_axis_order() {
+        assert_enumerates(
+            &[0.0..=1.0, 10.0..=12.0, 100.0..=103.0],
+            [&[0., 1.], &[10., 11., 12.], &[100., 101., 102., 103.]],
+        );
+    }
+
+    #[test]
+    fn first_axis_of_the_order_varies_fastest() {
+        let xy = grid_of([0.0..=1.0, 0.0..=1.0, 0.0..=0.0], AxisOrder::XYZ);
+        assert_eq!(
+            xy.points().collect::<Vec<_>>(),
+            vec![(0., 0., 0.), (1., 0., 0.), (0., 1., 0.), (1., 1., 0.)]
+        );
+        let yx = grid_of([0.0..=1.0, 0.0..=1.0, 0.0..=0.0], AxisOrder::YXZ);
+        assert_eq!(
+            yx.points().collect::<Vec<_>>(),
+            vec![(0., 0., 0.), (0., 1., 0.), (1., 0., 0.), (1., 1., 0.)]
+        );
+        assert_eq!(AxisOrder::default(), AxisOrder::XYZ);
+    }
+
+    #[test]
+    fn resolution_sets_the_step_and_drops_the_remainder() {
+        let g = Grid {
+            x: 0.0..=1.0,
+            y: 3.0..=3.0,
+            z: 0.0..=0.0,
+            resolution: 0.4,
+            order: AxisOrder::XYZ,
+        };
+        assert_eq!(
+            g.points().collect::<Vec<_>>(),
+            vec![(0.0, 3., 0.), (0.4, 3., 0.), (0.8, 3., 0.)]
+        );
+    }
+
+    #[test]
+    fn point_list_is_enumerated_as_given() {
+        let points = vec![Point3::new(3., 1., 2.), Point3::new(0., 5., -1.)];
+        assert_eq!(
+            points.points().collect::<Vec<_>>(),
+            vec![(3., 1., 2.), (0., 5., -1.)]
+        );
+        assert_eq!(points.aabb().min, Point3::new(0., 1., -1.));
+        assert_eq!(points.aabb().max, Point3::new(3., 5., 2.));
     }
 }

@@ -8,37 +8,30 @@ use autd3_rs_core::params::ULTRASOUND_FREQ_HZ;
 use autd3_rs_core::value::Phase;
 use rayon::prelude::*;
 
-#[cfg(feature = "polars")]
-use polars::frame::DataFrame;
-
 use crate::error::EmulatorError;
 use crate::range::Range;
 use crate::raw::{RawColumn, RawFrame};
 use crate::record::{Record, T4010A1_AMPLITUDE, ULTRASOUND_PERIOD_COUNT};
-use crate::sound_field::{SoundFieldOption, distances, num_frames, observe_points_raw};
+use crate::sound_field::{SoundFieldOption, distances, num_frames, observe_points};
 
 const P0: f32 = T4010A1_AMPLITUDE / (4.0 * PI) / SQRT_2;
 
 #[derive(Debug, Clone, Copy)]
 pub struct RmsRecordOption {
     pub sound_speed: Velocity,
-    #[cfg(feature = "gpu")]
-    pub gpu: bool,
 }
 
 impl Default for RmsRecordOption {
     fn default() -> Self {
         Self {
             sound_speed: Velocity::from_m_s(340.0),
-            #[cfg(feature = "gpu")]
-            gpu: false,
         }
     }
 }
 
-pub(crate) struct RmsSource {
-    pub(crate) amp: Vec<f32>,
-    pub(crate) phase: Vec<f32>,
+struct RmsSource {
+    amp: Vec<f32>,
+    phase: Vec<f32>,
 }
 
 struct CpuRms {
@@ -65,29 +58,12 @@ impl CpuRms {
     }
 }
 
-enum ComputeDevice {
-    Cpu(CpuRms),
-    #[cfg(feature = "gpu")]
-    Gpu(super::rms_gpu::GpuRms),
-}
-
-impl ComputeDevice {
-    #[cfg_attr(not(feature = "gpu"), allow(clippy::unnecessary_wraps))]
-    fn compute(&mut self, frame: usize, wavenumber: f32) -> Result<Vec<f32>, EmulatorError> {
-        match self {
-            ComputeDevice::Cpu(cpu) => Ok(cpu.frame(frame, wavenumber)),
-            #[cfg(feature = "gpu")]
-            ComputeDevice::Gpu(gpu) => gpu.compute(frame, wavenumber),
-        }
-    }
-}
-
 pub struct Rms {
     wavenumber: f32,
     x: Vec<f32>,
     y: Vec<f32>,
     z: Vec<f32>,
-    device: ComputeDevice,
+    cpu: CpuRms,
     cursor: usize,
     max_frame: usize,
 }
@@ -108,11 +84,11 @@ impl Rms {
     }
 
     #[must_use]
-    pub fn observe_points_raw(&self) -> RawFrame {
-        observe_points_raw(&self.x, &self.y, &self.z)
+    pub fn observe_points(&self) -> RawFrame {
+        observe_points(&self.x, &self.y, &self.z)
     }
 
-    pub fn next_raw(&mut self, duration: Duration) -> Result<RawFrame, EmulatorError> {
+    pub fn next(&mut self, duration: Duration) -> Result<RawFrame, EmulatorError> {
         let num_frames = self.frames_within(duration)?;
         let wavenumber = self.wavenumber;
         let rows = self.x.len();
@@ -120,23 +96,12 @@ impl Rms {
             .map(|i| {
                 let frame = self.cursor + i;
                 let t = (frame as u32 * ULTRASOUND_PERIOD).as_nanos() as u64;
-                let rms = self.device.compute(frame, wavenumber)?;
-                Ok((format!("rms[Pa]@{t}[ns]"), RawColumn::F32(rms)))
+                let rms = self.cpu.frame(frame, wavenumber);
+                (format!("rms[Pa]@{t}[ns]"), RawColumn::F32(rms))
             })
-            .collect::<Result<Vec<_>, EmulatorError>>()?;
+            .collect();
         self.cursor += num_frames;
         Ok(RawFrame { rows, columns })
-    }
-
-    #[cfg(feature = "polars")]
-    #[must_use]
-    pub fn observe_points(&self) -> DataFrame {
-        self.observe_points_raw().into_polars()
-    }
-
-    #[cfg(feature = "polars")]
-    pub fn next(&mut self, duration: Duration) -> Result<DataFrame, EmulatorError> {
-        Ok(self.next_raw(duration)?.into_polars())
     }
 }
 
@@ -164,29 +129,17 @@ impl<'a> SoundFieldOption<'a> for RmsRecordOption {
             })
             .collect();
 
-        let cpu = |sources| {
-            ComputeDevice::Cpu(CpuRms {
-                dists: distances(&x, &y, &z, &positions),
-                sources,
-            })
+        let cpu = CpuRms {
+            dists: distances(&x, &y, &z, &positions),
+            sources,
         };
-        #[cfg(feature = "gpu")]
-        let device = if self.gpu {
-            ComputeDevice::Gpu(super::rms_gpu::GpuRms::new(
-                &x, &y, &z, &positions, &sources,
-            )?)
-        } else {
-            cpu(sources)
-        };
-        #[cfg(not(feature = "gpu"))]
-        let device = cpu(sources);
 
         Ok(Rms {
             wavenumber: 2.0 * PI * ULTRASOUND_FREQ_HZ as f32 / self.sound_speed.mm_s(),
             x,
             y,
             z,
-            device,
+            cpu,
             cursor: 0,
             max_frame: record.num_samples(),
         })
