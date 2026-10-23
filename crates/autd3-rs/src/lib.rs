@@ -3,6 +3,7 @@ pub mod error;
 
 mod client;
 mod datagram;
+mod device_set;
 mod firmware_version;
 mod fpga_state;
 mod response;
