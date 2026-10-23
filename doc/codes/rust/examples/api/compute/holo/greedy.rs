@@ -1,6 +1,7 @@
 use std::num::NonZeroU8;
 
 use anyhow::Result;
+use rand::seq::SliceRandom;
 
 use autd3_rs::geometry::{Autd3, Geometry, TransducerMask, offset};
 use autd3_rs::units::{m, mm, s};
@@ -40,6 +41,8 @@ fn main() -> Result<()> {
         // ANCHOR_END: option
         ;
     let intensities = geometry.intensity_buffer();
+    let mut order: Vec<usize> = (0..geometry.num_transducers()).collect();
+    order.shuffle(&mut rand::rng());
     let mut dst = geometry.phase_buffer();
     // ANCHOR: api
     greedy(
@@ -47,6 +50,7 @@ fn main() -> Result<()> {
         &foci,
         wavelength,
         &intensities,
+        &order,
         &option,
         &mut dst,
     )?;

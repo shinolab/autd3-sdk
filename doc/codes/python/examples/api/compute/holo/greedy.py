@@ -1,3 +1,4 @@
+import numpy as np
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import m, mm, s
 from autd3_pattern import TransducerMask
@@ -38,7 +39,8 @@ option = (
     # ANCHOR_END: option
 )
 intensities = geometry.intensity_buffer()
+order = np.random.default_rng().permutation(geometry.num_transducers())
 dst = geometry.phase_buffer()
 # ANCHOR: api
-greedy(geometry, foci, wavelength, intensities, option, dst)
+greedy(geometry, foci, wavelength, intensities, order, option, dst)
 # ANCHOR_END: api

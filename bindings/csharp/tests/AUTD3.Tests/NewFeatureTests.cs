@@ -231,14 +231,43 @@ namespace AUTD3.Tests
                 new AmplitudeTarget(geometry.Center + new Vector3(0f, 0f, 150f), 150 * dB),
             };
 
+            var order = AscendingOrder(geometry);
+
             using var fromBuffer = geometry.PhaseBuffer();
-            Holo.Greedy(geometry, foci, Pattern.Wavelength(340 * m / s), intensities, new GreedyOption(), fromBuffer);
+            Holo.Greedy(geometry, foci, Pattern.Wavelength(340 * m / s), intensities, order, new GreedyOption(), fromBuffer);
             Assert.Contains(fromBuffer[0], p => p.Value != 0);
 
             using var fromUniform = geometry.PhaseBuffer();
-            Holo.Greedy(geometry, foci, Pattern.Wavelength(340 * m / s), Intensity.Max, new GreedyOption(), fromUniform);
+            Holo.Greedy(geometry, foci, Pattern.Wavelength(340 * m / s), Intensity.Max, order, new GreedyOption(), fromUniform);
             Assert.Contains(fromUniform[0], p => p.Value != 0);
         }
+
+        [Fact]
+        public void HoloGreedyFollowsTheGivenOrderAndRejectsANonPermutation()
+        {
+            using var geometry = Fixture.SingleDevice();
+            var foci = new[]
+            {
+                new AmplitudeTarget(geometry.Center + new Vector3(0f, 0f, 150f), 150 * dB),
+            };
+            var order = AscendingOrder(geometry);
+            new Random(0).Shuffle(order);
+
+            using var first = geometry.PhaseBuffer();
+            Holo.Greedy(geometry, foci, Pattern.Wavelength(340 * m / s), Intensity.Max, order, new GreedyOption(), first);
+            using var second = geometry.PhaseBuffer();
+            Holo.Greedy(geometry, foci, Pattern.Wavelength(340 * m / s), Intensity.Max, order, new GreedyOption(), second);
+            Assert.Equal(first[0].Select(p => p.Value), second[0].Select(p => p.Value));
+
+            var duplicated = (uint[])order.Clone();
+            duplicated[1] = duplicated[0];
+            using var dst = geometry.PhaseBuffer();
+            var e = Assert.Throws<Autd3Exception>(() => Holo.Greedy(geometry, foci, Pattern.Wavelength(340 * m / s), Intensity.Max, duplicated, new GreedyOption(), dst));
+            Assert.Contains("more than once", e.Message);
+            Assert.Throws<Autd3Exception>(() => Holo.Greedy(geometry, foci, Pattern.Wavelength(340 * m / s), Intensity.Max, order[1..], new GreedyOption(), dst));
+        }
+
+        private static uint[] AscendingOrder(Geometry geometry) => Enumerable.Range(0, geometry.NumTransducers).Select(i => (uint)i).ToArray();
 
         [Fact]
         public void SquareProducesSamples()

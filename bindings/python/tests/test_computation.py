@@ -381,10 +381,36 @@ def test_holo_algorithms() -> None:
     holo.naive(geo, foci, wavelength, holo.NaiveOption(), phases, intensities)
     holo.gs(geo, foci, wavelength, holo.GsOption(repeat=10), phases, intensities)
     holo.gspat(geo, foci, wavelength, holo.GspatOption(repeat=10), phases, intensities)
-    holo.greedy(geo, foci, wavelength, intensities, holo.GreedyOption(), phases)
-    holo.greedy(geo, foci, wavelength, autd3.value.Intensity.MAX, holo.GreedyOption(), phases)
+    order = np.random.default_rng(0).permutation(geo.num_transducers())
+    holo.greedy(geo, foci, wavelength, intensities, order, holo.GreedyOption(), phases)
+    holo.greedy(geo, foci, wavelength, autd3.value.Intensity.MAX, list(range(geo.num_transducers())), holo.GreedyOption(), phases)
     assert len(phases) == geo.num_devices()
     assert len(intensities) == geo.num_devices()
+
+
+def test_holo_greedy_follows_the_given_order() -> None:
+    geo = geometry()
+    wavelength = pattern.wavelength(340 * m / s)
+    foci = [holo.AmplitudeTarget(geo.center() + np.array([0.0, 0.0, 150.0]), 5e3 * Pa)]
+    order = np.random.default_rng(0).permutation(geo.num_transducers())
+
+    def run(order: Any) -> Any:
+        phases = geo.phase_buffer()
+        holo.greedy(geo, foci, wavelength, autd3.value.Intensity.MAX, order, holo.GreedyOption(), phases)
+        return phases.to_numpy()
+
+    np.testing.assert_array_equal(run(order), run(order))
+
+    with pytest.raises(holo.HoloError, match="entries"):
+        run(order[1:])
+    duplicated = order.copy()
+    duplicated[1] = duplicated[0]
+    with pytest.raises(holo.HoloError, match="more than once"):
+        run(duplicated)
+    out_of_range = order.copy()
+    out_of_range[0] = geo.num_transducers()
+    with pytest.raises(holo.HoloError, match="only"):
+        run(out_of_range)
 
 
 def test_stm_foci_and_pattern() -> None:

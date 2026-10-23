@@ -284,7 +284,7 @@ namespace AUTD3.Holo
         internal static extern int autd3_holo_gspat_batch(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, UIntPtr repeat, in IntensityConstraintNative constraint, byte directivity, byte[]? mask, IntPtr[] phases, IntPtr[] intensities, UIntPtr numProblems, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_holo_greedy(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, IntPtr intensities, byte uniformIntensity, byte phaseQuantizationLevels, byte directivity, byte[]? mask, PhaseBufferHandle dst, byte[] outErr, UIntPtr outErrLen);
+        internal static extern int autd3_holo_greedy(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, IntPtr intensities, byte uniformIntensity, uint[] order, UIntPtr orderLen, byte phaseQuantizationLevels, byte directivity, byte[]? mask, PhaseBufferHandle dst, byte[] outErr, UIntPtr outErrLen);
     }
 
     public readonly struct AmplitudeTarget : IEquatable<AmplitudeTarget>
@@ -437,11 +437,11 @@ namespace AUTD3.Holo
             }
         }
 
-        public static void Greedy(Geometry geometry, AmplitudeTarget[] foci, Length wavelength, PatternIntensity intensities, GreedyOption option, PhaseBuffer dst)
+        public static void Greedy(Geometry geometry, AmplitudeTarget[] foci, Length wavelength, PatternIntensity intensities, uint[] order, GreedyOption option, PhaseBuffer dst)
         {
             using var intensityLease = new HandleLease(intensities.Buffer?.Handle);
             var err = new byte[NativeAbi.ErrorBufferLength];
-            var code = NativeHolo.autd3_holo_greedy(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, intensityLease.Pointer, intensities.Uniform, option.PhaseQuantizationLevels, (byte)option.Directivity, FlattenMask(option.Mask.Mask, geometry.NumDevices), dst.Handle, err, (UIntPtr)err.Length);
+            var code = NativeHolo.autd3_holo_greedy(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, intensityLease.Pointer, intensities.Uniform, order, (UIntPtr)order.Length, option.PhaseQuantizationLevels, (byte)option.Directivity, FlattenMask(option.Mask.Mask, geometry.NumDevices), dst.Handle, err, (UIntPtr)err.Length);
             if (code != 0)
             {
                 throw Autd3Exception.FromNative(code, err);
