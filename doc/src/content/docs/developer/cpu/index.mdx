@@ -28,7 +28,7 @@ CPU ファームウェアに関する作業はすべて `autd3-sdk/` ディレ�
 
 ```bash
 cargo xtask cpu build         # 実機用 .bin を生成
-cargo xtask cpu flash         # build 後, J-Link で実機へ書き込む
+cargo xtask cpu flash         # build 後, firmware-writer (J-Link) で実機へ書き込む
 cargo xtask cpu test          # ホスト上の単体テスト (cargo test -p autd3-cpu-fw)
 cargo xtask cpu lint          # clippy (fw + board)
 cargo xtask cpu format        # rustfmt --check (fw + board)
@@ -62,7 +62,8 @@ cargo xtask cpu format --fix  # rustfmt 実書き換え
 
 ### 実機書き込み
 
-`cargo xtask cpu flash` は J-Link を JTAG 接続し, `autd3-cpu.bin` を `0x30000000` へロードして実行する.
+`cargo xtask cpu flash` は `tools/firmware-writer` に `--cpu build/autd3-cpu.bin` を渡して呼ぶ.
+writer は J-Link を JTAG 接続し, `autd3-cpu.bin` を `0x30000000` へロードする. 書き込み後は電源を入れ直して起動する.
 デバイスは `R7S910018_R4F` として認識される.
 
 ### ホストテスト

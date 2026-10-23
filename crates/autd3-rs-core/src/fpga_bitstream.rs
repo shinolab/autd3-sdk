@@ -2,7 +2,8 @@ use zerocopy::FromBytes;
 use zerocopy::big_endian::U32;
 
 use autd3_cpu_wire::fpga_update::{
-    FPGA_BARRIER_BASE, FPGA_GOLDEN_REGION_END, FpgaBootImage, is_plausible_fpga_length,
+    FPGA_BARRIER_BASE, FPGA_GOLDEN_REGION_END, FPGA_IMAGE_CAPACITY, FpgaBootImage,
+    is_plausible_fpga_length,
 };
 
 pub const SYNC_WORD: u32 = 0xAA99_5566;
@@ -138,12 +139,19 @@ pub fn summarize_bitstream(bytes: &[u8]) -> BitstreamSummary {
     summary
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, thiserror::Error)]
 pub enum FpgaImageError {
+    #[error("FPGA update image must not be empty")]
     Empty,
+    #[error(
+        "FPGA update image is {length} bytes; the update slot holds at most {FPGA_IMAGE_CAPACITY} bytes"
+    )]
     TooLarge { length: usize },
+    #[error("no bitstream sync word (0xAA995566) found")]
     NoSyncWord,
+    #[error("the bitstream is not an update-slot image (USR_ACCESS reads as {boot_image:?})")]
     NotAnUpdateImage { boot_image: FpgaBootImage },
+    #[error("the bitstream reboots into another image (WBSTAR/IPROG found)")]
     Reboots,
 }
 

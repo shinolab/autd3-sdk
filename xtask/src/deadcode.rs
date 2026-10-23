@@ -302,8 +302,7 @@ fn is_generated(source: &str) -> bool {
 }
 
 fn is_excluded(path: &str) -> bool {
-    path.starts_with("recipes/")
-        || path.ends_with("/build.rs")
+    path.ends_with("/build.rs")
         || path
             .split('/')
             .any(|component| EXCLUDED_DIRS.contains(&component))

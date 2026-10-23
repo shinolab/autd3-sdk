@@ -1,8 +1,10 @@
-set project_directory [file normalize [file join [file dirname [info script]] ..]]
-set mcs_file_path [file join $project_directory "autd3-fpga.mcs"]
+if {$argc != 1} {
+    error "usage: vivado -mode batch -source configuration.tcl -tclargs <mcs>"
+}
+set mcs_file_path [file normalize [lindex $argv 0]]
 
 if {![file exists $mcs_file_path]} {
-    error "$mcs_file_path not found; run `cargo xtask fpga build` first"
+    error "$mcs_file_path not found"
 }
 
 open_hw_manager

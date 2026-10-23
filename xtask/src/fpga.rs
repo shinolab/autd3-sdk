@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -26,7 +27,9 @@ pub(crate) enum FpgaCmd {
         #[arg(long, help = "Re-synthesize even when a bitstream already exists")]
         force: bool,
     },
-    #[command(about = "Build, then configure the SPI flash of the device (golden + update image)")]
+    #[command(
+        about = "Build, then configure the SPI flash of the device (golden + update image) with `firmware-writer` (Vivado)"
+    )]
     Flash {
         #[arg(long, help = "Re-synthesize even when a bitstream already exists")]
         force: bool,
@@ -309,15 +312,7 @@ fn read_mcs(path: &Path) -> Result<(u32, Vec<u8>)> {
 
 fn fpga_flash(root: &Path, force: bool) -> Result<()> {
     let artifacts = fpga_build(root, force)?;
-    let vivado = resolve_vivado()?;
-    let fpga_dir = root.join("firmware/fpga");
-    println!("Make sure the configuration cable is connected and the AUTD3 power is on.");
-    run(
-        &vivado,
-        ["-mode", "batch", "-source", "scripts/configuration.tcl"],
-        &fpga_dir,
-    )
-    .context("Vivado failed. Make sure the AUTD3 is connected and powered on.")?;
+    crate::firmware::run_writer(root, [OsStr::new("--fpga"), artifacts.mcs.as_os_str()])?;
     println!("flash complete: {}", artifacts.mcs.display());
     Ok(())
 }

@@ -56,7 +56,7 @@ jobs:
               - 'firmware/cpu/wire/**'
               - 'firmware/cpu/fw/**'
               - 'tools/**'
-              - 'recipes/**'
+              - 'firmware/fpga/scripts/configuration.tcl'
               - 'Cargo.toml'
               - 'Cargo.lock'
               - '.cargo/**'

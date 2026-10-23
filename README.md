@@ -34,7 +34,6 @@ This repository is a monorepo. See the README in each subfolder for details.
   - [`simulator/`](./simulator): Sound field simulator
   - [`console/`](./console): GUI console
   - [`tools/`](./tools): Auxiliary CLI tools
-- [`recipes/`](./recipes): Rust recipes that do not fit in the documentation
 - [`doc/`](./doc): Documentation site sources
 
 ## Citing

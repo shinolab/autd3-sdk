@@ -1,7 +1,7 @@
 use std::io::{BufRead, Write};
-use std::path::Path;
 #[cfg(windows)]
 use std::path::PathBuf as WinPathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
@@ -37,13 +37,36 @@ pub(crate) fn write(version: &str, target: Option<Target>, force_download: bool)
 
     match target {
         Target::Both => {
-            update_cpu(cpu.as_deref())?;
-            update_fpga(fpga.as_deref())?;
+            update_cpu(cpu.as_deref().context(CPU_NOT_IN_BUNDLE)?)?;
+            update_fpga(fpga.as_deref().context(FPGA_NOT_IN_BUNDLE)?)?;
         }
-        Target::Fpga => update_fpga(fpga.as_deref())?,
-        Target::Cpu => update_cpu(cpu.as_deref())?,
+        Target::Fpga => update_fpga(fpga.as_deref().context(FPGA_NOT_IN_BUNDLE)?)?,
+        Target::Cpu => update_cpu(cpu.as_deref().context(CPU_NOT_IN_BUNDLE)?)?,
     }
 
+    eprintln!("Done. Power-cycle the AUTD3 to load the new firmware.");
+    Ok(())
+}
+
+const CPU_NOT_IN_BUNDLE: &str = "CPU firmware (*.bin) not found in the bundle";
+const FPGA_NOT_IN_BUNDLE: &str = "FPGA firmware (*.mcs) not found in the bundle";
+
+pub(crate) fn write_local(cpu: Option<&Path>, fpga: Option<&Path>) -> Result<()> {
+    let absolute = |image: &Path| -> Result<PathBuf> {
+        if !image.is_file() {
+            bail!("{} not found", image.display());
+        }
+        std::path::absolute(image).with_context(|| format!("resolving {}", image.display()))
+    };
+    let cpu = cpu.map(absolute).transpose()?;
+    let fpga = fpga.map(absolute).transpose()?;
+    eprintln!("Make sure the configuration cables are connected and the AUTD3 power is on.");
+    if let Some(cpu) = &cpu {
+        update_cpu(cpu)?;
+    }
+    if let Some(fpga) = &fpga {
+        update_fpga(fpga)?;
+    }
     eprintln!("Done. Power-cycle the AUTD3 to load the new firmware.");
     Ok(())
 }
@@ -69,8 +92,7 @@ fn prompt_target() -> Result<Target> {
     }
 }
 
-fn update_cpu(firmware: Option<&Path>) -> Result<()> {
-    let firmware = firmware.context("CPU firmware (*.bin) not found in the bundle")?;
+fn update_cpu(firmware: &Path) -> Result<()> {
     let jlink = resolve_jlink()?;
 
     let script = jlink_script(firmware);
@@ -146,13 +168,14 @@ fn tee_lines(reader: impl std::io::Read, log: &mut String) {
     }
 }
 
-fn update_fpga(firmware: Option<&Path>) -> Result<()> {
-    let firmware = firmware.context("FPGA firmware (*.mcs) not found in the bundle")?;
+const FPGA_CONFIGURATION_TCL: &str =
+    include_str!("../../../firmware/fpga/scripts/configuration.tcl");
+
+fn update_fpga(firmware: &Path) -> Result<()> {
     let vivado = resolve_vivado()?;
 
-    let script = fpga_script(firmware);
     let script_path = std::env::temp_dir().join("autd3-fpga-configuration.tcl");
-    std::fs::write(&script_path, script)
+    std::fs::write(&script_path, FPGA_CONFIGURATION_TCL)
         .with_context(|| format!("writing {}", script_path.display()))?;
 
     eprintln!("Flashing FPGA via {vivado}...");
@@ -166,6 +189,8 @@ fn update_fpga(firmware: Option<&Path>) -> Result<()> {
             "-notrace",
             "-source",
             &script_path.to_string_lossy(),
+            "-tclargs",
+            &tcl_path(firmware),
         ],
         &std::env::temp_dir(),
     )
@@ -185,40 +210,14 @@ fn jlink_script(bin: &Path) -> String {
     )
 }
 
-fn fpga_script(mcs: &Path) -> String {
-    const DEV: &str = "xc7a200t_0";
-    let mcs = tcl_path(mcs);
-    format!(
-        "open_hw_manager
-connect_hw_server -allow_non_jtag
-open_hw_target
-current_hw_device [get_hw_devices {DEV}]
-refresh_hw_device -update_hw_probes false [lindex [get_hw_devices {DEV}] 0]
-create_hw_cfgmem -hw_device [lindex [get_hw_devices {DEV}] 0] [lindex [get_cfgmem_parts {{mt25ql128-spi-x1_x2_x4}}] 0]
-set_property PROGRAM.BLANK_CHECK 0 [get_property PROGRAM.HW_CFGMEM [lindex [get_hw_devices {DEV}] 0]]
-set_property PROGRAM.ERASE 1 [get_property PROGRAM.HW_CFGMEM [lindex [get_hw_devices {DEV}] 0]]
-set_property PROGRAM.CFG_PROGRAM 1 [get_property PROGRAM.HW_CFGMEM [lindex [get_hw_devices {DEV}] 0]]
-set_property PROGRAM.VERIFY 1 [get_property PROGRAM.HW_CFGMEM [lindex [get_hw_devices {DEV}] 0]]
-set_property PROGRAM.CHECKSUM 0 [get_property PROGRAM.HW_CFGMEM [lindex [get_hw_devices {DEV}] 0]]
-refresh_hw_device [lindex [get_hw_devices {DEV}] 0]
-set_property PROGRAM.ADDRESS_RANGE {{use_file}} [get_property PROGRAM.HW_CFGMEM [lindex [get_hw_devices {DEV}] 0]]
-set_property PROGRAM.FILES [list {{{mcs}}}] [get_property PROGRAM.HW_CFGMEM [lindex [get_hw_devices {DEV}] 0]]
-set_property PROGRAM.PRM_FILE {{}} [get_property PROGRAM.HW_CFGMEM [lindex [get_hw_devices {DEV}] 0]]
-set_property PROGRAM.UNUSED_PIN_TERMINATION {{pull-none}} [get_property PROGRAM.HW_CFGMEM [lindex [get_hw_devices {DEV}] 0]]
-startgroup
-create_hw_bitstream -hw_device [lindex [get_hw_devices {DEV}] 0] [get_property PROGRAM.HW_CFGMEM_BITFILE [lindex [get_hw_devices {DEV}] 0]]; program_hw_devices [lindex [get_hw_devices {DEV}] 0]; refresh_hw_device [lindex [get_hw_devices {DEV}] 0];
-program_hw_cfgmem -hw_cfgmem [get_property PROGRAM.HW_CFGMEM [lindex [get_hw_devices {DEV}] 0]]
-endgroup
-close_hw_manager
-"
-    )
-}
-
 fn tcl_path(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }
 
 fn resolve_jlink() -> Result<String> {
+    if let Some(path) = std::env::var_os("JLINK").filter(|path| !path.is_empty()) {
+        return Ok(path.to_string_lossy().into_owned());
+    }
     let candidates = if cfg!(windows) {
         ["JLink", "jlink"].as_slice()
     } else {
@@ -235,7 +234,7 @@ fn resolve_jlink() -> Result<String> {
     }
     bail!(
         "J-Link not found. Install SEGGER J-Link and put its commander \
-         (`JLinkExe` / `JLink.exe`) on PATH."
+         (`JLinkExe` / `JLink.exe`) on PATH, or set JLINK to its path."
     );
 }
 

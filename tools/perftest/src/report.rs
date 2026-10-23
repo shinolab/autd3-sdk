@@ -5,7 +5,6 @@ use std::io::{IsTerminal, Write as _};
 
 use autd3_rs::Telemetry;
 
-use crate::mem::MemProfile;
 use crate::stats::{Counters, LatencyStats, Summary, TrafficRate};
 
 struct TelemetryCounter {
@@ -258,62 +257,6 @@ pub(crate) fn print_summary(s: &Summary) {
         println!("  frames        : {}", s.ack.frames());
         println!("  mean          : {}", format_duration(mean));
         println!("  max           : {}", format_duration(s.ack.max()));
-    }
-}
-
-pub(crate) fn print_mem(m: &MemProfile) {
-    let per_send = |n: u64| {
-        if m.sends == 0 {
-            0.0
-        } else {
-            n as f64 / m.sends as f64
-        }
-    };
-    let net_bytes = i128::from(m.bytes_allocated) - i128::from(m.bytes_deallocated);
-
-    println!();
-    println!("memory (mem-profile build, process-wide):");
-    println!(
-        "  allocations   : {:>12}   (per send: {:.2})",
-        m.allocations,
-        per_send(m.allocations),
-    );
-    println!("  deallocations : {:>12}", m.deallocations);
-    println!("  reallocations : {:>12}", m.reallocations);
-    println!(
-        "  bytes alloc   : {:>12}   (per send: {:.2})",
-        m.bytes_allocated,
-        per_send(m.bytes_allocated),
-    );
-    println!("  net bytes     : {net_bytes:>12}");
-
-    if m.top_sizes.is_empty() && m.large_count == 0 {
-        return;
-    }
-    println!();
-    println!("  allocation sizes (largest share of bytes first):");
-    println!(
-        "    {:>8}  {:>10}  {:>10}  {:>12}",
-        "size", "count", "per send", "bytes/send"
-    );
-    for bucket in &m.top_sizes {
-        let bytes = bucket.size as u64 * bucket.count;
-        println!(
-            "    {:>8}  {:>10}  {:>10.2}  {:>12.2}",
-            bucket.size,
-            bucket.count,
-            per_send(bucket.count),
-            per_send(bytes),
-        );
-    }
-    if m.large_count > 0 {
-        println!(
-            "    {:>8}  {:>10}  {:>10.2}  {:>12.2}",
-            ">=8192",
-            m.large_count,
-            per_send(m.large_count),
-            per_send(m.large_bytes),
-        );
     }
 }
 
