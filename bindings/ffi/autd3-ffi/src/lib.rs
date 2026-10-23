@@ -32,7 +32,7 @@ use autd3_rs::value::{
 };
 use autd3_rs::{
     BusStats, Client, DeviceMask, DeviceState, Error, ExecAt, FirmwareVersion, FpgaState, Frames,
-    Geometry, NetworkCause, Point3, Response, ResponseFuture, Telemetry, Velocity,
+    Geometry, Point3, Response, ResponseFuture, Telemetry, Velocity,
 };
 
 pub(crate) fn executor() -> &'static Executor {
@@ -1737,12 +1737,15 @@ unsafe fn client_ctx(
     Some((Arc::clone(&client.0), ctx))
 }
 
+type SendCtx = (Arc<Client>, Arc<Frames>, (usize, usize), CompletionCtx);
+
 unsafe fn send_ctx(
     client: *const ClientHandle,
     frames: *const Arc<Frames>,
+    frame: i64,
     cb: CompletionCallback,
     user_data: *mut c_void,
-) -> Option<(Arc<Client>, Arc<Frames>, CompletionCtx)> {
+) -> Option<SendCtx> {
     let ctx = CompletionCtx::new(cb, user_data)?;
     let (Some(client), Some(frames)) = (unsafe { handle_ref(client) }, unsafe {
         handle_ref::<Arc<Frames>>(frames)
@@ -1750,22 +1753,19 @@ unsafe fn send_ctx(
         ctx.err("null argument");
         return None;
     };
-    Some((Arc::clone(&client.0), Arc::clone(frames), ctx))
+    let Some(span) = frame_span(frames, frame) else {
+        ctx.invalid_argument(&format!("frame {frame} out of range"));
+        return None;
+    };
+    Some((Arc::clone(&client.0), Arc::clone(frames), span, ctx))
 }
 
-fn frame_span(frames: &Frames, frame: i64) -> (usize, usize) {
+fn frame_span(frames: &Frames, frame: i64) -> Option<(usize, usize)> {
     match usize::try_from(frame) {
-        Ok(index) => (index, 1),
-        Err(_) => (0, frames.len()),
+        Ok(index) if index < frames.len() => Some((index, 1)),
+        Ok(_) => None,
+        Err(_) => Some((0, frames.len())),
     }
-}
-
-fn frame_at(frames: &Frames, index: usize) -> Result<autd3_rs::Frame<'_>, Error> {
-    frames.frame(index).ok_or_else(|| {
-        Error::Network(NetworkCause::new(std::io::Error::other(format!(
-            "frame {index} out of range"
-        ))))
-    })
 }
 
 #[unsafe(no_mangle)]
@@ -1866,19 +1866,16 @@ pub unsafe extern "C" fn autd3_client_send_checked(
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let Some((client, frames, ctx)) = (unsafe { send_ctx(client, frames, cb, user_data) }) else {
+    let Some((client, frames, (start, count), ctx)) =
+        (unsafe { send_ctx(client, frames, frame, cb, user_data) })
+    else {
         return;
     };
     spawn_completion(
         ctx,
         async move {
-            let (start, count) = frame_span(&frames, frame);
-            for index in (start..).take(count) {
-                client
-                    .send_frame(frame_at(&frames, index)?)
-                    .await?
-                    .await?
-                    .check()?;
+            for frame in frames.iter().skip(start).take(count) {
+                client.send_frame(frame).await?.await?.check()?;
             }
             Ok(())
         },
@@ -1894,16 +1891,17 @@ pub unsafe extern "C" fn autd3_client_send(
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let Some((client, frames, ctx)) = (unsafe { send_ctx(client, frames, cb, user_data) }) else {
+    let Some((client, frames, (start, count), ctx)) =
+        (unsafe { send_ctx(client, frames, frame, cb, user_data) })
+    else {
         return;
     };
     spawn_completion(
         ctx,
         async move {
-            let (start, count) = frame_span(&frames, frame);
             let mut futures = Vec::new();
-            for index in (start..).take(count) {
-                futures.push(client.send_frame(frame_at(&frames, index)?).await?);
+            for frame in frames.iter().skip(start).take(count) {
+                futures.push(client.send_frame(frame).await?);
             }
             Ok(futures)
         },
@@ -1920,7 +1918,9 @@ pub unsafe extern "C" fn autd3_client_send_at(
     cb: CompletionCallback,
     user_data: *mut c_void,
 ) {
-    let Some((client, frames, ctx)) = (unsafe { send_ctx(client, frames, cb, user_data) }) else {
+    let Some((client, frames, (start, count), ctx)) =
+        (unsafe { send_ctx(client, frames, frame, cb, user_data) })
+    else {
         return;
     };
     let Some(exec) = to_exec_at(exec) else {
@@ -1930,14 +1930,9 @@ pub unsafe extern "C" fn autd3_client_send_at(
     spawn_completion(
         ctx,
         async move {
-            let (start, count) = frame_span(&frames, frame);
             let mut futures = Vec::new();
-            for index in (start..).take(count) {
-                futures.push(
-                    client
-                        .send_frame_at(frame_at(&frames, index)?, exec)
-                        .await?,
-                );
+            for frame in frames.iter().skip(start).take(count) {
+                futures.push(client.send_frame_at(frame, exec).await?);
             }
             Ok(futures)
         },
@@ -3321,6 +3316,25 @@ mod tests {
             )
         });
         unsafe { autd3_op_free(command) };
+        unsafe { autd3_frames_free(frames) };
+        unsafe { drop_handle(geometry) };
+    }
+
+    #[test]
+    fn a_frame_index_past_the_last_frame_is_rejected() {
+        let geometry = geometry_of(1);
+        let frames = autd3_frames_new();
+        let ops = [autd3_op_clear(), autd3_op_nop()];
+        let sequence = unsafe { autd3_command_sequence(ops.as_ptr(), ops.len()) };
+        assert_eq!(AUTD3_OK, unsafe {
+            autd3_frames_encode_into(frames, geometry, sequence, std::ptr::null_mut(), 0)
+        });
+        let encoded = unsafe { handle_ref::<Arc<Frames>>(frames) }.unwrap();
+
+        assert_eq!(Some((0, 2)), frame_span(encoded, -1));
+        assert_eq!(Some((1, 1)), frame_span(encoded, 1));
+        assert_eq!(None, frame_span(encoded, 2));
+
         unsafe { autd3_frames_free(frames) };
         unsafe { drop_handle(geometry) };
     }

@@ -98,7 +98,7 @@ pub struct OpenError(#[from] Error);
 
 fn udp_cause(e: &Error) -> Option<&UdpError> {
     match e {
-        Error::Network(cause) => (**cause).downcast_ref::<UdpError>(),
+        Error::Network(cause) => Some(cause),
         _ => None,
     }
 }
