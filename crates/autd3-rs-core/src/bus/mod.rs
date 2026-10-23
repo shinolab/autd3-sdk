@@ -1,11 +1,9 @@
-mod device_clock;
 mod device_mask;
 mod device_state;
 mod interface;
 mod stats;
 mod status;
 
-pub use device_clock::DeviceClock;
 pub use device_mask::{DeviceMask, DeviceMaskIter};
 pub use device_state::DeviceState;
 pub use interface::Interface;

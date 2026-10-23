@@ -6,7 +6,7 @@ use std::task::{Context, Poll, Waker};
 use std::time::{Duration, Instant};
 
 use autd3_cpu_wire::udp::{Flags, Kind};
-use autd3_rs_core::{BusStats, DeviceClock, DeviceMask, DeviceStatus, MAX_DEVICES};
+use autd3_rs_core::{BusStats, DeviceMask, DeviceStatus, MAX_DEVICES};
 use zerocopy::{FromZeros, IntoBytes};
 
 use crate::datagram::Frame;
@@ -18,6 +18,7 @@ use crate::udp::{Channel, DeviceReply, Polled, Reply, StateChecker, TransportOpt
 use crate::value::SysTime;
 
 use super::completion::ResponseSender;
+use super::device_clock::DeviceClock;
 use super::liveness::DeviceLiveness;
 
 const IDLE_WAIT: Duration = Duration::from_secs(1);
@@ -303,7 +304,7 @@ impl SessionState {
             && let Some(sys_time) = NonZeroU64::new(reply.reply.sys_time)
         {
             self.device_clock
-                .observe(SysTime::from_nanos(sys_time.get()));
+                .observe(SysTime::from_nanos(sys_time.get()), now);
         }
         self.record_reply(&reply.reply, now)
     }
@@ -375,15 +376,14 @@ pub(crate) struct Session {
     state: Mutex<SessionState>,
     stop_requested: AtomicBool,
     heartbeat_resume_device: AtomicUsize,
-    device_clock: DeviceClock,
     stats: BusStats,
     timeouts: Timeouts,
 }
 
 impl Session {
     pub(crate) fn open(geometry: &Geometry, option: &TransportOption) -> Result<Self, UdpError> {
-        let device_clock = DeviceClock::new();
-        let channel = super::open::open(option, geometry.num_devices(), &device_clock)?;
+        let mut device_clock = DeviceClock::default();
+        let channel = super::open::open(option, geometry.num_devices(), &mut device_clock)?;
         let num_devices = channel.num_devices();
         let timeouts = Timeouts {
             ack: option.ack_timeout,
@@ -393,13 +393,12 @@ impl Session {
             state: Mutex::new(SessionState::new(
                 num_devices,
                 timeouts,
-                device_clock.clone(),
+                device_clock,
                 Instant::now(),
             )),
             stop_requested: AtomicBool::new(false),
             heartbeat_resume_device: AtomicUsize::new(num_devices - 1),
             channel,
-            device_clock,
             stats: BusStats::default(),
             timeouts,
         })
@@ -441,7 +440,7 @@ impl Session {
     }
 
     pub(crate) fn device_time(&self) -> Option<SysTime> {
-        self.device_clock.now()
+        self.lock_state().device_clock.now(Instant::now())
     }
 
     pub(crate) fn lost_timeout(&self) -> Duration {
@@ -1083,11 +1082,11 @@ mod tests {
         let mut state = session_state(2, now);
 
         state.receive_reply(&timed_reply(1, 1, DEVICE_TIME_NS), now);
-        assert!(state.device_clock.now().is_none());
+        assert!(state.device_clock.now(now).is_none());
         state.receive_reply(&timed_reply(0, 0, 0), now);
-        assert!(state.device_clock.now().is_none());
+        assert!(state.device_clock.now(now).is_none());
         state.receive_reply(&timed_reply(0, 0, DEVICE_TIME_NS), now);
-        assert!(state.device_clock.now().is_some());
+        assert!(state.device_clock.now(now).is_some());
     }
 
     #[test]
@@ -1101,7 +1100,7 @@ mod tests {
                 .is_none()
         );
         assert!(state.liveness[0].is_lost());
-        assert!(state.device_clock.now().is_none());
+        assert!(state.device_clock.now(now).is_none());
     }
 
     fn flagged_reply(device: usize, reported_unit_id: u8, flags: Flags) -> DeviceReply {

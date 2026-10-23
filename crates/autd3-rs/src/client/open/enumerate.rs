@@ -2,7 +2,6 @@ use std::net::SocketAddrV6;
 use std::time::{Duration, Instant};
 
 use autd3_cpu_wire::udp::{Flags, Kind, Role};
-use autd3_rs_core::DeviceClock;
 use autd3_rs_core::value::SysTime;
 use zerocopy::IntoBytes;
 
@@ -11,6 +10,8 @@ use crate::udp::{
     Channel, ControlResponse, TransportOption, UdpError, assign_id_body, same_endpoint,
     set_time_body,
 };
+
+use crate::client::device_clock::DeviceClock;
 
 pub(super) const REQUEST_REPLY_WAIT: Duration = Duration::from_millis(200);
 const EXCHANGE_ATTEMPTS: usize = 3;
@@ -297,7 +298,7 @@ impl Enumerator<'_> {
     fn set_time(
         &mut self,
         grandmaster: SocketAddrV6,
-        device_clock: &DeviceClock,
+        device_clock: &mut DeviceClock,
     ) -> Result<(), UdpError> {
         let body = set_time_body(DEVICE_TIME_AT_OPEN);
         let response = self
@@ -307,7 +308,7 @@ impl Enumerator<'_> {
                 unit_id: GRANDMASTER_UNIT_ID,
             })?;
         response.check_status(Kind::SetTime, GRANDMASTER_UNIT_ID)?;
-        device_clock.observe(DEVICE_TIME_AT_OPEN);
+        device_clock.observe(DEVICE_TIME_AT_OPEN, Instant::now());
         Ok(())
     }
 
@@ -352,7 +353,7 @@ pub(super) fn bring_up(
     option: &TransportOption,
     deadline: Option<Instant>,
     num_devices: usize,
-    device_clock: &DeviceClock,
+    device_clock: &mut DeviceClock,
 ) -> Result<Vec<SocketAddrV6>, UdpError> {
     let mut enumerator = Enumerator {
         channel,
