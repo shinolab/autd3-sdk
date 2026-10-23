@@ -31,7 +31,7 @@ pub(crate) enum RustCmd {
     Coverage {
         #[arg(
             long,
-            help = "Include `tools/` and `examples/`, which carry no tests by convention"
+            help = "Include `tools/` and `recipes/`, which carry no tests by convention"
         )]
         all: bool,
         #[arg(long, help = "Open the HTML report in a browser")]
@@ -87,16 +87,16 @@ pub(crate) enum RustCmd {
         #[arg(long, short, help = "Print every grep hit instead of the first few")]
         verbose: bool,
     },
-    #[command(about = "Build and run an example from `examples/`")]
-    Example {
-        #[arg(help = "Example binary name (one binary per feature; see `examples/`)")]
+    #[command(about = "Build and run a recipe from `recipes/`")]
+    Recipe {
+        #[arg(help = "Recipe binary name (see `recipes/src/bin/`)")]
         name: String,
         #[arg(long, help = "Build the dev profile instead of release")]
         debug: bool,
         #[arg(
             trailing_var_arg = true,
             allow_hyphen_values = true,
-            help = "Arguments forwarded to the example"
+            help = "Arguments forwarded to the recipe"
         )]
         args: Vec<String>,
     },
@@ -131,7 +131,7 @@ pub(crate) fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
         RustCmd::Deadcode { reuse, verbose } => {
             crate::deadcode::run_deadcode(root, *reuse, *verbose)
         }
-        RustCmd::Example { name, debug, args } => run_example(root, name, *debug, args),
+        RustCmd::Recipe { name, debug, args } => run_recipe(root, name, *debug, args),
         RustCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
 }
@@ -177,7 +177,7 @@ fn run_lint(root: &Path) -> Result<()> {
     )
 }
 
-const COVERAGE_IGNORE: &str = "/(tools|examples)/";
+const COVERAGE_IGNORE: &str = "/(tools|recipes)/";
 
 pub(crate) fn coverage(dir: &Path, test_args: &[&str], filter: &[&str], open: bool) -> Result<()> {
     if !on_path("cargo-llvm-cov") {
@@ -259,8 +259,8 @@ fn run_semver(root: &Path, baseline: Option<&str>) -> Result<()> {
     run("cargo", args, root)
 }
 
-fn run_example(root: &Path, name: &str, debug: bool, args: &[String]) -> Result<()> {
-    let mut build_args = cargo_build_args("autd3-rs-examples", None, debug);
+fn run_recipe(root: &Path, name: &str, debug: bool, args: &[String]) -> Result<()> {
+    let mut build_args = cargo_build_args("autd3-rs-recipes", None, debug);
     build_args.extend(["--bin", name]);
     run("cargo", build_args, root)?;
 

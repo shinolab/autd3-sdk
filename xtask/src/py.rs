@@ -61,19 +61,6 @@ pub(crate) enum PyCmd {
         )]
         python: Option<String>,
     },
-    #[command(about = "Run a Python example from `bindings/python/examples/`")]
-    Example {
-        #[arg(help = "Example script name (without `.py`)")]
-        name: String,
-        #[arg(long, help = "Build the dev profile instead of release")]
-        debug: bool,
-        #[arg(
-            trailing_var_arg = true,
-            allow_hyphen_values = true,
-            help = "Arguments forwarded to the example"
-        )]
-        args: Vec<String>,
-    },
     #[command(about = "Remove the Python binding build outputs")]
     Clean(CleanArgs),
 }
@@ -93,7 +80,6 @@ pub(crate) fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
         PyCmd::Lint => lint(&dir),
         PyCmd::Format { fix } => cargo_fmt(&dir, &[], fix),
         PyCmd::Test { python } => test(&dir, python.as_deref()),
-        PyCmd::Example { name, debug, args } => example(&dir, &name, debug, &args),
         PyCmd::Clean(args) => crate::clean::scope(root, args, clean),
     }
 }
@@ -195,22 +181,6 @@ fn test(dir: &Path, python: Option<&str>) -> Result<()> {
             .join("; ");
         run(&python.to_string_lossy(), ["-c", &imports], dir)
     }
-}
-
-fn example(dir: &Path, name: &str, debug: bool, args: &[String]) -> Result<()> {
-    let venv = venv_for(dir, None)?;
-    develop(dir, &venv, WHEELS, !debug)?;
-    pip_install(dir, &venv, &["numpy", "scipy", "polars"])?;
-    let script = dir.join("examples").join(format!("{name}.py"));
-    if !script.is_file() {
-        bail!("example not found: {}", script.display());
-    }
-    let python = venv_python(&venv).to_string_lossy().into_owned();
-    let script = script.to_string_lossy().into_owned();
-    let script_args = ["-B", &script]
-        .into_iter()
-        .chain(args.iter().map(String::as_str));
-    run(&python, script_args, dir)
 }
 
 fn stale_extension_modules(dir: &Path, wheel: &str) -> Vec<PathBuf> {

@@ -14,7 +14,7 @@ members = [
     "tools/firmware-test",
     "tools/firmware-ota",
     "tools/fpga-memory",
-    "examples",
+    "recipes",
 ]
 exclude = [
     "xtask",
