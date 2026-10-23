@@ -37,8 +37,8 @@ pub use set_silencer::{FixedCompletionTime, FixedUpdateRate, SetSilencer, Silenc
 pub use write_foci_buffer::WriteFociBuffer;
 pub(crate) use write_foci_buffer::num_foci;
 pub use write_modulation_buffer::WriteModulationBuffer;
+pub(crate) use write_pattern_buffer::encode_raw_pattern_entry;
 pub use write_pattern_buffer::{StmIntensity, WritePatternBuffer};
-pub(crate) use write_pattern_buffer::{WritePatternChunk, encode_raw_pattern_entry};
 pub use write_pattern_phase::{PhaseDepth, WritePatternPhase};
 
 use zerocopy::{Immutable, IntoBytes};
@@ -134,7 +134,7 @@ mod tests {
 
     #[test]
     fn ops_whose_payload_depends_on_the_device_are_per_device() {
-        let ops: [&dyn Operation; 7] = [
+        let ops: [&dyn Operation; 6] = [
             &SetOutputMask { masks: &[] },
             &SetPhaseCorrection { phases: &[] },
             &WriteFociBuffer {
@@ -144,12 +144,6 @@ mod tests {
             },
             &WritePatternBuffer::new(PatternBank::B0, 0, &[], Intensity::MAX),
             &crate::commands::Pattern::new(&[], Intensity::MAX),
-            &WritePatternChunk {
-                bank: PatternBank::B0,
-                start_index: 0,
-                patterns: &[],
-                intensities: StmIntensity::default(),
-            },
             &WritePatternPhase {
                 bank: PatternBank::B0,
                 start_index: 0,

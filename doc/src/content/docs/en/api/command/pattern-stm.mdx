@@ -64,9 +64,9 @@ For the behavior of `loop_behavior` and `transition_mode`, see [playback control
 
 ## Equivalent Low-Level Commands
 
-`PatternStm` internally expands into the three commands [WritePatternPhase](/autd3-sdk/en/api/command/lowlevel/write-pattern-phase/) or [WritePatternBuffer](/autd3-sdk/en/api/command/lowlevel/write-pattern-buffer/) (each index) + [ConfigPattern](/autd3-sdk/en/api/command/lowlevel/config-pattern/) + [ActivatePatternBank](/autd3-sdk/en/api/command/lowlevel/activate-pattern-bank/).
+`PatternStm` internally expands into the three commands [WritePatternPhase](/autd3-sdk/en/api/command/lowlevel/write-pattern-phase/) or [WritePatternBuffer](/autd3-sdk/en/api/command/lowlevel/write-pattern-buffer/) (2 indices at a time) + [ConfigPattern](/autd3-sdk/en/api/command/lowlevel/config-pattern/) + [ActivatePatternBank](/autd3-sdk/en/api/command/lowlevel/activate-pattern-bank/).
 The following is equivalent to `PatternStm::new(config, &phases, intensities, option)` when `intensities` is a uniform value.
-When `intensities` holds per-transducer values, `WritePatternBuffer` is used for each index instead of `WritePatternPhase`.
+When `intensities` holds per-transducer values, `WritePatternBuffer` is used for 2 indices at a time instead of `WritePatternPhase`.
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />
 

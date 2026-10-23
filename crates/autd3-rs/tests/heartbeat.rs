@@ -24,7 +24,6 @@ async fn the_client_sends_no_heartbeat_by_itself() {
     }
 
     assert_eq!(heartbeats(&emulator), [0, 0]);
-    assert_eq!(client.bus_stats().heartbeats(), 0);
     client.close().unwrap();
 }
 
@@ -39,7 +38,6 @@ async fn each_heartbeat_reaches_every_device_once() {
     client.send(Nop).await.unwrap();
 
     assert_eq!(heartbeats(&emulator), [5, 5, 5]);
-    assert_eq!(client.bus_stats().heartbeats(), 5);
     client.close().unwrap();
 }
 
@@ -47,17 +45,21 @@ async fn each_heartbeat_reaches_every_device_once() {
 #[ignore = "depends on real time"]
 async fn a_heartbeat_reply_updates_the_device_state() {
     let (emulator, client) = open(2);
-    let checker = client.state_checker();
+    let states = || -> Vec<DeviceState> {
+        client
+            .device_status()
+            .unwrap()
+            .iter()
+            .map(|status| status.state)
+            .collect()
+    };
 
     emulator.set_ptp_lock_blocked(1, true);
-    assert_eq!(
-        checker.check().unwrap().devices(),
-        [DeviceState::Ready, DeviceState::Ready]
-    );
+    assert_eq!(states(), [DeviceState::Ready, DeviceState::Ready]);
 
     client.send_heartbeat().unwrap();
     let give_up = Instant::now() + PATIENCE;
-    while checker.check().unwrap().devices()[1] != DeviceState::Syncing {
+    while states()[1] != DeviceState::Syncing {
         assert!(
             Instant::now() < give_up,
             "the heartbeat reply never arrived"
@@ -65,7 +67,7 @@ async fn a_heartbeat_reply_updates_the_device_state() {
         tokio::time::sleep(Duration::from_millis(5)).await;
     }
 
-    assert_eq!(checker.check().unwrap().devices()[0], DeviceState::Ready);
+    assert_eq!(states()[0], DeviceState::Ready);
     client.close().unwrap();
 }
 

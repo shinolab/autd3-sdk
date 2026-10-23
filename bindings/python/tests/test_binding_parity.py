@@ -133,8 +133,7 @@ def test_amplitude_arithmetic_and_ordering() -> None:
 def test_constants_come_from_rust() -> None:
     assert params.ULTRASOUND_FREQ_HZ == 40000
     assert params.PORT > 0
-    assert params.DEVICE_QUEUE_FRAMES > 0
-    assert params.ROTATION_NORM_TOLERANCE == Autd3.ROTATION_NORM_TOLERANCE
+    assert 0.0 < Autd3.ROTATION_NORM_TOLERANCE < 1.0
 
 
 def test_autd3_defaults_to_the_origin_and_identity() -> None:
@@ -329,22 +328,6 @@ def test_command_contents_are_checked_when_encoded() -> None:
         with pytest.raises(autd3.Autd3Error) as err:
             autd3.Frames.encode(geometry, loose(command))
         assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
-
-
-def test_a_zero_ack_timeout_is_rejected_at_open() -> None:
-    option = autd3.TransportOption(ack_timeout=Duration.from_nanos(0))
-
-    with pytest.raises(autd3.Autd3Error, match="ack_timeout") as err:
-        autd3.Client.open(one_device(), option)
-    assert err.value.code == autd3.Autd3Error.NETWORK
-
-
-def test_a_zero_lost_timeout_is_rejected_at_open() -> None:
-    option = autd3.TransportOption(lost_timeout=Duration.from_nanos(0))
-
-    with pytest.raises(autd3.Autd3Error, match="lost_timeout") as err:
-        autd3.Client.open(one_device(), option)
-    assert err.value.code == autd3.Autd3Error.NETWORK
 
 
 def test_pattern_functions_reject_a_buffer_for_another_geometry() -> None:

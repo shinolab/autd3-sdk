@@ -12,7 +12,7 @@ use autd3_ffi_abi::{
     AUTD3_ERR, AUTD3_ERR_DEVICE, AUTD3_ERR_INVALID_ARGUMENT, AUTD3_ERR_NETWORK, AUTD3_ERR_TIMEOUT,
     AUTD3_OK, Autd3FirmwareVersion, Autd3Telemetry, Buffer, CompletionCallback, CompletionCtx,
     IntensityBuffer, ModulationBuffer, PhaseBuffer, drop_handle, handle_mut, handle_ref,
-    into_handle, slice_ref, take_handle, to_ns, write_cstr, write_out,
+    into_handle, slice_mut, slice_ref, take_handle, to_ns, write_cstr, write_out,
 };
 use autd3_rs::commands::{
     ActivateModulationBank, ActivatePatternBank, BoxedCommand, Clear, Command, ConfigFociStm,
@@ -25,14 +25,13 @@ use autd3_rs::commands::{
     WritePatternPhase, each,
 };
 use autd3_rs::params::NUM_FOCI_MAX;
-use autd3_rs::udp::StateChecker;
 use autd3_rs::value::{
     ControlPoint, ControlPoints, Intensity, LoopBehavior, ModulationBank, PatternBank, Phase,
     PulseWidth, SamplingConfig, SysTime, TransitionMode,
 };
 use autd3_rs::{
-    BusStats, Client, DeviceMask, DeviceState, Error, ExecAt, FirmwareVersion, FpgaState, Frames,
-    Geometry, Point3, Response, ResponseFuture, Telemetry, Velocity,
+    Client, DeviceState, Error, ExecAt, FirmwareVersion, FpgaState, Frames, Geometry, Point3,
+    Response, ResponseFuture, Telemetry, Velocity,
 };
 
 pub(crate) fn executor() -> &'static Executor {
@@ -181,11 +180,6 @@ fn to_sampling_config(divide: u16) -> Option<SamplingConfig> {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_params_max_devices() -> usize {
-    autd3_rs::MAX_DEVICES
-}
-
-#[unsafe(no_mangle)]
 pub extern "C" fn autd3_params_pwe_table_size() -> usize {
     PWE_TABLE_SIZE
 }
@@ -311,9 +305,9 @@ pub enum OwnedCommand {
     },
     WritePatternBuffer {
         bank: PatternBank,
-        index: u16,
-        phases: Vec<Vec<Phase>>,
-        intensities: OwnedPatternIntensity,
+        start_index: u16,
+        patterns: Vec<Vec<Vec<Phase>>>,
+        intensities: OwnedStmIntensity,
     },
     WriteFociBuffer {
         bank: PatternBank,
@@ -507,28 +501,42 @@ pub unsafe extern "C" fn autd3_op_modulation(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_op_write_pattern_buffer(
     bank: u8,
-    index: u16,
-    phases: *const PhaseBuffer,
-    intensities: *const IntensityBuffer,
+    start_index: u16,
+    phases: *const *const PhaseBuffer,
+    num_patterns: usize,
+    intensity_kind: u8,
+    intensities: *const *const IntensityBuffer,
+    num_intensities: usize,
     uniform_intensity: u8,
 ) -> *mut OwnedCommand {
-    let Some(phases) = (unsafe { handle_ref(phases) }) else {
-        return std::ptr::null_mut();
-    };
-    let Some(intensities) = (unsafe { owned_pattern_intensity(intensities, uniform_intensity) })
-    else {
-        return std::ptr::null_mut();
-    };
     let Some(bank) = to_pattern_bank(bank) else {
+        return std::ptr::null_mut();
+    };
+    let Some(patterns) = (unsafe { clone_buffers(phases, num_patterns) }) else {
+        return std::ptr::null_mut();
+    };
+    let Some(intensities) = (unsafe {
+        owned_stm_intensity(
+            intensity_kind,
+            intensities,
+            num_intensities,
+            uniform_intensity,
+        )
+    }) else {
         return std::ptr::null_mut();
     };
 
     into_handle(OwnedCommand::WritePatternBuffer {
         bank,
-        index,
-        phases: phases.0.clone(),
+        start_index,
+        patterns,
         intensities,
     })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_op_write_pattern_buffer_max_len() -> usize {
+    WritePatternBuffer::MAX_LEN
 }
 
 #[unsafe(no_mangle)]
@@ -1351,13 +1359,13 @@ impl OwnedCommand {
             ),
             OwnedCommand::WritePatternBuffer {
                 bank,
-                index,
-                phases,
+                start_index,
+                patterns,
                 intensities,
             } => Lowered::Operation(Box::new(WritePatternBuffer::new(
                 *bank,
-                usize::from(*index),
-                phases,
+                usize::from(*start_index),
+                patterns,
                 intensities.as_ref(),
             ))),
             OwnedCommand::ConfigPattern {
@@ -1680,24 +1688,22 @@ pub unsafe extern "C" fn autd3_frames_free(frames: *mut Arc<Frames>) {
 
 pub struct ClientHandle(Arc<Client>);
 
-pub struct CheckerHandle(pub(crate) StateChecker);
-
 pub struct ResponseToken(Vec<ResponseFuture>);
 
 pub struct ByteArray(Vec<u8>);
 
 pub struct ResponseHandle(Response);
 
-pub struct BusStatsHandle(BusStats);
-
 pub struct FirmwareVersionArray(Vec<Autd3FirmwareVersion>);
 
 pub struct TelemetryArray(Vec<Autd3Telemetry>);
 
-pub struct DeviceStatus {
-    devices: Vec<DeviceState>,
-    ptp_locked: DeviceMask,
-    ptp_failsafe: DeviceMask,
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Autd3DeviceStatus {
+    pub state: u8,
+    pub ptp_locked: bool,
+    pub ptp_failsafe: bool,
 }
 
 pub(crate) fn error_code(e: &Error) -> i32 {
@@ -1799,13 +1805,49 @@ pub unsafe extern "C" fn autd3_client_open(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_state_checker(
+pub unsafe extern "C" fn autd3_client_device_status(
     client: *const ClientHandle,
-) -> *mut CheckerHandle {
+    out: *mut Autd3DeviceStatus,
+    len: usize,
+    out_err: *mut c_char,
+    out_err_len: usize,
+) -> i32 {
     let Some(client) = (unsafe { handle_ref(client) }) else {
-        return std::ptr::null_mut();
+        unsafe { write_cstr(out_err, out_err_len, "null client") };
+        return AUTD3_ERR_INVALID_ARGUMENT;
     };
-    into_handle(CheckerHandle(client.0.state_checker()))
+    let status = match client.0.device_status() {
+        Ok(status) => status,
+        Err(e) => {
+            unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
+            return error_code(&e);
+        }
+    };
+    if len != status.len() {
+        unsafe {
+            write_cstr(
+                out_err,
+                out_err_len,
+                &format!(
+                    "the buffer holds {len} devices, but {} are open",
+                    status.len()
+                ),
+            );
+        };
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    }
+    let Some(out) = (unsafe { slice_mut(out, len) }) else {
+        unsafe { write_cstr(out_err, out_err_len, "null output buffer") };
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    for (dst, status) in out.iter_mut().zip(status) {
+        *dst = Autd3DeviceStatus {
+            state: device_state_code(status.state),
+            ptp_locked: status.ptp_locked,
+            ptp_failsafe: status.ptp_failsafe,
+        };
+    }
+    AUTD3_OK
 }
 
 #[unsafe(no_mangle)]
@@ -2103,46 +2145,6 @@ pub unsafe extern "C" fn autd3_firmware_version_supported_series(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_bus_stats(
-    client: *const ClientHandle,
-) -> *mut BusStatsHandle {
-    let Some(client) = (unsafe { handle_ref(client) }) else {
-        return std::ptr::null_mut();
-    };
-    into_handle(BusStatsHandle(client.0.bus_stats()))
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_bus_stats_frames(stats: *const BusStatsHandle) -> u64 {
-    unsafe { handle_ref(stats) }.map_or(0, |stats| stats.0.frames())
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_bus_stats_heartbeats(stats: *const BusStatsHandle) -> u64 {
-    unsafe { handle_ref(stats) }.map_or(0, |stats| stats.0.heartbeats())
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_bus_stats_acked_frames(stats: *const BusStatsHandle) -> u64 {
-    unsafe { handle_ref(stats) }.map_or(0, |stats| stats.0.acked_frames())
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_bus_stats_worst_ack_latency_ns(stats: *const BusStatsHandle) -> u64 {
-    unsafe { handle_ref(stats) }.map_or(0, |stats| stats.0.worst_ack_latency_ns())
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_bus_stats_mean_ack_latency_ns(stats: *const BusStatsHandle) -> u64 {
-    unsafe { handle_ref(stats) }.map_or(0, |stats| stats.0.mean_ack_latency_ns())
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_bus_stats_free(stats: *mut BusStatsHandle) {
-    unsafe { drop_handle(stats) }
-}
-
-#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_client_read_fpga_state(
     client: *const ClientHandle,
     cb: CompletionCallback,
@@ -2154,7 +2156,7 @@ pub unsafe extern "C" fn autd3_client_read_fpga_state(
     spawn_completion(
         ctx,
         async move { client.read_fpga_state().await },
-        |states| into_handle(ByteArray(states.into_iter().map(FpgaState::raw).collect())).cast(),
+        |states| into_handle(ByteArray(states.into_iter().map(|state| state.0).collect())).cast(),
     );
 }
 
@@ -2223,38 +2225,6 @@ pub unsafe extern "C" fn autd3_byte_array_free(array: *mut ByteArray) {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_checker_check(
-    checker: *const CheckerHandle,
-    out_code: *mut i32,
-    out_err: *mut c_char,
-    out_err_len: usize,
-) -> *mut DeviceStatus {
-    let Some(checker) = (unsafe { handle_ref(checker) }) else {
-        unsafe { write_out(out_code, AUTD3_ERR_INVALID_ARGUMENT) };
-        unsafe { write_cstr(out_err, out_err_len, "null checker") };
-        return std::ptr::null_mut();
-    };
-
-    match checker.0.check().map_err(Error::from) {
-        Ok(status) => into_handle(DeviceStatus {
-            devices: status.devices().to_vec(),
-            ptp_locked: status.ptp_locked(),
-            ptp_failsafe: status.ptp_failsafe(),
-        }),
-        Err(e) => {
-            unsafe { write_out(out_code, error_code(&e)) };
-            unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
-            std::ptr::null_mut()
-        }
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_checker_free(checker: *mut CheckerHandle) {
-    unsafe { drop_handle(checker) }
-}
-
-#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_client_close(
     client: *const ClientHandle,
     out_err: *mut c_char,
@@ -2279,47 +2249,6 @@ pub unsafe extern "C" fn autd3_client_free(client: *mut ClientHandle) {
     unsafe { drop_handle(client) }
 }
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_device_status_num_devices(status: *const DeviceStatus) -> usize {
-    let Some(status) = (unsafe { handle_ref(status) }) else {
-        return 0;
-    };
-
-    status.devices.len()
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_device_status_device_state(
-    status: *const DeviceStatus,
-    index: usize,
-    out_kind: *mut u8,
-) -> bool {
-    let Some(status) = (unsafe { handle_ref(status) }) else {
-        return false;
-    };
-
-    let Some(state) = status.devices.get(index) else {
-        return false;
-    };
-    unsafe { write_out(out_kind, device_state_code(*state)) == AUTD3_OK }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_device_status_ptp_locked(
-    status: *const DeviceStatus,
-    index: usize,
-) -> bool {
-    unsafe { handle_ref(status) }.is_some_and(|status| status.ptp_locked.contains(index))
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_device_status_ptp_failsafe(
-    status: *const DeviceStatus,
-    index: usize,
-) -> bool {
-    unsafe { handle_ref(status) }.is_some_and(|status| status.ptp_failsafe.contains(index))
-}
-
 fn device_state_code(state: DeviceState) -> u8 {
     match state {
         DeviceState::Ready => 0,
@@ -2327,11 +2256,6 @@ fn device_state_code(state: DeviceState) -> u8 {
         DeviceState::Lost => 2,
         _ => unreachable!(),
     }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_device_status_free(status: *mut DeviceStatus) {
-    unsafe { drop_handle(status) }
 }
 
 autd3_ffi_abi::export_abi_version!();
@@ -3189,13 +3113,56 @@ mod tests {
     }
 
     #[test]
-    fn a_null_bus_stats_handle_reads_as_zero() {
-        assert!(unsafe { autd3_client_bus_stats(std::ptr::null()) }.is_null());
-        assert_eq!(0, unsafe { autd3_bus_stats_frames(std::ptr::null()) });
-        assert_eq!(0, unsafe {
-            autd3_bus_stats_mean_ack_latency_ns(std::ptr::null())
+    fn the_device_status_of_a_null_client_is_an_invalid_argument() {
+        let mut out = [Autd3DeviceStatus::default(); 1];
+        let mut err = [0 as c_char; 64];
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_client_device_status(
+                std::ptr::null(),
+                out.as_mut_ptr(),
+                out.len(),
+                err.as_mut_ptr(),
+                err.len(),
+            )
         });
-        unsafe { autd3_bus_stats_free(std::ptr::null_mut()) };
+        assert_eq!(out, [Autd3DeviceStatus::default()]);
+    }
+
+    fn write_pattern_buffer_of(
+        geometry: *const Geometry,
+        num_patterns: usize,
+    ) -> *mut OwnedCommand {
+        let phases = into_handle(autd3_ffi_abi::Buffer(unsafe { &*geometry }.phase_buffer()));
+        let buffers = vec![phases.cast_const(); num_patterns];
+        let op = unsafe {
+            autd3_op_write_pattern_buffer(
+                0,
+                0,
+                buffers.as_ptr(),
+                buffers.len(),
+                AUTD3_STM_INTENSITY_UNIFORM,
+                std::ptr::null(),
+                0,
+                0xFF,
+            )
+        };
+        unsafe { drop_handle(phases) };
+        op
+    }
+
+    #[test]
+    fn write_pattern_buffer_takes_up_to_max_len_patterns_in_one_frame() {
+        let geometry = geometry_of(1);
+        let max_len = autd3_op_write_pattern_buffer_max_len();
+
+        assert_eq!(
+            1,
+            num_frames_of(geometry, write_pattern_buffer_of(geometry, max_len))
+        );
+        let too_many = write_pattern_buffer_of(geometry, max_len + 1);
+        assert!(encode(geometry, too_many).is_null());
+        unsafe { autd3_op_free(too_many) };
+        unsafe { drop_handle(geometry) };
     }
 
     #[test]

@@ -44,12 +44,6 @@ pub enum UdpError {
         not_ready: Vec<u8>,
         timeout: Duration,
     },
-    #[error("open_timeout must be longer than zero")]
-    ZeroOpenTimeout,
-    #[error("lost_timeout must be longer than zero")]
-    ZeroLostTimeout,
-    #[error("ack_timeout must be longer than zero")]
-    ZeroAckTimeout,
     #[error("the number of devices must be 1..=128, but {0} was given")]
     InvalidDeviceCount(usize),
     #[error("the frame could not be sent to device {device}: {source}")]
@@ -57,6 +51,4 @@ pub enum UdpError {
         device: usize,
         source: std::io::Error,
     },
-    #[error("the connection is closed")]
-    Closed,
 }

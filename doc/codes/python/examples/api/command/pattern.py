@@ -26,8 +26,8 @@ Pattern(
 # ANCHOR: equivalent
 WritePatternBuffer(
     bank=bank,
-    index=0,
-    phases=phases,
+    start_index=0,
+    patterns=[phases],
     intensities=intensities,
 )
 ConfigPattern(

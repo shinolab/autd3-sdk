@@ -267,38 +267,6 @@ mod tests {
         );
     }
 
-    fn open_error_with_zero(
-        set: unsafe extern "C" fn(*mut TransportOptionHandle, u64) -> i32,
-    ) -> (i32, String) {
-        let geometry = Geometry::new(vec![Autd3::default()]);
-        let option = autd3_transport_option_new();
-        assert_eq!(unsafe { set(option, 0) }, AUTD3_OK);
-        let (code, client, message) = open(&raw const geometry, option);
-        assert!(client.is_null());
-        (code, message)
-    }
-
-    #[test]
-    fn a_zero_lost_timeout_fails_the_open_with_the_rust_error() {
-        let (code, message) = open_error_with_zero(autd3_transport_option_set_lost_timeout);
-        assert_eq!(crate::AUTD3_ERR_NETWORK, code);
-        assert!(message.contains("lost_timeout"), "{message}");
-    }
-
-    #[test]
-    fn a_zero_open_timeout_fails_the_open_with_the_rust_error() {
-        let (code, message) = open_error_with_zero(autd3_transport_option_set_open_timeout);
-        assert_eq!(crate::AUTD3_ERR_NETWORK, code);
-        assert!(message.contains("open_timeout"), "{message}");
-    }
-
-    #[test]
-    fn a_zero_ack_timeout_fails_the_open_with_the_rust_error() {
-        let (code, message) = open_error_with_zero(autd3_transport_option_set_ack_timeout);
-        assert_eq!(crate::AUTD3_ERR_NETWORK, code);
-        assert!(message.contains("ack_timeout"), "{message}");
-    }
-
     #[test]
     fn a_client_open_without_an_out_pointer_still_consumes_the_option() {
         let geometry = Geometry::new(vec![Autd3::default()]);

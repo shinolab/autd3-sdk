@@ -336,11 +336,9 @@ pub(crate) async fn run(client: Session, link: &Link<'_>) -> Result<Session> {
         println!("  [SKIP] not a device index");
         return Ok(client);
     };
-    let states = client.state_checker();
     let ctx = Ctx {
         client: &client,
         geometry: link.geometry,
-        states: &states,
         heartbeat: link.heartbeat,
         lost_timeout: link.option.lost_timeout,
         mute: link.mute,

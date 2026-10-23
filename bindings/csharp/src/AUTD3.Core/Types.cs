@@ -44,7 +44,6 @@ namespace AUTD3
         public static readonly int MaxInflight = (int)NativeCore.autd3_core_params_max_inflight();
         public static readonly int MaxDevices = (int)NativeCore.autd3_core_params_max_devices();
         public static readonly ushort Port = NativeCore.autd3_core_params_port();
-        public static readonly int DeviceQueueFrames = (int)NativeCore.autd3_core_params_device_queue_frames();
     }
 
     public readonly struct Autd3 : IEquatable<Autd3>

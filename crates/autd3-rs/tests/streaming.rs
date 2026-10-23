@@ -24,7 +24,7 @@ async fn frames_sent_without_waiting_arrive_whole_on_every_device() {
     )
     .unwrap();
     assert!(frames.len() > MAX_INFLIGHT);
-    let before = client.bus_stats().frames();
+    let before = emulator.frames_received(0);
 
     let mut responses = Vec::with_capacity(frames.len());
     for frame in &frames {
@@ -35,7 +35,7 @@ async fn frames_sent_without_waiting_arrive_whole_on_every_device() {
     }
 
     assert_eq!(
-        client.bus_stats().frames() - before,
+        emulator.frames_received(0) - before,
         u64::try_from(frames.len()).unwrap()
     );
     for device in 0..2 {
@@ -53,7 +53,6 @@ async fn send_frame_waits_while_the_window_is_full() {
     let emulator = emulator(1);
     let client = open_with(&emulator, &option(&emulator));
     let nop = Frames::encode(client.geometry(), Nop).unwrap();
-    let before = client.bus_stats().frames();
 
     emulator.pause_main_loop(0);
     let mut queued = Vec::with_capacity(MAX_INFLIGHT);
@@ -69,10 +68,6 @@ async fn send_frame_waits_while_the_window_is_full() {
         );
     }
 
-    assert_eq!(
-        client.bus_stats().frames() - before,
-        u64::try_from(MAX_INFLIGHT).unwrap()
-    );
     for response in queued {
         assert!(matches!(response.await, Err(Error::Timeout { .. })));
     }
@@ -112,8 +107,8 @@ async fn a_rejected_frame_sent_without_waiting_fails_only_its_own_response() {
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn a_command_that_cannot_be_encoded_sends_nothing() {
-    let (_emulator, client) = open(1);
-    let before = client.bus_stats().frames();
+    let (emulator, client) = open(1);
+    let before = emulator.frames_received(0);
 
     let sent = client
         .send(Modulation::new(SamplingConfig::FREQ_4K, &[]))
@@ -123,6 +118,6 @@ async fn a_command_that_cannot_be_encoded_sends_nothing() {
         sent,
         Err(Error::InvalidPayload(PayloadError::ModulationDataEmpty))
     ));
-    assert_eq!(client.bus_stats().frames(), before);
+    assert_eq!(emulator.frames_received(0), before);
     client.close().unwrap();
 }

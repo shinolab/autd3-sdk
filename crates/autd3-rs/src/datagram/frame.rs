@@ -267,7 +267,12 @@ mod tests {
     fn a_per_device_op_and_a_broadcast_op_keep_their_order_and_shape() {
         let phases = vec![vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]; 2];
         let intensities = vec![vec![Intensity::MAX; Autd3::NUM_TRANSDUCERS]; 2];
-        let write = WritePatternBuffer::new(PatternBank::B0, 0, &phases, &intensities);
+        let write = WritePatternBuffer::new(
+            PatternBank::B0,
+            0,
+            core::slice::from_ref(&phases),
+            &intensities,
+        );
         let frames = build(2, (write, CONFIG)).unwrap();
 
         assert_eq!(frames.len(), 2);

@@ -114,9 +114,6 @@ namespace AUTD3
         internal static extern ushort autd3_core_params_port();
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern UIntPtr autd3_core_params_device_queue_frames();
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern float autd3_core_params_rotation_norm_tolerance();
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]

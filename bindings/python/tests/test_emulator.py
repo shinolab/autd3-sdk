@@ -47,7 +47,7 @@ def test_transducer_table() -> None:
     assert table.columns == ["dev_idx", "tr_idx", "x[mm]", "y[mm]", "z[mm]", "nx", "ny", "nz"]
     assert table["dev_idx"].dtype == pl.UInt16
     assert table["tr_idx"].dtype == pl.UInt8
-    assert table["x[mm]"][1] == pytest.approx(autd3.params.PITCH_MM)
+    assert table["x[mm]"][1] == pytest.approx(autd3.geometry.Autd3.PITCH_MM)
     assert table["nz"][0] == 1.0
 
 

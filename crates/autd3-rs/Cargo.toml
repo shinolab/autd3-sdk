@@ -11,9 +11,6 @@ readme = "README.md"
 keywords.workspace = true
 categories.workspace = true
 
-[package.metadata.docs.rs]
-all-features = true
-
 [dependencies]
 autd3-cpu-wire.workspace = true
 autd3-rs-core.workspace = true

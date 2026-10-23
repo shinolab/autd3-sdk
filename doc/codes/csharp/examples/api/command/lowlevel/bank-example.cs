@@ -26,8 +26,8 @@ var bank = PatternBank.B0;
 
 await client.SendAsync(new WritePatternBuffer(
     bank: bank,
-    index: 0,
-    phases: phases,
+    startIndex: 0,
+    patterns: new[] { phases },
     intensities: Intensity.Max
 ));
 await client.SendAsync(new ConfigPattern(

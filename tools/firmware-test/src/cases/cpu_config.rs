@@ -163,10 +163,7 @@ async fn latch_polls(ctx: &Ctx<'_>) -> Result<()> {
 }
 
 pub(crate) fn states(ctx: &Ctx<'_>) -> Vec<DeviceState> {
-    ctx.states
-        .check()
-        .map(|s| s.devices().to_vec())
-        .unwrap_or_default()
+    crate::device_states(ctx.client)
 }
 
 pub(crate) async fn watch(ctx: &Ctx<'_>, label: &str, window: Duration) -> Vec<DeviceState> {

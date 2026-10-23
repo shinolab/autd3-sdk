@@ -283,7 +283,7 @@ pub(crate) enum OwnedStmIntensity {
 }
 
 impl OwnedStmIntensity {
-    fn as_ref(&self) -> CoreStmIntensity<'_> {
+    pub(crate) fn as_ref(&self) -> CoreStmIntensity<'_> {
         match self {
             OwnedStmIntensity::Uniform(intensity) => CoreStmIntensity::Uniform(*intensity),
             OwnedStmIntensity::SameForAllIndices(intensities) => {
@@ -294,7 +294,7 @@ impl OwnedStmIntensity {
     }
 }
 
-fn extract_stm_intensity(obj: &Bound<'_, PyAny>) -> PyResult<OwnedStmIntensity> {
+pub(crate) fn extract_stm_intensity(obj: &Bound<'_, PyAny>) -> PyResult<OwnedStmIntensity> {
     if let Some(intensity) = crate::datagram::extract_uniform_intensity(obj) {
         return Ok(OwnedStmIntensity::Uniform(intensity));
     }

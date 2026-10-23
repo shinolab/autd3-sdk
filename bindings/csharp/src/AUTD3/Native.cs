@@ -65,9 +65,6 @@ namespace AUTD3
 
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern UIntPtr autd3_params_max_devices();
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern UIntPtr autd3_params_pwe_table_size();
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
@@ -131,8 +128,16 @@ namespace AUTD3
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_client_open(GeometryHandle geometry, IntPtr option, out IntPtr client, byte[] outErr, UIntPtr outErrLen);
 
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct DeviceStatusNative
+        {
+            public byte State;
+            public byte PtpLocked;
+            public byte PtpFailsafe;
+        }
+
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_client_state_checker(ClientHandle client);
+        internal static extern int autd3_client_device_status(ClientHandle client, [Out] DeviceStatusNative[] status, UIntPtr len, byte[] outErr, UIntPtr outErrLen);
 
 
 
@@ -182,27 +187,6 @@ namespace AUTD3
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_response_free(IntPtr response);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_client_bus_stats(ClientHandle client);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern ulong autd3_bus_stats_frames(BusStatsHandle stats);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern ulong autd3_bus_stats_heartbeats(BusStatsHandle stats);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern ulong autd3_bus_stats_acked_frames(BusStatsHandle stats);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern ulong autd3_bus_stats_worst_ack_latency_ns(BusStatsHandle stats);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern ulong autd3_bus_stats_mean_ack_latency_ns(BusStatsHandle stats);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_bus_stats_free(IntPtr stats);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_tracing_option_default([Out] byte[] outDefaultFilter, UIntPtr outDefaultFilterLen, out byte outWriter);
@@ -275,29 +259,5 @@ namespace AUTD3
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_telemetry_array_free(IntPtr array);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_checker_check(CheckerHandle checker, out int code, byte[] err, UIntPtr errLen);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_checker_free(IntPtr checker);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern UIntPtr autd3_device_status_num_devices(IntPtr status);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        [return: MarshalAs(UnmanagedType.I1)]
-        internal static extern bool autd3_device_status_device_state(IntPtr status, UIntPtr index, out byte outKind);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        [return: MarshalAs(UnmanagedType.I1)]
-        internal static extern bool autd3_device_status_ptp_locked(IntPtr status, UIntPtr index);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        [return: MarshalAs(UnmanagedType.I1)]
-        internal static extern bool autd3_device_status_ptp_failsafe(IntPtr status, UIntPtr index);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_device_status_free(IntPtr status);
     }
 }

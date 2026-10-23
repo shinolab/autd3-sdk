@@ -9,11 +9,7 @@ from autd3_core import Autd3Error, Duration
 
 from . import commands, geometry, params, units, value
 from ._autd3 import (
-    MAX_DEVICES,
-    MAX_INFLIGHT,
-    BusStats,
     Client,
-    DeviceMask,
     DeviceState,
     DeviceStatus,
     ExecAt,
@@ -25,7 +21,6 @@ from ._autd3 import (
     LogWriter,
     Response,
     ResponseFuture,
-    StateChecker,
     Telemetry,
     TracingGuard,
     TransportOption,
@@ -34,12 +29,8 @@ from ._autd3 import (
 )
 
 __all__ = [
-    "MAX_DEVICES",
-    "MAX_INFLIGHT",
     "Autd3Error",
-    "BusStats",
     "Client",
-    "DeviceMask",
     "DeviceState",
     "DeviceStatus",
     "Duration",
@@ -52,7 +43,6 @@ __all__ = [
     "LogWriter",
     "Response",
     "ResponseFuture",
-    "StateChecker",
     "Telemetry",
     "TracingGuard",
     "TransportOption",

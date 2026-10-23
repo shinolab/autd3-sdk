@@ -5,14 +5,14 @@ from autd3.value import Intensity, LoopBehavior, PatternBank, SamplingConfig, Tr
 geometry = Geometry([Autd3()])
 
 bank = PatternBank.B0
-index = 0
-phases = geometry.phase_buffer()
+start_index = 0
+patterns = [geometry.phase_buffer()]
 intensities = Intensity.MAX
 # ANCHOR: write
 WritePatternBuffer(
     bank=bank,
-    index=index,
-    phases=phases,
+    start_index=start_index,
+    patterns=patterns,
     intensities=intensities,
 )
 # ANCHOR_END: write

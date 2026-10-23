@@ -44,7 +44,7 @@ async fn expect_state(
         let mark = if pred(state) { "OK" } else { "FAIL" };
         println!(
             "  [{mark}] {label} device[{dev}]: expected {expected} (raw={:#04x} pattern_stopped={} mod_stopped={} transition_pending={})",
-            state.raw(),
+            state.0,
             state.is_pattern_stopped(),
             state.is_mod_stopped(),
             state.is_transition_pending(),
@@ -74,7 +74,7 @@ async fn poll_state(
                 if !pred(state) {
                     println!(
                         "  [FAIL] {label} device[{dev}]: expected {expected} within {POLL_TIMEOUT:?} (raw={:#04x} pattern_stopped={} mod_stopped={} transition_pending={})",
-                        state.raw(),
+                        state.0,
                         state.is_pattern_stopped(),
                         state.is_mod_stopped(),
                         state.is_transition_pending(),

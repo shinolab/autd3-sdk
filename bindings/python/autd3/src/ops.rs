@@ -23,7 +23,8 @@ use autd3_rs::value::{
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-use crate::datagram::{OwnedPatternIntensity, PushOperation};
+use crate::datagram::PushOperation;
+use crate::stm::{OwnedStmIntensity, extract_stm_intensity};
 
 #[pyclass(
     name = "PatternBank",
@@ -279,17 +280,17 @@ impl LoopBehavior {
 
 pub(crate) struct WritePatternBufferData {
     bank: CorePatternBank,
-    index: usize,
-    phases: Vec<Vec<Phase>>,
-    intensities: OwnedPatternIntensity,
+    start_index: usize,
+    patterns: Vec<Vec<Vec<Phase>>>,
+    intensities: OwnedStmIntensity,
 }
 
 impl PushOperation for WritePatternBufferData {
     fn operation(&self) -> Box<dyn Operation + '_> {
         Box::new(CoreWritePatternBuffer::new(
             self.bank,
-            self.index,
-            &self.phases,
+            self.start_index,
+            &self.patterns,
             self.intensities.as_ref(),
         ))
     }
@@ -300,18 +301,25 @@ pub struct WritePatternBuffer(pub(crate) Arc<WritePatternBufferData>);
 
 #[pymethods]
 impl WritePatternBuffer {
+    #[classattr]
+    const MAX_LEN: usize = CoreWritePatternBuffer::MAX_LEN;
+
     #[new]
     fn new(
         bank: PatternBank,
-        index: u16,
-        phases: &Bound<'_, PyAny>,
+        start_index: usize,
+        patterns: Vec<Bound<'_, PyAny>>,
         intensities: &Bound<'_, PyAny>,
     ) -> PyResult<Self> {
+        let patterns = patterns
+            .iter()
+            .map(crate::datagram::extract_phases)
+            .collect::<PyResult<Vec<_>>>()?;
         Ok(Self(Arc::new(WritePatternBufferData {
             bank: bank.0,
-            index: usize::from(index),
-            phases: crate::datagram::extract_phases(phases)?,
-            intensities: crate::datagram::extract_pattern_intensity(intensities)?,
+            start_index,
+            patterns,
+            intensities: extract_stm_intensity(intensities)?,
         })))
     }
 }

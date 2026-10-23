@@ -807,8 +807,7 @@ def test_loop_behavior_and_transition_mode() -> None:
     pattern.focus(geo, geo.center() + np.array([0.0, 0.0, 150.0]), wavelength, buf)
 
     commands: list[autd3.commands.Command] = []
-    commands.append(autd3.commands.WritePatternBuffer(autd3.value.PatternBank.B1, 0, buf, amps))
-    commands.append(autd3.commands.WritePatternBuffer(autd3.value.PatternBank.B1, 1, buf, amps))
+    commands.append(autd3.commands.WritePatternBuffer(autd3.value.PatternBank.B1, 0, [buf, buf], amps))
     commands.append(autd3.commands.WritePatternPhase(autd3.value.PatternBank.B1, 2, autd3.commands.PhaseDepth.Bits8, autd3.value.Intensity.MAX, [buf, buf]))
     commands.append(
         autd3.commands.ConfigPattern(

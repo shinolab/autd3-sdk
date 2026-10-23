@@ -27,12 +27,15 @@ async fn request_reboot(client: &Client) -> Result<()> {
 }
 
 async fn gone(client: &Client, window: Duration) -> Result<(bool, Vec<DeviceState>)> {
-    let states = client.state_checker();
     let started = Instant::now();
     loop {
         client.send_heartbeat()?;
         tokio::time::sleep(POLL).await;
-        let seen = states.check()?.devices().to_vec();
+        let seen: Vec<DeviceState> = client
+            .device_status()?
+            .iter()
+            .map(|status| status.state)
+            .collect();
         let all_lost = seen.iter().all(|d| *d == DeviceState::Lost);
         if all_lost || started.elapsed() >= window {
             return Ok((all_lost, seen));
@@ -68,11 +71,7 @@ pub(crate) async fn run(client: Session, link: &Link<'_>) -> Result<Session> {
     }
 
     let client = link.reopen().await?;
-    let states = client
-        .state_checker()
-        .check()
-        .map(|s| s.devices().to_vec())
-        .unwrap_or_default();
+    let states = crate::device_states(&client);
     println!(
         "  {} the devices enumerate and synchronise again {:.1} s after the Reboot request: {states:?}",
         verdict(states.len() == devices && states.iter().all(|d| *d == DeviceState::Ready)),

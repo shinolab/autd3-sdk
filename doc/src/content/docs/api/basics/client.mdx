@@ -28,7 +28,7 @@ import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
 
 `Client` は実機 (または [Simulator](/autd3-sdk/guide/simulator/)) へ UDP で直接つなぐ.
 
-デバイスの稼働状態を継続的に監視したい場合は `Client::state_checker` で取った `StateChecker` を駆動する ([状態監視](/autd3-sdk/guide/state-check/) 参照).
+デバイスの稼働状態を継続的に監視したい場合は `Client::device_status` を周期的に呼ぶ ([状態監視](/autd3-sdk/guide/state-check/) 参照).
 
 ## API
 
@@ -38,7 +38,6 @@ import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
 | ------------------------- | :---: | -------------------------------------- | ---------------------------------------------------------- |
 | `num_devices()`           | —     | `usize`                                | 接続中のデバイス台数                                       |
 | `geometry()`              | —     | `&Geometry`                            | 接続時のデバイスの物理配置                                 |
-| `bus_stats()`             | —     | `BusStats`                             | 送受信の統計 (送信フレーム数・ack 遅延など)                |
 | `read_firmware_version()` | ✓     | `Result<Vec<FirmwareVersion>, Error>` | 各デバイスの CPU/FPGA ファームウェアバージョン             |
 | `read_fpga_state()`       | ✓     | `Result<Vec<FpgaState>, Error>`       | 各デバイスの FPGA 状態                                     |
 | `read_telemetry()`        | ✓     | `Result<Vec<Telemetry>, Error>`       | 各デバイスの CPU の診断カウンタ                            |
@@ -46,7 +45,7 @@ import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
 | `send(cmd)`               | ✓     | `Result<(), Error>`                   | コマンドを送信し, 1 フレームずつ応答確認まで行う           |
 | `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | フレームを 1 つ送る ([streaming](#streaming) 参照)          |
 | `send_frame_at(frame, exec)` | ✓  | `Result<ResponseFuture, Error>`       | 処理時刻を指定してフレームを 1 つ送る ([処理時刻](#処理時刻) 参照) |
-| `state_checker()`         | —     | `StateChecker`                         | `StateChecker`を取得. 詳細は[状態監視](/autd3-sdk/guide/state-check/)を参照. |
+| `device_status()`         | —     | `Result<Vec<DeviceStatus>, Error>`     | 各デバイスの状態. 詳細は[状態監視](/autd3-sdk/guide/state-check/)を参照. |
 | `send_heartbeat()`             | —     | `Result<(), Error>`                   | `Lost` でない全デバイスへ生存確認を 1 回送る ([生存確認](#生存確認) 参照) |
 | `close()`                 | —     | `Result<(), Error>`                   | 接続を閉じる                                               |
 
@@ -64,7 +63,7 @@ C# の `Dispose` (`using`), Python の `with` を抜けたとき, Rust の Drop 
 <CodeTabs rust={excerpt(sample, "streaming")} python={excerpt(pySample, "streaming")} csharp={excerpt(csSample, "streaming")} />
 
 応答を待たずに送ってよいフレーム数は `MAX_INFLIGHT (7)` (Python: `autd3.params.MAX_INFLIGHT`, C#: `Params.MaxInflight`) で固定である.
-これは各デバイスの受信キューのフレーム数 `DEVICE_QUEUE_FRAMES` (Python: `autd3.params.DEVICE_QUEUE_FRAMES`, C#: `Params.DeviceQueueFrames`) に等しい.
+これは各デバイスの受信キューのフレーム数に等しい.
 `MAX_INFLIGHT` 個のフレームが応答待ちの間, `send_frame` は応答が揃ってどれかが空くまで待つ.
 同時に送るフレーム数をこれより少なくしたい場合は, 先に返った `ResponseFuture` を await してから次のフレームを送る.
 
@@ -110,12 +109,11 @@ C# は PascalCase のプロパティになる (`is_thermal_asserted()` → `IsTh
 
 | メソッド                  | 型               | 説明                                     |
 | ------------------------- | ---------------- | ---------------------------------------- |
-| `raw()`                   | `u8`             | 状態レジスタの生の値                     |
+| `.0` (フィールド)         | `u8`             | 状態レジスタの生の値 (Python: `raw()`, C#: `Raw`) |
 | `is_thermal_asserted()`   | `bool`           | 温度センサが閾値を超えているか           |
 | `current_mod_bank()`      | `ModulationBank` | 現在の Modulation bank                   |
 | `current_pattern_bank()`  | `PatternBank`    | 現在の Pattern bank (Pattern と STM で共有) |
 | `is_pattern_mode()`       | `bool`           | Pattern を出力しているか                 |
-| `is_stm_mode()`           | `bool`           | STM を出力しているか                     |
 | `is_pattern_stopped()`    | `bool`           | Pattern / STM の再生が止まっているか |
 | `is_mod_stopped()`        | `bool`           | Modulation の再生が止まっているか |
 | `is_transition_pending()` | `bool`           | bank の切り替えが発効待ちか              |
@@ -140,18 +138,6 @@ CPU の診断カウンタ. `Clear` で `boot_failure` 以外は 0 に戻る (`Cl
 | `exec_late`           | `u32` | [処理時刻](#処理時刻)を 1 µs 以上過ぎてから処理を始めたフレーム数 |
 
 `u32` のフィールドは桁あふれで 0 に戻り, `u16` / `u8` のフィールドは上限で止まる.
-
-### BusStats
-
-`bus_stats()` はホスト側の送受信の統計を返す. 値は `Client` を開いてからの累計で, 読むたびに最新の値になる.
-
-| メソッド                     | 型    | 説明                                         |
-| ---------------------------- | ----- | -------------------------------------------- |
-| `frames()`                   | `u64` | 送ったフレーム数                             |
-| `heartbeats()`               | `u64` | `send_heartbeat()` で送った生存確認の数           |
-| `acked_frames()`             | `u64` | 返信を受けたフレーム数                       |
-| `worst_ack_latency_ns()`     | `u64` | 送信から返信までの最大時間 [ns]              |
-| `mean_ack_latency_ns()`      | `u64` | 送信から返信までの平均時間 [ns]              |
 
 ## 応答待ちのタイムアウト
 
@@ -184,7 +170,7 @@ CPU の診断カウンタ. `Clear` で `boot_failure` 以外は 0 に戻る (`Cl
   - 応答を待たずに続けて送ると ([streaming](#streaming)), 前のフレームの処理中に次のフレームの指定時刻が来ることがあり, そのフレームは遅れて処理される (`exec_late` にカウントされる).
   - また, 成功したとしてもCPUボード内部の処理の開始が揃うだけであり, FPGAの処理の開始が揃うこと (すなわち, 出力される超音波の位相の更新タイミングが揃うことなど) は保証しない
 - 応答は処理の後に返るので, 送信の完了は指定時刻まで遅れる. 1 フレームずつ応答を待つと, 複数フレームのコマンドはフレーム数 × `lead` 程度かかる
-- `Lead` は 100 µs 以上, 2^31 µs (約 35.8 分) 未満でなければならない. また, [`TransportOption`](/autd3-sdk/api/basics/transport-option/) の `lost_timeout` 未満でなければならない. 外れると `InvalidPayload` で, そのフレームは送られない
+- `Lead` は 2^31 µs (約 35.8 分) 未満でなければならない. また, [`TransportOption`](/autd3-sdk/api/basics/transport-option/) の `lost_timeout` 未満でなければならない. 外れると `InvalidPayload` で, そのフレームは送られない
 - `At` は現在時刻より 2^31 µs 以上先・2^30 µs (約 17.9 分) 以上前, または `lost_timeout` 以上先だとエラーになる. 過ぎた時刻 (範囲内) は受け付け, デバイスはすぐに処理して `exec_late` に数える
 - `ack_timeout` (既定 10 ms) は, 送信から指定時刻までの時間 + 処理時間より長くする
 - `Lead` / `At` はデバイスの時刻が分からない (時刻を載せた返信をまだ受けていない) と `DeviceTimeUnknown` で失敗する
