@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using AUTD3;
 using AUTD3.Holo;
 using static AUTD3.Units;
@@ -33,9 +35,11 @@ internal static class Sample
             // ANCHOR_END: option
             ;
         var intensities = geometry.IntensityBuffer();
+        var order = Enumerable.Range(0, geometry.NumTransducers).Select(i => (uint)i).ToArray();
+        Random.Shared.Shuffle(order);
         var dst = geometry.PhaseBuffer();
         // ANCHOR: api
-        Holo.Greedy(geometry, foci, wavelength, intensities, option, dst);
+        Holo.Greedy(geometry, foci, wavelength, intensities, order, option, dst);
         // ANCHOR_END: api
     }
 }

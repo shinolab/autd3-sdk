@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using AUTD3;
 using AUTD3.Holo;
 using static AUTD3.Units;
@@ -13,6 +15,9 @@ internal static class Sample
         // HIDE_END
 var geometry = new Geometry(new[] { new Autd3() });
 
+var order = Enumerable.Range(0, geometry.NumTransducers).Select(i => (uint)i).ToArray();
+Random.Shared.Shuffle(order);
+
 var phases = geometry.PhaseBuffer();
 
 Holo.Greedy(
@@ -24,6 +29,7 @@ Holo.Greedy(
     },
     Pattern.Wavelength(340.0f * m / s),
     Intensity.Max,
+    order,
     new GreedyOption
     {
         PhaseQuantizationLevels = 16,

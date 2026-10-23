@@ -691,6 +691,8 @@ pub unsafe extern "C" fn autd3_holo_greedy(
     wavelength_mm: f32,
     intensities: *const IntensityBuffer,
     uniform_intensity: u8,
+    order: *const u32,
+    order_len: usize,
     phase_quantization_levels: u8,
     directivity: u8,
     mask: *const u8,
@@ -722,6 +724,10 @@ pub unsafe extern "C" fn autd3_holo_greedy(
     let Some(foci) = (unsafe { slice_ref(foci, num_foci) }) else {
         return fail("null foci");
     };
+    let Some(order) = (unsafe { slice_ref(order, order_len) }) else {
+        return fail("null order");
+    };
+    let order: Vec<usize> = order.iter().map(|&index| index as usize).collect();
     let foci = build_foci(foci);
     let mask = unsafe { build_mask(mask, geometry.num_devices()) };
     let option = GreedyOption {
@@ -735,6 +741,7 @@ pub unsafe extern "C" fn autd3_holo_greedy(
         &foci,
         Length::from_mm(wavelength_mm),
         intensities,
+        &order,
         &option,
         &mut dst.0,
     );
@@ -922,6 +929,84 @@ mod tests {
             message(&err),
             autd3_rs_pattern_holo::HoloError::NoFoci.to_string()
         );
+    }
+
+    #[test]
+    fn greedy_follows_the_given_order_and_rejects_a_non_permutation() {
+        let geometry = geometry();
+        let foci = foci();
+        let mut err = [0 as c_char; 256];
+        let order: Vec<u32> = (0..Autd3::NUM_TRANSDUCERS)
+            .rev()
+            .map(|i| u32::try_from(i).unwrap())
+            .collect();
+        let run = |order: &[u32], dst: &mut PhaseBuffer, err: &mut [c_char]| unsafe {
+            autd3_holo_greedy(
+                &raw const geometry,
+                foci.as_ptr(),
+                foci.len(),
+                8.5,
+                std::ptr::null(),
+                u8::MAX,
+                order.as_ptr(),
+                order.len(),
+                16,
+                0,
+                std::ptr::null(),
+                dst,
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        };
+
+        let mut dst = Buffer(geometry.phase_buffer());
+        assert_eq!(AUTD3_OK, run(&order, &mut dst, &mut err));
+        let mut expected = geometry.phase_buffer();
+        greedy(
+            &geometry,
+            &build_foci(&foci),
+            Length::from_mm(8.5),
+            Intensity::MAX,
+            &order.iter().map(|&i| i as usize).collect::<Vec<_>>(),
+            &GreedyOption::default(),
+            &mut expected,
+        )
+        .unwrap();
+        assert_eq!(expected, dst.0);
+
+        let mut duplicated = order.clone();
+        duplicated[1] = duplicated[0];
+        assert_eq!(
+            AUTD3_ERR_INVALID_ARGUMENT,
+            run(&duplicated, &mut dst, &mut err)
+        );
+        assert_eq!(
+            message(&err),
+            autd3_rs_pattern_holo::HoloError::OrderDuplicateIndex {
+                index: duplicated[0] as usize
+            }
+            .to_string()
+        );
+
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_holo_greedy(
+                &raw const geometry,
+                foci.as_ptr(),
+                foci.len(),
+                8.5,
+                std::ptr::null(),
+                u8::MAX,
+                std::ptr::null(),
+                Autd3::NUM_TRANSDUCERS,
+                16,
+                0,
+                std::ptr::null(),
+                &raw mut dst,
+                err.as_mut_ptr(),
+                err.len(),
+            )
+        });
+        assert_eq!(message(&err), "null order");
     }
 
     #[test]

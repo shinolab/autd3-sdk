@@ -187,6 +187,7 @@ dependencies = [
  "autd3-rs-modulation",
  "autd3-rs-pattern",
  "autd3-rs-pattern-holo",
+ "rand",
  "tokio",
  "tracing-subscriber",
 ]
@@ -262,7 +263,6 @@ version = "0.12.0"
 dependencies = [
  "autd3-rs-core",
  "nalgebra",
- "rand",
  "thiserror",
 ]
 

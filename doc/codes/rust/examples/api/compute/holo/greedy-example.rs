@@ -1,5 +1,7 @@
 use std::num::NonZeroU8;
 
+use rand::seq::SliceRandom;
+
 use autd3_rs::geometry::{Autd3, Geometry, TransducerMask, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::Intensity;
@@ -12,6 +14,9 @@ use autd3_rs_pattern_holo::{
 fn main() -> anyhow::Result<()> {
     // HIDE_END
     let geometry = Geometry::new(vec![Autd3::default()]);
+
+    let mut order: Vec<usize> = (0..geometry.num_transducers()).collect();
+    order.shuffle(&mut rand::rng());
 
     let mut phases = geometry.phase_buffer();
 
@@ -29,6 +34,7 @@ fn main() -> anyhow::Result<()> {
         ],
         wavelength(340.0 * m / s),
         Intensity::MAX,
+        &order,
         &GreedyOption {
             phase_quantization_levels: NonZeroU8::new(16).unwrap(),
             directivity: Directivity::Sphere,

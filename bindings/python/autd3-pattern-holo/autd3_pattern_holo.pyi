@@ -160,6 +160,7 @@ def greedy(
     foci: Sequence[AmplitudeTarget],
     wavelength: Length,
     intensities: IntensityBuffer | Intensity | int,
+    order: Sequence[int] | npt.NDArray[np.integer[Any]],
     option: GreedyOption,
     dst: PhaseBuffer,
 ) -> None: ...

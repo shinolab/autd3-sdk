@@ -2,7 +2,6 @@ use core::f32::consts::PI;
 use core::num::NonZeroU8;
 
 use nalgebra::Complex;
-use rand::seq::SliceRandom;
 
 use autd3_rs_core::common::Length;
 use autd3_rs_core::geometry::{Geometry, TransducerMask};
@@ -63,6 +62,30 @@ fn validate_intensities(
     Ok(())
 }
 
+fn validate_order(order: &[usize], geometry: &Geometry) -> Result<(), HoloError> {
+    let num_transducers = geometry.num_transducers();
+    if order.len() != num_transducers {
+        return Err(HoloError::OrderLengthMismatch {
+            got: order.len(),
+            expected: num_transducers,
+        });
+    }
+    let mut visited = vec![false; num_transducers];
+    for &index in order {
+        let Some(seen) = visited.get_mut(index) else {
+            return Err(HoloError::OrderIndexOutOfRange {
+                index,
+                num_transducers,
+            });
+        };
+        if *seen {
+            return Err(HoloError::OrderDuplicateIndex { index });
+        }
+        *seen = true;
+    }
+    Ok(())
+}
+
 fn intensity_at(intensities: PatternIntensity<'_>, d: usize, t: usize) -> Intensity {
     match intensities {
         PatternIntensity::Uniform(intensity) => intensity,
@@ -76,6 +99,7 @@ pub fn greedy<'a>(
     foci: &[AmplitudeTarget],
     wavelength: Length,
     intensities: impl Into<PatternIntensity<'a>>,
+    order: &[usize],
     option: &GreedyOption<'_>,
     dst: &mut [Vec<Phase>],
 ) -> Result<(), HoloError> {
@@ -87,6 +111,7 @@ pub fn greedy<'a>(
     validate_intensities(intensities, geometry)?;
     let mask = option.mask;
     mask.validate(geometry)?;
+    validate_order(order, geometry)?;
 
     let k = wavenumber(wavelength);
     let m = foci.len();
@@ -96,18 +121,14 @@ pub fn greedy<'a>(
         .map(|i| Complex::new(0.0, 2.0 * PI * f32::from(i) / f32::from(levels)).exp())
         .collect();
 
-    let mut indices: Vec<(usize, usize)> = geometry
+    let device_offsets: Vec<usize> = geometry
         .iter()
-        .enumerate()
-        .flat_map(|(d, dev)| {
-            (0..dev.num_transducers())
-                .filter(move |&t| {
-                    mask.is_enabled(d, t) && intensity_at(intensities, d, t) != Intensity::MIN
-                })
-                .map(move |t| (d, t))
+        .scan(0, |offset, dev| {
+            let start = *offset;
+            *offset += dev.num_transducers();
+            Some(start)
         })
         .collect();
-    indices.shuffle(&mut rand::rng());
 
     for slot in dst.iter_mut() {
         slot.fill(Phase::ZERO);
@@ -116,7 +137,12 @@ pub fn greedy<'a>(
     let mut cache = vec![Complex::new(0.0, 0.0); m];
     let mut tmp = vec![Complex::new(0.0, 0.0); m];
 
-    for &(d, t) in &indices {
+    for &index in order {
+        let d = device_offsets.partition_point(|&start| start <= index) - 1;
+        let t = index - device_offsets[d];
+        if !mask.is_enabled(d, t) || intensity_at(intensities, d, t) == Intensity::MIN {
+            continue;
+        }
         let dev = &geometry[d];
         let pos = dev.positions()[t];
         let dir = dev.directions()[t];
@@ -166,6 +192,10 @@ mod tests {
         }]
     }
 
+    fn ascending(geometry: &Geometry) -> Vec<usize> {
+        (0..geometry.num_transducers()).collect()
+    }
+
     fn uniform(geometry: &Geometry, intensity: Intensity) -> Vec<Vec<Intensity>> {
         let mut intensities = geometry.intensity_buffer();
         for slot in &mut intensities {
@@ -210,6 +240,7 @@ mod tests {
                 &[],
                 wavelength(),
                 &intensities,
+                &ascending(&geometry),
                 &GreedyOption::default(),
                 &mut dst
             ),
@@ -234,6 +265,7 @@ mod tests {
                 &single_focus(),
                 wavelength(),
                 &intensities,
+                &ascending(&geometry),
                 &option,
                 &mut dst
             ),
@@ -254,6 +286,7 @@ mod tests {
                 &single_focus(),
                 wavelength(),
                 &intensities,
+                &ascending(&geometry),
                 &option,
                 &mut dst
             ),
@@ -278,6 +311,7 @@ mod tests {
                 &single_focus(),
                 wavelength(),
                 &intensities,
+                &ascending(&geometry),
                 &GreedyOption::default(),
                 &mut dst
             ),
@@ -300,6 +334,7 @@ mod tests {
                 &single_focus(),
                 wavelength(),
                 &one_device,
+                &ascending(&geometry),
                 &GreedyOption::default(),
                 &mut dst
             ),
@@ -319,6 +354,7 @@ mod tests {
                 &single_focus(),
                 wavelength(),
                 &short_row,
+                &ascending(&geometry),
                 &GreedyOption::default(),
                 &mut dst
             ),
@@ -340,6 +376,7 @@ mod tests {
             &single_focus(),
             wavelength(),
             &intensities,
+            &ascending(&geometry),
             &GreedyOption::default(),
             &mut dst,
         )
@@ -361,6 +398,7 @@ mod tests {
             &focus,
             wavelength(),
             &weak,
+            &ascending(&geometry),
             &GreedyOption::default(),
             &mut dst,
         )
@@ -384,6 +422,7 @@ mod tests {
             &foci,
             wavelength(),
             Intensity(64),
+            &ascending(&geometry),
             &GreedyOption::default(),
             &mut from_uniform,
         )
@@ -416,6 +455,7 @@ mod tests {
             &single_focus(),
             wavelength(),
             &intensities,
+            &ascending(&geometry),
             &GreedyOption::default(),
             &mut dst,
         )
@@ -423,5 +463,92 @@ mod tests {
         assert_eq!(intensities, given);
         assert!(dst[0][..100].iter().all(|&p| p == Phase::ZERO));
         assert!(dst[0][100..].iter().any(|&p| p != Phase::ZERO));
+    }
+
+    #[test]
+    fn the_same_order_gives_the_same_phases() {
+        let geometry = geometry(2);
+        let order: Vec<usize> = (0..geometry.num_transducers())
+            .map(|i| (i * 7) % geometry.num_transducers())
+            .collect();
+        let run = || {
+            let mut dst = geometry.phase_buffer();
+            greedy(
+                &geometry,
+                &single_focus(),
+                wavelength(),
+                Intensity::MAX,
+                &order,
+                &GreedyOption::default(),
+                &mut dst,
+            )
+            .unwrap();
+            dst
+        };
+        assert_eq!(run(), run());
+    }
+
+    #[test]
+    fn indices_past_the_first_device_reach_the_later_device() {
+        let geometry = geometry(2);
+        let mut intensities = uniform(&geometry, Intensity::MAX);
+        intensities[0].fill(Intensity::MIN);
+        let reversed: Vec<usize> = (0..geometry.num_transducers()).rev().collect();
+        let mut dst = geometry.phase_buffer();
+        greedy(
+            &geometry,
+            &single_focus(),
+            wavelength(),
+            &intensities,
+            &reversed,
+            &GreedyOption::default(),
+            &mut dst,
+        )
+        .unwrap();
+        assert!(dst[0].iter().all(|&p| p == Phase::ZERO));
+        assert!(dst[1].iter().any(|&p| p != Phase::ZERO));
+    }
+
+    #[test]
+    fn an_order_that_is_not_a_permutation_is_an_error_not_a_panic() {
+        let geometry = geometry(1);
+        let n = geometry.num_transducers();
+        let mut dst = geometry.phase_buffer();
+        let run = |order: &[usize], dst: &mut [Vec<Phase>]| {
+            greedy(
+                &geometry,
+                &single_focus(),
+                wavelength(),
+                Intensity::MAX,
+                order,
+                &GreedyOption::default(),
+                dst,
+            )
+        };
+
+        assert_eq!(
+            run(&ascending(&geometry)[1..], &mut dst),
+            Err(HoloError::OrderLengthMismatch {
+                got: n - 1,
+                expected: n
+            }),
+        );
+
+        let mut out_of_range = ascending(&geometry);
+        out_of_range[3] = n;
+        assert_eq!(
+            run(&out_of_range, &mut dst),
+            Err(HoloError::OrderIndexOutOfRange {
+                index: n,
+                num_transducers: n
+            }),
+        );
+
+        let mut duplicated = ascending(&geometry);
+        duplicated[3] = 2;
+        assert_eq!(
+            run(&duplicated, &mut dst),
+            Err(HoloError::OrderDuplicateIndex { index: 2 }),
+        );
     }
 }

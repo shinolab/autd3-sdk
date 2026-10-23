@@ -70,7 +70,7 @@ def test_a_masked_transducer_mask_is_validated_on_use_not_on_construction() -> N
         with pytest.raises(holo.HoloError):
             holo.gspat(geometry, foci, wavelength, holo.GspatOption(mask=mask), phases, intensities)
         with pytest.raises(holo.HoloError):
-            holo.greedy(geometry, foci, wavelength, intensities, holo.GreedyOption(mask=mask), phases)
+            holo.greedy(geometry, foci, wavelength, intensities, list(range(geometry.num_transducers())), holo.GreedyOption(mask=mask), phases)
 
 
 @pytest.mark.parametrize(
