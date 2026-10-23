@@ -1,10 +1,9 @@
 from autd3.commands import SetPhaseCorrection
 from autd3.geometry import Autd3, Geometry
-from autd3.value import Phase
 
 geometry = Geometry([Autd3()])
 
-phases = [[Phase.ZERO] * device.num_transducers() for device in geometry]
+phases = geometry.phase_buffer()
 
 # ANCHOR: api
 SetPhaseCorrection(phases)

@@ -710,7 +710,7 @@ class SetOutputMask:
 
 @final
 class SetPhaseCorrection:
-    def __new__(cls, phases: Sequence[Sequence[Phase | int]]) -> SetPhaseCorrection: ...
+    def __new__(cls, phases: PhaseBuffer) -> SetPhaseCorrection: ...
 
 @final
 class SetPulseWidthTable:

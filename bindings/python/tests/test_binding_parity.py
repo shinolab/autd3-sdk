@@ -304,7 +304,6 @@ def test_command_contents_are_checked_when_encoded() -> None:
     point = ControlPoint([0.0, 0.0, 150.0], Phase.ZERO)
     for command in (
         SetOutputMask([[True] * 3]),
-        SetPhaseCorrection([[Phase.ZERO] * 3]),
         FociStm(SamplingConfig.FREQ_4K, [], FociStmOption()),
         WriteFociBuffer(PatternBank.B0, 0, []),
         FociStm(SamplingConfig.FREQ_4K, [ControlPoints([], 0xFF)], FociStmOption()),
@@ -314,6 +313,16 @@ def test_command_contents_are_checked_when_encoded() -> None:
         with pytest.raises(autd3.Autd3Error) as err:
             autd3.Frames.encode(geometry, loose(command))
         assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
+
+
+def test_set_phase_correction_takes_a_phase_buffer_of_the_geometry() -> None:
+    geometry = one_device()
+    two = Geometry([Autd3(), Autd3([Autd3.DEVICE_WIDTH, 0.0, 0.0])])
+    command = SetPhaseCorrection(geometry.phase_buffer())
+    assert len(autd3.Frames.encode(geometry, command)) == 1
+    with pytest.raises(autd3.Autd3Error) as err:
+        autd3.Frames.encode(two, command)
+    assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
 
 
 def test_pattern_functions_reject_a_buffer_for_another_geometry() -> None:

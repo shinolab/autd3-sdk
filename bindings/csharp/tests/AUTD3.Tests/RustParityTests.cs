@@ -340,6 +340,21 @@ namespace AUTD3.Tests
         }
 
         [Fact]
+        public void SetPhaseCorrectionTakesAPhaseBufferOfTheGeometry()
+        {
+            using var geometry = Fixture.SingleDevice();
+            using var frames = new Frames();
+            using var phases = geometry.PhaseBuffer();
+            frames.EncodeInto(geometry, new SetPhaseCorrection(phases));
+            Assert.Equal(1, frames.Length);
+
+            using var two = Fixture.Devices(2);
+            var e = Assert.Throws<Autd3Exception>(() =>
+                frames.EncodeInto(two, new SetPhaseCorrection(phases)));
+            Assert.Equal(Autd3ErrorCode.InvalidArgument, e.Code);
+        }
+
+        [Fact]
         public void ABatchMatchesSolvingEachProblemAlone()
         {
             using var geometry = Fixture.SingleDevice();
