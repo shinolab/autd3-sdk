@@ -26,6 +26,7 @@ def test_defaults_follow_the_spec() -> None:
     assert option.lost_timeout == autd3.Duration.from_millis(100)
     assert option.ack_timeout == autd3.Duration.from_millis(10)
     assert option.send_buffer_bytes == 8192
+    assert option.sync_on_open is True
 
 
 def test_fields_round_trip() -> None:
@@ -41,6 +42,13 @@ def test_fields_round_trip() -> None:
     assert option.ack_timeout == autd3.Duration.from_millis(3)
     assert autd3.TransportOption(send_buffer_bytes=None).send_buffer_bytes is None
     assert autd3.TransportOption(send_buffer_bytes=65536).send_buffer_bytes == 65536
+
+
+def test_sync_on_open_can_be_turned_off() -> None:
+    option = autd3.TransportOption(sync_on_open=False)
+    assert option.sync_on_open is False
+    assert option != autd3.TransportOption()
+    assert "sync_on_open: false" in repr(option)
 
 
 def test_the_interface_selects_where_to_connect() -> None:

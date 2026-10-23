@@ -80,8 +80,7 @@ Sending the [`ReleaseFailsafe`](/autd3-sdk/en/api/command/release-failsafe/) com
 The settings return to their defaults on [Clear](/autd3-sdk/en/api/command/clear/) and on power cycling.
 Reopening the client does not reset them (the devices keep the values of the previous session), so send `Clear` to return to the defaults.
 If you close the client with a PTP setting that never locks, the synchronization wait of the next open fails at `open_timeout` (`SyncTimeout`).
-In that case, open with `sync_on_open` of [`TransportOption`](/autd3-sdk/en/api/basics/transport-option/) set to `false` (Rust only), send `Clear`, and open again.
-From Python / C#, reboot the devices with `autd3-firmware-ota --reboot-only` or power-cycle them to return to the defaults.
+In that case, open with `sync_on_open` of [`TransportOption`](/autd3-sdk/en/api/basics/transport-option/) set to `false`, send `Clear`, and open again.
 
 ## Example
 

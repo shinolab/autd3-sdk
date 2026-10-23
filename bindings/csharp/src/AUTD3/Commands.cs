@@ -10,6 +10,46 @@ namespace AUTD3
         public ulong Value;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct PtpConfigNative
+    {
+        public ulong SyncIntervalNs;
+        public ulong TxTimestampTimeoutNs;
+        public ulong DelayRespTimeoutNs;
+        public ulong HoldoverNs;
+        public ushort LockSamples;
+        public ulong StepThresholdNs;
+        public ulong LockThresholdNs;
+        public uint KpMilli;
+        public uint KiMilli;
+        public uint MaxFreqPpb;
+        public ushort DelayReqSyncs;
+        public byte PathDelayFilterShift;
+        public ushort PauseQuanta;
+        public ushort PauseHoldSyncs;
+        public ulong PauseRetryNs;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct CpuConfigNative
+    {
+        public ulong SyncGuardNs;
+        public byte HasFailsafeTimeout;
+        public ulong FailsafeTimeoutNs;
+        public byte HasPtpUnlockFailsafeTimeout;
+        public ulong PtpUnlockFailsafeTimeoutNs;
+        public byte FpgaBusWait;
+        public byte HasCpuWatchdogTimeout;
+        public ulong CpuWatchdogTimeoutNs;
+        public PtpConfigNative Ptp;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct FpgaConfigNative
+    {
+        public byte SyncPhaseLock;
+    }
+
     internal static class NativeCommand
     {
         private const string Lib = "autd3capi";
@@ -57,151 +97,16 @@ namespace AUTD3
         internal static extern IntPtr autd3_op_force_fan([MarshalAs(UnmanagedType.I1)] bool value);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_force_fan_default();
+        internal static extern int autd3_cpu_config_default(out CpuConfigNative config);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_cpu_config_new();
+        internal static extern IntPtr autd3_op_set_cpu_config(CpuConfigNative config, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_cpu_config_free(IntPtr config);
+        internal static extern int autd3_fpga_config_default(out FpgaConfigNative config);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_set_cpu_config(IntPtr config);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_set_sync_guard(IntPtr config, ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_get_sync_guard(IntPtr config, out ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_set_failsafe_timeout(IntPtr config, [MarshalAs(UnmanagedType.I1)] bool hasValue, ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_get_failsafe_timeout(IntPtr config, [MarshalAs(UnmanagedType.I1)] out bool hasValue, out ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_set_ptp_unlock_failsafe_timeout(IntPtr config, [MarshalAs(UnmanagedType.I1)] bool hasValue, ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_get_ptp_unlock_failsafe_timeout(IntPtr config, [MarshalAs(UnmanagedType.I1)] out bool hasValue, out ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_set_fpga_bus_wait(IntPtr config, byte cycles);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_get_fpga_bus_wait(IntPtr config, out byte cycles);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_set_cpu_watchdog_timeout(IntPtr config, [MarshalAs(UnmanagedType.I1)] bool hasValue, ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_get_cpu_watchdog_timeout(IntPtr config, [MarshalAs(UnmanagedType.I1)] out bool hasValue, out ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_set_ptp_sync_interval(IntPtr config, ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_get_ptp_sync_interval(IntPtr config, out ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_set_ptp_tx_timestamp_timeout(IntPtr config, ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_get_ptp_tx_timestamp_timeout(IntPtr config, out ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_set_ptp_delay_resp_timeout(IntPtr config, ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_get_ptp_delay_resp_timeout(IntPtr config, out ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_set_ptp_holdover(IntPtr config, ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_get_ptp_holdover(IntPtr config, out ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_set_ptp_step_threshold(IntPtr config, ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_get_ptp_step_threshold(IntPtr config, out ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_set_ptp_lock_threshold(IntPtr config, ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_get_ptp_lock_threshold(IntPtr config, out ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_set_ptp_kp_milli(IntPtr config, uint value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_get_ptp_kp_milli(IntPtr config, out uint value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_set_ptp_ki_milli(IntPtr config, uint value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_get_ptp_ki_milli(IntPtr config, out uint value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_set_ptp_max_freq_ppb(IntPtr config, uint value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_get_ptp_max_freq_ppb(IntPtr config, out uint value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_set_ptp_lock_samples(IntPtr config, ushort value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_get_ptp_lock_samples(IntPtr config, out ushort value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_set_ptp_delay_req_syncs(IntPtr config, ushort value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_get_ptp_delay_req_syncs(IntPtr config, out ushort value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_set_ptp_path_delay_filter_shift(IntPtr config, byte value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_get_ptp_path_delay_filter_shift(IntPtr config, out byte value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_set_ptp_pause_quanta(IntPtr config, ushort quanta);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_get_ptp_pause_quanta(IntPtr config, out ushort quanta);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_set_ptp_pause_hold_syncs(IntPtr config, ushort value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_get_ptp_pause_hold_syncs(IntPtr config, out ushort value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_set_ptp_pause_retry(IntPtr config, ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_get_ptp_pause_retry(IntPtr config, out ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_fpga_config_new();
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_fpga_config_free(IntPtr config);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_set_fpga_config(IntPtr config);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_fpga_config_set_sync_phase_lock(IntPtr config, [MarshalAs(UnmanagedType.I1)] bool value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_fpga_config_get_sync_phase_lock(IntPtr config, [MarshalAs(UnmanagedType.I1)] out bool value);
+        internal static extern IntPtr autd3_op_set_fpga_config(FpgaConfigNative config);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_set_silencer_completion_time(ulong intensityNs, ulong phaseNs, [MarshalAs(UnmanagedType.I1)] bool strict);
@@ -216,13 +121,7 @@ namespace AUTD3
         internal static extern IntPtr autd3_op_set_gpio_out(GpioOutNative[] outputs);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_set_gpio_out_default();
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_emulate_gpio_in(byte[] values);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_emulate_gpio_in_default();
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_set_output_mask(byte[] masks, UIntPtr[] lens, UIntPtr numDevices);
@@ -294,11 +193,11 @@ namespace AUTD3
 
     public sealed class ForceFan : ICommand
     {
-        private readonly bool? _value;
+        private readonly bool _value;
 
         public ForceFan()
         {
-            _value = null;
+            _value = false;
         }
 
         public ForceFan(bool value)
@@ -306,8 +205,7 @@ namespace AUTD3
             _value = value;
         }
 
-        IntPtr ICommand.CreateOp(Geometry geometry) =>
-            _value is bool value ? NativeCommand.autd3_op_force_fan(value) : NativeCommand.autd3_op_force_fan_default();
+        IntPtr ICommand.CreateOp(Geometry geometry) => NativeCommand.autd3_op_force_fan(_value);
     }
 
     internal static class CpuConfigDefaults
@@ -335,40 +233,28 @@ namespace AUTD3
 
         static CpuConfigDefaults()
         {
-            var handle = NativeCommand.autd3_cpu_config_new();
-            if (handle == IntPtr.Zero)
-            {
-                throw new Autd3Exception("failed to create cpu config");
-            }
-            try
-            {
-                SyncGuard = OptionNative.GetDuration(handle, NativeCommand.autd3_cpu_config_get_sync_guard);
-                FailsafeTimeout = OptionNative.GetOptionalDuration(handle, NativeCommand.autd3_cpu_config_get_failsafe_timeout);
-                PtpUnlockFailsafeTimeout = OptionNative.GetOptionalDuration(handle, NativeCommand.autd3_cpu_config_get_ptp_unlock_failsafe_timeout);
-                OptionNative.Apply("preset", NativeCommand.autd3_cpu_config_get_fpga_bus_wait(handle, out var fpgaBusWait));
-                FpgaBusWait = FpgaBusWaitNative.FromCycles(fpgaBusWait);
-                CpuWatchdogTimeout = OptionNative.GetOptionalDuration(handle, NativeCommand.autd3_cpu_config_get_cpu_watchdog_timeout);
-                PtpSyncInterval = OptionNative.GetDuration(handle, NativeCommand.autd3_cpu_config_get_ptp_sync_interval);
-                PtpTxTimestampTimeout = OptionNative.GetDuration(handle, NativeCommand.autd3_cpu_config_get_ptp_tx_timestamp_timeout);
-                PtpDelayRespTimeout = OptionNative.GetDuration(handle, NativeCommand.autd3_cpu_config_get_ptp_delay_resp_timeout);
-                PtpHoldover = OptionNative.GetDuration(handle, NativeCommand.autd3_cpu_config_get_ptp_holdover);
-                OptionNative.Apply("preset", NativeCommand.autd3_cpu_config_get_ptp_lock_samples(handle, out PtpLockSamples));
-                PtpStepThreshold = OptionNative.GetDuration(handle, NativeCommand.autd3_cpu_config_get_ptp_step_threshold);
-                PtpLockThreshold = OptionNative.GetDuration(handle, NativeCommand.autd3_cpu_config_get_ptp_lock_threshold);
-                OptionNative.Apply("preset", NativeCommand.autd3_cpu_config_get_ptp_kp_milli(handle, out PtpKpMilli));
-                OptionNative.Apply("preset", NativeCommand.autd3_cpu_config_get_ptp_ki_milli(handle, out PtpKiMilli));
-                OptionNative.Apply("preset", NativeCommand.autd3_cpu_config_get_ptp_max_freq_ppb(handle, out PtpMaxFreqPpb));
-                OptionNative.Apply("preset", NativeCommand.autd3_cpu_config_get_ptp_delay_req_syncs(handle, out PtpDelayReqSyncs));
-                OptionNative.Apply("preset", NativeCommand.autd3_cpu_config_get_ptp_path_delay_filter_shift(handle, out PtpPathDelayFilterShift));
-                OptionNative.Apply("preset", NativeCommand.autd3_cpu_config_get_ptp_pause_quanta(handle, out var pauseQuanta));
-                PtpPauseQuanta = pauseQuanta == 0 ? null : pauseQuanta;
-                OptionNative.Apply("preset", NativeCommand.autd3_cpu_config_get_ptp_pause_hold_syncs(handle, out PtpPauseHoldSyncs));
-                PtpPauseRetry = OptionNative.GetDuration(handle, NativeCommand.autd3_cpu_config_get_ptp_pause_retry);
-            }
-            finally
-            {
-                NativeCommand.autd3_cpu_config_free(handle);
-            }
+            OptionNative.Apply("preset", NativeCommand.autd3_cpu_config_default(out var native));
+            SyncGuard = OptionNative.FromNanos(native.SyncGuardNs);
+            FailsafeTimeout = OptionNative.FromOptionalNanos(native.HasFailsafeTimeout, native.FailsafeTimeoutNs);
+            PtpUnlockFailsafeTimeout = OptionNative.FromOptionalNanos(native.HasPtpUnlockFailsafeTimeout, native.PtpUnlockFailsafeTimeoutNs);
+            FpgaBusWait = FpgaBusWaitNative.FromCycles(native.FpgaBusWait);
+            CpuWatchdogTimeout = OptionNative.FromOptionalNanos(native.HasCpuWatchdogTimeout, native.CpuWatchdogTimeoutNs);
+            var ptp = native.Ptp;
+            PtpSyncInterval = OptionNative.FromNanos(ptp.SyncIntervalNs);
+            PtpTxTimestampTimeout = OptionNative.FromNanos(ptp.TxTimestampTimeoutNs);
+            PtpDelayRespTimeout = OptionNative.FromNanos(ptp.DelayRespTimeoutNs);
+            PtpHoldover = OptionNative.FromNanos(ptp.HoldoverNs);
+            PtpLockSamples = ptp.LockSamples;
+            PtpStepThreshold = OptionNative.FromNanos(ptp.StepThresholdNs);
+            PtpLockThreshold = OptionNative.FromNanos(ptp.LockThresholdNs);
+            PtpKpMilli = ptp.KpMilli;
+            PtpKiMilli = ptp.KiMilli;
+            PtpMaxFreqPpb = ptp.MaxFreqPpb;
+            PtpDelayReqSyncs = ptp.DelayReqSyncs;
+            PtpPathDelayFilterShift = ptp.PathDelayFilterShift;
+            PtpPauseQuanta = ptp.PauseQuanta == 0 ? null : ptp.PauseQuanta;
+            PtpPauseHoldSyncs = ptp.PauseHoldSyncs;
+            PtpPauseRetry = OptionNative.FromNanos(ptp.PauseRetryNs);
         }
     }
 
@@ -416,29 +302,29 @@ namespace AUTD3
         private readonly TimeSpan? _pauseRetry;
         public TimeSpan PauseRetry { get => _pauseRetry ?? CpuConfigDefaults.PtpPauseRetry; init => _pauseRetry = value; }
 
-        internal void Apply(IntPtr handle)
+        internal PtpConfigNative ToNative() => new PtpConfigNative
         {
-            OptionNative.SetRequiredDuration(handle, "ptp.syncInterval", SyncInterval, NativeCommand.autd3_cpu_config_set_ptp_sync_interval);
-            OptionNative.SetRequiredDuration(handle, "ptp.txTimestampTimeout", TxTimestampTimeout, NativeCommand.autd3_cpu_config_set_ptp_tx_timestamp_timeout);
-            OptionNative.SetRequiredDuration(handle, "ptp.delayRespTimeout", DelayRespTimeout, NativeCommand.autd3_cpu_config_set_ptp_delay_resp_timeout);
-            OptionNative.SetRequiredDuration(handle, "ptp.holdover", Holdover, NativeCommand.autd3_cpu_config_set_ptp_holdover);
-            OptionNative.Apply("ptp.lockSamples", NativeCommand.autd3_cpu_config_set_ptp_lock_samples(handle, LockSamples));
-            OptionNative.SetRequiredDuration(handle, "ptp.stepThreshold", StepThreshold, NativeCommand.autd3_cpu_config_set_ptp_step_threshold);
-            OptionNative.SetRequiredDuration(handle, "ptp.lockThreshold", LockThreshold, NativeCommand.autd3_cpu_config_set_ptp_lock_threshold);
-            OptionNative.Apply("ptp.kpMilli", NativeCommand.autd3_cpu_config_set_ptp_kp_milli(handle, KpMilli));
-            OptionNative.Apply("ptp.kiMilli", NativeCommand.autd3_cpu_config_set_ptp_ki_milli(handle, KiMilli));
-            OptionNative.Apply("ptp.maxFreqPpb", NativeCommand.autd3_cpu_config_set_ptp_max_freq_ppb(handle, MaxFreqPpb));
-            OptionNative.Apply("ptp.delayReqSyncs", NativeCommand.autd3_cpu_config_set_ptp_delay_req_syncs(handle, DelayReqSyncs));
-            OptionNative.Apply("ptp.pathDelayFilterShift", NativeCommand.autd3_cpu_config_set_ptp_path_delay_filter_shift(handle, PathDelayFilterShift));
-            OptionNative.Apply("ptp.pauseQuanta", PauseQuanta switch
+            SyncIntervalNs = OptionNative.RequiredNanos("ptp.syncInterval", SyncInterval),
+            TxTimestampTimeoutNs = OptionNative.RequiredNanos("ptp.txTimestampTimeout", TxTimestampTimeout),
+            DelayRespTimeoutNs = OptionNative.RequiredNanos("ptp.delayRespTimeout", DelayRespTimeout),
+            HoldoverNs = OptionNative.RequiredNanos("ptp.holdover", Holdover),
+            LockSamples = LockSamples,
+            StepThresholdNs = OptionNative.RequiredNanos("ptp.stepThreshold", StepThreshold),
+            LockThresholdNs = OptionNative.RequiredNanos("ptp.lockThreshold", LockThreshold),
+            KpMilli = KpMilli,
+            KiMilli = KiMilli,
+            MaxFreqPpb = MaxFreqPpb,
+            DelayReqSyncs = DelayReqSyncs,
+            PathDelayFilterShift = PathDelayFilterShift,
+            PauseQuanta = PauseQuanta switch
             {
-                null => NativeCommand.autd3_cpu_config_set_ptp_pause_quanta(handle, 0),
-                { } quanta when quanta > 0 => NativeCommand.autd3_cpu_config_set_ptp_pause_quanta(handle, quanta),
-                _ => -1,
-            });
-            OptionNative.Apply("ptp.pauseHoldSyncs", NativeCommand.autd3_cpu_config_set_ptp_pause_hold_syncs(handle, PauseHoldSyncs));
-            OptionNative.SetRequiredDuration(handle, "ptp.pauseRetry", PauseRetry, NativeCommand.autd3_cpu_config_set_ptp_pause_retry);
-        }
+                null => 0,
+                { } quanta when quanta > 0 => quanta,
+                _ => throw OptionNative.OutOfRange("ptp.pauseQuanta"),
+            },
+            PauseHoldSyncs = PauseHoldSyncs,
+            PauseRetryNs = OptionNative.RequiredNanos("ptp.pauseRetry", PauseRetry),
+        };
     }
 
     public readonly struct CpuConfig
@@ -488,29 +374,18 @@ namespace AUTD3
 
         public PtpConfig Ptp { get; init; }
 
-        internal IntPtr CreateHandle()
+        internal CpuConfigNative ToNative() => new CpuConfigNative
         {
-            var handle = NativeCommand.autd3_cpu_config_new();
-            if (handle == IntPtr.Zero)
-            {
-                throw new Autd3Exception("failed to create cpu config");
-            }
-            try
-            {
-                OptionNative.SetRequiredDuration(handle, "syncGuard", SyncGuard, NativeCommand.autd3_cpu_config_set_sync_guard);
-                OptionNative.SetOptionalDuration(handle, "failsafeTimeout", FailsafeTimeout, NativeCommand.autd3_cpu_config_set_failsafe_timeout);
-                OptionNative.SetOptionalDuration(handle, "ptpUnlockFailsafeTimeout", PtpUnlockFailsafeTimeout, NativeCommand.autd3_cpu_config_set_ptp_unlock_failsafe_timeout);
-                OptionNative.Apply("fpgaBusWait", NativeCommand.autd3_cpu_config_set_fpga_bus_wait(handle, FpgaBusWaitNative.ToCycles(FpgaBusWait)));
-                OptionNative.SetOptionalDuration(handle, "cpuWatchdogTimeout", CpuWatchdogTimeout, NativeCommand.autd3_cpu_config_set_cpu_watchdog_timeout);
-                Ptp.Apply(handle);
-            }
-            catch
-            {
-                NativeCommand.autd3_cpu_config_free(handle);
-                throw;
-            }
-            return handle;
-        }
+            SyncGuardNs = OptionNative.RequiredNanos("syncGuard", SyncGuard),
+            HasFailsafeTimeout = OptionNative.Flag(FailsafeTimeout.HasValue),
+            FailsafeTimeoutNs = OptionNative.OptionalNanos("failsafeTimeout", FailsafeTimeout),
+            HasPtpUnlockFailsafeTimeout = OptionNative.Flag(PtpUnlockFailsafeTimeout.HasValue),
+            PtpUnlockFailsafeTimeoutNs = OptionNative.OptionalNanos("ptpUnlockFailsafeTimeout", PtpUnlockFailsafeTimeout),
+            FpgaBusWait = FpgaBusWaitNative.ToCycles(FpgaBusWait),
+            HasCpuWatchdogTimeout = OptionNative.Flag(CpuWatchdogTimeout.HasValue),
+            CpuWatchdogTimeoutNs = OptionNative.OptionalNanos("cpuWatchdogTimeout", CpuWatchdogTimeout),
+            Ptp = Ptp.ToNative(),
+        };
     }
 
     public sealed class SetCpuConfig : ICommand
@@ -530,20 +405,14 @@ namespace AUTD3
 
         IntPtr ICommand.CreateOp(Geometry geometry)
         {
-            var handle = _config.CreateHandle();
-            try
+            var native = _config.ToNative();
+            var err = new byte[NativeAbi.ErrorBufferLength];
+            var op = NativeCommand.autd3_op_set_cpu_config(native, err, (UIntPtr)err.Length);
+            if (op == IntPtr.Zero)
             {
-                var op = NativeCommand.autd3_op_set_cpu_config(handle);
-                if (op == IntPtr.Zero)
-                {
-                    throw new Autd3Exception("failed to create the cpu config operation");
-                }
-                return op;
+                throw Autd3Exception.FromNative((int)Autd3ErrorCode.InvalidArgument, err);
             }
-            finally
-            {
-                NativeCommand.autd3_cpu_config_free(handle);
-            }
+            return op;
         }
     }
 
@@ -553,19 +422,8 @@ namespace AUTD3
 
         static FpgaConfigDefaults()
         {
-            var handle = NativeCommand.autd3_fpga_config_new();
-            if (handle == IntPtr.Zero)
-            {
-                throw new Autd3Exception("failed to create fpga config");
-            }
-            try
-            {
-                OptionNative.Apply("preset", NativeCommand.autd3_fpga_config_get_sync_phase_lock(handle, out SyncPhaseLock));
-            }
-            finally
-            {
-                NativeCommand.autd3_fpga_config_free(handle);
-            }
+            OptionNative.Apply("preset", NativeCommand.autd3_fpga_config_default(out var native));
+            SyncPhaseLock = native.SyncPhaseLock != 0;
         }
     }
 
@@ -574,24 +432,10 @@ namespace AUTD3
         private readonly bool? _syncPhaseLock;
         public bool SyncPhaseLock { get => _syncPhaseLock ?? FpgaConfigDefaults.SyncPhaseLock; init => _syncPhaseLock = value; }
 
-        internal IntPtr CreateHandle()
+        internal FpgaConfigNative ToNative() => new FpgaConfigNative
         {
-            var handle = NativeCommand.autd3_fpga_config_new();
-            if (handle == IntPtr.Zero)
-            {
-                throw new Autd3Exception("failed to create fpga config");
-            }
-            try
-            {
-                OptionNative.Apply("syncPhaseLock", NativeCommand.autd3_fpga_config_set_sync_phase_lock(handle, SyncPhaseLock));
-            }
-            catch
-            {
-                NativeCommand.autd3_fpga_config_free(handle);
-                throw;
-            }
-            return handle;
-        }
+            SyncPhaseLock = OptionNative.Flag(SyncPhaseLock),
+        };
     }
 
     public sealed class SetFpgaConfig : ICommand
@@ -609,23 +453,7 @@ namespace AUTD3
 
         public FpgaConfig Config => _config;
 
-        IntPtr ICommand.CreateOp(Geometry geometry)
-        {
-            var handle = _config.CreateHandle();
-            try
-            {
-                var op = NativeCommand.autd3_op_set_fpga_config(handle);
-                if (op == IntPtr.Zero)
-                {
-                    throw new Autd3Exception("failed to create the fpga config operation");
-                }
-                return op;
-            }
-            finally
-            {
-                NativeCommand.autd3_fpga_config_free(handle);
-            }
-        }
+        IntPtr ICommand.CreateOp(Geometry geometry) => NativeCommand.autd3_op_set_fpga_config(_config.ToNative());
     }
 
     public interface ISilencerConfig
@@ -714,11 +542,10 @@ namespace AUTD3
 
     public sealed class SetGpioOut : ICommand
     {
-        private readonly GpioOut[]? _outputs;
+        private readonly GpioOut[] _outputs;
 
-        public SetGpioOut()
+        public SetGpioOut() : this(new[] { GpioOut.Off, GpioOut.Off, GpioOut.Off, GpioOut.Off })
         {
-            _outputs = null;
         }
 
         public SetGpioOut(GpioOut[] outputs)
@@ -732,10 +559,6 @@ namespace AUTD3
 
         IntPtr ICommand.CreateOp(Geometry geometry)
         {
-            if (_outputs is null)
-            {
-                return NativeCommand.autd3_op_set_gpio_out_default();
-            }
             var native = new GpioOutNative[4];
             for (var i = 0; i < 4; i++)
             {
@@ -747,11 +570,10 @@ namespace AUTD3
 
     public sealed class EmulateGpioIn : ICommand
     {
-        private readonly bool[]? _values;
+        private readonly bool[] _values;
 
-        public EmulateGpioIn()
+        public EmulateGpioIn() : this(new bool[4])
         {
-            _values = null;
         }
 
         public EmulateGpioIn(bool[] values)
@@ -765,10 +587,6 @@ namespace AUTD3
 
         IntPtr ICommand.CreateOp(Geometry geometry)
         {
-            if (_values is null)
-            {
-                return NativeCommand.autd3_op_emulate_gpio_in_default();
-            }
             var bytes = new byte[4];
             for (var i = 0; i < 4; i++)
             {

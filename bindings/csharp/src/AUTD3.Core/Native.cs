@@ -168,52 +168,27 @@ namespace AUTD3
 
     internal static class OptionNative
     {
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        internal delegate int SetDurationFn(IntPtr option, ulong ns);
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        internal delegate int GetDurationFn(IntPtr option, out ulong ns);
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        internal delegate int SetOptionalDurationFn(IntPtr option, [MarshalAs(UnmanagedType.I1)] bool hasValue, ulong ns);
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        internal delegate int GetOptionalDurationFn(IntPtr option, [MarshalAs(UnmanagedType.I1)] out bool hasValue, out ulong ns);
+        internal static Autd3Exception OutOfRange(string field) =>
+            new Autd3Exception($"`{field}` is out of the range the native library accepts", Autd3ErrorCode.InvalidArgument);
 
         internal static void Apply(string field, int code)
         {
             if (code != 0)
             {
-                throw new Autd3Exception($"`{field}` is out of the range the native library accepts", Autd3ErrorCode.InvalidArgument);
+                throw OutOfRange(field);
             }
         }
 
-        internal static void SetRequiredDuration(IntPtr option, string field, TimeSpan value, SetDurationFn set)
-        {
-            Apply(field, value < TimeSpan.Zero ? -1 : set(option, ToNanos(value)));
-        }
+        internal static ulong RequiredNanos(string field, TimeSpan value) =>
+            value < TimeSpan.Zero ? throw OutOfRange(field) : ToNanos(value);
 
-        internal static TimeSpan GetDuration(IntPtr option, GetDurationFn get)
-        {
-            Apply("preset", get(option, out var ns));
-            return FromNanos(ns);
-        }
+        internal static ulong OptionalNanos(string field, TimeSpan? value) =>
+            value is { } duration ? RequiredNanos(field, duration) : 0;
 
-        internal static void SetOptionalDuration(IntPtr option, string field, TimeSpan? value, SetOptionalDurationFn set)
-        {
-            Apply(field, value switch
-            {
-                null => set(option, false, 0),
-                { } duration when duration >= TimeSpan.Zero => set(option, true, ToNanos(duration)),
-                _ => -1,
-            });
-        }
+        internal static TimeSpan? FromOptionalNanos(byte hasValue, ulong ns) =>
+            hasValue != 0 ? FromNanos(ns) : (TimeSpan?)null;
 
-        internal static TimeSpan? GetOptionalDuration(IntPtr option, GetOptionalDurationFn get)
-        {
-            Apply("preset", get(option, out var hasValue, out var ns));
-            return hasValue ? FromNanos(ns) : (TimeSpan?)null;
-        }
+        internal static byte Flag(bool value) => (byte)(value ? 1 : 0);
 
         internal static ulong ToNanos(TimeSpan value) =>
             (ulong)value.Ticks > ulong.MaxValue / 100UL ? ulong.MaxValue : (ulong)value.Ticks * 100UL;

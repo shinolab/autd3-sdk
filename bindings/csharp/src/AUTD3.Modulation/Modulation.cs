@@ -7,11 +7,37 @@ using System.Runtime.InteropServices;
 namespace AUTD3
 {
     [StructLayout(LayoutKind.Sequential)]
+    internal struct SineOptionNative
+    {
+        public byte Amplitude;
+        public byte Offset;
+        public float PhaseRad;
+        public byte Clamp;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct SquareOptionNative
+    {
+        public byte Low;
+        public byte High;
+        public float Duty;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct FourierOptionNative
+    {
+        public byte HasScaleFactor;
+        public float ScaleFactor;
+        public byte Clamp;
+        public byte Offset;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     internal struct SineComponentNative
     {
         public byte Mode;
         public float Freq;
-        public IntPtr Option;
+        public SineOptionNative Option;
     }
 
     internal static class NativeModulation
@@ -55,12 +81,6 @@ namespace AUTD3
         internal static extern bool autd3_modulation_samples_per_period(ushort divider, float freqHz, out uint outValue);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_modulation_sine_option_new(byte amplitude, byte offset, float phase, [MarshalAs(UnmanagedType.I1)] bool clamp);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_modulation_sine_option_free(IntPtr option);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_modulation_sine_option_default(out byte amplitude, out byte offset, out float phaseRad, [MarshalAs(UnmanagedType.I1)] out bool clamp);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
@@ -70,25 +90,13 @@ namespace AUTD3
         internal static extern int autd3_modulation_fourier_option_default([MarshalAs(UnmanagedType.I1)] out bool hasScaleFactor, out float scaleFactor, [MarshalAs(UnmanagedType.I1)] out bool clamp, out byte offset);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_modulation_sine(byte mode, float freq, IntPtr option, ushort samplingDivide, ModulationBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
+        internal static extern int autd3_modulation_sine(byte mode, float freq, SineOptionNative option, ushort samplingDivide, ModulationBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_modulation_square_option_new(byte low, byte high, float duty);
+        internal static extern int autd3_modulation_square(byte mode, float freq, SquareOptionNative option, ushort samplingDivide, ModulationBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_modulation_square_option_free(IntPtr option);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_modulation_square(byte mode, float freq, IntPtr option, ushort samplingDivide, ModulationBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_modulation_fourier_option_new([MarshalAs(UnmanagedType.I1)] bool hasScaleFactor, float scaleFactor, [MarshalAs(UnmanagedType.I1)] bool clamp, byte offset);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_modulation_fourier_option_free(IntPtr option);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_modulation_fourier(SineComponentNative[] components, UIntPtr numComponents, IntPtr option, ushort samplingDivide, ModulationBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
+        internal static extern int autd3_modulation_fourier(SineComponentNative[] components, UIntPtr numComponents, FourierOptionNative option, ushort samplingDivide, ModulationBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_modulation_buffer_copy_to(ModulationBufferHandle buffer, [Out] byte[] dst, UIntPtr len);
@@ -230,6 +238,14 @@ namespace AUTD3
         public Angle Phase { get => _phase ?? ModulationOptionDefaults.SinePhase; init => _phase = value; }
         private readonly bool? _clamp;
         public bool Clamp { get => _clamp ?? ModulationOptionDefaults.SineClamp; init => _clamp = value; }
+
+        internal SineOptionNative ToNative() => new SineOptionNative
+        {
+            Amplitude = Amplitude,
+            Offset = Offset,
+            PhaseRad = Phase.Rad,
+            Clamp = OptionNative.Flag(Clamp),
+        };
     }
 
     public readonly struct SquareOption
@@ -240,6 +256,13 @@ namespace AUTD3
         public byte High { get => _high ?? ModulationOptionDefaults.SquareHigh; init => _high = value; }
         private readonly float? _duty;
         public float Duty { get => _duty ?? ModulationOptionDefaults.SquareDuty; init => _duty = value; }
+
+        internal SquareOptionNative ToNative() => new SquareOptionNative
+        {
+            Low = Low,
+            High = High,
+            Duty = Duty,
+        };
     }
 
     public readonly struct FourierOption
@@ -261,6 +284,14 @@ namespace AUTD3
         public bool Clamp { get => _clamp ?? ModulationOptionDefaults.FourierClamp; init => _clamp = value; }
         private readonly byte? _offset;
         public byte Offset { get => _offset ?? ModulationOptionDefaults.FourierOffset; init => _offset = value; }
+
+        internal FourierOptionNative ToNative() => new FourierOptionNative
+        {
+            HasScaleFactor = OptionNative.Flag(ScaleFactor.HasValue),
+            ScaleFactor = ScaleFactor ?? 0f,
+            Clamp = OptionNative.Flag(Clamp),
+            Offset = Offset,
+        };
     }
 
     public readonly struct SineComponent
@@ -331,20 +362,11 @@ namespace AUTD3
         private static void Sine(Freq freq, byte modeCode, SineOption option, SamplingConfig config, ModulationBuffer dst)
         {
             var sampling = config.DivideForNative();
-            var optionHandle = NativeModulation.autd3_modulation_sine_option_new(
-                option.Amplitude, option.Offset, option.Phase.Rad, option.Clamp);
-            try
+            var err = new byte[NativeAbi.ErrorBufferLength];
+            var code = NativeModulation.autd3_modulation_sine(modeCode, freq.Hz, option.ToNative(), sampling, dst.Handle, err, (UIntPtr)err.Length);
+            if (code != 0)
             {
-                var err = new byte[NativeAbi.ErrorBufferLength];
-                var code = NativeModulation.autd3_modulation_sine(modeCode, freq.Hz, optionHandle, sampling, dst.Handle, err, (UIntPtr)err.Length);
-                if (code != 0)
-                {
-                    throw Autd3Exception.FromNative(code, err);
-                }
-            }
-            finally
-            {
-                NativeModulation.autd3_modulation_sine_option_free(optionHandle);
+                throw Autd3Exception.FromNative(code, err);
             }
         }
 
@@ -357,20 +379,11 @@ namespace AUTD3
         private static void Square(Freq freq, byte modeCode, SquareOption option, SamplingConfig config, ModulationBuffer dst)
         {
             var sampling = config.DivideForNative();
-            var optionHandle = NativeModulation.autd3_modulation_square_option_new(
-                option.Low, option.High, option.Duty);
-            try
+            var err = new byte[NativeAbi.ErrorBufferLength];
+            var code = NativeModulation.autd3_modulation_square(modeCode, freq.Hz, option.ToNative(), sampling, dst.Handle, err, (UIntPtr)err.Length);
+            if (code != 0)
             {
-                var err = new byte[NativeAbi.ErrorBufferLength];
-                var code = NativeModulation.autd3_modulation_square(modeCode, freq.Hz, optionHandle, sampling, dst.Handle, err, (UIntPtr)err.Length);
-                if (code != 0)
-                {
-                    throw Autd3Exception.FromNative(code, err);
-                }
-            }
-            finally
-            {
-                NativeModulation.autd3_modulation_square_option_free(optionHandle);
+                throw Autd3Exception.FromNative(code, err);
             }
         }
 
@@ -385,46 +398,22 @@ namespace AUTD3
         public static void Fourier(SineComponent[] components, FourierOption option, SamplingConfig config, ModulationBuffer dst)
         {
             var sampling = config.DivideForNative();
-            var optionHandles = new List<IntPtr>();
             var native = new SineComponentNative[components.Length];
-            try
+            for (var i = 0; i < components.Length; i++)
             {
-                for (var i = 0; i < components.Length; i++)
+                var c = components[i];
+                native[i] = new SineComponentNative
                 {
-                    var c = components[i];
-                    var optionHandle = NativeModulation.autd3_modulation_sine_option_new(
-                        c.Option.Amplitude, c.Option.Offset, c.Option.Phase.Rad, c.Option.Clamp);
-                    optionHandles.Add(optionHandle);
-                    native[i] = new SineComponentNative
-                    {
-                        Mode = c.ModeCode,
-                        Freq = c.Freq.Hz,
-                        Option = optionHandle,
-                    };
-                }
-
-                var fourierOption = NativeModulation.autd3_modulation_fourier_option_new(
-                    option.ScaleFactor.HasValue, option.ScaleFactor ?? 0f, option.Clamp, option.Offset);
-                try
-                {
-                    var err = new byte[NativeAbi.ErrorBufferLength];
-                    var code = NativeModulation.autd3_modulation_fourier(native, (UIntPtr)components.Length, fourierOption, sampling, dst.Handle, err, (UIntPtr)err.Length);
-                    if (code != 0)
-                    {
-                        throw Autd3Exception.FromNative(code, err);
-                    }
-                }
-                finally
-                {
-                    NativeModulation.autd3_modulation_fourier_option_free(fourierOption);
-                }
+                    Mode = c.ModeCode,
+                    Freq = c.Freq.Hz,
+                    Option = c.Option.ToNative(),
+                };
             }
-            finally
+            var err = new byte[NativeAbi.ErrorBufferLength];
+            var code = NativeModulation.autd3_modulation_fourier(native, (UIntPtr)components.Length, option.ToNative(), sampling, dst.Handle, err, (UIntPtr)err.Length);
+            if (code != 0)
             {
-                foreach (var optionHandle in optionHandles)
-                {
-                    NativeModulation.autd3_modulation_sine_option_free(optionHandle);
-                }
+                throw Autd3Exception.FromNative(code, err);
             }
         }
 

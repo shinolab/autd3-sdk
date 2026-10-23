@@ -36,20 +36,70 @@ namespace AUTD3.Tests
         }
 
         [Fact]
+        public void EveryCpuConfigFieldReachesItsOwnNativeField()
+        {
+            var native = new CpuConfig
+            {
+                SyncGuard = TimeSpan.FromTicks(1),
+                FailsafeTimeout = TimeSpan.FromTicks(2),
+                PtpUnlockFailsafeTimeout = TimeSpan.FromTicks(3),
+                FpgaBusWait = FpgaBusWait.Cycles2,
+                CpuWatchdogTimeout = null,
+                Ptp = new PtpConfig
+                {
+                    SyncInterval = TimeSpan.FromTicks(4),
+                    TxTimestampTimeout = TimeSpan.FromTicks(5),
+                    DelayRespTimeout = TimeSpan.FromTicks(6),
+                    Holdover = TimeSpan.FromTicks(7),
+                    LockSamples = 8,
+                    StepThreshold = TimeSpan.FromTicks(9),
+                    LockThreshold = TimeSpan.FromTicks(10),
+                    KpMilli = 11,
+                    KiMilli = 12,
+                    MaxFreqPpb = 13,
+                    DelayReqSyncs = 14,
+                    PathDelayFilterShift = 15,
+                    PauseQuanta = 16,
+                    PauseHoldSyncs = 17,
+                    PauseRetry = TimeSpan.FromTicks(18),
+                },
+            }.ToNative();
+            Assert.Equal(100ul, native.SyncGuardNs);
+            Assert.Equal((byte)1, native.HasFailsafeTimeout);
+            Assert.Equal(200ul, native.FailsafeTimeoutNs);
+            Assert.Equal((byte)1, native.HasPtpUnlockFailsafeTimeout);
+            Assert.Equal(300ul, native.PtpUnlockFailsafeTimeoutNs);
+            Assert.Equal((byte)2, native.FpgaBusWait);
+            Assert.Equal((byte)0, native.HasCpuWatchdogTimeout);
+            Assert.Equal(400ul, native.Ptp.SyncIntervalNs);
+            Assert.Equal(500ul, native.Ptp.TxTimestampTimeoutNs);
+            Assert.Equal(600ul, native.Ptp.DelayRespTimeoutNs);
+            Assert.Equal(700ul, native.Ptp.HoldoverNs);
+            Assert.Equal((ushort)8, native.Ptp.LockSamples);
+            Assert.Equal(900ul, native.Ptp.StepThresholdNs);
+            Assert.Equal(1000ul, native.Ptp.LockThresholdNs);
+            Assert.Equal(11u, native.Ptp.KpMilli);
+            Assert.Equal(12u, native.Ptp.KiMilli);
+            Assert.Equal(13u, native.Ptp.MaxFreqPpb);
+            Assert.Equal((ushort)14, native.Ptp.DelayReqSyncs);
+            Assert.Equal((byte)15, native.Ptp.PathDelayFilterShift);
+            Assert.Equal((ushort)16, native.Ptp.PauseQuanta);
+            Assert.Equal((ushort)17, native.Ptp.PauseHoldSyncs);
+            Assert.Equal(1800ul, native.Ptp.PauseRetryNs);
+
+            var err = new byte[NativeAbi.ErrorBufferLength];
+            var op = NativeCommand.autd3_op_set_cpu_config(native, err, (UIntPtr)err.Length);
+            Assert.NotEqual(IntPtr.Zero, op);
+            NativeClient.autd3_op_free(op);
+        }
+
+        [Fact]
         public void BothFpgaBusWaitsReachTheNativeConfig()
         {
             foreach (var wait in new[] { FpgaBusWait.Cycles2, FpgaBusWait.Cycles3 })
             {
-                var handle = new CpuConfig { FpgaBusWait = wait }.CreateHandle();
-                try
-                {
-                    Assert.Equal(0, NativeCommand.autd3_cpu_config_get_fpga_bus_wait(handle, out var cycles));
-                    Assert.Equal(wait == FpgaBusWait.Cycles2 ? (byte)2 : (byte)3, cycles);
-                }
-                finally
-                {
-                    NativeCommand.autd3_cpu_config_free(handle);
-                }
+                var cycles = new CpuConfig { FpgaBusWait = wait }.ToNative().FpgaBusWait;
+                Assert.Equal(wait == FpgaBusWait.Cycles2 ? (byte)2 : (byte)3, cycles);
             }
         }
 
@@ -237,16 +287,8 @@ namespace AUTD3.Tests
         {
             foreach (var syncPhaseLock in new[] { false, true })
             {
-                var handle = new FpgaConfig { SyncPhaseLock = syncPhaseLock }.CreateHandle();
-                try
-                {
-                    Assert.Equal(0, NativeCommand.autd3_fpga_config_get_sync_phase_lock(handle, out var value));
-                    Assert.Equal(syncPhaseLock, value);
-                }
-                finally
-                {
-                    NativeCommand.autd3_fpga_config_free(handle);
-                }
+                var value = new FpgaConfig { SyncPhaseLock = syncPhaseLock }.ToNative().SyncPhaseLock;
+                Assert.Equal(syncPhaseLock, value != 0);
             }
         }
 

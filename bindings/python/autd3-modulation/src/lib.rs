@@ -107,11 +107,6 @@ impl ModulationBuffer {
     }
 
     #[staticmethod]
-    fn from_bytes(data: Vec<u8>) -> Self {
-        Self { data }
-    }
-
-    #[staticmethod]
     fn from_array(values: &Bound<'_, PyAny>) -> PyResult<Self> {
         if numpy::is_ndarray(values)? {
             return Ok(Self {

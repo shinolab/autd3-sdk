@@ -319,8 +319,6 @@ namespace AUTD3
 
     public sealed class Client : IDisposable
     {
-        private const long AllFrames = -1;
-
         private readonly ClientHandle _handle;
         private readonly Geometry _geometry;
         private volatile bool _closed;
@@ -335,28 +333,17 @@ namespace AUTD3
 
         public static Client Open(Geometry geometry, TransportOption option)
         {
+            var native = option.ToNative();
             var owned = geometry.Clone();
-            IntPtr optionHandle;
-            try
-            {
-                optionHandle = option.CreateHandle();
-            }
-            catch
-            {
-                owned.Dispose();
-                throw;
-            }
-
             var err = new byte[NativeAbi.ErrorBufferLength];
             int code;
             IntPtr value;
             try
             {
-                code = NativeClient.autd3_client_open(geometry.Handle, optionHandle, out value, err, (UIntPtr)err.Length);
+                code = NativeClient.autd3_client_open(geometry.Handle, option.IfaceKind, option.IfaceValue, native, out value, err, (UIntPtr)err.Length);
             }
             catch
             {
-                NativeClient.autd3_transport_option_free(optionHandle);
                 owned.Dispose();
                 throw;
             }
@@ -414,7 +401,7 @@ namespace AUTD3
         {
             using var frames = Frames.Encode(_geometry, command);
             await AsyncOps.InvokeAsync((cb, ud) =>
-                NativeClient.autd3_client_send_checked(Handle, frames.Handle, AllFrames, cb, ud)).ConfigureAwait(false);
+                NativeClient.autd3_client_send_checked(Handle, frames.Handle, cb, ud)).ConfigureAwait(false);
         }
 
         public async Task<ResponseFuture> SendFrameAsync(Frame frame)

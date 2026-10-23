@@ -4,7 +4,7 @@ from autd3.value import Phase
 
 geometry = Geometry([Autd3()])
 
-phases = [[Phase.ZERO] * geometry.device(i).num_transducers() for i in range(geometry.num_devices())]
+phases = [[Phase.ZERO] * device.num_transducers() for device in geometry]
 
 # ANCHOR: api
 SetPhaseCorrection(phases)

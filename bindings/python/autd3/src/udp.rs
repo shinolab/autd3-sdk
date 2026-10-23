@@ -94,6 +94,7 @@ impl TransportOption {
         lost_timeout = CoreOption::default().lost_timeout,
         ack_timeout = CoreOption::default().ack_timeout,
         send_buffer_bytes = CoreOption::default().send_buffer_bytes,
+        sync_on_open = CoreOption::default().sync_on_open,
     ))]
     fn new(
         #[pyo3(from_py_with = extract_iface)] iface: CoreInterface,
@@ -101,6 +102,7 @@ impl TransportOption {
         #[pyo3(from_py_with = extract_duration)] lost_timeout: Duration,
         #[pyo3(from_py_with = extract_duration)] ack_timeout: Duration,
         send_buffer_bytes: Option<NonZeroUsize>,
+        sync_on_open: bool,
     ) -> Self {
         Self(CoreOption {
             iface,
@@ -108,7 +110,7 @@ impl TransportOption {
             lost_timeout,
             ack_timeout,
             send_buffer_bytes,
-            ..CoreOption::default()
+            sync_on_open,
         })
     }
 
@@ -135,6 +137,11 @@ impl TransportOption {
     #[getter]
     fn send_buffer_bytes(&self) -> Option<NonZeroUsize> {
         self.0.send_buffer_bytes
+    }
+
+    #[getter]
+    fn sync_on_open(&self) -> bool {
+        self.0.sync_on_open
     }
 
     fn __repr__(&self) -> String {
