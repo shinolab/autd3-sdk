@@ -20,6 +20,8 @@ use crate::error::Error;
 use crate::geometry::Geometry;
 use crate::udp::{TransportOption, UdpError};
 
+const GRANDMASTER_UNIT_ID: u8 = 0;
+
 pub struct Client {
     controller: Controller,
     driver: Mutex<Option<JoinHandle<Result<(), Error>>>>,

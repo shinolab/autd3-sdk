@@ -11,6 +11,7 @@ use crate::udp::{
     same_endpoint, set_time_body,
 };
 
+use crate::client::GRANDMASTER_UNIT_ID;
 use crate::client::device_clock::DeviceClock;
 
 pub(super) const REQUEST_REPLY_WAIT: Duration = Duration::from_millis(200);
@@ -20,7 +21,6 @@ const RESET_SETTLE: Duration = Duration::from_millis(100);
 const DISCOVER_LINGER: Duration = Duration::from_millis(10);
 const DISCOVER_RETRY_INTERVAL: Duration = Duration::from_millis(100);
 const SYNC_POLL_INTERVAL: Duration = Duration::from_millis(50);
-const GRANDMASTER_UNIT_ID: u8 = 0;
 const DEVICE_TIME_AT_OPEN: SysTime = SysTime::ZERO;
 
 fn deadline_passed(deadline: Option<Instant>) -> bool {
