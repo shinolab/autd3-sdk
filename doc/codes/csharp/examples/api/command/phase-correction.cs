@@ -8,16 +8,7 @@ internal static class Sample
     {
         var geometry = new Geometry(new[] { new Autd3() });
 
-        var phases = new Phase[geometry.NumDevices][];
-        for (var i = 0; i < geometry.NumDevices; i++)
-        {
-            var count = geometry[i].NumTransducers;
-            phases[i] = new Phase[count];
-            for (var t = 0; t < count; t++)
-            {
-                phases[i][t] = Phase.Zero;
-            }
-        }
+        using var phases = geometry.PhaseBuffer();
 
         // ANCHOR: api
         new SetPhaseCorrection(phases);
