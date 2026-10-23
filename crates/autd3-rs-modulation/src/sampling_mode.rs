@@ -16,66 +16,32 @@ pub struct Nearest<T>(pub T);
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[non_exhaustive]
 pub enum SamplingMode {
-    ExactFreq(Freq<u32>),
-    ExactFreqFloat(Freq<f32>),
-    NearestFreq(Freq<f32>),
+    ExactFreqFloat(Freq),
+    NearestFreq(Freq),
 }
 
-impl From<Freq<u32>> for SamplingMode {
-    fn from(v: Freq<u32>) -> Self {
-        SamplingMode::ExactFreq(v)
-    }
-}
-
-impl From<Freq<f32>> for SamplingMode {
-    fn from(v: Freq<f32>) -> Self {
+impl From<Freq> for SamplingMode {
+    fn from(v: Freq) -> Self {
         SamplingMode::ExactFreqFloat(v)
     }
 }
 
-impl From<Nearest<Freq<f32>>> for SamplingMode {
-    fn from(v: Nearest<Freq<f32>>) -> Self {
+impl From<Nearest<Freq>> for SamplingMode {
+    fn from(v: Nearest<Freq>) -> Self {
         SamplingMode::NearestFreq(v.0)
-    }
-}
-
-impl From<Nearest<Freq<u32>>> for SamplingMode {
-    fn from(v: Nearest<Freq<u32>>) -> Self {
-        SamplingMode::NearestFreq(Freq::from_hz(v.0.hz() as f32))
     }
 }
 
 impl SamplingMode {
     pub(crate) fn validate(self, config: SamplingConfig) -> Result<(usize, u64), ModulationError> {
         match self {
-            SamplingMode::ExactFreq(freq) => Self::validate_exact(freq, config),
             SamplingMode::ExactFreqFloat(freq) => Self::validate_exact_f(freq, config),
             SamplingMode::NearestFreq(freq) => Self::validate_nearest(freq, config),
         }
     }
 
-    fn validate_exact(
-        freq: Freq<u32>,
-        config: SamplingConfig,
-    ) -> Result<(usize, u64), ModulationError> {
-        let nyquist = config.freq().hz() / 2.;
-        if freq.hz() as f32 >= nyquist {
-            return Err(ModulationError::FrequencyAboveNyquist {
-                hz: freq.hz() as f32,
-                nyquist,
-            });
-        }
-        if freq.hz() == 0 {
-            return Err(ModulationError::FrequencyZero);
-        }
-        let fd = u64::from(freq.hz()) * u64::from(config.divide().get());
-        let fs = u64::from(ULTRASOUND_FREQ_HZ);
-        let k = num_integer::gcd(fs, fd);
-        Ok(((fs / k) as usize, fd / k))
-    }
-
     fn validate_exact_f(
-        freq: Freq<f32>,
+        freq: Freq,
         config: SamplingConfig,
     ) -> Result<(usize, u64), ModulationError> {
         if freq.hz() < 0. || freq.hz().is_nan() {
@@ -108,7 +74,7 @@ impl SamplingMode {
     }
 
     fn validate_nearest(
-        freq: Freq<f32>,
+        freq: Freq,
         config: SamplingConfig,
     ) -> Result<(usize, u64), ModulationError> {
         let cfg_freq = config.freq().hz();
@@ -119,19 +85,5 @@ impl SamplingMode {
             return Err(ModulationError::FrequencyNaN);
         }
         Ok(((cfg_freq / freq).round() as usize, 1))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use autd3_rs_core::units::Hz;
-
-    #[test]
-    fn a_nearest_integer_frequency_is_a_nearest_float_frequency() {
-        assert_eq!(
-            SamplingMode::from(Nearest(200 * Hz)),
-            SamplingMode::from(Nearest(200.0 * Hz))
-        );
     }
 }

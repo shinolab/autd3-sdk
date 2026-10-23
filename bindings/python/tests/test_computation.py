@@ -24,17 +24,14 @@ def geometry() -> autd3.geometry.Geometry:
 
 def test_unit_dsl() -> None:
     assert 2 * kHz == 2000 * Hz
-    assert 200 * Hz != 200.0 * Hz
+    assert 200 * Hz == 200.0 * Hz
     assert 200 * Hz == 200 * Hz
     assert 200.0 * Hz == 200.0 * Hz
-    assert hash(200 * Hz) != hash(200.0 * Hz)
+    assert hash(200 * Hz) == hash(200.0 * Hz)
     assert hash(200 * Hz) == hash(200 * Hz)
     assert (200 * Hz) / 2 == 100.0 * Hz
-    assert (200 * Hz) / 2 != 100 * Hz
     assert 200 * Hz <= 200.0 * Hz
     assert (200 * Hz).hz == 200.0
-    assert (200 * Hz).is_int
-    assert not (200.0 * Hz).is_int
     assert (340 * m / s) == (340_000 * mm / s)
     assert (340 * m / s).m_s == 340.0
     assert (340 * m / s).mm_s == 340_000.0
@@ -81,20 +78,6 @@ def test_pattern_focus_plane_bessel_write_phase() -> None:
         pattern.focus(geo, center, wavelength, loose(intensities))
 
 
-def test_pattern_set_and_add_phase() -> None:
-    geo = geometry()
-    phases = geo.phase_buffer()
-    intensities = geo.intensity_buffer()
-    pattern.set_intensity(0x80, intensities)
-    pattern.set_phase(autd3.value.Phase(0xF0), phases)
-    pattern.add_phase(0x20, phases)
-    for dev in range(len(phases)):
-        for tr in range(len(phases[dev])):
-            assert (phases[dev][tr], intensities[dev][tr]) == (autd3.value.Phase(0x10), autd3.value.Intensity(0x80))
-    with pytest.raises(TypeError):
-        pattern.set_intensity(0x80, loose(phases))
-
-
 def test_pattern_masked_holo() -> None:
     geo = autd3.geometry.Geometry(
         [
@@ -113,14 +96,15 @@ def test_pattern_masked_holo() -> None:
         geo,
         [holo.AmplitudeTarget(point=geo.center() + np.array([0.0, 0.0, 150.0]), amplitude=5e3 * Pa)],
         pattern.wavelength(340 * m / s),
-        holo.GspatOption(constraint=holo.IntensityConstraint.Uniform(0xFF), mask=mask),
+        holo.GspatOption(constraint=holo.IntensityConstraint.Multiply(1.0), mask=mask),
         holo_phases,
         holo_intensities,
     )
     for dev in range(2):
         for tr in range(len(holo_intensities[dev])):
-            expected = autd3.value.Intensity.MAX if enabled(dev, tr) else autd3.value.Intensity.MIN
-            assert holo_intensities[dev][tr] == expected
+            silent = holo_intensities[dev][tr] == autd3.value.Intensity.MIN
+            assert silent != enabled(dev, tr)
+    assert holo_intensities.to_numpy().max() == 0xFF
 
 
 def test_pattern_laguerre_hermite_gaussian() -> None:
@@ -152,7 +136,7 @@ def test_pattern_laguerre_hermite_gaussian() -> None:
     assert values(lg) != values(fundamental)
 
     lg_i = geo.intensity_buffer()
-    pattern.set_intensity(0x00, lg_i)
+    lg_i.copy_from(np.zeros_like(lg_i.to_numpy()))
     pattern.laguerre_gaussian_intensity(geo, target, [0.0, 0.0, 1.0], lg_option, wavelength, lg_i)
     assert max(values(lg_i)) == 0xFF
     assert min(values(lg_i)) < 0xFF
@@ -209,11 +193,6 @@ def test_modulation_sine_square_fourier_radiation() -> None:
     rp = modulation.modulation_buffer()
     modulation.sine(200 * Hz, modulation.SineOption(), autd3.value.SamplingConfig.FREQ_4K, rp)
     before = len(rp)
-
-    dst = modulation.modulation_buffer()
-    modulation.radiation_pressure(rp, dst)
-    assert len(dst) == before
-    assert len(rp) == before
 
     modulation.radiation_pressure_inplace(rp)
     assert len(rp) == before
@@ -322,15 +301,12 @@ def test_positions_and_directions_are_float32_arrays() -> None:
     )
     dev = geo[0]
     positions = dev.positions()
-    directions = dev.directions()
     assert positions.dtype == np.float32
-    assert directions.dtype == np.float32
+    assert dev.axial_direction().dtype == np.float32
     assert positions.shape == (dev.num_transducers(), 3)
-    assert directions.shape == (dev.num_transducers(), 3)
     for t in (0, 17, dev.num_transducers() - 1):
         np.testing.assert_allclose(positions[t], dev.position(t), atol=1e-4)
-        np.testing.assert_allclose(directions[t], dev.direction(t), atol=1e-6)
-    np.testing.assert_allclose(directions[0], [1.0, 0.0, 0.0], atol=1e-6)
+    np.testing.assert_allclose(dev.axial_direction(), [1.0, 0.0, 0.0], atol=1e-6)
 
 
 def test_numpy_focus_matches_native_focus() -> None:
@@ -857,9 +833,6 @@ def test_an_unresolvable_sampling_config_is_rejected_when_constructed() -> None:
     with pytest.raises(autd3.Autd3Error, match="must divide the ultrasound frequency") as err:
         autd3.value.SamplingConfig(3000.5 * Hz)
     assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
-    nearest = autd3.value.SamplingConfig(autd3.value.Nearest(3000.5 * Hz))
-    assert nearest.divide() == 13
-    assert len(autd3.Frames.encode(geometry(), autd3.commands.Modulation(nearest, buf))) > 0
 
 
 class _ProbingWavelength:

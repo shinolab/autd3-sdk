@@ -1,167 +1,15 @@
 use core::hash::{Hash, Hasher};
 
 use autd3_python_capsule::extract::number_f32;
-use autd3_rs_core::common::units::Hz;
-use autd3_rs_core::common::{Angle as CoreAngle, Length as CoreLength, Velocity as CoreVelocity};
+use autd3_rs_core::common::{
+    Angle as CoreAngle, Freq as CoreFreq, Length as CoreLength, Velocity as CoreVelocity,
+};
 use autd3_rs_core::value::{SamplingConfig as CoreSamplingConfig, SamplingConfigError};
-use pyo3::exceptions::{PyOverflowError, PyValueError, PyZeroDivisionError};
+use pyo3::exceptions::PyZeroDivisionError;
 use pyo3::prelude::*;
 
 pub(crate) fn hash_f32<H: Hasher>(value: f32, state: &mut H) {
     (value + 0.0).to_bits().hash(state);
-}
-
-#[derive(Clone, Copy)]
-enum FreqVal {
-    Int(u32),
-    Float(f32),
-}
-
-#[pyclass(
-    name = "Freq",
-    module = "autd3_core",
-    eq,
-    ord,
-    hash,
-    frozen,
-    from_py_object
-)]
-#[derive(Clone, Copy)]
-pub struct Freq(FreqVal);
-
-impl PartialEq for Freq {
-    fn eq(&self, other: &Self) -> bool {
-        match (self.0, other.0) {
-            (FreqVal::Int(l), FreqVal::Int(r)) => l == r,
-            (FreqVal::Float(l), FreqVal::Float(r)) => l == r,
-            _ => false,
-        }
-    }
-}
-
-impl PartialOrd for Freq {
-    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        match (self.0, other.0) {
-            (FreqVal::Int(l), FreqVal::Int(r)) => Some(l.cmp(&r)),
-            _ => self.hz().partial_cmp(&other.hz()),
-        }
-    }
-}
-
-fn int_freq_overflow() -> PyErr {
-    PyOverflowError::new_err("integer frequency must be in 0..=4294967295 Hz")
-}
-
-fn int_operand(value: &Bound<'_, PyAny>) -> Option<i64> {
-    if value.is_instance_of::<pyo3::types::PyBool>() {
-        return None;
-    }
-    value
-        .is_instance_of::<pyo3::types::PyInt>()
-        .then(|| value.extract::<i64>().ok())
-        .flatten()
-}
-
-fn int_freq(value: Option<i64>) -> PyResult<Freq> {
-    value
-        .and_then(|v| u32::try_from(v).ok())
-        .map(|v| Freq(FreqVal::Int(v)))
-        .ok_or_else(int_freq_overflow)
-}
-
-impl Hash for Freq {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        match self.0 {
-            FreqVal::Int(v) => {
-                0u8.hash(state);
-                v.hash(state);
-            }
-            FreqVal::Float(f) => {
-                1u8.hash(state);
-                hash_f32(f, state);
-            }
-        }
-    }
-}
-
-#[pymethods]
-impl Freq {
-    #[staticmethod]
-    fn from_hz(freq: &Bound<'_, PyAny>) -> PyResult<Self> {
-        FreqUnit::HZ.__rmul__(freq)
-    }
-
-    #[getter]
-    fn hz(&self) -> f32 {
-        match self.0 {
-            FreqVal::Int(v) => v as f32,
-            FreqVal::Float(f) => f,
-        }
-    }
-
-    #[getter]
-    fn is_int(&self) -> bool {
-        matches!(self.0, FreqVal::Int(_))
-    }
-
-    #[getter]
-    fn hz_int(&self) -> Option<u32> {
-        match self.0 {
-            FreqVal::Int(v) => Some(v),
-            FreqVal::Float(_) => None,
-        }
-    }
-
-    fn __add__(&self, rhs: Freq) -> PyResult<Freq> {
-        match (self.0, rhs.0) {
-            (FreqVal::Int(l), FreqVal::Int(r)) => int_freq(Some(i64::from(l) + i64::from(r))),
-            _ => Ok(Freq(FreqVal::Float(self.hz() + rhs.hz()))),
-        }
-    }
-
-    fn __sub__(&self, rhs: Freq) -> PyResult<Freq> {
-        match (self.0, rhs.0) {
-            (FreqVal::Int(l), FreqVal::Int(r)) => int_freq(Some(i64::from(l) - i64::from(r))),
-            _ => Ok(Freq(FreqVal::Float(self.hz() - rhs.hz()))),
-        }
-    }
-
-    fn __mul__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<Freq> {
-        if let (FreqVal::Int(l), Some(r)) = (self.0, int_operand(rhs)) {
-            return int_freq(i64::from(l).checked_mul(r));
-        }
-        Ok(Freq(FreqVal::Float(self.hz() * rhs.extract::<f32>()?)))
-    }
-
-    fn __rmul__(&self, lhs: &Bound<'_, PyAny>) -> PyResult<Freq> {
-        self.__mul__(lhs)
-    }
-
-    fn __truediv__(&self, rhs: f32) -> PyResult<Freq> {
-        if rhs == 0.0 {
-            return Err(PyZeroDivisionError::new_err("division by zero"));
-        }
-        Ok(Freq(FreqVal::Float(self.hz() / rhs)))
-    }
-
-    fn __floordiv__(&self, rhs: &Bound<'_, PyAny>) -> PyResult<Freq> {
-        let (FreqVal::Int(l), Some(r)) = (self.0, int_operand(rhs)) else {
-            return Err(pyo3::exceptions::PyTypeError::new_err(
-                "`//` needs an integer frequency (e.g. 200 * Hz) and an int divisor",
-            ));
-        };
-        if r == 0 {
-            return Err(PyZeroDivisionError::new_err("division by zero"));
-        }
-        int_freq(Some(i64::from(l).div_euclid(r)))
-    }
-
-    fn __repr__(&self) -> String {
-        match self.0 {
-            FreqVal::Int(v) => format!("{v} Hz"),
-            FreqVal::Float(f) => format!("{f} Hz"),
-        }
-    }
 }
 
 macro_rules! float_unit_eq_hash {
@@ -178,6 +26,66 @@ macro_rules! float_unit_eq_hash {
             }
         }
     };
+}
+
+#[pyclass(
+    name = "Freq",
+    module = "autd3_core",
+    eq,
+    ord,
+    hash,
+    frozen,
+    from_py_object
+)]
+#[derive(Clone, Copy)]
+pub struct Freq(pub CoreFreq);
+
+float_unit_eq_hash!(Freq, hz);
+
+impl PartialOrd for Freq {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        self.0.partial_cmp(&other.0)
+    }
+}
+
+#[pymethods]
+impl Freq {
+    #[staticmethod]
+    fn from_hz(freq: &Bound<'_, PyAny>) -> PyResult<Self> {
+        Ok(Self(CoreFreq::from_hz(number_f32(freq)?)))
+    }
+
+    #[getter]
+    fn hz(&self) -> f32 {
+        self.0.hz()
+    }
+
+    fn __add__(&self, rhs: Freq) -> Freq {
+        Freq(self.0 + rhs.0)
+    }
+
+    fn __sub__(&self, rhs: Freq) -> Freq {
+        Freq(self.0 - rhs.0)
+    }
+
+    fn __mul__(&self, rhs: f32) -> Freq {
+        Freq(self.0 * rhs)
+    }
+
+    fn __rmul__(&self, lhs: f32) -> Freq {
+        Freq(self.0 * lhs)
+    }
+
+    fn __truediv__(&self, rhs: f32) -> PyResult<Freq> {
+        if rhs == 0.0 {
+            return Err(PyZeroDivisionError::new_err("division by zero"));
+        }
+        Ok(Freq(self.0 / rhs))
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{:?}", self.0)
+    }
 }
 
 #[pyclass(
@@ -387,29 +295,18 @@ impl Length {
 #[pyclass(name = "_FreqUnit", module = "autd3_core")]
 #[derive(Clone, Copy)]
 pub struct FreqUnit {
-    scale: u32,
+    scale: f32,
 }
 
 impl FreqUnit {
-    pub(crate) const HZ: Self = Self { scale: 1 };
-    pub(crate) const KHZ: Self = Self { scale: 1000 };
+    pub(crate) const HZ: Self = Self { scale: 1.0 };
+    pub(crate) const KHZ: Self = Self { scale: 1000.0 };
 }
 
 #[pymethods]
 impl FreqUnit {
     fn __rmul__(&self, lhs: &Bound<'_, PyAny>) -> PyResult<Freq> {
-        if let Ok(i) = lhs.extract::<i64>() {
-            let scaled = i
-                .checked_mul(i64::from(self.scale))
-                .and_then(|v| u32::try_from(v).ok())
-                .ok_or_else(|| {
-                    PyValueError::new_err("integer frequency must be in 0..=4294967295 Hz")
-                })?;
-            Ok(Freq(FreqVal::Int(scaled)))
-        } else {
-            let f = number_f32(lhs)?;
-            Ok(Freq(FreqVal::Float(f * self.scale as f32)))
-        }
+        Ok(Freq(CoreFreq::from_hz(number_f32(lhs)? * self.scale)))
     }
 }
 
@@ -461,19 +358,8 @@ impl AngleUnit {
 pub(crate) struct SecUnit;
 
 impl Freq {
-    pub(crate) fn hz_f32(self) -> f32 {
-        self.hz()
-    }
-
-    pub(crate) fn from_hz_f32(hz: f32) -> Self {
-        Self(FreqVal::Float(hz))
-    }
-
     pub(crate) fn sampling_config(self) -> Result<CoreSamplingConfig, SamplingConfigError> {
-        match self.0 {
-            FreqVal::Int(v) => CoreSamplingConfig::from_freq(v * Hz),
-            FreqVal::Float(f) => CoreSamplingConfig::from_freq(f * Hz),
-        }
+        CoreSamplingConfig::from_freq(self.0)
     }
 }
 

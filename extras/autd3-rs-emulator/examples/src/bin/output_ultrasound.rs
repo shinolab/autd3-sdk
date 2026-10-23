@@ -40,7 +40,9 @@ fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
     let mut phases = geometry.phase_buffer();
-    autd3_rs_pattern::set_phase(Phase::from(std::f32::consts::PI / 2.0 * rad), &mut phases);
+    for slot in &mut phases {
+        slot.fill(Phase::from(std::f32::consts::PI / 2.0 * rad));
+    }
 
     let emulator = Emulator::new(geometry);
     let record = emulator.record(async move |r| {

@@ -77,7 +77,7 @@ Python / C# はクォータニオンのノルムを検査し, 1 との差が `RO
 
 1 台のデバイスを表す.
 `geometry[i]` または `&geometry` の走査で得る.
-各振動子の位置・法線方向や, デバイスの姿勢を取得できる.
+各振動子の位置や, デバイスの姿勢を取得できる. 振動子の法線方向はデバイス内で共通で, `axial_direction()` が返す.
 
 <CodeTabs rust={excerpt(sample, "device")} python={excerpt(pySample, "device")} csharp={excerpt(csSample, "device")} />
 
@@ -92,9 +92,7 @@ Python / C# はクォータニオンのノルムを検査し, 1 との差が `RO
 | `y_direction()`      | `UnitVector3<f32>`      | ローカル y 軸方向                             |
 | `axial_direction()`  | `UnitVector3<f32>`      | 軸方向 (超音波の放射方向)                     |
 | `positions()`        | `&[Point3<f32>]`        | 全振動子の位置                                |
-| `directions()`       | `&[UnitVector3<f32>]`   | 全振動子の法線方向                            |
 | `position(i)`        | `Point3<f32>`           | `i` 番目の振動子の位置                        |
-| `direction(i)`       | `UnitVector3<f32>`      | `i` 番目の振動子の方向                        |
 | `to_local(p)`        | `Point3<f32>`           | グローバル座標の点 `p` をデバイスのローカル座標 (0 番目の振動子が原点) に変換 |
 
 Python では座標・方向・姿勢はすべて `float32` の numpy 配列で返る (`Geometry.center()` や `Autd3.origin` / `Autd3.rotation` も同じ).

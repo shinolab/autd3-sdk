@@ -67,10 +67,8 @@ fn from_directivity(d: Directivity) -> u8 {
 
 fn from_constraint(c: IntensityConstraint) -> Autd3IntensityConstraint {
     let (kind, min, max, multiply) = match c {
-        IntensityConstraint::Normalize => (0, 0, 0, 0.0),
-        IntensityConstraint::Multiply(value) => (1, 0, 0, value),
-        IntensityConstraint::Uniform(value) => (2, value.0, 0, 0.0),
-        IntensityConstraint::Clamp(min, max) => (3, min.0, max.0, 0.0),
+        IntensityConstraint::Multiply(value) => (0, 0, 0, value),
+        IntensityConstraint::Clamp(min, max) => (1, min.0, max.0, 0.0),
         _ => unreachable!(),
     };
     Autd3IntensityConstraint {
@@ -156,10 +154,8 @@ fn to_directivity(d: u8) -> Option<Directivity> {
 
 fn to_constraint(c: &Autd3IntensityConstraint) -> Option<IntensityConstraint> {
     match c.kind {
-        0 => Some(IntensityConstraint::Normalize),
-        1 => Some(IntensityConstraint::Multiply(c.multiply)),
-        2 => Some(IntensityConstraint::Uniform(Intensity(c.min))),
-        3 => Some(IntensityConstraint::Clamp(
+        0 => Some(IntensityConstraint::Multiply(c.multiply)),
+        1 => Some(IntensityConstraint::Clamp(
             Intensity(c.min),
             Intensity(c.max),
         )),
@@ -695,7 +691,6 @@ pub unsafe extern "C" fn autd3_holo_greedy(
     order_len: usize,
     phase_quantization_levels: u8,
     directivity: u8,
-    mask: *const u8,
     dst: *mut PhaseBuffer,
     out_err: *mut c_char,
     out_err_len: usize,
@@ -729,12 +724,10 @@ pub unsafe extern "C" fn autd3_holo_greedy(
     };
     let order: Vec<usize> = order.iter().map(|&index| index as usize).collect();
     let foci = build_foci(foci);
-    let mask = unsafe { build_mask(mask, geometry.num_devices()) };
     let option = GreedyOption {
         phase_quantization_levels,
         directivity,
         objective_func: abs_objective_func,
-        mask: mask_ref(mask.as_deref()),
     };
     let result = greedy(
         geometry,
@@ -769,11 +762,11 @@ mod tests {
             .collect()
     }
 
-    static NORMALIZE: Autd3IntensityConstraint = Autd3IntensityConstraint {
+    static MULTIPLY_ONE: Autd3IntensityConstraint = Autd3IntensityConstraint {
         kind: 0,
         min: 0,
         max: 0,
-        multiply: 0.0,
+        multiply: 1.0,
     };
 
     #[test]
@@ -800,7 +793,7 @@ mod tests {
                 foci.as_ptr(),
                 foci.len(),
                 8.5,
-                &raw const NORMALIZE,
+                &raw const MULTIPLY_ONE,
                 0,
                 std::ptr::null(),
                 phase_handles.as_ptr(),
@@ -820,7 +813,7 @@ mod tests {
                     chunk.as_ptr(),
                     chunk.len(),
                     8.5,
-                    &raw const NORMALIZE,
+                    &raw const MULTIPLY_ONE,
                     0,
                     std::ptr::null(),
                     &raw mut single_phases,
@@ -850,7 +843,7 @@ mod tests {
                 foci.len(),
                 8.5,
                 10,
-                &raw const NORMALIZE,
+                &raw const MULTIPLY_ONE,
                 0,
                 std::ptr::null(),
                 phase_handles.as_ptr(),
@@ -884,7 +877,7 @@ mod tests {
                 foci.as_ptr(),
                 foci.len(),
                 8.5,
-                &raw const NORMALIZE,
+                &raw const MULTIPLY_ONE,
                 0,
                 std::ptr::null(),
                 &raw mut phases,
@@ -916,7 +909,7 @@ mod tests {
                 0,
                 8.5,
                 10,
-                &raw const NORMALIZE,
+                &raw const MULTIPLY_ONE,
                 0,
                 std::ptr::null(),
                 &raw mut phases,
@@ -952,7 +945,6 @@ mod tests {
                 order.len(),
                 16,
                 0,
-                std::ptr::null(),
                 dst,
                 err.as_mut_ptr(),
                 err.len(),
@@ -1000,7 +992,6 @@ mod tests {
                 Autd3::NUM_TRANSDUCERS,
                 16,
                 0,
-                std::ptr::null(),
                 &raw mut dst,
                 err.as_mut_ptr(),
                 err.len(),
@@ -1054,9 +1045,7 @@ mod tests {
             autd3_holo_greedy_option_default(std::ptr::null_mut(), &raw mut directivity)
         });
         for c in [
-            IntensityConstraint::Normalize,
             IntensityConstraint::Multiply(0.5),
-            IntensityConstraint::Uniform(Intensity(3)),
             IntensityConstraint::Clamp(Intensity(1), Intensity(2)),
         ] {
             assert_eq!(Some(c), to_constraint(&from_constraint(c)));

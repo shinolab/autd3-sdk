@@ -170,16 +170,10 @@ namespace AUTD3
         internal static extern int autd3_pattern_focus(GeometryHandle geometry, float[] target, float wavelengthMm, PhaseBufferHandle buffer);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_pattern_focus_device(GeometryHandle geometry, UIntPtr dev, float[] target, float wavelengthMm, [In, Out] byte[] dst);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_pattern_focus_transducer(float[] position, float[] target, float wavelengthMm, out byte @out);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_pattern_plane(GeometryHandle geometry, float[] dir, float wavelengthMm, PhaseBufferHandle buffer);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_pattern_plane_device(GeometryHandle geometry, UIntPtr dev, float[] dir, float wavelengthMm, [In, Out] byte[] dst);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_pattern_plane_transducer(float[] position, float[] dir, float wavelengthMm, out byte @out);
@@ -188,16 +182,10 @@ namespace AUTD3
         internal static extern int autd3_pattern_bessel(GeometryHandle geometry, float[] apex, float[] dir, float thetaRad, float wavelengthMm, PhaseBufferHandle buffer);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_pattern_bessel_device(GeometryHandle geometry, UIntPtr dev, float[] apex, float[] dir, float thetaRad, float wavelengthMm, [In, Out] byte[] dst);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_pattern_bessel_transducer(float[] position, float[] apex, float[] dir, float thetaRad, float wavelengthMm, out byte @out);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_pattern_laguerre_gaussian_phase(GeometryHandle geometry, float[] target, float[] axis, uint p, int l, float waistMm, float wavelengthMm, PhaseBufferHandle buffer);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_pattern_laguerre_gaussian_phase_device(GeometryHandle geometry, UIntPtr dev, float[] target, float[] axis, uint p, int l, float waistMm, float wavelengthMm, [In, Out] byte[] dst);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_pattern_laguerre_gaussian_phase_transducer(float[] position, float[] target, float[] axis, uint p, int l, float waistMm, float wavelengthMm, out byte @out);
@@ -206,31 +194,13 @@ namespace AUTD3
         internal static extern int autd3_pattern_laguerre_gaussian_intensity(GeometryHandle geometry, float[] target, float[] axis, uint p, int l, float waistMm, float wavelengthMm, IntensityBufferHandle buffer);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_pattern_laguerre_gaussian_intensity_device(GeometryHandle geometry, UIntPtr dev, float[] target, float[] axis, uint p, int l, float waistMm, float wavelengthMm, [In, Out] byte[] dst);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_pattern_hermite_gaussian_phase(GeometryHandle geometry, float[] target, float[] axis, float[] xDir, uint m, uint n, float waistMm, float wavelengthMm, PhaseBufferHandle buffer);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_pattern_hermite_gaussian_phase_device(GeometryHandle geometry, UIntPtr dev, float[] target, float[] axis, float[] xDir, uint m, uint n, float waistMm, float wavelengthMm, [In, Out] byte[] dst);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_pattern_hermite_gaussian_phase_transducer(float[] position, float[] target, float[] axis, float[] xDir, uint m, uint n, float waistMm, float wavelengthMm, out byte @out);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_pattern_hermite_gaussian_intensity(GeometryHandle geometry, float[] target, float[] axis, float[] xDir, uint m, uint n, float waistMm, float wavelengthMm, IntensityBufferHandle buffer);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_pattern_hermite_gaussian_intensity_device(GeometryHandle geometry, UIntPtr dev, float[] target, float[] axis, float[] xDir, uint m, uint n, float waistMm, float wavelengthMm, [In, Out] byte[] dst);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_pattern_set_intensity(byte intensity, IntensityBufferHandle buffer);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_pattern_set_phase(byte phase, PhaseBufferHandle buffer);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_pattern_add_phase(byte phase, PhaseBufferHandle buffer);
 
 
         [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
@@ -600,17 +570,6 @@ namespace AUTD3
             }
         }
 
-        public static void FocusDevice(Device device, Vector3 target, Length wavelength, Phase[] dst)
-        {
-            var native = ToNative(dst);
-            if (NativePattern.autd3_pattern_focus_device(device.GeometryHandle, device.DeviceIndex,
-                Coords.PointArray(target), wavelength.Mm, native) != 0)
-            {
-                throw new Autd3Exception("focus_device failed", Autd3ErrorCode.InvalidArgument);
-            }
-            FromNative(native, dst);
-        }
-
         public static Phase FocusTransducer(Vector3 position, Vector3 target, Length wavelength)
         {
             if (NativePattern.autd3_pattern_focus_transducer(
@@ -630,17 +589,6 @@ namespace AUTD3
             }
         }
 
-        public static void PlaneDevice(Device device, Vector3 dir, Length wavelength, Phase[] dst)
-        {
-            var native = ToNative(dst);
-            if (NativePattern.autd3_pattern_plane_device(device.GeometryHandle, device.DeviceIndex,
-                Coords.DirArray(dir), wavelength.Mm, native) != 0)
-            {
-                throw new Autd3Exception("plane_device failed", Autd3ErrorCode.InvalidArgument);
-            }
-            FromNative(native, dst);
-        }
-
         public static Phase PlaneTransducer(Vector3 position, Vector3 dir, Length wavelength)
         {
             if (NativePattern.autd3_pattern_plane_transducer(
@@ -658,18 +606,6 @@ namespace AUTD3
             {
                 throw new Autd3Exception("bessel failed (buffer device count must match geometry)", Autd3ErrorCode.InvalidArgument);
             }
-        }
-
-        public static void BesselDevice(Device device, Vector3 apex, Vector3 dir, Angle theta, Length wavelength, Phase[] dst)
-        {
-            var native = ToNative(dst);
-            if (NativePattern.autd3_pattern_bessel_device(device.GeometryHandle, device.DeviceIndex,
-                Coords.PointArray(apex),
-                Coords.DirArray(dir), theta.Rad, wavelength.Mm, native) != 0)
-            {
-                throw new Autd3Exception("bessel_device failed", Autd3ErrorCode.InvalidArgument);
-            }
-            FromNative(native, dst);
         }
 
         public static Phase BesselTransducer(Vector3 position, Vector3 apex, Vector3 dir, Angle theta, Length wavelength)
@@ -693,17 +629,6 @@ namespace AUTD3
             }
         }
 
-        public static void LaguerreGaussianPhaseDevice(Device device, Vector3 target, Vector3 axis, LaguerreGaussianOption option, Length wavelength, Phase[] dst)
-        {
-            var native = ToNative(dst);
-            if (NativePattern.autd3_pattern_laguerre_gaussian_phase_device(device.GeometryHandle, device.DeviceIndex,
-                Coords.PointArray(target), Coords.DirArray(axis), option.P, option.L, option.Waist.Mm, wavelength.Mm, native) != 0)
-            {
-                throw new Autd3Exception("laguerre_gaussian_phase_device failed (waist must be a positive finite length)", Autd3ErrorCode.InvalidArgument);
-            }
-            FromNative(native, dst);
-        }
-
         public static Phase LaguerreGaussianPhaseTransducer(Vector3 position, Vector3 target, Vector3 axis, LaguerreGaussianOption option, Length wavelength)
         {
             if (NativePattern.autd3_pattern_laguerre_gaussian_phase_transducer(
@@ -725,17 +650,6 @@ namespace AUTD3
             }
         }
 
-        public static void LaguerreGaussianIntensityDevice(Device device, Vector3 target, Vector3 axis, LaguerreGaussianOption option, Length wavelength, Intensity[] dst)
-        {
-            var native = ToNative(dst);
-            if (NativePattern.autd3_pattern_laguerre_gaussian_intensity_device(device.GeometryHandle, device.DeviceIndex,
-                Coords.PointArray(target), Coords.DirArray(axis), option.P, option.L, option.Waist.Mm, wavelength.Mm, native) != 0)
-            {
-                throw new Autd3Exception("laguerre_gaussian_intensity_device failed (waist must be a positive finite length)", Autd3ErrorCode.InvalidArgument);
-            }
-            FromNative(native, dst);
-        }
-
         public static void HermiteGaussianPhase(Geometry geometry, Vector3 target, Vector3 axis, Vector3 xDir, HermiteGaussianOption option, Length wavelength, PhaseBuffer dst)
         {
             if (NativePattern.autd3_pattern_hermite_gaussian_phase(geometry.Handle, Coords.PointArray(target), Coords.DirArray(axis), Coords.DirArray(xDir),
@@ -743,17 +657,6 @@ namespace AUTD3
             {
                 throw new Autd3Exception("hermite_gaussian_phase failed (waist must be a positive finite length and buffer device count must match geometry)", Autd3ErrorCode.InvalidArgument);
             }
-        }
-
-        public static void HermiteGaussianPhaseDevice(Device device, Vector3 target, Vector3 axis, Vector3 xDir, HermiteGaussianOption option, Length wavelength, Phase[] dst)
-        {
-            var native = ToNative(dst);
-            if (NativePattern.autd3_pattern_hermite_gaussian_phase_device(device.GeometryHandle, device.DeviceIndex,
-                Coords.PointArray(target), Coords.DirArray(axis), Coords.DirArray(xDir), option.M, option.N, option.Waist.Mm, wavelength.Mm, native) != 0)
-            {
-                throw new Autd3Exception("hermite_gaussian_phase_device failed (waist must be a positive finite length)", Autd3ErrorCode.InvalidArgument);
-            }
-            FromNative(native, dst);
         }
 
         public static Phase HermiteGaussianPhaseTransducer(Vector3 position, Vector3 target, Vector3 axis, Vector3 xDir, HermiteGaussianOption option, Length wavelength)
@@ -775,79 +678,6 @@ namespace AUTD3
                 option.M, option.N, option.Waist.Mm, wavelength.Mm, dst.Handle) != 0)
             {
                 throw new Autd3Exception("hermite_gaussian_intensity failed (waist must be a positive finite length and buffer device count must match geometry)", Autd3ErrorCode.InvalidArgument);
-            }
-        }
-
-        public static void HermiteGaussianIntensityDevice(Device device, Vector3 target, Vector3 axis, Vector3 xDir, HermiteGaussianOption option, Length wavelength, Intensity[] dst)
-        {
-            var native = ToNative(dst);
-            if (NativePattern.autd3_pattern_hermite_gaussian_intensity_device(device.GeometryHandle, device.DeviceIndex,
-                Coords.PointArray(target), Coords.DirArray(axis), Coords.DirArray(xDir), option.M, option.N, option.Waist.Mm, wavelength.Mm, native) != 0)
-            {
-                throw new Autd3Exception("hermite_gaussian_intensity_device failed (waist must be a positive finite length)", Autd3ErrorCode.InvalidArgument);
-            }
-            FromNative(native, dst);
-        }
-
-        public static void SetIntensity(Intensity intensity, IntensityBuffer dst)
-        {
-            if (NativePattern.autd3_pattern_set_intensity(intensity.Value, dst.Handle) != 0)
-            {
-                throw new Autd3Exception("set_intensity failed", Autd3ErrorCode.InvalidArgument);
-            }
-        }
-
-        public static void SetPhase(Phase phase, PhaseBuffer dst)
-        {
-            if (NativePattern.autd3_pattern_set_phase(phase.Value, dst.Handle) != 0)
-            {
-                throw new Autd3Exception("set_phase failed", Autd3ErrorCode.InvalidArgument);
-            }
-        }
-
-        public static void AddPhase(Phase phase, PhaseBuffer dst)
-        {
-            if (NativePattern.autd3_pattern_add_phase(phase.Value, dst.Handle) != 0)
-            {
-                throw new Autd3Exception("add_phase failed", Autd3ErrorCode.InvalidArgument);
-            }
-        }
-
-        private static byte[] ToNative(Phase[] dst) => ToNative(dst, p => p.Value);
-
-        private static byte[] ToNative(Intensity[] dst) => ToNative(dst, i => i.Value);
-
-        private static byte[] ToNative<T>(T[] dst, Func<T, byte> value)
-        {
-            if (dst == null)
-            {
-                throw new ArgumentNullException(nameof(dst));
-            }
-            if (dst.Length != Autd3.NumTransducers)
-            {
-                throw new Autd3Exception($"dst requires {Autd3.NumTransducers} elements", Autd3ErrorCode.InvalidArgument);
-            }
-            var native = new byte[dst.Length];
-            for (var i = 0; i < dst.Length; i++)
-            {
-                native[i] = value(dst[i]);
-            }
-            return native;
-        }
-
-        private static void FromNative(byte[] native, Phase[] dst)
-        {
-            for (var i = 0; i < dst.Length; i++)
-            {
-                dst[i] = new Phase(native[i]);
-            }
-        }
-
-        private static void FromNative(byte[] native, Intensity[] dst)
-        {
-            for (var i = 0; i < dst.Length; i++)
-            {
-                dst[i] = new Intensity(native[i]);
             }
         }
     }

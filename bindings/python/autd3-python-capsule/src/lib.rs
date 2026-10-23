@@ -6,8 +6,8 @@ pub use autd3_python_cell as cell;
 use std::ffi::{CStr, c_void};
 use std::ptr::NonNull;
 
+use autd3_rs_core::Geometry;
 use autd3_rs_core::value::{Intensity, Phase, SamplingConfig};
-use autd3_rs_core::{Device, Geometry};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyCapsule, PyCapsuleMethods};
@@ -15,7 +15,6 @@ use pyo3::types::{PyCapsule, PyCapsuleMethods};
 use crate::cell::{BufferCell, ExclusiveGuard, SharedGuard};
 
 const GEOMETRY_CAPSULE_NAME: &CStr = c"autd3.geometry.v1";
-const DEVICE_CAPSULE_NAME: &CStr = c"autd3.device.v1";
 const PHASE_CAPSULE_NAME: &CStr = c"autd3.phase.v3";
 const INTENSITY_CAPSULE_NAME: &CStr = c"autd3.intensity.v3";
 const MODULATION_CAPSULE_NAME: &CStr = c"autd3.modulation.v1";
@@ -69,15 +68,6 @@ pub fn geometry_into_capsule(py: Python<'_>, geometry: Geometry) -> PyResult<Bou
 pub fn geometry_from_capsule<'a>(capsule: &'a Bound<'_, PyCapsule>) -> PyResult<&'a Geometry> {
     let ptr: NonNull<c_void> = capsule.pointer_checked(Some(GEOMETRY_CAPSULE_NAME))?;
     Ok(unsafe { ptr.cast::<Geometry>().as_ref() })
-}
-
-pub fn device_into_capsule(py: Python<'_>, device: Device) -> PyResult<Bound<'_, PyCapsule>> {
-    PyCapsule::new_with_value(py, device, DEVICE_CAPSULE_NAME)
-}
-
-pub fn device_from_capsule<'a>(capsule: &'a Bound<'_, PyCapsule>) -> PyResult<&'a Device> {
-    let ptr: NonNull<c_void> = capsule.pointer_checked(Some(DEVICE_CAPSULE_NAME))?;
-    Ok(unsafe { ptr.cast::<Device>().as_ref() })
 }
 
 #[repr(C)]

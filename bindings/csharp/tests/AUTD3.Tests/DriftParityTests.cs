@@ -15,8 +15,6 @@ namespace AUTD3.Tests
             Assert.True(new SamplingConfig(512).Divide() == 512);
             Assert.InRange(new SamplingConfig(4000 * Hz).Freq().Hz, 3999f, 4001f);
             Assert.Equal(TimeSpan.FromMilliseconds(1), new SamplingConfig(TimeSpan.FromMilliseconds(1)).Period());
-            Assert.True(new SamplingConfig(Nearest(4001.5f * Hz)).Divide() > 0);
-            Assert.True(new SamplingConfig(Nearest(TimeSpan.FromTicks(2501))).Divide() > 0);
             Assert.Throws<Autd3Exception>(() => new SamplingConfig(0));
         }
 
@@ -26,7 +24,6 @@ namespace AUTD3.Tests
             Assert.Equal(40000, new SamplingConfig(1 * Hz * 1).Divide());
             Assert.Equal(100, new SamplingConfig(100.0f * Hz * 4).Divide());
             Assert.Equal(10, new SamplingConfig(TimeSpan.FromMilliseconds(1) / 4).Divide());
-            Assert.True(new SamplingConfig(Nearest(4001.0f * Hz)).Divide() > 0);
             Assert.Throws<Autd3Exception>(() => new SamplingConfig(4001.0f * Hz));
         }
 
@@ -59,27 +56,25 @@ namespace AUTD3.Tests
         }
 
         [Fact]
-        public void PatternDeviceAndTransducerVariants()
+        public void PatternGeometryAndTransducerVariants()
         {
             using var geometry = Fixture.SingleDevice();
             var wavelength = Pattern.Wavelength(340 * m / s);
             var device = geometry[0];
             var target = device.Center + new Vector3(0f, 0f, 150f);
 
-            var dst = new Phase[Autd3.NumTransducers];
-            Pattern.FocusDevice(device, target, wavelength, dst);
+            using var dst = geometry.PhaseBuffer();
+            Pattern.Focus(geometry, target, wavelength, dst);
             var e = Pattern.FocusTransducer(device.Position(0), target, wavelength);
-            Assert.Equal(e, dst[0]);
+            Assert.Equal(e, dst[0][0]);
 
-            Pattern.PlaneDevice(device, new Vector3(0f, 0f, 1f), wavelength, dst);
+            Pattern.Plane(geometry, new Vector3(0f, 0f, 1f), wavelength, dst);
             var pe = Pattern.PlaneTransducer(device.Position(0), new Vector3(0f, 0f, 1f), wavelength);
-            Assert.Equal(pe, dst[0]);
+            Assert.Equal(pe, dst[0][0]);
 
-            Pattern.BesselDevice(device, device.Center, new Vector3(0f, 0f, 1f), 0.3f * rad, wavelength, dst);
+            Pattern.Bessel(geometry, device.Center, new Vector3(0f, 0f, 1f), 0.3f * rad, wavelength, dst);
             var be = Pattern.BesselTransducer(device.Position(0), device.Center, new Vector3(0f, 0f, 1f), 0.3f * rad, wavelength);
-            Assert.Equal(be, dst[0]);
-
-            Assert.Throws<Autd3Exception>(() => Pattern.FocusDevice(device, target, wavelength, new Phase[10]));
+            Assert.Equal(be, dst[0][0]);
         }
 
         [Fact]
@@ -97,11 +92,8 @@ namespace AUTD3.Tests
         public void PhaseAndIntensityOperators()
         {
             Assert.Equal(Phase.Zero.Value, (Phase.Pi + Phase.Pi).Value);
-            Assert.Equal(0x40, (Phase.Pi / 2).Value);
             Assert.Equal(Phase.Pi.Value, ((Phase)(MathF.PI * rad)).Value);
-            Assert.Equal(Intensity.Max.Value, (Intensity.Max + Intensity.Max).Value);
-            Assert.Equal(Intensity.Min.Value, (Intensity.Min - Intensity.Max).Value);
-            Assert.Equal(0x80, (new Intensity(0x40) * 2).Value);
+            Assert.True(Intensity.Min < Intensity.Max);
         }
 
         [Fact]

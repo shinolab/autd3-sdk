@@ -13,10 +13,9 @@ use autd3_rs_pattern_holo::{
 };
 use autd3_rs_pattern_holo_wgpu::WgpuBackend;
 
-const CONSTRAINTS: [IntensityConstraint; 4] = [
-    IntensityConstraint::Normalize,
+const CONSTRAINTS: [IntensityConstraint; 3] = [
+    IntensityConstraint::Multiply(1.0),
     IntensityConstraint::Multiply(0.7),
-    IntensityConstraint::Uniform(Intensity(0x80)),
     IntensityConstraint::Clamp(Intensity(16), Intensity(240)),
 ];
 
@@ -91,7 +90,10 @@ fn transducers(g: &Geometry) -> (Vec<Point3<f32>>, Vec<UnitVector3<f32>>) {
     let mut dir = Vec::new();
     for dev in g {
         pos.extend_from_slice(dev.positions());
-        dir.extend_from_slice(dev.directions());
+        dir.extend(core::iter::repeat_n(
+            dev.axial_direction(),
+            dev.num_transducers(),
+        ));
     }
     (pos, dir)
 }
@@ -198,7 +200,7 @@ fn batch_matches_nalgebra_on_pool_size_collision() {
     let mut one = slot(&g);
 
     let opt = NaiveOption {
-        constraint: IntensityConstraint::Normalize,
+        constraint: IntensityConstraint::Multiply(1.0),
         directivity: Directivity::T4010A1,
         mask: TransducerMask::AllEnabled,
     };
@@ -219,7 +221,7 @@ fn batch_matches_nalgebra_on_pool_size_collision() {
     }
 
     let opt = GsOption {
-        constraint: IntensityConstraint::Normalize,
+        constraint: IntensityConstraint::Multiply(1.0),
         directivity: Directivity::T4010A1,
         mask: TransducerMask::AllEnabled,
         ..Default::default()
@@ -241,7 +243,7 @@ fn batch_matches_nalgebra_on_pool_size_collision() {
     }
 
     let opt = GspatOption {
-        constraint: IntensityConstraint::Normalize,
+        constraint: IntensityConstraint::Multiply(1.0),
         directivity: Directivity::T4010A1,
         mask: TransducerMask::AllEnabled,
         ..Default::default()

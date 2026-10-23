@@ -18,7 +18,7 @@ The sampling frequency must be the ultrasound frequency (40 kHz) divided by an i
 
 <CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
 
-In Rust, pass a division ratio with `SamplingConfig::new(NonZeroU16)`, a frequency with `from_freq(Freq<f32> | Freq<u32>)`, a period with `from_period(Duration)`, and round to the nearest ratio with `from_freq_nearest` / `from_period_nearest`.
+In Rust, pass a division ratio with `SamplingConfig::new(NonZeroU16)`, a frequency with `from_freq(Freq)`, and a period with `from_period(Duration)`.
 An integer frequency such as `4000 * Hz` can be passed in the same way as `4. * kHz`.
 All of the above represent 4 kHz (division ratio 10) and are equivalent to one another.
 
@@ -32,7 +32,7 @@ C# takes the division ratio as a `ushort` and the period as a `TimeSpan`.
 | Specification method  | Type            |
 | --------------------- | --------------- |
 | Division ratio        | `NonZeroU16`    |
-| Frequency             | `Freq<f32>` / `Freq<u32>` |
+| Frequency             | `Freq`          |
 | Period                | `Duration` (C#: `TimeSpan`) |
 
 The relationship between the division ratio <Math tex="N" />, the sampling frequency <Math tex="f_s" />, and the sampling period <Math tex="T_s" /> is as follows.
@@ -41,7 +41,7 @@ The relationship between the division ratio <Math tex="N" />, the sampling frequ
 
 When specified by frequency or period, it is an error if it does not evenly divide 40 kHz (i.e., does not yield an integer division ratio).
 `SamplingConfig` computes and validates the division ratio at construction: Rust returns a `Result` (`SamplingConfigError`), Python raises `Autd3Error`, and C# throws `Autd3Exception` (the `code` of the Python `Autd3Error` / the `Code` of the C# `Autd3Exception` is `INVALID_ARGUMENT` / `InvalidArgument`). `divide()` / `freq()` / `period()` never fail.
-To round an indivisible value to the nearest division ratio, use `from_freq_nearest` / `from_period_nearest` in Rust, or wrap the frequency/period in `Nearest` in Python / C#.
+To round an indivisible value to the nearest division ratio, compute the division ratio yourself and pass it.
 
 ## Presets
 

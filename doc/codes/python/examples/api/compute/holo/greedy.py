@@ -1,7 +1,6 @@
 import numpy as np
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import m, mm, s
-from autd3_pattern import TransducerMask
 from autd3_pattern import wavelength as calc_wavelength
 from autd3_pattern_holo import (
     AmplitudeTarget,
@@ -28,13 +27,11 @@ foci = [
 wavelength = calc_wavelength(340 * m / s)
 phase_quantization_levels = 16
 directivity = Directivity.Sphere
-mask = TransducerMask.AllEnabled
 option = (
     # ANCHOR: option
     GreedyOption(
         phase_quantization_levels,
         directivity,
-        mask,
     )
     # ANCHOR_END: option
 )

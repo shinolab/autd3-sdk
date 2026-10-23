@@ -2,7 +2,7 @@ import numpy as np
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import m, mm, s
 from autd3.value import Intensity
-from autd3_pattern import TransducerMask, wavelength
+from autd3_pattern import wavelength
 from autd3_pattern_holo import (
     AmplitudeTarget,
     Directivity,
@@ -35,7 +35,6 @@ greedy(
     GreedyOption(
         phase_quantization_levels=16,
         directivity=Directivity.Sphere,
-        mask=TransducerMask.AllEnabled,
     ),
     phases,
 )

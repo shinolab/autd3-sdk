@@ -17,8 +17,6 @@ async fn main() -> Result<()> {
     SamplingConfig::new(NonZeroU16::new(10).unwrap());
     SamplingConfig::from_freq(4. * kHz)?;
     SamplingConfig::from_period(Duration::from_micros(250))?;
-    SamplingConfig::from_freq_nearest(4. * kHz)?;
-    SamplingConfig::from_period_nearest(Duration::from_micros(250));
     // ANCHOR_END: api
 
     let geometry = Geometry::new(vec![Autd3::default()]);

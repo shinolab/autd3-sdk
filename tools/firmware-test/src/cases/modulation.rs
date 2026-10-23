@@ -1,3 +1,4 @@
+use core::num::NonZeroU16;
 use core::time::Duration;
 
 use anyhow::Result;
@@ -78,7 +79,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
 
     activate_mod_bank(ctx, ModulationBank::B1, TransitionMode::Immediate).await?;
 
-    let saw_config = SamplingConfig::from_freq_nearest(256.0 * Hz)?;
+    let saw_config = SamplingConfig::new(const { NonZeroU16::new(156).unwrap() });
     let ramp: Vec<u8> = (0..=255u8).collect();
     ctx.send(Modulation {
         loop_behavior: LoopBehavior::ONCE,

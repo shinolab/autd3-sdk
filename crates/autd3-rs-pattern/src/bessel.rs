@@ -1,8 +1,8 @@
 use autd3_rs_core::common::{Angle, Length};
-use autd3_rs_core::geometry::{Device, Geometry, Point3, UnitVector3};
+use autd3_rs_core::geometry::{Geometry, Point3, UnitVector3};
 use autd3_rs_core::value::Phase;
 
-use crate::each::{fill_from_positions, for_each_device};
+use crate::each::fill_each_transducer;
 use crate::focus::propagation_phase;
 
 fn bessel_phase(
@@ -31,20 +31,6 @@ pub fn bessel_transducer(
     bessel_phase(position, apex, direction, theta.rad().sin_cos(), wavelength)
 }
 
-pub fn bessel_device(
-    device: &Device,
-    apex: Point3<f32>,
-    direction: UnitVector3<f32>,
-    theta: Angle,
-    wavelength: Length,
-    dst: &mut [Phase],
-) {
-    let sin_cos = theta.rad().sin_cos();
-    fill_from_positions(device, dst, |pos| {
-        bessel_phase(pos, apex, direction, sin_cos, wavelength)
-    });
-}
-
 pub fn bessel(
     geometry: &Geometry,
     apex: Point3<f32>,
@@ -53,8 +39,9 @@ pub fn bessel(
     wavelength: Length,
     dst: &mut [Vec<Phase>],
 ) {
-    for_each_device(geometry, dst, |dev, slot| {
-        bessel_device(dev, apex, direction, theta, wavelength, slot);
+    let sin_cos = theta.rad().sin_cos();
+    fill_each_transducer(geometry, dst, |pos| {
+        bessel_phase(pos, apex, direction, sin_cos, wavelength)
     });
 }
 
@@ -63,7 +50,7 @@ mod tests {
     use core::f32::consts::PI;
 
     use autd3_rs_core::common::units::rad;
-    use autd3_rs_core::geometry::{Autd3, Vector3};
+    use autd3_rs_core::geometry::{Autd3, Device, UnitQuaternion, Vector3};
     use autd3_rs_core::units::mm;
 
     use super::*;
@@ -211,17 +198,24 @@ mod tests {
     }
 
     #[test]
-    fn device_level_matches_transducer_level() {
-        let dev: Device = Autd3::default().into();
+    fn geometry_level_matches_transducer_level() {
+        let geo = Geometry::new(vec![
+            Autd3::default(),
+            Autd3::new(Point3::new(200.0, 0.0, 0.0), UnitQuaternion::identity()),
+        ]);
         let lambda = 8.5 * mm;
         let apex = Point3::new(30.0, 40.0, 120.0);
         let dir = UnitVector3::new_normalize(Vector3::new(0.2, 0.3, 1.0));
         let theta = Angle::from_rad(0.5);
 
-        let mut pattern = vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS];
-        bessel_device(&dev, apex, dir, theta, lambda, &mut pattern);
-        for (i, &pos) in dev.positions().iter().enumerate() {
-            assert_eq!(pattern[i], bessel_transducer(pos, apex, dir, theta, lambda));
+        let mut phases = geo.phase_buffer();
+        bessel(&geo, apex, dir, theta, lambda, &mut phases);
+        assert_eq!(phases.len(), geo.num_devices());
+        for (slot, dev) in phases.iter().zip(&geo) {
+            assert_eq!(slot.len(), dev.num_transducers());
+            for (&phase, &pos) in slot.iter().zip(dev.positions()) {
+                assert_eq!(phase, bessel_transducer(pos, apex, dir, theta, lambda));
+            }
         }
     }
 }

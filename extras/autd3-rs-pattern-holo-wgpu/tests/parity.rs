@@ -7,10 +7,9 @@ use autd3_rs_pattern_holo::{
 };
 use autd3_rs_pattern_holo_wgpu::WgpuBackend;
 
-const CONSTRAINTS: [IntensityConstraint; 4] = [
-    IntensityConstraint::Normalize,
+const CONSTRAINTS: [IntensityConstraint; 3] = [
+    IntensityConstraint::Multiply(1.0),
     IntensityConstraint::Multiply(0.7),
-    IntensityConstraint::Uniform(Intensity(0x80)),
     IntensityConstraint::Clamp(Intensity(16), Intensity(240)),
 ];
 
@@ -85,7 +84,7 @@ fn multi_chunk_matches_nalgebra_backend() {
         for n in [1usize, 4, 16] {
             let f = foci(&g, n);
             for constraint in [
-                IntensityConstraint::Normalize,
+                IntensityConstraint::Multiply(1.0),
                 IntensityConstraint::Clamp(Intensity(16), Intensity(240)),
             ] {
                 let label = format!("{devices}dev/{n}foci/{constraint:?}");

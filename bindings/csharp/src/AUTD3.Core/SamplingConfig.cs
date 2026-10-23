@@ -29,17 +29,6 @@ namespace AUTD3
             _divide = Checked(NativeCore.autd3_core_sampling_config_from_period(PeriodNanos(period), out var divide, err, (UIntPtr)err.Length), divide, err);
         }
 
-        public SamplingConfig(Nearest<Freq> freq)
-        {
-            var err = new byte[NativeAbi.ErrorBufferLength];
-            _divide = Checked(NativeCore.autd3_core_sampling_config_from_freq_nearest(freq.Value.Hz, out var divide, err, (UIntPtr)err.Length), divide, err);
-        }
-
-        public SamplingConfig(Nearest<TimeSpan> period)
-        {
-            _divide = NativeCore.autd3_core_sampling_config_from_period_nearest(PeriodNanos(period.Value));
-        }
-
         private static ushort Checked(int code, ushort divide, byte[] err)
         {
             if (code != 0)

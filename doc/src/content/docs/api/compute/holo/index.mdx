@@ -44,13 +44,12 @@ Holo は複数の焦点 (制御点) を同時に生成するための Pattern �
 
 |                                 |                                                |
 |---------------------------------|------------------------------------------------|
-| `Normalize`                     | 最大値で正規化する                             |
-| `Multiply(f32)`                 | 正規化後に係数を掛けてクランプする             |
-| `Uniform(Intensity)`            | 全振動子を一定強度にする                       |
+| `Multiply(f32)`                 | 最大値で正規化した後に係数を掛けてクランプする |
 | `Clamp(Intensity, Intensity)`   | 振幅を指定範囲にクランプする                   |
 
 各 Option の `constraint` フィールドで指定する. デフォルトは `naive` / `gs` / `gspat` とも `Clamp(Intensity::MIN, Intensity::MAX)`. 
 `greedy` は振幅を最適化しないので `constraint` を持たず, 振幅は入力として与える. 
+全振動子を一定強度にしたいときは, 最適化後に振幅バッファを自分で書き換える. 
 
 ### エラー
 
@@ -66,7 +65,7 @@ Holo は複数の焦点 (制御点) を同時に生成するための Pattern �
 ### TransducerMask
 
 最適化に含める振動子を選択する.
-各 Option の `mask` フィールドで指定する (デフォルトは `AllEnabled`). 
+`naive` / `gs` / `gspat` の各 Option の `mask` フィールドで指定する (デフォルトは `AllEnabled`). `greedy` は `mask` を持たず, 振幅 0 の振動子が探索から外れる. 
 
 - `TransducerMask::AllEnabled` — 全振動子を使う (デフォルト). 
 - `TransducerMask::Masked(&[Vec<bool>])` — 各振動子ごとに有効/無効を指定する. 

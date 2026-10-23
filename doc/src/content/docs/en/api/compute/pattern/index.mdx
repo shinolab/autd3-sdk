@@ -19,14 +19,11 @@ Representative sound field computation utilities such as a single focal point, a
 - [bessel](/autd3-sdk/en/api/compute/pattern/bessel/) — Bessel beam
 - [laguerre_gaussian_phase / laguerre_gaussian_intensity](/autd3-sdk/en/api/compute/pattern/laguerre-gaussian/) — phase and intensity of a Laguerre-Gaussian beam
 - [hermite_gaussian_phase / hermite_gaussian_intensity](/autd3-sdk/en/api/compute/pattern/hermite-gaussian/) — phase and intensity of a Hermite-Gaussian beam
-- [set_intensity / set_phase / add_phase](/autd3-sdk/en/api/compute/pattern/set/) — set the intensity and phase of a whole buffer
 
-`focus` / `plane` / `bessel` / `laguerre_gaussian_phase` / `hermite_gaussian_phase` also have a `*_device` variant that computes for only a single device, and a `*_transducer` variant that returns the phase of a single transducer element (for example, `focus_device` / `focus_transducer`).
-`laguerre_gaussian_intensity` / `hermite_gaussian_intensity` have only a `*_device` variant (there is no per-transducer variant, because normalizing the intensity needs the surrounding transducers).
+`focus` / `plane` / `bessel` / `laguerre_gaussian_phase` / `hermite_gaussian_phase` also have a `*_transducer` variant that returns the phase of a single transducer element (for example, `focus_transducer`).
+`laguerre_gaussian_intensity` / `hermite_gaussian_intensity` have no per-transducer variant, because normalizing the intensity needs the surrounding transducers.
 
 For a Geometry-level function, if the number of devices of `dst` does not match `geometry`, Rust panics, Python raises `ValueError`, and C# throws `Autd3Exception` (`InvalidArgument`).
-
-The `dst` of a `*_device` variant is a buffer for one device: `&mut [Phase]` / `&mut [Intensity]` in Rust, a `uint8` numpy array whose length is the number of transducers of that device in Python, and a `Phase[]` / `Intensity[]` of length `NumTransducers` in C#.
 
 ## Wavelength
 

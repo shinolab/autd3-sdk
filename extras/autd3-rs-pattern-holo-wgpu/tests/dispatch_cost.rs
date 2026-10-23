@@ -26,7 +26,10 @@ fn propagation(gpu: &WgpuBackend, foci: usize) -> GpuMatrix {
     let mut tr_dir = Vec::with_capacity(N);
     for dev in &geometry {
         tr_pos.extend_from_slice(dev.positions());
-        tr_dir.extend_from_slice(dev.directions());
+        tr_dir.extend(core::iter::repeat_n(
+            dev.axial_direction(),
+            dev.num_transducers(),
+        ));
     }
     let f: Vec<AmplitudeTarget> = (0..foci)
         .map(|i| AmplitudeTarget {
@@ -155,7 +158,7 @@ fn quantize_cost() {
                 "clamp",
                 IntensityConstraint::Clamp(Intensity::MIN, Intensity::MAX),
             ),
-            ("normalize", IntensityConstraint::Normalize),
+            ("multiply", IntensityConstraint::Multiply(1.0)),
         ] {
             let _ = gpu.quantize(&gpu_v, c);
             let t = Instant::now();

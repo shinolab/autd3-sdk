@@ -80,7 +80,7 @@ pub(crate) unsafe extern "C" fn autd3_transport_option_set_iface(
     let Some(option) = (unsafe { handle_mut(handle) }) else {
         return AUTD3_ERR_INVALID_ARGUMENT;
     };
-    option.0.iface = Interface::from(unsafe { cstr_to_string(iface) });
+    option.0.iface = unsafe { cstr_to_string(iface) }.map_or(Interface::Auto, Interface::Name);
     AUTD3_OK
 }
 

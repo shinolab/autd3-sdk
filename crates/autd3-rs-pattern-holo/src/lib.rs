@@ -92,30 +92,6 @@ mod tests {
     }
 
     #[test]
-    fn uniform_constraint_sets_all_intensities() {
-        let geometry = geometry(1);
-        let foci = [AmplitudeTarget {
-            point: focus_target(&geometry),
-            amplitude: 5e3 * Pa,
-        }];
-        let (mut phases, mut intensities) = slot(&geometry);
-        gspat(
-            &NalgebraBackend,
-            &geometry,
-            &foci,
-            wavelength(),
-            &GspatOption {
-                constraint: IntensityConstraint::Uniform(Intensity(0x80)),
-                ..Default::default()
-            },
-            &mut phases,
-            &mut intensities,
-        )
-        .unwrap();
-        assert!(intensities[0].iter().all(|&i| i == Intensity(0x80)));
-    }
-
-    #[test]
     fn naive_single_focus_phases_match_focus_pattern() {
         let geometry = geometry(1);
         let target = focus_target(&geometry);
@@ -131,7 +107,6 @@ mod tests {
             &foci,
             wavelength(),
             &NaiveOption {
-                constraint: IntensityConstraint::Uniform(Intensity::MAX),
                 directivity: Directivity::Sphere,
                 ..Default::default()
             },
@@ -158,10 +133,7 @@ mod tests {
             &geometry,
             &foci,
             wavelength(),
-            &GspatOption {
-                constraint: IntensityConstraint::Uniform(Intensity::MAX),
-                ..Default::default()
-            },
+            &GspatOption::default(),
             &mut phases,
             &mut intensities,
         )
@@ -212,7 +184,7 @@ mod tests {
             &foci,
             wavelength(),
             &NaiveOption {
-                constraint: IntensityConstraint::Uniform(Intensity::MAX),
+                constraint: IntensityConstraint::Multiply(1.0),
                 directivity: Directivity::Sphere,
                 mask,
             },
@@ -221,9 +193,10 @@ mod tests {
         )
         .unwrap();
 
+        assert_eq!(intensities[0].iter().max(), Some(&Intensity::MAX));
         for (t, (&p, &i)) in phases[0].iter().zip(&intensities[0]).enumerate() {
             if t % 2 == 0 {
-                assert_eq!(i, Intensity::MAX, "enabled transducer {t}");
+                assert_ne!(i, Intensity::MIN, "enabled transducer {t}");
             } else {
                 assert_eq!(p, Phase::ZERO, "disabled transducer {t} must be silent");
                 assert_eq!(i, Intensity::MIN, "disabled transducer {t} must be silent");

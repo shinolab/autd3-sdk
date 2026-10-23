@@ -233,26 +233,6 @@ pub unsafe extern "C" fn autd3_core_device_to_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_core_transducer_direction(
-    geometry: *const Geometry,
-    dev: usize,
-    tr: usize,
-    out: *mut f32,
-) -> i32 {
-    let Some(device) = (unsafe { device(geometry, dev) }) else {
-        return -1;
-    };
-    if tr >= device.num_transducers() {
-        return -1;
-    }
-    let v = device.direction(tr).into_inner();
-    match unsafe { write_floats(out, [v.x, v.y, v.z]) } {
-        Some(()) => 0,
-        None => -1,
-    }
-}
-
-#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_core_device_direction_x(
     geometry: *const Geometry,
     dev: usize,
@@ -434,23 +414,6 @@ pub unsafe extern "C" fn autd3_core_sampling_config_from_freq(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_core_sampling_config_from_freq_nearest(
-    hz: f32,
-    out: *mut u16,
-    out_err: *mut c_char,
-    out_err_len: usize,
-) -> i32 {
-    unsafe {
-        write_sampling_config(
-            SamplingConfig::from_freq_nearest(hz * Hz),
-            out,
-            out_err,
-            out_err_len,
-        )
-    }
-}
-
-#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_core_sampling_config_from_period(
     nanos: u64,
     out: *mut u16,
@@ -465,13 +428,6 @@ pub unsafe extern "C" fn autd3_core_sampling_config_from_period(
             out_err_len,
         )
     }
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn autd3_core_sampling_config_from_period_nearest(nanos: u64) -> u16 {
-    SamplingConfig::from_period_nearest(Duration::from_nanos(nanos))
-        .divide()
-        .get()
 }
 
 autd3_ffi_abi::export_abi_version!();
@@ -591,16 +547,6 @@ mod tests {
         assert!(message(&err).contains("must divide the ultrasound frequency"));
 
         assert_eq!(AUTD3_OK, unsafe {
-            autd3_core_sampling_config_from_freq_nearest(
-                4001.0,
-                &raw mut out,
-                err.as_mut_ptr(),
-                err.len(),
-            )
-        });
-        assert_eq!(10, out);
-
-        assert_eq!(AUTD3_OK, unsafe {
             autd3_core_sampling_config_from_period(
                 250_000,
                 &raw mut out,
@@ -617,7 +563,6 @@ mod tests {
                 err.len(),
             )
         });
-        assert_eq!(10, autd3_core_sampling_config_from_period_nearest(250_001));
         assert_eq!(10, autd3_core_sampling_config_freq_4k());
         assert_eq!(1, autd3_core_sampling_config_freq_40k());
     }
