@@ -1,9 +1,9 @@
 use std::time::Duration;
 
-use autd3_rs::TransportOption;
 use autd3_rs::protocol::Cmd;
+use autd3_rs::{Datagram, TransportOption};
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
-use autd3_rs_firmware_ota::{DEFAULT_HEARTBEAT, Exchange, Frame, UdpLink};
+use autd3_rs_firmware_ota::{DEFAULT_HEARTBEAT, Exchange, UdpLink};
 
 const SILENT_DEVICE: usize = 1;
 
@@ -26,13 +26,16 @@ fn an_exchange_waits_for_a_device_that_never_answers_and_keeps_it_alive_meanwhil
     let mut link = UdpLink::open(&option, emulator.num_devices(), DEFAULT_HEARTBEAT).unwrap();
 
     emulator.drop_next_frames(SILENT_DEVICE, u32::MAX);
-    let replies = link.exchange(&Frame::new(Cmd::Nop)).unwrap();
+    let replies = link.exchange(&Datagram::no_payload(Cmd::Nop)).unwrap();
 
     assert_eq!(replies, Err(()));
     assert!(emulator.heartbeats_received(SILENT_DEVICE) > 0);
     emulator.drop_next_frames(SILENT_DEVICE, 0);
     assert_eq!(
-        link.exchange(&Frame::new(Cmd::Nop)).unwrap().unwrap().len(),
+        link.exchange(&Datagram::no_payload(Cmd::Nop))
+            .unwrap()
+            .unwrap()
+            .len(),
         2
     );
 }
@@ -49,8 +52,8 @@ fn a_lost_reply_fails_the_exchange_without_sending_the_frame_again() {
     .unwrap();
 
     emulator.drop_next_replies(SILENT_DEVICE, 1);
-    let lost = link.exchange(&Frame::new(Cmd::Nop)).unwrap();
-    let answered = link.exchange(&Frame::new(Cmd::Nop)).unwrap();
+    let lost = link.exchange(&Datagram::no_payload(Cmd::Nop)).unwrap();
+    let answered = link.exchange(&Datagram::no_payload(Cmd::Nop)).unwrap();
 
     assert_eq!(lost, Err(()));
     assert_eq!(answered.unwrap().len(), 2);

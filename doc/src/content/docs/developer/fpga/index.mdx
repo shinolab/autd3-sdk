@@ -26,7 +26,7 @@ FPGA に関する作業はすべて `autd3-sdk/` ディレクトリ内で `cargo
 cargo xtask fpga project        # Vivado プロジェクト生成
 cargo xtask fpga build          # 合成 → 実装 → bitstream → autd3-fpga.mcs
 cargo xtask fpga build --force  # bitstream があっても合成からやり直す
-cargo xtask fpga flash          # build → configuration
+cargo xtask fpga flash          # build → firmware-writer で configuration
 cargo xtask fpga clean
 ```
 

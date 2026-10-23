@@ -13,11 +13,10 @@ use autd3_cpu_wire::payload::{FirmwareInfo, UpdateBeginPayload, UpdateChunkPaylo
 use autd3_cpu_wire::update::RunningImage;
 use autd3_rs::commands::Distribution;
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::protocol::{Cmd, FrameHeader, PAYLOAD_BYTES};
+use autd3_rs::protocol::Cmd;
 use autd3_rs::udp::UdpError;
 use autd3_rs::{
-    Client, Datagram, DeviceState, Error, Frame as ClientFrame, Response, ResponseFuture,
-    TransportOption,
+    Client, Datagram, DeviceState, Error, Frame, Response, ResponseFuture, TransportOption,
 };
 use zerocopy::little_endian::U32;
 use zerocopy::{FromBytes, Immutable, IntoBytes};
@@ -181,54 +180,18 @@ pub struct DeviceReply {
     pub value: Vec<u8>,
 }
 
-pub struct Frame {
-    pub cmd: Cmd,
-    pub payload: [u8; PAYLOAD_BYTES],
-    pub payload_len: usize,
-}
-
-impl Frame {
-    #[must_use]
-    pub fn new(cmd: Cmd) -> Self {
-        Self {
-            cmd,
-            payload: [0; PAYLOAD_BYTES],
-            payload_len: 0,
-        }
-    }
-
-    #[must_use]
-    pub fn with_payload(cmd: Cmd, header: &(impl IntoBytes + Immutable), data: &[u8]) -> Self {
-        let mut frame = Self::new(cmd);
-        let header = header.as_bytes();
-        frame.payload[..header.len()].copy_from_slice(header);
-        frame.payload[header.len()..][..data.len()].copy_from_slice(data);
-        frame.payload_len = header.len() + data.len();
-        frame
-    }
-
-    fn datagram(&self) -> Datagram {
-        Datagram {
-            cmd: self.cmd,
-            payload: self.payload,
-            payload_len: self.payload_len,
-        }
-    }
-
-    #[must_use]
-    pub fn bytes(&self) -> Vec<u8> {
-        let mut bytes = Vec::with_capacity(size_of::<FrameHeader>() + self.payload_len);
-        bytes.extend_from_slice(
-            FrameHeader {
-                reserved: 0,
-                cmd: self.cmd.as_u8(),
-                exec_at: 0.into(),
-            }
-            .as_bytes(),
-        );
-        bytes.extend_from_slice(&self.payload[..self.payload_len]);
-        bytes
-    }
+#[must_use]
+pub fn datagram_with_payload(
+    cmd: Cmd,
+    header: &(impl IntoBytes + Immutable),
+    data: &[u8],
+) -> Datagram {
+    let mut datagram = Datagram::no_payload(cmd);
+    let header = header.as_bytes();
+    datagram.payload[..header.len()].copy_from_slice(header);
+    datagram.payload[header.len()..][..data.len()].copy_from_slice(data);
+    datagram.payload_len = header.len() + data.len();
+    datagram
 }
 
 pub type Replies = Result<Vec<DeviceReply>, ()>;
@@ -238,9 +201,9 @@ pub trait Exchange {
 
     fn num_devices(&self) -> usize;
 
-    fn exchange(&mut self, frame: &Frame) -> Result<Replies, Self::Error>;
+    fn exchange(&mut self, datagram: &Datagram) -> Result<Replies, Self::Error>;
 
-    fn exchange_each(&mut self, frames: &[Frame]) -> Result<Replies, Self::Error>;
+    fn exchange_each(&mut self, datagrams: &[Datagram]) -> Result<Replies, Self::Error>;
 
     fn idle(&mut self, duration: Duration) -> Result<(), Self::Error>;
 
@@ -340,13 +303,12 @@ impl Exchange for UdpLink {
             .map_or(0, |client| client.num_devices())
     }
 
-    fn exchange(&mut self, frame: &Frame) -> Result<Replies, Error> {
-        self.exchange_datagrams(Distribution::Broadcast, &[frame.datagram()])
+    fn exchange(&mut self, datagram: &Datagram) -> Result<Replies, Error> {
+        self.exchange_datagrams(Distribution::Broadcast, std::slice::from_ref(datagram))
     }
 
-    fn exchange_each(&mut self, frames: &[Frame]) -> Result<Replies, Error> {
-        let datagrams: Vec<Datagram> = frames.iter().map(Frame::datagram).collect();
-        self.exchange_datagrams(Distribution::PerDevice, &datagrams)
+    fn exchange_each(&mut self, datagrams: &[Datagram]) -> Result<Replies, Error> {
+        self.exchange_datagrams(Distribution::PerDevice, datagrams)
     }
 
     fn idle(&mut self, duration: Duration) -> Result<(), Error> {
@@ -368,7 +330,7 @@ impl UdpLink {
         datagrams: &[Datagram],
     ) -> Result<Replies, Error> {
         let client = self.client.as_ref().ok_or(Error::Closed)?;
-        let sent = pollster::block_on(client.send_frame(ClientFrame::new(distribution, datagrams)));
+        let sent = pollster::block_on(client.send_frame(Frame::new(distribution, datagrams)));
         let response = match sent {
             Ok(response) => response,
             Err(Error::Timeout { .. }) => return Ok(Err(())),
@@ -418,27 +380,31 @@ impl<L: Exchange> Driver<L> {
         self.inner.num_devices()
     }
 
-    fn send(&mut self, frame: &Frame) -> Result<Vec<DeviceReply>, DriverError> {
-        match self.inner.exchange(frame).map_err(network_err)? {
+    fn send(&mut self, datagram: &Datagram) -> Result<Vec<DeviceReply>, DriverError> {
+        match self.inner.exchange(datagram).map_err(network_err)? {
             Ok(replies) => Ok(replies),
-            Err(()) => Err(DriverError::Timeout { cmd: frame.cmd }),
+            Err(()) => Err(DriverError::Timeout { cmd: datagram.cmd }),
         }
     }
 
-    fn send_each(&mut self, cmd: Cmd, frames: &[Frame]) -> Result<Vec<DeviceReply>, DriverError> {
-        match self.inner.exchange_each(frames).map_err(network_err)? {
+    fn send_each(
+        &mut self,
+        cmd: Cmd,
+        datagrams: &[Datagram],
+    ) -> Result<Vec<DeviceReply>, DriverError> {
+        match self.inner.exchange_each(datagrams).map_err(network_err)? {
             Ok(replies) => Ok(replies),
             Err(()) => Err(DriverError::Timeout { cmd }),
         }
     }
 
-    pub fn send_checked(&mut self, frame: &Frame) -> Result<Vec<DeviceReply>, DriverError> {
-        let replies = self.send(frame)?;
-        all_accepted(frame.cmd, replies)
+    pub fn send_checked(&mut self, datagram: &Datagram) -> Result<Vec<DeviceReply>, DriverError> {
+        let replies = self.send(datagram)?;
+        all_accepted(datagram.cmd, replies)
     }
 
     pub fn read_firmware_info(&mut self) -> Result<Vec<FirmwareInfo>, DriverError> {
-        self.send_checked(&Frame::new(Cmd::ReadFirmwareInfo))?
+        self.send_checked(&Datagram::no_payload(Cmd::ReadFirmwareInfo))?
             .into_iter()
             .enumerate()
             .map(|(device, reply)| {
@@ -454,7 +420,7 @@ impl<L: Exchange> Driver<L> {
 
     pub fn read_running_image(&mut self) -> Result<Vec<Option<RunningImage>>, DriverError> {
         let cmd = Cmd::ReadRunningImage;
-        self.send(&Frame::new(cmd))?
+        self.send(&Datagram::no_payload(cmd))?
             .into_iter()
             .enumerate()
             .map(
@@ -534,7 +500,7 @@ impl<L: Exchange> Driver<L> {
     }
 
     pub fn activate_fpga(&mut self) -> Result<(), DriverError> {
-        self.send_checked(&Frame::new(Cmd::FpgaUpdateActivate))
+        self.send_checked(&Datagram::no_payload(Cmd::FpgaUpdateActivate))
             .map(drop)
     }
 
@@ -549,16 +515,16 @@ impl<L: Exchange> Driver<L> {
         if failed.is_empty() {
             return Ok(failed);
         }
-        let frames: Vec<Frame> = (0..self.num_devices())
+        let datagrams: Vec<Datagram> = (0..self.num_devices())
             .map(|device| {
-                Frame::new(if failed.contains(&device) {
+                Datagram::no_payload(if failed.contains(&device) {
                     Cmd::FpgaUpdateActivate
                 } else {
                     Cmd::Nop
                 })
             })
             .collect();
-        let replies = self.send_each(Cmd::FpgaUpdateActivate, &frames)?;
+        let replies = self.send_each(Cmd::FpgaUpdateActivate, &datagrams)?;
         all_accepted(Cmd::FpgaUpdateActivate, replies)?;
         Ok(failed)
     }
@@ -589,7 +555,7 @@ impl<L: Exchange> Driver<L> {
         mut on_progress: impl FnMut(UpdateProgress),
     ) -> Result<(), DriverError> {
         let total = bytes.len();
-        let begin = Frame::with_payload(
+        let begin = datagram_with_payload(
             begin_cmd,
             &UpdateBeginPayload {
                 length: U32::new(u32::try_from(total).expect("bounded by the slot capacity")),
@@ -602,7 +568,7 @@ impl<L: Exchange> Driver<L> {
 
         for (index, data) in bytes.chunks(UPDATE_CHUNK_MAX_DATA_LEN).enumerate() {
             let offset = index * UPDATE_CHUNK_MAX_DATA_LEN;
-            let chunk = Frame::with_payload(
+            let chunk = datagram_with_payload(
                 chunk_cmd,
                 &UpdateChunkPayload {
                     offset: U32::new(u32::try_from(offset).expect("bounded by the slot capacity")),
@@ -616,11 +582,13 @@ impl<L: Exchange> Driver<L> {
             });
         }
 
-        self.send_checked(&Frame::new(commit_cmd)).map(drop)
+        self.send_checked(&Datagram::no_payload(commit_cmd))
+            .map(drop)
     }
 
     pub fn confirm(&mut self) -> Result<(), DriverError> {
-        self.send_checked(&Frame::new(Cmd::UpdateConfirm)).map(drop)
+        self.send_checked(&Datagram::no_payload(Cmd::UpdateConfirm))
+            .map(drop)
     }
 
     pub fn activate(&mut self) -> Result<(), DriverError> {
@@ -638,22 +606,22 @@ impl<L: Exchange> Driver<L> {
         if unrebooted.is_empty() {
             return Ok(unrebooted);
         }
-        let frames: Vec<Frame> = (0..self.num_devices())
+        let datagrams: Vec<Datagram> = (0..self.num_devices())
             .map(|device| {
-                Frame::new(if unrebooted.contains(&device) {
+                Datagram::no_payload(if unrebooted.contains(&device) {
                     Cmd::Reboot
                 } else {
                     Cmd::Nop
                 })
             })
             .collect();
-        let replies = self.send_each(Cmd::Reboot, &frames)?;
+        let replies = self.send_each(Cmd::Reboot, &datagrams)?;
         all_accepted(Cmd::Reboot, replies)?;
         Ok(unrebooted)
     }
 
     pub fn reboot(&mut self) -> Result<(), DriverError> {
-        let replies = self.send(&Frame::new(Cmd::Reboot))?;
+        let replies = self.send(&Datagram::no_payload(Cmd::Reboot))?;
         all_accepted(Cmd::Reboot, replies).map(drop)
     }
 
@@ -692,11 +660,11 @@ mod tests {
             self.0.len()
         }
 
-        fn exchange(&mut self, _frame: &Frame) -> Result<Replies, Self::Error> {
+        fn exchange(&mut self, _datagram: &Datagram) -> Result<Replies, Self::Error> {
             Ok(Ok(self.0.clone()))
         }
 
-        fn exchange_each(&mut self, _frames: &[Frame]) -> Result<Replies, Self::Error> {
+        fn exchange_each(&mut self, _datagrams: &[Datagram]) -> Result<Replies, Self::Error> {
             Ok(Ok(self.0.clone()))
         }
 

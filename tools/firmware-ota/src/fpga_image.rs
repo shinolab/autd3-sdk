@@ -1,43 +1,5 @@
-use autd3_cpu_wire::fpga_update::{FPGA_IMAGE_CAPACITY, FpgaBootImage};
 use autd3_cpu_wire::update::crc32;
 use autd3_rs_core::fpga_bitstream::{FpgaImageError, validate_update_image};
-
-#[derive(Debug, thiserror::Error, PartialEq, Eq)]
-pub enum FpgaImageLoadError {
-    #[error("FPGA update image must not be empty")]
-    Empty,
-    #[error("FPGA update image is {len} bytes; the update slot holds at most {max} bytes")]
-    TooLarge { len: usize, max: usize },
-    #[error(
-        "no bitstream sync word (0xAA995566) found; pass the `autd3-fpga-update.img` produced by `cargo xtask fpga build`"
-    )]
-    NoSyncWord,
-    #[error(
-        "the bitstream is not an update-slot image (USR_ACCESS reads as {boot_image:?}); pass `autd3-fpga-update.img`, not the golden image"
-    )]
-    NotAnUpdateImage { boot_image: FpgaBootImage },
-    #[error(
-        "the bitstream reboots into another image (WBSTAR/IPROG found); a golden image must never be written to the update slot"
-    )]
-    Reboots,
-}
-
-impl From<FpgaImageError> for FpgaImageLoadError {
-    fn from(e: FpgaImageError) -> Self {
-        match e {
-            FpgaImageError::Empty => Self::Empty,
-            FpgaImageError::TooLarge { length } => Self::TooLarge {
-                len: length,
-                max: FPGA_IMAGE_CAPACITY as usize,
-            },
-            FpgaImageError::NoSyncWord => Self::NoSyncWord,
-            FpgaImageError::NotAnUpdateImage { boot_image } => {
-                Self::NotAnUpdateImage { boot_image }
-            }
-            FpgaImageError::Reboots => Self::Reboots,
-        }
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FpgaFirmwareImage {
@@ -46,7 +8,7 @@ pub struct FpgaFirmwareImage {
 }
 
 impl FpgaFirmwareImage {
-    pub fn from_update_bin(bytes: Vec<u8>) -> Result<Self, FpgaImageLoadError> {
+    pub fn from_update_bin(bytes: Vec<u8>) -> Result<Self, FpgaImageError> {
         validate_update_image(&bytes)?;
         let crc32 = crc32(&bytes);
         Ok(Self { bytes, crc32 })
@@ -76,7 +38,9 @@ impl FpgaFirmwareImage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use autd3_cpu_wire::fpga_update::{FPGA_USR_ACCESS_GOLDEN, FPGA_USR_ACCESS_UPDATE};
+    use autd3_cpu_wire::fpga_update::{
+        FPGA_IMAGE_CAPACITY, FPGA_USR_ACCESS_GOLDEN, FPGA_USR_ACCESS_UPDATE, FpgaBootImage,
+    };
     use autd3_rs_core::fpga_bitstream::SYNC_WORD;
 
     fn bitstream(usr_access: u32, reboot: bool, payload: u32) -> Vec<u8> {
@@ -109,11 +73,11 @@ mod tests {
     fn a_golden_bitstream_is_refused() {
         assert_eq!(
             FpgaFirmwareImage::from_update_bin(bitstream(FPGA_USR_ACCESS_GOLDEN, true, 10)),
-            Err(FpgaImageLoadError::Reboots)
+            Err(FpgaImageError::Reboots)
         );
         assert_eq!(
             FpgaFirmwareImage::from_update_bin(bitstream(FPGA_USR_ACCESS_GOLDEN, false, 10)),
-            Err(FpgaImageLoadError::NotAnUpdateImage {
+            Err(FpgaImageError::NotAnUpdateImage {
                 boot_image: FpgaBootImage::Golden
             })
         );
@@ -123,15 +87,15 @@ mod tests {
     fn garbage_is_refused() {
         assert_eq!(
             FpgaFirmwareImage::from_update_bin(Vec::new()),
-            Err(FpgaImageLoadError::Empty)
+            Err(FpgaImageError::Empty)
         );
         assert_eq!(
             FpgaFirmwareImage::from_update_bin(vec![0u8; 64]),
-            Err(FpgaImageLoadError::NoSyncWord)
+            Err(FpgaImageError::NoSyncWord)
         );
         assert!(matches!(
             FpgaFirmwareImage::from_update_bin(vec![0u8; FPGA_IMAGE_CAPACITY as usize + 1]),
-            Err(FpgaImageLoadError::TooLarge { .. })
+            Err(FpgaImageError::TooLarge { .. })
         ));
     }
 }

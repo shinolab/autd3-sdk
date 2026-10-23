@@ -93,12 +93,6 @@ struct Cli {
         help = "Treat <IMAGE> as an FPGA update image (`*-fpga-update.img`)"
     )]
     fpga: bool,
-    #[arg(
-        long,
-        conflicts_with_all = ["fpga", "version"],
-        help = "Treat <IMAGE> as a bare slot image (body only) instead of a full flash image"
-    )]
-    slot_image: bool,
     #[arg(long, help = "Number of devices on the chain")]
     devices: usize,
     #[arg(
@@ -137,7 +131,7 @@ struct Cli {
     confirm_only: bool,
     #[arg(
         long,
-        conflicts_with_all = ["image", "version", "fpga", "slot_image", "no_activate", "verify_only", "no_confirm", "confirm_only"],
+        conflicts_with_all = ["image", "version", "fpga", "no_activate", "verify_only", "no_confirm", "confirm_only"],
         help = "Only reboot every device (software reset, no image is written); the devices come back unassigned and the tool does not reconnect"
     )]
     reboot_only: bool,
@@ -562,13 +556,18 @@ fn reconnect_and_run<L: Exchange>(
     }
 }
 
-fn main_fpga(cli: &Cli, bytes: Vec<u8>) -> Result<()> {
+const LOCAL_FPGA_IMAGE_HINT: &str = "pass the `autd3-fpga-update.img` produced by `cargo xtask fpga build` \
+     (not the golden image; a golden image must never be written to the update slot)";
+const RELEASE_FPGA_IMAGE_HINT: &str =
+    "the FPGA update image in the release bundle is not usable; retry with `--force-download`";
+
+fn main_fpga(cli: &Cli, bytes: Vec<u8>, invalid_image_hint: &'static str) -> Result<()> {
     let connect: Connect<'_, _> = &|devices| Ok(cli.udp.open(devices)?);
     if cli.verify_only {
         open_and_run(connect, cli.devices, Stage::FpgaVerify)?;
         return Ok(());
     }
-    let image = FpgaFirmwareImage::from_update_bin(bytes)?;
+    let image = FpgaFirmwareImage::from_update_bin(bytes).context(invalid_image_hint)?;
     println!(
         "FPGA update image: {} bytes, crc32 {:#010x}",
         image.len(),
@@ -612,12 +611,8 @@ fn udp_release(version: &str) -> Result<Version> {
     Ok(release)
 }
 
-fn main_cpu(cli: &Cli, bytes: Vec<u8>, release: Option<Version>) -> Result<()> {
-    let image = if cli.slot_image {
-        CpuFirmwareImage::from_slot_image(bytes)?
-    } else {
-        CpuFirmwareImage::from_flash_image(&bytes)?
-    };
+fn main_cpu(cli: &Cli, bytes: &[u8], release: Option<Version>) -> Result<()> {
+    let image = CpuFirmwareImage::from_flash_image(bytes)?;
     println!(
         "image: {} bytes, crc32 {:#010x}",
         image.len(),
@@ -725,11 +720,11 @@ fn main_release(cli: &Cli, version: &str) -> Result<()> {
     let shown = version.trim_start_matches('v');
     if let Some(bytes) = cpu {
         println!("== CPU firmware v{shown} ==");
-        main_cpu(cli, bytes, Some(release))?;
+        main_cpu(cli, &bytes, Some(release))?;
     }
     if let Some(bytes) = fpga {
         println!("== FPGA firmware v{shown} ==");
-        main_fpga(cli, bytes)?;
+        main_fpga(cli, bytes, RELEASE_FPGA_IMAGE_HINT)?;
     }
     Ok(())
 }
@@ -746,9 +741,9 @@ fn main() -> Result<()> {
         (Some(path), _) => {
             let bytes = read_image(path)?;
             if cli.fpga {
-                main_fpga(&cli, bytes)
+                main_fpga(&cli, bytes, LOCAL_FPGA_IMAGE_HINT)
             } else {
-                main_cpu(&cli, bytes, None)
+                main_cpu(&cli, &bytes, None)
             }
         }
         (None, Some(version)) => main_release(&cli, version),

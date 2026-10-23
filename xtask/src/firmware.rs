@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -149,14 +150,21 @@ fn write_zip(archive: &Path, entries: &[(String, PathBuf)]) -> Result<()> {
     Ok(())
 }
 
-fn write(root: &Path, args: &WriteArgs) -> Result<()> {
+pub(crate) fn run_writer<I, S>(root: &Path, args: I) -> Result<()>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
     run(
         "cargo",
         cargo_build_args("autd3-firmware-writer", None, false),
         root,
     )?;
     let bin = cargo_bin(root, None, false, "autd3-firmware-writer");
+    run(&bin.to_string_lossy(), args, root)
+}
 
+fn write(root: &Path, args: &WriteArgs) -> Result<()> {
     let mut cli_args: Vec<String> = Vec::new();
     if let Some(version) = &args.version {
         cli_args.push("--version".to_string());
@@ -173,5 +181,5 @@ fn write(root: &Path, args: &WriteArgs) -> Result<()> {
         cli_args.push("--list".to_string());
     }
 
-    run(&bin.to_string_lossy(), &cli_args, root)
+    run_writer(root, &cli_args)
 }

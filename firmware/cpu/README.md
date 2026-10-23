@@ -14,7 +14,7 @@ firmware/cpu/
 
 ```bash
 cargo xtask cpu build          # cargo build (staticlib + loader), link, merge -> build/autd3-cpu.bin
-cargo xtask cpu flash          # build, then write autd3-cpu.bin to the device with J-Link
+cargo xtask cpu flash          # build, then write autd3-cpu.bin with firmware-writer (J-Link); power-cycle to boot it
 cargo xtask cpu test           # host unit tests of the portable firmware logic
 cargo xtask cpu lint
 cargo xtask cpu format         # add --fix to rewrite instead of only checking
