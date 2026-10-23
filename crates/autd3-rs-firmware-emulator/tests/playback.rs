@@ -7,7 +7,7 @@ mod modulation;
 use autd3_cpu_wire::ModulationBank;
 use autd3_cpu_wire::cpu_params::SYS_TIME_TRANSITION_MARGIN;
 use autd3_cpu_wire::fpga_params::REP_INFINITE;
-use autd3_cpu_wire::payload::{GpioInPayload, TransitionMode, WriteModPayload};
+use autd3_cpu_wire::payload::{GpioInPayload, TransitionModeKind, WriteModPayload};
 use autd3_rs_core::params::ULTRASOUND_FREQ_HZ;
 use autd3_rs_core::protocol::{Cmd, DeviceErrorCode};
 use autd3_rs_firmware_emulator::Device;
@@ -38,7 +38,7 @@ fn modulation_buffer_and_index_follow_time() {
     let write = write_modulation(bank, &samples);
 
     let config = config_modulation(bank, divider, samples.len() as u32, REP_INFINITE);
-    let change = activate_modulation_bank(bank, TransitionMode::Immediate, 0);
+    let change = activate_modulation_bank(bank, TransitionModeKind::Immediate, 0);
 
     let mut device = Device::new(NUM_TRANSDUCERS);
     assert_eq!(
@@ -83,7 +83,7 @@ fn modulation_finite_loop_stops_after_rep() {
     let write = write_modulation(bank, &samples);
 
     let config = config_modulation(bank, divider, samples.len() as u32, rep);
-    let change = activate_modulation_bank(bank, TransitionMode::SyncIdx, 0);
+    let change = activate_modulation_bank(bank, TransitionModeKind::SyncIdx, 0);
 
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(Cmd::WriteModulationBuffer, &write));
@@ -117,7 +117,7 @@ fn sys_time_transition_within_margin_is_rejected() {
     let config = config_modulation(bank, 1, samples.len() as u32, 3);
 
     let sys_time = 1_000_000_000u64;
-    let change = |value: u64| activate_modulation_bank(bank, TransitionMode::SysTime, value);
+    let change = |value: u64| activate_modulation_bank(bank, TransitionModeKind::SysTime, value);
 
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(Cmd::WriteModulationBuffer, &write));
@@ -162,7 +162,7 @@ fn sys_time_transition_margin_follows_the_cpu_config() {
     let config = config_modulation(bank, 1, samples.len() as u32, 3);
 
     let sys_time = 1_000_000_000u64;
-    let change = |value: u64| activate_modulation_bank(bank, TransitionMode::SysTime, value);
+    let change = |value: u64| activate_modulation_bank(bank, TransitionModeKind::SysTime, value);
     let cpu_config = SetCpuConfigPayload::encode(&CpuConfig {
         sys_time_transition_margin: std::time::Duration::from_nanos(u64::from(MARGIN_NS)),
         ..CpuConfig::default()
@@ -210,7 +210,7 @@ fn gpio_transition_waits_for_emulated_gpio_in() {
     let write = write_modulation(bank, &samples);
 
     let config = config_modulation(bank, 1, samples.len() as u32, 1);
-    let change = activate_modulation_bank(bank, TransitionMode::Gpio, GPIO_IN_PIN);
+    let change = activate_modulation_bank(bank, TransitionModeKind::Gpio, GPIO_IN_PIN);
 
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(Cmd::WriteModulationBuffer, &write));

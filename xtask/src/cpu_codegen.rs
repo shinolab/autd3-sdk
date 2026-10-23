@@ -73,7 +73,7 @@ const TYPED_ENUMS: &[Typed] = &[
     },
     Typed {
         sv: "transition_mode_t",
-        rust: "TransitionMode",
+        rust: "TransitionModeKind",
         prefix: "TRANSITION_MODE_",
         kind: TypedKind::Enum,
     },

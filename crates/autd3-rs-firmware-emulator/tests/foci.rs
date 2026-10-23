@@ -6,7 +6,7 @@ mod pattern;
 
 use autd3_cpu_wire::PatternBank;
 use autd3_cpu_wire::fpga_params::REP_INFINITE;
-use autd3_cpu_wire::payload::{EmissionType, TransitionMode, WriteFociPayload};
+use autd3_cpu_wire::payload::{EmissionType, TransitionModeKind, WriteFociPayload};
 use autd3_rs_core::protocol::{Cmd, DeviceErrorCode};
 use autd3_rs_core::value::Intensity;
 use autd3_rs_firmware_emulator::Device;
@@ -44,7 +44,7 @@ fn single_focus_synthesizes_phases() {
         SOUND_SPEED,
         REP_INFINITE,
     );
-    let change = activate_pattern_bank(BANK, TransitionMode::Immediate);
+    let change = activate_pattern_bank(BANK, TransitionModeKind::Immediate);
 
     let mut device = Device::new(NUM_TRANSDUCERS);
     assert_eq!(

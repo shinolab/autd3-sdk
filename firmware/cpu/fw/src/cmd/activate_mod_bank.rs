@@ -23,7 +23,7 @@ pub(crate) fn handle<P: Port>(
 
 #[cfg(all(test, not(loom)))]
 mod tests {
-    use crate::fpga::TransitionMode;
+    use crate::fpga::TransitionModeKind;
     use crate::fpga_params::{
         ADDR_MOD_REQ_RD_BANK, ADDR_MOD_TRANSITION_MODE, ADDR_MOD_TRANSITION_VALUE_0, CtlFlags,
     };
@@ -39,12 +39,12 @@ mod tests {
         let mut h = Harness::new();
         let latches_at_boot = h.latch_count(CtlFlags::MOD_SET);
 
-        h.deliver(&activate_mod_bank(1, TransitionMode::Immediate, 0));
+        h.deliver(&activate_mod_bank(1, TransitionModeKind::Immediate, 0));
 
         assert_eq!(h.status(), Error::None);
         assert_eq!(
             h.ctl(ADDR_MOD_TRANSITION_MODE),
-            TransitionMode::Immediate as u16
+            TransitionModeKind::Immediate as u16
         );
         assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 1);
         assert_eq!(h.latch_count(CtlFlags::MOD_SET), latches_at_boot + 1);
@@ -56,7 +56,7 @@ mod tests {
         let mut h = Harness::new();
         h.deliver(&activate_mod_bank(
             invalid_bank(),
-            TransitionMode::Immediate,
+            TransitionModeKind::Immediate,
             0,
         ));
         assert_eq!(h.status(), Error::InvalidPayload);
@@ -67,11 +67,11 @@ mod tests {
     fn activate_mod_bank_rejects_timed_transition_on_infinite_loop() {
         let mut h = Harness::new();
 
-        h.deliver(&activate_mod_bank(1, TransitionMode::SyncIdx, 0));
+        h.deliver(&activate_mod_bank(1, TransitionModeKind::SyncIdx, 0));
         assert_eq!(h.status(), Error::InvalidTransitionMode);
         assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 0);
 
-        h.deliver(&activate_mod_bank(1, TransitionMode::Ext, 0));
+        h.deliver(&activate_mod_bank(1, TransitionModeKind::Ext, 0));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 1);
     }
@@ -82,11 +82,11 @@ mod tests {
         h.deliver(&config_mod_rep(1, 10, 100, 4));
         assert_eq!(h.status(), Error::None);
 
-        h.deliver(&activate_mod_bank(1, TransitionMode::Immediate, 0));
+        h.deliver(&activate_mod_bank(1, TransitionModeKind::Immediate, 0));
         assert_eq!(h.status(), Error::InvalidTransitionMode);
         assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 0);
 
-        h.deliver(&activate_mod_bank(1, TransitionMode::Gpio, 1));
+        h.deliver(&activate_mod_bank(1, TransitionModeKind::Gpio, 1));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 1);
     }
@@ -97,10 +97,13 @@ mod tests {
         h.deliver(&config_mod_rep(1, 10, 100, 4));
         assert_eq!(h.status(), Error::None);
 
-        h.deliver(&activate_mod_bank(1, TransitionMode::Gpio, 3));
+        h.deliver(&activate_mod_bank(1, TransitionModeKind::Gpio, 3));
 
         assert_eq!(h.status(), Error::None);
-        assert_eq!(h.ctl(ADDR_MOD_TRANSITION_MODE), TransitionMode::Gpio as u16);
+        assert_eq!(
+            h.ctl(ADDR_MOD_TRANSITION_MODE),
+            TransitionModeKind::Gpio as u16
+        );
         assert_eq!(h.ctl(ADDR_MOD_TRANSITION_VALUE_0), 3);
         assert_eq!(h.ctl(ADDR_MOD_TRANSITION_VALUE_0 + 1), 0);
         assert_eq!(h.ctl(ADDR_MOD_TRANSITION_VALUE_0 + 2), 0);
@@ -116,7 +119,7 @@ mod tests {
 
         h.deliver(&activate_mod_bank(
             1,
-            TransitionMode::SysTime,
+            TransitionModeKind::SysTime,
             1_000_000_000 + SYS_TIME_TRANSITION_MARGIN_NS - 1,
         ));
         assert_eq!(h.status(), Error::MissTransitionTime);
@@ -124,7 +127,7 @@ mod tests {
 
         h.deliver(&activate_mod_bank(
             1,
-            TransitionMode::SysTime,
+            TransitionModeKind::SysTime,
             1_000_000_000 + SYS_TIME_TRANSITION_MARGIN_NS,
         ));
         assert_eq!(h.status(), Error::None);

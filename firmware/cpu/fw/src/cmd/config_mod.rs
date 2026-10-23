@@ -20,7 +20,7 @@ pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error>
 
 #[cfg(all(test, not(loom)))]
 mod tests {
-    use crate::fpga::{REP_INFINITE, TransitionMode};
+    use crate::fpga::{REP_INFINITE, TransitionModeKind};
     use crate::fpga_params::{
         ADDR_MOD_CYCLE0, ADDR_MOD_FREQ_DIV0, ADDR_MOD_REP0, ADDR_MOD_REQ_RD_BANK,
         ADDR_MOD_TRANSITION_MODE, CtlFlags,
@@ -45,7 +45,7 @@ mod tests {
         assert_eq!(h.ctl(ADDR_MOD_REP0 + 1), REP_INFINITE);
         assert_eq!(
             h.ctl(ADDR_MOD_TRANSITION_MODE),
-            TransitionMode::SyncIdx as u16
+            TransitionModeKind::SyncIdx as u16
         );
         assert_eq!(h.ctl(ADDR_MOD_REQ_RD_BANK), 0);
         assert_eq!(h.latch_count(CtlFlags::MOD_SET), latches_at_boot);

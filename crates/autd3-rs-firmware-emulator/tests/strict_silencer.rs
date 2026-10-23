@@ -10,7 +10,7 @@ use autd3_cpu_wire::fpga_params::REP_INFINITE;
 use autd3_cpu_wire::payload::{
     ActivatePatternBankPayload, ConfigPatternPayload, EmissionType,
     SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY, SILENCER_DEFAULT_COMPLETION_STEPS_PHASE,
-    SILENCER_DEFAULT_UPDATE_RATE, SilencerFlags, SilencerPayload, TransitionMode,
+    SILENCER_DEFAULT_UPDATE_RATE, SilencerFlags, SilencerPayload, TransitionModeKind,
 };
 use autd3_rs_core::protocol::{Cmd, DeviceErrorCode};
 use autd3_rs_firmware_emulator::Device;
@@ -22,10 +22,10 @@ use common::{NUM_TRANSDUCERS, frame};
 
 const STRICT: SilencerFlags = SilencerFlags::STRICT_MODE;
 const FIXED_UPDATE_RATE: SilencerFlags = SilencerFlags::FIXED_UPDATE_RATE_MODE;
-const IMMEDIATE: TransitionMode = TransitionMode::Immediate;
-const SYNC_IDX: TransitionMode = TransitionMode::SyncIdx;
-const SYS_TIME: TransitionMode = TransitionMode::SysTime;
-const EXT: TransitionMode = TransitionMode::Ext;
+const IMMEDIATE: TransitionModeKind = TransitionModeKind::Immediate;
+const SYNC_IDX: TransitionModeKind = TransitionModeKind::SyncIdx;
+const SYS_TIME: TransitionModeKind = TransitionModeKind::SysTime;
+const EXT: TransitionModeKind = TransitionModeKind::Ext;
 
 struct Host {
     device: Device,
@@ -56,7 +56,7 @@ impl Host {
     fn activate_modulation_bank(
         &mut self,
         bank: ModulationBank,
-        mode: TransitionMode,
+        mode: TransitionModeKind,
         value: u64,
     ) -> DeviceErrorCode {
         self.send(
@@ -82,7 +82,7 @@ impl Host {
     fn activate_pattern_bank(
         &mut self,
         bank: PatternBank,
-        mode: TransitionMode,
+        mode: TransitionModeKind,
     ) -> DeviceErrorCode {
         let payload = ActivatePatternBankPayload {
             bank,

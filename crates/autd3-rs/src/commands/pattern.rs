@@ -47,7 +47,7 @@ impl Operation for Pattern<'_> {
     }
 
     fn encode(&self, device: &Device, out: &mut Datagram) -> Result<(), Error> {
-        let header = WritePatternFusedPayload::new(self.bank, self.transition_mode.as_wire());
+        let header = WritePatternFusedPayload::new(self.bank, self.transition_mode);
         let rest = write_header(out, &header);
         let (data, _) = rest
             .split_first_chunk_mut::<PATTERN_RAW_DATA_LEN>()
