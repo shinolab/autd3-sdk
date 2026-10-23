@@ -45,11 +45,8 @@ class AmplitudeTarget:
 
 @final
 class IntensityConstraint:
-    Normalize: ClassVar[IntensityConstraint]
     @staticmethod
     def Multiply(value: float) -> IntensityConstraint: ...
-    @staticmethod
-    def Uniform(intensity: Intensity | int) -> IntensityConstraint: ...
     @staticmethod
     def Clamp(min: Intensity | int, max: Intensity | int) -> IntensityConstraint: ...
     def __eq__(self, other: object) -> bool: ...
@@ -122,14 +119,11 @@ class GreedyOption:
         cls,
         phase_quantization_levels: int = ...,
         directivity: Directivity = ...,
-        mask: TransducerMask = ...,
     ) -> GreedyOption: ...
     @property
     def phase_quantization_levels(self) -> int: ...
     @property
     def directivity(self) -> Directivity: ...
-    @property
-    def mask(self) -> TransducerMask: ...
 
 def naive(
     geometry: Geometry,

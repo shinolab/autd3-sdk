@@ -45,13 +45,12 @@ Therefore, a constraint is specified for converting the amplitude obtained from 
 
 |                                 |                                                |
 |---------------------------------|------------------------------------------------|
-| `Normalize`                     | Normalizes by the maximum value                |
-| `Multiply(f32)`                 | Multiplies by a coefficient after normalization and clamps |
-| `Uniform(Intensity)`            | Sets all transducers to a constant intensity   |
+| `Multiply(f32)`                 | Normalizes by the maximum value, multiplies by a coefficient, and clamps |
 | `Clamp(Intensity, Intensity)`   | Clamps the amplitude to the specified range     |
 
 It is specified via the `constraint` field of each Option.
 `greedy` does not optimize the intensities, so it has no `constraint` and takes the intensities as an input.
+To give every transducer the same intensity, rewrite the intensity buffer yourself after the optimization.
 The default is `Clamp(Intensity::MIN, Intensity::MAX)` for all of `naive` / `gs` / `gspat`.
 
 ### Errors
@@ -68,7 +67,7 @@ It is specified via the `directivity` field of each Option.
 ### TransducerMask
 
 Selects the transducers to include in the optimization.
-It is specified via the `mask` field of each Option (the default is `AllEnabled`).
+It is specified via the `mask` field of the `naive` / `gs` / `gspat` Options (the default is `AllEnabled`). `greedy` has no `mask`; transducers whose intensity is 0 are left out of the search.
 
 - `TransducerMask::AllEnabled` — uses all transducers (default).
 - `TransducerMask::Masked(&[Vec<bool>])` — specifies enabled/disabled for each transducer individually.

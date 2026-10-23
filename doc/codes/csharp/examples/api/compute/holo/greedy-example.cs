@@ -34,7 +34,6 @@ Holo.Greedy(
     {
         PhaseQuantizationLevels = 16,
         Directivity = Directivity.Sphere,
-        Mask = TransducerMask.AllEnabled,
     },
     phases
 );

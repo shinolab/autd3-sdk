@@ -1,5 +1,5 @@
 ---
-title: radiation_pressure
+title: radiation_pressure_inplace
 description: Modulation that applies radiation pressure correction to an existing modulation waveform
 sidebar:
   order: 24
@@ -18,11 +18,11 @@ import csSample from "@codes/csharp/examples/api/compute/modulation/radiation.cs
 import csFullSample from "@codes/csharp/examples/api/compute/modulation/radiation-example.cs?raw";
 import { excerpt } from "@lib/excerpt";
 
-`radiation_pressure` applies radiation pressure correction to a modulation waveform. It corrects a waveform computed by `sine` or similar.
+`radiation_pressure_inplace` applies radiation pressure correction to a modulation waveform. It rewrites a waveform computed by `sine` or similar in place.
 
 Acoustic radiation pressure is proportional to the square of the sound pressure.
 Since `sine` and similar functions specify the amplitude of the sound pressure, taking the square root of each sample is necessary when the radiation pressure should match the target waveform.
-`radiation_pressure` performs this correction.
+`radiation_pressure_inplace` performs this correction.
 
 Each sample <Math tex="m" /> is rewritten by the following equation.
 
@@ -34,15 +34,13 @@ Each sample <Math tex="m" /> is rewritten by the following equation.
 
 <CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
 
-### radiation_pressure
+### radiation_pressure_inplace
 
-| Parameter | Type           | Description                    |
-| ----- | -------------- | ------------------------------ |
-| `src` | `&[u8]`        | modulation waveform before correction |
-| `dst` | `&mut Vec<u8>` | buffer to write the corrected waveform |
+| Parameter | Type        | Description                                        |
+| --------- | ----------- | -------------------------------------------------- |
+| `samples` | `&mut [u8]` | modulation waveform to correct (rewritten in place) |
 
-There is also `radiation_pressure_inplace`, which rewrites in place.
-The same buffer cannot be passed as both `src` and `dst` (a compile error under the borrow rules in Rust, `ValueError` in Python, and `Autd3Exception` (`InvalidArgument`) in C#). Use `radiation_pressure_inplace` to rewrite a buffer in place.
+To keep the waveform before correction, copy the buffer first and pass the copy.
 
 ## Example
 

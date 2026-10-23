@@ -3,7 +3,6 @@ use autd3_ffi_abi::{
     slice_mut, slice_ref, write_out,
 };
 use autd3_rs_core::geometry::Autd3;
-use autd3_rs_core::value::{Intensity, Phase};
 use autd3_rs_core::{Angle, Geometry, Length, Point3, UnitVector3, Vector3, Velocity};
 use zerocopy::{FromBytes, Immutable, IntoBytes};
 
@@ -224,47 +223,6 @@ pub unsafe extern "C" fn autd3_pattern_focus(
     }
 }
 
-unsafe fn with_device_dst<T: FromBytes + IntoBytes>(
-    geometry: *const Geometry,
-    dev: usize,
-    dst: *mut u8,
-    f: impl FnOnce(&autd3_rs_core::geometry::Device, &mut [T]),
-) -> i32 {
-    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
-        return -1;
-    };
-    let Some(device) = geometry.iter().nth(dev) else {
-        return -1;
-    };
-    let Some(dst) = (unsafe { slice_mut(dst, device.num_transducers()) }) else {
-        return -1;
-    };
-    let Ok(dst) = <[T]>::mut_from_bytes(dst) else {
-        return -1;
-    };
-    f(device, dst);
-    0
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pattern_focus_device(
-    geometry: *const Geometry,
-    dev: usize,
-    target: *const f32,
-    wavelength_mm: f32,
-    dst: *mut u8,
-) -> i32 {
-    let Some(target) = (unsafe { point(target) }) else {
-        return -1;
-    };
-
-    unsafe {
-        with_device_dst(geometry, dev, dst, |device, buf| {
-            autd3_rs_pattern::focus_device(device, target, Length::from_mm(wavelength_mm), buf);
-        })
-    }
-}
-
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_pattern_focus_transducer(
     position: *const f32,
@@ -298,25 +256,6 @@ pub unsafe extern "C" fn autd3_pattern_plane(
     unsafe {
         with_geometry_buffer(geometry, buffer, |geometry, buf| {
             autd3_rs_pattern::plane(geometry, dir, Length::from_mm(wavelength_mm), buf);
-        })
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pattern_plane_device(
-    geometry: *const Geometry,
-    dev: usize,
-    dir: *const f32,
-    wavelength_mm: f32,
-    dst: *mut u8,
-) -> i32 {
-    let Some(dir) = (unsafe { unit_vector(dir) }) else {
-        return -1;
-    };
-
-    unsafe {
-        with_device_dst(geometry, dev, dst, |device, buf| {
-            autd3_rs_pattern::plane_device(device, dir, Length::from_mm(wavelength_mm), buf);
         })
     }
 }
@@ -357,34 +296,6 @@ pub unsafe extern "C" fn autd3_pattern_bessel(
         with_geometry_buffer(geometry, buffer, |geometry, buf| {
             autd3_rs_pattern::bessel(
                 geometry,
-                apex,
-                dir,
-                Angle::from_rad(theta_rad),
-                Length::from_mm(wavelength_mm),
-                buf,
-            );
-        })
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pattern_bessel_device(
-    geometry: *const Geometry,
-    dev: usize,
-    apex: *const f32,
-    dir: *const f32,
-    theta_rad: f32,
-    wavelength_mm: f32,
-    dst: *mut u8,
-) -> i32 {
-    let (Some(apex), Some(dir)) = (unsafe { point(apex) }, unsafe { unit_vector(dir) }) else {
-        return -1;
-    };
-
-    unsafe {
-        with_device_dst(geometry, dev, dst, |device, buf| {
-            autd3_rs_pattern::bessel_device(
-                device,
                 apex,
                 dir,
                 Angle::from_rad(theta_rad),
@@ -491,41 +402,6 @@ pub unsafe extern "C" fn autd3_pattern_laguerre_gaussian_phase(
 
 #[unsafe(no_mangle)]
 #[allow(clippy::too_many_arguments)]
-pub unsafe extern "C" fn autd3_pattern_laguerre_gaussian_phase_device(
-    geometry: *const Geometry,
-    dev: usize,
-    target: *const f32,
-    axis: *const f32,
-    p: u32,
-    l: i32,
-    waist_mm: f32,
-    wavelength_mm: f32,
-    dst: *mut u8,
-) -> i32 {
-    let (Some(target), Some(axis), Some(option)) = (
-        unsafe { point(target) },
-        unsafe { unit_vector(axis) },
-        laguerre_gaussian_option(p, l, waist_mm),
-    ) else {
-        return -1;
-    };
-
-    unsafe {
-        with_device_dst(geometry, dev, dst, |device, buf| {
-            autd3_rs_pattern::laguerre_gaussian_phase_device(
-                device,
-                target,
-                axis,
-                option,
-                Length::from_mm(wavelength_mm),
-                buf,
-            );
-        })
-    }
-}
-
-#[unsafe(no_mangle)]
-#[allow(clippy::too_many_arguments)]
 pub unsafe extern "C" fn autd3_pattern_laguerre_gaussian_phase_transducer(
     position: *const f32,
     target: *const f32,
@@ -595,41 +471,6 @@ pub unsafe extern "C" fn autd3_pattern_laguerre_gaussian_intensity(
 
 #[unsafe(no_mangle)]
 #[allow(clippy::too_many_arguments)]
-pub unsafe extern "C" fn autd3_pattern_laguerre_gaussian_intensity_device(
-    geometry: *const Geometry,
-    dev: usize,
-    target: *const f32,
-    axis: *const f32,
-    p: u32,
-    l: i32,
-    waist_mm: f32,
-    wavelength_mm: f32,
-    dst: *mut u8,
-) -> i32 {
-    let (Some(target), Some(axis), Some(option)) = (
-        unsafe { point(target) },
-        unsafe { unit_vector(axis) },
-        laguerre_gaussian_option(p, l, waist_mm),
-    ) else {
-        return -1;
-    };
-
-    unsafe {
-        with_device_dst(geometry, dev, dst, |device, buf| {
-            autd3_rs_pattern::laguerre_gaussian_intensity_device(
-                device,
-                target,
-                axis,
-                option,
-                Length::from_mm(wavelength_mm),
-                buf,
-            );
-        })
-    }
-}
-
-#[unsafe(no_mangle)]
-#[allow(clippy::too_many_arguments)]
 pub unsafe extern "C" fn autd3_pattern_hermite_gaussian_phase(
     geometry: *const Geometry,
     target: *const f32,
@@ -654,44 +495,6 @@ pub unsafe extern "C" fn autd3_pattern_hermite_gaussian_phase(
         with_geometry_buffer(geometry, buffer, |geometry, buf| {
             autd3_rs_pattern::hermite_gaussian_phase(
                 geometry,
-                target,
-                axis,
-                x_dir,
-                option,
-                Length::from_mm(wavelength_mm),
-                buf,
-            );
-        })
-    }
-}
-
-#[unsafe(no_mangle)]
-#[allow(clippy::too_many_arguments)]
-pub unsafe extern "C" fn autd3_pattern_hermite_gaussian_phase_device(
-    geometry: *const Geometry,
-    dev: usize,
-    target: *const f32,
-    axis: *const f32,
-    x_dir: *const f32,
-    m: u32,
-    n: u32,
-    waist_mm: f32,
-    wavelength_mm: f32,
-    dst: *mut u8,
-) -> i32 {
-    let (Some(target), Some(axis), Some(x_dir), Some(option)) = (
-        unsafe { point(target) },
-        unsafe { unit_vector(axis) },
-        unsafe { unit_vector(x_dir) },
-        hermite_gaussian_option(m, n, waist_mm),
-    ) else {
-        return -1;
-    };
-
-    unsafe {
-        with_device_dst(geometry, dev, dst, |device, buf| {
-            autd3_rs_pattern::hermite_gaussian_phase_device(
-                device,
                 target,
                 axis,
                 x_dir,
@@ -778,78 +581,12 @@ pub unsafe extern "C" fn autd3_pattern_hermite_gaussian_intensity(
     }
 }
 
-#[unsafe(no_mangle)]
-#[allow(clippy::too_many_arguments)]
-pub unsafe extern "C" fn autd3_pattern_hermite_gaussian_intensity_device(
-    geometry: *const Geometry,
-    dev: usize,
-    target: *const f32,
-    axis: *const f32,
-    x_dir: *const f32,
-    m: u32,
-    n: u32,
-    waist_mm: f32,
-    wavelength_mm: f32,
-    dst: *mut u8,
-) -> i32 {
-    let (Some(target), Some(axis), Some(x_dir), Some(option)) = (
-        unsafe { point(target) },
-        unsafe { unit_vector(axis) },
-        unsafe { unit_vector(x_dir) },
-        hermite_gaussian_option(m, n, waist_mm),
-    ) else {
-        return -1;
-    };
-
-    unsafe {
-        with_device_dst(geometry, dev, dst, |device, buf| {
-            autd3_rs_pattern::hermite_gaussian_intensity_device(
-                device,
-                target,
-                axis,
-                x_dir,
-                option,
-                Length::from_mm(wavelength_mm),
-                buf,
-            );
-        })
-    }
-}
-
-unsafe fn with_buffer<T>(buffer: *mut Buffer<T>, f: impl FnOnce(&mut [Vec<T>])) -> i32 {
-    let Some(buffer) = (unsafe { handle_mut(buffer) }) else {
-        return -1;
-    };
-    f(&mut buffer.0);
-    0
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pattern_set_intensity(
-    intensity: u8,
-    buffer: *mut IntensityBuffer,
-) -> i32 {
-    unsafe {
-        with_buffer(buffer, |buf| {
-            autd3_rs_pattern::set_intensity(Intensity(intensity), buf);
-        })
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pattern_set_phase(phase: u8, buffer: *mut PhaseBuffer) -> i32 {
-    unsafe { with_buffer(buffer, |buf| autd3_rs_pattern::set_phase(Phase(phase), buf)) }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_pattern_add_phase(phase: u8, buffer: *mut PhaseBuffer) -> i32 {
-    unsafe { with_buffer(buffer, |buf| autd3_rs_pattern::add_phase(Phase(phase), buf)) }
-}
-
 autd3_ffi_abi::export_abi_version!();
 
 #[cfg(test)]
 mod tests {
+    use autd3_rs_core::value::{Intensity, Phase};
+
     use super::*;
 
     fn geometry() -> Geometry {
@@ -858,13 +595,17 @@ mod tests {
 
     fn phases(geometry: &Geometry, phase: u8) -> PhaseBuffer {
         let mut buffer = Buffer(geometry.phase_buffer());
-        autd3_rs_pattern::set_phase(Phase(phase), &mut buffer.0);
+        for slot in &mut buffer.0 {
+            slot.fill(Phase(phase));
+        }
         buffer
     }
 
     fn intensities(geometry: &Geometry, intensity: u8) -> IntensityBuffer {
         let mut buffer = Buffer(geometry.intensity_buffer());
-        autd3_rs_pattern::set_intensity(Intensity(intensity), &mut buffer.0);
+        for slot in &mut buffer.0 {
+            slot.fill(Intensity(intensity));
+        }
         buffer
     }
 
@@ -949,86 +690,6 @@ mod tests {
     }
 
     #[test]
-    fn set_and_add_update_the_buffers_in_place() {
-        let geometry = geometry();
-        let mut phase_buffer = phases(&geometry, 0);
-        let mut intensity_buffer = intensities(&geometry, 0);
-
-        assert_eq!(
-            unsafe { autd3_pattern_set_intensity(0x80, &raw mut intensity_buffer) },
-            0
-        );
-        assert_eq!(
-            unsafe { autd3_pattern_set_phase(0xF0, &raw mut phase_buffer) },
-            0
-        );
-        assert_eq!(
-            unsafe { autd3_pattern_add_phase(0x20, &raw mut phase_buffer) },
-            0
-        );
-        assert!(phase_buffer.0.iter().flatten().all(|&p| p == Phase(0x10)));
-        assert!(
-            intensity_buffer
-                .0
-                .iter()
-                .flatten()
-                .all(|&i| i == Intensity(0x80))
-        );
-
-        assert_eq!(
-            unsafe { autd3_pattern_set_intensity(0, std::ptr::null_mut()) },
-            -1
-        );
-    }
-
-    #[test]
-    fn device_level_functions_write_the_given_array() {
-        let geometry = geometry();
-        let n = Autd3::NUM_TRANSDUCERS;
-        let mut dst = vec![0u8; n];
-        let target = [0.0_f32, 0.0, 150.0];
-
-        let result = unsafe {
-            autd3_pattern_focus_device(
-                &raw const geometry,
-                0,
-                target.as_ptr(),
-                8.5,
-                dst.as_mut_ptr(),
-            )
-        };
-        assert_eq!(result, 0);
-        for (tr, &p) in dst.iter().enumerate() {
-            let mut phase = 0u8;
-            let position = geometry[0].position(tr);
-            let pos = [position.x, position.y, position.z];
-            assert_eq!(
-                unsafe {
-                    autd3_pattern_focus_transducer(
-                        pos.as_ptr(),
-                        target.as_ptr(),
-                        8.5,
-                        &raw mut phase,
-                    )
-                },
-                0
-            );
-            assert_eq!(p, phase);
-        }
-
-        let result = unsafe {
-            autd3_pattern_focus_device(
-                &raw const geometry,
-                2,
-                target.as_ptr(),
-                8.5,
-                dst.as_mut_ptr(),
-            )
-        };
-        assert_eq!(result, -1);
-    }
-
-    #[test]
     fn laguerre_gaussian_geometry_level_matches_the_rust_api() {
         let geometry = geometry();
         let target = [86.0_f32, 66.0, 150.0];
@@ -1090,91 +751,6 @@ mod tests {
         );
         assert_eq!(phase_buffer.0, expected_p);
         assert_eq!(intensity_buffer.0, expected_i);
-    }
-
-    #[test]
-    fn laguerre_gaussian_device_level_matches_the_rust_api() {
-        let geometry = geometry();
-        let target = [86.0_f32, 66.0, 150.0];
-        let axis = [0.0_f32, 0.0, 1.0];
-        let option = autd3_rs_pattern::LaguerreGaussianOption {
-            p: 1,
-            l: 2,
-            waist: Length::from_mm(10.0),
-        };
-        let lambda = Length::from_mm(8.5);
-        let rust_target = Point3::new(86.0, 66.0, 150.0);
-
-        let mut expected_p = geometry.phase_buffer();
-        let mut expected_i = geometry.intensity_buffer();
-        autd3_rs_pattern::laguerre_gaussian_phase(
-            &geometry,
-            rust_target,
-            Vector3::z_axis(),
-            option,
-            lambda,
-            &mut expected_p,
-        );
-        autd3_rs_pattern::laguerre_gaussian_intensity(
-            &geometry,
-            rust_target,
-            Vector3::z_axis(),
-            option,
-            lambda,
-            &mut expected_i,
-        );
-
-        let mut dst_p = vec![0u8; Autd3::NUM_TRANSDUCERS];
-        let mut dst_i = vec![0u8; Autd3::NUM_TRANSDUCERS];
-        let result = unsafe {
-            autd3_pattern_laguerre_gaussian_phase_device(
-                &raw const geometry,
-                1,
-                target.as_ptr(),
-                axis.as_ptr(),
-                1,
-                2,
-                10.0,
-                8.5,
-                dst_p.as_mut_ptr(),
-            )
-        };
-        assert_eq!(result, 0);
-        let result = unsafe {
-            autd3_pattern_laguerre_gaussian_intensity_device(
-                &raw const geometry,
-                1,
-                target.as_ptr(),
-                axis.as_ptr(),
-                1,
-                2,
-                10.0,
-                8.5,
-                dst_i.as_mut_ptr(),
-            )
-        };
-        assert_eq!(result, 0);
-        for (tr, (&p, &i)) in dst_p.iter().zip(&dst_i).enumerate() {
-            assert_eq!(p, expected_p[1][tr].0);
-            assert_eq!(i, expected_i[1][tr].0);
-            let position = geometry[1].position(tr);
-            let pos = [position.x, position.y, position.z];
-            let mut phase = 0u8;
-            let result = unsafe {
-                autd3_pattern_laguerre_gaussian_phase_transducer(
-                    pos.as_ptr(),
-                    target.as_ptr(),
-                    axis.as_ptr(),
-                    1,
-                    2,
-                    10.0,
-                    8.5,
-                    &raw mut phase,
-                )
-            };
-            assert_eq!(result, 0);
-            assert_eq!(phase, p);
-        }
     }
 
     #[test]
@@ -1245,98 +821,6 @@ mod tests {
         );
         assert_eq!(phase_buffer.0, expected_p);
         assert_eq!(intensity_buffer.0, expected_i);
-    }
-
-    #[test]
-    fn hermite_gaussian_device_level_matches_the_rust_api() {
-        let geometry = geometry();
-        let target = [86.0_f32, 66.0, 150.0];
-        let axis = [0.0_f32, 0.0, 1.0];
-        let x_dir = [1.0_f32, 1.0, 0.0];
-        let option = autd3_rs_pattern::HermiteGaussianOption {
-            m: 1,
-            n: 2,
-            waist: Length::from_mm(10.0),
-        };
-        let lambda = Length::from_mm(8.5);
-        let rust_target = Point3::new(86.0, 66.0, 150.0);
-        let rust_x_dir = UnitVector3::new_normalize(Vector3::new(1.0, 1.0, 0.0));
-
-        let mut expected_p = geometry.phase_buffer();
-        let mut expected_i = geometry.intensity_buffer();
-        autd3_rs_pattern::hermite_gaussian_phase(
-            &geometry,
-            rust_target,
-            Vector3::z_axis(),
-            rust_x_dir,
-            option,
-            lambda,
-            &mut expected_p,
-        );
-        autd3_rs_pattern::hermite_gaussian_intensity(
-            &geometry,
-            rust_target,
-            Vector3::z_axis(),
-            rust_x_dir,
-            option,
-            lambda,
-            &mut expected_i,
-        );
-
-        let mut dst_p = vec![0u8; Autd3::NUM_TRANSDUCERS];
-        let mut dst_i = vec![0u8; Autd3::NUM_TRANSDUCERS];
-        let result = unsafe {
-            autd3_pattern_hermite_gaussian_phase_device(
-                &raw const geometry,
-                1,
-                target.as_ptr(),
-                axis.as_ptr(),
-                x_dir.as_ptr(),
-                1,
-                2,
-                10.0,
-                8.5,
-                dst_p.as_mut_ptr(),
-            )
-        };
-        assert_eq!(result, 0);
-        let result = unsafe {
-            autd3_pattern_hermite_gaussian_intensity_device(
-                &raw const geometry,
-                1,
-                target.as_ptr(),
-                axis.as_ptr(),
-                x_dir.as_ptr(),
-                1,
-                2,
-                10.0,
-                8.5,
-                dst_i.as_mut_ptr(),
-            )
-        };
-        assert_eq!(result, 0);
-        for (tr, (&p, &i)) in dst_p.iter().zip(&dst_i).enumerate() {
-            assert_eq!(p, expected_p[1][tr].0);
-            assert_eq!(i, expected_i[1][tr].0);
-            let position = geometry[1].position(tr);
-            let pos = [position.x, position.y, position.z];
-            let mut phase = 0u8;
-            let result = unsafe {
-                autd3_pattern_hermite_gaussian_phase_transducer(
-                    pos.as_ptr(),
-                    target.as_ptr(),
-                    axis.as_ptr(),
-                    x_dir.as_ptr(),
-                    1,
-                    2,
-                    10.0,
-                    8.5,
-                    &raw mut phase,
-                )
-            };
-            assert_eq!(result, 0);
-            assert_eq!(phase, p);
-        }
     }
 
     #[test]

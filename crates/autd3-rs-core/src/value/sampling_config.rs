@@ -22,15 +22,13 @@ pub const fn is_integer(a: f64) -> bool {
 #[non_exhaustive]
 pub enum SamplingConfigError {
     #[error("Sampling frequency ({0:?}) must divide the ultrasound frequency")]
-    FreqInvalid(Freq<f32>),
+    FreqInvalid(Freq),
     #[error("Sampling period ({0:?}) must be a multiple of the ultrasound period")]
     PeriodInvalid(Duration),
     #[error("Sampling frequency ({0:?}) is out of range ([{1:?}, {2:?}])")]
-    FreqOutOfRange(Freq<f32>, Freq<f32>, Freq<f32>),
+    FreqOutOfRange(Freq, Freq, Freq),
     #[error("Sampling period ({0:?}) is out of range ([{1:?}, {2:?}])")]
     PeriodOutOfRange(Duration, Duration, Duration),
-    #[error("Sampling frequency must be a number, but {0:?} was given")]
-    FreqNotANumber(Freq<f32>),
 }
 
 const PERIOD_MAX: Duration =
@@ -43,12 +41,6 @@ fn at_least_one(value: u16) -> NonZeroU16 {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct SamplingConfig(NonZeroU16);
 
-impl From<NonZeroU16> for SamplingConfig {
-    fn from(divide: NonZeroU16) -> Self {
-        Self(divide)
-    }
-}
-
 impl SamplingConfig {
     pub const FREQ_40K: Self = Self(NonZeroU16::MIN);
     pub const FREQ_4K: Self = Self(NonZeroU16::new(10).unwrap());
@@ -58,8 +50,7 @@ impl SamplingConfig {
         Self(divide)
     }
 
-    pub fn from_freq(freq: impl Into<Freq<f32>>) -> Result<Self, SamplingConfigError> {
-        let freq = freq.into();
+    pub fn from_freq(freq: Freq) -> Result<Self, SamplingConfigError> {
         let freq_max = ULTRASOUND_FREQ_HZ as f32 * Hz;
         let freq_min = freq_max / u16::MAX as f32;
         if !(freq_min..=freq_max).contains(&freq) {
@@ -72,16 +63,6 @@ impl SamplingConfig {
             return Err(SamplingConfigError::FreqInvalid(freq));
         }
         Ok(Self(at_least_one(divide as u16)))
-    }
-
-    pub fn from_freq_nearest(freq: impl Into<Freq<f32>>) -> Result<Self, SamplingConfigError> {
-        let freq = freq.into();
-        if freq.hz().is_nan() {
-            return Err(SamplingConfigError::FreqNotANumber(freq));
-        }
-        Ok(Self(at_least_one(
-            ((ULTRASOUND_FREQ_HZ as f32 / freq.hz()).clamp(1.0, u16::MAX as f32)).round() as u16,
-        )))
     }
 
     pub fn from_period(period: Duration) -> Result<Self, SamplingConfigError> {
@@ -104,20 +85,12 @@ impl SamplingConfig {
     }
 
     #[must_use]
-    pub fn from_period_nearest(period: Duration) -> Self {
-        Self(at_least_one(
-            ((period.as_nanos() + ULTRASOUND_PERIOD.as_nanos() / 2) / ULTRASOUND_PERIOD.as_nanos())
-                .clamp(1, u16::MAX as u128) as u16,
-        ))
-    }
-
-    #[must_use]
     pub const fn divide(self) -> NonZeroU16 {
         self.0
     }
 
     #[must_use]
-    pub fn freq(self) -> Freq<f32> {
+    pub fn freq(self) -> Freq {
         ULTRASOUND_FREQ_HZ as f32 / self.0.get() as f32 * Hz
     }
 
@@ -148,10 +121,6 @@ mod tests {
         assert_eq!(
             SamplingConfig::new(NonZeroU16::MAX).divide().get(),
             u16::MAX
-        );
-        assert_eq!(
-            SamplingConfig::from(NonZeroU16::MIN),
-            SamplingConfig::FREQ_40K
         );
         assert_eq!(SamplingConfig::FREQ_4K.divide().get(), 10);
     }
@@ -222,55 +191,6 @@ mod tests {
         assert_eq!(4000. * Hz, SamplingConfig::FREQ_4K.freq());
         assert_eq!(Duration::from_micros(25), SamplingConfig::FREQ_40K.period());
         assert_eq!(Duration::from_micros(250), SamplingConfig::FREQ_4K.period());
-    }
-
-    #[test]
-    fn nearest_rounds_and_clamps() {
-        let divide = |config: SamplingConfig| config.divide().get();
-        assert_eq!(
-            divide(SamplingConfig::from_freq_nearest(40000. * Hz).unwrap()),
-            1
-        );
-        assert_eq!(
-            divide(SamplingConfig::from_freq_nearest(3000 * Hz).unwrap()),
-            13
-        );
-        assert_eq!(
-            divide(SamplingConfig::from_freq_nearest(0. * Hz).unwrap()),
-            u16::MAX
-        );
-        assert_eq!(
-            divide(SamplingConfig::from_freq_nearest(f32::INFINITY.recip() * Hz).unwrap()),
-            u16::MAX,
-            "an infinite divider still clamps",
-        );
-        assert_eq!(
-            divide(SamplingConfig::from_freq_nearest(f32::INFINITY * Hz).unwrap()),
-            1
-        );
-        assert_eq!(
-            divide(SamplingConfig::from_freq_nearest(-1.0 * Hz).unwrap()),
-            1,
-            "a negative frequency clamps rather than wrapping",
-        );
-        assert!(matches!(
-            SamplingConfig::from_freq_nearest(f32::NAN * Hz),
-            Err(SamplingConfigError::FreqNotANumber(_))
-        ));
-        assert_eq!(
-            divide(SamplingConfig::from_period_nearest(ULTRASOUND_PERIOD / 2)),
-            1
-        );
-        assert_eq!(
-            divide(SamplingConfig::from_period_nearest(Duration::from_nanos(
-                50_001
-            ))),
-            2
-        );
-        assert_eq!(
-            divide(SamplingConfig::from_period_nearest(Duration::MAX)),
-            u16::MAX
-        );
     }
 
     #[test]

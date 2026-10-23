@@ -2,10 +2,10 @@ use core::f32::consts::PI;
 
 use autd3_rs_core::common::units::rad;
 use autd3_rs_core::common::{Angle, Length};
-use autd3_rs_core::geometry::{Device, Geometry, Point3, Vector3};
+use autd3_rs_core::geometry::{Geometry, Point3, Vector3};
 use autd3_rs_core::value::Phase;
 
-use crate::each::{fill_from_positions, for_each_device};
+use crate::each::fill_each_transducer;
 
 #[inline]
 pub(crate) fn propagation_phase(distance_mm: f32, wavelength: Length) -> Angle {
@@ -23,19 +23,15 @@ pub fn focus_transducer(position: Point3<f32>, target: Point3<f32>, wavelength: 
     Phase::from(focus_phase(position - target, wavelength))
 }
 
-pub fn focus_device(device: &Device, target: Point3<f32>, wavelength: Length, dst: &mut [Phase]) {
-    fill_from_positions(device, dst, |pos| focus_transducer(pos, target, wavelength));
-}
-
 pub fn focus(geometry: &Geometry, target: Point3<f32>, wavelength: Length, dst: &mut [Vec<Phase>]) {
-    for_each_device(geometry, dst, |dev, slot| {
-        focus_device(dev, target, wavelength, slot);
+    fill_each_transducer(geometry, dst, |pos| {
+        focus_transducer(pos, target, wavelength)
     });
 }
 
 #[cfg(test)]
 mod tests {
-    use autd3_rs_core::geometry::{Autd3, UnitQuaternion};
+    use autd3_rs_core::geometry::{Autd3, Device, UnitQuaternion};
     use autd3_rs_core::units::mm;
 
     use super::*;
@@ -61,20 +57,7 @@ mod tests {
     }
 
     #[test]
-    fn device_level_matches_transducer_level() {
-        let dev: Device = Autd3::default().into();
-        let target = Point3::new(86.36, 66.04, 150.0);
-        let lambda = 8.5 * mm;
-
-        let mut pattern = vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS];
-        focus_device(&dev, target, lambda, &mut pattern);
-        for (i, &pos) in dev.positions().iter().enumerate() {
-            assert_eq!(pattern[i], focus_transducer(pos, target, lambda));
-        }
-    }
-
-    #[test]
-    fn geometry_level_matches_device_level() {
+    fn geometry_level_matches_transducer_level() {
         let geo = Geometry::new(vec![
             Autd3::default(),
             Autd3::new(Point3::new(200.0, 0.0, 0.0), UnitQuaternion::identity()),
@@ -84,11 +67,12 @@ mod tests {
 
         let mut phases = geo.phase_buffer();
         focus(&geo, target, lambda, &mut phases);
-        assert_eq!(phases.len(), 2);
-        for (actual, dev) in phases.iter().zip(&geo) {
-            let mut expected = vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS];
-            focus_device(dev, target, lambda, &mut expected);
-            assert_eq!(*actual, expected);
+        assert_eq!(phases.len(), geo.num_devices());
+        for (slot, dev) in phases.iter().zip(&geo) {
+            assert_eq!(slot.len(), dev.num_transducers());
+            for (&phase, &pos) in slot.iter().zip(dev.positions()) {
+                assert_eq!(phase, focus_transducer(pos, target, lambda));
+            }
         }
     }
 }

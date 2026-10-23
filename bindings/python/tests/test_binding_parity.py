@@ -1,5 +1,6 @@
 from typing import Any
 
+import numpy as np
 import pytest
 
 import autd3
@@ -56,25 +57,18 @@ def one_device() -> Geometry:
 def test_phase_arithmetic_wraps_like_rust() -> None:
     assert Phase(0xF0) + Phase(0x20) == Phase(0x10)
     assert Phase(0x10) - Phase(0x20) == Phase(0xF0)
-    assert Phase(0x81) * 2 == Phase(0x02)
-    assert 2 * Phase(0x81) == Phase(0x02)
-    assert Phase(0x81) / 2 == Phase(0x40)
-    assert Phase(0x81) // 2 == Phase(0x40)
-    with pytest.raises(ZeroDivisionError):
-        Phase(1) / 0
     with pytest.raises(TypeError):
         loose(Phase(1)) + 1
+    with pytest.raises(TypeError):
+        loose(Phase(0x81)) * 2
 
 
-def test_intensity_arithmetic_saturates_like_rust() -> None:
-    assert Intensity(0xF0) + Intensity(0x20) == Intensity.MAX
-    assert Intensity(0x10) - Intensity(0x20) == Intensity.MIN
-    assert Intensity(0x80) * 3 == Intensity.MAX
-    assert 2 * Intensity(0x10) == Intensity(0x20)
-    assert Intensity(0x81) / 2 == Intensity(0x40)
-    assert Intensity(0x81) // 2 == Intensity(0x40)
-    with pytest.raises(ZeroDivisionError):
-        Intensity(1) // 0
+def test_intensity_has_no_arithmetic_like_rust() -> None:
+    assert Intensity(0x10) < Intensity(0x20)
+    with pytest.raises(TypeError):
+        loose(Intensity(0xF0)) + Intensity(0x20)
+    with pytest.raises(TypeError):
+        loose(Intensity(0x80)) * 3
 
 
 def test_length_arithmetic_and_ordering() -> None:
@@ -103,22 +97,18 @@ def test_angle_arithmetic_without_ordering() -> None:
         loose(1 * rad) < loose(2 * rad)
 
 
-def test_freq_arithmetic_keeps_integer_frequencies_integral() -> None:
-    assert (100 * Hz + 50 * Hz).hz_int == 150
-    assert (100 * Hz - 50 * Hz).hz_int == 50
-    assert (100 * Hz * 2).hz_int == 200
-    assert (2 * (100 * Hz)).hz_int == 200
-    assert (201 * Hz // 2).hz_int == 100
-    assert not (100 * Hz / 2).is_int
+def test_freq_is_a_single_float_like_rust() -> None:
+    assert 100 * Hz + 50 * Hz == 150.0 * Hz
+    assert 100 * Hz - 50 * Hz == 50.0 * Hz
+    assert 100 * Hz * 2 == 200.0 * Hz
+    assert 2 * (100 * Hz) == 200.0 * Hz
     assert (100 * Hz / 2).hz == pytest.approx(50.0)
-    assert not (100 * Hz + 0.5 * Hz).is_int
     assert (100 * Hz * 1.5).hz == pytest.approx(150.0)
+    assert (50 * Hz - 100 * Hz).hz == pytest.approx(-50.0)
     assert 1 * kHz > 999 * Hz
-    assert 100 * Hz <= 100.0 * Hz
-    with pytest.raises(OverflowError):
-        50 * Hz - 100 * Hz
+    assert 100 * Hz == 100.0 * Hz
     with pytest.raises(TypeError):
-        loose(1.5 * Hz) // 2
+        loose(100 * Hz) // 2
 
 
 def test_amplitude_arithmetic_and_ordering() -> None:
@@ -184,7 +174,6 @@ def test_rust_required_fields_cannot_be_omitted() -> None:
         lambda: SetSilencer(loose(None)),
         lambda: autd3.commands.SetPulseWidthTable(loose(None)),
         lambda: holo.GspatOption(mask=loose(None)),
-        lambda: holo.GreedyOption(mask=loose(None)),
         lambda: emu.RmsRecordOption(sound_speed=loose(None)),
         lambda: emu.InstantRecordOption(time_step=loose(None)),
     ],
@@ -278,7 +267,7 @@ def test_a_shared_intensity_buffer_is_shared_by_every_index() -> None:
         pattern.focus(geometry, geometry.center() + offset(x * mm, 0 * mm, 150 * mm), wavelength, buffer)
         phases.append(buffer)
     shared = geometry.intensity_buffer()
-    pattern.set_intensity(Intensity(0x80), shared)
+    shared.copy_from(np.full_like(shared.to_numpy(), 0x80))
     config = SamplingConfig(1.0 * Hz * len(phases))
     assert len(autd3.Frames.encode(geometry, PatternStm(config, phases, shared, PatternStmOption()))) > 0
     with pytest.raises(autd3.Autd3Error, match="intensit"):
@@ -302,8 +291,7 @@ def test_sampling_configs_are_resolved_when_constructed() -> None:
         SamplingConfig(loose("4000"))
 
     geometry = one_device()
-    resolved = SamplingConfig(Nearest(3000.5 * Hz))
-    assert resolved.divide() == 13
+    resolved = SamplingConfig(13)
     commands: list[autd3.commands.Command] = [
         ConfigModulation(ModulationBank.B0, resolved, 2, LoopBehavior.Infinite),
         ConfigPattern(PatternBank.B0, resolved, 2, LoopBehavior.Infinite),
@@ -338,16 +326,6 @@ def test_pattern_functions_reject_a_buffer_for_another_geometry() -> None:
         pattern.focus(geometry, [0.0, 0.0, 150.0], wavelength, two.phase_buffer())
     with pytest.raises(ValueError, match="one slot per device"):
         pattern.plane(geometry, [0.0, 0.0, 1.0], wavelength, two.phase_buffer())
-
-
-def test_radiation_pressure_needs_distinct_buffers() -> None:
-    buffer = modulation.modulation_buffer()
-    modulation.constant(0x80, buffer)
-    with pytest.raises(ValueError, match="radiation_pressure_inplace"):
-        modulation.radiation_pressure(buffer, buffer)
-    dst = modulation.modulation_buffer()
-    modulation.radiation_pressure(buffer, dst)
-    assert len(dst) == len(buffer)
 
 
 def test_emulator_options_default_to_rust() -> None:

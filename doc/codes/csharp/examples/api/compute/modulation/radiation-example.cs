@@ -9,12 +9,10 @@ internal static class Sample
     internal static void Run()
     {
         // HIDE_END
-var src = Modulation.ModulationBuffer();
-Modulation.Sine(150 * Hz, new SineOption(), SamplingConfig.Freq4k, src);
+var buffer = Modulation.ModulationBuffer();
+Modulation.Sine(150 * Hz, new SineOption(), SamplingConfig.Freq4k, buffer);
 
-var dst = Modulation.ModulationBuffer();
-
-Modulation.RadiationPressure(src, dst);
+Modulation.RadiationPressureInplace(buffer);
         // HIDE
     }
 }

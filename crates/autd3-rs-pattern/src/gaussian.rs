@@ -155,15 +155,6 @@ fn write_scaled(log_amplitudes: &[f32], log_max: f32, dst: &mut [Intensity]) {
     }
 }
 
-pub(crate) fn write_intensity_device(
-    device: &Device,
-    log_amplitude: impl Fn(Point3<f32>) -> f32,
-    dst: &mut [Intensity],
-) {
-    let log_amplitudes = device_log_amplitudes(device, &log_amplitude);
-    write_scaled(&log_amplitudes, max_log_amplitude(&log_amplitudes), dst);
-}
-
 pub(crate) fn write_intensity(
     geometry: &Geometry,
     log_amplitude: impl Fn(Point3<f32>) -> f32,

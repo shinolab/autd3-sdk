@@ -52,7 +52,10 @@ impl UdpArgs {
         TransportOption {
             iface: match self.simulator {
                 Some(port) => Interface::Addr(SocketAddrV6::new(Ipv6Addr::LOCALHOST, port, 0, 0)),
-                None => self.interface.clone().into(),
+                None => self
+                    .interface
+                    .clone()
+                    .map_or(Interface::Auto, Interface::Name),
             },
             lost_timeout: default
                 .lost_timeout

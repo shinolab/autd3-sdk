@@ -42,7 +42,8 @@ pub(crate) fn enabled_transducers(
     let mut tr_pos = Vec::with_capacity(n);
     let mut tr_dir = Vec::with_capacity(n);
     for (d, dev) in geometry.iter().enumerate() {
-        for (t, (&pos, &dir)) in dev.positions().iter().zip(dev.directions()).enumerate() {
+        let dir = dev.axial_direction();
+        for (t, &pos) in dev.positions().iter().enumerate() {
             if mask.is_enabled(d, t) {
                 tr_pos.push(pos);
                 tr_dir.push(dir);

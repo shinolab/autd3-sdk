@@ -3,7 +3,7 @@ from typing import Any, ClassVar, TypeAlias, final
 
 import numpy as np
 import numpy.typing as npt
-from autd3_core import Angle, Device, Geometry, Intensity, Length, Phase, Velocity
+from autd3_core import Angle, Geometry, Intensity, Length, Phase, Velocity
 
 _Vec3: TypeAlias = Sequence[float] | npt.NDArray[np.floating[Any]]
 
@@ -123,18 +123,8 @@ def hermite_gaussian_intensity(
     wavelength: Length,
     dst: IntensityBuffer,
 ) -> None: ...
-def focus_device(device: Device, target: _Vec3, wavelength: Length, dst: npt.NDArray[np.uint8]) -> None: ...
 def focus_transducer(position: _Vec3, target: _Vec3, wavelength: Length) -> Phase: ...
-def plane_device(device: Device, direction: _Vec3, wavelength: Length, dst: npt.NDArray[np.uint8]) -> None: ...
 def plane_transducer(position: _Vec3, direction: _Vec3, wavelength: Length) -> Phase: ...
-def bessel_device(
-    device: Device,
-    apex: _Vec3,
-    direction: _Vec3,
-    theta: Angle,
-    wavelength: Length,
-    dst: npt.NDArray[np.uint8],
-) -> None: ...
 def bessel_transducer(
     position: _Vec3,
     apex: _Vec3,
@@ -142,14 +132,6 @@ def bessel_transducer(
     theta: Angle,
     wavelength: Length,
 ) -> Phase: ...
-def laguerre_gaussian_phase_device(
-    device: Device,
-    target: _Vec3,
-    axis: _Vec3,
-    option: LaguerreGaussianOption,
-    wavelength: Length,
-    dst: npt.NDArray[np.uint8],
-) -> None: ...
 def laguerre_gaussian_phase_transducer(
     position: _Vec3,
     target: _Vec3,
@@ -157,23 +139,6 @@ def laguerre_gaussian_phase_transducer(
     option: LaguerreGaussianOption,
     wavelength: Length,
 ) -> Phase: ...
-def laguerre_gaussian_intensity_device(
-    device: Device,
-    target: _Vec3,
-    axis: _Vec3,
-    option: LaguerreGaussianOption,
-    wavelength: Length,
-    dst: npt.NDArray[np.uint8],
-) -> None: ...
-def hermite_gaussian_phase_device(
-    device: Device,
-    target: _Vec3,
-    axis: _Vec3,
-    x_dir: _Vec3,
-    option: HermiteGaussianOption,
-    wavelength: Length,
-    dst: npt.NDArray[np.uint8],
-) -> None: ...
 def hermite_gaussian_phase_transducer(
     position: _Vec3,
     target: _Vec3,
@@ -182,15 +147,3 @@ def hermite_gaussian_phase_transducer(
     option: HermiteGaussianOption,
     wavelength: Length,
 ) -> Phase: ...
-def hermite_gaussian_intensity_device(
-    device: Device,
-    target: _Vec3,
-    axis: _Vec3,
-    x_dir: _Vec3,
-    option: HermiteGaussianOption,
-    wavelength: Length,
-    dst: npt.NDArray[np.uint8],
-) -> None: ...
-def set_intensity(intensity: Intensity | int, dst: IntensityBuffer) -> None: ...
-def set_phase(phase: Phase | int, dst: PhaseBuffer) -> None: ...
-def add_phase(phase: Phase | int, dst: PhaseBuffer) -> None: ...

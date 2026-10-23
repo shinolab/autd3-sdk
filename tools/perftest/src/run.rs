@@ -225,7 +225,10 @@ pub(crate) fn transport_option(cli: &Cli, emulator: Option<&UdpEmulator>) -> Tra
         None => TransportOption {
             iface: match cli.simulator {
                 Some(port) => simulator_iface(port),
-                None => cli.interface.clone().into(),
+                None => cli
+                    .interface
+                    .clone()
+                    .map_or(Interface::Auto, Interface::Name),
             },
             ..Default::default()
         },

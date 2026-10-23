@@ -15,11 +15,10 @@ fn to_sampling_config(divide: u16) -> Option<SamplingConfig> {
     std::num::NonZeroU16::new(divide).map(SamplingConfig::new)
 }
 
-fn to_sampling_mode(mode: u8, freq: f32, freq_int: u32) -> Option<SamplingMode> {
+fn to_sampling_mode(mode: u8, freq: f32) -> Option<SamplingMode> {
     match mode {
         0 => Some(SamplingMode::from(freq * Hz)),
-        1 => Some(SamplingMode::from(freq_int * Hz)),
-        2 => Some(SamplingMode::from(Nearest(freq * Hz))),
+        1 => Some(SamplingMode::from(Nearest(freq * Hz))),
         _ => None,
     }
 }
@@ -43,7 +42,7 @@ unsafe fn invalid_argument(out_err: *mut c_char, out_err_len: usize, message: &s
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_modulation_samples_per_period(
     divider: u16,
-    freq_hz: u32,
+    freq_hz: f32,
     out: *mut u32,
 ) -> bool {
     let Some(divider) = core::num::NonZeroU16::new(divider) else {
@@ -221,7 +220,6 @@ pub unsafe extern "C" fn autd3_modulation_sine_option_free(option: *mut SineOpti
 pub unsafe extern "C" fn autd3_modulation_sine(
     mode: u8,
     freq: f32,
-    freq_int: u32,
     option: *const SineOption,
     sampling_divide: u16,
     buffer: *mut ModulationBuffer,
@@ -235,7 +233,7 @@ pub unsafe extern "C" fn autd3_modulation_sine(
     ) else {
         return unsafe { invalid_argument(out_err, out_err_len, "null argument") };
     };
-    let Some(mode) = to_sampling_mode(mode, freq, freq_int) else {
+    let Some(mode) = to_sampling_mode(mode, freq) else {
         return unsafe { invalid_argument(out_err, out_err_len, "unknown sampling mode") };
     };
 
@@ -261,7 +259,6 @@ pub unsafe extern "C" fn autd3_modulation_square_option_free(option: *mut Square
 pub unsafe extern "C" fn autd3_modulation_square(
     mode: u8,
     freq: f32,
-    freq_int: u32,
     option: *const SquareOption,
     sampling_divide: u16,
     buffer: *mut ModulationBuffer,
@@ -275,7 +272,7 @@ pub unsafe extern "C" fn autd3_modulation_square(
     ) else {
         return unsafe { invalid_argument(out_err, out_err_len, "null argument") };
     };
-    let Some(mode) = to_sampling_mode(mode, freq, freq_int) else {
+    let Some(mode) = to_sampling_mode(mode, freq) else {
         return unsafe { invalid_argument(out_err, out_err_len, "unknown sampling mode") };
     };
 
@@ -319,7 +316,6 @@ pub unsafe extern "C" fn autd3_modulation_fourier_option_free(option: *mut Fouri
 pub struct Autd3SineComponent {
     pub mode: u8,
     pub freq: f32,
-    pub freq_int: u32,
     pub option: *const SineOption,
 }
 
@@ -347,7 +343,7 @@ pub unsafe extern "C" fn autd3_modulation_fourier(
         let Some(component_option) = (unsafe { handle_ref(c.option) }) else {
             return unsafe { invalid_argument(out_err, out_err_len, "null sine option") };
         };
-        let Some(freq) = to_sampling_mode(c.mode, c.freq, c.freq_int) else {
+        let Some(freq) = to_sampling_mode(c.mode, c.freq) else {
             return unsafe { invalid_argument(out_err, out_err_len, "unknown sampling mode") };
         };
         sine_components.push(SineComponent {
@@ -357,22 +353,6 @@ pub unsafe extern "C" fn autd3_modulation_fourier(
     }
     let result = autd3_rs_modulation::fourier(&sine_components, option, config, &mut buffer.0);
     unsafe { finish(result, out_err, out_err_len) }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_modulation_radiation_pressure(
-    src: *const ModulationBuffer,
-    dst: *mut ModulationBuffer,
-) -> i32 {
-    if std::ptr::eq(src, dst.cast_const()) {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    }
-    let (Some(src), Some(dst)) = (unsafe { handle_ref(src) }, unsafe { handle_mut(dst) }) else {
-        return -1;
-    };
-
-    autd3_rs_modulation::radiation_pressure(&src.0, &mut dst.0);
-    0
 }
 
 #[unsafe(no_mangle)]
@@ -394,34 +374,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn radiation_pressure_rejects_the_same_buffer_as_src_and_dst() {
-        let buffer = autd3_modulation_buffer_new();
-        unsafe { &mut *buffer }.0 = vec![0x80, 0xFF];
-        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
-            autd3_modulation_radiation_pressure(buffer, buffer)
-        });
-        assert_eq!(vec![0x80, 0xFF], unsafe { &*buffer }.0);
-        let dst = autd3_modulation_buffer_new();
-        assert_eq!(0, unsafe {
-            autd3_modulation_radiation_pressure(buffer, dst)
-        });
-        assert_eq!(2, unsafe { &*dst }.0.len());
-        unsafe {
-            autd3_modulation_buffer_free(buffer);
-            autd3_modulation_buffer_free(dst);
-        }
-    }
-
-    #[test]
     fn sine_requires_a_sampling_config_and_uses_it() {
         let option = autd3_modulation_sine_option_new(0xFF, 0x80, 0.0, false);
         let buffer = autd3_modulation_buffer_new();
         let config = SamplingConfig::FREQ_40K.divide().get();
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
-            autd3_modulation_sine(1, 0.0, 200, option, 0, buffer, std::ptr::null_mut(), 0)
+            autd3_modulation_sine(0, 200.0, option, 0, buffer, std::ptr::null_mut(), 0)
         });
         assert_eq!(AUTD3_OK, unsafe {
-            autd3_modulation_sine(1, 0.0, 200, option, config, buffer, std::ptr::null_mut(), 0)
+            autd3_modulation_sine(0, 200.0, option, config, buffer, std::ptr::null_mut(), 0)
         });
         assert_eq!(200, unsafe { &*buffer }.0.len());
         unsafe {

@@ -21,97 +21,9 @@ impl Intensity {
     pub const MIN: Intensity = Intensity(0x00);
 }
 
-impl core::ops::Div<u8> for Intensity {
-    type Output = Self;
-    fn div(self, rhs: u8) -> Self::Output {
-        Self(self.0 / rhs)
-    }
-}
-
-impl core::ops::Mul<u8> for Intensity {
-    type Output = Intensity;
-    fn mul(self, rhs: u8) -> Self::Output {
-        Intensity(self.0.saturating_mul(rhs))
-    }
-}
-
-impl core::ops::Mul<Intensity> for u8 {
-    type Output = Intensity;
-    fn mul(self, rhs: Intensity) -> Self::Output {
-        Intensity(self.saturating_mul(rhs.0))
-    }
-}
-
-impl core::ops::Add for Intensity {
-    type Output = Self;
-    fn add(self, rhs: Intensity) -> Self::Output {
-        Self(self.0.saturating_add(rhs.0))
-    }
-}
-
-impl core::ops::AddAssign for Intensity {
-    fn add_assign(&mut self, rhs: Intensity) {
-        self.0 = self.0.saturating_add(rhs.0);
-    }
-}
-
-impl core::ops::Sub for Intensity {
-    type Output = Self;
-    fn sub(self, rhs: Intensity) -> Self::Output {
-        Self(self.0.saturating_sub(rhs.0))
-    }
-}
-
-impl core::ops::SubAssign for Intensity {
-    fn sub_assign(&mut self, rhs: Intensity) {
-        self.0 = self.0.saturating_sub(rhs.0);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rstest::rstest;
-
-    #[rstest]
-    #[case(Intensity(0x01), Intensity(0x01), 1)]
-    #[case(Intensity(0x00), Intensity(0x01), 2)]
-    #[case(Intensity(0x7F), Intensity(0xFF), 2)]
-    fn div(#[case] expected: Intensity, #[case] target: Intensity, #[case] d: u8) {
-        assert_eq!(expected, target / d);
-    }
-
-    #[rstest]
-    #[case(Intensity(0x01), Intensity(0x01), 1)]
-    #[case(Intensity(0x02), Intensity(0x01), 2)]
-    #[case(Intensity(0xFE), Intensity(0x7F), 2)]
-    #[case(Intensity(0xFF), Intensity(0x7F), 3)]
-    fn mul_saturates(#[case] expected: Intensity, #[case] target: Intensity, #[case] m: u8) {
-        assert_eq!(expected, target * m);
-        assert_eq!(expected, m * target);
-    }
-
-    #[rstest]
-    #[case(Intensity(0x02), Intensity(0x01), Intensity(0x01))]
-    #[case(Intensity(0xFE), Intensity(0x7F), Intensity(0x7F))]
-    #[case(Intensity(0xFF), Intensity(0x7F), Intensity(0xFF))]
-    fn add_saturates(#[case] expected: Intensity, #[case] lhs: Intensity, #[case] rhs: Intensity) {
-        assert_eq!(expected, lhs + rhs);
-        let mut a = lhs;
-        a += rhs;
-        assert_eq!(expected, a);
-    }
-
-    #[rstest]
-    #[case(Intensity(0x00), Intensity(0x01), Intensity(0x01))]
-    #[case(Intensity(0x01), Intensity(0x02), Intensity(0x01))]
-    #[case(Intensity(0x00), Intensity(0x7F), Intensity(0xFF))]
-    fn sub_saturates(#[case] expected: Intensity, #[case] lhs: Intensity, #[case] rhs: Intensity) {
-        assert_eq!(expected, lhs - rhs);
-        let mut a = lhs;
-        a -= rhs;
-        assert_eq!(expected, a);
-    }
 
     #[test]
     fn dbg() {

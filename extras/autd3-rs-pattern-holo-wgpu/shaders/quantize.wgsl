@@ -68,14 +68,8 @@ fn quantize_intensity(value: f32, m: f32) -> u32 {
     let normalized = select(0.0, value / m, m > 0.0);
     switch d.mode {
         case 0u: {
-            return u32(clamp(round_half_away(normalized * 255.0), 0.0, 255.0));
-        }
-        case 1u: {
             let scaled = normalized * 255.0 * bitcast<f32>(d.p0);
             return u32(clamp(round_half_away(scaled), 0.0, 255.0));
-        }
-        case 2u: {
-            return d.p0;
         }
         default: {
             let scaled = round_half_away(value * 255.0);
@@ -98,7 +92,7 @@ fn quantize_pass(@builtin(global_invocation_id) gid: vec3<u32>) {
     let k = gid.z;
     let base = k * d.len;
     var m = 0.0;
-    if (d.mode < 2u) {
+    if (d.mode == 0u) {
         m = max_coefficient[k];
     }
     let i = w * 2u;

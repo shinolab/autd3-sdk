@@ -19,14 +19,11 @@ import Install from "@components/Install.astro";
 - [bessel](/autd3-sdk/api/compute/pattern/bessel/) — ベッセルビーム
 - [laguerre_gaussian_phase / laguerre_gaussian_intensity](/autd3-sdk/api/compute/pattern/laguerre-gaussian/) — ラゲール・ガウシアンビームの位相・振幅
 - [hermite_gaussian_phase / hermite_gaussian_intensity](/autd3-sdk/api/compute/pattern/hermite-gaussian/) — エルミート・ガウシアンビームの位相・振幅
-- [set_intensity / set_phase / add_phase](/autd3-sdk/api/compute/pattern/set/) — 振幅・位相の一括設定
 
-`focus` / `plane` / `bessel` / `laguerre_gaussian_phase` / `hermite_gaussian_phase` には, デバイス 1 台分のみを計算する `*_device` 版と, 振動子 1 素子分の位相を返す `*_transducer` 版もある (例: `focus_device` / `focus_transducer`).
-`laguerre_gaussian_intensity` / `hermite_gaussian_intensity` には `*_device` 版だけがある (振幅の正規化に周囲の振動子が要るため, 振動子単位の版は無い).
+`focus` / `plane` / `bessel` / `laguerre_gaussian_phase` / `hermite_gaussian_phase` には, 振動子 1 素子分の位相を返す `*_transducer` 版もある (例: `focus_transducer`).
+`laguerre_gaussian_intensity` / `hermite_gaussian_intensity` には振動子単位の版は無い (振幅の正規化に周囲の振動子が要るため).
 
 Geometry 単位の関数で `dst` の台数が `geometry` と合わないと, Rust は panic し, Python は `ValueError`, C# は `Autd3Exception` (`InvalidArgument`) になる.
-
-`*_device` 版の `dst` は 1 台分のバッファで, Rust は `&mut [Phase]` / `&mut [Intensity]`, Python は長さがそのデバイスの振動子数の `uint8` の numpy 配列, C# は長さ `NumTransducers` の `Phase[]` / `Intensity[]`.
 
 ## 波長
 

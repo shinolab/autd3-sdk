@@ -13,37 +13,25 @@ use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyCapsule;
 
+fn freq_hz(freq: &Bound<'_, PyAny>) -> PyResult<f32> {
+    freq.getattr("hz").and_then(|v| v.extract()).map_err(|_| {
+        PyValueError::new_err(
+            "frequency must carry a unit, e.g. 200 * Hz (bare numbers are no longer accepted)",
+        )
+    })
+}
+
 fn freq_mode(freq: &Bound<'_, PyAny>) -> PyResult<SamplingMode> {
     if let Ok(hz) = freq.call_method0("nearest_hz") {
-        return match hz.extract::<Option<f32>>()? {
-            Some(hz) => Ok(SamplingMode::NearestFreq(hz * Hz)),
-            None => Err(PyValueError::new_err(
-                "modulation sampling frequency does not accept a period-based Nearest; use Nearest(freq)",
-            )),
-        };
+        return Ok(SamplingMode::NearestFreq(hz.extract::<f32>()? * Hz));
     }
-    let is_int: bool = freq
-        .getattr("is_int")
-        .and_then(|v| v.extract())
-        .map_err(|_| {
-            PyValueError::new_err(
-                "frequency must carry a unit, e.g. 200 * Hz (bare numbers are no longer accepted)",
-            )
-        })?;
-    Ok(if is_int {
-        let hz: u32 = freq.getattr("hz_int")?.extract()?;
-        SamplingMode::ExactFreq(hz * Hz)
-    } else {
-        let hz: f32 = freq.getattr("hz")?.extract()?;
-        SamplingMode::ExactFreqFloat(hz * Hz)
-    })
+    Ok(SamplingMode::ExactFreqFloat(freq_hz(freq)? * Hz))
 }
 
 fn mode_to_py(py: Python<'_>, mode: SamplingMode) -> PyResult<Bound<'_, PyAny>> {
     let core = py.import("autd3_core")?;
     let freq = core.getattr("Freq")?;
     match mode {
-        SamplingMode::ExactFreq(f) => freq.call_method1("from_hz", (f.hz(),)),
         SamplingMode::ExactFreqFloat(f) => freq.call_method1("from_hz", (f.hz(),)),
         SamplingMode::NearestFreq(f) => core
             .getattr("Nearest")?
@@ -344,42 +332,13 @@ fn fourier(
 }
 
 #[pyfunction]
-fn radiation_pressure(
-    src: &Bound<'_, ModulationBuffer>,
-    dst: &Bound<'_, ModulationBuffer>,
-) -> PyResult<()> {
-    if src.is(dst) {
-        return Err(PyValueError::new_err(
-            "src and dst must be different buffers; use radiation_pressure_inplace to rewrite a buffer in place",
-        ));
-    }
-    autd3_rs_modulation::radiation_pressure(
-        &src.try_borrow()?.data,
-        &mut dst.try_borrow_mut()?.data,
-    );
-    Ok(())
-}
-
-#[pyfunction]
 fn radiation_pressure_inplace(mut buffer: PyRefMut<'_, ModulationBuffer>) {
     autd3_rs_modulation::radiation_pressure_inplace(&mut buffer.data);
 }
 
 #[pyfunction]
 fn samples_per_period(divider: u16, freq: &Bound<'_, PyAny>) -> PyResult<Option<u32>> {
-    let freq_hz = freq
-        .getattr("hz_int")
-        .and_then(|v| v.extract::<Option<u32>>())
-        .map_err(|_| {
-            PyValueError::new_err(
-                "freq must be a frequency, e.g. 200 * Hz (bare numbers are not accepted)",
-            )
-        })?
-        .ok_or_else(|| {
-            PyValueError::new_err(
-                "freq must be an integer frequency, e.g. 200 * Hz (not 200.0 * Hz)",
-            )
-        })?;
+    let freq_hz = freq_hz(freq)?;
     Ok(core::num::NonZeroU16::new(divider).and_then(|divider| {
         autd3_rs_modulation::samples_per_period(divider, autd3_rs_core::Freq::from_hz(freq_hz))
     }))
@@ -397,7 +356,6 @@ fn autd3_modulation(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(square, m)?)?;
     m.add_function(wrap_pyfunction!(constant, m)?)?;
     m.add_function(wrap_pyfunction!(fourier, m)?)?;
-    m.add_function(wrap_pyfunction!(radiation_pressure, m)?)?;
     m.add_function(wrap_pyfunction!(radiation_pressure_inplace, m)?)?;
     m.add_function(wrap_pyfunction!(samples_per_period, m)?)?;
     Ok(())

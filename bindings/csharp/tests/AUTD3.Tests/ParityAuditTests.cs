@@ -77,7 +77,7 @@ namespace AUTD3.Tests
             var error = Assert.Throws<Autd3Exception>(() =>
                 Holo.Holo.Naive(geometry, foci, Pattern.Wavelength(340 * m / s), option, phases, intensities));
             Assert.Equal(Autd3ErrorCode.InvalidArgument, error.Code);
-            Assert.NotEqual(IntensityConstraint.Normalize, default(IntensityConstraint));
+            Assert.NotEqual(IntensityConstraint.Multiply(0f), default(IntensityConstraint));
         }
 
         [Fact]
@@ -137,18 +137,6 @@ namespace AUTD3.Tests
 
             using var matched = Frames.Encode(geometry, new PatternStm(new SamplingConfig(1 * Hz * patterns.Length), patterns, new[] { intensities, intensities }, new PatternStmOption()));
             Assert.False(matched.IsEmpty);
-        }
-
-        [Fact]
-        public void RadiationPressureRejectsTheSameBuffer()
-        {
-            using var buffer = ModulationBuffer.FromBytes(new byte[] { 0x80, 0xFF });
-            var error = Assert.Throws<Autd3Exception>(() => Modulation.RadiationPressure(buffer, buffer));
-            Assert.Equal(Autd3ErrorCode.InvalidArgument, error.Code);
-            Assert.Equal(new byte[] { 0x80, 0xFF }, buffer.ToArray());
-            using var dst = Modulation.ModulationBuffer();
-            Modulation.RadiationPressure(buffer, dst);
-            Assert.Equal(2, dst.Length);
         }
 
         [Fact]
@@ -319,7 +307,7 @@ namespace AUTD3.Tests
             Assert.True(340 * m / s > 300 * m / s);
 
             Assert.True(200 * Hz == 200 * Hz);
-            Assert.False(200 * Hz == 200f * Hz);
+            Assert.True(200 * Hz == 200f * Hz);
             Assert.True(200f * Hz == 200f * Hz);
             Assert.True(100 * Hz < 200 * Hz);
             Assert.True(100f * Hz < 200 * Hz);

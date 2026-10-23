@@ -28,7 +28,7 @@ import { excerpt } from "@lib/excerpt";
 
 | Parameter | Type           | Description                                  |
 | --------- | -------------- | -------------------------------------------- |
-| `freq`    | `Freq<u32>` etc. | modulation frequency                       |
+| `freq`    | `Freq` etc.      | modulation frequency                       |
 | `option`  | `&SineOption`  | additional options (see below)               |
 | `config`  | `SamplingConfig` | sampling configuration (see [Modulation](/autd3-sdk/en/api/compute/modulation/#samplingconfig)) |
 | `dst`     | `&mut Vec<u8>` | output buffer                                |
@@ -37,10 +37,7 @@ The value of each sample <Math tex="i" /> is given by the following equation, fo
 
 <MathBlock tex="m_i = \frac{A}{2}\sin\!\left(2\pi f t_i + \theta\right) + b" />
 
-`freq` is specified as `Freq<u32>` (`150 * Hz`) or `Freq<f32>` (`150.0 * Hz`).
-An integer frequency computes the waveform as an integer, and a floating-point frequency computes it in floating point (`ExactFreq` / `ExactFreqFloat` of `SamplingMode`).
-In Python / C# too, `150 * Hz` is an integer frequency and `150.0 * Hz` (C#: `150.0f * Hz`) is a floating-point one.
-In Python, `+` / `-` / `*` of `Freq` stay integers between integers, but `/` always returns a floating-point value. Use `//` to divide while keeping an integer.
+`freq` is specified as a `Freq` (`150 * Hz` or `150.0 * Hz`). `150 * Hz` and `150.0 * Hz` represent the same frequency.
 
 ## SineOption
 

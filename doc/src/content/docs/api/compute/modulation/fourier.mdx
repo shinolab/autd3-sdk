@@ -47,7 +47,7 @@ import { excerpt } from "@lib/excerpt";
 | `freq`     | `SamplingMode` | 成分の周波数            |
 | `option`   | `SineOption`   | 成分ごとの正弦波 Option |
 
-`freq` は [sine](/autd3-sdk/api/compute/modulation/sine/) と同じく `Freq<u32>` / `Freq<f32>` / `Nearest(freq)` で指定し, Rust では `.into()` で `SamplingMode` へ変換する.
+`freq` は [sine](/autd3-sdk/api/compute/modulation/sine/) と同じく `Freq` / `Nearest(freq)` で指定し, Rust では `.into()` で `SamplingMode` へ変換する.
 読み出すと, Python の `freq` は `Nearest` で指定した成分なら `Nearest(Freq)` を返し, C# は `Freq` と `IsNearest` で区別する.
 
 値域の判定は合成後の値に対して行うため, 成分の `SineOption` の `clamp` は使われない.

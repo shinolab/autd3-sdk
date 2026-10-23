@@ -3,7 +3,7 @@ use std::num::NonZeroU8;
 use anyhow::Result;
 use rand::seq::SliceRandom;
 
-use autd3_rs::geometry::{Autd3, Geometry, TransducerMask, offset};
+use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs_pattern_holo::{
     AmplitudeTarget, Directivity, GreedyOption, Pa, abs_objective_func, greedy,
@@ -28,15 +28,12 @@ fn main() -> Result<()> {
     let phase_quantization_levels = NonZeroU8::new(16).unwrap();
     let directivity = Directivity::Sphere;
     let objective_func = abs_objective_func;
-    let mask = TransducerMask::AllEnabled;
     let option =
         // ANCHOR: option
         GreedyOption {
             phase_quantization_levels,
             directivity,
             objective_func,
-            mask,
-            ..Default::default()
         }
         // ANCHOR_END: option
         ;

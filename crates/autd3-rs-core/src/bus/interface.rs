@@ -14,15 +14,3 @@ impl From<String> for Interface {
         Interface::Name(name)
     }
 }
-
-impl From<&str> for Interface {
-    fn from(name: &str) -> Self {
-        Interface::Name(name.to_owned())
-    }
-}
-
-impl<T: Into<Interface>> From<Option<T>> for Interface {
-    fn from(opt: Option<T>) -> Self {
-        opt.map_or(Interface::Auto, Into::into)
-    }
-}

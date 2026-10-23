@@ -13,7 +13,7 @@ import autd3_modulation as modulation
 import autd3_pattern as pattern
 import autd3_pattern_holo as holo
 from autd3.commands import FixedCompletionTime, FixedUpdateRate, SetSilencer
-from autd3.geometry import Autd3, Device, EulerAngles, Geometry, offset, point
+from autd3.geometry import Autd3, EulerAngles, Geometry, offset, point
 from autd3.units import Hz, deg, m, mm, s
 from autd3.value import ControlPoint, Nearest, Phase, SysTime
 from autd3_pattern_holo import Pa
@@ -69,8 +69,6 @@ def test_a_masked_transducer_mask_is_validated_on_use_not_on_construction() -> N
             holo.gs(geometry, foci, wavelength, holo.GsOption(mask=mask), phases, intensities)
         with pytest.raises(holo.HoloError):
             holo.gspat(geometry, foci, wavelength, holo.GspatOption(mask=mask), phases, intensities)
-        with pytest.raises(holo.HoloError):
-            holo.greedy(geometry, foci, wavelength, intensities, list(range(geometry.num_transducers())), holo.GreedyOption(mask=mask), phases)
 
 
 @pytest.mark.parametrize(
@@ -97,8 +95,6 @@ def test_time_arguments_accept_only_a_duration(value: object) -> None:
 )
 def test_sampling_periods_accept_only_a_duration(value: object) -> None:
     with pytest.raises(ValueError):
-        Nearest(loose(value))
-    with pytest.raises(ValueError):
         autd3.value.SamplingConfig(loose(value))
 
 
@@ -106,7 +102,6 @@ def test_a_duration_is_accepted_wherever_time_is_taken() -> None:
     period = autd3.Duration.from_millis(1)
     assert SysTime.from_nanos(0) + period == SysTime.from_nanos(1_000_000)
     assert autd3.value.SamplingConfig(period) == autd3.value.SamplingConfig(40)
-    assert autd3.value.SamplingConfig(Nearest(period)) == autd3.value.SamplingConfig(40)
     FixedCompletionTime(intensity=period, phase=period)
     autd3.TransportOption(ack_timeout=period)
 
@@ -130,9 +125,7 @@ def test_coordinates_and_rotations_are_float32() -> None:
     assert_float32(device.center(), (3,))
     assert_float32(device.position(0), (3,))
     assert_float32(device[0], (3,))
-    assert_float32(device.direction(0), (3,))
     assert_float32(device.positions(), (Autd3.NUM_TRANSDUCERS, 3))
-    assert_float32(device.directions(), (Autd3.NUM_TRANSDUCERS, 3))
     assert_float32(device.rotation(), (4,))
     assert_float32(device.x_direction(), (3,))
     assert_float32(device.y_direction(), (3,))
@@ -141,7 +134,6 @@ def test_coordinates_and_rotations_are_float32() -> None:
     assert_float32(ControlPoint([1.0, 2.0, 3.0], 0).point, (3,))
 
     np.testing.assert_array_equal(device.position(5), device.positions()[5])
-    np.testing.assert_array_equal(device.direction(5), device.directions()[5])
 
 
 def test_autd3_rotation_is_a_scalar_first_quaternion() -> None:
@@ -173,15 +165,10 @@ def test_rust_defaults_are_available_without_arguments() -> None:
         assert len(autd3.Frames.encode(geometry, command)) == 1
 
 
-def device_slot() -> npt.NDArray[np.uint8]:
-    return np.full(Autd3.NUM_TRANSDUCERS, 0xAA, dtype=np.uint8)
-
-
 def phase_cases() -> list[
     tuple[
         str,
         Callable[[Geometry, pattern.PhaseBuffer], None],
-        Callable[[Device, npt.NDArray[np.uint8]], None],
         Callable[[npt.NDArray[np.float32]], Phase],
     ]
 ]:
@@ -196,34 +183,27 @@ def phase_cases() -> list[
         (
             "focus",
             lambda geometry, dst: pattern.focus(geometry, target, wavelength, dst),
-            lambda device, dst: pattern.focus_device(device, target, wavelength, dst),
             lambda position: pattern.focus_transducer(position, target, wavelength),
         ),
         (
             "plane",
             lambda geometry, dst: pattern.plane(geometry, direction, wavelength, dst),
-            lambda device, dst: pattern.plane_device(device, direction, wavelength, dst),
             lambda position: pattern.plane_transducer(position, direction, wavelength),
         ),
         (
             "bessel",
             lambda geometry, dst: pattern.bessel(geometry, target, direction, theta, wavelength, dst),
-            lambda device, dst: pattern.bessel_device(device, target, direction, theta, wavelength, dst),
             lambda position: pattern.bessel_transducer(position, target, direction, theta, wavelength),
         ),
         (
             "laguerre_gaussian_phase",
             lambda geometry, dst: pattern.laguerre_gaussian_phase(geometry, target, direction, lg, wavelength, dst),
-            lambda device, dst: pattern.laguerre_gaussian_phase_device(device, target, direction, lg, wavelength, dst),
             lambda position: pattern.laguerre_gaussian_phase_transducer(position, target, direction, lg, wavelength),
         ),
         (
             "hermite_gaussian_phase",
             lambda geometry, dst: pattern.hermite_gaussian_phase(
                 geometry, target, direction, x_dir, hg, wavelength, dst
-            ),
-            lambda device, dst: pattern.hermite_gaussian_phase_device(
-                device, target, direction, x_dir, hg, wavelength, dst
             ),
             lambda position: pattern.hermite_gaussian_phase_transducer(
                 position, target, direction, x_dir, hg, wavelength
@@ -233,105 +213,24 @@ def phase_cases() -> list[
 
 
 @pytest.mark.parametrize("case", phase_cases(), ids=[name for name, *_ in phase_cases()])
-def test_device_and_transducer_phase_functions_match_the_geometry_function(
+def test_transducer_phase_functions_match_the_geometry_function(
     case: tuple[
         str,
         Callable[[Geometry, pattern.PhaseBuffer], None],
-        Callable[[Device, npt.NDArray[np.uint8]], None],
         Callable[[npt.NDArray[np.float32]], Phase],
     ],
 ) -> None:
-    _, whole, per_device, per_transducer = case
+    _, whole, per_transducer = case
     geometry = two_devices()
     expected = geometry.phase_buffer()
     whole(geometry, expected)
-    reference = expected.to_numpy()
-    assert len(np.unique(reference)) > 2
-
-    slots = np.zeros_like(reference)
-    for device in geometry:
-        slot = device_slot()
-        per_device(device, slot)
-        np.testing.assert_array_equal(slot, reference[device.idx()])
-        per_device(device, slots[device.idx()])
-    np.testing.assert_array_equal(slots, reference)
-
-    rebuilt = geometry.phase_buffer()
-    rebuilt.copy_from(slots)
-    np.testing.assert_array_equal(rebuilt.to_numpy(), reference)
+    assert len(np.unique(expected.to_numpy())) > 2
 
     for device in geometry:
         for tr in (0, 17, Autd3.NUM_TRANSDUCERS - 1):
             phase = per_transducer(device.position(tr))
             assert isinstance(phase, Phase)
             assert phase == expected[device.idx()][tr]
-
-
-def test_device_intensity_functions_match_the_geometry_function() -> None:
-    geometry = Geometry([Autd3([0.0, 0.0, 0.0])])
-    device = geometry[0]
-    wavelength = pattern.wavelength(340 * m / s)
-    target = [Autd3.DEVICE_WIDTH / 2, Autd3.DEVICE_HEIGHT / 2, 150.0]
-    axis = [0.0, 0.0, 1.0]
-    x_dir = [1.0, 0.0, 0.0]
-    lg = pattern.LaguerreGaussianOption(0, 1, 30 * mm)
-    hg = pattern.HermiteGaussianOption(1, 0, 30 * mm)
-
-    expected = geometry.intensity_buffer()
-    pattern.laguerre_gaussian_intensity(geometry, target, axis, lg, wavelength, expected)
-    slot = device_slot()
-    pattern.laguerre_gaussian_intensity_device(device, target, axis, lg, wavelength, slot)
-    np.testing.assert_array_equal(slot, expected.to_numpy()[0])
-    assert len(np.unique(slot)) > 2
-
-    pattern.hermite_gaussian_intensity(geometry, target, axis, x_dir, hg, wavelength, expected)
-    slot = device_slot()
-    pattern.hermite_gaussian_intensity_device(device, target, axis, x_dir, hg, wavelength, slot)
-    np.testing.assert_array_equal(slot, expected.to_numpy()[0])
-    assert len(np.unique(slot)) > 2
-
-    rebuilt = geometry.intensity_buffer()
-    rebuilt.copy_from(slot.reshape(1, -1))
-    np.testing.assert_array_equal(rebuilt.to_numpy(), expected.to_numpy())
-
-
-def test_device_functions_reject_a_dst_that_is_not_one_device_slot() -> None:
-    device = two_devices()[1]
-    wavelength = pattern.wavelength(340 * m / s)
-    target = [0.0, 0.0, 150.0]
-
-    def write(dst: object) -> None:
-        pattern.focus_device(device, target, wavelength, loose(dst))
-
-    with pytest.raises(TypeError, match="numpy.ndarray"):
-        write([0] * Autd3.NUM_TRANSDUCERS)
-    with pytest.raises(TypeError, match="numpy.ndarray"):
-        write(two_devices().phase_buffer()[1])
-    with pytest.raises(TypeError, match="uint8"):
-        write(np.zeros(Autd3.NUM_TRANSDUCERS, dtype=np.int8))
-    with pytest.raises(TypeError, match="uint8"):
-        write(np.zeros(Autd3.NUM_TRANSDUCERS, dtype=np.float32))
-    with pytest.raises(TypeError, match="masked"):
-        write(np.ma.masked_array(np.zeros(Autd3.NUM_TRANSDUCERS, dtype=np.uint8)))
-    with pytest.raises(ValueError, match="shape"):
-        write(np.zeros(Autd3.NUM_TRANSDUCERS - 1, dtype=np.uint8))
-    with pytest.raises(ValueError, match="shape"):
-        write(np.zeros((1, Autd3.NUM_TRANSDUCERS), dtype=np.uint8))
-    with pytest.raises(ValueError, match="contiguous"):
-        write(np.zeros(Autd3.NUM_TRANSDUCERS * 2, dtype=np.uint8)[::2])
-    read_only = np.zeros(Autd3.NUM_TRANSDUCERS, dtype=np.uint8)
-    read_only.flags.writeable = False
-    with pytest.raises(ValueError, match="writeable"):
-        write(read_only)
-    with pytest.raises(ValueError):
-        pattern.focus_device(loose(two_devices()), target, wavelength, device_slot())
-    with pytest.raises(AttributeError):
-        pattern.focus_device(loose(0), target, wavelength, device_slot())
-
-    untouched = device_slot()
-    with pytest.raises(ValueError):
-        pattern.focus_device(device, loose([0.0, 0.0]), wavelength, untouched)
-    np.testing.assert_array_equal(untouched, device_slot())
 
 
 def test_fourier_mixes_exact_and_nearest_components() -> None:

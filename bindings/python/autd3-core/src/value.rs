@@ -3,11 +3,10 @@ use core::num::NonZeroU16;
 use core::time::Duration as StdDuration;
 
 use autd3_rs_core::nalgebra::Complex;
-use autd3_rs_core::units::Hz;
 use autd3_rs_core::value::{
     Intensity as CoreIntensity, Phase as CorePhase, SamplingConfig as CoreSamplingConfig,
 };
-use pyo3::exceptions::{PyValueError, PyZeroDivisionError};
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyCapsule, PyComplex};
 
@@ -59,41 +58,9 @@ impl Intensity {
         self.0.0
     }
 
-    fn __add__(&self, rhs: Intensity) -> Self {
-        Self(self.0 + rhs.0)
-    }
-
-    fn __sub__(&self, rhs: Intensity) -> Self {
-        Self(self.0 - rhs.0)
-    }
-
-    fn __mul__(&self, rhs: u8) -> Self {
-        Self(self.0 * rhs)
-    }
-
-    fn __rmul__(&self, lhs: u8) -> Self {
-        Self(lhs * self.0)
-    }
-
-    fn __truediv__(&self, rhs: u8) -> PyResult<Self> {
-        non_zero_divisor(rhs)?;
-        Ok(Self(self.0 / rhs))
-    }
-
-    fn __floordiv__(&self, rhs: u8) -> PyResult<Self> {
-        self.__truediv__(rhs)
-    }
-
     fn __repr__(&self) -> String {
         format!("Intensity(0x{:02X})", self.0.0)
     }
-}
-
-fn non_zero_divisor(rhs: u8) -> PyResult<()> {
-    if rhs == 0 {
-        return Err(PyZeroDivisionError::new_err("division by zero"));
-    }
-    Ok(())
 }
 
 #[pyclass(
@@ -192,23 +159,6 @@ impl Phase {
         Self(self.0 - rhs.0)
     }
 
-    fn __mul__(&self, rhs: u8) -> Self {
-        Self(self.0 * rhs)
-    }
-
-    fn __rmul__(&self, lhs: u8) -> Self {
-        Self(lhs * self.0)
-    }
-
-    fn __truediv__(&self, rhs: u8) -> PyResult<Self> {
-        non_zero_divisor(rhs)?;
-        Ok(Self(self.0 / rhs))
-    }
-
-    fn __floordiv__(&self, rhs: u8) -> PyResult<Self> {
-        self.__truediv__(rhs)
-    }
-
     fn __repr__(&self) -> String {
         format!("Phase(0x{:02X})", self.0.0)
     }
@@ -241,16 +191,6 @@ impl SamplingConfig {
     #[new]
     fn new(value: &Bound<'_, PyAny>) -> PyResult<Self> {
         let py = value.py();
-        if let Ok(nearest) = value.cast::<PyNearest>() {
-            return match nearest.get().0 {
-                NearestInner::Freq(hz) => CoreSamplingConfig::from_freq_nearest(hz * Hz)
-                    .map(Self)
-                    .map_err(|e| invalid_argument(py, e)),
-                NearestInner::Period(period) => {
-                    Ok(Self(CoreSamplingConfig::from_period_nearest(period)))
-                }
-            };
-        }
         if let Ok(freq) = value.extract::<Freq>() {
             return freq
                 .sampling_config()
@@ -264,7 +204,7 @@ impl SamplingConfig {
         }
         let divide: u16 = value.extract().map_err(|_| {
             PyValueError::new_err(
-                "SamplingConfig expects an int divider, a frequency (e.g. 4000.0 * Hz), a Duration, or Nearest(...)",
+                "SamplingConfig expects an int divider, a frequency (e.g. 4000.0 * Hz), or a Duration",
             )
         })?;
         let divide = NonZeroU16::new(divide)
@@ -277,7 +217,7 @@ impl SamplingConfig {
     }
 
     fn freq(&self) -> Freq {
-        Freq::from_hz_f32(self.0.freq().hz())
+        Freq(self.0.freq())
     }
 
     fn period(&self) -> Duration {
@@ -293,28 +233,13 @@ impl SamplingConfig {
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
-enum NearestInner {
-    Freq(f32),
-    Period(StdDuration),
-}
-
 #[pyclass(name = "Nearest", module = "autd3_core", eq, hash, frozen)]
 #[derive(Clone, Copy, PartialEq)]
-pub struct PyNearest(NearestInner);
+pub struct PyNearest(f32);
 
 impl Hash for PyNearest {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        match self.0 {
-            NearestInner::Freq(hz) => {
-                0u8.hash(state);
-                hash_f32(hz, state);
-            }
-            NearestInner::Period(period) => {
-                1u8.hash(state);
-                period.hash(state);
-            }
-        }
+        hash_f32(self.0, state);
     }
 }
 
@@ -322,36 +247,18 @@ impl Hash for PyNearest {
 impl PyNearest {
     #[new]
     fn new(value: &Bound<'_, PyAny>) -> PyResult<Self> {
-        if let Ok(freq) = value.extract::<Freq>() {
-            return Ok(Self(NearestInner::Freq(freq.hz_f32())));
-        }
-        if let Ok(period) = value.extract::<Duration>() {
-            return Ok(Self(NearestInner::Period(period.0)));
-        }
-        Err(PyValueError::new_err(
-            "Nearest expects a frequency (e.g. 4000.0 * Hz) or a Duration",
-        ))
+        let freq = value
+            .extract::<Freq>()
+            .map_err(|_| PyValueError::new_err("Nearest expects a frequency (e.g. 4000.0 * Hz)"))?;
+        Ok(Self(freq.0.hz()))
     }
 
-    fn nearest_hz(&self) -> Option<f32> {
-        match self.0 {
-            NearestInner::Freq(hz) => Some(hz),
-            NearestInner::Period(_) => None,
-        }
-    }
-
-    fn nearest_nanos(&self) -> Option<u128> {
-        match self.0 {
-            NearestInner::Freq(_) => None,
-            NearestInner::Period(period) => Some(period.as_nanos()),
-        }
+    fn nearest_hz(&self) -> f32 {
+        self.0
     }
 
     fn __repr__(&self) -> String {
-        match self.0 {
-            NearestInner::Freq(hz) => format!("Nearest({hz} Hz)"),
-            NearestInner::Period(period) => format!("Nearest({period:?})"),
-        }
+        format!("Nearest({} Hz)", self.0)
     }
 }
 

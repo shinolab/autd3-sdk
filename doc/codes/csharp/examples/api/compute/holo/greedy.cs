@@ -23,14 +23,12 @@ internal static class Sample
         var wavelength = Pattern.Wavelength(340.0f * m / s);
         byte phaseQuantizationLevels = 16;
         var directivity = Directivity.Sphere;
-        var mask = TransducerMask.AllEnabled;
         var option =
             // ANCHOR: option
             new GreedyOption
             {
                 PhaseQuantizationLevels = phaseQuantizationLevels,
                 Directivity = directivity,
-                Mask = mask,
             }
             // ANCHOR_END: option
             ;

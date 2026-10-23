@@ -135,10 +135,6 @@ namespace AUTD3
             _dev = dev;
         }
 
-        internal GeometryHandle GeometryHandle => _geometry;
-
-        internal UIntPtr DeviceIndex => _dev;
-
         public int Idx => (int)NativeCore.autd3_core_device_idx(_geometry, _dev);
 
         public int NumTransducers => (int)NativeCore.autd3_core_device_num_transducers(_geometry, _dev);
@@ -179,14 +175,6 @@ namespace AUTD3
             return Coords.FromPointArray(xyz);
         }
 
-        public Vector3 Direction(int tr)
-        {
-            var xyz = new float[3];
-            if (NativeCore.autd3_core_transducer_direction(_geometry, _dev, (UIntPtr)tr, xyz) != 0)
-                throw new ArgumentOutOfRangeException(nameof(tr));
-            return Coords.FromDirArray(xyz);
-        }
-
         public Vector3[] Positions
         {
             get
@@ -214,18 +202,6 @@ namespace AUTD3
                 throw new Autd3Exception("failed to convert the point to the device frame");
             }
             return Coords.FromPointArray(xyz);
-        }
-
-        public Vector3[] Directions
-        {
-            get
-            {
-                var n = NumTransducers;
-                var result = new Vector3[n];
-                for (var i = 0; i < n; i++)
-                    result[i] = Direction(i);
-                return result;
-            }
         }
 
         private Vector3 DeviceDirection(Action<GeometryHandle, UIntPtr, float[]> native)

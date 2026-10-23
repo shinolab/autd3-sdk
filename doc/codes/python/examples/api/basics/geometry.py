@@ -50,7 +50,5 @@ x = device.x_direction()
 y = device.y_direction()
 axial = device.axial_direction()
 positions = device.positions()
-directions = device.directions()
 pos0 = device.position(0)
-dir0 = device.direction(0)
 # ANCHOR_END: device

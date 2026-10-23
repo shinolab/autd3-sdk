@@ -1,4 +1,3 @@
-use autd3_rs_core::common::Angle;
 use autd3_rs_core::geometry::{UnitVector3, Vector3};
 
 #[allow(clippy::excessive_precision, clippy::unreadable_literal)]
@@ -86,20 +85,10 @@ impl Directivity {
             }
         }
     }
-
-    #[must_use]
-    pub fn value(self, theta: Angle) -> f32 {
-        match self {
-            Directivity::Sphere => 1.0,
-            Directivity::T4010A1 => value_t4010a1(theta.rad()),
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
-    use autd3_rs_core::common::units::{deg, rad};
-
     use super::*;
     use rstest::rstest;
 
@@ -109,7 +98,8 @@ mod tests {
     #[case(1.0)]
     #[case(2.5)]
     fn sphere_is_unit(#[case] theta: f32) {
-        approx::assert_abs_diff_eq!(1.0, Directivity::Sphere.value(theta * rad));
+        let diff = Vector3::new(theta.sin(), 0.0, theta.cos());
+        approx::assert_abs_diff_eq!(1.0, Directivity::Sphere.value_at(Vector3::z_axis(), &diff));
     }
 
     #[rstest]
@@ -126,9 +116,11 @@ mod tests {
     #[case(0.19952622, 100.0)]
     #[allow(clippy::unreadable_literal)]
     fn t4010a1(#[case] expected: f32, #[case] theta_deg: f32) {
+        let theta = theta_deg.to_radians();
+        let diff = Vector3::new(theta.sin(), 0.0, theta.cos()) * 150.0;
         approx::assert_abs_diff_eq!(
             expected,
-            Directivity::T4010A1.value(theta_deg * deg),
+            Directivity::T4010A1.value_at(Vector3::z_axis(), &diff),
             epsilon = 1e-5
         );
     }

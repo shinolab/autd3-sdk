@@ -2,7 +2,7 @@ use std::num::NonZeroU8;
 
 use rand::seq::SliceRandom;
 
-use autd3_rs::geometry::{Autd3, Geometry, TransducerMask, offset};
+use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::Intensity;
 use autd3_rs_pattern::wavelength;
@@ -39,8 +39,6 @@ fn main() -> anyhow::Result<()> {
             phase_quantization_levels: NonZeroU8::new(16).unwrap(),
             directivity: Directivity::Sphere,
             objective_func: abs_objective_func,
-            mask: TransducerMask::AllEnabled,
-            ..Default::default()
         },
         &mut phases,
     )?;

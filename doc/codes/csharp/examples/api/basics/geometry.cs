@@ -39,13 +39,11 @@ internal static class Sample
         var y = dev.YDirection;
         var axial = dev.AxialDirection;
         var positions = dev.Positions;
-        var directions = dev.Directions;
         var pos0 = dev.Position(0);
-        var dir0 = dev.Direction(0);
         // ANCHOR_END: device
 
         _ = (numDevices, totalTransducers, arrayCenter, first);
         _ = (idx, numTransducers, center, rotation, x, y, axial);
-        _ = (positions, directions, pos0, dir0);
+        _ = (positions, pos0);
     }
 }

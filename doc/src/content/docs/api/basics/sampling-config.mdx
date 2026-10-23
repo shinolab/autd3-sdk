@@ -18,7 +18,7 @@ import { excerpt } from "@lib/excerpt";
 
 <CodeTabs rust={excerpt(sample, "api")} python={excerpt(pySample, "api")} csharp={excerpt(csSample, "api")} />
 
-Rust は分周比を `SamplingConfig::new(NonZeroU16)`, 周波数を `from_freq(Freq<f32> | Freq<u32>)`, 周期を `from_period(Duration)`, 最近傍への丸めを `from_freq_nearest` / `from_period_nearest` で渡す.
+Rust は分周比を `SamplingConfig::new(NonZeroU16)`, 周波数を `from_freq(Freq)`, 周期を `from_period(Duration)` で渡す.
 `4000 * Hz` のような整数の周波数も `4. * kHz` と同じように渡せる.
 上記はいずれも 4 kHz (分周比 10) を表し, 互いに等価. 
 
@@ -32,7 +32,7 @@ C# は分周比を `ushort` で, 周期を `TimeSpan` で渡す.
 | 指定方法              | 型              | 
 | --------------------- | --------------- | 
 | 分周比                | `NonZeroU16`    | 
-| 周波数                | `Freq<f32>` / `Freq<u32>` |
+| 周波数                | `Freq`          |
 | 周期                  | `Duration` (C#: `TimeSpan`) | 
 
 分周比 <Math tex="N" /> とサンプリング周波数 <Math tex="f_s" />, サンプリング周期 <Math tex="T_s" /> の関係は次の通り. 
@@ -41,7 +41,7 @@ C# は分周比を `ushort` で, 周期を `TimeSpan` で渡す.
 
 周波数・周期で指定した場合, それが 40 kHz を割り切れない (整数の分周比にならない) とエラーになる. 
 `SamplingConfig` は構築時に分周比を求めて検証し, Rust は `Result` (`SamplingConfigError`), Python は `Autd3Error`, C# は `Autd3Exception` で返す (Python の `Autd3Error.code` / C# の `Autd3Exception.Code` は `INVALID_ARGUMENT` / `InvalidArgument`). `divide()` / `freq()` / `period()` は失敗しない.
-割り切れない値を最も近い分周比へ丸めたいときは Rust は `from_freq_nearest` / `from_period_nearest`, Python / C# は周波数/周期を `Nearest` でラップする. 
+割り切れない値を最も近い分周比へ丸めたいときは, 分周比を自分で計算して渡す. 
 
 ## プリセット
 

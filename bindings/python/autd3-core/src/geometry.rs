@@ -221,10 +221,7 @@ fn pattern_module<'py>(py: Python<'py>, method: &str) -> PyResult<Bound<'py, PyM
 }
 
 fn same_device(lhs: &CoreDevice, rhs: &CoreDevice) -> bool {
-    lhs.idx() == rhs.idx()
-        && lhs.rotation() == rhs.rotation()
-        && lhs.positions() == rhs.positions()
-        && lhs.directions() == rhs.directions()
+    lhs.idx() == rhs.idx() && lhs.rotation() == rhs.rotation() && lhs.positions() == rhs.positions()
 }
 
 #[pyclass(name = "Geometry", module = "autd3_core")]
@@ -378,10 +375,6 @@ impl Device {
         self.0.is_empty()
     }
 
-    fn _capsule<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyCapsule>> {
-        autd3_python_capsule::device_into_capsule(py, self.0.clone())
-    }
-
     fn to_local<'py>(&self, py: Python<'py>, point: [f32; 3]) -> PyResult<Bound<'py, PyAny>> {
         let [x, y, z] = point;
         let p = self.0.to_local(Point3::new(x, y, z));
@@ -400,27 +393,12 @@ impl Device {
         )
     }
 
-    fn directions<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        autd3_python_capsule::numpy::f32_vec3_rows(
-            py,
-            self.0.directions().iter().map(|d| [d.x, d.y, d.z]),
-        )
-    }
-
     fn position<'py>(&self, py: Python<'py>, index: usize) -> PyResult<Bound<'py, PyAny>> {
         if index >= self.0.num_transducers() {
             return Err(PyIndexError::new_err("transducer index out of range"));
         }
         let p = self.0.position(index);
         np_vec3(py, p.x, p.y, p.z)
-    }
-
-    fn direction<'py>(&self, py: Python<'py>, index: usize) -> PyResult<Bound<'py, PyAny>> {
-        if index >= self.0.num_transducers() {
-            return Err(PyIndexError::new_err("transducer index out of range"));
-        }
-        let d = self.0.direction(index).into_inner();
-        np_vec3(py, d.x, d.y, d.z)
     }
 
     fn rotation<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {

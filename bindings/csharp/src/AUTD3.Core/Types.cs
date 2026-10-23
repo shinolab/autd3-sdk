@@ -133,20 +133,6 @@ namespace AUTD3
 
         public static Intensity Max => new Intensity(0xFF);
         public static Intensity Min => new Intensity(0x00);
-
-        public static Intensity operator +(Intensity lhs, Intensity rhs) =>
-            new Intensity((byte)Math.Min(lhs.Value + rhs.Value, 0xFF));
-
-        public static Intensity operator -(Intensity lhs, Intensity rhs) =>
-            new Intensity((byte)Math.Max(lhs.Value - rhs.Value, 0x00));
-
-        public static Intensity operator *(Intensity lhs, byte rhs) =>
-            new Intensity((byte)Math.Min(lhs.Value * rhs, 0xFF));
-
-        public static Intensity operator *(byte lhs, Intensity rhs) => rhs * lhs;
-
-        public static Intensity operator /(Intensity lhs, byte rhs) =>
-            new Intensity((byte)(lhs.Value / rhs));
     }
 
     public readonly struct Phase : IEquatable<Phase>
@@ -184,14 +170,6 @@ namespace AUTD3
 
         public static Phase operator -(Phase lhs, Phase rhs) =>
             new Phase(unchecked((byte)(lhs.Value - rhs.Value)));
-
-        public static Phase operator *(Phase lhs, byte rhs) =>
-            new Phase(unchecked((byte)(lhs.Value * rhs)));
-
-        public static Phase operator *(byte lhs, Phase rhs) => rhs * lhs;
-
-        public static Phase operator /(Phase lhs, byte rhs) =>
-            new Phase((byte)(lhs.Value / rhs));
     }
 
     public readonly struct Interface : IEquatable<Interface>

@@ -38,9 +38,6 @@ EQUAL_PAIRS: list[tuple[Hashable, Hashable]] = [
     (Intensity(0x80), Intensity(128)),
     (SamplingConfig(4000 * Hz), SamplingConfig(10)),
     (SamplingConfig(autd3.Duration.from_micros(250)), SamplingConfig.FREQ_4K),
-    (SamplingConfig(Nearest(3000 * Hz)), SamplingConfig(13)),
-    (SamplingConfig(Nearest(autd3.Duration.from_nanos(50_001))), SamplingConfig(2)),
-    (SamplingConfig(Nearest(autd3.Duration.from_nanos(1))), SamplingConfig.FREQ_40K),
     (SysTime.from_nanos(5), SysTime.from_nanos(5)),
     (TransitionMode.SysTime(SysTime.from_nanos(5)), TransitionMode.SysTime(SysTime.from_nanos(5))),
     (TransitionMode.Gpio(GpioIn.I1), TransitionMode.Gpio(GpioIn.I1)),
@@ -50,7 +47,6 @@ EQUAL_PAIRS: list[tuple[Hashable, Hashable]] = [
     (PatternBank.B1, PatternBank.B1),
     (ModulationBank.B0, ModulationBank.B0),
     (Nearest(150.0 * Hz), Nearest(150 * Hz)),
-    (Nearest(autd3.Duration.from_micros(30)), Nearest(autd3.Duration.from_nanos(30_000))),
     (autd3.Duration.from_millis(1), autd3.Duration.from_micros(1000)),
     (GpioOut.PwmOut(3), GpioOut.PwmOut(3)),
     (GpioOut.Sync, GpioOut.Sync),
@@ -62,9 +58,7 @@ EQUAL_PAIRS: list[tuple[Hashable, Hashable]] = [
     (CpuConfig(), CpuConfig(ptp=PtpConfig())),
     (FpgaConfig(), FpgaConfig(sync_phase_lock=True)),
     (PhaseDepth.Bits4, PhaseDepth.Bits4),
-    (holo.IntensityConstraint.Normalize, holo.IntensityConstraint.Normalize),
     (holo.IntensityConstraint.Multiply(0.5), holo.IntensityConstraint.Multiply(0.5)),
-    (holo.IntensityConstraint.Uniform(0x80), holo.IntensityConstraint.Uniform(Intensity(0x80))),
     (holo.IntensityConstraint.Clamp(1, 2), holo.IntensityConstraint.Clamp(1, 2)),
     (holo.Directivity.T4010A1, holo.Directivity.T4010A1),
     (2500.0 * Pa, 2.5 * kPa),
@@ -73,6 +67,7 @@ EQUAL_PAIRS: list[tuple[Hashable, Hashable]] = [
     (0.0 * mm, -0.0 * mm),
     (2 * kHz, 2000 * Hz),
     (2.0 * kHz, 2000.0 * Hz),
+    (200 * Hz, 200.0 * Hz),
     (340 * m / s, Velocity.from_mm_s(340_000.0)),
     (0.0 * rad, Angle.ZERO),
     (180 * deg, Angle.from_deg(180.0)),
@@ -84,7 +79,6 @@ DISTINCT_PAIRS: list[tuple[object, object]] = [
     (Phase(1), 1),
     (Intensity(1), Intensity(2)),
     (SamplingConfig(10), SamplingConfig(20)),
-    (SamplingConfig(Nearest(3000 * Hz)), SamplingConfig(Nearest(4000 * Hz))),
     (SysTime.from_nanos(5), SysTime.from_nanos(6)),
     (TransitionMode.Immediate, TransitionMode.Ext),
     (TransitionMode.Gpio(GpioIn.I1), TransitionMode.Gpio(GpioIn.I2)),
@@ -106,14 +100,13 @@ DISTINCT_PAIRS: list[tuple[object, object]] = [
     (CpuConfig(), CpuConfig(failsafe_timeout=autd3.Duration.from_millis(500))),
     (FpgaConfig(), FpgaConfig(sync_phase_lock=False)),
     (holo.IntensityConstraint.Multiply(0.5), holo.IntensityConstraint.Multiply(0.25)),
-    (holo.IntensityConstraint.Normalize, holo.IntensityConstraint.Uniform(0)),
+    (holo.IntensityConstraint.Multiply(1.0), holo.IntensityConstraint.Clamp(0, 255)),
     (holo.Directivity.Sphere, holo.Directivity.T4010A1),
     (1.0 * Pa, 2.0 * Pa),
     (autd3.Interface.Auto, autd3.Interface.Name("eth0")),
     (10 * mm, 11 * mm),
     (10 * mm, 10.0),
     (200 * Hz, 201 * Hz),
-    (200 * Hz, 200.0 * Hz),
     (1.0 * rad, 1.0 * deg),
 ]
 
@@ -141,7 +134,7 @@ def test_distinct_values_compare_unequal(lhs: object, rhs: object) -> None:
         (0.0 * Hz, "is out of range"),
         (autd3.Duration.from_nanos(50_001), "must be a multiple of the ultrasound period"),
         (autd3.Duration.from_nanos(1), "is out of range"),
-        (Nearest(float("nan") * Hz), "must be a number"),
+        (float("nan") * Hz, "is out of range"),
         (0, "non-zero"),
     ],
 )
@@ -172,11 +165,8 @@ def test_units_have_explicit_constructors() -> None:
     assert Length.from_mm(10.0) == 10 * mm
     assert Length.from_m(1.0) == 1000 * mm
     assert Freq.from_hz(200) == 200 * Hz
-    assert Freq.from_hz(200).is_int
-    assert not Freq.from_hz(200.0).is_int
+    assert Freq.from_hz(200.0) == 200 * Hz
     assert Angle.ZERO.rad == 0.0
-    with pytest.raises(ValueError):
-        Freq.from_hz(-1)
 
 
 def test_phase_conversions() -> None:
@@ -309,7 +299,7 @@ def test_modulation_options_expose_their_fields() -> None:
 
     component = modulation.SineComponent(100 * Hz, sine)
     assert component.freq == 100 * Hz
-    assert isinstance(component.freq, Freq) and component.freq.is_int
+    assert isinstance(component.freq, Freq)
     assert component.option == sine
     assert component == modulation.SineComponent(100 * Hz, modulation.SineOption())
     assert component != modulation.SineComponent(200 * Hz, sine)
@@ -362,10 +352,10 @@ def test_modulation_names_follow_rust() -> None:
     assert modulation.samples_per_period(10, 200 * Hz) == 20
     assert modulation.samples_per_period(10, 3 * Hz) is None
     assert modulation.samples_per_period(0, 200 * Hz) is None
+    assert modulation.samples_per_period(10, 200.0 * Hz) == 20
+    assert modulation.samples_per_period(10, 0.5 * Hz) == 8000
     with pytest.raises(ValueError):
         modulation.samples_per_period(10, loose(200))
-    with pytest.raises(ValueError):
-        modulation.samples_per_period(10, 200.0 * Hz)
 
 
 def test_amplitude_accessors_follow_rust() -> None:

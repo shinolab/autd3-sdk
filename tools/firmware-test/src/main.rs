@@ -254,7 +254,10 @@ async fn run(cli: &Cli) -> Result<()> {
     let option = TransportOption {
         iface: match cli.simulator {
             Some(port) => Interface::Addr(SocketAddrV6::new(Ipv6Addr::LOCALHOST, port, 0, 0)),
-            None => cli.interface.clone().into(),
+            None => cli
+                .interface
+                .clone()
+                .map_or(Interface::Auto, Interface::Name),
         },
         lost_timeout: cli
             .lost_timeout_ms
@@ -437,15 +440,14 @@ async fn report_exec_late(client: &Client) {
 }
 
 async fn reset(ctx: &Ctx<'_>) -> Result<()> {
-    use autd3_rs_pattern::set_intensity;
-
     let phases = ctx.geometry.phase_buffer();
-    let mut intensities = ctx.geometry.intensity_buffer();
-    set_intensity(Intensity::MIN, &mut intensities);
 
     ctx.send_frames(&Frames::encode(
         ctx.client.geometry(),
-        (Pattern::new(&phases, &intensities), SetSilencer::default()),
+        (
+            Pattern::new(&phases, Intensity::MIN),
+            SetSilencer::default(),
+        ),
     )?)
     .await?;
 

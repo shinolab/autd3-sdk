@@ -28,20 +28,20 @@ Modulation は, 各振動子の出力振幅を時間方向に変調する振幅�
 - [sine](/autd3-sdk/api/compute/modulation/sine/) — 正弦波
 - [square](/autd3-sdk/api/compute/modulation/square/) — 矩形波
 - [fourier](/autd3-sdk/api/compute/modulation/fourier/) — 複数正弦波の合成
-- [radiation_pressure](/autd3-sdk/api/compute/modulation/radiation/) — 放射圧補正
+- [radiation_pressure_inplace](/autd3-sdk/api/compute/modulation/radiation/) — 放射圧補正
 
 ## samples_per_period
 
 `samples_per_period(divider, freq)` は, 分周比 `divider` のサンプリングで周波数 `freq` の波形 1 周期が何サンプルになるかを返す.
-サンプリング周波数が `freq` で割り切れない (1 周期を整数のサンプル数で表せない) ときや `freq` が 0 のときは `None` を返す.
+1 周期を整数のサンプル数で表せないときや, `freq` が 0 以下・NaN のときは `None` を返す. 判定は `f32` に丸めた `freq` で行うので, `0.1 * Hz` のように 2 進で表せない周波数は `None` になることがある.
 たとえば分周比 10 (4 kHz) で 200 Hz なら 20 を返す.
 
 | 引数      | 型           | 説明                           |
 | --------- | ------------ | ------------------------------ |
 | `divider` | `NonZeroU16` | サンプリングの分周比           |
-| `freq`    | `Freq<u32>`  | 波形の周波数 (整数の周波数のみ) |
+| `freq`    | `Freq`       | 波形の周波数                   |
 
 返り値は `Option<u32>`.
-Python は `divider` を `int` で受け, `0` なら `None` を返す. `200.0 * Hz` のような浮動小数点の周波数を渡すと `ValueError` になる.
-C# は `Modulation.SamplesPerPeriod(ushort divider, Freq freq)` で `uint?` を返し, 浮動小数点の周波数を渡すと `Autd3Exception` (`InvalidArgument`) になる.
+Python は `divider` を `int` で受け, `0` なら `None` を返す.
+C# は `Modulation.SamplesPerPeriod(ushort divider, Freq freq)` で `uint?` を返す.
   
