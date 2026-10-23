@@ -4,8 +4,6 @@ crate::wire_enum_u8! {
         UnknownCmd = 0x01,
         InvalidPayload = 0x02,
         InvalidSilencerSetting = 0x04,
-        InvalidTransitionMode = 0x05,
-        MissTransitionTime = 0x06,
         FpgaTimeout = 0x07,
         SyncNotReady = 0x08,
         UpdateNotStarted = 0x0A,
@@ -18,7 +16,6 @@ crate::wire_enum_u8! {
         UpdateActivating = 0x12,
         SyncMissed = 0x14,
         FailsafeConditionActive = 0x15,
-        FpgaUnsupported = 0x16,
     }
 }
 
@@ -30,8 +27,6 @@ impl Error {
             Self::UnknownCmd => "unknown command (device firmware may be out of date)",
             Self::InvalidPayload => "invalid payload",
             Self::InvalidSilencerSetting => "invalid silencer setting",
-            Self::InvalidTransitionMode => "invalid transition mode for the target loop behavior",
-            Self::MissTransitionTime => "sys-time transition is too close to now (would be missed)",
             Self::FpgaTimeout => "FPGA did not acknowledge a register update in time",
             Self::SyncNotReady => {
                 "the sync pulse is not running (SetTime not received, PTP not locked, or the pulse was re-armed)"
@@ -49,17 +44,12 @@ impl Error {
             Self::FpgaUpdateInProgress => {
                 "an FPGA update is in progress; output commands are rejected until the FPGA reboots"
             }
-            Self::UpdateActivating => {
-                "a firmware activation is pending; the device reboots within the configured activate delay (default 100 ms)"
-            }
+            Self::UpdateActivating => "a reboot is pending; the device resets within 100 ms",
             Self::SyncMissed => {
-                "Synchronize kept missing the sync edge it wrote (the device was too busy to latch in time); reopen to retry"
+                "Synchronize missed the sync edge it wrote (the device was too busy to latch in time); send it again"
             }
             Self::FailsafeConditionActive => {
                 "the condition that tripped the failsafe still holds; the failsafe stays in effect"
-            }
-            Self::FpgaUnsupported => {
-                "the FPGA firmware does not support this command (update the FPGA firmware)"
             }
         }
     }
@@ -93,9 +83,12 @@ mod tests {
     #[test]
     fn retired_codes_stay_unassigned() {
         assert_eq!(Error::from_u8(0x03), None);
+        assert_eq!(Error::from_u8(0x05), None);
+        assert_eq!(Error::from_u8(0x06), None);
         assert_eq!(Error::from_u8(0x09), None);
         assert_eq!(Error::from_u8(0x11), None);
         assert_eq!(Error::from_u8(0x13), None);
+        assert_eq!(Error::from_u8(0x16), None);
     }
 
     #[test]
@@ -104,13 +97,6 @@ mod tests {
         for cause in ["SetTime not received", "PTP not locked", "re-armed"] {
             assert!(text.contains(cause));
         }
-    }
-
-    #[test]
-    fn update_activating_does_not_promise_a_fixed_delay() {
-        let text = Error::UpdateActivating.describe();
-        assert!(text.contains("configured activate delay"));
-        assert!(!text.contains("within 100 ms"));
     }
 
     #[test]

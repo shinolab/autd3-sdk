@@ -7,7 +7,7 @@ use crate::proto::Error;
 impl Cpu {
     pub(crate) fn clear<P: Port>(&self, port: &mut P) -> Result<(), Error> {
         self.apply_config(port, CpuConfig::DEFAULT);
-        let result = fpga::init(port, self.config().fpga_wait_update_max_polls);
+        let result = fpga::init(port, fpga::FPGA_WAIT_UPDATE_MAX_POLLS);
         self.reset_telemetry();
         if result.is_ok() {
             self.lower_ptp_failsafe();
@@ -21,7 +21,6 @@ mod tests {
     use core::time::Duration;
 
     use crate::cmd::cpu_config::CpuConfig;
-    use crate::cmd::silencer::SilencerFlags;
     use crate::fpga::TransitionModeKind;
     use crate::fpga_params::{
         ADDR_MOD_FREQ_DIV0, ADDR_MOD_REQ_RD_BANK, ADDR_PATTERN_FREQ_DIV0,
@@ -33,6 +32,7 @@ mod tests {
         activate_mod_bank, config_mod, force_fan, fpga_config, set_cpu_config, set_silencer,
     };
     use crate::test_utils::mock::{Frame, Harness};
+    use autd3_cpu_wire::payload::SilencerFlags;
 
     const FAILSAFE_TIMEOUT_MS: u32 = 500;
 

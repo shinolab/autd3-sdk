@@ -1,8 +1,4 @@
-pub(crate) const ERR_INVALID_PAYLOAD: u8 = 0x02;
 pub(crate) const ERR_INVALID_SILENCER_SETTING: u8 = 0x04;
-pub(crate) const ERR_INVALID_TRANSITION_MODE: u8 = 0x05;
-pub(crate) const ERR_MISS_TRANSITION_TIME: u8 = 0x06;
-pub(crate) const ERR_FPGA_TIMEOUT: u8 = 0x07;
 pub(crate) const ERR_FAILSAFE_CONDITION_ACTIVE: u8 = 0x15;
 
 pub(crate) mod cpu_config;

@@ -27,12 +27,6 @@ impl WritePatternFusedPayload {
     pub fn parse(payload: &[u8]) -> Result<(Self, &[u8; PATTERN_RAW_DATA_LEN]), Error> {
         let (p, rest) = try_read_header::<Self>(payload)?;
         let data = rest.try_into().map_err(|_| Error::InvalidPayload)?;
-        if !matches!(
-            p.transition_mode,
-            TransitionModeKind::Immediate | TransitionModeKind::Ext
-        ) {
-            return Err(Error::InvalidTransitionMode);
-        }
         Ok((p, data))
     }
 }
@@ -90,18 +84,22 @@ mod tests {
     }
 
     #[rstest]
-    #[case(TransitionMode::Immediate, TransitionModeKind::Immediate)]
-    #[case(TransitionMode::Ext, TransitionModeKind::Ext)]
+    #[case(TransitionMode::Immediate, TransitionModeKind::Immediate, 0)]
+    #[case(TransitionMode::Ext, TransitionModeKind::Ext, 0)]
+    #[case(TransitionMode::SyncIdx, TransitionModeKind::SyncIdx, 0)]
+    #[case(TransitionMode::SysTime { time: SysTime::from_nanos(0x0123_4567_89AB) }, TransitionModeKind::SysTime, 0x0123_4567_89AB)]
+    #[case(TransitionMode::Gpio(GpioIn::I1), TransitionModeKind::Gpio, 1)]
     fn a_built_payload_passes_parse(
         #[case] transition: TransitionMode,
         #[case] mode: TransitionModeKind,
+        #[case] value: u64,
     ) {
         let built = WritePatternFusedPayload::new(PatternBank::B1, transition);
         let bytes = frame(&built, PATTERN_RAW_DATA_LEN);
         let (parsed, data) = WritePatternFusedPayload::parse(&bytes).unwrap();
         assert_eq!(parsed.bank, PatternBank::B1);
         assert_eq!(parsed.transition_mode, mode);
-        assert_eq!(parsed.transition_value.get(), 0);
+        assert_eq!(parsed.transition_value.get(), value);
         assert_eq!(&data[..], &bytes[HEADER..]);
     }
 
@@ -130,27 +128,6 @@ mod tests {
         bytes[1] = 0x03;
         assert_eq!(
             WritePatternFusedPayload::parse(&bytes).err(),
-            Some(Error::InvalidPayload)
-        );
-    }
-
-    #[rstest]
-    #[case(TransitionMode::SyncIdx)]
-    #[case(TransitionMode::SysTime { time: SysTime::from_nanos(0x0123_4567_89AB) })]
-    #[case(TransitionMode::Gpio(GpioIn::I1))]
-    fn a_transition_needing_a_finite_loop_is_rejected(#[case] transition: TransitionMode) {
-        let built = WritePatternFusedPayload::new(PatternBank::B0, transition);
-        assert_eq!(
-            WritePatternFusedPayload::parse(&frame(&built, PATTERN_RAW_DATA_LEN)).err(),
-            Some(Error::InvalidTransitionMode)
-        );
-    }
-
-    #[test]
-    fn a_wrong_length_is_reported_before_the_transition_mode() {
-        let built = WritePatternFusedPayload::new(PatternBank::B0, TransitionMode::SyncIdx);
-        assert_eq!(
-            WritePatternFusedPayload::parse(&frame(&built, PATTERN_RAW_DATA_LEN - 1)).err(),
             Some(Error::InvalidPayload)
         );
     }

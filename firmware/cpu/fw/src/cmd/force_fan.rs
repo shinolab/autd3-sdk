@@ -15,11 +15,11 @@ pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error>
 
 #[cfg(all(test, not(loom)))]
 mod tests {
-    use crate::cmd::silencer::SilencerFlags;
     use crate::fpga_params::CtlFlags;
     use crate::proto::Error;
     use crate::test_utils::builders::{force_fan, set_silencer};
     use crate::test_utils::mock::Harness;
+    use autd3_cpu_wire::payload::SilencerFlags;
 
     #[test]
     fn force_fan_sets_and_clears_persistent_bit() {

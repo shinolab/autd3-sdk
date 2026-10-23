@@ -10,7 +10,7 @@ async def main() -> None:
     with Client.open(geometry, TransportOption()) as client:
         await client.send((Clear(), Synchronize()))
 
-        await client.send(SetCpuConfig(CpuConfig(sys_time_transition_margin=Duration.from_millis(20))))
+        await client.send(SetCpuConfig(CpuConfig(ptp_unlock_failsafe_timeout=Duration.from_secs(2))))
 
 
 asyncio.run(main())

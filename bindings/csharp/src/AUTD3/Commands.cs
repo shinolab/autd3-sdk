@@ -69,22 +69,10 @@ namespace AUTD3
         internal static extern IntPtr autd3_op_set_cpu_config(IntPtr config);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_set_sys_time_transition_margin(IntPtr config, ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_get_sys_time_transition_margin(IntPtr config, out ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_cpu_config_set_sync_guard(IntPtr config, ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_cpu_config_get_sync_guard(IntPtr config, out ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_set_update_activate_delay(IntPtr config, ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_get_update_activate_delay(IntPtr config, out ulong ns);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_cpu_config_set_failsafe_timeout(IntPtr config, [MarshalAs(UnmanagedType.I1)] bool hasValue, ulong ns);
@@ -145,18 +133,6 @@ namespace AUTD3
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_cpu_config_get_ptp_lock_threshold(IntPtr config, out ulong ns);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_set_fpga_wait_update_max_polls(IntPtr config, uint value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_get_fpga_wait_update_max_polls(IntPtr config, out uint value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_set_fpga_flash_max_polls(IntPtr config, uint value);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_cpu_config_get_fpga_flash_max_polls(IntPtr config, out uint value);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_cpu_config_set_ptp_kp_milli(IntPtr config, uint value);
@@ -336,11 +312,7 @@ namespace AUTD3
 
     internal static class CpuConfigDefaults
     {
-        internal static readonly TimeSpan SysTimeTransitionMargin;
-        internal static readonly uint FpgaWaitUpdateMaxPolls;
-        internal static readonly uint FpgaFlashMaxPolls;
         internal static readonly TimeSpan SyncGuard;
-        internal static readonly TimeSpan UpdateActivateDelay;
         internal static readonly TimeSpan? FailsafeTimeout;
         internal static readonly TimeSpan? PtpUnlockFailsafeTimeout;
         internal static readonly FpgaBusWait FpgaBusWait;
@@ -370,11 +342,7 @@ namespace AUTD3
             }
             try
             {
-                SysTimeTransitionMargin = OptionNative.GetDuration(handle, NativeCommand.autd3_cpu_config_get_sys_time_transition_margin);
-                OptionNative.Apply("preset", NativeCommand.autd3_cpu_config_get_fpga_wait_update_max_polls(handle, out FpgaWaitUpdateMaxPolls));
-                OptionNative.Apply("preset", NativeCommand.autd3_cpu_config_get_fpga_flash_max_polls(handle, out FpgaFlashMaxPolls));
                 SyncGuard = OptionNative.GetDuration(handle, NativeCommand.autd3_cpu_config_get_sync_guard);
-                UpdateActivateDelay = OptionNative.GetDuration(handle, NativeCommand.autd3_cpu_config_get_update_activate_delay);
                 FailsafeTimeout = OptionNative.GetOptionalDuration(handle, NativeCommand.autd3_cpu_config_get_failsafe_timeout);
                 PtpUnlockFailsafeTimeout = OptionNative.GetOptionalDuration(handle, NativeCommand.autd3_cpu_config_get_ptp_unlock_failsafe_timeout);
                 OptionNative.Apply("preset", NativeCommand.autd3_cpu_config_get_fpga_bus_wait(handle, out var fpgaBusWait));
@@ -482,16 +450,8 @@ namespace AUTD3
         private readonly bool _cpuWatchdogTimeoutSet;
         private readonly TimeSpan? _cpuWatchdogTimeout;
 
-        private readonly TimeSpan? _sysTimeTransitionMargin;
-        public TimeSpan SysTimeTransitionMargin { get => _sysTimeTransitionMargin ?? CpuConfigDefaults.SysTimeTransitionMargin; init => _sysTimeTransitionMargin = value; }
-        private readonly uint? _fpgaWaitUpdateMaxPolls;
-        public uint FpgaWaitUpdateMaxPolls { get => _fpgaWaitUpdateMaxPolls ?? CpuConfigDefaults.FpgaWaitUpdateMaxPolls; init => _fpgaWaitUpdateMaxPolls = value; }
-        private readonly uint? _fpgaFlashMaxPolls;
-        public uint FpgaFlashMaxPolls { get => _fpgaFlashMaxPolls ?? CpuConfigDefaults.FpgaFlashMaxPolls; init => _fpgaFlashMaxPolls = value; }
         private readonly TimeSpan? _syncGuard;
         public TimeSpan SyncGuard { get => _syncGuard ?? CpuConfigDefaults.SyncGuard; init => _syncGuard = value; }
-        private readonly TimeSpan? _updateActivateDelay;
-        public TimeSpan UpdateActivateDelay { get => _updateActivateDelay ?? CpuConfigDefaults.UpdateActivateDelay; init => _updateActivateDelay = value; }
 
         public TimeSpan? FailsafeTimeout
         {
@@ -537,11 +497,7 @@ namespace AUTD3
             }
             try
             {
-                OptionNative.SetRequiredDuration(handle, "sysTimeTransitionMargin", SysTimeTransitionMargin, NativeCommand.autd3_cpu_config_set_sys_time_transition_margin);
-                OptionNative.Apply("fpgaWaitUpdateMaxPolls", NativeCommand.autd3_cpu_config_set_fpga_wait_update_max_polls(handle, FpgaWaitUpdateMaxPolls));
-                OptionNative.Apply("fpgaFlashMaxPolls", NativeCommand.autd3_cpu_config_set_fpga_flash_max_polls(handle, FpgaFlashMaxPolls));
                 OptionNative.SetRequiredDuration(handle, "syncGuard", SyncGuard, NativeCommand.autd3_cpu_config_set_sync_guard);
-                OptionNative.SetRequiredDuration(handle, "updateActivateDelay", UpdateActivateDelay, NativeCommand.autd3_cpu_config_set_update_activate_delay);
                 OptionNative.SetOptionalDuration(handle, "failsafeTimeout", FailsafeTimeout, NativeCommand.autd3_cpu_config_set_failsafe_timeout);
                 OptionNative.SetOptionalDuration(handle, "ptpUnlockFailsafeTimeout", PtpUnlockFailsafeTimeout, NativeCommand.autd3_cpu_config_set_ptp_unlock_failsafe_timeout);
                 OptionNative.Apply("fpgaBusWait", NativeCommand.autd3_cpu_config_set_fpga_bus_wait(handle, FpgaBusWaitNative.ToCycles(FpgaBusWait)));

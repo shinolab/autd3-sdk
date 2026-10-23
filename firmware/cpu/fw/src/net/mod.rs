@@ -3,7 +3,7 @@ mod parse;
 
 use etherparse::{Ethernet2Header, Ipv6Header, UdpHeader};
 
-pub use build::{UDP_PAYLOAD_OFFSET, echo_reply, neighbor_advertisement, udp};
+pub use build::{UDP_PAYLOAD_OFFSET, neighbor_advertisement, udp};
 pub use parse::{Packet, Udp, parse};
 
 pub type Mac = [u8; 6];
@@ -26,8 +26,6 @@ pub const UNSPECIFIED: Ipv6 = [0; 16];
 pub const fn is_link_local_unicast(ip: &Ipv6) -> bool {
     ip[0] == 0xFE && ip[1] & 0xC0 == 0x80
 }
-
-const ECHO_ID_SEQ: usize = 4;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Endpoint {
@@ -242,43 +240,6 @@ mod tests {
     }
 
     #[test]
-    fn an_echo_reply_mirrors_the_request_body() {
-        let body = [0x12, 0x34, 0x00, 0x07, b'p', b'i', b'n', b'g', b'!'];
-        let mut req = vec![0u8; ETH_HEADER + IPV6_HEADER + 4 + body.len()];
-        req[6..12].copy_from_slice(&HOST_MAC);
-        req[12..14].copy_from_slice(&EtherType::IPV6.0.to_be_bytes());
-        let ip = &mut req[ETH_HEADER..];
-        ip[0] = 0x60;
-        ip[4..6].copy_from_slice(&((4 + body.len()) as u16).to_be_bytes());
-        ip[6] = IpNumber::IPV6_ICMP.0;
-        ip[7] = 64;
-        ip[8..24].copy_from_slice(&HOST_IP);
-        ip[24..40].copy_from_slice(&UNIT_IP);
-        ip[IPV6_HEADER] = icmpv6::TYPE_ECHO_REQUEST;
-        ip[IPV6_HEADER + 4..].copy_from_slice(&body);
-        let Some(Packet::EchoRequest {
-            body: parsed,
-            src_ip,
-            ..
-        }) = parse(&req)
-        else {
-            panic!("not an echo request");
-        };
-        assert_eq!(parsed, &body);
-        assert_eq!(src_ip, HOST_IP);
-
-        let mut buf = vec![0u8; 256];
-        let len = echo_reply(&mut buf, UNIT_MAC, UNIT_IP, HOST_MAC, HOST_IP, parsed).unwrap();
-        let icmp = upper(&buf[..len]);
-        assert_eq!(icmp[0], icmpv6::TYPE_ECHO_REPLY);
-        assert_eq!(&icmp[4..], &body);
-        assert_eq!(
-            upper_layer_checksum(&UNIT_IP, &HOST_IP, IpNumber::IPV6_ICMP.0, icmp),
-            0
-        );
-    }
-
-    #[test]
     fn a_ptp_frame_is_recognised_by_its_ethertype() {
         let mut frame = vec![0u8; 60];
         frame[12..14].copy_from_slice(&ETHERTYPE_PTP.to_be_bytes());
@@ -306,7 +267,6 @@ mod tests {
             udp_frame(&payload),
             udp_frame(&[]),
             neighbor_solicitation(UNIT_IP, NDP_HOP_LIMIT),
-            echo_request(&[0x5A; 64]),
         ] {
             assert!(parse(&frame).is_some());
             for len in 0..frame.len() {
@@ -330,7 +290,6 @@ mod tests {
         for frame in [
             udp_frame(&[1, 2, 3, 4]),
             neighbor_solicitation(UNIT_IP, NDP_HOP_LIMIT),
-            echo_request(&[0x5A; 8]),
         ] {
             for length in 0..=u16::MAX {
                 let mut ip = frame.clone();
@@ -384,7 +343,6 @@ mod tests {
 
     const GOLDEN_UDP: &str = "3c7c3f11223302415554440186dd60000000000d1140fe80000000000000004155fffe544401fe800000000000003e7c3ffffe112233ad30c350000d92604155544433";
     const GOLDEN_NA: &str = "3c7c3f11223302415554440186dd6000000000203afffe80000000000000004155fffe544401fe800000000000003e7c3ffffe1122338800ae9c60000000fe80000000000000004155fffe5444010201024155544401";
-    const GOLDEN_ECHO_REPLY: &str = "3c7c3f11223302415554440186dd60000000000d3a40fe80000000000000004155fffe544401fe800000000000003e7c3ffffe112233810038531234000770696e6721";
 
     #[test]
     fn a_udp_frame_matches_the_golden_bytes() {
@@ -400,14 +358,6 @@ mod tests {
         let mut buf = vec![0xCCu8; 128];
         let len = neighbor_advertisement(&mut buf, UNIT_MAC, UNIT_IP, HOST_MAC, HOST_IP).unwrap();
         assert_eq!(hex(&buf[..len]), GOLDEN_NA);
-    }
-
-    #[test]
-    fn an_echo_reply_matches_the_golden_bytes() {
-        let body = [0x12, 0x34, 0x00, 0x07, b'p', b'i', b'n', b'g', b'!'];
-        let mut buf = vec![0xCCu8; 128];
-        let len = echo_reply(&mut buf, UNIT_MAC, UNIT_IP, HOST_MAC, HOST_IP, &body).unwrap();
-        assert_eq!(hex(&buf[..len]), GOLDEN_ECHO_REPLY);
     }
 
     fn echo_request(body: &[u8]) -> Vec<u8> {
@@ -432,31 +382,11 @@ mod tests {
         short_ns[ETH_HEADER..][4..6].copy_from_slice(&23u16.to_be_bytes());
         assert_eq!(parse(&short_ns), None);
 
-        assert_eq!(parse(&echo_request(&[1, 2, 3])), None);
-        assert!(matches!(
-            parse(&echo_request(&[1, 2, 3, 4])),
-            Some(Packet::EchoRequest {
-                body: [1, 2, 3, 4],
-                ..
-            })
-        ));
+        assert_eq!(parse(&echo_request(&[1, 2, 3, 4])), None);
 
         let mut reply = echo_request(&[1, 2, 3, 4]);
         reply[ETH_HEADER + IPV6_HEADER] = icmpv6::TYPE_ECHO_REPLY;
         assert_eq!(parse(&reply), None);
-    }
-
-    #[test]
-    fn a_padded_echo_request_ends_at_the_ipv6_payload() {
-        let mut req = echo_request(&[9, 8, 7, 6]);
-        req.extend_from_slice(&[0xAA; 6]);
-        assert!(matches!(
-            parse(&req),
-            Some(Packet::EchoRequest {
-                body: [9, 8, 7, 6],
-                ..
-            })
-        ));
     }
 
     #[test]
@@ -489,19 +419,6 @@ mod tests {
         let mut ns = neighbor_solicitation(UNIT_IP, 255);
         ns[ETH_HEADER + IPV6_HEADER + 1] = 1;
         assert_eq!(parse(&ns), None);
-
-        let mut req = echo_request(&[1, 2, 3, 4]);
-        req[ETH_HEADER + IPV6_HEADER + 1] = 1;
-        assert_eq!(parse(&req), None);
-    }
-
-    #[test]
-    fn an_echo_body_shorter_than_its_identifier_is_not_answered() {
-        let mut buf = vec![0u8; 128];
-        assert_eq!(
-            echo_reply(&mut buf, UNIT_MAC, UNIT_IP, HOST_MAC, HOST_IP, &[1, 2, 3]),
-            None
-        );
     }
 
     #[test]

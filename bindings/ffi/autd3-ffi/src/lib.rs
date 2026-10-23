@@ -1,6 +1,6 @@
 use std::ffi::{c_char, c_void};
 use std::future::Future;
-use std::num::{NonZeroU16, NonZeroU32};
+use std::num::NonZeroU16;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
@@ -781,38 +781,10 @@ macro_rules! cpu_config_bounded_field {
 
 autd3_ffi_abi::option_handle_field!(
     CpuConfigHandle,
-    [sys_time_transition_margin],
-    duration,
-    autd3_cpu_config_set_sys_time_transition_margin,
-    autd3_cpu_config_get_sys_time_transition_margin
-);
-cpu_config_bounded_field!(
-    [fpga_wait_update_max_polls],
-    u32,
-    NonZeroU32,
-    autd3_cpu_config_set_fpga_wait_update_max_polls,
-    autd3_cpu_config_get_fpga_wait_update_max_polls
-);
-cpu_config_bounded_field!(
-    [fpga_flash_max_polls],
-    u32,
-    NonZeroU32,
-    autd3_cpu_config_set_fpga_flash_max_polls,
-    autd3_cpu_config_get_fpga_flash_max_polls
-);
-autd3_ffi_abi::option_handle_field!(
-    CpuConfigHandle,
     [sync_guard],
     duration,
     autd3_cpu_config_set_sync_guard,
     autd3_cpu_config_get_sync_guard
-);
-autd3_ffi_abi::option_handle_field!(
-    CpuConfigHandle,
-    [update_activate_delay],
-    duration,
-    autd3_cpu_config_set_update_activate_delay,
-    autd3_cpu_config_get_update_activate_delay
 );
 autd3_ffi_abi::option_handle_field!(
     CpuConfigHandle,
@@ -2397,12 +2369,9 @@ mod tests {
         let handle = autd3_cpu_config_new();
         let mut ns = 0u64;
         assert_eq!(AUTD3_OK, unsafe {
-            autd3_cpu_config_get_sys_time_transition_margin(handle, &raw mut ns)
+            autd3_cpu_config_get_sync_guard(handle, &raw mut ns)
         });
-        assert_eq!(
-            CpuConfig::default().sys_time_transition_margin,
-            Duration::from_nanos(ns)
-        );
+        assert_eq!(CpuConfig::default().sync_guard, Duration::from_nanos(ns));
         let config = unsafe { take_handle(handle) }.unwrap();
         assert_eq!(CpuConfig::default(), config.0);
     }
@@ -2411,23 +2380,7 @@ mod tests {
     fn cpu_config_setters_reach_their_fields() {
         let handle = autd3_cpu_config_new();
         unsafe {
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_set_sys_time_transition_margin(handle, 0)
-            );
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_set_fpga_wait_update_max_polls(handle, 11)
-            );
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_set_fpga_flash_max_polls(handle, 12)
-            );
             assert_eq!(AUTD3_OK, autd3_cpu_config_set_sync_guard(handle, 13));
-            assert_eq!(
-                AUTD3_OK,
-                autd3_cpu_config_set_update_activate_delay(handle, 14_000_000)
-            );
             assert_eq!(
                 AUTD3_OK,
                 autd3_cpu_config_set_failsafe_timeout(handle, true, 25_000_000)
@@ -2482,11 +2435,7 @@ mod tests {
         assert_eq!(
             config,
             CpuConfig {
-                sys_time_transition_margin: Duration::ZERO,
-                fpga_wait_update_max_polls: NonZeroU32::new(11).unwrap(),
-                fpga_flash_max_polls: NonZeroU32::new(12).unwrap(),
                 sync_guard: Duration::from_nanos(13),
-                update_activate_delay: Duration::from_millis(14),
                 failsafe_timeout: Some(Duration::from_millis(25)),
                 ptp_unlock_failsafe_timeout: Some(Duration::from_millis(26)),
                 fpga_bus_wait: autd3_rs::commands::FpgaBusWait::Cycles2,
@@ -2721,14 +2670,6 @@ mod tests {
     fn a_zero_cpu_config_count_is_rejected_and_keeps_the_value() {
         let handle = autd3_cpu_config_new();
         unsafe {
-            assert_eq!(
-                AUTD3_ERR_INVALID_ARGUMENT,
-                autd3_cpu_config_set_fpga_wait_update_max_polls(handle, 0)
-            );
-            assert_eq!(
-                AUTD3_ERR_INVALID_ARGUMENT,
-                autd3_cpu_config_set_fpga_flash_max_polls(handle, 0)
-            );
             assert_eq!(
                 AUTD3_ERR_INVALID_ARGUMENT,
                 autd3_cpu_config_set_ptp_lock_samples(handle, 0)

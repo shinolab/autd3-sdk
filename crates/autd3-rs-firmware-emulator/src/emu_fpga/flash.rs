@@ -1,9 +1,9 @@
-use autd3_cpu_wire::fpga_bitstream::validate_update_image;
 use autd3_cpu_wire::fpga_update::{
     FPGA_FLASH_BYTES, FPGA_GOLDEN_REGION_END, FPGA_IMAGE_BASE, FPGA_SECTOR_BYTES,
     FPGA_USR_ACCESS_GOLDEN, FPGA_USR_ACCESS_UPDATE,
 };
 use autd3_cpu_wire::update::crc32;
+use autd3_rs_core::fpga_bitstream::validate_update_image;
 
 use crate::fw;
 use crate::fw::{FlashErr, FlashOp};

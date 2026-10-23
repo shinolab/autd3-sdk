@@ -511,11 +511,7 @@ def test_cpu_config_defaults() -> None:
     config = autd3.commands.CpuConfig()
     assert config == autd3.commands.CpuConfig(ptp=autd3.commands.PtpConfig())
     assert config.ptp == autd3.commands.PtpConfig()
-    assert config.sys_time_transition_margin.as_nanos() == autd3.Duration.from_millis(10).as_nanos()
-    assert config.fpga_wait_update_max_polls == 1_000_000
-    assert config.fpga_flash_max_polls == 2_000_000_000
     assert config.sync_guard.as_nanos() == autd3.Duration.from_micros(250).as_nanos()
-    assert config.update_activate_delay.as_millis() == 100
     assert config.failsafe_timeout is None
     assert config.ptp_unlock_failsafe_timeout is None
     assert config.fpga_bus_wait == autd3.commands.FpgaBusWait.Cycles3
@@ -558,20 +554,12 @@ def test_cpu_config_fields() -> None:
         pause_retry=autd3.Duration.from_millis(28),
     )
     config = autd3.commands.CpuConfig(
-        sys_time_transition_margin=autd3.Duration.from_nanos(0),
-        fpga_wait_update_max_polls=11,
-        fpga_flash_max_polls=12,
         sync_guard=autd3.Duration.from_micros(500),
-        update_activate_delay=autd3.Duration.from_millis(13),
         failsafe_timeout=autd3.Duration.from_millis(24),
         ptp=ptp,
     )
     assert config != autd3.commands.CpuConfig()
-    assert config.sys_time_transition_margin.as_nanos() == 0
-    assert config.fpga_wait_update_max_polls == 11
-    assert config.fpga_flash_max_polls == 12
     assert config.sync_guard.as_nanos() == 500_000
-    assert config.update_activate_delay.as_millis() == 13
     assert config.failsafe_timeout == autd3.Duration.from_millis(24)
     assert config.ptp == ptp
     assert config.ptp.sync_interval.as_millis() == 14
@@ -605,7 +593,7 @@ def test_cpu_config_fields() -> None:
 
     partial = autd3.commands.CpuConfig(sync_guard=autd3.Duration.from_micros(500))
     assert partial.sync_guard.as_nanos() == 500_000
-    assert partial.fpga_wait_update_max_polls == autd3.commands.CpuConfig().fpga_wait_update_max_polls
+    assert partial.cpu_watchdog_timeout == autd3.commands.CpuConfig().cpu_watchdog_timeout
     assert partial.ptp == autd3.commands.PtpConfig()
     assert partial.failsafe_timeout is None
 
@@ -633,10 +621,6 @@ def test_cpu_config_fields() -> None:
 
 
 def test_cpu_config_rejects_invalid_arguments() -> None:
-    with pytest.raises(ValueError, match="fpga_wait_update_max_polls"):
-        autd3.commands.CpuConfig(fpga_wait_update_max_polls=0)
-    with pytest.raises(ValueError, match="fpga_flash_max_polls"):
-        autd3.commands.CpuConfig(fpga_flash_max_polls=0)
     with pytest.raises(ValueError, match="lock_samples"):
         autd3.commands.PtpConfig(lock_samples=0)
     with pytest.raises(TypeError):
@@ -683,8 +667,12 @@ def test_set_cpu_config_builds() -> None:
         autd3.Frames.encode(geo, commands)
 
     commands = []
-    commands.append(autd3.commands.SetCpuConfig(autd3.commands.CpuConfig(update_activate_delay=autd3.Duration.from_micros(1500))))
-    with pytest.raises(autd3.Autd3Error, match="update_activate_delay"):
+    commands.append(
+        autd3.commands.SetCpuConfig(
+            autd3.commands.CpuConfig(ptp=autd3.commands.PtpConfig(pause_retry=autd3.Duration.from_micros(1500)))
+        )
+    )
+    with pytest.raises(autd3.Autd3Error, match="ptp.pause_retry"):
         autd3.Frames.encode(geo, commands)
 
 

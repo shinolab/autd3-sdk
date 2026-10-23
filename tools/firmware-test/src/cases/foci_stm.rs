@@ -15,8 +15,8 @@ use autd3_rs_modulation::{SineOption, constant, modulation_buffer, sine};
 
 use crate::Ctx;
 use crate::cases::pattern_util::{
-    POINT_NUM, RADIUS_MM, activate_pattern_bank, circle_foci, expect_transition_mode_rejections,
-    report_fpga_state, stm_sampling, write_foci_bank,
+    POINT_NUM, RADIUS_MM, activate_pattern_bank, circle_foci, report_fpga_state, stm_sampling,
+    write_foci_bank,
 };
 use crate::io::wait_enter;
 
@@ -139,28 +139,6 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
         "A {:.3} Hz STM runs (maximum buffer at 40 kHz sampling)",
         40_000.0 / MAX_FOCI_TOTAL as f32
     ))
-    .await;
-
-    transition_asserts(ctx, &foci).await?;
-    Ok(())
-}
-
-async fn transition_asserts(ctx: &Ctx<'_>, foci: &[ControlPoints]) -> Result<()> {
-    let config = stm_sampling(0.5 * Hz, foci.len())?;
-    expect_transition_mode_rejections(ctx, "FociSTM", |loop_behavior, transition_mode| {
-        Frames::encode(
-            ctx.client.geometry(),
-            FociStm::new(
-                config,
-                foci,
-                FociStmOption {
-                    loop_behavior,
-                    transition_mode,
-                    ..FociStmOption::default()
-                },
-            ),
-        )
-    })
     .await;
     Ok(())
 }

@@ -4,12 +4,12 @@ use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 use crate::frame::FRAME_BYTES_MAX;
 
 pub const PORT: u16 = 0xAD30;
-pub const PROTOCOL_VERSION: u8 = 4;
+pub const PROTOCOL_VERSION: u8 = 5;
 
 const _: () = assert!(PORT == 44336);
 
 pub const UNASSIGNED_ID: u8 = 0xFF;
-pub const MAC_PREFIX: [u8; 5] = [0x02, 0x41, 0x55, 0x54, 0x44];
+const MAC_PREFIX: [u8; 5] = [0x02, 0x41, 0x55, 0x54, 0x44];
 pub const ALL_NODES: [u8; 16] = [0xFF, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x01];
 pub const PTP_MULTICAST_MAC: [u8; 6] = [0x01, 0x1B, 0x19, 0x00, 0x00, 0x00];
 pub const PTP_GENERAL_MAC: [u8; 6] = [
@@ -54,8 +54,6 @@ crate::wire_enum_u8! {
         Grandmaster = 0x01,
     }
 }
-
-pub const UPSTREAM_UNKNOWN: u8 = 0xFF;
 
 crate::wire_enum_u8! {
     pub enum Kind {
@@ -125,11 +123,6 @@ pub struct SetTimeBody {
 pub struct UnitInfo {
     pub unit_id: u8,
     pub flags: Flags,
-    pub upstream_port: u8,
-    pub reserved: u8,
-    pub fw_version: [u8; 3],
-    pub reserved2: u8,
-    pub sys_time: U64,
     pub ptp_offset_ns: I32,
 }
 
@@ -154,16 +147,7 @@ pub struct UnblockReply {
 }
 
 assert_layout!(Header { version: 0, kind: 1, msg_id: 2 } size 4);
-assert_layout!(UnitInfo {
-    unit_id: 0,
-    flags: 1,
-    upstream_port: 2,
-    reserved: 3,
-    fw_version: 4,
-    reserved2: 7,
-    sys_time: 8,
-    ptp_offset_ns: 16,
-} size 20);
+assert_layout!(UnitInfo { unit_id: 0, flags: 1, ptp_offset_ns: 2 } size 6);
 assert_layout!(FrameReply { reserved: 0, status: 1, flags: 2, unit_id: 3, sys_time: 4 } size 12);
 const _: () = assert!(core::mem::size_of::<Header>() + FRAME_BYTES_MAX == 1452);
 
@@ -265,20 +249,9 @@ mod tests {
         let info = UnitInfo {
             unit_id: 0x07,
             flags: Flags::ASSIGNED | Flags::SYNC_READY | Flags::PTP_LOCKED,
-            upstream_port: 0x01,
-            reserved: 0,
-            fw_version: [0, 10, 3],
-            reserved2: 0,
-            sys_time: U64::new(0x0102_0304_0506_0708),
             ptp_offset_ns: I32::new(-2),
         };
-        assert_eq!(
-            info.as_bytes(),
-            &[
-                0x07, 0x19, 0x01, 0x00, 0x00, 0x0A, 0x03, 0x00, 0x08, 0x07, 0x06, 0x05, 0x04, 0x03,
-                0x02, 0x01, 0xFE, 0xFF, 0xFF, 0xFF,
-            ]
-        );
+        assert_eq!(info.as_bytes(), &[0x07, 0x19, 0xFE, 0xFF, 0xFF, 0xFF]);
     }
 
     #[test]

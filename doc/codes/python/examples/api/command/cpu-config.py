@@ -3,11 +3,7 @@ from autd3.commands import CpuConfig, FpgaBusWait, PtpConfig, SetCpuConfig
 
 # ANCHOR: api
 config = CpuConfig(
-    sys_time_transition_margin=Duration.from_millis(10),
-    fpga_wait_update_max_polls=1_000_000,
-    fpga_flash_max_polls=2_000_000_000,
     sync_guard=Duration.from_micros(250),
-    update_activate_delay=Duration.from_millis(100),
     failsafe_timeout=Duration.from_millis(500),
     ptp_unlock_failsafe_timeout=None,
     fpga_bus_wait=FpgaBusWait.Cycles3,
