@@ -40,7 +40,7 @@ impl core::fmt::Display for NetworkCause {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 #[non_exhaustive]
 pub enum Error {
     #[error("device {device} firmware error {code:#04x}: {}", describe_device_error(*code))]

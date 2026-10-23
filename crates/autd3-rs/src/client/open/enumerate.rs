@@ -83,8 +83,19 @@ impl Enumerator<'_> {
         Ok(self.last_msg_id)
     }
 
-    fn request_all_devices(&mut self, kind: Kind) -> Result<u16, UdpError> {
-        self.send_request(self.channel.all_devices_dst(), kind, &[])
+    fn request_all_devices(
+        &mut self,
+        kind: Kind,
+        max_responses: Option<usize>,
+    ) -> Result<Vec<ControlResponse>, UdpError> {
+        let msg_id = self.send_request(self.channel.all_devices_dst(), kind, &[])?;
+        collect_responses(
+            self.channel,
+            kind,
+            msg_id,
+            REQUEST_REPLY_WAIT,
+            max_responses,
+        )
     }
 
     fn request_once(
@@ -95,20 +106,6 @@ impl Enumerator<'_> {
     ) -> Result<Option<ControlResponse>, UdpError> {
         let msg_id = self.send_request(dst, kind, body)?;
         Ok(collect_responses(self.channel, kind, msg_id, REQUEST_REPLY_WAIT, Some(1))?.pop())
-    }
-
-    fn read_unit_info(
-        &mut self,
-        max_responses: Option<usize>,
-    ) -> Result<Vec<ControlResponse>, UdpError> {
-        let msg_id = self.request_all_devices(Kind::ReadUnitInfo)?;
-        collect_responses(
-            self.channel,
-            Kind::ReadUnitInfo,
-            msg_id,
-            REQUEST_REPLY_WAIT,
-            max_responses,
-        )
     }
 
     fn exchange_with_retries(
@@ -126,21 +123,14 @@ impl Enumerator<'_> {
     }
 
     fn reset_all_unit_ids(&mut self) -> Result<(), UdpError> {
-        let msg_id = self.request_all_devices(Kind::ResetId)?;
-        let replies = collect_responses(
-            self.channel,
-            Kind::ResetId,
-            msg_id,
-            REQUEST_REPLY_WAIT,
-            None,
-        )?;
+        let replies = self.request_all_devices(Kind::ResetId, None)?;
         tracing::debug!(replies = replies.len(), "reset the unit ids");
         std::thread::sleep(RESET_SETTLE);
         Ok(())
     }
 
     fn discover(&mut self) -> Result<Option<SocketAddrV6>, UdpError> {
-        let msg_id = self.request_all_devices(Kind::Discover)?;
+        let msg_id = self.send_request(self.channel.all_devices_dst(), Kind::Discover, &[])?;
         let Some(first) = collect_responses(
             self.channel,
             Kind::Discover,
@@ -169,7 +159,7 @@ impl Enumerator<'_> {
             response.check_status(Kind::AssignId, unit_id)?;
             return Ok(response.src);
         }
-        self.read_unit_info(None)?
+        self.request_all_devices(Kind::ReadUnitInfo, None)?
             .into_iter()
             .find(|r| {
                 r.unit_info().is_some_and(|info| {
@@ -237,7 +227,7 @@ impl Enumerator<'_> {
         device_addrs: &[SocketAddrV6],
     ) -> Result<bool, UdpError> {
         let stale: Vec<SocketAddrV6> = self
-            .read_unit_info(None)?
+            .request_all_devices(Kind::ReadUnitInfo, None)?
             .into_iter()
             .filter(|r| {
                 r.unit_info()
@@ -277,7 +267,7 @@ impl Enumerator<'_> {
         answered: &mut [bool],
     ) -> Result<(), UdpError> {
         let mut seen = vec![false; device_addrs.len()];
-        for response in self.read_unit_info(None)? {
+        for response in self.request_all_devices(Kind::ReadUnitInfo, None)? {
             let info = response.unit_info();
             let unit_id = info.map_or(u8::MAX, |info| info.unit_id);
             let known = info.is_some_and(|info| info.flags.contains(Flags::ASSIGNED))
@@ -317,7 +307,9 @@ impl Enumerator<'_> {
         let deadline = self.deadline;
         loop {
             let mut ready = vec![false; device_addrs.len()];
-            for response in self.read_unit_info(Some(device_addrs.len()))? {
+            for response in
+                self.request_all_devices(Kind::ReadUnitInfo, Some(device_addrs.len()))?
+            {
                 let Some(info) = response.unit_info() else {
                     continue;
                 };

@@ -26,12 +26,11 @@ impl<'g> Expansion<'g> {
         Ok(self)
     }
 
-    pub(crate) fn push_op<O: Operation>(&mut self, op: &O) -> Result<&mut Self, Error> {
-        self.frames.push_encoded(op, self.geometry)?;
-        Ok(self)
+    pub(crate) fn push_op<O: Operation>(&mut self, op: &O) -> Result<(), Error> {
+        self.frames.push_encoded(op, self.geometry)
     }
 
-    pub(crate) fn push_per_device<O, F>(&mut self, assign: F) -> Result<&mut Self, Error>
+    pub(crate) fn push_per_device<O, F>(&mut self, assign: F) -> Result<(), Error>
     where
         O: Operation,
         F: FnMut(&Device) -> Option<O>,
@@ -43,6 +42,6 @@ impl<'g> Expansion<'g> {
             num_devices = self.geometry.num_devices(),
             "encoded per-device operations"
         );
-        Ok(self)
+        Ok(())
     }
 }
