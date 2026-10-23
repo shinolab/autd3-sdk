@@ -15,8 +15,6 @@ module sim_sync_ps ();
   localparam int AcquireStableMs = 20;
   localparam int SettleMs = 300;
   localparam real RateTolerance = 0.15;
-  localparam int ManualRate = 5000;
-  localparam real StepsPerRateUnitPerMs = 204.8e3 / 262144.0;
 
   logic PSCLK = 1'b0;
   logic BUS_CLK = 1'b0;
@@ -39,9 +37,8 @@ module sim_sync_ps ();
   logic signed [13:0] SYNC_TIME_DIFF[NumDevices];
   logic [7:0] SYNC_RESYNC_COUNT[NumDevices];
   logic FINE[NumDevices];
-  settings::sync_ps_state_t PS_STATE[NumDevices];
-  longint PS_STEPS_INC[NumDevices];
-  longint PS_STEPS_DEC[NumDevices];
+  logic signed [15:0] PS_RATE[NumDevices];
+  int fine_exits[NumDevices] = '{default: 0};
 
   logic measuring = 1'b0;
   logic watch_fine = 1'b0;
@@ -75,10 +72,10 @@ module sim_sync_ps ();
         .SYNC_TIME_DIFF(SYNC_TIME_DIFF[i]),
         .SYNC_RESYNC_COUNT(SYNC_RESYNC_COUNT[i]),
         .FINE(FINE[i]),
-        .PS_STATE(PS_STATE[i]),
-        .PS_STEPS_INC(PS_STEPS_INC[i]),
-        .PS_STEPS_DEC(PS_STEPS_DEC[i])
+        .PS_RATE(PS_RATE[i])
     );
+
+    always @(negedge FINE[i]) fine_exits[i] += 1;
 
     initial begin
       integer seed;
@@ -218,10 +215,7 @@ module sim_sync_ps ();
   endtask
 
   logic [15:0] rd;
-  logic [15:0] exit_before[NumDevices];
-  longint steps_before;
-  longint steps_after;
-  real expected_steps;
+  int exit_before[NumDevices];
   real expected_rate;
   longint d_before;
   longint d_after;
@@ -238,20 +232,12 @@ module sim_sync_ps ();
     repeat (10) @(negedge SYNC_IN[0]);
     measure("ps off", 40);
 
-    bus_read(0, params::ADDR_SYNC_PS_KP, rd);
-    if (rd != 16'd64) begin
-      $error("%s:%d: KP default: expected is 64, but actual is %0d", `__FILE__, `__LINE__, rd);
-      $finish();
-    end
-
     bus_write('1, params::ADDR_SYNC_PS_CTL, 16'h0001);
     wait_all_fine("enable", '1);
     repeat (SettleMs) @(negedge SYNC_IN[0]);
 
-    for (int i = 0; i < NumDevices; i++) begin
-      bus_read(i, params::ADDR_SYNC_PS_STATE, exit_before[i]);
-    end
-    watch_fine = 1'b1;
+    exit_before = fine_exits;
+    watch_fine  = 1'b1;
     measure("ps on", 200);
     watch_fine = 1'b0;
     for (int i = 0; i < NumDevices; i++) begin
@@ -265,17 +251,15 @@ module sim_sync_ps ();
                i, MeanBoundNs, st_mean[i] - st_mean[0]);
         $finish();
       end
-      bus_read(i, params::ADDR_SYNC_PS_STATE, rd);
-      if ((rd[0] != 1'b1) || (rd[15:8] != exit_before[i][15:8])) begin
-        $error("%s:%d: device %0d SYNC_PS_STATE over the window: expected is fine with %0d exits, but actual is 0x%04x", `__FILE__, `__LINE__, i,
-               exit_before[i][15:8], rd);
+      if ((FINE[i] !== 1'b1) || (fine_exits[i] != exit_before[i])) begin
+        $error("%s:%d: device %0d fine lock over the window: expected is fine with %0d exits, but actual is FINE=%b with %0d exits", `__FILE__,
+               `__LINE__, i, exit_before[i], FINE[i], fine_exits[i]);
         $finish();
       end
-      bus_read(i, params::ADDR_SYNC_PS_RATE, rd);
       expected_rate = -Ppm[i] * 1.0e-6 * 56.0 * 1024.0e6 * 262144.0 / 204.8e6;
-      $display("device %0d rate: %0d (expected %0.0f)", i, $signed(rd), expected_rate);
-      if (abs_real($itor($signed(rd)) - expected_rate) > RateTolerance * 7340.0) begin
-        $error("%s:%d: device %0d SYNC_PS_RATE: expected is %0.0f, but actual is %0d", `__FILE__, `__LINE__, i, expected_rate, $signed(rd));
+      $display("device %0d rate: %0d (expected %0.0f)", i, PS_RATE[i], expected_rate);
+      if (abs_real($itor(PS_RATE[i]) - expected_rate) > RateTolerance * 7340.0) begin
+        $error("%s:%d: device %0d rate: expected is %0.0f, but actual is %0d", `__FILE__, `__LINE__, i, expected_rate, PS_RATE[i]);
         $finish();
       end
     end
@@ -321,28 +305,9 @@ module sim_sync_ps ();
       $error("%s:%d: device 2 sys_time shift on disable: expected is within +-2, but actual is %0d", `__FILE__, `__LINE__, d_after - d_before);
       $finish();
     end
-    bus_read(2, params::ADDR_SYNC_PS_RATE, rd);
-    if (rd != 16'd0 || FINE[2] !== 1'b0) begin
-      $error("%s:%d: device 2 after disable: expected is rate 0 and not fine, but actual is rate %0d fine %b", `__FILE__, `__LINE__, $signed(rd),
+    if (PS_RATE[2] != 16'sd0 || FINE[2] !== 1'b0) begin
+      $error("%s:%d: device 2 after disable: expected is rate 0 and not fine, but actual is rate %0d fine %b", `__FILE__, `__LINE__, PS_RATE[2],
              FINE[2]);
-      $finish();
-    end
-
-    bus_write(4'b1000, params::ADDR_SYNC_PS_MANUAL_RATE, 16'(ManualRate));
-    bus_write(4'b1000, params::ADDR_SYNC_PS_CTL, 16'h0003);
-    repeat (2) @(negedge SYNC_IN[0]);
-    steps_before = PS_STEPS_DEC[3];
-    #(10 * SyncPeriodNs);
-    steps_after = PS_STEPS_DEC[3];
-    expected_steps = ManualRate * StepsPerRateUnitPerMs * 10.0;
-    $display("manual: %0d steps in 10 ms (expected %0.1f)", steps_after - steps_before, expected_steps);
-    if (abs_real($itor(steps_after - steps_before) - expected_steps) > 0.01 * expected_steps) begin
-      $error("%s:%d: manual mode steps in 10 ms: expected is %0.1f, but actual is %0d", `__FILE__, `__LINE__, expected_steps,
-             steps_after - steps_before);
-      $finish();
-    end
-    if (FINE[3] !== 1'b0) begin
-      $error("%s:%d: device 3 in manual mode: expected is not fine, but actual is fine", `__FILE__, `__LINE__);
       $finish();
     end
 

@@ -22,9 +22,9 @@ const TEST_PATTERN_SEED: u32 = 0x2545_F491;
         page selected by the controller registers). Numbers are decimal or `0x` hexadecimal.\n\n\
         Every device on the chain receives the same request. Nothing is validated: a write can \
         open the failsafe gate, latch half-written settings or start a flash command. Only the \
-        controller (0x00__), flash (0x03__), CPU watchdog (0x07__) and synchronizer phase shift (0x08__) registers \
-        can be read back; a read of any other address returns the output of whichever of those was selected last, \
-        not the memory.\n\n\
+        controller (0x00__) and flash (0x03__) registers, the CPU watchdog state (0x0703) and the synchronizer \
+        phase shift control (0x0800) can be read back; the other addresses of 0x07__ and 0x08__ read as 0, and a read \
+        of any other address returns the output of whichever of those was selected last, not the memory.\n\n\
         --bus-wait changes the wait cycles of the CPU bus to the FPGA for this run only: the \
         devices return to the default (3 cycles) when the chain is enumerated again."
 )]

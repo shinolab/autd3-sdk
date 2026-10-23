@@ -68,11 +68,7 @@ module cpu_watchdog #(
       endcase
     end
     if (EN) begin
-      case (ADDR)
-        ADDR_WATCHDOG_TIMEOUT: rdata <= timeout_reg;
-        ADDR_WATCHDOG_STATE: rdata <= {gray_to_bin(count_gray_sync), 7'd0, fired_sync};
-        default: rdata <= 16'd0;
-      endcase
+      rdata <= (ADDR == ADDR_WATCHDOG_STATE) ? {gray_to_bin(count_gray_sync), 7'd0, fired_sync} : 16'd0;
     end
   end
 

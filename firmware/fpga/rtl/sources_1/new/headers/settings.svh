@@ -45,22 +45,6 @@ package settings;
   typedef struct {
     logic UPDATE;
     logic ENABLE;
-    logic MANUAL;
-    logic [15:0] KP;
-    logic [15:0] KI;
-    logic [15:0] KF;
-    logic signed [15:0] MANUAL_RATE;
   } sync_ps_settings_t;
-
-  typedef struct {
-    logic FINE;
-    logic [7:0] FINE_EXIT_COUNT;
-    logic signed [15:0] RATE;
-    logic signed [15:0] INTEG;
-    logic [15:0] PD_POS;
-    logic [15:0] PD_NEG;
-    logic signed [15:0] EDGE_DIFF;
-    logic [15:0] EDGE_COUNT;
-  } sync_ps_state_t;
 
 endpackage

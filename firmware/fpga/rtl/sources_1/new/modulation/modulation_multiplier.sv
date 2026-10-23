@@ -13,15 +13,14 @@ module modulation_multiplier #(
     input wire BANK,
     input wire STOP,
     output wire [15:0] DEBUG_IDX,
-    output wire DEBUG_BANK,
-    output wire DEBUG_STOP
+    output wire DEBUG_BANK
 );
 
   logic dout_valid = 1'b0;
 
   logic [7:0] mod;
   logic [15:0] idx = '0;
-  logic stop = 1'b0, bank = 1'b0;
+  logic bank = 1'b0;
   logic [$clog2(DEPTH)-1:0] cnt;
   logic [7:0] intensity_buf;
   logic [15:0] p;
@@ -35,7 +34,6 @@ module modulation_multiplier #(
 
   assign DEBUG_IDX = idx;
   assign DEBUG_BANK = bank;
-  assign DEBUG_STOP = stop;
 
   delay_fifo #(
       .WIDTH(8),
@@ -71,7 +69,6 @@ module modulation_multiplier #(
       IDLE: begin
         dout_valid <= 1'b0;
         if (DIN_VALID) begin
-          stop <= STOP;
           if (~STOP) begin
             idx  <= IDX[BANK];
             bank <= BANK;

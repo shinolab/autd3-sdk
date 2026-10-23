@@ -9,8 +9,7 @@ module pwm #(
     input wire DIN_VALID,
     input wire [8:0] PULSE_WIDTH,
     input wire [7:0] PHASE,
-    output wire PWM_OUT[DEPTH],
-    output wire DOUT_VALID
+    output wire PWM_OUT[DEPTH]
 );
 
   logic [8:0] R[DEPTH];
@@ -25,7 +24,7 @@ module pwm #(
       .PHASE(PHASE),
       .RISE(R),
       .FALL(F),
-      .DOUT_VALID(DOUT_VALID)
+      .DOUT_VALID()
   );
 
   for (genvar i = 0; i < DEPTH; i++) begin : gen_pwm
