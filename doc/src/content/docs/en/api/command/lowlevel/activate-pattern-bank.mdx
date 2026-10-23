@@ -37,8 +37,12 @@ import { excerpt } from "@lib/excerpt";
 
 In Python / C#, `SysTime` is written as `TransitionMode.SysTime(time)`.
 
-`SysTime` rejects a time earlier than "now + margin" with a `MISS_TRANSITION_TIME` error, because the FPGA may miss a transition whose time is too close.
-The margin defaults to 10 ms and can be changed with `sys_time_transition_margin` of [SetCpuConfig](/autd3-sdk/en/api/command/cpu-config/).
+The device does not check the time of `SysTime`. If the time has already passed when the command arrives, the switch happens immediately.
+Add enough margin to the current time ([`device_time_now()`](/autd3-sdk/en/api/basics/sys-time/)).
+
+The combination of the transition mode and the `LoopBehavior` of the destination bank is not checked either.
+A bank with `LoopBehavior::Infinite` is switched to immediately with any transition mode, and a finite-loop bank is never switched to with `Immediate` / `Ext`.
+Use `SyncIdx` / `SysTime` / `Gpio` for a finite-loop bank.
 
 To write a bank without transitioning to it, send only the low-level `Write*` + `Config*` commands instead of a high-level command, and switch with this command later.
 

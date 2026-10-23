@@ -1,5 +1,6 @@
 pub mod bus;
 pub mod common;
+pub mod fpga_bitstream;
 pub mod geometry;
 pub mod params;
 pub mod protocol;

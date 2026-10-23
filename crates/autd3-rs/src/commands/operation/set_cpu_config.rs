@@ -45,7 +45,7 @@ mod tests {
     #[test]
     fn the_config_is_encoded_as_a_broadcast_payload() {
         let config = CpuConfig {
-            sys_time_transition_margin: Duration::ZERO,
+            sync_guard: Duration::ZERO,
             ..CpuConfig::default()
         };
         let (encoded, out) = encode(&SetCpuConfig::new(config)).unwrap();
@@ -95,7 +95,7 @@ mod tests {
     #[test]
     fn a_duration_the_wire_cannot_carry_is_a_payload_error() {
         let err = encode(&SetCpuConfig::new(CpuConfig {
-            update_activate_delay: Duration::from_micros(1500),
+            cpu_watchdog_timeout: Some(Duration::from_micros(1500)),
             ..CpuConfig::default()
         }))
         .unwrap_err();
@@ -103,7 +103,7 @@ mod tests {
         assert!(matches!(
             err,
             Error::InvalidPayload(PayloadError::CpuConfig(CpuConfigOutOfRange {
-                field: "update_activate_delay",
+                field: "cpu_watchdog_timeout",
                 ..
             }))
         ));

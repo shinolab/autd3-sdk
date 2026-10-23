@@ -18,6 +18,7 @@ path = "src/main.rs"
 [dependencies]
 autd3-cpu-wire.workspace = true
 autd3-rs.workspace = true
+autd3-rs-core.workspace = true
 autd3-firmware-writer.workspace = true
 clap.workspace = true
 anyhow.workspace = true

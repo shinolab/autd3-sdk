@@ -1,13 +1,13 @@
 use etherparse::{
-    EtherType, Ethernet2Header, IcmpEchoHeader, Icmpv6Header, Icmpv6Type, IpNumber, Ipv6FlowLabel,
-    Ipv6Header, UdpHeader, icmpv6::NeighborAdvertisementHeader,
+    EtherType, Ethernet2Header, Icmpv6Header, Icmpv6Type, IpNumber, Ipv6FlowLabel, Ipv6Header,
+    UdpHeader, icmpv6::NeighborAdvertisementHeader,
 };
 
 use zerocopy::{Immutable, IntoBytes, KnownLayout, Unaligned};
 
 use super::{
-    DEFAULT_HOP_LIMIT, ECHO_ID_SEQ, ETH_HEADER, Endpoint, IPV6_HEADER, Ipv6, MIN_FRAME, Mac,
-    NDP_HOP_LIMIT, UDP_HEADER,
+    DEFAULT_HOP_LIMIT, ETH_HEADER, Endpoint, IPV6_HEADER, Ipv6, MIN_FRAME, Mac, NDP_HOP_LIMIT,
+    UDP_HEADER,
 };
 
 pub const UDP_PAYLOAD_OFFSET: usize = ETH_HEADER + IPV6_HEADER + UDP_HEADER;
@@ -158,40 +158,4 @@ pub fn neighbor_advertisement(
         NA_LEN,
     )?;
     Some(finish(buf, NA_LEN))
-}
-
-#[must_use]
-pub fn echo_reply(
-    buf: &mut [u8],
-    own_mac: Mac,
-    own_ip: Ipv6,
-    dst_mac: Mac,
-    dst_ip: Ipv6,
-    body: &[u8],
-) -> Option<usize> {
-    let (id_seq, data) = body.split_first_chunk::<ECHO_ID_SEQ>()?;
-    let upper_len = ICMPV6_HEADER + data.len();
-    if !fits(buf, upper_len) {
-        return None;
-    }
-    let ip = write_headers(
-        buf,
-        &Headers {
-            src_mac: own_mac,
-            dst_mac,
-            src_ip: own_ip,
-            dst_ip,
-            next_header: IpNumber::IPV6_ICMP,
-            hop_limit: DEFAULT_HOP_LIMIT,
-        },
-        upper_len,
-    );
-    buf[UPPER_OFFSET..][ICMPV6_HEADER..upper_len].copy_from_slice(data);
-    write_icmpv6(
-        buf,
-        &ip,
-        Icmpv6Type::EchoReply(IcmpEchoHeader::from_bytes(*id_seq)),
-        upper_len,
-    )?;
-    Some(finish(buf, upper_len))
 }

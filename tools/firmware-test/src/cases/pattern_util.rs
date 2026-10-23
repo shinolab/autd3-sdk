@@ -18,7 +18,6 @@ use autd3_rs::{Error, Frames, Freq, Velocity};
 use autd3_rs_pattern::{focus, wavelength};
 
 use crate::Ctx;
-use crate::cases::ERR_INVALID_TRANSITION_MODE;
 
 pub(crate) const SOUND_SPEED_M_S: f32 = 340.0;
 pub(crate) const POINT_NUM: usize = 200;
@@ -262,28 +261,6 @@ pub(crate) async fn expect_firmware_error(
             println!("  [FAIL] {label}: firmware accepted the command (expected {expected:#04x})");
         }
     }
-}
-
-pub(crate) async fn expect_transition_mode_rejections(
-    ctx: &Ctx<'_>,
-    name: &str,
-    build: impl Fn(LoopBehavior, TransitionMode) -> Result<Frames, Error>,
-) {
-    println!("transition-mode validation (firmware):");
-    expect_firmware_error(
-        ctx,
-        &format!("{name} infinite loop + SyncIdx"),
-        build(LoopBehavior::Infinite, TransitionMode::SyncIdx),
-        ERR_INVALID_TRANSITION_MODE,
-    )
-    .await;
-    expect_firmware_error(
-        ctx,
-        &format!("{name} finite loop + Immediate"),
-        build(LoopBehavior::ONCE, TransitionMode::Immediate),
-        ERR_INVALID_TRANSITION_MODE,
-    )
-    .await;
 }
 
 pub(crate) async fn activate_mod_bank(

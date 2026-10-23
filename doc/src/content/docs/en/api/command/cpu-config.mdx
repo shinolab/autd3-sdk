@@ -14,10 +14,10 @@ import pyFullSample from "@codes/python/examples/api/command/cpu-config-example.
 import csSample from "@codes/csharp/examples/api/command/cpu-config.cs?raw";
 import csFullSample from "@codes/csharp/examples/api/command/cpu-config-example.cs?raw";
 
-`SetCpuConfig` is a command that changes the settings the CPU firmware uses internally (wait times, polling limits, and PTP synchronization parameters).
+`SetCpuConfig` is a command that changes the settings the CPU firmware uses internally (the failsafe, the watchdog, PTP synchronization parameters, and so on).
 
 :::caution
-You normally do not need to change anything other than `sys_time_transition_margin`, `failsafe_timeout`, and `ptp_unlock_failsafe_timeout`.
+You normally do not need to change anything other than `failsafe_timeout` and `ptp_unlock_failsafe_timeout`.
 Behavior is not guaranteed when any other field is changed from its default.
 :::
 
@@ -29,11 +29,7 @@ Behavior is not guaranteed when any other field is changed from its default.
 
 | Field                        | Type         | Default       | Description |
 | ---------------------------- | ------------ | ------------- | ----------- |
-| `sys_time_transition_margin` | `Duration`   | 10 ms         | Miss margin for `TransitionMode::SysTime`. A transition time earlier than "current device time + margin" is rejected with `MISS_TRANSITION_TIME`. `0` means no margin |
-| `fpga_wait_update_max_polls` | `NonZeroU32` | 1,000,000     | Maximum number of polls while waiting for the FPGA to apply a setting. Exceeding it yields `FPGA_TIMEOUT` |
-| `fpga_flash_max_polls`       | `NonZeroU32` | 2,000,000,000 | Maximum number of polls while waiting for an FPGA flash operation (FPGA firmware update) to complete |
 | `sync_guard`                 | `Duration`   | 250 μs        | Margin for choosing the synchronization start time |
-| `update_activate_delay`      | `Duration`   | 100 ms        | Grace period between the CPU firmware update activation and the reboot. |
 | `failsafe_timeout`           | `Option<Duration>` | `None`  | A device stops its output once nothing has arrived from the host for this long (failsafe). `None` disables the failsafe |
 | `ptp_unlock_failsafe_timeout` | `Option<Duration>` | `None` | A device stops its output once it has been without its PTP lock for this long. `None` disables it |
 | `fpga_bus_wait`              | `FpgaBusWait` | `Cycles3`    | Wait cycles of the bus the CPU reads and writes the FPGA through. `Cycles2` or `Cycles3` |
@@ -72,6 +68,9 @@ Locking again takes about 1 s with the default settings, so a shorter value stop
 `cpu_watchdog_timeout` is how long the FPGA waits before stopping the output while the CPU firmware hangs or resets, and it stops the output the same way as the failsafe.
 With `None`, a device keeps the output it had when the CPU firmware stopped.
 
+If you close the client with `failsafe_timeout` set, the devices stop the output that long after the host goes silent.
+Send [`ReleaseFailsafe`](/autd3-sdk/en/api/command/release-failsafe/) or [Clear](/autd3-sdk/en/api/command/clear/) after opening again.
+
 An output stopped by the failsafe or the CPU watchdog does not come back automatically.
 Whether a device is stopped can be checked with `is_failsafe_active()` (C#: `IsFailsafeActive`) of the `FpgaState` returned from `read_fpga_state()`.
 Sending the [`ReleaseFailsafe`](/autd3-sdk/en/api/command/release-failsafe/) command resumes the output.
@@ -79,6 +78,10 @@ Sending the [`ReleaseFailsafe`](/autd3-sdk/en/api/command/release-failsafe/) com
 :::
 
 The settings return to their defaults on [Clear](/autd3-sdk/en/api/command/clear/) and on power cycling.
+Reopening the client does not reset them (the devices keep the values of the previous session), so send `Clear` to return to the defaults.
+If you close the client with a PTP setting that never locks, the synchronization wait of the next open fails at `open_timeout` (`SyncTimeout`).
+In that case, open with `sync_on_open` of [`TransportOption`](/autd3-sdk/en/api/basics/transport-option/) set to `false` (Rust only), send `Clear`, and open again.
+From Python / C#, reboot the devices with `autd3-firmware-ota --reboot-only` or power-cycle them to return to the defaults.
 
 ## Example
 

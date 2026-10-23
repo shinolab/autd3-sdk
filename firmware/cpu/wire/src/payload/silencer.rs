@@ -37,7 +37,7 @@ pub struct SilencerPayload {
 
 impl SilencerPayload {
     #[must_use]
-    pub const fn fixed_completion_steps(
+    const fn fixed_completion_steps(
         intensity: NonZeroU16,
         phase: NonZeroU16,
         strict_mode: bool,

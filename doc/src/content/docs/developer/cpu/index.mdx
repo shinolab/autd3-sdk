@@ -127,12 +127,12 @@ FIFO が満杯の場合, フレームは捨てられ (`fifo_drop` に数える),
 | `0x02` | `ERR_INVALID_PAYLOAD`          | ペイロードの長さ・オフセットが不正         |
 | `0x03` | `ERR_INVALID_DATA`             | データの値が不正                           |
 | `0x04` | `ERR_INVALID_SILENCER_SETTING` | Silencer の設定が厳格モードの条件を満たさない |
-| `0x05` | `ERR_INVALID_TRANSITION_MODE`  | 遷移モードと繰り返し回数の組み合わせが不正 |
-| `0x06` | `ERR_MISS_TRANSITION_TIME`     | `SysTime` 遷移の指定時刻が近すぎる・過去である |
+| `0x05` | (欠番)                         | Firmware v0.12.x までの `ERR_INVALID_TRANSITION_MODE`. 遷移モードと繰り返し回数の組み合わせは検査しない |
+| `0x06` | (欠番)                         | Firmware v0.12.x までの `ERR_MISS_TRANSITION_TIME`. `SysTime` 遷移の時刻は検査しない |
 | `0x07` | `ERR_FPGA_TIMEOUT`             | FPGA が制御フラグを期限内にクリアしない     |
 | `0x08` | `ERR_SYNC_NOT_READY`           | 同期パルスがまだ動いていない (時刻合わせ前) |
 | `0x09` | (欠番)                         | Firmware v0.9.0 までの `ERR_INVALID_SYNC0_CYCLE`. 同期パルスの周期はファームが決めるので発生しない |
-| `0x14` | `ERR_SYNC_MISSED`              | `CMD_SYNCHRONIZE` の書き込みが同期パルスの立ち上がりに 3 回続けて間に合わなかった |
+| `0x14` | `ERR_SYNC_MISSED`              | `CMD_SYNCHRONIZE` の書き込みが同期パルスの立ち上がりに間に合わなかった. 送り直せばよい |
 
 ## FPGA への書き込み
 
@@ -178,13 +178,11 @@ ETHSW のタイマはデバイス間で PTP (IEEE 1588, L2, E2E, two-step) に�
 1. `SYNC_SET` フラグを立て, FPGA の [Synchronizer](/autd3-sdk/developer/fpga/synchronizer/) が `SYS_TIME` をセットするのを待つ.
 1. デバイス時刻を読み直し, 書き込んだ立ち上がりより手前であることを確かめる.
     - フラグが立ち上がりより後に届くと `SYS_TIME` が <Math tex="\SI{1}{ms}" /> 遅れる
-    - 手前でなければ, 立ち上がりの時刻を求め直して書き込みからやり直す (合計 3 回まで)
-    - 3 回とも間に合わなければ `ERR_SYNC_MISSED` を返す
+    - 手前でなければ `ERR_SYNC_MISSED` を返す. やり直しはしない (受け取ったホストが送り直す)
 
-## バンク遷移の検証
+## バンク遷移
 
-遷移モードと繰り返し回数の組み合わせには制約がある.
-無限ループ (`REP == 0xFFFF`) では `Immediate` / `Ext` のみ, 有限ループでは `SyncIdx` / `SysTime` / `Gpio` のみが有効である.
-`transition_mode_violates_loop()` がこれを検証し, 違反すれば `ERR_INVALID_TRANSITION_MODE` を返す.
-
-また `SysTime` 遷移では, 指定時刻が現在時刻から <Math tex="\SI{10}{ms}" /> 以内 (または過去) の場合, FPGA が遷移を取りこぼす可能性がため, `ERR_MISS_TRANSITION_TIME` を返す.
+CPU ファームは遷移モードと繰り返し回数の組み合わせも, `SysTime` 遷移の時刻も検査せず, そのまま FPGA へ書く.
+FPGA は, 無限ループ (`REP == 0xFFFF`) のバンクへはどの遷移モードでも即時に切り替える.
+有限ループのバンクへは `SyncIdx` / `SysTime` / `Gpio` の条件を待って切り替え, `Immediate` / `Ext` では切り替わらずに待ち続ける.
+`SysTime` の時刻が過ぎていれば即時に切り替える.

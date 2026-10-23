@@ -1,4 +1,4 @@
-use core::num::{NonZeroU16, NonZeroU32};
+use core::num::NonZeroU16;
 use core::time::Duration;
 use std::sync::Arc;
 
@@ -157,10 +157,6 @@ impl SetSilencerPy {
     fn disable() -> Self {
         Self(Arc::new(SetSilencer::disable()))
     }
-}
-
-fn non_zero_u32(field: &str, value: u32) -> PyResult<NonZeroU32> {
-    NonZeroU32::new(value).ok_or_else(|| PyValueError::new_err(format!("{field} must be >= 1")))
 }
 
 #[pyclass(
@@ -390,11 +386,7 @@ impl CpuConfigPy {
     #[new]
     #[pyo3(signature = (
         *,
-        sys_time_transition_margin = CoreCpuConfig::default().sys_time_transition_margin,
-        fpga_wait_update_max_polls = CoreCpuConfig::default().fpga_wait_update_max_polls.get(),
-        fpga_flash_max_polls = CoreCpuConfig::default().fpga_flash_max_polls.get(),
         sync_guard = CoreCpuConfig::default().sync_guard,
-        update_activate_delay = CoreCpuConfig::default().update_activate_delay,
         failsafe_timeout = CoreCpuConfig::default().failsafe_timeout,
         ptp_unlock_failsafe_timeout = CoreCpuConfig::default().ptp_unlock_failsafe_timeout,
         fpga_bus_wait = FpgaBusWaitPy(CoreCpuConfig::default().fpga_bus_wait),
@@ -403,11 +395,7 @@ impl CpuConfigPy {
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
-        #[pyo3(from_py_with = extract_duration)] sys_time_transition_margin: Duration,
-        fpga_wait_update_max_polls: u32,
-        fpga_flash_max_polls: u32,
         #[pyo3(from_py_with = extract_duration)] sync_guard: Duration,
-        #[pyo3(from_py_with = extract_duration)] update_activate_delay: Duration,
         #[pyo3(from_py_with = crate::udp::none_or_duration)] failsafe_timeout: Option<Duration>,
         #[pyo3(from_py_with = crate::udp::none_or_duration)] ptp_unlock_failsafe_timeout: Option<
             Duration,
@@ -417,14 +405,7 @@ impl CpuConfigPy {
         ptp: PtpConfigPy,
     ) -> PyResult<Self> {
         Ok(Self(CoreCpuConfig {
-            sys_time_transition_margin,
-            fpga_wait_update_max_polls: non_zero_u32(
-                "fpga_wait_update_max_polls",
-                fpga_wait_update_max_polls,
-            )?,
-            fpga_flash_max_polls: non_zero_u32("fpga_flash_max_polls", fpga_flash_max_polls)?,
             sync_guard,
-            update_activate_delay,
             failsafe_timeout,
             ptp_unlock_failsafe_timeout,
             fpga_bus_wait: fpga_bus_wait.0,
@@ -434,28 +415,8 @@ impl CpuConfigPy {
     }
 
     #[getter]
-    fn sys_time_transition_margin<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        duration_to_py(py, self.0.sys_time_transition_margin)
-    }
-
-    #[getter]
-    fn fpga_wait_update_max_polls(&self) -> u32 {
-        self.0.fpga_wait_update_max_polls.get()
-    }
-
-    #[getter]
-    fn fpga_flash_max_polls(&self) -> u32 {
-        self.0.fpga_flash_max_polls.get()
-    }
-
-    #[getter]
     fn sync_guard<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         duration_to_py(py, self.0.sync_guard)
-    }
-
-    #[getter]
-    fn update_activate_delay<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        duration_to_py(py, self.0.update_activate_delay)
     }
 
     #[getter]

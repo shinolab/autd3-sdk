@@ -1,4 +1,4 @@
-use std::num::{NonZeroU16, NonZeroU32};
+use std::num::NonZeroU16;
 use std::time::Duration;
 
 use autd3_rs::commands::{
@@ -8,11 +8,7 @@ use autd3_rs::commands::{
 fn main() {
     // ANCHOR: api
     let config = CpuConfig {
-        sys_time_transition_margin: Duration::from_millis(10),
-        fpga_wait_update_max_polls: NonZeroU32::new(1_000_000).unwrap(),
-        fpga_flash_max_polls: NonZeroU32::new(2_000_000_000).unwrap(),
         sync_guard: Duration::from_micros(250),
-        update_activate_delay: Duration::from_millis(100),
         failsafe_timeout: Some(Duration::from_millis(500)),
         ptp_unlock_failsafe_timeout: None,
         fpga_bus_wait: FpgaBusWait::Cycles3,

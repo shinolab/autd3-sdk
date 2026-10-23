@@ -20,6 +20,7 @@ pub use crate::fpga_params::{PWE_TABLE_SIZE, REP_INFINITE};
 use crate::port::Port;
 use crate::proto::{Error, OUTPUT_MASK_WORDS};
 
+pub const FPGA_WAIT_UPDATE_MAX_POLLS: NonZeroU32 = NonZeroU32::new(1_000_000).unwrap();
 pub const FPGA_PAGE_WORDS: u32 = 16384;
 
 pub use autd3_cpu_wire::payload::{EmissionType, TransitionModeKind};
@@ -142,37 +143,6 @@ pub fn write_u64<P: Port>(port: &mut P, addr: u16, value: u64) {
     for i in 0..4u16 {
         write_ctl(port, addr + i, (value >> (16 * i)) as u16);
     }
-}
-
-pub fn validate_transition_mode<P: Port>(
-    port: &mut P,
-    rep: u16,
-    transition_mode: TransitionModeKind,
-    transition_value: u64,
-    margin_ns: u64,
-) -> Result<(), Error> {
-    let loop_compatible = if rep == REP_INFINITE {
-        matches!(
-            transition_mode,
-            TransitionModeKind::Immediate | TransitionModeKind::Ext
-        )
-    } else {
-        matches!(
-            transition_mode,
-            TransitionModeKind::SyncIdx | TransitionModeKind::SysTime | TransitionModeKind::Gpio
-        )
-    };
-    if !loop_compatible {
-        return Err(Error::InvalidTransitionMode);
-    }
-    if transition_mode == TransitionModeKind::SysTime
-        && port
-            .sys_time()
-            .is_none_or(|now| transition_value < now + margin_ns)
-    {
-        return Err(Error::MissTransitionTime);
-    }
-    Ok(())
 }
 
 pub struct Ram {
@@ -350,6 +320,7 @@ mod tests {
 
     use super::{FPGA_PAGE_WORDS, MOD_RAM, set_and_wait_update, write_ram_words};
     use crate::fpga_params::{ADDR_MOD_MEM_WR_BANK, ADDR_MOD_MEM_WR_PAGE, CtlFlags};
+    use crate::proto::Error;
     use crate::test_utils::mock::Harness;
 
     #[test]
@@ -363,6 +334,18 @@ mod tests {
         );
         assert_eq!(h.latch_count(CtlFlags::SILENCER_SET), latched + 1);
         assert_eq!(h.port.barriers, 0);
+    }
+
+    #[test]
+    fn a_stuck_latch_is_polled_the_given_number_of_times() {
+        let mut h = Harness::new();
+        h.port.latch_stuck = true;
+        let reads = h.port.ctl_flag_reads;
+        assert_eq!(
+            set_and_wait_update(&mut h.port, CtlFlags::SYNC_SET, NonZeroU32::new(5).unwrap()),
+            Err(Error::FpgaTimeout)
+        );
+        assert_eq!(h.port.ctl_flag_reads - reads, 1 + 5);
     }
 
     #[test]

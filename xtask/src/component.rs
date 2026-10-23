@@ -19,12 +19,7 @@ pub(crate) const COMPONENTS: &[Component] = &[
         name: "software",
         section: "Rust",
         tag_prefix: "v",
-        include_paths: &[
-            "crates/**",
-            "tools/**",
-            "recipes/**",
-            "bindings/ffi/**",
-        ],
+        include_paths: &["crates/**", "tools/**", "recipes/**", "bindings/ffi/**"],
         also_shipped_by: &[],
         version_file: "Cargo.toml",
         version_table: &["workspace", "package"],

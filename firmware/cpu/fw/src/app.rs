@@ -145,7 +145,6 @@ pub struct Cpu {
     ptp_unlock_failsafe_fired: Cell<bool>,
     ptp_failsafe_active: AtomicBool,
     pub(crate) config: Cell<cmd::cpu_config::CpuConfig>,
-    pub(crate) config_reset_requested: AtomicBool,
     ptp_unlocked_ms: OptionalMs,
     host_idle_ms: OptionalMs,
     pub(crate) update: cmd::update::UpdateSession,
@@ -184,7 +183,6 @@ impl Cpu {
             ptp_unlock_failsafe_fired: Cell::new(false),
             ptp_failsafe_active: AtomicBool::new(false),
             config: Cell::new(cmd::cpu_config::CpuConfig::DEFAULT),
-            config_reset_requested: AtomicBool::new(false),
             ptp_unlocked_ms: OptionalMs::new(),
             host_idle_ms: OptionalMs::new(),
             update: cmd::update::UpdateSession::new(),
@@ -197,7 +195,7 @@ impl Cpu {
 impl Cpu {
     pub fn init<P: Port>(&self, port: &mut P) {
         let config = self.config();
-        if fpga::init(port, config.fpga_wait_update_max_polls).is_ok() {
+        if fpga::init(port, fpga::FPGA_WAIT_UPDATE_MAX_POLLS).is_ok() {
             self.lower_ptp_failsafe();
         } else {
             self.count_boot_failure();
@@ -266,7 +264,6 @@ impl Cpu {
 
     pub fn tick_1ms<P: Port>(&self, port: &mut P) {
         fpga::watchdog_kick(port);
-        self.apply_requested_config_reset(port);
         self.update_tick(port);
         self.fpga_update_tick(port);
         let config = self.config();
@@ -348,7 +345,6 @@ impl Cpu {
 
     fn handle_slot<P: Port>(&self, port: &mut P, slot: &Slot, cmd: u8) -> Option<Reply> {
         let payload = slot.payload.try_borrow().ok()?;
-        self.apply_requested_config_reset(port);
         let len = usize::from(slot.len.get()).min(PAYLOAD_BYTES);
         Some(self.handle_frame(port, cmd, &payload.0[..len]))
     }
@@ -413,7 +409,7 @@ impl Cpu {
             return Err(Error::FpgaUpdateInProgress);
         }
         let config = self.config();
-        let max_polls = config.fpga_wait_update_max_polls;
+        let max_polls = fpga::FPGA_WAIT_UPDATE_MAX_POLLS;
         let result = match cmd {
             Cmd::Nop => Ok(()),
             Cmd::SetCpuConfig => self.set_cpu_config(port, payload),
@@ -429,13 +425,15 @@ impl Cpu {
             }
             Cmd::WriteFociBuffer => cmd::write_foci::handle(port, payload),
             Cmd::WritePatternRaw => cmd::write_pattern_raw::handle(port, payload),
-            Cmd::WritePatternFused => cmd::write_pattern_fused::handle(port, &config, payload),
+            Cmd::WritePatternFused => cmd::write_pattern_fused::handle(port, payload, max_polls),
             Cmd::WritePatternPhase => cmd::write_pattern_phase::handle(port, payload),
             Cmd::WriteModulationBuffer => cmd::write_mod::handle(port, payload),
             Cmd::ConfigModulation => cmd::config_mod::handle(port, payload),
             Cmd::ConfigPattern => cmd::config_pattern::handle(port, payload),
-            Cmd::ActivateModulationBank => cmd::activate_mod_bank::handle(port, &config, payload),
-            Cmd::ActivatePatternBank => cmd::activate_pattern_bank::handle(port, &config, payload),
+            Cmd::ActivateModulationBank => cmd::activate_mod_bank::handle(port, payload, max_polls),
+            Cmd::ActivatePatternBank => {
+                cmd::activate_pattern_bank::handle(port, payload, max_polls)
+            }
             Cmd::SetSilencer => cmd::silencer::handle(port, payload, max_polls),
             Cmd::SetPhaseCorrection => cmd::phase_corr::handle(port, payload),
             Cmd::SetOutputMask => cmd::output_mask::handle(port, payload),
@@ -450,7 +448,6 @@ impl Cpu {
             Cmd::UpdateBegin => self.update_begin(port, payload),
             Cmd::UpdateChunk => self.update_chunk(port, payload),
             Cmd::UpdateCommit => self.update_commit(port),
-            Cmd::UpdateActivate => self.update_activate(),
             Cmd::Reboot => {
                 self.reboot();
                 Ok(())

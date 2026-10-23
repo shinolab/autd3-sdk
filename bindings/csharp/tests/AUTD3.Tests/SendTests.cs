@@ -188,7 +188,7 @@ namespace AUTD3.Tests
 
             Assert.Throws<Autd3Exception>(() => Frames.Encode(geometry, Command.Sequence(
                 new Nop(),
-                new SetCpuConfig(new CpuConfig { FpgaWaitUpdateMaxPolls = 0 }))));
+                new SetCpuConfig(new CpuConfig { Ptp = new PtpConfig { LockSamples = 0 } }))));
         }
     }
 }

@@ -1,4 +1,4 @@
-pub(crate) use autd3_cpu_wire::payload::{SilencerFlags, SilencerPayload};
+pub(crate) use autd3_cpu_wire::payload::SilencerPayload;
 
 use core::num::NonZeroU32;
 
@@ -6,7 +6,7 @@ use crate::fpga;
 use crate::fpga_params::{
     ADDR_SILENCER_COMPLETION_STEPS_INTENSITY, ADDR_SILENCER_COMPLETION_STEPS_PHASE,
     ADDR_SILENCER_FLAG, ADDR_SILENCER_UPDATE_RATE_INTENSITY, ADDR_SILENCER_UPDATE_RATE_PHASE,
-    CtlFlags, FunctionBits,
+    CtlFlags,
 };
 use crate::port::Port;
 use crate::proto::Error;
@@ -22,12 +22,6 @@ pub(crate) fn handle<P: Port>(
     let update_rate_phase = p.update_rate_phase.get();
     let completion_steps_intensity = p.completion_steps_intensity.get();
     let completion_steps_phase = p.completion_steps_phase.get();
-
-    let strict = !flag.contains(SilencerFlags::FIXED_UPDATE_RATE_MODE)
-        && flag.contains(SilencerFlags::STRICT_MODE);
-    if strict && !fpga::functions(port).contains(FunctionBits::STRICT_SILENCER_GUARD) {
-        return Err(Error::InvalidSilencerSetting);
-    }
 
     fpga::write_ctl(
         port,
@@ -51,16 +45,16 @@ pub(crate) fn handle<P: Port>(
 
 #[cfg(all(test, not(loom)))]
 mod tests {
-    use super::SilencerFlags;
     use crate::fpga::TransitionModeKind;
     use crate::fpga_params::{
-        ADDR_FUNCTION_BITS, ADDR_SILENCER_COMPLETION_STEPS_INTENSITY,
-        ADDR_SILENCER_COMPLETION_STEPS_PHASE, ADDR_SILENCER_FLAG,
-        ADDR_SILENCER_UPDATE_RATE_INTENSITY, ADDR_SILENCER_UPDATE_RATE_PHASE, CtlFlags,
+        ADDR_SILENCER_COMPLETION_STEPS_INTENSITY, ADDR_SILENCER_COMPLETION_STEPS_PHASE,
+        ADDR_SILENCER_FLAG, ADDR_SILENCER_UPDATE_RATE_INTENSITY, ADDR_SILENCER_UPDATE_RATE_PHASE,
+        CtlFlags,
     };
     use crate::proto::Error;
     use crate::test_utils::builders::{activate_mod_bank, activate_pattern_bank, set_silencer};
     use crate::test_utils::mock::Harness;
+    use autd3_cpu_wire::payload::SilencerFlags;
 
     #[test]
     fn set_silencer_fixed_completion_steps_writes_registers_and_latches() {
@@ -154,28 +148,6 @@ mod tests {
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.ctl(ADDR_SILENCER_UPDATE_RATE_INTENSITY), 0);
         assert_eq!(h.ctl(ADDR_SILENCER_COMPLETION_STEPS_INTENSITY), 5);
-    }
-
-    #[test]
-    fn strict_silencer_is_refused_on_an_fpga_without_the_guard() {
-        let mut h = Harness::new();
-        h.set_ctl(ADDR_FUNCTION_BITS, 0);
-
-        h.deliver(&set_silencer(SilencerFlags::STRICT_MODE, 256, 256, 8, 40));
-        assert_eq!(h.status(), Error::InvalidSilencerSetting);
-        assert_eq!(h.ctl(ADDR_SILENCER_FLAG), 0);
-        assert_eq!(h.ctl(ADDR_SILENCER_COMPLETION_STEPS_INTENSITY), 10);
-
-        h.deliver(&set_silencer(SilencerFlags::empty(), 256, 256, 8, 40));
-        assert_eq!(h.status(), Error::None);
-        h.deliver(&set_silencer(
-            SilencerFlags::STRICT_MODE | SilencerFlags::FIXED_UPDATE_RATE_MODE,
-            8,
-            16,
-            10,
-            40,
-        ));
-        assert_eq!(h.status(), Error::None);
     }
 
     #[test]

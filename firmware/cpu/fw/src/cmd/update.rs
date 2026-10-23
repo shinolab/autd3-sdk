@@ -19,6 +19,7 @@ use crate::port::{FlashError, Port};
 use crate::proto::Error;
 
 const READBACK_BYTES: usize = FLASH_PAGE_BYTES as usize;
+pub(crate) const REBOOT_DELAY_MS: u16 = 100;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum State {
@@ -30,9 +31,6 @@ pub(crate) enum State {
         generation: u32,
     },
     Committed,
-    Activating {
-        remaining_ms: u16,
-    },
     Rebooting {
         remaining_ms: u16,
     },
@@ -68,10 +66,7 @@ impl UpdateSession {
     }
 
     pub(crate) fn is_resetting(&self) -> bool {
-        matches!(
-            self.state.get(),
-            State::Activating { .. } | State::Rebooting { .. }
-        )
+        matches!(self.state.get(), State::Rebooting { .. })
     }
 }
 
@@ -288,38 +283,18 @@ impl Cpu {
         Ok(())
     }
 
-    pub(crate) fn update_activate(&self) -> Result<(), Error> {
-        if !matches!(
-            self.update.state.get(),
-            State::Committed | State::Activating { .. }
-        ) {
-            return Err(Error::UpdateNotCommitted);
-        }
-        self.update.state.set(State::Activating {
-            remaining_ms: self.config().update_activate_delay.as_millis() as u16,
-        });
-        Ok(())
-    }
-
     pub(crate) fn reboot(&self) {
         self.update.state.set(State::Rebooting {
-            remaining_ms: self.config().update_activate_delay.as_millis() as u16,
+            remaining_ms: REBOOT_DELAY_MS,
         });
     }
 
     pub(crate) fn update_tick<P: Port>(&self, port: &mut P) {
         match self.update.state.get() {
-            State::Activating { remaining_ms: 1 } => {
-                self.update.state.set(State::Committed);
-                port.reset();
-            }
             State::Rebooting { remaining_ms: 1 } => {
                 self.update.state.set(State::Idle);
                 port.reset();
             }
-            State::Activating { remaining_ms } => self.update.state.set(State::Activating {
-                remaining_ms: remaining_ms - 1,
-            }),
             State::Rebooting { remaining_ms } => self.update.state.set(State::Rebooting {
                 remaining_ms: remaining_ms - 1,
             }),
@@ -341,10 +316,8 @@ mod tests {
     use zerocopy::little_endian::U32;
     use zerocopy::{FromBytes, IntoBytes};
 
-    use super::{State, UpdateBeginPayload, UpdateChunkPayload};
+    use super::{REBOOT_DELAY_MS, State, UpdateBeginPayload, UpdateChunkPayload};
 
-    const ACTIVATE_DELAY_MS: u16 =
-        autd3_cpu_wire::cpu_params::UPDATE_ACTIVATE_DELAY.as_millis() as u16;
     const CPU_WATCHDOG_TIMEOUT_MS: u16 =
         autd3_cpu_wire::cpu_params::CPU_WATCHDOG_TIMEOUT.as_millis() as u16;
     use crate::fpga_params::CtlFlags;
@@ -538,8 +511,6 @@ mod tests {
         assert_eq!(h.status(), Error::UpdateNotStarted);
         h.deliver(&Frame::new(Cmd::UpdateCommit));
         assert_eq!(h.status(), Error::UpdateNotStarted);
-        h.deliver(&Frame::new(Cmd::UpdateActivate));
-        assert_eq!(h.status(), Error::UpdateNotCommitted);
     }
 
     #[test]
@@ -617,7 +588,7 @@ mod tests {
     #[case::zero_length(Some(0))]
     #[case::vector_table_only(Some(IMAGE_VECTOR_BYTES))]
     #[case::one_past_the_capacity(Some(IMAGE_VECTOR_BYTES + IMAGE_APP_CAPACITY + 1))]
-    fn an_invalid_begin_keeps_a_committed_image_activatable(#[case] length: Option<u32>) {
+    fn an_invalid_begin_keeps_a_committed_image(#[case] length: Option<u32>) {
         let (mut h, _) = running_from_slot_a();
         let img = image(300, 9);
         run_update(&mut h, &img);
@@ -633,10 +604,12 @@ mod tests {
         assert_eq!(h.cpu.update.state(), State::Committed);
         assert_eq!(h.port.erased, erased);
 
-        h.deliver(&Frame::new(Cmd::UpdateActivate));
+        h.deliver(&Frame::new(Cmd::Reboot));
         assert_eq!(h.status(), Error::None);
-        h.tick_1ms(u32::from(ACTIVATE_DELAY_MS));
+        h.tick_1ms(u32::from(REBOOT_DELAY_MS));
         assert_eq!(h.port.reset_count, 1);
+        h.reboot();
+        assert_eq!(h.cpu.booted_slot(), Some(Slot::B));
     }
 
     #[test]
@@ -661,70 +634,12 @@ mod tests {
         run_update(&mut h, &img);
         h.deliver(&begin(img.len() as u32, crc32(&img)));
         assert_eq!(h.status(), Error::None);
-        h.deliver(&Frame::new(Cmd::UpdateActivate));
-        assert_eq!(h.status(), Error::UpdateNotCommitted);
-    }
 
-    #[test]
-    fn activate_waits_for_the_configured_delay() {
-        use autd3_cpu_wire::config::CpuConfig;
-
-        use crate::test_utils::builders::set_cpu_config;
-
-        let (mut h, _) = running_from_slot_a();
-        let img = image(300, 9);
-        h.deliver(&set_cpu_config(&CpuConfig {
-            update_activate_delay: core::time::Duration::from_millis(7),
-            ..CpuConfig::default()
-        }));
-        assert_eq!(h.status(), Error::None);
-        h.deliver(&begin(img.len() as u32, crc32(&img)));
-        send_image(&mut h, &img);
-        h.deliver(&Frame::new(Cmd::UpdateCommit));
-        h.deliver(&Frame::new(Cmd::UpdateActivate));
-        assert_eq!(h.status(), Error::None);
-
-        h.tick_1ms(6);
-        assert_eq!(h.port.reset_count, 0);
-        h.tick_1ms(1);
+        h.deliver(&Frame::new(Cmd::Reboot));
+        h.tick_1ms(u32::from(REBOOT_DELAY_MS));
         assert_eq!(h.port.reset_count, 1);
-    }
-
-    #[test]
-    fn activate_requires_a_commit_and_resets_after_the_delay() {
-        let (mut h, _) = running_from_slot_a();
-        let img = image(300, 9);
-        h.deliver(&begin(img.len() as u32, crc32(&img)));
-        h.deliver(&Frame::new(Cmd::UpdateActivate));
-        assert_eq!(h.status(), Error::UpdateNotCommitted);
-        send_image(&mut h, &img);
-        h.deliver(&Frame::new(Cmd::UpdateCommit));
-        assert_eq!(h.status(), Error::None);
-        h.deliver(&Frame::new(Cmd::UpdateActivate));
-        assert_eq!(h.status(), Error::None);
-        assert_eq!(
-            h.cpu.update.state(),
-            State::Activating {
-                remaining_ms: ACTIVATE_DELAY_MS
-            }
-        );
-
-        h.tick_1ms(u32::from(ACTIVATE_DELAY_MS) - 1);
-        assert_eq!(h.port.reset_count, 0);
-        h.deliver(&Frame::new(Cmd::UpdateActivate));
-        assert_eq!(h.status(), Error::None);
-        assert_eq!(
-            h.cpu.update.state(),
-            State::Activating {
-                remaining_ms: ACTIVATE_DELAY_MS
-            }
-        );
-        h.tick_1ms(u32::from(ACTIVATE_DELAY_MS) - 1);
-        assert_eq!(h.port.reset_count, 0);
-        h.tick_1ms(1);
-        assert_eq!(h.port.reset_count, 1);
-        h.tick_1ms(10);
-        assert_eq!(h.port.reset_count, 1);
+        h.reboot();
+        assert_eq!(h.cpu.booted_slot(), Some(Slot::A));
     }
 
     #[test]
@@ -1094,11 +1009,11 @@ mod tests {
     }
 
     #[test]
-    fn begin_is_rejected_while_an_activation_is_pending() {
+    fn begin_is_rejected_while_a_reboot_after_a_commit_is_pending() {
         let (mut h, _) = running_from_slot_a();
         let img = image(300, 31);
         run_update(&mut h, &img);
-        h.deliver(&Frame::new(Cmd::UpdateActivate));
+        h.deliver(&Frame::new(Cmd::Reboot));
         assert_eq!(h.status(), Error::None);
         let erased_before = h.port.erased.len();
         h.deliver(&begin(img.len() as u32, crc32(&img)));
@@ -1109,7 +1024,7 @@ mod tests {
         assert_eq!(h.port.fpga_flash_ops, []);
         assert!(!h.cpu.fpga_update.is_locked());
         assert!(h.cpu.update.is_resetting());
-        h.tick_1ms(u32::from(ACTIVATE_DELAY_MS));
+        h.tick_1ms(u32::from(REBOOT_DELAY_MS));
         assert_eq!(h.port.reset_count, 1);
     }
 
@@ -1121,10 +1036,10 @@ mod tests {
         assert_eq!(
             h.cpu.update.state(),
             State::Rebooting {
-                remaining_ms: ACTIVATE_DELAY_MS
+                remaining_ms: REBOOT_DELAY_MS
             }
         );
-        h.tick_1ms(u32::from(ACTIVATE_DELAY_MS) - 1);
+        h.tick_1ms(u32::from(REBOOT_DELAY_MS) - 1);
         assert_eq!(h.port.reset_count, 0);
         h.tick_1ms(1);
         assert_eq!(h.port.reset_count, 1);
@@ -1137,12 +1052,12 @@ mod tests {
         assert_eq!(h.status(), Error::None);
         h.deliver(&Frame::new(Cmd::Reboot));
         assert_eq!(h.status(), Error::None);
-        h.tick_1ms(u32::from(ACTIVATE_DELAY_MS));
+        h.tick_1ms(u32::from(REBOOT_DELAY_MS));
         assert_eq!(h.port.reset_count, 2);
         run_update(&mut h, &img);
         h.deliver(&Frame::new(Cmd::Reboot));
         assert_eq!(h.status(), Error::None);
-        h.tick_1ms(u32::from(ACTIVATE_DELAY_MS));
+        h.tick_1ms(u32::from(REBOOT_DELAY_MS));
         assert_eq!(h.port.reset_count, 3);
     }
 
@@ -1153,7 +1068,7 @@ mod tests {
         assert_eq!(h.status(), Error::None);
         h.deliver_no_drain(&Frame::new(Cmd::Nop));
 
-        for _ in 0..u32::from(ACTIVATE_DELAY_MS) - 1 {
+        for _ in 0..u32::from(REBOOT_DELAY_MS) - 1 {
             h.step_backlogged(1);
         }
         assert_eq!(h.port.reset_count, 0);
@@ -1170,7 +1085,7 @@ mod tests {
         h.deliver_no_drain(&Frame::new(Cmd::Nop));
 
         h.step_backlogged(0);
-        h.step_backlogged(u32::from(ACTIVATE_DELAY_MS) - 4);
+        h.step_backlogged(u32::from(REBOOT_DELAY_MS) - 4);
         h.step_backlogged(0);
         h.step_backlogged(3);
         assert_eq!(h.port.reset_count, 0);
@@ -1182,33 +1097,13 @@ mod tests {
     }
 
     #[test]
-    fn an_activate_countdown_advances_while_the_fifo_never_empties() {
-        let (mut h, _) = running_from_slot_a();
-        let img = image(300, 9);
-        run_update(&mut h, &img);
-        h.deliver(&Frame::new(Cmd::UpdateActivate));
-        assert_eq!(h.status(), Error::None);
-        h.deliver_no_drain(&Frame::new(Cmd::Nop));
-
-        for _ in 0..u32::from(ACTIVATE_DELAY_MS) - 1 {
-            h.step_backlogged(1);
-        }
-        assert_eq!(h.port.reset_count, 0);
-        assert!(h.cpu.update.is_resetting());
-        h.step_backlogged(1);
-        assert_eq!(h.port.reset_count, 1);
-        assert_eq!(h.cpu.update.state(), State::Committed);
-        assert!(h.process_one());
-    }
-
-    #[test]
     fn a_repeated_reboot_restarts_the_delay() {
         let (mut h, _) = running_from_slot_a();
         h.deliver(&Frame::new(Cmd::Reboot));
-        h.tick_1ms(u32::from(ACTIVATE_DELAY_MS) - 1);
+        h.tick_1ms(u32::from(REBOOT_DELAY_MS) - 1);
         h.deliver(&Frame::new(Cmd::Reboot));
         assert_eq!(h.status(), Error::None);
-        h.tick_1ms(u32::from(ACTIVATE_DELAY_MS) - 1);
+        h.tick_1ms(u32::from(REBOOT_DELAY_MS) - 1);
         assert_eq!(h.port.reset_count, 0);
         h.tick_1ms(1);
         assert_eq!(h.port.reset_count, 1);
@@ -1226,9 +1121,7 @@ mod tests {
         assert_eq!(h.status(), Error::UpdateActivating);
         assert_eq!(h.port.erased, []);
         assert!(!h.cpu.fpga_update.is_locked());
-        h.deliver(&Frame::new(Cmd::UpdateActivate));
-        assert_eq!(h.status(), Error::UpdateNotCommitted);
-        h.tick_1ms(u32::from(ACTIVATE_DELAY_MS));
+        h.tick_1ms(u32::from(REBOOT_DELAY_MS));
         assert_eq!(h.port.reset_count, 1);
     }
 

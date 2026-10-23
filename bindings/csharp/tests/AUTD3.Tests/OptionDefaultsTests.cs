@@ -27,11 +27,7 @@ namespace AUTD3.Tests
         public void CpuConfigMatchesTheRustDefault()
         {
             var config = new CpuConfig();
-            Assert.Equal(TimeSpan.FromMilliseconds(10), config.SysTimeTransitionMargin);
-            Assert.Equal(1_000_000u, config.FpgaWaitUpdateMaxPolls);
-            Assert.Equal(2_000_000_000u, config.FpgaFlashMaxPolls);
             Assert.Equal(TimeSpan.FromTicks(2500), config.SyncGuard);
-            Assert.Equal(TimeSpan.FromMilliseconds(100), config.UpdateActivateDelay);
             Assert.Null(config.FailsafeTimeout);
             Assert.Equal(TimeSpan.FromSeconds(1), config.CpuWatchdogTimeout);
             Assert.Equal(new PtpConfig(), config.Ptp);
@@ -69,12 +65,11 @@ namespace AUTD3.Tests
         {
             var config = new CpuConfig
             {
-                SysTimeTransitionMargin = TimeSpan.Zero,
+                SyncGuard = TimeSpan.Zero,
                 Ptp = new PtpConfig { LockSamples = 128 },
             };
-            Assert.Equal(TimeSpan.Zero, config.SysTimeTransitionMargin);
-            Assert.Equal(new CpuConfig().FpgaWaitUpdateMaxPolls, config.FpgaWaitUpdateMaxPolls);
-            Assert.Equal(new CpuConfig().SyncGuard, config.SyncGuard);
+            Assert.Equal(TimeSpan.Zero, config.SyncGuard);
+            Assert.Equal(new CpuConfig().CpuWatchdogTimeout, config.CpuWatchdogTimeout);
             Assert.Null(config.FailsafeTimeout);
             Assert.Equal(TimeSpan.FromMilliseconds(500), new CpuConfig { FailsafeTimeout = TimeSpan.FromMilliseconds(500) }.FailsafeTimeout);
             Assert.Null(default(CpuConfig).FailsafeTimeout);

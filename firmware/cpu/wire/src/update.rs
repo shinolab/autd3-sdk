@@ -7,7 +7,7 @@ pub const FLASH_SECTOR_BYTES: u32 = 0x1000;
 pub const FLASH_PAGE_BYTES: u32 = 0x100;
 pub const LOADER_REGION_END: u32 = 0x1_0000;
 pub const SLOT_BYTES: u32 = 0x8_0000;
-pub const SLOT_A_BASE: u32 = LOADER_REGION_END;
+const SLOT_A_BASE: u32 = LOADER_REGION_END;
 pub const SLOT_B_BASE: u32 = SLOT_A_BASE + SLOT_BYTES;
 pub const SLOT_HEADER_BYTES: u32 = FLASH_PAGE_BYTES;
 pub const SLOT_IMAGE_CAPACITY: u32 = SLOT_BYTES - SLOT_HEADER_BYTES;
@@ -15,7 +15,7 @@ pub const IMAGE_MAGIC: u32 = u32::from_le_bytes(*b"AUT2");
 pub const IMAGE_VECTOR_BYTES: u32 = 0x40;
 pub const IMAGE_RESET_VECTOR_OFFSET: u32 = 0x20;
 pub const IMAGE_APP_LOAD_ADDR: u32 = 0x0004_0000;
-pub const ATCM_APP_REGION_END: u32 = 0x0007_0000;
+const ATCM_APP_REGION_END: u32 = 0x0007_0000;
 pub const IMAGE_APP_CAPACITY: u32 = ATCM_APP_REGION_END - IMAGE_APP_LOAD_ADDR;
 
 #[must_use]
@@ -76,7 +76,7 @@ crate::wire_enum_u8! {
     }
 }
 
-pub const IMAGE_ATTEMPTS_UNTRIED: u32 = 0xFFFF_FFFF;
+const IMAGE_ATTEMPTS_UNTRIED: u32 = 0xFFFF_FFFF;
 pub const IMAGE_MAX_ATTEMPTS: u32 = 1;
 
 pub const IMAGE_HEADER_STATUS_OFFSET: u32 = 16;

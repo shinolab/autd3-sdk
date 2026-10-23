@@ -214,11 +214,6 @@ mod tests {
         let info = UnitInfo {
             unit_id: 3,
             flags: Flags::ASSIGNED,
-            upstream_port: 0,
-            reserved: 0,
-            fw_version: [0, 10, 0],
-            reserved2: 0,
-            sys_time: U64::new(5),
             ptp_offset_ns: I32::new(-1),
         };
         let response = ControlResponse {

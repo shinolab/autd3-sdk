@@ -4,7 +4,7 @@ use std::time::Duration;
 use autd3_cpu_wire::payload::Telemetry;
 use autd3_cpu_wire::udp::{
     AssignIdBody, DEVICE_QUEUE_FRAMES, Flags, FrameReply, Header, Kind, PROTOCOL_VERSION, Role,
-    SetTimeBody, Status, UNASSIGNED_ID, UPSTREAM_UNKNOWN, UnblockReply, UnitInfo,
+    SetTimeBody, Status, UNASSIGNED_ID, UnblockReply, UnitInfo,
 };
 use autd3_rs_core::Interface;
 use autd3_rs_core::protocol::Cmd;
@@ -214,7 +214,6 @@ fn only_the_head_of_a_fresh_chain_is_reachable() {
     assert_eq!(discovered.status(), Status::Ok.as_u8());
     assert_eq!(infos.len(), 1);
     assert_eq!(infos[0].unit_id, UNASSIGNED_ID);
-    assert_eq!(infos[0].upstream_port, UPSTREAM_UNKNOWN);
     assert_eq!(infos[0].flags, Flags::DOWNSTREAM_LINK);
     assert!(
         host.ask(emulator.device_addr(1), Kind::ReadUnitInfo, &[])
@@ -240,21 +239,12 @@ fn assigning_and_unblocking_walks_down_the_chain() {
     assert_eq!(infos.len(), 3);
     for (index, info) in infos.iter().enumerate() {
         assert_eq!(usize::from(info.unit_id), index);
-        assert_eq!(info.upstream_port, 0);
         assert!(
             info.flags
                 .contains(Flags::ASSIGNED | Flags::DOWNSTREAM_OPEN)
         );
         assert_eq!(info.flags.contains(Flags::GRANDMASTER), index == 0);
         assert_eq!(info.flags.contains(Flags::DOWNSTREAM_LINK), index < 2);
-        assert_eq!(
-            info.fw_version,
-            [
-                autd3_cpu_fw::FW_VERSION_MAJOR,
-                autd3_cpu_fw::FW_VERSION_MINOR,
-                autd3_cpu_fw::FW_VERSION_PATCH
-            ]
-        );
     }
 }
 

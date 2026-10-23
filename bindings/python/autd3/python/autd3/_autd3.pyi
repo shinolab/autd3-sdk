@@ -627,11 +627,7 @@ class CpuConfig:
     def __new__(
         cls,
         *,
-        sys_time_transition_margin: Duration = ...,
-        fpga_wait_update_max_polls: int = ...,
-        fpga_flash_max_polls: int = ...,
         sync_guard: Duration = ...,
-        update_activate_delay: Duration = ...,
         failsafe_timeout: Duration | None = ...,
         ptp_unlock_failsafe_timeout: Duration | None = ...,
         fpga_bus_wait: FpgaBusWait = ...,
@@ -639,15 +635,7 @@ class CpuConfig:
         ptp: PtpConfig = ...,
     ) -> CpuConfig: ...
     @property
-    def sys_time_transition_margin(self) -> Duration: ...
-    @property
-    def fpga_wait_update_max_polls(self) -> int: ...
-    @property
-    def fpga_flash_max_polls(self) -> int: ...
-    @property
     def sync_guard(self) -> Duration: ...
-    @property
-    def update_activate_delay(self) -> Duration: ...
     @property
     def failsafe_timeout(self) -> Duration | None: ...
     @property
