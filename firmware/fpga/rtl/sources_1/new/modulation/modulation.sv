@@ -19,8 +19,7 @@ module modulation #(
     output wire TRANSITION_PENDING,
     output wire EXT_ACTIVE,
     output wire [15:0] DEBUG_IDX,
-    output wire DEBUG_BANK,
-    output wire DEBUG_STOP
+    output wire DEBUG_BANK
 );
 
   logic update_settings;
@@ -72,8 +71,7 @@ module modulation #(
       .BANK(bank),
       .STOP(stop),
       .DEBUG_IDX(DEBUG_IDX),
-      .DEBUG_BANK(DEBUG_BANK),
-      .DEBUG_STOP(DEBUG_STOP)
+      .DEBUG_BANK(DEBUG_BANK)
   );
 
   phase_correction #(

@@ -11,8 +11,7 @@ module memory (
     pwe_table_bus_if.in_port PWE_TABLE_BUS,
     flash_bus_if.host_port FLASH_BUS,
     output wire CPU_WATCHDOG_FIRED,
-    output var settings::sync_ps_settings_t SYNC_PS_SETTINGS,
-    input wire settings::sync_ps_state_t SYNC_PS_STATE
+    output var settings::sync_ps_settings_t SYNC_PS_SETTINGS
 );
 
   import params::*;
@@ -135,8 +134,7 @@ module memory (
       .ADDR(addr[7:0]),
       .DATA_IN(data_in),
       .DATA_OUT(sync_ps_dout),
-      .SETTINGS(SYNC_PS_SETTINGS),
-      .STATE(SYNC_PS_STATE)
+      .SETTINGS(SYNC_PS_SETTINGS)
   );
 
   flash_host flash_host (

@@ -49,6 +49,9 @@ module sim_mod_modulation ();
   logic [7:0] intensity_out;
   logic [7:0] phase_out;
   logic [15:0] idx_debug;
+  logic stop;
+  logic stop_debug = 1'b0;
+  logic din_valid_prev = 1'b0;
 
   modulation #(
       .DEPTH(DEPTH)
@@ -65,10 +68,15 @@ module sim_mod_modulation ();
       .MOD_BUS(mod_bus.out_port),
       .PHASE_CORR_BUS(phase_corr_bus.out_port),
       .GPIO_IN({1'b0, 1'b0, 1'b0, 1'b0}),
+      .STOP(stop),
       .DEBUG_IDX(idx_debug),
-      .DEBUG_BANK(bank_debug),
-      .DEBUG_STOP(stop_debug)
+      .DEBUG_BANK(bank_debug)
   );
+
+  always @(posedge CLK) begin
+    din_valid_prev <= din_valid;
+    if (din_valid & ~din_valid_prev) stop_debug <= stop;
+  end
 
   logic [16:0] cycle_buf[params::NumBanks];
   logic [15:0] freq_div_buf[params::NumBanks];
