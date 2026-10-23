@@ -10,11 +10,7 @@ internal static class Sample
         // ANCHOR: api
         var config = new CpuConfig
         {
-            SysTimeTransitionMargin = TimeSpan.FromMilliseconds(10),
-            FpgaWaitUpdateMaxPolls = 1_000_000,
-            FpgaFlashMaxPolls = 2_000_000_000,
             SyncGuard = TimeSpan.FromMicroseconds(250),
-            UpdateActivateDelay = TimeSpan.FromMilliseconds(100),
             FailsafeTimeout = TimeSpan.FromMilliseconds(500),
             PtpUnlockFailsafeTimeout = null,
             FpgaBusWait = FpgaBusWait.Cycles3,

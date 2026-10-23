@@ -171,11 +171,6 @@ impl Ptp {
         self.applied_ppb = Some(0);
     }
 
-    #[must_use]
-    pub const fn config(&self) -> Config {
-        self.config
-    }
-
     pub const fn set_config(&mut self, config: Config) {
         self.config = config;
     }
@@ -1760,7 +1755,7 @@ mod tests {
         assert_eq!(pair.slave.unlocked_ms(last_sample + 60), Some(9));
 
         pair.slave.reset(&mut pair.s);
-        assert_eq!(pair.slave.config(), config);
+        assert_eq!(pair.slave.config, config);
         assert_eq!(pair.slave.unlocked_ms(last_sample + 60), None);
     }
 }

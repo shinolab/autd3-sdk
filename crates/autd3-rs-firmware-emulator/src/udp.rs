@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use autd3_cpu_fw::proto::{Drained, FrameHeader, Reply};
 use autd3_cpu_wire::udp::{
     AssignIdBody, Flags, FrameReply, Header, Kind, PROTOCOL_VERSION, Role, SetTimeBody, Status,
-    UNASSIGNED_ID, UPSTREAM_UNKNOWN, UnblockReply, UnitInfo,
+    UNASSIGNED_ID, UnblockReply, UnitInfo,
 };
 use autd3_rs_core::geometry::Autd3;
 use autd3_rs_core::{FRAME_BYTES_MAX, Interface};
@@ -21,7 +21,6 @@ use crate::Device;
 const LOOPBACK_ANY: SocketAddrV6 = SocketAddrV6::new(Ipv6Addr::LOCALHOST, 0, 0, 0);
 const POLL_INTERVAL: Duration = Duration::from_millis(10);
 const MAX_CATCH_UP_TICKS: u128 = 60_000;
-const UPSTREAM_PORT: u8 = 0;
 const NS_PER_SEC: u64 = 1_000_000_000;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -172,19 +171,6 @@ impl Chain {
         UnitInfo {
             unit_id: unit.id.unwrap_or(UNASSIGNED_ID),
             flags: self.flags(index),
-            upstream_port: if unit.id.is_some() {
-                UPSTREAM_PORT
-            } else {
-                UPSTREAM_UNKNOWN
-            },
-            reserved: 0,
-            fw_version: [
-                autd3_cpu_fw::FW_VERSION_MAJOR,
-                autd3_cpu_fw::FW_VERSION_MINOR,
-                autd3_cpu_fw::FW_VERSION_PATCH,
-            ],
-            reserved2: 0,
-            sys_time: U64::new(self.device_now()),
             ptp_offset_ns: I32::new(0),
         }
     }
@@ -230,7 +216,6 @@ impl Chain {
                 Kind::ResetId => {
                     self.reply_status(i, src, header, Status::Ok, &[]);
                     self.units[i].forget();
-                    self.units[i].device.cpu.request_config_reset();
                 }
                 Kind::Discover => {
                     if self.units[i].id.is_none() {

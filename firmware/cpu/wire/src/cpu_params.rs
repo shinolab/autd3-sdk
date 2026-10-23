@@ -1,13 +1,9 @@
-use core::num::{NonZeroU16, NonZeroU32};
+use core::num::NonZeroU16;
 use core::time::Duration;
 
 use crate::config::{MaxFreqPpb, PathDelayFilterShift};
 
-pub const SYS_TIME_TRANSITION_MARGIN: Duration = Duration::from_millis(10);
-pub const FPGA_WAIT_UPDATE_MAX_POLLS: NonZeroU32 = NonZeroU32::new(1_000_000).unwrap();
-pub const FPGA_FLASH_MAX_POLLS: NonZeroU32 = NonZeroU32::new(2_000_000_000).unwrap();
 pub const SYNC_GUARD: Duration = Duration::from_micros(250);
-pub const UPDATE_ACTIVATE_DELAY: Duration = Duration::from_millis(100);
 pub const CPU_WATCHDOG_TIMEOUT: Duration = Duration::from_secs(1);
 pub const SYNC_PHASE_LOCK: bool = true;
 

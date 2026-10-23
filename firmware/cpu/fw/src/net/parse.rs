@@ -2,7 +2,7 @@ use etherparse::{
     EtherType, Ethernet2Slice, Icmpv6Slice, Icmpv6Type, IpNumber, Ipv6Slice, UdpSlice,
 };
 
-use super::{ECHO_ID_SEQ, ETHERTYPE_PTP, Ipv6, Mac};
+use super::{ETHERTYPE_PTP, Ipv6, Mac};
 
 const NS_TARGET: usize = 16;
 
@@ -28,12 +28,6 @@ pub enum Packet<'a> {
         dst_ip: Ipv6,
         target: Ipv6,
         hop_limit: u8,
-    },
-    EchoRequest {
-        src_mac: Mac,
-        src_ip: Ipv6,
-        dst_ip: Ipv6,
-        body: &'a [u8],
     },
 }
 
@@ -84,12 +78,6 @@ fn parse_ipv6(src_mac: Mac, frame: &[u8]) -> Option<Packet<'_>> {
                     dst_ip,
                     target: icmp.payload().get(..NS_TARGET)?.try_into().ok()?,
                     hop_limit: header.hop_limit(),
-                }),
-                Icmpv6Type::EchoRequest(_) => Some(Packet::EchoRequest {
-                    src_mac,
-                    src_ip,
-                    dst_ip,
-                    body: icmp.slice().get(ECHO_ID_SEQ..)?,
                 }),
                 _ => None,
             }

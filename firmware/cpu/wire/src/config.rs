@@ -1,4 +1,4 @@
-use core::num::{NonZeroU16, NonZeroU32};
+use core::num::NonZeroU16;
 use core::time::Duration;
 
 use crate::cpu_params;
@@ -129,11 +129,7 @@ crate::wire_enum_u8! {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct CpuConfig {
-    pub sys_time_transition_margin: Duration,
-    pub fpga_wait_update_max_polls: NonZeroU32,
-    pub fpga_flash_max_polls: NonZeroU32,
     pub sync_guard: Duration,
-    pub update_activate_delay: Duration,
     pub failsafe_timeout: Option<Duration>,
     pub ptp_unlock_failsafe_timeout: Option<Duration>,
     pub fpga_bus_wait: FpgaBusWait,
@@ -143,11 +139,7 @@ pub struct CpuConfig {
 
 impl CpuConfig {
     pub const DEFAULT: Self = Self {
-        sys_time_transition_margin: cpu_params::SYS_TIME_TRANSITION_MARGIN,
-        fpga_wait_update_max_polls: cpu_params::FPGA_WAIT_UPDATE_MAX_POLLS,
-        fpga_flash_max_polls: cpu_params::FPGA_FLASH_MAX_POLLS,
         sync_guard: cpu_params::SYNC_GUARD,
-        update_activate_delay: cpu_params::UPDATE_ACTIVATE_DELAY,
         failsafe_timeout: None,
         ptp_unlock_failsafe_timeout: None,
         fpga_bus_wait: FpgaBusWait::Cycles3,

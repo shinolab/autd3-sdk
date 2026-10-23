@@ -29,6 +29,7 @@ pub const DEFAULT_HEARTBEAT: Duration = Duration::from_millis(10);
 pub const ACK_TIMEOUT: Duration = Duration::from_secs(120);
 pub const FPGA_RECONFIG_WAIT: Duration =
     Duration::from_millis(autd3_cpu_wire::fpga_update::FPGA_RECONFIG_WORST_MS as u64 + 2000);
+pub const FPGA_ACTIVATE_ATTEMPTS: usize = 3;
 pub const MIN_CPU_FIRMWARE_VERSION: [u8; 3] = [0, 10, 0];
 
 #[derive(Debug, thiserror::Error)]
@@ -46,7 +47,7 @@ pub enum DriverError {
     )]
     FpgaUpdateUnsupported { device: usize },
     #[error(
-        "device {device} did not reconfigure after activation (or an earlier attempt failed since power-on); the written image boots at the next power cycle"
+        "device {device} did not reconfigure after activation; it keeps its output off and boots the written image at the next power cycle"
     )]
     FpgaReconfigFailed { device: usize },
     #[error(
@@ -68,14 +69,11 @@ fn timeout_hint(cmd: Cmd) -> &'static str {
         Cmd::FpgaUpdateBegin | Cmd::FpgaUpdateChunk | Cmd::FpgaUpdateCommit => {
             "the device stays locked with its output off until the next power cycle; power-cycle it and rerun the FPGA update"
         }
-        Cmd::UpdateActivate => {
-            "the image is committed and the devices that received the request are rebooting into it as a trial; wait for the reboot, check which devices run it with `--verify-only`, then run `--confirm-only` (a device that did not reboot keeps its previous image and boots the new one at its next power cycle)"
-        }
         Cmd::UpdateConfirm => {
             "the running image stays unconfirmed on the devices that did not answer; check the cable and rerun with `--confirm-only` before the next power cycle"
         }
         Cmd::Reboot => {
-            "the devices that received the request are resetting and come back unassigned; rerun `--reboot-only` to reset the rest"
+            "the devices that received the request are resetting and come back unassigned; check which image each device runs with `--verify-only` before resetting them again (a device already running an unconfirmed trial image rolls back to its previous image when it is reset again)"
         }
         Cmd::Synchronize
         | Cmd::Clear
@@ -112,8 +110,8 @@ fn timeout_hint(cmd: Cmd) -> &'static str {
 
 fn device_hint(cmd: Cmd, code: u8) -> &'static str {
     match (cmd, autd3_cpu_wire::Error::from_u8(code)) {
-        (Cmd::UpdateActivate, Some(autd3_cpu_wire::Error::FpgaUpdateInProgress)) => {
-            " (the CPU image is already committed: it boots as a trial at the next power cycle, run `--confirm-only` after that)"
+        (Cmd::Reboot, Some(autd3_cpu_wire::Error::FpgaUpdateInProgress)) => {
+            " (an FPGA update holds the device until it reconfigures or is power-cycled; a committed CPU image boots as a trial at the next power cycle, run `--confirm-only` after that)"
         }
         (
             Cmd::UpdateBegin | Cmd::FpgaUpdateBegin,
@@ -130,8 +128,6 @@ fn device_hint(cmd: Cmd, code: u8) -> &'static str {
                 | autd3_cpu_wire::Error::UnknownCmd
                 | autd3_cpu_wire::Error::InvalidPayload
                 | autd3_cpu_wire::Error::InvalidSilencerSetting
-                | autd3_cpu_wire::Error::InvalidTransitionMode
-                | autd3_cpu_wire::Error::MissTransitionTime
                 | autd3_cpu_wire::Error::FpgaTimeout
                 | autd3_cpu_wire::Error::SyncNotReady
                 | autd3_cpu_wire::Error::UpdateNotStarted
@@ -142,8 +138,7 @@ fn device_hint(cmd: Cmd, code: u8) -> &'static str {
                 | autd3_cpu_wire::Error::FpgaUpdateInProgress
                 | autd3_cpu_wire::Error::UpdateActivating
                 | autd3_cpu_wire::Error::SyncMissed
-                | autd3_cpu_wire::Error::FailsafeConditionActive
-                | autd3_cpu_wire::Error::FpgaUnsupported,
+                | autd3_cpu_wire::Error::FailsafeConditionActive,
             ),
         ) => "",
         (_, Some(_)) => unreachable!(),
@@ -212,6 +207,14 @@ impl Frame {
         frame
     }
 
+    fn datagram(&self) -> Datagram {
+        Datagram {
+            cmd: self.cmd,
+            payload: self.payload,
+            payload_len: self.payload_len,
+        }
+    }
+
     #[must_use]
     pub fn bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(size_of::<FrameHeader>() + self.payload_len);
@@ -236,6 +239,8 @@ pub trait Exchange {
     fn num_devices(&self) -> usize;
 
     fn exchange(&mut self, frame: &Frame) -> Result<Replies, Self::Error>;
+
+    fn exchange_each(&mut self, frames: &[Frame]) -> Result<Replies, Self::Error>;
 
     fn idle(&mut self, duration: Duration) -> Result<(), Self::Error>;
 
@@ -336,15 +341,34 @@ impl Exchange for UdpLink {
     }
 
     fn exchange(&mut self, frame: &Frame) -> Result<Replies, Error> {
+        self.exchange_datagrams(Distribution::Broadcast, &[frame.datagram()])
+    }
+
+    fn exchange_each(&mut self, frames: &[Frame]) -> Result<Replies, Error> {
+        let datagrams: Vec<Datagram> = frames.iter().map(Frame::datagram).collect();
+        self.exchange_datagrams(Distribution::PerDevice, &datagrams)
+    }
+
+    fn idle(&mut self, duration: Duration) -> Result<(), Error> {
+        std::thread::sleep(duration);
+        Ok(())
+    }
+
+    fn close(&mut self) -> Result<(), Error> {
+        self.stop_keepalive();
+        self.client = None;
+        Ok(())
+    }
+}
+
+impl UdpLink {
+    fn exchange_datagrams(
+        &self,
+        distribution: Distribution,
+        datagrams: &[Datagram],
+    ) -> Result<Replies, Error> {
         let client = self.client.as_ref().ok_or(Error::Closed)?;
-        let datagrams = [Datagram {
-            cmd: frame.cmd,
-            payload: frame.payload,
-            payload_len: frame.payload_len,
-        }];
-        let sent = pollster::block_on(
-            client.send_frame(ClientFrame::new(Distribution::Broadcast, &datagrams)),
-        );
+        let sent = pollster::block_on(client.send_frame(ClientFrame::new(distribution, datagrams)));
         let response = match sent {
             Ok(response) => response,
             Err(Error::Timeout { .. }) => return Ok(Err(())),
@@ -362,17 +386,6 @@ impl Exchange for UdpLink {
                 value: response.reply_data_of(device).to_vec(),
             })
             .collect()))
-    }
-
-    fn idle(&mut self, duration: Duration) -> Result<(), Error> {
-        std::thread::sleep(duration);
-        Ok(())
-    }
-
-    fn close(&mut self) -> Result<(), Error> {
-        self.stop_keepalive();
-        self.client = None;
-        Ok(())
     }
 }
 
@@ -409,6 +422,13 @@ impl<L: Exchange> Driver<L> {
         match self.inner.exchange(frame).map_err(network_err)? {
             Ok(replies) => Ok(replies),
             Err(()) => Err(DriverError::Timeout { cmd: frame.cmd }),
+        }
+    }
+
+    fn send_each(&mut self, cmd: Cmd, frames: &[Frame]) -> Result<Vec<DeviceReply>, DriverError> {
+        match self.inner.exchange_each(frames).map_err(network_err)? {
+            Ok(replies) => Ok(replies),
+            Err(()) => Err(DriverError::Timeout { cmd }),
         }
     }
 
@@ -450,8 +470,6 @@ impl<L: Exchange> Driver<L> {
                     | Some(
                         autd3_cpu_wire::Error::InvalidPayload
                         | autd3_cpu_wire::Error::InvalidSilencerSetting
-                        | autd3_cpu_wire::Error::InvalidTransitionMode
-                        | autd3_cpu_wire::Error::MissTransitionTime
                         | autd3_cpu_wire::Error::FpgaTimeout
                         | autd3_cpu_wire::Error::SyncNotReady
                         | autd3_cpu_wire::Error::UpdateNotStarted
@@ -463,8 +481,7 @@ impl<L: Exchange> Driver<L> {
                         | autd3_cpu_wire::Error::FpgaUpdateInProgress
                         | autd3_cpu_wire::Error::UpdateActivating
                         | autd3_cpu_wire::Error::SyncMissed
-                        | autd3_cpu_wire::Error::FailsafeConditionActive
-                        | autd3_cpu_wire::Error::FpgaUnsupported,
+                        | autd3_cpu_wire::Error::FailsafeConditionActive,
                     ) => Err(DriverError::Device {
                         device,
                         cmd,
@@ -519,6 +536,31 @@ impl<L: Exchange> Driver<L> {
     pub fn activate_fpga(&mut self) -> Result<(), DriverError> {
         self.send_checked(&Frame::new(Cmd::FpgaUpdateActivate))
             .map(drop)
+    }
+
+    pub fn activate_unreconfigured_fpga(&mut self) -> Result<Vec<usize>, DriverError> {
+        let failed: Vec<usize> = self
+            .read_firmware_info()?
+            .iter()
+            .enumerate()
+            .filter(|(_, info)| boot_image(info) == FpgaBootImage::ReconfigFailed)
+            .map(|(device, _)| device)
+            .collect();
+        if failed.is_empty() {
+            return Ok(failed);
+        }
+        let frames: Vec<Frame> = (0..self.num_devices())
+            .map(|device| {
+                Frame::new(if failed.contains(&device) {
+                    Cmd::FpgaUpdateActivate
+                } else {
+                    Cmd::Nop
+                })
+            })
+            .collect();
+        let replies = self.send_each(Cmd::FpgaUpdateActivate, &frames)?;
+        all_accepted(Cmd::FpgaUpdateActivate, replies)?;
+        Ok(failed)
     }
 
     pub fn idle(&mut self, duration: Duration) -> Result<(), DriverError> {
@@ -582,47 +624,32 @@ impl<L: Exchange> Driver<L> {
     }
 
     pub fn activate(&mut self) -> Result<(), DriverError> {
-        let replies = self.send(&Frame::new(Cmd::UpdateActivate))?;
-        all_accepted(Cmd::UpdateActivate, replies).map(drop)
+        self.reboot()
     }
 
     pub fn activate_unrebooted(&mut self) -> Result<Vec<usize>, DriverError> {
-        let replies = self.send(&Frame::new(Cmd::UpdateActivate))?;
-        let mut activated = Vec::new();
-        for (device, reply) in replies.iter().enumerate() {
-            match autd3_cpu_wire::Error::from_u8(reply.status) {
-                Some(autd3_cpu_wire::Error::None) => activated.push(device),
-                Some(autd3_cpu_wire::Error::UpdateNotCommitted) => {}
-                None
-                | Some(
-                    autd3_cpu_wire::Error::UnknownCmd
-                    | autd3_cpu_wire::Error::InvalidPayload
-                    | autd3_cpu_wire::Error::InvalidSilencerSetting
-                    | autd3_cpu_wire::Error::InvalidTransitionMode
-                    | autd3_cpu_wire::Error::MissTransitionTime
-                    | autd3_cpu_wire::Error::FpgaTimeout
-                    | autd3_cpu_wire::Error::SyncNotReady
-                    | autd3_cpu_wire::Error::UpdateNotStarted
-                    | autd3_cpu_wire::Error::UpdateImageInvalid
-                    | autd3_cpu_wire::Error::UpdateFlash
-                    | autd3_cpu_wire::Error::UpdateNothingToConfirm
-                    | autd3_cpu_wire::Error::UpdateUnsupported
-                    | autd3_cpu_wire::Error::FpgaUpdateInProgress
-                    | autd3_cpu_wire::Error::UpdateActivating
-                    | autd3_cpu_wire::Error::SyncMissed
-                    | autd3_cpu_wire::Error::FailsafeConditionActive
-                    | autd3_cpu_wire::Error::FpgaUnsupported,
-                ) => {
-                    return Err(DriverError::Device {
-                        device,
-                        cmd: Cmd::UpdateActivate,
-                        code: reply.status,
-                    });
-                }
-                Some(_) => unreachable!(),
-            }
+        let unrebooted: Vec<usize> = self
+            .read_running_image()?
+            .iter()
+            .enumerate()
+            .filter(|(_, image)| **image == Some(RunningImage::Confirmed))
+            .map(|(device, _)| device)
+            .collect();
+        if unrebooted.is_empty() {
+            return Ok(unrebooted);
         }
-        Ok(activated)
+        let frames: Vec<Frame> = (0..self.num_devices())
+            .map(|device| {
+                Frame::new(if unrebooted.contains(&device) {
+                    Cmd::Reboot
+                } else {
+                    Cmd::Nop
+                })
+            })
+            .collect();
+        let replies = self.send_each(Cmd::Reboot, &frames)?;
+        all_accepted(Cmd::Reboot, replies)?;
+        Ok(unrebooted)
     }
 
     pub fn reboot(&mut self) -> Result<(), DriverError> {
@@ -666,6 +693,10 @@ mod tests {
         }
 
         fn exchange(&mut self, _frame: &Frame) -> Result<Replies, Self::Error> {
+            Ok(Ok(self.0.clone()))
+        }
+
+        fn exchange_each(&mut self, _frames: &[Frame]) -> Result<Replies, Self::Error> {
             Ok(Ok(self.0.clone()))
         }
 

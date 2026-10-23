@@ -9,8 +9,8 @@ use autd3_cpu_wire::fpga_update::FpgaBootImage;
 use autd3_cpu_wire::update::RunningImage;
 use autd3_firmware_writer::bundle;
 use autd3_rs_firmware_ota::{
-    CpuFirmwareImage, Driver, DriverError, Exchange, FPGA_RECONFIG_WAIT, FpgaFirmwareImage,
-    MIN_CPU_FIRMWARE_VERSION, UdpArgs, boot_image,
+    CpuFirmwareImage, Driver, DriverError, Exchange, FPGA_ACTIVATE_ATTEMPTS, FPGA_RECONFIG_WAIT,
+    FpgaFirmwareImage, MIN_CPU_FIRMWARE_VERSION, UdpArgs, boot_image,
 };
 
 type Version = [u8; 3];
@@ -414,10 +414,25 @@ fn run_fpga<L: Exchange>(
         return Ok(());
     }
     driver.activate_fpga()?;
-    println!(
-        "activation acknowledged; waiting {FPGA_RECONFIG_WAIT:?} for the FPGAs to reconfigure"
-    );
-    driver.idle(FPGA_RECONFIG_WAIT)?;
+    for attempt in 1..=FPGA_ACTIVATE_ATTEMPTS {
+        println!(
+            "activation acknowledged; waiting {FPGA_RECONFIG_WAIT:?} for the FPGAs to reconfigure"
+        );
+        driver.idle(FPGA_RECONFIG_WAIT)?;
+        if attempt == FPGA_ACTIVATE_ATTEMPTS {
+            break;
+        }
+        let retried = driver.activate_unreconfigured_fpga()?;
+        if retried.is_empty() {
+            break;
+        }
+        for device in &retried {
+            println!(
+                "device {device} did not reconfigure; activating it again ({}/{FPGA_ACTIVATE_ATTEMPTS})",
+                attempt + 1
+            );
+        }
+    }
     let images = print_fpga(driver, "after")?;
     driver.ensure_fpga_reconfigured()?;
     if let Some(device) = images.iter().position(|&i| i != FpgaBootImage::Update) {

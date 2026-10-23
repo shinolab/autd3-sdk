@@ -1,14 +1,15 @@
 pub(crate) use autd3_cpu_wire::payload::ActivatePatternBankPayload;
 
+use core::num::NonZeroU32;
+
 use crate::cmd::bank::{PATTERN_BANK_REGS, activate_bank};
-use crate::cmd::cpu_config::CpuConfig;
 use crate::port::Port;
 use crate::proto::Error;
 
 pub(crate) fn handle<P: Port>(
     port: &mut P,
-    config: &CpuConfig,
     payload: &[u8],
+    max_polls: NonZeroU32,
 ) -> Result<(), Error> {
     let p = ActivatePatternBankPayload::parse(payload)?;
     activate_bank(
@@ -17,7 +18,7 @@ pub(crate) fn handle<P: Port>(
         p.bank.as_u8(),
         p.transition_mode,
         p.transition_value.get(),
-        config,
+        max_polls,
     )
 }
 
@@ -31,9 +32,6 @@ mod tests {
     use crate::proto::Error;
     use crate::test_utils::builders::{activate_pattern_bank, config_pattern_rep, invalid_bank};
     use crate::test_utils::mock::Harness;
-
-    const SYS_TIME_TRANSITION_MARGIN_NS: u64 =
-        autd3_cpu_wire::cpu_params::SYS_TIME_TRANSITION_MARGIN.as_nanos() as u64;
 
     #[test]
     fn activate_pattern_bank_writes_transition_and_req_bank_and_latches() {
@@ -97,23 +95,16 @@ mod tests {
     }
 
     #[test]
-    fn activate_pattern_bank_rejects_timed_transition_on_infinite_loop() {
+    fn activate_pattern_bank_leaves_the_transition_and_the_loop_to_the_host() {
         let mut h = Harness::new();
+        h.port.sys_time = Some(2_000_000_000);
 
         h.deliver(&activate_pattern_bank(1, TransitionModeKind::Gpio, 0));
-        assert_eq!(h.status(), Error::InvalidTransitionMode);
-        assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 0);
-
-        h.deliver(&activate_pattern_bank(1, TransitionModeKind::Immediate, 0));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 1);
-    }
 
-    #[test]
-    fn activate_pattern_bank_rejects_immediate_transition_on_finite_loop() {
-        let mut h = Harness::new();
         h.deliver(&config_pattern_rep(
-            1,
+            0,
             EmissionType::Raw.as_u8(),
             2,
             EMISSION_MAX_INDICES,
@@ -121,44 +112,14 @@ mod tests {
             0,
             4,
         ));
+        h.deliver(&activate_pattern_bank(0, TransitionModeKind::Ext, 0));
         assert_eq!(h.status(), Error::None);
-
-        h.deliver(&activate_pattern_bank(1, TransitionModeKind::Ext, 0));
-        assert_eq!(h.status(), Error::InvalidTransitionMode);
         assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 0);
-
-        h.deliver(&activate_pattern_bank(1, TransitionModeKind::SyncIdx, 0));
-        assert_eq!(h.status(), Error::None);
-        assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 1);
-    }
-
-    #[test]
-    fn activate_pattern_bank_rejects_sys_time_transition_within_margin() {
-        let mut h = Harness::new();
-        h.deliver(&config_pattern_rep(
-            1,
-            EmissionType::Raw.as_u8(),
-            2,
-            EMISSION_MAX_INDICES,
-            0,
-            0,
-            4,
-        ));
-        assert_eq!(h.status(), Error::None);
-        h.port.sys_time = Some(2_000_000_000);
 
         h.deliver(&activate_pattern_bank(
             1,
             TransitionModeKind::SysTime,
             2_000_000_000,
-        ));
-        assert_eq!(h.status(), Error::MissTransitionTime);
-        assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 0);
-
-        h.deliver(&activate_pattern_bank(
-            1,
-            TransitionModeKind::SysTime,
-            2_000_000_000 + SYS_TIME_TRANSITION_MARGIN_NS + 1,
         ));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 1);

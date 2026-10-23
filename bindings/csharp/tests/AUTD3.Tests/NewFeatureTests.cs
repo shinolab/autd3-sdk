@@ -319,11 +319,7 @@ namespace AUTD3.Tests
 
             using var frames = Frames.Encode(geometry, new SetCpuConfig(new CpuConfig
             {
-                SysTimeTransitionMargin = TimeSpan.Zero,
-                FpgaWaitUpdateMaxPolls = 1,
-                FpgaFlashMaxPolls = uint.MaxValue,
                 SyncGuard = TimeSpan.FromTicks(5000),
-                UpdateActivateDelay = TimeSpan.FromMilliseconds(200),
                 FailsafeTimeout = TimeSpan.FromSeconds(2),
                 Ptp = new PtpConfig
                 {
@@ -358,10 +354,6 @@ namespace AUTD3.Tests
         {
             using var geometry = Fixture.SingleDevice();
 
-            var waitUpdate = Assert.Throws<Autd3Exception>(() =>
-                Frames.Encode(geometry, new SetCpuConfig(new CpuConfig { FpgaWaitUpdateMaxPolls = 0 })));
-            Assert.Contains("fpgaWaitUpdateMaxPolls", waitUpdate.Message);
-
             var delayReqSyncs = Assert.Throws<Autd3Exception>(() =>
                 Frames.Encode(geometry, new SetCpuConfig(new CpuConfig { Ptp = new PtpConfig { DelayReqSyncs = 0 } })));
             Assert.Contains("ptp.delayReqSyncs", delayReqSyncs.Message);
@@ -369,10 +361,6 @@ namespace AUTD3.Tests
             var pauseQuanta = Assert.Throws<Autd3Exception>(() =>
                 Frames.Encode(geometry, new SetCpuConfig(new CpuConfig { Ptp = new PtpConfig { PauseQuanta = 0 } })));
             Assert.Contains("ptp.pauseQuanta", pauseQuanta.Message);
-
-            var flash = Assert.Throws<Autd3Exception>(() =>
-                Frames.Encode(geometry, new SetCpuConfig(new CpuConfig { FpgaFlashMaxPolls = 0 })));
-            Assert.Contains("fpgaFlashMaxPolls", flash.Message);
 
             var lockSamples = Assert.Throws<Autd3Exception>(() =>
                 Frames.Encode(geometry, new SetCpuConfig(new CpuConfig { Ptp = new PtpConfig { LockSamples = 0 } })));
@@ -417,7 +405,7 @@ namespace AUTD3.Tests
         {
             using var geometry = Fixture.SingleDevice();
             Assert.Throws<Autd3Exception>(() => Frames.Encode(geometry,
-                new SetCpuConfig(new CpuConfig { UpdateActivateDelay = TimeSpan.FromTicks(15000) })));
+                new SetCpuConfig(new CpuConfig { Ptp = new PtpConfig { PauseRetry = TimeSpan.FromTicks(15000) } })));
 
             Assert.Throws<Autd3Exception>(() => Frames.Encode(geometry,
                 new SetCpuConfig(new CpuConfig { FailsafeTimeout = TimeSpan.FromTicks(1L << 62) })));

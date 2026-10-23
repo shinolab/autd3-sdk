@@ -5,7 +5,6 @@ mod common;
 mod modulation;
 
 use autd3_cpu_wire::ModulationBank;
-use autd3_cpu_wire::cpu_params::SYS_TIME_TRANSITION_MARGIN;
 use autd3_cpu_wire::fpga_params::REP_INFINITE;
 use autd3_cpu_wire::payload::{GpioInPayload, TransitionModeKind, WriteModPayload};
 use autd3_rs_core::params::ULTRASOUND_FREQ_HZ;
@@ -106,9 +105,7 @@ fn modulation_finite_loop_stops_after_rep() {
 }
 
 #[test]
-fn sys_time_transition_within_margin_is_rejected() {
-    const MARGIN_NS: u64 = SYS_TIME_TRANSITION_MARGIN.as_nanos() as u64;
-
+fn a_sys_time_transition_in_the_past_is_accepted() {
     let samples = SAMPLES;
     let bank = ModulationBank::B1;
 
@@ -117,7 +114,7 @@ fn sys_time_transition_within_margin_is_rejected() {
     let config = config_modulation(bank, 1, samples.len() as u32, 3);
 
     let sys_time = 1_000_000_000u64;
-    let change = |value: u64| activate_modulation_bank(bank, TransitionModeKind::SysTime, value);
+    let change = activate_modulation_bank(bank, TransitionModeKind::SysTime, sys_time - 1);
 
     let mut device = Device::new(NUM_TRANSDUCERS);
     device.send(&frame(Cmd::WriteModulationBuffer, &write));
@@ -126,75 +123,7 @@ fn sys_time_transition_within_margin_is_rejected() {
 
     assert_eq!(
         device
-            .send(&frame(
-                Cmd::ActivateModulationBank,
-                &change(sys_time + MARGIN_NS - 1)
-            ))
-            .status,
-        DeviceErrorCode::MissTransitionTime,
-        "transition within the margin must be rejected"
-    );
-
-    assert_eq!(
-        device
-            .send(&frame(
-                Cmd::ActivateModulationBank,
-                &change(sys_time + MARGIN_NS)
-            ))
-            .status,
-        DeviceErrorCode::None,
-        "transition at least a margin ahead is accepted"
-    );
-}
-
-#[test]
-fn sys_time_transition_margin_follows_the_cpu_config() {
-    use autd3_cpu_wire::config::CpuConfig;
-    use autd3_cpu_wire::payload::SetCpuConfigPayload;
-
-    const MARGIN_NS: u32 = 1_000_000;
-
-    let samples = SAMPLES;
-    let bank = ModulationBank::B1;
-
-    let write = write_modulation(bank, &samples);
-
-    let config = config_modulation(bank, 1, samples.len() as u32, 3);
-
-    let sys_time = 1_000_000_000u64;
-    let change = |value: u64| activate_modulation_bank(bank, TransitionModeKind::SysTime, value);
-    let cpu_config = SetCpuConfigPayload::encode(&CpuConfig {
-        sys_time_transition_margin: std::time::Duration::from_nanos(u64::from(MARGIN_NS)),
-        ..CpuConfig::default()
-    })
-    .unwrap();
-
-    let mut device = Device::new(NUM_TRANSDUCERS);
-    device.send(&frame(Cmd::WriteModulationBuffer, &write));
-    device.send(&frame(Cmd::ConfigModulation, &config));
-    assert_eq!(
-        device
-            .send(&frame(Cmd::SetCpuConfig, cpu_config.as_bytes()))
-            .status,
-        DeviceErrorCode::None
-    );
-    device.fpga_mut().update_with_sys_time(sys_time);
-
-    assert_eq!(
-        device
-            .send(&frame(
-                Cmd::ActivateModulationBank,
-                &change(sys_time + u64::from(MARGIN_NS) - 1)
-            ))
-            .status,
-        DeviceErrorCode::MissTransitionTime,
-    );
-    assert_eq!(
-        device
-            .send(&frame(
-                Cmd::ActivateModulationBank,
-                &change(sys_time + u64::from(MARGIN_NS))
-            ))
+            .send(&frame(Cmd::ActivateModulationBank, &change))
             .status,
         DeviceErrorCode::None,
     );

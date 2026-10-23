@@ -1,10 +1,11 @@
 pub(crate) use autd3_cpu_wire::payload::WritePatternFusedPayload;
 
+use core::num::NonZeroU32;
+
 use autd3_cpu_wire::payload::ConfigPatternPayload;
 use zerocopy::little_endian::{U16, U32};
 
 use crate::cmd::bank::{PATTERN_BANK_REGS, activate_bank};
-use crate::cmd::cpu_config::CpuConfig;
 use crate::cmd::{config_pattern, write_pattern_raw};
 use crate::fpga::{EmissionType, REP_INFINITE};
 use crate::port::Port;
@@ -12,8 +13,8 @@ use crate::proto::Error;
 
 pub(crate) fn handle<P: Port>(
     port: &mut P,
-    config: &CpuConfig,
     payload: &[u8],
+    max_polls: NonZeroU32,
 ) -> Result<(), Error> {
     let (p, data) = WritePatternFusedPayload::parse(payload)?;
     write_pattern_raw::write_slot(port, p.bank, 0, data);
@@ -36,7 +37,7 @@ pub(crate) fn handle<P: Port>(
         p.bank.as_u8(),
         p.transition_mode,
         p.transition_value.get(),
-        config,
+        max_polls,
     )
 }
 
@@ -48,7 +49,10 @@ mod tests {
 
     use super::WritePatternFusedPayload;
     use crate::fpga::TransitionModeKind;
-    use crate::fpga_params::{ADDR_PATTERN_REQ_RD_BANK, CtlFlags, EmissionType, NUM_TRANSDUCERS};
+    use crate::fpga_params::{
+        ADDR_PATTERN_REQ_RD_BANK, ADDR_PATTERN_TRANSITION_MODE, CtlFlags, EmissionType,
+        NUM_TRANSDUCERS,
+    };
     use crate::proto::Error;
     use crate::test_utils::builders::{
         activate_pattern_bank, assert_fpga_unchanged, config_pattern, fpga_snapshot, invalid_bank,
@@ -129,18 +133,18 @@ mod tests {
     #[case(TransitionModeKind::SyncIdx, 0)]
     #[case(TransitionModeKind::SysTime, 4_000_000_000)]
     #[case(TransitionModeKind::Gpio, 1)]
-    fn a_transition_needing_a_finite_loop_touches_nothing(
+    fn a_transition_for_a_finite_loop_is_written_as_is(
         #[case] mode: TransitionModeKind,
         #[case] value: u64,
     ) {
         let (phases, intensities) = raw_pattern();
         let mut h = Harness::new();
-        let before = fpga_snapshot(&h);
 
         h.deliver(&write_pattern_fused(1, mode, value, &phases, &intensities));
 
-        assert_eq!(h.status(), Error::InvalidTransitionMode);
-        assert_fpga_unchanged(&before, &h);
+        assert_eq!(h.status(), Error::None);
+        assert_eq!(h.ctl(ADDR_PATTERN_TRANSITION_MODE), mode as u16);
+        assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 1);
     }
 
     #[test]

@@ -1,18 +1,16 @@
-use core::num::{NonZeroU16, NonZeroU32};
+use core::num::NonZeroU16;
 use core::time::Duration;
 
 use anyhow::Result;
 
 use autd3_rs::commands::{
-    ActivateModulationBank, Clear, ConfigModulation, CpuConfig, PtpConfig, ReleaseFailsafe,
-    SetCpuConfig, SetOutputMask, SetSilencer, Synchronize, WriteModulationBuffer,
+    Clear, ConfigModulation, CpuConfig, PtpConfig, ReleaseFailsafe, SetCpuConfig, SetOutputMask,
+    SetSilencer, Synchronize, WriteModulationBuffer,
 };
-use autd3_rs::value::{LoopBehavior, ModulationBank, SamplingConfig, TransitionMode};
-use autd3_rs::{DeviceState, Error, Frames};
+use autd3_rs::value::{LoopBehavior, ModulationBank, SamplingConfig};
+use autd3_rs::{DeviceState, Frames};
 
 use crate::Ctx;
-use crate::cases::pattern_util::{activate_mod_bank, expect_firmware_error, expect_firmware_ok};
-use crate::cases::{ERR_FPGA_TIMEOUT, ERR_INVALID_PAYLOAD, ERR_MISS_TRANSITION_TIME};
 
 pub(crate) async fn silence(ctx: &Ctx<'_>) -> Result<()> {
     ctx.stop_output().await?;
@@ -41,124 +39,6 @@ pub(crate) async fn silence(ctx: &Ctx<'_>) -> Result<()> {
         })
         .await?;
     }
-    Ok(())
-}
-
-fn at(ctx: &Ctx<'_>, ahead: Duration) -> Result<Frames, Error> {
-    let time = ctx.client.device_time_now()? + ahead;
-    Frames::encode(
-        ctx.client.geometry(),
-        ActivateModulationBank {
-            bank: ModulationBank::B1,
-            transition_mode: TransitionMode::SysTime { time },
-        },
-    )
-}
-
-async fn margin(ctx: &Ctx<'_>) -> Result<()> {
-    println!("-- SysTime transition margin");
-    expect_firmware_ok(
-        ctx,
-        "default margin, 1 s ahead",
-        at(ctx, Duration::from_secs(1)),
-    )
-    .await;
-    activate_mod_bank(ctx, ModulationBank::B0, TransitionMode::Immediate).await?;
-    expect_firmware_error(
-        ctx,
-        "default margin (10 ms), 3 ms ahead",
-        at(ctx, Duration::from_millis(3)),
-        ERR_MISS_TRANSITION_TIME,
-    )
-    .await;
-
-    ctx.send(SetCpuConfig::new(CpuConfig {
-        sys_time_transition_margin: Duration::ZERO,
-        ..CpuConfig::default()
-    }))
-    .await?;
-    expect_firmware_ok(
-        ctx,
-        "zero margin, 3 ms ahead",
-        at(ctx, Duration::from_millis(3)),
-    )
-    .await;
-    activate_mod_bank(ctx, ModulationBank::B0, TransitionMode::Immediate).await?;
-
-    ctx.send(SetCpuConfig::new(CpuConfig {
-        sys_time_transition_margin: Duration::from_secs(2),
-        ..CpuConfig::default()
-    }))
-    .await?;
-    expect_firmware_error(
-        ctx,
-        "2 s margin, 1 s ahead",
-        at(ctx, Duration::from_secs(1)),
-        ERR_MISS_TRANSITION_TIME,
-    )
-    .await;
-    expect_firmware_ok(
-        ctx,
-        "2 s margin, 3 s ahead",
-        at(ctx, Duration::from_secs(3)),
-    )
-    .await;
-    activate_mod_bank(ctx, ModulationBank::B0, TransitionMode::Immediate).await?;
-
-    expect_firmware_error(
-        ctx,
-        "zero update_activate_delay",
-        Frames::encode(
-            ctx.client.geometry(),
-            SetCpuConfig::new(CpuConfig {
-                update_activate_delay: Duration::ZERO,
-                ..CpuConfig::default()
-            }),
-        ),
-        ERR_INVALID_PAYLOAD,
-    )
-    .await;
-    expect_firmware_error(
-        ctx,
-        "the rejected config left the 2 s margin in place, 1 s ahead",
-        at(ctx, Duration::from_secs(1)),
-        ERR_MISS_TRANSITION_TIME,
-    )
-    .await;
-
-    ctx.send(Clear).await?;
-    silence(ctx).await?;
-    expect_firmware_ok(
-        ctx,
-        "Clear restored the default margin, 1 s ahead",
-        at(ctx, Duration::from_secs(1)),
-    )
-    .await;
-    activate_mod_bank(ctx, ModulationBank::B0, TransitionMode::Immediate).await
-}
-
-async fn latch_polls(ctx: &Ctx<'_>) -> Result<()> {
-    println!("-- FPGA latch polls");
-    ctx.send(SetCpuConfig::new(CpuConfig {
-        fpga_wait_update_max_polls: NonZeroU32::MIN,
-        ..CpuConfig::default()
-    }))
-    .await?;
-    expect_firmware_error(
-        ctx,
-        "a single poll cannot see the latch complete",
-        Frames::encode(ctx.client.geometry(), SetSilencer::disable()),
-        ERR_FPGA_TIMEOUT,
-    )
-    .await;
-    ctx.send(Clear).await?;
-    silence(ctx).await?;
-    expect_firmware_ok(
-        ctx,
-        "Clear restored the default polls",
-        Frames::encode(ctx.client.geometry(), SetSilencer::disable()),
-    )
-    .await;
     Ok(())
 }
 
@@ -353,8 +233,6 @@ async fn failsafe(ctx: &Ctx<'_>) -> Result<()> {
 pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     silence(ctx).await?;
     let outcome = async {
-        margin(ctx).await?;
-        latch_polls(ctx).await?;
         failsafe(ctx).await?;
         ptp(ctx).await
     }

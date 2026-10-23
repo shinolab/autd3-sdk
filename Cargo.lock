@@ -163,6 +163,7 @@ dependencies = [
  "autd3-cpu-wire",
  "autd3-firmware-writer",
  "autd3-rs",
+ "autd3-rs-core",
  "autd3-rs-firmware-emulator",
  "clap",
  "pollster",

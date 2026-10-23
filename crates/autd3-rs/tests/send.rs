@@ -10,7 +10,7 @@ use autd3_rs_firmware_emulator::autd3_cpu_fw::{
     FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH,
 };
 
-use common::{INVALID_TRANSITION_MODE, REJECTED_BY_THE_DEVICE, fans, geometry, open};
+use common::{INVALID_PAYLOAD, REJECTED_BY_THE_DEVICE, fans, geometry, open};
 
 #[tokio::test]
 #[ignore = "depends on real time"]
@@ -258,7 +258,7 @@ async fn an_error_reported_by_a_device_fails_only_that_send() {
         error,
         Error::DeviceError {
             device: 0,
-            code: INVALID_TRANSITION_MODE
+            code: INVALID_PAYLOAD
         }
     ));
     client.send(Nop).await.unwrap();
@@ -281,7 +281,7 @@ async fn a_per_device_error_names_the_device_that_reported_it() {
         error,
         Error::DeviceError {
             device: 2,
-            code: INVALID_TRANSITION_MODE
+            code: INVALID_PAYLOAD
         }
     ));
     client.close().unwrap();
@@ -304,7 +304,7 @@ async fn the_response_of_a_frame_carries_the_status_of_every_device() {
         .await
         .unwrap();
 
-    assert_eq!(response.error_codes(), [0, INVALID_TRANSITION_MODE, 0]);
+    assert_eq!(response.error_codes(), [0, INVALID_PAYLOAD, 0]);
     assert!(matches!(
         response.check(),
         Err(Error::DeviceError { device: 1, .. })

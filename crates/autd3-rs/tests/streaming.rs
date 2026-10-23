@@ -7,7 +7,7 @@ use autd3_rs::commands::{Modulation, Nop};
 use autd3_rs::value::SamplingConfig;
 use autd3_rs::{Error, Frames, MAX_INFLIGHT, PayloadError};
 
-use common::{INVALID_TRANSITION_MODE, REJECTED_BY_THE_DEVICE, emulator, open, open_with, option};
+use common::{INVALID_PAYLOAD, REJECTED_BY_THE_DEVICE, emulator, open, open_with, option};
 
 fn samples(len: u32) -> Vec<u8> {
     (0..len).map(|i| i.to_le_bytes()[0] ^ 0x5A).collect()
@@ -97,7 +97,7 @@ async fn a_rejected_frame_sent_without_waiting_fails_only_its_own_response() {
         outcomes[1],
         Err(Error::DeviceError {
             device: 0,
-            code: INVALID_TRANSITION_MODE
+            code: INVALID_PAYLOAD
         })
     ));
     assert!(outcomes[2..].iter().all(Result::is_ok));

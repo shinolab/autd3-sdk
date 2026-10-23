@@ -14,10 +14,10 @@ import pyFullSample from "@codes/python/examples/api/command/cpu-config-example.
 import csSample from "@codes/csharp/examples/api/command/cpu-config.cs?raw";
 import csFullSample from "@codes/csharp/examples/api/command/cpu-config-example.cs?raw";
 
-`SetCpuConfig` は, CPU ファームウェアが内部で使う設定値 (待ち時間・ポーリング上限・PTP 同期のパラメータ) を変更するコマンド.
+`SetCpuConfig` は, CPU ファームウェアが内部で使う設定値 (failsafe・ウォッチドッグ・PTP 同期のパラメータなど) を変更するコマンド.
 
 :::caution
-`sys_time_transition_margin`, `failsafe_timeout`, `ptp_unlock_failsafe_timeout` 以外は通常変更する必要はない.
+`failsafe_timeout`, `ptp_unlock_failsafe_timeout` 以外は通常変更する必要はない.
 これら以外を既定値から変更した場合の動作は保証しない.
 :::
 
@@ -29,11 +29,7 @@ import csFullSample from "@codes/csharp/examples/api/command/cpu-config-example.
 
 | フィールド                   | 型           | 既定値        | 説明 |
 | ---------------------------- | ------------ | ------------- | ---- |
-| `sys_time_transition_margin` | `Duration`   | 10 ms         | `TransitionMode::SysTime` の取りこぼし判定マージン. 「デバイスの現在時刻 + マージン」より前の遷移時刻は `MISS_TRANSITION_TIME` で拒否される. `0` はマージン無し |
-| `fpga_wait_update_max_polls` | `NonZeroU32` | 1,000,000     | FPGA の設定反映待ちのポーリング上限回数. 超えると `FPGA_TIMEOUT` |
-| `fpga_flash_max_polls`       | `NonZeroU32` | 2,000,000,000 | FPGA フラッシュ操作 (FPGA ファームウェア更新) の完了待ちのポーリング上限回数 |
 | `sync_guard`                 | `Duration`   | 250 μs        | 同期開始時刻の選択マージン                                                   |
-| `update_activate_delay`      | `Duration`   | 100 ms        | CPU ファームウェア更新の適用指示から再起動までの猶予  |
 | `failsafe_timeout`           | `Option<Duration>` | `None`  | ホストからの通信がこの時間途絶えるとデバイスが出力を止める (failsafe). `None` は failsafe 無効 |
 | `ptp_unlock_failsafe_timeout` | `Option<Duration>` | `None` | PTP のロックを失ったままこの時間が経つと, そのデバイスが出力を止める. `None` は無効 |
 | `fpga_bus_wait`              | `FpgaBusWait` | `Cycles3`    | CPU が FPGA を読み書きするバスのウェイト周期数. `Cycles2` または `Cycles3` |
@@ -72,6 +68,9 @@ C# では `Duration` の項目を `TimeSpan` で渡すので, 100 ns 単位で�
 `cpu_watchdog_timeout` は, CPU ファームウェアのハングやリセット中に FPGA が出力を止めるまでの時間で, failsafe と同じ方法で出力を止める.
 `None` にすると, CPU ファームウェアが止まってもデバイスは止まる直前の出力を続ける.
 
+`failsafe_timeout` を指定したままクライアントを閉じると, ホストからの通信が途絶えるのでその時間の後に出力が止まる.
+次に開いたときは [`ReleaseFailsafe`](/autd3-sdk/api/command/release-failsafe/) か [Clear](/autd3-sdk/api/command/clear/) を送る.
+
 failsafe や CPU ウォッチドッグで止まった出力は, 自動では戻らない.
 止まっているかどうかは `read_fpga_state()` が返す `FpgaState` の `is_failsafe_active()` (C#: `IsFailsafeActive`) で確認できる.
 [`ReleaseFailsafe`](/autd3-sdk/api/command/release-failsafe/) コマンドを送ると出力が再開される.
@@ -79,6 +78,10 @@ failsafe や CPU ウォッチドッグで止まった出力は, 自動では戻�
 :::
 
 設定値は [Clear](/autd3-sdk/api/command/clear/) と電源再投入で既定値に戻る.
+クライアントを開き直しても戻らない (前のセッションの値のまま動く) ので, 既定値に戻したい場合は `Clear` を送る.
+PTP がロックしない値を入れたまま閉じると, 次に開くときの同期待ちが `open_timeout` で失敗する (`SyncTimeout`).
+その場合は [`TransportOption`](/autd3-sdk/api/basics/transport-option/) の `sync_on_open` を `false` にして開き (Rust のみ), `Clear` を送ってから開き直す.
+Python / C# からは, `autd3-firmware-ota --reboot-only` でデバイスを再起動するか, 電源を入れ直して既定値に戻す.
 
 ## Example
 

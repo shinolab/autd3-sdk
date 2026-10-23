@@ -3,8 +3,7 @@ use core::time::Duration;
 
 use anyhow::Result;
 
-use autd3_rs::Frames;
-use autd3_rs::commands::{Modulation, SetSilencer};
+use autd3_rs::commands::Modulation;
 use autd3_rs::params::MOD_BUFFER_SAMPLES;
 use autd3_rs::units::Hz;
 use autd3_rs::value::{LoopBehavior, ModulationBank, SamplingConfig, TransitionMode};
@@ -12,8 +11,7 @@ use autd3_rs_modulation::{SineOption, constant, modulation_buffer, sine};
 
 use crate::Ctx;
 use crate::cases::pattern_util::{
-    activate_mod_bank, expect_transition_mode_rejections, focus_at, report_fpga_state,
-    send_pattern_mod, write_mod_bank,
+    activate_mod_bank, focus_at, report_fpga_state, send_pattern_mod, write_mod_bank,
 };
 use crate::io::wait_enter;
 
@@ -98,22 +96,5 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     })
     .await?;
     wait_enter("A reversed sawtooth AM is applied for exactly one waveform").await;
-
-    let mut probe = modulation_buffer();
-    constant(0xFF, &mut probe);
-    expect_transition_mode_rejections(ctx, "modulation", |loop_behavior, transition_mode| {
-        Frames::encode(
-            ctx.client.geometry(),
-            (
-                SetSilencer::default(),
-                Modulation {
-                    loop_behavior,
-                    transition_mode,
-                    ..Modulation::with_bank(ModulationBank::B1, SamplingConfig::FREQ_4K, &probe)
-                },
-            ),
-        )
-    })
-    .await;
     Ok(())
 }

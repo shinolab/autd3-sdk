@@ -15,7 +15,7 @@ async fn main() -> anyhow::Result<()> {
     client.send((Clear, Synchronize)).await?;
 
     client.send(SetCpuConfig::new(CpuConfig {
-        sys_time_transition_margin: Duration::from_millis(20),
+        ptp_unlock_failsafe_timeout: Some(Duration::from_secs(2)),
         ..Default::default()
     })).await?;
 

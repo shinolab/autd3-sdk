@@ -1,7 +1,7 @@
 use zerocopy::FromBytes;
 use zerocopy::big_endian::U32;
 
-use crate::fpga_update::{
+use autd3_cpu_wire::fpga_update::{
     FPGA_BARRIER_BASE, FPGA_GOLDEN_REGION_END, FpgaBootImage, is_plausible_fpga_length,
 };
 
@@ -165,19 +165,16 @@ pub fn validate_update_image(bytes: &[u8]) -> Result<BitstreamSummary, FpgaImage
     }
     match summary.boot_image() {
         FpgaBootImage::Update => Ok(summary),
-        boot_image @ (FpgaBootImage::Unknown
-        | FpgaBootImage::Golden
-        | FpgaBootImage::ReconfigFailed) => Err(FpgaImageError::NotAnUpdateImage { boot_image }),
+        boot_image => Err(FpgaImageError::NotAnUpdateImage { boot_image }),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::fpga_update::{FPGA_IMAGE_BASE, FPGA_USR_ACCESS_GOLDEN, FPGA_USR_ACCESS_UPDATE};
-
-    extern crate std;
-    use std::vec::Vec;
+    use autd3_cpu_wire::fpga_update::{
+        FPGA_IMAGE_BASE, FPGA_USR_ACCESS_GOLDEN, FPGA_USR_ACCESS_UPDATE,
+    };
 
     fn stream(words: &[u32]) -> Vec<u8> {
         let mut out = std::vec![0xFF; 16];

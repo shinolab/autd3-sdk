@@ -634,20 +634,6 @@ mod tests {
     }
 
     #[test]
-    fn a_config_reset_rearms_the_watchdog_with_the_default_timeout() {
-        let mut h = Harness::new();
-        h.deliver(&set_cpu_config(&CpuConfig {
-            cpu_watchdog_timeout: None,
-            ..CpuConfig::DEFAULT
-        }));
-        assert_eq!(h.port.watchdog_timeout, Some(0));
-
-        h.cpu.request_config_reset();
-        h.tick_1ms(1);
-        assert_eq!(h.port.watchdog_timeout, Some(CPU_WATCHDOG_TIMEOUT_MS));
-    }
-
-    #[test]
     fn clear_releases_a_fired_watchdog_after_the_timeout_is_rewritten() {
         let mut h = Harness::new();
         h.port.watchdog_state = 1;

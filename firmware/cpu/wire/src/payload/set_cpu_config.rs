@@ -1,4 +1,4 @@
-use core::num::{NonZeroU16, NonZeroU32};
+use core::num::NonZeroU16;
 use core::time::Duration;
 
 use zerocopy::little_endian::{U16, U32};
@@ -74,11 +74,7 @@ fn from_millis(value: U16) -> Duration {
 )]
 #[repr(C)]
 pub struct SetCpuConfigPayload {
-    pub sys_time_transition_margin_ns: U32,
-    pub fpga_wait_update_max_polls: U32,
-    pub fpga_flash_max_polls: U32,
     pub sync_guard_ns: U32,
-    pub update_activate_delay_ms: U16,
     pub ptp_sync_interval_ms: U16,
     pub ptp_tx_timestamp_timeout_ms: U16,
     pub ptp_delay_resp_timeout_ms: U16,
@@ -104,17 +100,7 @@ impl SetCpuConfigPayload {
     pub fn encode(config: &CpuConfig) -> Result<Self, CpuConfigOutOfRange> {
         let ptp = &config.ptp;
         Ok(Self {
-            sys_time_transition_margin_ns: to_nanos(
-                "sys_time_transition_margin",
-                config.sys_time_transition_margin,
-            )?,
-            fpga_wait_update_max_polls: U32::new(config.fpga_wait_update_max_polls.get()),
-            fpga_flash_max_polls: U32::new(config.fpga_flash_max_polls.get()),
             sync_guard_ns: to_nanos("sync_guard", config.sync_guard)?,
-            update_activate_delay_ms: to_millis(
-                "update_activate_delay",
-                config.update_activate_delay,
-            )?,
             ptp_sync_interval_ms: to_millis("ptp.sync_interval", ptp.sync_interval)?,
             ptp_tx_timestamp_timeout_ms: to_millis(
                 "ptp.tx_timestamp_timeout",
@@ -162,23 +148,17 @@ impl SetCpuConfigPayload {
 
     #[must_use]
     pub fn decode(&self) -> Option<CpuConfig> {
-        let fpga_wait_update_max_polls = NonZeroU32::new(self.fpga_wait_update_max_polls.get())?;
-        let fpga_flash_max_polls = NonZeroU32::new(self.fpga_flash_max_polls.get())?;
         let lock_samples = NonZeroU16::new(self.ptp_lock_samples.get())?;
         let delay_req_syncs = NonZeroU16::new(self.ptp_delay_req_syncs.get())?;
         let fpga_bus_wait = FpgaBusWait::from_u8(u8::try_from(self.fpga_bus_wait.get()).ok()?)?;
         let max_freq_ppb = MaxFreqPpb::new(self.ptp_max_freq_ppb.get())?;
         let path_delay_filter_shift =
             PathDelayFilterShift::new(u8::try_from(self.ptp_path_delay_filter_shift.get()).ok()?)?;
-        if self.update_activate_delay_ms.get() == 0 || self.ptp_sync_interval_ms.get() == 0 {
+        if self.ptp_sync_interval_ms.get() == 0 {
             return None;
         }
         Some(CpuConfig {
-            sys_time_transition_margin: from_nanos(self.sys_time_transition_margin_ns),
-            fpga_wait_update_max_polls,
-            fpga_flash_max_polls,
             sync_guard: from_nanos(self.sync_guard_ns),
-            update_activate_delay: from_millis(self.update_activate_delay_ms),
             failsafe_timeout: match self.failsafe_timeout_ms.get() {
                 FAILSAFE_DISABLED => None,
                 _ => Some(from_millis(self.failsafe_timeout_ms)),
@@ -220,31 +200,27 @@ impl SetCpuConfigPayload {
 }
 
 assert_layout!(SetCpuConfigPayload {
-    sys_time_transition_margin_ns: 0,
-    fpga_wait_update_max_polls: 4,
-    fpga_flash_max_polls: 8,
-    sync_guard_ns: 12,
-    update_activate_delay_ms: 16,
-    ptp_sync_interval_ms: 18,
-    ptp_tx_timestamp_timeout_ms: 20,
-    ptp_delay_resp_timeout_ms: 22,
-    ptp_holdover_ms: 24,
-    ptp_lock_samples: 26,
-    ptp_step_threshold_ns: 28,
-    ptp_lock_threshold_ns: 32,
-    ptp_kp_milli: 36,
-    ptp_ki_milli: 40,
-    ptp_max_freq_ppb: 44,
-    failsafe_timeout_ms: 48,
-    ptp_delay_req_syncs: 50,
-    ptp_path_delay_filter_shift: 52,
-    ptp_pause_quanta: 54,
-    ptp_pause_hold_syncs: 56,
-    ptp_pause_retry_ms: 58,
-    ptp_unlock_failsafe_timeout_ms: 60,
-    fpga_bus_wait: 62,
-    cpu_watchdog_timeout_ms: 64,
-} size 66);
+    sync_guard_ns: 0,
+    ptp_sync_interval_ms: 4,
+    ptp_tx_timestamp_timeout_ms: 6,
+    ptp_delay_resp_timeout_ms: 8,
+    ptp_holdover_ms: 10,
+    ptp_lock_samples: 12,
+    ptp_step_threshold_ns: 14,
+    ptp_lock_threshold_ns: 18,
+    ptp_kp_milli: 22,
+    ptp_ki_milli: 26,
+    ptp_max_freq_ppb: 30,
+    failsafe_timeout_ms: 34,
+    ptp_delay_req_syncs: 36,
+    ptp_path_delay_filter_shift: 38,
+    ptp_pause_quanta: 40,
+    ptp_pause_hold_syncs: 42,
+    ptp_pause_retry_ms: 44,
+    ptp_unlock_failsafe_timeout_ms: 46,
+    fpga_bus_wait: 48,
+    cpu_watchdog_timeout_ms: 50,
+} size 52);
 
 #[cfg(test)]
 mod tests {
@@ -254,11 +230,7 @@ mod tests {
     #[test]
     fn a_config_survives_the_round_trip() {
         let config = CpuConfig {
-            sys_time_transition_margin: Duration::ZERO,
-            fpga_wait_update_max_polls: NonZeroU32::new(11).unwrap(),
-            fpga_flash_max_polls: NonZeroU32::new(12).unwrap(),
             sync_guard: Duration::from_micros(500),
-            update_activate_delay: Duration::from_millis(13),
             failsafe_timeout: Some(Duration::from_millis(24)),
             ptp_unlock_failsafe_timeout: Some(Duration::from_millis(29)),
             fpga_bus_wait: FpgaBusWait::Cycles2,
@@ -283,7 +255,6 @@ mod tests {
         };
         let payload = SetCpuConfigPayload::encode(&config).unwrap();
         assert_eq!(payload.sync_guard_ns.get(), 500_000);
-        assert_eq!(payload.update_activate_delay_ms.get(), 13);
         assert_eq!(payload.failsafe_timeout_ms.get(), 24);
         assert_eq!(payload.ptp_delay_req_syncs.get(), 25);
         assert_eq!(payload.ptp_path_delay_filter_shift.get(), 5);
@@ -303,8 +274,7 @@ mod tests {
         assert_eq!(
             payload.as_bytes(),
             &[
-                0x80, 0x96, 0x98, 0x00, 0x40, 0x42, 0x0F, 0x00, 0x00, 0x94, 0x35, 0x77, 0x90, 0xD0,
-                0x03, 0x00, 0x64, 0x00, 0x08, 0x00, 0x03, 0x00, 0x06, 0x00, 0xE8, 0x03, 0x40, 0x00,
+                0x90, 0xD0, 0x03, 0x00, 0x08, 0x00, 0x03, 0x00, 0x06, 0x00, 0xE8, 0x03, 0x40, 0x00,
                 0x10, 0x27, 0x00, 0x00, 0x64, 0x00, 0x00, 0x00, 0x32, 0x00, 0x00, 0x00, 0x01, 0x00,
                 0x00, 0x00, 0x20, 0xA1, 0x07, 0x00, 0x00, 0x00, 0x20, 0x00, 0x05, 0x00, 0x30, 0x00,
                 0x40, 0x00, 0x08, 0x00, 0x00, 0x00, 0x03, 0x00, 0xE8, 0x03,
@@ -317,16 +287,8 @@ mod tests {
     const MS_MAX: Duration = Duration::from_millis(u16::MAX as u64);
 
     #[rstest]
-    #[case(CpuConfig { sys_time_transition_margin: Duration::ZERO, ..CpuConfig::default() })]
-    #[case(CpuConfig { sys_time_transition_margin: NS_MAX, ..CpuConfig::default() })]
-    #[case(CpuConfig { fpga_wait_update_max_polls: NonZeroU32::MIN, ..CpuConfig::default() })]
-    #[case(CpuConfig { fpga_wait_update_max_polls: NonZeroU32::MAX, ..CpuConfig::default() })]
-    #[case(CpuConfig { fpga_flash_max_polls: NonZeroU32::MIN, ..CpuConfig::default() })]
-    #[case(CpuConfig { fpga_flash_max_polls: NonZeroU32::MAX, ..CpuConfig::default() })]
     #[case(CpuConfig { sync_guard: Duration::ZERO, ..CpuConfig::default() })]
     #[case(CpuConfig { sync_guard: NS_MAX, ..CpuConfig::default() })]
-    #[case(CpuConfig { update_activate_delay: MS_MIN, ..CpuConfig::default() })]
-    #[case(CpuConfig { update_activate_delay: MS_MAX, ..CpuConfig::default() })]
     #[case(CpuConfig { failsafe_timeout: None, ..CpuConfig::default() })]
     #[case(CpuConfig { failsafe_timeout: Some(MS_MIN), ..CpuConfig::default() })]
     #[case(CpuConfig { failsafe_timeout: Some(MS_MAX), ..CpuConfig::default() })]
@@ -376,7 +338,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case(CpuConfig { update_activate_delay: Duration::ZERO, ..CpuConfig::default() })]
     #[case(CpuConfig { ptp: PtpConfig { sync_interval: Duration::ZERO, ..PtpConfig::default() }, ..CpuConfig::default() })]
     fn a_zero_duration_the_firmware_refuses_is_left_to_the_device(#[case] config: CpuConfig) {
         let payload = SetCpuConfigPayload::encode(&config).unwrap();
@@ -592,16 +553,19 @@ mod tests {
     fn durations_the_wire_cannot_carry_are_rejected() {
         let rejected = [
             (
-                "sys_time_transition_margin",
+                "sync_guard",
                 CpuConfig {
-                    sys_time_transition_margin: Duration::from_secs(5),
+                    sync_guard: Duration::from_secs(5),
                     ..CpuConfig::default()
                 },
             ),
             (
-                "update_activate_delay",
+                "ptp.pause_retry",
                 CpuConfig {
-                    update_activate_delay: Duration::from_micros(1500),
+                    ptp: PtpConfig {
+                        pause_retry: Duration::from_micros(1500),
+                        ..PtpConfig::default()
+                    },
                     ..CpuConfig::default()
                 },
             ),
@@ -628,18 +592,6 @@ mod tests {
     fn values_the_firmware_cannot_run_with_do_not_decode() {
         let valid = SetCpuConfigPayload::encode(&CpuConfig::default()).unwrap();
         let rejected = [
-            SetCpuConfigPayload {
-                fpga_wait_update_max_polls: U32::new(0),
-                ..valid
-            },
-            SetCpuConfigPayload {
-                fpga_flash_max_polls: U32::new(0),
-                ..valid
-            },
-            SetCpuConfigPayload {
-                update_activate_delay_ms: U16::new(0),
-                ..valid
-            },
             SetCpuConfigPayload {
                 ptp_sync_interval_ms: U16::new(0),
                 ..valid

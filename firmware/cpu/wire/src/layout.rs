@@ -12,11 +12,11 @@ pub const EMISSION_RAM_WORDS: usize = EMISSION_SLOT_WORDS * EMISSION_MAX_INDICES
 pub const MAX_FOCI_TOTAL: usize = EMISSION_RAM_WORDS / FOCUS_WORDS;
 
 pub const FOCUS_UNIT_MM: f32 = 0.025;
-pub const FOCUS_COORD_MIN: i32 = -(1 << 17);
-pub const FOCUS_COORD_MAX: i32 = (1 << 17) - 1;
+pub(crate) const FOCUS_COORD_MIN: i32 = -(1 << 17);
+pub(crate) const FOCUS_COORD_MAX: i32 = (1 << 17) - 1;
 
 pub const OUTPUT_MASK_WORDS: usize = NUM_TRANSDUCERS.div_ceil(16);
-pub const GPIO_OUT_NUM: usize = 4;
+pub(crate) const GPIO_OUT_NUM: usize = 4;
 
 pub const PATTERN_RAW_DATA_LEN: usize = 2 * NUM_TRANSDUCERS;
 pub const PATTERN_RAW_MAX_COUNT: usize =

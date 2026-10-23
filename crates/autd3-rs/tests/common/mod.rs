@@ -2,10 +2,9 @@
 
 use std::time::Duration;
 
-use autd3_rs::commands::ActivateModulationBank;
+use autd3_rs::commands::{CpuConfig, PtpConfig, SetCpuConfig};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::udp::{TransportOption, UdpError};
-use autd3_rs::value::{ModulationBank, TransitionMode};
 use autd3_rs::{Client, Error};
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
@@ -13,12 +12,15 @@ pub(crate) const ACK_TIMEOUT: Duration = Duration::from_millis(250);
 pub(crate) const LONG_ACK_TIMEOUT: Duration = Duration::from_secs(30);
 pub(crate) const LOST_TIMEOUT: Duration = Duration::from_millis(500);
 pub(crate) const PATIENCE: Duration = Duration::from_secs(10);
-pub(crate) const INVALID_TRANSITION_MODE: u8 = 0x05;
+pub(crate) const INVALID_PAYLOAD: u8 = 0x02;
 
-pub(crate) const REJECTED_BY_THE_DEVICE: ActivateModulationBank = ActivateModulationBank {
-    bank: ModulationBank::B0,
-    transition_mode: TransitionMode::SyncIdx,
-};
+pub(crate) const REJECTED_BY_THE_DEVICE: SetCpuConfig = SetCpuConfig::new(CpuConfig {
+    ptp: PtpConfig {
+        sync_interval: Duration::ZERO,
+        ..PtpConfig::DEFAULT
+    },
+    ..CpuConfig::DEFAULT
+});
 
 pub(crate) fn geometry(num_devices: usize) -> Geometry {
     Geometry::new((0..num_devices).map(|_| Autd3::default()))

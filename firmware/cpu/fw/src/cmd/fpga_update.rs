@@ -2,8 +2,8 @@ use core::cell::Cell;
 use core::num::NonZeroU32;
 
 pub(crate) use autd3_cpu_wire::fpga_update::{
-    FPGA_IMAGE_BASE, FPGA_REBOOT_ATTEMPTS, FPGA_REBOOT_DELAY_MS, FPGA_RECONFIG_SETTLE_MS,
-    FPGA_SECTOR_BYTES, FpgaBootImage, is_plausible_fpga_length,
+    FPGA_IMAGE_BASE, FPGA_REBOOT_DELAY_MS, FPGA_RECONFIG_SETTLE_MS, FPGA_SECTOR_BYTES,
+    FpgaBootImage, is_plausible_fpga_length,
 };
 use autd3_cpu_wire::payload::{UpdateBeginPayload, UpdateChunkPayload};
 
@@ -26,6 +26,7 @@ bitflags::bitflags! {
 }
 
 const SLOT_SECTOR_BASE: u32 = FPGA_IMAGE_BASE - FPGA_IMAGE_BASE % FPGA_SECTOR_BYTES;
+const FPGA_FLASH_MAX_POLLS: NonZeroU32 = NonZeroU32::new(2_000_000_000).unwrap();
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum State {
@@ -39,11 +40,9 @@ pub(crate) enum State {
     Committed,
     Reboot {
         remaining_ms: u16,
-        attempts: u8,
     },
     Settle {
         remaining_ms: u16,
-        attempts: u8,
     },
 }
 
@@ -214,7 +213,7 @@ impl Cpu {
         fpga::set_watchdog_timeout(port, None);
         run_command(
             port,
-            self.config().fpga_flash_max_polls,
+            FPGA_FLASH_MAX_POLLS,
             FlashOp::Erase,
             SLOT_SECTOR_BASE,
             FPGA_SECTOR_BYTES,
@@ -249,7 +248,7 @@ impl Cpu {
         }
         let start = FPGA_IMAGE_BASE + chunk.offset.get();
         let end = start + data.len() as u32;
-        let max_polls = self.config().fpga_flash_max_polls;
+        let max_polls = FPGA_FLASH_MAX_POLLS;
         let mut erased = erased_end;
         while erased < end {
             run_command(port, max_polls, FlashOp::Erase, erased, FPGA_SECTOR_BYTES)?;
@@ -278,7 +277,7 @@ impl Cpu {
             return Err(Error::UpdateNotStarted);
         };
         self.fpga_update.state.set(State::Locked);
-        let max_polls = self.config().fpga_flash_max_polls;
+        let max_polls = FPGA_FLASH_MAX_POLLS;
         if run_command(port, max_polls, FlashOp::Crc32, FPGA_IMAGE_BASE, length)? != crc32 {
             return Err(Error::UpdateImageInvalid);
         }
@@ -295,60 +294,43 @@ impl Cpu {
         }
         self.fpga_update.state.set(State::Reboot {
             remaining_ms: FPGA_REBOOT_DELAY_MS,
-            attempts: 0,
         });
         Ok(())
     }
 
     pub(crate) fn fpga_update_tick<P: Port>(&self, port: &mut P) {
         match self.fpga_update.state.get() {
-            State::Reboot {
-                remaining_ms,
-                attempts,
-            } => {
+            State::Reboot { remaining_ms } => {
                 let remaining_ms = remaining_ms.saturating_sub(1);
                 if remaining_ms == 0 {
                     write_target(port, 0, 0);
                     issue(port, FlashOp::Reboot);
                     self.fpga_update.state.set(State::Settle {
                         remaining_ms: FPGA_RECONFIG_SETTLE_MS,
-                        attempts: attempts + 1,
                     });
                 } else {
-                    self.fpga_update.state.set(State::Reboot {
-                        remaining_ms,
-                        attempts,
-                    });
+                    self.fpga_update.state.set(State::Reboot { remaining_ms });
                 }
             }
-            State::Settle {
-                remaining_ms,
-                attempts,
-            } => {
+            State::Settle { remaining_ms } => {
                 let remaining_ms = remaining_ms.saturating_sub(1);
                 if remaining_ms == 0 {
-                    self.finish_reconfiguration(port, attempts);
+                    self.finish_reconfiguration(port);
                 } else {
-                    self.fpga_update.state.set(State::Settle {
-                        remaining_ms,
-                        attempts,
-                    });
+                    self.fpga_update.state.set(State::Settle { remaining_ms });
                 }
             }
             State::Idle | State::Locked | State::Receiving { .. } | State::Committed => {}
         }
     }
 
-    fn finish_reconfiguration<P: Port>(&self, port: &mut P, attempts: u8) {
+    fn finish_reconfiguration<P: Port>(&self, port: &mut P) {
         let reconfigured = read_reg(port, ADDR_FLASH_CMD) == 0;
-        if !reconfigured && attempts < FPGA_REBOOT_ATTEMPTS {
-            self.fpga_update.state.set(State::Reboot {
-                remaining_ms: 1,
-                attempts,
-            });
+        self.fpga_update.reconfig_failed.set(!reconfigured);
+        if !reconfigured {
+            self.fpga_update.state.set(State::Committed);
             return;
         }
-        self.fpga_update.reconfig_failed.set(!reconfigured);
         self.init(port);
         self.fpga_update.state.set(State::Idle);
     }
@@ -367,12 +349,12 @@ mod tests {
     use autd3_cpu_wire::update::crc32;
     use zerocopy::little_endian::U32;
 
-    use super::{FPGA_REBOOT_ATTEMPTS, FPGA_REBOOT_DELAY_MS, FPGA_RECONFIG_SETTLE_MS, State};
+    use super::{FPGA_REBOOT_DELAY_MS, FPGA_RECONFIG_SETTLE_MS, State, run_command};
     use crate::cmd::cpu_config::CpuConfig;
     use crate::cmd::update::{UpdateBeginPayload, UpdateChunkPayload};
     use crate::fpga_params::{
-        ADDR_FLASH_CMD, ADDR_FLASH_LEN_0, ADDR_FUNCTION_BITS, CtlFlags, FLASH_BUF_BYTES, FlashErr,
-        FlashOp, FunctionBits,
+        ADDR_FLASH_CMD, ADDR_FLASH_LEN_0, ADDR_FLASH_STATUS, ADDR_FUNCTION_BITS, CtlFlags,
+        FLASH_BUF_BYTES, FlashErr, FlashOp, FunctionBits,
     };
     use crate::proto::{Cmd, Error, OUTPUT_MASK_WORDS};
     use crate::test_utils::builders::{output_mask, set_cpu_config};
@@ -686,7 +668,7 @@ mod tests {
         assert_eq!(h.status(), Error::None);
         h.deliver(&Frame::new(Cmd::ReadFirmwareInfo));
         assert_eq!(h.status(), Error::None);
-        h.deliver(&Frame::new(Cmd::UpdateActivate));
+        h.deliver(&Frame::new(Cmd::Reboot));
         assert_eq!(h.status(), Error::FpgaUpdateInProgress);
         assert_eq!(h.port.reset_count, 0);
         h.deliver(&begin(100, 0));
@@ -757,7 +739,6 @@ mod tests {
             h.cpu.fpga_update.state(),
             State::Settle {
                 remaining_ms: FPGA_RECONFIG_SETTLE_MS,
-                attempts: 1,
             }
         );
 
@@ -807,26 +788,24 @@ mod tests {
     }
 
     #[test]
-    fn an_ignored_reboot_is_retried_after_the_settle_time() {
+    fn an_ignored_reboot_leaves_the_image_committed_for_another_activation() {
         let mut h = activated(43);
         h.port.fpga_reboots_to_ignore = 1;
         h.tick_1ms(u32::from(FPGA_REBOOT_DELAY_MS) + u32::from(FPGA_RECONFIG_SETTLE_MS));
         assert_eq!(reboot_requests(&h), 1);
         assert_eq!(h.port.fpga_reboots, 0);
+        assert_eq!(h.cpu.fpga_update.state(), State::Committed);
         assert!(h.cpu.fpga_update.is_locked());
         assert!(output_muted(&h));
-        assert_eq!(
-            h.cpu.fpga_update.state(),
-            State::Reboot {
-                remaining_ms: 1,
-                attempts: 1,
-            }
-        );
+        assert_eq!(boot_image(&mut h), FpgaBootImage::ReconfigFailed as u8);
+        h.tick_1ms(10_000);
+        assert_eq!(reboot_requests(&h), 1);
 
-        h.tick_1ms(1);
+        h.deliver(&Frame::new(Cmd::FpgaUpdateActivate));
+        assert_eq!(h.status(), Error::None);
+        h.tick_1ms(u32::from(FPGA_REBOOT_DELAY_MS) + u32::from(FPGA_RECONFIG_SETTLE_MS));
         assert_eq!(reboot_requests(&h), 2);
         assert_eq!(h.port.fpga_reboots, 1);
-        h.tick_1ms(u32::from(FPGA_RECONFIG_SETTLE_MS));
         assert!(!h.cpu.fpga_update.is_locked());
         assert_eq!(h.cpu.fpga_update.state(), State::Idle);
         assert!((0..OUTPUT_MASK_WORDS).all(|i| h.output_mask(i) == 0xFFFF));
@@ -918,19 +897,21 @@ mod tests {
     }
 
     #[test]
-    fn an_fpga_that_never_reconfigures_is_reported_and_released() {
+    fn an_fpga_that_never_reconfigures_is_reported_and_stays_locked() {
         let mut h = activated(47);
         h.port.fpga_reboots_to_ignore = u32::MAX;
         h.tick_1ms(FPGA_RECONFIG_WORST_MS - 1);
-        assert_eq!(reboot_requests(&h), usize::from(FPGA_REBOOT_ATTEMPTS));
-        assert!(h.cpu.fpga_update.is_locked());
+        assert_eq!(reboot_requests(&h), 1);
+        assert!(matches!(h.cpu.fpga_update.state(), State::Settle { .. }));
         h.tick_1ms(1);
-        assert!(!h.cpu.fpga_update.is_locked());
-        assert_eq!(h.cpu.fpga_update.state(), State::Idle);
-        assert!((0..OUTPUT_MASK_WORDS).all(|i| h.output_mask(i) == 0xFFFF));
+        assert_eq!(h.cpu.fpga_update.state(), State::Committed);
+        assert!(h.cpu.fpga_update.is_locked());
+        assert!(output_muted(&h));
         assert_eq!(boot_image(&mut h), FpgaBootImage::ReconfigFailed as u8);
+        h.deliver(&Frame::new(Cmd::Clear));
+        assert_eq!(h.status(), Error::FpgaUpdateInProgress);
         h.tick_1ms(10_000);
-        assert_eq!(reboot_requests(&h), usize::from(FPGA_REBOOT_ATTEMPTS));
+        assert_eq!(reboot_requests(&h), 1);
         assert_eq!(h.port.fpga_reboots, 0);
     }
 
@@ -957,15 +938,13 @@ mod tests {
         h.port.fpga_flash_dropped_reg = Some(ADDR_FLASH_CMD);
         h.tick_1ms(1 + u32::from(FPGA_RECONFIG_SETTLE_MS));
         assert_eq!(h.port.fpga_reboots, 0);
-        assert_eq!(
-            h.cpu.fpga_update.state(),
-            State::Reboot {
-                remaining_ms: 1,
-                attempts: 1,
-            }
-        );
+        assert_eq!(h.cpu.fpga_update.state(), State::Committed);
+        assert_eq!(boot_image(&mut h), FpgaBootImage::ReconfigFailed as u8);
+
         h.port.fpga_flash_dropped_reg = None;
-        h.tick_1ms(1 + u32::from(FPGA_RECONFIG_SETTLE_MS));
+        h.deliver(&Frame::new(Cmd::FpgaUpdateActivate));
+        assert_eq!(h.status(), Error::None);
+        h.tick_1ms(u32::from(FPGA_REBOOT_DELAY_MS) + u32::from(FPGA_RECONFIG_SETTLE_MS));
         assert_eq!(h.port.fpga_reboots, 1);
         assert!(!h.cpu.fpga_update.is_locked());
         assert_ne!(boot_image(&mut h), FpgaBootImage::ReconfigFailed as u8);
@@ -1036,43 +1015,35 @@ mod tests {
     }
 
     #[test]
-    fn a_hung_fpga_times_out() {
-        use autd3_cpu_wire::config::CpuConfig;
-
-        use crate::test_utils::builders::set_cpu_config;
-
+    fn a_busy_fpga_times_out_without_issuing_a_command() {
         let mut h = ota_capable();
-        h.deliver(&set_cpu_config(&CpuConfig {
-            fpga_flash_max_polls: core::num::NonZeroU32::new(10_000).unwrap(),
-            ..CpuConfig::default()
-        }));
-        assert_eq!(h.status(), Error::None);
         h.port.fpga_flash_hang = true;
+        h.port.fpga_flash_reg[usize::from(ADDR_FLASH_STATUS)] = 1;
+        let ops = h.port.fpga_flash_ops.len();
         h.deliver(&begin(100, 0));
         assert_eq!(h.status(), Error::FpgaTimeout);
         assert_eq!(h.cpu.fpga_update.state(), State::Locked);
-        let ops = h.port.fpga_flash_ops.len();
+        assert_eq!(h.port.fpga_flash_ops.len(), ops);
         h.deliver(&begin(100, 0));
         assert_eq!(h.status(), Error::FpgaTimeout);
         assert_eq!(h.port.fpga_flash_ops.len(), ops);
     }
 
     #[test]
-    fn a_hung_fpga_is_polled_the_configured_number_of_times() {
-        use autd3_cpu_wire::config::CpuConfig;
-
-        use crate::test_utils::builders::set_cpu_config;
-
+    fn a_hung_fpga_is_polled_the_given_number_of_times() {
         let mut h = ota_capable();
-        h.deliver(&set_cpu_config(&CpuConfig {
-            fpga_flash_max_polls: core::num::NonZeroU32::new(7).unwrap(),
-            ..CpuConfig::default()
-        }));
-        assert_eq!(h.status(), Error::None);
         h.port.fpga_flash_hang = true;
         let reads = h.port.fpga_flash_status_reads;
-        h.deliver(&begin(100, 0));
-        assert_eq!(h.status(), Error::FpgaTimeout);
+        assert_eq!(
+            run_command(
+                &mut h.port,
+                core::num::NonZeroU32::new(7).unwrap(),
+                FlashOp::Erase,
+                FPGA_IMAGE_BASE,
+                FPGA_SECTOR_BYTES,
+            ),
+            Err(Error::FpgaTimeout)
+        );
         assert_eq!(h.port.fpga_flash_status_reads - reads, 1 + 7);
     }
 

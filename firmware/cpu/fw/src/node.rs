@@ -3,24 +3,21 @@ use zerocopy::{FromBytes, IntoBytes};
 
 use autd3_cpu_wire::udp::{
     ALL_NODES, AssignIdBody, Flags, FrameReply, Header, Kind, PORT, PROTOCOL_VERSION,
-    RESET_ID_CLOSE_DELAY_MS, Role, SetTimeBody, Status, UNASSIGNED_ID, UPSTREAM_UNKNOWN,
-    UnblockReply, UnitInfo, link_local, mac, solicited_node,
+    RESET_ID_CLOSE_DELAY_MS, Role, SetTimeBody, Status, UNASSIGNED_ID, UnblockReply, UnitInfo,
+    link_local, mac, solicited_node,
 };
 
 use crate::net::{self, Endpoint, Ipv6, Mac, NDP_HOP_LIMIT, Packet, UDP_PAYLOAD_OFFSET, Udp};
 use crate::nic::{Nic, RxMeta, other_port};
 use crate::proto::{FRAME_BYTES_MAX, FrameHeader, REPLY_DATA_BYTES_MAX, Reply};
 use crate::ptp::Ptp;
-use crate::version::{FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH};
 
 pub const TX_BUF_BYTES: usize = 320;
-const MAX_ECHO_BODY: usize = TX_BUF_BYTES - UDP_PAYLOAD_OFFSET - 4;
 
 pub trait CommandLayer {
     fn recv_frame(&mut self, frame: &[u8], msg_id: u16);
     fn reply(&mut self) -> Reply;
     fn send_failed(&mut self, count: u32);
-    fn unassigned(&mut self);
     fn ptp_unlocked(&mut self, elapsed_ms: Option<u32>);
     fn ptp_failsafe_active(&mut self) -> bool;
     fn host_idle(&mut self, idle_ms: Option<u32>);
@@ -37,10 +34,6 @@ impl CommandLayer for &crate::Cpu {
 
     fn send_failed(&mut self, count: u32) {
         crate::Cpu::count_send_failures(self, count);
-    }
-
-    fn unassigned(&mut self) {
-        crate::Cpu::request_config_reset(self);
     }
 
     fn ptp_unlocked(&mut self, elapsed_ms: Option<u32>) {
@@ -175,6 +168,7 @@ impl Node {
         nic.set_forwarding(false);
         *self = Self {
             last_host_frame_ms: self.last_host_frame_ms,
+            ptp: core::mem::take(&mut self.ptp),
             ..Self::new()
         };
         nic.set_mac(self.mac);
@@ -187,7 +181,6 @@ impl Node {
             && now_ms.wrapping_sub(at).cast_signed() >= 0
         {
             self.unassign(nic);
-            cmds.unassigned();
         }
         self.ptp.tick(nic, now_ms);
         cmds.ptp_unlocked(self.ptp.unlocked_ms(now_ms));
@@ -264,20 +257,6 @@ impl Node {
                         src_mac,
                         src_ip,
                     )
-                {
-                    let _ = nic.send(&self.buf[..len], rx.port, false);
-                }
-            }
-            Some(Packet::EchoRequest {
-                src_mac,
-                src_ip,
-                dst_ip,
-                body,
-            }) => {
-                if dst_ip == self.addr
-                    && body.len() <= MAX_ECHO_BODY
-                    && let Some(len) =
-                        net::echo_reply(&mut self.buf, self.mac, self.addr, src_mac, src_ip, body)
                 {
                     let _ = nic.send(&self.buf[..len], rx.port, false);
                 }
@@ -429,11 +408,6 @@ impl Node {
         UnitInfo {
             unit_id: self.unit_id,
             flags: self.flags(nic, ptp_failsafe),
-            upstream_port: self.upstream.unwrap_or(UPSTREAM_UNKNOWN),
-            reserved: 0,
-            fw_version: [FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH],
-            reserved2: 0,
-            sys_time: U64::new(nic.now().unwrap_or(0)),
             ptp_offset_ns: I32::new(self.ptp_offset_ns()),
         }
     }
@@ -548,7 +522,6 @@ mod tests {
         frames: Vec<(Vec<u8>, u16)>,
         reply: CmdReply,
         send_failures: u32,
-        unassigned: u32,
         ptp_unlocked: Vec<Option<u32>>,
         ptp_failsafe: bool,
         host_idle_publishes: u32,
@@ -565,10 +538,6 @@ mod tests {
 
         fn send_failed(&mut self, count: u32) {
             self.send_failures += count;
-        }
-
-        fn unassigned(&mut self) {
-            self.unassigned += 1;
         }
 
         fn ptp_unlocked(&mut self, elapsed_ms: Option<u32>) {
@@ -619,7 +588,6 @@ mod tests {
                     frames: Vec::new(),
                     reply: CmdReply::EMPTY,
                     send_failures: 0,
-                    unassigned: 0,
                     ptp_unlocked: Vec::new(),
                     ptp_failsafe: false,
                     host_idle_publishes: 0,
@@ -768,8 +736,7 @@ mod tests {
         let info = h.unit_info(ALL_NODES);
         assert_eq!(info.unit_id, UNASSIGNED_ID);
         assert_eq!(info.flags, Flags::empty());
-        assert_eq!(info.upstream_port, 0xFF);
-        assert_eq!(info.sys_time.get(), 5_000_000_000);
+        assert_eq!(info.ptp_offset_ns.get(), 0);
 
         h.send(ALL_NODES, Kind::Discover, &[]);
         let r = h.only_reply();
@@ -811,15 +778,6 @@ mod tests {
         let info = h.unit_info(unit_address(3));
         assert_eq!(info.unit_id, 3);
         assert_eq!(info.flags, Flags::ASSIGNED);
-        assert_eq!(info.upstream_port, UPSTREAM);
-        assert_eq!(
-            info.fw_version,
-            [
-                crate::FW_VERSION_MAJOR,
-                crate::FW_VERSION_MINOR,
-                crate::FW_VERSION_PATCH
-            ]
-        );
     }
 
     #[test]
@@ -916,7 +874,7 @@ mod tests {
             info.flags,
             Flags::ASSIGNED | Flags::GRANDMASTER | Flags::PTP_LOCKED | Flags::SYNC_READY
         );
-        assert_eq!(info.sys_time.get(), 812_000_000_123_456_789);
+        assert_eq!(h.nic.now(), Some(812_000_000_123_456_789));
         assert_eq!(info.ptp_offset_ns.get(), 0);
     }
 
@@ -1242,10 +1200,8 @@ mod tests {
         h.tick(19);
         assert!(h.node.is_assigned());
         assert_eq!(h.nic.forwarding_open, Some(true));
-        assert_eq!(h.cmds.unassigned, 0);
         h.tick(1);
         assert!(!h.node.is_assigned());
-        assert_eq!(h.cmds.unassigned, 1);
         assert_eq!(h.nic.forwarding_open, Some(false));
         assert_eq!(h.nic.mac, Some(mac(UNASSIGNED_ID)));
         assert!(!h.nic.pulse_ready);
@@ -1337,30 +1293,23 @@ mod tests {
     }
 
     #[test]
-    fn echo_is_answered_only_on_unicast() {
+    fn echo_is_not_answered() {
         let mut h = Harness::new();
         let own = unit_address(UNASSIGNED_ID);
-        let mut icmp = vec![icmpv6::TYPE_ECHO_REQUEST, 0, 0, 0, 0, 1, 0, 2, b'x'];
+        let icmp = [icmpv6::TYPE_ECHO_REQUEST, 0, 0, 0, 0, 1, 0, 2, b'x'];
         h.deliver(&icmp_frame(ALL_NODES, 64, &icmp));
-        assert!(h.nic.sent.is_empty());
-        h.deliver(&icmp_frame(own, 64, &icmp));
-        assert_eq!(h.nic.sent.len(), 1);
-        let sent = h.nic.sent.pop().unwrap();
-        assert_eq!(sent.frame[ETH_HEADER + IPV6_HEADER], 129);
-        icmp.resize(400, 0);
         h.deliver(&icmp_frame(own, 64, &icmp));
         assert!(h.nic.sent.is_empty());
     }
 
     #[test]
-    fn refused_neighbor_and_echo_replies_are_reported_to_the_command_layer() {
+    fn refused_neighbor_advertisements_are_reported_to_the_command_layer() {
         let mut h = Harness::new();
         h.assign(4);
         let own = unit_address(4);
         h.nic.send_refusals = 2;
         h.deliver(&icmp_frame(solicited_node(own), 255, &solicitation(own)));
-        let icmp = [icmpv6::TYPE_ECHO_REQUEST, 0, 0, 0, 0, 1, 0, 2, b'x'];
-        h.deliver(&icmp_frame(own, 64, &icmp));
+        h.deliver(&icmp_frame(own, 255, &solicitation(own)));
         assert!(h.nic.sent.is_empty());
         assert_eq!(h.cmds.send_failures, 2);
     }
@@ -1691,25 +1640,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn reset_id_restores_the_default_ptp_config() {
-        let mut wired = Wired::new(0.0);
-        let config = autd3_cpu_wire::config::PtpConfig {
-            holdover: core::time::Duration::from_millis(123),
-            ..autd3_cpu_wire::config::PtpConfig::default()
-        };
-        wired.slave.node.configure_ptp(config);
-        assert_eq!(wired.slave.node.ptp.config(), config);
-        wired.slave.send(ALL_NODES, Kind::ResetId, &[]);
-        wired.slave.replies();
-        wired.slave.tick(50);
-        assert!(!wired.slave.node.is_assigned());
-        assert_eq!(
-            wired.slave.node.ptp.config(),
-            autd3_cpu_wire::config::PtpConfig::default()
-        );
-    }
-
     #[cfg(not(loom))]
     #[test]
     fn a_heartbeat_reply_carries_the_ptp_failsafe_of_the_cpu() {
@@ -1893,42 +1823,33 @@ mod tests {
 
     #[cfg(not(loom))]
     #[test]
-    fn reset_id_restores_the_whole_cpu_config() {
+    fn reset_id_keeps_the_cpu_config() {
         use crate::cmd::cpu_config::CpuConfig;
         use crate::test_utils::builders::set_cpu_config;
         use crate::test_utils::mock::Harness as CpuHarness;
 
-        let stale = CpuConfig {
+        let config = CpuConfig {
             failsafe_timeout: Some(core::time::Duration::from_millis(500)),
-            ptp: autd3_cpu_wire::config::PtpConfig {
-                holdover: core::time::Duration::from_millis(123),
-                ..autd3_cpu_wire::config::PtpConfig::default()
-            },
             ..CpuConfig::DEFAULT
         };
         let mut c = CpuHarness::new();
-        c.deliver(&set_cpu_config(&stale));
-        assert_eq!(c.cpu.config(), stale);
+        c.deliver(&set_cpu_config(&config));
+        assert_eq!(c.cpu.config(), config);
 
         let mut h = Harness::new();
         h.assign(0);
-        h.node.configure_ptp(stale.ptp);
         h.send(ALL_NODES, Kind::ResetId, &[]);
         for _ in 0..50 {
             h.now_ms += 1;
             h.node.tick(&mut h.nic, h.now_ms, &mut &*c.cpu);
+            c.cpu.tick_1ms(&mut c.port);
         }
         assert!(!h.node.is_assigned());
-        assert_eq!(c.cpu.config(), stale);
-
-        c.cpu.tick_1ms(&mut c.port);
-        assert_eq!(c.cpu.config(), CpuConfig::DEFAULT);
-        assert_eq!(c.cpu.config().ptp, h.node.ptp.config());
-        assert_eq!(c.port.ptp_config, Some(h.node.ptp.config()));
+        assert_eq!(c.cpu.config(), config);
     }
 
     #[test]
-    fn a_unit_left_with_a_ptp_config_that_never_locks_locks_after_a_reopen() {
+    fn a_ptp_config_survives_reset_id_until_it_is_overwritten() {
         let mut wired = Wired::new(0.0);
         wired
             .slave
@@ -1945,6 +1866,13 @@ mod tests {
         wired.slave.tick(50);
         wired.slave.assign(1);
         wired.gm.now_ms = wired.slave.now_ms;
+        wired.run_ms(5000);
+        assert!(!wired.slave.node.ptp.is_locked());
+
+        wired
+            .slave
+            .node
+            .configure_ptp(autd3_cpu_wire::config::PtpConfig::default());
         wired.run_ms(5000);
         assert!(wired.slave.node.ptp.is_locked());
     }
