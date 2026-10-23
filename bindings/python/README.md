@@ -20,7 +20,6 @@ cargo xtask py develop [--release]          # editable-install into .venv
 cargo xtask py lint                          # clippy over the binding workspace
 cargo xtask py format [--fix]                # rustfmt
 cargo xtask py test                         # develop + pytest / import smoke
-cargo xtask py example focus_sine            # develop + run examples/focus_sine.py
 ```
 
 [uv](https://docs.astral.sh/uv/) is required.

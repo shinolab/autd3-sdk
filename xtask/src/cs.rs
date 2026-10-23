@@ -77,19 +77,6 @@ pub(crate) enum CsCmd {
         #[arg(long, help = "Rewrite the files instead of only checking them")]
         fix: bool,
     },
-    #[command(about = "Build and run a C# example from `bindings/csharp/examples/`")]
-    Example {
-        #[arg(help = "Example project name")]
-        name: String,
-        #[arg(long, help = "Build the Debug configuration instead of Release")]
-        debug: bool,
-        #[arg(
-            trailing_var_arg = true,
-            allow_hyphen_values = true,
-            help = "Arguments forwarded to the example"
-        )]
-        args: Vec<String>,
-    },
     #[command(about = "Remove the C# binding build outputs")]
     Clean(CleanArgs),
 }
@@ -101,7 +88,6 @@ pub(crate) fn run_cs(root: &Path, cmd: CsCmd) -> Result<()> {
         CsCmd::Pack { native_dir, out } => pack(root, native_dir, out),
         CsCmd::Test => test(root, &dir),
         CsCmd::Format { fix } => format(&dir, fix),
-        CsCmd::Example { name, debug, args } => example(root, &dir, &name, debug, &args),
         CsCmd::Clean(args) => crate::clean::scope(root, args, clean),
     }
 }
@@ -147,29 +133,6 @@ fn format(dir: &Path, fix: bool) -> Result<()> {
         args.push("--verify-no-changes");
     }
     run("dotnet", args, dir)
-}
-
-fn example(root: &Path, dir: &Path, name: &str, debug: bool, args: &[String]) -> Result<()> {
-    let native = build_ffi(root)?;
-    let config = if debug { "Debug" } else { "Release" };
-    let project_dir = dir.join("examples").join(name);
-    let project = project_dir.join(format!("{name}.csproj"));
-    if !project.is_file() {
-        bail!("example not found: {}", project.display());
-    }
-    run(
-        "dotnet",
-        ["build", &project.to_string_lossy(), "-c", config],
-        dir,
-    )?;
-    let exe = find_example_exe(&project_dir, config, name)?;
-    let (var, value) = native_lib_env(&native);
-    run_env(
-        &exe.to_string_lossy(),
-        args,
-        dir,
-        &[(var, value.as_os_str())],
-    )
 }
 
 fn pack(root: &Path, native_dir: Option<PathBuf>, out: Option<PathBuf>) -> Result<()> {
@@ -266,19 +229,6 @@ fn build_ffi(root: &Path) -> Result<PathBuf> {
     let ffi = root.join("bindings").join("ffi");
     run("cargo", ["build", "--workspace", "--release"], &ffi)?;
     Ok(ffi.join("target").join("release"))
-}
-
-fn find_example_exe(project_dir: &Path, config: &str, name: &str) -> Result<PathBuf> {
-    let bin = project_dir.join("bin").join(config);
-    if let Ok(entries) = std::fs::read_dir(&bin) {
-        for entry in entries.flatten() {
-            let candidate = entry.path().join(name);
-            if candidate.is_file() {
-                return Ok(candidate);
-            }
-        }
-    }
-    bail!("built example executable not found under {}", bin.display());
 }
 
 fn native_lib_env(native: &Path) -> (&'static str, OsString) {

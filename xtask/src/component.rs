@@ -22,7 +22,7 @@ pub(crate) const COMPONENTS: &[Component] = &[
         include_paths: &[
             "crates/**",
             "tools/**",
-            "examples/**",
+            "recipes/**",
             "bindings/ffi/**",
         ],
         also_shipped_by: &[],
