@@ -1,5 +1,5 @@
 use autd3_rs::commands::Command;
-use autd3_rs::{Client, Frame};
+use autd3_rs::{Client, Controller, Frame};
 
 #[allow(async_fn_in_trait)]
 pub trait ClientApi {
@@ -14,10 +14,10 @@ impl ClientApi for Client {
     type Error = autd3_rs::error::Error;
 
     async fn send<C: Command>(&mut self, cmd: C) -> Result<(), Self::Error> {
-        Client::send(self, cmd).await
+        Controller::send(self, cmd).await
     }
 
     async fn send_frame(&mut self, frame: Frame<'_>) -> Result<(), Self::Error> {
-        Client::send_frame(self, frame).await?.await?.check()
+        Controller::send_frame(self, frame).await?.await?.check()
     }
 }
