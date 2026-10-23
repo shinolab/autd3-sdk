@@ -4,7 +4,6 @@ use crate::error::{Error, PayloadError};
 use crate::protocol::EXEC_AT_UNIT_NS;
 use crate::value::SysTime;
 
-const EXEC_LEAD_MIN: Duration = Duration::from_micros(100);
 const EXEC_LEAD_LIMIT: Duration = Duration::from_nanos(EXEC_AT_UNIT_NS << 31);
 const EXEC_BEHIND_LIMIT: Duration = Duration::from_nanos(EXEC_AT_UNIT_NS << 30);
 
@@ -24,13 +23,6 @@ pub(crate) fn schedule(
     match exec {
         ExecAt::Immediate => Ok(0),
         ExecAt::Lead(lead) => {
-            if lead < EXEC_LEAD_MIN {
-                return Err(PayloadError::ExecLeadTooShort {
-                    got: lead,
-                    min: EXEC_LEAD_MIN,
-                }
-                .into());
-            }
             if lead >= limit {
                 return Err(PayloadError::ExecTooFarAhead { ahead: lead, limit }.into());
             }
@@ -123,23 +115,15 @@ mod tests {
     }
 
     #[test]
-    fn a_lead_below_100_microseconds_is_rejected_before_reading_the_device_time() {
-        assert!(
-            schedule(
-                ExecAt::Lead(Duration::from_micros(100)),
-                Duration::MAX,
-                || Some(NOW)
-            )
-            .is_ok()
+    fn a_lead_has_no_lower_bound() {
+        assert_eq!(
+            at_now(ExecAt::Lead(Duration::ZERO), Duration::MAX).unwrap(),
+            20_000
         );
-        assert!(matches!(
-            schedule(
-                ExecAt::Lead(Duration::from_nanos(99_999)),
-                Duration::MAX,
-                || { unreachable!("the device time is read") }
-            ),
-            Err(Error::InvalidPayload(PayloadError::ExecLeadTooShort { .. }))
-        ));
+        assert_eq!(
+            at_now(ExecAt::Lead(Duration::from_nanos(1)), Duration::MAX).unwrap(),
+            20_001
+        );
     }
 
     #[test]

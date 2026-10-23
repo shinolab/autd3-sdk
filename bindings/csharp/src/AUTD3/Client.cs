@@ -50,7 +50,6 @@ namespace AUTD3
         public ModulationBank CurrentModBank => (ModulationBank)NativeClient.autd3_fpga_state_current_mod_bank(Raw);
         public PatternBank CurrentPatternBank => (PatternBank)NativeClient.autd3_fpga_state_current_pattern_bank(Raw);
         public bool IsPatternMode => NativeClient.autd3_fpga_state_is_pattern_mode(Raw);
-        public bool IsStmMode => !IsPatternMode;
         public bool IsPatternStopped => NativeClient.autd3_fpga_state_is_pattern_stopped(Raw);
         public bool IsModStopped => NativeClient.autd3_fpga_state_is_mod_stopped(Raw);
         public bool IsTransitionPending => NativeClient.autd3_fpga_state_is_transition_pending(Raw);
@@ -127,40 +126,6 @@ namespace AUTD3
         public static bool operator !=(FirmwareVersion left, FirmwareVersion right) => !left.Equals(right);
     }
 
-    public sealed class BusStats : IDisposable
-    {
-        private readonly BusStatsHandle _handle;
-
-        internal BusStats(IntPtr handle)
-        {
-            _handle = new BusStatsHandle(handle);
-        }
-
-        private BusStatsHandle Handle
-        {
-            get
-            {
-                if (_handle.IsClosed)
-                {
-                    throw new ObjectDisposedException(nameof(BusStats));
-                }
-                return _handle;
-            }
-        }
-
-        public ulong Frames => NativeClient.autd3_bus_stats_frames(Handle);
-        public ulong Heartbeats => NativeClient.autd3_bus_stats_heartbeats(Handle);
-        public ulong AckedFrames => NativeClient.autd3_bus_stats_acked_frames(Handle);
-        public ulong WorstAckLatencyNs => NativeClient.autd3_bus_stats_worst_ack_latency_ns(Handle);
-        public ulong MeanAckLatencyNs => NativeClient.autd3_bus_stats_mean_ack_latency_ns(Handle);
-
-        public void Dispose() => _handle.Dispose();
-
-        public override string ToString() =>
-            $"BusStats {{ Frames = {Frames}, Heartbeats = {Heartbeats}, " +
-            $"AckedFrames = {AckedFrames}, WorstAckLatencyNs = {WorstAckLatencyNs}, MeanAckLatencyNs = {MeanAckLatencyNs} }}";
-    }
-
     public readonly struct Telemetry : IEquatable<Telemetry>
     {
         public uint FifoDrop { get; }
@@ -223,139 +188,34 @@ namespace AUTD3
         public static bool operator !=(Telemetry left, Telemetry right) => !left.Equals(right);
     }
 
-    public sealed class DeviceStatus
+    public readonly struct DeviceStatus : IEquatable<DeviceStatus>
     {
-        public IReadOnlyList<DeviceState> Devices { get; }
+        public DeviceState State { get; }
 
-        public DeviceMask PtpLocked { get; }
+        public bool PtpLocked { get; }
 
-        public DeviceMask PtpFailsafe { get; }
+        public bool PtpFailsafe { get; }
 
-        internal DeviceStatus(IReadOnlyList<DeviceState> devices, DeviceMask ptpLocked, DeviceMask ptpFailsafe)
+        internal DeviceStatus(NativeClient.DeviceStatusNative native)
         {
-            Devices = devices;
-            PtpLocked = ptpLocked;
-            PtpFailsafe = ptpFailsafe;
+            State = DeviceState.FromNative(native.State);
+            PtpLocked = native.PtpLocked != 0;
+            PtpFailsafe = native.PtpFailsafe != 0;
         }
 
-        public bool AllReady
-        {
-            get
-            {
-                foreach (var state in Devices)
-                {
-                    if (state != DeviceState.Ready)
-                    {
-                        return false;
-                    }
-                }
-                return true;
-            }
-        }
+        public override string ToString() =>
+            $"DeviceStatus {{ State = {State}, PtpLocked = {PtpLocked}, PtpFailsafe = {PtpFailsafe} }}";
 
-        public bool AnyLost
-        {
-            get
-            {
-                foreach (var state in Devices)
-                {
-                    if (state == DeviceState.Lost)
-                    {
-                        return true;
-                    }
-                }
-                return false;
-            }
-        }
+        public bool Equals(DeviceStatus other) =>
+            State == other.State && PtpLocked == other.PtpLocked && PtpFailsafe == other.PtpFailsafe;
 
-        public bool AnyPtpFailsafe => !PtpFailsafe.IsEmpty;
+        public override bool Equals(object? obj) => obj is DeviceStatus other && Equals(other);
 
-        public override bool Equals(object? obj)
-        {
-            if (obj is not DeviceStatus other)
-            {
-                return false;
-            }
-            if (Devices.Count != other.Devices.Count || PtpLocked != other.PtpLocked || PtpFailsafe != other.PtpFailsafe)
-            {
-                return false;
-            }
-            for (var i = 0; i < Devices.Count; i++)
-            {
-                if (Devices[i] != other.Devices[i])
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
+        public override int GetHashCode() => HashCode.Combine(State, PtpLocked, PtpFailsafe);
 
-        public override int GetHashCode()
-        {
-            var hash = new HashCode();
-            foreach (var state in Devices)
-            {
-                hash.Add(state);
-            }
-            hash.Add(PtpLocked);
-            hash.Add(PtpFailsafe);
-            return hash.ToHashCode();
-        }
+        public static bool operator ==(DeviceStatus left, DeviceStatus right) => left.Equals(right);
 
-        public static bool operator ==(DeviceStatus? left, DeviceStatus? right) =>
-            left is null ? right is null : left.Equals(right);
-
-        public static bool operator !=(DeviceStatus? left, DeviceStatus? right) => !(left == right);
-    }
-
-    public sealed class StateChecker : IDisposable
-    {
-        private readonly CheckerHandle _handle;
-
-        internal StateChecker(IntPtr handle)
-        {
-            _handle = new CheckerHandle(handle);
-        }
-
-        public DeviceStatus Check()
-        {
-            var err = new byte[NativeAbi.ErrorBufferLength];
-            var status = NativeClient.autd3_checker_check(_handle, out var code, err, (UIntPtr)err.Length);
-            if (status == IntPtr.Zero)
-            {
-                throw Autd3Exception.FromNative(code, err);
-            }
-            try
-            {
-                var count = (int)NativeClient.autd3_device_status_num_devices(status);
-                var devices = new List<DeviceState>(count);
-                var ptpLocked = new List<int>();
-                var ptpFailsafe = new List<int>();
-                for (var i = 0; i < count; i++)
-                {
-                    if (!NativeClient.autd3_device_status_device_state(status, (UIntPtr)i, out var kind))
-                    {
-                        throw new Autd3Exception("failed to read device state");
-                    }
-                    devices.Add(DeviceState.FromNative(kind));
-                    if (NativeClient.autd3_device_status_ptp_locked(status, (UIntPtr)i))
-                    {
-                        ptpLocked.Add(i);
-                    }
-                    if (NativeClient.autd3_device_status_ptp_failsafe(status, (UIntPtr)i))
-                    {
-                        ptpFailsafe.Add(i);
-                    }
-                }
-                return new DeviceStatus(devices, DeviceMask.FromDevices(ptpLocked), DeviceMask.FromDevices(ptpFailsafe));
-            }
-            finally
-            {
-                NativeClient.autd3_device_status_free(status);
-            }
-        }
-
-        public void Dispose() => _handle.Dispose();
+        public static bool operator !=(DeviceStatus left, DeviceStatus right) => !left.Equals(right);
     }
 
     public sealed class Response
@@ -459,10 +319,6 @@ namespace AUTD3
 
     public sealed class Client : IDisposable
     {
-        public static readonly int MaxInflight = Params.MaxInflight;
-
-        public static readonly int MaxDevices = (int)NativeClient.autd3_params_max_devices();
-
         private const long AllFrames = -1;
 
         private readonly ClientHandle _handle;
@@ -512,24 +368,21 @@ namespace AUTD3
             return new Client(value, owned);
         }
 
-        public StateChecker StateChecker()
+        public DeviceStatus[] DeviceStatus()
         {
-            var checker = NativeClient.autd3_client_state_checker(Handle);
-            if (checker == IntPtr.Zero)
+            var native = new NativeClient.DeviceStatusNative[NumDevices];
+            var err = new byte[NativeAbi.ErrorBufferLength];
+            var code = NativeClient.autd3_client_device_status(Handle, native, (UIntPtr)native.Length, err, (UIntPtr)err.Length);
+            if (code != 0)
             {
-                throw new Autd3Exception("failed to create checker");
+                throw Autd3Exception.FromNative(code, err);
             }
-            return new StateChecker(checker);
-        }
-
-        public BusStats BusStats()
-        {
-            var stats = NativeClient.autd3_client_bus_stats(Handle);
-            if (stats == IntPtr.Zero)
+            var status = new DeviceStatus[native.Length];
+            for (var i = 0; i < native.Length; i++)
             {
-                throw new Autd3Exception("failed to read the bus statistics");
+                status[i] = new DeviceStatus(native[i]);
             }
-            return new BusStats(stats);
+            return status;
         }
 
         public int NumDevices => (int)NativeClient.autd3_client_num_devices(Handle);

@@ -119,8 +119,6 @@ namespace AUTD3.Tests
             Assert.Equal(18u, Autd3.GridX);
             Assert.Equal(14u, Autd3.GridY);
             Assert.Equal(10.16f, Autd3.PitchMm);
-            Assert.Equal(Params.MaxInflight, Client.MaxInflight);
-            Assert.Equal(128, Client.MaxDevices);
             Assert.Equal(256, SetPulseWidthTable.TableSize);
             Assert.True(Params.ModBufferSamples > 0);
             Assert.True(Params.NumFociMax > 0);
@@ -317,13 +315,11 @@ namespace AUTD3.Tests
             Assert.Equal(ModulationBank.B0, idle.CurrentModBank);
             Assert.Equal(PatternBank.B0, idle.CurrentPatternBank);
             Assert.False(idle.IsPatternMode);
-            Assert.True(idle.IsStmMode);
 
             Assert.True(new FpgaState(1 << 0).IsThermalAsserted);
             Assert.Equal(ModulationBank.B1, new FpgaState(1 << 1).CurrentModBank);
             Assert.Equal(PatternBank.B1, new FpgaState(1 << 2).CurrentPatternBank);
             Assert.True(new FpgaState(1 << 3).IsPatternMode);
-            Assert.False(new FpgaState(1 << 3).IsStmMode);
             Assert.True(new FpgaState(1 << 4).IsPatternStopped);
             Assert.True(new FpgaState(1 << 5).IsModStopped);
             Assert.True(new FpgaState(1 << 6).IsTransitionPending);

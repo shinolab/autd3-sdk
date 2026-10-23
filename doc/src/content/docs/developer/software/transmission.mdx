@@ -280,7 +280,7 @@ open は `Clear` や `Synchronize` も送らない.
 ### 途絶
 
 デバイスが返信しない (再起動・ケーブル断) 間も, 上の返信の停滞と同じ経路で扱い, 最終的に `awaiting_reply` が `Timeout` する.
-デバイスの状態は `UdpBus` が返信の途絶 (`lost_timeout`) から `Lost` と判定し, `StateChecker` が報告する.
+デバイスの状態は `UdpBus` が返信の途絶 (`lost_timeout`) から `Lost` と判定し, `Client::device_status` が報告する.
 途絶は要求を送れた機体についてだけ測る (送信そのものが失敗した機体は数えない).
 
 `Lost` と判定した機体には, 以後 `Frame` も生存確認も unicast では送らない.

@@ -16,18 +16,17 @@ use autd3_rs::value::{
     Intensity, LoopBehavior, ModulationBank, PatternBank, Phase, SamplingConfig, TransitionMode,
 };
 use autd3_rs::{
-    BusStats, Client, Error as ClientError, ExecAt, Frame, Frames, Interface, ResponseFuture,
-    StateChecker, Telemetry, TransportOption,
+    Client, Error as ClientError, ExecAt, Frame, Frames, Interface, ResponseFuture, Telemetry,
+    TransportOption,
 };
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
 use crate::cli::{Cli, Command, Mode};
 use crate::mem::{self, MemProfile};
 use crate::report::{LiveBlock, interval_lines, telemetry_lines};
-use crate::stats::{Counters, DriverAckLatency, Histogram, SampleStatus, Summary, Traffic};
+use crate::stats::{AckLatency, Counters, Histogram, SampleStatus, Summary, Traffic};
 
 const REPORT_INTERVAL: Duration = Duration::from_secs(1);
-const STATE_CHECK_INTERVAL: Duration = Duration::from_millis(100);
 
 pub(crate) struct RunOutput {
     pub summary: Summary,
@@ -125,7 +124,12 @@ impl Sender {
         } else {
             self.frames.encode_into(
                 client.geometry(),
-                WritePatternBuffer::new(PatternBank::B0, 0, &self.phases, &self.intensities),
+                WritePatternBuffer::new(
+                    PatternBank::B0,
+                    0,
+                    std::slice::from_ref(&self.phases),
+                    &self.intensities,
+                ),
             )
         };
         encoded.context("encoding pattern write")?;
@@ -188,34 +192,6 @@ async fn send_base_signal_gpio_out_once(client: &Client) -> Result<()> {
     Ok(())
 }
 
-struct StateCheckGuard {
-    stop: Arc<AtomicBool>,
-    join: tokio::task::JoinHandle<()>,
-}
-
-impl StateCheckGuard {
-    async fn stop(self) {
-        self.stop.store(true, Ordering::Relaxed);
-        let _ = self.join.await;
-    }
-}
-
-fn spawn_state_check(checker: StateChecker, interval: Duration) -> StateCheckGuard {
-    let stop = Arc::new(AtomicBool::new(false));
-    let join = tokio::spawn({
-        let stop = Arc::clone(&stop);
-        async move {
-            while !stop.load(Ordering::Relaxed) {
-                if checker.check().is_err() {
-                    break;
-                }
-                tokio::time::sleep(interval).await;
-            }
-        }
-    });
-    StateCheckGuard { stop, join }
-}
-
 pub(crate) fn spawn_emulator(cli: &Cli) -> Result<Option<UdpEmulator>> {
     cli.emulator
         .then(|| UdpEmulator::spawn(cli.devices.get()))
@@ -276,8 +252,6 @@ async fn run_with_option(option: &TransportOption, cli: &Cli) -> Result<RunOutpu
     let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()));
     send_simulator_geometry(cli, &geometry, option)?;
     let client = Client::open(&geometry, option).context("opening the devices")?;
-    let checker = client.state_checker();
-    let guard = spawn_state_check(checker, STATE_CHECK_INTERVAL);
     client
         .send((Clear, Synchronize))
         .await
@@ -305,22 +279,25 @@ async fn run_with_option(option: &TransportOption, cli: &Cli) -> Result<RunOutpu
     spawn_signal_listener(Arc::clone(&shutdown));
 
     let telemetry_start = client.read_telemetry().await.context("reading telemetry")?;
+    let mut heartbeats = 0;
     if let Some(hold) = cli.hold {
         eprintln!("holding the connection idle for {hold:?}");
         let until = tokio::time::Instant::now() + hold;
         let mut heartbeat = tokio::time::interval(cli.heartbeat);
         while tokio::time::Instant::now() < until {
             tokio::select! {
-                _ = heartbeat.tick() => client.send_heartbeat().context("sending a heartbeat")?,
+                _ = heartbeat.tick() => {
+                    client.send_heartbeat().context("sending a heartbeat")?;
+                    heartbeats += 1;
+                }
                 () = tokio::time::sleep_until(until) => {}
             }
         }
     }
 
     let sender = Sender::new(&geometry, cli)?;
-    let bus_stats = client.bus_stats();
 
-    let measurement = Measurement::start(cli, &bus_stats, telemetry_start);
+    let measurement = Measurement::start(cli, heartbeats, telemetry_start);
     let exec = cli.exec_lead.map_or(ExecAt::Immediate, ExecAt::Lead);
     let mut output = match cli.mode {
         Mode::StopAndWait => {
@@ -349,7 +326,6 @@ async fn run_with_option(option: &TransportOption, cli: &Cli) -> Result<RunOutpu
     if let Err(e) = client.close() {
         eprintln!("the client closed with an error: {e}");
     }
-    guard.stop().await;
 
     output
 }
@@ -360,19 +336,22 @@ async fn send_all(
     frames: &Frames,
     window: usize,
     traffic: &mut Traffic,
+    ack: &mut AckLatency,
 ) -> Result<(), ClientError> {
-    let mut pending: VecDeque<ResponseFuture> = VecDeque::with_capacity(window);
+    let mut pending: VecDeque<PendingFuture> = VecDeque::with_capacity(window);
     for frame in frames {
         if pending.len() >= window {
-            let fut = pending.pop_front().expect("non-empty");
-            fut.await?.check()?;
+            let entry = pending.pop_front().expect("non-empty");
+            entry.acked(ack).await?.check()?;
             traffic.replied();
         }
-        pending.push_back(client.send_frame_at(frame, exec).await?);
+        let sent_at = Instant::now();
+        let fut = client.send_frame_at(frame, exec).await?;
+        pending.push_back(PendingFuture { sent_at, fut });
         traffic.sent(&frame);
     }
-    for fut in pending {
-        fut.await?.check()?;
+    for entry in pending {
+        entry.acked(ack).await?.check()?;
         traffic.replied();
     }
     Ok(())
@@ -404,35 +383,6 @@ fn classify(res: Result<(), ClientError>) -> Result<Outcome> {
     }))
 }
 
-#[derive(Clone, Copy)]
-struct AckSnapshot {
-    frames: u64,
-    total_ns: u128,
-}
-
-impl AckSnapshot {
-    fn take(bus_stats: &BusStats) -> Self {
-        let frames = bus_stats.acked_frames();
-        Self {
-            frames,
-            total_ns: u128::from(bus_stats.mean_ack_latency_ns()) * u128::from(frames),
-        }
-    }
-
-    fn latency_since(self, before: Self, worst_ns: u64) -> Option<DriverAckLatency> {
-        let frames = self.frames.saturating_sub(before.frames);
-        if frames == 0 {
-            return None;
-        }
-        let mean_ns = self.total_ns.saturating_sub(before.total_ns) / u128::from(frames);
-        Some(DriverAckLatency {
-            frames,
-            mean: Duration::from_nanos(u64::try_from(mean_ns).unwrap_or(u64::MAX)),
-            worst: Duration::from_nanos(worst_ns),
-        })
-    }
-}
-
 struct Measurement {
     counters: Counters,
     traffic: Traffic,
@@ -443,12 +393,12 @@ struct Measurement {
     stop_on_error: bool,
     mem_recorder: mem::Recorder,
     start: Instant,
-    bus_stats: BusStats,
-    ack_before: AckSnapshot,
+    heartbeats: u64,
+    ack: AckLatency,
 }
 
 impl Measurement {
-    fn start(cli: &Cli, bus_stats: &BusStats, telemetry_start: Vec<Telemetry>) -> Self {
+    fn start(cli: &Cli, heartbeats: u64, telemetry_start: Vec<Telemetry>) -> Self {
         let traffic = Traffic::new(cli.devices.get());
         let live = Live::new(traffic, telemetry_start);
         let mem_recorder = mem::start();
@@ -462,8 +412,8 @@ impl Measurement {
             stop_on_error: cli.stop_on_error,
             mem_recorder,
             start: Instant::now(),
-            bus_stats: bus_stats.clone(),
-            ack_before: AckSnapshot::take(bus_stats),
+            heartbeats,
+            ack: AckLatency::default(),
         }
     }
 
@@ -498,9 +448,6 @@ impl Measurement {
 
     fn finish(self) -> RunOutput {
         let elapsed = self.start.elapsed();
-        let bus_stats = &self.bus_stats;
-        let driver_ack = AckSnapshot::take(bus_stats)
-            .latency_since(self.ack_before, bus_stats.worst_ack_latency_ns());
         let mem = mem::profile(self.mem_recorder, self.counters.total());
         let secs = elapsed.as_secs_f64();
         let per_sec = |n: u64| if secs > 0.0 { n as f64 / secs } else { 0.0 };
@@ -510,7 +457,9 @@ impl Measurement {
                 throughput_cmd_per_sec: per_sec(self.counters.ok),
                 traffic: self.traffic.rate(elapsed),
                 latency: self.rtts.latency(),
-                driver_ack,
+                frames: self.traffic.frames(),
+                heartbeats: self.heartbeats,
+                ack: self.ack,
                 counters: self.counters,
             },
             stopped_on_error: self.stopped_on_error,
@@ -545,6 +494,7 @@ async fn run_stop_and_wait(
             &sender.frames,
             window,
             &mut measurement.traffic,
+            &mut measurement.ack,
         )
         .await;
         let rtt = t0.elapsed();
@@ -589,8 +539,9 @@ async fn run_streaming(
         let Some(entry) = pending.pop_front() else {
             break;
         };
-        let res = entry.fut.await;
-        let rtt = entry.sent_at.elapsed();
+        let sent_at = entry.sent_at;
+        let res = entry.acked(&mut measurement.ack).await;
+        let rtt = sent_at.elapsed();
         let outcome = classify(res.and_then(|resp| resp.check()))?;
         if matches!(outcome, Outcome::Sample(SampleStatus::Ok)) {
             measurement.traffic.replied();
@@ -607,6 +558,14 @@ async fn run_streaming(
 struct PendingFuture {
     sent_at: Instant,
     fut: ResponseFuture,
+}
+
+impl PendingFuture {
+    async fn acked(self, ack: &mut AckLatency) -> Result<autd3_rs::Response, ClientError> {
+        let response = self.fut.await?;
+        ack.record(self.sent_at.elapsed());
+        Ok(response)
+    }
 }
 
 struct Live {

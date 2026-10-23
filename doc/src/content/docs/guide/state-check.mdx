@@ -1,6 +1,6 @@
 ---
 title: 状態監視
-description: StateChecker でデバイスとの通信状態を監視する
+description: device_status でデバイスとの通信状態を監視する
 sidebar:
   order: 6
 ---
@@ -11,27 +11,21 @@ import sample from "@codes/rust/examples/guide/state-check.rs?raw";
 import pySample from "@codes/python/examples/guide/state-check.py?raw";
 import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 
-`StateChecker` を使うことでデバイスとの通信が正常に動いているかどうかを監視できる.
-
-## StateChecker の取得
-
-[`Client`](/autd3-sdk/api/basics/client/) の `state_checker` で `StateChecker` を取る.
-
-<CodeTabs rust={excerpt(sample, "open")} python={excerpt(pySample, "open")} csharp={excerpt(csSample, "open")} />
+[`Client`](/autd3-sdk/api/basics/client/) の `device_status` を使うことでデバイスとの通信が正常に動いているかどうかを監視できる.
 
 ## 状態の取得
 
-`StateChecker::check` は, 呼び出した時点の状態 `DeviceStatus` を返す.
+`device_status` は, 呼び出した時点の各デバイスの状態 `DeviceStatus` を並べて返す (Rust は `Vec<DeviceStatus>`, Python は `list[DeviceStatus]`, C# は `DeviceStatus[]`. 添字がデバイスの番号).
+デバイスには何も送らず, 状態を読むだけである.
 `DeviceStatus` は以下を持つ.
 
-- `devices`: デバイスごとの状態 (`DeviceState`).
-- `all_ready`: 全デバイスが `Ready` 状態か.
-- `any_lost`: いずれかのデバイスが `Lost` 状態か.
-- `ptp_locked`: PTP がロックしているデバイスの集合 (`DeviceMask`).
-- `ptp_failsafe`: PTP のロックを失ったことで出力を止め, まだ解除されていないデバイスの集合 (`DeviceMask`).
-- `any_ptp_failsafe`: `ptp_failsafe` が空でないか.
+- `state`: デバイスの状態 (`DeviceState`).
+- `ptp_locked`: PTP がロックしているか.
+- `ptp_failsafe`: PTP のロックを失ったことで出力を止め, まだ解除されていないか.
 
-`ptp_locked` と `ptp_failsafe` はデバイスからの最後の返信の値で, `Lost` のデバイスはどちらにも含まれない.
+全デバイスが `Ready` か, いずれかが `Lost` か, といった集約は返り値から作る (下の例を参照).
+`ptp_locked` と `ptp_failsafe` はデバイスからの最後の返信の値で, `Lost` のデバイスはどちらも `false` になる.
+`Client` を閉じた後に呼ぶとエラー (`Closed`. 通信エラーで閉じた場合は `Network`) になる.
 
 状態の意味は以下の通り. 
 
@@ -44,24 +38,24 @@ import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 途中の 1 台が`Lost`すると, その機体より先の機体も全て `Lost` になる.
 `Lost` のデバイスは `Client` を開いている間は戻らない. ケーブルの抜き差しなどで通信が戻っても `Lost` のままなので, `close` してから `Client::open` で開き直す.
 
-以下は, 一定間隔で `check` を呼び, 状態が変化したときだけ出力する例.
+以下は, 一定間隔で `device_status` を呼び, 状態が変化したときだけ出力する例.
 
 <CodeTabs rust={excerpt(sample, "poll")} python={excerpt(pySample, "poll")} csharp={excerpt(csSample, "poll")} />
 
-`check` を呼ぶ頻度はユーザー次第である.
+`device_status` を呼ぶ頻度はユーザー次第である.
 状態はデバイスからの返信で更新されるので, フレームを送らない間は [`send_heartbeat()`](/autd3-sdk/api/basics/client/#生存確認) で生存確認を送る (上の例ではループの先頭で送っている).
 送らない間は, デバイスとの通信が途絶えても `Lost` にならない.
 
 ## PTP failsafe の検出と解除
 
 [SetCpuConfig](/autd3-sdk/api/command/cpu-config/) で `ptp_unlock_failsafe_timeout` を指定すると, PTP のロックを失ったまま指定の時間が経ったデバイスは出力を止める.
-止まったデバイスは `ptp_failsafe` に入り, [`ReleaseFailsafe`](/autd3-sdk/api/command/release-failsafe/) か [Clear](/autd3-sdk/api/command/clear/) で解除されるまで入ったままになる (再ロックしても自動では戻らない).
+止まったデバイスは `ptp_failsafe` が立ち, [`ReleaseFailsafe`](/autd3-sdk/api/command/release-failsafe/) か [Clear](/autd3-sdk/api/command/clear/) で解除されるまで立ったままになる (再ロックしても自動では戻らない).
 
-以下は, `ptp_failsafe` のうち再ロックしたデバイスへ `ReleaseFailsafe` を送る例.
-`send_heartbeat()` は返信を待たずに戻るので, 返信が届くまで待ってから `check` を呼ぶ (直後に呼ぶと, その前の返信の値が返る).
-PTP failsafe は `Client` を開き直しても解除されないが, 開いた直後の `check` は最初の返信が届くまで `ptp_failsafe` が空になる.
+以下は, `ptp_failsafe` が立っていて再ロックした (`ptp_locked` も立っている) デバイスへ `ReleaseFailsafe` を送る例.
+`send_heartbeat()` は返信を待たずに戻るので, 返信が届くまで待ってから `device_status` を呼ぶ (直後に呼ぶと, その前の返信の値が返る).
+PTP failsafe は `Client` を開き直しても解除されないが, 開いた直後の `device_status` は最初の返信が届くまで `ptp_failsafe` が `false` になる.
 
 <CodeTabs rust={excerpt(sample, "ptp_failsafe")} python={excerpt(pySample, "ptp_failsafe")} csharp={excerpt(csSample, "ptp_failsafe")} />
 
-ロックを失ったままのデバイスへ `ReleaseFailsafe` を送るとエラーになり, 出力は止まったままになる. `ptp_locked` に入るのを待ってから送る.
+ロックを失ったままのデバイスへ `ReleaseFailsafe` を送るとエラーになり, 出力は止まったままになる. `ptp_locked` が立つのを待ってから送る.
 ホストとの通信の途絶など, PTP 以外の原因で止まった出力は `ptp_failsafe` には現れない (`read_fpga_state()` の `is_failsafe_active()` で確認する).

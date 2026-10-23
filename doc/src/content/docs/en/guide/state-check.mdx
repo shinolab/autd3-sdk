@@ -1,6 +1,6 @@
 ---
 title: State Monitoring
-description: Monitor the communication state of devices with the StateChecker
+description: Monitor the communication state of devices with device_status
 sidebar:
   order: 6
 ---
@@ -11,27 +11,21 @@ import sample from "@codes/rust/examples/guide/state-check.rs?raw";
 import pySample from "@codes/python/examples/guide/state-check.py?raw";
 import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 
-The `StateChecker` lets you monitor whether the communication with the devices is working correctly.
-
-## Obtaining the StateChecker
-
-Take the `StateChecker` with `state_checker` of the [`Client`](/autd3-sdk/en/api/basics/client/).
-
-<CodeTabs rust={excerpt(sample, "open")} python={excerpt(pySample, "open")} csharp={excerpt(csSample, "open")} />
+`device_status` of the [`Client`](/autd3-sdk/en/api/basics/client/) lets you monitor whether the communication with the devices is working correctly.
 
 ## Obtaining the State
 
-`StateChecker::check` returns the state `DeviceStatus` at the time of the call.
+`device_status` returns the state `DeviceStatus` of each device at the time of the call (`Vec<DeviceStatus>` in Rust, `list[DeviceStatus]` in Python, `DeviceStatus[]` in C#; the index is the device number).
+It sends nothing to the devices and only reads the state.
 `DeviceStatus` holds the following.
 
-- `devices`: the state of each device (`DeviceState`).
-- `all_ready`: whether all devices are in the `Ready` state.
-- `any_lost`: whether any device is in the `Lost` state.
-- `ptp_locked`: the set of devices whose PTP is locked (`DeviceMask`).
-- `ptp_failsafe`: the set of devices that stopped their output because they lost the PTP lock and have not been released yet (`DeviceMask`).
-- `any_ptp_failsafe`: whether `ptp_failsafe` is not empty.
+- `state`: the state of the device (`DeviceState`).
+- `ptp_locked`: whether its PTP is locked.
+- `ptp_failsafe`: whether it stopped its output because it lost the PTP lock and has not been released yet.
 
-`ptp_locked` and `ptp_failsafe` are taken from the last reply of each device, and a `Lost` device is in neither of them.
+Aggregates such as whether every device is `Ready` or whether any is `Lost` are built from the returned values (see the example below).
+`ptp_locked` and `ptp_failsafe` are taken from the last reply of each device, and both are `false` for a `Lost` device.
+Calling it after the `Client` is closed returns an error (`Closed`, or `Network` if it closed on a communication error).
 
 The meaning of each state is as follows.
 
@@ -44,24 +38,24 @@ The meaning of each state is as follows.
 When a device in the middle of the chain becomes `Lost`, every device beyond it also becomes `Lost`.
 A `Lost` device does not come back while the `Client` is open. It stays `Lost` even if the communication comes back, for example after replugging a cable, so `close` the client and reopen it with `Client::open`.
 
-The following is an example that calls `check` at fixed intervals and outputs only when the state changes.
+The following is an example that calls `device_status` at fixed intervals and outputs only when the state changes.
 
 <CodeTabs rust={excerpt(sample, "poll")} python={excerpt(pySample, "poll")} csharp={excerpt(csSample, "poll")} />
 
-How often to call `check` is up to the user.
+How often to call `device_status` is up to the user.
 The state is updated from the replies of the devices, so while you send no frame, send liveness checks with [`send_heartbeat()`](/autd3-sdk/en/api/basics/client/#liveness-check) (the example above sends one at the top of the loop).
 While nothing is sent, a device does not become `Lost` even if the communication with it is cut off.
 
 ## Detecting and Releasing the PTP Failsafe
 
 If `ptp_unlock_failsafe_timeout` is set with [SetCpuConfig](/autd3-sdk/en/api/command/cpu-config/), a device that stays without the PTP lock for that time stops its output.
-Such a device enters `ptp_failsafe` and stays there until it is released with [`ReleaseFailsafe`](/autd3-sdk/en/api/command/release-failsafe/) or [Clear](/autd3-sdk/en/api/command/clear/) (relocking does not release it automatically).
+Such a device has `ptp_failsafe` set, and it stays set until the device is released with [`ReleaseFailsafe`](/autd3-sdk/en/api/command/release-failsafe/) or [Clear](/autd3-sdk/en/api/command/clear/) (relocking does not release it automatically).
 
-The following is an example that sends `ReleaseFailsafe` to the devices in `ptp_failsafe` that have relocked.
-`send_heartbeat()` returns without waiting for the replies, so wait until they arrive before calling `check` (calling it right away returns the values of the previous replies).
-The PTP failsafe is not released by reopening the `Client`, but right after opening, `ptp_failsafe` is empty until the first replies arrive.
+The following is an example that sends `ReleaseFailsafe` to the devices that have `ptp_failsafe` set and have relocked (`ptp_locked` is set as well).
+`send_heartbeat()` returns without waiting for the replies, so wait until they arrive before calling `device_status` (calling it right away returns the values of the previous replies).
+The PTP failsafe is not released by reopening the `Client`, but right after opening, `device_status` reports `ptp_failsafe` as `false` until the first replies arrive.
 
 <CodeTabs rust={excerpt(sample, "ptp_failsafe")} python={excerpt(pySample, "ptp_failsafe")} csharp={excerpt(csSample, "ptp_failsafe")} />
 
-Sending `ReleaseFailsafe` to a device that is still without the lock returns an error, and its output stays stopped. Wait until it enters `ptp_locked` before sending.
+Sending `ReleaseFailsafe` to a device that is still without the lock returns an error, and its output stays stopped. Wait until its `ptp_locked` is set before sending.
 Output stopped for a reason other than PTP, such as a lost connection to the host, does not appear in `ptp_failsafe` (check it with `is_failsafe_active()` of `read_fpga_state()`).

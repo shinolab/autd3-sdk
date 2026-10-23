@@ -87,7 +87,7 @@ pub(crate) async fn write_pattern_bank(
     ctx.send_frames(&Frames::encode(
         ctx.client.geometry(),
         (
-            WritePatternBuffer::new(bank, 0, &pattern.0, &pattern.1),
+            WritePatternBuffer::new(bank, 0, std::slice::from_ref(&pattern.0), &pattern.1),
             ConfigPattern {
                 bank,
                 config: SamplingConfig::new(NonZeroU16::MAX),
@@ -339,8 +339,13 @@ pub(crate) async fn write_pattern_stm_bank(
 ) -> Result<()> {
     let size = patterns.len();
     for (index, (phases, intensities)) in patterns.iter().enumerate() {
-        ctx.send(WritePatternBuffer::new(bank, index, phases, intensities))
-            .await?;
+        ctx.send(WritePatternBuffer::new(
+            bank,
+            index,
+            std::slice::from_ref(phases),
+            intensities,
+        ))
+        .await?;
     }
     ctx.send(ConfigPattern {
         bank,

@@ -29,7 +29,9 @@ async fn main() -> anyhow::Result<()> {
 
     let bank = PatternBank::B0;
 
-    client.send(WritePatternBuffer::new(bank, 0, &phases, Intensity::MAX)).await?;
+    client
+        .send(WritePatternBuffer::new(bank, 0, &[phases], Intensity::MAX))
+        .await?;
     client.send(ConfigPattern {
         bank,
         config: SamplingConfig::new(NonZeroU16::MAX),

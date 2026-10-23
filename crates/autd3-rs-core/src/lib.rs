@@ -7,7 +7,7 @@ pub mod value;
 
 pub use nalgebra;
 
-pub use bus::{BusStats, DeviceMask, DeviceState, DeviceStatus, Interface};
+pub use bus::{DeviceState, DeviceStatus, Interface};
 pub use common::units;
 pub use common::{Angle, Freq, Length, Velocity};
 #[cfg(feature = "serde")]

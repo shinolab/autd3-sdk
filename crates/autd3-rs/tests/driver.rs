@@ -6,7 +6,7 @@ use std::task::{Context, Poll, Waker};
 use std::thread::JoinHandle;
 
 use autd3_rs::commands::{ForceFan, Nop};
-use autd3_rs::udp::{TransportOption, UdpError};
+use autd3_rs::udp::TransportOption;
 use autd3_rs::{Controller, Driver, Error, Frames};
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
@@ -93,7 +93,6 @@ fn dropping_the_driver_fails_the_frames_in_flight_and_later_sends_with_closed() 
     let (controller, mut driver) =
         Controller::open(&geometry(1), &patient_option(&emulator)).unwrap();
     let frames = Frames::encode(controller.geometry(), Nop).unwrap();
-    let checker = controller.state_checker();
 
     emulator.drop_next_replies(0, 1);
     let unanswered =
@@ -106,5 +105,5 @@ fn dropping_the_driver_fails_the_frames_in_flight_and_later_sends_with_closed() 
         Err(Error::Closed)
     ));
     assert!(matches!(controller.close(), Err(Error::Closed)));
-    assert!(matches!(checker.check(), Err(UdpError::Closed)));
+    assert!(matches!(controller.device_status(), Err(Error::Closed)));
 }

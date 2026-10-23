@@ -10,11 +10,6 @@ impl FpgaState {
     }
 
     #[must_use]
-    pub const fn raw(self) -> u8 {
-        self.0
-    }
-
-    #[must_use]
     pub const fn is_thermal_asserted(self) -> bool {
         self.flags().contains(FpgaStateFlags::THERMAL_ASSERT)
     }
@@ -40,11 +35,6 @@ impl FpgaState {
     #[must_use]
     pub const fn is_pattern_mode(self) -> bool {
         self.flags().contains(FpgaStateFlags::PATTERN_MODE)
-    }
-
-    #[must_use]
-    pub const fn is_stm_mode(self) -> bool {
-        !self.is_pattern_mode()
     }
 
     #[must_use]
@@ -93,8 +83,6 @@ mod tests {
 
         for raw in 0..=u8::MAX {
             let state = FpgaState(raw);
-            assert_eq!(state.raw(), raw);
-            assert_eq!(state.is_stm_mode(), !state.is_pattern_mode());
             for (bit, getter) in BITS {
                 assert_eq!(
                     getter(state),

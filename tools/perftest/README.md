@@ -31,6 +31,8 @@ cargo xtask tool perftest -- --devices 4 --mode bank-switch --exec-lead 5ms --fr
 ```
 
 The run continues until Ctrl+C, then prints the summary.
+Besides the per-sample latency it lists what perftest itself counted while measuring: the frames it sent, the heartbeats `--hold` sent, and the ack latency of every frame (mean and max).
+The ack latency runs from the `send_frame_at` call to the moment its `ResponseFuture` resolves, so it includes the wake-up of the awaiting task, not only the wire.
 
 ## Arguments
 
@@ -46,10 +48,10 @@ The run continues until Ctrl+C, then prints the summary.
 | `--stop-on-error`     | Stop at the first failed send and exit non-zero. The summary is still printed. Default: off. |
 | `--hold <DUR>`        | Keep the connection idle (heartbeats every `--heartbeat` only) this long before measuring, e.g. `3s`. |
 | `--ack-timeout <DUR>` | How long a request waits for its ACK before raising `Timeout` (`TransportOption.ack_timeout`). Default = `10ms`. Must exceed `--exec-lead` (plus the processing time). |
-| `--exec-lead <DUR>`   | Stamp every frame with `EXEC_AT` = the device time this far ahead, rounded up to 1 µs (each frame is sent with `send_frame_at(frame, ExecAt::Lead(..))`), e.g. `1ms`. At least `100us`. Omit to process every frame on arrival. |
+| `--exec-lead <DUR>`   | Stamp every frame with `EXEC_AT` = the device time this far ahead, rounded up to 1 µs (each frame is sent with `send_frame_at(frame, ExecAt::Lead(..))`), e.g. `1ms`. Omit to process every frame on arrival. |
 | `--mode <MODE>`       | `stop-and-wait` (default), `streaming`, or `bank-switch`. See below. |
 | `--framing <FRAMING>` | `bank-switch` only: `fused` (default; `Pattern`, 1 `WritePatternFused` frame) or `split` (`WritePatternBuffer` + `ConfigPattern` + `ActivatePatternBank`, 3 frames pipelined). |
-| `--max-inflight <N>`  | Pipeline depth in `streaming` mode: frames sent before awaiting the oldest response. Default = 7 (`DEVICE_QUEUE_FRAMES`, the device's receive queue). `stop-and-wait` ignores it except with `--command write-modulation-buffer`, which pipelines the frames of one sample up to this depth. Alias: `--inflight`. |
+| `--max-inflight <N>`  | Pipeline depth in `streaming` mode: frames sent before awaiting the oldest response. Default = 7 (`MAX_INFLIGHT`, the device's receive queue). `stop-and-wait` ignores it except with `--command write-modulation-buffer`, which pipelines the frames of one sample up to this depth. Alias: `--inflight`. |
 
 `--command` selects what is sent, which isolates where the time goes:
 

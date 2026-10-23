@@ -29,7 +29,7 @@ import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
 
 Python の既定値は Rust と同じ具体値で, 型が `Option` の項目だけ `None` (無効) を渡せる. それ以外の項目に `None` を渡すと `TypeError` になる.
 C# では型が `Option` の項目を `null` にすると無効になる.
-`open_timeout` / `lost_timeout` / `ack_timeout` を 0 にすると, `Client` を開くときにエラー (`Network`. Python の `Autd3Error.code` は `NETWORK`, C# の `Autd3Exception.Code` は `Network`) になる.
+`open_timeout` / `lost_timeout` / `ack_timeout` は検証しない. 0 にするとその待ちがすぐに時間切れになる (`lost_timeout` が 0 だと, 最初の送信の後に全デバイスが `Lost` になる).
 `send_buffer_bytes` の `0` は, Python では `TransportOption` を作るときに `ValueError`, C# では `Client` を開くときに `Autd3Exception` (`InvalidArgument`) になる (Rust は `NonZeroUsize` の型で `0` を渡せない).
 
 :::caution[Windows のタイマ分解能]

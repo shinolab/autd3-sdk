@@ -1,6 +1,6 @@
 import asyncio
 
-from autd3 import Client, DeviceMask, TransportOption
+from autd3 import Client, DeviceState, DeviceStatus, TransportOption
 from autd3.commands import ReleaseFailsafe, each
 from autd3.geometry import Autd3, Geometry
 
@@ -14,29 +14,32 @@ async def main() -> None:
 
     # ANCHOR: open
     client = Client.open(geometry, TransportOption())
-    checker = client.state_checker()
     # ANCHOR_END: open
 
     with client:
         # ANCHOR: ptp_failsafe
         client.send_heartbeat()
         await asyncio.sleep(CHECK_INTERVAL)
-        status = checker.check()
-        if status.any_ptp_failsafe:
-            releasable = DeviceMask.from_devices(i for i in status.ptp_failsafe if status.ptp_locked[i])
-            if releasable:
-                await client.send(each(lambda device: ReleaseFailsafe() if releasable[device.idx()] else None))
+        status = client.device_status()
+
+        def releasable(s: DeviceStatus) -> bool:
+            return s.ptp_failsafe and s.ptp_locked
+
+        if any(releasable(s) for s in status):
+            await client.send(each(lambda device: ReleaseFailsafe() if releasable(status[device.idx()]) else None))
         # ANCHOR_END: ptp_failsafe
 
         # ANCHOR: poll
         last = None
         while True:
             client.send_heartbeat()
-            status = checker.check()
+            status = client.device_status()
             if status != last:
-                for i, state in enumerate(status.devices):
-                    print(f"device[{i}]: {state}")
-                print(f"all ready: {status.all_ready}, any lost: {status.any_lost}")
+                for i, s in enumerate(status):
+                    print(f"device[{i}]: {s.state}")
+                all_ready = all(s.state == DeviceState.Ready for s in status)
+                any_lost = any(s.state == DeviceState.Lost for s in status)
+                print(f"all ready: {all_ready}, any lost: {any_lost}")
                 last = status
             await asyncio.sleep(CHECK_INTERVAL)
         # ANCHOR_END: poll

@@ -6,13 +6,11 @@ mod exec_at;
 mod liveness;
 pub(crate) mod open;
 mod session;
-mod state_checker;
 
 pub use completion::ResponseFuture;
 pub use controller::Controller;
 pub use driver::Driver;
 pub use exec_at::ExecAt;
-pub use state_checker::StateChecker;
 
 use std::ops::Deref;
 use std::sync::{Mutex, PoisonError};

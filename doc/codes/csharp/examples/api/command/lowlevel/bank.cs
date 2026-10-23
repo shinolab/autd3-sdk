@@ -9,14 +9,14 @@ internal static class Sample
         var geometry = new Geometry(new[] { new Autd3() });
 
         var bank = PatternBank.B0;
-        ushort index = 0;
-        var phases = geometry.PhaseBuffer();
+        ushort startIndex = 0;
+        var patterns = new[] { geometry.PhaseBuffer() };
         var intensities = Intensity.Max;
         // ANCHOR: write
         new WritePatternBuffer(
             bank: bank,
-            index: index,
-            phases: phases,
+            startIndex: startIndex,
+            patterns: patterns,
             intensities: intensities
         );
         // ANCHOR_END: write

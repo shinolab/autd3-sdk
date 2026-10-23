@@ -439,6 +439,7 @@ fn a_frame_to_an_unassigned_unit_is_ignored() {
             .is_empty()
     );
     assert_eq!(emulator.heartbeats_received(0), 0);
+    assert_eq!(emulator.frames_received(0), 0);
 }
 
 #[test]
@@ -494,6 +495,8 @@ fn a_dropped_frame_never_reaches_the_firmware() {
     let answer = host.accepted(&emulator, 0, &fan_on());
     assert_eq!(answer.frame_reply().0.status, 0);
     assert!(fan(&emulator, 0));
+    assert_eq!(emulator.frames_received(0), 3);
+    assert_eq!(emulator.frames_received(1), 1);
 }
 
 #[test]

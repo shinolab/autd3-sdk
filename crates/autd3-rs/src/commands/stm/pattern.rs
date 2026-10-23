@@ -1,13 +1,12 @@
 use crate::commands::Command;
 use crate::commands::operation::{
-    ActivatePatternBank, ConfigPattern, PhaseDepth, StmIntensity, WritePatternChunk,
+    ActivatePatternBank, ConfigPattern, PhaseDepth, StmIntensity, WritePatternBuffer,
     WritePatternPhase,
 };
 use crate::datagram::Expansion;
 use crate::error::{Error, PayloadError};
 use crate::params::{BUFFER_SIZE_MIN, EMISSION_MAX_INDICES};
 use crate::value::{LoopBehavior, PatternBank, Phase, SamplingConfig, TransitionMode};
-use autd3_cpu_wire::layout::PATTERN_RAW_MAX_COUNT;
 use autd3_cpu_wire::payload::PayloadBuildError;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -79,10 +78,10 @@ impl Command for PatternStm<'_> {
                 }
             }
             (_, PhaseDepth::Bits8) => {
-                for (k, phases) in self.phases.chunks(PATTERN_RAW_MAX_COUNT).enumerate() {
-                    expansion.push(WritePatternChunk {
+                for (k, phases) in self.phases.chunks(WritePatternBuffer::MAX_LEN).enumerate() {
+                    expansion.push(WritePatternBuffer {
                         bank,
-                        start_index: k * PATTERN_RAW_MAX_COUNT,
+                        start_index: k * WritePatternBuffer::MAX_LEN,
                         patterns: phases,
                         intensities: self.intensities,
                     })?;
@@ -226,7 +225,10 @@ mod tests {
         let header = core::mem::size_of::<autd3_cpu_wire::payload::WritePatternRawPayload>();
         let entry_len = autd3_cpu_wire::layout::PATTERN_RAW_DATA_LEN;
         for (i, phases) in phases.iter().enumerate() {
-            let (frame, k) = (i / PATTERN_RAW_MAX_COUNT, i % PATTERN_RAW_MAX_COUNT);
+            let (frame, k) = (
+                i / WritePatternBuffer::MAX_LEN,
+                i % WritePatternBuffer::MAX_LEN,
+            );
             let write = payload(&datagrams, frame, 0);
             let base = header + k * entry_len;
             assert_eq!(write[base], phases[0][0].0, "index {i} phase");

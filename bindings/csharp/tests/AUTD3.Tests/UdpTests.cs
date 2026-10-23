@@ -36,44 +36,12 @@ namespace AUTD3.Tests
             Assert.Equal(TimeSpan.FromMilliseconds(10), option.AckTimeout);
         }
 
-        private static Autd3Exception OpenFails(TransportOption option)
-        {
-            using var geometry = new Geometry(new[] { new Autd3(System.Numerics.Vector3.Zero) });
-            return Assert.Throws<Autd3Exception>(() => Client.Open(geometry, option));
-        }
-
-        [Fact]
-        public void AZeroAckTimeoutFailsTheOpenWithTheRustError()
-        {
-            var option = new TransportOption { AckTimeout = TimeSpan.Zero };
-            NativeClient.autd3_transport_option_free(option.CreateHandle());
-            var error = OpenFails(option);
-            Assert.Equal(Autd3ErrorCode.Network, error.Code);
-            Assert.Contains("ack_timeout", error.Message);
-        }
-
         [Fact]
         public void ANegativeAckTimeoutIsRejected()
         {
             var option = new TransportOption { AckTimeout = TimeSpan.FromTicks(-1) };
             var error = Assert.Throws<Autd3Exception>(() => option.CreateHandle());
             Assert.Equal(Autd3ErrorCode.InvalidArgument, error.Code);
-        }
-
-        [Fact]
-        public void AZeroOpenTimeoutFailsTheOpenWithTheRustError()
-        {
-            var error = OpenFails(new TransportOption { OpenTimeout = TimeSpan.Zero });
-            Assert.Equal(Autd3ErrorCode.Network, error.Code);
-            Assert.Contains("open_timeout", error.Message);
-        }
-
-        [Fact]
-        public void AZeroLostTimeoutFailsTheOpenWithTheRustError()
-        {
-            var error = OpenFails(new TransportOption { LostTimeout = TimeSpan.Zero });
-            Assert.Equal(Autd3ErrorCode.Network, error.Code);
-            Assert.Contains("lost_timeout", error.Message);
         }
 
         [Fact]

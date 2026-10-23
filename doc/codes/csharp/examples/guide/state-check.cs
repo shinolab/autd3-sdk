@@ -15,7 +15,6 @@ internal static class Sample
 
         // ANCHOR: open
         var client = Client.Open(geometry, new TransportOption());
-        using var checker = client.StateChecker();
         // ANCHOR_END: open
 
         using (client)
@@ -23,30 +22,29 @@ internal static class Sample
             // ANCHOR: ptp_failsafe
             client.SendHeartbeat();
             await Task.Delay(CheckInterval);
-            var current = checker.Check();
-            if (current.AnyPtpFailsafe)
+            var current = client.DeviceStatus();
+            static bool Releasable(DeviceStatus s) => s.PtpFailsafe && s.PtpLocked;
+            if (current.Any(Releasable))
             {
-                var releasable = DeviceMask.FromDevices(current.PtpFailsafe.Where(i => current.PtpLocked[i]));
-                if (!releasable.IsEmpty)
-                {
-                    await client.SendAsync(Command.Each(device => releasable[device.Idx] ? new ReleaseFailsafe() : null));
-                }
+                await client.SendAsync(Command.Each(device => Releasable(current[device.Idx]) ? new ReleaseFailsafe() : null));
             }
             // ANCHOR_END: ptp_failsafe
 
             // ANCHOR: poll
-            DeviceStatus? last = null;
+            DeviceStatus[] last = Array.Empty<DeviceStatus>();
             while (true)
             {
                 client.SendHeartbeat();
-                var status = checker.Check();
-                if (status != last)
+                var status = client.DeviceStatus();
+                if (!status.SequenceEqual(last))
                 {
-                    for (var i = 0; i < status.Devices.Count; i++)
+                    for (var i = 0; i < status.Length; i++)
                     {
-                        Console.WriteLine($"device[{i}]: {status.Devices[i]}");
+                        Console.WriteLine($"device[{i}]: {status[i].State}");
                     }
-                    Console.WriteLine($"all ready: {status.AllReady}, any lost: {status.AnyLost}");
+                    var allReady = status.All(s => s.State == DeviceState.Ready);
+                    var anyLost = status.Any(s => s.State == DeviceState.Lost);
+                    Console.WriteLine($"all ready: {allReady}, any lost: {anyLost}");
                     last = status;
                 }
                 await Task.Delay(CheckInterval);

@@ -201,13 +201,9 @@ def test_loop_behavior_and_transition_mode_names() -> None:
 def test_params_mirror_the_rust_constants() -> None:
     params = autd3.params
     assert params.ULTRASOUND_PERIOD == SamplingConfig.FREQ_40K.period()
-    assert params.NUM_TRANSDUCERS == Autd3.NUM_TRANSDUCERS == Geometry([Autd3([0.0, 0.0, 0.0])]).num_transducers()
-    assert params.GRID_X == Autd3.GRID_X
-    assert params.GRID_Y == Autd3.GRID_Y
-    assert params.GRID_X * params.GRID_Y - 3 == params.NUM_TRANSDUCERS
-    assert params.PITCH_MM == Autd3.PITCH_MM
-    assert params.MAX_INFLIGHT == autd3.MAX_INFLIGHT
-    assert params.MAX_DEVICES == autd3.MAX_DEVICES
+    assert Autd3.NUM_TRANSDUCERS == Geometry([Autd3([0.0, 0.0, 0.0])]).num_transducers()
+    assert Autd3.GRID_X * Autd3.GRID_Y - 3 == Autd3.NUM_TRANSDUCERS
+    assert params.MAX_DEVICES >= 1
     assert params.PWE_TABLE_SIZE == len(autd3.commands.SetPulseWidthTable.empty_table())
     assert params.BUFFER_SIZE_MIN >= 1
     assert params.NUM_FOCI_MAX >= 1
@@ -215,6 +211,10 @@ def test_params_mirror_the_rust_constants() -> None:
     assert params.MOD_BUFFER_SAMPLES >= params.BUFFER_SIZE_MIN
     assert params.PULSE_WIDTH_PERIOD > 0
     assert set(params.__all__) <= set(dir(params))
+    for name in ("NUM_TRANSDUCERS", "GRID_X", "GRID_Y", "PITCH_MM", "ROTATION_NORM_TOLERANCE", "DEVICE_QUEUE_FRAMES"):
+        assert not hasattr(params, name)
+    for name in ("MAX_DEVICES", "MAX_INFLIGHT"):
+        assert not hasattr(autd3, name)
 
 
 def test_geometry_helpers() -> None:

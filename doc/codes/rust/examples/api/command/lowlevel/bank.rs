@@ -13,12 +13,12 @@ async fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
     let bank = PatternBank::B0;
-    let index = 0;
-    let _phases = geometry.phase_buffer();
-    let phases = &_phases;
+    let start_index = 0;
+    let _patterns = [geometry.phase_buffer()];
+    let patterns = &_patterns;
     let intensities = Intensity::MAX;
     // ANCHOR: write
-    WritePatternBuffer::new(bank, index, phases, intensities);
+    WritePatternBuffer::new(bank, start_index, patterns, intensities);
     // ANCHOR_END: write
     let config = SamplingConfig::FREQ_4K;
     let size = 1;

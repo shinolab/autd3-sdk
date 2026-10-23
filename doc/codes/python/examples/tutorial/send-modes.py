@@ -3,9 +3,10 @@ import collections
 import math
 
 import autd3_pattern as pattern
-from autd3 import Client, Frames, MAX_INFLIGHT, TransportOption
+from autd3 import Client, Frames, TransportOption
 from autd3.commands import Clear, Pattern, SetSilencer, Synchronize
 from autd3.geometry import Autd3, Geometry, offset
+from autd3.params import MAX_INFLIGHT
 from autd3.units import m, mm, s
 from autd3.value import Intensity
 

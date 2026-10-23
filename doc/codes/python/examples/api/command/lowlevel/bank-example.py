@@ -26,8 +26,8 @@ async def main() -> None:
         await client.send(
             WritePatternBuffer(
                 bank=bank,
-                index=0,
-                phases=phases,
+                start_index=0,
+                patterns=[phases],
                 intensities=Intensity.MAX,
             )
         )

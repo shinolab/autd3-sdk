@@ -192,7 +192,12 @@ mod tests {
         let geometry = test_geometry(3);
         let phases = vec![vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]; 3];
         let intensities = vec![vec![Intensity::MAX; Autd3::NUM_TRANSDUCERS]; 3];
-        let pattern = WritePatternBuffer::new(PatternBank::B0, 0, &phases, &intensities);
+        let pattern = WritePatternBuffer::new(
+            PatternBank::B0,
+            0,
+            core::slice::from_ref(&phases),
+            &intensities,
+        );
         let config = ConfigModulation {
             bank: ModulationBank::B1,
             config: SamplingConfig::FREQ_40K,
