@@ -151,7 +151,7 @@ mod sys {
     }
 }
 
-fn is_undeliverable(e: &io::Error) -> bool {
+fn is_transient(e: &io::Error) -> bool {
     matches!(
         e.kind(),
         io::ErrorKind::ConnectionReset
@@ -160,11 +160,8 @@ fn is_undeliverable(e: &io::Error) -> bool {
             | io::ErrorKind::NetworkUnreachable
             | io::ErrorKind::NetworkDown
             | io::ErrorKind::AddrNotAvailable
+            | io::ErrorKind::Interrupted
     )
-}
-
-fn is_transient(e: &io::Error) -> bool {
-    is_undeliverable(e) || e.kind() == io::ErrorKind::Interrupted
 }
 
 impl Channel {
@@ -276,10 +273,6 @@ impl Channel {
                     }
                     sys::wait(&self.socket, Interest::Writable, Some(remaining))?;
                 }
-                Err(e) if is_undeliverable(&e) => {
-                    tracing::debug!(%dst, ?kind, "sending a datagram failed: {e}");
-                    return Ok(attempted_at);
-                }
                 Err(e) => return Err(e),
             }
         }
@@ -347,20 +340,5 @@ impl Channel {
 
     pub(crate) fn socket(&self) -> &UdpSocket {
         &self.socket
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn an_interruption_is_not_counted_as_a_sent_datagram() {
-        let interrupted = io::Error::from(io::ErrorKind::Interrupted);
-        assert!(!is_undeliverable(&interrupted));
-        assert!(is_transient(&interrupted));
-        assert!(is_undeliverable(&io::Error::from(
-            io::ErrorKind::HostUnreachable
-        )));
     }
 }
