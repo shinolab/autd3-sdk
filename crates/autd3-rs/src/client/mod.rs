@@ -22,6 +22,10 @@ use crate::udp::{TransportOption, UdpError};
 
 const GRANDMASTER_UNIT_ID: u8 = 0;
 
+fn unit_id_of(device: usize) -> u8 {
+    u8::try_from(device).expect("at most 255 devices")
+}
+
 pub struct Client {
     controller: Controller,
     driver: Mutex<Option<JoinHandle<Result<(), Error>>>>,
