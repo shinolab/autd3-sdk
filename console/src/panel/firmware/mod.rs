@@ -80,7 +80,7 @@ impl Target {
     }
 }
 
-#[derive(Default, Clone, Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct FirmwareConfig {
     pub version: Option<String>,

@@ -16,7 +16,7 @@ use crate::sound_field::{SoundFieldOption, distances, num_frames, observe_points
 
 const P0: f32 = T4010A1_AMPLITUDE / (4.0 * PI) / SQRT_2;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct RmsRecordOption {
     pub sound_speed: Velocity,
 }

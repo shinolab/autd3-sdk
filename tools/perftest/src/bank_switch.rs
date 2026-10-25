@@ -91,7 +91,7 @@ impl Sent {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug)]
 enum Failure {
     Status(SampleStatus),
 }

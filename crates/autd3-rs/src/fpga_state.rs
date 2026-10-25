@@ -1,7 +1,7 @@
 use autd3_cpu_wire::fpga_params::FpgaStateFlags;
 use autd3_rs_core::value::{ModulationBank, PatternBank};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FpgaState(pub u8);
 
 impl FpgaState {

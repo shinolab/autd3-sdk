@@ -24,7 +24,7 @@ impl Default for FociStmOption {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct FociStm<'a> {
     pub config: SamplingConfig,
     pub points: &'a [ControlPoints],

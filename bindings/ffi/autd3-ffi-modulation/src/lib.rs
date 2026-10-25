@@ -143,7 +143,7 @@ pub unsafe extern "C" fn autd3_modulation_buffer_free(buffer: *mut ModulationBuf
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy)]
 pub struct Autd3SineOption {
     pub amplitude: u8,
     pub offset: u8,
@@ -163,7 +163,6 @@ impl From<Autd3SineOption> for SineOption {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Autd3SquareOption {
     pub low: u8,
     pub high: u8,
@@ -181,7 +180,6 @@ impl From<Autd3SquareOption> for SquareOption {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Autd3FourierOption {
     pub has_scale_factor: bool,
     pub scale_factor: f32,

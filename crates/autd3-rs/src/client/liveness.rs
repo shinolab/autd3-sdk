@@ -5,7 +5,7 @@ use autd3_rs_core::DeviceState;
 
 use crate::udp::state::{PTP_FLAGS, SYNCED_FLAGS};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 pub(crate) struct DeviceLiveness {
     unanswered_since: Option<Instant>,
     answered_at: Option<Instant>,

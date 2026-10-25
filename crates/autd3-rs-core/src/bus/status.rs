@@ -1,6 +1,6 @@
 use super::DeviceState;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeviceStatus {
     pub state: DeviceState,
     pub ptp_locked: bool,

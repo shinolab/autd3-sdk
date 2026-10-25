@@ -6,7 +6,6 @@ use if_addrs::IfAddr;
 
 use super::error::UdpError;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct LinkLocalInterface {
     pub(crate) name: String,
     pub(crate) scope_id: u32,

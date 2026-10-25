@@ -9,7 +9,7 @@ pub use autd3_cpu_wire::payload::PhaseDepth;
 use autd3_cpu_wire::payload::WritePatternPhasePayload;
 use zerocopy::IntoBytes;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct WritePatternPhase<'a> {
     pub bank: PatternBank,
     pub start_index: usize,

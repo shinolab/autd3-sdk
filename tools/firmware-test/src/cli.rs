@@ -3,7 +3,7 @@ use std::time::Duration;
 use autd3_rs::{ExecAt, TransportOption};
 use clap::Parser;
 
-#[derive(Parser, Debug, Clone)]
+#[derive(Parser)]
 #[command(name = "autd3-rs-firmware-test", about)]
 pub(crate) struct Cli {
     #[arg(long, default_value = None)]

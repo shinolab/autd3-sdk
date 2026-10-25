@@ -34,7 +34,7 @@ use crate::stm::{OwnedStmIntensity, extract_stm_intensity};
     frozen,
     from_py_object
 )]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct PatternBank(pub(crate) CorePatternBank);
 
 impl core::hash::Hash for PatternBank {
@@ -70,7 +70,7 @@ impl PatternBank {
     frozen,
     from_py_object
 )]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct ModulationBank(pub(crate) CoreModulationBank);
 
 impl core::hash::Hash for ModulationBank {
@@ -149,7 +149,7 @@ impl GpioIn {
     frozen,
     from_py_object
 )]
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Hash)]
 pub struct SysTime(pub(crate) CoreSysTime);
 
 #[pymethods]
@@ -332,7 +332,7 @@ impl WritePatternBuffer {
     frozen,
     from_py_object
 )]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct PhaseDepth(pub(crate) CorePhaseDepth);
 
 impl core::hash::Hash for PhaseDepth {

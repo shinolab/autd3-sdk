@@ -124,7 +124,7 @@ pub fn port_identity(clock_id: [u8; 8]) -> PortIdentity {
     id
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub struct Message {
     pub kind: MessageType,
     pub seq: u16,
@@ -163,7 +163,7 @@ pub fn parse(message: &[u8]) -> Option<Message> {
     })
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Content {
     Sync,
     DelayReq,

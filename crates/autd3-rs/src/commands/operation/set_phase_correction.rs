@@ -10,7 +10,7 @@ use crate::value::Phase;
 
 use super::{Distribution, Operation, checked_device_row, encode_header_only};
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct SetPhaseCorrection<'a> {
     pub phases: &'a [Vec<Phase>],
 }

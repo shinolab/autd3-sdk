@@ -53,7 +53,7 @@ const TIMER_CFG_MON: u32 = 1 << 30;
 const CMD_IPROG: u32 = 0x0F;
 const CMD_DESYNC: u32 = 0x0D;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct BitstreamSummary {
     pub synced: bool,
     pub usr_access: Option<u32>,
@@ -139,7 +139,7 @@ pub fn summarize_bitstream(bytes: &[u8]) -> BitstreamSummary {
     summary
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, thiserror::Error)]
+#[derive(Clone, PartialEq, Eq, Debug, thiserror::Error)]
 pub enum FpgaImageError {
     #[error("FPGA update image must not be empty")]
     Empty,

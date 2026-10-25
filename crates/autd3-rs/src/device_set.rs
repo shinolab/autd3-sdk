@@ -2,7 +2,7 @@ use std::ops::{Index, Sub};
 
 use autd3_rs_core::MAX_DEVICES;
 
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct DeviceSet {
     bits: u128,
 }

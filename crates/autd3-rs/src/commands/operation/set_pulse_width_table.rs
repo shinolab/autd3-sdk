@@ -12,7 +12,7 @@ use super::{Operation, encode_header_only};
 
 pub use autd3_cpu_wire::layout::PWE_TABLE_SIZE;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct SetPulseWidthTable<'a> {
     pub table: &'a [PulseWidth; PWE_TABLE_SIZE],
 }

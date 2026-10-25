@@ -18,7 +18,7 @@ fn np_quat<'py>(py: Python<'py>, q: &UnitQuaternion<f32>) -> PyResult<Bound<'py,
 }
 
 #[pyclass(name = "EulerAngles", module = "autd3_core", from_py_object)]
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct EulerAngles(UnitQuaternion<f32>);
 
 impl EulerAngles {

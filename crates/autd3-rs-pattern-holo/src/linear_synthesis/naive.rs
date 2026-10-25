@@ -9,7 +9,7 @@ use crate::directivity::Directivity;
 use crate::error::HoloError;
 use crate::linear_synthesis::batch::{BatchSetup, solve_batched};
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NaiveOption<'a> {
     pub constraint: IntensityConstraint,
     pub directivity: Directivity,

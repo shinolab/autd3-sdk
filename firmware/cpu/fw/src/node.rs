@@ -95,7 +95,6 @@ impl Default for Node {
     }
 }
 
-#[derive(Clone, Copy)]
 struct ReplyTo {
     port: u8,
     to: Endpoint,

@@ -44,7 +44,7 @@ pub struct WgpuBackend {
     bind_cache: RefCell<HashMap<BindKey, wgpu::BindGroup>>,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 struct BindKey {
     layout: u8,
     buffers: [u64; MAX_BINDINGS],
