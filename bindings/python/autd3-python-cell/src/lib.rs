@@ -4,7 +4,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 
 const EXCLUSIVE: usize = usize::MAX;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum BufferBusy {
     #[error("the buffer is being written elsewhere")]
     Writing,

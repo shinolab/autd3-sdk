@@ -8,7 +8,7 @@ use crate::value::{ControlPoints, PatternBank};
 use super::{Distribution, Operation, set_cmd, write_header};
 use autd3_cpu_wire::payload::WriteFociPayload;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct WriteFociBuffer<'a> {
     pub bank: PatternBank,
     pub start_index: usize,

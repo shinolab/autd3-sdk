@@ -168,13 +168,13 @@ pub fn boot_image(info: &FirmwareInfo) -> FpgaBootImage {
     FpgaBootImage::from_u8(info.fpga_boot_image).unwrap_or(FpgaBootImage::Unknown)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct UpdateProgress {
     pub sent: usize,
     pub total: usize,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DeviceReply {
     pub status: u8,
     pub value: Vec<u8>,

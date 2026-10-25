@@ -9,7 +9,7 @@ use crate::driver::{ACK_TIMEOUT, DEFAULT_HEARTBEAT, UdpLink};
 
 const LOST_AFTER_HEARTBEATS: u32 = 10;
 
-#[derive(Args, Debug, Clone, Default)]
+#[derive(Args)]
 #[command(next_help_heading = "UDP (unset options keep the library defaults)")]
 pub struct UdpArgs {
     #[arg(long, help = "Network interface name (default: auto-detect)")]

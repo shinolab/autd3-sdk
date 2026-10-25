@@ -8,7 +8,7 @@ pub enum TransducerMask<'a> {
     Masked(&'a [Vec<bool>]),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum TransducerMaskError {
     #[error("the mask has {got} device slots but the geometry has {expected} devices")]

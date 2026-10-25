@@ -1,7 +1,7 @@
 use crate::fpga_params::{FOCUS_TR_X_MAX, FOCUS_TR_Y_MAX};
 use crate::layout::{FOCUS_COORD_MAX, FOCUS_COORD_MIN};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[error("focus coordinate {axis} = {value} out of range {min}..={max}")]
 pub struct FocusOutOfRange {
     pub axis: &'static str,
@@ -10,7 +10,7 @@ pub struct FocusOutOfRange {
     pub max: i32,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[doc(hidden)]
 pub struct Focus {
     pub x: i32,

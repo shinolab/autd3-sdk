@@ -102,7 +102,7 @@ pub fn apply_fpga_config<P: Port>(port: &mut P, config: &FpgaConfig) {
     );
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[derive(Default)]
 pub struct WatchdogState {
     pub fired: bool,
     pub count: u8,

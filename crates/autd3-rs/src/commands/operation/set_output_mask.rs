@@ -7,7 +7,7 @@ use crate::protocol::Cmd;
 
 use super::{Distribution, Operation, checked_device_row, encode_header_only};
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct SetOutputMask<'a> {
     pub masks: &'a [Vec<bool>],
 }

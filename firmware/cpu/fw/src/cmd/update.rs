@@ -36,7 +36,7 @@ pub(crate) enum State {
     },
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy)]
 pub(crate) struct BootImage {
     pub(crate) slot: Slot,
     generation: u32,

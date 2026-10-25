@@ -99,18 +99,14 @@ impl Header {
     }
 }
 
-#[derive(
-    FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned, Clone, Copy, PartialEq, Eq, Debug,
-)]
+#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned, Clone, PartialEq, Eq, Debug)]
 #[repr(C)]
 pub struct AssignIdBody {
     pub unit_id: u8,
     pub role: u8,
 }
 
-#[derive(
-    FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned, Clone, Copy, PartialEq, Eq, Debug,
-)]
+#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned, Clone, PartialEq, Eq, Debug)]
 #[repr(C)]
 pub struct SetTimeBody {
     pub sys_time: U64,
@@ -126,9 +122,7 @@ pub struct UnitInfo {
     pub ptp_offset_ns: I32,
 }
 
-#[derive(
-    FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned, Clone, Copy, PartialEq, Eq, Debug,
-)]
+#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned, Clone, PartialEq, Eq, Debug)]
 #[repr(C)]
 pub struct FrameReply {
     pub reserved: u8,
@@ -138,9 +132,7 @@ pub struct FrameReply {
     pub sys_time: U64,
 }
 
-#[derive(
-    FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned, Clone, Copy, PartialEq, Eq, Debug,
-)]
+#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned, Clone, PartialEq, Eq, Debug)]
 #[repr(C)]
 pub struct UnblockReply {
     pub downstream_link: u8,

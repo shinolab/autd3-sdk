@@ -4,7 +4,7 @@
     clippy::cast_sign_loss
 )]
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct SilencerEmulator {
     is_phase: bool,
     current: i32,

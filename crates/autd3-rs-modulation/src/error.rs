@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-#[derive(Clone, Copy, Debug, PartialEq, Error)]
+#[derive(Clone, Debug, PartialEq, Error)]
 #[non_exhaustive]
 pub enum ModulationError {
     #[error("modulation value is out of range [0, 255]")]

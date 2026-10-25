@@ -3,7 +3,7 @@ use core::time::Duration;
 
 use crate::cpu_params;
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Debug)]
 pub struct MaxFreqPpb(u32);
 
 impl MaxFreqPpb {
@@ -38,7 +38,7 @@ impl From<MaxFreqPpb> for u32 {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Debug)]
 pub struct PathDelayFilterShift(u8);
 
 impl PathDelayFilterShift {

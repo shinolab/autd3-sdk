@@ -9,7 +9,7 @@ const fn fits_in_the_bus(addr: u16, words: usize) -> bool {
     words != 0 && addr as usize + words <= 1 << u16::BITS
 }
 
-#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned, Clone, Copy, Debug)]
+#[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned, Clone, Debug)]
 #[repr(C)]
 pub struct WriteFpgaMemoryPayload {
     pub addr: U16,

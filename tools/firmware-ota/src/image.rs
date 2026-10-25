@@ -3,7 +3,7 @@ use autd3_cpu_wire::update::{
 };
 use zerocopy::FromBytes;
 
-#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+#[derive(Debug, thiserror::Error)]
 pub enum ImageError {
     #[error(
         "CPU firmware image is {len} bytes; it must be longer than {min_exclusive} and at most {max} bytes"
@@ -23,7 +23,6 @@ pub enum ImageError {
     HeaderMismatch { declared: usize, crc32: u32 },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CpuFirmwareImage {
     body: Vec<u8>,
     crc32: u32,

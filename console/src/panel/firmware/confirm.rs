@@ -10,7 +10,7 @@ pub(super) struct DeviceVersions {
     pub fpga: Option<String>,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub(super) enum Answer {
     Pending,
     Update,

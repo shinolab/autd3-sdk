@@ -20,7 +20,7 @@ pub(crate) enum SampleStatus {
     NetworkError,
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub(crate) struct Counters {
     pub ok: u64,
     pub timeouts: u64,
@@ -47,7 +47,7 @@ impl Counters {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub(crate) struct Traffic {
     devices: usize,
     tx_frames: u64,
@@ -116,14 +116,14 @@ impl Traffic {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Default)]
 pub(crate) struct TrafficRate {
     pub tx_byte_per_sec: f64,
     pub line_down_percent: f64,
     pub line_up_percent: f64,
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Default)]
 pub(crate) struct LatencyStats {
     pub mean: Duration,
     pub p50: Duration,
@@ -228,7 +228,7 @@ const fn bucket_upper_ns(index: usize) -> u64 {
     ((sub_buckets + mantissa) << shift) + ((1u64 << shift) - 1)
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Default)]
 pub(crate) struct AckLatency {
     frames: u64,
     total: Duration,
@@ -258,7 +258,6 @@ impl AckLatency {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct Summary {
     pub elapsed: Duration,
     pub counters: Counters,

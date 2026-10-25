@@ -9,7 +9,6 @@ use zerocopy::little_endian::U64;
 
 use super::error::UdpError;
 
-#[derive(Clone, Debug)]
 pub(crate) struct ControlResponse {
     pub(crate) src: SocketAddrV6,
     pub(crate) status: u8,

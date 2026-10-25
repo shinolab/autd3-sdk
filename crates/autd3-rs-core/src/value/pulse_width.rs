@@ -5,7 +5,7 @@ use thiserror::Error;
 pub const PULSE_WIDTH_PERIOD: u16 =
     (crate::params::FPGA_CLK_FREQ_HZ / crate::params::ULTRASOUND_FREQ_HZ) as u16;
 
-#[derive(Clone, Copy, Debug, PartialEq, Error)]
+#[derive(Clone, Debug, PartialEq, Error)]
 #[non_exhaustive]
 pub enum PulseWidthError {
     #[error("pulse width ({0}) is out of range [0, {n})", n = PULSE_WIDTH_PERIOD)]
@@ -14,7 +14,7 @@ pub enum PulseWidthError {
     DutyRatioOutOfRange(f32),
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Hash)]
 pub struct PulseWidth(u16);
 
 impl PulseWidth {

@@ -1,7 +1,7 @@
 use autd3_rs_core::geometry::TransducerMaskError;
 use thiserror::Error;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
 #[non_exhaustive]
 pub enum HoloError {
     #[error("at least one focus is required")]

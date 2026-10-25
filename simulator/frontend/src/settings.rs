@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 const STORAGE_KEY: &str = "autd3-simulator-settings";
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy)]
 #[serde(default)]
 pub(crate) struct Settings {
     pub max_pressure: f32,

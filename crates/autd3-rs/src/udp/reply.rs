@@ -54,7 +54,7 @@ impl Reply {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct DeviceReply {
     pub(crate) reply: Reply,
     pub(crate) reported_unit_id: u8,

@@ -2,7 +2,6 @@ use core::num::NonZeroU64;
 
 pub use autd3_cpu_wire::config::FpgaBusWait;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct FlashError;
 
 pub trait Port {

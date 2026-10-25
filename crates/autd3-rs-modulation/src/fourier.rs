@@ -16,7 +16,7 @@ pub struct SineComponent {
     pub option: SineOption,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub struct FourierOption {
     pub scale_factor: Option<f32>,
     pub clamp: bool,

@@ -5,7 +5,7 @@ use crate::process::ManagedProcess;
 
 const BIN: &str = "autd3-simulator";
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct SimulatorConfig {
     pub port: u16,

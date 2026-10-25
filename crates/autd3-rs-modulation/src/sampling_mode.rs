@@ -10,7 +10,7 @@ use autd3_rs_core::value::{SamplingConfig, is_integer};
 
 use crate::error::ModulationError;
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Nearest<T>(pub T);
 
 #[derive(Clone, Copy, Debug, PartialEq)]

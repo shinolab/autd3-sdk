@@ -10,7 +10,7 @@ pub enum LogWriter {
     Stderr,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct TracingOption {
     pub default_filter: &'static str,
     pub writer: LogWriter,
