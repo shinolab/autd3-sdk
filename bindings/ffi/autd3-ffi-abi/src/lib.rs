@@ -46,7 +46,7 @@ pub const AUTD3_ERR_INVALID_ARGUMENT: i32 = -5;
 pub const AUTD3_ERR_ABORTED: i32 = -7;
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 pub struct Autd3FirmwareVersion {
     pub cpu: [u8; 3],
     pub fpga: [u8; 3],
@@ -55,7 +55,7 @@ pub struct Autd3FirmwareVersion {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 pub struct Autd3Telemetry {
     pub fifo_drop: u32,
     pub dispatch_error: u32,

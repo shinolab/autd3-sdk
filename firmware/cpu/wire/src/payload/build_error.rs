@@ -2,7 +2,7 @@ use core::time::Duration;
 
 use super::PhaseDepth;
 
-#[derive(Clone, Copy, PartialEq, Debug, thiserror::Error)]
+#[derive(Clone, PartialEq, Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum PayloadBuildError {
     #[error("modulation size {size} out of range {min}..={max}")]

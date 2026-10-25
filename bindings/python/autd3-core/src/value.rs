@@ -234,7 +234,7 @@ impl SamplingConfig {
 }
 
 #[pyclass(name = "Nearest", module = "autd3_core", eq, hash, frozen)]
-#[derive(Clone, Copy, PartialEq)]
+#[derive(PartialEq)]
 pub struct PyNearest(f32);
 
 impl Hash for PyNearest {
@@ -271,7 +271,7 @@ impl PyNearest {
     frozen,
     from_py_object
 )]
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Hash)]
 pub struct Duration(pub StdDuration);
 
 #[pymethods]

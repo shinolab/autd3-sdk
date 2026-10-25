@@ -25,7 +25,6 @@ use super::liveness::DeviceLiveness;
 
 const IDLE_WAIT: Duration = Duration::from_secs(1);
 
-#[derive(Clone, Copy, Debug)]
 pub(crate) struct Timeouts {
     pub(crate) ack: Duration,
     pub(crate) lost: Duration,

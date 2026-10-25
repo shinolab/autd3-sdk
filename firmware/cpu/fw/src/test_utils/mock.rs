@@ -52,7 +52,7 @@ const PATTERN_LATCHED_REGS: [(u16, usize); 4] = [
     (ADDR_PATTERN_REP0, NUM_BANKS),
 ];
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub(crate) enum WatchdogEvent {
     Kick,
     Timeout(u16),

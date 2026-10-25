@@ -1,13 +1,13 @@
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 
-#[derive(Default, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[derive(Default, PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct UdpConfig {
     pub interface: String,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct OtaConfig {
     pub devices: usize,

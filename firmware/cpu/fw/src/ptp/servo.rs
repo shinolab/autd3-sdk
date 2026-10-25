@@ -11,7 +11,7 @@ enum State {
     Tracking,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[derive(PartialEq, Eq, Debug, Default)]
 pub struct Output {
     pub step_ns: Option<i64>,
     pub drift_ppb: Option<i32>,

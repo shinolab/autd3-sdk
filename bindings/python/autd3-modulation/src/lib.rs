@@ -174,7 +174,7 @@ fn modulation_buffer() -> ModulationBuffer {
 }
 
 #[pyclass(name = "SquareOption", module = "autd3_modulation", eq, frozen)]
-#[derive(Clone, Copy, PartialEq)]
+#[derive(PartialEq)]
 pub struct SquareOption(CoreSquareOption);
 
 #[pymethods]
@@ -210,7 +210,7 @@ impl SquareOption {
 }
 
 #[pyclass(name = "FourierOption", module = "autd3_modulation", eq, frozen)]
-#[derive(Clone, Copy, PartialEq)]
+#[derive(PartialEq)]
 pub struct FourierOption(CoreFourierOption);
 
 #[pymethods]

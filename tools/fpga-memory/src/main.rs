@@ -10,7 +10,7 @@ const WORDS_PER_LINE: usize = 8;
 const REPORTED_ERRORS_PER_DEVICE: usize = 8;
 const TEST_PATTERN_SEED: u32 = 0x2545_F491;
 
-#[derive(Parser, Debug)]
+#[derive(Parser)]
 #[command(
     name = "autd3-fpga-memory",
     about,
@@ -33,7 +33,7 @@ struct Cli {
     command: Command,
 }
 
-#[derive(Args, Debug)]
+#[derive(Args)]
 struct Chain {
     #[arg(long, help = "Number of devices on the chain")]
     devices: usize,
@@ -47,7 +47,7 @@ struct Chain {
     udp: UdpArgs,
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand)]
 enum Command {
     #[command(about = "Read words starting at a bus address")]
     Read {

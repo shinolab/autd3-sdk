@@ -7,7 +7,7 @@ use clap::{Parser, ValueEnum};
 const DEFAULT_HEARTBEAT: &str = "10ms";
 const DEFAULT_ACK_TIMEOUT: &str = "10ms";
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+#[derive(Clone, Default, PartialEq, Eq, ValueEnum)]
 pub(crate) enum Mode {
     #[default]
     StopAndWait,
@@ -15,14 +15,14 @@ pub(crate) enum Mode {
     BankSwitch,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, ValueEnum)]
 pub(crate) enum Framing {
     #[default]
     Fused,
     Split,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
+#[derive(Clone, Copy, Default, PartialEq, Eq, ValueEnum)]
 pub(crate) enum Command {
     Nop,
     WritePatternBuffer,
@@ -41,7 +41,7 @@ impl Command {
     }
 }
 
-#[derive(Parser, Debug, Clone)]
+#[derive(Parser, Clone)]
 #[command(name = "autd3-rs-perftest", about)]
 pub(crate) struct Cli {
     #[arg(

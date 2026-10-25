@@ -18,7 +18,7 @@ pub fn abs_objective_func(c: Complex<f32>, a: Amplitude) -> f32 {
     (a.pascal() - c.norm()).abs()
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct GreedyOption {
     pub phase_quantization_levels: NonZeroU8,
     pub directivity: Directivity,

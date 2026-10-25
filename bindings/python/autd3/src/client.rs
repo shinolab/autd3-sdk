@@ -59,7 +59,7 @@ impl DeviceState {
 }
 
 #[pyclass(name = "DeviceStatus", module = "autd3", eq, hash, frozen)]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 pub struct DeviceStatus(autd3_rs::DeviceStatus);
 
 impl core::hash::Hash for DeviceStatus {

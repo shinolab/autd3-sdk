@@ -8,7 +8,7 @@ use autd3_rs::Interface;
 use autd3_rs::udp::TransportOption;
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 pub struct Autd3TransportOption {
     pub open_timeout_ns: u64,
     pub lost_timeout_ns: u64,

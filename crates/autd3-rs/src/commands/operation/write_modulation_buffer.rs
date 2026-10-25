@@ -7,7 +7,7 @@ use crate::value::ModulationBank;
 use super::{Operation, set_cmd, write_header};
 use autd3_cpu_wire::payload::WriteModPayload;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct WriteModulationBuffer<'a> {
     pub bank: ModulationBank,
     pub offset: usize,

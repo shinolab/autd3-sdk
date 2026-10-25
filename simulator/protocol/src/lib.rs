@@ -4,7 +4,7 @@ pub const MAX_DEVICES: usize = 128;
 pub const DEVICE_WIDTH: f32 = 192.0;
 pub const ROTATION_NORM_TOLERANCE: f32 = 1e-3;
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct TransducerInfo {
     pub pos: [f32; 3],
     pub dir: [f32; 3],
@@ -16,7 +16,7 @@ pub struct DevicePose {
     pub rotation: [f32; 4],
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct TransState {
     pub amp: f32,
     pub phase: f32,
@@ -40,7 +40,7 @@ pub struct DeviceState {
     pub gpio_out: [Vec<u8>; 4],
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ServerMsg {
     Geometry {
@@ -55,7 +55,7 @@ pub enum ServerMsg {
     },
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClientMsg {
     SetModulationEnabled { enabled: bool },

@@ -6,7 +6,7 @@ use super::{ETHERTYPE_PTP, Ipv6, Mac};
 
 const NS_TARGET: usize = 16;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub struct Udp<'a> {
     pub src_mac: Mac,
     pub src_ip: Ipv6,
@@ -16,7 +16,7 @@ pub struct Udp<'a> {
     pub payload: &'a [u8],
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum Packet<'a> {
     Ptp {
         message: &'a [u8],
