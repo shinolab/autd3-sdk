@@ -9,8 +9,8 @@ use autd3_cpu_wire::fpga_update::FpgaBootImage;
 use autd3_cpu_wire::update::RunningImage;
 use autd3_firmware_writer::bundle;
 use autd3_rs_firmware_ota::{
-    CpuFirmwareImage, Driver, DriverError, Exchange, FPGA_ACTIVATE_ATTEMPTS, FPGA_RECONFIG_WAIT,
-    FpgaFirmwareImage, MIN_CPU_FIRMWARE_VERSION, UdpArgs, boot_image,
+    CpuFirmwareImage, Driver, DriverError, FPGA_ACTIVATE_ATTEMPTS, FPGA_RECONFIG_WAIT,
+    FpgaFirmwareImage, MIN_CPU_FIRMWARE_VERSION, UdpArgs, UdpLink, boot_image,
 };
 
 type Version = [u8; 3];
@@ -24,8 +24,6 @@ const UNACKNOWLEDGED_ACTIVATION_HINT: &str = "the activation was not acknowledge
      new one at their next power cycle. Once every device is reachable, check which image \
      runs with `--verify-only` and confirm it with `--confirm-only` (or simply run the \
      update again)";
-
-type Connect<'a, L> = &'a dyn Fn(usize) -> Result<L>;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 enum Target {
@@ -227,15 +225,11 @@ fn describe_running_image(image: Option<RunningImage>) -> &'static str {
     }
 }
 
-fn open_and_run<L: Exchange>(
-    connect: Connect<'_, L>,
-    devices: usize,
-    stage: Stage<'_>,
-) -> Result<Outcome> {
-    run(connect(devices)?, stage)
+fn open_and_run(udp: &UdpArgs, devices: usize, stage: Stage<'_>) -> Result<Outcome> {
+    run(udp.open(devices)?, stage)
 }
 
-fn request_activation<L: Exchange>(driver: &mut Driver<L>) -> Result<bool> {
+fn request_activation(driver: &mut Driver) -> Result<bool> {
     match driver.activate() {
         Ok(()) => {
             println!("activation acknowledged; the devices reboot in about 100 ms");
@@ -256,7 +250,7 @@ fn fmt_version([major, minor, patch]: Version) -> String {
     format!("{major}.{minor}.{patch}")
 }
 
-fn print_versions<L: Exchange>(driver: &mut Driver<L>, label: &str) -> Result<Vec<Version>> {
+fn print_versions(driver: &mut Driver, label: &str) -> Result<Vec<Version>> {
     let versions: Vec<Version> = driver
         .read_firmware_info()?
         .iter()
@@ -271,7 +265,7 @@ fn print_versions<L: Exchange>(driver: &mut Driver<L>, label: &str) -> Result<Ve
     Ok(versions)
 }
 
-fn print_running_images<L: Exchange>(driver: &mut Driver<L>) -> Result<Vec<Option<RunningImage>>> {
+fn print_running_images(driver: &mut Driver) -> Result<Vec<Option<RunningImage>>> {
     let images = driver.read_running_image()?;
     for (device, &image) in images.iter().enumerate() {
         println!("device {device}: CPU {}", describe_running_image(image));
@@ -279,7 +273,7 @@ fn print_running_images<L: Exchange>(driver: &mut Driver<L>) -> Result<Vec<Optio
     Ok(images)
 }
 
-fn print_fpga<L: Exchange>(driver: &mut Driver<L>, label: &str) -> Result<Vec<FpgaBootImage>> {
+fn print_fpga(driver: &mut Driver, label: &str) -> Result<Vec<FpgaBootImage>> {
     let infos = driver.read_firmware_info()?;
     for (device, info) in infos.iter().enumerate() {
         println!(
@@ -389,11 +383,7 @@ fn check_trial(
     .into())
 }
 
-fn run_fpga<L: Exchange>(
-    driver: &mut Driver<L>,
-    image: &FpgaFirmwareImage,
-    activate: bool,
-) -> Result<()> {
+fn run_fpga(driver: &mut Driver, image: &FpgaFirmwareImage, activate: bool) -> Result<()> {
     print_fpga(driver, "before")?;
     driver.update_fpga(image, progress_printer(image.len()))?;
     end_progress();
@@ -412,7 +402,7 @@ fn run_fpga<L: Exchange>(
         println!(
             "activation acknowledged; waiting {FPGA_RECONFIG_WAIT:?} for the FPGAs to reconfigure"
         );
-        driver.idle(FPGA_RECONFIG_WAIT)?;
+        std::thread::sleep(FPGA_RECONFIG_WAIT);
         if attempt == FPGA_ACTIVATE_ATTEMPTS {
             break;
         }
@@ -442,7 +432,7 @@ fn run_fpga<L: Exchange>(
     Ok(())
 }
 
-fn run<L: Exchange>(link: L, stage: Stage<'_>) -> Result<Outcome> {
+fn run(link: UdpLink, stage: Stage<'_>) -> Result<Outcome> {
     let mut driver = Driver::new(link);
     let devices = driver.num_devices();
     println!("{devices} device(s) on the bus");
@@ -521,12 +511,7 @@ fn main_reboot(cli: &Cli) -> Result<()> {
     Ok(())
 }
 
-fn reconnect_and_run<L: Exchange>(
-    cli: &Cli,
-    connect: Connect<'_, L>,
-    devices: usize,
-    stage: Stage<'_>,
-) -> Result<Outcome> {
+fn reconnect_and_run(cli: &Cli, devices: usize, stage: Stage<'_>) -> Result<Outcome> {
     let attempts = cli.reconnect_attempts.max(1);
     let hint = match stage {
         Stage::Verify {
@@ -538,7 +523,7 @@ fn reconnect_and_run<L: Exchange>(
     let mut attempt = 0;
     loop {
         attempt += 1;
-        match open_and_run(connect, devices, stage) {
+        match open_and_run(&cli.udp, devices, stage) {
             Ok(outcome) => return Ok(outcome),
             Err(e) if is_final(&e) => return Err(e),
             Err(e) if attempt < attempts => {
@@ -562,9 +547,8 @@ const RELEASE_FPGA_IMAGE_HINT: &str =
     "the FPGA update image in the release bundle is not usable; retry with `--force-download`";
 
 fn main_fpga(cli: &Cli, bytes: Vec<u8>, invalid_image_hint: &'static str) -> Result<()> {
-    let connect: Connect<'_, _> = &|devices| Ok(cli.udp.open(devices)?);
     if cli.verify_only {
-        open_and_run(connect, cli.devices, Stage::FpgaVerify)?;
+        open_and_run(&cli.udp, cli.devices, Stage::FpgaVerify)?;
         return Ok(());
     }
     let image = FpgaFirmwareImage::from_update_bin(bytes).context(invalid_image_hint)?;
@@ -574,7 +558,7 @@ fn main_fpga(cli: &Cli, bytes: Vec<u8>, invalid_image_hint: &'static str) -> Res
         image.crc32()
     );
     open_and_run(
-        connect,
+        &cli.udp,
         cli.devices,
         Stage::FpgaUpdate {
             image: &image,
@@ -618,18 +602,13 @@ fn main_cpu(cli: &Cli, bytes: &[u8], release: Option<Version>) -> Result<()> {
         image.len(),
         image.crc32()
     );
-    update_cpu(cli, &|devices| Ok(cli.udp.open(devices)?), &image, release)
+    update_cpu(cli, &image, release)
 }
 
-fn update_cpu<L: Exchange>(
-    cli: &Cli,
-    connect: Connect<'_, L>,
-    image: &CpuFirmwareImage,
-    release: Option<Version>,
-) -> Result<()> {
+fn update_cpu(cli: &Cli, image: &CpuFirmwareImage, release: Option<Version>) -> Result<()> {
     if cli.verify_only || cli.confirm_only {
         open_and_run(
-            connect,
+            &cli.udp,
             cli.devices,
             Stage::Verify {
                 confirm: cli.confirm_only,
@@ -641,7 +620,7 @@ fn update_cpu<L: Exchange>(
         return Ok(());
     }
     let activate = !cli.no_activate;
-    let before = open_and_run(connect, cli.devices, Stage::Update { image, activate })?;
+    let before = open_and_run(&cli.udp, cli.devices, Stage::Update { image, activate })?;
     if !activate {
         println!(
             "not activated (--no-activate); the committed image boots as a trial at the next \
@@ -659,7 +638,6 @@ fn update_cpu<L: Exchange>(
         std::thread::sleep(wait);
         let outcome = reconnect_and_run(
             cli,
-            connect,
             before.devices,
             Stage::Verify {
                 confirm: !cli.no_confirm,

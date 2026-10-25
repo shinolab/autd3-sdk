@@ -4,7 +4,7 @@ use clap::{Args, Parser, Subcommand};
 use autd3_cpu_wire::config::{CpuConfig, FpgaBusWait};
 use autd3_cpu_wire::payload::{ReadFpgaMemoryPayload, SetCpuConfigPayload, WriteFpgaMemoryPayload};
 use autd3_cpu_wire::{Cmd, PAYLOAD_BYTES, REPLY_DATA_BYTES_MAX};
-use autd3_rs_firmware_ota::{Driver, Exchange, UdpArgs, datagram_with_payload};
+use autd3_rs_firmware_ota::{Driver, UdpArgs, datagram_with_payload};
 
 const WORDS_PER_LINE: usize = 8;
 const REPORTED_ERRORS_PER_DEVICE: usize = 8;
@@ -129,7 +129,7 @@ fn ensure_inside_the_bus(addr: u16, words: usize) -> Result<()> {
     Ok(())
 }
 
-fn read<L: Exchange>(driver: &mut Driver<L>, addr: u16, count: usize) -> Result<Vec<Vec<u16>>> {
+fn read(driver: &mut Driver, addr: u16, count: usize) -> Result<Vec<Vec<u16>>> {
     let mut words = vec![Vec::with_capacity(count); driver.num_devices()];
     let per_frame = REPLY_DATA_BYTES_MAX / size_of::<u16>();
     for (addr, start) in (addr..=u16::MAX)
@@ -160,7 +160,7 @@ fn read<L: Exchange>(driver: &mut Driver<L>, addr: u16, count: usize) -> Result<
     Ok(words)
 }
 
-fn write<L: Exchange>(driver: &mut Driver<L>, addr: u16, words: &[u16]) -> Result<()> {
+fn write(driver: &mut Driver, addr: u16, words: &[u16]) -> Result<()> {
     let per_frame = (PAYLOAD_BYTES - size_of::<WriteFpgaMemoryPayload>()) / size_of::<u16>();
     for (addr, chunk) in (addr..=u16::MAX)
         .step_by(per_frame)
@@ -178,7 +178,7 @@ fn write<L: Exchange>(driver: &mut Driver<L>, addr: u16, words: &[u16]) -> Resul
     Ok(())
 }
 
-fn set_bus_wait<L: Exchange>(driver: &mut Driver<L>, wait: FpgaBusWait) -> Result<()> {
+fn set_bus_wait(driver: &mut Driver, wait: FpgaBusWait) -> Result<()> {
     let config = CpuConfig {
         fpga_bus_wait: wait,
         ..CpuConfig::default()
@@ -204,12 +204,7 @@ struct TestErrors {
     reported: Vec<String>,
 }
 
-fn test<L: Exchange>(
-    driver: &mut Driver<L>,
-    addr: u16,
-    count: usize,
-    iterations: u32,
-) -> Result<Vec<TestErrors>> {
+fn test(driver: &mut Driver, addr: u16, count: usize, iterations: u32) -> Result<Vec<TestErrors>> {
     let mut errors: Vec<TestErrors> = (0..driver.num_devices())
         .map(|_| TestErrors::default())
         .collect();
@@ -279,7 +274,7 @@ fn first_difference(addr: u16, expected: &[u16], devices: &[Vec<u16>]) -> Option
     })
 }
 
-fn open(chain: &Chain) -> Result<Driver<impl Exchange>> {
+fn open(chain: &Chain) -> Result<Driver> {
     Ok(Driver::new(chain.udp.open(chain.devices)?))
 }
 

@@ -23,35 +23,28 @@ pub enum TransducerMaskError {
     },
 }
 
-fn validate_shape(
-    geometry: &Geometry,
-    num_devices: usize,
-    num_transducers: impl Fn(usize) -> usize,
-) -> Result<(), TransducerMaskError> {
-    if num_devices != geometry.num_devices() {
-        return Err(TransducerMaskError::DeviceCountMismatch {
-            got: num_devices,
-            expected: geometry.num_devices(),
-        });
-    }
-    for (device, dev) in geometry.iter().enumerate() {
-        let got = num_transducers(device);
-        if got != dev.num_transducers() {
-            return Err(TransducerMaskError::TransducerCountMismatch {
-                device,
-                got,
-                expected: dev.num_transducers(),
-            });
-        }
-    }
-    Ok(())
-}
-
 impl TransducerMask<'_> {
     pub fn validate(self, geometry: &Geometry) -> Result<(), TransducerMaskError> {
         match self {
             Self::AllEnabled => Ok(()),
-            Self::Masked(m) => validate_shape(geometry, m.len(), |device| m[device].len()),
+            Self::Masked(m) => {
+                if m.len() != geometry.num_devices() {
+                    return Err(TransducerMaskError::DeviceCountMismatch {
+                        got: m.len(),
+                        expected: geometry.num_devices(),
+                    });
+                }
+                for (device, (row, dev)) in m.iter().zip(geometry.iter()).enumerate() {
+                    if row.len() != dev.num_transducers() {
+                        return Err(TransducerMaskError::TransducerCountMismatch {
+                            device,
+                            got: row.len(),
+                            expected: dev.num_transducers(),
+                        });
+                    }
+                }
+                Ok(())
+            }
         }
     }
 

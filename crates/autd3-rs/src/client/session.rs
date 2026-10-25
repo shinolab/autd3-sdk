@@ -626,13 +626,10 @@ impl Session {
 
     fn receive_available(&self) -> Result<(), NetworkCause> {
         loop {
-            let polled = self
-                .channel
-                .try_recv_from_device(DeviceReply::parse)
-                .map_err(|e| {
-                    tracing::error!("receiving failed: {e}");
-                    NetworkCause::new(UdpError::from(e))
-                })?;
+            let polled = self.channel.try_recv_from_device().map_err(|e| {
+                tracing::error!("receiving failed: {e}");
+                NetworkCause::new(UdpError::from(e))
+            })?;
             match polled {
                 Polled::Empty => {
                     self.lock_state()

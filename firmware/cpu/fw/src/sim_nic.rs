@@ -92,6 +92,7 @@ pub(crate) struct Sent {
     pub(crate) frame: Vec<u8>,
     pub(crate) port: u8,
     pub(crate) at: f64,
+    #[cfg(not(loom))]
     pub(crate) timestamp: bool,
 }
 
@@ -177,6 +178,7 @@ impl Nic for SimNic {
             frame: frame.to_vec(),
             port,
             at: self.t,
+            #[cfg(not(loom))]
             timestamp,
         });
         true

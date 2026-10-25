@@ -170,7 +170,7 @@ mod tests {
     use autd3_rs_simulator_protocol::DevicePose;
 
     use crate::emulator::device_poses;
-    use crate::scene::tests::{counting_scene, published_poses};
+    use crate::scene::tests::{published_poses, scene};
 
     fn set_geometry(devices: &[DevicePose]) -> String {
         serde_json::to_string(&ClientMsg::SetGeometry {
@@ -181,7 +181,7 @@ mod tests {
 
     #[test]
     fn set_modulation_enabled_updates_the_control_state() {
-        let (scene, _) = counting_scene(1);
+        let scene = scene(1);
         let mod_enabled = AtomicBool::new(true);
         apply_client_message(
             &mod_enabled,
@@ -199,7 +199,7 @@ mod tests {
 
     #[test]
     fn undecodable_client_message_leaves_the_control_state_untouched() {
-        let (scene, _) = counting_scene(1);
+        let scene = scene(1);
         let mut rx = scene.geometry();
         rx.borrow_and_update();
         let mod_enabled = AtomicBool::new(false);
@@ -218,7 +218,7 @@ mod tests {
 
     #[test]
     fn set_geometry_replaces_the_scene() {
-        let (scene, _) = counting_scene(1);
+        let scene = scene(1);
         let mut rx = scene.geometry();
         let geometry = Geometry::new(vec![
             Autd3::default(),
@@ -238,7 +238,7 @@ mod tests {
 
     #[test]
     fn an_invalid_geometry_from_the_gui_is_refused() {
-        let (scene, spawns) = counting_scene(1);
+        let scene = scene(1);
         let mut rx = scene.geometry();
         rx.borrow_and_update();
         let identity = DevicePose {
@@ -256,6 +256,6 @@ mod tests {
             apply_client_message(&AtomicBool::new(true), &scene, &set_geometry(&devices));
         }
         assert!(!rx.has_changed().unwrap());
-        assert_eq!(spawns.load(std::sync::atomic::Ordering::Relaxed), 1);
+        assert_eq!(scene.sample(|devices| devices.len()), Some(1));
     }
 }

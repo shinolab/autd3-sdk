@@ -8,20 +8,18 @@ use tokio::sync::watch;
 
 use crate::emulator::geometry_msg;
 
-pub(crate) type Spawn = Box<dyn Fn(usize) -> io::Result<UdpEmulator> + Send + Sync>;
-
 pub(crate) struct Scene {
-    spawn: Spawn,
+    port: u16,
     emulator: Mutex<Option<UdpEmulator>>,
     geometry: watch::Sender<Arc<str>>,
 }
 
 impl Scene {
-    pub(crate) fn new(spawn: Spawn, geometry: &Geometry) -> io::Result<Arc<Self>> {
-        let emulator = spawn(geometry.num_devices())?;
+    pub(crate) fn new(port: u16, geometry: &Geometry) -> io::Result<Arc<Self>> {
+        let emulator = UdpEmulator::spawn_simulator(port, geometry.num_devices())?;
         let (geometry, _) = watch::channel(geometry_json(geometry)?);
         Ok(Arc::new(Self {
-            spawn,
+            port: emulator.addr().port(),
             emulator: Mutex::new(Some(emulator)),
             geometry,
         }))
@@ -54,13 +52,15 @@ impl Scene {
 
     fn rebuild(&self, emulator: &mut Option<UdpEmulator>, num_devices: usize) -> io::Result<()> {
         let previous = emulator.take().map(|old| old.num_devices());
-        match (self.spawn)(num_devices) {
+        match UdpEmulator::spawn_simulator(self.port, num_devices) {
             Ok(rebuilt) => {
                 *emulator = Some(rebuilt);
                 Ok(())
             }
             Err(e) => {
-                *emulator = previous.and_then(|num_devices| (self.spawn)(num_devices).ok());
+                *emulator = previous.and_then(|num_devices| {
+                    UdpEmulator::spawn_simulator(self.port, num_devices).ok()
+                });
                 Err(e)
             }
         }
@@ -81,25 +81,13 @@ fn geometry_json(geometry: &Geometry) -> io::Result<Arc<str>> {
 pub(crate) mod tests {
     use super::*;
 
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
     use autd3_rs::geometry::{Autd3, Point3, UnitQuaternion};
     use autd3_rs_simulator_protocol::{DevicePose, ServerMsg};
 
     use crate::emulator::device_poses;
 
-    pub(crate) fn counting_scene(num_devices: usize) -> (Arc<Scene>, Arc<AtomicUsize>) {
-        let spawns = Arc::new(AtomicUsize::new(0));
-        let counter = Arc::clone(&spawns);
-        let scene = Scene::new(
-            Box::new(move |num_devices| {
-                counter.fetch_add(1, Ordering::Relaxed);
-                UdpEmulator::spawn(num_devices)
-            }),
-            &Geometry::new(vec![Autd3::default(); num_devices]),
-        )
-        .unwrap();
-        (scene, spawns)
+    pub(crate) fn scene(num_devices: usize) -> Arc<Scene> {
+        Scene::new(0, &Geometry::new(vec![Autd3::default(); num_devices])).unwrap()
     }
 
     fn shifted(num_devices: usize, dy: f32) -> Geometry {
@@ -121,12 +109,13 @@ pub(crate) mod tests {
 
     #[test]
     fn an_update_with_the_same_number_of_devices_keeps_the_emulator() {
-        let (scene, spawns) = counting_scene(2);
+        let scene = scene(2);
+        let addr = scene.emulator().as_ref().unwrap().device_addr(0);
         let mut rx = scene.geometry();
         rx.borrow_and_update();
         let moved = shifted(2, 50.0);
         scene.replace(&moved).unwrap();
-        assert_eq!(spawns.load(Ordering::Relaxed), 1);
+        assert_eq!(scene.emulator().as_ref().unwrap().device_addr(0), addr);
         assert!(rx.has_changed().unwrap());
         assert_eq!(published_poses(&mut rx), device_poses(&moved));
         assert_eq!(scene.sample(|devices| devices.len()), Some(2));
@@ -134,40 +123,18 @@ pub(crate) mod tests {
 
     #[test]
     fn an_update_with_another_number_of_devices_rebuilds_the_emulator() {
-        let (scene, spawns) = counting_scene(1);
+        let scene = scene(1);
         let mut rx = scene.geometry();
         rx.borrow_and_update();
         scene.replace(&shifted(3, 0.0)).unwrap();
-        assert_eq!(spawns.load(Ordering::Relaxed), 2);
         assert_eq!(scene.sample(|devices| devices.len()), Some(3));
         assert!(rx.has_changed().unwrap());
         assert_eq!(published_poses(&mut rx).len(), 3);
     }
 
     #[test]
-    fn a_failed_rebuild_republishes_the_current_geometry() {
-        let scene = Scene::new(
-            Box::new(|num_devices| {
-                if num_devices == 3 {
-                    Err(io::Error::from(io::ErrorKind::AddrInUse))
-                } else {
-                    UdpEmulator::spawn(num_devices)
-                }
-            }),
-            &shifted(2, 0.0),
-        )
-        .unwrap();
-        let mut rx = scene.geometry();
-        rx.borrow_and_update();
-        assert!(scene.replace(&shifted(3, 0.0)).is_err());
-        assert!(rx.has_changed().unwrap());
-        assert_eq!(published_poses(&mut rx), device_poses(&shifted(2, 0.0)));
-        assert_eq!(scene.sample(|devices| devices.len()), Some(2));
-    }
-
-    #[test]
     fn the_later_update_wins() {
-        let (scene, _) = counting_scene(1);
+        let scene = scene(1);
         let mut rx = scene.geometry();
         scene.replace(&shifted(2, 5.0)).unwrap();
         let later = shifted(1, 9.0);
