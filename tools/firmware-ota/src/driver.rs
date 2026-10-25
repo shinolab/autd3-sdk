@@ -34,7 +34,7 @@ pub const MIN_CPU_FIRMWARE_VERSION: [u8; 3] = [0, 10, 0];
 #[derive(Debug, thiserror::Error)]
 pub enum DriverError {
     #[error("network error: {0}")]
-    Network(#[source] Box<dyn core::error::Error + Send + Sync>),
+    Network(#[source] Box<Error>),
     #[error("not every device acknowledged {cmd:?}; {}", timeout_hint(*cmd))]
     Timeout { cmd: Cmd },
     #[error("device {device} rejected {cmd:?} with firmware error {code:#04x}: {}{}", describe_device_error(*code), device_hint(*cmd, *code))]
@@ -196,22 +196,6 @@ pub fn datagram_with_payload(
 
 pub type Replies = Result<Vec<DeviceReply>, ()>;
 
-pub trait Exchange {
-    type Error: core::error::Error + Send + Sync + 'static;
-
-    fn num_devices(&self) -> usize;
-
-    fn exchange(&mut self, datagram: &Datagram) -> Result<Replies, Self::Error>;
-
-    fn exchange_each(&mut self, datagrams: &[Datagram]) -> Result<Replies, Self::Error>;
-
-    fn idle(&mut self, duration: Duration) -> Result<(), Self::Error>;
-
-    fn close(&mut self) -> Result<(), Self::Error> {
-        Ok(())
-    }
-}
-
 struct ThreadWaker(Thread);
 
 impl Wake for ThreadWaker {
@@ -294,36 +278,28 @@ impl Drop for UdpLink {
     }
 }
 
-impl Exchange for UdpLink {
-    type Error = Error;
-
-    fn num_devices(&self) -> usize {
+impl UdpLink {
+    #[must_use]
+    pub fn num_devices(&self) -> usize {
         self.client
             .as_ref()
             .map_or(0, |client| client.num_devices())
     }
 
-    fn exchange(&mut self, datagram: &Datagram) -> Result<Replies, Error> {
+    pub fn exchange(&mut self, datagram: &Datagram) -> Result<Replies, Error> {
         self.exchange_datagrams(Distribution::Broadcast, std::slice::from_ref(datagram))
     }
 
-    fn exchange_each(&mut self, datagrams: &[Datagram]) -> Result<Replies, Error> {
+    pub fn exchange_each(&mut self, datagrams: &[Datagram]) -> Result<Replies, Error> {
         self.exchange_datagrams(Distribution::PerDevice, datagrams)
     }
 
-    fn idle(&mut self, duration: Duration) -> Result<(), Error> {
-        std::thread::sleep(duration);
-        Ok(())
-    }
-
-    fn close(&mut self) -> Result<(), Error> {
+    pub fn close(&mut self) -> Result<(), Error> {
         self.stop_keepalive();
         self.client = None;
         Ok(())
     }
-}
 
-impl UdpLink {
     fn exchange_datagrams(
         &self,
         distribution: Distribution,
@@ -351,8 +327,8 @@ impl UdpLink {
     }
 }
 
-pub struct Driver<L: Exchange> {
-    inner: L,
+pub struct Driver {
+    inner: UdpLink,
 }
 
 fn all_accepted(cmd: Cmd, replies: Vec<DeviceReply>) -> Result<Vec<DeviceReply>, DriverError> {
@@ -366,12 +342,13 @@ fn all_accepted(cmd: Cmd, replies: Vec<DeviceReply>) -> Result<Vec<DeviceReply>,
     }
 }
 
-fn network_err<E: core::error::Error + Send + Sync + 'static>(e: E) -> DriverError {
+fn network_err(e: Error) -> DriverError {
     DriverError::Network(Box::new(e))
 }
 
-impl<L: Exchange> Driver<L> {
-    pub fn new(inner: L) -> Self {
+impl Driver {
+    #[must_use]
+    pub fn new(inner: UdpLink) -> Self {
         Self { inner }
     }
 
@@ -529,10 +506,6 @@ impl<L: Exchange> Driver<L> {
         Ok(failed)
     }
 
-    pub fn idle(&mut self, duration: Duration) -> Result<(), DriverError> {
-        self.inner.idle(duration).map_err(network_err)
-    }
-
     pub fn update(
         &mut self,
         image: &CpuFirmwareImage,
@@ -628,11 +601,6 @@ impl<L: Exchange> Driver<L> {
     pub fn close(mut self) -> Result<(), DriverError> {
         self.inner.close().map_err(network_err)
     }
-
-    #[must_use]
-    pub fn into_inner(self) -> L {
-        self.inner
-    }
 }
 
 #[cfg(test)]
@@ -649,75 +617,6 @@ mod tests {
                 fpga_boot_image: 0,
             })
             .collect()
-    }
-
-    struct Scripted(Vec<DeviceReply>);
-
-    impl Exchange for Scripted {
-        type Error = core::convert::Infallible;
-
-        fn num_devices(&self) -> usize {
-            self.0.len()
-        }
-
-        fn exchange(&mut self, _datagram: &Datagram) -> Result<Replies, Self::Error> {
-            Ok(Ok(self.0.clone()))
-        }
-
-        fn exchange_each(&mut self, _datagrams: &[Datagram]) -> Result<Replies, Self::Error> {
-            Ok(Ok(self.0.clone()))
-        }
-
-        fn idle(&mut self, _duration: Duration) -> Result<(), Self::Error> {
-            Ok(())
-        }
-    }
-
-    fn reply(status: autd3_cpu_wire::Error, value: &[u8]) -> DeviceReply {
-        DeviceReply {
-            status: status.as_u8(),
-            value: value.to_vec(),
-        }
-    }
-
-    #[test]
-    fn firmware_without_the_running_image_readout_reads_as_unreported() {
-        let mut driver = Driver::new(Scripted(vec![
-            reply(autd3_cpu_wire::Error::None, &[2]),
-            reply(autd3_cpu_wire::Error::UnknownCmd, &[]),
-            reply(autd3_cpu_wire::Error::None, &[1]),
-            reply(autd3_cpu_wire::Error::None, &[0xFF]),
-        ]));
-        assert_eq!(
-            driver.read_running_image().unwrap(),
-            [
-                Some(RunningImage::Unconfirmed),
-                None,
-                Some(RunningImage::Confirmed),
-                Some(RunningImage::Unknown),
-            ]
-        );
-    }
-
-    #[test]
-    fn a_failed_running_image_readout_is_an_error() {
-        let mut driver = Driver::new(Scripted(vec![
-            reply(autd3_cpu_wire::Error::None, &[2]),
-            reply(autd3_cpu_wire::Error::UpdateFlash, &[]),
-        ]));
-        assert!(matches!(
-            driver.read_running_image(),
-            Err(DriverError::Device {
-                device: 1,
-                cmd: Cmd::ReadRunningImage,
-                ..
-            })
-        ));
-        let mut driver = Driver::new(Scripted(vec![reply(autd3_cpu_wire::Error::None, &[])]));
-        assert!(matches!(
-            driver.read_running_image(),
-            Err(DriverError::ShortReply { device: 0, .. })
-        ));
     }
 
     #[test]

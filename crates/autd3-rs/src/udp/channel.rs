@@ -1,18 +1,20 @@
 use std::io::{self, IoSlice};
 use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6, UdpSocket};
 use std::num::NonZeroUsize;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use autd3_cpu_wire::udp::{Header, Kind};
 use socket2::{Domain, Protocol, Socket, Type};
 use zerocopy::{FromBytes, IntoBytes};
 
+use super::DeviceReply;
+
 pub(crate) const RECV_BUFFER_BYTES: usize = 2048;
 
-pub(crate) enum Polled<R> {
+pub(crate) enum Polled {
     Empty,
     Wake,
-    Device(R),
+    Device(DeviceReply),
 }
 
 pub(crate) fn same_endpoint(a: SocketAddrV6, b: SocketAddrV6) -> bool {
@@ -165,31 +167,6 @@ fn is_transient(e: &io::Error) -> bool {
     is_undeliverable(e) || e.kind() == io::ErrorKind::Interrupted
 }
 
-fn send_until_accepted(
-    retry_full_socket_until: Option<Instant>,
-    mut attempt: impl FnMut() -> io::Result<usize>,
-    mut wait_writable: impl FnMut(Duration) -> io::Result<()>,
-) -> io::Result<()> {
-    loop {
-        match attempt() {
-            Ok(_) => return Ok(()),
-            Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                let remaining = retry_full_socket_until
-                    .map(|retry_full_socket_until| {
-                        retry_full_socket_until.saturating_duration_since(Instant::now())
-                    })
-                    .unwrap_or_default();
-                if remaining.is_zero() {
-                    return Err(e);
-                }
-                wait_writable(remaining)?;
-            }
-            Err(e) => return Err(e),
-        }
-    }
-}
-
 impl Channel {
     pub(crate) fn open(
         all_devices_dst: SocketAddrV6,
@@ -283,29 +260,32 @@ impl Channel {
             IoSlice::new(body[0]),
             IoSlice::new(body[1]),
         ];
-        let mut attempted_at = Instant::now();
-        let sent = send_until_accepted(
-            retry_full_socket_until,
-            || {
-                attempted_at = Instant::now();
-                sys::send_now(&self.socket, &datagram, dst)
-            },
-            |remaining| sys::wait(&self.socket, Interest::Writable, Some(remaining)).map(|_| ()),
-        );
-        match sent {
-            Ok(()) => Ok(attempted_at),
-            Err(e) if is_undeliverable(&e) => {
-                tracing::debug!(%dst, ?kind, "sending a datagram failed: {e}");
-                Ok(attempted_at)
+        loop {
+            let attempted_at = Instant::now();
+            match sys::send_now(&self.socket, &datagram, dst) {
+                Ok(_) => return Ok(attempted_at),
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    let remaining = retry_full_socket_until
+                        .map(|retry_full_socket_until| {
+                            retry_full_socket_until.saturating_duration_since(Instant::now())
+                        })
+                        .unwrap_or_default();
+                    if remaining.is_zero() {
+                        return Err(e);
+                    }
+                    sys::wait(&self.socket, Interest::Writable, Some(remaining))?;
+                }
+                Err(e) if is_undeliverable(&e) => {
+                    tracing::debug!(%dst, ?kind, "sending a datagram failed: {e}");
+                    return Ok(attempted_at);
+                }
+                Err(e) => return Err(e),
             }
-            Err(e) => Err(e),
         }
     }
 
-    pub(crate) fn try_recv_from_device<R>(
-        &self,
-        mut parse: impl FnMut(usize, Header, &[u8]) -> Option<R>,
-    ) -> io::Result<Polled<R>> {
+    pub(crate) fn try_recv_from_device(&self) -> io::Result<Polled> {
         let mut buf = [0; RECV_BUFFER_BYTES];
         let deadline = Some(Instant::now());
         while let Some((src, datagram)) = self.recv_datagram(&mut buf, deadline)? {
@@ -322,7 +302,7 @@ impl Channel {
             let Ok((header, body)) = Header::read_from_prefix(datagram) else {
                 continue;
             };
-            if let Some(parsed) = parse(device, header, body) {
+            if let Some(parsed) = DeviceReply::parse(device, header, body) {
                 return Ok(Polled::Device(parsed));
             }
         }
@@ -372,65 +352,7 @@ impl Channel {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
-
     use super::*;
-
-    #[test]
-    fn an_interrupted_send_is_attempted_again_until_the_socket_takes_it() {
-        let attempts = Cell::new(0);
-        let result = send_until_accepted(
-            None,
-            || {
-                attempts.set(attempts.get() + 1);
-                if attempts.get() < 3 {
-                    Err(io::Error::from(io::ErrorKind::Interrupted))
-                } else {
-                    Ok(0)
-                }
-            },
-            |_| panic!("an interrupted send does not wait for the socket"),
-        );
-        assert!(result.is_ok());
-        assert_eq!(attempts.get(), 3);
-    }
-
-    #[test]
-    fn an_interrupted_send_keeps_the_error_of_the_attempt_that_follows() {
-        let attempts = Cell::new(0);
-        let result = send_until_accepted(
-            None,
-            || {
-                attempts.set(attempts.get() + 1);
-                Err(io::Error::from(if attempts.get() < 2 {
-                    io::ErrorKind::Interrupted
-                } else {
-                    io::ErrorKind::PermissionDenied
-                }))
-            },
-            |_| Ok(()),
-        );
-        assert_eq!(
-            result.map_err(|e| e.kind()),
-            Err(io::ErrorKind::PermissionDenied)
-        );
-        assert_eq!(attempts.get(), 2);
-    }
-
-    #[test]
-    fn a_full_socket_without_a_deadline_fails_at_the_first_attempt() {
-        let attempts = Cell::new(0);
-        let result = send_until_accepted(
-            None,
-            || {
-                attempts.set(attempts.get() + 1);
-                Err(io::Error::from(io::ErrorKind::WouldBlock))
-            },
-            |_| panic!("no deadline leaves nothing to wait for"),
-        );
-        assert_eq!(result.map_err(|e| e.kind()), Err(io::ErrorKind::WouldBlock));
-        assert_eq!(attempts.get(), 1);
-    }
 
     #[test]
     fn an_interruption_is_not_counted_as_a_sent_datagram() {

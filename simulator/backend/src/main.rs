@@ -12,7 +12,6 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use autd3_cpu_wire::udp::PORT;
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs_firmware_emulator::udp::UdpEmulator;
 use autd3_rs_simulator_protocol::ServerMsg;
 use clap::Parser;
 use tokio::sync::watch;
@@ -49,11 +48,8 @@ async fn main() -> Result<()> {
     let mod_enabled = Arc::new(AtomicBool::new(true));
 
     let port = args.port;
-    let scene = Scene::new(
-        Box::new(move |num_devices| UdpEmulator::spawn_simulator(port, num_devices)),
-        &Geometry::new(vec![Autd3::default()]),
-    )
-    .context("binding the emulated devices; is another simulator running?")?;
+    let scene = Scene::new(port, &Geometry::new(vec![Autd3::default()]))
+        .context("binding the emulated devices; is another simulator running?")?;
     tracing::info!("emulated devices on [::1]:{port}; set the geometry in the Geometry tab");
     let geometry_rx = scene.geometry();
     let (state_rx, device_rx) = spawn_sampler(Arc::clone(&scene), Arc::clone(&mod_enabled))?;

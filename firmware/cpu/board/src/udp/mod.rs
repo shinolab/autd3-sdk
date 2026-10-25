@@ -216,7 +216,7 @@ fn advertise_pause_on(phy: u32) -> bool {
 
 pub(crate) fn tick(now_ms: u32) {
     let net = net();
-    net.node.tick(&mut net.nic, now_ms, &mut crate::cpu());
+    net.node.tick(&mut net.nic, now_ms, crate::cpu());
 }
 
 vic::irq_entry!(ethdmair_entry, ethdmair_isr);
@@ -234,13 +234,8 @@ extern "C" fn ethdmair_isr() {
                     port: (net.rx.0[RX_TAG_PORT_BYTE] >> RX_TAG_PORT_BIT) & 1,
                     timestamp_ns: u32::from_le_bytes(timestamp),
                 };
-                net.node.on_frame(
-                    &mut net.nic,
-                    now_ms,
-                    &net.rx.0[..len],
-                    meta,
-                    &mut crate::cpu(),
-                );
+                net.node
+                    .on_frame(&mut net.nic, now_ms, &net.rx.0[..len], meta, crate::cpu());
             }
         }
         gmac::release(rx.buffer);
@@ -252,8 +247,7 @@ extern "C" fn ethdmair_isr() {
 pub(crate) fn complete(msg_id: u16) {
     irq::without_irq(|| {
         let net = net();
-        net.node
-            .send_completion(&mut net.nic, msg_id, &mut crate::cpu());
+        net.node.send_completion(&mut net.nic, msg_id, crate::cpu());
     });
 }
 

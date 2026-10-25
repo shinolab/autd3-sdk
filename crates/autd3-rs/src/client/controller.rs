@@ -106,9 +106,11 @@ impl Controller {
         let (completion, response) = completion::channel();
         let mut completion = Some(completion);
         let msg_id = poll_fn(|cx| self.session.poll_enqueue(cx, &mut completion)).await?;
-        let exec_at = match exec_at::schedule(exec, self.session.lost_timeout(), || {
-            self.session.device_time()
-        }) {
+        let exec_at = match exec_at::schedule(
+            exec,
+            self.session.lost_timeout(),
+            self.session.device_time(),
+        ) {
             Ok(exec_at) => exec_at,
             Err(e) => {
                 self.session.cancel(msg_id);

@@ -3,7 +3,7 @@ use std::time::Duration;
 use autd3_rs::protocol::Cmd;
 use autd3_rs::{Datagram, TransportOption};
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
-use autd3_rs_firmware_ota::{DEFAULT_HEARTBEAT, Exchange, UdpLink};
+use autd3_rs_firmware_ota::{DEFAULT_HEARTBEAT, UdpLink};
 
 const SILENT_DEVICE: usize = 1;
 
