@@ -17,7 +17,7 @@ pub enum ExecAt {
 pub(crate) fn schedule(
     exec: ExecAt,
     lost_timeout: Duration,
-    now: impl FnOnce() -> Option<SysTime>,
+    now: Option<SysTime>,
 ) -> Result<u32, Error> {
     let limit = lost_timeout.min(EXEC_LEAD_LIMIT);
     match exec {
@@ -26,11 +26,11 @@ pub(crate) fn schedule(
             if lead >= limit {
                 return Err(PayloadError::ExecTooFarAhead { ahead: lead, limit }.into());
             }
-            let now = now().ok_or(Error::DeviceTimeUnknown)?;
+            let now = now.ok_or(Error::DeviceTimeUnknown)?;
             Ok(stamp(now + lead))
         }
         ExecAt::At(at) => {
-            let now = now().ok_or(Error::DeviceTimeUnknown)?;
+            let now = now.ok_or(Error::DeviceTimeUnknown)?;
             if at >= now {
                 let ahead = at - now;
                 if ahead >= limit {
@@ -68,7 +68,7 @@ mod tests {
     const NOW: SysTime = SysTime::from_nanos(20_000 * US);
 
     fn at_now(exec: ExecAt, lost_timeout: Duration) -> Result<u32, Error> {
-        schedule(exec, lost_timeout, || Some(NOW))
+        schedule(exec, lost_timeout, Some(NOW))
     }
 
     #[test]
@@ -88,14 +88,8 @@ mod tests {
     }
 
     #[test]
-    fn immediate_is_zero_and_does_not_read_the_device_time() {
-        assert_eq!(
-            schedule(ExecAt::Immediate, Duration::MAX, || unreachable!(
-                "the device time is read"
-            ))
-            .unwrap(),
-            0
-        );
+    fn immediate_is_zero_even_when_the_device_time_is_unknown() {
+        assert_eq!(schedule(ExecAt::Immediate, Duration::MAX, None).unwrap(), 0);
     }
 
     #[test]
@@ -214,7 +208,7 @@ mod tests {
     fn an_absolute_time_2_pow_30_microseconds_or_more_behind_is_rejected() {
         let limit = Duration::from_micros(1 << 30);
         let now = SysTime::ZERO + limit + Duration::from_secs(1);
-        let schedule_at = |at| schedule(ExecAt::At(at), Duration::MAX, || Some(now));
+        let schedule_at = |at| schedule(ExecAt::At(at), Duration::MAX, Some(now));
         assert!(schedule_at(now - limit + Duration::from_nanos(1)).is_ok());
         assert!(matches!(
             schedule_at(now - limit),
@@ -226,15 +220,11 @@ mod tests {
     #[test]
     fn a_lead_or_an_absolute_time_with_an_unknown_device_time_fails() {
         assert!(matches!(
-            schedule(
-                ExecAt::Lead(Duration::from_millis(5)),
-                Duration::MAX,
-                || None
-            ),
+            schedule(ExecAt::Lead(Duration::from_millis(5)), Duration::MAX, None),
             Err(Error::DeviceTimeUnknown)
         ));
         assert!(matches!(
-            schedule(ExecAt::At(NOW), Duration::MAX, || None),
+            schedule(ExecAt::At(NOW), Duration::MAX, None),
             Err(Error::DeviceTimeUnknown)
         ));
     }
