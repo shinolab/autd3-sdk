@@ -1,7 +1,7 @@
 use autd3_cpu_wire::update::crc32;
 use autd3_rs_core::fpga_bitstream::{FpgaImageError, validate_update_image};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct FpgaFirmwareImage {
     bytes: Vec<u8>,
     crc32: u32,

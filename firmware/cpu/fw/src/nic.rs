@@ -2,13 +2,13 @@ use crate::net::Mac;
 
 pub const NS_PER_SEC: u64 = 1_000_000_000;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy)]
 pub struct TxStamp {
     pub ns: u32,
     pub overwritten: bool,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy)]
 pub struct RxMeta {
     pub port: u8,
     pub timestamp_ns: u32,
@@ -18,7 +18,7 @@ const IMMEDIATE_STEP_LIMIT_NS: i64 = 500_000_000;
 const IMMEDIATE_STEP_RESULT_MARGIN_NS: i64 = 10_000_000;
 const SECOND_WRAP_GUARD_NS: u64 = 10_000;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum TimeStep {
     Add(i32),
     Rewrite(u64),

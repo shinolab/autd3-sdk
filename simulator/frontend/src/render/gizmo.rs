@@ -2,7 +2,7 @@ use glam::{EulerRot, Quat, Vec3};
 
 pub(crate) const RING_SEGMENTS: u32 = 64;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 pub(crate) enum GizmoMode {
     Move,
     Rotate,

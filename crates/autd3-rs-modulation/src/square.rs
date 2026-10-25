@@ -5,7 +5,7 @@ use autd3_rs_core::value::SamplingConfig;
 use crate::error::ModulationError;
 use crate::sampling_mode::SamplingMode;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct SquareOption {
     pub low: u8,
     pub high: u8,

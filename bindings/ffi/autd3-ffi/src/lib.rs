@@ -878,7 +878,6 @@ pub unsafe extern "C" fn autd3_op_set_cpu_config(
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Autd3FpgaConfig {
     pub sync_phase_lock: bool,
 }
@@ -1553,7 +1552,7 @@ pub struct FirmwareVersionArray(Vec<Autd3FirmwareVersion>);
 pub struct TelemetryArray(Vec<Autd3Telemetry>);
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct Autd3DeviceStatus {
     pub state: u8,
     pub ptp_locked: bool,

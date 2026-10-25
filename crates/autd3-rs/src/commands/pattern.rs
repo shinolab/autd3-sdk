@@ -10,7 +10,7 @@ use crate::geometry::Device;
 use crate::protocol::Cmd;
 use crate::value::{PatternBank, Phase, TransitionMode};
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct Pattern<'a> {
     pub bank: PatternBank,
     pub phases: &'a [Vec<Phase>],

@@ -85,7 +85,7 @@ where
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Error)]
+#[derive(Clone, Debug, PartialEq, Error)]
 #[non_exhaustive]
 pub enum PayloadError {
     #[error("the number of devices must be 1..={max}, got {got}")]

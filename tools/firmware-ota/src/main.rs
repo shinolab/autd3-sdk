@@ -45,7 +45,7 @@ impl Target {
     }
 }
 
-#[derive(Parser, Debug, Clone)]
+#[derive(Parser)]
 #[command(
     name = "autd3-firmware-ota",
     about,
@@ -183,7 +183,7 @@ struct TrialNotRunning {
     expected: String,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 struct OffTrial {
     device: usize,
     version: Version,

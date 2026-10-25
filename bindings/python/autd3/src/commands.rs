@@ -167,7 +167,7 @@ impl SetSilencerPy {
     frozen,
     from_py_object
 )]
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct PtpConfigPy(CorePtpConfig);
 
 impl core::hash::Hash for PtpConfigPy {
@@ -331,7 +331,7 @@ impl PtpConfigPy {
     frozen,
     from_py_object
 )]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct FpgaBusWaitPy(CoreFpgaBusWait);
 
 impl core::hash::Hash for FpgaBusWaitPy {
@@ -372,7 +372,7 @@ impl FpgaBusWaitPy {
     frozen,
     from_py_object
 )]
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct CpuConfigPy(CoreCpuConfig);
 
 impl core::hash::Hash for CpuConfigPy {
@@ -486,7 +486,7 @@ impl SetCpuConfigPy {
     frozen,
     from_py_object
 )]
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct FpgaConfigPy(CoreFpgaConfig);
 
 impl core::hash::Hash for FpgaConfigPy {

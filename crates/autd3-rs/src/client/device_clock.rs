@@ -2,13 +2,13 @@ use std::time::Instant;
 
 use crate::value::SysTime;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 struct DeviceTimeSample {
     host: Instant,
     device: SysTime,
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Default)]
 pub(crate) struct DeviceClock {
     last_sample: Option<DeviceTimeSample>,
 }

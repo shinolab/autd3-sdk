@@ -62,7 +62,7 @@ pub trait LinAlgBackend {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NalgebraBackend;
 
 impl LinAlgBackend for NalgebraBackend {

@@ -25,7 +25,6 @@ pub(crate) struct Pipelines {
     pub(crate) quantize_write: wgpu::ComputePipeline,
 }
 
-#[derive(Clone, Copy)]
 enum Kind {
     Read,
     ReadWrite,

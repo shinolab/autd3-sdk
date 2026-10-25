@@ -106,7 +106,6 @@ impl Amplitude {
     }
 }
 
-#[derive(Clone, Copy)]
 enum AmpKind {
     Pa,
     KPa,
@@ -114,7 +113,6 @@ enum AmpKind {
 }
 
 #[pyclass(name = "_AmplitudeUnit", module = "autd3_pattern_holo")]
-#[derive(Clone, Copy)]
 pub struct AmplitudeUnit(AmpKind);
 
 impl AmplitudeUnit {

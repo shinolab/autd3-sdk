@@ -11,7 +11,7 @@ use crate::directivity::Directivity;
 use crate::error::HoloError;
 use crate::linear_synthesis::batch::{BatchSetup, solve_batched};
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct GspatOption<'a> {
     pub repeat: NonZeroUsize,
     pub constraint: IntensityConstraint,

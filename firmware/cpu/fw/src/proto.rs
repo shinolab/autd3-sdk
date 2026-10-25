@@ -60,7 +60,7 @@ impl Reply {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum Drained {
     Empty,
     Completed { msg_id: u16 },

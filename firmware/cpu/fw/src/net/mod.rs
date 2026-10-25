@@ -27,7 +27,7 @@ pub const fn is_link_local_unicast(ip: &Ipv6) -> bool {
     ip[0] == 0xFE && ip[1] & 0xC0 == 0x80
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy)]
 pub struct Endpoint {
     pub mac: Mac,
     pub ip: Ipv6,

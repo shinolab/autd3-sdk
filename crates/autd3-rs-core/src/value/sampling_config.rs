@@ -18,7 +18,7 @@ pub const fn is_integer(a: f64) -> bool {
     dist < IS_INTEGER_EPSILON + a.abs() * (f64::EPSILON * 16.0)
 }
 
-#[derive(Debug, PartialEq, Copy, Clone, thiserror::Error)]
+#[derive(Debug, PartialEq, Clone, thiserror::Error)]
 #[non_exhaustive]
 pub enum SamplingConfigError {
     #[error("Sampling frequency ({0:?}) must divide the ultrasound frequency")]

@@ -22,7 +22,7 @@ use crate::sound_field::{SoundFieldOption, distances, num_frames, observe_points
 
 pub(super) const P0: f32 = T4010A1_AMPLITUDE * SQRT_2 / (4.0 * PI);
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct InstantRecordOption {
     pub sound_speed: Velocity,
     pub time_step: Duration,

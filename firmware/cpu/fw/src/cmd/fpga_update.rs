@@ -19,7 +19,6 @@ use crate::port::Port;
 use crate::proto::{Cmd, Error};
 
 bitflags::bitflags! {
-    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
     struct FlashStatus: u16 {
         const BUSY = 1 << 0;
     }

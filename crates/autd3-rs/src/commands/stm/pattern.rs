@@ -17,7 +17,7 @@ pub struct PatternStmOption {
     pub transition_mode: TransitionMode,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct PatternStm<'a> {
     pub config: SamplingConfig,
     pub phases: &'a [Vec<Vec<Phase>>],

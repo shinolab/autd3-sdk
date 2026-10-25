@@ -27,20 +27,18 @@ fn offset_ns(minuend: i64, subtrahend: i64) -> Option<i64> {
         .filter(|offset| offset.checked_neg().is_some())
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum TxTimestamp {
     Pending,
     Stale,
     At(u64),
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum MasterState {
     Idle,
     WaitSyncTs { seq: u16, since: u32 },
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 enum Pairing {
     Idle,
     GotSync { seq: u16, t2: u64, correction: i64 },
@@ -63,7 +61,7 @@ enum DelayState {
     },
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy)]
 struct Unlocked {
     counted_ms: u32,
     counted_until_ms: u32,
