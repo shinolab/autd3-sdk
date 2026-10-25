@@ -11,8 +11,8 @@ use crate::udp::{
     same_endpoint, set_time_body,
 };
 
-use crate::client::GRANDMASTER_UNIT_ID;
 use crate::client::device_clock::DeviceClock;
+use crate::client::{GRANDMASTER_UNIT_ID, unit_id_of};
 
 pub(super) const REQUEST_REPLY_WAIT: Duration = Duration::from_millis(200);
 const EXCHANGE_ATTEMPTS: usize = 3;
@@ -25,10 +25,6 @@ const DEVICE_TIME_AT_OPEN: SysTime = SysTime::ZERO;
 
 fn deadline_passed(deadline: Option<Instant>) -> bool {
     deadline.is_some_and(|deadline| Instant::now() >= deadline)
-}
-
-fn unit_id_of(device: usize) -> u8 {
-    u8::try_from(device).expect("at most 255 devices")
 }
 
 const fn role_of(unit_id: u8) -> Role {

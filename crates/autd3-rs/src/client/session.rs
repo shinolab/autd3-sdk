@@ -18,10 +18,10 @@ use crate::response::Response;
 use crate::udp::{Channel, DeviceReply, Polled, Reply, TransportOption, UdpError};
 use crate::value::SysTime;
 
-use super::GRANDMASTER_UNIT_ID;
 use super::completion::ResponseSender;
 use super::device_clock::DeviceClock;
 use super::liveness::DeviceLiveness;
+use super::{GRANDMASTER_UNIT_ID, unit_id_of};
 
 const IDLE_WAIT: Duration = Duration::from_secs(1);
 
@@ -274,14 +274,14 @@ impl SessionState {
 
     fn receive_reply(&mut self, reply: &DeviceReply, now: Instant) -> Option<InflightRequest> {
         let device = reply.reply.device;
-        let expected_unit_id = u8::try_from(device).expect("a device index is below MAX_DEVICES");
+        let expected_unit_id = unit_id_of(device);
         let liveness = &mut self.liveness[device];
         let accepted =
             liveness.accept_reply(expected_unit_id, reply.reported_unit_id, reply.flags, now);
         if !accepted {
             return None;
         }
-        if device == usize::from(GRANDMASTER_UNIT_ID)
+        if expected_unit_id == GRANDMASTER_UNIT_ID
             && let Some(sys_time) = NonZeroU64::new(reply.reply.sys_time)
         {
             self.device_clock
