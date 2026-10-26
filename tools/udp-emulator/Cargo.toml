@@ -1,0 +1,21 @@
+[package]
+name = "autd3-rs-udp-emulator"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+description = "Run emulated AUTD3 devices on the loopback (`[::1]`) over UDP until stdin is closed (used by the doc sample runner)."
+
+[[bin]]
+name = "autd3-udp-emulator"
+path = "src/main.rs"
+
+[dependencies]
+autd3-rs-firmware-emulator = { workspace = true, features = ["udp"] }
+clap.workspace = true
+anyhow.workspace = true
+
+[lints]
+workspace = true
