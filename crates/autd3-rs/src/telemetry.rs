@@ -17,18 +17,32 @@ pub struct Telemetry {
 
 impl Telemetry {
     pub(crate) fn parse(value: &[u8]) -> Option<Self> {
-        let (wire, _) = autd3_cpu_wire::payload::Telemetry::read_from_prefix(value).ok()?;
+        let (
+            autd3_cpu_wire::payload::Telemetry {
+                fifo_drop,
+                dispatch_error,
+                processed,
+                send_failure,
+                failsafe,
+                ptp_unlock_failsafe,
+                sync_resync,
+                boot_failure,
+                cpu_watchdog,
+                exec_late,
+            },
+            _,
+        ) = autd3_cpu_wire::payload::Telemetry::read_from_prefix(value).ok()?;
         Some(Self {
-            fifo_drop: wire.fifo_drop.get(),
-            dispatch_error: wire.dispatch_error.get(),
-            processed: wire.processed.get(),
-            send_failure: wire.send_failure.get(),
-            failsafe: wire.failsafe.get(),
-            ptp_unlock_failsafe: wire.ptp_unlock_failsafe.get(),
-            sync_resync: wire.sync_resync,
-            boot_failure: wire.boot_failure,
-            cpu_watchdog: wire.cpu_watchdog,
-            exec_late: wire.exec_late.get(),
+            fifo_drop: fifo_drop.get(),
+            dispatch_error: dispatch_error.get(),
+            processed: processed.get(),
+            send_failure: send_failure.get(),
+            failsafe: failsafe.get(),
+            ptp_unlock_failsafe: ptp_unlock_failsafe.get(),
+            sync_resync,
+            boot_failure,
+            cpu_watchdog,
+            exec_late: exec_late.get(),
         })
     }
 }
