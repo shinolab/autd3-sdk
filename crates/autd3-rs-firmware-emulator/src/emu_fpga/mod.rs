@@ -239,16 +239,18 @@ impl FpgaEmulator {
     }
 
     fn reload(&mut self) {
-        let mut next =
-            Self::with_cpu_flash(self.num_transducers, core::mem::take(&mut self.cpu_flash));
-        next.next_sync_edge = self.next_sync_edge;
-        next.sys_time_ns = self.sys_time_ns;
-        next.thermal = self.thermal;
-        let old = core::mem::replace(self, next);
+        let old = core::mem::replace(
+            self,
+            Self::with_cpu_flash(self.num_transducers, Box::default()),
+        );
+        self.cpu_flash = old.cpu_flash;
+        self.next_sync_edge = old.next_sync_edge;
+        self.sys_time_ns = old.sys_time_ns;
+        self.thermal = old.thermal;
         self.reset_count = old.reset_count;
+        self.reconfig_count = old.reconfig_count;
         self.flash = old.flash;
         self.flash.configure_from_flash();
-        self.reconfig_count = old.reconfig_count;
     }
 
     #[must_use]
