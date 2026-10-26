@@ -30,7 +30,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
                 .collect()
         })
         .collect();
-    ctx.send(SetPhaseCorrection { phases: &phases }).await?;
+    ctx.send(SetPhaseCorrection { phases }).await?;
 
     let emissions = buffers(ctx.geometry, Intensity::MAX);
     let mut modbuf = modulation_buffer();
@@ -48,7 +48,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
         .iter()
         .map(|dev| vec![Phase::ZERO; dev.num_transducers()])
         .collect();
-    ctx.send(SetPhaseCorrection { phases: &zero }).await?;
+    ctx.send(SetPhaseCorrection { phases: zero }).await?;
     wait_enter("Phase correction is cleared and the focus collapses").await;
     Ok(())
 }

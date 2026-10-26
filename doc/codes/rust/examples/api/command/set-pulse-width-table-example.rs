@@ -18,7 +18,7 @@ async fn main() -> anyhow::Result<()> {
         *width = PulseWidth::new(i)?;
     }
 
-    client.send(SetPulseWidthTable { table: &table }).await?;
+    client.send(SetPulseWidthTable { table }).await?;
 
     client.close()?;
     // HIDE

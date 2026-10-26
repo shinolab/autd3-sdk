@@ -22,7 +22,7 @@ import { excerpt } from "@lib/excerpt";
 
 | Field   | Type                    | Description                                              |
 | ------- | ----------------------- | ------------------------------------------------------- |
-| `table` | `&[PulseWidth; PWE_TABLE_SIZE]` | Pulse width per intensity index (0–255) (256 elements) |
+| `table` | `[PulseWidth; PWE_TABLE_SIZE]` | Pulse width per intensity index (0–255) (256 elements) |
 
 A `PulseWidth` is made with `PulseWidth::new(u16)` (a pulse width in 512 steps per period) or `PulseWidth::from_duty(f32)` (a duty ratio), and its value is read with `pulse_width()`.
 The range is validated at construction: `new` returns `Err(PulseWidthError)` outside `[0, 512)`, and `from_duty` outside `[0, 1)`.

@@ -500,7 +500,7 @@ mod tests {
 
         let num_transducers = h.fpga().num_transducers();
         let masks = vec![(0..num_transducers).map(|i| i % 2 == 0).collect::<Vec<_>>()];
-        h.send(SetOutputMask { masks: &masks });
+        h.send(SetOutputMask { masks });
 
         let states = h.states();
         assert_eq!(states.len(), num_transducers);

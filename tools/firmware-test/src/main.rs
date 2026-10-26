@@ -317,7 +317,7 @@ pub async fn mute(client: &Client) -> bool {
     use autd3_rs::commands::SetPulseWidthTable;
     let sent = client
         .send(SetPulseWidthTable {
-            table: &SetPulseWidthTable::empty_table(),
+            table: SetPulseWidthTable::empty_table(),
         })
         .await;
     if let Err(e) = &sent {

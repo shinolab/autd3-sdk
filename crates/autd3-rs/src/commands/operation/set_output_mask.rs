@@ -8,13 +8,13 @@ use crate::protocol::Cmd;
 use super::{Distribution, Operation, checked_device_row, encode_header_only};
 
 #[derive(Clone, Debug)]
-pub struct SetOutputMask<'a> {
-    pub masks: &'a [Vec<bool>],
+pub struct SetOutputMask {
+    pub masks: Vec<Vec<bool>>,
 }
 
-impl crate::sealed::Sealed for SetOutputMask<'_> {}
+impl crate::sealed::Sealed for SetOutputMask {}
 
-impl Operation for SetOutputMask<'_> {
+impl Operation for SetOutputMask {
     fn distribution(&self) -> Distribution {
         Distribution::PerDevice
     }
@@ -23,7 +23,7 @@ impl Operation for SetOutputMask<'_> {
         encode_header_only(
             out,
             Cmd::SetOutputMask,
-            &OutputMaskPayload::new(checked_device_row(self.masks, device)?),
+            &OutputMaskPayload::new(checked_device_row(&self.masks, device)?),
         );
         Ok(())
     }
@@ -45,8 +45,7 @@ mod tests {
         mask[8] = true;
         mask[16] = true;
         mask[n - 1] = true;
-        let data = vec![mask];
-        let (cmd, out) = encode(&SetOutputMask { masks: &data }).unwrap();
+        let (cmd, out) = encode(&SetOutputMask { masks: vec![mask] }).unwrap();
         assert_eq!(cmd, (Cmd::SetOutputMask, size_of::<OutputMaskPayload>()));
         let mut expected = [0u8; size_of::<OutputMaskPayload>()];
         expected[0] = 0b0000_1001;
@@ -62,7 +61,7 @@ mod tests {
         let data = vec![vec![true; dev.num_transducers()]];
         let mut out = Datagram::no_payload(Cmd::Nop);
         assert!(matches!(
-            SetOutputMask { masks: &data }.encode(&dev, &mut out),
+            SetOutputMask { masks: data }.encode(&dev, &mut out),
             Err(Error::InvalidPayload(_))
         ));
     }
@@ -72,7 +71,7 @@ mod tests {
         let dev = test_device(0);
         let data = vec![vec![true; dev.num_transducers() + 1]];
         assert!(matches!(
-            encode(&SetOutputMask { masks: &data }),
+            encode(&SetOutputMask { masks: data }),
             Err(Error::InvalidPayload(
                 PayloadError::TransducerCountMismatch { .. }
             ))
