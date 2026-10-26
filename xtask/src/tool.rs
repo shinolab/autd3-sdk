@@ -53,6 +53,17 @@ pub(crate) enum ToolCmd {
         )]
         args: Vec<String>,
     },
+    #[command(about = "Run emulated devices on the loopback until stdin is closed")]
+    UdpEmulator {
+        #[arg(long, help = "Build the dev profile instead of release")]
+        debug: bool,
+        #[arg(
+            trailing_var_arg = true,
+            allow_hyphen_values = true,
+            help = "Arguments forwarded to the tool (`--devices N`)"
+        )]
+        args: Vec<String>,
+    },
 }
 
 pub(crate) fn run_tool(root: &Path, cmd: ToolCmd) -> Result<()> {
@@ -78,6 +89,13 @@ pub(crate) fn run_tool(root: &Path, cmd: ToolCmd) -> Result<()> {
             root,
             "autd3-rs-fpga-memory",
             "autd3-fpga-memory",
+            debug,
+            &args,
+        ),
+        ToolCmd::UdpEmulator { debug, args } => run_bin(
+            root,
+            "autd3-rs-udp-emulator",
+            "autd3-udp-emulator",
             debug,
             &args,
         ),
