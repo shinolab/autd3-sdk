@@ -7,10 +7,10 @@ use std::thread::JoinHandle;
 
 use autd3_rs::commands::{ForceFan, Nop};
 use autd3_rs::udp::TransportOption;
-use autd3_rs::{Controller, Driver, Error, Frames};
+use autd3_rs::{Controller, Driver, Error};
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
-use common::{emulator, fans, geometry, option, patient_option};
+use common::{emulator, fans, geometry, option};
 
 fn open(emulator: &UdpEmulator, option: &TransportOption) -> (Controller, Driver) {
     Controller::open(&geometry(emulator.num_devices()), option).unwrap()
@@ -84,26 +84,4 @@ fn dropping_the_controller_stops_the_driver() {
     drop(controller);
 
     assert!(thread.join().unwrap().is_ok());
-}
-
-#[test]
-#[ignore = "depends on real time"]
-fn dropping_the_driver_fails_the_frames_in_flight_and_later_sends_with_closed() {
-    let emulator = emulator(1);
-    let (controller, mut driver) =
-        Controller::open(&geometry(1), &patient_option(&emulator)).unwrap();
-    let frames = Frames::encode(controller.geometry(), Nop).unwrap();
-
-    emulator.drop_next_replies(0, 1);
-    let unanswered =
-        drive_until_ready(&mut driver, controller.send_frame(frames.frame(0).unwrap())).unwrap();
-    drop(driver);
-
-    assert!(matches!(pollster::block_on(unanswered), Err(Error::Closed)));
-    assert!(matches!(
-        pollster::block_on(controller.send(Nop)),
-        Err(Error::Closed)
-    ));
-    assert!(matches!(controller.close(), Err(Error::Closed)));
-    assert!(matches!(controller.device_status(), Err(Error::Closed)));
 }

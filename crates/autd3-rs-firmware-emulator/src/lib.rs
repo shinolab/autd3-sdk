@@ -2,7 +2,6 @@ mod device;
 mod emu_fpga;
 mod emu_port;
 mod fw;
-pub mod test_utils;
 #[cfg(feature = "udp")]
 pub mod udp;
 

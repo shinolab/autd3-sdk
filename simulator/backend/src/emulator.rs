@@ -43,7 +43,6 @@ fn gpio_waveform(fpga: &FpgaEmulator, raw: u64) -> Vec<u8> {
         Some(GpioOutType::BaseSig) => (0..GPIO_SAMPLES)
             .map(|i| u8::from(i >= GPIO_SAMPLES / 2))
             .collect(),
-        Some(GpioOutType::Thermo) => constant_wave(u8::from(fpga.is_thermo_asserted())),
         Some(GpioOutType::ForceFan) => constant_wave(u8::from(fpga.force_fan())),
         Some(GpioOutType::ModBank) => constant_wave(u8::from(fpga.current_mod_bank() == 1)),
         Some(GpioOutType::ModIdx) => constant_wave(u8::from(fpga.current_mod_idx() == 0)),
@@ -59,7 +58,11 @@ fn gpio_waveform(fpga: &FpgaEmulator, raw: u64) -> Vec<u8> {
         Some(GpioOutType::PwmOut) => pwm_waveform(fpga, value as usize),
         Some(GpioOutType::Direct) => constant_wave(u8::from(value != 0)),
         Some(
-            GpioOutType::None | GpioOutType::Sync | GpioOutType::SyncRaw | GpioOutType::SyncDiff,
+            GpioOutType::None
+            | GpioOutType::Thermo
+            | GpioOutType::Sync
+            | GpioOutType::SyncRaw
+            | GpioOutType::SyncDiff,
         )
         | None => constant_wave(0),
         Some(_) => unreachable!(),
@@ -215,7 +218,6 @@ mod tests {
     };
     use autd3_rs::geometry::{Autd3, Point3, UnitQuaternion};
     use autd3_rs::value::{Intensity, Phase, SamplingConfig};
-    use autd3_rs_firmware_emulator::test_utils::FpgaEmulatorTestExt;
     use rstest::rstest;
 
     use crate::harness::Harness;
@@ -247,20 +249,6 @@ mod tests {
         assert_eq!(wave.len(), GPIO_SAMPLES);
         assert!(wave[..GPIO_SAMPLES / 2].iter().all(|&v| v == 0));
         assert!(wave[GPIO_SAMPLES / 2..].iter().all(|&v| v == 1));
-    }
-
-    #[test]
-    fn thermo_gpio_follows_the_fpga_flag() {
-        let mut h = Harness::new(1);
-        assert_eq!(
-            gpio_waveform(h.fpga(), raw(GpioOutType::Thermo, 0)),
-            constant_wave(0)
-        );
-        h.fpga_mut().set_thermal(true);
-        assert_eq!(
-            gpio_waveform(h.fpga(), raw(GpioOutType::Thermo, 0)),
-            constant_wave(1)
-        );
     }
 
     #[rstest]

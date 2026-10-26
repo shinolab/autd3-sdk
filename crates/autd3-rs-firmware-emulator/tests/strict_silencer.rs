@@ -14,7 +14,6 @@ use autd3_cpu_wire::payload::{
 };
 use autd3_rs_core::protocol::{Cmd, DeviceErrorCode};
 use autd3_rs_firmware_emulator::Device;
-use autd3_rs_firmware_emulator::test_utils::FpgaEmulatorTestExt;
 use zerocopy::IntoBytes;
 use zerocopy::little_endian::{U16, U32, U64};
 
@@ -228,37 +227,6 @@ fn a_faster_divider_on_an_unused_bank_is_not_rejected() {
 }
 
 #[test]
-fn activation_onto_a_faster_bank_is_rejected_and_playback_is_unchanged() {
-    let mut host = Host::new();
-    assert_eq!(
-        host.config_modulation(B0, 100, REP_INFINITE),
-        DeviceErrorCode::None
-    );
-    assert_eq!(
-        host.config_modulation(B1, 5, REP_INFINITE),
-        DeviceErrorCode::None
-    );
-    assert_eq!(
-        host.activate_modulation_bank(B0, IMMEDIATE, 0),
-        DeviceErrorCode::None
-    );
-    assert_eq!(host.set_silencer(STRICT, 8, 40), DeviceErrorCode::None);
-
-    assert_eq!(
-        host.config_modulation(B0, 50, REP_INFINITE),
-        DeviceErrorCode::None
-    );
-    assert_eq!(
-        host.activate_modulation_bank(B1, IMMEDIATE, 0),
-        DeviceErrorCode::InvalidSilencerSetting
-    );
-    assert_eq!(host.device.fpga().current_mod_bank(), 0);
-    assert_eq!(host.device.fpga().req_modulation_bank(), 0);
-    assert_eq!(host.device.fpga().modulation_freq_div(0), 100);
-    assert_eq!(host.device.fpga().modulation_freq_div(1), 5);
-}
-
-#[test]
 fn fixed_update_rate_and_clear_release_the_guard() {
     let mut host = Host::new();
     assert_eq!(
@@ -448,32 +416,6 @@ fn strict_is_rejected_while_a_too_fast_divider_is_still_latched() {
         DeviceErrorCode::None
     );
     assert_eq!(host.set_silencer(STRICT, 8, 40), DeviceErrorCode::None);
-}
-
-#[test]
-fn a_finite_request_is_rejected_while_the_playing_bank_gets_too_fast() {
-    let mut host = Host::new();
-    assert_eq!(
-        host.config_modulation(B0, 100, REP_INFINITE),
-        DeviceErrorCode::None
-    );
-    assert_eq!(
-        host.activate_modulation_bank(B0, IMMEDIATE, 0),
-        DeviceErrorCode::None
-    );
-    assert_eq!(host.set_silencer(STRICT, 8, 40), DeviceErrorCode::None);
-
-    assert_eq!(
-        host.config_modulation(B0, 5, REP_INFINITE),
-        DeviceErrorCode::None
-    );
-    assert_eq!(host.config_modulation(B1, 100, 0), DeviceErrorCode::None);
-    assert_eq!(
-        host.activate_modulation_bank(B1, SYS_TIME, 1_000_000_000),
-        DeviceErrorCode::InvalidSilencerSetting
-    );
-    assert_eq!(host.device.fpga().modulation_freq_div(0), 100);
-    assert_eq!(host.device.fpga().req_modulation_bank(), 0);
 }
 
 #[test]

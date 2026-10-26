@@ -177,15 +177,12 @@ pub struct FpgaEmulator {
     pwe: Box<[u16; PWE_TABLE_SIZE]>,
     mod_ram: Vec<Box<[u16]>>,
     em_ram: Vec<Box<[u16]>>,
-    pub(crate) next_sync_edge: u64,
     sys_time_ns: u64,
-    pub(crate) thermal: bool,
     mod_swapchain: Swapchain,
     pattern_swapchain: Swapchain,
     cpu_flash: Box<[u8]>,
     reset_count: u32,
     pub(crate) flash: flash::FlashEmulator,
-    reconfig_count: u32,
     sync_ps_ctl: u16,
 }
 
@@ -221,21 +218,14 @@ impl FpgaEmulator {
             em_ram: (0..NUM_BANKS)
                 .map(|_| vec![0u16; EMISSION_RAM_WORDS].into_boxed_slice())
                 .collect(),
-            next_sync_edge: 0,
             sys_time_ns: 0,
-            thermal: false,
             mod_swapchain: Swapchain::new(),
             pattern_swapchain: Swapchain::new(),
             cpu_flash,
             reset_count: 0,
             flash: flash::FlashEmulator::new(),
-            reconfig_count: 0,
             sync_ps_ctl: 1,
         }
-    }
-
-    pub(crate) fn power_on(&mut self) {
-        self.reload();
     }
 
     fn reload(&mut self) {
@@ -244,11 +234,8 @@ impl FpgaEmulator {
             Self::with_cpu_flash(self.num_transducers, Box::default()),
         );
         self.cpu_flash = old.cpu_flash;
-        self.next_sync_edge = old.next_sync_edge;
         self.sys_time_ns = old.sys_time_ns;
-        self.thermal = old.thermal;
         self.reset_count = old.reset_count;
-        self.reconfig_count = old.reconfig_count;
         self.flash = old.flash;
         self.flash.configure_from_flash();
     }
@@ -256,11 +243,6 @@ impl FpgaEmulator {
     #[must_use]
     pub fn fpga_flash(&self) -> &[u8] {
         self.flash.flash()
-    }
-
-    #[must_use]
-    pub fn reconfig_count(&self) -> u32 {
-        self.reconfig_count
     }
 
     #[must_use]
@@ -348,7 +330,6 @@ impl FpgaEmulator {
                 self.flash.write_reg(a & 0xFF, value);
                 if self.flash.take_reboot_request() {
                     self.reload();
-                    self.reconfig_count += 1;
                 }
             }
             sel if sel >> 1 == SELECT_FLASH_BUF >> 1 => self.flash.write_buf(a & 0x1FF, value),
@@ -375,7 +356,7 @@ impl FpgaEmulator {
     }
 
     pub(crate) fn next_sync_edge(&self) -> u64 {
-        self.next_sync_edge.max(self.sys_time_ns + 500_000)
+        self.sys_time_ns + 500_000
     }
 
     fn reg_u64(&self, base: usize) -> u64 {
@@ -521,11 +502,6 @@ impl FpgaEmulator {
     }
 
     #[must_use]
-    pub fn is_thermo_asserted(&self) -> bool {
-        self.thermal
-    }
-
-    #[must_use]
     pub fn sys_time(&self) -> u64 {
         self.sys_time_ns
     }
@@ -543,7 +519,6 @@ impl FpgaEmulator {
     #[must_use]
     pub fn fpga_state(&self) -> u8 {
         let mut state = FpgaStateFlags::empty();
-        state.set(FpgaStateFlags::THERMAL_ASSERT, self.thermal);
         state.set(FpgaStateFlags::MOD_BANK, self.current_mod_bank() == 1);
         state.set(
             FpgaStateFlags::PATTERN_BANK,

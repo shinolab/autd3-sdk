@@ -16,7 +16,6 @@ pub(crate) struct FlashEmulator {
     flash: Vec<u8>,
     usr_access: u32,
     reboot_requested: bool,
-    reboots_to_ignore: u32,
 }
 
 impl FlashEmulator {
@@ -27,7 +26,6 @@ impl FlashEmulator {
             flash: Vec::new(),
             usr_access: FPGA_USR_ACCESS_UPDATE,
             reboot_requested: false,
-            reboots_to_ignore: 0,
         }
     }
 
@@ -40,10 +38,6 @@ impl FlashEmulator {
             self.flash = vec![0xFF; FPGA_FLASH_BYTES as usize];
         }
         &mut self.flash
-    }
-
-    pub(crate) fn ignore_reboots(&mut self, count: u32) {
-        self.reboots_to_ignore = count;
     }
 
     pub(crate) fn take_reboot_request(&mut self) -> bool {
@@ -116,10 +110,6 @@ impl FlashEmulator {
                 for (cell, byte) in flash[addr as usize..end as usize].iter_mut().zip(data) {
                     *cell &= byte;
                 }
-                (FlashErr::None, 0)
-            }
-            Some(FlashOp::Reboot) if self.reboots_to_ignore > 0 => {
-                self.reboots_to_ignore -= 1;
                 (FlashErr::None, 0)
             }
             Some(FlashOp::Reboot) => {

@@ -55,10 +55,6 @@ impl Harness {
         self.devices[0].fpga()
     }
 
-    pub(crate) fn fpga_mut(&mut self) -> &mut FpgaEmulator {
-        self.devices[0].fpga_mut()
-    }
-
     pub(crate) fn states(&self) -> Vec<TransState> {
         extract_states(&self.device_refs(), self.mod_enabled)
     }
