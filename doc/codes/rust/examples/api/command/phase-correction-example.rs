@@ -14,7 +14,7 @@ async fn main() -> anyhow::Result<()> {
 
     let phases = geometry.phase_buffer();
 
-    client.send(SetPhaseCorrection { phases: &phases }).await?;
+    client.send(SetPhaseCorrection { phases }).await?;
 
     client.close()?;
     // HIDE

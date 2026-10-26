@@ -39,7 +39,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     table[1] = PulseWidth::from_duty(12.5 / 100.0)?;
     table[2] = PulseWidth::from_duty(18.75 / 100.0)?;
     table[3] = PulseWidth::from_duty(25.0 / 100.0)?;
-    ctx.send(SetPulseWidthTable { table: &table }).await?;
+    ctx.send(SetPulseWidthTable { table }).await?;
 
     let em = drive_pair(ctx, (0, 1), (2, 3));
     send_pattern_mod(ctx, &em, &static_ff, SamplingConfig::FREQ_4K).await?;
@@ -50,7 +50,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     .await;
 
     ctx.send(SetPulseWidthTable {
-        table: &SetPulseWidthTable::empty_table(),
+        table: SetPulseWidthTable::empty_table(),
     })
     .await?;
     let full = buffers(ctx.geometry, Intensity::MAX);

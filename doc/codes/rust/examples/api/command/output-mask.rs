@@ -7,6 +7,6 @@ fn main() {
     let masks = geometry.output_mask_buffer();
 
     // ANCHOR: api
-    SetOutputMask { masks: &masks };
+    SetOutputMask { masks };
     // ANCHOR_END: api
 }

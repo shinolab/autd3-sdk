@@ -19,7 +19,7 @@ pub(crate) async fn silence(ctx: &Ctx<'_>) -> Result<()> {
         .iter()
         .map(|dev| vec![false; dev.num_transducers()])
         .collect();
-    ctx.send(SetOutputMask { masks: &masks }).await?;
+    ctx.send(SetOutputMask { masks }).await?;
     ctx.send(SetSilencer::disable()).await?;
     for (bank, loop_behavior) in [
         (ModulationBank::B0, LoopBehavior::Infinite),

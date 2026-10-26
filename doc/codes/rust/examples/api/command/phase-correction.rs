@@ -7,6 +7,6 @@ fn main() {
     let phases = geometry.phase_buffer();
 
     // ANCHOR: api
-    SetPhaseCorrection { phases: &phases };
+    SetPhaseCorrection { phases };
     // ANCHOR_END: api
 }

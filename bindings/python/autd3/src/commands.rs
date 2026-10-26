@@ -15,7 +15,7 @@ use autd3_rs::commands::{
     SetPulseWidthTable as CoreSetPulseWidthTable, SetSilencer, SilencerConfig,
     Synchronize as CoreSynchronize,
 };
-use autd3_rs::value::{Phase, PulseWidth as CorePulseWidth};
+use autd3_rs::value::PulseWidth as CorePulseWidth;
 
 use crate::datagram::PushOperation;
 use crate::ops::SysTime;
@@ -673,15 +673,11 @@ impl EmulateGpioInPy {
     }
 }
 
-pub(crate) struct SetOutputMaskCmd {
-    masks: Vec<Vec<bool>>,
-}
+pub(crate) struct SetOutputMaskCmd(SetOutputMask);
 
 impl PushOperation for SetOutputMaskCmd {
     fn operation(&self) -> Box<dyn Operation + '_> {
-        Box::new(SetOutputMask {
-            masks: self.masks.as_slice(),
-        })
+        Box::new(&self.0)
     }
 }
 
@@ -692,19 +688,15 @@ pub struct SetOutputMaskPy(pub(crate) Arc<SetOutputMaskCmd>);
 impl SetOutputMaskPy {
     #[new]
     fn new(masks: Vec<Vec<bool>>) -> Self {
-        Self(Arc::new(SetOutputMaskCmd { masks }))
+        Self(Arc::new(SetOutputMaskCmd(SetOutputMask { masks })))
     }
 }
 
-pub(crate) struct SetPhaseCorrectionCmd {
-    phases: Vec<Vec<Phase>>,
-}
+pub(crate) struct SetPhaseCorrectionCmd(SetPhaseCorrection);
 
 impl PushOperation for SetPhaseCorrectionCmd {
     fn operation(&self) -> Box<dyn Operation + '_> {
-        Box::new(SetPhaseCorrection {
-            phases: self.phases.as_slice(),
-        })
+        Box::new(&self.0)
     }
 }
 
@@ -715,9 +707,9 @@ pub struct SetPhaseCorrectionPy(pub(crate) Arc<SetPhaseCorrectionCmd>);
 impl SetPhaseCorrectionPy {
     #[new]
     fn new(phases: &Bound<'_, PyAny>) -> PyResult<Self> {
-        Ok(Self(Arc::new(SetPhaseCorrectionCmd {
+        Ok(Self(Arc::new(SetPhaseCorrectionCmd(SetPhaseCorrection {
             phases: crate::datagram::extract_phases(phases)?,
-        })))
+        }))))
     }
 }
 
@@ -734,13 +726,11 @@ fn extract_pulse_width_table(
     Ok(Box::new(table.map(|pulse_width| pulse_width.0)))
 }
 
-pub(crate) struct SetPulseWidthTableCmd {
-    table: [CorePulseWidth; PWE_TABLE_SIZE],
-}
+pub(crate) struct SetPulseWidthTableCmd(CoreSetPulseWidthTable);
 
 impl PushOperation for SetPulseWidthTableCmd {
     fn operation(&self) -> Box<dyn Operation + '_> {
-        Box::new(CoreSetPulseWidthTable { table: &self.table })
+        Box::new(&self.0)
     }
 }
 
@@ -750,13 +740,15 @@ pub struct SetPulseWidthTablePy(pub(crate) Arc<SetPulseWidthTableCmd>);
 #[pymethods]
 impl SetPulseWidthTablePy {
     #[new]
-    #[pyo3(signature = (table = Box::new(*CoreSetPulseWidthTable::default().table)))]
+    #[pyo3(signature = (table = Box::new(CoreSetPulseWidthTable::default().table)))]
     fn new(
         #[pyo3(from_py_with = extract_pulse_width_table)] table: Box<
             [CorePulseWidth; PWE_TABLE_SIZE],
         >,
     ) -> Self {
-        Self(Arc::new(SetPulseWidthTableCmd { table: *table }))
+        Self(Arc::new(SetPulseWidthTableCmd(CoreSetPulseWidthTable {
+            table: *table,
+        })))
     }
 
     #[staticmethod]

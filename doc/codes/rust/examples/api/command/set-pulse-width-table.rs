@@ -6,7 +6,7 @@ fn main() {
     // ANCHOR_END: empty
 
     // ANCHOR: api
-    SetPulseWidthTable { table: &table };
+    SetPulseWidthTable { table };
     // ANCHOR_END: api
 
     // ANCHOR: default

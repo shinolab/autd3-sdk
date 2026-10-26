@@ -127,16 +127,29 @@ impl<O: Operation + ?Sized> Operation for Box<O> {
     }
 }
 
+impl<O: Operation + ?Sized> crate::sealed::Sealed for &O {}
+
+impl<O: Operation + ?Sized> Operation for &O {
+    fn distribution(&self) -> Distribution {
+        (**self).distribution()
+    }
+
+    fn encode(&self, device: &Device, out: &mut Datagram) -> Result<(), Error> {
+        (**self).encode(device, out)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::{build, cmds, payload, test_geometry};
     use crate::value::{Intensity, PatternBank};
 
     #[test]
     fn ops_whose_payload_depends_on_the_device_are_per_device() {
         let ops: [&dyn Operation; 6] = [
-            &SetOutputMask { masks: &[] },
-            &SetPhaseCorrection { phases: &[] },
+            &SetOutputMask { masks: vec![] },
+            &SetPhaseCorrection { phases: vec![] },
             &WriteFociBuffer {
                 bank: PatternBank::B0,
                 start_index: 0,
@@ -155,5 +168,19 @@ mod tests {
         for op in ops {
             assert_eq!(op.distribution(), Distribution::PerDevice);
         }
+    }
+
+    #[test]
+    fn a_borrowed_op_encodes_like_the_owned_op() {
+        let mut masks = test_geometry(2).output_mask_buffer();
+        masks[1][0] = false;
+        let op = SetOutputMask { masks };
+        let owned = build(2, op.clone()).unwrap();
+        let borrowed = build(2, &op).unwrap();
+        assert_eq!(cmds(&borrowed), cmds(&owned));
+        for device in 0..2 {
+            assert_eq!(payload(&borrowed, 0, device), payload(&owned, 0, device));
+        }
+        assert_ne!(payload(&borrowed, 0, 0), payload(&borrowed, 0, 1));
     }
 }

@@ -22,7 +22,7 @@ import { excerpt } from "@lib/excerpt";
 
 | Field   | Type           | Description                                                    |
 | ------- | -------------- | ------------------------------------------------------------- |
-| `masks` | `&[Vec<bool>]` | Output mask per device (output when `true`). |
+| `masks` | `Vec<Vec<bool>>` | Output mask per device (output when `true`). |
 
 `Geometry::output_mask_buffer` allocates the masks for all devices.
 Every entry starts at `true` (all transducers output).

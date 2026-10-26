@@ -13,8 +13,8 @@ use super::{Operation, encode_header_only};
 pub use autd3_cpu_wire::layout::PWE_TABLE_SIZE;
 
 #[derive(Clone, Debug)]
-pub struct SetPulseWidthTable<'a> {
-    pub table: &'a [PulseWidth; PWE_TABLE_SIZE],
+pub struct SetPulseWidthTable {
+    pub table: [PulseWidth; PWE_TABLE_SIZE],
 }
 
 const fn boot_pulse_width(i: usize) -> PulseWidth {
@@ -24,7 +24,7 @@ const fn boot_pulse_width(i: usize) -> PulseWidth {
     }
 }
 
-static DEFAULT_TABLE: [PulseWidth; PWE_TABLE_SIZE] = {
+const DEFAULT_TABLE: [PulseWidth; PWE_TABLE_SIZE] = {
     let mut table = [PulseWidth::ZERO; PWE_TABLE_SIZE];
     let mut i = 0;
     while i < PWE_TABLE_SIZE {
@@ -34,24 +34,24 @@ static DEFAULT_TABLE: [PulseWidth; PWE_TABLE_SIZE] = {
     table
 };
 
-impl SetPulseWidthTable<'_> {
+impl SetPulseWidthTable {
     #[must_use]
     pub const fn empty_table() -> [PulseWidth; PWE_TABLE_SIZE] {
         [PulseWidth::ZERO; PWE_TABLE_SIZE]
     }
 }
 
-impl Default for SetPulseWidthTable<'static> {
+impl Default for SetPulseWidthTable {
     fn default() -> Self {
         Self {
-            table: &DEFAULT_TABLE,
+            table: DEFAULT_TABLE,
         }
     }
 }
 
-impl crate::sealed::Sealed for SetPulseWidthTable<'_> {}
+impl crate::sealed::Sealed for SetPulseWidthTable {}
 
-impl Operation for SetPulseWidthTable<'_> {
+impl Operation for SetPulseWidthTable {
     fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
         let mut table = [U16::ZERO; PWE_TABLE_SIZE];
         for (dst, &v) in table.iter_mut().zip(self.table.iter()) {
@@ -74,7 +74,7 @@ mod tests {
         for (i, v) in table.iter_mut().enumerate() {
             *v = PulseWidth::new(u16::try_from(i).unwrap()).unwrap();
         }
-        let (cmd, out) = encode(&SetPulseWidthTable { table: &table }).unwrap();
+        let (cmd, out) = encode(&SetPulseWidthTable { table }).unwrap();
         assert_eq!(cmd, (Cmd::SetPulseWidthTable, size_of::<PwePayload>()));
         assert_eq!(&out[0..2], &0u16.to_le_bytes());
         assert_eq!(&out[2..4], &1u16.to_le_bytes());

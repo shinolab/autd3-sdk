@@ -22,7 +22,7 @@ import { excerpt } from "@lib/excerpt";
 
 | フィールド | 型                      | 説明                                                 |
 | ---------- | ----------------------- | ---------------------------------------------------- |
-| `table`    | `&[PulseWidth; PWE_TABLE_SIZE]` | 強度インデックス (0–255) ごとのパルス幅 (256 要素) |
+| `table`    | `[PulseWidth; PWE_TABLE_SIZE]` | 強度インデックス (0–255) ごとのパルス幅 (256 要素) |
 
 `PulseWidth` は `PulseWidth::new(u16)` (1 周期 512 刻みのパルス幅) か `PulseWidth::from_duty(f32)` (デューティ比) で作り, 値は `pulse_width()` で読む.
 範囲は構築時に検証し, `new` は `[0, 512)`, `from_duty` は `[0, 1)` の外なら `Err(PulseWidthError)` を返す.
