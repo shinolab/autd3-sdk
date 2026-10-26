@@ -20,6 +20,7 @@ mod sim_nic;
 mod sync;
 #[cfg(all(test, not(loom)))]
 mod test_utils;
+mod utils;
 pub mod version;
 
 pub use app::Cpu;
