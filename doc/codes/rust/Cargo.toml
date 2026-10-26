@@ -207,10 +207,6 @@ name = "api_command_synchronize"
 path = "examples/api/command/synchronize.rs"
 
 [[example]]
-name = "api_compute_holo_batch"
-path = "examples/api/compute/holo/batch.rs"
-
-[[example]]
 name = "api_compute_holo_greedy_example"
 path = "examples/api/compute/holo/greedy-example.rs"
 

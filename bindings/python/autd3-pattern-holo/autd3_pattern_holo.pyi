@@ -158,27 +158,3 @@ def greedy(
     option: GreedyOption,
     dst: PhaseBuffer,
 ) -> None: ...
-def naive_batch(
-    geometry: Geometry,
-    foci: Sequence[AmplitudeTarget],
-    wavelength: Length,
-    option: NaiveOption,
-    phases: Sequence[PhaseBuffer],
-    intensities: Sequence[IntensityBuffer],
-) -> None: ...
-def gs_batch(
-    geometry: Geometry,
-    foci: Sequence[AmplitudeTarget],
-    wavelength: Length,
-    option: GsOption,
-    phases: Sequence[PhaseBuffer],
-    intensities: Sequence[IntensityBuffer],
-) -> None: ...
-def gspat_batch(
-    geometry: Geometry,
-    foci: Sequence[AmplitudeTarget],
-    wavelength: Length,
-    option: GspatOption,
-    phases: Sequence[PhaseBuffer],
-    intensities: Sequence[IntensityBuffer],
-) -> None: ...

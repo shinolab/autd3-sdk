@@ -6,12 +6,7 @@ sidebar:
 ---
 
 import Math from "@components/Math.astro";
-import CodeTabs from "@components/CodeTabs.astro";
 import Install from "@components/Install.astro";
-import batchSample from "@codes/rust/examples/api/compute/holo/batch.rs?raw";
-import pyBatchSample from "@codes/python/examples/api/compute/holo/batch.py?raw";
-import csBatchSample from "@codes/csharp/examples/api/compute/holo/batch.cs?raw";
-import { excerpt } from "@lib/excerpt";
 
 Holo は複数の焦点 (制御点) を同時に生成するための Pattern 計算群. 
 各振動子の位相・振幅を最適化し, 指定した複数点で目標音圧が得られるようにする. 
@@ -88,15 +83,3 @@ Python / C# は `NalgebraBackend` に固定しており, バックエンドの�
 GPUで計算するバックエンドとして `WgpuBackend` を用意している (Rust のみ).
 
 <Install rust="autd3-rs-pattern-holo-wgpu"/>
-
-### バッチ API
-
-`naive` / `gs` / `gspat` には, 独立した複数の問題をまとめて解く `naive_batch` / `gs_batch` / `gspat_batch` がある. 
-
-<CodeTabs rust={excerpt(batchSample, "api")} python={excerpt(pyBatchSample, "api")} csharp={excerpt(csBatchSample, "api")} />
-
-問題数は `phases` / `intensities` の長さで決まる (両者の長さは揃える).
-焦点は 問題数 × 各問題あたりの焦点数 の長さのスライスを渡す.
-全問題は焦点数が揃っている必要があり, 問題数で割り切れなければエラーになる.
-
-バッチ API で計算速度に利があるのは GPU バックエンドだけである. CPU バックエンド (Python / C# の `NalgebraBackend` を含む) は問題を 1 つずつ順に解くので, 1 問題ずつ関数を呼ぶのと速度は変わらない.

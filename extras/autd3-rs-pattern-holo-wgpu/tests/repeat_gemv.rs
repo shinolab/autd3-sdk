@@ -48,26 +48,19 @@ fn fused_repeat_matches_the_unfused_chain() {
     };
 
     let (tr_pos, tr_dir) = transducers(249);
-    for (m, batch, repeat) in [
-        (1usize, 1usize, 0usize),
-        (1, 1, 5),
-        (8, 1, 1),
-        (8, 3, 7),
-        (16, 1, 100),
-        (64, 2, 5),
-        (257, 1, 100),
+    for (m, repeat) in [
+        (1usize, 0usize),
+        (1, 5),
+        (8, 1),
+        (8, 7),
+        (16, 100),
+        (64, 5),
+        (257, 100),
     ] {
-        let g = gpu.propagation_matrix(
-            &tr_pos,
-            &tr_dir,
-            &foci(m * batch),
-            batch,
-            WAVENUMBER,
-            Directivity::Sphere,
-        );
+        let g = gpu.propagation_matrix(&tr_pos, &tr_dir, &foci(m), WAVENUMBER, Directivity::Sphere);
         let a = gpu.gemm(&g, &gpu.back_prop(&g));
-        let x = || gpu.make_vector(batch, samples(m * batch, 0x9e37_79b9));
-        let r = gpu.make_vector(batch, samples(m * batch, 0x85eb_ca6b));
+        let x = || gpu.make_vector(samples(m, 0x9e37_79b9));
+        let r = gpu.make_vector(samples(m, 0x85eb_ca6b));
 
         let mut want = x();
         for _ in 0..repeat {
@@ -78,7 +71,7 @@ fn fused_repeat_matches_the_unfused_chain() {
         assert_eq!(
             bits(&gpu.vector_to_host(&want)),
             bits(&gpu.vector_to_host(&got)),
-            "{m} foci batch {batch} repeat {repeat}",
+            "{m} foci repeat {repeat}",
         );
     }
 }

@@ -5,7 +5,7 @@ use autd3_python_capsule::extract::{extract_length, extract_point, extract_u8, n
 use autd3_python_capsule::numpy::f32_vec3;
 use autd3_python_capsule::{
     capsule_of, geometry_from_capsule, intensities_from_capsule, intensities_from_capsule_mut,
-    intensity_buffer_addr, phase_buffer_addr, phases_from_capsule_mut,
+    phases_from_capsule_mut,
 };
 use autd3_rs_core::geometry::TransducerMask;
 use autd3_rs_core::value::{Intensity, PatternIntensity, Phase};
@@ -629,167 +629,6 @@ fn gspat(
     })
 }
 
-fn ensure_distinct(addrs: &[usize]) -> PyResult<()> {
-    for (i, lhs) in addrs.iter().enumerate() {
-        if addrs[..i].contains(lhs) {
-            return Err(PyValueError::new_err(
-                "the same buffer must not be passed twice",
-            ));
-        }
-    }
-    Ok(())
-}
-
-fn with_dst_batches<F>(
-    phases: &[Bound<'_, PyAny>],
-    intensities: &[Bound<'_, PyAny>],
-    f: F,
-) -> PyResult<()>
-where
-    F: FnOnce(&mut [Vec<Vec<Phase>>], &mut [Vec<Vec<Intensity>>]) -> PyResult<()>,
-{
-    let phase_capsules = phases
-        .iter()
-        .map(capsule_of)
-        .collect::<PyResult<Vec<_>>>()?;
-    let intensity_capsules = intensities
-        .iter()
-        .map(capsule_of)
-        .collect::<PyResult<Vec<_>>>()?;
-    ensure_distinct(
-        &phase_capsules
-            .iter()
-            .map(phase_buffer_addr)
-            .collect::<PyResult<Vec<_>>>()?,
-    )?;
-    ensure_distinct(
-        &intensity_capsules
-            .iter()
-            .map(intensity_buffer_addr)
-            .collect::<PyResult<Vec<_>>>()?,
-    )?;
-    let mut phase_slots = phase_capsules
-        .iter()
-        .map(phases_from_capsule_mut)
-        .collect::<PyResult<Vec<_>>>()?;
-    let mut intensity_slots = intensity_capsules
-        .iter()
-        .map(intensities_from_capsule_mut)
-        .collect::<PyResult<Vec<_>>>()?;
-    let mut phase_problems = phase_slots
-        .iter_mut()
-        .map(|slot| core::mem::take(&mut **slot))
-        .collect::<Vec<_>>();
-    let mut intensity_problems = intensity_slots
-        .iter_mut()
-        .map(|slot| core::mem::take(&mut **slot))
-        .collect::<Vec<_>>();
-    let result = f(&mut phase_problems, &mut intensity_problems);
-    for (slot, problem) in phase_slots.iter_mut().zip(phase_problems) {
-        **slot = problem;
-    }
-    for (slot, problem) in intensity_slots.iter_mut().zip(intensity_problems) {
-        **slot = problem;
-    }
-    result
-}
-
-#[pyfunction]
-#[pyo3(signature = (geometry, foci, wavelength, option, phases, intensities))]
-fn naive_batch(
-    geometry: &Bound<'_, PyAny>,
-    foci: Vec<PyRef<'_, AmplitudeTarget>>,
-    wavelength: &Bound<'_, PyAny>,
-    option: &NaiveOption,
-    phases: Vec<Bound<'_, PyAny>>,
-    intensities: Vec<Bound<'_, PyAny>>,
-) -> PyResult<()> {
-    let geo_capsule = capsule_of(geometry)?;
-    let geometry = geometry_from_capsule(&geo_capsule)?;
-    let foci = collect_foci(&foci);
-    let wavelength = extract_length(wavelength)?;
-    let option = CoreNaiveOption {
-        mask: mask_ref(option.mask.as_deref()),
-        ..option.inner
-    };
-    with_dst_batches(&phases, &intensities, |phases, intensities| {
-        autd3_rs_pattern_holo::naive_batch(
-            &autd3_rs_pattern_holo::NalgebraBackend,
-            geometry,
-            &foci,
-            wavelength,
-            &option,
-            phases,
-            intensities,
-        )
-        .map_err(holo_err)
-    })
-}
-
-#[pyfunction]
-#[pyo3(signature = (geometry, foci, wavelength, option, phases, intensities))]
-fn gs_batch(
-    geometry: &Bound<'_, PyAny>,
-    foci: Vec<PyRef<'_, AmplitudeTarget>>,
-    wavelength: &Bound<'_, PyAny>,
-    option: &GsOption,
-    phases: Vec<Bound<'_, PyAny>>,
-    intensities: Vec<Bound<'_, PyAny>>,
-) -> PyResult<()> {
-    let geo_capsule = capsule_of(geometry)?;
-    let geometry = geometry_from_capsule(&geo_capsule)?;
-    let foci = collect_foci(&foci);
-    let wavelength = extract_length(wavelength)?;
-    let option = CoreGsOption {
-        mask: mask_ref(option.mask.as_deref()),
-        ..option.inner
-    };
-    with_dst_batches(&phases, &intensities, |phases, intensities| {
-        autd3_rs_pattern_holo::gs_batch(
-            &autd3_rs_pattern_holo::NalgebraBackend,
-            geometry,
-            &foci,
-            wavelength,
-            &option,
-            phases,
-            intensities,
-        )
-        .map_err(holo_err)
-    })
-}
-
-#[pyfunction]
-#[pyo3(signature = (geometry, foci, wavelength, option, phases, intensities))]
-fn gspat_batch(
-    geometry: &Bound<'_, PyAny>,
-    foci: Vec<PyRef<'_, AmplitudeTarget>>,
-    wavelength: &Bound<'_, PyAny>,
-    option: &GspatOption,
-    phases: Vec<Bound<'_, PyAny>>,
-    intensities: Vec<Bound<'_, PyAny>>,
-) -> PyResult<()> {
-    let geo_capsule = capsule_of(geometry)?;
-    let geometry = geometry_from_capsule(&geo_capsule)?;
-    let foci = collect_foci(&foci);
-    let wavelength = extract_length(wavelength)?;
-    let option = CoreGspatOption {
-        mask: mask_ref(option.mask.as_deref()),
-        ..option.inner
-    };
-    with_dst_batches(&phases, &intensities, |phases, intensities| {
-        autd3_rs_pattern_holo::gspat_batch(
-            &autd3_rs_pattern_holo::NalgebraBackend,
-            geometry,
-            &foci,
-            wavelength,
-            &option,
-            phases,
-            intensities,
-        )
-        .map_err(holo_err)
-    })
-}
-
 #[pyfunction]
 #[pyo3(signature = (geometry, foci, wavelength, intensities, order, option, dst))]
 fn greedy(
@@ -851,8 +690,5 @@ fn autd3_pattern_holo(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(gs, m)?)?;
     m.add_function(wrap_pyfunction!(gspat, m)?)?;
     m.add_function(wrap_pyfunction!(greedy, m)?)?;
-    m.add_function(wrap_pyfunction!(naive_batch, m)?)?;
-    m.add_function(wrap_pyfunction!(gs_batch, m)?)?;
-    m.add_function(wrap_pyfunction!(gspat_batch, m)?)?;
     Ok(())
 }

@@ -87,25 +87,22 @@ pub(crate) struct PartialSum {
 pub struct GpuVector {
     pub(crate) buf: Pooled,
     pub(crate) len: usize,
-    pub(crate) batch: usize,
     pub(crate) partial: RefCell<Option<PartialSum>>,
 }
 
 impl GpuVector {
-    pub(crate) fn new(buf: Pooled, len: usize, batch: usize) -> Self {
+    pub(crate) fn new(buf: Pooled, len: usize) -> Self {
         Self {
             buf,
             len,
-            batch,
             partial: RefCell::new(None),
         }
     }
 
-    pub(crate) fn deferred(buf: Pooled, len: usize, batch: usize, partial: PartialSum) -> Self {
+    pub(crate) fn deferred(buf: Pooled, len: usize, partial: PartialSum) -> Self {
         Self {
             buf,
             len,
-            batch,
             partial: RefCell::new(Some(partial)),
         }
     }
@@ -115,6 +112,5 @@ pub struct GpuMatrix {
     pub(crate) buf: Pooled,
     pub(crate) rows: usize,
     pub(crate) cols: usize,
-    pub(crate) batch: usize,
     pub(crate) row_major: bool,
 }

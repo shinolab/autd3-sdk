@@ -101,14 +101,6 @@ fn buffer_cell<'a, T>(
     Ok(unsafe { &*(addr as *const BufferCell<T>) })
 }
 
-pub fn phase_buffer_addr(capsule: &Bound<'_, PyCapsule>) -> PyResult<usize> {
-    Ok(core::ptr::from_ref(buffer_cell::<Phase>(capsule, PHASE_CAPSULE_NAME)?).addr())
-}
-
-pub fn intensity_buffer_addr(capsule: &Bound<'_, PyCapsule>) -> PyResult<usize> {
-    Ok(core::ptr::from_ref(buffer_cell::<Intensity>(capsule, INTENSITY_CAPSULE_NAME)?).addr())
-}
-
 #[allow(clippy::missing_safety_doc)]
 pub unsafe fn phase_capsule(
     py: Python<'_>,

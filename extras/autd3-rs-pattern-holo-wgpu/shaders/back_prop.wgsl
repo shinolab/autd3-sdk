@@ -31,12 +31,10 @@ fn row_norm_pass(
     @builtin(local_invocation_id) lid: vec3<u32>,
 ) {
     let i = wg.x;
-    let k = wg.z;
-    let g_base = k * d.rows * d.cols;
     var acc = 0.0;
     var j = lid.x;
     while (j < d.cols) {
-        let v = g[g_base + at(i, j)];
+        let v = g[at(i, j)];
         acc = acc + v.x * v.x + v.y * v.y;
         j = j + WG;
     }
@@ -55,7 +53,7 @@ fn row_norm_pass(
         s = s >> 1u;
     }
     if (lid.x == 0u) {
-        row_norm[k * d.rows + i] = scratch[0];
+        row_norm[i] = scratch[0];
     }
 }
 
@@ -67,9 +65,7 @@ fn write_pass(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let i = idx / d.cols;
     let j = idx % d.cols;
-    let k = gid.z;
-    let base = k * d.rows * d.cols;
-    let v = g[base + at(i, j)];
-    let scale = 1.0 / row_norm[k * d.rows + i];
-    out[base + idx] = vec2<f32>(v.x * scale, -v.y * scale);
+    let v = g[at(i, j)];
+    let scale = 1.0 / row_norm[i];
+    out[idx] = vec2<f32>(v.x * scale, -v.y * scale);
 }

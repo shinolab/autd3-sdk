@@ -58,11 +58,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let i = idx / d.cols;
     let j = idx % d.cols;
-    let k = gid.z;
 
     let pos = tr_pos[j].xyz;
     let dir = tr_dir[j].xyz;
-    let focus = foci[k * d.rows + i].xyz;
+    let focus = foci[i].xyz;
 
     let diff = focus - pos;
     let dist = length(diff);
@@ -76,5 +75,5 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let phase = d.wavenumber * dist;
     let reduced = phase - TWO_PI * floor(phase / TWO_PI);
 
-    out[k * d.rows * d.cols + idx] = vec2<f32>(r * cos(reduced), r * sin(reduced));
+    out[idx] = vec2<f32>(r * cos(reduced), r * sin(reduced));
 }

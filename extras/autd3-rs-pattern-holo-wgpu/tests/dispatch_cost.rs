@@ -38,11 +38,11 @@ fn propagation(gpu: &WgpuBackend, foci: usize) -> GpuMatrix {
         })
         .collect();
     let wavenumber = 2.0 * core::f32::consts::PI / autd3_rs_pattern::wavelength(340.0 * m / s).mm();
-    gpu.propagation_matrix(&tr_pos, &tr_dir, &f, 1, wavenumber, Directivity::Sphere)
+    gpu.propagation_matrix(&tr_pos, &tr_dir, &f, wavenumber, Directivity::Sphere)
 }
 
 fn measure(gpu: &WgpuBackend, label: &str, dispatches: usize, mut record: impl FnMut()) {
-    let sink = gpu.make_vector(1, vec![Complex::new(1.0, 0.0); 1]);
+    let sink = gpu.make_vector(vec![Complex::new(1.0, 0.0); 1]);
     for _ in 0..2 {
         for _ in 0..8 {
             record();
@@ -84,7 +84,7 @@ fn dispatch_cost_breakdown() {
         let t = Instant::now();
         let mut sink = Vec::with_capacity(2000);
         for _ in 0..2000 {
-            sink.push(gpu.make_vector(1, vec![Complex::new(1.0, 0.0); 4]));
+            sink.push(gpu.make_vector(vec![Complex::new(1.0, 0.0); 4]));
         }
         println!(
             "make_vector (small):        {:>6.2} us/call",
@@ -102,7 +102,7 @@ fn dispatch_cost_breakdown() {
         println!("--- 64 devices (n={N}) / {m} foci ---");
         let g = propagation(&gpu, m);
         let b = gpu.back_prop(&g);
-        let ones = |len| gpu.make_vector(1, vec![Complex::new(1.0, 0.0); len]);
+        let ones = |len| gpu.make_vector(vec![Complex::new(1.0, 0.0); len]);
         let amps = ones(m);
         let q0 = ones(N);
         let p0 = ones(m);
@@ -146,13 +146,13 @@ fn quantize_cost() {
         return;
     };
     println!(
-        "{:<10} {:>6} {:>11} {:>11} {:>9} {:>9}",
-        "constraint", "batch", "gpu[ms]", "cpu[ms]", "gpu[ns/tr]", "speedup"
+        "{:<10} {:>11} {:>11} {:>9} {:>9}",
+        "constraint", "gpu[ms]", "cpu[ms]", "gpu[ns/tr]", "speedup"
     );
-    for batch in [1usize, 16, 64] {
-        let data = vec![Complex::new(1.0, 0.5); batch * N];
-        let gpu_v = gpu.make_vector(batch, data.clone());
-        let cpu_v = NalgebraBackend.make_vector(batch, data);
+    {
+        let data = vec![Complex::new(1.0, 0.5); N];
+        let gpu_v = gpu.make_vector(data.clone());
+        let cpu_v = NalgebraBackend.make_vector(data);
         for (label, c) in [
             (
                 "clamp",
@@ -175,9 +175,8 @@ fn quantize_cost() {
             let cpu_ms = t.elapsed().as_secs_f64() * 1e3 / QUANTIZE_ITERS as f64;
 
             println!(
-                "{label:<10} {batch:>6} {gpu_ms:>11.3} {cpu_ms:>11.3} \
-                 {:>10.2} {:>8.2}x",
-                gpu_ms * 1e6 / (batch * N) as f64,
+                "{label:<10} {gpu_ms:>11.3} {cpu_ms:>11.3} {:>10.2} {:>8.2}x",
+                gpu_ms * 1e6 / N as f64,
                 cpu_ms / gpu_ms
             );
         }
