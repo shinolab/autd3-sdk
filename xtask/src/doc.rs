@@ -23,7 +23,8 @@ const LONG_RUNNING_MARKER: &str = "# xtask:long-running";
 const SAMPLE_TIMEOUT: Duration = Duration::from_secs(30);
 const LONG_RUNNING_TIMEOUT: Duration = Duration::from_secs(8);
 const UDP_EMULATOR_ENV: &str = "AUTD3_UDP_EMULATOR";
-const UDP_EMULATOR_EXAMPLE: &str = "udp_emulator";
+const UDP_EMULATOR_PKG: &str = "autd3-rs-udp-emulator";
+const UDP_EMULATOR_BIN: &str = "autd3-udp-emulator";
 
 #[derive(Subcommand)]
 pub(crate) enum DocCmd {
@@ -1155,25 +1156,8 @@ fn run_python_samples(root: &Path, doc: &Path) -> Result<()> {
 }
 
 fn build_udp_emulator(root: &Path) -> Result<PathBuf> {
-    run(
-        "cargo",
-        [
-            "build",
-            "-p",
-            "autd3-rs-firmware-emulator",
-            "--features",
-            "udp",
-            "--example",
-            UDP_EMULATOR_EXAMPLE,
-        ],
-        root,
-    )?;
-    let bin = cargo_bin(
-        root,
-        None,
-        true,
-        &format!("examples/{UDP_EMULATOR_EXAMPLE}"),
-    );
+    run("cargo", ["build", "-p", UDP_EMULATOR_PKG], root)?;
+    let bin = cargo_bin(root, None, true, UDP_EMULATOR_BIN);
     if !bin.is_file() {
         bail!("the UDP emulator was not built at {}", bin.display());
     }

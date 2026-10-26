@@ -241,6 +241,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "autd3-rs-udp-emulator"
+version = "0.12.0"
+dependencies = [
+ "anyhow",
+ "autd3-rs-firmware-emulator",
+ "clap",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

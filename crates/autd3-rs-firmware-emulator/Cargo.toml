@@ -32,10 +32,5 @@ name = "udp"
 path = "tests/udp.rs"
 required-features = ["udp"]
 
-[[example]]
-name = "udp_emulator"
-path = "examples/udp_emulator.rs"
-required-features = ["udp"]
-
 [lints]
 workspace = true
