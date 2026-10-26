@@ -2,14 +2,12 @@ use zerocopy::{Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned};
 
 use super::try_read_exact;
 use crate::Error;
+use crate::layout::GPIO_IN_NUM;
 
 #[derive(TryFromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct GpioInPayload {
-    pub gpio_in_0: bool,
-    pub gpio_in_1: bool,
-    pub gpio_in_2: bool,
-    pub gpio_in_3: bool,
+    pub values: [bool; GPIO_IN_NUM],
 }
 
 impl GpioInPayload {
@@ -18,9 +16,4 @@ impl GpioInPayload {
     }
 }
 
-assert_layout!(GpioInPayload {
-    gpio_in_0: 0,
-    gpio_in_1: 1,
-    gpio_in_2: 2,
-    gpio_in_3: 3,
-} size 4);
+assert_layout!(GpioInPayload { values: 0 } size GPIO_IN_NUM);

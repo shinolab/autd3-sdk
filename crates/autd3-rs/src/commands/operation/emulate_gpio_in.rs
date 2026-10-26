@@ -20,10 +20,7 @@ impl Operation for EmulateGpioIn {
             out,
             Cmd::EmulateGpioIn,
             &GpioInPayload {
-                gpio_in_0: self.values[0],
-                gpio_in_1: self.values[1],
-                gpio_in_2: self.values[2],
-                gpio_in_3: self.values[3],
+                values: self.values,
             },
         );
         Ok(())

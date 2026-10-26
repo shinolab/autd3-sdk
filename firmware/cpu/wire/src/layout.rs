@@ -16,6 +16,7 @@ pub(crate) const FOCUS_COORD_MIN: i32 = -(1 << 17);
 pub(crate) const FOCUS_COORD_MAX: i32 = (1 << 17) - 1;
 
 pub const OUTPUT_MASK_WORDS: usize = NUM_TRANSDUCERS.div_ceil(16);
+pub(crate) const GPIO_IN_NUM: usize = 4;
 pub(crate) const GPIO_OUT_NUM: usize = 4;
 
 pub const PATTERN_RAW_DATA_LEN: usize = 2 * NUM_TRANSDUCERS;

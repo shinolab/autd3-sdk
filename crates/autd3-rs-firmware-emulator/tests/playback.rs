@@ -163,10 +163,7 @@ fn gpio_transition_waits_for_emulated_gpio_in() {
     );
 
     let gpio_in = GpioInPayload {
-        gpio_in_0: true,
-        gpio_in_1: false,
-        gpio_in_2: false,
-        gpio_in_3: false,
+        values: [true, false, false, false],
     };
     assert_eq!(
         device
