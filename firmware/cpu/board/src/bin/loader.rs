@@ -81,73 +81,10 @@ fn write32(addr: usize, value: u32) {
     unsafe { (addr as *mut u32).write_volatile(value) }
 }
 
-fn set_atcm_wait() {
-    write32(SYSTEM_PRCR, PRCR_ATCM_WAIT_UNLOCK);
-    let _ = read32(SYSTEM_PRCR);
-    write32(SYSTEM_SYTATCMWAIT, ATCMWAIT_ONE_WAIT_OPTIMIZED);
-    let _ = read32(SYSTEM_SYTATCMWAIT);
-    write32(SYSTEM_PRCR, PRCR_LOCK);
-    let _ = read32(SYSTEM_PRCR);
-}
-
 fn read_header(slot: Slot) -> Option<ImageHeader> {
     let addr = (SERIAL_FLASH_BASE + slot.base()) as usize;
     let header = unsafe { (addr as *const ImageHeader).read_volatile() };
     header.is_plausible().then_some(header)
-}
-
-fn read_vector(slot: Slot) -> [u32; VECTOR_WORDS] {
-    let base = (SERIAL_FLASH_BASE + slot.image_base()) as usize;
-    let mut vector = [0; VECTOR_WORDS];
-    for (i, word) in vector.iter_mut().enumerate() {
-        *word = read32(base + 4 * i);
-    }
-    vector
-}
-
-fn copy_app(slot: Slot, bytes: usize) {
-    let src = (SERIAL_FLASH_BASE + slot.image_base() + IMAGE_VECTOR_BYTES) as usize;
-    let dst = IMAGE_APP_LOAD_ADDR as usize;
-    for offset in (0..bytes).step_by(4) {
-        write32(dst + offset, read32(src + offset));
-    }
-}
-
-fn load(slot: Slot, header: &ImageHeader) -> Option<[u32; VECTOR_WORDS]> {
-    let app_bytes = (header.length.get() - IMAGE_VECTOR_BYTES) as usize;
-    let vector = read_vector(slot);
-    copy_app(slot, app_bytes);
-    let app = unsafe { core::slice::from_raw_parts(IMAGE_APP_LOAD_ADDR as *const u8, app_bytes) };
-    let mut digest = CRC32.digest();
-    for word in vector {
-        digest.update(&word.to_le_bytes());
-    }
-    digest.update(app);
-    (digest.finalize() == header.crc32.get()).then_some(vector)
-}
-
-fn boot(vector: &[u32; VECTOR_WORDS]) -> ! {
-    unsafe {
-        asm!(
-            "2:",
-            "ldr r3, [r0], #4",
-            "str r3, [r1], #4",
-            "subs r2, r2, #1",
-            "bne 2b",
-            "mrc p15, 0, r3, c1, c0, 0",
-            "bic r3, r3, #0x2000",
-            "mcr p15, 0, r3, c1, c0, 0",
-            "isb",
-            "mov r3, #{reset_vector}",
-            "ldr r3, [r3]",
-            "bx r3",
-            in("r0") vector.as_ptr(),
-            in("r1") 0u32,
-            in("r2") VECTOR_WORDS,
-            reset_vector = const IMAGE_RESET_VECTOR_OFFSET,
-            options(noreturn),
-        )
-    }
 }
 
 fn halt() -> ! {
@@ -157,7 +94,12 @@ fn halt() -> ! {
 }
 
 extern "C" fn loader_main() -> ! {
-    set_atcm_wait();
+    write32(SYSTEM_PRCR, PRCR_ATCM_WAIT_UNLOCK);
+    let _ = read32(SYSTEM_PRCR);
+    write32(SYSTEM_SYTATCMWAIT, ATCMWAIT_ONE_WAIT_OPTIMIZED);
+    let _ = read32(SYSTEM_SYTATCMWAIT);
+    write32(SYSTEM_PRCR, PRCR_LOCK);
+    let _ = read32(SYSTEM_PRCR);
     let mut a = read_header(Slot::A);
     let mut b = read_header(Slot::B);
     loop {
@@ -166,8 +108,50 @@ extern "C" fn loader_main() -> ! {
             Some(Slot::B) => (Slot::B, b.take()),
             None => halt(),
         };
-        if let Some(vector) = header.and_then(|header| load(slot, &header)) {
-            boot(&vector);
+        let Some(header) = header else {
+            continue;
+        };
+        let app_bytes = (header.length.get() - IMAGE_VECTOR_BYTES) as usize;
+        let base = (SERIAL_FLASH_BASE + slot.image_base()) as usize;
+        let mut vector = [0; VECTOR_WORDS];
+        for (i, word) in vector.iter_mut().enumerate() {
+            *word = read32(base + 4 * i);
+        }
+        let src = (SERIAL_FLASH_BASE + slot.image_base() + IMAGE_VECTOR_BYTES) as usize;
+        let dst = IMAGE_APP_LOAD_ADDR as usize;
+        for offset in (0..app_bytes).step_by(4) {
+            write32(dst + offset, read32(src + offset));
+        }
+        let app =
+            unsafe { core::slice::from_raw_parts(IMAGE_APP_LOAD_ADDR as *const u8, app_bytes) };
+        let mut digest = CRC32.digest();
+        for word in vector {
+            digest.update(&word.to_le_bytes());
+        }
+        digest.update(app);
+        if digest.finalize() != header.crc32.get() {
+            continue;
+        }
+        unsafe {
+            asm!(
+                "2:",
+                "ldr r3, [r0], #4",
+                "str r3, [r1], #4",
+                "subs r2, r2, #1",
+                "bne 2b",
+                "mrc p15, 0, r3, c1, c0, 0",
+                "bic r3, r3, #0x2000",
+                "mcr p15, 0, r3, c1, c0, 0",
+                "isb",
+                "mov r3, #{reset_vector}",
+                "ldr r3, [r3]",
+                "bx r3",
+                in("r0") vector.as_ptr(),
+                in("r1") 0u32,
+                in("r2") VECTOR_WORDS,
+                reset_vector = const IMAGE_RESET_VECTOR_OFFSET,
+                options(noreturn),
+            )
         }
     }
 }

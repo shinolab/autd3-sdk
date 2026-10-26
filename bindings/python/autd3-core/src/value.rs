@@ -80,26 +80,26 @@ impl Hash for Phase {
     }
 }
 
-fn extract_complex(value: &Bound<'_, PyAny>) -> PyResult<Option<Complex<f32>>> {
-    let complex = if let Ok(complex) = value.cast::<PyComplex>() {
-        complex.clone()
-    } else if value.hasattr("__complex__")? {
-        value
-            .py()
-            .get_type::<PyComplex>()
-            .call1((value,))?
-            .cast_into::<PyComplex>()?
-    } else {
-        return Ok(None);
-    };
-    #[allow(clippy::cast_possible_truncation)]
-    Ok(Some(Complex::new(
-        complex.real() as f32,
-        complex.imag() as f32,
-    )))
-}
-
 fn extract_phase(value: &Bound<'_, PyAny>) -> PyResult<CorePhase> {
+    fn extract_complex(value: &Bound<'_, PyAny>) -> PyResult<Option<Complex<f32>>> {
+        let complex = if let Ok(complex) = value.cast::<PyComplex>() {
+            complex.clone()
+        } else if value.hasattr("__complex__")? {
+            value
+                .py()
+                .get_type::<PyComplex>()
+                .call1((value,))?
+                .cast_into::<PyComplex>()?
+        } else {
+            return Ok(None);
+        };
+        #[allow(clippy::cast_possible_truncation)]
+        Ok(Some(Complex::new(
+            complex.real() as f32,
+            complex.imag() as f32,
+        )))
+    }
+
     if let Ok(v) = value.extract::<u8>() {
         return Ok(CorePhase(v));
     }

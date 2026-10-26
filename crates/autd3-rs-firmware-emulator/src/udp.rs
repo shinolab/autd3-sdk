@@ -351,26 +351,6 @@ fn lock(chain: &Mutex<Chain>) -> MutexGuard<'_, Chain> {
     chain.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-fn serve(chain: &Mutex<Chain>, socket: &UdpSocket, via: Via, stop: &AtomicBool) {
-    let mut buf = vec![0u8; 2048];
-    while !stop.load(Ordering::Acquire) {
-        match socket.recv_from(&mut buf) {
-            Ok((len, src)) => lock(chain).handle(via, src, &buf[..len]),
-            Err(e)
-                if matches!(
-                    e.kind(),
-                    io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
-                ) =>
-            {
-                if let Via::Unit(index) = via {
-                    lock(chain).advance(index, Instant::now());
-                }
-            }
-            Err(e) => tracing::debug!("emulated device socket error: {e}"),
-        }
-    }
-}
-
 impl UdpEmulator {
     pub fn spawn(num_devices: usize) -> io::Result<Self> {
         Self::spawn_at(LOOPBACK_ANY, num_devices)
@@ -416,7 +396,25 @@ impl UdpEmulator {
             let serving = Arc::clone(&stop);
             let spawned = std::thread::Builder::new()
                 .name("udp-emulator".into())
-                .spawn(move || serve(&chain, &socket, via, &serving));
+                .spawn(move || {
+                    let mut buf = vec![0u8; 2048];
+                    while !serving.load(Ordering::Acquire) {
+                        match socket.recv_from(&mut buf) {
+                            Ok((len, src)) => lock(&chain).handle(via, src, &buf[..len]),
+                            Err(e)
+                                if matches!(
+                                    e.kind(),
+                                    io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+                                ) =>
+                            {
+                                if let Via::Unit(index) = via {
+                                    lock(&chain).advance(index, Instant::now());
+                                }
+                            }
+                            Err(e) => tracing::debug!("emulated device socket error: {e}"),
+                        }
+                    }
+                });
             match spawned {
                 Ok(thread) => threads.push(thread),
                 Err(e) => {

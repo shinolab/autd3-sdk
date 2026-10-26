@@ -81,13 +81,125 @@ pub(crate) enum CsCmd {
     Clean(CleanArgs),
 }
 
+#[allow(clippy::too_many_lines)]
 pub(crate) fn run_cs(root: &Path, cmd: CsCmd) -> Result<()> {
     let dir = root.join("bindings").join("csharp");
     match cmd {
-        CsCmd::Build { debug } => build(&dir, debug),
-        CsCmd::Pack { native_dir, out } => pack(root, native_dir, out),
-        CsCmd::Test => test(root, &dir),
-        CsCmd::Format { fix } => format(&dir, fix),
+        CsCmd::Build { debug } => {
+            let config = if debug { "Debug" } else { "Release" };
+            run("dotnet", ["build", SOLUTION, "-c", config], &dir)
+        }
+        CsCmd::Pack { native_dir, out } => {
+            let ffi = root.join("bindings").join("ffi");
+            let native_root = native_dir.unwrap_or_else(|| ffi.join("target").join("native"));
+            let present: Vec<&str> = RIDS
+                .iter()
+                .copied()
+                .filter(|rid| native_root.join(rid).is_dir())
+                .collect();
+            let host = if present.is_empty() {
+                run("cargo", ["build", "--workspace", "--release"], &ffi)?;
+                Some((host_rid()?, ffi.join("target").join("release")))
+            } else {
+                None
+            };
+            let out = out.unwrap_or_else(|| dir.join("dist"));
+            std::fs::create_dir_all(&out)?;
+            let src = dir.join("src");
+            for pkg in PACKAGES {
+                let lib = pkg.lib;
+                let pkg = pkg.assembly;
+                let pkg_dir = src.join(pkg);
+                let runtimes = pkg_dir.join("runtimes");
+                if runtimes.exists() {
+                    std::fs::remove_dir_all(&runtimes)
+                        .with_context(|| format!("clearing {}", runtimes.display()))?;
+                }
+                match &host {
+                    Some((rid, from)) => stage_native(from, rid, lib, &runtimes)?,
+                    None => {
+                        for rid in &present {
+                            stage_native(&native_root.join(rid), rid, lib, &runtimes)?;
+                        }
+                    }
+                }
+                let proj = pkg_dir.join(format!("{pkg}.csproj"));
+                run(
+                    "dotnet",
+                    [
+                        "pack",
+                        &proj.to_string_lossy(),
+                        "-c",
+                        "Release",
+                        "-o",
+                        &out.to_string_lossy(),
+                    ],
+                    &dir,
+                )?;
+            }
+            println!("cs pack: nupkg written to {}", out.display());
+            Ok(())
+        }
+        CsCmd::Test => {
+            let ffi = root.join("bindings").join("ffi");
+            run("cargo", ["build", "--workspace", "--release"], &ffi)?;
+            let native = ffi.join("target").join("release");
+            if cfg!(target_os = "windows") {
+                run("dotnet", ["build", SOLUTION, "-c", "Debug"], &dir)?;
+                let test_bin = dir.join("tests/AUTD3.Tests/bin/Debug");
+                let (_, ext) = rid_affix(host_rid()?);
+                let mut staged = 0;
+                for tfm in std::fs::read_dir(&test_bin)
+                    .with_context(|| format!("reading test output dir {}", test_bin.display()))?
+                {
+                    let tfm = tfm?.path();
+                    if !tfm.is_dir() {
+                        continue;
+                    }
+                    for lib in std::fs::read_dir(&native)? {
+                        let lib = lib?.path();
+                        if lib.extension().and_then(|e| e.to_str()) == Some(ext) {
+                            std::fs::copy(&lib, tfm.join(lib.file_name().unwrap()))?;
+                            staged += 1;
+                        }
+                    }
+                }
+                if staged == 0 {
+                    bail!(
+                        "no native libraries staged from {} into {}",
+                        native.display(),
+                        test_bin.display()
+                    );
+                }
+                run(
+                    "dotnet",
+                    ["test", SOLUTION, "-c", "Debug", "--no-build"],
+                    &dir,
+                )
+            } else {
+                let (var, value): (&str, OsString) = if cfg!(target_os = "windows") {
+                    let existing = std::env::var("PATH").unwrap_or_default();
+                    ("PATH", format!("{};{existing}", native.display()).into())
+                } else if cfg!(target_os = "macos") {
+                    ("DYLD_LIBRARY_PATH", native.clone().into())
+                } else {
+                    ("LD_LIBRARY_PATH", native.clone().into())
+                };
+                run_env(
+                    "dotnet",
+                    ["test", SOLUTION, "-c", "Debug"],
+                    &dir,
+                    &[(var, value.as_os_str())],
+                )
+            }
+        }
+        CsCmd::Format { fix } => {
+            let mut args = vec!["format", SOLUTION];
+            if !fix {
+                args.push("--verify-no-changes");
+            }
+            run("dotnet", args, &dir)
+        }
         CsCmd::Clean(args) => crate::clean::scope(root, args, clean),
     }
 }
@@ -99,96 +211,6 @@ pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {
         &["runtimes", "THIRD-PARTY-LICENSES.md"],
     )?;
     cleaner.nested("bindings/csharp", &["bin", "obj"])
-}
-
-fn build(dir: &Path, debug: bool) -> Result<()> {
-    let config = if debug { "Debug" } else { "Release" };
-    run("dotnet", ["build", SOLUTION, "-c", config], dir)
-}
-
-fn test(root: &Path, dir: &Path) -> Result<()> {
-    let native = build_ffi(root)?;
-    if cfg!(target_os = "windows") {
-        run("dotnet", ["build", SOLUTION, "-c", "Debug"], dir)?;
-        stage_native_libs(&native, dir)?;
-        run(
-            "dotnet",
-            ["test", SOLUTION, "-c", "Debug", "--no-build"],
-            dir,
-        )
-    } else {
-        let (var, value) = native_lib_env(&native);
-        run_env(
-            "dotnet",
-            ["test", SOLUTION, "-c", "Debug"],
-            dir,
-            &[(var, value.as_os_str())],
-        )
-    }
-}
-
-fn format(dir: &Path, fix: bool) -> Result<()> {
-    let mut args = vec!["format", SOLUTION];
-    if !fix {
-        args.push("--verify-no-changes");
-    }
-    run("dotnet", args, dir)
-}
-
-fn pack(root: &Path, native_dir: Option<PathBuf>, out: Option<PathBuf>) -> Result<()> {
-    let dir = root.join("bindings").join("csharp");
-    let ffi = root.join("bindings").join("ffi");
-    let native_root = native_dir.unwrap_or_else(|| ffi.join("target").join("native"));
-
-    let present: Vec<&str> = RIDS
-        .iter()
-        .copied()
-        .filter(|rid| native_root.join(rid).is_dir())
-        .collect();
-    let host = if present.is_empty() {
-        run("cargo", ["build", "--workspace", "--release"], &ffi)?;
-        Some((host_rid()?, ffi.join("target").join("release")))
-    } else {
-        None
-    };
-
-    let out = out.unwrap_or_else(|| dir.join("dist"));
-    std::fs::create_dir_all(&out)?;
-    let src = dir.join("src");
-
-    for pkg in PACKAGES {
-        let lib = pkg.lib;
-        let pkg = pkg.assembly;
-        let pkg_dir = src.join(pkg);
-        let runtimes = pkg_dir.join("runtimes");
-        if runtimes.exists() {
-            std::fs::remove_dir_all(&runtimes)
-                .with_context(|| format!("clearing {}", runtimes.display()))?;
-        }
-        match &host {
-            Some((rid, from)) => stage_native(from, rid, lib, &runtimes)?,
-            None => {
-                for rid in &present {
-                    stage_native(&native_root.join(rid), rid, lib, &runtimes)?;
-                }
-            }
-        }
-        let proj = pkg_dir.join(format!("{pkg}.csproj"));
-        run(
-            "dotnet",
-            [
-                "pack",
-                &proj.to_string_lossy(),
-                "-c",
-                "Release",
-                "-o",
-                &out.to_string_lossy(),
-            ],
-            &dir,
-        )?;
-    }
-    println!("cs pack: nupkg written to {}", out.display());
-    Ok(())
 }
 
 fn stage_native(from: &Path, rid: &str, lib: &str, runtimes: &Path) -> Result<()> {
@@ -223,50 +245,4 @@ pub(crate) fn host_rid() -> Result<&'static str> {
         ("macos", "x86_64") => "osx-x64",
         (os, arch) => bail!("unsupported host {os}/{arch}"),
     })
-}
-
-fn build_ffi(root: &Path) -> Result<PathBuf> {
-    let ffi = root.join("bindings").join("ffi");
-    run("cargo", ["build", "--workspace", "--release"], &ffi)?;
-    Ok(ffi.join("target").join("release"))
-}
-
-fn native_lib_env(native: &Path) -> (&'static str, OsString) {
-    if cfg!(target_os = "windows") {
-        let existing = std::env::var("PATH").unwrap_or_default();
-        ("PATH", format!("{};{existing}", native.display()).into())
-    } else if cfg!(target_os = "macos") {
-        ("DYLD_LIBRARY_PATH", native.into())
-    } else {
-        ("LD_LIBRARY_PATH", native.into())
-    }
-}
-
-fn stage_native_libs(native: &Path, csharp_dir: &Path) -> Result<()> {
-    let test_bin = csharp_dir.join("tests/AUTD3.Tests/bin/Debug");
-    let (_, ext) = rid_affix(host_rid()?);
-    let mut staged = 0;
-    for tfm in std::fs::read_dir(&test_bin)
-        .with_context(|| format!("reading test output dir {}", test_bin.display()))?
-    {
-        let tfm = tfm?.path();
-        if !tfm.is_dir() {
-            continue;
-        }
-        for lib in std::fs::read_dir(native)? {
-            let lib = lib?.path();
-            if lib.extension().and_then(|e| e.to_str()) == Some(ext) {
-                std::fs::copy(&lib, tfm.join(lib.file_name().unwrap()))?;
-                staged += 1;
-            }
-        }
-    }
-    if staged == 0 {
-        bail!(
-            "no native libraries staged from {} into {}",
-            native.display(),
-            test_bin.display()
-        );
-    }
-    Ok(())
 }

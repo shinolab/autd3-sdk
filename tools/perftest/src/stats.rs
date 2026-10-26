@@ -154,7 +154,14 @@ impl Histogram {
 
     pub(crate) fn record(&mut self, rtt: Duration) {
         let ns = u64::try_from(rtt.as_nanos()).unwrap_or(u64::MAX);
-        self.buckets[bucket_index(ns)] += 1;
+        let sub_buckets = SUB_BUCKETS as u64;
+        let index = if ns < sub_buckets {
+            ns
+        } else {
+            let shift = u64::from(u64::BITS - 1 - ns.leading_zeros() - SUB_BUCKET_BITS);
+            (shift + 1) * sub_buckets + (ns >> shift) - sub_buckets
+        };
+        self.buckets[usize::try_from(index).unwrap_or(BUCKETS - 1)] += 1;
         self.count += 1;
         self.sum_ns += u128::from(ns);
         self.min_ns = self.min_ns.min(ns);
@@ -189,6 +196,17 @@ impl Histogram {
     }
 
     fn percentile(&self, p: u64) -> Duration {
+        const fn bucket_upper_ns(index: usize) -> u64 {
+            let sub_buckets = SUB_BUCKETS as u64;
+            let group = index as u64 / sub_buckets;
+            let mantissa = index as u64 % sub_buckets;
+            if group == 0 {
+                return mantissa;
+            }
+            let shift = group - 1;
+            ((sub_buckets + mantissa) << shift) + ((1u64 << shift) - 1)
+        }
+
         let rank = p
             .saturating_mul(self.count)
             .saturating_add(99)
@@ -204,28 +222,6 @@ impl Histogram {
         }
         Duration::from_nanos(self.max_ns)
     }
-}
-
-fn bucket_index(ns: u64) -> usize {
-    let sub_buckets = SUB_BUCKETS as u64;
-    let index = if ns < sub_buckets {
-        ns
-    } else {
-        let shift = u64::from(u64::BITS - 1 - ns.leading_zeros() - SUB_BUCKET_BITS);
-        (shift + 1) * sub_buckets + (ns >> shift) - sub_buckets
-    };
-    usize::try_from(index).unwrap_or(BUCKETS - 1)
-}
-
-const fn bucket_upper_ns(index: usize) -> u64 {
-    let sub_buckets = SUB_BUCKETS as u64;
-    let group = index as u64 / sub_buckets;
-    let mantissa = index as u64 % sub_buckets;
-    if group == 0 {
-        return mantissa;
-    }
-    let shift = group - 1;
-    ((sub_buckets + mantissa) << shift) + ((1u64 << shift) - 1)
 }
 
 #[derive(Default)]

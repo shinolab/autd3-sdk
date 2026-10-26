@@ -8,15 +8,6 @@ fn quat_to_euler_deg(q: Quat) -> Vec3 {
     Vec3::new(x.to_degrees(), y.to_degrees(), z.to_degrees())
 }
 
-fn look_euler(pos: Vec3, pivot: Vec3) -> Vec3 {
-    if (pivot - pos).length() < 1e-4 {
-        return Vec3::ZERO;
-    }
-    let view = look_at_mat4(pos, pivot, Vec3::Z);
-    let world_rot = Mat3::from_mat4(view).transpose();
-    quat_to_euler_deg(Quat::from_mat3(&world_rot))
-}
-
 #[derive(Clone, Copy)]
 pub(crate) struct Camera {
     pub(crate) pos: Vec3,
@@ -44,6 +35,15 @@ impl Camera {
     }
 
     pub(crate) fn aim_at_pivot(&mut self) {
+        fn look_euler(pos: Vec3, pivot: Vec3) -> Vec3 {
+            if (pivot - pos).length() < 1e-4 {
+                return Vec3::ZERO;
+            }
+            let view = look_at_mat4(pos, pivot, Vec3::Z);
+            let world_rot = Mat3::from_mat4(view).transpose();
+            quat_to_euler_deg(Quat::from_mat3(&world_rot))
+        }
+
         self.rot = look_euler(self.pos, self.pivot);
     }
 

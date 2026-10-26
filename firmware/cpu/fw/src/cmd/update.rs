@@ -96,15 +96,6 @@ fn slot_write<P: Port>(port: &mut P, slot: Slot, offset: u32, data: &[u8]) -> Re
     Ok(())
 }
 
-fn slot_erase<P: Port>(port: &mut P, slot: Slot, len: u32) -> Result<(), Error> {
-    let len = len.div_ceil(FLASH_SECTOR_BYTES) * FLASH_SECTOR_BYTES;
-    if !slot_range_ok(0, len) {
-        return Err(Error::InvalidPayload);
-    }
-    port.flash_erase(slot.base(), len)?;
-    Ok(())
-}
-
 fn image_crc32<P: Port>(port: &mut P, slot: Slot, length: u32) -> Result<u32, Error> {
     let mut digest = CRC32.digest();
     let mut buf = [0u8; READBACK_BYTES];
@@ -133,18 +124,6 @@ fn valid_header<P: Port>(port: &mut P, slot: Slot) -> Result<Option<ImageHeader>
         return Ok(None);
     }
     Ok(Some(header))
-}
-
-fn boot_selection<P: Port>(port: &mut P) -> Result<Option<(Slot, ImageHeader)>, Error> {
-    let a = valid_header(port, Slot::A)?;
-    let b = valid_header(port, Slot::B)?;
-    Ok(select_boot_slot(a.as_ref(), b.as_ref()).and_then(|slot| {
-        let header = match slot {
-            Slot::A => a,
-            Slot::B => b,
-        };
-        header.map(|h| (slot, h))
-    }))
 }
 
 impl Cpu {
@@ -176,7 +155,12 @@ impl Cpu {
         if self.update.boot_slot() == Some(slot) {
             self.update.boot.set(None);
         }
-        slot_erase(port, slot, SLOT_HEADER_BYTES + length)?;
+        let erase_len =
+            (SLOT_HEADER_BYTES + length).div_ceil(FLASH_SECTOR_BYTES) * FLASH_SECTOR_BYTES;
+        if !slot_range_ok(0, erase_len) {
+            return Err(Error::InvalidPayload);
+        }
+        port.flash_erase(slot.base(), erase_len)?;
         self.update.state.set(State::Receiving {
             slot,
             length,
@@ -222,7 +206,15 @@ impl Cpu {
 
     pub(crate) fn record_boot_attempt<P: Port>(&self, port: &mut P) -> Result<(), Error> {
         self.update.boot.set(None);
-        let Some((slot, header)) = boot_selection(port)? else {
+        let a = valid_header(port, Slot::A)?;
+        let b = valid_header(port, Slot::B)?;
+        let Some((slot, header)) = select_boot_slot(a.as_ref(), b.as_ref()).and_then(|slot| {
+            let header = match slot {
+                Slot::A => a,
+                Slot::B => b,
+            };
+            header.map(|h| (slot, h))
+        }) else {
             return Ok(());
         };
         self.update.boot.set(Some(BootImage {

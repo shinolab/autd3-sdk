@@ -13,13 +13,13 @@ const BIN: &str = "autd3-firmware-writer";
 const OTA_BIN: &str = "autd3-firmware-ota";
 const MIN_OTA_VERSION: (u64, u64, u64) = (0, 10, 0);
 
-fn parse_version(version: &str) -> Option<(u64, u64, u64)> {
-    let mut parts = version.trim_start_matches('v').split('.');
-    let mut next = || parts.next()?.parse::<u64>().ok();
-    Some((next()?, next()?, next()?))
-}
-
 fn supports_ota(version: &str) -> bool {
+    fn parse_version(version: &str) -> Option<(u64, u64, u64)> {
+        let mut parts = version.trim_start_matches('v').split('.');
+        let mut next = || parts.next()?.parse::<u64>().ok();
+        Some((next()?, next()?, next()?))
+    }
+
     parse_version(version).is_some_and(|v| v >= MIN_OTA_VERSION)
 }
 

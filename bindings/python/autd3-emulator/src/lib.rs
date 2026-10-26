@@ -41,20 +41,6 @@ fn extract_axis(obj: &Bound<'_, PyAny>) -> PyResult<RangeInclusive<f32>> {
     Ok(start..=end)
 }
 
-fn extract_order(order: &str) -> PyResult<AxisOrder> {
-    match order {
-        "xyz" => Ok(AxisOrder::XYZ),
-        "xzy" => Ok(AxisOrder::XZY),
-        "yxz" => Ok(AxisOrder::YXZ),
-        "yzx" => Ok(AxisOrder::YZX),
-        "zxy" => Ok(AxisOrder::ZXY),
-        "zyx" => Ok(AxisOrder::ZYX),
-        _ => Err(PyValueError::new_err(
-            "order must be one of 'xyz', 'xzy', 'yxz', 'yzx', 'zxy', 'zyx'",
-        )),
-    }
-}
-
 #[pyclass(name = "Grid", module = "autd3_emulator")]
 pub struct Grid(CoreGrid);
 
@@ -69,12 +55,25 @@ impl Grid {
         resolution: f32,
         order: &str,
     ) -> PyResult<Self> {
+        let order = match order {
+            "xyz" => AxisOrder::XYZ,
+            "xzy" => AxisOrder::XZY,
+            "yxz" => AxisOrder::YXZ,
+            "yzx" => AxisOrder::YZX,
+            "zxy" => AxisOrder::ZXY,
+            "zyx" => AxisOrder::ZYX,
+            _ => {
+                return Err(PyValueError::new_err(
+                    "order must be one of 'xyz', 'xzy', 'yxz', 'yzx', 'zxy', 'zyx'",
+                ));
+            }
+        };
         Ok(Self(CoreGrid {
             x: extract_axis(x)?,
             y: extract_axis(y)?,
             z: extract_axis(z)?,
             resolution,
-            order: extract_order(order)?,
+            order,
         }))
     }
 }

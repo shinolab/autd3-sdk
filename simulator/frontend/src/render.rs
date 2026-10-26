@@ -96,6 +96,7 @@ pub(crate) struct Renderer {
 }
 
 impl Renderer {
+    #[allow(clippy::too_many_lines)]
     pub(crate) async fn new(
         canvas: web_sys::HtmlCanvasElement,
         settings: &Settings,
@@ -103,25 +104,149 @@ impl Renderer {
         let (width, height) = backing_size(&canvas);
         canvas.set_width(width);
         canvas.set_height(height);
-        let Gpu {
-            surface,
-            config,
-            device,
-            queue,
-            sample_count,
-        } = init_gpu(canvas.clone(), width, height).await?;
-        let format = config.format;
+        let instance = wgpu::Instance::default();
+        let surface = instance
+            .create_surface(wgpu::SurfaceTarget::Canvas(canvas.clone()))
+            .map_err(|e| format!("create_surface: {e}"))?;
+        let adapter = instance
+            .request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::HighPerformance,
+                compatible_surface: Some(&surface),
+                force_fallback_adapter: false,
+                apply_limit_buckets: false,
+            })
+            .await
+            .map_err(|e| format!("request_adapter: {e}"))?;
+        let (device, queue) = adapter
+            .request_device(&wgpu::DeviceDescriptor {
+                label: Some("simulator-device"),
+                required_features: wgpu::Features::empty(),
+                required_limits: wgpu::Limits::default(),
+                experimental_features: wgpu::ExperimentalFeatures::default(),
+                memory_hints: wgpu::MemoryHints::default(),
+                trace: wgpu::Trace::Off,
+            })
+            .await
+            .map_err(|e| format!("request_device: {e}"))?;
+        let caps = surface.get_capabilities(&adapter);
+        let format = caps.formats[0];
+        let sample_count = if adapter
+            .get_texture_format_features(format)
+            .flags
+            .sample_count_supported(MSAA_SAMPLES)
+        {
+            MSAA_SAMPLES
+        } else {
+            1
+        };
+        let config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format,
+            width,
+            height,
+            present_mode: wgpu::PresentMode::Fifo,
+            desired_maximum_frame_latency: 2,
+            alpha_mode: caps.alpha_modes[0],
+            color_space: wgpu::SurfaceColorSpace::Auto,
+            view_formats: vec![],
+        };
+        surface.configure(&device, &config);
 
-        let Pipelines {
-            bind_group_layout,
-            field_compute_layout,
-            field_render_layout,
-            slice_pipeline,
-            marker_pipeline,
-            gizmo_pipeline,
-            ring_pipeline,
-            field_pipeline,
-        } = build_pipelines(&device, format, sample_count);
+        let target = Target {
+            format,
+            sample_count,
+        };
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("scene-bgl"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: SCENE_STAGES,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                storage_entry(1),
+                storage_entry(2),
+                storage_entry(3),
+            ],
+        });
+        let field_compute_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("field-compute-bgl"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::StorageTexture {
+                        access: wgpu::StorageTextureAccess::WriteOnly,
+                        format: FIELD_FORMAT,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                    },
+                    count: None,
+                }],
+            });
+        let field_render_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("field-render-bgl"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+            });
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("scene-shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("scene.wgsl").into()),
+        });
+        let layouts = [&bind_group_layout, &field_render_layout];
+        let field_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("field_cs"),
+            layout: Some(
+                &device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("field-pl"),
+                    bind_group_layouts: &[Some(&bind_group_layout), Some(&field_compute_layout)],
+                    immediate_size: 0,
+                }),
+            ),
+            module: &shader,
+            entry_point: Some("field_cs"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            cache: None,
+        });
+        let slice_pipeline = build_pipeline(
+            &device, &layouts, &shader, target, "slice_vs", "slice_fs", true,
+        );
+        let marker_pipeline = build_pipeline(
+            &device,
+            &layouts,
+            &shader,
+            target,
+            "marker_vs",
+            "marker_fs",
+            true,
+        );
+        let gizmo_pipeline = build_pipeline(
+            &device, &layouts, &shader, target, "gizmo_vs", "gizmo_fs", false,
+        );
+        let ring_pipeline = build_pipeline(
+            &device, &layouts, &shader, target, "ring_vs", "gizmo_fs", false,
+        );
 
         let field_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("field-sampler"),
@@ -719,14 +844,6 @@ impl Renderer {
     }
 }
 
-struct Gpu {
-    surface: wgpu::Surface<'static>,
-    config: wgpu::SurfaceConfiguration,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    sample_count: u32,
-}
-
 fn clear_color(rgb: [f32; 3]) -> wgpu::Color {
     wgpu::Color {
         r: f64::from(rgb[0]),
@@ -750,190 +867,10 @@ fn backing_size(canvas: &web_sys::HtmlCanvasElement) -> (u32, u32) {
     (to_dim(width), to_dim(height))
 }
 
-async fn init_gpu(
-    canvas: web_sys::HtmlCanvasElement,
-    width: u32,
-    height: u32,
-) -> Result<Gpu, String> {
-    let instance = wgpu::Instance::default();
-    let surface = instance
-        .create_surface(wgpu::SurfaceTarget::Canvas(canvas))
-        .map_err(|e| format!("create_surface: {e}"))?;
-    let adapter = instance
-        .request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
-            compatible_surface: Some(&surface),
-            force_fallback_adapter: false,
-            apply_limit_buckets: false,
-        })
-        .await
-        .map_err(|e| format!("request_adapter: {e}"))?;
-    let (device, queue) = adapter
-        .request_device(&wgpu::DeviceDescriptor {
-            label: Some("simulator-device"),
-            required_features: wgpu::Features::empty(),
-            required_limits: wgpu::Limits::default(),
-            experimental_features: wgpu::ExperimentalFeatures::default(),
-            memory_hints: wgpu::MemoryHints::default(),
-            trace: wgpu::Trace::Off,
-        })
-        .await
-        .map_err(|e| format!("request_device: {e}"))?;
-
-    let caps = surface.get_capabilities(&adapter);
-    let format = caps.formats[0];
-    let sample_count = if adapter
-        .get_texture_format_features(format)
-        .flags
-        .sample_count_supported(MSAA_SAMPLES)
-    {
-        MSAA_SAMPLES
-    } else {
-        1
-    };
-    let config = wgpu::SurfaceConfiguration {
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        format,
-        width,
-        height,
-        present_mode: wgpu::PresentMode::Fifo,
-        desired_maximum_frame_latency: 2,
-        alpha_mode: caps.alpha_modes[0],
-        color_space: wgpu::SurfaceColorSpace::Auto,
-        view_formats: vec![],
-    };
-    surface.configure(&device, &config);
-
-    Ok(Gpu {
-        surface,
-        config,
-        device,
-        queue,
-        sample_count,
-    })
-}
-
-struct Pipelines {
-    bind_group_layout: wgpu::BindGroupLayout,
-    field_compute_layout: wgpu::BindGroupLayout,
-    field_render_layout: wgpu::BindGroupLayout,
-    slice_pipeline: wgpu::RenderPipeline,
-    marker_pipeline: wgpu::RenderPipeline,
-    gizmo_pipeline: wgpu::RenderPipeline,
-    ring_pipeline: wgpu::RenderPipeline,
-    field_pipeline: wgpu::ComputePipeline,
-}
-
 #[derive(Clone, Copy)]
 struct Target {
     format: wgpu::TextureFormat,
     sample_count: u32,
-}
-
-fn build_pipelines(
-    device: &wgpu::Device,
-    format: wgpu::TextureFormat,
-    sample_count: u32,
-) -> Pipelines {
-    let target = Target {
-        format,
-        sample_count,
-    };
-    let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("scene-bgl"),
-        entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: SCENE_STAGES,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-            storage_entry(1),
-            storage_entry(2),
-            storage_entry(3),
-        ],
-    });
-    let field_compute_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("field-compute-bgl"),
-        entries: &[wgpu::BindGroupLayoutEntry {
-            binding: 0,
-            visibility: wgpu::ShaderStages::COMPUTE,
-            ty: wgpu::BindingType::StorageTexture {
-                access: wgpu::StorageTextureAccess::WriteOnly,
-                format: FIELD_FORMAT,
-                view_dimension: wgpu::TextureViewDimension::D2,
-            },
-            count: None,
-        }],
-    });
-    let field_render_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("field-render-bgl"),
-        entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 2,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                count: None,
-            },
-        ],
-    });
-    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some("scene-shader"),
-        source: wgpu::ShaderSource::Wgsl(include_str!("scene.wgsl").into()),
-    });
-    let layouts = [&bind_group_layout, &field_render_layout];
-    let field_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-        label: Some("field_cs"),
-        layout: Some(
-            &device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("field-pl"),
-                bind_group_layouts: &[Some(&bind_group_layout), Some(&field_compute_layout)],
-                immediate_size: 0,
-            }),
-        ),
-        module: &shader,
-        entry_point: Some("field_cs"),
-        compilation_options: wgpu::PipelineCompilationOptions::default(),
-        cache: None,
-    });
-    Pipelines {
-        slice_pipeline: build_pipeline(
-            device, &layouts, &shader, target, "slice_vs", "slice_fs", true,
-        ),
-        marker_pipeline: build_pipeline(
-            device,
-            &layouts,
-            &shader,
-            target,
-            "marker_vs",
-            "marker_fs",
-            true,
-        ),
-        gizmo_pipeline: build_pipeline(
-            device, &layouts, &shader, target, "gizmo_vs", "gizmo_fs", false,
-        ),
-        ring_pipeline: build_pipeline(
-            device, &layouts, &shader, target, "ring_vs", "gizmo_fs", false,
-        ),
-        field_pipeline,
-        bind_group_layout,
-        field_compute_layout,
-        field_render_layout,
-    }
 }
 
 fn build_pipeline(

@@ -96,6 +96,22 @@ impl Component {
     }
 
     pub(crate) fn current_version(&self, root: &Path) -> Result<String> {
+        fn toml_version(text: &str, table: &[&str]) -> Option<String> {
+            let doc: toml_edit::DocumentMut = text.parse().ok()?;
+            table
+                .iter()
+                .try_fold(doc.as_item(), |item, key| item.get(key))?
+                .get("version")
+                .and_then(toml_edit::Item::as_str)
+                .map(str::to_string)
+        }
+
+        fn between(text: &str, open: &str, close: &str) -> Option<String> {
+            let start = text.find(open)? + open.len();
+            let end = text[start..].find(close)? + start;
+            Some(text[start..end].trim().to_string())
+        }
+
         let file = root.join(self.version_file);
         let text = std::fs::read_to_string(&file)
             .with_context(|| format!("reading {}", file.display()))?;
@@ -126,22 +142,6 @@ impl Component {
         }
         Ok(Some(format!("{}{version}", self.tag_prefix)))
     }
-}
-
-fn toml_version(text: &str, table: &[&str]) -> Option<String> {
-    let doc: toml_edit::DocumentMut = text.parse().ok()?;
-    table
-        .iter()
-        .try_fold(doc.as_item(), |item, key| item.get(key))?
-        .get("version")
-        .and_then(toml_edit::Item::as_str)
-        .map(str::to_string)
-}
-
-fn between(text: &str, open: &str, close: &str) -> Option<String> {
-    let start = text.find(open)? + open.len();
-    let end = text[start..].find(close)? + start;
-    Some(text[start..end].trim().to_string())
 }
 
 pub(crate) fn after_quoted(text: &str, key: &str) -> Option<String> {

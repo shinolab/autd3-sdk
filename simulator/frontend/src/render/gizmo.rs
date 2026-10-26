@@ -21,14 +21,6 @@ fn axis_unit(axis: usize) -> Vec3 {
     }
 }
 
-fn ring_basis(axis: usize) -> (Vec3, Vec3) {
-    match axis {
-        0 => (Vec3::Y, Vec3::Z),
-        1 => (Vec3::Z, Vec3::X),
-        _ => (Vec3::X, Vec3::Y),
-    }
-}
-
 fn quat_of(rot: Vec3) -> Quat {
     Quat::from_euler(
         EulerRot::XYZ,
@@ -185,7 +177,11 @@ impl Gizmo {
             }
             GizmoMode::Rotate => {
                 let q0 = quat_of(slice_rot);
-                let (r0, r1) = ring_basis(axis);
+                let (r0, r1) = match axis {
+                    0 => (Vec3::Y, Vec3::Z),
+                    1 => (Vec3::Z, Vec3::X),
+                    _ => (Vec3::X, Vec3::Y),
+                };
                 self.drag_start_q = q0;
                 self.drag_axis = q0 * axis_unit(axis);
                 self.drag_ref0 = q0 * r0;

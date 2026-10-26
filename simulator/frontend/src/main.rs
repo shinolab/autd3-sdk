@@ -25,49 +25,37 @@ const TAILWIND_CSS: Asset = asset!("/assets/tailwind.css");
 const FAVICON_SVG: Asset = asset!("/assets/favicon.svg");
 const FAVICON_ICO: Asset = asset!("/assets/favicon.ico");
 
-fn ws_url() -> String {
-    let location = web_sys::window().expect("no window").location();
-    let scheme = match location.protocol().as_deref() {
-        Ok("https:") => "wss",
-        _ => "ws",
-    };
-    let host = location
-        .host()
-        .unwrap_or_else(|_| "127.0.0.1:8081".to_string());
-    format!("{scheme}://{host}/ws")
-}
-
 fn main() {
     console_error_panic_hook::set_once();
     dioxus::logger::initialize_default();
     dioxus::launch(App);
 }
 
-async fn init_renderer(saved: &Settings) -> Result<Renderer, String> {
-    let canvas = canvas_element("field")
-        .await
-        .ok_or_else(|| "canvas element not found".to_string())?;
-    Renderer::new(canvas, saved)
-        .await
-        .map_err(|e| format!("WebGPU init failed: {e}"))
-}
-
-async fn canvas_element(id: &str) -> Option<web_sys::HtmlCanvasElement> {
-    for _ in 0..100 {
-        if let Some(canvas) = web_sys::window()
-            .and_then(|w| w.document())
-            .and_then(|d| d.get_element_by_id(id))
-            .and_then(|e| e.dyn_into::<web_sys::HtmlCanvasElement>().ok())
-        {
-            return Some(canvas);
-        }
-        gloo_timers::future::TimeoutFuture::new(20).await;
-    }
-    None
-}
-
 #[component]
 fn App() -> Element {
+    async fn init_renderer(saved: &Settings) -> Result<Renderer, String> {
+        async fn canvas_element(id: &str) -> Option<web_sys::HtmlCanvasElement> {
+            for _ in 0..100 {
+                if let Some(canvas) = web_sys::window()
+                    .and_then(|w| w.document())
+                    .and_then(|d| d.get_element_by_id(id))
+                    .and_then(|e| e.dyn_into::<web_sys::HtmlCanvasElement>().ok())
+                {
+                    return Some(canvas);
+                }
+                gloo_timers::future::TimeoutFuture::new(20).await;
+            }
+            None
+        }
+
+        let canvas = canvas_element("field")
+            .await
+            .ok_or_else(|| "canvas element not found".to_string())?;
+        Renderer::new(canvas, saved)
+            .await
+            .map_err(|e| format!("WebGPU init failed: {e}"))
+    }
+
     let saved = use_hook(Settings::load);
     let ctx = use_app_ctx(saved);
     use_context_provider(|| ctx.clone());
@@ -127,7 +115,16 @@ fn App() -> Element {
             let control_tx = control_tx.clone();
             let unanswered_geometries = unanswered_geometries.clone();
             async move {
-                let ws = match WebSocket::open(&ws_url()) {
+                let location = web_sys::window().expect("no window").location();
+                let scheme = match location.protocol().as_deref() {
+                    Ok("https:") => "wss",
+                    _ => "ws",
+                };
+                let host = location
+                    .host()
+                    .unwrap_or_else(|_| "127.0.0.1:8081".to_string());
+                let ws_url = format!("{scheme}://{host}/ws");
+                let ws = match WebSocket::open(&ws_url) {
                     Ok(ws) => ws,
                     Err(e) => {
                         error.set(Some(format!("websocket open failed: {e}")));

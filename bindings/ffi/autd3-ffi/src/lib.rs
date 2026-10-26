@@ -34,11 +34,6 @@ use autd3_rs::{
     Response, ResponseFuture, Telemetry, Velocity,
 };
 
-pub(crate) fn executor() -> &'static Executor {
-    static EXECUTOR: OnceLock<Executor> = OnceLock::new();
-    EXECUTOR.get_or_init(Executor::new)
-}
-
 fn to_pattern_bank(v: u8) -> Option<PatternBank> {
     match v {
         0 => Some(PatternBank::B0),
@@ -127,13 +122,6 @@ pub struct Autd3StmControlPoint {
     pub phase_offset: u8,
 }
 
-fn to_control_point(p: &Autd3StmControlPoint) -> ControlPoint {
-    ControlPoint::new(
-        Point3::new(p.point[0], p.point[1], p.point[2]),
-        Phase(p.phase_offset),
-    )
-}
-
 #[unsafe(no_mangle)]
 pub extern "C" fn autd3_op_write_foci_buffer_max_len(num_foci: u8) -> usize {
     WriteFociBuffer::max_len(num_foci)
@@ -157,7 +145,15 @@ unsafe fn foci_points(
             .zip(intensities)
             .map(|(chunk, &intensity)| {
                 ControlPoints::new(
-                    chunk.iter().map(to_control_point).collect::<Vec<_>>(),
+                    chunk
+                        .iter()
+                        .map(|p| {
+                            ControlPoint::new(
+                                Point3::new(p.point[0], p.point[1], p.point[2]),
+                                Phase(p.phase_offset),
+                            )
+                        })
+                        .collect::<Vec<_>>(),
                     Intensity(intensity),
                 )
             })
@@ -395,17 +391,6 @@ pub enum OwnedCommand {
     },
 }
 
-unsafe fn owned_pattern_intensity(
-    intensities: *const IntensityBuffer,
-    uniform_intensity: u8,
-) -> Option<OwnedPatternIntensity> {
-    if intensities.is_null() {
-        return Some(OwnedPatternIntensity::Uniform(Intensity(uniform_intensity)));
-    }
-    unsafe { handle_ref(intensities) }
-        .map(|intensities| OwnedPatternIntensity::PerDevice(intensities.0.clone()))
-}
-
 pub const AUTD3_STM_INTENSITY_UNIFORM: u8 = 0;
 pub const AUTD3_STM_INTENSITY_SAME_FOR_ALL_INDICES: u8 = 1;
 pub const AUTD3_STM_INTENSITY_PER_INDEX: u8 = 2;
@@ -443,6 +428,17 @@ pub unsafe extern "C" fn autd3_op_pattern(
     transition_mode: u8,
     transition_value: u64,
 ) -> *mut OwnedCommand {
+    unsafe fn owned_pattern_intensity(
+        intensities: *const IntensityBuffer,
+        uniform_intensity: u8,
+    ) -> Option<OwnedPatternIntensity> {
+        if intensities.is_null() {
+            return Some(OwnedPatternIntensity::Uniform(Intensity(uniform_intensity)));
+        }
+        unsafe { handle_ref(intensities) }
+            .map(|intensities| OwnedPatternIntensity::PerDevice(intensities.0.clone()))
+    }
+
     let Some(phases) = (unsafe { handle_ref(phases) }) else {
         return std::ptr::null_mut();
     };
@@ -815,44 +811,6 @@ fn out_of_range(field: &str, value: impl std::fmt::Display) -> String {
     format!("{field} is out of range: {value}")
 }
 
-fn to_cpu_config(config: Autd3CpuConfig) -> Result<CpuConfig, String> {
-    let optional = |has: bool, ns: u64| has.then(|| Duration::from_nanos(ns));
-    let ptp = config.ptp;
-    Ok(CpuConfig {
-        sync_guard: Duration::from_nanos(config.sync_guard_ns),
-        failsafe_timeout: optional(config.has_failsafe_timeout, config.failsafe_timeout_ns),
-        ptp_unlock_failsafe_timeout: optional(
-            config.has_ptp_unlock_failsafe_timeout,
-            config.ptp_unlock_failsafe_timeout_ns,
-        ),
-        fpga_bus_wait: FpgaBusWait::from_u8(config.fpga_bus_wait)
-            .ok_or_else(|| out_of_range("fpga_bus_wait", config.fpga_bus_wait))?,
-        cpu_watchdog_timeout: optional(
-            config.has_cpu_watchdog_timeout,
-            config.cpu_watchdog_timeout_ns,
-        ),
-        ptp: PtpConfig {
-            sync_interval: Duration::from_nanos(ptp.sync_interval_ns),
-            tx_timestamp_timeout: Duration::from_nanos(ptp.tx_timestamp_timeout_ns),
-            delay_resp_timeout: Duration::from_nanos(ptp.delay_resp_timeout_ns),
-            holdover: Duration::from_nanos(ptp.holdover_ns),
-            lock_samples: NonZeroU16::new(ptp.lock_samples)
-                .ok_or_else(|| out_of_range("ptp.lock_samples", ptp.lock_samples))?,
-            step_threshold: Duration::from_nanos(ptp.step_threshold_ns),
-            lock_threshold: Duration::from_nanos(ptp.lock_threshold_ns),
-            kp_milli: ptp.kp_milli,
-            ki_milli: ptp.ki_milli,
-            max_freq_ppb: ptp.max_freq_ppb,
-            delay_req_syncs: NonZeroU16::new(ptp.delay_req_syncs)
-                .ok_or_else(|| out_of_range("ptp.delay_req_syncs", ptp.delay_req_syncs))?,
-            path_delay_filter_shift: ptp.path_delay_filter_shift,
-            pause_quanta: NonZeroU16::new(ptp.pause_quanta),
-            pause_hold_syncs: ptp.pause_hold_syncs,
-            pause_retry: Duration::from_nanos(ptp.pause_retry_ns),
-        },
-    })
-}
-
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_cpu_config_default(out: *mut Autd3CpuConfig) -> i32 {
     unsafe { write_out(out, CpuConfig::default().into()) }
@@ -864,6 +822,44 @@ pub unsafe extern "C" fn autd3_op_set_cpu_config(
     out_err: *mut c_char,
     out_err_len: usize,
 ) -> *mut OwnedCommand {
+    fn to_cpu_config(config: Autd3CpuConfig) -> Result<CpuConfig, String> {
+        let optional = |has: bool, ns: u64| has.then(|| Duration::from_nanos(ns));
+        let ptp = config.ptp;
+        Ok(CpuConfig {
+            sync_guard: Duration::from_nanos(config.sync_guard_ns),
+            failsafe_timeout: optional(config.has_failsafe_timeout, config.failsafe_timeout_ns),
+            ptp_unlock_failsafe_timeout: optional(
+                config.has_ptp_unlock_failsafe_timeout,
+                config.ptp_unlock_failsafe_timeout_ns,
+            ),
+            fpga_bus_wait: FpgaBusWait::from_u8(config.fpga_bus_wait)
+                .ok_or_else(|| out_of_range("fpga_bus_wait", config.fpga_bus_wait))?,
+            cpu_watchdog_timeout: optional(
+                config.has_cpu_watchdog_timeout,
+                config.cpu_watchdog_timeout_ns,
+            ),
+            ptp: PtpConfig {
+                sync_interval: Duration::from_nanos(ptp.sync_interval_ns),
+                tx_timestamp_timeout: Duration::from_nanos(ptp.tx_timestamp_timeout_ns),
+                delay_resp_timeout: Duration::from_nanos(ptp.delay_resp_timeout_ns),
+                holdover: Duration::from_nanos(ptp.holdover_ns),
+                lock_samples: NonZeroU16::new(ptp.lock_samples)
+                    .ok_or_else(|| out_of_range("ptp.lock_samples", ptp.lock_samples))?,
+                step_threshold: Duration::from_nanos(ptp.step_threshold_ns),
+                lock_threshold: Duration::from_nanos(ptp.lock_threshold_ns),
+                kp_milli: ptp.kp_milli,
+                ki_milli: ptp.ki_milli,
+                max_freq_ppb: ptp.max_freq_ppb,
+                delay_req_syncs: NonZeroU16::new(ptp.delay_req_syncs)
+                    .ok_or_else(|| out_of_range("ptp.delay_req_syncs", ptp.delay_req_syncs))?,
+                path_delay_filter_shift: ptp.path_delay_filter_shift,
+                pause_quanta: NonZeroU16::new(ptp.pause_quanta),
+                pause_hold_syncs: ptp.pause_hold_syncs,
+                pause_retry: Duration::from_nanos(ptp.pause_retry_ns),
+            },
+        })
+    }
+
     match to_cpu_config(config) {
         Ok(config) => into_handle(OwnedCommand::SetCpuConfig(Box::new(config))),
         Err(message) => {
@@ -964,31 +960,31 @@ fn total_len(lens: &[usize]) -> Option<usize> {
         .try_fold(0usize, |acc, &len| acc.checked_add(len))
 }
 
-unsafe fn per_device<T>(
-    values: *const u8,
-    lens: *const usize,
-    num_devices: usize,
-    convert: impl Fn(u8) -> T,
-) -> Option<Vec<Vec<T>>> {
-    let lens = unsafe { slice_ref(lens, num_devices) }?;
-    let mut rest = unsafe { slice_ref(values, total_len(lens)?) }?;
-    Some(
-        lens.iter()
-            .map(|&len| {
-                let (device, tail) = rest.split_at(len);
-                rest = tail;
-                device.iter().map(|&v| convert(v)).collect()
-            })
-            .collect(),
-    )
-}
-
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_op_set_output_mask(
     masks: *const u8,
     lens: *const usize,
     num_devices: usize,
 ) -> *mut OwnedCommand {
+    unsafe fn per_device<T>(
+        values: *const u8,
+        lens: *const usize,
+        num_devices: usize,
+        convert: impl Fn(u8) -> T,
+    ) -> Option<Vec<Vec<T>>> {
+        let lens = unsafe { slice_ref(lens, num_devices) }?;
+        let mut rest = unsafe { slice_ref(values, total_len(lens)?) }?;
+        Some(
+            lens.iter()
+                .map(|&len| {
+                    let (device, tail) = rest.split_at(len);
+                    rest = tail;
+                    device.iter().map(|&v| convert(v)).collect()
+                })
+                .collect(),
+        )
+    }
+
     match unsafe { per_device(masks, lens, num_devices, |v| v != 0) } {
         Some(masks) => into_handle(OwnedCommand::SetOutputMask(SetOutputMask { masks })),
         None => std::ptr::null_mut(),
@@ -1461,35 +1457,6 @@ pub unsafe extern "C" fn autd3_command_sequence(
     ))
 }
 
-unsafe fn encode_into(
-    frames: &mut Frames,
-    geometry: *const Geometry,
-    command: *mut OwnedCommand,
-    out_err: *mut c_char,
-    out_err_len: usize,
-) -> i32 {
-    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
-        unsafe { write_cstr(out_err, out_err_len, "null geometry") };
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    let Some(pending) = (unsafe { handle_ref(command.cast_const()) }) else {
-        unsafe { write_cstr(out_err, out_err_len, "null command") };
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-
-    if let Err(message) = pending.check_each(geometry.num_devices()) {
-        unsafe { write_cstr(out_err, out_err_len, &message) };
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    }
-
-    if let Err(e) = frames.encode_into(geometry, pending.boxed()) {
-        unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
-        return error_code(&e);
-    }
-    unsafe { drop_handle(command) };
-    AUTD3_OK
-}
-
 #[unsafe(no_mangle)]
 pub extern "C" fn autd3_frames_new() -> *mut Arc<Frames> {
     into_handle(Arc::new(Frames::default()))
@@ -1514,7 +1481,26 @@ pub unsafe extern "C" fn autd3_frames_encode_into(
         unsafe { write_cstr(out_err, out_err_len, "the frames are shared") };
         return AUTD3_ERR;
     };
-    unsafe { encode_into(frames, geometry, command, out_err, out_err_len) }
+    let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
+        unsafe { write_cstr(out_err, out_err_len, "null geometry") };
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+    let Some(pending) = (unsafe { handle_ref(command.cast_const()) }) else {
+        unsafe { write_cstr(out_err, out_err_len, "null command") };
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+
+    if let Err(message) = pending.check_each(geometry.num_devices()) {
+        unsafe { write_cstr(out_err, out_err_len, &message) };
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    }
+
+    if let Err(e) = frames.encode_into(geometry, pending.boxed()) {
+        unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
+        return error_code(&e);
+    }
+    unsafe { drop_handle(command) };
+    AUTD3_OK
 }
 
 #[unsafe(no_mangle)]
@@ -1567,7 +1553,8 @@ fn spawn_completion<T>(
     future: impl Future<Output = Result<T, Error>> + Send + 'static,
     into_value: impl FnOnce(T) -> *mut c_void + Send + 'static,
 ) {
-    executor().spawn(async move {
+    static EXECUTOR: OnceLock<Executor> = OnceLock::new();
+    EXECUTOR.get_or_init(Executor::new).spawn(async move {
         match future.await {
             Ok(value) => ctx.ok(into_value(value)),
             Err(e) => ctx.fail(error_code(&e), &e.to_string()),
@@ -1916,19 +1903,18 @@ pub unsafe extern "C" fn autd3_client_read_firmware_version(
         ctx,
         async move { client.read_firmware_version().await },
         |versions| {
-            let versions = versions.into_iter().map(to_firmware_version).collect();
+            let versions = versions
+                .into_iter()
+                .map(|version| Autd3FirmwareVersion {
+                    cpu: [version.cpu.major, version.cpu.minor, version.cpu.patch],
+                    fpga: [version.fpga.major, version.fpga.minor, version.fpga.patch],
+                    is_emulator: version.is_emulator(),
+                    is_supported: version.is_supported(),
+                })
+                .collect();
             into_handle(FirmwareVersionArray(versions)).cast()
         },
     );
-}
-
-fn to_firmware_version(version: FirmwareVersion) -> Autd3FirmwareVersion {
-    Autd3FirmwareVersion {
-        cpu: [version.cpu.major, version.cpu.minor, version.cpu.patch],
-        fpga: [version.fpga.major, version.fpga.minor, version.fpga.patch],
-        is_emulator: version.is_emulator(),
-        is_supported: version.is_supported(),
-    }
 }
 
 #[unsafe(no_mangle)]

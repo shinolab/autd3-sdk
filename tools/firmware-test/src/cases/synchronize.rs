@@ -101,81 +101,81 @@ fn report(label: &str, brackets: &[Bracket]) -> bool {
     ok
 }
 
-async fn phase_sweep(ctx: &Ctx<'_>, rounds: usize) -> Result<usize> {
-    println!("-- default guard, Synchronize sent at a chosen phase of the 1 ms cycle");
-    let mut failures = 0;
-    for _ in 0..rounds {
-        for phase_ns in [50_000, 250_000, 450_000, 650_000, 700_000, 800_000, 900_000] {
-            let (sent_phase, elapsed) = synchronize_at_phase(ctx, Some(phase_ns)).await?;
-            tokio::time::sleep(Duration::from_millis(20)).await;
-            let brackets = transition_brackets(ctx).await?;
-            if !report(
-                &format!(
-                    "sent at phase {:>3} us, accepted in {elapsed:?}",
-                    sent_phase / 1000
-                ),
-                &brackets,
-            ) {
-                failures += 1;
-            }
-        }
-    }
-    Ok(failures)
-}
-
-async fn guard_sweep(ctx: &Ctx<'_>) -> Result<usize> {
-    println!("-- other guards");
-    let mut failures = 0;
-    for guard in [
-        Duration::ZERO,
-        Duration::from_millis(2),
-        Duration::from_millis(5),
-    ] {
-        ctx.send(SetCpuConfig::new(CpuConfig {
-            sync_guard: guard,
-            ..CpuConfig::default()
-        }))
-        .await?;
-        for _ in 0..3 {
-            let (_, elapsed) = synchronize_at_phase(ctx, None).await?;
-            tokio::time::sleep(Duration::from_millis(20)).await;
-            let brackets = transition_brackets(ctx).await?;
-            if !report(
-                &format!("guard {guard:?}, accepted in {elapsed:?}"),
-                &brackets,
-            ) {
-                failures += 1;
-            }
-        }
-    }
-    ctx.send(SetCpuConfig::new(CpuConfig::default())).await?;
-    ctx.send(Synchronize).await?;
-    Ok(failures)
-}
-
-async fn repeated(ctx: &Ctx<'_>, count: usize) -> Result<usize> {
-    println!("-- {count} Synchronize in a row at the default guard");
-    let mut failures = 0;
-    let mut slowest = Duration::ZERO;
-    for _ in 0..count {
-        match synchronize_at_phase(ctx, None).await {
-            Ok((_, elapsed)) => slowest = slowest.max(elapsed),
-            Err(e) => {
-                failures += 1;
-                println!("  [FAIL] Synchronize: {e:#}");
-            }
-        }
-    }
-    tokio::time::sleep(Duration::from_millis(1500)).await;
-    println!(
-        "  [{}] {failures} failure(s), slowest {slowest:?}, SyncResync {:?}",
-        if failures == 0 { "OK" } else { "FAIL" },
-        resyncs(ctx).await?
-    );
-    Ok(failures)
-}
-
 pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
+    async fn phase_sweep(ctx: &Ctx<'_>, rounds: usize) -> Result<usize> {
+        println!("-- default guard, Synchronize sent at a chosen phase of the 1 ms cycle");
+        let mut failures = 0;
+        for _ in 0..rounds {
+            for phase_ns in [50_000, 250_000, 450_000, 650_000, 700_000, 800_000, 900_000] {
+                let (sent_phase, elapsed) = synchronize_at_phase(ctx, Some(phase_ns)).await?;
+                tokio::time::sleep(Duration::from_millis(20)).await;
+                let brackets = transition_brackets(ctx).await?;
+                if !report(
+                    &format!(
+                        "sent at phase {:>3} us, accepted in {elapsed:?}",
+                        sent_phase / 1000
+                    ),
+                    &brackets,
+                ) {
+                    failures += 1;
+                }
+            }
+        }
+        Ok(failures)
+    }
+
+    async fn guard_sweep(ctx: &Ctx<'_>) -> Result<usize> {
+        println!("-- other guards");
+        let mut failures = 0;
+        for guard in [
+            Duration::ZERO,
+            Duration::from_millis(2),
+            Duration::from_millis(5),
+        ] {
+            ctx.send(SetCpuConfig::new(CpuConfig {
+                sync_guard: guard,
+                ..CpuConfig::default()
+            }))
+            .await?;
+            for _ in 0..3 {
+                let (_, elapsed) = synchronize_at_phase(ctx, None).await?;
+                tokio::time::sleep(Duration::from_millis(20)).await;
+                let brackets = transition_brackets(ctx).await?;
+                if !report(
+                    &format!("guard {guard:?}, accepted in {elapsed:?}"),
+                    &brackets,
+                ) {
+                    failures += 1;
+                }
+            }
+        }
+        ctx.send(SetCpuConfig::new(CpuConfig::default())).await?;
+        ctx.send(Synchronize).await?;
+        Ok(failures)
+    }
+
+    async fn repeated(ctx: &Ctx<'_>, count: usize) -> Result<usize> {
+        println!("-- {count} Synchronize in a row at the default guard");
+        let mut failures = 0;
+        let mut slowest = Duration::ZERO;
+        for _ in 0..count {
+            match synchronize_at_phase(ctx, None).await {
+                Ok((_, elapsed)) => slowest = slowest.max(elapsed),
+                Err(e) => {
+                    failures += 1;
+                    println!("  [FAIL] Synchronize: {e:#}");
+                }
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(1500)).await;
+        println!(
+            "  [{}] {failures} failure(s), slowest {slowest:?}, SyncResync {:?}",
+            if failures == 0 { "OK" } else { "FAIL" },
+            resyncs(ctx).await?
+        );
+        Ok(failures)
+    }
+
     silence(ctx).await?;
     let outcome = async {
         let mut failures = phase_sweep(ctx, 3).await?;

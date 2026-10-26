@@ -59,24 +59,6 @@ fn write_headers(buf: &mut [u8], h: &Headers, upper_len: usize) -> Ipv6Header {
     ip
 }
 
-fn write_icmpv6(
-    buf: &mut [u8],
-    ip: &Ipv6Header,
-    icmp_type: Icmpv6Type,
-    upper_len: usize,
-) -> Option<()> {
-    let upper = &mut buf[UPPER_OFFSET..][..upper_len];
-    let header = Icmpv6Header::with_checksum(
-        icmp_type,
-        ip.source,
-        ip.destination,
-        &upper[ICMPV6_HEADER..],
-    )
-    .ok()?;
-    upper[..ICMPV6_HEADER].copy_from_slice(&header.to_bytes());
-    Some(())
-}
-
 fn finish(buf: &mut [u8], upper_len: usize) -> usize {
     let len = UPPER_OFFSET + upper_len;
     if len < MIN_FRAME {
@@ -147,15 +129,19 @@ pub fn neighbor_advertisement(
         link_layer_address: own_mac,
     };
     buf[UPPER_OFFSET..][ICMPV6_HEADER..NA_LEN].copy_from_slice(body.as_bytes());
-    write_icmpv6(
-        buf,
-        &ip,
-        Icmpv6Type::NeighborAdvertisement(NeighborAdvertisementHeader {
-            router: false,
-            solicited: true,
-            r#override: true,
-        }),
-        NA_LEN,
-    )?;
+    let icmp_type = Icmpv6Type::NeighborAdvertisement(NeighborAdvertisementHeader {
+        router: false,
+        solicited: true,
+        r#override: true,
+    });
+    let upper = &mut buf[UPPER_OFFSET..][..NA_LEN];
+    let header = Icmpv6Header::with_checksum(
+        icmp_type,
+        ip.source,
+        ip.destination,
+        &upper[ICMPV6_HEADER..],
+    )
+    .ok()?;
+    upper[..ICMPV6_HEADER].copy_from_slice(&header.to_bytes());
     Some(finish(buf, NA_LEN))
 }

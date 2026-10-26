@@ -78,7 +78,104 @@ pub(crate) enum DocCmd {
     Clean(CleanArgs),
 }
 
+#[allow(clippy::too_many_lines)]
 pub(crate) fn run_doc(root: &Path, cmd: &DocCmd) -> Result<()> {
+    fn regenerate_snapshot(doc: &Path, slug: &str) -> Result<()> {
+        if !version_slugs(doc)?.iter().any(|s| s == slug) {
+            bail!(
+                "version {slug} is not declared in astro.config.mjs; run `cargo xtask bump-version doc` \
+             to declare it before freezing"
+            );
+        }
+        let mut removed = Vec::new();
+        remove_dirs_named(
+            &doc.join("src/content/docs"),
+            &[slug.to_string()],
+            &mut removed,
+        )?;
+        if removed.is_empty() {
+            println!("doc: no {slug} snapshot on disk; building the site generates it");
+        } else {
+            for path in &removed {
+                println!("doc: removed stale snapshot {}", path.display());
+            }
+        }
+        npm_install(doc)?;
+        npm(doc, &["run", "build"])?;
+        if !doc.join("src/content/docs").join(slug).is_dir() {
+            bail!(
+                "`astro build` did not regenerate src/content/docs/{slug}/; starlight-versions \
+             generates one version per build, so build again if another version was pending"
+            );
+        }
+        println!("doc: regenerated the {slug} snapshot from the live docs");
+        if !on_path("git") {
+            println!(
+                "doc: `git` is not on PATH; the snapshot now carries the live version numbers"
+            );
+            return Ok(());
+        }
+        let tracked = capture("git", &["ls-files", "src/content/docs"], doc)?;
+        let tracked: Vec<&str> = tracked.lines().collect();
+        let mut pages = snapshot_pages(&doc.join("src/content/docs"), slug)?;
+        pages.sort();
+        let mut kept = Vec::new();
+        for page in &pages {
+            let rel = page
+                .strip_prefix(doc)
+                .unwrap_or(page)
+                .to_string_lossy()
+                .replace('\\', "/");
+            if !tracked.contains(&rel.as_str()) {
+                continue;
+            }
+            let frozen = capture("git", &["show", &format!(":./{rel}")], doc)?;
+            let mut text =
+                fs::read_to_string(page).with_context(|| format!("reading {}", page.display()))?;
+            for (label, spans, _) in SNAPSHOT_VERSION_SPANS {
+                let was = spans(&frozen);
+                let now = spans(&text);
+                if was.len() != now.len() {
+                    if !was.is_empty() {
+                        println!(
+                            "doc: {rel} no longer has the same {label} markers as the frozen page; \
+                     check them by hand"
+                        );
+                    }
+                    continue;
+                }
+                let mut out = String::with_capacity(text.len());
+                let mut cursor = 0;
+                for ((o_start, o_end, o_value), (n_start, n_end, n_value)) in was.iter().zip(&now) {
+                    out.push_str(&text[cursor..*n_start]);
+                    out.push_str(&frozen[*o_start..*o_end]);
+                    cursor = *n_end;
+                    if o_value != n_value {
+                        kept.push(format!(
+                            "{rel}: {label} {o_value} (live docs say {n_value})"
+                        ));
+                    }
+                }
+                out.push_str(&text[cursor..]);
+                text = out;
+            }
+            let current =
+                fs::read_to_string(page).with_context(|| format!("reading {}", page.display()))?;
+            if text != current {
+                fs::write(page, text).with_context(|| format!("writing {}", page.display()))?;
+            }
+        }
+        if kept.is_empty() {
+            println!("doc: the regenerated snapshot already carries the frozen version numbers");
+        } else {
+            println!("doc: kept {} frozen version number(s):", kept.len());
+            for note in &kept {
+                println!("  {note}");
+            }
+        }
+        Ok(())
+    }
+
     let doc = root.join("doc");
     let samples = doc.join("codes").join("rust");
     match cmd {
@@ -86,14 +183,211 @@ pub(crate) fn run_doc(root: &Path, cmd: &DocCmd) -> Result<()> {
             check,
             python,
             csharp,
-        } => run_samples(root, &doc, &samples, *check, *python, *csharp),
-        DocCmd::Build { no_samples } => build(root, &doc, &samples, *no_samples),
-        DocCmd::Serve { open } => serve(&doc, *open),
-        DocCmd::Check => check(root, &doc),
+        } => {
+            if *check {
+                return sync_examples(&samples, true);
+            }
+            if !*python && !csharp {
+                build_samples(&samples)?;
+                run_python_samples(root, &doc)?;
+                return build_csharp_samples(&doc);
+            }
+            if *python {
+                run_python_samples(root, &doc)?;
+            }
+            if *csharp {
+                build_csharp_samples(&doc)?;
+            }
+            Ok(())
+        }
+        DocCmd::Build { no_samples } => {
+            verify_frozen_versions(&doc)?;
+            verify_versions(root, &doc)?;
+            if !*no_samples {
+                build_samples(&samples)?;
+            }
+            npm_install(&doc)?;
+            npm(&doc, &["run", "build"])
+        }
+        DocCmd::Serve { open } => {
+            npm_install(&doc)?;
+            let mut args = vec!["run", "dev"];
+            if *open {
+                args.extend_from_slice(&["--", "--open"]);
+            }
+            npm(&doc, &args)
+        }
+        DocCmd::Check => {
+            verify_frozen_versions(&doc)?;
+            verify_versions(root, &doc)?;
+            npm_install(&doc)?;
+            npm(&doc, &["run", "check"])
+        }
         DocCmd::Audit => npm(&doc, &["audit", "--audit-level=high"]),
-        DocCmd::LinkCheck { offline } => link_check(&doc, *offline),
-        DocCmd::FreezeVersion { slug, force } => freeze_version(&doc, slug, *force),
-        DocCmd::RemoveVersion { slug } => remove_version(&doc, slug),
+        DocCmd::LinkCheck { offline } => {
+            if !on_path("lychee") {
+                bail!(
+                    "`lychee` is required for `doc link-check` (`cargo install lychee --locked`)"
+                );
+            }
+            let dist = doc.join("dist");
+            if !dist.is_dir() {
+                bail!(
+                    "{} does not exist; run `cargo xtask doc build` first",
+                    dist.display()
+                );
+            }
+            let dist_path = dist.to_string_lossy().replace('\\', "/");
+            let base = if dist_path.starts_with('/') {
+                format!("file://{dist_path}")
+            } else {
+                format!("file:///{dist_path}")
+            };
+            let mut args = vec![
+                "--no-progress".to_string(),
+                "--root-dir".to_string(),
+                dist.to_string_lossy().into_owned(),
+                "--remap".to_string(),
+                format!("{base}{SITE_BASE}/?(.*) {base}/$1"),
+                "--index-files".to_string(),
+                "index.html".to_string(),
+                "--include-fragments".to_string(),
+                "--exclude".to_string(),
+                SITE_ORIGIN.to_string(),
+                "--accept".to_string(),
+                LINK_ACCEPT.to_string(),
+            ];
+            for slug in version_slugs(&doc)? {
+                args.push("--exclude-path".to_string());
+                args.push(format!("dist/(en/)?{}", slug.replace('.', "\\.")));
+            }
+            if *offline {
+                args.push("--offline".to_string());
+            }
+            args.push("dist/**/*.html".to_string());
+            run_tool("lychee", args, &doc)
+        }
+        DocCmd::FreezeVersion { slug, force } => {
+            if !on_path("node") {
+                bail!("`node` is required for `doc freeze-version`");
+            }
+            if *force {
+                regenerate_snapshot(&doc, slug)?;
+            }
+            run("node", ["scripts/freeze-version-codes.mjs", slug], &doc)?;
+            let slugs = version_slugs(&doc)?;
+            let docs = doc.join("src/content/docs");
+            let mut roots = Vec::new();
+            if docs.join(slug).is_dir() {
+                roots.push(docs.join(slug));
+            }
+            for entry in
+                fs::read_dir(&docs).with_context(|| format!("reading {}", docs.display()))?
+            {
+                let nested = entry?.path().join(slug);
+                if nested.is_dir() {
+                    roots.push(nested);
+                }
+            }
+            let mut removed = Vec::new();
+            for root in &roots {
+                remove_dirs_named(root, &slugs, &mut removed)?;
+            }
+            for path in &removed {
+                println!("doc: removed nested snapshot {}", path.display());
+            }
+            edit_gitignore(&doc, slug, |lines, slug| {
+                let ignore_root = format!("src/content/docs/{slug}/");
+                let ignore_locale = format!("src/content/docs/*/{slug}/");
+                lines.retain(|l| {
+                    let t = l.trim();
+                    t != ignore_root && t != ignore_locale
+                });
+                unignore_version_config(lines, slug);
+                push_unique(lines, format!("!{ignore_root}"));
+                push_unique(lines, format!("!{ignore_locale}"));
+            })
+            .map(|_| ())
+        }
+        DocCmd::RemoveVersion { slug } => {
+            let slugs = version_slugs(&doc)?;
+            if !slugs.iter().any(|s| s == slug) {
+                bail!("version {slug} is not declared in astro.config.mjs");
+            }
+            if slugs.len() == 1 {
+                bail!(
+                    "{slug} is the only declared version, and starlight-versions rejects an empty \
+             `versions` array; drop the plugin from astro.config.mjs instead if the site should \
+             stop being versioned"
+                );
+            }
+            let path = doc.join("astro.config.mjs");
+            let text = fs::read_to_string(&path)
+                .with_context(|| format!("failed to read {}", path.display()))?;
+            let key = text
+                .find("versions:")
+                .context("`versions:` not found in astro.config.mjs")?;
+            let open = key
+                + text[key..]
+                    .find('[')
+                    .context("`versions:` is not followed by an array in astro.config.mjs")?;
+            let close = open
+                + text[open..]
+                    .find(']')
+                    .context("unterminated `versions:` array in astro.config.mjs")?;
+            let quoted = format!("\"{slug}\"");
+            let inner = &text[open + 1..close];
+            let mut kept = Vec::new();
+            let mut depth = 0usize;
+            let mut start = 0usize;
+            for (i, c) in inner.char_indices() {
+                match c {
+                    '{' => {
+                        if depth == 0 {
+                            start = i;
+                        }
+                        depth += 1;
+                    }
+                    '}' => {
+                        depth -= 1;
+                        if depth == 0 && !inner[start..=i].contains(&quoted) {
+                            kept.push(&inner[start..=i]);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            let new_text = format!("{}{}{}", &text[..=open], kept.join(", "), &text[close..]);
+            fs::write(&path, new_text)
+                .with_context(|| format!("failed to write {}", path.display()))?;
+            println!("doc: undeclared version {slug} in {}", path.display());
+            let mut removed = Vec::new();
+            remove_dirs_named(
+                &doc.join("src/content/docs"),
+                std::slice::from_ref(slug),
+                &mut removed,
+            )?;
+            let config = doc
+                .join("src/content/versions")
+                .join(format!("{slug}.json"));
+            if config.is_file() {
+                fs::remove_file(&config)
+                    .with_context(|| format!("failed to remove {}", config.display()))?;
+                removed.push(config);
+            }
+            for path in &removed {
+                println!("doc: removed {}", path.display());
+            }
+            edit_gitignore(&doc, slug, |lines, slug| {
+                let doomed = [
+                    format!("!src/content/versions/{slug}.json"),
+                    format!("!src/content/docs/{slug}/"),
+                    format!("!src/content/docs/*/{slug}/"),
+                ];
+                lines.retain(|l| !doomed.iter().any(|d| l.trim() == d));
+            })?;
+            Ok(())
+        }
         DocCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
 }
@@ -113,118 +407,9 @@ pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {
     cleaner.deps("doc/node_modules")
 }
 
-fn run_samples(
-    root: &Path,
-    doc: &Path,
-    samples: &Path,
-    check: bool,
-    python: bool,
-    csharp: bool,
-) -> Result<()> {
-    if check {
-        return sync_examples(samples, true);
-    }
-    if !python && !csharp {
-        build_samples(samples)?;
-        run_python_samples(root, doc)?;
-        return build_csharp_samples(doc);
-    }
-    if python {
-        run_python_samples(root, doc)?;
-    }
-    if csharp {
-        build_csharp_samples(doc)?;
-    }
-    Ok(())
-}
-
-fn build(root: &Path, doc: &Path, samples: &Path, no_samples: bool) -> Result<()> {
-    verify_frozen_versions(doc)?;
-    verify_versions(root, doc)?;
-    if !no_samples {
-        build_samples(samples)?;
-    }
-    npm_install(doc)?;
-    npm(doc, &["run", "build"])
-}
-
-fn serve(doc: &Path, open: bool) -> Result<()> {
-    npm_install(doc)?;
-    let mut args = vec!["run", "dev"];
-    if open {
-        args.extend_from_slice(&["--", "--open"]);
-    }
-    npm(doc, &args)
-}
-
-fn check(root: &Path, doc: &Path) -> Result<()> {
-    verify_frozen_versions(doc)?;
-    verify_versions(root, doc)?;
-    npm_install(doc)?;
-    npm(doc, &["run", "check"])
-}
-
-fn freeze_version(doc: &Path, slug: &str, force: bool) -> Result<()> {
-    if !on_path("node") {
-        bail!("`node` is required for `doc freeze-version`");
-    }
-    if force {
-        regenerate_snapshot(doc, slug)?;
-    }
-    run("node", ["scripts/freeze-version-codes.mjs", slug], doc)?;
-    prune_nested_versions(doc, slug)?;
-    track_frozen_version(doc, slug)
-}
-
 const SITE_BASE: &str = "/autd3-sdk";
 const SITE_ORIGIN: &str = "^https://shinolab\\.github\\.io/autd3-sdk";
 const LINK_ACCEPT: &str = "200..=299,403,429";
-
-fn link_check(doc: &Path, offline: bool) -> Result<()> {
-    if !on_path("lychee") {
-        bail!("`lychee` is required for `doc link-check` (`cargo install lychee --locked`)");
-    }
-    let dist = doc.join("dist");
-    if !dist.is_dir() {
-        bail!(
-            "{} does not exist; run `cargo xtask doc build` first",
-            dist.display()
-        );
-    }
-    let base = file_uri(&dist);
-    let mut args = vec![
-        "--no-progress".to_string(),
-        "--root-dir".to_string(),
-        dist.to_string_lossy().into_owned(),
-        "--remap".to_string(),
-        format!("{base}{SITE_BASE}/?(.*) {base}/$1"),
-        "--index-files".to_string(),
-        "index.html".to_string(),
-        "--include-fragments".to_string(),
-        "--exclude".to_string(),
-        SITE_ORIGIN.to_string(),
-        "--accept".to_string(),
-        LINK_ACCEPT.to_string(),
-    ];
-    for slug in version_slugs(doc)? {
-        args.push("--exclude-path".to_string());
-        args.push(format!("dist/(en/)?{}", slug.replace('.', "\\.")));
-    }
-    if offline {
-        args.push("--offline".to_string());
-    }
-    args.push("dist/**/*.html".to_string());
-    run_tool("lychee", args, doc)
-}
-
-fn file_uri(path: &Path) -> String {
-    let path = path.to_string_lossy().replace('\\', "/");
-    if path.starts_with('/') {
-        format!("file://{path}")
-    } else {
-        format!("file:///{path}")
-    }
-}
 
 pub(crate) fn add_version(root: &Path, slug: &str) -> Result<bool> {
     let doc = root.join("doc");
@@ -235,151 +420,30 @@ pub(crate) fn add_version(root: &Path, slug: &str) -> Result<bool> {
     if !on_path("node") {
         bail!("`node` is required to write the version config");
     }
-    declare_version_slug(&doc, slug)?;
+    let path = doc.join("astro.config.mjs");
+    let text =
+        fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
+    let key = text
+        .find("versions:")
+        .context("`versions:` not found in astro.config.mjs")?;
+    let open = key
+        + text[key..]
+            .find('[')
+            .context("`versions:` is not followed by an array in astro.config.mjs")?;
+    let rest = &text[open + 1..];
+    let entry = if rest.trim_start().starts_with(']') {
+        format!("{{ slug: \"{slug}\" }}")
+    } else {
+        format!("{{ slug: \"{slug}\" }}, ")
+    };
+    let new_text = format!("{}{entry}{rest}", &text[..=open]);
+    fs::write(&path, new_text).with_context(|| format!("failed to write {}", path.display()))?;
+    println!("doc: declared version {slug} in {}", path.display());
     run("node", ["scripts/version-config.mjs", slug], &doc)?;
     edit_gitignore(&doc, slug, |lines, slug| {
         unignore_version_config(lines, slug);
     })?;
     Ok(true)
-}
-
-pub(crate) fn remove_version(doc: &Path, slug: &str) -> Result<()> {
-    let slugs = version_slugs(doc)?;
-    if !slugs.iter().any(|s| s == slug) {
-        bail!("version {slug} is not declared in astro.config.mjs");
-    }
-    if slugs.len() == 1 {
-        bail!(
-            "{slug} is the only declared version, and starlight-versions rejects an empty \
-             `versions` array; drop the plugin from astro.config.mjs instead if the site should \
-             stop being versioned"
-        );
-    }
-    undeclare_version_slug(doc, slug)?;
-    let mut removed = Vec::new();
-    remove_dirs_named(
-        &doc.join("src/content/docs"),
-        &[slug.to_string()],
-        &mut removed,
-    )?;
-    let config = doc
-        .join("src/content/versions")
-        .join(format!("{slug}.json"));
-    if config.is_file() {
-        fs::remove_file(&config)
-            .with_context(|| format!("failed to remove {}", config.display()))?;
-        removed.push(config);
-    }
-    for path in &removed {
-        println!("doc: removed {}", path.display());
-    }
-    edit_gitignore(doc, slug, |lines, slug| {
-        let doomed = [
-            format!("!src/content/versions/{slug}.json"),
-            format!("!src/content/docs/{slug}/"),
-            format!("!src/content/docs/*/{slug}/"),
-        ];
-        lines.retain(|l| !doomed.iter().any(|d| l.trim() == d));
-    })?;
-    Ok(())
-}
-
-fn regenerate_snapshot(doc: &Path, slug: &str) -> Result<()> {
-    if !version_slugs(doc)?.iter().any(|s| s == slug) {
-        bail!(
-            "version {slug} is not declared in astro.config.mjs; run `cargo xtask bump-version doc` \
-             to declare it before freezing"
-        );
-    }
-    let mut removed = Vec::new();
-    remove_dirs_named(
-        &doc.join("src/content/docs"),
-        &[slug.to_string()],
-        &mut removed,
-    )?;
-    if removed.is_empty() {
-        println!("doc: no {slug} snapshot on disk; building the site generates it");
-    } else {
-        for path in &removed {
-            println!("doc: removed stale snapshot {}", path.display());
-        }
-    }
-    npm_install(doc)?;
-    npm(doc, &["run", "build"])?;
-    if !doc.join("src/content/docs").join(slug).is_dir() {
-        bail!(
-            "`astro build` did not regenerate src/content/docs/{slug}/; starlight-versions \
-             generates one version per build, so build again if another version was pending"
-        );
-    }
-    println!("doc: regenerated the {slug} snapshot from the live docs");
-    preserve_snapshot_versions(doc, slug)
-}
-
-fn preserve_snapshot_versions(doc: &Path, slug: &str) -> Result<()> {
-    if !on_path("git") {
-        println!("doc: `git` is not on PATH; the snapshot now carries the live version numbers");
-        return Ok(());
-    }
-    let tracked = capture("git", &["ls-files", "src/content/docs"], doc)?;
-    let tracked: Vec<&str> = tracked.lines().collect();
-    let mut pages = snapshot_pages(&doc.join("src/content/docs"), slug)?;
-    pages.sort();
-    let mut kept = Vec::new();
-    for page in &pages {
-        let rel = page
-            .strip_prefix(doc)
-            .unwrap_or(page)
-            .to_string_lossy()
-            .replace('\\', "/");
-        if !tracked.contains(&rel.as_str()) {
-            continue;
-        }
-        let frozen = capture("git", &["show", &format!(":./{rel}")], doc)?;
-        let mut text =
-            fs::read_to_string(page).with_context(|| format!("reading {}", page.display()))?;
-        for (label, spans, _) in SNAPSHOT_VERSION_SPANS {
-            let was = spans(&frozen);
-            let now = spans(&text);
-            if was.len() != now.len() {
-                if !was.is_empty() {
-                    println!(
-                        "doc: {rel} no longer has the same {label} markers as the frozen page; \
-                         check them by hand"
-                    );
-                }
-                continue;
-            }
-            let mut out = String::with_capacity(text.len());
-            let mut cursor = 0;
-            for ((o_start, o_end, o_value), (n_start, n_end, n_value)) in was.iter().zip(&now) {
-                out.push_str(&text[cursor..*n_start]);
-                out.push_str(&frozen[*o_start..*o_end]);
-                cursor = *n_end;
-                if o_value != n_value {
-                    kept.push(format!(
-                        "{rel}: {label} {o_value} (live docs say {n_value})"
-                    ));
-                }
-            }
-            out.push_str(&text[cursor..]);
-            text = out;
-        }
-        let current =
-            fs::read_to_string(page).with_context(|| format!("reading {}", page.display()))?;
-        if text != current {
-            fs::write(page, text).with_context(|| format!("writing {}", page.display()))?;
-        }
-    }
-    if kept.is_empty() {
-        println!("doc: the regenerated snapshot already carries the frozen version numbers");
-    } else {
-        println!("doc: kept {} frozen version number(s):", kept.len());
-        for note in &kept {
-            println!("  {note}");
-        }
-    }
-    Ok(())
 }
 
 fn snapshot_pages(dir: &Path, slug: &str) -> Result<Vec<PathBuf>> {
@@ -400,29 +464,6 @@ fn is_page(path: &Path) -> bool {
     )
 }
 
-fn prune_nested_versions(doc: &Path, slug: &str) -> Result<()> {
-    let slugs = version_slugs(doc)?;
-    let docs = doc.join("src/content/docs");
-    let mut roots = Vec::new();
-    if docs.join(slug).is_dir() {
-        roots.push(docs.join(slug));
-    }
-    for entry in fs::read_dir(&docs).with_context(|| format!("reading {}", docs.display()))? {
-        let nested = entry?.path().join(slug);
-        if nested.is_dir() {
-            roots.push(nested);
-        }
-    }
-    let mut removed = Vec::new();
-    for root in &roots {
-        remove_dirs_named(root, &slugs, &mut removed)?;
-    }
-    for path in &removed {
-        println!("doc: removed nested snapshot {}", path.display());
-    }
-    Ok(())
-}
-
 fn remove_dirs_named(dir: &Path, names: &[String], removed: &mut Vec<PathBuf>) -> Result<()> {
     let mut found = Vec::new();
     let mut walker = WalkDir::new(dir)
@@ -432,7 +473,12 @@ fn remove_dirs_named(dir: &Path, names: &[String], removed: &mut Vec<PathBuf>) -
     while let Some(entry) = walker.next() {
         let entry = match entry {
             Ok(entry) => entry,
-            Err(e) if is_broken_link(&e) => continue,
+            Err(e)
+                if e.io_error()
+                    .is_some_and(|e| e.kind() == std::io::ErrorKind::NotFound) =>
+            {
+                continue;
+            }
             Err(e) => return Err(e).with_context(|| format!("reading {}", dir.display())),
         };
         if entry.file_type().is_dir()
@@ -451,85 +497,6 @@ fn remove_dirs_named(dir: &Path, names: &[String], removed: &mut Vec<PathBuf>) -
         removed.push(path);
     }
     Ok(())
-}
-
-fn is_broken_link(error: &walkdir::Error) -> bool {
-    error
-        .io_error()
-        .is_some_and(|e| e.kind() == std::io::ErrorKind::NotFound)
-}
-
-fn declare_version_slug(doc: &Path, slug: &str) -> Result<()> {
-    let path = doc.join("astro.config.mjs");
-    let text =
-        fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
-    let key = text
-        .find("versions:")
-        .context("`versions:` not found in astro.config.mjs")?;
-    let open = key
-        + text[key..]
-            .find('[')
-            .context("`versions:` is not followed by an array in astro.config.mjs")?;
-    let rest = &text[open + 1..];
-    let entry = if rest.trim_start().starts_with(']') {
-        format!("{{ slug: \"{slug}\" }}")
-    } else {
-        format!("{{ slug: \"{slug}\" }}, ")
-    };
-    let new_text = format!("{}{entry}{rest}", &text[..=open]);
-    fs::write(&path, new_text).with_context(|| format!("failed to write {}", path.display()))?;
-    println!("doc: declared version {slug} in {}", path.display());
-    Ok(())
-}
-
-fn undeclare_version_slug(doc: &Path, slug: &str) -> Result<()> {
-    let path = doc.join("astro.config.mjs");
-    let text =
-        fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
-    let key = text
-        .find("versions:")
-        .context("`versions:` not found in astro.config.mjs")?;
-    let open = key
-        + text[key..]
-            .find('[')
-            .context("`versions:` is not followed by an array in astro.config.mjs")?;
-    let close = open
-        + text[open..]
-            .find(']')
-            .context("unterminated `versions:` array in astro.config.mjs")?;
-    let quoted = format!("\"{slug}\"");
-    let kept: Vec<&str> = version_entries(&text[open + 1..close])
-        .into_iter()
-        .filter(|entry| !entry.contains(&quoted))
-        .collect();
-    let new_text = format!("{}{}{}", &text[..=open], kept.join(", "), &text[close..]);
-    fs::write(&path, new_text).with_context(|| format!("failed to write {}", path.display()))?;
-    println!("doc: undeclared version {slug} in {}", path.display());
-    Ok(())
-}
-
-fn version_entries(inner: &str) -> Vec<&str> {
-    let mut entries = Vec::new();
-    let mut depth = 0usize;
-    let mut start = 0usize;
-    for (i, c) in inner.char_indices() {
-        match c {
-            '{' => {
-                if depth == 0 {
-                    start = i;
-                }
-                depth += 1;
-            }
-            '}' => {
-                depth -= 1;
-                if depth == 0 {
-                    entries.push(&inner[start..=i]);
-                }
-            }
-            _ => {}
-        }
-    }
-    entries
 }
 
 fn unignore_version_config(lines: &mut Vec<String>, slug: &str) {
@@ -571,21 +538,6 @@ fn edit_gitignore(
     Ok(true)
 }
 
-fn track_frozen_version(doc: &Path, slug: &str) -> Result<()> {
-    edit_gitignore(doc, slug, |lines, slug| {
-        let ignore_root = format!("src/content/docs/{slug}/");
-        let ignore_locale = format!("src/content/docs/*/{slug}/");
-        lines.retain(|l| {
-            let t = l.trim();
-            t != ignore_root && t != ignore_locale
-        });
-        unignore_version_config(lines, slug);
-        push_unique(lines, format!("!{ignore_root}"));
-        push_unique(lines, format!("!{ignore_locale}"));
-    })
-    .map(|_| ())
-}
-
 fn version_slugs(doc: &Path) -> Result<Vec<String>> {
     let cfg = fs::read_to_string(doc.join("astro.config.mjs"))
         .context("failed to read astro.config.mjs")?;
@@ -605,12 +557,6 @@ fn version_slugs(doc: &Path) -> Result<Vec<String>> {
         rest = &after[end + 1..];
     }
     Ok(slugs)
-}
-
-fn live_pages(dir: &Path, slugs: &[String]) -> Result<Vec<PathBuf>> {
-    let mut pages = files_under(dir, |name| !slugs.iter().any(|slug| slug == name))?;
-    pages.retain(|path| is_page(path));
-    Ok(pages)
 }
 
 fn firmware_series_spans(text: &str) -> Vec<(usize, usize, String)> {
@@ -749,32 +695,21 @@ const SNAPSHOT_VERSION_SPANS: &[(&str, Spans, SnapshotPin)] = &[
 
 fn crate_pin(old: &str, version: &str) -> String {
     if old.split('.').count() == 2 {
-        version_series(version)
+        version
+            .rsplit_once('.')
+            .map_or_else(|| version.to_owned(), |(head, _)| head.to_owned())
     } else {
         version.to_owned()
     }
 }
 
-fn crate_pin_files(root: &Path, doc: &Path) -> Result<Vec<PathBuf>> {
-    let mut files = doc_pages(doc)?;
-    files.extend(crate_readmes(root)?);
-    Ok(files)
-}
-
-fn crate_readmes(dir: &Path) -> Result<Vec<PathBuf>> {
-    let mut readmes = files_under(dir, |name| {
-        !name.starts_with('.') && !CRATE_PIN_SKIP_DIRS.contains(&name)
-    })?;
-    readmes.retain(|path| {
-        path.file_name().is_some_and(|name| name == "README.md")
-            && path.with_file_name("Cargo.toml").is_file()
-    });
-    Ok(readmes)
-}
-
 fn doc_pages(doc: &Path) -> Result<Vec<PathBuf>> {
     let slugs = version_slugs(doc)?;
-    live_pages(&doc.join("src/content/docs"), &slugs)
+    let mut pages = files_under(&doc.join("src/content/docs"), |name| {
+        !slugs.iter().any(|slug| slug == name)
+    })?;
+    pages.retain(|path| is_page(path));
+    Ok(pages)
 }
 
 fn rewrite_spans(root: &Path, spans: Spans, new: &str) -> Result<usize> {
@@ -811,12 +746,8 @@ fn rewrite_spans_in(
 }
 
 fn collect_spans(doc: &Path, spans: Spans) -> Result<Vec<(PathBuf, String)>> {
-    collect_spans_in(&doc_pages(doc)?, spans)
-}
-
-fn collect_spans_in(files: &[PathBuf], spans: Spans) -> Result<Vec<(PathBuf, String)>> {
     let mut found = Vec::new();
-    for page in files {
+    for page in &doc_pages(doc)? {
         let text =
             fs::read_to_string(page).with_context(|| format!("reading {}", page.display()))?;
         found.extend(
@@ -845,7 +776,15 @@ pub(crate) fn rewrite_console_version(root: &Path, version: &str) -> Result<usiz
 }
 
 pub(crate) fn rewrite_crate_version(root: &Path, version: &str) -> Result<usize> {
-    let files = crate_pin_files(root, &root.join("doc"))?;
+    let mut files = doc_pages(&root.join("doc"))?;
+    let mut readmes = files_under(root, |name| {
+        !name.starts_with('.') && !CRATE_PIN_SKIP_DIRS.contains(&name)
+    })?;
+    readmes.retain(|path| {
+        path.file_name().is_some_and(|name| name == "README.md")
+            && path.with_file_name("Cargo.toml").is_file()
+    });
+    files.extend(readmes);
     rewrite_spans_in(&files, crate_version_spans, &|old| crate_pin(old, version))
 }
 
@@ -884,19 +823,7 @@ pub(crate) fn sync_snapshot_versions(root: &Path, slug: &str) -> Result<usize> {
     Ok(total)
 }
 
-fn version_series(version: &str) -> String {
-    version
-        .rsplit_once('.')
-        .map_or_else(|| version.to_owned(), |(head, _)| head.to_owned())
-}
-
 fn verify_versions(root: &Path, doc: &Path) -> Result<()> {
-    verify_firmware_series(root, doc)?;
-    verify_unity_version(root, doc)?;
-    verify_console_version(root, doc)
-}
-
-fn verify_firmware_series(root: &Path, doc: &Path) -> Result<()> {
     let expected = crate::bump::firmware_series(root)?;
     let found = collect_spans(doc, firmware_series_spans)?;
     if found.is_empty() {
@@ -919,10 +846,6 @@ fn verify_firmware_series(root: &Path, doc: &Path) -> Result<()> {
             offenders.join("\n  ")
         );
     }
-    Ok(())
-}
-
-fn verify_unity_version(root: &Path, doc: &Path) -> Result<()> {
     let expected = component_version(root, "unity")?;
     let found = collect_spans(doc, unity_version_spans)?;
     if found.is_empty() {
@@ -945,10 +868,6 @@ fn verify_unity_version(root: &Path, doc: &Path) -> Result<()> {
             offenders.join("\n  ")
         );
     }
-    Ok(())
-}
-
-fn verify_console_version(root: &Path, doc: &Path) -> Result<()> {
     let expected = component_version(root, "console")?;
     let found = collect_spans(doc, console_version_spans)?;
     if found.is_empty() {
@@ -1084,6 +1003,24 @@ fn build_csharp_samples(doc: &Path) -> Result<()> {
 }
 
 fn run_python_samples(root: &Path, doc: &Path) -> Result<()> {
+    fn wait_timeout(
+        child: &mut Child,
+        limit: Duration,
+    ) -> Result<Option<std::process::ExitStatus>> {
+        let start = Instant::now();
+        loop {
+            if let Some(status) = child.try_wait().context("failed to poll python child")? {
+                return Ok(Some(status));
+            }
+            if start.elapsed() >= limit {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Ok(None);
+            }
+            sleep(Duration::from_millis(100));
+        }
+    }
+
     let bindings = root.join("bindings").join("python");
     let venv = venv_for(&bindings, None)?;
     develop(&bindings, &venv, WHEELS, false)?;
@@ -1095,10 +1032,17 @@ fn run_python_samples(root: &Path, doc: &Path) -> Result<()> {
         bail!("python sample runner not found: {}", runner.display());
     }
     let examples_dir = py_codes.join("examples");
-    let mut rels = collect_py(&examples_dir)?;
+    let mut rels = relative_sources(&examples_dir, "py", |name| name != "__pycache__")?;
     rels.sort();
 
-    let udp_emulator = build_udp_emulator(root)?;
+    run("cargo", ["build", "-p", UDP_EMULATOR_PKG], root)?;
+    let udp_emulator = cargo_bin(root, None, true, UDP_EMULATOR_BIN);
+    if !udp_emulator.is_file() {
+        bail!(
+            "the UDP emulator was not built at {}",
+            udp_emulator.display()
+        );
+    }
     let python = venv_python(&venv);
     let mut failures = Vec::new();
     for rel in &rels {
@@ -1155,34 +1099,6 @@ fn run_python_samples(root: &Path, doc: &Path) -> Result<()> {
     Ok(())
 }
 
-fn build_udp_emulator(root: &Path) -> Result<PathBuf> {
-    run("cargo", ["build", "-p", UDP_EMULATOR_PKG], root)?;
-    let bin = cargo_bin(root, None, true, UDP_EMULATOR_BIN);
-    if !bin.is_file() {
-        bail!("the UDP emulator was not built at {}", bin.display());
-    }
-    Ok(bin)
-}
-
-fn wait_timeout(child: &mut Child, limit: Duration) -> Result<Option<std::process::ExitStatus>> {
-    let start = Instant::now();
-    loop {
-        if let Some(status) = child.try_wait().context("failed to poll python child")? {
-            return Ok(Some(status));
-        }
-        if start.elapsed() >= limit {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Ok(None);
-        }
-        sleep(Duration::from_millis(100));
-    }
-}
-
-fn collect_py(dir: &Path) -> Result<Vec<String>> {
-    relative_sources(dir, "py", |name| name != "__pycache__")
-}
-
 fn relative_sources(
     dir: &Path,
     extension: &str,
@@ -1202,7 +1118,7 @@ fn relative_sources(
 
 fn sync_examples(samples: &Path, check: bool) -> Result<()> {
     let examples_dir = samples.join("examples");
-    let mut rels = collect_rs(&examples_dir)?;
+    let mut rels = relative_sources(&examples_dir, "rs", |_| true)?;
     rels.sort();
 
     let manifest_path = samples.join("Cargo.toml");
@@ -1244,10 +1160,6 @@ fn sync_examples(samples: &Path, check: bool) -> Result<()> {
         manifest_path.display()
     );
     Ok(())
-}
-
-fn collect_rs(dir: &Path) -> Result<Vec<String>> {
-    relative_sources(dir, "rs", |_| true)
 }
 
 fn npm_install(doc: &Path) -> Result<()> {

@@ -63,79 +63,85 @@ pub(crate) fn run_fpga(root: &Path, cmd: &FpgaCmd) -> Result<()> {
     match cmd {
         FpgaCmd::Project => fpga_project(&fpga_dir),
         FpgaCmd::Build { force } => fpga_build(root, *force).map(|_| ()),
-        FpgaCmd::Flash { force } => fpga_flash(root, *force),
-        FpgaCmd::Sim { tb } => fpga_sim(&fpga_dir, tb.as_deref()),
-        FpgaCmd::Format { fix } => fpga_format(&fpga_dir, *fix),
+        FpgaCmd::Flash { force } => {
+            let artifacts = fpga_build(root, *force)?;
+            crate::firmware::run_writer(root, [OsStr::new("--fpga"), artifacts.mcs.as_os_str()])?;
+            println!("flash complete: {}", artifacts.mcs.display());
+            Ok(())
+        }
+        FpgaCmd::Sim { tb } => {
+            let tb = tb.as_deref();
+            let vivado = resolve_vivado()?;
+            if !fpga_dir.join(format!("{PROJECT_NAME}.xpr")).exists() {
+                fpga_project(&fpga_dir)?;
+            }
+            let mut args = vec![
+                "-mode".to_string(),
+                "batch".to_string(),
+                "-source".to_string(),
+                "scripts/sim.tcl".to_string(),
+            ];
+            if let Some(tb) = tb {
+                args.push("-tclargs".to_string());
+                args.extend(tb.split_whitespace().map(str::to_string));
+            }
+            run(&vivado, args, &fpga_dir)
+                .context("xsim reported testbench failures (see the SUMMARY table above)")
+        }
+        FpgaCmd::Format { fix } => {
+            if !on_path("verible-verilog-format") {
+                bail!(
+                    "verible-verilog-format not found on PATH. Install Verible \
+                 (https://github.com/chipsalliance/verible)."
+                );
+            }
+            let rtl_dir = fpga_dir.join("rtl");
+            let mut files = files_under(&rtl_dir, |_| true)?;
+            files.retain(|path| {
+                path.extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|e| e == "sv" || e == "svh")
+            });
+            files.sort();
+            if files.is_empty() {
+                bail!("no SystemVerilog sources found under {}", rtl_dir.display());
+            }
+            if *fix {
+                let mut args = vec![VERIBLE_COLUMN_LIMIT.to_string(), "--inplace".to_string()];
+                args.extend(files.iter().map(|p| p.to_string_lossy().into_owned()));
+                return run("verible-verilog-format", args, &fpga_dir)
+                    .context("verible-verilog-format failed");
+            }
+            let mut unformatted = 0usize;
+            for file in &files {
+                let args = [VERIBLE_COLUMN_LIMIT, "--verify", &file.to_string_lossy()];
+                if run("verible-verilog-format", args, &fpga_dir).is_err() {
+                    unformatted += 1;
+                }
+            }
+            if unformatted > 0 {
+                bail!(
+                    "{unformatted} RTL source(s) are not formatted; run `cargo xtask fpga format --fix`"
+                );
+            }
+            Ok(())
+        }
         FpgaCmd::GenController { check } => crate::fpga_codegen::gen_controller(&fpga_dir, *check),
-        FpgaCmd::CommitIps => fpga_commit_ips(&fpga_dir),
+        FpgaCmd::CommitIps => {
+            let src = fpga_dir.join(format!("{PROJECT_NAME}.srcs/sources_1/ip"));
+            let dst = fpga_dir.join("rtl/sources_1/ip");
+            if !src.is_dir() {
+                bail!(
+                    "{} does not exist; generate the Vivado project first (`cargo xtask fpga project`)",
+                    src.display()
+                );
+            }
+            copy_dir(&src, &dst)?;
+            println!("committed IP: {} -> {}", src.display(), dst.display());
+            Ok(())
+        }
         FpgaCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
-}
-
-fn fpga_sim(fpga_dir: &Path, tb: Option<&str>) -> Result<()> {
-    let vivado = resolve_vivado()?;
-
-    if !fpga_dir.join(format!("{PROJECT_NAME}.xpr")).exists() {
-        fpga_project(fpga_dir)?;
-    }
-
-    let mut args = vec![
-        "-mode".to_string(),
-        "batch".to_string(),
-        "-source".to_string(),
-        "scripts/sim.tcl".to_string(),
-    ];
-    if let Some(tb) = tb {
-        args.push("-tclargs".to_string());
-        args.extend(tb.split_whitespace().map(str::to_string));
-    }
-    run(&vivado, args, fpga_dir)
-        .context("xsim reported testbench failures (see the SUMMARY table above)")
-}
-
-fn fpga_format(fpga_dir: &Path, fix: bool) -> Result<()> {
-    if !on_path("verible-verilog-format") {
-        bail!(
-            "verible-verilog-format not found on PATH. Install Verible \
-             (https://github.com/chipsalliance/verible)."
-        );
-    }
-
-    let rtl_dir = fpga_dir.join("rtl");
-    let mut files = collect_rtl_sources(&rtl_dir)?;
-    files.sort();
-    if files.is_empty() {
-        bail!("no SystemVerilog sources found under {}", rtl_dir.display());
-    }
-
-    if fix {
-        let mut args = vec![VERIBLE_COLUMN_LIMIT.to_string(), "--inplace".to_string()];
-        args.extend(files.iter().map(|p| p.to_string_lossy().into_owned()));
-        return run("verible-verilog-format", args, fpga_dir)
-            .context("verible-verilog-format failed");
-    }
-
-    let mut unformatted = 0usize;
-    for file in &files {
-        let args = [VERIBLE_COLUMN_LIMIT, "--verify", &file.to_string_lossy()];
-        if run("verible-verilog-format", args, fpga_dir).is_err() {
-            unformatted += 1;
-        }
-    }
-    if unformatted > 0 {
-        bail!("{unformatted} RTL source(s) are not formatted; run `cargo xtask fpga format --fix`");
-    }
-    Ok(())
-}
-
-fn collect_rtl_sources(dir: &Path) -> Result<Vec<PathBuf>> {
-    let mut files = files_under(dir, |_| true)?;
-    files.retain(|path| {
-        path.extension()
-            .and_then(|e| e.to_str())
-            .is_some_and(|e| e == "sv" || e == "svh")
-    });
-    Ok(files)
 }
 
 fn fpga_project(fpga_dir: &Path) -> Result<()> {
@@ -155,6 +161,7 @@ pub(crate) struct FpgaArtifacts {
 pub(crate) const UPDATE_IMAGE_NAME: &str = "autd3-fpga-update.img";
 const BARRIER_IMAGE_NAME: &str = "autd3-fpga-barrier.bin";
 
+#[allow(clippy::too_many_lines)]
 pub(crate) fn fpga_build(root: &Path, force: bool) -> Result<FpgaArtifacts> {
     let fpga_dir = root.join("firmware/fpga");
     let vivado = resolve_vivado()?;
@@ -189,14 +196,60 @@ pub(crate) fn fpga_build(root: &Path, force: bool) -> Result<FpgaArtifacts> {
         bail!("Vivado finished but {} was not created", mcs.display());
     }
     let update_image = fpga_dir.join(UPDATE_IMAGE_NAME);
-    split_flash_image(&mcs, &update_image)?;
-    println!("fpga built: {}", mcs.display());
-    println!("fpga update image: {}", update_image.display());
-    Ok(FpgaArtifacts { mcs, update_image })
-}
-
-fn split_flash_image(mcs: &Path, update_image: &Path) -> Result<()> {
-    let (start, flash) = read_mcs(mcs)?;
+    let text =
+        std::fs::read_to_string(&mcs).with_context(|| format!("reading {}", mcs.display()))?;
+    let mut records: Vec<(u32, Vec<u8>)> = Vec::new();
+    let mut base = 0u32;
+    for (index, line) in text.lines().enumerate() {
+        let line_no = index + 1;
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let hex = line
+            .strip_prefix(':')
+            .with_context(|| format!("line {line_no}: missing ':'"))?;
+        let bytes = (0..hex.len())
+            .step_by(2)
+            .map(|i| {
+                hex.get(i..i + 2)
+                    .and_then(|b| u8::from_str_radix(b, 16).ok())
+            })
+            .collect::<Option<Vec<u8>>>()
+            .with_context(|| format!("line {line_no}: malformed hex"))?;
+        if bytes.len() < 5 || bytes.len() != usize::from(bytes[0]) + 5 {
+            bail!("line {line_no}: bad record length");
+        }
+        if bytes.iter().fold(0u8, |acc, b| acc.wrapping_add(*b)) != 0 {
+            bail!("line {line_no}: checksum mismatch");
+        }
+        let offset = u32::from(u16::from_be_bytes([bytes[1], bytes[2]]));
+        let data = &bytes[4..bytes.len() - 1];
+        match bytes[3] {
+            0x00 => records.push((base + offset, data.to_vec())),
+            0x01 => break,
+            0x04 if data.len() == 2 => {
+                base = u32::from(u16::from_be_bytes([data[0], data[1]])) << 16;
+            }
+            t => bail!("line {line_no}: unsupported record type 0x{t:02X}"),
+        }
+    }
+    let start = records
+        .iter()
+        .map(|(addr, _)| *addr)
+        .min()
+        .with_context(|| format!("{} has no data records", mcs.display()))?;
+    let start_index = usize::try_from(start)?;
+    let mut end_index = start_index;
+    for (addr, data) in &records {
+        end_index = end_index.max(usize::try_from(*addr)? + data.len());
+    }
+    let mut image = vec![0xFF; end_index - start_index];
+    for (addr, data) in &records {
+        let offset = usize::try_from(*addr)? - start_index;
+        image[offset..][..data.len()].copy_from_slice(data);
+    }
+    let flash = image;
     if start != 0 {
         bail!(
             "{} starts at 0x{start:X}, expected the golden image at 0x0",
@@ -240,7 +293,7 @@ fn split_flash_image(mcs: &Path, update_image: &Path) -> Result<()> {
     if !summary.monitors_configuration() {
         bail!("the update image does not arm the configuration watchdog: {summary:?}");
     }
-    std::fs::write(update_image, update)
+    std::fs::write(&update_image, update)
         .with_context(|| format!("writing {}", update_image.display()))?;
     println!(
         "barrier at 0x{FPGA_BARRIER_BASE:06X}, update: {} bytes (USR_ACCESS 0x{:08X}), TIMER 0x{:08X} / 0x{:08X}",
@@ -249,72 +302,9 @@ fn split_flash_image(mcs: &Path, update_image: &Path) -> Result<()> {
         golden.timer.unwrap_or_default(),
         summary.timer.unwrap_or_default()
     );
-    Ok(())
-}
-
-fn read_mcs(path: &Path) -> Result<(u32, Vec<u8>)> {
-    let text =
-        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-    let mut records: Vec<(u32, Vec<u8>)> = Vec::new();
-    let mut base = 0u32;
-    for (index, line) in text.lines().enumerate() {
-        let line_no = index + 1;
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-        let hex = line
-            .strip_prefix(':')
-            .with_context(|| format!("line {line_no}: missing ':'"))?;
-        let bytes = (0..hex.len())
-            .step_by(2)
-            .map(|i| {
-                hex.get(i..i + 2)
-                    .and_then(|b| u8::from_str_radix(b, 16).ok())
-            })
-            .collect::<Option<Vec<u8>>>()
-            .with_context(|| format!("line {line_no}: malformed hex"))?;
-        if bytes.len() < 5 || bytes.len() != usize::from(bytes[0]) + 5 {
-            bail!("line {line_no}: bad record length");
-        }
-        if bytes.iter().fold(0u8, |acc, b| acc.wrapping_add(*b)) != 0 {
-            bail!("line {line_no}: checksum mismatch");
-        }
-        let offset = u32::from(u16::from_be_bytes([bytes[1], bytes[2]]));
-        let data = &bytes[4..bytes.len() - 1];
-        match bytes[3] {
-            0x00 => records.push((base + offset, data.to_vec())),
-            0x01 => break,
-            0x04 if data.len() == 2 => {
-                base = u32::from(u16::from_be_bytes([data[0], data[1]])) << 16;
-            }
-            t => bail!("line {line_no}: unsupported record type 0x{t:02X}"),
-        }
-    }
-
-    let start = records
-        .iter()
-        .map(|(addr, _)| *addr)
-        .min()
-        .with_context(|| format!("{} has no data records", path.display()))?;
-    let start_index = usize::try_from(start)?;
-    let mut end_index = start_index;
-    for (addr, data) in &records {
-        end_index = end_index.max(usize::try_from(*addr)? + data.len());
-    }
-    let mut image = vec![0xFF; end_index - start_index];
-    for (addr, data) in &records {
-        let offset = usize::try_from(*addr)? - start_index;
-        image[offset..][..data.len()].copy_from_slice(data);
-    }
-    Ok((start, image))
-}
-
-fn fpga_flash(root: &Path, force: bool) -> Result<()> {
-    let artifacts = fpga_build(root, force)?;
-    crate::firmware::run_writer(root, [OsStr::new("--fpga"), artifacts.mcs.as_os_str()])?;
-    println!("flash complete: {}", artifacts.mcs.display());
-    Ok(())
+    println!("fpga built: {}", mcs.display());
+    println!("fpga update image: {}", update_image.display());
+    Ok(FpgaArtifacts { mcs, update_image })
 }
 
 pub(crate) fn resolve_vivado() -> Result<String> {
@@ -403,20 +393,6 @@ fn find_vivado_2025(install: &Path) -> Option<PathBuf> {
         .collect();
     found.sort();
     found.pop()
-}
-
-fn fpga_commit_ips(fpga_dir: &Path) -> Result<()> {
-    let src = fpga_dir.join(format!("{PROJECT_NAME}.srcs/sources_1/ip"));
-    let dst = fpga_dir.join("rtl/sources_1/ip");
-    if !src.is_dir() {
-        bail!(
-            "{} does not exist; generate the Vivado project first (`cargo xtask fpga project`)",
-            src.display()
-        );
-    }
-    copy_dir(&src, &dst)?;
-    println!("committed IP: {} -> {}", src.display(), dst.display());
-    Ok(())
 }
 
 pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {

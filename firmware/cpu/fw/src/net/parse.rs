@@ -38,47 +38,46 @@ pub fn parse(frame: &[u8]) -> Option<Packet<'_>> {
         EtherType(ETHERTYPE_PTP) => Some(Packet::Ptp {
             message: eth.payload_slice(),
         }),
-        EtherType::IPV6 => parse_ipv6(eth.source(), eth.payload_slice()),
-        _ => None,
-    }
-}
-
-fn parse_ipv6(src_mac: Mac, frame: &[u8]) -> Option<Packet<'_>> {
-    let ip = Ipv6Slice::from_slice(frame).ok()?;
-    let header = ip.header();
-    if header.payload_length() == 0
-        || !matches!(header.next_header(), IpNumber::UDP | IpNumber::IPV6_ICMP)
-    {
-        return None;
-    }
-    let upper = ip.payload();
-    let src_ip = header.source();
-    let dst_ip = header.destination();
-    match upper.ip_number {
-        IpNumber::UDP => {
-            let udp = UdpSlice::from_slice(upper.payload).ok()?;
-            if udp.length() == 0 {
+        EtherType::IPV6 => {
+            let src_mac = eth.source();
+            let ip = Ipv6Slice::from_slice(eth.payload_slice()).ok()?;
+            let header = ip.header();
+            if header.payload_length() == 0
+                || !matches!(header.next_header(), IpNumber::UDP | IpNumber::IPV6_ICMP)
+            {
                 return None;
             }
-            Some(Packet::Udp(Udp {
-                src_mac,
-                src_ip,
-                dst_ip,
-                src_port: udp.source_port(),
-                dst_port: udp.destination_port(),
-                payload: udp.payload(),
-            }))
-        }
-        IpNumber::IPV6_ICMP => {
-            let icmp = Icmpv6Slice::from_slice(upper.payload).ok()?;
-            match icmp.icmp_type() {
-                Icmpv6Type::NeighborSolicitation => Some(Packet::NeighborSolicitation {
-                    src_mac,
-                    src_ip,
-                    dst_ip,
-                    target: icmp.payload().get(..NS_TARGET)?.try_into().ok()?,
-                    hop_limit: header.hop_limit(),
-                }),
+            let upper = ip.payload();
+            let src_ip = header.source();
+            let dst_ip = header.destination();
+            match upper.ip_number {
+                IpNumber::UDP => {
+                    let udp = UdpSlice::from_slice(upper.payload).ok()?;
+                    if udp.length() == 0 {
+                        return None;
+                    }
+                    Some(Packet::Udp(Udp {
+                        src_mac,
+                        src_ip,
+                        dst_ip,
+                        src_port: udp.source_port(),
+                        dst_port: udp.destination_port(),
+                        payload: udp.payload(),
+                    }))
+                }
+                IpNumber::IPV6_ICMP => {
+                    let icmp = Icmpv6Slice::from_slice(upper.payload).ok()?;
+                    match icmp.icmp_type() {
+                        Icmpv6Type::NeighborSolicitation => Some(Packet::NeighborSolicitation {
+                            src_mac,
+                            src_ip,
+                            dst_ip,
+                            target: icmp.payload().get(..NS_TARGET)?.try_into().ok()?,
+                            hop_limit: header.hop_limit(),
+                        }),
+                        _ => None,
+                    }
+                }
                 _ => None,
             }
         }

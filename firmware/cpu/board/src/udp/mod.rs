@@ -149,6 +149,24 @@ pub(crate) fn init() {
 }
 
 pub(crate) fn start() {
+    fn advertise_pause_on(phy: u32) -> bool {
+        let Some(anar) = gmac::mdio_read(phy, PHY_ANAR) else {
+            return false;
+        };
+        if anar & ANAR_PAUSE != 0 {
+            return true;
+        }
+        let Some(bmcr) = gmac::mdio_read(phy, PHY_BMCR) else {
+            return false;
+        };
+        gmac::mdio_write(phy, PHY_ANAR, anar | ANAR_PAUSE)
+            && gmac::mdio_write(
+                phy,
+                PHY_BMCR,
+                bmcr | BMCR_AUTONEG_ENABLE | BMCR_RESTART_AUTONEG,
+            )
+    }
+
     let net = net();
     ethsw::select_switch();
     let switch_ready = ethsw::init_switch();
@@ -163,7 +181,11 @@ pub(crate) fn start() {
             io::show_network_fault();
         }
     }
-    if !advertise_pause() {
+    let mut pause_advertised = true;
+    for port in 0..2 {
+        pause_advertised &= advertise_pause_on(PHY_ADDRESS_BASE + port);
+    }
+    if !pause_advertised {
         crate::cpu().count_boot_failure();
     }
     for buffer in &mut net.nic.tx {
@@ -186,32 +208,6 @@ pub(crate) fn start() {
         tgia0_entry as *const () as usize,
         true,
     );
-}
-
-fn advertise_pause() -> bool {
-    let mut advertised = true;
-    for port in 0..2 {
-        advertised &= advertise_pause_on(PHY_ADDRESS_BASE + port);
-    }
-    advertised
-}
-
-fn advertise_pause_on(phy: u32) -> bool {
-    let Some(anar) = gmac::mdio_read(phy, PHY_ANAR) else {
-        return false;
-    };
-    if anar & ANAR_PAUSE != 0 {
-        return true;
-    }
-    let Some(bmcr) = gmac::mdio_read(phy, PHY_BMCR) else {
-        return false;
-    };
-    gmac::mdio_write(phy, PHY_ANAR, anar | ANAR_PAUSE)
-        && gmac::mdio_write(
-            phy,
-            PHY_BMCR,
-            bmcr | BMCR_AUTONEG_ENABLE | BMCR_RESTART_AUTONEG,
-        )
 }
 
 pub(crate) fn tick(now_ms: u32) {

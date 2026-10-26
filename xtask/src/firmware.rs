@@ -47,107 +47,101 @@ pub(crate) struct WriteArgs {
 
 pub(crate) fn run_firmware(root: &Path, cmd: FirmwareCmd) -> Result<()> {
     match cmd {
-        FirmwareCmd::Write(args) => write(root, &args),
-        FirmwareCmd::Bundle(args) => bundle(root, &args),
+        FirmwareCmd::Write(args) => {
+            let mut cli_args: Vec<String> = Vec::new();
+            if let Some(version) = &args.version {
+                cli_args.push("--version".to_string());
+                cli_args.push(version.clone());
+            }
+            if let Some(target) = &args.target {
+                cli_args.push("--target".to_string());
+                cli_args.push(target.clone());
+            }
+            if args.force_download {
+                cli_args.push("--force-download".to_string());
+            }
+            if args.list {
+                cli_args.push("--list".to_string());
+            }
+            run_writer(root, &cli_args)
+        }
+        FirmwareCmd::Bundle(args) => {
+            crate::bump::firmware_series(root)?;
+            let version = crate::component::find("firmware")?.current_version(root)?;
+            let cpu = crate::cpu::cpu_build(root)?;
+            let fpga = crate::fpga::fpga_build(root, args.force)?;
+            let stem = format!("autd3-sdk-firmware-v{version}");
+            let dist = root.join("firmware/dist");
+            std::fs::create_dir_all(&dist)
+                .with_context(|| format!("creating {}", dist.display()))?;
+            let archive = dist.join(format!("{stem}.zip"));
+            let entries: &[(String, PathBuf)] = &[
+                (format!("{stem}.bin"), cpu),
+                (format!("{stem}.mcs"), fpga.mcs),
+                (format!("{stem}-fpga-update.img"), fpga.update_image),
+            ];
+            let file = std::fs::File::create(&archive)
+                .with_context(|| format!("creating {}", archive.display()))?;
+            let mut zip = zip::ZipWriter::new(file);
+            let options = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Deflated);
+            for (name, path) in entries {
+                zip.start_file(name.clone(), options)?;
+                let mut src = std::fs::File::open(path)
+                    .with_context(|| format!("opening {}", path.display()))?;
+                std::io::copy(&mut src, &mut zip).with_context(|| format!("adding {name}"))?;
+            }
+            zip.finish()?;
+            println!("firmware bundle: {}", archive.display());
+            if args.upload {
+                let tag = format!("firmware-v{version}");
+                if !on_path("gh") {
+                    bail!(
+                        "`gh` is required for --upload but was not found on PATH; install the GitHub CLI (https://cli.github.com/) or upload {} manually to the `{tag}` release",
+                        archive.display()
+                    );
+                }
+                let status = std::process::Command::new("gh")
+                    .args(["auth", "status"])
+                    .current_dir(root)
+                    .status()
+                    .context("failed to spawn `gh`")?;
+                if !status.success() {
+                    bail!("`gh` is not authenticated; run `gh auth login` and retry");
+                }
+                let exists = std::process::Command::new("gh")
+                    .args(["release", "view", &tag])
+                    .current_dir(root)
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status()
+                    .context("failed to spawn `gh`")?;
+                if !exists.success() {
+                    bail!(
+                        "no `{tag}` release on GitHub; push the `{tag}` tag first and wait for `release.yml` to create the release, then rerun with --upload"
+                    );
+                }
+                run(
+                    "gh",
+                    [
+                        "release",
+                        "upload",
+                        &tag,
+                        &archive.display().to_string(),
+                        "--clobber",
+                    ],
+                    root,
+                )?;
+                println!("uploaded {} to {tag}", archive.display());
+            }
+            Ok(())
+        }
         FirmwareCmd::Clean(args) => crate::clean::scope(root, args, clean),
     }
 }
 
 pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {
     cleaner.path("firmware/dist")
-}
-
-fn bundle(root: &Path, args: &BundleArgs) -> Result<()> {
-    crate::bump::firmware_series(root)?;
-    let version = crate::component::find("firmware")?.current_version(root)?;
-
-    let cpu = crate::cpu::cpu_build(root)?;
-    let fpga = crate::fpga::fpga_build(root, args.force)?;
-
-    let stem = format!("autd3-sdk-firmware-v{version}");
-    let dist = root.join("firmware/dist");
-    std::fs::create_dir_all(&dist).with_context(|| format!("creating {}", dist.display()))?;
-    let archive = dist.join(format!("{stem}.zip"));
-    write_zip(
-        &archive,
-        &[
-            (format!("{stem}.bin"), cpu),
-            (format!("{stem}.mcs"), fpga.mcs),
-            (format!("{stem}-fpga-update.img"), fpga.update_image),
-        ],
-    )?;
-
-    println!("firmware bundle: {}", archive.display());
-
-    if args.upload {
-        upload(root, &version, &archive)?;
-    }
-
-    Ok(())
-}
-
-fn upload(root: &Path, version: &str, archive: &Path) -> Result<()> {
-    let tag = format!("firmware-v{version}");
-
-    if !on_path("gh") {
-        bail!(
-            "`gh` is required for --upload but was not found on PATH; install the GitHub CLI (https://cli.github.com/) or upload {} manually to the `{tag}` release",
-            archive.display()
-        );
-    }
-
-    let status = std::process::Command::new("gh")
-        .args(["auth", "status"])
-        .current_dir(root)
-        .status()
-        .context("failed to spawn `gh`")?;
-    if !status.success() {
-        bail!("`gh` is not authenticated; run `gh auth login` and retry");
-    }
-
-    let exists = std::process::Command::new("gh")
-        .args(["release", "view", &tag])
-        .current_dir(root)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .context("failed to spawn `gh`")?;
-    if !exists.success() {
-        bail!(
-            "no `{tag}` release on GitHub; push the `{tag}` tag first and wait for `release.yml` to create the release, then rerun with --upload"
-        );
-    }
-
-    run(
-        "gh",
-        [
-            "release",
-            "upload",
-            &tag,
-            &archive.display().to_string(),
-            "--clobber",
-        ],
-        root,
-    )?;
-
-    println!("uploaded {} to {tag}", archive.display());
-    Ok(())
-}
-
-fn write_zip(archive: &Path, entries: &[(String, PathBuf)]) -> Result<()> {
-    let file = std::fs::File::create(archive)
-        .with_context(|| format!("creating {}", archive.display()))?;
-    let mut zip = zip::ZipWriter::new(file);
-    let options = zip::write::SimpleFileOptions::default()
-        .compression_method(zip::CompressionMethod::Deflated);
-    for (name, path) in entries {
-        zip.start_file(name.clone(), options)?;
-        let mut src =
-            std::fs::File::open(path).with_context(|| format!("opening {}", path.display()))?;
-        std::io::copy(&mut src, &mut zip).with_context(|| format!("adding {name}"))?;
-    }
-    zip.finish()?;
-    Ok(())
 }
 
 pub(crate) fn run_writer<I, S>(root: &Path, args: I) -> Result<()>
@@ -162,24 +156,4 @@ where
     )?;
     let bin = cargo_bin(root, None, false, "autd3-firmware-writer");
     run(&bin.to_string_lossy(), args, root)
-}
-
-fn write(root: &Path, args: &WriteArgs) -> Result<()> {
-    let mut cli_args: Vec<String> = Vec::new();
-    if let Some(version) = &args.version {
-        cli_args.push("--version".to_string());
-        cli_args.push(version.clone());
-    }
-    if let Some(target) = &args.target {
-        cli_args.push("--target".to_string());
-        cli_args.push(target.clone());
-    }
-    if args.force_download {
-        cli_args.push("--force-download".to_string());
-    }
-    if args.list {
-        cli_args.push("--list".to_string());
-    }
-
-    run_writer(root, &cli_args)
 }

@@ -32,18 +32,11 @@ pub struct UdpArgs {
     pub open_timeout_ms: Option<u64>,
 }
 
-fn ms(value: Option<u64>) -> Option<Duration> {
-    value.map(Duration::from_millis)
-}
-
-fn us(value: Option<u64>) -> Option<Duration> {
-    value.map(Duration::from_micros)
-}
-
 impl UdpArgs {
     #[must_use]
     pub fn heartbeat(&self) -> Duration {
-        us(self.heartbeat_us).unwrap_or(DEFAULT_HEARTBEAT)
+        self.heartbeat_us
+            .map_or(DEFAULT_HEARTBEAT, Duration::from_micros)
     }
 
     #[must_use]
@@ -60,7 +53,9 @@ impl UdpArgs {
             lost_timeout: default
                 .lost_timeout
                 .max(self.heartbeat().saturating_mul(LOST_AFTER_HEARTBEATS)),
-            open_timeout: ms(self.open_timeout_ms).unwrap_or(default.open_timeout),
+            open_timeout: self
+                .open_timeout_ms
+                .map_or(default.open_timeout, Duration::from_millis),
             ack_timeout: ACK_TIMEOUT,
             sync_on_open: false,
             ..default
@@ -76,25 +71,6 @@ impl UdpArgs {
     }
 }
 
-fn udp_found_nothing(e: &UdpError) -> bool {
-    matches!(
-        e,
-        UdpError::NoInterfaceFound
-            | UdpError::InterfaceNotFound(_)
-            | UdpError::EnumerationTimeout { found: 0, .. }
-    )
-}
-
-fn firewall_hint() -> String {
-    let port = autd3_cpu_wire::udp::PORT;
-    format!(
-        "if the devices are connected and powered, the host firewall may be dropping their \
-         replies: allow inbound UDP from fe80::/10 source port {port} on that interface \
-         (e.g. `sudo ufw allow in on <interface> proto udp from fe80::/10 port {port}`; \
-         on Windows, an inbound rule for UDP from remote port {port})"
-    )
-}
-
 #[derive(Debug, thiserror::Error)]
 #[error("{0}{hint}", hint = hint(.0))]
 pub struct OpenError(#[from] Error);
@@ -107,8 +83,22 @@ fn udp_cause(e: &Error) -> Option<&UdpError> {
 }
 
 fn hint(e: &Error) -> String {
-    if udp_cause(e).is_some_and(udp_found_nothing) {
-        format!("; {}", firewall_hint())
+    let found_nothing = udp_cause(e).is_some_and(|e| {
+        matches!(
+            e,
+            UdpError::NoInterfaceFound
+                | UdpError::InterfaceNotFound(_)
+                | UdpError::EnumerationTimeout { found: 0, .. }
+        )
+    });
+    if found_nothing {
+        let port = autd3_cpu_wire::udp::PORT;
+        format!(
+            "; if the devices are connected and powered, the host firewall may be dropping their \
+             replies: allow inbound UDP from fe80::/10 source port {port} on that interface \
+             (e.g. `sudo ufw allow in on <interface> proto udp from fe80::/10 port {port}`; \
+             on Windows, an inbound rule for UDP from remote port {port})"
+        )
     } else {
         String::new()
     }

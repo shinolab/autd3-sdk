@@ -28,15 +28,6 @@ fn constant_wave(v: u8) -> Vec<u8> {
     vec![v; GPIO_SAMPLES]
 }
 
-fn pwm_waveform(fpga: &FpgaEmulator, tr: usize) -> Vec<u8> {
-    let (phases, intensities) = fpga.emissions();
-    let (Some(&em_phase), Some(&em_intensity)) = (phases.get(tr), intensities.get(tr)) else {
-        return constant_wave(0);
-    };
-    let pw = fpga.to_pulse_width(em_intensity, fpga.modulation());
-    pwm_levels(pw, em_phase.0).map(u8::from).collect()
-}
-
 fn gpio_waveform(fpga: &FpgaEmulator, raw: u64) -> Vec<u8> {
     let value = raw & GPIO_VALUE_MASK;
     match gpio_type(raw) {
@@ -55,7 +46,16 @@ fn gpio_waveform(fpga: &FpgaEmulator, raw: u64) -> Vec<u8> {
             let now = (fpga.sys_time() / 25_000) & GPIO_VALUE_MASK;
             constant_wave(u8::from(now == value))
         }
-        Some(GpioOutType::PwmOut) => pwm_waveform(fpga, value as usize),
+        Some(GpioOutType::PwmOut) => {
+            let tr = value as usize;
+            let (phases, intensities) = fpga.emissions();
+            let (Some(&em_phase), Some(&em_intensity)) = (phases.get(tr), intensities.get(tr))
+            else {
+                return constant_wave(0);
+            };
+            let pw = fpga.to_pulse_width(em_intensity, fpga.modulation());
+            pwm_levels(pw, em_phase.0).map(u8::from).collect()
+        }
         Some(GpioOutType::Direct) => constant_wave(u8::from(value != 0)),
         Some(
             GpioOutType::None

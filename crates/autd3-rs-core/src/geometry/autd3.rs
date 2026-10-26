@@ -23,10 +23,6 @@ impl Autd3 {
     }
 }
 
-pub(crate) const fn is_missing_transducer(x: u32, y: u32) -> bool {
-    y == 1 && (x == 1 || x == 2 || x == 16)
-}
-
 impl Default for Autd3 {
     fn default() -> Self {
         Self::new(Point3::origin(), UnitQuaternion::identity())
@@ -37,7 +33,7 @@ impl From<Autd3> for Device {
     fn from(a: Autd3) -> Device {
         let positions: Vec<_> = (0..Autd3::GRID_Y)
             .flat_map(|y| (0..Autd3::GRID_X).map(move |x| (x, y)))
-            .filter(|&(x, y)| !is_missing_transducer(x, y))
+            .filter(|&(x, y)| !(y == 1 && (x == 1 || x == 2 || x == 16)))
             .map(|(x, y)| {
                 a.origin
                     + a.rotation

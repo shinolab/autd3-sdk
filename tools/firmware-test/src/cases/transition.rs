@@ -81,21 +81,6 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     })
     .await?;
 
-    ext_square(ctx, center).await?;
-    Ok(())
-}
-
-fn vertex(center: Point3<f32>, dx: f32, dy: f32) -> ControlPoints {
-    ControlPoints::new(
-        [ControlPoint::new(
-            center + Vector3::new(dx, dy, 0.0),
-            Phase::ZERO,
-        )],
-        Intensity::MAX,
-    )
-}
-
-async fn ext_square(ctx: &Ctx<'_>, center: Point3<f32>) -> Result<()> {
     let mut sine150 = modulation_buffer();
     sine(
         150 * Hz,
@@ -125,4 +110,14 @@ async fn ext_square(ctx: &Ctx<'_>, center: Point3<f32>) -> Result<()> {
     .await?;
     wait_enter("The focus jumps between the square's vertices every second (Ext transition)").await;
     Ok(())
+}
+
+fn vertex(center: Point3<f32>, dx: f32, dy: f32) -> ControlPoints {
+    ControlPoints::new(
+        [ControlPoint::new(
+            center + Vector3::new(dx, dy, 0.0),
+            Phase::ZERO,
+        )],
+        Intensity::MAX,
+    )
 }

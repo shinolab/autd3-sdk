@@ -40,8 +40,78 @@ pub(crate) struct BumpVersionCmd {
 }
 
 pub(crate) fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
+    fn resolve_component(root: &Path, name: Option<&str>) -> Result<&'static Component> {
+        if let Some(name) = name {
+            return find(name).ok().with_context(|| {
+                let known = COMPONENTS
+                    .iter()
+                    .map(|c| c.name)
+                    .chain([DOC_COMPONENT])
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("unknown component `{name}` (known: {known})")
+            });
+        }
+        let stem = release_stem(root)?;
+        detect(&stem)
+            .map(|(c, _)| c)
+            .with_context(|| format!("branch `release/{stem}` matches no known release component"))
+    }
+
+    fn print_doc_followup(name: &str, core: &str) {
+        if !matches!(name, "software" | "console" | "firmware") {
+            return;
+        }
+        let purpose = if name == "software" && core.ends_with(".0") {
+            "freeze the outgoing doc version series"
+        } else {
+            "sync the live doc version snapshot"
+        };
+        println!();
+        println!("Then, to {purpose}");
+        println!("  cargo xtask bump-version doc");
+        println!();
+    }
+
     if cmd.component.as_deref() == Some(DOC_COMPONENT) {
-        return bump_doc(root, cmd.version.as_deref());
+        return {
+            let version = cmd.version.as_deref();
+            let raw = match version {
+                Some(v) => v.to_string(),
+                None => version_from_branch(root, find("software")?)?,
+            };
+            let core = parse_version(&raw)?;
+            let [major, minor, patch] = version_parts(&core)?;
+            let slug = format!("{major}.{minor}.x");
+            if patch != 0 {
+                let changed = crate::doc::sync_snapshot_versions(root, &slug)?;
+                if changed == 0 {
+                    println!("The {slug} snapshot already records the current component versions");
+                    return Ok(());
+                }
+                println!("Updated {changed} page(s) in the {slug} snapshot -> {core}");
+                println!();
+                println!("Next (do these manually after reviewing the diff):");
+                println!("  git add doc/src/content/docs/{slug} 'doc/src/content/docs/*/{slug}'");
+                return Ok(());
+            }
+            if !crate::doc::add_version(root, &slug)? {
+                return Ok(());
+            }
+            println!();
+            println!("Next (do these manually after reviewing the diff):");
+            println!(
+                "  git add doc/astro.config.mjs doc/.gitignore doc/src/content/versions/{slug}.json   # the guard requires a tracked config"
+            );
+            println!(
+                "  cargo xtask doc build                    # generates doc/src/content/docs/{slug}/"
+            );
+            println!(
+                "  cargo xtask doc freeze-version {slug}    # inlines codes + tracks the snapshot"
+            );
+            println!("  git add doc/");
+            Ok(())
+        };
     }
     let component = resolve_component(root, cmd.component.as_deref())?;
     let raw = match cmd.version.as_deref() {
@@ -53,22 +123,192 @@ pub(crate) fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> 
 
     match component.name {
         "software" => {
+            fn replace_json_string_value(line: &str, new: &str) -> String {
+                let Some(colon) = line.find(':') else {
+                    return line.to_string();
+                };
+                let (key, rest) = line.split_at(colon + 1);
+                let Some(open) = rest.find('"') else {
+                    return line.to_string();
+                };
+                let after_open = open + 1;
+                let Some(rel_close) = rest[after_open..].find('"') else {
+                    return line.to_string();
+                };
+                let close = after_open + rel_close;
+                format!("{key}{}\"{new}\"{}", &rest[..open], &rest[close + 1..])
+            }
+
             bump_cargo_toml(&root.join("Cargo.toml"), &core)?;
             bump_cargo_toml(&root.join("bindings/ffi/Cargo.toml"), &core)?;
             bump_cargo_toml(&root.join("bindings/python/Cargo.toml"), &core)?;
-            bump_python_pyproject(root, &core)?;
-            bump_csharp_props(&root.join("bindings/csharp/Directory.Build.props"), &core)?;
-            bump_csharp_abi(root, &core)?;
+            let py_root = root.join("bindings/python");
+            let mut dirs: Vec<_> = std::fs::read_dir(&py_root)
+                .with_context(|| format!("reading {}", py_root.display()))?
+                .filter_map(Result::ok)
+                .map(|e| e.path())
+                .collect();
+            dirs.sort();
+            let manifests: Vec<_> = dirs
+                .iter()
+                .map(|dir| dir.join("pyproject.toml"))
+                .filter(|path| path.is_file())
+                .collect();
+            if manifests.is_empty() {
+                bail!("no pyproject.toml found under {}", py_root.display());
+            }
+            let mut siblings = HashSet::new();
+            for path in &manifests {
+                let text = std::fs::read_to_string(path)
+                    .with_context(|| format!("reading {}", path.display()))?;
+                let doc: DocumentMut = text
+                    .parse()
+                    .with_context(|| format!("parsing {}", path.display()))?;
+                let name = doc
+                    .get("project")
+                    .and_then(Item::as_table_like)
+                    .and_then(|project| project.get("name"))
+                    .and_then(Item::as_str)
+                    .with_context(|| format!("missing `project.name` in {}", path.display()))?;
+                siblings.insert(name.to_owned());
+            }
+            for path in &manifests {
+                edit_toml(path, |doc| {
+                    let project = doc
+                        .get_mut("project")
+                        .and_then(Item::as_table_like_mut)
+                        .with_context(|| {
+                            format!("missing [project] table in {}", path.display())
+                        })?;
+                    project.insert("version", value(&core));
+                    if let Some(dynamic) = project.get_mut("dynamic").and_then(Item::as_array_mut) {
+                        dynamic.retain(|v| v.as_str() != Some("version"));
+                        if dynamic.is_empty() {
+                            project.remove("dynamic");
+                        }
+                    }
+                    let Some(dependencies) =
+                        project.get_mut("dependencies").and_then(Item::as_array_mut)
+                    else {
+                        return Ok(());
+                    };
+                    for dep in dependencies.iter_mut() {
+                        let Some(spec) = dep.as_str() else { continue };
+                        let name = spec
+                            .split(|c: char| "<>=!~ [;".contains(c))
+                            .next()
+                            .unwrap_or(spec);
+                        if siblings.contains(name) {
+                            let prefix = dep
+                                .decor()
+                                .prefix()
+                                .and_then(|r| r.as_str())
+                                .unwrap_or("")
+                                .to_owned();
+                            let suffix = dep
+                                .decor()
+                                .suffix()
+                                .and_then(|r| r.as_str())
+                                .unwrap_or("")
+                                .to_owned();
+                            *dep = toml_edit::Value::from(format!("{name}=={core}"))
+                                .decorated(prefix.as_str(), suffix.as_str());
+                        }
+                    }
+                    Ok(())
+                })?;
+            }
+            let props = root.join("bindings/csharp/Directory.Build.props");
+            let text = std::fs::read_to_string(&props)
+                .with_context(|| format!("reading {}", props.display()))?;
+            let open = "<Version>";
+            let close = "</Version>";
+            let start = text
+                .find(open)
+                .with_context(|| format!("`{open}` not found in {}", props.display()))?
+                + open.len();
+            let end = text[start..]
+                .find(close)
+                .with_context(|| format!("`{close}` not found in {}", props.display()))?
+                + start;
+            let new = format!("{}{core}{}", &text[..start], &text[end..]);
+            std::fs::write(&props, new).with_context(|| format!("writing {}", props.display()))?;
+            let path = root.join(CSHARP_ABI_PATH);
+            let parts = version_parts(&core)?;
+            let text = std::fs::read_to_string(&path)
+                .with_context(|| format!("reading {}", props.display()))?;
+            let mut out = text;
+            for (name, value) in ["Major", "Minor", "Patch"].into_iter().zip(parts) {
+                if value > 0x3FF {
+                    bail!(
+                        "version component {value} does not fit in the 10-bit C ABI version field"
+                    );
+                }
+                let prefix = format!("internal const ushort {name} = ");
+                let start = out
+                    .find(&prefix)
+                    .with_context(|| format!("`{prefix}` not found in {}", props.display()))?
+                    + prefix.len();
+                let end = out[start..]
+                    .find(';')
+                    .with_context(|| format!("unterminated `{prefix}` in {}", props.display()))?
+                    + start;
+                out = format!("{}{value}{}", &out[..start], &out[end..]);
+            }
+            std::fs::write(&path, out).with_context(|| format!("writing {}", props.display()))?;
             bump_cargo_toml(&root.join("extras/autd3-rs-emulator/Cargo.toml"), &core)?;
-            bump_standalone_crate(
-                &root.join("extras/autd3-rs-pattern-holo-wgpu/Cargo.toml"),
-                &core,
-            )?;
+            let holo_wgpu = root.join("extras/autd3-rs-pattern-holo-wgpu/Cargo.toml");
+            edit_toml(&holo_wgpu, |doc| {
+                set_package_version(doc, &holo_wgpu, &core)?;
+                for table in ["dependencies", "dev-dependencies", "build-dependencies"] {
+                    if let Some(deps) = doc.get_mut(table).and_then(Item::as_table_like_mut) {
+                        bump_autd3_deps(deps, &core);
+                    }
+                }
+                Ok(())
+            })?;
             bump_cargo_toml(&root.join("simulator/Cargo.toml"), &core)?;
             bump_console(root, &core)?;
             let pins = crate::doc::rewrite_crate_version(root, &core)?;
             println!("Updated crate version pins in {pins} doc page(s)/README(s) -> {core}");
-            let count = bump_unity(root, &core)?;
+            let unity_root = root.join("bindings/unity");
+            let mut dirs: Vec<_> = std::fs::read_dir(&unity_root)
+                .with_context(|| format!("reading {}", unity_root.display()))?
+                .filter_map(Result::ok)
+                .map(|e| e.path())
+                .filter(|p| p.is_dir())
+                .collect();
+            dirs.sort();
+            let dep_prefix = format!("\"{}", crate::unity::PKG_PREFIX);
+            let mut count = 0usize;
+            for dir in dirs {
+                let path = dir.join("package.json");
+                if !root.join("bindings/csharp/Directory.Build.props").is_file() {
+                    continue;
+                }
+                let text = std::fs::read_to_string(&path)
+                    .with_context(|| format!("reading {}", props.display()))?;
+                let mut out = String::with_capacity(text.len());
+                for line in text.lines() {
+                    let trimmed = line.trim_start();
+                    if trimmed.starts_with("\"version\":")
+                        || trimmed.starts_with(dep_prefix.as_str())
+                    {
+                        out.push_str(&replace_json_string_value(line, &core));
+                    } else {
+                        out.push_str(line);
+                    }
+                    out.push('\n');
+                }
+                std::fs::write(&path, out)
+                    .with_context(|| format!("writing {}", props.display()))?;
+                count += 1;
+            }
+            if count == 0 {
+                bail!("no package.json found under {}", unity_root.display());
+            }
+            let pages = crate::doc::rewrite_unity_version(root, &core)?;
+            println!("Updated Unity package version in {pages} doc page(s) -> {core}");
             println!("Updated Unity version -> {core} ({count} package.json, incl. sibling deps)");
             println!(
                 "Updated software version -> {core} (crates, ffi, python, csharp, unity, emulator, holo-wgpu, simulator, console)"
@@ -87,7 +327,46 @@ pub(crate) fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> 
             println!("Updated console version -> {core}");
         }
         "firmware" => {
-            bump_firmware(root, &core)?;
+            let [major, minor, patch] = version_parts(&core)?;
+            let svh = root.join(PARAMS_SVH_REL);
+            let mut text = std::fs::read_to_string(&svh)
+                .with_context(|| format!("reading {}", svh.display()))?;
+            for (key, val) in [
+                ("VersionNumMajor = 8'd", major),
+                ("VersionNumMinor = 8'd", minor),
+                ("VersionNumPatch = 8'd", patch),
+            ] {
+                let span = digits_span(&text, key)?;
+                text = format!("{}{val}{}", &text[..span.start], &text[span.end..]);
+            }
+            std::fs::write(&svh, text).with_context(|| format!("writing {}", svh.display()))?;
+            gen_param(root)?;
+            bump_package_version(&root.join("firmware/cpu/fw/Cargo.toml"), &core)?;
+            bump_package_version(&root.join("firmware/cpu/wire/Cargo.toml"), &core)?;
+            bump_package_version(&root.join("firmware/cpu/board/Cargo.toml"), &core)?;
+            let workspace = root.join("Cargo.toml");
+            for dep in FIRMWARE_VERSIONED_CRATES {
+                edit_toml(&workspace, |doc| {
+                    let item = doc
+                        .get_mut("workspace")
+                        .and_then(|w| w.get_mut("dependencies"))
+                        .and_then(Item::as_table_like_mut)
+                        .and_then(|deps| deps.get_mut(dep))
+                        .with_context(|| {
+                            format!(
+                                "missing [workspace.dependencies] `{dep}` in {}",
+                                workspace.display()
+                            )
+                        })?;
+                    let inline = item.as_inline_table_mut().with_context(|| {
+                        format!("workspace dependency `{dep}` is not an inline table")
+                    })?;
+                    inline.insert("version", Value::from(&core));
+                    Ok(())
+                })?;
+            }
+            let pages = crate::doc::rewrite_firmware_series(root, &format!("{major}.{minor}"))?;
+            println!("Updated firmware version in {pages} doc page(s) -> {major}.{minor}.x");
             println!(
                 "Updated firmware version (fw/wire/board Cargo.toml + params.svh, regenerated fpga_params.rs) -> {core}"
             );
@@ -95,7 +374,24 @@ pub(crate) fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> 
         other => bail!("no version-bump implementation for component `{other}`"),
     }
 
-    let refreshed = refresh_locks(root)?;
+    let mut refreshed = Vec::new();
+    for rel in LOCK_WORKSPACES {
+        let dir = root.join(rel);
+        let lock = dir.join("Cargo.lock");
+        if !lock.is_file() {
+            continue;
+        }
+        let before = std::fs::read_to_string(&lock)
+            .with_context(|| format!("reading {}", lock.display()))?;
+        if !resolve(&dir, true)? && !resolve(&dir, false)? {
+            bail!("`cargo update --workspace` failed in {}", dir.display());
+        }
+        let after = std::fs::read_to_string(&lock)
+            .with_context(|| format!("reading {}", lock.display()))?;
+        if before != after {
+            refreshed.push(format!("{rel}/Cargo.lock"));
+        }
+    }
     if refreshed.is_empty() {
         println!("Every Cargo.lock already records the new version");
     } else {
@@ -117,7 +413,41 @@ pub(crate) fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> 
 
     println!();
     println!("Next (do these manually after reviewing the diff):");
-    print_next_steps(component.name);
+    {
+        let name: &str = component.name;
+        match name {
+            "software" => {
+                println!("  cargo xtask rust build         # check the bump builds");
+                println!("  cargo xtask ffi build");
+                println!("  cargo xtask py build");
+                println!("  cargo xtask emulator build");
+                println!("  cargo xtask holo-wgpu build");
+                println!("  cargo xtask simulator build");
+                println!("  cargo xtask console build");
+                println!(
+                    "  git add Cargo.toml Cargo.lock CHANGELOG.md bindings/ffi/Cargo.toml bindings/ffi/Cargo.lock bindings/python/Cargo.toml bindings/python/Cargo.lock 'bindings/python/*/pyproject.toml' bindings/csharp/Directory.Build.props bindings/csharp/src/AUTD3.Core/Native.cs extras/autd3-rs-emulator/Cargo.toml extras/autd3-rs-emulator/Cargo.lock extras/autd3-rs-pattern-holo-wgpu/Cargo.toml extras/autd3-rs-pattern-holo-wgpu/Cargo.lock simulator/Cargo.toml simulator/Cargo.lock console/Cargo.toml console/Cargo.lock console/dist.toml 'bindings/unity/*/package.json' doc/src/content/docs"
+                );
+            }
+            "simulator" => {
+                println!("  cargo xtask simulator build    # check the bump builds");
+                println!("  git add simulator/Cargo.toml simulator/Cargo.lock CHANGELOG.md");
+            }
+            "console" => {
+                println!("  cargo xtask console build      # check the bump builds");
+                println!(
+                    "  git add console/Cargo.toml console/Cargo.lock console/dist.toml doc/src/content/docs CHANGELOG.md"
+                );
+            }
+            "firmware" => {
+                println!("  cargo xtask rust build         # check the bump builds");
+                println!("  cargo xtask cpu build");
+                println!(
+                    "  git add firmware/fpga/rtl/sources_1/new/headers/params.svh firmware/cpu/fw/src/fpga_params.rs firmware/cpu/fw/Cargo.toml firmware/cpu/wire/Cargo.toml firmware/cpu/board/Cargo.toml firmware/cpu/board/Cargo.lock Cargo.toml Cargo.lock doc/src/content/docs CHANGELOG.md"
+                );
+            }
+            _ => {}
+        }
+    };
     print_doc_followup(component.name, &core);
     println!("  git commit -m \"chore: release {tag}\"");
     Ok(())
@@ -136,86 +466,6 @@ fn resolve(dir: &Path, offline: bool) -> Result<bool> {
         .status()
         .with_context(|| format!("failed to spawn `cargo update` in {}", dir.display()))?;
     Ok(status.success())
-}
-
-fn refresh_locks(root: &Path) -> Result<Vec<String>> {
-    let mut refreshed = Vec::new();
-    for rel in LOCK_WORKSPACES {
-        let dir = root.join(rel);
-        let lock = dir.join("Cargo.lock");
-        if !lock.is_file() {
-            continue;
-        }
-        let before = std::fs::read_to_string(&lock)
-            .with_context(|| format!("reading {}", lock.display()))?;
-        if !resolve(&dir, true)? && !resolve(&dir, false)? {
-            bail!("`cargo update --workspace` failed in {}", dir.display());
-        }
-        let after = std::fs::read_to_string(&lock)
-            .with_context(|| format!("reading {}", lock.display()))?;
-        if before != after {
-            refreshed.push(format!("{rel}/Cargo.lock"));
-        }
-    }
-    Ok(refreshed)
-}
-
-fn bump_doc(root: &Path, version: Option<&str>) -> Result<()> {
-    let raw = match version {
-        Some(v) => v.to_string(),
-        None => version_from_branch(root, find("software")?)?,
-    };
-    let core = parse_version(&raw)?;
-    let [major, minor, patch] = version_parts(&core)?;
-    let slug = format!("{major}.{minor}.x");
-    if patch != 0 {
-        return sync_doc_snapshot(root, &slug, &core);
-    }
-
-    if !crate::doc::add_version(root, &slug)? {
-        return Ok(());
-    }
-
-    println!();
-    println!("Next (do these manually after reviewing the diff):");
-    println!(
-        "  git add doc/astro.config.mjs doc/.gitignore doc/src/content/versions/{slug}.json   # the guard requires a tracked config"
-    );
-    println!("  cargo xtask doc build                    # generates doc/src/content/docs/{slug}/");
-    println!("  cargo xtask doc freeze-version {slug}    # inlines codes + tracks the snapshot");
-    println!("  git add doc/");
-    Ok(())
-}
-
-fn sync_doc_snapshot(root: &Path, slug: &str, core: &str) -> Result<()> {
-    let changed = crate::doc::sync_snapshot_versions(root, slug)?;
-    if changed == 0 {
-        println!("The {slug} snapshot already records the current component versions");
-        return Ok(());
-    }
-    println!("Updated {changed} page(s) in the {slug} snapshot -> {core}");
-    println!();
-    println!("Next (do these manually after reviewing the diff):");
-    println!("  git add doc/src/content/docs/{slug} 'doc/src/content/docs/*/{slug}'");
-    Ok(())
-}
-
-fn resolve_component(root: &Path, name: Option<&str>) -> Result<&'static Component> {
-    if let Some(name) = name {
-        return find(name).ok().with_context(|| {
-            let known = COMPONENTS
-                .iter()
-                .map(|c| c.name)
-                .chain([DOC_COMPONENT])
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!("unknown component `{name}` (known: {known})")
-        });
-    }
-    let stem = release_stem(root)?;
-    detect(&stem)
-        .map(|(c, _)| c)
-        .with_context(|| format!("branch `release/{stem}` matches no known release component"))
 }
 
 fn version_from_branch(root: &Path, component: &Component) -> Result<String> {
@@ -257,56 +507,6 @@ fn parse_version(version: &str) -> Result<String> {
         );
     }
     Ok(version.to_string())
-}
-
-fn print_doc_followup(name: &str, core: &str) {
-    if !matches!(name, "software" | "console" | "firmware") {
-        return;
-    }
-    let purpose = if name == "software" && core.ends_with(".0") {
-        "freeze the outgoing doc version series"
-    } else {
-        "sync the live doc version snapshot"
-    };
-    println!();
-    println!("Then, to {purpose}");
-    println!("  cargo xtask bump-version doc");
-    println!();
-}
-
-fn print_next_steps(name: &str) {
-    match name {
-        "software" => {
-            println!("  cargo xtask rust build         # check the bump builds");
-            println!("  cargo xtask ffi build");
-            println!("  cargo xtask py build");
-            println!("  cargo xtask emulator build");
-            println!("  cargo xtask holo-wgpu build");
-            println!("  cargo xtask simulator build");
-            println!("  cargo xtask console build");
-            println!(
-                "  git add Cargo.toml Cargo.lock CHANGELOG.md bindings/ffi/Cargo.toml bindings/ffi/Cargo.lock bindings/python/Cargo.toml bindings/python/Cargo.lock 'bindings/python/*/pyproject.toml' bindings/csharp/Directory.Build.props bindings/csharp/src/AUTD3.Core/Native.cs extras/autd3-rs-emulator/Cargo.toml extras/autd3-rs-emulator/Cargo.lock extras/autd3-rs-pattern-holo-wgpu/Cargo.toml extras/autd3-rs-pattern-holo-wgpu/Cargo.lock simulator/Cargo.toml simulator/Cargo.lock console/Cargo.toml console/Cargo.lock console/dist.toml 'bindings/unity/*/package.json' doc/src/content/docs"
-            );
-        }
-        "simulator" => {
-            println!("  cargo xtask simulator build    # check the bump builds");
-            println!("  git add simulator/Cargo.toml simulator/Cargo.lock CHANGELOG.md");
-        }
-        "console" => {
-            println!("  cargo xtask console build      # check the bump builds");
-            println!(
-                "  git add console/Cargo.toml console/Cargo.lock console/dist.toml doc/src/content/docs CHANGELOG.md"
-            );
-        }
-        "firmware" => {
-            println!("  cargo xtask rust build         # check the bump builds");
-            println!("  cargo xtask cpu build");
-            println!(
-                "  git add firmware/fpga/rtl/sources_1/new/headers/params.svh firmware/cpu/fw/src/fpga_params.rs firmware/cpu/fw/Cargo.toml firmware/cpu/wire/Cargo.toml firmware/cpu/board/Cargo.toml firmware/cpu/board/Cargo.lock Cargo.toml Cargo.lock doc/src/content/docs CHANGELOG.md"
-            );
-        }
-        _ => {}
-    }
 }
 
 fn bump_console(root: &Path, version: &str) -> Result<()> {
@@ -391,225 +591,7 @@ fn bump_package_version(path: &Path, version: &str) -> Result<()> {
     edit_toml(path, |doc| set_package_version(doc, path, version))
 }
 
-fn bump_standalone_crate(path: &Path, version: &str) -> Result<()> {
-    edit_toml(path, |doc| {
-        set_package_version(doc, path, version)?;
-        for table in ["dependencies", "dev-dependencies", "build-dependencies"] {
-            if let Some(deps) = doc.get_mut(table).and_then(Item::as_table_like_mut) {
-                bump_autd3_deps(deps, version);
-            }
-        }
-        Ok(())
-    })
-}
-
-fn bump_workspace_dep_version(path: &Path, dep: &str, version: &str) -> Result<()> {
-    edit_toml(path, |doc| {
-        let item = doc
-            .get_mut("workspace")
-            .and_then(|w| w.get_mut("dependencies"))
-            .and_then(Item::as_table_like_mut)
-            .and_then(|deps| deps.get_mut(dep))
-            .with_context(|| {
-                format!(
-                    "missing [workspace.dependencies] `{dep}` in {}",
-                    path.display()
-                )
-            })?;
-        let inline = item
-            .as_inline_table_mut()
-            .with_context(|| format!("workspace dependency `{dep}` is not an inline table"))?;
-        inline.insert("version", Value::from(version));
-        Ok(())
-    })
-}
-
-fn bump_python_pyproject(root: &Path, version: &str) -> Result<()> {
-    let py_root = root.join("bindings/python");
-    let mut dirs: Vec<_> = std::fs::read_dir(&py_root)
-        .with_context(|| format!("reading {}", py_root.display()))?
-        .filter_map(Result::ok)
-        .map(|e| e.path())
-        .collect();
-    dirs.sort();
-
-    let manifests: Vec<_> = dirs
-        .iter()
-        .map(|dir| dir.join("pyproject.toml"))
-        .filter(|path| path.is_file())
-        .collect();
-    if manifests.is_empty() {
-        bail!("no pyproject.toml found under {}", py_root.display());
-    }
-
-    let siblings = python_distribution_names(&manifests)?;
-    for path in &manifests {
-        edit_toml(path, |doc| {
-            let project = doc
-                .get_mut("project")
-                .and_then(Item::as_table_like_mut)
-                .with_context(|| format!("missing [project] table in {}", path.display()))?;
-            project.insert("version", value(version));
-            if let Some(dynamic) = project.get_mut("dynamic").and_then(Item::as_array_mut) {
-                dynamic.retain(|v| v.as_str() != Some("version"));
-                if dynamic.is_empty() {
-                    project.remove("dynamic");
-                }
-            }
-            let Some(dependencies) = project.get_mut("dependencies").and_then(Item::as_array_mut)
-            else {
-                return Ok(());
-            };
-            for dep in dependencies.iter_mut() {
-                let Some(spec) = dep.as_str() else { continue };
-                let name = spec
-                    .split(|c: char| "<>=!~ [;".contains(c))
-                    .next()
-                    .unwrap_or(spec);
-                if siblings.contains(name) {
-                    let prefix = dep
-                        .decor()
-                        .prefix()
-                        .and_then(|r| r.as_str())
-                        .unwrap_or("")
-                        .to_owned();
-                    let suffix = dep
-                        .decor()
-                        .suffix()
-                        .and_then(|r| r.as_str())
-                        .unwrap_or("")
-                        .to_owned();
-                    *dep = toml_edit::Value::from(format!("{name}=={version}"))
-                        .decorated(prefix.as_str(), suffix.as_str());
-                }
-            }
-            Ok(())
-        })?;
-    }
-    Ok(())
-}
-
-fn python_distribution_names(manifests: &[std::path::PathBuf]) -> Result<HashSet<String>> {
-    let mut names = HashSet::new();
-    for path in manifests {
-        let text =
-            std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-        let doc: DocumentMut = text
-            .parse()
-            .with_context(|| format!("parsing {}", path.display()))?;
-        let name = doc
-            .get("project")
-            .and_then(Item::as_table_like)
-            .and_then(|project| project.get("name"))
-            .and_then(Item::as_str)
-            .with_context(|| format!("missing `project.name` in {}", path.display()))?;
-        names.insert(name.to_owned());
-    }
-    Ok(names)
-}
-
-fn bump_unity(root: &Path, version: &str) -> Result<usize> {
-    let unity_root = root.join("bindings/unity");
-    let mut dirs: Vec<_> = std::fs::read_dir(&unity_root)
-        .with_context(|| format!("reading {}", unity_root.display()))?
-        .filter_map(Result::ok)
-        .map(|e| e.path())
-        .filter(|p| p.is_dir())
-        .collect();
-    dirs.sort();
-
-    let dep_prefix = format!("\"{}", crate::unity::PKG_PREFIX);
-    let mut count = 0usize;
-    for dir in dirs {
-        let path = dir.join("package.json");
-        if !path.is_file() {
-            continue;
-        }
-        let text = std::fs::read_to_string(&path)
-            .with_context(|| format!("reading {}", path.display()))?;
-        let mut out = String::with_capacity(text.len());
-        for line in text.lines() {
-            let trimmed = line.trim_start();
-            if trimmed.starts_with("\"version\":") || trimmed.starts_with(dep_prefix.as_str()) {
-                out.push_str(&replace_json_string_value(line, version));
-            } else {
-                out.push_str(line);
-            }
-            out.push('\n');
-        }
-        std::fs::write(&path, out).with_context(|| format!("writing {}", path.display()))?;
-        count += 1;
-    }
-    if count == 0 {
-        bail!("no package.json found under {}", unity_root.display());
-    }
-    let pages = crate::doc::rewrite_unity_version(root, version)?;
-    println!("Updated Unity package version in {pages} doc page(s) -> {version}");
-    Ok(count)
-}
-
-fn replace_json_string_value(line: &str, new: &str) -> String {
-    let Some(colon) = line.find(':') else {
-        return line.to_string();
-    };
-    let (key, rest) = line.split_at(colon + 1);
-    let Some(open) = rest.find('"') else {
-        return line.to_string();
-    };
-    let after_open = open + 1;
-    let Some(rel_close) = rest[after_open..].find('"') else {
-        return line.to_string();
-    };
-    let close = after_open + rel_close;
-    format!("{key}{}\"{new}\"{}", &rest[..open], &rest[close + 1..])
-}
-
 const CSHARP_ABI_PATH: &str = "bindings/csharp/src/AUTD3.Core/Native.cs";
-
-fn bump_csharp_abi(root: &Path, version: &str) -> Result<()> {
-    let path = root.join(CSHARP_ABI_PATH);
-    let parts = version_parts(version)?;
-    let text =
-        std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
-
-    let mut out = text;
-    for (name, value) in ["Major", "Minor", "Patch"].into_iter().zip(parts) {
-        if value > 0x3FF {
-            bail!("version component {value} does not fit in the 10-bit C ABI version field");
-        }
-        let prefix = format!("internal const ushort {name} = ");
-        let start = out
-            .find(&prefix)
-            .with_context(|| format!("`{prefix}` not found in {}", path.display()))?
-            + prefix.len();
-        let end = out[start..]
-            .find(';')
-            .with_context(|| format!("unterminated `{prefix}` in {}", path.display()))?
-            + start;
-        out = format!("{}{value}{}", &out[..start], &out[end..]);
-    }
-
-    std::fs::write(&path, out).with_context(|| format!("writing {}", path.display()))?;
-    Ok(())
-}
-
-fn bump_csharp_props(path: &Path, version: &str) -> Result<()> {
-    let text =
-        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-    let open = "<Version>";
-    let close = "</Version>";
-    let start = text
-        .find(open)
-        .with_context(|| format!("`{open}` not found in {}", path.display()))?
-        + open.len();
-    let end = text[start..]
-        .find(close)
-        .with_context(|| format!("`{close}` not found in {}", path.display()))?
-        + start;
-    let new = format!("{}{version}{}", &text[..start], &text[end..]);
-    std::fs::write(path, new).with_context(|| format!("writing {}", path.display()))?;
-    Ok(())
-}
 
 pub(crate) fn firmware_series(root: &Path) -> Result<String> {
     let version = package_version(&root.join("firmware/cpu/fw/Cargo.toml"))?;
@@ -630,35 +612,6 @@ pub(crate) fn firmware_series(root: &Path) -> Result<String> {
     Ok(format!("{major}.{minor}"))
 }
 
-fn bump_firmware(root: &Path, version: &str) -> Result<()> {
-    let [major, minor, patch] = version_parts(version)?;
-
-    let svh = root.join(PARAMS_SVH_REL);
-    let mut text =
-        std::fs::read_to_string(&svh).with_context(|| format!("reading {}", svh.display()))?;
-    for (key, val) in [
-        ("VersionNumMajor = 8'd", major),
-        ("VersionNumMinor = 8'd", minor),
-        ("VersionNumPatch = 8'd", patch),
-    ] {
-        text = bump_digits_after(&text, key, val)?;
-    }
-    std::fs::write(&svh, text).with_context(|| format!("writing {}", svh.display()))?;
-
-    gen_param(root)?;
-
-    bump_package_version(&root.join("firmware/cpu/fw/Cargo.toml"), version)?;
-    bump_package_version(&root.join("firmware/cpu/wire/Cargo.toml"), version)?;
-    bump_package_version(&root.join("firmware/cpu/board/Cargo.toml"), version)?;
-    for dep in FIRMWARE_VERSIONED_CRATES {
-        bump_workspace_dep_version(&root.join("Cargo.toml"), dep, version)?;
-    }
-
-    let pages = crate::doc::rewrite_firmware_series(root, &format!("{major}.{minor}"))?;
-    println!("Updated firmware version in {pages} doc page(s) -> {major}.{minor}.x");
-    Ok(())
-}
-
 fn digits_span(content: &str, key: &str) -> Result<std::ops::Range<usize>> {
     let pos = content
         .find(key)
@@ -674,13 +627,4 @@ fn read_digits_after(content: &str, key: &str) -> Result<u32> {
     content[digits_span(content, key)?]
         .parse()
         .with_context(|| format!("non-numeric value after `{key}`"))
-}
-
-fn bump_digits_after(content: &str, key: &str, new: u32) -> Result<String> {
-    let span = digits_span(content, key)?;
-    Ok(format!(
-        "{}{new}{}",
-        &content[..span.start],
-        &content[span.end..]
-    ))
 }

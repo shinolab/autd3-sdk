@@ -85,17 +85,136 @@ pub(crate) enum CheckCmd {
     },
 }
 
+#[allow(clippy::too_many_lines)]
 pub(crate) fn run_check(root: &Path, cmd: &CheckCmd) -> Result<()> {
     match cmd {
-        CheckCmd::Miri { package, filter } => run_miri(root, package, filter.as_deref()),
-        CheckCmd::Sanitizer { kind, package } => run_sanitizer(root, *kind, package),
-        CheckCmd::Careful { package } => run_careful(root, package),
+        CheckCmd::Miri { package, filter } => {
+            let filter = filter.as_deref();
+            ensure_nightly()?;
+            ensure_component("miri")?;
+            gen_param(root)?;
+            let target_dir = root.join("target").join("miri");
+            for package in selection(package, MIRI_PACKAGES) {
+                let mut args = vec![
+                    "+nightly".to_string(),
+                    "miri".to_string(),
+                    "test".to_string(),
+                    "--package".to_string(),
+                    package,
+                    "--lib".to_string(),
+                    "--tests".to_string(),
+                ];
+                if let Some(filter) = filter {
+                    args.push("--".to_string());
+                    args.push(filter.to_string());
+                }
+                run_env(
+                    "cargo",
+                    args,
+                    root,
+                    &[("CARGO_TARGET_DIR", target_dir.as_os_str())],
+                )?;
+            }
+            Ok(())
+        }
+        CheckCmd::Sanitizer { kind, package } => {
+            if !cfg!(target_os = "linux") {
+                bail!("`check sanitizer` is wired up for Linux only");
+            }
+            ensure_nightly()?;
+            ensure_component("rust-src")?;
+            gen_param(root)?;
+            let mut args = vec![
+                "+nightly".to_string(),
+                "test".to_string(),
+                "-Zbuild-std".to_string(),
+                "--target".to_string(),
+                host_triple()?,
+                "--lib".to_string(),
+                "--tests".to_string(),
+            ];
+            args.extend(scope_args(package));
+            if *kind == SanitizerKind::Leak {
+                args.push("--".to_string());
+                for name in LEAK_SKIP {
+                    args.push("--skip".to_string());
+                    args.push((*name).to_string());
+                }
+            }
+            let flags = format!("-Zsanitizer={}", kind.name());
+            let target_dir = root
+                .join("target")
+                .join(format!("sanitizer-{}", kind.name()));
+            let mut env: Vec<(&str, &OsStr)> = vec![
+                ("CARGO_TARGET_DIR", target_dir.as_os_str()),
+                ("RUSTFLAGS", OsStr::new(flags.as_str())),
+            ];
+            if *kind == SanitizerKind::Address {
+                env.push(("ASAN_OPTIONS", OsStr::new("detect_leaks=0")));
+            }
+            run_env("cargo", args, root, &env)
+        }
+        CheckCmd::Careful { package } => {
+            ensure_nightly()?;
+            if !on_path("cargo-careful") {
+                bail!("`cargo-careful` is required (`cargo install cargo-careful --locked`)");
+            }
+            gen_param(root)?;
+
+            let mut args = vec![
+                "+nightly".to_string(),
+                "careful".to_string(),
+                "test".to_string(),
+                "--lib".to_string(),
+                "--bins".to_string(),
+                "--tests".to_string(),
+            ];
+            args.extend(scope_args(package));
+
+            let target_dir = root.join("target").join("careful");
+            run_env(
+                "cargo",
+                args,
+                root,
+                &[("CARGO_TARGET_DIR", target_dir.as_os_str())],
+            )
+        }
         CheckCmd::Mutants {
             package,
             list,
             shard,
             timeout_multiplier,
-        } => run_mutants(root, package, *list, shard.as_deref(), *timeout_multiplier),
+        } => {
+            let shard = shard.as_deref();
+            if !on_path("cargo-mutants") {
+                bail!("`cargo-mutants` is required (`cargo install cargo-mutants --locked`)");
+            }
+            gen_param(root)?;
+            let output = root.join("target").join("mutants");
+            let scratch = root.join("target").join("mutants-scratch");
+            std::fs::create_dir_all(&scratch)
+                .with_context(|| format!("creating {}", scratch.display()))?;
+            let mut args = vec![
+                "mutants".to_string(),
+                "--output".to_string(),
+                output.to_string_lossy().into_owned(),
+                "--gitignore".to_string(),
+                "true".to_string(),
+            ];
+            args.extend(package_args(&selection(package, MUTANTS_PACKAGES)));
+            if *list {
+                args.push("--list".to_string());
+            }
+            if let Some(shard) = shard {
+                args.push("--shard".to_string());
+                args.push(shard.to_string());
+            }
+            if let Some(multiplier) = *timeout_multiplier {
+                args.push("--timeout-multiplier".to_string());
+                args.push(multiplier.to_string());
+            }
+            run_env("cargo", args, root, &[("TMPDIR", scratch.as_os_str())])
+        }
     }
 }
 
@@ -143,137 +262,4 @@ fn ensure_component(component: &str) -> Result<()> {
         "the `{component}` component is required \
          (`rustup component add --toolchain nightly {component}`)"
     )
-}
-
-fn run_miri(root: &Path, packages: &[String], filter: Option<&str>) -> Result<()> {
-    ensure_nightly()?;
-    ensure_component("miri")?;
-    gen_param(root)?;
-
-    let target_dir = root.join("target").join("miri");
-    for package in selection(packages, MIRI_PACKAGES) {
-        let mut args = vec![
-            "+nightly".to_string(),
-            "miri".to_string(),
-            "test".to_string(),
-            "--package".to_string(),
-            package,
-            "--lib".to_string(),
-            "--tests".to_string(),
-        ];
-        if let Some(filter) = filter {
-            args.push("--".to_string());
-            args.push(filter.to_string());
-        }
-        run_env(
-            "cargo",
-            args,
-            root,
-            &[("CARGO_TARGET_DIR", target_dir.as_os_str())],
-        )?;
-    }
-    Ok(())
-}
-
-fn run_sanitizer(root: &Path, kind: SanitizerKind, packages: &[String]) -> Result<()> {
-    if !cfg!(target_os = "linux") {
-        bail!("`check sanitizer` is wired up for Linux only");
-    }
-    ensure_nightly()?;
-    ensure_component("rust-src")?;
-    gen_param(root)?;
-
-    let mut args = vec![
-        "+nightly".to_string(),
-        "test".to_string(),
-        "-Zbuild-std".to_string(),
-        "--target".to_string(),
-        host_triple()?,
-        "--lib".to_string(),
-        "--tests".to_string(),
-    ];
-    args.extend(scope_args(packages));
-    if kind == SanitizerKind::Leak {
-        args.push("--".to_string());
-        for name in LEAK_SKIP {
-            args.push("--skip".to_string());
-            args.push((*name).to_string());
-        }
-    }
-
-    let flags = format!("-Zsanitizer={}", kind.name());
-    let target_dir = root
-        .join("target")
-        .join(format!("sanitizer-{}", kind.name()));
-    let mut env: Vec<(&str, &OsStr)> = vec![
-        ("CARGO_TARGET_DIR", target_dir.as_os_str()),
-        ("RUSTFLAGS", OsStr::new(flags.as_str())),
-    ];
-    if kind == SanitizerKind::Address {
-        env.push(("ASAN_OPTIONS", OsStr::new("detect_leaks=0")));
-    }
-    run_env("cargo", args, root, &env)
-}
-
-fn run_careful(root: &Path, packages: &[String]) -> Result<()> {
-    ensure_nightly()?;
-    if !on_path("cargo-careful") {
-        bail!("`cargo-careful` is required (`cargo install cargo-careful --locked`)");
-    }
-    gen_param(root)?;
-
-    let mut args = vec![
-        "+nightly".to_string(),
-        "careful".to_string(),
-        "test".to_string(),
-        "--lib".to_string(),
-        "--bins".to_string(),
-        "--tests".to_string(),
-    ];
-    args.extend(scope_args(packages));
-
-    let target_dir = root.join("target").join("careful");
-    run_env(
-        "cargo",
-        args,
-        root,
-        &[("CARGO_TARGET_DIR", target_dir.as_os_str())],
-    )
-}
-
-fn run_mutants(
-    root: &Path,
-    packages: &[String],
-    list: bool,
-    shard: Option<&str>,
-    timeout_multiplier: Option<f64>,
-) -> Result<()> {
-    if !on_path("cargo-mutants") {
-        bail!("`cargo-mutants` is required (`cargo install cargo-mutants --locked`)");
-    }
-    gen_param(root)?;
-
-    let output = root.join("target").join("mutants");
-    let scratch = root.join("target").join("mutants-scratch");
-    std::fs::create_dir_all(&scratch).with_context(|| format!("creating {}", scratch.display()))?;
-    let mut args = vec![
-        "mutants".to_string(),
-        "--output".to_string(),
-        output.to_string_lossy().into_owned(),
-        "--gitignore".to_string(),
-        "true".to_string(),
-    ];
-    args.extend(package_args(&selection(packages, MUTANTS_PACKAGES)));
-    if list {
-        args.push("--list".to_string());
-    }
-    if let Some(shard) = shard {
-        args.push("--shard".to_string());
-        args.push(shard.to_string());
-    }
-    if let Some(multiplier) = timeout_multiplier {
-        args.push("--timeout-multiplier".to_string());
-        args.push(multiplier.to_string());
-    }
-    run_env("cargo", args, root, &[("TMPDIR", scratch.as_os_str())])
 }

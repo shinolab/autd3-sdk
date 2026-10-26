@@ -33,7 +33,61 @@ pub(crate) fn run_changelog(root: &Path, cmd: &ChangelogCmd) -> Result<()> {
             .tag
             .as_deref()
             .context("--release-notes requires --tag")?;
-        write_release_notes(root, tag, cmd.output.as_deref())
+        let output = cmd.output.as_deref();
+        let (primary, _) = detect(tag)
+            .with_context(|| format!("tag `{tag}` matches no known release component"))?;
+        if capture(
+            "git",
+            &["rev-parse", "-q", "--verify", &format!("refs/tags/{tag}")],
+            root,
+        )
+        .is_err()
+        {
+            bail!(
+                "tag `{tag}` does not exist in this repository; release notes would silently describe \
+             the previous release (create the tag first, or fetch tags with `fetch-depth: 0`)"
+            );
+        }
+        let sections = release_sections(primary);
+        let multi = sections.len() > 1;
+        let mut doc = String::new();
+        for section in sections {
+            let mut args: Vec<String> = Vec::new();
+            scope_args(&mut args, section, root)?;
+            args.push("--tag".into());
+            args.push(tag.to_string());
+            args.push("--latest".into());
+            args.push("--strip".into());
+            args.push("header".into());
+
+            let refs: Vec<&str> = args.iter().map(String::as_str).collect();
+            let body = capture_lenient("git-cliff", &refs, root)?;
+            if body.is_empty() {
+                continue;
+            }
+            if multi {
+                doc.push_str("# ");
+                doc.push_str(section.section);
+                doc.push_str("\n\n");
+            }
+            doc.push_str(&strip_tag_prefixes(&body, section));
+            doc.push_str("\n\n");
+        }
+        let doc = doc.trim_end().to_string();
+        if doc.is_empty() {
+            bail!(
+                "no release notes generated for `{tag}`: git-cliff matched no commits for any section \
+             (is the tag present with full history? `git-cliff` may have failed silently)"
+            );
+        }
+        let doc = doc + "\n";
+        match output {
+            Some(out) => {
+                std::fs::write(root.join(out), doc).with_context(|| format!("writing {out}"))?;
+            }
+            None => print!("{doc}"),
+        }
+        Ok(())
     } else {
         let output = cmd.output.clone().unwrap_or_else(|| "CHANGELOG.md".into());
         write_changelog_file(root, &output)
@@ -43,29 +97,21 @@ pub(crate) fn run_changelog(root: &Path, cmd: &ChangelogCmd) -> Result<()> {
 fn scope_args(args: &mut Vec<String>, component: &Component, root: &Path) -> Result<()> {
     args.push("--tag-pattern".into());
     args.push(format!("^({})[0-9]", component.tag_prefixes().join("|")));
-    for sha in unrelated_commits(root, component)? {
-        args.push("--skip-commit".into());
-        args.push(sha);
-    }
-    Ok(())
-}
-
-fn unrelated_commits(root: &Path, component: &Component) -> Result<Vec<String>> {
     let all = capture("git", &["rev-list", "HEAD"], root)?;
     let specs: Vec<String> = component
         .include_paths
         .iter()
         .map(|p| format!(":(glob){p}"))
         .collect();
-    let mut args: Vec<&str> = vec!["rev-list", "--full-history", "HEAD", "--"];
-    args.extend(specs.iter().map(String::as_str));
-    let scoped = capture("git", &args, root)?;
+    let mut rev_list: Vec<&str> = vec!["rev-list", "--full-history", "HEAD", "--"];
+    rev_list.extend(specs.iter().map(String::as_str));
+    let scoped = capture("git", &rev_list, root)?;
     let kept: HashSet<&str> = scoped.lines().collect();
-    Ok(all
-        .lines()
-        .filter(|sha| !kept.contains(sha))
-        .map(str::to_string)
-        .collect())
+    for sha in all.lines().filter(|sha| !kept.contains(sha)) {
+        args.push("--skip-commit".into());
+        args.push(sha.to_string());
+    }
+    Ok(())
 }
 
 fn strip_tag_prefixes(body: &str, component: &Component) -> String {
@@ -74,67 +120,6 @@ fn strip_tag_prefixes(body: &str, component: &Component) -> String {
         body = body.replace(&format!("## [{prefix}"), "## [");
     }
     body
-}
-
-fn write_release_notes(root: &Path, tag: &str, output: Option<&str>) -> Result<()> {
-    let (primary, _) =
-        detect(tag).with_context(|| format!("tag `{tag}` matches no known release component"))?;
-
-    if capture(
-        "git",
-        &["rev-parse", "-q", "--verify", &format!("refs/tags/{tag}")],
-        root,
-    )
-    .is_err()
-    {
-        bail!(
-            "tag `{tag}` does not exist in this repository; release notes would silently describe \
-             the previous release (create the tag first, or fetch tags with `fetch-depth: 0`)"
-        );
-    }
-
-    let sections = release_sections(primary);
-    let multi = sections.len() > 1;
-
-    let mut doc = String::new();
-    for section in sections {
-        let mut args: Vec<String> = Vec::new();
-        scope_args(&mut args, section, root)?;
-        args.push("--tag".into());
-        args.push(tag.to_string());
-        args.push("--latest".into());
-        args.push("--strip".into());
-        args.push("header".into());
-
-        let refs: Vec<&str> = args.iter().map(String::as_str).collect();
-        let body = capture_lenient("git-cliff", &refs, root)?;
-        if body.is_empty() {
-            continue;
-        }
-        if multi {
-            doc.push_str("# ");
-            doc.push_str(section.section);
-            doc.push_str("\n\n");
-        }
-        doc.push_str(&strip_tag_prefixes(&body, section));
-        doc.push_str("\n\n");
-    }
-
-    let doc = doc.trim_end().to_string();
-    if doc.is_empty() {
-        bail!(
-            "no release notes generated for `{tag}`: git-cliff matched no commits for any section \
-             (is the tag present with full history? `git-cliff` may have failed silently)"
-        );
-    }
-    let doc = doc + "\n";
-    match output {
-        Some(out) => {
-            std::fs::write(root.join(out), doc).with_context(|| format!("writing {out}"))?;
-        }
-        None => print!("{doc}"),
-    }
-    Ok(())
 }
 
 pub(crate) fn write_changelog_file(root: &Path, output: &str) -> Result<()> {

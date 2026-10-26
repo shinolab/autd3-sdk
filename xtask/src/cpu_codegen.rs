@@ -120,17 +120,6 @@ fn function_bit(name: &str) -> Option<&str> {
         .strip_suffix(FUNCTION_BIT_SUFFIX)
 }
 
-fn to_pascal(name: &str) -> String {
-    name.split('_')
-        .filter(|word| !word.is_empty())
-        .fold(String::new(), |mut pascal, word| {
-            let (head, tail) = word.split_at(1);
-            pascal.push_str(&head.to_ascii_uppercase());
-            pascal.push_str(&tail.to_ascii_lowercase());
-            pascal
-        })
-}
-
 fn is_fw_internal(name: &str) -> bool {
     FW_INTERNAL_PREFIXES.iter().any(|p| name.starts_with(p))
 }
@@ -143,26 +132,6 @@ struct Const {
 struct Enum {
     name: String,
     consts: Vec<Const>,
-}
-
-fn rust_type(name: &str) -> &'static str {
-    if name == "NUM_TRANSDUCERS"
-        || name == "NUM_BANKS"
-        || name == "EMISSION_SLOT_WORDS"
-        || name == "FOCUS_WORDS"
-        || name == "FLASH_BUF_BYTES"
-    {
-        "usize"
-    } else if name == "EMISSION_MAX_INDICES"
-        || name == "ULTRASOUND_FREQ_HZ"
-        || name.starts_with("FLASH_")
-    {
-        "u32"
-    } else if name == "NUM_FOCI_MAX" || name.starts_with("VERSION_NUM_") {
-        "u8"
-    } else {
-        "u16"
-    }
 }
 
 fn is_ident(s: &str) -> bool {
@@ -184,15 +153,6 @@ fn is_sized(v: &str) -> bool {
         && rest[1..].bytes().all(|b| b.is_ascii_hexdigit())
 }
 
-fn is_float(v: &str) -> bool {
-    let b = v.as_bytes();
-    if b.len() < 3 {
-        return false;
-    }
-    (1..b.len() - 1)
-        .any(|k| b[..k].iter().all(u8::is_ascii_digit) && b[k + 1..].iter().all(u8::is_ascii_digit))
-}
-
 fn group_decimal(s: &str) -> String {
     let (sign, digits) = s.strip_prefix('-').map_or(("", s), |d| ("-", d));
     if digits.len() <= 5 || !digits.bytes().all(|b| b.is_ascii_digit()) {
@@ -208,21 +168,6 @@ fn group_decimal(s: &str) -> String {
     format!("{sign}{out}")
 }
 
-fn group_hex(v: u64) -> String {
-    let digits = format!("{v:X}");
-    if digits.len() <= 4 {
-        return format!("0x{digits}");
-    }
-    let mut out = String::with_capacity(digits.len() + digits.len() / 4);
-    for (i, c) in digits.chars().enumerate() {
-        if i != 0 && (digits.len() - i).is_multiple_of(4) {
-            out.push('_');
-        }
-        out.push(c);
-    }
-    format!("0x{out}")
-}
-
 fn to_value(value: &str) -> String {
     if let Some((size, rest)) = value.split_once('\'') {
         if !size.is_empty() && size.bytes().all(|b| b.is_ascii_digit()) && rest.len() >= 2 {
@@ -236,74 +181,23 @@ fn to_value(value: &str) -> String {
             if digits.bytes().all(|b| b.is_ascii_hexdigit())
                 && let Ok(v) = u64::from_str_radix(digits, radix)
             {
-                return group_hex(v);
+                let digits = format!("{v:X}");
+                if digits.len() <= 4 {
+                    return format!("0x{digits}");
+                }
+                let mut out = String::with_capacity(digits.len() + digits.len() / 4);
+                for (i, c) in digits.chars().enumerate() {
+                    if i != 0 && (digits.len() - i).is_multiple_of(4) {
+                        out.push('_');
+                    }
+                    out.push(c);
+                }
+                return format!("0x{out}");
             }
         }
         return value.to_string();
     }
     group_decimal(value)
-}
-
-fn to_upper(name: &str) -> String {
-    let chars: Vec<char> = name.chars().collect();
-    let mut s1 = String::new();
-    let mut i = 0;
-    while i < chars.len() {
-        if i + 2 < chars.len()
-            && chars[i + 1].is_ascii_uppercase()
-            && chars[i + 2].is_ascii_lowercase()
-        {
-            s1.push(chars[i]);
-            s1.push('_');
-            s1.push(chars[i + 1]);
-            let mut j = i + 2;
-            while j < chars.len() && chars[j].is_ascii_lowercase() {
-                s1.push(chars[j]);
-                j += 1;
-            }
-            i = j;
-        } else {
-            s1.push(chars[i]);
-            i += 1;
-        }
-    }
-
-    let chars: Vec<char> = s1.chars().collect();
-    let mut s2 = String::new();
-    let mut i = 0;
-    while i < chars.len() {
-        if i + 1 < chars.len()
-            && (chars[i].is_ascii_lowercase() || chars[i].is_ascii_digit())
-            && chars[i + 1].is_ascii_uppercase()
-        {
-            s2.push(chars[i]);
-            s2.push('_');
-            s2.push(chars[i + 1]);
-            i += 2;
-        } else {
-            s2.push(chars[i]);
-            i += 1;
-        }
-    }
-
-    s2.to_ascii_uppercase()
-}
-
-fn parse_localparam(line: &str) -> Option<Const> {
-    let rest = line.strip_prefix("localparam ")?;
-    let (decl, valpart) = rest.split_once(" = ")?;
-    let name = decl.split_whitespace().last()?;
-    if !is_ident(name) {
-        return None;
-    }
-    let value = valpart.split(';').next()?.trim();
-    if !(is_decimal(value) || is_sized(value) || is_float(value)) {
-        return None;
-    }
-    Some(Const {
-        name: to_upper(name),
-        value: value.to_string(),
-    })
 }
 
 fn parse_member(s: &str) -> Option<Const> {
@@ -328,7 +222,218 @@ fn enum_name(line: &str) -> Option<String> {
     is_ident(name).then(|| name.to_string())
 }
 
-fn parse(text: &str) -> (Vec<Const>, Vec<Enum>) {
+fn xci_value_str<'a>(text: &'a str, key: &str) -> Option<&'a str> {
+    let key_tok = format!("\"{key}\"");
+    let start = text.find(&key_tok)? + key_tok.len();
+    let after = &text[start..];
+    let vpos = after.find("\"value\"")? + "\"value\"".len();
+    let after = &after[vpos..];
+    let q1 = after.find('"')?;
+    let q2 = after[q1 + 1..].find('"')? + q1 + 1;
+    Some(&after[q1 + 1..q2])
+}
+
+fn emit(out: &mut String, c: &Const) {
+    let name = c.name.as_str();
+    let rust_type = if name == "NUM_TRANSDUCERS"
+        || name == "NUM_BANKS"
+        || name == "EMISSION_SLOT_WORDS"
+        || name == "FOCUS_WORDS"
+        || name == "FLASH_BUF_BYTES"
+    {
+        "usize"
+    } else if name == "EMISSION_MAX_INDICES"
+        || name == "ULTRASOUND_FREQ_HZ"
+        || name.starts_with("FLASH_")
+    {
+        "u32"
+    } else if name == "NUM_FOCI_MAX" || name.starts_with("VERSION_NUM_") {
+        "u8"
+    } else {
+        "u16"
+    };
+    let _ = writeln!(
+        out,
+        "pub const {name}: {rust_type} = {};",
+        to_value(&c.value)
+    );
+}
+
+fn emit_flags<'a>(
+    out: &mut String,
+    rust: &str,
+    repr: &str,
+    flags: impl Iterator<Item = (&'a str, &'a str)>,
+) {
+    let _ = writeln!(
+        out,
+        "bitflags::bitflags! {{\n    #[derive(Clone, Copy, PartialEq, Eq, Debug)]\n    pub struct {rust}: {repr} {{"
+    );
+    for (name, bit) in flags {
+        let _ = writeln!(out, "        const {name} = 1 << {};", to_value(bit));
+    }
+    out.push_str("    }\n}\n");
+}
+
+#[allow(clippy::too_many_lines)]
+pub(crate) fn gen_param(root: &Path) -> Result<()> {
+    fn parse_localparam(line: &str) -> Option<Const> {
+        fn is_float(v: &str) -> bool {
+            let b = v.as_bytes();
+            if b.len() < 3 {
+                return false;
+            }
+            (1..b.len() - 1).any(|k| {
+                b[..k].iter().all(u8::is_ascii_digit) && b[k + 1..].iter().all(u8::is_ascii_digit)
+            })
+        }
+
+        let rest = line.strip_prefix("localparam ")?;
+        let (decl, valpart) = rest.split_once(" = ")?;
+        let name = decl.split_whitespace().last()?;
+        if !is_ident(name) {
+            return None;
+        }
+        let value = valpart.split(';').next()?.trim();
+        if !(is_decimal(value) || is_sized(value) || is_float(value)) {
+            return None;
+        }
+        let chars: Vec<char> = name.chars().collect();
+        let mut s1 = String::new();
+        let mut i = 0;
+        while i < chars.len() {
+            if i + 2 < chars.len()
+                && chars[i + 1].is_ascii_uppercase()
+                && chars[i + 2].is_ascii_lowercase()
+            {
+                s1.push(chars[i]);
+                s1.push('_');
+                s1.push(chars[i + 1]);
+                let mut j = i + 2;
+                while j < chars.len() && chars[j].is_ascii_lowercase() {
+                    s1.push(chars[j]);
+                    j += 1;
+                }
+                i = j;
+            } else {
+                s1.push(chars[i]);
+                i += 1;
+            }
+        }
+
+        let chars: Vec<char> = s1.chars().collect();
+        let mut s2 = String::new();
+        let mut i = 0;
+        while i < chars.len() {
+            if i + 1 < chars.len()
+                && (chars[i].is_ascii_lowercase() || chars[i].is_ascii_digit())
+                && chars[i + 1].is_ascii_uppercase()
+            {
+                s2.push(chars[i]);
+                s2.push('_');
+                s2.push(chars[i + 1]);
+                i += 2;
+            } else {
+                s2.push(chars[i]);
+                i += 1;
+            }
+        }
+
+        Some(Const {
+            name: s2.to_ascii_uppercase(),
+            value: value.to_string(),
+        })
+    }
+
+    fn mhz_to_hz(s: &str) -> Option<u64> {
+        let (int, frac) = s.split_once('.').unwrap_or((s, ""));
+        if int.is_empty() || !int.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        let Ok(frac_digits) = u32::try_from(frac.len()) else {
+            return None;
+        };
+        if frac_digits > 6 || !frac.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        let scale = 10u64.pow(6 - frac_digits);
+        let frac_hz = if frac.is_empty() {
+            0
+        } else {
+            frac.parse::<u64>().ok()? * scale
+        };
+        Some(int.parse::<u64>().ok()? * 1_000_000 + frac_hz)
+    }
+
+    let svh = root.join(PARAMS_SVH_REL);
+    let text = std::fs::read_to_string(&svh)
+        .with_context(|| format!("failed to read {}", svh.display()))?;
+
+    let mut ip_consts = Vec::with_capacity(IP_CONSTS.len());
+    for ic in IP_CONSTS {
+        let xci = root
+            .join(IP_DIR_REL)
+            .join(ic.ip)
+            .join(format!("{}.xci", ic.ip));
+        let text = std::fs::read_to_string(&xci)
+            .with_context(|| format!("failed to read {}", xci.display()))?;
+        let depth = xci_value_str(&text, "Write_Depth_A")
+            .and_then(|v| v.parse::<u64>().ok())
+            .with_context(|| format!("missing Write_Depth_A in {}", xci.display()))?;
+        let width = xci_value_str(&text, "Write_Width_A")
+            .and_then(|v| v.parse::<u64>().ok())
+            .with_context(|| format!("missing Write_Width_A in {}", xci.display()))?;
+        let value = depth * width / ic.elem_bits;
+        ip_consts.push(Const {
+            name: ic.name.to_string(),
+            value: value.to_string(),
+        });
+    }
+    let coe = root.join(TR_COE_REL);
+    let coe_text = std::fs::read_to_string(&coe)
+        .with_context(|| format!("failed to read {}", coe.display()))?;
+    let vector = coe_text
+        .split_once("memory_initialization_vector")
+        .map_or("", |(_, rest)| rest);
+    let mut x_max: u32 = 0;
+    let mut y_max: u32 = 0;
+    for tok in vector.split(|c: char| !c.is_ascii_hexdigit()) {
+        if tok.len() != 8 {
+            continue;
+        }
+        if let Ok(word) = u32::from_str_radix(tok, 16) {
+            x_max = x_max.max(word >> 16);
+            y_max = y_max.max(word & 0xFFFF);
+        }
+    }
+    let tr_consts = vec![
+        Const {
+            name: "FOCUS_TR_X_MAX".to_string(),
+            value: x_max.to_string(),
+        },
+        Const {
+            name: "FOCUS_TR_Y_MAX".to_string(),
+            value: y_max.to_string(),
+        },
+    ];
+    let clk_xci = root
+        .join(IP_DIR_REL)
+        .join(CLK_WIZ_IP)
+        .join(format!("{CLK_WIZ_IP}.xci"));
+    let clk_text = std::fs::read_to_string(&clk_xci)
+        .with_context(|| format!("failed to read {}", clk_xci.display()))?;
+    let mhz = xci_value_str(&clk_text, CLK_OUT_FREQ_KEY)
+        .with_context(|| format!("missing {CLK_OUT_FREQ_KEY} in {}", clk_xci.display()))?;
+    let hz = mhz_to_hz(mhz).with_context(|| {
+        format!(
+            "cannot parse {CLK_OUT_FREQ_KEY}={mhz:?} in {}",
+            clk_xci.display()
+        )
+    })?;
+    let clk_consts = vec![Const {
+        name: "FPGA_CLK_FREQ_HZ".to_string(),
+        value: hz.to_string(),
+    }];
     let mut consts = Vec::new();
     let mut enums = Vec::new();
     let mut read_enum = false;
@@ -371,199 +476,6 @@ fn parse(text: &str) -> (Vec<Const>, Vec<Enum>) {
         }
     }
 
-    (consts, enums)
-}
-
-fn xci_value_str<'a>(text: &'a str, key: &str) -> Option<&'a str> {
-    let key_tok = format!("\"{key}\"");
-    let start = text.find(&key_tok)? + key_tok.len();
-    let after = &text[start..];
-    let vpos = after.find("\"value\"")? + "\"value\"".len();
-    let after = &after[vpos..];
-    let q1 = after.find('"')?;
-    let q2 = after[q1 + 1..].find('"')? + q1 + 1;
-    Some(&after[q1 + 1..q2])
-}
-
-fn mhz_to_hz(s: &str) -> Option<u64> {
-    let (int, frac) = s.split_once('.').unwrap_or((s, ""));
-    if int.is_empty() || !int.bytes().all(|b| b.is_ascii_digit()) {
-        return None;
-    }
-    let Ok(frac_digits) = u32::try_from(frac.len()) else {
-        return None;
-    };
-    if frac_digits > 6 || !frac.bytes().all(|b| b.is_ascii_digit()) {
-        return None;
-    }
-    let scale = 10u64.pow(6 - frac_digits);
-    let frac_hz = if frac.is_empty() {
-        0
-    } else {
-        frac.parse::<u64>().ok()? * scale
-    };
-    Some(int.parse::<u64>().ok()? * 1_000_000 + frac_hz)
-}
-
-fn read_clk_consts(root: &Path) -> Result<Vec<Const>> {
-    let xci = root
-        .join(IP_DIR_REL)
-        .join(CLK_WIZ_IP)
-        .join(format!("{CLK_WIZ_IP}.xci"));
-    let text = std::fs::read_to_string(&xci)
-        .with_context(|| format!("failed to read {}", xci.display()))?;
-    let mhz = xci_value_str(&text, CLK_OUT_FREQ_KEY)
-        .with_context(|| format!("missing {CLK_OUT_FREQ_KEY} in {}", xci.display()))?;
-    let hz = mhz_to_hz(mhz).with_context(|| {
-        format!(
-            "cannot parse {CLK_OUT_FREQ_KEY}={mhz:?} in {}",
-            xci.display()
-        )
-    })?;
-    Ok(vec![Const {
-        name: "FPGA_CLK_FREQ_HZ".to_string(),
-        value: hz.to_string(),
-    }])
-}
-
-fn read_ip_consts(root: &Path) -> Result<Vec<Const>> {
-    let mut out = Vec::with_capacity(IP_CONSTS.len());
-    for ic in IP_CONSTS {
-        let xci = root
-            .join(IP_DIR_REL)
-            .join(ic.ip)
-            .join(format!("{}.xci", ic.ip));
-        let text = std::fs::read_to_string(&xci)
-            .with_context(|| format!("failed to read {}", xci.display()))?;
-        let depth = xci_value_str(&text, "Write_Depth_A")
-            .and_then(|v| v.parse::<u64>().ok())
-            .with_context(|| format!("missing Write_Depth_A in {}", xci.display()))?;
-        let width = xci_value_str(&text, "Write_Width_A")
-            .and_then(|v| v.parse::<u64>().ok())
-            .with_context(|| format!("missing Write_Width_A in {}", xci.display()))?;
-        let value = depth * width / ic.elem_bits;
-        out.push(Const {
-            name: ic.name.to_string(),
-            value: value.to_string(),
-        });
-    }
-    Ok(out)
-}
-
-fn emit_ip(out: &mut String, c: &Const) {
-    let _ = writeln!(
-        out,
-        "pub const {}: usize = {};",
-        c.name,
-        group_decimal(&c.value)
-    );
-}
-
-fn read_tr_bounds(root: &Path) -> Result<Vec<Const>> {
-    let path = root.join(TR_COE_REL);
-    let text = std::fs::read_to_string(&path)
-        .with_context(|| format!("failed to read {}", path.display()))?;
-    let vector = text
-        .split_once("memory_initialization_vector")
-        .map_or("", |(_, rest)| rest);
-    let mut x_max: u32 = 0;
-    let mut y_max: u32 = 0;
-    for tok in vector.split(|c: char| !c.is_ascii_hexdigit()) {
-        if tok.len() != 8 {
-            continue;
-        }
-        if let Ok(word) = u32::from_str_radix(tok, 16) {
-            x_max = x_max.max(word >> 16);
-            y_max = y_max.max(word & 0xFFFF);
-        }
-    }
-    Ok(vec![
-        Const {
-            name: "FOCUS_TR_X_MAX".to_string(),
-            value: x_max.to_string(),
-        },
-        Const {
-            name: "FOCUS_TR_Y_MAX".to_string(),
-            value: y_max.to_string(),
-        },
-    ])
-}
-
-fn emit_tr(out: &mut String, c: &Const) {
-    let _ = writeln!(
-        out,
-        "pub const {}: i32 = {};",
-        c.name,
-        group_decimal(&c.value)
-    );
-}
-
-fn emit_clk(out: &mut String, c: &Const) {
-    let _ = writeln!(
-        out,
-        "pub const {}: u32 = {};",
-        c.name,
-        group_decimal(&c.value)
-    );
-}
-
-fn emit(out: &mut String, c: &Const) {
-    let _ = writeln!(
-        out,
-        "pub const {}: {} = {};",
-        c.name,
-        rust_type(&c.name),
-        to_value(&c.value)
-    );
-}
-
-fn emit_flags<'a>(
-    out: &mut String,
-    rust: &str,
-    repr: &str,
-    flags: impl Iterator<Item = (&'a str, &'a str)>,
-) {
-    let _ = writeln!(
-        out,
-        "bitflags::bitflags! {{\n    #[derive(Clone, Copy, PartialEq, Eq, Debug)]\n    pub struct {rust}: {repr} {{"
-    );
-    for (name, bit) in flags {
-        let _ = writeln!(out, "        const {name} = 1 << {};", to_value(bit));
-    }
-    out.push_str("    }\n}\n");
-}
-
-fn emit_typed(out: &mut String, wire_crate: &str, typed: &Typed, e: &Enum) {
-    let members = e.consts.iter().map(|c| {
-        (
-            c.name.strip_prefix(typed.prefix).unwrap_or(&c.name),
-            &*c.value,
-        )
-    });
-    match typed.kind {
-        TypedKind::Flags(repr) => emit_flags(out, typed.rust, repr, members),
-        TypedKind::Enum => {
-            let _ = writeln!(
-                out,
-                "{wire_crate}::wire_enum_u8! {{\n    pub enum {} {{",
-                typed.rust
-            );
-            for (name, value) in members {
-                let _ = writeln!(out, "        {} = {},", to_pascal(name), to_value(value));
-            }
-            out.push_str("    }\n}\n");
-        }
-    }
-}
-
-fn generate(
-    text: &str,
-    ip_consts: &[Const],
-    tr_consts: &[Const],
-    clk_consts: &[Const],
-) -> (String, String) {
-    let (consts, enums) = parse(text);
-
     let header = |src: &str, kind: &str| {
         format!(
             "// AUTO-GENERATED by `cargo xtask cpu gen-param` from\n// {src}. DO NOT EDIT.\n// {kind}\n\n"
@@ -575,7 +487,6 @@ fn generate(
     );
     let mut fw = header(PARAMS_SVH_REL, "Firmware-internal FPGA register map.");
     fw.push_str("pub use autd3_cpu_wire::fpga_params::*;\n");
-
     for c in consts.iter().filter(|c| function_bit(&c.name).is_none()) {
         emit(
             if is_fw_internal(&c.name) {
@@ -606,45 +517,75 @@ fn generate(
         };
         out.push('\n');
         if let Some(typed) = TYPED_ENUMS.iter().find(|t| t.sv == e.name) {
-            emit_typed(out, wire_crate, typed, e);
+            let members = e.consts.iter().map(|c| {
+                (
+                    c.name.strip_prefix(typed.prefix).unwrap_or(&c.name),
+                    &*c.value,
+                )
+            });
+            match typed.kind {
+                TypedKind::Flags(repr) => emit_flags(out, typed.rust, repr, members),
+                TypedKind::Enum => {
+                    let _ = writeln!(
+                        out,
+                        "{wire_crate}::wire_enum_u8! {{\n    pub enum {} {{",
+                        typed.rust
+                    );
+                    for (name, value) in members {
+                        let pascal = name.split('_').filter(|word| !word.is_empty()).fold(
+                            String::new(),
+                            |mut pascal, word| {
+                                let (head, tail) = word.split_at(1);
+                                pascal.push_str(&head.to_ascii_uppercase());
+                                pascal.push_str(&tail.to_ascii_lowercase());
+                                pascal
+                            },
+                        );
+                        let _ = writeln!(out, "        {pascal} = {},", to_value(value));
+                    }
+                    out.push_str("    }\n}\n");
+                }
+            }
             continue;
         }
         for c in &e.consts {
             emit(out, c);
         }
     }
-
     if !ip_consts.is_empty() {
         wire.push('\n');
         for c in ip_consts {
-            emit_ip(&mut wire, c);
+            let _ = writeln!(
+                wire,
+                "pub const {}: usize = {};",
+                c.name,
+                group_decimal(&c.value)
+            );
         }
     }
     if !tr_consts.is_empty() {
         wire.push('\n');
         for c in tr_consts {
-            emit_tr(&mut wire, c);
+            let _ = writeln!(
+                wire,
+                "pub const {}: i32 = {};",
+                c.name,
+                group_decimal(&c.value)
+            );
         }
     }
     if !clk_consts.is_empty() {
         wire.push('\n');
         for c in clk_consts {
-            emit_clk(&mut wire, c);
+            let _ = writeln!(
+                wire,
+                "pub const {}: u32 = {};",
+                c.name,
+                group_decimal(&c.value)
+            );
         }
     }
-    (wire, fw)
-}
-
-pub(crate) fn gen_param(root: &Path) -> Result<()> {
-    let svh = root.join(PARAMS_SVH_REL);
-    let text = std::fs::read_to_string(&svh)
-        .with_context(|| format!("failed to read {}", svh.display()))?;
-
-    let ip_consts = read_ip_consts(root)?;
-    let tr_consts = read_tr_bounds(root)?;
-    let clk_consts = read_clk_consts(root)?;
-    let (wire_src, fw_src) = generate(&text, &ip_consts, &tr_consts, &clk_consts);
-    for (rel, src) in [(WIRE_OUT_REL, wire_src), (FW_OUT_REL, fw_src)] {
+    for (rel, src) in [(WIRE_OUT_REL, wire), (FW_OUT_REL, fw)] {
         let out = root.join(rel);
         std::fs::write(&out, src).with_context(|| format!("failed to write {}", out.display()))?;
         run(

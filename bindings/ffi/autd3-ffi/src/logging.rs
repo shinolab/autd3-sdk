@@ -11,22 +11,6 @@ pub(crate) const AUTD3_LOG_WRITER_STDERR: u8 = 1;
 
 pub(crate) struct TracingGuardHandle(#[expect(dead_code)] TracingGuard);
 
-fn to_log_writer(v: u8) -> Option<LogWriter> {
-    match v {
-        AUTD3_LOG_WRITER_STDOUT => Some(LogWriter::Stdout),
-        AUTD3_LOG_WRITER_STDERR => Some(LogWriter::Stderr),
-        _ => None,
-    }
-}
-
-fn from_log_writer(writer: LogWriter) -> u8 {
-    match writer {
-        LogWriter::Stdout => AUTD3_LOG_WRITER_STDOUT,
-        LogWriter::Stderr => AUTD3_LOG_WRITER_STDERR,
-        _ => unreachable!(),
-    }
-}
-
 #[unsafe(no_mangle)]
 pub(crate) unsafe extern "C" fn autd3_tracing_option_default(
     out_default_filter: *mut c_char,
@@ -37,7 +21,12 @@ pub(crate) unsafe extern "C" fn autd3_tracing_option_default(
     if out_default_filter.is_null() || out_default_filter_len <= default.default_filter.len() {
         return AUTD3_ERR_INVALID_ARGUMENT;
     }
-    let code = unsafe { write_out(out_writer, from_log_writer(default.writer)) };
+    let writer = match default.writer {
+        LogWriter::Stdout => AUTD3_LOG_WRITER_STDOUT,
+        LogWriter::Stderr => AUTD3_LOG_WRITER_STDERR,
+        _ => unreachable!(),
+    };
+    let code = unsafe { write_out(out_writer, writer) };
     if code != AUTD3_OK {
         return code;
     }
@@ -62,9 +51,13 @@ pub(crate) unsafe extern "C" fn autd3_init_tracing(
         unsafe { write_cstr(out_err, out_err_len, "null or non-UTF-8 default filter") };
         return std::ptr::null_mut();
     };
-    let Some(writer) = to_log_writer(writer) else {
-        unsafe { write_cstr(out_err, out_err_len, "unknown log writer") };
-        return std::ptr::null_mut();
+    let writer = match writer {
+        AUTD3_LOG_WRITER_STDOUT => LogWriter::Stdout,
+        AUTD3_LOG_WRITER_STDERR => LogWriter::Stderr,
+        _ => {
+            unsafe { write_cstr(out_err, out_err_len, "unknown log writer") };
+            return std::ptr::null_mut();
+        }
     };
 
     match try_init_tracing(TracingOption {

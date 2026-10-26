@@ -40,7 +40,18 @@ pub(crate) fn is_ready() -> bool {
     READY.load(Ordering::Acquire)
 }
 
-fn setup_ppg() {
+pub(crate) fn stop() {
+    ARMED.store(false, Ordering::Release);
+    READY.store(false, Ordering::Release);
+    write8(ELC_ELOPA, ELOPA_DISABLED);
+    write8(ELC_ELSR0, 0);
+    write8(MTU0_TIER, 0);
+    modify8(MTU_TSTRA, |v| v & !TSTRA_CST0);
+    ethsw::stop_syncout();
+}
+
+pub(crate) fn arm() -> bool {
+    stop();
     write8(PPG1_NDERL, 0);
     write8(PPG1_PODRL, 0);
     write8(PPG1_PTRSLR, PTRSL_MTU);
@@ -53,25 +64,6 @@ fn setup_ppg() {
     write8(pfs(PORT_M, PM3), PFS_PO16);
     pfs_write_disable();
     modify8(pmr(PORT_M), |v| v | (1 << PM3));
-}
-
-fn stop_capture() {
-    write8(ELC_ELOPA, ELOPA_DISABLED);
-    write8(ELC_ELSR0, 0);
-    write8(MTU0_TIER, 0);
-    modify8(MTU_TSTRA, |v| v & !TSTRA_CST0);
-}
-
-pub(crate) fn stop() {
-    ARMED.store(false, Ordering::Release);
-    READY.store(false, Ordering::Release);
-    stop_capture();
-    ethsw::stop_syncout();
-}
-
-pub(crate) fn arm() -> bool {
-    stop();
-    setup_ppg();
     write8(MTU0_TCR, TCR_PCLKC_DIV1);
     write8(MTU0_TCR2, 0);
     write8(MTU0_TMDR1, 0);
@@ -92,15 +84,11 @@ pub(crate) fn arm() -> bool {
     started
 }
 
-pub(crate) fn next_level_is_high(latch_ns: u64) -> bool {
-    let period = u64::from(HALF_PERIOD_NS);
-    let event = (latch_ns + period / 2) / period;
-    (event + 1).is_multiple_of(2)
-}
-
 pub(crate) fn on_capture() {
     let latch = ethsw::syncout_latch();
-    let high = next_level_is_high(latch);
+    let period = u64::from(HALF_PERIOD_NS);
+    let event = (latch + period / 2) / period;
+    let high = (event + 1).is_multiple_of(2);
     write8(PPG1_NDRL, if high { PO16 } else { 0 });
     SERVED_LATCH.store(latch, Ordering::Relaxed);
     if ARMED.load(Ordering::Acquire) {
