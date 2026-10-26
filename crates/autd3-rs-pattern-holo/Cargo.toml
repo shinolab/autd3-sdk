@@ -26,7 +26,7 @@ thiserror.workspace = true
 rstest.workspace = true
 approx.workspace = true
 autd3-rs-pattern.workspace = true
-criterion = { version = "0.8.2", default-features = false }
+criterion.workspace = true
 
 [[bench]]
 name = "holo"

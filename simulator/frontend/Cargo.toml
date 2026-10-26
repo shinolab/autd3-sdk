@@ -10,31 +10,38 @@ description = "Browser frontend for the AUTD3 simulator"
 
 [dependencies]
 autd3-rs-simulator-protocol = { path = "../protocol" }
-dioxus = { version = "0.7.9", features = ["web"] }
+dioxus = { version = "0.7.10", default-features = false, features = [
+    "launch",
+    "devtools",
+    "logger",
+    "lib",
+    "web",
+] }
 gloo-net = { version = "0.7.0", default-features = false, features = ["websocket"] }
-futures-util = { version = "0.3.32", default-features = false, features = [
+futures-util = { version = "0.3.34", default-features = false, features = [
     "sink",
     "std",
 ] }
-futures-channel = { version = "0.3.32", default-features = false, features = [
+futures-channel = { version = "0.3.34", default-features = false, features = [
     "std",
 ] }
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.150"
-tracing = "0.1.44"
-console_error_panic_hook = "0.1.7"
-wgpu = { version = "30.0.0", default-features = false, features = [
+serde = { version = "1.0.229", default-features = false, features = ["std", "derive"] }
+serde_json = { version = "1.0.154", default-features = false, features = ["std"] }
+tracing = { version = "0.1.44", default-features = false, features = ["std"] }
+console_error_panic_hook = { version = "0.1.7", default-features = false }
+wgpu = { version = "30.0.1", default-features = false, features = [
     "webgpu",
     "wgsl",
     "fragile-send-sync-non-atomic-wasm",
 ] }
-bytemuck = { version = "1.25.0", features = ["derive"] }
-glam = { version = "0.34.1", features = ["bytemuck"] }
-wasm-bindgen = "0.2.126"
-wasm-bindgen-futures = "0.4.76"
-js-sys = "0.3.103"
-gloo-timers = { version = "0.4.0", features = ["futures"] }
-web-sys = { version = "0.3.103", features = [
+bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
+glam = { version = "0.34.1", default-features = false, features = ["std", "bytemuck"] }
+wasm-bindgen = { version = "0.2.129", default-features = false, features = ["std"] }
+wasm-bindgen-futures = { version = "0.4.79", default-features = false, features = ["std"] }
+js-sys = { version = "0.3.106", default-features = false, features = ["std"] }
+gloo-timers = { version = "0.4.0", default-features = false, features = ["futures"] }
+web-sys = { version = "0.3.106", default-features = false, features = [
+    "std",
     "Window",
     "Location",
     "Document",
