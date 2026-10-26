@@ -370,44 +370,11 @@ def test_wavelength_is_a_length() -> None:
     assert wavelength == 8.5 * mm
 
 
-def test_holo_batches_solve_one_problem_per_buffer() -> None:
+def test_holo_wavelength_must_be_a_length() -> None:
     geometry = Geometry([Autd3([0.0, 0.0, 0.0])])
-    wavelength = pattern.wavelength(340 * m / s)
-    center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm)
-    problems = [
-        [holo.AmplitudeTarget(center + offset(x * mm, 0.0 * mm, 0.0 * mm), 2.5e3 * Pa) for x in pair]
-        for pair in ((-30.0, 30.0), (-10.0, 10.0))
-    ]
-    foci = [target for problem in problems for target in problem]
-
-    for solve, solve_batch, option in (
-        (holo.naive, holo.naive_batch, holo.NaiveOption()),
-        (holo.gs, holo.gs_batch, holo.GsOption(repeat=10)),
-        (holo.gspat, holo.gspat_batch, holo.GspatOption(repeat=10)),
-    ):
-        phases = [geometry.phase_buffer() for _ in problems]
-        intensities = [geometry.intensity_buffer() for _ in problems]
-        loose(solve_batch)(geometry, foci, wavelength, option, phases, intensities)
-        for problem, batched_phases, batched_intensities in zip(problems, phases, intensities):
-            single_phases = geometry.phase_buffer()
-            single_intensities = geometry.intensity_buffer()
-            loose(solve)(geometry, problem, wavelength, option, single_phases, single_intensities)
-            diff = (batched_phases.to_numpy().astype(np.int16) - single_phases.to_numpy().astype(np.int16)) & 0xFF
-            assert np.all((diff <= 1) | (diff == 0xFF))
-            assert len(batched_intensities) == 1
-        assert not np.array_equal(phases[0].to_numpy(), phases[1].to_numpy())
-
-    phases = [geometry.phase_buffer() for _ in problems]
-    intensities = [geometry.intensity_buffer() for _ in problems]
-    with pytest.raises(ValueError, match="twice"):
-        holo.gs_batch(geometry, foci, wavelength, holo.GsOption(), [phases[0], phases[0]], intensities)
-    with pytest.raises(holo.HoloError):
-        holo.gs_batch(geometry, foci[:3], wavelength, holo.GsOption(), phases, intensities)
-    with pytest.raises(holo.HoloError):
-        holo.naive_batch(geometry, foci, wavelength, holo.NaiveOption(), [], [])
-    assert all(len(buffer) == 1 for buffer in phases)
+    foci = [holo.AmplitudeTarget(geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm), 2.5e3 * Pa)]
     with pytest.raises(TypeError, match="Length"):
-        holo.naive(geometry, foci, loose(8.5), holo.NaiveOption(), phases[0], intensities[0])
+        holo.naive(geometry, foci, loose(8.5), holo.NaiveOption(), geometry.phase_buffer(), geometry.intensity_buffer())
 
 
 def test_frames_are_re_encoded_in_place() -> None:

@@ -270,15 +270,6 @@ namespace AUTD3.Holo
         internal static extern int autd3_holo_gspat(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, UIntPtr repeat, in IntensityConstraintNative constraint, byte directivity, byte[]? mask, PhaseBufferHandle phases, IntensityBufferHandle intensities, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_holo_naive_batch(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, in IntensityConstraintNative constraint, byte directivity, byte[]? mask, IntPtr[] phases, IntPtr[] intensities, UIntPtr numProblems, byte[] outErr, UIntPtr outErrLen);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_holo_gs_batch(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, UIntPtr repeat, in IntensityConstraintNative constraint, byte directivity, byte[]? mask, IntPtr[] phases, IntPtr[] intensities, UIntPtr numProblems, byte[] outErr, UIntPtr outErrLen);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_holo_gspat_batch(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, UIntPtr repeat, in IntensityConstraintNative constraint, byte directivity, byte[]? mask, IntPtr[] phases, IntPtr[] intensities, UIntPtr numProblems, byte[] outErr, UIntPtr outErrLen);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_holo_greedy(GeometryHandle geometry, HoloAmplitudeTargetNative[] foci, UIntPtr numFoci, float wavelengthMm, IntPtr intensities, byte uniformIntensity, uint[] order, UIntPtr orderLen, byte phaseQuantizationLevels, byte directivity, PhaseBufferHandle dst, byte[] outErr, UIntPtr outErrLen);
     }
 
@@ -364,68 +355,6 @@ namespace AUTD3.Holo
             var c = option.Constraint.ToNative();
             var err = new byte[NativeAbi.ErrorBufferLength];
             var code = NativeHolo.autd3_holo_gspat(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, geometry.NumDevices), phases.Handle, intensities.Handle, err, (UIntPtr)err.Length);
-            if (code != 0)
-            {
-                throw Autd3Exception.FromNative(code, err);
-            }
-        }
-
-        private static void CheckBatch(IReadOnlyList<PhaseBuffer> phases, IReadOnlyList<IntensityBuffer> intensities)
-        {
-            if (phases.Count != intensities.Count)
-            {
-                throw new Autd3Exception(
-                    $"a batch needs one intensity buffer per phase buffer, but {phases.Count} phase and {intensities.Count} intensity buffers were given",
-                    Autd3ErrorCode.InvalidArgument);
-            }
-        }
-
-        private static HandleArray Lease<T>(IReadOnlyList<T> buffers, Func<T, SafeHandle> handle)
-        {
-            var handles = new SafeHandle[buffers.Count];
-            for (var i = 0; i < handles.Length; i++)
-            {
-                handles[i] = handle(buffers[i]);
-            }
-            return new HandleArray(handles);
-        }
-
-        public static void NaiveBatch(Geometry geometry, AmplitudeTarget[] foci, Length wavelength, NaiveOption option, IReadOnlyList<PhaseBuffer> phases, IReadOnlyList<IntensityBuffer> intensities)
-        {
-            CheckBatch(phases, intensities);
-            var c = option.Constraint.ToNative();
-            var err = new byte[NativeAbi.ErrorBufferLength];
-            using var p = Lease(phases, b => b.Handle);
-            using var i = Lease(intensities, b => b.Handle);
-            var code = NativeHolo.autd3_holo_naive_batch(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, geometry.NumDevices), p.Pointers, i.Pointers, (UIntPtr)phases.Count, err, (UIntPtr)err.Length);
-            if (code != 0)
-            {
-                throw Autd3Exception.FromNative(code, err);
-            }
-        }
-
-        public static void GsBatch(Geometry geometry, AmplitudeTarget[] foci, Length wavelength, GsOption option, IReadOnlyList<PhaseBuffer> phases, IReadOnlyList<IntensityBuffer> intensities)
-        {
-            CheckBatch(phases, intensities);
-            var c = option.Constraint.ToNative();
-            var err = new byte[NativeAbi.ErrorBufferLength];
-            using var p = Lease(phases, b => b.Handle);
-            using var i = Lease(intensities, b => b.Handle);
-            var code = NativeHolo.autd3_holo_gs_batch(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, geometry.NumDevices), p.Pointers, i.Pointers, (UIntPtr)phases.Count, err, (UIntPtr)err.Length);
-            if (code != 0)
-            {
-                throw Autd3Exception.FromNative(code, err);
-            }
-        }
-
-        public static void GspatBatch(Geometry geometry, AmplitudeTarget[] foci, Length wavelength, GspatOption option, IReadOnlyList<PhaseBuffer> phases, IReadOnlyList<IntensityBuffer> intensities)
-        {
-            CheckBatch(phases, intensities);
-            var c = option.Constraint.ToNative();
-            var err = new byte[NativeAbi.ErrorBufferLength];
-            using var p = Lease(phases, b => b.Handle);
-            using var i = Lease(intensities, b => b.Handle);
-            var code = NativeHolo.autd3_holo_gspat_batch(geometry.Handle, ToNative(foci), (UIntPtr)foci.Length, wavelength.Mm, (UIntPtr)option.Repeat, in c, (byte)option.Directivity, FlattenMask(option.Mask.Mask, geometry.NumDevices), p.Pointers, i.Pointers, (UIntPtr)phases.Count, err, (UIntPtr)err.Length);
             if (code != 0)
             {
                 throw Autd3Exception.FromNative(code, err);

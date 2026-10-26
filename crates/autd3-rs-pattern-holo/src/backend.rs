@@ -12,7 +12,7 @@ pub trait LinAlgBackend {
     type Matrix;
     type Vector;
 
-    fn make_vector(&self, batch: usize, data: Vec<Complex<f32>>) -> Self::Vector;
+    fn make_vector(&self, data: Vec<Complex<f32>>) -> Self::Vector;
     fn vector_to_host(&self, v: &Self::Vector) -> Vec<Complex<f32>>;
 
     fn propagation_matrix(
@@ -20,7 +20,6 @@ pub trait LinAlgBackend {
         tr_pos: &[Point3<f32>],
         tr_dir: &[UnitVector3<f32>],
         foci: &[AmplitudeTarget],
-        batch: usize,
         wavenumber: f32,
         directivity: Directivity,
     ) -> Self::Matrix;
@@ -56,30 +55,21 @@ pub trait LinAlgBackend {
         v: &Self::Vector,
         constraint: IntensityConstraint,
     ) -> (Vec<Phase>, Vec<Intensity>);
-
-    fn max_batch(&self, _bytes_per_problem: usize) -> usize {
-        usize::MAX
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NalgebraBackend;
 
 impl LinAlgBackend for NalgebraBackend {
-    type Matrix = Vec<DMatrix<Complex<f32>>>;
-    type Vector = Vec<DVector<Complex<f32>>>;
+    type Matrix = DMatrix<Complex<f32>>;
+    type Vector = DVector<Complex<f32>>;
 
-    fn make_vector(&self, batch: usize, data: Vec<Complex<f32>>) -> Self::Vector {
-        let batch = batch.max(1);
-        let len = data.len() / batch;
-        if len == 0 {
-            return vec![DVector::zeros(0); batch];
-        }
-        data.chunks(len).map(DVector::from_column_slice).collect()
+    fn make_vector(&self, data: Vec<Complex<f32>>) -> Self::Vector {
+        DVector::from_vec(data)
     }
 
     fn vector_to_host(&self, v: &Self::Vector) -> Vec<Complex<f32>> {
-        v.iter().flat_map(|v| v.iter().copied()).collect()
+        v.as_slice().to_vec()
     }
 
     fn propagation_matrix(
@@ -87,51 +77,36 @@ impl LinAlgBackend for NalgebraBackend {
         tr_pos: &[Point3<f32>],
         tr_dir: &[UnitVector3<f32>],
         foci: &[AmplitudeTarget],
-        batch: usize,
         wavenumber: f32,
         directivity: Directivity,
     ) -> Self::Matrix {
-        foci.chunks(foci.len() / batch.max(1))
-            .map(|foci| propagation_matrix(tr_pos, tr_dir, foci, wavenumber, directivity))
-            .collect()
+        propagation_matrix(tr_pos, tr_dir, foci, wavenumber, directivity)
     }
 
     fn back_prop(&self, g: &Self::Matrix) -> Self::Matrix {
-        g.iter().map(back_prop).collect()
+        back_prop(g)
     }
 
     fn gemm(&self, a: &Self::Matrix, b: &Self::Matrix) -> Self::Matrix {
-        a.iter().zip(b).map(|(a, b)| a * b).collect()
+        a * b
     }
 
     fn gemv(&self, a: &Self::Matrix, x: &Self::Vector) -> Self::Vector {
-        a.iter()
-            .zip(broadcast(x, a.len()))
-            .map(|(a, x)| a * x)
-            .collect()
+        a * x
     }
 
     fn gemv_hadamard_normalized(
         &self,
         a: &Self::Matrix,
-        x: Self::Vector,
+        mut x: Self::Vector,
         r: &Self::Vector,
     ) -> Self::Vector {
-        a.iter()
-            .zip(x)
-            .zip(broadcast(r, a.len()))
-            .map(|((a, mut x), r)| {
-                hadamard_normalize(&mut x, r);
-                a * x
-            })
-            .collect()
+        hadamard_normalize(&mut x, r);
+        a * x
     }
 
     fn amplitude_correct(&self, x: &mut Self::Vector, r: &Self::Vector) {
-        let batch = x.len();
-        for (x, r) in x.iter_mut().zip(broadcast(r, batch)) {
-            amplitude_correct(x, r);
-        }
+        amplitude_correct(x, r);
     }
 
     fn quantize(
@@ -139,9 +114,7 @@ impl LinAlgBackend for NalgebraBackend {
         v: &Self::Vector,
         constraint: IntensityConstraint,
     ) -> (Vec<Phase>, Vec<Intensity>) {
-        v.iter()
-            .flat_map(|q| quantized(q.as_slice(), constraint))
-            .unzip()
+        quantized(v.as_slice(), constraint).unzip()
     }
 }
 
@@ -200,11 +173,6 @@ fn quantized(
         .map(move |&v| phase_and_intensity(v, constraint, max))
 }
 
-fn broadcast<T>(v: &[T], batch: usize) -> impl Iterator<Item = &T> {
-    let stride = usize::from(v.len() > 1);
-    (0..batch).map(move |k| &v[k * stride])
-}
-
 #[cfg(test)]
 mod tests {
     use autd3_rs_core::geometry::{Geometry, TransducerMask, Vector3};
@@ -223,33 +191,29 @@ mod tests {
             .collect()
     }
 
-    fn bits(v: &[nalgebra::DVector<Complex<f32>>]) -> Vec<(u32, u32)> {
-        v.iter()
-            .flatten()
-            .map(|c| (c.re.to_bits(), c.im.to_bits()))
-            .collect()
+    fn bits(v: &DVector<Complex<f32>>) -> Vec<(u32, u32)> {
+        v.iter().map(|c| (c.re.to_bits(), c.im.to_bits())).collect()
     }
 
-    type Matrices = <NalgebraBackend as LinAlgBackend>::Matrix;
-    type Vectors = <NalgebraBackend as LinAlgBackend>::Vector;
+    type Matrix = DMatrix<Complex<f32>>;
+    type Vector = DVector<Complex<f32>>;
 
-    fn problem(geo: &Geometry, foci: &[AmplitudeTarget]) -> (Matrices, Matrices, Vectors) {
+    fn problem(geo: &Geometry, foci: &[AmplitudeTarget]) -> (Matrix, Matrix, Vector) {
         let b = NalgebraBackend;
         let (tr_pos, tr_dir) = enabled_transducers(geo, TransducerMask::AllEnabled);
         let g = b.propagation_matrix(
             &tr_pos,
             &tr_dir,
             foci,
-            1,
             wavenumber(wavelength()),
             Directivity::Sphere,
         );
         let bp = b.back_prop(&g);
-        (g, bp, target_amplitudes(&b, foci, 1))
+        (g, bp, target_amplitudes(&b, foci))
     }
 
-    fn normalized(mut x: Vectors, r: &Vectors) -> Vectors {
-        hadamard_normalize(&mut x[0], &r[0]);
+    fn normalized(mut x: Vector, r: &Vector) -> Vector {
+        hadamard_normalize(&mut x, r);
         x
     }
 
@@ -261,7 +225,7 @@ mod tests {
             let foci = foci(&geo, nf);
             let (g, bp, amps) = problem(&geo, &foci);
             let n = TransducerMask::AllEnabled.num_enabled(&geo);
-            let q0 = b.make_vector(1, vec![Complex::new(1.0, 0.0); n]);
+            let q0 = b.make_vector(vec![Complex::new(1.0, 0.0); n]);
 
             let mut want = q0.clone();
             for _ in 0..repeat {

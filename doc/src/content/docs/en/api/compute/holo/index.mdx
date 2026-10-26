@@ -6,12 +6,7 @@ sidebar:
 ---
 
 import Math from "@components/Math.astro";
-import CodeTabs from "@components/CodeTabs.astro";
 import Install from "@components/Install.astro";
-import batchSample from "@codes/rust/examples/api/compute/holo/batch.rs?raw";
-import pyBatchSample from "@codes/python/examples/api/compute/holo/batch.py?raw";
-import csBatchSample from "@codes/csharp/examples/api/compute/holo/batch.cs?raw";
-import { excerpt } from "@lib/excerpt";
 
 Holo is a set of Pattern computations for generating multiple focal points (control points) simultaneously.
 It optimizes the phase and amplitude of each transducer so that the target sound pressure is obtained at the specified multiple points.
@@ -90,15 +85,3 @@ Python / C# are fixed to `NalgebraBackend` and do not take a backend argument.
 `WgpuBackend` is a backend that performs calculations on the GPU (Rust only).
 
 <Install rust="autd3-rs-pattern-holo-wgpu"/>
-
-### Batch API
-
-`naive` / `gs` / `gspat` each have a `naive_batch` / `gs_batch` / `gspat_batch` counterpart that solves several independent problems at once.
-
-<CodeTabs rust={excerpt(batchSample, "api")} python={excerpt(pyBatchSample, "api")} csharp={excerpt(csBatchSample, "api")} />
-
-The problem count is determined by the length of `phases` / `intensities` (both must have the same length).
-The foci are passed as a slice of length equal to the number of problems multiplied by the number of foci per problem.
-All problems must have the same number of foci; an error is returned if the length of the slice is not divisible by the problem count.
-
-The batch API is faster only with a GPU backend. A CPU backend (including `NalgebraBackend` used by Python / C#) solves the problems one by one, so it is no faster than calling the function once per problem.

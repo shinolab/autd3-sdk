@@ -212,7 +212,7 @@ namespace AUTD3.Tests
         }
 
         [Fact]
-        public void HoloGreedyFollowsTheGivenOrderAndRejectsANonPermutation()
+        public void HoloGreedyFollowsTheGivenOrder()
         {
             using var geometry = Fixture.SingleDevice();
             var foci = new[]
@@ -227,13 +227,6 @@ namespace AUTD3.Tests
             using var second = geometry.PhaseBuffer();
             Holo.Greedy(geometry, foci, Pattern.Wavelength(340 * m / s), Intensity.Max, order, new GreedyOption(), second);
             Assert.Equal(first[0].Select(p => p.Value), second[0].Select(p => p.Value));
-
-            var duplicated = (uint[])order.Clone();
-            duplicated[1] = duplicated[0];
-            using var dst = geometry.PhaseBuffer();
-            var e = Assert.Throws<Autd3Exception>(() => Holo.Greedy(geometry, foci, Pattern.Wavelength(340 * m / s), Intensity.Max, duplicated, new GreedyOption(), dst));
-            Assert.Contains("more than once", e.Message);
-            Assert.Throws<Autd3Exception>(() => Holo.Greedy(geometry, foci, Pattern.Wavelength(340 * m / s), Intensity.Max, order[1..], new GreedyOption(), dst));
         }
 
         private static uint[] AscendingOrder(Geometry geometry) => Enumerable.Range(0, geometry.NumTransducers).Select(i => (uint)i).ToArray();

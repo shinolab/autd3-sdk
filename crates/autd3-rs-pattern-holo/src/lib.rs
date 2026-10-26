@@ -19,9 +19,7 @@ pub use combinatorial::{GreedyOption, abs_objective_func, greedy};
 pub use constraint::IntensityConstraint;
 pub use directivity::Directivity;
 pub use error::HoloError;
-pub use linear_synthesis::{
-    GsOption, GspatOption, NaiveOption, gs, gs_batch, gspat, gspat_batch, naive, naive_batch,
-};
+pub use linear_synthesis::{GsOption, GspatOption, NaiveOption, gs, gspat, naive};
 
 #[cfg(test)]
 mod tests {
@@ -151,7 +149,7 @@ mod tests {
             amplitude: 5e3 * Pa,
         }];
 
-        for (name, single, _) in ALGORITHMS {
+        for (name, single) in ALGORITHMS {
             let mut dst = slot(&geometry);
             single(&geometry, &foci, TransducerMask::AllEnabled, &mut dst).unwrap();
             let (phases, intensities) = dst;
