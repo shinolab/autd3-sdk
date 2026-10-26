@@ -9,7 +9,6 @@ use autd3_rs::{Client, Error};
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
 pub(crate) const ACK_TIMEOUT: Duration = Duration::from_millis(250);
-pub(crate) const LONG_ACK_TIMEOUT: Duration = Duration::from_secs(30);
 pub(crate) const LOST_TIMEOUT: Duration = Duration::from_millis(500);
 pub(crate) const PATIENCE: Duration = Duration::from_secs(10);
 pub(crate) const INVALID_PAYLOAD: u8 = 0x02;
@@ -43,13 +42,6 @@ pub(crate) fn option(emulator: &UdpEmulator) -> TransportOption {
 pub(crate) fn monitoring_option(emulator: &UdpEmulator) -> TransportOption {
     TransportOption {
         lost_timeout: LOST_TIMEOUT,
-        ..option(emulator)
-    }
-}
-
-pub(crate) fn patient_option(emulator: &UdpEmulator) -> TransportOption {
-    TransportOption {
-        ack_timeout: LONG_ACK_TIMEOUT,
         ..option(emulator)
     }
 }

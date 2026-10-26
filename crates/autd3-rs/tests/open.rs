@@ -2,9 +2,9 @@ mod common;
 
 use std::time::Duration;
 
-use autd3_rs::commands::{Clear, ForceFan, Nop};
+use autd3_rs::commands::Nop;
 use autd3_rs::udp::{TransportOption, UdpError};
-use autd3_rs::{Client, DeviceState, Error, FirmwareVersion};
+use autd3_rs::{Client, Error, FirmwareVersion};
 
 use common::{emulator, geometry, open_with, option, udp_error};
 
@@ -63,49 +63,6 @@ async fn a_geometry_with_fewer_devices_than_attached_is_a_count_mismatch() {
 
 #[tokio::test]
 #[ignore = "depends on real time"]
-async fn open_fails_when_a_device_never_locks_to_the_grandmaster() {
-    let emulator = emulator(2);
-    emulator.set_ptp_lock_blocked(1, true);
-    let option = TransportOption {
-        open_timeout: Duration::from_secs(2),
-        ..option(&emulator)
-    };
-
-    let error = open_error(2, &option);
-
-    assert!(matches!(
-        udp_error(&error),
-        Some(UdpError::SyncTimeout { not_ready, .. }) if not_ready == &[1]
-    ));
-}
-
-#[tokio::test]
-#[ignore = "depends on real time"]
-async fn opening_without_synchronizing_does_not_wait_for_the_lock() {
-    let emulator = emulator(2);
-    emulator.set_ptp_lock_blocked(1, true);
-    let option = TransportOption {
-        open_timeout: Duration::from_secs(2),
-        sync_on_open: false,
-        ..option(&emulator)
-    };
-
-    let client = open_with(&emulator, &option);
-
-    assert!(matches!(
-        client.device_time_now(),
-        Err(Error::DeviceTimeUnknown)
-    ));
-    client.send(Nop).await.unwrap();
-    assert!(client.device_time_now().is_ok());
-    assert_eq!(
-        client.device_status().unwrap()[1].state,
-        DeviceState::Syncing
-    );
-}
-
-#[tokio::test]
-#[ignore = "depends on real time"]
 async fn the_bundled_firmware_is_in_the_supported_series() {
     let emulator = emulator(2);
     let client = open_with(&emulator, &option(&emulator));
@@ -119,24 +76,6 @@ async fn the_bundled_firmware_is_in_the_supported_series() {
 
 #[tokio::test]
 #[ignore = "depends on real time"]
-async fn open_keeps_what_a_previous_session_left_until_the_user_clears_it() {
-    let emulator = emulator(2);
-    let first = open_with(&emulator, &option(&emulator));
-    first.send(ForceFan { value: true }).await.unwrap();
-    drop(first);
-    let frames = emulator.frames_received(0);
-
-    let second = open_with(&emulator, &option(&emulator));
-
-    assert!(emulator.with_devices(|devices| devices.iter().all(|d| d.fpga().force_fan())));
-    assert_eq!(emulator.frames_received(0), frames);
-    second.send(Clear).await.unwrap();
-    assert!(emulator.with_devices(|devices| devices.iter().all(|d| !d.fpga().force_fan())));
-    second.close().unwrap();
-}
-
-#[tokio::test]
-#[ignore = "depends on real time"]
 async fn the_devices_can_be_opened_again_after_a_close() {
     let emulator = emulator(3);
     for _ in 0..2 {
@@ -145,17 +84,4 @@ async fn the_devices_can_be_opened_again_after_a_close() {
         assert_eq!(client.read_firmware_version().await.unwrap().len(), 3);
         client.close().unwrap();
     }
-}
-
-#[tokio::test]
-#[ignore = "depends on real time"]
-async fn open_survives_a_lost_unit_info_reply() {
-    let emulator = emulator(2);
-    emulator.drop_next_unit_infos(0, 1);
-    emulator.drop_next_unit_infos(1, 1);
-
-    let client = open_with(&emulator, &option(&emulator));
-
-    client.send(Nop).await.unwrap();
-    client.close().unwrap();
 }

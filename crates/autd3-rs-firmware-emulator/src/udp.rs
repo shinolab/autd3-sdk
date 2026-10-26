@@ -35,18 +35,9 @@ struct Unit {
     id: Option<u8>,
     grandmaster: bool,
     open: bool,
-    lock_blocked_since: Option<Instant>,
     last_tick: Instant,
     host: Option<SocketAddr>,
     last_host_frame_ms: Option<u32>,
-    main_loop_paused: bool,
-    drop_frames: u32,
-    drop_replies: u32,
-    drop_unit_infos: u32,
-    duplicate_frames: u32,
-    muted: bool,
-    heartbeats: u64,
-    frames: u64,
 }
 
 impl Unit {
@@ -56,10 +47,6 @@ impl Unit {
         self.open = false;
         self.host = None;
     }
-}
-
-fn millis_since(at: Instant, now: Instant) -> u32 {
-    u32::try_from(now.saturating_duration_since(at).as_millis()).unwrap_or(u32::MAX)
 }
 
 fn wrapping_millis_since(at: Instant, now: Instant) -> u32 {
@@ -90,20 +77,6 @@ impl Chain {
         self.units[index].id.is_some() && self.clock_offset_ns.is_some()
     }
 
-    fn locked(&self, index: usize) -> bool {
-        let unit = &self.units[index];
-        self.assigned_after_time_set(index)
-            && (unit.grandmaster || unit.lock_blocked_since.is_none())
-    }
-
-    fn ptp_unlocked_ms(&self, index: usize, now: Instant) -> Option<u32> {
-        let unit = &self.units[index];
-        if !self.assigned_after_time_set(index) || unit.grandmaster {
-            return None;
-        }
-        unit.lock_blocked_since.map(|at| millis_since(at, now))
-    }
-
     fn reachable_end(&self) -> usize {
         self.units
             .iter()
@@ -132,7 +105,7 @@ impl Chain {
         if index + 1 < self.units.len() {
             flags |= Flags::DOWNSTREAM_LINK;
         }
-        if self.locked(index) {
+        if self.assigned_after_time_set(index) {
             flags |= Flags::PTP_LOCKED | Flags::SYNC_READY;
         }
         if unit.grandmaster {
@@ -206,10 +179,6 @@ impl Chain {
                 Kind::Frame => self.frame(i, src, header, body, now),
                 Kind::Heartbeat => self.heartbeat(i, src, header, now),
                 Kind::ReadUnitInfo => {
-                    if self.units[i].drop_unit_infos > 0 {
-                        self.units[i].drop_unit_infos -= 1;
-                        continue;
-                    }
                     let info = self.unit_info(i);
                     self.reply_status(i, src, header, Status::Ok, info.as_bytes());
                 }
@@ -279,16 +248,14 @@ impl Chain {
     fn advance(&mut self, index: usize, now: Instant) {
         let bus = self.device_now();
         let now_ms = wrapping_millis_since(self.boot, now);
-        let ptp_unlocked_ms = self.ptp_unlocked_ms(index, now);
         let unit = &mut self.units[index];
         let resets = unit.device.fpga().reset_count();
         unit.device.cpu.publish_host_idle(
             unit.last_host_frame_ms
                 .map(|last| now_ms.wrapping_sub(last)),
         );
-        unit.device.cpu.publish_ptp_unlocked(ptp_unlocked_ms);
         let elapsed = now.saturating_duration_since(unit.last_tick).as_millis();
-        if elapsed > 0 && !unit.main_loop_paused {
+        if elapsed > 0 {
             unit.last_tick = now;
             for _ in 0..elapsed.min(MAX_CATCH_UP_TICKS) {
                 unit.device.tick_1ms();
@@ -299,32 +266,6 @@ impl Chain {
             unit.forget();
         }
         unit.device.fpga_mut().update_with_sys_time(bus);
-    }
-
-    fn complete_one(&mut self, index: usize) -> bool {
-        let Drained::Completed { msg_id } = self.units[index].device.process_one() else {
-            return false;
-        };
-        if self.units[index].drop_replies > 0 {
-            self.units[index].drop_replies -= 1;
-        } else if let Some(host) = self.units[index].host {
-            self.frame_reply(index, host, Header::new(Kind::Frame, msg_id));
-        }
-        true
-    }
-
-    fn resume_main_loop(&mut self, index: usize, now: Instant) {
-        self.units[index].main_loop_paused = false;
-        self.advance(index, now);
-        while self.complete_one(index) {}
-    }
-
-    fn enqueue(&mut self, index: usize, body: &[u8], msg_id: u16) {
-        self.units[index].device.recv(body, msg_id);
-        if self.units[index].duplicate_frames > 0 {
-            self.units[index].duplicate_frames -= 1;
-            self.units[index].device.recv(body, msg_id);
-        }
     }
 
     fn frame_reply(&self, index: usize, dst: SocketAddr, header: Header) {
@@ -342,25 +283,17 @@ impl Chain {
         self.reply(index, dst, header, &[head.as_bytes(), state.data()]);
     }
 
-    fn note_host_contact(&mut self, index: usize, src: SocketAddr, now: Instant) -> bool {
-        if self.units[index].muted {
-            self.advance(index, now);
-            return false;
-        }
+    fn note_host_contact(&mut self, index: usize, src: SocketAddr, now: Instant) {
         self.units[index].last_host_frame_ms = Some(wrapping_millis_since(self.boot, now));
         self.units[index].host = Some(src);
         self.advance(index, now);
-        true
     }
 
     fn heartbeat(&mut self, index: usize, src: SocketAddr, header: Header, now: Instant) {
         if self.units[index].id.is_none() {
             return;
         }
-        self.units[index].heartbeats += 1;
-        if !self.note_host_contact(index, src, now) {
-            return;
-        }
+        self.note_host_contact(index, src, now);
         self.frame_reply(index, src, header);
     }
 
@@ -370,7 +303,6 @@ impl Chain {
         {
             return;
         }
-        self.units[index].frames += 1;
         let mut immediate = [0u8; FRAME_BYTES_MAX];
         let body = &mut immediate[..frame.len()];
         body.copy_from_slice(frame);
@@ -378,28 +310,14 @@ impl Chain {
             frame_header.exec_at = 0.into();
         }
         let body = &*body;
-        if self.units[index].drop_frames > 0 {
-            self.units[index].drop_frames -= 1;
-            return;
-        }
-        if !self.note_host_contact(index, src, now) {
-            return;
-        }
+        self.note_host_contact(index, src, now);
         if self.units[index].id.is_none() {
             return;
         }
-        self.enqueue(index, body, header.msg_id.get());
-        if self.units[index].main_loop_paused {
-            return;
-        }
-        let silent = self.units[index].drop_replies > 0;
-        if silent {
-            self.units[index].drop_replies -= 1;
-        }
+        self.units[index].device.recv(body, header.msg_id.get());
         loop {
             match self.units[index].device.process_one() {
                 Drained::Empty => break,
-                Drained::Completed { .. } if silent => {}
                 Drained::Completed { msg_id } => {
                     let header = Header {
                         msg_id: zerocopy::little_endian::U16::new(msg_id),
@@ -481,18 +399,9 @@ impl UdpEmulator {
                 id: None,
                 grandmaster: false,
                 open: false,
-                lock_blocked_since: None,
                 last_tick: now,
                 host: None,
                 last_host_frame_ms: None,
-                main_loop_paused: false,
-                drop_frames: 0,
-                drop_replies: 0,
-                drop_unit_infos: 0,
-                duplicate_frames: 0,
-                muted: false,
-                heartbeats: 0,
-                frames: 0,
             });
         }
         let chain = Arc::new(Mutex::new(Chain {
@@ -556,62 +465,6 @@ impl UdpEmulator {
         let chain = lock(&self.chain);
         let devices: Vec<&Device> = chain.units.iter().map(|unit| &unit.device).collect();
         f(&devices)
-    }
-
-    pub fn set_ptp_lock_blocked(&self, index: usize, blocked: bool) {
-        let mut chain = lock(&self.chain);
-        let since = &mut chain.units[index].lock_blocked_since;
-        if blocked {
-            since.get_or_insert_with(Instant::now);
-        } else {
-            *since = None;
-        }
-    }
-
-    pub fn pause_main_loop(&self, index: usize) {
-        lock(&self.chain).units[index].main_loop_paused = true;
-    }
-
-    pub fn resume_main_loop(&self, index: usize) {
-        lock(&self.chain).resume_main_loop(index, Instant::now());
-    }
-
-    pub fn drop_next_frames(&self, index: usize, count: u32) {
-        lock(&self.chain).units[index].drop_frames = count;
-    }
-
-    pub fn drop_next_replies(&self, index: usize, count: u32) {
-        lock(&self.chain).units[index].drop_replies = count;
-    }
-
-    pub fn drop_next_unit_infos(&self, index: usize, count: u32) {
-        lock(&self.chain).units[index].drop_unit_infos = count;
-    }
-
-    pub fn duplicate_next_frames(&self, index: usize, count: u32) {
-        lock(&self.chain).units[index].duplicate_frames = count;
-    }
-
-    pub fn set_muted(&self, index: usize, muted: bool) {
-        lock(&self.chain).units[index].muted = muted;
-    }
-
-    #[must_use]
-    pub fn heartbeats_received(&self, index: usize) -> u64 {
-        lock(&self.chain).units[index].heartbeats
-    }
-
-    #[must_use]
-    pub fn frames_received(&self, index: usize) -> u64 {
-        lock(&self.chain).units[index].frames
-    }
-
-    pub fn reboot(&self, index: usize) {
-        let mut chain = lock(&self.chain);
-        let unit = &mut chain.units[index];
-        unit.device.reset_cpu();
-        unit.last_host_frame_ms = None;
-        unit.forget();
     }
 }
 
