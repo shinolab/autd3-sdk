@@ -5,7 +5,6 @@ use autd3_cpu_wire::udp::{Flags, Header, Kind, Role};
 use autd3_rs_core::value::SysTime;
 use zerocopy::{FromBytes, IntoBytes};
 
-use crate::udp::state::SYNCED_FLAGS;
 use crate::udp::{
     Channel, ControlResponse, RECV_BUFFER_BYTES, TransportOption, UdpError, assign_id_body,
     same_endpoint, set_time_body,
@@ -314,7 +313,7 @@ impl Enumerator<'_> {
                     .get(device)
                     .is_some_and(|&addr| same_endpoint(addr, response.src))
                 {
-                    ready[device] = info.flags.contains(SYNCED_FLAGS);
+                    ready[device] = info.flags.contains(Flags::PTP_LOCKED | Flags::SYNC_READY);
                 }
             }
             let not_ready: Vec<u8> = ready
