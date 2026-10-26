@@ -288,15 +288,10 @@ pub(crate) fn fpga_config(sync_phase_lock: u8) -> Frame {
 }
 
 pub(crate) fn gpio_in(values: [u8; 4]) -> Frame {
-    let p = GpioInPayload {
-        gpio_in_0: false,
-        gpio_in_1: false,
-        gpio_in_2: false,
-        gpio_in_3: false,
-    };
+    let p = GpioInPayload { values: [false; 4] };
     let mut f = Frame::from_payload(Cmd::EmulateGpioIn, &p);
     for (i, value) in values.into_iter().enumerate() {
-        f.set_payload_byte(offset_of!(GpioInPayload, gpio_in_0) + i, value);
+        f.set_payload_byte(offset_of!(GpioInPayload, values) + i, value);
     }
     f
 }
