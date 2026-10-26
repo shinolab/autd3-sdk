@@ -23,3 +23,51 @@ impl FrameHeader {
         (payload.len() <= PAYLOAD_BYTES).then_some((header, payload))
     }
 }
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ReplyData {
+    len: u8,
+    bytes: [u8; REPLY_DATA_BYTES_MAX],
+}
+
+const _: () = assert!(REPLY_DATA_BYTES_MAX <= u8::MAX as usize);
+
+impl ReplyData {
+    pub const EMPTY: Self = Self {
+        len: 0,
+        bytes: [0; REPLY_DATA_BYTES_MAX],
+    };
+
+    #[must_use]
+    pub fn from_slice(data: &[u8]) -> Self {
+        let len = data.len().min(REPLY_DATA_BYTES_MAX);
+        let mut bytes = [0; REPLY_DATA_BYTES_MAX];
+        bytes[..len].copy_from_slice(&data[..len]);
+        Self {
+            len: len as u8,
+            bytes,
+        }
+    }
+
+    #[must_use]
+    pub fn as_slice(&self) -> &[u8] {
+        &self.bytes[..usize::from(self.len)]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reply_data_keeps_the_bytes_it_was_given() {
+        assert_eq!(ReplyData::from_slice(&[7, 8]).as_slice(), [7, 8]);
+        assert_eq!(ReplyData::from_slice(&[]), ReplyData::EMPTY);
+    }
+
+    #[test]
+    fn reply_data_is_clamped_to_the_reply_limit() {
+        let data = ReplyData::from_slice(&[7; REPLY_DATA_BYTES_MAX + 5]);
+        assert_eq!(data.as_slice(), [7; REPLY_DATA_BYTES_MAX]);
+    }
+}
