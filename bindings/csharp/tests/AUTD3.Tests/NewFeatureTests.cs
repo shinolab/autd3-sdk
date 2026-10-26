@@ -374,23 +374,15 @@ namespace AUTD3.Tests
         }
 
         [Fact]
-        public void SetCpuConfigRejectsAPtpValuePastItsRange()
+        public void SetCpuConfigLeavesAPtpValuePastItsRangeToTheDevice()
         {
             using var geometry = Fixture.SingleDevice();
 
-            using var atTheLimits = Frames.Encode(geometry, new SetCpuConfig(new CpuConfig
+            using var pastTheLimits = Frames.Encode(geometry, new SetCpuConfig(new CpuConfig
             {
-                Ptp = new PtpConfig { MaxFreqPpb = int.MaxValue, PathDelayFilterShift = 16 },
+                Ptp = new PtpConfig { MaxFreqPpb = uint.MaxValue, PathDelayFilterShift = byte.MaxValue },
             }));
-            Assert.Equal(1, atTheLimits.Length);
-
-            var maxFreqPpb = Assert.Throws<Autd3Exception>(() =>
-                Frames.Encode(geometry, new SetCpuConfig(new CpuConfig { Ptp = new PtpConfig { MaxFreqPpb = 0x8000_0000 } })));
-            Assert.Contains("ptp.max_freq_ppb", maxFreqPpb.Message);
-
-            var pathDelayFilterShift = Assert.Throws<Autd3Exception>(() =>
-                Frames.Encode(geometry, new SetCpuConfig(new CpuConfig { Ptp = new PtpConfig { PathDelayFilterShift = 17 } })));
-            Assert.Contains("ptp.path_delay_filter_shift", pathDelayFilterShift.Message);
+            Assert.Equal(1, pastTheLimits.Length);
         }
 
         [Fact]
