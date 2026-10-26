@@ -149,7 +149,7 @@ impl Cpu {
 impl Cpu {
     pub fn init<P: Port>(&self, port: &mut P) {
         let config = self.config();
-        if fpga::init(port, fpga::FPGA_WAIT_UPDATE_MAX_POLLS).is_ok() {
+        if fpga::init(port).is_ok() {
             self.lower_ptp_failsafe();
         } else {
             self.count_boot_failure();
@@ -384,7 +384,6 @@ impl Cpu {
             return Err(Error::FpgaUpdateInProgress);
         }
         let config = self.config();
-        let max_polls = fpga::FPGA_WAIT_UPDATE_MAX_POLLS;
         let result = match cmd {
             Cmd::Nop => Ok(()),
             Cmd::SetCpuConfig => self.set_cpu_config(port, payload),
@@ -400,21 +399,19 @@ impl Cpu {
             }
             Cmd::WriteFociBuffer => cmd::write_foci::handle(port, payload),
             Cmd::WritePatternRaw => cmd::write_pattern_raw::handle(port, payload),
-            Cmd::WritePatternFused => cmd::write_pattern_fused::handle(port, payload, max_polls),
+            Cmd::WritePatternFused => cmd::write_pattern_fused::handle(port, payload),
             Cmd::WritePatternPhase => cmd::write_pattern_phase::handle(port, payload),
             Cmd::WriteModulationBuffer => cmd::write_mod::handle(port, payload),
             Cmd::ConfigModulation => cmd::config_mod::handle(port, payload),
             Cmd::ConfigPattern => cmd::config_pattern::handle(port, payload),
-            Cmd::ActivateModulationBank => cmd::activate_mod_bank::handle(port, payload, max_polls),
-            Cmd::ActivatePatternBank => {
-                cmd::activate_pattern_bank::handle(port, payload, max_polls)
-            }
-            Cmd::SetSilencer => cmd::silencer::handle(port, payload, max_polls),
+            Cmd::ActivateModulationBank => cmd::activate_mod_bank::handle(port, payload),
+            Cmd::ActivatePatternBank => cmd::activate_pattern_bank::handle(port, payload),
+            Cmd::SetSilencer => cmd::silencer::handle(port, payload),
             Cmd::SetPhaseCorrection => cmd::phase_corr::handle(port, payload),
             Cmd::SetOutputMask => cmd::output_mask::handle(port, payload),
             Cmd::SetPulseWidthTable => cmd::pwe::handle(port, payload),
             Cmd::EmulateGpioIn => cmd::gpio_in::handle(port, payload),
-            Cmd::SetGpioOut => cmd::gpio_out::handle(port, payload, max_polls),
+            Cmd::SetGpioOut => cmd::gpio_out::handle(port, payload),
             Cmd::ForceFan => cmd::force_fan::handle(port, payload),
             Cmd::SetFpgaConfig => cmd::fpga_config::handle(port, payload),
             Cmd::ReleaseFailsafe => {

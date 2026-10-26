@@ -1,22 +1,16 @@
 pub(crate) use autd3_cpu_wire::payload::GpioOutPayload;
 
-use core::num::NonZeroU32;
-
 use crate::fpga;
 use crate::fpga_params::{ADDR_DEBUG_VALUE0_0, CtlFlags};
 use crate::port::Port;
 use crate::proto::Error;
 
-pub(crate) fn handle<P: Port>(
-    port: &mut P,
-    payload: &[u8],
-    max_polls: NonZeroU32,
-) -> Result<(), Error> {
+pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
     let p = GpioOutPayload::parse(payload)?;
     for (i, value) in p.values.iter().enumerate() {
         fpga::write_u64(port, ADDR_DEBUG_VALUE0_0 + 4 * i as u16, value.get());
     }
-    fpga::set_and_wait_update(port, CtlFlags::DEBUG_SET, max_polls)
+    fpga::set_and_wait_update(port, CtlFlags::DEBUG_SET, fpga::FPGA_WAIT_UPDATE_MAX_POLLS)
 }
 
 #[cfg(all(test, not(loom)))]

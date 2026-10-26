@@ -7,7 +7,7 @@ use crate::proto::Error;
 impl Cpu {
     pub(crate) fn clear<P: Port>(&self, port: &mut P) -> Result<(), Error> {
         self.apply_config(port, CpuConfig::DEFAULT);
-        let result = fpga::init(port, fpga::FPGA_WAIT_UPDATE_MAX_POLLS);
+        let result = fpga::init(port);
         self.reset_telemetry();
         if result.is_ok() {
             self.lower_ptp_failsafe();

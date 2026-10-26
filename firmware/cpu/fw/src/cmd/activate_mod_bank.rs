@@ -1,16 +1,10 @@
 pub(crate) use autd3_cpu_wire::payload::ActivateModBankPayload;
 
-use core::num::NonZeroU32;
-
 use crate::cmd::bank::{MOD_BANK_REGS, activate_bank};
 use crate::port::Port;
 use crate::proto::Error;
 
-pub(crate) fn handle<P: Port>(
-    port: &mut P,
-    payload: &[u8],
-    max_polls: NonZeroU32,
-) -> Result<(), Error> {
+pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
     let p = ActivateModBankPayload::parse(payload)?;
     activate_bank(
         port,
@@ -18,7 +12,6 @@ pub(crate) fn handle<P: Port>(
         p.bank.as_u8(),
         p.transition_mode,
         p.transition_value.get(),
-        max_polls,
     )
 }
 
