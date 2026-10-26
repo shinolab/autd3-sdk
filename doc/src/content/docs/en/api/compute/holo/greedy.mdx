@@ -25,7 +25,8 @@ A transducer whose intensity is 0 is left out of the search and gets phase 0.
 
 You give the order in which the transducers are visited in `order`.
 The indices run through the whole geometry (from `0` to `geometry.num_transducers() - 1` in device order),
-and `order` must contain every transducer exactly once (a wrong length, an out-of-range index, or a duplicate is an error).
+and `order` should contain every transducer exactly once.
+greedy does not validate `order`, so passing a correct sequence is up to the caller (an out-of-range index panics).
 greedy itself uses no random numbers, so the same `order` always gives the same result.
 The transducers should be visited in random order ([Suzuki et al., 2021](https://doi.org/10.1109/TOH.2021.3076489)), so you normally pass a sequence shuffled with your own random number generator.
 

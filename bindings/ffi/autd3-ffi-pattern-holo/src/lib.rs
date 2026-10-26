@@ -925,7 +925,7 @@ mod tests {
     }
 
     #[test]
-    fn greedy_follows_the_given_order_and_rejects_a_non_permutation() {
+    fn greedy_follows_the_given_order() {
         let geometry = geometry();
         let foci = foci();
         let mut err = [0 as c_char; 256];
@@ -965,20 +965,6 @@ mod tests {
         )
         .unwrap();
         assert_eq!(expected, dst.0);
-
-        let mut duplicated = order.clone();
-        duplicated[1] = duplicated[0];
-        assert_eq!(
-            AUTD3_ERR_INVALID_ARGUMENT,
-            run(&duplicated, &mut dst, &mut err)
-        );
-        assert_eq!(
-            message(&err),
-            autd3_rs_pattern_holo::HoloError::OrderDuplicateIndex {
-                index: duplicated[0] as usize
-            }
-            .to_string()
-        );
 
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
             autd3_holo_greedy(

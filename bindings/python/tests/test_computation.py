@@ -377,17 +377,6 @@ def test_holo_greedy_follows_the_given_order() -> None:
 
     np.testing.assert_array_equal(run(order), run(order))
 
-    with pytest.raises(holo.HoloError, match="entries"):
-        run(order[1:])
-    duplicated = order.copy()
-    duplicated[1] = duplicated[0]
-    with pytest.raises(holo.HoloError, match="more than once"):
-        run(duplicated)
-    out_of_range = order.copy()
-    out_of_range[0] = geo.num_transducers()
-    with pytest.raises(holo.HoloError, match="only"):
-        run(out_of_range)
-
 
 def test_stm_foci_and_pattern() -> None:
     geo = geometry()
