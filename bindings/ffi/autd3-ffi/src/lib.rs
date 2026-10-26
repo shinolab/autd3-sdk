@@ -373,9 +373,9 @@ pub enum OwnedCommand {
     SetSilencerDisable,
     SetGpioOut([GpioOut; 4]),
     EmulateGpioIn([bool; 4]),
-    SetOutputMask(Vec<Vec<bool>>),
-    SetPhaseCorrection(Vec<Vec<Phase>>),
-    SetPulseWidthTable(Box<[PulseWidth; PWE_TABLE_SIZE]>),
+    SetOutputMask(SetOutputMask),
+    SetPhaseCorrection(SetPhaseCorrection),
+    SetPulseWidthTable(Box<SetPulseWidthTable>),
     FociStm {
         config: SamplingConfig,
         points: Vec<ControlPoints>,
@@ -994,7 +994,7 @@ pub unsafe extern "C" fn autd3_op_set_output_mask(
     num_devices: usize,
 ) -> *mut OwnedCommand {
     match unsafe { per_device(masks, lens, num_devices, |v| v != 0) } {
-        Some(masks) => into_handle(OwnedCommand::SetOutputMask(masks)),
+        Some(masks) => into_handle(OwnedCommand::SetOutputMask(SetOutputMask { masks })),
         None => std::ptr::null_mut(),
     }
 }
@@ -1004,7 +1004,9 @@ pub unsafe extern "C" fn autd3_op_set_phase_correction(
     phases: *const PhaseBuffer,
 ) -> *mut OwnedCommand {
     match unsafe { handle_ref(phases) } {
-        Some(phases) => into_handle(OwnedCommand::SetPhaseCorrection(phases.0.clone())),
+        Some(phases) => into_handle(OwnedCommand::SetPhaseCorrection(SetPhaseCorrection {
+            phases: phases.0.clone(),
+        })),
         None => std::ptr::null_mut(),
     }
 }
@@ -1015,21 +1017,21 @@ pub unsafe extern "C" fn autd3_op_set_pulse_width_table(table: *const u16) -> *m
         return std::ptr::null_mut();
     };
 
-    let mut t = Box::new(SetPulseWidthTable::empty_table());
-    for (dst, &src) in t.iter_mut().zip(slice.iter()) {
+    let mut op = Box::new(SetPulseWidthTable {
+        table: SetPulseWidthTable::empty_table(),
+    });
+    for (dst, &src) in op.table.iter_mut().zip(slice.iter()) {
         let Ok(value) = PulseWidth::new(src) else {
             return std::ptr::null_mut();
         };
         *dst = value;
     }
-    into_handle(OwnedCommand::SetPulseWidthTable(t))
+    into_handle(OwnedCommand::SetPulseWidthTable(op))
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn autd3_op_set_pulse_width_table_default() -> *mut OwnedCommand {
-    into_handle(OwnedCommand::SetPulseWidthTable(Box::new(
-        *SetPulseWidthTable::default().table,
-    )))
+    into_handle(OwnedCommand::SetPulseWidthTable(Box::default()))
 }
 
 #[unsafe(no_mangle)]
@@ -1334,15 +1336,9 @@ impl OwnedCommand {
             OwnedCommand::EmulateGpioIn(values) => {
                 Lowered::Operation(Box::new(EmulateGpioIn { values: *values }))
             }
-            OwnedCommand::SetOutputMask(masks) => {
-                Lowered::Operation(Box::new(SetOutputMask { masks }))
-            }
-            OwnedCommand::SetPhaseCorrection(phases) => {
-                Lowered::Operation(Box::new(SetPhaseCorrection { phases }))
-            }
-            OwnedCommand::SetPulseWidthTable(t) => {
-                Lowered::Operation(Box::new(SetPulseWidthTable { table: t }))
-            }
+            OwnedCommand::SetOutputMask(op) => Lowered::Operation(Box::new(op)),
+            OwnedCommand::SetPhaseCorrection(op) => Lowered::Operation(Box::new(op)),
+            OwnedCommand::SetPulseWidthTable(op) => Lowered::Operation(Box::new(&**op)),
             OwnedCommand::WriteFociBuffer {
                 bank,
                 start_index,

@@ -48,20 +48,17 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     wait_enter("A focus is formed 150 mm above the centre of each device").await;
 
     ctx.send(SetOutputMask {
-        masks: &half_mask(ctx, true),
+        masks: half_mask(ctx, true),
     })
     .await?;
     wait_enter("Only the left half of device 0 and the right half of the others output").await;
 
-    ctx.send(SetOutputMask {
-        masks: &all_on(ctx),
-    })
-    .await?;
+    ctx.send(SetOutputMask { masks: all_on(ctx) }).await?;
     send_pattern_mod(ctx, &focus, &sine150, SamplingConfig::FREQ_4K).await?;
     wait_enter("A focus is formed 150 mm above the centre of each device again").await;
 
     ctx.send(SetOutputMask {
-        masks: &half_mask(ctx, false),
+        masks: half_mask(ctx, false),
     })
     .await?;
     wait_enter("Only the right half of device 0 and the left half of the others output").await;
@@ -75,7 +72,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     report_fpga_state(ctx, "B1 mask kept", None, Some(PatternBank::B1), Some(true)).await?;
 
     ctx.send(SetOutputMask {
-        masks: &half_mask(ctx, true),
+        masks: half_mask(ctx, true),
     })
     .await?;
     wait_enter(
@@ -83,10 +80,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     )
     .await;
 
-    ctx.send(SetOutputMask {
-        masks: &all_on(ctx),
-    })
-    .await?;
+    ctx.send(SetOutputMask { masks: all_on(ctx) }).await?;
     wait_enter("A focus is formed 150 mm above the centre of each device again (pattern bank 1)")
         .await;
 

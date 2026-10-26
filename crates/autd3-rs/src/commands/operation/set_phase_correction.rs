@@ -11,19 +11,19 @@ use crate::value::Phase;
 use super::{Distribution, Operation, checked_device_row, encode_header_only};
 
 #[derive(Clone, Debug)]
-pub struct SetPhaseCorrection<'a> {
-    pub phases: &'a [Vec<Phase>],
+pub struct SetPhaseCorrection {
+    pub phases: Vec<Vec<Phase>>,
 }
 
-impl crate::sealed::Sealed for SetPhaseCorrection<'_> {}
+impl crate::sealed::Sealed for SetPhaseCorrection {}
 
-impl Operation for SetPhaseCorrection<'_> {
+impl Operation for SetPhaseCorrection {
     fn distribution(&self) -> Distribution {
         Distribution::PerDevice
     }
 
     fn encode(&self, device: &Device, out: &mut Datagram) -> Result<(), Error> {
-        let phases = checked_device_row(self.phases, device)?.as_bytes();
+        let phases = checked_device_row(&self.phases, device)?.as_bytes();
         let mut data = [0u8; NUM_TRANSDUCERS];
         data[..phases.len()].copy_from_slice(phases);
         encode_header_only(out, Cmd::SetPhaseCorrection, &PhaseCorrPayload { data });
@@ -43,8 +43,10 @@ mod tests {
         let phases: Vec<Phase> = (0..dev.num_transducers())
             .map(|i| Phase(u8::try_from(i % 256).unwrap()))
             .collect();
-        let data = vec![phases.clone()];
-        let (cmd, out) = encode(&SetPhaseCorrection { phases: &data }).unwrap();
+        let (cmd, out) = encode(&SetPhaseCorrection {
+            phases: vec![phases.clone()],
+        })
+        .unwrap();
         assert_eq!(
             cmd,
             (Cmd::SetPhaseCorrection, size_of::<PhaseCorrPayload>())
@@ -60,7 +62,7 @@ mod tests {
         let data = vec![vec![Phase::ZERO; dev.num_transducers()]];
         let mut out = Datagram::no_payload(Cmd::Nop);
         assert!(matches!(
-            SetPhaseCorrection { phases: &data }.encode(&dev, &mut out),
+            SetPhaseCorrection { phases: data }.encode(&dev, &mut out),
             Err(Error::InvalidPayload(_))
         ));
     }
@@ -70,7 +72,7 @@ mod tests {
         let dev = test_device(0);
         let data = vec![vec![Phase::ZERO; dev.num_transducers() - 1]];
         assert!(matches!(
-            encode(&SetPhaseCorrection { phases: &data }),
+            encode(&SetPhaseCorrection { phases: data }),
             Err(Error::InvalidPayload(
                 PayloadError::TransducerCountMismatch { .. }
             ))

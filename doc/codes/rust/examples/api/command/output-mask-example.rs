@@ -14,7 +14,7 @@ async fn main() -> anyhow::Result<()> {
 
     let masks = geometry.output_mask_buffer();
 
-    client.send(SetOutputMask { masks: &masks }).await?;
+    client.send(SetOutputMask { masks }).await?;
 
     client.close()?;
     // HIDE
