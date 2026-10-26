@@ -1,30 +1,6 @@
+use autd3_cpu_wire::ReplyData;
 use autd3_cpu_wire::udp::{Flags, FrameReply, Header, Kind, PROTOCOL_VERSION};
-use autd3_rs_core::REPLY_DATA_BYTES_MAX;
 use zerocopy::FromBytes;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct ReplyData {
-    len: u8,
-    bytes: [u8; REPLY_DATA_BYTES_MAX],
-}
-
-impl ReplyData {
-    #[must_use]
-    pub(crate) fn new(data: &[u8]) -> Self {
-        let len = data.len().min(REPLY_DATA_BYTES_MAX);
-        let mut bytes = [0; REPLY_DATA_BYTES_MAX];
-        bytes[..len].copy_from_slice(&data[..len]);
-        Self {
-            len: u8::try_from(len).expect("bounded by REPLY_DATA_BYTES_MAX"),
-            bytes,
-        }
-    }
-
-    #[must_use]
-    pub(crate) fn as_slice(&self) -> &[u8] {
-        &self.bytes[..usize::from(self.len)]
-    }
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Reply {
@@ -49,7 +25,7 @@ impl Reply {
             msg_id,
             error_code,
             sys_time,
-            data: ReplyData::new(data),
+            data: ReplyData::from_slice(data),
         }
     }
 }
@@ -122,12 +98,5 @@ mod tests {
         assert!(
             DeviceReply::parse(0, Header::new(Kind::Frame, 1), &body[..body.len() - 1]).is_none()
         );
-    }
-
-    #[test]
-    fn data_is_clamped_to_the_reply_limit() {
-        let reply = Reply::new(1, 2, 0, 0, &[7; REPLY_DATA_BYTES_MAX + 5]);
-        assert_eq!(reply.data.as_slice().len(), REPLY_DATA_BYTES_MAX);
-        assert_eq!(Reply::new(0, 0, 0, 0, &[]).data.as_slice(), [0u8; 0]);
     }
 }
