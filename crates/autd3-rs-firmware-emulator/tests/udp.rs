@@ -494,12 +494,13 @@ fn a_dropped_frame_never_reaches_the_firmware() {
 fn a_dropped_reply_leaves_the_frame_executed() {
     let (emulator, mut host) = enumerated(1);
 
-    emulator.drop_next_replies(0, 2);
+    emulator.drop_next_replies(0, 1);
 
     assert!(host.frame(&emulator, 0, &fan_on()).is_empty());
     assert!(fan(&emulator, 0));
     assert!(
-        host.ask(emulator.device_addr(0), Kind::Heartbeat, &[])
+        !host
+            .ask(emulator.device_addr(0), Kind::Heartbeat, &[])
             .is_empty()
     );
     assert_eq!(emulator.heartbeats_received(0), 1);
