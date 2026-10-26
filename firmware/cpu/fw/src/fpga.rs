@@ -208,7 +208,7 @@ pub fn write_ram_at<P: Port>(
     });
 }
 
-pub fn init<P: Port>(port: &mut P, max_polls: NonZeroU32) -> Result<(), Error> {
+pub fn init<P: Port>(port: &mut P) -> Result<(), Error> {
     let gate = CtlFlags::from_bits_retain(read_ctl(port, ADDR_CTL_FLAG)) & CtlFlags::FAILSAFE;
     write_ctl(port, ADDR_CTL_FLAG, gate.bits());
     write_ctl(
@@ -284,11 +284,11 @@ pub fn init<P: Port>(port: &mut P, max_polls: NonZeroU32) -> Result<(), Error> {
         write_ctl(port, ADDR_DEBUG_VALUE0_0 + i, 0);
     }
 
-    set_and_wait_update(port, CtlFlags::SILENCER_SET, max_polls)?;
+    set_and_wait_update(port, CtlFlags::SILENCER_SET, FPGA_WAIT_UPDATE_MAX_POLLS)?;
     set_and_wait_update(
         port,
         CtlFlags::MOD_SET | CtlFlags::PATTERN_SET | CtlFlags::DEBUG_SET,
-        max_polls,
+        FPGA_WAIT_UPDATE_MAX_POLLS,
     )?;
     if !gate.is_empty() {
         write_ctl(port, ADDR_CTL_FLAG, 0);

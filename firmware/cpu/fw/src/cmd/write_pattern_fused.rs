@@ -1,7 +1,5 @@
 pub(crate) use autd3_cpu_wire::payload::WritePatternFusedPayload;
 
-use core::num::NonZeroU32;
-
 use autd3_cpu_wire::payload::ConfigPatternPayload;
 use zerocopy::little_endian::{U16, U32};
 
@@ -11,11 +9,7 @@ use crate::fpga::{EmissionType, REP_INFINITE};
 use crate::port::Port;
 use crate::proto::Error;
 
-pub(crate) fn handle<P: Port>(
-    port: &mut P,
-    payload: &[u8],
-    max_polls: NonZeroU32,
-) -> Result<(), Error> {
+pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
     let (p, data) = WritePatternFusedPayload::parse(payload)?;
     write_pattern_raw::write_slot(port, p.bank, 0, data);
     config_pattern::write(
@@ -37,7 +31,6 @@ pub(crate) fn handle<P: Port>(
         p.bank.as_u8(),
         p.transition_mode,
         p.transition_value.get(),
-        max_polls,
     )
 }
 
