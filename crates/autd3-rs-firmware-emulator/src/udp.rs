@@ -361,10 +361,6 @@ impl Chain {
         if !self.note_host_contact(index, src, now) {
             return;
         }
-        if self.units[index].drop_replies > 0 {
-            self.units[index].drop_replies -= 1;
-            return;
-        }
         self.frame_reply(index, src, header);
     }
 
