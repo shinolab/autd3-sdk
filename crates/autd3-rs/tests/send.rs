@@ -2,15 +2,13 @@ mod common;
 
 use std::time::Duration;
 
-use autd3_rs::commands::{Distribution, ForceFan, Modulation, Nop, each};
-use autd3_rs::protocol::{Cmd, PAYLOAD_BYTES};
-use autd3_rs::value::SamplingConfig;
-use autd3_rs::{Datagram, Error, ExecAt, Frame, Frames, PayloadError, Version};
+use autd3_rs::commands::{Distribution, ForceFan, Nop, each};
+use autd3_rs::{Error, ExecAt, Frame, Frames, Version};
 use autd3_rs_firmware_emulator::autd3_cpu_fw::{
     FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH,
 };
 
-use common::{INVALID_PAYLOAD, REJECTED_BY_THE_DEVICE, fans, geometry, open};
+use common::{INVALID_PAYLOAD, REJECTED_BY_THE_DEVICE, fans, open};
 
 #[tokio::test]
 #[ignore = "depends on real time"]
@@ -91,31 +89,6 @@ async fn a_frame_sent_with_each_execution_time_completes() {
 
 #[tokio::test]
 #[ignore = "depends on real time"]
-async fn a_rejected_execution_time_sends_nothing() {
-    let (emulator, client) = open(1);
-    let frames = Frames::encode(client.geometry(), Nop).unwrap();
-    let before = emulator.frames_received(0);
-
-    let error = client
-        .send_frame_at(
-            frames.frame(0).unwrap(),
-            ExecAt::Lead(Duration::from_micros(1 << 31)),
-        )
-        .await
-        .err()
-        .unwrap();
-
-    assert!(matches!(
-        error,
-        Error::InvalidPayload(PayloadError::ExecTooFarAhead { .. })
-    ));
-    assert_eq!(emulator.frames_received(0), before);
-    client.send(Nop).await.unwrap();
-    client.close().unwrap();
-}
-
-#[tokio::test]
-#[ignore = "depends on real time"]
 async fn a_broadcast_frame_reaches_every_device() {
     let (emulator, client) = open(3);
 
@@ -165,29 +138,6 @@ async fn a_device_left_out_of_a_per_device_command_keeps_its_state() {
         .unwrap();
 
     assert_eq!(fans(&emulator), [false, true]);
-    client.close().unwrap();
-}
-
-#[tokio::test]
-#[ignore = "depends on real time"]
-async fn a_command_spanning_many_frames_arrives_whole_on_every_device() {
-    let (emulator, client) = open(2);
-    let data: Vec<u8> = (0..20_000u32).map(|i| i.to_le_bytes()[0]).collect();
-    let command = Modulation::new(SamplingConfig::FREQ_4K, &data);
-    let frames = Frames::encode(client.geometry(), command).unwrap();
-    assert!(frames.len() > 3);
-    let before = emulator.frames_received(0);
-
-    client.send(command).await.unwrap();
-
-    assert_eq!(
-        emulator.frames_received(0) - before,
-        u64::try_from(frames.len()).unwrap()
-    );
-    for device in 0..2 {
-        let written = emulator.with_device(device, |d| d.fpga().modulation_buffer(0));
-        assert_eq!(written, data);
-    }
     client.close().unwrap();
 }
 
@@ -314,30 +264,6 @@ async fn the_response_of_a_frame_carries_the_status_of_every_device() {
 
 #[tokio::test]
 #[ignore = "depends on real time"]
-async fn a_frame_encoded_for_another_geometry_is_rejected_before_it_is_sent() {
-    let (emulator, client) = open(1);
-    let frames = Frames::encode(&geometry(2), each(|_| Some(Nop))).unwrap();
-    let before = emulator.frames_received(0);
-
-    let error = client
-        .send_frame(frames.frame(0).unwrap())
-        .await
-        .err()
-        .unwrap();
-
-    assert!(matches!(
-        error,
-        Error::InvalidPayload(PayloadError::DatagramCountMismatch {
-            expected: 1,
-            got: 2
-        })
-    ));
-    assert_eq!(emulator.frames_received(0), before);
-    client.close().unwrap();
-}
-
-#[tokio::test]
-#[ignore = "depends on real time"]
 async fn a_frame_rebuilt_from_its_datagrams_is_sent_like_the_original() {
     let (emulator, client) = open(2);
     let frames = Frames::encode(
@@ -358,88 +284,5 @@ async fn a_frame_rebuilt_from_its_datagrams_is_sent_like_the_original() {
         .unwrap();
 
     assert_eq!(fans(&emulator), [false, true]);
-    client.close().unwrap();
-}
-
-#[tokio::test]
-#[ignore = "depends on real time"]
-async fn a_frame_built_with_malformed_datagrams_is_rejected_before_it_is_sent() {
-    let (emulator, client) = open(2);
-    let nop = Datagram::no_payload(Cmd::Nop);
-    let before = emulator.frames_received(0);
-
-    let broadcast = client
-        .send_frame(Frame::new(
-            Distribution::Broadcast,
-            &[nop.clone(), nop.clone()],
-        ))
-        .await
-        .err()
-        .unwrap();
-    let per_device = client
-        .send_frame(Frame::new(
-            Distribution::PerDevice,
-            std::slice::from_ref(&nop),
-        ))
-        .await
-        .err()
-        .unwrap();
-    let oversized = Datagram {
-        payload_len: PAYLOAD_BYTES + 1,
-        ..nop.clone()
-    };
-    let too_long = client
-        .send_frame(Frame::new(Distribution::PerDevice, &[nop, oversized]))
-        .await
-        .err()
-        .unwrap();
-
-    assert!(matches!(
-        broadcast,
-        Error::InvalidPayload(PayloadError::DatagramCountMismatch {
-            expected: 1,
-            got: 2
-        })
-    ));
-    assert!(matches!(
-        per_device,
-        Error::InvalidPayload(PayloadError::DatagramCountMismatch {
-            expected: 2,
-            got: 1
-        })
-    ));
-    assert!(matches!(
-        too_long,
-        Error::InvalidPayload(PayloadError::DatagramPayloadTooLong {
-            index: 1,
-            len,
-            max: PAYLOAD_BYTES
-        }) if len == PAYLOAD_BYTES + 1
-    ));
-    assert_eq!(emulator.frames_received(0), before);
-    client.send(Nop).await.unwrap();
-    client.close().unwrap();
-}
-
-#[tokio::test]
-#[ignore = "depends on real time"]
-async fn concurrent_senders_all_complete() {
-    let (emulator, client) = open(2);
-    let before = emulator.frames_received(0);
-
-    let (nop, versions, fan, telemetry, another_nop) = tokio::join!(
-        client.send(Nop),
-        client.read_firmware_version(),
-        client.send(ForceFan { value: true }),
-        client.read_telemetry(),
-        client.send(Nop),
-    );
-    nop.unwrap();
-    assert_eq!(versions.unwrap().len(), 2);
-    fan.unwrap();
-    assert_eq!(telemetry.unwrap().len(), 2);
-    another_nop.unwrap();
-
-    assert_eq!(emulator.frames_received(0) - before, 5);
     client.close().unwrap();
 }

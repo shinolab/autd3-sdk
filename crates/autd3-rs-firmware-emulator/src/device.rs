@@ -1,6 +1,8 @@
 use crate::emu_fpga::FpgaEmulator;
 use autd3_cpu_fw::Cpu;
-use autd3_cpu_fw::proto::{Drained, Reply};
+#[cfg(feature = "udp")]
+use autd3_cpu_fw::proto::Drained;
+use autd3_cpu_fw::proto::Reply;
 
 pub struct Device {
     pub(crate) cpu: Cpu,
@@ -23,6 +25,7 @@ impl Device {
         self.cpu.recv_frame(frame, msg_id);
     }
 
+    #[cfg(feature = "udp")]
     pub(crate) fn process_one(&mut self) -> Drained {
         self.cpu.process_one(&mut self.fpga)
     }

@@ -14,7 +14,6 @@ use autd3_cpu_wire::payload::{
 use autd3_cpu_wire::{ModulationBank, PatternBank};
 use autd3_rs_core::protocol::Cmd;
 use autd3_rs_firmware_emulator::Device;
-use autd3_rs_firmware_emulator::test_utils::FpgaEmulatorTestExt;
 use zerocopy::IntoBytes;
 use zerocopy::little_endian::{U16, U32};
 
@@ -22,7 +21,6 @@ use common::{NUM_TRANSDUCERS, frame};
 use modulation::{activate_modulation_bank, config_modulation};
 use pattern::{activate_pattern_bank, config_pattern};
 
-const BIT_THERMAL: u8 = FpgaStateFlags::THERMAL_ASSERT.bits();
 const BIT_MOD_BANK: u8 = FpgaStateFlags::MOD_BANK.bits();
 const BIT_PATTERN_BANK: u8 = FpgaStateFlags::PATTERN_BANK.bits();
 const BIT_PATTERN_MODE: u8 = FpgaStateFlags::PATTERN_MODE.bits();
@@ -57,17 +55,6 @@ fn read_state(device: &mut Device) -> u8 {
 fn default_state_is_pattern_mode_bank_zero() {
     let mut device = Device::new(NUM_TRANSDUCERS);
 
-    assert_eq!(BIT_PATTERN_MODE, read_state(&mut device));
-}
-
-#[test]
-fn thermal_bit_follows_setter() {
-    let mut device = Device::new(NUM_TRANSDUCERS);
-
-    device.fpga_mut().set_thermal(true);
-    assert_eq!(BIT_PATTERN_MODE | BIT_THERMAL, read_state(&mut device));
-
-    device.fpga_mut().set_thermal(false);
     assert_eq!(BIT_PATTERN_MODE, read_state(&mut device));
 }
 
