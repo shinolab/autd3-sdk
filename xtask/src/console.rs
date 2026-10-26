@@ -62,7 +62,57 @@ pub(crate) fn run_console(root: &Path, cmd: &ConsoleCmd) -> Result<()> {
         ConsoleCmd::Lint => cargo_clippy(&dir, &["--all-targets"]),
         ConsoleCmd::Format { fix } => cargo_fmt(&dir, &["-p", "autd3-console"], *fix),
         ConsoleCmd::Run { debug } => cargo_with_profile(&dir, "run", *debug),
-        ConsoleCmd::Stage { debug, license } => stage(root, &dir, *debug, *license),
+        ConsoleCmd::Stage { debug, license } => {
+            let cargo = package_version(&dir.join("Cargo.toml"))?;
+            let dist = package_version(&dir.join("dist.toml"))?;
+            if cargo != dist {
+                bail!(
+                    "console/Cargo.toml is {cargo} but console/dist.toml is {dist}; \
+                 run `cargo xtask bump-version console <version>`"
+                );
+            }
+            let target = dist_target();
+            if let Some(target) = &target {
+                run("rustup", ["target", "add", target], root)?;
+            }
+            let target = target.as_deref();
+            crate::license::generate_console(root, *license)?;
+            run_cargo(cargo_build_args("autd3-console", target, *debug), &dir)?;
+            let console_bin = cargo_bin(&dir, target, *debug, "autd3-console");
+            let (sim_bin, _) = build_backend_and_frontend(root, *debug, target)?;
+            run_cargo(
+                cargo_build_args("autd3-firmware-writer", target, *debug),
+                root,
+            )?;
+            let fw_bin = cargo_bin(root, target, *debug, "autd3-firmware-writer");
+            run_cargo(
+                cargo_build_args("autd3-rs-firmware-ota", target, *debug),
+                root,
+            )?;
+            let ota_bin = cargo_bin(root, target, *debug, "autd3-firmware-ota");
+            let out_dir = dir.join("target").join("distrib");
+            if out_dir.exists() {
+                std::fs::remove_dir_all(&out_dir)?;
+            }
+            std::fs::create_dir_all(&out_dir)?;
+            for (bin, name) in [&console_bin, &sim_bin, &fw_bin, &ota_bin]
+                .into_iter()
+                .zip(BINARIES)
+            {
+                copy_file(bin, &out_dir.join(exe_name(name)))?;
+            }
+            copy_file(&root.join("LICENSE"), &out_dir.join("LICENSE"))?;
+            copy_file(
+                &dir.join("THIRD-PARTY-LICENSES.md"),
+                &out_dir.join("THIRD-PARTY-LICENSES.md"),
+            )?;
+            println!(
+                "staged {} binaries in {}",
+                BINARIES.len(),
+                out_dir.display()
+            );
+            Ok(())
+        }
         ConsoleCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
 }
@@ -81,71 +131,4 @@ pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {
         "console/THIRD-PARTY-LICENSES.md",
         "console/.third-party-firmware.md",
     ])
-}
-
-fn stage(root: &Path, console_dir: &Path, debug: bool, license: bool) -> Result<()> {
-    check_versions_match(console_dir)?;
-
-    let target = dist_target();
-    if let Some(target) = &target {
-        run("rustup", ["target", "add", target], root)?;
-    }
-    let target = target.as_deref();
-
-    crate::license::generate_console(root, license)?;
-
-    run_cargo(
-        cargo_build_args("autd3-console", target, debug),
-        console_dir,
-    )?;
-    let console_bin = cargo_bin(console_dir, target, debug, "autd3-console");
-
-    let (sim_bin, _) = build_backend_and_frontend(root, debug, target)?;
-
-    run_cargo(
-        cargo_build_args("autd3-firmware-writer", target, debug),
-        root,
-    )?;
-    let fw_bin = cargo_bin(root, target, debug, "autd3-firmware-writer");
-
-    run_cargo(
-        cargo_build_args("autd3-rs-firmware-ota", target, debug),
-        root,
-    )?;
-    let ota_bin = cargo_bin(root, target, debug, "autd3-firmware-ota");
-
-    let out_dir = console_dir.join("target").join("distrib");
-    if out_dir.exists() {
-        std::fs::remove_dir_all(&out_dir)?;
-    }
-    std::fs::create_dir_all(&out_dir)?;
-    for (bin, name) in [&console_bin, &sim_bin, &fw_bin, &ota_bin]
-        .into_iter()
-        .zip(BINARIES)
-    {
-        copy_file(bin, &out_dir.join(exe_name(name)))?;
-    }
-    copy_file(&root.join("LICENSE"), &out_dir.join("LICENSE"))?;
-    copy_file(
-        &console_dir.join("THIRD-PARTY-LICENSES.md"),
-        &out_dir.join("THIRD-PARTY-LICENSES.md"),
-    )?;
-    println!(
-        "staged {} binaries in {}",
-        BINARIES.len(),
-        out_dir.display()
-    );
-    Ok(())
-}
-
-fn check_versions_match(console_dir: &Path) -> Result<()> {
-    let cargo = package_version(&console_dir.join("Cargo.toml"))?;
-    let dist = package_version(&console_dir.join("dist.toml"))?;
-    if cargo != dist {
-        bail!(
-            "console/Cargo.toml is {cargo} but console/dist.toml is {dist}; \
-             run `cargo xtask bump-version console <version>`"
-        );
-    }
-    Ok(())
 }

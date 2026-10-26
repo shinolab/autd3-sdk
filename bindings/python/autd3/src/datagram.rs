@@ -82,13 +82,6 @@ pub(crate) fn extract_uniform_intensity(obj: &Bound<'_, PyAny>) -> Option<Intens
     obj.extract::<u8>().ok().map(Intensity)
 }
 
-pub(crate) fn extract_pattern_intensity(obj: &Bound<'_, PyAny>) -> PyResult<OwnedPatternIntensity> {
-    if let Some(intensity) = extract_uniform_intensity(obj) {
-        return Ok(OwnedPatternIntensity::Uniform(intensity));
-    }
-    Ok(OwnedPatternIntensity::PerDevice(extract_intensities(obj)?))
-}
-
 pub(crate) struct PatternData {
     bank: CorePatternBank,
     phases: Vec<Vec<Phase>>,
@@ -123,6 +116,13 @@ impl Pattern {
         bank: ops::PatternBank,
         transition_mode: ops::TransitionMode,
     ) -> PyResult<Self> {
+        fn extract_pattern_intensity(obj: &Bound<'_, PyAny>) -> PyResult<OwnedPatternIntensity> {
+            if let Some(intensity) = extract_uniform_intensity(obj) {
+                return Ok(OwnedPatternIntensity::Uniform(intensity));
+            }
+            Ok(OwnedPatternIntensity::PerDevice(extract_intensities(obj)?))
+        }
+
         Ok(Self(Arc::new(PatternData {
             bank: bank.0,
             phases: extract_phases(phases)?,

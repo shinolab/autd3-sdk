@@ -23,8 +23,6 @@ mod tool;
 mod unity;
 mod util;
 
-use std::path::Path;
-
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
@@ -181,29 +179,25 @@ fn main() -> Result<()> {
         TopCmd::Check { cmd } => run_check(&root, &cmd),
         TopCmd::Changelog(cmd) => run_changelog(&root, &cmd),
         TopCmd::BumpVersion(cmd) => run_bump_version(&root, &cmd),
-        TopCmd::Clean(args) => run_clean(&root, &args),
+        TopCmd::Clean(args) => clean::scope(&root, args.common, |cleaner| {
+            rust::clean(cleaner)?;
+            cpu::clean(cleaner)?;
+            holo_wgpu::clean(cleaner)?;
+            simulator::clean(cleaner)?;
+            console::clean(cleaner)?;
+            emulator::clean(cleaner)?;
+            firmware::clean(cleaner)?;
+            py::clean(cleaner)?;
+            ffi::clean(cleaner)?;
+            cs::clean(cleaner)?;
+            unity::clean(cleaner)?;
+            doc::clean(cleaner)?;
+            if args.fpga {
+                fpga::clean(cleaner)?;
+            } else {
+                println!("kept the FPGA build outputs; pass --fpga to remove them too");
+            }
+            Ok(())
+        }),
     }
-}
-
-fn run_clean(root: &Path, args: &TopCleanArgs) -> Result<()> {
-    clean::scope(root, args.common, |cleaner| {
-        rust::clean(cleaner)?;
-        cpu::clean(cleaner)?;
-        holo_wgpu::clean(cleaner)?;
-        simulator::clean(cleaner)?;
-        console::clean(cleaner)?;
-        emulator::clean(cleaner)?;
-        firmware::clean(cleaner)?;
-        py::clean(cleaner)?;
-        ffi::clean(cleaner)?;
-        cs::clean(cleaner)?;
-        unity::clean(cleaner)?;
-        doc::clean(cleaner)?;
-        if args.fpga {
-            fpga::clean(cleaner)?;
-        } else {
-            println!("kept the FPGA build outputs; pass --fpga to remove them too");
-        }
-        Ok(())
-    })
 }

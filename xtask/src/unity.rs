@@ -56,15 +56,273 @@ pub(crate) enum UnityCmd {
     Clean(CleanArgs),
 }
 
+#[allow(clippy::too_many_lines)]
 pub(crate) fn run_unity(root: &Path, cmd: UnityCmd) -> Result<()> {
     match cmd {
-        UnityCmd::Build { manifest } => build(root, manifest),
+        UnityCmd::Build { manifest } => {
+            let ffi = root.join("bindings").join("ffi");
+            let unity_dir = root.join("bindings").join("unity");
+
+            run("cargo", ["build", "--workspace", "--release"], &ffi)?;
+            let native = ffi.join("target").join("release");
+            let rid = host_rid()?;
+
+            for pkg in PACKAGES {
+                let pkg_dir = unity_dir.join(pkg.unity_id);
+                stage_package(root, pkg, &pkg_dir)?;
+                stage_native(&native, rid, pkg, &pkg_dir)?;
+            }
+
+            println!(
+                "unity build: assembled {} packages under {}",
+                PACKAGES.len(),
+                unity_dir.display()
+            );
+            if manifest {
+                println!(
+                    "\n// add these to your Unity project's Packages/manifest.json \"dependencies\":"
+                );
+                for pkg in PACKAGES {
+                    let path = unity_dir.join(pkg.unity_id);
+                    println!("  \"{}\": \"file:{}\",", pkg.unity_id, path.display());
+                }
+            }
+            Ok(())
+        }
         UnityCmd::Pack {
             native_dir,
             out,
             license,
-        } => pack(root, native_dir.as_deref(), out, license),
-        UnityCmd::Test { unity_editor } => test(root, unity_editor),
+        } => {
+            let native_dir = native_dir.as_deref();
+            if !on_path("npm") {
+                bail!("`npm` is required for `unity pack` (install Node.js)");
+            }
+            let ffi = root.join("bindings").join("ffi");
+            let unity_dir = root.join("bindings").join("unity");
+            let out_dir = out.unwrap_or_else(|| unity_dir.join("dist"));
+            let mut version: Option<String> = None;
+            for pkg in PACKAGES {
+                let path = unity_dir.join(pkg.unity_id).join("package.json");
+                let text = std::fs::read_to_string(&path)
+                    .with_context(|| format!("reading {}", path.display()))?;
+                let found = crate::component::after_quoted(&text, "\"version\":")
+                    .with_context(|| format!("no \"version\" field in {}", path.display()))?;
+                match &version {
+                    None => version = Some(found),
+                    Some(first) if *first != found => bail!(
+                        "unity package versions diverge: {} is {found}, expected {first}",
+                        pkg.unity_id
+                    ),
+                    Some(_) => {}
+                }
+            }
+            let version = version.context("no unity packages")?;
+            let parts: Vec<&str> = version.split('.').collect();
+            if parts.len() != 3
+                || !parts
+                    .iter()
+                    .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+            {
+                bail!(
+                    "unity version `{version}` must be major.minor.patch; npm rejects a 4th component, \
+             strips `+build` metadata, and orders `-1` prereleases below the plain release"
+                );
+            }
+            let cargo = crate::component::find("software")?.current_version(root)?;
+            let cargo_minor: Vec<&str> = cargo.split('.').take(2).collect();
+            if parts[..2] != cargo_minor[..] {
+                bail!(
+                    "unity version `{version}` must share major.minor with the Cargo workspace version `{cargo}`"
+                );
+            }
+            for pkg in PACKAGES {
+                let path = unity_dir.join(pkg.unity_id).join("package.json");
+                let text = std::fs::read_to_string(&path)
+                    .with_context(|| format!("reading {}", path.display()))?;
+                let prefix = format!("\"{PKG_PREFIX}");
+                let mut deps = Vec::new();
+                for line in text.lines() {
+                    let trimmed = line.trim_start();
+                    if !trimmed.starts_with(&prefix) {
+                        continue;
+                    }
+                    let (name, req) = trimmed.split_once(':').with_context(|| {
+                        format!("malformed dependency line in {}: {line}", path.display())
+                    })?;
+                    deps.push((
+                        name.trim().trim_matches('"').to_owned(),
+                        req.trim()
+                            .trim_end_matches(',')
+                            .trim_matches('"')
+                            .to_owned(),
+                    ));
+                }
+                for (dep, req) in deps {
+                    if req != version {
+                        bail!(
+                            "{}: dependency `{dep}` is pinned to `{req}`, expected `{version}`; npm rejects a package whose sibling dependency is not published",
+                            pkg.unity_id
+                        );
+                    }
+                }
+            }
+            let rids: Vec<&str> = if let Some(dir) = native_dir {
+                let missing: Vec<&str> = RIDS
+                    .iter()
+                    .copied()
+                    .filter(|rid| !dir.join(rid).is_dir())
+                    .collect();
+                if !missing.is_empty() {
+                    bail!(
+                        "native dir {} is missing rid(s): {}",
+                        dir.display(),
+                        missing.join(", ")
+                    );
+                }
+                RIDS.to_vec()
+            } else {
+                run("cargo", ["build", "--workspace", "--release"], &ffi)?;
+                vec![host_rid()?]
+            };
+            crate::license::generate_unity(root, license)?;
+            if out_dir.exists() {
+                std::fs::remove_dir_all(&out_dir)?;
+            }
+            std::fs::create_dir_all(&out_dir)?;
+            for pkg in PACKAGES {
+                let pkg_dir = unity_dir.join(pkg.unity_id);
+                stage_package(root, pkg, &pkg_dir)?;
+                for rid in &rids {
+                    let native = native_dir
+                        .map_or_else(|| ffi.join("target").join("release"), |dir| dir.join(rid));
+                    stage_native(&native, rid, pkg, &pkg_dir)?;
+                }
+                run_tool(
+                    "npm",
+                    [
+                        "pack",
+                        "--silent",
+                        "--pack-destination",
+                        &out_dir.to_string_lossy(),
+                    ],
+                    &pkg_dir,
+                )?;
+                let tarball = out_dir.join(format!("{}-{version}.tgz", pkg.unity_id));
+                let file = std::fs::File::open(&tarball)
+                    .with_context(|| format!("opening {}", tarball.display()))?;
+                let mut archive = Archive::new(GzDecoder::new(file));
+                let mut entries = Vec::new();
+                for entry in archive
+                    .entries()
+                    .with_context(|| format!("reading {}", tarball.display()))?
+                {
+                    let entry = entry?;
+                    let path = entry.path()?.to_string_lossy().into_owned();
+                    let Some(rel) = path.strip_prefix("package/") else {
+                        bail!("{}: entry outside package/ root: {path}", tarball.display());
+                    };
+                    entries.push(rel.to_string());
+                }
+                let has = |name: &str| entries.iter().any(|e| e == name);
+                let mut required = vec![
+                    "package.json".to_string(),
+                    "package.json.meta".to_string(),
+                    format!("{}.asmdef", pkg.assembly),
+                    format!("{}.asmdef.meta", pkg.assembly),
+                    "csc.rsp".to_string(),
+                    "csc.rsp.meta".to_string(),
+                    "README.md".to_string(),
+                    "LICENSE.md".to_string(),
+                    "THIRD-PARTY-LICENSES.md".to_string(),
+                ];
+                for rid in &rids {
+                    let (prefix, ext) = rid_affix(rid);
+                    required.push(format!("Plugins/{rid}/{prefix}{}.{ext}", pkg.lib));
+                    required.push(format!("Plugins/{rid}/{prefix}{}.{ext}.meta", pkg.lib));
+                }
+                for name in &required {
+                    if !has(name) {
+                        bail!("{}: missing {name}", tarball.display());
+                    }
+                }
+                let sources: Vec<&String> = entries
+                    .iter()
+                    .filter(|e| !e.starts_with("Samples~/"))
+                    .filter(|e| Path::new(e).extension().is_some_and(|ext| ext == "cs"))
+                    .collect();
+                if sources.is_empty() {
+                    bail!("{}: no .cs sources", tarball.display());
+                }
+                for src in &sources {
+                    let meta = format!("{src}.meta");
+                    if !has(&meta) {
+                        bail!("{}: {src} has no .meta", tarball.display());
+                    }
+                }
+                let sample = entries.iter().any(|e| e.starts_with(CLIENT_SAMPLE));
+                if pkg.unity_id == PKG_PREFIX && !sample {
+                    bail!("{}: missing {CLIENT_SAMPLE}", tarball.display());
+                }
+                if pkg.unity_id != PKG_PREFIX && sample {
+                    bail!("{}: unexpected {CLIENT_SAMPLE}", tarball.display());
+                }
+            }
+            println!(
+                "unity pack: wrote {} tarballs ({}) to {}",
+                PACKAGES.len(),
+                rids.join(", "),
+                out_dir.display()
+            );
+            Ok(())
+        }
+        UnityCmd::Test { unity_editor } => {
+            fn resolve_managed_dir(unity_editor: Option<PathBuf>) -> Result<PathBuf> {
+                let editor = unity_editor
+                    .or_else(|| std::env::var_os("AUTD3_UNITY_EDITOR").map(PathBuf::from))
+                    .or_else(|| std::env::var_os("UNITY_EDITOR").map(PathBuf::from))
+                    .context(
+                        "Unity Editor path required: pass --unity-editor <editor-root> or set AUTD3_UNITY_EDITOR",
+                    )?;
+                for candidate in [
+                    editor.join("Data").join("Managed").join("UnityEngine"),
+                    editor.join("Contents").join("Managed").join("UnityEngine"),
+                    editor.clone(),
+                ] {
+                    if candidate.join("UnityEngine.CoreModule.dll").is_file() {
+                        return Ok(candidate);
+                    }
+                }
+                Ok(editor.join("Data").join("Managed").join("UnityEngine"))
+            }
+
+            let managed = resolve_managed_dir(unity_editor)?;
+            let core_module = managed.join("UnityEngine.CoreModule.dll");
+            if !core_module.is_file() {
+                bail!(
+                    "UnityEngine.CoreModule.dll not found under {} (pass --unity-editor <editor-root> or set AUTD3_UNITY_EDITOR)",
+                    managed.display()
+                );
+            }
+            let proj = root
+                .join("bindings")
+                .join("csharp")
+                .join("tests")
+                .join("AUTD3.Unity.Tests")
+                .join("AUTD3.Unity.Tests.csproj");
+            let cwd = proj.parent().unwrap();
+            run(
+                "dotnet",
+                [
+                    "test",
+                    &proj.to_string_lossy(),
+                    "-c",
+                    "Debug",
+                    &format!("-p:UnityManagedDir={}", managed.display()),
+                ],
+                cwd,
+            )
+        }
         UnityCmd::Clean(args) => crate::clean::scope(root, args, clean),
     }
 }
@@ -80,89 +338,6 @@ pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {
             .extension()
             .is_some_and(|ext| ext == "cs" || ext == "meta")
     })
-}
-
-fn build(root: &Path, manifest: bool) -> Result<()> {
-    let ffi = root.join("bindings").join("ffi");
-    let unity_dir = root.join("bindings").join("unity");
-
-    run("cargo", ["build", "--workspace", "--release"], &ffi)?;
-    let native = ffi.join("target").join("release");
-    let rid = host_rid()?;
-
-    for pkg in PACKAGES {
-        let pkg_dir = unity_dir.join(pkg.unity_id);
-        stage_package(root, pkg, &pkg_dir)?;
-        stage_native(&native, rid, pkg, &pkg_dir)?;
-    }
-
-    println!(
-        "unity build: assembled {} packages under {}",
-        PACKAGES.len(),
-        unity_dir.display()
-    );
-    if manifest {
-        emit_manifest(&unity_dir);
-    }
-    Ok(())
-}
-
-fn pack(root: &Path, native_dir: Option<&Path>, out: Option<PathBuf>, license: bool) -> Result<()> {
-    if !on_path("npm") {
-        bail!("`npm` is required for `unity pack` (install Node.js)");
-    }
-    let ffi = root.join("bindings").join("ffi");
-    let unity_dir = root.join("bindings").join("unity");
-    let out_dir = out.unwrap_or_else(|| unity_dir.join("dist"));
-
-    let version = verify_versions(root, &unity_dir)?;
-
-    let rids: Vec<&str> = if let Some(dir) = native_dir {
-        let missing: Vec<&str> = RIDS
-            .iter()
-            .copied()
-            .filter(|rid| !dir.join(rid).is_dir())
-            .collect();
-        if !missing.is_empty() {
-            bail!(
-                "native dir {} is missing rid(s): {}",
-                dir.display(),
-                missing.join(", ")
-            );
-        }
-        RIDS.to_vec()
-    } else {
-        run("cargo", ["build", "--workspace", "--release"], &ffi)?;
-        vec![host_rid()?]
-    };
-
-    crate::license::generate_unity(root, license)?;
-
-    if out_dir.exists() {
-        std::fs::remove_dir_all(&out_dir)?;
-    }
-    std::fs::create_dir_all(&out_dir)?;
-
-    for pkg in PACKAGES {
-        let pkg_dir = unity_dir.join(pkg.unity_id);
-        stage_package(root, pkg, &pkg_dir)?;
-        for rid in &rids {
-            let native =
-                native_dir.map_or_else(|| ffi.join("target").join("release"), |dir| dir.join(rid));
-            stage_native(&native, rid, pkg, &pkg_dir)?;
-        }
-        npm_pack(&pkg_dir, &out_dir)?;
-        let tarball = out_dir.join(format!("{}-{version}.tgz", pkg.unity_id));
-        verify_tarball(&tarball, pkg, &rids)?;
-    }
-
-    println!(
-        "unity pack: wrote {} tarballs ({}) to {}",
-        PACKAGES.len(),
-        rids.join(", "),
-        out_dir.display()
-    );
-    Ok(())
 }
 
 fn stage_package(root: &Path, pkg: &BindingPkg, pkg_dir: &Path) -> Result<()> {
@@ -181,47 +356,6 @@ fn stage_package(root: &Path, pkg: &BindingPkg, pkg_dir: &Path) -> Result<()> {
         }
     }
 
-    clean_generated(pkg_dir)?;
-
-    let src_dir = csharp_src.join(pkg.assembly);
-    stage_sources(&src_dir, pkg_dir)?;
-    write_meta(
-        &pkg_dir.join(format!("{}.asmdef.meta", pkg.assembly)),
-        &asmdef_meta(&guid_for(pkg.unity_id, &format!("{}.asmdef", pkg.assembly))),
-    )?;
-    write_meta(
-        &pkg_dir.join("csc.rsp.meta"),
-        &default_meta(&guid_for(pkg.unity_id, "csc.rsp")),
-    )?;
-    write_meta(
-        &pkg_dir.join("package.json.meta"),
-        &package_manifest_meta(&guid_for(pkg.unity_id, "package.json")),
-    )?;
-    for doc in DOC_FILES {
-        if pkg_dir.join(doc).is_file() {
-            write_meta(
-                &pkg_dir.join(format!("{doc}.meta")),
-                &default_meta(&guid_for(pkg.unity_id, doc)),
-            )?;
-        }
-    }
-    Ok(())
-}
-
-fn npm_pack(pkg_dir: &Path, out_dir: &Path) -> Result<()> {
-    run_tool(
-        "npm",
-        [
-            "pack",
-            "--silent",
-            "--pack-destination",
-            &out_dir.to_string_lossy(),
-        ],
-        pkg_dir,
-    )
-}
-
-fn clean_generated(pkg_dir: &Path) -> Result<()> {
     let doc_metas: Vec<String> = DOC_FILES.iter().map(|f| format!("{f}.meta")).collect();
     for entry in std::fs::read_dir(pkg_dir)
         .with_context(|| format!("reading {}", pkg_dir.display()))?
@@ -249,12 +383,11 @@ fn clean_generated(pkg_dir: &Path) -> Result<()> {
     if plugins_meta.exists() {
         std::fs::remove_file(&plugins_meta)?;
     }
-    Ok(())
-}
 
-fn stage_sources(src_dir: &Path, pkg_dir: &Path) -> Result<()> {
+    let src_dir = csharp_src.join(pkg.assembly);
+
     let pkg_id = pkg_dir.file_name().unwrap().to_string_lossy().into_owned();
-    for entry in std::fs::read_dir(src_dir)
+    for entry in std::fs::read_dir(&src_dir)
         .with_context(|| format!("reading source dir {}", src_dir.display()))?
         .flatten()
     {
@@ -267,10 +400,39 @@ fn stage_sources(src_dir: &Path, pkg_dir: &Path) -> Result<()> {
         std::fs::copy(&path, &dst)
             .with_context(|| format!("staging {} -> {}", path.display(), dst.display()))?;
         let rel = file_name.to_string_lossy();
+        let guid = guid_for(&pkg_id, &rel);
         write_meta(
             &pkg_dir.join(format!("{rel}.meta")),
-            &cs_meta(&guid_for(&pkg_id, &rel)),
+            &format!(
+                "fileFormatVersion: 2\nguid: {guid}\nMonoImporter:\n  externalObjects: {{}}\n  serializedVersion: 2\n  defaultReferences: []\n  executionOrder: 0\n  icon: {{instanceID: 0}}\n  userData: \n  assetBundleName: \n  assetBundleVariant: \n"
+            ),
         )?;
+    }
+    let guid = guid_for(pkg.unity_id, &format!("{}.asmdef", pkg.assembly));
+    write_meta(
+        &pkg_dir.join(format!("{}.asmdef.meta", pkg.assembly)),
+        &format!(
+            "fileFormatVersion: 2\nguid: {guid}\nAssemblyDefinitionImporter:\n  externalObjects: {{}}\n  userData: \n  assetBundleName: \n  assetBundleVariant: \n"
+        ),
+    )?;
+    write_meta(
+        &pkg_dir.join("csc.rsp.meta"),
+        &default_meta(&guid_for(pkg.unity_id, "csc.rsp")),
+    )?;
+    let guid = guid_for(pkg.unity_id, "package.json");
+    write_meta(
+        &pkg_dir.join("package.json.meta"),
+        &format!(
+            "fileFormatVersion: 2\nguid: {guid}\nPackageManifestImporter:\n  externalObjects: {{}}\n  userData: \n  assetBundleName: \n  assetBundleVariant: \n"
+        ),
+    )?;
+    for doc in DOC_FILES {
+        if pkg_dir.join(doc).is_file() {
+            write_meta(
+                &pkg_dir.join(format!("{doc}.meta")),
+                &default_meta(&guid_for(pkg.unity_id, doc)),
+            )?;
+        }
     }
     Ok(())
 }
@@ -298,271 +460,14 @@ fn stage_native(native: &Path, rid: &str, pkg: &BindingPkg, pkg_dir: &Path) -> R
         &plugins.join(format!("{rid}.meta")),
         &folder_meta(&guid_for(pkg.unity_id, &format!("Plugins/{rid}"))),
     )?;
-    write_meta(
-        &rid_dir.join(format!("{file}.meta")),
-        &plugin_meta(
-            &guid_for(pkg.unity_id, &format!("Plugins/{rid}/{file}")),
-            rid,
-        ),
-    )?;
-    Ok(())
-}
-
-fn write_meta(path: &Path, content: &str) -> Result<()> {
-    std::fs::write(path, content).with_context(|| format!("writing {}", path.display()))
-}
-
-fn verify_versions(root: &Path, unity_dir: &Path) -> Result<String> {
-    let mut version: Option<String> = None;
-    for pkg in PACKAGES {
-        let path = unity_dir.join(pkg.unity_id).join("package.json");
-        let text = std::fs::read_to_string(&path)
-            .with_context(|| format!("reading {}", path.display()))?;
-        let found = crate::component::after_quoted(&text, "\"version\":")
-            .with_context(|| format!("no \"version\" field in {}", path.display()))?;
-        match &version {
-            None => version = Some(found),
-            Some(first) if *first != found => bail!(
-                "unity package versions diverge: {} is {found}, expected {first}",
-                pkg.unity_id
-            ),
-            Some(_) => {}
-        }
-    }
-    let version = version.context("no unity packages")?;
-
-    let parts: Vec<&str> = version.split('.').collect();
-    if parts.len() != 3
-        || !parts
-            .iter()
-            .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
-    {
-        bail!(
-            "unity version `{version}` must be major.minor.patch; npm rejects a 4th component, \
-             strips `+build` metadata, and orders `-1` prereleases below the plain release"
-        );
-    }
-
-    let cargo = crate::component::find("software")?.current_version(root)?;
-    let cargo_minor: Vec<&str> = cargo.split('.').take(2).collect();
-    if parts[..2] != cargo_minor[..] {
-        bail!(
-            "unity version `{version}` must share major.minor with the Cargo workspace version `{cargo}`"
-        );
-    }
-
-    for pkg in PACKAGES {
-        let path = unity_dir.join(pkg.unity_id).join("package.json");
-        for (dep, req) in package_json_deps(&path)? {
-            if req != version {
-                bail!(
-                    "{}: dependency `{dep}` is pinned to `{req}`, expected `{version}`; npm rejects a package whose sibling dependency is not published",
-                    pkg.unity_id
-                );
-            }
-        }
-    }
-    Ok(version)
-}
-
-fn package_json_deps(path: &Path) -> Result<Vec<(String, String)>> {
-    let text =
-        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-    let prefix = format!("\"{PKG_PREFIX}");
-    let mut deps = Vec::new();
-    for line in text.lines() {
-        let trimmed = line.trim_start();
-        if !trimmed.starts_with(&prefix) {
-            continue;
-        }
-        let (name, req) = trimmed
-            .split_once(':')
-            .with_context(|| format!("malformed dependency line in {}: {line}", path.display()))?;
-        deps.push((
-            name.trim().trim_matches('"').to_owned(),
-            req.trim()
-                .trim_end_matches(',')
-                .trim_matches('"')
-                .to_owned(),
-        ));
-    }
-    Ok(deps)
-}
-
-fn verify_tarball(tarball: &Path, pkg: &BindingPkg, rids: &[&str]) -> Result<()> {
-    let file =
-        std::fs::File::open(tarball).with_context(|| format!("opening {}", tarball.display()))?;
-    let mut archive = Archive::new(GzDecoder::new(file));
-    let mut entries = Vec::new();
-    for entry in archive
-        .entries()
-        .with_context(|| format!("reading {}", tarball.display()))?
-    {
-        let entry = entry?;
-        let path = entry.path()?.to_string_lossy().into_owned();
-        let Some(rel) = path.strip_prefix("package/") else {
-            bail!("{}: entry outside package/ root: {path}", tarball.display());
-        };
-        entries.push(rel.to_string());
-    }
-
-    let has = |name: &str| entries.iter().any(|e| e == name);
-    let mut required = vec![
-        "package.json".to_string(),
-        "package.json.meta".to_string(),
-        format!("{}.asmdef", pkg.assembly),
-        format!("{}.asmdef.meta", pkg.assembly),
-        "csc.rsp".to_string(),
-        "csc.rsp.meta".to_string(),
-        "README.md".to_string(),
-        "LICENSE.md".to_string(),
-        "THIRD-PARTY-LICENSES.md".to_string(),
-    ];
-    for rid in rids {
-        let (prefix, ext) = rid_affix(rid);
-        required.push(format!("Plugins/{rid}/{prefix}{}.{ext}", pkg.lib));
-        required.push(format!("Plugins/{rid}/{prefix}{}.{ext}.meta", pkg.lib));
-    }
-    for name in &required {
-        if !has(name) {
-            bail!("{}: missing {name}", tarball.display());
-        }
-    }
-
-    let sources: Vec<&String> = entries
-        .iter()
-        .filter(|e| !e.starts_with("Samples~/"))
-        .filter(|e| Path::new(e).extension().is_some_and(|ext| ext == "cs"))
-        .collect();
-    if sources.is_empty() {
-        bail!("{}: no .cs sources", tarball.display());
-    }
-    for src in &sources {
-        let meta = format!("{src}.meta");
-        if !has(&meta) {
-            bail!("{}: {src} has no .meta", tarball.display());
-        }
-    }
-
-    let sample = entries.iter().any(|e| e.starts_with(CLIENT_SAMPLE));
-    if pkg.unity_id == PKG_PREFIX && !sample {
-        bail!("{}: missing {CLIENT_SAMPLE}", tarball.display());
-    }
-    if pkg.unity_id != PKG_PREFIX && sample {
-        bail!("{}: unexpected {CLIENT_SAMPLE}", tarball.display());
-    }
-    Ok(())
-}
-
-fn emit_manifest(unity_dir: &Path) {
-    println!("\n// add these to your Unity project's Packages/manifest.json \"dependencies\":");
-    for pkg in PACKAGES {
-        let path = unity_dir.join(pkg.unity_id);
-        println!("  \"{}\": \"file:{}\",", pkg.unity_id, path.display());
-    }
-}
-
-fn test(root: &Path, unity_editor: Option<PathBuf>) -> Result<()> {
-    let managed = resolve_managed_dir(unity_editor)?;
-    let core_module = managed.join("UnityEngine.CoreModule.dll");
-    if !core_module.is_file() {
-        bail!(
-            "UnityEngine.CoreModule.dll not found under {} (pass --unity-editor <editor-root> or set AUTD3_UNITY_EDITOR)",
-            managed.display()
-        );
-    }
-    let proj = root
-        .join("bindings")
-        .join("csharp")
-        .join("tests")
-        .join("AUTD3.Unity.Tests")
-        .join("AUTD3.Unity.Tests.csproj");
-    let cwd = proj.parent().unwrap();
-    run(
-        "dotnet",
-        [
-            "test",
-            &proj.to_string_lossy(),
-            "-c",
-            "Debug",
-            &format!("-p:UnityManagedDir={}", managed.display()),
-        ],
-        cwd,
-    )
-}
-
-fn resolve_managed_dir(unity_editor: Option<PathBuf>) -> Result<PathBuf> {
-    let editor = unity_editor
-        .or_else(|| std::env::var_os("AUTD3_UNITY_EDITOR").map(PathBuf::from))
-        .or_else(|| std::env::var_os("UNITY_EDITOR").map(PathBuf::from))
-        .context(
-            "Unity Editor path required: pass --unity-editor <editor-root> or set AUTD3_UNITY_EDITOR",
-        )?;
-    for candidate in [
-        editor.join("Data").join("Managed").join("UnityEngine"),
-        editor.join("Contents").join("Managed").join("UnityEngine"),
-        editor.clone(),
-    ] {
-        if candidate.join("UnityEngine.CoreModule.dll").is_file() {
-            return Ok(candidate);
-        }
-    }
-    Ok(editor.join("Data").join("Managed").join("UnityEngine"))
-}
-
-fn guid_for(pkg_id: &str, rel: &str) -> String {
-    let input = format!("{pkg_id}/{rel}");
-    let a = fnv1a(input.as_bytes(), 0xcbf2_9ce4_8422_2325);
-    let b = fnv1a(input.as_bytes(), 0x8422_2325_cbf2_9ce4);
-    format!("{a:016x}{b:016x}")
-}
-
-fn fnv1a(bytes: &[u8], mut hash: u64) -> u64 {
-    for &byte in bytes {
-        hash ^= u64::from(byte);
-        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    hash
-}
-
-fn cs_meta(guid: &str) -> String {
-    format!(
-        "fileFormatVersion: 2\nguid: {guid}\nMonoImporter:\n  externalObjects: {{}}\n  serializedVersion: 2\n  defaultReferences: []\n  executionOrder: 0\n  icon: {{instanceID: 0}}\n  userData: \n  assetBundleName: \n  assetBundleVariant: \n"
-    )
-}
-
-fn asmdef_meta(guid: &str) -> String {
-    format!(
-        "fileFormatVersion: 2\nguid: {guid}\nAssemblyDefinitionImporter:\n  externalObjects: {{}}\n  userData: \n  assetBundleName: \n  assetBundleVariant: \n"
-    )
-}
-
-fn default_meta(guid: &str) -> String {
-    format!(
-        "fileFormatVersion: 2\nguid: {guid}\nDefaultImporter:\n  externalObjects: {{}}\n  userData: \n  assetBundleName: \n  assetBundleVariant: \n"
-    )
-}
-
-fn package_manifest_meta(guid: &str) -> String {
-    format!(
-        "fileFormatVersion: 2\nguid: {guid}\nPackageManifestImporter:\n  externalObjects: {{}}\n  userData: \n  assetBundleName: \n  assetBundleVariant: \n"
-    )
-}
-
-fn folder_meta(guid: &str) -> String {
-    format!(
-        "fileFormatVersion: 2\nguid: {guid}\nfolderAsset: yes\nDefaultImporter:\n  externalObjects: {{}}\n  userData: \n  assetBundleName: \n  assetBundleVariant: \n"
-    )
-}
-
-fn plugin_meta(guid: &str, rid: &str) -> String {
+    let guid = guid_for(pkg.unity_id, &format!("Plugins/{rid}/{file}"));
     let (cpu, os, standalone) = match rid {
         "win-x64" => ("x86_64", "Windows", "Win64"),
         "osx-arm64" => ("ARM64", "OSX", "OSXUniversal"),
         "osx-x64" => ("x86_64", "OSX", "OSXUniversal"),
         _ => ("x86_64", "Linux", "Linux64"),
     };
-    format!(
+    let plugin_meta = format!(
         r"fileFormatVersion: 2
 guid: {guid}
 PluginImporter:
@@ -599,5 +504,38 @@ PluginImporter:
   assetBundleName:
   assetBundleVariant:
 "
+    );
+    write_meta(&rid_dir.join(format!("{file}.meta")), &plugin_meta)?;
+    Ok(())
+}
+
+fn write_meta(path: &Path, content: &str) -> Result<()> {
+    std::fs::write(path, content).with_context(|| format!("writing {}", path.display()))
+}
+
+fn guid_for(pkg_id: &str, rel: &str) -> String {
+    let input = format!("{pkg_id}/{rel}");
+    let a = fnv1a(input.as_bytes(), 0xcbf2_9ce4_8422_2325);
+    let b = fnv1a(input.as_bytes(), 0x8422_2325_cbf2_9ce4);
+    format!("{a:016x}{b:016x}")
+}
+
+fn fnv1a(bytes: &[u8], mut hash: u64) -> u64 {
+    for &byte in bytes {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
+}
+
+fn default_meta(guid: &str) -> String {
+    format!(
+        "fileFormatVersion: 2\nguid: {guid}\nDefaultImporter:\n  externalObjects: {{}}\n  userData: \n  assetBundleName: \n  assetBundleVariant: \n"
+    )
+}
+
+fn folder_meta(guid: &str) -> String {
+    format!(
+        "fileFormatVersion: 2\nguid: {guid}\nfolderAsset: yes\nDefaultImporter:\n  externalObjects: {{}}\n  userData: \n  assetBundleName: \n  assetBundleVariant: \n"
     )
 }

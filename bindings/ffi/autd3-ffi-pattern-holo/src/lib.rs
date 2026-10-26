@@ -171,24 +171,6 @@ fn build_foci(foci: &[Autd3HoloAmplitudeTarget]) -> Vec<AmplitudeTarget> {
         .collect()
 }
 
-unsafe fn build_mask(mask: *const u8, num_devices: usize) -> Option<Vec<Vec<bool>>> {
-    let slice = unsafe { slice_ref(mask, num_devices * Autd3::NUM_TRANSDUCERS) }?;
-    Some(
-        slice
-            .as_chunks::<{ Autd3::NUM_TRANSDUCERS }>()
-            .0
-            .iter()
-            .map(|device| {
-                let mut slot = vec![false; Autd3::NUM_TRANSDUCERS];
-                for (m, src) in slot.iter_mut().zip(device) {
-                    *m = *src != 0;
-                }
-                slot
-            })
-            .collect(),
-    )
-}
-
 fn mask_ref(mask: Option<&[Vec<bool>]>) -> TransducerMask<'_> {
     match mask {
         Some(m) => TransducerMask::Masked(m),
@@ -219,6 +201,24 @@ unsafe fn prepare<'a>(
     out_err: *mut c_char,
     out_err_len: usize,
 ) -> Result<Common<'a>, i32> {
+    unsafe fn build_mask(mask: *const u8, num_devices: usize) -> Option<Vec<Vec<bool>>> {
+        let slice = unsafe { slice_ref(mask, num_devices * Autd3::NUM_TRANSDUCERS) }?;
+        Some(
+            slice
+                .as_chunks::<{ Autd3::NUM_TRANSDUCERS }>()
+                .0
+                .iter()
+                .map(|device| {
+                    let mut slot = vec![false; Autd3::NUM_TRANSDUCERS];
+                    for (m, src) in slot.iter_mut().zip(device) {
+                        *m = *src != 0;
+                    }
+                    slot
+                })
+                .collect(),
+        )
+    }
+
     let fail = |message: &str| {
         unsafe { write_cstr(out_err, out_err_len, message) };
         AUTD3_ERR_INVALID_ARGUMENT

@@ -189,14 +189,6 @@ fn set_bus_wait(driver: &mut Driver, wait: FpgaBusWait) -> Result<()> {
     Ok(())
 }
 
-fn next_pattern(state: &mut u32) -> u16 {
-    *state ^= *state << 13;
-    *state ^= *state >> 17;
-    *state ^= *state << 5;
-    let [_, low, high, _] = state.to_le_bytes();
-    u16::from_le_bytes([low, high])
-}
-
 #[derive(Default)]
 struct TestErrors {
     write: u64,
@@ -204,81 +196,64 @@ struct TestErrors {
     reported: Vec<String>,
 }
 
-fn test(driver: &mut Driver, addr: u16, count: usize, iterations: u32) -> Result<Vec<TestErrors>> {
-    let mut errors: Vec<TestErrors> = (0..driver.num_devices())
-        .map(|_| TestErrors::default())
-        .collect();
-    let mut state = TEST_PATTERN_SEED;
-    for iteration in 0..iterations {
-        let pattern: Vec<u16> = (0..count).map(|_| next_pattern(&mut state)).collect();
-        write(driver, addr, &pattern)?;
-        let first = read(driver, addr, count)?;
-        if first.iter().all(|words| *words == pattern) {
-            continue;
-        }
-        let second = read(driver, addr, count)?;
-        for (device, (first, second)) in first.iter().zip(&second).enumerate() {
-            for (i, wrote) in pattern.iter().enumerate() {
-                if first[i] == *wrote {
-                    continue;
-                }
-                let kind = if second[i] == *wrote {
-                    errors[device].read += 1;
-                    "read"
-                } else {
-                    errors[device].write += 1;
-                    "write"
-                };
-                if errors[device].reported.len() < REPORTED_ERRORS_PER_DEVICE {
-                    errors[device].reported.push(format!(
-                        "round {iteration} {:#06x}: wrote {wrote:#06x}, read {:#06x} then {:#06x} ({kind} error)",
-                        usize::from(addr) + i,
-                        first[i],
-                        second[i]
-                    ));
-                }
-            }
-        }
-    }
-    Ok(errors)
-}
-
-fn print_words(addr: u16, devices: &[Vec<u16>]) {
-    for (device, words) in devices.iter().enumerate() {
-        println!("device {device}");
-        for (line, chunk) in words.chunks(WORDS_PER_LINE).enumerate() {
-            let values: Vec<String> = chunk.iter().map(|word| format!("{word:#06x}")).collect();
-            println!(
-                "  {:#06x}: {}",
-                usize::from(addr) + line * WORDS_PER_LINE,
-                values.join(" ")
-            );
-        }
-    }
-}
-
-fn first_difference(addr: u16, expected: &[u16], devices: &[Vec<u16>]) -> Option<String> {
-    devices.iter().enumerate().find_map(|(device, read)| {
-        expected
-            .iter()
-            .zip(read)
-            .position(|(wrote, read)| wrote != read)
-            .map(|i| {
-                format!(
-                    "device {device} reads {:#06x} at {:#06x} after {:#06x} was written",
-                    read[i],
-                    usize::from(addr) + i,
-                    expected[i]
-                )
-            })
-    })
-}
-
 fn open(chain: &Chain) -> Result<Driver> {
     Ok(Driver::new(chain.udp.open(chain.devices)?))
 }
 
+#[allow(clippy::too_many_lines)]
 fn main() -> Result<()> {
+    fn test(
+        driver: &mut Driver,
+        addr: u16,
+        count: usize,
+        iterations: u32,
+    ) -> Result<Vec<TestErrors>> {
+        let mut errors: Vec<TestErrors> = (0..driver.num_devices())
+            .map(|_| TestErrors::default())
+            .collect();
+        let mut state = TEST_PATTERN_SEED;
+        for iteration in 0..iterations {
+            let pattern: Vec<u16> = (0..count)
+                .map(|_| {
+                    state ^= state << 13;
+                    state ^= state >> 17;
+                    state ^= state << 5;
+                    let [_, low, high, _] = state.to_le_bytes();
+                    u16::from_le_bytes([low, high])
+                })
+                .collect();
+            write(driver, addr, &pattern)?;
+            let first = read(driver, addr, count)?;
+            if first.iter().all(|words| *words == pattern) {
+                continue;
+            }
+            let second = read(driver, addr, count)?;
+            for (device, (first, second)) in first.iter().zip(&second).enumerate() {
+                for (i, wrote) in pattern.iter().enumerate() {
+                    if first[i] == *wrote {
+                        continue;
+                    }
+                    let kind = if second[i] == *wrote {
+                        errors[device].read += 1;
+                        "read"
+                    } else {
+                        errors[device].write += 1;
+                        "write"
+                    };
+                    if errors[device].reported.len() < REPORTED_ERRORS_PER_DEVICE {
+                        errors[device].reported.push(format!(
+                            "round {iteration} {:#06x}: wrote {wrote:#06x}, read {:#06x} then {:#06x} ({kind} error)",
+                            usize::from(addr) + i,
+                            first[i],
+                            second[i]
+                        ));
+                    }
+                }
+            }
+        }
+        Ok(errors)
+    }
+
     match Cli::parse().command {
         Command::Read { addr, count, chain } => {
             ensure_inside_the_bus(addr, count)?;
@@ -287,7 +262,18 @@ fn main() -> Result<()> {
                 set_bus_wait(&mut driver, wait)?;
             }
             let words = read(&mut driver, addr, count)?;
-            print_words(addr, &words);
+            for (device, words) in words.iter().enumerate() {
+                println!("device {device}");
+                for (line, chunk) in words.chunks(WORDS_PER_LINE).enumerate() {
+                    let values: Vec<String> =
+                        chunk.iter().map(|word| format!("{word:#06x}")).collect();
+                    println!(
+                        "  {:#06x}: {}",
+                        usize::from(addr) + line * WORDS_PER_LINE,
+                        values.join(" ")
+                    );
+                }
+            }
             driver.close()?;
         }
         Command::Write {
@@ -309,7 +295,21 @@ fn main() -> Result<()> {
             );
             if verify {
                 let read = read(&mut driver, addr, words.len())?;
-                if let Some(difference) = first_difference(addr, &words, &read) {
+                let difference = read.iter().enumerate().find_map(|(device, read)| {
+                        words
+                            .iter()
+                            .zip(read)
+                            .position(|(wrote, read)| wrote != read)
+                            .map(|i| {
+                                format!(
+                                    "device {device} reads {:#06x} at {:#06x} after {:#06x} was written",
+                                    read[i],
+                                    usize::from(addr) + i,
+                                    words[i]
+                                )
+                            })
+                    });
+                if let Some(difference) = difference {
                     bail!("{difference}");
                 }
                 println!("read back the same words from every device");

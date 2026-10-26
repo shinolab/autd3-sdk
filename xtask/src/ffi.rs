@@ -43,10 +43,35 @@ pub(crate) enum FfiCmd {
     Clean(CleanArgs),
 }
 
+#[allow(clippy::too_many_lines)]
 pub(crate) fn run_ffi(root: &Path, cmd: &FfiCmd) -> Result<()> {
+    fn entry_point(attribute: &str) -> Option<&str> {
+        let rest = attribute.split("EntryPoint").nth(1)?;
+        let rest = rest.split_once('"')?.1;
+        rest.split_once('"').map(|(name, _)| name)
+    }
+    fn declared_name<'a>(lines: &[&'a str]) -> Option<&'a str> {
+        for line in lines.iter().take(3) {
+            if line.starts_with('[') {
+                continue;
+            }
+            let paren = line.find('(')?;
+            let head = &line[..paren];
+            let start = head.rfind(|c: char| !is_ident_char(c)).map_or(0, |i| i + 1);
+            return (start < head.len()).then_some(&head[start..]);
+        }
+        None
+    }
+
     let dir = root.join("bindings").join("ffi");
     match cmd {
-        FfiCmd::Build { debug } => build(&dir, *debug),
+        FfiCmd::Build { debug } => {
+            let mut args = vec!["build", "--workspace"];
+            if !*debug {
+                args.push("--release");
+            }
+            run("cargo", args, &dir)
+        }
         FfiCmd::Test => run("cargo", vec!["test", "--workspace"], &dir),
         FfiCmd::Coverage { open } => crate::rust::coverage(
             &dir,
@@ -56,78 +81,217 @@ pub(crate) fn run_ffi(root: &Path, cmd: &FfiCmd) -> Result<()> {
         ),
         FfiCmd::Lint => cargo_clippy(&dir, &["--workspace", "--all-targets"]),
         FfiCmd::Format { fix } => cargo_fmt(&dir, &[], *fix),
-        FfiCmd::Drift => drift(root, &dir),
+        FfiCmd::Drift => {
+            let ffi = &dir;
+            let mut exporters = BTreeMap::new();
+            for dir in ffi_crates(ffi)? {
+                for file in rust_sources(&dir.join("src"))? {
+                    let text = std::fs::read_to_string(&file)
+                        .with_context(|| format!("failed to read {}", file.display()))?;
+                    let key = "macro_rules!";
+                    let mut definitions = Vec::new();
+                    let mut from = 0;
+                    while let Some(offset) = text[from..].find(key) {
+                        let after = from + offset + key.len();
+                        let name_start =
+                            after + (text[after..].len() - text[after..].trim_start().len());
+                        let name_end = name_start
+                            + text[name_start..]
+                                .find(|c: char| !is_ident_char(c))
+                                .unwrap_or(0);
+                        let Some(brace) = text[name_end..].find('{').map(|i| name_end + i) else {
+                            break;
+                        };
+                        let end = matching(&text, brace, b'{', b'}');
+                        if name_end > name_start {
+                            definitions
+                                .push((text[name_start..name_end].to_string(), &text[brace..end]));
+                        }
+                        from = end;
+                    }
+                    for (name, body) in definitions {
+                        if !body.contains("no_mangle") {
+                            continue;
+                        }
+                        let mut fixed = BTreeSet::new();
+                        collect_plain_exports(body, &mut fixed);
+                        exporters.insert(name, fixed);
+                    }
+                }
+            }
+            let mut exported: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+            let mut libs = Vec::new();
+            for dir in ffi_crates(ffi)? {
+                let manifest = dir.join("Cargo.toml");
+                let text = std::fs::read_to_string(&manifest)
+                    .with_context(|| format!("failed to read {}", manifest.display()))?;
+                let doc = text
+                    .parse::<toml_edit::DocumentMut>()
+                    .with_context(|| format!("failed to parse {}", manifest.display()))?;
+                let Some(lib) = doc.get("lib") else {
+                    continue;
+                };
+                let is_cdylib = lib
+                    .get("crate-type")
+                    .and_then(toml_edit::Item::as_array)
+                    .is_some_and(|kinds| kinds.iter().any(|k| k.as_str() == Some("cdylib")));
+                if !is_cdylib {
+                    continue;
+                }
+                let name = lib
+                    .get("name")
+                    .and_then(toml_edit::Item::as_str)
+                    .with_context(|| format!("no [lib] name in {}", manifest.display()))?;
+                libs.push((name.to_string(), dir));
+            }
+            libs.sort();
+            for (lib, dir) in libs {
+                let mut symbols = BTreeSet::new();
+                for file in rust_sources(&dir.join("src"))? {
+                    let text = std::fs::read_to_string(&file)
+                        .with_context(|| format!("failed to read {}", file.display()))?;
+                    collect_plain_exports(&text, &mut symbols);
+                    {
+                        let mut from = 0;
+                        while let Some(offset) = text[from..].find("!(") {
+                            let bang = from + offset;
+                            from = bang + 2;
+                            let name_start = text[..bang]
+                                .rfind(|c: char| !is_ident_char(c))
+                                .map_or(0, |i| i + 1);
+                            if name_start == bang {
+                                continue;
+                            }
+                            let Some(fixed) = exporters.get(&text[name_start..bang]) else {
+                                continue;
+                            };
+                            symbols.extend(fixed.iter().cloned());
+                            let end = matching(&text, bang + 1, b'(', b')');
+                            let mut rest = &text[bang + 2..end];
+                            while let Some(start) = rest.find(SYMBOL_PREFIX) {
+                                let preceded_by_ident = start > 0
+                                    && rest[..start].chars().next_back().is_some_and(is_ident_char);
+                                let symbol_end = start
+                                    + rest[start..]
+                                        .find(|c: char| !is_ident_char(c))
+                                        .unwrap_or(rest.len() - start);
+                                if !preceded_by_ident && !rest[symbol_end..].starts_with("::") {
+                                    symbols.insert(rest[start..symbol_end].to_string());
+                                }
+                                rest = &rest[symbol_end..];
+                            }
+                            from = end;
+                        }
+                    };
+                }
+                exported.insert(lib, symbols);
+            }
+            let csharp_dir = root.join(CSHARP_SRC);
+            if !csharp_dir.is_dir() {
+                bail!("{} does not exist", csharp_dir.display());
+            }
+            let mut files = files_under(&csharp_dir, |name| name != "obj" && name != "bin")?;
+            files.retain(|path| path.extension().is_some_and(|ext| ext == "cs"));
+            files.sort();
+            let mut declared: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+            for file in files {
+                let text = std::fs::read_to_string(&file)
+                    .with_context(|| format!("failed to read {}", file.display()))?;
+                let mut constants = BTreeMap::new();
+                for line in text.lines() {
+                    let Some(rest) = line.trim().split("const string ").nth(1) else {
+                        continue;
+                    };
+                    let Some((name, value)) = rest.split_once('=') else {
+                        continue;
+                    };
+                    let value = value.trim().trim_end_matches(';').trim();
+                    if let Some(literal) = value.strip_prefix('"').and_then(|v| v.strip_suffix('"'))
+                    {
+                        constants.insert(name.trim().to_string(), literal.to_string());
+                    }
+                }
+                let lines: Vec<&str> = text.lines().map(str::trim).collect();
+                for (index, line) in lines.iter().enumerate() {
+                    let Some(rest) = line
+                        .strip_prefix("[DllImport(")
+                        .or_else(|| line.strip_prefix("[LibraryImport("))
+                    else {
+                        continue;
+                    };
+                    let lib_end = rest.find([',', ')']).with_context(|| {
+                        format!("unterminated import attribute in {}", file.display())
+                    })?;
+                    let lib_expr = rest[..lib_end].trim();
+                    let lib = constants
+                        .get(lib_expr)
+                        .cloned()
+                        .unwrap_or_else(|| lib_expr.trim_matches('"').to_string());
+                    let symbol = entry_point(&rest[lib_end..])
+                        .or_else(|| declared_name(&lines[index + 1..]))
+                        .with_context(|| {
+                            format!(
+                                "cannot resolve the imported symbol at {}:{}",
+                                file.display(),
+                                index + 1
+                            )
+                        })?;
+                    declared.entry(lib).or_default().insert(symbol.to_string());
+                }
+            }
+            let mut problems = Vec::new();
+            for (lib, declarations) in &declared {
+                let Some(symbols) = exported.get(lib) else {
+                    problems.push(format!(
+                        "C# imports `{lib}`, which is not a cdylib in bindings/ffi"
+                    ));
+                    continue;
+                };
+                for symbol in declarations {
+                    if !symbols.contains(symbol) {
+                        problems.push(format!(
+                            "C# declares `{symbol}` in `{lib}`, which exports no such symbol"
+                        ));
+                    }
+                }
+            }
+            let empty = BTreeSet::new();
+            for (lib, symbols) in &exported {
+                let declarations = declared.get(lib).unwrap_or(&empty);
+                for symbol in symbols {
+                    if declarations.contains(symbol)
+                        || symbol.contains(OPTION_GETTER_MARKER)
+                        || CSHARP_UNUSED_EXPORTS.contains(&symbol.as_str())
+                    {
+                        continue;
+                    }
+                    problems.push(format!(
+                        "`{lib}` exports `{symbol}`, which no C# binding declares"
+                    ));
+                }
+            }
+            if problems.is_empty() {
+                let total: usize = exported.values().map(BTreeSet::len).sum();
+                println!(
+                    "ffi drift: {total} exported symbols across {} cdylibs match the C# declarations",
+                    exported.len()
+                );
+                return Ok(());
+            }
+            for problem in &problems {
+                eprintln!("{problem}");
+            }
+            bail!(
+                "{} binding drift(s) between bindings/ffi and C#",
+                problems.len()
+            )
+        }
         FfiCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
 }
 
-fn build(dir: &Path, debug: bool) -> Result<()> {
-    let mut args = vec!["build", "--workspace"];
-    if !debug {
-        args.push("--release");
-    }
-    run("cargo", args, dir)
-}
-
 pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {
     cleaner.path("bindings/ffi/target")
-}
-
-fn drift(root: &Path, ffi: &Path) -> Result<()> {
-    let exporters = exporting_macros(ffi)?;
-    let mut exported: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    for (lib, dir) in cdylibs(ffi)? {
-        exported.insert(lib, exported_symbols(&dir, &exporters)?);
-    }
-    let declared = csharp_imports(&root.join(CSHARP_SRC))?;
-
-    let mut problems = Vec::new();
-    for (lib, declarations) in &declared {
-        let Some(symbols) = exported.get(lib) else {
-            problems.push(format!(
-                "C# imports `{lib}`, which is not a cdylib in bindings/ffi"
-            ));
-            continue;
-        };
-        for symbol in declarations {
-            if !symbols.contains(symbol) {
-                problems.push(format!(
-                    "C# declares `{symbol}` in `{lib}`, which exports no such symbol"
-                ));
-            }
-        }
-    }
-    let empty = BTreeSet::new();
-    for (lib, symbols) in &exported {
-        let declarations = declared.get(lib).unwrap_or(&empty);
-        for symbol in symbols {
-            if declarations.contains(symbol)
-                || symbol.contains(OPTION_GETTER_MARKER)
-                || CSHARP_UNUSED_EXPORTS.contains(&symbol.as_str())
-            {
-                continue;
-            }
-            problems.push(format!(
-                "`{lib}` exports `{symbol}`, which no C# binding declares"
-            ));
-        }
-    }
-
-    if problems.is_empty() {
-        let total: usize = exported.values().map(BTreeSet::len).sum();
-        println!(
-            "ffi drift: {total} exported symbols across {} cdylibs match the C# declarations",
-            exported.len()
-        );
-        return Ok(());
-    }
-    for problem in &problems {
-        eprintln!("{problem}");
-    }
-    bail!(
-        "{} binding drift(s) between bindings/ffi and C#",
-        problems.len()
-    )
 }
 
 fn ffi_crates(ffi: &Path) -> Result<Vec<PathBuf>> {
@@ -142,35 +306,6 @@ fn ffi_crates(ffi: &Path) -> Result<Vec<PathBuf>> {
     Ok(dirs)
 }
 
-fn cdylibs(ffi: &Path) -> Result<Vec<(String, PathBuf)>> {
-    let mut libs = Vec::new();
-    for dir in ffi_crates(ffi)? {
-        let manifest = dir.join("Cargo.toml");
-        let text = std::fs::read_to_string(&manifest)
-            .with_context(|| format!("failed to read {}", manifest.display()))?;
-        let doc = text
-            .parse::<toml_edit::DocumentMut>()
-            .with_context(|| format!("failed to parse {}", manifest.display()))?;
-        let Some(lib) = doc.get("lib") else {
-            continue;
-        };
-        let is_cdylib = lib
-            .get("crate-type")
-            .and_then(toml_edit::Item::as_array)
-            .is_some_and(|kinds| kinds.iter().any(|k| k.as_str() == Some("cdylib")));
-        if !is_cdylib {
-            continue;
-        }
-        let name = lib
-            .get("name")
-            .and_then(toml_edit::Item::as_str)
-            .with_context(|| format!("no [lib] name in {}", manifest.display()))?;
-        libs.push((name.to_string(), dir));
-    }
-    libs.sort();
-    Ok(libs)
-}
-
 fn rust_sources(dir: &Path) -> Result<Vec<PathBuf>> {
     if !dir.is_dir() {
         return Ok(Vec::new());
@@ -179,48 +314,6 @@ fn rust_sources(dir: &Path) -> Result<Vec<PathBuf>> {
     files.retain(|path| path.extension().is_some_and(|ext| ext == "rs"));
     files.sort();
     Ok(files)
-}
-
-fn exporting_macros(ffi: &Path) -> Result<BTreeMap<String, BTreeSet<String>>> {
-    let mut macros = BTreeMap::new();
-    for dir in ffi_crates(ffi)? {
-        for file in rust_sources(&dir.join("src"))? {
-            let text = std::fs::read_to_string(&file)
-                .with_context(|| format!("failed to read {}", file.display()))?;
-            for (name, body) in macro_definitions(&text) {
-                if !body.contains("no_mangle") {
-                    continue;
-                }
-                let mut fixed = BTreeSet::new();
-                collect_plain_exports(body, &mut fixed);
-                macros.insert(name, fixed);
-            }
-        }
-    }
-    Ok(macros)
-}
-
-fn macro_definitions(text: &str) -> Vec<(String, &str)> {
-    const KEY: &str = "macro_rules!";
-    let mut found = Vec::new();
-    let mut from = 0;
-    while let Some(offset) = text[from..].find(KEY) {
-        let after = from + offset + KEY.len();
-        let name_start = after + (text[after..].len() - text[after..].trim_start().len());
-        let name_end = name_start
-            + text[name_start..]
-                .find(|c: char| !is_ident_char(c))
-                .unwrap_or(0);
-        let Some(brace) = text[name_end..].find('{').map(|i| name_end + i) else {
-            break;
-        };
-        let end = matching(text, brace, b'{', b'}');
-        if name_end > name_start {
-            found.push((text[name_start..name_end].to_string(), &text[brace..end]));
-        }
-        from = end;
-    }
-    found
 }
 
 fn matching(text: &str, open: usize, opener: u8, closer: u8) -> usize {
@@ -243,21 +336,15 @@ fn is_ident_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || c == '_'
 }
 
-fn exported_symbols(
-    dir: &Path,
-    exporters: &BTreeMap<String, BTreeSet<String>>,
-) -> Result<BTreeSet<String>> {
-    let mut symbols = BTreeSet::new();
-    for file in rust_sources(&dir.join("src"))? {
-        let text = std::fs::read_to_string(&file)
-            .with_context(|| format!("failed to read {}", file.display()))?;
-        collect_plain_exports(&text, &mut symbols);
-        collect_macro_exports(&text, exporters, &mut symbols);
-    }
-    Ok(symbols)
-}
-
 fn collect_plain_exports(text: &str, symbols: &mut BTreeSet<String>) {
+    fn extern_fn_name(line: &str) -> Option<&str> {
+        let rest = strip_visibility(line);
+        let rest = rest.strip_prefix("unsafe ").unwrap_or(rest).trim_start();
+        let rest = rest.strip_prefix("extern \"C\" fn ")?.trim_start();
+        let end = rest.find(|c: char| !is_ident_char(c)).unwrap_or(rest.len());
+        (end > 0).then(|| &rest[..end])
+    }
+
     let mut tagged = false;
     for line in text.lines() {
         let line = line.trim();
@@ -275,142 +362,4 @@ fn collect_plain_exports(text: &str, symbols: &mut BTreeSet<String>) {
     }
 }
 
-fn extern_fn_name(line: &str) -> Option<&str> {
-    let rest = strip_visibility(line);
-    let rest = rest.strip_prefix("unsafe ").unwrap_or(rest).trim_start();
-    let rest = rest.strip_prefix("extern \"C\" fn ")?.trim_start();
-    let end = rest.find(|c: char| !is_ident_char(c)).unwrap_or(rest.len());
-    (end > 0).then(|| &rest[..end])
-}
-
-fn collect_macro_exports(
-    text: &str,
-    exporters: &BTreeMap<String, BTreeSet<String>>,
-    symbols: &mut BTreeSet<String>,
-) {
-    let mut from = 0;
-    while let Some(offset) = text[from..].find("!(") {
-        let bang = from + offset;
-        from = bang + 2;
-        let name_start = text[..bang]
-            .rfind(|c: char| !is_ident_char(c))
-            .map_or(0, |i| i + 1);
-        if name_start == bang {
-            continue;
-        }
-        let Some(fixed) = exporters.get(&text[name_start..bang]) else {
-            continue;
-        };
-        symbols.extend(fixed.iter().cloned());
-        let end = matching(text, bang + 1, b'(', b')');
-        for symbol in autd3_idents(&text[bang + 2..end]) {
-            symbols.insert(symbol);
-        }
-        from = end;
-    }
-}
-
 const SYMBOL_PREFIX: &str = "autd3_";
-
-fn autd3_idents(args: &str) -> Vec<String> {
-    let mut found = Vec::new();
-    let mut rest = args;
-    while let Some(start) = rest.find(SYMBOL_PREFIX) {
-        let preceded_by_ident =
-            start > 0 && rest[..start].chars().next_back().is_some_and(is_ident_char);
-        let end = start
-            + rest[start..]
-                .find(|c: char| !is_ident_char(c))
-                .unwrap_or(rest.len() - start);
-        if !preceded_by_ident && !rest[end..].starts_with("::") {
-            found.push(rest[start..end].to_string());
-        }
-        rest = &rest[end..];
-    }
-    found
-}
-
-fn csharp_imports(dir: &Path) -> Result<BTreeMap<String, BTreeSet<String>>> {
-    let files = csharp_sources(dir)?;
-    let mut imports: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    for file in files {
-        let text = std::fs::read_to_string(&file)
-            .with_context(|| format!("failed to read {}", file.display()))?;
-        let constants = string_constants(&text);
-        let lines: Vec<&str> = text.lines().map(str::trim).collect();
-        for (index, line) in lines.iter().enumerate() {
-            let Some(rest) = line
-                .strip_prefix("[DllImport(")
-                .or_else(|| line.strip_prefix("[LibraryImport("))
-            else {
-                continue;
-            };
-            let lib_end = rest
-                .find([',', ')'])
-                .with_context(|| format!("unterminated import attribute in {}", file.display()))?;
-            let lib_expr = rest[..lib_end].trim();
-            let lib = constants
-                .get(lib_expr)
-                .cloned()
-                .unwrap_or_else(|| lib_expr.trim_matches('"').to_string());
-            let symbol = entry_point(&rest[lib_end..])
-                .or_else(|| declared_name(&lines[index + 1..]))
-                .with_context(|| {
-                    format!(
-                        "cannot resolve the imported symbol at {}:{}",
-                        file.display(),
-                        index + 1
-                    )
-                })?;
-            imports.entry(lib).or_default().insert(symbol.to_string());
-        }
-    }
-    Ok(imports)
-}
-
-fn csharp_sources(dir: &Path) -> Result<Vec<PathBuf>> {
-    if !dir.is_dir() {
-        bail!("{} does not exist", dir.display());
-    }
-    let mut files = files_under(dir, |name| name != "obj" && name != "bin")?;
-    files.retain(|path| path.extension().is_some_and(|ext| ext == "cs"));
-    files.sort();
-    Ok(files)
-}
-
-fn string_constants(text: &str) -> BTreeMap<String, String> {
-    const KEY: &str = "const string ";
-    let mut constants = BTreeMap::new();
-    for line in text.lines() {
-        let Some(rest) = line.trim().split(KEY).nth(1) else {
-            continue;
-        };
-        let Some((name, value)) = rest.split_once('=') else {
-            continue;
-        };
-        let value = value.trim().trim_end_matches(';').trim();
-        if let Some(literal) = value.strip_prefix('"').and_then(|v| v.strip_suffix('"')) {
-            constants.insert(name.trim().to_string(), literal.to_string());
-        }
-    }
-    constants
-}
-
-fn entry_point(attribute: &str) -> Option<&str> {
-    let rest = attribute.split("EntryPoint").nth(1)?;
-    let rest = rest.split_once('"')?.1;
-    rest.split_once('"').map(|(name, _)| name)
-}
-
-fn declared_name<'a>(lines: &[&'a str]) -> Option<&'a str> {
-    for line in lines.iter().take(3) {
-        if line.starts_with('[') {
-            continue;
-        }
-        let paren = line.find('(')?;
-        let head = &line[..paren];
-        let start = head.rfind(|c: char| !is_ident_char(c)).map_or(0, |i| i + 1);
-        return (start < head.len()).then_some(&head[start..]);
-    }
-    None
-}

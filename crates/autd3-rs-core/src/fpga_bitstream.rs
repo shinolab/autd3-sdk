@@ -81,17 +81,17 @@ fn word_at(bytes: &[u8], offset: usize) -> Option<u32> {
     Some(word.get())
 }
 
-fn find_sync(bytes: &[u8], from: usize) -> Option<usize> {
-    let pattern = SYNC_WORD.to_be_bytes();
-    bytes
-        .get(from..)?
-        .windows(4)
-        .position(|w| w == pattern)
-        .map(|p| from + p)
-}
-
 #[must_use]
 pub fn summarize_bitstream(bytes: &[u8]) -> BitstreamSummary {
+    fn find_sync(bytes: &[u8], from: usize) -> Option<usize> {
+        let pattern = SYNC_WORD.to_be_bytes();
+        bytes
+            .get(from..)?
+            .windows(4)
+            .position(|w| w == pattern)
+            .map(|p| from + p)
+    }
+
     let mut summary = BitstreamSummary::default();
     let mut cursor = 0;
     while let Some(sync) = find_sync(bytes, cursor) {

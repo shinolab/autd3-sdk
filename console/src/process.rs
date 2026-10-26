@@ -1,7 +1,7 @@
 use std::io::{BufRead, BufReader, Read};
 use std::num::NonZeroUsize;
 use std::path::Path;
-use std::process::{Child, Command, ExitStatus, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 
 pub(crate) const FINISHED: &str = "[process finished]";
@@ -88,7 +88,12 @@ impl ManagedProcess {
             }
         }
         if disconnected && let Ok(Some(status)) = self.child.try_wait() {
-            self.logs.push(exit_marker(status));
+            let marker = match status.code() {
+                Some(0) => FINISHED.to_string(),
+                Some(code) => format!("[process exited with code {code}]"),
+                None => "[process terminated]".to_string(),
+            };
+            self.logs.push(marker);
             self.exited = true;
         }
     }
@@ -122,14 +127,6 @@ pub(crate) fn no_window(command: &mut Command) {
 
 #[cfg(not(windows))]
 pub(crate) fn no_window(_command: &mut Command) {}
-
-fn exit_marker(status: ExitStatus) -> String {
-    match status.code() {
-        Some(0) => FINISHED.to_string(),
-        Some(code) => format!("[process exited with code {code}]"),
-        None => "[process terminated]".to_string(),
-    }
-}
 
 fn spawn_reader<R: Read + Send + 'static>(reader: R, tx: Sender<String>) {
     std::thread::spawn(move || {

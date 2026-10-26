@@ -188,30 +188,99 @@ const CPU_WATCHDOG_INDEX: usize = 18;
 
 const _: () = assert!(CASE_NAMES.len() == CPU_WATCHDOG_INDEX + 1);
 
-async fn dispatch(index: usize, ctx: &Ctx<'_>) -> Result<()> {
-    match index {
-        0 => cases::pattern::run(ctx).await,
-        1 => cases::modulation::run(ctx).await,
-        2 => cases::foci_stm::run(ctx).await,
-        3 => cases::pattern_stm::run(ctx).await,
-        4 => cases::silencer::run(ctx).await,
-        5 => cases::force_fan::run(ctx).await,
-        6 => cases::pulse_width_encoder::run(ctx).await,
-        7 => cases::phase_correction::run(ctx).await,
-        8 => cases::transition::run(ctx).await,
-        9 => cases::gpio::run(ctx).await,
-        10 => cases::error::run(ctx).await,
-        11 => cases::output_mask::run(ctx).await,
-        12 => cases::fpga_state::run(ctx).await,
-        13 => cases::cpu_config::run(ctx).await,
-        14 => cases::synchronize::run(ctx).await,
-        15 => cases::ptp_unlock_failsafe::run(ctx).await,
-        _ => Ok(()),
-    }
-}
-
 #[tokio::main(flavor = "multi_thread")]
+#[allow(clippy::too_many_lines)]
 async fn main() -> Result<()> {
+    async fn select(ctx: &Ctx<'_>) -> Selected {
+        async fn reset(ctx: &Ctx<'_>) -> Result<()> {
+            let phases = ctx.geometry.phase_buffer();
+
+            ctx.send_frames(&Frames::encode(
+                ctx.client.geometry(),
+                (
+                    Pattern::new(&phases, Intensity::MIN),
+                    SetSilencer::default(),
+                ),
+            )?)
+            .await?;
+
+            ctx.send(Clear).await
+        }
+
+        loop {
+            println!();
+            for (i, name) in CASE_NAMES.iter().enumerate() {
+                println!("[{i}]: {name}");
+            }
+            println!("[anything else]: quit");
+            let sel = prompt("Select a number").await;
+            let Ok(i) = sel.trim().parse::<usize>() else {
+                return Selected::Quit;
+            };
+            if i >= CASE_NAMES.len() {
+                return Selected::Quit;
+            }
+
+            println!("=== {} ===", CASE_NAMES[i]);
+            match i {
+                LOST_INDEX => return Selected::Lost,
+                REBOOT_INDEX => return Selected::Reboot,
+                CPU_WATCHDOG_INDEX => return Selected::CpuWatchdog,
+                PULSE_WIDTH_ENCODER_INDEX if ctx.mute => {
+                    println!("  [SKIP] the case replaces the pulse width table that --mute zeroes");
+                    continue;
+                }
+                _ => {}
+            }
+            let result = match i {
+                0 => cases::pattern::run(ctx).await,
+                1 => cases::modulation::run(ctx).await,
+                2 => cases::foci_stm::run(ctx).await,
+                3 => cases::pattern_stm::run(ctx).await,
+                4 => cases::silencer::run(ctx).await,
+                5 => cases::force_fan::run(ctx).await,
+                6 => cases::pulse_width_encoder::run(ctx).await,
+                7 => cases::phase_correction::run(ctx).await,
+                8 => cases::transition::run(ctx).await,
+                9 => cases::gpio::run(ctx).await,
+                10 => cases::error::run(ctx).await,
+                11 => cases::output_mask::run(ctx).await,
+                12 => cases::fpga_state::run(ctx).await,
+                13 => cases::cpu_config::run(ctx).await,
+                14 => cases::synchronize::run(ctx).await,
+                15 => cases::ptp_unlock_failsafe::run(ctx).await,
+                _ => Ok(()),
+            };
+            if let Err(e) = result {
+                eprintln!("test failed: {e:?}");
+            }
+            if ctx.exec != ExecAt::Immediate {
+                match ctx.client.read_telemetry().await {
+                    Ok(telemetry) => {
+                        let late: Vec<u32> = telemetry.iter().map(|t| t.exec_late).collect();
+                        println!(
+                            "  {} no frame since the last Clear started 1 us or more after its EXEC_AT: exec_late {late:?}",
+                            if late.iter().all(|n| *n == 0) {
+                                "[OK]"
+                            } else {
+                                "[FAIL]"
+                            }
+                        );
+                    }
+                    Err(e) => eprintln!("read telemetry failed: {e}"),
+                }
+            }
+
+            if let Err(e) = reset(ctx).await {
+                eprintln!("reset failed: {e:?}");
+            }
+            if ctx.mute && !mute(ctx.client).await {
+                eprintln!("stopping: the devices could not be muted after the case");
+                return Selected::Quit;
+            }
+        }
+    }
+
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn")),
@@ -234,10 +303,6 @@ async fn main() -> Result<()> {
         );
     }
 
-    run(&cli).await
-}
-
-async fn run(cli: &Cli) -> Result<()> {
     let geometry = Geometry::new((0..cli.devices).map(|_| Autd3::default()));
     let heartbeat = Duration::from_micros(cli.heartbeat_us);
 
@@ -367,79 +432,4 @@ pub async fn describe(client: &Client) {
         }
         Err(e) => eprintln!("read fpga state failed: {e}"),
     }
-}
-
-async fn select(ctx: &Ctx<'_>) -> Selected {
-    loop {
-        println!();
-        for (i, name) in CASE_NAMES.iter().enumerate() {
-            println!("[{i}]: {name}");
-        }
-        println!("[anything else]: quit");
-        let sel = prompt("Select a number").await;
-        let Ok(i) = sel.trim().parse::<usize>() else {
-            return Selected::Quit;
-        };
-        if i >= CASE_NAMES.len() {
-            return Selected::Quit;
-        }
-
-        println!("=== {} ===", CASE_NAMES[i]);
-        match i {
-            LOST_INDEX => return Selected::Lost,
-            REBOOT_INDEX => return Selected::Reboot,
-            CPU_WATCHDOG_INDEX => return Selected::CpuWatchdog,
-            PULSE_WIDTH_ENCODER_INDEX if ctx.mute => {
-                println!("  [SKIP] the case replaces the pulse width table that --mute zeroes");
-                continue;
-            }
-            _ => {}
-        }
-        if let Err(e) = dispatch(i, ctx).await {
-            eprintln!("test failed: {e:?}");
-        }
-        if ctx.exec != ExecAt::Immediate {
-            report_exec_late(ctx.client).await;
-        }
-
-        if let Err(e) = reset(ctx).await {
-            eprintln!("reset failed: {e:?}");
-        }
-        if ctx.mute && !mute(ctx.client).await {
-            eprintln!("stopping: the devices could not be muted after the case");
-            return Selected::Quit;
-        }
-    }
-}
-
-async fn report_exec_late(client: &Client) {
-    match client.read_telemetry().await {
-        Ok(telemetry) => {
-            let late: Vec<u32> = telemetry.iter().map(|t| t.exec_late).collect();
-            println!(
-                "  {} no frame since the last Clear started 1 us or more after its EXEC_AT: exec_late {late:?}",
-                if late.iter().all(|n| *n == 0) {
-                    "[OK]"
-                } else {
-                    "[FAIL]"
-                }
-            );
-        }
-        Err(e) => eprintln!("read telemetry failed: {e}"),
-    }
-}
-
-async fn reset(ctx: &Ctx<'_>) -> Result<()> {
-    let phases = ctx.geometry.phase_buffer();
-
-    ctx.send_frames(&Frames::encode(
-        ctx.client.geometry(),
-        (
-            Pattern::new(&phases, Intensity::MIN),
-            SetSilencer::default(),
-        ),
-    )?)
-    .await?;
-
-    ctx.send(Clear).await
 }

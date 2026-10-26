@@ -113,18 +113,6 @@ const REGIONS: [Region; 5] = [
     },
 ];
 
-fn read_sctlr() -> u32 {
-    let value: u32;
-    unsafe {
-        asm!(
-            "mrc p15, 0, {value}, c1, c0, 0",
-            value = out(reg) value,
-            options(nomem, nostack, preserves_flags),
-        );
-    }
-    value
-}
-
 fn write_sctlr(value: u32) {
     unsafe {
         asm!(
@@ -155,7 +143,15 @@ fn write_region(number: u32, base: u32, size: u32, access: u32) {
 
 #[allow(clippy::cast_possible_truncation)]
 extern "C" fn init() {
-    let sctlr = (read_sctlr() & !(SCTLR_M | SCTLR_V)) | SCTLR_VE;
+    let sctlr: u32;
+    unsafe {
+        asm!(
+            "mrc p15, 0, {value}, c1, c0, 0",
+            value = out(reg) sctlr,
+            options(nomem, nostack, preserves_flags),
+        );
+    }
+    let sctlr = (sctlr & !(SCTLR_M | SCTLR_V)) | SCTLR_VE;
     write_sctlr(sctlr);
     for number in REGIONS.len() as u32..MPU_REGIONS {
         write_region(number, 0, 0, 0);

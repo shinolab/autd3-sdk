@@ -9,6 +9,16 @@ use crate::proto::Error;
 const _: () = assert!(sys_time_ticks(SYNC_CYCLE_NS as u64) == SYNC_CYCLE_TICKS as u64);
 
 pub(crate) fn handle<P: Port>(port: &mut P, config: &CpuConfig) -> Result<(), Error> {
+    fn wait_for_the_cycle_before<P: Port>(port: &mut P, edge: u64) -> Result<(), Error> {
+        for _ in 0..fpga::FPGA_WAIT_UPDATE_MAX_POLLS.get() {
+            let now = port.sys_time().ok_or(Error::SyncNotReady)?;
+            if now.saturating_add(u64::from(SYNC_CYCLE_NS)) > edge {
+                return Ok(());
+            }
+        }
+        Err(Error::SyncNotReady)
+    }
+
     let next_edge = port
         .next_sync_edge(config.sync_guard.as_nanos() as u32)
         .ok_or(Error::SyncNotReady)?
@@ -22,16 +32,6 @@ pub(crate) fn handle<P: Port>(port: &mut P, config: &CpuConfig) -> Result<(), Er
     } else {
         Err(Error::SyncMissed)
     }
-}
-
-fn wait_for_the_cycle_before<P: Port>(port: &mut P, edge: u64) -> Result<(), Error> {
-    for _ in 0..fpga::FPGA_WAIT_UPDATE_MAX_POLLS.get() {
-        let now = port.sys_time().ok_or(Error::SyncNotReady)?;
-        if now.saturating_add(u64::from(SYNC_CYCLE_NS)) > edge {
-            return Ok(());
-        }
-    }
-    Err(Error::SyncNotReady)
 }
 
 #[cfg(all(test, not(loom)))]

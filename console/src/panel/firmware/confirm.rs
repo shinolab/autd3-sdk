@@ -28,17 +28,17 @@ enum Part {
     Fpga,
 }
 
-fn parse_line(line: &str) -> Option<(usize, Part, String)> {
-    let (device, rest) = line.strip_prefix("device ")?.split_once(": ")?;
-    let device = device.parse::<usize>().ok()?;
-    let (part, version) = match rest.strip_prefix("CPU firmware now = ") {
-        Some(version) => (Part::Cpu, version),
-        None => (Part::Fpga, rest.strip_prefix("FPGA firmware now = ")?),
-    };
-    Some((device, part, version.trim().to_string()))
-}
-
 pub(super) fn parse(logs: &[String]) -> Vec<DeviceVersions> {
+    fn parse_line(line: &str) -> Option<(usize, Part, String)> {
+        let (device, rest) = line.strip_prefix("device ")?.split_once(": ")?;
+        let device = device.parse::<usize>().ok()?;
+        let (part, version) = match rest.strip_prefix("CPU firmware now = ") {
+            Some(version) => (Part::Cpu, version),
+            None => (Part::Fpga, rest.strip_prefix("FPGA firmware now = ")?),
+        };
+        Some((device, part, version.trim().to_string()))
+    }
+
     let mut devices: Vec<DeviceVersions> = Vec::new();
     for (device, part, version) in logs.iter().filter_map(|line| parse_line(line)) {
         if devices.len() <= device {

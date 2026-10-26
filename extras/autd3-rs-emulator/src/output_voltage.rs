@@ -6,16 +6,6 @@ use crate::record::{
 };
 
 impl TransducerRecord {
-    fn voltage_frame(pw: u16, phase: u8, out: &mut Vec<f32>) {
-        out.extend(pwm_levels(pw, phase).map(|high| {
-            if high {
-                OUTPUT_VOLTAGE
-            } else {
-                -OUTPUT_VOLTAGE
-            }
-        }));
-    }
-
     pub(crate) fn output_voltage_within(&self, start: usize, n: usize) -> Option<Vec<f32>> {
         if start + n > self.pulse_width.len() {
             return None;
@@ -25,7 +15,13 @@ impl TransducerRecord {
             .iter()
             .zip(self.phase[start..][..n].iter())
         {
-            Self::voltage_frame(*pw, *phase, &mut out);
+            out.extend(pwm_levels(*pw, *phase).map(|high| {
+                if high {
+                    OUTPUT_VOLTAGE
+                } else {
+                    -OUTPUT_VOLTAGE
+                }
+            }));
         }
         Some(out)
     }

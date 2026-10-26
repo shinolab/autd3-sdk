@@ -25,23 +25,6 @@ pub const EMULATED_CPU_IMAGE: &[u8] =
 
 const _: () = assert!(is_plausible_length(EMULATED_CPU_IMAGE.len() as u32));
 
-fn fresh_cpu_flash() -> Box<[u8]> {
-    let mut flash = vec![0xFF; FLASH_BYTES as usize].into_boxed_slice();
-    let header_at = Slot::A.base() as usize;
-    let body_at = Slot::A.image_base() as usize;
-    let header = [
-        IMAGE_MAGIC,
-        0,
-        EMULATED_CPU_IMAGE.len() as u32,
-        crc32(EMULATED_CPU_IMAGE),
-    ];
-    for (i, word) in header.iter().enumerate() {
-        flash[header_at + 4 * i..][..4].copy_from_slice(&word.to_le_bytes());
-    }
-    flash[body_at..][..EMULATED_CPU_IMAGE.len()].copy_from_slice(EMULATED_CPU_IMAGE);
-    flash
-}
-
 pub use silencer::SilencerEmulator;
 use swapchain::Swapchain;
 
@@ -189,7 +172,20 @@ pub struct FpgaEmulator {
 impl FpgaEmulator {
     #[must_use]
     pub(crate) fn new(num_transducers: usize) -> Self {
-        Self::with_cpu_flash(num_transducers, fresh_cpu_flash())
+        let mut flash = vec![0xFF; FLASH_BYTES as usize].into_boxed_slice();
+        let header_at = Slot::A.base() as usize;
+        let body_at = Slot::A.image_base() as usize;
+        let header = [
+            IMAGE_MAGIC,
+            0,
+            EMULATED_CPU_IMAGE.len() as u32,
+            crc32(EMULATED_CPU_IMAGE),
+        ];
+        for (i, word) in header.iter().enumerate() {
+            flash[header_at + 4 * i..][..4].copy_from_slice(&word.to_le_bytes());
+        }
+        flash[body_at..][..EMULATED_CPU_IMAGE.len()].copy_from_slice(EMULATED_CPU_IMAGE);
+        Self::with_cpu_flash(num_transducers, flash)
     }
 
     fn with_cpu_flash(num_transducers: usize, cpu_flash: Box<[u8]>) -> Self {

@@ -43,10 +43,48 @@ pub(crate) enum CpuCmd {
 pub(crate) fn run_cpu(root: &Path, cmd: &CpuCmd) -> Result<()> {
     match cmd {
         CpuCmd::Build => cpu_build(root).map(|_| ()),
-        CpuCmd::Flash => cpu_flash(root),
-        CpuCmd::Test { loom } => cpu_test(root, *loom),
+        CpuCmd::Flash => {
+            let bin = cpu_build(root)?;
+            crate::firmware::run_writer(root, [OsStr::new("--cpu"), bin.as_os_str()])?;
+            println!("flash complete: {}", bin.display());
+            Ok(())
+        }
+        CpuCmd::Test { loom } => {
+            gen_param(root)?;
+            if !*loom {
+                return run("cargo", ["test", "-p", "autd3-cpu-fw"], root);
+            }
+            run_env(
+                "cargo",
+                ["test", "-p", "autd3-cpu-fw", "--lib"],
+                root,
+                &[("RUSTFLAGS", OsStr::new("--cfg loom"))],
+            )
+        }
         CpuCmd::GenParam => gen_param(root),
-        CpuCmd::Lint { loom } => cpu_lint(root, *loom),
+        CpuCmd::Lint { loom } => {
+            gen_param(root)?;
+            if *loom {
+                return run_env(
+                    "cargo",
+                    [
+                        "clippy",
+                        "-p",
+                        "autd3-cpu-fw",
+                        "--lib",
+                        "--profile",
+                        "test",
+                        "--",
+                        "-D",
+                        "warnings",
+                    ],
+                    root,
+                    &[("RUSTFLAGS", OsStr::new("--cfg loom"))],
+                );
+            }
+            cargo_clippy(root, &["-p", "autd3-cpu-fw", "--all-targets"])?;
+            cargo_clippy(&board_dir(root), &["--release"])
+        }
         CpuCmd::Format { fix } => {
             cargo_fmt(root, &["-p", "autd3-cpu-fw"], *fix)?;
             cargo_fmt(&board_dir(root), &[], *fix)
@@ -75,14 +113,11 @@ fn board_dir(root: &Path) -> PathBuf {
     root.join("firmware/cpu/board")
 }
 
-fn cpu_flash(root: &Path) -> Result<()> {
-    let bin = cpu_build(root)?;
-    crate::firmware::run_writer(root, [OsStr::new("--cpu"), bin.as_os_str()])?;
-    println!("flash complete: {}", bin.display());
-    Ok(())
-}
-
+#[allow(clippy::too_many_lines)]
 pub(crate) fn cpu_build(root: &Path) -> Result<PathBuf> {
+    use autd3_cpu_wire::update::{ImageHeader, SLOT_IMAGE_CAPACITY, Slot, crc32};
+    use zerocopy::IntoBytes;
+
     gen_param(root)?;
 
     let prefix = std::env::var("CROSS_COMPILE").unwrap_or_else(|_| "arm-none-eabi-".to_string());
@@ -164,28 +199,7 @@ pub(crate) fn cpu_build(root: &Path) -> Result<PathBuf> {
     let bin = build_dir.join("autd3-cpu.bin");
     std::fs::write(&bin, &image).with_context(|| format!("writing {}", bin.display()))?;
 
-    stamp_image(&bin)?;
-
-    println!("firmware built: {}", bin.display());
-    Ok(bin)
-}
-
-fn objcopy_binary(objcopy: &str, elf: &Path, bin: &Path, cwd: &Path) -> Result<Vec<u8>> {
-    let elf_str = elf.to_string_lossy().into_owned();
-    let bin_str = bin.to_string_lossy().into_owned();
-    run(
-        objcopy,
-        ["-O", "binary", "--gap-fill", "0xff", &elf_str, &bin_str],
-        cwd,
-    )?;
-    std::fs::read(bin).with_context(|| format!("reading {}", bin.display()))
-}
-
-fn stamp_image(bin: &Path) -> Result<()> {
-    use autd3_cpu_wire::update::{ImageHeader, SLOT_IMAGE_CAPACITY, Slot, crc32};
-    use zerocopy::IntoBytes;
-
-    let mut image = std::fs::read(bin).with_context(|| format!("reading {}", bin.display()))?;
+    let mut image = std::fs::read(&bin).with_context(|| format!("reading {}", bin.display()))?;
     let header_at = Slot::A.base() as usize;
     let body_at = Slot::A.image_base() as usize;
     if image.len() <= body_at {
@@ -211,47 +225,23 @@ fn stamp_image(bin: &Path) -> Result<()> {
         );
     }
     slot.copy_from_slice(header.as_bytes());
-    std::fs::write(bin, &image).with_context(|| format!("writing {}", bin.display()))?;
+    std::fs::write(&bin, &image).with_context(|| format!("writing {}", bin.display()))?;
     println!(
         "stamped slot-A header: length {body_len} bytes, crc32 0x{:08X}",
         header.crc32.get()
     );
-    Ok(())
+
+    println!("firmware built: {}", bin.display());
+    Ok(bin)
 }
 
-fn cpu_test(root: &Path, loom: bool) -> Result<()> {
-    gen_param(root)?;
-    if !loom {
-        return run("cargo", ["test", "-p", "autd3-cpu-fw"], root);
-    }
-    run_env(
-        "cargo",
-        ["test", "-p", "autd3-cpu-fw", "--lib"],
-        root,
-        &[("RUSTFLAGS", OsStr::new("--cfg loom"))],
-    )
-}
-
-fn cpu_lint(root: &Path, loom: bool) -> Result<()> {
-    gen_param(root)?;
-    if loom {
-        return run_env(
-            "cargo",
-            [
-                "clippy",
-                "-p",
-                "autd3-cpu-fw",
-                "--lib",
-                "--profile",
-                "test",
-                "--",
-                "-D",
-                "warnings",
-            ],
-            root,
-            &[("RUSTFLAGS", OsStr::new("--cfg loom"))],
-        );
-    }
-    cargo_clippy(root, &["-p", "autd3-cpu-fw", "--all-targets"])?;
-    cargo_clippy(&board_dir(root), &["--release"])
+fn objcopy_binary(objcopy: &str, elf: &Path, bin: &Path, cwd: &Path) -> Result<Vec<u8>> {
+    let elf_str = elf.to_string_lossy().into_owned();
+    let bin_str = bin.to_string_lossy().into_owned();
+    run(
+        objcopy,
+        ["-O", "binary", "--gap-fill", "0xff", &elf_str, &bin_str],
+        cwd,
+    )?;
+    std::fs::read(bin).with_context(|| format!("reading {}", bin.display()))
 }

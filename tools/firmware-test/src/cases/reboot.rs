@@ -16,39 +16,30 @@ fn verdict(ok: bool) -> &'static str {
     if ok { "[OK]" } else { "[FAIL]" }
 }
 
-async fn request_reboot(client: &Client) -> Result<()> {
-    let datagrams = [Datagram::no_payload(Cmd::Reboot)];
-    client
-        .send_frame(Frame::new(Distribution::Broadcast, &datagrams))
-        .await?
-        .await?
-        .check()?;
-    Ok(())
-}
-
-async fn gone(client: &Client, window: Duration) -> Result<(bool, Vec<DeviceState>)> {
-    let started = Instant::now();
-    loop {
-        client.send_heartbeat()?;
-        tokio::time::sleep(POLL).await;
-        let seen: Vec<DeviceState> = client
-            .device_status()?
-            .iter()
-            .map(|status| status.state)
-            .collect();
-        let all_lost = seen.iter().all(|d| *d == DeviceState::Lost);
-        if all_lost || started.elapsed() >= window {
-            return Ok((all_lost, seen));
+pub(crate) async fn run(client: Session, link: &Link<'_>) -> Result<Session> {
+    async fn reboot_all(client: &Client, window: Duration) -> Result<(bool, Vec<DeviceState>)> {
+        let datagrams = [Datagram::no_payload(Cmd::Reboot)];
+        client
+            .send_frame(Frame::new(Distribution::Broadcast, &datagrams))
+            .await?
+            .await?
+            .check()?;
+        let started = Instant::now();
+        loop {
+            client.send_heartbeat()?;
+            tokio::time::sleep(POLL).await;
+            let seen: Vec<DeviceState> = client
+                .device_status()?
+                .iter()
+                .map(|status| status.state)
+                .collect();
+            let all_lost = seen.iter().all(|d| *d == DeviceState::Lost);
+            if all_lost || started.elapsed() >= window {
+                return Ok((all_lost, seen));
+            }
         }
     }
-}
 
-async fn reboot_all(client: &Client, window: Duration) -> Result<(bool, Vec<DeviceState>)> {
-    request_reboot(client).await?;
-    gone(client, window).await
-}
-
-pub(crate) async fn run(client: Session, link: &Link<'_>) -> Result<Session> {
     let devices = client.num_devices();
     let before = client.read_firmware_version().await;
     if let Err(e) = &before {

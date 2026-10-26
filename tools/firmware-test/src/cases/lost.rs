@@ -21,29 +21,51 @@ fn snapshot(client: &Client) -> Vec<DeviceState> {
     crate::device_states(client)
 }
 
-async fn reaches(client: &Client, expected: &[DeviceState], window: Duration) -> Option<Duration> {
-    let started = Instant::now();
-    while started.elapsed() < window {
-        if snapshot(client) == expected {
-            return Some(started.elapsed());
+#[allow(clippy::too_many_lines)]
+pub(crate) async fn run(client: Session, link: &Link<'_>) -> Result<Session> {
+    async fn reaches(
+        client: &Client,
+        expected: &[DeviceState],
+        window: Duration,
+    ) -> Option<Duration> {
+        let started = Instant::now();
+        while started.elapsed() < window {
+            if snapshot(client) == expected {
+                return Some(started.elapsed());
+            }
+            tokio::time::sleep(POLL).await;
         }
-        tokio::time::sleep(POLL).await;
+        None
     }
-    None
-}
-
-async fn holds(client: &Client, expected: &[DeviceState], window: Duration) -> bool {
-    let started = Instant::now();
-    while started.elapsed() < window {
-        if snapshot(client) != expected {
-            return false;
+    async fn holds(client: &Client, expected: &[DeviceState], window: Duration) -> bool {
+        let started = Instant::now();
+        while started.elapsed() < window {
+            if snapshot(client) != expected {
+                return false;
+            }
+            tokio::time::sleep(POLL).await;
         }
-        tokio::time::sleep(POLL).await;
+        true
     }
-    true
-}
 
-async fn detect(client: &Client, first: usize) {
+    let count = client.num_devices();
+    let before = snapshot(&client);
+    println!(
+        "  {} every device is Ready before the cable is touched: {before:?}",
+        verdict(before.iter().all(|d| *d == DeviceState::Ready))
+    );
+
+    let answer = prompt(&format!(
+        "Index of the first device to cut off (0..{count}, empty = the last one)"
+    ))
+    .await;
+    let first = answer
+        .trim()
+        .parse::<usize>()
+        .ok()
+        .filter(|device| *device < count)
+        .unwrap_or(count - 1);
+
     let count = client.num_devices();
     let expected: Vec<DeviceState> = (0..count)
         .map(|device| {
@@ -54,21 +76,19 @@ async fn detect(client: &Client, first: usize) {
             }
         })
         .collect();
-
     check(&format!(
         "Unplug the cable on the host side of device[{first}], or power-cycle device[{first}], within {DETECTION_WINDOW:?}"
     ));
-    match reaches(client, &expected, DETECTION_WINDOW).await {
+    match reaches(&client, &expected, DETECTION_WINDOW).await {
         Some(elapsed) => println!(
             "  [OK] device[{first}] and every device behind it turned Lost, the others stayed Ready ({:.1} s after the prompt): {expected:?}",
             elapsed.as_secs_f32()
         ),
         None => println!(
             "  [FAIL] expected {expected:?} within {DETECTION_WINDOW:?}, got {:?}",
-            snapshot(client)
+            snapshot(&client)
         ),
     }
-
     let read = client.read_fpga_state().await.map(|values| values.len());
     let write = client.send(ForceFan { value: false }).await;
     if first == 0 {
@@ -90,38 +110,15 @@ async fn detect(client: &Client, first: usize) {
             verdict(write.is_ok())
         );
     }
-
     wait_enter(
         "Plug the cable back (or wait until the device has booted) and wait for the link LED",
     )
     .await;
     println!(
         "  {} a Lost device stays Lost for {STICKY_WINDOW:?} after the link is back: {:?}",
-        verdict(holds(client, &expected, STICKY_WINDOW).await),
-        snapshot(client)
+        verdict(holds(&client, &expected, STICKY_WINDOW).await),
+        snapshot(&client)
     );
-}
-
-pub(crate) async fn run(client: Session, link: &Link<'_>) -> Result<Session> {
-    let count = client.num_devices();
-    let before = snapshot(&client);
-    println!(
-        "  {} every device is Ready before the cable is touched: {before:?}",
-        verdict(before.iter().all(|d| *d == DeviceState::Ready))
-    );
-
-    let answer = prompt(&format!(
-        "Index of the first device to cut off (0..{count}, empty = the last one)"
-    ))
-    .await;
-    let first = answer
-        .trim()
-        .parse::<usize>()
-        .ok()
-        .filter(|device| *device < count)
-        .unwrap_or(count - 1);
-
-    detect(&client, first).await;
 
     if let Err(e) = client.close() {
         println!("  closing the client with Lost devices reported: {e}");

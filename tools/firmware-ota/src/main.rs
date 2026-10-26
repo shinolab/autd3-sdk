@@ -10,7 +10,7 @@ use autd3_cpu_wire::update::RunningImage;
 use autd3_firmware_writer::bundle;
 use autd3_rs_firmware_ota::{
     CpuFirmwareImage, Driver, DriverError, FPGA_ACTIVATE_ATTEMPTS, FPGA_RECONFIG_WAIT,
-    FpgaFirmwareImage, MIN_CPU_FIRMWARE_VERSION, UdpArgs, UdpLink, boot_image,
+    FpgaFirmwareImage, MIN_CPU_FIRMWARE_VERSION, UdpArgs, boot_image,
 };
 
 type Version = [u8; 3];
@@ -212,10 +212,6 @@ struct NotOnTrial {
     devices: Vec<OffTrial>,
 }
 
-fn is_final(e: &anyhow::Error) -> bool {
-    e.downcast_ref::<TrialNotRunning>().is_some() || e.downcast_ref::<NotOnTrial>().is_some()
-}
-
 fn describe_running_image(image: Option<RunningImage>) -> &'static str {
     match image {
         Some(RunningImage::Unconfirmed) => "unconfirmed trial image",
@@ -225,25 +221,140 @@ fn describe_running_image(image: Option<RunningImage>) -> &'static str {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn open_and_run(udp: &UdpArgs, devices: usize, stage: Stage<'_>) -> Result<Outcome> {
-    run(udp.open(devices)?, stage)
-}
-
-fn request_activation(driver: &mut Driver) -> Result<bool> {
-    match driver.activate() {
-        Ok(()) => {
-            println!("activation acknowledged; the devices reboot in about 100 ms");
-            Ok(true)
-        }
-        Err(DriverError::Timeout { .. }) => {
-            eprintln!(
-                "warning: not every device acknowledged the activation; the devices that \
-                 have not rebooted are activated after the reconnection"
+    fn run_fpga(driver: &mut Driver, image: &FpgaFirmwareImage, activate: bool) -> Result<()> {
+        print_fpga(driver, "before")?;
+        driver.update_fpga(image, progress_printer(image.len()))?;
+        end_progress();
+        println!(
+            "FPGA image committed on every device (transducer output stays off until reconfiguration)"
+        );
+        if !activate {
+            println!(
+                "not activated (--no-activate); output stays off until the next power cycle, \
+             which boots the new image"
             );
-            Ok(false)
+            return Ok(());
         }
-        Err(e) => Err(e.into()),
+        driver.activate_fpga()?;
+        for attempt in 1..=FPGA_ACTIVATE_ATTEMPTS {
+            println!(
+                "activation acknowledged; waiting {FPGA_RECONFIG_WAIT:?} for the FPGAs to reconfigure"
+            );
+            std::thread::sleep(FPGA_RECONFIG_WAIT);
+            if attempt == FPGA_ACTIVATE_ATTEMPTS {
+                break;
+            }
+            let retried = driver.activate_unreconfigured_fpga()?;
+            if retried.is_empty() {
+                break;
+            }
+            for device in &retried {
+                println!(
+                    "device {device} did not reconfigure; activating it again ({}/{FPGA_ACTIVATE_ATTEMPTS})",
+                    attempt + 1
+                );
+            }
+        }
+        let images = print_fpga(driver, "after")?;
+        driver.ensure_fpga_reconfigured()?;
+        if let Some(device) = images.iter().position(|&i| i != FpgaBootImage::Update) {
+            bail!(
+                "device {device} did not come back with the update image (reads {:?}); \
+             Golden means the update image failed to configure and the golden image took over. \
+             Write the FPGA via JTAG (autd3-console Firmware tab with Method = JTAG, or \
+             `autd3-firmware-writer`)",
+                images[device]
+            );
+        }
+        println!("Ok!");
+        Ok(())
     }
+
+    let mut driver = Driver::new(udp.open(devices)?);
+    let devices = driver.num_devices();
+    println!("{devices} device(s) on the bus");
+    let mut activation_unacknowledged = false;
+    let mut activated_late = Vec::new();
+    let cpu_versions = match stage {
+        Stage::Update { image, activate } => {
+            let before = print_versions(&mut driver, "before")?;
+            driver.update(image, progress_printer(image.len()))?;
+            end_progress();
+            println!("image committed on every device");
+            if activate {
+                activation_unacknowledged = match driver.activate() {
+                    Ok(()) => {
+                        println!("activation acknowledged; the devices reboot in about 100 ms");
+                        false
+                    }
+                    Err(DriverError::Timeout { .. }) => {
+                        eprintln!(
+                            "warning: not every device acknowledged the activation; the devices that \
+                         have not rebooted are activated after the reconnection"
+                        );
+                        true
+                    }
+                    Err(e) => return Err(e.into()),
+                };
+            }
+            driver.close()?;
+            before
+        }
+        Stage::FpgaUpdate { image, activate } => {
+            run_fpga(&mut driver, image, activate)?;
+            driver.close()?;
+            Vec::new()
+        }
+        Stage::FpgaVerify => {
+            print_fpga(&mut driver, "now")?;
+            driver.close()?;
+            Vec::new()
+        }
+        Stage::Verify {
+            confirm,
+            expect,
+            activate_unrebooted,
+            require_trial,
+        } => {
+            if activate_unrebooted {
+                activated_late = driver.activate_unrebooted()?;
+            }
+            let after = if activated_late.is_empty() {
+                let label = if confirm { "after" } else { "now" };
+                let after = print_versions(&mut driver, label)?;
+                check_expectation(&after, expect)?;
+                let images = driver.read_running_image()?;
+                for (device, &image) in images.iter().enumerate() {
+                    println!("device {device}: CPU {}", describe_running_image(image));
+                }
+                if require_trial {
+                    check_trial(&images, &after, expect)?;
+                }
+                if confirm {
+                    driver.confirm()?;
+                    println!("running image confirmed on every device");
+                }
+                after
+            } else {
+                for device in &activated_late {
+                    println!(
+                        "device {device} had not rebooted; activated now, it reboots in about 100 ms"
+                    );
+                }
+                Vec::new()
+            };
+            driver.close()?;
+            after
+        }
+    };
+    Ok(Outcome {
+        devices,
+        cpu_versions,
+        activation_unacknowledged,
+        activated_late,
+    })
 }
 
 fn fmt_version([major, minor, patch]: Version) -> String {
@@ -263,14 +374,6 @@ fn print_versions(driver: &mut Driver, label: &str) -> Result<Vec<Version>> {
         );
     }
     Ok(versions)
-}
-
-fn print_running_images(driver: &mut Driver) -> Result<Vec<Option<RunningImage>>> {
-    let images = driver.read_running_image()?;
-    for (device, &image) in images.iter().enumerate() {
-        println!("device {device}: CPU {}", describe_running_image(image));
-    }
-    Ok(images)
 }
 
 fn print_fpga(driver: &mut Driver, label: &str) -> Result<Vec<FpgaBootImage>> {
@@ -327,35 +430,35 @@ fn check_expectation(versions: &[Version], expect: Expect<'_>) -> Result<()> {
     Ok(())
 }
 
-fn off_trial_by_version(versions: &[Version], expect: Expect<'_>) -> Vec<usize> {
-    let Expect::ChangedFrom(before) = expect else {
-        return Vec::new();
-    };
-    if versions.windows(2).all(|pair| pair[0] == pair[1]) {
-        if before == versions {
-            eprintln!(
-                "warning: the CPU firmware version did not change across the reboot; \
-                 this is expected only if the same version was written again, otherwise \
-                 the trial image did not boot and the previous image is running"
-            );
-        }
-        return Vec::new();
-    }
-    let unchanged: Vec<usize> = (0..versions.len())
-        .filter(|&device| before.get(device) == Some(&versions[device]))
-        .collect();
-    if unchanged.is_empty() {
-        (0..versions.len()).collect()
-    } else {
-        unchanged
-    }
-}
-
 fn check_trial(
     images: &[Option<RunningImage>],
     versions: &[Version],
     expect: Expect<'_>,
 ) -> Result<()> {
+    fn off_trial_by_version(versions: &[Version], expect: Expect<'_>) -> Vec<usize> {
+        let Expect::ChangedFrom(before) = expect else {
+            return Vec::new();
+        };
+        if versions.windows(2).all(|pair| pair[0] == pair[1]) {
+            if before == versions {
+                eprintln!(
+                    "warning: the CPU firmware version did not change across the reboot; \
+                     this is expected only if the same version was written again, otherwise \
+                     the trial image did not boot and the previous image is running"
+                );
+            }
+            return Vec::new();
+        }
+        let unchanged: Vec<usize> = (0..versions.len())
+            .filter(|&device| before.get(device) == Some(&versions[device]))
+            .collect();
+        if unchanged.is_empty() {
+            (0..versions.len()).collect()
+        } else {
+            unchanged
+        }
+    }
+
     let off_trial = if images.iter().any(Option::is_some) {
         (0..images.len())
             .filter(|&device| images[device] != Some(RunningImage::Unconfirmed))
@@ -381,164 +484,6 @@ fn check_trial(
             .collect(),
     }
     .into())
-}
-
-fn run_fpga(driver: &mut Driver, image: &FpgaFirmwareImage, activate: bool) -> Result<()> {
-    print_fpga(driver, "before")?;
-    driver.update_fpga(image, progress_printer(image.len()))?;
-    end_progress();
-    println!(
-        "FPGA image committed on every device (transducer output stays off until reconfiguration)"
-    );
-    if !activate {
-        println!(
-            "not activated (--no-activate); output stays off until the next power cycle, \
-             which boots the new image"
-        );
-        return Ok(());
-    }
-    driver.activate_fpga()?;
-    for attempt in 1..=FPGA_ACTIVATE_ATTEMPTS {
-        println!(
-            "activation acknowledged; waiting {FPGA_RECONFIG_WAIT:?} for the FPGAs to reconfigure"
-        );
-        std::thread::sleep(FPGA_RECONFIG_WAIT);
-        if attempt == FPGA_ACTIVATE_ATTEMPTS {
-            break;
-        }
-        let retried = driver.activate_unreconfigured_fpga()?;
-        if retried.is_empty() {
-            break;
-        }
-        for device in &retried {
-            println!(
-                "device {device} did not reconfigure; activating it again ({}/{FPGA_ACTIVATE_ATTEMPTS})",
-                attempt + 1
-            );
-        }
-    }
-    let images = print_fpga(driver, "after")?;
-    driver.ensure_fpga_reconfigured()?;
-    if let Some(device) = images.iter().position(|&i| i != FpgaBootImage::Update) {
-        bail!(
-            "device {device} did not come back with the update image (reads {:?}); \
-             Golden means the update image failed to configure and the golden image took over. \
-             Write the FPGA via JTAG (autd3-console Firmware tab with Method = JTAG, or \
-             `autd3-firmware-writer`)",
-            images[device]
-        );
-    }
-    println!("Ok!");
-    Ok(())
-}
-
-fn run(link: UdpLink, stage: Stage<'_>) -> Result<Outcome> {
-    let mut driver = Driver::new(link);
-    let devices = driver.num_devices();
-    println!("{devices} device(s) on the bus");
-    let mut activation_unacknowledged = false;
-    let mut activated_late = Vec::new();
-    let cpu_versions = match stage {
-        Stage::Update { image, activate } => {
-            let before = print_versions(&mut driver, "before")?;
-            driver.update(image, progress_printer(image.len()))?;
-            end_progress();
-            println!("image committed on every device");
-            if activate {
-                activation_unacknowledged = !request_activation(&mut driver)?;
-            }
-            driver.close()?;
-            before
-        }
-        Stage::FpgaUpdate { image, activate } => {
-            run_fpga(&mut driver, image, activate)?;
-            driver.close()?;
-            Vec::new()
-        }
-        Stage::FpgaVerify => {
-            print_fpga(&mut driver, "now")?;
-            driver.close()?;
-            Vec::new()
-        }
-        Stage::Verify {
-            confirm,
-            expect,
-            activate_unrebooted,
-            require_trial,
-        } => {
-            if activate_unrebooted {
-                activated_late = driver.activate_unrebooted()?;
-            }
-            let after = if activated_late.is_empty() {
-                let label = if confirm { "after" } else { "now" };
-                let after = print_versions(&mut driver, label)?;
-                check_expectation(&after, expect)?;
-                let images = print_running_images(&mut driver)?;
-                if require_trial {
-                    check_trial(&images, &after, expect)?;
-                }
-                if confirm {
-                    driver.confirm()?;
-                    println!("running image confirmed on every device");
-                }
-                after
-            } else {
-                for device in &activated_late {
-                    println!(
-                        "device {device} had not rebooted; activated now, it reboots in about 100 ms"
-                    );
-                }
-                Vec::new()
-            };
-            driver.close()?;
-            after
-        }
-    };
-    Ok(Outcome {
-        devices,
-        cpu_versions,
-        activation_unacknowledged,
-        activated_late,
-    })
-}
-
-fn main_reboot(cli: &Cli) -> Result<()> {
-    let mut driver = Driver::new(cli.udp.open(cli.devices)?);
-    println!("{} device(s) on the bus", driver.num_devices());
-    driver.reboot()?;
-    println!("reboot acknowledged; the devices reset in about 100 ms and come back unassigned");
-    driver.close()?;
-    Ok(())
-}
-
-fn reconnect_and_run(cli: &Cli, devices: usize, stage: Stage<'_>) -> Result<Outcome> {
-    let attempts = cli.reconnect_attempts.max(1);
-    let hint = match stage {
-        Stage::Verify {
-            activate_unrebooted: true,
-            ..
-        } => UNACKNOWLEDGED_ACTIVATION_HINT,
-        _ => CONFIRM_ONLY_HINT,
-    };
-    let mut attempt = 0;
-    loop {
-        attempt += 1;
-        match open_and_run(&cli.udp, devices, stage) {
-            Ok(outcome) => return Ok(outcome),
-            Err(e) if is_final(&e) => return Err(e),
-            Err(e) if attempt < attempts => {
-                eprintln!(
-                    "reconnection attempt {attempt}/{attempts} failed: {e:#}; retrying in {RECONNECT_INTERVAL:?}"
-                );
-                std::thread::sleep(RECONNECT_INTERVAL);
-            }
-            Err(e) => {
-                return Err(e).context(format!(
-                    "reconnection failed {attempts} time(s) after the reboot; {hint}"
-                ));
-            }
-        }
-    }
 }
 
 const LOCAL_FPGA_IMAGE_HINT: &str = "pass the `autd3-fpga-update.img` produced by `cargo xtask fpga build` \
@@ -596,16 +541,47 @@ fn udp_release(version: &str) -> Result<Version> {
 }
 
 fn main_cpu(cli: &Cli, bytes: &[u8], release: Option<Version>) -> Result<()> {
+    fn reconnect_and_run(cli: &Cli, devices: usize, stage: Stage<'_>) -> Result<Outcome> {
+        let attempts = cli.reconnect_attempts.max(1);
+        let hint = match stage {
+            Stage::Verify {
+                activate_unrebooted: true,
+                ..
+            } => UNACKNOWLEDGED_ACTIVATION_HINT,
+            _ => CONFIRM_ONLY_HINT,
+        };
+        let mut attempt = 0;
+        loop {
+            attempt += 1;
+            match open_and_run(&cli.udp, devices, stage) {
+                Ok(outcome) => return Ok(outcome),
+                Err(e)
+                    if e.downcast_ref::<TrialNotRunning>().is_some()
+                        || e.downcast_ref::<NotOnTrial>().is_some() =>
+                {
+                    return Err(e);
+                }
+                Err(e) if attempt < attempts => {
+                    eprintln!(
+                        "reconnection attempt {attempt}/{attempts} failed: {e:#}; retrying in {RECONNECT_INTERVAL:?}"
+                    );
+                    std::thread::sleep(RECONNECT_INTERVAL);
+                }
+                Err(e) => {
+                    return Err(e).context(format!(
+                        "reconnection failed {attempts} time(s) after the reboot; {hint}"
+                    ));
+                }
+            }
+        }
+    }
+
     let image = CpuFirmwareImage::from_flash_image(bytes)?;
     println!(
         "image: {} bytes, crc32 {:#010x}",
         image.len(),
         image.crc32()
     );
-    update_cpu(cli, &image, release)
-}
-
-fn update_cpu(cli: &Cli, image: &CpuFirmwareImage, release: Option<Version>) -> Result<()> {
     if cli.verify_only || cli.confirm_only {
         open_and_run(
             &cli.udp,
@@ -620,7 +596,14 @@ fn update_cpu(cli: &Cli, image: &CpuFirmwareImage, release: Option<Version>) -> 
         return Ok(());
     }
     let activate = !cli.no_activate;
-    let before = open_and_run(&cli.udp, cli.devices, Stage::Update { image, activate })?;
+    let before = open_and_run(
+        &cli.udp,
+        cli.devices,
+        Stage::Update {
+            image: &image,
+            activate,
+        },
+    )?;
     if !activate {
         println!(
             "not activated (--no-activate); the committed image boots as a trial at the next \
@@ -629,7 +612,6 @@ fn update_cpu(cli: &Cli, image: &CpuFirmwareImage, release: Option<Version>) -> 
         );
         return Ok(());
     }
-
     let wait = Duration::from_secs(cli.reboot_wait_secs);
     let expect = release.map_or(Expect::ChangedFrom(&before.cpu_versions), Expect::Exactly);
     let mut activate_unrebooted = before.activation_unacknowledged;
@@ -686,34 +668,18 @@ fn release_images(bundle: bundle::Bundle, target: Target) -> Result<ReleaseImage
     Ok(ReleaseImages { cpu, fpga })
 }
 
-fn main_release(cli: &Cli, version: &str) -> Result<()> {
-    if cli.confirm_only && cli.target != Target::Cpu {
-        bail!("--confirm-only only applies to the CPU image; pass --target cpu");
-    }
-    let release = udp_release(version)?;
-    let bundle = bundle::fetch(version, cli.force_download)?;
-    let images = release_images(bundle, cli.target)?;
-    let cpu = images.cpu.as_deref().map(read_image).transpose()?;
-    let fpga = images.fpga.as_deref().map(read_image).transpose()?;
-    let shown = version.trim_start_matches('v');
-    if let Some(bytes) = cpu {
-        println!("== CPU firmware v{shown} ==");
-        main_cpu(cli, &bytes, Some(release))?;
-    }
-    if let Some(bytes) = fpga {
-        println!("== FPGA firmware v{shown} ==");
-        main_fpga(cli, bytes, RELEASE_FPGA_IMAGE_HINT)?;
-    }
-    Ok(())
-}
-
 fn main() -> Result<()> {
     let cli = Cli::parse();
     if cli.devices == 0 {
         bail!("--devices must be at least 1");
     }
     if cli.reboot_only {
-        return main_reboot(&cli);
+        let mut driver = Driver::new(cli.udp.open(cli.devices)?);
+        println!("{} device(s) on the bus", driver.num_devices());
+        driver.reboot()?;
+        println!("reboot acknowledged; the devices reset in about 100 ms and come back unassigned");
+        driver.close()?;
+        return Ok(());
     }
     match (&cli.image, &cli.version) {
         (Some(path), _) => {
@@ -724,7 +690,26 @@ fn main() -> Result<()> {
                 main_cpu(&cli, &bytes, None)
             }
         }
-        (None, Some(version)) => main_release(&cli, version),
+        (None, Some(version)) => {
+            if cli.confirm_only && cli.target != Target::Cpu {
+                bail!("--confirm-only only applies to the CPU image; pass --target cpu");
+            }
+            let release = udp_release(version)?;
+            let bundle = bundle::fetch(version, cli.force_download)?;
+            let images = release_images(bundle, cli.target)?;
+            let cpu = images.cpu.as_deref().map(read_image).transpose()?;
+            let fpga = images.fpga.as_deref().map(read_image).transpose()?;
+            let shown = version.trim_start_matches('v');
+            if let Some(bytes) = cpu {
+                println!("== CPU firmware v{shown} ==");
+                main_cpu(&cli, &bytes, Some(release))?;
+            }
+            if let Some(bytes) = fpga {
+                println!("== FPGA firmware v{shown} ==");
+                main_fpga(&cli, bytes, RELEASE_FPGA_IMAGE_HINT)?;
+            }
+            Ok(())
+        }
         (None, None) => bail!("pass an image file or --version"),
     }
 }

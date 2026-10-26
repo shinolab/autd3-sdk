@@ -208,7 +208,9 @@ pub fn write_ram_at<P: Port>(
     });
 }
 
-fn init_silencer<P: Port>(port: &mut P) {
+pub fn init<P: Port>(port: &mut P, max_polls: NonZeroU32) -> Result<(), Error> {
+    let gate = CtlFlags::from_bits_retain(read_ctl(port, ADDR_CTL_FLAG)) & CtlFlags::FAILSAFE;
+    write_ctl(port, ADDR_CTL_FLAG, gate.bits());
     write_ctl(
         port,
         ADDR_SILENCER_UPDATE_RATE_INTENSITY,
@@ -230,9 +232,6 @@ fn init_silencer<P: Port>(port: &mut P) {
         ADDR_SILENCER_COMPLETION_STEPS_PHASE,
         SILENCER_DEFAULT_COMPLETION_STEPS_PHASE,
     );
-}
-
-fn init_mod<P: Port>(port: &mut P) {
     write_ctl(
         port,
         ADDR_MOD_TRANSITION_MODE,
@@ -246,9 +245,6 @@ fn init_mod<P: Port>(port: &mut P) {
         write_ctl(port, ADDR_MOD_REP0 + u16::from(bank), REP_INFINITE);
         write_ram_words(port, &MOD_RAM, bank, 0, core::iter::once(0xFFFF));
     }
-}
-
-fn init_pattern<P: Port>(port: &mut P) {
     write_ctl(
         port,
         ADDR_PATTERN_TRANSITION_MODE,
@@ -273,9 +269,6 @@ fn init_pattern<P: Port>(port: &mut P) {
             core::iter::repeat_n(0, NUM_TRANSDUCERS),
         );
     }
-}
-
-fn init_tables<P: Port>(port: &mut P) {
     for i in 0..PHASE_CORR_WORDS as u16 {
         write(port, BramSelect::PhaseCorr, i, 0);
     }
@@ -290,15 +283,6 @@ fn init_tables<P: Port>(port: &mut P) {
     for i in 0..DEBUG_VALUE_WORDS {
         write_ctl(port, ADDR_DEBUG_VALUE0_0 + i, 0);
     }
-}
-
-pub fn init<P: Port>(port: &mut P, max_polls: NonZeroU32) -> Result<(), Error> {
-    let gate = CtlFlags::from_bits_retain(read_ctl(port, ADDR_CTL_FLAG)) & CtlFlags::FAILSAFE;
-    write_ctl(port, ADDR_CTL_FLAG, gate.bits());
-    init_silencer(port);
-    init_mod(port);
-    init_pattern(port);
-    init_tables(port);
 
     set_and_wait_update(port, CtlFlags::SILENCER_SET, max_polls)?;
     set_and_wait_update(

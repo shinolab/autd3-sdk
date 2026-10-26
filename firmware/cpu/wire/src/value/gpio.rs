@@ -31,10 +31,6 @@ impl GpioIn {
 
 const GPIO_OUT_VALUE_MASK: u64 = 0x00FF_FFFF_FFFF_FFFF;
 
-const fn gpio_sys_time(sys_time_ns: u64) -> u64 {
-    ((sys_time_ns / 3125) << 6) >> 9
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[non_exhaustive]
 pub enum GpioOut {
@@ -69,7 +65,7 @@ impl GpioOut {
             GpioOut::PatternBank => (GpioOutType::PatternBank, 0),
             GpioOut::PatternIdx(idx) => (GpioOutType::PatternIdx, idx as u64),
             GpioOut::IsStmMode => (GpioOutType::IsStmMode, 0),
-            GpioOut::SysTimeEq(t) => (GpioOutType::SysTimeEq, gpio_sys_time(t.sys_time())),
+            GpioOut::SysTimeEq(t) => (GpioOutType::SysTimeEq, ((t.sys_time() / 3125) << 6) >> 9),
             GpioOut::SyncDiff => (GpioOutType::SyncDiff, 0),
             GpioOut::PwmOut(tr) => (GpioOutType::PwmOut, tr as u64),
             GpioOut::Direct(on) => (GpioOutType::Direct, on as u64),

@@ -28,18 +28,6 @@ fn freq_mode(freq: &Bound<'_, PyAny>) -> PyResult<SamplingMode> {
     Ok(SamplingMode::ExactFreqFloat(freq_hz(freq)? * Hz))
 }
 
-fn mode_to_py(py: Python<'_>, mode: SamplingMode) -> PyResult<Bound<'_, PyAny>> {
-    let core = py.import("autd3_core")?;
-    let freq = core.getattr("Freq")?;
-    match mode {
-        SamplingMode::ExactFreqFloat(f) => freq.call_method1("from_hz", (f.hz(),)),
-        SamplingMode::NearestFreq(f) => core
-            .getattr("Nearest")?
-            .call1((freq.call_method1("from_hz", (f.hz(),))?,)),
-        _ => unreachable!(),
-    }
-}
-
 #[pyclass(name = "SineOption", module = "autd3_modulation", eq, frozen)]
 #[derive(Clone, Copy, PartialEq)]
 pub struct SineOption(pub(crate) CoreSineOption);
@@ -266,7 +254,15 @@ impl SineComponent {
 
     #[getter]
     fn freq<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        mode_to_py(py, self.0.freq)
+        let core = py.import("autd3_core")?;
+        let freq = core.getattr("Freq")?;
+        match self.0.freq {
+            SamplingMode::ExactFreqFloat(f) => freq.call_method1("from_hz", (f.hz(),)),
+            SamplingMode::NearestFreq(f) => core
+                .getattr("Nearest")?
+                .call1((freq.call_method1("from_hz", (f.hz(),))?,)),
+            _ => unreachable!(),
+        }
     }
 
     #[getter]

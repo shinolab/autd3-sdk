@@ -75,29 +75,29 @@ euler_orders!(
     ("ZYZ", zyz, z_axis, y_axis, z_axis),
 );
 
-fn scipy_rotation_to_quat(obj: &Bound<'_, PyAny>) -> PyResult<Option<[f32; 4]>> {
-    let py = obj.py();
-    let modules = py.import("sys")?.getattr("modules")?;
-    let Some(m) = modules
-        .call_method1("get", ("scipy.spatial.transform",))?
-        .extract::<Option<Bound<'_, PyAny>>>()?
-    else {
-        return Ok(None);
-    };
-    let rot_cls = m.getattr("Rotation")?;
-    if !obj.is_instance(&rot_cls)? {
-        return Ok(None);
-    }
-    let [qx, qy, qz, qw]: [f32; 4] = obj.call_method0("as_quat")?.extract()?;
-    Ok(Some([qw, qx, qy, qz]))
-}
-
 fn coerce_origin(origin: &Bound<'_, PyAny>) -> PyResult<Point3<f32>> {
     let [x, y, z] = origin.extract::<[f32; 3]>()?;
     Ok(Point3::new(x, y, z))
 }
 
 fn coerce_rotation(rotation: &Bound<'_, PyAny>) -> PyResult<UnitQuaternion<f32>> {
+    fn scipy_rotation_to_quat(obj: &Bound<'_, PyAny>) -> PyResult<Option<[f32; 4]>> {
+        let py = obj.py();
+        let modules = py.import("sys")?.getattr("modules")?;
+        let Some(m) = modules
+            .call_method1("get", ("scipy.spatial.transform",))?
+            .extract::<Option<Bound<'_, PyAny>>>()?
+        else {
+            return Ok(None);
+        };
+        let rot_cls = m.getattr("Rotation")?;
+        if !obj.is_instance(&rot_cls)? {
+            return Ok(None);
+        }
+        let [qx, qy, qz, qw]: [f32; 4] = obj.call_method0("as_quat")?.extract()?;
+        Ok(Some([qw, qx, qy, qz]))
+    }
+
     if rotation.is_none() {
         return Err(PyTypeError::new_err(
             "rotation must be a scalar-first quaternion [w, x, y, z], an EulerAngles, or a scipy.spatial.transform.Rotation, not None",

@@ -88,29 +88,112 @@ pub(crate) enum RustCmd {
     Clean(CleanArgs),
 }
 
+#[allow(clippy::too_many_lines)]
 pub(crate) fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
     match cmd {
         RustCmd::Build => run("cargo", ["build", "--workspace", "--all-targets"], root),
         RustCmd::Test {
             package,
             include_ignored,
-        } => run_test(root, package, *include_ignored),
-        RustCmd::Coverage { all, open } => run_coverage(root, *all, *open),
-        RustCmd::Lint => run_lint(root),
+        } => {
+            let mut args = vec!["test"];
+            if package.is_empty() {
+                args.push("--workspace");
+            }
+            for package in package {
+                args.extend(["--package", package.as_str()]);
+            }
+            args.extend(["--lib", "--bins", "--tests"]);
+            if *include_ignored {
+                args.extend(["--", "--include-ignored"]);
+            }
+            run("cargo", args, root)
+        }
+        RustCmd::Coverage { all, open } => {
+            let test_args = [
+                "llvm-cov",
+                "--no-report",
+                "--workspace",
+                "--lib",
+                "--bins",
+                "--tests",
+            ];
+            let filter: &[&str] = if *all {
+                &[]
+            } else {
+                &["--ignore-filename-regex", COVERAGE_IGNORE]
+            };
+            coverage(root, &test_args, filter, *open)
+        }
+        RustCmd::Lint => {
+            cargo_clippy(root, &["--workspace", "--all-targets"])?;
+            cargo_clippy(
+                root,
+                &[
+                    "-p",
+                    "autd3-rs-pattern-holo",
+                    "--no-default-features",
+                    "--all-targets",
+                ],
+            )?;
+            cargo_clippy(
+                root,
+                &[
+                    "-p",
+                    "autd3-rs-firmware-emulator",
+                    "--no-default-features",
+                    "--all-targets",
+                ],
+            )
+        }
         RustCmd::Format { fix } => cargo_fmt(root, &["--all"], *fix),
         RustCmd::Bench {
             filter,
             package,
             save_baseline,
             baseline,
-        } => run_bench(
-            root,
-            filter.as_deref(),
-            package.as_deref(),
-            save_baseline.as_deref(),
-            baseline.as_deref(),
-        ),
-        RustCmd::Semver { baseline } => run_semver(root, baseline.as_deref()),
+        } => {
+            let filter = filter.as_deref();
+            let package = package.as_deref();
+            let save_baseline = save_baseline.as_deref();
+            let baseline = baseline.as_deref();
+            let mut args = vec!["bench"];
+            match package {
+                Some(package) => args.extend(["--package", package]),
+                None => args.push("--workspace"),
+            }
+            args.push("--benches");
+            args.push("--");
+            if let Some(filter) = filter {
+                args.push(filter);
+            }
+            if let Some(name) = save_baseline {
+                args.extend(["--save-baseline", name]);
+            }
+            if let Some(name) = baseline {
+                args.extend(["--baseline", name]);
+            }
+            run("cargo", args, root)
+        }
+        RustCmd::Semver { baseline } => {
+            let baseline = baseline.as_deref();
+            if !on_path("cargo-semver-checks") {
+                bail!("`cargo-semver-checks` is required");
+            }
+            let mut args = vec!["semver-checks".to_string()];
+            for package in workspace_members(root)?
+                .iter()
+                .filter(|package| package.publishable())
+            {
+                args.push("--package".to_string());
+                args.push(package.name().to_string());
+            }
+            if let Some(baseline) = baseline {
+                args.push("--baseline-version".to_string());
+                args.push(baseline.to_string());
+            }
+            run("cargo", args, root)
+        }
         RustCmd::Publish { dry_run } => publish_workspace(root, *dry_run),
         RustCmd::Deadcode { reuse, verbose } => {
             crate::deadcode::run_deadcode(root, *reuse, *verbose)
@@ -121,43 +204,6 @@ pub(crate) fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
 
 pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {
     cleaner.paths(&["target"])
-}
-
-fn run_test(root: &Path, packages: &[String], include_ignored: bool) -> Result<()> {
-    let mut args = vec!["test"];
-    if packages.is_empty() {
-        args.push("--workspace");
-    }
-    for package in packages {
-        args.extend(["--package", package.as_str()]);
-    }
-    args.extend(["--lib", "--bins", "--tests"]);
-    if include_ignored {
-        args.extend(["--", "--include-ignored"]);
-    }
-    run("cargo", args, root)
-}
-
-fn run_lint(root: &Path) -> Result<()> {
-    cargo_clippy(root, &["--workspace", "--all-targets"])?;
-    cargo_clippy(
-        root,
-        &[
-            "-p",
-            "autd3-rs-pattern-holo",
-            "--no-default-features",
-            "--all-targets",
-        ],
-    )?;
-    cargo_clippy(
-        root,
-        &[
-            "-p",
-            "autd3-rs-firmware-emulator",
-            "--no-default-features",
-            "--all-targets",
-        ],
-    )
 }
 
 const COVERAGE_IGNORE: &str = "/tools/";
@@ -178,66 +224,4 @@ pub(crate) fn coverage(dir: &Path, test_args: &[&str], filter: &[&str], open: bo
     let mut summary_args = vec!["llvm-cov", "report", "--summary-only"];
     summary_args.extend_from_slice(filter);
     run("cargo", summary_args, dir)
-}
-
-fn run_coverage(root: &Path, all: bool, open: bool) -> Result<()> {
-    let test_args = [
-        "llvm-cov",
-        "--no-report",
-        "--workspace",
-        "--lib",
-        "--bins",
-        "--tests",
-    ];
-    let filter: &[&str] = if all {
-        &[]
-    } else {
-        &["--ignore-filename-regex", COVERAGE_IGNORE]
-    };
-    coverage(root, &test_args, filter, open)
-}
-
-fn run_bench(
-    root: &Path,
-    filter: Option<&str>,
-    package: Option<&str>,
-    save_baseline: Option<&str>,
-    baseline: Option<&str>,
-) -> Result<()> {
-    let mut args = vec!["bench"];
-    match package {
-        Some(package) => args.extend(["--package", package]),
-        None => args.push("--workspace"),
-    }
-    args.push("--benches");
-    args.push("--");
-    if let Some(filter) = filter {
-        args.push(filter);
-    }
-    if let Some(name) = save_baseline {
-        args.extend(["--save-baseline", name]);
-    }
-    if let Some(name) = baseline {
-        args.extend(["--baseline", name]);
-    }
-    run("cargo", args, root)
-}
-
-fn run_semver(root: &Path, baseline: Option<&str>) -> Result<()> {
-    if !on_path("cargo-semver-checks") {
-        bail!("`cargo-semver-checks` is required");
-    }
-    let mut args = vec!["semver-checks".to_string()];
-    for package in workspace_members(root)?
-        .iter()
-        .filter(|package| package.publishable())
-    {
-        args.push("--package".to_string());
-        args.push(package.name().to_string());
-    }
-    if let Some(baseline) = baseline {
-        args.push("--baseline-version".to_string());
-        args.push(baseline.to_string());
-    }
-    run("cargo", args, root)
 }

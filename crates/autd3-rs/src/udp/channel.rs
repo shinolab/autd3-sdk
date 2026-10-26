@@ -151,19 +151,6 @@ mod sys {
     }
 }
 
-fn is_transient(e: &io::Error) -> bool {
-    matches!(
-        e.kind(),
-        io::ErrorKind::ConnectionReset
-            | io::ErrorKind::ConnectionRefused
-            | io::ErrorKind::HostUnreachable
-            | io::ErrorKind::NetworkUnreachable
-            | io::ErrorKind::NetworkDown
-            | io::ErrorKind::AddrNotAvailable
-            | io::ErrorKind::Interrupted
-    )
-}
-
 impl Channel {
     pub(crate) fn open(
         all_devices_dst: SocketAddrV6,
@@ -323,7 +310,17 @@ impl Channel {
                         return Ok(None);
                     }
                 }
-                Err(e) if is_transient(&e) => {}
+                Err(e)
+                    if matches!(
+                        e.kind(),
+                        io::ErrorKind::ConnectionReset
+                            | io::ErrorKind::ConnectionRefused
+                            | io::ErrorKind::HostUnreachable
+                            | io::ErrorKind::NetworkUnreachable
+                            | io::ErrorKind::NetworkDown
+                            | io::ErrorKind::AddrNotAvailable
+                            | io::ErrorKind::Interrupted
+                    ) => {}
                 Err(e) if sys::is_oversized(&e) => {
                     tracing::debug!("dropped a datagram that does not fit the receive buffer");
                 }

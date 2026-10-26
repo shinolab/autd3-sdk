@@ -19,21 +19,6 @@ fn divider(steps: u16) -> SamplingConfig {
     SamplingConfig::new(NonZeroU16::new(steps).unwrap())
 }
 
-async fn config_bank(
-    ctx: &Ctx<'_>,
-    bank: PatternBank,
-    size: usize,
-    loop_behavior: LoopBehavior,
-) -> Result<()> {
-    ctx.send(ConfigPattern {
-        bank,
-        config: SamplingConfig::new(NonZeroU16::MAX),
-        size,
-        loop_behavior,
-    })
-    .await
-}
-
 async fn config_mod_bank(ctx: &Ctx<'_>, config: SamplingConfig) -> Result<()> {
     ctx.send(ConfigModulation {
         bank: ModulationBank::B0,
@@ -42,75 +27,6 @@ async fn config_mod_bank(ctx: &Ctx<'_>, config: SamplingConfig) -> Result<()> {
         loop_behavior: LoopBehavior::Infinite,
     })
     .await
-}
-
-async fn silencer_phase_checks(ctx: &Ctx<'_>) -> Result<()> {
-    const DIVIDER: u16 = 20;
-
-    config_mod_bank(ctx, SamplingConfig::new(NonZeroU16::MAX)).await?;
-    config_bank(ctx, PatternBank::B0, 1, LoopBehavior::Infinite).await?;
-    ctx.send(SetSilencer::default()).await?;
-
-    expect_firmware_ok(
-        ctx,
-        "modulation divider within phase window (amplitude only)",
-        Frames::encode(
-            ctx.client.geometry(),
-            ConfigModulation {
-                bank: ModulationBank::B0,
-                config: divider(DIVIDER),
-                size: 2,
-                loop_behavior: LoopBehavior::Infinite,
-            },
-        ),
-    )
-    .await;
-
-    expect_firmware_error(
-        ctx,
-        "pattern divider within phase window (activation-time)",
-        Frames::encode(
-            ctx.client.geometry(),
-            (
-                ConfigPattern {
-                    bank: PatternBank::B0,
-                    config: divider(DIVIDER),
-                    size: 1,
-                    loop_behavior: LoopBehavior::Infinite,
-                },
-                ActivatePatternBank {
-                    bank: PatternBank::B0,
-                    transition_mode: TransitionMode::Immediate,
-                },
-            ),
-        ),
-        ERR_INVALID_SILENCER_SETTING,
-    )
-    .await;
-
-    ctx.send(SetSilencer::disable()).await?;
-    config_mod_bank(ctx, SamplingConfig::new(NonZeroU16::MAX)).await?;
-    ctx.send(ConfigPattern {
-        bank: PatternBank::B0,
-        config: divider(DIVIDER),
-        size: 1,
-        loop_behavior: LoopBehavior::Infinite,
-    })
-    .await?;
-    ctx.send(ActivatePatternBank {
-        bank: PatternBank::B0,
-        transition_mode: TransitionMode::Immediate,
-    })
-    .await?;
-    expect_firmware_error(
-        ctx,
-        "pattern divider within phase window (silencer-enable-time)",
-        Frames::encode(ctx.client.geometry(), SetSilencer::default()),
-        ERR_INVALID_SILENCER_SETTING,
-    )
-    .await;
-
-    Ok(())
 }
 
 fn strict_silencer(intensity_steps: u32) -> SetSilencer {
@@ -142,9 +58,101 @@ async fn mod_banks(
     activate_mod_bank(ctx, activate.0, activate.1).await
 }
 
-async fn strict_guard_follows_the_banks_in_use(ctx: &Ctx<'_>) -> Result<()> {
+#[allow(clippy::too_many_lines)]
+pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
+    const DIVIDER: u16 = 20;
     const STEPS: u32 = 8;
 
+    println!("firmware error-detail checks:");
+
+    ctx.send(SetSilencer::default()).await?;
+    expect_firmware_error(
+        ctx,
+        "strict silencer vs short sampling period",
+        Frames::encode(
+            ctx.client.geometry(),
+            (
+                ConfigPattern {
+                    bank: PatternBank::B0,
+                    config: SamplingConfig::new(NonZeroU16::new(1).unwrap()),
+                    size: 1,
+                    loop_behavior: LoopBehavior::Infinite,
+                },
+                ActivatePatternBank {
+                    bank: PatternBank::B0,
+                    transition_mode: TransitionMode::Immediate,
+                },
+            ),
+        ),
+        ERR_INVALID_SILENCER_SETTING,
+    )
+    .await;
+
+    config_mod_bank(ctx, SamplingConfig::new(NonZeroU16::MAX)).await?;
+    ctx.send(ConfigPattern {
+        bank: PatternBank::B0,
+        config: SamplingConfig::new(NonZeroU16::MAX),
+        size: 1,
+        loop_behavior: LoopBehavior::Infinite,
+    })
+    .await?;
+    ctx.send(SetSilencer::default()).await?;
+    expect_firmware_ok(
+        ctx,
+        "modulation divider within phase window (amplitude only)",
+        Frames::encode(
+            ctx.client.geometry(),
+            ConfigModulation {
+                bank: ModulationBank::B0,
+                config: divider(DIVIDER),
+                size: 2,
+                loop_behavior: LoopBehavior::Infinite,
+            },
+        ),
+    )
+    .await;
+    expect_firmware_error(
+        ctx,
+        "pattern divider within phase window (activation-time)",
+        Frames::encode(
+            ctx.client.geometry(),
+            (
+                ConfigPattern {
+                    bank: PatternBank::B0,
+                    config: divider(DIVIDER),
+                    size: 1,
+                    loop_behavior: LoopBehavior::Infinite,
+                },
+                ActivatePatternBank {
+                    bank: PatternBank::B0,
+                    transition_mode: TransitionMode::Immediate,
+                },
+            ),
+        ),
+        ERR_INVALID_SILENCER_SETTING,
+    )
+    .await;
+    ctx.send(SetSilencer::disable()).await?;
+    config_mod_bank(ctx, SamplingConfig::new(NonZeroU16::MAX)).await?;
+    ctx.send(ConfigPattern {
+        bank: PatternBank::B0,
+        config: divider(DIVIDER),
+        size: 1,
+        loop_behavior: LoopBehavior::Infinite,
+    })
+    .await?;
+    ctx.send(ActivatePatternBank {
+        bank: PatternBank::B0,
+        transition_mode: TransitionMode::Immediate,
+    })
+    .await?;
+    expect_firmware_error(
+        ctx,
+        "pattern divider within phase window (silencer-enable-time)",
+        Frames::encode(ctx.client.geometry(), SetSilencer::default()),
+        ERR_INVALID_SILENCER_SETTING,
+    )
+    .await;
     ctx.send(Clear).await?;
     mod_banks(
         ctx,
@@ -224,37 +232,7 @@ async fn strict_guard_follows_the_banks_in_use(ctx: &Ctx<'_>) -> Result<()> {
     )
     .await;
 
-    ctx.send(Clear).await
-}
-
-pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
-    println!("firmware error-detail checks:");
-
-    ctx.send(SetSilencer::default()).await?;
-    expect_firmware_error(
-        ctx,
-        "strict silencer vs short sampling period",
-        Frames::encode(
-            ctx.client.geometry(),
-            (
-                ConfigPattern {
-                    bank: PatternBank::B0,
-                    config: SamplingConfig::new(NonZeroU16::new(1).unwrap()),
-                    size: 1,
-                    loop_behavior: LoopBehavior::Infinite,
-                },
-                ActivatePatternBank {
-                    bank: PatternBank::B0,
-                    transition_mode: TransitionMode::Immediate,
-                },
-            ),
-        ),
-        ERR_INVALID_SILENCER_SETTING,
-    )
-    .await;
-
-    silencer_phase_checks(ctx).await?;
-    strict_guard_follows_the_banks_in_use(ctx).await?;
+    ctx.send(Clear).await?;
 
     wait_enter("The firmware rejected each malformed command with the expected error code").await;
     Ok(())

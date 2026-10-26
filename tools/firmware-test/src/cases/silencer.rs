@@ -16,17 +16,13 @@ use crate::Ctx;
 use crate::cases::pattern_util::{circle_foci, focus_at, send_pattern_mod, stm_sampling};
 use crate::io::wait_enter;
 
-fn completion_time(intensity_mul: u32, phase_mul: u32) -> FixedCompletionTime {
-    FixedCompletionTime {
-        intensity: ULTRASOUND_PERIOD
-            * (u32::from(SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY) * intensity_mul),
-        phase: ULTRASOUND_PERIOD * (u32::from(SILENCER_DEFAULT_COMPLETION_STEPS_PHASE) * phase_mul),
-        strict_mode: true,
-    }
-}
-
 async fn sweep_silencer(ctx: &Ctx<'_>) -> Result<()> {
-    ctx.send(SetSilencer::new(completion_time(2, 2))).await?;
+    ctx.send(SetSilencer::new(FixedCompletionTime {
+        intensity: ULTRASOUND_PERIOD * (u32::from(SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY) * 2),
+        phase: ULTRASOUND_PERIOD * (u32::from(SILENCER_DEFAULT_COMPLETION_STEPS_PHASE) * 2),
+        strict_mode: true,
+    }))
+    .await?;
     wait_enter("With a longer completion time, the noise got quieter").await;
 
     ctx.send(SetSilencer::default()).await?;

@@ -27,6 +27,25 @@ pub unsafe extern "C" fn autd3_core_geometry_new(
     out_err: *mut c_char,
     out_err_len: usize,
 ) -> *mut Geometry {
+    fn to_autd3(device: &Autd3Device) -> Result<Autd3, String> {
+        let rotation = Quaternion::new(
+            device.rotation[0],
+            device.rotation[1],
+            device.rotation[2],
+            device.rotation[3],
+        );
+        let norm = rotation.norm();
+        if norm.is_nan() || (norm - 1.0).abs() > Autd3::ROTATION_NORM_TOLERANCE {
+            return Err(format!(
+                "`rotation` must be a unit quaternion [w, x, y, z], but its norm is {norm}"
+            ));
+        }
+        Ok(Autd3::new(
+            Point3::new(device.origin[0], device.origin[1], device.origin[2]),
+            UnitQuaternion::from_quaternion(rotation),
+        ))
+    }
+
     let Some(slice) = (unsafe { slice_ref(devices, len) }) else {
         unsafe { write_cstr(out_err, out_err_len, "null devices") };
         return std::ptr::null_mut();
@@ -34,25 +53,6 @@ pub unsafe extern "C" fn autd3_core_geometry_new(
 
     let devices: Result<Vec<Autd3>, String> = slice.iter().map(to_autd3).collect();
     unsafe { into_handle_or_err(devices.map(Geometry::new), out_err, out_err_len) }
-}
-
-fn to_autd3(device: &Autd3Device) -> Result<Autd3, String> {
-    let rotation = Quaternion::new(
-        device.rotation[0],
-        device.rotation[1],
-        device.rotation[2],
-        device.rotation[3],
-    );
-    let norm = rotation.norm();
-    if norm.is_nan() || (norm - 1.0).abs() > Autd3::ROTATION_NORM_TOLERANCE {
-        return Err(format!(
-            "`rotation` must be a unit quaternion [w, x, y, z], but its norm is {norm}"
-        ));
-    }
-    Ok(Autd3::new(
-        Point3::new(device.origin[0], device.origin[1], device.origin[2]),
-        UnitQuaternion::from_quaternion(rotation),
-    ))
 }
 
 #[unsafe(no_mangle)]

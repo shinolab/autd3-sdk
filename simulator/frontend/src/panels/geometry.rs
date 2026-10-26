@@ -37,37 +37,28 @@ fn edit(ctx: &Ctx, f: impl FnOnce(&mut Vec<DeviceDraft>)) {
     commit(ctx, next);
 }
 
-fn display(v: f32) -> String {
-    let rounded = format!("{v:.3}");
-    let trimmed = rounded.trim_end_matches('0').trim_end_matches('.');
-    match trimmed {
-        "-0" | "" => "0".to_string(),
-        s => s.to_string(),
-    }
-}
-
-fn download(name: &str, content: &str) -> Result<(), JsValue> {
-    let document = web_sys::window()
-        .and_then(|window| window.document())
-        .ok_or_else(|| JsValue::from_str("no document"))?;
-    let parts = js_sys::Array::of1(&JsValue::from_str(content));
-    let options = web_sys::BlobPropertyBag::new();
-    options.set_type("application/json");
-    let blob = web_sys::Blob::new_with_str_sequence_and_options(&parts, &options)?;
-    let url = web_sys::Url::create_object_url_with_blob(&blob)?;
-    let anchor: web_sys::HtmlAnchorElement = document.create_element("a")?.dyn_into()?;
-    anchor.set_href(&url);
-    anchor.set_download(name);
-    anchor.click();
-    wasm_bindgen_futures::spawn_local(async move {
-        gloo_timers::future::TimeoutFuture::new(DOWNLOAD_URL_LIFETIME_MS).await;
-        let _ = web_sys::Url::revoke_object_url(&url);
-    });
-    Ok(())
-}
-
 #[component]
 pub fn GeometryPanel() -> Element {
+    fn download(name: &str, content: &str) -> Result<(), JsValue> {
+        let document = web_sys::window()
+            .and_then(|window| window.document())
+            .ok_or_else(|| JsValue::from_str("no document"))?;
+        let parts = js_sys::Array::of1(&JsValue::from_str(content));
+        let options = web_sys::BlobPropertyBag::new();
+        options.set_type("application/json");
+        let blob = web_sys::Blob::new_with_str_sequence_and_options(&parts, &options)?;
+        let url = web_sys::Url::create_object_url_with_blob(&blob)?;
+        let anchor: web_sys::HtmlAnchorElement = document.create_element("a")?.dyn_into()?;
+        anchor.set_href(&url);
+        anchor.set_download(name);
+        anchor.click();
+        wasm_bindgen_futures::spawn_local(async move {
+            gloo_timers::future::TimeoutFuture::new(DOWNLOAD_URL_LIFETIME_MS).await;
+            let _ = web_sys::Url::revoke_object_url(&url);
+        });
+        Ok(())
+    }
+
     let ctx = use_context::<Ctx>();
     let drafts = ctx.geometry_draft;
     let count = drafts().len();
@@ -233,6 +224,14 @@ fn DeviceRow(index: usize, draft: DeviceDraft, count: usize, editable: bool) -> 
 
 #[component]
 fn PoseInputs(index: usize, field: PoseField, values: [f32; 3], editable: bool) -> Element {
+    let displayed = values.map(|v| {
+        let rounded = format!("{v:.3}");
+        let trimmed = rounded.trim_end_matches('0').trim_end_matches('.');
+        match trimmed {
+            "-0" | "" => "0".to_string(),
+            s => s.to_string(),
+        }
+    });
     let ctx = use_context::<Ctx>();
     let (title, labels, step) = match field {
         PoseField::Origin => ("Origin (mm)", ["X", "Y", "Z"], "1"),
@@ -252,7 +251,7 @@ fn PoseInputs(index: usize, field: PoseField, values: [f32; 3], editable: bool) 
                             r#type: "number",
                             step,
                             disabled: !editable,
-                            value: display(values[axis]),
+                            value: displayed[axis].clone(),
                             onchange: {
                                 let ctx = ctx.clone();
                                 move |e: Event<FormData>| {

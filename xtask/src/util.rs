@@ -293,15 +293,6 @@ pub(crate) fn workspace_members(workspace_dir: &Path) -> Result<Vec<MemberPackag
     Ok(packages)
 }
 
-fn is_published(package: &MemberPackage, cwd: &Path) -> Result<bool> {
-    let spec = format!("{}@{}", package.name, package.version);
-    Ok(
-        output("cargo", &["info", &spec, "--registry", "crates-io"], cwd)?
-            .status
-            .success(),
-    )
-}
-
 pub(crate) fn publish_workspace(workspace_dir: &Path, dry_run: bool) -> Result<()> {
     let mut args = vec![
         "publish".to_string(),
@@ -313,7 +304,15 @@ pub(crate) fn publish_workspace(workspace_dir: &Path, dry_run: bool) -> Result<(
         .iter()
         .filter(|package| package.publishable)
     {
-        if is_published(package, workspace_dir)? {
+        let spec = format!("{}@{}", package.name, package.version);
+        let published = output(
+            "cargo",
+            &["info", &spec, "--registry", "crates-io"],
+            workspace_dir,
+        )?
+        .status
+        .success();
+        if published {
             println!(
                 "skipping {} v{} (already on crates.io)",
                 package.name, package.version

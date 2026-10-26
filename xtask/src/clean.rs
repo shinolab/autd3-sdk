@@ -47,7 +47,16 @@ impl<'a> Cleaner<'a> {
             return Ok(());
         };
         let dir = meta.is_dir();
-        let size = if dir { dir_size(path) } else { meta.len() };
+        let size = if dir {
+            WalkDir::new(path)
+                .into_iter()
+                .flatten()
+                .filter(|entry| entry.file_type().is_file())
+                .map(|entry| entry.metadata().map_or(0, |meta| meta.len()))
+                .sum()
+        } else {
+            meta.len()
+        };
         let shown = path.strip_prefix(self.root).unwrap_or(path);
         if self.args.dry_run {
             println!("would remove {}", shown.display());
@@ -132,13 +141,57 @@ impl<'a> Cleaner<'a> {
     }
 
     pub(crate) fn nested(&mut self, rel: &str, names: &[&str]) -> Result<()> {
-        for path in collect_nested(&self.root.join(rel), names) {
+        let mut found = Vec::new();
+        let mut walker = WalkDir::new(self.root.join(rel))
+            .min_depth(1)
+            .follow_links(true)
+            .sort_by_file_name()
+            .into_iter();
+        while let Some(entry) = walker.next() {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(e) => {
+                    let broken = e.path().filter(|path| {
+                        path.file_name()
+                            .and_then(|name| name.to_str())
+                            .is_some_and(|name| names.contains(&name))
+                    });
+                    found.extend(broken.map(Path::to_path_buf));
+                    continue;
+                }
+            };
+            let name = entry.file_name().to_str();
+            let wanted = name.is_some_and(|name| names.contains(&name));
+            let skipped = name.is_none_or(|name| WALK_SKIP.contains(&name));
+            if entry.file_type().is_dir() && (wanted || skipped) {
+                walker.skip_current_dir();
+            }
+            if wanted {
+                found.push(entry.into_path());
+            }
+        }
+        for path in found {
             self.remove(&path)?;
         }
         Ok(())
     }
 
     pub(crate) fn finish(self) {
+        fn human_size(bytes: u64) -> String {
+            const UNITS: [&str; 4] = ["B", "KiB", "MiB", "GiB"];
+            let mut scale = 1u64;
+            let mut unit = 0;
+            while unit + 1 < UNITS.len() && bytes / scale >= 1024 {
+                scale *= 1024;
+                unit += 1;
+            }
+            if unit == 0 {
+                return format!("{bytes} B");
+            }
+            let tenths = bytes * 10 / scale;
+            format!("{}.{} {}", tenths / 10, tenths % 10, UNITS[unit])
+        }
+
         if self.removed == 0 {
             println!("nothing to clean");
             return;
@@ -179,61 +232,4 @@ fn sorted_entries(dir: &Path) -> Vec<PathBuf> {
     let mut paths: Vec<PathBuf> = entries.flatten().map(|entry| entry.path()).collect();
     paths.sort();
     paths
-}
-
-fn collect_nested(dir: &Path, names: &[&str]) -> Vec<PathBuf> {
-    let mut found = Vec::new();
-    let mut walker = WalkDir::new(dir)
-        .min_depth(1)
-        .follow_links(true)
-        .sort_by_file_name()
-        .into_iter();
-    while let Some(entry) = walker.next() {
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(e) => {
-                let broken = e.path().filter(|path| {
-                    path.file_name()
-                        .and_then(|name| name.to_str())
-                        .is_some_and(|name| names.contains(&name))
-                });
-                found.extend(broken.map(Path::to_path_buf));
-                continue;
-            }
-        };
-        let name = entry.file_name().to_str();
-        let wanted = name.is_some_and(|name| names.contains(&name));
-        let skipped = name.is_none_or(|name| WALK_SKIP.contains(&name));
-        if entry.file_type().is_dir() && (wanted || skipped) {
-            walker.skip_current_dir();
-        }
-        if wanted {
-            found.push(entry.into_path());
-        }
-    }
-    found
-}
-
-fn dir_size(dir: &Path) -> u64 {
-    WalkDir::new(dir)
-        .into_iter()
-        .flatten()
-        .filter(|entry| entry.file_type().is_file())
-        .map(|entry| entry.metadata().map_or(0, |meta| meta.len()))
-        .sum()
-}
-
-fn human_size(bytes: u64) -> String {
-    const UNITS: [&str; 4] = ["B", "KiB", "MiB", "GiB"];
-    let mut scale = 1u64;
-    let mut unit = 0;
-    while unit + 1 < UNITS.len() && bytes / scale >= 1024 {
-        scale *= 1024;
-        unit += 1;
-    }
-    if unit == 0 {
-        return format!("{bytes} B");
-    }
-    let tenths = bytes * 10 / scale;
-    format!("{}.{} {}", tenths / 10, tenths % 10, UNITS[unit])
 }

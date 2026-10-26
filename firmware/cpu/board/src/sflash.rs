@@ -46,20 +46,6 @@ fn wait_transfer_end() -> Result<(), FlashError> {
     Err(FlashError)
 }
 
-fn release_read_burst() -> Result<(), FlashError> {
-    let drcr = read32(SPIBSC_DRCR);
-    if drcr & DRCR_BURST_HOLDS_SSL != DRCR_BURST_HOLDS_SSL {
-        return Ok(());
-    }
-    write32(SPIBSC_DRCR, drcr | DRCR_SSLN);
-    for _ in 0..TRANSFER_END_MAX_POLLS {
-        if read32(SPIBSC_CMNSR) & CMNSR_SSLF == 0 {
-            return Ok(());
-        }
-    }
-    Err(FlashError)
-}
-
 fn transfer(enable: u32, control: u32) -> Result<(), FlashError> {
     write32(SPIBSC_SMENR, enable);
     write32(SPIBSC_SMCR, control);
@@ -72,49 +58,32 @@ fn command(cmd: u32) -> Result<(), FlashError> {
     transfer(SMENR_CDE, 0)
 }
 
-fn read_status() -> Result<u8, FlashError> {
-    write32(SPIBSC_SMCMR, CMD_READ_STATUS << SMCMR_CMD_SHIFT);
-    transfer(SMENR_CDE | SMENR_SPIDE_8_BITS, SMCR_SPIRE)?;
-    Ok(read8(SPIBSC_SMRDR0))
-}
-
 fn wait_idle() -> Result<(), FlashError> {
     for _ in 0..IDLE_MAX_POLLS {
-        if read_status()? & STATUS_WIP == 0 {
+        write32(SPIBSC_SMCMR, CMD_READ_STATUS << SMCMR_CMD_SHIFT);
+        transfer(SMENR_CDE | SMENR_SPIDE_8_BITS, SMCR_SPIRE)?;
+        if read8(SPIBSC_SMRDR0) & STATUS_WIP == 0 {
             return Ok(());
         }
     }
     Err(FlashError)
 }
 
-fn erase_sector(addr: u32) -> Result<(), FlashError> {
-    wait_idle()?;
-    command(CMD_WRITE_ENABLE)?;
-    write32(SPIBSC_SMCMR, CMD_SECTOR_ERASE << SMCMR_CMD_SHIFT);
-    write32(SPIBSC_SMADR, addr);
-    transfer(SMENR_CDE | SMENR_ADE_24_BITS, 0)?;
-    wait_idle()
-}
-
-fn program_page(addr: u32, data: &[u8]) -> Result<(), FlashError> {
-    let Some((last, head)) = data.split_last() else {
-        return Ok(());
-    };
-    wait_idle()?;
-    command(CMD_WRITE_ENABLE)?;
-    write32(SPIBSC_SMCMR, CMD_PAGE_PROGRAM << SMCMR_CMD_SHIFT);
-    write32(SPIBSC_SMADR, addr);
-    transfer(SMENR_CDE | SMENR_ADE_24_BITS, SMCR_SSLKP)?;
-    for &byte in head {
-        write8(SPIBSC_SMWDR0, byte);
-        transfer(SMENR_SPIDE_8_BITS, SMCR_SPIWE | SMCR_SSLKP)?;
-    }
-    write8(SPIBSC_SMWDR0, *last);
-    transfer(SMENR_SPIDE_8_BITS, SMCR_SPIWE)?;
-    wait_idle()
-}
-
 fn with_spi_mode<T>(f: impl FnOnce() -> Result<T, FlashError>) -> Result<T, FlashError> {
+    fn release_read_burst() -> Result<(), FlashError> {
+        let drcr = read32(SPIBSC_DRCR);
+        if drcr & DRCR_BURST_HOLDS_SSL != DRCR_BURST_HOLDS_SSL {
+            return Ok(());
+        }
+        write32(SPIBSC_DRCR, drcr | DRCR_SSLN);
+        for _ in 0..TRANSFER_END_MAX_POLLS {
+            if read32(SPIBSC_CMNSR) & CMNSR_SSLF == 0 {
+                return Ok(());
+            }
+        }
+        Err(FlashError)
+    }
+
     release_read_burst()?;
     wait_transfer_end()?;
     let read_mode = read32(SPIBSC_CMNCR) & !CMNCR_MD_SPI;
@@ -151,6 +120,24 @@ pub(crate) fn read(addr: u32, buf: &mut [u8]) -> Result<(), FlashError> {
 
 #[allow(clippy::cast_possible_truncation)]
 pub(crate) fn write(addr: u32, data: &[u8]) -> Result<(), FlashError> {
+    fn program_page(addr: u32, data: &[u8]) -> Result<(), FlashError> {
+        let Some((last, head)) = data.split_last() else {
+            return Ok(());
+        };
+        wait_idle()?;
+        command(CMD_WRITE_ENABLE)?;
+        write32(SPIBSC_SMCMR, CMD_PAGE_PROGRAM << SMCMR_CMD_SHIFT);
+        write32(SPIBSC_SMADR, addr);
+        transfer(SMENR_CDE | SMENR_ADE_24_BITS, SMCR_SSLKP)?;
+        for &byte in head {
+            write8(SPIBSC_SMWDR0, byte);
+            transfer(SMENR_SPIDE_8_BITS, SMCR_SPIWE | SMCR_SSLKP)?;
+        }
+        write8(SPIBSC_SMWDR0, *last);
+        transfer(SMENR_SPIDE_8_BITS, SMCR_SPIWE)?;
+        wait_idle()
+    }
+
     with_spi_mode(|| {
         let mut at = addr;
         let mut rest = data;
@@ -166,6 +153,15 @@ pub(crate) fn write(addr: u32, data: &[u8]) -> Result<(), FlashError> {
 }
 
 pub(crate) fn erase(addr: u32, len: u32) -> Result<(), FlashError> {
+    fn erase_sector(addr: u32) -> Result<(), FlashError> {
+        wait_idle()?;
+        command(CMD_WRITE_ENABLE)?;
+        write32(SPIBSC_SMCMR, CMD_SECTOR_ERASE << SMCMR_CMD_SHIFT);
+        write32(SPIBSC_SMADR, addr);
+        transfer(SMENR_CDE | SMENR_ADE_24_BITS, 0)?;
+        wait_idle()
+    }
+
     with_spi_mode(|| {
         for sector in (addr..addr + len).step_by(FLASH_SECTOR_BYTES as usize) {
             erase_sector(sector)?;

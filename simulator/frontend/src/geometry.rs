@@ -28,10 +28,6 @@ fn pose_matches(a: &DevicePose, b: &DevicePose) -> bool {
     origin_matches && qa.abs_diff_eq(qb, ROTATION_TOLERANCE)
 }
 
-fn poses_match(a: &[DevicePose], b: &[DevicePose]) -> bool {
-    a.len() == b.len() && a.iter().zip(b).all(|(a, b)| pose_matches(a, b))
-}
-
 impl DeviceDraft {
     pub(crate) fn from_pose(pose: &DevicePose) -> Self {
         let (a, b, c) = quat_of(pose).to_euler(EulerRot::ZYZ);
@@ -125,7 +121,10 @@ impl UnansweredGeometries {
     }
 
     pub(crate) fn consume_broadcast_is_current(&mut self, received: &[DevicePose]) -> bool {
-        if let Some(answered) = self.0.iter().position(|sent| poses_match(sent, received)) {
+        if let Some(answered) = self.0.iter().position(|sent| {
+            sent.len() == received.len()
+                && sent.iter().zip(received).all(|(a, b)| pose_matches(a, b))
+        }) {
             self.0.drain(..=answered);
             self.0.is_empty()
         } else {

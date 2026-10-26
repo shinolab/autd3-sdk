@@ -80,11 +80,26 @@ impl LinAlgBackend for NalgebraBackend {
         wavenumber: f32,
         directivity: Directivity,
     ) -> Self::Matrix {
-        propagation_matrix(tr_pos, tr_dir, foci, wavenumber, directivity)
+        let m = foci.len();
+        let n = tr_pos.len();
+        let mut data = Vec::with_capacity(m * n);
+        data.extend(tr_pos.iter().zip(tr_dir).flat_map(|(&pos, &dir)| {
+            foci.iter()
+                .map(move |f| propagate(pos, dir, f.point, wavenumber, directivity))
+        }));
+        DMatrix::from_vec(m, n, data)
     }
 
     fn back_prop(&self, g: &Self::Matrix) -> Self::Matrix {
-        back_prop(g)
+        let m = g.nrows();
+        let n = g.ncols();
+        let mut data = Vec::with_capacity(m * n);
+        data.extend((0..m).flat_map(|i| {
+            let denom: f32 = (0..n).map(|j| g[(i, j)].norm_sqr()).sum();
+            let x = Complex::new(1.0 / denom, 0.0);
+            (0..n).map(move |j| g[(i, j)].conj() * x)
+        }));
+        DMatrix::from_vec(n, m, data)
     }
 
     fn gemm(&self, a: &Self::Matrix, b: &Self::Matrix) -> Self::Matrix {
@@ -106,7 +121,12 @@ impl LinAlgBackend for NalgebraBackend {
     }
 
     fn amplitude_correct(&self, x: &mut Self::Vector, r: &Self::Vector) {
-        amplitude_correct(x, r);
+        for (b, a) in x.as_mut_slice().iter_mut().zip(r.as_slice()) {
+            let inv = 1.0 / (b.re * b.re + b.im * b.im);
+            let (re, im) = (b.re * inv, b.im * inv);
+            let (ar, ai) = (a.re * a.re - a.im * a.im, 2.0 * a.re * a.im);
+            *b = Complex::new(re * ar - im * ai, re * ai + im * ar);
+        }
     }
 
     fn quantize(
@@ -114,37 +134,11 @@ impl LinAlgBackend for NalgebraBackend {
         v: &Self::Vector,
         constraint: IntensityConstraint,
     ) -> (Vec<Phase>, Vec<Intensity>) {
-        quantized(v.as_slice(), constraint).unzip()
+        let max = max_coefficient(v.as_slice());
+        v.iter()
+            .map(|&v| phase_and_intensity(v, constraint, max))
+            .unzip()
     }
-}
-
-fn propagation_matrix(
-    tr_pos: &[Point3<f32>],
-    tr_dir: &[UnitVector3<f32>],
-    foci: &[AmplitudeTarget],
-    wavenumber: f32,
-    directivity: Directivity,
-) -> DMatrix<Complex<f32>> {
-    let m = foci.len();
-    let n = tr_pos.len();
-    let mut data = Vec::with_capacity(m * n);
-    data.extend(tr_pos.iter().zip(tr_dir).flat_map(|(&pos, &dir)| {
-        foci.iter()
-            .map(move |f| propagate(pos, dir, f.point, wavenumber, directivity))
-    }));
-    DMatrix::from_vec(m, n, data)
-}
-
-fn back_prop(g: &DMatrix<Complex<f32>>) -> DMatrix<Complex<f32>> {
-    let m = g.nrows();
-    let n = g.ncols();
-    let mut data = Vec::with_capacity(m * n);
-    data.extend((0..m).flat_map(|i| {
-        let denom: f32 = (0..n).map(|j| g[(i, j)].norm_sqr()).sum();
-        let x = Complex::new(1.0 / denom, 0.0);
-        (0..n).map(move |j| g[(i, j)].conj() * x)
-    }));
-    DMatrix::from_vec(n, m, data)
 }
 
 fn hadamard_normalize(x: &mut DVector<Complex<f32>>, r: &DVector<Complex<f32>>) {
@@ -153,24 +147,6 @@ fn hadamard_normalize(x: &mut DVector<Complex<f32>>, r: &DVector<Complex<f32>>) 
         let (re, im) = (b.re * inv, b.im * inv);
         *b = Complex::new(re * a.re - im * a.im, re * a.im + im * a.re);
     }
-}
-
-fn amplitude_correct(x: &mut DVector<Complex<f32>>, r: &DVector<Complex<f32>>) {
-    for (b, a) in x.as_mut_slice().iter_mut().zip(r.as_slice()) {
-        let inv = 1.0 / (b.re * b.re + b.im * b.im);
-        let (re, im) = (b.re * inv, b.im * inv);
-        let (ar, ai) = (a.re * a.re - a.im * a.im, 2.0 * a.re * a.im);
-        *b = Complex::new(re * ar - im * ai, re * ai + im * ar);
-    }
-}
-
-fn quantized(
-    q: &[Complex<f32>],
-    constraint: IntensityConstraint,
-) -> impl Iterator<Item = (Phase, Intensity)> + '_ {
-    let max = max_coefficient(q);
-    q.iter()
-        .map(move |&v| phase_and_intensity(v, constraint, max))
 }
 
 #[cfg(test)]
