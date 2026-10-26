@@ -1,8 +1,6 @@
 use core::num::NonZeroU16;
 use core::time::Duration;
 
-use crate::config::{MaxFreqPpb, PathDelayFilterShift};
-
 pub const SYNC_GUARD: Duration = Duration::from_micros(250);
 pub const CPU_WATCHDOG_TIMEOUT: Duration = Duration::from_secs(1);
 pub const SYNC_PHASE_LOCK: bool = true;
@@ -13,7 +11,7 @@ pub const PTP_DELAY_RESP_TIMEOUT: Duration = Duration::from_millis(6);
 pub const PTP_HOLDOVER: Duration = Duration::from_secs(1);
 pub const PTP_DELAY_REQ_SYNCS: NonZeroU16 = NonZeroU16::new(32).unwrap();
 pub const PTP_PATH_DELAY_FILTER_SHIFT_MAX: u8 = 16;
-pub const PTP_PATH_DELAY_FILTER_SHIFT: PathDelayFilterShift = PathDelayFilterShift::new(5).unwrap();
+pub const PTP_PATH_DELAY_FILTER_SHIFT: u8 = 5;
 pub const PTP_PAUSE_QUANTA: NonZeroU16 = NonZeroU16::new(48).unwrap();
 pub const PTP_PAUSE_HOLD_SYNCS: u16 = 64;
 pub const PTP_PAUSE_RETRY: Duration = Duration::from_millis(8);
@@ -23,7 +21,7 @@ pub const PTP_LOCK_THRESHOLD: Duration = Duration::from_nanos(100);
 pub const PTP_KP_MILLI: u32 = 50;
 pub const PTP_KI_MILLI: u32 = 1;
 pub const PTP_MAX_FREQ_PPB_MAX: u32 = i32::MAX.unsigned_abs();
-pub const PTP_MAX_FREQ_PPB: MaxFreqPpb = MaxFreqPpb::new(500_000).unwrap();
+pub const PTP_MAX_FREQ_PPB: u32 = 500_000;
 
 pub const PWE_DEFAULT_TABLE: [u16; crate::layout::PWE_TABLE_SIZE] = [
     0x00, 0x01, 0x01, 0x02, 0x03, 0x03, 0x04, 0x04, 0x05, 0x06, 0x06, 0x07, 0x08, 0x08, 0x09, 0x0a,

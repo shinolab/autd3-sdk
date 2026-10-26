@@ -571,14 +571,8 @@ def test_cpu_config_fields() -> None:
         autd3.commands.PtpConfig(delay_req_syncs=0)
     with pytest.raises(ValueError):
         autd3.commands.PtpConfig(pause_quanta=0)
-    assert autd3.commands.PtpConfig(max_freq_ppb=0).max_freq_ppb == 0
-    assert autd3.commands.PtpConfig(max_freq_ppb=2**31 - 1).max_freq_ppb == 2**31 - 1
-    with pytest.raises(ValueError):
-        autd3.commands.PtpConfig(max_freq_ppb=2**31)
-    assert autd3.commands.PtpConfig(path_delay_filter_shift=0).path_delay_filter_shift == 0
-    assert autd3.commands.PtpConfig(path_delay_filter_shift=16).path_delay_filter_shift == 16
-    with pytest.raises(ValueError):
-        autd3.commands.PtpConfig(path_delay_filter_shift=17)
+    assert autd3.commands.PtpConfig(max_freq_ppb=2**32 - 1).max_freq_ppb == 2**32 - 1
+    assert autd3.commands.PtpConfig(path_delay_filter_shift=255).path_delay_filter_shift == 255
 
     partial = autd3.commands.CpuConfig(sync_guard=autd3.Duration.from_micros(500))
     assert partial.sync_guard.as_nanos() == 500_000

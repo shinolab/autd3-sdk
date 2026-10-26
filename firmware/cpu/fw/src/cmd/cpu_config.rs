@@ -34,7 +34,7 @@ mod tests {
     use core::num::NonZeroU16;
     use core::time::Duration;
 
-    use autd3_cpu_wire::config::{FpgaBusWait, MaxFreqPpb, PathDelayFilterShift, PtpConfig};
+    use autd3_cpu_wire::config::{FpgaBusWait, PtpConfig};
     use zerocopy::IntoBytes;
     use zerocopy::little_endian::{U16, U32};
 
@@ -113,9 +113,9 @@ mod tests {
             lock_threshold: Duration::from_nanos(200),
             kp_milli: 150,
             ki_milli: 30,
-            max_freq_ppb: MaxFreqPpb::new(100_000).unwrap(),
+            max_freq_ppb: 100_000,
             delay_req_syncs: NonZeroU16::new(4).unwrap(),
-            path_delay_filter_shift: PathDelayFilterShift::new(2).unwrap(),
+            path_delay_filter_shift: 2,
             pause_quanta: None,
             pause_hold_syncs: 16,
             pause_retry: Duration::from_millis(4),

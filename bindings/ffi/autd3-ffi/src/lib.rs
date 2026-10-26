@@ -18,11 +18,11 @@ use autd3_rs::commands::{
     ActivateModulationBank, ActivatePatternBank, BoxedCommand, Clear, Command, ConfigFociStm,
     ConfigModulation, ConfigPattern, CpuConfig, EmulateGpioIn, Expansion, FixedCompletionTime,
     FixedUpdateRate, FociStm as CoreFociStm, FociStmOption, ForceFan, FpgaBusWait, FpgaConfig,
-    GpioOut, MaxFreqPpb, Modulation, Nop, Operation, PWE_TABLE_SIZE, PathDelayFilterShift, Pattern,
-    PatternIntensity, PatternStm, PatternStmOption, PhaseDepth, PtpConfig, ReleaseFailsafe,
-    SetCpuConfig, SetFpgaConfig, SetGpioOut, SetOutputMask, SetPhaseCorrection, SetPulseWidthTable,
-    SetSilencer, StmIntensity, Synchronize, WriteFociBuffer, WriteModulationBuffer,
-    WritePatternBuffer, WritePatternPhase, each,
+    GpioOut, Modulation, Nop, Operation, PWE_TABLE_SIZE, Pattern, PatternIntensity, PatternStm,
+    PatternStmOption, PhaseDepth, PtpConfig, ReleaseFailsafe, SetCpuConfig, SetFpgaConfig,
+    SetGpioOut, SetOutputMask, SetPhaseCorrection, SetPulseWidthTable, SetSilencer, StmIntensity,
+    Synchronize, WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer, WritePatternPhase,
+    each,
 };
 use autd3_rs::params::NUM_FOCI_MAX;
 use autd3_rs::value::{
@@ -800,9 +800,9 @@ impl From<CpuConfig> for Autd3CpuConfig {
                 lock_threshold_ns: to_ns(ptp.lock_threshold),
                 kp_milli: ptp.kp_milli,
                 ki_milli: ptp.ki_milli,
-                max_freq_ppb: ptp.max_freq_ppb.get(),
+                max_freq_ppb: ptp.max_freq_ppb,
                 delay_req_syncs: ptp.delay_req_syncs.get(),
-                path_delay_filter_shift: ptp.path_delay_filter_shift.get(),
+                path_delay_filter_shift: ptp.path_delay_filter_shift,
                 pause_quanta: ptp.pause_quanta.map_or(0, NonZeroU16::get),
                 pause_hold_syncs: ptp.pause_hold_syncs,
                 pause_retry_ns: to_ns(ptp.pause_retry),
@@ -842,14 +842,10 @@ fn to_cpu_config(config: Autd3CpuConfig) -> Result<CpuConfig, String> {
             lock_threshold: Duration::from_nanos(ptp.lock_threshold_ns),
             kp_milli: ptp.kp_milli,
             ki_milli: ptp.ki_milli,
-            max_freq_ppb: MaxFreqPpb::new(ptp.max_freq_ppb)
-                .ok_or_else(|| out_of_range("ptp.max_freq_ppb", ptp.max_freq_ppb))?,
+            max_freq_ppb: ptp.max_freq_ppb,
             delay_req_syncs: NonZeroU16::new(ptp.delay_req_syncs)
                 .ok_or_else(|| out_of_range("ptp.delay_req_syncs", ptp.delay_req_syncs))?,
-            path_delay_filter_shift: PathDelayFilterShift::new(ptp.path_delay_filter_shift)
-                .ok_or_else(|| {
-                    out_of_range("ptp.path_delay_filter_shift", ptp.path_delay_filter_shift)
-                })?,
+            path_delay_filter_shift: ptp.path_delay_filter_shift,
             pause_quanta: NonZeroU16::new(ptp.pause_quanta),
             pause_hold_syncs: ptp.pause_hold_syncs,
             pause_retry: Duration::from_nanos(ptp.pause_retry_ns),
@@ -2277,9 +2273,9 @@ mod tests {
                 lock_threshold: Duration::from_nanos(21),
                 kp_milli: 22,
                 ki_milli: 23,
-                max_freq_ppb: MaxFreqPpb::new(24).unwrap(),
+                max_freq_ppb: 24,
                 delay_req_syncs: NonZeroU16::new(26).unwrap(),
-                path_delay_filter_shift: PathDelayFilterShift::new(4).unwrap(),
+                path_delay_filter_shift: 4,
                 pause_quanta: NonZeroU16::new(27),
                 pause_hold_syncs: 28,
                 pause_retry: Duration::from_millis(29),
@@ -2354,20 +2350,22 @@ mod tests {
                 ..default.ptp
             })
         );
-        assert_eq!(
-            Err("ptp.max_freq_ppb is out of range: 2147483648".to_owned()),
-            ptp(Autd3PtpConfig {
-                max_freq_ppb: 0x8000_0000,
+    }
+
+    #[test]
+    fn ptp_values_the_device_refuses_are_passed_through_unchecked() {
+        let default = default_cpu_config();
+        let config = set_cpu_config(Autd3CpuConfig {
+            ptp: Autd3PtpConfig {
+                max_freq_ppb: u32::MAX,
+                path_delay_filter_shift: u8::MAX,
                 ..default.ptp
-            })
-        );
-        assert_eq!(
-            Err("ptp.path_delay_filter_shift is out of range: 17".to_owned()),
-            ptp(Autd3PtpConfig {
-                path_delay_filter_shift: 17,
-                ..default.ptp
-            })
-        );
+            },
+            ..default
+        })
+        .unwrap();
+        assert_eq!(u32::MAX, config.ptp.max_freq_ppb);
+        assert_eq!(u8::MAX, config.ptp.path_delay_filter_shift);
     }
 
     #[test]
