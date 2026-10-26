@@ -1,5 +1,3 @@
-use core::num::NonZeroU32;
-
 use crate::fpga::{self, TransitionModeKind, transition_register_value};
 use crate::fpga_params::{
     ADDR_MOD_REQ_RD_BANK, ADDR_MOD_TRANSITION_MODE, ADDR_MOD_TRANSITION_VALUE_0,
@@ -36,7 +34,6 @@ pub(crate) fn activate_bank<P: Port>(
     bank: u8,
     mode: TransitionModeKind,
     value: u64,
-    max_polls: NonZeroU32,
 ) -> Result<(), Error> {
     fpga::write_ctl(port, regs.transition_mode, mode as u16);
     fpga::write_u64(
@@ -45,7 +42,7 @@ pub(crate) fn activate_bank<P: Port>(
         transition_register_value(mode, value),
     );
     fpga::write_ctl(port, regs.req_rd_bank, u16::from(bank));
-    fpga::set_and_wait_update(port, regs.set_flag, max_polls)
+    fpga::set_and_wait_update(port, regs.set_flag, fpga::FPGA_WAIT_UPDATE_MAX_POLLS)
 }
 
 #[cfg(all(test, not(loom)))]

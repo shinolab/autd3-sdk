@@ -1,7 +1,5 @@
 pub(crate) use autd3_cpu_wire::payload::SilencerPayload;
 
-use core::num::NonZeroU32;
-
 use crate::fpga;
 use crate::fpga_params::{
     ADDR_SILENCER_COMPLETION_STEPS_INTENSITY, ADDR_SILENCER_COMPLETION_STEPS_PHASE,
@@ -11,11 +9,7 @@ use crate::fpga_params::{
 use crate::port::Port;
 use crate::proto::Error;
 
-pub(crate) fn handle<P: Port>(
-    port: &mut P,
-    payload: &[u8],
-    max_polls: NonZeroU32,
-) -> Result<(), Error> {
+pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
     let p = SilencerPayload::parse(payload)?;
     let flag = p.flags();
     let update_rate_intensity = p.update_rate_intensity.get();
@@ -40,7 +34,11 @@ pub(crate) fn handle<P: Port>(
         completion_steps_phase,
     );
     fpga::write_ctl(port, ADDR_SILENCER_FLAG, u16::from(flag.bits()));
-    fpga::set_and_wait_update(port, CtlFlags::SILENCER_SET, max_polls)
+    fpga::set_and_wait_update(
+        port,
+        CtlFlags::SILENCER_SET,
+        fpga::FPGA_WAIT_UPDATE_MAX_POLLS,
+    )
 }
 
 #[cfg(all(test, not(loom)))]
