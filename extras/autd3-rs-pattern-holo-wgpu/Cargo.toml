@@ -32,15 +32,15 @@ nalgebra = { version = "0.35.0", default-features = false, features = [
     "std",
     "convert-bytemuck",
 ] }
-thiserror = { version = "2.0.18", default-features = false, features = ["std"] }
-wgpu = { version = "30.0.0", default-features = false, features = [
+thiserror = { version = "2.0.21", default-features = false, features = ["std"] }
+wgpu = { version = "30.0.1", default-features = false, features = [
     "wgsl",
     "vulkan",
     "metal",
     "dx12",
 ] }
 pollster = { version = "1.0.1", default-features = false }
-bytemuck = { version = "1.25.0", default-features = false }
+bytemuck = { version = "1.25.2", default-features = false }
 
 [dev-dependencies]
 autd3-rs-pattern = { path = "../../crates/autd3-rs-pattern" }

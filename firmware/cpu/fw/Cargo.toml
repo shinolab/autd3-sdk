@@ -16,13 +16,13 @@ autd3-cpu-wire.workspace = true
 zerocopy.workspace = true
 etherparse.workspace = true
 bitflags.workspace = true
-const_fn = { version = "0.4.7", default-features = false }
+const_fn.workspace = true
 
 [dev-dependencies]
 rstest.workspace = true
 
 [target.'cfg(loom)'.dev-dependencies]
-loom = { version = "0.7.2", default-features = false }
+loom.workspace = true
 
 [lints]
 workspace = true

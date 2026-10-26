@@ -41,24 +41,19 @@ categories = ["science"]
 approx = { version = "0.5.1", default-features = false, features = ["std"] }
 nalgebra = { version = "0.35.0", default-features = false, features = ["std"] }
 num-integer = { version = "0.1.47", default-features = false }
-rstest = { version = "0.27.0", default-features = false }
-thiserror = { version = "2.0.18", default-features = false, features = ["std"] }
-zerocopy = { version = "0.8.52", default-features = false, features = [
+rstest = { version = "0.28.0", default-features = false }
+thiserror = { version = "2.0.21", default-features = false }
+zerocopy = { version = "0.8.63", default-features = false, features = [
     "derive",
 ] }
 crc = { version = "3.4.0", default-features = false }
 bitflags = { version = "2.13.2", default-features = false }
 etherparse = { version = "0.21.0", default-features = false }
-tokio = { version = "1.52.3", default-features = false, features = [
-    "sync",
-    "time",
-    "macros",
-    "rt",
-] }
-socket2 = { version = "0.6.4", default-features = false }
-libc = { version = "0.2.190", default-features = false }
+tokio = { version = "1.54.1", default-features = false }
+socket2 = { version = "0.6.5", default-features = false }
+libc = { version = "0.2.191", default-features = false }
 windows-sys = { version = "0.61.2", default-features = false }
-clap = { version = "4.6.1", default-features = false, features = [
+clap = { version = "4.6.7", default-features = false, features = [
     "std",
     "derive",
     "help",
@@ -70,24 +65,31 @@ futures-channel = { version = "0.3.34", default-features = false, features = [
 ] }
 async-lock = { version = "3.4.2", default-features = false, features = ["std"] }
 pollster = { version = "1.0.1", default-features = false }
-humantime = { version = "2.3.0", default-features = false }
+humantime = { version = "2.4.0", default-features = false }
 if-addrs = { version = "0.15.0", default-features = false }
-serde = { version = "1.0.228", default-features = false, features = [
+serde = { version = "1.0.229", default-features = false, features = [
     "std",
     "derive",
 ] }
-serde_json = { version = "1.0.150", default-features = false, features = [
+serde_json = { version = "1.0.154", default-features = false, features = [
     "std",
 ] }
 anyhow = { version = "1.0.104", default-features = false, features = ["std"] }
 tracing = { version = "0.1.44", default-features = false }
-tracing-appender = { version = "0.2.3", default-features = false }
 tracing-subscriber = { version = "0.3.23", default-features = false, features = [
     "std",
     "fmt",
     "ansi",
     "env-filter",
 ] }
+criterion = { version = "0.8.2", default-features = false }
+const_fn = { version = "0.4.12", default-features = false }
+loom = { version = "0.7.2", default-features = false }
+ureq = { version = "3.5.0", default-features = false, features = ["rustls", "gzip"] }
+zip = { version = "9.1.1", default-features = false, features = [
+    "deflate-flate2-zlib-rs",
+] }
+winreg = { version = "0.56.0", default-features = false }
 
 autd3-rs = { version = "0.12.0", path = "crates/autd3-rs" }
 autd3-cpu-wire = { version = "0.12.0", path = "firmware/cpu/wire" }

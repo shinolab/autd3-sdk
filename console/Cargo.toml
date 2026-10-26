@@ -21,10 +21,10 @@ eframe = { version = "0.37.0", default-features = false, features = [
     "wayland",
     "x11",
 ] }
-serde = { version = "1.0.228", default-features = false, features = ["std", "derive"] }
+serde = { version = "1.0.229", default-features = false, features = ["std", "derive"] }
 
 [dev-dependencies]
-serde_json = { version = "1.0.150", default-features = false, features = ["std"] }
+serde_json = { version = "1.0.154", default-features = false, features = ["std"] }
 
 [lints]
 workspace = true

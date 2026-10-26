@@ -31,8 +31,8 @@ autd3-rs-pattern = { path = "../../crates/autd3-rs-pattern" }
 autd3-rs-modulation = { path = "../../crates/autd3-rs-modulation" }
 anyhow = { version = "1.0.104", default-features = false, features = ["std"] }
 textplots = { version = "0.8.7", default-features = false }
-thiserror = { version = "2.0.18", default-features = false, features = ["std"] }
-rayon = { version = "1.11.0", default-features = false }
+thiserror = { version = "2.0.21", default-features = false, features = ["std"] }
+rayon = { version = "1.12.0", default-features = false }
 approx = { version = "0.5.1", default-features = false, features = ["std"] }
 
 [package]
