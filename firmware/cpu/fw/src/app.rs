@@ -119,13 +119,6 @@ const _: () = assert!(FIFO_DEPTH as usize > autd3_cpu_wire::udp::DEVICE_QUEUE_FR
 
 pub(crate) const EXEC_SPIN_NS: i64 = 50_000;
 
-fn ahead_of_exec_at_ns(now: u64, exec_at: u32) -> i64 {
-    let ahead_us = exec_at
-        .wrapping_sub((now / EXEC_AT_UNIT_NS) as u32)
-        .cast_signed();
-    i64::from(ahead_us) * EXEC_AT_UNIT_NS.cast_signed() - (now % EXEC_AT_UNIT_NS).cast_signed()
-}
-
 impl Default for Cpu {
     fn default() -> Self {
         Self::new()
@@ -311,6 +304,14 @@ impl Cpu {
     }
 
     fn is_due<P: Port>(&self, port: &mut P, exec_at: u32) -> bool {
+        fn ahead_of_exec_at_ns(now: u64, exec_at: u32) -> i64 {
+            let ahead_us = exec_at
+                .wrapping_sub((now / EXEC_AT_UNIT_NS) as u32)
+                .cast_signed();
+            i64::from(ahead_us) * EXEC_AT_UNIT_NS.cast_signed()
+                - (now % EXEC_AT_UNIT_NS).cast_signed()
+        }
+
         if exec_at == 0 {
             return true;
         }

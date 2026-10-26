@@ -26,14 +26,6 @@ fn deadline_passed(deadline: Option<Instant>) -> bool {
     deadline.is_some_and(|deadline| Instant::now() >= deadline)
 }
 
-const fn role_of(unit_id: u8) -> Role {
-    if unit_id == GRANDMASTER_UNIT_ID {
-        Role::Grandmaster
-    } else {
-        Role::Slave
-    }
-}
-
 pub(super) fn collect_responses(
     channel: &Channel,
     kind: Kind,
@@ -147,7 +139,12 @@ impl Enumerator<'_> {
     }
 
     fn assign(&mut self, discovered: SocketAddrV6, unit_id: u8) -> Result<SocketAddrV6, UdpError> {
-        let body = assign_id_body(unit_id, role_of(unit_id));
+        let role = if unit_id == GRANDMASTER_UNIT_ID {
+            Role::Grandmaster
+        } else {
+            Role::Slave
+        };
+        let body = assign_id_body(unit_id, role);
         if let Some(response) =
             self.exchange_with_retries(discovered, Kind::AssignId, body.as_bytes())?
         {

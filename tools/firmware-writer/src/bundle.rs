@@ -68,44 +68,44 @@ pub fn bundle_url(version: &str) -> String {
 }
 
 pub fn fetch(version: &str, force_download: bool) -> Result<Bundle> {
+    fn download_and_extract(version: &str, force: bool) -> Result<PathBuf> {
+        let dest = std::env::temp_dir().join(format!("autd3-sdk-firmware-v{version}"));
+        if dest.is_dir() && !force {
+            eprintln!("Using cached firmware at {}", dest.display());
+            return Ok(dest);
+        }
+        if dest.exists() {
+            std::fs::remove_dir_all(&dest).map_err(io_err("removing stale cache", &dest))?;
+        }
+
+        let url = bundle_url(version);
+        eprintln!("Downloading {url}");
+        let resp = ureq::get(&url)
+            .call()
+            .map_err(|source| BundleError::Download {
+                url: url.clone(),
+                source: Box::new(source),
+            })?;
+        let mut bytes = Vec::new();
+        resp.into_body()
+            .into_reader()
+            .read_to_end(&mut bytes)
+            .map_err(BundleError::Read)?;
+
+        let mut archive =
+            zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(BundleError::Open)?;
+        archive
+            .extract(&dest)
+            .map_err(|source| BundleError::Extract {
+                path: dest.clone(),
+                source,
+            })?;
+        Ok(dest)
+    }
+
     let version = version.trim_start_matches('v');
     let dir = download_and_extract(version, force_download)?;
     find(&dir)
-}
-
-fn download_and_extract(version: &str, force: bool) -> Result<PathBuf> {
-    let dest = std::env::temp_dir().join(format!("autd3-sdk-firmware-v{version}"));
-    if dest.is_dir() && !force {
-        eprintln!("Using cached firmware at {}", dest.display());
-        return Ok(dest);
-    }
-    if dest.exists() {
-        std::fs::remove_dir_all(&dest).map_err(io_err("removing stale cache", &dest))?;
-    }
-
-    let url = bundle_url(version);
-    eprintln!("Downloading {url}");
-    let resp = ureq::get(&url)
-        .call()
-        .map_err(|source| BundleError::Download {
-            url: url.clone(),
-            source: Box::new(source),
-        })?;
-    let mut bytes = Vec::new();
-    resp.into_body()
-        .into_reader()
-        .read_to_end(&mut bytes)
-        .map_err(BundleError::Read)?;
-
-    let mut archive =
-        zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(BundleError::Open)?;
-    archive
-        .extract(&dest)
-        .map_err(|source| BundleError::Extract {
-            path: dest.clone(),
-            source,
-        })?;
-    Ok(dest)
 }
 
 pub fn find(dir: &Path) -> Result<Bundle> {

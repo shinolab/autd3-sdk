@@ -58,41 +58,71 @@ pub(crate) enum GenTarget {
 
 pub(crate) fn run_license(root: &Path, cmd: &LicenseCmd) -> Result<()> {
     match cmd {
-        LicenseCmd::Generate { target } => generate(root, *target),
-        LicenseCmd::Check => check(root),
-        LicenseCmd::Audit => audit(root),
-    }
-}
-
-fn generate(root: &Path, target: GenTarget) -> Result<()> {
-    match target {
-        GenTarget::All => {
-            generate_python(root, true)?;
-            generate_csharp(root, true)?;
-            generate_unity(root, true)?;
-            generate_console(root, true)?;
+        LicenseCmd::Generate { target } => {
+            match *target {
+                GenTarget::All => {
+                    generate_python(root, true)?;
+                    generate_csharp(root, true)?;
+                    generate_unity(root, true)?;
+                    generate_console(root, true)?;
+                }
+                GenTarget::Python => generate_python(root, true)?,
+                GenTarget::Csharp => generate_csharp(root, true)?,
+                GenTarget::Unity => generate_unity(root, true)?,
+                GenTarget::Console => generate_console(root, true)?,
+                GenTarget::Simulator => generate_simulator(root, true)?,
+            }
+            println!("license generate: done");
+            Ok(())
         }
-        GenTarget::Python => generate_python(root, true)?,
-        GenTarget::Csharp => generate_csharp(root, true)?,
-        GenTarget::Unity => generate_unity(root, true)?,
-        GenTarget::Console => generate_console(root, true)?,
-        GenTarget::Simulator => generate_simulator(root, true)?,
+        LicenseCmd::Check => {
+            println!("== bundled license text ==");
+            let mit = std::fs::read_to_string(root.join("LICENSE"))
+                .with_context(|| format!("reading {}", root.join("LICENSE").display()))?;
+            let mut missing = Vec::new();
+            for ws in PUBLISH_WORKSPACES {
+                let ws_dir = if *ws == "." {
+                    root.to_path_buf()
+                } else {
+                    root.join(ws)
+                };
+                for package in workspace_members(&ws_dir)?
+                    .iter()
+                    .filter(|package| package.publishable())
+                {
+                    let path = package.dir().join("LICENSE");
+                    match std::fs::read_to_string(&path) {
+                        Ok(text) if text == mit => {}
+                        Ok(_) => missing.push(format!(
+                            "{}: {} differs from the root text",
+                            package.name(),
+                            path.display()
+                        )),
+                        Err(_) => {
+                            missing.push(format!(
+                                "{}: {} is missing",
+                                package.name(),
+                                path.display()
+                            ));
+                        }
+                    }
+                }
+            }
+            if !missing.is_empty() {
+                bail!(
+                    "publishable crates must bundle their license text (`cargo package` cannot reach outside the crate directory):\n  {}",
+                    missing.join("\n  ")
+                );
+            }
+            println!("bundled license text: ok");
+            deny(root, DENY_WORKSPACES.iter().copied(), &["licenses"])
+        }
+        LicenseCmd::Audit => deny(
+            root,
+            DENY_WORKSPACES.iter().chain(AUDIT_ONLY_WORKSPACES).copied(),
+            &["advisories", "bans", "sources"],
+        ),
     }
-    println!("license generate: done");
-    Ok(())
-}
-
-fn check(root: &Path) -> Result<()> {
-    check_bundled_license(root)?;
-    deny(root, DENY_WORKSPACES.iter().copied(), &["licenses"])
-}
-
-fn audit(root: &Path) -> Result<()> {
-    deny(
-        root,
-        DENY_WORKSPACES.iter().chain(AUDIT_ONLY_WORKSPACES).copied(),
-        &["advisories", "bans", "sources"],
-    )
 }
 
 fn deny<'a>(root: &Path, workspaces: impl Iterator<Item = &'a str>, checks: &[&str]) -> Result<()> {
@@ -119,46 +149,6 @@ fn deny<'a>(root: &Path, workspaces: impl Iterator<Item = &'a str>, checks: &[&s
     if !failed.is_empty() {
         bail!("cargo-deny failed in: {}", failed.join(", "));
     }
-    Ok(())
-}
-
-fn check_bundled_license(root: &Path) -> Result<()> {
-    println!("== bundled license text ==");
-    let mit = std::fs::read_to_string(root.join("LICENSE"))
-        .with_context(|| format!("reading {}", root.join("LICENSE").display()))?;
-
-    let mut missing = Vec::new();
-    for ws in PUBLISH_WORKSPACES {
-        let ws_dir = if *ws == "." {
-            root.to_path_buf()
-        } else {
-            root.join(ws)
-        };
-        for package in workspace_members(&ws_dir)?
-            .iter()
-            .filter(|package| package.publishable())
-        {
-            let path = package.dir().join("LICENSE");
-            match std::fs::read_to_string(&path) {
-                Ok(text) if text == mit => {}
-                Ok(_) => missing.push(format!(
-                    "{}: {} differs from the root text",
-                    package.name(),
-                    path.display()
-                )),
-                Err(_) => {
-                    missing.push(format!("{}: {} is missing", package.name(), path.display()));
-                }
-            }
-        }
-    }
-    if !missing.is_empty() {
-        bail!(
-            "publishable crates must bundle their license text (`cargo package` cannot reach outside the crate directory):\n  {}",
-            missing.join("\n  ")
-        );
-    }
-    println!("bundled license text: ok");
     Ok(())
 }
 
@@ -300,7 +290,12 @@ pub(crate) fn generate_simulator(root: &Path, generate: bool) -> Result<()> {
 
 fn about(root: &Path, manifest: &Path, out: &Path, generate: bool) -> Result<()> {
     if !generate {
-        return placeholder(manifest, out);
+        println!("== cargo-about skipped: {} ==", manifest.display());
+        if let Some(parent) = out.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        return std::fs::write(out, PLACEHOLDER)
+            .with_context(|| format!("writing {}", out.display()));
     }
     let about_toml = root.join("about.toml");
     let template = root.join("about.hbs");
@@ -320,12 +315,4 @@ fn about(root: &Path, manifest: &Path, out: &Path, generate: bool) -> Result<()>
         ],
         root,
     )
-}
-
-fn placeholder(manifest: &Path, out: &Path) -> Result<()> {
-    println!("== cargo-about skipped: {} ==", manifest.display());
-    if let Some(parent) = out.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::write(out, PLACEHOLDER).with_context(|| format!("writing {}", out.display()))
 }

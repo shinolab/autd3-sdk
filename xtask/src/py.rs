@@ -72,14 +72,76 @@ pub(crate) fn run_py(root: &Path, cmd: PyCmd) -> Result<()> {
             debug,
             python,
             license,
-        } => build(root, &dir, debug, python.as_deref(), license),
+        } => {
+            let python = python.as_deref();
+            crate::license::generate_python(root, license)?;
+            let out = dir.join("target").join("wheels");
+            let interpreter = python
+                .map(|spec| venv_for(&dir, Some(spec)).map(|venv| venv_python(&venv)))
+                .transpose()?
+                .map(|python| python.to_string_lossy().into_owned());
+            for wheel in WHEELS {
+                drop_stale_native_cdylib(&dir, wheel, !debug);
+                drop_stale_extension_modules(&dir, wheel);
+                let manifest = manifest(wheel);
+                let mut args = vec!["build", "-m", &manifest, "-o"];
+                let out = out.to_string_lossy().into_owned();
+                args.push(&out);
+                if !debug {
+                    args.push("--release");
+                }
+                if let Some(interpreter) = &interpreter {
+                    args.push("-i");
+                    args.push(interpreter);
+                }
+                if NATIVE_LIB_WHEELS.contains(wheel) {
+                    args.push("--auditwheel");
+                    args.push("warn");
+                }
+                maturin(&dir, None, &args)?;
+            }
+            Ok(())
+        }
         PyCmd::Develop { release, python } => {
             let venv = venv_for(&dir, python.as_deref())?;
             develop(&dir, &venv, WHEELS, release)
         }
-        PyCmd::Lint => lint(&dir),
+        PyCmd::Lint => {
+            cargo_clippy(&dir, &["--workspace", "--all-targets"])?;
+            let venv = venv_for(&dir, None)?;
+            develop(&dir, &venv, WHEELS, false)?;
+            pip_install(
+                &dir,
+                &venv,
+                &["mypy==2.4.0", "pytest", "numpy", "scipy", "polars"],
+            )?;
+            let python = venv_python(&venv);
+            run(&python.to_string_lossy(), ["-m", "mypy"], &dir)
+        }
         PyCmd::Format { fix } => cargo_fmt(&dir, &[], fix),
-        PyCmd::Test { python } => test(&dir, python.as_deref()),
+        PyCmd::Test { python } => {
+            let python = python.as_deref();
+            run_cargo(["test", "-p", "autd3-python-cell"], &dir)?;
+            let venv = venv_for(&dir, python)?;
+            develop(&dir, &venv, WHEELS, false)?;
+            let free_threaded = is_free_threaded(&dir, &venv)?;
+            let python = venv_python(&venv);
+            if dir.join("tests").is_dir() {
+                let packages: Vec<&str> = ["pytest", "numpy", "scipy", "polars"]
+                    .into_iter()
+                    .filter(|p| !free_threaded || !FREE_THREADED_UNAVAILABLE.contains(p))
+                    .collect();
+                pip_install(&dir, &venv, &packages)?;
+                run(&python.to_string_lossy(), ["-m", "pytest", "tests"], &dir)
+            } else {
+                let imports = WHEELS
+                    .iter()
+                    .map(|w| format!("import {}", module_name(w)))
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                run(&python.to_string_lossy(), ["-c", &imports], &dir)
+            }
+        }
         PyCmd::Clean(args) => crate::clean::scope(root, args, clean),
     }
 }
@@ -115,72 +177,6 @@ pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {
         cleaner.deps(&format!("bindings/python/{name}"))?;
     }
     Ok(())
-}
-
-fn build(root: &Path, dir: &Path, debug: bool, python: Option<&str>, license: bool) -> Result<()> {
-    crate::license::generate_python(root, license)?;
-    let out = dir.join("target").join("wheels");
-    let interpreter = python
-        .map(|spec| venv_for(dir, Some(spec)).map(|venv| venv_python(&venv)))
-        .transpose()?
-        .map(|python| python.to_string_lossy().into_owned());
-    for wheel in WHEELS {
-        drop_stale_native_cdylib(dir, wheel, !debug);
-        drop_stale_extension_modules(dir, wheel);
-        let manifest = manifest(wheel);
-        let mut args = vec!["build", "-m", &manifest, "-o"];
-        let out = out.to_string_lossy().into_owned();
-        args.push(&out);
-        if !debug {
-            args.push("--release");
-        }
-        if let Some(interpreter) = &interpreter {
-            args.push("-i");
-            args.push(interpreter);
-        }
-        if NATIVE_LIB_WHEELS.contains(wheel) {
-            args.push("--auditwheel");
-            args.push("warn");
-        }
-        maturin(dir, None, &args)?;
-    }
-    Ok(())
-}
-
-fn lint(dir: &Path) -> Result<()> {
-    cargo_clippy(dir, &["--workspace", "--all-targets"])?;
-    let venv = venv_for(dir, None)?;
-    develop(dir, &venv, WHEELS, false)?;
-    pip_install(
-        dir,
-        &venv,
-        &["mypy==2.4.0", "pytest", "numpy", "scipy", "polars"],
-    )?;
-    let python = venv_python(&venv);
-    run(&python.to_string_lossy(), ["-m", "mypy"], dir)
-}
-
-fn test(dir: &Path, python: Option<&str>) -> Result<()> {
-    run_cargo(["test", "-p", "autd3-python-cell"], dir)?;
-    let venv = venv_for(dir, python)?;
-    develop(dir, &venv, WHEELS, false)?;
-    let free_threaded = is_free_threaded(dir, &venv)?;
-    let python = venv_python(&venv);
-    if dir.join("tests").is_dir() {
-        let packages: Vec<&str> = ["pytest", "numpy", "scipy", "polars"]
-            .into_iter()
-            .filter(|p| !free_threaded || !FREE_THREADED_UNAVAILABLE.contains(p))
-            .collect();
-        pip_install(dir, &venv, &packages)?;
-        run(&python.to_string_lossy(), ["-m", "pytest", "tests"], dir)
-    } else {
-        let imports = WHEELS
-            .iter()
-            .map(|w| format!("import {}", module_name(w)))
-            .collect::<Vec<_>>()
-            .join("; ");
-        run(&python.to_string_lossy(), ["-c", &imports], dir)
-    }
 }
 
 fn stale_extension_modules(dir: &Path, wheel: &str) -> Vec<PathBuf> {
@@ -242,7 +238,36 @@ pub(crate) fn develop(dir: &Path, venv: &Path, wheels: &[&str], release: bool) -
         drop_stale_native_cdylib(dir, wheel, release);
         drop_stale_extension_modules(dir, wheel);
         if free_threaded && FREE_THREADED_UNMET_DEPS.contains(wheel) {
-            install_without_deps(dir, venv, wheel, release)?;
+            let out = dir.join("target").join("no-deps-wheels").join(wheel);
+            if out.exists() {
+                std::fs::remove_dir_all(&out)?;
+            }
+            let manifest = manifest(wheel);
+            let python = venv_python(venv).to_string_lossy().into_owned();
+            let out_arg = out.to_string_lossy().into_owned();
+            let mut args = vec!["build", "-m", &manifest, "-i", &python, "-o", &out_arg];
+            if release {
+                args.push("--release");
+            }
+            maturin(dir, None, &args)?;
+            let built = std::fs::read_dir(&out)?
+                .flatten()
+                .map(|entry| entry.path())
+                .find(|path| path.extension().is_some_and(|ext| ext == "whl"))
+                .ok_or_else(|| anyhow::anyhow!("maturin produced no wheel in {}", out.display()))?;
+            ensure_uv()?;
+            run_env(
+                "uv",
+                [
+                    OsStr::new("pip"),
+                    OsStr::new("install"),
+                    OsStr::new("--no-deps"),
+                    OsStr::new("--reinstall"),
+                    built.as_os_str(),
+                ],
+                dir,
+                &[("VIRTUAL_ENV", venv.as_os_str())],
+            )?;
             continue;
         }
         let manifest = manifest(wheel);
@@ -253,39 +278,6 @@ pub(crate) fn develop(dir: &Path, venv: &Path, wheels: &[&str], release: bool) -
         maturin(dir, Some(venv), &args)?;
     }
     Ok(())
-}
-
-fn install_without_deps(dir: &Path, venv: &Path, wheel: &str, release: bool) -> Result<()> {
-    let out = dir.join("target").join("no-deps-wheels").join(wheel);
-    if out.exists() {
-        std::fs::remove_dir_all(&out)?;
-    }
-    let manifest = manifest(wheel);
-    let python = venv_python(venv).to_string_lossy().into_owned();
-    let out_arg = out.to_string_lossy().into_owned();
-    let mut args = vec!["build", "-m", &manifest, "-i", &python, "-o", &out_arg];
-    if release {
-        args.push("--release");
-    }
-    maturin(dir, None, &args)?;
-    let built = std::fs::read_dir(&out)?
-        .flatten()
-        .map(|entry| entry.path())
-        .find(|path| path.extension().is_some_and(|ext| ext == "whl"))
-        .ok_or_else(|| anyhow::anyhow!("maturin produced no wheel in {}", out.display()))?;
-    ensure_uv()?;
-    run_env(
-        "uv",
-        [
-            OsStr::new("pip"),
-            OsStr::new("install"),
-            OsStr::new("--no-deps"),
-            OsStr::new("--reinstall"),
-            built.as_os_str(),
-        ],
-        dir,
-        &[("VIRTUAL_ENV", venv.as_os_str())],
-    )
 }
 
 fn is_free_threaded(dir: &Path, venv: &Path) -> Result<bool> {

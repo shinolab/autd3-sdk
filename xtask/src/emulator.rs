@@ -67,26 +67,24 @@ pub(crate) fn run_emulator(root: &Path, cmd: &EmulatorCmd) -> Result<()> {
             debug,
             no_plot,
             args,
-        } => example(&dir, name, *debug, *no_plot, args),
+        } => {
+            let mut cargo_args = vec!["run", "-p", "autd3-rs-emulator-examples", "--bin", name];
+            if !*debug {
+                cargo_args.push("--release");
+            }
+            if *no_plot || !args.is_empty() {
+                cargo_args.push("--");
+                if *no_plot {
+                    cargo_args.push("--no-plot");
+                }
+                cargo_args.extend(args.iter().map(String::as_str));
+            }
+            run("cargo", cargo_args, &dir)
+        }
         EmulatorCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
 }
 
 pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {
     cleaner.path("extras/autd3-rs-emulator/target")
-}
-
-fn example(dir: &Path, name: &str, debug: bool, no_plot: bool, args: &[String]) -> Result<()> {
-    let mut cargo_args = vec!["run", "-p", "autd3-rs-emulator-examples", "--bin", name];
-    if !debug {
-        cargo_args.push("--release");
-    }
-    if no_plot || !args.is_empty() {
-        cargo_args.push("--");
-        if no_plot {
-            cargo_args.push("--no-plot");
-        }
-        cargo_args.extend(args.iter().map(String::as_str));
-    }
-    run("cargo", cargo_args, dir)
 }

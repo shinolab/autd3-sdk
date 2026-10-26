@@ -29,7 +29,171 @@ const BIN_NS: i64 = 1_000;
 const ORIGIN_NS: i64 = -10_000_000;
 const HISTOGRAM_HEADROOM: Duration = Duration::from_millis(10);
 
+#[allow(clippy::too_many_lines)]
 pub(crate) async fn run(cli: &Cli) -> Result<()> {
+    #[allow(clippy::too_many_lines)]
+    fn measure(cli: &Cli, option: &TransportOption, shutdown: &AtomicBool) -> Result<()> {
+        let devices = cli.devices.get();
+        let framing = cli.framing.unwrap_or_default();
+        eprintln!(
+            "devices: {devices}  framing: {framing:?}  exec_lead: {:?}",
+            cli.exec_lead
+        );
+        if cli.ack_timeout >= option.lost_timeout {
+            bail!(
+                "--ack-timeout {:?} must be shorter than the lost timeout {:?}",
+                cli.ack_timeout,
+                option.lost_timeout
+            );
+        }
+        let geometry = Geometry::new((0..devices).map(|_| Autd3::default()));
+        let session = Session::open(cli, option, &geometry)?;
+        let patterns = [geometry.phase_buffer()];
+        let intensities: Vec<Vec<Intensity>> = geometry
+            .iter()
+            .map(|d| vec![Intensity::MIN; d.num_transducers()])
+            .collect();
+        session.run_unscheduled(&Frames::encode(&geometry, Clear)?, "Clear")?;
+        session.run_unscheduled(&Frames::encode(&geometry, Synchronize)?, "Synchronize")?;
+        session.run_unscheduled(
+            &Frames::encode(
+                &geometry,
+                SetGpioOut {
+                    outputs: [
+                        GpioOut::PatternBank,
+                        GpioOut::Off,
+                        GpioOut::Off,
+                        GpioOut::Off,
+                    ],
+                },
+            )?,
+            "SetGpioOut",
+        )?;
+        session.run_unscheduled(
+            &Frames::encode(
+                &geometry,
+                Pattern::with_bank(PatternBank::B0, &patterns[0], &intensities),
+            )?,
+            "the initial Pattern",
+        )?;
+        eprintln!(
+            "GPIO[0]: PatternBank (toggles on every switch; probe it on two or more devices)"
+        );
+        let telemetry_start = session.read_telemetry()?;
+
+        let upper_ns =
+            i64::try_from((cli.ack_timeout + HISTOGRAM_HEADROOM).as_nanos()).unwrap_or(i64::MAX);
+        let bins = usize::try_from((upper_ns - ORIGIN_NS) / BIN_NS).unwrap_or(0);
+        let mut stats = Stats::new(devices, bins);
+        let mut frames = Frames::default();
+        let mut bank = PatternBank::B1;
+        let mut stopped: Option<anyhow::Error> = None;
+        let start = Instant::now();
+        let mut last_report = start;
+        while !shutdown.load(Ordering::Relaxed) {
+            let encoded = match framing {
+                Framing::Fused => frames.encode_into(
+                    &geometry,
+                    Pattern::with_bank(bank, &patterns[0], &intensities),
+                ),
+                Framing::Split => frames.encode_into(
+                    &geometry,
+                    (
+                        WritePatternBuffer::new(bank, 0, &patterns, &intensities),
+                        ConfigPattern {
+                            bank,
+                            config: SamplingConfig::new(NonZeroU16::MAX),
+                            size: 1,
+                            loop_behavior: LoopBehavior::Infinite,
+                        },
+                        ActivatePatternBank {
+                            bank,
+                            transition_mode: TransitionMode::Immediate,
+                        },
+                    ),
+                ),
+            }
+            .context("encoding the switch");
+            if let Err(e) = encoded {
+                stopped = Some(e);
+                break;
+            }
+            let exchange = match session.exchange(&frames, true) {
+                Ok(exchange) => exchange,
+                Err(e) => {
+                    stopped = Some(e);
+                    break;
+                }
+            };
+            bank = match bank {
+                PatternBank::B0 => PatternBank::B1,
+                PatternBank::B1 => PatternBank::B0,
+            };
+            match exchange.failure() {
+                None => stats.record(&exchange),
+                Some(failure) => {
+                    stats.fail(failure);
+                    let lost = session.lost_devices();
+                    if !lost.is_empty() {
+                        stopped = Some(anyhow::anyhow!(
+                            "stopped because devices {lost:?} are Lost: the client no longer sends to them"
+                        ));
+                        break;
+                    }
+                    if cli.stop_on_error {
+                        stopped = Some(anyhow::anyhow!(
+                            "stopped at the first failure: {failure:?} (--stop-on-error)"
+                        ));
+                        break;
+                    }
+                }
+            }
+            if last_report.elapsed() >= REPORT_INTERVAL {
+                last_report = Instant::now();
+                println!(
+                    "[{:>8.1}s] ok {}  timeout {}  dev_err {}  net_err {}",
+                    start.elapsed().as_secs_f64(),
+                    stats.counters.ok,
+                    stats.counters.timeouts,
+                    stats.counters.device_error_total(),
+                    stats.counters.network_errors,
+                );
+            }
+        }
+        let elapsed = start.elapsed();
+
+        let telemetry_end = session.read_telemetry();
+        stats.print(elapsed, cli.exec_lead.is_some());
+        match &telemetry_end {
+            Ok(end) => {
+                println!();
+                println!("telemetry (per device, delta over the run; sync_resync: at end):");
+                for counter in &TELEMETRY_COUNTERS {
+                    let values: Vec<u32> = telemetry_start
+                        .iter()
+                        .zip(end)
+                        .map(|(s, e)| {
+                            if counter.absolute {
+                                (counter.read)(e)
+                            } else {
+                                (counter.read)(e).wrapping_sub((counter.read)(s))
+                            }
+                        })
+                        .collect();
+                    println!("  {:<15}: {values:?}", counter.name);
+                }
+            }
+            Err(e) => eprintln!("reading the telemetry at the end failed: {e}"),
+        }
+        let lost = session.lost_devices();
+        drop(session);
+        match stopped {
+            Some(e) if lost.is_empty() => Err(e),
+            Some(e) => Err(e.context(format!("devices {lost:?} are Lost"))),
+            None => Ok(()),
+        }
+    }
+
     let emulator = spawn_emulator(cli)?;
     let option = transport_option(cli, emulator.as_ref());
     let shutdown = Arc::new(AtomicBool::new(false));
@@ -40,20 +204,6 @@ pub(crate) async fn run(cli: &Cli) -> Result<()> {
         .context("the measurement thread panicked")?;
     drop(emulator);
     measured
-}
-
-fn exec_at_stamp(at: SysTime) -> u32 {
-    let us = at.sys_time().div_ceil(EXEC_AT_UNIT_NS);
-    match u32::try_from(us & u64::from(u32::MAX)) {
-        Ok(0) | Err(_) => 1,
-        Ok(us) => us,
-    }
-}
-
-fn after_boundary(sys_time: u64, exec_at: u32) -> i64 {
-    let us = u32::try_from((sys_time / EXEC_AT_UNIT_NS) & u64::from(u32::MAX)).unwrap_or(0);
-    let behind = i64::from(us.wrapping_sub(exec_at).cast_signed());
-    behind * EXEC_AT_UNIT_NS.cast_signed() + (sys_time % EXEC_AT_UNIT_NS).cast_signed()
 }
 
 struct Answer {
@@ -158,7 +308,12 @@ impl Session {
                         .device_time_now()
                         .context("the device time is unknown")?
                         + lead;
-                    (ExecAt::At(at), exec_at_stamp(at))
+                    let us = at.sys_time().div_ceil(EXEC_AT_UNIT_NS);
+                    let stamp = match u32::try_from(us & u64::from(u32::MAX)) {
+                        Ok(0) | Err(_) => 1,
+                        Ok(us) => us,
+                    };
+                    (ExecAt::At(at), stamp)
                 }
             };
             match block_on(self.client.send_frame_at(frame, exec)) {
@@ -342,7 +497,13 @@ impl Stats {
         for (device, time) in times.iter().enumerate() {
             match time {
                 Some(time) if last.exec_at != 0 => {
-                    self.after_boundary[device].record(after_boundary(*time, last.exec_at));
+                    let us =
+                        u32::try_from((time / EXEC_AT_UNIT_NS) & u64::from(u32::MAX)).unwrap_or(0);
+                    let behind = i64::from(us.wrapping_sub(last.exec_at).cast_signed());
+                    self.after_boundary[device].record(
+                        behind * EXEC_AT_UNIT_NS.cast_signed()
+                            + (time % EXEC_AT_UNIT_NS).cast_signed(),
+                    );
                 }
                 Some(_) => {}
                 None => self.missing_sys_time += 1,
@@ -433,196 +594,3 @@ const TELEMETRY_COUNTERS: [TelemetryCounter; 6] = [
         absolute: true,
     },
 ];
-
-fn print_telemetry(start: &[Telemetry], end: &[Telemetry]) {
-    println!();
-    println!("telemetry (per device, delta over the run; sync_resync: at end):");
-    for counter in &TELEMETRY_COUNTERS {
-        let values: Vec<u32> = start
-            .iter()
-            .zip(end)
-            .map(|(s, e)| {
-                if counter.absolute {
-                    (counter.read)(e)
-                } else {
-                    (counter.read)(e).wrapping_sub((counter.read)(s))
-                }
-            })
-            .collect();
-        println!("  {:<15}: {values:?}", counter.name);
-    }
-}
-
-const fn other(bank: PatternBank) -> PatternBank {
-    match bank {
-        PatternBank::B0 => PatternBank::B1,
-        PatternBank::B1 => PatternBank::B0,
-    }
-}
-
-fn encode_switch(
-    frames: &mut Frames,
-    geometry: &Geometry,
-    framing: Framing,
-    bank: PatternBank,
-    patterns: &[Vec<Vec<autd3_rs::value::Phase>>],
-    intensities: &[Vec<Intensity>],
-) -> Result<()> {
-    match framing {
-        Framing::Fused => frames.encode_into(
-            geometry,
-            Pattern::with_bank(bank, &patterns[0], intensities),
-        ),
-        Framing::Split => frames.encode_into(
-            geometry,
-            (
-                WritePatternBuffer::new(bank, 0, patterns, intensities),
-                ConfigPattern {
-                    bank,
-                    config: SamplingConfig::new(NonZeroU16::MAX),
-                    size: 1,
-                    loop_behavior: LoopBehavior::Infinite,
-                },
-                ActivatePatternBank {
-                    bank,
-                    transition_mode: TransitionMode::Immediate,
-                },
-            ),
-        ),
-    }
-    .context("encoding the switch")
-}
-
-fn prepare(
-    session: &Session,
-    geometry: &Geometry,
-    phases: &[Vec<autd3_rs::value::Phase>],
-    intensities: &[Vec<Intensity>],
-) -> Result<()> {
-    session.run_unscheduled(&Frames::encode(geometry, Clear)?, "Clear")?;
-    session.run_unscheduled(&Frames::encode(geometry, Synchronize)?, "Synchronize")?;
-    session.run_unscheduled(
-        &Frames::encode(
-            geometry,
-            SetGpioOut {
-                outputs: [
-                    GpioOut::PatternBank,
-                    GpioOut::Off,
-                    GpioOut::Off,
-                    GpioOut::Off,
-                ],
-            },
-        )?,
-        "SetGpioOut",
-    )?;
-    session.run_unscheduled(
-        &Frames::encode(
-            geometry,
-            Pattern::with_bank(PatternBank::B0, phases, intensities),
-        )?,
-        "the initial Pattern",
-    )?;
-    Ok(())
-}
-
-fn measure(cli: &Cli, option: &TransportOption, shutdown: &AtomicBool) -> Result<()> {
-    let devices = cli.devices.get();
-    let framing = cli.framing.unwrap_or_default();
-    eprintln!(
-        "devices: {devices}  framing: {framing:?}  exec_lead: {:?}",
-        cli.exec_lead
-    );
-    if cli.ack_timeout >= option.lost_timeout {
-        bail!(
-            "--ack-timeout {:?} must be shorter than the lost timeout {:?}",
-            cli.ack_timeout,
-            option.lost_timeout
-        );
-    }
-    let geometry = Geometry::new((0..devices).map(|_| Autd3::default()));
-    let session = Session::open(cli, option, &geometry)?;
-    let patterns = [geometry.phase_buffer()];
-    let intensities: Vec<Vec<Intensity>> = geometry
-        .iter()
-        .map(|d| vec![Intensity::MIN; d.num_transducers()])
-        .collect();
-    prepare(&session, &geometry, &patterns[0], &intensities)?;
-    eprintln!("GPIO[0]: PatternBank (toggles on every switch; probe it on two or more devices)");
-    let telemetry_start = session.read_telemetry()?;
-
-    let upper_ns =
-        i64::try_from((cli.ack_timeout + HISTOGRAM_HEADROOM).as_nanos()).unwrap_or(i64::MAX);
-    let bins = usize::try_from((upper_ns - ORIGIN_NS) / BIN_NS).unwrap_or(0);
-    let mut stats = Stats::new(devices, bins);
-    let mut frames = Frames::default();
-    let mut bank = PatternBank::B1;
-    let mut stopped: Option<anyhow::Error> = None;
-    let start = Instant::now();
-    let mut last_report = start;
-    while !shutdown.load(Ordering::Relaxed) {
-        if let Err(e) = encode_switch(
-            &mut frames,
-            &geometry,
-            framing,
-            bank,
-            &patterns,
-            &intensities,
-        ) {
-            stopped = Some(e);
-            break;
-        }
-        let exchange = match session.exchange(&frames, true) {
-            Ok(exchange) => exchange,
-            Err(e) => {
-                stopped = Some(e);
-                break;
-            }
-        };
-        bank = other(bank);
-        match exchange.failure() {
-            None => stats.record(&exchange),
-            Some(failure) => {
-                stats.fail(failure);
-                let lost = session.lost_devices();
-                if !lost.is_empty() {
-                    stopped = Some(anyhow::anyhow!(
-                        "stopped because devices {lost:?} are Lost: the client no longer sends to them"
-                    ));
-                    break;
-                }
-                if cli.stop_on_error {
-                    stopped = Some(anyhow::anyhow!(
-                        "stopped at the first failure: {failure:?} (--stop-on-error)"
-                    ));
-                    break;
-                }
-            }
-        }
-        if last_report.elapsed() >= REPORT_INTERVAL {
-            last_report = Instant::now();
-            println!(
-                "[{:>8.1}s] ok {}  timeout {}  dev_err {}  net_err {}",
-                start.elapsed().as_secs_f64(),
-                stats.counters.ok,
-                stats.counters.timeouts,
-                stats.counters.device_error_total(),
-                stats.counters.network_errors,
-            );
-        }
-    }
-    let elapsed = start.elapsed();
-
-    let telemetry_end = session.read_telemetry();
-    stats.print(elapsed, cli.exec_lead.is_some());
-    match &telemetry_end {
-        Ok(end) => print_telemetry(&telemetry_start, end),
-        Err(e) => eprintln!("reading the telemetry at the end failed: {e}"),
-    }
-    let lost = session.lost_devices();
-    drop(session);
-    match stopped {
-        Some(e) if lost.is_empty() => Err(e),
-        Some(e) => Err(e.context(format!("devices {lost:?} are Lost"))),
-        None => Ok(()),
-    }
-}

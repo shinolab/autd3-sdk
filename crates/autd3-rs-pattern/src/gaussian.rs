@@ -1,7 +1,7 @@
 use core::f32::consts::PI;
 
 use autd3_rs_core::common::{Angle, Length};
-use autd3_rs_core::geometry::{Device, Geometry, Point3, UnitVector3, Vector3};
+use autd3_rs_core::geometry::{Geometry, Point3, UnitVector3, Vector3};
 use autd3_rs_core::value::Intensity;
 
 use crate::each::assert_one_slot_per_device;
@@ -125,21 +125,6 @@ pub(crate) fn hermite(n: u32, x: f32) -> f32 {
     cur
 }
 
-fn device_log_amplitudes(device: &Device, log_amplitude: &impl Fn(Point3<f32>) -> f32) -> Vec<f32> {
-    device
-        .positions()
-        .iter()
-        .map(|&p| log_amplitude(p))
-        .collect()
-}
-
-fn max_log_amplitude<'a>(log_amplitudes: impl IntoIterator<Item = &'a f32>) -> f32 {
-    log_amplitudes
-        .into_iter()
-        .copied()
-        .fold(f32::NEG_INFINITY, f32::max)
-}
-
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn scaled_intensity(log_amplitude: f32, log_max: f32) -> Intensity {
     if !log_max.is_finite() {
@@ -147,12 +132,6 @@ fn scaled_intensity(log_amplitude: f32, log_max: f32) -> Intensity {
     }
     let relative = (log_amplitude - log_max).exp();
     Intensity((relative * 255.0).round().clamp(0.0, 255.0) as u8)
-}
-
-fn write_scaled(log_amplitudes: &[f32], log_max: f32, dst: &mut [Intensity]) {
-    for (slot, &log_amplitude) in dst.iter_mut().zip(log_amplitudes) {
-        *slot = scaled_intensity(log_amplitude, log_max);
-    }
 }
 
 pub(crate) fn write_intensity(
@@ -163,11 +142,17 @@ pub(crate) fn write_intensity(
     assert_one_slot_per_device(geometry, dst);
     let log_amplitudes: Vec<Vec<f32>> = geometry
         .iter()
-        .map(|dev| device_log_amplitudes(dev, &log_amplitude))
+        .map(|dev| dev.positions().iter().map(|&p| log_amplitude(p)).collect())
         .collect();
-    let log_max = max_log_amplitude(log_amplitudes.iter().flatten());
-    for (slot, device_log_amplitudes) in dst.iter_mut().zip(&log_amplitudes) {
-        write_scaled(device_log_amplitudes, log_max, slot);
+    let log_max = log_amplitudes
+        .iter()
+        .flatten()
+        .copied()
+        .fold(f32::NEG_INFINITY, f32::max);
+    for (dst, device_log_amplitudes) in dst.iter_mut().zip(&log_amplitudes) {
+        for (slot, &log_amplitude) in dst.iter_mut().zip(device_log_amplitudes) {
+            *slot = scaled_intensity(log_amplitude, log_max);
+        }
     }
 }
 

@@ -17,24 +17,7 @@ use crate::cases::pattern_util::{
 };
 use crate::io::wait_enter;
 
-fn circle_patterns(ctx: &Ctx<'_>) -> Vec<Buffers> {
-    (0..POINT_NUM)
-        .map(|i| {
-            let theta = 2.0 * PI * i as f32 / POINT_NUM as f32;
-            focus_at(
-                ctx.geometry,
-                [RADIUS_MM * theta.cos(), RADIUS_MM * theta.sin(), 150.0],
-                0xFF,
-            )
-        })
-        .collect()
-}
-
 type Split = (Vec<Vec<Vec<Phase>>>, Vec<Vec<Vec<Intensity>>>);
-
-fn split(patterns: &[Buffers]) -> Split {
-    patterns.iter().cloned().unzip()
-}
 
 async fn send_stm(
     ctx: &Ctx<'_>,
@@ -42,7 +25,7 @@ async fn send_stm(
     config: f32,
     bank: PatternBank,
 ) -> Result<()> {
-    let (phases, intensities) = split(patterns);
+    let (phases, intensities): Split = patterns.iter().cloned().unzip();
     ctx.send_frames(&Frames::encode(
         ctx.client.geometry(),
         (
@@ -70,7 +53,16 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     ))
     .await?;
 
-    let patterns = circle_patterns(ctx);
+    let patterns: Vec<Buffers> = (0..POINT_NUM)
+        .map(|i| {
+            let theta = 2.0 * PI * i as f32 / POINT_NUM as f32;
+            focus_at(
+                ctx.geometry,
+                [RADIUS_MM * theta.cos(), RADIUS_MM * theta.sin(), 150.0],
+                0xFF,
+            )
+        })
+        .collect();
 
     send_stm(ctx, &patterns, 0.5, PatternBank::B0).await?;
     wait_enter("A 0.5 Hz STM runs on a 30 mm-radius circle centred 150 mm above the array centre")

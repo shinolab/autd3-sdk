@@ -1,6 +1,5 @@
 use core::time::Duration;
-use std::path::PathBuf;
-use std::process::{Command, Output};
+use std::process::Command;
 use std::time::Instant;
 
 use anyhow::{Context, Result, bail};
@@ -53,88 +52,60 @@ fn only_target(values: &[bool], target: usize) -> bool {
     values.iter().enumerate().all(|(i, v)| *v == (i == target))
 }
 
-fn jlink_script(commands: &str) -> Result<PathBuf> {
-    let path =
-        std::env::temp_dir().join(format!("autd3-firmware-test-{}.jlink", std::process::id()));
-    std::fs::write(&path, commands).with_context(|| format!("writing {}", path.display()))?;
-    Ok(path)
-}
-
-fn spawn_jlink(program: &str, script: &PathBuf) -> std::io::Result<Output> {
-    Command::new(program)
-        .args([
-            "-device",
-            "R7S910018_R4F",
-            "-if",
-            "JTAG",
-            "-speed",
-            "4000",
-            "-jtagconf",
-            "-1,-1",
-            "-autoconnect",
-            "1",
-            "-ExitOnError",
-            "1",
-            "-CommanderScript",
-        ])
-        .arg(script)
-        .output()
-}
-
-fn run_jlink(commands: &str) -> Result<()> {
-    let script = jlink_script(commands)?;
-    let programs: Vec<String> = match std::env::var("JLINK") {
-        Ok(v) if !v.is_empty() => vec![v],
-        _ => JLINK_CANDIDATES.iter().map(|p| (*p).to_string()).collect(),
-    };
-    let mut outcome = None;
-    for program in &programs {
-        match spawn_jlink(program, &script) {
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            result => {
-                outcome = Some(result.with_context(|| format!("failed to run `{program}`"))?);
-                break;
+async fn jlink(commands: String) -> Result<()> {
+    fn run_jlink(commands: &str) -> Result<()> {
+        let script =
+            std::env::temp_dir().join(format!("autd3-firmware-test-{}.jlink", std::process::id()));
+        std::fs::write(&script, commands)
+            .with_context(|| format!("writing {}", script.display()))?;
+        let programs: Vec<String> = match std::env::var("JLINK") {
+            Ok(v) if !v.is_empty() => vec![v],
+            _ => JLINK_CANDIDATES.iter().map(|p| (*p).to_string()).collect(),
+        };
+        let mut outcome = None;
+        for program in &programs {
+            let spawned = Command::new(program)
+                .args([
+                    "-device",
+                    "R7S910018_R4F",
+                    "-if",
+                    "JTAG",
+                    "-speed",
+                    "4000",
+                    "-jtagconf",
+                    "-1,-1",
+                    "-autoconnect",
+                    "1",
+                    "-ExitOnError",
+                    "1",
+                    "-CommanderScript",
+                ])
+                .arg(&script)
+                .output();
+            match spawned {
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                result => {
+                    outcome = Some(result.with_context(|| format!("failed to run `{program}`"))?);
+                    break;
+                }
             }
         }
+        let _ = std::fs::remove_file(&script);
+        let Some(output) = outcome else {
+            bail!("J-Link Commander (JLinkExe) not found on PATH (install J-Link or set JLINK)");
+        };
+        if !output.status.success() {
+            bail!(
+                "J-Link exited with {}:\n{}{}",
+                output.status,
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        Ok(())
     }
-    let _ = std::fs::remove_file(&script);
-    let Some(output) = outcome else {
-        bail!("J-Link Commander (JLinkExe) not found on PATH (install J-Link or set JLINK)");
-    };
-    if !output.status.success() {
-        bail!(
-            "J-Link exited with {}:\n{}{}",
-            output.status,
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
-    Ok(())
-}
 
-async fn jlink(commands: String) -> Result<()> {
     tokio::task::spawn_blocking(move || run_jlink(&commands)).await?
-}
-
-async fn halt_for(duration: Duration) -> Result<()> {
-    jlink(format!("h\nsleep {}\ng\nq\n", duration.as_millis())).await
-}
-
-async fn reset_for(duration: Duration) -> Result<()> {
-    jlink(format!("r\nsleep {}\ng\nq\n", duration.as_millis())).await
-}
-
-async fn all_ready_within(ctx: &Ctx<'_>, window: Duration) -> (bool, Duration) {
-    let started = Instant::now();
-    loop {
-        if states(ctx).iter().all(|d| *d == DeviceState::Ready) {
-            return (true, started.elapsed());
-        }
-        if started.elapsed() >= window {
-            return (false, started.elapsed());
-        }
-        tokio::time::sleep(Duration::from_millis(50)).await;
-    }
 }
 
 async fn config(ctx: &Ctx<'_>, cpu_watchdog_timeout: Option<Duration>) -> Result<()> {
@@ -146,8 +117,21 @@ async fn config(ctx: &Ctx<'_>, cpu_watchdog_timeout: Option<Duration>) -> Result
 }
 
 async fn halted(ctx: &Ctx<'_>, label: &str, halt: Duration) -> Result<(Observed, Vec<u8>)> {
+    async fn all_ready_within(ctx: &Ctx<'_>, window: Duration) -> (bool, Duration) {
+        let started = Instant::now();
+        loop {
+            if states(ctx).iter().all(|d| *d == DeviceState::Ready) {
+                return (true, started.elapsed());
+            }
+            if started.elapsed() >= window {
+                return (false, started.elapsed());
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    }
+
     let before = observe(ctx).await?;
-    halt_for(halt).await?;
+    jlink(format!("h\nsleep {}\ng\nq\n", halt.as_millis())).await?;
     let (ready, elapsed) = all_ready_within(ctx, RELOCK).await;
     println!(
         "  {label}: halted for {halt:?}; {} every device answers and is locked again after {:.1} s: {:?}",
@@ -160,129 +144,157 @@ async fn halted(ctx: &Ctx<'_>, label: &str, halt: Duration) -> Result<(Observed,
     Ok((after, fired))
 }
 
-async fn below_timeout(ctx: &Ctx<'_>) -> Result<()> {
-    println!("-- a halt shorter than the timeout");
-    config(ctx, Some(TIMEOUT)).await?;
-    let (seen, fired) = halted(ctx, "timeout 1 s", SHORT_HALT).await?;
-    println!(
-        "  {} no device fires: fired {fired:?} gates {:?}",
-        verdict(fired.iter().all(|c| *c == 0) && seen.gates.iter().all(|g| !g)),
-        seen.gates
-    );
-    Ok(())
-}
-
-async fn above_timeout(ctx: &Ctx<'_>, target: usize) -> Result<()> {
-    println!("-- a halt longer than the timeout");
-    config(ctx, Some(TIMEOUT)).await?;
-    let (seen, fired) = halted(ctx, "timeout 1 s", LONG_HALT).await?;
-    println!(
-        "  {} only device[{target}] fires, once: fired {fired:?}",
-        verdict(
-            fired
-                .iter()
-                .enumerate()
-                .all(|(i, c)| *c == u8::from(i == target))
-        )
-    );
-    println!(
-        "  {} the gate is up on device[{target}] alone: gates {:?}",
-        verdict(only_target(&seen.gates, target)),
-        seen.gates
-    );
-    println!(
-        "  {} the disabled host-silence failsafe did not trip, so the gate is the watchdog's: host trips {:?}",
-        verdict(seen.host_trips.iter().all(|c| *c == 0)),
-        seen.host_trips
-    );
-
-    tokio::time::sleep(LONG_HALT).await;
-    let later = observe(ctx).await?;
-    println!(
-        "  {} the gate stays up after the CPU runs again (no automatic release): gates {:?}",
-        verdict(only_target(&later.gates, target)),
-        later.gates
-    );
-
-    expect_firmware_ok(
-        ctx,
-        "ReleaseFailsafe after the watchdog fired",
-        Frames::encode(ctx.client.geometry(), ReleaseFailsafe),
-    )
-    .await;
-    let released = observe(ctx).await?;
-    println!(
-        "  {} the release lowered the gate: gates {:?}",
-        verdict(released.gates.iter().all(|g| !g)),
-        released.gates
-    );
-    println!(
-        "  {} the release keeps the count: {:?} -> {:?}",
-        verdict(released.watchdog == seen.watchdog),
-        seen.watchdog,
-        released.watchdog
-    );
-    Ok(())
-}
-
-async fn longer_timeout(ctx: &Ctx<'_>) -> Result<()> {
-    println!("-- the configured timeout is the one the FPGA uses");
-    config(ctx, Some(LONGER_TIMEOUT)).await?;
-    let (seen, fired) = halted(ctx, "timeout 3 s", LONG_HALT).await?;
-    println!(
-        "  {} no device fires: fired {fired:?} gates {:?}",
-        verdict(fired.iter().all(|c| *c == 0) && seen.gates.iter().all(|g| !g)),
-        seen.gates
-    );
-    Ok(())
-}
-
-async fn disabled(ctx: &Ctx<'_>) -> Result<()> {
-    println!("-- a disabled watchdog");
-    config(ctx, None).await?;
-    let (seen, fired) = halted(ctx, "timeout None", LONG_HALT).await?;
-    println!(
-        "  {} no device fires: fired {fired:?} gates {:?}",
-        verdict(fired.iter().all(|c| *c == 0) && seen.gates.iter().all(|g| !g)),
-        seen.gates
-    );
-    Ok(())
-}
-
-async fn halts(ctx: &Ctx<'_>, target: usize) -> Result<()> {
-    if ctx.lost_timeout < HALT_LOST_TIMEOUT {
-        println!(
-            "  [SKIP] the halted device would turn Lost after {:?} and Lost needs a reopen, which lowers the gate; rerun with --lost-timeout-ms {} or more",
-            ctx.lost_timeout,
-            HALT_LOST_TIMEOUT.as_millis()
-        );
-        return Ok(());
+#[allow(clippy::too_many_lines)]
+pub(crate) async fn run(client: Session, link: &Link<'_>) -> Result<Session> {
+    async fn target(devices: usize) -> Option<usize> {
+        let answer = prompt(&format!(
+            "Index of the device the J-Link is attached to (0..{devices}, default 0)"
+        ))
+        .await;
+        let answer = answer.trim();
+        if answer.is_empty() {
+            return Some(0);
+        }
+        answer.parse::<usize>().ok().filter(|i| *i < devices)
     }
-    ctx.send(Clear).await?;
-    silence(ctx).await?;
-    let outcome = async {
-        below_timeout(ctx).await?;
-        above_timeout(ctx, target).await?;
-        longer_timeout(ctx).await?;
-        disabled(ctx).await
-    }
-    .await;
-    ctx.send(Clear).await?;
-    ctx.send(Synchronize).await?;
-    ctx.stop_output().await?;
-    outcome
-}
 
-async fn reset(client: Session, link: &Link<'_>, target: usize) -> Result<Session> {
+    #[allow(clippy::too_many_lines)]
+    async fn halts(ctx: &Ctx<'_>, target: usize) -> Result<()> {
+        async fn below_timeout(ctx: &Ctx<'_>) -> Result<()> {
+            println!("-- a halt shorter than the timeout");
+            config(ctx, Some(TIMEOUT)).await?;
+            let (seen, fired) = halted(ctx, "timeout 1 s", SHORT_HALT).await?;
+            println!(
+                "  {} no device fires: fired {fired:?} gates {:?}",
+                verdict(fired.iter().all(|c| *c == 0) && seen.gates.iter().all(|g| !g)),
+                seen.gates
+            );
+            Ok(())
+        }
+
+        async fn above_timeout(ctx: &Ctx<'_>, target: usize) -> Result<()> {
+            println!("-- a halt longer than the timeout");
+            config(ctx, Some(TIMEOUT)).await?;
+            let (seen, fired) = halted(ctx, "timeout 1 s", LONG_HALT).await?;
+            println!(
+                "  {} only device[{target}] fires, once: fired {fired:?}",
+                verdict(
+                    fired
+                        .iter()
+                        .enumerate()
+                        .all(|(i, c)| *c == u8::from(i == target))
+                )
+            );
+            println!(
+                "  {} the gate is up on device[{target}] alone: gates {:?}",
+                verdict(only_target(&seen.gates, target)),
+                seen.gates
+            );
+            println!(
+                "  {} the disabled host-silence failsafe did not trip, so the gate is the watchdog's: host trips {:?}",
+                verdict(seen.host_trips.iter().all(|c| *c == 0)),
+                seen.host_trips
+            );
+
+            tokio::time::sleep(LONG_HALT).await;
+            let later = observe(ctx).await?;
+            println!(
+                "  {} the gate stays up after the CPU runs again (no automatic release): gates {:?}",
+                verdict(only_target(&later.gates, target)),
+                later.gates
+            );
+
+            expect_firmware_ok(
+                ctx,
+                "ReleaseFailsafe after the watchdog fired",
+                Frames::encode(ctx.client.geometry(), ReleaseFailsafe),
+            )
+            .await;
+            let released = observe(ctx).await?;
+            println!(
+                "  {} the release lowered the gate: gates {:?}",
+                verdict(released.gates.iter().all(|g| !g)),
+                released.gates
+            );
+            println!(
+                "  {} the release keeps the count: {:?} -> {:?}",
+                verdict(released.watchdog == seen.watchdog),
+                seen.watchdog,
+                released.watchdog
+            );
+            Ok(())
+        }
+
+        async fn longer_timeout(ctx: &Ctx<'_>) -> Result<()> {
+            println!("-- the configured timeout is the one the FPGA uses");
+            config(ctx, Some(LONGER_TIMEOUT)).await?;
+            let (seen, fired) = halted(ctx, "timeout 3 s", LONG_HALT).await?;
+            println!(
+                "  {} no device fires: fired {fired:?} gates {:?}",
+                verdict(fired.iter().all(|c| *c == 0) && seen.gates.iter().all(|g| !g)),
+                seen.gates
+            );
+            Ok(())
+        }
+
+        async fn disabled(ctx: &Ctx<'_>) -> Result<()> {
+            println!("-- a disabled watchdog");
+            config(ctx, None).await?;
+            let (seen, fired) = halted(ctx, "timeout None", LONG_HALT).await?;
+            println!(
+                "  {} no device fires: fired {fired:?} gates {:?}",
+                verdict(fired.iter().all(|c| *c == 0) && seen.gates.iter().all(|g| !g)),
+                seen.gates
+            );
+            Ok(())
+        }
+
+        if ctx.lost_timeout < HALT_LOST_TIMEOUT {
+            println!(
+                "  [SKIP] the halted device would turn Lost after {:?} and Lost needs a reopen, which lowers the gate; rerun with --lost-timeout-ms {} or more",
+                ctx.lost_timeout,
+                HALT_LOST_TIMEOUT.as_millis()
+            );
+            return Ok(());
+        }
+        ctx.send(Clear).await?;
+        silence(ctx).await?;
+        let outcome = async {
+            below_timeout(ctx).await?;
+            above_timeout(ctx, target).await?;
+            longer_timeout(ctx).await?;
+            disabled(ctx).await
+        }
+        .await;
+        ctx.send(Clear).await?;
+        ctx.send(Synchronize).await?;
+        ctx.stop_output().await?;
+        outcome
+    }
+
+    let Some(target) = target(client.num_devices()).await else {
+        println!("  [SKIP] not a device index");
+        return Ok(client);
+    };
+    let ctx = Ctx {
+        client: &client,
+        geometry: link.geometry,
+        heartbeat: link.heartbeat,
+        lost_timeout: link.option.lost_timeout,
+        mute: link.mute,
+        exec: link.exec,
+    };
+    if let Err(e) = halts(&ctx, target).await {
+        println!("  [FAIL] the halt checks stopped: {e:#}");
+    }
     println!("-- a CPU reset longer than the timeout");
     let before = client.read_telemetry().await?;
     if let Err(e) = client.close() {
         println!("  closing the client before the reset reported: {e}");
     }
     drop(client);
-
     let started = Instant::now();
-    let held = reset_for(LONG_HALT).await;
+    let held = jlink(format!("r\nsleep {}\ng\nq\n", LONG_HALT.as_millis())).await;
     if let Err(e) = &held {
         println!("  [FAIL] holding device[{target}] in reset: {e:#}");
     }
@@ -292,7 +304,6 @@ async fn reset(client: Session, link: &Link<'_>, target: usize) -> Result<Sessio
         started.elapsed().as_secs_f32()
     );
     held?;
-
     let after = client.read_telemetry().await?;
     let before: Vec<u8> = before.iter().map(|t| t.cpu_watchdog).collect();
     let after: Vec<u8> = after.iter().map(|t| t.cpu_watchdog).collect();
@@ -317,35 +328,4 @@ async fn reset(client: Session, link: &Link<'_>, target: usize) -> Result<Sessio
         verdict(gates.iter().all(|g| !g))
     );
     Ok(client)
-}
-
-async fn target(devices: usize) -> Option<usize> {
-    let answer = prompt(&format!(
-        "Index of the device the J-Link is attached to (0..{devices}, default 0)"
-    ))
-    .await;
-    let answer = answer.trim();
-    if answer.is_empty() {
-        return Some(0);
-    }
-    answer.parse::<usize>().ok().filter(|i| *i < devices)
-}
-
-pub(crate) async fn run(client: Session, link: &Link<'_>) -> Result<Session> {
-    let Some(target) = target(client.num_devices()).await else {
-        println!("  [SKIP] not a device index");
-        return Ok(client);
-    };
-    let ctx = Ctx {
-        client: &client,
-        geometry: link.geometry,
-        heartbeat: link.heartbeat,
-        lost_timeout: link.option.lost_timeout,
-        mute: link.mute,
-        exec: link.exec,
-    };
-    if let Err(e) = halts(&ctx, target).await {
-        println!("  [FAIL] the halt checks stopped: {e:#}");
-    }
-    reset(client, link, target).await
 }

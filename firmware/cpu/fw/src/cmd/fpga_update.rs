@@ -107,13 +107,6 @@ fn write_target<P: Port>(port: &mut P, addr: u32, len: u32) {
     port.memory_barrier();
 }
 
-fn target_latched<P: Port>(port: &mut P, addr: u32, len: u32) -> bool {
-    read_reg(port, ADDR_FLASH_ADDR_0) == addr as u16
-        && read_reg(port, ADDR_FLASH_ADDR_1) == ((addr >> 16) & 0xFF) as u16
-        && read_reg(port, ADDR_FLASH_LEN_0) == len as u16
-        && read_reg(port, ADDR_FLASH_LEN_1) == ((len >> 16) & 0xFF) as u16
-}
-
 fn issue<P: Port>(port: &mut P, op: FlashOp) {
     write_reg(port, ADDR_FLASH_CMD, u16::from(op.as_u8()));
     port.memory_barrier();
@@ -131,7 +124,11 @@ fn run_command<P: Port>(
         return Err(Error::FpgaTimeout);
     }
     write_target(port, addr, len);
-    if !target_latched(port, addr, len) {
+    let target_latched = read_reg(port, ADDR_FLASH_ADDR_0) == addr as u16
+        && read_reg(port, ADDR_FLASH_ADDR_1) == ((addr >> 16) & 0xFF) as u16
+        && read_reg(port, ADDR_FLASH_LEN_0) == len as u16
+        && read_reg(port, ADDR_FLASH_LEN_1) == ((len >> 16) & 0xFF) as u16;
+    if !target_latched {
         return Err(Error::UpdateFlash);
     }
     issue(port, op);
@@ -148,12 +145,6 @@ fn run_command<P: Port>(
         return Ok((u32::from(hi) << 16) | u32::from(lo));
     }
     Err(Error::FpgaTimeout)
-}
-
-fn load_buffer<P: Port>(port: &mut P, data: &[u8]) {
-    for (i, word) in fpga::le_words(data, 0xFF).enumerate() {
-        fpga::write(port, BramSelect::FlashBuf, i as u16, word);
-    }
 }
 
 pub(crate) fn supports_flash<P: Port>(port: &mut P) -> bool {
@@ -259,7 +250,9 @@ impl Cpu {
             });
         }
         for (k, part) in data.chunks(FLASH_BUF_BYTES).enumerate() {
-            load_buffer(port, part);
+            for (i, word) in fpga::le_words(part, 0xFF).enumerate() {
+                fpga::write(port, BramSelect::FlashBuf, i as u16, word);
+            }
             run_command(
                 port,
                 max_polls,

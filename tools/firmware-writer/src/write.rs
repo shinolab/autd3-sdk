@@ -11,6 +11,27 @@ use crate::Target;
 use crate::util::{run, which};
 
 pub(crate) fn write(version: &str, target: Option<Target>, force_download: bool) -> Result<()> {
+    fn prompt_target() -> Result<Target> {
+        eprintln!("Select which firmware to update:");
+        eprintln!("  [0]: Both (default)");
+        eprintln!("  [1]: FPGA");
+        eprintln!("  [2]: CPU");
+        loop {
+            eprint!("Select: ");
+            std::io::stderr().flush().ok();
+            let mut line = String::new();
+            if std::io::stdin().read_line(&mut line)? == 0 {
+                bail!("no input (use --target to run non-interactively)");
+            }
+            match line.trim() {
+                "" | "0" => return Ok(Target::Both),
+                "1" => return Ok(Target::Fpga),
+                "2" => return Ok(Target::Cpu),
+                other => eprintln!("invalid selection: {other:?}"),
+            }
+        }
+    }
+
     let version = version.trim_start_matches('v');
 
     let Bundle {
@@ -71,31 +92,89 @@ pub(crate) fn write_local(cpu: Option<&Path>, fpga: Option<&Path>) -> Result<()>
     Ok(())
 }
 
-fn prompt_target() -> Result<Target> {
-    eprintln!("Select which firmware to update:");
-    eprintln!("  [0]: Both (default)");
-    eprintln!("  [1]: FPGA");
-    eprintln!("  [2]: CPU");
-    loop {
-        eprint!("Select: ");
-        std::io::stderr().flush().ok();
-        let mut line = String::new();
-        if std::io::stdin().read_line(&mut line)? == 0 {
-            bail!("no input (use --target to run non-interactively)");
-        }
-        match line.trim() {
-            "" | "0" => return Ok(Target::Both),
-            "1" => return Ok(Target::Fpga),
-            "2" => return Ok(Target::Cpu),
-            other => eprintln!("invalid selection: {other:?}"),
-        }
-    }
-}
-
 fn update_cpu(firmware: &Path) -> Result<()> {
+    fn run_jlink(jlink: &str, script: &Path) -> Result<()> {
+        let mut child = std::process::Command::new(jlink)
+            .args([
+                "-device",
+                "R7S910018_R4F",
+                "-if",
+                "JTAG",
+                "-speed",
+                "4000",
+                "-jtagconf",
+                "-1,-1",
+                "-autoconnect",
+                "1",
+                "-ExitOnError",
+                "1",
+                "-CommanderScript",
+            ])
+            .arg(script)
+            .current_dir(std::env::temp_dir())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .with_context(|| format!("failed to spawn `{jlink}` (is it installed and on PATH?)"))?;
+        let stdout = child.stdout.take().context("J-Link stdout is not piped")?;
+        let stderr = child.stderr.take().context("J-Link stderr is not piped")?;
+        let out = std::thread::spawn(move || {
+            let mut log = String::new();
+            tee_lines(stdout, &mut log);
+            log
+        });
+        let err = std::thread::spawn(move || {
+            let mut log = String::new();
+            tee_lines(stderr, &mut log);
+            log
+        });
+        let status = child.wait().context("waiting for J-Link")?;
+        let mut log = out.join().unwrap_or_default();
+        log.push_str(&err.join().unwrap_or_default());
+        if !status.success() {
+            bail!("`{jlink}` exited with {status}");
+        }
+        if log.contains(JLINK_NO_FLASH_BANK) {
+            bail!(
+                "J-Link did not erase the serial flash: {JLINK_NO_FLASH_BANK}. \
+                 The QSPI bank stayed untouched, so an OTA image in slot B would still win the boot."
+            );
+        }
+        Ok(())
+    }
+
+    fn resolve_jlink() -> Result<String> {
+        if let Some(path) = std::env::var_os("JLINK").filter(|path| !path.is_empty()) {
+            return Ok(path.to_string_lossy().into_owned());
+        }
+        let candidates = if cfg!(windows) {
+            ["JLink", "jlink"].as_slice()
+        } else {
+            ["JLinkExe"].as_slice()
+        };
+        for name in candidates {
+            if let Some(path) = which(name) {
+                return Ok(path.to_string_lossy().into_owned());
+            }
+        }
+        #[cfg(windows)]
+        if let Some(path) = find_jlink_windows() {
+            return Ok(path);
+        }
+        bail!(
+            "J-Link not found. Install SEGGER J-Link and put its commander \
+             (`JLinkExe` / `JLink.exe`) on PATH, or set JLINK to its path."
+        );
+    }
+
     let jlink = resolve_jlink()?;
 
-    let script = jlink_script(firmware);
+    let slot_b_start = SERIAL_FLASH_XIP_BASE + autd3_cpu_wire::update::SLOT_B_BASE;
+    let slot_b_last = slot_b_start + autd3_cpu_wire::update::SLOT_BYTES - 1;
+    let script = format!(
+        "r\nexec EnableEraseAllFlashBanks\nerase 0x{slot_b_start:X} 0x{slot_b_last:X}\nloadfile {} 0x{SERIAL_FLASH_XIP_BASE:X}\nq\n",
+        tcl_path(firmware)
+    );
     let script_path = std::env::temp_dir().join("autd3-cpu-flash.jlink");
     std::fs::write(&script_path, script)
         .with_context(|| format!("writing {}", script_path.display()))?;
@@ -108,56 +187,6 @@ fn update_cpu(firmware: &Path) -> Result<()> {
 }
 
 const JLINK_NO_FLASH_BANK: &str = "No Flash bank within given address range";
-
-fn run_jlink(jlink: &str, script: &Path) -> Result<()> {
-    let mut child = std::process::Command::new(jlink)
-        .args([
-            "-device",
-            "R7S910018_R4F",
-            "-if",
-            "JTAG",
-            "-speed",
-            "4000",
-            "-jtagconf",
-            "-1,-1",
-            "-autoconnect",
-            "1",
-            "-ExitOnError",
-            "1",
-            "-CommanderScript",
-        ])
-        .arg(script)
-        .current_dir(std::env::temp_dir())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .with_context(|| format!("failed to spawn `{jlink}` (is it installed and on PATH?)"))?;
-    let stdout = child.stdout.take().context("J-Link stdout is not piped")?;
-    let stderr = child.stderr.take().context("J-Link stderr is not piped")?;
-    let out = std::thread::spawn(move || {
-        let mut log = String::new();
-        tee_lines(stdout, &mut log);
-        log
-    });
-    let err = std::thread::spawn(move || {
-        let mut log = String::new();
-        tee_lines(stderr, &mut log);
-        log
-    });
-    let status = child.wait().context("waiting for J-Link")?;
-    let mut log = out.join().unwrap_or_default();
-    log.push_str(&err.join().unwrap_or_default());
-    if !status.success() {
-        bail!("`{jlink}` exited with {status}");
-    }
-    if log.contains(JLINK_NO_FLASH_BANK) {
-        bail!(
-            "J-Link did not erase the serial flash: {JLINK_NO_FLASH_BANK}. \
-             The QSPI bank stayed untouched, so an OTA image in slot B would still win the boot."
-        );
-    }
-    Ok(())
-}
 
 fn tee_lines(reader: impl std::io::Read, log: &mut String) {
     for line in std::io::BufReader::new(reader).lines() {
@@ -172,6 +201,22 @@ const FPGA_CONFIGURATION_TCL: &str =
     include_str!("../../../firmware/fpga/scripts/configuration.tcl");
 
 fn update_fpga(firmware: &Path) -> Result<()> {
+    fn resolve_vivado() -> Result<String> {
+        for name in ["vivado_lab", "vivado"] {
+            if let Some(path) = which(name) {
+                return Ok(path.to_string_lossy().into_owned());
+            }
+        }
+        #[cfg(windows)]
+        if let Some(path) = find_vivado_windows() {
+            return Ok(path);
+        }
+        bail!(
+            "Vivado not found. Put `vivado` (or `vivado_lab`) on PATH (source Vivado's \
+             `settings64` script) or install it so it can be auto-detected."
+        );
+    }
+
     let vivado = resolve_vivado()?;
 
     let script_path = std::env::temp_dir().join("autd3-fpga-configuration.tcl");
@@ -201,57 +246,8 @@ fn update_fpga(firmware: &Path) -> Result<()> {
 
 const SERIAL_FLASH_XIP_BASE: u32 = 0x3000_0000;
 
-fn jlink_script(bin: &Path) -> String {
-    let slot_b_start = SERIAL_FLASH_XIP_BASE + autd3_cpu_wire::update::SLOT_B_BASE;
-    let slot_b_last = slot_b_start + autd3_cpu_wire::update::SLOT_BYTES - 1;
-    format!(
-        "r\nexec EnableEraseAllFlashBanks\nerase 0x{slot_b_start:X} 0x{slot_b_last:X}\nloadfile {} 0x{SERIAL_FLASH_XIP_BASE:X}\nq\n",
-        tcl_path(bin)
-    )
-}
-
 fn tcl_path(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
-}
-
-fn resolve_jlink() -> Result<String> {
-    if let Some(path) = std::env::var_os("JLINK").filter(|path| !path.is_empty()) {
-        return Ok(path.to_string_lossy().into_owned());
-    }
-    let candidates = if cfg!(windows) {
-        ["JLink", "jlink"].as_slice()
-    } else {
-        ["JLinkExe"].as_slice()
-    };
-    for name in candidates {
-        if let Some(path) = which(name) {
-            return Ok(path.to_string_lossy().into_owned());
-        }
-    }
-    #[cfg(windows)]
-    if let Some(path) = find_jlink_windows() {
-        return Ok(path);
-    }
-    bail!(
-        "J-Link not found. Install SEGGER J-Link and put its commander \
-         (`JLinkExe` / `JLink.exe`) on PATH, or set JLINK to its path."
-    );
-}
-
-fn resolve_vivado() -> Result<String> {
-    for name in ["vivado_lab", "vivado"] {
-        if let Some(path) = which(name) {
-            return Ok(path.to_string_lossy().into_owned());
-        }
-    }
-    #[cfg(windows)]
-    if let Some(path) = find_vivado_windows() {
-        return Ok(path);
-    }
-    bail!(
-        "Vivado not found. Put `vivado` (or `vivado_lab`) on PATH (source Vivado's \
-         `settings64` script) or install it so it can be auto-detected."
-    );
 }
 
 #[cfg(windows)]

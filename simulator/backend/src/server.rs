@@ -10,7 +10,7 @@ use axum::{
         ws::{Message, WebSocket, WebSocketUpgrade},
     },
     http::{StatusCode, Uri, header},
-    response::{IntoResponse, Response},
+    response::IntoResponse,
     routing::get,
 };
 use futures_util::{SinkExt, StreamExt};
@@ -37,110 +37,111 @@ pub(crate) struct AppState {
 struct WebAssets;
 
 pub(crate) fn router(state: AppState, web_dir: Option<PathBuf>) -> Router {
-    let router = Router::new().route("/ws", get(ws_handler));
-    let router = match web_dir {
-        Some(dir) => router.fallback_service(ServeDir::new(dir)),
-        None if WebAssets::get("index.html").is_some() => router.fallback(embedded_handler),
-        None => router.route("/", get(|| async { "autd3-simulator backend" })),
-    };
-    router.with_state(state)
-}
+    async fn handle_socket(socket: WebSocket, state: AppState) {
+        let (mut sender, mut receiver) = socket.split();
+        let AppState {
+            mut geometry_rx,
+            mut state_rx,
+            mut device_rx,
+            mod_enabled,
+            scene,
+        } = state;
 
-async fn embedded_handler(uri: Uri) -> Response {
-    let path = uri.path().trim_start_matches('/');
-    let path = if path.is_empty() { "index.html" } else { path };
-    match WebAssets::get(path) {
-        Some(file) => (
-            [(header::CONTENT_TYPE, file.metadata.mimetype())],
-            Body::from(file.data.into_owned()),
-        )
-            .into_response(),
-        None => (StatusCode::NOT_FOUND, "not found").into_response(),
-    }
-}
-
-async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
-    ws.on_upgrade(|socket| handle_socket(socket, state))
-}
-
-async fn handle_socket(socket: WebSocket, state: AppState) {
-    let (mut sender, mut receiver) = socket.split();
-    let AppState {
-        mut geometry_rx,
-        mut state_rx,
-        mut device_rx,
-        mod_enabled,
-        scene,
-    } = state;
-
-    let initial = [
-        geometry_rx.borrow_and_update().clone(),
-        state_rx.borrow_and_update().clone(),
-        device_rx.borrow_and_update().clone(),
-    ];
-    for message in initial {
-        if sender
-            .send(Message::Text(message.as_ref().into()))
-            .await
-            .is_err()
-        {
-            return;
-        }
-    }
-
-    let send_task = async move {
-        loop {
-            let message = tokio::select! {
-                biased;
-                changed = geometry_rx.changed() => {
-                    if changed.is_err() {
-                        break;
-                    }
-                    geometry_rx.borrow_and_update().clone()
-                }
-                changed = state_rx.changed() => {
-                    if changed.is_err() {
-                        break;
-                    }
-                    state_rx.borrow_and_update().clone()
-                }
-                changed = device_rx.changed() => {
-                    if changed.is_err() {
-                        break;
-                    }
-                    device_rx.borrow_and_update().clone()
-                }
-            };
+        let initial = [
+            geometry_rx.borrow_and_update().clone(),
+            state_rx.borrow_and_update().clone(),
+            device_rx.borrow_and_update().clone(),
+        ];
+        for message in initial {
             if sender
                 .send(Message::Text(message.as_ref().into()))
                 .await
                 .is_err()
             {
-                break;
+                return;
             }
         }
-    };
 
-    let recv_task = async move {
-        while let Some(Ok(message)) = receiver.next().await {
-            if let Message::Text(text) = message {
-                let mod_enabled = Arc::clone(&mod_enabled);
-                let scene = Arc::clone(&scene);
-                if let Err(e) = tokio::task::spawn_blocking(move || {
-                    apply_client_message(&mod_enabled, &scene, &text);
-                })
-                .await
+        let send_task = async move {
+            loop {
+                let message = tokio::select! {
+                    biased;
+                    changed = geometry_rx.changed() => {
+                        if changed.is_err() {
+                            break;
+                        }
+                        geometry_rx.borrow_and_update().clone()
+                    }
+                    changed = state_rx.changed() => {
+                        if changed.is_err() {
+                            break;
+                        }
+                        state_rx.borrow_and_update().clone()
+                    }
+                    changed = device_rx.changed() => {
+                        if changed.is_err() {
+                            break;
+                        }
+                        device_rx.borrow_and_update().clone()
+                    }
+                };
+                if sender
+                    .send(Message::Text(message.as_ref().into()))
+                    .await
+                    .is_err()
                 {
-                    tracing::error!("failed to apply a client message: {e}");
+                    break;
                 }
             }
-        }
-    };
+        };
 
-    tokio::select! {
-        () = send_task => {}
-        () = recv_task => {}
+        let recv_task = async move {
+            while let Some(Ok(message)) = receiver.next().await {
+                if let Message::Text(text) = message {
+                    let mod_enabled = Arc::clone(&mod_enabled);
+                    let scene = Arc::clone(&scene);
+                    if let Err(e) = tokio::task::spawn_blocking(move || {
+                        apply_client_message(&mod_enabled, &scene, &text);
+                    })
+                    .await
+                    {
+                        tracing::error!("failed to apply a client message: {e}");
+                    }
+                }
+            }
+        };
+
+        tokio::select! {
+            () = send_task => {}
+            () = recv_task => {}
+        }
     }
+
+    let router = Router::new().route(
+        "/ws",
+        get(
+            |ws: WebSocketUpgrade, State(state): State<AppState>| async move {
+                ws.on_upgrade(|socket| handle_socket(socket, state))
+            },
+        ),
+    );
+    let router = match web_dir {
+        Some(dir) => router.fallback_service(ServeDir::new(dir)),
+        None if WebAssets::get("index.html").is_some() => router.fallback(|uri: Uri| async move {
+            let path = uri.path().trim_start_matches('/');
+            let path = if path.is_empty() { "index.html" } else { path };
+            match WebAssets::get(path) {
+                Some(file) => (
+                    [(header::CONTENT_TYPE, file.metadata.mimetype())],
+                    Body::from(file.data.into_owned()),
+                )
+                    .into_response(),
+                None => (StatusCode::NOT_FOUND, "not found").into_response(),
+            }
+        }),
+        None => router.route("/", get(|| async { "autd3-simulator backend" })),
+    };
+    router.with_state(state)
 }
 
 fn apply_client_message(mod_enabled: &AtomicBool, scene: &Scene, text: &str) {

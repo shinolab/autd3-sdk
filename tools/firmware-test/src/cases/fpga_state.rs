@@ -87,7 +87,19 @@ async fn poll_state(
     }
 }
 
-async fn pattern_finite_loop(ctx: &Ctx<'_>, center: Point3<f32>) -> Result<()> {
+#[allow(clippy::too_many_lines)]
+pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
+    let center = ctx.geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
+
+    ctx.send(SetSilencer::disable()).await?;
+    expect_state(
+        ctx,
+        "baseline",
+        "!pattern_stopped && !mod_stopped && !transition_pending",
+        |s| !s.is_pattern_stopped() && !s.is_mod_stopped() && !s.is_transition_pending(),
+    )
+    .await?;
+
     println!("pattern finite loop (SyncIdx transition):");
     write_foci_bank(
         ctx,
@@ -112,16 +124,11 @@ async fn pattern_finite_loop(ctx: &Ctx<'_>, center: Point3<f32>) -> Result<()> {
         |s| s.is_pattern_stopped() && !s.is_transition_pending(),
     )
     .await?;
-
     activate_pattern_bank(ctx, PatternBank::B0, TransitionMode::Immediate).await?;
     expect_state(ctx, "back to the infinite bank", "!pattern_stopped", |s| {
         !s.is_pattern_stopped() && !s.is_transition_pending()
     })
     .await?;
-    Ok(())
-}
-
-async fn pattern_gpio_pending(ctx: &Ctx<'_>, center: Point3<f32>) -> Result<()> {
     println!("pattern finite loop (GPIO transition):");
     write_foci_bank(
         ctx,
@@ -140,7 +147,6 @@ async fn pattern_gpio_pending(ctx: &Ctx<'_>, center: Point3<f32>) -> Result<()> 
         |s| s.is_transition_pending() && !s.is_pattern_stopped(),
     )
     .await?;
-
     ctx.send(EmulateGpioIn {
         values: [true, false, false, false],
     })
@@ -152,16 +158,11 @@ async fn pattern_gpio_pending(ctx: &Ctx<'_>, center: Point3<f32>) -> Result<()> 
         |s| s.is_pattern_stopped() && !s.is_transition_pending(),
     )
     .await?;
-
     ctx.send(EmulateGpioIn {
         values: [false, false, false, false],
     })
     .await?;
     activate_pattern_bank(ctx, PatternBank::B0, TransitionMode::Immediate).await?;
-    Ok(())
-}
-
-async fn modulation_finite_loop(ctx: &Ctx<'_>) -> Result<()> {
     println!("modulation finite loop (SyncIdx transition):");
     let data = [0xFFu8; 4];
     ctx.send_frames(&Frames::encode(
@@ -196,30 +197,11 @@ async fn modulation_finite_loop(ctx: &Ctx<'_>) -> Result<()> {
         |s| s.is_mod_stopped() && !s.is_transition_pending(),
     )
     .await?;
-
     activate_mod_bank(ctx, ModulationBank::B0, TransitionMode::Immediate).await?;
     expect_state(ctx, "back to the infinite bank", "!mod_stopped", |s| {
         !s.is_mod_stopped() && !s.is_transition_pending()
     })
     .await?;
-    Ok(())
-}
-
-pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
-    let center = ctx.geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
-
-    ctx.send(SetSilencer::disable()).await?;
-    expect_state(
-        ctx,
-        "baseline",
-        "!pattern_stopped && !mod_stopped && !transition_pending",
-        |s| !s.is_pattern_stopped() && !s.is_mod_stopped() && !s.is_transition_pending(),
-    )
-    .await?;
-
-    pattern_finite_loop(ctx, center).await?;
-    pattern_gpio_pending(ctx, center).await?;
-    modulation_finite_loop(ctx).await?;
 
     wait_enter("Every FPGA-state check above reported OK").await;
     Ok(())

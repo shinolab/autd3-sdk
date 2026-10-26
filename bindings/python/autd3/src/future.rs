@@ -38,28 +38,28 @@ impl CheckedCompletor {
     }
 }
 
-fn set_result(
-    event_loop: &Bound<'_, PyAny>,
-    future: &Bound<'_, PyAny>,
-    result: PyResult<Py<PyAny>>,
-) -> PyResult<()> {
-    let py = event_loop.py();
-    let (complete, val) = match result {
-        Ok(val) => (future.getattr("set_result")?, val),
-        Err(err) => (future.getattr("set_exception")?, err.into_py_any(py)?),
-    };
-    event_loop.call_method1(
-        "call_soon_threadsafe",
-        (CheckedCompletor, future, complete, val),
-    )?;
-    Ok(())
-}
-
 pub(crate) fn future_into_py<'py, F, T>(py: Python<'py>, fut: F) -> PyResult<Bound<'py, PyAny>>
 where
     F: Future<Output = PyResult<T>> + Send + 'static,
     T: for<'p> IntoPyObject<'p> + Send + 'static,
 {
+    fn set_result(
+        event_loop: &Bound<'_, PyAny>,
+        future: &Bound<'_, PyAny>,
+        result: PyResult<Py<PyAny>>,
+    ) -> PyResult<()> {
+        let py = event_loop.py();
+        let (complete, val) = match result {
+            Ok(val) => (future.getattr("set_result")?, val),
+            Err(err) => (future.getattr("set_exception")?, err.into_py_any(py)?),
+        };
+        event_loop.call_method1(
+            "call_soon_threadsafe",
+            (CheckedCompletor, future, complete, val),
+        )?;
+        Ok(())
+    }
+
     let event_loop = py.import("asyncio")?.call_method0("get_running_loop")?;
     let py_fut = event_loop.call_method0("create_future")?;
     let event_loop_tx = event_loop.unbind();

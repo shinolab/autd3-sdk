@@ -634,7 +634,13 @@ impl LinAlgBackend for WgpuBackend {
         let len = v.len;
         let words = len.div_ceil(2);
         let bytes = words as u64 * 4;
-        let (mode, p0, p1) = encode_constraint(constraint);
+        let (mode, p0, p1) = match constraint {
+            IntensityConstraint::Multiply(v) => (0, v.to_bits(), 0),
+            IntensityConstraint::Clamp(min, max) => {
+                (1, f32::from(min.0).to_bits(), f32::from(max.0).to_bits())
+            }
+            _ => unreachable!(),
+        };
         let out = self.storage(bytes);
         let max = (mode == 0).then(|| self.storage(4));
         let max_buf: &Pooled = max.as_ref().unwrap_or(&self.unused_rw);
@@ -669,15 +675,5 @@ impl LinAlgBackend for WgpuBackend {
                 .map(|b| (Phase(b[0]), Intensity(b[1])))
                 .unzip()
         })
-    }
-}
-
-fn encode_constraint(constraint: IntensityConstraint) -> (u32, u32, u32) {
-    match constraint {
-        IntensityConstraint::Multiply(v) => (0, v.to_bits(), 0),
-        IntensityConstraint::Clamp(min, max) => {
-            (1, f32::from(min.0).to_bits(), f32::from(max.0).to_bits())
-        }
-        _ => unreachable!(),
     }
 }

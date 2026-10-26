@@ -5,13 +5,6 @@ use anyhow::{Context, Result};
 use autd3_firmware_writer::bundle::{RELEASES_API, TAG_PREFIX};
 
 pub(crate) fn print_available_versions() -> Result<()> {
-    for version in fetch_versions()? {
-        println!("{version}");
-    }
-    Ok(())
-}
-
-fn fetch_versions() -> Result<Vec<String>> {
     let resp = ureq::get(RELEASES_API)
         .header("User-Agent", "autd3-firmware-writer")
         .header("Accept", "application/vnd.github+json")
@@ -35,18 +28,19 @@ fn fetch_versions() -> Result<Vec<String>> {
         .filter_map(|tag| tag.strip_prefix(TAG_PREFIX))
         .map(ToString::to_string)
         .collect();
-    versions.sort_by_key(|v| std::cmp::Reverse(version_key(v)));
+    versions.sort_by_key(|v| {
+        let mut parts = v
+            .split(['.', '-', '+'])
+            .filter_map(|p| p.parse::<u64>().ok());
+        std::cmp::Reverse((
+            parts.next().unwrap_or(0),
+            parts.next().unwrap_or(0),
+            parts.next().unwrap_or(0),
+        ))
+    });
     versions.dedup();
-    Ok(versions)
-}
-
-fn version_key(version: &str) -> (u64, u64, u64) {
-    let mut parts = version
-        .split(['.', '-', '+'])
-        .filter_map(|p| p.parse::<u64>().ok());
-    (
-        parts.next().unwrap_or(0),
-        parts.next().unwrap_or(0),
-        parts.next().unwrap_or(0),
-    )
+    for version in versions {
+        println!("{version}");
+    }
+    Ok(())
 }
