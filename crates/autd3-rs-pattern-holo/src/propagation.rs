@@ -53,22 +53,6 @@ pub(crate) fn enabled_transducers(
     (tr_pos, tr_dir)
 }
 
-pub(crate) fn batch_shape(foci: &[AmplitudeTarget], problems: usize) -> Result<usize, HoloError> {
-    if problems == 0 {
-        return Err(HoloError::NoProblems);
-    }
-    if foci.is_empty() {
-        return Err(HoloError::NoFoci);
-    }
-    if !foci.len().is_multiple_of(problems) {
-        return Err(HoloError::BatchSizeMismatch {
-            foci: foci.len(),
-            problems,
-        });
-    }
-    Ok(foci.len() / problems)
-}
-
 pub(crate) fn validate_dst_len(dst: usize, geometry: &Geometry) -> Result<(), HoloError> {
     if dst != geometry.num_devices() {
         return Err(HoloError::DstDeviceCountMismatch {
@@ -83,10 +67,8 @@ pub(crate) fn validate_dst_len(dst: usize, geometry: &Geometry) -> Result<(), Ho
 pub(crate) fn target_amplitudes<B: LinAlgBackend>(
     backend: &B,
     foci: &[AmplitudeTarget],
-    problems: usize,
 ) -> B::Vector {
     backend.make_vector(
-        problems,
         foci.iter()
             .map(|f| Complex::new(f.amplitude.pascal(), 0.0))
             .collect(),
@@ -111,32 +93,24 @@ pub(crate) fn max_coefficient(q: &[Complex<f32>]) -> f32 {
         .sqrt()
 }
 
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn quantize<B, P, I>(
+pub(crate) fn quantize<B: LinAlgBackend>(
     backend: &B,
     q: &B::Vector,
     constraint: IntensityConstraint,
     mask: TransducerMask<'_>,
     enabled: usize,
-    phases: &mut [P],
-    intensities: &mut [I],
-) where
-    B: LinAlgBackend,
-    P: AsMut<[Vec<Phase>]>,
-    I: AsMut<[Vec<Intensity>]>,
-{
+    phases: &mut [Vec<Phase>],
+    intensities: &mut [Vec<Intensity>],
+) {
     let (p, i) = backend.quantize(q, constraint);
     debug_assert_eq!(
         p.len(),
-        enabled * phases.len(),
-        "backend must return one phase per enabled transducer per problem"
+        enabled,
+        "backend must return one phase per enabled transducer"
     );
     debug_assert_eq!(p.len(), i.len());
-    for (k, (phases, intensities)) in phases.iter_mut().zip(intensities.iter_mut()).enumerate() {
-        let range = enabled * k..enabled * (k + 1);
-        scatter(&p[range.clone()], mask, Phase::ZERO, phases.as_mut());
-        scatter(&i[range], mask, Intensity::MIN, intensities.as_mut());
-    }
+    scatter(&p, mask, Phase::ZERO, phases);
+    scatter(&i, mask, Intensity::MIN, intensities);
 }
 
 fn scatter<T: Copy>(e: &[T], mask: TransducerMask<'_>, null: T, dst: &mut [Vec<T>]) {

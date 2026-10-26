@@ -24,12 +24,10 @@ fn max_pass(
     @builtin(workgroup_id) wg: vec3<u32>,
     @builtin(local_invocation_id) lid: vec3<u32>,
 ) {
-    let k = wg.z;
-    let base = k * d.len;
     var acc = 0.0;
     var i = lid.x;
     while (i < d.len) {
-        let v = q[base + i];
+        let v = q[i];
         acc = max(acc, v.x * v.x + v.y * v.y);
         i = i + WG;
     }
@@ -48,7 +46,7 @@ fn max_pass(
         s = s >> 1u;
     }
     if (lid.x == 0u) {
-        max_coefficient[k] = sqrt(scratch[0]);
+        max_coefficient[0] = sqrt(scratch[0]);
     }
 }
 
@@ -78,8 +76,8 @@ fn quantize_intensity(value: f32, m: f32) -> u32 {
     }
 }
 
-fn pack(i: u32, base: u32, m: f32) -> u32 {
-    let v = q[base + i];
+fn pack(i: u32, m: f32) -> u32 {
+    let v = q[i];
     return (quantize_intensity(length(v), m) << 8u) | quantize_phase(v);
 }
 
@@ -89,17 +87,15 @@ fn quantize_pass(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (w >= d.words) {
         return;
     }
-    let k = gid.z;
-    let base = k * d.len;
     var m = 0.0;
     if (d.mode == 0u) {
-        m = max_coefficient[k];
+        m = max_coefficient[0];
     }
     let i = w * 2u;
-    let lo = pack(i, base, m);
+    let lo = pack(i, m);
     var hi = 0u;
     if (i + 1u < d.len) {
-        hi = pack(i + 1u, base, m);
+        hi = pack(i + 1u, m);
     }
-    out[k * d.words + w] = (hi << 16u) | lo;
+    out[w] = (hi << 16u) | lo;
 }

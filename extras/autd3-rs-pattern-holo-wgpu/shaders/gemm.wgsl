@@ -57,13 +57,10 @@ fn main(
 ) {
     let i = wg.x;
     let j = wg.y;
-    let batch = wg.z;
-    let a_base = batch * d.rows * d.inner;
-    let b_base = batch * d.inner * d.cols;
 
-    let a_row = a_base + a_row_base(i);
+    let a_row = a_row_base(i);
     let a_step = a_inner_step();
-    let b_col = b_base + b_col_base(j);
+    let b_col = b_col_base(j);
     let b_step = b_inner_step();
     var acc = vec2<f32>(0.0, 0.0);
     var k = lid.x;
@@ -86,6 +83,6 @@ fn main(
         s = s >> 1u;
     }
     if (lid.x == 0u) {
-        out[batch * d.rows * d.cols + j * d.rows + i] = scratch[0];
+        out[j * d.rows + i] = scratch[0];
     }
 }

@@ -7,10 +7,10 @@ struct Dims {
     cols: u32,
     chunks: u32,
     normalize: u32,
-    r_stride: u32,
     a_row_major: u32,
     x_chunks: u32,
-    x_stride: u32,
+    _pad0: u32,
+    _pad1: u32,
 }
 
 @group(0) @binding(0) var<storage, read> a: array<vec2<f32>>;
@@ -48,8 +48,8 @@ fn apply_x(b: vec2<f32>, ri: u32) -> vec2<f32> {
     return cmul(vec2<f32>(b.x * inv, b.y * inv), r[ri]);
 }
 
-fn load_x(xi: u32, ri: u32) -> vec2<f32> {
-    return apply_x(x[xi], ri);
+fn load_x(j: u32) -> vec2<f32> {
+    return apply_x(x[j], j);
 }
 
 fn reduce(lid: u32) {
@@ -72,17 +72,13 @@ fn rowwise(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (row >= d.rows) {
         return;
     }
-    let k = gid.z;
-    let a_base = k * d.rows * d.cols;
-    let x_base = k * d.x_stride;
-    let r_base = k * d.r_stride;
-    let a_row = a_base + a_row_base(row);
+    let a_row = a_row_base(row);
     let a_step = a_col_step();
     var acc = vec2<f32>(0.0, 0.0);
     for (var j: u32 = 0u; j < d.cols; j = j + 1u) {
-        acc = acc + cmul(a[a_row + j * a_step], load_x(x_base + j, r_base + j));
+        acc = acc + cmul(a[a_row + j * a_step], load_x(j));
     }
-    out[k * d.rows + row] = acc;
+    out[row] = acc;
 }
 
 var<workgroup> xs: array<vec2<f32>, ROWWISE_COL_LIMIT>;
@@ -92,11 +88,9 @@ fn rowwise_pending(
     @builtin(global_invocation_id) gid: vec3<u32>,
     @builtin(local_invocation_id) lid: vec3<u32>,
 ) {
-    let k = gid.z;
-    let x_base = k * d.x_stride;
     var j = lid.x;
     while (j < d.cols) {
-        let base = (x_base + j) * d.x_chunks;
+        let base = j * d.x_chunks;
         var sum = vec2<f32>(0.0, 0.0);
         for (var c: u32 = 0u; c < d.x_chunks; c = c + 1u) {
             sum = sum + partial[base + c];
@@ -110,14 +104,13 @@ fn rowwise_pending(
     if (row >= d.rows) {
         return;
     }
-    let r_base = k * d.r_stride;
-    let a_row = k * d.rows * d.cols + a_row_base(row);
+    let a_row = a_row_base(row);
     let a_step = a_col_step();
     var acc = vec2<f32>(0.0, 0.0);
     for (var i: u32 = 0u; i < d.cols; i = i + 1u) {
-        acc = acc + cmul(a[a_row + i * a_step], apply_x(xs[i], r_base + i));
+        acc = acc + cmul(a[a_row + i * a_step], apply_x(xs[i], i));
     }
-    out[k * d.rows + row] = acc;
+    out[row] = acc;
 }
 
 @compute @workgroup_size(256)
@@ -127,26 +120,22 @@ fn partial_pass(
 ) {
     let chunk = wg.x;
     let row = wg.y;
-    let k = wg.z;
-    let a_base = k * d.rows * d.cols;
-    let x_base = k * d.x_stride;
-    let r_base = k * d.r_stride;
     let base = chunk * COLS_PER_CHUNK;
     let end = min(base + COLS_PER_CHUNK, d.cols);
 
-    let a_row = a_base + a_row_base(row);
+    let a_row = a_row_base(row);
     let a_step = a_col_step();
     var acc = vec2<f32>(0.0, 0.0);
     var j = base + lid.x;
     while (j < end) {
-        acc = acc + cmul(a[a_row + j * a_step], load_x(x_base + j, r_base + j));
+        acc = acc + cmul(a[a_row + j * a_step], load_x(j));
         j = j + WG;
     }
     scratch[lid.x] = acc;
     workgroupBarrier();
     reduce(lid.x);
     if (lid.x == 0u) {
-        partial[(k * d.rows + row) * d.chunks + chunk] = scratch[0];
+        partial[row * d.chunks + chunk] = scratch[0];
     }
 }
 
@@ -156,17 +145,16 @@ fn reduce_pass(
     @builtin(local_invocation_id) lid: vec3<u32>,
 ) {
     let row = wg.x;
-    let k = wg.z;
     var acc = vec2<f32>(0.0, 0.0);
     var c = lid.x;
     while (c < d.chunks) {
-        acc = acc + partial[(k * d.rows + row) * d.chunks + c];
+        acc = acc + partial[row * d.chunks + c];
         c = c + WG;
     }
     scratch[lid.x] = acc;
     workgroupBarrier();
     reduce(lid.x);
     if (lid.x == 0u) {
-        out[k * d.rows + row] = scratch[0];
+        out[row] = scratch[0];
     }
 }

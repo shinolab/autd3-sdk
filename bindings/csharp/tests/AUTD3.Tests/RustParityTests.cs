@@ -353,37 +353,5 @@ namespace AUTD3.Tests
                 frames.EncodeInto(two, new SetPhaseCorrection(phases)));
             Assert.Equal(Autd3ErrorCode.InvalidArgument, e.Code);
         }
-
-        [Fact]
-        public void ABatchMatchesSolvingEachProblemAlone()
-        {
-            using var geometry = Fixture.SingleDevice();
-            var wavelength = Pattern.Wavelength(340 * m / s);
-            var foci = new[] { -30f, 30f, -10f, 10f }
-                .Select(x => new AmplitudeTarget(geometry.Center + new Vector3(x, 0f, 150f), 2.5e3f * Pa))
-                .ToArray();
-
-            using var p0 = geometry.PhaseBuffer();
-            using var p1 = geometry.PhaseBuffer();
-            using var i0 = geometry.IntensityBuffer();
-            using var i1 = geometry.IntensityBuffer();
-            Holo.Holo.GspatBatch(geometry, foci, wavelength, new GspatOption(), new[] { p0, p1 }, new[] { i0, i1 });
-
-            using var phases = geometry.PhaseBuffer();
-            using var intensities = geometry.IntensityBuffer();
-            Holo.Holo.Gspat(geometry, foci.Skip(2).ToArray(), wavelength, new GspatOption(), phases, intensities);
-            Assert.Equal(phases.ToArray()[0].Select(p => p.Value), p1.ToArray()[0].Select(p => p.Value));
-            Assert.Equal(intensities.ToArray()[0].Select(i => i.Value), i1.ToArray()[0].Select(i => i.Value));
-
-            Holo.Holo.NaiveBatch(geometry, foci, wavelength, new NaiveOption(), new[] { p0, p1 }, new[] { i0, i1 });
-            Holo.Holo.GsBatch(geometry, foci, wavelength, new GsOption(), new[] { p0, p1 }, new[] { i0, i1 });
-
-            var e = Assert.Throws<Autd3Exception>(() =>
-                Holo.Holo.GspatBatch(geometry, foci, wavelength, new GspatOption(), new[] { p0, p0 }, new[] { i0, i1 }));
-            Assert.Equal(Autd3ErrorCode.InvalidArgument, e.Code);
-            Assert.Throws<Autd3Exception>(() =>
-                Holo.Holo.GspatBatch(geometry, foci, wavelength, new GspatOption(), new[] { p0 }, new[] { i0, i1 }));
-            Assert.Equal(1, p0.NumDevices);
-        }
     }
 }

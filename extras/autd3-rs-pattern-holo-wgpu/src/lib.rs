@@ -329,14 +329,14 @@ impl WgpuBackend {
                 .uniform(&dims)
                 .storage(&self.unused_ro),
             dims.offset,
-            (to_u32(v.len).max(1), 1, to_u32(v.batch).max(1)),
+            (to_u32(v.len).max(1), 1, 1),
         );
     }
 
     fn elementwise(&self, pipeline: &wgpu::ComputePipeline, x: &GpuVector, r: &GpuVector) {
         self.materialize(x);
         self.materialize(r);
-        let dims = self.uniform(&[to_u32(x.len), broadcast_stride(r)]);
+        let dims = self.uniform(&[to_u32(x.len)]);
         self.dispatch(
             pipeline,
             &self.pipelines.elementwise_layout,
@@ -345,7 +345,7 @@ impl WgpuBackend {
                 .storage(&r.buf)
                 .uniform(&dims),
             dims.offset,
-            (div_ceil(x.len, WG), 1, to_u32(x.batch).max(1)),
+            (div_ceil(x.len, WG), 1, 1),
         );
     }
 
@@ -355,7 +355,6 @@ impl WgpuBackend {
         x: &GpuVector,
         r: Option<&GpuVector>,
     ) -> GpuVector {
-        let batch = a.batch;
         let rowwise = a.cols <= ROWWISE_COL_LIMIT;
         if let Some(r) = r {
             self.materialize(r);
@@ -365,7 +364,7 @@ impl WgpuBackend {
         }
         let x_partial = x.partial.borrow();
         let x_chunks = x_partial.as_ref().map_or(0, |p| p.chunks);
-        let out = self.storage(bytes_of(a.rows * batch));
+        let out = self.storage(bytes_of(a.rows));
         let chunks = if rowwise {
             1
         } else {
@@ -374,7 +373,7 @@ impl WgpuBackend {
         let partial = if rowwise {
             None
         } else {
-            Some(self.storage(bytes_of(a.rows * chunks as usize * batch)))
+            Some(self.storage(bytes_of(a.rows * chunks as usize)))
         };
         let partial_buf: &Pooled = partial
             .as_ref()
@@ -385,10 +384,8 @@ impl WgpuBackend {
             to_u32(a.cols),
             chunks,
             u32::from(r.is_some()),
-            r.map_or(0, broadcast_stride),
             u32::from(a.row_major),
             x_chunks,
-            broadcast_stride(x),
         ]);
         let r = r.map_or(&self.unused_ro, |r| &r.buf);
         let bindings = Bindings::default()
@@ -398,7 +395,6 @@ impl WgpuBackend {
             .storage(&out)
             .uniform(&dims)
             .storage(r);
-        let z = to_u32(batch).max(1);
         if rowwise {
             self.dispatch(
                 if x_chunks == 0 {
@@ -409,32 +405,21 @@ impl WgpuBackend {
                 &self.pipelines.gemv_layout,
                 &bindings,
                 dims.offset,
-                (div_ceil(a.rows, WG), 1, z),
+                (div_ceil(a.rows, WG), 1, 1),
             );
-            return GpuVector::new(out, a.rows, batch);
+            return GpuVector::new(out, a.rows);
         }
         self.dispatch(
             &self.pipelines.gemv_partial,
             &self.pipelines.gemv_layout,
             &bindings,
             dims.offset,
-            (chunks, to_u32(a.rows).max(1), z),
+            (chunks, to_u32(a.rows).max(1), 1),
         );
-        if batch > 1 {
-            self.dispatch(
-                &self.pipelines.gemv_reduce,
-                &self.pipelines.gemv_layout,
-                &bindings,
-                dims.offset,
-                (to_u32(a.rows).max(1), 1, z),
-            );
-            return GpuVector::new(out, a.rows, batch);
-        }
         drop(bindings);
         GpuVector::deferred(
             out,
             a.rows,
-            batch,
             buffer::PartialSum {
                 buf: partial.expect("the two-pass path always allocates partials"),
                 chunks,
@@ -464,22 +449,17 @@ fn bytes_of(elems: usize) -> u64 {
     (elems as u64) * 8
 }
 
-fn broadcast_stride(v: &GpuVector) -> u32 {
-    if v.batch > 1 { to_u32(v.len) } else { 0 }
-}
-
 impl LinAlgBackend for WgpuBackend {
     type Matrix = GpuMatrix;
     type Vector = GpuVector;
 
-    fn make_vector(&self, batch: usize, data: Vec<Complex<f32>>) -> Self::Vector {
-        GpuVector::new(self.storage_init(&data), data.len() / batch.max(1), batch)
+    fn make_vector(&self, data: Vec<Complex<f32>>) -> Self::Vector {
+        GpuVector::new(self.storage_init(&data), data.len())
     }
 
     fn vector_to_host(&self, v: &Self::Vector) -> Vec<Complex<f32>> {
         self.materialize(v);
-        let total = v.len * v.batch;
-        self.read_back(&v.buf, bytes_of(total), |raw| {
+        self.read_back(&v.buf, bytes_of(v.len), |raw| {
             bytemuck::cast_slice::<u8, Complex<f32>>(raw).to_vec()
         })
     }
@@ -489,11 +469,10 @@ impl LinAlgBackend for WgpuBackend {
         tr_pos: &[Point3<f32>],
         tr_dir: &[UnitVector3<f32>],
         foci: &[AmplitudeTarget],
-        batch: usize,
         wavenumber: f32,
         directivity: Directivity,
     ) -> Self::Matrix {
-        let rows = foci.len() / batch.max(1);
+        let rows = foci.len();
         let cols = tr_pos.len();
         let pos: Vec<[f32; 4]> = tr_pos.iter().map(|p| [p.x, p.y, p.z, 0.0]).collect();
         let dir: Vec<[f32; 4]> = tr_dir.iter().map(|d| [d.x, d.y, d.z, 0.0]).collect();
@@ -504,7 +483,7 @@ impl LinAlgBackend for WgpuBackend {
         let pos = self.storage_init(&pos);
         let dir = self.storage_init(&dir);
         let tgt = self.storage_init(&tgt);
-        let out = self.storage(bytes_of(rows * cols * batch));
+        let out = self.storage(bytes_of(rows * cols));
         let dims = self.uniform(&[
             to_u32(rows),
             to_u32(cols),
@@ -521,54 +500,50 @@ impl LinAlgBackend for WgpuBackend {
                 .storage(&out)
                 .uniform(&dims),
             dims.offset,
-            (div_ceil(rows * cols, WG), 1, to_u32(batch).max(1)),
+            (div_ceil(rows * cols, WG), 1, 1),
         );
         GpuMatrix {
             buf: out,
             rows,
             cols,
-            batch,
             row_major: true,
         }
     }
 
     fn back_prop(&self, g: &Self::Matrix) -> Self::Matrix {
-        let row_norm = self.storage((g.rows * g.batch) as u64 * 4);
-        let out = self.storage(bytes_of(g.rows * g.cols * g.batch));
+        let row_norm = self.storage(g.rows as u64 * 4);
+        let out = self.storage(bytes_of(g.rows * g.cols));
         let dims = self.uniform(&[to_u32(g.rows), to_u32(g.cols), u32::from(g.row_major)]);
         let bindings = Bindings::default()
             .storage(&g.buf)
             .storage(&row_norm)
             .storage(&out)
             .uniform(&dims);
-        let batch = to_u32(g.batch).max(1);
         self.dispatch(
             &self.pipelines.back_prop_row_norm,
             &self.pipelines.back_prop_layout,
             &bindings,
             dims.offset,
-            (to_u32(g.rows).max(1), 1, batch),
+            (to_u32(g.rows).max(1), 1, 1),
         );
         self.dispatch(
             &self.pipelines.back_prop_write,
             &self.pipelines.back_prop_layout,
             &bindings,
             dims.offset,
-            (div_ceil(g.rows * g.cols, WG), 1, batch),
+            (div_ceil(g.rows * g.cols, WG), 1, 1),
         );
         GpuMatrix {
             buf: out,
             rows: g.cols,
             cols: g.rows,
-            batch: g.batch,
             row_major: false,
         }
     }
 
     fn gemm(&self, a: &Self::Matrix, b: &Self::Matrix) -> Self::Matrix {
         let (rows, inner, cols) = (a.rows, a.cols, b.cols);
-        let batch = a.batch;
-        let out = self.storage(bytes_of(rows * cols * batch));
+        let out = self.storage(bytes_of(rows * cols));
         let dims = self.uniform(&[
             to_u32(rows),
             to_u32(inner),
@@ -585,17 +560,12 @@ impl LinAlgBackend for WgpuBackend {
                 .storage(&out)
                 .uniform(&dims),
             dims.offset,
-            (
-                to_u32(rows).max(1),
-                to_u32(cols).max(1),
-                to_u32(batch).max(1),
-            ),
+            (to_u32(rows).max(1), to_u32(cols).max(1), 1),
         );
         GpuMatrix {
             buf: out,
             rows,
             cols,
-            batch,
             row_major: false,
         }
     }
@@ -632,15 +602,9 @@ impl LinAlgBackend for WgpuBackend {
         }
         self.materialize(&x);
         self.materialize(r);
-        let (n, batch) = (a.cols, a.batch);
-        let out = self.storage(bytes_of(n * batch));
-        let dims = self.uniform(&[
-            to_u32(n),
-            to_u32(repeat),
-            broadcast_stride(r),
-            broadcast_stride(&x),
-            u32::from(a.row_major),
-        ]);
+        let n = a.cols;
+        let out = self.storage(bytes_of(n));
+        let dims = self.uniform(&[to_u32(n), to_u32(repeat), u32::from(a.row_major)]);
         self.dispatch(
             &self.pipelines.repeat_gemv,
             &self.pipelines.gemv_layout,
@@ -652,9 +616,9 @@ impl LinAlgBackend for WgpuBackend {
                 .uniform(&dims)
                 .storage(&r.buf),
             dims.offset,
-            (1, 1, to_u32(batch).max(1)),
+            (1, 1, 1),
         );
-        GpuVector::new(out, n, batch)
+        GpuVector::new(out, n)
     }
 
     fn amplitude_correct(&self, x: &mut Self::Vector, r: &Self::Vector) {
@@ -667,12 +631,12 @@ impl LinAlgBackend for WgpuBackend {
         constraint: IntensityConstraint,
     ) -> (Vec<Phase>, Vec<Intensity>) {
         self.materialize(v);
-        let (len, batch) = (v.len, v.batch.max(1));
+        let len = v.len;
         let words = len.div_ceil(2);
-        let bytes = (words * batch) as u64 * 4;
+        let bytes = words as u64 * 4;
         let (mode, p0, p1) = encode_constraint(constraint);
         let out = self.storage(bytes);
-        let max = (mode == 0).then(|| self.storage(batch as u64 * 4));
+        let max = (mode == 0).then(|| self.storage(4));
         let max_buf: &Pooled = max.as_ref().unwrap_or(&self.unused_rw);
         let dims = self.uniform(&[to_u32(len), mode, p0, p1, to_u32(words)]);
         let bindings = Bindings::default()
@@ -680,14 +644,13 @@ impl LinAlgBackend for WgpuBackend {
             .storage(max_buf)
             .storage(&out)
             .uniform(&dims);
-        let z = to_u32(batch).max(1);
         if max.is_some() {
             self.dispatch(
                 &self.pipelines.quantize_max,
                 &self.pipelines.quantize_layout,
                 &bindings,
                 dims.offset,
-                (1, 1, z),
+                (1, 1, 1),
             );
         }
         self.dispatch(
@@ -695,32 +658,17 @@ impl LinAlgBackend for WgpuBackend {
             &self.pipelines.quantize_layout,
             &bindings,
             dims.offset,
-            (div_ceil(words, WG), 1, z),
+            (div_ceil(words, WG), 1, 1),
         );
 
         self.read_back(&out, bytes, |raw| {
-            let mut phases = Vec::with_capacity(len * batch);
-            let mut intensities = Vec::with_capacity(len * batch);
-            for k in 0..batch {
-                let at = k * words * 4;
-                for b in raw[at..][..len * 2].as_chunks::<2>().0 {
-                    phases.push(Phase(b[0]));
-                    intensities.push(Intensity(b[1]));
-                }
-            }
-            (phases, intensities)
+            raw[..len * 2]
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|b| (Phase(b[0]), Intensity(b[1])))
+                .unzip()
         })
-    }
-
-    fn max_batch(&self, bytes_per_problem: usize) -> usize {
-        let limits = self.device.limits();
-        let cap = limits
-            .max_storage_buffer_binding_size
-            .min(limits.max_buffer_size);
-        let by_size = usize::try_from(cap / bytes_per_problem.max(1) as u64).unwrap_or(usize::MAX);
-        let by_dispatch =
-            usize::try_from(limits.max_compute_workgroups_per_dimension).unwrap_or(usize::MAX);
-        by_size.min(by_dispatch).max(1)
     }
 }
 
@@ -731,22 +679,5 @@ fn encode_constraint(constraint: IntensityConstraint) -> (u32, u32, u32) {
             (1, f32::from(min.0).to_bits(), f32::from(max.0).to_bits())
         }
         _ => unreachable!(),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn max_batch_fits_the_dispatch_limit() {
-        let Ok(gpu) = WgpuBackend::new() else {
-            eprintln!("skipped: no GPU adapter");
-            return;
-        };
-        let limits = gpu.device.limits();
-        let z = limits.max_compute_workgroups_per_dimension as usize;
-        assert!(gpu.max_batch(1) <= z);
-        assert!(gpu.max_batch(usize::MAX) >= 1);
     }
 }
