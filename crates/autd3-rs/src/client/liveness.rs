@@ -3,8 +3,6 @@ use std::time::{Duration, Instant};
 use autd3_cpu_wire::udp::Flags;
 use autd3_rs_core::DeviceState;
 
-use crate::udp::state::{PTP_FLAGS, SYNCED_FLAGS};
-
 #[derive(Clone, Copy)]
 pub(crate) struct DeviceLiveness {
     unanswered_since: Option<Instant>,
@@ -15,13 +13,13 @@ pub(crate) struct DeviceLiveness {
 }
 
 impl DeviceLiveness {
-    pub(crate) const fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             unanswered_since: None,
             answered_at: None,
             send_failing_since: None,
             state: DeviceState::Ready,
-            last_flags: SYNCED_FLAGS,
+            last_flags: Flags::PTP_LOCKED | Flags::SYNC_READY,
         }
     }
 
@@ -67,7 +65,7 @@ impl DeviceLiveness {
         self.answered_at = Some(now);
         self.send_failing_since = None;
         self.last_flags = flags;
-        self.state = if flags.contains(SYNCED_FLAGS) {
+        self.state = if flags.contains(Flags::PTP_LOCKED | Flags::SYNC_READY) {
             DeviceState::Ready
         } else {
             DeviceState::Syncing
@@ -99,7 +97,7 @@ impl DeviceLiveness {
         if self.is_lost() {
             return Flags::empty();
         }
-        self.last_flags.intersection(PTP_FLAGS)
+        self.last_flags & (Flags::PTP_LOCKED | Flags::PTP_FAILSAFE)
     }
 
     pub(crate) fn is_lost(self) -> bool {
