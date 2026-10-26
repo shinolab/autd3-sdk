@@ -6,7 +6,8 @@ use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
 use super::try_read_exact;
 use crate::Error;
-use crate::config::{CpuConfig, FpgaBusWait, MaxFreqPpb, PathDelayFilterShift, PtpConfig};
+use crate::config::{CpuConfig, FpgaBusWait, PtpConfig};
+use crate::cpu_params;
 
 #[derive(Clone, PartialEq, Eq, Debug, thiserror::Error)]
 #[error("CPU config `{field}` = {value:?} must be a multiple of {unit:?} within {min:?}..={max:?}")]
@@ -111,7 +112,7 @@ impl SetCpuConfigPayload {
             ptp_lock_threshold_ns: to_nanos("ptp.lock_threshold", ptp.lock_threshold)?,
             ptp_kp_milli: U32::new(ptp.kp_milli),
             ptp_ki_milli: U32::new(ptp.ki_milli),
-            ptp_max_freq_ppb: U32::new(ptp.max_freq_ppb.get()),
+            ptp_max_freq_ppb: U32::new(ptp.max_freq_ppb),
             failsafe_timeout_ms: match config.failsafe_timeout {
                 Some(timeout) => {
                     to_millis_at_least("failsafe_timeout", timeout, Duration::from_millis(1))?
@@ -119,7 +120,7 @@ impl SetCpuConfigPayload {
                 None => U16::new(FAILSAFE_DISABLED),
             },
             ptp_delay_req_syncs: U16::new(ptp.delay_req_syncs.get()),
-            ptp_path_delay_filter_shift: U16::new(u16::from(ptp.path_delay_filter_shift.get())),
+            ptp_path_delay_filter_shift: U16::new(u16::from(ptp.path_delay_filter_shift)),
             ptp_pause_quanta: U16::new(match ptp.pause_quanta {
                 Some(quanta) => quanta.get(),
                 None => PAUSE_DISABLED,
@@ -149,10 +150,12 @@ impl SetCpuConfigPayload {
         let lock_samples = NonZeroU16::new(self.ptp_lock_samples.get())?;
         let delay_req_syncs = NonZeroU16::new(self.ptp_delay_req_syncs.get())?;
         let fpga_bus_wait = FpgaBusWait::from_u8(u8::try_from(self.fpga_bus_wait.get()).ok()?)?;
-        let max_freq_ppb = MaxFreqPpb::new(self.ptp_max_freq_ppb.get())?;
-        let path_delay_filter_shift =
-            PathDelayFilterShift::new(u8::try_from(self.ptp_path_delay_filter_shift.get()).ok()?)?;
-        if self.ptp_sync_interval_ms.get() == 0 {
+        let max_freq_ppb = self.ptp_max_freq_ppb.get();
+        let path_delay_filter_shift = u8::try_from(self.ptp_path_delay_filter_shift.get()).ok()?;
+        if self.ptp_sync_interval_ms.get() == 0
+            || max_freq_ppb > cpu_params::PTP_MAX_FREQ_PPB_MAX
+            || path_delay_filter_shift > cpu_params::PTP_PATH_DELAY_FILTER_SHIFT_MAX
+        {
             return None;
         }
         Some(CpuConfig {
@@ -243,9 +246,9 @@ mod tests {
                 lock_threshold: Duration::from_nanos(20),
                 kp_milli: 21,
                 ki_milli: 22,
-                max_freq_ppb: MaxFreqPpb::new(23).unwrap(),
+                max_freq_ppb: 23,
                 delay_req_syncs: NonZeroU16::new(25).unwrap(),
-                path_delay_filter_shift: PathDelayFilterShift::new(5).unwrap(),
+                path_delay_filter_shift: 5,
                 pause_quanta: NonZeroU16::new(26),
                 pause_hold_syncs: 27,
                 pause_retry: Duration::from_millis(28),
@@ -316,12 +319,12 @@ mod tests {
     #[case(CpuConfig { ptp: PtpConfig { kp_milli: u32::MAX, ..PtpConfig::default() }, ..CpuConfig::default() })]
     #[case(CpuConfig { ptp: PtpConfig { ki_milli: 0, ..PtpConfig::default() }, ..CpuConfig::default() })]
     #[case(CpuConfig { ptp: PtpConfig { ki_milli: u32::MAX, ..PtpConfig::default() }, ..CpuConfig::default() })]
-    #[case(CpuConfig { ptp: PtpConfig { max_freq_ppb: MaxFreqPpb::MIN, ..PtpConfig::default() }, ..CpuConfig::default() })]
-    #[case(CpuConfig { ptp: PtpConfig { max_freq_ppb: MaxFreqPpb::MAX, ..PtpConfig::default() }, ..CpuConfig::default() })]
+    #[case(CpuConfig { ptp: PtpConfig { max_freq_ppb: 0, ..PtpConfig::default() }, ..CpuConfig::default() })]
+    #[case(CpuConfig { ptp: PtpConfig { max_freq_ppb: cpu_params::PTP_MAX_FREQ_PPB_MAX, ..PtpConfig::default() }, ..CpuConfig::default() })]
     #[case(CpuConfig { ptp: PtpConfig { delay_req_syncs: NonZeroU16::MIN, ..PtpConfig::default() }, ..CpuConfig::default() })]
     #[case(CpuConfig { ptp: PtpConfig { delay_req_syncs: NonZeroU16::MAX, ..PtpConfig::default() }, ..CpuConfig::default() })]
-    #[case(CpuConfig { ptp: PtpConfig { path_delay_filter_shift: PathDelayFilterShift::MIN, ..PtpConfig::default() }, ..CpuConfig::default() })]
-    #[case(CpuConfig { ptp: PtpConfig { path_delay_filter_shift: PathDelayFilterShift::MAX, ..PtpConfig::default() }, ..CpuConfig::default() })]
+    #[case(CpuConfig { ptp: PtpConfig { path_delay_filter_shift: 0, ..PtpConfig::default() }, ..CpuConfig::default() })]
+    #[case(CpuConfig { ptp: PtpConfig { path_delay_filter_shift: cpu_params::PTP_PATH_DELAY_FILTER_SHIFT_MAX, ..PtpConfig::default() }, ..CpuConfig::default() })]
     #[case(CpuConfig { ptp: PtpConfig { pause_quanta: None, ..PtpConfig::default() }, ..CpuConfig::default() })]
     #[case(CpuConfig { ptp: PtpConfig { pause_quanta: Some(NonZeroU16::MIN), ..PtpConfig::default() }, ..CpuConfig::default() })]
     #[case(CpuConfig { ptp: PtpConfig { pause_quanta: Some(NonZeroU16::MAX), ..PtpConfig::default() }, ..CpuConfig::default() })]
@@ -337,17 +340,21 @@ mod tests {
 
     #[rstest]
     #[case(CpuConfig { ptp: PtpConfig { sync_interval: Duration::ZERO, ..PtpConfig::default() }, ..CpuConfig::default() })]
-    fn a_zero_duration_the_firmware_refuses_is_left_to_the_device(#[case] config: CpuConfig) {
+    #[case(CpuConfig { ptp: PtpConfig { max_freq_ppb: cpu_params::PTP_MAX_FREQ_PPB_MAX + 1, ..PtpConfig::default() }, ..CpuConfig::default() })]
+    #[case(CpuConfig { ptp: PtpConfig { max_freq_ppb: u32::MAX, ..PtpConfig::default() }, ..CpuConfig::default() })]
+    #[case(CpuConfig { ptp: PtpConfig { path_delay_filter_shift: cpu_params::PTP_PATH_DELAY_FILTER_SHIFT_MAX + 1, ..PtpConfig::default() }, ..CpuConfig::default() })]
+    #[case(CpuConfig { ptp: PtpConfig { path_delay_filter_shift: u8::MAX, ..PtpConfig::default() }, ..CpuConfig::default() })]
+    fn a_value_the_firmware_refuses_is_left_to_the_device(#[case] config: CpuConfig) {
         let payload = SetCpuConfigPayload::encode(&config).unwrap();
         assert_eq!(payload.decode(), None);
     }
 
     #[test]
-    fn the_bounded_ptp_fields_reach_the_wire_at_both_ends() {
+    fn the_ptp_limits_reach_the_wire_as_they_are() {
         let payload = SetCpuConfigPayload::encode(&CpuConfig {
             ptp: PtpConfig {
-                max_freq_ppb: MaxFreqPpb::MAX,
-                path_delay_filter_shift: PathDelayFilterShift::MAX,
+                max_freq_ppb: cpu_params::PTP_MAX_FREQ_PPB_MAX,
+                path_delay_filter_shift: cpu_params::PTP_PATH_DELAY_FILTER_SHIFT_MAX,
                 ..PtpConfig::default()
             },
             ..CpuConfig::default()
@@ -599,7 +606,7 @@ mod tests {
                 ..valid
             },
             SetCpuConfigPayload {
-                ptp_max_freq_ppb: U32::new(MaxFreqPpb::MAX.get() + 1),
+                ptp_max_freq_ppb: U32::new(cpu_params::PTP_MAX_FREQ_PPB_MAX + 1),
                 ..valid
             },
             SetCpuConfigPayload {

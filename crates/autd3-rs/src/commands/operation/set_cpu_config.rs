@@ -1,6 +1,4 @@
-pub use autd3_cpu_wire::config::{
-    CpuConfig, FpgaBusWait, MaxFreqPpb, PathDelayFilterShift, PtpConfig,
-};
+pub use autd3_cpu_wire::config::{CpuConfig, FpgaBusWait, PtpConfig};
 use autd3_cpu_wire::payload::SetCpuConfigPayload;
 
 use crate::datagram::Datagram;

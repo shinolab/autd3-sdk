@@ -8,12 +8,11 @@ use autd3_rs::commands::Operation;
 use autd3_rs::commands::{
     Clear as CoreClear, CpuConfig as CoreCpuConfig, EmulateGpioIn, FixedCompletionTime,
     FixedUpdateRate, ForceFan as CoreForceFan, FpgaBusWait as CoreFpgaBusWait,
-    FpgaConfig as CoreFpgaConfig, GpioOut as CoreGpioOut, MaxFreqPpb, Nop as CoreNop,
-    PWE_TABLE_SIZE, PathDelayFilterShift, PtpConfig as CorePtpConfig,
-    ReleaseFailsafe as CoreReleaseFailsafe, SetCpuConfig as CoreSetCpuConfig,
-    SetFpgaConfig as CoreSetFpgaConfig, SetGpioOut, SetOutputMask, SetPhaseCorrection,
-    SetPulseWidthTable as CoreSetPulseWidthTable, SetSilencer, SilencerConfig,
-    Synchronize as CoreSynchronize,
+    FpgaConfig as CoreFpgaConfig, GpioOut as CoreGpioOut, Nop as CoreNop, PWE_TABLE_SIZE,
+    PtpConfig as CorePtpConfig, ReleaseFailsafe as CoreReleaseFailsafe,
+    SetCpuConfig as CoreSetCpuConfig, SetFpgaConfig as CoreSetFpgaConfig, SetGpioOut,
+    SetOutputMask, SetPhaseCorrection, SetPulseWidthTable as CoreSetPulseWidthTable, SetSilencer,
+    SilencerConfig, Synchronize as CoreSynchronize,
 };
 use autd3_rs::value::PulseWidth as CorePulseWidth;
 
@@ -190,9 +189,9 @@ impl PtpConfigPy {
         lock_threshold = CorePtpConfig::default().lock_threshold,
         kp_milli = CorePtpConfig::default().kp_milli,
         ki_milli = CorePtpConfig::default().ki_milli,
-        max_freq_ppb = CorePtpConfig::default().max_freq_ppb.get(),
+        max_freq_ppb = CorePtpConfig::default().max_freq_ppb,
         delay_req_syncs = CorePtpConfig::default().delay_req_syncs,
-        path_delay_filter_shift = CorePtpConfig::default().path_delay_filter_shift.get(),
+        path_delay_filter_shift = CorePtpConfig::default().path_delay_filter_shift,
         pause_quanta = CorePtpConfig::default().pause_quanta,
         pause_hold_syncs = CorePtpConfig::default().pause_hold_syncs,
         pause_retry = CorePtpConfig::default().pause_retry,
@@ -226,17 +225,9 @@ impl PtpConfigPy {
             lock_threshold,
             kp_milli,
             ki_milli,
-            max_freq_ppb: MaxFreqPpb::new(max_freq_ppb).ok_or_else(|| {
-                PyValueError::new_err(format!("max_freq_ppb must be <= {}", MaxFreqPpb::MAX.get()))
-            })?,
+            max_freq_ppb,
             delay_req_syncs,
-            path_delay_filter_shift: PathDelayFilterShift::new(path_delay_filter_shift)
-                .ok_or_else(|| {
-                    PyValueError::new_err(format!(
-                        "path_delay_filter_shift must be <= {}",
-                        PathDelayFilterShift::MAX.get()
-                    ))
-                })?,
+            path_delay_filter_shift,
             pause_quanta,
             pause_hold_syncs,
             pause_retry,
@@ -290,7 +281,7 @@ impl PtpConfigPy {
 
     #[getter]
     fn max_freq_ppb(&self) -> u32 {
-        self.0.max_freq_ppb.get()
+        self.0.max_freq_ppb
     }
 
     #[getter]
@@ -300,7 +291,7 @@ impl PtpConfigPy {
 
     #[getter]
     fn path_delay_filter_shift(&self) -> u8 {
-        self.0.path_delay_filter_shift.get()
+        self.0.path_delay_filter_shift
     }
 
     #[getter]

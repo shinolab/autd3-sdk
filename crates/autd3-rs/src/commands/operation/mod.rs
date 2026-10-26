@@ -25,9 +25,7 @@ pub use config_pattern::{ConfigFociStm, ConfigPattern};
 pub use control::{Clear, Nop, ReleaseFailsafe, Synchronize};
 pub use emulate_gpio_in::EmulateGpioIn;
 pub use force_fan::ForceFan;
-pub use set_cpu_config::{
-    CpuConfig, FpgaBusWait, MaxFreqPpb, PathDelayFilterShift, PtpConfig, SetCpuConfig,
-};
+pub use set_cpu_config::{CpuConfig, FpgaBusWait, PtpConfig, SetCpuConfig};
 pub use set_fpga_config::{FpgaConfig, SetFpgaConfig};
 pub use set_gpio_out::{GpioOut, SetGpioOut};
 pub use set_output_mask::SetOutputMask;

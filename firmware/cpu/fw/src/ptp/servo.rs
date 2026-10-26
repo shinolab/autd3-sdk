@@ -34,7 +34,7 @@ impl Default for Servo {
 }
 
 fn clamp_mppb(v: i128, config: &Config) -> i64 {
-    let max = i128::from(config.max_freq_ppb.get()) * i128::from(MILLI);
+    let max = i128::from(config.max_freq_ppb) * i128::from(MILLI);
     v.clamp(-max, max) as i64
 }
 
@@ -147,16 +147,13 @@ mod tests {
     use core::num::NonZeroU16;
     use core::time::Duration;
 
-    use autd3_cpu_wire::config::MaxFreqPpb;
     use rstest::rstest;
 
     use super::{Config, Servo};
 
     const LOCK_SAMPLES: u16 = autd3_cpu_wire::cpu_params::PTP_LOCK_SAMPLES.get();
     const STEP_THRESHOLD_NS: i64 = autd3_cpu_wire::cpu_params::PTP_STEP_THRESHOLD.as_nanos() as i64;
-    const MAX_FREQ_PPB: i32 = autd3_cpu_wire::cpu_params::PTP_MAX_FREQ_PPB
-        .get()
-        .cast_signed();
+    const MAX_FREQ_PPB: i32 = autd3_cpu_wire::cpu_params::PTP_MAX_FREQ_PPB.cast_signed();
 
     #[test]
     fn the_servo_needs_64_quiet_samples_to_lock() {
@@ -283,7 +280,7 @@ mod tests {
 
         let mut servo = Servo::new();
         let config = Config {
-            max_freq_ppb: MaxFreqPpb::new(5_000).unwrap(),
+            max_freq_ppb: 5_000,
             ..Config::default()
         };
         assert_eq!(
