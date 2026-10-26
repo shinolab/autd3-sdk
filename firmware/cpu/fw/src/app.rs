@@ -8,6 +8,7 @@ use crate::port::Port;
 use crate::proto::{
     Cmd, Drained, EXEC_AT_UNIT_NS, Error, FrameHeader, PAYLOAD_BYTES, Reply, ReplyData,
 };
+use crate::utils::OptionalAtomic;
 use autd3_cpu_wire::payload::Telemetry;
 use zerocopy::little_endian::U32;
 
@@ -99,44 +100,6 @@ impl Counters {
     }
 }
 
-struct OptionalMs {
-    present: AtomicBool,
-    ms: AtomicU32,
-}
-
-impl OptionalMs {
-    const fn new() -> Self {
-        Self {
-            present: AtomicBool::new(false),
-            ms: AtomicU32::new(0),
-        }
-    }
-
-    fn store(&self, ms: Option<u32>) {
-        match ms {
-            Some(ms) => {
-                self.ms.store(ms, Ordering::Relaxed);
-                self.present.store(true, Ordering::Release);
-            }
-            None => self.present.store(false, Ordering::Release),
-        }
-    }
-
-    fn load(&self) -> Option<u32> {
-        self.present
-            .load(Ordering::Acquire)
-            .then(|| self.ms.load(Ordering::Relaxed))
-    }
-}
-
-fn bump(counter: &Cell<u32>) {
-    counter.set(counter.get().wrapping_add(1));
-}
-
-fn bump_shared(counter: &AtomicU32) {
-    counter.fetch_add(1, Ordering::Relaxed);
-}
-
 pub struct Cpu {
     slots: [Slot; FIFO_DEPTH as usize],
     fifo: Fifo,
@@ -145,16 +108,14 @@ pub struct Cpu {
     ptp_unlock_failsafe_fired: Cell<bool>,
     ptp_failsafe_active: AtomicBool,
     pub(crate) config: Cell<cmd::cpu_config::CpuConfig>,
-    ptp_unlocked_ms: OptionalMs,
-    host_idle_ms: OptionalMs,
+    ptp_unlocked_ms: OptionalAtomic<u32>,
+    host_idle_ms: OptionalAtomic<u32>,
     pub(crate) update: cmd::update::UpdateSession,
     pub(crate) fpga_update: cmd::fpga_update::FpgaUpdateSession,
     results: [Cell<Reply>; FIFO_DEPTH as usize],
 }
 
 const _: () = assert!(FIFO_DEPTH as usize > autd3_cpu_wire::udp::DEVICE_QUEUE_FRAMES);
-
-type Outcome = Result<ReplyData, Error>;
 
 pub(crate) const EXEC_SPIN_NS: i64 = 50_000;
 
@@ -183,8 +144,8 @@ impl Cpu {
             ptp_unlock_failsafe_fired: Cell::new(false),
             ptp_failsafe_active: AtomicBool::new(false),
             config: Cell::new(cmd::cpu_config::CpuConfig::DEFAULT),
-            ptp_unlocked_ms: OptionalMs::new(),
-            host_idle_ms: OptionalMs::new(),
+            ptp_unlocked_ms: OptionalAtomic::new(),
+            host_idle_ms: OptionalAtomic::new(),
             update: cmd::update::UpdateSession::new(),
             fpga_update: cmd::fpga_update::FpgaUpdateSession::new(),
             results: [const { Cell::new(Reply::EMPTY) }; FIFO_DEPTH as usize],
@@ -316,7 +277,7 @@ impl Cpu {
         if Fifo::is_full(head, self.fifo.tail_acquire())
             || !self.slots[Fifo::slot(head)].store(*header, payload, msg_id)
         {
-            bump_shared(&self.counters.fifo_drop);
+            self.counters.fifo_drop.fetch_add(1, Ordering::Relaxed);
             return;
         }
         self.fifo.publish(head);
@@ -333,7 +294,7 @@ impl Cpu {
         }
         let msg_id = slot.msg_id.get();
         let Some(result) = self.handle_slot(port, slot, header.cmd) else {
-            bump_shared(&self.counters.fifo_drop);
+            self.counters.fifo_drop.fetch_add(1, Ordering::Relaxed);
             self.results[Fifo::slot(tail)].set(self.result_before(tail));
             self.fifo.commit(tail);
             return Drained::Empty;
@@ -354,7 +315,9 @@ impl Cpu {
             return true;
         }
         let Some(now) = port.sys_time() else {
-            bump(&self.counters.exec_late);
+            self.counters
+                .exec_late
+                .set(self.counters.exec_late.get().wrapping_add(1));
             return true;
         };
         if ahead_of_exec_at_ns(now, exec_at) > EXEC_SPIN_NS {
@@ -372,7 +335,9 @@ impl Cpu {
             }
         });
         if late {
-            bump(&self.counters.exec_late);
+            self.counters
+                .exec_late
+                .set(self.counters.exec_late.get().wrapping_add(1));
         }
         true
     }
@@ -396,15 +361,24 @@ impl Cpu {
         let result = match outcome {
             Ok(data) => Reply::new(Error::None, data),
             Err(err) => {
-                bump(&self.counters.dispatch_error);
+                self.counters
+                    .dispatch_error
+                    .set(self.counters.dispatch_error.get().wrapping_add(1));
                 Reply::new(err, ReplyData::EMPTY)
             }
         };
-        bump(&self.counters.processed);
+        self.counters
+            .processed
+            .set(self.counters.processed.get().wrapping_add(1));
         result
     }
 
-    fn dispatch<P: Port>(&self, port: &mut P, cmd: Cmd, payload: &[u8]) -> Outcome {
+    fn dispatch<P: Port>(
+        &self,
+        port: &mut P,
+        cmd: Cmd,
+        payload: &[u8],
+    ) -> Result<ReplyData, Error> {
         if self.fpga_update.is_locked() && !cmd::fpga_update::allowed_while_locked(cmd) {
             return Err(Error::FpgaUpdateInProgress);
         }
