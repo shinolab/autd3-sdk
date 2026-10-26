@@ -24,15 +24,6 @@ pub enum HoloError {
         got: usize,
         expected: usize,
     },
-    #[error("order has {got} entries but the geometry has {expected} transducers")]
-    OrderLengthMismatch { got: usize, expected: usize },
-    #[error("order contains {index} but the geometry has only {num_transducers} transducers")]
-    OrderIndexOutOfRange {
-        index: usize,
-        num_transducers: usize,
-    },
-    #[error("order contains {index} more than once")]
-    OrderDuplicateIndex { index: usize },
     #[error(transparent)]
     Mask(#[from] TransducerMaskError),
 }

@@ -4,7 +4,7 @@ use core::num::NonZeroU8;
 use nalgebra::Complex;
 
 use autd3_rs_core::common::Length;
-use autd3_rs_core::geometry::{Device, Geometry};
+use autd3_rs_core::geometry::Geometry;
 use autd3_rs_core::value::{Intensity, PatternIntensity, Phase};
 
 use crate::amp::Amplitude;
@@ -35,55 +35,6 @@ impl Default for GreedyOption {
     }
 }
 
-fn validate_intensities(
-    intensities: PatternIntensity<'_>,
-    geometry: &Geometry,
-) -> Result<(), HoloError> {
-    let PatternIntensity::PerDevice(intensities) = intensities else {
-        return Ok(());
-    };
-    if intensities.len() != geometry.num_devices() {
-        return Err(HoloError::IntensityDeviceCountMismatch {
-            got: intensities.len(),
-            expected: geometry.num_devices(),
-        });
-    }
-    for (device, (slot, dev)) in intensities.iter().zip(geometry.iter()).enumerate() {
-        if slot.len() != dev.num_transducers() {
-            return Err(HoloError::IntensityTransducerCountMismatch {
-                device,
-                got: slot.len(),
-                expected: dev.num_transducers(),
-            });
-        }
-    }
-    Ok(())
-}
-
-fn validate_order(order: &[usize], geometry: &Geometry) -> Result<(), HoloError> {
-    let num_transducers = geometry.num_transducers();
-    if order.len() != num_transducers {
-        return Err(HoloError::OrderLengthMismatch {
-            got: order.len(),
-            expected: num_transducers,
-        });
-    }
-    let mut visited = vec![false; num_transducers];
-    for &index in order {
-        let Some(seen) = visited.get_mut(index) else {
-            return Err(HoloError::OrderIndexOutOfRange {
-                index,
-                num_transducers,
-            });
-        };
-        if *seen {
-            return Err(HoloError::OrderDuplicateIndex { index });
-        }
-        *seen = true;
-    }
-    Ok(())
-}
-
 fn intensity_at(intensities: PatternIntensity<'_>, d: usize, t: usize) -> Intensity {
     match intensities {
         PatternIntensity::Uniform(intensity) => intensity,
@@ -106,8 +57,14 @@ pub fn greedy<'a>(
         return Err(HoloError::NoFoci);
     }
     validate_dst_len(dst.len(), geometry)?;
-    validate_intensities(intensities, geometry)?;
-    validate_order(order, geometry)?;
+    if let PatternIntensity::PerDevice(intensities) = intensities
+        && intensities.len() != geometry.num_devices()
+    {
+        return Err(HoloError::IntensityDeviceCountMismatch {
+            got: intensities.len(),
+            expected: geometry.num_devices(),
+        });
+    }
 
     let k = wavenumber(wavelength);
     let m = foci.len();
@@ -117,17 +74,22 @@ pub fn greedy<'a>(
         .map(|i| Complex::new(0.0, 2.0 * PI * f32::from(i) / f32::from(levels)).exp())
         .collect();
 
-    let device_offsets: Vec<usize> = geometry
-        .iter()
-        .scan(0, |offset, dev| {
-            let start = *offset;
-            *offset += dev.num_transducers();
-            Some(start)
-        })
-        .collect();
-    let device_directions: Vec<_> = geometry.iter().map(Device::axial_direction).collect();
-
-    for slot in dst.iter_mut() {
+    let mut device_offsets = Vec::with_capacity(geometry.num_devices());
+    let mut device_directions = Vec::with_capacity(geometry.num_devices());
+    let mut offset = 0;
+    for (device, (dev, slot)) in geometry.iter().zip(dst.iter_mut()).enumerate() {
+        if let PatternIntensity::PerDevice(intensities) = intensities
+            && intensities[device].len() != dev.num_transducers()
+        {
+            return Err(HoloError::IntensityTransducerCountMismatch {
+                device,
+                got: intensities[device].len(),
+                expected: dev.num_transducers(),
+            });
+        }
+        device_offsets.push(offset);
+        device_directions.push(dev.axial_direction());
+        offset += dev.num_transducers();
         slot.fill(Phase::ZERO);
     }
 
@@ -451,48 +413,5 @@ mod tests {
         .unwrap();
         assert!(dst[0].iter().all(|&p| p == Phase::ZERO));
         assert!(dst[1].iter().any(|&p| p != Phase::ZERO));
-    }
-
-    #[test]
-    fn an_order_that_is_not_a_permutation_is_an_error_not_a_panic() {
-        let geometry = geometry(1);
-        let n = geometry.num_transducers();
-        let mut dst = geometry.phase_buffer();
-        let run = |order: &[usize], dst: &mut [Vec<Phase>]| {
-            greedy(
-                &geometry,
-                &single_focus(),
-                wavelength(),
-                Intensity::MAX,
-                order,
-                &GreedyOption::default(),
-                dst,
-            )
-        };
-
-        assert_eq!(
-            run(&ascending(&geometry)[1..], &mut dst),
-            Err(HoloError::OrderLengthMismatch {
-                got: n - 1,
-                expected: n
-            }),
-        );
-
-        let mut out_of_range = ascending(&geometry);
-        out_of_range[3] = n;
-        assert_eq!(
-            run(&out_of_range, &mut dst),
-            Err(HoloError::OrderIndexOutOfRange {
-                index: n,
-                num_transducers: n
-            }),
-        );
-
-        let mut duplicated = ascending(&geometry);
-        duplicated[3] = 2;
-        assert_eq!(
-            run(&duplicated, &mut dst),
-            Err(HoloError::OrderDuplicateIndex { index: 2 }),
-        );
     }
 }
