@@ -21,7 +21,8 @@ namespace AUTD3.Samples
         {
             _geometry = new Geometry(new List<Autd3> { new Autd3(Vector3.zero) });
             _client = Client.Open(_geometry, new TransportOption { Iface = Interface.Addr("[::1]:44336") });
-            await _client.SendAsync(Command.Sequence(new Clear(), new Synchronize()));
+            await _client.SendAsync(new Clear());
+            await _client.SendAsync(new Synchronize());
 
             var target = _geometry.Center + new Vector3(0f, 0f, -0.15f);
             var wavelength = Pattern.Wavelength(340 * m / s);

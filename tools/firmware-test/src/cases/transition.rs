@@ -1,6 +1,5 @@
 use anyhow::Result;
 
-use autd3_rs::Frames;
 use autd3_rs::commands::{EmulateGpioIn, FociStm, FociStmOption, Modulation, SetSilencer};
 use autd3_rs::geometry::{Point3, Vector3, offset};
 use autd3_rs::units::{Hz, mm};
@@ -28,17 +27,12 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     ctx.send(Modulation::new(SamplingConfig::FREQ_4K, &static_ff))
         .await?;
 
-    ctx.send_frames(&Frames::encode(
-        ctx.client.geometry(),
-        (
-            SetSilencer::disable(),
-            FociStm::new(
-                stm_sampling(0.5 * Hz, foci.len())?,
-                &foci,
-                FociStmOption::default(),
-            ),
-        ),
-    )?)
+    ctx.send(SetSilencer::disable()).await?;
+    ctx.send(FociStm::new(
+        stm_sampling(0.5 * Hz, foci.len())?,
+        &foci,
+        FociStmOption::default(),
+    ))
     .await?;
     wait_enter("A 0.5 Hz STM runs on a 30 mm-radius circle 150 mm above the array centre").await;
 

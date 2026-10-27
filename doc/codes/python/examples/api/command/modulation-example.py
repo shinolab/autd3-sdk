@@ -11,7 +11,8 @@ from autd3_modulation import SineOption, modulation_buffer, sine
 async def main() -> None:
     geometry = Geometry([Autd3()])
     with Client.open(geometry, TransportOption()) as client:
-        await client.send((Clear(), Synchronize()))
+        await client.send(Clear())
+        await client.send(Synchronize())
 
         config = SamplingConfig.FREQ_4K
         data = modulation_buffer()

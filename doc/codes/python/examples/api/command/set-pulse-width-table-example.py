@@ -9,7 +9,8 @@ from autd3.value import PulseWidth
 async def main() -> None:
     geometry = Geometry([Autd3()])
     with Client.open(geometry, TransportOption()) as client:
-        await client.send((Clear(), Synchronize()))
+        await client.send(Clear())
+        await client.send(Synchronize())
 
         table = SetPulseWidthTable.empty_table()
         for i in range(len(table)):

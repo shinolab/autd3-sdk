@@ -279,15 +279,21 @@ namespace AUTD3.Tests
         public void CommandsBuildDatagrams()
         {
             using var geometry = Fixture.SingleDevice();
-            using var frames = Frames.Encode(geometry, Command.Sequence(
+            var commands = new ICommand[]
+            {
                 new Clear(),
                 new Synchronize(),
                 new ReleaseFailsafe(),
                 new ForceFan(true),
                 new SetSilencer(new FixedUpdateRate(256, 256)),
                 new SetSilencer(),
-                SetSilencer.Disable()));
-            Assert.Equal(7, frames.Length);
+                SetSilencer.Disable(),
+            };
+            foreach (var command in commands)
+            {
+                using var frames = Frames.Encode(geometry, command);
+                Assert.Equal(1, frames.Length);
+            }
         }
 
         [Fact]

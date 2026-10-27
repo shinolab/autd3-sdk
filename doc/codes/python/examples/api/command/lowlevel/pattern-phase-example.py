@@ -12,7 +12,8 @@ from autd3_pattern import wavelength as calc_wavelength
 async def main() -> None:
     geometry = Geometry([Autd3()])
     with Client.open(geometry, TransportOption()) as client:
-        await client.send((Clear(), Synchronize()))
+        await client.send(Clear())
+        await client.send(Synchronize())
 
         wavelength = calc_wavelength(340 * m / s)
         patterns = []

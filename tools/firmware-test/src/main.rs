@@ -88,7 +88,8 @@ pub struct Link<'a> {
 impl Link<'_> {
     async fn open(&self) -> Result<Session> {
         let client = Client::open(self.geometry, self.option)?;
-        client.send((Clear, Synchronize)).await?;
+        client.send(Clear).await?;
+        client.send(Synchronize).await?;
         Ok(Session::new(client, self.heartbeat))
     }
 
@@ -195,15 +196,8 @@ async fn main() -> Result<()> {
         async fn reset(ctx: &Ctx<'_>) -> Result<()> {
             let phases = ctx.geometry.phase_buffer();
 
-            ctx.send_frames(&Frames::encode(
-                ctx.client.geometry(),
-                (
-                    Pattern::new(&phases, Intensity::MIN),
-                    SetSilencer::default(),
-                ),
-            )?)
-            .await?;
-
+            ctx.send(Pattern::new(&phases, Intensity::MIN)).await?;
+            ctx.send(SetSilencer::default()).await?;
             ctx.send(Clear).await
         }
 

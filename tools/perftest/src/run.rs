@@ -192,18 +192,18 @@ pub(crate) async fn run(cli: &Cli) -> Result<RunOutput> {
     async fn run_with_option(option: &TransportOption, cli: &Cli) -> Result<RunOutput> {
         async fn send_config_pattern_once(client: &Client) -> Result<()> {
             client
-                .send((
-                    ConfigPattern {
-                        bank: PatternBank::B0,
-                        config: SamplingConfig::FREQ_4K,
-                        size: 1,
-                        loop_behavior: LoopBehavior::Infinite,
-                    },
-                    ActivatePatternBank {
-                        bank: PatternBank::B0,
-                        transition_mode: TransitionMode::Immediate,
-                    },
-                ))
+                .send(ConfigPattern {
+                    bank: PatternBank::B0,
+                    config: SamplingConfig::FREQ_4K,
+                    size: 1,
+                    loop_behavior: LoopBehavior::Infinite,
+                })
+                .await?;
+            client
+                .send(ActivatePatternBank {
+                    bank: PatternBank::B0,
+                    transition_mode: TransitionMode::Immediate,
+                })
                 .await?;
             Ok(())
         }
@@ -338,10 +338,11 @@ pub(crate) async fn run(cli: &Cli) -> Result<RunOutput> {
 
         let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()));
         let client = Client::open(&geometry, option).context("opening the devices")?;
+        client.send(Clear).await.context("initial Clear")?;
         client
-            .send((Clear, Synchronize))
+            .send(Synchronize)
             .await
-            .context("initial Clear + Synchronize")?;
+            .context("initial Synchronize")?;
 
         let fw = client
             .read_firmware_version()

@@ -69,15 +69,9 @@ pub(crate) async fn send_pattern_mod(
     modulation: &[u8],
     config: SamplingConfig,
 ) -> Result<()> {
-    ctx.send_frames(&Frames::encode(
-        ctx.client.geometry(),
-        (
-            SetSilencer::default(),
-            Pattern::new(&pattern.0, &pattern.1),
-            Modulation::new(config, modulation),
-        ),
-    )?)
-    .await
+    ctx.send(SetSilencer::default()).await?;
+    ctx.send(Pattern::new(&pattern.0, &pattern.1)).await?;
+    ctx.send(Modulation::new(config, modulation)).await
 }
 
 pub(crate) async fn write_pattern_bank(
@@ -85,18 +79,19 @@ pub(crate) async fn write_pattern_bank(
     bank: PatternBank,
     pattern: &Buffers,
 ) -> Result<()> {
-    ctx.send_frames(&Frames::encode(
-        ctx.client.geometry(),
-        (
-            WritePatternBuffer::new(bank, 0, std::slice::from_ref(&pattern.0), &pattern.1),
-            ConfigPattern {
-                bank,
-                config: SamplingConfig::new(NonZeroU16::MAX),
-                size: 1,
-                loop_behavior: LoopBehavior::Infinite,
-            },
-        ),
-    )?)
+    ctx.send(WritePatternBuffer::new(
+        bank,
+        0,
+        std::slice::from_ref(&pattern.0),
+        &pattern.1,
+    ))
+    .await?;
+    ctx.send(ConfigPattern {
+        bank,
+        config: SamplingConfig::new(NonZeroU16::MAX),
+        size: 1,
+        loop_behavior: LoopBehavior::Infinite,
+    })
     .await
 }
 
@@ -156,18 +151,13 @@ pub(crate) async fn write_mod_bank(
     config: SamplingConfig,
     data: &[u8],
 ) -> Result<()> {
-    ctx.send_frames(&Frames::encode(
-        ctx.client.geometry(),
-        (
-            WholeModulationWrite { bank, data },
-            ConfigModulation {
-                bank,
-                config,
-                size: data.len(),
-                loop_behavior: LoopBehavior::Infinite,
-            },
-        ),
-    )?)
+    ctx.send(WholeModulationWrite { bank, data }).await?;
+    ctx.send(ConfigModulation {
+        bank,
+        config,
+        size: data.len(),
+        loop_behavior: LoopBehavior::Infinite,
+    })
     .await
 }
 
@@ -288,24 +278,20 @@ pub(crate) async fn write_foci_bank(
 ) -> Result<()> {
     let size = points.len();
     let num_foci = u8::try_from(points.first().map_or(0, |p| p.points.len()))?;
-    ctx.send_frames(&Frames::encode(
-        ctx.client.geometry(),
-        (
-            WholeFociWrite {
-                bank,
-                num_foci,
-                points,
-            },
-            ConfigFociStm {
-                bank,
-                config,
-                size,
-                num_foci,
-                sound_speed: Velocity::from_m_s(SOUND_SPEED_M_S),
-                loop_behavior,
-            },
-        ),
-    )?)
+    ctx.send(WholeFociWrite {
+        bank,
+        num_foci,
+        points,
+    })
+    .await?;
+    ctx.send(ConfigFociStm {
+        bank,
+        config,
+        size,
+        num_foci,
+        sound_speed: Velocity::from_m_s(SOUND_SPEED_M_S),
+        loop_behavior,
+    })
     .await
 }
 

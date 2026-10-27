@@ -11,7 +11,8 @@ from autd3.value import ControlPoint, ControlPoints, Intensity, LoopBehavior, Pa
 async def main() -> None:
     geometry = Geometry([Autd3()])
     with Client.open(geometry, TransportOption()) as client:
-        await client.send((Clear(), Synchronize()))
+        await client.send(Clear())
+        await client.send(Synchronize())
 
         center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm)
         points = []

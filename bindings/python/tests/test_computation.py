@@ -409,8 +409,8 @@ def test_stm_foci_and_pattern() -> None:
     with pytest.raises(TypeError, match="SamplingConfig"):
         autd3.commands.PatternStm(loose(1.0 * Hz), frames, amps, autd3.commands.PatternStmOption())
 
-    datagrams = autd3.Frames.encode(geo, commands)
-    assert len(datagrams) > 0
+    for command in commands:
+        assert len(autd3.Frames.encode(geo, command)) > 0
 
 
 def test_pattern_stm_phase_depth() -> None:
@@ -425,29 +425,23 @@ def test_pattern_stm_phase_depth() -> None:
     assert autd3.commands.PhaseDepth.Bits8.max_count() == 5
     assert autd3.commands.PhaseDepth.Bits4.max_count() == 11
 
-    commands: list[autd3.commands.Command] = []
-    commands.append(
-        autd3.commands.PatternStm(
-            autd3.value.SamplingConfig.FREQ_4K,
-            frames,
-            autd3.value.Intensity.MAX,
-            autd3.commands.PatternStmOption(phase_depth=autd3.commands.PhaseDepth.Bits4),
-        )
+    uniform = autd3.commands.PatternStm(
+        autd3.value.SamplingConfig.FREQ_4K,
+        frames,
+        autd3.value.Intensity.MAX,
+        autd3.commands.PatternStmOption(phase_depth=autd3.commands.PhaseDepth.Bits4),
     )
-    assert len(autd3.Frames.encode(geo, commands)) == 4
+    assert len(autd3.Frames.encode(geo, uniform)) == 4
 
     amps = [geo.intensity_buffer() for _ in frames]
-    commands = []
-    commands.append(
-        autd3.commands.PatternStm(
-            autd3.value.SamplingConfig.FREQ_4K,
-            frames,
-            amps,
-            autd3.commands.PatternStmOption(phase_depth=autd3.commands.PhaseDepth.Bits4),
-        )
+    per_index = autd3.commands.PatternStm(
+        autd3.value.SamplingConfig.FREQ_4K,
+        frames,
+        amps,
+        autd3.commands.PatternStmOption(phase_depth=autd3.commands.PhaseDepth.Bits4),
     )
     with pytest.raises(autd3.Autd3Error, match="Bits4"):
-        autd3.Frames.encode(geo, commands)
+        autd3.Frames.encode(geo, per_index)
 
 
 def test_each() -> None:
@@ -463,21 +457,18 @@ def test_each() -> None:
     amps = geo.intensity_buffer()
 
     # homogeneous per-device command
-    commands: list[autd3.commands.Command] = []
-    commands.append(autd3.commands.each(lambda device: autd3.commands.Pattern(left if device.idx() % 2 == 0 else right, amps)))
-    assert len(autd3.Frames.encode(geo, commands)) > 0
+    homogeneous = autd3.commands.each(lambda device: autd3.commands.Pattern(left if device.idx() % 2 == 0 else right, amps))
+    assert len(autd3.Frames.encode(geo, homogeneous)) > 0
 
     # heterogeneous per-device operation (Python is dynamically typed, no boxing needed)
-    commands = []
-    commands.append(autd3.commands.each(
+    heterogeneous = autd3.commands.each(
         lambda device: autd3.commands.Pattern(left, amps) if device.idx() % 2 == 0 else autd3.commands.SetSilencer()
-    ))
-    assert len(autd3.Frames.encode(geo, commands)) > 0
+    )
+    assert len(autd3.Frames.encode(geo, heterogeneous)) > 0
 
     # returning None leaves that device unassigned
-    commands = []
-    commands.append(autd3.commands.each(lambda device: autd3.commands.Pattern(left, amps) if device.idx() == 0 else None))
-    assert len(autd3.Frames.encode(geo, commands)) > 0
+    partial = autd3.commands.each(lambda device: autd3.commands.Pattern(left, amps) if device.idx() == 0 else None)
+    assert len(autd3.Frames.encode(geo, partial)) > 0
 
 
 def test_commands_build() -> None:
@@ -493,7 +484,8 @@ def test_commands_build() -> None:
     commands.append(autd3.commands.SetGpioOut([autd3.commands.GpioOut.Off, autd3.commands.GpioOut.BaseSignal,
                                    autd3.commands.GpioOut.PwmOut(0), autd3.commands.GpioOut.Direct(True)]))
     commands.append(autd3.commands.EmulateGpioIn([True, False, True, False]))
-    assert len(autd3.Frames.encode(geo, commands)) > 0
+    for command in commands:
+        assert len(autd3.Frames.encode(geo, command)) == 1
 
 
 def test_cpu_config_defaults() -> None:
@@ -622,41 +614,36 @@ def test_set_cpu_config_builds() -> None:
     commands.append(autd3.commands.SetCpuConfig())
     commands.append(autd3.commands.SetCpuConfig(autd3.commands.CpuConfig(sync_guard=autd3.Duration.from_micros(500))))
     commands.append(autd3.commands.SetCpuConfig(autd3.commands.CpuConfig(failsafe_timeout=autd3.Duration.from_millis(500))))
-    assert len(autd3.Frames.encode(geo, commands)) == 3
-
-    commands = []
-    commands.append(autd3.commands.SetCpuConfig(autd3.commands.CpuConfig(failsafe_timeout=autd3.Duration.from_nanos(0))))
-    with pytest.raises(autd3.Autd3Error, match="failsafe_timeout"):
-        autd3.Frames.encode(geo, commands)
-
-    commands = []
-    commands.append(
-        autd3.commands.SetCpuConfig(
-            autd3.commands.CpuConfig(ptp_unlock_failsafe_timeout=autd3.Duration.from_nanos(0))
-        )
-    )
-    with pytest.raises(autd3.Autd3Error, match="ptp_unlock_failsafe_timeout"):
-        autd3.Frames.encode(geo, commands)
-
-    commands = []
     commands.append(autd3.commands.SetCpuConfig(autd3.commands.CpuConfig(cpu_watchdog_timeout=None)))
-    assert len(autd3.Frames.encode(geo, commands)) == 1
+    for command in commands:
+        assert len(autd3.Frames.encode(geo, command)) == 1
 
-    commands = []
-    commands.append(
-        autd3.commands.SetCpuConfig(autd3.commands.CpuConfig(cpu_watchdog_timeout=autd3.Duration.from_nanos(0)))
-    )
-    with pytest.raises(autd3.Autd3Error, match="cpu_watchdog_timeout"):
-        autd3.Frames.encode(geo, commands)
-
-    commands = []
-    commands.append(
-        autd3.commands.SetCpuConfig(
-            autd3.commands.CpuConfig(ptp=autd3.commands.PtpConfig(pause_retry=autd3.Duration.from_micros(1500)))
+    with pytest.raises(autd3.Autd3Error, match="failsafe_timeout"):
+        autd3.Frames.encode(
+            geo, autd3.commands.SetCpuConfig(autd3.commands.CpuConfig(failsafe_timeout=autd3.Duration.from_nanos(0)))
         )
-    )
+
+    with pytest.raises(autd3.Autd3Error, match="ptp_unlock_failsafe_timeout"):
+        autd3.Frames.encode(
+            geo,
+            autd3.commands.SetCpuConfig(
+                autd3.commands.CpuConfig(ptp_unlock_failsafe_timeout=autd3.Duration.from_nanos(0))
+            ),
+        )
+
+    with pytest.raises(autd3.Autd3Error, match="cpu_watchdog_timeout"):
+        autd3.Frames.encode(
+            geo,
+            autd3.commands.SetCpuConfig(autd3.commands.CpuConfig(cpu_watchdog_timeout=autd3.Duration.from_nanos(0))),
+        )
+
     with pytest.raises(autd3.Autd3Error, match="ptp.pause_retry"):
-        autd3.Frames.encode(geo, commands)
+        autd3.Frames.encode(
+            geo,
+            autd3.commands.SetCpuConfig(
+                autd3.commands.CpuConfig(ptp=autd3.commands.PtpConfig(pause_retry=autd3.Duration.from_micros(1500)))
+            ),
+        )
 
 
 def test_fpga_config_defaults() -> None:
@@ -690,7 +677,8 @@ def test_set_fpga_config_builds() -> None:
     commands: list[autd3.commands.Command] = []
     commands.append(autd3.commands.SetFpgaConfig())
     commands.append(autd3.commands.SetFpgaConfig(autd3.commands.FpgaConfig(sync_phase_lock=False)))
-    assert len(autd3.Frames.encode(geo, commands)) == 2
+    for command in commands:
+        assert len(autd3.Frames.encode(geo, command)) == 1
 
 
 def test_pulse_width_table_and_pulse_width() -> None:
@@ -701,7 +689,8 @@ def test_pulse_width_table_and_pulse_width() -> None:
     assert table == [autd3.value.PulseWidth(0)] * autd3.params.PWE_TABLE_SIZE
     commands.append(autd3.commands.SetPulseWidthTable(table))
     commands.append(autd3.commands.SetPulseWidthTable())
-    assert len(autd3.Frames.encode(geo, commands)) > 0
+    for command in commands:
+        assert len(autd3.Frames.encode(geo, command)) == 1
     with pytest.raises(ValueError):
         autd3.commands.SetPulseWidthTable(table[:-1])
     with pytest.raises(TypeError):
@@ -770,7 +759,8 @@ def test_loop_behavior_and_transition_mode() -> None:
             transition_mode=autd3.value.TransitionMode.Gpio(autd3.value.GpioIn.I1),
         )
     )
-    assert len(autd3.Frames.encode(geo, commands)) > 0
+    for command in commands:
+        assert len(autd3.Frames.encode(geo, command)) == 1
 
 
 def test_sys_time_feeds_transition_mode_and_gpio() -> None:

@@ -12,7 +12,8 @@ async fn main() -> anyhow::Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
     let option = TransportOption::default();
     let client = Client::open(&geometry, &option)?;
-    client.send((Clear, Synchronize)).await?;
+    client.send(Clear).await?;
+    client.send(Synchronize).await?;
 
     client.send(SetCpuConfig::new(CpuConfig {
         ptp_unlock_failsafe_timeout: Some(Duration::from_secs(2)),

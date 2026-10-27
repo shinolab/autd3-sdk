@@ -11,7 +11,8 @@ async fn main() -> anyhow::Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
     let option = TransportOption::default();
     let client = Client::open(&geometry, &option)?;
-    client.send((Clear, Synchronize)).await?;
+    client.send(Clear).await?;
+    client.send(Synchronize).await?;
 
     let mut table = SetPulseWidthTable::empty_table();
     for (width, i) in table.iter_mut().zip(0..) {

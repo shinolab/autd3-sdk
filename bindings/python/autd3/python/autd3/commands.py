@@ -1,6 +1,5 @@
 """Command / datagram types (mirrors ``autd3_rs::commands``)."""
 
-from collections.abc import Sequence
 from typing import TypeAlias, Union
 
 from ._autd3 import (
@@ -76,7 +75,6 @@ Command: TypeAlias = Union[
     Modulation,
     PatternStm,
     Each,
-    Sequence["Command"],
 ]
 
 __all__ = [

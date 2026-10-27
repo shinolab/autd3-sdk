@@ -54,24 +54,3 @@ impl Command for BoxedCommand<'_> {
         self.0.expand_boxed(expansion)
     }
 }
-
-macro_rules! impl_command_for_tuple {
-    ($($name:ident),+) => {
-        impl<$($name: Command),+> Command for ($($name,)+) {
-            #[allow(non_snake_case)]
-            fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
-                let ($($name,)+) = self;
-                $(expansion.push($name)?;)+
-                Ok(())
-            }
-        }
-    };
-}
-
-impl_command_for_tuple!(A, B);
-impl_command_for_tuple!(A, B, C);
-impl_command_for_tuple!(A, B, C, D);
-impl_command_for_tuple!(A, B, C, D, E);
-impl_command_for_tuple!(A, B, C, D, E, F);
-impl_command_for_tuple!(A, B, C, D, E, F, G);
-impl_command_for_tuple!(A, B, C, D, E, F, G, H);

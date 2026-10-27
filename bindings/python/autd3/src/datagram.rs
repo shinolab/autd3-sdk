@@ -16,7 +16,6 @@ use autd3_rs::value::{
 use autd3_rs::{Frames as CoreFrames, Geometry};
 use pyo3::exceptions::{PyIndexError, PyRecursionError, PyTypeError};
 use pyo3::prelude::*;
-use pyo3::types::{PyList, PyTuple};
 
 use crate::{commands, ops, stm};
 
@@ -184,8 +183,6 @@ impl Modulation {
 
 struct PerDevice(Vec<Option<Arc<dyn PushCommand>>>);
 
-struct Sequence(Vec<Arc<dyn PushCommand>>);
-
 pub(crate) struct Expand<'a>(pub(crate) &'a dyn PushCommand);
 
 impl CoreCommand for Expand<'_> {
@@ -201,15 +198,6 @@ impl PushCommand for PerDevice {
                 .as_deref()
                 .and_then(PushCommand::as_operation)
         }))?;
-        Ok(())
-    }
-}
-
-impl PushCommand for Sequence {
-    fn push_into(&self, expansion: &mut Expansion<'_>) -> Result<(), autd3_rs::Error> {
-        for command in &self.0 {
-            command.push_into(expansion)?;
-        }
         Ok(())
     }
 }
@@ -232,17 +220,6 @@ pub(crate) fn each(assign: Bound<'_, PyAny>) -> PyResult<Each> {
 }
 
 const COMMAND_NESTING_MAX: usize = 64;
-
-fn sequence_of<'py>(
-    items: impl Iterator<Item = Bound<'py, PyAny>>,
-    geometry: &Geometry,
-    depth: usize,
-) -> PyResult<Arc<dyn PushCommand>> {
-    let commands = items
-        .map(|item| nested_command_of(&item, geometry, depth + 1))
-        .collect::<PyResult<Vec<_>>>()?;
-    Ok(Arc::new(Sequence(commands)))
-}
 
 pub(crate) fn command_of(
     obj: &Bound<'_, PyAny>,
@@ -319,14 +296,8 @@ fn nested_command_of(
             .collect::<PyResult<Vec<_>>>()?;
         return Ok(Arc::new(PerDevice(commands)));
     }
-    if let Ok(tuple) = obj.cast::<PyTuple>() {
-        return sequence_of(tuple.iter(), geometry, depth);
-    }
-    if let Ok(list) = obj.cast::<PyList>() {
-        return sequence_of(list.iter(), geometry, depth);
-    }
     Err(PyTypeError::new_err(format!(
-        "expected a command, each(...), or a tuple/list of them, got {}",
+        "expected a command or each(...), got {}",
         obj.get_type().name()?
     )))
 }

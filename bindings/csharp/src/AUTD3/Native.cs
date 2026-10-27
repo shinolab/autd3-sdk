@@ -66,9 +66,6 @@ namespace AUTD3
         internal static extern IntPtr autd3_command_each(IntPtr[] ops, UIntPtr numDevices);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_command_sequence(IntPtr[] ops, UIntPtr len);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_op_free(IntPtr op);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]

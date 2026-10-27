@@ -17,7 +17,8 @@ internal static class Sample
         var geometry = new Geometry(new[] { new Autd3() });
 
         using var client = Client.Open(geometry, new TransportOption());
-        await client.SendAsync(Command.Sequence(new Clear(), new Synchronize()));
+        await client.SendAsync(new Clear());
+        await client.SendAsync(new Synchronize());
 
         await client.SendAsync(new SetSilencer());
 
