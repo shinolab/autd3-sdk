@@ -6,11 +6,12 @@ use std::task::{Context, Poll, Waker};
 use std::time::{Duration, Instant};
 
 use autd3_cpu_wire::udp::{Flags, Kind};
-use autd3_rs_core::{DeviceStatus, MAX_DEVICES};
+use autd3_rs_core::MAX_DEVICES;
 use zerocopy::{FromZeros, IntoBytes};
 
 use crate::datagram::Frame;
 use crate::device_set::DeviceSet;
+use crate::device_status::DeviceStatus;
 use crate::error::{Error, NetworkCause};
 use crate::geometry::Geometry;
 use crate::protocol::{FrameHeader, MAX_INFLIGHT};

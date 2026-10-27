@@ -4,6 +4,7 @@ pub mod error;
 mod client;
 mod datagram;
 mod device_set;
+mod device_status;
 mod firmware_version;
 mod fpga_state;
 mod response;
@@ -21,12 +22,13 @@ pub use autd3_rs_core::{bus, common, geometry, nalgebra, params, protocol, units
 pub use error::{Error, NetworkCause, PayloadError};
 
 pub use autd3_rs_core::{
-    Angle, Autd3, Device, DeviceState, DeviceStatus, Freq, Geometry, Interface, Length,
-    MAX_DEVICES, MAX_INFLIGHT, Point3, Quaternion, UnitQuaternion, UnitVector3, Vector3, Velocity,
-    offset, point,
+    Angle, Autd3, Device, DeviceState, Freq, Geometry, Interface, Length, MAX_DEVICES,
+    MAX_INFLIGHT, Point3, Quaternion, UnitQuaternion, UnitVector3, Vector3, Velocity, offset,
+    point,
 };
 pub use client::{Client, Controller, Driver, ExecAt, ResponseFuture};
 pub use datagram::{Datagram, Frame, FrameIter, Frames};
+pub use device_status::DeviceStatus;
 pub use firmware_version::{FirmwareVersion, Version};
 pub use fpga_state::FpgaState;
 pub use response::Response;
