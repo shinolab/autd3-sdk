@@ -2,8 +2,8 @@ use etherparse::{EtherType, Ethernet2Header};
 use zerocopy::big_endian::{I64, U16, U32};
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
+use super::clock::NS_PER_SEC;
 use crate::net::{ETH_HEADER, ETHERTYPE_PTP, MIN_FRAME, Mac};
-use crate::nic::NS_PER_SEC;
 
 autd3_cpu_wire::wire_enum_u8! {
     pub enum MessageType {
@@ -262,7 +262,7 @@ mod tests {
         Content, FRAME_CAP, MessageType, Outgoing, build, build_pause, correction_ns, parse,
     };
     use crate::net::{ETH_HEADER, Mac};
-    use crate::nic::NS_PER_SEC;
+    use crate::ptp::clock::NS_PER_SEC;
     use rstest::rstest;
 
     const SLAVE_MAC: Mac = [0x02, 0x41, 0x55, 0x54, 0x44, 0x01];

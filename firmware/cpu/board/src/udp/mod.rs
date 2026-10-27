@@ -1,18 +1,18 @@
 mod ethsw;
 mod gmac;
 pub(crate) mod irq;
+mod node;
 mod pins;
+mod ptp;
 mod pulse;
 mod regs;
 
 use core::cell::UnsafeCell;
 use core::num::{NonZeroU32, NonZeroU64};
 
-use autd3_cpu_fw::net::Mac;
-use autd3_cpu_fw::nic::{Nic, RxMeta, TxStamp};
-use autd3_cpu_fw::node::Node;
 use autd3_cpu_fw::udp::SYNC_CYCLE_NS;
 
+use self::node::Node;
 use self::regs::{VIC_INTNO_ETHDMAIR, VIC_INTNO_TGIA0};
 use crate::bsp::{io, timer, vic};
 
@@ -31,20 +31,43 @@ const ANAR_PAUSE: u16 = 1 << 10;
 const ETHDMAIR_PRIORITY: u32 = 14;
 const TGIA0_PRIORITY: u32 = 13;
 
-struct HwNic {
-    tx: [Option<NonZeroU32>; TX_RING],
-    next_tx: usize,
-    frame_id: u32,
-    send_failures: u32,
+#[derive(Clone, Copy)]
+struct RxMeta {
+    port: u8,
+    timestamp_ns: u32,
 }
 
-impl HwNic {
+const fn other_port(port: u8) -> u8 {
+    port ^ 1
+}
+
+fn downstream_link(port: u8) -> bool {
+    let phy = PHY_ADDRESS_BASE + u32::from(port & 1);
+    let _ = gmac::mdio_read(phy, PHY_BMSR);
+    gmac::mdio_read(phy, PHY_BMSR).is_some_and(|bmsr| bmsr & BMSR_LINK_STATUS != 0)
+}
+
+struct Tx {
+    buffers: [Option<NonZeroU32>; TX_RING],
+    next: usize,
+    frame_id: u32,
+}
+
+impl Tx {
+    fn send(&mut self, frame: &[u8], port: u8, timestamp: bool) -> bool {
+        let sent = self.transmit(frame, port, timestamp);
+        if !sent {
+            crate::cpu().count_send_failures(1);
+        }
+        sent
+    }
+
     fn transmit(&mut self, frame: &[u8], port: u8, timestamp: bool) -> bool {
         let Some(buffer) = (0..TX_RING)
-            .map(|k| (self.next_tx + k) % TX_RING)
-            .find_map(|slot| self.tx[slot].map(|buffer| (slot, buffer)))
+            .map(|k| (self.next + k) % TX_RING)
+            .find_map(|slot| self.buffers[slot].map(|buffer| (slot, buffer)))
             .map(|(slot, buffer)| {
-                self.next_tx = (slot + 1) % TX_RING;
+                self.next = (slot + 1) % TX_RING;
                 buffer
             })
         else {
@@ -55,73 +78,9 @@ impl HwNic {
     }
 }
 
-impl Nic for HwNic {
-    fn send(&mut self, frame: &[u8], port: u8, timestamp: bool) -> bool {
-        let sent = self.transmit(frame, port, timestamp);
-        if !sent {
-            self.send_failures = self.send_failures.wrapping_add(1);
-        }
-        sent
-    }
-
-    fn now(&mut self) -> Option<u64> {
-        ethsw::capture()
-    }
-
-    fn step(&mut self, offset_ns: i64) -> bool {
-        ethsw::step_time(offset_ns)
-    }
-
-    fn set_time(&mut self, ns: u64) -> bool {
-        ethsw::set_time(ns)
-    }
-
-    fn set_drift(&mut self, ppb: i32) {
-        ethsw::set_drift(ppb);
-    }
-
-    fn clear_tx_timestamps(&mut self) {
-        ethsw::clear_tx_timestamps();
-    }
-
-    fn take_tx_timestamp(&mut self, port: u8) -> Option<TxStamp> {
-        ethsw::take_tx_timestamp(port)
-    }
-
-    fn set_forwarding(&mut self, open: bool) {
-        ethsw::set_forwarding(open);
-    }
-
-    fn set_mac(&mut self, mac: Mac) {
-        ethsw::set_own_mac(mac);
-    }
-
-    fn downstream_link(&mut self, port: u8) -> bool {
-        let phy = PHY_ADDRESS_BASE + u32::from(port & 1);
-        let _ = gmac::mdio_read(phy, PHY_BMSR);
-        gmac::mdio_read(phy, PHY_BMSR).is_some_and(|bmsr| bmsr & BMSR_LINK_STATUS != 0)
-    }
-
-    fn arm_pulse(&mut self) -> bool {
-        pulse::arm()
-    }
-
-    fn stop_pulse(&mut self) {
-        pulse::stop();
-    }
-
-    fn pulse_ready(&mut self) -> bool {
-        pulse::is_ready()
-    }
-
-    fn take_send_failures(&mut self) -> u32 {
-        core::mem::take(&mut self.send_failures)
-    }
-}
-
 struct Net {
     node: Node,
-    nic: HwNic,
+    tx: Tx,
     rx: gmac::RxBuffer,
 }
 
@@ -131,11 +90,10 @@ unsafe impl Sync for IsrOnly {}
 
 static NET: IsrOnly = IsrOnly(UnsafeCell::new(Net {
     node: Node::new(),
-    nic: HwNic {
-        tx: [None; TX_RING],
-        next_tx: 0,
+    tx: Tx {
+        buffers: [None; TX_RING],
+        next: 0,
         frame_id: 0,
-        send_failures: 0,
     },
     rx: gmac::RxBuffer([0; gmac::RX_BUFFER_BYTES]),
 }));
@@ -188,14 +146,14 @@ pub(crate) fn start() {
     if !pause_advertised {
         crate::cpu().count_boot_failure();
     }
-    for buffer in &mut net.nic.tx {
+    for buffer in &mut net.tx.buffers {
         *buffer = gmac::alloc_tx_buffer().and_then(NonZeroU32::new);
     }
-    if net.nic.tx.iter().any(Option::is_none) {
+    if net.tx.buffers.iter().any(Option::is_none) {
         crate::cpu().count_boot_failure();
         io::show_network_fault();
     }
-    net.node.init(&mut net.nic);
+    net.node.init();
     vic::install_with(
         VIC_INTNO_ETHDMAIR,
         ETHDMAIR_PRIORITY,
@@ -212,7 +170,7 @@ pub(crate) fn start() {
 
 pub(crate) fn tick(now_ms: u32) {
     let net = net();
-    net.node.tick(&mut net.nic, now_ms, crate::cpu());
+    net.node.tick(&mut net.tx, now_ms);
 }
 
 vic::irq_entry!(ethdmair_entry, ethdmair_isr);
@@ -231,7 +189,7 @@ extern "C" fn ethdmair_isr() {
                     timestamp_ns: u32::from_le_bytes(timestamp),
                 };
                 net.node
-                    .on_frame(&mut net.nic, now_ms, &net.rx.0[..len], meta, crate::cpu());
+                    .on_frame(&mut net.tx, now_ms, &net.rx.0[..len], meta);
             }
         }
         gmac::release(rx.buffer);
@@ -243,7 +201,7 @@ extern "C" fn ethdmair_isr() {
 pub(crate) fn complete(msg_id: u16) {
     irq::without_irq(|| {
         let net = net();
-        net.node.send_completion(&mut net.nic, msg_id, crate::cpu());
+        net.node.send_completion(&mut net.tx, msg_id);
     });
 }
 

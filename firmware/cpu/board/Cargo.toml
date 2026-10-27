@@ -19,6 +19,7 @@ bench = false
 
 [dependencies]
 autd3-cpu-fw = { path = "../fw" }
+zerocopy = { version = "0.8.63", default-features = false }
 
 [profile.dev]
 panic = "abort"
