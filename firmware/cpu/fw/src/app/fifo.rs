@@ -1,5 +1,9 @@
+use core::cell::{Cell, RefCell};
 use core::ops::Deref;
 
+use zerocopy::little_endian::U32;
+
+use crate::proto::{FrameHeader, PAYLOAD_BYTES, Reply};
 use crate::sync::{AtomicU16, Ordering};
 
 pub(crate) const FIFO_DEPTH: u16 = 8;
@@ -71,6 +75,45 @@ impl<S> Deref for Front<'_, S> {
 
     fn deref(&self) -> &S {
         self.fifo.slot(self.tail)
+    }
+}
+
+#[repr(align(4))]
+pub(super) struct SlotPayload(pub(super) [u8; PAYLOAD_BYTES]);
+
+pub(super) struct Slot {
+    pub(super) msg_id: Cell<u16>,
+    pub(super) len: Cell<u16>,
+    pub(super) payload: RefCell<SlotPayload>,
+    pub(super) header: Cell<FrameHeader>,
+    pub(super) reply: Cell<Reply>,
+}
+
+impl Slot {
+    pub(super) const fn new() -> Self {
+        Self {
+            msg_id: Cell::new(0),
+            len: Cell::new(0),
+            payload: RefCell::new(SlotPayload([0; PAYLOAD_BYTES])),
+            header: Cell::new(FrameHeader {
+                reserved: 0,
+                cmd: 0,
+                exec_at: U32::ZERO,
+            }),
+            reply: Cell::new(Reply::EMPTY),
+        }
+    }
+
+    pub(super) fn store(&self, header: FrameHeader, payload: &[u8], msg_id: u16) -> bool {
+        let Ok(mut dst) = self.payload.try_borrow_mut() else {
+            return false;
+        };
+        let len = payload.len().min(PAYLOAD_BYTES);
+        dst.0[..len].copy_from_slice(&payload[..len]);
+        self.len.set(len as u16);
+        self.msg_id.set(msg_id);
+        self.header.set(header);
+        true
     }
 }
 
