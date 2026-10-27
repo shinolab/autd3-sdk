@@ -11,7 +11,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyCapsule, PyComplex};
 
 use crate::error::invalid_argument;
-use crate::units::{Angle, Freq, hash_f32};
+use crate::units::{Angle, Freq};
 
 #[pyclass(
     name = "Intensity",
@@ -230,35 +230,6 @@ impl SamplingConfig {
 
     fn __repr__(&self) -> String {
         format!("{:?}", self.0)
-    }
-}
-
-#[pyclass(name = "Nearest", module = "autd3_core", eq, hash, frozen)]
-#[derive(PartialEq)]
-pub struct PyNearest(f32);
-
-impl Hash for PyNearest {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        hash_f32(self.0, state);
-    }
-}
-
-#[pymethods]
-impl PyNearest {
-    #[new]
-    fn new(value: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let freq = value
-            .extract::<Freq>()
-            .map_err(|_| PyValueError::new_err("Nearest expects a frequency (e.g. 4000.0 * Hz)"))?;
-        Ok(Self(freq.0.hz()))
-    }
-
-    fn nearest_hz(&self) -> f32 {
-        self.0
-    }
-
-    fn __repr__(&self) -> String {
-        format!("Nearest({} Hz)", self.0)
     }
 }
 

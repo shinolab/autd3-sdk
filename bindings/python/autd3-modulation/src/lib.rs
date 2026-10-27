@@ -6,7 +6,7 @@ use autd3_rs_core::params::MOD_BUFFER_SAMPLES;
 use autd3_rs_core::units::Hz;
 use autd3_rs_core::value::SamplingConfig;
 use autd3_rs_modulation::{
-    FourierOption as CoreFourierOption, SamplingMode, SineComponent as CoreSineComponent,
+    FourierOption as CoreFourierOption, SineComponent as CoreSineComponent,
     SineOption as CoreSineOption, SquareOption as CoreSquareOption,
 };
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
@@ -19,13 +19,6 @@ fn freq_hz(freq: &Bound<'_, PyAny>) -> PyResult<f32> {
             "frequency must carry a unit, e.g. 200 * Hz (bare numbers are no longer accepted)",
         )
     })
-}
-
-fn freq_mode(freq: &Bound<'_, PyAny>) -> PyResult<SamplingMode> {
-    if let Ok(hz) = freq.call_method0("nearest_hz") {
-        return Ok(SamplingMode::NearestFreq(hz.extract::<f32>()? * Hz));
-    }
-    Ok(SamplingMode::ExactFreqFloat(freq_hz(freq)? * Hz))
 }
 
 #[pyclass(name = "SineOption", module = "autd3_modulation", eq, frozen)]
@@ -247,22 +240,16 @@ impl SineComponent {
     #[pyo3(signature = (freq, option))]
     fn new(freq: &Bound<'_, PyAny>, option: &SineOption) -> PyResult<Self> {
         Ok(Self(CoreSineComponent {
-            freq: freq_mode(freq)?,
+            freq: freq_hz(freq)? * Hz,
             option: option.0,
         }))
     }
 
     #[getter]
     fn freq<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let core = py.import("autd3_core")?;
-        let freq = core.getattr("Freq")?;
-        match self.0.freq {
-            SamplingMode::ExactFreqFloat(f) => freq.call_method1("from_hz", (f.hz(),)),
-            SamplingMode::NearestFreq(f) => core
-                .getattr("Nearest")?
-                .call1((freq.call_method1("from_hz", (f.hz(),))?,)),
-            _ => unreachable!(),
-        }
+        py.import("autd3_core")?
+            .getattr("Freq")?
+            .call_method1("from_hz", (self.0.freq.hz(),))
     }
 
     #[getter]
@@ -284,7 +271,7 @@ fn sine(
     #[pyo3(from_py_with = extract_sampling_config)] config: SamplingConfig,
     mut dst: PyRefMut<'_, ModulationBuffer>,
 ) -> PyResult<()> {
-    autd3_rs_modulation::sine(freq_mode(freq)?, &option.0, config, &mut dst.data)
+    autd3_rs_modulation::sine(freq_hz(freq)? * Hz, &option.0, config, &mut dst.data)
         .map_err(|e| to_pyerr(py, e))?;
     Ok(())
 }
@@ -298,7 +285,7 @@ fn square(
     #[pyo3(from_py_with = extract_sampling_config)] config: SamplingConfig,
     mut dst: PyRefMut<'_, ModulationBuffer>,
 ) -> PyResult<()> {
-    autd3_rs_modulation::square(freq_mode(freq)?, &option.0, config, &mut dst.data)
+    autd3_rs_modulation::square(freq_hz(freq)? * Hz, &option.0, config, &mut dst.data)
         .map_err(|e| to_pyerr(py, e))?;
     Ok(())
 }

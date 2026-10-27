@@ -31,7 +31,4 @@ pub enum ModulationError {
 
     #[error("frequency {hz} Hz cannot be output with the current sampling config")]
     FrequencyNotRepresentable { hz: f32 },
-
-    #[error("modulation frequency must be a valid value")]
-    FrequencyNaN,
 }

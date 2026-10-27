@@ -1,6 +1,6 @@
 """Value types (mirrors ``autd3_rs::value``)."""
 
-from autd3_core import Intensity, Nearest, Phase, SamplingConfig
+from autd3_core import Intensity, Phase, SamplingConfig
 
 from ._autd3 import (
     ControlPoint,
@@ -21,7 +21,6 @@ __all__ = [
     "Intensity",
     "LoopBehavior",
     "ModulationBank",
-    "Nearest",
     "PatternBank",
     "Phase",
     "PulseWidth",

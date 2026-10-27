@@ -15,7 +15,7 @@ import autd3_pattern_holo as holo
 from autd3.commands import FixedCompletionTime, FixedUpdateRate, SetSilencer
 from autd3.geometry import Autd3, EulerAngles, Geometry, offset, point
 from autd3.units import Hz, deg, m, mm, s
-from autd3.value import ControlPoint, Nearest, Phase, SysTime
+from autd3.value import ControlPoint, Phase, SysTime
 from autd3_pattern_holo import Pa
 
 
@@ -230,18 +230,6 @@ def test_transducer_phase_functions_match_the_geometry_function(
             phase = per_transducer(device.position(tr))
             assert isinstance(phase, Phase)
             assert phase == expected[device.idx()][tr]
-
-
-def test_fourier_mixes_exact_and_nearest_components() -> None:
-    components = [
-        modulation.SineComponent(100 * Hz, modulation.SineOption()),
-        modulation.SineComponent(Nearest(150.0 * Hz), modulation.SineOption()),
-    ]
-    assert components[0].freq == 100 * Hz
-    assert components[1].freq == Nearest(150.0 * Hz)
-    buffer = modulation.modulation_buffer()
-    modulation.fourier(components, modulation.FourierOption(), autd3.value.SamplingConfig.FREQ_4K, buffer)
-    assert len(buffer) > 0
 
 
 def run_python(code: str) -> subprocess.CompletedProcess[str]:

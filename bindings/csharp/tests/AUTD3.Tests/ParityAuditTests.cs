@@ -372,13 +372,6 @@ namespace AUTD3.Tests
         }
 
         [Fact]
-        public void ASineComponentTellsNearestFromExact()
-        {
-            Assert.True(new SineComponent(Nearest(150.5f * Hz), new SineOption()).IsNearest);
-            Assert.False(new SineComponent(150.5f * Hz, new SineOption()).IsNearest);
-        }
-
-        [Fact]
         public void ControlPointsConvertFromPointsLikeRustFrom()
         {
             var point = new Vector3(1, 2, 3);

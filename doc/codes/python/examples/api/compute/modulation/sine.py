@@ -1,5 +1,5 @@
 from autd3.units import Hz, rad
-from autd3.value import Nearest, SamplingConfig
+from autd3.value import SamplingConfig
 from autd3_modulation import SineOption, modulation_buffer, sine
 
 freq = 150 * Hz
@@ -22,7 +22,3 @@ dst = modulation_buffer()
 # ANCHOR: api
 sine(freq, option, sampling_config, dst)
 # ANCHOR_END: api
-
-# ANCHOR: nearest
-sine(Nearest(150.5 * Hz), option, sampling_config, dst)
-# ANCHOR_END: nearest

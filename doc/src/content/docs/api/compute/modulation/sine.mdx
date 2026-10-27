@@ -56,9 +56,7 @@ import { excerpt } from "@lib/excerpt";
 ## 制約
 
 [SamplingConfigの制約](/autd3-sdk/api/basics/sampling-config/)により, 指定した周波数が表現可能な周波数でない場合がある. 
-その場合は`Nearest(freq)` を渡すと最も近い表現可能な周波数に丸める. 
-
-<CodeTabs rust={excerpt(sample, "nearest")} python={excerpt(pySample, "nearest")} csharp={excerpt(csSample, "nearest")} />
+`freq` は周期内に整数個のサンプルで表せる周波数でなければならず, そうでない場合はエラーになる. 
 
 ## Example
 

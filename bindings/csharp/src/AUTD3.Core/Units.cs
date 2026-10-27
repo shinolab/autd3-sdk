@@ -164,16 +164,6 @@ namespace AUTD3
         public static bool operator >=(Freq left, Freq right) => left.Hz >= right.Hz;
     }
 
-    public readonly struct Nearest<T>
-    {
-        public T Value { get; }
-
-        public Nearest(T value)
-        {
-            Value = value;
-        }
-    }
-
     public readonly struct LengthUnit
     {
         internal float MmPerUnit { get; }
@@ -236,7 +226,5 @@ namespace AUTD3
         public static Vector3 Point(Length x, Length y, Length z) => Coords.FromLengths(x, y, z);
 
         public static Vector3 Offset(Length x, Length y, Length z) => Coords.FromLengths(x, y, z);
-
-        public static Nearest<Freq> Nearest(Freq freq) => new Nearest<Freq>(freq);
     }
 }

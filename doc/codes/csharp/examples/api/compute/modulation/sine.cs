@@ -28,9 +28,5 @@ internal static class Sample
         // ANCHOR: api
         Modulation.Sine(freq, option, samplingConfig, dst);
         // ANCHOR_END: api
-
-        // ANCHOR: nearest
-        Modulation.Sine(Nearest(150.5f * Hz), option, samplingConfig, dst);
-        // ANCHOR_END: nearest
     }
 }

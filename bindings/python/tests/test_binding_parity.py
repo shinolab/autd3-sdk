@@ -36,7 +36,6 @@ from autd3.value import (
     Intensity,
     LoopBehavior,
     ModulationBank,
-    Nearest,
     PatternBank,
     Phase,
     SamplingConfig,

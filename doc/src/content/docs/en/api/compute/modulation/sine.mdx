@@ -56,9 +56,7 @@ Choose values that stay within range, or set `clamp` to `true`.
 ## Constraints
 
 Due to the [constraints of SamplingConfig](/autd3-sdk/en/api/basics/sampling-config/), the specified frequency may not be a representable frequency.
-In that case, passing `Nearest(freq)` rounds it to the nearest representable frequency.
-
-<CodeTabs rust={excerpt(sample, "nearest")} python={excerpt(pySample, "nearest")} csharp={excerpt(csSample, "nearest")} />
+`freq` must be a frequency that fits an integer number of samples in a period; otherwise an error is returned.
 
 ## Example
 

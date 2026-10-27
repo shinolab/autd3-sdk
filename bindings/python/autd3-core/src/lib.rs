@@ -11,7 +11,6 @@ fn autd3_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<value::Intensity>()?;
     m.add_class::<value::Phase>()?;
     m.add_class::<value::SamplingConfig>()?;
-    m.add_class::<value::PyNearest>()?;
     m.add_class::<value::Duration>()?;
     m.add_class::<geometry::Autd3>()?;
     m.add_class::<geometry::EulerAngles>()?;

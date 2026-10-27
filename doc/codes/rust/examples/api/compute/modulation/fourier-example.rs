@@ -9,7 +9,7 @@ fn main() -> anyhow::Result<()> {
 
     fourier(
         &[SineComponent {
-            freq: (100 * Hz).into(),
+            freq: 100 * Hz,
             option: SineOption::default(),
         }],
         &FourierOption {

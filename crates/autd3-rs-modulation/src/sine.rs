@@ -6,12 +6,12 @@
 
 use core::f32::consts::PI;
 
-use autd3_rs_core::common::Angle;
+use autd3_rs_core::common::{Angle, Freq};
 use autd3_rs_core::value::SamplingConfig;
 
 use crate::error::ModulationError;
 use crate::quantize::quantize;
-use crate::sampling_mode::SamplingMode;
+use crate::sampling::samples_and_cycles;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SineOption {
@@ -32,13 +32,12 @@ impl Default for SineOption {
     }
 }
 
-pub(crate) fn sine_samples<S: Into<SamplingMode>>(
-    freq: S,
+pub(crate) fn sine_samples(
+    freq: Freq,
     option: SineOption,
     config: SamplingConfig,
-) -> Result<impl ExactSizeIterator<Item = f32> + use<S>, ModulationError> {
-    let mode: SamplingMode = freq.into();
-    let (n, rep) = mode.validate(config)?;
+) -> Result<impl ExactSizeIterator<Item = f32>, ModulationError> {
+    let (n, rep) = samples_and_cycles(freq, config)?;
 
     let amplitude = f32::from(option.amplitude);
     let offset = f32::from(option.offset);
@@ -50,8 +49,8 @@ pub(crate) fn sine_samples<S: Into<SamplingMode>>(
     }))
 }
 
-pub fn sine<S: Into<SamplingMode>>(
-    freq: S,
+pub fn sine(
+    freq: Freq,
     option: &SineOption,
     config: SamplingConfig,
     dst: &mut Vec<u8>,
@@ -61,7 +60,6 @@ pub fn sine<S: Into<SamplingMode>>(
 
 #[cfg(test)]
 mod tests {
-    use crate::Nearest;
     use autd3_rs_core::units::Hz;
 
     use super::*;
@@ -81,33 +79,6 @@ mod tests {
         )
         .unwrap();
         assert_eq!(buf.as_slice(), SINE_200HZ_DEFAULT);
-    }
-
-    #[test]
-    fn sine_nearest_frequency_matches_exact() {
-        let mut buf = Vec::new();
-        sine(
-            Nearest(200.0 * Hz),
-            &SineOption::default(),
-            SamplingConfig::FREQ_4K,
-            &mut buf,
-        )
-        .unwrap();
-        assert_eq!(buf.as_slice(), SINE_200HZ_DEFAULT);
-    }
-
-    #[test]
-    fn sine_nearest_rounds_to_integer_sample_count() {
-        let mut buf = Vec::new();
-        sine(
-            Nearest(190.0 * Hz),
-            &SineOption::default(),
-            SamplingConfig::FREQ_4K,
-            &mut buf,
-        )
-        .unwrap();
-        assert_eq!(buf.len(), 21);
-        assert_eq!(buf[0], 0x80);
     }
 
     #[test]

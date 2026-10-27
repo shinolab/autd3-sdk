@@ -1,18 +1,18 @@
 #![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 
+use autd3_rs_core::common::Freq;
 use autd3_rs_core::params::MOD_BUFFER_SAMPLES;
 use autd3_rs_core::value::SamplingConfig;
 
 use crate::error::ModulationError;
 use crate::quantize::quantize;
-use crate::sampling_mode::SamplingMode;
 use crate::sine::{SineOption, sine_samples};
 
 use num_integer::Integer;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SineComponent {
-    pub freq: SamplingMode,
+    pub freq: Freq,
     pub option: SineOption,
 }
 
@@ -72,7 +72,7 @@ mod tests {
         let mut buf = Vec::new();
         fourier(
             &[SineComponent {
-                freq: (200 * Hz).into(),
+                freq: 200 * Hz,
                 option: SineOption {
                     offset: 0x00,
                     ..Default::default()
@@ -98,15 +98,15 @@ mod tests {
     fn fourier_sum_matches_legacy_formula() {
         let components = [
             SineComponent {
-                freq: (100 * Hz).into(),
+                freq: 100 * Hz,
                 option: SineOption::default(),
             },
             SineComponent {
-                freq: (150 * Hz).into(),
+                freq: 150 * Hz,
                 option: SineOption::default(),
             },
             SineComponent {
-                freq: (200 * Hz).into(),
+                freq: 200 * Hz,
                 option: SineOption::default(),
             },
         ];
@@ -137,109 +137,21 @@ mod tests {
         }
     }
 
-    #[test]
-    fn fourier_mixes_exact_and_nearest_components_in_one_slice() {
-        use crate::Nearest;
-
-        let mixed = [
-            SineComponent {
-                freq: (100 * Hz).into(),
-                option: SineOption::default(),
-            },
-            SineComponent {
-                freq: Nearest(200.0 * Hz).into(),
-                option: SineOption::default(),
-            },
-        ];
-        let exact = [
-            SineComponent {
-                freq: (100 * Hz).into(),
-                option: SineOption::default(),
-            },
-            SineComponent {
-                freq: (200 * Hz).into(),
-                option: SineOption::default(),
-            },
-        ];
-        let mut mixed_buf = Vec::new();
-        let mut exact_buf = Vec::new();
-        fourier(
-            &mixed,
-            &FourierOption::default(),
-            SamplingConfig::FREQ_4K,
-            &mut mixed_buf,
-        )
-        .unwrap();
-        fourier(
-            &exact,
-            &FourierOption::default(),
-            SamplingConfig::FREQ_4K,
-            &mut exact_buf,
-        )
-        .unwrap();
-        assert_eq!(mixed_buf, exact_buf);
-    }
-
-    fn nearest_components(periods: &[f32]) -> Vec<SineComponent> {
-        use crate::Nearest;
-
+    fn components_with_periods(periods: &[f32]) -> Vec<SineComponent> {
         periods
             .iter()
             .map(|&period| SineComponent {
-                freq: Nearest(4000.0 / period * Hz).into(),
+                freq: 4000.0 / period * Hz,
                 option: SineOption::default(),
             })
             .collect()
-    }
-
-    fn periods(components: &[SineComponent]) -> Vec<usize> {
-        components
-            .iter()
-            .map(|c| {
-                sine_samples(c.freq, c.option, SamplingConfig::FREQ_4K)
-                    .unwrap()
-                    .len()
-            })
-            .collect()
-    }
-
-    #[test]
-    fn fourier_rejects_coprime_periods_whose_product_overflows() {
-        let components = nearest_components(&[65521.0, 65519.0, 65497.0, 65479.0, 65449.0]);
-        let periods = periods(&components);
-        assert_eq!(periods, [65521, 65519, 65497, 65479, 65449]);
-        assert!(
-            periods
-                .iter()
-                .enumerate()
-                .all(|(i, a)| periods[..i].iter().all(|b| num_integer::gcd(*a, *b) == 1))
-        );
-        assert!(
-            periods
-                .iter()
-                .try_fold(1usize, |acc, &n| acc.checked_mul(n))
-                .is_none()
-        );
-
-        let mut buf = Vec::new();
-        assert_eq!(
-            fourier(
-                &components,
-                &FourierOption::default(),
-                SamplingConfig::FREQ_4K,
-                &mut buf
-            ),
-            Err(ModulationError::FourierPeriodTooLong {
-                max: MOD_BUFFER_SAMPLES
-            })
-        );
     }
 
     #[test]
     fn fourier_accepts_a_period_up_to_the_buffer_and_rejects_one_past_it() {
         let mut buf = Vec::new();
 
-        let fits = nearest_components(&[256.0, 65536.0]);
+        let fits = components_with_periods(&[256.0, 65536.0]);
         fourier(
             &fits,
             &FourierOption::default(),
@@ -249,7 +161,7 @@ mod tests {
         .unwrap();
         assert_eq!(buf.len(), MOD_BUFFER_SAMPLES);
 
-        let too_long = nearest_components(&[3.0, 65536.0]);
+        let too_long = components_with_periods(&[5.0, 65536.0]);
         assert_eq!(
             fourier(
                 &too_long,
@@ -267,11 +179,11 @@ mod tests {
     fn fourier_applies_the_sampling_config_to_every_component() {
         let components = [
             SineComponent {
-                freq: (100 * Hz).into(),
+                freq: 100 * Hz,
                 option: SineOption::default(),
             },
             SineComponent {
-                freq: (160 * Hz).into(),
+                freq: 160 * Hz,
                 option: SineOption::default(),
             },
         ];
@@ -305,7 +217,7 @@ mod tests {
         let make = |offset: u8, clamp: bool, scale: Option<f32>, buf: &mut Vec<u8>| {
             fourier(
                 &[SineComponent {
-                    freq: (200 * Hz).into(),
+                    freq: 200 * Hz,
                     option: SineOption {
                         offset,
                         ..Default::default()
@@ -338,7 +250,7 @@ mod tests {
         let mut buf = vec![1, 2, 3];
         let result = fourier(
             &[SineComponent {
-                freq: (200 * Hz).into(),
+                freq: 200 * Hz,
                 option: SineOption::default(),
             }],
             &FourierOption {
@@ -363,7 +275,7 @@ mod tests {
         let mut buf = Vec::new();
         let result = fourier(
             &[SineComponent {
-                freq: (200 * Hz).into(),
+                freq: 200 * Hz,
                 option: SineOption::default(),
             }],
             &FourierOption {

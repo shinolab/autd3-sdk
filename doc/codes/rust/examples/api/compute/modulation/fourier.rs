@@ -22,13 +22,13 @@ fn main() -> Result<()> {
 
     // ANCHOR: components
     SineComponent {
-        freq: (100 * Hz).into(),
+        freq: 100 * Hz,
         option: SineOption::default(),
     };
     // ANCHOR_END: components
 
     let components = [SineComponent {
-        freq: (100 * Hz).into(),
+        freq: 100 * Hz,
         option: SineOption::default(),
     }];
     let sampling_config = SamplingConfig::FREQ_4K;

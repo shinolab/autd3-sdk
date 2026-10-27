@@ -7,20 +7,10 @@ use autd3_ffi_abi::{
 use autd3_rs_core::Angle;
 use autd3_rs_core::units::Hz;
 use autd3_rs_core::value::SamplingConfig;
-use autd3_rs_modulation::{
-    FourierOption, Nearest, SamplingMode, SineComponent, SineOption, SquareOption,
-};
+use autd3_rs_modulation::{FourierOption, SineComponent, SineOption, SquareOption};
 
 fn to_sampling_config(divide: u16) -> Option<SamplingConfig> {
     std::num::NonZeroU16::new(divide).map(SamplingConfig::new)
-}
-
-fn to_sampling_mode(mode: u8, freq: f32) -> Option<SamplingMode> {
-    match mode {
-        0 => Some(SamplingMode::from(freq * Hz)),
-        1 => Some(SamplingMode::from(Nearest(freq * Hz))),
-        _ => None,
-    }
 }
 
 unsafe fn finish(
@@ -253,7 +243,6 @@ pub unsafe extern "C" fn autd3_modulation_fourier_option_default(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_modulation_sine(
-    mode: u8,
     freq: f32,
     option: Autd3SineOption,
     sampling_divide: u16,
@@ -266,17 +255,12 @@ pub unsafe extern "C" fn autd3_modulation_sine(
     }) else {
         return unsafe { invalid_argument(out_err, out_err_len, "null argument") };
     };
-    let Some(mode) = to_sampling_mode(mode, freq) else {
-        return unsafe { invalid_argument(out_err, out_err_len, "unknown sampling mode") };
-    };
-
-    let result = autd3_rs_modulation::sine(mode, &option.into(), config, &mut buffer.0);
+    let result = autd3_rs_modulation::sine(freq * Hz, &option.into(), config, &mut buffer.0);
     unsafe { finish(result, out_err, out_err_len) }
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_modulation_square(
-    mode: u8,
     freq: f32,
     option: Autd3SquareOption,
     sampling_divide: u16,
@@ -289,11 +273,7 @@ pub unsafe extern "C" fn autd3_modulation_square(
     }) else {
         return unsafe { invalid_argument(out_err, out_err_len, "null argument") };
     };
-    let Some(mode) = to_sampling_mode(mode, freq) else {
-        return unsafe { invalid_argument(out_err, out_err_len, "unknown sampling mode") };
-    };
-
-    let result = autd3_rs_modulation::square(mode, &option.into(), config, &mut buffer.0);
+    let result = autd3_rs_modulation::square(freq * Hz, &option.into(), config, &mut buffer.0);
     unsafe { finish(result, out_err, out_err_len) }
 }
 
@@ -312,7 +292,6 @@ pub unsafe extern "C" fn autd3_modulation_constant(
 
 #[repr(C)]
 pub struct Autd3SineComponent {
-    pub mode: u8,
     pub freq: f32,
     pub option: Autd3SineOption,
 }
@@ -335,16 +314,13 @@ pub unsafe extern "C" fn autd3_modulation_fourier(
         return unsafe { invalid_argument(out_err, out_err_len, "null argument") };
     };
 
-    let mut sine_components = Vec::with_capacity(slice.len());
-    for c in slice {
-        let Some(freq) = to_sampling_mode(c.mode, c.freq) else {
-            return unsafe { invalid_argument(out_err, out_err_len, "unknown sampling mode") };
-        };
-        sine_components.push(SineComponent {
-            freq,
+    let sine_components = slice
+        .iter()
+        .map(|c| SineComponent {
+            freq: c.freq * Hz,
             option: c.option.into(),
-        });
-    }
+        })
+        .collect::<Vec<_>>();
     let result =
         autd3_rs_modulation::fourier(&sine_components, &option.into(), config, &mut buffer.0);
     unsafe { finish(result, out_err, out_err_len) }
@@ -379,10 +355,10 @@ mod tests {
         let buffer = autd3_modulation_buffer_new();
         let config = SamplingConfig::FREQ_40K.divide().get();
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
-            autd3_modulation_sine(0, 200.0, option, 0, buffer, std::ptr::null_mut(), 0)
+            autd3_modulation_sine(200.0, option, 0, buffer, std::ptr::null_mut(), 0)
         });
         assert_eq!(AUTD3_OK, unsafe {
-            autd3_modulation_sine(0, 200.0, option, config, buffer, std::ptr::null_mut(), 0)
+            autd3_modulation_sine(200.0, option, config, buffer, std::ptr::null_mut(), 0)
         });
         assert_eq!(200, unsafe { &*buffer }.0.len());
         unsafe { autd3_modulation_buffer_free(buffer) };
