@@ -43,19 +43,10 @@ namespace AUTD3
     {
         private const string Lib = "autd3_modulation";
 
-        private const string ClientLib = "autd3capi";
-
-        static NativeModulation()
-        {
-            NativeAbi.Verify(Lib, autd3_abi_version());
-            NativeAbi.Verify(ClientLib, autd3capi_abi_version());
-        }
+        static NativeModulation() => NativeAbi.Verify(Lib, autd3_abi_version());
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         private static extern uint autd3_abi_version();
-
-        [DllImport(ClientLib, EntryPoint = "autd3_abi_version", CallingConvention = CallingConvention.Cdecl)]
-        private static extern uint autd3capi_abi_version();
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_modulation_buffer_new();
@@ -105,20 +96,30 @@ namespace AUTD3
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_modulation_radiation_pressure_inplace(ModulationBufferHandle buffer);
+    }
 
-        [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
+    internal static class NativeModulationOp
+    {
+        private const string Lib = "autd3capi";
+
+        static NativeModulationOp() => NativeAbi.Verify(Lib, autd3_abi_version());
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        private static extern uint autd3_abi_version();
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_modulation(byte bank, ushort samplingDivide, ModulationBufferHandle modulationBuffer, ushort loopRep, byte transitionMode, ulong transitionValue);
 
-        [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_write_modulation_buffer(byte bank, uint offset, ModulationBufferHandle modulationBuffer);
 
-        [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern UIntPtr autd3_op_write_modulation_buffer_max_len();
 
-        [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_config_modulation(byte bank, ushort samplingDivide, uint size, ushort rep);
 
-        [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_activate_modulation_bank(byte bank, byte transitionMode, ulong transitionValue);
     }
 
@@ -333,7 +334,7 @@ namespace AUTD3
             NativeModulation.autd3_modulation_samples_per_period(divider, freq.Hz, out var value) ? value : null;
 
         IntPtr ICommand.CreateOp(Geometry geometry) =>
-            NativeModulation.autd3_op_modulation(
+            NativeModulationOp.autd3_op_modulation(
                 (byte)_bank, _samplingConfig.DivideForNative(), _buffer.Handle, _loopBehavior.Rep, _transitionMode.Mode, _transitionMode.Value);
 
         public static void Sine(Freq freq, SineOption option, SamplingConfig config, ModulationBuffer dst)

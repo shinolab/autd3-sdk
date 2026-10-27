@@ -101,19 +101,10 @@ namespace AUTD3
     {
         private const string Lib = "autd3_pattern";
 
-        private const string ClientLib = "autd3capi";
-
-        static NativePattern()
-        {
-            NativeAbi.Verify(Lib, autd3_abi_version());
-            NativeAbi.Verify(ClientLib, autd3capi_abi_version());
-        }
+        static NativePattern() => NativeAbi.Verify(Lib, autd3_abi_version());
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         private static extern uint autd3_abi_version();
-
-        [DllImport(ClientLib, EntryPoint = "autd3_abi_version", CallingConvention = CallingConvention.Cdecl)]
-        private static extern uint autd3capi_abi_version();
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern float autd3_pattern_wavelength(float soundSpeedMmPerS);
@@ -201,24 +192,33 @@ namespace AUTD3
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_pattern_hermite_gaussian_intensity(GeometryHandle geometry, float[] target, float[] axis, float[] xDir, uint m, uint n, float waistMm, float wavelengthMm, IntensityBufferHandle buffer);
+    }
 
+    internal static class NativePatternOp
+    {
+        private const string Lib = "autd3capi";
 
-        [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
+        static NativePatternOp() => NativeAbi.Verify(Lib, autd3_abi_version());
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        private static extern uint autd3_abi_version();
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_pattern(byte bank, PhaseBufferHandle phases, IntPtr intensities, byte uniformIntensity, byte transitionMode, ulong transitionValue);
 
-        [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_write_pattern_phase(byte bank, ushort startIndex, byte depth, byte intensity, IntPtr[] patterns, UIntPtr numPatterns);
 
-        [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_config_pattern(byte bank, ushort samplingDivide, uint size, ushort rep);
 
-        [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_config_foci_stm(byte bank, ushort samplingDivide, uint size, byte numFoci, float soundSpeedMPerS, ushort rep);
 
-        [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_activate_pattern_bank(byte bank, byte transitionMode, ulong transitionValue);
 
-        [DllImport(ClientLib, CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_phase_depth_max_count(byte depth, out UIntPtr @out);
     }
 
@@ -554,7 +554,7 @@ namespace AUTD3
         IntPtr ICommand.CreateOp(Geometry geometry)
         {
             using var intensityLease = new HandleLease(_intensities.Buffer?.Handle);
-            return NativePattern.autd3_op_pattern((byte)_bank, _phases.Handle, intensityLease.Pointer, _intensities.Uniform, _transitionMode.Mode, _transitionMode.Value);
+            return NativePatternOp.autd3_op_pattern((byte)_bank, _phases.Handle, intensityLease.Pointer, _intensities.Uniform, _transitionMode.Mode, _transitionMode.Value);
         }
 
 

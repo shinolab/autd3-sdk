@@ -10,7 +10,7 @@ namespace AUTD3
 
     public sealed class WriteModulationBuffer : ICommand
     {
-        public static readonly int MaxLen = (int)NativeModulation.autd3_op_write_modulation_buffer_max_len();
+        public static readonly int MaxLen = (int)NativeModulationOp.autd3_op_write_modulation_buffer_max_len();
 
         private readonly ModulationBank _bank;
         private readonly uint _offset;
@@ -24,7 +24,7 @@ namespace AUTD3
         }
 
         IntPtr ICommand.CreateOp(Geometry geometry) =>
-            NativeModulation.autd3_op_write_modulation_buffer((byte)_bank, _offset, _buffer.Handle);
+            NativeModulationOp.autd3_op_write_modulation_buffer((byte)_bank, _offset, _buffer.Handle);
     }
 
     public sealed class ConfigModulation : ICommand
@@ -43,7 +43,7 @@ namespace AUTD3
         }
 
         IntPtr ICommand.CreateOp(Geometry geometry) =>
-            NativeModulation.autd3_op_config_modulation((byte)_bank, _config.DivideForNative(), _size, _loopBehavior.Rep);
+            NativeModulationOp.autd3_op_config_modulation((byte)_bank, _config.DivideForNative(), _size, _loopBehavior.Rep);
     }
 
     public sealed class ActivateModulationBank : ICommand
@@ -58,6 +58,6 @@ namespace AUTD3
         }
 
         IntPtr ICommand.CreateOp(Geometry geometry) =>
-            NativeModulation.autd3_op_activate_modulation_bank((byte)_bank, _transitionMode.Mode, _transitionMode.Value);
+            NativeModulationOp.autd3_op_activate_modulation_bank((byte)_bank, _transitionMode.Mode, _transitionMode.Value);
     }
 }
