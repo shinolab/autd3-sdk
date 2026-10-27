@@ -3,7 +3,7 @@ import math
 from autd3.commands import ActivatePatternBank, ConfigFociStm, FociStm, FociStmOption, WriteFociBuffer
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import Hz, m, mm, s
-from autd3.value import ControlPoint, ControlPoints, Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig, TransitionMode
+from autd3.value import ControlPoints, LoopBehavior, PatternBank, SamplingConfig, TransitionMode
 
 geometry = Geometry([Autd3()])
 center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm)
@@ -14,7 +14,7 @@ points = []
 for i in range(num_points):
     theta = 2.0 * math.pi * i / num_points
     p = center + offset(radius * math.cos(theta), radius * math.sin(theta), 0.0 * mm)
-    points.append(ControlPoints([ControlPoint(p, Phase.ZERO)], Intensity.MAX))
+    points.append(ControlPoints(p))
 # ANCHOR_END: circle
 config = SamplingConfig(1.0 * Hz * num_points)
 bank = PatternBank.B0

@@ -3,14 +3,14 @@ import math
 from autd3.commands import ConfigFociStm, WriteFociBuffer
 from autd3.geometry import offset
 from autd3.units import Hz, m, mm, s
-from autd3.value import ControlPoint, ControlPoints, Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig
+from autd3.value import ControlPoints, LoopBehavior, PatternBank, SamplingConfig
 
 bank = PatternBank.B0
 points = []
 for i in range(200):
     theta = 2.0 * math.pi * i / 200
     p = offset(30.0 * mm * math.cos(theta), 30.0 * mm * math.sin(theta), 0.0 * mm)
-    points.append(ControlPoints([ControlPoint(p, Phase.ZERO)], Intensity.MAX))
+    points.append(ControlPoints(p))
 config = SamplingConfig(1.0 * Hz * len(points))
 
 start_index = 0

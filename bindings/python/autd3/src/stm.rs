@@ -4,8 +4,7 @@ use autd3_python_capsule::extract::{
     extract_point, extract_sampling_config, extract_u8, extract_velocity, intensity_to_py,
     phase_to_py, velocity_to_py,
 };
-use autd3_python_capsule::numpy::f32_vec3;
-use autd3_rs::Velocity;
+use autd3_python_capsule::numpy::{f32_vec3, f32_vec3_rows_from_ndarray, is_ndarray};
 use autd3_rs::commands::WriteFociBuffer as CoreWriteFociBuffer;
 use autd3_rs::commands::{Expansion, Operation};
 use autd3_rs::commands::{
@@ -17,7 +16,8 @@ use autd3_rs::value::{
     ControlPoint as CoreControlPoint, ControlPoints as CoreControlPoints, Intensity,
     PatternBank as CorePatternBank, Phase, SamplingConfig,
 };
-use pyo3::exceptions::PyValueError;
+use autd3_rs::{Point3, Velocity};
+use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 
 use crate::datagram::{PushCommand, PushOperation};
@@ -61,12 +61,31 @@ pub struct ControlPoints(pub(crate) CoreControlPoints);
 #[pymethods]
 impl ControlPoints {
     #[new]
-    #[pyo3(signature = (points, intensity))]
-    fn new(points: Vec<PyRef<'_, ControlPoint>>, intensity: &Bound<'_, PyAny>) -> PyResult<Self> {
-        Ok(Self(CoreControlPoints::new(
-            points.iter().map(|p| p.0).collect::<Vec<_>>(),
-            Intensity(extract_u8(intensity)?),
-        )))
+    #[pyo3(signature = (points, intensity = Intensity::MAX.0))]
+    fn new(
+        points: &Bound<'_, PyAny>,
+        #[pyo3(from_py_with = extract_u8)] intensity: u8,
+    ) -> PyResult<Self> {
+        let points = if is_ndarray(points)? {
+            f32_vec3_rows_from_ndarray(points)?
+                .into_iter()
+                .map(|[x, y, z]| CoreControlPoint::new(Point3::new(x, y, z), Phase::ZERO))
+                .collect::<Vec<_>>()
+        } else if let Ok(point) = points.cast::<ControlPoint>() {
+            vec![point.get().0]
+        } else {
+            points
+                .extract::<Vec<PyRef<'_, ControlPoint>>>()
+                .map_err(|_| {
+                    PyTypeError::new_err(
+                        "expected a ControlPoint, a sequence of ControlPoint, or a numpy.ndarray of shape (3,) or (n, 3)",
+                    )
+                })?
+                .iter()
+                .map(|p| p.0)
+                .collect()
+        };
+        Ok(Self(CoreControlPoints::new(points, Intensity(intensity))))
     }
 
     #[getter]

@@ -348,7 +348,11 @@ class ControlPoint:
 
 @final
 class ControlPoints:
-    def __new__(cls, points: Sequence[ControlPoint], intensity: Intensity | int) -> ControlPoints: ...
+    def __new__(
+        cls,
+        points: ControlPoint | Sequence[ControlPoint] | npt.NDArray[np.floating[Any] | np.integer[Any]],
+        intensity: Intensity | int = ...,
+    ) -> ControlPoints: ...
     @property
     def points(self) -> list[ControlPoint]: ...
     @property
