@@ -111,6 +111,11 @@ def test_a_zero_ack_timeout_is_constructible_and_a_non_duration_is_rejected() ->
         autd3.TransportOption(ack_timeout=loose(None))
 
 
+def test_the_timeouts_are_read_and_replaced_through_the_client() -> None:
+    for name in ("ack_timeout", "set_ack_timeout", "lost_timeout", "set_lost_timeout"):
+        assert callable(getattr(autd3.Client, name, None))
+
+
 def test_client_open_takes_a_transport_option() -> None:
     with pytest.raises(TypeError):
         autd3.Client.open(geometry(1), loose(autd3.Interface.Auto))

@@ -1,10 +1,11 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use crate::datagram::{Expand, Frame, command_of};
 use crate::future::{Completed, future_into_py};
 use crate::ops::SysTime;
-use autd3_python_capsule::extract::{extract_duration, geometry_to_py};
+use autd3_python_capsule::extract::{duration_to_py, extract_duration, geometry_to_py};
 use autd3_python_capsule::{capsule_of, client_pyerr, client_pyerr_gil, geometry_from_capsule};
 use autd3_rs::Geometry;
 
@@ -392,6 +393,22 @@ impl Client {
             .device_time_now()
             .map(SysTime)
             .map_err(|e| client_pyerr(py, &e))
+    }
+
+    fn ack_timeout<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        duration_to_py(py, self.inner.ack_timeout())
+    }
+
+    fn set_ack_timeout(&self, #[pyo3(from_py_with = extract_duration)] timeout: Duration) {
+        self.inner.set_ack_timeout(timeout);
+    }
+
+    fn lost_timeout<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        duration_to_py(py, self.inner.lost_timeout())
+    }
+
+    fn set_lost_timeout(&self, #[pyo3(from_py_with = extract_duration)] timeout: Duration) {
+        self.inner.set_lost_timeout(timeout);
     }
 
     fn send_heartbeat(&self, py: Python<'_>) -> PyResult<()> {

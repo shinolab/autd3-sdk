@@ -1,5 +1,6 @@
 use std::future::poll_fn;
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_lock::Mutex as AsyncMutex;
 use autd3_cpu_wire::payload::FirmwareInfo;
@@ -57,6 +58,24 @@ impl Controller {
 
     pub fn device_time_now(&self) -> Result<SysTime, Error> {
         self.session.device_time().ok_or(Error::DeviceTimeUnknown)
+    }
+
+    #[must_use]
+    pub fn ack_timeout(&self) -> Duration {
+        self.session.ack_timeout()
+    }
+
+    pub fn set_ack_timeout(&self, timeout: Duration) {
+        self.session.set_ack_timeout(timeout);
+    }
+
+    #[must_use]
+    pub fn lost_timeout(&self) -> Duration {
+        self.session.lost_timeout()
+    }
+
+    pub fn set_lost_timeout(&self, timeout: Duration) {
+        self.session.set_lost_timeout(timeout);
     }
 
     pub fn send<C: Command>(&self, cmd: C) -> impl Future<Output = Result<(), Error>> + use<'_, C> {

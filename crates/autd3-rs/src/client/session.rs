@@ -406,8 +406,22 @@ impl Session {
         self.lock_state().device_clock.now(Instant::now())
     }
 
+    pub(crate) fn ack_timeout(&self) -> Duration {
+        self.lock_state().timeouts.ack
+    }
+
     pub(crate) fn lost_timeout(&self) -> Duration {
         self.lock_state().timeouts.lost
+    }
+
+    pub(crate) fn set_ack_timeout(&self, timeout: Duration) {
+        self.lock_state().timeouts.ack = timeout;
+        self.wake_driver("the new ack timeout is noticed at its next deadline");
+    }
+
+    pub(crate) fn set_lost_timeout(&self, timeout: Duration) {
+        self.lock_state().timeouts.lost = timeout;
+        self.wake_driver("the new lost timeout is noticed at its next deadline");
     }
 
     pub(crate) fn request_stop(&self) {
@@ -1030,6 +1044,50 @@ mod tests {
                 .is_none()
         );
         assert_eq!(state.next_deadline(now), now + TIMEOUTS.ack);
+    }
+
+    #[test]
+    fn a_changed_ack_timeout_moves_the_deadline_of_the_pending_head_from_its_clock_start() {
+        let start = Instant::now();
+        let mut state = session_state(1, start);
+        let (head, _response) = enqueue(&mut state, start);
+        let head_sent = start + Duration::from_millis(1);
+        assert!(
+            state
+                .record_sent_to(head, DeviceSet::from_iter([0]), head_sent)
+                .is_none()
+        );
+        let later = head_sent + TIMEOUTS.ack;
+        assert!(state.is_head_ack_overdue(later));
+
+        state.timeouts.ack = TIMEOUTS.ack * 3;
+
+        assert!(!state.is_head_ack_overdue(later));
+        assert_eq!(state.next_deadline(later), head_sent + TIMEOUTS.ack * 3);
+
+        state.timeouts.ack = TIMEOUTS.ack / 2;
+
+        assert!(state.is_head_ack_overdue(head_sent + TIMEOUTS.ack / 2));
+    }
+
+    #[test]
+    fn a_changed_lost_timeout_moves_the_deadline_of_an_unanswered_device_from_its_first_request() {
+        let start = Instant::now();
+        let mut state = session_state(2, start);
+        state.start_unanswered_clock(1, start);
+        assert_eq!(state.lost_deadline(), Some(start + TIMEOUTS.lost));
+
+        state.timeouts.lost = TIMEOUTS.lost * 2;
+        state.mark_unanswered_devices_lost(start + TIMEOUTS.lost);
+
+        assert!(!state.liveness[1].is_lost());
+        assert_eq!(state.lost_deadline(), Some(start + TIMEOUTS.lost * 2));
+
+        state.timeouts.lost = TIMEOUTS.lost / 2;
+        state.mark_unanswered_devices_lost(start + TIMEOUTS.lost / 2);
+
+        assert!(state.liveness[1].is_lost());
+        assert!(!state.liveness[0].is_lost());
     }
 
     #[test]

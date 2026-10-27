@@ -104,6 +104,18 @@ namespace AUTD3
         internal static extern int autd3_client_device_time_now(ClientHandle client, out ulong ns, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_client_ack_timeout(ClientHandle client, out ulong ns);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_client_set_ack_timeout(ClientHandle client, ulong timeoutNs);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_client_lost_timeout(ClientHandle client, out ulong ns);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_client_set_lost_timeout(ClientHandle client, ulong timeoutNs);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_client_send_heartbeat(ClientHandle client, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]

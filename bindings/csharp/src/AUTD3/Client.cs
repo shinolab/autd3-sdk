@@ -386,6 +386,26 @@ namespace AUTD3
             return SysTime.FromNanos(ns);
         }
 
+        public TimeSpan AckTimeout
+        {
+            get
+            {
+                OptionNative.Apply("ackTimeout", NativeClient.autd3_client_ack_timeout(Handle, out var ns));
+                return OptionNative.FromNanos(ns);
+            }
+            set => OptionNative.Apply("ackTimeout", NativeClient.autd3_client_set_ack_timeout(Handle, OptionNative.RequiredNanos("ackTimeout", value)));
+        }
+
+        public TimeSpan LostTimeout
+        {
+            get
+            {
+                OptionNative.Apply("lostTimeout", NativeClient.autd3_client_lost_timeout(Handle, out var ns));
+                return OptionNative.FromNanos(ns);
+            }
+            set => OptionNative.Apply("lostTimeout", NativeClient.autd3_client_set_lost_timeout(Handle, OptionNative.RequiredNanos("lostTimeout", value)));
+        }
+
         public void SendHeartbeat()
         {
             var err = new byte[NativeAbi.ErrorBufferLength];
