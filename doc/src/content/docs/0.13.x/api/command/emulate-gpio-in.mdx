@@ -1,0 +1,24 @@
+---
+title: EmulateGpioIn
+description: GPIO 入力をソフトウェアからアサートする EmulateGpioIn
+sidebar:
+  order: 7.5
+slug: 0.13.x/api/command/emulate-gpio-in
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`EmulateGpioIn` は, デバイスの 4 本の [GPIO 入力端子](/autd3-sdk/0.13.x/hardware/gpio/) をソフトウェアからアサートするコマンド.
+FPGA が参照する実効値は, 物理端子の入力と `EmulateGpioIn` の論理和になる.
+
+## API
+
+<CodeTabs rust={"EmulateGpioIn { values };"} python={"EmulateGpioIn(values)"} csharp={"new EmulateGpioIn(values);"} />
+
+| フィールド | 型          | デフォルト    | 説明                                                     |
+| ---------- | ----------- | ------------- | -------------------------------------------------------- |
+| `values`   | `[bool; 4]` | すべて `false` | 入力 0..3 のそれぞれをアサートするか (`true` でアサート) |
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::{Clear, EmulateGpioIn, Synchronize};\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::Client;\nuse autd3_rs::udp::TransportOption;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet option = TransportOption::default();\nlet client = Client::open(&geometry, &option)?;\nclient.send(Clear).await?;\nclient.send(Synchronize).await?;\n\nclient.send(EmulateGpioIn {\n    values: [true, false, false, false],\n}).await?;\n\nclient.close()?;"} python={"import asyncio\n\nfrom autd3 import Client, TransportOption\nfrom autd3.commands import Clear, EmulateGpioIn, Synchronize\nfrom autd3.geometry import Autd3, Geometry\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3()])\n    with Client.open(geometry, TransportOption()) as client:\n        await client.send(Clear())\n        await client.send(Synchronize())\n\n        await client.send(EmulateGpioIn([True, False, False, False]))\n\n\nasyncio.run(main())"} csharp={"using System.Threading.Tasks;\nusing AUTD3;\n\nvar geometry = new Geometry(new[] { new Autd3() });\nusing var client = Client.Open(geometry, new TransportOption());\nawait client.SendAsync(new Clear());\nawait client.SendAsync(new Synchronize());\n\nawait client.SendAsync(new EmulateGpioIn(new[] { true, false, false, false }));"} />

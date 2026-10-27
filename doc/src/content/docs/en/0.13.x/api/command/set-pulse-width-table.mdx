@@ -1,0 +1,35 @@
+---
+title: SetPulseWidthTable
+description: SetPulseWidthTable to set the conversion table from intensity to
+  PWM pulse width
+sidebar:
+  order: 9.5
+slug: en/0.13.x/api/command/set-pulse-width-table
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`SetPulseWidthTable` is a command that sets the conversion table from intensity (0–255) to the PWM pulse width.
+
+## API
+
+<CodeTabs rust={"SetPulseWidthTable { table };"} python={"SetPulseWidthTable(table)"} csharp={"new SetPulseWidthTable(table);"} />
+
+| Field   | Type                    | Description                                              |
+| ------- | ----------------------- | ------------------------------------------------------- |
+| `table` | `[PulseWidth; PWE_TABLE_SIZE]` | Pulse width per intensity index (0–255) (256 elements) |
+
+A `PulseWidth` is made with `PulseWidth::new(u16)` (a pulse width in 512 steps per period) or `PulseWidth::from_duty(f32)` (a duty ratio).
+
+The default command sets an arcsin-shaped table.
+This is a table that makes the output sound pressure (theoretically) linear with respect to intensity, and it is the same table the device holds at boot.
+
+<CodeTabs rust={"SetPulseWidthTable::default();"} python={"SetPulseWidthTable()"} csharp={"new SetPulseWidthTable();"} />
+
+`empty_table` returns a table whose entries are all 0.
+
+<CodeTabs rust={"let table = SetPulseWidthTable::empty_table();"} python={"table = SetPulseWidthTable.empty_table()"} csharp={"var table = SetPulseWidthTable.EmptyTable();"} />
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::{Clear, SetPulseWidthTable, Synchronize};\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::Client;\nuse autd3_rs::udp::TransportOption;\nuse autd3_rs::value::PulseWidth;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet option = TransportOption::default();\nlet client = Client::open(&geometry, &option)?;\nclient.send(Clear).await?;\nclient.send(Synchronize).await?;\n\nlet mut table = SetPulseWidthTable::empty_table();\nfor (width, i) in table.iter_mut().zip(0..) {\n    *width = PulseWidth::new(i)?;\n}\n\nclient.send(SetPulseWidthTable { table }).await?;\n\nclient.close()?;"} python={"import asyncio\n\nfrom autd3 import Client, TransportOption\nfrom autd3.commands import Clear, SetPulseWidthTable, Synchronize\nfrom autd3.geometry import Autd3, Geometry\nfrom autd3.value import PulseWidth\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3()])\n    with Client.open(geometry, TransportOption()) as client:\n        await client.send(Clear())\n        await client.send(Synchronize())\n\n        table = SetPulseWidthTable.empty_table()\n        for i in range(len(table)):\n            table[i] = PulseWidth(i)\n\n        await client.send(SetPulseWidthTable(table=table))\n\n\nasyncio.run(main())"} csharp={"using System.Threading.Tasks;\nusing AUTD3;\n\nvar geometry = new Geometry(new[] { new Autd3() });\nusing var client = Client.Open(geometry, new TransportOption());\nawait client.SendAsync(new Clear());\nawait client.SendAsync(new Synchronize());\n\nvar table = SetPulseWidthTable.EmptyTable();\nfor (var i = 0; i < table.Length; i++)\n{\n    table[i] = new PulseWidth((ushort)i);\n}\n\nawait client.SendAsync(new SetPulseWidthTable(table));"} />

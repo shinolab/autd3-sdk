@@ -1,0 +1,39 @@
+---
+title: Failsafe
+description: The failsafe that makes a device stop its output when communication
+  is lost or the PTP lock is lost
+sidebar:
+  order: 6.5
+slug: en/0.13.x/guide/failsafe
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+The devices have a failsafe feature that stops their output by themselves when communication with the host is lost or when they lose the PTP lock.
+Both are disabled by default and can be enabled with [SetCpuConfig](/autd3-sdk/en/0.13.x/api/command/cpu-config/).
+
+## Communication-loss failsafe and liveness check
+
+If `failsafe_timeout` is set, a device stops its output when communication from the host has been cut off for that long.
+The default is `None` (disabled), and the devices do not stop the ultrasound even if communication is cut off by a host crash or a broken cable.
+
+While there is nothing to send, `Client` sends nothing to the devices by itself.
+Therefore, when `failsafe_timeout` is set, you need to call [`send_heartbeat()`](/autd3-sdk/en/0.13.x/api/basics/client/#api) periodically while you wait with the output kept on.
+`send_heartbeat()` must be called at a period sufficiently shorter than `failsafe_timeout`.
+
+The following is an example that sets `failsafe_timeout` to 100 ms and sends a liveness check every 10 ms.
+
+<CodeTabs rust={"client\n    .send(SetCpuConfig::new(CpuConfig {\n        failsafe_timeout: Some(Duration::from_millis(100)),\n        ..Default::default()\n    }))\n    .await?;\n\nlet mut heartbeat = tokio::time::interval(Duration::from_millis(10));\nloop {\n    heartbeat.tick().await;\n    client.send_heartbeat()?;\n}"} python={"await client.send(SetCpuConfig(CpuConfig(failsafe_timeout=Duration.from_millis(100))))\n\nwhile True:\n    client.send_heartbeat()\n    await asyncio.sleep(0.01)"} csharp={"await client.SendAsync(new SetCpuConfig(new CpuConfig { FailsafeTimeout = TimeSpan.FromMilliseconds(100) }));\n\nwhile (true)\n{\n    client.SendHeartbeat();\n    await Task.Delay(TimeSpan.FromMilliseconds(10));\n}"} />
+
+An output stopped by the failsafe does not come back automatically.
+Whether it is stopped can be checked with `failsafe_active` of the `DeviceStatus` that `device_status()` returns, and sending [`ReleaseFailsafe`](/autd3-sdk/en/0.13.x/api/command/release-failsafe/) resumes it ([Clear](/autd3-sdk/en/0.13.x/api/command/clear/) also works, but it resets every state).
+
+## Detecting and releasing the PTP failsafe
+
+If `ptp_unlock_failsafe_timeout` is set with [SetCpuConfig](/autd3-sdk/en/0.13.x/api/command/cpu-config/), a device that has stayed without the PTP lock for the given time stops its output.
+
+The following is an example that sends `ReleaseFailsafe` to the devices that have `failsafe_active` set and have relocked (`ptp_locked` is set).
+
+<CodeTabs rust={"let status = client.device_status()?;\nlet releasable = |s: &DeviceStatus| s.failsafe_active && s.ptp_locked;\nif status.iter().any(releasable) {\n    client\n        .send(each(|device| {\n            releasable(&status[device.idx()]).then_some(ReleaseFailsafe)\n        }))\n        .await?;\n}"} python={"status = client.device_status()\n\ndef releasable(s: DeviceStatus) -> bool:\n    return s.failsafe_active and s.ptp_locked\n\nif any(releasable(s) for s in status):\n    await client.send(each(lambda device: ReleaseFailsafe() if releasable(status[device.idx()]) else None))"} csharp={"var status = client.DeviceStatus();\nstatic bool Releasable(DeviceStatus s) => s.FailsafeActive && s.PtpLocked;\nif (status.Any(Releasable))\n{\n    await client.SendAsync(Command.Each(device => Releasable(status[device.Idx]) ? new ReleaseFailsafe() : null));\n}"} />
+
+Sending `ReleaseFailsafe` to a device that is still without the lock returns an error, and its output stays stopped.

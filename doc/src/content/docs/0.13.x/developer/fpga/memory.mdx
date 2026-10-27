@@ -1,0 +1,68 @@
+---
+title: Memory
+description: FPGA 内部の BRAM 構成とアドレスマップ
+sidebar:
+  order: 12
+slug: 0.13.x/developer/fpga/memory
+---
+
+import Math from "@components/Math.astro";
+
+このモジュールは BRAM を集めたモジュールである.
+
+CPU から見たアドレス (<Math tex="\SI{16}{bit}" />) の内, 上位 <Math tex="\SI{8}{bit}" /> (`BRAM_SELECT`, `params.svh` の `bram_select_t`) で領域を区別する.
+残りの下位 <Math tex="\SI{8}{bit}" /> が各領域内のアドレスになる.
+ただし, Modulation / Emission BRAM は上位 <Math tex="\SI{2}{bit}" /> だけで選択され, 下位 <Math tex="\SI{14}{bit}" /> が BRAM 内のアドレスになる.
+
+| 上位 8 bit    | 領域                        | 備考                                                 |
+| ------------- | --------------------------- | ---------------------------------------------------- |
+| `0x00`        | Controller Main BRAM        | 制御フラグ・各種設定値                               |
+| `0x01`        | Phase Correction BRAM       | 振動子毎の位相補正値                                 |
+| `0x02`        | Output Mask BRAM            | 振動子毎の出力マスク                                 |
+| `0x03`        | Flash レジスタ              | コンフィグレーション用 SPI フラッシュの操作 (FPGA OTA) |
+| `0x04`-`0x05` | Flash バッファ              | フラッシュへの書き込みデータ (1024 byte)             |
+| `0x06`        | Pulse Width Encoder Table BRAM | 強度 → パルス幅の変換テーブル                     |
+| `0x07`        | CPU ウォッチドッグ レジスタ | 後述                                                 |
+| `0x08`        | 同期位相ロック レジスタ     | `0x00` の bit 0 が細調整の有効フラグ (既定 1). [Synchronizer](/autd3-sdk/0.13.x/developer/fpga/synchronizer/) 参照 |
+| `0x40`-`0x7F` | Modulation BRAM             | ページ拡張あり                                       |
+| `0x80`-`0xBF` | (未使用)                    |                                                      |
+| `0xC0`-`0xFF` | Emission BRAM               | ページ拡張あり                                       |
+
+Modulation / Emission BRAM はそのままだと書き込みアドレスが足りないので, Controller Main BRAM 内の特定のアドレス (`ADDR_MOD_MEM_WR_PAGE` (`0x21`), `ADDR_PATTERN_MEM_WR_PAGE` (`0x51`)) に書き込まれたページ番号をアドレスの上位に付加することでアドレスを拡張している.
+また, Modulation / Emission BRAM は, 書き込むバンクの選択も Controller Main BRAM 内の特定のアドレス (`ADDR_MOD_MEM_WR_BANK` (`0x20`), `ADDR_PATTERN_MEM_WR_BANK` (`0x50`)) に書き込まれたバンク番号により行う.
+
+| BRAM                       | 書き込み幅 | 読み出し幅 | バンク | 備考                                      |
+| -------------------------- | ---------- | ---------- | ------ | ----------------------------------------- |
+| Controller Main            | 16         | 16         | -      | 256 語                                    |
+| Phase Correction           | 16         | 8          | -      | 書き込み側 128 語                         |
+| Output Mask                | 16         | 256        | -      | 16 語 (256 bit) の単一領域. バンクによらない |
+| Modulation                 | 16         | 8          | 2      | ページ 1 bit. バンク毎に書き込み側 32768 語 |
+| Pulse Width Encoder Table  | 16         | 16         | -      | 256 語. 下位 9 bit を使用                 |
+| Emission                   | 16         | 64         | 2      | ページ 4 bit. バンク毎に書き込み側 262144 語 |
+
+CPU から読み出せるのは Controller Main BRAM, Flash レジスタ, CPU ウォッチドッグ レジスタ, 同期位相ロック レジスタだけである.
+
+:::note
+これらのページ番号, バンク番号データは CPU バスのクロックドメインで使用するため, BRAM に格納されたデータは使用しない.
+代わりに, このアドレスへの書き込みを監視し, 直接レジスタに格納して使用するようにしている.
+:::
+
+:::caution
+ページ番号・バンク番号レジスタは書き込み先を切り替えるものであり, BRAM のようにラッチされない.
+CPU ファームウェア側はこれらのレジスタを書き換える前後でメモリバリアを張る必要がある (`firmware/cpu/fw/src/fpga.rs` の `write_switch`).
+:::
+
+## CPU ウォッチドッグ
+
+CPU のメインループの停止 (ハング, リセット中, デバッガによる停止など) を検知して, 出力を止める機能である (`watchdog/cpu_watchdog.sv`).
+
+| アドレス | 名前      | 意味                                                                 |
+| -------- | --------- | -------------------------------------------------------------------- |
+| `0x00`   | `KICK`    | 書き込むと経過時間を 0 に戻す                                        |
+| `0x01`   | `TIMEOUT` | タイムアウト (ms). 0 で無効 (既定)                                   |
+| `0x02`   | `RELEASE` | 書き込むと発火状態を解除する                                         |
+| `0x03`   | `STATE`   | 読み出し専用. bit 0 が発火中, bit 8-15 が発火回数 (255 で飽和)       |
+
+`TIMEOUT` が 0 でなく, 最後の `KICK` から `TIMEOUT` ms 経過すると発火する.
+経過時間はメインクロックで数える (CPU が止まると `CPU_CKIO` も止まり得るため).
+発火中は, [Controller](/autd3-sdk/0.13.x/developer/fpga/controller/) の `FAILSAFE` ビットと同様に, すべての振動子の強度を 0 にする ([Emission](/autd3-sdk/0.13.x/developer/fpga/emission/) の Output Mask を参照).

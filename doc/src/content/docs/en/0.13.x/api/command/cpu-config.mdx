@@ -1,0 +1,58 @@
+---
+title: SetCpuConfig
+description: SetCpuConfig to change the internal settings of the CPU firmware
+sidebar:
+  order: 10.5
+slug: en/0.13.x/api/command/cpu-config
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`SetCpuConfig` is a command that changes the settings the CPU firmware uses internally (the failsafe, the watchdog, PTP synchronization parameters, and so on).
+
+:::caution
+You normally do not need to change anything other than `failsafe_timeout` and `ptp_unlock_failsafe_timeout`.
+Behavior is not guaranteed when any other field is changed from its default.
+:::
+
+## API
+
+<CodeTabs rust={"let config = CpuConfig {\n    sync_guard,\n    failsafe_timeout,\n    ptp_unlock_failsafe_timeout,\n    fpga_bus_wait,\n    cpu_watchdog_timeout,\n    ptp: PtpConfig {\n        sync_interval,\n        tx_timestamp_timeout,\n        delay_resp_timeout,\n        holdover,\n        lock_samples,\n        step_threshold,\n        lock_threshold,\n        kp_milli,\n        ki_milli,\n        max_freq_ppb,\n        delay_req_syncs,\n        path_delay_filter_shift,\n        pause_quanta,\n        pause_hold_syncs,\n        pause_retry,\n    },\n};\nSetCpuConfig::new(config);"} python={"config = CpuConfig(\n    sync_guard=sync_guard,\n    failsafe_timeout=failsafe_timeout,\n    ptp_unlock_failsafe_timeout=ptp_unlock_failsafe_timeout,\n    fpga_bus_wait=fpga_bus_wait,\n    cpu_watchdog_timeout=cpu_watchdog_timeout,\n    ptp=PtpConfig(\n        sync_interval=sync_interval,\n        tx_timestamp_timeout=tx_timestamp_timeout,\n        delay_resp_timeout=delay_resp_timeout,\n        holdover=holdover,\n        lock_samples=lock_samples,\n        step_threshold=step_threshold,\n        lock_threshold=lock_threshold,\n        kp_milli=kp_milli,\n        ki_milli=ki_milli,\n        max_freq_ppb=max_freq_ppb,\n        delay_req_syncs=delay_req_syncs,\n        path_delay_filter_shift=path_delay_filter_shift,\n        pause_quanta=pause_quanta,\n        pause_hold_syncs=pause_hold_syncs,\n        pause_retry=pause_retry,\n    ),\n)\nSetCpuConfig(config)"} csharp={"var config = new CpuConfig\n{\n    SyncGuard = syncGuard,\n    FailsafeTimeout = failsafeTimeout,\n    PtpUnlockFailsafeTimeout = ptpUnlockFailsafeTimeout,\n    FpgaBusWait = fpgaBusWait,\n    CpuWatchdogTimeout = cpuWatchdogTimeout,\n    Ptp = new PtpConfig\n    {\n        SyncInterval = syncInterval,\n        TxTimestampTimeout = txTimestampTimeout,\n        DelayRespTimeout = delayRespTimeout,\n        Holdover = holdover,\n        LockSamples = lockSamples,\n        StepThreshold = stepThreshold,\n        LockThreshold = lockThreshold,\n        KpMilli = kpMilli,\n        KiMilli = kiMilli,\n        MaxFreqPpb = maxFreqPpb,\n        DelayReqSyncs = delayReqSyncs,\n        PathDelayFilterShift = pathDelayFilterShift,\n        PauseQuanta = pauseQuanta,\n        PauseHoldSyncs = pauseHoldSyncs,\n        PauseRetry = pauseRetry,\n    },\n};\nnew SetCpuConfig(config);"} />
+
+### CpuConfig
+
+| Field                        | Type         | Default       | Description |
+| ---------------------------- | ------------ | ------------- | ----------- |
+| `sync_guard`                 | `Duration`   | 250 μs        | Margin for choosing the synchronization start time |
+| `failsafe_timeout`           | `Option<Duration>` | `None`  | A device stops its output once nothing has arrived from the host for this long (failsafe). `None` disables the failsafe |
+| `ptp_unlock_failsafe_timeout` | `Option<Duration>` | `None` | A device stops its output once it has been without its PTP lock for this long. `None` disables it |
+| `fpga_bus_wait`              | `FpgaBusWait` | `Cycles3`    | Wait cycles of the bus the CPU reads and writes the FPGA through. `Cycles2` or `Cycles3` |
+| `cpu_watchdog_timeout`       | `Option<Duration>` | 1 s     | Once the CPU firmware has stopped for this long, the device stops the output. `None` disables it |
+| `ptp`                        | `PtpConfig`  |               | PTP synchronization parameters |
+
+### PtpConfig
+
+| Field                  | Type         | Default | Description |
+| ---------------------- | ------------ | ------- | ----------- |
+| `sync_interval`        | `Duration`   | 8 ms    | Interval at which `Sync` messages are sent |
+| `tx_timestamp_timeout` | `Duration`   | 3 ms    | How long to wait for the transmit timestamp of `Delay_Req` |
+| `delay_resp_timeout`   | `Duration`   | 6 ms    | How long to wait for `Delay_Resp` |
+| `holdover`             | `Duration`   | 1 s     | How long the lock is kept while locked and no `Sync` arrives |
+| `lock_samples`         | `NonZeroU16` | 64      | Number of consecutive samples required to lock |
+| `step_threshold`       | `Duration`   | 10 μs   | The clock is stepped when the time offset exceeds this |
+| `lock_threshold`       | `Duration`   | 100 ns  | Samples whose time offset is below this count toward the lock |
+| `kp_milli`             | `u32`        | 50      | Proportional gain of the servo × 1000 |
+| `ki_milli`             | `u32`        | 1       | Integral gain of the servo × 1000 |
+| `max_freq_ppb`         | `u32`        | 500,000 | Limit of the frequency correction \[ppb]. 0 to 2,147,483,647 (the device rejects larger values) |
+| `delay_req_syncs`      | `NonZeroU16` | 32      | Interval at which the path delay is measured again once locked (in `Sync` messages) |
+| `path_delay_filter_shift` | `u8`      | 5       | Smoothing factor `1 / 2^n` of the path delay. 0 to 16 (the device rejects larger values). 0 disables the smoothing |
+| `pause_quanta`         | `Option<NonZeroU16>` | 48 | Length of the `PAUSE` sent to the host when the link is saturated \[512 bit times]. `None` sends no `PAUSE` |
+| `pause_hold_syncs`     | `u16`        | 64      | Number of `Sync` messages for which a `PAUSE` keeps being sent on every send after the link was found saturated |
+| `pause_retry`          | `Duration`   | 8 ms    | How long `PAUSE` keeps being sent while a `Sync` cannot be sent out |
+
+The settings return to their defaults on [Clear](/autd3-sdk/en/0.13.x/api/command/clear/) and on power cycling.
+Reopening the client does not reset them.
+
+## Example
+
+<CodeTabs rust={"use std::time::Duration;\n\nuse autd3_rs::commands::{Clear, CpuConfig, SetCpuConfig, Synchronize};\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::Client;\nuse autd3_rs::udp::TransportOption;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet option = TransportOption::default();\nlet client = Client::open(&geometry, &option)?;\nclient.send(Clear).await?;\nclient.send(Synchronize).await?;\n\nclient.send(SetCpuConfig::new(CpuConfig {\n    ptp_unlock_failsafe_timeout: Some(Duration::from_secs(2)),\n    ..Default::default()\n})).await?;\n\nclient.close()?;"} python={"import asyncio\n\nfrom autd3 import Client, Duration, TransportOption\nfrom autd3.commands import Clear, CpuConfig, SetCpuConfig, Synchronize\nfrom autd3.geometry import Autd3, Geometry\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3()])\n    with Client.open(geometry, TransportOption()) as client:\n        await client.send(Clear())\n        await client.send(Synchronize())\n\n        await client.send(SetCpuConfig(CpuConfig(ptp_unlock_failsafe_timeout=Duration.from_secs(2))))\n\n\nasyncio.run(main())"} csharp={"using System;\nusing System.Threading.Tasks;\nusing AUTD3;\n\nvar geometry = new Geometry(new[] { new Autd3() });\nusing var client = Client.Open(geometry, new TransportOption());\nawait client.SendAsync(new Clear());\nawait client.SendAsync(new Synchronize());\n\nawait client.SendAsync(new SetCpuConfig(new CpuConfig { PtpUnlockFailsafeTimeout = TimeSpan.FromSeconds(2) }));"} />

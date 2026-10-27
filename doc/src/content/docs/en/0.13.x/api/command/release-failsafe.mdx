@@ -1,0 +1,27 @@
+---
+title: ReleaseFailsafe
+description: ReleaseFailsafe resumes the output stopped by the failsafe
+sidebar:
+  order: 10.6
+slug: en/0.13.x/api/command/release-failsafe
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`ReleaseFailsafe` is a command that resumes the output stopped by the failsafe (loss of communication with the host, loss of the PTP lock, or the CPU watchdog).
+See [SetCpuConfig](/autd3-sdk/en/0.13.x/api/command/cpu-config/) for the failsafe conditions and defaults.
+
+The output from before the stop resumes as it was.
+It does nothing to devices that are not stopped by the failsafe.
+A device whose firing condition still holds (for example, one that is still without the PTP lock) rejects it with an error (`ERR_FAILSAFE_CONDITION_ACTIVE`) and stays stopped.
+Whether the output is stopped can be checked with `failsafe_active` of the `DeviceStatus` returned by `device_status()` (see [State Monitoring](/autd3-sdk/en/0.13.x/guide/state-check/)).
+
+[Clear](/autd3-sdk/en/0.13.x/api/command/clear/) also releases it, but it resets every state to the defaults.
+
+## API
+
+<CodeTabs rust={"ReleaseFailsafe;"} python={"ReleaseFailsafe()"} csharp={"new ReleaseFailsafe();"} />
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::{Clear, ReleaseFailsafe, Synchronize};\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::Client;\nuse autd3_rs::udp::TransportOption;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet option = TransportOption::default();\nlet client = Client::open(&geometry, &option)?;\nclient.send(Clear).await?;\nclient.send(Synchronize).await?;\n\nlet status = client.device_status()?;\nif status.iter().any(|s| s.failsafe_active) {\n    client.send(ReleaseFailsafe).await?;\n}\n\nclient.close()?;"} python={"import asyncio\n\nfrom autd3 import Client, TransportOption\nfrom autd3.commands import Clear, ReleaseFailsafe, Synchronize\nfrom autd3.geometry import Autd3, Geometry\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3()])\n    with Client.open(geometry, TransportOption()) as client:\n        await client.send(Clear())\n        await client.send(Synchronize())\n\n        status = client.device_status()\n        if any(s.failsafe_active for s in status):\n            await client.send(ReleaseFailsafe())\n\n\nasyncio.run(main())"} csharp={"using System.Linq;\nusing System.Threading.Tasks;\nusing AUTD3;\n\nvar geometry = new Geometry(new[] { new Autd3() });\nusing var client = Client.Open(geometry, new TransportOption());\nawait client.SendAsync(new Clear());\nawait client.SendAsync(new Synchronize());\n\nvar status = client.DeviceStatus();\nif (status.Any(s => s.FailsafeActive))\n{\n    await client.SendAsync(new ReleaseFailsafe());\n}"} />

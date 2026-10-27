@@ -1,0 +1,57 @@
+---
+title: sine
+description: 正弦波の振幅変調を生成する Modulation
+sidebar:
+  order: 21
+srcPath: crates/autd3-rs-modulation/src/sine.rs
+slug: 0.13.x/api/compute/modulation/sine
+---
+
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+import CodeTabs from "@components/CodeTabs.astro";
+import ModulationPlot from "@components/ModulationPlot.astro";
+
+`sine` は正弦波の振幅変調を生成する.
+
+<ModulationPlot fixed="freq = 200 Hz (clamp = true)" />
+
+## API
+
+<CodeTabs rust={"sine(freq, &option, sampling_config, &mut dst)?;"} python={"sine(freq, option, sampling_config, dst)"} csharp={"Modulation.Sine(freq, option, samplingConfig, dst);"} />
+
+| 引数      | 型             | 説明                                         |
+| --------- | -------------- | -------------------------------------------- |
+| `freq`    | `Freq` 等      | 変調周波数                                   |
+| `option`  | `&SineOption`  | 追加オプション (下記参照)                    |
+| `config`  | `SamplingConfig` | サンプリング設定 ([Modulation](/autd3-sdk/0.13.x/api/compute/modulation/#samplingconfig) 参照) |
+| `dst`     | `&mut Vec<u8>` | 出力バッファ                                 |
+
+各サンプル <Math tex="i" /> の値は, 振幅 <Math tex="A" />（`amplitude`）, オフセット <Math tex="b" />（`offset`）, 位相 <Math tex="\theta" />（`phase`）に対して次式で与えられる.
+
+<MathBlock tex="m_i = \frac{A}{2}\sin\!\left(2\pi f t_i + \theta\right) + b" />
+
+`freq` は `Freq` (`150 * Hz` や `150.0 * Hz`) で指定する. `150 * Hz` と `150.0 * Hz` は同じ周波数を表す.
+
+## SineOption
+
+<CodeTabs rust={"SineOption {\n    amplitude,\n    offset,\n    phase,\n    clamp,\n    ..Default::default()\n}"} python={"SineOption(\n    amplitude,\n    offset,\n    phase,\n    clamp,\n)"} csharp={"new SineOption\n{\n    Amplitude = amplitude,\n    Offset = offset,\n    Phase = phase,\n    Clamp = clamp,\n}"} />
+
+| フィールド        | 型               | デフォルト              | 説明                                                     |
+| ----------------- | ---------------- | ----------------------- | -------------------------------------------------------- |
+| `amplitude`       | `u8`             | `0xFF`                  | 正弦波の振幅                                             |
+| `offset`          | `u8`             | `0x80`                  | 直流オフセット                                           |
+| `phase`           | `Angle`          | `Angle::ZERO`           | 位相                                                     |
+| `clamp`           | `bool`           | `false`                 | 範囲外の値を \[0, 255] に clamp するか                        |
+
+`amplitude` と `offset` の組み合わせで波形が \[0, 255] の範囲を外れる場合, `clamp` が `false` だとエラーになる.
+範囲内に収まるよう値を選ぶか, `clamp` を `true` にする.
+
+## 制約
+
+[SamplingConfigの制約](/autd3-sdk/0.13.x/api/basics/sampling-config/)により, 指定した周波数が表現可能な周波数でない場合がある.
+`freq` は周期内に整数個のサンプルで表せる周波数でなければならず, そうでない場合はエラーになる.
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::units::{Hz, rad};\nuse autd3_rs::value::SamplingConfig;\nuse autd3_rs_modulation::{SineOption, modulation_buffer, sine};\n\nlet mut dst = modulation_buffer();\n\nsine(\n    150 * Hz,\n    &SineOption {\n        amplitude: 0xFF,\n        offset: 0x80,\n        phase: 0.0 * rad,\n        clamp: false,\n        ..Default::default()\n    },\n    SamplingConfig::FREQ_4K,\n    &mut dst,\n)?;"} python={"from autd3.units import Hz, rad\nfrom autd3.value import SamplingConfig\nfrom autd3_modulation import SineOption, modulation_buffer, sine\n\ndst = modulation_buffer()\n\nsine(\n    150 * Hz,\n    SineOption(\n        amplitude=0xFF,\n        offset=0x80,\n        phase=0.0 * rad,\n        clamp=False,\n    ),\n    SamplingConfig.FREQ_4K,\n    dst,\n)"} csharp={"using AUTD3;\nusing static AUTD3.Units;\n\nvar dst = Modulation.ModulationBuffer();\n\nModulation.Sine(\n    150 * Hz,\n    new SineOption\n    {\n        Amplitude = 0xFF,\n        Offset = 0x80,\n        Phase = 0.0f * rad,\n        Clamp = false,\n    },\n    SamplingConfig.Freq4k,\n    dst\n);"} />

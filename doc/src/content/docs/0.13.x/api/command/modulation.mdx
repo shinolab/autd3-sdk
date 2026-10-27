@@ -1,0 +1,65 @@
+---
+title: Modulation
+description: 計算した AM 波形をデバイスへ送るコマンド
+sidebar:
+  order: 2
+slug: 0.13.x/api/command/modulation
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { Code } from "astro-expressive-code/components";
+
+`Modulation` は, AM 波形データ (`&[u8]`) をデバイスへ送るコマンド.
+
+## API
+
+<CodeTabs>
+  <Fragment slot="rust">
+    <Code code={"Modulation::new(config, &data);\n\nModulation::with_bank(bank, config, &data);\n\nModulation {\n    bank,\n    config,\n    data: &data,\n    loop_behavior,\n    transition_mode,\n};"} lang="rust" />
+
+    `Modulation::new` は書き込み先バンクを `ModulationBank::B0`, ループを `Infinite`, 遷移を `Immediate` とする.
+    別バンクへ書く場合は `Modulation::with_bank(bank, config, data)` を使う.
+    ループ回数や遷移タイミングも変えたい場合は, フィールドを直接指定して構築する.
+  </Fragment>
+
+  <Fragment slot="python">
+    <Code code={"Modulation(config, data)\n\nModulation(config, data, bank=bank)\n\nModulation(\n    bank=bank,\n    config=config,\n    data=data,\n    loop_behavior=loop_behavior,\n    transition_mode=transition_mode,\n)"} lang="python" />
+
+    `Modulation` は書き込み先バンクをデフォルトで `ModulationBank.B0`, ループを `Infinite`, 遷移を `Immediate` とする.
+    別バンクへ書く場合は `Modulation(config, data, bank=bank)` を使う.
+    ループ回数や遷移タイミングも変えたい場合は, `loop_behavior` / `transition_mode` 引数を渡す.
+  </Fragment>
+
+  <Fragment slot="csharp">
+    <Code code={"new Modulation(config, data);\n\nnew Modulation(bank, config, data);\n\nnew Modulation(\n    bank: bank,\n    config: config,\n    data: data,\n    loopBehavior: loopBehavior,\n    transitionMode: transitionMode\n);"} lang="csharp" />
+
+    `new Modulation(config, data)` は書き込み先バンクを `ModulationBank.B0`, ループを `Infinite`, 遷移を `Immediate` とする.
+    別バンクへ書く場合は `new Modulation(bank, config, data)` を使う.
+    ループ回数や遷移タイミングも変えたい場合は, `loopBehavior` / `transitionMode` 引数を渡す.
+  </Fragment>
+</CodeTabs>
+
+| フィールド        | 型               | デフォルト                  | 説明                         |
+| ----------------- | ---------------- | --------------------------- | ---------------------------- |
+| `bank`            | `ModulationBank` | `ModulationBank::B0`        | 書き込み先・再生対象のバンク |
+| `config`          | `SamplingConfig` | —                           | 再生サンプリング周波数       |
+| `data`            | `&[u8]`          | —                           | AM 波形サンプル列 (2 サンプル以上)   |
+| `loop_behavior`   | `LoopBehavior`   | `LoopBehavior::Infinite`    | 再生ループ回数               |
+| `transition_mode` | `TransitionMode` | `TransitionMode::Immediate` | バンク切替時の遷移挙動       |
+
+`config` は [`SamplingConfig`](/autd3-sdk/0.13.x/api/basics/sampling-config/) で指定する.
+`data` は `modulation_buffer()` で確保したバッファへ書き込む.
+`loop_behavior` / `transition_mode` の挙動は [ActivateModulationBank](/autd3-sdk/0.13.x/api/command/lowlevel/activate-modulation-bank/) を参照.
+
+modulation の計算には幾つかの[ヘルパ関数](/autd3-sdk/0.13.x/api/compute/modulation/)が用意されている.
+
+## 等価な低レベルコマンド
+
+`Modulation` は [WriteModulationBuffer](/autd3-sdk/0.13.x/api/command/lowlevel/write-modulation-buffer/) + [ConfigModulation](/autd3-sdk/0.13.x/api/command/lowlevel/config-modulation/) + [ActivateModulationBank](/autd3-sdk/0.13.x/api/command/lowlevel/activate-modulation-bank/) の 3 つと等価である.
+以下は `Modulation { bank, config, data, loop_behavior, transition_mode }` と等価な組み合わせである
+
+<CodeTabs rust={"for (i, chunk) in data.chunks(WriteModulationBuffer::MAX_LEN).enumerate() {\n    WriteModulationBuffer {\n        bank,\n        offset: i * WriteModulationBuffer::MAX_LEN,\n        data: chunk,\n    };\n}\nConfigModulation {\n    bank,\n    config,\n    size: data.len(),\n    loop_behavior,\n};\nActivateModulationBank {\n    bank,\n    transition_mode,\n};"} python={"samples = data.to_numpy()\nfor offset in range(0, len(samples), WriteModulationBuffer.MAX_LEN):\n    WriteModulationBuffer(\n        bank=bank,\n        offset=offset,\n        data=ModulationBuffer.from_array(samples[offset : offset + WriteModulationBuffer.MAX_LEN]),\n    )\nConfigModulation(\n    bank=bank,\n    config=config,\n    size=len(data),\n    loop_behavior=loop_behavior,\n)\nActivateModulationBank(\n    bank=bank,\n    transition_mode=transition_mode,\n)"} csharp={"var samples = data.ToArray();\nfor (var offset = 0; offset < samples.Length; offset += WriteModulationBuffer.MaxLen)\n{\n    using var chunk = ModulationBuffer.FromBytes(samples[offset..Math.Min(offset + WriteModulationBuffer.MaxLen, samples.Length)]);\n    new WriteModulationBuffer(\n        bank: bank,\n        offset: (uint)offset,\n        data: chunk\n    );\n}\nnew ConfigModulation(\n    bank: bank,\n    config: config,\n    size: (uint)data.Length,\n    loopBehavior: loopBehavior\n);\nnew ActivateModulationBank(\n    bank: bank,\n    transitionMode: transitionMode\n);"} />
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::{Clear, Modulation, Synchronize};\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::units::Hz;\nuse autd3_rs::value::SamplingConfig;\nuse autd3_rs::Client;\nuse autd3_rs::udp::TransportOption;\nuse autd3_rs_modulation::{SineOption, modulation_buffer, sine};\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet option = TransportOption::default();\nlet client = Client::open(&geometry, &option)?;\nclient.send(Clear).await?;\nclient.send(Synchronize).await?;\n\nlet config = SamplingConfig::FREQ_4K;\nlet mut data = modulation_buffer();\nsine(150 * Hz, &SineOption::default(), config, &mut data)?;\n\nclient.send(Modulation::new(config, &data)).await?;\n\nclient.close()?;"} python={"import asyncio\n\nfrom autd3 import Client, TransportOption\nfrom autd3.commands import Clear, Modulation, Synchronize\nfrom autd3.geometry import Autd3, Geometry\nfrom autd3.units import Hz\nfrom autd3.value import SamplingConfig\nfrom autd3_modulation import SineOption, modulation_buffer, sine\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3()])\n    with Client.open(geometry, TransportOption()) as client:\n        await client.send(Clear())\n        await client.send(Synchronize())\n\n        config = SamplingConfig.FREQ_4K\n        data = modulation_buffer()\n        sine(150 * Hz, SineOption(), config, data)\n\n        await client.send(Modulation(config, data))\n\n\nasyncio.run(main())"} csharp={"using System.Threading.Tasks;\nusing AUTD3;\nusing static AUTD3.Units;\n\nvar geometry = new Geometry(new[] { new Autd3() });\nusing var client = Client.Open(geometry, new TransportOption());\nawait client.SendAsync(new Clear());\nawait client.SendAsync(new Synchronize());\n\nvar config = SamplingConfig.Freq4k;\nvar data = Modulation.ModulationBuffer();\nModulation.Sine(150 * Hz, new SineOption(), config, data);\n\nawait client.SendAsync(new Modulation(config, data));"} />

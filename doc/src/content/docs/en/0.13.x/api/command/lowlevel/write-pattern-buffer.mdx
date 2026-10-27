@@ -1,0 +1,30 @@
+---
+title: WritePatternBuffer
+description: Writing to the Pattern buffer
+sidebar:
+  order: 12
+slug: en/0.13.x/api/command/lowlevel/write-pattern-buffer
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`WritePatternBuffer` is a low-level command that writes Patterns (the phase and intensity of each transducer) to consecutive indices of the specified bank, starting at `start_index`.
+One frame holds up to `WritePatternBuffer::MAX_LEN` (2) Patterns.
+To write more, send them in several commands.
+
+## API
+
+<CodeTabs rust={"WritePatternBuffer::new(bank, start_index, patterns, intensities);"} python={"WritePatternBuffer(\n    bank=bank,\n    start_index=start_index,\n    patterns=patterns,\n    intensities=intensities,\n)"} csharp={"new WritePatternBuffer(\n    bank: bank,\n    startIndex: startIndex,\n    patterns: patterns,\n    intensities: intensities\n);"} />
+
+| Field       | Type                             | Description                        |
+| ----------- | -------------------------------- | ---------------------------------- |
+| `bank`      | `PatternBank`                    | Destination bank                   |
+| `start_index` | `usize`                        | First destination index within the bank |
+| `patterns`    | `&[Vec<Vec<Phase>>]`           | Per-device phases of each index    |
+| `intensities` | `StmIntensity`                 | Intensity (same as [PatternStm](/autd3-sdk/en/0.13.x/api/command/pattern-stm/)) |
+
+## Example
+
+The following is an example of playing a single Pattern via `WritePatternBuffer` → `ConfigPattern` → `ActivatePatternBank` (equivalent to the high-level [Pattern](/autd3-sdk/en/0.13.x/api/command/pattern/)).
+
+<CodeTabs rust={"use core::num::NonZeroU16;\n\nuse autd3_rs::commands::{\n    ActivatePatternBank, Clear, ConfigPattern, Synchronize, WritePatternBuffer,\n};\nuse autd3_rs::geometry::{Autd3, Geometry, offset};\nuse autd3_rs::units::{m, mm, s};\nuse autd3_rs::value::{Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode};\nuse autd3_rs::Client;\nuse autd3_rs::udp::TransportOption;\nuse autd3_rs_pattern::{focus, wavelength};\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet option = TransportOption::default();\nlet client = Client::open(&geometry, &option)?;\nclient.send(Clear).await?;\nclient.send(Synchronize).await?;\n\nlet mut phases = geometry.phase_buffer();\nfocus(\n    &geometry,\n    geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm),\n    wavelength(340.0 * m / s),\n    &mut phases,\n);\n\nlet bank = PatternBank::B0;\n\nclient\n    .send(WritePatternBuffer::new(bank, 0, &[phases], Intensity::MAX))\n    .await?;\nclient.send(ConfigPattern {\n    bank,\n    config: SamplingConfig::new(NonZeroU16::MAX),\n    size: 1,\n    loop_behavior: LoopBehavior::Infinite,\n}).await?;\nclient.send(ActivatePatternBank {\n    bank,\n    transition_mode: TransitionMode::Immediate,\n}).await?;\n\nclient.close()?;"} python={"import asyncio\n\nfrom autd3 import Client, TransportOption\nfrom autd3.commands import ActivatePatternBank, Clear, ConfigPattern, Synchronize, WritePatternBuffer\nfrom autd3.geometry import Autd3, Geometry, offset\nfrom autd3.units import m, mm, s\nfrom autd3.value import Intensity, LoopBehavior, PatternBank, SamplingConfig, TransitionMode\nfrom autd3_pattern import focus, wavelength\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3()])\n    with Client.open(geometry, TransportOption()) as client:\n        await client.send(Clear())\n        await client.send(Synchronize())\n\n        phases = geometry.phase_buffer()\n        focus(\n            geometry,\n            geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm),\n            wavelength(340 * m / s),\n            phases,\n        )\n\n        bank = PatternBank.B0\n\n        await client.send(\n            WritePatternBuffer(\n                bank=bank,\n                start_index=0,\n                patterns=[phases],\n                intensities=Intensity.MAX,\n            )\n        )\n        await client.send(\n            ConfigPattern(\n                bank=bank,\n                config=SamplingConfig(0xFFFF),\n                size=1,\n                loop_behavior=LoopBehavior.Infinite,\n            )\n        )\n        await client.send(\n            ActivatePatternBank(\n                bank=bank,\n                transition_mode=TransitionMode.Immediate,\n            )\n        )\n\n\nasyncio.run(main())"} csharp={"using System.Threading.Tasks;\nusing AUTD3;\nusing static AUTD3.Units;\n\nvar geometry = new Geometry(new[] { new Autd3() });\nusing var client = Client.Open(geometry, new TransportOption());\nawait client.SendAsync(new Clear());\nawait client.SendAsync(new Synchronize());\n\nvar phases = geometry.PhaseBuffer();\nPattern.Focus(\n    geometry,\n    geometry.Center + Offset(0.0f * mm, 0.0f * mm, 150.0f * mm),\n    Pattern.Wavelength(340.0f * m / s),\n    phases\n);\n\nvar bank = PatternBank.B0;\n\nawait client.SendAsync(new WritePatternBuffer(\n    bank: bank,\n    startIndex: 0,\n    patterns: new[] { phases },\n    intensities: Intensity.Max\n));\nawait client.SendAsync(new ConfigPattern(\n    bank: bank,\n    config: new SamplingConfig(ushort.MaxValue),\n    size: 1,\n    loopBehavior: LoopBehavior.Infinite\n));\nawait client.SendAsync(new ActivatePatternBank(\n    bank: bank,\n    transitionMode: TransitionMode.Immediate\n));"} />

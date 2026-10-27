@@ -1,0 +1,35 @@
+---
+title: Simulator
+description: 音場シミュレータの起動と接続
+sidebar:
+  order: 8
+slug: 0.13.x/guide/simulator
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`Simulator` は, AUTD3 の出力音場をブラウザ上で可視化する音場シミュレータ.
+実機がなくても, クライアントが送ったデータから生成される音場を確認できる.
+
+## 起動
+
+`Simulator` は GUI コンソール `autd3-console` に同梱されている.
+
+[コンソール](/autd3-sdk/0.13.x/guide/console/) の手順で `autd3-console` を入手して起動し, 上部の「Simulator」タブを開く.
+
+## 接続
+
+クライアントは Simulator と同じホストで動かす必要がある.
+
+Simulator は既定でポート 44336 で待ち受ける. ポートはコンソールの Simulator タブの「UDP port」で変えられる.
+
+クライアントからの接続は, [`TransportOption`](/autd3-sdk/0.13.x/api/basics/transport-option/) の `iface` に `Addr` で `[::1]:44336` を指定する.
+
+<CodeTabs rust={'let option = TransportOption {\n    iface: Interface::Addr("[::1]:44336".parse()?),\n    ..Default::default()\n};'} python={'option = TransportOption(iface=Interface.Addr("[::1]:44336"))'} csharp={'var option = new TransportOption { Iface = Interface.Addr("[::1]:44336") };'} />
+
+## ジオメトリ
+
+台数・配置は Simulator の画面 (Geometry タブ) で設定する.
+クライアントを開く前に, Geometry タブの台数と配置をクライアントのジオメトリに合わせておく.
+
+Simulator は起動するたびに原点に 1 台の状態から始まる. 設定したジオメトリを次回も使うときは「Save to file」で保存しておき, 「Load from file」で読み込む.

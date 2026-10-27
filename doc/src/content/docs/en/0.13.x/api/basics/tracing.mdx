@@ -1,0 +1,29 @@
+---
+title: Logging
+description: Writing the library's logs to standard output or standard error
+sidebar:
+  order: 6
+slug: en/0.13.x/api/basics/tracing
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+The library's logs are emitted through the `tracing` crate.
+In Rust, the library has no logging initialization API; initialize a subscriber directly, e.g. with `tracing-subscriber`.
+Python and C# provide `init_tracing` for initializing logging.
+
+## API
+
+<CodeTabs rust={"tracing_subscriber::fmt()\n    .with_env_filter(\n        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(\"info\")),\n    )\n    .init();"} python={"log_guard = init_tracing(\n    default_filter=\"info\",\n    writer=LogWriter.Stdout,\n)"} csharp={"var option = new TracingOption\n{\n    DefaultFilter = \"info\",\n    Writer = LogWriter.Stdout,\n};\nusing var logGuard = Tracing.Init(option);"} />
+
+`init_tracing` in Python and C# returns a guard.
+Keep the guard until the end of the program.
+
+## TracingOption (Python / C#)
+
+| Field            | Type           | Default  | Description                                                  |
+| ---------------- | -------------- | -------- | ------------------------------------------------------------ |
+| `default_filter` | `&'static str` | `"info"` | Filter used when the `RUST_LOG` environment variable is not set |
+| `writer`         | `LogWriter`    | `Stdout` | Output destination. `LogWriter::Stdout` / `LogWriter::Stderr` |
+
+If the `RUST_LOG` environment variable is set, it takes precedence over `default_filter`.

@@ -1,0 +1,40 @@
+---
+title: TransportOption
+description: UDP/IPv6 リンクローカルで AUTD3 と直接通信する
+sidebar:
+  order: 1
+slug: 0.13.x/api/basics/transport-option
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+## API
+
+<CodeTabs rust={"TransportOption {\n    iface,\n    open_timeout,\n    lost_timeout,\n    ack_timeout,\n    send_buffer_bytes,\n    sync_on_open,\n};"} python={"TransportOption(\n    iface=iface,\n    open_timeout=open_timeout,\n    lost_timeout=lost_timeout,\n    ack_timeout=ack_timeout,\n    send_buffer_bytes=send_buffer_bytes,\n)"} csharp={"new TransportOption\n{\n    Iface = iface,\n    OpenTimeout = openTimeout,\n    LostTimeout = lostTimeout,\n    AckTimeout = ackTimeout,\n    SendBufferBytes = sendBufferBytes,\n};"} />
+
+| フィールド            | 型          | 既定値  | 説明                                                                                          |
+| --------------------- | ----------- | ------- | --------------------------------------------------------------------------------------------- |
+| `iface`               | `Interface` | `Auto`  | 接続先                                                                                        |
+| `open_timeout`        | `Duration`  | 40 s    | open 処理の待ち時間上限                     |
+| `lost_timeout`        | `Duration`  | 100 ms  | この時間返信が無いデバイスを `Lost` とする                                                     |
+| `ack_timeout`         | `Duration`  | 10 ms   | 応答待ちのタイムアウト |
+| `send_buffer_bytes`         | `Option<NonZeroUsize>` | 8192 | ソケットの送信バッファの大きさ \[B]. `None` で OS の既定のままにする |
+| `sync_on_open`        | `bool`      | `true`  | `false` なら open 時にデバイス間の同期を待たない |
+
+基本的に `iface` 以外を変更することは推奨しない.
+
+:::caution[Windows のタイマ分解能]
+ライブラリは Windows のタイマ分解能 (`timeBeginPeriod`) を変更しない.
+既定の分解能 (典型的には 15.6 ms) では, 返信の待ち (ソケットの受信タイムアウト) がその粒度に丸められ, `ack_timeout` や `lost_timeout` の判定が遅れることがある.
+必要であれば, ユーザーがプロセスで `timeBeginPeriod(1)` を呼ぶ.
+:::
+
+## Interface
+
+<CodeTabs rust={"Interface::Auto;\nInterface::Name(\"eth0\".to_string());\nInterface::Addr(\"[::1]:44336\".parse()?);"} python={"Interface.Auto\nInterface.Name(\"eth0\")\nInterface.Addr(\"[::1]:44336\")"} csharp={"_ = Interface.Auto;\n_ = Interface.Name(\"eth0\");\n_ = Interface.Addr(\"[::1]:44336\");"} />
+
+| 値          | 接続先                                                                                                  |
+| ----------- | ------------------------------------------------------------------------------------------------------- |
+| `Auto`      | デバイスが最初に応答したネットワークインタフェース                                                      |
+| `Name(..)`  | 名前で指定したネットワークインタフェースにつながっている実機                                            |
+| `Addr(..)`  | 指定した IPv6 アドレスとポート. [Simulator](/autd3-sdk/0.13.x/guide/simulator/) へは `[::1]:44336` でつなぐ    |

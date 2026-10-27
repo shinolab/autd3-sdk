@@ -44,7 +44,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-cpu-wire"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "bitflags",
  "crc",
@@ -54,7 +54,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-core"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "autd3-cpu-wire",
  "nalgebra",
@@ -64,14 +64,14 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-pattern"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "autd3-rs-core",
 ]
 
 [[package]]
 name = "autd3-rs-pattern-holo"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "autd3-rs-core",
  "nalgebra",
@@ -80,7 +80,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-pattern-holo-wgpu"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "approx",
  "autd3-rs-core",

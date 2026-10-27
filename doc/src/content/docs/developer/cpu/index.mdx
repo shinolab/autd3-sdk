@@ -129,8 +129,8 @@ FIFO が満杯の場合, フレームは捨てられ (`fifo_drop` に数える),
 | `0x02` | `ERR_INVALID_PAYLOAD`          | ペイロードの長さ・オフセットが不正         |
 | `0x03` | (欠番)                         | 再利用しない                               |
 | `0x04` | `ERR_INVALID_SILENCER_SETTING` | Silencer の設定が厳格モードの条件を満たさない |
-| `0x05` | (欠番)                         | Firmware v0.12.x までの `ERR_INVALID_TRANSITION_MODE`. 遷移モードと繰り返し回数の組み合わせは検査しない |
-| `0x06` | (欠番)                         | Firmware v0.12.x までの `ERR_MISS_TRANSITION_TIME`. `SysTime` 遷移の時刻は検査しない |
+| `0x05` | (欠番)                         | Firmware v0.13.x までの `ERR_INVALID_TRANSITION_MODE`. 遷移モードと繰り返し回数の組み合わせは検査しない |
+| `0x06` | (欠番)                         | Firmware v0.13.x までの `ERR_MISS_TRANSITION_TIME`. `SysTime` 遷移の時刻は検査しない |
 | `0x07` | `ERR_FPGA_TIMEOUT`             | FPGA が制御フラグを期限内にクリアしない     |
 | `0x08` | `ERR_SYNC_NOT_READY`           | 同期パルスがまだ動いていない (時刻合わせ前) |
 | `0x09` | (欠番)                         | Firmware v0.9.0 までの `ERR_INVALID_SYNC0_CYCLE`. 同期パルスの周期はファームが決めるので発生しない |

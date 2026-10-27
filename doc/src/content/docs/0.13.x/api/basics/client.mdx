@@ -1,0 +1,140 @@
+---
+title: Client
+description: デバイスとの接続・送信を司る Client
+sidebar:
+  order: 2
+slug: 0.13.x/api/basics/client
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import Install from "@components/Install.astro";
+
+`Client` はコマンドの送信・状態の読み出しを行う中心的なオブジェクト.
+
+<Install rust="autd3-rs" python="autd3" csharp="AUTD3" />
+
+<CodeTabs rust={"let client = Client::open(&geometry, &option)?;\nclient.send(Clear).await?;\nclient.send(Synchronize).await?;"} python={"client = Client.open(geometry, TransportOption())\nawait client.send(Clear())\nawait client.send(Synchronize())"} csharp={"var client = Client.Open(layout, new TransportOption());\nawait client.SendAsync(new Clear());\nawait client.SendAsync(new Synchronize());"} />
+
+| 引数       | 型                | 説明                                                         |
+| ---------- | ----------------- | ------------------------------------------------------------ |
+| `geometry` | `&Geometry`       | デバイスの物理配置                                           |
+| `option`   | `&TransportOption`      | 接続の設定. [`TransportOption`](/autd3-sdk/0.13.x/api/basics/transport-option/) 参照 |
+
+`Client` は実機 (または [Simulator](/autd3-sdk/0.13.x/guide/simulator/)) へ UDP で直接つなぐ.
+
+## API
+
+<CodeTabs rust={"let num_devices = client.num_devices();\nlet geometry = client.geometry();\n\nclient.send_heartbeat()?;\n\nlet firmware = client.read_firmware_version().await?;\nlet fpga_state = client.read_fpga_state().await?;\n\nclient.send(Nop).await?;\nlet resp = client.send_frame(frame).await?.await?;\n\nclient.close()?;"} python={"num_devices = client.num_devices()\ngeometry = client.geometry()\n\nclient.send_heartbeat()\n\nfirmware = await client.read_firmware_version()\nfpga_state = await client.read_fpga_state()\n\nawait client.send(Nop())\nresp = await (await client.send_frame(frame))\n\nclient.close()"} csharp={"var numDevices = client.NumDevices;\nvar geometry = client.Geometry;\n\nclient.SendHeartbeat();\n\nvar firmware = await client.ReadFirmwareVersionAsync();\nvar fpgaState = await client.ReadFpgaStateAsync();\n\nawait client.SendAsync(new Nop());\nvar resp = await await client.SendFrameAsync(frames[0]);\n\nclient.Close();"} />
+
+| メソッド                  | async | 返り値                                 | 説明                                                       |
+| ------------------------- | :---: | -------------------------------------- | ---------------------------------------------------------- |
+| `num_devices()`           | —     | `usize`                                | 接続中のデバイス台数                                       |
+| `geometry()`              | —     | `&Geometry`                            | 接続時のデバイスの物理配置                                 |
+| `read_firmware_version()` | ✓     | `Result<Vec<FirmwareVersion>, Error>` | 各デバイスの CPU/FPGA ファームウェアバージョン             |
+| `read_fpga_state()`       | ✓     | `Result<Vec<FpgaState>, Error>`       | 各デバイスの FPGA 状態                                     |
+| `read_telemetry()`        | ✓     | `Result<Vec<Telemetry>, Error>`       | 各デバイスの CPU の診断カウンタ                            |
+| `device_time_now()`       | —     | `Result<SysTime, Error>`               | 現在のデバイスの時刻 ([SysTime](/autd3-sdk/0.13.x/api/basics/sys-time/) 参照) |
+| `send(cmd)`               | ✓     | `Result<(), Error>`                   | コマンドを送信し, 1 フレームずつ応答確認まで行う           |
+| `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | フレームを 1 つ送る ([streaming](#streaming) 参照)          |
+| `send_frame_at(frame, exec)` | ✓  | `Result<ResponseFuture, Error>`       | 処理時刻を指定してフレームを 1 つ送る ([処理時刻](#処理時刻) 参照) |
+| `device_status()`         | —     | `Result<Vec<DeviceStatus>, Error>`     | 各デバイスの状態. 詳細は[状態監視](/autd3-sdk/0.13.x/guide/state-check/)を参照. |
+| `send_heartbeat()`        | —     | `Result<(), Error>`                   | `Lost` でない全デバイスへ生存確認を 1 回送る ([フェイルセーフ](/autd3-sdk/0.13.x/guide/failsafe/#通信途絶の-failsafe-と生存確認) 参照) |
+| `ack_timeout()` / `set_ack_timeout(timeout)` | — | `Duration` / `()`          | 応答待ちのタイムアウトの読み出し・変更 |
+| `lost_timeout()` / `set_lost_timeout(timeout)` | — | `Duration` / `()`        | `Lost` 判定のタイムアウトの読み出し・変更              |
+| `close()`                 | —     | `Result<(), Error>`                   | 接続を閉じる                                               |
+
+`close()` は I/O スレッドを止めて接続を閉じるだけで, デバイスへは何も送らない.
+デバイスは閉じた後も直前の出力を続けるので, 出力を止めるのはユーザーの責任である.
+
+## streaming
+
+`send` は 1 フレームずつ応答を待つ (stop-and-wait).
+応答を待たずに続けて送るには, `Frames::encode` でコマンドをフレーム列に変換し, `send_frame` が返す `ResponseFuture` を貯めてから順に await する.
+
+<CodeTabs rust={"let frames = Frames::encode(&geometry, Modulation::new(SamplingConfig::FREQ_4K, &modulation))?;\nlet mut responses = Vec::with_capacity(frames.len());\nfor frame in &frames {\n    responses.push(client.send_frame(frame).await?);\n}\nfor response in responses {\n    response.await?.check()?;\n}"} python={"frames = Frames.encode(geometry, Modulation(SamplingConfig.FREQ_4K, data))\nresponses = [await client.send_frame(frame) for frame in frames]\nfor response in responses:\n    (await response).check()"} csharp={"using var modulationFrames = Frames.Encode(geometry, new Modulation(SamplingConfig.Freq4k, modulation));\nvar responses = new List<ResponseFuture>();\nforeach (var frame in modulationFrames)\n{\n    responses.Add(await client.SendFrameAsync(frame));\n}\nforeach (var response in responses)\n{\n    (await response).Check();\n}"} />
+
+応答を待たずに送ってよいフレーム数は `MAX_INFLIGHT (7)` である.
+`MAX_INFLIGHT` 個のフレームが応答待ちの間, `send_frame` は応答が揃ってどれかが空くまで待つ.
+
+## 読み出し結果の型
+
+`read_firmware_version()` / `read_fpga_state()` / `read_telemetry()` はデバイス番号順に 1 台 1 要素の配列を返す.
+`Lost` のデバイスがある間は `DeviceLost` で失敗する.
+
+### FirmwareVersion
+
+| メンバ                  | 型               | 説明                                                   |
+| ----------------------- | ---------------- | ------------------------------------------------------ |
+| `cpu`                   | `Version`        | CPU ファームウェアのバージョン                         |
+| `fpga`                  | `Version`        | FPGA ファームウェアのバージョン                        |
+| `is_emulator()`         | `bool`           | デバイスエミュレータか                                 |
+| `is_supported()`        | `bool`           | CPU と FPGA の両方がこの SDK のサポートする系列か      |
+| `SUPPORTED_SERIES`      | `(u8, u8)`       | サポートする系列 (major, minor)                        |
+
+### FpgaState
+
+| メソッド                  | 型               | 説明                                     |
+| ------------------------- | ---------------- | ---------------------------------------- |
+| `is_thermal_asserted()`   | `bool`           | 温度センサが閾値を超えているか           |
+| `current_mod_bank()`      | `ModulationBank` | 現在の Modulation bank                   |
+| `current_pattern_bank()`  | `PatternBank`    | 現在の Pattern bank (Pattern と STM で共有) |
+| `is_pattern_mode()`       | `bool`           | Pattern を出力しているか                 |
+| `is_pattern_stopped()`    | `bool`           | Pattern / STM の再生が止まっているか |
+| `is_mod_stopped()`        | `bool`           | Modulation の再生が止まっているか |
+| `is_transition_pending()` | `bool`           | bank の切り替えが発効待ちか              |
+
+### Telemetry
+
+CPU の診断カウンタ.
+
+| フィールド            | 型    | 説明                                                   |
+| --------------------- | ----- | ------------------------------------------------------ |
+| `fifo_drop`           | `u32` | 受信 FIFO が満杯で捨てたフレーム数                     |
+| `dispatch_error`      | `u32` | 処理がエラーになった回数                               |
+| `processed`           | `u32` | 処理したフレーム数                                     |
+| `send_failure`        | `u32` | NIC が送信を断った回数                                 |
+| `failsafe`            | `u16` | ホストとの通信途絶によるフェイルセーフの発火回数       |
+| `ptp_unlock_failsafe` | `u16` | PTP ロック喪失によるフェイルセーフの発火回数           |
+| `sync_resync`         | `u8`  | 同期入力のハード再同期回数 (`Synchronize` で 0 に戻る) |
+| `boot_failure`        | `u8`  | 起動時に失敗した手順の数 (`Clear` で消えない)          |
+| `cpu_watchdog`        | `u8`  | CPU ウォッチドッグの発火回数 (FPGA の再構成まで消えない) |
+| `exec_late`           | `u32` | [処理時刻](#処理時刻)を 1 µs 以上過ぎてから処理を始めたフレーム数 |
+
+## 処理時刻
+
+デバイスへの送信は順に 1 台ずつ行われるので, 各デバイスにフレームが届く時刻は少しずつずれる.
+`send_frame_at` に `ExecAt` を渡して送ると, フレームに処理時刻を付け, 各デバイスはその時刻まで処理を待つ.
+これにより, 1 回の送信の内容を全デバイスが同じタイミングで処理し始める.
+`send` / `send_frame` は処理時刻を付けない (各デバイスは届いた順にすぐ処理する).
+コマンドを処理時刻付きで送るには, `Frames::encode` でフレーム列に変換し, 各フレームを `send_frame_at` で送る.
+
+<CodeTabs rust={"let frames = Frames::encode(client.geometry(), Nop)?;\n\nlet lead = ExecAt::Lead(Duration::from_millis(1));\nfor frame in &frames {\n    client.send_frame_at(frame, lead).await?.await?.check()?;\n}\n\nlet at = client.device_time_now()? + Duration::from_millis(5);\nfor frame in &frames {\n    client.send_frame_at(frame, ExecAt::At(at)).await?.await?.check()?;\n}"} python={"frames = Frames.encode(client.geometry(), Nop())\n\nlead = ExecAt.Lead(Duration.from_millis(1))\nfor frame in frames:\n    (await (await client.send_frame_at(frame, lead))).check()\n\nat = client.device_time_now() + Duration.from_millis(5)\nfor frame in frames:\n    (await (await client.send_frame_at(frame, ExecAt.At(at)))).check()"} csharp={"using var frames = Frames.Encode(client.Geometry, new Nop());\n\nvar lead = ExecAt.Lead(TimeSpan.FromMilliseconds(1));\nforeach (var frame in frames)\n{\n    (await await client.SendFrameAsync(frame, lead)).Check();\n}\n\nvar at = client.DeviceTimeNow() + TimeSpan.FromMilliseconds(5);\nforeach (var frame in frames)\n{\n    (await await client.SendFrameAsync(frame, ExecAt.At(at))).Check();\n}"} />
+
+| `ExecAt`         | 処理時刻                                                                 |
+| ---------------- | ------------------------------------------------------------------------ |
+| `Immediate`      | 付けない (届いた順にすぐ処理する. `send_frame` と同じ)                    |
+| `Lead(lead)`     | 送信時のデバイスの現在時刻 + `lead`                                       |
+| `At(sys_time)`   | デバイス時刻 `sys_time` ([SysTime](/autd3-sdk/0.13.x/api/basics/sys-time/) 参照) |
+
+注意点は以下の通り
+
+* 必ず全デバイスが同じ時刻に処理を始めることを保証はしない
+  * 全デバイスへの送信が指定時刻までに終わらなければ, 遅れたデバイスは指定時刻を過ぎてから処理する. この回数は `read_telemetry` の `exec_late` で読める.
+  * 応答を待たずに続けて送ると ([streaming](#streaming)), 前のフレームの処理中に次のフレームの指定時刻が来ることがあり, そのフレームは遅れて処理される (`exec_late` にカウントされる).
+  * また, 成功したとしてもCPUボード内部の処理の開始が揃うだけであり, FPGAの処理の開始が揃うこと (すなわち, 出力される超音波の位相の更新タイミングが揃うことなど) は保証しない
+* 応答は処理の後に返るので, 送信の完了は指定時刻まで遅れる. 1 フレームずつ応答を待つと, 複数フレームのコマンドはフレーム数 × `lead` 程度かかる
+
+## each
+
+`each` はデバイスを引数にするクロージャを受け取り, デバイスごとに異なる 1 フレームのコマンドを割り当てる.
+
+<CodeTabs rust={"client\n    .send(each(|device| {\n        Some(if device.idx() % 2 == 0 {\n            Pattern::new(&left, Intensity::MAX)\n        } else {\n            Pattern::new(&right, Intensity::MAX)\n        })\n    }))\n    .await?;"} python={"await client.send(each(lambda device: Pattern(left if device.idx() % 2 == 0 else right, Intensity.MAX)))"} csharp={"await client.SendAsync(Command.Each(device => device.Idx % 2 == 0\n    ? new Pattern(left, Intensity.Max)\n    : new Pattern(right, Intensity.Max)));"} />
+
+`each` は常に 1 フレームになる.
+`Modulation` / `FociStm` / `PatternStm` のような複数フレームのコマンドは `each` では送れない.
+デバイスごとに異なる複数フレームの内容が必要な場合, `Frame::new` でフレームを自分で組み立てて `send_frame` で送る.
+
+Rust ではクロージャの返り値はすべて同じ型でなければならない.
+型の異なるコマンドを混在させたい場合は, `Box<dyn Operation>` に揃える.
+
+<CodeTabs rust={"client\n    .send(each(|device| {\n        Some(if device.idx() % 2 == 0 {\n            Box::new(Pattern::new(&left, Intensity::MAX)) as Box<dyn Operation>\n        } else {\n            Box::new(SetSilencer::default())\n        })\n    }))\n    .await?;"} />

@@ -1,0 +1,27 @@
+---
+title: ReleaseFailsafe
+description: フェイルセーフで止まった出力を再開させる ReleaseFailsafe
+sidebar:
+  order: 10.6
+slug: 0.13.x/api/command/release-failsafe
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`ReleaseFailsafe` は, フェイルセーフ (ホストとの通信途絶・PTP ロック喪失・CPU ウォッチドッグ) で止まった出力を再開させるコマンド.
+フェイルセーフの条件と既定値は [SetCpuConfig](/autd3-sdk/0.13.x/api/command/cpu-config/) を参照.
+
+止まる前の出力がそのまま再開する.
+フェイルセーフで止まっていないデバイスには何もしない.
+発火の条件が成り立ったままのデバイス (PTP のロックを失ったまま等) は, エラー (`ERR_FAILSAFE_CONDITION_ACTIVE`) で拒否し, 止まったままにする.
+止まっているかどうかは `device_status()` が返す `DeviceStatus` の `failsafe_active` で確認できる ([状態監視](/autd3-sdk/0.13.x/guide/state-check/) 参照).
+
+[Clear](/autd3-sdk/0.13.x/api/command/clear/) でも解除されるが, すべての状態が既定値に戻る.
+
+## API
+
+<CodeTabs rust={"ReleaseFailsafe;"} python={"ReleaseFailsafe()"} csharp={"new ReleaseFailsafe();"} />
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::{Clear, ReleaseFailsafe, Synchronize};\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::Client;\nuse autd3_rs::udp::TransportOption;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet option = TransportOption::default();\nlet client = Client::open(&geometry, &option)?;\nclient.send(Clear).await?;\nclient.send(Synchronize).await?;\n\nlet status = client.device_status()?;\nif status.iter().any(|s| s.failsafe_active) {\n    client.send(ReleaseFailsafe).await?;\n}\n\nclient.close()?;"} python={"import asyncio\n\nfrom autd3 import Client, TransportOption\nfrom autd3.commands import Clear, ReleaseFailsafe, Synchronize\nfrom autd3.geometry import Autd3, Geometry\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3()])\n    with Client.open(geometry, TransportOption()) as client:\n        await client.send(Clear())\n        await client.send(Synchronize())\n\n        status = client.device_status()\n        if any(s.failsafe_active for s in status):\n            await client.send(ReleaseFailsafe())\n\n\nasyncio.run(main())"} csharp={"using System.Linq;\nusing System.Threading.Tasks;\nusing AUTD3;\n\nvar geometry = new Geometry(new[] { new Autd3() });\nusing var client = Client.Open(geometry, new TransportOption());\nawait client.SendAsync(new Clear());\nawait client.SendAsync(new Synchronize());\n\nvar status = client.DeviceStatus();\nif (status.Any(s => s.FailsafeActive))\n{\n    await client.SendAsync(new ReleaseFailsafe());\n}"} />

@@ -1,0 +1,45 @@
+---
+title: SetSilencer
+description: SetSilencer that suppresses noise by interpolating abrupt changes
+  in phase and intensity
+sidebar:
+  order: 5
+slug: en/0.13.x/api/command/silencer
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`SetSilencer` is a command that configures a `Silencer`, which linearly interpolates abrupt changes in phase and intensity to suppress output noise.
+
+There are two interpolation methods: `FixedCompletionTime`, which specifies the interpolation completion time, and `FixedUpdateRate`, which specifies the update amount per interpolation step.
+
+## API
+
+<CodeTabs rust={"SetSilencer::default();\n\nSetSilencer::disable();\n\nSetSilencer::new(FixedCompletionTime {\n    intensity,\n    phase,\n    strict_mode,\n});\n\nSetSilencer::new(FixedUpdateRate { intensity, phase });"} python={"SetSilencer()\n\nSetSilencer.disable()\n\nSetSilencer(\n    FixedCompletionTime(\n        intensity,\n        phase,\n        strict_mode,\n    )\n)\n\nSetSilencer(FixedUpdateRate(intensity, phase))"} csharp={"new SetSilencer();\n\nSetSilencer.Disable();\n\nnew SetSilencer(new FixedCompletionTime\n{\n    Intensity = intensity,\n    Phase = phase,\n    StrictMode = strictMode,\n});\n\nnew SetSilencer(new FixedUpdateRate(intensityRate, phaseRate));"} />
+
+`SetSilencer::default()` is equivalent to passing the default of `FixedCompletionTime`.
+`SetSilencer::disable()` disables interpolation by the `Silencer` (equivalent to completing interpolation in 25 μs).
+
+## FixedCompletionTime
+
+Specifies the completion time until the target value is reached.
+Each update step is in units of the ultrasound period (25 µs), and it is an error if the specified time is not an integer multiple of it.
+
+| Field         | Type       | Default   | Description                                              |
+| ------------- | ---------- | --------- | -------------------------------------------------------- |
+| `intensity`   | `Duration` | `250 µs`  | Completion time until the intensity reaches the target   |
+| `phase`       | `Duration` | `1000 µs` | Completion time until the phase reaches the target       |
+| `strict_mode` | `bool`     | `true`    | Whether to error when the completion time does not fit within the modulation/STM sampling period |
+
+## FixedUpdateRate
+
+Fixes the update amount per interpolation step (every 25 μs).
+
+| Field       | Type         | Description                        |
+| ----------- | ------------ | --------------------------------- |
+| `intensity` | `NonZeroU16` | Update amount of intensity per step |
+| `phase`     | `NonZeroU16` | Update amount of phase per step     |
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::{Clear, SetSilencer, Synchronize};\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::Client;\nuse autd3_rs::udp::TransportOption;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet option = TransportOption::default();\nlet client = Client::open(&geometry, &option)?;\nclient.send(Clear).await?;\nclient.send(Synchronize).await?;\n\nclient.send(SetSilencer::default()).await?;\n\nclient.close()?;"} python={"import asyncio\n\nfrom autd3 import Client, TransportOption\nfrom autd3.commands import Clear, SetSilencer, Synchronize\nfrom autd3.geometry import Autd3, Geometry\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3()])\n    with Client.open(geometry, TransportOption()) as client:\n        await client.send(Clear())\n        await client.send(Synchronize())\n\n        await client.send(SetSilencer())\n\n\nasyncio.run(main())"} csharp={"using System.Threading.Tasks;\nusing AUTD3;\n\nvar geometry = new Geometry(new[] { new Autd3() });\nusing var client = Client.Open(geometry, new TransportOption());\nawait client.SendAsync(new Clear());\nawait client.SendAsync(new Synchronize());\n\nawait client.SendAsync(new SetSilencer());"} />

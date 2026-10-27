@@ -1,0 +1,65 @@
+---
+title: Modulation
+description: Command that sends a computed AM waveform to the device
+sidebar:
+  order: 2
+slug: en/0.13.x/api/command/modulation
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { Code } from "astro-expressive-code/components";
+
+`Modulation` is a command that sends AM waveform data (`&[u8]`) to the device.
+
+## API
+
+<CodeTabs>
+  <Fragment slot="rust">
+    <Code code={"Modulation::new(config, &data);\n\nModulation::with_bank(bank, config, &data);\n\nModulation {\n    bank,\n    config,\n    data: &data,\n    loop_behavior,\n    transition_mode,\n};"} lang="rust" />
+
+    `Modulation::new` sets the destination bank to `ModulationBank::B0`, the loop to `Infinite`, and the transition to `Immediate`.
+    To write to another bank, use `Modulation::with_bank(bank, config, data)`.
+    To also change the loop count or transition timing, construct it by specifying the fields directly.
+  </Fragment>
+
+  <Fragment slot="python">
+    <Code code={"Modulation(config, data)\n\nModulation(config, data, bank=bank)\n\nModulation(\n    bank=bank,\n    config=config,\n    data=data,\n    loop_behavior=loop_behavior,\n    transition_mode=transition_mode,\n)"} lang="python" />
+
+    `Modulation` sets the destination bank to `ModulationBank.B0`, the loop to `Infinite`, and the transition to `Immediate` by default.
+    To write to another bank, use `Modulation(config, data, bank=bank)`.
+    To also change the loop count or transition timing, pass the `loop_behavior` / `transition_mode` arguments.
+  </Fragment>
+
+  <Fragment slot="csharp">
+    <Code code={"new Modulation(config, data);\n\nnew Modulation(bank, config, data);\n\nnew Modulation(\n    bank: bank,\n    config: config,\n    data: data,\n    loopBehavior: loopBehavior,\n    transitionMode: transitionMode\n);"} lang="csharp" />
+
+    `new Modulation(config, data)` sets the destination bank to `ModulationBank.B0`, the loop to `Infinite`, and the transition to `Immediate`.
+    To write to another bank, use `new Modulation(bank, config, data)`.
+    To also change the loop count or transition timing, pass the `loopBehavior` / `transitionMode` arguments.
+  </Fragment>
+</CodeTabs>
+
+| Field             | Type             | Default                     | Description                  |
+| ----------------- | ---------------- | --------------------------- | ---------------------------- |
+| `bank`            | `ModulationBank` | `ModulationBank::B0`        | Bank to write to / play back |
+| `config`          | `SamplingConfig` | —                           | Playback sampling frequency  |
+| `data`            | `&[u8]`          | —                           | AM waveform sample sequence (at least 2 samples) |
+| `loop_behavior`   | `LoopBehavior`   | `LoopBehavior::Infinite`    | Playback loop count          |
+| `transition_mode` | `TransitionMode` | `TransitionMode::Immediate` | Transition behavior on bank switching |
+
+`config` is specified with [`SamplingConfig`](/autd3-sdk/en/0.13.x/api/basics/sampling-config/).
+`data` is written to a buffer allocated by `modulation_buffer()`.
+For the behavior of `loop_behavior` / `transition_mode`, see [ActivateModulationBank](/autd3-sdk/en/0.13.x/api/command/lowlevel/activate-modulation-bank/).
+
+Several [helper functions](/autd3-sdk/en/0.13.x/api/compute/modulation/) are provided for computing modulation.
+
+## Equivalent Low-Level Commands
+
+`Modulation` is equivalent to the three commands [WriteModulationBuffer](/autd3-sdk/en/0.13.x/api/command/lowlevel/write-modulation-buffer/) + [ConfigModulation](/autd3-sdk/en/0.13.x/api/command/lowlevel/config-modulation/) + [ActivateModulationBank](/autd3-sdk/en/0.13.x/api/command/lowlevel/activate-modulation-bank/).
+The following is equivalent to `Modulation { bank, config, data, loop_behavior, transition_mode }`
+
+<CodeTabs rust={"for (i, chunk) in data.chunks(WriteModulationBuffer::MAX_LEN).enumerate() {\n    WriteModulationBuffer {\n        bank,\n        offset: i * WriteModulationBuffer::MAX_LEN,\n        data: chunk,\n    };\n}\nConfigModulation {\n    bank,\n    config,\n    size: data.len(),\n    loop_behavior,\n};\nActivateModulationBank {\n    bank,\n    transition_mode,\n};"} python={"samples = data.to_numpy()\nfor offset in range(0, len(samples), WriteModulationBuffer.MAX_LEN):\n    WriteModulationBuffer(\n        bank=bank,\n        offset=offset,\n        data=ModulationBuffer.from_array(samples[offset : offset + WriteModulationBuffer.MAX_LEN]),\n    )\nConfigModulation(\n    bank=bank,\n    config=config,\n    size=len(data),\n    loop_behavior=loop_behavior,\n)\nActivateModulationBank(\n    bank=bank,\n    transition_mode=transition_mode,\n)"} csharp={"var samples = data.ToArray();\nfor (var offset = 0; offset < samples.Length; offset += WriteModulationBuffer.MaxLen)\n{\n    using var chunk = ModulationBuffer.FromBytes(samples[offset..Math.Min(offset + WriteModulationBuffer.MaxLen, samples.Length)]);\n    new WriteModulationBuffer(\n        bank: bank,\n        offset: (uint)offset,\n        data: chunk\n    );\n}\nnew ConfigModulation(\n    bank: bank,\n    config: config,\n    size: (uint)data.Length,\n    loopBehavior: loopBehavior\n);\nnew ActivateModulationBank(\n    bank: bank,\n    transitionMode: transitionMode\n);"} />
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::{Clear, Modulation, Synchronize};\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::units::Hz;\nuse autd3_rs::value::SamplingConfig;\nuse autd3_rs::Client;\nuse autd3_rs::udp::TransportOption;\nuse autd3_rs_modulation::{SineOption, modulation_buffer, sine};\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet option = TransportOption::default();\nlet client = Client::open(&geometry, &option)?;\nclient.send(Clear).await?;\nclient.send(Synchronize).await?;\n\nlet config = SamplingConfig::FREQ_4K;\nlet mut data = modulation_buffer();\nsine(150 * Hz, &SineOption::default(), config, &mut data)?;\n\nclient.send(Modulation::new(config, &data)).await?;\n\nclient.close()?;"} python={"import asyncio\n\nfrom autd3 import Client, TransportOption\nfrom autd3.commands import Clear, Modulation, Synchronize\nfrom autd3.geometry import Autd3, Geometry\nfrom autd3.units import Hz\nfrom autd3.value import SamplingConfig\nfrom autd3_modulation import SineOption, modulation_buffer, sine\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3()])\n    with Client.open(geometry, TransportOption()) as client:\n        await client.send(Clear())\n        await client.send(Synchronize())\n\n        config = SamplingConfig.FREQ_4K\n        data = modulation_buffer()\n        sine(150 * Hz, SineOption(), config, data)\n\n        await client.send(Modulation(config, data))\n\n\nasyncio.run(main())"} csharp={"using System.Threading.Tasks;\nusing AUTD3;\nusing static AUTD3.Units;\n\nvar geometry = new Geometry(new[] { new Autd3() });\nusing var client = Client.Open(geometry, new TransportOption());\nawait client.SendAsync(new Clear());\nawait client.SendAsync(new Synchronize());\n\nvar config = SamplingConfig.Freq4k;\nvar data = Modulation.ModulationBuffer();\nModulation.Sine(150 * Hz, new SineOption(), config, data);\n\nawait client.SendAsync(new Modulation(config, data));"} />

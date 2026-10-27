@@ -1,0 +1,24 @@
+---
+title: 時刻同期
+description: PTP によるデバイス間の時刻同期
+sidebar:
+  order: 5.5
+slug: 0.13.x/guide/time-sync
+---
+
+複数のデバイスからの超音波出力を揃えるため, 各デバイスの時刻を PTP (Precision Time Protocol, IEEE 1588) で同期させている.
+
+## PTP
+
+ID 0 のデバイスが基準になり, 他のデバイスは, ユーザの送信したデータとは別にPTP同期用の通信を自動的に行い, 基準の時刻へ自分の時計を合わせ続ける.
+基準との時刻ずれが十分小さくなった状態を「ロックした」と言う.
+なんらかの理由でPTP同期用の通信が行われないなどで, 基準との時刻ずれが大きくなった場合はロックを失う.
+
+各デバイスがロックしているかどうかは `device_status` で確認できる ([状態監視](/autd3-sdk/0.13.x/guide/state-check/) 参照).
+
+## デバイスの時刻
+
+揃えた時刻は [`SysTime`](/autd3-sdk/0.13.x/api/basics/sys-time/) として, [`TransitionMode::SysTime`](/autd3-sdk/0.13.x/getting-started/tutorial/loop/) などで出力を切り替える時刻の指定に使うことができる.
+この時刻は `Client` を開いた時点から相対的に数える.
+
+`Client::open` は既定で全デバイスの同期が終わるまで待つ ([`TransportOption`](/autd3-sdk/0.13.x/api/basics/transport-option/) の `open_timeout` / `sync_on_open` 参照).

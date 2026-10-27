@@ -1,0 +1,20 @@
+---
+title: Synchronize
+description: デバイス間の出力の位相を揃える Synchronize
+sidebar:
+  order: 10.1
+slug: 0.13.x/api/command/synchronize
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`Synchronize` は, FPGA が PWM 生成に使う同期クロックを初期化し直し, デバイス間の出力の位相を揃えるコマンド.
+`open` 後に一度だけ呼ぶ必要がある.
+
+## API
+
+<CodeTabs rust={"Synchronize;"} python={"Synchronize()"} csharp={"new Synchronize();"} />
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::Synchronize;\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::Client;\nuse autd3_rs::udp::TransportOption;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet option = TransportOption::default();\nlet client = Client::open(&geometry, &option)?;\n\nclient.send(Synchronize).await?;\n\nclient.close()?;"} python={"import asyncio\n\nfrom autd3 import Client, TransportOption\nfrom autd3.commands import Synchronize\nfrom autd3.geometry import Autd3, Geometry\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3()])\n    with Client.open(geometry, TransportOption()) as client:\n        await client.send(Synchronize())\n\n\nasyncio.run(main())"} csharp={"using System.Threading.Tasks;\nusing AUTD3;\n\nvar geometry = new Geometry(new[] { new Autd3() });\nusing var client = Client.Open(geometry, new TransportOption());\n\nawait client.SendAsync(new Synchronize());"} />

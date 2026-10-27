@@ -1,0 +1,37 @@
+---
+title: SamplingConfig
+description: Modulation / STM のサンプリング周波数を表す SamplingConfig
+sidebar:
+  order: 4
+slug: 0.13.x/api/basics/sampling-config
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+
+`SamplingConfig` は Modulation や STM のサンプリング周波数を表す.
+サンプリング周波数は超音波周波数 (40 kHz) を整数で分周した値でなければならない.
+
+<CodeTabs rust={"SamplingConfig::new(NonZeroU16::new(10).unwrap());\nSamplingConfig::from_freq(4. * kHz)?;\nSamplingConfig::from_period(Duration::from_micros(250))?;"} python={"SamplingConfig(10)\nSamplingConfig(4.0 * kHz)\nSamplingConfig(Duration.from_micros(250))"} csharp={"new SamplingConfig(10);\nnew SamplingConfig(4.0f * kHz);\nnew SamplingConfig(TimeSpan.FromMicroseconds(250));"} />
+
+上記はいずれも 4 kHz (分周比 10) を表し, 互いに等価.
+
+## 内部表現
+
+`SamplingConfig` は内部では最終的に分周比 (`u16`) へ変換される.
+
+分周比 <Math tex="N" /> とサンプリング周波数 <Math tex="f_s" />, サンプリング周期 <Math tex="T_s" /> の関係は次の通り.
+
+<MathBlock tex="f_s = \frac{40\,\mathrm{kHz}}{N}, \quad T_s = 25\,\mathrm{\mu s} \times N" />
+
+周波数・周期で指定した場合, それが 40 kHz を割り切れない (整数の分周比にならない) とエラーになる.
+
+## プリセット
+
+よく使う定数はあらかじめ用意されている.
+
+| 定数      | サンプリング周波数 | 分周比 |
+| --------- | ------------------ | ------ |
+| `FREQ_40K`| 40 kHz             | 1      |
+| `FREQ_4K` | 4 kHz              | 10     |

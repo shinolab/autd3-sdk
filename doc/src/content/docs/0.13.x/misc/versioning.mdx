@@ -1,0 +1,19 @@
+---
+title: バージョニング
+description: SemVer の適用範囲, 非推奨 API の扱い, ファームウェア互換, Rust の要求版数
+sidebar:
+  order: 1
+slug: 0.13.x/misc/versioning
+---
+
+本 SDK は [Semantic Versioning 2.0.0](https://semver.org/lang/ja/) に従う.
+
+## Rust の要求版数
+
+MSRV は保証しない.
+本 SDK は常に最新の stable Rust でビルドできることのみを保証する.
+
+## パッケージ間の版数
+
+同時に使うパッケージは版数を揃えること.
+異なる版数のパッケージを混在させた場合の動作は保証しない.

@@ -1,0 +1,45 @@
+---
+title: square
+description: 矩形波の振幅変調を生成する Modulation
+sidebar:
+  order: 22
+srcPath: crates/autd3-rs-modulation/src/square.rs
+slug: 0.13.x/api/compute/modulation/square
+---
+
+import Math from "@components/Math.astro";
+import CodeTabs from "@components/CodeTabs.astro";
+import ModulationPlot from "@components/ModulationPlot.astro";
+
+`square` は矩形波の振幅変調を生成する. 指定周波数 `freq` で `high` と `low` の 2 値を切り替える.
+
+<ModulationPlot kind="square" />
+
+## API
+
+<CodeTabs rust={"square(freq, &option, sampling_config, &mut dst)?;"} python={"square(freq, option, sampling_config, dst)"} csharp={"Modulation.Square(freq, option, samplingConfig, dst);"} />
+
+| 引数      | 型              | 説明                      |
+| --------- | --------------- | ------------------------- |
+| `freq`    | `Freq` 等       | 変調周波数                |
+| `option`  | `&SquareOption` | 追加オプション (下記参照) |
+| `config`  | `SamplingConfig` | サンプリング設定 ([Modulation](/autd3-sdk/0.13.x/api/compute/modulation/#samplingconfig) 参照) |
+| `dst`     | `&mut Vec<u8>`  | 出力バッファ              |
+
+`freq` の指定方法は [sine](/autd3-sdk/0.13.x/api/compute/modulation/sine/) と同じ.
+
+## SquareOption
+
+<CodeTabs rust={"SquareOption {\n    low,\n    high,\n    duty,\n    ..Default::default()\n}"} python={"SquareOption(\n    low,\n    high,\n    duty,\n)"} csharp={"new SquareOption\n{\n    Low = low,\n    High = high,\n    Duty = duty,\n}"} />
+
+| フィールド        | 型               | デフォルト                | 説明                        |
+| ----------------- | ---------------- | ------------------------- | --------------------------- |
+| `low`             | `u8`             | `u8::MIN`                 | 低レベルの振幅              |
+| `high`            | `u8`             | `u8::MAX`                 | 高レベルの振幅              |
+| `duty`            | `f32`            | `0.5`                     | 1 周期に占める `high` の割合 |
+
+1 周期のうち `duty` の割合が `high`, 残りが `low` になる.
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::units::Hz;\nuse autd3_rs::value::SamplingConfig;\nuse autd3_rs_modulation::{SquareOption, modulation_buffer, square};\n\nlet mut dst = modulation_buffer();\n\nsquare(\n    150 * Hz,\n    &SquareOption {\n        low: u8::MIN,\n        high: u8::MAX,\n        duty: 0.5,\n        ..Default::default()\n    },\n    SamplingConfig::FREQ_4K,\n    &mut dst,\n)?;"} python={"from autd3.units import Hz\nfrom autd3.value import SamplingConfig\nfrom autd3_modulation import SquareOption, modulation_buffer, square\n\ndst = modulation_buffer()\n\nsquare(\n    150 * Hz,\n    SquareOption(\n        low=0x00,\n        high=0xFF,\n        duty=0.5,\n    ),\n    SamplingConfig.FREQ_4K,\n    dst,\n)"} csharp={"using AUTD3;\nusing static AUTD3.Units;\n\nvar dst = Modulation.ModulationBuffer();\n\nModulation.Square(\n    150 * Hz,\n    new SquareOption\n    {\n        Low = byte.MinValue,\n        High = byte.MaxValue,\n        Duty = 0.5f,\n    },\n    SamplingConfig.Freq4k,\n    dst\n);"} />

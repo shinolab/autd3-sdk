@@ -1,0 +1,44 @@
+---
+title: SetGpioOut
+description: GPIO 出力を制御する SetGpioOut / GpioOut
+sidebar:
+  order: 7
+slug: 0.13.x/api/command/gpio
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`SetGpioOut` は, デバイスの 4 本の GPIO 出力端子に出力する信号を設定するコマンド.
+
+## API
+
+<CodeTabs rust={"SetGpioOut { outputs };"} python={"SetGpioOut(outputs=outputs)"} csharp={"new SetGpioOut(outputs);"} />
+
+| フィールド | 型             | デフォルト   | 説明                       |
+| ---------- | -------------- | ------------ | -------------------------- |
+| `outputs`  | `[GpioOut; 4]` | すべて `Off` | 端子 0..3 に割り当てる出力 |
+
+## GpioOut
+
+|         |                                  |
+| ----------------- | ---------------------------------------- |
+| `Off`             | 常に Low (デフォルト)                    |
+| `BaseSignal`      | 超音波の基準信号 (40 kHz)                |
+| `Thermo`          | 温度センサのアサート                     |
+| `ForceFan`        | ForceFan の状態                          |
+| `Sync`            | 同期信号                                 |
+| `ModBank`         | アクティブな Modulation バンク           |
+| `ModIdx(u16)`     | Modulation が指定インデックスのとき High |
+| `PatternBank`     | アクティブな Pattern バンク              |
+| `PatternIdx(u16)` | Pattern が指定インデックスのとき High    |
+| `IsStmMode`   | Stm モード (`size != 1`) のとき High                |
+| `SysTimeEq(SysTime)` | システム時刻が指定値に一致したとき High |
+| `SyncDiff`        | 同期誤差                                 |
+| `PwmOut(u8)`      | 指定振動子の PWM 出力                    |
+| `Direct(bool)`    | 指定した固定値を直接出力                 |
+
+`SysTimeEq` に渡す `SysTime` については, [SysTime](/autd3-sdk/0.13.x/api/basics/sys-time/) を参照.
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::{Clear, GpioOut, SetGpioOut, Synchronize};\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::Client;\nuse autd3_rs::udp::TransportOption;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet option = TransportOption::default();\nlet client = Client::open(&geometry, &option)?;\nclient.send(Clear).await?;\nclient.send(Synchronize).await?;\n\nclient.send(SetGpioOut {\n    outputs: [\n        GpioOut::PatternBank,\n        GpioOut::Thermo,\n        GpioOut::PwmOut(0),\n        GpioOut::Off,\n    ],\n}).await?;\n\nclient.close()?;"} python={"import asyncio\n\nfrom autd3 import Client, TransportOption\nfrom autd3.commands import Clear, GpioOut, SetGpioOut, Synchronize\nfrom autd3.geometry import Autd3, Geometry\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3()])\n    with Client.open(geometry, TransportOption()) as client:\n        await client.send(Clear())\n        await client.send(Synchronize())\n\n        await client.send(\n            SetGpioOut(\n                outputs=[\n                    GpioOut.PatternBank,\n                    GpioOut.Thermo,\n                    GpioOut.PwmOut(0),\n                    GpioOut.Off,\n                ]\n            )\n        )\n\n\nasyncio.run(main())"} csharp={"using System.Threading.Tasks;\nusing AUTD3;\n\nvar geometry = new Geometry(new[] { new Autd3() });\nusing var client = Client.Open(geometry, new TransportOption());\nawait client.SendAsync(new Clear());\nawait client.SendAsync(new Synchronize());\n\nawait client.SendAsync(new SetGpioOut(new[]\n{\n    GpioOut.PatternBank,\n    GpioOut.Thermo,\n    GpioOut.PwmOut(0),\n    GpioOut.Off,\n}));"} />

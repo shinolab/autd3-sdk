@@ -1,0 +1,41 @@
+---
+title: State Monitoring
+description: Monitor the communication state of devices with device_status
+sidebar:
+  order: 6
+slug: en/0.13.x/guide/state-check
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`device_status` of the [`Client`](/autd3-sdk/en/0.13.x/api/basics/client/) lets you monitor whether the communication with the devices is working correctly.
+
+## Obtaining the State
+
+`device_status` returns an array of the state `DeviceStatus` of each device at the time of the call.
+
+`DeviceStatus` holds the following.
+
+* `state`: the state of the device (`DeviceState`).
+* `ptp_locked`: whether its PTP is locked.
+* `failsafe_active`: whether it stopped its output by the failsafe and has not been released yet
+
+Aggregates such as whether every device is `Ready` or whether any is `Lost` are built from the returned values (see the example below).
+`ptp_locked` and `failsafe_active` are taken from the last reply of each device, and both are `false` for a `Lost` device.
+Calling it after the `Client` is closed returns an error (`Closed`, or `Network` if it closed on a communication error).
+
+The meaning of each `DeviceState` is as follows.
+
+| State     | Meaning                                                    |
+| --------- | ---------------------------------------------------------- |
+| `Ready`   | The device replies and its time is synchronized            |
+| `Syncing` | The device replies, but its time is still being synchronized |
+| `Lost`    | No reply for a certain period of time                      |
+
+When a device in the middle of the chain becomes `Lost`, every device beyond it also becomes `Lost`.
+There is no automatic recovery from `Lost`.
+Therefore, once a device becomes `Lost`, the only way is to `close` the client and reopen it with `Client::open`.
+
+The following is an example that calls `device_status` at fixed intervals and outputs only when the state changes.
+
+<CodeTabs rust={"let mut last: Vec<DeviceStatus> = Vec::new();\nloop {\n    let status = client.device_status()?;\n    if last != status {\n        for (i, s) in status.iter().enumerate() {\n            println!(\"device[{i}]: {}\", s.state);\n        }\n        println!(\n            \"all ready: {}, any lost: {}\",\n            status.iter().all(|s| s.state == DeviceState::Ready),\n            status.iter().any(|s| s.state == DeviceState::Lost)\n        );\n        last = status;\n    }\n    tokio::time::sleep(CHECK_INTERVAL).await;\n}"} python={"last = None\nwhile True:\n    status = client.device_status()\n    if status != last:\n        for i, s in enumerate(status):\n            print(f\"device[{i}]: {s.state}\")\n        all_ready = all(s.state == DeviceState.Ready for s in status)\n        any_lost = any(s.state == DeviceState.Lost for s in status)\n        print(f\"all ready: {all_ready}, any lost: {any_lost}\")\n        last = status\n    await asyncio.sleep(CHECK_INTERVAL)"} csharp={"DeviceStatus[] last = Array.Empty<DeviceStatus>();\nwhile (true)\n{\n    var status = client.DeviceStatus();\n    if (!status.SequenceEqual(last))\n    {\n        for (var i = 0; i < status.Length; i++)\n        {\n            Console.WriteLine($\"device[{i}]: {status[i].State}\");\n        }\n        var allReady = status.All(s => s.State == DeviceState.Ready);\n        var anyLost = status.Any(s => s.State == DeviceState.Lost);\n        Console.WriteLine($\"all ready: {allReady}, any lost: {anyLost}\");\n        last = status;\n    }\n    await Task.Delay(CheckInterval);\n}"} />

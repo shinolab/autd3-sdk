@@ -1,0 +1,66 @@
+---
+title: Controller / Driver
+description: Controller and Driver for driving the send/receive loop yourself (Rust only)
+sidebar:
+  order: 0
+slug: en/0.13.x/api/advanced/controller
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+:::note
+`Controller` / `Driver` are provided in Rust only.
+:::
+
+`Controller` and `Driver` are the parts that let you drive the internals of [`Client`](/autd3-sdk/en/0.13.x/api/basics/client/) yourself.
+
+`Client` owns one I/O thread that receives the replies.
+Use `Controller` / `Driver` when you want to run the send/receive loop on your own thread or the like instead of that thread.
+
+## Open
+
+`Controller::open` returns a tuple of `Controller` and `Driver`.
+It takes the same arguments as `Client::open`.
+
+<CodeTabs rust={"let (controller, driver) = Controller::open(geometry, option)?;\nlet driving = std::thread::spawn(move || driver.run());\n\ncontroller.send(Clear).await?;\n\ncontroller.send(Synchronize).await?;\ncontroller.send(SetSilencer::default()).await?;\ncontroller.close()?;\n\ndriving.join().unwrap()?;"} />
+
+## Driver
+
+`Driver` has the following methods.
+
+| Method            | Return value                     | Description                                                              |
+| ----------------- | -------------------------------- | ------------------------------------------------------------------------ |
+| `run(self)`       | `Result<(), Error>`              | Repeats `poll` and `wait` until the `Controller` is closed. Blocking.    |
+| `poll(&mut self)` | `Result<Option<Instant>, Error>` | Processes the replies that have arrived and the work that is due, and returns the deadline for the next call. Non-blocking. |
+| `wait(&mut self, deadline)` | `Result<(), Error>`    | Blocks the thread until a reply arrives or `deadline` is reached         |
+
+### poll / wait
+
+`run` is the same as the following loop.
+Call `poll` and `wait` directly when you want to put your own work inside the loop.
+
+<CodeTabs rust={"fn drive(mut driver: Driver) -> Result<(), Error> {\n    while let Some(deadline) = driver.poll()? {\n        driver.wait(deadline)?;\n    }\n    Ok(())\n}"} />
+
+The return value of `poll` means the following.
+
+* `Ok(Some(deadline))`: the deadline by which `poll` should be called next
+* `Ok(None)`: the `Controller` has been closed (`close` or drop)
+* `Err(..)`: a communication error
+
+### Async
+
+`Driver` implements `AsFd` on Unix and `AsSocket` on Windows.
+The following example uses `AsyncFd` of tokio to run on a single-threaded tokio runtime (`current_thread`) (Unix).
+
+<CodeTabs rust={"#[cfg(unix)]\nasync fn drive_on_reactor(mut driver: Driver) -> Result<()> {\n    use std::os::fd::{AsFd, AsRawFd};\n    use tokio::io::Interest;\n    use tokio::io::unix::AsyncFd;\n\n    let socket = unsafe {\n        AsyncFd::register_with_interest(driver.as_fd().as_raw_fd(), Interest::READABLE)?\n    };\n    while let Some(deadline) = driver.poll()? {\n        tokio::select! {\n            readable = socket.readable() => readable?.clear_ready(),\n            () = tokio::time::sleep_until(deadline.into()) => {}\n        }\n    }\n    Ok(())\n}\n\nlet (controller, driver) = Controller::open(geometry, option)?;\nlet driving = tokio::spawn(drive_on_reactor(driver));\n\ncontroller.send(Clear).await?;\n\ncontroller.send(Synchronize).await?;\ncontroller.send(SetSilencer::default()).await?;\ncontroller.close()?;\n\ndriving.await??;"} />
+
+:::caution
+When running on a single thread, that thread is blocked during the following, and no other task makes progress.
+
+* `Controller::open` (waiting for the device enumeration and the synchronization)
+* Waiting for the socket send buffer to drain
+:::
+
+Without a reactor, call `poll` at a short interval.
+
+<CodeTabs rust={"while driver.poll()?.is_some() {\n    tokio::time::sleep(POLL_INTERVAL).await;\n}"} />

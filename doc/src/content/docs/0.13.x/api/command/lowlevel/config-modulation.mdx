@@ -1,0 +1,29 @@
+---
+title: ConfigModulation
+description: Modulation バンクの設定
+sidebar:
+  order: 16
+slug: 0.13.x/api/command/lowlevel/config-modulation
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`ConfigModulation` は, Modulation バンクの再生パラメータを設定する低レベルコマンド.
+設定は書き込まれるだけで, 有効化するには [ActivateModulationBank](/autd3-sdk/0.13.x/api/command/lowlevel/activate-modulation-bank/) を送る.
+
+## API
+
+<CodeTabs rust={"ConfigModulation {\n    bank,\n    config,\n    size,\n    loop_behavior,\n};"} python={"ConfigModulation(\n    bank=bank,\n    config=config,\n    size=size,\n    loop_behavior=loop_behavior,\n)"} csharp={"new ConfigModulation(\n    bank: bank,\n    config: config,\n    size: size,\n    loopBehavior: loopBehavior\n);"} />
+
+| フィールド | 型               | 説明                                              |
+| ---------- | ---------------- | ------------------------------------------------- |
+| `bank`     | `ModulationBank` | 対象バンク                                        |
+| `config`   | `SamplingConfig` | 再生サンプリング周波数                            |
+| `size`     | `usize`          | サンプル数                                        |
+| `loop_behavior` | `LoopBehavior` | 再生ループ回数 (`Infinite` / `Finite`)         |
+
+`size` の下限は 2.
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::{\n    ActivateModulationBank, Clear, ConfigModulation, Synchronize, WriteModulationBuffer,\n};\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::units::Hz;\nuse autd3_rs::value::{LoopBehavior, ModulationBank, SamplingConfig, TransitionMode};\nuse autd3_rs::Client;\nuse autd3_rs::udp::TransportOption;\nuse autd3_rs_modulation::{SineOption, modulation_buffer, sine};\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet option = TransportOption::default();\nlet client = Client::open(&geometry, &option)?;\nclient.send(Clear).await?;\nclient.send(Synchronize).await?;\n\nlet mut data = modulation_buffer();\nsine(150 * Hz, &SineOption::default(), SamplingConfig::FREQ_4K, &mut data)?;\n\nlet bank = ModulationBank::B0;\n\nclient.send(WriteModulationBuffer {\n    bank,\n    offset: 0,\n    data: &data,\n}).await?;\nclient.send(ConfigModulation {\n    bank,\n    config: SamplingConfig::FREQ_4K,\n    size: data.len(),\n    loop_behavior: LoopBehavior::Infinite,\n}).await?;\nclient.send(ActivateModulationBank {\n    bank,\n    transition_mode: TransitionMode::Immediate,\n}).await?;\n\nclient.close()?;"} python={"import asyncio\n\nfrom autd3 import Client, TransportOption\nfrom autd3.commands import ActivateModulationBank, Clear, ConfigModulation, Synchronize, WriteModulationBuffer\nfrom autd3.geometry import Autd3, Geometry\nfrom autd3.units import Hz\nfrom autd3.value import LoopBehavior, ModulationBank, SamplingConfig, TransitionMode\nfrom autd3_modulation import SineOption, modulation_buffer, sine\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3()])\n    with Client.open(geometry, TransportOption()) as client:\n        await client.send(Clear())\n        await client.send(Synchronize())\n\n        data = modulation_buffer()\n        sine(150 * Hz, SineOption(), SamplingConfig.FREQ_4K, data)\n\n        bank = ModulationBank.B0\n\n        await client.send(\n            WriteModulationBuffer(\n                bank=bank,\n                offset=0,\n                data=data,\n            )\n        )\n        await client.send(\n            ConfigModulation(\n                bank=bank,\n                config=SamplingConfig.FREQ_4K,\n                size=len(data),\n                loop_behavior=LoopBehavior.Infinite,\n            )\n        )\n        await client.send(\n            ActivateModulationBank(\n                bank=bank,\n                transition_mode=TransitionMode.Immediate,\n            )\n        )\n\n\nasyncio.run(main())"} csharp={"using System.Threading.Tasks;\nusing AUTD3;\nusing static AUTD3.Units;\n\nvar geometry = new Geometry(new[] { new Autd3() });\nusing var client = Client.Open(geometry, new TransportOption());\nawait client.SendAsync(new Clear());\nawait client.SendAsync(new Synchronize());\n\nvar data = Modulation.ModulationBuffer();\nModulation.Sine(150 * Hz, new SineOption(), SamplingConfig.Freq4k, data);\n\nvar bank = ModulationBank.B0;\n\nawait client.SendAsync(new WriteModulationBuffer(\n    bank: bank,\n    offset: 0,\n    data: data\n));\nawait client.SendAsync(new ConfigModulation(\n    bank: bank,\n    config: SamplingConfig.Freq4k,\n    size: (uint)data.Length,\n    loopBehavior: LoopBehavior.Infinite\n));\nawait client.SendAsync(new ActivateModulationBank(\n    bank: bank,\n    transitionMode: TransitionMode.Immediate\n));"} />

@@ -1,0 +1,58 @@
+---
+title: SetCpuConfig
+description: CPU ファームウェアの内部設定値を変更する SetCpuConfig
+sidebar:
+  order: 10.5
+slug: 0.13.x/api/command/cpu-config
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`SetCpuConfig` は, CPU ファームウェアが内部で使う設定値 (failsafe・ウォッチドッグ・PTP 同期のパラメータなど) を変更するコマンド.
+
+:::caution
+`failsafe_timeout`, `ptp_unlock_failsafe_timeout` 以外は通常変更する必要はない.
+これら以外を既定値から変更した場合の動作は保証しない.
+:::
+
+## API
+
+<CodeTabs rust={"let config = CpuConfig {\n    sync_guard,\n    failsafe_timeout,\n    ptp_unlock_failsafe_timeout,\n    fpga_bus_wait,\n    cpu_watchdog_timeout,\n    ptp: PtpConfig {\n        sync_interval,\n        tx_timestamp_timeout,\n        delay_resp_timeout,\n        holdover,\n        lock_samples,\n        step_threshold,\n        lock_threshold,\n        kp_milli,\n        ki_milli,\n        max_freq_ppb,\n        delay_req_syncs,\n        path_delay_filter_shift,\n        pause_quanta,\n        pause_hold_syncs,\n        pause_retry,\n    },\n};\nSetCpuConfig::new(config);"} python={"config = CpuConfig(\n    sync_guard=sync_guard,\n    failsafe_timeout=failsafe_timeout,\n    ptp_unlock_failsafe_timeout=ptp_unlock_failsafe_timeout,\n    fpga_bus_wait=fpga_bus_wait,\n    cpu_watchdog_timeout=cpu_watchdog_timeout,\n    ptp=PtpConfig(\n        sync_interval=sync_interval,\n        tx_timestamp_timeout=tx_timestamp_timeout,\n        delay_resp_timeout=delay_resp_timeout,\n        holdover=holdover,\n        lock_samples=lock_samples,\n        step_threshold=step_threshold,\n        lock_threshold=lock_threshold,\n        kp_milli=kp_milli,\n        ki_milli=ki_milli,\n        max_freq_ppb=max_freq_ppb,\n        delay_req_syncs=delay_req_syncs,\n        path_delay_filter_shift=path_delay_filter_shift,\n        pause_quanta=pause_quanta,\n        pause_hold_syncs=pause_hold_syncs,\n        pause_retry=pause_retry,\n    ),\n)\nSetCpuConfig(config)"} csharp={"var config = new CpuConfig\n{\n    SyncGuard = syncGuard,\n    FailsafeTimeout = failsafeTimeout,\n    PtpUnlockFailsafeTimeout = ptpUnlockFailsafeTimeout,\n    FpgaBusWait = fpgaBusWait,\n    CpuWatchdogTimeout = cpuWatchdogTimeout,\n    Ptp = new PtpConfig\n    {\n        SyncInterval = syncInterval,\n        TxTimestampTimeout = txTimestampTimeout,\n        DelayRespTimeout = delayRespTimeout,\n        Holdover = holdover,\n        LockSamples = lockSamples,\n        StepThreshold = stepThreshold,\n        LockThreshold = lockThreshold,\n        KpMilli = kpMilli,\n        KiMilli = kiMilli,\n        MaxFreqPpb = maxFreqPpb,\n        DelayReqSyncs = delayReqSyncs,\n        PathDelayFilterShift = pathDelayFilterShift,\n        PauseQuanta = pauseQuanta,\n        PauseHoldSyncs = pauseHoldSyncs,\n        PauseRetry = pauseRetry,\n    },\n};\nnew SetCpuConfig(config);"} />
+
+### CpuConfig
+
+| フィールド                   | 型           | 既定値        | 説明 |
+| ---------------------------- | ------------ | ------------- | ---- |
+| `sync_guard`                 | `Duration`   | 250 μs        | 同期開始時刻の選択マージン                                                   |
+| `failsafe_timeout`           | `Option<Duration>` | `None`  | ホストからの通信がこの時間途絶えるとデバイスが出力を止める (failsafe). `None` は failsafe 無効 |
+| `ptp_unlock_failsafe_timeout` | `Option<Duration>` | `None` | PTP のロックを失ったままこの時間が経つと, そのデバイスが出力を止める. `None` は無効 |
+| `fpga_bus_wait`              | `FpgaBusWait` | `Cycles3`    | CPU が FPGA を読み書きするバスのウェイト周期数. `Cycles2` または `Cycles3` |
+| `cpu_watchdog_timeout`       | `Option<Duration>` | 1 s     | CPU ファームウェアがこの時間止まると出力を止める. `None` は無効 |
+| `ptp`                        | `PtpConfig`  |               | PTP 同期のパラメータ |
+
+### PtpConfig
+
+| フィールド             | 型           | 既定値  | 説明 |
+| ---------------------- | ------------ | ------- | ---- |
+| `sync_interval`        | `Duration`   | 8 ms    | `Sync` メッセージの送出間隔 |
+| `tx_timestamp_timeout` | `Duration`   | 3 ms    | `Delay_Req` の送信タイムスタンプの回収待ち上限 |
+| `delay_resp_timeout`   | `Duration`   | 6 ms    | `Delay_Resp` の待ち上限 |
+| `holdover`             | `Duration`   | 1 s     | ロック中に `Sync` を受けられないままロックを保つ時間 |
+| `lock_samples`         | `NonZeroU16` | 64      | ロックに必要な連続標本数 |
+| `step_threshold`       | `Duration`   | 10 μs   | 時刻のずれがこれを超えたら時計を強制的に揃える |
+| `lock_threshold`       | `Duration`   | 100 ns  | 時刻のずれがこれ未満の標本をロックに数える |
+| `kp_milli`             | `u32`        | 50      | サーボの比例ゲイン × 1000 |
+| `ki_milli`             | `u32`        | 1       | サーボの積分ゲイン × 1000 |
+| `max_freq_ppb`         | `u32`        | 500,000 | 周波数補正の上限 \[ppb]. 0 から 2,147,483,647 (超えるとデバイスが拒否する) |
+| `delay_req_syncs`      | `NonZeroU16` | 32      | ロック後に経路遅延を測り直す間隔 (`Sync` の回数) |
+| `path_delay_filter_shift` | `u8`      | 5       | 経路遅延の平滑化の係数 `1 / 2^n`. 0 から 16 (超えるとデバイスが拒否する). 0 で平滑化しない |
+| `pause_quanta`         | `Option<NonZeroU16>` | 48 | 回線が飽和したときにホストへ送られる `PAUSE` の長さ \[512 ビット時間]. `None` で `PAUSE` を送らない |
+| `pause_hold_syncs`     | `u16`        | 64      | 一度詰まってから, 送信のたびに `PAUSE` を送り続ける `Sync` の回数 |
+| `pause_retry`          | `Duration`   | 8 ms    | `Sync` を送り出せない間, `PAUSE` を送り続ける時間 |
+
+設定値は [Clear](/autd3-sdk/0.13.x/api/command/clear/) と電源再投入で既定値に戻る.
+クライアントを開き直しても戻らない.
+
+## Example
+
+<CodeTabs rust={"use std::time::Duration;\n\nuse autd3_rs::commands::{Clear, CpuConfig, SetCpuConfig, Synchronize};\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::Client;\nuse autd3_rs::udp::TransportOption;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet option = TransportOption::default();\nlet client = Client::open(&geometry, &option)?;\nclient.send(Clear).await?;\nclient.send(Synchronize).await?;\n\nclient.send(SetCpuConfig::new(CpuConfig {\n    ptp_unlock_failsafe_timeout: Some(Duration::from_secs(2)),\n    ..Default::default()\n})).await?;\n\nclient.close()?;"} python={"import asyncio\n\nfrom autd3 import Client, Duration, TransportOption\nfrom autd3.commands import Clear, CpuConfig, SetCpuConfig, Synchronize\nfrom autd3.geometry import Autd3, Geometry\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3()])\n    with Client.open(geometry, TransportOption()) as client:\n        await client.send(Clear())\n        await client.send(Synchronize())\n\n        await client.send(SetCpuConfig(CpuConfig(ptp_unlock_failsafe_timeout=Duration.from_secs(2))))\n\n\nasyncio.run(main())"} csharp={"using System;\nusing System.Threading.Tasks;\nusing AUTD3;\n\nvar geometry = new Geometry(new[] { new Autd3() });\nusing var client = Client.Open(geometry, new TransportOption());\nawait client.SendAsync(new Clear());\nawait client.SendAsync(new Synchronize());\n\nawait client.SendAsync(new SetCpuConfig(new CpuConfig { PtpUnlockFailsafeTimeout = TimeSpan.FromSeconds(2) }));"} />

@@ -1,0 +1,73 @@
+---
+title: Controller
+description: CPU が書き込んだ設定値を読み出して各モジュールへ配る Controller モジュール
+sidebar:
+  order: 11
+slug: 0.13.x/developer/fpga/controller
+---
+
+import Math from "@components/Math.astro";
+
+Controller モジュールは基本的に制御用のデータを読み出すだけのモジュールである.
+Controller Main BRAM を巡回して読み出し, `MOD_SETTINGS` / `PATTERN_SETTINGS` / `SILENCER_SETTINGS` / `SYNC_SETTINGS` / `DEBUG_SETTINGS` として各モジュールへ供給する.
+
+中身は巨大なステートマシンになっている.
+これを手で書くのは大変なので, `controller.sv` は `xtask/src/fpga_codegen.rs` から `cargo xtask fpga gen-controller` で自動生成するようにしている (`controller.sv` を直接編集してはならない).
+
+## 制御フラグ
+
+`ADDR_CTL_FLAG` (アドレス `0x00`) は CPU と FPGA の間のハンドシェイクに使われる.
+
+CPU が設定値を書き込んだ後, 対応する `*_SET` ビットを立てる.
+Controller はそのビットを検出したら設定値を読み出し, 対応するモジュールへ `UPDATE` を送ったうえで, ビットをクリアする.
+CPU 側はビットがクリアされるまでポーリングして待つ (`set_and_wait_update`).
+
+Controller は `ADDR_CTL_FLAG` を繰り返し読み出し, 連続する 2 回の読み出し値が一致したときだけその値を採用する.
+これは CPU の書き込みとの BRAM のポート衝突で化けた値を拾わないためである.
+
+| ビット | 名前              | 意味                            |
+| ------ | ----------------- | ------------------------------- |
+| 0      | `MOD_SET`         | Modulation 設定の更新要求       |
+| 1      | `PATTERN_SET`     | Emission 設定の更新要求         |
+| 2      | `SILENCER_SET`    | Silencer 設定の更新要求         |
+| 4      | `DEBUG_SET`       | GPIO Output 設定の更新要求      |
+| 5      | `SYNC_SET`        | 同期の更新要求                  |
+| 8-11   | `GPIO_IN_0`-`3`   | GPIO 入力のソフトウェアエミュレート |
+| 12     | `FAILSAFE`        | 出力の停止 (1 の間, すべての振動子の強度を 0 にする) |
+| 13     | `FORCE_FAN`       | ファンの強制動作                |
+
+`GPIO_IN_*` は実際の GPIO 入力ピンと論理和が取られる.
+これにより, GPIO による遷移をソフトウェアからテストできる.
+
+`GPIO_IN_*`, `FAILSAFE`, `FORCE_FAN` はレベルで効くフラグであり, Controller はクリアしない.
+
+## Strict Silencer のガード
+
+`MOD_SET` / `PATTERN_SET` / `SILENCER_SET` では, Controller は設定値をいったん内部のレジスタに読み込み, 検証に通った場合だけ各モジュールへ反映 (`UPDATE` をアサート) する.
+Silencer が固定完了ステップモードかつ strict モード (`SILENCER_FLAG_BIT_STRICT_MODE`) の場合, 使用中となるバンクの周波数分周比 `FREQ_DIV` が完了ステップ数 (Modulation は `COMPLETION_STEPS_INTENSITY`, Emission は `COMPLETION_STEPS_INTENSITY` と `COMPLETION_STEPS_PHASE`) より小さくなる設定を拒否する.
+拒否した場合は設定を反映しない.
+
+検証の結果は `ADDR_SILENCER_SET_RESULT` (アドレス `0x06`) の, `ADDR_CTL_FLAG` と同じ位置のビットに書き込まれる (拒否で 1).
+Controller はこれを書いてから `*_SET` ビットをクリアするので, CPU はビットのクリアを確認した後に結果を読む.
+
+## 状態
+
+Controller は FPGA の状態を `ADDR_FPGA_STATE` (アドレス `0x01`) に書き込む (値が変わったときだけ).
+
+| ビット | 名前                 | 意味                                         |
+| ------ | -------------------- | -------------------------------------------- |
+| 0      | `THERMAL_ASSERT`     | 温度センサの出力                             |
+| 1      | `MOD_BANK`           | 現在の Modulation バンク                     |
+| 2      | `PATTERN_BANK`       | 現在の Emission バンク                       |
+| 3      | `PATTERN_MODE`       | 現在の Emission バンクの `CYCLE` が 0 (STM でない) のとき 1 |
+| 4      | `PATTERN_STOPPED`    | Emission の有限ループが終わって停止している  |
+| 5      | `MOD_STOPPED`        | Modulation の有限ループが終わって停止している |
+| 6      | `TRANSITION_PENDING` | Emission または Modulation のバンク切り替え待ち |
+| 7      | `FAILSAFE`           | `ADDR_CTL_FLAG` の `FAILSAFE` ビットの値     |
+| 8-15   | `SYNC_RESYNC_COUNT`  | [Synchronizer](/autd3-sdk/0.13.x/developer/fpga/synchronizer/) が位相カウンタをリセットした回数 |
+
+## バージョン番号
+
+Controller は起動時に自身のバージョン番号 (`params.svh` の `VersionNumMajor` / `VersionNumMinor` / `VersionNumPatch`) を Controller Main BRAM のアドレス <Math tex="\text{0x02}" />--<Math tex="\text{0x04}" /> へ書き込む.
+また, 対応している機能を表すビット列 (`FunctionBits`) をアドレス <Math tex="\text{0x05}" /> (`ADDR_FUNCTION_BITS`) へ書き込む.
+現在は FPGA OTA (bit 2), Strict Silencer のガード (bit 3), CPU ウォッチドッグ (bit 4), 同期位相ロック (bit 5) が立っている.

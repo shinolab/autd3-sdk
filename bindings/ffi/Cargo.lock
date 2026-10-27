@@ -33,7 +33,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-binding-rt"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "async-lock",
  "futures-channel",
@@ -45,7 +45,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-cpu-wire"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "bitflags",
  "crc",
@@ -55,7 +55,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-ffi"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "autd3-binding-rt",
  "autd3-ffi-abi",
@@ -64,14 +64,14 @@ dependencies = [
 
 [[package]]
 name = "autd3-ffi-abi"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "autd3-rs-core",
 ]
 
 [[package]]
 name = "autd3-ffi-core"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "autd3-cpu-wire",
  "autd3-ffi-abi",
@@ -80,7 +80,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-ffi-modulation"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "autd3-ffi-abi",
  "autd3-rs-core",
@@ -89,7 +89,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-ffi-pattern"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "autd3-ffi-abi",
  "autd3-rs-core",
@@ -99,7 +99,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-ffi-pattern-holo"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "autd3-ffi-abi",
  "autd3-rs-core",
@@ -108,7 +108,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "async-lock",
  "autd3-cpu-wire",
@@ -125,7 +125,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-core"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "autd3-cpu-wire",
  "nalgebra",
@@ -137,7 +137,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-modulation"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "autd3-rs-core",
  "num-integer",
@@ -146,14 +146,14 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-pattern"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "autd3-rs-core",
 ]
 
 [[package]]
 name = "autd3-rs-pattern-holo"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "autd3-rs-core",
  "nalgebra",

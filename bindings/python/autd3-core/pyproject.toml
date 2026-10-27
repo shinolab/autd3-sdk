@@ -8,7 +8,7 @@ description = "Python bindings for autd3-rs-core (geometry, value types, error).
 requires-python = ">=3.10"
 classifiers = ["Programming Language :: Python :: Free Threading :: 2 - Beta"]
 license = "MIT"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = ["numpy"]
 
 [tool.maturin]

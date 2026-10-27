@@ -1,0 +1,88 @@
+---
+title: Single Device
+description: Generate a focal point with a single AUTD3
+sidebar:
+  order: 1
+slug: en/0.13.x/getting-started/tutorial/single-device
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { Code } from "astro-expressive-code/components";
+
+This section explains how to drive a single device.
+
+## Preparation
+
+The following is an example that generates a focal point 150 mm directly above the center of the array with a single AUTD3 device and applies a 200 Hz sine-wave AM.
+
+<CodeTabs>
+  <Fragment slot="rust">
+    First, create an appropriate project and add the `autd3-rs` library as a dependency.
+    For focus computation and AM modulation, also add `autd3-rs-pattern` and `autd3-rs-modulation`.
+    An async runtime is also required, so add `tokio`.
+
+    ```
+    cargo new --bin autd3-sample && cd autd3-sample
+    cargo add autd3-rs
+    cargo add autd3-rs-pattern
+    cargo add autd3-rs-modulation
+    cargo add tokio --features full
+    ```
+
+    Next, edit the `src/main.rs` file to look like the following.
+
+    <Code code={"use autd3_rs::commands::{Clear, Modulation, Pattern, SetSilencer, Synchronize};\nuse autd3_rs::geometry::{Autd3, Geometry, offset};\nuse autd3_rs::units::{Hz, m, mm, s};\nuse autd3_rs::value::{Intensity, SamplingConfig};\nuse autd3_rs::Client;\nuse autd3_rs::TransportOption;\n\n#[tokio::main(flavor = \"multi_thread\")]\nasync fn main() -> Result<(), Box<dyn std::error::Error>> {\n    // Define a geometry consisting of a single AUTD3 device.\n    let geometry = Geometry::new(vec![Autd3::default()]);\n\n    // Open the client.\n    let client = Client::open(&geometry, &TransportOption::default())?;\n    client.send(Clear).await?;\n    client.send(Synchronize).await?;\n\n    // Generate a focus 150 mm above the array center.\n    let target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);\n    let wavelength = autd3_rs_pattern::wavelength(340.0 * m / s);\n    let mut phases = geometry.phase_buffer();\n    autd3_rs_pattern::focus(\n        &geometry,\n        target,\n        wavelength,\n        &mut phases,\n    );\n\n    // Apply a 200 Hz sine-wave AM.\n    let sampling_config = SamplingConfig::FREQ_4K;\n    let mut modulation = autd3_rs_modulation::modulation_buffer();\n    autd3_rs_modulation::sine(\n        200 * Hz,\n        &autd3_rs_modulation::SineOption::default(),\n        sampling_config,\n        &mut modulation,\n    )?;\n\n    client.send(SetSilencer::default()).await?;\n    client.send(Pattern::new(&phases, Intensity::MAX)).await?;\n    client.send(Modulation::new(sampling_config, &modulation)).await?;\n\n    tokio::signal::ctrl_c().await?;\n\n    client.send(Pattern::new(&geometry.phase_buffer(), Intensity::MIN)).await?;\n    client.close()?;\n\n    Ok(())\n}"} lang="rust" />
+
+    Then, run it.
+
+    ```
+    cargo run --release
+    ```
+  </Fragment>
+
+  <Fragment slot="python">
+    First, create an appropriate directory, prepare a virtual environment, and add the autd3 library.
+    Also add autd3-pattern for focus computation and autd3-modulation for AM modulation.
+
+    ```
+    mkdir autd3-sample && cd autd3-sample
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install autd3 autd3-pattern autd3-modulation
+    ```
+
+    Next, make the `main.py` file look like the following.
+
+    <Code code={"import asyncio\n\nimport autd3_modulation as modulation\nimport autd3_pattern as pattern\nfrom autd3 import Client, TransportOption\nfrom autd3.commands import Clear, Modulation, Pattern, SetSilencer, Synchronize\nfrom autd3.geometry import Autd3, Geometry, offset\nfrom autd3.units import Hz, m, mm, s\nfrom autd3.value import Intensity, SamplingConfig\n\n\n\nasync def main() -> None:\n    # Define a geometry consisting of a single AUTD3 device.\n    geometry = Geometry([Autd3()])\n\n    # Open the client.\n    with Client.open(\n        geometry,\n        TransportOption(),\n    ) as client:\n        await client.send(Clear())\n        await client.send(Synchronize())\n\n        # Generate a focus 150 mm above the array center.\n        target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm)\n        wavelength = pattern.wavelength(340 * m / s)\n        phases = geometry.phase_buffer()\n        pattern.focus(\n            geometry,\n            target,\n            wavelength,\n            phases,\n        )\n\n        # Apply a 200 Hz sine-wave AM.\n        sampling_config = SamplingConfig.FREQ_4K\n        mod_buf = modulation.modulation_buffer()\n        modulation.sine(\n            200 * Hz,\n            modulation.SineOption(),\n            sampling_config,\n            mod_buf,\n        )\n\n        await client.send(SetSilencer())\n        await client.send(Pattern(phases, Intensity.MAX))\n        await client.send(Modulation(sampling_config, mod_buf))\n\n        try:\n            await asyncio.Event().wait()\n        finally:\n            await client.send(Pattern(geometry.phase_buffer(), Intensity.MIN))\n            client.close()\n\n\nif __name__ == \"__main__\":\n    asyncio.run(main())"} lang="python" />
+
+    Then, run it.
+
+    ```
+    python3 main.py
+    ```
+  </Fragment>
+
+  <Fragment slot="csharp">
+    First, create an appropriate directory and add the autd3 library.
+    Also add AUTD3.Pattern for focus computation and AUTD3.Modulation for AM modulation.
+
+    ```
+    dotnet new console -o autd3-sample && cd autd3-sample
+    dotnet add package AUTD3
+    dotnet add package AUTD3.Pattern
+    dotnet add package AUTD3.Modulation
+    ```
+
+    Next, make the `Program.cs` file look like the following.
+
+    <Code code={"using System;\nusing System.Threading;\nusing System.Threading.Tasks;\nusing AUTD3;\nusing static AUTD3.Units;\n\n// Define a geometry consisting of a single AUTD3 device.\nvar geometry = new Geometry(new[] { new Autd3() });\n\n// Open the client.\nusing var client = Client.Open(\n    geometry,\n    new TransportOption()\n);\nawait client.SendAsync(new Clear());\nawait client.SendAsync(new Synchronize());\n\n// Generate a focus 150 mm above the array center.\nvar target = geometry.Center + Offset(0.0f * mm, 0.0f * mm, 150.0f * mm);\nvar wavelength = Pattern.Wavelength(340.0f * m / s);\nvar phases = geometry.PhaseBuffer();\nPattern.Focus(\n    geometry,\n    target,\n    wavelength,\n    phases\n);\n\n// Apply a 200 Hz sine-wave AM.\nvar samplingConfig = SamplingConfig.Freq4k;\nvar modulation = Modulation.ModulationBuffer();\nModulation.Sine(\n    200 * Hz,\n    new SineOption(),\n    samplingConfig,\n    modulation\n);\n\nawait client.SendAsync(new SetSilencer());\nawait client.SendAsync(new Pattern(phases, Intensity.Max));\nawait client.SendAsync(new Modulation(samplingConfig, modulation));\n\nusing var cts = new CancellationTokenSource();\nConsole.CancelKeyPress += (_, e) =>\n{\n    e.Cancel = true;\n    cts.Cancel();\n};\n\ntry\n{\n    await Task.Delay(Timeout.InfiniteTimeSpan, cts.Token);\n}\ncatch (OperationCanceledException)\n{\n}\n\nawait client.SendAsync(new Pattern(geometry.PhaseBuffer(), Intensity.Min));\nclient.Close();"} lang="csharp" />
+
+    Then, run it.
+
+    ```
+    dotnet run -c Release
+    ```
+  </Fragment>
+</CodeTabs>
+
+Press Ctrl+C to exit.

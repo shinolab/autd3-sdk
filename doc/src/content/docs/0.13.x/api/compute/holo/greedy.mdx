@@ -1,0 +1,54 @@
+---
+title: greedy
+description: 組合せ最適化による多焦点最適化
+sidebar:
+  order: 14
+srcPath: crates/autd3-rs-pattern-holo/src/combinatorial/greedy.rs
+slug: 0.13.x/api/compute/holo/greedy
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+greedy は各振動子の位相を離散的な候補から 1 つずつ貪欲に選択していく組合せ最適化.
+アルゴリズムは Suzuki らの論文 ([Suzuki et al., 2021](https://doi.org/10.1109/TOH.2021.3076489)) に基づく.
+
+greedy が最適化するのは位相だけで, 振幅は最適化しない.
+振幅は `intensities` で与え, greedy はその振幅を前提に位相を決める.
+`intensities` には全振動子共通の一様値 (`Intensity`) と, 振動子ごとのバッファの両方を渡せる.
+振幅が 0 の振動子は探索から外れ, 位相は 0 になる.
+
+振動子を訪問する順序を `order` で与える必要がある.
+番号は Geometry 全体の通し番号 (デバイス順に `0` から `geometry.num_transducers() - 1` まで) で, `order` には全振動子をちょうど 1 回ずつ含む並びを渡す.
+なお, 振動子は無作為な順に選ぶのが推奨されるため, 通常は乱数でシャッフルした並びを渡すこと.
+
+## API
+
+<CodeTabs rust={"greedy(\n    &geometry,\n    &foci,\n    wavelength,\n    &intensities,\n    &order,\n    &option,\n    &mut dst,\n)?;"} python={"greedy(geometry, foci, wavelength, intensities, order, option, dst)"} csharp={"Holo.Greedy(geometry, foci, wavelength, intensities, order, option, dst);"} />
+
+| 引数         | 型                     | 説明                      |
+| ------------ | ---------------------- | ------------------------- |
+| `geometry`   | `&Geometry`            | デバイス配置              |
+| `foci`       | `&[AmplitudeTarget]`      | 焦点列 (位置と目標振幅)   |
+| `wavelength` | `Length`               | 波長                      |
+| `intensities` | `impl Into<PatternIntensity>` | 振幅 (`Intensity` の一様値, または `&[Vec<Intensity>]` のデバイスごとのバッファ) |
+| `order`      | `&[usize]`             | 振動子を訪問する順序 (通し番号の並び) |
+| `option`     | `&GreedyOption`        | 追加オプション (下記参照) |
+| `dst`        | `&mut [Vec<Phase>]`    | 位相の出力バッファ        |
+
+## GreedyOption
+
+<CodeTabs rust={"GreedyOption {\n    phase_quantization_levels,\n    directivity,\n    objective_func,\n}"} python={"GreedyOption(\n    phase_quantization_levels,\n    directivity,\n)"} csharp={"new GreedyOption\n{\n    PhaseQuantizationLevels = phaseQuantizationLevels,\n    Directivity = directivity,\n}"} />
+
+| フィールド                  | 型                                | デフォルト              |
+|-----------------------------|-----------------------------------|---------------------|
+| `phase_quantization_levels` | `NonZeroU8`                       | `16`                |
+| `directivity`               | `Directivity`                     | `Sphere`            |
+| `objective_func`            | `fn(Complex<f32>, Amplitude) -> f32` | `abs_objective_func` |
+
+* `phase_quantization_levels` — 位相候補の分割数. 大きいほど位相分解能が上がる.
+* `objective_func` — 各候補を評価する目的関数. デフォルトの `abs_objective_func` は, 合成音圧の大きさと目標振幅の差の絶対値を返す.
+  * Rust版のみ設定可能. 他の言語ではデフォルトの目的関数が使われる
+
+## Example
+
+<CodeTabs rust={"use std::num::NonZeroU8;\n\nuse rand::seq::SliceRandom;\n\nuse autd3_rs::geometry::{Autd3, Geometry, offset};\nuse autd3_rs::units::{m, mm, s};\nuse autd3_rs::value::Intensity;\nuse autd3_rs_pattern::wavelength;\nuse autd3_rs_pattern_holo::{\n    AmplitudeTarget, Directivity, GreedyOption, Pa, abs_objective_func, greedy,\n};\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\n\nlet mut order: Vec<usize> = (0..geometry.num_transducers()).collect();\norder.shuffle(&mut rand::rng());\n\nlet mut phases = geometry.phase_buffer();\n\ngreedy(\n    &geometry,\n    &[\n        AmplitudeTarget {\n            point: geometry.center() + offset(-30.0 * mm, 0.0 * mm, 150.0 * mm),\n            amplitude: 2.5e3 * Pa,\n        },\n        AmplitudeTarget {\n            point: geometry.center() + offset(30.0 * mm, 0.0 * mm, 150.0 * mm),\n            amplitude: 2.5e3 * Pa,\n        },\n    ],\n    wavelength(340.0 * m / s),\n    Intensity::MAX,\n    &order,\n    &GreedyOption {\n        phase_quantization_levels: NonZeroU8::new(16).unwrap(),\n        directivity: Directivity::Sphere,\n        objective_func: abs_objective_func,\n    },\n    &mut phases,\n)?;"} python={"import numpy as np\nfrom autd3.geometry import Autd3, Geometry, offset\nfrom autd3.units import m, mm, s\nfrom autd3.value import Intensity\nfrom autd3_pattern import wavelength\nfrom autd3_pattern_holo import (\n    AmplitudeTarget,\n    Directivity,\n    GreedyOption,\n    Pa,\n    greedy,\n)\n\ngeometry = Geometry([Autd3()])\n\norder = np.random.default_rng().permutation(geometry.num_transducers())\n\nphases = geometry.phase_buffer()\n\ngreedy(\n    geometry,\n    [\n        AmplitudeTarget(\n            point=geometry.center() + offset(-30.0 * mm, 0.0 * mm, 150.0 * mm),\n            amplitude=2.5e3 * Pa,\n        ),\n        AmplitudeTarget(\n            point=geometry.center() + offset(30.0 * mm, 0.0 * mm, 150.0 * mm),\n            amplitude=2.5e3 * Pa,\n        ),\n    ],\n    wavelength(340 * m / s),\n    Intensity.MAX,\n    order,\n    GreedyOption(\n        phase_quantization_levels=16,\n        directivity=Directivity.Sphere,\n    ),\n    phases,\n)"} csharp={"using System;\nusing System.Linq;\nusing AUTD3;\nusing AUTD3.Holo;\nusing static AUTD3.Units;\nusing static AUTD3.Holo.HoloUnits;\n\nvar geometry = new Geometry(new[] { new Autd3() });\n\nvar order = Enumerable.Range(0, geometry.NumTransducers).Select(i => (uint)i).ToArray();\nRandom.Shared.Shuffle(order);\n\nvar phases = geometry.PhaseBuffer();\n\nHolo.Greedy(\n    geometry,\n    new[]\n    {\n        new AmplitudeTarget(geometry.Center + Offset(-30.0f * mm, 0.0f * mm, 150.0f * mm), 2.5e3f * Pa),\n        new AmplitudeTarget(geometry.Center + Offset(30.0f * mm, 0.0f * mm, 150.0f * mm), 2.5e3f * Pa),\n    },\n    Pattern.Wavelength(340.0f * m / s),\n    Intensity.Max,\n    order,\n    new GreedyOption\n    {\n        PhaseQuantizationLevels = 16,\n        Directivity = Directivity.Sphere,\n    },\n    phases\n);"} />

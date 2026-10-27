@@ -1,0 +1,34 @@
+---
+title: SetPulseWidthTable
+description: 強度から PWM パルス幅への変換テーブルを設定する SetPulseWidthTable
+sidebar:
+  order: 9.5
+slug: 0.13.x/api/command/set-pulse-width-table
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`SetPulseWidthTable` は, 強度 (0–255) から PWM のパルス幅への変換テーブルを設定するコマンド.
+
+## API
+
+<CodeTabs rust={"SetPulseWidthTable { table };"} python={"SetPulseWidthTable(table)"} csharp={"new SetPulseWidthTable(table);"} />
+
+| フィールド | 型                      | 説明                                                 |
+| ---------- | ----------------------- | ---------------------------------------------------- |
+| `table`    | `[PulseWidth; PWE_TABLE_SIZE]` | 強度インデックス (0–255) ごとのパルス幅 (256 要素) |
+
+`PulseWidth` は `PulseWidth::new(u16)` (1 周期 512 刻みのパルス幅) か `PulseWidth::from_duty(f32)` (デューティ比) で作る.
+
+デフォルトのコマンドは arcsin 形状のテーブルを設定する.
+これは出力音圧が強度に対して (理論的に) 線形になるようなテーブルであり, デバイスが起動時に持つテーブルと同じである.
+
+<CodeTabs rust={"SetPulseWidthTable::default();"} python={"SetPulseWidthTable()"} csharp={"new SetPulseWidthTable();"} />
+
+`empty_table` は全要素が 0 のテーブルを返す.
+
+<CodeTabs rust={"let table = SetPulseWidthTable::empty_table();"} python={"table = SetPulseWidthTable.empty_table()"} csharp={"var table = SetPulseWidthTable.EmptyTable();"} />
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::{Clear, SetPulseWidthTable, Synchronize};\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::Client;\nuse autd3_rs::udp::TransportOption;\nuse autd3_rs::value::PulseWidth;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet option = TransportOption::default();\nlet client = Client::open(&geometry, &option)?;\nclient.send(Clear).await?;\nclient.send(Synchronize).await?;\n\nlet mut table = SetPulseWidthTable::empty_table();\nfor (width, i) in table.iter_mut().zip(0..) {\n    *width = PulseWidth::new(i)?;\n}\n\nclient.send(SetPulseWidthTable { table }).await?;\n\nclient.close()?;"} python={"import asyncio\n\nfrom autd3 import Client, TransportOption\nfrom autd3.commands import Clear, SetPulseWidthTable, Synchronize\nfrom autd3.geometry import Autd3, Geometry\nfrom autd3.value import PulseWidth\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3()])\n    with Client.open(geometry, TransportOption()) as client:\n        await client.send(Clear())\n        await client.send(Synchronize())\n\n        table = SetPulseWidthTable.empty_table()\n        for i in range(len(table)):\n            table[i] = PulseWidth(i)\n\n        await client.send(SetPulseWidthTable(table=table))\n\n\nasyncio.run(main())"} csharp={"using System.Threading.Tasks;\nusing AUTD3;\n\nvar geometry = new Geometry(new[] { new Autd3() });\nusing var client = Client.Open(geometry, new TransportOption());\nawait client.SendAsync(new Clear());\nawait client.SendAsync(new Synchronize());\n\nvar table = SetPulseWidthTable.EmptyTable();\nfor (var i = 0; i < table.Length; i++)\n{\n    table[i] = new PulseWidth((ushort)i);\n}\n\nawait client.SendAsync(new SetPulseWidthTable(table));"} />

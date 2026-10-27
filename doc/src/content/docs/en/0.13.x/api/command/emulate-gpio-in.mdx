@@ -1,0 +1,24 @@
+---
+title: EmulateGpioIn
+description: EmulateGpioIn asserts GPIO inputs from software
+sidebar:
+  order: 7.5
+slug: en/0.13.x/api/command/emulate-gpio-in
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`EmulateGpioIn` is a command that asserts the four [GPIO input terminals](/autd3-sdk/en/0.13.x/hardware/gpio/) of the devices from software.
+The effective value the FPGA sees is the logical OR of the physical terminal input and `EmulateGpioIn`.
+
+## API
+
+<CodeTabs rust={"EmulateGpioIn { values };"} python={"EmulateGpioIn(values)"} csharp={"new EmulateGpioIn(values);"} />
+
+| Field    | Type        | Default         | Description                                            |
+| -------- | ----------- | --------------- | ------------------------------------------------------ |
+| `values` | `[bool; 4]` | all `false`     | Whether to assert each of inputs 0..3 (`true` asserts) |
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::{Clear, EmulateGpioIn, Synchronize};\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::Client;\nuse autd3_rs::udp::TransportOption;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet option = TransportOption::default();\nlet client = Client::open(&geometry, &option)?;\nclient.send(Clear).await?;\nclient.send(Synchronize).await?;\n\nclient.send(EmulateGpioIn {\n    values: [true, false, false, false],\n}).await?;\n\nclient.close()?;"} python={"import asyncio\n\nfrom autd3 import Client, TransportOption\nfrom autd3.commands import Clear, EmulateGpioIn, Synchronize\nfrom autd3.geometry import Autd3, Geometry\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3()])\n    with Client.open(geometry, TransportOption()) as client:\n        await client.send(Clear())\n        await client.send(Synchronize())\n\n        await client.send(EmulateGpioIn([True, False, False, False]))\n\n\nasyncio.run(main())"} csharp={"using System.Threading.Tasks;\nusing AUTD3;\n\nvar geometry = new Geometry(new[] { new Autd3() });\nusing var client = Client.Open(geometry, new TransportOption());\nawait client.SendAsync(new Clear());\nawait client.SendAsync(new Synchronize());\n\nawait client.SendAsync(new EmulateGpioIn(new[] { true, false, false, false }));"} />

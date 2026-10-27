@@ -1,0 +1,39 @@
+---
+title: radiation_pressure_inplace
+description: 既存の変調波形に放射圧補正を適用する Modulation
+sidebar:
+  order: 24
+srcPath: crates/autd3-rs-modulation/src/radiation_pressure.rs
+slug: 0.13.x/api/compute/modulation/radiation
+---
+
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+import CodeTabs from "@components/CodeTabs.astro";
+import ModulationPlot from "@components/ModulationPlot.astro";
+
+`radiation_pressure_inplace` は変調波形に放射圧補正を適用する. `sine` などで計算した波形を in-place に書き換える.
+
+音響放射圧は音圧の 2 乗に比例する.
+`sine` などが指定するのは音圧の振幅なので, 放射圧を目的の波形に合わせたい場合は各サンプルの平方根を取る必要がある.
+`radiation_pressure_inplace` はこの補正を行う.
+
+各サンプル <Math tex="m" /> は次式で書き換えられる.
+
+<MathBlock tex="m' = \mathrm{round}\!\left(255 \sqrt{\tfrac{m}{255}}\right)" />
+
+<ModulationPlot kind="radiation" fixed="" />
+
+## API
+
+<CodeTabs rust={"radiation_pressure_inplace(&mut buffer);"} python={"radiation_pressure_inplace(buffer)"} csharp={"Modulation.RadiationPressureInplace(buffer);"} />
+
+### radiation\_pressure\_inplace
+
+| 引数      | 型          | 説明                             |
+| --------- | ----------- | -------------------------------- |
+| `samples` | `&mut [u8]` | 補正する変調波形                 |
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::units::Hz;\nuse autd3_rs::value::SamplingConfig;\nuse autd3_rs_modulation::{SineOption, modulation_buffer, radiation_pressure_inplace, sine};\n\nlet mut buffer = modulation_buffer();\nsine(150 * Hz, &SineOption::default(), SamplingConfig::FREQ_4K, &mut buffer)?;\n\nradiation_pressure_inplace(&mut buffer);"} python={"from autd3.units import Hz\nfrom autd3.value import SamplingConfig\nfrom autd3_modulation import SineOption, modulation_buffer, radiation_pressure_inplace, sine\n\nbuffer = modulation_buffer()\nsine(150 * Hz, SineOption(), SamplingConfig.FREQ_4K, buffer)\n\nradiation_pressure_inplace(buffer)"} csharp={"using AUTD3;\nusing static AUTD3.Units;\n\nvar buffer = Modulation.ModulationBuffer();\nModulation.Sine(150 * Hz, new SineOption(), SamplingConfig.Freq4k, buffer);\n\nModulation.RadiationPressureInplace(buffer);"} />

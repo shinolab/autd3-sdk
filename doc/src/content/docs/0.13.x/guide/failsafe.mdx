@@ -1,0 +1,38 @@
+---
+title: フェイルセーフ
+description: 通信途絶・PTP ロック喪失時にデバイスが出力を止めるフェイルセーフ
+sidebar:
+  order: 6.5
+slug: 0.13.x/guide/failsafe
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+ホストとの通信が途絶えたときや PTP のロックを失ったときに, 自分で出力を止めるフェイルセーフ機能がある.
+どちらも既定では無効で, [SetCpuConfig](/autd3-sdk/0.13.x/api/command/cpu-config/) で有効化できる.
+
+## 通信途絶の failsafe と生存確認
+
+`failsafe_timeout` を指定すると, ホストからの通信がその時間途絶えたデバイスは出力を止める.
+既定は `None` (無効) で, ホストのクラッシュやケーブル断で通信が途絶えてもデバイスは超音波を止めない.
+
+`Client` は, 送るものが無い間, 自分からはデバイスへ何も送らない.
+そのため `failsafe_timeout` を指定した場合, 出力を保ったまま待つ間は [`send_heartbeat()`](/autd3-sdk/0.13.x/api/basics/client/#api) を周期的に呼ぶ必要がある.
+`send_heartbeat()` は `failsafe_timeout` より十分短い周期で呼ぶ必要がある.
+
+以下は, `failsafe_timeout` を 100 ms にして, 10 ms ごとに生存確認を送る例.
+
+<CodeTabs rust={"client\n    .send(SetCpuConfig::new(CpuConfig {\n        failsafe_timeout: Some(Duration::from_millis(100)),\n        ..Default::default()\n    }))\n    .await?;\n\nlet mut heartbeat = tokio::time::interval(Duration::from_millis(10));\nloop {\n    heartbeat.tick().await;\n    client.send_heartbeat()?;\n}"} python={"await client.send(SetCpuConfig(CpuConfig(failsafe_timeout=Duration.from_millis(100))))\n\nwhile True:\n    client.send_heartbeat()\n    await asyncio.sleep(0.01)"} csharp={"await client.SendAsync(new SetCpuConfig(new CpuConfig { FailsafeTimeout = TimeSpan.FromMilliseconds(100) }));\n\nwhile (true)\n{\n    client.SendHeartbeat();\n    await Task.Delay(TimeSpan.FromMilliseconds(10));\n}"} />
+
+failsafe で止まった出力は, 自動では戻らない.
+止まっているかどうかは `device_status()` が返す `DeviceStatus` の `failsafe_active` で確認でき, [`ReleaseFailsafe`](/autd3-sdk/0.13.x/api/command/release-failsafe/) を送ると再開する ([Clear](/autd3-sdk/0.13.x/api/command/clear/)でも良いが, その場合, すべての状態が初期化される).
+
+## PTP failsafe の検出と解除
+
+[SetCpuConfig](/autd3-sdk/0.13.x/api/command/cpu-config/) で `ptp_unlock_failsafe_timeout` を指定すると, PTP のロックを失ったまま指定の時間が経ったデバイスは出力を止める.
+
+以下は, `failsafe_active` が立っていて再ロックした (`ptp_locked` が立っている) デバイスへ `ReleaseFailsafe` を送る例.
+
+<CodeTabs rust={"let status = client.device_status()?;\nlet releasable = |s: &DeviceStatus| s.failsafe_active && s.ptp_locked;\nif status.iter().any(releasable) {\n    client\n        .send(each(|device| {\n            releasable(&status[device.idx()]).then_some(ReleaseFailsafe)\n        }))\n        .await?;\n}"} python={"status = client.device_status()\n\ndef releasable(s: DeviceStatus) -> bool:\n    return s.failsafe_active and s.ptp_locked\n\nif any(releasable(s) for s in status):\n    await client.send(each(lambda device: ReleaseFailsafe() if releasable(status[device.idx()]) else None))"} csharp={"var status = client.DeviceStatus();\nstatic bool Releasable(DeviceStatus s) => s.FailsafeActive && s.PtpLocked;\nif (status.Any(Releasable))\n{\n    await client.SendAsync(Command.Each(device => Releasable(status[device.Idx]) ? new ReleaseFailsafe() : null));\n}"} />
+
+ロックを失ったままのデバイスへ `ReleaseFailsafe` を送ってもエラーになり, 出力は止まったままになる.

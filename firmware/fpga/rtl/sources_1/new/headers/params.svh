@@ -29,7 +29,7 @@ package params;
   localparam bit [31:0] FlashUsrAccessUpdate = 32'h55504454;
 
   localparam bit [7:0] VersionNumMajor = 8'd0;
-  localparam bit [7:0] VersionNumMinor = 8'd12;
+  localparam bit [7:0] VersionNumMinor = 8'd13;
   localparam bit [7:0] VersionNumPatch = 8'd0;
 
   typedef enum int {

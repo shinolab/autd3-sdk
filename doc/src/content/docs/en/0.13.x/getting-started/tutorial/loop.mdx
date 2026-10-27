@@ -1,0 +1,46 @@
+---
+title: Loops and Transitions
+description: Control finite loop counts and bank switching timing
+sidebar:
+  order: 8
+slug: en/0.13.x/getting-started/tutorial/loop
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+By default, `FociStm` / `PatternStm` play back the same pattern sequence infinitely.
+To make the playback count finite, proceed as follows.
+
+## Finite loops
+
+The playback count is specified with `loop_behavior` of `FociStmOption` and the like.
+`LoopBehavior::Infinite` (default) loops infinitely, while `LoopBehavior::Finite(n)` plays back `n` times (up to 65535 times) and then stops.
+Note that on stopping, the last pattern continues to be output.
+
+An important point is that **a finite loop takes effect only when switching to a bank different from the current one**.
+
+<CodeTabs rust={"// Play the circular motion only 3 times, then stop.\n// A finite loop (and non-immediate transition) only fires when switching to a\n// different bank, so write to bank B1 instead of the current B0.\nclient.send(FociStm::new(\n    config,\n    &foci,\n    FociStmOption {\n        loop_behavior: LoopBehavior::Finite(NonZeroU16::new(3).unwrap()),\n        bank: PatternBank::B1,\n        transition_mode: TransitionMode::SyncIdx,\n        ..Default::default()\n    },\n)).await?;"} python={"# Play the circular motion only 3 times, then stop.\n# A finite loop (and non-immediate transition) only fires when switching to a\n# different bank, so write to bank B1 instead of the current B0.\nawait client.send(\n    FociStm(\n        config,\n        foci,\n        FociStmOption(\n            loop_behavior=LoopBehavior.Finite(3),\n            bank=PatternBank.B1,\n            transition_mode=TransitionMode.SyncIdx,\n        ),\n    )\n)"} csharp={"// Play the circular motion only 3 times, then stop.\n// A finite loop (and non-immediate transition) only fires when switching to a\n// different bank, so write to bank B1 instead of the current B0.\nawait client.SendAsync(new FociStm(\n    new SamplingConfig(50.0f * Hz * foci.Length),\n    foci,\n    new FociStmOption\n    {\n        LoopBehavior = LoopBehavior.Finite(3),\n        Bank = PatternBank.B1,\n        TransitionMode = TransitionMode.SyncIdx,\n    }\n));"} />
+
+## Transition timing
+
+The timing at which the playback target switches to a bank is specified with `transition_mode`.
+The modes that can be used are constrained by the loop setting (`loop_behavior`) of the destination bank.
+
+Modes available when the destination is an infinite loop.
+
+* `Immediate` (default): switches the bank immediately after the write.
+* `Ext`: extended mode. Automatically switches to the next bank when playback within the bank finishes.
+
+Modes available when the destination is a finite loop.
+
+* `SyncIdx`: switches at the timing when the playback index of the target bank returns to 0.
+* `SysTime { time }`: switches at the specified [device time](/autd3-sdk/en/0.13.x/api/basics/sys-time/) `time` (`TransitionMode.SysTime(time)` in Python / C#).
+* `Gpio(GpioIn)`: switches on the trigger of the specified [GPIO input pin](/autd3-sdk/en/0.13.x/hardware/gpio).
+
+:::note
+The various loop and transition constraints exist in order to synchronize multiple devices.
+:::
+
+As with the loop setting, the transition timing takes effect only when a bank is switched.
+
+For fine-grained control such as preloading the next output into another bank in advance and switching at an arbitrary timing, refer to the [low-level commands](/autd3-sdk/en/0.13.x/api/command/lowlevel/) in the API reference.

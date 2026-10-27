@@ -1,0 +1,40 @@
+---
+title: radiation_pressure_inplace
+description: Modulation that applies radiation pressure correction to an
+  existing modulation waveform
+sidebar:
+  order: 24
+srcPath: crates/autd3-rs-modulation/src/radiation_pressure.rs
+slug: en/0.13.x/api/compute/modulation/radiation
+---
+
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+import CodeTabs from "@components/CodeTabs.astro";
+import ModulationPlot from "@components/ModulationPlot.astro";
+
+`radiation_pressure_inplace` applies radiation pressure correction to a modulation waveform. It rewrites a waveform computed by `sine` or similar in place.
+
+Acoustic radiation pressure is proportional to the square of the sound pressure.
+Since `sine` and similar functions specify the amplitude of the sound pressure, taking the square root of each sample is necessary when the radiation pressure should match the target waveform.
+`radiation_pressure_inplace` performs this correction.
+
+Each sample <Math tex="m" /> is rewritten by the following equation.
+
+<MathBlock tex="m' = \mathrm{round}\!\left(255 \sqrt{\tfrac{m}{255}}\right)" />
+
+<ModulationPlot kind="radiation" fixed="" />
+
+## API
+
+<CodeTabs rust={"radiation_pressure_inplace(&mut buffer);"} python={"radiation_pressure_inplace(buffer)"} csharp={"Modulation.RadiationPressureInplace(buffer);"} />
+
+### radiation\_pressure\_inplace
+
+| Parameter | Type        | Description                                        |
+| --------- | ----------- | -------------------------------------------------- |
+| `samples` | `&mut [u8]` | modulation waveform to correct                     |
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::units::Hz;\nuse autd3_rs::value::SamplingConfig;\nuse autd3_rs_modulation::{SineOption, modulation_buffer, radiation_pressure_inplace, sine};\n\nlet mut buffer = modulation_buffer();\nsine(150 * Hz, &SineOption::default(), SamplingConfig::FREQ_4K, &mut buffer)?;\n\nradiation_pressure_inplace(&mut buffer);"} python={"from autd3.units import Hz\nfrom autd3.value import SamplingConfig\nfrom autd3_modulation import SineOption, modulation_buffer, radiation_pressure_inplace, sine\n\nbuffer = modulation_buffer()\nsine(150 * Hz, SineOption(), SamplingConfig.FREQ_4K, buffer)\n\nradiation_pressure_inplace(buffer)"} csharp={"using AUTD3;\nusing static AUTD3.Units;\n\nvar buffer = Modulation.ModulationBuffer();\nModulation.Sine(150 * Hz, new SineOption(), SamplingConfig.Freq4k, buffer);\n\nModulation.RadiationPressureInplace(buffer);"} />

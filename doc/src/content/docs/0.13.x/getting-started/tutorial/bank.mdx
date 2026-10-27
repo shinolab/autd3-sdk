@@ -1,0 +1,31 @@
+---
+title: バンクの切り替え
+description: Pattern バンクへの書き込みと切り替えによるダブルバッファリング
+sidebar:
+  order: 7
+slug: 0.13.x/getting-started/tutorial/bank
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+[焦点の移動](/autd3-sdk/0.13.x/getting-started/tutorial/moving-focus/)で説明したように, AUTD3 において `Pattern` 等は送信するたびに上書きされ, この書き込みはバッファリングされない.
+そのため, 再生中のデータを上書きすると, 書き込みの途中で意図しない中間データが出力されてしまうことがある.
+
+これを防ぐために, AUTD3 の `Pattern` は複数のメモリ領域 (バンクと呼ぶ) を持っている.
+再生中でない別のバンクへ書き込み, 書き込み完了後に再生対象をそのバンクへ切り替えれば, 出力を乱さずにデータを差し替えられる.
+
+## バンクを指定して書き込む
+
+書き込み先・再生対象のバンクは `Pattern::with_bank` で指定する.
+`Pattern::new` ( バンク省略時) は `PatternBank::B0` を使う.
+
+下記の例では, まず `B0` へ焦点 A を書き込んで再生し, 次の焦点 B は再生中でない `B1` へ書き込む.
+`B1` への書き込み中も `B0` の出力は乱れず, 書き込み完了後に `B1` へ切り替わる.
+
+<CodeTabs rust={"// Write focus A to bank B0 and play it.\nlet target_a = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);\nlet mut pat_a = geometry.phase_buffer();\nautd3_rs_pattern::focus(\n    &geometry,\n    target_a,\n    wavelength,\n    &mut pat_a,\n);\nclient.send(Pattern::with_bank(PatternBank::B0, &pat_a, Intensity::MAX)).await?;\n\n// Write focus B to bank B1, which is not currently playing, then switch to B1.\n// B0 keeps playing cleanly while B1 is being written (double buffering).\nlet target_b = geometry.center() + offset(0.0 * mm, 30.0 * mm, 150.0 * mm);\nlet mut pat_b = geometry.phase_buffer();\nautd3_rs_pattern::focus(\n    &geometry,\n    target_b,\n    wavelength,\n    &mut pat_b,\n);\nclient.send(Pattern::with_bank(PatternBank::B1, &pat_b, Intensity::MAX)).await?;"} python={"# Write focus A to bank B0 and play it.\ntarget_a = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm)\npat_a = geometry.phase_buffer()\npattern.focus(\n    geometry,\n    target_a,\n    wavelength,\n    pat_a,\n)\nawait client.send(Pattern(pat_a, Intensity.MAX, bank=PatternBank.B0))\n\n# Write focus B to bank B1, which is not currently playing, then switch to B1.\n# B0 keeps playing cleanly while B1 is being written (double buffering).\ntarget_b = geometry.center() + offset(0.0 * mm, 30.0 * mm, 150.0 * mm)\npat_b = geometry.phase_buffer()\npattern.focus(\n    geometry,\n    target_b,\n    wavelength,\n    pat_b,\n)\nawait client.send(Pattern(pat_b, Intensity.MAX, bank=PatternBank.B1))"} csharp={"// Write focus A to bank B0 and play it.\nvar targetA = geometry.Center + Offset(0.0f * mm, 0.0f * mm, 150.0f * mm);\nvar patA = geometry.PhaseBuffer();\nPattern.Focus(\n    geometry,\n    targetA,\n    wavelength,\n    patA\n);\nawait client.SendAsync(new Pattern(PatternBank.B0, patA, Intensity.Max));\n\n// Write focus B to bank B1, which is not currently playing, then switch to B1.\n// B0 keeps playing cleanly while B1 is being written (double buffering).\nvar targetB = geometry.Center + Offset(0.0f * mm, 30.0f * mm, 150.0f * mm);\nvar patB = geometry.PhaseBuffer();\nPattern.Focus(\n    geometry,\n    targetB,\n    wavelength,\n    patB\n);\nawait client.SendAsync(new Pattern(PatternBank.B1, patB, Intensity.Max));"} />
+
+このように再生中でないバンクへ交互に書き込むことで, 出力を乱さずにパターンを差し替えられる.
+
+`Modulation` も同様にバンクを持っており, `Modulation::with_bank` で書き込み先のバンク (`ModulationBank`) を指定できる.
+
+バンクの書き込み・設定・切り替えをより細かく制御したい場合は, API リファレンスの [低レベルコマンド](/autd3-sdk/0.13.x/api/command/lowlevel/) を参照.

@@ -2,6 +2,87 @@
 
 # Rust
 
+## [0.13.0] - 2026-10-27
+
+### 💥 Breaking Changes
+
+- *(core)* [**breaking**] Accept any IntoIterator in Geometry::new
+- [**breaking**] Remove UdpOption::for_emulator
+- *(modulation)* [**breaking**] Take SamplingConfig as a required argument of sine/square/fourier
+- *(modulation)* [**breaking**] Unify value out-of-range errors and report NaN samples
+- [**breaking**] Make silent_stop private and call it only from close
+- [**breaking**] Remove unused thread_waker, UdpEmulator::ptp_config and Audit fault injection/heartbeat
+- [**breaking**] Remove server link and rename UdpOption to TransportOption
+- [**breaking**] Make heartbeat user-driven and disable the host failsafe by default
+- [**breaking**] Stop sending Clear/Synchronize on open and remove exec_lead, send_streaming, firmware check, resync rounds and timer_resolution
+- [**breaking**] Remove ClientConfig, fix the window at MAX_INFLIGHT and move ack_timeout to TransportOption
+- [**breaking**] Rename transport options, heartbeat, Response accessors and internal client/udp types to descriptive names
+- [**breaking**] Remove the command-layer SEQ, Reset and dedup, and make Client::open synchronous
+- [**breaking**] Trim public surface (consolidate open timeouts, drop STM generators and runtime re-exports)
+- [**breaking**] Remove simulator knowledge from the client and move geometry sending to autd3-rs-simulator-control
+- [**breaking**] Report PTP lock and PTP failsafe per device in DeviceStatus
+- [**breaking**] Remove udp::discover
+- [**breaking**] Report an out-of-range geometry device count on open as UdpError::InvalidDeviceCount instead of PayloadError
+- [**breaking**] Remove the unused UdpError::FrameCountMismatch and InvalidFrameLength variants
+- *(udp)* [**breaking**] Interface::Auto picks the first interface with a responding device
+- [**breaking**] Remove TransitionMode::Later in favour of the low-level Write* + Config* ops
+- [**breaking**] Wrap the wire error types in PayloadError instead of mirroring their variants
+- [**breaking**] Validate SamplingConfig and PulseWidth on construction and drop StmConfig
+- *(core)* [**breaking**] Keep only the latest DeviceClock sample instead of a max filter
+- [**breaking**] Make close() one-shot and close the client even when the stop frames fail
+- *(firmware)* [**breaking**] Interleave raw pattern data, move bitstream parsing to fpga_bitstream, unpack phase depths in wire and check payload layouts with a macro
+- *(core)* [**breaking**] Drop unused and test-only re-exports from params
+- *(firmware)* [**breaking**] Drop Disposition, consume the config reset request without an RMW and check wire layouts with assert_layout
+- [**breaking**] Remove send_rate_limit_percent and the host-side pacer
+- [**breaking**] Remove TransducerGroups and the group pattern functions
+- [**breaking**] Remove recovery from Lost; a Lost device stays lost until reopened
+- [**breaking**] Restrict each to single-frame operations
+- [**breaking**] Make WriteModulationBuffer and WriteFociBuffer single-frame operations
+- [**breaking**] Write Operation::encode output directly into a Datagram and remove Encoded
+- [**breaking**] Drop the unused lifetime from Command and Expansion
+- *(holo)* [**breaking**] Remove parallel feature and option
+- [**breaking**] Make close synchronous and stop sending the stop frame
+- [**breaking**] Make the number of foci per FociStm sample a runtime value
+- *(client)* [**breaking**] Implement Deref<Target = Controller> for Client instead of delegating each method
+- [**breaking**] Restrict NetworkCause to UdpError
+- *(client)* [**breaking**] Make DeviceClock a plain value owned by SessionState
+- *(holo)* [**breaking**] Take the transducer update order for greedy from the caller
+- [**breaking**] Replace StateChecker and BusStats with per-device device_status and drop implicit checks and aliases
+- [**breaking**] Drop sugar and duplicate APIs from core, pattern, holo and modulation and make Freq f32-only
+- [**breaking**] Drop the simulator control port, emulator GPU/polars/ClientApi and console self-updater
+- [**breaking**] Drop firmware-side transition checks, retries, ICMPv6 echo and internal CpuConfig fields and replace UpdateActivate with Reboot
+- *(bindings)* [**breaking**] Pass FFI configs and modulation options by value and drop binding-only duplicate APIs
+- *(bindings)* [**breaking**] Take PhaseBuffer in SetPhaseCorrection instead of nested arrays
+- [**breaking**] Fail a frame immediately when a datagram cannot reach a device
+- [**breaking**] Own the data of SetPulseWidthTable, SetOutputMask and SetPhaseCorrection
+- *(holo)* [**breaking**] Remove the batch API and the batch dimension of LinAlgBackend
+- *(firmware-emulator)* [**breaking**] Remove fault injection, main loop pause, counters and test_utils
+- *(cpu-config)* [**breaking**] Leave ptp.max_freq_ppb and path_delay_filter_shift range checks to the device
+- [**breaking**] Remove command tuples and sequences, send commands one at a time
+- [**breaking**] Report failsafe_active for any failsafe cause in DeviceStatus
+- *(modulation)* [**breaking**] Remove Nearest and SamplingMode
+- *(core)* [**breaking**] Mark FpgaImageError as non_exhaustive
+- [**breaking**] Make BoxedCommand Send
+
+### 🚀 Features
+
+- *(fpga)* Phase-lock the system clock to SYNC_IN with MMCM fine phase shift
+- Add ack/lost timeout accessors to Client
+
+### 🐛 Bug Fixes
+
+- *(client)* Fail a frame at once when the socket stays full instead of letting it time out
+- *(pattern-holo)* Return an error for an out-of-range order index instead of panicking
+
+### ⚡ Performance
+
+- *(core)* Quantize Phase with round-half-to-even and a constant multiply
+- *(pattern)* Evaluate the Hermite/Laguerre-Gaussian log amplitude once per transducer
+
+### 📦 Dependencies
+
+- *(deps)* Update dependencies and align default-features
+
 ## [0.12.0] - 2026-10-19
 
 ### 💥 Breaking Changes
@@ -19,8 +100,6 @@
 
 ### 🐛 Bug Fixes
 
-- *(server)* Serialize client attach with bus shutdown
-- *(server)* Reject a zero retry interval
 - Reject a zero server port and check a zero ServerLink timeout at open
 - Align Python/C# bindings and docs with the Rust API
 
@@ -387,6 +466,63 @@
 
 # Python
 
+## [0.13.0] - 2026-10-27
+
+### 💥 Breaking Changes
+
+- *(core)* [**breaking**] Accept any IntoIterator in Geometry::new
+- [**breaking**] Remove UdpOption::for_emulator
+- *(modulation)* [**breaking**] Take SamplingConfig as a required argument of sine/square/fourier
+- [**breaking**] Make silent_stop private and call it only from close
+- [**breaking**] Remove server link and rename UdpOption to TransportOption
+- [**breaking**] Make heartbeat user-driven and disable the host failsafe by default
+- [**breaking**] Stop sending Clear/Synchronize on open and remove exec_lead, send_streaming, firmware check, resync rounds and timer_resolution
+- [**breaking**] Remove ClientConfig, fix the window at MAX_INFLIGHT and move ack_timeout to TransportOption
+- [**breaking**] Rename transport options, heartbeat, Response accessors and internal client/udp types to descriptive names
+- [**breaking**] Remove the command-layer SEQ, Reset and dedup, and make Client::open synchronous
+- [**breaking**] Trim public surface (consolidate open timeouts, drop STM generators and runtime re-exports)
+- [**breaking**] Remove simulator knowledge from the client and move geometry sending to autd3-rs-simulator-control
+- [**breaking**] Report PTP lock and PTP failsafe per device in DeviceStatus
+- [**breaking**] Remove TransitionMode::Later in favour of the low-level Write* + Config* ops
+- [**breaking**] Wrap the wire error types in PayloadError instead of mirroring their variants
+- [**breaking**] Remove send_rate_limit_percent and the host-side pacer
+- [**breaking**] Remove TransducerGroups and the group pattern functions
+- [**breaking**] Remove recovery from Lost; a Lost device stays lost until reopened
+- [**breaking**] Restrict each to single-frame operations
+- [**breaking**] Make WriteModulationBuffer and WriteFociBuffer single-frame operations
+- [**breaking**] Drop the unused lifetime from Command and Expansion
+- *(holo)* [**breaking**] Remove parallel feature and option
+- [**breaking**] Make close synchronous and stop sending the stop frame
+- [**breaking**] Make the number of foci per FociStm sample a runtime value
+- *(holo)* [**breaking**] Take the transducer update order for greedy from the caller
+- [**breaking**] Replace StateChecker and BusStats with per-device device_status and drop implicit checks and aliases
+- [**breaking**] Drop sugar and duplicate APIs from core, pattern, holo and modulation and make Freq f32-only
+- [**breaking**] Drop the simulator control port, emulator GPU/polars/ClientApi and console self-updater
+- [**breaking**] Drop firmware-side transition checks, retries, ICMPv6 echo and internal CpuConfig fields and replace UpdateActivate with Reboot
+- *(bindings)* [**breaking**] Pass FFI configs and modulation options by value and drop binding-only duplicate APIs
+- *(bindings)* [**breaking**] Take PhaseBuffer in SetPhaseCorrection instead of nested arrays
+- [**breaking**] Own the data of SetPulseWidthTable, SetOutputMask and SetPhaseCorrection
+- *(holo)* [**breaking**] Remove the batch API and the batch dimension of LinAlgBackend
+- *(cpu-config)* [**breaking**] Leave ptp.max_freq_ppb and path_delay_filter_shift range checks to the device
+- [**breaking**] Remove command tuples and sequences, send commands one at a time
+- [**breaking**] Report failsafe_active for any failsafe cause in DeviceStatus
+- *(modulation)* [**breaking**] Remove Nearest and SamplingMode
+- *(python)* [**breaking**] Unify the exception hierarchy, rename TransducerMask.Masked and remove Interface.name()
+
+### 🚀 Features
+
+- *(fpga)* Phase-lock the system clock to SYNC_IN with MMCM fine phase shift
+- *(python)* Accept ndarray and single ControlPoint in ControlPoints
+- Add ack/lost timeout accessors to Client
+
+### 🐛 Bug Fixes
+
+- *(python)* Keep Client.__exit__ from raising after a failed session
+
+### 📦 Dependencies
+
+- *(deps)* Update dependencies and align default-features
+
 ## [0.12.0] - 2026-10-19
 
 ### 💥 Breaking Changes
@@ -622,6 +758,54 @@
 
 # C#
 
+## [0.13.0] - 2026-10-27
+
+### 💥 Breaking Changes
+
+- *(modulation)* [**breaking**] Take SamplingConfig as a required argument of sine/square/fourier
+- [**breaking**] Make silent_stop private and call it only from close
+- [**breaking**] Remove server link and rename UdpOption to TransportOption
+- [**breaking**] Make heartbeat user-driven and disable the host failsafe by default
+- [**breaking**] Stop sending Clear/Synchronize on open and remove exec_lead, send_streaming, firmware check, resync rounds and timer_resolution
+- [**breaking**] Remove ClientConfig, fix the window at MAX_INFLIGHT and move ack_timeout to TransportOption
+- [**breaking**] Rename transport options, heartbeat, Response accessors and internal client/udp types to descriptive names
+- [**breaking**] Remove the command-layer SEQ, Reset and dedup, and make Client::open synchronous
+- [**breaking**] Trim public surface (consolidate open timeouts, drop STM generators and runtime re-exports)
+- [**breaking**] Remove simulator knowledge from the client and move geometry sending to autd3-rs-simulator-control
+- [**breaking**] Report PTP lock and PTP failsafe per device in DeviceStatus
+- [**breaking**] Remove TransitionMode::Later in favour of the low-level Write* + Config* ops
+- [**breaking**] Remove send_rate_limit_percent and the host-side pacer
+- [**breaking**] Remove TransducerGroups and the group pattern functions
+- [**breaking**] Remove recovery from Lost; a Lost device stays lost until reopened
+- [**breaking**] Restrict each to single-frame operations
+- [**breaking**] Make WriteModulationBuffer and WriteFociBuffer single-frame operations
+- *(holo)* [**breaking**] Remove parallel feature and option
+- [**breaking**] Make close synchronous and stop sending the stop frame
+- *(holo)* [**breaking**] Take the transducer update order for greedy from the caller
+- [**breaking**] Replace StateChecker and BusStats with per-device device_status and drop implicit checks and aliases
+- [**breaking**] Drop sugar and duplicate APIs from core, pattern, holo and modulation and make Freq f32-only
+- [**breaking**] Drop firmware-side transition checks, retries, ICMPv6 echo and internal CpuConfig fields and replace UpdateActivate with Reboot
+- *(bindings)* [**breaking**] Pass FFI configs and modulation options by value and drop binding-only duplicate APIs
+- *(bindings)* [**breaking**] Take PhaseBuffer in SetPhaseCorrection instead of nested arrays
+- *(holo)* [**breaking**] Remove the batch API and the batch dimension of LinAlgBackend
+- *(cpu-config)* [**breaking**] Leave ptp.max_freq_ppb and path_delay_filter_shift range checks to the device
+- [**breaking**] Remove command tuples and sequences, send commands one at a time
+- [**breaking**] Report failsafe_active for any failsafe cause in DeviceStatus
+- *(modulation)* [**breaking**] Remove Nearest and SamplingMode
+
+### 🚀 Features
+
+- *(fpga)* Phase-lock the system clock to SYNC_IN with MMCM fine phase shift
+- Add ack/lost timeout accessors to Client
+
+### 🐛 Bug Fixes
+
+- *(csharp)* Load AUTD3.Pattern/Modulation without autd3capi and keep Dispose from throwing after a failed session
+
+### ⚡ Performance
+
+- *(core)* Quantize Phase with round-half-to-even and a constant multiply
+
 ## [0.12.0] - 2026-10-19
 
 ### 💥 Breaking Changes
@@ -806,6 +990,21 @@
 
 # Unity
 
+## [0.13.0] - 2026-10-27
+
+### 💥 Breaking Changes
+
+- *(modulation)* [**breaking**] Take SamplingConfig as a required argument of sine/square/fourier
+- [**breaking**] Make silent_stop private and call it only from close
+- [**breaking**] Remove server link and rename UdpOption to TransportOption
+- [**breaking**] Stop sending Clear/Synchronize on open and remove exec_lead, send_streaming, firmware check, resync rounds and timer_resolution
+- [**breaking**] Remove ClientConfig, fix the window at MAX_INFLIGHT and move ack_timeout to TransportOption
+- [**breaking**] Remove the command-layer SEQ, Reset and dedup, and make Client::open synchronous
+- [**breaking**] Trim public surface (consolidate open timeouts, drop STM generators and runtime re-exports)
+- [**breaking**] Remove simulator knowledge from the client and move geometry sending to autd3-rs-simulator-control
+- [**breaking**] Make close synchronous and stop sending the stop frame
+- [**breaking**] Remove command tuples and sequences, send commands one at a time
+
 ## [0.11.0] - 2026-10-15
 
 ### 💥 Breaking Changes
@@ -856,6 +1055,30 @@
 ## [0.1.0] - 2026-07-06
 
 # Simulator
+
+## [0.13.0] - 2026-10-27
+
+### 💥 Breaking Changes
+
+- *(core)* [**breaking**] Accept any IntoIterator in Geometry::new
+- [**breaking**] Remove server link and rename UdpOption to TransportOption
+- [**breaking**] Remove ClientConfig, fix the window at MAX_INFLIGHT and move ack_timeout to TransportOption
+- [**breaking**] Remove the command-layer SEQ, Reset and dedup, and make Client::open synchronous
+- [**breaking**] Trim public surface (consolidate open timeouts, drop STM generators and runtime re-exports)
+- [**breaking**] Remove simulator knowledge from the client and move geometry sending to autd3-rs-simulator-control
+- [**breaking**] Drop the unused lifetime from Command and Expansion
+- [**breaking**] Drop sugar and duplicate APIs from core, pattern, holo and modulation and make Freq f32-only
+- [**breaking**] Drop the simulator control port, emulator GPU/polars/ClientApi and console self-updater
+- [**breaking**] Own the data of SetPulseWidthTable, SetOutputMask and SetPhaseCorrection
+- *(firmware-emulator)* [**breaking**] Remove fault injection, main loop pause, counters and test_utils
+
+### 🚀 Features
+
+- *(simulator)* Edit, save and load the geometry in the GUI and stop sending it from the examples
+
+### 📦 Dependencies
+
+- *(deps)* Update dependencies and align default-features
 
 ## [0.12.0] - 2026-10-19
 
@@ -989,6 +1212,19 @@
 
 # Console
 
+## [0.13.0] - 2026-10-27
+
+### 💥 Breaking Changes
+
+- [**breaking**] Remove server link and rename UdpOption to TransportOption
+- [**breaking**] Trim public surface (consolidate open timeouts, drop STM generators and runtime re-exports)
+- [**breaking**] Remove udp::discover
+- [**breaking**] Drop the simulator control port, emulator GPU/polars/ClientApi and console self-updater
+
+### 📦 Dependencies
+
+- *(deps)* Update dependencies and align default-features
+
 ## [0.12.0] - 2026-10-19
 
 ### 💥 Breaking Changes
@@ -1099,6 +1335,29 @@
 - Derive simulator device count from client geometry
 
 # Firmware
+
+## [0.13.0] - 2026-10-27
+
+### 💥 Breaking Changes
+
+- [**breaking**] Make heartbeat user-driven and disable the host failsafe by default
+- [**breaking**] Remove the command-layer SEQ, Reset and dedup, and make Client::open synchronous
+- [**breaking**] Report PTP lock and PTP failsafe per device in DeviceStatus
+- [**breaking**] Wrap the wire error types in PayloadError instead of mirroring their variants
+- *(firmware)* [**breaking**] Interleave raw pattern data, move bitstream parsing to fpga_bitstream, unpack phase depths in wire and check payload layouts with a macro
+- *(firmware)* [**breaking**] Drop Disposition, consume the config reset request without an RMW and check wire layouts with assert_layout
+- [**breaking**] Drop firmware-side transition checks, retries, ICMPv6 echo and internal CpuConfig fields and replace UpdateActivate with Reboot
+- *(cpu-config)* [**breaking**] Leave ptp.max_freq_ppb and path_delay_filter_shift range checks to the device
+- [**breaking**] Report failsafe_active for any failsafe cause in DeviceStatus
+
+### 🚀 Features
+
+- *(fpga)* Phase-lock the system clock to SYNC_IN with MMCM fine phase shift
+- Add DEFAULT const to CpuConfig, PtpConfig and FpgaConfig
+
+### 📦 Dependencies
+
+- *(deps)* Update dependencies and align default-features
 
 ## [0.12.0] - 2026-10-19
 

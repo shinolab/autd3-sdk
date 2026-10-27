@@ -1,0 +1,24 @@
+---
+title: SetPhaseCorrection
+description: SetPhaseCorrection for per-transducer phase correction
+sidebar:
+  order: 8
+slug: en/0.13.x/api/command/phase-correction
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`SetPhaseCorrection` is a command that sets the phase offset added to each transducer.
+The offset set here is added to all subsequent output phases.
+
+## API
+
+<CodeTabs rust={"SetPhaseCorrection { phases };"} python={"SetPhaseCorrection(phases)"} csharp={"new SetPhaseCorrection(phases);"} />
+
+| Field    | Type            | Description                                    |
+| -------- | --------------- | --------------------------------------------- |
+| `phases` | `Vec<Vec<Phase>>` | Phase offset table per device. |
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::{Clear, SetPhaseCorrection, Synchronize};\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::Client;\nuse autd3_rs::udp::TransportOption;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet option = TransportOption::default();\nlet client = Client::open(&geometry, &option)?;\nclient.send(Clear).await?;\nclient.send(Synchronize).await?;\n\nlet phases = geometry.phase_buffer();\n\nclient.send(SetPhaseCorrection { phases }).await?;\n\nclient.close()?;"} python={"import asyncio\n\nfrom autd3 import Client, TransportOption\nfrom autd3.commands import Clear, SetPhaseCorrection, Synchronize\nfrom autd3.geometry import Autd3, Geometry\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3()])\n    with Client.open(geometry, TransportOption()) as client:\n        await client.send(Clear())\n        await client.send(Synchronize())\n\n        phases = geometry.phase_buffer()\n\n        await client.send(SetPhaseCorrection(phases))\n\n\nasyncio.run(main())"} csharp={"using System.Threading.Tasks;\nusing AUTD3;\n\nvar geometry = new Geometry(new[] { new Autd3() });\nusing var client = Client.Open(geometry, new TransportOption());\nawait client.SendAsync(new Clear());\nawait client.SendAsync(new Synchronize());\n\nusing var phases = geometry.PhaseBuffer();\n\nawait client.SendAsync(new SetPhaseCorrection(phases));"} />

@@ -1,0 +1,26 @@
+---
+title: SetOutputMask
+description: SetOutputMask to toggle output enable/disable
+sidebar:
+  order: 9
+slug: en/0.13.x/api/command/output-mask
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`SetOutputMask` is a command that toggles output enable/disable per transducer.
+
+## API
+
+<CodeTabs rust={"SetOutputMask { masks };"} python={"SetOutputMask(masks)"} csharp={"new SetOutputMask(masks);"} />
+
+| Field   | Type           | Description                                                    |
+| ------- | -------------- | ------------------------------------------------------------- |
+| `masks` | `Vec<Vec<bool>>` | Output mask per device (output when `true`). |
+
+`Geometry::output_mask_buffer` allocates the masks for all devices.
+Every entry starts at `true` (all transducers output).
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::{Clear, SetOutputMask, Synchronize};\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::Client;\nuse autd3_rs::udp::TransportOption;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet option = TransportOption::default();\nlet client = Client::open(&geometry, &option)?;\nclient.send(Clear).await?;\nclient.send(Synchronize).await?;\n\nlet masks = geometry.output_mask_buffer();\n\nclient.send(SetOutputMask { masks }).await?;\n\nclient.close()?;"} python={"import asyncio\n\nfrom autd3 import Client, TransportOption\nfrom autd3.commands import Clear, SetOutputMask, Synchronize\nfrom autd3.geometry import Autd3, Geometry\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3()])\n    with Client.open(geometry, TransportOption()) as client:\n        await client.send(Clear())\n        await client.send(Synchronize())\n\n        masks = geometry.output_mask_buffer()\n\n        await client.send(SetOutputMask(masks=masks))\n\n\nasyncio.run(main())"} csharp={"using System.Threading.Tasks;\nusing AUTD3;\n\nvar geometry = new Geometry(new[] { new Autd3() });\nusing var client = Client.Open(geometry, new TransportOption());\nawait client.SendAsync(new Clear());\nawait client.SendAsync(new Synchronize());\n\nvar masks = geometry.OutputMaskBuffer();\n\nawait client.SendAsync(new SetOutputMask(masks));"} />

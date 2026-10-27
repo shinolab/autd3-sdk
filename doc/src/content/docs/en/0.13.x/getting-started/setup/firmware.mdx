@@ -1,0 +1,98 @@
+---
+title: Firmware
+description: Steps to update the CPU / FPGA firmware using autd3-console
+sidebar:
+  order: 2
+slug: en/0.13.x/getting-started/setup/firmware
+---
+
+import Figure from "@components/Figure.astro";
+
+For the AUTD3 device to operate correctly, a version of the CPU / FPGA firmware compatible with the SDK must be flashed.
+
+:::note
+This version of the SDK supports Firmware v0.10.x.
+:::
+
+Firmware updates are performed using the **Firmware** tab of the GUI console autd3-console.
+See [Console](/autd3-sdk/en/0.13.x/guide/console/) for how to obtain it.
+
+:::caution
+If the firmware version does not match the SDK, correct operation is not guaranteed.
+:::
+
+## OTA over an Ethernet cable
+
+If both the CPU and the FPGA run firmware v0.10.0 or later, the device can be updated with nothing but an Ethernet cable.
+If either is v0.9.x or earlier (the EtherCAT firmware), the JTAG update described below is required.
+
+:::caution
+The OTA cannot take a device back to the EtherCAT firmware (v0.9.x and earlier).
+To go back to the EtherCAT firmware, flash it via JTAG.
+:::
+
+### Prerequisites
+
+Complete the [host network setup](/autd3-sdk/en/0.13.x/getting-started/setup/network/) first.
+
+### Procedure
+
+1. Connect the AUTD3 and the PC with an Ethernet cable, then turn on the power
+2. Launch autd3-console and open the **Firmware** tab
+3. Select **Version** and **Target** (`Both` / `FPGA` / `CPU`). Normally use `Both` (note that updating only the CPU leaves the FPGA on a different version, and correct operation is then not guaranteed)
+4. Make sure **Method** is OTA (the default)
+5. Enter the number of connected AUTD3 devices in **Devices**
+6. Set **Interface** if needed (the default is fine)
+7. Press **Flash**. Progress is shown in the log at the bottom of the panel. The CPU takes tens of seconds, the FPGA about 90 seconds per device
+8. The update is complete when `Ok!` appears in the log. No power cycle is needed (after a CPU update the devices reboot and are enumerated again)
+
+**Do not power off the devices during the update.**
+If the update fails, power-cycle the devices and try again.
+
+### If an error about a different protocol version appears
+
+If the firmware on the device and autd3-console speak different versions of the communication protocol, OTA fails with an error such as the following.
+
+```
+the device speaks UDP protocol version 4, but this host speaks version 5
+```
+
+In this case, flash it with the following steps.
+
+1. With the autd3-console of the same version as the firmware currently on the device, try flashing the firmware of the version you want to flash
+2. **Keeping the power on**, flash the same firmware once more with the autd3-console of the same version as the firmware you want to flash
+
+## Updating via JTAG
+
+### Prerequisites
+
+Flashing the firmware requires the following external tools.
+In each case, the executable must be on the `PATH` (on Windows, the installation location is detected automatically).
+
+* **FPGA flashing**: [Vivado](https://www.xilinx.com/products/design-tools/vivado.html) (`vivado` / `vivado_lab`) and a [XILINX Platform Cable](https://www.xilinx.com/products/boards-and-kits/hw-usb-ii-g.html) for the connection.
+
+:::note
+If the only goal is FPGA flashing, using **Vivado Lab Edition** is strongly recommended.
+The standard version (ML Edition) requires over 60 GB to install, whereas the Lab Edition needs only about 6 GB.
+:::
+
+* **CPU flashing**: [J-Link Software](https://www.segger.com/downloads/jlink/) (`JLink` / `JLinkExe`) and a [J-Link Plus](https://www.segger.com/products/debug-probes/j-link/models/j-link-plus/) probe via a [J-Link 9-Pin Cortex-M Adapter](https://www.segger-pocjapan.com/j-link-9-pin-cortex-m-adapter).
+
+:::note
+When using an older J-Link device (e.g. J-Link Plus V10 or earlier), check "**Install legacy USB Driver for J-Link**" during installation of the J-Link Software.
+For details, see the [Segger Wiki](https://wiki.segger.com/J-Link_Model_Overview).
+:::
+
+### Flashing Procedure
+
+<Figure src="img/hardware/cable.jpg" alt="Connection points for the firmware update cable" />
+
+1. Turn off the AUTD3 power
+2. Connect the cables described above. The connection points are as shown in the figure above.
+3. Turn on the AUTD3 power
+4. Launch autd3-console and open the **Firmware** tab.
+5. Select the version to flash from **Version**
+6. Choose the target to flash under **Target** (`Both` / `FPGA` / `CPU`).
+7. Choose `JTAG` under **Method**
+8. Press **Flash**. Progress is shown in the log at the bottom of the panel. Flashing takes several minutes.
+9. After flashing completes, power-cycle the AUTD3 to apply the new firmware.

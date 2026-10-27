@@ -1,0 +1,44 @@
+---
+title: SetGpioOut
+description: SetGpioOut / GpioOut to control the GPIO output
+sidebar:
+  order: 7
+slug: en/0.13.x/api/command/gpio
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`SetGpioOut` is a command that sets the signals output to the device's 4 GPIO output terminals.
+
+## API
+
+<CodeTabs rust={"SetGpioOut { outputs };"} python={"SetGpioOut(outputs=outputs)"} csharp={"new SetGpioOut(outputs);"} />
+
+| Field     | Type           | Default   | Description                        |
+| --------- | -------------- | --------- | ---------------------------------- |
+| `outputs` | `[GpioOut; 4]` | all `Off` | Outputs assigned to terminals 0..3 |
+
+## GpioOut
+
+|         |                                  |
+| ----------------- | ---------------------------------------- |
+| `Off`             | Always Low (default)                     |
+| `BaseSignal`      | Reference signal of the ultrasound (40 kHz) |
+| `Thermo`          | Temperature sensor assertion             |
+| `ForceFan`        | ForceFan state                           |
+| `Sync`            | Synchronization signal                   |
+| `ModBank`         | Active Modulation bank                    |
+| `ModIdx(u16)`     | High when Modulation is at the specified index |
+| `PatternBank`     | Active Pattern bank                       |
+| `PatternIdx(u16)` | High when Pattern is at the specified index |
+| `IsStmMode`   | High when in Stm mode (`size != 1`)                 |
+| `SysTimeEq(SysTime)` | High when the system time matches the specified value |
+| `SyncDiff`        | Synchronization error                    |
+| `PwmOut(u8)`      | PWM output of the specified transducer   |
+| `Direct(bool)`    | Directly output the specified fixed value |
+
+For the `SysTime` passed to `SysTimeEq`, see [SysTime](/autd3-sdk/en/0.13.x/api/basics/sys-time/).
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::{Clear, GpioOut, SetGpioOut, Synchronize};\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::Client;\nuse autd3_rs::udp::TransportOption;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet option = TransportOption::default();\nlet client = Client::open(&geometry, &option)?;\nclient.send(Clear).await?;\nclient.send(Synchronize).await?;\n\nclient.send(SetGpioOut {\n    outputs: [\n        GpioOut::PatternBank,\n        GpioOut::Thermo,\n        GpioOut::PwmOut(0),\n        GpioOut::Off,\n    ],\n}).await?;\n\nclient.close()?;"} python={"import asyncio\n\nfrom autd3 import Client, TransportOption\nfrom autd3.commands import Clear, GpioOut, SetGpioOut, Synchronize\nfrom autd3.geometry import Autd3, Geometry\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3()])\n    with Client.open(geometry, TransportOption()) as client:\n        await client.send(Clear())\n        await client.send(Synchronize())\n\n        await client.send(\n            SetGpioOut(\n                outputs=[\n                    GpioOut.PatternBank,\n                    GpioOut.Thermo,\n                    GpioOut.PwmOut(0),\n                    GpioOut.Off,\n                ]\n            )\n        )\n\n\nasyncio.run(main())"} csharp={"using System.Threading.Tasks;\nusing AUTD3;\n\nvar geometry = new Geometry(new[] { new Autd3() });\nusing var client = Client.Open(geometry, new TransportOption());\nawait client.SendAsync(new Clear());\nawait client.SendAsync(new Synchronize());\n\nawait client.SendAsync(new SetGpioOut(new[]\n{\n    GpioOut.PatternBank,\n    GpioOut.Thermo,\n    GpioOut.PwmOut(0),\n    GpioOut.Off,\n}));"} />

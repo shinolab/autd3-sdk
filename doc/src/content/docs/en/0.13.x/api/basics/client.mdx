@@ -1,0 +1,140 @@
+---
+title: Client
+description: The Client that manages connection and transmission to devices
+sidebar:
+  order: 2
+slug: en/0.13.x/api/basics/client
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import Install from "@components/Install.astro";
+
+`Client` is the central object that sends commands and reads state.
+
+<Install rust="autd3-rs" python="autd3" csharp="AUTD3" />
+
+<CodeTabs rust={"let client = Client::open(&geometry, &option)?;\nclient.send(Clear).await?;\nclient.send(Synchronize).await?;"} python={"client = Client.open(geometry, TransportOption())\nawait client.send(Clear())\nawait client.send(Synchronize())"} csharp={"var client = Client.Open(layout, new TransportOption());\nawait client.SendAsync(new Clear());\nawait client.SendAsync(new Synchronize());"} />
+
+| Parameter  | Type              | Description                                                                  |
+| ---------- | ----------------- | ---------------------------------------------------------------------------- |
+| `geometry` | `&Geometry`       | Physical layout of the devices                                               |
+| `option`   | `&TransportOption`      | Connection settings. See [`TransportOption`](/autd3-sdk/en/0.13.x/api/basics/transport-option/) |
+
+The `Client` connects to the devices (or the [Simulator](/autd3-sdk/en/0.13.x/guide/simulator/)) directly over UDP.
+
+## API
+
+<CodeTabs rust={"let num_devices = client.num_devices();\nlet geometry = client.geometry();\n\nclient.send_heartbeat()?;\n\nlet firmware = client.read_firmware_version().await?;\nlet fpga_state = client.read_fpga_state().await?;\n\nclient.send(Nop).await?;\nlet resp = client.send_frame(frame).await?.await?;\n\nclient.close()?;"} python={"num_devices = client.num_devices()\ngeometry = client.geometry()\n\nclient.send_heartbeat()\n\nfirmware = await client.read_firmware_version()\nfpga_state = await client.read_fpga_state()\n\nawait client.send(Nop())\nresp = await (await client.send_frame(frame))\n\nclient.close()"} csharp={"var numDevices = client.NumDevices;\nvar geometry = client.Geometry;\n\nclient.SendHeartbeat();\n\nvar firmware = await client.ReadFirmwareVersionAsync();\nvar fpgaState = await client.ReadFpgaStateAsync();\n\nawait client.SendAsync(new Nop());\nvar resp = await await client.SendFrameAsync(frames[0]);\n\nclient.Close();"} />
+
+| Method                    | async | Returns                               | Description                                                |
+| ------------------------- | :---: | ------------------------------------- | ---------------------------------------------------------- |
+| `num_devices()`           | —     | `usize`                               | Number of connected devices                                |
+| `geometry()`              | —     | `&Geometry`                           | Physical layout of the devices given at open time          |
+| `read_firmware_version()` | ✓     | `Result<Vec<FirmwareVersion>, Error>` | CPU/FPGA firmware version of each device                   |
+| `read_fpga_state()`       | ✓     | `Result<Vec<FpgaState>, Error>`       | FPGA state of each device                                  |
+| `read_telemetry()`        | ✓     | `Result<Vec<Telemetry>, Error>`       | CPU diagnostic counters of each device                     |
+| `device_time_now()`       | —     | `Result<SysTime, Error>`              | Current time of the devices (see [SysTime](/autd3-sdk/en/0.13.x/api/basics/sys-time/)) |
+| `send(cmd)`               | ✓     | `Result<(), Error>`                   | Send a command, confirming the response frame by frame     |
+| `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | Send one frame (see [streaming](#streaming))                |
+| `send_frame_at(frame, exec)` | ✓  | `Result<ResponseFuture, Error>`       | Send one frame at a given processing time (see [Processing time](#processing-time)) |
+| `device_status()`         | —     | `Result<Vec<DeviceStatus>, Error>`    | State of each device. See [State Monitoring](/autd3-sdk/en/0.13.x/guide/state-check/) for details. |
+| `send_heartbeat()`        | —     | `Result<(), Error>`                   | Send one liveness check to every device that is not `Lost` (see [Failsafe](/autd3-sdk/en/0.13.x/guide/failsafe/#communication-loss-failsafe-and-liveness-check)) |
+| `ack_timeout()` / `set_ack_timeout(timeout)` | — | `Duration` / `()`          | Read or change the response-wait timeout |
+| `lost_timeout()` / `set_lost_timeout(timeout)` | — | `Duration` / `()`        | Read or change the timeout for the `Lost` judgement |
+| `close()`                 | —     | `Result<(), Error>`                   | Close the connection                                       |
+
+`close()` only stops the I/O thread and closes the connection; it sends nothing to the devices.
+The devices keep their last output after the client is closed, so stopping the output is the user's responsibility.
+
+## streaming
+
+`send` waits for the response frame by frame (stop-and-wait).
+To keep sending without waiting for the responses, convert the command into frames with `Frames::encode`, collect the `ResponseFuture`s that `send_frame` returns, and then await them in order.
+
+<CodeTabs rust={"let frames = Frames::encode(&geometry, Modulation::new(SamplingConfig::FREQ_4K, &modulation))?;\nlet mut responses = Vec::with_capacity(frames.len());\nfor frame in &frames {\n    responses.push(client.send_frame(frame).await?);\n}\nfor response in responses {\n    response.await?.check()?;\n}"} python={"frames = Frames.encode(geometry, Modulation(SamplingConfig.FREQ_4K, data))\nresponses = [await client.send_frame(frame) for frame in frames]\nfor response in responses:\n    (await response).check()"} csharp={"using var modulationFrames = Frames.Encode(geometry, new Modulation(SamplingConfig.Freq4k, modulation));\nvar responses = new List<ResponseFuture>();\nforeach (var frame in modulationFrames)\n{\n    responses.Add(await client.SendFrameAsync(frame));\n}\nforeach (var response in responses)\n{\n    (await response).Check();\n}"} />
+
+The number of frames that may be sent without waiting for a reply is `MAX_INFLIGHT (7)`.
+While `MAX_INFLIGHT` frames are waiting for their replies, `send_frame` waits until the replies of one of them are complete.
+
+## Types of the Read Results
+
+`read_firmware_version()` / `read_fpga_state()` / `read_telemetry()` return an array with one element per device, in device-number order.
+They fail with `DeviceLost` while a device is `Lost`.
+
+### FirmwareVersion
+
+| Member                  | Type             | Description                                            |
+| ----------------------- | ---------------- | ------------------------------------------------------ |
+| `cpu`                   | `Version`        | Version of the CPU firmware                            |
+| `fpga`                  | `Version`        | Version of the FPGA firmware                           |
+| `is_emulator()`         | `bool`           | Whether it is a device emulator                        |
+| `is_supported()`        | `bool`           | Whether both the CPU and the FPGA are in a series this SDK supports |
+| `SUPPORTED_SERIES`      | `(u8, u8)`       | Supported series (major, minor)                        |
+
+### FpgaState
+
+| Method                    | Type             | Description                              |
+| ------------------------- | ---------------- | ---------------------------------------- |
+| `is_thermal_asserted()`   | `bool`           | Whether the thermal sensor is over the threshold |
+| `current_mod_bank()`      | `ModulationBank` | Current Modulation bank                  |
+| `current_pattern_bank()`  | `PatternBank`    | Current Pattern bank (shared by Pattern and STM) |
+| `is_pattern_mode()`       | `bool`           | Whether a Pattern is being output        |
+| `is_pattern_stopped()`    | `bool`           | Whether Pattern / STM playback has stopped |
+| `is_mod_stopped()`        | `bool`           | Whether Modulation playback has stopped |
+| `is_transition_pending()` | `bool`           | Whether a bank switch is waiting to take effect |
+
+### Telemetry
+
+CPU diagnostic counters.
+
+| Field                 | Type  | Description                                            |
+| --------------------- | ----- | ------------------------------------------------------ |
+| `fifo_drop`           | `u32` | Frames dropped because the receive FIFO was full       |
+| `dispatch_error`      | `u32` | Number of times processing ended in an error           |
+| `processed`           | `u32` | Frames processed                                       |
+| `send_failure`        | `u32` | Number of times the NIC refused to send                |
+| `failsafe`            | `u16` | Number of times the failsafe fired because communication with the host was lost |
+| `ptp_unlock_failsafe` | `u16` | Number of times the failsafe fired because the PTP lock was lost |
+| `sync_resync`         | `u8`  | Number of hardware resynchronizations of the sync input (reset to 0 by `Synchronize`) |
+| `boot_failure`        | `u8`  | Number of steps that failed at boot (not cleared by `Clear`) |
+| `cpu_watchdog`        | `u8`  | Number of times the CPU watchdog fired (kept until the FPGA is reconfigured) |
+| `exec_late`           | `u32` | Frames whose processing started 1 µs or more after their [processing time](#processing-time) |
+
+## Processing time
+
+Frames are sent to the devices one at a time, so they reach the devices at slightly different times.
+Sending a frame with `send_frame_at` and an `ExecAt` stamps it with a processing time, and each device holds the frame until that time.
+Every device thus starts processing what one send carries at the same timing.
+`send` / `send_frame` stamp no processing time (each device processes a frame as soon as it arrives).
+To send a command with a processing time, convert it into frames with `Frames::encode` and send each frame with `send_frame_at`.
+
+<CodeTabs rust={"let frames = Frames::encode(client.geometry(), Nop)?;\n\nlet lead = ExecAt::Lead(Duration::from_millis(1));\nfor frame in &frames {\n    client.send_frame_at(frame, lead).await?.await?.check()?;\n}\n\nlet at = client.device_time_now()? + Duration::from_millis(5);\nfor frame in &frames {\n    client.send_frame_at(frame, ExecAt::At(at)).await?.await?.check()?;\n}"} python={"frames = Frames.encode(client.geometry(), Nop())\n\nlead = ExecAt.Lead(Duration.from_millis(1))\nfor frame in frames:\n    (await (await client.send_frame_at(frame, lead))).check()\n\nat = client.device_time_now() + Duration.from_millis(5)\nfor frame in frames:\n    (await (await client.send_frame_at(frame, ExecAt.At(at)))).check()"} csharp={"using var frames = Frames.Encode(client.Geometry, new Nop());\n\nvar lead = ExecAt.Lead(TimeSpan.FromMilliseconds(1));\nforeach (var frame in frames)\n{\n    (await await client.SendFrameAsync(frame, lead)).Check();\n}\n\nvar at = client.DeviceTimeNow() + TimeSpan.FromMilliseconds(5);\nforeach (var frame in frames)\n{\n    (await await client.SendFrameAsync(frame, ExecAt.At(at))).Check();\n}"} />
+
+| `ExecAt`         | Processing time                                                              |
+| ---------------- | ---------------------------------------------------------------------------- |
+| `Immediate`      | None (each device processes the frame as soon as it arrives; the same as `send_frame`) |
+| `Lead(lead)`     | The current device time at the send + `lead`                                 |
+| `At(sys_time)`   | The device time `sys_time` (see [SysTime](/autd3-sdk/en/0.13.x/api/basics/sys-time/)) |
+
+Note the following:
+
+* It does not guarantee that every device always starts processing at the same time
+  * If sending to every device does not finish by the stamped time, a late device processes the frame after the stamped time. `exec_late` of `read_telemetry` counts how often that happened.
+  * When frames are sent one after another without waiting for the responses ([streaming](#streaming)), the stamped time of a frame can come while the device is still processing the previous one; that frame is processed late (and counted in `exec_late`).
+  * Even when it succeeds, only the start of the processing inside the CPU board is aligned; it does not guarantee that the start of the processing on the FPGA is aligned (that is, for example, that the phase of the emitted ultrasound is updated at the same timing)
+* The response comes back after the processing, so a send completes only after the stamped time. Waiting for the response frame by frame, a command of several frames takes about the number of frames × `lead`
+
+## each
+
+`each` takes a closure that receives a device and assigns a different single-frame command per device.
+
+<CodeTabs rust={"client\n    .send(each(|device| {\n        Some(if device.idx() % 2 == 0 {\n            Pattern::new(&left, Intensity::MAX)\n        } else {\n            Pattern::new(&right, Intensity::MAX)\n        })\n    }))\n    .await?;"} python={"await client.send(each(lambda device: Pattern(left if device.idx() % 2 == 0 else right, Intensity.MAX)))"} csharp={"await client.SendAsync(Command.Each(device => device.Idx % 2 == 0\n    ? new Pattern(left, Intensity.Max)\n    : new Pattern(right, Intensity.Max)));"} />
+
+`each` always makes a single frame.
+A multi-frame command such as `Modulation` / `FociStm` / `PatternStm` cannot be sent with `each`.
+When each device needs different multi-frame content, build the frames yourself with `Frame::new` and send them with `send_frame`.
+
+In Rust, the return values of the closure must all be the same type.
+To mix commands of different types, unify them into a `Box<dyn Operation>`.
+
+<CodeTabs rust={"client\n    .send(each(|device| {\n        Some(if device.idx() % 2 == 0 {\n            Box::new(Pattern::new(&left, Intensity::MAX)) as Box<dyn Operation>\n        } else {\n            Box::new(SetSilencer::default())\n        })\n    }))\n    .await?;"} />

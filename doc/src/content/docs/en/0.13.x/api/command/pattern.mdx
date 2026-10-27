@@ -1,0 +1,60 @@
+---
+title: Pattern
+description: Command that sends a computed phase and intensity pattern to the device
+sidebar:
+  order: 1
+slug: en/0.13.x/api/command/pattern
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { Code } from "astro-expressive-code/components";
+
+`Pattern` is a command that sends the phase and intensity of each transducer to the device.
+The phases and intensities are passed as separate buffers.
+
+## API
+
+<CodeTabs>
+  <Fragment slot="rust">
+    <Code code={"Pattern::new(&phases, intensities);\n\nPattern::with_bank(bank, &phases, intensities);\n\nPattern {\n    bank,\n    phases: &phases,\n    intensities: intensities.into(),\n    transition_mode,\n};"} lang="rust" />
+
+    `Pattern::new` sets the destination bank to `PatternBank::B0`.
+    To write to another bank, use `Pattern::with_bank(bank, phases, intensities)`.
+  </Fragment>
+
+  <Fragment slot="python">
+    <Code code={"Pattern(phases, intensities)\n\nPattern(phases, intensities, bank=bank)\n\nPattern(\n    phases,\n    intensities,\n    bank=bank,\n    transition_mode=transition_mode,\n)"} lang="python" />
+
+    `Pattern` sets the destination bank to `PatternBank.B0` by default.
+    To write to another bank, use `Pattern(phases, intensities, bank=bank)`.
+  </Fragment>
+
+  <Fragment slot="csharp">
+    <Code code={"new Pattern(phases, intensities);\n\nnew Pattern(bank, phases, intensities);\n\nnew Pattern(\n    bank: bank,\n    phases: phases,\n    intensities: intensities,\n    transitionMode: transitionMode\n);"} lang="csharp" />
+
+    `new Pattern(phases, intensities)` sets the destination bank to `PatternBank.B0`.
+    To write to another bank, use `new Pattern(bank, phases, intensities)`.
+  </Fragment>
+</CodeTabs>
+
+| Field             | Type                             | Default                     | Description                      |
+| ----------------- | -------------------------------- | --------------------------- | -------------------------------- |
+| `bank`            | `PatternBank`                    | `PatternBank::B0`           | Bank to write to / play back     |
+| `phases`          | `&[Vec<Phase>]`     | —                           | Phases per device                |
+| `intensities`     | `PatternIntensity`  | —                           | Intensity (a uniform `Intensity`, or a per-device `&[Vec<Intensity>]` buffer) |
+| `transition_mode` | `TransitionMode`                 | `TransitionMode::Immediate` | Behavior when switching the bank |
+
+Several [helper functions](/autd3-sdk/en/0.13.x/api/compute/pattern/) are provided for computing patterns.
+
+## Equivalent Low-Level Commands
+
+`Pattern` is equivalent to the three commands [WritePatternBuffer](/autd3-sdk/en/0.13.x/api/command/lowlevel/write-pattern-buffer/) + [ConfigPattern](/autd3-sdk/en/0.13.x/api/command/lowlevel/config-pattern/) + [ActivatePatternBank](/autd3-sdk/en/0.13.x/api/command/lowlevel/activate-pattern-bank/). However, `Pattern` itself is sent as a single frame that fuses the three.
+The following is equivalent to `Pattern { bank, phases, intensities }`.
+
+To write a bank without switching to it (and send `ActivatePatternBank` later), send `WritePatternBuffer` + `ConfigPattern` directly instead of `Pattern`.
+
+<CodeTabs rust={"WritePatternBuffer::new(bank, 0, patterns, intensities);\nConfigPattern {\n    bank,\n    config: SamplingConfig::new(NonZeroU16::MAX),\n    size: 1,\n    loop_behavior: LoopBehavior::Infinite,\n};\nActivatePatternBank {\n    bank,\n    transition_mode,\n};"} python={"WritePatternBuffer(\n    bank=bank,\n    start_index=0,\n    patterns=[phases],\n    intensities=intensities,\n)\nConfigPattern(\n    bank=bank,\n    config=SamplingConfig(0xFFFF),\n    size=1,\n    loop_behavior=LoopBehavior.Infinite,\n)\nActivatePatternBank(\n    bank=bank,\n    transition_mode=transition_mode,\n)"} csharp={"new WritePatternBuffer(\n    bank: bank,\n    startIndex: 0,\n    patterns: new[] { phases },\n    intensities: intensities\n);\nnew ConfigPattern(\n    bank: bank,\n    config: new SamplingConfig(ushort.MaxValue),\n    size: 1,\n    loopBehavior: LoopBehavior.Infinite\n);\nnew ActivatePatternBank(\n    bank: bank,\n    transitionMode: transitionMode\n);"} />
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::{Clear, Pattern, Synchronize};\nuse autd3_rs::geometry::{Autd3, Geometry, offset};\nuse autd3_rs::units::{m, mm, s};\nuse autd3_rs::value::Intensity;\nuse autd3_rs::Client;\nuse autd3_rs::udp::TransportOption;\nuse autd3_rs_pattern::{focus, wavelength};\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet option = TransportOption::default();\nlet client = Client::open(&geometry, &option)?;\nclient.send(Clear).await?;\nclient.send(Synchronize).await?;\n\nlet mut phases = geometry.phase_buffer();\nfocus(\n    &geometry,\n    geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm),\n    wavelength(340.0 * m / s),\n    &mut phases,\n);\n\nclient.send(Pattern::new(&phases, Intensity::MAX)).await?;\n\nclient.close()?;"} python={"import asyncio\n\nfrom autd3 import Client, TransportOption\nfrom autd3.commands import Clear, Pattern, Synchronize\nfrom autd3.geometry import Autd3, Geometry, offset\nfrom autd3.units import m, mm, s\nfrom autd3.value import Intensity\nfrom autd3_pattern import focus, wavelength\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3()])\n    with Client.open(geometry, TransportOption()) as client:\n        await client.send(Clear())\n        await client.send(Synchronize())\n\n        phases = geometry.phase_buffer()\n        focus(\n            geometry,\n            geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm),\n            wavelength(340 * m / s),\n            phases,\n        )\n\n        await client.send(Pattern(phases, Intensity.MAX))\n\n\nasyncio.run(main())"} csharp={"using System.Threading.Tasks;\nusing AUTD3;\nusing static AUTD3.Units;\n\nvar geometry = new Geometry(new[] { new Autd3() });\nusing var client = Client.Open(geometry, new TransportOption());\nawait client.SendAsync(new Clear());\nawait client.SendAsync(new Synchronize());\n\nvar phases = geometry.PhaseBuffer();\nPattern.Focus(\n    geometry,\n    geometry.Center + Offset(0.0f * mm, 0.0f * mm, 150.0f * mm),\n    Pattern.Wavelength(340.0f * m / s),\n    phases\n);\n\nawait client.SendAsync(new Pattern(phases, Intensity.Max));"} />
