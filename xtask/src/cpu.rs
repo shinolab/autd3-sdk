@@ -6,7 +6,7 @@ use clap::Subcommand;
 
 use crate::clean::{CleanArgs, Cleaner};
 use crate::cpu_codegen::gen_param;
-use crate::util::{cargo_clippy, cargo_fmt, run, run_env};
+use crate::util::{capture, cargo_clippy, cargo_fmt, run, run_env};
 
 #[derive(Subcommand)]
 pub(crate) enum CpuCmd {
@@ -99,16 +99,6 @@ pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {
 
 pub(crate) const CPU_TARGET: &str = "armv7r-none-eabi";
 
-const CPU_LINK_FLAGS: &[&str] = &[
-    "-mcpu=cortex-r4f",
-    "-march=armv7-r",
-    "-marm",
-    "-mlittle-endian",
-    "-mthumb-interwork",
-    "-mfloat-abi=soft",
-    "-mfpu=vfpv3",
-];
-
 fn board_dir(root: &Path) -> PathBuf {
     root.join("firmware/cpu/board")
 }
@@ -120,16 +110,18 @@ pub(crate) fn cpu_build(root: &Path) -> Result<PathBuf> {
 
     gen_param(root)?;
 
-    let prefix = std::env::var("CROSS_COMPILE").unwrap_or_else(|_| "arm-none-eabi-".to_string());
-    let cc = format!("{prefix}gcc");
-    let objcopy = format!("{prefix}objcopy");
-    if std::process::Command::new(&cc)
-        .arg("--version")
-        .output()
-        .is_err()
-    {
-        bail!("{cc} not found on PATH (install the Arm GNU toolchain or set CROSS_COMPILE)");
+    let board = board_dir(root);
+    let tools = rustc_host_tools(&board)?;
+    let lld = tools.join(format!("rust-lld{}", std::env::consts::EXE_SUFFIX));
+    let objcopy = tools.join(format!("llvm-objcopy{}", std::env::consts::EXE_SUFFIX));
+    if !objcopy.exists() {
+        bail!(
+            "{} not found (install it with `rustup component add llvm-tools`)",
+            objcopy.display()
+        );
     }
+    let lld = lld.to_string_lossy();
+    let objcopy = objcopy.to_string_lossy();
 
     let cpu_dir = root.join("firmware/cpu");
     let linker_script = cpu_dir.join("platform/autd3-cpu.ld");
@@ -137,7 +129,6 @@ pub(crate) fn cpu_build(root: &Path) -> Result<PathBuf> {
     std::fs::create_dir_all(&build_dir)
         .with_context(|| format!("creating {}", build_dir.display()))?;
 
-    let board = board_dir(root);
     run("cargo", ["build", "--release"], &board).context(
         "building the firmware staticlib failed \
          (is the target installed? `rustup target add armv7r-none-eabi`)",
@@ -159,25 +150,26 @@ pub(crate) fn cpu_build(root: &Path) -> Result<PathBuf> {
     }
 
     let elf = build_dir.join("autd3-cpu.x");
-    let map_flag = format!("-Wl,-Map={}", build_dir.join("autd3-cpu.map").display());
+    let map_flag = format!("-Map={}", build_dir.join("autd3-cpu.map").display());
     let script_flag = format!("-T{}", linker_script.display());
     let staticlib_str = staticlib.to_string_lossy().into_owned();
     let elf_str = elf.to_string_lossy().into_owned();
-    let mut args: Vec<&str> = Vec::new();
-    args.extend(CPU_LINK_FLAGS);
-    args.extend([
-        "-nostartfiles",
-        "--specs=nosys.specs",
-        &script_flag,
-        &map_flag,
-        "-Wl,--no-warn-rwx-segments",
-        "-Wl,-z,noexecstack",
-        "-Wl,--undefined=_vector_table",
-        &staticlib_str,
-        "-o",
-        &elf_str,
-    ]);
-    run(&cc, args, root)?;
+    run(
+        &lld,
+        [
+            "-flavor",
+            "gnu",
+            &script_flag,
+            &map_flag,
+            "-z",
+            "noexecstack",
+            "--undefined=_vector_table",
+            &staticlib_str,
+            "-o",
+            &elf_str,
+        ],
+        root,
+    )?;
 
     let loader = objcopy_binary(
         &objcopy,
@@ -233,6 +225,15 @@ pub(crate) fn cpu_build(root: &Path) -> Result<PathBuf> {
 
     println!("firmware built: {}", bin.display());
     Ok(bin)
+}
+
+fn rustc_host_tools(cwd: &Path) -> Result<PathBuf> {
+    let sysroot = capture("rustc", &["--print", "sysroot"], cwd)?;
+    let host = capture("rustc", &["--print", "host-tuple"], cwd)?;
+    Ok(PathBuf::from(sysroot)
+        .join("lib/rustlib")
+        .join(host)
+        .join("bin"))
 }
 
 fn objcopy_binary(objcopy: &str, elf: &Path, bin: &Path, cwd: &Path) -> Result<Vec<u8>> {

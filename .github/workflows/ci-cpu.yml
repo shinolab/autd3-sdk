@@ -14,10 +14,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-rust
+        with:
+          components: llvm-tools
       - name: Install the bare-metal Rust target
         run: rustup target add armv7r-none-eabi
-      - name: Install the Arm GNU toolchain
-        run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi
       - run: cargo xtask cpu format
       - run: cargo xtask cpu lint
       - run: cargo xtask cpu lint --loom

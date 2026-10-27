@@ -20,14 +20,14 @@ SECTIONS
 
 	_vec_rom_s = LOADADDR(.vector);
 
-	.text 0x00040000 :
+	.text 0x00040000 : AT(LOADADDR(.vector) + SIZEOF(.vector))
 	{
 		_text = .;
 		* (.text)
 		* (.text.*)
 		. = ALIGN(8);
 		_etext = .;
-	} > ATCM AT > APP_FLASH
+	} > ATCM
 
 	_mtext = LOADADDR(.text);
 
@@ -38,7 +38,7 @@ SECTIONS
 		* (.rodata.*)
 		. = ALIGN(8);
 		_erodata = .;
-	} > ATCM AT > APP_FLASH
+	} > ATCM
 
 	_mrodata = LOADADDR(.rodata);
 
@@ -49,7 +49,7 @@ SECTIONS
 		* (.data.*)
 		. = ALIGN(8);
 		_edata = .;
-	} > ATCM AT > APP_FLASH
+	} > ATCM
 
 	_mdata = LOADADDR(.data);
 
@@ -62,7 +62,7 @@ SECTIONS
 		_ebss = .;
 	} > ATCM
 
-	.cstack 0x00070000 :
+	.cstack 0x00070000 (NOLOAD) :
 	{
 		_cstack_s = .;
 		. += 0x2000;
@@ -71,7 +71,7 @@ SECTIONS
 		_stack = .;
 	} > ATCM_STACK
 
-	.svc_stack (0x00070000 + 0x2000) :
+	.svc_stack (0x00070000 + 0x2000) (NOLOAD) :
 	{
 		_svc_stack_s = .;
 		. += 0x2000;
@@ -79,7 +79,7 @@ SECTIONS
 		_svc_stack = _svc_stack_s + 0x2000;
 	} > ATCM_STACK
 
-	.irq_stack (0x00070000 + 0x4000) :
+	.irq_stack (0x00070000 + 0x4000) (NOLOAD) :
 	{
 		_irq_stack_s = .;
 		. += 0x2000;
@@ -87,7 +87,7 @@ SECTIONS
 		_irq_stack = _irq_stack_s + 0x2000;
 	} > ATCM_STACK
 
-	.fiq_stack (0x00070000 + 0x6000) :
+	.fiq_stack (0x00070000 + 0x6000) (NOLOAD) :
 	{
 		_fiq_stack_s = .;
 		. += 0x1000;
@@ -95,7 +95,7 @@ SECTIONS
 		_fiq_stack = _fiq_stack_s + 0x1000;
 	} > ATCM_STACK
 
-	.und_stack (0x00070000 + 0x7000) :
+	.und_stack (0x00070000 + 0x7000) (NOLOAD) :
 	{
 		_und_stack_s = .;
 		. += 0x1000;
@@ -103,7 +103,7 @@ SECTIONS
 		_und_stack = _und_stack_s + 0x1000;
 	} > ATCM_STACK
 
-	.abt_stack (0x00070000 + 0x8000) :
+	.abt_stack (0x00070000 + 0x8000) (NOLOAD) :
 	{
 		_abt_stack_s = .;
 		. += 0x1000;
@@ -111,7 +111,7 @@ SECTIONS
 		_abt_stack = _abt_stack_s + 0x1000;
 	} > ATCM_STACK
 
-	.heap (0x00070000 + 0x9000) :
+	.heap (0x00070000 + 0x9000) (NOLOAD) :
 	{
 		_heap_s = .;
 		. += 0x1000;
@@ -138,4 +138,6 @@ SECTIONS
 		".rodata must keep the load-to-run offset of .text: the loader copies one flat block")
 	ASSERT(LOADADDR(.data) - ADDR(.data) == LOADADDR(.text) - ADDR(.text),
 		".data must keep the load-to-run offset of .text: the loader copies one flat block")
+	ASSERT(LOADADDR(.data) + SIZEOF(.data) <= ORIGIN(APP_FLASH) + LENGTH(APP_FLASH),
+		"the application overflows APP_FLASH")
 }
