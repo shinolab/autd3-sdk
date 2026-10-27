@@ -1,7 +1,9 @@
-use pyo3::exceptions::{PyTypeError, PyValueError};
+use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyByteArray, PyBytes};
+
+use crate::error::invalid_argument;
 
 static NDARRAY: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 static MASKED_ARRAY: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
@@ -69,7 +71,7 @@ pub fn u8_matrix_bytes<'py>(
     };
     if !matches {
         let expected_rows = rows.map_or_else(|| "n".to_owned(), |n| n.to_string());
-        return Err(PyValueError::new_err(format!(
+        return Err(invalid_argument(format!(
             "expected shape ({expected_rows}, {cols}), got {shape_obj}"
         )));
     }
@@ -137,7 +139,7 @@ pub fn f32_vec3_rows_from_ndarray(obj: &Bound<'_, PyAny>) -> PyResult<Vec<[f32; 
     let shape_obj = obj.getattr("shape")?;
     let shape: Vec<usize> = shape_obj.extract()?;
     if !matches!(shape.as_slice(), &[3] | &[_, 3]) {
-        return Err(PyValueError::new_err(format!(
+        return Err(invalid_argument(format!(
             "expected shape (3,) or (n, 3), got {shape_obj}"
         )));
     }
@@ -178,7 +180,7 @@ pub fn u8_vector_bytes<'py>(obj: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyBy
     let shape_obj = obj.getattr("shape")?;
     let shape: Vec<usize> = shape_obj.extract()?;
     if shape.len() != 1 {
-        return Err(PyValueError::new_err(format!(
+        return Err(invalid_argument(format!(
             "expected shape (n,), got {shape_obj}"
         )));
     }

@@ -134,9 +134,9 @@ def test_grid_axes_and_order() -> None:
         (3.0, 4.0, 152.0),
     ]
 
-    with pytest.raises(ValueError):
+    with pytest.raises(autd3.InvalidArgumentError):
         emu.Grid(x=0.0, y=0.0, z=150.0, resolution=1.0, order=loose("xy"))
-    with pytest.raises(ValueError):
+    with pytest.raises(TypeError):
         emu.Grid(x=loose("0"), y=0.0, z=150.0, resolution=1.0, order="xyz")
     with pytest.raises(TypeError):
         record.sound_field(loose((0.0, 0.0, 150.0)), emu.RmsRecordOption())
@@ -231,5 +231,21 @@ def test_a_recorder_reports_a_frame_the_firmware_rejects() -> None:
         r.send(autd3.commands.Modulation(autd3.value.SamplingConfig.FREQ_4K, buf))
         r.send(strict)
 
-    with pytest.raises(autd3.Autd3Error):
+    with pytest.raises(autd3.DeviceError):
         emu.Emulator(geo).record(record)
+
+
+def test_recorder_misuse_is_a_runtime_error_and_a_bad_tick_an_invalid_argument() -> None:
+    def consume(r: emu.Recorder) -> None:
+        r.into_record()
+        with pytest.raises(RuntimeError, match="consumed"):
+            r.tick(Duration.from_micros(25))
+
+    with pytest.raises(RuntimeError, match="consumed"):
+        emu.Emulator(geometry()).record(consume)
+
+    def bad_tick(r: emu.Recorder) -> None:
+        r.tick(Duration.from_micros(1))
+
+    with pytest.raises(autd3.InvalidArgumentError, match="tick"):
+        emu.Emulator(geometry()).record(bad_tick)

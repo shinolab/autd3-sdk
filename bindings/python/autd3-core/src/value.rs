@@ -2,15 +2,15 @@ use core::hash::{Hash, Hasher};
 use core::num::NonZeroU16;
 use core::time::Duration as StdDuration;
 
+use autd3_python_capsule::error::invalid_argument;
 use autd3_rs_core::nalgebra::Complex;
 use autd3_rs_core::value::{
     Intensity as CoreIntensity, Phase as CorePhase, SamplingConfig as CoreSamplingConfig,
 };
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
-use pyo3::types::{PyCapsule, PyComplex};
+use pyo3::types::{PyCapsule, PyComplex, PyInt};
 
-use crate::error::invalid_argument;
 use crate::units::{Angle, Freq};
 
 #[pyclass(
@@ -109,7 +109,10 @@ fn extract_phase(value: &Bound<'_, PyAny>) -> PyResult<CorePhase> {
     if let Some(complex) = extract_complex(value)? {
         return Ok(CorePhase::from(complex));
     }
-    Err(PyValueError::new_err(
+    if value.is_instance_of::<PyInt>() {
+        return Err(invalid_argument("Phase expects an int in 0-255"));
+    }
+    Err(PyTypeError::new_err(
         "Phase expects an int (0-255), an Angle (e.g. 0.5 * pi * rad) or a complex number",
     ))
 }
@@ -190,25 +193,24 @@ impl SamplingConfig {
 
     #[new]
     fn new(value: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let py = value.py();
         if let Ok(freq) = value.extract::<Freq>() {
-            return freq
-                .sampling_config()
-                .map(Self)
-                .map_err(|e| invalid_argument(py, e));
+            return freq.sampling_config().map(Self).map_err(invalid_argument);
         }
         if let Ok(period) = value.extract::<Duration>() {
             return CoreSamplingConfig::from_period(period.0)
                 .map(Self)
-                .map_err(|e| invalid_argument(py, e));
+                .map_err(invalid_argument);
         }
-        let divide: u16 = value.extract().map_err(|_| {
-            PyValueError::new_err(
+        if !value.is_instance_of::<PyInt>() {
+            return Err(PyTypeError::new_err(
                 "SamplingConfig expects an int divider, a frequency (e.g. 4000.0 * Hz), or a Duration",
-            )
-        })?;
-        let divide = NonZeroU16::new(divide)
-            .ok_or_else(|| invalid_argument(py, "divide must be non-zero"))?;
+            ));
+        }
+        let divide = value
+            .extract::<u16>()
+            .ok()
+            .and_then(NonZeroU16::new)
+            .ok_or_else(|| invalid_argument("divide must be non-zero and at most 65535"))?;
         Ok(Self(CoreSamplingConfig::new(divide)))
     }
 
@@ -270,9 +272,7 @@ impl Duration {
     #[staticmethod]
     fn from_secs_f64(secs: f64) -> PyResult<Self> {
         if !secs.is_finite() || secs < 0.0 {
-            return Err(PyValueError::new_err(
-                "secs must be finite and non-negative",
-            ));
+            return Err(invalid_argument("secs must be finite and non-negative"));
         }
         Ok(Self(StdDuration::from_secs_f64(secs)))
     }

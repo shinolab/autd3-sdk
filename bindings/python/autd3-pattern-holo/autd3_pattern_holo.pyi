@@ -3,12 +3,10 @@ from typing import Any, ClassVar, TypeAlias, final
 
 import numpy as np
 import numpy.typing as npt
-from autd3_core import Autd3Error, Geometry, Intensity, Length
+from autd3_core import Geometry, Intensity, Length
 from autd3_pattern import IntensityBuffer, PhaseBuffer, TransducerMask
 
 _Vec3: TypeAlias = Sequence[float] | npt.NDArray[np.floating[Any]]
-
-class HoloError(Autd3Error): ...
 
 @final
 class Amplitude:

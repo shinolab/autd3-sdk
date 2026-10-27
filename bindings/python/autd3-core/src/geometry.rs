@@ -1,12 +1,12 @@
+use autd3_python_capsule::error::{generic, invalid_argument};
 use autd3_rs_core::{
     Autd3 as CoreAutd3, Device as CoreDevice, Geometry as CoreGeometry, Point3, Quaternion,
     UnitQuaternion, UnitVector3, Vector3,
 };
-use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyTypeError};
 use pyo3::prelude::*;
 use pyo3::types::{PyCapsule, PyIterator, PyList};
 
-use crate::error::to_pyerr;
 use crate::units::{Angle, Length};
 
 fn np_vec3(py: Python<'_>, x: f32, y: f32, z: f32) -> PyResult<Bound<'_, PyAny>> {
@@ -111,7 +111,7 @@ fn coerce_rotation(rotation: &Bound<'_, PyAny>) -> PyResult<UnitQuaternion<f32>>
     } else if let Ok(q) = rotation.extract::<[f32; 4]>() {
         q
     } else {
-        return Err(PyValueError::new_err(
+        return Err(PyTypeError::new_err(
             "rotation must be a scalar-first quaternion [w, x, y, z], an EulerAngles, or a scipy.spatial.transform.Rotation",
         ));
     };
@@ -119,7 +119,7 @@ fn coerce_rotation(rotation: &Bound<'_, PyAny>) -> PyResult<UnitQuaternion<f32>>
     let quat = Quaternion::new(w, qx, qy, qz);
     let norm = quat.norm();
     if norm.is_nan() || (norm - 1.0).abs() > CoreAutd3::ROTATION_NORM_TOLERANCE {
-        return Err(PyValueError::new_err(format!(
+        return Err(invalid_argument(format!(
             "`rotation` must be a unit quaternion [w, x, y, z], but its norm is {norm}"
         )));
     }
@@ -240,11 +240,13 @@ impl Geometry {
 
     #[staticmethod]
     fn from_json(json: &str) -> PyResult<Self> {
-        CoreGeometry::from_json(json).map(Self).map_err(to_pyerr)
+        CoreGeometry::from_json(json)
+            .map(Self)
+            .map_err(invalid_argument)
     }
 
     fn to_json(&self) -> PyResult<String> {
-        self.0.to_json().map_err(to_pyerr)
+        self.0.to_json().map_err(generic)
     }
 
     fn center<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {

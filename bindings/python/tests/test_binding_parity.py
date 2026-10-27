@@ -19,10 +19,12 @@ from autd3.commands import (
     FixedUpdateRate,
     FociStm,
     FociStmOption,
+    GpioOut,
     Modulation,
     PatternStm,
     PatternStmOption,
     PhaseDepth,
+    SetGpioOut,
     SetOutputMask,
     SetPhaseCorrection,
     SetSilencer,
@@ -222,7 +224,7 @@ def test_holo_options_expose_their_fields() -> None:
     assert "GspatOption" in repr(gspat)
     assert holo.GsOption().repeat == 100
     assert holo.NaiveOption() == holo.NaiveOption()
-    masked = pattern.TransducerMask.masked([[False] * Autd3.NUM_TRANSDUCERS])
+    masked = pattern.TransducerMask.Masked([[False] * Autd3.NUM_TRANSDUCERS])
     assert holo.NaiveOption(mask=masked).mask.num_enabled(one_device()) == 0
     greedy = holo.GreedyOption()
     assert greedy.phase_quantization_levels == 16
@@ -235,24 +237,54 @@ def test_holo_options_expose_their_fields() -> None:
     assert target != holo.AmplitudeTarget([1.0, 2.0, 3.0], 4 * kPa)
 
 
-def test_holo_errors_carry_an_error_code() -> None:
-    assert issubclass(holo.HoloError, autd3.Autd3Error)
+def test_errors_form_one_hierarchy() -> None:
+    assert issubclass(autd3.InvalidArgumentError, autd3.Autd3Error)
+    assert issubclass(autd3.InvalidArgumentError, ValueError)
+    assert issubclass(autd3.ReplyTimeoutError, autd3.Autd3Error)
+    assert issubclass(autd3.ReplyTimeoutError, TimeoutError)
+    assert issubclass(autd3.DeviceError, autd3.Autd3Error)
+    assert issubclass(autd3.NetworkError, autd3.Autd3Error)
+    assert not hasattr(holo, "HoloError")
+    assert not hasattr(autd3.Autd3Error, "code")
+
+
+def test_holo_errors_are_invalid_arguments() -> None:
     geometry = one_device()
-    with pytest.raises(holo.HoloError) as err:
+    with pytest.raises(autd3.InvalidArgumentError):
         holo.naive(
             geometry, [], pattern.wavelength(340 * m / s), holo.NaiveOption(), geometry.phase_buffer(), geometry.intensity_buffer()
         )
-    assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
+
+
+def test_modulation_errors_are_invalid_arguments() -> None:
+    with pytest.raises(autd3.InvalidArgumentError, match="duty"):
+        modulation.square(150 * Hz, modulation.SquareOption(duty=2.0), SamplingConfig.FREQ_4K, modulation.ModulationBuffer(10))
+
+
+def test_validations_the_rust_type_system_does_are_invalid_arguments() -> None:
+    with pytest.raises(autd3.InvalidArgumentError, match="loop count"):
+        LoopBehavior.Finite(0)
+    with pytest.raises(autd3.InvalidArgumentError, match="exactly 4"):
+        SetGpioOut([GpioOut.Off])
+
+
+def test_type_and_state_errors_stay_builtin() -> None:
+    with pytest.raises(TypeError, match="SamplingConfig expects"):
+        SamplingConfig(loose("4000"))
+    with pytest.raises(TypeError, match="expected a number"):
+        Freq.from_hz(loose("x"))
+    with pytest.raises(autd3.InvalidArgumentError, match="0-255"):
+        Phase(300)
+    with pytest.raises(autd3.InvalidArgumentError, match="at most 65535"):
+        SamplingConfig(70_000)
 
 
 def test_core_value_errors_are_invalid_arguments() -> None:
-    with pytest.raises(autd3.Autd3Error) as err:
+    with pytest.raises(autd3.InvalidArgumentError):
         SamplingConfig(3000.5 * Hz)
-    assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
-    mask = pattern.TransducerMask.masked([[True] * 3])
-    with pytest.raises(autd3.Autd3Error) as err:
+    mask = pattern.TransducerMask.Masked([[True] * 3])
+    with pytest.raises(autd3.InvalidArgumentError):
         mask.validate(one_device())
-    assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
 
 
 def test_a_shared_intensity_buffer_is_shared_by_every_index() -> None:
@@ -272,19 +304,15 @@ def test_a_shared_intensity_buffer_is_shared_by_every_index() -> None:
 
 
 def test_sampling_configs_are_resolved_when_constructed() -> None:
-    with pytest.raises(autd3.Autd3Error, match="ultrasound frequency") as err:
+    with pytest.raises(autd3.InvalidArgumentError, match="ultrasound frequency"):
         SamplingConfig(3000.5 * Hz)
-    assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
-    with pytest.raises(autd3.Autd3Error, match="ultrasound period") as err:
+    with pytest.raises(autd3.InvalidArgumentError, match="ultrasound period"):
         SamplingConfig(Duration.from_nanos(50_001))
-    assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
-    with pytest.raises(autd3.Autd3Error, match="out of range") as err:
+    with pytest.raises(autd3.InvalidArgumentError, match="out of range"):
         SamplingConfig(80_000 * Hz)
-    assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
-    with pytest.raises(autd3.Autd3Error, match="non-zero") as err:
+    with pytest.raises(autd3.InvalidArgumentError, match="non-zero"):
         SamplingConfig(0)
-    assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
-    with pytest.raises(ValueError, match="SamplingConfig expects"):
+    with pytest.raises(TypeError, match="SamplingConfig expects"):
         SamplingConfig(loose("4000"))
 
     geometry = one_device()
@@ -309,9 +337,8 @@ def test_command_contents_are_checked_when_encoded() -> None:
         FociStm(SamplingConfig.FREQ_4K, [ControlPoints([point], 0xFF), ControlPoints([point, point], 0xFF)], FociStmOption()),
         WriteFociBuffer(PatternBank.B0, 0, [ControlPoints([point] * 9, 0xFF)]),
     ):
-        with pytest.raises(autd3.Autd3Error) as err:
+        with pytest.raises(autd3.InvalidArgumentError):
             autd3.Frames.encode(geometry, loose(command))
-        assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
 
 
 def test_set_phase_correction_takes_a_phase_buffer_of_the_geometry() -> None:
@@ -319,18 +346,17 @@ def test_set_phase_correction_takes_a_phase_buffer_of_the_geometry() -> None:
     two = Geometry([Autd3(), Autd3([Autd3.DEVICE_WIDTH, 0.0, 0.0])])
     command = SetPhaseCorrection(geometry.phase_buffer())
     assert len(autd3.Frames.encode(geometry, command)) == 1
-    with pytest.raises(autd3.Autd3Error) as err:
+    with pytest.raises(autd3.InvalidArgumentError):
         autd3.Frames.encode(two, command)
-    assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
 
 
 def test_pattern_functions_reject_a_buffer_for_another_geometry() -> None:
     geometry = one_device()
     two = Geometry([Autd3(), Autd3([Autd3.DEVICE_WIDTH, 0.0, 0.0])])
     wavelength = pattern.wavelength(340 * m / s)
-    with pytest.raises(ValueError, match="one slot per device"):
+    with pytest.raises(autd3.InvalidArgumentError, match="one slot per device"):
         pattern.focus(geometry, [0.0, 0.0, 150.0], wavelength, two.phase_buffer())
-    with pytest.raises(ValueError, match="one slot per device"):
+    with pytest.raises(autd3.InvalidArgumentError, match="one slot per device"):
         pattern.plane(geometry, [0.0, 0.0, 1.0], wavelength, two.phase_buffer())
 
 

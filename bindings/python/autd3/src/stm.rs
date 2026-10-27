@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use autd3_python_capsule::error::invalid_argument;
 use autd3_python_capsule::extract::{
     extract_point, extract_sampling_config, extract_u8, extract_velocity, intensity_to_py,
     phase_to_py, velocity_to_py,
@@ -17,7 +18,7 @@ use autd3_rs::value::{
     PatternBank as CorePatternBank, Phase, SamplingConfig,
 };
 use autd3_rs::{Point3, Velocity};
-use pyo3::exceptions::{PyTypeError, PyValueError};
+use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 
 use crate::datagram::{PushCommand, PushOperation};
@@ -275,7 +276,7 @@ impl WriteFociBuffer {
             .map(CoreWriteFociBuffer::max_len)
             .filter(|&len| len > 0)
             .ok_or_else(|| {
-                PyValueError::new_err(format!(
+                invalid_argument(format!(
                     "number of foci per sample must be 1..={NUM_FOCI_MAX}, got {num_foci}"
                 ))
             })

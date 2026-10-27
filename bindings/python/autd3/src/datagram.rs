@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
+use autd3_python_capsule::error::client as client_error;
 use autd3_python_capsule::extract::{extract_sampling_config, geometry_to_py};
 use autd3_python_capsule::{
-    capsule_of, client_pyerr, frame_into_capsule, geometry_from_capsule, intensities_from_capsule,
+    capsule_of, frame_into_capsule, geometry_from_capsule, intensities_from_capsule,
     modulation_from_capsule, phases_from_capsule,
 };
 use autd3_rs::commands::{
@@ -326,16 +327,12 @@ impl Frames {
     }
 
     #[staticmethod]
-    fn encode(
-        py: Python<'_>,
-        geometry: &Bound<'_, PyAny>,
-        command: &Bound<'_, PyAny>,
-    ) -> PyResult<Self> {
+    fn encode(geometry: &Bound<'_, PyAny>, command: &Bound<'_, PyAny>) -> PyResult<Self> {
         let capsule = capsule_of(geometry)?;
         let geometry = geometry_from_capsule(&capsule)?;
         let command = command_of(command, geometry)?;
-        let frames = CoreFrames::encode(geometry, Expand(command.as_ref()))
-            .map_err(|e| client_pyerr(py, &e))?;
+        let frames =
+            CoreFrames::encode(geometry, Expand(command.as_ref())).map_err(client_error)?;
         Ok(Self(Arc::new(frames)))
     }
 
@@ -344,7 +341,6 @@ impl Frames {
         geometry: &Bound<'_, PyAny>,
         command: &Bound<'_, PyAny>,
     ) -> PyResult<()> {
-        let py = slf.py();
         let capsule = capsule_of(geometry)?;
         let geometry = geometry_from_capsule(&capsule)?;
         let command = command_of(command, geometry)?;
@@ -355,7 +351,7 @@ impl Frames {
         let frames = Arc::get_mut(&mut this.0).expect("the frames were just made unique");
         frames
             .encode_into(geometry, Expand(command.as_ref()))
-            .map_err(|e| client_pyerr(py, &e))
+            .map_err(client_error)
     }
 
     fn is_empty(&self) -> bool {

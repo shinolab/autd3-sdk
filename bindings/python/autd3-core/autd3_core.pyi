@@ -13,13 +13,11 @@ class _ScipyRotation(Protocol):
 
 _Rotation: TypeAlias = _Quaternion | EulerAngles | _ScipyRotation
 
-class Autd3Error(Exception):
-    GENERIC: ClassVar[int]
-    TIMEOUT: ClassVar[int]
-    DEVICE: ClassVar[int]
-    NETWORK: ClassVar[int]
-    INVALID_ARGUMENT: ClassVar[int]
-    code: int
+class Autd3Error(Exception): ...
+class InvalidArgumentError(Autd3Error, ValueError): ...
+class ReplyTimeoutError(Autd3Error, TimeoutError): ...
+class DeviceError(Autd3Error): ...
+class NetworkError(Autd3Error): ...
 
 @final
 class Freq:

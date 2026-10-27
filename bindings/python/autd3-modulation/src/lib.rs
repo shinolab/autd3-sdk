@@ -1,6 +1,7 @@
+use autd3_python_capsule::error::invalid_argument;
 use autd3_python_capsule::extract::{angle_to_py, extract_angle, extract_sampling_config};
+use autd3_python_capsule::modulation_into_capsule;
 use autd3_python_capsule::numpy;
-use autd3_python_capsule::{modulation_into_capsule, to_pyerr};
 use autd3_rs_core::common::Angle;
 use autd3_rs_core::params::MOD_BUFFER_SAMPLES;
 use autd3_rs_core::units::Hz;
@@ -9,13 +10,13 @@ use autd3_rs_modulation::{
     FourierOption as CoreFourierOption, SineComponent as CoreSineComponent,
     SineOption as CoreSineOption, SquareOption as CoreSquareOption,
 };
-use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyTypeError};
 use pyo3::prelude::*;
 use pyo3::types::PyCapsule;
 
 fn freq_hz(freq: &Bound<'_, PyAny>) -> PyResult<f32> {
     freq.getattr("hz").and_then(|v| v.extract()).map_err(|_| {
-        PyValueError::new_err(
+        PyTypeError::new_err(
             "frequency must carry a unit, e.g. 200 * Hz (bare numbers are no longer accepted)",
         )
     })
@@ -265,28 +266,26 @@ impl SineComponent {
 #[pyfunction]
 #[pyo3(signature = (freq, option, config, dst))]
 fn sine(
-    py: Python<'_>,
     freq: &Bound<'_, PyAny>,
     option: &SineOption,
     #[pyo3(from_py_with = extract_sampling_config)] config: SamplingConfig,
     mut dst: PyRefMut<'_, ModulationBuffer>,
 ) -> PyResult<()> {
     autd3_rs_modulation::sine(freq_hz(freq)? * Hz, &option.0, config, &mut dst.data)
-        .map_err(|e| to_pyerr(py, e))?;
+        .map_err(invalid_argument)?;
     Ok(())
 }
 
 #[pyfunction]
 #[pyo3(signature = (freq, option, config, dst))]
 fn square(
-    py: Python<'_>,
     freq: &Bound<'_, PyAny>,
     option: &SquareOption,
     #[pyo3(from_py_with = extract_sampling_config)] config: SamplingConfig,
     mut dst: PyRefMut<'_, ModulationBuffer>,
 ) -> PyResult<()> {
     autd3_rs_modulation::square(freq_hz(freq)? * Hz, &option.0, config, &mut dst.data)
-        .map_err(|e| to_pyerr(py, e))?;
+        .map_err(invalid_argument)?;
     Ok(())
 }
 
@@ -297,7 +296,6 @@ fn constant(amplitude: u8, mut dst: PyRefMut<'_, ModulationBuffer>) {
 
 #[pyfunction]
 fn fourier(
-    py: Python<'_>,
     components: Vec<PyRef<'_, SineComponent>>,
     option: &FourierOption,
     #[pyo3(from_py_with = extract_sampling_config)] config: SamplingConfig,
@@ -305,7 +303,7 @@ fn fourier(
 ) -> PyResult<()> {
     let components = components.iter().map(|c| c.0).collect::<Vec<_>>();
     autd3_rs_modulation::fourier(&components, &option.0, config, &mut dst.data)
-        .map_err(|e| to_pyerr(py, e))?;
+        .map_err(invalid_argument)?;
     Ok(())
 }
 

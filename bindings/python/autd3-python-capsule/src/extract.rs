@@ -4,7 +4,7 @@ use autd3_rs_core::common::Angle;
 use autd3_rs_core::geometry::{UnitVector3, Vector3};
 use autd3_rs_core::value::{Intensity, Phase, SamplingConfig};
 use autd3_rs_core::{Geometry, Length, Point3, Velocity};
-use pyo3::exceptions::{PyTypeError, PyValueError};
+use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::PyCapsule;
@@ -20,13 +20,13 @@ pub fn extract_u8(obj: &Bound<'_, PyAny>) -> PyResult<u8> {
 
 pub fn number_f32(obj: &Bound<'_, PyAny>) -> PyResult<f32> {
     obj.extract::<f32>()
-        .map_err(|_| PyValueError::new_err("expected a number"))
+        .map_err(|_| PyTypeError::new_err("expected a number"))
 }
 
 pub fn nanos_to_duration(nanos: u128) -> PyResult<Duration> {
     u64::try_from(nanos)
         .map(Duration::from_nanos)
-        .map_err(|_| PyValueError::new_err("duration is out of range"))
+        .map_err(|_| crate::error::invalid_argument("duration is out of range"))
 }
 
 pub fn is_duration(obj: &Bound<'_, PyAny>) -> PyResult<bool> {
@@ -71,7 +71,7 @@ pub fn extract_angle(obj: &Bound<'_, PyAny>) -> PyResult<Angle> {
 
 pub fn extract_point(obj: &Bound<'_, PyAny>) -> PyResult<Point3<f32>> {
     let [x, y, z] = obj.extract::<[f32; 3]>().map_err(|_| {
-        PyValueError::new_err(
+        crate::error::invalid_argument(
             "expected a length-3 array-like (numpy array, list, or tuple) of x, y, z in mm",
         )
     })?;
@@ -80,7 +80,7 @@ pub fn extract_point(obj: &Bound<'_, PyAny>) -> PyResult<Point3<f32>> {
 
 pub fn extract_direction(obj: &Bound<'_, PyAny>) -> PyResult<UnitVector3<f32>> {
     let [x, y, z] = obj.extract::<[f32; 3]>().map_err(|_| {
-        PyValueError::new_err(
+        crate::error::invalid_argument(
             "expected a length-3 array-like (numpy array, list, or tuple) of a direction vector",
         )
     })?;

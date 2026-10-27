@@ -1,10 +1,11 @@
 use std::num::NonZeroUsize;
 use std::time::Duration;
 
+use autd3_python_capsule::error::invalid_argument;
 use autd3_python_capsule::extract::{duration_to_py, extract_duration};
 use autd3_rs::Interface as CoreInterface;
 use autd3_rs::udp::TransportOption as CoreOption;
-use pyo3::exceptions::{PyTypeError, PyValueError};
+use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 
 pub(crate) fn none_or_duration(obj: &Bound<'_, PyAny>) -> PyResult<Option<Duration>> {
@@ -44,19 +45,10 @@ impl Interface {
         addr.parse()
             .map(|addr| Self(CoreInterface::Addr(addr)))
             .map_err(|_| {
-                PyValueError::new_err(format!(
+                invalid_argument(format!(
                     "{addr:?} is not an IPv6 socket address such as \"[::1]:44336\""
                 ))
             })
-    }
-
-    #[pyo3(name = "name")]
-    fn interface_name(&self) -> Option<&str> {
-        match &self.0 {
-            CoreInterface::Name(name) => Some(name),
-            CoreInterface::Auto | CoreInterface::Addr(_) => None,
-            _ => unreachable!(),
-        }
     }
 
     fn __repr__(&self) -> String {
@@ -93,7 +85,7 @@ impl TransportOption {
         open_timeout = CoreOption::default().open_timeout,
         lost_timeout = CoreOption::default().lost_timeout,
         ack_timeout = CoreOption::default().ack_timeout,
-        send_buffer_bytes = CoreOption::default().send_buffer_bytes,
+        send_buffer_bytes = CoreOption::default().send_buffer_bytes.map(NonZeroUsize::get),
         sync_on_open = CoreOption::default().sync_on_open,
     ))]
     fn new(
@@ -101,17 +93,22 @@ impl TransportOption {
         #[pyo3(from_py_with = extract_duration)] open_timeout: Duration,
         #[pyo3(from_py_with = extract_duration)] lost_timeout: Duration,
         #[pyo3(from_py_with = extract_duration)] ack_timeout: Duration,
-        send_buffer_bytes: Option<NonZeroUsize>,
+        send_buffer_bytes: Option<usize>,
         sync_on_open: bool,
-    ) -> Self {
-        Self(CoreOption {
+    ) -> PyResult<Self> {
+        Ok(Self(CoreOption {
             iface,
             open_timeout,
             lost_timeout,
             ack_timeout,
-            send_buffer_bytes,
+            send_buffer_bytes: send_buffer_bytes
+                .map(|n| {
+                    NonZeroUsize::new(n)
+                        .ok_or_else(|| invalid_argument("send_buffer_bytes must be >= 1"))
+                })
+                .transpose()?,
             sync_on_open,
-        })
+        }))
     }
 
     #[getter]

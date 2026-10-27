@@ -5,7 +5,14 @@ The public API is organized into submodules that mirror the Rust crate layout:
 The client entry points (``Client`` etc.) live at the package root.
 """
 
-from autd3_core import Autd3Error, Duration
+from autd3_core import (
+    Autd3Error,
+    DeviceError,
+    Duration,
+    InvalidArgumentError,
+    NetworkError,
+    ReplyTimeoutError,
+)
 
 from . import commands, geometry, params, units, value
 from ._autd3 import (
@@ -31,6 +38,7 @@ from ._autd3 import (
 __all__ = [
     "Autd3Error",
     "Client",
+    "DeviceError",
     "DeviceState",
     "DeviceStatus",
     "Duration",
@@ -40,7 +48,10 @@ __all__ = [
     "Frame",
     "Frames",
     "Interface",
+    "InvalidArgumentError",
     "LogWriter",
+    "NetworkError",
+    "ReplyTimeoutError",
     "Response",
     "ResponseFuture",
     "Telemetry",

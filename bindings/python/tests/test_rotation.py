@@ -8,6 +8,8 @@ import numpy as np
 import numpy.typing as npt
 import pytest
 
+import autd3
+
 from autd3.geometry import Autd3, EulerAngles, Geometry
 from autd3.units import deg, rad
 
@@ -84,7 +86,7 @@ def test_scipy_rotation_equivalence() -> None:
 
 
 def test_invalid_rotation_raises() -> None:
-    with pytest.raises(ValueError, match="scalar-first"):
+    with pytest.raises(TypeError, match="scalar-first"):
         Autd3([0.0, 0.0, 0.0], loose("not a rotation"))
 
 
@@ -112,7 +114,7 @@ def test_an_omitted_rotation_is_the_identity() -> None:
     ],
 )
 def test_a_non_unit_quaternion_is_rejected(quaternion: list[float]) -> None:
-    with pytest.raises(ValueError, match="unit quaternion"):
+    with pytest.raises(autd3.InvalidArgumentError, match="unit quaternion"):
         Autd3([0.0, 0.0, 0.0], quaternion)
 
 
