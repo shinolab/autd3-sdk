@@ -114,15 +114,10 @@ namespace AUTD3.Tests
         public void BuildDatagramsFromCommands()
         {
             using var geometry = Fixture.SingleDevice();
-            using var phases = geometry.PhaseBuffer();
-            using var intensities = geometry.IntensityBuffer();
-            Pattern.Focus(geometry, geometry.Center + new Vector3(0f, 0f, 150f), Pattern.Wavelength(340 * m / s), phases);
             using var modulation = Modulation.ModulationBuffer();
             Modulation.Sine(200 * Hz, new SineOption(), SamplingConfig.Freq4k, modulation);
 
-            using var frames = Frames.Encode(geometry, Command.Sequence(
-                new Pattern(phases, intensities),
-                new Modulation(SamplingConfig.Freq4k, modulation)));
+            using var frames = Frames.Encode(geometry, new Modulation(SamplingConfig.Freq4k, modulation));
 
             Assert.True(frames.Length > 0);
 
@@ -143,11 +138,10 @@ namespace AUTD3.Tests
             using var intensities = geometry.IntensityBuffer();
             Fixture.Fill(intensities, Intensity.Min);
 
-            using var frames = Frames.Encode(geometry, Command.Sequence(
-                new WritePatternBuffer(PatternBank.B0, 0, new[] { phases }, intensities),
-                new ConfigPattern(PatternBank.B0, SamplingConfig.Freq4k, 1, LoopBehavior.Infinite)));
+            using var frames = Frames.Encode(geometry,
+                new WritePatternBuffer(PatternBank.B0, 0, new[] { phases }, intensities));
 
-            Assert.Equal(2, frames.Length);
+            Assert.Equal(1, frames.Length);
             _ = frames[0];
             Assert.Throws<ArgumentOutOfRangeException>(() => frames[frames.Length]);
         }

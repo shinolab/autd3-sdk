@@ -2,7 +2,6 @@ use core::f32::consts::PI;
 
 use anyhow::Result;
 
-use autd3_rs::Frames;
 use autd3_rs::commands::{PatternStm, PatternStmOption, SetSilencer};
 use autd3_rs::units::Hz;
 use autd3_rs::value::{
@@ -26,21 +25,16 @@ async fn send_stm(
     bank: PatternBank,
 ) -> Result<()> {
     let (phases, intensities): Split = patterns.iter().cloned().unzip();
-    ctx.send_frames(&Frames::encode(
-        ctx.client.geometry(),
-        (
-            SetSilencer::default(),
-            PatternStm::new(
-                stm_sampling(config * Hz, phases.len())?,
-                &phases,
-                &intensities,
-                PatternStmOption {
-                    bank,
-                    ..PatternStmOption::default()
-                },
-            ),
-        ),
-    )?)
+    ctx.send(SetSilencer::default()).await?;
+    ctx.send(PatternStm::new(
+        stm_sampling(config * Hz, phases.len())?,
+        &phases,
+        &intensities,
+        PatternStmOption {
+            bank,
+            ..PatternStmOption::default()
+        },
+    ))
     .await
 }
 

@@ -62,7 +62,6 @@ namespace AUTD3.Tests
             var notSingleFrame = new ICommand[]
             {
                 new Modulation(SamplingConfig.Freq4k, modulation),
-                Command.Sequence(new Nop()),
                 Command.Each(_ => new Nop()),
             };
 
@@ -81,11 +80,13 @@ namespace AUTD3.Tests
             using var modulation = ModulationBuffer.FromBytes(new byte[] { 0xFF, 0xFF });
             var points = new[] { new ControlPoints(new[] { new ControlPoint(new Vector3(0f, 0f, 150f), Phase.Zero) }, Intensity.Max) };
 
-            using var frames = Frames.Encode(geometry, Command.Sequence(
-                Command.Each(_ => new WriteModulationBuffer(ModulationBank.B0, 0, modulation)),
-                Command.Each(device => device.Idx == 1 ? new WriteFociBuffer(PatternBank.B0, 0, points) : (ICommand?)null)));
+            using var modulationFrames = Frames.Encode(geometry,
+                Command.Each(_ => new WriteModulationBuffer(ModulationBank.B0, 0, modulation)));
+            using var fociFrames = Frames.Encode(geometry,
+                Command.Each(device => device.Idx == 1 ? new WriteFociBuffer(PatternBank.B0, 0, points) : (ICommand?)null));
 
-            Assert.Equal(2, frames.Length);
+            Assert.Equal(1, modulationFrames.Length);
+            Assert.Equal(1, fociFrames.Length);
         }
 
         [Fact]
@@ -133,62 +134,13 @@ namespace AUTD3.Tests
         }
 
         [Fact]
-        public void SequenceExpandsItsCommandsInOrder()
-        {
-            using var geometry = Fixture.Devices(2);
-            using var phases = geometry.PhaseBuffer();
-            using var intensities = geometry.IntensityBuffer();
-
-            using var frames = Frames.Encode(geometry, Command.Sequence(
-                new Clear(),
-                Command.Each(device => device.Idx == 0 ? new Nop() : null),
-                Command.Each(device => device.Idx == 1 ? new Nop() : null),
-                Command.Sequence(new Pattern(phases, intensities), new Nop())));
-
-            Assert.Equal(5, frames.Length);
-        }
-
-        [Fact]
-        public void AnEmptySequenceEncodesToNoFrames()
-        {
-            using var geometry = Fixture.SingleDevice();
-            using var frames = Frames.Encode(geometry, Command.Sequence());
-            Assert.Equal(0, frames.Length);
-        }
-
-        [Fact]
-        public void ASequenceCanBeEncodedMoreThanOnce()
-        {
-            using var geometry = Fixture.SingleDevice();
-            var command = Command.Sequence(new Nop(), new Synchronize());
-
-            using var first = Frames.Encode(geometry, command);
-            using var second = Frames.Encode(geometry, command);
-
-            Assert.Equal(2, first.Length);
-            Assert.Equal(2, second.Length);
-        }
-
-        [Fact]
         public void NullArgumentsAreRejectedBeforeReachingTheNativeLayer()
         {
             using var geometry = Fixture.SingleDevice();
 
             Assert.Throws<ArgumentNullException>(() => Command.Each(null!));
-            Assert.Throws<ArgumentNullException>(() => Command.Sequence(null!));
-            Assert.Throws<ArgumentNullException>(() => Command.Sequence(new Nop(), null!));
             Assert.Throws<ArgumentNullException>(() => Frames.Encode(geometry, null!));
             Assert.Throws<ArgumentNullException>(() => Frames.Encode(null!, new Nop()));
-        }
-
-        [Fact]
-        public void AFailingMemberFailsTheWholeSequence()
-        {
-            using var geometry = Fixture.SingleDevice();
-
-            Assert.Throws<Autd3Exception>(() => Frames.Encode(geometry, Command.Sequence(
-                new Nop(),
-                new SetCpuConfig(new CpuConfig { Ptp = new PtpConfig { LockSamples = 0 } }))));
         }
     }
 }

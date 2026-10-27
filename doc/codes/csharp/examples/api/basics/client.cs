@@ -11,7 +11,8 @@ internal static class Sample
         var layout = new Geometry(new[] { new Autd3() });
         // ANCHOR: open
         var client = Client.Open(layout, new TransportOption());
-        await client.SendAsync(Command.Sequence(new Clear(), new Synchronize()));
+        await client.SendAsync(new Clear());
+        await client.SendAsync(new Synchronize());
         // ANCHOR_END: open
 
         // ANCHOR: exec_at

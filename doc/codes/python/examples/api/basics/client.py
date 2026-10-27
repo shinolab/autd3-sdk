@@ -9,7 +9,8 @@ async def main() -> None:
     geometry = Geometry([Autd3()])
     # ANCHOR: open
     client = Client.open(geometry, TransportOption())
-    await client.send((Clear(), Synchronize()))
+    await client.send(Clear())
+    await client.send(Synchronize())
     # ANCHOR_END: open
 
     # ANCHOR: exec_at

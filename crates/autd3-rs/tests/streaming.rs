@@ -9,11 +9,12 @@ use common::{INVALID_PAYLOAD, REJECTED_BY_THE_DEVICE, open};
 #[ignore = "depends on real time"]
 async fn a_rejected_frame_sent_without_waiting_fails_only_its_own_response() {
     let (_emulator, client) = open(2);
-    let frames =
-        Frames::encode(client.geometry(), (Nop, REJECTED_BY_THE_DEVICE, Nop, Nop)).unwrap();
+    let nop = Frames::encode(client.geometry(), Nop).unwrap();
+    let rejected = Frames::encode(client.geometry(), REJECTED_BY_THE_DEVICE).unwrap();
+    let frames = [&nop, &rejected, &nop, &nop].map(|frames| frames.frame(0).unwrap());
 
     let mut responses = Vec::with_capacity(frames.len());
-    for frame in &frames {
+    for frame in frames {
         responses.push(client.send_frame(frame).await.unwrap());
     }
     let mut outcomes = Vec::with_capacity(responses.len());

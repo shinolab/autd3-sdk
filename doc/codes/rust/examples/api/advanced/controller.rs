@@ -13,7 +13,9 @@ async fn with_run(geometry: &Geometry, option: &TransportOption) -> Result<()> {
     let (controller, driver) = Controller::open(geometry, option)?;
     let driving = std::thread::spawn(move || driver.run());
 
-    controller.send((Clear, Synchronize)).await?;
+    controller.send(Clear).await?;
+
+    controller.send(Synchronize).await?;
     controller.send(SetSilencer::default()).await?;
     controller.close()?;
 
@@ -35,7 +37,9 @@ async fn with_poll(geometry: &Geometry, option: &TransportOption) -> Result<()> 
     let (controller, driver) = Controller::open(geometry, option)?;
     let driving = std::thread::spawn(move || drive(driver));
 
-    controller.send((Clear, Synchronize)).await?;
+    controller.send(Clear).await?;
+
+    controller.send(Synchronize).await?;
     controller.send(SetSilencer::default()).await?;
     controller.close()?;
 
@@ -65,7 +69,9 @@ async fn on_single_thread(geometry: &Geometry, option: &TransportOption) -> Resu
     let (controller, driver) = Controller::open(geometry, option)?;
     let driving = tokio::spawn(drive_on_reactor(driver));
 
-    controller.send((Clear, Synchronize)).await?;
+    controller.send(Clear).await?;
+
+    controller.send(Synchronize).await?;
     controller.send(SetSilencer::default()).await?;
     controller.close()?;
 

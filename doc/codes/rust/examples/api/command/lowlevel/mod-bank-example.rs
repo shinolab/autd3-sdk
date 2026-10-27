@@ -15,7 +15,8 @@ async fn main() -> anyhow::Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
     let option = TransportOption::default();
     let client = Client::open(&geometry, &option)?;
-    client.send((Clear, Synchronize)).await?;
+    client.send(Clear).await?;
+    client.send(Synchronize).await?;
 
     let mut data = modulation_buffer();
     sine(150 * Hz, &SineOption::default(), SamplingConfig::FREQ_4K, &mut data)?;

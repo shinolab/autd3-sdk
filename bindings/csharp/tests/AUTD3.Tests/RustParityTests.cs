@@ -330,8 +330,8 @@ namespace AUTD3.Tests
             Assert.Equal(0, frames.Length);
             frames.EncodeInto(geometry, new Clear());
             Assert.Equal(1, frames.Length);
-            frames.EncodeInto(geometry, Command.Sequence(new Clear(), new Synchronize()));
-            Assert.Equal(2, frames.Length);
+            frames.EncodeInto(geometry, Command.Each(_ => new Nop()));
+            Assert.Equal(1, frames.Length);
 
             using var mismatched = Fixture.Devices(2);
             var e = Assert.Throws<Autd3Exception>(() =>

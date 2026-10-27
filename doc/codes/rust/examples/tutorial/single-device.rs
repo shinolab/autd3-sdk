@@ -12,7 +12,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Open the client.
     let client = Client::open(&geometry, &TransportOption::default())?;
-    client.send((Clear, Synchronize)).await?;
+    client.send(Clear).await?;
+    client.send(Synchronize).await?;
 
     // Generate a focus 150 mm above the array center.
     let target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);

@@ -12,7 +12,8 @@ internal static class Sample
         // HIDE_END
 var geometry = new Geometry(new[] { new Autd3() });
 using var client = Client.Open(geometry, new TransportOption());
-await client.SendAsync(Command.Sequence(new Clear(), new Synchronize()));
+await client.SendAsync(new Clear());
+await client.SendAsync(new Synchronize());
 
 var data = Modulation.ModulationBuffer();
 Modulation.Sine(150 * Hz, new SineOption(), SamplingConfig.Freq4k, data);

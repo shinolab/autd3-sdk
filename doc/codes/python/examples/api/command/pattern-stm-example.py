@@ -13,7 +13,8 @@ from autd3_pattern import wavelength as calc_wavelength
 async def main() -> None:
     geometry = Geometry([Autd3()])
     with Client.open(geometry, TransportOption()) as client:
-        await client.send((Clear(), Synchronize()))
+        await client.send(Clear())
+        await client.send(Synchronize())
 
         center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm)
         wavelength = calc_wavelength(340 * m / s)

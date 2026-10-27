@@ -195,12 +195,14 @@ def test_a_recorder_sends_commands_and_encoded_frames() -> None:
     command = autd3.commands.Pattern(phases, intensities)
 
     def by_command(r: emu.Recorder) -> None:
-        r.send([autd3.commands.SetSilencer(), command])
+        r.send(autd3.commands.SetSilencer())
+        r.send(command)
         r.tick(Duration.from_micros(1000))
 
     def by_frame(r: emu.Recorder) -> None:
-        for frame in autd3.Frames.encode(geo, (autd3.commands.SetSilencer(), command)):
-            r.send_frame(frame)
+        for c in (autd3.commands.SetSilencer(), command):
+            for frame in autd3.Frames.encode(geo, c):
+                r.send_frame(frame)
         r.tick(Duration.from_micros(1000))
 
     def by_each(r: emu.Recorder) -> None:
@@ -226,7 +228,8 @@ def test_a_recorder_reports_a_frame_the_firmware_rejects() -> None:
     )
 
     def record(r: emu.Recorder) -> None:
-        r.send((autd3.commands.Modulation(autd3.value.SamplingConfig.FREQ_4K, buf), strict))
+        r.send(autd3.commands.Modulation(autd3.value.SamplingConfig.FREQ_4K, buf))
+        r.send(strict)
 
     with pytest.raises(autd3.Autd3Error):
         emu.Emulator(geo).record(record)

@@ -17,7 +17,8 @@ async def main() -> None:
         geometry,
         TransportOption(),
     ) as client:
-        await client.send((Clear(), Synchronize()))
+        await client.send(Clear())
+        await client.send(Synchronize())
 
         center = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm)
         radius = (30.0 * mm).mm

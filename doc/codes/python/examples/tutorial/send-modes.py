@@ -21,7 +21,8 @@ async def main() -> None:
         geometry,
         TransportOption(),
     ) as client:
-        await client.send((Clear(), Synchronize()))
+        await client.send(Clear())
+        await client.send(Synchronize())
 
         await client.send(SetSilencer())
 

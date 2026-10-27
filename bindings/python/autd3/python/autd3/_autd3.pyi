@@ -44,7 +44,7 @@ _Operation: TypeAlias = (
     | WritePatternPhase
 )
 _SingleCommand: TypeAlias = _Operation | FociStm | Modulation | PatternStm
-_Command: TypeAlias = _SingleCommand | Each | Sequence[_Command]
+_Command: TypeAlias = _SingleCommand | Each
 
 MAX_INFLIGHT: int
 MAX_DEVICES: int

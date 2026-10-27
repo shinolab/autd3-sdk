@@ -2,7 +2,6 @@ use core::f32::consts::PI;
 
 use anyhow::Result;
 
-use autd3_rs::Frames;
 use autd3_rs::commands::{FociStm, FociStmOption, SetSilencer};
 use autd3_rs::geometry::{Vector3, offset};
 use autd3_rs::params::MAX_FOCI_TOTAL;
@@ -26,20 +25,15 @@ async fn send_foci(
     config: f32,
     bank: PatternBank,
 ) -> Result<()> {
-    ctx.send_frames(&Frames::encode(
-        ctx.client.geometry(),
-        (
-            SetSilencer::disable(),
-            FociStm::new(
-                stm_sampling(config * Hz, points.len())?,
-                points,
-                FociStmOption {
-                    bank,
-                    ..FociStmOption::default()
-                },
-            ),
-        ),
-    )?)
+    ctx.send(SetSilencer::disable()).await?;
+    ctx.send(FociStm::new(
+        stm_sampling(config * Hz, points.len())?,
+        points,
+        FociStmOption {
+            bank,
+            ..FociStmOption::default()
+        },
+    ))
     .await
 }
 

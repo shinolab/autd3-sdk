@@ -227,7 +227,7 @@ mod tests {
     };
     use crate::commands::{Command, Modulation};
     use crate::datagram::{Expansion, each};
-    use crate::error::Error;
+    use crate::error::{Error, PayloadError};
     use crate::geometry::Autd3;
     use crate::protocol::Cmd;
     use crate::test_utils::{
@@ -248,6 +248,18 @@ mod tests {
         );
     }
 
+    struct Pushes<F>(F);
+
+    fn pushes<F: FnOnce(&mut Expansion<'_>) -> Result<(), Error>>(push: F) -> Pushes<F> {
+        Pushes(push)
+    }
+
+    impl<F: FnOnce(&mut Expansion<'_>) -> Result<(), Error>> Command for Pushes<F> {
+        fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
+            (self.0)(expansion)
+        }
+    }
+
     const DEVICE_TIME: SysTime = SysTime::from_nanos(2_000_000_000);
 
     const CONFIG: ConfigPattern = ConfigPattern {
@@ -264,7 +276,7 @@ mod tests {
     }
 
     #[test]
-    fn a_per_device_op_and_a_broadcast_op_keep_their_order_and_shape() {
+    fn a_per_device_op_and_a_broadcast_op_keep_their_shape() {
         let phases = vec![vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS]; 2];
         let intensities = vec![vec![Intensity::MAX; Autd3::NUM_TRANSDUCERS]; 2];
         let write = WritePatternBuffer::new(
@@ -273,21 +285,34 @@ mod tests {
             core::slice::from_ref(&phases),
             &intensities,
         );
-        let frames = build(2, (write, CONFIG)).unwrap();
+        let per_device = build(2, write).unwrap();
+        let broadcast = build(2, CONFIG).unwrap();
 
-        assert_eq!(frames.len(), 2);
-        let per_device = frames.frame(0).unwrap();
+        assert_eq!(per_device.len(), 1);
+        let per_device = per_device.frame(0).unwrap();
         assert_eq!(per_device.distribution(), Distribution::PerDevice);
         assert_eq!(per_device.datagrams().len(), 2);
-        let broadcast = frames.frame(1).unwrap();
+        assert_eq!(broadcast.len(), 1);
+        let broadcast = broadcast.frame(0).unwrap();
         assert_eq!(broadcast.distribution(), Distribution::Broadcast);
         assert_eq!(broadcast.datagrams().len(), 1);
         assert_eq!(broadcast.datagrams()[0].cmd, Cmd::ConfigPattern);
     }
 
     #[test]
-    fn a_tuple_expands_its_commands_in_order() {
-        let frames = build(1, (Marker(3), CONFIG, Marker(5), Marker(7))).unwrap();
+    fn pushed_commands_expand_in_order() {
+        let frames = build(
+            1,
+            pushes(|expansion| {
+                expansion
+                    .push(Marker(3))?
+                    .push(CONFIG)?
+                    .push(Marker(5))?
+                    .push(Marker(7))?;
+                Ok(())
+            }),
+        )
+        .unwrap();
 
         assert_eq!(
             cmds(&frames),
@@ -306,7 +331,13 @@ mod tests {
     #[test]
     fn a_failing_op_leaves_no_frame_behind() {
         let mut frames = Frames::default();
-        let result = frames.encode_into(&test_geometry(2), (Marker(1), FailAt(1)));
+        let result = frames.encode_into(
+            &test_geometry(2),
+            pushes(|expansion| {
+                expansion.push(Marker(1))?.push(FailAt(1))?;
+                Ok(())
+            }),
+        );
 
         assert!(matches!(result, Err(Error::InvalidPayload(_))));
         assert!(frames.is_empty());
@@ -325,7 +356,13 @@ mod tests {
         }
 
         let expanded = std::cell::Cell::new(false);
-        let result = build(2, (FailAt(0), Expanded(&expanded)));
+        let result = build(
+            2,
+            pushes(|expansion| {
+                expansion.push(FailAt(0))?.push(Expanded(&expanded))?;
+                Ok(())
+            }),
+        );
 
         assert!(matches!(result, Err(Error::InvalidPayload(_))));
         assert!(!expanded.get());
@@ -365,12 +402,30 @@ mod tests {
         let geometry = test_geometry(1);
         let mut frames = Frames::default();
         frames
-            .encode_into(&geometry, (Marker(1), Marker(2)))
+            .encode_into(
+                &geometry,
+                pushes(|expansion| {
+                    expansion.push(Marker(1))?.push(Marker(2))?;
+                    Ok(())
+                }),
+            )
             .unwrap();
         frames.encode_into(&geometry, Marker(9)).unwrap();
 
         assert_eq!(frames.len(), 1);
         assert_eq!(payload(&frames, 0, 0)[0], 9);
+    }
+
+    #[test]
+    fn a_command_on_an_empty_geometry_is_rejected() {
+        let expected = PayloadError::DeviceCountOutOfRange {
+            got: 0,
+            max: autd3_rs_core::MAX_DEVICES,
+        };
+
+        let result = build(0, Marker(0));
+
+        assert!(matches!(result, Err(Error::InvalidPayload(e)) if e == expected));
     }
 
     #[test]

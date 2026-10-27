@@ -8,7 +8,8 @@ from autd3.geometry import Autd3, Geometry
 async def main() -> None:
     geometry = Geometry([Autd3()])
     with Client.open(geometry, TransportOption()) as client:
-        await client.send((Clear(), Synchronize()))
+        await client.send(Clear())
+        await client.send(Synchronize())
 
         states = await client.read_fpga_state()
         if any(state.is_failsafe_active() for state in states):

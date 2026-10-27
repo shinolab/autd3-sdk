@@ -13,7 +13,8 @@ async fn main() -> Result<()> {
 
     let option = TransportOption::default();
     let client = Client::open(&geometry, &option)?;
-    client.send((Clear, Synchronize)).await?;
+    client.send(Clear).await?;
+    client.send(Synchronize).await?;
 
     let wavelength = autd3_rs_pattern::wavelength(340.0 * m / s);
 

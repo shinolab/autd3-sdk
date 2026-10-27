@@ -6,13 +6,13 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result, bail};
 use autd3_cpu_wire::payload::Telemetry;
 use autd3_rs::commands::{
-    ActivatePatternBank, Clear, ConfigPattern, Distribution, GpioOut, Pattern, SetGpioOut,
-    Synchronize, WritePatternBuffer,
+    ActivatePatternBank, Clear, Command, ConfigPattern, Distribution, Expansion, GpioOut, Pattern,
+    SetGpioOut, Synchronize, WritePatternBuffer,
 };
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::protocol::{Cmd, EXEC_AT_UNIT_NS};
 use autd3_rs::value::{
-    Intensity, LoopBehavior, PatternBank, SamplingConfig, SysTime, TransitionMode,
+    Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig, SysTime, TransitionMode,
 };
 use autd3_rs::{
     Client, Datagram, DeviceState, Error, ExecAt, Frame, Frames, Response, TransportOption,
@@ -23,6 +23,35 @@ use zerocopy::FromBytes;
 use crate::cli::{Cli, Framing};
 use crate::run::{spawn_emulator, spawn_signal_listener, transport_option};
 use crate::stats::{Counters, SampleStatus};
+
+struct SplitSwitch<'a> {
+    bank: PatternBank,
+    patterns: &'a [Vec<Vec<Phase>>],
+    intensities: &'a [Vec<Intensity>],
+}
+
+impl Command for SplitSwitch<'_> {
+    fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
+        expansion
+            .push(WritePatternBuffer::new(
+                self.bank,
+                0,
+                self.patterns,
+                self.intensities,
+            ))?
+            .push(ConfigPattern {
+                bank: self.bank,
+                config: SamplingConfig::new(NonZeroU16::MAX),
+                size: 1,
+                loop_behavior: LoopBehavior::Infinite,
+            })?
+            .push(ActivatePatternBank {
+                bank: self.bank,
+                transition_mode: TransitionMode::Immediate,
+            })?;
+        Ok(())
+    }
+}
 
 const REPORT_INTERVAL: Duration = Duration::from_secs(1);
 const BIN_NS: i64 = 1_000;
@@ -98,19 +127,11 @@ pub(crate) async fn run(cli: &Cli) -> Result<()> {
                 ),
                 Framing::Split => frames.encode_into(
                     &geometry,
-                    (
-                        WritePatternBuffer::new(bank, 0, &patterns, &intensities),
-                        ConfigPattern {
-                            bank,
-                            config: SamplingConfig::new(NonZeroU16::MAX),
-                            size: 1,
-                            loop_behavior: LoopBehavior::Infinite,
-                        },
-                        ActivatePatternBank {
-                            bank,
-                            transition_mode: TransitionMode::Immediate,
-                        },
-                    ),
+                    SplitSwitch {
+                        bank,
+                        patterns: &patterns,
+                        intensities: &intensities,
+                    },
                 ),
             }
             .context("encoding the switch");

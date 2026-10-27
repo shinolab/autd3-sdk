@@ -20,7 +20,8 @@ async def main() -> None:
         geometry,
         TransportOption(),
     ) as client:
-        await client.send((Clear(), Synchronize()))
+        await client.send(Clear())
+        await client.send(Synchronize())
 
         # Generate a focus 150 mm above the array center.
         target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm)

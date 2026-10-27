@@ -386,8 +386,8 @@ def test_frames_are_re_encoded_in_place() -> None:
     frames.encode_into(geometry, autd3.commands.Nop())
     assert len(frames) == 1
     held = frames[0]
-    frames.encode_into(geometry, (autd3.commands.Nop(), autd3.commands.Clear()))
-    assert len(frames) == 2
+    frames.encode_into(geometry, autd3.commands.each(lambda _: autd3.commands.Clear()))
+    assert len(frames) == 1
     assert isinstance(held, autd3.Frame)
 
     invalid = autd3.commands.SetCpuConfig(CpuConfig(failsafe_timeout=autd3.Duration.from_nanos(0)))

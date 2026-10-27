@@ -66,23 +66,22 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     println!("firmware error-detail checks:");
 
     ctx.send(SetSilencer::default()).await?;
+    ctx.send(ConfigPattern {
+        bank: PatternBank::B0,
+        config: SamplingConfig::new(NonZeroU16::new(1).unwrap()),
+        size: 1,
+        loop_behavior: LoopBehavior::Infinite,
+    })
+    .await?;
     expect_firmware_error(
         ctx,
         "strict silencer vs short sampling period",
         Frames::encode(
             ctx.client.geometry(),
-            (
-                ConfigPattern {
-                    bank: PatternBank::B0,
-                    config: SamplingConfig::new(NonZeroU16::new(1).unwrap()),
-                    size: 1,
-                    loop_behavior: LoopBehavior::Infinite,
-                },
-                ActivatePatternBank {
-                    bank: PatternBank::B0,
-                    transition_mode: TransitionMode::Immediate,
-                },
-            ),
+            ActivatePatternBank {
+                bank: PatternBank::B0,
+                transition_mode: TransitionMode::Immediate,
+            },
         ),
         ERR_INVALID_SILENCER_SETTING,
     )
@@ -111,23 +110,22 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
         ),
     )
     .await;
+    ctx.send(ConfigPattern {
+        bank: PatternBank::B0,
+        config: divider(DIVIDER),
+        size: 1,
+        loop_behavior: LoopBehavior::Infinite,
+    })
+    .await?;
     expect_firmware_error(
         ctx,
         "pattern divider within phase window (activation-time)",
         Frames::encode(
             ctx.client.geometry(),
-            (
-                ConfigPattern {
-                    bank: PatternBank::B0,
-                    config: divider(DIVIDER),
-                    size: 1,
-                    loop_behavior: LoopBehavior::Infinite,
-                },
-                ActivatePatternBank {
-                    bank: PatternBank::B0,
-                    transition_mode: TransitionMode::Immediate,
-                },
-            ),
+            ActivatePatternBank {
+                bank: PatternBank::B0,
+                transition_mode: TransitionMode::Immediate,
+            },
         ),
         ERR_INVALID_SILENCER_SETTING,
     )

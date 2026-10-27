@@ -19,7 +19,8 @@ async fn main() -> Result<()> {
 
     let option = TransportOption::default();
     let client = Client::open(&geometry, &option)?;
-    client.send((Clear, Synchronize)).await?;
+    client.send(Clear).await?;
+    client.send(Synchronize).await?;
 
     client.send(SetSilencer::default()).await?;
 

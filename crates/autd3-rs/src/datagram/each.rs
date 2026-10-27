@@ -34,7 +34,7 @@ mod tests {
     };
     use crate::commands::{Pattern, SetSilencer};
     use crate::datagram::{Datagram, Frames, each};
-    use crate::error::{Error, PayloadError};
+    use crate::error::Error;
     use crate::geometry::{Autd3, Point3};
     use crate::protocol::{Cmd, PAYLOAD_BYTES};
     use crate::test_utils::{FailAt, Marker, build, cmd_at, payload, test_geometry};
@@ -79,9 +79,9 @@ mod tests {
 
     #[test]
     fn each_without_any_assignment_emits_no_frame() {
-        let frames = build(2, (Marker(0), each(|_| None::<Marker>))).unwrap();
+        let frames = build(2, each(|_| None::<Marker>)).unwrap();
 
-        assert_eq!(frames.len(), 1);
+        assert!(frames.is_empty());
     }
 
     #[test]
@@ -117,73 +117,44 @@ mod tests {
         let low = [0x11u8; 4];
         let high = [0x22u8; 4];
         let points = [ControlPoints::from(Point3::new(0.0, 0.0, 150.0))];
-        let frames = build(
+        let modulation = build(
             2,
-            (
-                each(|device| {
-                    Some(WriteModulationBuffer {
-                        bank: ModulationBank::B0,
-                        offset: 0,
-                        data: if device.idx() == 0 { &low } else { &high },
-                    })
-                }),
-                each(|device| {
-                    (device.idx() == 1).then_some(WriteFociBuffer {
-                        bank: PatternBank::B0,
-                        start_index: 0,
-                        points: &points,
-                    })
-                }),
-            ),
+            each(|device| {
+                Some(WriteModulationBuffer {
+                    bank: ModulationBank::B0,
+                    offset: 0,
+                    data: if device.idx() == 0 { &low } else { &high },
+                })
+            }),
+        )
+        .unwrap();
+        let foci = build(
+            2,
+            each(|device| {
+                (device.idx() == 1).then_some(WriteFociBuffer {
+                    bank: PatternBank::B0,
+                    start_index: 0,
+                    points: &points,
+                })
+            }),
         )
         .unwrap();
 
-        assert_eq!(frames.len(), 2);
-        assert_eq!(&payload(&frames, 0, 0)[6..], &low);
-        assert_eq!(&payload(&frames, 0, 1)[6..], &high);
-        assert_eq!(cmd_at(&frames, 1, 0), Cmd::Nop);
-        assert_eq!(cmd_at(&frames, 1, 1), Cmd::WriteFociBuffer);
-    }
-
-    #[test]
-    fn consecutive_each_stay_sequential_even_when_their_devices_are_disjoint() {
-        let frames = build(
-            2,
-            (
-                each(|device| (device.idx() == 0).then_some(Marker(0))),
-                each(|device| (device.idx() == 1).then_some(Marker(1))),
-            ),
-        )
-        .unwrap();
-
-        assert_eq!(frames.len(), 2);
-        assert_eq!(payload(&frames, 0, 0)[0], 0);
-        assert_eq!(cmd_at(&frames, 0, 1), Cmd::Nop);
-        assert_eq!(cmd_at(&frames, 1, 0), Cmd::Nop);
-        assert_eq!(payload(&frames, 1, 1)[0], 1);
+        assert_eq!(modulation.len(), 1);
+        assert_eq!(&payload(&modulation, 0, 0)[6..], &low);
+        assert_eq!(&payload(&modulation, 0, 1)[6..], &high);
+        assert_eq!(foci.len(), 1);
+        assert_eq!(cmd_at(&foci, 0, 0), Cmd::Nop);
+        assert_eq!(cmd_at(&foci, 0, 1), Cmd::WriteFociBuffer);
     }
 
     #[test]
     fn a_failing_device_inside_each_leaves_no_frame_behind() {
         let mut frames = Frames::default();
-        let result = frames.encode_into(&test_geometry(2), (Marker(1), each(|_| Some(FailAt(1)))));
+        let result = frames.encode_into(&test_geometry(2), each(|_| Some(FailAt(1))));
 
         assert!(matches!(result, Err(Error::InvalidPayload(_))));
         assert!(frames.is_empty());
-    }
-
-    #[test]
-    fn each_on_an_empty_geometry_is_rejected_like_a_plain_command() {
-        let expected = PayloadError::DeviceCountOutOfRange {
-            got: 0,
-            max: autd3_rs_core::MAX_DEVICES,
-        };
-
-        let plain = build(0, Marker(0));
-        assert!(matches!(plain, Err(Error::InvalidPayload(e)) if e == expected));
-
-        let per_device = build(0, (Marker(0), each(|_| Some(Marker(0)))));
-        assert!(matches!(per_device, Err(Error::InvalidPayload(e)) if e == expected));
     }
 
     #[test]

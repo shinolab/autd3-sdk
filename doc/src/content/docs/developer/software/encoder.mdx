@@ -152,18 +152,6 @@ frames = [ WriteModulationBuffer { offset: 0 }
          , ActivateModulationBank ]
 ```
 
-#### 例: タプル
-
-タプルは要素を先頭から順に `push` するだけの `Command` である.
-
-```rust
-Frames::encode(&geometry, (SetSilencer::default(), Clear))?;
-```
-
-```
-frames = [ SetSilencer, Clear ]
-```
-
 ### encode
 
 ```rust
@@ -271,7 +259,7 @@ where
 ```
 
 `Each<F>` も `Command` であり, `expand` で `PerDevice` のフレームを 1 つ作る.
-`assign` が返せるのは 1 フレームの `Operation` だけで, 複数フレームに展開される `Command` (`Modulation` やタプル, `each` 自身など) は型で弾かれる.
+`assign` が返せるのは 1 フレームの `Operation` だけで, 複数フレームに展開される `Command` (`Modulation` や `each` 自身など) は型で弾かれる.
 型の異なる `Operation` は `Box<dyn Operation + 'a>` に揃える (`Box<dyn Operation>` も `Operation` である).
 
 ### フレームへの展開

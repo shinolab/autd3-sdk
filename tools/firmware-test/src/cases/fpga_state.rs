@@ -4,7 +4,6 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 
 use autd3_rs::FpgaState;
-use autd3_rs::Frames;
 use autd3_rs::commands::{ConfigModulation, EmulateGpioIn, SetSilencer, WriteModulationBuffer};
 use autd3_rs::geometry::{Point3, Vector3, offset};
 use autd3_rs::units::mm;
@@ -165,22 +164,18 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     activate_pattern_bank(ctx, PatternBank::B0, TransitionMode::Immediate).await?;
     println!("modulation finite loop (SyncIdx transition):");
     let data = [0xFFu8; 4];
-    ctx.send_frames(&Frames::encode(
-        ctx.client.geometry(),
-        (
-            WriteModulationBuffer {
-                bank: ModulationBank::B1,
-                offset: 0,
-                data: &data,
-            },
-            ConfigModulation {
-                bank: ModulationBank::B1,
-                config: slow_sampling(),
-                size: data.len(),
-                loop_behavior: LoopBehavior::ONCE,
-            },
-        ),
-    )?)
+    ctx.send(WriteModulationBuffer {
+        bank: ModulationBank::B1,
+        offset: 0,
+        data: &data,
+    })
+    .await?;
+    ctx.send(ConfigModulation {
+        bank: ModulationBank::B1,
+        config: slow_sampling(),
+        size: data.len(),
+        loop_behavior: LoopBehavior::ONCE,
+    })
     .await?;
     activate_mod_bank(ctx, ModulationBank::B1, TransitionMode::SyncIdx).await?;
     expect_state(

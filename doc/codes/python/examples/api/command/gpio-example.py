@@ -8,7 +8,8 @@ from autd3.geometry import Autd3, Geometry
 async def main() -> None:
     geometry = Geometry([Autd3()])
     with Client.open(geometry, TransportOption()) as client:
-        await client.send((Clear(), Synchronize()))
+        await client.send(Clear())
+        await client.send(Synchronize())
 
         await client.send(
             SetGpioOut(
