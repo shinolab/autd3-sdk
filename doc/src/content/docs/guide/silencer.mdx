@@ -45,7 +45,7 @@ Silencer は位相 <Math tex="P" /> の変化を線形補間し, 段階的にす
 <SilencerPlot mode="phase" period={12} p0={2} target={6} delta={1} />
 
 目標までの距離が <Math tex="T/2" /> を超える場合は, 逆回りのほうが近いためそちらへ補間する.
-例えば <Math tex="P=2" /> から <Math tex="P_r=10" /> へ変化する場合, <Math tex="P=10" /> より <Math tex="P=-2" /> のほうが近い.
+例えば <Math tex="T=12" /> の場合, <Math tex="P=2" /> から <Math tex="P_r=10" /> へ変化させるなら, <Math tex="P=10" /> より <Math tex="P=-2" /> のほうが近い.
 
 この実装の都合上, 移動平均フィルタとは異なる挙動を示す場合がある.
 元時系列への忠実度という観点では移動平均フィルタが正しいが, 位相変化量が <Math tex="\pi" /> を超える場合の扱いや <Math tex="\Delta" /> の可変化 (フィルタ長の可変化) が煩雑なため, 現在の実装となっている.

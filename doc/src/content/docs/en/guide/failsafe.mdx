@@ -1,0 +1,41 @@
+---
+title: Failsafe
+description: The failsafe that makes a device stop its output when communication is lost or the PTP lock is lost
+sidebar:
+  order: 6.5
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import { excerpt } from "@lib/excerpt";
+import sample from "@codes/rust/examples/guide/failsafe.rs?raw";
+import pySample from "@codes/python/examples/guide/failsafe.py?raw";
+import csSample from "@codes/csharp/examples/guide/failsafe.cs?raw";
+
+The devices have a failsafe feature that stops their output by themselves when communication with the host is lost or when they lose the PTP lock.
+Both are disabled by default and can be enabled with [SetCpuConfig](/autd3-sdk/en/api/command/cpu-config/).
+
+## Communication-loss failsafe and liveness check
+
+If `failsafe_timeout` is set, a device stops its output when communication from the host has been cut off for that long.
+The default is `None` (disabled), and the devices do not stop the ultrasound even if communication is cut off by a host crash or a broken cable.
+
+While there is nothing to send, `Client` sends nothing to the devices by itself.
+Therefore, when `failsafe_timeout` is set, you need to call [`send_heartbeat()`](/autd3-sdk/en/api/basics/client/#api) periodically while you wait with the output kept on.
+`send_heartbeat()` must be called at a period sufficiently shorter than `failsafe_timeout`.
+
+The following is an example that sets `failsafe_timeout` to 100 ms and sends a liveness check every 10 ms.
+
+<CodeTabs rust={excerpt(sample, "heartbeat")} python={excerpt(pySample, "heartbeat")} csharp={excerpt(csSample, "heartbeat")} />
+
+An output stopped by the failsafe does not come back automatically.
+Whether it is stopped can be checked with `failsafe_active` of the `DeviceStatus` that `device_status()` returns, and sending [`ReleaseFailsafe`](/autd3-sdk/en/api/command/release-failsafe/) resumes it ([Clear](/autd3-sdk/en/api/command/clear/) also works, but it resets every state).
+
+## Detecting and releasing the PTP failsafe
+
+If `ptp_unlock_failsafe_timeout` is set with [SetCpuConfig](/autd3-sdk/en/api/command/cpu-config/), a device that has stayed without the PTP lock for the given time stops its output.
+
+The following is an example that sends `ReleaseFailsafe` to the devices that have `failsafe_active` set and have relocked (`ptp_locked` is set).
+
+<CodeTabs rust={excerpt(sample, "ptp_failsafe")} python={excerpt(pySample, "ptp_failsafe")} csharp={excerpt(csSample, "ptp_failsafe")} />
+
+Sending `ReleaseFailsafe` to a device that is still without the lock returns an error, and its output stays stopped.

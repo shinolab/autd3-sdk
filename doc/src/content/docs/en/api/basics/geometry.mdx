@@ -21,17 +21,13 @@ import { excerpt } from "@lib/excerpt";
 <Code code={excerpt(sample, "api")} lang="rust" />
 
 `Autd3::new(origin, rotation)` constructs a single device from an origin (`Point3`) and a rotation (`UnitQuaternion`).
-There is also `Autd3::default()`, which uses `Point3::origin()` for the origin and `UnitQuaternion::identity()` for the rotation.
 </Fragment>
 <Fragment slot="python">
 <Code code={excerpt(pySample, "api")} lang="python" />
 
 `Autd3([x, y, z], rotation)` constructs a single device from an origin and a rotation.
-Both can be omitted: the origin defaults to `[0, 0, 0]` and the rotation to the identity quaternion `[1, 0, 0, 0]` (`Autd3()` is the same as Rust's `Autd3::default()`).
 
 The rotation accepts the following 3 forms.
-
-<Code code={excerpt(pySample, "rotation")} lang="python" />
 
 - Quaternion: **scalar-first** `[w, i, j, k]`
 - `EulerAngles`: intrinsic Euler angles
@@ -41,15 +37,10 @@ The rotation accepts the following 3 forms.
 <Code code={excerpt(csSample, "api")} lang="csharp" />
 
 `new Autd3(origin, rotation)` constructs a single device from an origin (`Vector3`) and a rotation (`Quaternion`).
-There is also `new Autd3(origin)`, which omits the rotation (it uses `Quaternion.Identity`).
-`new Autd3()` (and `default(Autd3)`) gives the origin and `Quaternion.Identity`, the same as Rust's `Autd3::default()`.
 </Fragment>
 </CodeTabs>
 
 When multiple devices are passed to `Geometry::new`, device numbers (`idx`) are assigned in order from the first.
-
-Rust takes the rotation as a `UnitQuaternion`, so its unit length is guaranteed by the type.
-Python / C# check the norm of the quaternion and report an error if it differs from 1 by more than `ROTATION_NORM_TOLERANCE` (1e-3, C#: `Autd3.RotationNormTolerance`) (Python raises `ValueError` when constructing `Autd3`; C# throws `Autd3Exception` (`InvalidArgument`) when constructing `Geometry`).
 
 ## API
 
@@ -61,7 +52,6 @@ Provides retrieval of information about the whole layout and access to each `Dev
 | ---------------------- | ---------------------------- | ------------------------------------ |
 | `num_devices()`        | `usize`                      | Number of devices                    |
 | `num_transducers()`    | `usize`                      | Total number of transducers across all devices |
-| `is_empty()`           | `bool`                       | Whether there are no devices         |
 | `center()`             | `Point3<f32>`                | Center coordinate of the whole array |
 | `phase_buffer()`       | `Vec<Vec<Phase>>`            | Allocate a phase buffer for Pattern computation (starts at 0) |
 | `intensity_buffer()`   | `Vec<Vec<Intensity>>`        | Allocate an intensity buffer for Pattern computation (starts at the maximum) |
@@ -70,8 +60,6 @@ Provides retrieval of information about the whole layout and access to each `Dev
 | `geometry[i]`          | `&Device`                    | Get the `i`-th `Device`              |
 | `to_json()`            | `Result<String, LayoutError>` | Convert the layout to a JSON string  |
 | `from_json(&str)`      | `Result<Geometry, LayoutError>` | Construct `Geometry` from a JSON string   |
-
-An out-of-range `geometry[i]` panics in Rust, raises `IndexError` in Python (also for a negative `i`), and throws `ArgumentOutOfRangeException` in C#.
 
 ## Device
 
@@ -85,7 +73,6 @@ The position of each transducer and the device's rotation can be retrieved. All 
 | -------------------- | ----------------------- | --------------------------------------------- |
 | `idx()`              | `usize`                 | Device number within the `Geometry`           |
 | `num_transducers()`  | `usize`                 | Number of transducers                         |
-| `is_empty()`         | `bool`                  | Whether there are no transducers              |
 | `center()`           | `Point3<f32>`           | Device center coordinate                      |
 | `rotation()`         | `UnitQuaternion<f32>`   | Device rotation                               |
 | `x_direction()`      | `UnitVector3<f32>`      | Local x-axis direction                        |
@@ -93,10 +80,6 @@ The position of each transducer and the device's rotation can be retrieved. All 
 | `axial_direction()`  | `UnitVector3<f32>`      | Axial direction (ultrasound emission direction) |
 | `positions()`        | `&[Point3<f32>]`        | Positions of all transducers                  |
 | `position(i)`        | `Point3<f32>`           | Position of the `i`-th transducer             |
-| `to_local(p)`        | `Point3<f32>`           | Convert a global point `p` to the device's local coordinates (with the 0th transducer at the origin) |
-
-In Python, coordinates, directions, and rotations are all returned as `float32` numpy arrays (the same holds for `Geometry.center()` and `Autd3.origin` / `Autd3.rotation`).
-A rotation is a quaternion in `[w, x, y, z]` order.
 
 ## Coordinate Helpers
 

@@ -8,7 +8,7 @@ sidebar:
 import Math from "@components/Math.astro";
 import Install from "@components/Install.astro";
 
-Representative sound field computation utilities such as a single focal point, a plane wave, a Bessel beam, a Laguerre-Gaussian beam (acoustic vortex), and a Hermite-Gaussian beam (the trapping field used for acoustic levitation).
+Representative sound field computation utilities such as a single focal point, a plane wave, a Bessel beam, a Laguerre-Gaussian beam, and a Hermite-Gaussian beam.
 
 <Install rust="autd3-rs-pattern" python="autd3-pattern" csharp="AUTD3.Pattern" />
 
@@ -21,9 +21,7 @@ Representative sound field computation utilities such as a single focal point, a
 - [hermite_gaussian_phase / hermite_gaussian_intensity](/autd3-sdk/en/api/compute/pattern/hermite-gaussian/) — phase and intensity of a Hermite-Gaussian beam
 
 `focus` / `plane` / `bessel` / `laguerre_gaussian_phase` / `hermite_gaussian_phase` also have a `*_transducer` variant that returns the phase of a single transducer element (for example, `focus_transducer`).
-`laguerre_gaussian_intensity` / `hermite_gaussian_intensity` have no per-transducer variant, because normalizing the intensity needs the surrounding transducers.
-
-For a Geometry-level function, if the number of devices of `dst` does not match `geometry`, Rust panics, Python raises `ValueError`, and C# throws `Autd3Exception` (`InvalidArgument`).
+`laguerre_gaussian_intensity` / `hermite_gaussian_intensity` have no per-transducer variant.
 
 ## Wavelength
 

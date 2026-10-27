@@ -15,47 +15,30 @@ import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 
 ## Obtaining the State
 
-`device_status` returns the state `DeviceStatus` of each device at the time of the call (`Vec<DeviceStatus>` in Rust, `list[DeviceStatus]` in Python, `DeviceStatus[]` in C#; the index is the device number).
-It sends nothing to the devices and only reads the state.
+`device_status` returns an array of the state `DeviceStatus` of each device at the time of the call.
+
 `DeviceStatus` holds the following.
 
 - `state`: the state of the device (`DeviceState`).
 - `ptp_locked`: whether its PTP is locked.
-- `failsafe_active`: whether it stopped its output by the failsafe and has not been released yet (whatever the cause: loss of communication with the host, loss of the PTP lock, the CPU watchdog, or a firmware update).
+- `failsafe_active`: whether it stopped its output by the failsafe and has not been released yet
 
 Aggregates such as whether every device is `Ready` or whether any is `Lost` are built from the returned values (see the example below).
 `ptp_locked` and `failsafe_active` are taken from the last reply of each device, and both are `false` for a `Lost` device.
 Calling it after the `Client` is closed returns an error (`Closed`, or `Network` if it closed on a communication error).
 
-The meaning of each state is as follows.
+The meaning of each `DeviceState` is as follows.
 
-| State     | Meaning                                                                              |
-| --------- | ------------------------------------------------------------------------------------ |
-| `Ready`   | The device replies, its time is synchronized, and its sync pulse is running           |
-| `Syncing` | The device replies, but its time is still being synchronized or its sync pulse is not running yet |
-| `Lost`    | No reply for a certain period of time                                                 |
+| State     | Meaning                                                    |
+| --------- | ---------------------------------------------------------- |
+| `Ready`   | The device replies and its time is synchronized            |
+| `Syncing` | The device replies, but its time is still being synchronized |
+| `Lost`    | No reply for a certain period of time                      |
 
 When a device in the middle of the chain becomes `Lost`, every device beyond it also becomes `Lost`.
-A `Lost` device does not come back while the `Client` is open. It stays `Lost` even if the communication comes back, for example after replugging a cable, so `close` the client and reopen it with `Client::open`.
+There is no automatic recovery from `Lost`.
+Therefore, once a device becomes `Lost`, the only way is to `close` the client and reopen it with `Client::open`.
 
 The following is an example that calls `device_status` at fixed intervals and outputs only when the state changes.
 
 <CodeTabs rust={excerpt(sample, "poll")} python={excerpt(pySample, "poll")} csharp={excerpt(csSample, "poll")} />
-
-How often to call `device_status` is up to the user.
-The state is updated from the replies of the devices, so while you send no frame, send liveness checks with [`send_heartbeat()`](/autd3-sdk/en/api/basics/client/#liveness-check) (the example above sends one at the top of the loop).
-While nothing is sent, a device does not become `Lost` even if the communication with it is cut off.
-
-## Detecting and Releasing the Failsafe
-
-If `failsafe_timeout` or `ptp_unlock_failsafe_timeout` is set with [SetCpuConfig](/autd3-sdk/en/api/command/cpu-config/), a device that meets the condition stops its output (the CPU watchdog does the same).
-Such a device has `failsafe_active` set, and it stays set until the device is released with [`ReleaseFailsafe`](/autd3-sdk/en/api/command/release-failsafe/) or [Clear](/autd3-sdk/en/api/command/clear/) (neither the communication coming back nor relocking releases it automatically).
-Which cause stopped it can be told from the fire counts of `read_telemetry()` (`failsafe` / `ptp_unlock_failsafe` / `cpu_watchdog`).
-
-The following is an example that sends `ReleaseFailsafe` to the devices that have `failsafe_active` set and whose PTP is locked (`ptp_locked` is set as well).
-`send_heartbeat()` returns without waiting for the replies, so wait until they arrive before calling `device_status` (calling it right away returns the values of the previous replies). After waiting for a `send` to complete, it returns the values of that frame's replies.
-The failsafe is not released by reopening the `Client`, but right after opening, `device_status` reports `failsafe_active` as `false` until the first replies arrive.
-
-<CodeTabs rust={excerpt(sample, "ptp_failsafe")} python={excerpt(pySample, "ptp_failsafe")} csharp={excerpt(csSample, "ptp_failsafe")} />
-
-Sending `ReleaseFailsafe` to a device that is still without the PTP lock returns an error, and its output stays stopped. Wait until its `ptp_locked` is set before sending.

@@ -18,21 +18,16 @@ import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
 | Field                 | Type                   | Default | Description                                                                                   |
 | --------------------- | ---------------------- | ------- | --------------------------------------------------------------------------------------------- |
 | `iface`               | `Interface`            | `Auto`  | Destination                                                                                   |
-| `open_timeout`        | `Duration`             | 40 s    | Upper bound on the whole open (enumerating the devices and waiting for all of them to synchronize with one another) |
+| `open_timeout`        | `Duration`             | 40 s    | Upper bound on the time the open waits |
 | `lost_timeout`        | `Duration`             | 100 ms  | A device that has not replied for this long is treated as `Lost` |
-| `ack_timeout`         | `Duration`             | 10 ms   | Response-wait timeout. If the replies to the frame at the head of the wait do not all arrive within this time, every frame in flight fails with `Timeout` (see [Client](/autd3-sdk/en/api/basics/client/#response-wait-timeout)) |
+| `ack_timeout`         | `Duration`             | 10 ms   | Response-wait timeout |
 | `send_buffer_bytes`         | `Option<NonZeroUsize>` | 8192    | Size of the socket send buffer [B]. `None` leaves the OS default                              |
-| `sync_on_open`        | `bool`                 | `true`  | When `false`, open does not wait for the devices to synchronize (for maintenance such as firmware updates) |
+| `sync_on_open`        | `bool`                 | `true`  | When `false`, open does not wait for the devices to synchronize with one another |
 
 Changing anything other than `iface` is generally not recommended.
-The liveness check is not configured in `TransportOption`; the user sends it by calling [`send_heartbeat()`](/autd3-sdk/en/api/basics/client/#liveness-check) of the `Client`.
-
-The Python defaults are the same concrete values as in Rust, and only the fields whose type is an `Option` accept `None` (disabled). Passing `None` to any other field raises `TypeError`.
-In C#, setting a field whose type is an `Option` to `null` disables it.
-`open_timeout` / `lost_timeout` / `ack_timeout` are not validated. Setting one to 0 makes that wait time out immediately (with `lost_timeout` at 0, every device becomes `Lost` after the first send).
-A `0` for `send_buffer_bytes` raises `ValueError` when the `TransportOption` is built in Python, and makes opening the `Client` fail with `Autd3Exception` (`InvalidArgument`) in C# (Rust cannot pass `0` because the type is `NonZeroUsize`).
 
 :::caution[Windows timer resolution]
+The library does not change the timer resolution of Windows (`timeBeginPeriod`).
 At the default timer resolution in Windows (typically 15.6 ms), waiting for the replies (the socket receive timeout) is rounded to that granularity, so the judgement of `ack_timeout` and of `lost_timeout` may come late.
 If needed, call `timeBeginPeriod(1)` in your process yourself.
 :::
@@ -43,7 +38,7 @@ If needed, call `timeBeginPeriod(1)` in your process yourself.
 
 | Value       | Destination                                                                                             |
 | ----------- | ------------------------------------------------------------------------------------------------------- |
-| `Auto`      | The first network interface on which devices reply, searched in interface-index order                   |
+| `Auto`      | The first network interface on which devices reply                                                      |
 | `Name(..)`  | The real devices connected to the network interface with the given name                                 |
 | `Addr(..)`  | The given IPv6 address and port. Connect to the [Simulator](/autd3-sdk/en/guide/simulator/) with `[::1]:44336` |
 

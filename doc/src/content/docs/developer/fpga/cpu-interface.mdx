@@ -18,14 +18,15 @@ FPGA と CPU ボードとの接続は以下のようになっている.
 - `CPU_RDWR`: Input, 1 で CPU からの読み込み, 0 で CPU からの書き込み
 - `RESET_N`: Input, リセット (負論理)
 
-CPU との通信には, `CPU_ADDR`, `CPU_DATA`, `CPU_CKIO`, `CPU_CS1_N`, `CPU_WE0_N`, 及び, `CPU_RDWR` を使用する.
+CPU との通信には, `CPU_ADDR`, `CPU_DATA`, `CPU_CKIO`, `CPU_CS1_N`, `CPU_WE0_N`, `CPU_RD_N`, 及び, `CPU_RDWR` を使用する.
 これらの信号は, AMD の BRAM IP (Native Port) と接続できる.
 
-CPU からの書き込みには, `CPU_ADDR` を `addr`, `CPU_DATA` を `din`, `CPU_CKIO` を `clk`, `~CPU_CS1_N` を `en`, `~CPU_WE0_N` を `we` に接続すれば良い.
+CPU からの書き込みでは, `CPU_CS1_N`, `CPU_WE0_N`, `CPU_ADDR`, `CPU_DATA` をまず端子の IOB のフリップフロップで `CPU_CKIO` に同期して取り込む.
+`CPU_WE0_N` が連続する 2 回の取り込みでアサートされていたら, 先の取り込みのアドレスとデータで BRAM の `addr`, `din` を駆動し, `en`, `we` を 1 クロックだけアサートする (1 回のアクセスにつき 1 回だけ書き込む).
 
 CPU からの読み込みには, トライステートバッファを使用し, `~CPU_CS1_N`, かつ, `~CPU_RD_N`, かつ, `CPU_RDWR` の場合に `CPU_DATA` を `dout` に接続し, そうでないときは `CPU_DATA` をハイインピーダンス (`z`) にする.
 
-`CPU_ADDR` の上位 <Math tex="\SI{2}{bit}" /> は BRAM の選択 (`BRAM_SELECT`) に, 残り <Math tex="\SI{14}{bit}" /> が BRAM 内のアドレス (`BRAM_ADDR`) になる.
+`CPU_ADDR` の上位 <Math tex="\SI{8}{bit}" /> は領域の選択 (`BRAM_SELECT`) に, 残り <Math tex="\SI{8}{bit}" /> が領域内のアドレスになる (Modulation / Emission BRAM は上位 <Math tex="\SI{2}{bit}" /> で選択し, 残り <Math tex="\SI{14}{bit}" /> が BRAM 内のアドレスになる).
 詳細は [Memory](/autd3-sdk/developer/fpga/memory/) を参照されたい.
 
 CPU 側から見ると, この FPGA は CS1 空間 (`0x44000000`) にマップされた <Math tex="\SI{16}{bit}" /> 幅のメモリとして見える.

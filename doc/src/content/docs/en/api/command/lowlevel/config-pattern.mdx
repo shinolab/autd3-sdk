@@ -15,8 +15,7 @@ import csFullSample from "@codes/csharp/examples/api/command/lowlevel/bank-examp
 import { excerpt } from "@lib/excerpt";
 
 `ConfigPattern` is a low-level command that configures the playback parameters of the Pattern bank.
-The settings are only written; they take effect on playback when [ActivatePatternBank](/autd3-sdk/en/api/command/lowlevel/activate-pattern-bank/) is sent.
-To change the settings of the bank being played, follow it with a `ActivatePatternBank` that points to the same bank.
+The settings are only written; send [ActivatePatternBank](/autd3-sdk/en/api/command/lowlevel/activate-pattern-bank/) to activate them.
 
 ## API
 

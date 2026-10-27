@@ -22,7 +22,6 @@ import pySample from "@codes/python/examples/guide/emulator.py?raw";
 <CodeTabs rust={excerpt(sample, "record")} python={excerpt(pySample, "record")} />
 
 `tick` に渡す時間は超音波周期 ( 25 us ) の整数倍でなければならない.
-`record` 内の `send` は実機の `Client` と違い同期で, `.await` は付けない.
 
 出力データは列名の付いた列の集まりである.
 Rust では `RawFrame` ( 行数 `rows` と, 列名と値の組の列 `columns` ) を, Python では [Polars](https://pola.rs/) の `DataFrame` を返す.
@@ -168,8 +167,6 @@ shape: (249, 20_480)
 |                       | `time_step`             | 1 µs     | 瞬時音圧を出す時間間隔                   |
 |                       | `memory_limits_hint_mb` | 128      | 一度に計算する範囲を決めるメモリ量の目安 [MB] |
 
-Python の既定値も同じで, `None` は渡せない.
-
 いずれも `observe_points` で観測点座標を, `next` で指定時間分の音場を得られる.
 `skip` で計算せずに時間を進められる.
 
@@ -261,7 +258,6 @@ shape: (1_681, 25)
 
 `Range` は観測点の集合を表す.
 格子状の観測点は `Grid` で指定する. `x` / `y` / `z` に各軸の範囲, `resolution` に刻み幅 ( mm ) を与える.
-固定したい軸は始点と終点を同じ値にする ( Rust は `150.0..=150.0`, Python は `150.0` ).
 
 `order` は観測点の列挙順で, 先頭の軸から走査される. 省略はできない.
 Rust は `AxisOrder::XYZ` / `XZY` / `YXZ` / `YZX` / `ZXY` / `ZYX`, Python は `order="xyz"` のような文字列で指定する.

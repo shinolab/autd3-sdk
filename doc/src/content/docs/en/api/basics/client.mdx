@@ -28,8 +28,6 @@ import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
 
 The `Client` connects to the devices (or the [Simulator](/autd3-sdk/en/guide/simulator/)) directly over UDP.
 
-To continuously monitor the operating state of the devices, call `Client::device_status` periodically (see [State Monitoring](/autd3-sdk/en/guide/state-check/)).
-
 ## API
 
 <CodeTabs rust={excerpt(methods, "api")} python={excerpt(pyMethods, "api")} csharp={excerpt(csMethods, "api")} />
@@ -41,19 +39,16 @@ To continuously monitor the operating state of the devices, call `Client::device
 | `read_firmware_version()` | ✓     | `Result<Vec<FirmwareVersion>, Error>` | CPU/FPGA firmware version of each device                   |
 | `read_fpga_state()`       | ✓     | `Result<Vec<FpgaState>, Error>`       | FPGA state of each device                                  |
 | `read_telemetry()`        | ✓     | `Result<Vec<Telemetry>, Error>`       | CPU diagnostic counters of each device                     |
-| `device_time_now()`       | —     | `Result<SysTime, Error>`              | Current time of the devices (see [SysTime](/autd3-sdk/en/api/basics/sys-time/)). `DeviceTimeUnknown` if no reply carrying the time has been received yet |
+| `device_time_now()`       | —     | `Result<SysTime, Error>`              | Current time of the devices (see [SysTime](/autd3-sdk/en/api/basics/sys-time/)) |
 | `send(cmd)`               | ✓     | `Result<(), Error>`                   | Send a command, confirming the response frame by frame     |
 | `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | Send one frame (see [streaming](#streaming))                |
 | `send_frame_at(frame, exec)` | ✓  | `Result<ResponseFuture, Error>`       | Send one frame at a given processing time (see [Processing time](#processing-time)) |
 | `device_status()`         | —     | `Result<Vec<DeviceStatus>, Error>`    | State of each device. See [State Monitoring](/autd3-sdk/en/guide/state-check/) for details. |
-| `send_heartbeat()`             | —     | `Result<(), Error>`                   | Send one liveness check to every device that is not `Lost` (see [Liveness check](#liveness-check)) |
+| `send_heartbeat()`        | —     | `Result<(), Error>`                   | Send one liveness check to every device that is not `Lost` (see [Failsafe](/autd3-sdk/en/guide/failsafe/#communication-loss-failsafe-and-liveness-check)) |
 | `close()`                 | —     | `Result<(), Error>`                   | Close the connection                                       |
 
 `close()` only stops the I/O thread and closes the connection; it sends nothing to the devices.
-The same holds for `Dispose` (`using`) in C#, leaving a `with` block in Python, and drop in Rust.
 The devices keep their last output after the client is closed, so stopping the output is the user's responsibility.
-To stop it, send, for example, a zero-amplitude [Pattern](/autd3-sdk/en/api/command/pattern/) (in Rust, `Pattern::new(&geometry.phase_buffer(), Intensity::MIN)`) before closing.
-To avoid the noise of dropping the amplitude at once, set the [Silencer](/autd3-sdk/en/api/command/silencer/) beforehand.
 
 ## streaming
 
@@ -62,54 +57,28 @@ To keep sending without waiting for the responses, convert the command into fram
 
 <CodeTabs rust={excerpt(sample, "streaming")} python={excerpt(pySample, "streaming")} csharp={excerpt(csSample, "streaming")} />
 
-The number of frames that may be sent without waiting for a reply is fixed at `MAX_INFLIGHT (7)` (Python: `autd3.params.MAX_INFLIGHT`, C#: `Params.MaxInflight`).
-This equals the number of frames in the receive queue of each device.
+The number of frames that may be sent without waiting for a reply is `MAX_INFLIGHT (7)`.
 While `MAX_INFLIGHT` frames are waiting for their replies, `send_frame` waits until the replies of one of them are complete.
-To keep fewer frames in flight, await an earlier `ResponseFuture` before sending the next frame.
-
-The devices process every frame they receive in the order it arrives, and they do not detect missing or reordered frames.
-Even if a frame in the middle is lost and fails with `Timeout`, the frames sent after it are processed as usual.
-Send a frame that depends on the success of an earlier one (such as a bank switch after writing a Pattern) only after awaiting the earlier frame's `ResponseFuture` and confirming that it succeeded.
-`send` waits for the response frame by frame, so it does not have this problem.
-
-## Liveness check
-
-While there is nothing to send, `Client` sends nothing to the devices by itself.
-If you set `failsafe_timeout` of [CpuConfig](/autd3-sdk/en/api/command/cpu-config/) (disabled by default), a device stops its output when communication from the host has been cut off for that long, so while you wait with the output kept on, call `send_heartbeat()` periodically to send liveness checks.
-Keep the period well below half of `failsafe_timeout` (10 ms, for example). Keeping the failsafe from stopping the output is the user's responsibility.
-Note that a device running an older firmware, on which `failsafe_timeout` defaulted to 500 ms, stops its output after 500 ms even if you never set it, so call `send_heartbeat()` there as well.
-
-<CodeTabs rust={excerpt(methods, "heartbeat")} python={excerpt(pyMethods, "heartbeat")} csharp={excerpt(csMethods, "heartbeat")} />
-
-`send_heartbeat()` sends one liveness check to every device that is not `Lost` and returns without waiting for the replies.
-The replies update the [state monitoring](/autd3-sdk/en/guide/state-check/) and the device time (`device_time_now()`), so while you send nothing, a lost or rebooted device goes unnoticed and the device time estimate drifts.
-It may be called concurrently with `send` and the other sends.
 
 ## Types of the Read Results
 
 `read_firmware_version()` / `read_fpga_state()` / `read_telemetry()` return an array with one element per device, in device-number order.
 They fail with `DeviceLost` while a device is `Lost`.
 
-In Python, the method and field names are the same as in Rust (fields are properties).
-In C#, they are PascalCase properties (`is_thermal_asserted()` → `IsThermalAsserted`, `fifo_drop` → `FifoDrop`, and so on).
-
 ### FirmwareVersion
 
 | Member                  | Type             | Description                                            |
 | ----------------------- | ---------------- | ------------------------------------------------------ |
 | `cpu`                   | `Version`        | Version of the CPU firmware                            |
-| `fpga`                  | `Version`        | Version of the FPGA firmware (`0.0.0` if it cannot be read) |
+| `fpga`                  | `Version`        | Version of the FPGA firmware                           |
 | `is_emulator()`         | `bool`           | Whether it is a device emulator                        |
 | `is_supported()`        | `bool`           | Whether both the CPU and the FPGA are in a series this SDK supports |
-| `SUPPORTED_SERIES`      | `(u8, u8)`       | Supported series (major, minor) (C#: `SupportedSeries`) |
-
-`Version` has `major` / `minor` / `patch` (`u8`) and `is_unknown()` (whether it is `0.0.0`).
+| `SUPPORTED_SERIES`      | `(u8, u8)`       | Supported series (major, minor)                        |
 
 ### FpgaState
 
 | Method                    | Type             | Description                              |
 | ------------------------- | ---------------- | ---------------------------------------- |
-| `.0` (field)              | `u8`             | Raw value of the state register (Python: `raw()`, C#: `Raw`) |
 | `is_thermal_asserted()`   | `bool`           | Whether the thermal sensor is over the threshold |
 | `current_mod_bank()`      | `ModulationBank` | Current Modulation bank                  |
 | `current_pattern_bank()`  | `PatternBank`    | Current Pattern bank (shared by Pattern and STM) |
@@ -120,8 +89,7 @@ In C#, they are PascalCase properties (`is_thermal_asserted()` → `IsThermalAss
 
 ### Telemetry
 
-CPU diagnostic counters. `Clear` resets all of them to 0 except `boot_failure` (the `Client` does not send `Clear` when it opens, so the values from the previous session remain).
-Reading them does not clear them.
+CPU diagnostic counters.
 
 | Field                 | Type  | Description                                            |
 | --------------------- | ----- | ------------------------------------------------------ |
@@ -136,21 +104,10 @@ Reading them does not clear them.
 | `cpu_watchdog`        | `u8`  | Number of times the CPU watchdog fired (kept until the FPGA is reconfigured) |
 | `exec_late`           | `u32` | Frames whose processing started 1 µs or more after their [processing time](#processing-time) |
 
-The `u32` fields wrap around to 0 on overflow, and the `u16` / `u8` fields stop at their maximum.
-
-## Response-wait timeout
-
-The response-wait timeout is `ack_timeout` of [`TransportOption`](/autd3-sdk/en/api/basics/transport-option/) (10 ms by default). It is fixed when the `Client` opens and cannot be changed afterwards.
-If the replies to the frame at the head of the wait do not all arrive within `ack_timeout`, every frame in flight fails with `Timeout`.
-
-There is no retransmission. A failed command must be sent again by the user.
-A frame that failed with `Timeout` has still been processed if it reached the device (for example, when only the reply was lost).
-The devices do not drop duplicates, so a frame sent again may be processed twice together with the earlier one.
-
 ## Processing time
 
 Frames are sent to the devices one at a time, so they reach the devices at slightly different times.
-Sending a frame with `send_frame_at` and an `ExecAt` stamps it with a processing time (a device time rounded up to a whole microsecond), and each device holds the frame until that time.
+Sending a frame with `send_frame_at` and an `ExecAt` stamps it with a processing time, and each device holds the frame until that time.
 Every device thus starts processing what one send carries at the same timing.
 `send` / `send_frame` stamp no processing time (each device processes a frame as soon as it arrives).
 To send a command with a processing time, convert it into frames with `Frames::encode` and send each frame with `send_frame_at`.
@@ -169,24 +126,16 @@ Note the following:
   - When frames are sent one after another without waiting for the responses ([streaming](#streaming)), the stamped time of a frame can come while the device is still processing the previous one; that frame is processed late (and counted in `exec_late`).
   - Even when it succeeds, only the start of the processing inside the CPU board is aligned; it does not guarantee that the start of the processing on the FPGA is aligned (that is, for example, that the phase of the emitted ultrasound is updated at the same timing)
 - The response comes back after the processing, so a send completes only after the stamped time. Waiting for the response frame by frame, a command of several frames takes about the number of frames × `lead`
-- `Lead` must be shorter than 2^31 µs (about 35.8 minutes), and shorter than `lost_timeout` of [`TransportOption`](/autd3-sdk/en/api/basics/transport-option/). Outside it the send fails with `InvalidPayload` and the frame is not sent
-- `At` fails if it is 2^31 µs or more ahead of the current time, 2^30 µs (about 17.9 minutes) or more behind it, or `lost_timeout` or more ahead. A past time within the range is accepted; the devices process the frame at once and count it in `exec_late`
-- Keep `ack_timeout` (10 ms by default) longer than the time from the send to the given time + the processing time
-- `Lead` / `At` fail with `DeviceTimeUnknown` while the device time is unknown (no reply carrying it has been received yet)
-- The [Simulator](/autd3-sdk/en/guide/simulator/) ignores the processing time and processes the frame at once
 
 ## each
 
-`each` takes a closure that receives a device and assigns a different single-frame command (`Operation`) per device.
-In Rust it is `FnMut(&Device) -> Option<O>` (`O: Operation`), in Python `Callable[[Device], Operation | None]`, and in C# `Func<Device, ICommand?>`.
-Nothing is assigned to a device for which `None` is returned (it receives a `Nop`).
+`each` takes a closure that receives a device and assigns a different single-frame command per device.
 
 <CodeTabs rust={excerpt(sample, "each")} python={excerpt(pySample, "each")} csharp={excerpt(csSample, "each")} />
 
 `each` always makes a single frame.
-A multi-frame command such as `Modulation` / `FociStm` / `PatternStm`, a sequence of commands, or `each` itself cannot be assigned.
-Rust rejects it at compile time, Python raises `TypeError`, and C# throws `Autd3Exception` (`InvalidArgument`).
-When each device needs different multi-frame content, in Rust, build the frames yourself with `Frame::new` and send them with `send_frame` (Python / C# have no equivalent API).
+A multi-frame command such as `Modulation` / `FociStm` / `PatternStm` cannot be sent with `each`.
+When each device needs different multi-frame content, build the frames yourself with `Frame::new` and send them with `send_frame`.
 
 In Rust, the return values of the closure must all be the same type.
 To mix commands of different types, unify them into a `Box<dyn Operation>`.

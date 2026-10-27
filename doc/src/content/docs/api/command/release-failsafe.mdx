@@ -20,7 +20,7 @@ import { excerpt } from "@lib/excerpt";
 止まる前の出力がそのまま再開する.
 フェイルセーフで止まっていないデバイスには何もしない.
 発火の条件が成り立ったままのデバイス (PTP のロックを失ったまま等) は, エラー (`ERR_FAILSAFE_CONDITION_ACTIVE`) で拒否し, 止まったままにする.
-止まっているかどうかは `device_status()` が返す `DeviceStatus` の `failsafe_active` (C#: `FailsafeActive`) で確認できる ([状態監視](/autd3-sdk/guide/state-check/) 参照).
+止まっているかどうかは `device_status()` が返す `DeviceStatus` の `failsafe_active` で確認できる ([状態監視](/autd3-sdk/guide/state-check/) 参照).
 
 [Clear](/autd3-sdk/api/command/clear/) でも解除されるが, すべての状態が既定値に戻る.
 

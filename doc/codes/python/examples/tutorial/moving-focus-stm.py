@@ -23,7 +23,7 @@ async def main() -> None:
             ControlPoints(center + offset(20.0 * mm, 0.0 * mm, 0.0 * mm)),
             ControlPoints(center + offset(-20.0 * mm, 0.0 * mm, 0.0 * mm)),
         ]
-        config = SamplingConfig(0.5 * Hz * len(points))
+        config = SamplingConfig(1.0 * Hz)
         await client.send(FociStm(config, points, FociStmOption()))
         # ANCHOR_END: stm
 

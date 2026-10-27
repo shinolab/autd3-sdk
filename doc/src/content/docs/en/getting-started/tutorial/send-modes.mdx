@@ -39,9 +39,3 @@ The maximum size of the send queue is `MAX_INFLIGHT (7)`.
 `ResponseFuture`s are held in FIFO order, and when the queue is full the oldest response is collected.
 
 <CodeTabs rust={excerpt(sample, "streaming")} python={excerpt(pySample, "streaming")} csharp={excerpt(csSample, "streaming")} />
-
-To stream a single command, likewise send the frames converted with `Frames::encode` with `send_frame`, collect the `ResponseFuture`s, and then await them in order (see [streaming](/autd3-sdk/en/api/basics/client/#streaming)).
-
-For commands that must be applied reliably one at a time, such as initialization and configuration, use stop-and-wait.
-For situations where throughput matters, such as updating the focal point at high frequency, use streaming.
-For details on `send` / `send_frame`, refer to [Sending](/autd3-sdk/en/api/basics/client/).

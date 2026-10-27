@@ -19,8 +19,6 @@ Each sample is an 8 bit amplitude coefficient <Math tex="0 \le m \le 255" />, wh
 ## SamplingConfig
 
 Each sample in the buffer is applied in order at the period of the `SamplingConfig` passed to `Modulation::new`.
-The `config` passed to a waveform computation function (`sine` / `square` / `fourier`) determines the length of the waveform (number of samples), and it must match the `SamplingConfig` passed to `Modulation::new`.
-For example, with `SamplingConfig::FREQ_4K` (4 kHz, sampling period 250 µs), one period of a 200 Hz sine wave is 20 samples.
 
 ## Function List
 
@@ -29,19 +27,3 @@ For example, with `SamplingConfig::FREQ_4K` (4 kHz, sampling period 250 µs), on
 - [square](/autd3-sdk/en/api/compute/modulation/square/) — square wave
 - [fourier](/autd3-sdk/en/api/compute/modulation/fourier/) — synthesis of multiple sine waves
 - [radiation_pressure_inplace](/autd3-sdk/en/api/compute/modulation/radiation/) — radiation pressure correction
-
-## samples_per_period
-
-`samples_per_period(divider, freq)` returns how many samples one period of a waveform of frequency `freq` takes at the sampling with division ratio `divider`.
-It returns `None` when one period cannot be represented by an integer number of samples, or when `freq` is 0, negative, or NaN. The check uses `freq` rounded to `f32`, so a frequency that has no exact binary representation, such as `0.1 * Hz`, may give `None`.
-For example, it returns 20 for 200 Hz at division ratio 10 (4 kHz).
-
-| Parameter | Type         | Description                    |
-| --------- | ------------ | ------------------------------ |
-| `divider` | `NonZeroU16` | Division ratio of the sampling |
-| `freq`    | `Freq`       | Frequency of the waveform      |
-
-The return value is `Option<u32>`.
-Python takes `divider` as an `int` and returns `None` for `0`.
-C# provides `Modulation.SamplesPerPeriod(ushort divider, Freq freq)`, which returns `uint?`.
-  

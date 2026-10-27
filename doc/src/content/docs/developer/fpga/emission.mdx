@@ -47,6 +47,7 @@ import Mermaid from "@components/Mermaid.astro";
 | SYS_TIME            | In     | 57    | システム時刻                       |
 | UPDATE              | In     | 1     | 超音波周期トリガ                   |
 | GPIO_IN             | In     | 4     | GPIO 入力                          |
+| FAILSAFE            | In     | 1     | 出力停止フラグ                     |
 | INTENSITY           | Out    | 8     | 強度                               |
 | PHASE               | Out    | 8     | 位相                               |
 | DOUT_VALID          | Out    | 1     | 強度/位相データ有効フラグ          |
@@ -171,5 +172,8 @@ P = \tan^{-1} \frac{\sum_0^N \sin(p_i)}{\sum_0^N \cos(p_i)}
 
 `Output Mask` サブモジュールは `Raw`, または, `Focus` サブモジュールからの出力を, マスクデータに基づいて, 超音波を出力するか否か (強度を 0 にするか否か) を制御する.
 マスクデータは <Math tex="\SI{256}{bit}" /> (振動子毎に 1 bit) の単一領域であり, バンクによらず同じマスクが適用される.
+
+また, `FAILSAFE` が 1 の間は, マスクデータによらずすべての振動子の強度を 0 にする.
+`FAILSAFE` は [Controller](/autd3-sdk/developer/fpga/controller/) の `FAILSAFE` ビットと [CPU ウォッチドッグ](/autd3-sdk/developer/fpga/memory/#cpu-ウォッチドッグ) の発火の論理和である.
 
 `Raw` は振動子毎に強度を設定できるため, 基本的に `Focus` サブモジュールからの出力を制御する目的で使用される.

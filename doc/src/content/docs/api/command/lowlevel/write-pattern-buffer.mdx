@@ -15,8 +15,8 @@ import csFullSample from "@codes/csharp/examples/api/command/lowlevel/bank-examp
 import { excerpt } from "@lib/excerpt";
 
 `WritePatternBuffer` は, 指定したバンクの `start_index` から連続するインデックスへ Pattern (各振動子の位相と振幅) を書き込む低レベルコマンド.
-1 フレームに書ける Pattern は `WritePatternBuffer::MAX_LEN` (= 2. Python: `WritePatternBuffer.MAX_LEN`, C#: `WritePatternBuffer.MaxLen`) 個までで, 超えると `InvalidPayload` になる.
-それより多く書くときは分けて送るか, [PatternStm](/autd3-sdk/api/command/pattern-stm/) を使う.
+1 フレームに書ける Pattern は `WritePatternBuffer::MAX_LEN` (2).
+それより多く書くときは分けて送る.
 
 ## API
 
@@ -27,7 +27,7 @@ import { excerpt } from "@lib/excerpt";
 | `bank`      | `PatternBank`                    | 書き込み先バンク                 |
 | `start_index` | `usize`                        | バンク内の書き込み先の先頭インデックス |
 | `patterns`    | `&[Vec<Vec<Phase>>]`           | インデックスごとの, デバイスごとの位相 |
-| `intensities` | `StmIntensity`                 | 振幅 ([PatternStm](/autd3-sdk/api/command/pattern-stm/) と同じ. `Intensity` の一様値, `&[Vec<Intensity>]` の全インデックス共通のバッファ, または `&[Vec<Vec<Intensity>>]` のインデックスごとのバッファ (`start_index + k` 番目を使う)) |
+| `intensities` | `StmIntensity`                 | 振幅 ([PatternStm](/autd3-sdk/api/command/pattern-stm/) と同じ.) |
 
 ## Example
 

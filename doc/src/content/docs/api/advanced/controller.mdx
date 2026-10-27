@@ -25,11 +25,6 @@ import sample from "@codes/rust/examples/api/advanced/controller.rs?raw";
 
 <CodeTabs rust={excerpt(sample, "run")} />
 
-`Controller::open` は `Client::open` と同じく同期関数で, デバイスの列挙と I/O の準備だけを行い, デバイスへフレームを送らない.
-`Driver` を回し始めたら, そのままコマンドを送ってよい.
-`Clear` と `Synchronize` も送らないので, 初期状態から始める場合は自分で送る.
-コマンドの完了は返信を待つので, `Driver` を回す前に送ると完了しない.
-
 ## Driver
 
 `Driver` は以下のメソッドを持つ.
@@ -49,9 +44,9 @@ import sample from "@codes/rust/examples/api/advanced/controller.rs?raw";
 
 `poll` の返り値の意味は以下の通り.
 
-- `Ok(Some(deadline))`: 次に `poll` を呼ぶべき期限. 期限より前でも, 返信が届いたら呼ぶこと. `wait` はこのどちらかまで待つ.
-- `Ok(None)`: `Controller` が閉じた (`close` または Drop). ループを抜ける.
-- `Err(..)`: 通信エラー. 送信中のコマンドと以後の送信は同じ原因のエラーで失敗する.
+- `Ok(Some(deadline))`: 次に `poll` を呼ぶべき期限
+- `Ok(None)`: `Controller` が閉じた (`close` または Drop)
+- `Err(..)`: 通信エラー
 
 ### 非同期
 
@@ -70,9 +65,3 @@ import sample from "@codes/rust/examples/api/advanced/controller.rs?raw";
 リアクタを使わない場合は, 短い周期で `poll` を呼ぶ.
 
 <CodeTabs rust={excerpt(sample, "interval")} />
-
-## 注意点
-
-- `Controller` を先に破棄すると, `close` と同じく `Driver` の `poll` は `Ok(None)` を返す. どちらでもデバイスの出力は止まらないので, 出力を止めるには破棄や `close` の前に振幅 0 の [Pattern](/autd3-sdk/api/command/pattern/) を送るなどすること.
-- `Driver` を先に破棄すると, 送信中のコマンドと以後の送信は `Error::Closed` で失敗する.
-- `Driver` を`poll` しない限り, `Controller` の非同期メソッドは完了しない.

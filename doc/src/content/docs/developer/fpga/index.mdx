@@ -24,15 +24,17 @@ FPGA に関する作業はすべて `autd3-sdk/` ディレクトリ内で `cargo
 
 ```bash
 cargo xtask fpga project        # Vivado プロジェクト生成
-cargo xtask fpga build          # 合成 → 実装 → bitstream → autd3-fpga.mcs
+cargo xtask fpga build          # 合成 → 実装 → bitstream → autd3-fpga.mcs + autd3-fpga-update.img
 cargo xtask fpga build --force  # bitstream があっても合成からやり直す
 cargo xtask fpga flash          # build → firmware-writer で configuration
+cargo xtask fpga sim            # テストベンチの実行
+cargo xtask fpga gen-controller # controller.sv の生成
 cargo xtask fpga clean
 ```
 
 `cargo xtask fpga project` を実行すると `autd3-fpga.xpr` が生成されるので, GUI で作業したい場合はこれを Vivado で開けばよい.
 
-`cargo xtask fpga build` は bitstream からコンフィグレーションファイル (`.mcs`) を生成する.
+`cargo xtask fpga build` は bitstream からコンフィグレーションファイル (`.mcs`) と, UDP 経由の更新 (FPGA OTA) 用のイメージ (`autd3-fpga-update.img`) を生成する.
 bitstream がない場合は合成, 実装を行う.
 合成からやり直したい場合は `--force` を付ける.
 
@@ -91,6 +93,7 @@ CPU から送られてきたデータはすべて `Memory` モジュール内の
 `Emission` から `PWM` までの各モジュールは, `DIN_VALID` がアサートされている間に 249 個の振動子分のデータが順番に流れてくることを前提としたパイプライン処理を行う.
 
 このほか, デバッグ用に内部状態を GPIO ピンへ出力する `GPIO Output` モジュールと, CPU から書き込まれた設定値を読み出して各モジュールへ配る `Controller` モジュールがある.
+また, CPU のメインループの停止を検知して出力を止める CPU ウォッチドッグ ([Memory](/autd3-sdk/developer/fpga/memory/#cpu-ウォッチドッグ) 参照) と, コンフィグレーション用 SPI フラッシュを書き換える (FPGA OTA) `Flash` モジュールがある.
 
 以下に, 各モジュールの解説をしていく.
 なお, 説明の都合上, 信号の流れる順とは異なる順序で説明する.

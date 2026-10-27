@@ -15,8 +15,8 @@ import csFullSample from "@codes/csharp/examples/api/command/lowlevel/bank-examp
 import { excerpt } from "@lib/excerpt";
 
 `WritePatternBuffer` is a low-level command that writes Patterns (the phase and intensity of each transducer) to consecutive indices of the specified bank, starting at `start_index`.
-One frame holds up to `WritePatternBuffer::MAX_LEN` (= 2; Python: `WritePatternBuffer.MAX_LEN`, C#: `WritePatternBuffer.MaxLen`) Patterns; more fails with `InvalidPayload`.
-To write more, send them in several commands or use [PatternStm](/autd3-sdk/en/api/command/pattern-stm/).
+One frame holds up to `WritePatternBuffer::MAX_LEN` (2) Patterns.
+To write more, send them in several commands.
 
 ## API
 
@@ -27,7 +27,7 @@ To write more, send them in several commands or use [PatternStm](/autd3-sdk/en/a
 | `bank`      | `PatternBank`                    | Destination bank                   |
 | `start_index` | `usize`                        | First destination index within the bank |
 | `patterns`    | `&[Vec<Vec<Phase>>]`           | Per-device phases of each index    |
-| `intensities` | `StmIntensity`                 | Intensity (same as [PatternStm](/autd3-sdk/en/api/command/pattern-stm/): a uniform `Intensity`, a `&[Vec<Intensity>]` buffer shared by every index, or a per-index `&[Vec<Vec<Intensity>>]` buffer whose entry `start_index + k` is used) |
+| `intensities` | `StmIntensity`                 | Intensity (same as [PatternStm](/autd3-sdk/en/api/command/pattern-stm/)) |
 
 ## Example
 

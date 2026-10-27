@@ -59,8 +59,7 @@ modulation の計算には幾つかの[ヘルパ関数](/autd3-sdk/api/compute/m
 
 ## 等価な低レベルコマンド
 
-`Modulation` は [WriteModulationBuffer](/autd3-sdk/api/command/lowlevel/write-modulation-buffer/) + [ConfigModulation](/autd3-sdk/api/command/lowlevel/config-modulation/) + [ActivateModulationBank](/autd3-sdk/api/command/lowlevel/activate-modulation-bank/) の 3 つと等価であり, この順に展開して送られる.
-`WriteModulationBuffer` は 1 フレーム分しか書けないので, 1 フレームに収まらない波形は `offset` をずらした複数の `WriteModulationBuffer` に分割される.
+`Modulation` は [WriteModulationBuffer](/autd3-sdk/api/command/lowlevel/write-modulation-buffer/) + [ConfigModulation](/autd3-sdk/api/command/lowlevel/config-modulation/) + [ActivateModulationBank](/autd3-sdk/api/command/lowlevel/activate-modulation-bank/) の 3 つと等価である.
 以下は `Modulation { bank, config, data, loop_behavior, transition_mode }` と等価な組み合わせである
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />

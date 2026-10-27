@@ -44,8 +44,6 @@ import { excerpt } from "@lib/excerpt";
 | `n`        | `u32`    | それに直交する方向のモード次数                        |
 | `waist`    | `Length` | ビームウエスト半径 <Math tex="w_0" /> (正値) |
 
-`waist` は有限の正の長さでなければならない. 外れると Rust は計算時に panic し, Python は `ValueError`, C# は `Autd3Exception` (`InvalidArgument`) になる.
-
 ## Example
 
 <CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

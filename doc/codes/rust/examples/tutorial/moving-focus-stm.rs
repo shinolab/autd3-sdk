@@ -23,7 +23,7 @@ async fn main() -> Result<()> {
         ControlPoints::from(center + offset(20.0 * mm, 0.0 * mm, 0.0 * mm)),
         ControlPoints::from(center + offset(-20.0 * mm, 0.0 * mm, 0.0 * mm)),
     ];
-    let config = SamplingConfig::from_freq(0.5 * Hz * points.len() as f32)?;
+    let config = SamplingConfig::from_freq(1.0 * Hz)?;
     client.send(FociStm::new(config, &points, FociStmOption::default())).await?;
     // ANCHOR_END: stm
 

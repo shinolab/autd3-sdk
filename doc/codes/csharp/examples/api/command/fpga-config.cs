@@ -6,10 +6,11 @@ internal static class Sample
 {
     internal static void Run()
     {
+        var syncPhaseLock = true;
         // ANCHOR: api
         var config = new FpgaConfig
         {
-            SyncPhaseLock = true,
+            SyncPhaseLock = syncPhaseLock,
         };
         new SetFpgaConfig(config);
         // ANCHOR_END: api

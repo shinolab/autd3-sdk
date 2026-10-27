@@ -15,8 +15,7 @@ import csFullSample from "@codes/csharp/examples/api/command/lowlevel/mod-bank-e
 import { excerpt } from "@lib/excerpt";
 
 `ConfigModulation` is a low-level command that configures the playback parameters of the Modulation bank.
-The settings are only written; they take effect on playback when [ActivateModulationBank](/autd3-sdk/en/api/command/lowlevel/activate-modulation-bank/) is sent.
-To change the settings of the bank being played, follow it with a `ActivateModulationBank` that points to the same bank.
+The settings are only written; send [ActivateModulationBank](/autd3-sdk/en/api/command/lowlevel/activate-modulation-bank/) to activate them.
 
 ## API
 
@@ -30,9 +29,6 @@ To change the settings of the bank being played, follow it with a `ActivateModul
 | `loop_behavior` | `LoopBehavior` | Playback loop count (`Infinite` / `Finite`)       |
 
 The minimum `size` is 2.
-To emit a constant modulation, repeat the same value twice.
-
-For the timing at which `loop_behavior` and the transition take effect see [ActivateModulationBank](/autd3-sdk/en/api/command/lowlevel/activate-modulation-bank/).
 
 ## Example
 

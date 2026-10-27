@@ -28,17 +28,13 @@ import { excerpt } from "@lib/excerpt";
 | `intensities` | `impl Into<StmIntensity>` | 全サンプルの振幅 (一様値 / 全 index 共通バッファ / index 毎のバッファ列) |
 | `option`   | `PatternStmOption`                    | 位相のビット幅・ループ・遷移などのオプション         |
 
-`config` は 1 サンプルあたりのサンプリング設定である. 「全サンプルを 1 周する周波数」から決めたいときは, 周波数にサンプル数を掛けて `SamplingConfig` を作る (例: 200 サンプルを 1 Hz で回すなら 200 Hz).
+`config` は 1 サンプルあたりのサンプリング設定である.
 
 `intensities` には以下の3つの型が渡せる.
 
 - `Intensity` : 全デバイス・全振動子・全indexで同じ値を使う場合
 - `&[Vec<Intensity>]` : 振動子ごとには異なるが全indexで共通の値を使う場合
 - `&[Vec<Vec<Intensity>>]` : 全indexごとに異なる値を使う場合
-
-Python では `Intensity` (または `int`), `IntensityBuffer` 1 つ, `IntensityBuffer` の list の順に対応する.
-C# では `Intensity`, `IntensityBuffer`, `IntensityBuffer[]` の順に対応する.
-index 毎のバッファ列は, 長さが 1 でも index 毎として扱い, 本数が `phases` と一致しなければエラーになる.
 
 ## PatternStmOption
 
@@ -64,7 +60,7 @@ index 毎のバッファ列は, 長さが 1 でも index 毎として扱い, 本
 
 ## 等価な低レベルコマンド
 
-`PatternStm` は内部で [WritePatternPhase](/autd3-sdk/api/command/lowlevel/write-pattern-phase/) または [WritePatternBuffer](/autd3-sdk/api/command/lowlevel/write-pattern-buffer/) (2 index ずつ) + [ConfigPattern](/autd3-sdk/api/command/lowlevel/config-pattern/) + [ActivatePatternBank](/autd3-sdk/api/command/lowlevel/activate-pattern-bank/) の 3 つへ展開される.
+`PatternStm` は内部で [WritePatternPhase](/autd3-sdk/api/command/lowlevel/write-pattern-phase/) または [WritePatternBuffer](/autd3-sdk/api/command/lowlevel/write-pattern-buffer/) + [ConfigPattern](/autd3-sdk/api/command/lowlevel/config-pattern/) + [ActivatePatternBank](/autd3-sdk/api/command/lowlevel/activate-pattern-bank/) の 3 つへ展開される.
 以下は `intensities` が一様値のときの `PatternStm::new(config, &phases, intensities, option)` と等価な組み合わせである.
 `intensities` が振動子ごとの値のときは `WritePatternPhase` の代わりに `WritePatternBuffer` が 2 index ずつ使われる.
 

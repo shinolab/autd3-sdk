@@ -32,8 +32,6 @@ The algorithm is based on the paper by Marzo et al. ([Marzo & Drinkwater, 2019](
 | `phases`      | `&mut [Vec<Phase>]`     | Phase output buffer       |
 | `intensities` | `&mut [Vec<Intensity>]` | Intensity output buffer   |
 
-The parameters other than `option` are the same as [Naive](/autd3-sdk/en/api/compute/holo/naive/).
-
 ## GsOption
 
 <CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
@@ -47,7 +45,6 @@ The parameters other than `option` are the same as [Naive](/autd3-sdk/en/api/com
 
 `repeat` is the number of iterations.
 The larger it is, the higher the quality, but the more computation time increases.
-For the meaning of `constraint` / `directivity` / `mask`, see the [Holo overview](/autd3-sdk/en/api/compute/holo/).
 
 ## Example
 

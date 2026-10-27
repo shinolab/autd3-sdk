@@ -22,7 +22,7 @@ import { excerpt } from "@lib/excerpt";
 
 音響放射圧は音圧の 2 乗に比例する. 
 `sine` などが指定するのは音圧の振幅なので, 放射圧を目的の波形に合わせたい場合は各サンプルの平方根を取る必要がある. 
-`radiation_pressure_inplace` はこの補正を行う. 
+`radiation_pressure_inplace` はこの補正を行う.
 
 各サンプル <Math tex="m" /> は次式で書き換えられる. 
 
@@ -38,9 +38,7 @@ import { excerpt } from "@lib/excerpt";
 
 | 引数      | 型          | 説明                             |
 | --------- | ----------- | -------------------------------- |
-| `samples` | `&mut [u8]` | 補正する変調波形 (in-place に書き換える) |
-
-補正前の波形も残したいときは, 先にバッファを複製してから渡す.
+| `samples` | `&mut [u8]` | 補正する変調波形                 |
 
 ## Example
 

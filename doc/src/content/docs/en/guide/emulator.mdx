@@ -22,7 +22,6 @@ By passing a `Geometry` to `Emulator::new`, sending data inside `record`, and ad
 <CodeTabs rust={excerpt(sample, "record")} python={excerpt(pySample, "record")} />
 
 The time passed to `tick` must be an integer multiple of the ultrasound period (25 us).
-Unlike the `Client` for real devices, `send` inside `record` is synchronous and takes no `.await`.
 
 The output data is a set of named columns.
 Rust returns a `RawFrame` (the number of rows `rows` and the list of name and value pairs `columns`), and Python returns a [Polars](https://pola.rs/) `DataFrame`.
@@ -168,8 +167,6 @@ There are two kinds of options: `RmsRecordOption` (RMS sound pressure) and `Inst
 |                       | `time_step`             | 1 µs     | Time interval of the instantaneous sound pressure |
 |                       | `memory_limits_hint_mb` | 128      | Rough memory budget that decides how much is computed at once [MB] |
 
-The Python defaults are the same, and `None` is not accepted.
-
 For both, `observe_points` gives the observation point coordinates, and `next` gives the sound field for the specified duration.
 `skip` advances time without computing.
 
@@ -261,7 +258,6 @@ shape: (1_681, 25)
 
 `Range` represents a set of observation points.
 Use `Grid` for points on a regular grid: `x` / `y` / `z` give the range of each axis and `resolution` the step width (mm).
-To fix an axis, set its start and end to the same value (`150.0..=150.0` in Rust, `150.0` in Python).
 
 `order` is the enumeration order of the observation points; they are scanned starting from the first axis. It cannot be omitted.
 It is `AxisOrder::XYZ` / `XZY` / `YXZ` / `YZX` / `ZXY` / `ZYX` in Rust, and a string such as `order="xyz"` in Python.

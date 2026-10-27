@@ -346,6 +346,10 @@ name = "guide_emulator"
 path = "examples/guide/emulator.rs"
 
 [[example]]
+name = "guide_failsafe"
+path = "examples/guide/failsafe.rs"
+
+[[example]]
 name = "guide_state_check"
 path = "examples/guide/state-check.rs"
 

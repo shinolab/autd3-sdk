@@ -56,31 +56,8 @@ Behavior is not guaranteed when any other field is changed from its default.
 | `pause_hold_syncs`     | `u16`        | 64      | Number of `Sync` messages for which a `PAUSE` keeps being sent on every send after the link was found saturated |
 | `pause_retry`          | `Duration`   | 8 ms    | How long `PAUSE` keeps being sent while a `Sync` cannot be sent out |
 
-In C#, the `Duration` fields are passed as `TimeSpan`, so they can only be specified in 100 ns units (the default 100 ns of `lock_threshold` is `TimeSpan.FromTicks(1)`).
-
-:::danger
-`failsafe_timeout` is `None` (disabled) by default, so a device keeps emitting ultrasound even when communication is lost because the host crashed or a cable was unplugged.
-Set `failsafe_timeout` if the output should stop when communication is lost.
-If you set it, call [`send_heartbeat()`](/autd3-sdk/en/api/basics/client/#liveness-check) periodically while there is nothing to send, and keep `failsafe_timeout` well above twice that interval. If it is too short, the output stops even while the host is running.
-With `ptp_unlock_failsafe_timeout` set, a device that loses its PTP lock (any device but the first one) stops its output the same way as the failsafe once this long has passed since the loss.
-Locking again takes about 1 s with the default settings, so a shorter value stops the output on every loss of the lock.
-
-`cpu_watchdog_timeout` is how long the FPGA waits before stopping the output while the CPU firmware hangs or resets, and it stops the output the same way as the failsafe.
-With `None`, a device keeps the output it had when the CPU firmware stopped.
-
-If you close the client with `failsafe_timeout` set, the devices stop the output that long after the host goes silent.
-Send [`ReleaseFailsafe`](/autd3-sdk/en/api/command/release-failsafe/) or [Clear](/autd3-sdk/en/api/command/clear/) after opening again.
-
-An output stopped by the failsafe or the CPU watchdog does not come back automatically.
-Whether a device is stopped can be checked with `failsafe_active` (C#: `FailsafeActive`) of the `DeviceStatus` returned from `device_status()`.
-Sending the [`ReleaseFailsafe`](/autd3-sdk/en/api/command/release-failsafe/) command resumes the output.
-[Clear](/autd3-sdk/en/api/command/clear/) releases it as well, but returns every state to its default.
-:::
-
 The settings return to their defaults on [Clear](/autd3-sdk/en/api/command/clear/) and on power cycling.
-Reopening the client does not reset them (the devices keep the values of the previous session), so send `Clear` to return to the defaults.
-If you close the client with a PTP setting that never locks, the synchronization wait of the next open fails at `open_timeout` (`SyncTimeout`).
-In that case, open with `sync_on_open` of [`TransportOption`](/autd3-sdk/en/api/basics/transport-option/) set to `false`, send `Clear`, and open again.
+Reopening the client does not reset them.
 
 ## Example
 

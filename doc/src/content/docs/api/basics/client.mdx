@@ -28,8 +28,6 @@ import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
 
 `Client` は実機 (または [Simulator](/autd3-sdk/guide/simulator/)) へ UDP で直接つなぐ.
 
-デバイスの稼働状態を継続的に監視したい場合は `Client::device_status` を周期的に呼ぶ ([状態監視](/autd3-sdk/guide/state-check/) 参照).
-
 ## API
 
 <CodeTabs rust={excerpt(methods, "api")} python={excerpt(pyMethods, "api")} csharp={excerpt(csMethods, "api")} />
@@ -41,19 +39,16 @@ import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
 | `read_firmware_version()` | ✓     | `Result<Vec<FirmwareVersion>, Error>` | 各デバイスの CPU/FPGA ファームウェアバージョン             |
 | `read_fpga_state()`       | ✓     | `Result<Vec<FpgaState>, Error>`       | 各デバイスの FPGA 状態                                     |
 | `read_telemetry()`        | ✓     | `Result<Vec<Telemetry>, Error>`       | 各デバイスの CPU の診断カウンタ                            |
-| `device_time_now()`       | —     | `Result<SysTime, Error>`              | 現在のデバイスの時刻 ([SysTime](/autd3-sdk/api/basics/sys-time/) 参照). 時刻を載せた返信をまだ受けていなければ `DeviceTimeUnknown` |
+| `device_time_now()`       | —     | `Result<SysTime, Error>`               | 現在のデバイスの時刻 ([SysTime](/autd3-sdk/api/basics/sys-time/) 参照) |
 | `send(cmd)`               | ✓     | `Result<(), Error>`                   | コマンドを送信し, 1 フレームずつ応答確認まで行う           |
 | `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | フレームを 1 つ送る ([streaming](#streaming) 参照)          |
 | `send_frame_at(frame, exec)` | ✓  | `Result<ResponseFuture, Error>`       | 処理時刻を指定してフレームを 1 つ送る ([処理時刻](#処理時刻) 参照) |
 | `device_status()`         | —     | `Result<Vec<DeviceStatus>, Error>`     | 各デバイスの状態. 詳細は[状態監視](/autd3-sdk/guide/state-check/)を参照. |
-| `send_heartbeat()`             | —     | `Result<(), Error>`                   | `Lost` でない全デバイスへ生存確認を 1 回送る ([生存確認](#生存確認) 参照) |
+| `send_heartbeat()`        | —     | `Result<(), Error>`                   | `Lost` でない全デバイスへ生存確認を 1 回送る ([フェイルセーフ](/autd3-sdk/guide/failsafe/#通信途絶の-failsafe-と生存確認) 参照) |
 | `close()`                 | —     | `Result<(), Error>`                   | 接続を閉じる                                               |
 
 `close()` は I/O スレッドを止めて接続を閉じるだけで, デバイスへは何も送らない.
-C# の `Dispose` (`using`), Python の `with` を抜けたとき, Rust の Drop も同じである.
 デバイスは閉じた後も直前の出力を続けるので, 出力を止めるのはユーザーの責任である.
-止めるには, 閉じる前に振幅 0 の [Pattern](/autd3-sdk/api/command/pattern/) (Rust なら `Pattern::new(&geometry.phase_buffer(), Intensity::MIN)`) を送るなどする.
-振幅を一気に落とすことによるノイズを避けたい場合は, その前に [Silencer](/autd3-sdk/api/command/silencer/) を設定しておく.
 
 ## streaming
 
@@ -62,54 +57,28 @@ C# の `Dispose` (`using`), Python の `with` を抜けたとき, Rust の Drop 
 
 <CodeTabs rust={excerpt(sample, "streaming")} python={excerpt(pySample, "streaming")} csharp={excerpt(csSample, "streaming")} />
 
-応答を待たずに送ってよいフレーム数は `MAX_INFLIGHT (7)` (Python: `autd3.params.MAX_INFLIGHT`, C#: `Params.MaxInflight`) で固定である.
-これは各デバイスの受信キューのフレーム数に等しい.
+応答を待たずに送ってよいフレーム数は `MAX_INFLIGHT (7)` である.
 `MAX_INFLIGHT` 個のフレームが応答待ちの間, `send_frame` は応答が揃ってどれかが空くまで待つ.
-同時に送るフレーム数をこれより少なくしたい場合は, 先に返った `ResponseFuture` を await してから次のフレームを送る.
-
-デバイスは届いたフレームを届いた順にすべて処理し, 欠落や順序の検出はしない.
-途中のフレームが欠けて `Timeout` になっても, 後ろに続けて送ったフレームはそのまま処理される.
-前のフレームの成否に依存するフレーム (Pattern の書き込みの後の bank 切替など) は, 前のフレームの `ResponseFuture` を await して成功を確かめてから送ること.
-`send` は 1 フレームずつ応答を待つので, この心配は無い.
-
-## 生存確認
-
-`Client` は, 送るものが無い間, 自分からはデバイスへ何も送らない.
-[CpuConfig](/autd3-sdk/api/command/cpu-config/) の `failsafe_timeout` (既定は無効) を指定すると, デバイスはホストからの通信がその時間途絶えたときに出力を止めるので, 出力を保ったまま待つ間は `send_heartbeat()` を周期的に呼んで生存確認を送る.
-周期は `failsafe_timeout` の半分より十分短くする (例えば 10 ms). failsafe で出力を止めないようにするのはユーザーの責任である.
-なお, `failsafe_timeout` の既定が 500 ms だった旧ファームウェアのデバイスでは, 指定しなくても 500 ms で出力が止まるので, 同様に `send_heartbeat()` を呼ぶ.
-
-<CodeTabs rust={excerpt(methods, "heartbeat")} python={excerpt(pyMethods, "heartbeat")} csharp={excerpt(csMethods, "heartbeat")} />
-
-`send_heartbeat()` は `Lost` でない全デバイスへ生存確認を 1 回送り, 返信を待たずに返る.
-返信は[状態監視](/autd3-sdk/guide/state-check/)とデバイスの時刻 (`device_time_now()`) の更新に使われるので, 送らない間はデバイスの途絶や再起動に気付けず, デバイスの時刻の推定もずれていく.
-`send` などの送信と並行に呼んでもよい.
 
 ## 読み出し結果の型
 
 `read_firmware_version()` / `read_fpga_state()` / `read_telemetry()` はデバイス番号順に 1 台 1 要素の配列を返す.
 `Lost` のデバイスがある間は `DeviceLost` で失敗する.
 
-Python のメソッド・フィールド名は Rust と同じ (フィールドはプロパティ).
-C# は PascalCase のプロパティになる (`is_thermal_asserted()` → `IsThermalAsserted`, `fifo_drop` → `FifoDrop` など).
-
 ### FirmwareVersion
 
 | メンバ                  | 型               | 説明                                                   |
 | ----------------------- | ---------------- | ------------------------------------------------------ |
 | `cpu`                   | `Version`        | CPU ファームウェアのバージョン                         |
-| `fpga`                  | `Version`        | FPGA ファームウェアのバージョン (読めなければ `0.0.0`) |
+| `fpga`                  | `Version`        | FPGA ファームウェアのバージョン                        |
 | `is_emulator()`         | `bool`           | デバイスエミュレータか                                 |
 | `is_supported()`        | `bool`           | CPU と FPGA の両方がこの SDK のサポートする系列か      |
-| `SUPPORTED_SERIES`      | `(u8, u8)`       | サポートする系列 (major, minor) (C#: `SupportedSeries`) |
-
-`Version` は `major` / `minor` / `patch` (`u8`) と `is_unknown()` (`0.0.0` か) を持つ.
+| `SUPPORTED_SERIES`      | `(u8, u8)`       | サポートする系列 (major, minor)                        |
 
 ### FpgaState
 
 | メソッド                  | 型               | 説明                                     |
 | ------------------------- | ---------------- | ---------------------------------------- |
-| `.0` (フィールド)         | `u8`             | 状態レジスタの生の値 (Python: `raw()`, C#: `Raw`) |
 | `is_thermal_asserted()`   | `bool`           | 温度センサが閾値を超えているか           |
 | `current_mod_bank()`      | `ModulationBank` | 現在の Modulation bank                   |
 | `current_pattern_bank()`  | `PatternBank`    | 現在の Pattern bank (Pattern と STM で共有) |
@@ -120,8 +89,7 @@ C# は PascalCase のプロパティになる (`is_thermal_asserted()` → `IsTh
 
 ### Telemetry
 
-CPU の診断カウンタ. `Clear` で `boot_failure` 以外は 0 に戻る (`Client` は開くときに `Clear` を送らないので, 前回のセッションからの値が残る).
-読み出してもクリアされない.
+CPU の診断カウンタ.
 
 | フィールド            | 型    | 説明                                                   |
 | --------------------- | ----- | ------------------------------------------------------ |
@@ -136,21 +104,10 @@ CPU の診断カウンタ. `Clear` で `boot_failure` 以外は 0 に戻る (`Cl
 | `cpu_watchdog`        | `u8`  | CPU ウォッチドッグの発火回数 (FPGA の再構成まで消えない) |
 | `exec_late`           | `u32` | [処理時刻](#処理時刻)を 1 µs 以上過ぎてから処理を始めたフレーム数 |
 
-`u32` のフィールドは桁あふれで 0 に戻り, `u16` / `u8` のフィールドは上限で止まる.
-
-## 応答待ちのタイムアウト
-
-応答待ちのタイムアウトは [`TransportOption`](/autd3-sdk/api/basics/transport-option/) の `ack_timeout` (既定 10 ms) で, `Client` を開くときに決まり, 開いた後には変えられない.
-応答待ちの先頭のフレームの応答が `ack_timeout` の間揃わなければ, 送信中のフレームはすべて `Timeout` で失敗する.
-
-再送処理は行われない. 失敗したコマンドはユーザが送り直す必要がある.
-`Timeout` で失敗したフレームも, デバイスに届いていれば処理されている (返信だけが失われた場合など).
-デバイスは重複を排除しないので, 送り直したフレームが前のものと合わせて 2 回処理されることがある.
-
 ## 処理時刻
 
 デバイスへの送信は順に 1 台ずつ行われるので, 各デバイスにフレームが届く時刻は少しずつずれる.
-`send_frame_at` に `ExecAt` を渡して送ると, フレームに処理時刻 (デバイスの時刻を 1 µs 単位に切り上げたもの) が付き, 各デバイスはその時刻まで処理を待つ.
+`send_frame_at` に `ExecAt` を渡して送ると, フレームに処理時刻を付け, 各デバイスはその時刻まで処理を待つ.
 これにより, 1 回の送信の内容を全デバイスが同じタイミングで処理し始める.
 `send` / `send_frame` は処理時刻を付けない (各デバイスは届いた順にすぐ処理する).
 コマンドを処理時刻付きで送るには, `Frames::encode` でフレーム列に変換し, 各フレームを `send_frame_at` で送る.
@@ -169,24 +126,16 @@ CPU の診断カウンタ. `Clear` で `boot_failure` 以外は 0 に戻る (`Cl
   - 応答を待たずに続けて送ると ([streaming](#streaming)), 前のフレームの処理中に次のフレームの指定時刻が来ることがあり, そのフレームは遅れて処理される (`exec_late` にカウントされる).
   - また, 成功したとしてもCPUボード内部の処理の開始が揃うだけであり, FPGAの処理の開始が揃うこと (すなわち, 出力される超音波の位相の更新タイミングが揃うことなど) は保証しない
 - 応答は処理の後に返るので, 送信の完了は指定時刻まで遅れる. 1 フレームずつ応答を待つと, 複数フレームのコマンドはフレーム数 × `lead` 程度かかる
-- `Lead` は 2^31 µs (約 35.8 分) 未満でなければならない. また, [`TransportOption`](/autd3-sdk/api/basics/transport-option/) の `lost_timeout` 未満でなければならない. 外れると `InvalidPayload` で, そのフレームは送られない
-- `At` は現在時刻より 2^31 µs 以上先・2^30 µs (約 17.9 分) 以上前, または `lost_timeout` 以上先だとエラーになる. 過ぎた時刻 (範囲内) は受け付け, デバイスはすぐに処理して `exec_late` に数える
-- `ack_timeout` (既定 10 ms) は, 送信から指定時刻までの時間 + 処理時間より長くする
-- `Lead` / `At` はデバイスの時刻が分からない (時刻を載せた返信をまだ受けていない) と `DeviceTimeUnknown` で失敗する
-- [Simulator](/autd3-sdk/guide/simulator/) は処理時刻を無視してすぐに処理する
 
 ## each
 
-`each` はデバイスを引数にするクロージャを受け取り, デバイスごとに異なる 1 フレームのコマンド (`Operation`) を割り当てる.
-Rust では `FnMut(&Device) -> Option<O>` (`O: Operation`), Python では `Callable[[Device], Operation | None]`, C# では `Func<Device, ICommand?>`.
-`None` を返したデバイスには何も割り当てない (`Nop` が送られる).
+`each` はデバイスを引数にするクロージャを受け取り, デバイスごとに異なる 1 フレームのコマンドを割り当てる.
 
 <CodeTabs rust={excerpt(sample, "each")} python={excerpt(pySample, "each")} csharp={excerpt(csSample, "each")} />
 
 `each` は常に 1 フレームになる.
-`Modulation` / `FociStm` / `PatternStm` のような複数フレームのコマンドや, コマンドの列, `each` 自身は割り当てられない.
-Rust ではコンパイルエラーになり, Python は `TypeError`, C# は `Autd3Exception` (`InvalidArgument`) になる.
-デバイスごとに異なる複数フレームの内容が必要な場合, Rust では `Frame::new` でフレームを自分で組み立てて `send_frame` で送る (Python / C# には相当する API は無い).
+`Modulation` / `FociStm` / `PatternStm` のような複数フレームのコマンドは `each` では送れない.
+デバイスごとに異なる複数フレームの内容が必要な場合, `Frame::new` でフレームを自分で組み立てて `send_frame` で送る.
 
 Rust ではクロージャの返り値はすべて同じ型でなければならない.
 型の異なるコマンドを混在させたい場合は, `Box<dyn Operation>` に揃える.

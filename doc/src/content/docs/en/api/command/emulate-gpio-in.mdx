@@ -16,7 +16,6 @@ import { excerpt } from "@lib/excerpt";
 
 `EmulateGpioIn` is a command that asserts the four [GPIO input terminals](/autd3-sdk/en/hardware/gpio/) of the devices from software.
 The effective value the FPGA sees is the logical OR of the physical terminal input and `EmulateGpioIn`.
-It is useful, for example, to try switching with [`TransitionMode::Gpio`](/autd3-sdk/en/api/command/lowlevel/activate-pattern-bank/) without external wiring.
 
 ## API
 
@@ -25,9 +24,6 @@ It is useful, for example, to try switching with [`TransitionMode::Gpio`](/autd3
 | Field    | Type        | Default         | Description                                            |
 | -------- | ----------- | --------------- | ------------------------------------------------------ |
 | `values` | `[bool; 4]` | all `false`     | Whether to assert each of inputs 0..3 (`true` asserts) |
-
-Python takes a sequence of 4 `bool`s, and C# takes a `bool[]` of length 4.
-A length other than 4 is an error at construction (`ValueError` in Python, `Autd3Exception` (`InvalidArgument`) in C#). In Rust, the array type fixes the length.
 
 ## Example
 

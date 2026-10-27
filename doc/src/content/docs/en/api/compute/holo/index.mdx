@@ -25,13 +25,11 @@ The provided algorithms are as follows.
 ### AmplitudeTarget
 
 A struct representing a focal point.
-It holds a position `point` and a target amplitude `amplitude` (the `point` / `amplitude` properties in Python, `Point` / `Amplitude` in C#).
+It holds a position `point` and a target amplitude `amplitude`.
 
 ### Amplitude units `Pa` / `kPa` / `dB`
 
 The target amplitude `Amplitude` is constructed by multiplying an `f32` by an amplitude unit.
-Its value is read with `pascal()` (Pa) and `spl()` (dB) (the `pascal` / `spl` properties in Python, `Pascal` / `Spl` in C#).
-`Amplitude` supports scalar multiplication (`* f32` / `f32 *`), division (`/ f32`), and comparison (the same in Python / C#).
 
 ### IntensityConstraint
 
@@ -44,14 +42,8 @@ Therefore, a constraint is specified for converting the amplitude obtained from 
 | `Clamp(Intensity, Intensity)`   | Clamps the amplitude to the specified range     |
 
 It is specified via the `constraint` field of each Option.
-`greedy` does not optimize the intensities, so it has no `constraint` and takes the intensities as an input.
-To give every transducer the same intensity, rewrite the intensity buffer yourself after the optimization.
 The default is `Clamp(Intensity::MIN, Intensity::MAX)` for all of `naive` / `gs` / `gspat`.
-
-### Errors
-
-A failure of each function is a `HoloError` in Rust, a `HoloError` in Python (a subclass of `autd3_core.Autd3Error` whose `code` is `INVALID_ARGUMENT`), and an `Autd3Exception` in C# (whose `Code` is `InvalidArgument`).
-It fails, for example, when the foci are empty, when the number of devices of an output buffer does not match `geometry`, or when the shape of `mask` does not match `geometry`.
+`greedy` does not optimize the intensities, so it has no `constraint` and takes the intensities as an input.
 
 ### Directivity
 
@@ -62,13 +54,11 @@ It is specified via the `directivity` field of each Option.
 ### TransducerMask
 
 Selects the transducers to include in the optimization.
-It is specified via the `mask` field of the `naive` / `gs` / `gspat` Options (the default is `AllEnabled`). `greedy` has no `mask`; transducers whose intensity is 0 are left out of the search.
+It is specified via the `mask` field of the `naive` / `gs` / `gspat` Options (the default is `AllEnabled`).
+`greedy` has no `mask`; transducers whose intensity is 0 are left out of the search.
 
 - `TransducerMask::AllEnabled` — uses all transducers (default).
 - `TransducerMask::Masked(&[Vec<bool>])` — specifies enabled/disabled for each transducer individually.
-
-In Python they are written as `TransducerMask.AllEnabled` / `TransducerMask.masked(rows)`, and in C# as `TransducerMask.AllEnabled` / `TransducerMask.Masked(bool[][])`.
-In Python, `mask` does not accept `None` (`TypeError`).
 
 ### LinAlgBackend (NalgebraBackend)
 

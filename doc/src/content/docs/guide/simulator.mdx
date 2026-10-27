@@ -22,7 +22,7 @@ import CodeTabs from "@components/CodeTabs.astro";
 
 Simulator は既定でポート 44336 で待ち受ける. ポートはコンソールの Simulator タブの「UDP port」で変えられる.
 
-クライアントライブラリは Simulator を特別扱いしない. [`TransportOption`](/autd3-sdk/api/basics/transport-option/) の `iface` に `Addr(..)` で Simulator のアドレス `[::1]:44336` を指定してつなぐ (`Auto` は Simulator を探さない).
+クライアントからの接続は, [`TransportOption`](/autd3-sdk/api/basics/transport-option/) の `iface` に `Addr` で `[::1]:44336` を指定する.
 
 <CodeTabs
   rust={'let option = TransportOption {\n    iface: Interface::Addr("[::1]:44336".parse()?),\n    ..Default::default()\n};'}
@@ -32,18 +32,7 @@ Simulator は既定でポート 44336 で待ち受ける. ポートはコンソ�
 
 ## ジオメトリ
 
-台数・配置は Simulator の画面 (Geometry タブ) で設定する. クライアントからジオメトリを送る手段は無い. クライアントを開く前に, Geometry タブの台数と配置をクライアントのジオメトリに合わせておく.
-
-Geometry タブには, デバイスがデイジーチェーンの順に並ぶ. n 番目のデバイスがクライアントの `geometry[n]` にあたる.
-
-- 「Add device」で末尾にデバイスを足す (最後のデバイスの +x 方向に 1 台分ずらした位置)
-- 「Up」「Down」で順番を入れ替え, 「Remove」で削除する
-- 各デバイスの原点 (mm) と姿勢 (ZYZ オイラー角, 度) を入力する
-- 「Save to file」で今のジオメトリを JSON ファイル (`geometry.json`) に保存し, 「Load from file」で読み込む. 読めないファイル・不正な内容 (台数が 1〜128 でない, 回転が単位四元数でない など) は読み込まず, 理由を表示する
-
-台数がクライアントのジオメトリと違うと `open` は失敗する. 配置がずれていると, クライアントが計算した位相と表示される音場が食い違う.
-
-台数を変えるとデバイスは作り直される (それまでの状態は消える) ので, クライアントを開き直す. 台数を変えずに配置・姿勢・順番だけを変えた場合は, デバイスの状態はそのままで表示だけが新しい配置に追従する (状態は n 番目という位置に付いたままで, 並べ替えたデバイスには付いていかない).
-複数のブラウザタブで開いていても, 編集結果は全タブに反映される.
+台数・配置は Simulator の画面 (Geometry タブ) で設定する.
+クライアントを開く前に, Geometry タブの台数と配置をクライアントのジオメトリに合わせておく.
 
 Simulator は起動するたびに原点に 1 台の状態から始まる. 設定したジオメトリを次回も使うときは「Save to file」で保存しておき, 「Load from file」で読み込む.

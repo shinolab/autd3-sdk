@@ -14,7 +14,7 @@ CPU ボード (AP-RZT-01, Alpha Project) は Renesas RZ/T1 (Arm Cortex-R4F) を�
 RZ/T1 内蔵の Ethernet スイッチ (ETHSW) の 2 ポートを使い, デバイスをデイジーチェーンで接続する.
 
 ソースは `firmware/cpu/` 以下にあり, `no_std` Rust で記述されている.
-2 つのクレートに分かれている.
+ファームウェア本体は 2 つのクレートに分かれており, ホストとの通信の取り決め (コマンド ID・ペイロードやヘッダのレイアウト・エラーコード・既定値など) はクライアントと共有するクレート `wire/` (`autd3-cpu-wire`) に置かれている.
 
 - `fw/` (`autd3-cpu-fw`): プロトコル解釈・コマンド処理・FPGA 書き込み, および IPv6 / UDP / ICMPv6 の解析と組み立て (`net`), PTP のメッセージとサーボ (`ptp`) などの可搬ロジック.
   ハードウェアには `Port` trait (コマンド層) 越しにのみアクセスし, `unsafe` を含まない.
@@ -30,6 +30,7 @@ CPU ファームウェアに関する作業はすべて `autd3-sdk/` ディレ�
 cargo xtask cpu build         # 実機用 .bin を生成
 cargo xtask cpu flash         # build 後, firmware-writer (J-Link) で実機へ書き込む
 cargo xtask cpu test          # ホスト上の単体テスト (cargo test -p autd3-cpu-fw)
+cargo xtask cpu test --loom   # 受信割り込みとメインループの FIFO の受け渡しを loom でモデル検査する
 cargo xtask cpu lint          # clippy (fw + board)
 cargo xtask cpu format        # rustfmt --check (fw + board)
 cargo xtask cpu format --fix  # rustfmt 実書き換え
@@ -39,22 +40,22 @@ cargo xtask cpu format --fix  # rustfmt 実書き換え
 
 | 用途           | ツール                                              |
 | -------------- | --------------------------------------------------- |
-| 実機ビルド     | Rust ツールチェイン + `rustup target add armv7r-none-eabi`, Arm GNU Toolchain (`arm-none-eabi-gcc`, `arm-none-eabi-objcopy`) |
+| 実機ビルド     | Rust ツールチェイン + `rustup target add armv7r-none-eabi`, `rustup component add llvm-tools` (`rust-lld`, `llvm-objcopy`) |
 | 実機書き込み   | J-Link Commander (`JLinkExe`)                       |
 | ホストテスト   | Rust ツールチェイン (`cargo test`)                  |
 | lint / format  | `clippy`, `rustfmt`                                 |
 
-`arm-none-eabi-` 以外のプレフィックスを使う場合は環境変数 `CROSS_COMPILE` で上書きできる.
 `JLinkExe` が PATH に無い場合は環境変数 `JLINK` でパスを指定できる.
 
 ### ビルド
 
 `cargo xtask cpu build` は以下を行う.
 
-1. `cargo xtask cpu gen-param` で FPGA の `params.svh` から `fw/src/params.rs` を生成する.
+1. `cargo xtask cpu gen-param` で FPGA の `params.svh` から `fw/src/fpga_params.rs` (と `wire/src/fpga_params.rs`) を生成する.
 1. `board/` を `armv7r-none-eabi` ターゲットでビルドする. アプリの staticlib (`libautd3_cpu.a`) とローダの実行ファイル (`autd3-cpu-loader`) ができる.
-1. `arm-none-eabi-gcc` でリンカスクリプト `platform/autd3-cpu.ld` を用いてアプリをリンクする.
-1. `objcopy` でローダとアプリをそれぞれバイナリにし, ローダを先頭, アプリをスロット A に置いて `build/autd3-cpu.bin` に合成する.
+1. `rust-lld` でリンカスクリプト `platform/autd3-cpu.ld` を用いてアプリをリンクする.
+1. `llvm-objcopy` でローダとアプリをそれぞれバイナリにし, ローダを先頭, アプリをスロット A に置いて `build/autd3-cpu.bin` に合成する.
+1. スロット A のヘッダにアプリの長さと CRC32 を書き込む.
 
 ローダ (`board/src/bin/loader.rs`)・スタートアップ (`board/src/startup.rs`)・シリアルフラッシュドライバ (`board/src/sflash.rs`) も Rust で書かれている.
 ローダはブート ROM が BTCM に展開して実行するプログラムで, 起動するスロットを選んで ATCM にコピーする.
@@ -69,8 +70,8 @@ writer は J-Link を JTAG 接続し, `autd3-cpu.bin` を `0x30000000` へロー
 ### ホストテスト
 
 `fw/` は `Port` trait (`fpga_write` / `fpga_read` / `memory_barrier` など) 以外のハードウェア依存を持たない.
-`cargo xtask cpu test` では `fw/src/tests/mock.rs` の `MockPort` がこれを置き換え, FPGA への書き込みを記録する.
-`fw/src/tests/` がプロトコル層 (`Cpu::recv_frame` / `Cpu::process_one`) の振る舞いを, `fw/src/net` と `fw/src/ptp` のテストがパケットの解析・組み立てと PTP のサーボを検証する.
+`cargo xtask cpu test` では `fw/src/test_utils/mock.rs` の `MockPort` がこれを置き換え, FPGA への書き込みを記録する.
+`fw/src/app` と `fw/src/cmd` の各モジュールのテストがプロトコル層 (`Cpu::recv_frame` / `Cpu::process_one`) と各コマンドの振る舞いを, `fw/src/net` と `fw/src/ptp` のテストがパケットの解析・組み立てと PTP のサーボを検証する.
 
 ## フレーム処理
 
@@ -90,9 +91,9 @@ writer は J-Link を JTAG 接続し, `autd3-cpu.bin` を `0x30000000` へロー
 シーケンス番号による欠落検出・順序保護・重複排除は持たないので, 途中のフレームが欠けても後続のフレームはそのまま処理され, 同じフレームが 2 回届けば 2 回処理する.
 前のフレームの成否に依存するフレームは, 前のフレームの返信を待ってから送るのがホスト側 (呼び出し側) の責務である.
 
-受信割り込みはフレームを深さ 8 のリングバッファ (FIFO) に積むだけで抜け, メインループが処理して返信する.
+受信割り込みはフレームを深さ 8 のリングバッファ (FIFO. 同時に積めるのは 7 フレーム) に積むだけで抜け, メインループが処理して返信する.
 コマンドを受信割り込みの中で処理する経路は無い.
-受信割り込みの中で返信するのは `Heartbeat` だけで, その返信は直前に処理したフレームの結果を写す.
+フレームと `Heartbeat` のうち受信割り込みの中で返信するのは `Heartbeat` だけで, その返信は直前に処理したフレームの結果 (スロットに残した返信) を写す.
 `Heartbeat` への返信は割り込みの中で返るので, メインループが長い処理で止まっていても返り続ける.
 FIFO に積んだフレームはメインループが処理した後に, 割り込みを禁止した区間で返信する.
 
@@ -126,14 +127,23 @@ FIFO が満杯の場合, フレームは捨てられ (`fifo_drop` に数える),
 | `0x00` | `ERR_NONE`                     | エラーなし                                 |
 | `0x01` | `ERR_UNKNOWN_CMD`              | 未知のコマンド                             |
 | `0x02` | `ERR_INVALID_PAYLOAD`          | ペイロードの長さ・オフセットが不正         |
-| `0x03` | `ERR_INVALID_DATA`             | データの値が不正                           |
+| `0x03` | (欠番)                         | 再利用しない                               |
 | `0x04` | `ERR_INVALID_SILENCER_SETTING` | Silencer の設定が厳格モードの条件を満たさない |
 | `0x05` | (欠番)                         | Firmware v0.12.x までの `ERR_INVALID_TRANSITION_MODE`. 遷移モードと繰り返し回数の組み合わせは検査しない |
 | `0x06` | (欠番)                         | Firmware v0.12.x までの `ERR_MISS_TRANSITION_TIME`. `SysTime` 遷移の時刻は検査しない |
 | `0x07` | `ERR_FPGA_TIMEOUT`             | FPGA が制御フラグを期限内にクリアしない     |
 | `0x08` | `ERR_SYNC_NOT_READY`           | 同期パルスがまだ動いていない (時刻合わせ前) |
 | `0x09` | (欠番)                         | Firmware v0.9.0 までの `ERR_INVALID_SYNC0_CYCLE`. 同期パルスの周期はファームが決めるので発生しない |
-| `0x14` | `ERR_SYNC_MISSED`              | `CMD_SYNCHRONIZE` の書き込みが同期パルスの立ち上がりに間に合わなかった. 送り直せばよい |
+| `0x0A` | `ERR_UPDATE_NOT_STARTED`       | 更新セッションが開いていない (`UpdateBegin` が必要) |
+| `0x0B` | `ERR_UPDATE_IMAGE_INVALID`     | 書き込んだイメージの読み戻し CRC32 が一致しない |
+| `0x0C` | `ERR_UPDATE_FLASH`             | シリアルフラッシュの消去・書き込み・読み出しが失敗した |
+| `0x0D` | `ERR_UPDATE_NOT_COMMITTED`     | Commit 済みのイメージが無い                |
+| `0x0E` | `ERR_UPDATE_NOTHING_TO_CONFIRM` | 確定の対象 (今回起動したイメージ) が不明, または書き直されている |
+| `0x0F` | `ERR_UPDATE_UNSUPPORTED`       | 稼働中の FPGA が自身のコンフィギュレーションフラッシュを書けない |
+| `0x10` | `ERR_FPGA_UPDATE_IN_PROGRESS`  | FPGA 更新のロック中に出力系コマンドを受けた |
+| `0x12` | `ERR_UPDATE_ACTIVATING`        | `Reboot` 受理後のリセット待ちの間に更新の開始を受けた |
+| `0x14` | `ERR_SYNC_MISSED`              | `Synchronize` の書き込みが同期パルスの立ち上がりに間に合わなかった. 送り直せばよい |
+| `0x15` | `ERR_FAILSAFE_CONDITION_ACTIVE` | `ReleaseFailsafe` を受けたが, フェイルセーフの発火条件がまだ成り立っている |
 
 ## FPGA への書き込み
 
@@ -156,26 +166,27 @@ FPGA 側の「書き込み先を切り替えるレジスタ」(`MOD_MEM_WR_BANK`
 FPGA の同期入力 (`SYNC_IN` ピン) には, ETHSW のタイマから作った同期パルスを入れる.
 タイマの SYNCOUT (<Math tex="\SI{500}{us}" /> 周期) から ELC → MTU → PPG を経て, 立ち上がりが <Math tex="\SI{1}{ms}" /> 境界に乗る <Math tex="\SI{1}{ms}" /> 周期のパルスを作る.
 
-ETHSW のタイマはデバイス間で PTP (IEEE 1588, L2, E2E, two-step) によって揃える (`fw/src/ptp`).
+ETHSW のタイマはデバイス間で PTP (IEEE 1588, L2, E2E, two-step) によって揃える (状態機械は `board/src/udp/ptp.rs`, メッセージとサーボは `fw/src/ptp`).
+以下の周期・閾値・回数は既定値であり, `SetCpuConfig` で変えられる.
 
-- ID 0 のデバイスが grandmaster (GM) になる. ホストは `Client` (`UdpBus`) を開くときに GM にだけ時刻を送る (`SetTime`. 送る値は 0 で, デバイスの時刻は開いた時点から数える). GM 以外は `SetTime` を `NotGrandmaster` で拒否する
-- GM は <Math tex="\SI{16}{ms}" /> ごとに下流ポートへ `Sync` / `Follow_Up` を送り, `Delay_Req` に `Delay_Resp` で答える. 中継する各デバイスの ETHSW が Transparent Clock として滞留時間を `correctionField` に足す
+- ID 0 のデバイスが grandmaster (GM) になる. ホストは `Client` を開くときに (`TransportOption::sync_on_open` が真のとき) GM にだけ時刻を送る (`SetTime`. 送る値は 0 で, デバイスの時刻は開いた時点から数える). GM 以外は `SetTime` を `NotGrandmaster` で拒否する
+- GM は <Math tex="\SI{8}{ms}" /> ごとに下流ポートへ `Sync` / `Follow_Up` を送り, `Delay_Req` に `Delay_Resp` で答える. 中継する各デバイスの ETHSW が Transparent Clock として滞留時間を `correctionField` に足す
 - 他のデバイス (slave) は上流ポートから届く `Sync` と自分の `Delay_Req` から GM とのずれを求め, 固定小数点の PI サーボでタイマの周波数を補正する. ずれが <Math tex="\SI{10}{us}" /> を超えるとタイマをステップする
 - ずれが <Math tex="\SI{100}{ns}" /> 未満の状態が 64 回続くとロックとみなし, 同期パルスを張り直す. ステップするとロックを外して同期パルスを止める
 - PTP の処理は受信割り込みと 1 ms のタイマ割り込みだけで行うので, メインループが止まっても (フラッシュの消去など) 同期は保たれる
 
-`CMD_SYNCHRONIZE` は以下を行う.
+`Synchronize` は以下を行う.
 
 1. 次に同期パルスが立ち上がるデバイス時刻 (現在時刻から <Math tex="\SI{250}{us}" /> 以上先の最初の <Math tex="\SI{1}{ms}" /> 境界) を求める.
     - 同期パルスがまだ動いていない場合は `ERR_SYNC_NOT_READY` を返す
-1. その時刻を FPGA 内部の `SYS_TIME` の単位 (<Math tex="\SI{20.48}{MHz}" />) へ変換し, `ADDR_SYNC_TIME_*` へ書き込む.
+1. デバイス時刻がその立ち上がりの <Math tex="\SI{1}{ms}" /> 前を過ぎるまで待つ (最長 <Math tex="\SI{250}{us}" />).
+    - FPGA はフラグを受けたあと最初の立ち上がりで `SYS_TIME` をセットするので, 1 つ手前の立ち上がりより前にフラグを立てると `SYS_TIME` が <Math tex="\SI{1}{ms}" /> 進む
+1. 求めた立ち上がりの時刻を FPGA 内部の `SYS_TIME` の単位 (<Math tex="\SI{20.48}{MHz}" />) へ変換し, `ADDR_SYNC_TIME_*` へ書き込む.
 
     <MathBlock tex={String.raw`
     \text{ticks} = \text{time\_ns} \times \frac{\SI{20.48}{MHz}}{\SI{1}{GHz}} = 64 \times \frac{\text{time\_ns}}{3125}
     `} />
 
-1. デバイス時刻がその立ち上がりの <Math tex="\SI{1}{ms}" /> 前を過ぎるまで待つ (最長 <Math tex="\SI{250}{us}" />).
-    - FPGA はフラグを受けたあと最初の立ち上がりで `SYS_TIME` をセットするので, 1 つ手前の立ち上がりより前にフラグを立てると `SYS_TIME` が <Math tex="\SI{1}{ms}" /> 進む
 1. `SYNC_SET` フラグを立て, FPGA の [Synchronizer](/autd3-sdk/developer/fpga/synchronizer/) が `SYS_TIME` をセットするのを待つ.
 1. デバイス時刻を読み直し, 書き込んだ立ち上がりより手前であることを確かめる.
     - フラグが立ち上がりより後に届くと `SYS_TIME` が <Math tex="\SI{1}{ms}" /> 遅れる

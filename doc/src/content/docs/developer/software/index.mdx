@@ -24,17 +24,17 @@ import Mermaid from "@components/Mermaid.astro";
   PAT --> CORE
   MOD --> CORE
   EMU --> CORE
-  HOLO --> PAT`}
+  HOLO --> CORE`}
 />
 
 | クレート                     | 役割                                                                 |
 | ---------------------------- | -------------------------------------------------------------------- |
-| `autd3-rs-core`              | 基盤層. geometry / value / params / protocol / error と通信の観測型 (`bus`). |
+| `autd3-rs-core`              | 基盤層. geometry / value / params / protocol と通信の観測型 (`bus`). |
 | `autd3-rs`                   | クライアント本体                                                      |
 | `autd3-rs-pattern`           | 位相・振幅パターンの計算 (単一焦点等).                                |
 | `autd3-rs-pattern-holo`      | 多焦点音場再構成. 理論は[理論と考察](/autd3-sdk/theory/holo/)を参照.  |
 | `autd3-rs-modulation`        | AM 波形計算.                                                          |
-| `autd3-rs-firmware-emulator` | 実 CPU ファームウェア (`autd3-cpu-fw`) のソースを取り込み, Rust による FPGA エミュレータと組み合わせる |
+| `autd3-rs-firmware-emulator` | 実 CPU ファームウェアのクレート (`autd3-cpu-fw`) をリンクし, Rust による FPGA エミュレータと組み合わせる |
 
 ## スレッドモデル
 
@@ -52,10 +52,12 @@ import Mermaid from "@components/Mermaid.astro";
 />
 
 - **ユーザースレッド**: `send` を呼んだスレッドがその場で全デバイスへフレームを送り, `.await` で完了通知を待つ. 待機は自前の `Waker` 実装だけで組まれており, 特定の非同期ランタイムに依存しない.
-- **I/O スレッド**: `Client` が持つ 1 本の OS スレッド. 返信を読んで `msg_id` で送信中のフレームへ照合し, 全デバイスの返信が揃ったら完了を通知する. 生存確認は送らない (ユーザーが `send_heartbeat()` を呼んだときに, 呼んだスレッドが送る).
+- **I/O スレッド**: `Client` が持つ 1 本の OS スレッドで, `Driver::run` を回す. 返信を読んで `msg_id` で送信中のフレームへ照合し, 全デバイスの返信が揃ったら完了を通知する. 生存確認は送らない (ユーザーが `send_heartbeat()` を呼んだときに, 呼んだスレッドが送る).
 
-`UdpBus` は要求駆動の口 (`send` / `broadcast` / `send_heartbeat` / `recv`) だけを持ち, 送信と受信を別スレッドから同時に呼べる.
-普通の UDP ソケットで各デバイスへフレームを 1 つずつ送り, 届いた返信を 1 つずつ返す. いつ送るか (窓) は `Client` が, 生存確認はユーザーが決める.
+`Client` は送信側の `Controller` と I/O スレッドの `Driver` の組で, `Deref<Target = Controller>` により `Controller` のメソッド (`send` / `send_frame` / `send_heartbeat` / `device_status` など) をそのまま公開する.
+`Controller` と `Driver` は制御層の `Session` (`client/session.rs`) を `Arc` で共有する. `Session` は in-flight キュー・機体ごとの状態・`msg_id` の採番を 1 本の Mutex の下に持ち, 返信の照合と `ack_timeout` / `lost_timeout` の判定を行う.
+ソケットは `Session` が持つ通信層の `Channel` (`udp/channel.rs`, crate 内部) が扱う. `Channel` は普通の UDP ソケットで各デバイスへデータグラムを 1 つずつ送り, 届いた返信を 1 つずつ返す口だけを持ち, デバイスの状態は持たない.
+いつ送るか (窓) は `Controller` が, 生存確認はユーザーが決める.
 Link のような差し替え可能な通信路の抽象は無い.
 
 ## ユーザー API からデバイスまで
