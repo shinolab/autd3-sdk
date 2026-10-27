@@ -103,6 +103,7 @@ autd3-rs-pattern-holo = { version = "0.12.0", path = "crates/autd3-rs-pattern-ho
 autd3-rs-modulation = { version = "0.12.0", path = "crates/autd3-rs-modulation" }
 
 [workspace.metadata.cargo-semver-checks.lints]
+constructible_struct_adds_field = "allow"
 macro_now_doc_hidden = "allow"
 
 [workspace.lints.rust]
