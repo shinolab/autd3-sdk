@@ -15,47 +15,30 @@ import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 
 ## 状態の取得
 
-`device_status` は, 呼び出した時点の各デバイスの状態 `DeviceStatus` を並べて返す (Rust は `Vec<DeviceStatus>`, Python は `list[DeviceStatus]`, C# は `DeviceStatus[]`. 添字がデバイスの番号).
-デバイスには何も送らず, 状態を読むだけである.
+`device_status` は, 呼び出した時点の各デバイスの状態 `DeviceStatus` の配列を返す.
+
 `DeviceStatus` は以下を持つ.
 
 - `state`: デバイスの状態 (`DeviceState`).
 - `ptp_locked`: PTP がロックしているか.
-- `failsafe_active`: フェイルセーフで出力を止めていて, まだ解除されていないか (原因は問わない: ホストとの通信途絶・PTP ロック喪失・CPU ウォッチドッグ・ファームウェア更新).
+- `failsafe_active`: フェイルセーフで出力を止めていて, まだ解除されていないか
 
 全デバイスが `Ready` か, いずれかが `Lost` か, といった集約は返り値から作る (下の例を参照).
 `ptp_locked` と `failsafe_active` はデバイスからの最後の返信の値で, `Lost` のデバイスはどちらも `false` になる.
 `Client` を閉じた後に呼ぶとエラー (`Closed`. 通信エラーで閉じた場合は `Network`) になる.
 
-状態の意味は以下の通り. 
+`DeviceState`の意味は以下の通り. 
 
 | 状態     | 意味                                                                     |
 | -------- | ------------------------------------------------------------------------ |
-| `Ready`   | 返信があり, デバイスの時刻が合っていて, 同期パルスが動いている          |
-| `Syncing` | 返信はあるが, 時刻を合わせている途中か, 同期パルスがまだ動いていない    |
-| `Lost`    | 返信が一定時間無い                                      |
+| `Ready`   | 返信があり, 時刻が同期されている                                        |
+| `Syncing` | 返信はあるが, 時刻を合わせている途中                                    |
+| `Lost`    | 返信が一定時間無い                                                      |
 
 途中の 1 台が`Lost`すると, その機体より先の機体も全て `Lost` になる.
-`Lost` のデバイスは `Client` を開いている間は戻らない. ケーブルの抜き差しなどで通信が戻っても `Lost` のままなので, `close` してから `Client::open` で開き直す.
+`Lost` からの自動復帰はしない.
+そのため, `Lost`した場合は `close` してから `Client::open` で開き直すしかない.
 
 以下は, 一定間隔で `device_status` を呼び, 状態が変化したときだけ出力する例.
 
 <CodeTabs rust={excerpt(sample, "poll")} python={excerpt(pySample, "poll")} csharp={excerpt(csSample, "poll")} />
-
-`device_status` を呼ぶ頻度はユーザー次第である.
-状態はデバイスからの返信で更新されるので, フレームを送らない間は [`send_heartbeat()`](/autd3-sdk/api/basics/client/#生存確認) で生存確認を送る (上の例ではループの先頭で送っている).
-送らない間は, デバイスとの通信が途絶えても `Lost` にならない.
-
-## フェイルセーフの検出と解除
-
-[SetCpuConfig](/autd3-sdk/api/command/cpu-config/) で `failsafe_timeout` や `ptp_unlock_failsafe_timeout` を指定すると, 条件を満たしたデバイスは出力を止める (CPU ウォッチドッグも同じ).
-止まったデバイスは `failsafe_active` が立ち, [`ReleaseFailsafe`](/autd3-sdk/api/command/release-failsafe/) か [Clear](/autd3-sdk/api/command/clear/) で解除されるまで立ったままになる (通信が戻っても, 再ロックしても自動では戻らない).
-どの原因で止まったかは `read_telemetry()` の発火回数 (`failsafe` / `ptp_unlock_failsafe` / `cpu_watchdog`) で分かる.
-
-以下は, `failsafe_active` が立っていて PTP がロックしている (`ptp_locked` も立っている) デバイスへ `ReleaseFailsafe` を送る例.
-`send_heartbeat()` は返信を待たずに戻るので, 返信が届くまで待ってから `device_status` を呼ぶ (直後に呼ぶと, その前の返信の値が返る). `send` の完了を待った後なら, そのフレームの返信の値が返る.
-フェイルセーフは `Client` を開き直しても解除されないが, 開いた直後の `device_status` は最初の返信が届くまで `failsafe_active` が `false` になる.
-
-<CodeTabs rust={excerpt(sample, "ptp_failsafe")} python={excerpt(pySample, "ptp_failsafe")} csharp={excerpt(csSample, "ptp_failsafe")} />
-
-PTP のロックを失ったままのデバイスへ `ReleaseFailsafe` を送るとエラーになり, 出力は止まったままになる. `ptp_locked` が立つのを待ってから送る.

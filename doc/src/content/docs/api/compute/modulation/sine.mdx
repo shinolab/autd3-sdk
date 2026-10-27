@@ -48,7 +48,7 @@ import { excerpt } from "@lib/excerpt";
 | `amplitude`       | `u8`             | `0xFF`                  | 正弦波の振幅                                             |
 | `offset`          | `u8`             | `0x80`                  | 直流オフセット                                           |
 | `phase`           | `Angle`          | `Angle::ZERO`           | 位相                                                     |
-| `clamp`           | `bool`           | `false`                 | 範囲外の値を [0, 255] clampするか                        |
+| `clamp`           | `bool`           | `false`                 | 範囲外の値を [0, 255] に clamp するか                        |
 
 `amplitude` と `offset` の組み合わせで波形が [0, 255] の範囲を外れる場合, `clamp` が `false` だとエラーになる.
 範囲内に収まるよう値を選ぶか, `clamp` を `true` にする. 
@@ -63,4 +63,3 @@ import { excerpt } from "@lib/excerpt";
 ## Example
 
 <CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />
-

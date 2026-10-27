@@ -34,8 +34,6 @@ Because `FociStm` / `PatternStm` loops inside the AUTD3 device, no software loop
 In addition, the timing is controlled by the timer built into the AUTD3 device, so it is highly accurate and can be specified with a resolution as fine as 25 µs.
 However, due to constraints of this timer, there are [frequencies that cannot be output](/autd3-sdk/en/api/basics/sampling-config/#internal-representation).
 
-The switching timing of `FociStm` / `PatternStm` is specified by the frequency or period of one loop.
-That is, in this case two focal points make 0.5 Hz (2 s), so each focal point is output for 1 s.
-Note that by using [`SamplingConfig`](/autd3-sdk/en/api/basics/sampling-config/), the frequency or period can be specified as the sampling frequency, that is per focal point, rather than per loop.
+The switching timing of `FociStm` / `PatternStm` is specified by [`SamplingConfig`](/autd3-sdk/en/api/basics/sampling-config/).
 
 To switch an arbitrary Pattern rather than just a focal point, use [`PatternStm`](/autd3-sdk/en/api/command/pattern-stm/) instead of `FociStm`.

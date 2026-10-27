@@ -31,8 +31,6 @@ It does not iterate and is fast, but it does not correct for interference betwee
 | `phases`      | `&mut [Vec<Phase>]`     | Phase output buffer       |
 | `intensities` | `&mut [Vec<Intensity>]` | Intensity output buffer   |
 
-For the common elements (`AmplitudeTarget` / `TransducerMask` / `LinAlgBackend`, etc.), see the [Holo overview](/autd3-sdk/en/api/compute/holo/).
-
 ## NaiveOption
 
 <CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
@@ -42,8 +40,6 @@ For the common elements (`AmplitudeTarget` / `TransducerMask` / `LinAlgBackend`,
 | `constraint`  | `IntensityConstraint` | `Clamp(MIN, MAX)`         |
 | `directivity` | `Directivity`        | `Sphere`                  |
 | `mask`        | `TransducerMask`     | `AllEnabled`              |
-
-For the meaning of each field, see the [Holo overview](/autd3-sdk/en/api/compute/holo/).
 
 ## Example
 

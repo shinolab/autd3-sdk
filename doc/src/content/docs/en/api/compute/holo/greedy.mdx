@@ -23,12 +23,9 @@ You give the intensities in `intensities`, and greedy chooses the phases for tho
 `intensities` takes either a uniform value for all transducers (`Intensity`) or a per-transducer buffer.
 A transducer whose intensity is 0 is left out of the search and gets phase 0.
 
-You give the order in which the transducers are visited in `order`.
-The indices run through the whole geometry (from `0` to `geometry.num_transducers() - 1` in device order),
-and `order` should contain every transducer exactly once.
-greedy does not validate `order`, so passing a correct sequence is up to the caller (an out-of-range index panics).
-greedy itself uses no random numbers, so the same `order` always gives the same result.
-The transducers should be visited in random order ([Suzuki et al., 2021](https://doi.org/10.1109/TOH.2021.3076489)), so you normally pass a sequence shuffled with your own random number generator.
+You must give the order in which the transducers are visited in `order`.
+The indices run through the whole geometry (from `0` to `geometry.num_transducers() - 1` in device order), and `order` should contain every transducer exactly once.
+Visiting the transducers in random order is recommended, so you normally pass a sequence shuffled with random numbers.
 
 ## API
 
@@ -44,8 +41,6 @@ The transducers should be visited in random order ([Suzuki et al., 2021](https:/
 | `option`     | `&GreedyOption`        | Additional options (see below) |
 | `dst`        | `&mut [Vec<Phase>]`    | Phase output buffer       |
 
-For the common elements (`AmplitudeTarget`, etc.), see the [Holo overview](/autd3-sdk/en/api/compute/holo/).
-
 ## GreedyOption
 
 <CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
@@ -59,7 +54,6 @@ For the common elements (`AmplitudeTarget`, etc.), see the [Holo overview](/autd
 - `phase_quantization_levels` — the number of divisions of the phase candidates. The larger it is, the higher the phase resolution.
 - `objective_func` — the objective function that evaluates each candidate. The default `abs_objective_func` returns the absolute value of the difference between the magnitude of the synthesized sound pressure and the target amplitude.
   - Configurable only in the Rust version. In other languages, the default objective function is used.
-- For the meaning of `directivity`, see the [Holo overview](/autd3-sdk/en/api/compute/holo/). To leave a transducer out of the search, set its intensity to 0.
 
 ## Example
 

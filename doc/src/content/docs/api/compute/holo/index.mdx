@@ -24,13 +24,11 @@ Holo は複数の焦点 (制御点) を同時に生成するための Pattern �
 
 ### AmplitudeTarget
 
-焦点を表す構造体. 位置 `point` と目標振幅 `amplitude` を持つ (Python はプロパティ `point` / `amplitude`, C# は `Point` / `Amplitude`). 
+焦点を表す構造体. 位置 `point` と目標振幅 `amplitude` を持つ. 
 
 ### 振幅単位 `Pa` / `kPa` / `dB`
 
 目標振幅 `Amplitude` は, `f32` に振幅単位を掛けて構築する. 
-値は `pascal()` (Pa) と `spl()` (dB) で読む (Python はプロパティ `pascal` / `spl`, C# は `Pascal` / `Spl`). 
-`Amplitude` はスカラ倍 (`* f32` / `f32 *`)・除算 (`/ f32`)・大小比較ができる (Python / C# も同じ). 
 
 ### IntensityConstraint
 
@@ -42,14 +40,9 @@ Holo は複数の焦点 (制御点) を同時に生成するための Pattern �
 | `Multiply(f32)`                 | 最大値で正規化した後に係数を掛けてクランプする |
 | `Clamp(Intensity, Intensity)`   | 振幅を指定範囲にクランプする                   |
 
-各 Option の `constraint` フィールドで指定する. デフォルトは `naive` / `gs` / `gspat` とも `Clamp(Intensity::MIN, Intensity::MAX)`. 
+各 Option の `constraint` フィールドで指定する.
+デフォルトは `naive` / `gs` / `gspat` とも `Clamp(Intensity::MIN, Intensity::MAX)`. 
 `greedy` は振幅を最適化しないので `constraint` を持たず, 振幅は入力として与える. 
-全振動子を一定強度にしたいときは, 最適化後に振幅バッファを自分で書き換える. 
-
-### エラー
-
-各関数の失敗は, Rust では `HoloError`, Python では `HoloError` (`autd3_core.Autd3Error` のサブクラスで `code` は `INVALID_ARGUMENT`), C# では `Autd3Exception` (`Code` は `InvalidArgument`) になる.
-焦点が空のとき, 出力バッファの台数が `geometry` と合わないとき, `mask` の形が `geometry` と合わないときなどに失敗する.
 
 ### Directivity
 
@@ -60,13 +53,11 @@ Holo は複数の焦点 (制御点) を同時に生成するための Pattern �
 ### TransducerMask
 
 最適化に含める振動子を選択する.
-`naive` / `gs` / `gspat` の各 Option の `mask` フィールドで指定する (デフォルトは `AllEnabled`). `greedy` は `mask` を持たず, 振幅 0 の振動子が探索から外れる. 
+`naive` / `gs` / `gspat` の各 Option の `mask` フィールドで指定する (デフォルトは `AllEnabled`).
+`greedy` は `mask` を持たず, 振幅 0 の振動子が探索から外れる. 
 
 - `TransducerMask::AllEnabled` — 全振動子を使う (デフォルト). 
 - `TransducerMask::Masked(&[Vec<bool>])` — 各振動子ごとに有効/無効を指定する. 
-
-Python では `TransducerMask.AllEnabled` / `TransducerMask.masked(rows)`, C# では `TransducerMask.AllEnabled` / `TransducerMask.Masked(bool[][])` と書く.
-Python の `mask` に `None` は渡せない (`TypeError`).
 
 ### LinAlgBackend (NalgebraBackend)
 

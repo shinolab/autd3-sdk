@@ -56,31 +56,8 @@ import csFullSample from "@codes/csharp/examples/api/command/cpu-config-example.
 | `pause_hold_syncs`     | `u16`        | 64      | 一度詰まってから, 送信のたびに `PAUSE` を送り続ける `Sync` の回数 |
 | `pause_retry`          | `Duration`   | 8 ms    | `Sync` を送り出せない間, `PAUSE` を送り続ける時間 |
 
-C# では `Duration` の項目を `TimeSpan` で渡すので, 100 ns 単位でしか指定できない (`lock_threshold` の既定値 100 ns は `TimeSpan.FromTicks(1)`).
-
-:::danger
-`failsafe_timeout` は既定で `None` (無効) で, ホストのクラッシュやケーブル断で通信が途絶えてもデバイスは超音波を出力し続ける.
-途絶えたときに出力を止めたい場合は `failsafe_timeout` を指定する.
-指定した場合, 送るものが無い間は [`send_heartbeat()`](/autd3-sdk/api/basics/client/#生存確認) を周期的に呼び, `failsafe_timeout` はその間隔の 2 倍より十分長く保つこと. 短すぎるとホストが動いていても出力が止まる.
-`ptp_unlock_failsafe_timeout` を指定すると, PTP のロックを失ったデバイス (先頭のデバイス以外) は, 失ってからこの時間が経つと failsafe と同じ方法で出力を止める.
-再ロックには既定の設定で 1 s 程度かかるので, それより短い値を指定するとロックを失うたびに必ず出力が止まる.
-
-`cpu_watchdog_timeout` は, CPU ファームウェアのハングやリセット中に FPGA が出力を止めるまでの時間で, failsafe と同じ方法で出力を止める.
-`None` にすると, CPU ファームウェアが止まってもデバイスは止まる直前の出力を続ける.
-
-`failsafe_timeout` を指定したままクライアントを閉じると, ホストからの通信が途絶えるのでその時間の後に出力が止まる.
-次に開いたときは [`ReleaseFailsafe`](/autd3-sdk/api/command/release-failsafe/) か [Clear](/autd3-sdk/api/command/clear/) を送る.
-
-failsafe や CPU ウォッチドッグで止まった出力は, 自動では戻らない.
-止まっているかどうかは `device_status()` が返す `DeviceStatus` の `failsafe_active` (C#: `FailsafeActive`) で確認できる.
-[`ReleaseFailsafe`](/autd3-sdk/api/command/release-failsafe/) コマンドを送ると出力が再開される.
-[Clear](/autd3-sdk/api/command/clear/) でも解除されるが, すべての状態が既定値に戻る.
-:::
-
 設定値は [Clear](/autd3-sdk/api/command/clear/) と電源再投入で既定値に戻る.
-クライアントを開き直しても戻らない (前のセッションの値のまま動く) ので, 既定値に戻したい場合は `Clear` を送る.
-PTP がロックしない値を入れたまま閉じると, 次に開くときの同期待ちが `open_timeout` で失敗する (`SyncTimeout`).
-その場合は [`TransportOption`](/autd3-sdk/api/basics/transport-option/) の `sync_on_open` を `false` にして開き, `Clear` を送ってから開き直す.
+クライアントを開き直しても戻らない.
 
 ## Example
 

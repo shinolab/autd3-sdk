@@ -20,7 +20,7 @@ See [SetCpuConfig](/autd3-sdk/en/api/command/cpu-config/) for the failsafe condi
 The output from before the stop resumes as it was.
 It does nothing to devices that are not stopped by the failsafe.
 A device whose firing condition still holds (for example, one that is still without the PTP lock) rejects it with an error (`ERR_FAILSAFE_CONDITION_ACTIVE`) and stays stopped.
-Whether the output is stopped can be checked with `failsafe_active` (C#: `FailsafeActive`) of the `DeviceStatus` returned by `device_status()` (see [State Monitoring](/autd3-sdk/en/guide/state-check/)).
+Whether the output is stopped can be checked with `failsafe_active` of the `DeviceStatus` returned by `device_status()` (see [State Monitoring](/autd3-sdk/en/guide/state-check/)).
 
 [Clear](/autd3-sdk/en/api/command/clear/) also releases it, but it resets every state to the defaults.
 

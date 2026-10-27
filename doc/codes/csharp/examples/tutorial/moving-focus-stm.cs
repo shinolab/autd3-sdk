@@ -22,7 +22,7 @@ internal static class Sample
             (ControlPoints)(center + Offset(20.0f * mm, 0.0f * mm, 0.0f * mm)),
             (ControlPoints)(center + Offset(-20.0f * mm, 0.0f * mm, 0.0f * mm)),
         };
-        var config = new SamplingConfig(0.5f * Hz * points.Length);
+        var config = new SamplingConfig(1.0f * Hz);
         await client.SendAsync(new FociStm(config, points, new FociStmOption()));
         // ANCHOR_END: stm
 

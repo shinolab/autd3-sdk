@@ -20,6 +20,7 @@ import Math from "@components/Math.astro";
 | THERMO         | In     | 1     | 温度センサ                      |
 | FORCE_FAN      | In     | 1     | ファン強制動作フラグ            |
 | SYNC           | In     | 1     | 同期パルス検出フラグ            |
+| SYNC_IN_RAW    | In     | 1     | 同期パルス入力 (同期化前)       |
 | PATTERN_BANK   | In     | 1     | 現在の Emission バンク          |
 | MOD_BANK       | In     | 1     | 現在の Modulation バンク        |
 | PATTERN_IDX    | In     | 16    | 現在の Emission インデックス    |
@@ -40,11 +41,12 @@ import Math from "@components/Math.astro";
 | `THERMO`          | `0x02` | 温度センサの出力                                           |
 | `FORCE_FAN`       | `0x03` | ファン強制動作フラグ                                       |
 | `SYNC`            | `0x10` | 同期パルスを検出したクロックで 1                           |
+| `SYNC_RAW`        | `0x11` | 同期パルス入力 `SYNC_IN` をクロックに同期させずにそのまま出力 |
 | `MOD_BANK`        | `0x20` | 現在の Modulation バンク                                   |
 | `MOD_IDX`         | `0x21` | Modulation のインデックスが引数と一致する間 1              |
 | `PATTERN_BANK`    | `0x50` | 現在の Emission バンク                                     |
 | `PATTERN_IDX`     | `0x51` | Emission のインデックスが引数と一致する間 1                |
-| `IS_PATTERN_MODE` | `0x52` | Emission の周期が 0 でない (STM として動作している) 間 1   |
+| `IS_STM_MODE`     | `0x52` | Emission の周期が 0 でない (STM として動作している) 間 1   |
 | `SYS_TIME_EQ`     | `0x60` | `SYS_TIME` の上位 48 bit が引数と一致する間 1              |
 | `SYNC_DIFF`       | `0x70` | 時刻補正の残量が 0 でない間 1                              |
 | `PWM_OUT`         | `0xE0` | 引数で指定した振動子の PWM 出力                            |

@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use autd3_rs::commands::{ReleaseFailsafe, each};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::{Client, DeviceState, DeviceStatus};
 use autd3_rs::TransportOption;
@@ -15,24 +14,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::open(&geometry, &TransportOption::default())?;
     // ANCHOR_END: open
 
-    // ANCHOR: ptp_failsafe
-    client.send_heartbeat()?;
-    tokio::time::sleep(CHECK_INTERVAL).await;
-    let status = client.device_status()?;
-    let releasable = |s: &DeviceStatus| s.failsafe_active && s.ptp_locked;
-    if status.iter().any(releasable) {
-        client
-            .send(each(|device| {
-                releasable(&status[device.idx()]).then_some(ReleaseFailsafe)
-            }))
-            .await?;
-    }
-    // ANCHOR_END: ptp_failsafe
-
     // ANCHOR: poll
     let mut last: Vec<DeviceStatus> = Vec::new();
     loop {
-        client.send_heartbeat()?;
         let status = client.device_status()?;
         if last != status {
             for (i, s) in status.iter().enumerate() {

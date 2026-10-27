@@ -56,7 +56,7 @@ Synchronizer は CPU のデバイス時刻に同期した時刻 `SYS_TIME` を�
     - ただしこの時, 現在時刻が立ち上がりの 1 周期以上前であれば, いったん待機する. これにより, 次の `UPDATE` フラグが 1 つ手前の立ち上がりより後に届くことを保証する.
 1. CPU: 同期の更新要求 (`SYNC_SET`) を FPGA 内の BRAM に書き込む. [Controller](/autd3-sdk/developer/fpga/controller/) がこれを読んで `SYNC_TIME` を取り込み, `UPDATE` フラグをアサートする.
 1. FPGA: `UPDATE` フラグを受けた後, 最初に `SYNC_IN` が立ち上がったタイミングで, `SYNC_TIME` を `SYS_TIME` にセットする.
-1. CPU: デバイス時刻を読み直し, `UPDATE` フラグが書き込んだ立ち上がりより前に届いたことを確かめる. 間に合っていなければ最初からやり直す.
+1. CPU: デバイス時刻を読み直し, `UPDATE` フラグが書き込んだ立ち上がりより前に届いたことを確かめる. 間に合っていなければエラー (`ERR_SYNC_MISSED`) を返す (やり直すには [Synchronize](/autd3-sdk/api/command/synchronize/) を送り直す).
 
 以上により, FPGA 内部の `SYS_TIME` の時刻がデバイス時刻に同期する.
 
@@ -104,11 +104,11 @@ Synchronizer は CPU のデバイス時刻に同期した時刻 `SYS_TIME` を�
 
 上記の補正は `SYS_TIME` を 1 単位 (<Math tex="\SI{48.83}{ns}" />) ずつ動かすだけで, メインクロックそのものは各デバイスの水晶振動子で自走している.
 そのため, 出力のエッジは各デバイスの水晶振動子由来のグリッドに乗り, グリッド同士の位相はデバイス間でずれ続ける.
-PTP で同期パルスがいくら揃っていても, デバイス間の出力のずれは 1 単位幅の一様分布 (標準偏差 <Math tex="\SI{14}{ns}" />) に, 補正の段差 (<Math tex="\pm 3" /> 単位程度) が重なったものになる (4 台の実測で, 標準偏差約 <Math tex="\SI{28}{ns}" />, Peek-to-Peek 約 <Math tex="\SI{290}{ns}" />).
+PTP で同期パルスがいくら揃っていても, デバイス間の出力のずれは 1 単位幅の一様分布 (標準偏差 <Math tex="\SI{14}{ns}" />) に, 補正の段差 (<Math tex="\pm 3" /> 単位程度) が重なったものになる (4 台の実測で, 標準偏差約 <Math tex="\SI{28}{ns}" />, peak-to-peak 約 <Math tex="\SI{290}{ns}" />).
 
 細調整は, メインクロックを生成する MMCM の dynamic fine phase shift でクロックの位相そのものを動かし, 同期パルスの立ち上がりにクロックの立ち上がりを合わせる (位相ロック).
 既定で有効で, [SetFpgaConfig](/autd3-sdk/api/command/fpga-config/) の `sync_phase_lock` で無効にできる.
-4 台の実測で, デバイス間の出力のずれは標準偏差約 <Math tex="\SI{2}{ns}" />, peek-to-peek 約 <Math tex="\SI{15}{ns}" /> になった.
+4 台の実測で, デバイス間の出力のずれは標準偏差約 <Math tex="\SI{2}{ns}" />, peak-to-peak 約 <Math tex="\SI{15}{ns}" /> になった.
 
 ### クロック
 

@@ -33,17 +33,18 @@ pub trait Command {
     fn boxed<'a>(self) -> BoxedCommand<'a> where Self: Sized + 'a;
 }
 
-pub trait Operation {
+pub trait Operation: Sealed {
     fn distribution(&self) -> Distribution { Distribution::Broadcast }
     fn encode(&self, device: &Device, out: &mut Datagram) -> Result<(), Error>;
 }
 ```
 
 `impl<O: Operation> Command for O` のブランケット実装があるため, 単一の `Operation` はそのまま `Command` として扱える.
+`Operation` は sealed trait であり, クレートの外では実装できない (自作できるのは `Command` だけである).
 
 `Operation` は 1 フレームに対応する.
-バッファ書き込み (`WriteModulationBuffer` / `WriteFociBuffer`) も `Operation` であり, 1 フレームに収まる分 (`WriteModulationBuffer::MAX_LEN` / `WriteFociBuffer::max_len(num_foci)`) しか書かない.
-1 フレームに収まらないデータの分割は, 高レベルの `Modulation` / `FociStm` が `expand` の中で行う.
+バッファ書き込み (`WriteModulationBuffer` / `WritePatternBuffer` / `WritePatternPhase` / `WriteFociBuffer`) も `Operation` であり, 1 フレームに収まる分 (`WriteModulationBuffer::MAX_LEN` / `WritePatternBuffer::MAX_LEN` / `WriteFociBuffer::max_len(num_foci)` など) しか書かない.
+1 フレームに収まらないデータの分割は, 高レベルの `Modulation` / `PatternStm` / `FociStm` が `expand` の中で行う.
 
 ### Distribution
 
@@ -89,15 +90,13 @@ pub fn push<C: Command>(&mut self, cmd: C) -> Result<&mut Self, Error> {
     Ok(self)
 }
 
-pub(crate) fn push_op<O: Operation>(&mut self, op: &O) -> Result<&mut Self, Error> {
-    self.frames.push_encoded(op, self.geometry)?;
-    Ok(self)
+pub(crate) fn push_op<O: Operation>(&mut self, op: &O) -> Result<(), Error> {
+    self.frames.push_encoded(op, self.geometry)
 }
 
 impl<O: Operation> Command for O {
     fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
-        expansion.push_op(&self)?;
-        Ok(())
+        expansion.push_op(&self)
     }
 }
 ```

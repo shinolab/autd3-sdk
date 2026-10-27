@@ -15,8 +15,7 @@ import csFullSample from "@codes/csharp/examples/api/command/lowlevel/mod-bank-e
 import { excerpt } from "@lib/excerpt";
 
 `ConfigModulation` は, Modulation バンクの再生パラメータを設定する低レベルコマンド.
-設定は書き込まれるだけで, 再生には [ActivateModulationBank](/autd3-sdk/api/command/lowlevel/activate-modulation-bank/) を送った時点で反映される.
-再生中のバンクの設定を変える場合も, 同じバンクを指す `ActivateModulationBank` を続けて送る.
+設定は書き込まれるだけで, 有効化するには [ActivateModulationBank](/autd3-sdk/api/command/lowlevel/activate-modulation-bank/) を送る.
 
 ## API
 
@@ -30,9 +29,6 @@ import { excerpt } from "@lib/excerpt";
 | `loop_behavior` | `LoopBehavior` | 再生ループ回数 (`Infinite` / `Finite`)         |
 
 `size` の下限は 2.
-定数変調が要るときは同じ値を 2 サンプル並べる.
-
-`loop_behavior` と遷移の反映タイミングは [ActivateModulationBank](/autd3-sdk/api/command/lowlevel/activate-modulation-bank/) を参照.
 
 ## Example
 

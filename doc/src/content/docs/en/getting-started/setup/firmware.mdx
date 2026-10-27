@@ -48,6 +48,19 @@ Complete the [host network setup](/autd3-sdk/en/getting-started/setup/network/) 
 **Do not power off the devices during the update.**
 If the update fails, power-cycle the devices and try again.
 
+### If an error about a different protocol version appears
+
+If the firmware on the device and autd3-console speak different versions of the communication protocol, OTA fails with an error such as the following.
+
+```
+the device speaks UDP protocol version 4, but this host speaks version 5
+```
+
+In this case, flash it with the following steps.
+
+1. With the autd3-console of the same version as the firmware currently on the device, try flashing the firmware of the version you want to flash
+1. **Keeping the power on**, flash the same firmware once more with the autd3-console of the same version as the firmware you want to flash
+
 ## Updating via JTAG
 
 ### Prerequisites

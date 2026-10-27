@@ -29,10 +29,8 @@ import { excerpt } from "@lib/excerpt";
 `ControlPoints` is one sample holding a sequence of focal points (`ControlPoint`) and an amplitude. Every sample must have the same number of foci.
 For details see [FociStm](/autd3-sdk/en/api/command/foci-stm/#controlpoint--controlpoints).
 
-`WriteFociBuffer` is sent as a single frame and writes only what fits in one frame.
-The limit (in `ControlPoints`) depends on the number of foci: `WriteFociBuffer::max_len(num_foci)` in Rust, `WriteFociBuffer.max_len(num_foci)` in Python, and `WriteFociBuffer.MaxLen(numFoci)` in C#; exceeding it is an error when sending.
-Split a longer sequence and send it with `start_index` advanced by the limit (the high-level [FociStm](/autd3-sdk/en/api/command/foci-stm/) does this split automatically).
-Since it is a single-frame command, [each](/autd3-sdk/en/api/basics/client/#each) can assign a different sequence to each device.
+`WriteFociBuffer` writes only what fits in one frame.
+The limit (in `ControlPoints`) depends on the number of foci and is given by `WriteFociBuffer::max_len(num_foci)`; exceeding it is an error when sending.
 
 ## Example
 

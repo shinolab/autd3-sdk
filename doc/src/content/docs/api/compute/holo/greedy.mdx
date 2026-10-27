@@ -23,12 +23,9 @@ greedy が最適化するのは位相だけで, 振幅は最適化しない.
 `intensities` には全振動子共通の一様値 (`Intensity`) と, 振動子ごとのバッファの両方を渡せる. 
 振幅が 0 の振動子は探索から外れ, 位相は 0 になる. 
 
-振動子を訪問する順序は `order` で与える. 
-番号は Geometry 全体の通し番号 (デバイス順に `0` から `geometry.num_transducers() - 1` まで) で, 
-`order` には全振動子をちょうど 1 回ずつ含む並びを渡す. 
-greedy は `order` を検証しないので, 正しい並びを渡すのは呼び出し側の責任になる (範囲外の番号は panic する). 
-greedy 自身は乱数を使わないので, 同じ `order` を渡せば結果は毎回同じになる. 
-振動子は無作為な順に選ぶべきとされている ([理論](/autd3-sdk/theory/holo/greedy/) を参照) ので, 通常は自分の乱数でシャッフルした並びを渡す. 
+振動子を訪問する順序を `order` で与える必要がある. 
+番号は Geometry 全体の通し番号 (デバイス順に `0` から `geometry.num_transducers() - 1` まで) で, `order` には全振動子をちょうど 1 回ずつ含む並びを渡す. 
+なお, 振動子は無作為な順に選ぶのが推奨されるため, 通常は乱数でシャッフルした並びを渡すこと.
 
 ## API
 
@@ -44,8 +41,6 @@ greedy 自身は乱数を使わないので, 同じ `order` を渡せば結果�
 | `option`     | `&GreedyOption`        | 追加オプション (下記参照) |
 | `dst`        | `&mut [Vec<Phase>]`    | 位相の出力バッファ        |
 
-共通要素 (`AmplitudeTarget` など) は [Holo 概要](/autd3-sdk/api/compute/holo/) を参照. 
-
 ## GreedyOption
 
 <CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
@@ -57,10 +52,8 @@ greedy 自身は乱数を使わないので, 同じ `order` を渡せば結果�
 | `objective_func`            | `fn(Complex<f32>, Amplitude) -> f32` | `abs_objective_func` |
 
 - `phase_quantization_levels` — 位相候補の分割数. 大きいほど位相分解能が上がる. 
-- `objective_func` — 各候補を評価する目的関数. デフォルトの `abs_objective_func` は, 合成音圧の
-  大きさと目標振幅の差の絶対値を返す. 
+- `objective_func` — 各候補を評価する目的関数. デフォルトの `abs_objective_func` は, 合成音圧の大きさと目標振幅の差の絶対値を返す. 
   - Rust版のみ設定可能. 他の言語ではデフォルトの目的関数が使われる
-- `directivity` の意味は [Holo 概要](/autd3-sdk/api/compute/holo/) を参照. 振動子を探索から外すには, その振動子の振幅を 0 にする. 
 
 ## Example
 

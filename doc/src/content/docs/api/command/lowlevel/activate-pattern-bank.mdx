@@ -35,22 +35,6 @@ import { excerpt } from "@lib/excerpt";
 | `Gpio(GpioIn)`       | 指定 GPIO 入力ピンのトリガ        |
 | `Ext`                | 拡張モード (バンク内の再生が終わると次のバンクに自動で切り替え) |
 
-Python / C# では `SysTime` を `TransitionMode.SysTime(time)` と書く.
-
-`SysTime` の指定時刻はデバイスで検査しない. 指定時刻がコマンドの届いた時点で過ぎていると, 即座に切り替わる.
-現在時刻 ([`device_time_now()`](/autd3-sdk/api/basics/sys-time/)) に十分な余裕を足して指定すること.
-
-遷移モードと, 切り替え先バンクの `LoopBehavior` の組み合わせも検査しない.
-`LoopBehavior::Infinite` のバンクへはどの遷移モードでも即座に切り替わり, 有限回のバンクへ `Immediate` / `Ext` で切り替えようとすると切り替わらない.
-有限回のバンクには `SyncIdx` / `SysTime` / `Gpio` を使うこと.
-
-バンクへ書き込むだけで遷移しない場合は, 高レベルコマンドではなく `Write*` + `Config*` の低レベルコマンドだけを送り, 後からこのコマンドで切り替える.
-
-`Gpio(GpioIn)` の詳細は [GPIO ピン](/autd3-sdk/hardware/gpio/) を参照.
-
-同一バンクへの切り替えでは, `TransitionMode` や `LoopBehavior` の設定は機能しない.
-バンク運用の詳細は [バンクの切り替え チュートリアル](/autd3-sdk/getting-started/tutorial/bank/) を参照.
-
 ## Example
 
 <CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

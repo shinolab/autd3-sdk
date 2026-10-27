@@ -35,22 +35,6 @@ import { excerpt } from "@lib/excerpt";
 | `Gpio(GpioIn)`       | Trigger on the specified GPIO input pin |
 | `Ext`                | Extended mode (automatically switches to the next bank when playback within the bank finishes) |
 
-In Python / C#, `SysTime` is written as `TransitionMode.SysTime(time)`.
-
-The device does not check the time of `SysTime`. If the time has already passed when the command arrives, the switch happens immediately.
-Add enough margin to the current time ([`device_time_now()`](/autd3-sdk/en/api/basics/sys-time/)).
-
-The combination of the transition mode and the `LoopBehavior` of the destination bank is not checked either.
-A bank with `LoopBehavior::Infinite` is switched to immediately with any transition mode, and a finite-loop bank is never switched to with `Immediate` / `Ext`.
-Use `SyncIdx` / `SysTime` / `Gpio` for a finite-loop bank.
-
-To write a bank without transitioning to it, send only the low-level `Write*` + `Config*` commands instead of a high-level command, and switch with this command later.
-
-See [GPIO pins](/autd3-sdk/en/hardware/gpio/) for details on `Gpio(GpioIn)`.
-
-When switching to the same bank, the `TransitionMode` and `LoopBehavior` settings have no effect.
-For details on bank operation see the [bank switching tutorial](/autd3-sdk/en/getting-started/tutorial/bank/).
-
 ## Example
 
 <CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

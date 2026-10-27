@@ -28,17 +28,13 @@ Unlike [FociStm](/autd3-sdk/en/api/command/foci-stm/), it can handle arbitrary P
 | `intensities` | `impl Into<StmIntensity>` | Intensities for every sample (a uniform value, one buffer shared by all indices, or one buffer per index) |
 | `option`   | `PatternStmOption`                    | Options such as phase depth, loop, and transition |
 
-`config` is the sampling configuration per sample. To derive it from "the frequency of one full cycle over all samples", multiply that frequency by the number of samples (e.g. 200 samples at 1 Hz is 200 Hz).
+`config` is the sampling configuration per sample.
 
 `intensities` accepts the following three types.
 
 - `Intensity`: to use the same value for every device, every transducer and every index
 - `&[Vec<Intensity>]`: to use values that differ per transducer but are shared by all indices
 - `&[Vec<Vec<Intensity>>]`: to use a different value for every index
-
-In Python they correspond, in that order, to an `Intensity` (or an `int`), a single `IntensityBuffer`, and a list of `IntensityBuffer`s.
-In C# they correspond, in that order, to an `Intensity`, an `IntensityBuffer`, and an `IntensityBuffer[]`.
-A per-index buffer list is treated as per-index even when its length is 1, and it is an error if the count does not match `phases`.
 
 ## PatternStmOption
 
@@ -64,7 +60,7 @@ For the behavior of `loop_behavior` and `transition_mode`, see [playback control
 
 ## Equivalent Low-Level Commands
 
-`PatternStm` internally expands into the three commands [WritePatternPhase](/autd3-sdk/en/api/command/lowlevel/write-pattern-phase/) or [WritePatternBuffer](/autd3-sdk/en/api/command/lowlevel/write-pattern-buffer/) (2 indices at a time) + [ConfigPattern](/autd3-sdk/en/api/command/lowlevel/config-pattern/) + [ActivatePatternBank](/autd3-sdk/en/api/command/lowlevel/activate-pattern-bank/).
+`PatternStm` internally expands into the three commands [WritePatternPhase](/autd3-sdk/en/api/command/lowlevel/write-pattern-phase/) or [WritePatternBuffer](/autd3-sdk/en/api/command/lowlevel/write-pattern-buffer/) + [ConfigPattern](/autd3-sdk/en/api/command/lowlevel/config-pattern/) + [ActivatePatternBank](/autd3-sdk/en/api/command/lowlevel/activate-pattern-bank/).
 The following is equivalent to `PatternStm::new(config, &phases, intensities, option)` when `intensities` is a uniform value.
 When `intensities` holds per-transducer values, `WritePatternBuffer` is used for 2 indices at a time instead of `WritePatternPhase`.
 

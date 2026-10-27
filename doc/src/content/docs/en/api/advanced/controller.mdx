@@ -25,11 +25,6 @@ It takes the same arguments as `Client::open`.
 
 <CodeTabs rust={excerpt(sample, "run")} />
 
-Like `Client::open`, `Controller::open` is a synchronous function. It only enumerates the devices and prepares the I/O, and sends no frames to the devices.
-Once the `Driver` is being driven, you can send commands right away.
-`Clear` and `Synchronize` are not sent either, so to start from the initial state, send them yourself.
-A command completes only when its replies arrive, so a send does not complete if it is made before the `Driver` is driven.
-
 ## Driver
 
 `Driver` has the following methods.
@@ -49,9 +44,9 @@ Call `poll` and `wait` directly when you want to put your own work inside the lo
 
 The return value of `poll` means the following.
 
-- `Ok(Some(deadline))`: the deadline by which `poll` should be called next. Call it earlier if a reply arrives before the deadline. `wait` waits for either of the two.
-- `Ok(None)`: the `Controller` has been closed (`close` or drop). Leave the loop.
-- `Err(..)`: a communication error. The commands being sent and all later sends fail with an error of the same cause.
+- `Ok(Some(deadline))`: the deadline by which `poll` should be called next
+- `Ok(None)`: the `Controller` has been closed (`close` or drop)
+- `Err(..)`: a communication error
 
 ### Async
 
@@ -70,9 +65,3 @@ When running on a single thread, that thread is blocked during the following, an
 Without a reactor, call `poll` at a short interval.
 
 <CodeTabs rust={excerpt(sample, "interval")} />
-
-## Notes
-
-- If the `Controller` is dropped first, `poll` of the `Driver` returns `Ok(None)`, the same as with `close`. Neither stops the output of the devices, so to stop it, send, for example, a zero-amplitude [Pattern](/autd3-sdk/en/api/command/pattern/) before dropping or closing.
-- If the `Driver` is dropped first, the commands being sent and all later sends fail with `Error::Closed`.
-- The async methods of `Controller` never complete unless the `Driver` is polled.

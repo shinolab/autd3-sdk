@@ -36,12 +36,6 @@ import { excerpt } from "@lib/excerpt";
 - `ControlPoint { point, phase_offset }` — 焦点座標 [mm] と位相オフセット. 
 - `ControlPoints { points: Vec<ControlPoint>, intensity }` — 焦点の列と振幅. 
 
-`ControlPoint::new(point, phase_offset)` / `ControlPoints::new(points, intensity)` の引数はすべて必須 (C# も同じ. Python の `ControlPoint` も同じ).
-Rust では `From` で座標から変換でき, 位相オフセットは `Phase::ZERO`, 振幅は `Intensity::MAX` になる (`ControlPoint::from(p)`, `ControlPoints::from(p)` / `ControlPoints::from(cp)` / `ControlPoints::from([p0, p1])`).
-C# では同じ変換を explicit 変換 `(ControlPoint)p` / `(ControlPoints)p` / `(ControlPoints)cp` / `(ControlPoints)points` で書く.
-Python では `ControlPoints` のコンストラクタが同じ変換を受け持ち, `intensity` を省略すると `Intensity.MAX` になる (`ControlPoints(p)` / `ControlPoints(cp)` / `ControlPoints(np.array([p0, p1]))`).
-`points` には `ControlPoint` の列・`ControlPoint` 単体・shape `(3,)` の ndarray (1 点)・shape `(N, 3)` の ndarray (各行が焦点座標 [mm]) を渡せ, ndarray の各行の位相オフセットは `Phase.ZERO` になる.
-
 ## FociStmOption
 
 <CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
@@ -55,16 +49,9 @@ Python では `ControlPoints` のコンストラクタが同じ変換を受け�
 
 `loop_behavior` と `transition_mode` の挙動は[再生制御](/autd3-sdk/api/command/lowlevel/activate-pattern-bank/) を参照. 
 
-## 点列の作り方
-
-軌道を生成するヘルパ関数は無い. 点列はユーザーが作って渡す. 以下は半径 30 mm の円周上に 200 点を等間隔に並べる例である.
-
-<CodeTabs rust={excerpt(sample, "circle")} python={excerpt(pySample, "circle")} csharp={excerpt(csSample, "circle")} />
-
 ## 等価な低レベルコマンド
 
-`FociStm` は [WriteFociBuffer](/autd3-sdk/api/command/lowlevel/write-foci-buffer/) + [ConfigFociStm](/autd3-sdk/api/command/lowlevel/config-foci-stm/) + [ActivatePatternBank](/autd3-sdk/api/command/lowlevel/activate-pattern-bank/) の 3 つと等価であり, この順に展開して送られる.
-`WriteFociBuffer` は 1 フレーム分しか書けないので, 1 フレームに収まらない焦点列は `start_index` をずらした複数の `WriteFociBuffer` に分割される.
+`FociStm` は [WriteFociBuffer](/autd3-sdk/api/command/lowlevel/write-foci-buffer/) + [ConfigFociStm](/autd3-sdk/api/command/lowlevel/config-foci-stm/) + [ActivatePatternBank](/autd3-sdk/api/command/lowlevel/activate-pattern-bank/) の 3 つと等価である.
 以下は `FociStm::new(config, &points, option)` と等価な組み合わせである.
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />

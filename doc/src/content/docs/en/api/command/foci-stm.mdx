@@ -36,12 +36,6 @@ A single sample is represented by `ControlPoints`. The length of `points` is the
 - `ControlPoint { point, phase_offset }` — focal point coordinate [mm] and phase offset.
 - `ControlPoints { points: Vec<ControlPoint>, intensity }` — a sequence of focal points and an amplitude.
 
-All arguments of `ControlPoint::new(point, phase_offset)` / `ControlPoints::new(points, intensity)` are required (the same in C#, and for Python's `ControlPoint`).
-In Rust, `From` converts from coordinates, with the phase offset `Phase::ZERO` and the amplitude `Intensity::MAX` (`ControlPoint::from(p)`, `ControlPoints::from(p)` / `ControlPoints::from(cp)` / `ControlPoints::from([p0, p1])`).
-In C#, the same conversions are written as the explicit conversions `(ControlPoint)p` / `(ControlPoints)p` / `(ControlPoints)cp` / `(ControlPoints)points`.
-In Python, the `ControlPoints` constructor covers the same conversions, and omitting `intensity` gives `Intensity.MAX` (`ControlPoints(p)` / `ControlPoints(cp)` / `ControlPoints(np.array([p0, p1]))`).
-`points` accepts a sequence of `ControlPoint`, a single `ControlPoint`, an ndarray of shape `(3,)` (one point), or an ndarray of shape `(N, 3)` (each row a focal point in mm); each ndarray row gets a phase offset of `Phase.ZERO`.
-
 ## FociStmOption
 
 <CodeTabs rust={excerpt(sample, "option")} python={excerpt(pySample, "option")} csharp={excerpt(csSample, "option")} />
@@ -55,16 +49,9 @@ In Python, the `ControlPoints` constructor covers the same conversions, and omit
 
 For the behavior of `loop_behavior` and `transition_mode`, see [playback control](/autd3-sdk/en/api/command/lowlevel/activate-pattern-bank/).
 
-## Building the Points
-
-There are no helper functions that generate trajectories; build the points yourself and pass them. The following places 200 points at equal intervals on a circle of radius 30 mm.
-
-<CodeTabs rust={excerpt(sample, "circle")} python={excerpt(pySample, "circle")} csharp={excerpt(csSample, "circle")} />
-
 ## Equivalent Low-Level Commands
 
-`FociStm` is equivalent to the three commands [WriteFociBuffer](/autd3-sdk/en/api/command/lowlevel/write-foci-buffer/) + [ConfigFociStm](/autd3-sdk/en/api/command/lowlevel/config-foci-stm/) + [ActivatePatternBank](/autd3-sdk/en/api/command/lowlevel/activate-pattern-bank/), and is sent expanded in that order.
-`WriteFociBuffer` writes only one frame, so a sequence that does not fit in one frame is split into several `WriteFociBuffer`s with advancing `start_index`.
+`FociStm` is equivalent to the three commands [WriteFociBuffer](/autd3-sdk/en/api/command/lowlevel/write-foci-buffer/) + [ConfigFociStm](/autd3-sdk/en/api/command/lowlevel/config-foci-stm/) + [ActivatePatternBank](/autd3-sdk/en/api/command/lowlevel/activate-pattern-bank/).
 The following is equivalent to `FociStm::new(config, &points, option)`.
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />

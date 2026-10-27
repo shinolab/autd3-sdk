@@ -44,6 +44,3 @@ The current time of the devices is obtained with `device_time_now()` of the `Cli
 | `SysTime - Duration`        | `SysTime`  | Subtract the specified duration          |
 | `SysTime - SysTime`       | `Duration`   | Difference between two times (0 if it would be negative) |
 | Comparison (`<` / `>` / `==`, etc.) | `bool` | Comparison                               |
-
-In C#, `SysTime - SysTime` returns a `TimeSpan`, so it is truncated to 100 ns units.
-When the difference in ns is needed, take the difference of the `Nanos` values.

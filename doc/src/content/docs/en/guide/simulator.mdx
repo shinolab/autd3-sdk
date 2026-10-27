@@ -22,7 +22,7 @@ The client must run on the same host as the Simulator.
 
 The Simulator listens on port 44336 by default. Change the port with "UDP port" in the Simulator tab of the console.
 
-The client library does not treat the Simulator specially. Set `iface` of [`TransportOption`](/autd3-sdk/en/api/basics/transport-option/) to `Addr(..)` with the Simulator's address `[::1]:44336` (`Auto` does not look for the Simulator).
+To connect from the client, set `iface` of [`TransportOption`](/autd3-sdk/en/api/basics/transport-option/) to `Addr` with `[::1]:44336`.
 
 <CodeTabs
   rust={'let option = TransportOption {\n    iface: Interface::Addr("[::1]:44336".parse()?),\n    ..Default::default()\n};'}
@@ -32,18 +32,7 @@ The client library does not treat the Simulator specially. Set `iface` of [`Tran
 
 ## Geometry
 
-Set the number and placement of devices in the Simulator window (the Geometry tab). The client cannot send a geometry. Before opening the client, make the number and placement of devices in the Geometry tab match the client's geometry.
-
-The Geometry tab lists the devices in daisy-chain order. The n-th device corresponds to `geometry[n]` of the client.
-
-- "Add device" appends a device (shifted by one device width in the +x direction of the last device)
-- "Up" and "Down" reorder the devices, and "Remove" deletes one
-- Enter the origin (mm) and orientation (ZYZ Euler angles, degrees) of each device
-- "Save to file" saves the current geometry to a JSON file (`geometry.json`), and "Load from file" loads one. An unreadable file or invalid content (the number of devices is not 1 to 128, a rotation is not a unit quaternion, etc.) is not loaded, and the reason is shown
-
-If the number of devices differs from the client's geometry, `open` fails. If the placement differs, the phases the client computes do not match the sound field shown.
-
-Changing the number of devices rebuilds them (their previous state is lost), so reopen the client. Changing only the placement, orientation, or order keeps the state of the devices, and the view follows the new placement (the state stays with the n-th position and does not follow a reordered device).
-Edits are reflected in every browser tab that has the Simulator open.
+Set the number and placement of devices in the Simulator window (the Geometry tab).
+Before opening the client, make the number and placement of devices in the Geometry tab match the client's geometry.
 
 The Simulator always starts with one device at the origin. To reuse a geometry next time, save it with "Save to file" and load it with "Load from file".

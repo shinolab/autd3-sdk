@@ -1,34 +1,9 @@
 ---
-title: Units and Value Types
-description: How to build and operate on unit-carrying quantities (Length / Angle / Freq / Velocity) and Phase / Intensity
+title: Units
+description: Unit-carrying quantities (Length / Angle / Freq / Velocity)
 sidebar:
   order: 3
 ---
 
 Lengths, angles, frequencies, and velocities are represented by unit-carrying types, built by multiplying a number by a unit (`150 * mm`, `90 * deg`, `200 * Hz`, `340 * m / s`).
 The units come from `autd3_rs::units` in Rust, `autd3.units` in Python, and `using static AUTD3.Units;` in C#.
-
-## Unit-Carrying Quantities
-
-| Type       | Construction                     | Operations                                                   | Comparison      |
-| ---------- | -------------------------------- | ------------------------------------------------------------ | --------------- |
-| `Length`   | `x * mm` / `x * m`               | `+` / `-` / unary `-` / `* f32` / `f32 *` / `/ f32`. `Length / s` is a `Velocity` | Ordering        |
-| `Velocity` | `Length / s` (e.g. `340 * m / s`) | —                                                            | Ordering        |
-| `Angle`    | `x * deg` / `x * rad`            | `+` / `-` / unary `-` / `* f32` / `f32 *` / `/ f32`          | Equality only   |
-| `Freq`     | `x * Hz` / `x * kHz`             | `+` / `-` / `* f32` / `f32 *` / `/ f32`                      | Ordering        |
-
-`x` may be an integer or a floating-point number.
-In every language, `Freq` holds a single floating-point (`f32`) value, so `200 * Hz` and `200.0 * Hz` are the same value.
-
-## Phase / Intensity
-
-`Phase` is a phase that divides one period into 256 steps, and `Intensity` is an amplitude from 0 to 255; both hold a `u8`.
-
-| Type        | Construction                                               | Operations                                                   | Comparison      |
-| ----------- | ---------------------------------------------------------- | ------------------------------------------------------------ | --------------- |
-| `Phase`     | `Phase(u8)`, conversion from `Angle`, `ZERO` / `PI`        | `+` / `-` (wrap around at 256)                               | Equality only   |
-| `Intensity` | `Intensity(u8)`, `MIN` / `MAX`                             | —                                                            | Ordering        |
-
-Rust's `Phase::from(angle)` is written as `Phase(angle)` in Python and as the explicit conversion `(Phase)angle` in C#.
-In C#, they are built with `new Phase(byte)` / `new Intensity(byte)`, and the constants are `Phase.Zero` / `Phase.Pi` / `Intensity.Min` / `Intensity.Max`.
-As in Rust, the default of `Phase` is `ZERO` and that of `Intensity` is `MAX`; Python `Phase()` / `Intensity()` and C# `default(Phase)` / `default(Intensity)` (and each element of `new Intensity[n]`) give these values.

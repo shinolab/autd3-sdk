@@ -19,22 +19,10 @@ internal static class Sample
 
         using (client)
         {
-            // ANCHOR: ptp_failsafe
-            client.SendHeartbeat();
-            await Task.Delay(CheckInterval);
-            var current = client.DeviceStatus();
-            static bool Releasable(DeviceStatus s) => s.FailsafeActive && s.PtpLocked;
-            if (current.Any(Releasable))
-            {
-                await client.SendAsync(Command.Each(device => Releasable(current[device.Idx]) ? new ReleaseFailsafe() : null));
-            }
-            // ANCHOR_END: ptp_failsafe
-
             // ANCHOR: poll
             DeviceStatus[] last = Array.Empty<DeviceStatus>();
             while (true)
             {
-                client.SendHeartbeat();
                 var status = client.DeviceStatus();
                 if (!status.SequenceEqual(last))
                 {

@@ -44,6 +44,3 @@ import csSample from "@codes/csharp/examples/api/basics/sys-time.cs?raw";
 | `SysTime - Duration`        | `SysTime`  | 指定時間の減算                           |
 | `SysTime - SysTime`       | `Duration`   | 2 時刻の差 (負になる場合は 0)            |
 | 比較 (`<` / `>` / `==` など)  | `bool`       | 比較                                     |
-
-C# の `SysTime - SysTime` は `TimeSpan` を返すため, 100 ns 単位に切り捨てられる.
-ns 単位の差が要るときは `Nanos` 同士の差を取る.

@@ -45,7 +45,7 @@ The smaller <Math tex="\Delta" /> is, the more gradual the change becomes and th
 <SilencerPlot mode="phase" period={12} p0={2} target={6} delta={1} />
 
 When the distance to the target exceeds <Math tex="T/2" />, the reverse direction is closer, so interpolation proceeds in that direction.
-For example, when changing from <Math tex="P=2" /> to <Math tex="P_r=10" />, <Math tex="P=-2" /> is closer than <Math tex="P=10" />.
+For example, with <Math tex="T=12" />, when changing from <Math tex="P=2" /> to <Math tex="P_r=10" />, <Math tex="P=-2" /> is closer than <Math tex="P=10" />.
 
 Due to the nature of this implementation, the behavior may differ from a moving average filter.
 In terms of fidelity to the original time series, the moving average filter is correct, but because handling phase changes exceeding <Math tex="\pi" /> and making <Math tex="\Delta" /> variable (variable filter length) is cumbersome, the current implementation is used.
