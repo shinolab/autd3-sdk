@@ -511,11 +511,11 @@ impl Client {
         _exc_type: Option<Bound<'py, PyAny>>,
         _exc_value: Option<Bound<'py, PyAny>>,
         _traceback: Option<Bound<'py, PyAny>>,
-    ) -> PyResult<()> {
+    ) {
         if self.closed.load(Ordering::Acquire) {
-            return Ok(());
+            return;
         }
-        self.close(py)
+        let _ = self.close(py);
     }
 }
 
