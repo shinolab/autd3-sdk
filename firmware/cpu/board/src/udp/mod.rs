@@ -55,26 +55,25 @@ struct Tx {
 
 impl Tx {
     fn send(&mut self, frame: &[u8], port: u8, timestamp: bool) -> bool {
-        let sent = self.transmit(frame, port, timestamp);
+        fn transmit(tx: &mut Tx, frame: &[u8], port: u8, timestamp: bool) -> bool {
+            let Some(buffer) = (0..TX_RING)
+                .map(|k| (tx.next + k) % TX_RING)
+                .find_map(|slot| tx.buffers[slot].map(|buffer| (slot, buffer)))
+                .map(|(slot, buffer)| {
+                    tx.next = (slot + 1) % TX_RING;
+                    buffer
+                })
+            else {
+                return false;
+            };
+            tx.frame_id = tx.frame_id.wrapping_add(1);
+            gmac::send(buffer.get(), frame, tx.frame_id, port, timestamp)
+        }
+        let sent = transmit(self, frame, port, timestamp);
         if !sent {
             crate::cpu().count_send_failures(1);
         }
         sent
-    }
-
-    fn transmit(&mut self, frame: &[u8], port: u8, timestamp: bool) -> bool {
-        let Some(buffer) = (0..TX_RING)
-            .map(|k| (self.next + k) % TX_RING)
-            .find_map(|slot| self.buffers[slot].map(|buffer| (slot, buffer)))
-            .map(|(slot, buffer)| {
-                self.next = (slot + 1) % TX_RING;
-                buffer
-            })
-        else {
-            return false;
-        };
-        self.frame_id = self.frame_id.wrapping_add(1);
-        gmac::send(buffer.get(), frame, self.frame_id, port, timestamp)
     }
 }
 

@@ -220,75 +220,100 @@ impl Node {
         let unicast = udp.dst_ip == self.addr;
         match Kind::from_u8(header.kind) {
             Some(kind @ (Kind::Frame | Kind::Heartbeat)) => {
-                let is_frame = matches!(kind, Kind::Frame);
-                if !self.is_assigned()
-                    || (is_frame
-                        && (!unicast
-                            || !(size_of::<FrameHeader>()..=FRAME_BYTES_MAX).contains(&body.len())))
-                {
-                    return;
-                }
-                self.host = Some((reply.port, reply.to));
-                self.last_host_frame_ms = Some(now_ms);
-                crate::cpu().publish_host_idle(Some(0));
-                if is_frame {
-                    crate::cpu().recv_frame(body, reply.msg_id);
-                } else {
-                    let state = crate::cpu().reply();
-                    let ptp_failsafe = crate::cpu().ptp_failsafe_active();
-                    self.frame_reply(tx, &reply, &state, ptp_failsafe);
-                }
+                self.frame_or_heartbeat(tx, &reply, now_ms, kind, unicast, body);
             }
-            Some(Kind::ReadUnitInfo) => {
-                let info = self.unit_info(crate::cpu().ptp_failsafe_active());
-                self.send_reply(tx, &reply, Some(Status::Ok), info.as_bytes());
-            }
-            Some(Kind::ResetId) => {
-                self.status(tx, &reply, Status::Ok);
-                if self.close_at.is_none() {
-                    self.close_at = Some(now_ms.wrapping_add(RESET_ID_CLOSE_DELAY_MS));
-                }
-            }
-            Some(Kind::Discover) => {
-                if !self.is_assigned() {
-                    self.status(tx, &reply, Status::Ok);
-                }
-            }
+            Some(Kind::ReadUnitInfo) => self.read_unit_info(tx, &reply),
+            Some(Kind::ResetId) => self.reset_id(tx, &reply, now_ms),
+            Some(Kind::Discover) => self.discover(tx, &reply),
             Some(Kind::AssignId) if unicast && !self.is_assigned() => {
-                let status = self.assign(body, reply.port);
-                self.status(tx, &reply, status);
+                self.assign_id(tx, &reply, body);
             }
-            Some(Kind::UnblockDownstream) if unicast => self.unblock(tx, &reply),
-            Some(Kind::SetTime) if unicast => {
-                let status = self.set_time(body);
-                self.status(tx, &reply, status);
-            }
+            Some(Kind::UnblockDownstream) if unicast => self.unblock_downstream(tx, &reply),
+            Some(Kind::SetTime) if unicast => self.set_time(tx, &reply, body),
             Some(Kind::AssignId | Kind::UnblockDownstream | Kind::SetTime) | None => {}
             Some(_) => unreachable!(),
         }
     }
 
-    fn assign(&mut self, body: &[u8], upstream: u8) -> Status {
-        let Ok((req, _)) = AssignIdBody::ref_from_prefix(body) else {
-            return Status::InvalidPayload;
-        };
-        let Some(role) = Role::from_u8(req.role) else {
-            return Status::InvalidPayload;
-        };
-        if req.unit_id == UNASSIGNED_ID {
-            return Status::InvalidPayload;
+    fn frame_or_heartbeat(
+        &mut self,
+        tx: &mut Tx,
+        reply: &ReplyTo,
+        now_ms: u32,
+        kind: Kind,
+        unicast: bool,
+        body: &[u8],
+    ) {
+        let is_frame = matches!(kind, Kind::Frame);
+        if !self.is_assigned()
+            || (is_frame
+                && (!unicast
+                    || !(size_of::<FrameHeader>()..=FRAME_BYTES_MAX).contains(&body.len())))
+        {
+            return;
         }
-        self.unit_id = req.unit_id;
-        self.upstream = Some(upstream);
-        self.close_at = None;
-        self.mac = mac(req.unit_id);
-        self.addr = link_local(self.mac);
-        ethsw::set_own_mac(self.mac);
-        self.ptp.configure(role, self.mac, upstream);
-        Status::Ok
+        self.host = Some((reply.port, reply.to));
+        self.last_host_frame_ms = Some(now_ms);
+        crate::cpu().publish_host_idle(Some(0));
+        if is_frame {
+            crate::cpu().recv_frame(body, reply.msg_id);
+        } else {
+            let state = crate::cpu().reply();
+            let ptp_failsafe = crate::cpu().ptp_failsafe_active();
+            self.frame_reply(tx, reply, &state, ptp_failsafe);
+        }
     }
 
-    fn unblock(&mut self, tx: &mut Tx, reply: &ReplyTo) {
+    fn read_unit_info(&mut self, tx: &mut Tx, reply: &ReplyTo) {
+        #[allow(clippy::cast_possible_truncation)]
+        let ptp_offset_ns = if self.is_assigned() && !self.is_grandmaster() {
+            self.ptp
+                .last_offset()
+                .clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32
+        } else {
+            0
+        };
+        let info = UnitInfo {
+            unit_id: self.unit_id,
+            flags: self.flags(crate::cpu().ptp_failsafe_active()),
+            ptp_offset_ns: I32::new(ptp_offset_ns),
+        };
+        self.send_reply(tx, reply, Some(Status::Ok), info.as_bytes());
+    }
+
+    fn reset_id(&mut self, tx: &mut Tx, reply: &ReplyTo, now_ms: u32) {
+        self.status(tx, reply, Status::Ok);
+        if self.close_at.is_none() {
+            self.close_at = Some(now_ms.wrapping_add(RESET_ID_CLOSE_DELAY_MS));
+        }
+    }
+
+    fn discover(&mut self, tx: &mut Tx, reply: &ReplyTo) {
+        if !self.is_assigned() {
+            self.status(tx, reply, Status::Ok);
+        }
+    }
+
+    fn assign_id(&mut self, tx: &mut Tx, reply: &ReplyTo, body: &[u8]) {
+        let status = if let Ok((req, _)) = AssignIdBody::ref_from_prefix(body)
+            && let Some(role) = Role::from_u8(req.role)
+            && req.unit_id != UNASSIGNED_ID
+        {
+            self.unit_id = req.unit_id;
+            self.upstream = Some(reply.port);
+            self.close_at = None;
+            self.mac = mac(req.unit_id);
+            self.addr = link_local(self.mac);
+            ethsw::set_own_mac(self.mac);
+            self.ptp.configure(role, self.mac, reply.port);
+            Status::Ok
+        } else {
+            Status::InvalidPayload
+        };
+        self.status(tx, reply, status);
+    }
+
+    fn unblock_downstream(&mut self, tx: &mut Tx, reply: &ReplyTo) {
         let Some(upstream) = self.upstream.filter(|_| self.is_assigned()) else {
             self.status(tx, reply, Status::NotAssigned);
             return;
@@ -302,44 +327,27 @@ impl Node {
         self.send_reply(tx, reply, Some(Status::Ok), body.as_bytes());
     }
 
-    fn set_time(&mut self, body: &[u8]) -> Status {
-        if !self.is_assigned() {
-            return Status::NotAssigned;
-        }
-        if !self.is_grandmaster() {
-            return Status::NotGrandmaster;
-        }
-        let Ok((req, _)) = SetTimeBody::ref_from_prefix(body) else {
-            return Status::InvalidPayload;
-        };
-        pulse::stop();
-        if !ethsw::set_time(req.sys_time.get()) {
-            if self.ptp.is_locked() {
+    fn set_time(&mut self, tx: &mut Tx, reply: &ReplyTo, body: &[u8]) {
+        let status = if !self.is_assigned() {
+            Status::NotAssigned
+        } else if !self.is_grandmaster() {
+            Status::NotGrandmaster
+        } else if let Ok((req, _)) = SetTimeBody::ref_from_prefix(body) {
+            pulse::stop();
+            if ethsw::set_time(req.sys_time.get()) {
+                self.ptp.time_set();
                 self.ptp.arm_pulse();
+                Status::Ok
+            } else {
+                if self.ptp.is_locked() {
+                    self.ptp.arm_pulse();
+                }
+                Status::InvalidPayload
             }
-            return Status::InvalidPayload;
-        }
-        self.ptp.time_set();
-        self.ptp.arm_pulse();
-        Status::Ok
-    }
-
-    fn unit_info(&self, ptp_failsafe: bool) -> UnitInfo {
-        UnitInfo {
-            unit_id: self.unit_id,
-            flags: self.flags(ptp_failsafe),
-            ptp_offset_ns: I32::new(self.ptp_offset_ns()),
-        }
-    }
-
-    #[allow(clippy::cast_possible_truncation)]
-    fn ptp_offset_ns(&self) -> i32 {
-        if !self.is_assigned() || self.is_grandmaster() {
-            return 0;
-        }
-        self.ptp
-            .last_offset()
-            .clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32
+        } else {
+            Status::InvalidPayload
+        };
+        self.status(tx, reply, status);
     }
 
     fn frame_reply(&mut self, tx: &mut Tx, reply: &ReplyTo, state: &Reply, ptp_failsafe: bool) {
