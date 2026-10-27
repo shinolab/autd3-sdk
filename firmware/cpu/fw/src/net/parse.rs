@@ -65,6 +65,7 @@ pub fn parse(frame: &[u8]) -> Option<Packet<'_>> {
                         payload: udp.payload(),
                     }))
                 }
+                // ICMPv6 is not used by the client, but it is necessary for the OS to resolve addresses with NPD
                 IpNumber::IPV6_ICMP => {
                     let icmp = Icmpv6Slice::from_slice(upper.payload).ok()?;
                     match icmp.icmp_type() {
