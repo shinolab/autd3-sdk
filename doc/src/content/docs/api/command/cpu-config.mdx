@@ -72,7 +72,7 @@ C# では `Duration` の項目を `TimeSpan` で渡すので, 100 ns 単位で�
 次に開いたときは [`ReleaseFailsafe`](/autd3-sdk/api/command/release-failsafe/) か [Clear](/autd3-sdk/api/command/clear/) を送る.
 
 failsafe や CPU ウォッチドッグで止まった出力は, 自動では戻らない.
-止まっているかどうかは `read_fpga_state()` が返す `FpgaState` の `is_failsafe_active()` (C#: `IsFailsafeActive`) で確認できる.
+止まっているかどうかは `device_status()` が返す `DeviceStatus` の `failsafe_active` (C#: `FailsafeActive`) で確認できる.
 [`ReleaseFailsafe`](/autd3-sdk/api/command/release-failsafe/) コマンドを送ると出力が再開される.
 [Clear](/autd3-sdk/api/command/clear/) でも解除されるが, すべての状態が既定値に戻る.
 :::

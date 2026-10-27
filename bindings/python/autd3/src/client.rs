@@ -66,7 +66,7 @@ impl core::hash::Hash for DeviceStatus {
     fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
         DeviceState(self.0.state).hash(state);
         self.0.ptp_locked.hash(state);
-        self.0.ptp_failsafe.hash(state);
+        self.0.failsafe_active.hash(state);
     }
 }
 
@@ -83,16 +83,16 @@ impl DeviceStatus {
     }
 
     #[getter]
-    fn ptp_failsafe(&self) -> bool {
-        self.0.ptp_failsafe
+    fn failsafe_active(&self) -> bool {
+        self.0.failsafe_active
     }
 
     fn __repr__(&self) -> String {
         format!(
-            "DeviceStatus(state={}, ptp_locked={}, ptp_failsafe={})",
+            "DeviceStatus(state={}, ptp_locked={}, failsafe_active={})",
             DeviceState(self.0.state).__repr__(),
             self.0.ptp_locked,
-            self.0.ptp_failsafe
+            self.0.failsafe_active
         )
     }
 }
@@ -224,13 +224,9 @@ impl FpgaState {
         self.0.is_transition_pending()
     }
 
-    fn is_failsafe_active(&self) -> bool {
-        self.0.is_failsafe_active()
-    }
-
     fn __repr__(&self) -> String {
         format!(
-            "FpgaState(raw=0x{:02X}, thermal_asserted={}, mod_bank={:?}, pattern_bank={:?}, pattern_mode={}, pattern_stopped={}, mod_stopped={}, transition_pending={}, failsafe_active={})",
+            "FpgaState(raw=0x{:02X}, thermal_asserted={}, mod_bank={:?}, pattern_bank={:?}, pattern_mode={}, pattern_stopped={}, mod_stopped={}, transition_pending={})",
             self.0.0,
             self.0.is_thermal_asserted(),
             self.0.current_mod_bank(),
@@ -238,8 +234,7 @@ impl FpgaState {
             self.0.is_pattern_mode(),
             self.0.is_pattern_stopped(),
             self.0.is_mod_stopped(),
-            self.0.is_transition_pending(),
-            self.0.is_failsafe_active()
+            self.0.is_transition_pending()
         )
     }
 }

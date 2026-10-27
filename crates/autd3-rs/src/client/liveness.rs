@@ -93,11 +93,11 @@ impl DeviceLiveness {
         self.state
     }
 
-    pub(crate) fn ptp_flags(self) -> Flags {
+    pub(crate) fn reported_flags(self) -> Flags {
         if self.is_lost() {
             return Flags::empty();
         }
-        self.last_flags & (Flags::PTP_LOCKED | Flags::PTP_FAILSAFE)
+        self.last_flags & (Flags::PTP_LOCKED | Flags::FAILSAFE)
     }
 
     pub(crate) fn is_lost(self) -> bool {
@@ -178,34 +178,34 @@ mod tests {
     }
 
     #[test]
-    fn the_ptp_flags_follow_the_last_reply() {
+    fn the_reported_flags_follow_the_last_reply() {
         let mut liveness = DeviceLiveness::new();
         let now = Instant::now();
-        assert_eq!(liveness.ptp_flags(), Flags::PTP_LOCKED);
+        assert_eq!(liveness.reported_flags(), Flags::PTP_LOCKED);
 
-        assert!(liveness.accept_reply(1, 1, READY | Flags::PTP_FAILSAFE, now));
+        assert!(liveness.accept_reply(1, 1, READY | Flags::FAILSAFE, now));
         assert_eq!(
-            liveness.ptp_flags(),
-            Flags::PTP_LOCKED | Flags::PTP_FAILSAFE
+            liveness.reported_flags(),
+            Flags::PTP_LOCKED | Flags::FAILSAFE
         );
 
-        assert!(liveness.accept_reply(1, 1, Flags::ASSIGNED | Flags::PTP_FAILSAFE, now));
+        assert!(liveness.accept_reply(1, 1, Flags::ASSIGNED | Flags::FAILSAFE, now));
         assert_eq!(liveness.state(), DeviceState::Syncing);
-        assert_eq!(liveness.ptp_flags(), Flags::PTP_FAILSAFE);
+        assert_eq!(liveness.reported_flags(), Flags::FAILSAFE);
 
         assert!(liveness.accept_reply(1, 1, Flags::ASSIGNED | Flags::SYNC_READY, now));
-        assert_eq!(liveness.ptp_flags(), Flags::empty());
+        assert_eq!(liveness.reported_flags(), Flags::empty());
     }
 
     #[test]
-    fn a_lost_device_reports_no_ptp_flags() {
+    fn a_lost_device_reports_no_flags() {
         let mut liveness = DeviceLiveness::new();
         let now = Instant::now();
-        assert!(liveness.accept_reply(1, 1, READY | Flags::PTP_FAILSAFE, now));
+        assert!(liveness.accept_reply(1, 1, READY | Flags::FAILSAFE, now));
         liveness.start_unanswered_clock(now + Duration::from_micros(1));
         liveness.mark_lost_if_unanswered(now + Duration::from_micros(1) + LOST_AFTER, LOST_AFTER);
         assert_eq!(liveness.state(), DeviceState::Lost);
-        assert_eq!(liveness.ptp_flags(), Flags::empty());
+        assert_eq!(liveness.reported_flags(), Flags::empty());
     }
 
     #[test]

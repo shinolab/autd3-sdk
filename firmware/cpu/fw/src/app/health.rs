@@ -5,6 +5,7 @@ use autd3_cpu_wire::payload::Telemetry;
 
 use super::Cpu;
 use crate::cmd;
+use crate::fpga;
 use crate::port::Port;
 use crate::utils::OptionalAtomic;
 
@@ -18,7 +19,7 @@ pub(super) struct Health {
     pub(super) failsafe_fired: Cell<bool>,
     pub(super) ptp_unlock_failsafe: Cell<u16>,
     pub(super) ptp_unlock_failsafe_fired: Cell<bool>,
-    pub(super) ptp_failsafe_active: AtomicBool,
+    pub(super) failsafe_active: AtomicBool,
     pub(super) ptp_unlocked_ms: OptionalAtomic<u32>,
     pub(super) host_idle_ms: OptionalAtomic<u32>,
     pub(super) boot_failure: Cell<u8>,
@@ -36,7 +37,7 @@ impl Health {
             failsafe_fired: Cell::new(false),
             ptp_unlock_failsafe: Cell::new(0),
             ptp_unlock_failsafe_fired: Cell::new(false),
-            ptp_failsafe_active: AtomicBool::new(false),
+            failsafe_active: AtomicBool::new(false),
             ptp_unlocked_ms: OptionalAtomic::new(),
             host_idle_ms: OptionalAtomic::new(),
             boot_failure: Cell::new(0),
@@ -63,14 +64,17 @@ impl Cpu {
     }
 
     #[must_use]
-    pub fn ptp_failsafe_active(&self) -> bool {
-        self.health.ptp_failsafe_active.load(Ordering::Relaxed)
+    pub fn failsafe_active(&self) -> bool {
+        self.health.failsafe_active.load(Ordering::Relaxed)
     }
 
-    pub(crate) fn lower_ptp_failsafe(&self) {
-        self.health
-            .ptp_failsafe_active
-            .store(false, Ordering::Relaxed);
+    pub(crate) fn mute_output<P: Port>(&self, port: &mut P) {
+        cmd::failsafe::mute(port);
+        self.health.failsafe_active.store(true, Ordering::Relaxed);
+    }
+
+    pub(crate) fn lower_failsafe(&self) {
+        self.health.failsafe_active.store(false, Ordering::Relaxed);
     }
 
     #[must_use]
@@ -114,36 +118,38 @@ impl Cpu {
 
     pub(super) fn check_failsafes<P: Port>(&self, port: &mut P) {
         fn failsafe<P: Port>(
+            cpu: &Cpu,
             port: &mut P,
             tripped: bool,
             fired: &Cell<bool>,
             counter: &Cell<u16>,
-        ) -> bool {
+        ) {
             if !tripped {
                 fired.set(false);
-                return false;
+                return;
             }
             if fired.get() {
-                return false;
+                return;
             }
             fired.set(true);
-            cmd::failsafe::mute(port);
+            cpu.mute_output(port);
             counter.set(counter.get().saturating_add(1));
-            true
         }
 
         let config = self.config();
         let health = &self.health;
         let silent = cmd::failsafe::host_silent(self, &config);
-        failsafe(port, silent, &health.failsafe_fired, &health.failsafe);
+        failsafe(self, port, silent, &health.failsafe_fired, &health.failsafe);
         let unlocked = cmd::failsafe::ptp_unlock_expired(self, &config);
-        if failsafe(
+        failsafe(
+            self,
             port,
             unlocked,
             &health.ptp_unlock_failsafe_fired,
             &health.ptp_unlock_failsafe,
-        ) {
-            health.ptp_failsafe_active.store(true, Ordering::Relaxed);
+        );
+        if !self.failsafe_active() && fpga::watchdog_state(port).fired {
+            health.failsafe_active.store(true, Ordering::Relaxed);
         }
     }
 }

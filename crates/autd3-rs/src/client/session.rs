@@ -258,8 +258,8 @@ impl SessionState {
             .iter()
             .map(|liveness| DeviceStatus {
                 state: liveness.state(),
-                ptp_locked: liveness.ptp_flags().contains(Flags::PTP_LOCKED),
-                ptp_failsafe: liveness.ptp_flags().contains(Flags::PTP_FAILSAFE),
+                ptp_locked: liveness.reported_flags().contains(Flags::PTP_LOCKED),
+                failsafe_active: liveness.reported_flags().contains(Flags::FAILSAFE),
             })
             .collect()
     }
@@ -1117,11 +1117,11 @@ mod tests {
             status.iter().map(|s| s.ptp_locked).collect::<Vec<_>>(),
             [true, false, false]
         );
-        assert!(status.iter().all(|s| !s.ptp_failsafe));
+        assert!(status.iter().all(|s| !s.failsafe_active));
     }
 
     #[test]
-    fn the_device_status_reports_the_ptp_flags_of_the_last_reply() {
+    fn the_device_status_reports_the_flags_of_the_last_reply() {
         let now = Instant::now();
         let mut state = session_state(3, now);
         state.receive_reply(
@@ -1129,14 +1129,10 @@ mod tests {
             now,
         );
         state.receive_reply(
-            &flagged_reply(
-                1,
-                1,
-                Flags::ASSIGNED | Flags::PTP_FAILSAFE | Flags::SYNC_READY,
-            ),
+            &flagged_reply(1, 1, Flags::ASSIGNED | Flags::FAILSAFE | Flags::SYNC_READY),
             now,
         );
-        state.receive_reply(&flagged_reply(2, 2, READY | Flags::PTP_FAILSAFE), now);
+        state.receive_reply(&flagged_reply(2, 2, READY | Flags::FAILSAFE), now);
 
         let status = state.device_status();
 
@@ -1146,17 +1142,17 @@ mod tests {
                 DeviceStatus {
                     state: DeviceState::Syncing,
                     ptp_locked: true,
-                    ptp_failsafe: false,
+                    failsafe_active: false,
                 },
                 DeviceStatus {
                     state: DeviceState::Syncing,
                     ptp_locked: false,
-                    ptp_failsafe: true,
+                    failsafe_active: true,
                 },
                 DeviceStatus {
                     state: DeviceState::Ready,
                     ptp_locked: true,
-                    ptp_failsafe: true,
+                    failsafe_active: true,
                 },
             ]
         );

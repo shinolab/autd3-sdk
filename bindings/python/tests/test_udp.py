@@ -92,9 +92,9 @@ def test_device_status_is_read_from_the_client_per_device() -> None:
         assert not hasattr(autd3.Client, removed)
     for removed in ("StateChecker", "BusStats", "DeviceMask"):
         assert not hasattr(autd3, removed)
-    for field in ("state", "ptp_locked", "ptp_failsafe"):
+    for field in ("state", "ptp_locked", "failsafe_active"):
         assert inspect.isdatadescriptor(getattr(autd3.DeviceStatus, field))
-    for removed in ("devices", "all_ready", "any_lost", "any_ptp_failsafe"):
+    for removed in ("devices", "all_ready", "any_lost", "any_ptp_failsafe", "ptp_failsafe"):
         assert not hasattr(autd3.DeviceStatus, removed)
     with pytest.raises(TypeError):
         loose(autd3.DeviceStatus)()

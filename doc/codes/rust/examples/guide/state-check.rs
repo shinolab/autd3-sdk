@@ -19,7 +19,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     client.send_heartbeat()?;
     tokio::time::sleep(CHECK_INTERVAL).await;
     let status = client.device_status()?;
-    let releasable = |s: &DeviceStatus| s.ptp_failsafe && s.ptp_locked;
+    let releasable = |s: &DeviceStatus| s.failsafe_active && s.ptp_locked;
     if status.iter().any(releasable) {
         client
             .send(each(|device| {

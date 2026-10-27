@@ -244,11 +244,6 @@ pub extern "C" fn autd3_fpga_state_is_transition_pending(raw: u8) -> bool {
     FpgaState(raw).is_transition_pending()
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn autd3_fpga_state_is_failsafe_active(raw: u8) -> bool {
-    FpgaState(raw).is_failsafe_active()
-}
-
 pub enum OwnedPatternIntensity {
     Uniform(Intensity),
     PerDevice(Vec<Vec<Intensity>>),
@@ -1501,7 +1496,7 @@ pub struct TelemetryArray(Vec<Autd3Telemetry>);
 pub struct Autd3DeviceStatus {
     pub state: u8,
     pub ptp_locked: bool,
-    pub ptp_failsafe: bool,
+    pub failsafe_active: bool,
 }
 
 pub(crate) fn error_code(e: &Error) -> i32 {
@@ -1649,7 +1644,7 @@ pub unsafe extern "C" fn autd3_client_device_status(
         *dst = Autd3DeviceStatus {
             state: device_state_code(status.state),
             ptp_locked: status.ptp_locked,
-            ptp_failsafe: status.ptp_failsafe,
+            failsafe_active: status.failsafe_active,
         };
     }
     AUTD3_OK
@@ -2476,10 +2471,6 @@ mod tests {
             assert_eq!(
                 state.is_transition_pending(),
                 autd3_fpga_state_is_transition_pending(raw)
-            );
-            assert_eq!(
-                state.is_failsafe_active(),
-                autd3_fpga_state_is_failsafe_active(raw)
             );
         }
     }

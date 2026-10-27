@@ -319,7 +319,6 @@ namespace AUTD3.Tests
             Assert.True(new FpgaState(1 << 4).IsPatternStopped);
             Assert.True(new FpgaState(1 << 5).IsModStopped);
             Assert.True(new FpgaState(1 << 6).IsTransitionPending);
-            Assert.True(new FpgaState(1 << 7).IsFailsafeActive);
         }
 
         [Fact]

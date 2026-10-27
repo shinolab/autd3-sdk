@@ -15,8 +15,8 @@ using var client = Client.Open(geometry, new TransportOption());
 await client.SendAsync(new Clear());
 await client.SendAsync(new Synchronize());
 
-var states = await client.ReadFpgaStateAsync();
-if (states.Any(state => state.IsFailsafeActive))
+var status = client.DeviceStatus();
+if (status.Any(s => s.FailsafeActive))
 {
     await client.SendAsync(new ReleaseFailsafe());
 }

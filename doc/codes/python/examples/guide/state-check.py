@@ -23,7 +23,7 @@ async def main() -> None:
         status = client.device_status()
 
         def releasable(s: DeviceStatus) -> bool:
-            return s.ptp_failsafe and s.ptp_locked
+            return s.failsafe_active and s.ptp_locked
 
         if any(releasable(s) for s in status):
             await client.send(each(lambda device: ReleaseFailsafe() if releasable(status[device.idx()]) else None))

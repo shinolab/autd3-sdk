@@ -49,7 +49,7 @@ impl Cpu {
     pub fn init<P: Port>(&self, port: &mut P) {
         let config = self.config();
         if fpga::init(port).is_ok() {
-            self.lower_ptp_failsafe();
+            self.lower_failsafe();
         } else {
             self.count_boot_failure();
         }
@@ -210,7 +210,7 @@ impl Cpu {
             Cmd::ForceFan => cmd::force_fan::handle(port, payload),
             Cmd::SetFpgaConfig => cmd::fpga_config::handle(port, payload),
             Cmd::ReleaseFailsafe => {
-                cmd::failsafe::release(port, self, &config).inspect(|()| self.lower_ptp_failsafe())
+                cmd::failsafe::release(port, self, &config).inspect(|()| self.lower_failsafe())
             }
             Cmd::UpdateBegin => self.update_begin(port, payload),
             Cmd::UpdateChunk => self.update_chunk(port, payload),

@@ -10,7 +10,7 @@ impl Cpu {
         let result = fpga::init(port);
         self.reset_telemetry();
         if result.is_ok() {
-            self.lower_ptp_failsafe();
+            self.lower_failsafe();
         }
         result
     }
@@ -221,7 +221,7 @@ mod tests {
     }
 
     #[test]
-    fn clear_lowers_the_ptp_failsafe_flag_only_once_the_gate_opens() {
+    fn clear_lowers_the_failsafe_flag_only_once_the_gate_opens() {
         let mut h = Harness::new();
         h.deliver(&set_cpu_config(&CpuConfig {
             ptp_unlock_failsafe_timeout: Some(Duration::from_millis(50)),
@@ -230,19 +230,19 @@ mod tests {
         assert_eq!(h.status(), Error::None);
         h.cpu.publish_ptp_unlocked(Some(50));
         h.tick_1ms(1);
-        assert!(h.cpu.ptp_failsafe_active());
+        assert!(h.cpu.failsafe_active());
 
         h.port.latch_stuck = true;
         h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.status(), Error::FpgaTimeout);
         assert!(h.ctl_flags().contains(CtlFlags::FAILSAFE));
-        assert!(h.cpu.ptp_failsafe_active());
+        assert!(h.cpu.failsafe_active());
 
         h.port.latch_stuck = false;
         h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.status(), Error::None);
         assert!(!h.ctl_flags().contains(CtlFlags::FAILSAFE));
-        assert!(!h.cpu.ptp_failsafe_active());
+        assert!(!h.cpu.failsafe_active());
     }
 
     #[test]
