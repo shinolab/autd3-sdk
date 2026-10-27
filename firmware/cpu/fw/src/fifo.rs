@@ -1,3 +1,5 @@
+use core::ops::Deref;
+
 use crate::sync::{AtomicU16, Ordering};
 
 pub(crate) const FIFO_DEPTH: u16 = 8;
@@ -6,102 +8,125 @@ const FIFO_CAPACITY: u16 = FIFO_DEPTH - 1;
 
 const _: () = assert!(FIFO_DEPTH.is_power_of_two());
 
-pub(crate) struct Fifo {
+pub(crate) struct Fifo<S> {
     head: AtomicU16,
     tail: AtomicU16,
+    slots: [S; FIFO_DEPTH as usize],
 }
 
-impl Fifo {
+impl<S> Fifo<S> {
     #[const_fn::const_fn(cfg(not(loom)))]
-    pub(crate) const fn new() -> Self {
+    pub(crate) const fn new(slots: [S; FIFO_DEPTH as usize]) -> Self {
         Self {
             head: AtomicU16::new(0),
             tail: AtomicU16::new(0),
+            slots,
         }
     }
-}
 
-impl Fifo {
-    pub(crate) fn slot(index: u16) -> usize {
-        (index & FIFO_MASK) as usize
+    fn slot(&self, index: u16) -> &S {
+        &self.slots[(index & FIFO_MASK) as usize]
     }
 
-    pub(crate) fn is_full(head: u16, tail: u16) -> bool {
-        head.wrapping_sub(tail) >= FIFO_CAPACITY
-    }
-
-    pub(crate) fn head(&self) -> u16 {
-        self.head.load(Ordering::Relaxed)
-    }
-
-    pub(crate) fn tail_acquire(&self) -> u16 {
-        self.tail.load(Ordering::Acquire)
-    }
-
-    pub(crate) fn publish(&self, head: u16) {
+    pub(crate) fn push(&self, write: impl FnOnce(&S) -> bool) -> bool {
+        let head = self.head.load(Ordering::Relaxed);
+        let tail = self.tail.load(Ordering::Acquire);
+        if head.wrapping_sub(tail) >= FIFO_CAPACITY || !write(self.slot(head)) {
+            return false;
+        }
         self.head.store(head.wrapping_add(1), Ordering::Release);
+        true
     }
 
-    pub(crate) fn next(&self) -> Option<u16> {
+    pub(crate) fn front(&self) -> Option<Front<'_, S>> {
         let tail = self.tail.load(Ordering::Relaxed);
-        if tail == self.head.load(Ordering::Acquire) {
-            None
-        } else {
-            Some(tail)
-        }
+        (tail != self.head.load(Ordering::Acquire)).then_some(Front { fifo: self, tail })
     }
 
-    pub(crate) fn commit(&self, tail: u16) {
-        self.tail.store(tail.wrapping_add(1), Ordering::Release);
+    pub(crate) fn last_popped(&self) -> &S {
+        self.slot(self.tail.load(Ordering::Acquire).wrapping_sub(1))
     }
 
     #[cfg(test)]
-    pub(crate) fn seed(&self, head: u16, tail: u16) {
+    pub(crate) fn slots(&self) -> &[S] {
+        &self.slots
+    }
+
+    #[cfg(test)]
+    fn seed(&self, head: u16, tail: u16) {
         self.head.store(head, Ordering::Relaxed);
         self.tail.store(tail, Ordering::Relaxed);
     }
 }
 
+pub(crate) struct Front<'a, S> {
+    fifo: &'a Fifo<S>,
+    tail: u16,
+}
+
+impl<S> Front<'_, S> {
+    pub(crate) fn pop(self) {
+        self.fifo
+            .tail
+            .store(self.tail.wrapping_add(1), Ordering::Release);
+    }
+}
+
+impl<S> Deref for Front<'_, S> {
+    type Target = S;
+
+    fn deref(&self) -> &S {
+        self.fifo.slot(self.tail)
+    }
+}
+
 #[cfg(all(test, not(loom)))]
 mod tests {
-    use super::{FIFO_DEPTH, Fifo};
+    use core::cell::Cell;
 
-    #[test]
-    fn fifo_indices_wrap_without_confusing_full_and_empty() {
-        let fifo = Fifo::new();
-        let start = u16::MAX - 2;
-        fifo.seed(start, start);
-        assert!(fifo.next().is_none());
+    use super::{FIFO_CAPACITY, FIFO_DEPTH, Fifo};
 
-        let mut head = start;
-        let mut pushed = 0;
-        while !Fifo::is_full(head, fifo.tail_acquire()) {
-            fifo.publish(head);
-            head = head.wrapping_add(1);
-            pushed += 1;
-        }
-        assert_eq!(pushed, FIFO_DEPTH - 1);
-        assert!(Fifo::is_full(fifo.head(), fifo.tail_acquire()));
+    fn fifo() -> Fifo<Cell<u16>> {
+        Fifo::new([const { Cell::new(0) }; FIFO_DEPTH as usize])
+    }
 
-        let mut drained = 0;
-        while let Some(tail) = fifo.next() {
-            fifo.commit(tail);
-            drained += 1;
-        }
-        assert_eq!(drained, pushed);
-        assert!(!Fifo::is_full(fifo.head(), fifo.tail_acquire()));
+    fn push(fifo: &Fifo<Cell<u16>>, value: u16) -> bool {
+        fifo.push(|slot| {
+            slot.set(value);
+            true
+        })
+    }
+
+    fn pop(fifo: &Fifo<Cell<u16>>) -> Option<u16> {
+        let front = fifo.front()?;
+        let value = front.get();
+        front.pop();
+        Some(value)
     }
 
     #[test]
-    fn fifo_slots_stay_distinct_across_the_index_wrap() {
-        let start = u16::MAX - 3;
-        let mut seen = [false; FIFO_DEPTH as usize];
-        for i in 0..FIFO_DEPTH {
-            let slot = Fifo::slot(start.wrapping_add(i));
-            assert!(!seen[slot]);
-            seen[slot] = true;
+    fn fifo_pops_in_push_order_across_the_index_wrap_without_confusing_full_and_empty() {
+        let fifo = fifo();
+        let start = u16::MAX - 2;
+        fifo.seed(start, start);
+        assert!(fifo.front().is_none());
+
+        for value in 1..=FIFO_CAPACITY {
+            assert!(push(&fifo, value));
         }
-        assert!(seen.iter().all(|&s| s));
+        assert!(!push(&fifo, u16::MAX));
+
+        let drained: std::vec::Vec<u16> = core::iter::from_fn(|| pop(&fifo)).collect();
+        assert_eq!(drained, (1..=FIFO_CAPACITY).collect::<std::vec::Vec<_>>());
+        assert_eq!(fifo.last_popped().get(), FIFO_CAPACITY);
+        assert!(push(&fifo, u16::MAX));
+    }
+
+    #[test]
+    fn a_refused_write_does_not_publish_the_slot() {
+        let fifo = fifo();
+        assert!(!fifo.push(|_| false));
+        assert!(fifo.front().is_none());
     }
 }
 
@@ -113,20 +138,24 @@ mod loom_tests {
     use loom::sync::atomic::{AtomicU16, Ordering};
     use loom::thread;
 
-    use super::{FIFO_DEPTH, Fifo};
+    use super::{FIFO_CAPACITY, Fifo};
+
+    struct TestSlot {
+        value: AtomicU16,
+        result: AtomicU16,
+    }
 
     struct Ring {
-        fifo: Fifo,
-        slots: Vec<AtomicU16>,
-        results: Vec<AtomicU16>,
+        fifo: Fifo<TestSlot>,
     }
 
     impl Ring {
         fn new() -> Self {
             Self {
-                fifo: Fifo::new(),
-                slots: (0..FIFO_DEPTH).map(|_| AtomicU16::new(0)).collect(),
-                results: (0..FIFO_DEPTH).map(|_| AtomicU16::new(0)).collect(),
+                fifo: Fifo::new(core::array::from_fn(|_| TestSlot {
+                    value: AtomicU16::new(0),
+                    result: AtomicU16::new(0),
+                })),
             }
         }
 
@@ -137,28 +166,26 @@ mod loom_tests {
         }
 
         fn push(&self, value: u16) -> bool {
-            let head = self.fifo.head();
-            let tail = self.fifo.tail_acquire();
-            if Fifo::is_full(head, tail) {
-                return false;
-            }
-            self.slots[Fifo::slot(head)].store(value, Ordering::Relaxed);
-            self.fifo.publish(head);
-            true
+            self.fifo.push(|slot| {
+                slot.value.store(value, Ordering::Relaxed);
+                true
+            })
         }
 
         fn pop(&self) -> Option<u16> {
-            let tail = self.fifo.next()?;
-            let value = self.slots[Fifo::slot(tail)].load(Ordering::Relaxed);
-            self.results[Fifo::slot(tail)].store(value, Ordering::Relaxed);
-            self.fifo.commit(tail);
+            let front = self.fifo.front()?;
+            let value = front.value.load(Ordering::Relaxed);
+            front.result.store(value, Ordering::Relaxed);
+            front.pop();
             Some(value)
         }
 
         fn reply(&self) -> (u16, u16) {
-            let tail = self.fifo.tail_acquire();
-            let result = self.results[Fifo::slot(tail.wrapping_sub(1))].load(Ordering::Relaxed);
-            (tail, result)
+            let slot = self.fifo.last_popped();
+            (
+                slot.value.load(Ordering::Relaxed),
+                slot.result.load(Ordering::Relaxed),
+            )
         }
 
         fn drain_until(&self, wanted: usize) -> Vec<u16> {
@@ -193,12 +220,16 @@ mod loom_tests {
 
     #[test]
     fn a_full_ring_never_overwrites_an_unconsumed_slot() {
-        const CAPACITY: u16 = FIFO_DEPTH - 1;
-
         loom::model(|| {
-            let ring = Arc::new(Ring::seeded(CAPACITY, 0));
-            for index in 0..CAPACITY {
-                ring.slots[Fifo::slot(index)].store(index + 1, Ordering::Relaxed);
+            let ring = Arc::new(Ring::seeded(FIFO_CAPACITY, 0));
+            for (index, slot) in ring
+                .fifo
+                .slots()
+                .iter()
+                .take(FIFO_CAPACITY.into())
+                .enumerate()
+            {
+                slot.value.store(index as u16 + 1, Ordering::Relaxed);
             }
 
             let producer = {
@@ -222,14 +253,14 @@ mod loom_tests {
                 drained.push(value);
             }
 
-            let mut expected: Vec<u16> = (1..=CAPACITY).collect();
+            let mut expected: Vec<u16> = (1..=FIFO_CAPACITY).collect();
             expected.extend(accepted);
             assert_eq!(drained, expected);
         });
     }
 
     #[test]
-    fn the_published_reply_is_the_result_of_the_last_committed_slot() {
+    fn the_last_popped_slot_carries_its_result() {
         loom::model(|| {
             let ring = Arc::new(Ring::new());
             let producer = {
@@ -237,8 +268,8 @@ mod loom_tests {
                 thread::spawn(move || {
                     for value in 1..=2u16 {
                         assert!(ring.push(value));
-                        let (tail, result) = ring.reply();
-                        assert_eq!(result, tail);
+                        let (value, result) = ring.reply();
+                        assert_eq!(result, value);
                     }
                 })
             };
