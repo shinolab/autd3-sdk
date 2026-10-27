@@ -16,11 +16,11 @@ RZ/T1 内蔵の Ethernet スイッチ (ETHSW) の 2 ポートを使い, デバ�
 ソースは `firmware/cpu/` 以下にあり, `no_std` Rust で記述されている.
 2 つのクレートに分かれている.
 
-- `fw/` (`autd3-cpu-fw`): プロトコル解釈・コマンド処理・FPGA 書き込み, および IPv6 / UDP / ICMPv6 の解析と組み立て (`net`), 列挙と受信振り分け (`node`) などの可搬ロジック.
-  ハードウェアには `Port` trait (コマンド層) と `Nic` trait (ネットワーク) 越しにのみアクセスし, `unsafe` を含まない.
+- `fw/` (`autd3-cpu-fw`): プロトコル解釈・コマンド処理・FPGA 書き込み, および IPv6 / UDP / ICMPv6 の解析と組み立て (`net`), PTP のメッセージとサーボ (`ptp`) などの可搬ロジック.
+  ハードウェアには `Port` trait (コマンド層) 越しにのみアクセスし, `unsafe` を含まない.
   ホストテストと `autd3-rs-firmware-emulator` からも同じコードが使われる.
 - `board/` (`autd3-cpu`): 実機ターゲット (armv7r-none-eabi) の staticlib.
-  レジスタ定義・BSP・ETHSW / GMAC のドライバ・`Port` / `Nic` trait の実機実装・`main`・panic handler を持ち, `unsafe` はここに閉じ込める.
+  レジスタ定義・BSP・ETHSW / GMAC のドライバ・`Port` trait の実機実装・列挙と受信振り分け (`udp/node.rs`)・PTP の状態機械 (`udp/ptp.rs`)・`main`・panic handler を持ち, `unsafe` はここに閉じ込める.
 
 ## 開発環境構築
 
@@ -68,9 +68,9 @@ writer は J-Link を JTAG 接続し, `autd3-cpu.bin` を `0x30000000` へロー
 
 ### ホストテスト
 
-`fw/` は `Port` trait (`fpga_write` / `fpga_read` / `memory_barrier` など) と `Nic` trait 以外のハードウェア依存を持たない.
+`fw/` は `Port` trait (`fpga_write` / `fpga_read` / `memory_barrier` など) 以外のハードウェア依存を持たない.
 `cargo xtask cpu test` では `fw/src/tests/mock.rs` の `MockPort` がこれを置き換え, FPGA への書き込みを記録する.
-`fw/src/tests/` がプロトコル層 (`Cpu::recv_frame` / `Cpu::process_one`) の振る舞いを, `fw/src/net` と `fw/src/node` のテストがネットワーク処理と列挙の振る舞いを検証する.
+`fw/src/tests/` がプロトコル層 (`Cpu::recv_frame` / `Cpu::process_one`) の振る舞いを, `fw/src/net` と `fw/src/ptp` のテストがパケットの解析・組み立てと PTP のサーボを検証する.
 
 ## フレーム処理
 
