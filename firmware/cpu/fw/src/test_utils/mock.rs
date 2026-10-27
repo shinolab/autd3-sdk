@@ -583,7 +583,7 @@ impl Harness {
 
     pub(crate) fn deliver(&mut self, frame: &Frame) {
         self.deliver_no_drain(frame);
-        self.cpu.process_pending(&mut self.port);
+        while self.process_one() {}
     }
 
     pub(crate) fn deliver_no_drain(&mut self, frame: &Frame) {
@@ -658,7 +658,8 @@ impl Harness {
 
     pub(crate) fn step_backlogged(&mut self, elapsed_ms: u32) {
         self.deliver_no_drain(&Frame::new(Cmd::Nop));
-        assert_ne!(self.cpu.step(&mut self.port, elapsed_ms), Drained::Empty);
+        self.tick_1ms(elapsed_ms);
+        assert!(self.process_one());
     }
 
     pub(crate) fn set_host_idle_ms(&self, ms: u32) {

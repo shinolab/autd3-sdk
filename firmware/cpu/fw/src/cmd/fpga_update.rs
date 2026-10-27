@@ -65,11 +65,6 @@ impl FpgaUpdateSession {
     pub(crate) fn is_locked(&self) -> bool {
         self.state.get() != State::Idle
     }
-
-    #[cfg(all(test, not(loom)))]
-    pub(crate) fn state(&self) -> State {
-        self.state.get()
-    }
 }
 
 pub(crate) fn allowed_while_locked(cmd: Cmd) -> bool {
@@ -459,7 +454,7 @@ mod tests {
         assert!(output_muted(&h));
         assert_eq!(erased_sectors(&h), [FPGA_GOLDEN_REGION_END]);
         assert!(matches!(
-            h.cpu.fpga_update.state(),
+            h.cpu.fpga_update.state.get(),
             State::Receiving {
                 length: 0x30_0000,
                 erased_end,
@@ -495,7 +490,7 @@ mod tests {
             h.port.fpga_flash_ops.last(),
             Some(&(FlashOp::Crc32.as_u8(), FPGA_IMAGE_BASE, img.len() as u32))
         );
-        assert_eq!(h.cpu.fpga_update.state(), State::Committed);
+        assert_eq!(h.cpu.fpga_update.state.get(), State::Committed);
         let erased_sector = vec![0xFF; FPGA_SECTOR_BYTES as usize];
         assert!(
             h.port.fpga_flash[..FPGA_GOLDEN_REGION_END as usize]
@@ -583,7 +578,7 @@ mod tests {
         send_image(&mut h, &img);
         h.deliver(&Frame::new(Cmd::FpgaUpdateCommit));
         assert_eq!(h.status(), Error::UpdateImageInvalid);
-        assert_eq!(h.cpu.fpga_update.state(), State::Locked);
+        assert_eq!(h.cpu.fpga_update.state.get(), State::Locked);
         assert!(h.cpu.fpga_update.is_locked());
         h.deliver(&chunk(0, &img[..10]));
         assert_eq!(h.status(), Error::UpdateNotStarted);
@@ -602,7 +597,7 @@ mod tests {
 
         let retry = image(1000, 7);
         run_update(&mut h, &retry);
-        assert_eq!(h.cpu.fpga_update.state(), State::Committed);
+        assert_eq!(h.cpu.fpga_update.state.get(), State::Committed);
         assert_eq!(slot(&h, retry.len()), retry.as_slice());
         h.deliver(&Frame::new(Cmd::FpgaUpdateActivate));
         assert_eq!(h.status(), Error::None);
@@ -674,11 +669,11 @@ mod tests {
         assert_eq!(h.status(), Error::None);
         h.deliver(&begin(0, 0));
         assert_eq!(h.status(), Error::InvalidPayload);
-        assert_eq!(h.cpu.fpga_update.state(), State::Locked);
+        assert_eq!(h.cpu.fpga_update.state.get(), State::Locked);
         h.set_ctl(ADDR_FUNCTION_BITS, 0);
         h.deliver(&begin(100, 0));
         assert_eq!(h.status(), Error::UpdateUnsupported);
-        assert_eq!(h.cpu.fpga_update.state(), State::Locked);
+        assert_eq!(h.cpu.fpga_update.state.get(), State::Locked);
         assert!(output_muted(&h));
         h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.status(), Error::FpgaUpdateInProgress);
@@ -690,7 +685,7 @@ mod tests {
         run_update(&mut h, &image(700, 13));
         h.deliver(&begin(0, 0));
         assert_eq!(h.status(), Error::InvalidPayload);
-        assert_eq!(h.cpu.fpga_update.state(), State::Locked);
+        assert_eq!(h.cpu.fpga_update.state.get(), State::Locked);
         h.deliver(&Frame::new(Cmd::FpgaUpdateActivate));
         assert_eq!(h.status(), Error::UpdateNotCommitted);
         h.tick_1ms(u32::from(FPGA_REBOOT_DELAY_MS));
@@ -728,7 +723,7 @@ mod tests {
             Some(FlashOp::Reboot.as_u8())
         );
         assert_eq!(
-            h.cpu.fpga_update.state(),
+            h.cpu.fpga_update.state.get(),
             State::Settle {
                 remaining_ms: FPGA_RECONFIG_SETTLE_MS,
             }
@@ -748,7 +743,7 @@ mod tests {
         assert!(output_muted(&h));
         h.tick_1ms(1);
         assert!(!h.cpu.fpga_update.is_locked());
-        assert_eq!(h.cpu.fpga_update.state(), State::Idle);
+        assert_eq!(h.cpu.fpga_update.state.get(), State::Idle);
         assert!((0..OUTPUT_MASK_WORDS).all(|i| h.output_mask(i) == 0xFFFF));
         h.tick_1ms(10_000);
         assert_eq!(h.port.fpga_reboots, 1);
@@ -786,7 +781,7 @@ mod tests {
         h.tick_1ms(u32::from(FPGA_REBOOT_DELAY_MS) + u32::from(FPGA_RECONFIG_SETTLE_MS));
         assert_eq!(reboot_requests(&h), 1);
         assert_eq!(h.port.fpga_reboots, 0);
-        assert_eq!(h.cpu.fpga_update.state(), State::Committed);
+        assert_eq!(h.cpu.fpga_update.state.get(), State::Committed);
         assert!(h.cpu.fpga_update.is_locked());
         assert!(output_muted(&h));
         assert_eq!(boot_image(&mut h), FpgaBootImage::ReconfigFailed as u8);
@@ -799,7 +794,7 @@ mod tests {
         assert_eq!(reboot_requests(&h), 2);
         assert_eq!(h.port.fpga_reboots, 1);
         assert!(!h.cpu.fpga_update.is_locked());
-        assert_eq!(h.cpu.fpga_update.state(), State::Idle);
+        assert_eq!(h.cpu.fpga_update.state.get(), State::Idle);
         assert!((0..OUTPUT_MASK_WORDS).all(|i| h.output_mask(i) == 0xFFFF));
         assert_ne!(boot_image(&mut h), FpgaBootImage::ReconfigFailed as u8);
     }
@@ -894,9 +889,12 @@ mod tests {
         h.port.fpga_reboots_to_ignore = u32::MAX;
         h.tick_1ms(FPGA_RECONFIG_WORST_MS - 1);
         assert_eq!(reboot_requests(&h), 1);
-        assert!(matches!(h.cpu.fpga_update.state(), State::Settle { .. }));
+        assert!(matches!(
+            h.cpu.fpga_update.state.get(),
+            State::Settle { .. }
+        ));
         h.tick_1ms(1);
-        assert_eq!(h.cpu.fpga_update.state(), State::Committed);
+        assert_eq!(h.cpu.fpga_update.state.get(), State::Committed);
         assert!(h.cpu.fpga_update.is_locked());
         assert!(output_muted(&h));
         assert_eq!(boot_image(&mut h), FpgaBootImage::ReconfigFailed as u8);
@@ -930,7 +928,7 @@ mod tests {
         h.port.fpga_flash_dropped_reg = Some(ADDR_FLASH_CMD);
         h.tick_1ms(1 + u32::from(FPGA_RECONFIG_SETTLE_MS));
         assert_eq!(h.port.fpga_reboots, 0);
-        assert_eq!(h.cpu.fpga_update.state(), State::Committed);
+        assert_eq!(h.cpu.fpga_update.state.get(), State::Committed);
         assert_eq!(boot_image(&mut h), FpgaBootImage::ReconfigFailed as u8);
 
         h.port.fpga_flash_dropped_reg = None;
@@ -948,7 +946,7 @@ mod tests {
         h.port.fpga_flash_err = Some(FlashErr::Protected);
         h.deliver(&begin(100, 0));
         assert_eq!(h.status(), Error::UpdateFlash);
-        assert_eq!(h.cpu.fpga_update.state(), State::Locked);
+        assert_eq!(h.cpu.fpga_update.state.get(), State::Locked);
         assert!(h.cpu.fpga_update.is_locked());
         assert!(output_muted(&h));
         h.deliver(&Frame::new(Cmd::Clear));
@@ -961,7 +959,7 @@ mod tests {
         let img = image(FPGA_SECTOR_BYTES as usize + 100, 36);
         h.deliver(&begin(img.len() as u32, crc32(&img)));
         assert_eq!(h.status(), Error::None);
-        let State::Receiving { erased_end, .. } = h.cpu.fpga_update.state() else {
+        let State::Receiving { erased_end, .. } = h.cpu.fpga_update.state.get() else {
             panic!("session did not open");
         };
         h.port.fpga_flash_err = Some(FlashErr::Protected);
@@ -972,7 +970,7 @@ mod tests {
         assert_eq!(h.status(), Error::UpdateFlash);
         assert_eq!(erased_sectors(&h).len(), 2);
         assert_eq!(
-            h.cpu.fpga_update.state(),
+            h.cpu.fpga_update.state.get(),
             State::Receiving {
                 length: img.len() as u32,
                 crc32: crc32(&img),
@@ -1014,7 +1012,7 @@ mod tests {
         let ops = h.port.fpga_flash_ops.len();
         h.deliver(&begin(100, 0));
         assert_eq!(h.status(), Error::FpgaTimeout);
-        assert_eq!(h.cpu.fpga_update.state(), State::Locked);
+        assert_eq!(h.cpu.fpga_update.state.get(), State::Locked);
         assert_eq!(h.port.fpga_flash_ops.len(), ops);
         h.deliver(&begin(100, 0));
         assert_eq!(h.status(), Error::FpgaTimeout);
@@ -1099,6 +1097,6 @@ mod tests {
         assert!(h.cpu.fpga_update.is_locked());
         h.reboot();
         assert!(!h.cpu.fpga_update.is_locked());
-        assert_eq!(h.cpu.fpga_update.state(), State::Idle);
+        assert_eq!(h.cpu.fpga_update.state.get(), State::Idle);
     }
 }

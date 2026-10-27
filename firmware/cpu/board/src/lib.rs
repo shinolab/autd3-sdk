@@ -46,7 +46,10 @@ pub extern "C" fn main() -> ! {
     udp::start();
     bsp::vic::irq_enable();
     loop {
-        if let Drained::Completed { msg_id } = cpu().step(&mut HwPort, bsp::timer::elapsed_ms()) {
+        for _ in 0..bsp::timer::elapsed_ms() {
+            cpu().tick_1ms(&mut HwPort);
+        }
+        if let Drained::Completed { msg_id } = cpu().process_one(&mut HwPort) {
             udp::complete(msg_id);
         }
     }

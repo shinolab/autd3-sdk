@@ -1575,7 +1575,7 @@ mod tests {
             },
             &c.cpu,
         );
-        c.cpu.process_pending(&mut c.port);
+        while c.process_one() {}
         assert_eq!(c.status(), CmdError::None);
         assert!(!c.ctl_flags().contains(CtlFlags::FAILSAFE));
     }

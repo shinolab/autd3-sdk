@@ -199,11 +199,6 @@ impl Cpu {
         self.host_idle_ms.load()
     }
 
-    #[must_use]
-    pub fn booted_slot(&self) -> Option<autd3_cpu_wire::update::Slot> {
-        self.update.boot_slot()
-    }
-
     pub(crate) fn reset_telemetry(&self) {
         self.counters.reset_all_but_boot_failure();
         self.failsafe_fired.set(false);
@@ -329,17 +324,6 @@ impl Cpu {
                 .set(self.counters.exec_late.get().wrapping_add(1));
         }
         true
-    }
-
-    pub fn step<P: Port>(&self, port: &mut P, elapsed_ms: u32) -> Drained {
-        for _ in 0..elapsed_ms {
-            self.tick_1ms(port);
-        }
-        self.process_one(port)
-    }
-
-    pub fn process_pending<P: Port>(&self, port: &mut P) {
-        while self.process_one(port) != Drained::Empty {}
     }
 
     fn handle_frame<P: Port>(&self, port: &mut P, cmd: u8, payload: &[u8]) -> Reply {
@@ -573,7 +557,7 @@ mod tests {
         h.deliver_no_drain(&Frame::new(Cmd::Nop));
         assert_eq!(h.processed(), 0);
 
-        h.cpu.process_pending(&mut h.port);
+        while h.process_one() {}
         assert_eq!(h.processed(), 1);
     }
 
@@ -596,7 +580,7 @@ mod tests {
         let frame = Frame::new(Cmd::Nop);
         h.deliver_no_drain(&frame);
         h.deliver_no_drain(&frame);
-        h.cpu.process_pending(&mut h.port);
+        while h.process_one() {}
         assert_eq!(h.processed(), 2);
     }
 
@@ -606,7 +590,7 @@ mod tests {
         let mut bytes = Frame::new(Cmd::ReadFpgaState).bytes();
         bytes[0] = 0xFF;
         h.cpu.recv_frame(&bytes, 0);
-        h.cpu.process_pending(&mut h.port);
+        while h.process_one() {}
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.processed(), 1);
         assert_eq!(h.reply_data().len(), 1);
@@ -661,7 +645,7 @@ mod tests {
         }
         h.deliver_no_drain(&Frame::new(Cmd::Nop));
 
-        h.cpu.process_pending(&mut h.port);
+        while h.process_one() {}
         assert_eq!(h.processed(), capacity);
         assert_eq!(h.telemetry().fifo_drop, 1);
 
@@ -722,23 +706,6 @@ mod tests {
     }
 
     #[test]
-    fn a_step_completes_one_frame_per_call_with_its_msg_id() {
-        let h = Harness::new();
-        let mut port = crate::test_utils::mock::MockPort::new();
-        h.cpu.recv_frame(&[0, Cmd::Nop as u8, 0, 0, 0, 0], 0x11);
-        h.cpu.recv_frame(&[0, Cmd::Nop as u8, 0, 0, 0, 0], 0x22);
-        assert_eq!(
-            h.cpu.step(&mut port, 0),
-            Drained::Completed { msg_id: 0x11 }
-        );
-        assert_eq!(
-            h.cpu.step(&mut port, 3),
-            Drained::Completed { msg_id: 0x22 }
-        );
-        assert_eq!(h.cpu.step(&mut port, 0), Drained::Empty);
-    }
-
-    #[test]
     fn a_full_fifo_drops_the_frame_without_a_reply() {
         let mut h = Harness::new();
         for _ in 0..FIFO_DEPTH - 1 {
@@ -747,7 +714,7 @@ mod tests {
         assert_eq!(h.telemetry().fifo_drop, 0);
         h.cpu.recv_frame(&[0, Cmd::Nop as u8, 0, 0, 0, 0], 0);
         assert_eq!(h.telemetry().fifo_drop, 1);
-        h.cpu.process_pending(&mut h.port);
+        while h.process_one() {}
         assert_eq!(h.processed(), u32::from(FIFO_DEPTH - 1));
     }
 
@@ -818,7 +785,7 @@ mod tests {
         assert_eq!(h.processed(), 0);
 
         h.port.sys_time = Some(u64::from(LATER) * US);
-        h.cpu.process_pending(&mut h.port);
+        while h.process_one() {}
         assert_eq!(h.processed(), 2);
     }
 
@@ -828,7 +795,8 @@ mod tests {
         h.port.sys_time = Some(0);
         h.deliver(&scheduled(LATER));
         let kicks = h.port.watchdog_kicks;
-        assert_eq!(h.cpu.step(&mut h.port, 3), Drained::Empty);
+        h.tick_1ms(3);
+        assert!(!h.process_one());
         assert_eq!(h.port.watchdog_kicks, kicks + 3);
         assert_eq!(h.processed(), 0);
     }
