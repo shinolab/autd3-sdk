@@ -39,6 +39,7 @@ internal static class Sample
         await Streaming(client, geometry, targets, wavelength);
 
         await client.SendAsync(new Pattern(geometry.PhaseBuffer(), Intensity.Min));
+        client.Close();
     }
 
     private static async Task StopAndWait(Client client, Geometry geometry, Vector3[] targets, Length wavelength)

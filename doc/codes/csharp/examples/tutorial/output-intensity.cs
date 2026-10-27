@@ -43,5 +43,6 @@ internal static class Sample
         await client.SendAsync(new Modulation(samplingConfig, modulation));
 
         await client.SendAsync(new Pattern(geometry.PhaseBuffer(), Intensity.Min));
+        client.Close();
     }
 }
