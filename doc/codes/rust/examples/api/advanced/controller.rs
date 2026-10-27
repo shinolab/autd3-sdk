@@ -56,7 +56,9 @@ async fn on_single_thread(geometry: &Geometry, option: &TransportOption) -> Resu
         use tokio::io::Interest;
         use tokio::io::unix::AsyncFd;
 
-        let socket = AsyncFd::with_interest(driver.as_fd().as_raw_fd(), Interest::READABLE)?;
+        let socket = unsafe {
+            AsyncFd::register_with_interest(driver.as_fd().as_raw_fd(), Interest::READABLE)?
+        };
         while let Some(deadline) = driver.poll()? {
             tokio::select! {
                 readable = socket.readable() => readable?.clear_ready(),
