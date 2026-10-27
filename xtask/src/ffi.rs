@@ -198,21 +198,22 @@ pub(crate) fn run_ffi(root: &Path, cmd: &FfiCmd) -> Result<()> {
                 let text = std::fs::read_to_string(&file)
                     .with_context(|| format!("failed to read {}", file.display()))?;
                 let mut constants = BTreeMap::new();
-                for line in text.lines() {
-                    let Some(rest) = line.trim().split("const string ").nth(1) else {
-                        continue;
-                    };
-                    let Some((name, value)) = rest.split_once('=') else {
-                        continue;
-                    };
-                    let value = value.trim().trim_end_matches(';').trim();
-                    if let Some(literal) = value.strip_prefix('"').and_then(|v| v.strip_suffix('"'))
-                    {
-                        constants.insert(name.trim().to_string(), literal.to_string());
-                    }
-                }
                 let lines: Vec<&str> = text.lines().map(str::trim).collect();
                 for (index, line) in lines.iter().enumerate() {
+                    if let Some((name, value)) = line
+                        .split("const string ")
+                        .nth(1)
+                        .and_then(|rest| rest.split_once('='))
+                        && let Some(literal) = value
+                            .trim()
+                            .trim_end_matches(';')
+                            .trim()
+                            .strip_prefix('"')
+                            .and_then(|v| v.strip_suffix('"'))
+                    {
+                        constants.insert(name.trim().to_string(), literal.to_string());
+                        continue;
+                    }
                     let Some(rest) = line
                         .strip_prefix("[DllImport(")
                         .or_else(|| line.strip_prefix("[LibraryImport("))

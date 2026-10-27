@@ -1,3 +1,7 @@
+using System;
+using System.Linq;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using AUTD3;
 using Xunit;
 
@@ -33,6 +37,50 @@ namespace AUTD3.Tests
                 (ushort)(NativeAbi.Minor + dMinor),
                 (ushort)(NativeAbi.Patch + dPatch));
             Assert.Throws<Autd3Exception>(() => NativeAbi.Verify("test", actual));
+        }
+
+        [Fact]
+        public void EachNativeClassImportsFromASingleLibrary()
+        {
+            var assemblies = new[]
+            {
+                typeof(Geometry).Assembly,
+                typeof(Pattern).Assembly,
+                typeof(Modulation).Assembly,
+                typeof(AUTD3.Holo.Holo).Assembly,
+                typeof(Client).Assembly,
+            };
+            var libraries = assemblies
+                .SelectMany(assembly => assembly.GetTypes())
+                .Select(type => (
+                    type,
+                    libs: type.GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+                        .Select(method => method.GetCustomAttribute<DllImportAttribute>()?.Value)
+                        .OfType<string>()
+                        .Distinct()
+                        .ToArray()))
+                .Where(entry => entry.libs.Length > 0)
+                .ToArray();
+            Assert.NotEmpty(libraries);
+            foreach (var (type, libs) in libraries)
+            {
+                Assert.True(libs.Length == 1, $"{type.FullName} imports from {string.Join(", ", libs)}");
+            }
+        }
+
+        [Theory]
+        [InlineData(typeof(Pattern))]
+        [InlineData(typeof(Modulation))]
+        [InlineData(typeof(AUTD3.Holo.Holo))]
+        public void ComputationLayersDoNotImportTheClientLibrary(Type anchor)
+        {
+            var offenders = anchor.Assembly.GetTypes()
+                .Where(type => !type.Name.EndsWith("Op", StringComparison.Ordinal))
+                .Where(type => type.GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+                    .Any(method => method.GetCustomAttribute<DllImportAttribute>()?.Value == "autd3capi"))
+                .Select(type => type.FullName)
+                .ToArray();
+            Assert.Empty(offenders);
         }
     }
 }

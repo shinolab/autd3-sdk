@@ -547,6 +547,9 @@ namespace AUTD3
                     Close();
                 }
             }
+            catch (Autd3Exception)
+            {
+            }
             finally
             {
                 _handle.Dispose();

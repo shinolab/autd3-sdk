@@ -19,7 +19,7 @@ namespace AUTD3
     {
         public static int MaxCount(this PhaseDepth depth)
         {
-            if (NativePattern.autd3_phase_depth_max_count(depth.ToBits(), out var maxCount) != 0)
+            if (NativePatternOp.autd3_phase_depth_max_count(depth.ToBits(), out var maxCount) != 0)
             {
                 throw new Autd3Exception($"unknown phase depth {depth}", Autd3ErrorCode.InvalidArgument);
             }
@@ -59,7 +59,7 @@ namespace AUTD3
                 handles[i] = _patterns[i].Handle;
             }
             using var lease = new HandleArray(handles);
-            return NativePattern.autd3_op_write_pattern_phase((byte)_bank, _startIndex, _depth.ToBits(), _intensity.Value, lease.Pointers, (UIntPtr)lease.Pointers.Length);
+            return NativePatternOp.autd3_op_write_pattern_phase((byte)_bank, _startIndex, _depth.ToBits(), _intensity.Value, lease.Pointers, (UIntPtr)lease.Pointers.Length);
         }
     }
 
@@ -79,7 +79,7 @@ namespace AUTD3
         }
 
         IntPtr ICommand.CreateOp(Geometry geometry) =>
-            NativePattern.autd3_op_config_pattern((byte)_bank, _config.DivideForNative(), _size, _loopBehavior.Rep);
+            NativePatternOp.autd3_op_config_pattern((byte)_bank, _config.DivideForNative(), _size, _loopBehavior.Rep);
     }
 
     public sealed class ConfigFociStm : ICommand
@@ -102,7 +102,7 @@ namespace AUTD3
         }
 
         IntPtr ICommand.CreateOp(Geometry geometry) =>
-            NativePattern.autd3_op_config_foci_stm((byte)_bank, _config.DivideForNative(), _size, _numFoci, _soundSpeed.MS, _loopBehavior.Rep);
+            NativePatternOp.autd3_op_config_foci_stm((byte)_bank, _config.DivideForNative(), _size, _numFoci, _soundSpeed.MS, _loopBehavior.Rep);
     }
 
     public sealed class ActivatePatternBank : ICommand
@@ -117,6 +117,6 @@ namespace AUTD3
         }
 
         IntPtr ICommand.CreateOp(Geometry geometry) =>
-            NativePattern.autd3_op_activate_pattern_bank((byte)_bank, _transitionMode.Mode, _transitionMode.Value);
+            NativePatternOp.autd3_op_activate_pattern_bank((byte)_bank, _transitionMode.Mode, _transitionMode.Value);
     }
 }
