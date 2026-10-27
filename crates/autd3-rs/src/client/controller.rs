@@ -9,6 +9,7 @@ use zerocopy::FromBytes;
 use crate::commands::Command;
 use crate::commands::operation::Distribution;
 use crate::datagram::{Datagram, Frame, Frames};
+use crate::device_status::DeviceStatus;
 use crate::error::{Error, PayloadError};
 use crate::firmware_version::FirmwareVersion;
 use crate::fpga_state::FpgaState;
@@ -17,7 +18,6 @@ use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use crate::telemetry::Telemetry;
 use crate::udp::TransportOption;
 use crate::value::SysTime;
-use autd3_rs_core::DeviceStatus;
 
 use super::completion::{self, ResponseFuture};
 use super::driver::Driver;
