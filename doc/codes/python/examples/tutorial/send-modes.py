@@ -46,6 +46,7 @@ async def main() -> None:
         await streaming(client, geometry, targets, wavelength)
 
         await client.send(Pattern(geometry.phase_buffer(), Intensity.MIN))
+        client.close()
 
 
 async def stop_and_wait(client, geometry, targets, wavelength) -> None:

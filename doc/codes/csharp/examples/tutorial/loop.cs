@@ -50,5 +50,6 @@ internal static class Sample
         // ANCHOR_END: finite
 
         await client.SendAsync(new Pattern(geometry.PhaseBuffer(), Intensity.Min));
+        client.Close();
     }
 }

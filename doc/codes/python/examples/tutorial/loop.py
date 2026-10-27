@@ -52,6 +52,7 @@ async def main() -> None:
         # ANCHOR_END: finite
 
         await client.send(Pattern(geometry.phase_buffer(), Intensity.MIN))
+        client.close()
 
 
 if __name__ == "__main__":
