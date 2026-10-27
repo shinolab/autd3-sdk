@@ -93,10 +93,17 @@ pub fn greedy<'a>(
         slot.fill(Phase::ZERO);
     }
 
+    let num_transducers = offset;
     let mut cache = vec![Complex::new(0.0, 0.0); m];
     let mut tmp = vec![Complex::new(0.0, 0.0); m];
 
     for &index in order {
+        if index >= num_transducers {
+            return Err(HoloError::OrderIndexOutOfRange {
+                index,
+                num_transducers,
+            });
+        }
         let d = device_offsets.partition_point(|&start| start <= index) - 1;
         let t = index - device_offsets[d];
         if intensity_at(intensities, d, t) == Intensity::MIN {
@@ -268,6 +275,56 @@ mod tests {
                 device: 1,
                 got: 3,
                 expected: Autd3::NUM_TRANSDUCERS,
+            }),
+        );
+    }
+
+    #[test]
+    fn an_order_index_past_the_last_transducer_is_an_error_not_a_panic() {
+        let geometry = geometry(2);
+        let num_transducers = geometry.num_transducers();
+        let mut order = ascending(&geometry);
+        order[1] = num_transducers;
+        for intensities in [
+            PatternIntensity::Uniform(Intensity::MAX),
+            PatternIntensity::Uniform(Intensity::MIN),
+        ] {
+            let mut dst = geometry.phase_buffer();
+            assert_eq!(
+                greedy(
+                    &geometry,
+                    &single_focus(),
+                    wavelength(),
+                    intensities,
+                    &order,
+                    &GreedyOption::default(),
+                    &mut dst
+                ),
+                Err(HoloError::OrderIndexOutOfRange {
+                    index: num_transducers,
+                    num_transducers,
+                }),
+            );
+        }
+    }
+
+    #[test]
+    fn an_order_index_on_a_geometry_without_devices_is_an_error_not_a_panic() {
+        let geometry = geometry(0);
+        let mut dst = geometry.phase_buffer();
+        assert_eq!(
+            greedy(
+                &geometry,
+                &single_focus(),
+                wavelength(),
+                Intensity::MAX,
+                &[0],
+                &GreedyOption::default(),
+                &mut dst
+            ),
+            Err(HoloError::OrderIndexOutOfRange {
+                index: 0,
+                num_transducers: 0,
             }),
         );
     }
