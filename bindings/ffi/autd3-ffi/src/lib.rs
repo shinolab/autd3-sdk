@@ -1681,6 +1681,56 @@ pub unsafe extern "C" fn autd3_client_device_time_now(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_client_ack_timeout(
+    client: *const ClientHandle,
+    out_ns: *mut u64,
+) -> i32 {
+    let Some(client) = (unsafe { handle_ref(client) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+
+    unsafe { write_out(out_ns, to_ns(client.0.ack_timeout())) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_client_set_ack_timeout(
+    client: *const ClientHandle,
+    timeout_ns: u64,
+) -> i32 {
+    let Some(client) = (unsafe { handle_ref(client) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+
+    client.0.set_ack_timeout(Duration::from_nanos(timeout_ns));
+    AUTD3_OK
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_client_lost_timeout(
+    client: *const ClientHandle,
+    out_ns: *mut u64,
+) -> i32 {
+    let Some(client) = (unsafe { handle_ref(client) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+
+    unsafe { write_out(out_ns, to_ns(client.0.lost_timeout())) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_client_set_lost_timeout(
+    client: *const ClientHandle,
+    timeout_ns: u64,
+) -> i32 {
+    let Some(client) = (unsafe { handle_ref(client) }) else {
+        return AUTD3_ERR_INVALID_ARGUMENT;
+    };
+
+    client.0.set_lost_timeout(Duration::from_nanos(timeout_ns));
+    AUTD3_OK
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_client_send_heartbeat(
     client: *const ClientHandle,
     out_err: *mut c_char,
@@ -2696,6 +2746,23 @@ mod tests {
         let mut ns = 0u64;
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
             autd3_client_device_time_now(std::ptr::null(), &raw mut ns, std::ptr::null_mut(), 0)
+        });
+    }
+
+    #[test]
+    fn the_timeouts_of_a_null_client_are_an_error() {
+        let mut ns = 0u64;
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_client_ack_timeout(std::ptr::null(), &raw mut ns)
+        });
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_client_lost_timeout(std::ptr::null(), &raw mut ns)
+        });
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_client_set_ack_timeout(std::ptr::null(), 1)
+        });
+        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
+            autd3_client_set_lost_timeout(std::ptr::null(), 1)
         });
     }
 

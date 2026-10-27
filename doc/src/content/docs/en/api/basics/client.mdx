@@ -45,6 +45,8 @@ The `Client` connects to the devices (or the [Simulator](/autd3-sdk/en/guide/sim
 | `send_frame_at(frame, exec)` | ✓  | `Result<ResponseFuture, Error>`       | Send one frame at a given processing time (see [Processing time](#processing-time)) |
 | `device_status()`         | —     | `Result<Vec<DeviceStatus>, Error>`    | State of each device. See [State Monitoring](/autd3-sdk/en/guide/state-check/) for details. |
 | `send_heartbeat()`        | —     | `Result<(), Error>`                   | Send one liveness check to every device that is not `Lost` (see [Failsafe](/autd3-sdk/en/guide/failsafe/#communication-loss-failsafe-and-liveness-check)) |
+| `ack_timeout()` / `set_ack_timeout(timeout)` | — | `Duration` / `()`          | Read or change the response-wait timeout |
+| `lost_timeout()` / `set_lost_timeout(timeout)` | — | `Duration` / `()`        | Read or change the timeout for the `Lost` judgement |
 | `close()`                 | —     | `Result<(), Error>`                   | Close the connection                                       |
 
 `close()` only stops the I/O thread and closes the connection; it sends nothing to the devices.
