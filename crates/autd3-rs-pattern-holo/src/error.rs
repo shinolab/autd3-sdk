@@ -18,6 +18,11 @@ pub enum HoloError {
         got: usize,
         expected: usize,
     },
+    #[error("order contains index {index} but the geometry has {num_transducers} transducers")]
+    OrderIndexOutOfRange {
+        index: usize,
+        num_transducers: usize,
+    },
     #[error(transparent)]
     Mask(#[from] TransducerMaskError),
 }

@@ -638,6 +638,21 @@ mod tests {
             )
         });
         assert_eq!(message(&err), "null order");
+
+        let mut out_of_range = order.clone();
+        out_of_range[0] = u32::try_from(Autd3::NUM_TRANSDUCERS).unwrap();
+        assert_eq!(
+            AUTD3_ERR_INVALID_ARGUMENT,
+            run(&out_of_range, &mut dst, &mut err)
+        );
+        assert_eq!(
+            message(&err),
+            autd3_rs_pattern_holo::HoloError::OrderIndexOutOfRange {
+                index: Autd3::NUM_TRANSDUCERS,
+                num_transducers: Autd3::NUM_TRANSDUCERS,
+            }
+            .to_string()
+        );
     }
 
     #[test]
