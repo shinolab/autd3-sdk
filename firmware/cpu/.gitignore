@@ -1,5 +1,2 @@
 build/
 board/target/
-
-.settings/
-.autotools
