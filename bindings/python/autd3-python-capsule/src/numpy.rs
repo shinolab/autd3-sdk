@@ -114,6 +114,48 @@ pub fn f32_vec3_rows(
         .call_method1("reshape", (n, 3))
 }
 
+pub fn f32_vec3_rows_from_ndarray(obj: &Bound<'_, PyAny>) -> PyResult<Vec<[f32; 3]>> {
+    let py = obj.py();
+    if !is_ndarray(obj)? {
+        return Err(PyTypeError::new_err(format!(
+            "expected a numpy.ndarray, got {}",
+            obj.get_type().name()?
+        )));
+    }
+    if obj.is_instance(MASKED_ARRAY.import(py, "numpy.ma", "MaskedArray")?)? {
+        return Err(PyTypeError::new_err(
+            "masked arrays are not supported; fill them explicitly (e.g. arr.filled(0))",
+        ));
+    }
+    let dtype = obj.getattr("dtype")?;
+    let kind: String = dtype.getattr("kind")?.extract()?;
+    if !matches!(kind.as_str(), "f" | "i" | "u") {
+        return Err(PyTypeError::new_err(format!(
+            "expected a real-valued dtype, got {dtype}"
+        )));
+    }
+    let shape_obj = obj.getattr("shape")?;
+    let shape: Vec<usize> = shape_obj.extract()?;
+    if !matches!(shape.as_slice(), &[3] | &[_, 3]) {
+        return Err(PyValueError::new_err(format!(
+            "expected shape (3,) or (n, 3), got {shape_obj}"
+        )));
+    }
+    let bytes = obj
+        .call_method1("astype", (cached_dtype(py, &FLOAT32, "float32")?,))?
+        .call_method0("tobytes")?
+        .cast_into::<PyBytes>()?;
+    Ok(bytes
+        .as_bytes()
+        .as_chunks::<{ size_of::<f32>() }>()
+        .0
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .map(|row| row.map(f32::from_ne_bytes))
+        .collect())
+}
+
 pub fn u8_vector_bytes<'py>(obj: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyBytes>> {
     let py = obj.py();
     if !is_ndarray(obj)? {

@@ -36,10 +36,11 @@ import { excerpt } from "@lib/excerpt";
 - `ControlPoint { point, phase_offset }` — 焦点座標 [mm] と位相オフセット. 
 - `ControlPoints { points: Vec<ControlPoint>, intensity }` — 焦点の列と振幅. 
 
-`ControlPoint::new(point, phase_offset)` / `ControlPoints::new(points, intensity)` の引数はすべて必須 (Python / C# も同じ).
+`ControlPoint::new(point, phase_offset)` / `ControlPoints::new(points, intensity)` の引数はすべて必須 (C# も同じ. Python の `ControlPoint` も同じ).
 Rust では `From` で座標から変換でき, 位相オフセットは `Phase::ZERO`, 振幅は `Intensity::MAX` になる (`ControlPoint::from(p)`, `ControlPoints::from(p)` / `ControlPoints::from(cp)` / `ControlPoints::from([p0, p1])`).
 C# では同じ変換を explicit 変換 `(ControlPoint)p` / `(ControlPoints)p` / `(ControlPoints)cp` / `(ControlPoints)points` で書く.
-Python にはこの短い書き方が無いので, `ControlPoints([ControlPoint(p, Phase.ZERO)], Intensity.MAX)` のように明示する.
+Python では `ControlPoints` のコンストラクタが同じ変換を受け持ち, `intensity` を省略すると `Intensity.MAX` になる (`ControlPoints(p)` / `ControlPoints(cp)` / `ControlPoints(np.array([p0, p1]))`).
+`points` には `ControlPoint` の列・`ControlPoint` 単体・shape `(3,)` の ndarray (1 点)・shape `(N, 3)` の ndarray (各行が焦点座標 [mm]) を渡せ, ndarray の各行の位相オフセットは `Phase.ZERO` になる.
 
 ## FociStmOption
 

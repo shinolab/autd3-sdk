@@ -5,7 +5,7 @@ from autd3 import Client, TransportOption
 from autd3.commands import Clear, FociStm, FociStmOption, Synchronize
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import Hz, m, mm, s
-from autd3.value import ControlPoint, ControlPoints, Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig, TransitionMode
+from autd3.value import ControlPoints, LoopBehavior, PatternBank, SamplingConfig, TransitionMode
 
 
 async def main() -> None:
@@ -19,7 +19,7 @@ async def main() -> None:
         for i in range(200):
             theta = 2.0 * math.pi * i / 200
             p = center + offset(30.0 * mm * math.cos(theta), 30.0 * mm * math.sin(theta), 0.0 * mm)
-            points.append(ControlPoints([ControlPoint(p, Phase.ZERO)], Intensity.MAX))
+            points.append(ControlPoints(p))
 
         await client.send(
             FociStm(

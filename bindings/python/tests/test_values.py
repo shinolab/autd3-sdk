@@ -267,10 +267,32 @@ def test_control_points_expose_their_fields() -> None:
     control_points = ControlPoints([control_point, ControlPoint([4.0, 5.0, 6.0], Phase.ZERO)], Intensity(0x80))
     assert control_points.points == [control_point, ControlPoint([4.0, 5.0, 6.0], Phase.ZERO)]
     assert control_points.intensity == Intensity(0x80)
-    with pytest.raises(TypeError):
-        loose(ControlPoints)([control_point])
+    assert ControlPoints([control_point]) == ControlPoints([control_point], Intensity.MAX)
+    assert ControlPoints(control_point) == ControlPoints([control_point], Intensity.MAX)
     assert control_points == ControlPoints([control_point, ControlPoint([4.0, 5.0, 6.0], Phase.ZERO)], 0x80)
     assert control_points != ControlPoints([control_point], 0x80)
+
+
+def test_control_points_from_an_n_by_3_ndarray() -> None:
+    rows = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+    expected = ControlPoints([ControlPoint([1.0, 2.0, 3.0], Phase.ZERO), ControlPoint([4.0, 5.0, 6.0], Phase.ZERO)], 0x80)
+    assert ControlPoints(rows, Intensity(0x80)) == expected
+    assert ControlPoints(rows.astype(np.float32), 0x80) == expected
+    assert ControlPoints(rows.astype(np.int64), 0x80) == expected
+    assert ControlPoints(np.asfortranarray(rows), 0x80) == expected
+    assert ControlPoints(np.zeros((0, 3)), 0x80).points == []
+    assert ControlPoints(rows) == ControlPoints(rows, Intensity.MAX)
+    assert ControlPoints(rows[0]) == ControlPoints([ControlPoint([1.0, 2.0, 3.0], Phase.ZERO)], Intensity.MAX)
+    with pytest.raises(ValueError, match=r"shape \(3,\) or \(n, 3\)"):
+        ControlPoints(np.zeros(2), 0x80)
+    with pytest.raises(ValueError, match=r"shape \(3,\) or \(n, 3\)"):
+        ControlPoints(np.zeros((2, 2)), 0x80)
+    with pytest.raises(TypeError, match="real-valued dtype"):
+        ControlPoints(np.zeros((2, 3), dtype=np.complex64), 0x80)
+    with pytest.raises(TypeError, match="masked arrays"):
+        ControlPoints(np.ma.masked_array(rows), 0x80)
+    with pytest.raises(TypeError, match="a ControlPoint, a sequence of ControlPoint"):
+        loose(ControlPoints)([[1.0, 2.0, 3.0]], 0x80)
 
 
 def test_modulation_options_expose_their_fields() -> None:
