@@ -140,6 +140,7 @@ pub fn summarize_bitstream(bytes: &[u8]) -> BitstreamSummary {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum FpgaImageError {
     #[error("FPGA update image must not be empty")]
     Empty,
