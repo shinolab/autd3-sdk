@@ -1,4 +1,5 @@
 use autd3_python_capsule::cell::{BufferCell, ExclusiveGuard, SharedGuard};
+use autd3_python_capsule::error::invalid_argument;
 use autd3_python_capsule::extract::{
     extract_angle, extract_direction, extract_length, extract_point, extract_u8, extract_velocity,
     length_to_py,
@@ -9,7 +10,7 @@ use autd3_rs_core::Length;
 use autd3_rs_core::geometry::Autd3;
 use autd3_rs_core::geometry::TransducerMask as CoreTransducerMask;
 use autd3_rs_core::value::{Intensity, Phase};
-use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyTypeError};
 use pyo3::prelude::*;
 use pyo3::types::PyCapsule;
 use zerocopy::{FromBytes, IntoBytes};
@@ -71,7 +72,7 @@ macro_rules! buffer_class {
                 if numpy::is_ndarray(values)? {
                     let bytes = numpy::u8_matrix_bytes(values, Autd3::NUM_TRANSDUCERS, None)?;
                     let inner = <[$ty]>::ref_from_bytes(bytes.as_bytes())
-                        .map_err(|e| PyValueError::new_err(e.to_string()))?
+                        .map_err(invalid_argument)?
                         .chunks_exact(Autd3::NUM_TRANSDUCERS)
                         .map(<[$ty]>::to_vec)
                         .collect::<Vec<Vec<$ty>>>();
@@ -85,7 +86,7 @@ macro_rules! buffer_class {
                 let mut inner = Vec::with_capacity(values.len());
                 for device in values {
                     if device.len() != Autd3::NUM_TRANSDUCERS {
-                        return Err(PyValueError::new_err(format!(
+                        return Err(invalid_argument(format!(
                             "each device needs {} values, got {}",
                             Autd3::NUM_TRANSDUCERS,
                             device.len()
@@ -271,9 +272,7 @@ fn check_waist(waist: Length) -> PyResult<()> {
     if waist.mm().is_finite() && waist.mm() > 0.0 {
         Ok(())
     } else {
-        Err(PyValueError::new_err(
-            "waist must be a positive finite length",
-        ))
+        Err(invalid_argument("waist must be a positive finite length"))
     }
 }
 
@@ -281,7 +280,7 @@ fn check_slots<T>(geometry: &autd3_rs_core::Geometry, dst: &[Vec<T>]) -> PyResul
     if dst.len() == geometry.num_devices() {
         Ok(())
     } else {
-        Err(PyValueError::new_err(format!(
+        Err(invalid_argument(format!(
             "dst must have one slot per device: the geometry has {} devices, but dst has {}",
             geometry.num_devices(),
             dst.len()
@@ -555,6 +554,7 @@ impl TransducerMask {
     }
 
     #[staticmethod]
+    #[pyo3(name = "Masked")]
     fn masked(mask: Vec<Vec<bool>>) -> Self {
         Self { mask: Some(mask) }
     }
@@ -562,9 +562,7 @@ impl TransducerMask {
     fn validate(&self, geometry: &Bound<'_, PyAny>) -> PyResult<()> {
         let capsule = capsule_of(geometry)?;
         let geometry = geometry_from_capsule(&capsule)?;
-        self.as_core()
-            .validate(geometry)
-            .map_err(|e| autd3_python_capsule::invalid_argument(capsule.py(), e))
+        self.as_core().validate(geometry).map_err(invalid_argument)
     }
 
     fn is_enabled(&self, device: usize, transducer: usize) -> PyResult<bool> {

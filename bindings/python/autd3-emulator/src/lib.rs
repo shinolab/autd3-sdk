@@ -2,20 +2,29 @@ use std::ops::RangeInclusive;
 use std::sync::Arc;
 use std::time::Duration;
 
+use autd3_python_capsule::error::invalid_argument;
 use autd3_python_capsule::extract::{
     duration_to_py, extract_duration, extract_velocity, velocity_to_py,
 };
-use autd3_python_capsule::{capsule_of, frame_from_capsule, geometry_from_capsule, to_pyerr_gil};
+use autd3_python_capsule::{capsule_of, frame_from_capsule, geometry_from_capsule};
 use autd3_rs_core::common::Velocity;
 use autd3_rs_core::geometry::Geometry;
 use autd3_rs_emulator::{
-    AxisOrder, Emulator as CoreEmulator, Grid as CoreGrid, Instant as CoreInstant,
+    AxisOrder, Emulator as CoreEmulator, EmulatorError, Grid as CoreGrid, Instant as CoreInstant,
     InstantRecordOption as CoreInstantOption, RawColumn, RawFrame, Record as CoreRecord,
     Recorder as CoreRecorder, Rms as CoreRms, RmsRecordOption as CoreRmsOption,
 };
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyIndexError, PyRuntimeError, PyTypeError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict};
+
+#[allow(clippy::needless_pass_by_value)]
+fn emulator_error(e: EmulatorError) -> PyErr {
+    match e {
+        EmulatorError::Autd3(e) => autd3_python_capsule::error::client(e),
+        e => invalid_argument(e),
+    }
+}
 
 fn raw_to_polars(py: Python<'_>, frame: RawFrame) -> PyResult<Bound<'_, PyAny>> {
     let frombuffer = py.import("numpy")?.getattr("frombuffer")?;
@@ -37,7 +46,7 @@ fn extract_axis(obj: &Bound<'_, PyAny>) -> PyResult<RangeInclusive<f32>> {
     }
     let (start, end): (f32, f32) = obj
         .extract()
-        .map_err(|_| PyValueError::new_err("an axis must be a float or a (start, end) tuple"))?;
+        .map_err(|_| PyTypeError::new_err("an axis must be a float or a (start, end) tuple"))?;
     Ok(start..=end)
 }
 
@@ -63,7 +72,7 @@ impl Grid {
             "zxy" => AxisOrder::ZXY,
             "zyx" => AxisOrder::ZYX,
             _ => {
-                return Err(PyValueError::new_err(
+                return Err(invalid_argument(
                     "order must be one of 'xyz', 'xzy', 'yxz', 'yzx', 'zxy', 'zyx'",
                 ));
             }
@@ -104,8 +113,7 @@ impl RmsRecordOption {
 }
 
 fn time_step_nanos(time_step: Duration) -> PyResult<u64> {
-    u64::try_from(time_step.as_nanos())
-        .map_err(|_| PyValueError::new_err("time_step is out of range"))
+    u64::try_from(time_step.as_nanos()).map_err(|_| invalid_argument("time_step is out of range"))
 }
 
 #[pyclass(name = "InstantRecordOption", module = "autd3_emulator")]
@@ -174,13 +182,13 @@ impl Rms {
         duration: &Bound<'_, PyAny>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let d = extract_duration(duration)?;
-        let frame = self.0.next(d).map_err(to_pyerr_gil)?;
+        let frame = self.0.next(d).map_err(emulator_error)?;
         raw_to_polars(py, frame)
     }
 
     fn skip(&mut self, duration: &Bound<'_, PyAny>) -> PyResult<()> {
         let d = extract_duration(duration)?;
-        self.0.skip(d).map_err(to_pyerr_gil)?;
+        self.0.skip(d).map_err(emulator_error)?;
         Ok(())
     }
 }
@@ -211,7 +219,7 @@ impl Instant {
         let frame = self
             .0
             .with_dependent_mut(|_, instant| instant.next(d))
-            .map_err(to_pyerr_gil)?;
+            .map_err(emulator_error)?;
         raw_to_polars(py, frame)
     }
 
@@ -219,7 +227,7 @@ impl Instant {
         let d = extract_duration(duration)?;
         self.0
             .with_dependent_mut(|_, instant| instant.skip(d).map(|_| ()))
-            .map_err(to_pyerr_gil)?;
+            .map_err(emulator_error)?;
         Ok(())
     }
 }
@@ -269,7 +277,7 @@ impl Record {
                         sound_speed: opt.sound_speed,
                     },
                 )
-                .map_err(to_pyerr_gil)?;
+                .map_err(emulator_error)?;
             return Ok(Py::new(py, Rms(rms))?.into_any());
         }
         if let Ok(opt) = option.cast::<InstantRecordOption>() {
@@ -284,10 +292,10 @@ impl Record {
                     },
                 )
             })
-            .map_err(to_pyerr_gil)?;
+            .map_err(emulator_error)?;
             return Ok(Py::new(py, Instant(instant))?.into_any());
         }
-        Err(PyValueError::new_err(
+        Err(PyTypeError::new_err(
             "option must be RmsRecordOption or InstantRecordOption",
         ))
     }
@@ -333,13 +341,13 @@ impl Recorder {
         let recorder = self
             .inner
             .as_mut()
-            .ok_or_else(|| PyValueError::new_err("recorder has already been consumed"))?;
+            .ok_or_else(|| PyRuntimeError::new_err("recorder has already been consumed"))?;
         let capsule = capsule_of(frame)?;
         let (frames, index) = frame_from_capsule(&capsule)?;
         let f = frames
             .frame(index)
-            .ok_or_else(|| PyValueError::new_err("frame index out of range"))?;
-        recorder.send_frame(f).map_err(to_pyerr_gil)?;
+            .ok_or_else(|| PyIndexError::new_err("frame index out of range"))?;
+        recorder.send_frame(f).map_err(emulator_error)?;
         Ok(())
     }
 
@@ -347,9 +355,9 @@ impl Recorder {
         let recorder = self
             .inner
             .as_mut()
-            .ok_or_else(|| PyValueError::new_err("recorder has already been consumed"))?;
+            .ok_or_else(|| PyRuntimeError::new_err("recorder has already been consumed"))?;
         let d = extract_duration(duration)?;
-        recorder.tick(d).map_err(to_pyerr_gil)?;
+        recorder.tick(d).map_err(emulator_error)?;
         Ok(())
     }
 
@@ -358,7 +366,7 @@ impl Recorder {
         let recorder = self
             .inner
             .take()
-            .ok_or_else(|| PyValueError::new_err("recorder has already been consumed"))?;
+            .ok_or_else(|| PyRuntimeError::new_err("recorder has already been consumed"))?;
         Ok(Record(Arc::new(recorder.into_record())))
     }
 }
@@ -402,7 +410,7 @@ impl Emulator {
             .borrow_mut(py)
             .inner
             .take()
-            .ok_or_else(|| PyValueError::new_err("recorder has already been consumed"))?;
+            .ok_or_else(|| PyRuntimeError::new_err("recorder has already been consumed"))?;
         Ok(Record(Arc::new(inner.into_record())))
     }
 }

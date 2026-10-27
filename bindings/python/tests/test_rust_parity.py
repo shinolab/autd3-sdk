@@ -51,10 +51,10 @@ def test_fixed_update_rate_has_no_defaults() -> None:
 
 def test_a_masked_transducer_mask_is_validated_on_use_not_on_construction() -> None:
     geometry = two_devices()
-    short_row = pattern.TransducerMask.masked([[True] * 3, [True] * Autd3.NUM_TRANSDUCERS])
+    short_row = pattern.TransducerMask.Masked([[True] * 3, [True] * Autd3.NUM_TRANSDUCERS])
     with pytest.raises(autd3.Autd3Error, match="transducers"):
         short_row.validate(geometry)
-    one_device = pattern.TransducerMask.masked([[True] * Autd3.NUM_TRANSDUCERS])
+    one_device = pattern.TransducerMask.Masked([[True] * Autd3.NUM_TRANSDUCERS])
     with pytest.raises(autd3.Autd3Error, match="device slots"):
         one_device.validate(geometry)
 
@@ -63,11 +63,11 @@ def test_a_masked_transducer_mask_is_validated_on_use_not_on_construction() -> N
     for mask in (short_row, one_device):
         phases = geometry.phase_buffer()
         intensities = geometry.intensity_buffer()
-        with pytest.raises(holo.HoloError):
+        with pytest.raises(autd3.InvalidArgumentError):
             holo.naive(geometry, foci, wavelength, holo.NaiveOption(mask=mask), phases, intensities)
-        with pytest.raises(holo.HoloError):
+        with pytest.raises(autd3.InvalidArgumentError):
             holo.gs(geometry, foci, wavelength, holo.GsOption(mask=mask), phases, intensities)
-        with pytest.raises(holo.HoloError):
+        with pytest.raises(autd3.InvalidArgumentError):
             holo.gspat(geometry, foci, wavelength, holo.GspatOption(mask=mask), phases, intensities)
 
 
@@ -94,7 +94,7 @@ def test_time_arguments_accept_only_a_duration(value: object) -> None:
     ids=["as_nanos-lookalike", "timedelta"],
 )
 def test_sampling_periods_accept_only_a_duration(value: object) -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(TypeError):
         autd3.value.SamplingConfig(loose(value))
 
 

@@ -2,6 +2,7 @@ use core::num::NonZeroU16;
 
 use std::sync::Arc;
 
+use autd3_python_capsule::error::invalid_argument;
 use autd3_python_capsule::extract::{
     duration_to_py, extract_duration, extract_sampling_config, extract_velocity,
 };
@@ -20,7 +21,6 @@ use autd3_rs::value::{
     ModulationBank as CoreModulationBank, PatternBank as CorePatternBank, Phase, SamplingConfig,
     SysTime as CoreSysTime, TransitionMode as CoreTransitionMode,
 };
-use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 use crate::datagram::PushOperation;
@@ -264,8 +264,8 @@ impl LoopBehavior {
     #[staticmethod]
     #[pyo3(name = "Finite")]
     fn finite(count: u16) -> PyResult<Self> {
-        let count = NonZeroU16::new(count)
-            .ok_or_else(|| PyValueError::new_err("loop count must be >= 1"))?;
+        let count =
+            NonZeroU16::new(count).ok_or_else(|| invalid_argument("loop count must be >= 1"))?;
         Ok(Self(CoreLoopBehavior::Finite(count)))
     }
 

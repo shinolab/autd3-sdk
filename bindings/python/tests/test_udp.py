@@ -27,6 +27,8 @@ def test_defaults_follow_the_spec() -> None:
     assert option.ack_timeout == autd3.Duration.from_millis(10)
     assert option.send_buffer_bytes == 8192
     assert option.sync_on_open is True
+    with pytest.raises(autd3.InvalidArgumentError, match="send_buffer_bytes"):
+        autd3.TransportOption(send_buffer_bytes=0)
 
 
 def test_fields_round_trip() -> None:
@@ -60,9 +62,7 @@ def test_the_interface_selects_where_to_connect() -> None:
     assert named.iface != autd3.Interface.Name("eth1")
     assert named.iface != autd3.Interface.Auto
     assert repr(autd3.Interface.Name("eth0")) == 'Interface.Name("eth0")'
-    assert autd3.Interface.Name("eth0").name() == "eth0"
-    assert autd3.Interface.Auto.name() is None
-    assert autd3.Interface.Addr("[::1]:44336").name() is None
+    assert not hasattr(autd3.Interface.Auto, "name")
     assert hash(autd3.Interface.Name("eth0")) == hash(autd3.Interface.Name("eth0"))
     assert len({autd3.Interface.Auto, autd3.Interface.Name("eth0"), autd3.Interface.Auto}) == 2
     with pytest.raises(TypeError):
@@ -74,7 +74,7 @@ def test_an_address_interface_round_trips_and_rejects_garbage() -> None:
     assert repr(iface) == 'Interface.Addr("[::1]:44336")'
     assert autd3.TransportOption(iface=iface).iface == iface
     assert iface != autd3.Interface.Addr("[::1]:50000")
-    with pytest.raises(ValueError):
+    with pytest.raises(autd3.InvalidArgumentError):
         autd3.Interface.Addr("127.0.0.1:1")
 
 

@@ -1,6 +1,6 @@
 use core::num::{NonZeroU8, NonZeroUsize};
 
-use autd3_python_capsule::error_code;
+use autd3_python_capsule::error::invalid_argument;
 use autd3_python_capsule::extract::{extract_length, extract_point, extract_u8, number_f32};
 use autd3_python_capsule::numpy::f32_vec3;
 use autd3_python_capsule::{
@@ -15,42 +15,8 @@ use autd3_rs_pattern_holo::{
     GspatOption as CoreGspatOption, IntensityConstraint as CoreIntensityConstraint,
     NaiveOption as CoreNaiveOption, Pa, dB, kPa,
 };
-use pyo3::exceptions::{PyTypeError, PyValueError, PyZeroDivisionError};
+use pyo3::exceptions::{PyTypeError, PyZeroDivisionError};
 use pyo3::prelude::*;
-use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyDict, PyTuple, PyType};
-
-static HOLO_ERROR: PyOnceLock<Py<PyType>> = PyOnceLock::new();
-
-fn holo_error_type(py: Python<'_>) -> PyResult<&Bound<'_, PyType>> {
-    HOLO_ERROR
-        .get_or_try_init(py, || {
-            let base = py.import("autd3_core")?.getattr("Autd3Error")?;
-            let namespace = PyDict::new(py);
-            namespace.set_item("__module__", "autd3_pattern_holo")?;
-            namespace.set_item("code", error_code::INVALID_ARGUMENT)?;
-            Ok::<_, PyErr>(
-                py.get_type::<PyType>()
-                    .call1(("HoloError", PyTuple::new(py, [base])?, namespace))?
-                    .cast_into::<PyType>()?
-                    .unbind(),
-            )
-        })
-        .map(|ty| ty.bind(py))
-}
-
-fn holo_err(e: autd3_rs_pattern_holo::HoloError) -> PyErr {
-    Python::attach(|py| {
-        match holo_error_type(py).and_then(|ty| {
-            let err = ty.call1((e.to_string(),))?;
-            err.setattr("code", error_code::INVALID_ARGUMENT)?;
-            Ok(err)
-        }) {
-            Ok(err) => PyErr::from_value(err),
-            Err(err) => err,
-        }
-    })
-}
 
 fn hash_f32<H: core::hash::Hasher>(value: f32, state: &mut H) {
     core::hash::Hash::hash(&(value + 0.0).to_bits(), state);
@@ -268,14 +234,14 @@ fn extract_mask(mask: &Bound<'_, PyAny>) -> PyResult<Mask> {
 fn mask_to_py<'py>(py: Python<'py>, mask: &Mask) -> PyResult<Bound<'py, PyAny>> {
     let cls = py.import("autd3_pattern")?.getattr("TransducerMask")?;
     match mask {
-        Some(rows) => cls.call_method1("masked", (rows.clone(),)),
+        Some(rows) => cls.call_method1("Masked", (rows.clone(),)),
         None => cls.getattr("AllEnabled"),
     }
 }
 
 fn mask_repr(mask: &Mask) -> String {
     match mask {
-        Some(rows) => format!("TransducerMask.masked(<{} devices>)", rows.len()),
+        Some(rows) => format!("TransducerMask.Masked(<{} devices>)", rows.len()),
         None => "TransducerMask.AllEnabled".to_owned(),
     }
 }
@@ -360,7 +326,7 @@ impl GsOption {
         Ok(Self {
             inner: CoreGsOption {
                 repeat: NonZeroUsize::new(repeat)
-                    .ok_or_else(|| PyValueError::new_err("repeat must be >= 1"))?,
+                    .ok_or_else(|| invalid_argument("repeat must be >= 1"))?,
                 constraint: constraint.0,
                 directivity: directivity.0,
                 ..CoreGsOption::default()
@@ -425,7 +391,7 @@ impl GspatOption {
         Ok(Self {
             inner: CoreGspatOption {
                 repeat: NonZeroUsize::new(repeat)
-                    .ok_or_else(|| PyValueError::new_err("repeat must be >= 1"))?,
+                    .ok_or_else(|| invalid_argument("repeat must be >= 1"))?,
                 constraint: constraint.0,
                 directivity: directivity.0,
                 ..CoreGspatOption::default()
@@ -480,9 +446,8 @@ impl GreedyOption {
     fn new(phase_quantization_levels: u8, directivity: Directivity) -> PyResult<Self> {
         Ok(Self {
             inner: CoreGreedyOption {
-                phase_quantization_levels: NonZeroU8::new(phase_quantization_levels).ok_or_else(
-                    || PyValueError::new_err("phase_quantization_levels must be >= 1"),
-                )?,
+                phase_quantization_levels: NonZeroU8::new(phase_quantization_levels)
+                    .ok_or_else(|| invalid_argument("phase_quantization_levels must be >= 1"))?,
                 directivity: directivity.0,
                 ..CoreGreedyOption::default()
             },
@@ -561,7 +526,7 @@ fn naive(
             phases,
             intensities,
         )
-        .map_err(holo_err)
+        .map_err(invalid_argument)
     })
 }
 
@@ -593,7 +558,7 @@ fn gs(
             phases,
             intensities,
         )
-        .map_err(holo_err)
+        .map_err(invalid_argument)
     })
 }
 
@@ -625,7 +590,7 @@ fn gspat(
             phases,
             intensities,
         )
-        .map_err(holo_err)
+        .map_err(invalid_argument)
     })
 }
 
@@ -668,7 +633,7 @@ fn greedy(
         &option.inner,
         dst.as_mut_slice(),
     )
-    .map_err(holo_err)
+    .map_err(invalid_argument)
 }
 
 #[pymodule(gil_used = false)]
@@ -682,7 +647,6 @@ fn autd3_pattern_holo(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<GsOption>()?;
     m.add_class::<GspatOption>()?;
     m.add_class::<GreedyOption>()?;
-    m.add("HoloError", holo_error_type(m.py())?)?;
     m.add("Pa", Py::new(m.py(), AmplitudeUnit::PA)?)?;
     m.add("kPa", Py::new(m.py(), AmplitudeUnit::KPA)?)?;
     m.add("dB", Py::new(m.py(), AmplitudeUnit::DB)?)?;

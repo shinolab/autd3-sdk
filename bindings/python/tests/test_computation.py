@@ -45,7 +45,7 @@ def test_phase_from_angle() -> None:
     assert autd3.value.Phase(np.pi * rad) == autd3.value.Phase(128)
     assert autd3.value.Phase(180 * deg) == autd3.value.Phase(128)
     assert autd3.value.Phase(0x80) == autd3.value.Phase.PI
-    with pytest.raises(ValueError):
+    with pytest.raises(TypeError):
         autd3.value.Phase(loose("invalid"))
     assert (2500.0 * Pa) == (2.5 * kPa)
     assert (121.5 * dB).pascal == pytest.approx(23.77, abs=1e-2)
@@ -53,7 +53,7 @@ def test_phase_from_angle() -> None:
 
     with pytest.raises(TypeError):
         pattern.wavelength(loose(340_000.0))
-    with pytest.raises(ValueError):
+    with pytest.raises(TypeError):
         modulation.sine(loose(200.0), modulation.SineOption(), autd3.value.SamplingConfig.FREQ_4K, modulation.modulation_buffer())
 
 
@@ -89,7 +89,7 @@ def test_pattern_masked_holo() -> None:
     def enabled(dev: int, tr: int) -> bool:
         return dev == 1 and tr % 3 == 1
 
-    mask = pattern.TransducerMask.masked([[enabled(device.idx(), tr) for tr in range(device.num_transducers())] for device in geo])
+    mask = pattern.TransducerMask.Masked([[enabled(device.idx(), tr) for tr in range(device.num_transducers())] for device in geo])
     holo_phases = geo.phase_buffer()
     holo_intensities = geo.intensity_buffer()
     holo.gspat(
@@ -154,12 +154,12 @@ def test_pattern_laguerre_hermite_gaussian() -> None:
     assert any(near(o, split[0] + 128) for o in split)
 
     zero_waist = pattern.LaguerreGaussianOption(p=0, l=1, waist=0.0 * mm)
-    with pytest.raises(ValueError, match="waist"):
+    with pytest.raises(autd3.InvalidArgumentError, match="waist"):
         pattern.laguerre_gaussian_phase(geo, target, [0.0, 0.0, 1.0], zero_waist, wavelength, lg)
     nan_waist = pattern.HermiteGaussianOption(m=1, n=0, waist=float("nan") * mm)
-    with pytest.raises(ValueError, match="waist"):
+    with pytest.raises(autd3.InvalidArgumentError, match="waist"):
         pattern.hermite_gaussian_phase(geo, target, [0.0, 0.0, 1.0], [1.0, 0.0, 0.0], nan_waist, wavelength, hg)
-    with pytest.raises(ValueError, match="waist"):
+    with pytest.raises(autd3.InvalidArgumentError, match="waist"):
         pattern.hermite_gaussian_phase_transducer(target, target, [0.0, 0.0, 1.0], [1.0, 0.0, 0.0], nan_waist, wavelength)
     with pytest.raises(TypeError, match="Length"):
         pattern.LaguerreGaussianOption(p=0, l=1, waist=loose(10.0))
@@ -266,13 +266,13 @@ def test_buffer_numpy_rejects_mismatch(buffer_type: type[pattern.PhaseBuffer] | 
         buf.copy_from(loose(values.astype(np.int64)))
     with pytest.raises(TypeError, match="uint8"):
         buffer_type.from_array(loose(values.astype(np.float32)))
-    with pytest.raises(ValueError, match="shape"):
+    with pytest.raises(autd3.InvalidArgumentError, match="shape"):
         buf.copy_from(values[:1])
-    with pytest.raises(ValueError, match="shape"):
+    with pytest.raises(autd3.InvalidArgumentError, match="shape"):
         buf.copy_from(np.zeros((249, 2), dtype=np.uint8))
-    with pytest.raises(ValueError, match=r"expected shape \(n, 249\), got \(249,\)"):
+    with pytest.raises(autd3.InvalidArgumentError, match=r"expected shape \(n, 249\), got \(249,\)"):
         buffer_type.from_array(np.zeros(249, dtype=np.uint8))
-    with pytest.raises(ValueError, match=r"expected shape \(n, 249\)"):
+    with pytest.raises(autd3.InvalidArgumentError, match=r"expected shape \(n, 249\)"):
         buffer_type.from_array(np.zeros((2, 249, 1), dtype=np.uint8))
     with pytest.raises(TypeError, match="ndarray"):
         buf.copy_from(loose(values.tolist()))
@@ -282,7 +282,7 @@ def test_buffer_numpy_rejects_mismatch(buffer_type: type[pattern.PhaseBuffer] | 
         buffer_type.from_array(loose("abc"))
 
     before = buf.to_numpy()
-    with pytest.raises(ValueError):
+    with pytest.raises(autd3.InvalidArgumentError):
         buf.copy_from(np.full((1, 249), 7, dtype=np.uint8))
     np.testing.assert_array_equal(buf.to_numpy(), before)
 
@@ -291,7 +291,7 @@ def test_buffer_from_array_list_is_unchanged() -> None:
     values = [[autd3.value.Phase(t & 0xFF) for t in range(249)] for _ in range(2)]
     buf = pattern.PhaseBuffer.from_array(values)
     assert buf[1][5] == autd3.value.Phase(5)
-    with pytest.raises(ValueError):
+    with pytest.raises(autd3.InvalidArgumentError):
         pattern.PhaseBuffer.from_array([[0] * 248])
 
 
@@ -559,9 +559,9 @@ def test_cpu_config_fields() -> None:
     assert config.ptp.pause_hold_syncs == 27
     assert config.ptp.pause_retry.as_millis() == 28
     assert autd3.commands.PtpConfig(pause_quanta=None).pause_quanta is None
-    with pytest.raises(ValueError):
+    with pytest.raises(autd3.InvalidArgumentError):
         autd3.commands.PtpConfig(delay_req_syncs=0)
-    with pytest.raises(ValueError):
+    with pytest.raises(autd3.InvalidArgumentError):
         autd3.commands.PtpConfig(pause_quanta=0)
     assert autd3.commands.PtpConfig(max_freq_ppb=2**32 - 1).max_freq_ppb == 2**32 - 1
     assert autd3.commands.PtpConfig(path_delay_filter_shift=255).path_delay_filter_shift == 255
@@ -596,7 +596,7 @@ def test_cpu_config_fields() -> None:
 
 
 def test_cpu_config_rejects_invalid_arguments() -> None:
-    with pytest.raises(ValueError, match="lock_samples"):
+    with pytest.raises(autd3.InvalidArgumentError, match="lock_samples"):
         autd3.commands.PtpConfig(lock_samples=0)
     with pytest.raises(TypeError):
         loose(autd3.commands.CpuConfig)(autd3.Duration.from_millis(10))
@@ -691,7 +691,7 @@ def test_pulse_width_table_and_pulse_width() -> None:
     commands.append(autd3.commands.SetPulseWidthTable())
     for command in commands:
         assert len(autd3.Frames.encode(geo, command)) == 1
-    with pytest.raises(ValueError):
+    with pytest.raises(autd3.InvalidArgumentError):
         autd3.commands.SetPulseWidthTable(table[:-1])
     with pytest.raises(TypeError):
         autd3.commands.SetPulseWidthTable(loose([0] * autd3.params.PWE_TABLE_SIZE))
@@ -705,15 +705,12 @@ def test_pulse_width_table_and_pulse_width() -> None:
     assert half == autd3.value.PulseWidth.from_duty(0.5)
     assert hash(half) == hash(autd3.value.PulseWidth.from_duty(0.5))
     assert autd3.value.PulseWidth(autd3.params.PULSE_WIDTH_PERIOD - 1).pulse_width() == autd3.params.PULSE_WIDTH_PERIOD - 1
-    with pytest.raises(autd3.Autd3Error, match="duty ratio") as err:
+    with pytest.raises(autd3.InvalidArgumentError, match="duty ratio"):
         autd3.value.PulseWidth.from_duty(1.0)
-    assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
-    with pytest.raises(autd3.Autd3Error, match="duty ratio") as err:
+    with pytest.raises(autd3.InvalidArgumentError, match="duty ratio"):
         autd3.value.PulseWidth.from_duty(-0.5)
-    assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
-    with pytest.raises(autd3.Autd3Error, match="pulse width") as err:
+    with pytest.raises(autd3.InvalidArgumentError, match="pulse width"):
         autd3.value.PulseWidth(autd3.params.PULSE_WIDTH_PERIOD)
-    assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
     with pytest.raises(OverflowError):
         autd3.value.PulseWidth(-1)
 
@@ -791,9 +788,8 @@ def test_an_unresolvable_sampling_config_is_rejected_when_constructed() -> None:
     with pytest.raises(TypeError, match="SamplingConfig"):
         autd3.commands.Modulation(loose(ZeroDivider()), buf)
 
-    with pytest.raises(autd3.Autd3Error, match="must divide the ultrasound frequency") as err:
+    with pytest.raises(autd3.InvalidArgumentError, match="must divide the ultrasound frequency"):
         autd3.value.SamplingConfig(3000.5 * Hz)
-    assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
 
 
 class _ProbingWavelength:

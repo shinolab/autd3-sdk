@@ -5,11 +5,12 @@ use std::time::Duration;
 use crate::datagram::{Expand, Frame, command_of};
 use crate::future::{Completed, future_into_py};
 use crate::ops::SysTime;
+use autd3_python_capsule::error::client as client_error;
 use autd3_python_capsule::extract::{duration_to_py, extract_duration, geometry_to_py};
-use autd3_python_capsule::{capsule_of, client_pyerr, client_pyerr_gil, geometry_from_capsule};
+use autd3_python_capsule::{capsule_of, geometry_from_capsule};
 use autd3_rs::Geometry;
 
-use pyo3::exceptions::{PyIndexError, PyValueError};
+use pyo3::exceptions::{PyIndexError, PyRuntimeError};
 use pyo3::prelude::*;
 use pyo3::sync::MutexExt;
 
@@ -365,7 +366,7 @@ impl Client {
         let option = &option.0;
         let client = py
             .detach(|| autd3_rs::Client::open(&geometry, option))
-            .map_err(|e| client_pyerr(py, &e))?;
+            .map_err(client_error)?;
         Ok(Client {
             inner: Arc::new(client),
             geometry,
@@ -377,22 +378,22 @@ impl Client {
         self.inner.num_devices()
     }
 
-    fn device_status(&self, py: Python<'_>) -> PyResult<Vec<DeviceStatus>> {
+    fn device_status(&self) -> PyResult<Vec<DeviceStatus>> {
         self.inner
             .device_status()
             .map(|status| status.into_iter().map(DeviceStatus).collect())
-            .map_err(|e| client_pyerr(py, &e))
+            .map_err(client_error)
     }
 
     fn geometry<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         geometry_to_py(py, &self.geometry)
     }
 
-    fn device_time_now(&self, py: Python<'_>) -> PyResult<SysTime> {
+    fn device_time_now(&self) -> PyResult<SysTime> {
         self.inner
             .device_time_now()
             .map(SysTime)
-            .map_err(|e| client_pyerr(py, &e))
+            .map_err(client_error)
     }
 
     fn ack_timeout<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
@@ -413,16 +414,13 @@ impl Client {
 
     fn send_heartbeat(&self, py: Python<'_>) -> PyResult<()> {
         py.detach(|| self.inner.send_heartbeat())
-            .map_err(|e| client_pyerr(py, &e))
+            .map_err(client_error)
     }
 
     fn read_firmware_version<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let client = Arc::clone(&self.inner);
         future_into_py(py, async move {
-            let versions = client
-                .read_firmware_version()
-                .await
-                .map_err(client_pyerr_gil)?;
+            let versions = client.read_firmware_version().await.map_err(client_error)?;
             Ok(versions
                 .into_iter()
                 .map(FirmwareVersion)
@@ -433,7 +431,7 @@ impl Client {
     fn read_fpga_state<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let client = Arc::clone(&self.inner);
         future_into_py(py, async move {
-            let states = client.read_fpga_state().await.map_err(client_pyerr_gil)?;
+            let states = client.read_fpga_state().await.map_err(client_error)?;
             Ok(states.into_iter().map(FpgaState).collect::<Vec<_>>())
         })
     }
@@ -441,7 +439,7 @@ impl Client {
     fn read_telemetry<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let client = Arc::clone(&self.inner);
         future_into_py(py, async move {
-            let telemetry = client.read_telemetry().await.map_err(client_pyerr_gil)?;
+            let telemetry = client.read_telemetry().await.map_err(client_error)?;
             Ok(telemetry.into_iter().map(Telemetry).collect::<Vec<_>>())
         })
     }
@@ -458,7 +456,7 @@ impl Client {
                 .send(Expand(command.as_ref()))
                 .await
                 .map(|()| Completed)
-                .map_err(client_pyerr_gil)
+                .map_err(client_error)
         })
     }
 
@@ -472,7 +470,7 @@ impl Client {
         let index = frame.index;
         future_into_py(py, async move {
             let frame = datagrams.frame(index).ok_or_else(frame_out_of_range)?;
-            let fut = client.send_frame(frame).await.map_err(client_pyerr_gil)?;
+            let fut = client.send_frame(frame).await.map_err(client_error)?;
             Ok(ResponseFuture(Mutex::new(Some(fut))))
         })
     }
@@ -491,7 +489,7 @@ impl Client {
             let fut = client
                 .send_frame_at(frame, exec_at.0)
                 .await
-                .map_err(client_pyerr_gil)?;
+                .map_err(client_error)?;
             Ok(ResponseFuture(Mutex::new(Some(fut))))
         })
     }
@@ -499,7 +497,7 @@ impl Client {
     fn close(&self, py: Python<'_>) -> PyResult<()> {
         let result = py.detach(|| self.inner.close());
         self.closed.store(true, Ordering::Release);
-        result.map_err(|e| client_pyerr(py, &e))
+        result.map_err(client_error)
     }
 
     fn __enter__(slf: Bound<'_, Self>) -> Bound<'_, Self> {
@@ -540,8 +538,8 @@ impl Response {
         self.0.reply_data_of(device).to_vec()
     }
 
-    fn check(&self, py: Python<'_>) -> PyResult<()> {
-        self.0.check().map_err(|e| client_pyerr(py, &e))
+    fn check(&self) -> PyResult<()> {
+        self.0.check().map_err(client_error)
     }
 }
 
@@ -556,9 +554,9 @@ impl ResponseFuture {
             .lock_py_attached(py)
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .take()
-            .ok_or_else(|| PyValueError::new_err("ResponseFuture has already been awaited"))?;
+            .ok_or_else(|| PyRuntimeError::new_err("ResponseFuture has already been awaited"))?;
         let awaitable = future_into_py(py, async move {
-            let inner = fut.await.map_err(client_pyerr_gil)?;
+            let inner = fut.await.map_err(client_error)?;
             Ok(Response(inner))
         })?;
         awaitable.getattr("__await__")?.call0()

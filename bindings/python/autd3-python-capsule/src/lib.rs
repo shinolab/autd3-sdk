@@ -1,3 +1,4 @@
+pub mod error;
 pub mod extract;
 pub mod numpy;
 
@@ -8,7 +9,6 @@ use std::ptr::NonNull;
 
 use autd3_rs_core::Geometry;
 use autd3_rs_core::value::{Intensity, Phase, SamplingConfig};
-use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyCapsule, PyCapsuleMethods};
 
@@ -19,39 +19,6 @@ const PHASE_CAPSULE_NAME: &CStr = c"autd3.phase.v3";
 const INTENSITY_CAPSULE_NAME: &CStr = c"autd3.intensity.v3";
 const MODULATION_CAPSULE_NAME: &CStr = c"autd3.modulation.v1";
 const SAMPLING_CONFIG_CAPSULE_NAME: &CStr = c"autd3.sampling_config.v1";
-
-pub mod error_code {
-    pub const GENERIC: i32 = -1;
-    pub const TIMEOUT: i32 = -2;
-    pub const DEVICE: i32 = -3;
-    pub const NETWORK: i32 = -4;
-    pub const INVALID_ARGUMENT: i32 = -5;
-}
-
-#[must_use]
-pub fn to_pyerr_with_code(py: Python<'_>, code: i32, msg: String) -> PyErr {
-    match py
-        .import("autd3_core")
-        .and_then(|m| m.getattr("Autd3Error"))
-        .and_then(|c| c.call1((msg.clone(),)))
-        .and_then(|inst| inst.setattr("code", code).map(|()| inst))
-    {
-        Ok(inst) => PyErr::from_value(inst),
-        Err(_) => PyValueError::new_err(msg),
-    }
-}
-
-pub fn to_pyerr<E: core::fmt::Display>(py: Python<'_>, e: E) -> PyErr {
-    to_pyerr_with_code(py, error_code::GENERIC, e.to_string())
-}
-
-pub fn invalid_argument<E: core::fmt::Display>(py: Python<'_>, e: E) -> PyErr {
-    to_pyerr_with_code(py, error_code::INVALID_ARGUMENT, e.to_string())
-}
-
-pub fn to_pyerr_gil<E: core::fmt::Display>(e: E) -> PyErr {
-    Python::attach(|py| to_pyerr(py, e))
-}
 
 pub fn capsule_of<'py>(obj: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyCapsule>> {
     if let Ok(capsule) = obj.cast::<PyCapsule>() {
@@ -194,37 +161,3 @@ mod frame {
 
 #[cfg(feature = "frame")]
 pub use frame::{frame_from_capsule, frame_into_capsule};
-
-#[cfg(feature = "frame")]
-mod client_error {
-    use autd3_rs::Error;
-    use pyo3::prelude::*;
-
-    use crate::error_code;
-
-    #[must_use]
-    pub fn client_error_code(e: &Error) -> i32 {
-        match e {
-            Error::Timeout { .. } => error_code::TIMEOUT,
-            Error::DeviceError { .. } | Error::UnexpectedReply { .. } => error_code::DEVICE,
-            Error::Network(_) | Error::DeviceLost { .. } => error_code::NETWORK,
-            Error::InvalidPayload(_) => error_code::INVALID_ARGUMENT,
-            Error::DeviceTimeUnknown | Error::Closed => error_code::GENERIC,
-            _ => unreachable!(),
-        }
-    }
-
-    #[must_use]
-    pub fn client_pyerr(py: Python<'_>, e: &Error) -> PyErr {
-        crate::to_pyerr_with_code(py, client_error_code(e), e.to_string())
-    }
-
-    #[allow(clippy::needless_pass_by_value)]
-    #[must_use]
-    pub fn client_pyerr_gil(e: Error) -> PyErr {
-        Python::attach(|py| client_pyerr(py, &e))
-    }
-}
-
-#[cfg(feature = "frame")]
-pub use client_error::{client_error_code, client_pyerr, client_pyerr_gil};

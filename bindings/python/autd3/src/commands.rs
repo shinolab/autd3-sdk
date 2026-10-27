@@ -2,8 +2,8 @@ use core::num::NonZeroU16;
 use core::time::Duration;
 use std::sync::Arc;
 
+use autd3_python_capsule::error::invalid_argument;
 use autd3_python_capsule::extract::{duration_to_py, extract_duration};
-use autd3_python_capsule::invalid_argument;
 use autd3_rs::commands::Operation;
 use autd3_rs::commands::{
     Clear as CoreClear, CpuConfig as CoreCpuConfig, EmulateGpioIn, FixedCompletionTime,
@@ -18,7 +18,7 @@ use autd3_rs::value::PulseWidth as CorePulseWidth;
 
 use crate::datagram::PushOperation;
 use crate::ops::SysTime;
-use pyo3::exceptions::{PyTypeError, PyValueError};
+use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 
 macro_rules! simple_command {
@@ -108,9 +108,8 @@ impl FixedUpdateRatePy {
     fn new(intensity: u16, phase: u16) -> PyResult<Self> {
         Ok(Self(FixedUpdateRate {
             intensity: NonZeroU16::new(intensity)
-                .ok_or_else(|| PyValueError::new_err("intensity must be >= 1"))?,
-            phase: NonZeroU16::new(phase)
-                .ok_or_else(|| PyValueError::new_err("phase must be >= 1"))?,
+                .ok_or_else(|| invalid_argument("intensity must be >= 1"))?,
+            phase: NonZeroU16::new(phase).ok_or_else(|| invalid_argument("phase must be >= 1"))?,
         }))
     }
 
@@ -190,9 +189,9 @@ impl PtpConfigPy {
         kp_milli = CorePtpConfig::default().kp_milli,
         ki_milli = CorePtpConfig::default().ki_milli,
         max_freq_ppb = CorePtpConfig::default().max_freq_ppb,
-        delay_req_syncs = CorePtpConfig::default().delay_req_syncs,
+        delay_req_syncs = CorePtpConfig::default().delay_req_syncs.get(),
         path_delay_filter_shift = CorePtpConfig::default().path_delay_filter_shift,
-        pause_quanta = CorePtpConfig::default().pause_quanta,
+        pause_quanta = CorePtpConfig::default().pause_quanta.map(NonZeroU16::get),
         pause_hold_syncs = CorePtpConfig::default().pause_hold_syncs,
         pause_retry = CorePtpConfig::default().pause_retry,
     ))]
@@ -208,9 +207,9 @@ impl PtpConfigPy {
         kp_milli: u32,
         ki_milli: u32,
         max_freq_ppb: u32,
-        delay_req_syncs: NonZeroU16,
+        delay_req_syncs: u16,
         path_delay_filter_shift: u8,
-        pause_quanta: Option<NonZeroU16>,
+        pause_quanta: Option<u16>,
         pause_hold_syncs: u16,
         #[pyo3(from_py_with = extract_duration)] pause_retry: Duration,
     ) -> PyResult<Self> {
@@ -220,15 +219,20 @@ impl PtpConfigPy {
             delay_resp_timeout,
             holdover,
             lock_samples: NonZeroU16::new(lock_samples)
-                .ok_or_else(|| PyValueError::new_err("lock_samples must be >= 1"))?,
+                .ok_or_else(|| invalid_argument("lock_samples must be >= 1"))?,
             step_threshold,
             lock_threshold,
             kp_milli,
             ki_milli,
             max_freq_ppb,
-            delay_req_syncs,
+            delay_req_syncs: NonZeroU16::new(delay_req_syncs)
+                .ok_or_else(|| invalid_argument("delay_req_syncs must be >= 1"))?,
             path_delay_filter_shift,
-            pause_quanta,
+            pause_quanta: pause_quanta
+                .map(|q| {
+                    NonZeroU16::new(q).ok_or_else(|| invalid_argument("pause_quanta must be >= 1"))
+                })
+                .transpose()?,
             pause_hold_syncs,
             pause_retry,
         }))
@@ -642,7 +646,7 @@ impl SetGpioOutPy {
     fn new(outputs: Vec<GpioOut>) -> PyResult<Self> {
         let outputs: [GpioOut; 4] = outputs
             .try_into()
-            .map_err(|_| PyValueError::new_err("SetGpioOut needs exactly 4 outputs"))?;
+            .map_err(|_| invalid_argument("SetGpioOut needs exactly 4 outputs"))?;
         Ok(Self(Arc::new(SetGpioOut {
             outputs: outputs.map(|g| g.0),
         })))
@@ -659,7 +663,7 @@ impl EmulateGpioInPy {
     fn new(values: Vec<bool>) -> PyResult<Self> {
         let values: [bool; 4] = values
             .try_into()
-            .map_err(|_| PyValueError::new_err("EmulateGpioIn needs exactly 4 values"))?;
+            .map_err(|_| invalid_argument("EmulateGpioIn needs exactly 4 values"))?;
         Ok(Self(Arc::new(EmulateGpioIn { values })))
     }
 }
@@ -709,7 +713,7 @@ fn extract_pulse_width_table(
 ) -> PyResult<Box<[CorePulseWidth; PWE_TABLE_SIZE]>> {
     let table: Vec<PulseWidth> = table.extract()?;
     let table: [PulseWidth; PWE_TABLE_SIZE] = table.try_into().map_err(|v: Vec<PulseWidth>| {
-        PyValueError::new_err(format!(
+        invalid_argument(format!(
             "SetPulseWidthTable needs exactly {PWE_TABLE_SIZE} entries, got {}",
             v.len()
         ))
@@ -765,17 +769,17 @@ pub struct PulseWidth(pub(crate) CorePulseWidth);
 #[pymethods]
 impl PulseWidth {
     #[new]
-    fn new(py: Python<'_>, pulse_width: u16) -> PyResult<Self> {
+    fn new(pulse_width: u16) -> PyResult<Self> {
         CorePulseWidth::new(pulse_width)
             .map(Self)
-            .map_err(|e| invalid_argument(py, e))
+            .map_err(invalid_argument)
     }
 
     #[staticmethod]
-    fn from_duty(py: Python<'_>, duty: f32) -> PyResult<Self> {
+    fn from_duty(duty: f32) -> PyResult<Self> {
         CorePulseWidth::from_duty(duty)
             .map(Self)
-            .map_err(|e| invalid_argument(py, e))
+            .map_err(invalid_argument)
     }
 
     fn pulse_width(&self) -> u16 {

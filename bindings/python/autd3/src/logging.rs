@@ -89,8 +89,7 @@ pub(crate) fn init_tracing(
         .unwrap_or_else(PoisonError::into_inner);
     if state.initialized {
         drop(state);
-        return Err(autd3_python_capsule::to_pyerr(
-            py,
+        return Err(autd3_python_capsule::error::generic(
             "tracing is already initialized; init_tracing can be called once per process",
         ));
     }
@@ -106,7 +105,7 @@ pub(crate) fn init_tracing(
         }
         Err(e) => {
             drop(state);
-            Err(autd3_python_capsule::to_pyerr(py, e))
+            Err(autd3_python_capsule::error::generic(e))
         }
     }
 }

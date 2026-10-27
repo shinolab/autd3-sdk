@@ -136,9 +136,8 @@ def test_distinct_values_compare_unequal(lhs: object, rhs: object) -> None:
     ],
 )
 def test_an_invalid_sampling_config_cannot_be_constructed(value: object, message: str) -> None:
-    with pytest.raises(autd3.Autd3Error, match=message) as err:
+    with pytest.raises(autd3.InvalidArgumentError, match=message):
         SamplingConfig(loose(value))
-    assert err.value.code == autd3.Autd3Error.INVALID_ARGUMENT
 
 
 def test_value_types_are_immutable() -> None:
@@ -174,7 +173,7 @@ def test_phase_conversions() -> None:
     assert Phase(0x40).rad() == pytest.approx(np.pi / 2)
     assert [10, 20, 30][Phase(1)] == 20
     assert int(Phase(7)) == 7
-    with pytest.raises(ValueError):
+    with pytest.raises(TypeError):
         Phase(loose(1.5))
     assert not hasattr(Phase(0), "radian")
 
@@ -237,7 +236,7 @@ def test_transducer_mask_queries() -> None:
     assert everything.num_enabled(geometry) == geometry.num_transducers()
 
     rows = [[tr % 2 == 0 for tr in range(Autd3.NUM_TRANSDUCERS)] for _ in range(2)]
-    mask = pattern.TransducerMask.masked(rows)
+    mask = pattern.TransducerMask.Masked(rows)
     mask.validate(geometry)
     assert mask.is_enabled(0, 0)
     assert not mask.is_enabled(1, 1)
@@ -247,7 +246,7 @@ def test_transducer_mask_queries() -> None:
     with pytest.raises(IndexError):
         mask.is_enabled(0, Autd3.NUM_TRANSDUCERS)
 
-    short = pattern.TransducerMask.masked(rows[:1])
+    short = pattern.TransducerMask.Masked(rows[:1])
     with pytest.raises(autd3.Autd3Error, match="device slots"):
         short.validate(geometry)
 
@@ -280,9 +279,9 @@ def test_control_points_from_an_n_by_3_ndarray() -> None:
     assert ControlPoints(np.zeros((0, 3)), 0x80).points == []
     assert ControlPoints(rows) == ControlPoints(rows, Intensity.MAX)
     assert ControlPoints(rows[0]) == ControlPoints([ControlPoint([1.0, 2.0, 3.0], Phase.ZERO)], Intensity.MAX)
-    with pytest.raises(ValueError, match=r"shape \(3,\) or \(n, 3\)"):
+    with pytest.raises(autd3.InvalidArgumentError, match=r"shape \(3,\) or \(n, 3\)"):
         ControlPoints(np.zeros(2), 0x80)
-    with pytest.raises(ValueError, match=r"shape \(3,\) or \(n, 3\)"):
+    with pytest.raises(autd3.InvalidArgumentError, match=r"shape \(3,\) or \(n, 3\)"):
         ControlPoints(np.zeros((2, 2)), 0x80)
     with pytest.raises(TypeError, match="real-valued dtype"):
         ControlPoints(np.zeros((2, 3), dtype=np.complex64), 0x80)
@@ -346,7 +345,7 @@ def test_modulation_buffer_numpy_round_trip() -> None:
 
     with pytest.raises(TypeError, match="uint8"):
         buf.copy_from(loose(values.astype(np.int64)))
-    with pytest.raises(ValueError, match="shape"):
+    with pytest.raises(autd3.InvalidArgumentError, match="shape"):
         buf.copy_from(loose(values.reshape(2, 4)))
     with pytest.raises(TypeError, match="ndarray"):
         buf.copy_from(loose([1, 2, 3]))
@@ -371,7 +370,7 @@ def test_modulation_names_follow_rust() -> None:
     assert modulation.samples_per_period(0, 200 * Hz) is None
     assert modulation.samples_per_period(10, 200.0 * Hz) == 20
     assert modulation.samples_per_period(10, 0.5 * Hz) == 8000
-    with pytest.raises(ValueError):
+    with pytest.raises(TypeError):
         modulation.samples_per_period(10, loose(200))
 
 
