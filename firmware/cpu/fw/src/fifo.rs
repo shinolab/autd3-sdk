@@ -51,12 +51,6 @@ impl<S> Fifo<S> {
     pub(crate) fn slots(&self) -> &[S] {
         &self.slots
     }
-
-    #[cfg(test)]
-    fn seed(&self, head: u16, tail: u16) {
-        self.head.store(head, Ordering::Relaxed);
-        self.tail.store(tail, Ordering::Relaxed);
-    }
 }
 
 pub(crate) struct Front<'a, S> {
@@ -84,7 +78,7 @@ impl<S> Deref for Front<'_, S> {
 mod tests {
     use core::cell::Cell;
 
-    use super::{FIFO_CAPACITY, FIFO_DEPTH, Fifo};
+    use super::{FIFO_CAPACITY, FIFO_DEPTH, Fifo, Ordering};
 
     fn fifo() -> Fifo<Cell<u16>> {
         Fifo::new([const { Cell::new(0) }; FIFO_DEPTH as usize])
@@ -108,7 +102,8 @@ mod tests {
     fn fifo_pops_in_push_order_across_the_index_wrap_without_confusing_full_and_empty() {
         let fifo = fifo();
         let start = u16::MAX - 2;
-        fifo.seed(start, start);
+        fifo.head.store(start, Ordering::Relaxed);
+        fifo.tail.store(start, Ordering::Relaxed);
         assert!(fifo.front().is_none());
 
         for value in 1..=FIFO_CAPACITY {
@@ -161,7 +156,8 @@ mod loom_tests {
 
         fn seeded(head: u16, tail: u16) -> Self {
             let ring = Self::new();
-            ring.fifo.seed(head, tail);
+            ring.fifo.head.store(head, Ordering::Relaxed);
+            ring.fifo.tail.store(tail, Ordering::Relaxed);
             ring
         }
 
