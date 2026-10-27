@@ -1,9 +1,10 @@
 #![allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 
+use autd3_rs_core::common::Freq;
 use autd3_rs_core::value::SamplingConfig;
 
 use crate::error::ModulationError;
-use crate::sampling_mode::SamplingMode;
+use crate::sampling::samples_and_cycles;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SquareOption {
@@ -22,8 +23,8 @@ impl Default for SquareOption {
     }
 }
 
-pub fn square<S: Into<SamplingMode>>(
-    freq: S,
+pub fn square(
+    freq: Freq,
     option: &SquareOption,
     config: SamplingConfig,
     dst: &mut Vec<u8>,
@@ -32,8 +33,7 @@ pub fn square<S: Into<SamplingMode>>(
         return Err(ModulationError::DutyOutOfRange { duty: option.duty });
     }
 
-    let mode: SamplingMode = freq.into();
-    let (n, rep) = mode.validate(config)?;
+    let (n, rep) = samples_and_cycles(freq, config)?;
 
     dst.clear();
     dst.reserve(n);

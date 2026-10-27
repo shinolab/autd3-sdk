@@ -35,7 +35,6 @@ namespace AUTD3
     [StructLayout(LayoutKind.Sequential)]
     internal struct SineComponentNative
     {
-        public byte Mode;
         public float Freq;
         public SineOptionNative Option;
     }
@@ -90,10 +89,10 @@ namespace AUTD3
         internal static extern int autd3_modulation_fourier_option_default([MarshalAs(UnmanagedType.I1)] out bool hasScaleFactor, out float scaleFactor, [MarshalAs(UnmanagedType.I1)] out bool clamp, out byte offset);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_modulation_sine(byte mode, float freq, SineOptionNative option, ushort samplingDivide, ModulationBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
+        internal static extern int autd3_modulation_sine(float freq, SineOptionNative option, ushort samplingDivide, ModulationBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_modulation_square(byte mode, float freq, SquareOptionNative option, ushort samplingDivide, ModulationBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
+        internal static extern int autd3_modulation_square(float freq, SquareOptionNative option, ushort samplingDivide, ModulationBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_modulation_fourier(SineComponentNative[] components, UIntPtr numComponents, FourierOptionNative option, ushort samplingDivide, ModulationBufferHandle buffer, byte[] outErr, UIntPtr outErrLen);
@@ -296,30 +295,14 @@ namespace AUTD3
 
     public readonly struct SineComponent
     {
-        internal const byte ModeExact = 0;
-        internal const byte ModeNearest = 1;
-
         public Freq Freq { get; }
         public SineOption Option { get; }
-        private readonly bool _nearest;
 
         public SineComponent(Freq freq, SineOption option)
         {
             Freq = freq;
             Option = option;
-            _nearest = false;
         }
-
-        public SineComponent(Nearest<Freq> freq, SineOption option)
-        {
-            Freq = freq.Value;
-            Option = option;
-            _nearest = true;
-        }
-
-        public bool IsNearest => _nearest;
-
-        internal byte ModeCode => _nearest ? ModeNearest : ModeExact;
     }
 
     public sealed class Modulation : ICommand
@@ -353,34 +336,22 @@ namespace AUTD3
             NativeModulation.autd3_op_modulation(
                 (byte)_bank, _samplingConfig.DivideForNative(), _buffer.Handle, _loopBehavior.Rep, _transitionMode.Mode, _transitionMode.Value);
 
-        public static void Sine(Nearest<Freq> freq, SineOption option, SamplingConfig config, ModulationBuffer dst) =>
-            Sine(freq.Value, SineComponent.ModeNearest, option, config, dst);
-
-        public static void Sine(Freq freq, SineOption option, SamplingConfig config, ModulationBuffer dst) =>
-            Sine(freq, SineComponent.ModeExact, option, config, dst);
-
-        private static void Sine(Freq freq, byte modeCode, SineOption option, SamplingConfig config, ModulationBuffer dst)
+        public static void Sine(Freq freq, SineOption option, SamplingConfig config, ModulationBuffer dst)
         {
             var sampling = config.DivideForNative();
             var err = new byte[NativeAbi.ErrorBufferLength];
-            var code = NativeModulation.autd3_modulation_sine(modeCode, freq.Hz, option.ToNative(), sampling, dst.Handle, err, (UIntPtr)err.Length);
+            var code = NativeModulation.autd3_modulation_sine(freq.Hz, option.ToNative(), sampling, dst.Handle, err, (UIntPtr)err.Length);
             if (code != 0)
             {
                 throw Autd3Exception.FromNative(code, err);
             }
         }
 
-        public static void Square(Nearest<Freq> freq, SquareOption option, SamplingConfig config, ModulationBuffer dst) =>
-            Square(freq.Value, SineComponent.ModeNearest, option, config, dst);
-
-        public static void Square(Freq freq, SquareOption option, SamplingConfig config, ModulationBuffer dst) =>
-            Square(freq, SineComponent.ModeExact, option, config, dst);
-
-        private static void Square(Freq freq, byte modeCode, SquareOption option, SamplingConfig config, ModulationBuffer dst)
+        public static void Square(Freq freq, SquareOption option, SamplingConfig config, ModulationBuffer dst)
         {
             var sampling = config.DivideForNative();
             var err = new byte[NativeAbi.ErrorBufferLength];
-            var code = NativeModulation.autd3_modulation_square(modeCode, freq.Hz, option.ToNative(), sampling, dst.Handle, err, (UIntPtr)err.Length);
+            var code = NativeModulation.autd3_modulation_square(freq.Hz, option.ToNative(), sampling, dst.Handle, err, (UIntPtr)err.Length);
             if (code != 0)
             {
                 throw Autd3Exception.FromNative(code, err);
@@ -404,7 +375,6 @@ namespace AUTD3
                 var c = components[i];
                 native[i] = new SineComponentNative
                 {
-                    Mode = c.ModeCode,
                     Freq = c.Freq.Hz,
                     Option = c.Option.ToNative(),
                 };

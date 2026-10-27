@@ -22,12 +22,6 @@ namespace AUTD3.Tests
         }
 
         [Fact]
-        public void FreqNearest()
-        {
-            Assert.Equal(200f, Nearest(200 * Hz).Value.Hz);
-        }
-
-        [Fact]
         public void VelocityNoParentheses()
         {
             Assert.Equal(340000f, (340 * m / s).MmS);
@@ -57,10 +51,6 @@ namespace AUTD3.Tests
             using var floatMod = Modulation.ModulationBuffer();
             Modulation.Sine(200.0f * Hz, new SineOption(), SamplingConfig.Freq4k, floatMod);
             Assert.True(floatMod.Length > 0);
-
-            using var nearestMod = Modulation.ModulationBuffer();
-            Modulation.Sine(Nearest(200 * Hz), new SineOption(), SamplingConfig.Freq4k, nearestMod);
-            Assert.True(nearestMod.Length > 0);
         }
 
         [Fact]

@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use autd3_rs::units::{Hz, rad};
 use autd3_rs::value::SamplingConfig;
-use autd3_rs_modulation::{Nearest, SineOption, modulation_buffer, sine};
+use autd3_rs_modulation::{SineOption, modulation_buffer, sine};
 
 fn main() -> Result<()> {
     let freq = 150 * Hz;
@@ -26,9 +26,5 @@ fn main() -> Result<()> {
     // ANCHOR: api
     sine(freq, &option, sampling_config, &mut dst)?;
     // ANCHOR_END: api
-
-    // ANCHOR: nearest
-    sine(Nearest(150.5 * Hz), &option, sampling_config, &mut dst)?;
-    // ANCHOR_END: nearest
     Ok(())
 }

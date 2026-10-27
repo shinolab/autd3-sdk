@@ -19,7 +19,6 @@ from autd3.value import (
     Intensity,
     LoopBehavior,
     ModulationBank,
-    Nearest,
     PatternBank,
     Phase,
     SamplingConfig,
@@ -46,7 +45,6 @@ EQUAL_PAIRS: list[tuple[Hashable, Hashable]] = [
     (GpioIn.I2, GpioIn.I2),
     (PatternBank.B1, PatternBank.B1),
     (ModulationBank.B0, ModulationBank.B0),
-    (Nearest(150.0 * Hz), Nearest(150 * Hz)),
     (autd3.Duration.from_millis(1), autd3.Duration.from_micros(1000)),
     (GpioOut.PwmOut(3), GpioOut.PwmOut(3)),
     (GpioOut.Sync, GpioOut.Sync),
@@ -87,7 +85,6 @@ DISTINCT_PAIRS: list[tuple[object, object]] = [
     (GpioIn.I0, GpioIn.I1),
     (PatternBank.B0, PatternBank.B1),
     (PatternBank.B0, ModulationBank.B0),
-    (Nearest(150.0 * Hz), Nearest(151.0 * Hz)),
     (autd3.Duration.from_millis(1), autd3.Duration.from_millis(2)),
     (GpioOut.PwmOut(3), GpioOut.PwmOut(4)),
     (GpioOut.ModIdx(3), GpioOut.PatternIdx(3)),
@@ -325,7 +322,6 @@ def test_modulation_options_expose_their_fields() -> None:
     assert component == modulation.SineComponent(100 * Hz, modulation.SineOption())
     assert component != modulation.SineComponent(200 * Hz, sine)
     assert modulation.SineComponent(100.0 * Hz, sine).freq == 100.0 * Hz
-    assert modulation.SineComponent(Nearest(150.0 * Hz), sine).freq == Nearest(150.0 * Hz)
     assert "SineComponent" in repr(component)
 
 
