@@ -3,6 +3,7 @@ name: release-unity
 on:
   push:
     tags:
+      - 'v*'
       - 'unity-v*'
 
 defaults:
@@ -64,8 +65,10 @@ jobs:
       - name: Pack
         run: cargo xtask unity pack --license --native-dir bindings/ffi/target/native
       - name: Generate release notes
+        if: startsWith(github.ref_name, 'unity-v')
         run: cargo xtask changelog --tag "${GITHUB_REF_NAME}" --release-notes --output RELEASE_NOTES.md
       - name: Create GitHub Release
+        if: startsWith(github.ref_name, 'unity-v')
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >-
@@ -73,6 +76,16 @@ jobs:
           --title "${GITHUB_REF_NAME}"
           --notes-file RELEASE_NOTES.md
           bindings/unity/dist/*.tgz
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref_name, 'v')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for _ in $(seq 30); do
+            gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 && break
+            sleep 20
+          done
+          gh release upload "${GITHUB_REF_NAME}" bindings/unity/dist/*.tgz
       - uses: actions/upload-artifact@v7
         with:
           name: unity-tarballs
@@ -99,7 +112,8 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          version="${GITHUB_REF_NAME#unity-v}"
+          version="${GITHUB_REF_NAME#unity-}"
+          version="${version#v}"
           for tgz in *.tgz; do
             name="${tgz%-${version}.tgz}"
             if [ "$name" = "$tgz" ]; then
