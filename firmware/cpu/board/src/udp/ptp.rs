@@ -4,8 +4,7 @@ use autd3_cpu_fw::net::Mac;
 use autd3_cpu_fw::ptp::Config;
 use autd3_cpu_fw::ptp::clock::complete;
 use autd3_cpu_fw::ptp::message::{
-    self, Content, FRAME_CAP, Message, MessageType, Outgoing, PortIdentity, correction_ns,
-    port_identity,
+    self, Content, FRAME_CAP, Message, MessageType, Outgoing, correction_ns, port_identity,
 };
 use autd3_cpu_fw::ptp::servo::Servo;
 use autd3_cpu_fw::udp::Role;
@@ -79,11 +78,6 @@ impl Unlocked {
     const fn elapsed_ms(self, now_ms: u32) -> u32 {
         self.counted_ms
             .saturating_add(now_ms.wrapping_sub(self.counted_until_ms))
-    }
-
-    const fn advance(&mut self, now_ms: u32) {
-        self.counted_ms = self.elapsed_ms(now_ms);
-        self.counted_until_ms = now_ms;
     }
 }
 
@@ -219,11 +213,6 @@ impl Ptp {
         }
     }
 
-    #[must_use]
-    pub(crate) fn identity(&self) -> PortIdentity {
-        port_identity(self.clock_id)
-    }
-
     fn send(&mut self, tx: &mut Tx, out: &Outgoing, port: u8, timestamp: bool) -> bool {
         let len = message::build(&mut self.frame, self.mac, self.clock_id, out);
         tx.send(&self.frame[..len], port, timestamp)
@@ -268,7 +257,8 @@ impl Ptp {
 
     pub(crate) fn tick(&mut self, tx: &mut Tx, now_ms: u32) {
         if let Some(unlocked) = &mut self.unlocked {
-            unlocked.advance(now_ms);
+            unlocked.counted_ms = unlocked.elapsed_ms(now_ms);
+            unlocked.counted_until_ms = now_ms;
         }
         match self.role {
             Some(Role::Grandmaster) => self.tick_master(tx, now_ms),
@@ -358,31 +348,6 @@ impl Ptp {
         }
     }
 
-    fn shortest_period_ppb(&self) -> i32 {
-        let sync_interval = self.config.sync_interval.as_nanos().max(1);
-        i32::try_from(NS_PER_SEC.div_ceil(sync_interval)).unwrap_or(i32::MAX)
-    }
-
-    fn dither_drift(&mut self, ppb: i32) -> i32 {
-        let floor = self.shortest_period_ppb();
-        if ppb.saturating_abs() >= floor {
-            self.drift_residual_ppb = 0;
-            return ppb;
-        }
-        let wanted = self.drift_residual_ppb + ppb;
-        let written = if wanted >= 0 { floor } else { -floor };
-        self.drift_residual_ppb = wanted - written;
-        written
-    }
-
-    fn apply_drift(&mut self, ppb: i32) {
-        let ppb = self.dither_drift(ppb);
-        if self.applied_ppb != Some(ppb) {
-            ethsw::set_drift(ppb);
-            self.applied_ppb = Some(ppb);
-        }
-    }
-
     fn poll_delay_req_timestamp(&mut self, now_ms: u32) {
         let DelayState::WaitReqTs { forward, t2, since } = self.delay else {
             return;
@@ -407,26 +372,6 @@ impl Ptp {
         }
     }
 
-    fn path_delay(&self) -> Option<i64> {
-        const HALF_BIT: u32 = PATH_DELAY_FRACTION_BITS - 1;
-        self.path_delay_acc
-            .map(|acc| (acc >> PATH_DELAY_FRACTION_BITS) + ((acc >> HALF_BIT) & 1))
-    }
-
-    fn filtered_path_delay(&self, measured: i64) -> Option<i64> {
-        let measured = measured.checked_mul(1 << PATH_DELAY_FRACTION_BITS)?;
-        match self.path_delay_acc {
-            Some(acc) => {
-                acc.checked_add(measured.checked_sub(acc)? >> self.config.path_delay_filter_shift)
-            }
-            None => Some(measured),
-        }
-    }
-
-    fn delay_req_due(&self, sync_seq: u16) -> bool {
-        sync_seq.wrapping_add(u16::from(self.mac[5])) % self.config.delay_req_syncs == 0
-    }
-
     fn paired(
         &mut self,
         tx: &mut Tx,
@@ -444,47 +389,64 @@ impl Ptp {
         else {
             return;
         };
-        let measure = match (self.locked, self.path_delay()) {
+        let path_delay = self.path_delay_acc.map(|acc| {
+            (acc >> PATH_DELAY_FRACTION_BITS) + ((acc >> (PATH_DELAY_FRACTION_BITS - 1)) & 1)
+        });
+        let measure = match (self.locked, path_delay) {
             (true, Some(path_delay)) => {
                 let Some(offset) = offset_ns(forward, path_delay) else {
                     return;
                 };
                 self.sample(offset, t2, now_ms);
-                self.locked && self.delay_req_due(seq)
+                self.locked
+                    && seq.wrapping_add(u16::from(self.mac[5])) % self.config.delay_req_syncs == 0
             }
             _ => true,
         };
         if measure {
-            self.request_delay(tx, forward, t2, now_ms);
+            self.seq = self.seq.wrapping_add(1);
+            self.arm_tx_timestamp();
+            let req = Outgoing {
+                content: Content::DelayReq,
+                seq: self.seq,
+                timestamp: 0,
+                correction: 0,
+            };
+            self.delay = if self.send(tx, &req, self.upstream, true) {
+                DelayState::WaitReqTs {
+                    forward,
+                    t2,
+                    since: now_ms,
+                }
+            } else {
+                DelayState::Idle
+            };
         }
     }
 
-    fn request_delay(&mut self, tx: &mut Tx, forward: i64, t2: u64, now_ms: u32) {
-        self.seq = self.seq.wrapping_add(1);
-        self.arm_tx_timestamp();
-        let req = Outgoing {
-            content: Content::DelayReq,
-            seq: self.seq,
-            timestamp: 0,
-            correction: 0,
-        };
-        self.delay = if self.send(tx, &req, self.upstream, true) {
-            DelayState::WaitReqTs {
-                forward,
-                t2,
-                since: now_ms,
-            }
-        } else {
-            DelayState::Idle
-        };
-    }
-
     fn sample(&mut self, offset: i64, t2: u64, now_ms: u32) {
+        fn dither_drift(ptp: &mut Ptp, ppb: i32) -> i32 {
+            let floor =
+                i32::try_from(NS_PER_SEC.div_ceil(ptp.config.sync_interval.as_nanos().max(1)))
+                    .unwrap_or(i32::MAX);
+            if ppb.saturating_abs() >= floor {
+                ptp.drift_residual_ppb = 0;
+                return ppb;
+            }
+            let wanted = ptp.drift_residual_ppb + ppb;
+            let written = if wanted >= 0 { floor } else { -floor };
+            ptp.drift_residual_ppb = wanted - written;
+            written
+        }
         self.last_sample_ms = now_ms;
         self.last_offset = offset;
         let out = self.servo.sample(offset, t2.cast_signed(), &self.config);
         if let Some(ppb) = out.drift_ppb {
-            self.apply_drift(ppb);
+            let ppb = dither_drift(self, ppb);
+            if self.applied_ppb != Some(ppb) {
+                ethsw::set_drift(ppb);
+                self.applied_ppb = Some(ppb);
+            }
         }
         if let Some(step) = out.step_ns {
             self.stop_pulse();
@@ -537,6 +499,14 @@ impl Ptp {
     }
 
     fn on_slave_message(&mut self, tx: &mut Tx, msg: &Message, rx: RxMeta, now_ms: u32) {
+        fn filtered_path_delay(ptp: &Ptp, measured: i64) -> Option<i64> {
+            let measured = measured.checked_mul(1 << PATH_DELAY_FRACTION_BITS)?;
+            match ptp.path_delay_acc {
+                Some(acc) => acc
+                    .checked_add(measured.checked_sub(acc)? >> ptp.config.path_delay_filter_shift),
+                None => Some(measured),
+            }
+        }
         match msg.kind {
             MessageType::Sync
                 if rx.port == self.upstream && self.last_sync_seq != Some(msg.seq) =>
@@ -580,7 +550,10 @@ impl Ptp {
                         now_ms,
                     );
                 }
-                _ if self.follows_last_sync(msg.seq) => {
+                _ if self
+                    .last_sync_seq
+                    .is_none_or(|last| msg.seq.wrapping_sub(last).cast_signed() > 0) =>
+                {
                     self.pairing = Pairing::GotFollowUp {
                         seq: msg.seq,
                         t1: msg.timestamp,
@@ -589,7 +562,7 @@ impl Ptp {
                 }
                 _ => {}
             },
-            MessageType::DelayResp if msg.requesting == Some(self.identity()) => {
+            MessageType::DelayResp if msg.requesting == Some(port_identity(self.clock_id)) => {
                 self.poll_delay_req_timestamp(now_ms);
                 let DelayState::WaitResp {
                     forward, t2, t3, ..
@@ -605,7 +578,7 @@ impl Ptp {
                     return;
                 };
                 let Some(path_delay_acc) =
-                    self.filtered_path_delay(i64::midpoint(forward, backward))
+                    filtered_path_delay(self, i64::midpoint(forward, backward))
                 else {
                     return;
                 };
@@ -623,10 +596,5 @@ impl Ptp {
             | MessageType::DelayResp => {}
             _ => unreachable!(),
         }
-    }
-
-    fn follows_last_sync(&self, seq: u16) -> bool {
-        self.last_sync_seq
-            .is_none_or(|last| seq.wrapping_sub(last).cast_signed() > 0)
     }
 }
