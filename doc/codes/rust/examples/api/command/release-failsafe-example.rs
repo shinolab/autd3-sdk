@@ -13,8 +13,8 @@ async fn main() -> anyhow::Result<()> {
     client.send(Clear).await?;
     client.send(Synchronize).await?;
 
-    let states = client.read_fpga_state().await?;
-    if states.iter().any(|state| state.is_failsafe_active()) {
+    let status = client.device_status()?;
+    if status.iter().any(|s| s.failsafe_active) {
         client.send(ReleaseFailsafe).await?;
     }
 

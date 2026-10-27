@@ -4,5 +4,5 @@ use super::DeviceState;
 pub struct DeviceStatus {
     pub state: DeviceState,
     pub ptp_locked: bool,
-    pub ptp_failsafe: bool,
+    pub failsafe_active: bool,
 }

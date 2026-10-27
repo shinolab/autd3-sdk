@@ -57,10 +57,6 @@ namespace AUTD3
         [return: MarshalAs(UnmanagedType.I1)]
         internal static extern bool autd3_fpga_state_is_transition_pending(byte raw);
 
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        [return: MarshalAs(UnmanagedType.I1)]
-        internal static extern bool autd3_fpga_state_is_failsafe_active(byte raw);
-
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_command_each(IntPtr[] ops, UIntPtr numDevices);
@@ -88,7 +84,7 @@ namespace AUTD3
         {
             public byte State;
             public byte PtpLocked;
-            public byte PtpFailsafe;
+            public byte FailsafeActive;
         }
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]

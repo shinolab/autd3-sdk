@@ -6,11 +6,11 @@ use anyhow::Result;
 use autd3_rs::commands::{Clear, CpuConfig, PtpConfig, ReleaseFailsafe, SetCpuConfig, Synchronize};
 use autd3_rs::{DeviceState, Frames};
 
-use crate::Ctx;
 use crate::cases::ERR_FAILSAFE_CONDITION_ACTIVE;
 use crate::cases::cpu_config::{silence, states, watch};
 use crate::cases::pattern_util::{expect_firmware_error, expect_firmware_ok};
 use crate::io::wait_enter;
+use crate::{Ctx, failsafe_gates};
 
 const TIMEOUT: Duration = Duration::from_secs(1);
 const SETTLE: Duration = Duration::from_secs(3);
@@ -38,11 +38,10 @@ struct Observed {
 
 async fn observe(ctx: &Ctx<'_>) -> Result<Observed> {
     let telemetry = ctx.client.read_telemetry().await?;
-    let fpga = ctx.client.read_fpga_state().await?;
     Ok(Observed {
         ptp_trips: telemetry.iter().map(|t| t.ptp_unlock_failsafe).collect(),
         host_trips: telemetry.iter().map(|t| t.failsafe).collect(),
-        gates: fpga.iter().map(|s| s.is_failsafe_active()).collect(),
+        gates: failsafe_gates(ctx.client)?,
     })
 }
 

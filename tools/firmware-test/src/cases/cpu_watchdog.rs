@@ -10,7 +10,7 @@ use autd3_rs::{DeviceState, Frames};
 use crate::cases::cpu_config::{silence, states};
 use crate::cases::pattern_util::expect_firmware_ok;
 use crate::io::prompt;
-use crate::{Ctx, Link, Session};
+use crate::{Ctx, Link, Session, failsafe_gates};
 
 const TIMEOUT: Duration = Duration::from_secs(1);
 const LONGER_TIMEOUT: Duration = Duration::from_secs(3);
@@ -32,11 +32,10 @@ struct Observed {
 
 async fn observe(ctx: &Ctx<'_>) -> Result<Observed> {
     let telemetry = ctx.client.read_telemetry().await?;
-    let fpga = ctx.client.read_fpga_state().await?;
     Ok(Observed {
         watchdog: telemetry.iter().map(|t| t.cpu_watchdog).collect(),
         host_trips: telemetry.iter().map(|t| t.failsafe).collect(),
-        gates: fpga.iter().map(|s| s.is_failsafe_active()).collect(),
+        gates: failsafe_gates(ctx.client)?,
     })
 }
 
@@ -317,12 +316,7 @@ pub(crate) async fn run(client: Session, link: &Link<'_>) -> Result<Session> {
                 .all(|(i, c)| *c == u8::from(i == target))
         )
     );
-    let gates: Vec<bool> = client
-        .read_fpga_state()
-        .await?
-        .iter()
-        .map(|s| s.is_failsafe_active())
-        .collect();
+    let gates = failsafe_gates(&client)?;
     println!(
         "  {} the gate is down after the reboot: gates {gates:?}",
         verdict(gates.iter().all(|g| !g))

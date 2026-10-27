@@ -11,8 +11,8 @@ async def main() -> None:
         await client.send(Clear())
         await client.send(Synchronize())
 
-        states = await client.read_fpga_state()
-        if any(state.is_failsafe_active() for state in states):
+        status = client.device_status()
+        if any(s.failsafe_active for s in status):
             await client.send(ReleaseFailsafe())
 
 

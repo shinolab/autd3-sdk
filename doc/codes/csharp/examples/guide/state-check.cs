@@ -23,7 +23,7 @@ internal static class Sample
             client.SendHeartbeat();
             await Task.Delay(CheckInterval);
             var current = client.DeviceStatus();
-            static bool Releasable(DeviceStatus s) => s.PtpFailsafe && s.PtpLocked;
+            static bool Releasable(DeviceStatus s) => s.FailsafeActive && s.PtpLocked;
             if (current.Any(Releasable))
             {
                 await client.SendAsync(Command.Each(device => Releasable(current[device.Idx]) ? new ReleaseFailsafe() : null));

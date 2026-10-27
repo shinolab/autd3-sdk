@@ -91,7 +91,7 @@ impl Node {
         self.ptp.set_config(config);
     }
 
-    pub(crate) fn flags(&self, ptp_failsafe: bool) -> Flags {
+    pub(crate) fn flags(&self, failsafe_active: bool) -> Flags {
         let mut flags = Flags::empty();
         if self.is_assigned() {
             flags |= Flags::ASSIGNED;
@@ -111,8 +111,8 @@ impl Node {
         if self.is_grandmaster() {
             flags |= Flags::GRANDMASTER;
         }
-        if ptp_failsafe {
-            flags |= Flags::PTP_FAILSAFE;
+        if failsafe_active {
+            flags |= Flags::FAILSAFE;
         }
         flags
     }
@@ -154,8 +154,8 @@ impl Node {
             msg_id,
         };
         let state = crate::cpu().reply();
-        let ptp_failsafe = crate::cpu().ptp_failsafe_active();
-        self.frame_reply(tx, &reply_to, &state, ptp_failsafe);
+        let failsafe_active = crate::cpu().failsafe_active();
+        self.frame_reply(tx, &reply_to, &state, failsafe_active);
     }
 
     pub(crate) fn on_frame(&mut self, tx: &mut Tx, now_ms: u32, frame: &[u8], rx: RxMeta) {
@@ -259,8 +259,8 @@ impl Node {
             crate::cpu().recv_frame(body, reply.msg_id);
         } else {
             let state = crate::cpu().reply();
-            let ptp_failsafe = crate::cpu().ptp_failsafe_active();
-            self.frame_reply(tx, reply, &state, ptp_failsafe);
+            let failsafe_active = crate::cpu().failsafe_active();
+            self.frame_reply(tx, reply, &state, failsafe_active);
         }
     }
 
@@ -275,7 +275,7 @@ impl Node {
         };
         let info = UnitInfo {
             unit_id: self.unit_id,
-            flags: self.flags(crate::cpu().ptp_failsafe_active()),
+            flags: self.flags(crate::cpu().failsafe_active()),
             ptp_offset_ns: I32::new(ptp_offset_ns),
         };
         self.send_reply(tx, reply, Some(Status::Ok), info.as_bytes());
@@ -350,11 +350,11 @@ impl Node {
         self.status(tx, reply, status);
     }
 
-    fn frame_reply(&mut self, tx: &mut Tx, reply: &ReplyTo, state: &Reply, ptp_failsafe: bool) {
+    fn frame_reply(&mut self, tx: &mut Tx, reply: &ReplyTo, state: &Reply, failsafe_active: bool) {
         let head = FrameReply {
             reserved: 0,
             status: state.status.as_u8(),
-            flags: self.flags(ptp_failsafe),
+            flags: self.flags(failsafe_active),
             unit_id: self.unit_id,
             sys_time: U64::new(ethsw::capture().unwrap_or(0)),
         };

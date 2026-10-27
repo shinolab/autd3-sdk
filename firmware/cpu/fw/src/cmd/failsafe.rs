@@ -49,7 +49,7 @@ mod tests {
     use autd3_cpu_wire::cpu_params;
 
     use crate::cmd::cpu_config::CpuConfig;
-    use crate::fpga_params::{CtlFlags, NUM_TRANSDUCERS};
+    use crate::fpga_params::{ADDR_FUNCTION_BITS, CtlFlags, FunctionBits, NUM_TRANSDUCERS};
     use crate::proto::{Cmd, Error};
     use crate::test_utils::builders::{force_fan, output_mask, set_cpu_config};
     use crate::test_utils::mock::{Frame, Harness, WatchdogEvent};
@@ -97,11 +97,13 @@ mod tests {
 
     fn assert_muted(h: &Harness) {
         assert!(h.ctl_flags().contains(CtlFlags::FAILSAFE));
+        assert!(h.cpu.failsafe_active());
         assert_mask_kept(h);
     }
 
     fn assert_not_muted(h: &Harness) {
         assert!(!h.ctl_flags().contains(CtlFlags::FAILSAFE));
+        assert!(!h.cpu.failsafe_active());
         assert_mask_kept(h);
     }
 
@@ -482,53 +484,51 @@ mod tests {
     }
 
     #[test]
-    fn the_ptp_failsafe_flag_rises_on_a_ptp_trip_and_stays_until_a_release() {
+    fn the_failsafe_flag_stays_raised_after_the_condition_clears_until_a_release() {
         let mut h = Harness::new();
         set_mask(&mut h);
         set_ptp_unlock_failsafe_timeout(&mut h, Some(Duration::from_millis(50)));
-        h.cpu.publish_ptp_unlocked(Some(49));
-        h.tick_1ms(1);
-        assert!(!h.cpu.ptp_failsafe_active());
-
         h.cpu.publish_ptp_unlocked(Some(50));
         h.tick_1ms(1);
-        assert!(h.cpu.ptp_failsafe_active());
+        assert_muted(&h);
 
         h.deliver(&Frame::new(Cmd::ReleaseFailsafe));
         assert_eq!(h.status(), Error::FailsafeConditionActive);
-        assert!(h.cpu.ptp_failsafe_active());
+        assert_muted(&h);
 
         h.cpu.publish_ptp_unlocked(None);
         h.tick_1ms(1);
-        assert!(h.cpu.ptp_failsafe_active());
+        assert_muted(&h);
 
         release(&mut h);
-        assert!(!h.cpu.ptp_failsafe_active());
     }
 
     #[test]
-    fn the_ptp_failsafe_flag_rises_even_when_the_host_failsafe_already_muted() {
-        let mut h = armed();
+    fn a_fired_watchdog_raises_the_failsafe_flag_on_the_next_tick() {
+        let mut h = Harness::new();
         set_mask(&mut h);
-        set_ptp_unlock_failsafe_timeout(&mut h, Some(Duration::from_millis(50)));
-        h.set_host_idle_ms(FAILSAFE_TIMEOUT_MS);
-        h.tick_1ms(1);
-        assert_muted(&h);
-        assert!(!h.cpu.ptp_failsafe_active());
+        h.port.watchdog_state = 0x0101;
+        assert!(!h.cpu.failsafe_active());
 
-        h.cpu.publish_ptp_unlocked(Some(50));
         h.tick_1ms(1);
-        assert!(h.cpu.ptp_failsafe_active());
+        assert!(h.cpu.failsafe_active());
+        assert!(!h.ctl_flags().contains(CtlFlags::FAILSAFE));
+
+        release(&mut h);
+        h.tick_1ms(1);
+        assert_not_muted(&h);
     }
 
     #[test]
-    fn a_host_failsafe_never_raises_the_ptp_failsafe_flag() {
-        let mut h = armed();
-        set_mask(&mut h);
-        h.set_host_idle_ms(FAILSAFE_TIMEOUT_MS);
+    fn a_watchdog_bit_on_an_fpga_without_the_watchdog_raises_nothing() {
+        let mut h = Harness::new();
+        h.set_ctl(
+            ADDR_FUNCTION_BITS,
+            u16::from(FunctionBits::STRICT_SILENCER_GUARD.bits()),
+        );
+        h.port.watchdog_state = 0x0101;
         h.tick_1ms(1);
-        assert_muted(&h);
-        assert!(!h.cpu.ptp_failsafe_active());
+        assert!(!h.cpu.failsafe_active());
     }
 
     #[test]

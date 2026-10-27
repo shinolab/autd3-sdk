@@ -21,10 +21,10 @@ import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 
 - `state`: デバイスの状態 (`DeviceState`).
 - `ptp_locked`: PTP がロックしているか.
-- `ptp_failsafe`: PTP のロックを失ったことで出力を止め, まだ解除されていないか.
+- `failsafe_active`: フェイルセーフで出力を止めていて, まだ解除されていないか (原因は問わない: ホストとの通信途絶・PTP ロック喪失・CPU ウォッチドッグ・ファームウェア更新).
 
 全デバイスが `Ready` か, いずれかが `Lost` か, といった集約は返り値から作る (下の例を参照).
-`ptp_locked` と `ptp_failsafe` はデバイスからの最後の返信の値で, `Lost` のデバイスはどちらも `false` になる.
+`ptp_locked` と `failsafe_active` はデバイスからの最後の返信の値で, `Lost` のデバイスはどちらも `false` になる.
 `Client` を閉じた後に呼ぶとエラー (`Closed`. 通信エラーで閉じた場合は `Network`) になる.
 
 状態の意味は以下の通り. 
@@ -46,16 +46,16 @@ import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 状態はデバイスからの返信で更新されるので, フレームを送らない間は [`send_heartbeat()`](/autd3-sdk/api/basics/client/#生存確認) で生存確認を送る (上の例ではループの先頭で送っている).
 送らない間は, デバイスとの通信が途絶えても `Lost` にならない.
 
-## PTP failsafe の検出と解除
+## フェイルセーフの検出と解除
 
-[SetCpuConfig](/autd3-sdk/api/command/cpu-config/) で `ptp_unlock_failsafe_timeout` を指定すると, PTP のロックを失ったまま指定の時間が経ったデバイスは出力を止める.
-止まったデバイスは `ptp_failsafe` が立ち, [`ReleaseFailsafe`](/autd3-sdk/api/command/release-failsafe/) か [Clear](/autd3-sdk/api/command/clear/) で解除されるまで立ったままになる (再ロックしても自動では戻らない).
+[SetCpuConfig](/autd3-sdk/api/command/cpu-config/) で `failsafe_timeout` や `ptp_unlock_failsafe_timeout` を指定すると, 条件を満たしたデバイスは出力を止める (CPU ウォッチドッグも同じ).
+止まったデバイスは `failsafe_active` が立ち, [`ReleaseFailsafe`](/autd3-sdk/api/command/release-failsafe/) か [Clear](/autd3-sdk/api/command/clear/) で解除されるまで立ったままになる (通信が戻っても, 再ロックしても自動では戻らない).
+どの原因で止まったかは `read_telemetry()` の発火回数 (`failsafe` / `ptp_unlock_failsafe` / `cpu_watchdog`) で分かる.
 
-以下は, `ptp_failsafe` が立っていて再ロックした (`ptp_locked` も立っている) デバイスへ `ReleaseFailsafe` を送る例.
-`send_heartbeat()` は返信を待たずに戻るので, 返信が届くまで待ってから `device_status` を呼ぶ (直後に呼ぶと, その前の返信の値が返る).
-PTP failsafe は `Client` を開き直しても解除されないが, 開いた直後の `device_status` は最初の返信が届くまで `ptp_failsafe` が `false` になる.
+以下は, `failsafe_active` が立っていて PTP がロックしている (`ptp_locked` も立っている) デバイスへ `ReleaseFailsafe` を送る例.
+`send_heartbeat()` は返信を待たずに戻るので, 返信が届くまで待ってから `device_status` を呼ぶ (直後に呼ぶと, その前の返信の値が返る). `send` の完了を待った後なら, そのフレームの返信の値が返る.
+フェイルセーフは `Client` を開き直しても解除されないが, 開いた直後の `device_status` は最初の返信が届くまで `failsafe_active` が `false` になる.
 
 <CodeTabs rust={excerpt(sample, "ptp_failsafe")} python={excerpt(pySample, "ptp_failsafe")} csharp={excerpt(csSample, "ptp_failsafe")} />
 
-ロックを失ったままのデバイスへ `ReleaseFailsafe` を送るとエラーになり, 出力は止まったままになる. `ptp_locked` が立つのを待ってから送る.
-ホストとの通信の途絶など, PTP 以外の原因で止まった出力は `ptp_failsafe` には現れない (`read_fpga_state()` の `is_failsafe_active()` で確認する).
+PTP のロックを失ったままのデバイスへ `ReleaseFailsafe` を送るとエラーになり, 出力は止まったままになる. `ptp_locked` が立つのを待ってから送る.

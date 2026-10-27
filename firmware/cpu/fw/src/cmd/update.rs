@@ -13,7 +13,6 @@ pub(crate) use autd3_cpu_wire::update::{
 };
 
 use crate::app::Cpu;
-use crate::cmd::failsafe;
 use crate::fpga;
 use crate::port::{FlashError, Port};
 use crate::proto::Error;
@@ -131,7 +130,7 @@ impl Cpu {
         if !is_plausible_length(length) {
             return Err(Error::InvalidPayload);
         }
-        failsafe::mute(port);
+        self.mute_output(port);
         fpga::set_watchdog_timeout(port, None);
         self.update.state.set(State::Idle);
         let a = valid_header(port, Slot::A)?;

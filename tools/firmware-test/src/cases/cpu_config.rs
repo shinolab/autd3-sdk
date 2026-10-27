@@ -10,7 +10,7 @@ use autd3_rs::commands::{
 use autd3_rs::value::{LoopBehavior, ModulationBank, SamplingConfig};
 use autd3_rs::{DeviceState, Frames};
 
-use crate::Ctx;
+use crate::{Ctx, failsafe_gates};
 
 pub(crate) async fn silence(ctx: &Ctx<'_>) -> Result<()> {
     ctx.stop_output().await?;
@@ -171,10 +171,10 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
             "  {} a timeout ({short:?}) shorter than the heartbeat trips on every device: {tripped:?}",
             verdict(tripped.iter().all(|c| *c > 0))
         );
-        let gated = ctx.client.read_fpga_state().await?;
+        let gated = failsafe_gates(ctx.client)?;
         println!(
             "  {} the trip raises the failsafe gate on every device",
-            verdict(gated.iter().all(|s| s.is_failsafe_active()))
+            verdict(gated.iter().all(|g| *g))
         );
 
         set_failsafe_timeout(ctx, None).await?;
@@ -185,15 +185,12 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
             "  {} a disabled failsafe stops tripping: {before:?} -> {after:?}",
             verdict(before == after)
         );
-        let still_gated = ctx.client.read_fpga_state().await?;
+        let still_gated = failsafe_gates(ctx.client)?;
         ctx.send(ReleaseFailsafe).await?;
-        let released = ctx.client.read_fpga_state().await?;
+        let released = failsafe_gates(ctx.client)?;
         println!(
             "  {} the gate stays up until ReleaseFailsafe lowers it",
-            verdict(
-                still_gated.iter().all(|s| s.is_failsafe_active())
-                    && released.iter().all(|s| !s.is_failsafe_active())
-            )
+            verdict(still_gated.iter().all(|g| *g) && released.iter().all(|g| !g))
         );
 
         set_failsafe_timeout(ctx, Some(short)).await?;
@@ -224,10 +221,10 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
             "  {} Clear disabled the failsafe (the default) and reset the counter: {counts:?}",
             verdict(counts.iter().all(|c| *c == 0))
         );
-        let cleared = ctx.client.read_fpga_state().await?;
+        let cleared = failsafe_gates(ctx.client)?;
         println!(
             "  {} Clear lowered the failsafe gate",
-            verdict(cleared.iter().all(|s| !s.is_failsafe_active()))
+            verdict(cleared.iter().all(|g| !g))
         );
         Ok(())
     }

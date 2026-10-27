@@ -29,6 +29,14 @@ pub fn device_states(client: &Client) -> Vec<DeviceState> {
         .unwrap_or_default()
 }
 
+pub fn failsafe_gates(client: &Client) -> Result<Vec<bool>> {
+    Ok(client
+        .device_status()?
+        .iter()
+        .map(|s| s.failsafe_active)
+        .collect())
+}
+
 pub struct Ctx<'a> {
     pub client: &'a Client,
     pub geometry: &'a Geometry,
@@ -405,9 +413,10 @@ pub async fn describe(client: &Client) {
 
     match client.read_fpga_state().await {
         Ok(states) => {
+            let gates = failsafe_gates(client).unwrap_or_default();
             for (i, s) in states.iter().enumerate() {
                 println!(
-                    "  device[{i}] fpga state: raw={:#04x} thermal={} mod_bank={:?} pattern_bank={:?} mode={} pattern_stopped={} mod_stopped={} transition_pending={} failsafe={}",
+                    "  device[{i}] fpga state: raw={:#04x} thermal={} mod_bank={:?} pattern_bank={:?} mode={} pattern_stopped={} mod_stopped={} transition_pending={} failsafe={:?}",
                     s.0,
                     s.is_thermal_asserted(),
                     s.current_mod_bank(),
@@ -420,7 +429,7 @@ pub async fn describe(client: &Client) {
                     s.is_pattern_stopped(),
                     s.is_mod_stopped(),
                     s.is_transition_pending(),
-                    s.is_failsafe_active(),
+                    gates.get(i),
                 );
             }
         }

@@ -8,7 +8,6 @@ pub(crate) use autd3_cpu_wire::fpga_update::{
 use autd3_cpu_wire::payload::{UpdateBeginPayload, UpdateChunkPayload};
 
 use crate::app::Cpu;
-use crate::cmd::failsafe;
 use crate::fpga;
 use crate::fpga_params::{
     ADDR_FLASH_ADDR_0, ADDR_FLASH_ADDR_1, ADDR_FLASH_CMD, ADDR_FLASH_LEN_0, ADDR_FLASH_LEN_1,
@@ -194,7 +193,7 @@ impl Cpu {
             return Err(Error::UpdateUnsupported);
         }
         self.fpga_update.state.set(State::Locked);
-        failsafe::mute(port);
+        self.mute_output(port);
         fpga::set_watchdog_timeout(port, None);
         run_command(
             port,
@@ -854,7 +853,7 @@ mod tests {
         assert_eq!(h.status(), Error::None);
         h.cpu.publish_ptp_unlocked(Some(50));
         h.tick_1ms(1);
-        assert!(h.cpu.ptp_failsafe_active());
+        assert!(h.cpu.failsafe_active());
         h.cpu.publish_ptp_unlocked(None);
         run_update(&mut h, &image(700, seed));
         h.deliver(&Frame::new(Cmd::FpgaUpdateActivate));
@@ -863,24 +862,24 @@ mod tests {
     }
 
     #[test]
-    fn a_clean_reinitialization_after_reconfiguration_lowers_the_ptp_failsafe_flag() {
+    fn a_clean_reinitialization_after_reconfiguration_lowers_the_failsafe_flag() {
         let mut h = ptp_failsafe_then_activated(63);
         h.tick_1ms(u32::from(FPGA_REBOOT_DELAY_MS) + u32::from(FPGA_RECONFIG_SETTLE_MS) - 1);
-        assert!(h.cpu.ptp_failsafe_active());
+        assert!(h.cpu.failsafe_active());
         h.tick_1ms(1);
         assert!(!output_muted(&h));
-        assert!(!h.cpu.ptp_failsafe_active());
+        assert!(!h.cpu.failsafe_active());
     }
 
     #[test]
-    fn a_reinitialization_that_times_out_keeps_the_ptp_failsafe_flag() {
+    fn a_reinitialization_that_times_out_keeps_the_failsafe_flag() {
         let mut h = ptp_failsafe_then_activated(64);
         h.tick_1ms(u32::from(FPGA_REBOOT_DELAY_MS) + u32::from(FPGA_RECONFIG_SETTLE_MS) - 1);
         h.port.latch_stuck = true;
         h.tick_1ms(1);
         h.port.latch_stuck = false;
         assert!(output_muted(&h));
-        assert!(h.cpu.ptp_failsafe_active());
+        assert!(h.cpu.failsafe_active());
     }
 
     #[test]

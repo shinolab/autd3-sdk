@@ -53,7 +53,6 @@ namespace AUTD3
         public bool IsPatternStopped => NativeClient.autd3_fpga_state_is_pattern_stopped(Raw);
         public bool IsModStopped => NativeClient.autd3_fpga_state_is_mod_stopped(Raw);
         public bool IsTransitionPending => NativeClient.autd3_fpga_state_is_transition_pending(Raw);
-        public bool IsFailsafeActive => NativeClient.autd3_fpga_state_is_failsafe_active(Raw);
     }
 
     public readonly struct Version : IEquatable<Version>
@@ -194,24 +193,24 @@ namespace AUTD3
 
         public bool PtpLocked { get; }
 
-        public bool PtpFailsafe { get; }
+        public bool FailsafeActive { get; }
 
         internal DeviceStatus(NativeClient.DeviceStatusNative native)
         {
             State = DeviceState.FromNative(native.State);
             PtpLocked = native.PtpLocked != 0;
-            PtpFailsafe = native.PtpFailsafe != 0;
+            FailsafeActive = native.FailsafeActive != 0;
         }
 
         public override string ToString() =>
-            $"DeviceStatus {{ State = {State}, PtpLocked = {PtpLocked}, PtpFailsafe = {PtpFailsafe} }}";
+            $"DeviceStatus {{ State = {State}, PtpLocked = {PtpLocked}, FailsafeActive = {FailsafeActive} }}";
 
         public bool Equals(DeviceStatus other) =>
-            State == other.State && PtpLocked == other.PtpLocked && PtpFailsafe == other.PtpFailsafe;
+            State == other.State && PtpLocked == other.PtpLocked && FailsafeActive == other.FailsafeActive;
 
         public override bool Equals(object? obj) => obj is DeviceStatus other && Equals(other);
 
-        public override int GetHashCode() => HashCode.Combine(State, PtpLocked, PtpFailsafe);
+        public override int GetHashCode() => HashCode.Combine(State, PtpLocked, FailsafeActive);
 
         public static bool operator ==(DeviceStatus left, DeviceStatus right) => left.Equals(right);
 
