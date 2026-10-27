@@ -1,8 +1,6 @@
 use crate::emu_fpga::FpgaEmulator;
 use autd3_cpu_fw::Cpu;
-#[cfg(feature = "udp")]
-use autd3_cpu_fw::proto::Drained;
-use autd3_cpu_fw::proto::Reply;
+use autd3_cpu_fw::proto::{Drained, Reply};
 
 pub struct Device {
     pub(crate) cpu: Cpu,
@@ -30,10 +28,6 @@ impl Device {
         self.cpu.process_one(&mut self.fpga)
     }
 
-    fn process_pending(&mut self) {
-        self.cpu.process_pending(&mut self.fpga);
-    }
-
     pub fn tick_1ms(&mut self) {
         let resets = self.fpga.reset_count();
         self.cpu.tick_1ms(&mut self.fpga);
@@ -49,7 +43,7 @@ impl Device {
 
     pub fn send(&mut self, frame: &[u8]) -> Reply {
         self.recv(frame, 0);
-        self.process_pending();
+        while self.cpu.process_one(&mut self.fpga) != Drained::Empty {}
         self.reply()
     }
 

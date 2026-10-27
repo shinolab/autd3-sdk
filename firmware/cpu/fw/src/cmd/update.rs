@@ -60,11 +60,6 @@ impl UpdateSession {
         self.boot.get().map(|b| b.slot)
     }
 
-    #[cfg(all(test, not(loom)))]
-    pub(crate) fn state(&self) -> State {
-        self.state.get()
-    }
-
     pub(crate) fn is_resetting(&self) -> bool {
         matches!(self.state.get(), State::Rebooting { .. })
     }
@@ -399,7 +394,7 @@ mod tests {
         let mut h = Harness::new();
         h.deliver(&begin(5000, 0));
         assert_eq!(h.status(), Error::UpdateFlash);
-        assert_eq!(h.cpu.update.state(), State::Idle);
+        assert_eq!(h.cpu.update.state.get(), State::Idle);
         assert_eq!(h.port.erased, []);
         assert!(
             h.port
@@ -436,7 +431,7 @@ mod tests {
         assert_eq!(slot_image(&h, Slot::B, img.len()), &img[..]);
         assert_eq!(header_of(&h, Slot::A).generation.get(), 0);
         assert_eq!(slot_image(&h, Slot::A, running.len()), &running[..]);
-        assert_eq!(h.cpu.update.state(), State::Committed);
+        assert_eq!(h.cpu.update.state.get(), State::Committed);
         assert_eq!(
             h.port.erased,
             [(Slot::B.base(), erased_len(img.len() as u32))]
@@ -497,7 +492,7 @@ mod tests {
         assert_eq!(h.status(), Error::UpdateImageInvalid);
         assert!(!header_of(&h, Slot::B).is_plausible());
         assert_eq!(header_of(&h, Slot::A).generation.get(), 0);
-        assert_eq!(h.cpu.update.state(), State::Idle);
+        assert_eq!(h.cpu.update.state.get(), State::Idle);
 
         h.deliver(&chunk(0, &img[..8]));
         assert_eq!(h.status(), Error::UpdateNotStarted);
@@ -542,7 +537,7 @@ mod tests {
         h.deliver(&chunk(1000, &[]));
         assert_eq!(h.status(), Error::None);
         assert_eq!(
-            h.cpu.update.state(),
+            h.cpu.update.state.get(),
             State::Receiving {
                 slot: Slot::B,
                 length: 1000,
@@ -568,7 +563,7 @@ mod tests {
             h.deliver(&begin(length, 0));
             assert_eq!(h.status(), Error::InvalidPayload, "length {length}");
         }
-        assert_eq!(h.cpu.update.state(), State::Idle);
+        assert_eq!(h.cpu.update.state.get(), State::Idle);
         assert_eq!(h.port.erased, []);
         h.deliver(&begin(max, 0));
         assert_eq!(h.status(), Error::None);
@@ -584,7 +579,7 @@ mod tests {
         let (mut h, _) = running_from_slot_a();
         let img = image(300, 9);
         run_update(&mut h, &img);
-        assert_eq!(h.cpu.update.state(), State::Committed);
+        assert_eq!(h.cpu.update.state.get(), State::Committed);
         let erased = h.port.erased.clone();
 
         let mut invalid = begin(length.unwrap_or(0), 0);
@@ -593,7 +588,7 @@ mod tests {
         }
         h.deliver(&invalid);
         assert_eq!(h.status(), Error::InvalidPayload);
-        assert_eq!(h.cpu.update.state(), State::Committed);
+        assert_eq!(h.cpu.update.state.get(), State::Committed);
         assert_eq!(h.port.erased, erased);
 
         h.deliver(&Frame::new(Cmd::Reboot));
@@ -601,7 +596,7 @@ mod tests {
         h.tick_1ms(u32::from(REBOOT_DELAY_MS));
         assert_eq!(h.port.reset_count, 1);
         h.reboot();
-        assert_eq!(h.cpu.booted_slot(), Some(Slot::B));
+        assert_eq!(h.cpu.update.boot_slot(), Some(Slot::B));
     }
 
     #[test]
@@ -610,10 +605,10 @@ mod tests {
         let img = image(300, 9);
         h.deliver(&begin(img.len() as u32, crc32(&img)));
         assert_eq!(h.status(), Error::None);
-        let session = h.cpu.update.state();
+        let session = h.cpu.update.state.get();
         h.deliver(&begin(0, 0));
         assert_eq!(h.status(), Error::InvalidPayload);
-        assert_eq!(h.cpu.update.state(), session);
+        assert_eq!(h.cpu.update.state.get(), session);
         send_image(&mut h, &img);
         h.deliver(&Frame::new(Cmd::UpdateCommit));
         assert_eq!(h.status(), Error::None);
@@ -631,7 +626,7 @@ mod tests {
         h.tick_1ms(u32::from(REBOOT_DELAY_MS));
         assert_eq!(h.port.reset_count, 1);
         h.reboot();
-        assert_eq!(h.cpu.booted_slot(), Some(Slot::A));
+        assert_eq!(h.cpu.update.boot_slot(), Some(Slot::A));
     }
 
     #[test]
@@ -640,7 +635,7 @@ mod tests {
         h.port.flash_fail = true;
         h.deliver(&begin(100, 0));
         assert_eq!(h.status(), Error::UpdateFlash);
-        assert_eq!(h.cpu.update.state(), State::Idle);
+        assert_eq!(h.cpu.update.state.get(), State::Idle);
     }
 
     fn output_muted(h: &Harness) -> bool {
@@ -766,7 +761,7 @@ mod tests {
         assert_eq!(running_image(&mut h), Some(RunningImage::Confirmed));
 
         h.reboot();
-        assert_eq!(h.cpu.booted_slot(), Some(Slot::B));
+        assert_eq!(h.cpu.update.boot_slot(), Some(Slot::B));
         let flash = h.port.flash.clone();
         assert_eq!(running_image(&mut h), Some(RunningImage::Unconfirmed));
         assert_eq!(h.port.flash, flash);
@@ -786,7 +781,7 @@ mod tests {
         h.reboot();
         assert_eq!(running_image(&mut h), Some(RunningImage::Unconfirmed));
         h.reboot();
-        assert_eq!(h.cpu.booted_slot(), Some(Slot::A));
+        assert_eq!(h.cpu.update.boot_slot(), Some(Slot::A));
         assert_eq!(running_image(&mut h), Some(RunningImage::Confirmed));
         assert!(header_of(&h, Slot::B).needs_confirmation());
     }
@@ -825,7 +820,7 @@ mod tests {
         run_update(&mut h, &img);
 
         h.reboot();
-        assert_eq!(h.cpu.booted_slot(), Some(Slot::B));
+        assert_eq!(h.cpu.update.boot_slot(), Some(Slot::B));
         let b = header_of(&h, Slot::B);
         assert_eq!(b.attempts_used(), 1);
         assert!(!b.is_boot_eligible());
@@ -839,13 +834,13 @@ mod tests {
         run_update(&mut h, &img);
 
         h.reboot();
-        assert_eq!(h.cpu.booted_slot(), Some(Slot::B));
+        assert_eq!(h.cpu.update.boot_slot(), Some(Slot::B));
         h.reboot();
-        assert_eq!(h.cpu.booted_slot(), Some(Slot::A));
+        assert_eq!(h.cpu.update.boot_slot(), Some(Slot::A));
         assert_eq!(header_of(&h, Slot::B).attempts_used(), 1);
         assert_eq!(slot_image(&h, Slot::A, running.len()), &running[..]);
         h.reboot();
-        assert_eq!(h.cpu.booted_slot(), Some(Slot::A));
+        assert_eq!(h.cpu.update.boot_slot(), Some(Slot::A));
     }
 
     #[test]
@@ -863,7 +858,7 @@ mod tests {
 
         for _ in 0..3 {
             h.reboot();
-            assert_eq!(h.cpu.booted_slot(), Some(Slot::B));
+            assert_eq!(h.cpu.update.boot_slot(), Some(Slot::B));
         }
         assert_eq!(header_of(&h, Slot::B).attempts_used(), 1);
     }
@@ -872,7 +867,7 @@ mod tests {
     fn confirming_a_normal_image_writes_nothing() {
         let (mut h, _) = running_from_slot_a();
         h.reboot();
-        assert_eq!(h.cpu.booted_slot(), Some(Slot::A));
+        assert_eq!(h.cpu.update.boot_slot(), Some(Slot::A));
         let before = h.port.flash.clone();
         assert_eq!(confirm(&mut h), Error::None);
         assert_eq!(h.port.flash, before);
@@ -882,12 +877,12 @@ mod tests {
     #[test]
     fn confirm_without_a_booted_image_is_rejected() {
         let (mut h, _) = running_from_slot_a();
-        assert_eq!(h.cpu.booted_slot(), None);
+        assert_eq!(h.cpu.update.boot_slot(), None);
         assert_eq!(confirm(&mut h), Error::UpdateNothingToConfirm);
 
         let mut blank = Harness::new();
         blank.reboot();
-        assert_eq!(blank.cpu.booted_slot(), None);
+        assert_eq!(blank.cpu.update.boot_slot(), None);
         assert_eq!(confirm(&mut blank), Error::UpdateNothingToConfirm);
     }
 
@@ -897,12 +892,12 @@ mod tests {
         let img = image(900, 24);
         run_update(&mut h, &img);
         h.reboot();
-        assert_eq!(h.cpu.booted_slot(), Some(Slot::B));
+        assert_eq!(h.cpu.update.boot_slot(), Some(Slot::B));
 
         let next = image(1100, 25);
         h.deliver(&begin(next.len() as u32, crc32(&next)));
         assert_eq!(h.status(), Error::None);
-        assert_eq!(h.cpu.booted_slot(), None);
+        assert_eq!(h.cpu.update.boot_slot(), None);
         assert_eq!(confirm(&mut h), Error::UpdateNothingToConfirm);
         send_image(&mut h, &next);
         h.deliver(&Frame::new(Cmd::UpdateCommit));
@@ -939,7 +934,7 @@ mod tests {
         h.port.flash[image_base..][..img.len()].copy_from_slice(&img);
 
         h.reboot();
-        assert_eq!(h.cpu.booted_slot(), Some(Slot::B));
+        assert_eq!(h.cpu.update.boot_slot(), Some(Slot::B));
         assert_eq!(header_of(&h, Slot::B).attempts, U32::new(0xFFFF_FFFE));
     }
 
@@ -952,7 +947,7 @@ mod tests {
         let status = Slot::B.base() as usize + 16;
         h.port.flash[status + 3] = 0x00;
         h.reboot();
-        assert_eq!(h.cpu.booted_slot(), Some(Slot::A));
+        assert_eq!(h.cpu.update.boot_slot(), Some(Slot::A));
     }
 
     #[test]
@@ -962,7 +957,7 @@ mod tests {
         run_update(&mut h, &img);
         h.port.flash_fail = true;
         h.reboot();
-        assert_eq!(h.cpu.booted_slot(), None);
+        assert_eq!(h.cpu.update.boot_slot(), None);
         h.port.flash_fail = false;
         assert_eq!(header_of(&h, Slot::B).attempts_used(), 0);
     }
@@ -987,7 +982,7 @@ mod tests {
         h.deliver(&Frame::new(Cmd::UpdateCommit));
         assert_eq!(h.status(), Error::UpdateNotStarted);
         assert_eq!(header_of(&h, Slot::B).generation.get(), 1);
-        assert_eq!(h.cpu.update.state(), State::Committed);
+        assert_eq!(h.cpu.update.state.get(), State::Committed);
     }
 
     fn fpga_begin(length: u32, crc: u32) -> Frame {
@@ -1026,7 +1021,7 @@ mod tests {
         h.deliver(&Frame::new(Cmd::Reboot));
         assert_eq!(h.status(), Error::None);
         assert_eq!(
-            h.cpu.update.state(),
+            h.cpu.update.state.get(),
             State::Rebooting {
                 remaining_ms: REBOOT_DELAY_MS
             }
@@ -1035,7 +1030,7 @@ mod tests {
         assert_eq!(h.port.reset_count, 0);
         h.tick_1ms(1);
         assert_eq!(h.port.reset_count, 1);
-        assert_eq!(h.cpu.update.state(), State::Idle);
+        assert_eq!(h.cpu.update.state.get(), State::Idle);
         h.tick_1ms(10);
         assert_eq!(h.port.reset_count, 1);
 
@@ -1141,7 +1136,7 @@ mod tests {
         h.deliver(&Frame::new(Cmd::UpdateCommit));
         assert_eq!(h.status(), Error::UpdateFlash);
         assert!(!header_of(&h, Slot::B).is_plausible());
-        assert_ne!(h.cpu.update.state(), State::Committed);
+        assert_ne!(h.cpu.update.state.get(), State::Committed);
     }
 
     #[test]
@@ -1150,7 +1145,7 @@ mod tests {
         let img = image(300, 34);
         run_update(&mut h, &img);
         h.reboot();
-        assert_eq!(h.cpu.booted_slot(), Some(Slot::B));
+        assert_eq!(h.cpu.update.boot_slot(), Some(Slot::B));
         h.port.flash_write_silent = true;
         assert_eq!(confirm(&mut h), Error::UpdateFlash);
         assert!(header_of(&h, Slot::B).needs_confirmation());
