@@ -1,116 +1,22 @@
-use core::cell::{Cell, RefCell};
-use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+mod fifo;
+mod health;
+
+use core::cell::Cell;
+use core::sync::atomic::Ordering;
 
 use crate::cmd;
-use crate::fifo::{FIFO_DEPTH, Fifo};
 use crate::fpga;
 use crate::port::Port;
 use crate::proto::{
     Cmd, Drained, EXEC_AT_UNIT_NS, Error, FrameHeader, PAYLOAD_BYTES, Reply, ReplyData,
 };
-use crate::utils::OptionalAtomic;
-use autd3_cpu_wire::payload::Telemetry;
-use zerocopy::little_endian::U32;
-
-#[repr(align(4))]
-struct SlotPayload([u8; PAYLOAD_BYTES]);
-
-struct Slot {
-    msg_id: Cell<u16>,
-    len: Cell<u16>,
-    payload: RefCell<SlotPayload>,
-    header: Cell<FrameHeader>,
-    reply: Cell<Reply>,
-}
-
-impl Slot {
-    const fn new() -> Self {
-        Self {
-            msg_id: Cell::new(0),
-            len: Cell::new(0),
-            payload: RefCell::new(SlotPayload([0; PAYLOAD_BYTES])),
-            header: Cell::new(FrameHeader {
-                reserved: 0,
-                cmd: 0,
-                exec_at: U32::ZERO,
-            }),
-            reply: Cell::new(Reply::EMPTY),
-        }
-    }
-
-    fn store(&self, header: FrameHeader, payload: &[u8], msg_id: u16) -> bool {
-        let Ok(mut dst) = self.payload.try_borrow_mut() else {
-            return false;
-        };
-        let len = payload.len().min(PAYLOAD_BYTES);
-        dst.0[..len].copy_from_slice(&payload[..len]);
-        self.len.set(len as u16);
-        self.msg_id.set(msg_id);
-        self.header.set(header);
-        true
-    }
-}
-
-struct Counters {
-    fifo_drop: AtomicU32,
-    dispatch_error: Cell<u32>,
-    processed: Cell<u32>,
-    send_failure: AtomicU32,
-    exec_late: Cell<u32>,
-    failsafe: Cell<u16>,
-    ptp_unlock_failsafe: Cell<u16>,
-    boot_failure: Cell<u8>,
-}
-
-impl Counters {
-    const fn new() -> Self {
-        Self {
-            fifo_drop: AtomicU32::new(0),
-            dispatch_error: Cell::new(0),
-            processed: Cell::new(0),
-            send_failure: AtomicU32::new(0),
-            exec_late: Cell::new(0),
-            failsafe: Cell::new(0),
-            ptp_unlock_failsafe: Cell::new(0),
-            boot_failure: Cell::new(0),
-        }
-    }
-
-    fn reset_all_but_boot_failure(&self) {
-        self.fifo_drop.store(0, Ordering::Relaxed);
-        self.dispatch_error.set(0);
-        self.processed.set(0);
-        self.send_failure.store(0, Ordering::Relaxed);
-        self.exec_late.set(0);
-        self.failsafe.set(0);
-        self.ptp_unlock_failsafe.set(0);
-    }
-
-    fn telemetry(&self, sync_resync: u8, cpu_watchdog: u8) -> Telemetry {
-        Telemetry {
-            fifo_drop: self.fifo_drop.load(Ordering::Relaxed).into(),
-            dispatch_error: self.dispatch_error.get().into(),
-            processed: self.processed.get().into(),
-            send_failure: self.send_failure.load(Ordering::Relaxed).into(),
-            failsafe: self.failsafe.get().into(),
-            ptp_unlock_failsafe: self.ptp_unlock_failsafe.get().into(),
-            sync_resync,
-            boot_failure: self.boot_failure.get(),
-            cpu_watchdog,
-            exec_late: self.exec_late.get().into(),
-        }
-    }
-}
+use fifo::{FIFO_DEPTH, Fifo, Slot};
+use health::Health;
 
 pub struct Cpu {
     fifo: Fifo<Slot>,
-    counters: Counters,
-    failsafe_fired: Cell<bool>,
-    ptp_unlock_failsafe_fired: Cell<bool>,
-    ptp_failsafe_active: AtomicBool,
+    health: Health,
     pub(crate) config: Cell<cmd::cpu_config::CpuConfig>,
-    ptp_unlocked_ms: OptionalAtomic<u32>,
-    host_idle_ms: OptionalAtomic<u32>,
     pub(crate) update: cmd::update::UpdateSession,
     pub(crate) fpga_update: cmd::fpga_update::FpgaUpdateSession,
 }
@@ -131,13 +37,8 @@ impl Cpu {
     pub const fn new() -> Self {
         Self {
             fifo: Fifo::new([const { Slot::new() }; FIFO_DEPTH as usize]),
-            counters: Counters::new(),
-            failsafe_fired: Cell::new(false),
-            ptp_unlock_failsafe_fired: Cell::new(false),
-            ptp_failsafe_active: AtomicBool::new(false),
+            health: Health::new(),
             config: Cell::new(cmd::cpu_config::CpuConfig::DEFAULT),
-            ptp_unlocked_ms: OptionalAtomic::new(),
-            host_idle_ms: OptionalAtomic::new(),
             update: cmd::update::UpdateSession::new(),
             fpga_update: cmd::fpga_update::FpgaUpdateSession::new(),
         }
@@ -161,89 +62,11 @@ impl Cpu {
         }
     }
 
-    pub fn count_boot_failure(&self) {
-        let count = &self.counters.boot_failure;
-        count.set(count.get().saturating_add(1));
-    }
-
-    pub fn count_send_failures(&self, count: u32) {
-        self.counters
-            .send_failure
-            .fetch_add(count, Ordering::Relaxed);
-    }
-
-    pub fn publish_ptp_unlocked(&self, elapsed_ms: Option<u32>) {
-        self.ptp_unlocked_ms.store(elapsed_ms);
-    }
-
-    pub fn publish_host_idle(&self, idle_ms: Option<u32>) {
-        self.host_idle_ms.store(idle_ms);
-    }
-
-    #[must_use]
-    pub fn ptp_failsafe_active(&self) -> bool {
-        self.ptp_failsafe_active.load(Ordering::Relaxed)
-    }
-
-    pub(crate) fn lower_ptp_failsafe(&self) {
-        self.ptp_failsafe_active.store(false, Ordering::Relaxed);
-    }
-
-    #[must_use]
-    pub(crate) fn ptp_unlocked_ms(&self) -> Option<u32> {
-        self.ptp_unlocked_ms.load()
-    }
-
-    #[must_use]
-    pub(crate) fn host_idle_ms(&self) -> Option<u32> {
-        self.host_idle_ms.load()
-    }
-
-    pub(crate) fn reset_telemetry(&self) {
-        self.counters.reset_all_but_boot_failure();
-        self.failsafe_fired.set(false);
-        self.ptp_unlock_failsafe_fired.set(false);
-    }
-
-    pub(crate) fn telemetry(&self, sync_resync: u8, cpu_watchdog: u8) -> Telemetry {
-        self.counters.telemetry(sync_resync, cpu_watchdog)
-    }
-
     pub fn tick_1ms<P: Port>(&self, port: &mut P) {
         fpga::watchdog_kick(port);
         self.update_tick(port);
         self.fpga_update_tick(port);
-        let config = self.config();
-        let silent = cmd::failsafe::host_silent(self, &config);
-        Self::failsafe(port, silent, &self.failsafe_fired, &self.counters.failsafe);
-        let unlocked = cmd::failsafe::ptp_unlock_expired(self, &config);
-        if Self::failsafe(
-            port,
-            unlocked,
-            &self.ptp_unlock_failsafe_fired,
-            &self.counters.ptp_unlock_failsafe,
-        ) {
-            self.ptp_failsafe_active.store(true, Ordering::Relaxed);
-        }
-    }
-
-    fn failsafe<P: Port>(
-        port: &mut P,
-        tripped: bool,
-        fired: &Cell<bool>,
-        counter: &Cell<u16>,
-    ) -> bool {
-        if !tripped {
-            fired.set(false);
-            return false;
-        }
-        if fired.get() {
-            return false;
-        }
-        fired.set(true);
-        cmd::failsafe::mute(port);
-        counter.set(counter.get().saturating_add(1));
-        true
+        self.check_failsafes(port);
     }
 
     #[must_use]
@@ -256,7 +79,7 @@ impl Cpu {
             return;
         };
         if !self.fifo.push(|slot| slot.store(*header, payload, msg_id)) {
-            self.counters.fifo_drop.fetch_add(1, Ordering::Relaxed);
+            self.health.fifo_drop.fetch_add(1, Ordering::Relaxed);
         }
     }
 
@@ -270,7 +93,7 @@ impl Cpu {
         }
         let msg_id = front.msg_id.get();
         let Some(reply) = self.handle_slot(port, &front, header.cmd) else {
-            self.counters.fifo_drop.fetch_add(1, Ordering::Relaxed);
+            self.health.fifo_drop.fetch_add(1, Ordering::Relaxed);
             front.reply.set(self.reply());
             front.pop();
             return Drained::Empty;
@@ -299,9 +122,9 @@ impl Cpu {
             return true;
         }
         let Some(now) = port.sys_time() else {
-            self.counters
+            self.health
                 .exec_late
-                .set(self.counters.exec_late.get().wrapping_add(1));
+                .set(self.health.exec_late.get().wrapping_add(1));
             return true;
         };
         if ahead_of_exec_at_ns(now, exec_at) > EXEC_SPIN_NS {
@@ -319,9 +142,9 @@ impl Cpu {
             }
         });
         if late {
-            self.counters
+            self.health
                 .exec_late
-                .set(self.counters.exec_late.get().wrapping_add(1));
+                .set(self.health.exec_late.get().wrapping_add(1));
         }
         true
     }
@@ -334,15 +157,15 @@ impl Cpu {
         let result = match outcome {
             Ok(data) => Reply::new(Error::None, data),
             Err(err) => {
-                self.counters
+                self.health
                     .dispatch_error
-                    .set(self.counters.dispatch_error.get().wrapping_add(1));
+                    .set(self.health.dispatch_error.get().wrapping_add(1));
                 Reply::new(err, ReplyData::EMPTY)
             }
         };
-        self.counters
+        self.health
             .processed
-            .set(self.counters.processed.get().wrapping_add(1));
+            .set(self.health.processed.get().wrapping_add(1));
         result
     }
 
@@ -413,9 +236,9 @@ impl Cpu {
 mod tests {
 
     use super::EXEC_SPIN_NS;
+    use super::fifo::FIFO_DEPTH;
     use crate::cmd::config_mod::ConfigModPayload;
     use crate::cmd::force_fan::ForceFanPayload;
-    use crate::fifo::FIFO_DEPTH;
     use crate::fpga::{PHASE_CORR_WORDS, PWE_TABLE_SIZE, REP_INFINITE};
     use crate::fpga_params::{
         ADDR_MOD_CYCLE0, ADDR_MOD_FREQ_DIV0, ADDR_MOD_REP0, ADDR_PATTERN_CYCLE0,
@@ -427,54 +250,6 @@ mod tests {
     use crate::proto::{Cmd, Drained, EXEC_AT_UNIT_NS, Error, FRAME_BYTES_MAX, OUTPUT_MASK_WORDS};
     use crate::test_utils::builders::{config_mod, force_fan, write_foci_buffer};
     use crate::test_utils::mock::{Frame, Harness};
-
-    #[test]
-    fn a_clean_boot_counts_no_boot_failure() {
-        let mut h = Harness::new();
-        h.reboot();
-        assert_eq!(h.telemetry().boot_failure, 0);
-    }
-
-    #[test]
-    fn an_fpga_timeout_at_boot_is_counted_and_survives_clear() {
-        let mut h = Harness::new();
-        h.port.latch_stuck = true;
-        h.reboot();
-        h.port.latch_stuck = false;
-        assert_eq!(h.telemetry().boot_failure, 1);
-
-        h.deliver(&Frame::new(Cmd::Clear));
-        assert_eq!(h.status(), Error::None);
-        assert_eq!(h.telemetry().boot_failure, 1);
-    }
-
-    #[test]
-    fn a_flash_failure_while_marking_the_boot_is_counted() {
-        let mut h = Harness::new();
-        h.port.flash_fail = true;
-        h.reboot();
-        h.port.flash_fail = false;
-        assert_eq!(h.telemetry().boot_failure, 1);
-    }
-
-    #[test]
-    fn boot_failures_reported_by_the_board_accumulate() {
-        let h = Harness::new();
-        h.cpu.count_boot_failure();
-        h.cpu.count_boot_failure();
-        assert_eq!(h.telemetry().boot_failure, 2);
-    }
-
-    #[test]
-    fn send_failures_are_counted_and_cleared_by_clear() {
-        let mut h = Harness::new();
-        h.cpu.count_send_failures(2);
-        h.cpu.count_send_failures(1);
-        assert_eq!(h.telemetry().send_failure, 3);
-
-        h.deliver(&Frame::new(Cmd::Clear));
-        assert_eq!(h.telemetry().send_failure, 0);
-    }
 
     #[test]
     fn unknown_cmd_reports_unknown_cmd_and_is_processed() {
@@ -849,32 +624,6 @@ mod tests {
         assert_eq!(h.telemetry().exec_late, 1);
         h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.telemetry().exec_late, 0);
-    }
-
-    #[test]
-    fn telemetry_counts_processed_frames() {
-        let mut h = Harness::new();
-        h.deliver(&Frame::new(Cmd::Nop));
-        h.deliver(&Frame::new(Cmd::Nop));
-        assert_eq!(h.telemetry().processed, 2);
-    }
-
-    #[test]
-    fn telemetry_counts_dispatch_errors() {
-        let mut h = Harness::new();
-        h.deliver(&force_fan(2));
-        assert_eq!(h.status(), Error::InvalidPayload);
-        assert_eq!(h.telemetry().dispatch_error, 1);
-    }
-
-    #[test]
-    fn telemetry_counts_fifo_drops() {
-        let mut h = Harness::new();
-
-        for _ in 0..FIFO_DEPTH {
-            h.deliver_no_drain(&Frame::new(Cmd::Nop));
-        }
-        assert_eq!(h.telemetry().fifo_drop, 1);
     }
 
     #[test]
