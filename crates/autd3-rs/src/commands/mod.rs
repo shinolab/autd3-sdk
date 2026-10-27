@@ -25,7 +25,7 @@ pub trait Command {
     #[must_use]
     fn boxed<'a>(self) -> BoxedCommand<'a>
     where
-        Self: Sized + 'a,
+        Self: Sized + Send + 'a,
     {
         BoxedCommand(Box::new(self))
     }
@@ -47,7 +47,7 @@ impl<C: Command> DynCommand for C {
     }
 }
 
-pub struct BoxedCommand<'a>(Box<dyn DynCommand + 'a>);
+pub struct BoxedCommand<'a>(Box<dyn DynCommand + Send + 'a>);
 
 impl Command for BoxedCommand<'_> {
     fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {

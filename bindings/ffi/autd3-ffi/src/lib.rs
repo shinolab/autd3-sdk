@@ -1170,7 +1170,7 @@ impl OwnedCommand {
         }
     }
 
-    fn operation(&self) -> Option<Box<dyn Operation + '_>> {
+    fn operation(&self) -> Option<Box<dyn Operation + Send + '_>> {
         match self.lower() {
             Lowered::Operation(op) => Some(op),
             Lowered::Command(_) => None,
@@ -1392,7 +1392,7 @@ impl OwnedCommand {
 }
 
 enum Lowered<'a> {
-    Operation(Box<dyn Operation + 'a>),
+    Operation(Box<dyn Operation + Send + 'a>),
     Command(BoxedCommand<'a>),
 }
 
