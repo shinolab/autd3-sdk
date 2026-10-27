@@ -9,13 +9,9 @@ mod cmd;
 pub mod fpga;
 pub mod fpga_params;
 pub mod net;
-pub mod nic;
-pub mod node;
 pub mod port;
 pub mod proto;
 pub mod ptp;
-#[cfg(test)]
-mod sim_nic;
 mod sync;
 #[cfg(all(test, not(loom)))]
 mod test_utils;

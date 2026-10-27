@@ -1,5 +1,5 @@
 use autd3_cpu_fw::net::Mac;
-use autd3_cpu_fw::nic::{NS_PER_SEC, TimeStep, TxStamp, is_near_second_wrap, plan_step};
+use autd3_cpu_fw::ptp::clock::{NS_PER_SEC, TimeStep, is_near_second_wrap, plan_step};
 use autd3_cpu_fw::udp::PTP_MULTICAST_MAC;
 
 use super::irq::without_irq;
@@ -16,6 +16,12 @@ use super::regs::{
 };
 use crate::bsp::timer::delay_ms;
 use crate::regs::{read32, write32};
+
+#[derive(Clone, Copy)]
+pub(crate) struct TxStamp {
+    pub(crate) ns: u32,
+    pub(crate) overwritten: bool,
+}
 
 const PROTECT_SEQUENCE: [u32; 4] = [0x00A5, 0x0001, 0xFFFE, 0x0001];
 
