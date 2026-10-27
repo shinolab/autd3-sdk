@@ -20,6 +20,7 @@ struct Slot {
     len: Cell<u16>,
     payload: RefCell<SlotPayload>,
     header: Cell<FrameHeader>,
+    reply: Cell<Reply>,
 }
 
 impl Slot {
@@ -33,6 +34,7 @@ impl Slot {
                 cmd: 0,
                 exec_at: U32::ZERO,
             }),
+            reply: Cell::new(Reply::EMPTY),
         }
     }
 
@@ -101,8 +103,7 @@ impl Counters {
 }
 
 pub struct Cpu {
-    slots: [Slot; FIFO_DEPTH as usize],
-    fifo: Fifo,
+    fifo: Fifo<Slot>,
     counters: Counters,
     failsafe_fired: Cell<bool>,
     ptp_unlock_failsafe_fired: Cell<bool>,
@@ -112,7 +113,6 @@ pub struct Cpu {
     host_idle_ms: OptionalAtomic<u32>,
     pub(crate) update: cmd::update::UpdateSession,
     pub(crate) fpga_update: cmd::fpga_update::FpgaUpdateSession,
-    results: [Cell<Reply>; FIFO_DEPTH as usize],
 }
 
 const _: () = assert!(FIFO_DEPTH as usize > autd3_cpu_wire::udp::DEVICE_QUEUE_FRAMES);
@@ -130,8 +130,7 @@ impl Cpu {
     #[const_fn::const_fn(cfg(not(loom)))]
     pub const fn new() -> Self {
         Self {
-            slots: [const { Slot::new() }; FIFO_DEPTH as usize],
-            fifo: Fifo::new(),
+            fifo: Fifo::new([const { Slot::new() }; FIFO_DEPTH as usize]),
             counters: Counters::new(),
             failsafe_fired: Cell::new(false),
             ptp_unlock_failsafe_fired: Cell::new(false),
@@ -141,7 +140,6 @@ impl Cpu {
             host_idle_ms: OptionalAtomic::new(),
             update: cmd::update::UpdateSession::new(),
             fpga_update: cmd::fpga_update::FpgaUpdateSession::new(),
-            results: [const { Cell::new(Reply::EMPTY) }; FIFO_DEPTH as usize],
         }
     }
 }
@@ -255,45 +253,35 @@ impl Cpu {
 
     #[must_use]
     pub fn reply(&self) -> Reply {
-        self.result_before(self.fifo.tail_acquire())
-    }
-
-    fn result_before(&self, tail: u16) -> Reply {
-        self.results[Fifo::slot(tail.wrapping_sub(1))].get()
+        self.fifo.last_popped().reply.get()
     }
 
     pub fn recv_frame(&self, frame: &[u8], msg_id: u16) {
         let Some((header, payload)) = FrameHeader::parse(frame) else {
             return;
         };
-        let head = self.fifo.head();
-        if Fifo::is_full(head, self.fifo.tail_acquire())
-            || !self.slots[Fifo::slot(head)].store(*header, payload, msg_id)
-        {
+        if !self.fifo.push(|slot| slot.store(*header, payload, msg_id)) {
             self.counters.fifo_drop.fetch_add(1, Ordering::Relaxed);
-            return;
         }
-        self.fifo.publish(head);
     }
 
     pub fn process_one<P: Port>(&self, port: &mut P) -> Drained {
-        let Some(tail) = self.fifo.next() else {
+        let Some(front) = self.fifo.front() else {
             return Drained::Empty;
         };
-        let slot = &self.slots[Fifo::slot(tail)];
-        let header = slot.header.get();
+        let header = front.header.get();
         if !self.is_due(port, header.exec_at.get()) {
             return Drained::Empty;
         }
-        let msg_id = slot.msg_id.get();
-        let Some(result) = self.handle_slot(port, slot, header.cmd) else {
+        let msg_id = front.msg_id.get();
+        let Some(reply) = self.handle_slot(port, &front, header.cmd) else {
             self.counters.fifo_drop.fetch_add(1, Ordering::Relaxed);
-            self.results[Fifo::slot(tail)].set(self.result_before(tail));
-            self.fifo.commit(tail);
+            front.reply.set(self.reply());
+            front.pop();
             return Drained::Empty;
         };
-        self.results[Fifo::slot(tail)].set(result);
-        self.fifo.commit(tail);
+        front.reply.set(reply);
+        front.pop();
         Drained::Completed { msg_id }
     }
 
@@ -684,7 +672,7 @@ mod tests {
     #[test]
     fn a_frame_into_a_slot_still_borrowed_is_dropped_and_counted() {
         let h = Harness::new();
-        let borrowed = h.cpu.slots[0].payload.borrow();
+        let borrowed = h.cpu.fifo.slots()[0].payload.borrow();
         h.cpu.recv_frame(&Frame::new(Cmd::Nop).bytes(), 1);
         drop(borrowed);
         assert_eq!(h.telemetry().fifo_drop, 1);
@@ -706,7 +694,7 @@ mod tests {
         h.cpu.recv_frame(&Frame::new(Cmd::Nop).bytes(), 1);
         h.cpu.recv_frame(&Frame::new(Cmd::Nop).bytes(), 2);
 
-        let borrowed = h.cpu.slots[1].payload.borrow_mut();
+        let borrowed = h.cpu.fifo.slots()[1].payload.borrow_mut();
         assert_eq!(h.cpu.process_one(&mut h.port), Drained::Empty);
         drop(borrowed);
         assert_eq!(h.telemetry().fifo_drop, 1);
