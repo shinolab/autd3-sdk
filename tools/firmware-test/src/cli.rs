@@ -1,3 +1,4 @@
+use std::num::NonZeroUsize;
 use std::time::Duration;
 
 use autd3_rs::{ExecAt, TransportOption};
@@ -18,8 +19,8 @@ pub(crate) struct Cli {
                 by opening Interface::Addr([::1]:PORT). Set the geometry in the simulator's Geometry tab first."
     )]
     pub simulator: Option<u16>,
-    #[arg(long, default_value_t = 1)]
-    pub devices: usize,
+    #[arg(long, default_value_t = NonZeroUsize::MIN)]
+    pub devices: NonZeroUsize,
     #[arg(long, default_value_t = 10_000)]
     pub heartbeat_us: u64,
     #[arg(long)]
@@ -34,19 +35,10 @@ pub(crate) struct Cli {
         help = "Maps to TransportOption::ack_timeout. Must exceed --exec-lead-us"
     )]
     pub ack_timeout_ms: Option<u64>,
-    #[arg(
-        long,
-        default_value_t = false,
-        help = "Zero the pulse width table after opening and after every case so that no transducer emits"
-    )]
-    pub mute: bool,
 }
 
 impl Cli {
     pub(crate) fn validate(&self) -> Result<(), String> {
-        if self.devices == 0 {
-            return Err("--devices must be at least 1".to_string());
-        }
         if self.heartbeat_us == 0 {
             return Err("--heartbeat-us must be at least 1".to_string());
         }

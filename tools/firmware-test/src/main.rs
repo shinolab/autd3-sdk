@@ -2,15 +2,19 @@ mod cases;
 mod cli;
 mod io;
 
+use std::future::Future;
 use std::net::{Ipv6Addr, SocketAddrV6};
 use std::ops::Deref;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
 use clap::Parser;
 
-use autd3_rs::commands::{Clear, Command, FixedCompletionTime, Pattern, SetSilencer, Synchronize};
+use autd3_rs::commands::{
+    Clear, Command, FixedCompletionTime, GpioOut, Pattern, SetGpioOut, SetSilencer, Synchronize,
+};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::value::Intensity;
 use autd3_rs::{Client, DeviceState, Error, ExecAt, Frames, Interface, TransportOption};
@@ -18,9 +22,6 @@ use autd3_rs::{Client, DeviceState, Error, ExecAt, Frames, Interface, TransportO
 use crate::cli::Cli;
 use crate::io::{check, prompt, wait_enter};
 use tracing_subscriber::EnvFilter;
-
-const REOPEN_ATTEMPTS: u32 = 5;
-const REOPEN_INTERVAL: Duration = Duration::from_secs(2);
 
 pub fn device_states(client: &Client) -> Vec<DeviceState> {
     client
@@ -42,7 +43,6 @@ pub struct Ctx<'a> {
     pub geometry: &'a Geometry,
     pub heartbeat: Duration,
     pub lost_timeout: Duration,
-    pub mute: bool,
     pub exec: ExecAt,
 }
 
@@ -85,56 +85,7 @@ impl Drop for Session {
     }
 }
 
-pub struct Link<'a> {
-    pub geometry: &'a Geometry,
-    pub option: &'a TransportOption,
-    pub heartbeat: Duration,
-    pub mute: bool,
-    pub exec: ExecAt,
-}
-
-impl Link<'_> {
-    async fn open(&self) -> Result<Session> {
-        let client = Client::open(self.geometry, self.option)?;
-        client.send(Clear).await?;
-        client.send(Synchronize).await?;
-        Ok(Session::new(client, self.heartbeat))
-    }
-
-    pub async fn reopen(&self) -> Result<Session> {
-        let mut attempt = 1;
-        loop {
-            match self.open().await {
-                Ok(client) => {
-                    restore_gpio_out(&client).await;
-                    if self.mute && !mute(&client).await {
-                        anyhow::bail!("muting the reopened devices failed");
-                    }
-                    return Ok(client);
-                }
-                Err(e) if attempt < REOPEN_ATTEMPTS => {
-                    eprintln!(
-                        "reopening attempt {attempt}/{REOPEN_ATTEMPTS} failed: {e}; retrying in {REOPEN_INTERVAL:?}"
-                    );
-                    attempt += 1;
-                    tokio::time::sleep(REOPEN_INTERVAL).await;
-                }
-                Err(e) => {
-                    return Err(e).context(format!(
-                        "reopening the devices failed {REOPEN_ATTEMPTS} time(s)"
-                    ));
-                }
-            }
-        }
-    }
-}
-
-enum Selected {
-    Quit,
-    Lost,
-    Reboot,
-    CpuWatchdog,
-}
+type Case = for<'a> fn(&'a Ctx<'a>) -> Pin<Box<dyn Future<Output = Result<()>> + 'a>>;
 
 impl Ctx<'_> {
     pub async fn try_send_frames(&self, frames: &Frames) -> Result<(), Error> {
@@ -168,119 +119,39 @@ impl Ctx<'_> {
     }
 }
 
-const CASE_NAMES: &[&str] = &[
-    "Pattern",
-    "Modulation",
-    "FociSTM",
-    "PatternSTM",
-    "Silencer",
-    "ForceFan",
-    "Pulse Width Encoder",
-    "Phase Correction",
-    "Transition",
-    "GPIO",
-    "Error",
-    "Output Mask",
-    "FPGA State",
-    "CPU Config",
-    "Synchronize",
-    "PTP Unlock Failsafe",
-    "Lost",
-    "Reboot",
-    "CPU Watchdog",
+const CASES: &[(&str, Case)] = &[
+    ("Pattern", |ctx| Box::pin(cases::pattern::run(ctx))),
+    ("Modulation", |ctx| Box::pin(cases::modulation::run(ctx))),
+    ("FociSTM", |ctx| Box::pin(cases::foci_stm::run(ctx))),
+    ("PatternSTM", |ctx| Box::pin(cases::pattern_stm::run(ctx))),
+    ("Silencer", |ctx| Box::pin(cases::silencer::run(ctx))),
+    ("ForceFan", |ctx| Box::pin(cases::force_fan::run(ctx))),
+    ("Pulse Width Encoder", |ctx| {
+        Box::pin(cases::pulse_width_encoder::run(ctx))
+    }),
+    ("Phase Correction", |ctx| {
+        Box::pin(cases::phase_correction::run(ctx))
+    }),
+    ("Transition", |ctx| Box::pin(cases::transition::run(ctx))),
+    ("GPIO", |ctx| Box::pin(cases::gpio::run(ctx))),
+    ("Error", |ctx| Box::pin(cases::error::run(ctx))),
+    ("Output Mask", |ctx| Box::pin(cases::output_mask::run(ctx))),
+    ("FPGA State", |ctx| Box::pin(cases::fpga_state::run(ctx))),
+    ("CPU Config", |ctx| Box::pin(cases::cpu_config::run(ctx))),
+    ("Synchronize", |ctx| Box::pin(cases::synchronize::run(ctx))),
+    ("PTP Unlock Failsafe", |ctx| {
+        Box::pin(cases::ptp_unlock_failsafe::run(ctx))
+    }),
 ];
 
-const PULSE_WIDTH_ENCODER_INDEX: usize = 6;
-const LOST_INDEX: usize = 16;
-const REBOOT_INDEX: usize = 17;
-const CPU_WATCHDOG_INDEX: usize = 18;
-
-const _: () = assert!(CASE_NAMES.len() == CPU_WATCHDOG_INDEX + 1);
-
 #[tokio::main(flavor = "multi_thread")]
-#[allow(clippy::too_many_lines)]
 async fn main() -> Result<()> {
-    async fn select(ctx: &Ctx<'_>) -> Selected {
-        async fn reset(ctx: &Ctx<'_>) -> Result<()> {
-            let phases = ctx.geometry.phase_buffer();
+    async fn reset(ctx: &Ctx<'_>) -> Result<()> {
+        let phases = ctx.geometry.phase_buffer();
 
-            ctx.send(Pattern::new(&phases, Intensity::MIN)).await?;
-            ctx.send(SetSilencer::default()).await?;
-            ctx.send(Clear).await
-        }
-
-        loop {
-            println!();
-            for (i, name) in CASE_NAMES.iter().enumerate() {
-                println!("[{i}]: {name}");
-            }
-            println!("[anything else]: quit");
-            let sel = prompt("Select a number").await;
-            let Ok(i) = sel.trim().parse::<usize>() else {
-                return Selected::Quit;
-            };
-            if i >= CASE_NAMES.len() {
-                return Selected::Quit;
-            }
-
-            println!("=== {} ===", CASE_NAMES[i]);
-            match i {
-                LOST_INDEX => return Selected::Lost,
-                REBOOT_INDEX => return Selected::Reboot,
-                CPU_WATCHDOG_INDEX => return Selected::CpuWatchdog,
-                PULSE_WIDTH_ENCODER_INDEX if ctx.mute => {
-                    println!("  [SKIP] the case replaces the pulse width table that --mute zeroes");
-                    continue;
-                }
-                _ => {}
-            }
-            let result = match i {
-                0 => cases::pattern::run(ctx).await,
-                1 => cases::modulation::run(ctx).await,
-                2 => cases::foci_stm::run(ctx).await,
-                3 => cases::pattern_stm::run(ctx).await,
-                4 => cases::silencer::run(ctx).await,
-                5 => cases::force_fan::run(ctx).await,
-                6 => cases::pulse_width_encoder::run(ctx).await,
-                7 => cases::phase_correction::run(ctx).await,
-                8 => cases::transition::run(ctx).await,
-                9 => cases::gpio::run(ctx).await,
-                10 => cases::error::run(ctx).await,
-                11 => cases::output_mask::run(ctx).await,
-                12 => cases::fpga_state::run(ctx).await,
-                13 => cases::cpu_config::run(ctx).await,
-                14 => cases::synchronize::run(ctx).await,
-                15 => cases::ptp_unlock_failsafe::run(ctx).await,
-                _ => Ok(()),
-            };
-            if let Err(e) = result {
-                eprintln!("test failed: {e:?}");
-            }
-            if ctx.exec != ExecAt::Immediate {
-                match ctx.client.read_telemetry().await {
-                    Ok(telemetry) => {
-                        let late: Vec<u32> = telemetry.iter().map(|t| t.exec_late).collect();
-                        println!(
-                            "  {} no frame since the last Clear started 1 us or more after its EXEC_AT: exec_late {late:?}",
-                            if late.iter().all(|n| *n == 0) {
-                                "[OK]"
-                            } else {
-                                "[FAIL]"
-                            }
-                        );
-                    }
-                    Err(e) => eprintln!("read telemetry failed: {e}"),
-                }
-            }
-
-            if let Err(e) = reset(ctx).await {
-                eprintln!("reset failed: {e:?}");
-            }
-            if ctx.mute && !mute(ctx.client).await {
-                eprintln!("stopping: the devices could not be muted after the case");
-                return Selected::Quit;
-            }
-        }
+        ctx.send(Pattern::new(&phases, Intensity::MIN)).await?;
+        ctx.send(SetSilencer::default()).await?;
+        ctx.send(Clear).await
     }
 
     tracing_subscriber::fmt()
@@ -299,13 +170,8 @@ async fn main() -> Result<()> {
     check("An oscilloscope is attached to the GPIO[0]/GPIO[1] pins of each device");
     check("No output is present on any GPIO pin");
     check("Client-side validation is disabled: malformed commands are checked by the firmware");
-    if cli.mute {
-        check(
-            "--mute: the pulse width table is all zero, so no transducer emits and PwmOut stays low",
-        );
-    }
 
-    let geometry = Geometry::new((0..cli.devices).map(|_| Autd3::default()));
+    let geometry = Geometry::new((0..cli.devices.get()).map(|_| Autd3::default()));
     let heartbeat = Duration::from_micros(cli.heartbeat_us);
 
     let default = TransportOption::default();
@@ -323,48 +189,13 @@ async fn main() -> Result<()> {
         ack_timeout: cli.ack_timeout(),
         ..default
     };
-    let link = Link {
-        geometry: &geometry,
-        option: &option,
-        heartbeat,
-        mute: cli.mute,
-        exec: cli.exec(),
-    };
-    let mut client = link.open().await.context("opening the devices")?;
-    if cli.mute && !mute(&client).await {
-        anyhow::bail!("muting the devices failed");
-    }
+    let client = Client::open(&geometry, &option).context("opening the devices")?;
+    client.send(Clear).await?;
+    client.send(Synchronize).await?;
+    let client = Session::new(client, heartbeat);
 
     describe(&client).await;
-    if restore_gpio_out(&client).await {
-        wait_enter("The GPIO[0] output is synchronised across every device").await;
-    }
-
-    loop {
-        let ctx = Ctx {
-            client: &client,
-            geometry: &geometry,
-            heartbeat,
-            lost_timeout: option.lost_timeout,
-            mute: cli.mute,
-            exec: link.exec,
-        };
-        client = match select(&ctx).await {
-            Selected::Quit => break,
-            Selected::Lost => cases::lost::run(client, &link).await?,
-            Selected::Reboot => cases::reboot::run(client, &link).await?,
-            Selected::CpuWatchdog => cases::cpu_watchdog::run(client, &link).await?,
-        };
-    }
-
-    client.close().context("closing client")?;
-    println!("Ok!");
-    Ok(())
-}
-
-async fn restore_gpio_out(client: &Client) -> bool {
-    use autd3_rs::commands::{GpioOut, SetGpioOut};
-    let sent = client
+    match client
         .send(SetGpioOut {
             outputs: [
                 GpioOut::BaseSignal,
@@ -373,24 +204,59 @@ async fn restore_gpio_out(client: &Client) -> bool {
                 GpioOut::Off,
             ],
         })
-        .await;
-    if let Err(e) = &sent {
-        eprintln!("set gpio out failed: {e}");
+        .await
+    {
+        Ok(()) => wait_enter("The GPIO[0] output is synchronised across every device").await,
+        Err(e) => eprintln!("set gpio out failed: {e}"),
     }
-    sent.is_ok()
-}
 
-pub async fn mute(client: &Client) -> bool {
-    use autd3_rs::commands::SetPulseWidthTable;
-    let sent = client
-        .send(SetPulseWidthTable {
-            table: SetPulseWidthTable::empty_table(),
-        })
-        .await;
-    if let Err(e) = &sent {
-        eprintln!("muting failed: {e}");
+    let ctx = Ctx {
+        client: &client,
+        geometry: &geometry,
+        heartbeat,
+        lost_timeout: option.lost_timeout,
+        exec: cli.exec(),
+    };
+    loop {
+        println!();
+        for (i, (name, _)) in CASES.iter().enumerate() {
+            println!("[{i}]: {name}");
+        }
+        println!("[anything else]: quit");
+        let sel = prompt("Select a number").await;
+        let Some((name, run)) = sel.trim().parse::<usize>().ok().and_then(|i| CASES.get(i)) else {
+            break;
+        };
+
+        println!("=== {name} ===");
+        if let Err(e) = run(&ctx).await {
+            eprintln!("test failed: {e:?}");
+        }
+        if ctx.exec != ExecAt::Immediate {
+            match ctx.client.read_telemetry().await {
+                Ok(telemetry) => {
+                    let late: Vec<u32> = telemetry.iter().map(|t| t.exec_late).collect();
+                    println!(
+                        "  {} no frame since the last Clear started 1 us or more after its EXEC_AT: exec_late {late:?}",
+                        if late.iter().all(|n| *n == 0) {
+                            "[OK]"
+                        } else {
+                            "[FAIL]"
+                        }
+                    );
+                }
+                Err(e) => eprintln!("read telemetry failed: {e}"),
+            }
+        }
+
+        if let Err(e) = reset(&ctx).await {
+            eprintln!("reset failed: {e:?}");
+        }
     }
-    sent.is_ok()
+
+    client.close().context("closing client")?;
+    println!("Ok!");
+    Ok(())
 }
 
 pub async fn describe(client: &Client) {
