@@ -1,109 +1,51 @@
 use std::path::Path;
 
 use anyhow::Result;
-use clap::Subcommand;
+use clap::{Args, Subcommand};
 
-use crate::util::{cargo_bin, cargo_build_args, run};
+use crate::util::run_cargo;
+
+#[derive(Args)]
+pub(crate) struct ToolArgs {
+    #[arg(long, help = "Build the dev profile instead of release")]
+    debug: bool,
+    #[arg(
+        trailing_var_arg = true,
+        allow_hyphen_values = true,
+        help = "Arguments forwarded to the tool"
+    )]
+    args: Vec<String>,
+}
 
 #[derive(Subcommand)]
 pub(crate) enum ToolCmd {
     #[command(about = "Measure the communication performance")]
-    Perftest {
-        #[arg(long, help = "Build the dev profile instead of release")]
-        debug: bool,
-        #[arg(
-            trailing_var_arg = true,
-            allow_hyphen_values = true,
-            help = "Arguments forwarded to the tool"
-        )]
-        args: Vec<String>,
-    },
+    Perftest(ToolArgs),
     #[command(about = "Run the interactive firmware acceptance tests against a real device")]
-    FirmwareTest {
-        #[arg(long, help = "Build the dev profile instead of release")]
-        debug: bool,
-        #[arg(
-            trailing_var_arg = true,
-            allow_hyphen_values = true,
-            help = "Arguments forwarded to the tool"
-        )]
-        args: Vec<String>,
-    },
+    FirmwareTest(ToolArgs),
     #[command(
         about = "Update the CPU / FPGA firmware over UDP (no J-Link / Vivado) and reboot the devices"
     )]
-    FirmwareOta {
-        #[arg(long, help = "Build the dev profile instead of release")]
-        debug: bool,
-        #[arg(
-            trailing_var_arg = true,
-            allow_hyphen_values = true,
-            help = "Arguments forwarded to the tool (the flash image path or `--version X.Y.Z` first)"
-        )]
-        args: Vec<String>,
-    },
+    FirmwareOta(ToolArgs),
     #[command(about = "Read / write raw FPGA bus addresses over UDP (diagnostics only)")]
-    FpgaMemory {
-        #[arg(long, help = "Build the dev profile instead of release")]
-        debug: bool,
-        #[arg(
-            trailing_var_arg = true,
-            allow_hyphen_values = true,
-            help = "Arguments forwarded to the tool (`read <ADDR>` or `write <ADDR> <WORD>...` first)"
-        )]
-        args: Vec<String>,
-    },
+    FpgaMemory(ToolArgs),
     #[command(about = "Run emulated devices on the loopback until stdin is closed")]
-    UdpEmulator {
-        #[arg(long, help = "Build the dev profile instead of release")]
-        debug: bool,
-        #[arg(
-            trailing_var_arg = true,
-            allow_hyphen_values = true,
-            help = "Arguments forwarded to the tool (`--devices N`)"
-        )]
-        args: Vec<String>,
-    },
+    UdpEmulator(ToolArgs),
 }
 
 pub(crate) fn run_tool(root: &Path, cmd: ToolCmd) -> Result<()> {
-    match cmd {
-        ToolCmd::Perftest { debug, args } => {
-            run_bin(root, "autd3-rs-perftest", "autd3-rs-perftest", debug, &args)
-        }
-        ToolCmd::FirmwareTest { debug, args } => run_bin(
-            root,
-            "autd3-rs-firmware-test",
-            "autd3-rs-firmware-test",
-            debug,
-            &args,
-        ),
-        ToolCmd::FirmwareOta { debug, args } => run_bin(
-            root,
-            "autd3-rs-firmware-ota",
-            "autd3-firmware-ota",
-            debug,
-            &args,
-        ),
-        ToolCmd::FpgaMemory { debug, args } => run_bin(
-            root,
-            "autd3-rs-fpga-memory",
-            "autd3-fpga-memory",
-            debug,
-            &args,
-        ),
-        ToolCmd::UdpEmulator { debug, args } => run_bin(
-            root,
-            "autd3-rs-udp-emulator",
-            "autd3-udp-emulator",
-            debug,
-            &args,
-        ),
+    let (pkg, bin, tool) = match cmd {
+        ToolCmd::Perftest(tool) => ("autd3-rs-perftest", "autd3-rs-perftest", tool),
+        ToolCmd::FirmwareTest(tool) => ("autd3-rs-firmware-test", "autd3-rs-firmware-test", tool),
+        ToolCmd::FirmwareOta(tool) => ("autd3-rs-firmware-ota", "autd3-firmware-ota", tool),
+        ToolCmd::FpgaMemory(tool) => ("autd3-rs-fpga-memory", "autd3-fpga-memory", tool),
+        ToolCmd::UdpEmulator(tool) => ("autd3-rs-udp-emulator", "autd3-udp-emulator", tool),
+    };
+    let mut args = vec!["run", "-p", pkg, "--bin", bin];
+    if !tool.debug {
+        args.push("--release");
     }
-}
-
-fn run_bin(root: &Path, pkg: &str, bin: &str, debug: bool, args: &[String]) -> Result<()> {
-    run("cargo", cargo_build_args(pkg, None, debug), root)?;
-    let bin = cargo_bin(root, None, debug, bin);
-    run(&bin.to_string_lossy(), args, root)
+    args.push("--");
+    args.extend(tool.args.iter().map(String::as_str));
+    run_cargo(args, root)
 }
