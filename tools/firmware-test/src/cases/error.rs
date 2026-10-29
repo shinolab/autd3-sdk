@@ -12,7 +12,7 @@ use autd3_rs::value::{LoopBehavior, ModulationBank, PatternBank, SamplingConfig,
 
 use crate::Ctx;
 use crate::cases::ERR_INVALID_SILENCER_SETTING;
-use crate::cases::pattern_util::{activate_mod_bank, expect_firmware_error, expect_firmware_ok};
+use crate::cases::pattern_util::{expect_firmware_error, expect_firmware_ok};
 use crate::io::wait_enter;
 
 fn divider(steps: u16) -> SamplingConfig {
@@ -55,14 +55,15 @@ async fn mod_banks(
         })
         .await?;
     }
-    activate_mod_bank(ctx, activate.0, activate.1).await
+    ctx.send(ActivateModulationBank {
+        bank: activate.0,
+        transition_mode: activate.1,
+    })
+    .await
 }
 
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
-    const DIVIDER: u16 = 20;
-    const STEPS: u32 = 8;
-
     println!("firmware error-detail checks:");
 
     ctx.send(SetSilencer::default()).await?;
@@ -103,7 +104,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
             ctx.client.geometry(),
             ConfigModulation {
                 bank: ModulationBank::B0,
-                config: divider(DIVIDER),
+                config: divider(20),
                 size: 2,
                 loop_behavior: LoopBehavior::Infinite,
             },
@@ -112,7 +113,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     .await;
     ctx.send(ConfigPattern {
         bank: PatternBank::B0,
-        config: divider(DIVIDER),
+        config: divider(20),
         size: 1,
         loop_behavior: LoopBehavior::Infinite,
     })
@@ -134,7 +135,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     config_mod_bank(ctx, SamplingConfig::new(NonZeroU16::MAX)).await?;
     ctx.send(ConfigPattern {
         bank: PatternBank::B0,
-        config: divider(DIVIDER),
+        config: divider(20),
         size: 1,
         loop_behavior: LoopBehavior::Infinite,
     })
@@ -160,16 +161,37 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     )
     .await?;
     let at = ctx.client.device_time_now()? + std::time::Duration::from_secs(5);
-    activate_mod_bank(
-        ctx,
-        ModulationBank::B1,
-        TransitionMode::SysTime { time: at },
-    )
+    ctx.send(ActivateModulationBank {
+        bank: ModulationBank::B1,
+        transition_mode: TransitionMode::SysTime { time: at },
+    })
     .await?;
     expect_firmware_error(
         ctx,
         "strict silencer ahead of a pending SysTime transition from a faster bank",
-        Frames::encode(ctx.client.geometry(), strict_silencer(STEPS)),
+        Frames::encode(ctx.client.geometry(), strict_silencer(8)),
+        ERR_INVALID_SILENCER_SETTING,
+    )
+    .await;
+
+    ctx.send(Clear).await?;
+    mod_banks(
+        ctx,
+        [100, 5],
+        LoopBehavior::ONCE,
+        (ModulationBank::B0, TransitionMode::Immediate),
+    )
+    .await?;
+    let at = ctx.client.device_time_now()? + std::time::Duration::from_secs(5);
+    ctx.send(ActivateModulationBank {
+        bank: ModulationBank::B1,
+        transition_mode: TransitionMode::SysTime { time: at },
+    })
+    .await?;
+    expect_firmware_error(
+        ctx,
+        "strict silencer ahead of a pending SysTime transition onto a faster bank",
+        Frames::encode(ctx.client.geometry(), strict_silencer(8)),
         ERR_INVALID_SILENCER_SETTING,
     )
     .await;
@@ -185,7 +207,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     expect_firmware_error(
         ctx,
         "strict silencer while Ext alternates onto a faster bank",
-        Frames::encode(ctx.client.geometry(), strict_silencer(STEPS)),
+        Frames::encode(ctx.client.geometry(), strict_silencer(8)),
         ERR_INVALID_SILENCER_SETTING,
     )
     .await;
@@ -201,7 +223,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     expect_firmware_ok(
         ctx,
         "strict silencer with a faster unused bank",
-        Frames::encode(ctx.client.geometry(), strict_silencer(STEPS)),
+        Frames::encode(ctx.client.geometry(), strict_silencer(8)),
     )
     .await;
     expect_firmware_error(

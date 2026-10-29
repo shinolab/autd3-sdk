@@ -3,17 +3,12 @@ use std::time::Instant;
 
 use anyhow::Result;
 
-use autd3_rs::commands::{Clear, CpuConfig, SetCpuConfig, Synchronize};
+use autd3_rs::commands::{ActivateModulationBank, Clear, CpuConfig, SetCpuConfig, Synchronize};
 use autd3_rs::value::{ModulationBank, TransitionMode};
 
 use crate::Ctx;
 use crate::cases::cpu_config::silence;
-use crate::cases::pattern_util::{activate_mod_bank, resyncs};
-
-const CYCLE_NS: u64 = 1_000_000;
-const AHEAD: Duration = Duration::from_millis(300);
-const POLL_WINDOW: Duration = Duration::from_millis(800);
-const TOLERANCE_US: i64 = 500;
+use crate::cases::pattern_util::resyncs;
 
 struct Bracket {
     still_b0_us: i64,
@@ -32,24 +27,32 @@ async fn synchronize_at_phase(ctx: &Ctx<'_>, phase_ns: Option<u64>) -> Result<(u
     if let Some(phase_ns) = phase_ns {
         let deadline = Instant::now() + Duration::from_millis(5);
         while Instant::now() < deadline {
-            let now = ctx.client.device_time_now()?.sys_time() % CYCLE_NS;
+            let now = ctx.client.device_time_now()?.sys_time() % 1_000_000;
             if now >= phase_ns && now < phase_ns + 20_000 {
                 break;
             }
             std::hint::spin_loop();
         }
     }
-    let sent_phase = ctx.client.device_time_now()?.sys_time() % CYCLE_NS;
+    let sent_phase = ctx.client.device_time_now()?.sys_time() % 1_000_000;
     let started = Instant::now();
     ctx.send(Synchronize).await?;
     Ok((sent_phase, started.elapsed()))
 }
 
 async fn transition_brackets(ctx: &Ctx<'_>) -> Result<Vec<Bracket>> {
-    activate_mod_bank(ctx, ModulationBank::B0, TransitionMode::Immediate).await?;
-    let target = Instant::now() + AHEAD;
-    let time = ctx.client.device_time_now()? + AHEAD;
-    activate_mod_bank(ctx, ModulationBank::B1, TransitionMode::SysTime { time }).await?;
+    ctx.send(ActivateModulationBank {
+        bank: ModulationBank::B0,
+        transition_mode: TransitionMode::Immediate,
+    })
+    .await?;
+    let target = Instant::now() + Duration::from_millis(300);
+    let time = ctx.client.device_time_now()? + Duration::from_millis(300);
+    ctx.send(ActivateModulationBank {
+        bank: ModulationBank::B1,
+        transition_mode: TransitionMode::SysTime { time },
+    })
+    .await?;
 
     let mut brackets: Vec<Bracket> = (0..ctx.client.num_devices())
         .map(|_| Bracket {
@@ -57,7 +60,7 @@ async fn transition_brackets(ctx: &Ctx<'_>) -> Result<Vec<Bracket>> {
             seen_b1_us: None,
         })
         .collect();
-    let deadline = target + POLL_WINDOW;
+    let deadline = target + Duration::from_millis(800);
     while Instant::now() < deadline && brackets.iter().any(|b| b.seen_b1_us.is_none()) {
         let before = Instant::now();
         let states = ctx.client.read_fpga_state().await?;
@@ -73,7 +76,11 @@ async fn transition_brackets(ctx: &Ctx<'_>) -> Result<Vec<Bracket>> {
             }
         }
     }
-    activate_mod_bank(ctx, ModulationBank::B0, TransitionMode::Immediate).await?;
+    ctx.send(ActivateModulationBank {
+        bank: ModulationBank::B0,
+        transition_mode: TransitionMode::Immediate,
+    })
+    .await?;
     Ok(brackets)
 }
 
@@ -83,7 +90,7 @@ fn report(label: &str, brackets: &[Bracket]) -> bool {
         .iter()
         .map(|b| {
             if let Some(hi) = b.seen_b1_us {
-                if b.still_b0_us > TOLERANCE_US || hi < -TOLERANCE_US {
+                if b.still_b0_us > 500 || hi < -500 {
                     ok = false;
                 }
                 format!("({:+}, {:+}]", b.still_b0_us, hi)

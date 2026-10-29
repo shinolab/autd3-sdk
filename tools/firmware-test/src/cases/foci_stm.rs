@@ -2,7 +2,7 @@ use core::f32::consts::PI;
 
 use anyhow::Result;
 
-use autd3_rs::commands::{FociStm, FociStmOption, SetSilencer};
+use autd3_rs::commands::{ActivatePatternBank, FociStm, FociStmOption, SetSilencer};
 use autd3_rs::geometry::{Vector3, offset};
 use autd3_rs::params::MAX_FOCI_TOTAL;
 use autd3_rs::units::{Hz, mm};
@@ -13,10 +13,7 @@ use autd3_rs::value::{
 use autd3_rs_modulation::{SineOption, constant, modulation_buffer, sine};
 
 use crate::Ctx;
-use crate::cases::pattern_util::{
-    POINT_NUM, RADIUS_MM, activate_pattern_bank, circle_foci, report_fpga_state, stm_sampling,
-    write_foci_bank,
-};
+use crate::cases::pattern_util::{circle_foci, report_fpga_state, stm_sampling, write_foci_bank};
 use crate::io::wait_enter;
 
 async fn send_foci(
@@ -39,7 +36,7 @@ async fn send_foci(
 
 pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     let center = ctx.geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
-    let foci = circle_foci(center, POINT_NUM);
+    let foci = circle_foci(center, 200);
 
     let mut static_ff = modulation_buffer();
     constant(0xFF, &mut static_ff);
@@ -58,13 +55,17 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     wait_enter("The STM frequency changed to 1 Hz").await;
     report_fpga_state(ctx, "B1 1Hz", None, Some(PatternBank::B1), Some(false)).await?;
 
-    activate_pattern_bank(ctx, PatternBank::B0, TransitionMode::Immediate).await?;
+    ctx.send(ActivatePatternBank {
+        bank: PatternBank::B0,
+        transition_mode: TransitionMode::Immediate,
+    })
+    .await?;
     wait_enter("The STM frequency returned to 0.5 Hz").await;
     report_fpga_state(ctx, "back to B0", None, Some(PatternBank::B0), Some(false)).await?;
 
     let mut rev = foci.clone();
     rev.reverse();
-    rev[POINT_NUM - 1].intensity = Intensity::MIN;
+    rev[199].intensity = Intensity::MIN;
     write_foci_bank(
         ctx,
         PatternBank::B1,
@@ -74,14 +75,18 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     )
     .await?;
     wait_enter("Nothing changed. Press Enter when the focus reaches the device's left edge").await;
-    activate_pattern_bank(ctx, PatternBank::B1, TransitionMode::SyncIdx).await?;
+    ctx.send(ActivatePatternBank {
+        bank: PatternBank::B1,
+        transition_mode: TransitionMode::SyncIdx,
+    })
+    .await?;
     wait_enter("The trajectory reverses at the right edge, then stops after one cycle").await;
 
     let indices = MAX_FOCI_TOTAL / 8;
     let foci8: Vec<ControlPoints> = (0..indices)
         .map(|i| {
             let theta = 2.0 * PI * i as f32 / indices as f32;
-            let d = Vector3::new(RADIUS_MM * theta.cos(), RADIUS_MM * theta.sin(), 0.0);
+            let d = Vector3::new(30.0 * theta.cos(), 30.0 * theta.sin(), 0.0);
             let plus = ControlPoint::new(center + d, Phase::ZERO);
             let minus = ControlPoint::new(center - d, Phase::ZERO);
             ControlPoints::new(

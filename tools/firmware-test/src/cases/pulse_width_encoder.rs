@@ -5,17 +5,15 @@ use autd3_rs::value::{Intensity, PulseWidth, SamplingConfig};
 use autd3_rs_modulation::{constant, modulation_buffer};
 
 use crate::Ctx;
-use crate::cases::pattern_util::{Buffers, TR_A, TR_B, buffers, send_pattern_mod};
+use crate::cases::pattern_util::{Buffers, buffers, send_pattern_mod};
 use crate::io::wait_enter;
 
 fn drive_pair(ctx: &Ctx<'_>, dev0: (u8, u8), other: (u8, u8)) -> Buffers {
     let (phases, mut intensities) = buffers(ctx.geometry, Intensity::MIN);
-    for (d, dev) in ctx.geometry.iter().enumerate() {
+    for (d, _dev) in ctx.geometry.iter().enumerate() {
         let (a, b) = if d == 0 { dev0 } else { other };
-        intensities[d][usize::from(TR_A)] = Intensity(a);
-        if dev.num_transducers() > usize::from(TR_B) {
-            intensities[d][usize::from(TR_B)] = Intensity(b);
-        }
+        intensities[d][0] = Intensity(a);
+        intensities[d][248] = Intensity(b);
     }
     (phases, intensities)
 }
@@ -23,8 +21,8 @@ fn drive_pair(ctx: &Ctx<'_>, dev0: (u8, u8), other: (u8, u8)) -> Buffers {
 pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     ctx.send(SetGpioOut {
         outputs: [
-            GpioOut::PwmOut(TR_A),
-            GpioOut::PwmOut(TR_B),
+            GpioOut::PwmOut(0),
+            GpioOut::PwmOut(248),
             GpioOut::Off,
             GpioOut::Off,
         ],
@@ -58,8 +56,8 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     wait_enter("No output is present on GPIO[0] or GPIO[1] of any device").await;
 
     ctx.send(SetPulseWidthTable::default()).await?;
-    let em = drive_pair(ctx, (0, 0xFF), (0, 0xFF));
+    let em = drive_pair(ctx, (0xFF, 0x00), (0xFF, 0x00));
     send_pattern_mod(ctx, &em, &static_ff, SamplingConfig::FREQ_4K).await?;
-    wait_enter("GPIO[0] and GPIO[1] show duty cycles of 0% and 50% respectively").await;
+    wait_enter("GPIO[0] and GPIO[1] show duty cycles of 50% and 0% respectively").await;
     Ok(())
 }
