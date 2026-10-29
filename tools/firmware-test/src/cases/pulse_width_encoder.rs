@@ -58,8 +58,8 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     wait_enter("No output is present on GPIO[0] or GPIO[1] of any device").await;
 
     ctx.send(SetPulseWidthTable::default()).await?;
-    let em = drive_pair(ctx, (0, 0xFF), (0, 0xFF));
+    let em = drive_pair(ctx, (0xFF, 0x00), (0xFF, 0x00));
     send_pattern_mod(ctx, &em, &static_ff, SamplingConfig::FREQ_4K).await?;
-    wait_enter("GPIO[0] and GPIO[1] show duty cycles of 0% and 50% respectively").await;
+    wait_enter("GPIO[0] and GPIO[1] show duty cycles of 50% and 0% respectively").await;
     Ok(())
 }
