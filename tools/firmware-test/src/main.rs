@@ -42,7 +42,6 @@ pub struct Ctx<'a> {
     pub client: &'a Client,
     pub geometry: &'a Geometry,
     pub heartbeat: Duration,
-    pub lost_timeout: Duration,
     pub exec: ExecAt,
 }
 
@@ -214,7 +213,6 @@ async fn main() -> Result<()> {
         client: &client,
         geometry: &geometry,
         heartbeat,
-        lost_timeout: option.lost_timeout,
         exec: cli.exec(),
     };
     loop {
