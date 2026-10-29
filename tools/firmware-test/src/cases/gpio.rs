@@ -9,10 +9,6 @@ use crate::Ctx;
 use crate::cases::pattern_util::{TR_A, TR_B, buffers, send_pattern_mod};
 use crate::io::wait_enter;
 
-async fn send_gpio(ctx: &Ctx<'_>, outputs: [GpioOut; 4]) -> Result<()> {
-    ctx.send(SetGpioOut { outputs }).await
-}
-
 async fn send_gpio_each(ctx: &Ctx<'_>, outputs: impl Fn(usize) -> [GpioOut; 4]) -> Result<()> {
     ctx.send(each(|dev| {
         Some(SetGpioOut {
@@ -45,40 +41,37 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     constant(0xFF, &mut static_ff);
     send_pattern_mod(ctx, &em, &static_ff, SamplingConfig::FREQ_4K).await?;
 
-    send_gpio(
-        ctx,
-        [
+    ctx.send(SetGpioOut {
+        outputs: [
             GpioOut::BaseSignal,
             GpioOut::Off,
             GpioOut::Off,
             GpioOut::Off,
         ],
-    )
+    })
     .await?;
     wait_enter("GPIO[0] outputs BaseSignal and there is no output on GPIO[1]").await;
 
-    send_gpio(
-        ctx,
-        [
+    ctx.send(SetGpioOut {
+        outputs: [
             GpioOut::BaseSignal,
             GpioOut::PwmOut(TR_A),
             GpioOut::Off,
             GpioOut::Off,
         ],
-    )
+    })
     .await?;
     wait_enter("GPIO[1] shows a 50% duty square wave, phase-shifted half a period between devices")
         .await;
 
-    send_gpio(
-        ctx,
-        [
+    ctx.send(SetGpioOut {
+        outputs: [
             GpioOut::BaseSignal,
             GpioOut::PwmOut(TR_B),
             GpioOut::Off,
             GpioOut::Off,
         ],
-    )
+    })
     .await?;
     wait_enter(
         "GPIO[1] shows an ~17% duty square wave, phase-shifted half a period between devices",
@@ -131,6 +124,9 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     )
     .await;
 
-    send_gpio(ctx, [GpioOut::Off; 4]).await?;
+    ctx.send(SetGpioOut {
+        outputs: [GpioOut::Off; 4],
+    })
+    .await?;
     Ok(())
 }

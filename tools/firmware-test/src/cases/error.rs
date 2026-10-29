@@ -12,7 +12,7 @@ use autd3_rs::value::{LoopBehavior, ModulationBank, PatternBank, SamplingConfig,
 
 use crate::Ctx;
 use crate::cases::ERR_INVALID_SILENCER_SETTING;
-use crate::cases::pattern_util::{activate_mod_bank, expect_firmware_error, expect_firmware_ok};
+use crate::cases::pattern_util::{expect_firmware_error, expect_firmware_ok};
 use crate::io::wait_enter;
 
 fn divider(steps: u16) -> SamplingConfig {
@@ -55,7 +55,11 @@ async fn mod_banks(
         })
         .await?;
     }
-    activate_mod_bank(ctx, activate.0, activate.1).await
+    ctx.send(ActivateModulationBank {
+        bank: activate.0,
+        transition_mode: activate.1,
+    })
+    .await
 }
 
 #[allow(clippy::too_many_lines)]
@@ -160,11 +164,10 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     )
     .await?;
     let at = ctx.client.device_time_now()? + std::time::Duration::from_secs(5);
-    activate_mod_bank(
-        ctx,
-        ModulationBank::B1,
-        TransitionMode::SysTime { time: at },
-    )
+    ctx.send(ActivateModulationBank {
+        bank: ModulationBank::B1,
+        transition_mode: TransitionMode::SysTime { time: at },
+    })
     .await?;
     expect_firmware_error(
         ctx,

@@ -4,7 +4,10 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 
 use autd3_rs::FpgaState;
-use autd3_rs::commands::{ConfigModulation, EmulateGpioIn, SetSilencer, WriteModulationBuffer};
+use autd3_rs::commands::{
+    ActivateModulationBank, ActivatePatternBank, ConfigModulation, EmulateGpioIn, SetSilencer,
+    WriteModulationBuffer,
+};
 use autd3_rs::geometry::{Point3, Vector3, offset};
 use autd3_rs::units::mm;
 use autd3_rs::value::{
@@ -13,7 +16,7 @@ use autd3_rs::value::{
 };
 
 use crate::Ctx;
-use crate::cases::pattern_util::{activate_mod_bank, activate_pattern_bank, write_foci_bank};
+use crate::cases::pattern_util::write_foci_bank;
 use crate::io::wait_enter;
 
 const SAMPLING_DIVIDER: u16 = 20_000;
@@ -108,7 +111,11 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
         LoopBehavior::ONCE,
     )
     .await?;
-    activate_pattern_bank(ctx, PatternBank::B1, TransitionMode::SyncIdx).await?;
+    ctx.send(ActivatePatternBank {
+        bank: PatternBank::B1,
+        transition_mode: TransitionMode::SyncIdx,
+    })
+    .await?;
     expect_state(
         ctx,
         "right after the bank change",
@@ -123,7 +130,11 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
         |s| s.is_pattern_stopped() && !s.is_transition_pending(),
     )
     .await?;
-    activate_pattern_bank(ctx, PatternBank::B0, TransitionMode::Immediate).await?;
+    ctx.send(ActivatePatternBank {
+        bank: PatternBank::B0,
+        transition_mode: TransitionMode::Immediate,
+    })
+    .await?;
     expect_state(ctx, "back to the infinite bank", "!pattern_stopped", |s| {
         !s.is_pattern_stopped() && !s.is_transition_pending()
     })
@@ -137,7 +148,11 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
         LoopBehavior::ONCE,
     )
     .await?;
-    activate_pattern_bank(ctx, PatternBank::B1, TransitionMode::Gpio(GpioIn::I0)).await?;
+    ctx.send(ActivatePatternBank {
+        bank: PatternBank::B1,
+        transition_mode: TransitionMode::Gpio(GpioIn::I0),
+    })
+    .await?;
     tokio::time::sleep(Duration::from_secs(1)).await;
     expect_state(
         ctx,
@@ -161,7 +176,11 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
         values: [false, false, false, false],
     })
     .await?;
-    activate_pattern_bank(ctx, PatternBank::B0, TransitionMode::Immediate).await?;
+    ctx.send(ActivatePatternBank {
+        bank: PatternBank::B0,
+        transition_mode: TransitionMode::Immediate,
+    })
+    .await?;
     println!("modulation finite loop (SyncIdx transition):");
     let data = [0xFFu8; 4];
     ctx.send(WriteModulationBuffer {
@@ -177,7 +196,11 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
         loop_behavior: LoopBehavior::ONCE,
     })
     .await?;
-    activate_mod_bank(ctx, ModulationBank::B1, TransitionMode::SyncIdx).await?;
+    ctx.send(ActivateModulationBank {
+        bank: ModulationBank::B1,
+        transition_mode: TransitionMode::SyncIdx,
+    })
+    .await?;
     expect_state(
         ctx,
         "right after the bank change",
@@ -192,7 +215,11 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
         |s| s.is_mod_stopped() && !s.is_transition_pending(),
     )
     .await?;
-    activate_mod_bank(ctx, ModulationBank::B0, TransitionMode::Immediate).await?;
+    ctx.send(ActivateModulationBank {
+        bank: ModulationBank::B0,
+        transition_mode: TransitionMode::Immediate,
+    })
+    .await?;
     expect_state(ctx, "back to the infinite bank", "!mod_stopped", |s| {
         !s.is_mod_stopped() && !s.is_transition_pending()
     })

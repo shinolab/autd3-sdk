@@ -3,16 +3,14 @@ use core::time::Duration;
 
 use anyhow::Result;
 
-use autd3_rs::commands::Modulation;
+use autd3_rs::commands::{ActivateModulationBank, Modulation};
 use autd3_rs::params::MOD_BUFFER_SAMPLES;
 use autd3_rs::units::Hz;
 use autd3_rs::value::{LoopBehavior, ModulationBank, SamplingConfig, TransitionMode};
 use autd3_rs_modulation::{SineOption, constant, modulation_buffer, sine};
 
 use crate::Ctx;
-use crate::cases::pattern_util::{
-    activate_mod_bank, focus_at, report_fpga_state, send_pattern_mod, write_mod_bank,
-};
+use crate::cases::pattern_util::{focus_at, report_fpga_state, send_pattern_mod, write_mod_bank};
 use crate::io::wait_enter;
 
 const MOD_PAGE_SAMPLES: usize = 2 * 16384;
@@ -41,7 +39,11 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     wait_enter("No AM is applied").await;
     report_fpga_state(ctx, "B1 static", Some(ModulationBank::B1), None, None).await?;
 
-    activate_mod_bank(ctx, ModulationBank::B0, TransitionMode::Immediate).await?;
+    ctx.send(ActivateModulationBank {
+        bank: ModulationBank::B0,
+        transition_mode: TransitionMode::Immediate,
+    })
+    .await?;
     wait_enter("AM is applied again").await;
     report_fpga_state(ctx, "back to B0", Some(ModulationBank::B0), None, None).await?;
 
@@ -51,7 +53,11 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     wait_enter("AM is still applied").await;
     report_fpga_state(ctx, "B0 stays active", Some(ModulationBank::B0), None, None).await?;
 
-    activate_mod_bank(ctx, ModulationBank::B1, TransitionMode::Immediate).await?;
+    ctx.send(ActivateModulationBank {
+        bank: ModulationBank::B1,
+        transition_mode: TransitionMode::Immediate,
+    })
+    .await?;
     wait_enter("The focus disappears").await;
     report_fpga_state(ctx, "switch to B1", Some(ModulationBank::B1), None, None).await?;
 
@@ -74,7 +80,11 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
         .await?;
     wait_enter(&format!("A single pop is heard once every {period:?}")).await;
 
-    activate_mod_bank(ctx, ModulationBank::B1, TransitionMode::Immediate).await?;
+    ctx.send(ActivateModulationBank {
+        bank: ModulationBank::B1,
+        transition_mode: TransitionMode::Immediate,
+    })
+    .await?;
 
     let saw_config = SamplingConfig::new(const { NonZeroU16::new(156).unwrap() });
     let ramp: Vec<u8> = (0..=255u8).collect();

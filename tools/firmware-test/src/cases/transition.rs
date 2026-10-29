@@ -1,6 +1,8 @@
 use anyhow::Result;
 
-use autd3_rs::commands::{EmulateGpioIn, FociStm, FociStmOption, Modulation, SetSilencer};
+use autd3_rs::commands::{
+    ActivatePatternBank, EmulateGpioIn, FociStm, FociStmOption, Modulation, SetSilencer,
+};
 use autd3_rs::geometry::{Point3, Vector3, offset};
 use autd3_rs::units::{Hz, mm};
 use autd3_rs::value::{
@@ -10,9 +12,7 @@ use autd3_rs::value::{
 use autd3_rs_modulation::{SineOption, constant, modulation_buffer, sine};
 
 use crate::Ctx;
-use crate::cases::pattern_util::{
-    POINT_NUM, activate_pattern_bank, circle_foci, stm_sampling, write_foci_bank,
-};
+use crate::cases::pattern_util::{POINT_NUM, circle_foci, stm_sampling, write_foci_bank};
 use crate::io::wait_enter;
 
 pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
@@ -46,13 +46,21 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     .await?;
     wait_enter("Nothing changed. Press Enter when the focus reaches the device's left edge").await;
     let at = ctx.client.device_time_now()? + std::time::Duration::from_secs(2);
-    activate_pattern_bank(ctx, PatternBank::B1, TransitionMode::SysTime { time: at }).await?;
+    ctx.send(ActivatePatternBank {
+        bank: PatternBank::B1,
+        transition_mode: TransitionMode::SysTime { time: at },
+    })
+    .await?;
     wait_enter(
         "~2 s later the trajectory jumps to the right edge, runs in reverse, then stops after one cycle",
     )
     .await;
 
-    activate_pattern_bank(ctx, PatternBank::B0, TransitionMode::Immediate).await?;
+    ctx.send(ActivatePatternBank {
+        bank: PatternBank::B0,
+        transition_mode: TransitionMode::Immediate,
+    })
+    .await?;
     wait_enter("The 0.5 Hz STM is applied again").await;
 
     write_foci_bank(
@@ -63,7 +71,11 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
         LoopBehavior::ONCE,
     )
     .await?;
-    activate_pattern_bank(ctx, PatternBank::B1, TransitionMode::Gpio(GpioIn::I0)).await?;
+    ctx.send(ActivatePatternBank {
+        bank: PatternBank::B1,
+        transition_mode: TransitionMode::Gpio(GpioIn::I0),
+    })
+    .await?;
     wait_enter("Press Enter when the focus reaches the device's left edge").await;
     ctx.send(EmulateGpioIn {
         values: [true, false, false, false],

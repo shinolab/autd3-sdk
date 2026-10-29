@@ -4,15 +4,14 @@ use core::num::NonZeroU16;
 use anyhow::Result;
 
 use autd3_rs::commands::{
-    ActivateModulationBank, ActivatePatternBank, Command, ConfigFociStm, ConfigModulation,
-    ConfigPattern, Expansion, Modulation, Pattern, SetSilencer, WriteFociBuffer,
-    WriteModulationBuffer, WritePatternBuffer,
+    Command, ConfigFociStm, ConfigModulation, ConfigPattern, Expansion, Modulation, Pattern,
+    SetSilencer, WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer,
 };
 use autd3_rs::geometry::{Geometry, Point3, Vector3, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::{
     ControlPoint, ControlPoints, Intensity, LoopBehavior, ModulationBank, PatternBank, Phase,
-    SamplingConfig, TransitionMode,
+    SamplingConfig,
 };
 use autd3_rs::{Error, Frames, Freq, Velocity};
 use autd3_rs_pattern::{focus, wavelength};
@@ -91,18 +90,6 @@ pub(crate) async fn write_pattern_bank(
         config: SamplingConfig::new(NonZeroU16::MAX),
         size: 1,
         loop_behavior: LoopBehavior::Infinite,
-    })
-    .await
-}
-
-pub(crate) async fn activate_pattern_bank(
-    ctx: &Ctx<'_>,
-    bank: PatternBank,
-    transition_mode: TransitionMode,
-) -> Result<()> {
-    ctx.send(ActivatePatternBank {
-        bank,
-        transition_mode,
     })
     .await
 }
@@ -251,18 +238,6 @@ pub(crate) async fn expect_firmware_error(
             println!("  [FAIL] {label}: firmware accepted the command (expected {expected:#04x})");
         }
     }
-}
-
-pub(crate) async fn activate_mod_bank(
-    ctx: &Ctx<'_>,
-    bank: ModulationBank,
-    transition_mode: TransitionMode,
-) -> Result<()> {
-    ctx.send(ActivateModulationBank {
-        bank,
-        transition_mode,
-    })
-    .await
 }
 
 pub(crate) fn stm_sampling(loop_freq: Freq, size: usize) -> Result<SamplingConfig> {

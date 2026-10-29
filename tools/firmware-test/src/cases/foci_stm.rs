@@ -2,7 +2,7 @@ use core::f32::consts::PI;
 
 use anyhow::Result;
 
-use autd3_rs::commands::{FociStm, FociStmOption, SetSilencer};
+use autd3_rs::commands::{ActivatePatternBank, FociStm, FociStmOption, SetSilencer};
 use autd3_rs::geometry::{Vector3, offset};
 use autd3_rs::params::MAX_FOCI_TOTAL;
 use autd3_rs::units::{Hz, mm};
@@ -14,8 +14,7 @@ use autd3_rs_modulation::{SineOption, constant, modulation_buffer, sine};
 
 use crate::Ctx;
 use crate::cases::pattern_util::{
-    POINT_NUM, RADIUS_MM, activate_pattern_bank, circle_foci, report_fpga_state, stm_sampling,
-    write_foci_bank,
+    POINT_NUM, RADIUS_MM, circle_foci, report_fpga_state, stm_sampling, write_foci_bank,
 };
 use crate::io::wait_enter;
 
@@ -58,7 +57,11 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     wait_enter("The STM frequency changed to 1 Hz").await;
     report_fpga_state(ctx, "B1 1Hz", None, Some(PatternBank::B1), Some(false)).await?;
 
-    activate_pattern_bank(ctx, PatternBank::B0, TransitionMode::Immediate).await?;
+    ctx.send(ActivatePatternBank {
+        bank: PatternBank::B0,
+        transition_mode: TransitionMode::Immediate,
+    })
+    .await?;
     wait_enter("The STM frequency returned to 0.5 Hz").await;
     report_fpga_state(ctx, "back to B0", None, Some(PatternBank::B0), Some(false)).await?;
 
@@ -74,7 +77,11 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     )
     .await?;
     wait_enter("Nothing changed. Press Enter when the focus reaches the device's left edge").await;
-    activate_pattern_bank(ctx, PatternBank::B1, TransitionMode::SyncIdx).await?;
+    ctx.send(ActivatePatternBank {
+        bank: PatternBank::B1,
+        transition_mode: TransitionMode::SyncIdx,
+    })
+    .await?;
     wait_enter("The trajectory reverses at the right edge, then stops after one cycle").await;
 
     let indices = MAX_FOCI_TOTAL / 8;

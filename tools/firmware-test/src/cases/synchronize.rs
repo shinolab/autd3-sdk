@@ -3,12 +3,12 @@ use std::time::Instant;
 
 use anyhow::Result;
 
-use autd3_rs::commands::{Clear, CpuConfig, SetCpuConfig, Synchronize};
+use autd3_rs::commands::{ActivateModulationBank, Clear, CpuConfig, SetCpuConfig, Synchronize};
 use autd3_rs::value::{ModulationBank, TransitionMode};
 
 use crate::Ctx;
 use crate::cases::cpu_config::silence;
-use crate::cases::pattern_util::{activate_mod_bank, resyncs};
+use crate::cases::pattern_util::resyncs;
 
 const CYCLE_NS: u64 = 1_000_000;
 const AHEAD: Duration = Duration::from_millis(300);
@@ -46,10 +46,18 @@ async fn synchronize_at_phase(ctx: &Ctx<'_>, phase_ns: Option<u64>) -> Result<(u
 }
 
 async fn transition_brackets(ctx: &Ctx<'_>) -> Result<Vec<Bracket>> {
-    activate_mod_bank(ctx, ModulationBank::B0, TransitionMode::Immediate).await?;
+    ctx.send(ActivateModulationBank {
+        bank: ModulationBank::B0,
+        transition_mode: TransitionMode::Immediate,
+    })
+    .await?;
     let target = Instant::now() + AHEAD;
     let time = ctx.client.device_time_now()? + AHEAD;
-    activate_mod_bank(ctx, ModulationBank::B1, TransitionMode::SysTime { time }).await?;
+    ctx.send(ActivateModulationBank {
+        bank: ModulationBank::B1,
+        transition_mode: TransitionMode::SysTime { time },
+    })
+    .await?;
 
     let mut brackets: Vec<Bracket> = (0..ctx.client.num_devices())
         .map(|_| Bracket {
@@ -73,7 +81,11 @@ async fn transition_brackets(ctx: &Ctx<'_>) -> Result<Vec<Bracket>> {
             }
         }
     }
-    activate_mod_bank(ctx, ModulationBank::B0, TransitionMode::Immediate).await?;
+    ctx.send(ActivateModulationBank {
+        bank: ModulationBank::B0,
+        transition_mode: TransitionMode::Immediate,
+    })
+    .await?;
     Ok(brackets)
 }
 
