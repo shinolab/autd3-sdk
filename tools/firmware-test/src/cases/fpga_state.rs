@@ -19,11 +19,8 @@ use crate::Ctx;
 use crate::cases::pattern_util::write_foci_bank;
 use crate::io::wait_enter;
 
-const SAMPLING_DIVIDER: u16 = 20_000;
-const POLL_TIMEOUT: Duration = Duration::from_secs(10);
-
 fn slow_sampling() -> SamplingConfig {
-    SamplingConfig::new(NonZeroU16::new(SAMPLING_DIVIDER).unwrap())
+    SamplingConfig::new(NonZeroU16::new(20_000).unwrap())
 }
 
 fn quiet_foci(center: Point3<f32>) -> Vec<ControlPoints> {
@@ -71,11 +68,11 @@ async fn poll_state(
             );
             return Ok(());
         }
-        if start.elapsed() > POLL_TIMEOUT {
+        if start.elapsed() > Duration::from_secs(10) {
             for (dev, state) in states.iter().enumerate() {
                 if !pred(state) {
                     println!(
-                        "  [FAIL] {label} device[{dev}]: expected {expected} within {POLL_TIMEOUT:?} (raw={:#04x} pattern_stopped={} mod_stopped={} transition_pending={})",
+                        "  [FAIL] {label} device[{dev}]: expected {expected} within 10s (raw={:#04x} pattern_stopped={} mod_stopped={} transition_pending={})",
                         state.0,
                         state.is_pattern_stopped(),
                         state.is_mod_stopped(),

@@ -64,9 +64,6 @@ async fn mod_banks(
 
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
-    const DIVIDER: u16 = 20;
-    const STEPS: u32 = 8;
-
     println!("firmware error-detail checks:");
 
     ctx.send(SetSilencer::default()).await?;
@@ -107,7 +104,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
             ctx.client.geometry(),
             ConfigModulation {
                 bank: ModulationBank::B0,
-                config: divider(DIVIDER),
+                config: divider(20),
                 size: 2,
                 loop_behavior: LoopBehavior::Infinite,
             },
@@ -116,7 +113,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     .await;
     ctx.send(ConfigPattern {
         bank: PatternBank::B0,
-        config: divider(DIVIDER),
+        config: divider(20),
         size: 1,
         loop_behavior: LoopBehavior::Infinite,
     })
@@ -138,7 +135,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     config_mod_bank(ctx, SamplingConfig::new(NonZeroU16::MAX)).await?;
     ctx.send(ConfigPattern {
         bank: PatternBank::B0,
-        config: divider(DIVIDER),
+        config: divider(20),
         size: 1,
         loop_behavior: LoopBehavior::Infinite,
     })
@@ -172,7 +169,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     expect_firmware_error(
         ctx,
         "strict silencer ahead of a pending SysTime transition from a faster bank",
-        Frames::encode(ctx.client.geometry(), strict_silencer(STEPS)),
+        Frames::encode(ctx.client.geometry(), strict_silencer(8)),
         ERR_INVALID_SILENCER_SETTING,
     )
     .await;
@@ -194,7 +191,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     expect_firmware_error(
         ctx,
         "strict silencer ahead of a pending SysTime transition onto a faster bank",
-        Frames::encode(ctx.client.geometry(), strict_silencer(STEPS)),
+        Frames::encode(ctx.client.geometry(), strict_silencer(8)),
         ERR_INVALID_SILENCER_SETTING,
     )
     .await;
@@ -210,7 +207,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     expect_firmware_error(
         ctx,
         "strict silencer while Ext alternates onto a faster bank",
-        Frames::encode(ctx.client.geometry(), strict_silencer(STEPS)),
+        Frames::encode(ctx.client.geometry(), strict_silencer(8)),
         ERR_INVALID_SILENCER_SETTING,
     )
     .await;
@@ -226,7 +223,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     expect_firmware_ok(
         ctx,
         "strict silencer with a faster unused bank",
-        Frames::encode(ctx.client.geometry(), strict_silencer(STEPS)),
+        Frames::encode(ctx.client.geometry(), strict_silencer(8)),
     )
     .await;
     expect_firmware_error(

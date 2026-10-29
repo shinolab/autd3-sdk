@@ -11,8 +11,7 @@ use autd3_rs_modulation::{constant, modulation_buffer};
 
 use crate::Ctx;
 use crate::cases::pattern_util::{
-    Buffers, POINT_NUM, RADIUS_MM, buffers, focus_at, report_fpga_state, stm_sampling,
-    write_pattern_stm_bank,
+    Buffers, buffers, focus_at, report_fpga_state, stm_sampling, write_pattern_stm_bank,
 };
 use crate::io::wait_enter;
 
@@ -47,12 +46,12 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     ))
     .await?;
 
-    let patterns: Vec<Buffers> = (0..POINT_NUM)
+    let patterns: Vec<Buffers> = (0..200)
         .map(|i| {
-            let theta = 2.0 * PI * i as f32 / POINT_NUM as f32;
+            let theta = 2.0 * PI * i as f32 / 200.0;
             focus_at(
                 ctx.geometry,
-                [RADIUS_MM * theta.cos(), RADIUS_MM * theta.sin(), 150.0],
+                [30.0 * theta.cos(), 30.0 * theta.sin(), 150.0],
                 0xFF,
             )
         })
@@ -77,7 +76,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
 
     let mut rev = patterns.clone();
     rev.reverse();
-    rev[POINT_NUM - 1] = buffers(ctx.geometry, Intensity::MIN);
+    rev[199] = buffers(ctx.geometry, Intensity::MIN);
     write_pattern_stm_bank(
         ctx,
         PatternBank::B1,

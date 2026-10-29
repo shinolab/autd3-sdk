@@ -5,17 +5,15 @@ use autd3_rs::value::{Intensity, PulseWidth, SamplingConfig};
 use autd3_rs_modulation::{constant, modulation_buffer};
 
 use crate::Ctx;
-use crate::cases::pattern_util::{Buffers, TR_A, TR_B, buffers, send_pattern_mod};
+use crate::cases::pattern_util::{Buffers, buffers, send_pattern_mod};
 use crate::io::wait_enter;
 
 fn drive_pair(ctx: &Ctx<'_>, dev0: (u8, u8), other: (u8, u8)) -> Buffers {
     let (phases, mut intensities) = buffers(ctx.geometry, Intensity::MIN);
-    for (d, dev) in ctx.geometry.iter().enumerate() {
+    for (d, _dev) in ctx.geometry.iter().enumerate() {
         let (a, b) = if d == 0 { dev0 } else { other };
-        intensities[d][usize::from(TR_A)] = Intensity(a);
-        if dev.num_transducers() > usize::from(TR_B) {
-            intensities[d][usize::from(TR_B)] = Intensity(b);
-        }
+        intensities[d][0] = Intensity(a);
+        intensities[d][248] = Intensity(b);
     }
     (phases, intensities)
 }
@@ -23,8 +21,8 @@ fn drive_pair(ctx: &Ctx<'_>, dev0: (u8, u8), other: (u8, u8)) -> Buffers {
 pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     ctx.send(SetGpioOut {
         outputs: [
-            GpioOut::PwmOut(TR_A),
-            GpioOut::PwmOut(TR_B),
+            GpioOut::PwmOut(0),
+            GpioOut::PwmOut(248),
             GpioOut::Off,
             GpioOut::Off,
         ],

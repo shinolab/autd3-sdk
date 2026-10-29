@@ -12,12 +12,6 @@ use crate::cases::pattern_util::{expect_firmware_error, expect_firmware_ok};
 use crate::io::wait_enter;
 use crate::{Ctx, failsafe_gates};
 
-const TIMEOUT: Duration = Duration::from_secs(1);
-const SETTLE: Duration = Duration::from_secs(3);
-const RELOCK: Duration = Duration::from_secs(8);
-const CABLE_LOST_TIMEOUT: Duration = Duration::from_secs(20);
-const CABLE_RECOVERY: Duration = Duration::from_secs(30);
-
 fn verdict(ok: bool) -> &'static str {
     if ok { "[OK]" } else { "[FAIL]" }
 }
@@ -69,15 +63,15 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
         config(
             ctx,
             CpuConfig {
-                ptp_unlock_failsafe_timeout: Some(TIMEOUT),
+                ptp_unlock_failsafe_timeout: Some(Duration::from_secs(1)),
                 ..CpuConfig::default()
             },
         )
         .await?;
-        let s = watch(ctx, "timeout armed, default PTP", SETTLE).await;
+        let s = watch(ctx, "timeout armed, default PTP", Duration::from_secs(3)).await;
         let seen = observe(ctx).await?;
         println!(
-            "  {} an armed timeout ({TIMEOUT:?}) never trips while every device is locked: trips {:?}",
+            "  {} an armed timeout (1s) never trips while every device is locked: trips {:?}",
             verdict(s.iter().all(|d| *d == DeviceState::Ready) && untouched(&seen)),
             seen.ptp_trips
         );
@@ -90,7 +84,12 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
             },
         )
         .await?;
-        let s = watch(ctx, "timeout disabled, 1 ms holdover", SETTLE).await;
+        let s = watch(
+            ctx,
+            "timeout disabled, 1 ms holdover",
+            Duration::from_secs(3),
+        )
+        .await;
         let slaves_unlocked = s.len() > 1 && s[1..].iter().all(|d| *d == DeviceState::Syncing);
         println!(
             "  {} the slaves lose the lock and the grandmaster keeps it",
@@ -108,15 +107,15 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
             ctx,
             CpuConfig {
                 ptp: unlocked_ptp(),
-                ptp_unlock_failsafe_timeout: Some(TIMEOUT),
+                ptp_unlock_failsafe_timeout: Some(Duration::from_secs(1)),
                 ..CpuConfig::default()
             },
         )
         .await?;
-        tokio::time::sleep(SETTLE).await;
+        tokio::time::sleep(Duration::from_secs(3)).await;
         let seen = observe(ctx).await?;
         println!(
-            "  {} every slave trips once the lock has been gone for {TIMEOUT:?}: trips {:?}",
+            "  {} every slave trips once the lock has been gone for 1s: trips {:?}",
             verdict(seen.ptp_trips.len() > 1 && seen.ptp_trips[1..].iter().all(|c| *c > 0)),
             seen.ptp_trips
         );
@@ -150,12 +149,17 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
         config(
             ctx,
             CpuConfig {
-                ptp_unlock_failsafe_timeout: Some(TIMEOUT),
+                ptp_unlock_failsafe_timeout: Some(Duration::from_secs(1)),
                 ..CpuConfig::default()
             },
         )
         .await?;
-        let s = watch(ctx, "default PTP, timeout still armed", RELOCK).await;
+        let s = watch(
+            ctx,
+            "default PTP, timeout still armed",
+            Duration::from_secs(8),
+        )
+        .await;
         println!(
             "  {} every device locks again",
             verdict(s.iter().all(|d| *d == DeviceState::Ready))
@@ -197,11 +201,10 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
         }
 
         println!("-- lock dropped by unplugging a cable");
-        if ctx.lost_timeout < CABLE_LOST_TIMEOUT {
+        if ctx.lost_timeout < Duration::from_secs(20) {
             println!(
                 "  [SKIP] the unplugged device would turn Lost after {:?} and Lost needs a reopen, which clears the counters; rerun with --lost-timeout-ms {} or more",
-                ctx.lost_timeout,
-                CABLE_LOST_TIMEOUT.as_millis()
+                ctx.lost_timeout, 20_000
             );
             return Ok(());
         }
@@ -212,7 +215,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
         config(
             ctx,
             CpuConfig {
-                ptp_unlock_failsafe_timeout: Some(TIMEOUT),
+                ptp_unlock_failsafe_timeout: Some(Duration::from_secs(1)),
                 ..CpuConfig::default()
             },
         )
@@ -221,7 +224,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
             "Unplug the cable on the host side of device[{last}] for about 5 seconds, plug it back, and wait for the link LED"
         ))
         .await;
-        let (ready, elapsed) = all_ready_within(ctx, CABLE_RECOVERY).await;
+        let (ready, elapsed) = all_ready_within(ctx, Duration::from_secs(30)).await;
         println!(
             "  {} every device answers and is locked again after {:.1} s: {:?}",
             verdict(ready),

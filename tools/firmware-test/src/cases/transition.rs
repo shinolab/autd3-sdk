@@ -12,15 +12,15 @@ use autd3_rs::value::{
 use autd3_rs_modulation::{SineOption, constant, modulation_buffer, sine};
 
 use crate::Ctx;
-use crate::cases::pattern_util::{POINT_NUM, circle_foci, stm_sampling, write_foci_bank};
+use crate::cases::pattern_util::{circle_foci, stm_sampling, write_foci_bank};
 use crate::io::wait_enter;
 
 pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     let center = ctx.geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
-    let foci = circle_foci(center, POINT_NUM);
+    let foci = circle_foci(center, 200);
     let mut reversed = foci.clone();
     reversed.reverse();
-    reversed[POINT_NUM - 1].intensity = Intensity::MIN;
+    reversed[199].intensity = Intensity::MIN;
 
     let mut static_ff = modulation_buffer();
     constant(0xFF, &mut static_ff);

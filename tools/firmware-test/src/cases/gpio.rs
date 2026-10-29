@@ -6,7 +6,7 @@ use autd3_rs::value::{Intensity, Phase, SamplingConfig};
 use autd3_rs_modulation::{constant, modulation_buffer};
 
 use crate::Ctx;
-use crate::cases::pattern_util::{TR_A, TR_B, buffers, send_pattern_mod};
+use crate::cases::pattern_util::{buffers, send_pattern_mod};
 use crate::io::wait_enter;
 
 async fn send_gpio_each(ctx: &Ctx<'_>, outputs: impl Fn(usize) -> [GpioOut; 4]) -> Result<()> {
@@ -22,18 +22,16 @@ async fn send_gpio_each(ctx: &Ctx<'_>, outputs: impl Fn(usize) -> [GpioOut; 4]) 
 pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     let em = {
         let (mut phases, mut intensities) = buffers(ctx.geometry, Intensity::MIN);
-        for (d, dev) in ctx.geometry.iter().enumerate() {
+        for (d, _dev) in ctx.geometry.iter().enumerate() {
             let (i0, p0, i248, p248) = if d == 0 {
                 (0xFF, 0x00, 0x80, 0x80)
             } else {
                 (0xFF, 0x80, 0x80, 0x00)
             };
-            phases[d][usize::from(TR_A)] = Phase(p0);
-            intensities[d][usize::from(TR_A)] = Intensity(i0);
-            if dev.num_transducers() > usize::from(TR_B) {
-                phases[d][usize::from(TR_B)] = Phase(p248);
-                intensities[d][usize::from(TR_B)] = Intensity(i248);
-            }
+            phases[d][0] = Phase(p0);
+            intensities[d][0] = Intensity(i0);
+            phases[d][248] = Phase(p248);
+            intensities[d][248] = Intensity(i248);
         }
         (phases, intensities)
     };
@@ -55,7 +53,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     ctx.send(SetGpioOut {
         outputs: [
             GpioOut::BaseSignal,
-            GpioOut::PwmOut(TR_A),
+            GpioOut::PwmOut(0),
             GpioOut::Off,
             GpioOut::Off,
         ],
@@ -67,7 +65,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     ctx.send(SetGpioOut {
         outputs: [
             GpioOut::BaseSignal,
-            GpioOut::PwmOut(TR_B),
+            GpioOut::PwmOut(248),
             GpioOut::Off,
             GpioOut::Off,
         ],
@@ -79,7 +77,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     .await;
 
     send_gpio_each(ctx, |dev| {
-        let tr = if dev == 0 { TR_A } else { TR_B };
+        let tr = if dev == 0 { 0 } else { 248 };
         [
             GpioOut::BaseSignal,
             GpioOut::PwmOut(tr),

@@ -18,12 +18,6 @@ use autd3_rs_pattern::{focus, wavelength};
 
 use crate::Ctx;
 
-pub(crate) const SOUND_SPEED_M_S: f32 = 340.0;
-pub(crate) const POINT_NUM: usize = 200;
-pub(crate) const RADIUS_MM: f32 = 30.0;
-pub(crate) const TR_A: u8 = 0;
-pub(crate) const TR_B: u8 = 248;
-
 pub(crate) type Buffers = (Vec<Vec<Phase>>, Vec<Vec<Intensity>>);
 
 pub(crate) fn buffers(geometry: &Geometry, intensity: Intensity) -> Buffers {
@@ -37,7 +31,7 @@ pub(crate) fn buffers(geometry: &Geometry, intensity: Intensity) -> Buffers {
 pub(crate) fn focus_at(geometry: &Geometry, off: [f32; 3], intensity: u8) -> Buffers {
     let (mut phases, intensities) = buffers(geometry, Intensity(intensity));
     let target = geometry.center() + offset(off[0] * mm, off[1] * mm, off[2] * mm);
-    let wl = wavelength(SOUND_SPEED_M_S * m / s);
+    let wl = wavelength(340.0 * m / s);
     focus(geometry, target, wl, &mut phases);
     (phases, intensities)
 }
@@ -46,7 +40,7 @@ pub(crate) fn circle_foci(center: Point3<f32>, n: usize) -> Vec<ControlPoints> {
     (0..n)
         .map(|i| {
             let theta = 2.0 * PI * i as f32 / n as f32;
-            let p = center + Vector3::new(RADIUS_MM * theta.cos(), RADIUS_MM * theta.sin(), 0.0);
+            let p = center + Vector3::new(30.0 * theta.cos(), 30.0 * theta.sin(), 0.0);
             ControlPoints::new([ControlPoint::new(p, Phase::ZERO)], Intensity::MAX)
         })
         .collect()
@@ -264,7 +258,7 @@ pub(crate) async fn write_foci_bank(
         config,
         size,
         num_foci,
-        sound_speed: Velocity::from_m_s(SOUND_SPEED_M_S),
+        sound_speed: Velocity::from_m_s(340.0),
         loop_behavior,
     })
     .await
