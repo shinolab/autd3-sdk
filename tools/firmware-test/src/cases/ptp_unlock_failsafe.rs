@@ -51,10 +51,6 @@ fn untouched(seen: &Observed) -> bool {
     seen.ptp_trips.iter().all(|c| *c == 0) && seen.gates.iter().all(|g| !g)
 }
 
-async fn config(ctx: &Ctx<'_>, config: CpuConfig) -> Result<()> {
-    ctx.send(SetCpuConfig::new(config)).await
-}
-
 async fn emit(ctx: &Ctx<'_>) -> Result<()> {
     ctx.send(Clear).await?;
     ctx.send(SetGpioOut {
@@ -101,13 +97,10 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
             seen.gates
         );
 
-        config(
-            ctx,
-            CpuConfig {
-                ptp_unlock_failsafe_timeout: Some(Duration::from_secs(1)),
-                ..CpuConfig::default()
-            },
-        )
+        ctx.send(SetCpuConfig::new(CpuConfig {
+            ptp_unlock_failsafe_timeout: Some(Duration::from_secs(1)),
+            ..CpuConfig::default()
+        }))
         .await?;
         let s = watch(ctx, "timeout armed, default PTP", Duration::from_secs(3)).await;
         let seen = observe(ctx).await?;
@@ -117,13 +110,10 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
             seen.ptp_trips
         );
 
-        config(
-            ctx,
-            CpuConfig {
-                ptp: unlocked_ptp(),
-                ..CpuConfig::default()
-            },
-        )
+        ctx.send(SetCpuConfig::new(CpuConfig {
+            ptp: unlocked_ptp(),
+            ..CpuConfig::default()
+        }))
         .await?;
         let s = watch(
             ctx,
@@ -144,14 +134,11 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
             seen.gates
         );
 
-        config(
-            ctx,
-            CpuConfig {
-                ptp: unlocked_ptp(),
-                ptp_unlock_failsafe_timeout: Some(Duration::from_secs(1)),
-                ..CpuConfig::default()
-            },
-        )
+        ctx.send(SetCpuConfig::new(CpuConfig {
+            ptp: unlocked_ptp(),
+            ptp_unlock_failsafe_timeout: Some(Duration::from_secs(1)),
+            ..CpuConfig::default()
+        }))
         .await?;
         tokio::time::sleep(Duration::from_secs(3)).await;
         let seen = observe(ctx).await?;
@@ -188,13 +175,10 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
             verdict(seen.gates.len() > 1 && seen.gates[1..].iter().all(|g| *g)),
             seen.gates
         );
-        config(
-            ctx,
-            CpuConfig {
-                ptp_unlock_failsafe_timeout: Some(Duration::from_secs(1)),
-                ..CpuConfig::default()
-            },
-        )
+        ctx.send(SetCpuConfig::new(CpuConfig {
+            ptp_unlock_failsafe_timeout: Some(Duration::from_secs(1)),
+            ..CpuConfig::default()
+        }))
         .await?;
         let s = watch(
             ctx,
@@ -257,13 +241,10 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
             let last = ctx.client.num_devices() - 1;
 
             emit(ctx).await?;
-            config(
-                ctx,
-                CpuConfig {
-                    ptp_unlock_failsafe_timeout: Some(Duration::from_secs(1)),
-                    ..CpuConfig::default()
-                },
-            )
+            ctx.send(SetCpuConfig::new(CpuConfig {
+                ptp_unlock_failsafe_timeout: Some(Duration::from_secs(1)),
+                ..CpuConfig::default()
+            }))
             .await?;
             wait_enter(&format!(
                 "Unplug the cable on the host side of device[{last}] for about 5 seconds, plug it back, and wait for the link LED"
@@ -305,7 +286,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
             ))
             .await;
 
-            config(ctx, CpuConfig::default()).await?;
+            ctx.send(SetCpuConfig::new(CpuConfig::default())).await?;
             expect_firmware_ok(
                 ctx,
                 "ReleaseFailsafe after the cable is back",
