@@ -146,6 +146,32 @@ fn strict_is_rejected_ahead_of_a_pending_sys_time_transition() {
 }
 
 #[test]
+fn strict_is_rejected_on_the_faster_target_of_a_pending_sys_time_transition() {
+    let mut host = Host::new();
+    assert_eq!(
+        host.config_modulation(B0, 100, REP_INFINITE),
+        DeviceErrorCode::None
+    );
+    assert_eq!(
+        host.activate_modulation_bank(B0, IMMEDIATE, 0),
+        DeviceErrorCode::None
+    );
+    assert_eq!(host.config_modulation(B1, 5, 0), DeviceErrorCode::None);
+    assert_eq!(
+        host.activate_modulation_bank(B1, SYS_TIME, 1_000_000_000),
+        DeviceErrorCode::None
+    );
+    assert_eq!(host.device.fpga().current_mod_bank(), 0);
+
+    assert_eq!(
+        host.set_silencer(STRICT, 8, 40),
+        DeviceErrorCode::InvalidSilencerSetting
+    );
+    host.assert_silencer_at_default();
+    assert_eq!(host.device.fpga().current_mod_bank(), 0);
+}
+
+#[test]
 fn strict_is_rejected_while_ext_alternates_onto_a_faster_bank() {
     let mut host = Host::new();
     assert_eq!(

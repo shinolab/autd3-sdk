@@ -181,6 +181,28 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     mod_banks(
         ctx,
         [100, 5],
+        LoopBehavior::ONCE,
+        (ModulationBank::B0, TransitionMode::Immediate),
+    )
+    .await?;
+    let at = ctx.client.device_time_now()? + std::time::Duration::from_secs(5);
+    ctx.send(ActivateModulationBank {
+        bank: ModulationBank::B1,
+        transition_mode: TransitionMode::SysTime { time: at },
+    })
+    .await?;
+    expect_firmware_error(
+        ctx,
+        "strict silencer ahead of a pending SysTime transition onto a faster bank",
+        Frames::encode(ctx.client.geometry(), strict_silencer(STEPS)),
+        ERR_INVALID_SILENCER_SETTING,
+    )
+    .await;
+
+    ctx.send(Clear).await?;
+    mod_banks(
+        ctx,
+        [100, 5],
         LoopBehavior::Infinite,
         (ModulationBank::B0, TransitionMode::Ext),
     )
