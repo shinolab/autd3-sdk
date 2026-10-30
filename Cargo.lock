@@ -234,10 +234,8 @@ dependencies = [
  "autd3-rs-firmware-emulator",
  "clap",
  "humantime",
- "pollster",
  "tokio",
  "tracing-subscriber",
- "zerocopy",
 ]
 
 [[package]]

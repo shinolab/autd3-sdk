@@ -21,8 +21,6 @@ clap.workspace = true
 humantime.workspace = true
 anyhow.workspace = true
 tokio = { workspace = true, features = ["time", "macros", "rt", "rt-multi-thread", "signal"] }
-pollster.workspace = true
-zerocopy.workspace = true
 
 [lints]
 workspace = true

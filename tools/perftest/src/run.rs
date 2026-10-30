@@ -7,13 +7,12 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use autd3_rs::commands::{
-    ActivatePatternBank, Clear, Command as AutdCommand, ConfigPattern, Expansion, GpioOut, Nop,
-    Pattern, SetGpioOut, Synchronize, WriteModulationBuffer, WritePatternBuffer,
+    ActivatePatternBank, Clear, ConfigPattern, GpioOut, Nop, Pattern, SetGpioOut, Synchronize,
+    WritePatternBuffer,
 };
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::params::MOD_BUFFER_SAMPLES;
 use autd3_rs::value::{
-    Intensity, LoopBehavior, ModulationBank, PatternBank, Phase, SamplingConfig, TransitionMode,
+    Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig, TransitionMode,
 };
 use autd3_rs::{
     Client, Error as ClientError, ExecAt, Frame, Frames, Interface, ResponseFuture, Telemetry,
@@ -35,27 +34,11 @@ pub(crate) struct RunOutput {
     pub telemetry_end: Vec<Telemetry>,
 }
 
-struct WholeModulationWrite<'a>(&'a [u8]);
-
-impl AutdCommand for WholeModulationWrite<'_> {
-    fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), ClientError> {
-        for (i, data) in self.0.chunks(WriteModulationBuffer::MAX_LEN).enumerate() {
-            expansion.push(WriteModulationBuffer {
-                bank: ModulationBank::B1,
-                offset: i * WriteModulationBuffer::MAX_LEN,
-                data,
-            })?;
-        }
-        Ok(())
-    }
-}
-
 struct Sender {
     command: Command,
     frames: Frames,
     phases: Vec<Vec<Phase>>,
     intensities: Vec<Vec<Intensity>>,
-    modulation: Vec<u8>,
     tick: u8,
     next_frame: usize,
 }
@@ -78,11 +61,6 @@ impl Sender {
             } else {
                 Vec::new()
             },
-            modulation: if cli.command.is_bulk() {
-                vec![0; MOD_BUFFER_SAMPLES]
-            } else {
-                Vec::new()
-            },
             tick: 0,
             next_frame: 0,
         };
@@ -97,18 +75,6 @@ impl Sender {
 
     fn prepare(&mut self, client: &Client) -> Result<()> {
         if self.command == Command::Nop {
-            return Ok(());
-        }
-        if self.command.is_bulk() {
-            let mut value = self.tick;
-            for sample in &mut self.modulation {
-                *sample = value;
-                value = value.wrapping_add(1);
-            }
-            self.tick = self.tick.wrapping_add(1);
-            self.frames
-                .encode_into(client.geometry(), WholeModulationWrite(&self.modulation))
-                .context("encoding modulation write")?;
             return Ok(());
         }
         for device in &mut self.phases {
@@ -154,14 +120,14 @@ impl Sender {
     }
 }
 
-pub(crate) fn spawn_emulator(cli: &Cli) -> Result<Option<UdpEmulator>> {
+fn spawn_emulator(cli: &Cli) -> Result<Option<UdpEmulator>> {
     cli.emulator
         .then(|| UdpEmulator::spawn(cli.devices.get()))
         .transpose()
         .context("starting the UDP device emulator")
 }
 
-pub(crate) fn transport_option(cli: &Cli, emulator: Option<&UdpEmulator>) -> TransportOption {
+fn transport_option(cli: &Cli, emulator: Option<&UdpEmulator>) -> TransportOption {
     let mut option = match emulator {
         Some(emulator) => TransportOption {
             iface: emulator.interface(),
@@ -224,7 +190,6 @@ pub(crate) async fn run(cli: &Cli) -> Result<RunOutput> {
 
         async fn run_stop_and_wait(
             client: &Client,
-            cli: &Cli,
             exec: ExecAt,
             mut sender: Sender,
             shutdown: Arc<AtomicBool>,
@@ -234,34 +199,19 @@ pub(crate) async fn run(cli: &Cli) -> Result<RunOutput> {
                 client: &Client,
                 exec: ExecAt,
                 frames: &Frames,
-                window: usize,
                 traffic: &mut Traffic,
                 ack: &mut AckLatency,
             ) -> Result<(), ClientError> {
-                let mut pending: VecDeque<PendingFuture> = VecDeque::with_capacity(window);
                 for frame in frames {
-                    if pending.len() >= window {
-                        let entry = pending.pop_front().expect("non-empty");
-                        entry.acked(ack).await?.check()?;
-                        traffic.replied();
-                    }
                     let sent_at = Instant::now();
                     let fut = client.send_frame_at(frame, exec).await?;
-                    pending.push_back(PendingFuture { sent_at, fut });
                     traffic.sent(&frame);
-                }
-                for entry in pending {
-                    entry.acked(ack).await?.check()?;
+                    PendingFuture { sent_at, fut }.acked(ack).await?.check()?;
                     traffic.replied();
                 }
                 Ok(())
             }
 
-            let window = if cli.command.is_bulk() {
-                cli.max_inflight.max(1)
-            } else {
-                1
-            };
             let mut index: u64 = 0;
             while !shutdown.load(Ordering::Relaxed) {
                 sender.prepare(client)?;
@@ -270,7 +220,6 @@ pub(crate) async fn run(cli: &Cli) -> Result<RunOutput> {
                     client,
                     exec,
                     &sender.frames,
-                    window,
                     &mut measurement.traffic,
                     &mut measurement.ack,
                 )
@@ -388,7 +337,7 @@ pub(crate) async fn run(cli: &Cli) -> Result<RunOutput> {
         let exec = cli.exec_lead.map_or(ExecAt::Immediate, ExecAt::Lead);
         let mut output = match cli.mode {
             Mode::StopAndWait => {
-                run_stop_and_wait(&client, cli, exec, sender, shutdown, measurement).await
+                run_stop_and_wait(&client, exec, sender, shutdown, measurement).await
             }
             Mode::Streaming => {
                 run_streaming(
@@ -401,7 +350,6 @@ pub(crate) async fn run(cli: &Cli) -> Result<RunOutput> {
                 )
                 .await
             }
-            Mode::BankSwitch => unreachable!("bank-switch runs without the Client"),
         };
 
         if let Ok(output) = &mut output
@@ -603,7 +551,7 @@ impl Live {
     }
 }
 
-pub(crate) fn spawn_signal_listener(flag: Arc<AtomicBool>) {
+fn spawn_signal_listener(flag: Arc<AtomicBool>) {
     tokio::spawn(async move {
         if tokio::signal::ctrl_c().await.is_ok() {
             flag.store(true, Ordering::Relaxed);

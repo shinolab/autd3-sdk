@@ -1,4 +1,3 @@
-mod bank_switch;
 mod cli;
 mod report;
 mod run;
@@ -7,7 +6,7 @@ mod stats;
 use anyhow::Result;
 use clap::Parser;
 
-use crate::cli::{Cli, Mode};
+use crate::cli::Cli;
 use crate::report::{print_summary, print_telemetry};
 use crate::run::{RunOutput, run};
 use tracing_subscriber::EnvFilter;
@@ -24,10 +23,6 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     if let Err(msg) = cli.validate() {
         anyhow::bail!(msg);
-    }
-
-    if cli.mode == Mode::BankSwitch {
-        return bank_switch::run(&cli).await;
     }
 
     let output = Box::pin(run(&cli)).await?;

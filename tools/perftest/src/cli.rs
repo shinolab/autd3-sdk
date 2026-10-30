@@ -12,14 +12,6 @@ pub(crate) enum Mode {
     #[default]
     StopAndWait,
     Streaming,
-    BankSwitch,
-}
-
-#[derive(Clone, Copy, Debug, Default, ValueEnum)]
-pub(crate) enum Framing {
-    #[default]
-    Fused,
-    Split,
 }
 
 #[derive(Clone, Copy, Default, PartialEq, Eq, ValueEnum)]
@@ -28,16 +20,11 @@ pub(crate) enum Command {
     WritePatternBuffer,
     #[default]
     Pattern,
-    WriteModulationBuffer,
 }
 
 impl Command {
     pub(crate) const fn is_pattern(self) -> bool {
         matches!(self, Self::WritePatternBuffer | Self::Pattern)
-    }
-
-    pub(crate) const fn is_bulk(self) -> bool {
-        matches!(self, Self::WriteModulationBuffer)
     }
 }
 
@@ -58,9 +45,7 @@ pub(crate) struct Cli {
         default_value_t = Command::Pattern,
         help = "Command to measure. nop touches no FPGA register (pure communication path), \
                 write-pattern-buffer writes FPGA RAM without latching, \
-                pattern is the production write + config + bank-activation (1 fused frame, 1 CTL_FLAG latch), \
-                write-modulation-buffer writes the whole modulation buffer of bank 1 per sample \
-                (its frames pipelined up to --max-inflight; stop-and-wait only)."
+                pattern is the production write + config + bank-activation (1 fused frame, 1 CTL_FLAG latch)."
     )]
     pub command: Command,
     #[arg(
@@ -129,42 +114,28 @@ pub(crate) struct Cli {
         long,
         value_enum,
         default_value_t = Mode::StopAndWait,
-        help = "stop-and-wait, streaming, or bank-switch. bank-switch sends raw frames through the \
-                Client: it alternates zero-amplitude Patterns between bank B0 and B1 with GPIO[0] on \
-                PatternBank and records, per device, the reply's device time minus the device time \
-                right before the send."
+        help = "stop-and-wait or streaming."
     )]
     pub mode: Mode,
-    #[arg(
-        long,
-        value_enum,
-        help = "How bank-switch sends one switch: fused (Pattern, 1 WritePatternFused frame, default) \
-                or split (WritePatternBuffer + ConfigPattern + ActivatePatternBank, 3 frames pipelined)."
-    )]
-    pub framing: Option<Framing>,
     #[arg(
         long = "max-inflight",
         alias = "inflight",
         default_value_t = MAX_INFLIGHT,
         help = "Pipeline depth in streaming mode: frames sent before awaiting the oldest response. \
-                Stop-and-wait ignores it except with --command write-modulation-buffer, \
-                which pipelines the frames of one sample up to this depth."
+                Stop-and-wait ignores it."
     )]
     pub max_inflight: usize,
 }
 
 impl Cli {
     pub(crate) fn validate(&self) -> Result<(), String> {
-        if (self.mode == Mode::Streaming || self.command.is_bulk())
+        if self.mode == Mode::Streaming
             && (self.max_inflight == 0 || self.max_inflight > MAX_INFLIGHT)
         {
             return Err(format!(
                 "--max-inflight {} must be in 1..={MAX_INFLIGHT}",
                 self.max_inflight,
             ));
-        }
-        if self.command.is_bulk() && self.mode == Mode::Streaming {
-            return Err("--command write-modulation-buffer runs in stop-and-wait only".to_string());
         }
         if self.heartbeat.is_zero() {
             return Err("--heartbeat must be longer than 0".to_string());
@@ -179,13 +150,6 @@ impl Cli {
                 "--ack-timeout {:?} must exceed --exec-lead {exec_lead:?}",
                 self.ack_timeout
             ));
-        }
-        if self.mode == Mode::BankSwitch {
-            if self.command != Command::Pattern {
-                return Err("--mode bank-switch sends its own Patterns; drop --command".to_string());
-            }
-        } else if self.framing.is_some() {
-            return Err("--framing applies to --mode bank-switch only".to_string());
         }
         Ok(())
     }
