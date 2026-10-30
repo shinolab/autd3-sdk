@@ -12,8 +12,8 @@ jobs:
     name: holo-wgpu (ubuntu-latest)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup-rust
+      - uses: actions/checkout@v7.0.1
+      - uses: $/.github/actions/setup-rust
         with:
           components: rustfmt, clippy
           workspaces: |

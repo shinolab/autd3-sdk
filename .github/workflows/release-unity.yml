@@ -25,8 +25,8 @@ jobs:
           - os: macos-latest
             rid: osx-arm64
     steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup-rust
+      - uses: actions/checkout@v7.0.1
+      - uses: $/.github/actions/setup-rust
       - name: Build native cdylibs
         working-directory: bindings/ffi
         run: cargo build --workspace --release
@@ -36,7 +36,7 @@ jobs:
           cp bindings/ffi/target/release/*autd3*.dll native/ 2>/dev/null || true
           cp bindings/ffi/target/release/libautd3*.so native/ 2>/dev/null || true
           cp bindings/ffi/target/release/libautd3*.dylib native/ 2>/dev/null || true
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: ${{ matrix.rid }}
           path: native/*
@@ -48,18 +48,18 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
-      - uses: ./.github/actions/setup-rust
-      - uses: actions/setup-node@v7
+      - uses: $/.github/actions/setup-rust
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: '24'
       - uses: taiki-e/install-action@v2.87.31
         with:
           tool: cargo-about,git-cliff
       - name: Download native libs
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v8.0.2
         with:
           path: bindings/ffi/target/native
       - name: Pack
@@ -86,7 +86,7 @@ jobs:
             sleep 20
           done
           gh release upload "${GITHUB_REF_NAME}" bindings/unity/dist/*.tgz
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: unity-tarballs
           path: bindings/unity/dist/*.tgz
@@ -99,11 +99,11 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@v8.0.2
         with:
           name: unity-tarballs
           path: dist

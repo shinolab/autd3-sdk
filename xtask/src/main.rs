@@ -1,3 +1,4 @@
+mod actions;
 mod bump;
 mod changelog;
 mod check;
@@ -26,6 +27,7 @@ mod util;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
+use actions::{ActionsCmd, run_actions};
 use bump::{BumpVersionCmd, run_bump_version};
 use changelog::{ChangelogCmd, run_changelog};
 use check::{CheckCmd, run_check};
@@ -126,6 +128,11 @@ enum TopCmd {
         #[command(subcommand)]
         cmd: LicenseCmd,
     },
+    #[command(about = "The GitHub Actions workflow lockfile (`.github/workflows/actions.lock`)")]
+    Actions {
+        #[command(subcommand)]
+        cmd: ActionsCmd,
+    },
     #[command(about = "The documentation site (`doc/`)")]
     Doc {
         #[command(subcommand)]
@@ -175,6 +182,7 @@ fn main() -> Result<()> {
         TopCmd::Cs { cmd } => run_cs(&root, cmd),
         TopCmd::Unity { cmd } => run_unity(&root, cmd),
         TopCmd::License { cmd } => run_license(&root, &cmd),
+        TopCmd::Actions { cmd } => run_actions(&root, &cmd),
         TopCmd::Doc { cmd } => run_doc(&root, &cmd),
         TopCmd::Check { cmd } => run_check(&root, &cmd),
         TopCmd::Changelog(cmd) => run_changelog(&root, &cmd),
