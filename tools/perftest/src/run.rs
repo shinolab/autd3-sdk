@@ -118,38 +118,6 @@ impl Sender {
     }
 }
 
-async fn send_config_pattern_once(client: &Client) -> Result<()> {
-    client
-        .send(ConfigPattern {
-            bank: PatternBank::B0,
-            config: SamplingConfig::FREQ_4K,
-            size: 1,
-            loop_behavior: LoopBehavior::Infinite,
-        })
-        .await?;
-    client
-        .send(ActivatePatternBank {
-            bank: PatternBank::B0,
-            transition_mode: TransitionMode::Immediate,
-        })
-        .await?;
-    Ok(())
-}
-
-async fn send_base_signal_gpio_out_once(client: &Client) -> Result<()> {
-    client
-        .send(SetGpioOut {
-            outputs: [
-                GpioOut::BaseSignal,
-                GpioOut::Off,
-                GpioOut::Off,
-                GpioOut::Off,
-            ],
-        })
-        .await?;
-    Ok(())
-}
-
 async fn run_stop_and_wait(
     client: &Client,
     exec: ExecAt,
@@ -244,6 +212,7 @@ async fn run_streaming(
     Ok(measurement.finish())
 }
 
+#[allow(clippy::too_many_lines)]
 pub(crate) async fn run(cli: &Cli) -> Result<RunOutput> {
     let num_devices = cli.devices.get();
     eprintln!("devices: {num_devices}");
@@ -277,11 +246,32 @@ pub(crate) async fn run(cli: &Cli) -> Result<RunOutput> {
     }
 
     if cli.command.is_pattern() {
-        send_config_pattern_once(&client)
+        client
+            .send(ConfigPattern {
+                bank: PatternBank::B0,
+                config: SamplingConfig::FREQ_4K,
+                size: 1,
+                loop_behavior: LoopBehavior::Infinite,
+            })
             .await
-            .context("initial ConfigPattern + ActivatePatternBank")?;
+            .context("initial ConfigPattern")?;
+        client
+            .send(ActivatePatternBank {
+                bank: PatternBank::B0,
+                transition_mode: TransitionMode::Immediate,
+            })
+            .await
+            .context("initial ActivatePatternBank")?;
     }
-    send_base_signal_gpio_out_once(&client)
+    client
+        .send(SetGpioOut {
+            outputs: [
+                GpioOut::BaseSignal,
+                GpioOut::Off,
+                GpioOut::Off,
+                GpioOut::Off,
+            ],
+        })
         .await
         .context("initial SetGpioOut")?;
     eprintln!("GPIO[0]: BaseSignal (probe it to check inter-device sync)");
