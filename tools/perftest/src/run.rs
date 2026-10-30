@@ -125,34 +125,23 @@ async fn run_stop_and_wait(
     shutdown: Arc<AtomicBool>,
     mut measurement: Measurement,
 ) -> Result<RunOutput> {
-    async fn send_all(
-        client: &Client,
-        exec: ExecAt,
-        frames: &Frames,
-        traffic: &mut Traffic,
-        ack: &mut AckLatency,
-    ) -> Result<(), ClientError> {
-        for frame in frames {
-            let sent_at = Instant::now();
-            let fut = client.send_frame_at(frame, exec).await?;
-            traffic.sent(&frame);
-            PendingFuture { sent_at, fut }.acked(ack).await?.check()?;
-            traffic.replied();
-        }
-        Ok(())
-    }
-
     let mut index: u64 = 0;
     while !shutdown.load(Ordering::Relaxed) {
         sender.prepare(client)?;
         let t0 = Instant::now();
-        let res = send_all(
-            client,
-            exec,
-            &sender.frames,
-            &mut measurement.traffic,
-            &mut measurement.ack,
-        )
+        let res = async {
+            for frame in &sender.frames {
+                let sent_at = Instant::now();
+                let fut = client.send_frame_at(frame, exec).await?;
+                measurement.traffic.sent(&frame);
+                PendingFuture { sent_at, fut }
+                    .acked(&mut measurement.ack)
+                    .await?
+                    .check()?;
+                measurement.traffic.replied();
+            }
+            Ok::<(), ClientError>(())
+        }
         .await;
         let rtt = t0.elapsed();
 
