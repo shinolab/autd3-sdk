@@ -34,10 +34,10 @@ jobs:
       doc: ${{ steps.filter.outputs.doc }}
       doc-samples: ${{ steps.filter.outputs.doc-samples }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
-      - uses: dorny/paths-filter@v4
+      - uses: dorny/paths-filter@v4.0.3
         id: filter
         with:
           token: ''
@@ -296,6 +296,21 @@ jobs:
     with:
       samples: ${{ needs.changes.outputs.doc-samples == 'true' }}
 
+  actions-lock:
+    name: actions-lock
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: $/.github/actions/setup-rust
+        with:
+          workspaces: xtask
+      - run: gh extension install github/gh-actions-lock
+      - run: cargo xtask actions lint
+
   semver:
     name: semver
     if: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' }}
@@ -330,7 +345,7 @@ jobs:
           esac
       - name: Checkout release head
         if: ${{ steps.chk.outputs.lineage == 'check' }}
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
@@ -348,7 +363,7 @@ jobs:
   ci-passed:
     name: ci-passed
     if: ${{ always() }}
-    needs: [changes, rust, holo-wgpu, simulator, console, emulator, cpu, fpga, py, ffi, cs, unity, license, doc, semver, guard]
+    needs: [changes, rust, holo-wgpu, simulator, console, emulator, cpu, fpga, py, ffi, cs, unity, license, doc, actions-lock, semver, guard]
     runs-on: ubuntu-latest
     steps:
       - name: Verify detect-changes succeeded
@@ -368,7 +383,8 @@ jobs:
             ${{ needs.py.result }}
             ${{ needs.ffi.result }} ${{ needs.cs.result }}
             ${{ needs.unity.result }} ${{ needs.license.result }}
-            ${{ needs.doc.result }} ${{ needs.semver.result }}
+            ${{ needs.doc.result }} ${{ needs.actions-lock.result }}
+            ${{ needs.semver.result }}
             ${{ needs.guard.result }}
         run: |
           for r in $RESULTS; do

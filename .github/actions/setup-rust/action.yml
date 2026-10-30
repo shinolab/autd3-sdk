@@ -28,7 +28,7 @@ runs:
       with:
         components: ${{ inputs.components }}
         targets: ${{ inputs.targets }}
-    - uses: Swatinem/rust-cache@v2
+    - uses: Swatinem/rust-cache@v2.9.3
       with:
         workspaces: ${{ inputs.workspaces }}
         shared-key: ${{ inputs.shared-key }}

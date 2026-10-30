@@ -16,14 +16,14 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup-rust
+      - uses: actions/checkout@v7.0.1
+      - uses: $/.github/actions/setup-rust
         with:
           workspaces: |
             bindings/ffi
             xtask
           shared-key: ffi
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@v6.0.0
         with:
           dotnet-version: '10.0.x'
       - name: Format
