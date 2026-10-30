@@ -16,12 +16,6 @@ cargo xtask tool perftest -- --devices 2 --mode streaming
 
 # Isolate the communication path from the FPGA write
 cargo xtask tool perftest -- --devices 2 --command nop
-
-# Host-side baseline against the in-process device emulator (no hardware)
-cargo xtask tool perftest -- --devices 2 --emulator
-
-# Against the simulator
-cargo xtask tool perftest -- --devices 1 --simulator
 ```
 
 The run continues until Ctrl+C, then prints the summary.
@@ -32,10 +26,8 @@ The ack latency runs from the `send_frame_at` call to the moment its `ResponseFu
 
 | Flag                  | Description |
 |-----------------------|-------------|
-| `--emulator`          | Run against the in-process UDP device emulator (firmware emulator behind real UDP sockets on `::1`) instead of real devices. Default: off. |
 | `--command <CMD>`     | `pattern` (default), `write-pattern-buffer`, or `nop`. See the table below. |
 | `--interface <NAME>`  | Network interface the devices hang off (`TransportOption.iface`). Omit to pick the one whose devices answer. |
-| `--simulator [PORT]`  | Connect to the simulator on this host, listening on `PORT` (default 44336), by opening `Interface::Addr([::1]:PORT)`. Set the geometry in the simulator's Geometry tab first. `Interface::Auto` never finds the simulator. |
 | `--devices <N>`       | Device count of the geometry. Default = 1. Opening fails when it does not match the chain. |
 | `--heartbeat <DUR>`   | Interval of `Client::send_heartbeat` while `--hold` keeps the connection idle. Default = `10ms`. The library sends no heartbeat by itself. |
 | `--send-buffer <BYTES>` | Socket send buffer (`TransportOption.send_buffer_bytes`). `0` keeps the OS default. Omit to use the library default. |

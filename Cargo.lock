@@ -231,7 +231,6 @@ dependencies = [
  "anyhow",
  "autd3-cpu-wire",
  "autd3-rs",
- "autd3-rs-firmware-emulator",
  "clap",
  "humantime",
  "tokio",

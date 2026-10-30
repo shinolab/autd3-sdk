@@ -1,5 +1,4 @@
 use std::collections::VecDeque;
-use std::net::{Ipv6Addr, SocketAddrV6};
 use std::ops::ControlFlow;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -18,7 +17,6 @@ use autd3_rs::{
     Client, Error as ClientError, ExecAt, Frame, Frames, Interface, ResponseFuture, Telemetry,
     TransportOption,
 };
-use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
 use crate::cli::{Cli, Command, Mode};
 use crate::report::{LiveBlock, interval_lines, telemetry_lines};
@@ -120,256 +118,224 @@ impl Sender {
     }
 }
 
-fn spawn_emulator(cli: &Cli) -> Result<Option<UdpEmulator>> {
-    cli.emulator
-        .then(|| UdpEmulator::spawn(cli.devices.get()))
-        .transpose()
-        .context("starting the UDP device emulator")
+async fn send_config_pattern_once(client: &Client) -> Result<()> {
+    client
+        .send(ConfigPattern {
+            bank: PatternBank::B0,
+            config: SamplingConfig::FREQ_4K,
+            size: 1,
+            loop_behavior: LoopBehavior::Infinite,
+        })
+        .await?;
+    client
+        .send(ActivatePatternBank {
+            bank: PatternBank::B0,
+            transition_mode: TransitionMode::Immediate,
+        })
+        .await?;
+    Ok(())
 }
 
-fn transport_option(cli: &Cli, emulator: Option<&UdpEmulator>) -> TransportOption {
-    let mut option = match emulator {
-        Some(emulator) => TransportOption {
-            iface: emulator.interface(),
-            open_timeout: Duration::from_secs(6),
-            ..Default::default()
-        },
-        None => TransportOption {
-            iface: match cli.simulator {
-                Some(port) => Interface::Addr(SocketAddrV6::new(Ipv6Addr::LOCALHOST, port, 0, 0)),
-                None => cli
-                    .interface
-                    .clone()
-                    .map_or(Interface::Auto, Interface::Name),
-            },
-            ..Default::default()
-        },
-    };
-    option.ack_timeout = cli.ack_timeout;
-    if let Some(bytes) = cli.send_buffer {
-        option.send_buffer_bytes = std::num::NonZeroUsize::new(bytes);
+async fn send_base_signal_gpio_out_once(client: &Client) -> Result<()> {
+    client
+        .send(SetGpioOut {
+            outputs: [
+                GpioOut::BaseSignal,
+                GpioOut::Off,
+                GpioOut::Off,
+                GpioOut::Off,
+            ],
+        })
+        .await?;
+    Ok(())
+}
+
+async fn run_stop_and_wait(
+    client: &Client,
+    exec: ExecAt,
+    mut sender: Sender,
+    shutdown: Arc<AtomicBool>,
+    mut measurement: Measurement,
+) -> Result<RunOutput> {
+    async fn send_all(
+        client: &Client,
+        exec: ExecAt,
+        frames: &Frames,
+        traffic: &mut Traffic,
+        ack: &mut AckLatency,
+    ) -> Result<(), ClientError> {
+        for frame in frames {
+            let sent_at = Instant::now();
+            let fut = client.send_frame_at(frame, exec).await?;
+            traffic.sent(&frame);
+            PendingFuture { sent_at, fut }.acked(ack).await?.check()?;
+            traffic.replied();
+        }
+        Ok(())
     }
-    option
+
+    let mut index: u64 = 0;
+    while !shutdown.load(Ordering::Relaxed) {
+        sender.prepare(client)?;
+        let t0 = Instant::now();
+        let res = send_all(
+            client,
+            exec,
+            &sender.frames,
+            &mut measurement.traffic,
+            &mut measurement.ack,
+        )
+        .await;
+        let rtt = t0.elapsed();
+
+        if measurement.record(index, rtt, classify(res)?).is_break() {
+            break;
+        }
+        measurement.report(client).await;
+        index += 1;
+    }
+    Ok(measurement.finish())
 }
 
-#[allow(clippy::too_many_lines)]
-pub(crate) async fn run(cli: &Cli) -> Result<RunOutput> {
-    #[allow(clippy::too_many_lines)]
-    async fn run_with_option(option: &TransportOption, cli: &Cli) -> Result<RunOutput> {
-        async fn send_config_pattern_once(client: &Client) -> Result<()> {
-            client
-                .send(ConfigPattern {
-                    bank: PatternBank::B0,
-                    config: SamplingConfig::FREQ_4K,
-                    size: 1,
-                    loop_behavior: LoopBehavior::Infinite,
-                })
-                .await?;
-            client
-                .send(ActivatePatternBank {
-                    bank: PatternBank::B0,
-                    transition_mode: TransitionMode::Immediate,
-                })
-                .await?;
-            Ok(())
-        }
-
-        async fn send_base_signal_gpio_out_once(client: &Client) -> Result<()> {
-            client
-                .send(SetGpioOut {
-                    outputs: [
-                        GpioOut::BaseSignal,
-                        GpioOut::Off,
-                        GpioOut::Off,
-                        GpioOut::Off,
-                    ],
-                })
-                .await?;
-            Ok(())
-        }
-
-        async fn run_stop_and_wait(
-            client: &Client,
-            exec: ExecAt,
-            mut sender: Sender,
-            shutdown: Arc<AtomicBool>,
-            mut measurement: Measurement,
-        ) -> Result<RunOutput> {
-            async fn send_all(
-                client: &Client,
-                exec: ExecAt,
-                frames: &Frames,
-                traffic: &mut Traffic,
-                ack: &mut AckLatency,
-            ) -> Result<(), ClientError> {
-                for frame in frames {
-                    let sent_at = Instant::now();
-                    let fut = client.send_frame_at(frame, exec).await?;
-                    traffic.sent(&frame);
-                    PendingFuture { sent_at, fut }.acked(ack).await?.check()?;
-                    traffic.replied();
-                }
-                Ok(())
-            }
-
-            let mut index: u64 = 0;
-            while !shutdown.load(Ordering::Relaxed) {
-                sender.prepare(client)?;
-                let t0 = Instant::now();
-                let res = send_all(
-                    client,
-                    exec,
-                    &sender.frames,
-                    &mut measurement.traffic,
-                    &mut measurement.ack,
-                )
-                .await;
-                let rtt = t0.elapsed();
-
-                if measurement.record(index, rtt, classify(res)?).is_break() {
+async fn run_streaming(
+    client: &Client,
+    exec: ExecAt,
+    mut sender: Sender,
+    shutdown: Arc<AtomicBool>,
+    max_inflight: usize,
+    mut measurement: Measurement,
+) -> Result<RunOutput> {
+    let mut pending: VecDeque<PendingFuture> = VecDeque::with_capacity(max_inflight);
+    let mut sample_index: u64 = 0;
+    while !shutdown.load(Ordering::Relaxed) {
+        if pending.len() < max_inflight {
+            let frame = sender.next_frame(client)?;
+            let sent_at = Instant::now();
+            let fut = match client.send_frame_at(frame, exec).await {
+                Ok(fut) => fut,
+                Err(ClientError::Closed) => {
+                    eprintln!("the client closed unexpectedly");
+                    measurement.driver_closed = true;
                     break;
                 }
-                measurement.report(client).await;
-                index += 1;
-            }
-            Ok(measurement.finish())
+                Err(e) => return Err(e.into()),
+            };
+            measurement.traffic.sent(&frame);
+            pending.push_back(PendingFuture { sent_at, fut });
+            continue;
         }
 
-        async fn run_streaming(
-            client: &Client,
-            exec: ExecAt,
-            mut sender: Sender,
-            shutdown: Arc<AtomicBool>,
-            max_inflight: usize,
-            mut measurement: Measurement,
-        ) -> Result<RunOutput> {
-            let mut pending: VecDeque<PendingFuture> = VecDeque::with_capacity(max_inflight);
-            let mut sample_index: u64 = 0;
-            while !shutdown.load(Ordering::Relaxed) {
-                if pending.len() < max_inflight {
-                    let frame = sender.next_frame(client)?;
-                    let sent_at = Instant::now();
-                    let fut = match client.send_frame_at(frame, exec).await {
-                        Ok(fut) => fut,
-                        Err(ClientError::Closed) => {
-                            eprintln!("the client closed unexpectedly");
-                            measurement.driver_closed = true;
-                            break;
-                        }
-                        Err(e) => return Err(e.into()),
-                    };
-                    measurement.traffic.sent(&frame);
-                    pending.push_back(PendingFuture { sent_at, fut });
-                    continue;
-                }
-
-                let Some(entry) = pending.pop_front() else {
-                    break;
-                };
-                let sent_at = entry.sent_at;
-                let res = entry.acked(&mut measurement.ack).await;
-                let rtt = sent_at.elapsed();
-                let outcome = classify(res.and_then(|resp| resp.check()))?;
-                if matches!(outcome, Outcome::Sample(SampleStatus::Ok)) {
-                    measurement.traffic.replied();
-                }
-                if measurement.record(sample_index, rtt, outcome).is_break() {
-                    break;
-                }
-                measurement.report(client).await;
-                sample_index += 1;
-            }
-            Ok(measurement.finish())
-        }
-
-        let num_devices = cli.devices.get();
-        eprintln!("devices: {num_devices}");
-
-        let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()));
-        let client = Client::open(&geometry, option).context("opening the devices")?;
-        client.send(Clear).await.context("initial Clear")?;
-        client
-            .send(Synchronize)
-            .await
-            .context("initial Synchronize")?;
-
-        let fw = client
-            .read_firmware_version()
-            .await
-            .context("reading firmware version")?;
-        for (i, fw) in fw.iter().enumerate() {
-            eprintln!("device[{i}] firmware version: {fw}");
-        }
-
-        if cli.command.is_pattern() {
-            send_config_pattern_once(&client)
-                .await
-                .context("initial ConfigPattern + ActivatePatternBank")?;
-        }
-        send_base_signal_gpio_out_once(&client)
-            .await
-            .context("initial SetGpioOut")?;
-        eprintln!("GPIO[0]: BaseSignal (probe it to check inter-device sync)");
-
-        let shutdown = Arc::new(AtomicBool::new(false));
-        spawn_signal_listener(Arc::clone(&shutdown));
-
-        let telemetry_start = client.read_telemetry().await.context("reading telemetry")?;
-        let mut heartbeats = 0;
-        if let Some(hold) = cli.hold {
-            eprintln!("holding the connection idle for {hold:?}");
-            let until = tokio::time::Instant::now() + hold;
-            let mut heartbeat = tokio::time::interval(cli.heartbeat);
-            while tokio::time::Instant::now() < until {
-                tokio::select! {
-                    _ = heartbeat.tick() => {
-                        client.send_heartbeat().context("sending a heartbeat")?;
-                        heartbeats += 1;
-                    }
-                    () = tokio::time::sleep_until(until) => {}
-                }
-            }
-        }
-
-        let sender = Sender::new(&geometry, cli)?;
-
-        let measurement = Measurement::start(cli, heartbeats, telemetry_start);
-        let exec = cli.exec_lead.map_or(ExecAt::Immediate, ExecAt::Lead);
-        let mut output = match cli.mode {
-            Mode::StopAndWait => {
-                run_stop_and_wait(&client, exec, sender, shutdown, measurement).await
-            }
-            Mode::Streaming => {
-                run_streaming(
-                    &client,
-                    exec,
-                    sender,
-                    shutdown,
-                    cli.max_inflight.max(1),
-                    measurement,
-                )
-                .await
-            }
+        let Some(entry) = pending.pop_front() else {
+            break;
         };
-
-        if let Ok(output) = &mut output
-            && let Ok(telemetry) = client.read_telemetry().await
-        {
-            output.telemetry_end = telemetry;
+        let sent_at = entry.sent_at;
+        let res = entry.acked(&mut measurement.ack).await;
+        let rtt = sent_at.elapsed();
+        let outcome = classify(res.and_then(|resp| resp.check()))?;
+        if matches!(outcome, Outcome::Sample(SampleStatus::Ok)) {
+            measurement.traffic.replied();
         }
-
-        if let Err(e) = client.close() {
-            eprintln!("the client closed with an error: {e}");
+        if measurement.record(sample_index, rtt, outcome).is_break() {
+            break;
         }
+        measurement.report(client).await;
+        sample_index += 1;
+    }
+    Ok(measurement.finish())
+}
 
-        output
+pub(crate) async fn run(cli: &Cli) -> Result<RunOutput> {
+    let num_devices = cli.devices.get();
+    eprintln!("devices: {num_devices}");
+
+    let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()));
+    let option = TransportOption {
+        iface: cli
+            .interface
+            .clone()
+            .map_or(Interface::Auto, Interface::Name),
+        ack_timeout: cli.ack_timeout,
+        send_buffer_bytes: match cli.send_buffer {
+            Some(bytes) => std::num::NonZeroUsize::new(bytes),
+            None => TransportOption::default().send_buffer_bytes,
+        },
+        ..Default::default()
+    };
+    let client = Client::open(&geometry, &option).context("opening the devices")?;
+    client.send(Clear).await.context("initial Clear")?;
+    client
+        .send(Synchronize)
+        .await
+        .context("initial Synchronize")?;
+
+    let fw = client
+        .read_firmware_version()
+        .await
+        .context("reading firmware version")?;
+    for (i, fw) in fw.iter().enumerate() {
+        eprintln!("device[{i}] firmware version: {fw}");
     }
 
-    let emulator = spawn_emulator(cli)?;
-    let option = transport_option(cli, emulator.as_ref());
-    let out = Box::pin(run_with_option(&option, cli)).await;
-    drop(emulator);
-    out
+    if cli.command.is_pattern() {
+        send_config_pattern_once(&client)
+            .await
+            .context("initial ConfigPattern + ActivatePatternBank")?;
+    }
+    send_base_signal_gpio_out_once(&client)
+        .await
+        .context("initial SetGpioOut")?;
+    eprintln!("GPIO[0]: BaseSignal (probe it to check inter-device sync)");
+
+    let shutdown = Arc::new(AtomicBool::new(false));
+    spawn_signal_listener(Arc::clone(&shutdown));
+
+    let telemetry_start = client.read_telemetry().await.context("reading telemetry")?;
+    let mut heartbeats = 0;
+    if let Some(hold) = cli.hold {
+        eprintln!("holding the connection idle for {hold:?}");
+        let until = tokio::time::Instant::now() + hold;
+        let mut heartbeat = tokio::time::interval(cli.heartbeat);
+        while tokio::time::Instant::now() < until {
+            tokio::select! {
+                _ = heartbeat.tick() => {
+                    client.send_heartbeat().context("sending a heartbeat")?;
+                    heartbeats += 1;
+                }
+                () = tokio::time::sleep_until(until) => {}
+            }
+        }
+    }
+
+    let sender = Sender::new(&geometry, cli)?;
+
+    let measurement = Measurement::start(cli, heartbeats, telemetry_start);
+    let exec = cli.exec_lead.map_or(ExecAt::Immediate, ExecAt::Lead);
+    let mut output = match cli.mode {
+        Mode::StopAndWait => run_stop_and_wait(&client, exec, sender, shutdown, measurement).await,
+        Mode::Streaming => {
+            run_streaming(
+                &client,
+                exec,
+                sender,
+                shutdown,
+                cli.max_inflight.max(1),
+                measurement,
+            )
+            .await
+        }
+    };
+
+    if let Ok(output) = &mut output
+        && let Ok(telemetry) = client.read_telemetry().await
+    {
+        output.telemetry_end = telemetry;
+    }
+
+    if let Err(e) = client.close() {
+        eprintln!("the client closed with an error: {e}");
+    }
+
+    output
 }
 
 #[derive(Clone, Copy)]

@@ -33,14 +33,6 @@ impl Command {
 pub(crate) struct Cli {
     #[arg(
         long,
-        default_value_t = false,
-        conflicts_with_all = ["interface", "simulator"],
-        help = "Run against the in-process UDP device emulator instead of real devices \
-                (baseline of the host side; no hardware needed)."
-    )]
-    pub emulator: bool,
-    #[arg(
-        long,
         value_enum,
         default_value_t = Command::Pattern,
         help = "Command to measure. nop touches no FPGA register (pure communication path), \
@@ -54,16 +46,6 @@ pub(crate) struct Cli {
                 Omit to pick the one whose devices answer."
     )]
     pub interface: Option<String>,
-    #[arg(
-        long,
-        value_name = "PORT",
-        num_args = 0..=1,
-        default_missing_value = "44336",
-        conflicts_with = "interface",
-        help = "Connect to the simulator on this host, listening on PORT (default 44336), \
-                by opening Interface::Addr([::1]:PORT). Set the geometry in the simulator's Geometry tab first."
-    )]
-    pub simulator: Option<u16>,
     #[arg(
         long,
         default_value_t = NonZeroUsize::MIN,
