@@ -8,10 +8,6 @@ use autd3_rs::protocol::FrameHeader;
 const LINK_BITS_PER_SEC: f64 = 100_000_000.0;
 const WIRE_OVERHEAD_BYTES: u64 = 8 + 40 + 14 + 4 + 8 + 12;
 
-const SUB_BUCKET_BITS: u32 = 7;
-const SUB_BUCKETS: usize = 1 << SUB_BUCKET_BITS;
-const BUCKETS: usize = (u64::BITS - SUB_BUCKET_BITS + 1) as usize * SUB_BUCKETS;
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SampleStatus {
     Ok,
@@ -133,94 +129,26 @@ pub(crate) struct LatencyStats {
     pub max: Duration,
 }
 
-pub(crate) struct Histogram {
-    buckets: Vec<u64>,
-    count: u64,
-    sum_ns: u128,
-    min_ns: u64,
-    max_ns: u64,
+pub(crate) fn rtt_histogram() -> hdrhistogram::Histogram<u64> {
+    hdrhistogram::Histogram::new(3).expect("3 significant digits is a valid precision")
 }
 
-impl Histogram {
-    pub(crate) fn new() -> Self {
-        Self {
-            buckets: vec![0; BUCKETS],
-            count: 0,
-            sum_ns: 0,
-            min_ns: u64::MAX,
-            max_ns: 0,
-        }
+pub(crate) fn record_rtt(rtts: &mut hdrhistogram::Histogram<u64>, rtt: Duration) {
+    rtts.saturating_record(u64::try_from(rtt.as_nanos()).unwrap_or(u64::MAX));
+}
+
+pub(crate) fn latency(rtts: &hdrhistogram::Histogram<u64>) -> LatencyStats {
+    if rtts.is_empty() {
+        return LatencyStats::default();
     }
-
-    pub(crate) fn record(&mut self, rtt: Duration) {
-        let ns = u64::try_from(rtt.as_nanos()).unwrap_or(u64::MAX);
-        let sub_buckets = SUB_BUCKETS as u64;
-        let index = if ns < sub_buckets {
-            ns
-        } else {
-            let shift = u64::from(u64::BITS - 1 - ns.leading_zeros() - SUB_BUCKET_BITS);
-            (shift + 1) * sub_buckets + (ns >> shift) - sub_buckets
-        };
-        self.buckets[usize::try_from(index).unwrap_or(BUCKETS - 1)] += 1;
-        self.count += 1;
-        self.sum_ns += u128::from(ns);
-        self.min_ns = self.min_ns.min(ns);
-        self.max_ns = self.max_ns.max(ns);
-    }
-
-    pub(crate) fn clear(&mut self) {
-        self.buckets.fill(0);
-        self.count = 0;
-        self.sum_ns = 0;
-        self.min_ns = u64::MAX;
-        self.max_ns = 0;
-    }
-
-    pub(crate) const fn count(&self) -> u64 {
-        self.count
-    }
-
-    pub(crate) fn latency(&self) -> LatencyStats {
-        if self.count == 0 {
-            return LatencyStats::default();
-        }
-        let mean_ns = u64::try_from(self.sum_ns / u128::from(self.count)).unwrap_or(u64::MAX);
-        LatencyStats {
-            mean: Duration::from_nanos(mean_ns),
-            p50: self.percentile(50),
-            p95: self.percentile(95),
-            p99: self.percentile(99),
-            min: Duration::from_nanos(self.min_ns),
-            max: Duration::from_nanos(self.max_ns),
-        }
-    }
-
-    fn percentile(&self, p: u64) -> Duration {
-        const fn bucket_upper_ns(index: usize) -> u64 {
-            let sub_buckets = SUB_BUCKETS as u64;
-            let group = index as u64 / sub_buckets;
-            let mantissa = index as u64 % sub_buckets;
-            if group == 0 {
-                return mantissa;
-            }
-            let shift = group - 1;
-            ((sub_buckets + mantissa) << shift) + ((1u64 << shift) - 1)
-        }
-
-        let rank = p
-            .saturating_mul(self.count)
-            .saturating_add(99)
-            .saturating_div(100)
-            .max(1);
-        let mut seen = 0u64;
-        for (index, &n) in self.buckets.iter().enumerate() {
-            seen += n;
-            if seen >= rank {
-                let ns = bucket_upper_ns(index).clamp(self.min_ns, self.max_ns);
-                return Duration::from_nanos(ns);
-            }
-        }
-        Duration::from_nanos(self.max_ns)
+    let percentile = |quantile: f64| Duration::from_nanos(rtts.value_at_quantile(quantile));
+    LatencyStats {
+        mean: Duration::from_secs_f64(rtts.mean() / 1e9),
+        p50: percentile(0.50),
+        p95: percentile(0.95),
+        p99: percentile(0.99),
+        min: Duration::from_nanos(rtts.min()),
+        max: Duration::from_nanos(rtts.max()),
     }
 }
 

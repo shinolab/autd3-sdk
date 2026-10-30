@@ -20,7 +20,9 @@ use autd3_rs::{
 
 use crate::cli::{Cli, Command, Mode};
 use crate::report::{LiveBlock, interval_lines, telemetry_lines};
-use crate::stats::{AckLatency, Counters, Histogram, SampleStatus, Summary, Traffic};
+use crate::stats::{
+    AckLatency, Counters, SampleStatus, Summary, Traffic, latency, record_rtt, rtt_histogram,
+};
 
 const REPORT_INTERVAL: Duration = Duration::from_secs(1);
 
@@ -346,7 +348,7 @@ fn classify(res: Result<(), ClientError>) -> Result<Outcome> {
 struct Measurement {
     counters: Counters,
     traffic: Traffic,
-    rtts: Histogram,
+    rtts: hdrhistogram::Histogram<u64>,
     live: Live,
     stopped_on_error: Option<(u64, SampleStatus)>,
     driver_closed: bool,
@@ -363,7 +365,7 @@ impl Measurement {
         Self {
             counters: Counters::default(),
             traffic,
-            rtts: Histogram::new(),
+            rtts: rtt_histogram(),
             live,
             stopped_on_error: None,
             driver_closed: false,
@@ -384,8 +386,8 @@ impl Measurement {
         };
         self.counters.observe(status);
         if status == SampleStatus::Ok {
-            self.rtts.record(rtt);
-            self.live.rtts.record(rtt);
+            record_rtt(&mut self.rtts, rtt);
+            record_rtt(&mut self.live.rtts, rtt);
         }
         if self.driver_closed {
             return ControlFlow::Break(());
@@ -412,7 +414,7 @@ impl Measurement {
                 elapsed,
                 throughput_cmd_per_sec: per_sec(self.counters.ok),
                 traffic: self.traffic.rate(elapsed),
-                latency: self.rtts.latency(),
+                latency: latency(&self.rtts),
                 frames: self.traffic.frames(),
                 heartbeats: self.heartbeats,
                 ack: self.ack,
@@ -442,7 +444,7 @@ impl PendingFuture {
 struct Live {
     last_report: Instant,
     block: LiveBlock,
-    rtts: Histogram,
+    rtts: hdrhistogram::Histogram<u64>,
     traffic_last: Traffic,
     telemetry_start: Vec<Telemetry>,
     telemetry_last: Vec<Telemetry>,
@@ -453,7 +455,7 @@ impl Live {
         Self {
             last_report: Instant::now(),
             block: LiveBlock::new(),
-            rtts: Histogram::new(),
+            rtts: rtt_histogram(),
             traffic_last: traffic,
             telemetry_last: telemetry_start.clone(),
             telemetry_start,
@@ -472,9 +474,9 @@ impl Live {
             return;
         }
         self.last_report = Instant::now();
-        let cmd_per_sec = self.rtts.count() as f64 / interval.as_secs_f64();
-        let latency = self.rtts.latency();
-        self.rtts.clear();
+        let cmd_per_sec = self.rtts.len() as f64 / interval.as_secs_f64();
+        let latency = latency(&self.rtts);
+        self.rtts.reset();
         let traffic_rate = traffic.since(self.traffic_last).rate(interval);
         self.traffic_last = traffic;
         let mut lines = interval_lines(

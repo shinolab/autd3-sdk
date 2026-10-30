@@ -18,6 +18,7 @@ tracing-subscriber.workspace = true
 autd3-cpu-wire.workspace = true
 clap.workspace = true
 humantime.workspace = true
+hdrhistogram.workspace = true
 anyhow.workspace = true
 tokio = { workspace = true, features = ["time", "macros", "rt", "rt-multi-thread", "signal"] }
 
