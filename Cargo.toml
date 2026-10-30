@@ -66,6 +66,7 @@ futures-channel = { version = "0.3.34", default-features = false, features = [
 async-lock = { version = "3.4.2", default-features = false, features = ["std"] }
 pollster = { version = "1.0.1", default-features = false }
 humantime = { version = "2.4.0", default-features = false }
+hdrhistogram = { version = "7.6.0", default-features = false }
 if-addrs = { version = "0.15.0", default-features = false }
 serde = { version = "1.0.229", default-features = false, features = [
     "std",
