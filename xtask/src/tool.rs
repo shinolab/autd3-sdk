@@ -27,8 +27,6 @@ pub(crate) enum ToolCmd {
         about = "Update the CPU / FPGA firmware over UDP (no J-Link / Vivado) and reboot the devices"
     )]
     FirmwareOta(ToolArgs),
-    #[command(about = "Read / write raw FPGA bus addresses over UDP (diagnostics only)")]
-    FpgaMemory(ToolArgs),
     #[command(about = "Run emulated devices on the loopback until stdin is closed")]
     UdpEmulator(ToolArgs),
 }
@@ -38,7 +36,6 @@ pub(crate) fn run_tool(root: &Path, cmd: ToolCmd) -> Result<()> {
         ToolCmd::Perftest(tool) => ("autd3-rs-perftest", "autd3-rs-perftest", tool),
         ToolCmd::FirmwareTest(tool) => ("autd3-rs-firmware-test", "autd3-rs-firmware-test", tool),
         ToolCmd::FirmwareOta(tool) => ("autd3-rs-firmware-ota", "autd3-firmware-ota", tool),
-        ToolCmd::FpgaMemory(tool) => ("autd3-rs-fpga-memory", "autd3-fpga-memory", tool),
         ToolCmd::UdpEmulator(tool) => ("autd3-rs-udp-emulator", "autd3-udp-emulator", tool),
     };
     let mut args = vec!["run", "-p", pkg, "--bin", bin];
