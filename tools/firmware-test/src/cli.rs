@@ -21,54 +21,55 @@ pub(crate) struct Cli {
     pub simulator: Option<u16>,
     #[arg(long, default_value_t = NonZeroUsize::MIN)]
     pub devices: NonZeroUsize,
-    #[arg(long, default_value_t = 10_000)]
-    pub heartbeat_us: u64,
-    #[arg(long)]
-    pub lost_timeout_ms: Option<u64>,
+    #[arg(long, value_parser = humantime::parse_duration, default_value = "10ms")]
+    pub heartbeat: Duration,
+    #[arg(long, value_parser = humantime::parse_duration)]
+    pub lost_timeout: Option<Duration>,
     #[arg(
         long,
-        help = "Sends every case frame with ExecAt::Lead of this many microseconds. At least 100. Omit to process every frame on arrival"
+        value_parser = humantime::parse_duration,
+        help = "Sends every case frame with ExecAt::Lead of this duration, e.g. 1ms. At least 100us. Omit to process every frame on arrival"
     )]
-    pub exec_lead_us: Option<u64>,
+    pub exec_lead: Option<Duration>,
     #[arg(
         long,
-        help = "Maps to TransportOption::ack_timeout. Must exceed --exec-lead-us"
+        value_parser = humantime::parse_duration,
+        help = "Maps to TransportOption::ack_timeout. Must exceed --exec-lead"
     )]
-    pub ack_timeout_ms: Option<u64>,
+    pub ack_timeout: Option<Duration>,
 }
 
 impl Cli {
     pub(crate) fn validate(&self) -> Result<(), String> {
-        if self.heartbeat_us == 0 {
-            return Err("--heartbeat-us must be at least 1".to_string());
+        if self.heartbeat.is_zero() {
+            return Err("--heartbeat must be longer than 0".to_string());
         }
-        if self.exec_lead_us.is_some_and(|us| us < 100) {
-            return Err("--exec-lead-us must be at least 100".to_string());
+        if self
+            .exec_lead
+            .is_some_and(|lead| lead < Duration::from_micros(100))
+        {
+            return Err("--exec-lead must be at least 100us".to_string());
         }
-        if self.ack_timeout_ms == Some(0) {
-            return Err("--ack-timeout-ms must be at least 1".to_string());
+        if self.ack_timeout.is_some_and(|timeout| timeout.is_zero()) {
+            return Err("--ack-timeout must be longer than 0".to_string());
         }
         let ack_timeout = self.ack_timeout();
         if let ExecAt::Lead(exec_lead) = self.exec()
             && ack_timeout <= exec_lead
         {
             return Err(format!(
-                "the ack timeout {ack_timeout:?} must exceed --exec-lead-us {exec_lead:?}; raise --ack-timeout-ms"
+                "the ack timeout {ack_timeout:?} must exceed --exec-lead {exec_lead:?}; raise --ack-timeout"
             ));
         }
         Ok(())
     }
 
     pub(crate) fn ack_timeout(&self) -> Duration {
-        self.ack_timeout_ms.map_or(
-            TransportOption::default().ack_timeout,
-            Duration::from_millis,
-        )
+        self.ack_timeout
+            .unwrap_or(TransportOption::default().ack_timeout)
     }
 
     pub(crate) fn exec(&self) -> ExecAt {
-        self.exec_lead_us.map_or(ExecAt::Immediate, |us| {
-            ExecAt::Lead(Duration::from_micros(us))
-        })
+        self.exec_lead.map_or(ExecAt::Immediate, ExecAt::Lead)
     }
 }

@@ -100,10 +100,11 @@ struct Cli {
     no_activate: bool,
     #[arg(
         long,
-        default_value_t = 10,
-        help = "Seconds to wait after the CPU reboot before reconnecting"
+        value_parser = humantime::parse_duration,
+        default_value = "10s",
+        help = "How long to wait after the CPU reboot before reconnecting"
     )]
-    reboot_wait_secs: u64,
+    reboot_wait: Duration,
     #[arg(
         long,
         default_value_t = 5,
@@ -612,7 +613,7 @@ fn main_cpu(cli: &Cli, bytes: &[u8], release: Option<Version>) -> Result<()> {
         );
         return Ok(());
     }
-    let wait = Duration::from_secs(cli.reboot_wait_secs);
+    let wait = cli.reboot_wait;
     let expect = release.map_or(Expect::ChangedFrom(&before.cpu_versions), Expect::Exactly);
     let mut activate_unrebooted = before.activation_unacknowledged;
     loop {

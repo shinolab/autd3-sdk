@@ -23,20 +23,24 @@ pub struct UdpArgs {
         help = "Connect to the simulator on this host only, listening on PORT (default 44336)"
     )]
     pub simulator: Option<u16>,
-    #[arg(long, help = "Heartbeat interval while waiting, microseconds")]
-    pub heartbeat_us: Option<u64>,
     #[arg(
         long,
-        help = "How long opening the connection may take, enumeration included, milliseconds"
+        value_parser = humantime::parse_duration,
+        help = "Heartbeat interval while waiting, e.g. 10ms"
     )]
-    pub open_timeout_ms: Option<u64>,
+    pub heartbeat: Option<Duration>,
+    #[arg(
+        long,
+        value_parser = humantime::parse_duration,
+        help = "How long opening the connection may take, enumeration included, e.g. 20s"
+    )]
+    pub open_timeout: Option<Duration>,
 }
 
 impl UdpArgs {
     #[must_use]
     pub fn heartbeat(&self) -> Duration {
-        self.heartbeat_us
-            .map_or(DEFAULT_HEARTBEAT, Duration::from_micros)
+        self.heartbeat.unwrap_or(DEFAULT_HEARTBEAT)
     }
 
     #[must_use]
@@ -53,9 +57,7 @@ impl UdpArgs {
             lost_timeout: default
                 .lost_timeout
                 .max(self.heartbeat().saturating_mul(LOST_AFTER_HEARTBEATS)),
-            open_timeout: self
-                .open_timeout_ms
-                .map_or(default.open_timeout, Duration::from_millis),
+            open_timeout: self.open_timeout.unwrap_or(default.open_timeout),
             ack_timeout: ACK_TIMEOUT,
             sync_on_open: false,
             ..default
@@ -142,10 +144,10 @@ mod tests {
         let args = parse(&[
             "--interface",
             "eth1",
-            "--heartbeat-us",
-            "20000",
-            "--open-timeout-ms",
-            "20000",
+            "--heartbeat",
+            "20ms",
+            "--open-timeout",
+            "20s",
         ]);
         assert_eq!(
             args.option(),

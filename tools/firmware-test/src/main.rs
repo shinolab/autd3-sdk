@@ -171,7 +171,6 @@ async fn main() -> Result<()> {
     check("Client-side validation is disabled: malformed commands are checked by the firmware");
 
     let geometry = Geometry::new((0..cli.devices.get()).map(|_| Autd3::default()));
-    let heartbeat = Duration::from_micros(cli.heartbeat_us);
 
     let default = TransportOption::default();
     let option = TransportOption {
@@ -182,16 +181,14 @@ async fn main() -> Result<()> {
                 .clone()
                 .map_or(Interface::Auto, Interface::Name),
         },
-        lost_timeout: cli
-            .lost_timeout_ms
-            .map_or(default.lost_timeout, Duration::from_millis),
+        lost_timeout: cli.lost_timeout.unwrap_or(default.lost_timeout),
         ack_timeout: cli.ack_timeout(),
         ..default
     };
     let client = Client::open(&geometry, &option).context("opening the devices")?;
     client.send(Clear).await?;
     client.send(Synchronize).await?;
-    let client = Session::new(client, heartbeat);
+    let client = Session::new(client, cli.heartbeat);
 
     describe(&client).await;
     match client
@@ -212,7 +209,7 @@ async fn main() -> Result<()> {
     let ctx = Ctx {
         client: &client,
         geometry: &geometry,
-        heartbeat,
+        heartbeat: cli.heartbeat,
         exec: cli.exec(),
     };
     loop {

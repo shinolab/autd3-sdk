@@ -37,8 +37,8 @@ impl OtaConfig {
             target.to_string(),
             "--devices".to_string(),
             self.devices.to_string(),
-            "--reboot-wait-secs".to_string(),
-            self.reboot_wait_secs.to_string(),
+            "--reboot-wait".to_string(),
+            format!("{}s", self.reboot_wait_secs),
         ];
         self.udp_args(&mut args);
         args
@@ -116,8 +116,8 @@ mod tests {
                 "both",
                 "--devices",
                 "3",
-                "--reboot-wait-secs",
-                "20",
+                "--reboot-wait",
+                "20s",
             ]
         );
     }

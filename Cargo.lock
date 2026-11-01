@@ -166,6 +166,7 @@ dependencies = [
  "autd3-rs-core",
  "autd3-rs-firmware-emulator",
  "clap",
+ "humantime",
  "pollster",
  "thiserror",
  "zerocopy",
@@ -180,6 +181,7 @@ dependencies = [
  "autd3-rs-modulation",
  "autd3-rs-pattern",
  "clap",
+ "humantime",
  "tokio",
  "tracing-subscriber",
 ]
