@@ -4,7 +4,11 @@ use autd3_cpu_wire::layout::FOCUS_UNIT_MM;
 
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 fn to_fixed(mm: f32) -> i32 {
-    (mm / FOCUS_UNIT_MM).round() as i32
+    if mm.is_nan() {
+        i32::MAX
+    } else {
+        (mm / FOCUS_UNIT_MM).round() as i32
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
