@@ -486,7 +486,7 @@ impl Session {
         };
         let mut accepted_devices = DeviceSet::empty();
         let mut first_failure = None;
-        let mut started_lost_clock = false;
+        let mut attempt_times = [None; MAX_DEVICES];
         let num_devices = self.channel.num_devices();
         for device in (0..num_devices).map(|step| (start_device + num_devices - step) % num_devices)
         {
@@ -502,9 +502,7 @@ impl Session {
             );
             match result {
                 Ok(attempted_at) => {
-                    started_lost_clock |= self
-                        .lock_state()
-                        .start_unanswered_clock(device, attempted_at);
+                    attempt_times[device] = Some(attempted_at);
                     accepted_devices.insert(device);
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
@@ -527,12 +525,24 @@ impl Session {
                 }
                 Err(e) => {
                     tracing::warn!(device, "sending to a device failed; skipping it: {e}");
-                    self.lock_state()
-                        .record_send_failure(device, Instant::now());
+                    attempt_times[device] = Some(Instant::now());
                     first_failure.get_or_insert(UdpError::Unsent { device, source: e });
                 }
             }
         }
+        let mut started_lost_clock = false;
+        let mut state = self.lock_state();
+        for (device, attempted_at) in attempt_times.into_iter().enumerate() {
+            let Some(attempted_at) = attempted_at else {
+                continue;
+            };
+            if accepted_devices[device] {
+                started_lost_clock |= state.start_unanswered_clock(device, attempted_at);
+            } else {
+                state.record_send_failure(device, attempted_at);
+            }
+        }
+        drop(state);
         EachDeviceSend {
             accepted_devices,
             first_failure,
