@@ -58,11 +58,12 @@ impl SamplingConfig {
                 freq, freq_min, freq_max,
             ));
         }
-        let divide = ULTRASOUND_FREQ_HZ as f32 / freq.hz();
-        if !is_integer(divide as f64) {
+        let divide = ULTRASOUND_FREQ_HZ as f64 / freq.hz() as f64;
+        let nearest = divide.round();
+        if (divide - nearest).abs() > nearest * f32::EPSILON as f64 * 4.0 {
             return Err(SamplingConfigError::FreqInvalid(freq));
         }
-        Ok(Self(at_least_one(divide as u16)))
+        Ok(Self(at_least_one(nearest as u16)))
     }
 
     pub fn from_period(period: Duration) -> Result<Self, SamplingConfigError> {
@@ -157,6 +158,36 @@ mod tests {
             Err(SamplingConfigError::FreqOutOfRange(..))
         ));
         assert!(SamplingConfig::from_freq(f32::NAN * Hz).is_err());
+    }
+
+    #[test]
+    fn a_frequency_near_a_divider_takes_that_divider() {
+        let divide = |hz: f32| SamplingConfig::from_freq(hz * Hz).map(|c| c.divide().get());
+        assert_eq!(divide(6666.667), Ok(6));
+        assert_eq!(divide(5714.286), Ok(7));
+        assert_eq!(
+            divide(6666.7),
+            Err(SamplingConfigError::FreqInvalid(6666.7 * Hz))
+        );
+    }
+
+    #[test]
+    fn every_divider_survives_the_round_trip_through_its_frequency() {
+        (1..=u16::MAX).for_each(|d| {
+            let config = SamplingConfig::new(NonZeroU16::new(d).unwrap());
+            assert_eq!(SamplingConfig::from_freq(config.freq()), Ok(config));
+        });
+    }
+
+    #[test]
+    fn a_frequency_between_two_dividers_is_rejected() {
+        (1..u16::MAX).for_each(|d| {
+            let between = (ULTRASOUND_FREQ_HZ as f64 / (d as f64 + 0.5)) as f32 * Hz;
+            assert_eq!(
+                SamplingConfig::from_freq(between),
+                Err(SamplingConfigError::FreqInvalid(between))
+            );
+        });
     }
 
     #[test]
