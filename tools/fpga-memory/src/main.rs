@@ -4,7 +4,7 @@ use clap::{Args, Parser, Subcommand};
 use autd3_cpu_wire::config::{CpuConfig, FpgaBusWait};
 use autd3_cpu_wire::payload::{ReadFpgaMemoryPayload, SetCpuConfigPayload, WriteFpgaMemoryPayload};
 use autd3_cpu_wire::{Cmd, PAYLOAD_BYTES, REPLY_DATA_BYTES_MAX};
-use autd3_rs_firmware_ota::{Driver, UdpArgs, datagram_with_payload};
+use autd3_rs_firmware_ota::{KeepaliveClient, UdpArgs, datagram_with_payload, exchange};
 
 const WORDS_PER_LINE: usize = 8;
 const REPORTED_ERRORS_PER_DEVICE: usize = 8;
@@ -129,8 +129,8 @@ fn ensure_inside_the_bus(addr: u16, words: usize) -> Result<()> {
     Ok(())
 }
 
-fn read(driver: &mut Driver, addr: u16, count: usize) -> Result<Vec<Vec<u16>>> {
-    let mut words = vec![Vec::with_capacity(count); driver.num_devices()];
+fn read(client: &KeepaliveClient, addr: u16, count: usize) -> Result<Vec<Vec<u16>>> {
+    let mut words = vec![Vec::with_capacity(count); client.num_devices()];
     let per_frame = REPLY_DATA_BYTES_MAX / size_of::<u16>();
     for (addr, start) in (addr..=u16::MAX)
         .step_by(per_frame)
@@ -139,17 +139,19 @@ fn read(driver: &mut Driver, addr: u16, count: usize) -> Result<Vec<Vec<u16>>> {
         let len = (count - start).min(per_frame);
         let payload = ReadFpgaMemoryPayload::new(addr, u16::try_from(len)?)
             .context("the read request does not fit the bus")?;
-        let replies =
-            driver.send_checked(&datagram_with_payload(Cmd::ReadFpgaMemory, &payload, &[]))?;
-        for (device, reply) in replies.iter().enumerate() {
+        let response = exchange(
+            client,
+            &datagram_with_payload(Cmd::ReadFpgaMemory, &payload, &[]),
+        )?;
+        for (device, words) in words.iter_mut().enumerate() {
+            let value = response.reply_data_of(device);
             ensure!(
-                reply.value.len() == len * size_of::<u16>(),
+                value.len() == len * size_of::<u16>(),
                 "device {device} returned {} bytes for {len} words",
-                reply.value.len()
+                value.len()
             );
-            words[device].extend(
-                reply
-                    .value
+            words.extend(
+                value
                     .as_chunks::<2>()
                     .0
                     .iter()
@@ -160,7 +162,7 @@ fn read(driver: &mut Driver, addr: u16, count: usize) -> Result<Vec<Vec<u16>>> {
     Ok(words)
 }
 
-fn write(driver: &mut Driver, addr: u16, words: &[u16]) -> Result<()> {
+fn write(client: &KeepaliveClient, addr: u16, words: &[u16]) -> Result<()> {
     let per_frame = (PAYLOAD_BYTES - size_of::<WriteFpgaMemoryPayload>()) / size_of::<u16>();
     for (addr, chunk) in (addr..=u16::MAX)
         .step_by(per_frame)
@@ -169,22 +171,24 @@ fn write(driver: &mut Driver, addr: u16, words: &[u16]) -> Result<()> {
         let payload = WriteFpgaMemoryPayload::new(addr, chunk.len())
             .context("the write request does not fit the bus")?;
         let data: Vec<u8> = chunk.iter().flat_map(|word| word.to_le_bytes()).collect();
-        driver.send_checked(&datagram_with_payload(
-            Cmd::WriteFpgaMemory,
-            &payload,
-            &data,
-        ))?;
+        exchange(
+            client,
+            &datagram_with_payload(Cmd::WriteFpgaMemory, &payload, &data),
+        )?;
     }
     Ok(())
 }
 
-fn set_bus_wait(driver: &mut Driver, wait: FpgaBusWait) -> Result<()> {
+fn set_bus_wait(client: &KeepaliveClient, wait: FpgaBusWait) -> Result<()> {
     let config = CpuConfig {
         fpga_bus_wait: wait,
         ..CpuConfig::default()
     };
     let payload = SetCpuConfigPayload::encode(&config).map_err(|e| anyhow!("{e:?}"))?;
-    driver.send_checked(&datagram_with_payload(Cmd::SetCpuConfig, &payload, &[]))?;
+    exchange(
+        client,
+        &datagram_with_payload(Cmd::SetCpuConfig, &payload, &[]),
+    )?;
     println!("FPGA bus wait: {} cycles", wait.as_u8());
     Ok(())
 }
@@ -196,19 +200,19 @@ struct TestErrors {
     reported: Vec<String>,
 }
 
-fn open(chain: &Chain) -> Result<Driver> {
-    Ok(Driver::new(chain.udp.open(chain.devices)?))
+fn open(chain: &Chain) -> Result<KeepaliveClient> {
+    Ok(chain.udp.open(chain.devices)?)
 }
 
 #[allow(clippy::too_many_lines)]
 fn main() -> Result<()> {
     fn test(
-        driver: &mut Driver,
+        client: &KeepaliveClient,
         addr: u16,
         count: usize,
         iterations: u32,
     ) -> Result<Vec<TestErrors>> {
-        let mut errors: Vec<TestErrors> = (0..driver.num_devices())
+        let mut errors: Vec<TestErrors> = (0..client.num_devices())
             .map(|_| TestErrors::default())
             .collect();
         let mut state = TEST_PATTERN_SEED;
@@ -222,12 +226,12 @@ fn main() -> Result<()> {
                     u16::from_le_bytes([low, high])
                 })
                 .collect();
-            write(driver, addr, &pattern)?;
-            let first = read(driver, addr, count)?;
+            write(client, addr, &pattern)?;
+            let first = read(client, addr, count)?;
             if first.iter().all(|words| *words == pattern) {
                 continue;
             }
-            let second = read(driver, addr, count)?;
+            let second = read(client, addr, count)?;
             for (device, (first, second)) in first.iter().zip(&second).enumerate() {
                 for (i, wrote) in pattern.iter().enumerate() {
                     if first[i] == *wrote {
@@ -257,11 +261,11 @@ fn main() -> Result<()> {
     match Cli::parse().command {
         Command::Read { addr, count, chain } => {
             ensure_inside_the_bus(addr, count)?;
-            let mut driver = open(&chain)?;
+            let client = open(&chain)?;
             if let Some(wait) = chain.bus_wait {
-                set_bus_wait(&mut driver, wait)?;
+                set_bus_wait(&client, wait)?;
             }
-            let words = read(&mut driver, addr, count)?;
+            let words = read(&client, addr, count)?;
             for (device, words) in words.iter().enumerate() {
                 println!("device {device}");
                 for (line, chunk) in words.chunks(WORDS_PER_LINE).enumerate() {
@@ -274,7 +278,6 @@ fn main() -> Result<()> {
                     );
                 }
             }
-            driver.close()?;
         }
         Command::Write {
             addr,
@@ -283,18 +286,18 @@ fn main() -> Result<()> {
             chain,
         } => {
             ensure_inside_the_bus(addr, words.len())?;
-            let mut driver = open(&chain)?;
+            let client = open(&chain)?;
             if let Some(wait) = chain.bus_wait {
-                set_bus_wait(&mut driver, wait)?;
+                set_bus_wait(&client, wait)?;
             }
-            write(&mut driver, addr, &words)?;
+            write(&client, addr, &words)?;
             println!(
                 "wrote {} words from {addr:#06x} to {} devices",
                 words.len(),
-                driver.num_devices()
+                client.num_devices()
             );
             if verify {
-                let read = read(&mut driver, addr, words.len())?;
+                let read = read(&client, addr, words.len())?;
                 let difference = read.iter().enumerate().find_map(|(device, read)| {
                         words
                             .iter()
@@ -314,7 +317,6 @@ fn main() -> Result<()> {
                 }
                 println!("read back the same words from every device");
             }
-            driver.close()?;
         }
         Command::Test {
             addr,
@@ -327,20 +329,20 @@ fn main() -> Result<()> {
                 usize::from(addr) + count <= 1 << 8,
                 "the test needs words that read back: only the controller registers (0x0000-0x00ff) do"
             );
-            let mut driver = open(&chain)?;
-            let original = read(&mut driver, addr, count)?;
+            let client = open(&chain)?;
+            let original = read(&client, addr, count)?;
             ensure!(
                 original.iter().all(|words| *words == original[0]),
                 "the devices hold different words in the range, which one request to every device cannot restore"
             );
             if let Some(wait) = chain.bus_wait {
-                set_bus_wait(&mut driver, wait)?;
+                set_bus_wait(&client, wait)?;
             }
-            let outcome = test(&mut driver, addr, count, iterations);
+            let outcome = test(&client, addr, count, iterations);
             if chain.bus_wait.is_some() {
-                set_bus_wait(&mut driver, FpgaBusWait::default())?;
+                set_bus_wait(&client, FpgaBusWait::default())?;
             }
-            write(&mut driver, addr, &original[0])?;
+            write(&client, addr, &original[0])?;
             let errors = outcome?;
             let words = u64::from(iterations) * count as u64;
             for (device, errors) in errors.iter().enumerate() {
@@ -352,7 +354,6 @@ fn main() -> Result<()> {
                     println!("  {line}");
                 }
             }
-            driver.close()?;
             if errors.iter().any(|e| e.write + e.read > 0) {
                 bail!("the words read back differ from the words written");
             }

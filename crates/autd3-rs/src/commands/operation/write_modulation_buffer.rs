@@ -20,6 +20,8 @@ impl WriteModulationBuffer<'_> {
 
 impl crate::sealed::Sealed for WriteModulationBuffer<'_> {}
 
+impl crate::commands::CommandOperation for WriteModulationBuffer<'_> {}
+
 impl Operation for WriteModulationBuffer<'_> {
     fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
         if self.data.is_empty() {

@@ -1,5 +1,5 @@
 use crate::commands::Command;
-use crate::commands::operation::Operation;
+use crate::commands::CommandOperation;
 use crate::error::Error;
 use crate::geometry::Device;
 
@@ -10,7 +10,7 @@ pub struct Each<F>(F);
 #[must_use]
 pub fn each<O, F>(assign: F) -> Each<F>
 where
-    O: Operation,
+    O: CommandOperation,
     F: FnMut(&Device) -> Option<O>,
 {
     Each(assign)
@@ -18,7 +18,7 @@ where
 
 impl<O, F> Command for Each<F>
 where
-    O: Operation,
+    O: CommandOperation,
     F: FnMut(&Device) -> Option<O>,
 {
     fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
@@ -29,10 +29,9 @@ where
 #[cfg(test)]
 mod tests {
     use crate::commands::operation::{
-        ConfigModulation, Distribution, Operation, WriteFociBuffer, WriteModulationBuffer,
-        WritePatternBuffer,
+        ConfigModulation, Distribution, WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer,
     };
-    use crate::commands::{Pattern, SetSilencer};
+    use crate::commands::{CommandOperation, Operation, Pattern, SetSilencer};
     use crate::datagram::{Datagram, Frames, each};
     use crate::error::Error;
     use crate::geometry::{Autd3, Point3};
@@ -99,7 +98,7 @@ mod tests {
             2,
             each(|device| {
                 Some(if device.idx() == 0 {
-                    Box::new(Pattern::new(&phases, &intensities)) as Box<dyn Operation>
+                    Box::new(Pattern::new(&phases, &intensities)) as Box<dyn CommandOperation>
                 } else {
                     Box::new(SetSilencer::default())
                 })
@@ -178,7 +177,7 @@ mod tests {
         let frames = Frames::encode(
             &geometry,
             each(|device| match device.idx() {
-                0 => Some(Box::new(pattern) as Box<dyn Operation>),
+                0 => Some(Box::new(pattern) as Box<dyn CommandOperation>),
                 1 => Some(Box::new(config)),
                 _ => None,
             }),

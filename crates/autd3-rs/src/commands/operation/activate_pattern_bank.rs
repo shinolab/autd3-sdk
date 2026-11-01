@@ -16,6 +16,8 @@ pub struct ActivatePatternBank {
 
 impl crate::sealed::Sealed for ActivatePatternBank {}
 
+impl crate::commands::CommandOperation for ActivatePatternBank {}
+
 impl Operation for ActivatePatternBank {
     fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
         encode_header_only(

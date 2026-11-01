@@ -159,6 +159,9 @@ pub enum PayloadError {
     )]
     PhaseDepthRequiresUniformIntensity { depth: PhaseDepth },
 
+    #[error("firmware update chunk of {len} bytes exceeds the {max} that fit in one frame")]
+    UpdateChunkTooLong { len: usize, max: usize },
+
     #[error(transparent)]
     Build(#[from] PayloadBuildError),
 

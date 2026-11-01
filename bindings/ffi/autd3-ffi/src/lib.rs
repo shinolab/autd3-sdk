@@ -15,10 +15,10 @@ use autd3_ffi_abi::{
     into_handle, slice_mut, slice_ref, take_handle, to_ns, write_cstr, write_out,
 };
 use autd3_rs::commands::{
-    ActivateModulationBank, ActivatePatternBank, BoxedCommand, Clear, Command, ConfigFociStm,
-    ConfigModulation, ConfigPattern, CpuConfig, EmulateGpioIn, FixedCompletionTime,
+    ActivateModulationBank, ActivatePatternBank, BoxedCommand, Clear, Command, CommandOperation,
+    ConfigFociStm, ConfigModulation, ConfigPattern, CpuConfig, EmulateGpioIn, FixedCompletionTime,
     FixedUpdateRate, FociStm as CoreFociStm, FociStmOption, ForceFan, FpgaBusWait, FpgaConfig,
-    GpioOut, Modulation, Nop, Operation, PWE_TABLE_SIZE, Pattern, PatternIntensity, PatternStm,
+    GpioOut, Modulation, Nop, PWE_TABLE_SIZE, Pattern, PatternIntensity, PatternStm,
     PatternStmOption, PhaseDepth, PtpConfig, ReleaseFailsafe, SetCpuConfig, SetFpgaConfig,
     SetGpioOut, SetOutputMask, SetPhaseCorrection, SetPulseWidthTable, SetSilencer, StmIntensity,
     Synchronize, WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer, WritePatternPhase,
@@ -1170,7 +1170,7 @@ impl OwnedCommand {
         }
     }
 
-    fn operation(&self) -> Option<Box<dyn Operation + Send + '_>> {
+    fn operation(&self) -> Option<Box<dyn CommandOperation + Send + '_>> {
         match self.lower() {
             Lowered::Operation(op) => Some(op),
             Lowered::Command(_) => None,
@@ -1392,7 +1392,7 @@ impl OwnedCommand {
 }
 
 enum Lowered<'a> {
-    Operation(Box<dyn Operation + Send + 'a>),
+    Operation(Box<dyn CommandOperation + Send + 'a>),
     Command(BoxedCommand<'a>),
 }
 

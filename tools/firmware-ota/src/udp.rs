@@ -4,7 +4,7 @@ use clap::Args;
 
 use autd3_rs::{Error, Interface, TransportOption, UdpError};
 
-use crate::driver::{ACK_TIMEOUT, DEFAULT_HEARTBEAT, UdpLink};
+use crate::update::{ACK_TIMEOUT, DEFAULT_HEARTBEAT, KeepaliveClient};
 
 const LOST_AFTER_HEARTBEATS: u32 = 10;
 
@@ -51,8 +51,8 @@ impl UdpArgs {
         }
     }
 
-    pub fn open(&self, num_devices: usize) -> Result<UdpLink, OpenError> {
-        Ok(UdpLink::open(
+    pub fn open(&self, num_devices: usize) -> Result<KeepaliveClient, OpenError> {
+        Ok(KeepaliveClient::open(
             &self.option(),
             num_devices,
             self.heartbeat(),
@@ -160,7 +160,11 @@ mod tests {
             sync_on_open: false,
             ..TransportOption::default()
         };
-        let err = OpenError::from(UdpLink::open(&option, 2, DEFAULT_HEARTBEAT).err().unwrap());
+        let err = OpenError::from(
+            KeepaliveClient::open(&option, 2, DEFAULT_HEARTBEAT)
+                .err()
+                .unwrap(),
+        );
         assert!(
             matches!(
                 udp_cause(&err.0),

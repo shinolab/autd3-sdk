@@ -1,6 +1,7 @@
 use core::fmt;
 
 use autd3_cpu_wire::fpga_params::{FunctionBits, VERSION_NUM_MAJOR, VERSION_NUM_MINOR};
+use autd3_cpu_wire::fpga_update::FpgaBootImage;
 use autd3_cpu_wire::payload::FirmwareInfo;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -36,6 +37,7 @@ pub struct FirmwareVersion {
     pub cpu: Version,
     pub fpga: Version,
     pub(crate) function_bits: u8,
+    fpga_boot_image: u8,
 }
 
 impl FirmwareVersion {
@@ -46,12 +48,28 @@ impl FirmwareVersion {
             cpu: Version::from_triple(info.cpu_version),
             fpga: Version::from_triple(info.fpga_version),
             function_bits: info.fpga_functions,
+            fpga_boot_image: info.fpga_boot_image,
         }
     }
 
     #[must_use]
     pub const fn is_emulator(&self) -> bool {
         FunctionBits::from_bits_retain(self.function_bits).contains(FunctionBits::EMULATOR)
+    }
+
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn fpga_boot_image(&self) -> FpgaBootImage {
+        match FpgaBootImage::from_u8(self.fpga_boot_image) {
+            Some(image) => image,
+            None => FpgaBootImage::Unknown,
+        }
+    }
+
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn supports_fpga_ota(&self) -> bool {
+        FunctionBits::from_bits_retain(self.function_bits).contains(FunctionBits::FLASH_OTA)
     }
 
     #[must_use]
@@ -115,7 +133,25 @@ mod tests {
             cpu,
             fpga,
             function_bits,
+            fpga_boot_image: 0,
         }
+    }
+
+    #[test]
+    fn the_boot_image_and_the_ota_capability_come_from_the_firmware_info() {
+        let info = |fpga_functions, fpga_boot_image| {
+            FirmwareVersion::from_info(FirmwareInfo {
+                cpu_version: [0; 3],
+                fpga_version: [0; 3],
+                fpga_functions,
+                fpga_boot_image,
+            })
+        };
+        let ota = FunctionBits::FLASH_OTA.bits();
+        assert!(info(ota, 0x02).supports_fpga_ota());
+        assert!(!info(0, 0x02).supports_fpga_ota());
+        assert_eq!(info(ota, 0x02).fpga_boot_image(), FpgaBootImage::Update);
+        assert_eq!(info(ota, 0x7F).fpga_boot_image(), FpgaBootImage::Unknown);
     }
 
     #[test]

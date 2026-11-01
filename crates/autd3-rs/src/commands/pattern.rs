@@ -41,6 +41,8 @@ impl<'a> Pattern<'a> {
 
 impl crate::sealed::Sealed for Pattern<'_> {}
 
+impl crate::commands::CommandOperation for Pattern<'_> {}
+
 impl Operation for Pattern<'_> {
     fn distribution(&self) -> Distribution {
         Distribution::PerDevice

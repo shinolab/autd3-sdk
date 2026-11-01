@@ -39,7 +39,7 @@ pub trait Operation: Sealed {
 }
 ```
 
-`impl<O: Operation> Command for O` のブランケット実装があるため, 単一の `Operation` はそのまま `Command` として扱える.
+`Operation` のうち `CommandOperation` (`Operation` の薄いマーカー trait) を実装するものには `impl<O: CommandOperation> Command for O` のブランケット実装があるため, 単一の `Operation` はそのまま `Command` として扱える.
 `Operation` は sealed trait であり, クレートの外では実装できない (自作できるのは `Command` だけである).
 
 `Operation` は 1 フレームに対応する.
@@ -90,11 +90,11 @@ pub fn push<C: Command>(&mut self, cmd: C) -> Result<&mut Self, Error> {
     Ok(self)
 }
 
-pub(crate) fn push_op<O: Operation>(&mut self, op: &O) -> Result<(), Error> {
+pub fn push_op<O: Operation>(&mut self, op: &O) -> Result<(), Error> {
     self.frames.push_encoded(op, self.geometry)
 }
 
-impl<O: Operation> Command for O {
+impl<O: CommandOperation> Command for O {
     fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
         expansion.push_op(&self)
     }

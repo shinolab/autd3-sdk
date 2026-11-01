@@ -22,6 +22,8 @@ impl SetFpgaConfig {
 
 impl crate::sealed::Sealed for SetFpgaConfig {}
 
+impl crate::commands::CommandOperation for SetFpgaConfig {}
+
 impl Operation for SetFpgaConfig {
     fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
         encode_header_only(
