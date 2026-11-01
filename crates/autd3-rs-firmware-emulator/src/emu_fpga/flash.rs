@@ -29,10 +29,6 @@ impl FlashEmulator {
         }
     }
 
-    pub(crate) fn flash(&self) -> &[u8] {
-        &self.flash
-    }
-
     pub(crate) fn flash_mut(&mut self) -> &mut Vec<u8> {
         if self.flash.is_empty() {
             self.flash = vec![0xFF; FPGA_FLASH_BYTES as usize];

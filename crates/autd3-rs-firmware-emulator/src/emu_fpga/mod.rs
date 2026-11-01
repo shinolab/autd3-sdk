@@ -237,11 +237,6 @@ impl FpgaEmulator {
     }
 
     #[must_use]
-    pub fn fpga_flash(&self) -> &[u8] {
-        self.flash.flash()
-    }
-
-    #[must_use]
     pub fn cpu_flash(&self) -> &[u8] {
         &self.cpu_flash
     }
