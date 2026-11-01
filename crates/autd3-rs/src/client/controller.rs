@@ -1,6 +1,6 @@
 use std::future::poll_fn;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use async_lock::Mutex as AsyncMutex;
 use autd3_cpu_wire::payload::FirmwareInfo;
@@ -54,29 +54,41 @@ impl Controller {
     }
 
     pub fn device_status(&self) -> Result<Vec<DeviceStatus>, Error> {
-        self.session.device_status()
+        let state = self.session.lock_state();
+        if let Some(error) = self.session.closed_error_of(&state) {
+            return Err(error);
+        }
+        Ok(state.device_status())
     }
 
     pub fn device_time_now(&self) -> Result<SysTime, Error> {
-        self.session.device_time().ok_or(Error::DeviceTimeUnknown)
+        self.session
+            .lock_state()
+            .device_clock
+            .now(Instant::now())
+            .ok_or(Error::DeviceTimeUnknown)
     }
 
     #[must_use]
     pub fn ack_timeout(&self) -> Duration {
-        self.session.ack_timeout()
+        self.session.lock_state().timeouts.ack
     }
 
     pub fn set_ack_timeout(&self, timeout: Duration) {
-        self.session.set_ack_timeout(timeout);
+        self.session.lock_state().timeouts.ack = timeout;
+        self.session
+            .wake_driver("the new ack timeout is noticed at its next deadline");
     }
 
     #[must_use]
     pub fn lost_timeout(&self) -> Duration {
-        self.session.lost_timeout()
+        self.session.lock_state().timeouts.lost
     }
 
     pub fn set_lost_timeout(&self, timeout: Duration) {
-        self.session.set_lost_timeout(timeout);
+        self.session.lock_state().timeouts.lost = timeout;
+        self.session
+            .wake_driver("the new lost timeout is noticed at its next deadline");
     }
 
     pub fn send<C: Command>(&self, cmd: C) -> impl Future<Output = Result<(), Error>> + use<'_, C> {
@@ -120,20 +132,27 @@ impl Controller {
             .into());
         }
         let _serialized = self.send_serializer.lock().await;
-        if let Some(e) = self.session.closed_error() {
+        if let Some(e) = self.session.closed_error_of(&self.session.lock_state()) {
             return Err(e);
         }
         let (completion, response) = completion::channel();
         let mut completion = Some(completion);
-        let msg_id = poll_fn(|cx| self.session.poll_enqueue(cx, &mut completion)).await?;
-        let exec_at = match exec_at::schedule(
-            exec,
-            self.session.lost_timeout(),
-            self.session.device_time(),
-        ) {
+        let msg_id = poll_fn(|cx| {
+            self.session
+                .lock_state()
+                .poll_enqueue(cx.waker(), &mut completion, Instant::now())
+        })
+        .await?;
+        let (lost_timeout, device_time) = {
+            let state = self.session.lock_state();
+            (state.timeouts.lost, state.device_clock.now(Instant::now()))
+        };
+        let exec_at = match exec_at::schedule(exec, lost_timeout, device_time) {
             Ok(exec_at) => exec_at,
             Err(e) => {
-                self.session.cancel(msg_id);
+                let mut state = self.session.lock_state();
+                state.remove(msg_id, Instant::now());
+                Session::release(state);
                 return Err(e);
             }
         };
@@ -192,7 +211,7 @@ impl Controller {
 
     pub fn close(&self) -> Result<(), Error> {
         tracing::debug!("closing controller");
-        if let Some(e) = self.session.closed_error() {
+        if let Some(e) = self.session.closed_error_of(&self.session.lock_state()) {
             return Err(e);
         }
         self.shutdown();

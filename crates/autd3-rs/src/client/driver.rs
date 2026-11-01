@@ -50,7 +50,7 @@ impl Driver {
     }
 
     fn shutdown_result(&self) -> Result<(), Error> {
-        match self.session.closed_error() {
+        match self.session.closed_error_of(&self.session.lock_state()) {
             Some(error @ Error::Network(_)) => Err(error),
             _ => Ok(()),
         }
@@ -64,7 +64,8 @@ impl Driver {
 
     fn shut_down(&mut self, error: Error) {
         self.is_shut_down = true;
-        self.session.close(error);
+        let failed = self.session.lock_state().close(error);
+        failed.resolve();
         tracing::debug!("driver stopped");
     }
 }

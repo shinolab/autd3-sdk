@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 use std::num::NonZeroU64;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
-use std::task::{Context, Poll, Waker};
+use std::task::{Poll, Waker};
 use std::time::{Duration, Instant};
 
 use autd3_cpu_wire::udp::{Flags, Kind};
@@ -123,10 +123,10 @@ impl InflightQueue {
 pub(crate) struct SessionState {
     inflight: InflightQueue,
     liveness: Vec<DeviceLiveness>,
-    device_clock: DeviceClock,
+    pub(crate) device_clock: DeviceClock,
     closed: Option<Error>,
     last_msg_id: u16,
-    timeouts: Timeouts,
+    pub(crate) timeouts: Timeouts,
 }
 
 pub(crate) struct FailedRequests {
@@ -254,7 +254,7 @@ impl SessionState {
             .collect()
     }
 
-    fn device_status(&self) -> Vec<DeviceStatus> {
+    pub(crate) fn device_status(&self) -> Vec<DeviceStatus> {
         self.liveness
             .iter()
             .map(|liveness| DeviceStatus {
@@ -335,7 +335,7 @@ impl SessionState {
 }
 
 impl FailedRequests {
-    fn resolve(self) {
+    pub(crate) fn resolve(self) {
         for request in self.requests {
             request.fail(self.error.clone());
         }
@@ -379,11 +379,11 @@ impl Session {
         })
     }
 
-    fn lock_state(&self) -> MutexGuard<'_, SessionState> {
+    pub(crate) fn lock_state(&self) -> MutexGuard<'_, SessionState> {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    fn release(mut state: MutexGuard<'_, SessionState>) {
+    pub(crate) fn release(mut state: MutexGuard<'_, SessionState>) {
         let slot_waiter = state.take_released_slot_waiter();
         drop(state);
         if let Some(slot_waiter) = slot_waiter {
@@ -395,36 +395,6 @@ impl Session {
         self.channel.socket()
     }
 
-    pub(crate) fn device_status(&self) -> Result<Vec<DeviceStatus>, Error> {
-        let state = self.lock_state();
-        if let Some(error) = self.closed_error_of(&state) {
-            return Err(error);
-        }
-        Ok(state.device_status())
-    }
-
-    pub(crate) fn device_time(&self) -> Option<SysTime> {
-        self.lock_state().device_clock.now(Instant::now())
-    }
-
-    pub(crate) fn ack_timeout(&self) -> Duration {
-        self.lock_state().timeouts.ack
-    }
-
-    pub(crate) fn lost_timeout(&self) -> Duration {
-        self.lock_state().timeouts.lost
-    }
-
-    pub(crate) fn set_ack_timeout(&self, timeout: Duration) {
-        self.lock_state().timeouts.ack = timeout;
-        self.wake_driver("the new ack timeout is noticed at its next deadline");
-    }
-
-    pub(crate) fn set_lost_timeout(&self, timeout: Duration) {
-        self.lock_state().timeouts.lost = timeout;
-        self.wake_driver("the new lost timeout is noticed at its next deadline");
-    }
-
     pub(crate) fn request_stop(&self) {
         self.stop_requested.store(true, Ordering::Release);
     }
@@ -433,11 +403,7 @@ impl Session {
         self.stop_requested.load(Ordering::Acquire)
     }
 
-    pub(crate) fn closed_error(&self) -> Option<Error> {
-        self.closed_error_of(&self.lock_state())
-    }
-
-    fn closed_error_of(&self, state: &SessionState) -> Option<Error> {
+    pub(crate) fn closed_error_of(&self, state: &SessionState) -> Option<Error> {
         state
             .closed_error()
             .or_else(|| self.is_stopping().then_some(Error::Closed))
@@ -457,21 +423,6 @@ impl Session {
         Ok(self.channel.wait_readable(deadline)?)
     }
 
-    pub(crate) fn poll_enqueue(
-        &self,
-        cx: &mut Context<'_>,
-        completion: &mut Option<ResponseSender>,
-    ) -> Poll<Result<u16, Error>> {
-        self.lock_state()
-            .poll_enqueue(cx.waker(), completion, Instant::now())
-    }
-
-    pub(crate) fn cancel(&self, msg_id: u16) {
-        let mut state = self.lock_state();
-        state.remove(msg_id, Instant::now());
-        Self::release(state);
-    }
-
     fn send_to_each_device<'a>(
         &self,
         kind: Kind,
@@ -481,7 +432,7 @@ impl Session {
         body_for_device: impl Fn(usize) -> [&'a [u8]; 2],
     ) -> EachDeviceSend {
         let mut retry_full_socket_until = match kind {
-            Kind::Frame => Instant::now().checked_add(self.lost_timeout()),
+            Kind::Frame => Instant::now().checked_add(self.lock_state().timeouts.lost),
             _ => None,
         };
         let mut accepted_devices = DeviceSet::empty();
@@ -550,7 +501,7 @@ impl Session {
         }
     }
 
-    fn wake_driver(&self, missed_wake: &str) {
+    pub(crate) fn wake_driver(&self, missed_wake: &str) {
         if !self.wake() {
             tracing::debug!("could not wake the driver; {missed_wake}");
         }
@@ -662,17 +613,15 @@ impl Session {
                     return Ok(());
                 }
                 Polled::Wake => return Ok(()),
-                Polled::Device(reply) => self.handle_reply(&reply),
+                Polled::Device(reply) => {
+                    let mut state = self.lock_state();
+                    let answered = state.receive_reply(&reply, Instant::now());
+                    Self::release(state);
+                    if let Some(answered) = answered {
+                        answered.deliver();
+                    }
+                }
             }
-        }
-    }
-
-    fn handle_reply(&self, reply: &DeviceReply) {
-        let mut state = self.lock_state();
-        let answered = state.receive_reply(reply, Instant::now());
-        Self::release(state);
-        if let Some(answered) = answered {
-            answered.deliver();
         }
     }
 
@@ -698,11 +647,6 @@ impl Session {
             pending = failed.requests.len(),
             "the head frame got no reply within the ack timeout; failing the pending frames"
         );
-        failed.resolve();
-    }
-
-    pub(crate) fn close(&self, error: Error) {
-        let failed = self.lock_state().close(error);
         failed.resolve();
     }
 }
