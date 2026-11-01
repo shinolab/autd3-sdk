@@ -5,6 +5,7 @@ mod config_pattern;
 mod control;
 mod emulate_gpio_in;
 mod force_fan;
+mod fpga_memory;
 mod set_cpu_config;
 mod set_fpga_config;
 mod set_gpio_out;
@@ -26,6 +27,8 @@ pub use config_pattern::{ConfigFociStm, ConfigPattern};
 pub use control::{Clear, Nop, ReleaseFailsafe, Synchronize};
 pub use emulate_gpio_in::EmulateGpioIn;
 pub use force_fan::ForceFan;
+#[doc(hidden)]
+pub use fpga_memory::{FpgaMemoryRead, FpgaMemoryWrite};
 pub use set_cpu_config::{CpuConfig, FpgaBusWait, PtpConfig, SetCpuConfig};
 pub use set_fpga_config::{FpgaConfig, SetFpgaConfig};
 pub use set_gpio_out::{GpioOut, SetGpioOut};

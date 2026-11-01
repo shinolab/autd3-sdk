@@ -9,16 +9,13 @@ use autd3_cpu_wire::fpga_update::FpgaBootImage;
 use autd3_cpu_wire::layout::UPDATE_CHUNK_MAX_DATA_LEN;
 use autd3_cpu_wire::update::RunningImage;
 use autd3_rs::commands::{
-    Command, Distribution, Expansion, FpgaUpdateActivate, FpgaUpdateBegin, FpgaUpdateChunk,
-    FpgaUpdateCommit, Operation, Reboot, UpdateBegin, UpdateChunk, UpdateCommit, UpdateConfirm,
+    Command, Expansion, FpgaUpdateActivate, FpgaUpdateBegin, FpgaUpdateChunk, FpgaUpdateCommit,
+    Operation, Reboot, UpdateBegin, UpdateChunk, UpdateCommit, UpdateConfirm,
 };
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::protocol::Cmd;
 use autd3_rs::udp::UdpError;
-use autd3_rs::{
-    Client, Datagram, DeviceState, Error, FirmwareVersion, Frame, Response, TransportOption,
-};
-use zerocopy::{Immutable, IntoBytes};
+use autd3_rs::{Client, DeviceState, Error, FirmwareVersion, TransportOption};
 
 use crate::fpga_image::FpgaFirmwareImage;
 use crate::image::CpuFirmwareImage;
@@ -174,20 +171,6 @@ pub struct UpdateProgress {
     pub total: usize,
 }
 
-#[must_use]
-pub fn datagram_with_payload(
-    cmd: Cmd,
-    header: &(impl IntoBytes + Immutable),
-    data: &[u8],
-) -> Datagram {
-    let mut datagram = Datagram::no_payload(cmd);
-    let header = header.as_bytes();
-    datagram.payload[..header.len()].copy_from_slice(header);
-    datagram.payload[header.len()..][..data.len()].copy_from_slice(data);
-    datagram.payload_len = header.len() + data.len();
-    datagram
-}
-
 pub struct KeepaliveClient {
     client: Arc<Client>,
     keepalive_stop: Arc<AtomicBool>,
@@ -241,7 +224,7 @@ impl Drop for KeepaliveClient {
     }
 }
 
-struct ExplicitOperation<O>(O);
+pub struct ExplicitOperation<O>(pub O);
 
 impl<O: Operation> Command for ExplicitOperation<O> {
     fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
@@ -264,7 +247,8 @@ impl<O: Operation> Command for ExplicitOperationOn<'_, O> {
     }
 }
 
-fn ota_error(cmd: Cmd, e: Error) -> OtaError {
+#[must_use]
+pub fn ota_error(cmd: Cmd, e: Error) -> OtaError {
     match e {
         Error::Timeout { .. } | Error::DeviceLost { .. } => OtaError::Timeout { cmd },
         Error::DeviceError { device, code } => OtaError::Device { device, cmd, code },
@@ -273,7 +257,7 @@ fn ota_error(cmd: Cmd, e: Error) -> OtaError {
     }
 }
 
-fn ensure_no_device_lost(client: &Client, cmd: Cmd) -> Result<(), OtaError> {
+pub fn ensure_no_device_lost(client: &Client, cmd: Cmd) -> Result<(), OtaError> {
     let lost = client
         .device_status()
         .map_err(|e| ota_error(cmd, e))?
@@ -286,19 +270,9 @@ fn ensure_no_device_lost(client: &Client, cmd: Cmd) -> Result<(), OtaError> {
     }
 }
 
-fn send(client: &Client, cmd: Cmd, command: impl Command) -> Result<(), OtaError> {
+pub fn send(client: &Client, cmd: Cmd, command: impl Command) -> Result<(), OtaError> {
     pollster::block_on(client.send(command)).map_err(|e| ota_error(cmd, e))?;
     ensure_no_device_lost(client, cmd)
-}
-
-pub fn exchange(client: &Client, datagram: &Datagram) -> Result<Response, OtaError> {
-    let cmd = datagram.cmd;
-    let frame = Frame::new(Distribution::Broadcast, std::slice::from_ref(datagram));
-    let response = pollster::block_on(async { client.send_frame(frame).await?.await })
-        .map_err(|e| ota_error(cmd, e))?;
-    response.check().map_err(|e| ota_error(cmd, e))?;
-    ensure_no_device_lost(client, cmd)?;
-    Ok(response)
 }
 
 pub fn read_firmware_version(client: &Client) -> Result<Vec<FirmwareVersion>, OtaError> {

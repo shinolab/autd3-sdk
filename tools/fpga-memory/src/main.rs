@@ -1,10 +1,12 @@
-use anyhow::{Context, Result, anyhow, bail, ensure};
+use anyhow::{Result, bail, ensure};
 use clap::{Args, Parser, Subcommand};
 
-use autd3_cpu_wire::config::{CpuConfig, FpgaBusWait};
-use autd3_cpu_wire::payload::{ReadFpgaMemoryPayload, SetCpuConfigPayload, WriteFpgaMemoryPayload};
-use autd3_cpu_wire::{Cmd, PAYLOAD_BYTES, REPLY_DATA_BYTES_MAX};
-use autd3_rs_firmware_ota::{KeepaliveClient, UdpArgs, datagram_with_payload, exchange};
+use autd3_rs::Frames;
+use autd3_rs::commands::{CpuConfig, FpgaBusWait, FpgaMemoryRead, FpgaMemoryWrite, SetCpuConfig};
+use autd3_rs::protocol::Cmd;
+use autd3_rs_firmware_ota::{
+    ExplicitOperation, KeepaliveClient, UdpArgs, ensure_no_device_lost, ota_error, send,
+};
 
 const WORDS_PER_LINE: usize = 8;
 const REPORTED_ERRORS_PER_DEVICE: usize = 8;
@@ -131,18 +133,26 @@ fn ensure_inside_the_bus(addr: u16, words: usize) -> Result<()> {
 
 fn read(client: &KeepaliveClient, addr: u16, count: usize) -> Result<Vec<Vec<u16>>> {
     let mut words = vec![Vec::with_capacity(count); client.num_devices()];
-    let per_frame = REPLY_DATA_BYTES_MAX / size_of::<u16>();
+    let per_frame = FpgaMemoryRead::MAX_LEN;
+    let read_error = |e| ota_error(Cmd::ReadFpgaMemory, e);
     for (addr, start) in (addr..=u16::MAX)
         .step_by(per_frame)
         .zip((0..count).step_by(per_frame))
     {
         let len = (count - start).min(per_frame);
-        let payload = ReadFpgaMemoryPayload::new(addr, u16::try_from(len)?)
-            .context("the read request does not fit the bus")?;
-        let response = exchange(
-            client,
-            &datagram_with_payload(Cmd::ReadFpgaMemory, &payload, &[]),
-        )?;
+        let frames = Frames::encode(
+            client.geometry(),
+            ExplicitOperation(FpgaMemoryRead {
+                addr,
+                count: u16::try_from(len)?,
+            }),
+        )
+        .map_err(read_error)?;
+        let frame = frames.frame(0).expect("an operation encodes to one frame");
+        let response = pollster::block_on(async { client.send_frame(frame).await?.await })
+            .map_err(read_error)?;
+        response.check().map_err(read_error)?;
+        ensure_no_device_lost(client, Cmd::ReadFpgaMemory)?;
         for (device, words) in words.iter_mut().enumerate() {
             let value = response.reply_data_of(device);
             ensure!(
@@ -163,17 +173,15 @@ fn read(client: &KeepaliveClient, addr: u16, count: usize) -> Result<Vec<Vec<u16
 }
 
 fn write(client: &KeepaliveClient, addr: u16, words: &[u16]) -> Result<()> {
-    let per_frame = (PAYLOAD_BYTES - size_of::<WriteFpgaMemoryPayload>()) / size_of::<u16>();
-    for (addr, chunk) in (addr..=u16::MAX)
+    let per_frame = FpgaMemoryWrite::MAX_LEN;
+    for (addr, words) in (addr..=u16::MAX)
         .step_by(per_frame)
         .zip(words.chunks(per_frame))
     {
-        let payload = WriteFpgaMemoryPayload::new(addr, chunk.len())
-            .context("the write request does not fit the bus")?;
-        let data: Vec<u8> = chunk.iter().flat_map(|word| word.to_le_bytes()).collect();
-        exchange(
+        send(
             client,
-            &datagram_with_payload(Cmd::WriteFpgaMemory, &payload, &data),
+            Cmd::WriteFpgaMemory,
+            ExplicitOperation(FpgaMemoryWrite { addr, words }),
         )?;
     }
     Ok(())
@@ -184,11 +192,7 @@ fn set_bus_wait(client: &KeepaliveClient, wait: FpgaBusWait) -> Result<()> {
         fpga_bus_wait: wait,
         ..CpuConfig::default()
     };
-    let payload = SetCpuConfigPayload::encode(&config).map_err(|e| anyhow!("{e:?}"))?;
-    exchange(
-        client,
-        &datagram_with_payload(Cmd::SetCpuConfig, &payload, &[]),
-    )?;
+    send(client, Cmd::SetCpuConfig, SetCpuConfig::new(config))?;
     println!("FPGA bus wait: {} cycles", wait.as_u8());
     Ok(())
 }

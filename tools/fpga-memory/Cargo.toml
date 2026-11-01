@@ -13,9 +13,10 @@ name = "autd3-fpga-memory"
 path = "src/main.rs"
 
 [dependencies]
-autd3-cpu-wire.workspace = true
+autd3-rs.workspace = true
 autd3-rs-firmware-ota.workspace = true
 clap.workspace = true
+pollster.workspace = true
 anyhow.workspace = true
 
 [lints]

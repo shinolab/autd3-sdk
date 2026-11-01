@@ -191,9 +191,10 @@ name = "autd3-rs-fpga-memory"
 version = "0.13.0"
 dependencies = [
  "anyhow",
- "autd3-cpu-wire",
+ "autd3-rs",
  "autd3-rs-firmware-ota",
  "clap",
+ "pollster",
 ]
 
 [[package]]
