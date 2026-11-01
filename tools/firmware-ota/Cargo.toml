@@ -6,7 +6,7 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 publish = false
-description = "Update the AUTD3 CPU and FPGA firmware over UDP (no J-Link / Vivado): streams the images through the frame protocol, reboots the devices, and confirms the result."
+description = "Update the AUTD3 CPU and FPGA firmware: writes the images, reboots the devices, and confirms the result."
 
 [lib]
 path = "src/lib.rs"
