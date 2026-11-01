@@ -49,17 +49,13 @@ impl Target {
 #[command(
     name = "autd3-firmware-ota",
     about,
-    long_about = "Update the AUTD3 CPU / FPGA firmware over UDP (no J-Link / Vivado).\n\n\
-        Pass a flash image, or --version to download a release bundle. The CPU image is \
-        written to the inactive slot, the devices reboot into it, and the tool reconnects \
-        to confirm it (the reboot leaves the devices unassigned, so the chain is enumerated \
-        again); an unconfirmed image rolls back at the next reset. The FPGA image is \
-        written to the update slot and the FPGA reconfigures in place (golden image fallback).\n\n\
-        --version only takes UDP firmware releases (v0.10.0 or newer). A local image is not \
-        checked for its version: writing an EtherCAT CPU image (v0.9.x or older) leaves the \
-        devices unreachable over UDP until they are written again via J-Link. Only devices \
-        already running the UDP firmware are reached; devices on the EtherCAT firmware must \
-        be written once via J-Link."
+    long_about = "Update the AUTD3 CPU / FPGA firmware.\n\n\
+        Pass a flash image, or --version to download a release bundle (0.10.0 or newer). \
+        A local image is not version-checked. The CPU image is written to the inactive slot, \
+        the devices reboot into it, and the tool reconnects to confirm it (the reboot leaves \
+        the devices unassigned, so the chain is enumerated again); an unconfirmed image rolls \
+        back at the next reset. The FPGA image is written to the update slot and the FPGA \
+        reconfigures in place (golden image fallback)."
 )]
 struct Cli {
     #[arg(
