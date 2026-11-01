@@ -18,6 +18,7 @@ tracing-subscriber.workspace = true
 autd3-rs-pattern.workspace = true
 autd3-rs-modulation.workspace = true
 clap.workspace = true
+humantime.workspace = true
 anyhow.workspace = true
 tokio = { workspace = true, features = [
     "time",
