@@ -3,10 +3,10 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 
-use autd3_firmware_writer::bundle::{RELEASES_API, TAG_PREFIX, parse_release};
+use autd3_firmware_writer::bundle::parse_release;
 
 pub(crate) fn print_available_versions() -> Result<()> {
-    let resp = ureq::get(RELEASES_API)
+    let resp = ureq::get("https://api.github.com/repos/shinolab/autd3-sdk/releases?per_page=100")
         .header("User-Agent", "autd3-firmware-writer")
         .header("Accept", "application/vnd.github+json")
         .config()
@@ -29,7 +29,7 @@ pub(crate) fn print_available_versions() -> Result<()> {
     let mut versions: Vec<String> = releases
         .iter()
         .filter_map(|r| r.get("tag_name").and_then(serde_json::Value::as_str))
-        .filter_map(|tag| tag.strip_prefix(TAG_PREFIX))
+        .filter_map(|tag| tag.strip_prefix("firmware-v"))
         .filter(|version| parse_release(version).is_ok())
         .map(ToString::to_string)
         .collect();

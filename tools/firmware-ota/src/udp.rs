@@ -6,8 +6,6 @@ use autd3_rs::{Error, Interface, TransportOption, UdpError};
 
 use crate::update::{ACK_TIMEOUT, DEFAULT_HEARTBEAT, KeepaliveClient};
 
-const LOST_AFTER_HEARTBEATS: u32 = 10;
-
 #[derive(Args)]
 #[command(next_help_heading = "UDP (unset options keep the library defaults)")]
 pub struct UdpArgs {
@@ -43,7 +41,7 @@ impl UdpArgs {
                 .map_or(Interface::Auto, Interface::Name),
             lost_timeout: default
                 .lost_timeout
-                .max(self.heartbeat().saturating_mul(LOST_AFTER_HEARTBEATS)),
+                .max(self.heartbeat().saturating_mul(10)),
             open_timeout: self.open_timeout.unwrap_or(default.open_timeout),
             ack_timeout: ACK_TIMEOUT,
             sync_on_open: false,

@@ -21,11 +21,6 @@ const RECONNECT_INTERVAL: Duration = Duration::from_secs(2);
 const CONFIRM_ONLY_HINT: &str = "the new CPU image is running but not confirmed: rerun the same command with \
      `--confirm-only` (or simply run the update again) before the next power cycle, otherwise \
      the previous image boots again";
-const UNACKNOWLEDGED_ACTIVATION_HINT: &str = "the activation was not acknowledged by every device: the devices that received it \
-     run the new CPU image unconfirmed, the others still run the previous image and boot the \
-     new one at their next power cycle. Once every device is reachable, check which image \
-     runs with `--verify-only` and confirm it with `--confirm-only` (or simply run the \
-     update again)";
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 enum Target {
@@ -222,55 +217,6 @@ fn describe_running_image(image: Option<RunningImage>) -> &'static str {
 
 #[allow(clippy::too_many_lines)]
 fn open_and_run(udp: &UdpArgs, devices: usize, stage: Stage<'_>) -> Result<Outcome> {
-    fn run_fpga(client: &Client, image: &FpgaFirmwareImage, activate: bool) -> Result<()> {
-        print_fpga(client, "before")?;
-        update_fpga(client, image, progress_printer(image.len()))?;
-        end_progress();
-        println!(
-            "FPGA image committed on every device (transducer output stays off until reconfiguration)"
-        );
-        if !activate {
-            println!(
-                "not activated (--no-activate); output stays off until the next power cycle, \
-             which boots the new image"
-            );
-            return Ok(());
-        }
-        activate_fpga(client)?;
-        for attempt in 1..=FPGA_ACTIVATE_ATTEMPTS {
-            println!(
-                "activation acknowledged; waiting {FPGA_RECONFIG_WAIT:?} for the FPGAs to reconfigure"
-            );
-            std::thread::sleep(FPGA_RECONFIG_WAIT);
-            if attempt == FPGA_ACTIVATE_ATTEMPTS {
-                break;
-            }
-            let retried = activate_unreconfigured_fpga(client)?;
-            if retried.is_empty() {
-                break;
-            }
-            for device in &retried {
-                println!(
-                    "device {device} did not reconfigure; activating it again ({}/{FPGA_ACTIVATE_ATTEMPTS})",
-                    attempt + 1
-                );
-            }
-        }
-        let images = print_fpga(client, "after")?;
-        ensure_fpga_reconfigured(client)?;
-        if let Some(device) = images.iter().position(|&i| i != FpgaBootImage::Update) {
-            bail!(
-                "device {device} did not come back with the update image (reads {:?}); \
-             Golden means the update image failed to configure and the golden image took over. \
-             Write the FPGA via JTAG (autd3-console Firmware tab with Method = JTAG, or \
-             `autd3-firmware-writer`)",
-                images[device]
-            );
-        }
-        println!("Ok!");
-        Ok(())
-    }
-
     let client = udp.open(devices)?;
     let devices = client.num_devices();
     println!("{devices} device(s) on the bus");
@@ -301,7 +247,51 @@ fn open_and_run(udp: &UdpArgs, devices: usize, stage: Stage<'_>) -> Result<Outco
             before
         }
         Stage::FpgaUpdate { image, activate } => {
-            run_fpga(&client, image, activate)?;
+            print_fpga(&client, "before")?;
+            update_fpga(&client, image, progress_printer(image.len()))?;
+            end_progress();
+            println!(
+                "FPGA image committed on every device (transducer output stays off until reconfiguration)"
+            );
+            if activate {
+                activate_fpga(&client)?;
+                for attempt in 1..=FPGA_ACTIVATE_ATTEMPTS {
+                    println!(
+                        "activation acknowledged; waiting {FPGA_RECONFIG_WAIT:?} for the FPGAs to reconfigure"
+                    );
+                    std::thread::sleep(FPGA_RECONFIG_WAIT);
+                    if attempt == FPGA_ACTIVATE_ATTEMPTS {
+                        break;
+                    }
+                    let retried = activate_unreconfigured_fpga(&client)?;
+                    if retried.is_empty() {
+                        break;
+                    }
+                    for device in &retried {
+                        println!(
+                            "device {device} did not reconfigure; activating it again ({}/{FPGA_ACTIVATE_ATTEMPTS})",
+                            attempt + 1
+                        );
+                    }
+                }
+                let images = print_fpga(&client, "after")?;
+                ensure_fpga_reconfigured(&client)?;
+                if let Some(device) = images.iter().position(|&i| i != FpgaBootImage::Update) {
+                    bail!(
+                        "device {device} did not come back with the update image (reads {:?}); \
+                         Golden means the update image failed to configure and the golden image took over. \
+                         Write the FPGA via JTAG (autd3-console Firmware tab with Method = JTAG, or \
+                         `autd3-firmware-writer`)",
+                        images[device]
+                    );
+                }
+                println!("Ok!");
+            } else {
+                println!(
+                    "not activated (--no-activate); output stays off until the next power cycle, \
+                     which boots the new image"
+                );
+            }
             Vec::new()
         }
         Stage::FpgaVerify => {
@@ -479,11 +469,6 @@ fn check_trial(
     .into())
 }
 
-const LOCAL_FPGA_IMAGE_HINT: &str = "pass the `autd3-fpga-update.img` produced by `cargo xtask fpga build` \
-     (not the golden image; a golden image must never be written to the update slot)";
-const RELEASE_FPGA_IMAGE_HINT: &str =
-    "the FPGA update image in the release bundle is not usable; retry with `--force-download`";
-
 fn main_fpga(cli: &Cli, bytes: Vec<u8>, invalid_image_hint: &'static str) -> Result<()> {
     if cli.verify_only {
         open_and_run(&cli.udp, cli.devices, Stage::FpgaVerify)?;
@@ -511,41 +496,6 @@ fn read_image(path: &Path) -> Result<Vec<u8>> {
 }
 
 fn main_cpu(cli: &Cli, bytes: &[u8], release: Option<Version>) -> Result<()> {
-    fn reconnect_and_run(cli: &Cli, devices: usize, stage: Stage<'_>) -> Result<Outcome> {
-        let attempts = cli.reconnect_attempts.max(1);
-        let hint = match stage {
-            Stage::Verify {
-                activate_unrebooted: true,
-                ..
-            } => UNACKNOWLEDGED_ACTIVATION_HINT,
-            _ => CONFIRM_ONLY_HINT,
-        };
-        let mut attempt = 0;
-        loop {
-            attempt += 1;
-            match open_and_run(&cli.udp, devices, stage) {
-                Ok(outcome) => return Ok(outcome),
-                Err(e)
-                    if e.downcast_ref::<TrialNotRunning>().is_some()
-                        || e.downcast_ref::<NotOnTrial>().is_some() =>
-                {
-                    return Err(e);
-                }
-                Err(e) if attempt < attempts => {
-                    eprintln!(
-                        "reconnection attempt {attempt}/{attempts} failed: {e:#}; retrying in {RECONNECT_INTERVAL:?}"
-                    );
-                    std::thread::sleep(RECONNECT_INTERVAL);
-                }
-                Err(e) => {
-                    return Err(e).context(format!(
-                        "reconnection failed {attempts} time(s) after the reboot; {hint}"
-                    ));
-                }
-            }
-        }
-    }
-
     let image = CpuFirmwareImage::from_flash_image(bytes)?;
     println!(
         "image: {} bytes, crc32 {:#010x}",
@@ -584,20 +534,50 @@ fn main_cpu(cli: &Cli, bytes: &[u8], release: Option<Version>) -> Result<()> {
     }
     let wait = cli.reboot_wait;
     let expect = release.map_or(Expect::ChangedFrom(&before.cpu_versions), Expect::Exactly);
+    let attempts = cli.reconnect_attempts.max(1);
     let mut activate_unrebooted = before.activation_unacknowledged;
     loop {
         println!("waiting {wait:?} for the devices to reboot before enumerating them again");
         std::thread::sleep(wait);
-        let outcome = reconnect_and_run(
-            cli,
-            before.devices,
-            Stage::Verify {
-                confirm: !cli.no_confirm,
-                expect,
-                activate_unrebooted,
-                require_trial: true,
-            },
-        )?;
+        let stage = Stage::Verify {
+            confirm: !cli.no_confirm,
+            expect,
+            activate_unrebooted,
+            require_trial: true,
+        };
+        let hint = if activate_unrebooted {
+            "the activation was not acknowledged by every device: the devices that received it \
+             run the new CPU image unconfirmed, the others still run the previous image and boot \
+             the new one at their next power cycle. Once every device is reachable, check which \
+             image runs with `--verify-only` and confirm it with `--confirm-only` (or simply run \
+             the update again)"
+        } else {
+            CONFIRM_ONLY_HINT
+        };
+        let mut attempt = 0;
+        let outcome = loop {
+            attempt += 1;
+            match open_and_run(&cli.udp, before.devices, stage) {
+                Ok(outcome) => break outcome,
+                Err(e)
+                    if e.downcast_ref::<TrialNotRunning>().is_some()
+                        || e.downcast_ref::<NotOnTrial>().is_some() =>
+                {
+                    return Err(e);
+                }
+                Err(e) if attempt < attempts => {
+                    eprintln!(
+                        "reconnection attempt {attempt}/{attempts} failed: {e:#}; retrying in {RECONNECT_INTERVAL:?}"
+                    );
+                    std::thread::sleep(RECONNECT_INTERVAL);
+                }
+                Err(e) => {
+                    return Err(e).context(format!(
+                        "reconnection failed {attempts} time(s) after the reboot; {hint}"
+                    ));
+                }
+            }
+        };
         if outcome.activated_late.is_empty() {
             break;
         }
@@ -655,7 +635,12 @@ fn main() -> Result<()> {
         (Some(path), _) => {
             let bytes = read_image(path)?;
             if cli.fpga {
-                main_fpga(&cli, bytes, LOCAL_FPGA_IMAGE_HINT)
+                main_fpga(
+                    &cli,
+                    bytes,
+                    "pass the `autd3-fpga-update.img` produced by `cargo xtask fpga build` \
+                     (not the golden image; a golden image must never be written to the update slot)",
+                )
             } else {
                 main_cpu(&cli, &bytes, None)
             }
@@ -676,7 +661,11 @@ fn main() -> Result<()> {
             }
             if let Some(bytes) = fpga {
                 println!("== FPGA firmware v{shown} ==");
-                main_fpga(&cli, bytes, RELEASE_FPGA_IMAGE_HINT)?;
+                main_fpga(
+                    &cli,
+                    bytes,
+                    "the FPGA update image in the release bundle is not usable; retry with `--force-download`",
+                )?;
             }
             Ok(())
         }

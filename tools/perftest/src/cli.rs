@@ -4,9 +4,6 @@ use std::time::Duration;
 use autd3_rs::MAX_INFLIGHT;
 use clap::{Parser, ValueEnum};
 
-const DEFAULT_HEARTBEAT: &str = "10ms";
-const DEFAULT_ACK_TIMEOUT: &str = "10ms";
-
 #[derive(Clone, Default, PartialEq, Eq, ValueEnum)]
 pub(crate) enum Mode {
     #[default]
@@ -55,7 +52,7 @@ pub(crate) struct Cli {
     #[arg(
         long,
         value_parser = humantime::parse_duration,
-        default_value = DEFAULT_HEARTBEAT,
+        default_value = "10ms",
         help = "Interval of Client::heartbeat while --hold keeps the connection idle, e.g. 10ms."
     )]
     pub heartbeat: Duration,
@@ -81,7 +78,7 @@ pub(crate) struct Cli {
     #[arg(
         long = "ack-timeout",
         value_parser = humantime::parse_duration,
-        default_value = DEFAULT_ACK_TIMEOUT,
+        default_value = "10ms",
         help = "maps to TransportOption.ack_timeout"
     )]
     pub ack_timeout: Duration,

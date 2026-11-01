@@ -24,8 +24,6 @@ use crate::stats::{
     AckLatency, Counters, SampleStatus, Summary, Traffic, latency, record_rtt, rtt_histogram,
 };
 
-const REPORT_INTERVAL: Duration = Duration::from_secs(1);
-
 pub(crate) struct RunOutput {
     pub summary: Summary,
     pub stopped_on_error: Option<(u64, SampleStatus)>,
@@ -470,7 +468,7 @@ impl Live {
         start: Instant,
     ) {
         let interval = self.last_report.elapsed();
-        if interval < REPORT_INTERVAL {
+        if interval < Duration::from_secs(1) {
             return;
         }
         self.last_report = Instant::now();
