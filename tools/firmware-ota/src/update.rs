@@ -8,6 +8,8 @@ use autd3_cpu_wire::describe_device_error;
 use autd3_cpu_wire::fpga_update::FpgaBootImage;
 use autd3_cpu_wire::layout::UPDATE_CHUNK_MAX_DATA_LEN;
 use autd3_cpu_wire::update::RunningImage;
+use autd3_firmware_writer::bundle::MIN_CPU_FIRMWARE_VERSION;
+use autd3_firmware_writer::image::CpuFirmwareImage;
 use autd3_rs::commands::{
     Command, Expansion, FpgaUpdateActivate, FpgaUpdateBegin, FpgaUpdateChunk, FpgaUpdateCommit,
     Operation, Reboot, UpdateBegin, UpdateChunk, UpdateCommit, UpdateConfirm,
@@ -18,14 +20,12 @@ use autd3_rs::udp::UdpError;
 use autd3_rs::{Client, DeviceState, Error, FirmwareVersion, TransportOption};
 
 use crate::fpga_image::FpgaFirmwareImage;
-use crate::image::CpuFirmwareImage;
 
 pub const DEFAULT_HEARTBEAT: Duration = Duration::from_millis(10);
 pub const ACK_TIMEOUT: Duration = Duration::from_secs(120);
 pub const FPGA_RECONFIG_WAIT: Duration =
     Duration::from_millis(autd3_cpu_wire::fpga_update::FPGA_RECONFIG_WORST_MS as u64 + 2000);
 pub const FPGA_ACTIVATE_ATTEMPTS: usize = 3;
-pub const MIN_CPU_FIRMWARE_VERSION: [u8; 3] = [0, 10, 0];
 
 #[derive(Debug, thiserror::Error)]
 pub enum OtaError {

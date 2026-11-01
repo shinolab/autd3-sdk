@@ -11,17 +11,6 @@ use ota::OtaConfig;
 
 const BIN: &str = "autd3-firmware-writer";
 const OTA_BIN: &str = "autd3-firmware-ota";
-const MIN_OTA_VERSION: (u64, u64, u64) = (0, 10, 0);
-
-fn supports_ota(version: &str) -> bool {
-    fn parse_version(version: &str) -> Option<(u64, u64, u64)> {
-        let mut parts = version.trim_start_matches('v').split('.');
-        let mut next = || parts.next()?.parse::<u64>().ok();
-        Some((next()?, next()?, next()?))
-    }
-
-    parse_version(version).is_some_and(|v| v >= MIN_OTA_VERSION)
-}
 
 #[derive(Default, Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub(crate) enum Method {
@@ -102,10 +91,6 @@ impl FirmwareConfig {
                 "--target".to_string(),
                 self.target.arg().to_string(),
             ]),
-            Method::Ota if !supports_ota(&version) => Err(format!(
-                "v{version} is an EtherCAT firmware (UDP updates need v{}.{}.{} or newer); choose Method = JTAG",
-                MIN_OTA_VERSION.0, MIN_OTA_VERSION.1, MIN_OTA_VERSION.2
-            )),
             Method::Ota => Ok(self.ota.args(&version, self.target.arg())),
         }
     }
@@ -253,20 +238,11 @@ impl FirmwarePanel {
                             .selected_text(selected)
                             .show_ui(ui, |ui| {
                                 for v in &self.versions {
-                                    let ota_only =
-                                        self.config.method == Method::Ota && !supports_ota(v);
-                                    let label = if ota_only {
-                                        format!("{v} (JTAG only)")
-                                    } else {
-                                        v.clone()
-                                    };
-                                    ui.add_enabled_ui(!ota_only, |ui| {
-                                        ui.selectable_value(
-                                            &mut self.config.version,
-                                            Some(v.clone()),
-                                            label,
-                                        );
-                                    });
+                                    ui.selectable_value(
+                                        &mut self.config.version,
+                                        Some(v.clone()),
+                                        v,
+                                    );
                                 }
                             });
                     });
@@ -417,14 +393,14 @@ mod tests {
     #[test]
     fn jtag_keeps_the_writer_arguments() {
         let config = FirmwareConfig {
-            version: Some("0.9.0".to_string()),
+            version: Some("0.10.0".to_string()),
             target: Target::Fpga,
             method: Method::Jtag,
             ota: OtaConfig::default(),
         };
         assert_eq!(
             config.args().unwrap(),
-            ["--version", "0.9.0", "--target", "fpga"]
+            ["--version", "0.10.0", "--target", "fpga"]
         );
         assert_eq!(config.method.bin(), "autd3-firmware-writer");
     }
@@ -462,24 +438,6 @@ mod tests {
     #[test]
     fn no_version_means_nothing_to_flash() {
         assert!(FirmwareConfig::default().args().is_err());
-    }
-
-    #[test]
-    fn ota_refuses_ethercat_versions_but_jtag_takes_them() {
-        let mut config = FirmwareConfig {
-            version: Some("0.9.0".to_string()),
-            target: Target::Both,
-            method: Method::Ota,
-            ota: OtaConfig::default(),
-        };
-        let err = config.args().unwrap_err();
-        assert!(err.contains("JTAG"), "{err}");
-        config.method = Method::Jtag;
-        assert!(config.args().is_ok());
-        assert!(supports_ota("0.10.0"));
-        assert!(supports_ota("v1.0.0"));
-        assert!(!supports_ota("0.9.99"));
-        assert!(!supports_ota("latest"));
     }
 
     #[test]
