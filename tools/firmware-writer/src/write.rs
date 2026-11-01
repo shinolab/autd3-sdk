@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 
 use autd3_firmware_writer::bundle::{self, Bundle};
+use autd3_firmware_writer::image::CpuFirmwareImage;
 
 use crate::Target;
 use crate::util::{run, which};
@@ -32,15 +33,16 @@ pub(crate) fn write(version: &str, target: Option<Target>, force_download: bool)
         }
     }
 
-    let version = version.trim_start_matches('v');
+    let release = bundle::parse_release(version)?;
 
     let Bundle {
         cpu,
         fpga_mcs: fpga,
         ..
-    } = bundle::fetch(version, force_download)?;
+    } = bundle::fetch(release, force_download)?;
 
-    eprintln!("Found firmwares (autd3-sdk v{version}):");
+    let [major, minor, patch] = release;
+    eprintln!("Found firmwares (autd3-sdk v{major}.{minor}.{patch}):");
     match &cpu {
         Some(p) => eprintln!("  CPU : {}", p.display()),
         None => eprintln!("  CPU : (none)"),
@@ -56,17 +58,13 @@ pub(crate) fn write(version: &str, target: Option<Target>, force_download: bool)
         None => prompt_target()?,
     };
 
+    let cpu = cpu.as_deref().context(CPU_NOT_IN_BUNDLE);
+    let fpga = fpga.as_deref().context(FPGA_NOT_IN_BUNDLE);
     match target {
-        Target::Both => {
-            update_cpu(cpu.as_deref().context(CPU_NOT_IN_BUNDLE)?)?;
-            update_fpga(fpga.as_deref().context(FPGA_NOT_IN_BUNDLE)?)?;
-        }
-        Target::Fpga => update_fpga(fpga.as_deref().context(FPGA_NOT_IN_BUNDLE)?)?,
-        Target::Cpu => update_cpu(cpu.as_deref().context(CPU_NOT_IN_BUNDLE)?)?,
+        Target::Both => write_images(Some(cpu?), Some(fpga?)),
+        Target::Fpga => write_images(None, Some(fpga?)),
+        Target::Cpu => write_images(Some(cpu?), None),
     }
-
-    eprintln!("Done. Power-cycle the AUTD3 to load the new firmware.");
-    Ok(())
 }
 
 const CPU_NOT_IN_BUNDLE: &str = "CPU firmware (*.bin) not found in the bundle";
@@ -82,14 +80,46 @@ pub(crate) fn write_local(cpu: Option<&Path>, fpga: Option<&Path>) -> Result<()>
     let cpu = cpu.map(absolute).transpose()?;
     let fpga = fpga.map(absolute).transpose()?;
     eprintln!("Make sure the configuration cables are connected and the AUTD3 power is on.");
-    if let Some(cpu) = &cpu {
+    write_images(cpu.as_deref(), fpga.as_deref())
+}
+
+fn write_images(cpu: Option<&Path>, fpga: Option<&Path>) -> Result<()> {
+    let read =
+        |image: &Path| std::fs::read(image).with_context(|| format!("reading {}", image.display()));
+    if let Some(cpu) = cpu {
+        CpuFirmwareImage::from_flash_image(&read(cpu)?)
+            .with_context(|| format!("{} is not a CPU flash image", cpu.display()))?;
+    }
+    if let Some(fpga) = fpga
+        && !is_mcs(fpga, &read(fpga)?)
+    {
+        bail!(
+            "{} is not an FPGA configuration image (expected an Intel HEX *.mcs ending with its EOF record)",
+            fpga.display()
+        );
+    }
+
+    if let Some(cpu) = cpu {
         update_cpu(cpu)?;
     }
-    if let Some(fpga) = &fpga {
+    if let Some(fpga) = fpga {
         update_fpga(fpga)?;
     }
     eprintln!("Done. Power-cycle the AUTD3 to load the new firmware.");
     Ok(())
+}
+
+fn is_mcs(path: &Path, content: &[u8]) -> bool {
+    let is_mcs_file = path
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("mcs"));
+    let text = String::from_utf8_lossy(content);
+    let mut lines = text.trim_end().lines();
+    is_mcs_file
+        && lines
+            .next_back()
+            .is_some_and(|last| last.eq_ignore_ascii_case(":00000001FF"))
+        && lines.all(|line| line.starts_with(':'))
 }
 
 fn update_cpu(firmware: &Path) -> Result<()> {
@@ -345,5 +375,38 @@ fn collect_vivado_bins(dir: &Path, depth: usize, exe: &str, out: &mut Vec<WinPat
         if path.is_dir() {
             collect_vivado_bins(&path, depth + 1, exe, out);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const MCS: &[u8] = b":020000040000FA\r\n:0400000011223344AA\r\n:00000001FF\r\n";
+
+    #[test]
+    fn an_intel_hex_mcs_is_accepted() {
+        assert!(is_mcs(Path::new("autd3-fpga.mcs"), MCS));
+        assert!(is_mcs(Path::new("AUTD3-FPGA.MCS"), MCS));
+        assert!(is_mcs(Path::new("fw.mcs"), b":00000001FF\n"));
+    }
+
+    #[test]
+    fn a_file_without_the_mcs_extension_is_rejected() {
+        for path in ["fw.bin", "fw-fpga-update.img", "fw"] {
+            assert!(!is_mcs(Path::new(path), MCS), "{path}");
+        }
+    }
+
+    #[test]
+    fn a_truncated_mcs_is_rejected() {
+        assert!(!is_mcs(Path::new("fw.mcs"), &MCS[..MCS.len() - 13]));
+        assert!(!is_mcs(Path::new("fw.mcs"), b""));
+    }
+
+    #[test]
+    fn content_that_is_not_intel_hex_is_rejected() {
+        assert!(!is_mcs(Path::new("fw.mcs"), b"not hex\n:00000001FF\n"));
+        assert!(!is_mcs(Path::new("fw.mcs"), &[0xFF, 0x00, 0xAA, 0x55]));
     }
 }

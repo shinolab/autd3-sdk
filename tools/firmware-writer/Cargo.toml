@@ -23,6 +23,7 @@ clap.workspace = true
 thiserror.workspace = true
 serde_json.workspace = true
 ureq.workspace = true
+zerocopy.workspace = true
 zip.workspace = true
 
 [target.'cfg(windows)'.dependencies]

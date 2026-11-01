@@ -1,10 +1,19 @@
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 const FPGA_UPDATE_SUFFIX: &str = "-fpga-update.img";
 
 #[derive(Debug, thiserror::Error)]
 pub enum BundleError {
+    #[error("`{version}` is not a release version (expected MAJOR.MINOR.PATCH, e.g. 0.10.0)")]
+    InvalidVersion { version: String },
+    #[error(
+        "release {}.{}.{} is an EtherCAT firmware; only UDP firmware ({}.{}.{} or newer) is supported",
+        release[0], release[1], release[2],
+        MIN_CPU_FIRMWARE_VERSION[0], MIN_CPU_FIRMWARE_VERSION[1], MIN_CPU_FIRMWARE_VERSION[2]
+    )]
+    UnsupportedVersion { release: [u8; 3] },
     #[error("{action} {}", path.display())]
     Io {
         action: &'static str,
@@ -59,6 +68,24 @@ pub struct Bundle {
 pub const RELEASES_API: &str =
     "https://api.github.com/repos/shinolab/autd3-sdk/releases?per_page=100";
 pub const TAG_PREFIX: &str = "firmware-v";
+pub const MIN_CPU_FIRMWARE_VERSION: [u8; 3] = [0, 10, 0];
+
+pub fn parse_release(version: &str) -> Result<[u8; 3]> {
+    fn parse(version: &str) -> Option<[u8; 3]> {
+        let mut parts = version.trim_start_matches('v').split('.');
+        let mut next = || parts.next()?.parse::<u8>().ok();
+        let release = [next()?, next()?, next()?];
+        parts.next().is_none().then_some(release)
+    }
+
+    let release = parse(version).ok_or_else(|| BundleError::InvalidVersion {
+        version: version.to_string(),
+    })?;
+    if release < MIN_CPU_FIRMWARE_VERSION {
+        return Err(BundleError::UnsupportedVersion { release });
+    }
+    Ok(release)
+}
 
 #[must_use]
 pub fn bundle_url(version: &str) -> String {
@@ -67,20 +94,21 @@ pub fn bundle_url(version: &str) -> String {
     )
 }
 
-pub fn fetch(version: &str, force_download: bool) -> Result<Bundle> {
-    fn download_and_extract(version: &str, force: bool) -> Result<PathBuf> {
-        let dest = std::env::temp_dir().join(format!("autd3-sdk-firmware-v{version}"));
+pub fn fetch([major, minor, patch]: [u8; 3], force_download: bool) -> Result<Bundle> {
+    fn download_and_install(version: &str, force: bool) -> Result<PathBuf> {
+        let temp = std::env::temp_dir();
+        let dest = temp.join(format!("autd3-firmware-bundle-v{version}"));
         if dest.is_dir() && !force {
             eprintln!("Using cached firmware at {}", dest.display());
             return Ok(dest);
-        }
-        if dest.exists() {
-            std::fs::remove_dir_all(&dest).map_err(io_err("removing stale cache", &dest))?;
         }
 
         let url = bundle_url(version);
         eprintln!("Downloading {url}");
         let resp = ureq::get(&url)
+            .config()
+            .timeout_global(Some(Duration::from_secs(600)))
+            .build()
             .call()
             .map_err(|source| BundleError::Download {
                 url: url.clone(),
@@ -92,20 +120,38 @@ pub fn fetch(version: &str, force_download: bool) -> Result<Bundle> {
             .read_to_end(&mut bytes)
             .map_err(BundleError::Read)?;
 
-        let mut archive =
-            zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(BundleError::Open)?;
-        archive
-            .extract(&dest)
-            .map_err(|source| BundleError::Extract {
-                path: dest.clone(),
-                source,
-            })?;
+        let staging = temp.join(format!(
+            "autd3-firmware-bundle-v{version}.{}.partial",
+            std::process::id()
+        ));
+        install(bytes, &staging, &dest)?;
         Ok(dest)
     }
 
-    let version = version.trim_start_matches('v');
-    let dir = download_and_extract(version, force_download)?;
+    let dir = download_and_install(&format!("{major}.{minor}.{patch}"), force_download)?;
     find(&dir)
+}
+
+fn install(bytes: Vec<u8>, staging: &Path, dest: &Path) -> Result<()> {
+    let mut archive =
+        zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(BundleError::Open)?;
+    let _ = std::fs::remove_dir_all(staging);
+    let installed = archive
+        .extract(staging)
+        .map_err(|source| BundleError::Extract {
+            path: staging.to_path_buf(),
+            source,
+        })
+        .and_then(|()| {
+            if dest.exists() {
+                std::fs::remove_dir_all(dest).map_err(io_err("removing stale cache", dest))?;
+            }
+            std::fs::rename(staging, dest).map_err(io_err("publishing firmware to", dest))
+        });
+    if installed.is_err() {
+        let _ = std::fs::remove_dir_all(staging);
+    }
+    installed
 }
 
 pub fn find(dir: &Path) -> Result<Bundle> {
@@ -174,7 +220,18 @@ fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Write;
+
     use super::*;
+
+    fn zipped(name: &str, content: &[u8]) -> Vec<u8> {
+        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        let stored = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        zip.start_file(name, stored).unwrap();
+        zip.write_all(content).unwrap();
+        zip.finish().unwrap().into_inner()
+    }
 
     fn scratch(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
@@ -184,6 +241,87 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("nested")).unwrap();
         dir
+    }
+
+    #[test]
+    fn a_release_parses_with_or_without_the_v_prefix() {
+        assert_eq!(parse_release("0.10.0").unwrap(), [0, 10, 0]);
+        assert_eq!(parse_release("v1.2.3").unwrap(), [1, 2, 3]);
+    }
+
+    #[test]
+    fn ethercat_releases_are_rejected() {
+        for older in ["0.9.0", "v0.9.9", "0.6.1", "0.0.0"] {
+            let err = parse_release(older).unwrap_err().to_string();
+            assert!(err.contains("EtherCAT") && err.contains("0.10.0"), "{err}");
+        }
+    }
+
+    #[test]
+    fn a_version_that_is_not_three_numbers_is_rejected() {
+        for malformed in [
+            "",
+            "latest",
+            "0.10",
+            "0.10.0.1",
+            "0.10.0-rc.1",
+            "0.13.0/../../home",
+            "../x",
+            "0.13.0/autd3-sdk-firmware-v0.13.0.zip#",
+        ] {
+            let err = parse_release(malformed).unwrap_err().to_string();
+            assert!(err.contains("MAJOR.MINOR.PATCH"), "{err}");
+        }
+    }
+
+    #[test]
+    fn a_corrupt_bundle_leaves_the_cache_untouched() {
+        let dir = scratch("corrupt-bundle");
+        let (staging, dest) = (dir.join("staging"), dir.join("dest"));
+        std::fs::create_dir(&dest).unwrap();
+        std::fs::write(dest.join("old.bin"), b"old").unwrap();
+        let mut bytes = zipped("new.bin", &[0xAA; 256]);
+        bytes[64] ^= 0xFF;
+
+        assert!(matches!(
+            install(bytes, &staging, &dest),
+            Err(BundleError::Extract { .. })
+        ));
+
+        assert!(!staging.exists());
+        assert_eq!(std::fs::read(dest.join("old.bin")).unwrap(), b"old");
+        assert!(!dest.join("new.bin").exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_truncated_download_publishes_nothing() {
+        let dir = scratch("truncated-bundle");
+        let (staging, dest) = (dir.join("staging"), dir.join("dest"));
+        let mut bytes = zipped("new.bin", &[0xAA; 256]);
+        bytes.truncate(bytes.len() / 2);
+
+        assert!(matches!(
+            install(bytes, &staging, &dest),
+            Err(BundleError::Open(_))
+        ));
+
+        assert!(!staging.exists() && !dest.exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_good_bundle_replaces_the_cache() {
+        let dir = scratch("good-bundle");
+        let (staging, dest) = (dir.join("staging"), dir.join("dest"));
+        std::fs::create_dir(&dest).unwrap();
+        std::fs::write(dest.join("old.bin"), b"old").unwrap();
+
+        install(zipped("new.bin", b"new"), &staging, &dest).unwrap();
+
+        assert!(!staging.exists() && !dest.join("old.bin").exists());
+        assert_eq!(std::fs::read(dest.join("new.bin")).unwrap(), b"new");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

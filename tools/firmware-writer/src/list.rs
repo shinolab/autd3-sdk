@@ -1,13 +1,17 @@
 use std::io::Read;
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 
-use autd3_firmware_writer::bundle::{RELEASES_API, TAG_PREFIX};
+use autd3_firmware_writer::bundle::{RELEASES_API, TAG_PREFIX, parse_release};
 
 pub(crate) fn print_available_versions() -> Result<()> {
     let resp = ureq::get(RELEASES_API)
         .header("User-Agent", "autd3-firmware-writer")
         .header("Accept", "application/vnd.github+json")
+        .config()
+        .timeout_global(Some(Duration::from_secs(30)))
+        .build()
         .call()
         .context("querying GitHub releases")?;
     let mut body = String::new();
@@ -26,6 +30,7 @@ pub(crate) fn print_available_versions() -> Result<()> {
         .iter()
         .filter_map(|r| r.get("tag_name").and_then(serde_json::Value::as_str))
         .filter_map(|tag| tag.strip_prefix(TAG_PREFIX))
+        .filter(|version| parse_release(version).is_ok())
         .map(ToString::to_string)
         .collect();
     versions.sort_by_key(|v| {

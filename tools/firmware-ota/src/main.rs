@@ -10,10 +10,9 @@ use autd3_cpu_wire::update::RunningImage;
 use autd3_firmware_writer::bundle;
 use autd3_rs::{Client, FirmwareVersion};
 use autd3_rs_firmware_ota::{
-    CpuFirmwareImage, FPGA_ACTIVATE_ATTEMPTS, FPGA_RECONFIG_WAIT, FpgaFirmwareImage,
-    MIN_CPU_FIRMWARE_VERSION, OtaError, UdpArgs, activate_fpga, activate_unreconfigured_fpga,
-    ensure_fpga_reconfigured, read_firmware_version, read_running_image, reboot, update_cpu,
-    update_fpga, version_triple,
+    CpuFirmwareImage, FPGA_ACTIVATE_ATTEMPTS, FPGA_RECONFIG_WAIT, FpgaFirmwareImage, OtaError,
+    UdpArgs, activate_fpga, activate_unreconfigured_fpga, ensure_fpga_reconfigured,
+    read_firmware_version, read_running_image, reboot, update_cpu, update_fpga, version_triple,
 };
 
 type Version = [u8; 3];
@@ -515,29 +514,6 @@ fn read_image(path: &Path) -> Result<Vec<u8>> {
     std::fs::read(path).with_context(|| format!("reading {}", path.display()))
 }
 
-fn parse_version(version: &str) -> Option<Version> {
-    let mut parts = version.trim_start_matches('v').split('.');
-    let mut next = || parts.next()?.parse::<u8>().ok();
-    let v = [next()?, next()?, next()?];
-    parts.next().is_none().then_some(v)
-}
-
-fn udp_release(version: &str) -> Result<Version> {
-    let Some(release) = parse_version(version) else {
-        bail!("`{version}` is not a release version (expected MAJOR.MINOR.PATCH, e.g. 0.10.0)");
-    };
-    if release < MIN_CPU_FIRMWARE_VERSION {
-        bail!(
-            "release {} is an EtherCAT firmware; this tool only writes UDP firmware ({} or \
-             newer), and a device written with an older CPU image is unreachable over UDP. \
-             Write that release via J-Link",
-            fmt_version(release),
-            fmt_version(MIN_CPU_FIRMWARE_VERSION)
-        );
-    }
-    Ok(release)
-}
-
 fn main_cpu(cli: &Cli, bytes: &[u8], release: Option<Version>) -> Result<()> {
     fn reconnect_and_run(cli: &Cli, devices: usize, stage: Stage<'_>) -> Result<Outcome> {
         let attempts = cli.reconnect_attempts.max(1);
@@ -656,10 +632,11 @@ fn release_images(bundle: bundle::Bundle, target: Target) -> Result<ReleaseImage
         None
     };
     let fpga = if target.fpga() {
-        Some(bundle.fpga_update.context(
-            "the release bundle has no FPGA update image (*-fpga-update.img): the cached \
-             bundle may be incomplete (retry with --force-download)",
-        )?)
+        Some(
+            bundle
+                .fpga_update
+                .context("the release bundle has no FPGA update image (*-fpga-update.img)")?,
+        )
     } else {
         None
     };
@@ -691,8 +668,8 @@ fn main() -> Result<()> {
             if cli.confirm_only && cli.target != Target::Cpu {
                 bail!("--confirm-only only applies to the CPU image; pass --target cpu");
             }
-            let release = udp_release(version)?;
-            let bundle = bundle::fetch(version, cli.force_download)?;
+            let release = bundle::parse_release(version)?;
+            let bundle = bundle::fetch(release, cli.force_download)?;
             let images = release_images(bundle, cli.target)?;
             let cpu = images.cpu.as_deref().map(read_image).transpose()?;
             let fpga = images.fpga.as_deref().map(read_image).transpose()?;
@@ -714,30 +691,6 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn a_release_version_parses_with_or_without_the_v_prefix() {
-        assert_eq!(parse_version("0.9.0"), Some([0, 9, 0]));
-        assert_eq!(parse_version("v1.2.3"), Some([1, 2, 3]));
-        assert_eq!(parse_version("1.2"), None);
-        assert_eq!(parse_version("1.2.3.4"), None);
-        assert_eq!(parse_version("a.b.c"), None);
-    }
-
-    #[test]
-    fn only_udp_releases_are_accepted() {
-        assert_eq!(udp_release("0.10.0").unwrap(), [0, 10, 0]);
-        assert_eq!(udp_release("v0.10.1").unwrap(), [0, 10, 1]);
-        assert_eq!(udp_release("1.0.0").unwrap(), [1, 0, 0]);
-        for older in ["0.9.0", "v0.9.9", "0.6.1", "0.0.0"] {
-            let err = udp_release(older).unwrap_err().to_string();
-            assert!(err.contains("J-Link") && err.contains("0.10.0"), "{err}");
-        }
-        for malformed in ["0.10", "latest", "0.10.0-rc.1", ""] {
-            let err = udp_release(malformed).unwrap_err().to_string();
-            assert!(err.contains("MAJOR.MINOR.PATCH"), "{err}");
-        }
-    }
 
     #[test]
     fn only_the_images_of_the_target_are_required_from_the_bundle() {
