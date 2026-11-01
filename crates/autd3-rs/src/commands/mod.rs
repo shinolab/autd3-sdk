@@ -7,12 +7,18 @@ pub use modulation::Modulation;
 pub use pattern::Pattern;
 
 pub use operation::{
-    ActivateModulationBank, ActivatePatternBank, Clear, ConfigFociStm, ConfigModulation,
-    ConfigPattern, CpuConfig, Distribution, EmulateGpioIn, FixedCompletionTime, FixedUpdateRate,
-    ForceFan, FpgaBusWait, FpgaConfig, GpioOut, Nop, Operation, PWE_TABLE_SIZE, PatternIntensity,
-    PhaseDepth, PtpConfig, ReleaseFailsafe, SetCpuConfig, SetFpgaConfig, SetGpioOut, SetOutputMask,
-    SetPhaseCorrection, SetPulseWidthTable, SetSilencer, SilencerConfig, StmIntensity, Synchronize,
-    WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer, WritePatternPhase,
+    ActivateModulationBank, ActivatePatternBank, Clear, CommandOperation, ConfigFociStm,
+    ConfigModulation, ConfigPattern, CpuConfig, Distribution, EmulateGpioIn, FixedCompletionTime,
+    FixedUpdateRate, ForceFan, FpgaBusWait, FpgaConfig, GpioOut, Nop, Operation, PWE_TABLE_SIZE,
+    PatternIntensity, PhaseDepth, PtpConfig, ReleaseFailsafe, SetCpuConfig, SetFpgaConfig,
+    SetGpioOut, SetOutputMask, SetPhaseCorrection, SetPulseWidthTable, SetSilencer, SilencerConfig,
+    StmIntensity, Synchronize, WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer,
+    WritePatternPhase,
+};
+#[doc(hidden)]
+pub use operation::{
+    FpgaUpdateActivate, FpgaUpdateBegin, FpgaUpdateChunk, FpgaUpdateCommit, Reboot, UpdateBegin,
+    UpdateChunk, UpdateCommit, UpdateConfirm,
 };
 pub use stm::{FociStm, FociStmOption, PatternStm, PatternStmOption};
 
@@ -31,7 +37,7 @@ pub trait Command {
     }
 }
 
-impl<O: Operation> Command for O {
+impl<O: CommandOperation> Command for O {
     fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
         expansion.push_op(&self)
     }

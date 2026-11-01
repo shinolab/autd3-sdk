@@ -113,6 +113,8 @@ impl<'a> WritePatternBuffer<'a> {
 
 impl crate::sealed::Sealed for WritePatternBuffer<'_> {}
 
+impl crate::commands::CommandOperation for WritePatternBuffer<'_> {}
+
 pub(crate) fn encode_raw_pattern_entry(
     phases: &[Vec<Phase>],
     intensities: PatternIntensity<'_>,

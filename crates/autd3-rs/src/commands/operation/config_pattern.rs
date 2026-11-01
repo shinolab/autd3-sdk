@@ -29,6 +29,8 @@ pub struct ConfigFociStm {
 
 impl crate::sealed::Sealed for ConfigPattern {}
 
+impl crate::commands::CommandOperation for ConfigPattern {}
+
 impl Operation for ConfigPattern {
     fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
         let payload = ConfigPatternPayload::raw(
@@ -43,6 +45,8 @@ impl Operation for ConfigPattern {
 }
 
 impl crate::sealed::Sealed for ConfigFociStm {}
+
+impl crate::commands::CommandOperation for ConfigFociStm {}
 
 impl Operation for ConfigFociStm {
     fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {

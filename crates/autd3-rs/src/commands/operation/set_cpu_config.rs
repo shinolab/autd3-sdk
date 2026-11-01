@@ -22,6 +22,8 @@ impl SetCpuConfig {
 
 impl crate::sealed::Sealed for SetCpuConfig {}
 
+impl crate::commands::CommandOperation for SetCpuConfig {}
+
 impl Operation for SetCpuConfig {
     fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
         let payload = SetCpuConfigPayload::encode(&self.config)?;

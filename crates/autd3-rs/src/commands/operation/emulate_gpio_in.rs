@@ -14,6 +14,8 @@ pub struct EmulateGpioIn {
 
 impl crate::sealed::Sealed for EmulateGpioIn {}
 
+impl crate::commands::CommandOperation for EmulateGpioIn {}
+
 impl Operation for EmulateGpioIn {
     fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
         encode_header_only(

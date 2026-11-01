@@ -12,6 +12,7 @@ mod set_output_mask;
 mod set_phase_correction;
 mod set_pulse_width_table;
 mod set_silencer;
+mod update;
 mod write_foci_buffer;
 mod write_modulation_buffer;
 mod write_pattern_buffer;
@@ -32,6 +33,11 @@ pub use set_output_mask::SetOutputMask;
 pub use set_phase_correction::SetPhaseCorrection;
 pub use set_pulse_width_table::{PWE_TABLE_SIZE, SetPulseWidthTable};
 pub use set_silencer::{FixedCompletionTime, FixedUpdateRate, SetSilencer, SilencerConfig};
+#[doc(hidden)]
+pub use update::{
+    FpgaUpdateActivate, FpgaUpdateBegin, FpgaUpdateChunk, FpgaUpdateCommit, Reboot, UpdateBegin,
+    UpdateChunk, UpdateCommit, UpdateConfirm,
+};
 pub use write_foci_buffer::WriteFociBuffer;
 pub(crate) use write_foci_buffer::num_foci;
 pub use write_modulation_buffer::WriteModulationBuffer;
@@ -112,6 +118,12 @@ pub trait Operation: crate::sealed::Sealed {
 
     fn encode(&self, device: &Device, out: &mut Datagram) -> Result<(), Error>;
 }
+
+pub trait CommandOperation: Operation {}
+
+impl<O: CommandOperation + ?Sized> CommandOperation for Box<O> {}
+
+impl<O: CommandOperation + ?Sized> CommandOperation for &O {}
 
 impl<O: Operation + ?Sized> crate::sealed::Sealed for Box<O> {}
 

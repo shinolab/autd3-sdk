@@ -14,6 +14,8 @@ pub struct ForceFan {
 
 impl crate::sealed::Sealed for ForceFan {}
 
+impl crate::commands::CommandOperation for ForceFan {}
+
 impl Operation for ForceFan {
     fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
         encode_header_only(out, Cmd::ForceFan, &ForceFanPayload { value: self.value });

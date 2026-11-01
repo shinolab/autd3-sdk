@@ -140,6 +140,6 @@ CPU の診断カウンタ.
 デバイスごとに異なる複数フレームの内容が必要な場合, `Frame::new` でフレームを自分で組み立てて `send_frame` で送る.
 
 Rust ではクロージャの返り値はすべて同じ型でなければならない.
-型の異なるコマンドを混在させたい場合は, `Box<dyn Operation>` に揃える.
+型の異なるコマンドを混在させたい場合は, `Box<dyn CommandOperation>` に揃える.
 
 <CodeTabs rust={excerpt(sample, "each_boxed")} />

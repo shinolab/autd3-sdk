@@ -8,9 +8,12 @@ use clap::{Parser, ValueEnum};
 use autd3_cpu_wire::fpga_update::FpgaBootImage;
 use autd3_cpu_wire::update::RunningImage;
 use autd3_firmware_writer::bundle;
+use autd3_rs::{Client, FirmwareVersion};
 use autd3_rs_firmware_ota::{
-    CpuFirmwareImage, Driver, DriverError, FPGA_ACTIVATE_ATTEMPTS, FPGA_RECONFIG_WAIT,
-    FpgaFirmwareImage, MIN_CPU_FIRMWARE_VERSION, UdpArgs, boot_image,
+    CpuFirmwareImage, FPGA_ACTIVATE_ATTEMPTS, FPGA_RECONFIG_WAIT, FpgaFirmwareImage,
+    MIN_CPU_FIRMWARE_VERSION, OtaError, UdpArgs, activate_fpga, activate_unreconfigured_fpga,
+    ensure_fpga_reconfigured, read_firmware_version, read_running_image, reboot, update_cpu,
+    update_fpga, version_triple,
 };
 
 type Version = [u8; 3];
@@ -224,9 +227,9 @@ fn describe_running_image(image: Option<RunningImage>) -> &'static str {
 
 #[allow(clippy::too_many_lines)]
 fn open_and_run(udp: &UdpArgs, devices: usize, stage: Stage<'_>) -> Result<Outcome> {
-    fn run_fpga(driver: &mut Driver, image: &FpgaFirmwareImage, activate: bool) -> Result<()> {
-        print_fpga(driver, "before")?;
-        driver.update_fpga(image, progress_printer(image.len()))?;
+    fn run_fpga(client: &Client, image: &FpgaFirmwareImage, activate: bool) -> Result<()> {
+        print_fpga(client, "before")?;
+        update_fpga(client, image, progress_printer(image.len()))?;
         end_progress();
         println!(
             "FPGA image committed on every device (transducer output stays off until reconfiguration)"
@@ -238,7 +241,7 @@ fn open_and_run(udp: &UdpArgs, devices: usize, stage: Stage<'_>) -> Result<Outco
             );
             return Ok(());
         }
-        driver.activate_fpga()?;
+        activate_fpga(client)?;
         for attempt in 1..=FPGA_ACTIVATE_ATTEMPTS {
             println!(
                 "activation acknowledged; waiting {FPGA_RECONFIG_WAIT:?} for the FPGAs to reconfigure"
@@ -247,7 +250,7 @@ fn open_and_run(udp: &UdpArgs, devices: usize, stage: Stage<'_>) -> Result<Outco
             if attempt == FPGA_ACTIVATE_ATTEMPTS {
                 break;
             }
-            let retried = driver.activate_unreconfigured_fpga()?;
+            let retried = activate_unreconfigured_fpga(client)?;
             if retried.is_empty() {
                 break;
             }
@@ -258,8 +261,8 @@ fn open_and_run(udp: &UdpArgs, devices: usize, stage: Stage<'_>) -> Result<Outco
                 );
             }
         }
-        let images = print_fpga(driver, "after")?;
-        driver.ensure_fpga_reconfigured()?;
+        let images = print_fpga(client, "after")?;
+        ensure_fpga_reconfigured(client)?;
         if let Some(device) = images.iter().position(|&i| i != FpgaBootImage::Update) {
             bail!(
                 "device {device} did not come back with the update image (reads {:?}); \
@@ -273,24 +276,24 @@ fn open_and_run(udp: &UdpArgs, devices: usize, stage: Stage<'_>) -> Result<Outco
         Ok(())
     }
 
-    let mut driver = Driver::new(udp.open(devices)?);
-    let devices = driver.num_devices();
+    let client = udp.open(devices)?;
+    let devices = client.num_devices();
     println!("{devices} device(s) on the bus");
     let mut activation_unacknowledged = false;
     let mut activated_late = Vec::new();
     let cpu_versions = match stage {
         Stage::Update { image, activate } => {
-            let before = print_versions(&mut driver, "before")?;
-            driver.update(image, progress_printer(image.len()))?;
+            let before = print_versions(&client, "before")?;
+            update_cpu(&client, image, progress_printer(image.len()))?;
             end_progress();
             println!("image committed on every device");
             if activate {
-                activation_unacknowledged = match driver.activate() {
+                activation_unacknowledged = match reboot(&client) {
                     Ok(()) => {
                         println!("activation acknowledged; the devices reboot in about 100 ms");
                         false
                     }
-                    Err(DriverError::Timeout { .. }) => {
+                    Err(OtaError::Timeout { .. }) => {
                         eprintln!(
                             "warning: not every device acknowledged the activation; the devices that \
                          have not rebooted are activated after the reconnection"
@@ -300,17 +303,14 @@ fn open_and_run(udp: &UdpArgs, devices: usize, stage: Stage<'_>) -> Result<Outco
                     Err(e) => return Err(e.into()),
                 };
             }
-            driver.close()?;
             before
         }
         Stage::FpgaUpdate { image, activate } => {
-            run_fpga(&mut driver, image, activate)?;
-            driver.close()?;
+            run_fpga(&client, image, activate)?;
             Vec::new()
         }
         Stage::FpgaVerify => {
-            print_fpga(&mut driver, "now")?;
-            driver.close()?;
+            print_fpga(&client, "now")?;
             Vec::new()
         }
         Stage::Verify {
@@ -320,13 +320,13 @@ fn open_and_run(udp: &UdpArgs, devices: usize, stage: Stage<'_>) -> Result<Outco
             require_trial,
         } => {
             if activate_unrebooted {
-                activated_late = driver.activate_unrebooted()?;
+                activated_late = autd3_rs_firmware_ota::activate_unrebooted(&client)?;
             }
-            let after = if activated_late.is_empty() {
+            if activated_late.is_empty() {
                 let label = if confirm { "after" } else { "now" };
-                let after = print_versions(&mut driver, label)?;
+                let after = print_versions(&client, label)?;
                 check_expectation(&after, expect)?;
-                let images = driver.read_running_image()?;
+                let images = read_running_image(&client)?;
                 for (device, &image) in images.iter().enumerate() {
                     println!("device {device}: CPU {}", describe_running_image(image));
                 }
@@ -334,7 +334,7 @@ fn open_and_run(udp: &UdpArgs, devices: usize, stage: Stage<'_>) -> Result<Outco
                     check_trial(&images, &after, expect)?;
                 }
                 if confirm {
-                    driver.confirm()?;
+                    autd3_rs_firmware_ota::confirm(&client)?;
                     println!("running image confirmed on every device");
                 }
                 after
@@ -345,9 +345,7 @@ fn open_and_run(udp: &UdpArgs, devices: usize, stage: Stage<'_>) -> Result<Outco
                     );
                 }
                 Vec::new()
-            };
-            driver.close()?;
-            after
+            }
         }
     };
     Ok(Outcome {
@@ -362,11 +360,10 @@ fn fmt_version([major, minor, patch]: Version) -> String {
     format!("{major}.{minor}.{patch}")
 }
 
-fn print_versions(driver: &mut Driver, label: &str) -> Result<Vec<Version>> {
-    let versions: Vec<Version> = driver
-        .read_firmware_info()?
+fn print_versions(client: &Client, label: &str) -> Result<Vec<Version>> {
+    let versions: Vec<Version> = read_firmware_version(client)?
         .iter()
-        .map(|info| info.cpu_version)
+        .map(|info| version_triple(info.cpu))
         .collect();
     for (device, &version) in versions.iter().enumerate() {
         println!(
@@ -377,16 +374,16 @@ fn print_versions(driver: &mut Driver, label: &str) -> Result<Vec<Version>> {
     Ok(versions)
 }
 
-fn print_fpga(driver: &mut Driver, label: &str) -> Result<Vec<FpgaBootImage>> {
-    let infos = driver.read_firmware_info()?;
+fn print_fpga(client: &Client, label: &str) -> Result<Vec<FpgaBootImage>> {
+    let infos = read_firmware_version(client)?;
     for (device, info) in infos.iter().enumerate() {
         println!(
             "device {device}: FPGA firmware {label} = {} ({:?} image)",
-            fmt_version(info.fpga_version),
-            boot_image(info)
+            info.fpga,
+            info.fpga_boot_image()
         );
     }
-    Ok(infos.iter().map(boot_image).collect())
+    Ok(infos.iter().map(FirmwareVersion::fpga_boot_image).collect())
 }
 
 fn progress_printer(total: usize) -> impl FnMut(autd3_rs_firmware_ota::UpdateProgress) {
@@ -675,11 +672,10 @@ fn main() -> Result<()> {
         bail!("--devices must be at least 1");
     }
     if cli.reboot_only {
-        let mut driver = Driver::new(cli.udp.open(cli.devices)?);
-        println!("{} device(s) on the bus", driver.num_devices());
-        driver.reboot()?;
+        let client = cli.udp.open(cli.devices)?;
+        println!("{} device(s) on the bus", client.num_devices());
+        reboot(&client)?;
         println!("reboot acknowledged; the devices reset in about 100 ms and come back unassigned");
-        driver.close()?;
         return Ok(());
     }
     match (&cli.image, &cli.version) {

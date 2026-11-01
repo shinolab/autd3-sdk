@@ -20,6 +20,8 @@ pub struct WritePatternPhase<'a> {
 
 impl crate::sealed::Sealed for WritePatternPhase<'_> {}
 
+impl crate::commands::CommandOperation for WritePatternPhase<'_> {}
+
 impl Operation for WritePatternPhase<'_> {
     fn distribution(&self) -> Distribution {
         Distribution::PerDevice

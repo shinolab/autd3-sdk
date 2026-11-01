@@ -104,6 +104,8 @@ impl SetSilencer {
 
 impl crate::sealed::Sealed for SetSilencer {}
 
+impl crate::commands::CommandOperation for SetSilencer {}
+
 impl Operation for SetSilencer {
     fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
         let payload = match self.config {

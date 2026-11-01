@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use async_lock::Mutex as AsyncMutex;
 use autd3_cpu_wire::payload::FirmwareInfo;
+use autd3_cpu_wire::update::RunningImage;
 use zerocopy::FromBytes;
 
 use crate::commands::Command;
@@ -166,6 +167,16 @@ impl Controller {
                 .map(|(info, _)| FirmwareVersion::from_info(info))
         })
         .await
+    }
+
+    #[doc(hidden)]
+    pub async fn read_running_image(&self) -> Result<Vec<Option<RunningImage>>, Error> {
+        let datagram = [Datagram::no_payload(Cmd::ReadRunningImage)];
+        let response = self
+            .send_frame(Frame::new(Distribution::Broadcast, &datagram))
+            .await?
+            .await?;
+        response.running_images()
     }
 
     pub async fn read_fpga_state(&self) -> Result<Vec<FpgaState>, Error> {

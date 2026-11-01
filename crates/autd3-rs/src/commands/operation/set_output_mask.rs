@@ -14,6 +14,8 @@ pub struct SetOutputMask {
 
 impl crate::sealed::Sealed for SetOutputMask {}
 
+impl crate::commands::CommandOperation for SetOutputMask {}
+
 impl Operation for SetOutputMask {
     fn distribution(&self) -> Distribution {
         Distribution::PerDevice

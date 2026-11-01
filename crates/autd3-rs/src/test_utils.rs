@@ -42,6 +42,8 @@ pub(crate) struct Marker(pub(crate) u8);
 
 impl crate::sealed::Sealed for Marker {}
 
+impl crate::commands::CommandOperation for Marker {}
+
 impl Operation for Marker {
     fn distribution(&self) -> Distribution {
         Distribution::PerDevice
@@ -58,6 +60,8 @@ pub(crate) struct FailBroadcast;
 
 impl crate::sealed::Sealed for FailBroadcast {}
 
+impl crate::commands::CommandOperation for FailBroadcast {}
+
 impl Operation for FailBroadcast {
     fn encode(&self, _device: &Device, _out: &mut Datagram) -> Result<(), Error> {
         Err(PayloadError::ModulationDataEmpty.into())
@@ -67,6 +71,8 @@ impl Operation for FailBroadcast {
 pub(crate) struct FailAt(pub(crate) usize);
 
 impl crate::sealed::Sealed for FailAt {}
+
+impl crate::commands::CommandOperation for FailAt {}
 
 impl Operation for FailAt {
     fn distribution(&self) -> Distribution {
