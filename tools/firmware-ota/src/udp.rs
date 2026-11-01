@@ -1,4 +1,3 @@
-use std::net::{Ipv6Addr, SocketAddrV6};
 use std::time::Duration;
 
 use clap::Args;
@@ -14,15 +13,6 @@ const LOST_AFTER_HEARTBEATS: u32 = 10;
 pub struct UdpArgs {
     #[arg(long, help = "Network interface name (default: auto-detect)")]
     pub interface: Option<String>,
-    #[arg(
-        long,
-        value_name = "PORT",
-        num_args = 0..=1,
-        default_missing_value = "44336",
-        conflicts_with = "interface",
-        help = "Connect to the simulator on this host only, listening on PORT (default 44336)"
-    )]
-    pub simulator: Option<u16>,
     #[arg(
         long,
         value_parser = humantime::parse_duration,
@@ -47,13 +37,10 @@ impl UdpArgs {
     pub fn option(&self) -> TransportOption {
         let default = TransportOption::default();
         TransportOption {
-            iface: match self.simulator {
-                Some(port) => Interface::Addr(SocketAddrV6::new(Ipv6Addr::LOCALHOST, port, 0, 0)),
-                None => self
-                    .interface
-                    .clone()
-                    .map_or(Interface::Auto, Interface::Name),
-            },
+            iface: self
+                .interface
+                .clone()
+                .map_or(Interface::Auto, Interface::Name),
             lost_timeout: default
                 .lost_timeout
                 .max(self.heartbeat().saturating_mul(LOST_AFTER_HEARTBEATS)),
@@ -212,16 +199,5 @@ mod tests {
         )
         .to_string();
         assert!(!message.contains("firewall"), "{message}");
-    }
-
-    #[test]
-    fn the_simulator_flag_reaches_the_simulator_address_without_sending_a_geometry() {
-        let simulator_at =
-            |port| Interface::Addr(SocketAddrV6::new(Ipv6Addr::LOCALHOST, port, 0, 0));
-        let args = parse(&["--simulator"]);
-        assert_eq!(args.option().iface, simulator_at(autd3_rs::udp::PORT));
-        let args = parse(&["--simulator", "50000"]);
-        assert_eq!(args.option().iface, simulator_at(50000));
-        assert!(Cli::try_parse_from(["ota", "--simulator", "--interface", "eth0"]).is_err());
     }
 }
