@@ -6,8 +6,6 @@ use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 
 pub(crate) const FINISHED: &str = "[process finished]";
 
-const LOG_CAPACITY: NonZeroUsize = NonZeroUsize::new(10_000).unwrap();
-
 pub(crate) struct LogLines {
     lines: Vec<String>,
     capacity: NonZeroUsize,
@@ -36,7 +34,7 @@ impl LogLines {
 
 impl Default for LogLines {
     fn default() -> Self {
-        Self::new(LOG_CAPACITY)
+        Self::new(NonZeroUsize::new(10_000).unwrap())
     }
 }
 

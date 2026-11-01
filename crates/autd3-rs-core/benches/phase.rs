@@ -5,11 +5,9 @@ use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_m
 use autd3_rs_core::common::Angle;
 use autd3_rs_core::value::Phase;
 
-const COUNTS: &[usize] = &[249, 249 * 64];
-
 fn bench(c: &mut Criterion) {
     let mut group = c.benchmark_group("phase");
-    for &n in COUNTS {
+    for n in [249, 249 * 64] {
         let angles: Vec<Angle> = (0..n)
             .map(|i| Angle::from_rad(i as f32 * 0.0137 - 100.0))
             .collect();

@@ -375,11 +375,9 @@ mod tests {
         h.port.flash[image_base..][..img.len()].copy_from_slice(img);
     }
 
-    const RUNNING_IMAGE_LEN: usize = 256;
-
     fn running_from_slot_a() -> (Harness, Vec<u8>) {
         let mut h = Harness::new();
-        let running = image(RUNNING_IMAGE_LEN, 0xA0);
+        let running = image(256, 0xA0);
         stamp(&mut h, Slot::A, 0, &running);
         (h, running)
     }

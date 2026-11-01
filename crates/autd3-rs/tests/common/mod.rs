@@ -8,8 +8,6 @@ use autd3_rs::udp::{TransportOption, UdpError};
 use autd3_rs::{Client, Error};
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
-pub(crate) const ACK_TIMEOUT: Duration = Duration::from_millis(250);
-pub(crate) const LOST_TIMEOUT: Duration = Duration::from_millis(500);
 pub(crate) const PATIENCE: Duration = Duration::from_secs(10);
 pub(crate) const INVALID_PAYLOAD: u8 = 0x02;
 
@@ -34,14 +32,14 @@ pub(crate) fn option(emulator: &UdpEmulator) -> TransportOption {
         iface: emulator.interface(),
         lost_timeout: PATIENCE,
         open_timeout: Duration::from_secs(6),
-        ack_timeout: ACK_TIMEOUT,
+        ack_timeout: Duration::from_millis(250),
         ..TransportOption::default()
     }
 }
 
 pub(crate) fn monitoring_option(emulator: &UdpEmulator) -> TransportOption {
     TransportOption {
-        lost_timeout: LOST_TIMEOUT,
+        lost_timeout: Duration::from_millis(500),
         ..option(emulator)
     }
 }

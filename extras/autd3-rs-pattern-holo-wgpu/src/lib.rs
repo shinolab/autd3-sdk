@@ -15,13 +15,9 @@ use buffer::Pooled;
 pub use buffer::{GpuMatrix, GpuVector};
 
 const WG: u32 = 256;
-const COLS_PER_CHUNK: u32 = 1024;
-const ROWWISE_COL_LIMIT: usize = 256;
-const FUSED_REPEAT_LIMIT: usize = 256;
 const UNIFORM_SIZE: u64 = 32;
 const UNIFORM_SLOTS: u64 = 1024;
 const MAX_BINDINGS: usize = 6;
-const BIND_CACHE_LIMIT: usize = 64;
 
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
@@ -216,7 +212,7 @@ impl WgpuBackend {
         if let Some(hit) = cache.get(&key) {
             return hit.clone();
         }
-        if cache.len() >= BIND_CACHE_LIMIT {
+        if cache.len() >= 64 {
             cache.clear();
         }
         let fresh = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -355,7 +351,7 @@ impl WgpuBackend {
         x: &GpuVector,
         r: Option<&GpuVector>,
     ) -> GpuVector {
-        let rowwise = a.cols <= ROWWISE_COL_LIMIT;
+        let rowwise = a.cols <= 256;
         if let Some(r) = r {
             self.materialize(r);
         }
@@ -365,11 +361,7 @@ impl WgpuBackend {
         let x_partial = x.partial.borrow();
         let x_chunks = x_partial.as_ref().map_or(0, |p| p.chunks);
         let out = self.storage(bytes_of(a.rows));
-        let chunks = if rowwise {
-            1
-        } else {
-            div_ceil(a.cols, COLS_PER_CHUNK)
-        };
+        let chunks = if rowwise { 1 } else { div_ceil(a.cols, 1024) };
         let partial = if rowwise {
             None
         } else {
@@ -593,7 +585,7 @@ impl LinAlgBackend for WgpuBackend {
         if repeat == 0 {
             return x;
         }
-        if a.rows != a.cols || a.cols > FUSED_REPEAT_LIMIT {
+        if a.rows != a.cols || a.cols > 256 {
             let mut x = x;
             for _ in 0..repeat {
                 x = self.gemv_maybe_normalized(a, &x, Some(r));

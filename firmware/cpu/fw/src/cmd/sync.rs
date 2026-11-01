@@ -9,21 +9,22 @@ use crate::proto::Error;
 const _: () = assert!(sys_time_ticks(SYNC_CYCLE_NS as u64) == SYNC_CYCLE_TICKS as u64);
 
 pub(crate) fn handle<P: Port>(port: &mut P, config: &CpuConfig) -> Result<(), Error> {
-    fn wait_for_the_cycle_before<P: Port>(port: &mut P, edge: u64) -> Result<(), Error> {
-        for _ in 0..fpga::FPGA_WAIT_UPDATE_MAX_POLLS.get() {
-            let now = port.sys_time().ok_or(Error::SyncNotReady)?;
-            if now.saturating_add(u64::from(SYNC_CYCLE_NS)) > edge {
-                return Ok(());
-            }
-        }
-        Err(Error::SyncNotReady)
-    }
-
     let next_edge = port
         .next_sync_edge(config.sync_guard.as_nanos() as u32)
         .ok_or(Error::SyncNotReady)?
         .get();
-    wait_for_the_cycle_before(port, next_edge)?;
+    let mut polls_left = fpga::FPGA_WAIT_UPDATE_MAX_POLLS.get();
+    while port
+        .sys_time()
+        .ok_or(Error::SyncNotReady)?
+        .saturating_add(u64::from(SYNC_CYCLE_NS))
+        <= next_edge
+    {
+        polls_left -= 1;
+        if polls_left == 0 {
+            return Err(Error::SyncNotReady);
+        }
+    }
     fpga::write_u64(port, ADDR_SYNC_TIME_0, sys_time_ticks(next_edge));
     fpga::set_and_wait_update(port, CtlFlags::SYNC_SET, fpga::FPGA_WAIT_UPDATE_MAX_POLLS)?;
     let latched_at = port.sys_time().ok_or(Error::SyncNotReady)?;

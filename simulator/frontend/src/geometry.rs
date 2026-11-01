@@ -2,9 +2,6 @@ use glam::{EulerRot, Quat, Vec3};
 
 use autd3_rs_simulator_protocol::{DEVICE_WIDTH, DevicePose, MAX_DEVICES, ROTATION_NORM_TOLERANCE};
 
-const ORIGIN_TOLERANCE_MM: f32 = 1e-3;
-const ROTATION_TOLERANCE: f32 = 1e-4;
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DeviceDraft {
     pub origin: [f32; 3],
@@ -21,11 +18,11 @@ fn pose_matches(a: &DevicePose, b: &DevicePose) -> bool {
         .origin
         .iter()
         .zip(&b.origin)
-        .all(|(a, b)| (a - b).abs() < ORIGIN_TOLERANCE_MM);
+        .all(|(a, b)| (a - b).abs() < 1e-3);
     let qa = quat_of(a);
     let qb = quat_of(b);
     let qb = if qa.dot(qb) < 0.0 { -qb } else { qb };
-    origin_matches && qa.abs_diff_eq(qb, ROTATION_TOLERANCE)
+    origin_matches && qa.abs_diff_eq(qb, 1e-4)
 }
 
 impl DeviceDraft {

@@ -40,8 +40,6 @@ impl MessageType {
 }
 
 const PTP_VERSION: u8 = 2;
-const VERSION_MASK: u8 = 0x0F;
-const TYPE_MASK: u8 = 0x0F;
 const FLAG_TWO_STEP: u8 = 0x02;
 const LOG_INTERVAL_UNSPECIFIED: u8 = 0x7F;
 const PORT_NUMBER: u16 = 1;
@@ -143,10 +141,10 @@ pub fn correction_ns(raw: i64) -> i64 {
 pub fn parse(message: &[u8]) -> Option<Message> {
     let (base, _) = TimestampedMessage::ref_from_prefix(message).ok()?;
     let header = &base.header;
-    if header.version & VERSION_MASK != PTP_VERSION {
+    if header.version & 0x0F != PTP_VERSION {
         return None;
     }
-    let kind = MessageType::from_u8(header.message_type & TYPE_MASK)?;
+    let kind = MessageType::from_u8(header.message_type & 0x0F)?;
     let timestamp = base.timestamp.as_ns()?;
     let requesting = if kind == MessageType::DelayResp {
         Some(DelayResp::ref_from_prefix(message).ok()?.0.requesting)

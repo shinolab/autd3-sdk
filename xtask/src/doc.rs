@@ -1,6 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command};
+use std::process::Command;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
@@ -15,16 +15,8 @@ use crate::util::{capture, cargo_bin, files_under, on_path, run, run_tool};
 
 const FIRMWARE_MARKER: &str = "Firmware v";
 const CRATE_PIN_PREFIX: &str = "autd3-";
-const CRATE_PIN_SKIP_DIRS: &[&str] = &["target", "node_modules", "3rdparty", "dist", "doc"];
 const UNITY_PKG_MARKER: &str = "\"com.shinolab.autd3-sdk";
 const CONSOLE_TAG_MARKER: &str = "console-v";
-const EXPECT_ERROR_MARKER: &str = "# xtask:expect-error";
-const LONG_RUNNING_MARKER: &str = "# xtask:long-running";
-const SAMPLE_TIMEOUT: Duration = Duration::from_secs(30);
-const LONG_RUNNING_TIMEOUT: Duration = Duration::from_secs(8);
-const UDP_EMULATOR_ENV: &str = "AUTD3_UDP_EMULATOR";
-const UDP_EMULATOR_PKG: &str = "autd3-rs-udp-emulator";
-const UDP_EMULATOR_BIN: &str = "autd3-udp-emulator";
 
 #[derive(Subcommand)]
 pub(crate) enum DocCmd {
@@ -80,102 +72,6 @@ pub(crate) enum DocCmd {
 
 #[allow(clippy::too_many_lines)]
 pub(crate) fn run_doc(root: &Path, cmd: &DocCmd) -> Result<()> {
-    fn regenerate_snapshot(doc: &Path, slug: &str) -> Result<()> {
-        if !version_slugs(doc)?.iter().any(|s| s == slug) {
-            bail!(
-                "version {slug} is not declared in astro.config.mjs; run `cargo xtask bump-version doc` \
-             to declare it before freezing"
-            );
-        }
-        let mut removed = Vec::new();
-        remove_dirs_named(
-            &doc.join("src/content/docs"),
-            &[slug.to_string()],
-            &mut removed,
-        )?;
-        if removed.is_empty() {
-            println!("doc: no {slug} snapshot on disk; building the site generates it");
-        } else {
-            for path in &removed {
-                println!("doc: removed stale snapshot {}", path.display());
-            }
-        }
-        npm_install(doc)?;
-        npm(doc, &["run", "build"])?;
-        if !doc.join("src/content/docs").join(slug).is_dir() {
-            bail!(
-                "`astro build` did not regenerate src/content/docs/{slug}/; starlight-versions \
-             generates one version per build, so build again if another version was pending"
-            );
-        }
-        println!("doc: regenerated the {slug} snapshot from the live docs");
-        if !on_path("git") {
-            println!(
-                "doc: `git` is not on PATH; the snapshot now carries the live version numbers"
-            );
-            return Ok(());
-        }
-        let tracked = capture("git", &["ls-files", "src/content/docs"], doc)?;
-        let tracked: Vec<&str> = tracked.lines().collect();
-        let mut pages = snapshot_pages(&doc.join("src/content/docs"), slug)?;
-        pages.sort();
-        let mut kept = Vec::new();
-        for page in &pages {
-            let rel = page
-                .strip_prefix(doc)
-                .unwrap_or(page)
-                .to_string_lossy()
-                .replace('\\', "/");
-            if !tracked.contains(&rel.as_str()) {
-                continue;
-            }
-            let frozen = capture("git", &["show", &format!(":./{rel}")], doc)?;
-            let mut text =
-                fs::read_to_string(page).with_context(|| format!("reading {}", page.display()))?;
-            for (label, spans, _) in SNAPSHOT_VERSION_SPANS {
-                let was = spans(&frozen);
-                let now = spans(&text);
-                if was.len() != now.len() {
-                    if !was.is_empty() {
-                        println!(
-                            "doc: {rel} no longer has the same {label} markers as the frozen page; \
-                     check them by hand"
-                        );
-                    }
-                    continue;
-                }
-                let mut out = String::with_capacity(text.len());
-                let mut cursor = 0;
-                for ((o_start, o_end, o_value), (n_start, n_end, n_value)) in was.iter().zip(&now) {
-                    out.push_str(&text[cursor..*n_start]);
-                    out.push_str(&frozen[*o_start..*o_end]);
-                    cursor = *n_end;
-                    if o_value != n_value {
-                        kept.push(format!(
-                            "{rel}: {label} {o_value} (live docs say {n_value})"
-                        ));
-                    }
-                }
-                out.push_str(&text[cursor..]);
-                text = out;
-            }
-            let current =
-                fs::read_to_string(page).with_context(|| format!("reading {}", page.display()))?;
-            if text != current {
-                fs::write(page, text).with_context(|| format!("writing {}", page.display()))?;
-            }
-        }
-        if kept.is_empty() {
-            println!("doc: the regenerated snapshot already carries the frozen version numbers");
-        } else {
-            println!("doc: kept {} frozen version number(s):", kept.len());
-            for note in &kept {
-                println!("  {note}");
-            }
-        }
-        Ok(())
-    }
-
     let doc = root.join("doc");
     let samples = doc.join("codes").join("rust");
     match cmd {
@@ -248,14 +144,14 @@ pub(crate) fn run_doc(root: &Path, cmd: &DocCmd) -> Result<()> {
                 "--root-dir".to_string(),
                 dist.to_string_lossy().into_owned(),
                 "--remap".to_string(),
-                format!("{base}{SITE_BASE}/?(.*) {base}/$1"),
+                format!("{base}/autd3-sdk/?(.*) {base}/$1"),
                 "--index-files".to_string(),
                 "index.html".to_string(),
                 "--include-fragments".to_string(),
                 "--exclude".to_string(),
-                SITE_ORIGIN.to_string(),
+                "^https://shinolab\\.github\\.io/autd3-sdk".to_string(),
                 "--accept".to_string(),
-                LINK_ACCEPT.to_string(),
+                "200..=299,403,429".to_string(),
             ];
             for slug in version_slugs(&doc)? {
                 args.push("--exclude-path".to_string());
@@ -272,7 +168,103 @@ pub(crate) fn run_doc(root: &Path, cmd: &DocCmd) -> Result<()> {
                 bail!("`node` is required for `doc freeze-version`");
             }
             if *force {
-                regenerate_snapshot(&doc, slug)?;
+                if !version_slugs(&doc)?.iter().any(|s| s == slug) {
+                    bail!(
+                        "version {slug} is not declared in astro.config.mjs; run `cargo xtask bump-version doc` \
+                     to declare it before freezing"
+                    );
+                }
+                let mut removed = Vec::new();
+                remove_dirs_named(
+                    &doc.join("src/content/docs"),
+                    &[slug.to_string()],
+                    &mut removed,
+                )?;
+                if removed.is_empty() {
+                    println!("doc: no {slug} snapshot on disk; building the site generates it");
+                } else {
+                    for path in &removed {
+                        println!("doc: removed stale snapshot {}", path.display());
+                    }
+                }
+                npm_install(&doc)?;
+                npm(&doc, &["run", "build"])?;
+                if !doc.join("src/content/docs").join(slug).is_dir() {
+                    bail!(
+                        "`astro build` did not regenerate src/content/docs/{slug}/; starlight-versions \
+                     generates one version per build, so build again if another version was pending"
+                    );
+                }
+                println!("doc: regenerated the {slug} snapshot from the live docs");
+                if on_path("git") {
+                    let tracked = capture("git", &["ls-files", "src/content/docs"], &doc)?;
+                    let tracked: Vec<&str> = tracked.lines().collect();
+                    let mut pages = snapshot_pages(&doc.join("src/content/docs"), slug)?;
+                    pages.sort();
+                    let mut kept = Vec::new();
+                    for page in &pages {
+                        let rel = page
+                            .strip_prefix(&doc)
+                            .unwrap_or(page)
+                            .to_string_lossy()
+                            .replace('\\', "/");
+                        if !tracked.contains(&rel.as_str()) {
+                            continue;
+                        }
+                        let frozen = capture("git", &["show", &format!(":./{rel}")], &doc)?;
+                        let mut text = fs::read_to_string(page)
+                            .with_context(|| format!("reading {}", page.display()))?;
+                        for (label, spans, _) in SNAPSHOT_VERSION_SPANS {
+                            let was = spans(&frozen);
+                            let now = spans(&text);
+                            if was.len() != now.len() {
+                                if !was.is_empty() {
+                                    println!(
+                                        "doc: {rel} no longer has the same {label} markers as the frozen page; \
+                                 check them by hand"
+                                    );
+                                }
+                                continue;
+                            }
+                            let mut out = String::with_capacity(text.len());
+                            let mut cursor = 0;
+                            for ((o_start, o_end, o_value), (n_start, n_end, n_value)) in
+                                was.iter().zip(&now)
+                            {
+                                out.push_str(&text[cursor..*n_start]);
+                                out.push_str(&frozen[*o_start..*o_end]);
+                                cursor = *n_end;
+                                if o_value != n_value {
+                                    kept.push(format!(
+                                        "{rel}: {label} {o_value} (live docs say {n_value})"
+                                    ));
+                                }
+                            }
+                            out.push_str(&text[cursor..]);
+                            text = out;
+                        }
+                        let current = fs::read_to_string(page)
+                            .with_context(|| format!("reading {}", page.display()))?;
+                        if text != current {
+                            fs::write(page, text)
+                                .with_context(|| format!("writing {}", page.display()))?;
+                        }
+                    }
+                    if kept.is_empty() {
+                        println!(
+                            "doc: the regenerated snapshot already carries the frozen version numbers"
+                        );
+                    } else {
+                        println!("doc: kept {} frozen version number(s):", kept.len());
+                        for note in &kept {
+                            println!("  {note}");
+                        }
+                    }
+                } else {
+                    println!(
+                        "doc: `git` is not on PATH; the snapshot now carries the live version numbers"
+                    );
+                }
             }
             run("node", ["scripts/freeze-version-codes.mjs", slug], &doc)?;
             let slugs = version_slugs(&doc)?;
@@ -406,10 +398,6 @@ pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {
     cleaner.deps("doc/codes/python/examples/.venv")?;
     cleaner.deps("doc/node_modules")
 }
-
-const SITE_BASE: &str = "/autd3-sdk";
-const SITE_ORIGIN: &str = "^https://shinolab\\.github\\.io/autd3-sdk";
-const LINK_ACCEPT: &str = "200..=299,403,429";
 
 pub(crate) fn add_version(root: &Path, slug: &str) -> Result<bool> {
     let doc = root.join("doc");
@@ -778,7 +766,8 @@ pub(crate) fn rewrite_console_version(root: &Path, version: &str) -> Result<usiz
 pub(crate) fn rewrite_crate_version(root: &Path, version: &str) -> Result<usize> {
     let mut files = doc_pages(&root.join("doc"))?;
     let mut readmes = files_under(root, |name| {
-        !name.starts_with('.') && !CRATE_PIN_SKIP_DIRS.contains(&name)
+        !name.starts_with('.')
+            && !["target", "node_modules", "3rdparty", "dist", "doc"].contains(&name)
     })?;
     readmes.retain(|path| {
         path.file_name().is_some_and(|name| name == "README.md")
@@ -1003,24 +992,6 @@ fn build_csharp_samples(doc: &Path) -> Result<()> {
 }
 
 fn run_python_samples(root: &Path, doc: &Path) -> Result<()> {
-    fn wait_timeout(
-        child: &mut Child,
-        limit: Duration,
-    ) -> Result<Option<std::process::ExitStatus>> {
-        let start = Instant::now();
-        loop {
-            if let Some(status) = child.try_wait().context("failed to poll python child")? {
-                return Ok(Some(status));
-            }
-            if start.elapsed() >= limit {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Ok(None);
-            }
-            sleep(Duration::from_millis(100));
-        }
-    }
-
     let bindings = root.join("bindings").join("python");
     let venv = venv_for(&bindings, None)?;
     develop(&bindings, &venv, WHEELS, false)?;
@@ -1035,8 +1006,8 @@ fn run_python_samples(root: &Path, doc: &Path) -> Result<()> {
     let mut rels = relative_sources(&examples_dir, "py", |name| name != "__pycache__")?;
     rels.sort();
 
-    run("cargo", ["build", "-p", UDP_EMULATOR_PKG], root)?;
-    let udp_emulator = cargo_bin(root, None, true, UDP_EMULATOR_BIN);
+    run("cargo", ["build", "-p", "autd3-rs-udp-emulator"], root)?;
+    let udp_emulator = cargo_bin(root, None, true, "autd3-udp-emulator");
     if !udp_emulator.is_file() {
         bail!(
             "the UDP emulator was not built at {}",
@@ -1049,24 +1020,36 @@ fn run_python_samples(root: &Path, doc: &Path) -> Result<()> {
         let script = examples_dir.join(rel);
         let text = fs::read_to_string(&script)
             .with_context(|| format!("failed to read {}", script.display()))?;
-        let expect_error = text.contains(EXPECT_ERROR_MARKER);
-        let long_running = text.contains(LONG_RUNNING_MARKER);
+        let expect_error = text.contains("# xtask:expect-error");
+        let long_running = text.contains("# xtask:long-running");
         let limit = if long_running {
-            LONG_RUNNING_TIMEOUT
+            Duration::from_secs(8)
         } else {
-            SAMPLE_TIMEOUT
+            Duration::from_secs(30)
         };
 
         let mut child = Command::new(&python)
             .arg("-B")
             .arg(&runner)
             .arg(&script)
-            .env(UDP_EMULATOR_ENV, &udp_emulator)
+            .env("AUTD3_UDP_EMULATOR", &udp_emulator)
             .current_dir(&py_codes)
             .spawn()
             .with_context(|| format!("failed to spawn python for {}", script.display()))?;
 
-        let reason = match wait_timeout(&mut child, limit)? {
+        let start = Instant::now();
+        let status = loop {
+            if let Some(status) = child.try_wait().context("failed to poll python child")? {
+                break Some(status);
+            }
+            if start.elapsed() >= limit {
+                let _ = child.kill();
+                let _ = child.wait();
+                break None;
+            }
+            sleep(Duration::from_millis(100));
+        };
+        let reason = match status {
             Some(status) if long_running => {
                 (!status.success()).then(|| format!("exited early with {status}"))
             }

@@ -20,8 +20,6 @@ impl Completions {
     }
 }
 
-const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10);
-
 struct Runtime {
     executor: Executor,
     completions: Completions,
@@ -47,7 +45,7 @@ impl Runtime {
     }
 
     fn shutdown(mut self) {
-        let _ = self.executor.shutdown_timeout(SHUTDOWN_TIMEOUT);
+        let _ = self.executor.shutdown_timeout(Duration::from_secs(10));
         let _ = self.completions.0.send(None);
         if let Some(thread) = self.completion_thread.take() {
             let _ = thread.join();

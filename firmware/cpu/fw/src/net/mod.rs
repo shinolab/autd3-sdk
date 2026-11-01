@@ -341,23 +341,26 @@ mod tests {
         s
     }
 
-    const GOLDEN_UDP: &str = "3c7c3f11223302415554440186dd60000000000d1140fe80000000000000004155fffe544401fe800000000000003e7c3ffffe112233ad30c350000d92604155544433";
-    const GOLDEN_NA: &str = "3c7c3f11223302415554440186dd6000000000203afffe80000000000000004155fffe544401fe800000000000003e7c3ffffe1122338800ae9c60000000fe80000000000000004155fffe5444010201024155544401";
-
     #[test]
     fn a_udp_frame_matches_the_golden_bytes() {
         let payload = b"AUTD3";
         let mut buf = vec![0xCCu8; 128];
         buf[UDP_PAYLOAD_OFFSET..][..payload.len()].copy_from_slice(payload);
         let len = udp(&mut buf, &unit(), &host(), payload.len()).unwrap();
-        assert_eq!(hex(&buf[..len]), GOLDEN_UDP);
+        assert_eq!(
+            hex(&buf[..len]),
+            "3c7c3f11223302415554440186dd60000000000d1140fe80000000000000004155fffe544401fe800000000000003e7c3ffffe112233ad30c350000d92604155544433"
+        );
     }
 
     #[test]
     fn a_neighbor_advertisement_matches_the_golden_bytes() {
         let mut buf = vec![0xCCu8; 128];
         let len = neighbor_advertisement(&mut buf, UNIT_MAC, UNIT_IP, HOST_MAC, HOST_IP).unwrap();
-        assert_eq!(hex(&buf[..len]), GOLDEN_NA);
+        assert_eq!(
+            hex(&buf[..len]),
+            "3c7c3f11223302415554440186dd6000000000203afffe80000000000000004155fffe544401fe800000000000003e7c3ffffe1122338800ae9c60000000fe80000000000000004155fffe5444010201024155544401"
+        );
     }
 
     fn echo_request(body: &[u8]) -> Vec<u8> {

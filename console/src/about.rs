@@ -1,8 +1,5 @@
 use eframe::egui;
 
-const LICENSE: &str = include_str!(concat!(env!("OUT_DIR"), "/license.txt"));
-const THIRD_PARTY: &str = include_str!(concat!(env!("OUT_DIR"), "/third-party.md"));
-
 pub(crate) fn ui(ui: &mut egui::Ui) {
     ui.add_space(4.0);
     ui.heading("AUTD3 Console");
@@ -14,10 +11,10 @@ pub(crate) fn ui(ui: &mut egui::Ui) {
         .auto_shrink([false, false])
         .show(ui, |ui| {
             ui.collapsing("License (MIT)", |ui| {
-                ui.monospace(LICENSE);
+                ui.monospace(include_str!(concat!(env!("OUT_DIR"), "/license.txt")));
             });
             ui.collapsing("Third-party licenses", |ui| {
-                ui.monospace(THIRD_PARTY);
+                ui.monospace(include_str!(concat!(env!("OUT_DIR"), "/third-party.md")));
             });
         });
 }

@@ -21,9 +21,6 @@ use crate::emulator::{extract_device_states, extract_states};
 use crate::scene::Scene;
 use crate::server::{AppState, router};
 
-const STATE_PERIOD: Duration = Duration::from_millis(33);
-const DEVICE_STATE_EVERY: u32 = 6;
-
 #[derive(Parser)]
 struct Args {
     #[arg(long, default_value_t = PORT, value_parser = clap::value_parser!(u16).range(1..))]
@@ -67,8 +64,8 @@ async fn main() -> Result<()> {
     std::thread::spawn(move || {
         let mut tick = 0;
         loop {
-            std::thread::sleep(STATE_PERIOD);
-            tick = (tick + 1) % DEVICE_STATE_EVERY;
+            std::thread::sleep(Duration::from_millis(33));
+            tick = (tick + 1) % 6;
             let enabled = sampler_mod_enabled.load(Ordering::Relaxed);
             let Some((states, devices)) = sampler_scene.sample(|devices| {
                 (

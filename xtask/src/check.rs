@@ -7,8 +7,6 @@ use clap::{Subcommand, ValueEnum};
 use crate::cpu_codegen::gen_param;
 use crate::util::{capture, host_triple, on_path, run_env, workspace_root};
 
-const MIRI_PACKAGES: &[&str] = &["autd3-cpu-wire", "autd3-cpu-fw", "autd3-rs-core"];
-
 const MUTANTS_PACKAGES: &[&str] = &[
     "autd3-cpu-wire",
     "autd3-cpu-fw",
@@ -94,7 +92,10 @@ pub(crate) fn run_check(root: &Path, cmd: &CheckCmd) -> Result<()> {
             ensure_component("miri")?;
             gen_param(root)?;
             let target_dir = root.join("target").join("miri");
-            for package in selection(package, MIRI_PACKAGES) {
+            for package in selection(
+                package,
+                &["autd3-cpu-wire", "autd3-cpu-fw", "autd3-rs-core"],
+            ) {
                 let mut args = vec![
                     "+nightly".to_string(),
                     "miri".to_string(),

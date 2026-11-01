@@ -31,7 +31,6 @@ use autd3_cpu_wire::payload::Telemetry;
 use autd3_cpu_wire::update::{FLASH_BYTES, FLASH_SECTOR_BYTES, LOADER_REGION_END, crc32};
 
 pub(crate) const MOD_RAM_WORDS: usize = (MOD_BUFFER_SAMPLES / 2) as usize;
-pub(crate) const EM_RAM_WORDS: usize = EMISSION_RAM_WORDS as usize;
 
 const LATCH_MASK: CtlFlags = CtlFlags::MOD_SET
     .union(CtlFlags::PATTERN_SET)
@@ -132,7 +131,7 @@ impl MockPort {
             output_mask: Box::new([0; OUTPUT_MASK_WORDS]),
             pwe: Box::new([0; PWE_TABLE_SIZE]),
             mod_ram: vec![vec![0; MOD_RAM_WORDS]; NUM_BANKS],
-            em_ram: vec![vec![0; EM_RAM_WORDS]; NUM_BANKS],
+            em_ram: vec![vec![0; EMISSION_RAM_WORDS as usize]; NUM_BANKS],
             latch_count: [0; 16],
             next_sync_edge: None,
             sync_guard_ns: None,

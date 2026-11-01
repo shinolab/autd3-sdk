@@ -29,8 +29,6 @@ mod tests {
     use crate::test_utils::builders::{config_mod, config_mod_rep, invalid_bank};
     use crate::test_utils::mock::Harness;
 
-    const BUFFER_SIZE_MIN: u32 = autd3_cpu_wire::layout::BUFFER_SIZE_MIN as u32;
-
     #[test]
     fn config_mod_writes_playback_registers_without_latching() {
         let mut h = Harness::new();
@@ -88,7 +86,11 @@ mod tests {
         h.deliver(&config_mod(0, 1, 1));
         assert_eq!(h.status(), Error::InvalidPayload);
 
-        h.deliver(&config_mod(0, 1, BUFFER_SIZE_MIN));
+        h.deliver(&config_mod(
+            0,
+            1,
+            autd3_cpu_wire::layout::BUFFER_SIZE_MIN as u32,
+        ));
         assert_eq!(h.status(), Error::None);
     }
 

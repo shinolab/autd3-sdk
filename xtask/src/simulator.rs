@@ -230,25 +230,39 @@ const BINARYEN_RELEASE: &str = "version_127";
 
 #[allow(clippy::too_many_lines)]
 fn build_frontend(frontend: &Path, debug: bool) -> Result<()> {
-    fn ensure_wasm_opt(frontend: &Path, dx_home: &Path) -> Result<()> {
-        let installed = capture("dx", &["--version"], frontend)?;
-        if !installed.contains(DX_VERSION) {
-            bail!(
-                "expected dioxus-cli {DX_VERSION} but found `{installed}`. \
-                 `dx` downloads wasm-opt itself without checking the HTTP status or the extracted \
-                 files, which silently produces a missing binary; xtask pre-installs it into \
-                 {DX_BINARYEN_TOOLS_DIR} instead. Re-check that directory name against \
-                 BINARYEN_VERSION in the new dioxus-cli before bumping DX_VERSION."
-            );
+    if !on_path("dx") {
+        bail!("`dx` (dioxus-cli) not found on PATH.");
+    }
+    ensure_css(frontend)?;
+    let dx_home = if let Some(path) = std::env::var_os("DX_HOME") {
+        PathBuf::from(path)
+    } else {
+        let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+            .map(PathBuf::from)
+            .context("neither DX_HOME nor the home directory is set")?;
+        if cfg!(any(target_os = "macos", target_os = "windows")) {
+            home.join(".dx")
+        } else {
+            std::env::var_os("XDG_DATA_HOME")
+                .map_or_else(|| home.join(".local").join("share"), PathBuf::from)
+                .join(".dx")
         }
+    };
+    let installed = capture("dx", &["--version"], frontend)?;
+    if !installed.contains(DX_VERSION) {
+        bail!(
+            "expected dioxus-cli {DX_VERSION} but found `{installed}`. \
+             `dx` downloads wasm-opt itself without checking the HTTP status or the extracted \
+             files, which silently produces a missing binary; xtask pre-installs it into \
+             {DX_BINARYEN_TOOLS_DIR} instead. Re-check that directory name against \
+             BINARYEN_VERSION in the new dioxus-cli before bumping DX_VERSION."
+        );
+    }
 
-        let install_dir = dx_home.join("tools").join(DX_BINARYEN_TOOLS_DIR);
-        let wasm_opt = exe_name("wasm-opt");
-        let bin = install_dir.join("bin").join(&wasm_opt);
-        if bin.is_file() {
-            return Ok(());
-        }
-
+    let install_dir = dx_home.join("tools").join(DX_BINARYEN_TOOLS_DIR);
+    let wasm_opt = exe_name("wasm-opt");
+    let bin = install_dir.join("bin").join(&wasm_opt);
+    if !bin.is_file() {
         let platform = if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
             "x86_64-windows"
         } else if cfg!(all(target_os = "windows", target_arch = "aarch64")) {
@@ -286,7 +300,6 @@ fn build_frontend(frontend: &Path, debug: bool) -> Result<()> {
         let file = std::fs::File::open(&archive)
             .with_context(|| format!("opening {}", archive.display()))?;
         let mut tar = tar::Archive::new(flate2::read::GzDecoder::new(file));
-        let wasm_opt = exe_name("wasm-opt");
         for entry in tar.entries()? {
             let mut entry = entry?;
             let path = entry.path()?.into_owned();
@@ -310,30 +323,7 @@ fn build_frontend(frontend: &Path, debug: bool) -> Result<()> {
                 install_dir.display()
             );
         }
-        Ok(())
     }
-
-    fn dx_home() -> Result<PathBuf> {
-        if let Some(path) = std::env::var_os("DX_HOME") {
-            return Ok(PathBuf::from(path));
-        }
-        let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
-            .map(PathBuf::from)
-            .context("neither DX_HOME nor the home directory is set")?;
-        if cfg!(any(target_os = "macos", target_os = "windows")) {
-            return Ok(home.join(".dx"));
-        }
-        let data = std::env::var_os("XDG_DATA_HOME")
-            .map_or_else(|| home.join(".local").join("share"), PathBuf::from);
-        Ok(data.join(".dx"))
-    }
-
-    if !on_path("dx") {
-        bail!("`dx` (dioxus-cli) not found on PATH.");
-    }
-    ensure_css(frontend)?;
-    let dx_home = dx_home()?;
-    ensure_wasm_opt(frontend, &dx_home)?;
     let mut dx_args = vec!["build", "--platform", "web"];
     if !debug {
         dx_args.extend(["--release", "--debug-symbols", "false"]);

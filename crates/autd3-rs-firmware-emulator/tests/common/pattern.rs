@@ -7,8 +7,6 @@ use autd3_cpu_wire::payload::{
 use zerocopy::IntoBytes;
 use zerocopy::little_endian::{U16, U32, U64};
 
-const DIVIDER: u16 = 512;
-
 pub(crate) fn config_pattern(
     bank: PatternBank,
     emission_type: EmissionType,
@@ -20,7 +18,7 @@ pub(crate) fn config_pattern(
     ConfigPatternPayload {
         bank,
         emission_type,
-        divider: U16::new(DIVIDER),
+        divider: U16::new(512),
         size: U32::new(size),
         num_foci: NonZeroU8::new(num_foci),
         reserved: 0,

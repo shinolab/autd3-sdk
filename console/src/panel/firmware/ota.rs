@@ -26,7 +26,6 @@ impl Default for OtaConfig {
 }
 
 const DEVICE_PORT: u16 = 44336;
-const MAX_DEVICES: usize = 128;
 
 impl OtaConfig {
     pub(crate) fn args(&self, version: &str, target: &str) -> Vec<String> {
@@ -59,7 +58,7 @@ impl OtaConfig {
                 .spacing([12.0, 6.0])
                 .show(ui, |ui| {
                     ui.label("Devices");
-                    ui.add(egui::DragValue::new(&mut self.devices).range(1..=MAX_DEVICES));
+                    ui.add(egui::DragValue::new(&mut self.devices).range(1..=128));
                     ui.end_row();
 
                     ui.label("Reboot wait");

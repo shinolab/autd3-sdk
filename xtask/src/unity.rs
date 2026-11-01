@@ -277,26 +277,20 @@ pub(crate) fn run_unity(root: &Path, cmd: UnityCmd) -> Result<()> {
             Ok(())
         }
         UnityCmd::Test { unity_editor } => {
-            fn resolve_managed_dir(unity_editor: Option<PathBuf>) -> Result<PathBuf> {
-                let editor = unity_editor
-                    .or_else(|| std::env::var_os("AUTD3_UNITY_EDITOR").map(PathBuf::from))
-                    .or_else(|| std::env::var_os("UNITY_EDITOR").map(PathBuf::from))
-                    .context(
-                        "Unity Editor path required: pass --unity-editor <editor-root> or set AUTD3_UNITY_EDITOR",
-                    )?;
-                for candidate in [
-                    editor.join("Data").join("Managed").join("UnityEngine"),
-                    editor.join("Contents").join("Managed").join("UnityEngine"),
-                    editor.clone(),
-                ] {
-                    if candidate.join("UnityEngine.CoreModule.dll").is_file() {
-                        return Ok(candidate);
-                    }
-                }
-                Ok(editor.join("Data").join("Managed").join("UnityEngine"))
-            }
-
-            let managed = resolve_managed_dir(unity_editor)?;
+            let editor = unity_editor
+                .or_else(|| std::env::var_os("AUTD3_UNITY_EDITOR").map(PathBuf::from))
+                .or_else(|| std::env::var_os("UNITY_EDITOR").map(PathBuf::from))
+                .context(
+                    "Unity Editor path required: pass --unity-editor <editor-root> or set AUTD3_UNITY_EDITOR",
+                )?;
+            let managed = [
+                editor.join("Data").join("Managed").join("UnityEngine"),
+                editor.join("Contents").join("Managed").join("UnityEngine"),
+                editor.clone(),
+            ]
+            .into_iter()
+            .find(|candidate| candidate.join("UnityEngine.CoreModule.dll").is_file())
+            .unwrap_or_else(|| editor.join("Data").join("Managed").join("UnityEngine"));
             let core_module = managed.join("UnityEngine.CoreModule.dll");
             if !core_module.is_file() {
                 bail!(

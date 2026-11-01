@@ -7,14 +7,10 @@ use clap::Subcommand;
 use crate::clean::{CleanArgs, Cleaner};
 use crate::util::{cargo_clippy, cargo_fmt, files_under, run, strip_visibility};
 
-const CSHARP_SRC: &str = "bindings/csharp/src";
-
 const CSHARP_UNUSED_EXPORTS: &[&str] = &[
     "autd3_core_sampling_config_freq_4k",
     "autd3_core_sampling_config_freq_40k",
 ];
-
-const OPTION_GETTER_MARKER: &str = "_option_get_";
 
 #[derive(Subcommand)]
 pub(crate) enum FfiCmd {
@@ -168,7 +164,7 @@ pub(crate) fn run_ffi(root: &Path, cmd: &FfiCmd) -> Result<()> {
                             symbols.extend(fixed.iter().cloned());
                             let end = matching(&text, bang + 1, b'(', b')');
                             let mut rest = &text[bang + 2..end];
-                            while let Some(start) = rest.find(SYMBOL_PREFIX) {
+                            while let Some(start) = rest.find("autd3_") {
                                 let preceded_by_ident = start > 0
                                     && rest[..start].chars().next_back().is_some_and(is_ident_char);
                                 let symbol_end = start
@@ -186,7 +182,7 @@ pub(crate) fn run_ffi(root: &Path, cmd: &FfiCmd) -> Result<()> {
                 }
                 exported.insert(lib, symbols);
             }
-            let csharp_dir = root.join(CSHARP_SRC);
+            let csharp_dir = root.join("bindings/csharp/src");
             if !csharp_dir.is_dir() {
                 bail!("{} does not exist", csharp_dir.display());
             }
@@ -261,7 +257,7 @@ pub(crate) fn run_ffi(root: &Path, cmd: &FfiCmd) -> Result<()> {
                 let declarations = declared.get(lib).unwrap_or(&empty);
                 for symbol in symbols {
                     if declarations.contains(symbol)
-                        || symbol.contains(OPTION_GETTER_MARKER)
+                        || symbol.contains("_option_get_")
                         || CSHARP_UNUSED_EXPORTS.contains(&symbol.as_str())
                     {
                         continue;
@@ -362,5 +358,3 @@ fn collect_plain_exports(text: &str, symbols: &mut BTreeSet<String>) {
         }
     }
 }
-
-const SYMBOL_PREFIX: &str = "autd3_";

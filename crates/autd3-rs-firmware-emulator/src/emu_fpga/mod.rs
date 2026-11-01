@@ -28,10 +28,6 @@ const _: () = assert!(is_plausible_length(EMULATED_CPU_IMAGE.len() as u32));
 pub use silencer::SilencerEmulator;
 use swapchain::Swapchain;
 
-const EMISSION_SLOT_WORDS: usize = fw::EMISSION_SLOT_WORDS as usize;
-const EMISSION_RAM_WORDS: usize = fw::EMISSION_RAM_WORDS as usize;
-const MOD_RAM_WORDS: usize = (fw::MOD_BUFFER_SAMPLES / 2) as usize;
-
 const SELECT_CONTROLLER: usize = fw::BramSelect::Controller.as_u8() as usize;
 const SELECT_PHASE_CORR: usize = fw::BramSelect::PhaseCorr.as_u8() as usize;
 const SELECT_OUTPUT_MASK: usize = fw::BramSelect::OutputMask.as_u8() as usize;
@@ -64,7 +60,6 @@ const PATTERN_CONFIG_REGS: [u16; 6] = [
 const SILENCER_REGS: core::ops::RangeInclusive<usize> =
     fw::ADDR_SILENCER_FLAG as usize..=fw::ADDR_SILENCER_COMPLETION_STEPS_PHASE as usize;
 const SILENCER_STRICT_MODE: u16 = fw::SilencerFlags::STRICT_MODE.bits() as u16;
-const TRANSITION_MODE_EXT: u16 = fw::TransitionModeKind::Ext.as_u8() as u16;
 
 struct SwapchainRegs {
     req_rd_bank: u16,
@@ -209,10 +204,10 @@ impl FpgaEmulator {
             output_mask: Box::new([0u16; OUTPUT_MASK_WORDS]),
             pwe: Box::new([0u16; PWE_TABLE_SIZE]),
             mod_ram: (0..NUM_BANKS)
-                .map(|_| vec![0u16; MOD_RAM_WORDS].into_boxed_slice())
+                .map(|_| vec![0u16; (fw::MOD_BUFFER_SAMPLES / 2) as usize].into_boxed_slice())
                 .collect(),
             em_ram: (0..NUM_BANKS)
-                .map(|_| vec![0u16; EMISSION_RAM_WORDS].into_boxed_slice())
+                .map(|_| vec![0u16; fw::EMISSION_RAM_WORDS as usize].into_boxed_slice())
                 .collect(),
             sys_time_ns: 0,
             mod_swapchain: Swapchain::new(),
@@ -392,7 +387,7 @@ impl FpgaEmulator {
         let all = if finite {
             all_when_finite()
         } else {
-            config[reg(regs.transition_mode)] == TRANSITION_MODE_EXT
+            config[reg(regs.transition_mode)] == fw::TransitionModeKind::Ext.as_u8() as u16
         };
         BankRequest { req, finite, all }
     }
@@ -688,7 +683,7 @@ impl FpgaEmulator {
 
     #[must_use]
     pub fn emissions_at(&self, bank: usize, idx: usize) -> (Vec<Phase>, Vec<Intensity>) {
-        let base = idx * EMISSION_SLOT_WORDS;
+        let base = idx * fw::EMISSION_SLOT_WORDS as usize;
         (0..self.num_transducers)
             .map(|i| {
                 let word = self.em_ram[bank][base + i];

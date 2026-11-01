@@ -4,8 +4,6 @@ use anyhow::{Context, Result};
 use clap::Args;
 use walkdir::WalkDir;
 
-const WALK_SKIP: &[&str] = &[".git", "target", "node_modules", ".venv"];
-
 #[derive(Args, Clone, Copy)]
 pub(crate) struct CleanArgs {
     #[arg(
@@ -162,7 +160,8 @@ impl<'a> Cleaner<'a> {
             };
             let name = entry.file_name().to_str();
             let wanted = name.is_some_and(|name| names.contains(&name));
-            let skipped = name.is_none_or(|name| WALK_SKIP.contains(&name));
+            let skipped =
+                name.is_none_or(|name| [".git", "target", "node_modules", ".venv"].contains(&name));
             if entry.file_type().is_dir() && (wanted || skipped) {
                 walker.skip_current_dir();
             }

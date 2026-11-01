@@ -19,9 +19,7 @@ use zerocopy::{FromBytes, IntoBytes};
 use crate::Device;
 
 const LOOPBACK_ANY: SocketAddrV6 = SocketAddrV6::new(Ipv6Addr::LOCALHOST, 0, 0, 0);
-const POLL_INTERVAL: Duration = Duration::from_millis(10);
 const MAX_CATCH_UP_TICKS: u128 = 60_000;
-const NS_PER_SEC: u64 = 1_000_000_000;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Via {
@@ -234,7 +232,7 @@ impl Chain {
         } else if !self.units[index].grandmaster {
             Status::NotGrandmaster
         } else if let Ok((request, _)) = SetTimeBody::read_from_prefix(body)
-            && u32::try_from(request.sys_time.get() / NS_PER_SEC).is_ok()
+            && u32::try_from(request.sys_time.get() / 1_000_000_000).is_ok()
         {
             let target = i64::try_from(request.sys_time.get()).unwrap_or(i64::MAX);
             self.clock_offset_ns = Some(target.saturating_sub(self.host_now_ns()));
@@ -340,7 +338,7 @@ pub struct UdpEmulator {
 
 fn bind(addr: SocketAddrV6) -> io::Result<(Arc<UdpSocket>, SocketAddrV6)> {
     let socket = UdpSocket::bind(addr)?;
-    socket.set_read_timeout(Some(POLL_INTERVAL))?;
+    socket.set_read_timeout(Some(Duration::from_millis(10)))?;
     let SocketAddr::V6(addr) = socket.local_addr()? else {
         return Err(io::Error::from(io::ErrorKind::AddrNotAvailable));
     };

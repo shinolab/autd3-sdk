@@ -7,7 +7,6 @@ use crate::proto::{FrameHeader, PAYLOAD_BYTES, Reply};
 use crate::sync::{AtomicU16, Ordering};
 
 pub(crate) const FIFO_DEPTH: u16 = 8;
-const FIFO_MASK: u16 = FIFO_DEPTH - 1;
 const FIFO_CAPACITY: u16 = FIFO_DEPTH - 1;
 
 const _: () = assert!(FIFO_DEPTH.is_power_of_two());
@@ -29,7 +28,7 @@ impl<S> Fifo<S> {
     }
 
     fn slot(&self, index: u16) -> &S {
-        &self.slots[(index & FIFO_MASK) as usize]
+        &self.slots[(index & (FIFO_DEPTH - 1)) as usize]
     }
 
     pub(crate) fn push(&self, write: impl FnOnce(&S) -> bool) -> bool {

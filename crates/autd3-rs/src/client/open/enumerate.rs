@@ -14,12 +14,7 @@ use crate::client::device_clock::DeviceClock;
 use crate::client::{GRANDMASTER_UNIT_ID, unit_id_of};
 
 pub(super) const REQUEST_REPLY_WAIT: Duration = Duration::from_millis(200);
-const EXCHANGE_ATTEMPTS: usize = 3;
-const VERIFY_ASSIGNMENTS_ATTEMPTS: usize = 3;
 const RESET_SETTLE: Duration = Duration::from_millis(100);
-const DISCOVER_LINGER: Duration = Duration::from_millis(10);
-const DISCOVER_RETRY_INTERVAL: Duration = Duration::from_millis(100);
-const SYNC_POLL_INTERVAL: Duration = Duration::from_millis(50);
 const DEVICE_TIME_AT_OPEN: SysTime = SysTime::ZERO;
 
 fn deadline_passed(deadline: Option<Instant>) -> bool {
@@ -101,7 +96,7 @@ impl Enumerator<'_> {
         kind: Kind,
         body: &[u8],
     ) -> Result<Option<ControlResponse>, UdpError> {
-        for _ in 0..EXCHANGE_ATTEMPTS {
+        for _ in 0..3 {
             if let Some(response) = self.request_once(dst, kind, body)? {
                 return Ok(Some(response));
             }
@@ -128,8 +123,13 @@ impl Enumerator<'_> {
         .pop() else {
             return Ok(None);
         };
-        let others =
-            collect_responses(self.channel, Kind::Discover, msg_id, DISCOVER_LINGER, None)?;
+        let others = collect_responses(
+            self.channel,
+            Kind::Discover,
+            msg_id,
+            Duration::from_millis(10),
+            None,
+        )?;
         if !others.is_empty() {
             return Err(UdpError::DownstreamNotClosed {
                 replies: others.len() + 1,
@@ -193,7 +193,7 @@ impl Enumerator<'_> {
                         found: device_addrs.len(),
                     });
                 }
-                std::thread::sleep(DISCOVER_RETRY_INTERVAL);
+                std::thread::sleep(Duration::from_millis(100));
                 continue;
             };
             if device_addrs.len() >= num_devices {
@@ -241,7 +241,7 @@ impl Enumerator<'_> {
 
     fn verify_assignments(&mut self, device_addrs: &[SocketAddrV6]) -> Result<(), UdpError> {
         let mut answered = vec![false; device_addrs.len()];
-        for _ in 0..VERIFY_ASSIGNMENTS_ATTEMPTS {
+        for _ in 0..3 {
             self.verify_assignments_once(device_addrs, &mut answered)?;
             if answered.iter().all(|&answered| answered) {
                 return Ok(());
@@ -328,7 +328,7 @@ impl Enumerator<'_> {
                     timeout: self.open_timeout,
                 });
             }
-            std::thread::sleep(SYNC_POLL_INTERVAL);
+            std::thread::sleep(Duration::from_millis(50));
         }
     }
 }

@@ -31,7 +31,6 @@ mod tests {
     use crate::value::SysTime;
     use autd3_cpu_wire::fpga_params::GpioOutType;
 
-    const VALUE_MASK: u64 = 0x00FF_FFFF_FFFF_FFFF;
     use crate::test_utils::encode;
 
     #[test]
@@ -76,7 +75,8 @@ mod tests {
         .unwrap();
         assert_eq!(
             &out[8..16],
-            &((u64::from(GpioOutType::SysTimeEq.as_u8()) << 56) | (expected & VALUE_MASK))
+            &((u64::from(GpioOutType::SysTimeEq.as_u8()) << 56)
+                | (expected & 0x00FF_FFFF_FFFF_FFFF))
                 .to_le_bytes()
         );
     }

@@ -25,16 +25,6 @@ const WORKSPACES: &[&str] = &[
     "xtask",
 ];
 
-const EXCLUDED_DIRS: &[&str] = &["tests", "benches", "examples"];
-
-const GENERATED_MARKERS: &[&str] = &["AUTO-GENERATED", "DO NOT EDIT", "@generated"];
-
-const GENERATED_MARKER_LINES: usize = 5;
-
-const DOC_EXTENSIONS: &[&str] = &["md", "mdx", "txt"];
-
-const SHOWN_HITS: usize = 3;
-
 struct Definition {
     path: String,
     line: usize,
@@ -189,7 +179,7 @@ pub(crate) fn run_deadcode(root: &Path, reuse: bool, verbose: bool) -> Result<()
             .and_then(|extension| extension.to_str())
             .unwrap_or_default();
         let rust = is_rust(path);
-        let doc_file = DOC_EXTENSIONS.contains(&extension) || path.starts_with("doc/");
+        let doc_file = ["md", "mdx", "txt"].contains(&extension) || path.starts_with("doc/");
         for (line, content) in text.lines().enumerate() {
             let comment = content.trim_start().starts_with("//");
             let bytes = content.as_bytes();
@@ -395,12 +385,13 @@ impl Scan {
         if path.ends_with("/build.rs")
             || path
                 .split('/')
-                .any(|component| EXCLUDED_DIRS.contains(&component))
+                .any(|component| ["tests", "benches", "examples"].contains(&component))
             || source.is_some_and(|source| {
-                source
-                    .lines()
-                    .take(GENERATED_MARKER_LINES)
-                    .any(|line| GENERATED_MARKERS.iter().any(|marker| line.contains(marker)))
+                source.lines().take(5).any(|line| {
+                    ["AUTO-GENERATED", "DO NOT EDIT", "@generated"]
+                        .iter()
+                        .any(|marker| line.contains(marker))
+                })
             })
         {
             return;
@@ -484,7 +475,7 @@ fn print_candidate(candidate: &Definition) {
 }
 
 fn print_hits(hits: &[(String, usize)], verbose: bool) {
-    let shown = if verbose { hits.len() } else { SHOWN_HITS };
+    let shown = if verbose { hits.len() } else { 3 };
     for (path, line) in hits.iter().take(shown) {
         println!("    {path}:{}", line + 1);
     }
