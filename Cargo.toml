@@ -13,7 +13,6 @@ members = [
     "tools/firmware-writer",
     "tools/firmware-test",
     "tools/firmware-ota",
-    "tools/fpga-memory",
     "tools/udp-emulator",
 ]
 exclude = [
@@ -86,7 +85,10 @@ tracing-subscriber = { version = "0.3.23", default-features = false, features = 
 criterion = { version = "0.8.2", default-features = false }
 const_fn = { version = "0.4.12", default-features = false }
 loom = { version = "0.7.2", default-features = false }
-ureq = { version = "3.5.0", default-features = false, features = ["rustls", "gzip"] }
+ureq = { version = "3.5.0", default-features = false, features = [
+    "rustls",
+    "gzip",
+] }
 zip = { version = "9.1.1", default-features = false, features = [
     "deflate-flate2-zlib-rs",
 ] }
