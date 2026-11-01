@@ -99,7 +99,7 @@ async fn main() -> Result<()> {
         },
         args.web_dir,
     );
-    let listener = tokio::net::TcpListener::bind(("0.0.0.0", args.http_port)).await?;
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", args.http_port)).await?;
     tracing::info!(
         "simulator http listening on http://localhost:{}",
         args.http_port
