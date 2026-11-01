@@ -12,7 +12,6 @@ use autd3_rs_pattern_holo_wgpu::{GpuMatrix, WgpuBackend};
 const N: usize = 249 * 64;
 const REPEAT: usize = 200;
 const QUANTIZE_ITERS: usize = 20;
-const TRIALS: usize = 5;
 
 fn propagation(gpu: &WgpuBackend, foci: usize) -> GpuMatrix {
     use autd3_rs_core::common::units::{m, s};
@@ -51,7 +50,7 @@ fn measure(gpu: &WgpuBackend, label: &str, dispatches: usize, mut record: impl F
     }
     let mut rec = Duration::MAX;
     let mut exec = Duration::MAX;
-    for _ in 0..TRIALS {
+    for _ in 0..5 {
         let t = Instant::now();
         for _ in 0..REPEAT {
             record();

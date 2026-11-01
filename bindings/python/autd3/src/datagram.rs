@@ -116,17 +116,13 @@ impl Pattern {
         bank: ops::PatternBank,
         transition_mode: ops::TransitionMode,
     ) -> PyResult<Self> {
-        fn extract_pattern_intensity(obj: &Bound<'_, PyAny>) -> PyResult<OwnedPatternIntensity> {
-            if let Some(intensity) = extract_uniform_intensity(obj) {
-                return Ok(OwnedPatternIntensity::Uniform(intensity));
-            }
-            Ok(OwnedPatternIntensity::PerDevice(extract_intensities(obj)?))
-        }
-
         Ok(Self(Arc::new(PatternData {
             bank: bank.0,
             phases: extract_phases(phases)?,
-            intensities: extract_pattern_intensity(intensities)?,
+            intensities: match extract_uniform_intensity(intensities) {
+                Some(intensity) => OwnedPatternIntensity::Uniform(intensity),
+                None => OwnedPatternIntensity::PerDevice(extract_intensities(intensities)?),
+            },
             transition_mode: transition_mode.0,
         })))
     }

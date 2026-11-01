@@ -55,7 +55,6 @@ mod tests {
     use crate::test_utils::builders::{config_pattern, config_pattern_rep};
     use crate::test_utils::mock::Harness;
 
-    const BUFFER_SIZE_MIN: u32 = autd3_cpu_wire::layout::BUFFER_SIZE_MIN as u32;
     const MAX_FOCI_TOTAL: u32 = autd3_cpu_wire::layout::MAX_FOCI_TOTAL as u32;
 
     #[test]
@@ -83,7 +82,7 @@ mod tests {
             0,
             EmissionType::Raw.as_u8(),
             10,
-            BUFFER_SIZE_MIN,
+            autd3_cpu_wire::layout::BUFFER_SIZE_MIN as u32,
             0,
             0,
             4,

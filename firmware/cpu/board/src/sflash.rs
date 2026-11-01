@@ -70,21 +70,13 @@ fn wait_idle() -> Result<(), FlashError> {
 }
 
 fn with_spi_mode<T>(f: impl FnOnce() -> Result<T, FlashError>) -> Result<T, FlashError> {
-    fn release_read_burst() -> Result<(), FlashError> {
-        let drcr = read32(SPIBSC_DRCR);
-        if drcr & DRCR_BURST_HOLDS_SSL != DRCR_BURST_HOLDS_SSL {
-            return Ok(());
-        }
+    let drcr = read32(SPIBSC_DRCR);
+    if drcr & DRCR_BURST_HOLDS_SSL == DRCR_BURST_HOLDS_SSL {
         write32(SPIBSC_DRCR, drcr | DRCR_SSLN);
-        for _ in 0..TRANSFER_END_MAX_POLLS {
-            if read32(SPIBSC_CMNSR) & CMNSR_SSLF == 0 {
-                return Ok(());
-            }
+        if !(0..TRANSFER_END_MAX_POLLS).any(|_| read32(SPIBSC_CMNSR) & CMNSR_SSLF == 0) {
+            return Err(FlashError);
         }
-        Err(FlashError)
     }
-
-    release_read_burst()?;
     wait_transfer_end()?;
     let read_mode = read32(SPIBSC_CMNCR) & !CMNCR_MD_SPI;
     write32(SPIBSC_CMNCR, read_mode | CMNCR_MD_SPI);
@@ -120,31 +112,26 @@ pub(crate) fn read(addr: u32, buf: &mut [u8]) -> Result<(), FlashError> {
 
 #[allow(clippy::cast_possible_truncation)]
 pub(crate) fn write(addr: u32, data: &[u8]) -> Result<(), FlashError> {
-    fn program_page(addr: u32, data: &[u8]) -> Result<(), FlashError> {
-        let Some((last, head)) = data.split_last() else {
-            return Ok(());
-        };
-        wait_idle()?;
-        command(CMD_WRITE_ENABLE)?;
-        write32(SPIBSC_SMCMR, CMD_PAGE_PROGRAM << SMCMR_CMD_SHIFT);
-        write32(SPIBSC_SMADR, addr);
-        transfer(SMENR_CDE | SMENR_ADE_24_BITS, SMCR_SSLKP)?;
-        for &byte in head {
-            write8(SPIBSC_SMWDR0, byte);
-            transfer(SMENR_SPIDE_8_BITS, SMCR_SPIWE | SMCR_SSLKP)?;
-        }
-        write8(SPIBSC_SMWDR0, *last);
-        transfer(SMENR_SPIDE_8_BITS, SMCR_SPIWE)?;
-        wait_idle()
-    }
-
     with_spi_mode(|| {
         let mut at = addr;
         let mut rest = data;
         while !rest.is_empty() {
             let room = (FLASH_PAGE_BYTES - at % FLASH_PAGE_BYTES) as usize;
             let (page, tail) = rest.split_at(room.min(rest.len()));
-            program_page(at, page)?;
+            if let Some((last, head)) = page.split_last() {
+                wait_idle()?;
+                command(CMD_WRITE_ENABLE)?;
+                write32(SPIBSC_SMCMR, CMD_PAGE_PROGRAM << SMCMR_CMD_SHIFT);
+                write32(SPIBSC_SMADR, at);
+                transfer(SMENR_CDE | SMENR_ADE_24_BITS, SMCR_SSLKP)?;
+                for &byte in head {
+                    write8(SPIBSC_SMWDR0, byte);
+                    transfer(SMENR_SPIDE_8_BITS, SMCR_SPIWE | SMCR_SSLKP)?;
+                }
+                write8(SPIBSC_SMWDR0, *last);
+                transfer(SMENR_SPIDE_8_BITS, SMCR_SPIWE)?;
+                wait_idle()?;
+            }
             at += page.len() as u32;
             rest = tail;
         }
@@ -153,18 +140,14 @@ pub(crate) fn write(addr: u32, data: &[u8]) -> Result<(), FlashError> {
 }
 
 pub(crate) fn erase(addr: u32, len: u32) -> Result<(), FlashError> {
-    fn erase_sector(addr: u32) -> Result<(), FlashError> {
-        wait_idle()?;
-        command(CMD_WRITE_ENABLE)?;
-        write32(SPIBSC_SMCMR, CMD_SECTOR_ERASE << SMCMR_CMD_SHIFT);
-        write32(SPIBSC_SMADR, addr);
-        transfer(SMENR_CDE | SMENR_ADE_24_BITS, 0)?;
-        wait_idle()
-    }
-
     with_spi_mode(|| {
         for sector in (addr..addr + len).step_by(FLASH_SECTOR_BYTES as usize) {
-            erase_sector(sector)?;
+            wait_idle()?;
+            command(CMD_WRITE_ENABLE)?;
+            write32(SPIBSC_SMCMR, CMD_SECTOR_ERASE << SMCMR_CMD_SHIFT);
+            write32(SPIBSC_SMADR, sector);
+            transfer(SMENR_CDE | SMENR_ADE_24_BITS, 0)?;
+            wait_idle()?;
         }
         Ok(())
     })

@@ -11,7 +11,6 @@ use autd3_rs_firmware_emulator::udp::UdpEmulator;
 use zerocopy::little_endian::U64;
 use zerocopy::{FromBytes, IntoBytes};
 
-const QUIET: Duration = Duration::from_millis(50);
 const PATIENCE: Duration = Duration::from_secs(5);
 const SYNCED: Flags = Flags::PTP_LOCKED.union(Flags::SYNC_READY);
 
@@ -77,7 +76,7 @@ impl Host {
     }
 
     fn collect(&self) -> Vec<Answer> {
-        std::iter::from_fn(|| self.receive(QUIET)).collect()
+        std::iter::from_fn(|| self.receive(Duration::from_millis(50))).collect()
     }
 
     fn ask(&mut self, dst: SocketAddrV6, kind: Kind, body: &[u8]) -> Vec<Answer> {

@@ -10,7 +10,6 @@ use autd3_rs_pattern::{
 };
 
 const HALF_SPAN: f32 = 10.0;
-const RESOLUTION: f32 = 0.5;
 const GRID: usize = 41;
 const CENTER: usize = GRID / 2;
 
@@ -41,7 +40,7 @@ fn rms_grid(record: &Record, target: Point3<f32>) -> Vec<f32> {
         x: (target.x - HALF_SPAN)..=(target.x + HALF_SPAN),
         y: (target.y - HALF_SPAN)..=(target.y + HALF_SPAN),
         z: target.z..=target.z,
-        resolution: RESOLUTION,
+        resolution: 0.5,
         order: AxisOrder::XYZ,
     };
     let mut rms = record

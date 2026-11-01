@@ -4,7 +4,6 @@ use crate::error::{Error, PayloadError};
 use crate::protocol::EXEC_AT_UNIT_NS;
 use crate::value::SysTime;
 
-const EXEC_LEAD_LIMIT: Duration = Duration::from_nanos(EXEC_AT_UNIT_NS << 31);
 const EXEC_BEHIND_LIMIT: Duration = Duration::from_nanos(EXEC_AT_UNIT_NS << 30);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -19,7 +18,7 @@ pub(crate) fn schedule(
     lost_timeout: Duration,
     now: Option<SysTime>,
 ) -> Result<u32, Error> {
-    let limit = lost_timeout.min(EXEC_LEAD_LIMIT);
+    let limit = lost_timeout.min(Duration::from_nanos(EXEC_AT_UNIT_NS << 31));
     match exec {
         ExecAt::Immediate => Ok(0),
         ExecAt::Lead(lead) => {

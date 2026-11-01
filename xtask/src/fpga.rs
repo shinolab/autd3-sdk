@@ -158,9 +158,6 @@ pub(crate) struct FpgaArtifacts {
     pub update_image: PathBuf,
 }
 
-pub(crate) const UPDATE_IMAGE_NAME: &str = "autd3-fpga-update.img";
-const BARRIER_IMAGE_NAME: &str = "autd3-fpga-barrier.bin";
-
 #[allow(clippy::too_many_lines)]
 pub(crate) fn fpga_build(root: &Path, force: bool) -> Result<FpgaArtifacts> {
     let fpga_dir = root.join("firmware/fpga");
@@ -170,7 +167,7 @@ pub(crate) fn fpga_build(root: &Path, force: bool) -> Result<FpgaArtifacts> {
         fpga_project(&fpga_dir)?;
     }
 
-    let barrier = fpga_dir.join(BARRIER_IMAGE_NAME);
+    let barrier = fpga_dir.join("autd3-fpga-barrier.bin");
     std::fs::write(&barrier, fpga_barrier_image())
         .with_context(|| format!("writing {}", barrier.display()))?;
 
@@ -195,7 +192,7 @@ pub(crate) fn fpga_build(root: &Path, force: bool) -> Result<FpgaArtifacts> {
     if !mcs.is_file() {
         bail!("Vivado finished but {} was not created", mcs.display());
     }
-    let update_image = fpga_dir.join(UPDATE_IMAGE_NAME);
+    let update_image = fpga_dir.join("autd3-fpga-update.img");
     let text =
         std::fs::read_to_string(&mcs).with_context(|| format!("reading {}", mcs.display()))?;
     let mut records: Vec<(u32, Vec<u8>)> = Vec::new();
@@ -326,13 +323,6 @@ fn find_vivado_windows() -> Option<String> {
     use winreg::RegKey;
     use winreg::enums::HKEY_LOCAL_MACHINE;
 
-    const NEEDLES: [&str; 4] = [
-        "Vivado",
-        "Vitis",
-        "Xilinx Design Tools FPGAs",
-        "AMDDesignTools",
-    ];
-
     let uninstall = RegKey::predef(HKEY_LOCAL_MACHINE)
         .open_subkey(r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall")
         .ok()?;
@@ -343,7 +333,15 @@ fn find_vivado_windows() -> Option<String> {
             continue;
         };
         let display_name: String = subkey.get_value("DisplayName").unwrap_or_default();
-        if NEEDLES.iter().any(|n| display_name.contains(n)) {
+        if [
+            "Vivado",
+            "Vitis",
+            "Xilinx Design Tools FPGAs",
+            "AMDDesignTools",
+        ]
+        .iter()
+        .any(|n| display_name.contains(n))
+        {
             if let Ok(loc) = subkey.get_value::<String, _>("InstallLocation") {
                 install_location = Some(loc);
             }
@@ -396,10 +394,6 @@ fn find_vivado_2025(install: &Path) -> Option<PathBuf> {
 }
 
 pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {
-    const FILE_EXTS: [&str; 12] = [
-        "jou", "log", "zip", "prm", "str", "pb", "mcs", "xpr", "bit", "img", "stamp", "bin",
-    ];
-
     let fpga_dir = cleaner.root().join("firmware/fpga");
     let entries =
         std::fs::read_dir(&fpga_dir).with_context(|| format!("reading {}", fpga_dir.display()))?;
@@ -412,9 +406,13 @@ pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {
             if path.is_dir() {
                 name == ".Xil" || name.starts_with("autd3-fpga.")
             } else {
-                path.extension()
-                    .and_then(|e| e.to_str())
-                    .is_some_and(|e| FILE_EXTS.contains(&e))
+                path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+                    [
+                        "jou", "log", "zip", "prm", "str", "pb", "mcs", "xpr", "bit", "img",
+                        "stamp", "bin",
+                    ]
+                    .contains(&e)
+                })
             }
         })
         .map(|entry| entry.path())

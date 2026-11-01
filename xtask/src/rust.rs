@@ -121,7 +121,7 @@ pub(crate) fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
             let filter: &[&str] = if *all {
                 &[]
             } else {
-                &["--ignore-filename-regex", COVERAGE_IGNORE]
+                &["--ignore-filename-regex", "/tools/"]
             };
             coverage(root, &test_args, filter, *open)
         }
@@ -205,8 +205,6 @@ pub(crate) fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
 pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {
     cleaner.paths(&["target"])
 }
-
-const COVERAGE_IGNORE: &str = "/tools/";
 
 pub(crate) fn coverage(dir: &Path, test_args: &[&str], filter: &[&str], open: bool) -> Result<()> {
     if !on_path("cargo-llvm-cov") {

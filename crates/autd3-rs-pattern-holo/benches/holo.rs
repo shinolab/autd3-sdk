@@ -10,9 +10,6 @@ use autd3_rs_pattern_holo::{
     gs, gspat, naive,
 };
 
-const DEVICE_COUNTS: &[usize] = &[1, 9, 64];
-const FOCI_COUNTS: &[usize] = &[1, 4, 16];
-
 fn make_geometry(devices: usize) -> Geometry {
     Geometry::new((0..devices).map(|i| {
         Autd3::new(
@@ -38,13 +35,13 @@ fn wavelength() -> Length {
 fn bench(c: &mut Criterion) {
     let wl = wavelength();
     let mut group = c.benchmark_group("holo");
-    for &d in DEVICE_COUNTS {
+    for d in [1, 9, 64] {
         let geometry = make_geometry(d);
         let mut phases = geometry.phase_buffer();
         let mut intensities = geometry.intensity_buffer();
         let max_intensities = geometry.intensity_buffer();
         let order: Vec<usize> = (0..geometry.num_transducers()).collect();
-        for &n in FOCI_COUNTS {
+        for n in [1, 4, 16] {
             let foci = make_foci(&geometry, n);
             let id = format!("{d}dev-{n}foci");
 

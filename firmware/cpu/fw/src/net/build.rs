@@ -12,11 +12,9 @@ use super::{
 
 pub const UDP_PAYLOAD_OFFSET: usize = ETH_HEADER + IPV6_HEADER + UDP_HEADER;
 
-const IP_OFFSET: usize = ETH_HEADER;
 const UPPER_OFFSET: usize = ETH_HEADER + IPV6_HEADER;
 const ICMPV6_HEADER: usize = 8;
 const NDP_OPTION_TARGET_LINK_LAYER: u8 = 2;
-const NDP_OPTION_UNITS: u8 = 1;
 const NA_LEN: usize = ICMPV6_HEADER + size_of::<NaBody>();
 
 #[derive(IntoBytes, KnownLayout, Immutable, Unaligned)]
@@ -55,7 +53,7 @@ fn write_headers(buf: &mut [u8], h: &Headers, upper_len: usize) -> Ipv6Header {
         destination: h.dst_ip,
     };
     buf[..ETH_HEADER].copy_from_slice(&eth.to_bytes());
-    buf[IP_OFFSET..UPPER_OFFSET].copy_from_slice(&ip.to_bytes());
+    buf[ETH_HEADER..UPPER_OFFSET].copy_from_slice(&ip.to_bytes());
     ip
 }
 
@@ -125,7 +123,7 @@ pub fn neighbor_advertisement(
     let body = NaBody {
         target: own_ip,
         option_type: NDP_OPTION_TARGET_LINK_LAYER,
-        option_units: NDP_OPTION_UNITS,
+        option_units: 1,
         link_layer_address: own_mac,
     };
     buf[UPPER_OFFSET..][ICMPV6_HEADER..NA_LEN].copy_from_slice(body.as_bytes());

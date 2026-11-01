@@ -9,13 +9,11 @@ use core::{num::NonZeroU16, time::Duration};
 use crate::common::{Freq, ULTRASOUND_PERIOD, units::Hz};
 use crate::params::ULTRASOUND_FREQ_HZ;
 
-const IS_INTEGER_EPSILON: f64 = 1e-6;
-
 #[doc(hidden)]
 #[must_use]
 pub const fn is_integer(a: f64) -> bool {
     let dist = 0.5 - (a.fract() - 0.5).abs();
-    dist < IS_INTEGER_EPSILON + a.abs() * (f64::EPSILON * 16.0)
+    dist < 1e-6 + a.abs() * (f64::EPSILON * 16.0)
 }
 
 #[derive(Debug, PartialEq, Clone, thiserror::Error)]

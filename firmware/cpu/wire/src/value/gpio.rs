@@ -29,8 +29,6 @@ impl GpioIn {
     }
 }
 
-const GPIO_OUT_VALUE_MASK: u64 = 0x00FF_FFFF_FFFF_FFFF;
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[non_exhaustive]
 pub enum GpioOut {
@@ -70,7 +68,7 @@ impl GpioOut {
             GpioOut::PwmOut(tr) => (GpioOutType::PwmOut, tr as u64),
             GpioOut::Direct(on) => (GpioOutType::Direct, on as u64),
         };
-        ((tag.as_u8() as u64) << 56) | (value & GPIO_OUT_VALUE_MASK)
+        ((tag.as_u8() as u64) << 56) | (value & 0x00FF_FFFF_FFFF_FFFF)
     }
 }
 

@@ -6,9 +6,6 @@ use autd3_rs_simulator_protocol::{ClientMsg, MAX_DEVICES};
 use crate::context::Ctx;
 use crate::geometry::{self, DeviceDraft, to_poses};
 
-const GEOMETRY_FILE_NAME: &str = "geometry.json";
-const DOWNLOAD_URL_LIFETIME_MS: u32 = 1000;
-
 #[derive(Clone, Copy, PartialEq)]
 enum PoseField {
     Origin,
@@ -53,7 +50,7 @@ pub fn GeometryPanel() -> Element {
         anchor.set_download(name);
         anchor.click();
         wasm_bindgen_futures::spawn_local(async move {
-            gloo_timers::future::TimeoutFuture::new(DOWNLOAD_URL_LIFETIME_MS).await;
+            gloo_timers::future::TimeoutFuture::new(1000).await;
             let _ = web_sys::Url::revoke_object_url(&url);
         });
         Ok(())
@@ -68,7 +65,7 @@ pub fn GeometryPanel() -> Element {
 
     let on_save = move |_| {
         let result = geometry::to_file(&drafts.peek()).and_then(|content| {
-            download(GEOMETRY_FILE_NAME, &content)
+            download("geometry.json", &content)
                 .map_err(|e| format!("could not save the file: {e:?}"))
         });
         file_error.set(result.err());

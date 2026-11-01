@@ -4,8 +4,6 @@ use etherparse::{
 
 use super::{ETHERTYPE_PTP, Ipv6, Mac};
 
-const NS_TARGET: usize = 16;
-
 #[derive(PartialEq, Eq, Debug)]
 pub struct Udp<'a> {
     pub src_mac: Mac,
@@ -73,7 +71,7 @@ pub fn parse(frame: &[u8]) -> Option<Packet<'_>> {
                             src_mac,
                             src_ip,
                             dst_ip,
-                            target: icmp.payload().get(..NS_TARGET)?.try_into().ok()?,
+                            target: icmp.payload().get(..16)?.try_into().ok()?,
                             hop_limit: header.hop_limit(),
                         }),
                         _ => None,

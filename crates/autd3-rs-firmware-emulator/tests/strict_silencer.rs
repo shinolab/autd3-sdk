@@ -20,9 +20,7 @@ use zerocopy::little_endian::{U16, U32, U64};
 use common::{NUM_TRANSDUCERS, frame};
 
 const STRICT: SilencerFlags = SilencerFlags::STRICT_MODE;
-const FIXED_UPDATE_RATE: SilencerFlags = SilencerFlags::FIXED_UPDATE_RATE_MODE;
 const IMMEDIATE: TransitionModeKind = TransitionModeKind::Immediate;
-const SYNC_IDX: TransitionModeKind = TransitionModeKind::SyncIdx;
 const SYS_TIME: TransitionModeKind = TransitionModeKind::SysTime;
 const EXT: TransitionModeKind = TransitionModeKind::Ext;
 
@@ -211,7 +209,7 @@ fn strict_is_rejected_while_ext_keeps_alternating_under_a_finite_request() {
     );
     assert_eq!(host.config_modulation(B0, 100, 0), DeviceErrorCode::None);
     assert_eq!(
-        host.activate_modulation_bank(B0, SYNC_IDX, 0),
+        host.activate_modulation_bank(B0, TransitionModeKind::SyncIdx, 0),
         DeviceErrorCode::None
     );
 
@@ -274,7 +272,7 @@ fn fixed_update_rate_and_clear_release_the_guard() {
     );
 
     assert_eq!(
-        host.set_silencer(STRICT | FIXED_UPDATE_RATE, 8, 40),
+        host.set_silencer(STRICT | SilencerFlags::FIXED_UPDATE_RATE_MODE, 8, 40),
         DeviceErrorCode::None
     );
     assert_eq!(

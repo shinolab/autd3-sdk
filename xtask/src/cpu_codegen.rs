@@ -6,10 +6,7 @@ use anyhow::{Context, Result};
 use crate::util::run;
 
 pub(crate) const PARAMS_SVH_REL: &str = "firmware/fpga/rtl/sources_1/new/headers/params.svh";
-const FW_OUT_REL: &str = "firmware/cpu/fw/src/fpga_params.rs";
-const WIRE_OUT_REL: &str = "firmware/cpu/wire/src/fpga_params.rs";
 const IP_DIR_REL: &str = "firmware/fpga/rtl/sources_1/ip";
-const TR_COE_REL: &str = "firmware/fpga/coe/tr.coe";
 
 struct IpConst {
     name: &'static str,
@@ -42,9 +39,6 @@ const FW_INTERNAL_PREFIXES: &[&str] = &[
     "FLASH_BUF_",
     "SYNC_CYCLE_",
 ];
-
-const FUNCTION_BIT_PREFIX: &str = "FUNC_";
-const FUNCTION_BIT_SUFFIX: &str = "_BIT";
 
 enum TypedKind {
     Flags(&'static str),
@@ -116,8 +110,7 @@ const TYPED_ENUMS: &[Typed] = &[
 ];
 
 fn function_bit(name: &str) -> Option<&str> {
-    name.strip_prefix(FUNCTION_BIT_PREFIX)?
-        .strip_suffix(FUNCTION_BIT_SUFFIX)
+    name.strip_prefix("FUNC_")?.strip_suffix("_BIT")
 }
 
 fn is_fw_internal(name: &str) -> bool {
@@ -389,7 +382,7 @@ pub(crate) fn gen_param(root: &Path) -> Result<()> {
             value: value.to_string(),
         });
     }
-    let coe = root.join(TR_COE_REL);
+    let coe = root.join("firmware/fpga/coe/tr.coe");
     let coe_text = std::fs::read_to_string(&coe)
         .with_context(|| format!("failed to read {}", coe.display()))?;
     let vector = coe_text
@@ -585,7 +578,10 @@ pub(crate) fn gen_param(root: &Path) -> Result<()> {
             );
         }
     }
-    for (rel, src) in [(WIRE_OUT_REL, wire), (FW_OUT_REL, fw)] {
+    for (rel, src) in [
+        ("firmware/cpu/wire/src/fpga_params.rs", wire),
+        ("firmware/cpu/fw/src/fpga_params.rs", fw),
+    ] {
         let out = root.join(rel);
         std::fs::write(&out, src).with_context(|| format!("failed to write {}", out.display()))?;
         run(

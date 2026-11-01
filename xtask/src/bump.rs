@@ -40,39 +40,6 @@ pub(crate) struct BumpVersionCmd {
 }
 
 pub(crate) fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> {
-    fn resolve_component(root: &Path, name: Option<&str>) -> Result<&'static Component> {
-        if let Some(name) = name {
-            return find(name).ok().with_context(|| {
-                let known = COMPONENTS
-                    .iter()
-                    .map(|c| c.name)
-                    .chain([DOC_COMPONENT])
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                format!("unknown component `{name}` (known: {known})")
-            });
-        }
-        let stem = release_stem(root)?;
-        detect(&stem)
-            .map(|(c, _)| c)
-            .with_context(|| format!("branch `release/{stem}` matches no known release component"))
-    }
-
-    fn print_doc_followup(name: &str, core: &str) {
-        if !matches!(name, "software" | "console" | "firmware") {
-            return;
-        }
-        let purpose = if name == "software" && core.ends_with(".0") {
-            "freeze the outgoing doc version series"
-        } else {
-            "sync the live doc version snapshot"
-        };
-        println!();
-        println!("Then, to {purpose}");
-        println!("  cargo xtask bump-version doc");
-        println!();
-    }
-
     if cmd.component.as_deref() == Some(DOC_COMPONENT) {
         return {
             let version = cmd.version.as_deref();
@@ -113,7 +80,22 @@ pub(crate) fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> 
             Ok(())
         };
     }
-    let component = resolve_component(root, cmd.component.as_deref())?;
+    let component = if let Some(name) = cmd.component.as_deref() {
+        find(name).ok().with_context(|| {
+            let known = COMPONENTS
+                .iter()
+                .map(|c| c.name)
+                .chain([DOC_COMPONENT])
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("unknown component `{name}` (known: {known})")
+        })?
+    } else {
+        let stem = release_stem(root)?;
+        detect(&stem).map(|(c, _)| c).with_context(|| {
+            format!("branch `release/{stem}` matches no known release component")
+        })?
+    };
     let raw = match cmd.version.as_deref() {
         Some(v) => v.to_string(),
         None => version_from_branch(root, component)?,
@@ -233,7 +215,7 @@ pub(crate) fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> 
                 + start;
             let new = format!("{}{core}{}", &text[..start], &text[end..]);
             std::fs::write(&props, new).with_context(|| format!("writing {}", props.display()))?;
-            let path = root.join(CSHARP_ABI_PATH);
+            let path = root.join("bindings/csharp/src/AUTD3.Core/Native.cs");
             let parts = version_parts(&core)?;
             let text = std::fs::read_to_string(&path)
                 .with_context(|| format!("reading {}", props.display()))?;
@@ -448,7 +430,17 @@ pub(crate) fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> 
             _ => {}
         }
     };
-    print_doc_followup(component.name, &core);
+    if matches!(component.name, "software" | "console" | "firmware") {
+        let purpose = if component.name == "software" && core.ends_with(".0") {
+            "freeze the outgoing doc version series"
+        } else {
+            "sync the live doc version snapshot"
+        };
+        println!();
+        println!("Then, to {purpose}");
+        println!("  cargo xtask bump-version doc");
+        println!();
+    }
     println!("  git commit -m \"chore: release {tag}\"");
     Ok(())
 }
@@ -590,8 +582,6 @@ fn bump_cargo_toml(path: &Path, version: &str) -> Result<()> {
 fn bump_package_version(path: &Path, version: &str) -> Result<()> {
     edit_toml(path, |doc| set_package_version(doc, path, version))
 }
-
-const CSHARP_ABI_PATH: &str = "bindings/csharp/src/AUTD3.Core/Native.cs";
 
 pub(crate) fn firmware_series(root: &Path) -> Result<String> {
     let version = package_version(&root.join("firmware/cpu/fw/Cargo.toml"))?;

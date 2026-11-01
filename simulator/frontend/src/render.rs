@@ -13,12 +13,8 @@ use gizmo::{Gizmo, RING_SEGMENTS};
 const SLICE_MARGIN_MM: f32 = 40.0;
 const SLICE_HEIGHT_MM: f32 = 260.0;
 const SLICE_BOTTOM_MM: f32 = -10.0;
-const MARKER_SIZE_MM: f32 = 4.5;
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 const MSAA_SAMPLES: u32 = 4;
-const MAX_DIM: u32 = 4096;
-const MAX_DPR: f64 = 2.0;
-const MAX_PIXELS: f64 = 4.0e6;
 const FIELD_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 pub(crate) const FIELD_TEXELS_PER_MM: f32 = 2.0;
 pub(crate) const FIELD_MAX_DIM: u32 = 1024;
@@ -830,7 +826,7 @@ impl Renderer {
         self.apply_slice();
         self.create_field();
 
-        self.uniforms.marker_size = MARKER_SIZE_MM;
+        self.uniforms.marker_size = 4.5;
         self.uniforms.num_trans = self.num_trans;
 
         let extent = (max[0] - min[0]).max(max[1] - min[1]).max(SLICE_HEIGHT_MM);
@@ -856,14 +852,14 @@ fn clear_color(rgb: [f32; 3]) -> wgpu::Color {
 fn backing_size(canvas: &web_sys::HtmlCanvasElement) -> (u32, u32) {
     let dpr = web_sys::window().map_or(1.0, |w| w.device_pixel_ratio());
     let dpr = if dpr.is_finite() {
-        dpr.clamp(1.0, MAX_DPR)
+        dpr.clamp(1.0, 2.0)
     } else {
         1.0
     };
     let width = f64::from(canvas.client_width().max(1)) * dpr;
     let height = f64::from(canvas.client_height().max(1)) * dpr;
-    let scale = (MAX_PIXELS / (width * height)).sqrt().min(1.0);
-    let to_dim = |px: f64| -> u32 { ((px * scale).round() as u32).clamp(1, MAX_DIM) };
+    let scale = (4.0e6 / (width * height)).sqrt().min(1.0);
+    let to_dim = |px: f64| -> u32 { ((px * scale).round() as u32).clamp(1, 4096) };
     (to_dim(width), to_dim(height))
 }
 

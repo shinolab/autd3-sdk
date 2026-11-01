@@ -3,8 +3,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::process::ManagedProcess;
 
-const BIN: &str = "autd3-simulator";
-
 #[derive(Serialize, Deserialize)]
 #[serde(default)]
 pub(crate) struct SimulatorConfig {
@@ -100,7 +98,7 @@ impl SimulatorPanel {
 
     fn start(&mut self) {
         self.error = None;
-        match super::spawn_tool(BIN, &self.config.args()) {
+        match super::spawn_tool("autd3-simulator", &self.config.args()) {
             Ok(proc) => self.proc = Some(proc),
             Err(e) => self.error = Some(e),
         }
