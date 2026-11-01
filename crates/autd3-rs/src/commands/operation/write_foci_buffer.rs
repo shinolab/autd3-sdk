@@ -200,6 +200,10 @@ mod tests {
             Err(Error::InvalidPayload(PayloadError::Focus(_)))
         ));
         assert!(matches!(
+            write(0, &[ControlPoints::from(Point3::new(0.0, 0.0, f32::NAN))]),
+            Err(Error::InvalidPayload(PayloadError::Focus(_)))
+        ));
+        assert!(matches!(
             write(
                 MAX_FOCI_TOTAL - 1,
                 &[
