@@ -65,9 +65,6 @@ pub struct Bundle {
     pub fpga_update: Option<PathBuf>,
 }
 
-pub const RELEASES_API: &str =
-    "https://api.github.com/repos/shinolab/autd3-sdk/releases?per_page=100";
-pub const TAG_PREFIX: &str = "firmware-v";
 pub const MIN_CPU_FIRMWARE_VERSION: [u8; 3] = [0, 10, 0];
 
 pub fn parse_release(version: &str) -> Result<[u8; 3]> {
@@ -95,15 +92,13 @@ pub fn bundle_url(version: &str) -> String {
 }
 
 pub fn fetch([major, minor, patch]: [u8; 3], force_download: bool) -> Result<Bundle> {
-    fn download_and_install(version: &str, force: bool) -> Result<PathBuf> {
-        let temp = std::env::temp_dir();
-        let dest = temp.join(format!("autd3-firmware-bundle-v{version}"));
-        if dest.is_dir() && !force {
-            eprintln!("Using cached firmware at {}", dest.display());
-            return Ok(dest);
-        }
-
-        let url = bundle_url(version);
+    let version = format!("{major}.{minor}.{patch}");
+    let temp = std::env::temp_dir();
+    let dest = temp.join(format!("autd3-firmware-bundle-v{version}"));
+    if dest.is_dir() && !force_download {
+        eprintln!("Using cached firmware at {}", dest.display());
+    } else {
+        let url = bundle_url(&version);
         eprintln!("Downloading {url}");
         let resp = ureq::get(&url)
             .config()
@@ -125,11 +120,8 @@ pub fn fetch([major, minor, patch]: [u8; 3], force_download: bool) -> Result<Bun
             std::process::id()
         ));
         install(bytes, &staging, &dest)?;
-        Ok(dest)
     }
-
-    let dir = download_and_install(&format!("{major}.{minor}.{patch}"), force_download)?;
-    find(&dir)
+    find(&dest)
 }
 
 fn install(bytes: Vec<u8>, staging: &Path, dest: &Path) -> Result<()> {

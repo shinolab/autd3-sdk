@@ -86,8 +86,25 @@ async fn emit(ctx: &Ctx<'_>) -> Result<()> {
 
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
-    #[allow(clippy::too_many_lines)]
-    async fn by_holdover(ctx: &Ctx<'_>) -> Result<()> {
+    async fn all_ready_within(ctx: &Ctx<'_>, window: Duration) -> (bool, Duration) {
+        let started = Instant::now();
+        loop {
+            if states(ctx).iter().all(|d| *d == DeviceState::Ready) {
+                return (true, started.elapsed());
+            }
+            if started.elapsed() >= window {
+                return (false, started.elapsed());
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    }
+
+    if ctx.client.num_devices() < 2 {
+        println!("  [SKIP] needs at least 2 devices: only a slave can lose the PTP lock");
+        return Ok(());
+    }
+    emit(ctx).await?;
+    let outcome = async {
         println!("-- lock dropped by a holdover shorter than the sync interval");
         let seen = observe(ctx).await?;
         println!(
@@ -211,22 +228,6 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
         );
         wait_enter("Every device emits again").await;
         ctx.send(Synchronize).await?;
-        Ok(())
-    }
-
-    async fn by_cable(ctx: &Ctx<'_>) -> Result<()> {
-        async fn all_ready_within(ctx: &Ctx<'_>, window: Duration) -> (bool, Duration) {
-            let started = Instant::now();
-            loop {
-                if states(ctx).iter().all(|d| *d == DeviceState::Ready) {
-                    return (true, started.elapsed());
-                }
-                if started.elapsed() >= window {
-                    return (false, started.elapsed());
-                }
-                tokio::time::sleep(Duration::from_millis(50)).await;
-            }
-        }
 
         println!("-- lock dropped by unplugging a cable");
         let lost_timeout = ctx.client.lost_timeout();
@@ -305,16 +306,6 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
         .await;
         ctx.client.set_lost_timeout(lost_timeout);
         outcome
-    }
-
-    if ctx.client.num_devices() < 2 {
-        println!("  [SKIP] needs at least 2 devices: only a slave can lose the PTP lock");
-        return Ok(());
-    }
-    emit(ctx).await?;
-    let outcome = async {
-        by_holdover(ctx).await?;
-        by_cable(ctx).await
     }
     .await;
     ctx.send(Clear).await?;
