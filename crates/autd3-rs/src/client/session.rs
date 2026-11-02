@@ -137,11 +137,12 @@ impl SessionState {
         num_devices: usize,
         timeouts: Timeouts,
         device_clock: DeviceClock,
+        initial_liveness: DeviceLiveness,
         now: Instant,
     ) -> Self {
         Self {
             inflight: InflightQueue::new(now),
-            liveness: vec![DeviceLiveness::new(); num_devices],
+            liveness: vec![initial_liveness; num_devices],
             device_clock,
             closed: None,
             last_msg_id: 0,
@@ -374,16 +375,27 @@ impl Session {
             ack: option.ack_timeout,
             lost: option.lost_timeout,
         };
-        Ok(Self::new(channel, timeouts, device_clock))
+        let initial_liveness = if option.sync_on_open {
+            DeviceLiveness::new()
+        } else {
+            DeviceLiveness::unsynchronized()
+        };
+        Ok(Self::new(channel, timeouts, device_clock, initial_liveness))
     }
 
-    fn new(channel: Channel, timeouts: Timeouts, device_clock: DeviceClock) -> Self {
+    fn new(
+        channel: Channel,
+        timeouts: Timeouts,
+        device_clock: DeviceClock,
+        initial_liveness: DeviceLiveness,
+    ) -> Self {
         let num_devices = channel.num_devices();
         Self {
             state: Mutex::new(SessionState::new(
                 num_devices,
                 timeouts,
                 device_clock,
+                initial_liveness,
                 Instant::now(),
             )),
             stop_requested: AtomicBool::new(false),
@@ -709,7 +721,13 @@ pub(super) mod tests {
         .union(Flags::SYNC_READY);
 
     fn session_state(num_devices: usize, now: Instant) -> SessionState {
-        SessionState::new(num_devices, TIMEOUTS, DeviceClock::default(), now)
+        SessionState::new(
+            num_devices,
+            TIMEOUTS,
+            DeviceClock::default(),
+            DeviceLiveness::new(),
+            now,
+        )
     }
 
     fn enqueue(state: &mut SessionState, now: Instant) -> (u16, ResponseFuture) {
@@ -1076,7 +1094,12 @@ pub(super) mod tests {
         let mut channel = Channel::open(device_addr, None, None).await.unwrap();
         channel.attach_devices(vec![device_addr]);
         (
-            Session::new(channel, timeouts, DeviceClock::default()),
+            Session::new(
+                channel,
+                timeouts,
+                DeviceClock::default(),
+                DeviceLiveness::new(),
+            ),
             device,
         )
     }
