@@ -8,8 +8,11 @@ use autd3_rs::{Client, Error, FirmwareVersion};
 
 use common::{emulator, geometry, open_with, option, udp_error};
 
-fn open_error(num_devices: usize, option: &TransportOption) -> Error {
-    Client::open(&geometry(num_devices), option).err().unwrap()
+async fn open_error(num_devices: usize, option: &TransportOption) -> Error {
+    Client::open(&geometry(num_devices), option)
+        .await
+        .err()
+        .unwrap()
 }
 
 #[tokio::test]
@@ -17,7 +20,7 @@ fn open_error(num_devices: usize, option: &TransportOption) -> Error {
 async fn an_empty_geometry_is_rejected() {
     let emulator = emulator(1);
 
-    let error = open_error(0, &option(&emulator));
+    let error = open_error(0, &option(&emulator)).await;
 
     assert!(matches!(
         udp_error(&error),
@@ -34,7 +37,7 @@ async fn a_geometry_with_more_devices_than_attached_times_out_the_enumeration() 
         ..option(&emulator)
     };
 
-    let error = open_error(2, &option);
+    let error = open_error(2, &option).await;
 
     assert!(matches!(
         udp_error(&error),
@@ -50,7 +53,7 @@ async fn a_geometry_with_more_devices_than_attached_times_out_the_enumeration() 
 async fn a_geometry_with_fewer_devices_than_attached_is_a_count_mismatch() {
     let emulator = emulator(2);
 
-    let error = open_error(1, &option(&emulator));
+    let error = open_error(1, &option(&emulator)).await;
 
     assert!(matches!(
         udp_error(&error),
@@ -65,13 +68,13 @@ async fn a_geometry_with_fewer_devices_than_attached_is_a_count_mismatch() {
 #[ignore = "depends on real time"]
 async fn the_bundled_firmware_is_in_the_supported_series() {
     let emulator = emulator(2);
-    let client = open_with(&emulator, &option(&emulator));
+    let client = open_with(&emulator, &option(&emulator)).await;
 
     let versions = client.read_firmware_version().await.unwrap();
 
     assert_eq!(versions.len(), 2);
     assert!(versions.iter().all(FirmwareVersion::is_supported));
-    client.close().unwrap();
+    client.close().await.unwrap();
 }
 
 #[tokio::test]
@@ -79,9 +82,9 @@ async fn the_bundled_firmware_is_in_the_supported_series() {
 async fn the_devices_can_be_opened_again_after_a_close() {
     let emulator = emulator(3);
     for _ in 0..2 {
-        let client = open_with(&emulator, &option(&emulator));
+        let client = open_with(&emulator, &option(&emulator)).await;
         client.send(Nop).await.unwrap();
         assert_eq!(client.read_firmware_version().await.unwrap().len(), 3);
-        client.close().unwrap();
+        client.close().await.unwrap();
     }
 }

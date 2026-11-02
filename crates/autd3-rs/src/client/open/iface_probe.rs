@@ -5,17 +5,20 @@ use crate::udp::{Channel, ResolvedEndpoint, UdpError, link_local_interfaces};
 
 use super::enumerate::{REQUEST_REPLY_WAIT, collect_responses};
 
-pub(super) fn resolve(iface: &Interface) -> Result<ResolvedEndpoint, UdpError> {
-    fn devices_respond_at(endpoint: ResolvedEndpoint) -> Result<bool, UdpError> {
-        let channel = Channel::open(endpoint.all_devices_dst, endpoint.scope_id, None)?;
-        channel.send(
-            endpoint.all_devices_dst,
-            Kind::ReadUnitInfo,
-            0,
-            [&[], &[]],
-            None,
-        )?;
-        match collect_responses(&channel, Kind::ReadUnitInfo, 0, REQUEST_REPLY_WAIT, Some(1)) {
+pub(super) async fn resolve(iface: &Interface) -> Result<ResolvedEndpoint, UdpError> {
+    async fn devices_respond_at(endpoint: ResolvedEndpoint) -> Result<bool, UdpError> {
+        let channel = Channel::open(endpoint.all_devices_dst, endpoint.scope_id, None).await?;
+        channel
+            .send(
+                endpoint.all_devices_dst,
+                Kind::ReadUnitInfo,
+                0,
+                [&[], &[]],
+                None,
+            )
+            .await?;
+        match collect_responses(&channel, Kind::ReadUnitInfo, 0, REQUEST_REPLY_WAIT, Some(1)).await
+        {
             Ok(responses) => Ok(!responses.is_empty()),
             Err(UdpError::UnsupportedVersion { .. }) => Ok(true),
             Err(e) => Err(e),
@@ -30,17 +33,20 @@ pub(super) fn resolve(iface: &Interface) -> Result<ResolvedEndpoint, UdpError> {
             .map(|c| ResolvedEndpoint::all_nodes_on(c.scope_id))
             .ok_or_else(|| UdpError::InterfaceNotFound(name.clone())),
         Interface::Auto => {
-            let found = link_local_interfaces()?
-                .into_iter()
-                .find(|c| {
-                    devices_respond_at(ResolvedEndpoint::all_nodes_on(c.scope_id)).unwrap_or_else(|e| {
-                        tracing::debug!(interface = %c.name, "asking an interface for AUTD3 devices failed: {e}");
-                        false
-                    })
-                })
-                .ok_or(UdpError::NoInterfaceFound)?;
-            tracing::info!(interface = %found.name, "found AUTD3 devices");
-            Ok(ResolvedEndpoint::all_nodes_on(found.scope_id))
+            for candidate in link_local_interfaces()? {
+                let endpoint = ResolvedEndpoint::all_nodes_on(candidate.scope_id);
+                match devices_respond_at(endpoint).await {
+                    Ok(true) => {
+                        tracing::info!(interface = %candidate.name, "found AUTD3 devices");
+                        return Ok(endpoint);
+                    }
+                    Ok(false) => {}
+                    Err(e) => {
+                        tracing::debug!(interface = %candidate.name, "asking an interface for AUTD3 devices failed: {e}");
+                    }
+                }
+            }
+            Err(UdpError::NoInterfaceFound)
         }
         _ => unreachable!(),
     }
@@ -54,11 +60,11 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn a_scoped_address_sends_through_its_interface() {
+    #[tokio::test]
+    async fn a_scoped_address_sends_through_its_interface() {
         let scoped = SocketAddrV6::new(Ipv6Addr::from(ALL_NODES), PORT, 0, 7);
         assert_eq!(
-            resolve(&Interface::Addr(scoped)).unwrap(),
+            resolve(&Interface::Addr(scoped)).await.unwrap(),
             ResolvedEndpoint {
                 all_devices_dst: scoped,
                 scope_id: Some(7),

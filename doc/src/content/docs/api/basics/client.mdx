@@ -44,13 +44,15 @@ import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
 | `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | フレームを 1 つ送る ([streaming](#streaming) 参照)          |
 | `send_frame_at(frame, exec)` | ✓  | `Result<ResponseFuture, Error>`       | 処理時刻を指定してフレームを 1 つ送る ([処理時刻](#処理時刻) 参照) |
 | `device_status()`         | —     | `Result<Vec<DeviceStatus>, Error>`     | 各デバイスの状態. 詳細は[状態監視](/autd3-sdk/guide/state-check/)を参照. |
-| `send_heartbeat()`        | —     | `Result<(), Error>`                   | `Lost` でない全デバイスへ生存確認を 1 回送る ([フェイルセーフ](/autd3-sdk/guide/failsafe/#通信途絶の-failsafe-と生存確認) 参照) |
+| `send_heartbeat()`        | ✓     | `Result<(), Error>`                   | `Lost` でない全デバイスへ生存確認を 1 回送る ([フェイルセーフ](/autd3-sdk/guide/failsafe/#通信途絶の-failsafe-と生存確認) 参照) |
 | `ack_timeout()` / `set_ack_timeout(timeout)` | — | `Duration` / `()`          | 応答待ちのタイムアウトの読み出し・変更 |
 | `lost_timeout()` / `set_lost_timeout(timeout)` | — | `Duration` / `()`        | `Lost` 判定のタイムアウトの読み出し・変更              |
 | `close()`                 | —     | `Result<(), Error>`                   | 接続を閉じる                                               |
 
-`close()` は I/O スレッドを止めて接続を閉じるだけで, デバイスへは何も送らない.
+`close()` は I/O タスクを止めて接続を閉じるだけで, デバイスへは何も送らない.
 デバイスは閉じた後も直前の出力を続けるので, 出力を止めるのはユーザーの責任である.
+
+Rust の `Client` は tokio のランタイムの中で使う (`Client::open` を呼び, 返った future もランタイムの中で await する). 返信の受信はそのランタイムのタスクで回るので, ランタイムをブロックしない (`current_thread` で重い同期計算を回すと, その間は返信の処理と `Lost` / タイムアウトの判定が止まる). 重い計算は `spawn_blocking` や別スレッドへ逃がす.
 
 ## streaming
 

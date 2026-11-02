@@ -16,8 +16,8 @@ fn states(client: &Client) -> Vec<DeviceState> {
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn every_device_is_ready_after_open() {
-    let (_emulator, client) = open_monitored(3);
+    let (_emulator, client) = open_monitored(3).await;
 
     assert_eq!(states(&client), [DeviceState::Ready; 3]);
-    client.close().unwrap();
+    client.close().await.unwrap();
 }

@@ -23,8 +23,8 @@ autd3-firmware-writer.workspace = true
 clap.workspace = true
 humantime.workspace = true
 anyhow.workspace = true
-pollster.workspace = true
 thiserror.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "time"] }
 
 [dev-dependencies]
 autd3-rs-firmware-emulator = { workspace = true, features = ["udp"] }

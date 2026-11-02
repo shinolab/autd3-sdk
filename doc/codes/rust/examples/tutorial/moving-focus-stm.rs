@@ -12,7 +12,7 @@ async fn main() -> Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
     let option = TransportOption::default();
-    let client = Client::open(&geometry, &option)?;
+    let client = Client::open(&geometry, &option).await?;
     client.send(Clear).await?;
     client.send(Synchronize).await?;
 
@@ -28,6 +28,6 @@ async fn main() -> Result<()> {
     // ANCHOR_END: stm
 
     client.send(Pattern::new(&geometry.phase_buffer(), Intensity::MIN)).await?;
-    client.close()?;
+    client.close().await?;
     Ok(())
 }

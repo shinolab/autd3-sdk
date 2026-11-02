@@ -11,7 +11,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
     // Open the client.
-    let client = Client::open(&geometry, &TransportOption::default())?;
+    let client = Client::open(&geometry, &TransportOption::default()).await?;
     client.send(Clear).await?;
     client.send(Synchronize).await?;
 
@@ -43,7 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::signal::ctrl_c().await?;
 
     client.send(Pattern::new(&geometry.phase_buffer(), Intensity::MIN)).await?;
-    client.close()?;
+    client.close().await?;
 
     Ok(())
 }

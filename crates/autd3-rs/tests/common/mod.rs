@@ -44,19 +44,21 @@ pub(crate) fn monitoring_option(emulator: &UdpEmulator) -> TransportOption {
     }
 }
 
-pub(crate) fn open_with(emulator: &UdpEmulator, option: &TransportOption) -> Client {
-    Client::open(&geometry(emulator.num_devices()), option).unwrap()
+pub(crate) async fn open_with(emulator: &UdpEmulator, option: &TransportOption) -> Client {
+    Client::open(&geometry(emulator.num_devices()), option)
+        .await
+        .unwrap()
 }
 
-pub(crate) fn open(num_devices: usize) -> (UdpEmulator, Client) {
+pub(crate) async fn open(num_devices: usize) -> (UdpEmulator, Client) {
     let emulator = emulator(num_devices);
-    let client = open_with(&emulator, &option(&emulator));
+    let client = open_with(&emulator, &option(&emulator)).await;
     (emulator, client)
 }
 
-pub(crate) fn open_monitored(num_devices: usize) -> (UdpEmulator, Client) {
+pub(crate) async fn open_monitored(num_devices: usize) -> (UdpEmulator, Client) {
     let emulator = emulator(num_devices);
-    let client = open_with(&emulator, &monitoring_option(&emulator));
+    let client = open_with(&emulator, &monitoring_option(&emulator)).await;
     (emulator, client)
 }
 

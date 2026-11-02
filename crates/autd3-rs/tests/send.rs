@@ -13,7 +13,7 @@ use common::{INVALID_PAYLOAD, REJECTED_BY_THE_DEVICE, fans, open};
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn a_single_device_receives_what_is_sent() {
-    let (emulator, client) = open(1);
+    let (emulator, client) = open(1).await;
     assert_eq!(client.num_devices(), 1);
     assert_eq!(client.geometry().num_devices(), 1);
     assert_eq!(fans(&emulator), [false]);
@@ -21,13 +21,13 @@ async fn a_single_device_receives_what_is_sent() {
     client.send(ForceFan { value: true }).await.unwrap();
     assert_eq!(fans(&emulator), [true]);
 
-    client.close().unwrap();
+    client.close().await.unwrap();
 }
 
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn the_emulator_processes_frames_with_an_execution_time_without_waiting() {
-    let (emulator, client) = open(3);
+    let (emulator, client) = open(3).await;
     let on = Frames::encode(client.geometry(), ForceFan { value: true }).unwrap();
 
     client
@@ -42,13 +42,13 @@ async fn the_emulator_processes_frames_with_an_execution_time_without_waiting() 
     let telemetry = client.read_telemetry().await.unwrap();
     assert!(telemetry.iter().all(|t| t.exec_late == 0), "{telemetry:?}");
 
-    client.close().unwrap();
+    client.close().await.unwrap();
 }
 
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn a_frame_sent_with_each_execution_time_completes() {
-    let (emulator, client) = open(2);
+    let (emulator, client) = open(2).await;
     let on = Frames::encode(client.geometry(), ForceFan { value: true }).unwrap();
     let off = Frames::encode(client.geometry(), ForceFan { value: false }).unwrap();
 
@@ -84,13 +84,13 @@ async fn a_frame_sent_with_each_execution_time_completes() {
         .unwrap();
     assert_eq!(fans(&emulator), [true, true]);
 
-    client.close().unwrap();
+    client.close().await.unwrap();
 }
 
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn a_broadcast_frame_reaches_every_device() {
-    let (emulator, client) = open(3);
+    let (emulator, client) = open(3).await;
 
     let frames = Frames::encode(client.geometry(), ForceFan { value: true }).unwrap();
     assert_eq!(frames.len(), 1);
@@ -100,13 +100,13 @@ async fn a_broadcast_frame_reaches_every_device() {
 
     assert_eq!(response.error_codes(), [0, 0, 0]);
     assert_eq!(fans(&emulator), [true, true, true]);
-    client.close().unwrap();
+    client.close().await.unwrap();
 }
 
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn a_per_device_frame_delivers_each_device_its_own_payload() {
-    let (emulator, client) = open(3);
+    let (emulator, client) = open(3).await;
 
     let command = each(|device| {
         Some(ForceFan {
@@ -121,13 +121,13 @@ async fn a_per_device_frame_delivers_each_device_its_own_payload() {
 
     assert_eq!(response.error_codes(), [0, 0, 0]);
     assert_eq!(fans(&emulator), [false, true, false]);
-    client.close().unwrap();
+    client.close().await.unwrap();
 }
 
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn a_device_left_out_of_a_per_device_command_keeps_its_state() {
-    let (emulator, client) = open(2);
+    let (emulator, client) = open(2).await;
     client.send(ForceFan { value: true }).await.unwrap();
 
     client
@@ -138,13 +138,13 @@ async fn a_device_left_out_of_a_per_device_command_keeps_its_state() {
         .unwrap();
 
     assert_eq!(fans(&emulator), [false, true]);
-    client.close().unwrap();
+    client.close().await.unwrap();
 }
 
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn the_firmware_version_is_read_from_every_device() {
-    let (_emulator, client) = open(2);
+    let (_emulator, client) = open(2).await;
 
     let versions = client.read_firmware_version().await.unwrap();
 
@@ -162,26 +162,26 @@ async fn the_firmware_version_is_read_from_every_device() {
         assert!(version.is_emulator());
         assert!(version.is_supported());
     }
-    client.close().unwrap();
+    client.close().await.unwrap();
 }
 
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn the_fpga_state_is_read_from_every_device() {
-    let (emulator, client) = open(2);
+    let (emulator, client) = open(2).await;
 
     let states = client.read_fpga_state().await.unwrap();
 
     let expected: Vec<u8> =
         emulator.with_devices(|devices| devices.iter().map(|d| d.fpga().fpga_state()).collect());
     assert_eq!(states.iter().map(|s| s.0).collect::<Vec<_>>(), expected);
-    client.close().unwrap();
+    client.close().await.unwrap();
 }
 
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn the_telemetry_counts_the_frames_each_device_processed() {
-    let (_emulator, client) = open(2);
+    let (_emulator, client) = open(2).await;
     let before = client.read_telemetry().await.unwrap();
     assert_eq!(before.len(), 2);
 
@@ -194,13 +194,13 @@ async fn the_telemetry_counts_the_frames_each_device_processed() {
         assert_eq!(after.processed - before.processed, 5);
         assert_eq!(after.fifo_drop, 0);
     }
-    client.close().unwrap();
+    client.close().await.unwrap();
 }
 
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn an_error_reported_by_a_device_fails_only_that_send() {
-    let (_emulator, client) = open(2);
+    let (_emulator, client) = open(2).await;
 
     let error = client.send(REJECTED_BY_THE_DEVICE).await.unwrap_err();
 
@@ -212,13 +212,13 @@ async fn an_error_reported_by_a_device_fails_only_that_send() {
         }
     ));
     client.send(Nop).await.unwrap();
-    client.close().unwrap();
+    client.close().await.unwrap();
 }
 
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn a_per_device_error_names_the_device_that_reported_it() {
-    let (_emulator, client) = open(3);
+    let (_emulator, client) = open(3).await;
 
     let error = client
         .send(each(|device| {
@@ -234,13 +234,13 @@ async fn a_per_device_error_names_the_device_that_reported_it() {
             code: INVALID_PAYLOAD
         }
     ));
-    client.close().unwrap();
+    client.close().await.unwrap();
 }
 
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn the_response_of_a_frame_carries_the_status_of_every_device() {
-    let (_emulator, client) = open(3);
+    let (_emulator, client) = open(3).await;
     let frames = Frames::encode(
         client.geometry(),
         each(|device| (device.idx() == 1).then_some(REJECTED_BY_THE_DEVICE)),
@@ -259,13 +259,13 @@ async fn the_response_of_a_frame_carries_the_status_of_every_device() {
         response.check(),
         Err(Error::DeviceError { device: 1, .. })
     ));
-    client.close().unwrap();
+    client.close().await.unwrap();
 }
 
 #[tokio::test]
 #[ignore = "depends on real time"]
 async fn a_frame_rebuilt_from_its_datagrams_is_sent_like_the_original() {
-    let (emulator, client) = open(2);
+    let (emulator, client) = open(2).await;
     let frames = Frames::encode(
         client.geometry(),
         each(|device| (device.idx() == 1).then_some(ForceFan { value: true })),
@@ -284,5 +284,5 @@ async fn a_frame_rebuilt_from_its_datagrams_is_sent_like_the_original() {
         .unwrap();
 
     assert_eq!(fans(&emulator), [false, true]);
-    client.close().unwrap();
+    client.close().await.unwrap();
 }

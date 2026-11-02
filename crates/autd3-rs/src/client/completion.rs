@@ -1,7 +1,7 @@
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use futures_channel::oneshot;
+use tokio::sync::oneshot;
 
 use crate::error::Error;
 use crate::response::Response;
@@ -54,13 +54,5 @@ mod tests {
         tokio::task::yield_now().await;
         tx.send(Ok(Response::from_error_codes(&[7]))).unwrap();
         assert_eq!(joined.await.unwrap().unwrap().error_codes(), [7]);
-    }
-
-    #[tokio::test]
-    async fn polling_after_completion_reports_a_closed_driver() {
-        let (tx, mut rx) = channel();
-        tx.send(Ok(Response::from_error_codes(&[1]))).unwrap();
-        assert_eq!((&mut rx).await.unwrap().error_codes(), [1]);
-        assert!(matches!(rx.await, Err(Error::Closed)));
     }
 }

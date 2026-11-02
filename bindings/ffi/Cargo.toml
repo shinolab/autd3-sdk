@@ -35,11 +35,7 @@ tracing-subscriber = { version = "0.3.23", default-features = false, features = 
     "ansi",
     "env-filter",
 ] }
-async-lock = { version = "3.4.2", default-features = false, features = ["std"] }
-futures-channel = { version = "0.3.34", default-features = false, features = [
-    "alloc",
-] }
-pollster = { version = "1.0.1", default-features = false }
+tokio = { version = "1.54.1", default-features = false }
 
 [profile.release]
 panic = "abort"

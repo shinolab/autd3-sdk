@@ -364,8 +364,7 @@ impl Client {
     ) -> PyResult<Client> {
         let geometry = geometry_from_capsule(&capsule_of(geometry)?)?.clone();
         let option = &option.0;
-        let client = py
-            .detach(|| autd3_rs::Client::open(&geometry, option))
+        let client = crate::runtime::block_on(py, autd3_rs::Client::open(&geometry, option))?
             .map_err(client_error)?;
         Ok(Client {
             inner: Arc::new(client),
@@ -413,8 +412,7 @@ impl Client {
     }
 
     fn send_heartbeat(&self, py: Python<'_>) -> PyResult<()> {
-        py.detach(|| self.inner.send_heartbeat())
-            .map_err(client_error)
+        crate::runtime::block_on(py, self.inner.send_heartbeat())?.map_err(client_error)
     }
 
     fn read_firmware_version<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
@@ -495,9 +493,9 @@ impl Client {
     }
 
     fn close(&self, py: Python<'_>) -> PyResult<()> {
-        let result = py.detach(|| self.inner.close());
+        let result = crate::runtime::block_on(py, self.inner.close());
         self.closed.store(true, Ordering::Release);
-        result.map_err(client_error)
+        result?.map_err(client_error)
     }
 
     fn __enter__(slf: Bound<'_, Self>) -> Bound<'_, Self> {

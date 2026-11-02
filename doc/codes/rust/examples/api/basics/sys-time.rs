@@ -9,7 +9,7 @@ use autd3_rs::Client;
 async fn main() -> anyhow::Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
     let option = TransportOption::default();
-    let client = Client::open(&geometry, &option)?;
+    let client = Client::open(&geometry, &option).await?;
 
     // ANCHOR: construct
     let opened = SysTime::ZERO;
@@ -27,6 +27,6 @@ async fn main() -> anyhow::Result<()> {
 
     let _ = (opened, raw, ns, elapsed, is_after);
 
-    client.close()?;
+    client.close().await?;
     Ok(())
 }
