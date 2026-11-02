@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 
-use autd3_rs_firmware_ota::CpuFirmwareImage;
+use autd3_firmware_writer::image::CpuFirmwareImage;
 
 use crate::cli::Cli;
 use crate::session::{Stage, open_and_run};
@@ -13,7 +13,7 @@ const CONFIRM_ONLY_HINT: &str = "the new CPU image is running but not confirmed:
      `--confirm-only` (or simply run the update again) before the next power cycle, otherwise \
      the previous image boots again";
 
-pub(crate) fn main_cpu(cli: &Cli, bytes: &[u8], release: Option<Version>) -> Result<()> {
+pub(crate) async fn main_cpu(cli: &Cli, bytes: &[u8], release: Option<Version>) -> Result<()> {
     let image = CpuFirmwareImage::from_flash_image(bytes)?;
     println!(
         "image: {} bytes, crc32 {:#010x}",
@@ -30,7 +30,8 @@ pub(crate) fn main_cpu(cli: &Cli, bytes: &[u8], release: Option<Version>) -> Res
                 activate_unrebooted: false,
                 require_trial: false,
             },
-        )?;
+        )
+        .await?;
         return Ok(());
     }
     let activate = !cli.no_activate;
@@ -41,7 +42,8 @@ pub(crate) fn main_cpu(cli: &Cli, bytes: &[u8], release: Option<Version>) -> Res
             image: &image,
             activate,
         },
-    )?;
+    )
+    .await?;
     if !activate {
         println!(
             "not activated (--no-activate); the committed image boots as a trial at the next \
@@ -56,7 +58,7 @@ pub(crate) fn main_cpu(cli: &Cli, bytes: &[u8], release: Option<Version>) -> Res
     let mut activate_unrebooted = before.activation_unacknowledged;
     loop {
         println!("waiting {wait:?} for the devices to reboot before enumerating them again");
-        std::thread::sleep(wait);
+        tokio::time::sleep(wait).await;
         let stage = Stage::Verify {
             confirm: !cli.no_confirm,
             expect,
@@ -75,7 +77,7 @@ pub(crate) fn main_cpu(cli: &Cli, bytes: &[u8], release: Option<Version>) -> Res
         let mut attempt = 0;
         let outcome = loop {
             attempt += 1;
-            match open_and_run(cli, before.devices, stage) {
+            match open_and_run(cli, before.devices, stage).await {
                 Ok(outcome) => break outcome,
                 Err(e)
                     if e.downcast_ref::<TrialNotRunning>().is_some()
@@ -87,7 +89,7 @@ pub(crate) fn main_cpu(cli: &Cli, bytes: &[u8], release: Option<Version>) -> Res
                     eprintln!(
                         "reconnection attempt {attempt}/{attempts} failed: {e:#}; retrying in {RECONNECT_INTERVAL:?}"
                     );
-                    std::thread::sleep(RECONNECT_INTERVAL);
+                    tokio::time::sleep(RECONNECT_INTERVAL).await;
                 }
                 Err(e) => {
                     return Err(e).context(format!(

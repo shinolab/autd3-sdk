@@ -103,7 +103,7 @@ pub(crate) fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
             for package in package {
                 args.extend(["--package", package.as_str()]);
             }
-            args.extend(["--lib", "--bins", "--tests"]);
+            args.push("--tests");
             if *include_ignored {
                 args.extend(["--", "--include-ignored"]);
             }

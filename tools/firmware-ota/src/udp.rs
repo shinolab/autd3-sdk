@@ -6,7 +6,7 @@ use crate::update::{ACK_TIMEOUT, KeepaliveClient};
 
 #[derive(Debug, thiserror::Error)]
 #[error("{0}{hint}", hint = hint(.0))]
-pub struct OpenError(#[from] Error);
+pub(crate) struct OpenError(#[from] Error);
 
 fn option(interface: Option<&str>, open_timeout: Option<Duration>) -> TransportOption {
     let default = TransportOption::default();
@@ -19,15 +19,12 @@ fn option(interface: Option<&str>, open_timeout: Option<Duration>) -> TransportO
     }
 }
 
-pub fn connect(
+pub(crate) async fn connect(
     interface: Option<&str>,
     open_timeout: Option<Duration>,
     num_devices: usize,
 ) -> Result<KeepaliveClient, OpenError> {
-    Ok(KeepaliveClient::open(
-        &option(interface, open_timeout),
-        num_devices,
-    )?)
+    Ok(KeepaliveClient::open(&option(interface, open_timeout), num_devices).await?)
 }
 
 fn udp_cause(e: &Error) -> Option<&UdpError> {
@@ -91,9 +88,9 @@ mod tests {
         );
     }
 
-    #[test]
+    #[tokio::test]
     #[ignore = "depends on real time"]
-    fn a_given_device_count_must_match_the_chain() {
+    async fn a_given_device_count_must_match_the_chain() {
         let emulator = UdpEmulator::spawn(3).unwrap();
         let option = TransportOption {
             iface: emulator.interface(),
@@ -101,7 +98,7 @@ mod tests {
             sync_on_open: false,
             ..TransportOption::default()
         };
-        let err = OpenError::from(KeepaliveClient::open(&option, 2).err().unwrap());
+        let err = OpenError::from(KeepaliveClient::open(&option, 2).await.err().unwrap());
         assert!(
             matches!(
                 udp_cause(&err.0),
