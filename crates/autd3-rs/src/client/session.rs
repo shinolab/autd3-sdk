@@ -455,9 +455,10 @@ impl Session {
         start_device: usize,
         body_for_device: impl Fn(usize) -> [&'a [u8]; 2] + Send,
     ) -> EachDeviceSend {
-        let mut retry_full_socket_until = match kind {
-            Kind::Frame => Instant::now().checked_add(self.lock_state().timeouts.lost),
-            _ => None,
+        let mut retry_full_socket_until = if kind == Kind::Frame {
+            Instant::now().checked_add(self.lock_state().timeouts.lost)
+        } else {
+            None
         };
         let mut accepted_devices = DeviceSet::empty();
         let mut first_failure = None;

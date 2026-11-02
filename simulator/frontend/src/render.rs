@@ -716,7 +716,11 @@ impl Renderer {
         let frame = match self.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame)
             | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
-            other => {
+            other @ (wgpu::CurrentSurfaceTexture::Timeout
+            | wgpu::CurrentSurfaceTexture::Occluded
+            | wgpu::CurrentSurfaceTexture::Outdated
+            | wgpu::CurrentSurfaceTexture::Lost
+            | wgpu::CurrentSurfaceTexture::Validation) => {
                 tracing::warn!("surface texture unavailable: {other:?}");
                 return;
             }

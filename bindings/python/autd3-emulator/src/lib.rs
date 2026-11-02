@@ -22,7 +22,12 @@ use pyo3::types::{PyBytes, PyDict};
 fn emulator_error(e: EmulatorError) -> PyErr {
     match e {
         EmulatorError::Autd3(e) => autd3_python_capsule::error::client(e),
-        e => invalid_argument(e),
+        EmulatorError::InvalidGrid(_)
+        | EmulatorError::InvalidTick
+        | EmulatorError::InvalidDuration
+        | EmulatorError::InvalidTimeStep
+        | EmulatorError::NotRecorded => invalid_argument(e),
+        _ => unreachable!(),
     }
 }
 

@@ -212,7 +212,7 @@ impl FirmwarePanel {
     fn confirm_ui(&mut self, ui: &egui::Ui) {
         let answer = match &self.phase {
             Phase::Confirm(confirm) => confirm.ui(ui),
-            _ => Answer::Pending,
+            Phase::Idle | Phase::Verify | Phase::Flash => Answer::Pending,
         };
         match answer {
             Answer::Update => self.start_flash(),

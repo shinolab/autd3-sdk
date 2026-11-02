@@ -66,15 +66,16 @@ pub fn parse(frame: &[u8]) -> Option<Packet<'_>> {
                 // ICMPv6 is not used by the client, but it is necessary for the OS to resolve addresses with NPD
                 IpNumber::IPV6_ICMP => {
                     let icmp = Icmpv6Slice::from_slice(upper.payload).ok()?;
-                    match icmp.icmp_type() {
-                        Icmpv6Type::NeighborSolicitation => Some(Packet::NeighborSolicitation {
+                    if let Icmpv6Type::NeighborSolicitation = icmp.icmp_type() {
+                        Some(Packet::NeighborSolicitation {
                             src_mac,
                             src_ip,
                             dst_ip,
                             target: icmp.payload().get(..16)?.try_into().ok()?,
                             hop_limit: header.hop_limit(),
-                        }),
-                        _ => None,
+                        })
+                    } else {
+                        None
                     }
                 }
                 _ => None,

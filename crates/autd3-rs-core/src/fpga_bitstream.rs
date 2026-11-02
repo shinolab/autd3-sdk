@@ -172,10 +172,11 @@ pub fn validate_update_image(bytes: &[u8]) -> Result<BitstreamSummary, FpgaImage
     if summary.iprog || summary.wbstar.is_some_and(|addr| addr != 0) {
         return Err(FpgaImageError::Reboots);
     }
-    match summary.boot_image() {
-        FpgaBootImage::Update => Ok(summary),
-        boot_image => Err(FpgaImageError::NotAnUpdateImage { boot_image }),
+    let boot_image = summary.boot_image();
+    if boot_image != FpgaBootImage::Update {
+        return Err(FpgaImageError::NotAnUpdateImage { boot_image });
     }
+    Ok(summary)
 }
 
 #[cfg(test)]

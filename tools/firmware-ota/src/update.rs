@@ -239,7 +239,10 @@ fn ota_error(cmd: Cmd, e: Error) -> OtaError {
         Error::Timeout { .. } | Error::DeviceLost { .. } => OtaError::Timeout { cmd },
         Error::DeviceError { device, code } => OtaError::Device { device, cmd, code },
         Error::UnexpectedReply { device } => OtaError::ShortReply { device, cmd },
-        e => OtaError::Network(Box::new(e)),
+        Error::Network(_) | Error::DeviceTimeUnknown | Error::InvalidPayload(_) | Error::Closed => {
+            OtaError::Network(Box::new(e))
+        }
+        _ => unreachable!(),
     }
 }
 

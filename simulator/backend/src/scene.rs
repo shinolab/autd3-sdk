@@ -103,7 +103,9 @@ pub(crate) mod tests {
         let json = rx.borrow_and_update().clone();
         match serde_json::from_str(&json).unwrap() {
             ServerMsg::Geometry { devices, .. } => devices,
-            _ => panic!("expected a geometry message"),
+            ServerMsg::State { .. } | ServerMsg::DeviceStates { .. } => {
+                panic!("expected a geometry message")
+            }
         }
     }
 
