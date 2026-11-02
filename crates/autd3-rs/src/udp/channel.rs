@@ -1,8 +1,9 @@
-use std::io::{self, IoSlice};
+use std::io;
 use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6, UdpSocket};
 use std::num::NonZeroUsize;
 use std::time::Instant;
 
+use autd3_cpu_wire::FRAME_BYTES_MAX;
 use autd3_cpu_wire::udp::{Header, Kind};
 use socket2::{Domain, Protocol, Socket, Type};
 use zerocopy::{FromBytes, IntoBytes};
@@ -38,26 +39,11 @@ pub(crate) struct Channel {
 #[cfg(unix)]
 mod sys {
     use std::ffi::c_int;
-    use std::io::{self, IoSlice};
-    use std::net::{SocketAddr, SocketAddrV6, UdpSocket};
+    use std::io;
     use std::os::fd::AsRawFd;
     use std::time::Duration;
 
-    use socket2::SockRef;
-
     use super::Interest;
-
-    pub(super) fn send_now(
-        socket: &UdpSocket,
-        datagram: &[IoSlice<'_>],
-        dst: SocketAddrV6,
-    ) -> io::Result<usize> {
-        SockRef::from(socket).send_to_vectored_with_flags(
-            datagram,
-            &SocketAddr::V6(dst).into(),
-            libc::MSG_DONTWAIT,
-        )
-    }
 
     pub(super) fn wait(
         socket: &impl AsRawFd,
@@ -96,25 +82,15 @@ mod sys {
 
 #[cfg(windows)]
 mod sys {
-    use std::io::{self, IoSlice};
-    use std::net::{SocketAddr, SocketAddrV6, UdpSocket};
+    use std::io;
     use std::os::windows::io::AsRawSocket;
     use std::time::Duration;
 
-    use socket2::SockRef;
     use windows_sys::Win32::Networking::WinSock::{
         POLLRDNORM, POLLWRNORM, SOCKET_ERROR, WSAEMSGSIZE, WSAPOLLFD, WSAPoll,
     };
 
     use super::Interest;
-
-    pub(super) fn send_now(
-        socket: &UdpSocket,
-        datagram: &[IoSlice<'_>],
-        dst: SocketAddrV6,
-    ) -> io::Result<usize> {
-        SockRef::from(socket).send_to_vectored(datagram, &SocketAddr::V6(dst).into())
-    }
 
     pub(super) fn wait(
         socket: &impl AsRawSocket,
@@ -239,14 +215,15 @@ impl Channel {
         retry_full_socket_until: Option<Instant>,
     ) -> io::Result<Instant> {
         let header = Header::new(kind, msg_id);
-        let datagram = [
-            IoSlice::new(header.as_bytes()),
-            IoSlice::new(body[0]),
-            IoSlice::new(body[1]),
-        ];
+        let mut datagram = [0; size_of::<Header>() + FRAME_BYTES_MAX];
+        let mut len = 0;
+        for part in [header.as_bytes(), body[0], body[1]] {
+            datagram[len..len + part.len()].copy_from_slice(part);
+            len += part.len();
+        }
         loop {
             let attempted_at = Instant::now();
-            match sys::send_now(&self.socket, &datagram, dst) {
+            match self.socket.send_to(&datagram[..len], dst) {
                 Ok(_) => return Ok(attempted_at),
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
@@ -337,5 +314,31 @@ impl Channel {
 
     pub(crate) fn socket(&self) -> &UdpSocket {
         &self.socket
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_full_size_datagram_is_the_header_followed_by_both_body_parts() {
+        let receiver = UdpSocket::bind(SocketAddrV6::new(Ipv6Addr::LOCALHOST, 0, 0, 0)).unwrap();
+        let SocketAddr::V6(dst) = receiver.local_addr().unwrap() else {
+            panic!("the receiver is bound to an IPv6 address");
+        };
+        let channel = Channel::open(dst, None, None).unwrap();
+        let first = [1; 6];
+        let second = [2; FRAME_BYTES_MAX - 6];
+
+        channel
+            .send(dst, Kind::Frame, 0x1234, [&first, &second], None)
+            .unwrap();
+
+        let mut buf = [0; RECV_BUFFER_BYTES];
+        let (len, _) = receiver.recv_from(&mut buf).unwrap();
+        let header = Header::new(Kind::Frame, 0x1234);
+        let expected = [header.as_bytes(), &first, &second].concat();
+        assert_eq!(&buf[..len], expected);
     }
 }
