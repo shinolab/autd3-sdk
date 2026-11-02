@@ -2,13 +2,13 @@ use autd3_cpu_wire::update::crc32;
 use autd3_rs_core::fpga_bitstream::{FpgaImageError, validate_update_image};
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct FpgaFirmwareImage {
+pub(crate) struct FpgaFirmwareImage {
     bytes: Vec<u8>,
     crc32: u32,
 }
 
 impl FpgaFirmwareImage {
-    pub fn from_update_bin(bytes: Vec<u8>) -> Result<Self, FpgaImageError> {
+    pub(crate) fn from_update_bin(bytes: Vec<u8>) -> Result<Self, FpgaImageError> {
         validate_update_image(&bytes)?;
         let crc32 = crc32(&bytes);
         Ok(Self { bytes, crc32 })
@@ -20,17 +20,12 @@ impl FpgaFirmwareImage {
     }
 
     #[must_use]
-    pub fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.bytes.len()
     }
 
     #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.bytes.is_empty()
-    }
-
-    #[must_use]
-    pub fn crc32(&self) -> u32 {
+    pub(crate) fn crc32(&self) -> u32 {
         self.crc32
     }
 }

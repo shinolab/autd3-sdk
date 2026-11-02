@@ -1,5 +1,5 @@
 use std::ops::Deref;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 use std::time::Duration;
 
 use autd3_cpu_wire::describe_device_error;
@@ -15,20 +15,19 @@ use autd3_rs::commands::{
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::protocol::Cmd;
 use autd3_rs::{Client, DeviceState, Error, FirmwareVersion, TransportOption};
-use tokio::runtime::{Builder, Runtime};
 use tokio::task::JoinHandle;
 use tokio::time::MissedTickBehavior;
 
 use crate::fpga_image::FpgaFirmwareImage;
 
 const HEARTBEAT: Duration = Duration::from_millis(10);
-pub const ACK_TIMEOUT: Duration = Duration::from_secs(120);
-pub const FPGA_RECONFIG_WAIT: Duration =
+pub(crate) const ACK_TIMEOUT: Duration = Duration::from_secs(120);
+pub(crate) const FPGA_RECONFIG_WAIT: Duration =
     Duration::from_millis(autd3_cpu_wire::fpga_update::FPGA_RECONFIG_WORST_MS as u64 + 2000);
-pub const FPGA_ACTIVATE_ATTEMPTS: usize = 3;
+pub(crate) const FPGA_ACTIVATE_ATTEMPTS: usize = 3;
 
 #[derive(Debug, thiserror::Error)]
-pub enum OtaError {
+pub(crate) enum OtaError {
     #[error("network error: {0}")]
     Network(#[source] Box<Error>),
     #[error("not every device acknowledged {cmd:?}; {}", timeout_hint(*cmd))]
@@ -161,34 +160,26 @@ fn ensure_cpu_supported(infos: &[FirmwareVersion]) -> Result<(), OtaError> {
 }
 
 #[must_use]
-pub fn version_triple(version: autd3_rs::Version) -> [u8; 3] {
+pub(crate) fn version_triple(version: autd3_rs::Version) -> [u8; 3] {
     [version.major, version.minor, version.patch]
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct UpdateProgress {
-    pub sent: usize,
-    pub total: usize,
+pub(crate) struct UpdateProgress {
+    pub(crate) sent: usize,
+    pub(crate) total: usize,
 }
 
-static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
-    Builder::new_multi_thread()
-        .worker_threads(1)
-        .enable_all()
-        .build()
-        .expect("failed to build the tokio runtime")
-});
-
-pub struct KeepaliveClient {
+pub(crate) struct KeepaliveClient {
     client: Arc<Client>,
     keepalive: JoinHandle<()>,
 }
 
 impl KeepaliveClient {
-    pub(crate) fn open(option: &TransportOption, num_devices: usize) -> Result<Self, Error> {
+    pub(crate) async fn open(option: &TransportOption, num_devices: usize) -> Result<Self, Error> {
         let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()));
-        let client = Arc::new(RUNTIME.block_on(Client::open(&geometry, option))?);
-        let keepalive = RUNTIME.spawn({
+        let client = Arc::new(Client::open(&geometry, option).await?);
+        let keepalive = tokio::spawn({
             let client = Arc::clone(&client);
             async move {
                 let mut ticker = tokio::time::interval(HEARTBEAT);
@@ -216,11 +207,10 @@ impl Deref for KeepaliveClient {
 impl Drop for KeepaliveClient {
     fn drop(&mut self) {
         self.keepalive.abort();
-        let _ = RUNTIME.block_on(&mut self.keepalive);
     }
 }
 
-pub struct ExplicitOperation<O>(pub O);
+struct ExplicitOperation<O>(O);
 
 impl<O: Operation> Command for ExplicitOperation<O> {
     fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
@@ -244,7 +234,7 @@ impl<O: Operation> Command for ExplicitOperationOn<'_, O> {
 }
 
 #[must_use]
-pub fn ota_error(cmd: Cmd, e: Error) -> OtaError {
+fn ota_error(cmd: Cmd, e: Error) -> OtaError {
     match e {
         Error::Timeout { .. } | Error::DeviceLost { .. } => OtaError::Timeout { cmd },
         Error::DeviceError { device, code } => OtaError::Device { device, cmd, code },
@@ -253,7 +243,7 @@ pub fn ota_error(cmd: Cmd, e: Error) -> OtaError {
     }
 }
 
-pub fn ensure_no_device_lost(client: &Client, cmd: Cmd) -> Result<(), OtaError> {
+fn ensure_no_device_lost(client: &Client, cmd: Cmd) -> Result<(), OtaError> {
     let lost = client
         .device_status()
         .map_err(|e| ota_error(cmd, e))?
@@ -266,27 +256,31 @@ pub fn ensure_no_device_lost(client: &Client, cmd: Cmd) -> Result<(), OtaError> 
     }
 }
 
-pub fn send(client: &Client, cmd: Cmd, command: impl Command) -> Result<(), OtaError> {
-    RUNTIME
-        .block_on(client.send(command))
-        .map_err(|e| ota_error(cmd, e))?;
+async fn send(client: &Client, cmd: Cmd, command: impl Command) -> Result<(), OtaError> {
+    client.send(command).await.map_err(|e| ota_error(cmd, e))?;
     ensure_no_device_lost(client, cmd)
 }
 
-pub fn read_firmware_version(client: &Client) -> Result<Vec<FirmwareVersion>, OtaError> {
-    RUNTIME
-        .block_on(client.read_firmware_version())
+pub(crate) async fn read_firmware_version(
+    client: &Client,
+) -> Result<Vec<FirmwareVersion>, OtaError> {
+    client
+        .read_firmware_version()
+        .await
         .map_err(|e| ota_error(Cmd::ReadFirmwareInfo, e))
 }
 
-pub fn read_running_image(client: &Client) -> Result<Vec<Option<RunningImage>>, OtaError> {
-    RUNTIME
-        .block_on(client.read_running_image())
+pub(crate) async fn read_running_image(
+    client: &Client,
+) -> Result<Vec<Option<RunningImage>>, OtaError> {
+    client
+        .read_running_image()
+        .await
         .map_err(|e| ota_error(Cmd::ReadRunningImage, e))
 }
 
-fn ensure_fpga_update_supported(client: &Client) -> Result<(), OtaError> {
-    let infos = read_firmware_version(client)?;
+async fn ensure_fpga_update_supported(client: &Client) -> Result<(), OtaError> {
+    let infos = read_firmware_version(client).await?;
     ensure_cpu_supported(&infos)?;
     match infos.iter().position(|info| !info.supports_fpga_ota()) {
         None => Ok(()),
@@ -294,8 +288,9 @@ fn ensure_fpga_update_supported(client: &Client) -> Result<(), OtaError> {
     }
 }
 
-pub fn ensure_fpga_reconfigured(client: &Client) -> Result<(), OtaError> {
-    match read_firmware_version(client)?
+pub(crate) async fn ensure_fpga_reconfigured(client: &Client) -> Result<(), OtaError> {
+    match read_firmware_version(client)
+        .await?
         .iter()
         .position(|info| info.fpga_boot_image() == FpgaBootImage::ReconfigFailed)
     {
@@ -304,10 +299,10 @@ pub fn ensure_fpga_reconfigured(client: &Client) -> Result<(), OtaError> {
     }
 }
 
-fn stream(
+async fn stream(
     bytes: &[u8],
     mut on_progress: impl FnMut(UpdateProgress),
-    mut send_chunk: impl FnMut(u32, &[u8]) -> Result<(), OtaError>,
+    mut send_chunk: impl AsyncFnMut(u32, &[u8]) -> Result<(), OtaError>,
 ) -> Result<(), OtaError> {
     let total = bytes.len();
     on_progress(UpdateProgress { sent: 0, total });
@@ -316,7 +311,8 @@ fn stream(
         send_chunk(
             u32::try_from(offset).expect("bounded by the slot capacity"),
             data,
-        )?;
+        )
+        .await?;
         on_progress(UpdateProgress {
             sent: offset + data.len(),
             total,
@@ -325,12 +321,12 @@ fn stream(
     Ok(())
 }
 
-pub fn update_fpga(
+pub(crate) async fn update_fpga(
     client: &Client,
     image: &FpgaFirmwareImage,
     on_progress: impl FnMut(UpdateProgress),
 ) -> Result<(), OtaError> {
-    ensure_fpga_update_supported(client)?;
+    ensure_fpga_update_supported(client).await?;
     let bytes = image.as_bytes();
     send(
         client,
@@ -339,31 +335,37 @@ pub fn update_fpga(
             length: u32::try_from(bytes.len()).expect("bounded by the slot capacity"),
             crc32: image.crc32(),
         }),
-    )?;
-    stream(bytes, on_progress, |offset, data| {
+    )
+    .await?;
+    stream(bytes, on_progress, async |offset, data| {
         send(
             client,
             Cmd::FpgaUpdateChunk,
             ExplicitOperation(FpgaUpdateChunk { offset, data }),
         )
-    })?;
+        .await
+    })
+    .await?;
     send(
         client,
         Cmd::FpgaUpdateCommit,
         ExplicitOperation(FpgaUpdateCommit),
     )
+    .await
 }
 
-pub fn activate_fpga(client: &Client) -> Result<(), OtaError> {
+pub(crate) async fn activate_fpga(client: &Client) -> Result<(), OtaError> {
     send(
         client,
         Cmd::FpgaUpdateActivate,
         ExplicitOperation(FpgaUpdateActivate),
     )
+    .await
 }
 
-pub fn activate_unreconfigured_fpga(client: &Client) -> Result<Vec<usize>, OtaError> {
-    let failed: Vec<usize> = read_firmware_version(client)?
+pub(crate) async fn activate_unreconfigured_fpga(client: &Client) -> Result<Vec<usize>, OtaError> {
+    let failed: Vec<usize> = read_firmware_version(client)
+        .await?
         .iter()
         .enumerate()
         .filter(|(_, info)| info.fpga_boot_image() == FpgaBootImage::ReconfigFailed)
@@ -379,16 +381,17 @@ pub fn activate_unreconfigured_fpga(client: &Client) -> Result<Vec<usize>, OtaEr
             operation: FpgaUpdateActivate,
             devices: &failed,
         },
-    )?;
+    )
+    .await?;
     Ok(failed)
 }
 
-pub fn update_cpu(
+pub(crate) async fn update_cpu(
     client: &Client,
     image: &CpuFirmwareImage,
     on_progress: impl FnMut(UpdateProgress),
 ) -> Result<(), OtaError> {
-    ensure_cpu_supported(&read_firmware_version(client)?)?;
+    ensure_cpu_supported(&read_firmware_version(client).await?)?;
     let bytes = image.as_bytes();
     send(
         client,
@@ -397,32 +400,36 @@ pub fn update_cpu(
             length: u32::try_from(bytes.len()).expect("bounded by the slot capacity"),
             crc32: image.crc32(),
         }),
-    )?;
-    stream(bytes, on_progress, |offset, data| {
+    )
+    .await?;
+    stream(bytes, on_progress, async |offset, data| {
         send(
             client,
             Cmd::UpdateChunk,
             ExplicitOperation(UpdateChunk { offset, data }),
         )
-    })?;
-    send(client, Cmd::UpdateCommit, ExplicitOperation(UpdateCommit))
+        .await
+    })
+    .await?;
+    send(client, Cmd::UpdateCommit, ExplicitOperation(UpdateCommit)).await
 }
 
-pub fn confirm(client: &Client) -> Result<(), OtaError> {
-    send(client, Cmd::UpdateConfirm, ExplicitOperation(UpdateConfirm))
+pub(crate) async fn confirm(client: &Client) -> Result<(), OtaError> {
+    send(client, Cmd::UpdateConfirm, ExplicitOperation(UpdateConfirm)).await
 }
 
-fn send_reboot(client: &Client, command: impl Command) -> Result<(), OtaError> {
+async fn send_reboot(client: &Client, command: impl Command) -> Result<(), OtaError> {
     client.set_ack_timeout(Duration::from_secs(5));
-    send(client, Cmd::Reboot, command)
+    send(client, Cmd::Reboot, command).await
 }
 
-pub fn reboot(client: &Client) -> Result<(), OtaError> {
-    send_reboot(client, ExplicitOperation(Reboot))
+pub(crate) async fn reboot(client: &Client) -> Result<(), OtaError> {
+    send_reboot(client, ExplicitOperation(Reboot)).await
 }
 
-pub fn activate_unrebooted(client: &Client) -> Result<Vec<usize>, OtaError> {
-    let unrebooted: Vec<usize> = read_running_image(client)?
+pub(crate) async fn activate_unrebooted(client: &Client) -> Result<Vec<usize>, OtaError> {
+    let unrebooted: Vec<usize> = read_running_image(client)
+        .await?
         .iter()
         .enumerate()
         .filter(|(_, image)| **image == Some(RunningImage::Confirmed))
@@ -437,7 +444,8 @@ pub fn activate_unrebooted(client: &Client) -> Result<Vec<usize>, OtaError> {
             operation: Reboot,
             devices: &unrebooted,
         },
-    )?;
+    )
+    .await?;
     Ok(unrebooted)
 }
 

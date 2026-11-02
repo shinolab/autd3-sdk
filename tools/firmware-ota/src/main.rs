@@ -1,6 +1,9 @@
 mod cli;
 mod cpu;
+mod fpga_image;
 mod session;
+mod udp;
+mod update;
 mod verify;
 
 use std::path::{Path, PathBuf};
@@ -8,16 +11,17 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use clap::Parser;
 
-use autd3_firmware_writer::bundle;
-use autd3_rs_firmware_ota::{FpgaFirmwareImage, connect, reboot};
-
 use crate::cli::{Cli, Target};
 use crate::cpu::main_cpu;
+use crate::fpga_image::FpgaFirmwareImage;
 use crate::session::{Stage, open_and_run};
+use crate::udp::connect;
+use crate::update::reboot;
+use autd3_firmware_writer::bundle;
 
-fn main_fpga(cli: &Cli, bytes: Vec<u8>, invalid_image_hint: &'static str) -> Result<()> {
+async fn main_fpga(cli: &Cli, bytes: Vec<u8>, invalid_image_hint: &'static str) -> Result<()> {
     if cli.verify_only {
-        open_and_run(cli, cli.devices, Stage::FpgaVerify)?;
+        open_and_run(cli, cli.devices, Stage::FpgaVerify).await?;
         return Ok(());
     }
     let image = FpgaFirmwareImage::from_update_bin(bytes).context(invalid_image_hint)?;
@@ -33,7 +37,8 @@ fn main_fpga(cli: &Cli, bytes: Vec<u8>, invalid_image_hint: &'static str) -> Res
             image: &image,
             activate: !cli.no_activate,
         },
-    )?;
+    )
+    .await?;
     Ok(())
 }
 
@@ -69,15 +74,16 @@ fn release_images(bundle: bundle::Bundle, target: Target) -> Result<ReleaseImage
     Ok(ReleaseImages { cpu, fpga })
 }
 
-fn main() -> Result<()> {
+#[tokio::main(flavor = "multi_thread", worker_threads = 1)]
+async fn main() -> Result<()> {
     let cli = Cli::parse();
     if cli.devices == 0 {
         bail!("--devices must be at least 1");
     }
     if cli.reboot_only {
-        let client = connect(cli.interface.as_deref(), cli.open_timeout, cli.devices)?;
+        let client = connect(cli.interface.as_deref(), cli.open_timeout, cli.devices).await?;
         println!("{} device(s) on the bus", client.num_devices());
-        reboot(&client)?;
+        reboot(&client).await?;
         println!("reboot acknowledged; the devices reset in about 100 ms and come back unassigned");
         return Ok(());
     }
@@ -91,8 +97,9 @@ fn main() -> Result<()> {
                     "pass the `autd3-fpga-update.img` produced by `cargo xtask fpga build` \
                      (not the golden image; a golden image must never be written to the update slot)",
                 )
+                .await
             } else {
-                main_cpu(&cli, &bytes, None)
+                main_cpu(&cli, &bytes, None).await
             }
         }
         (None, Some(version)) => {
@@ -107,7 +114,7 @@ fn main() -> Result<()> {
             let shown = version.trim_start_matches('v');
             if let Some(bytes) = cpu {
                 println!("== CPU firmware v{shown} ==");
-                main_cpu(&cli, &bytes, Some(release))?;
+                main_cpu(&cli, &bytes, Some(release)).await?;
             }
             if let Some(bytes) = fpga {
                 println!("== FPGA firmware v{shown} ==");
@@ -115,7 +122,8 @@ fn main() -> Result<()> {
                     &cli,
                     bytes,
                     "the FPGA update image in the release bundle is not usable; retry with `--force-download`",
-                )?;
+                )
+                .await?;
             }
             Ok(())
         }

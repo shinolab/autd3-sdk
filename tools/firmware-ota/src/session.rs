@@ -3,14 +3,17 @@ use std::io::IsTerminal;
 use anyhow::{Result, bail};
 
 use autd3_cpu_wire::fpga_update::FpgaBootImage;
+use autd3_firmware_writer::image::CpuFirmwareImage;
 use autd3_rs::{Client, FirmwareVersion};
-use autd3_rs_firmware_ota::{
-    CpuFirmwareImage, FPGA_ACTIVATE_ATTEMPTS, FPGA_RECONFIG_WAIT, FpgaFirmwareImage, OtaError,
-    UpdateProgress, activate_fpga, activate_unreconfigured_fpga, connect, ensure_fpga_reconfigured,
-    read_firmware_version, read_running_image, reboot, update_cpu, update_fpga, version_triple,
-};
 
 use crate::cli::Cli;
+use crate::fpga_image::FpgaFirmwareImage;
+use crate::udp::connect;
+use crate::update::{
+    FPGA_ACTIVATE_ATTEMPTS, FPGA_RECONFIG_WAIT, OtaError, UpdateProgress, activate_fpga,
+    activate_unreconfigured_fpga, ensure_fpga_reconfigured, read_firmware_version,
+    read_running_image, reboot, update_cpu, update_fpga, version_triple,
+};
 use crate::verify::{
     Expect, Version, check_expectation, check_trial, describe_running_image, fmt_version,
 };
@@ -42,20 +45,20 @@ pub(crate) struct Outcome {
 }
 
 #[allow(clippy::too_many_lines)]
-pub(crate) fn open_and_run(cli: &Cli, devices: usize, stage: Stage<'_>) -> Result<Outcome> {
-    let client = connect(cli.interface.as_deref(), cli.open_timeout, devices)?;
+pub(crate) async fn open_and_run(cli: &Cli, devices: usize, stage: Stage<'_>) -> Result<Outcome> {
+    let client = connect(cli.interface.as_deref(), cli.open_timeout, devices).await?;
     let devices = client.num_devices();
     println!("{devices} device(s) on the bus");
     let mut activation_unacknowledged = false;
     let mut activated_late = Vec::new();
     let cpu_versions = match stage {
         Stage::Update { image, activate } => {
-            let before = print_versions(&client, "before")?;
-            update_cpu(&client, image, progress_printer(image.len()))?;
+            let before = print_versions(&client, "before").await?;
+            update_cpu(&client, image, progress_printer(image.len())).await?;
             end_progress();
             println!("image committed on every device");
             if activate {
-                activation_unacknowledged = match reboot(&client) {
+                activation_unacknowledged = match reboot(&client).await {
                     Ok(()) => {
                         println!("activation acknowledged; the devices reboot in about 100 ms");
                         false
@@ -73,23 +76,23 @@ pub(crate) fn open_and_run(cli: &Cli, devices: usize, stage: Stage<'_>) -> Resul
             before
         }
         Stage::FpgaUpdate { image, activate } => {
-            print_fpga(&client, "before")?;
-            update_fpga(&client, image, progress_printer(image.len()))?;
+            print_fpga(&client, "before").await?;
+            update_fpga(&client, image, progress_printer(image.len())).await?;
             end_progress();
             println!(
                 "FPGA image committed on every device (transducer output stays off until reconfiguration)"
             );
             if activate {
-                activate_fpga(&client)?;
+                activate_fpga(&client).await?;
                 for attempt in 1..=FPGA_ACTIVATE_ATTEMPTS {
                     println!(
                         "activation acknowledged; waiting {FPGA_RECONFIG_WAIT:?} for the FPGAs to reconfigure"
                     );
-                    std::thread::sleep(FPGA_RECONFIG_WAIT);
+                    tokio::time::sleep(FPGA_RECONFIG_WAIT).await;
                     if attempt == FPGA_ACTIVATE_ATTEMPTS {
                         break;
                     }
-                    let retried = activate_unreconfigured_fpga(&client)?;
+                    let retried = activate_unreconfigured_fpga(&client).await?;
                     if retried.is_empty() {
                         break;
                     }
@@ -100,8 +103,8 @@ pub(crate) fn open_and_run(cli: &Cli, devices: usize, stage: Stage<'_>) -> Resul
                         );
                     }
                 }
-                let images = print_fpga(&client, "after")?;
-                ensure_fpga_reconfigured(&client)?;
+                let images = print_fpga(&client, "after").await?;
+                ensure_fpga_reconfigured(&client).await?;
                 if let Some(device) = images.iter().position(|&i| i != FpgaBootImage::Update) {
                     bail!(
                         "device {device} did not come back with the update image (reads {:?}); \
@@ -121,7 +124,7 @@ pub(crate) fn open_and_run(cli: &Cli, devices: usize, stage: Stage<'_>) -> Resul
             Vec::new()
         }
         Stage::FpgaVerify => {
-            print_fpga(&client, "now")?;
+            print_fpga(&client, "now").await?;
             Vec::new()
         }
         Stage::Verify {
@@ -131,13 +134,13 @@ pub(crate) fn open_and_run(cli: &Cli, devices: usize, stage: Stage<'_>) -> Resul
             require_trial,
         } => {
             if activate_unrebooted {
-                activated_late = autd3_rs_firmware_ota::activate_unrebooted(&client)?;
+                activated_late = crate::update::activate_unrebooted(&client).await?;
             }
             if activated_late.is_empty() {
                 let label = if confirm { "after" } else { "now" };
-                let after = print_versions(&client, label)?;
+                let after = print_versions(&client, label).await?;
                 check_expectation(&after, expect)?;
-                let images = read_running_image(&client)?;
+                let images = read_running_image(&client).await?;
                 for (device, &image) in images.iter().enumerate() {
                     println!("device {device}: CPU {}", describe_running_image(image));
                 }
@@ -145,7 +148,7 @@ pub(crate) fn open_and_run(cli: &Cli, devices: usize, stage: Stage<'_>) -> Resul
                     check_trial(&images, &after, expect)?;
                 }
                 if confirm {
-                    autd3_rs_firmware_ota::confirm(&client)?;
+                    crate::update::confirm(&client).await?;
                     println!("running image confirmed on every device");
                 }
                 after
@@ -167,8 +170,9 @@ pub(crate) fn open_and_run(cli: &Cli, devices: usize, stage: Stage<'_>) -> Resul
     })
 }
 
-fn print_versions(client: &Client, label: &str) -> Result<Vec<Version>> {
-    let versions: Vec<Version> = read_firmware_version(client)?
+async fn print_versions(client: &Client, label: &str) -> Result<Vec<Version>> {
+    let versions: Vec<Version> = read_firmware_version(client)
+        .await?
         .iter()
         .map(|info| version_triple(info.cpu))
         .collect();
@@ -181,8 +185,8 @@ fn print_versions(client: &Client, label: &str) -> Result<Vec<Version>> {
     Ok(versions)
 }
 
-fn print_fpga(client: &Client, label: &str) -> Result<Vec<FpgaBootImage>> {
-    let infos = read_firmware_version(client)?;
+async fn print_fpga(client: &Client, label: &str) -> Result<Vec<FpgaBootImage>> {
+    let infos = read_firmware_version(client).await?;
     for (device, info) in infos.iter().enumerate() {
         println!(
             "device {device}: FPGA firmware {label} = {} ({:?} image)",

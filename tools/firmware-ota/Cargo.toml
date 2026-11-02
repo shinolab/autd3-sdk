@@ -8,9 +8,6 @@ repository.workspace = true
 publish = false
 description = "Update the AUTD3 CPU and FPGA firmware: writes the images, reboots the devices, and confirms the result."
 
-[lib]
-path = "src/lib.rs"
-
 [[bin]]
 name = "autd3-firmware-ota"
 path = "src/main.rs"
@@ -24,7 +21,7 @@ clap.workspace = true
 humantime.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["rt-multi-thread", "time"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
 
 [dev-dependencies]
 autd3-rs-firmware-emulator = { workspace = true, features = ["udp"] }
