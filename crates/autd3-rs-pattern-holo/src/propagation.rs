@@ -128,7 +128,7 @@ fn scatter<T: Copy>(e: &[T], mask: TransducerMask<'_>, null: T, dst: &mut [Vec<T
                 at += n;
             }
         }
-        mask => {
+        TransducerMask::Masked(_) => {
             let mut idx = 0;
             for (d, slot) in dst.iter_mut().enumerate() {
                 for (t, out) in slot.iter_mut().enumerate() {
@@ -141,5 +141,6 @@ fn scatter<T: Copy>(e: &[T], mask: TransducerMask<'_>, null: T, dst: &mut [Vec<T
                 }
             }
         }
+        _ => unreachable!(),
     }
 }

@@ -479,7 +479,9 @@ mod tests {
                     .collect();
                 let expected_intensities = match intensities {
                     StmIntensity::SameForAllIndices(rows) => rows[0].clone(),
-                    _ => vec![Intensity(0x80); Autd3::NUM_TRANSDUCERS],
+                    StmIntensity::Uniform(_) | StmIntensity::PerIndex(_) => {
+                        vec![Intensity(0x80); Autd3::NUM_TRANSDUCERS]
+                    }
                 };
                 assert_eq!(
                     device.fpga().emissions_at(1, index),

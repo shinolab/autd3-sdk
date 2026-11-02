@@ -28,9 +28,10 @@ pub(crate) async fn connect(
 }
 
 fn udp_cause(e: &Error) -> Option<&UdpError> {
-    match e {
-        Error::Network(cause) => Some(cause),
-        _ => None,
+    if let Error::Network(cause) = e {
+        Some(cause)
+    } else {
+        None
     }
 }
 

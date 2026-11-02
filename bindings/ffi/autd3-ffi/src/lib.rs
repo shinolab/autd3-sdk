@@ -1144,23 +1144,25 @@ pub unsafe extern "C" fn autd3_op_free(op: *mut OwnedCommand) {
 
 impl OwnedCommand {
     fn check_each(&self, num_devices: usize) -> Result<(), String> {
-        match self {
-            OwnedCommand::Each(devices) if devices.len() != num_devices => Err(format!(
+        let OwnedCommand::Each(devices) = self else {
+            return Ok(());
+        };
+        if devices.len() != num_devices {
+            return Err(format!(
                 "per-device command holds {} entries for {num_devices} devices",
                 devices.len()
-            )),
-            OwnedCommand::Each(devices) => devices
-                .iter()
-                .enumerate()
-                .filter_map(|(device, op)| op.as_ref().map(|op| (device, op)))
-                .try_for_each(|(device, op)| match op.operation() {
-                    Some(_) => Ok(()),
-                    None => Err(format!(
-                        "per-device command entry for device {device} is not a single-frame operation"
-                    )),
-                }),
-            _ => Ok(()),
+            ));
         }
+        devices
+            .iter()
+            .enumerate()
+            .filter_map(|(device, op)| op.as_ref().map(|op| (device, op)))
+            .try_for_each(|(device, op)| match op.operation() {
+                Some(_) => Ok(()),
+                None => Err(format!(
+                    "per-device command entry for device {device} is not a single-frame operation"
+                )),
+            })
     }
 
     fn boxed(&self) -> BoxedCommand<'_> {

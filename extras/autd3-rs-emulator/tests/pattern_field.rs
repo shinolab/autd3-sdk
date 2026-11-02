@@ -51,7 +51,7 @@ fn rms_grid(record: &Record, target: Point3<f32>) -> Vec<f32> {
     assert_eq!(frame.rows, GRID * GRID);
     match &frame.columns[0].1 {
         RawColumn::F32(v) => v.clone(),
-        _ => panic!("rms column must be f32"),
+        RawColumn::U8(_) | RawColumn::U16(_) => panic!("rms column must be f32"),
     }
 }
 
