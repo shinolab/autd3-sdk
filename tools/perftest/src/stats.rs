@@ -130,7 +130,8 @@ pub(crate) struct LatencyStats {
 }
 
 pub(crate) fn rtt_histogram() -> hdrhistogram::Histogram<u64> {
-    hdrhistogram::Histogram::new(3).expect("3 significant digits is a valid precision")
+    hdrhistogram::Histogram::new_with_max(3_600_000_000_000, 3)
+        .expect("1 hour in ns with 3 significant digits is a valid range")
 }
 
 pub(crate) fn record_rtt(rtts: &mut hdrhistogram::Histogram<u64>, rtt: Duration) {
