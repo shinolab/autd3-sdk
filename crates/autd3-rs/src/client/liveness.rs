@@ -23,6 +23,14 @@ impl DeviceLiveness {
         }
     }
 
+    pub(crate) fn unsynchronized() -> Self {
+        Self {
+            state: DeviceState::Syncing,
+            last_flags: Flags::empty(),
+            ..Self::new()
+        }
+    }
+
     pub(crate) fn record_send_failure(&mut self, now: Instant, lost_timeout: Duration) {
         let since = *self.send_failing_since.get_or_insert(now);
         if now.saturating_duration_since(since) >= lost_timeout {
@@ -195,6 +203,17 @@ mod tests {
 
         assert!(liveness.accept_reply(1, 1, Flags::ASSIGNED | Flags::SYNC_READY, now));
         assert_eq!(liveness.reported_flags(), Flags::empty());
+    }
+
+    #[test]
+    fn an_unsynchronized_device_is_syncing_until_its_first_reply() {
+        let mut liveness = DeviceLiveness::unsynchronized();
+        assert_eq!(liveness.state(), DeviceState::Syncing);
+        assert_eq!(liveness.reported_flags(), Flags::empty());
+
+        assert!(liveness.accept_reply(1, 1, READY, Instant::now()));
+        assert_eq!(liveness.state(), DeviceState::Ready);
+        assert_eq!(liveness.reported_flags(), Flags::PTP_LOCKED);
     }
 
     #[test]
