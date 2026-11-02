@@ -9,7 +9,7 @@ use autd3_rs::TransportOption;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let client = Client::open(&geometry, &TransportOption::default())?;
+    let client = Client::open(&geometry, &TransportOption::default()).await?;
 
     // ANCHOR: ptp_failsafe
     let status = client.device_status()?;
@@ -34,10 +34,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut heartbeat = tokio::time::interval(Duration::from_millis(10));
     loop {
         heartbeat.tick().await;
-        client.send_heartbeat()?;
+        client.send_heartbeat().await?;
     }
     // ANCHOR_END: heartbeat
 
-    client.close()?;
+    client.close().await?;
     Ok(())
 }

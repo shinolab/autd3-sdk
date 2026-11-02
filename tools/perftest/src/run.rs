@@ -219,7 +219,9 @@ pub(crate) async fn run(cli: &Cli) -> Result<RunOutput> {
         },
         ..Default::default()
     };
-    let client = Client::open(&geometry, &option).context("opening the devices")?;
+    let client = Client::open(&geometry, &option)
+        .await
+        .context("opening the devices")?;
     client.send(Clear).await.context("initial Clear")?;
     client
         .send(Synchronize)
@@ -277,7 +279,7 @@ pub(crate) async fn run(cli: &Cli) -> Result<RunOutput> {
         while tokio::time::Instant::now() < until {
             tokio::select! {
                 _ = heartbeat.tick() => {
-                    client.send_heartbeat().context("sending a heartbeat")?;
+                    client.send_heartbeat().await.context("sending a heartbeat")?;
                     heartbeats += 1;
                 }
                 () = tokio::time::sleep_until(until) => {}
@@ -310,7 +312,7 @@ pub(crate) async fn run(cli: &Cli) -> Result<RunOutput> {
         output.telemetry_end = telemetry;
     }
 
-    if let Err(e) = client.close() {
+    if let Err(e) = client.close().await {
         eprintln!("the client closed with an error: {e}");
     }
 

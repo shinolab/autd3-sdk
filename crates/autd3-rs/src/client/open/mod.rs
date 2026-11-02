@@ -11,7 +11,7 @@ use super::device_clock::DeviceClock;
 
 use enumerate::bring_up;
 
-pub(crate) fn open(
+pub(crate) async fn open(
     option: &TransportOption,
     num_devices: usize,
     device_clock: &mut DeviceClock,
@@ -20,13 +20,14 @@ pub(crate) fn open(
     if !(1..=MAX_DEVICES).contains(&num_devices) {
         return Err(UdpError::InvalidDeviceCount(num_devices));
     }
-    let target = iface_probe::resolve(&option.iface)?;
+    let target = iface_probe::resolve(&option.iface).await?;
     let mut channel = Channel::open(
         target.all_devices_dst,
         target.scope_id,
         option.send_buffer_bytes,
-    )?;
-    let device_addrs = bring_up(&channel, option, deadline, num_devices, device_clock)?;
+    )
+    .await?;
+    let device_addrs = bring_up(&channel, option, deadline, num_devices, device_clock).await?;
     channel.attach_devices(device_addrs);
     Ok(channel)
 }

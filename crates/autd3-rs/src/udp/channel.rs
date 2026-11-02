@@ -1,134 +1,68 @@
 use std::io;
-use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6, UdpSocket};
+use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6};
 use std::num::NonZeroUsize;
 use std::time::Instant;
 
 use autd3_cpu_wire::FRAME_BYTES_MAX;
 use autd3_cpu_wire::udp::{Header, Kind};
 use socket2::{Domain, Protocol, Socket, Type};
+use tokio::net::UdpSocket;
+use tokio::time::timeout_at;
 use zerocopy::{FromBytes, IntoBytes};
 
 use super::DeviceReply;
 
 pub(crate) const RECV_BUFFER_BYTES: usize = 2048;
 
-pub(crate) enum Polled {
-    Empty,
-    Wake,
-    Device(DeviceReply),
-}
-
 pub(crate) fn same_endpoint(a: SocketAddrV6, b: SocketAddrV6) -> bool {
     a.ip() == b.ip() && a.port() == b.port()
 }
 
-#[derive(Clone, Copy)]
-enum Interest {
-    Readable,
-    Writable,
-}
-
 pub(crate) struct Channel {
     socket: UdpSocket,
-    waker_socket: UdpSocket,
+    deadline_check_socket: std::net::UdpSocket,
     all_devices_dst: SocketAddrV6,
     device_addrs: Vec<SocketAddrV6>,
-    waker_socket_port: u16,
 }
 
-#[cfg(unix)]
-mod sys {
-    use std::ffi::c_int;
-    use std::io;
-    use std::os::fd::AsRawFd;
-    use std::time::Duration;
-
-    use super::Interest;
-
-    pub(super) fn wait(
-        socket: &impl AsRawFd,
-        interest: Interest,
-        timeout: Option<Duration>,
-    ) -> io::Result<bool> {
-        let mut fd = libc::pollfd {
-            fd: socket.as_raw_fd(),
-            events: match interest {
-                Interest::Readable => libc::POLLIN,
-                Interest::Writable => libc::POLLOUT,
-            },
-            revents: 0,
-        };
-        let millis = timeout.map_or(-1, |timeout| {
-            c_int::try_from(timeout.as_micros().div_ceil(1000)).unwrap_or(c_int::MAX)
-        });
-        loop {
-            match unsafe { libc::poll(&raw mut fd, 1, millis) } {
-                0 => return Ok(false),
-                ready if ready > 0 => return Ok(true),
-                _ => {
-                    let e = io::Error::last_os_error();
-                    if e.kind() != io::ErrorKind::Interrupted {
-                        return Err(e);
-                    }
-                }
-            }
-        }
-    }
-
-    pub(super) fn is_oversized(_e: &io::Error) -> bool {
-        false
-    }
+fn is_oversized(e: &io::Error) -> bool {
+    cfg!(windows) && e.raw_os_error() == Some(10040)
 }
 
-#[cfg(windows)]
-mod sys {
-    use std::io;
-    use std::os::windows::io::AsRawSocket;
-    use std::time::Duration;
-
-    use windows_sys::Win32::Networking::WinSock::{
-        POLLRDNORM, POLLWRNORM, SOCKET_ERROR, WSAEMSGSIZE, WSAPOLLFD, WSAPoll,
-    };
-
-    use super::Interest;
-
-    pub(super) fn wait(
-        socket: &impl AsRawSocket,
-        interest: Interest,
-        timeout: Option<Duration>,
-    ) -> io::Result<bool> {
-        let mut fd = WSAPOLLFD {
-            fd: usize::try_from(socket.as_raw_socket()).expect("a socket handle fits in a pointer"),
-            events: match interest {
-                Interest::Readable => POLLRDNORM,
-                Interest::Writable => POLLWRNORM,
-            },
-            revents: 0,
-        };
-        let millis = timeout.map_or(-1, |timeout| {
-            i32::try_from(timeout.as_micros().div_ceil(1000)).unwrap_or(i32::MAX)
-        });
-        loop {
-            match unsafe { WSAPoll(&raw mut fd, 1, millis) } {
-                0 => return Ok(false),
-                SOCKET_ERROR => {
-                    let e = io::Error::last_os_error();
-                    if e.kind() != io::ErrorKind::Interrupted {
-                        return Err(e);
-                    }
-                }
-                _ => return Ok(true),
-            }
+fn accepted_datagram(
+    received: io::Result<(usize, SocketAddr)>,
+) -> io::Result<Option<(usize, SocketAddrV6)>> {
+    match received {
+        Ok((len, src)) if len >= RECV_BUFFER_BYTES => {
+            tracing::debug!(%src, "dropped a datagram that does not fit the receive buffer");
+            Ok(None)
         }
-    }
-
-    pub(super) fn is_oversized(e: &io::Error) -> bool {
-        e.raw_os_error() == Some(WSAEMSGSIZE)
+        Ok((len, SocketAddr::V6(src))) => Ok(Some((len, src))),
+        Ok(_) => Ok(None),
+        Err(e)
+            if matches!(
+                e.kind(),
+                io::ErrorKind::ConnectionReset
+                    | io::ErrorKind::ConnectionRefused
+                    | io::ErrorKind::HostUnreachable
+                    | io::ErrorKind::NetworkUnreachable
+                    | io::ErrorKind::NetworkDown
+                    | io::ErrorKind::AddrNotAvailable
+                    | io::ErrorKind::Interrupted
+            ) =>
+        {
+            Ok(None)
+        }
+        Err(e) if is_oversized(&e) => {
+            tracing::debug!("dropped a datagram that does not fit the receive buffer");
+            Ok(None)
+        }
+        Err(e) => Err(e),
     }
 }
 
 impl Channel {
-    pub(crate) fn open(
+    pub(crate) async fn open(
         all_devices_dst: SocketAddrV6,
         scope_id: Option<u32>,
         send_buffer_bytes: Option<NonZeroUsize>,
@@ -149,22 +83,16 @@ impl Channel {
                 "send buffer set"
             );
         }
-        let socket: UdpSocket = socket.into();
-        let waker_socket = UdpSocket::bind(SocketAddrV6::new(Ipv6Addr::LOCALHOST, 0, 0, 0))?;
-        waker_socket.set_nonblocking(true)?;
-        waker_socket.connect(SocketAddrV6::new(
-            Ipv6Addr::LOCALHOST,
-            socket.local_addr()?.port(),
-            0,
-            0,
-        ))?;
-        let waker_socket_port = waker_socket.local_addr()?.port();
+        let socket: std::net::UdpSocket = socket.into();
+        let deadline_check_socket = socket.try_clone()?;
+        deadline_check_socket.set_nonblocking(true)?;
+        let socket = UdpSocket::from_std(socket)?;
+        socket.writable().await?;
         Ok(Self {
             socket,
-            waker_socket,
+            deadline_check_socket,
             all_devices_dst,
             device_addrs: Vec::new(),
-            waker_socket_port,
         })
     }
 
@@ -181,15 +109,7 @@ impl Channel {
         self.all_devices_dst
     }
 
-    fn is_from_waker(&self, src: SocketAddrV6) -> bool {
-        src.ip().is_loopback() && src.port() == self.waker_socket_port
-    }
-
-    pub(crate) fn wake(&self) -> io::Result<()> {
-        self.waker_socket.send(&[]).map(|_| ())
-    }
-
-    pub(crate) fn send_to_device(
+    pub(crate) async fn send_to_device(
         &self,
         device: usize,
         kind: Kind,
@@ -204,15 +124,15 @@ impl Channel {
             body,
             retry_full_socket_until,
         )
+        .await
     }
 
-    pub(crate) fn send(
+    fn try_send(
         &self,
         dst: SocketAddrV6,
         kind: Kind,
         msg_id: u16,
         body: [&[u8]; 2],
-        retry_full_socket_until: Option<Instant>,
     ) -> io::Result<Instant> {
         let header = Header::new(kind, msg_id);
         let mut datagram = [0; size_of::<Header>() + FRAME_BYTES_MAX];
@@ -223,32 +143,51 @@ impl Channel {
         }
         loop {
             let attempted_at = Instant::now();
-            match self.socket.send_to(&datagram[..len], dst) {
+            match self.socket.try_send_to(&datagram[..len], dst.into()) {
                 Ok(_) => return Ok(attempted_at),
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
-                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    let remaining = retry_full_socket_until
-                        .map(|retry_full_socket_until| {
-                            retry_full_socket_until.saturating_duration_since(Instant::now())
-                        })
-                        .unwrap_or_default();
-                    if remaining.is_zero() {
-                        return Err(e);
-                    }
-                    sys::wait(&self.socket, Interest::Writable, Some(remaining))?;
-                }
                 Err(e) => return Err(e),
             }
         }
     }
 
-    pub(crate) fn try_recv_from_device(&self) -> io::Result<Polled> {
-        let mut buf = [0; RECV_BUFFER_BYTES];
-        let deadline = Some(Instant::now());
-        while let Some((src, datagram)) = self.recv_datagram(&mut buf, deadline)? {
-            if self.is_from_waker(src) {
-                return Ok(Polled::Wake);
+    pub(crate) async fn send(
+        &self,
+        dst: SocketAddrV6,
+        kind: Kind,
+        msg_id: u16,
+        body: [&[u8]; 2],
+        retry_full_socket_until: Option<Instant>,
+    ) -> io::Result<Instant> {
+        loop {
+            match self.try_send(dst, kind, msg_id, body) {
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    let Some(until) =
+                        retry_full_socket_until.filter(|&until| until > Instant::now())
+                    else {
+                        return Err(e);
+                    };
+                    if let Ok(ready) = timeout_at(until.into(), self.socket.writable()).await {
+                        ready?;
+                    }
+                }
+                sent => return sent,
             }
+        }
+    }
+
+    fn next_device_reply(
+        &self,
+        mut recv: impl FnMut(&mut [u8]) -> io::Result<(usize, SocketAddr)>,
+    ) -> io::Result<Option<DeviceReply>> {
+        let mut buf = [0; RECV_BUFFER_BYTES];
+        loop {
+            let (len, src) = match accepted_datagram(recv(&mut buf)) {
+                Ok(Some(datagram)) => datagram,
+                Ok(None) => continue,
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => return Ok(None),
+                Err(e) => return Err(e),
+            };
             let Some(device) = self
                 .device_addrs
                 .iter()
@@ -256,64 +195,61 @@ impl Channel {
             else {
                 continue;
             };
-            let Ok((header, body)) = Header::read_from_prefix(datagram) else {
+            let Ok((header, body)) = Header::read_from_prefix(&buf[..len]) else {
                 continue;
             };
             if let Some(parsed) = DeviceReply::parse(device, header, body) {
-                return Ok(Polled::Device(parsed));
+                return Ok(Some(parsed));
             }
         }
-        Ok(Polled::Empty)
     }
 
-    pub(crate) fn recv_datagram<'a>(
+    pub(crate) fn try_recv_from_device(&self) -> io::Result<Option<DeviceReply>> {
+        self.next_device_reply(|buf| self.socket.try_recv_from(buf))
+    }
+
+    pub(crate) fn recv_from_device_past_readiness(&self) -> io::Result<Option<DeviceReply>> {
+        self.next_device_reply(|buf| self.deadline_check_socket.recv_from(buf))
+    }
+
+    pub(crate) async fn recv_datagram<'a>(
         &self,
         buf: &'a mut [u8; RECV_BUFFER_BYTES],
         deadline: Option<Instant>,
     ) -> io::Result<Option<(SocketAddrV6, &'a [u8])>> {
         let (len, src) = loop {
-            match self.socket.recv_from(&mut buf[..]) {
-                Ok((len, src)) if len >= RECV_BUFFER_BYTES => {
-                    tracing::debug!(%src, "dropped a datagram that does not fit the receive buffer");
-                }
-                Ok((len, SocketAddr::V6(src))) => break (len, src),
-                Ok(_) => {}
-                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    let remaining =
-                        deadline.map(|deadline| deadline.saturating_duration_since(Instant::now()));
-                    if remaining.is_some_and(|remaining| remaining.is_zero())
-                        || !sys::wait(&self.socket, Interest::Readable, remaining)?
-                    {
-                        return Ok(None);
+            match accepted_datagram(self.socket.try_recv_from(&mut buf[..])) {
+                Ok(Some(datagram)) => break datagram,
+                Ok(None) => {}
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => match deadline {
+                    Some(deadline) => {
+                        match timeout_at(deadline.into(), self.socket.readable()).await {
+                            Ok(ready) => ready?,
+                            Err(_) => return Ok(None),
+                        }
                     }
-                }
-                Err(e)
-                    if matches!(
-                        e.kind(),
-                        io::ErrorKind::ConnectionReset
-                            | io::ErrorKind::ConnectionRefused
-                            | io::ErrorKind::HostUnreachable
-                            | io::ErrorKind::NetworkUnreachable
-                            | io::ErrorKind::NetworkDown
-                            | io::ErrorKind::AddrNotAvailable
-                            | io::ErrorKind::Interrupted
-                    ) => {}
-                Err(e) if sys::is_oversized(&e) => {
-                    tracing::debug!("dropped a datagram that does not fit the receive buffer");
-                }
+                    None => self.socket.readable().await?,
+                },
                 Err(e) => return Err(e),
             }
         };
         Ok(Some((src, &buf[..len])))
     }
 
-    pub(crate) fn wait_readable(&self, deadline: Instant) -> io::Result<()> {
-        let remaining = deadline.saturating_duration_since(Instant::now());
-        sys::wait(&self.socket, Interest::Readable, Some(remaining)).map(|_| ())
+    pub(crate) async fn readable(&self) -> io::Result<()> {
+        self.socket.readable().await
     }
 
-    pub(crate) fn socket(&self) -> &UdpSocket {
-        &self.socket
+    #[cfg(test)]
+    pub(crate) fn wait_for_datagram_in_the_kernel(&self) {
+        let mut buf = [0; RECV_BUFFER_BYTES];
+        while self
+            .deadline_check_socket
+            .peek_from(&mut buf)
+            .is_err_and(|e| e.kind() == io::ErrorKind::WouldBlock)
+        {
+            std::hint::spin_loop();
+        }
     }
 }
 
@@ -321,18 +257,20 @@ impl Channel {
 mod tests {
     use super::*;
 
-    #[test]
-    fn a_full_size_datagram_is_the_header_followed_by_both_body_parts() {
-        let receiver = UdpSocket::bind(SocketAddrV6::new(Ipv6Addr::LOCALHOST, 0, 0, 0)).unwrap();
+    #[tokio::test]
+    async fn a_full_size_datagram_is_the_header_followed_by_both_body_parts() {
+        let receiver =
+            std::net::UdpSocket::bind(SocketAddrV6::new(Ipv6Addr::LOCALHOST, 0, 0, 0)).unwrap();
         let SocketAddr::V6(dst) = receiver.local_addr().unwrap() else {
             panic!("the receiver is bound to an IPv6 address");
         };
-        let channel = Channel::open(dst, None, None).unwrap();
+        let channel = Channel::open(dst, None, None).await.unwrap();
         let first = [1; 6];
         let second = [2; FRAME_BYTES_MAX - 6];
 
         channel
             .send(dst, Kind::Frame, 0x1234, [&first, &second], None)
+            .await
             .unwrap();
 
         let mut buf = [0; RECV_BUFFER_BYTES];

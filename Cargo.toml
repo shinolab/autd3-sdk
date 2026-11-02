@@ -50,8 +50,6 @@ bitflags = { version = "2.13.2", default-features = false }
 etherparse = { version = "0.21.0", default-features = false }
 tokio = { version = "1.54.1", default-features = false }
 socket2 = { version = "0.6.5", default-features = false }
-libc = { version = "0.2.191", default-features = false }
-windows-sys = { version = "0.61.2", default-features = false }
 clap = { version = "4.6.7", default-features = false, features = [
     "std",
     "derive",
@@ -59,11 +57,6 @@ clap = { version = "4.6.7", default-features = false, features = [
     "usage",
     "error-context",
 ] }
-futures-channel = { version = "0.3.34", default-features = false, features = [
-    "alloc",
-] }
-async-lock = { version = "3.4.2", default-features = false, features = ["std"] }
-pollster = { version = "1.0.1", default-features = false }
 humantime = { version = "2.4.0", default-features = false }
 hdrhistogram = { version = "7.6.0", default-features = false }
 if-addrs = { version = "0.15.0", default-features = false }

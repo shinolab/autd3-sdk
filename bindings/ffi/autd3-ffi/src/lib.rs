@@ -7,7 +7,7 @@ use std::time::Duration;
 mod logging;
 mod udp;
 
-use autd3_binding_rt::Executor;
+use autd3_binding_rt::{Runtime, block_on, new_runtime};
 use autd3_ffi_abi::{
     AUTD3_ERR, AUTD3_ERR_DEVICE, AUTD3_ERR_INVALID_ARGUMENT, AUTD3_ERR_NETWORK, AUTD3_ERR_TIMEOUT,
     AUTD3_OK, Autd3FirmwareVersion, Autd3Telemetry, Buffer, CompletionCallback, CompletionCtx,
@@ -1510,13 +1510,17 @@ pub(crate) fn error_code(e: &Error) -> i32 {
     }
 }
 
-fn spawn_completion<T>(
+fn runtime() -> &'static Runtime {
+    static RUNTIME: OnceLock<Runtime> = OnceLock::new();
+    RUNTIME.get_or_init(new_runtime)
+}
+
+fn spawn_completion<T: Send + 'static>(
     ctx: CompletionCtx,
     future: impl Future<Output = Result<T, Error>> + Send + 'static,
     into_value: impl FnOnce(T) -> *mut c_void + Send + 'static,
 ) {
-    static EXECUTOR: OnceLock<Executor> = OnceLock::new();
-    EXECUTOR.get_or_init(Executor::new).spawn(async move {
+    runtime().spawn(async move {
         match future.await {
             Ok(value) => ctx.ok(into_value(value)),
             Err(e) => ctx.fail(error_code(&e), &e.to_string()),
@@ -1595,7 +1599,7 @@ pub unsafe extern "C" fn autd3_client_open(
         }
     };
 
-    match Client::open(geometry, &option) {
+    match block_on(runtime().handle(), Client::open(geometry, &option)) {
         Ok(client) => unsafe { write_out(out, into_handle(ClientHandle(Arc::new(client)))) },
         Err(e) => {
             unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
@@ -1741,7 +1745,7 @@ pub unsafe extern "C" fn autd3_client_send_heartbeat(
         return AUTD3_ERR_INVALID_ARGUMENT;
     };
 
-    match client.0.send_heartbeat() {
+    match block_on(runtime().handle(), client.0.send_heartbeat()) {
         Ok(()) => AUTD3_OK,
         Err(e) => {
             unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
@@ -2056,7 +2060,7 @@ pub unsafe extern "C" fn autd3_client_close(
         return AUTD3_ERR_INVALID_ARGUMENT;
     };
 
-    match client.0.close() {
+    match block_on(runtime().handle(), client.0.close()) {
         Ok(()) => AUTD3_OK,
         Err(e) => {
             unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
@@ -2083,7 +2087,36 @@ autd3_ffi_abi::export_abi_version!();
 
 #[cfg(test)]
 mod tests {
+    use std::sync::mpsc::{Sender, channel};
+
     use super::*;
+
+    extern "C" fn block_on_the_runtime_from_the_callback(
+        _code: i32,
+        _value: *mut c_void,
+        _message: *const c_char,
+        user_data: *mut c_void,
+    ) {
+        let done = unsafe { &*user_data.cast::<Sender<u32>>() };
+        let blocked = block_on(runtime().handle(), async {
+            tokio::spawn(async { 7 }).await.unwrap()
+        });
+        let _ = done.send(blocked);
+    }
+
+    #[test]
+    fn a_completion_callback_can_block_on_the_runtime() {
+        let (mut done, finished) = channel();
+        let ctx = CompletionCtx::new(
+            Some(block_on_the_runtime_from_the_callback),
+            (&raw mut done).cast(),
+        )
+        .unwrap();
+
+        spawn_completion(ctx, async { Ok(()) }, |()| std::ptr::null_mut());
+
+        assert_eq!(finished.recv(), Ok(7));
+    }
 
     fn pending_error(pending: *mut OwnedCommand) -> (i32, String) {
         let geometry = Geometry::new(vec![autd3_rs::geometry::Autd3::default()]);

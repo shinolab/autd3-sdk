@@ -12,7 +12,7 @@ async fn main() -> anyhow::Result<()> {
     // HIDE_END
     let geometry = Geometry::new(vec![Autd3::default()]);
     let option = TransportOption::default();
-    let client = Client::open(&geometry, &option)?;
+    let client = Client::open(&geometry, &option).await?;
     client.send(Clear).await?;
     client.send(Synchronize).await?;
 
@@ -46,7 +46,7 @@ async fn main() -> anyhow::Result<()> {
         },
     )).await?;
 
-    client.close()?;
+    client.close().await?;
     // HIDE
     Ok(())
 }

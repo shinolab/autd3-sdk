@@ -2,11 +2,11 @@ use std::collections::VecDeque;
 use std::num::NonZeroU64;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
-use std::task::{Poll, Waker};
 use std::time::{Duration, Instant};
 
 use autd3_cpu_wire::udp::{Flags, Kind};
 use autd3_rs_core::MAX_DEVICES;
+use tokio::sync::Notify;
 use zerocopy::{FromZeros, IntoBytes};
 
 use crate::datagram::Frame;
@@ -16,10 +16,10 @@ use crate::error::{Error, NetworkCause};
 use crate::geometry::Geometry;
 use crate::protocol::{FrameHeader, MAX_INFLIGHT};
 use crate::response::Response;
-use crate::udp::{Channel, DeviceReply, Polled, Reply, TransportOption, UdpError};
+use crate::udp::{Channel, DeviceReply, Reply, TransportOption, UdpError};
 use crate::value::SysTime;
 
-use super::completion::ResponseSender;
+use super::completion::{self, ResponseFuture, ResponseSender};
 use super::device_clock::DeviceClock;
 use super::liveness::DeviceLiveness;
 use super::{GRANDMASTER_UNIT_ID, unit_id_of};
@@ -58,7 +58,6 @@ impl InflightRequest {
 struct InflightQueue {
     requests: VecDeque<Option<InflightRequest>>,
     head_ack_clock_started_at: Instant,
-    slot_waiter: Option<Waker>,
 }
 
 impl InflightQueue {
@@ -66,7 +65,6 @@ impl InflightQueue {
         Self {
             requests: VecDeque::with_capacity(MAX_INFLIGHT),
             head_ack_clock_started_at: now,
-            slot_waiter: None,
         }
     }
 
@@ -131,7 +129,6 @@ pub(crate) struct SessionState {
 
 pub(crate) struct FailedRequests {
     requests: Vec<InflightRequest>,
-    slot_waiter: Option<Waker>,
     error: Error,
 }
 
@@ -161,37 +158,23 @@ impl SessionState {
         self.last_msg_id
     }
 
-    pub(crate) fn poll_enqueue(
-        &mut self,
-        waker: &Waker,
-        completion: &mut Option<ResponseSender>,
-        now: Instant,
-    ) -> Poll<Result<u16, Error>> {
+    fn try_enqueue(&mut self, now: Instant) -> Result<Option<(u16, ResponseFuture)>, Error> {
         if let Some(error) = self.closed_error() {
-            return Poll::Ready(Err(error));
+            return Err(error);
         }
         if self.inflight.is_full() {
-            self.inflight.slot_waiter = Some(waker.clone());
-            return Poll::Pending;
+            return Ok(None);
         }
         let msg_id = self.next_msg_id();
+        let (completion, response) = completion::channel();
         self.inflight.push(InflightRequest {
             msg_id,
             sent_to: None,
             sent_at: now,
-            completion: completion
-                .take()
-                .expect("an enqueued frame is not polled again"),
+            completion,
             response: Response::for_devices(self.liveness.len()),
         });
-        Poll::Ready(Ok(msg_id))
-    }
-
-    fn take_released_slot_waiter(&mut self) -> Option<Waker> {
-        if self.inflight.is_full() {
-            return None;
-        }
-        self.inflight.slot_waiter.take()
+        Ok(Some((msg_id, response)))
     }
 
     pub(crate) fn remove(&mut self, msg_id: u16, now: Instant) -> Option<ResponseSender> {
@@ -310,6 +293,11 @@ impl SessionState {
             .is_some_and(|deadline| now >= deadline)
     }
 
+    fn is_any_deadline_overdue(&self, now: Instant) -> bool {
+        self.is_head_ack_overdue(now)
+            || self.lost_deadline().is_some_and(|deadline| now >= deadline)
+    }
+
     pub(crate) fn next_deadline(&self, now: Instant) -> Instant {
         [
             self.lost_deadline(),
@@ -323,13 +311,12 @@ impl SessionState {
     fn fail_all(&mut self, error: Error) -> FailedRequests {
         FailedRequests {
             requests: self.inflight.take_all(),
-            slot_waiter: self.inflight.slot_waiter.take(),
             error,
         }
     }
 
     pub(crate) fn close(&mut self, error: Error) -> FailedRequests {
-        self.closed = Some(error.clone());
+        let error = self.closed.get_or_insert(error).clone();
         self.fail_all(error)
     }
 }
@@ -338,9 +325,6 @@ impl FailedRequests {
     pub(crate) fn resolve(self) {
         for request in self.requests {
             request.fail(self.error.clone());
-        }
-        if let Some(slot_waiter) = self.slot_waiter {
-            slot_waiter.wake();
         }
     }
 }
@@ -351,52 +335,80 @@ struct EachDeviceSend {
     started_lost_clock: bool,
 }
 
+pub(crate) struct EnqueuedFrame<'a> {
+    session: &'a Session,
+    msg_id: u16,
+}
+
+impl EnqueuedFrame<'_> {
+    pub(crate) fn msg_id(&self) -> u16 {
+        self.msg_id
+    }
+}
+
+impl Drop for EnqueuedFrame<'_> {
+    fn drop(&mut self) {
+        let mut state = self.session.lock_state();
+        state.remove(self.msg_id, Instant::now());
+        self.session.release(state);
+    }
+}
+
 pub(crate) struct Session {
     channel: Channel,
     state: Mutex<SessionState>,
     stop_requested: AtomicBool,
     heartbeat_resume_device: AtomicUsize,
+    io_wake: Notify,
+    slot_released: Notify,
 }
 
 impl Session {
-    pub(crate) fn open(geometry: &Geometry, option: &TransportOption) -> Result<Self, UdpError> {
+    pub(crate) async fn open(
+        geometry: &Geometry,
+        option: &TransportOption,
+    ) -> Result<Self, UdpError> {
         let mut device_clock = DeviceClock::default();
-        let channel = super::open::open(option, geometry.num_devices(), &mut device_clock)?;
+        let channel = super::open::open(option, geometry.num_devices(), &mut device_clock).await?;
+        let timeouts = Timeouts {
+            ack: option.ack_timeout,
+            lost: option.lost_timeout,
+        };
+        Ok(Self::new(channel, timeouts, device_clock))
+    }
+
+    fn new(channel: Channel, timeouts: Timeouts, device_clock: DeviceClock) -> Self {
         let num_devices = channel.num_devices();
-        Ok(Self {
+        Self {
             state: Mutex::new(SessionState::new(
                 num_devices,
-                Timeouts {
-                    ack: option.ack_timeout,
-                    lost: option.lost_timeout,
-                },
+                timeouts,
                 device_clock,
                 Instant::now(),
             )),
             stop_requested: AtomicBool::new(false),
             heartbeat_resume_device: AtomicUsize::new(num_devices - 1),
+            io_wake: Notify::new(),
+            slot_released: Notify::new(),
             channel,
-        })
+        }
     }
 
     pub(crate) fn lock_state(&self) -> MutexGuard<'_, SessionState> {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    pub(crate) fn release(mut state: MutexGuard<'_, SessionState>) {
-        let slot_waiter = state.take_released_slot_waiter();
+    fn release(&self, state: MutexGuard<'_, SessionState>) {
+        let has_room = !state.inflight.is_full();
         drop(state);
-        if let Some(slot_waiter) = slot_waiter {
-            slot_waiter.wake();
+        if has_room {
+            self.slot_released.notify_one();
         }
-    }
-
-    pub(crate) fn socket(&self) -> &std::net::UdpSocket {
-        self.channel.socket()
     }
 
     pub(crate) fn request_stop(&self) {
         self.stop_requested.store(true, Ordering::Release);
+        self.wake_io();
     }
 
     pub(crate) fn is_stopping(&self) -> bool {
@@ -409,27 +421,27 @@ impl Session {
             .or_else(|| self.is_stopping().then_some(Error::Closed))
     }
 
-    pub(crate) fn wake(&self) -> bool {
-        match self.channel.wake() {
-            Ok(()) => true,
-            Err(e) => {
-                tracing::debug!("waking the receiver failed: {e}");
-                false
+    pub(crate) fn wake_io(&self) {
+        self.io_wake.notify_one();
+    }
+
+    pub(crate) async fn enqueue(&self) -> Result<(EnqueuedFrame<'_>, ResponseFuture), Error> {
+        loop {
+            if let Some((msg_id, response)) = self.lock_state().try_enqueue(Instant::now())? {
+                let session = self;
+                return Ok((EnqueuedFrame { session, msg_id }, response));
             }
+            self.slot_released.notified().await;
         }
     }
 
-    pub(crate) fn wait_readable(&self, deadline: Instant) -> Result<(), UdpError> {
-        Ok(self.channel.wait_readable(deadline)?)
-    }
-
-    fn send_to_each_device<'a>(
+    async fn send_to_each_device<'a>(
         &self,
         kind: Kind,
         msg_id: u16,
         target_devices: DeviceSet,
         start_device: usize,
-        body_for_device: impl Fn(usize) -> [&'a [u8]; 2],
+        body_for_device: impl Fn(usize) -> [&'a [u8]; 2] + Send,
     ) -> EachDeviceSend {
         let mut retry_full_socket_until = match kind {
             Kind::Frame => Instant::now().checked_add(self.lock_state().timeouts.lost),
@@ -444,13 +456,16 @@ impl Session {
             if !target_devices[device] {
                 continue;
             }
-            let result = self.channel.send_to_device(
-                device,
-                kind,
-                msg_id,
-                body_for_device(device),
-                retry_full_socket_until,
-            );
+            let result = self
+                .channel
+                .send_to_device(
+                    device,
+                    kind,
+                    msg_id,
+                    body_for_device(device),
+                    retry_full_socket_until,
+                )
+                .await;
             match result {
                 Ok(attempted_at) => {
                     attempt_times[device] = Some(attempted_at);
@@ -501,15 +516,9 @@ impl Session {
         }
     }
 
-    pub(crate) fn wake_driver(&self, missed_wake: &str) {
-        if !self.wake() {
-            tracing::debug!("could not wake the driver; {missed_wake}");
-        }
-    }
-
-    pub(crate) fn send_frame(
+    pub(crate) async fn send_frame(
         &self,
-        msg_id: u16,
+        enqueued: EnqueuedFrame<'_>,
         frame: Frame<'_>,
         exec_at: u32,
     ) -> Result<(), Error> {
@@ -521,24 +530,26 @@ impl Session {
         for (header, datagram) in headers.iter_mut().zip(datagrams) {
             *header = datagram.frame_header(exec_at);
         }
-        let outcome = self.send_to_each_device(
-            Kind::Frame,
-            msg_id,
-            target_devices,
-            self.channel.num_devices() - 1,
-            |device| {
-                let index = frame.datagram_index(device);
-                [headers[index].as_bytes(), datagrams[index].payload()]
-            },
-        );
+        let msg_id = enqueued.msg_id;
+        let outcome = self
+            .send_to_each_device(
+                Kind::Frame,
+                msg_id,
+                target_devices,
+                self.channel.num_devices() - 1,
+                |device| {
+                    let index = frame.datagram_index(device);
+                    [headers[index].as_bytes(), datagrams[index].payload()]
+                },
+            )
+            .await;
+        std::mem::forget(enqueued);
         let sent = outcome
             .first_failure
             .map_or(Ok(outcome.accepted_devices), Err);
         let finished = self.finish_frame_send(msg_id, sent);
-        if finished.as_ref().is_ok_and(|&became_head| became_head) {
-            self.wake_driver("the ack timeout is noticed at its next deadline");
-        } else if outcome.started_lost_clock {
-            self.wake_driver("a silent device is noticed at its next deadline");
+        if outcome.started_lost_clock || finished.as_ref().is_ok_and(|&became_head| became_head) {
+            self.wake_io();
         }
         finished.map(|_| ())
     }
@@ -554,14 +565,14 @@ impl Session {
             Ok(sent_to) => sent_to,
             Err(e) => {
                 state.remove(msg_id, now);
-                Self::release(state);
+                self.release(state);
                 return Err(e.into());
             }
         };
         if sent_to.is_empty() {
             let completion = state.remove(msg_id, now);
             let timeout = state.timeouts.ack;
-            Self::release(state);
+            self.release(state);
             if let Some(completion) = completion {
                 let _ = completion.send(Err(Error::Timeout { timeout }));
             }
@@ -569,14 +580,14 @@ impl Session {
         }
         let answered = state.record_sent_to(msg_id, sent_to, now);
         let became_head = state.inflight.is_head(msg_id);
-        Self::release(state);
+        self.release(state);
         if let Some(answered) = answered {
             answered.deliver();
         }
         Ok(became_head)
     }
 
-    pub(crate) fn send_heartbeat(&self) -> Result<(), Error> {
+    pub(crate) async fn send_heartbeat(&self) -> Result<(), Error> {
         let (msg_id, target_devices) = {
             let mut state = self.lock_state();
             if let Some(error) = self.closed_error_of(&state) {
@@ -587,50 +598,49 @@ impl Session {
                 state.devices_where(|liveness| !liveness.is_lost()),
             )
         };
-        let outcome = self.send_to_each_device(
-            Kind::Heartbeat,
-            msg_id,
-            target_devices,
-            self.heartbeat_resume_device.load(Ordering::Relaxed),
-            |_| [&[][..]; 2],
-        );
+        let outcome = self
+            .send_to_each_device(
+                Kind::Heartbeat,
+                msg_id,
+                target_devices,
+                self.heartbeat_resume_device.load(Ordering::Relaxed),
+                |_| [&[][..]; 2],
+            )
+            .await;
         if outcome.started_lost_clock {
-            self.wake_driver("a silent device is noticed at its next deadline");
+            self.wake_io();
         }
         Ok(())
     }
 
-    fn receive_available(&self) -> Result<(), NetworkCause> {
+    fn receive_available(
+        &self,
+        recv_from_device: impl Fn(&Channel) -> std::io::Result<Option<DeviceReply>>,
+    ) -> Result<(), NetworkCause> {
         loop {
-            let polled = self.channel.try_recv_from_device().map_err(|e| {
+            let reply = recv_from_device(&self.channel).map_err(|e| {
                 tracing::error!("receiving failed: {e}");
                 NetworkCause::new(UdpError::from(e))
             })?;
-            match polled {
-                Polled::Empty => {
-                    self.lock_state()
-                        .mark_unanswered_devices_lost(Instant::now());
-                    return Ok(());
-                }
-                Polled::Wake => return Ok(()),
-                Polled::Device(reply) => {
-                    let mut state = self.lock_state();
-                    let answered = state.receive_reply(&reply, Instant::now());
-                    Self::release(state);
-                    if let Some(answered) = answered {
-                        answered.deliver();
-                    }
-                }
+            let Some(reply) = reply else {
+                return Ok(());
+            };
+            let mut state = self.lock_state();
+            let answered = state.receive_reply(&reply, Instant::now());
+            self.release(state);
+            if let Some(answered) = answered {
+                answered.deliver();
             }
         }
     }
 
-    pub(crate) fn step(&self) -> Result<Instant, NetworkCause> {
-        self.receive_available()?;
+    fn step(&self) -> Result<Instant, NetworkCause> {
+        self.receive_available(Channel::try_recv_from_device)?;
         let now = Instant::now();
-        if self.lock_state().is_head_ack_overdue(now) {
-            self.receive_available()?;
+        if self.lock_state().is_any_deadline_overdue(now) {
+            self.receive_available(Channel::recv_from_device_past_readiness)?;
         }
+        self.lock_state().mark_unanswered_devices_lost(now);
         self.fail_all_if_head_ack_overdue(now);
         Ok(self.lock_state().next_deadline(now))
     }
@@ -648,17 +658,49 @@ impl Session {
             "the head frame got no reply within the ack timeout; failing the pending frames"
         );
         failed.resolve();
+        self.slot_released.notify_one();
+    }
+
+    pub(crate) async fn run_io(&self) -> Result<(), NetworkCause> {
+        while !self.is_stopping() {
+            let deadline = self.step()?;
+            tokio::select! {
+                ready = self.channel.readable() => ready.map_err(|e| {
+                    tracing::error!("waiting for a reply failed: {e}");
+                    NetworkCause::new(UdpError::from(e))
+                })?,
+                () = self.io_wake.notified() => {}
+                () = tokio::time::sleep_until(deadline.into()) => {}
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) fn close(&self, error: Error) {
+        let failed = self.lock_state().close(error);
+        failed.resolve();
+        self.slot_released.notify_one();
+        tracing::debug!("session closed");
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use autd3_cpu_wire::udp::Flags;
+pub(super) mod tests {
+    use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6};
+    use std::sync::Arc;
+
+    use autd3_cpu_wire::udp::{Flags, FrameReply, Header};
     use autd3_rs_core::DeviceState;
+    use zerocopy::FromBytes;
+    use zerocopy::little_endian::U64;
+
+    use crate::commands::Distribution;
+    use crate::datagram::Datagram;
+    use crate::protocol::Cmd;
 
     use super::*;
 
-    const TIMEOUTS: Timeouts = Timeouts {
+    pub(in crate::client) const TIMEOUTS: Timeouts = Timeouts {
         ack: Duration::from_millis(10),
         lost: Duration::from_millis(100),
     };
@@ -670,14 +712,8 @@ mod tests {
         SessionState::new(num_devices, TIMEOUTS, DeviceClock::default(), now)
     }
 
-    fn enqueue(state: &mut SessionState, now: Instant) -> (u16, crate::client::ResponseFuture) {
-        let (completion, response) = super::super::completion::channel();
-        let mut completion = Some(completion);
-        let Poll::Ready(Ok(msg_id)) = state.poll_enqueue(Waker::noop(), &mut completion, now)
-        else {
-            panic!("the queue has room");
-        };
-        (msg_id, response)
+    fn enqueue(state: &mut SessionState, now: Instant) -> (u16, ResponseFuture) {
+        state.try_enqueue(now).unwrap().expect("the queue has room")
     }
 
     fn reply(device: usize, msg_id: u16, error_code: u8) -> Reply {
@@ -691,15 +727,8 @@ mod tests {
         let enqueued: Vec<_> = (0..MAX_INFLIGHT)
             .map(|_| enqueue(&mut state, now))
             .collect();
-        let (completion, _response) = super::super::completion::channel();
-        let mut completion = Some(completion);
 
-        assert!(
-            state
-                .poll_enqueue(Waker::noop(), &mut completion, now)
-                .is_pending()
-        );
-        assert!(state.take_released_slot_waiter().is_none());
+        assert!(state.try_enqueue(now).unwrap().is_none());
 
         let head = enqueued[0].0;
         assert!(
@@ -709,11 +738,7 @@ mod tests {
         );
         assert!(state.record_reply(&reply(0, head, 0), now).is_some());
 
-        assert!(state.take_released_slot_waiter().is_some());
-        assert!(matches!(
-            state.poll_enqueue(Waker::noop(), &mut completion, now),
-            Poll::Ready(Ok(_))
-        ));
+        assert!(state.try_enqueue(now).unwrap().is_some());
     }
 
     #[test]
@@ -726,7 +751,6 @@ mod tests {
         let behind_head = enqueued[1].0;
         assert!(state.remove(behind_head, now).is_some());
         assert!(state.inflight.is_full());
-        assert!(state.take_released_slot_waiter().is_none());
 
         let head = enqueued[0].0;
         assert!(state.remove(head, now).is_some());
@@ -753,13 +777,7 @@ mod tests {
 
     fn fill_and_park(state: &mut SessionState, now: Instant) -> Vec<u16> {
         let enqueued = (0..MAX_INFLIGHT).map(|_| enqueue(state, now).0).collect();
-        let (completion, _response) = super::super::completion::channel();
-        let mut completion = Some(completion);
-        assert!(
-            state
-                .poll_enqueue(Waker::noop(), &mut completion, now)
-                .is_pending()
-        );
+        assert!(state.try_enqueue(now).unwrap().is_none());
         enqueued
     }
 
@@ -772,7 +790,6 @@ mod tests {
         assert!(state.remove(enqueued[MAX_INFLIGHT - 1], now).is_some());
 
         assert_eq!(state.inflight.requests.len(), MAX_INFLIGHT - 1);
-        assert!(state.take_released_slot_waiter().is_some());
         let (msg_id, _response) = enqueue(&mut state, now);
         assert_eq!(state.inflight.position(msg_id), Some(MAX_INFLIGHT - 1));
     }
@@ -783,27 +800,15 @@ mod tests {
         let mut state = session_state(1, now);
         let enqueued = fill_and_park(&mut state, now);
         assert!(state.remove(enqueued[MAX_INFLIGHT - 2], now).is_some());
-        assert!(state.take_released_slot_waiter().is_none());
+        assert!(state.inflight.is_full());
 
         assert!(state.remove(enqueued[MAX_INFLIGHT - 1], now).is_some());
 
         assert_eq!(state.inflight.requests.len(), MAX_INFLIGHT - 2);
-        assert!(state.take_released_slot_waiter().is_some());
     }
 
-    #[test]
-    fn failing_every_pending_frame_releases_the_parked_sender() {
-        let now = Instant::now();
-        let mut state = session_state(1, now);
-        fill_and_park(&mut state, now);
-
-        assert_eq!(state.inflight.take_all().len(), MAX_INFLIGHT);
-
-        assert!(state.take_released_slot_waiter().is_some());
-    }
-
-    #[test]
-    fn closing_on_a_network_failure_resolves_with_that_failure() {
+    #[tokio::test]
+    async fn closing_on_a_network_failure_resolves_with_that_failure() {
         let now = Instant::now();
         let mut state = session_state(1, now);
         let (_msg_id, response) = enqueue(&mut state, now);
@@ -811,40 +816,32 @@ mod tests {
 
         state.close(Error::Network(cause)).resolve();
 
-        assert!(matches!(
-            pollster::block_on(response),
-            Err(Error::Network(_))
-        ));
+        assert!(matches!(response.await, Err(Error::Network(_))));
         assert!(matches!(state.closed_error(), Some(Error::Network(_))));
     }
 
     #[test]
-    fn closing_resolves_the_pending_frames_and_wakes_the_parked_sender() {
+    fn the_first_cause_of_closing_is_kept() {
         let now = Instant::now();
         let mut state = session_state(1, now);
-        let mut enqueued: Vec<_> = (0..MAX_INFLIGHT)
-            .map(|_| enqueue(&mut state, now))
-            .collect();
-        let (completion, _response) = super::super::completion::channel();
-        let mut completion = Some(completion);
-        assert!(
-            state
-                .poll_enqueue(Waker::noop(), &mut completion, now)
-                .is_pending()
-        );
+        let cause = NetworkCause::new(UdpError::NoInterfaceFound);
 
-        let failed = state.close(Error::Closed);
-        assert!(failed.slot_waiter.is_some());
-        failed.resolve();
+        state.close(Error::Network(cause)).resolve();
+        state.close(Error::Closed).resolve();
 
-        assert!(matches!(
-            pollster::block_on(enqueued.remove(0).1),
-            Err(Error::Closed)
-        ));
-        assert!(matches!(
-            state.poll_enqueue(Waker::noop(), &mut completion, now),
-            Poll::Ready(Err(Error::Closed))
-        ));
+        assert!(matches!(state.closed_error(), Some(Error::Network(_))));
+    }
+
+    #[tokio::test]
+    async fn closing_resolves_the_pending_frames_and_refuses_new_ones() {
+        let now = Instant::now();
+        let mut state = session_state(1, now);
+        let (_msg_id, response) = enqueue(&mut state, now);
+
+        state.close(Error::Closed).resolve();
+
+        assert!(matches!(response.await, Err(Error::Closed)));
+        assert!(matches!(state.try_enqueue(now), Err(Error::Closed)));
     }
 
     #[test]
@@ -911,8 +908,8 @@ mod tests {
         assert!(!state.inflight.is_head(next));
     }
 
-    #[test]
-    fn a_repeated_reply_from_a_device_keeps_the_first_one() {
+    #[tokio::test]
+    async fn a_repeated_reply_from_a_device_keeps_the_first_one() {
         let now = Instant::now();
         let mut state = session_state(2, now);
         let (msg_id, response) = enqueue(&mut state, now);
@@ -927,7 +924,7 @@ mod tests {
         let answered = state.record_reply(&reply(1, msg_id, 0), now).unwrap();
         answered.deliver();
 
-        assert_eq!(pollster::block_on(response).unwrap().error_codes(), [0, 0]);
+        assert_eq!(response.await.unwrap().error_codes(), [0, 0]);
     }
 
     #[test]
@@ -1066,6 +1063,178 @@ mod tests {
             state.devices_where(|liveness| !liveness.is_lost()),
             DeviceSet::from_iter([0])
         );
+    }
+
+    pub(in crate::client) async fn session_with_device(
+        timeouts: Timeouts,
+    ) -> (Session, std::net::UdpSocket) {
+        let device =
+            std::net::UdpSocket::bind(SocketAddrV6::new(Ipv6Addr::LOCALHOST, 0, 0, 0)).unwrap();
+        let SocketAddr::V6(device_addr) = device.local_addr().unwrap() else {
+            panic!("the device is bound to an IPv6 address");
+        };
+        let mut channel = Channel::open(device_addr, None, None).await.unwrap();
+        channel.attach_devices(vec![device_addr]);
+        (
+            Session::new(channel, timeouts, DeviceClock::default()),
+            device,
+        )
+    }
+
+    fn answer_the_last_request(device: &std::net::UdpSocket) {
+        let mut buf = [0; 64];
+        let (_, host) = device.recv_from(&mut buf).unwrap();
+        let (header, _) = Header::read_from_prefix(&buf).unwrap();
+        let reply = FrameReply {
+            reserved: 0,
+            status: 0,
+            flags: READY,
+            unit_id: 0,
+            sys_time: U64::new(0),
+        };
+        let datagram = [header.as_bytes(), reply.as_bytes()].concat();
+        device.send_to(&datagram, host).unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_reply_the_reactor_has_not_seen_answers_a_frame_past_its_ack_timeout() {
+        let (session, device) = session_with_device(Timeouts {
+            ack: Duration::ZERO,
+            lost: Duration::from_secs(3600),
+        })
+        .await;
+        let datagrams = [Datagram::no_payload(Cmd::Nop)];
+        let frame = Frame::new(Distribution::Broadcast, &datagrams);
+        let (enqueued, response) = session.enqueue().await.unwrap();
+        session.send_frame(enqueued, frame, 0).await.unwrap();
+        answer_the_last_request(&device);
+        session.channel.wait_for_datagram_in_the_kernel();
+
+        session.step().unwrap();
+
+        assert!(response.await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn a_reply_the_reactor_has_not_seen_keeps_a_device_past_its_lost_timeout() {
+        let (session, device) = session_with_device(Timeouts {
+            ack: Duration::from_secs(3600),
+            lost: Duration::ZERO,
+        })
+        .await;
+        session.send_heartbeat().await.unwrap();
+        answer_the_last_request(&device);
+        session.channel.wait_for_datagram_in_the_kernel();
+
+        session.step().unwrap();
+
+        assert_eq!(
+            session.lock_state().device_status()[0].state,
+            DeviceState::Ready
+        );
+    }
+
+    #[tokio::test]
+    async fn dropping_an_unfinished_frame_gives_its_slot_back() {
+        let (session, _device) = session_with_device(TIMEOUTS).await;
+        let mut enqueued = Vec::new();
+        for _ in 0..MAX_INFLIGHT {
+            enqueued.push(session.enqueue().await.unwrap());
+        }
+        assert!(session.lock_state().inflight.is_full());
+
+        drop(enqueued.pop());
+
+        assert_eq!(
+            session.lock_state().inflight.requests.len(),
+            MAX_INFLIGHT - 1
+        );
+        session.enqueue().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn dropping_the_future_of_a_frame_send_keeps_later_sends_going() {
+        let (session, device) = session_with_device(TIMEOUTS).await;
+        let datagrams = [Datagram::no_payload(Cmd::Nop)];
+        let frame = Frame::new(Distribution::Broadcast, &datagrams);
+        let (enqueued, _response) = session.enqueue().await.unwrap();
+
+        drop(session.send_frame(enqueued, frame, 0));
+
+        assert_eq!(session.lock_state().inflight.requests.len(), 0);
+        let (enqueued, response) = session.enqueue().await.unwrap();
+        session.send_frame(enqueued, frame, 0).await.unwrap();
+        answer_the_last_request(&device);
+        session.channel.wait_for_datagram_in_the_kernel();
+        session
+            .receive_available(Channel::recv_from_device_past_readiness)
+            .unwrap();
+        assert!(response.await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn a_parked_sender_takes_the_slot_a_finished_frame_releases() {
+        let session = Arc::new(session_with_device(TIMEOUTS).await.0);
+        let mut enqueued = Vec::new();
+        for _ in 0..MAX_INFLIGHT {
+            enqueued.push(session.enqueue().await.unwrap());
+        }
+        let parked = tokio::spawn({
+            let session = Arc::clone(&session);
+            async move { session.enqueue().await.is_ok() }
+        });
+        tokio::task::yield_now().await;
+        assert!(!parked.is_finished());
+
+        drop(enqueued.pop());
+
+        assert!(parked.await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn failing_every_pending_frame_releases_the_parked_sender() {
+        let timeouts = Timeouts {
+            ack: Duration::ZERO,
+            lost: Duration::from_secs(3600),
+        };
+        let session = Arc::new(session_with_device(timeouts).await.0);
+        let mut enqueued = Vec::new();
+        for _ in 0..MAX_INFLIGHT {
+            enqueued.push(session.enqueue().await.unwrap());
+        }
+        session.lock_state().record_sent_to(
+            enqueued[0].0.msg_id(),
+            DeviceSet::from_iter([0]),
+            Instant::now(),
+        );
+        let parked = tokio::spawn({
+            let session = Arc::clone(&session);
+            async move { session.enqueue().await.is_ok() }
+        });
+        tokio::task::yield_now().await;
+
+        session.step().unwrap();
+
+        assert!(parked.await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn closing_releases_a_parked_sender() {
+        let session = Arc::new(session_with_device(TIMEOUTS).await.0);
+        let mut enqueued = Vec::new();
+        for _ in 0..MAX_INFLIGHT {
+            enqueued.push(session.enqueue().await.unwrap());
+        }
+        let parked = tokio::spawn({
+            let session = Arc::clone(&session);
+            async move { session.enqueue().await.map(|_| ()) }
+        });
+        tokio::task::yield_now().await;
+
+        session.close(Error::Closed);
+
+        assert!(matches!(parked.await.unwrap(), Err(Error::Closed)));
+        drop(enqueued);
     }
 
     fn timed_reply(device: usize, reported_unit_id: u8, sys_time: u64) -> DeviceReply {

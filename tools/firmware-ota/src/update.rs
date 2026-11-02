@@ -1,7 +1,5 @@
 use std::ops::Deref;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::thread::JoinHandle;
+use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
 use autd3_cpu_wire::describe_device_error;
@@ -16,8 +14,10 @@ use autd3_rs::commands::{
 };
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::protocol::Cmd;
-use autd3_rs::udp::UdpError;
 use autd3_rs::{Client, DeviceState, Error, FirmwareVersion, TransportOption};
+use tokio::runtime::{Builder, Runtime};
+use tokio::task::JoinHandle;
+use tokio::time::MissedTickBehavior;
 
 use crate::fpga_image::FpgaFirmwareImage;
 
@@ -171,34 +171,37 @@ pub struct UpdateProgress {
     pub total: usize,
 }
 
+static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
+    Builder::new_multi_thread()
+        .worker_threads(1)
+        .enable_all()
+        .build()
+        .expect("failed to build the tokio runtime")
+});
+
 pub struct KeepaliveClient {
     client: Arc<Client>,
-    keepalive_stop: Arc<AtomicBool>,
-    keepalive: Option<JoinHandle<()>>,
+    keepalive: JoinHandle<()>,
 }
 
 impl KeepaliveClient {
     pub(crate) fn open(option: &TransportOption, num_devices: usize) -> Result<Self, Error> {
         let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()));
-        let client = Arc::new(Client::open(&geometry, option)?);
-        let keepalive_stop = Arc::new(AtomicBool::new(false));
-        let keepalive = {
+        let client = Arc::new(RUNTIME.block_on(Client::open(&geometry, option))?);
+        let keepalive = RUNTIME.spawn({
             let client = Arc::clone(&client);
-            let stop = Arc::clone(&keepalive_stop);
-            std::thread::Builder::new()
-                .name("autd3-ota-keepalive".to_owned())
-                .spawn(move || {
-                    while !stop.load(Ordering::Acquire) && client.send_heartbeat().is_ok() {
-                        std::thread::park_timeout(HEARTBEAT);
+            async move {
+                let mut ticker = tokio::time::interval(HEARTBEAT);
+                ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
+                loop {
+                    ticker.tick().await;
+                    if client.send_heartbeat().await.is_err() {
+                        break;
                     }
-                })
-                .map_err(|e| Error::from(UdpError::from(e)))?
-        };
-        Ok(Self {
-            client,
-            keepalive_stop,
-            keepalive: Some(keepalive),
-        })
+                }
+            }
+        });
+        Ok(Self { client, keepalive })
     }
 }
 
@@ -212,11 +215,8 @@ impl Deref for KeepaliveClient {
 
 impl Drop for KeepaliveClient {
     fn drop(&mut self) {
-        self.keepalive_stop.store(true, Ordering::Release);
-        if let Some(keepalive) = self.keepalive.take() {
-            keepalive.thread().unpark();
-            let _ = keepalive.join();
-        }
+        self.keepalive.abort();
+        let _ = RUNTIME.block_on(&mut self.keepalive);
     }
 }
 
@@ -267,17 +267,22 @@ pub fn ensure_no_device_lost(client: &Client, cmd: Cmd) -> Result<(), OtaError> 
 }
 
 pub fn send(client: &Client, cmd: Cmd, command: impl Command) -> Result<(), OtaError> {
-    pollster::block_on(client.send(command)).map_err(|e| ota_error(cmd, e))?;
+    RUNTIME
+        .block_on(client.send(command))
+        .map_err(|e| ota_error(cmd, e))?;
     ensure_no_device_lost(client, cmd)
 }
 
 pub fn read_firmware_version(client: &Client) -> Result<Vec<FirmwareVersion>, OtaError> {
-    pollster::block_on(client.read_firmware_version())
+    RUNTIME
+        .block_on(client.read_firmware_version())
         .map_err(|e| ota_error(Cmd::ReadFirmwareInfo, e))
 }
 
 pub fn read_running_image(client: &Client) -> Result<Vec<Option<RunningImage>>, OtaError> {
-    pollster::block_on(client.read_running_image()).map_err(|e| ota_error(Cmd::ReadRunningImage, e))
+    RUNTIME
+        .block_on(client.read_running_image())
+        .map_err(|e| ota_error(Cmd::ReadRunningImage, e))
 }
 
 fn ensure_fpga_update_supported(client: &Client) -> Result<(), OtaError> {

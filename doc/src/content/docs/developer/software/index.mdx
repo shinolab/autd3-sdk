@@ -36,33 +36,32 @@ import Mermaid from "@components/Mermaid.astro";
 | `autd3-rs-modulation`        | AM 波形計算.                                                          |
 | `autd3-rs-firmware-emulator` | 実 CPU ファームウェアのクレート (`autd3-cpu-fw`) をリンクし, Rust による FPGA エミュレータと組み合わせる |
 
-## スレッドモデル
+## タスクモデル
 
 デバイスとの送受信と, ユーザーの非同期 API を分離している.
 
 <Mermaid
-  title="スレッドモデル"
+  title="タスクモデル"
   code={`flowchart LR
-  U["ユーザースレッド (非同期)"]
-  IO["I/O スレッド (受信)"]
+  U["ユーザーのタスク (非同期)"]
+  IO["I/O タスク (受信)"]
   D["デバイス"]
   U -- "UDP: フレーム" --> D
   D -- "UDP: 返信" --> IO
   IO -- "oneshot: 完了通知" --> U`}
 />
 
-- **ユーザースレッド**: `send` を呼んだスレッドがその場で全デバイスへフレームを送り, `.await` で完了通知を待つ. 待機は自前の `Waker` 実装だけで組まれており, 特定の非同期ランタイムに依存しない.
-- **I/O スレッド**: `Client` が持つ 1 本の OS スレッドで, `Driver::run` を回す. 返信を読んで `msg_id` で送信中のフレームへ照合し, 全デバイスの返信が揃ったら完了を通知する. 生存確認は送らない (ユーザーが `send_heartbeat()` を呼んだときに, 呼んだスレッドが送る).
+- **ユーザーのタスク**: `send` を呼んだタスクがその場で全デバイスへフレームを送り, `.await` で完了通知を待つ. tokio を前提とする.
+- **I/O タスク**: `Client::open` が呼び出し元のランタイムへ `tokio::spawn` する 1 本のタスクで, `Session::run_io` を回す. 返信を読んで `msg_id` で送信中のフレームへ照合し, 全デバイスの返信が揃ったら完了を通知する. 生存確認は送らない (ユーザーが `send_heartbeat()` を呼んだときに, 呼んだスレッドが送る).
 
-`Client` は送信側の `Controller` と I/O スレッドの `Driver` の組で, `Deref<Target = Controller>` により `Controller` のメソッド (`send` / `send_frame` / `send_heartbeat` / `device_status` など) をそのまま公開する.
-`Controller` と `Driver` は制御層の `Session` (`client/session.rs`) を `Arc` で共有する. `Session` は in-flight キュー・機体ごとの状態・`msg_id` の採番を 1 本の Mutex の下に持ち, 返信の照合と `ack_timeout` / `lost_timeout` の判定を行う.
+`Client` と I/O タスクは制御層の `Session` (`client/session.rs`) を `Arc` で共有する. `Session` は in-flight キュー・機体ごとの状態・`msg_id` の採番を 1 本の Mutex の下に持ち, 返信の照合と `ack_timeout` / `lost_timeout` の判定を行う.
 ソケットは `Session` が持つ通信層の `Channel` (`udp/channel.rs`, crate 内部) が扱う. `Channel` は普通の UDP ソケットで各デバイスへデータグラムを 1 つずつ送り, 届いた返信を 1 つずつ返す口だけを持ち, デバイスの状態は持たない.
-いつ送るか (窓) は `Controller` が, 生存確認はユーザーが決める.
+いつ送るか (窓) は `Client` が, 生存確認はユーザーが決める.
 Link のような差し替え可能な通信路の抽象は無い.
 
 ## ユーザー API からデバイスまで
 
-ユーザーが渡したコマンドは, フレーム列へ実体化されたうえで `send` を呼んだスレッドから送出される (返信を待たずに送ってよいのは `MAX_INFLIGHT` (= 7) フレームまで).
+ユーザーが渡したコマンドは, フレーム列へ実体化されたうえで `send` を呼んだタスクから送出される (返信を待たずに送ってよいのは `MAX_INFLIGHT` (= 7) フレームまで).
 
 <Mermaid
   title="コマンドの流れ"

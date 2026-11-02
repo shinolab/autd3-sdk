@@ -4,7 +4,7 @@ use std::sync::{Mutex, PoisonError};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use autd3_binding_rt::Executor;
+use autd3_binding_rt::new_runtime;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use pyo3::sync::MutexExt;
@@ -21,7 +21,7 @@ impl Completions {
 }
 
 struct Runtime {
-    executor: Executor,
+    tokio: autd3_binding_rt::Runtime,
     completions: Completions,
     completion_thread: Option<JoinHandle<()>>,
 }
@@ -38,14 +38,14 @@ impl Runtime {
             })
             .expect("failed to spawn the completion thread");
         Self {
-            executor: Executor::new(),
+            tokio: new_runtime(),
             completions: Completions(tx),
             completion_thread: Some(completion_thread),
         }
     }
 
     fn shutdown(mut self) {
-        let _ = self.executor.shutdown_timeout(Duration::from_secs(10));
+        self.tokio.shutdown_timeout(Duration::from_secs(10));
         let _ = self.completions.0.send(None);
         if let Some(thread) = self.completion_thread.take() {
             let _ = thread.join();
@@ -87,7 +87,19 @@ pub(crate) fn spawn<F: Future<Output = ()> + Send + 'static>(
     py: Python<'_>,
     future: F,
 ) -> PyResult<()> {
-    with_runtime(py, |runtime| runtime.executor.spawn(future).then_some(()))
+    with_runtime(py, |runtime| {
+        runtime.tokio.spawn(future);
+        Some(())
+    })
+}
+
+pub(crate) fn block_on<F>(py: Python<'_>, future: F) -> PyResult<F::Output>
+where
+    F: Future + Send,
+    F::Output: Send,
+{
+    let handle = with_runtime(py, |runtime| Some(runtime.tokio.handle().clone()))?;
+    Ok(py.detach(|| autd3_binding_rt::block_on(&handle, future)))
 }
 
 #[pyfunction]

@@ -21,7 +21,7 @@ fn deadline_passed(deadline: Option<Instant>) -> bool {
     deadline.is_some_and(|deadline| Instant::now() >= deadline)
 }
 
-pub(super) fn collect_responses(
+pub(super) async fn collect_responses(
     channel: &Channel,
     kind: Kind,
     msg_id: u16,
@@ -32,7 +32,7 @@ pub(super) fn collect_responses(
     let mut responses = Vec::new();
     let mut buf = [0; RECV_BUFFER_BYTES];
     while max_responses.is_none_or(|n| responses.len() < n) {
-        let Some((src, datagram)) = channel.recv_datagram(&mut buf, deadline)? else {
+        let Some((src, datagram)) = channel.recv_datagram(&mut buf, deadline).await? else {
             break;
         };
         let Ok((header, body)) = Header::read_from_prefix(datagram) else {
@@ -53,7 +53,7 @@ struct Enumerator<'a> {
 }
 
 impl Enumerator<'_> {
-    fn send_request(
+    async fn send_request(
         &mut self,
         dst: SocketAddrV6,
         kind: Kind,
@@ -61,16 +61,19 @@ impl Enumerator<'_> {
     ) -> Result<u16, UdpError> {
         self.last_msg_id = self.last_msg_id.wrapping_add(1);
         self.channel
-            .send(dst, kind, self.last_msg_id, [body, &[]], None)?;
+            .send(dst, kind, self.last_msg_id, [body, &[]], None)
+            .await?;
         Ok(self.last_msg_id)
     }
 
-    fn request_all_devices(
+    async fn request_all_devices(
         &mut self,
         kind: Kind,
         max_responses: Option<usize>,
     ) -> Result<Vec<ControlResponse>, UdpError> {
-        let msg_id = self.send_request(self.channel.all_devices_dst(), kind, &[])?;
+        let msg_id = self
+            .send_request(self.channel.all_devices_dst(), kind, &[])
+            .await?;
         collect_responses(
             self.channel,
             kind,
@@ -78,48 +81,56 @@ impl Enumerator<'_> {
             REQUEST_REPLY_WAIT,
             max_responses,
         )
+        .await
     }
 
-    fn request_once(
+    async fn request_once(
         &mut self,
         dst: SocketAddrV6,
         kind: Kind,
         body: &[u8],
     ) -> Result<Option<ControlResponse>, UdpError> {
-        let msg_id = self.send_request(dst, kind, body)?;
-        Ok(collect_responses(self.channel, kind, msg_id, REQUEST_REPLY_WAIT, Some(1))?.pop())
+        let msg_id = self.send_request(dst, kind, body).await?;
+        Ok(
+            collect_responses(self.channel, kind, msg_id, REQUEST_REPLY_WAIT, Some(1))
+                .await?
+                .pop(),
+        )
     }
 
-    fn exchange_with_retries(
+    async fn exchange_with_retries(
         &mut self,
         dst: SocketAddrV6,
         kind: Kind,
         body: &[u8],
     ) -> Result<Option<ControlResponse>, UdpError> {
         for _ in 0..3 {
-            if let Some(response) = self.request_once(dst, kind, body)? {
+            if let Some(response) = self.request_once(dst, kind, body).await? {
                 return Ok(Some(response));
             }
         }
         Ok(None)
     }
 
-    fn reset_all_unit_ids(&mut self) -> Result<(), UdpError> {
-        let replies = self.request_all_devices(Kind::ResetId, None)?;
+    async fn reset_all_unit_ids(&mut self) -> Result<(), UdpError> {
+        let replies = self.request_all_devices(Kind::ResetId, None).await?;
         tracing::debug!(replies = replies.len(), "reset the unit ids");
-        std::thread::sleep(RESET_SETTLE);
+        tokio::time::sleep(RESET_SETTLE).await;
         Ok(())
     }
 
-    fn discover(&mut self) -> Result<Option<SocketAddrV6>, UdpError> {
-        let msg_id = self.send_request(self.channel.all_devices_dst(), Kind::Discover, &[])?;
+    async fn discover(&mut self) -> Result<Option<SocketAddrV6>, UdpError> {
+        let msg_id = self
+            .send_request(self.channel.all_devices_dst(), Kind::Discover, &[])
+            .await?;
         let Some(first) = collect_responses(
             self.channel,
             Kind::Discover,
             msg_id,
             REQUEST_REPLY_WAIT,
             Some(1),
-        )?
+        )
+        .await?
         .pop() else {
             return Ok(None);
         };
@@ -129,7 +140,8 @@ impl Enumerator<'_> {
             msg_id,
             Duration::from_millis(10),
             None,
-        )?;
+        )
+        .await?;
         if !others.is_empty() {
             return Err(UdpError::DownstreamNotClosed {
                 replies: others.len() + 1,
@@ -138,20 +150,26 @@ impl Enumerator<'_> {
         Ok(Some(first.src))
     }
 
-    fn assign(&mut self, discovered: SocketAddrV6, unit_id: u8) -> Result<SocketAddrV6, UdpError> {
+    async fn assign(
+        &mut self,
+        discovered: SocketAddrV6,
+        unit_id: u8,
+    ) -> Result<SocketAddrV6, UdpError> {
         let role = if unit_id == GRANDMASTER_UNIT_ID {
             Role::Grandmaster
         } else {
             Role::Slave
         };
         let body = assign_id_body(unit_id, role);
-        if let Some(response) =
-            self.exchange_with_retries(discovered, Kind::AssignId, body.as_bytes())?
+        if let Some(response) = self
+            .exchange_with_retries(discovered, Kind::AssignId, body.as_bytes())
+            .await?
         {
             response.check_status(Kind::AssignId, unit_id)?;
             return Ok(response.src);
         }
-        self.request_all_devices(Kind::ReadUnitInfo, None)?
+        self.request_all_devices(Kind::ReadUnitInfo, None)
+            .await?
             .into_iter()
             .find(|r| {
                 r.unit_info().is_some_and(|info| {
@@ -165,9 +183,14 @@ impl Enumerator<'_> {
             })
     }
 
-    fn unblock_downstream(&mut self, addr: SocketAddrV6, unit_id: u8) -> Result<bool, UdpError> {
+    async fn unblock_downstream(
+        &mut self,
+        addr: SocketAddrV6,
+        unit_id: u8,
+    ) -> Result<bool, UdpError> {
         let response = self
-            .exchange_with_retries(addr, Kind::UnblockDownstream, &[])?
+            .exchange_with_retries(addr, Kind::UnblockDownstream, &[])
+            .await?
             .ok_or(UdpError::NoResponse {
                 kind: Kind::UnblockDownstream,
                 unit_id,
@@ -176,12 +199,14 @@ impl Enumerator<'_> {
         Ok(response.opened_downstream_link())
     }
 
-    fn enumerate(&mut self, num_devices: usize) -> Result<Vec<SocketAddrV6>, UdpError> {
+    async fn enumerate(&mut self, num_devices: usize) -> Result<Vec<SocketAddrV6>, UdpError> {
         let deadline = self.deadline;
         let mut device_addrs: Vec<SocketAddrV6> = Vec::with_capacity(num_devices);
         loop {
-            let Some(discovered) = self.discover()? else {
-                if !deadline_passed(deadline) && self.release_stale_assignments(&device_addrs)? {
+            let Some(discovered) = self.discover().await? else {
+                if !deadline_passed(deadline)
+                    && self.release_stale_assignments(&device_addrs).await?
+                {
                     continue;
                 }
                 if device_addrs.len() >= num_devices {
@@ -193,7 +218,7 @@ impl Enumerator<'_> {
                         found: device_addrs.len(),
                     });
                 }
-                std::thread::sleep(Duration::from_millis(100));
+                tokio::time::sleep(Duration::from_millis(100)).await;
                 continue;
             };
             if device_addrs.len() >= num_devices {
@@ -203,8 +228,8 @@ impl Enumerator<'_> {
                 });
             }
             let unit_id = unit_id_of(device_addrs.len());
-            let addr = self.assign(discovered, unit_id)?;
-            let has_downstream_link = self.unblock_downstream(addr, unit_id)?;
+            let addr = self.assign(discovered, unit_id).await?;
+            let has_downstream_link = self.unblock_downstream(addr, unit_id).await?;
             tracing::debug!(unit_id, %addr, downstream_link = has_downstream_link, "assigned a unit");
             device_addrs.push(addr);
             if device_addrs.len() >= num_devices && !has_downstream_link {
@@ -214,12 +239,13 @@ impl Enumerator<'_> {
         Ok(device_addrs)
     }
 
-    fn release_stale_assignments(
+    async fn release_stale_assignments(
         &mut self,
         device_addrs: &[SocketAddrV6],
     ) -> Result<bool, UdpError> {
         let stale: Vec<SocketAddrV6> = self
-            .request_all_devices(Kind::ReadUnitInfo, None)?
+            .request_all_devices(Kind::ReadUnitInfo, None)
+            .await?
             .into_iter()
             .filter(|r| {
                 r.unit_info()
@@ -233,16 +259,17 @@ impl Enumerator<'_> {
         }
         for &addr in &stale {
             tracing::debug!(%addr, "releasing a unit left assigned by a previous enumeration");
-            self.request_once(addr, Kind::ResetId, &[])?;
+            self.request_once(addr, Kind::ResetId, &[]).await?;
         }
-        std::thread::sleep(RESET_SETTLE);
+        tokio::time::sleep(RESET_SETTLE).await;
         Ok(true)
     }
 
-    fn verify_assignments(&mut self, device_addrs: &[SocketAddrV6]) -> Result<(), UdpError> {
+    async fn verify_assignments(&mut self, device_addrs: &[SocketAddrV6]) -> Result<(), UdpError> {
         let mut answered = vec![false; device_addrs.len()];
         for _ in 0..3 {
-            self.verify_assignments_once(device_addrs, &mut answered)?;
+            self.verify_assignments_once(device_addrs, &mut answered)
+                .await?;
             if answered.iter().all(|&answered| answered) {
                 return Ok(());
             }
@@ -253,13 +280,13 @@ impl Enumerator<'_> {
         }
     }
 
-    fn verify_assignments_once(
+    async fn verify_assignments_once(
         &mut self,
         device_addrs: &[SocketAddrV6],
         answered: &mut [bool],
     ) -> Result<(), UdpError> {
         let mut seen = vec![false; device_addrs.len()];
-        for response in self.request_all_devices(Kind::ReadUnitInfo, None)? {
+        for response in self.request_all_devices(Kind::ReadUnitInfo, None).await? {
             let info = response.unit_info();
             let unit_id = info.map_or(u8::MAX, |info| info.unit_id);
             let known = info.is_some_and(|info| info.flags.contains(Flags::ASSIGNED))
@@ -278,14 +305,15 @@ impl Enumerator<'_> {
         Ok(())
     }
 
-    fn set_time(
+    async fn set_time(
         &mut self,
         grandmaster: SocketAddrV6,
         device_clock: &mut DeviceClock,
     ) -> Result<(), UdpError> {
         let body = set_time_body(DEVICE_TIME_AT_OPEN);
         let response = self
-            .exchange_with_retries(grandmaster, Kind::SetTime, body.as_bytes())?
+            .exchange_with_retries(grandmaster, Kind::SetTime, body.as_bytes())
+            .await?
             .ok_or(UdpError::NoResponse {
                 kind: Kind::SetTime,
                 unit_id: GRANDMASTER_UNIT_ID,
@@ -295,12 +323,13 @@ impl Enumerator<'_> {
         Ok(())
     }
 
-    fn wait_sync(&mut self, device_addrs: &[SocketAddrV6]) -> Result<(), UdpError> {
+    async fn wait_sync(&mut self, device_addrs: &[SocketAddrV6]) -> Result<(), UdpError> {
         let deadline = self.deadline;
         loop {
             let mut ready = vec![false; device_addrs.len()];
-            for response in
-                self.request_all_devices(Kind::ReadUnitInfo, Some(device_addrs.len()))?
+            for response in self
+                .request_all_devices(Kind::ReadUnitInfo, Some(device_addrs.len()))
+                .await?
             {
                 let Some(info) = response.unit_info() else {
                     continue;
@@ -328,12 +357,12 @@ impl Enumerator<'_> {
                     timeout: self.open_timeout,
                 });
             }
-            std::thread::sleep(Duration::from_millis(50));
+            tokio::time::sleep(Duration::from_millis(50)).await;
         }
     }
 }
 
-pub(super) fn bring_up(
+pub(super) async fn bring_up(
     channel: &Channel,
     option: &TransportOption,
     deadline: Option<Instant>,
@@ -346,9 +375,9 @@ pub(super) fn bring_up(
         open_timeout: option.open_timeout,
         deadline,
     };
-    enumerator.reset_all_unit_ids()?;
-    let device_addrs = enumerator.enumerate(num_devices)?;
-    enumerator.verify_assignments(&device_addrs)?;
+    enumerator.reset_all_unit_ids().await?;
+    let device_addrs = enumerator.enumerate(num_devices).await?;
+    enumerator.verify_assignments(&device_addrs).await?;
     if !option.sync_on_open {
         tracing::info!(
             units = device_addrs.len(),
@@ -356,8 +385,10 @@ pub(super) fn bring_up(
         );
         return Ok(device_addrs);
     }
-    enumerator.set_time(device_addrs[usize::from(GRANDMASTER_UNIT_ID)], device_clock)?;
-    enumerator.wait_sync(&device_addrs)?;
+    enumerator
+        .set_time(device_addrs[usize::from(GRANDMASTER_UNIT_ID)], device_clock)
+        .await?;
+    enumerator.wait_sync(&device_addrs).await?;
     tracing::info!(
         units = device_addrs.len(),
         "all units are locked to the grandmaster and run their sync pulse"

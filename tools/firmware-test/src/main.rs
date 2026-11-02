@@ -60,7 +60,7 @@ impl Session {
                 ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
                 loop {
                     ticker.tick().await;
-                    if client.send_heartbeat().is_err() {
+                    if client.send_heartbeat().await.is_err() {
                         break;
                     }
                 }
@@ -185,7 +185,9 @@ async fn main() -> Result<()> {
         ack_timeout: cli.ack_timeout(),
         ..default
     };
-    let client = Client::open(&geometry, &option).context("opening the devices")?;
+    let client = Client::open(&geometry, &option)
+        .await
+        .context("opening the devices")?;
     client.send(Clear).await?;
     client.send(Synchronize).await?;
     let client = Session::new(client, cli.heartbeat);
@@ -249,7 +251,7 @@ async fn main() -> Result<()> {
         }
     }
 
-    client.close().context("closing client")?;
+    client.close().await.context("closing client")?;
     println!("Ok!");
     Ok(())
 }

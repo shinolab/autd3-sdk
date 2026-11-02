@@ -11,7 +11,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
     // ANCHOR: open
-    let client = Client::open(&geometry, &TransportOption::default())?;
+    let client = Client::open(&geometry, &TransportOption::default()).await?;
     // ANCHOR_END: open
 
     // ANCHOR: poll
@@ -33,6 +33,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     // ANCHOR_END: poll
 
-    client.close()?;
+    client.close().await?;
     Ok(())
 }

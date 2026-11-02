@@ -10,7 +10,7 @@ import Mermaid from "@components/Mermaid.astro";
 [エンコーダ](/autd3-sdk/developer/software/encoder/) が生成した `Frame` を実際にデバイスへ送り届ける処理について述べる.
 実装は `crates/autd3-rs/src/client/` と `crates/autd3-rs/src/udp/` にある.
 
-`Frames` は複数のフレームを持ち, `Client::send` (`Controller::send`) はそれを 1 フレームずつ `send_frame` で送る.
+`Frames` は複数のフレームを持ち, `Client::send` はそれを 1 フレームずつ `send_frame` で送る.
 
 ```rust
 for frame in &frames {
@@ -25,13 +25,13 @@ for frame in &frames {
 
 ## stop-and-wait
 
-送信は `send_frame` を呼んだスレッドがその場で行い (`Controller`), 受信は `Client` が持つ I/O スレッドが行う (`Driver`).
+送信は `send_frame` を呼んだタスクがその場で行い, 受信は `Client` が持つ I/O タスクが行う.
 
 <Mermaid
-  title="Client と I/O スレッド"
+  title="Client と I/O タスク"
   code={`flowchart LR
-  U["Controller::send_frame (呼び出し側のスレッド)"]
-  IO["I/O スレッド (Driver)"]
+  U["Client::send_frame (呼び出し側のタスク)"]
+  IO["I/O タスク"]
   D["デバイス"]
   U -- "UDP: Frame" --> D
   D -- "UDP: 返信" --> IO
@@ -46,27 +46,25 @@ for frame in &frames {
 
 ```rust
 let _serialized = self.send_serializer.lock().await;   // send_frame どうしの直列化
-let (completion, response) = completion::channel();
-let mut completion = Some(completion);
-let msg_id = poll_fn(|cx| self.session.poll_enqueue(cx, &mut completion)).await?;
+let (enqueued, response) = self.session.enqueue().await?;
 ```
 
-`poll_enqueue` は in-flight キューに空きがあれば `msg_id` を採番して要求を積み, 無ければ送信者の `Waker` を預けて待つ.
+`enqueue` は in-flight キューに空きがあれば `msg_id` を採番して要求を積み, 無ければ `slot_released` (`tokio::sync::Notify`) で空きを待つ.
 
 ```rust
 if self.inflight.is_full() {
-    self.inflight.slot_waiter = Some(waker.clone());
-    return Poll::Pending;
+    return Ok(None);                                 // 呼び出し側が slot_released.notified().await
 }
 let msg_id = self.next_msg_id();
+let (completion, response) = completion::channel();
 self.inflight.push(InflightRequest {
     msg_id,
     sent_to: None,                                   // 送れた機体の集合 (送り終えてから記録する)
     sent_at: now,
-    completion: completion.take().expect(".."),
+    completion,
     response: Response::for_devices(self.liveness.len()),   // 各機体の返信をここへ直接記録する
 });
-Poll::Ready(Ok(msg_id))
+Ok(Some((msg_id, response)))
 ```
 
 in-flight キューの容量は `MAX_INFLIGHT` (= 7. 固定) であり, in-flight 数は自然に上限へ抑えられる.
@@ -75,6 +73,7 @@ in-flight キューの容量は `MAX_INFLIGHT` (= 7. 固定) であり, in-fligh
 完了通知用のチャネルを 1 組作り, 送信側 (`completion`) を `InflightRequest` に持たせて in-flight キューへ積む.
 受信側 (`response`) が `ResponseFuture` としてユーザーへ返る.
 **送る前に積む**ので, 送信の途中で届いた返信も照合できる.
+返る `enqueued` は drop ガードで, 送り終える前に future が drop されると要求を in-flight キューから外して枠を返す.
 
 ### ② 送る
 
@@ -86,7 +85,7 @@ for (header, datagram) in headers.iter_mut().zip(datagrams) {
 let outcome = self.send_to_each_device(Kind::Frame, msg_id, target_devices, .., |device| {
     let index = frame.datagram_index(device);
     [headers[index].as_bytes(), datagrams[index].payload()]
-});
+}).await;
 ```
 
 フレームの先頭 6 byte (`FrameHeader`) が予約 (0) と `Cmd` と処理時刻 `exec_at` で, 残りがペイロードである.
@@ -100,38 +99,44 @@ let outcome = self.send_to_each_device(Kind::Frame, msg_id, target_devices, .., 
 
 ### ③ 返信を待つ
 
-以下は I/O スレッドの処理である.
+以下は I/O タスクの処理である.
 
 ```rust
-pub fn run(mut self) -> Result<(), Error> {
-    while let Some(deadline) = self.poll()? {   // Session::step
-        self.wait(deadline)?;                   // ソケットが読めるようになるか期限まで待つ
+pub(crate) async fn run_io(&self) -> Result<(), NetworkCause> {
+    while !self.is_stopping() {
+        let deadline = self.step()?;
+        tokio::select! {
+            ready = self.channel.readable() => ..,      // 返信が届いた
+            () = self.io_wake.notified() => {}          // 期限を計算し直す
+            () = tokio::time::sleep_until(deadline.into()) => {}
+        }
     }
     Ok(())
 }
 
-pub(crate) fn step(&self) -> Result<Instant, NetworkCause> {
-    self.receive_available()?;                  // 届いている返信を読み切る
+fn step(&self) -> Result<Instant, NetworkCause> {
+    self.receive_available(Channel::try_recv_from_device)?;   // 届いている返信を読み切る
     let now = Instant::now();
-    if self.lock_state().is_head_ack_overdue(now) {
-        self.receive_available()?;
+    if self.lock_state().is_any_deadline_overdue(now) {
+        self.receive_available(Channel::recv_from_device_past_readiness)?;
     }
+    self.lock_state().mark_unanswered_devices_lost(now);
     self.fail_all_if_head_ack_overdue(now);     // 先頭の ack_timeout
     Ok(self.lock_state().next_deadline(now))
 }
 ```
 
 期限は「先頭が `ack_timeout` を過ぎる時刻」「未返信のデバイスが `lost_timeout` に達する時刻」のうち最も早いもの (どれも無ければ 1 秒後) である.
-待機は `poll` (Windows では `WSAPoll`) で行う.
-送ったフレームが in-flight キューの先頭になったときと, 送信 (`Frame` / `send_heartbeat()`) で機体の未返信を数え始めたときは, 送った側が I/O スレッドを起こして (`Channel::wake`) 期限を計算し直させる.
-返信が 1 つ届いたら, 溜まっている返信を読み切ってからタイマの判定へ戻るので, スレッドが遅れても届いている返信を見ずに `Timeout` にすることは無い.
+tokio の `try_recv_from` はリアクタが覚えている readiness が空だと syscall しないので, カーネルに返信が届いていても空に見えることがある. 期限が来ていたら, 判定の前に複製した std ソケットで読み直す.
+送ったフレームが in-flight キューの先頭になったときと, 送信 (`Frame` / `send_heartbeat()`) で機体の未返信を数え始めたときは, 送った側が I/O タスクを起こして (`io_wake`) 期限を計算し直させる.
+返信が 1 つ届いたら, 溜まっている返信を読み切ってからタイマの判定へ戻るので, タスクが遅れても届いている返信を見ずに `Timeout` にすることは無い.
 
 デバイスは各フレームの扱いを終えた時点で 1 回返信する.
 フレームは受信割り込みが FIFO に積み, メインループが処理した後に返信が届く.
 返信には要求の `msg_id`・`status` (そのフレームのエラーコード)・読み出し値が載る.
 
 :::note
-生存確認 (`Heartbeat`) は I/O スレッドではなくユーザーが `send_heartbeat()` で送る. 呼ぶたびに `Lost` でない全デバイスへ 1 回送り, 返信は待たない.
+生存確認 (`Heartbeat`) は I/O タスクではなくユーザーが `send_heartbeat()` で送る. 呼ぶたびに `Lost` でない全デバイスへ 1 回送り, 返信は待たない.
 デバイスはこれをホストが生きている信号として使い (`failsafe_timeout` を指定していれば, その時間届かないと出力を止める. [フェイルセーフ](/autd3-sdk/guide/failsafe/)を参照), 直前に処理したフレームの結果と現在の状態を載せて返信する.
 ホストはこの返信で状態監視 (`device_status()` の `state` / `ptp_locked` / `failsafe_active`) とデバイス時刻の観測を行う. in-flight キューに一致する要求が無いので, 照合では捨てる.
 :::
@@ -188,18 +193,18 @@ fn take(&mut self, index: usize, now: Instant) -> Option<InflightRequest> {
 完了した要求は in-flight キューの中の位置を空 (`None`) にし, 両端から続く空だけを取り除く. 途中の空は, それより先頭側の要求が片付くまで容量を占める.
 先頭の要求を外したときは, `ack_timeout` を数え始める時刻を今に更新する.
 記録した `Response` をそのまま完了通知のチャネルへ渡し, これで `Client` 側の `ResponseFuture` が起こされる.
-in-flight キューに空きができれば, ① で預けられた `Waker` も起こす.
+in-flight キューに空きができれば, ① で空きを待っている送信者も起こす.
 
 ### 全体の流れ
 
 <Mermaid
   title="stop-and-wait の 1 フレーム"
   code={`sequenceDiagram
-  participant U as Controller::send_frame
+  participant U as Client::send_frame
   participant Q as in-flight キュー
-  participant IO as I/O スレッド
+  participant IO as I/O タスク
   participant D as デバイス
-  U->>Q: InflightRequest を積む (満杯なら Waker を預けて待つ)
+  U->>Q: InflightRequest を積む (満杯なら空きを待つ)
   U->>D: Frame (msg_id) を全デバイスへ
   U->>Q: sent_to を記録
   Note over U: ResponseFuture を await
@@ -207,7 +212,7 @@ in-flight キューに空きができれば, ① で預けられた `Waker` も�
   D-->>IO: 返信 (msg_id, status)
   IO->>Q: msg_id で引き Response に記録
   Q-->>IO: 全機体の返信が揃った要求を外す
-  IO-->>U: 完了通知 (waker)`}
+  IO-->>U: 完了通知 (oneshot)`}
 />
 
 ## streaming
@@ -257,12 +262,12 @@ streaming を組むときは, 依存のあるフレームの前で貯めた `Res
 
 ### ソケットの異常
 
-ソケットの異常は Client 側ではどうすることもできないので, I/O スレッドは in-flight キューの全要求を `Error::Network` で失敗させて終わる.
+ソケットの異常は Client 側ではどうすることもできないので, I/O タスクは in-flight キューの全要求を `Error::Network` で失敗させて終わる.
 以後の `send_frame` も同じ原因の `Error::Network` を返す. `Client` を作り直すこと.
 
 ### 送信の失敗
 
-`sendto` の結果は機体ごとに次のように扱う. どの場合も I/O スレッドは止めない.
+`sendto` の結果は機体ごとに次のように扱う. どの場合も I/O タスクは止めない.
 
 | `sendto` の結果 | `Frame` | `Heartbeat` | `Lost` の判定 |
 | --------------- | ------- | ----------- | ------------- |
@@ -303,7 +308,7 @@ fn fail_all_if_head_ack_overdue(&self, now: Instant) {
 失敗したコマンドは呼び出し側が送り直す. ペイロードはステートレスなので同じコマンドを送り直せばよいが, デバイスは重複を排除しないので, 届いていたフレームは 2 回処理される.
 
 :::note
-`Client::open` はデバイスへフレーム (`Frame`) を送らない (handshake は無い). 列挙と ID の割当て, 時刻合わせ (`sync_on_open` が真のとき), I/O スレッドの起動だけを行う同期関数である.
+`Client::open` はデバイスへフレーム (`Frame`) を送らない (handshake は無い). 列挙と ID の割当て, 時刻合わせ (`sync_on_open` が真のとき), I/O タスクの起動だけを行う.
 デバイスはシーケンス番号や重複排除の状態を持たないので, 前回のセッションから引き継ぐプロトコル状態は無い.
 前回のセッションが送ったフレームが FIFO に残っていれば新しいセッションのフレームより先に処理されるが, その返信は新しいセッションのどの `msg_id` とも一致しないので捨てられる.
 open は `Clear` や `Synchronize` も送らない.
@@ -331,6 +336,6 @@ Linux の既定では 1 宛先のキューの上限 (`unres_qlen_bytes`) と送�
 
 ### 終了
 
-`Client::close` はデバイスへ何も送らず, 停止を要求して I/O スレッドを起こし (`Channel::wake`), I/O スレッドを join する. デバイスは close 前の出力を続ける.
-I/O スレッドは終わるときに in-flight キューの全要求を `Error::Closed` で失敗させる.
+`Client::close` はデバイスへ何も送らず, 停止を要求して I/O タスクを起こし (`io_wake`), その終了を await する. デバイスは close 前の出力を続ける.
+I/O タスクは終わるときに in-flight キューの全要求を `Error::Closed` で失敗させる.
 以後の `send_frame` は `Error::Closed` を返す.

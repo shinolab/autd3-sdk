@@ -16,5 +16,8 @@ autd3-rs.workspace = true
 autd3-binding-rt.workspace = true
 autd3-ffi-abi.workspace = true
 
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt"] }
+
 [lints]
 workspace = true
