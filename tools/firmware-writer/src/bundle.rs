@@ -84,13 +84,6 @@ pub fn parse_release(version: &str) -> Result<[u8; 3]> {
     Ok(release)
 }
 
-#[must_use]
-pub(crate) fn bundle_url(version: &str) -> String {
-    format!(
-        "https://github.com/shinolab/autd3-sdk/releases/download/firmware-v{version}/autd3-sdk-firmware-v{version}.zip"
-    )
-}
-
 pub fn fetch([major, minor, patch]: [u8; 3], force_download: bool) -> Result<Bundle> {
     let version = format!("{major}.{minor}.{patch}");
     let temp = std::env::temp_dir();
@@ -98,7 +91,9 @@ pub fn fetch([major, minor, patch]: [u8; 3], force_download: bool) -> Result<Bun
     if dest.is_dir() && !force_download {
         eprintln!("Using cached firmware at {}", dest.display());
     } else {
-        let url = bundle_url(&version);
+        let url = format!(
+            "https://github.com/shinolab/autd3-sdk/releases/download/firmware-v{version}/autd3-sdk-firmware-v{version}.zip"
+        );
         eprintln!("Downloading {url}");
         let resp = ureq::get(&url)
             .config()

@@ -140,10 +140,11 @@ fn update_cpu(firmware: &Path) -> Result<()> {
         );
     };
 
-    let slot_b_start = SERIAL_FLASH_XIP_BASE + autd3_cpu_wire::update::SLOT_B_BASE;
+    let serial_flash_xip_base = 0x3000_0000;
+    let slot_b_start = serial_flash_xip_base + autd3_cpu_wire::update::SLOT_B_BASE;
     let slot_b_last = slot_b_start + autd3_cpu_wire::update::SLOT_BYTES - 1;
     let script = format!(
-        "r\nexec EnableEraseAllFlashBanks\nerase 0x{slot_b_start:X} 0x{slot_b_last:X}\nloadfile {} 0x{SERIAL_FLASH_XIP_BASE:X}\nq\n",
+        "r\nexec EnableEraseAllFlashBanks\nerase 0x{slot_b_start:X} 0x{slot_b_last:X}\nloadfile {} 0x{serial_flash_xip_base:X}\nq\n",
         tcl_path(firmware)
     );
     let script_path = std::env::temp_dir().join("autd3-cpu-flash.jlink");
@@ -191,17 +192,16 @@ fn update_cpu(firmware: &Path) -> Result<()> {
     if !status.success() {
         bail!("`{jlink}` exited with {status}. Make sure the AUTD3 is connected and powered on.");
     }
-    if log.contains(JLINK_NO_FLASH_BANK) {
+    let jlink_no_flash_bank = "No Flash bank within given address range";
+    if log.contains(jlink_no_flash_bank) {
         bail!(
-            "J-Link did not erase the serial flash: {JLINK_NO_FLASH_BANK}. \
+            "J-Link did not erase the serial flash: {jlink_no_flash_bank}. \
              The QSPI bank stayed untouched, so an OTA image in slot B would still win the boot."
         );
     }
     eprintln!("CPU update done.");
     Ok(())
 }
-
-const JLINK_NO_FLASH_BANK: &str = "No Flash bank within given address range";
 
 fn tee_lines(reader: impl std::io::Read, log: &mut String) {
     for line in std::io::BufReader::new(reader).lines() {
@@ -253,8 +253,6 @@ fn update_fpga(firmware: &Path) -> Result<()> {
     eprintln!("FPGA update done.");
     Ok(())
 }
-
-const SERIAL_FLASH_XIP_BASE: u32 = 0x3000_0000;
 
 fn tcl_path(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
