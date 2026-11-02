@@ -21,7 +21,7 @@ use autd3_rs::{Client, DeviceState, Error, FirmwareVersion, TransportOption};
 
 use crate::fpga_image::FpgaFirmwareImage;
 
-pub const DEFAULT_HEARTBEAT: Duration = Duration::from_millis(10);
+const HEARTBEAT: Duration = Duration::from_millis(10);
 pub const ACK_TIMEOUT: Duration = Duration::from_secs(120);
 pub const FPGA_RECONFIG_WAIT: Duration =
     Duration::from_millis(autd3_cpu_wire::fpga_update::FPGA_RECONFIG_WORST_MS as u64 + 2000);
@@ -178,11 +178,7 @@ pub struct KeepaliveClient {
 }
 
 impl KeepaliveClient {
-    pub(crate) fn open(
-        option: &TransportOption,
-        num_devices: usize,
-        heartbeat: Duration,
-    ) -> Result<Self, Error> {
+    pub(crate) fn open(option: &TransportOption, num_devices: usize) -> Result<Self, Error> {
         let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()));
         let client = Arc::new(Client::open(&geometry, option)?);
         let keepalive_stop = Arc::new(AtomicBool::new(false));
@@ -193,7 +189,7 @@ impl KeepaliveClient {
                 .name("autd3-ota-keepalive".to_owned())
                 .spawn(move || {
                     while !stop.load(Ordering::Acquire) && client.send_heartbeat().is_ok() {
-                        std::thread::park_timeout(heartbeat);
+                        std::thread::park_timeout(HEARTBEAT);
                     }
                 })
                 .map_err(|e| Error::from(UdpError::from(e)))?

@@ -1,66 +1,34 @@
 use std::time::Duration;
 
-use clap::Args;
-
 use autd3_rs::{Error, Interface, TransportOption, UdpError};
 
-use crate::update::{ACK_TIMEOUT, DEFAULT_HEARTBEAT, KeepaliveClient};
-
-#[derive(Args)]
-#[command(next_help_heading = "UDP (unset options keep the library defaults)")]
-pub struct UdpArgs {
-    #[arg(long, help = "Network interface name (default: auto-detect)")]
-    pub interface: Option<String>,
-    #[arg(
-        long,
-        value_parser = humantime::parse_duration,
-        help = "Heartbeat interval while waiting, e.g. 10ms"
-    )]
-    pub heartbeat: Option<Duration>,
-    #[arg(
-        long,
-        value_parser = humantime::parse_duration,
-        help = "How long opening the connection may take, enumeration included, e.g. 20s"
-    )]
-    pub open_timeout: Option<Duration>,
-}
-
-impl UdpArgs {
-    #[must_use]
-    pub(crate) fn heartbeat(&self) -> Duration {
-        self.heartbeat.unwrap_or(DEFAULT_HEARTBEAT)
-    }
-
-    #[must_use]
-    pub(crate) fn option(&self) -> TransportOption {
-        let default = TransportOption::default();
-        TransportOption {
-            iface: self
-                .interface
-                .clone()
-                .map_or(Interface::Auto, Interface::Name),
-            lost_timeout: default
-                .lost_timeout
-                .max(self.heartbeat().saturating_mul(10)),
-            open_timeout: self.open_timeout.unwrap_or(default.open_timeout),
-            ack_timeout: ACK_TIMEOUT,
-            sync_on_open: false,
-            ..default
-        }
-    }
-
-    pub fn open(&self, num_devices: usize) -> Result<KeepaliveClient, OpenError> {
-        Ok(KeepaliveClient::open(
-            &self.option(),
-            num_devices,
-            self.heartbeat(),
-        )?)
-    }
-}
+use crate::update::{ACK_TIMEOUT, KeepaliveClient};
 
 #[derive(Debug, thiserror::Error)]
 #[error("{0}{hint}", hint = hint(.0))]
 pub struct OpenError(#[from] Error);
+
+fn option(interface: Option<&str>, open_timeout: Option<Duration>) -> TransportOption {
+    let default = TransportOption::default();
+    TransportOption {
+        iface: interface.map_or(Interface::Auto, |name| Interface::Name(name.to_owned())),
+        open_timeout: open_timeout.unwrap_or(default.open_timeout),
+        ack_timeout: ACK_TIMEOUT,
+        sync_on_open: false,
+        ..default
+    }
+}
+
+pub fn connect(
+    interface: Option<&str>,
+    open_timeout: Option<Duration>,
+    num_devices: usize,
+) -> Result<KeepaliveClient, OpenError> {
+    Ok(KeepaliveClient::open(
+        &option(interface, open_timeout),
+        num_devices,
+    )?)
+}
 
 fn udp_cause(e: &Error) -> Option<&UdpError> {
     match e {
@@ -94,58 +62,33 @@ fn hint(e: &Error) -> String {
 #[cfg(test)]
 mod tests {
     use autd3_rs_firmware_emulator::udp::UdpEmulator;
-    use clap::Parser;
 
     use super::*;
 
-    #[derive(Parser)]
-    struct Cli {
-        #[command(flatten)]
-        udp: UdpArgs,
-    }
-
-    fn parse(args: &[&str]) -> UdpArgs {
-        Cli::try_parse_from(std::iter::once("ota").chain(args.iter().copied()))
-            .unwrap()
-            .udp
-    }
-
     #[test]
-    fn no_udp_arguments_mean_the_library_defaults() {
-        let args = parse(&[]);
+    fn no_arguments_mean_the_library_defaults() {
         assert_eq!(
-            args.option(),
+            option(None, None),
             TransportOption {
                 ack_timeout: ACK_TIMEOUT,
                 sync_on_open: false,
                 ..TransportOption::default()
             }
         );
-        assert_eq!(args.heartbeat(), DEFAULT_HEARTBEAT);
     }
 
     #[test]
-    fn every_udp_argument_reaches_the_option() {
-        let args = parse(&[
-            "--interface",
-            "eth1",
-            "--heartbeat",
-            "20ms",
-            "--open-timeout",
-            "20s",
-        ]);
+    fn interface_and_open_timeout_reach_the_option() {
         assert_eq!(
-            args.option(),
+            option(Some("eth1"), Some(Duration::from_secs(20))),
             TransportOption {
                 iface: Interface::Name("eth1".to_string()),
-                lost_timeout: Duration::from_millis(200),
                 open_timeout: Duration::from_secs(20),
                 ack_timeout: ACK_TIMEOUT,
                 sync_on_open: false,
                 ..TransportOption::default()
             }
         );
-        assert_eq!(args.heartbeat(), Duration::from_millis(20));
     }
 
     #[test]
@@ -158,11 +101,7 @@ mod tests {
             sync_on_open: false,
             ..TransportOption::default()
         };
-        let err = OpenError::from(
-            KeepaliveClient::open(&option, 2, DEFAULT_HEARTBEAT)
-                .err()
-                .unwrap(),
-        );
+        let err = OpenError::from(KeepaliveClient::open(&option, 2).err().unwrap());
         assert!(
             matches!(
                 udp_cause(&err.0),
