@@ -29,7 +29,7 @@ pub struct CpuFirmwareImage {
 }
 
 impl CpuFirmwareImage {
-    pub fn from_slot_image(body: Vec<u8>) -> Result<Self, ImageError> {
+    fn from_slot_image(body: Vec<u8>) -> Result<Self, ImageError> {
         if !u32::try_from(body.len()).is_ok_and(is_plausible_length) {
             return Err(ImageError::LengthOutOfRange {
                 len: body.len(),

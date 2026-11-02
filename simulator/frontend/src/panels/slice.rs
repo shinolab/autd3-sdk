@@ -5,7 +5,7 @@ use crate::context::{Ctx, Field, SharedRenderer};
 use crate::render::{RESOLUTION_MAX, RESOLUTION_MIN, Renderer, SLICE_MAX_MM, SLICE_MIN_MM};
 
 #[component]
-pub fn SlicePanel() -> Element {
+pub(crate) fn SlicePanel() -> Element {
     let ctx = use_context::<Ctx>();
     let renderer = ctx.renderer.clone();
     let mut gizmo_on = ctx.gizmo_on;

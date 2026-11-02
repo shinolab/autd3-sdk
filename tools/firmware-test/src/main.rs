@@ -23,14 +23,14 @@ use crate::cli::Cli;
 use crate::io::{check, prompt, wait_enter};
 use tracing_subscriber::EnvFilter;
 
-pub fn device_states(client: &Client) -> Vec<DeviceState> {
+pub(crate) fn device_states(client: &Client) -> Vec<DeviceState> {
     client
         .device_status()
         .map(|status| status.iter().map(|s| s.state).collect())
         .unwrap_or_default()
 }
 
-pub fn failsafe_gates(client: &Client) -> Result<Vec<bool>> {
+pub(crate) fn failsafe_gates(client: &Client) -> Result<Vec<bool>> {
     Ok(client
         .device_status()?
         .iter()
@@ -51,7 +51,7 @@ pub struct Session {
 }
 
 impl Session {
-    pub fn new(client: Client, heartbeat: Duration) -> Self {
+    pub(crate) fn new(client: Client, heartbeat: Duration) -> Self {
         let client = Arc::new(client);
         let keepalive = tokio::spawn({
             let client = Arc::clone(&client);
@@ -87,7 +87,7 @@ impl Drop for Session {
 type Case = for<'a> fn(&'a Ctx<'a>) -> Pin<Box<dyn Future<Output = Result<()>> + 'a>>;
 
 impl Ctx<'_> {
-    pub async fn try_send_frames(&self, frames: &Frames) -> Result<(), Error> {
+    pub(crate) async fn try_send_frames(&self, frames: &Frames) -> Result<(), Error> {
         for frame in frames {
             self.client
                 .send_frame_at(frame, self.exec)
@@ -98,16 +98,16 @@ impl Ctx<'_> {
         Ok(())
     }
 
-    pub async fn send_frames(&self, frames: &Frames) -> Result<()> {
+    pub(crate) async fn send_frames(&self, frames: &Frames) -> Result<()> {
         Ok(self.try_send_frames(frames).await?)
     }
 
-    pub async fn send<C: Command>(&self, cmd: C) -> Result<()> {
+    pub(crate) async fn send<C: Command>(&self, cmd: C) -> Result<()> {
         self.send_frames(&Frames::encode(self.client.geometry(), cmd)?)
             .await
     }
 
-    pub async fn stop_output(&self) -> Result<()> {
+    pub(crate) async fn stop_output(&self) -> Result<()> {
         self.send(SetSilencer::new(FixedCompletionTime {
             strict_mode: false,
             ..Default::default()
@@ -254,7 +254,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-pub async fn describe(client: &Client) {
+pub(crate) async fn describe(client: &Client) {
     match client.read_firmware_version().await {
         Ok(fw) => {
             check(&format!("Connected devices: {}", client.num_devices()));

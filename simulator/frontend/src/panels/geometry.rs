@@ -35,7 +35,7 @@ fn edit(ctx: &Ctx, f: impl FnOnce(&mut Vec<DeviceDraft>)) {
 }
 
 #[component]
-pub fn GeometryPanel() -> Element {
+pub(crate) fn GeometryPanel() -> Element {
     fn download(name: &str, content: &str) -> Result<(), JsValue> {
         let document = web_sys::window()
             .and_then(|window| window.document())

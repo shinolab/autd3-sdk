@@ -23,6 +23,7 @@ const WORKSPACES: &[&str] = &[
     "extras/autd3-rs-pattern-holo-wgpu",
     "firmware/cpu/board",
     "xtask",
+    "doc/codes/rust",
 ];
 
 struct Definition {
@@ -33,6 +34,7 @@ struct Definition {
     owner: Option<String>,
     signature: String,
     trait_method: Option<(String, String)>,
+    pub_function: bool,
 }
 
 #[derive(Default)]
@@ -44,7 +46,7 @@ struct Hits {
 #[derive(Default)]
 struct Scan {
     definitions: HashMap<String, Definition>,
-    referenced: HashSet<String>,
+    referenced: HashMap<String, HashSet<String>>,
     resolved: HashSet<(String, usize, usize)>,
 }
 
@@ -84,6 +86,33 @@ pub(crate) fn run_deadcode(root: &Path, reuse: bool, verbose: bool) -> Result<()
         } else {
             Qualifier::Value
         }
+    }
+    fn library_modules(root: &Path, package: &str) -> HashSet<String> {
+        let mut modules = HashSet::new();
+        let mut pending = vec![format!("{package}/src/lib.rs")];
+        while let Some(path) = pending.pop() {
+            let Ok(text) = fs::read_to_string(root.join(&path)) else {
+                continue;
+            };
+            let (directory, file) = path.rsplit_once('/').unwrap_or(("", &path));
+            let stem = file.trim_end_matches(".rs");
+            let children = if ["lib", "main", "mod"].contains(&stem) {
+                directory.to_string()
+            } else {
+                format!("{directory}/{stem}")
+            };
+            for line in text.lines() {
+                if let Some(name) = strip_visibility(line.trim())
+                    .strip_prefix("mod ")
+                    .and_then(|rest| rest.strip_suffix(';'))
+                {
+                    pending.push(format!("{children}/{name}.rs"));
+                    pending.push(format!("{children}/{name}/mod.rs"));
+                }
+            }
+            modules.insert(path);
+        }
+        modules
     }
 
     let out = root.join("target").join("deadcode");
@@ -147,22 +176,48 @@ pub(crate) fn run_deadcode(root: &Path, reuse: bool, verbose: bool) -> Result<()
 
     let implemented: HashSet<(String, String)> = scan
         .referenced
-        .iter()
+        .keys()
         .filter_map(|symbol| implemented_trait_method(symbol))
         .collect();
-    let mut candidates: Vec<Definition> = scan
-        .definitions
-        .into_iter()
-        .filter(|(symbol, definition)| {
-            !scan.referenced.contains(symbol)
-                && definition
+    let mut libraries: HashMap<String, HashSet<String>> = HashMap::new();
+    let mut crate_of = |path: &str| {
+        let package = Path::new(path)
+            .ancestors()
+            .skip(1)
+            .find(|directory| root.join(directory).join("Cargo.toml").is_file())
+            .map_or_else(String::new, |directory| {
+                directory.to_string_lossy().replace('\\', "/")
+            });
+        let in_library = libraries
+            .entry(package.clone())
+            .or_insert_with(|| library_modules(root, &package))
+            .contains(path);
+        (package, in_library)
+    };
+    let mut candidates = Vec::new();
+    let mut crate_local = Vec::new();
+    for (symbol, definition) in scan.definitions {
+        match scan.referenced.get(&symbol) {
+            None => {
+                if definition
                     .trait_method
                     .as_ref()
                     .is_none_or(|method| !implemented.contains(method))
-        })
-        .map(|(_, definition)| definition)
-        .collect();
+                {
+                    candidates.push(definition);
+                }
+            }
+            Some(paths) if definition.pub_function => {
+                let defining_crate = crate_of(&definition.path);
+                if paths.iter().all(|path| crate_of(path) == defining_crate) {
+                    crate_local.push(definition);
+                }
+            }
+            Some(_) => {}
+        }
+    }
     candidates.sort_by(|a, b| (&a.path, a.line).cmp(&(&b.path, b.line)));
+    crate_local.sort_by(|a, b| (&a.path, a.line).cmp(&(&b.path, b.line)));
 
     let mut by_name: HashMap<&str, Vec<usize>> = HashMap::new();
     for (index, candidate) in candidates.iter().enumerate() {
@@ -277,6 +332,14 @@ pub(crate) fn run_deadcode(root: &Path, reuse: bool, verbose: bool) -> Result<()
             print_candidate(&candidates[index]);
             print_hits(&hits[index].code, verbose);
         }
+        println!();
+        println!(
+            "== referenced only inside the defining crate ({})",
+            crate_local.len()
+        );
+        for candidate in &crate_local {
+            print_candidate(candidate);
+        }
     };
     Ok(())
 }
@@ -378,7 +441,10 @@ impl Scan {
             if occurrence.symbol_roles & SymbolRole::Definition as i32 != 0 {
                 lines.insert(occurrence.symbol.as_str(), line);
             } else if !imports.contains(&line) {
-                self.referenced.insert(occurrence.symbol.clone());
+                self.referenced
+                    .entry(occurrence.symbol.clone())
+                    .or_default()
+                    .insert(path.to_string());
             }
         }
 
@@ -437,6 +503,10 @@ impl Scan {
                     trait_method: (info.kind.enum_value_or_default() == Kind::TraitMethod)
                         .then(|| trait_method(&info.symbol))
                         .flatten(),
+                    pub_function: matches!(
+                        info.kind.enum_value_or_default(),
+                        Kind::Function | Kind::Method | Kind::StaticMethod
+                    ) && definition_line.trim_start().starts_with("pub "),
                 });
         }
     }

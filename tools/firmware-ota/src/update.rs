@@ -178,7 +178,7 @@ pub struct KeepaliveClient {
 }
 
 impl KeepaliveClient {
-    pub fn open(
+    pub(crate) fn open(
         option: &TransportOption,
         num_devices: usize,
         heartbeat: Duration,

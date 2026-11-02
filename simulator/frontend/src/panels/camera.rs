@@ -5,7 +5,7 @@ use crate::context::{Ctx, Field, SharedRenderer};
 use crate::render::Renderer;
 
 #[component]
-pub fn CameraPanel() -> Element {
+pub(crate) fn CameraPanel() -> Element {
     let ctx = use_context::<Ctx>();
     let renderer = ctx.renderer.clone();
     let mut cam_free = ctx.cam_free;

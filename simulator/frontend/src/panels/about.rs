@@ -5,7 +5,7 @@ const LICENSE: &str = include_str!(concat!(env!("OUT_DIR"), "/license.txt"));
 const THIRD_PARTY: &str = include_str!(concat!(env!("OUT_DIR"), "/third-party.md"));
 
 #[component]
-pub fn AboutPanel() -> Element {
+pub(crate) fn AboutPanel() -> Element {
     rsx! {
         div { class: "px-6 pt-4 flex flex-col gap-4",
             div { class: "card bg-base-100 shadow",

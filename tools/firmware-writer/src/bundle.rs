@@ -85,7 +85,7 @@ pub fn parse_release(version: &str) -> Result<[u8; 3]> {
 }
 
 #[must_use]
-pub fn bundle_url(version: &str) -> String {
+pub(crate) fn bundle_url(version: &str) -> String {
     format!(
         "https://github.com/shinolab/autd3-sdk/releases/download/firmware-v{version}/autd3-sdk-firmware-v{version}.zip"
     )
@@ -146,7 +146,7 @@ fn install(bytes: Vec<u8>, staging: &Path, dest: &Path) -> Result<()> {
     installed
 }
 
-pub fn find(dir: &Path) -> Result<Bundle> {
+pub(crate) fn find(dir: &Path) -> Result<Bundle> {
     let mut files = Vec::new();
     collect_files(dir, &mut files)?;
 

@@ -27,12 +27,12 @@ pub struct UdpArgs {
 
 impl UdpArgs {
     #[must_use]
-    pub fn heartbeat(&self) -> Duration {
+    pub(crate) fn heartbeat(&self) -> Duration {
         self.heartbeat.unwrap_or(DEFAULT_HEARTBEAT)
     }
 
     #[must_use]
-    pub fn option(&self) -> TransportOption {
+    pub(crate) fn option(&self) -> TransportOption {
         let default = TransportOption::default();
         TransportOption {
             iface: self

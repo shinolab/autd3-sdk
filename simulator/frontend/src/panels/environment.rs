@@ -5,7 +5,7 @@ use crate::context::Ctx;
 use crate::render::Renderer;
 
 #[component]
-pub fn EnvironmentPanel() -> Element {
+pub(crate) fn EnvironmentPanel() -> Element {
     let ctx = use_context::<Ctx>();
     let sound_speed = ctx.sound_speed;
     let on_sound_speed =
