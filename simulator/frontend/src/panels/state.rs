@@ -5,7 +5,7 @@ use autd3_rs_simulator_protocol::DeviceState;
 use crate::context::Ctx;
 
 #[component]
-pub fn StatePanel() -> Element {
+pub(crate) fn StatePanel() -> Element {
     let ctx = use_context::<Ctx>();
     let device_states = ctx.device_states;
     rsx! {

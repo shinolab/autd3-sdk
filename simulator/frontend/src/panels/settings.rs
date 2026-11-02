@@ -6,7 +6,7 @@ use crate::context::Ctx;
 use crate::settings::{self, Settings};
 
 #[component]
-pub fn SettingsPanel() -> Element {
+pub(crate) fn SettingsPanel() -> Element {
     let ctx = use_context::<Ctx>();
     let renderer = ctx.renderer.clone();
     let control_tx = ctx.control_tx.clone();
