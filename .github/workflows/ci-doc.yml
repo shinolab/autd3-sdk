@@ -30,7 +30,7 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: doc/package-lock.json
-      - uses: taiki-e/install-action@v2.87.31
+      - uses: taiki-e/install-action@v2.88.1
         with:
           tool: cargo-binstall
       - run: cargo binstall -y lychee@0.24.2
@@ -50,7 +50,7 @@ jobs:
             doc/codes/rust
             bindings/python
             xtask
-      - uses: astral-sh/setup-uv@v7.6.0
+      - uses: astral-sh/setup-uv@v10.3.3
       - uses: actions/setup-dotnet@v6.0.0
         with:
           dotnet-version: '10.0.x'
