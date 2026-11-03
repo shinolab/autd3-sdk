@@ -20,9 +20,13 @@ pub enum UdpError {
         host_version: u8,
     },
     #[error("unit {unit_id} rejected {kind:?} with status {status:#04x}")]
-    Rejected { kind: Kind, unit_id: u8, status: u8 },
+    Rejected {
+        kind: Kind,
+        unit_id: usize,
+        status: u8,
+    },
     #[error("unit {unit_id} did not answer {kind:?}")]
-    NoResponse { kind: Kind, unit_id: u8 },
+    NoResponse { kind: Kind, unit_id: usize },
     #[error(
         "{replies} unassigned devices answered one Discover; a device failed to close its downstream port"
     )]
@@ -34,14 +38,14 @@ pub enum UdpError {
     #[error("geometry declares {expected} devices but {found} are attached")]
     DeviceCountMismatch { expected: usize, found: usize },
     #[error("an unexpected unit (id {unit_id:#04x}) at {addr} answered the cross-check")]
-    UnexpectedUnit { unit_id: u8, addr: SocketAddrV6 },
+    UnexpectedUnit { unit_id: usize, addr: SocketAddrV6 },
     #[error("unit {0} did not answer the cross-check")]
-    MissingUnit(u8),
+    MissingUnit(usize),
     #[error(
         "units {not_ready:?} did not lock to the grandmaster and start their sync pulse within {timeout:?}"
     )]
     SyncTimeout {
-        not_ready: Vec<u8>,
+        not_ready: Vec<usize>,
         timeout: Duration,
     },
     #[error("the number of devices must be 1..=128, but {0} was given")]

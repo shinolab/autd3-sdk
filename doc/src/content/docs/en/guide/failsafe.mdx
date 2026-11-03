@@ -19,9 +19,11 @@ Both are disabled by default and can be enabled with [SetCpuConfig](/autd3-sdk/e
 If `failsafe_timeout` is set, a device stops its output when communication from the host has been cut off for that long.
 The default is `None` (disabled), and the devices do not stop the ultrasound even if communication is cut off by a host crash or a broken cable.
 
-While there is nothing to send, `Client` sends nothing to the devices by itself.
-Therefore, when `failsafe_timeout` is set, you need to call [`send_heartbeat()`](/autd3-sdk/en/api/basics/client/#api) periodically while you wait with the output kept on.
-`send_heartbeat()` must be called at a period sufficiently shorter than `failsafe_timeout`.
+By default, while there is nothing to send, `Client` sends nothing to the devices by itself.
+Therefore, when `failsafe_timeout` is set, liveness checks must keep going while you wait with the output kept on.
+Set `heartbeat_interval` of [`TransportOption`](/autd3-sdk/en/api/basics/transport-option/) and `Client` sends them at that interval.
+The interval must be sufficiently shorter than `failsafe_timeout`.
+To send them at your own timing, call [`send_heartbeat()`](/autd3-sdk/en/api/basics/client/#api) periodically instead.
 
 The following is an example that sets `failsafe_timeout` to 100 ms and sends a liveness check every 10 ms.
 

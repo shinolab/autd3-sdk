@@ -11,6 +11,8 @@ namespace AUTD3
         public ulong AckTimeoutNs;
         public ulong SendBufferBytes;
         public byte SyncOnOpen;
+        public byte HasHeartbeatInterval;
+        public ulong HeartbeatIntervalNs;
     }
 
     internal static class TransportOptionDefaults
@@ -20,6 +22,7 @@ namespace AUTD3
         internal static readonly TimeSpan AckTimeout;
         internal static readonly ulong? SendBufferBytes;
         internal static readonly bool SyncOnOpen;
+        internal static readonly TimeSpan? HeartbeatInterval;
 
         static TransportOptionDefaults()
         {
@@ -29,6 +32,7 @@ namespace AUTD3
             AckTimeout = OptionNative.FromNanos(native.AckTimeoutNs);
             SendBufferBytes = native.SendBufferBytes == 0 ? null : native.SendBufferBytes;
             SyncOnOpen = native.SyncOnOpen != 0;
+            HeartbeatInterval = OptionNative.FromOptionalNanos(native.HasHeartbeatInterval, native.HeartbeatIntervalNs);
         }
     }
 
@@ -63,6 +67,19 @@ namespace AUTD3
         private readonly bool? _syncOnOpen;
         public bool SyncOnOpen { get => _syncOnOpen ?? TransportOptionDefaults.SyncOnOpen; init => _syncOnOpen = value; }
 
+        private readonly bool _heartbeatIntervalSet;
+        private readonly TimeSpan? _heartbeatInterval;
+
+        public TimeSpan? HeartbeatInterval
+        {
+            get => _heartbeatIntervalSet ? _heartbeatInterval : TransportOptionDefaults.HeartbeatInterval;
+            init
+            {
+                _heartbeatInterval = value;
+                _heartbeatIntervalSet = true;
+            }
+        }
+
         internal byte IfaceKind => Iface switch
         {
             { AddrValue: { } } => IfaceKindAddr,
@@ -84,6 +101,8 @@ namespace AUTD3
                 _ => throw OptionNative.OutOfRange("sendBufferBytes"),
             },
             SyncOnOpen = OptionNative.Flag(SyncOnOpen),
+            HasHeartbeatInterval = OptionNative.Flag(HeartbeatInterval.HasValue),
+            HeartbeatIntervalNs = OptionNative.OptionalNanos("heartbeatInterval", HeartbeatInterval),
         };
     }
 }

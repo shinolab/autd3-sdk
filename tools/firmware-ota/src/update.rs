@@ -1,5 +1,3 @@
-use std::ops::Deref;
-use std::sync::Arc;
 use std::time::Duration;
 
 use autd3_cpu_wire::describe_device_error;
@@ -12,15 +10,11 @@ use autd3_rs::commands::{
     Command, Expansion, FpgaUpdateActivate, FpgaUpdateBegin, FpgaUpdateChunk, FpgaUpdateCommit,
     Operation, Reboot, UpdateBegin, UpdateChunk, UpdateCommit, UpdateConfirm,
 };
-use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::protocol::Cmd;
-use autd3_rs::{Client, DeviceState, Error, FirmwareVersion, TransportOption};
-use tokio::task::JoinHandle;
-use tokio::time::MissedTickBehavior;
+use autd3_rs::{Client, DeviceState, Error, FirmwareVersion};
 
 use crate::fpga_image::FpgaFirmwareImage;
 
-const HEARTBEAT: Duration = Duration::from_millis(10);
 pub(crate) const ACK_TIMEOUT: Duration = Duration::from_secs(120);
 pub(crate) const FPGA_RECONFIG_WAIT: Duration =
     Duration::from_millis(autd3_cpu_wire::fpga_update::FPGA_RECONFIG_WORST_MS as u64 + 2000);
@@ -168,46 +162,6 @@ pub(crate) fn version_triple(version: autd3_rs::Version) -> [u8; 3] {
 pub(crate) struct UpdateProgress {
     pub(crate) sent: usize,
     pub(crate) total: usize,
-}
-
-pub(crate) struct KeepaliveClient {
-    client: Arc<Client>,
-    keepalive: JoinHandle<()>,
-}
-
-impl KeepaliveClient {
-    pub(crate) async fn open(option: &TransportOption, num_devices: usize) -> Result<Self, Error> {
-        let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()));
-        let client = Arc::new(Client::open(&geometry, option).await?);
-        let keepalive = tokio::spawn({
-            let client = Arc::clone(&client);
-            async move {
-                let mut ticker = tokio::time::interval(HEARTBEAT);
-                ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
-                loop {
-                    ticker.tick().await;
-                    if client.send_heartbeat().await.is_err() {
-                        break;
-                    }
-                }
-            }
-        });
-        Ok(Self { client, keepalive })
-    }
-}
-
-impl Deref for KeepaliveClient {
-    type Target = Client;
-
-    fn deref(&self) -> &Client {
-        &self.client
-    }
-}
-
-impl Drop for KeepaliveClient {
-    fn drop(&mut self) {
-        self.keepalive.abort();
-    }
 }
 
 struct ExplicitOperation<O>(O);

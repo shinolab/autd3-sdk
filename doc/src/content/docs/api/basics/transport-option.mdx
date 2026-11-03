@@ -23,8 +23,9 @@ import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
 | `ack_timeout`         | `Duration`  | 10 ms   | 応答待ちのタイムアウト |
 | `send_buffer_bytes`         | `Option<NonZeroUsize>` | 8192 | ソケットの送信バッファの大きさ [B]. `None` で OS の既定のままにする |
 | `sync_on_open`        | `bool`      | `true`  | `false` なら open 時にデバイス間の同期を待たない |
+| `heartbeat_interval`  | `Option<Duration>` | `None` | `Client` がこの間隔で生存確認を送る. `None` なら送らない ([フェイルセーフ](/autd3-sdk/guide/failsafe/#通信途絶の-failsafe-と生存確認) 参照) |
 
-基本的に `iface` 以外を変更することは推奨しない.
+基本的に `iface` と `heartbeat_interval` 以外を変更することは推奨しない.
 
 :::caution[Windows のタイマ分解能]
 ライブラリは Windows のタイマ分解能 (`timeBeginPeriod`) を変更しない.

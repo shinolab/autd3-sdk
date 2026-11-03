@@ -11,7 +11,10 @@ internal static class Sample
     {
         var geometry = new Geometry(new[] { new Autd3() });
 
-        var client = Client.Open(geometry, new TransportOption());
+        // ANCHOR: heartbeat
+        var client = Client.Open(geometry, new TransportOption { HeartbeatInterval = TimeSpan.FromMilliseconds(10) });
+        await client.SendAsync(new SetCpuConfig(new CpuConfig { FailsafeTimeout = TimeSpan.FromMilliseconds(100) }));
+        // ANCHOR_END: heartbeat
 
         using (client)
         {
@@ -23,17 +26,6 @@ internal static class Sample
                 await client.SendAsync(Command.Each(device => Releasable(status[device.Idx]) ? new ReleaseFailsafe() : null));
             }
             // ANCHOR_END: ptp_failsafe
-
-            // ANCHOR: heartbeat
-            await client.SendAsync(new SetCpuConfig(new CpuConfig { FailsafeTimeout = TimeSpan.FromMilliseconds(100) }));
-
-            while (true)
-            {
-                client.SendHeartbeat();
-                await Task.Delay(TimeSpan.FromMilliseconds(10));
-            }
-            // ANCHOR_END: heartbeat
-
         }
     }
 }

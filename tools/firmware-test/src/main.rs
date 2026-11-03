@@ -4,9 +4,7 @@ mod io;
 
 use std::future::Future;
 use std::net::{Ipv6Addr, SocketAddrV6};
-use std::ops::Deref;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -43,45 +41,6 @@ pub struct Ctx<'a> {
     pub geometry: &'a Geometry,
     pub heartbeat: Duration,
     pub exec: ExecAt,
-}
-
-pub struct Session {
-    client: Arc<Client>,
-    keepalive: tokio::task::JoinHandle<()>,
-}
-
-impl Session {
-    pub(crate) fn new(client: Client, heartbeat: Duration) -> Self {
-        let client = Arc::new(client);
-        let keepalive = tokio::spawn({
-            let client = Arc::clone(&client);
-            async move {
-                let mut ticker = tokio::time::interval(heartbeat);
-                ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-                loop {
-                    ticker.tick().await;
-                    if client.send_heartbeat().await.is_err() {
-                        break;
-                    }
-                }
-            }
-        });
-        Self { client, keepalive }
-    }
-}
-
-impl Deref for Session {
-    type Target = Client;
-
-    fn deref(&self) -> &Client {
-        &self.client
-    }
-}
-
-impl Drop for Session {
-    fn drop(&mut self) {
-        self.keepalive.abort();
-    }
 }
 
 type Case = for<'a> fn(&'a Ctx<'a>) -> Pin<Box<dyn Future<Output = Result<()>> + 'a>>;
@@ -183,6 +142,7 @@ async fn main() -> Result<()> {
         },
         lost_timeout: cli.lost_timeout.unwrap_or(default.lost_timeout),
         ack_timeout: cli.ack_timeout(),
+        heartbeat_interval: Some(cli.heartbeat),
         ..default
     };
     let client = Client::open(&geometry, &option)
@@ -190,7 +150,6 @@ async fn main() -> Result<()> {
         .context("opening the devices")?;
     client.send(Clear).await?;
     client.send(Synchronize).await?;
-    let client = Session::new(client, cli.heartbeat);
 
     describe(&client).await;
     match client

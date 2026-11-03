@@ -27,6 +27,7 @@ def test_defaults_follow_the_spec() -> None:
     assert option.ack_timeout == autd3.Duration.from_millis(10)
     assert option.send_buffer_bytes == 8192
     assert option.sync_on_open is True
+    assert option.heartbeat_interval is None
     with pytest.raises(autd3.InvalidArgumentError, match="send_buffer_bytes"):
         autd3.TransportOption(send_buffer_bytes=0)
 
@@ -44,6 +45,9 @@ def test_fields_round_trip() -> None:
     assert option.ack_timeout == autd3.Duration.from_millis(3)
     assert autd3.TransportOption(send_buffer_bytes=None).send_buffer_bytes is None
     assert autd3.TransportOption(send_buffer_bytes=65536).send_buffer_bytes == 65536
+    interval = autd3.Duration.from_millis(10)
+    assert autd3.TransportOption(heartbeat_interval=interval).heartbeat_interval == interval
+    assert autd3.TransportOption(heartbeat_interval=None).heartbeat_interval is None
 
 
 def test_sync_on_open_can_be_turned_off() -> None:

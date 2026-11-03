@@ -9,7 +9,23 @@ use autd3_rs::TransportOption;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
-    let client = Client::open(&geometry, &TransportOption::default()).await?;
+    // ANCHOR: heartbeat
+    let client = Client::open(
+        &geometry,
+        &TransportOption {
+            heartbeat_interval: Some(Duration::from_millis(10)),
+            ..Default::default()
+        },
+    )
+    .await?;
+
+    client
+        .send(SetCpuConfig::new(CpuConfig {
+            failsafe_timeout: Some(Duration::from_millis(100)),
+            ..Default::default()
+        }))
+        .await?;
+    // ANCHOR_END: heartbeat
 
     // ANCHOR: ptp_failsafe
     let status = client.device_status()?;
@@ -22,21 +38,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await?;
     }
     // ANCHOR_END: ptp_failsafe
-
-    // ANCHOR: heartbeat
-    client
-        .send(SetCpuConfig::new(CpuConfig {
-            failsafe_timeout: Some(Duration::from_millis(100)),
-            ..Default::default()
-        }))
-        .await?;
-
-    let mut heartbeat = tokio::time::interval(Duration::from_millis(10));
-    loop {
-        heartbeat.tick().await;
-        client.send_heartbeat().await?;
-    }
-    // ANCHOR_END: heartbeat
 
     client.close().await?;
     Ok(())

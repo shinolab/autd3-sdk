@@ -23,8 +23,9 @@ import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
 | `ack_timeout`         | `Duration`             | 10 ms   | Response-wait timeout |
 | `send_buffer_bytes`         | `Option<NonZeroUsize>` | 8192    | Size of the socket send buffer [B]. `None` leaves the OS default                              |
 | `sync_on_open`        | `bool`                 | `true`  | When `false`, open does not wait for the devices to synchronize with one another |
+| `heartbeat_interval`  | `Option<Duration>`     | `None`  | `Client` sends a liveness check at this interval. `None` sends none (see [Failsafe](/autd3-sdk/en/guide/failsafe/)) |
 
-Changing anything other than `iface` is generally not recommended.
+Changing anything other than `iface` and `heartbeat_interval` is generally not recommended.
 
 :::caution[Windows timer resolution]
 The library does not change the timer resolution of Windows (`timeBeginPeriod`).

@@ -15,6 +15,8 @@ pub struct Autd3TransportOption {
     pub ack_timeout_ns: u64,
     pub send_buffer_bytes: u64,
     pub sync_on_open: bool,
+    pub has_heartbeat_interval: bool,
+    pub heartbeat_interval_ns: u64,
 }
 
 impl From<&TransportOption> for Autd3TransportOption {
@@ -27,6 +29,8 @@ impl From<&TransportOption> for Autd3TransportOption {
                 .send_buffer_bytes
                 .map_or(0, |bytes| bytes.get() as u64),
             sync_on_open: option.sync_on_open,
+            has_heartbeat_interval: option.heartbeat_interval.is_some(),
+            heartbeat_interval_ns: option.heartbeat_interval.map_or(0, to_ns),
         }
     }
 }
@@ -67,6 +71,9 @@ pub(crate) unsafe fn to_transport_option(
         ack_timeout: Duration::from_nanos(option.ack_timeout_ns),
         send_buffer_bytes: NonZeroUsize::new(send_buffer_bytes),
         sync_on_open: option.sync_on_open,
+        heartbeat_interval: option
+            .has_heartbeat_interval
+            .then(|| Duration::from_nanos(option.heartbeat_interval_ns)),
     })
 }
 
@@ -94,6 +101,8 @@ mod tests {
             ack_timeout_ns: 0,
             send_buffer_bytes: 0,
             sync_on_open: false,
+            has_heartbeat_interval: true,
+            heartbeat_interval_ns: 0,
         };
         assert_eq!(
             unsafe { autd3_transport_option_default(&raw mut option) },
@@ -130,6 +139,8 @@ mod tests {
             ack_timeout_ns: 3,
             send_buffer_bytes: 0,
             sync_on_open: false,
+            has_heartbeat_interval: true,
+            heartbeat_interval_ns: 4,
         };
         assert_eq!(
             unsafe { to_transport_option(0, std::ptr::null(), option) },
@@ -140,6 +151,7 @@ mod tests {
                 ack_timeout: Duration::from_nanos(3),
                 send_buffer_bytes: None,
                 sync_on_open: false,
+                heartbeat_interval: Some(Duration::from_nanos(4)),
             })
         );
     }

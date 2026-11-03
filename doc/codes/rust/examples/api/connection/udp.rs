@@ -17,6 +17,7 @@ async fn main() -> Result<()> {
     let ack_timeout = Duration::from_millis(10);
     let send_buffer_bytes = NonZeroUsize::new(8192);
     let sync_on_open = true;
+    let heartbeat_interval = None;
     // ANCHOR: api
     TransportOption {
         iface,
@@ -25,6 +26,7 @@ async fn main() -> Result<()> {
         ack_timeout,
         send_buffer_bytes,
         sync_on_open,
+        heartbeat_interval,
     };
     // ANCHOR_END: api
 

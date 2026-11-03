@@ -24,6 +24,7 @@ namespace AUTD3.Tests
         {
             Assert.Equal(TransportOptionDefaults.SendBufferBytes, new TransportOption().SendBufferBytes);
             Assert.Null(new TransportOption { SendBufferBytes = null }.SendBufferBytes);
+            Assert.Null(new TransportOption().HeartbeatInterval);
         }
 
         [Fact]
@@ -35,12 +36,16 @@ namespace AUTD3.Tests
                 LostTimeout = TimeSpan.FromMilliseconds(2),
                 AckTimeout = TimeSpan.FromMilliseconds(25),
                 SyncOnOpen = false,
+                HeartbeatInterval = TimeSpan.FromMilliseconds(10),
             }.ToNative();
             Assert.Equal(1_000_000_000ul, native.OpenTimeoutNs);
             Assert.Equal(2_000_000ul, native.LostTimeoutNs);
             Assert.Equal(25_000_000ul, native.AckTimeoutNs);
             Assert.Equal((byte)0, native.SyncOnOpen);
             Assert.Equal((byte)1, new TransportOption().ToNative().SyncOnOpen);
+            Assert.Equal((byte)1, native.HasHeartbeatInterval);
+            Assert.Equal(10_000_000ul, native.HeartbeatIntervalNs);
+            Assert.Equal((byte)0, new TransportOption().ToNative().HasHeartbeatInterval);
         }
 
         [Fact]

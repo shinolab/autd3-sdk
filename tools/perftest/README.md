@@ -29,7 +29,7 @@ The ack latency runs from the `send_frame_at` call to the moment its `ResponseFu
 | `--command <CMD>`     | `pattern` (default), `write-pattern-buffer`, or `nop`. See the table below. |
 | `--interface <NAME>`  | Network interface the devices hang off (`TransportOption.iface`). Omit to pick the one whose devices answer. |
 | `--devices <N>`       | Device count of the geometry. Default = 1. Opening fails when it does not match the chain. |
-| `--heartbeat <DUR>`   | Interval of `Client::send_heartbeat` while `--hold` keeps the connection idle. Default = `10ms`. The library sends no heartbeat by itself. |
+| `--heartbeat <DUR>`   | Interval of `Client::send_heartbeat` while `--hold` keeps the connection idle. Default = `10ms`. `TransportOption.heartbeat_interval` stays off so that the tool can count them. |
 | `--send-buffer <BYTES>` | Socket send buffer (`TransportOption.send_buffer_bytes`). `0` keeps the OS default. Omit to use the library default. |
 | `--stop-on-error`     | Stop at the first failed send and exit non-zero. The summary is still printed. Default: off. |
 | `--hold <DUR>`        | Keep the connection idle (heartbeats every `--heartbeat` only) this long before measuring, e.g. `3s`. |
