@@ -30,20 +30,26 @@ const DEVICE_PORT: u16 = 44336;
 impl OtaConfig {
     pub(crate) fn args(&self, version: &str, target: &str) -> Vec<String> {
         let mut args = vec![
-            "--version".to_string(),
+            "release".to_string(),
             version.to_string(),
             "--target".to_string(),
             target.to_string(),
-            "--devices".to_string(),
-            self.devices.to_string(),
             "--reboot-wait".to_string(),
             format!("{}s", self.reboot_wait_secs),
         ];
-        self.udp_args(&mut args);
+        self.connection_args(&mut args);
         args
     }
 
-    fn udp_args(&self, args: &mut Vec<String>) {
+    pub(crate) fn verify_args(&self) -> Vec<String> {
+        let mut args = vec!["verify".to_string()];
+        self.connection_args(&mut args);
+        args
+    }
+
+    fn connection_args(&self, args: &mut Vec<String>) {
+        args.push("--devices".to_string());
+        args.push(self.devices.to_string());
         let interface = self.udp.interface.trim();
         if !interface.is_empty() {
             args.push("--interface".to_string());
@@ -109,16 +115,17 @@ mod tests {
         assert_eq!(
             config.args("0.10.0", "both"),
             [
-                "--version",
+                "release",
                 "0.10.0",
                 "--target",
                 "both",
-                "--devices",
-                "3",
                 "--reboot-wait",
                 "20s",
+                "--devices",
+                "3",
             ]
         );
+        assert_eq!(config.verify_args(), ["verify", "--devices", "3"]);
     }
 
     #[test]

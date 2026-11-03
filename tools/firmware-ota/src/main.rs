@@ -1,173 +1,146 @@
 mod cli;
 mod cpu;
+mod error;
+mod fpga;
 mod fpga_image;
-mod session;
-mod udp;
 mod update;
 mod verify;
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;
 
-use crate::cli::{Cli, Target};
-use crate::cpu::main_cpu;
-use crate::fpga_image::FpgaFirmwareImage;
-use crate::session::{Stage, open_and_run};
-use crate::udp::connect;
-use crate::update::reboot;
+use crate::cli::{Cli, Command, Connection};
+use crate::cpu::{check_cpu, main_cpu};
+use crate::fpga::{main_fpga, print_fpga};
+use crate::update::ACK_TIMEOUT;
 use autd3_firmware_writer::bundle;
-
-async fn main_fpga(cli: &Cli, bytes: Vec<u8>, invalid_image_hint: &'static str) -> Result<()> {
-    if cli.verify_only {
-        open_and_run(cli, cli.devices, Stage::FpgaVerify).await?;
-        return Ok(());
-    }
-    let image = FpgaFirmwareImage::from_update_bin(bytes).context(invalid_image_hint)?;
-    println!(
-        "FPGA update image: {} bytes, crc32 {:#010x}",
-        image.len(),
-        image.crc32()
-    );
-    open_and_run(
-        cli,
-        cli.devices,
-        Stage::FpgaUpdate {
-            image: &image,
-            activate: !cli.no_activate,
-        },
-    )
-    .await?;
-    Ok(())
-}
+use autd3_rs::commands::Reboot;
+use autd3_rs::geometry::{Autd3, Geometry};
+use autd3_rs::{Client, Error, Interface, TransportOption, Version};
 
 fn read_image(path: &Path) -> Result<Vec<u8>> {
     std::fs::read(path).with_context(|| format!("reading {}", path.display()))
 }
 
-#[derive(Debug, PartialEq, Eq)]
-struct ReleaseImages {
-    cpu: Option<PathBuf>,
-    fpga: Option<PathBuf>,
-}
-
-fn release_images(bundle: bundle::Bundle, target: Target) -> Result<ReleaseImages> {
-    let cpu = if target.cpu() {
-        Some(
-            bundle
-                .cpu
-                .context("the release bundle has no CPU firmware image (*.bin)")?,
-        )
-    } else {
-        None
+async fn connect(connection: &Connection, num_devices: usize) -> Result<Client, Error> {
+    let default = TransportOption::default();
+    let option = TransportOption {
+        iface: connection
+            .interface
+            .as_deref()
+            .map_or(Interface::Auto, |name| Interface::Name(name.to_owned())),
+        open_timeout: connection.open_timeout.unwrap_or(default.open_timeout),
+        ack_timeout: ACK_TIMEOUT,
+        sync_on_open: false,
+        heartbeat_interval: Some(Duration::from_millis(10)),
+        ..default
     };
-    let fpga = if target.fpga() {
-        Some(
-            bundle
-                .fpga_update
-                .context("the release bundle has no FPGA update image (*-fpga-update.img)")?,
-        )
-    } else {
-        None
-    };
-    Ok(ReleaseImages { cpu, fpga })
+    let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()));
+    let client = Client::open(&geometry, &option).await?;
+    println!("{} device(s) on the bus", client.num_devices());
+    Ok(client)
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 1)]
 async fn main() -> Result<()> {
-    let cli = Cli::parse();
-    if cli.devices == 0 {
+    let command = Cli::parse().command;
+    let connection = command.connection();
+    if connection.devices == 0 {
         bail!("--devices must be at least 1");
     }
-    if cli.reboot_only {
-        let client = connect(cli.interface.as_deref(), cli.open_timeout, cli.devices).await?;
-        println!("{} device(s) on the bus", client.num_devices());
-        reboot(&client).await?;
-        println!("reboot acknowledged; the devices reset in about 100 ms and come back unassigned");
-        return Ok(());
-    }
-    match (&cli.image, &cli.version) {
-        (Some(path), _) => {
-            let bytes = read_image(path)?;
-            if cli.fpga {
+    match &command {
+        Command::Reboot { connection } => {
+            let client = connect(connection, connection.devices).await?;
+            client.set_ack_timeout(Duration::from_secs(5));
+            client.send(Reboot).await?;
+            println!(
+                "reboot acknowledged; the devices reset in about 100 ms and come back unassigned"
+            );
+            Ok(())
+        }
+        Command::Verify { connection } => {
+            let client = connect(connection, connection.devices).await?;
+            check_cpu(&client, false, None).await?;
+            print_fpga(&client, "now").await.map(drop)
+        }
+        Command::Confirm { connection } => {
+            let client = connect(connection, connection.devices).await?;
+            check_cpu(&client, true, None).await
+        }
+        Command::Local {
+            image,
+            fpga,
+            update,
+            connection,
+        } => {
+            if *fpga && update.no_confirm {
+                bail!("--no-confirm only applies to the CPU image");
+            }
+            let bytes = read_image(image)?;
+            if *fpga {
                 main_fpga(
-                    &cli,
+                    connection,
+                    update,
                     bytes,
                     "pass the `autd3-fpga-update.img` produced by `cargo xtask fpga build` \
                      (not the golden image; a golden image must never be written to the update slot)",
                 )
                 .await
             } else {
-                main_cpu(&cli, &bytes, None).await
+                main_cpu(connection, update, &bytes, None).await
             }
         }
-        (None, Some(version)) => {
-            if cli.confirm_only && cli.target != Target::Cpu {
-                bail!("--confirm-only only applies to the CPU image; pass --target cpu");
-            }
+        Command::Release {
+            version,
+            target,
+            force_download,
+            update,
+            connection,
+        } => {
             let release = bundle::parse_release(version)?;
-            let bundle = bundle::fetch(release, cli.force_download)?;
-            let images = release_images(bundle, cli.target)?;
-            let cpu = images.cpu.as_deref().map(read_image).transpose()?;
-            let fpga = images.fpga.as_deref().map(read_image).transpose()?;
+            let bundle = bundle::fetch(release, *force_download)?;
+            let cpu_path = target
+                .cpu()
+                .then(|| {
+                    bundle
+                        .cpu
+                        .context("the release bundle has no CPU firmware image (*.bin)")
+                })
+                .transpose()?;
+            let fpga_path = target
+                .fpga()
+                .then(|| {
+                    bundle
+                        .fpga_update
+                        .context("the release bundle has no FPGA update image (*-fpga-update.img)")
+                })
+                .transpose()?;
+            let cpu = cpu_path.as_deref().map(read_image).transpose()?;
+            let fpga = fpga_path.as_deref().map(read_image).transpose()?;
             let shown = version.trim_start_matches('v');
             if let Some(bytes) = cpu {
                 println!("== CPU firmware v{shown} ==");
-                main_cpu(&cli, &bytes, Some(release)).await?;
+                let release = Version {
+                    major: release[0],
+                    minor: release[1],
+                    patch: release[2],
+                };
+                main_cpu(connection, update, &bytes, Some(release)).await?;
             }
             if let Some(bytes) = fpga {
                 println!("== FPGA firmware v{shown} ==");
                 main_fpga(
-                    &cli,
+                    connection,
+                    update,
                     bytes,
                     "the FPGA update image in the release bundle is not usable; retry with `--force-download`",
                 )
                 .await?;
             }
             Ok(())
-        }
-        (None, None) => bail!("pass an image file or --version"),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn only_the_images_of_the_target_are_required_from_the_bundle() {
-        let cpu = PathBuf::from("autd3-cpu.bin");
-        let fpga = PathBuf::from("autd3-fpga-update.img");
-        let cpu_only = bundle::Bundle {
-            cpu: Some(cpu.clone()),
-            ..bundle::Bundle::default()
-        };
-        let fpga_only = bundle::Bundle {
-            fpga_update: Some(fpga.clone()),
-            ..bundle::Bundle::default()
-        };
-        assert_eq!(
-            release_images(cpu_only.clone(), Target::Cpu).unwrap(),
-            ReleaseImages {
-                cpu: Some(cpu),
-                fpga: None
-            }
-        );
-        assert_eq!(
-            release_images(fpga_only.clone(), Target::Fpga).unwrap(),
-            ReleaseImages {
-                cpu: None,
-                fpga: Some(fpga)
-            }
-        );
-        for (bundle, target) in [
-            (cpu_only.clone(), Target::Both),
-            (cpu_only, Target::Fpga),
-            (fpga_only.clone(), Target::Both),
-            (fpga_only, Target::Cpu),
-        ] {
-            assert!(release_images(bundle, target).is_err(), "{target:?}");
         }
     }
 }

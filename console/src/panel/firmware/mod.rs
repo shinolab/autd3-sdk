@@ -96,9 +96,8 @@ impl FirmwareConfig {
     }
 
     fn verify_args(&self) -> Result<Vec<String>, String> {
-        let mut args = self.args()?;
-        args.push("--verify-only".to_string());
-        Ok(args)
+        self.args()?;
+        Ok(self.ota.verify_args())
     }
 }
 
@@ -414,12 +413,12 @@ mod tests {
             ota: OtaConfig::default(),
         };
         let args = config.args().unwrap();
-        assert_eq!(args[..4], ["--version", "0.10.0", "--target", "cpu"]);
+        assert_eq!(args[..4], ["release", "0.10.0", "--target", "cpu"]);
         assert_eq!(config.method.bin(), "autd3-firmware-ota");
     }
 
     #[test]
-    fn the_version_is_read_back_before_the_write_with_the_very_same_arguments() {
+    fn the_version_is_read_back_before_the_write_on_the_same_connection() {
         let config = FirmwareConfig {
             version: Some("0.10.0".to_string()),
             target: Target::Both,
@@ -428,8 +427,9 @@ mod tests {
         };
         let args = config.args().unwrap();
         let verify = config.verify_args().unwrap();
-        assert_eq!(verify[..args.len()], args[..]);
-        assert_eq!(verify[args.len()..], ["--verify-only"]);
+        assert_eq!(verify[0], "verify");
+        assert_eq!(verify[1..], args[args.len() - 2..]);
+        assert!(FirmwareConfig::default().verify_args().is_err());
         assert!(config.target.cpu() && config.target.fpga());
         assert!(!Target::Fpga.cpu() && Target::Fpga.fpga());
         assert!(Target::Cpu.cpu() && !Target::Cpu.fpga());
