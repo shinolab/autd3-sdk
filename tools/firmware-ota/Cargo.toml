@@ -19,6 +19,7 @@ autd3-rs-core.workspace = true
 autd3-firmware-writer.workspace = true
 clap.workspace = true
 humantime.workspace = true
+indicatif.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
