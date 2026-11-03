@@ -12,6 +12,7 @@ internal static class Sample
         var lostTimeout = TimeSpan.FromMilliseconds(100);
         var ackTimeout = TimeSpan.FromMilliseconds(10);
         ulong sendBufferBytes = 8192;
+        TimeSpan? heartbeatInterval = null;
         // ANCHOR: api
         new TransportOption
         {
@@ -20,6 +21,7 @@ internal static class Sample
             LostTimeout = lostTimeout,
             AckTimeout = ackTimeout,
             SendBufferBytes = sendBufferBytes,
+            HeartbeatInterval = heartbeatInterval,
         };
         // ANCHOR_END: api
 

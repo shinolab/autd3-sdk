@@ -42,7 +42,7 @@ impl ControlResponse {
         }))
     }
 
-    pub(crate) fn check_status(&self, kind: Kind, unit_id: u8) -> Result<(), UdpError> {
+    pub(crate) fn check_status(&self, kind: Kind, unit_id: usize) -> Result<(), UdpError> {
         if self.status == Status::Ok.as_u8() {
             Ok(())
         } else {

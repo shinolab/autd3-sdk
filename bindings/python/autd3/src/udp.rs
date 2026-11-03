@@ -87,6 +87,7 @@ impl TransportOption {
         ack_timeout = CoreOption::default().ack_timeout,
         send_buffer_bytes = CoreOption::default().send_buffer_bytes.map(NonZeroUsize::get),
         sync_on_open = CoreOption::default().sync_on_open,
+        heartbeat_interval = CoreOption::default().heartbeat_interval,
     ))]
     fn new(
         #[pyo3(from_py_with = extract_iface)] iface: CoreInterface,
@@ -95,6 +96,7 @@ impl TransportOption {
         #[pyo3(from_py_with = extract_duration)] ack_timeout: Duration,
         send_buffer_bytes: Option<usize>,
         sync_on_open: bool,
+        #[pyo3(from_py_with = none_or_duration)] heartbeat_interval: Option<Duration>,
     ) -> PyResult<Self> {
         Ok(Self(CoreOption {
             iface,
@@ -108,6 +110,7 @@ impl TransportOption {
                 })
                 .transpose()?,
             sync_on_open,
+            heartbeat_interval,
         }))
     }
 
@@ -139,6 +142,14 @@ impl TransportOption {
     #[getter]
     fn sync_on_open(&self) -> bool {
         self.0.sync_on_open
+    }
+
+    #[getter]
+    fn heartbeat_interval<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
+        self.0
+            .heartbeat_interval
+            .map(|interval| duration_to_py(py, interval))
+            .transpose()
     }
 
     fn __repr__(&self) -> String {

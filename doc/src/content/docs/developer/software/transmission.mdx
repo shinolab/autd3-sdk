@@ -136,7 +136,7 @@ tokio の `try_recv_from` はリアクタが覚えている readiness が空だ�
 返信には要求の `msg_id`・`status` (そのフレームのエラーコード)・読み出し値が載る.
 
 :::note
-生存確認 (`Heartbeat`) は I/O タスクではなくユーザーが `send_heartbeat()` で送る. 呼ぶたびに `Lost` でない全デバイスへ 1 回送り, 返信は待たない.
+生存確認 (`Heartbeat`) は I/O タスクではなく, `TransportOption::heartbeat_interval` を指定したときの専用タスクとユーザーの `send_heartbeat()` が送る. どちらも 1 回ごとに `Lost` でない全デバイスへ 1 回送り, 返信は待たない.
 デバイスはこれをホストが生きている信号として使い (`failsafe_timeout` を指定していれば, その時間届かないと出力を止める. [フェイルセーフ](/autd3-sdk/guide/failsafe/)を参照), 直前に処理したフレームの結果と現在の状態を載せて返信する.
 ホストはこの返信で状態監視 (`device_status()` の `state` / `ptp_locked` / `failsafe_active`) とデバイス時刻の観測を行う. in-flight キューに一致する要求が無いので, 照合では捨てる.
 :::

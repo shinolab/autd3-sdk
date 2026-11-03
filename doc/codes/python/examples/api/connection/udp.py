@@ -6,6 +6,7 @@ open_timeout = Duration.from_secs(40)
 lost_timeout = Duration.from_millis(100)
 ack_timeout = Duration.from_millis(10)
 send_buffer_bytes = 8192
+heartbeat_interval = None
 # ANCHOR: api
 TransportOption(
     iface=iface,
@@ -13,6 +14,7 @@ TransportOption(
     lost_timeout=lost_timeout,
     ack_timeout=ack_timeout,
     send_buffer_bytes=send_buffer_bytes,
+    heartbeat_interval=heartbeat_interval,
 )
 # ANCHOR_END: api
 

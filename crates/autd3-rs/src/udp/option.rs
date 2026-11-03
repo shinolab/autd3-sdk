@@ -11,6 +11,7 @@ pub struct TransportOption {
     pub ack_timeout: Duration,
     pub send_buffer_bytes: Option<NonZeroUsize>,
     pub sync_on_open: bool,
+    pub heartbeat_interval: Option<Duration>,
 }
 
 impl Default for TransportOption {
@@ -22,6 +23,7 @@ impl Default for TransportOption {
             ack_timeout: Duration::from_millis(10),
             send_buffer_bytes: NonZeroUsize::new(8 * 1024),
             sync_on_open: true,
+            heartbeat_interval: None,
         }
     }
 }
@@ -39,5 +41,6 @@ mod tests {
         assert_eq!(option.ack_timeout, Duration::from_millis(10));
         assert_eq!(option.send_buffer_bytes, NonZeroUsize::new(8192));
         assert!(option.sync_on_open);
+        assert_eq!(option.heartbeat_interval, None);
     }
 }

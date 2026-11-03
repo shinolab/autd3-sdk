@@ -1,8 +1,9 @@
 use std::time::Duration;
 
-use autd3_rs::{Error, Interface, TransportOption, UdpError};
+use autd3_rs::geometry::{Autd3, Geometry};
+use autd3_rs::{Client, Error, Interface, TransportOption, UdpError};
 
-use crate::update::{ACK_TIMEOUT, KeepaliveClient};
+use crate::update::ACK_TIMEOUT;
 
 #[derive(Debug, thiserror::Error)]
 #[error("{0}{hint}", hint = hint(.0))]
@@ -15,16 +16,22 @@ fn option(interface: Option<&str>, open_timeout: Option<Duration>) -> TransportO
         open_timeout: open_timeout.unwrap_or(default.open_timeout),
         ack_timeout: ACK_TIMEOUT,
         sync_on_open: false,
+        heartbeat_interval: Some(Duration::from_millis(10)),
         ..default
     }
+}
+
+async fn open(option: &TransportOption, num_devices: usize) -> Result<Client, Error> {
+    let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()));
+    Client::open(&geometry, option).await
 }
 
 pub(crate) async fn connect(
     interface: Option<&str>,
     open_timeout: Option<Duration>,
     num_devices: usize,
-) -> Result<KeepaliveClient, OpenError> {
-    Ok(KeepaliveClient::open(&option(interface, open_timeout), num_devices).await?)
+) -> Result<Client, OpenError> {
+    Ok(open(&option(interface, open_timeout), num_devices).await?)
 }
 
 fn udp_cause(e: &Error) -> Option<&UdpError> {
@@ -70,6 +77,7 @@ mod tests {
             TransportOption {
                 ack_timeout: ACK_TIMEOUT,
                 sync_on_open: false,
+                heartbeat_interval: Some(Duration::from_millis(10)),
                 ..TransportOption::default()
             }
         );
@@ -84,6 +92,7 @@ mod tests {
                 open_timeout: Duration::from_secs(20),
                 ack_timeout: ACK_TIMEOUT,
                 sync_on_open: false,
+                heartbeat_interval: Some(Duration::from_millis(10)),
                 ..TransportOption::default()
             }
         );
@@ -99,7 +108,7 @@ mod tests {
             sync_on_open: false,
             ..TransportOption::default()
         };
-        let err = OpenError::from(KeepaliveClient::open(&option, 2).await.err().unwrap());
+        let err = OpenError::from(open(&option, 2).await.err().unwrap());
         assert!(
             matches!(
                 udp_cause(&err.0),

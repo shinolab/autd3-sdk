@@ -52,8 +52,8 @@ impl DeviceLiveness {
 
     pub(crate) fn accept_reply(
         &mut self,
-        expected_unit_id: u8,
-        reported_unit_id: u8,
+        expected_unit_id: usize,
+        reported_unit_id: usize,
         flags: Flags,
         now: Instant,
     ) -> bool {

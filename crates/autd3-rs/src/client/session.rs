@@ -19,10 +19,10 @@ use crate::response::Response;
 use crate::udp::{Channel, DeviceReply, Reply, TransportOption, UdpError};
 use crate::value::SysTime;
 
+use super::GRANDMASTER_UNIT_ID;
 use super::completion::{self, ResponseFuture, ResponseSender};
 use super::device_clock::DeviceClock;
 use super::liveness::DeviceLiveness;
-use super::{GRANDMASTER_UNIT_ID, unit_id_of};
 
 const IDLE_WAIT: Duration = Duration::from_secs(1);
 
@@ -259,14 +259,17 @@ impl SessionState {
 
     fn receive_reply(&mut self, reply: &DeviceReply, now: Instant) -> Option<InflightRequest> {
         let device = reply.reply.device;
-        let expected_unit_id = unit_id_of(device);
         let liveness = &mut self.liveness[device];
-        let accepted =
-            liveness.accept_reply(expected_unit_id, reply.reported_unit_id, reply.flags, now);
+        let accepted = liveness.accept_reply(
+            device,
+            usize::from(reply.reported_unit_id),
+            reply.flags,
+            now,
+        );
         if !accepted {
             return None;
         }
-        if expected_unit_id == GRANDMASTER_UNIT_ID
+        if device == GRANDMASTER_UNIT_ID
             && let Some(sys_time) = NonZeroU64::new(reply.reply.sys_time)
         {
             self.device_clock
@@ -698,7 +701,7 @@ impl Session {
 }
 
 #[cfg(test)]
-pub(super) mod tests {
+mod tests {
     use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6};
     use std::sync::Arc;
 
@@ -713,7 +716,7 @@ pub(super) mod tests {
 
     use super::*;
 
-    pub(in crate::client) const TIMEOUTS: Timeouts = Timeouts {
+    const TIMEOUTS: Timeouts = Timeouts {
         ack: Duration::from_millis(10),
         lost: Duration::from_millis(100),
     };
@@ -1084,9 +1087,7 @@ pub(super) mod tests {
         );
     }
 
-    pub(in crate::client) async fn session_with_device(
-        timeouts: Timeouts,
-    ) -> (Session, std::net::UdpSocket) {
+    async fn session_with_device(timeouts: Timeouts) -> (Session, std::net::UdpSocket) {
         let device =
             std::net::UdpSocket::bind(SocketAddrV6::new(Ipv6Addr::LOCALHOST, 0, 0, 0)).unwrap();
         let SocketAddr::V6(device_addr) = device.local_addr().unwrap() else {

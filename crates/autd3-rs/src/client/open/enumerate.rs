@@ -10,8 +10,8 @@ use crate::udp::{
     same_endpoint, set_time_body,
 };
 
+use crate::client::GRANDMASTER_UNIT_ID;
 use crate::client::device_clock::DeviceClock;
-use crate::client::{GRANDMASTER_UNIT_ID, unit_id_of};
 
 pub(super) const REQUEST_REPLY_WAIT: Duration = Duration::from_millis(200);
 const RESET_SETTLE: Duration = Duration::from_millis(100);
@@ -150,17 +150,18 @@ impl Enumerator<'_> {
         Ok(Some(first.src))
     }
 
+    #[allow(clippy::cast_possible_truncation)]
     async fn assign(
         &mut self,
         discovered: SocketAddrV6,
-        unit_id: u8,
+        unit_id: usize,
     ) -> Result<SocketAddrV6, UdpError> {
         let role = if unit_id == GRANDMASTER_UNIT_ID {
             Role::Grandmaster
         } else {
             Role::Slave
         };
-        let body = assign_id_body(unit_id, role);
+        let body = assign_id_body(unit_id as u8, role);
         if let Some(response) = self
             .exchange_with_retries(discovered, Kind::AssignId, body.as_bytes())
             .await?
@@ -173,7 +174,7 @@ impl Enumerator<'_> {
             .into_iter()
             .find(|r| {
                 r.unit_info().is_some_and(|info| {
-                    info.unit_id == unit_id && info.flags.contains(Flags::ASSIGNED)
+                    usize::from(info.unit_id) == unit_id && info.flags.contains(Flags::ASSIGNED)
                 })
             })
             .map(|r| r.src)
@@ -186,7 +187,7 @@ impl Enumerator<'_> {
     async fn unblock_downstream(
         &mut self,
         addr: SocketAddrV6,
-        unit_id: u8,
+        unit_id: usize,
     ) -> Result<bool, UdpError> {
         let response = self
             .exchange_with_retries(addr, Kind::UnblockDownstream, &[])
@@ -227,7 +228,7 @@ impl Enumerator<'_> {
                     found: device_addrs.len() + 1,
                 });
             }
-            let unit_id = unit_id_of(device_addrs.len());
+            let unit_id = device_addrs.len();
             let addr = self.assign(discovered, unit_id).await?;
             let has_downstream_link = self.unblock_downstream(addr, unit_id).await?;
             tracing::debug!(unit_id, %addr, downstream_link = has_downstream_link, "assigned a unit");
@@ -275,7 +276,7 @@ impl Enumerator<'_> {
             }
         }
         match answered.iter().position(|answered| !answered) {
-            Some(missing) => Err(UdpError::MissingUnit(unit_id_of(missing))),
+            Some(missing) => Err(UdpError::MissingUnit(missing)),
             None => Ok(()),
         }
     }
@@ -288,19 +289,19 @@ impl Enumerator<'_> {
         let mut seen = vec![false; device_addrs.len()];
         for response in self.request_all_devices(Kind::ReadUnitInfo, None).await? {
             let info = response.unit_info();
-            let unit_id = info.map_or(u8::MAX, |info| info.unit_id);
+            let unit_id = info.map_or(usize::from(u8::MAX), |info| usize::from(info.unit_id));
             let known = info.is_some_and(|info| info.flags.contains(Flags::ASSIGNED))
                 && device_addrs
-                    .get(usize::from(unit_id))
+                    .get(unit_id)
                     .is_some_and(|&addr| same_endpoint(addr, response.src));
-            if !known || seen[usize::from(unit_id)] {
+            if !known || seen[unit_id] {
                 return Err(UdpError::UnexpectedUnit {
                     unit_id,
                     addr: response.src,
                 });
             }
-            seen[usize::from(unit_id)] = true;
-            answered[usize::from(unit_id)] = true;
+            seen[unit_id] = true;
+            answered[unit_id] = true;
         }
         Ok(())
     }
@@ -342,11 +343,11 @@ impl Enumerator<'_> {
                     ready[device] = info.flags.contains(Flags::PTP_LOCKED | Flags::SYNC_READY);
                 }
             }
-            let not_ready: Vec<u8> = ready
+            let not_ready: Vec<usize> = ready
                 .iter()
                 .enumerate()
                 .filter(|&(_, ready)| !ready)
-                .map(|(device, _)| unit_id_of(device))
+                .map(|(device, _)| device)
                 .collect();
             if not_ready.is_empty() {
                 return Ok(());
@@ -386,7 +387,7 @@ pub(super) async fn bring_up(
         return Ok(device_addrs);
     }
     enumerator
-        .set_time(device_addrs[usize::from(GRANDMASTER_UNIT_ID)], device_clock)
+        .set_time(device_addrs[GRANDMASTER_UNIT_ID], device_clock)
         .await?;
     enumerator.wait_sync(&device_addrs).await?;
     tracing::info!(
