@@ -7,7 +7,7 @@ use autd3_python_capsule::{
     modulation_from_capsule, phases_from_capsule,
 };
 use autd3_rs::commands::{
-    Command as CoreCommand, CommandOperation, Expansion, Modulation as CoreModulation,
+    Command as CoreCommand, Expansion, Modulation as CoreModulation, Operation,
     Pattern as CorePattern, PatternIntensity as CorePatternIntensity, each as core_each,
 };
 use autd3_rs::value::{
@@ -23,20 +23,20 @@ use crate::{commands, ops, stm};
 pub(crate) trait PushCommand: Send + Sync {
     fn push_into(&self, expansion: &mut Expansion<'_>) -> Result<(), autd3_rs::Error>;
 
-    fn as_operation(&self) -> Option<Box<dyn CommandOperation + '_>> {
+    fn as_operation(&self) -> Option<Box<dyn Operation + '_>> {
         None
     }
 }
 
 pub(crate) trait PushOperation: Send + Sync {
-    fn operation(&self) -> Box<dyn CommandOperation + '_>;
+    fn operation(&self) -> Box<dyn Operation + '_>;
 }
 
 impl<O> PushOperation for O
 where
-    O: CommandOperation + Copy + Send + Sync + 'static,
+    O: Operation + Copy + Send + Sync + 'static,
 {
-    fn operation(&self) -> Box<dyn CommandOperation + '_> {
+    fn operation(&self) -> Box<dyn Operation + '_> {
         Box::new(*self)
     }
 }
@@ -47,7 +47,7 @@ impl<O: PushOperation> PushCommand for O {
         Ok(())
     }
 
-    fn as_operation(&self) -> Option<Box<dyn CommandOperation + '_>> {
+    fn as_operation(&self) -> Option<Box<dyn Operation + '_>> {
         Some(self.operation())
     }
 }
@@ -90,7 +90,7 @@ pub(crate) struct PatternData {
 }
 
 impl PushOperation for PatternData {
-    fn operation(&self) -> Box<dyn CommandOperation + '_> {
+    fn operation(&self) -> Box<dyn Operation + '_> {
         Box::new(CorePattern {
             transition_mode: self.transition_mode,
             ..CorePattern::with_bank(self.bank, &self.phases, self.intensities.as_ref())

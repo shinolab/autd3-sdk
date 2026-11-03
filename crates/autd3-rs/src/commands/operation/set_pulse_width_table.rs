@@ -51,8 +51,6 @@ impl Default for SetPulseWidthTable {
 
 impl crate::sealed::Sealed for SetPulseWidthTable {}
 
-impl crate::commands::CommandOperation for SetPulseWidthTable {}
-
 impl Operation for SetPulseWidthTable {
     fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
         let mut table = [U16::ZERO; PWE_TABLE_SIZE];

@@ -18,8 +18,6 @@ pub struct ConfigModulation {
 
 impl crate::sealed::Sealed for ConfigModulation {}
 
-impl crate::commands::CommandOperation for ConfigModulation {}
-
 impl Operation for ConfigModulation {
     fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
         let payload = ConfigModPayload::new(

@@ -16,8 +16,6 @@ pub struct ActivateModulationBank {
 
 impl crate::sealed::Sealed for ActivateModulationBank {}
 
-impl crate::commands::CommandOperation for ActivateModulationBank {}
-
 impl Operation for ActivateModulationBank {
     fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
         encode_header_only(

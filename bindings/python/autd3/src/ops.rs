@@ -8,7 +8,7 @@ use autd3_python_capsule::extract::{
 };
 use autd3_python_capsule::{capsule_of, modulation_from_capsule};
 use autd3_rs::Velocity;
-use autd3_rs::commands::CommandOperation;
+use autd3_rs::commands::Operation;
 use autd3_rs::commands::{
     ActivateModulationBank as CoreActivateModulationBank,
     ActivatePatternBank as CoreActivatePatternBank, ConfigFociStm as CoreConfigFociStm,
@@ -286,7 +286,7 @@ pub(crate) struct WritePatternBufferData {
 }
 
 impl PushOperation for WritePatternBufferData {
-    fn operation(&self) -> Box<dyn CommandOperation + '_> {
+    fn operation(&self) -> Box<dyn Operation + '_> {
         Box::new(CoreWritePatternBuffer::new(
             self.bank,
             self.start_index,
@@ -373,7 +373,7 @@ pub(crate) struct WritePatternPhaseData {
 }
 
 impl PushOperation for WritePatternPhaseData {
-    fn operation(&self) -> Box<dyn CommandOperation + '_> {
+    fn operation(&self) -> Box<dyn Operation + '_> {
         Box::new(CoreWritePatternPhase {
             bank: self.bank,
             start_index: self.start_index,
@@ -481,7 +481,7 @@ pub(crate) struct WriteModulationBufferData {
 }
 
 impl PushOperation for WriteModulationBufferData {
-    fn operation(&self) -> Box<dyn CommandOperation + '_> {
+    fn operation(&self) -> Box<dyn Operation + '_> {
         Box::new(CoreWriteModulationBuffer {
             bank: self.bank,
             offset: self.offset,

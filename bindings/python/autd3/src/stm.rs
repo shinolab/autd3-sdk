@@ -7,7 +7,7 @@ use autd3_python_capsule::extract::{
 };
 use autd3_python_capsule::numpy::{f32_vec3, f32_vec3_rows_from_ndarray, is_ndarray};
 use autd3_rs::commands::WriteFociBuffer as CoreWriteFociBuffer;
-use autd3_rs::commands::{CommandOperation, Expansion};
+use autd3_rs::commands::{Expansion, Operation};
 use autd3_rs::commands::{
     FociStm as CoreFociStm, FociStmOption as CoreFociStmOption, PatternStm as CorePatternStm,
     PatternStmOption as CorePatternStmOption, StmIntensity as CoreStmIntensity,
@@ -255,7 +255,7 @@ pub(crate) struct WriteFociBufferData {
 }
 
 impl PushOperation for WriteFociBufferData {
-    fn operation(&self) -> Box<dyn CommandOperation + '_> {
+    fn operation(&self) -> Box<dyn Operation + '_> {
         Box::new(CoreWriteFociBuffer {
             bank: self.bank,
             start_index: self.start_index,
