@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use autd3_python_capsule::error::invalid_argument;
 use autd3_python_capsule::extract::{duration_to_py, extract_duration};
-use autd3_rs::commands::CommandOperation;
+use autd3_rs::commands::Operation;
 use autd3_rs::commands::{
     Clear as CoreClear, CpuConfig as CoreCpuConfig, EmulateGpioIn, FixedCompletionTime,
     FixedUpdateRate, ForceFan as CoreForceFan, FpgaBusWait as CoreFpgaBusWait,
@@ -671,7 +671,7 @@ impl EmulateGpioInPy {
 pub(crate) struct SetOutputMaskCmd(SetOutputMask);
 
 impl PushOperation for SetOutputMaskCmd {
-    fn operation(&self) -> Box<dyn CommandOperation + '_> {
+    fn operation(&self) -> Box<dyn Operation + '_> {
         Box::new(&self.0)
     }
 }
@@ -690,7 +690,7 @@ impl SetOutputMaskPy {
 pub(crate) struct SetPhaseCorrectionCmd(SetPhaseCorrection);
 
 impl PushOperation for SetPhaseCorrectionCmd {
-    fn operation(&self) -> Box<dyn CommandOperation + '_> {
+    fn operation(&self) -> Box<dyn Operation + '_> {
         Box::new(&self.0)
     }
 }
@@ -724,7 +724,7 @@ fn extract_pulse_width_table(
 pub(crate) struct SetPulseWidthTableCmd(CoreSetPulseWidthTable);
 
 impl PushOperation for SetPulseWidthTableCmd {
-    fn operation(&self) -> Box<dyn CommandOperation + '_> {
+    fn operation(&self) -> Box<dyn Operation + '_> {
         Box::new(&self.0)
     }
 }

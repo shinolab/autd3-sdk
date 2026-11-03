@@ -19,8 +19,6 @@ pub struct ReleaseFailsafe;
 
 impl crate::sealed::Sealed for Clear {}
 
-impl crate::commands::CommandOperation for Clear {}
-
 impl Operation for Clear {
     fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
         set_cmd(out, Cmd::Clear, 0);
@@ -29,8 +27,6 @@ impl Operation for Clear {
 }
 
 impl crate::sealed::Sealed for Nop {}
-
-impl crate::commands::CommandOperation for Nop {}
 
 impl Operation for Nop {
     fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
@@ -41,8 +37,6 @@ impl Operation for Nop {
 
 impl crate::sealed::Sealed for Synchronize {}
 
-impl crate::commands::CommandOperation for Synchronize {}
-
 impl Operation for Synchronize {
     fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
         set_cmd(out, Cmd::Synchronize, 0);
@@ -51,8 +45,6 @@ impl Operation for Synchronize {
 }
 
 impl crate::sealed::Sealed for ReleaseFailsafe {}
-
-impl crate::commands::CommandOperation for ReleaseFailsafe {}
 
 impl Operation for ReleaseFailsafe {
     fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {

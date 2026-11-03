@@ -122,12 +122,6 @@ pub trait Operation: crate::sealed::Sealed {
     fn encode(&self, device: &Device, out: &mut Datagram) -> Result<(), Error>;
 }
 
-pub trait CommandOperation: Operation {}
-
-impl<O: CommandOperation + ?Sized> CommandOperation for Box<O> {}
-
-impl<O: CommandOperation + ?Sized> CommandOperation for &O {}
-
 impl<O: Operation + ?Sized> crate::sealed::Sealed for Box<O> {}
 
 impl<O: Operation + ?Sized> Operation for Box<O> {

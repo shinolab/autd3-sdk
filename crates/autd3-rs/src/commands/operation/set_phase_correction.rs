@@ -17,8 +17,6 @@ pub struct SetPhaseCorrection {
 
 impl crate::sealed::Sealed for SetPhaseCorrection {}
 
-impl crate::commands::CommandOperation for SetPhaseCorrection {}
-
 impl Operation for SetPhaseCorrection {
     fn distribution(&self) -> Distribution {
         Distribution::PerDevice

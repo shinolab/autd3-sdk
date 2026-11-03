@@ -4,7 +4,7 @@ use autd3_cpu_wire::fpga_params::{FunctionBits, VERSION_NUM_MAJOR, VERSION_NUM_M
 use autd3_cpu_wire::fpga_update::FpgaBootImage;
 use autd3_cpu_wire::payload::FirmwareInfo;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Version {
     pub major: u8,
     pub minor: u8,

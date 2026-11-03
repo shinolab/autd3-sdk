@@ -16,8 +16,6 @@ pub struct SetGpioOut {
 
 impl crate::sealed::Sealed for SetGpioOut {}
 
-impl crate::commands::CommandOperation for SetGpioOut {}
-
 impl Operation for SetGpioOut {
     fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
         encode_header_only(out, Cmd::SetGpioOut, &GpioOutPayload::new(self.outputs));

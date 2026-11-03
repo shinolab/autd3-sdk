@@ -142,6 +142,6 @@ A multi-frame command such as `Modulation` / `FociStm` / `PatternStm` cannot be 
 When each device needs different multi-frame content, build the frames yourself with `Frame::new` and send them with `send_frame`.
 
 In Rust, the return values of the closure must all be the same type.
-To mix commands of different types, unify them into a `Box<dyn CommandOperation>`.
+To mix commands of different types, unify them into a `Box<dyn Operation>`.
 
 <CodeTabs rust={excerpt(sample, "each_boxed")} />

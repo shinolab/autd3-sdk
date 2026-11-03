@@ -51,8 +51,6 @@ pub(crate) fn num_foci(points: &[ControlPoints]) -> Result<u8, PayloadError> {
 
 impl crate::sealed::Sealed for WriteFociBuffer<'_> {}
 
-impl crate::commands::CommandOperation for WriteFociBuffer<'_> {}
-
 impl Operation for WriteFociBuffer<'_> {
     fn distribution(&self) -> Distribution {
         Distribution::PerDevice
