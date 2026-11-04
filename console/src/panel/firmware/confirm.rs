@@ -98,12 +98,6 @@ impl Confirm {
                             }
                         }
                     });
-                ui.add_space(4.0);
-                ui.colored_label(
-                    egui::Color32::LIGHT_YELLOW,
-                    "Transducer output stops during the update; do not power off the devices \
-                 while it runs.",
-                );
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
                     if ui.button("Update").clicked() {
