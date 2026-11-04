@@ -8,19 +8,18 @@ pub fn radiation_pressure_inplace(samples: &mut [u8]) {
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
     use super::*;
 
-    #[test]
-    fn radiation_pressure_inplace_matches_legacy_formula() {
-        let mut buf = [0, 64, 128, 191, 255];
+    #[rstest]
+    #[case::matches_legacy_formula(&[0, 128, 181, 221, 255], vec![0, 64, 128, 191, 255])]
+    #[case::empty(&[], vec![])]
+    fn radiation_pressure_inplace_maps_each_sample(
+        #[case] expected: &[u8],
+        #[case] mut buf: Vec<u8>,
+    ) {
         radiation_pressure_inplace(&mut buf);
-        assert_eq!(buf, [0, 128, 181, 221, 255]);
-    }
-
-    #[test]
-    fn radiation_pressure_inplace_empty() {
-        let mut buf: [u8; 0] = [];
-        radiation_pressure_inplace(&mut buf);
-        assert_eq!(buf, [0u8; 0]);
+        assert_eq!(expected, buf.as_slice());
     }
 }

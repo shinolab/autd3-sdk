@@ -61,6 +61,7 @@ pub fn sine(
 #[cfg(test)]
 mod tests {
     use autd3_rs_core::units::Hz;
+    use rstest::rstest;
 
     use super::*;
 
@@ -68,11 +69,13 @@ mod tests {
         128, 167, 202, 231, 249, 255, 249, 231, 202, 167, 127, 88, 53, 24, 6, 0, 6, 24, 53, 88,
     ];
 
-    #[test]
-    fn sine_200hz_default_matches_reference() {
+    #[rstest]
+    #[case::integer_frequency(200 * Hz)]
+    #[case::float_frequency(200.0 * Hz)]
+    fn sine_200hz_default_matches_reference(#[case] freq: Freq) {
         let mut buf = Vec::new();
         sine(
-            200 * Hz,
+            freq,
             &SineOption::default(),
             SamplingConfig::FREQ_4K,
             &mut buf,
@@ -81,31 +84,16 @@ mod tests {
         assert_eq!(buf.as_slice(), SINE_200HZ_DEFAULT);
     }
 
-    #[test]
-    fn sine_float_frequency() {
+    #[rstest]
+    #[case(20, SamplingConfig::FREQ_4K)]
+    #[case(200, SamplingConfig::FREQ_40K)]
+    fn sine_sample_count_follows_the_sampling_config(
+        #[case] expected: usize,
+        #[case] config: SamplingConfig,
+    ) {
         let mut buf = Vec::new();
-        sine(
-            200.0 * Hz,
-            &SineOption::default(),
-            SamplingConfig::FREQ_4K,
-            &mut buf,
-        )
-        .unwrap();
-        assert_eq!(buf.len(), 20);
-        assert_eq!(buf.as_slice()[0], 128);
-    }
-
-    #[test]
-    fn sine_sample_count_follows_the_sampling_config() {
-        let mut buf = Vec::new();
-        sine(
-            200 * Hz,
-            &SineOption::default(),
-            SamplingConfig::FREQ_40K,
-            &mut buf,
-        )
-        .unwrap();
-        assert_eq!(buf.len(), 200);
+        sine(200 * Hz, &SineOption::default(), config, &mut buf).unwrap();
+        assert_eq!(expected, buf.len());
     }
 
     #[test]

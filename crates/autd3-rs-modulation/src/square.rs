@@ -49,6 +49,7 @@ pub fn square(
 #[cfg(test)]
 mod tests {
     use autd3_rs_core::units::Hz;
+    use rstest::rstest;
 
     use super::*;
 
@@ -93,67 +94,33 @@ mod tests {
         );
     }
 
-    #[test]
-    fn square_duty_extremes() {
+    #[rstest]
+    #[case::duty_zero(u8::MIN, 200 * Hz, SquareOption { duty: 0.0, ..Default::default() })]
+    #[case::duty_one(u8::MAX, 200 * Hz, SquareOption { duty: 1.0, ..Default::default() })]
+    #[case::low_high_swap(u8::MAX, 150.0 * Hz, SquareOption { low: u8::MAX, ..Default::default() })]
+    fn square_flat_output(#[case] expected: u8, #[case] freq: Freq, #[case] option: SquareOption) {
         let mut buf = Vec::new();
-        square(
-            200 * Hz,
-            &SquareOption {
-                duty: 0.0,
-                ..Default::default()
-            },
-            SamplingConfig::FREQ_4K,
-            &mut buf,
-        )
-        .unwrap();
-        assert!(buf.iter().all(|&x| x == u8::MIN));
-
-        square(
-            200 * Hz,
-            &SquareOption {
-                duty: 1.0,
-                ..Default::default()
-            },
-            SamplingConfig::FREQ_4K,
-            &mut buf,
-        )
-        .unwrap();
-        assert!(buf.iter().all(|&x| x == u8::MAX));
+        square(freq, &option, SamplingConfig::FREQ_4K, &mut buf).unwrap();
+        assert!(buf.iter().all(|&x| x == expected));
     }
 
-    #[test]
-    fn square_low_high_swap() {
+    #[rstest]
+    #[case(-0.1)]
+    #[case(1.1)]
+    fn square_duty_out_of_range_errors(#[case] duty: f32) {
         let mut buf = Vec::new();
-        square(
-            150.0 * Hz,
-            &SquareOption {
-                low: u8::MAX,
-                ..Default::default()
-            },
-            SamplingConfig::FREQ_4K,
-            &mut buf,
-        )
-        .unwrap();
-        assert!(buf.iter().all(|&x| x == u8::MAX));
-    }
-
-    #[test]
-    fn square_duty_out_of_range_errors() {
-        let mut buf = Vec::new();
-        for duty in [-0.1, 1.1] {
-            assert!(
-                square(
-                    150.0 * Hz,
-                    &SquareOption {
-                        duty,
-                        ..Default::default()
-                    },
-                    SamplingConfig::FREQ_4K,
-                    &mut buf,
-                )
-                .is_err()
-            );
-        }
+        assert!(
+            square(
+                150.0 * Hz,
+                &SquareOption {
+                    duty,
+                    ..Default::default()
+                },
+                SamplingConfig::FREQ_4K,
+                &mut buf,
+            )
+            .is_err()
+        );
     }
 
     #[test]
