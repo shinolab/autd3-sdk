@@ -22,6 +22,11 @@ eframe = { version = "0.37.0", default-features = false, features = [
     "x11",
 ] }
 serde = { version = "1.0.229", default-features = false, features = ["std", "derive"] }
+axoupdater = { version = "0.10.3", default-features = false, features = [
+    "blocking",
+    "github_releases",
+] }
+tokio = { version = "1.54.1", default-features = false, features = ["rt"] }
 
 [dev-dependencies]
 serde_json = { version = "1.0.154", default-features = false, features = ["std"] }
