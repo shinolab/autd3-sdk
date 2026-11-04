@@ -13,11 +13,11 @@ use anyhow::{Context, Result, bail};
 use clap::Parser;
 
 use crate::cli::{Cli, Command, Connection};
-use crate::cpu::{check_cpu, main_cpu};
+use crate::cpu::{main_cpu, print_cpu};
 use crate::fpga::{main_fpga, print_fpga};
 use crate::update::ACK_TIMEOUT;
 use autd3_firmware_writer::bundle;
-use autd3_rs::commands::Reboot;
+use autd3_rs::commands::{Reboot, UpdateConfirm};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::{Client, Error, Interface, TransportOption, Version};
 
@@ -59,12 +59,14 @@ async fn main() -> Result<()> {
         }
         Command::Verify { connection } => {
             let client = connect(connection, connection.devices).await?;
-            check_cpu(&client, false, None).await?;
+            print_cpu(&client, "now").await?;
             print_fpga(&client, "now").await.map(drop)
         }
         Command::Confirm { connection } => {
             let client = connect(connection, connection.devices).await?;
-            check_cpu(&client, true, None).await
+            print_cpu(&client, "before confirm").await?;
+            client.send(UpdateConfirm).await?;
+            print_cpu(&client, "after confirm").await.map(drop)
         }
         Command::Local {
             image,

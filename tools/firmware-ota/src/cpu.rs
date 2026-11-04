@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 
+use autd3_cpu_wire::update::RunningImage;
 use autd3_firmware_writer::image::CpuFirmwareImage;
 use autd3_rs::commands::{Reboot, UpdateConfirm};
 use autd3_rs::{Client, Version};
@@ -31,7 +32,7 @@ pub(crate) async fn main_cpu(
     );
     let client = connect(connection, connection.devices).await?;
     let devices = client.num_devices();
-    let before = print_versions(&client, "before").await?;
+    let (before, _) = print_cpu(&client, "before").await?;
     update_cpu(&client, &image).await?;
     println!("image committed on every device");
     if update.no_activate {
@@ -138,49 +139,34 @@ async fn reconnect(
             return Ok(activated_late);
         }
     }
-    check_cpu(&client, confirm, Some(expect)).await?;
+    let (after, images) =
+        print_cpu(&client, if confirm { "before confirm" } else { "now" }).await?;
+    check_expectation(&after, expect)?;
+    check_trial(&images, &after, expect)?;
+    if confirm {
+        client.send(UpdateConfirm).await?;
+        println!("running image confirmed on every device");
+        print_cpu(&client, "after confirm").await?;
+    }
     Ok(Vec::new())
 }
 
-pub(crate) async fn check_cpu(
+pub(crate) async fn print_cpu(
     client: &Client,
-    confirm_running: bool,
-    expect: Option<Expect<'_>>,
-) -> Result<()> {
-    let label = if confirm_running { "after" } else { "now" };
-    let after: Vec<Version> = client
-        .read_firmware_version()
-        .await?
-        .iter()
-        .map(|info| info.cpu)
-        .collect();
-    let images = client.read_running_image().await?;
-    for (device, (version, &image)) in after.iter().zip(&images).enumerate() {
-        println!(
-            "device {device}: CPU firmware {label} = {version} ({})",
-            describe_running_image(image)
-        );
-    }
-    if let Some(expect) = expect {
-        check_expectation(&after, expect)?;
-        check_trial(&images, &after, expect)?;
-    }
-    if confirm_running {
-        client.send(UpdateConfirm).await?;
-        println!("running image confirmed on every device");
-    }
-    Ok(())
-}
-
-async fn print_versions(client: &Client, label: &str) -> Result<Vec<Version>> {
+    label: &str,
+) -> Result<(Vec<Version>, Vec<Option<RunningImage>>)> {
     let versions: Vec<Version> = client
         .read_firmware_version()
         .await?
         .iter()
         .map(|info| info.cpu)
         .collect();
-    for (device, version) in versions.iter().enumerate() {
-        println!("device {device}: CPU firmware {label} = {version}");
+    let images = client.read_running_image().await?;
+    for (device, (version, &image)) in versions.iter().zip(&images).enumerate() {
+        println!(
+            "device {device}: CPU firmware {label} = {version} ({})",
+            describe_running_image(image)
+        );
     }
-    Ok(versions)
+    Ok((versions, images))
 }
