@@ -15,6 +15,3 @@ pub use pattern_intensity::PatternIntensity;
 pub use phase::Phase;
 pub use pulse_width::{PULSE_WIDTH_PERIOD, PulseWidth, PulseWidthError};
 pub use sampling_config::{SamplingConfig, SamplingConfigError};
-
-#[doc(hidden)]
-pub use sampling_config::is_integer;

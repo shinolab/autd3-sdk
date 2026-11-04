@@ -9,13 +9,6 @@ use core::{num::NonZeroU16, time::Duration};
 use crate::common::{Freq, ULTRASOUND_PERIOD, units::Hz};
 use crate::params::ULTRASOUND_FREQ_HZ;
 
-#[doc(hidden)]
-#[must_use]
-pub const fn is_integer(a: f64) -> bool {
-    let dist = 0.5 - (a.fract() - 0.5).abs();
-    dist < 1e-6 + a.abs() * (f64::EPSILON * 16.0)
-}
-
 #[derive(Debug, PartialEq, Clone, thiserror::Error)]
 #[non_exhaustive]
 pub enum SamplingConfigError {
@@ -101,71 +94,68 @@ impl SamplingConfig {
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
     use super::*;
     use crate::common::units::kHz;
 
-    #[test]
-    fn is_integer_uses_relative_tolerance() {
-        assert!(is_integer(0.0));
-        assert!(is_integer(42.0));
-        assert!(is_integer(1e12));
-        assert!(!is_integer(2.5));
-        assert!(!is_integer(1e12 + 0.5));
-        assert!(is_integer(1e12 + 1e-4));
+    #[rstest]
+    #[case(1, SamplingConfig::new(NonZeroU16::MIN))]
+    #[case(u16::MAX, SamplingConfig::new(NonZeroU16::MAX))]
+    #[case(10, SamplingConfig::FREQ_4K)]
+    fn a_divider_is_taken_as_is(#[case] expected: u16, #[case] config: SamplingConfig) {
+        assert_eq!(expected, config.divide().get());
     }
 
-    #[test]
-    fn a_divider_is_taken_as_is() {
-        assert_eq!(SamplingConfig::new(NonZeroU16::MIN).divide().get(), 1);
-        assert_eq!(
-            SamplingConfig::new(NonZeroU16::MAX).divide().get(),
-            u16::MAX
-        );
-        assert_eq!(SamplingConfig::FREQ_4K.divide().get(), 10);
+    #[rstest]
+    #[case(SamplingConfig::FREQ_40K, 40000. * Hz)]
+    #[case(SamplingConfig::FREQ_4K, 4000. * Hz)]
+    #[case(SamplingConfig::FREQ_4K, 4000 * Hz)]
+    #[case(SamplingConfig::FREQ_40K, 40 * kHz)]
+    fn a_frequency_dividing_the_ultrasound_frequency_is_accepted(
+        #[case] expected: SamplingConfig,
+        #[case] freq: Freq,
+    ) {
+        assert_eq!(Ok(expected), SamplingConfig::from_freq(freq));
     }
 
-    #[test]
-    fn a_frequency_must_divide_the_ultrasound_frequency() {
+    #[rstest]
+    #[case((ULTRASOUND_FREQ_HZ as f32 - 1.) * Hz)]
+    #[case(39999 * Hz)]
+    fn a_frequency_not_dividing_the_ultrasound_frequency_is_rejected(#[case] freq: Freq) {
         assert_eq!(
-            SamplingConfig::from_freq(40000. * Hz),
-            Ok(SamplingConfig::FREQ_40K)
+            Err(SamplingConfigError::FreqInvalid(freq)),
+            SamplingConfig::from_freq(freq)
         );
-        assert_eq!(
-            SamplingConfig::from_freq(4000. * Hz),
-            Ok(SamplingConfig::FREQ_4K)
-        );
-        assert_eq!(
-            SamplingConfig::from_freq(4000 * Hz),
-            Ok(SamplingConfig::FREQ_4K)
-        );
-        assert_eq!(
-            SamplingConfig::from_freq(40 * kHz),
-            Ok(SamplingConfig::FREQ_40K)
-        );
-        let off = (ULTRASOUND_FREQ_HZ as f32 - 1.) * Hz;
-        assert_eq!(
-            SamplingConfig::from_freq(off),
-            Err(SamplingConfigError::FreqInvalid(off))
-        );
-        assert_eq!(
-            SamplingConfig::from_freq(39999 * Hz),
-            Err(SamplingConfigError::FreqInvalid(39999. * Hz))
-        );
+    }
+
+    #[rstest]
+    #[case(80000.)]
+    #[case(-40000.)]
+    #[case(-4000.)]
+    #[case(-0.)]
+    #[case(0.)]
+    #[case(f32::NEG_INFINITY)]
+    #[case(f32::INFINITY)]
+    #[case(f32::NAN)]
+    fn a_frequency_out_of_range_is_rejected(#[case] hz: f32) {
         assert!(matches!(
-            SamplingConfig::from_freq(80000. * Hz),
+            SamplingConfig::from_freq(hz * Hz),
             Err(SamplingConfigError::FreqOutOfRange(..))
         ));
-        assert!(SamplingConfig::from_freq(f32::NAN * Hz).is_err());
     }
 
-    #[test]
-    fn a_frequency_near_a_divider_takes_that_divider() {
-        let divide = |hz: f32| SamplingConfig::from_freq(hz * Hz).map(|c| c.divide().get());
-        assert_eq!(divide(6666.667), Ok(6));
-        assert_eq!(divide(5714.286), Ok(7));
+    #[rstest]
+    #[case(Ok(6), 6666.667)]
+    #[case(Ok(7), 5714.286)]
+    #[case(Err(SamplingConfigError::FreqInvalid(6666.7 * Hz)), 6666.7)]
+    fn a_frequency_near_a_divider_takes_that_divider(
+        #[case] expected: Result<u16, SamplingConfigError>,
+        #[case] hz: f32,
+    ) {
         assert_eq!(
-            divide(6666.7),
-            Err(SamplingConfigError::FreqInvalid(6666.7 * Hz))
+            expected,
+            SamplingConfig::from_freq(hz * Hz).map(|c| c.divide().get())
         );
     }
 
@@ -188,38 +178,38 @@ mod tests {
         });
     }
 
-    #[test]
-    fn a_period_must_be_a_multiple_of_the_ultrasound_period() {
-        assert_eq!(
-            SamplingConfig::from_period(Duration::from_micros(25)),
-            Ok(SamplingConfig::FREQ_40K)
-        );
-        assert_eq!(
-            SamplingConfig::from_period(Duration::from_micros(250)),
-            Ok(SamplingConfig::FREQ_4K)
-        );
-        assert_eq!(
-            SamplingConfig::from_period(ULTRASOUND_PERIOD / 2),
-            Err(SamplingConfigError::PeriodOutOfRange(
-                ULTRASOUND_PERIOD / 2,
-                ULTRASOUND_PERIOD,
-                PERIOD_MAX
-            ))
-        );
-        assert_eq!(
-            SamplingConfig::from_period(Duration::from_nanos(50_001)),
-            Err(SamplingConfigError::PeriodInvalid(Duration::from_nanos(
-                50_001
-            )))
-        );
+    #[rstest]
+    #[case(Ok(SamplingConfig::FREQ_40K), Duration::from_micros(25))]
+    #[case(Ok(SamplingConfig::FREQ_4K), Duration::from_micros(250))]
+    #[case(
+        Err(SamplingConfigError::PeriodOutOfRange(
+            ULTRASOUND_PERIOD / 2,
+            ULTRASOUND_PERIOD,
+            PERIOD_MAX
+        )),
+        ULTRASOUND_PERIOD / 2
+    )]
+    #[case(
+        Err(SamplingConfigError::PeriodInvalid(Duration::from_nanos(50_001))),
+        Duration::from_nanos(50_001)
+    )]
+    fn a_period_must_be_a_multiple_of_the_ultrasound_period(
+        #[case] expected: Result<SamplingConfig, SamplingConfigError>,
+        #[case] period: Duration,
+    ) {
+        assert_eq!(expected, SamplingConfig::from_period(period));
     }
 
-    #[test]
-    fn freq_and_period() {
-        assert_eq!(40000. * Hz, SamplingConfig::FREQ_40K.freq());
-        assert_eq!(4000. * Hz, SamplingConfig::FREQ_4K.freq());
-        assert_eq!(Duration::from_micros(25), SamplingConfig::FREQ_40K.period());
-        assert_eq!(Duration::from_micros(250), SamplingConfig::FREQ_4K.period());
+    #[rstest]
+    #[case(40000. * Hz, Duration::from_micros(25), SamplingConfig::FREQ_40K)]
+    #[case(4000. * Hz, Duration::from_micros(250), SamplingConfig::FREQ_4K)]
+    fn freq_and_period(
+        #[case] freq: Freq,
+        #[case] period: Duration,
+        #[case] config: SamplingConfig,
+    ) {
+        assert_eq!(freq, config.freq());
+        assert_eq!(period, config.period());
     }
 
     #[test]
