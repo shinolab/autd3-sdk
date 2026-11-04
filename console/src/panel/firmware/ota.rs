@@ -25,8 +25,6 @@ impl Default for OtaConfig {
     }
 }
 
-const DEVICE_PORT: u16 = 44336;
-
 impl OtaConfig {
     pub(crate) fn args(&self, version: &str, target: &str) -> Vec<String> {
         let mut args = vec![
@@ -88,14 +86,6 @@ impl OtaConfig {
                 .desired_width(240.0),
         );
         ui.end_row();
-    }
-
-    pub(crate) fn hint() -> String {
-        format!(
-            "Devices on the UDP firmware (v0.10.0 or newer) need the host firewall to accept \
-             UDP from fe80::/10 port {DEVICE_PORT} on the interface they hang off; no \
-             administrator rights or IP address are needed."
-        )
     }
 }
 

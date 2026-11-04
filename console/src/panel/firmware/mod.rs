@@ -288,25 +288,12 @@ impl FirmwarePanel {
 
     fn method_ui(&mut self, ui: &mut egui::Ui, locked: bool) {
         match self.config.method {
-            Method::Jtag => {
-                ui.weak(
-                    "Flashing requires SEGGER J-Link (CPU) and Xilinx Vivado / vivado_lab (FPGA) \
-                     installed and on PATH. Connect the configuration cable and power on the AUTD3.",
-                );
-            }
+            Method::Jtag => {}
             Method::Ota => {
                 egui::ScrollArea::vertical()
                     .id_salt("ota-settings")
                     .max_height(ui.available_height() * 0.5)
                     .show(ui, |ui| self.config.ota.ui(ui, !locked));
-                ui.weak(
-                    "Updates the firmware over the network without a cable. Only devices \
-                     running the UDP firmware v0.10 or newer are reached; devices on the \
-                     EtherCAT firmware (v0.9.x or older) must be written once via JTAG. CPU is \
-                     updated first, then FPGA. Transducer output stops during the update; do \
-                     not power off the devices while it runs.",
-                );
-                ui.weak(OtaConfig::hint());
             }
         }
     }
