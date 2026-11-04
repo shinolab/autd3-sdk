@@ -134,15 +134,3 @@ pub(crate) struct UpdateArgs {
     )]
     pub(crate) reconnect_attempts: u32,
 }
-
-impl Command {
-    pub(crate) fn connection(&self) -> &Connection {
-        match self {
-            Command::Local { connection, .. }
-            | Command::Release { connection, .. }
-            | Command::Verify { connection }
-            | Command::Confirm { connection }
-            | Command::Reboot { connection } => connection,
-        }
-    }
-}
