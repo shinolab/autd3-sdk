@@ -17,6 +17,10 @@ const RECONNECT_INTERVAL: Duration = Duration::from_secs(2);
 const CONFIRM_HINT: &str = "the new CPU image is running but not confirmed: run `autd3-firmware-ota \
      confirm` (or simply run the update again) before the next power cycle, otherwise \
      the previous image boots again";
+const UNACKNOWLEDGED_HINT: &str = "the activation was not acknowledged by every device: the devices \
+     that received it run the new CPU image unconfirmed, the others still run the previous image \
+     and boot the new one at their next power cycle. Once every device is reachable, check which \
+     image runs with `verify` and confirm it with `confirm` (or simply run the update again)";
 
 pub(crate) async fn main_cpu(
     connection: &Connection,
@@ -44,74 +48,45 @@ pub(crate) async fn main_cpu(
         return Ok(());
     }
     client.set_ack_timeout(Duration::from_secs(5));
-    let mut activate_unrebooted = match client.send(Reboot).await {
+    let acknowledged = match client.send(Reboot).await {
         Ok(()) => {
             println!("activation acknowledged; the devices reboot in about 100 ms");
-            false
+            true
         }
         Err(autd3_rs::Error::Timeout { .. }) => {
             eprintln!(
                 "warning: not every device acknowledged the activation; the devices that \
                  have not rebooted are activated after the reconnection"
             );
-            true
+            false
         }
         Err(e) => return Err(e.into()),
     };
     drop(client);
 
     let wait = update.reboot_wait;
-    let expect = release.map_or(Expect::ChangedFrom(&before), Expect::Exactly);
     let attempts = update.reconnect_attempts.max(1);
-    loop {
-        println!("waiting {wait:?} for the devices to reboot before enumerating them again");
-        tokio::time::sleep(wait).await;
-        let hint = if activate_unrebooted {
-            "the activation was not acknowledged by every device: the devices that received it \
-             run the new CPU image unconfirmed, the others still run the previous image and boot \
-             the new one at their next power cycle. Once every device is reachable, check which \
-             image runs with `verify` and confirm it with `confirm` (or simply run \
-             the update again)"
-        } else {
-            CONFIRM_HINT
-        };
-        let mut attempt = 0;
-        let activated_late = loop {
-            attempt += 1;
-            match reconnect(
-                connection,
-                devices,
-                !update.no_confirm,
-                expect,
-                activate_unrebooted,
-            )
-            .await
-            {
-                Ok(activated_late) => break activated_late,
-                Err(e)
-                    if e.downcast_ref::<TrialNotRunning>().is_some()
-                        || e.downcast_ref::<NotOnTrial>().is_some() =>
-                {
-                    return Err(e);
-                }
-                Err(e) if attempt < attempts => {
-                    eprintln!(
-                        "reconnection attempt {attempt}/{attempts} failed: {e:#}; retrying in {RECONNECT_INTERVAL:?}"
-                    );
-                    tokio::time::sleep(RECONNECT_INTERVAL).await;
-                }
-                Err(e) => {
-                    return Err(e).context(format!(
-                        "reconnection failed {attempts} time(s) after the reboot; {hint}"
-                    ));
-                }
+    wait_for_reboot(wait).await;
+    if !acknowledged {
+        let activated_late = retry_reconnect(attempts, UNACKNOWLEDGED_HINT, async || {
+            let client = connect(connection, devices).await?;
+            Ok(activate_unrebooted(&client).await?)
+        })
+        .await?;
+        if !activated_late.is_empty() {
+            for device in &activated_late {
+                println!(
+                    "device {device} had not rebooted; activated now, it reboots in about 100 ms"
+                );
             }
-        };
-        if activated_late.is_empty() {
-            break;
+            wait_for_reboot(wait).await;
         }
-        activate_unrebooted = false;
     }
+    let expect = release.map_or(Expect::ChangedFrom(&before), Expect::Exactly);
+    retry_reconnect(attempts, CONFIRM_HINT, async || {
+        reconnect(connection, devices, !update.no_confirm, expect).await
+    })
+    .await?;
     if update.no_confirm {
         println!("not confirmed (--no-confirm); {CONFIRM_HINT}");
         return Ok(());
@@ -120,25 +95,44 @@ pub(crate) async fn main_cpu(
     Ok(())
 }
 
+async fn wait_for_reboot(wait: Duration) {
+    println!("waiting {wait:?} for the devices to reboot before enumerating them again");
+    tokio::time::sleep(wait).await;
+}
+
+async fn retry_reconnect<T>(
+    attempts: u32,
+    hint: &str,
+    mut reconnect: impl AsyncFnMut() -> Result<T>,
+) -> Result<T> {
+    let mut attempt = 0;
+    loop {
+        attempt += 1;
+        match reconnect().await {
+            Ok(value) => return Ok(value),
+            Err(e) if e.is::<TrialNotRunning>() || e.is::<NotOnTrial>() => return Err(e),
+            Err(e) if attempt < attempts => {
+                eprintln!(
+                    "reconnection attempt {attempt}/{attempts} failed: {e:#}; retrying in {RECONNECT_INTERVAL:?}"
+                );
+                tokio::time::sleep(RECONNECT_INTERVAL).await;
+            }
+            Err(e) => {
+                return Err(e).context(format!(
+                    "reconnection failed {attempts} time(s) after the reboot; {hint}"
+                ));
+            }
+        }
+    }
+}
+
 async fn reconnect(
     connection: &Connection,
     devices: usize,
     confirm: bool,
     expect: Expect<'_>,
-    activate_unrebooted_devices: bool,
-) -> Result<Vec<usize>> {
+) -> Result<()> {
     let client = connect(connection, devices).await?;
-    if activate_unrebooted_devices {
-        let activated_late = activate_unrebooted(&client).await?;
-        if !activated_late.is_empty() {
-            for device in &activated_late {
-                println!(
-                    "device {device} had not rebooted; activated now, it reboots in about 100 ms"
-                );
-            }
-            return Ok(activated_late);
-        }
-    }
     let (after, images) =
         print_cpu(&client, if confirm { "before confirm" } else { "now" }).await?;
     check_expectation(&after, expect)?;
@@ -148,7 +142,7 @@ async fn reconnect(
         println!("running image confirmed on every device");
         print_cpu(&client, "after confirm").await?;
     }
-    Ok(Vec::new())
+    Ok(())
 }
 
 pub(crate) async fn print_cpu(
