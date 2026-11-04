@@ -7,19 +7,19 @@ pub fn constant(amplitude: u8, dst: &mut Vec<u8>) {
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
     use super::*;
 
-    #[test]
-    fn constant_fills_two_constant_samples() {
-        let mut buf = Vec::new();
-        constant(0xAB, &mut buf);
-        assert_eq!(buf.as_slice(), &[0xAB, 0xAB]);
-    }
-
-    #[test]
-    fn constant_clears_previous_contents() {
-        let mut buf = vec![1, 2, 3, 4, 5];
-        constant(0x00, &mut buf);
-        assert_eq!(buf.as_slice(), &[0x00, 0x00]);
+    #[rstest]
+    #[case::fills_two_constant_samples(&[0xAB, 0xAB], 0xAB, vec![])]
+    #[case::clears_previous_contents(&[0x00, 0x00], 0x00, vec![1, 2, 3, 4, 5])]
+    fn constant_fills_two_samples(
+        #[case] expected: &[u8],
+        #[case] amplitude: u8,
+        #[case] mut buf: Vec<u8>,
+    ) {
+        constant(amplitude, &mut buf);
+        assert_eq!(expected, buf.as_slice());
     }
 }

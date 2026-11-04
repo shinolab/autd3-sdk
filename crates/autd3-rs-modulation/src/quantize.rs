@@ -37,75 +37,56 @@ pub(crate) fn quantize(
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
     use super::*;
 
-    #[test]
-    fn in_range_samples_are_floored() {
+    #[rstest]
+    #[case::in_range_samples_are_floored(Ok(()), &[0, 0, 254, 255], &[0.0, 0.9, 254.5, 255.9], false)]
+    #[case::out_of_range_samples_become_zero_and_are_reported(
+        Err(ModulationError::ValueOutOfRange),
+        &[0, 0, 10],
+        &[-0.1, 256.0, 10.0],
+        false
+    )]
+    #[case::out_of_range_samples_saturate_when_clamped(
+        Ok(()),
+        &[0, 255, 255, 0],
+        &[-0.1, 256.0, f32::INFINITY, f32::NEG_INFINITY],
+        true
+    )]
+    #[case::infinite_samples_are_out_of_range_unless_clamped(
+        Err(ModulationError::ValueOutOfRange),
+        &[0, 0],
+        &[f32::INFINITY, f32::NEG_INFINITY],
+        false
+    )]
+    #[case::nan_samples_become_zero_and_are_reported(
+        Err(ModulationError::ValueNaN),
+        &[0, 1],
+        &[f32::NAN, 1.0],
+        false
+    )]
+    #[case::nan_samples_become_zero_and_are_reported_even_when_clamped(
+        Err(ModulationError::ValueNaN),
+        &[0, 1],
+        &[f32::NAN, 1.0],
+        true
+    )]
+    #[case::nan_takes_precedence_over_out_of_range(
+        Err(ModulationError::ValueNaN),
+        &[0, 0],
+        &[256.0, f32::NAN],
+        false
+    )]
+    fn quantize_floors_into_dst(
+        #[case] expected: Result<(), ModulationError>,
+        #[case] expected_dst: &[u8],
+        #[case] samples: &[f32],
+        #[case] clamp: bool,
+    ) {
         let mut dst = vec![9];
-        assert_eq!(
-            quantize([0.0, 0.9, 254.5, 255.9].into_iter(), false, &mut dst),
-            Ok(())
-        );
-        assert_eq!(dst.as_slice(), &[0, 0, 254, 255]);
-    }
-
-    #[test]
-    fn out_of_range_samples_become_zero_and_are_reported() {
-        let mut dst = Vec::new();
-        assert_eq!(
-            quantize([-0.1, 256.0, 10.0].into_iter(), false, &mut dst),
-            Err(ModulationError::ValueOutOfRange)
-        );
-        assert_eq!(dst.as_slice(), &[0, 0, 10]);
-    }
-
-    #[test]
-    fn out_of_range_samples_saturate_when_clamped() {
-        let mut dst = Vec::new();
-        assert_eq!(
-            quantize(
-                [-0.1, 256.0, f32::INFINITY, f32::NEG_INFINITY].into_iter(),
-                true,
-                &mut dst
-            ),
-            Ok(())
-        );
-        assert_eq!(dst.as_slice(), &[0, 255, 255, 0]);
-    }
-
-    #[test]
-    fn infinite_samples_are_out_of_range_unless_clamped() {
-        let mut dst = Vec::new();
-        assert_eq!(
-            quantize(
-                [f32::INFINITY, f32::NEG_INFINITY].into_iter(),
-                false,
-                &mut dst
-            ),
-            Err(ModulationError::ValueOutOfRange)
-        );
-        assert_eq!(dst.as_slice(), &[0, 0]);
-    }
-
-    #[test]
-    fn nan_samples_become_zero_and_are_reported_even_when_clamped() {
-        for clamp in [false, true] {
-            let mut dst = Vec::new();
-            assert_eq!(
-                quantize([f32::NAN, 1.0].into_iter(), clamp, &mut dst),
-                Err(ModulationError::ValueNaN)
-            );
-            assert_eq!(dst.as_slice(), &[0, 1]);
-        }
-    }
-
-    #[test]
-    fn nan_takes_precedence_over_out_of_range() {
-        let mut dst = Vec::new();
-        assert_eq!(
-            quantize([256.0, f32::NAN].into_iter(), false, &mut dst),
-            Err(ModulationError::ValueNaN)
-        );
-        assert_eq!(dst.as_slice(), &[0, 0]);
+        assert_eq!(expected, quantize(samples.iter().copied(), clamp, &mut dst));
+        assert_eq!(expected_dst, dst.as_slice());
     }
 }
