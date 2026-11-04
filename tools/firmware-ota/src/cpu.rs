@@ -148,15 +148,21 @@ pub(crate) async fn check_cpu(
     expect: Option<Expect<'_>>,
 ) -> Result<()> {
     let label = if confirm_running { "after" } else { "now" };
-    let after = print_versions(client, label).await?;
+    let after: Vec<Version> = client
+        .read_firmware_version()
+        .await?
+        .iter()
+        .map(|info| info.cpu)
+        .collect();
+    let images = client.read_running_image().await?;
+    for (device, (version, &image)) in after.iter().zip(&images).enumerate() {
+        println!(
+            "device {device}: CPU firmware {label} = {version} ({})",
+            describe_running_image(image)
+        );
+    }
     if let Some(expect) = expect {
         check_expectation(&after, expect)?;
-    }
-    let images = client.read_running_image().await?;
-    for (device, &image) in images.iter().enumerate() {
-        println!("device {device}: CPU {}", describe_running_image(image));
-    }
-    if let Some(expect) = expect {
         check_trial(&images, &after, expect)?;
     }
     if confirm_running {
