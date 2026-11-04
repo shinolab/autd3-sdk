@@ -47,10 +47,6 @@ async fn connect(connection: &Connection, num_devices: usize) -> Result<Client, 
 #[tokio::main(flavor = "multi_thread", worker_threads = 1)]
 async fn main() -> Result<()> {
     let command = Cli::parse().command;
-    let connection = command.connection();
-    if connection.devices == 0 {
-        bail!("--devices must be at least 1");
-    }
     match &command {
         Command::Reboot { connection } => {
             let client = connect(connection, connection.devices).await?;
