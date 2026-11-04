@@ -36,7 +36,7 @@ pub(super) fn parse(logs: &[String]) -> Vec<DeviceVersions> {
             Some(version) => (Part::Cpu, version),
             None => (Part::Fpga, rest.strip_prefix("FPGA firmware now = ")?),
         };
-        Some((device, part, version.trim().to_string()))
+        Some((device, part, version.split_whitespace().next()?.to_string()))
     }
 
     let mut devices: Vec<DeviceVersions> = Vec::new();
@@ -98,12 +98,6 @@ impl Confirm {
                             }
                         }
                     });
-                ui.add_space(4.0);
-                ui.colored_label(
-                    egui::Color32::LIGHT_YELLOW,
-                    "Transducer output stops during the update; do not power off the devices \
-                 while it runs.",
-                );
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
                     if ui.button("Update").clicked() {
@@ -133,8 +127,8 @@ mod tests {
     fn both_versions_of_every_device_are_read_from_the_verify_output() {
         let devices = parse(&logs(&[
             "2 device(s) on the bus",
-            "device 0: CPU firmware now = 0.9.0",
-            "device 1: CPU firmware now = 0.9.1",
+            "device 0: CPU firmware now = 0.9.0 (confirmed image)",
+            "device 1: CPU firmware now = 0.9.1 (unconfirmed trial image)",
             "2 device(s) on the bus",
             "device 0: FPGA firmware now = 0.9.0 (Update image)",
             "device 1: FPGA firmware now = 0.9.0 (Golden image)",
@@ -145,11 +139,11 @@ mod tests {
             [
                 DeviceVersions {
                     cpu: Some("0.9.0".to_string()),
-                    fpga: Some("0.9.0 (Update image)".to_string()),
+                    fpga: Some("0.9.0".to_string()),
                 },
                 DeviceVersions {
                     cpu: Some("0.9.1".to_string()),
-                    fpga: Some("0.9.0 (Golden image)".to_string()),
+                    fpga: Some("0.9.0".to_string()),
                 },
             ]
         );
@@ -164,7 +158,7 @@ mod tests {
             devices,
             [DeviceVersions {
                 cpu: None,
-                fpga: Some("0.9.0 (Update image)".to_string()),
+                fpga: Some("0.9.0".to_string()),
             }]
         );
     }
