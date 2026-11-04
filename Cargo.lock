@@ -177,6 +177,7 @@ version = "0.13.0"
 dependencies = [
  "autd3-rs-core",
  "num-integer",
+ "rstest",
  "thiserror",
 ]
 

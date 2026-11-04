@@ -4,9 +4,15 @@ use core::num::NonZeroU16;
 
 use autd3_rs_core::Freq;
 use autd3_rs_core::params::{MOD_BUFFER_SAMPLES, ULTRASOUND_FREQ_HZ};
-use autd3_rs_core::value::{SamplingConfig, is_integer};
+use autd3_rs_core::value::SamplingConfig;
 
 use crate::error::ModulationError;
+
+#[must_use]
+const fn is_integer(a: f64) -> bool {
+    let dist = 0.5 - (a.fract() - 0.5).abs();
+    dist < 1e-6 + a.abs() * (f64::EPSILON * 16.0)
+}
 
 #[must_use]
 pub fn samples_per_period(divider: NonZeroU16, freq: Freq) -> Option<u32> {
@@ -55,20 +61,39 @@ pub(crate) fn samples_and_cycles(
 #[cfg(test)]
 mod tests {
     use autd3_rs_core::units::Hz;
+    use rstest::rstest;
 
     use super::*;
 
-    #[test]
-    fn samples_per_period_divides_sampling_rate() {
-        let div = |v| NonZeroU16::new(v).unwrap();
-        assert_eq!(samples_per_period(div(10), 200 * Hz), Some(20));
-        assert_eq!(samples_per_period(div(1), 200 * Hz), Some(200));
-        assert_eq!(samples_per_period(div(10), 0.5 * Hz), Some(8000));
-        assert_eq!(samples_per_period(div(10), 300 * Hz), None);
-        assert_eq!(samples_per_period(div(10), 0.1 * Hz), None);
-        assert_eq!(samples_per_period(div(10), 0 * Hz), None);
-        assert_eq!(samples_per_period(div(10), -200.0 * Hz), None);
-        assert_eq!(samples_per_period(div(10), f32::NAN * Hz), None);
-        assert_eq!(samples_per_period(div(3), 100 * Hz), None);
+    #[rstest]
+    #[case(true, 0.0)]
+    #[case(true, 42.0)]
+    #[case(true, 1e12)]
+    #[case(false, 2.5)]
+    #[case(false, 1e12 + 0.5)]
+    #[case(true, 1e12 + 1e-4)]
+    fn is_integer_uses_relative_tolerance(#[case] expected: bool, #[case] a: f64) {
+        assert_eq!(expected, is_integer(a));
+    }
+
+    #[rstest]
+    #[case(Some(20), 10, 200 * Hz)]
+    #[case(Some(200), 1, 200 * Hz)]
+    #[case(Some(8000), 10, 0.5 * Hz)]
+    #[case(None, 10, 300 * Hz)]
+    #[case(None, 10, 0.1 * Hz)]
+    #[case(None, 10, 0 * Hz)]
+    #[case(None, 10, -200.0 * Hz)]
+    #[case(None, 10, f32::NAN * Hz)]
+    #[case(None, 3, 100 * Hz)]
+    fn samples_per_period_divides_sampling_rate(
+        #[case] expected: Option<u32>,
+        #[case] divider: u16,
+        #[case] freq: Freq,
+    ) {
+        assert_eq!(
+            expected,
+            samples_per_period(NonZeroU16::new(divider).unwrap(), freq)
+        );
     }
 }
