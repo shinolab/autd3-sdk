@@ -525,40 +525,33 @@ impl Session {
                 },
             )
             .await;
-        std::mem::forget(enqueued);
-        let sent = outcome
-            .first_failure
-            .map_or(Ok(outcome.accepted_devices), Err);
-        let finished = self.finish_frame_send(msg_id, sent);
-        if outcome.started_lost_clock || finished.as_ref().is_ok_and(|&became_head| became_head) {
-            self.wake_io();
-        }
-        finished.map(|_| ())
-    }
 
-    fn finish_frame_send(
-        &self,
-        msg_id: u16,
-        sent: Result<DeviceSet, UdpError>,
-    ) -> Result<bool, Error> {
+        // For cancellation safety, `EnqueuedFrame` implements `Drop`.
+        // If Future is dropped during `send_to_each_device`, the `Drop` of `EnqueuedFrame` is called to return the slot.
+        // However, when the send is successful, we need to keep the slot for waiting for a reply, so we don't want to call the `Drop` of `EnqueuedFrame`.
+        std::mem::forget(enqueued);
+
         let now = Instant::now();
         let mut state = self.lock_state();
-        let sent_to = match sent {
-            Ok(sent_to) => sent_to,
-            Err(e) => {
-                state.remove(msg_id, now);
-                let error = state.closed_error().unwrap_or_else(|| e.into());
-                self.release(state);
-                return Err(error);
+        if let Some(e) = outcome.first_failure {
+            state.remove(msg_id, now);
+            let error = state.closed_error().unwrap_or_else(|| e.into());
+            self.release(state);
+            if outcome.started_lost_clock {
+                self.wake_io();
             }
-        };
-        let answered = state.record_sent_to(msg_id, sent_to, now);
+            return Err(error);
+        }
+        let answered = state.record_sent_to(msg_id, outcome.accepted_devices, now);
         let became_head = state.inflight.is_head(msg_id);
         self.release(state);
         if let Some(answered) = answered {
             answered.deliver();
         }
-        Ok(became_head)
+        if outcome.started_lost_clock || became_head {
+            self.wake_io();
+        }
+        Ok(())
     }
 
     pub(crate) async fn send_heartbeat(&self) -> Result<(), Error> {
