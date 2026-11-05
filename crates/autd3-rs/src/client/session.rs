@@ -507,7 +507,11 @@ impl Session {
         let datagrams = frame.datagrams();
         let mut headers = [FrameHeader::new_zeroed(); MAX_DEVICES];
         for (header, datagram) in headers.iter_mut().zip(datagrams) {
-            *header = datagram.frame_header(exec_at);
+            *header = FrameHeader {
+                reserved: 0,
+                cmd: datagram.cmd.as_u8(),
+                exec_at: exec_at.into(),
+            };
         }
         let msg_id = enqueued.msg_id;
         let outcome = self
