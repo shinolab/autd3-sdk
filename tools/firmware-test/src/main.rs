@@ -21,11 +21,8 @@ use crate::cli::Cli;
 use crate::io::{check, prompt, wait_enter};
 use tracing_subscriber::EnvFilter;
 
-pub(crate) fn device_states(client: &Client) -> Vec<DeviceState> {
-    client
-        .device_status()
-        .map(|status| status.iter().map(|s| s.state).collect())
-        .unwrap_or_default()
+pub(crate) fn device_states(client: &Client) -> Result<Vec<DeviceState>> {
+    Ok(client.device_status()?.iter().map(|s| s.state).collect())
 }
 
 pub(crate) fn failsafe_gates(client: &Client) -> Result<Vec<bool>> {

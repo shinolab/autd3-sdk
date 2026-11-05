@@ -1,4 +1,4 @@
-use std::ops::{Index, Sub};
+use std::ops::Index;
 
 use autd3_rs_core::MAX_DEVICES;
 
@@ -37,22 +37,8 @@ impl DeviceSet {
     }
 
     #[must_use]
-    pub(crate) const fn is_empty(&self) -> bool {
-        self.bits == 0
-    }
-
-    #[must_use]
     pub(crate) const fn is_subset(&self, other: &Self) -> bool {
         self.bits & other.bits == self.bits
-    }
-
-    #[must_use]
-    pub(crate) const fn lowest(&self) -> Option<usize> {
-        if self.is_empty() {
-            None
-        } else {
-            Some(self.bits.trailing_zeros() as usize)
-        }
     }
 
     pub(crate) fn iter(&self) -> impl Iterator<Item = usize> + '_ {
@@ -65,16 +51,6 @@ impl Index<usize> for DeviceSet {
 
     fn index(&self, device: usize) -> &bool {
         if self.contains(device) { &true } else { &false }
-    }
-}
-
-impl Sub for DeviceSet {
-    type Output = Self;
-
-    fn sub(self, rhs: Self) -> Self {
-        Self {
-            bits: self.bits & !rhs.bits,
-        }
     }
 }
 
@@ -112,18 +88,10 @@ mod tests {
 
     #[test]
     fn first_n_holds_exactly_the_leading_devices() {
-        assert!(DeviceSet::first_n(0).is_empty());
+        assert_eq!(DeviceSet::first_n(0), DeviceSet::empty());
         assert_eq!(DeviceSet::first_n(3), DeviceSet::from_iter([0, 1, 2]));
         assert_eq!(DeviceSet::first_n(MAX_DEVICES).iter().count(), MAX_DEVICES);
         assert!(DeviceSet::first_n(MAX_DEVICES)[MAX_DEVICES - 1]);
-    }
-
-    #[test]
-    fn difference_and_lowest_find_the_first_missing_device() {
-        let missing = DeviceSet::first_n(4) - DeviceSet::from_iter([0, 3]);
-        assert_eq!(missing, DeviceSet::from_iter([1, 2]));
-        assert_eq!(missing.lowest(), Some(1));
-        assert_eq!(DeviceSet::empty().lowest(), None);
     }
 
     #[test]

@@ -42,24 +42,28 @@ pub(crate) async fn silence(ctx: &Ctx<'_>) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn states(ctx: &Ctx<'_>) -> Vec<DeviceState> {
+pub(crate) fn states(ctx: &Ctx<'_>) -> Result<Vec<DeviceState>> {
     crate::device_states(ctx.client)
 }
 
-pub(crate) async fn watch(ctx: &Ctx<'_>, label: &str, window: Duration) -> Vec<DeviceState> {
+pub(crate) async fn watch(
+    ctx: &Ctx<'_>,
+    label: &str,
+    window: Duration,
+) -> Result<Vec<DeviceState>> {
     let deadline = std::time::Instant::now() + window;
-    let mut seen = states(ctx);
+    let mut seen = states(ctx)?;
     let mut changes = 0u32;
     while std::time::Instant::now() < deadline {
         tokio::time::sleep(Duration::from_millis(20)).await;
-        let now = states(ctx);
+        let now = states(ctx)?;
         if now != seen {
             changes += 1;
             seen = now;
         }
     }
     println!("  {label}: {seen:?} ({changes} change(s) in {window:?})");
-    seen
+    Ok(seen)
 }
 
 async fn failsafe_counts(ctx: &Ctx<'_>) -> Result<Vec<u32>> {
@@ -175,7 +179,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
         println!("-- PTP");
         let all_ready = |s: &[DeviceState]| s.iter().all(|d| *d == DeviceState::Ready);
 
-        let s = watch(ctx, "default", Duration::from_secs(1)).await;
+        let s = watch(ctx, "default", Duration::from_secs(1)).await?;
         println!(
             "  {} every device is Ready before any change",
             verdict(all_ready(&s))
@@ -196,7 +200,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
             "8 ms interval / 500 ms holdover",
             Duration::from_secs(3),
         )
-        .await;
+        .await?;
         println!(
             "  {} the lock survives a benign change",
             verdict(all_ready(&s))
@@ -210,7 +214,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
             ..CpuConfig::default()
         }))
         .await?;
-        let s = watch(ctx, "1 ms holdover", Duration::from_secs(2)).await;
+        let s = watch(ctx, "1 ms holdover", Duration::from_secs(2)).await?;
         println!(
             "  {} a holdover shorter than the sync interval drops the lock of the slaves",
             verdict(s.len() > 1 && s[1..].iter().all(|d| *d == DeviceState::Syncing))
@@ -221,7 +225,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
         );
 
         ctx.send(SetCpuConfig::new(CpuConfig::default())).await?;
-        let s = watch(ctx, "default again", Duration::from_secs(8)).await;
+        let s = watch(ctx, "default again", Duration::from_secs(8)).await?;
         println!("  {} every device locks again", verdict(all_ready(&s)));
         ctx.send(Synchronize).await
     }

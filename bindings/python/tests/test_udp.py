@@ -84,10 +84,10 @@ def test_an_address_interface_round_trips_and_rejects_garbage() -> None:
 
 def test_device_states_are_values() -> None:
     assert autd3.DeviceState.Ready == autd3.DeviceState.Ready
-    assert autd3.DeviceState.Ready != autd3.DeviceState.Lost
-    assert len({autd3.DeviceState.Ready, autd3.DeviceState.Syncing, autd3.DeviceState.Lost}) == 3
+    assert autd3.DeviceState.Ready != autd3.DeviceState.Syncing
+    assert len({autd3.DeviceState.Ready, autd3.DeviceState.Syncing}) == 2
     assert repr(autd3.DeviceState.Syncing) == "DeviceState.Syncing"
-    assert str(autd3.DeviceState.Lost) == "LOST"
+    assert str(autd3.DeviceState.Syncing) == "SYNCING"
 
 
 def test_device_status_is_read_from_the_client_per_device() -> None:

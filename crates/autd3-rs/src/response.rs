@@ -74,10 +74,6 @@ impl Response {
         &self,
         parse: impl Fn(&[u8]) -> Option<T>,
     ) -> Result<Vec<T>, Error> {
-        let unreplied_devices = DeviceSet::first_n(self.num_devices) - self.replied_devices;
-        if let Some(device) = unreplied_devices.lowest() {
-            return Err(Error::DeviceLost { device });
-        }
         (0..self.num_devices)
             .map(|device| {
                 parse(self.reply_data_of(device)).ok_or(Error::UnexpectedReply { device })
@@ -233,15 +229,6 @@ mod tests {
     }
 
     #[test]
-    fn parse_each_device_reports_the_lowest_device_that_did_not_reply_as_lost() {
-        let response = replied(4, &[(0, 0, &[]), (3, 0, &[4])]);
-        let err = response
-            .parse_each_device(|value| value.first().copied())
-            .unwrap_err();
-        assert!(matches!(err, crate::error::Error::DeviceLost { device: 1 }));
-    }
-
-    #[test]
     fn the_replied_mask_covers_every_device_up_to_the_limit() {
         let full = Response::from_error_codes(&[0u8; MAX_DEVICES]);
         assert_eq!(
@@ -255,15 +242,6 @@ mod tests {
                 .len(),
             0
         );
-        assert!(matches!(
-            replied(3, &[(0, 0, &[]), (2, 0, &[])]).parse_each_device(|_| Some(())),
-            Err(crate::error::Error::DeviceLost { device: 1 })
-        ));
-        let unsent = Response::for_devices(2);
-        assert!(matches!(
-            unsent.parse_each_device(|_| Some(())),
-            Err(crate::error::Error::DeviceLost { device: 0 })
-        ));
     }
 
     #[test]
@@ -295,10 +273,6 @@ mod tests {
         assert!(matches!(
             replied(2, &[(0, 0, &[1]), (1, 0, &[])]).running_images(),
             Err(crate::error::Error::UnexpectedReply { device: 1 })
-        ));
-        assert!(matches!(
-            replied(2, &[(0, 0, &[1])]).running_images(),
-            Err(crate::error::Error::DeviceLost { device: 1 })
         ));
     }
 

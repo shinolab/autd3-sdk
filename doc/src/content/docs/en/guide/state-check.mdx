@@ -23,9 +23,9 @@ import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 - `ptp_locked`: whether its PTP is locked.
 - `failsafe_active`: whether it stopped its output by the failsafe and has not been released yet
 
-Aggregates such as whether every device is `Ready` or whether any is `Lost` are built from the returned values (see the example below).
-`ptp_locked` and `failsafe_active` are taken from the last reply of each device, and both are `false` for a `Lost` device.
-Calling it after the `Client` is closed returns an error (`Closed`, or `Network` if it closed on a communication error).
+Aggregates such as whether every device is `Ready` are built from the returned values (see the example below).
+`ptp_locked` and `failsafe_active` are taken from the last reply of each device.
+Calling it after the `Client` is closed returns an error (`Closed`, `Network` if it closed on a communication error, or `DeviceLost` if it closed because a device was lost).
 
 The meaning of each `DeviceState` is as follows.
 
@@ -33,11 +33,11 @@ The meaning of each `DeviceState` is as follows.
 | --------- | ---------------------------------------------------------- |
 | `Ready`   | The device replies and its time is synchronized            |
 | `Syncing` | The device replies, but its time is still being synchronized |
-| `Lost`    | No reply for a certain period of time                      |
 
-When a device in the middle of the chain becomes `Lost`, every device beyond it also becomes `Lost`.
-There is no automatic recovery from `Lost`.
-Therefore, once a device becomes `Lost`, the only way is to `close` the client and reopen it with `Client::open`.
+If even one device does not reply for `lost_timeout` (the device is lost), the `Client` closes at that point, and every later send, read and `device_status` fails with `DeviceLost` (which holds the number of the lost device).
+When a device in the middle of the chain is lost, the devices beyond it are no longer reached either.
+There is no automatic recovery.
+Therefore, once a device is lost, the only way is to reopen the client with `Client::open`.
 
 The following is an example that calls `device_status` at fixed intervals and outputs only when the state changes.
 

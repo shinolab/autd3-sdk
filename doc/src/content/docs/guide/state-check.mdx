@@ -23,9 +23,9 @@ import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 - `ptp_locked`: PTP がロックしているか.
 - `failsafe_active`: フェイルセーフで出力を止めていて, まだ解除されていないか
 
-全デバイスが `Ready` か, いずれかが `Lost` か, といった集約は返り値から作る (下の例を参照).
-`ptp_locked` と `failsafe_active` はデバイスからの最後の返信の値で, `Lost` のデバイスはどちらも `false` になる.
-`Client` を閉じた後に呼ぶとエラー (`Closed`. 通信エラーで閉じた場合は `Network`) になる.
+全デバイスが `Ready` か, といった集約は返り値から作る (下の例を参照).
+`ptp_locked` と `failsafe_active` はデバイスからの最後の返信の値である.
+`Client` を閉じた後に呼ぶとエラー (`Closed`. 通信エラーで閉じた場合は `Network`, デバイスの途絶で閉じた場合は `DeviceLost`) になる.
 
 `DeviceState`の意味は以下の通り. 
 
@@ -33,11 +33,11 @@ import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 | -------- | ------------------------------------------------------------------------ |
 | `Ready`   | 返信があり, 時刻が同期されている                                        |
 | `Syncing` | 返信はあるが, 時刻を合わせている途中                                    |
-| `Lost`    | 返信が一定時間無い                                                      |
 
-途中の 1 台が`Lost`すると, その機体より先の機体も全て `Lost` になる.
-`Lost` からの自動復帰はしない.
-そのため, `Lost`した場合は `close` してから `Client::open` で開き直すしかない.
+1 台でも返信が `lost_timeout` の間無ければ (途絶), `Client` はその時点で閉じ, 以後の送信・読み出し・`device_status` はすべて `DeviceLost` (途絶したデバイスの番号を持つ) で失敗する.
+途中の 1 台が途絶すると, その機体より先の機体にも届かなくなる.
+途絶からの自動復帰はしない.
+そのため, 途絶した場合は `Client::open` で開き直すしかない.
 
 以下は, 一定間隔で `device_status` を呼び, 状態が変化したときだけ出力する例.
 

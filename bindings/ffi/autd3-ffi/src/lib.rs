@@ -2080,7 +2080,6 @@ fn device_state_code(state: DeviceState) -> u8 {
     match state {
         DeviceState::Ready => 0,
         DeviceState::Syncing => 1,
-        DeviceState::Lost => 2,
         _ => unreachable!(),
     }
 }
@@ -2099,7 +2098,7 @@ mod tests {
         _message: *const c_char,
         user_data: *mut c_void,
     ) {
-        let done = unsafe { &*user_data.cast::<Sender<u32>>() };
+        let done = unsafe { Box::from_raw(user_data.cast::<Sender<u32>>()) };
         let blocked = block_on(runtime().handle(), async {
             tokio::spawn(async { 7 }).await.unwrap()
         });
@@ -2108,10 +2107,10 @@ mod tests {
 
     #[test]
     fn a_completion_callback_can_block_on_the_runtime() {
-        let (mut done, finished) = channel();
+        let (done, finished) = channel();
         let ctx = CompletionCtx::new(
             Some(block_on_the_runtime_from_the_callback),
-            (&raw mut done).cast(),
+            Box::into_raw(Box::new(done)).cast(),
         )
         .unwrap();
 
@@ -2509,7 +2508,6 @@ mod tests {
     fn device_states_have_stable_codes() {
         assert_eq!(device_state_code(DeviceState::Ready), 0);
         assert_eq!(device_state_code(DeviceState::Syncing), 1);
-        assert_eq!(device_state_code(DeviceState::Lost), 2);
     }
 
     #[test]

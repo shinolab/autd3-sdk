@@ -24,8 +24,7 @@ async def main() -> None:
                 for i, s in enumerate(status):
                     print(f"device[{i}]: {s.state}")
                 all_ready = all(s.state == DeviceState.Ready for s in status)
-                any_lost = any(s.state == DeviceState.Lost for s in status)
-                print(f"all ready: {all_ready}, any lost: {any_lost}")
+                print(f"all ready: {all_ready}")
                 last = status
             await asyncio.sleep(CHECK_INTERVAL)
         # ANCHOR_END: poll

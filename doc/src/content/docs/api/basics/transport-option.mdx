@@ -19,7 +19,7 @@ import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
 | --------------------- | ----------- | ------- | --------------------------------------------------------------------------------------------- |
 | `iface`               | `Interface` | `Auto`  | 接続先                                                                                        |
 | `open_timeout`        | `Duration`  | 40 s    | open 処理の待ち時間上限                     |
-| `lost_timeout`        | `Duration`  | 100 ms  | この時間返信が無いデバイスを `Lost` とする                                                     |
+| `lost_timeout`        | `Duration`  | 100 ms  | この時間返信が無いデバイスがあれば途絶として `Client` を閉じる (`DeviceLost`)                    |
 | `ack_timeout`         | `Duration`  | 10 ms   | 応答待ちのタイムアウト |
 | `send_buffer_bytes`         | `Option<NonZeroUsize>` | 8192 | ソケットの送信バッファの大きさ [B]. `None` で OS の既定のままにする |
 | `sync_on_open`        | `bool`      | `true`  | `false` なら open 時にデバイス間の同期を待たない |

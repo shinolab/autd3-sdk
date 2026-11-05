@@ -45,12 +45,6 @@ impl DeviceState {
         Self(autd3_rs::DeviceState::Syncing)
     }
 
-    #[classattr]
-    #[pyo3(name = "Lost")]
-    fn lost() -> Self {
-        Self(autd3_rs::DeviceState::Lost)
-    }
-
     fn __str__(&self) -> String {
         self.0.to_string()
     }

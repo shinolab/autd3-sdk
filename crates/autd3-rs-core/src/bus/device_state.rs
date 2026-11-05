@@ -3,7 +3,6 @@
 pub enum DeviceState {
     Ready,
     Syncing,
-    Lost,
 }
 
 impl std::fmt::Display for DeviceState {
@@ -11,7 +10,6 @@ impl std::fmt::Display for DeviceState {
         match self {
             DeviceState::Ready => write!(f, "READY"),
             DeviceState::Syncing => write!(f, "SYNCING"),
-            DeviceState::Lost => write!(f, "LOST"),
         }
     }
 }
@@ -24,6 +22,5 @@ mod tests {
     fn display_names_the_state() {
         assert_eq!(DeviceState::Ready.to_string(), "READY");
         assert_eq!(DeviceState::Syncing.to_string(), "SYNCING");
-        assert_eq!(DeviceState::Lost.to_string(), "LOST");
     }
 }

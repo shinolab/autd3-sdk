@@ -44,15 +44,15 @@ The `Client` connects to the devices (or the [Simulator](/autd3-sdk/en/guide/sim
 | `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | Send one frame (see [streaming](#streaming))                |
 | `send_frame_at(frame, exec)` | ✓  | `Result<ResponseFuture, Error>`       | Send one frame at a given processing time (see [Processing time](#processing-time)) |
 | `device_status()`         | —     | `Result<Vec<DeviceStatus>, Error>`    | State of each device. See [State Monitoring](/autd3-sdk/en/guide/state-check/) for details. |
-| `send_heartbeat()`        | ✓     | `Result<(), Error>`                   | Send one liveness check to every device that is not `Lost` (see [Failsafe](/autd3-sdk/en/guide/failsafe/#communication-loss-failsafe-and-liveness-check)) |
+| `send_heartbeat()`        | ✓     | `Result<(), Error>`                   | Send one liveness check to every device (see [Failsafe](/autd3-sdk/en/guide/failsafe/#communication-loss-failsafe-and-liveness-check)) |
 | `ack_timeout()` / `set_ack_timeout(timeout)` | — | `Duration` / `()`          | Read or change the response-wait timeout |
-| `lost_timeout()` / `set_lost_timeout(timeout)` | — | `Duration` / `()`        | Read or change the timeout for the `Lost` judgement |
+| `lost_timeout()` / `set_lost_timeout(timeout)` | — | `Duration` / `()`        | Read or change the timeout for judging a device lost |
 | `close()`                 | —     | `Result<(), Error>`                   | Close the connection                                       |
 
 `close()` only stops the I/O task and closes the connection; it sends nothing to the devices.
 The devices keep their last output after the client is closed, so stopping the output is the user's responsibility.
 
-In Rust, use `Client` inside a tokio runtime (call `Client::open` and await the returned futures there). Replies are received by a task on that runtime, so do not block it (a heavy synchronous computation on a `current_thread` runtime stalls reply handling and the `Lost` / timeout checks while it runs). Move heavy computation to `spawn_blocking` or another thread.
+In Rust, use `Client` inside a tokio runtime (call `Client::open` and await the returned futures there). Replies are received by a task on that runtime, so do not block it (a heavy synchronous computation on a `current_thread` runtime stalls reply handling and the lost-device / timeout checks while it runs). Move heavy computation to `spawn_blocking` or another thread.
 
 ## streaming
 
@@ -67,7 +67,7 @@ While `MAX_INFLIGHT` frames are waiting for their replies, `send_frame` waits un
 ## Types of the Read Results
 
 `read_firmware_version()` / `read_fpga_state()` / `read_telemetry()` return an array with one element per device, in device-number order.
-They fail with `DeviceLost` while a device is `Lost`.
+If even one device is lost, the `Client` closes and they fail with `DeviceLost`.
 
 ### FirmwareVersion
 

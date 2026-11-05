@@ -78,11 +78,10 @@ in-flight キューの容量は `MAX_INFLIGHT` (= 7. 固定) であり, in-fligh
 ### ② 送る
 
 ```rust
-let target_devices = self.lock_state().devices_where(|liveness| !liveness.is_lost());
 for (header, datagram) in headers.iter_mut().zip(datagrams) {
     *header = datagram.frame_header(exec_at);          // [予約 (0), CMD, EXEC_AT]
 }
-let outcome = self.send_to_each_device(Kind::Frame, msg_id, target_devices, .., |device| {
+let outcome = self.send_to_each_device(Kind::Frame, msg_id, .., |device| {
     let index = frame.datagram_index(device);
     [headers[index].as_bytes(), datagrams[index].payload()]
 }).await;
@@ -93,7 +92,7 @@ let outcome = self.send_to_each_device(Kind::Frame, msg_id, target_devices, .., 
 `exec_at` は `send_frame_at` で `ExecAt::Lead(lead)` / `ExecAt::At(t)` を渡したときだけ, それぞれ送る直前のデバイス時刻の推定値 + `lead` / `t` を µs 単位に切り上げて求め, 全デバイスに同じ値を書く (`send` / `send_frame` と `ExecAt::Immediate` では 0).
 ペイロードは `encode` が返した長さのまま送る (末尾の 0 も省かない). デバイスはデータグラムの長さをペイロード長として扱う.
 
-`send_to_each_device` は `Lost` でない全デバイスへ, ① で採った `msg_id` で UDP のデータグラムを 1 つずつ送り, 実際に送れた機体の集合を返す.
+`send_to_each_device` は全デバイスへ, ① で採った `msg_id` で UDP のデータグラムを 1 つずつ送り, 実際に送れた機体の集合を返す.
 それを `InflightRequest` の `sent_to` に記録したところで `send_frame` は終わりであり, ユーザーは `ResponseFuture` を `await` して待つ.
 この時点で既に全機体の返信が届いていれば, その場で完了させる.
 
@@ -103,7 +102,7 @@ let outcome = self.send_to_each_device(Kind::Frame, msg_id, target_devices, .., 
 
 ```rust
 pub(crate) async fn run_io(&self) -> Result<(), NetworkCause> {
-    while !self.is_stopping() {
+    while self.closed_error_of(&self.lock_state()).is_none() {
         let deadline = self.step()?;
         tokio::select! {
             ready = self.channel.readable() => ..,      // 返信が届いた
@@ -120,7 +119,10 @@ fn step(&self) -> Result<Instant, NetworkCause> {
     if self.lock_state().is_any_deadline_overdue(now) {
         self.receive_available(Channel::recv_from_device_past_readiness)?;
     }
-    self.lock_state().mark_unanswered_devices_lost(now);
+    let lost_device = self.lock_state().first_device_unanswered_past_lost_timeout(now);
+    if let Some(device) = lost_device {
+        self.close(Error::DeviceLost { device });   // 1 台でも途絶したら閉じる
+    }
     self.fail_all_if_head_ack_overdue(now);     // 先頭の ack_timeout
     Ok(self.lock_state().next_deadline(now))
 }
@@ -136,7 +138,7 @@ tokio の `try_recv_from` はリアクタが覚えている readiness が空だ�
 返信には要求の `msg_id`・`status` (そのフレームのエラーコード)・読み出し値が載る.
 
 :::note
-生存確認 (`Heartbeat`) は I/O タスクではなく, `TransportOption::heartbeat_interval` を指定したときの専用タスクとユーザーの `send_heartbeat()` が送る. どちらも 1 回ごとに `Lost` でない全デバイスへ 1 回送り, 返信は待たない.
+生存確認 (`Heartbeat`) は I/O タスクではなく, `TransportOption::heartbeat_interval` を指定したときの専用タスクとユーザーの `send_heartbeat()` が送る. どちらも 1 回ごとに全デバイスへ 1 回送り, 返信は待たない.
 デバイスはこれをホストが生きている信号として使い (`failsafe_timeout` を指定していれば, その時間届かないと出力を止める. [フェイルセーフ](/autd3-sdk/guide/failsafe/)を参照), 直前に処理したフレームの結果と現在の状態を載せて返信する.
 ホストはこの返信で状態監視 (`device_status()` の `state` / `ptp_locked` / `failsafe_active`) とデバイス時刻の観測を行う. in-flight キューに一致する要求が無いので, 照合では捨てる.
 :::
@@ -144,7 +146,7 @@ tokio の `try_recv_from` はリアクタが覚えている readiness が空だ�
 ### ④ 返信を照合する
 
 返信はまず機体ごとの生存状態に反映する.
-返信の ID が割り当てた ID と違う, または ID 割り当て済みのフラグが無い機体は, その場で `Lost` にして返信を捨てる.
+返信の ID が割り当てた ID と違う, または ID 割り当て済みのフラグが無い機体があれば, その機体の途絶としてその場で `Client` を閉じる.
 ID 0 (GM) の返信に載るデバイス時刻は, ホスト側でのデバイス時刻の推定に使う.
 そのうえで `msg_id` で in-flight キューの要求を引く.
 
@@ -269,16 +271,16 @@ streaming を組むときは, 依存のあるフレームの前で貯めた `Res
 
 `sendto` の結果は機体ごとに次のように扱う. どの場合も I/O タスクは止めない.
 
-| `sendto` の結果 | `Frame` | `Heartbeat` | `Lost` の判定 |
+| `sendto` の結果 | `Frame` | `Heartbeat` | 途絶の判定 |
 | --------------- | ------- | ----------- | ------------- |
 | 成功 | 返信を待つ | 返信は待たない (状態監視に使う) | ソケットへ渡した時刻から未返信を数える |
 | ソケットが満杯 (`WouldBlock`) | `lost_timeout` まで空きを待つ. 空かなければその機体を飛ばし (以降の機体では待たない), 送り終えた後にそのフレームを `UdpError::Unsent` を原因とする `Error::Network` で即座に失敗させる | 待たずにその機体で打ち切り, 次の `send_heartbeat()` をその機体から始める | 数えない |
 | シグナルによる中断 (`Interrupted`) | その場で送り直し, その結果をこの表で扱う | 同左 | 送り直した結果に従う |
-| それ以外のエラー (`HostUnreachable` / `NetworkDown` などの到達不能も含む) | そのフレームを `UdpError::Unsent` を原因とする `Error::Network` で失敗させる | その機体を飛ばして続ける | 未返信には数えない. 返信を挟まずに失敗が `lost_timeout` 続いたら `Lost` にする |
+| それ以外のエラー (`HostUnreachable` / `NetworkDown` などの到達不能も含む) | そのフレームを `UdpError::Unsent` を原因とする `Error::Network` で失敗させる | その機体を飛ばして続ける | 未返信には数えない. 返信を挟まずに失敗が `lost_timeout` 続いたら途絶として `Client` を閉じる |
 
 1 台でも送れなかった `Frame` は, 残りの機体が返信しても成功にしない (送れなかった機体にはそのフレームが届いていない).
 ホストはそのフレームを自動では送り直さない.
-`Client` は閉じないので, 原因が解消すればそのまま送信を続けられる. 解消しなければその機体は `Lost` になり, 以後は送信の対象から外れる.
+`Client` は閉じないので, 原因が解消すればそのまま送信を続けられる. 解消しなければその機体の途絶として `Client` を閉じる.
 
 ### 損失時の扱い
 
@@ -316,23 +318,15 @@ open は `Clear` や `Synchronize` も送らない.
 
 ### 途絶
 
-デバイスが返信しない (再起動・ケーブル断) 間も, 上の返信の停滞と同じ経路で扱い, 最終的に in-flight キューが `Timeout` する.
-デバイスの状態は `Session` が返信の途絶 (`lost_timeout`) から `Lost` と判定し, `device_status()` が報告する.
+デバイスが返信しない (再起動・ケーブル断) 間, `ack_timeout` が先に切れた要求は上の返信の停滞と同じ経路で `Timeout` になる.
+返信の無いまま `lost_timeout` たった機体が 1 台でもあれば, `Session` はその機体の途絶として `Error::DeviceLost { device }` で閉じる.
+残っている要求も以後の送信・読み出し・`device_status()` もこのエラーで失敗する. 途絶からは戻らないので, 戻すには開き直す.
 途絶は要求を送れた機体についてだけ測る (送信そのものが失敗した機体は数えない).
 
-`Lost` と判定した機体には, 以後 `Frame` も生存確認も unicast では送らない.
+閉じた後は `Frame` も生存確認も新しく送り始めない (閉じたときに送信中の 1 回は最後まで送る). I/O タスクも閉じたのを見て抜ける.
 応答しない機体へ送り続けると, その宛先の近隣探索 (NDP) が解決しない間, 送ったパケットが OS の未解決キューに溜まってソケットの送信バッファを占める.
 Linux の既定では 1 宛先のキューの上限 (`unres_qlen_bytes`) と送信バッファ (`wmem_default`) がどちらも 212,992 B なので, 1 台ぶんで送信バッファが尽き, 生きている機体への送信まで失敗する (実機では途中の 1 台の再起動から約 10 秒で全台への送信が失敗した).
-`Lost` の機体は生きていても何も届かなくなるので, failsafe を有効にしていれば出力が止まる.
-`Lost` は `Client` を開いている間は戻らないので, 戻すには開き直す.
-
-`Lost` の機体を待っていた要求は `Timeout` で失敗する.
-以後の送信は `Lost` でない機体だけへ送り, その返信だけで完了する.
-全機体が `Lost` なら送る先が無いので, `send_frame` で積んだ要求はその場で `Timeout` で失敗する.
-
-読み出し (`read_firmware_version` / `read_fpga_state` / `read_telemetry`) は全機体ぶんの値を返すので, `Lost` の機体が居る間は `Error::DeviceLost { device }` で失敗する.
-送らなかった機体の値が無いためで, 返信の `data` が短い `Error::UnexpectedReply` とは区別する.
-`Response` は完了した要求の返信済みビットマスク (`replied_devices`) を持ち, 返信の無い機体のうち最も若い番号を報告する.
+1 台の途絶で残りの機体にも何も届かなくなるので, failsafe を有効にしていれば残りの機体の出力も止まる.
 
 ### 終了
 
