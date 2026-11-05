@@ -220,7 +220,6 @@ namespace AUTD3
 
         public static DeviceState Ready => new DeviceState(0);
         public static DeviceState Syncing => new DeviceState(1);
-        public static DeviceState Lost => new DeviceState(2);
 
         internal static DeviceState FromNative(byte kind) => new DeviceState(kind);
 
@@ -228,7 +227,6 @@ namespace AUTD3
         {
             0 => "READY",
             1 => "SYNCING",
-            2 => "LOST",
             _ => $"UNKNOWN ({_kind})",
         };
 

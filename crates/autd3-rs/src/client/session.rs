@@ -229,15 +229,6 @@ impl SessionState {
         self.inflight.take(index, now)
     }
 
-    fn devices_where(&self, holds: impl Fn(DeviceLiveness) -> bool) -> DeviceSet {
-        self.liveness
-            .iter()
-            .enumerate()
-            .filter(|&(_, &liveness)| holds(liveness))
-            .map(|(device, _)| device)
-            .collect()
-    }
-
     pub(crate) fn device_status(&self) -> Vec<DeviceStatus> {
         self.liveness
             .iter()
@@ -253,11 +244,15 @@ impl SessionState {
         self.liveness[device].start_unanswered_clock(requested_at)
     }
 
-    fn record_send_failure(&mut self, device: usize, now: Instant) {
-        self.liveness[device].record_send_failure(now, self.timeouts.lost);
+    fn record_send_failure(&mut self, device: usize, now: Instant) -> bool {
+        self.liveness[device].record_send_failure(now, self.timeouts.lost)
     }
 
-    fn receive_reply(&mut self, reply: &DeviceReply, now: Instant) -> Option<InflightRequest> {
+    fn receive_reply(
+        &mut self,
+        reply: &DeviceReply,
+        now: Instant,
+    ) -> Result<Option<InflightRequest>, Error> {
         let device = reply.reply.device;
         let liveness = &mut self.liveness[device];
         let accepted = liveness.accept_reply(
@@ -267,7 +262,7 @@ impl SessionState {
             now,
         );
         if !accepted {
-            return None;
+            return Err(Error::DeviceLost { device });
         }
         if device == GRANDMASTER_UNIT_ID
             && let Some(sys_time) = NonZeroU64::new(reply.reply.sys_time)
@@ -275,13 +270,13 @@ impl SessionState {
             self.device_clock
                 .observe(SysTime::from_nanos(sys_time.get()), now);
         }
-        self.record_reply(&reply.reply, now)
+        Ok(self.record_reply(&reply.reply, now))
     }
 
-    pub(crate) fn mark_unanswered_devices_lost(&mut self, now: Instant) {
-        for liveness in &mut self.liveness {
-            liveness.mark_lost_if_unanswered(now, self.timeouts.lost);
-        }
+    pub(crate) fn first_device_unanswered_past_lost_timeout(&self, now: Instant) -> Option<usize> {
+        self.liveness
+            .iter()
+            .position(|liveness| liveness.is_unanswered_past(now, self.timeouts.lost))
     }
 
     pub(crate) fn lost_deadline(&self) -> Option<Instant> {
@@ -454,7 +449,6 @@ impl Session {
         &self,
         kind: Kind,
         msg_id: u16,
-        target_devices: DeviceSet,
         start_device: usize,
         body_for_device: impl Fn(usize) -> [&'a [u8]; 2] + Send,
     ) -> EachDeviceSend {
@@ -465,13 +459,11 @@ impl Session {
         };
         let mut accepted_devices = DeviceSet::empty();
         let mut first_failure = None;
-        let mut attempt_times = [None; MAX_DEVICES];
+        let mut started_lost_clock = false;
+        let mut lost_device = None;
         let num_devices = self.channel.num_devices();
         for device in (0..num_devices).map(|step| (start_device + num_devices - step) % num_devices)
         {
-            if !target_devices[device] {
-                continue;
-            }
             let result = self
                 .channel
                 .send_to_device(
@@ -484,8 +476,10 @@ impl Session {
                 .await;
             match result {
                 Ok(attempted_at) => {
-                    attempt_times[device] = Some(attempted_at);
                     accepted_devices.insert(device);
+                    started_lost_clock |= self
+                        .lock_state()
+                        .start_unanswered_clock(device, attempted_at);
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                     if kind == Kind::Frame {
@@ -507,24 +501,19 @@ impl Session {
                 }
                 Err(e) => {
                     tracing::warn!(device, "sending to a device failed; skipping it: {e}");
-                    attempt_times[device] = Some(Instant::now());
+                    if self
+                        .lock_state()
+                        .record_send_failure(device, Instant::now())
+                    {
+                        lost_device.get_or_insert(device);
+                    }
                     first_failure.get_or_insert(UdpError::Unsent { device, source: e });
                 }
             }
         }
-        let mut started_lost_clock = false;
-        let mut state = self.lock_state();
-        for (device, attempted_at) in attempt_times.into_iter().enumerate().take(num_devices) {
-            let Some(attempted_at) = attempted_at else {
-                continue;
-            };
-            if accepted_devices[device] {
-                started_lost_clock |= state.start_unanswered_clock(device, attempted_at);
-            } else {
-                state.record_send_failure(device, attempted_at);
-            }
+        if let Some(device) = lost_device {
+            self.close(Error::DeviceLost { device });
         }
-        drop(state);
         EachDeviceSend {
             accepted_devices,
             first_failure,
@@ -539,9 +528,6 @@ impl Session {
         exec_at: u32,
     ) -> Result<(), Error> {
         let datagrams = frame.datagrams();
-        let target_devices = self
-            .lock_state()
-            .devices_where(|liveness| !liveness.is_lost());
         let mut headers = [FrameHeader::new_zeroed(); MAX_DEVICES];
         for (header, datagram) in headers.iter_mut().zip(datagrams) {
             *header = datagram.frame_header(exec_at);
@@ -551,7 +537,6 @@ impl Session {
             .send_to_each_device(
                 Kind::Frame,
                 msg_id,
-                target_devices,
                 self.channel.num_devices() - 1,
                 |device| {
                     let index = frame.datagram_index(device);
@@ -581,19 +566,11 @@ impl Session {
             Ok(sent_to) => sent_to,
             Err(e) => {
                 state.remove(msg_id, now);
+                let error = state.closed_error().unwrap_or_else(|| e.into());
                 self.release(state);
-                return Err(e.into());
+                return Err(error);
             }
         };
-        if sent_to.is_empty() {
-            let completion = state.remove(msg_id, now);
-            let timeout = state.timeouts.ack;
-            self.release(state);
-            if let Some(completion) = completion {
-                let _ = completion.send(Err(Error::Timeout { timeout }));
-            }
-            return Ok(false);
-        }
         let answered = state.record_sent_to(msg_id, sent_to, now);
         let became_head = state.inflight.is_head(msg_id);
         self.release(state);
@@ -604,21 +581,17 @@ impl Session {
     }
 
     pub(crate) async fn send_heartbeat(&self) -> Result<(), Error> {
-        let (msg_id, target_devices) = {
+        let msg_id = {
             let mut state = self.lock_state();
             if let Some(error) = self.closed_error_of(&state) {
                 return Err(error);
             }
-            (
-                state.next_msg_id(),
-                state.devices_where(|liveness| !liveness.is_lost()),
-            )
+            state.next_msg_id()
         };
         let outcome = self
             .send_to_each_device(
                 Kind::Heartbeat,
                 msg_id,
-                target_devices,
                 self.heartbeat_resume_device.load(Ordering::Relaxed),
                 |_| [&[][..]; 2],
             )
@@ -644,8 +617,13 @@ impl Session {
             let mut state = self.lock_state();
             let answered = state.receive_reply(&reply, Instant::now());
             self.release(state);
-            if let Some(answered) = answered {
-                answered.deliver();
+            match answered {
+                Ok(Some(answered)) => answered.deliver(),
+                Ok(None) => {}
+                Err(error) => {
+                    self.close(error);
+                    return Ok(());
+                }
             }
         }
     }
@@ -656,7 +634,12 @@ impl Session {
         if self.lock_state().is_any_deadline_overdue(now) {
             self.receive_available(Channel::recv_from_device_past_readiness)?;
         }
-        self.lock_state().mark_unanswered_devices_lost(now);
+        let lost_device = self
+            .lock_state()
+            .first_device_unanswered_past_lost_timeout(now);
+        if let Some(device) = lost_device {
+            self.close(Error::DeviceLost { device });
+        }
         self.fail_all_if_head_ack_overdue(now);
         Ok(self.lock_state().next_deadline(now))
     }
@@ -678,7 +661,7 @@ impl Session {
     }
 
     pub(crate) async fn run_io(&self) -> Result<(), NetworkCause> {
-        while !self.is_stopping() {
+        while self.closed_error_of(&self.lock_state()).is_none() {
             let deadline = self.step()?;
             tokio::select! {
                 ready = self.channel.readable() => ready.map_err(|e| {
@@ -696,6 +679,7 @@ impl Session {
         let failed = self.lock_state().close(error);
         failed.resolve();
         self.slot_released.notify_one();
+        self.wake_io();
         tracing::debug!("session closed");
     }
 }
@@ -1052,38 +1036,16 @@ mod tests {
         assert_eq!(state.lost_deadline(), Some(start + TIMEOUTS.lost));
 
         state.timeouts.lost = TIMEOUTS.lost * 2;
-        state.mark_unanswered_devices_lost(start + TIMEOUTS.lost);
-
-        assert!(!state.liveness[1].is_lost());
+        assert_eq!(
+            state.first_device_unanswered_past_lost_timeout(start + TIMEOUTS.lost),
+            None
+        );
         assert_eq!(state.lost_deadline(), Some(start + TIMEOUTS.lost * 2));
 
         state.timeouts.lost = TIMEOUTS.lost / 2;
-        state.mark_unanswered_devices_lost(start + TIMEOUTS.lost / 2);
-
-        assert!(state.liveness[1].is_lost());
-        assert!(!state.liveness[0].is_lost());
-    }
-
-    #[test]
-    fn a_lost_device_stays_lost_and_takes_no_frame() {
-        let now = Instant::now();
-        let mut state = session_state(2, now);
-        state.start_unanswered_clock(1, now);
-        state.mark_unanswered_devices_lost(now + TIMEOUTS.lost);
-
-        let answered = state.receive_reply(
-            &DeviceReply {
-                reply: reply(1, 0, 0),
-                reported_unit_id: 1,
-                flags: READY,
-            },
-            now + TIMEOUTS.lost,
-        );
-        assert!(answered.is_none());
-        assert_eq!(state.liveness[1].state(), DeviceState::Lost);
         assert_eq!(
-            state.devices_where(|liveness| !liveness.is_lost()),
-            DeviceSet::from_iter([0])
+            state.first_device_unanswered_past_lost_timeout(start + TIMEOUTS.lost / 2),
+            Some(1)
         );
     }
 
@@ -1107,13 +1069,17 @@ mod tests {
     }
 
     fn answer_the_last_request(device: &std::net::UdpSocket) {
+        answer_the_last_request_with(device, READY);
+    }
+
+    fn answer_the_last_request_with(device: &std::net::UdpSocket, flags: Flags) {
         let mut buf = [0; 64];
         let (_, host) = device.recv_from(&mut buf).unwrap();
         let (header, _) = Header::read_from_prefix(&buf).unwrap();
         let reply = FrameReply {
             reserved: 0,
             status: 0,
-            flags: READY,
+            flags,
             unit_id: 0,
             sys_time: U64::new(0),
         };
@@ -1153,10 +1119,101 @@ mod tests {
 
         session.step().unwrap();
 
+        assert!(session.lock_state().closed_error().is_none());
         assert_eq!(
             session.lock_state().device_status()[0].state,
             DeviceState::Ready
         );
+    }
+
+    #[tokio::test]
+    async fn a_device_unanswered_past_the_lost_timeout_closes_the_session_and_nothing_is_sent_after()
+     {
+        let (session, device) = session_with_device(Timeouts {
+            ack: Duration::from_secs(3600),
+            lost: Duration::ZERO,
+        })
+        .await;
+        let datagrams = [Datagram::no_payload(Cmd::Nop)];
+        let frame = Frame::new(Distribution::Broadcast, &datagrams);
+        let (enqueued, response) = session.enqueue().await.unwrap();
+        session.send_frame(enqueued, frame, 0).await.unwrap();
+        device.recv_from(&mut [0; 64]).unwrap();
+
+        session.step().unwrap();
+
+        assert!(matches!(
+            response.await,
+            Err(Error::DeviceLost { device: 0 })
+        ));
+        assert!(matches!(
+            session.send_heartbeat().await,
+            Err(Error::DeviceLost { device: 0 })
+        ));
+        assert!(matches!(
+            session.enqueue().await.map(|_| ()),
+            Err(Error::DeviceLost { device: 0 })
+        ));
+        device.set_nonblocking(true).unwrap();
+        assert_eq!(
+            device.recv_from(&mut [0; 64]).unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+    }
+
+    #[tokio::test]
+    async fn a_loss_and_an_ack_timeout_in_the_same_step_close_the_session_as_lost() {
+        let (session, device) = session_with_device(Timeouts {
+            ack: Duration::ZERO,
+            lost: Duration::ZERO,
+        })
+        .await;
+        let datagrams = [Datagram::no_payload(Cmd::Nop)];
+        let frame = Frame::new(Distribution::Broadcast, &datagrams);
+        let (enqueued, response) = session.enqueue().await.unwrap();
+        session.send_frame(enqueued, frame, 0).await.unwrap();
+        device.recv_from(&mut [0; 64]).unwrap();
+
+        session.step().unwrap();
+
+        assert!(matches!(
+            response.await,
+            Err(Error::DeviceLost { device: 0 })
+        ));
+    }
+
+    #[tokio::test]
+    async fn the_io_loop_ends_once_the_session_is_closed_by_a_lost_device() {
+        let (session, _device) = session_with_device(TIMEOUTS).await;
+
+        session.close(Error::DeviceLost { device: 0 });
+
+        assert!(session.run_io().await.is_ok());
+        assert!(!session.is_stopping());
+    }
+
+    #[tokio::test]
+    async fn an_unassigned_reply_closes_the_session() {
+        let (session, device) = session_with_device(TIMEOUTS).await;
+        let datagrams = [Datagram::no_payload(Cmd::Nop)];
+        let frame = Frame::new(Distribution::Broadcast, &datagrams);
+        let (enqueued, response) = session.enqueue().await.unwrap();
+        session.send_frame(enqueued, frame, 0).await.unwrap();
+        answer_the_last_request_with(&device, Flags::PTP_LOCKED | Flags::SYNC_READY);
+        session.channel.wait_for_datagram_in_the_kernel();
+
+        session
+            .receive_available(Channel::recv_from_device_past_readiness)
+            .unwrap();
+
+        assert!(matches!(
+            response.await,
+            Err(Error::DeviceLost { device: 0 })
+        ));
+        assert!(matches!(
+            session.lock_state().closed_error(),
+            Some(Error::DeviceLost { device: 0 })
+        ));
     }
 
     #[tokio::test]
@@ -1277,11 +1334,15 @@ mod tests {
         let now = Instant::now();
         let mut state = session_state(2, now);
 
-        state.receive_reply(&timed_reply(1, 1, DEVICE_TIME_NS), now);
+        state
+            .receive_reply(&timed_reply(1, 1, DEVICE_TIME_NS), now)
+            .unwrap();
         assert!(state.device_clock.now(now).is_none());
-        state.receive_reply(&timed_reply(0, 0, 0), now);
+        state.receive_reply(&timed_reply(0, 0, 0), now).unwrap();
         assert!(state.device_clock.now(now).is_none());
-        state.receive_reply(&timed_reply(0, 0, DEVICE_TIME_NS), now);
+        state
+            .receive_reply(&timed_reply(0, 0, DEVICE_TIME_NS), now)
+            .unwrap();
         assert!(state.device_clock.now(now).is_some());
     }
 
@@ -1290,12 +1351,10 @@ mod tests {
         let now = Instant::now();
         let mut state = session_state(1, now);
 
-        assert!(
-            state
-                .receive_reply(&timed_reply(0, 1, DEVICE_TIME_NS), now)
-                .is_none()
-        );
-        assert!(state.liveness[0].is_lost());
+        assert!(matches!(
+            state.receive_reply(&timed_reply(0, 1, DEVICE_TIME_NS), now),
+            Err(Error::DeviceLost { device: 0 })
+        ));
         assert!(state.device_clock.now(now).is_none());
     }
 
@@ -1311,18 +1370,19 @@ mod tests {
     fn the_device_status_reports_each_device_liveness() {
         let now = Instant::now();
         let mut state = session_state(3, now);
-        state.receive_reply(&flagged_reply(1, 1, Flags::ASSIGNED), now);
-        state.receive_reply(&flagged_reply(2, 0, READY), now);
+        state
+            .receive_reply(&flagged_reply(1, 1, Flags::ASSIGNED), now)
+            .unwrap();
 
         let status = state.device_status();
 
         assert_eq!(
             status.iter().map(|s| s.state).collect::<Vec<_>>(),
-            [DeviceState::Ready, DeviceState::Syncing, DeviceState::Lost]
+            [DeviceState::Ready, DeviceState::Syncing, DeviceState::Ready]
         );
         assert_eq!(
             status.iter().map(|s| s.ptp_locked).collect::<Vec<_>>(),
-            [true, false, false]
+            [true, false, true]
         );
         assert!(status.iter().all(|s| !s.failsafe_active));
     }
@@ -1331,15 +1391,21 @@ mod tests {
     fn the_device_status_reports_the_flags_of_the_last_reply() {
         let now = Instant::now();
         let mut state = session_state(3, now);
-        state.receive_reply(
-            &flagged_reply(0, 0, Flags::ASSIGNED | Flags::PTP_LOCKED),
-            now,
-        );
-        state.receive_reply(
-            &flagged_reply(1, 1, Flags::ASSIGNED | Flags::FAILSAFE | Flags::SYNC_READY),
-            now,
-        );
-        state.receive_reply(&flagged_reply(2, 2, READY | Flags::FAILSAFE), now);
+        state
+            .receive_reply(
+                &flagged_reply(0, 0, Flags::ASSIGNED | Flags::PTP_LOCKED),
+                now,
+            )
+            .unwrap();
+        state
+            .receive_reply(
+                &flagged_reply(1, 1, Flags::ASSIGNED | Flags::FAILSAFE | Flags::SYNC_READY),
+                now,
+            )
+            .unwrap();
+        state
+            .receive_reply(&flagged_reply(2, 2, READY | Flags::FAILSAFE), now)
+            .unwrap();
 
         let status = state.device_status();
 

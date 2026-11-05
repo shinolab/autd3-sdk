@@ -19,7 +19,7 @@ import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
 | --------------------- | ---------------------- | ------- | --------------------------------------------------------------------------------------------- |
 | `iface`               | `Interface`            | `Auto`  | Destination                                                                                   |
 | `open_timeout`        | `Duration`             | 40 s    | Upper bound on the time the open waits |
-| `lost_timeout`        | `Duration`             | 100 ms  | A device that has not replied for this long is treated as `Lost` |
+| `lost_timeout`        | `Duration`             | 100 ms  | If a device has not replied for this long, it is lost and the `Client` closes (`DeviceLost`) |
 | `ack_timeout`         | `Duration`             | 10 ms   | Response-wait timeout |
 | `send_buffer_bytes`         | `Option<NonZeroUsize>` | 8192    | Size of the socket send buffer [B]. `None` leaves the OS default                              |
 | `sync_on_open`        | `bool`                 | `true`  | When `false`, open does not wait for the devices to synchronize with one another |

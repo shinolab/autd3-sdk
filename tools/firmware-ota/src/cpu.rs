@@ -53,7 +53,7 @@ pub(crate) async fn main_cpu(
             println!("activation acknowledged; the devices reboot in about 100 ms");
             true
         }
-        Err(autd3_rs::Error::Timeout { .. }) => {
+        Err(autd3_rs::Error::Timeout { .. } | autd3_rs::Error::DeviceLost { .. }) => {
             eprintln!(
                 "warning: not every device acknowledged the activation; the devices that \
                  have not rebooted are activated after the reconnection"

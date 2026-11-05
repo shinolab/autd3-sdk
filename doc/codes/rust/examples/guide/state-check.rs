@@ -23,9 +23,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("device[{i}]: {}", s.state);
             }
             println!(
-                "all ready: {}, any lost: {}",
-                status.iter().all(|s| s.state == DeviceState::Ready),
-                status.iter().any(|s| s.state == DeviceState::Lost)
+                "all ready: {}",
+                status.iter().all(|s| s.state == DeviceState::Ready)
             );
             last = status;
         }

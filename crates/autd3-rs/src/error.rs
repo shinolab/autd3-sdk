@@ -49,9 +49,7 @@ pub enum Error {
     #[error("device {device} returned a shorter reply than the command defines")]
     UnexpectedReply { device: usize },
 
-    #[error(
-        "device {device} is lost: it stopped replying, so nothing is sent to it until the client is reopened"
-    )]
+    #[error("device {device} is lost, so the client is closed; reopen it")]
     DeviceLost { device: usize },
 
     #[error("the devices did not reply within {timeout:?}")]

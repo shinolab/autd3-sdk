@@ -62,7 +62,6 @@ PORT: int
 class DeviceState:
     Ready: ClassVar[DeviceState]
     Syncing: ClassVar[DeviceState]
-    Lost: ClassVar[DeviceState]
     def __eq__(self, other: object) -> bool: ...
     def __hash__(self) -> int: ...
 

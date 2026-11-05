@@ -31,11 +31,9 @@ impl DeviceLiveness {
         }
     }
 
-    pub(crate) fn record_send_failure(&mut self, now: Instant, lost_timeout: Duration) {
+    pub(crate) fn record_send_failure(&mut self, now: Instant, lost_timeout: Duration) -> bool {
         let since = *self.send_failing_since.get_or_insert(now);
-        if now.saturating_duration_since(since) >= lost_timeout {
-            self.state = DeviceState::Lost;
-        }
+        now.saturating_duration_since(since) >= lost_timeout
     }
 
     pub(crate) fn start_unanswered_clock(&mut self, requested_at: Instant) -> bool {
@@ -57,11 +55,7 @@ impl DeviceLiveness {
         flags: Flags,
         now: Instant,
     ) -> bool {
-        if self.is_lost() {
-            return false;
-        }
         if !flags.contains(Flags::ASSIGNED) || reported_unit_id != expected_unit_id {
-            self.state = DeviceState::Lost;
             return false;
         }
         self.apply_reply_flags(flags, now);
@@ -80,19 +74,12 @@ impl DeviceLiveness {
         };
     }
 
-    pub(crate) fn mark_lost_if_unanswered(&mut self, now: Instant, lost_timeout: Duration) {
-        if self
-            .unanswered_since
+    pub(crate) fn is_unanswered_past(self, now: Instant, lost_timeout: Duration) -> bool {
+        self.unanswered_since
             .is_some_and(|since| now.saturating_duration_since(since) >= lost_timeout)
-        {
-            self.state = DeviceState::Lost;
-        }
     }
 
     pub(crate) fn lost_deadline(self, lost_timeout: Duration) -> Option<Instant> {
-        if self.is_lost() {
-            return None;
-        }
         self.unanswered_since
             .and_then(|since| since.checked_add(lost_timeout))
     }
@@ -102,14 +89,7 @@ impl DeviceLiveness {
     }
 
     pub(crate) fn reported_flags(self) -> Flags {
-        if self.is_lost() {
-            return Flags::empty();
-        }
         self.last_flags & (Flags::PTP_LOCKED | Flags::FAILSAFE)
-    }
-
-    pub(crate) fn is_lost(self) -> bool {
-        self.state == DeviceState::Lost
     }
 }
 
@@ -138,8 +118,7 @@ mod tests {
         let requested_at = Instant::now();
         assert!(liveness.accept_reply(1, 1, READY, requested_at + Duration::from_micros(1)));
         assert!(!liveness.start_unanswered_clock(requested_at));
-        liveness.mark_lost_if_unanswered(requested_at + LOST_AFTER * 2, LOST_AFTER);
-        assert_eq!(liveness.state(), DeviceState::Ready);
+        assert!(!liveness.is_unanswered_past(requested_at + LOST_AFTER * 2, LOST_AFTER));
     }
 
     #[test]
@@ -149,40 +128,34 @@ mod tests {
         let requested_at = answered_at + Duration::from_micros(1);
         assert!(liveness.accept_reply(1, 1, READY, answered_at));
         assert!(liveness.start_unanswered_clock(requested_at));
-        liveness.mark_lost_if_unanswered(requested_at + LOST_AFTER, LOST_AFTER);
-        assert_eq!(liveness.state(), DeviceState::Lost);
+        assert!(liveness.is_unanswered_past(requested_at + LOST_AFTER, LOST_AFTER));
     }
 
     #[test]
-    fn a_send_that_fails_once_does_not_make_a_device_lost() {
+    fn a_send_that_fails_once_is_not_a_loss() {
         let mut liveness = DeviceLiveness::new();
         let now = Instant::now();
-        liveness.record_send_failure(now, LOST_AFTER);
-        liveness.mark_lost_if_unanswered(now + LOST_AFTER * 2, LOST_AFTER);
-        assert_eq!(liveness.state(), DeviceState::Ready);
+        assert!(!liveness.record_send_failure(now, LOST_AFTER));
+        assert!(!liveness.is_unanswered_past(now + LOST_AFTER * 2, LOST_AFTER));
     }
 
     #[test]
-    fn sends_that_keep_failing_past_the_lost_timeout_make_a_device_lost() {
+    fn sends_that_keep_failing_past_the_lost_timeout_are_a_loss() {
         let mut liveness = DeviceLiveness::new();
         let start = Instant::now();
-        liveness.record_send_failure(start, LOST_AFTER);
-        liveness.record_send_failure(start + LOST_AFTER / 2, LOST_AFTER);
-        assert_eq!(liveness.state(), DeviceState::Ready);
-        liveness.record_send_failure(start + LOST_AFTER, LOST_AFTER);
-        assert_eq!(liveness.state(), DeviceState::Lost);
+        assert!(!liveness.record_send_failure(start, LOST_AFTER));
+        assert!(!liveness.record_send_failure(start + LOST_AFTER / 2, LOST_AFTER));
+        assert!(liveness.record_send_failure(start + LOST_AFTER, LOST_AFTER));
     }
 
     #[test]
     fn a_reply_between_two_failed_sends_restarts_the_count() {
         let mut liveness = DeviceLiveness::new();
         let start = Instant::now();
-        liveness.record_send_failure(start, LOST_AFTER);
+        assert!(!liveness.record_send_failure(start, LOST_AFTER));
         assert!(liveness.accept_reply(1, 1, READY, start + LOST_AFTER / 2));
-        liveness.record_send_failure(start + LOST_AFTER, LOST_AFTER);
-        assert_eq!(liveness.state(), DeviceState::Ready);
-        liveness.record_send_failure(start + LOST_AFTER * 2, LOST_AFTER);
-        assert_eq!(liveness.state(), DeviceState::Lost);
+        assert!(!liveness.record_send_failure(start + LOST_AFTER, LOST_AFTER));
+        assert!(liveness.record_send_failure(start + LOST_AFTER * 2, LOST_AFTER));
     }
 
     #[test]
@@ -217,17 +190,6 @@ mod tests {
     }
 
     #[test]
-    fn a_lost_device_reports_no_flags() {
-        let mut liveness = DeviceLiveness::new();
-        let now = Instant::now();
-        assert!(liveness.accept_reply(1, 1, READY | Flags::FAILSAFE, now));
-        liveness.start_unanswered_clock(now + Duration::from_micros(1));
-        liveness.mark_lost_if_unanswered(now + Duration::from_micros(1) + LOST_AFTER, LOST_AFTER);
-        assert_eq!(liveness.state(), DeviceState::Lost);
-        assert_eq!(liveness.reported_flags(), Flags::empty());
-    }
-
-    #[test]
     fn a_ready_reply_is_ready() {
         let mut liveness = DeviceLiveness::new();
         assert!(liveness.accept_reply(2, 2, READY, Instant::now()));
@@ -257,26 +219,21 @@ mod tests {
     }
 
     #[test]
-    fn an_unanswered_request_past_the_lost_timeout_makes_a_device_lost_for_good() {
+    fn an_unanswered_request_is_a_loss_once_the_lost_timeout_passes_since_the_first_one() {
         let start = Instant::now();
         let mut liveness = DeviceLiveness::new();
         liveness.start_unanswered_clock(start);
-        liveness.mark_lost_if_unanswered(start + LOST_AFTER / 2, LOST_AFTER);
-        assert_eq!(liveness.state(), DeviceState::Ready);
+        assert!(!liveness.is_unanswered_past(start + LOST_AFTER / 2, LOST_AFTER));
         assert!(liveness.accept_reply(1, 1, READY, start + LOST_AFTER / 4));
         let later = start + LOST_AFTER / 2;
         liveness.start_unanswered_clock(later);
         liveness.start_unanswered_clock(later + LOST_AFTER / 2);
-        liveness.mark_lost_if_unanswered(start + LOST_AFTER, LOST_AFTER);
-        assert_eq!(liveness.state(), DeviceState::Ready);
-        liveness.mark_lost_if_unanswered(later + LOST_AFTER, LOST_AFTER);
-        assert_eq!(liveness.state(), DeviceState::Lost);
-        assert!(!liveness.accept_reply(1, 1, READY, later + LOST_AFTER));
-        assert_eq!(liveness.state(), DeviceState::Lost);
+        assert!(!liveness.is_unanswered_past(start + LOST_AFTER, LOST_AFTER));
+        assert!(liveness.is_unanswered_past(later + LOST_AFTER, LOST_AFTER));
     }
 
     #[test]
-    fn the_lost_deadline_follows_the_first_unanswered_request_until_the_device_is_lost() {
+    fn the_lost_deadline_follows_the_first_unanswered_request() {
         let start = Instant::now();
         let mut liveness = DeviceLiveness::new();
         assert_eq!(liveness.lost_deadline(LOST_AFTER), None);
@@ -285,32 +242,22 @@ mod tests {
         assert_eq!(liveness.lost_deadline(LOST_AFTER), Some(start + LOST_AFTER));
         assert!(liveness.accept_reply(1, 1, READY, start + LOST_AFTER / 2));
         assert_eq!(liveness.lost_deadline(LOST_AFTER), None);
-        liveness.start_unanswered_clock(start + LOST_AFTER);
-        liveness.mark_lost_if_unanswered(start + LOST_AFTER * 2, LOST_AFTER);
-        assert_eq!(liveness.lost_deadline(LOST_AFTER), None);
     }
 
     #[test]
-    fn silence_without_a_request_is_not_lost() {
+    fn silence_without_a_request_is_not_a_loss() {
         let start = Instant::now();
         let mut liveness = DeviceLiveness::new();
         assert!(liveness.accept_reply(1, 1, READY, start));
-        liveness.mark_lost_if_unanswered(start + LOST_AFTER * 10, LOST_AFTER);
-        assert_eq!(liveness.state(), DeviceState::Ready);
+        assert!(!liveness.is_unanswered_past(start + LOST_AFTER * 10, LOST_AFTER));
         liveness.start_unanswered_clock(start + LOST_AFTER * 10);
-        liveness.mark_lost_if_unanswered(start + LOST_AFTER * 10 + LOST_AFTER / 2, LOST_AFTER);
-        assert_eq!(liveness.state(), DeviceState::Ready);
+        assert!(!liveness.is_unanswered_past(start + LOST_AFTER * 10 + LOST_AFTER / 2, LOST_AFTER));
     }
 
     #[test]
-    fn an_unassigned_or_foreign_reply_is_lost() {
+    fn an_unassigned_or_foreign_reply_is_rejected() {
         let now = Instant::now();
-        let mut liveness = DeviceLiveness::new();
-        assert!(!liveness.accept_reply(1, 1, Flags::SYNC_READY, now));
-        assert_eq!(liveness.state(), DeviceState::Lost);
-
-        let mut liveness = DeviceLiveness::new();
-        assert!(!liveness.accept_reply(1, 3, READY, now));
-        assert_eq!(liveness.state(), DeviceState::Lost);
+        assert!(!DeviceLiveness::new().accept_reply(1, 1, Flags::SYNC_READY, now));
+        assert!(!DeviceLiveness::new().accept_reply(1, 3, READY, now));
     }
 }

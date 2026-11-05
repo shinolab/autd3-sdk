@@ -86,14 +86,14 @@ async fn emit(ctx: &Ctx<'_>) -> Result<()> {
 
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
-    async fn all_ready_within(ctx: &Ctx<'_>, window: Duration) -> (bool, Duration) {
+    async fn all_ready_within(ctx: &Ctx<'_>, window: Duration) -> Result<(bool, Duration)> {
         let started = Instant::now();
         loop {
-            if states(ctx).iter().all(|d| *d == DeviceState::Ready) {
-                return (true, started.elapsed());
+            if states(ctx)?.iter().all(|d| *d == DeviceState::Ready) {
+                return Ok((true, started.elapsed()));
             }
             if started.elapsed() >= window {
-                return (false, started.elapsed());
+                return Ok((false, started.elapsed()));
             }
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
@@ -119,7 +119,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
             ..CpuConfig::default()
         }))
         .await?;
-        let s = watch(ctx, "timeout armed, default PTP", Duration::from_secs(3)).await;
+        let s = watch(ctx, "timeout armed, default PTP", Duration::from_secs(3)).await?;
         let seen = observe(ctx).await?;
         println!(
             "  {} an armed timeout (1s) never trips while every device is locked: trips {:?}",
@@ -137,7 +137,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
             "timeout disabled, 1 ms holdover",
             Duration::from_secs(3),
         )
-        .await;
+        .await?;
         let slaves_unlocked = s.len() > 1 && s[1..].iter().all(|d| *d == DeviceState::Syncing);
         println!(
             "  {} the slaves lose the lock and the grandmaster keeps it",
@@ -202,7 +202,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
             "default PTP, timeout still armed",
             Duration::from_secs(8),
         )
-        .await;
+        .await?;
         println!(
             "  {} every device locks again",
             verdict(s.iter().all(|d| *d == DeviceState::Ready))
@@ -234,7 +234,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
         let raised = lost_timeout.max(Duration::from_secs(30));
         if raised != lost_timeout {
             println!(
-                "  lost timeout raised from {lost_timeout:?} to {raised:?} until the cable is back, so the unplugged device does not turn Lost"
+                "  lost timeout raised from {lost_timeout:?} to {raised:?} until the cable is back, so the unplugged device does not close the client"
             );
         }
         ctx.client.set_lost_timeout(raised);
@@ -251,12 +251,12 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
                 "Unplug the cable on the host side of device[{last}] for about 5 seconds, plug it back, and wait for the link LED"
             ))
             .await;
-            let (ready, elapsed) = all_ready_within(ctx, Duration::from_secs(30)).await;
+            let (ready, elapsed) = all_ready_within(ctx, Duration::from_secs(30)).await?;
             println!(
                 "  {} every device answers and is locked again after {:.1} s: {:?}",
                 verdict(ready),
                 elapsed.as_secs_f32(),
-                states(ctx)
+                states(ctx)?
             );
 
             let seen = observe(ctx).await?;

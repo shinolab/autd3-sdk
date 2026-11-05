@@ -133,9 +133,8 @@ namespace AUTD3.Tests
         {
             Assert.Equal("READY", DeviceState.Ready.ToString());
             Assert.Equal("SYNCING", DeviceState.Syncing.ToString());
-            Assert.Equal("LOST", DeviceState.Lost.ToString());
             Assert.True(DeviceState.Ready == DeviceState.Ready);
-            Assert.True(DeviceState.Ready != DeviceState.Lost);
+            Assert.True(DeviceState.Ready != DeviceState.Syncing);
         }
     }
 }

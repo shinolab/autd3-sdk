@@ -31,8 +31,7 @@ internal static class Sample
                         Console.WriteLine($"device[{i}]: {status[i].State}");
                     }
                     var allReady = status.All(s => s.State == DeviceState.Ready);
-                    var anyLost = status.Any(s => s.State == DeviceState.Lost);
-                    Console.WriteLine($"all ready: {allReady}, any lost: {anyLost}");
+                    Console.WriteLine($"all ready: {allReady}");
                     last = status;
                 }
                 await Task.Delay(CheckInterval);
