@@ -117,21 +117,21 @@ impl Client {
 
     #[must_use]
     pub fn ack_timeout(&self) -> Duration {
-        self.session.lock_state().timeouts.ack
+        self.session.lock_state().ack_timeout
     }
 
     pub fn set_ack_timeout(&self, timeout: Duration) {
-        self.session.lock_state().timeouts.ack = timeout;
+        self.session.lock_state().ack_timeout = timeout;
         self.session.wake_io();
     }
 
     #[must_use]
     pub fn lost_timeout(&self) -> Duration {
-        self.session.lock_state().timeouts.lost
+        self.session.lock_state().lost_timeout
     }
 
     pub fn set_lost_timeout(&self, timeout: Duration) {
-        self.session.lock_state().timeouts.lost = timeout;
+        self.session.lock_state().lost_timeout = timeout;
         self.session.wake_io();
     }
 
@@ -182,7 +182,7 @@ impl Client {
         let (enqueued, response) = self.session.enqueue().await?;
         let (lost_timeout, device_time) = {
             let state = self.session.lock_state();
-            (state.timeouts.lost, state.device_clock.now(Instant::now()))
+            (state.lost_timeout, state.device_clock.now(Instant::now()))
         };
         let exec_at = exec_at::schedule(exec, lost_timeout, device_time)?;
         tracing::trace!(msg_id = enqueued.msg_id(), cmd = ?datagrams[0].cmd, dist = ?frame.distribution(), "sending frame");

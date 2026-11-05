@@ -26,11 +26,6 @@ use super::liveness::DeviceLiveness;
 
 const IDLE_WAIT: Duration = Duration::from_secs(1);
 
-pub(crate) struct Timeouts {
-    pub(crate) ack: Duration,
-    pub(crate) lost: Duration,
-}
-
 struct InflightRequest {
     msg_id: u16,
     sent_to: Option<DeviceSet>,
@@ -118,13 +113,15 @@ pub(crate) struct SessionState {
     pub(crate) device_clock: DeviceClock,
     closed: Option<Error>,
     last_msg_id: u16,
-    pub(crate) timeouts: Timeouts,
+    pub(crate) ack_timeout: Duration,
+    pub(crate) lost_timeout: Duration,
 }
 
 impl SessionState {
     pub(crate) fn new(
         num_devices: usize,
-        timeouts: Timeouts,
+        ack_timeout: Duration,
+        lost_timeout: Duration,
         device_clock: DeviceClock,
         initial_liveness: DeviceLiveness,
         now: Instant,
@@ -135,7 +132,8 @@ impl SessionState {
             device_clock,
             closed: None,
             last_msg_id: 0,
-            timeouts,
+            ack_timeout,
+            lost_timeout,
         }
     }
 
@@ -231,7 +229,7 @@ impl SessionState {
     }
 
     fn record_send_failure(&mut self, device: usize, now: Instant) -> bool {
-        self.liveness[device].record_send_failure(now, self.timeouts.lost)
+        self.liveness[device].record_send_failure(now, self.lost_timeout)
     }
 
     fn receive_reply(
@@ -262,26 +260,26 @@ impl SessionState {
     pub(crate) fn first_device_unanswered_past_lost_timeout(&self, now: Instant) -> Option<usize> {
         self.liveness
             .iter()
-            .position(|liveness| liveness.is_unanswered_past(now, self.timeouts.lost))
+            .position(|liveness| liveness.is_unanswered_past(now, self.lost_timeout))
     }
 
     pub(crate) fn lost_deadline(&self) -> Option<Instant> {
         self.liveness
             .iter()
-            .filter_map(|liveness| liveness.lost_deadline(self.timeouts.lost))
+            .filter_map(|liveness| liveness.lost_deadline(self.lost_timeout))
             .min()
     }
 
     pub(crate) fn is_head_ack_overdue(&self, now: Instant) -> bool {
         self.inflight
-            .head_ack_deadline(self.timeouts.ack)
+            .head_ack_deadline(self.ack_timeout)
             .is_some_and(|deadline| now >= deadline)
     }
 
     pub(crate) fn next_deadline(&self, now: Instant) -> Instant {
         [
             self.lost_deadline(),
-            self.inflight.head_ack_deadline(self.timeouts.ack),
+            self.inflight.head_ack_deadline(self.ack_timeout),
         ]
         .into_iter()
         .flatten()
@@ -344,21 +342,24 @@ impl Session {
     ) -> Result<Self, UdpError> {
         let mut device_clock = DeviceClock::default();
         let channel = super::open::open(option, geometry.num_devices(), &mut device_clock).await?;
-        let timeouts = Timeouts {
-            ack: option.ack_timeout,
-            lost: option.lost_timeout,
-        };
         let initial_liveness = if option.sync_on_open {
             DeviceLiveness::new()
         } else {
             DeviceLiveness::unsynchronized()
         };
-        Ok(Self::new(channel, timeouts, device_clock, initial_liveness))
+        Ok(Self::new(
+            channel,
+            option.ack_timeout,
+            option.lost_timeout,
+            device_clock,
+            initial_liveness,
+        ))
     }
 
     fn new(
         channel: Channel,
-        timeouts: Timeouts,
+        ack_timeout: Duration,
+        lost_timeout: Duration,
         device_clock: DeviceClock,
         initial_liveness: DeviceLiveness,
     ) -> Self {
@@ -366,7 +367,8 @@ impl Session {
         Self {
             state: Mutex::new(SessionState::new(
                 num_devices,
-                timeouts,
+                ack_timeout,
+                lost_timeout,
                 device_clock,
                 initial_liveness,
                 Instant::now(),
@@ -428,7 +430,7 @@ impl Session {
         body_for_device: impl Fn(usize) -> [&'a [u8]; 2] + Send,
     ) -> EachDeviceSend {
         let mut retry_full_socket_until = if kind == Kind::Frame {
-            Instant::now().checked_add(self.lock_state().timeouts.lost)
+            Instant::now().checked_add(self.lock_state().lost_timeout)
         } else {
             None
         };
@@ -615,7 +617,7 @@ impl Session {
 
     fn fail_head_if_ack_overdue(&self, now: Instant) {
         let mut state = self.lock_state();
-        let timeout = state.timeouts.ack;
+        let timeout = state.ack_timeout;
         let overdue = state.take_head_if_ack_overdue(now);
         self.release(state);
         if let Some(overdue) = overdue {
@@ -666,10 +668,6 @@ mod tests {
 
     use super::*;
 
-    const TIMEOUTS: Timeouts = Timeouts {
-        ack: Duration::from_millis(10),
-        lost: Duration::from_millis(100),
-    };
     const READY: Flags = Flags::ASSIGNED
         .union(Flags::PTP_LOCKED)
         .union(Flags::SYNC_READY);
@@ -677,7 +675,8 @@ mod tests {
     fn session_state(num_devices: usize, now: Instant) -> SessionState {
         SessionState::new(
             num_devices,
-            TIMEOUTS,
+            Duration::from_millis(10),
+            Duration::from_millis(100),
             DeviceClock::default(),
             DeviceLiveness::new(),
             now,
@@ -779,19 +778,19 @@ mod tests {
                     .is_none()
             );
         }
-        let overdue_at = sent + TIMEOUTS.ack;
+        let overdue_at = sent + Duration::from_millis(10);
 
         let overdue = state.take_head_if_ack_overdue(overdue_at).unwrap();
         overdue.fail(Error::Timeout {
-            timeout: TIMEOUTS.ack,
+            timeout: Duration::from_millis(10),
         });
 
         assert!(matches!(head_response.await, Err(Error::Timeout { .. })));
         assert!(state.inflight.is_head(next));
         assert!(state.take_head_if_ack_overdue(overdue_at).is_none());
         assert_eq!(
-            state.inflight.head_ack_deadline(TIMEOUTS.ack),
-            Some(overdue_at + TIMEOUTS.ack)
+            state.inflight.head_ack_deadline(Duration::from_millis(10)),
+            Some(overdue_at + Duration::from_millis(10))
         );
     }
 
@@ -934,7 +933,10 @@ mod tests {
         let mut state = session_state(1, start);
         let (head, _head_response) = enqueue(&mut state, start);
         let (next, _next_response) = enqueue(&mut state, start);
-        assert_eq!(state.inflight.head_ack_deadline(TIMEOUTS.ack), None);
+        assert_eq!(
+            state.inflight.head_ack_deadline(Duration::from_millis(10)),
+            None
+        );
 
         let head_sent = start + Duration::from_millis(1);
         assert!(
@@ -949,8 +951,8 @@ mod tests {
                 .is_none()
         );
         assert_eq!(
-            state.inflight.head_ack_deadline(TIMEOUTS.ack),
-            Some(head_sent + TIMEOUTS.ack)
+            state.inflight.head_ack_deadline(Duration::from_millis(10)),
+            Some(head_sent + Duration::from_millis(10))
         );
 
         let head_answered = start + Duration::from_millis(5);
@@ -961,11 +963,11 @@ mod tests {
         );
         assert!(state.inflight.is_head(next));
         assert_eq!(
-            state.inflight.head_ack_deadline(TIMEOUTS.ack),
-            Some(head_answered + TIMEOUTS.ack)
+            state.inflight.head_ack_deadline(Duration::from_millis(10)),
+            Some(head_answered + Duration::from_millis(10))
         );
-        assert!(!state.is_head_ack_overdue(head_answered + TIMEOUTS.ack / 2));
-        assert!(state.is_head_ack_overdue(head_answered + TIMEOUTS.ack));
+        assert!(!state.is_head_ack_overdue(head_answered + Duration::from_millis(10) / 2));
+        assert!(state.is_head_ack_overdue(head_answered + Duration::from_millis(10)));
     }
 
     #[test]
@@ -975,7 +977,7 @@ mod tests {
         assert_eq!(state.next_deadline(now), now + IDLE_WAIT);
 
         state.start_unanswered_clock(0, now);
-        assert_eq!(state.next_deadline(now), now + TIMEOUTS.lost);
+        assert_eq!(state.next_deadline(now), now + Duration::from_millis(100));
 
         let (msg_id, _response) = enqueue(&mut state, now);
         assert!(
@@ -983,7 +985,7 @@ mod tests {
                 .record_sent_to(msg_id, DeviceSet::from_iter([0]), now)
                 .is_none()
         );
-        assert_eq!(state.next_deadline(now), now + TIMEOUTS.ack);
+        assert_eq!(state.next_deadline(now), now + Duration::from_millis(10));
     }
 
     #[test]
@@ -997,17 +999,20 @@ mod tests {
                 .record_sent_to(head, DeviceSet::from_iter([0]), head_sent)
                 .is_none()
         );
-        let later = head_sent + TIMEOUTS.ack;
+        let later = head_sent + Duration::from_millis(10);
         assert!(state.is_head_ack_overdue(later));
 
-        state.timeouts.ack = TIMEOUTS.ack * 3;
+        state.ack_timeout = Duration::from_millis(10) * 3;
 
         assert!(!state.is_head_ack_overdue(later));
-        assert_eq!(state.next_deadline(later), head_sent + TIMEOUTS.ack * 3);
+        assert_eq!(
+            state.next_deadline(later),
+            head_sent + Duration::from_millis(10) * 3
+        );
 
-        state.timeouts.ack = TIMEOUTS.ack / 2;
+        state.ack_timeout = Duration::from_millis(10) / 2;
 
-        assert!(state.is_head_ack_overdue(head_sent + TIMEOUTS.ack / 2));
+        assert!(state.is_head_ack_overdue(head_sent + Duration::from_millis(10) / 2));
     }
 
     #[test]
@@ -1015,23 +1020,32 @@ mod tests {
         let start = Instant::now();
         let mut state = session_state(2, start);
         state.start_unanswered_clock(1, start);
-        assert_eq!(state.lost_deadline(), Some(start + TIMEOUTS.lost));
-
-        state.timeouts.lost = TIMEOUTS.lost * 2;
         assert_eq!(
-            state.first_device_unanswered_past_lost_timeout(start + TIMEOUTS.lost),
+            state.lost_deadline(),
+            Some(start + Duration::from_millis(100))
+        );
+
+        state.lost_timeout = Duration::from_millis(100) * 2;
+        assert_eq!(
+            state.first_device_unanswered_past_lost_timeout(start + Duration::from_millis(100)),
             None
         );
-        assert_eq!(state.lost_deadline(), Some(start + TIMEOUTS.lost * 2));
-
-        state.timeouts.lost = TIMEOUTS.lost / 2;
         assert_eq!(
-            state.first_device_unanswered_past_lost_timeout(start + TIMEOUTS.lost / 2),
+            state.lost_deadline(),
+            Some(start + Duration::from_millis(100) * 2)
+        );
+
+        state.lost_timeout = Duration::from_millis(100) / 2;
+        assert_eq!(
+            state.first_device_unanswered_past_lost_timeout(start + Duration::from_millis(100) / 2),
             Some(1)
         );
     }
 
-    async fn session_with_device(timeouts: Timeouts) -> (Session, std::net::UdpSocket) {
+    async fn session_with_device(
+        ack_timeout: Duration,
+        lost_timeout: Duration,
+    ) -> (Session, std::net::UdpSocket) {
         let device =
             std::net::UdpSocket::bind(SocketAddrV6::new(Ipv6Addr::LOCALHOST, 0, 0, 0)).unwrap();
         let SocketAddr::V6(device_addr) = device.local_addr().unwrap() else {
@@ -1042,7 +1056,8 @@ mod tests {
         (
             Session::new(
                 channel,
-                timeouts,
+                ack_timeout,
+                lost_timeout,
                 DeviceClock::default(),
                 DeviceLiveness::new(),
             ),
@@ -1072,11 +1087,8 @@ mod tests {
     #[tokio::test]
     async fn a_device_unanswered_past_the_lost_timeout_closes_the_session_and_nothing_is_sent_after()
      {
-        let (session, device) = session_with_device(Timeouts {
-            ack: Duration::from_secs(3600),
-            lost: Duration::ZERO,
-        })
-        .await;
+        let (session, device) =
+            session_with_device(Duration::from_secs(3600), Duration::ZERO).await;
         let datagrams = [Datagram::no_payload(Cmd::Nop)];
         let frame = Frame::new(Distribution::Broadcast, &datagrams);
         let (enqueued, response) = session.enqueue().await.unwrap();
@@ -1106,11 +1118,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_loss_and_an_ack_timeout_in_the_same_step_close_the_session_as_lost() {
-        let (session, device) = session_with_device(Timeouts {
-            ack: Duration::ZERO,
-            lost: Duration::ZERO,
-        })
-        .await;
+        let (session, device) = session_with_device(Duration::ZERO, Duration::ZERO).await;
         let datagrams = [Datagram::no_payload(Cmd::Nop)];
         let frame = Frame::new(Distribution::Broadcast, &datagrams);
         let (enqueued, response) = session.enqueue().await.unwrap();
@@ -1127,7 +1135,8 @@ mod tests {
 
     #[tokio::test]
     async fn the_io_loop_ends_once_the_session_is_closed_by_a_lost_device() {
-        let (session, _device) = session_with_device(TIMEOUTS).await;
+        let (session, _device) =
+            session_with_device(Duration::from_millis(10), Duration::from_millis(100)).await;
 
         session.close(Error::DeviceLost { device: 0 });
 
@@ -1137,7 +1146,8 @@ mod tests {
 
     #[tokio::test]
     async fn an_unassigned_reply_closes_the_session() {
-        let (session, device) = session_with_device(TIMEOUTS).await;
+        let (session, device) =
+            session_with_device(Duration::from_millis(10), Duration::from_millis(100)).await;
         let datagrams = [Datagram::no_payload(Cmd::Nop)];
         let frame = Frame::new(Distribution::Broadcast, &datagrams);
         let (enqueued, response) = session.enqueue().await.unwrap();
@@ -1159,7 +1169,8 @@ mod tests {
 
     #[tokio::test]
     async fn dropping_an_unfinished_frame_gives_its_slot_back() {
-        let (session, _device) = session_with_device(TIMEOUTS).await;
+        let (session, _device) =
+            session_with_device(Duration::from_millis(10), Duration::from_millis(100)).await;
         let mut enqueued = Vec::new();
         for _ in 0..MAX_INFLIGHT {
             enqueued.push(session.enqueue().await.unwrap());
@@ -1177,7 +1188,8 @@ mod tests {
 
     #[tokio::test]
     async fn dropping_the_future_of_a_frame_send_keeps_later_sends_going() {
-        let (session, device) = session_with_device(TIMEOUTS).await;
+        let (session, device) =
+            session_with_device(Duration::from_millis(10), Duration::from_millis(100)).await;
         let datagrams = [Datagram::no_payload(Cmd::Nop)];
         let frame = Frame::new(Distribution::Broadcast, &datagrams);
         let (enqueued, _response) = session.enqueue().await.unwrap();
@@ -1195,7 +1207,11 @@ mod tests {
 
     #[tokio::test]
     async fn a_parked_sender_takes_the_slot_a_finished_frame_releases() {
-        let session = Arc::new(session_with_device(TIMEOUTS).await.0);
+        let session = Arc::new(
+            session_with_device(Duration::from_millis(10), Duration::from_millis(100))
+                .await
+                .0,
+        );
         let mut enqueued = Vec::new();
         for _ in 0..MAX_INFLIGHT {
             enqueued.push(session.enqueue().await.unwrap());
@@ -1214,11 +1230,11 @@ mod tests {
 
     #[tokio::test]
     async fn failing_every_pending_frame_releases_the_parked_sender() {
-        let timeouts = Timeouts {
-            ack: Duration::ZERO,
-            lost: Duration::from_secs(3600),
-        };
-        let session = Arc::new(session_with_device(timeouts).await.0);
+        let session = Arc::new(
+            session_with_device(Duration::ZERO, Duration::from_secs(3600))
+                .await
+                .0,
+        );
         let mut enqueued = Vec::new();
         for _ in 0..MAX_INFLIGHT {
             enqueued.push(session.enqueue().await.unwrap());
@@ -1241,7 +1257,11 @@ mod tests {
 
     #[tokio::test]
     async fn closing_releases_a_parked_sender() {
-        let session = Arc::new(session_with_device(TIMEOUTS).await.0);
+        let session = Arc::new(
+            session_with_device(Duration::from_millis(10), Duration::from_millis(100))
+                .await
+                .0,
+        );
         let mut enqueued = Vec::new();
         for _ in 0..MAX_INFLIGHT {
             enqueued.push(session.enqueue().await.unwrap());
