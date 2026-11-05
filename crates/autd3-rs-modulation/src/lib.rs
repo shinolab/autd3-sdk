@@ -17,7 +17,7 @@ pub fn modulation_buffer() -> Vec<u8> {
 pub use constant::constant;
 pub use error::ModulationError;
 pub use fourier::{FourierOption, SineComponent, fourier};
-pub use radiation_pressure::radiation_pressure_inplace;
+pub use radiation_pressure::radiation_pressure;
 pub use sampling::samples_per_period;
 pub use sine::{SineOption, sine};
 pub use square::{SquareOption, square};

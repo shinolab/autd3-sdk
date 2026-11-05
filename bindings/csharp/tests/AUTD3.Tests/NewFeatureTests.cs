@@ -258,7 +258,7 @@ namespace AUTD3.Tests
             Modulation.Sine(200 * Hz, new SineOption(), SamplingConfig.Freq4k, modulation);
             var before = modulation.Length;
 
-            Modulation.RadiationPressureInplace(modulation);
+            Modulation.RadiationPressure(modulation);
             Assert.Equal(before, modulation.Length);
         }
 

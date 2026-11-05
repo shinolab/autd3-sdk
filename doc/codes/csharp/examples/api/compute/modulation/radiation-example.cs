@@ -12,7 +12,7 @@ internal static class Sample
 var buffer = Modulation.ModulationBuffer();
 Modulation.Sine(150 * Hz, new SineOption(), SamplingConfig.Freq4k, buffer);
 
-Modulation.RadiationPressureInplace(buffer);
+Modulation.RadiationPressure(buffer);
         // HIDE
     }
 }

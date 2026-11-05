@@ -95,7 +95,7 @@ namespace AUTD3
         internal static extern int autd3_modulation_constant(byte amplitude, ModulationBufferHandle buffer);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_modulation_radiation_pressure_inplace(ModulationBufferHandle buffer);
+        internal static extern int autd3_modulation_radiation_pressure(ModulationBufferHandle buffer);
     }
 
     internal static class NativeModulationOp
@@ -388,9 +388,9 @@ namespace AUTD3
             }
         }
 
-        public static void RadiationPressureInplace(ModulationBuffer buffer)
+        public static void RadiationPressure(ModulationBuffer buffer)
         {
-            if (NativeModulation.autd3_modulation_radiation_pressure_inplace(buffer.Handle) != 0)
+            if (NativeModulation.autd3_modulation_radiation_pressure(buffer.Handle) != 0)
             {
                 throw new Autd3Exception("radiation pressure failed");
             }
