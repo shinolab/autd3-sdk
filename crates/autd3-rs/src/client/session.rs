@@ -56,7 +56,7 @@ impl InflightRequest {
 }
 
 struct InflightQueue {
-    requests: VecDeque<Option<InflightRequest>>,
+    requests: VecDeque<InflightRequest>,
     head_ack_clock_started_at: Instant,
 }
 
@@ -76,11 +76,11 @@ impl InflightQueue {
         if self.requests.is_empty() {
             self.head_ack_clock_started_at = request.sent_at;
         }
-        self.requests.push_back(Some(request));
+        self.requests.push_back(request);
     }
 
     fn head(&self) -> Option<&InflightRequest> {
-        self.requests.front()?.as_ref()
+        self.requests.front()
     }
 
     fn is_head(&self, msg_id: u16) -> bool {
@@ -88,27 +88,21 @@ impl InflightQueue {
     }
 
     fn position(&self, msg_id: u16) -> Option<usize> {
-        self.requests.iter().position(|request| {
-            request
-                .as_ref()
-                .is_some_and(|request| request.msg_id == msg_id)
-        })
+        self.requests
+            .iter()
+            .position(|request| request.msg_id == msg_id)
     }
 
     fn take(&mut self, index: usize, now: Instant) -> Option<InflightRequest> {
-        let request = self.requests[index].take();
-        while matches!(self.requests.front(), Some(None)) {
-            self.requests.pop_front();
+        let request = self.requests.remove(index);
+        if index == 0 {
             self.head_ack_clock_started_at = now;
-        }
-        while matches!(self.requests.back(), Some(None)) {
-            self.requests.pop_back();
         }
         request
     }
 
     fn take_all(&mut self) -> Vec<InflightRequest> {
-        self.requests.drain(..).flatten().collect()
+        self.requests.drain(..).collect()
     }
 
     fn head_ack_deadline(&self, ack_timeout: Duration) -> Option<Instant> {
@@ -125,11 +119,6 @@ pub(crate) struct SessionState {
     closed: Option<Error>,
     last_msg_id: u16,
     pub(crate) timeouts: Timeouts,
-}
-
-pub(crate) struct FailedRequests {
-    requests: Vec<InflightRequest>,
-    error: Error,
 }
 
 impl SessionState {
@@ -192,7 +181,7 @@ impl SessionState {
         now: Instant,
     ) -> Option<InflightRequest> {
         let index = self.inflight.position(msg_id)?;
-        let request = self.inflight.requests[index].as_mut()?;
+        let request = &mut self.inflight.requests[index];
         request.sent_to = Some(sent_to);
         if request.has_all_replies() {
             return self.inflight.take(index, now);
@@ -208,7 +197,7 @@ impl SessionState {
             tracing::trace!(msg_id = reply.msg_id, "dropping a reply nothing waits for");
             return None;
         };
-        let request = self.inflight.requests[index].as_mut()?;
+        let request = &mut self.inflight.requests[index];
         if request.response.replied_devices()[reply.device] {
             tracing::trace!(
                 msg_id = reply.msg_id,
@@ -299,23 +288,17 @@ impl SessionState {
         .fold(now + IDLE_WAIT, Instant::min)
     }
 
-    fn fail_all(&mut self, error: Error) -> FailedRequests {
-        FailedRequests {
-            requests: self.inflight.take_all(),
-            error,
+    fn take_head_if_ack_overdue(&mut self, now: Instant) -> Option<InflightRequest> {
+        if !self.is_head_ack_overdue(now) {
+            return None;
         }
+        self.inflight.take(0, now)
     }
 
-    pub(crate) fn close(&mut self, error: Error) -> FailedRequests {
+    pub(crate) fn close(&mut self, error: Error) {
         let error = self.closed.get_or_insert(error).clone();
-        self.fail_all(error)
-    }
-}
-
-impl FailedRequests {
-    pub(crate) fn resolve(self) {
-        for request in self.requests {
-            request.fail(self.error.clone());
+        for request in self.inflight.take_all() {
+            request.fail(error.clone());
         }
     }
 }
@@ -626,24 +609,22 @@ impl Session {
         if let Some(device) = lost_device {
             self.close(Error::DeviceLost { device });
         }
-        self.fail_all_if_head_ack_overdue(now);
+        self.fail_head_if_ack_overdue(now);
         Ok(self.lock_state().next_deadline(now))
     }
 
-    fn fail_all_if_head_ack_overdue(&self, now: Instant) {
+    fn fail_head_if_ack_overdue(&self, now: Instant) {
         let mut state = self.lock_state();
-        if !state.is_head_ack_overdue(now) {
-            return;
-        }
         let timeout = state.timeouts.ack;
-        let failed = state.fail_all(Error::Timeout { timeout });
-        drop(state);
-        tracing::warn!(
-            pending = failed.requests.len(),
-            "the head frame got no reply within the ack timeout; failing the pending frames"
-        );
-        failed.resolve();
-        self.slot_released.notify_one();
+        let overdue = state.take_head_if_ack_overdue(now);
+        self.release(state);
+        if let Some(overdue) = overdue {
+            tracing::warn!(
+                msg_id = overdue.msg_id,
+                "the head frame got no reply within the ack timeout; failing it"
+            );
+            overdue.fail(Error::Timeout { timeout });
+        }
     }
 
     pub(crate) async fn run_io(&self) -> Result<(), NetworkCause> {
@@ -662,8 +643,7 @@ impl Session {
     }
 
     pub(crate) fn close(&self, error: Error) {
-        let failed = self.lock_state().close(error);
-        failed.resolve();
+        self.lock_state().close(error);
         self.slot_released.notify_one();
         self.wake_io();
         tracing::debug!("session closed");
@@ -734,20 +714,20 @@ mod tests {
     }
 
     #[test]
-    fn a_frame_behind_the_head_keeps_its_slot_until_the_head_is_done() {
+    fn a_frame_behind_the_head_frees_its_slot_at_once() {
         let now = Instant::now();
         let mut state = session_state(1, now);
-        let enqueued: Vec<_> = (0..MAX_INFLIGHT)
-            .map(|_| enqueue(&mut state, now))
-            .collect();
-        let behind_head = enqueued[1].0;
-        assert!(state.remove(behind_head, now).is_some());
-        assert!(state.inflight.is_full());
+        let enqueued = fill_and_park(&mut state, now);
 
-        let head = enqueued[0].0;
-        assert!(state.remove(head, now).is_some());
-        assert_eq!(state.inflight.requests.len(), MAX_INFLIGHT - 2);
-        assert!(state.inflight.is_head(enqueued[2].0));
+        assert!(state.remove(enqueued[1], now).is_some());
+
+        assert!(!state.inflight.is_full());
+        assert!(state.inflight.is_head(enqueued[0]));
+        let (msg_id, _response) = enqueue(&mut state, now);
+        assert_eq!(state.inflight.position(msg_id), Some(MAX_INFLIGHT - 1));
+
+        assert!(state.remove(enqueued[0], now).is_some());
+        assert!(state.inflight.is_head(enqueued[2]));
     }
 
     #[test]
@@ -786,17 +766,33 @@ mod tests {
         assert_eq!(state.inflight.position(msg_id), Some(MAX_INFLIGHT - 1));
     }
 
-    #[test]
-    fn a_hole_left_behind_the_head_is_freed_once_the_frames_after_it_are_gone() {
-        let now = Instant::now();
-        let mut state = session_state(1, now);
-        let enqueued = fill_and_park(&mut state, now);
-        assert!(state.remove(enqueued[MAX_INFLIGHT - 2], now).is_some());
-        assert!(state.inflight.is_full());
+    #[tokio::test]
+    async fn an_overdue_head_fails_alone_and_the_next_frame_restarts_the_clock() {
+        let sent = Instant::now();
+        let mut state = session_state(1, sent);
+        let (head, head_response) = enqueue(&mut state, sent);
+        let (next, _next_response) = enqueue(&mut state, sent);
+        for msg_id in [head, next] {
+            assert!(
+                state
+                    .record_sent_to(msg_id, DeviceSet::from_iter([0]), sent)
+                    .is_none()
+            );
+        }
+        let overdue_at = sent + TIMEOUTS.ack;
 
-        assert!(state.remove(enqueued[MAX_INFLIGHT - 1], now).is_some());
+        let overdue = state.take_head_if_ack_overdue(overdue_at).unwrap();
+        overdue.fail(Error::Timeout {
+            timeout: TIMEOUTS.ack,
+        });
 
-        assert_eq!(state.inflight.requests.len(), MAX_INFLIGHT - 2);
+        assert!(matches!(head_response.await, Err(Error::Timeout { .. })));
+        assert!(state.inflight.is_head(next));
+        assert!(state.take_head_if_ack_overdue(overdue_at).is_none());
+        assert_eq!(
+            state.inflight.head_ack_deadline(TIMEOUTS.ack),
+            Some(overdue_at + TIMEOUTS.ack)
+        );
     }
 
     #[tokio::test]
@@ -806,7 +802,7 @@ mod tests {
         let (_msg_id, response) = enqueue(&mut state, now);
         let cause = NetworkCause::new(UdpError::NoInterfaceFound);
 
-        state.close(Error::Network(cause)).resolve();
+        state.close(Error::Network(cause));
 
         assert!(matches!(response.await, Err(Error::Network(_))));
         assert!(matches!(state.closed_error(), Some(Error::Network(_))));
@@ -818,8 +814,8 @@ mod tests {
         let mut state = session_state(1, now);
         let cause = NetworkCause::new(UdpError::NoInterfaceFound);
 
-        state.close(Error::Network(cause)).resolve();
-        state.close(Error::Closed).resolve();
+        state.close(Error::Network(cause));
+        state.close(Error::Closed);
 
         assert!(matches!(state.closed_error(), Some(Error::Network(_))));
     }
@@ -830,7 +826,7 @@ mod tests {
         let mut state = session_state(1, now);
         let (_msg_id, response) = enqueue(&mut state, now);
 
-        state.close(Error::Closed).resolve();
+        state.close(Error::Closed);
 
         assert!(matches!(response.await, Err(Error::Closed)));
         assert!(matches!(state.try_enqueue(now), Err(Error::Closed)));
@@ -1378,7 +1374,7 @@ mod tests {
     fn a_closed_session_keeps_the_device_liveness() {
         let now = Instant::now();
         let mut state = session_state(1, now);
-        state.close(Error::Closed).resolve();
+        state.close(Error::Closed);
         assert!(matches!(state.closed_error(), Some(Error::Closed)));
         assert_eq!(state.liveness[0].state(), DeviceState::Ready);
     }
