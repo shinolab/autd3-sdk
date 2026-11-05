@@ -514,7 +514,7 @@ impl Session {
         }
         let mut started_lost_clock = false;
         let mut state = self.lock_state();
-        for (device, attempted_at) in attempt_times.into_iter().enumerate() {
+        for (device, attempted_at) in attempt_times.into_iter().enumerate().take(num_devices) {
             let Some(attempted_at) = attempted_at else {
                 continue;
             };
