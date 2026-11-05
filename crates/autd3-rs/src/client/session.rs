@@ -203,7 +203,7 @@ impl SessionState {
         None
     }
 
-    fn record_reply(&mut self, reply: &Reply, now: Instant) -> Option<InflightRequest> {
+    fn record_reply(&mut self, reply: Reply, now: Instant) -> Option<InflightRequest> {
         let Some(index) = self.inflight.position(reply.msg_id) else {
             tracing::trace!(msg_id = reply.msg_id, "dropping a reply nothing waits for");
             return None;
@@ -217,12 +217,9 @@ impl SessionState {
             );
             return None;
         }
-        request.response.record_reply(
-            reply.device,
-            reply.error_code,
-            reply.sys_time,
-            reply.data.as_slice(),
-        );
+        request
+            .response
+            .record_reply(reply.device, reply.error_code, reply.sys_time, reply.data);
         if !request.has_all_replies() {
             return None;
         }
@@ -250,7 +247,7 @@ impl SessionState {
 
     fn receive_reply(
         &mut self,
-        reply: &DeviceReply,
+        reply: DeviceReply,
         now: Instant,
     ) -> Result<Option<InflightRequest>, Error> {
         let device = reply.reply.device;
@@ -270,7 +267,7 @@ impl SessionState {
             self.device_clock
                 .observe(SysTime::from_nanos(sys_time.get()), now);
         }
-        Ok(self.record_reply(&reply.reply, now))
+        Ok(self.record_reply(reply.reply, now))
     }
 
     pub(crate) fn first_device_unanswered_past_lost_timeout(&self, now: Instant) -> Option<usize> {
@@ -607,7 +604,7 @@ impl Session {
                 return Ok(());
             };
             let mut state = self.lock_state();
-            let answered = state.receive_reply(&reply, Instant::now());
+            let answered = state.receive_reply(reply, Instant::now());
             self.release(state);
             match answered {
                 Ok(Some(answered)) => answered.deliver(),
@@ -731,7 +728,7 @@ mod tests {
                 .record_sent_to(head, DeviceSet::from_iter([0]), now)
                 .is_none()
         );
-        assert!(state.record_reply(&reply(0, head, 0), now).is_some());
+        assert!(state.record_reply(reply(0, head, 0), now).is_some());
 
         assert!(state.try_enqueue(now).unwrap().is_some());
     }
@@ -844,8 +841,8 @@ mod tests {
         let now = Instant::now();
         let mut state = session_state(2, now);
         let (msg_id, _response) = enqueue(&mut state, now);
-        assert!(state.record_reply(&reply(0, msg_id, 0), now).is_none());
-        assert!(state.record_reply(&reply(1, msg_id, 0), now).is_none());
+        assert!(state.record_reply(reply(0, msg_id, 0), now).is_none());
+        assert!(state.record_reply(reply(1, msg_id, 0), now).is_none());
 
         let answered = state.record_sent_to(msg_id, DeviceSet::from_iter([0, 1]), now);
 
@@ -858,7 +855,7 @@ mod tests {
         let now = Instant::now();
         let mut state = session_state(2, now);
         let (msg_id, _response) = enqueue(&mut state, now);
-        assert!(state.record_reply(&reply(0, msg_id, 0), now).is_none());
+        assert!(state.record_reply(reply(0, msg_id, 0), now).is_none());
 
         assert!(
             state
@@ -878,7 +875,7 @@ mod tests {
         let now = Instant::now();
         let mut state = session_state(1, now);
         let (msg_id, _response) = enqueue(&mut state, now);
-        assert!(state.record_reply(&reply(0, msg_id, 0), now).is_none());
+        assert!(state.record_reply(reply(0, msg_id, 0), now).is_none());
         assert_eq!(state.inflight.requests.len(), 1);
     }
 
@@ -914,9 +911,9 @@ mod tests {
                 .is_none()
         );
 
-        assert!(state.record_reply(&reply(0, msg_id, 0), now).is_none());
-        assert!(state.record_reply(&reply(0, msg_id, 5), now).is_none());
-        let answered = state.record_reply(&reply(1, msg_id, 0), now).unwrap();
+        assert!(state.record_reply(reply(0, msg_id, 0), now).is_none());
+        assert!(state.record_reply(reply(0, msg_id, 5), now).is_none());
+        let answered = state.record_reply(reply(1, msg_id, 0), now).unwrap();
         answered.deliver();
 
         assert_eq!(response.await.unwrap().error_codes(), [0, 0]);
@@ -929,7 +926,7 @@ mod tests {
         let (msg_id, _response) = enqueue(&mut state, now);
         assert!(
             state
-                .record_reply(&reply(0, msg_id.wrapping_add(1), 0), now)
+                .record_reply(reply(0, msg_id.wrapping_add(1), 0), now)
                 .is_none()
         );
         assert_eq!(state.inflight.requests.len(), 1);
@@ -963,7 +960,7 @@ mod tests {
         let head_answered = start + Duration::from_millis(5);
         assert!(
             state
-                .record_reply(&reply(0, head, 0), head_answered)
+                .record_reply(reply(0, head, 0), head_answered)
                 .is_some()
         );
         assert!(state.inflight.is_head(next));
@@ -1281,13 +1278,13 @@ mod tests {
         let mut state = session_state(2, now);
 
         state
-            .receive_reply(&timed_reply(1, 1, DEVICE_TIME_NS), now)
+            .receive_reply(timed_reply(1, 1, DEVICE_TIME_NS), now)
             .unwrap();
         assert!(state.device_clock.now(now).is_none());
-        state.receive_reply(&timed_reply(0, 0, 0), now).unwrap();
+        state.receive_reply(timed_reply(0, 0, 0), now).unwrap();
         assert!(state.device_clock.now(now).is_none());
         state
-            .receive_reply(&timed_reply(0, 0, DEVICE_TIME_NS), now)
+            .receive_reply(timed_reply(0, 0, DEVICE_TIME_NS), now)
             .unwrap();
         assert!(state.device_clock.now(now).is_some());
     }
@@ -1298,7 +1295,7 @@ mod tests {
         let mut state = session_state(1, now);
 
         assert!(matches!(
-            state.receive_reply(&timed_reply(0, 1, DEVICE_TIME_NS), now),
+            state.receive_reply(timed_reply(0, 1, DEVICE_TIME_NS), now),
             Err(Error::DeviceLost { device: 0 })
         ));
         assert!(state.device_clock.now(now).is_none());
@@ -1317,7 +1314,7 @@ mod tests {
         let now = Instant::now();
         let mut state = session_state(3, now);
         state
-            .receive_reply(&flagged_reply(1, 1, Flags::ASSIGNED), now)
+            .receive_reply(flagged_reply(1, 1, Flags::ASSIGNED), now)
             .unwrap();
 
         let status = state.device_status();
@@ -1339,18 +1336,18 @@ mod tests {
         let mut state = session_state(3, now);
         state
             .receive_reply(
-                &flagged_reply(0, 0, Flags::ASSIGNED | Flags::PTP_LOCKED),
+                flagged_reply(0, 0, Flags::ASSIGNED | Flags::PTP_LOCKED),
                 now,
             )
             .unwrap();
         state
             .receive_reply(
-                &flagged_reply(1, 1, Flags::ASSIGNED | Flags::FAILSAFE | Flags::SYNC_READY),
+                flagged_reply(1, 1, Flags::ASSIGNED | Flags::FAILSAFE | Flags::SYNC_READY),
                 now,
             )
             .unwrap();
         state
-            .receive_reply(&flagged_reply(2, 2, READY | Flags::FAILSAFE), now)
+            .receive_reply(flagged_reply(2, 2, READY | Flags::FAILSAFE), now)
             .unwrap();
 
         let status = state.device_status();

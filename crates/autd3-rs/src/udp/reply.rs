@@ -1,14 +1,13 @@
-use autd3_cpu_wire::ReplyData;
 use autd3_cpu_wire::udp::{Flags, FrameReply, Header, Kind, PROTOCOL_VERSION};
 use zerocopy::FromBytes;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Reply {
     pub(crate) device: usize,
     pub(crate) msg_id: u16,
     pub(crate) error_code: u8,
     pub(crate) sys_time: u64,
-    pub(crate) data: ReplyData,
+    pub(crate) data: Vec<u8>,
 }
 
 impl Reply {
@@ -25,7 +24,7 @@ impl Reply {
             msg_id,
             error_code,
             sys_time,
-            data: ReplyData::from_slice(data),
+            data: data.to_vec(),
         }
     }
 }
