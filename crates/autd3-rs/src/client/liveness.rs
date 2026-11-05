@@ -8,7 +8,6 @@ pub(crate) struct DeviceLiveness {
     unanswered_since: Option<Instant>,
     answered_at: Option<Instant>,
     send_failing_since: Option<Instant>,
-    state: DeviceState,
     last_flags: Flags,
 }
 
@@ -18,14 +17,12 @@ impl DeviceLiveness {
             unanswered_since: None,
             answered_at: None,
             send_failing_since: None,
-            state: DeviceState::Ready,
             last_flags: Flags::PTP_LOCKED | Flags::SYNC_READY,
         }
     }
 
     pub(crate) fn unsynchronized() -> Self {
         Self {
-            state: DeviceState::Syncing,
             last_flags: Flags::empty(),
             ..Self::new()
         }
@@ -58,20 +55,11 @@ impl DeviceLiveness {
         if !flags.contains(Flags::ASSIGNED) || reported_unit_id != expected_unit_id {
             return false;
         }
-        self.apply_reply_flags(flags, now);
-        true
-    }
-
-    fn apply_reply_flags(&mut self, flags: Flags, now: Instant) {
         self.unanswered_since = None;
         self.answered_at = Some(now);
         self.send_failing_since = None;
         self.last_flags = flags;
-        self.state = if flags.contains(Flags::PTP_LOCKED | Flags::SYNC_READY) {
-            DeviceState::Ready
-        } else {
-            DeviceState::Syncing
-        };
+        true
     }
 
     pub(crate) fn is_unanswered_past(self, now: Instant, lost_timeout: Duration) -> bool {
@@ -85,7 +73,14 @@ impl DeviceLiveness {
     }
 
     pub(crate) fn state(self) -> DeviceState {
-        self.state
+        if self
+            .last_flags
+            .contains(Flags::PTP_LOCKED | Flags::SYNC_READY)
+        {
+            DeviceState::Ready
+        } else {
+            DeviceState::Syncing
+        }
     }
 
     pub(crate) fn reported_flags(self) -> Flags {
