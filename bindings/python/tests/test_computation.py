@@ -194,7 +194,7 @@ def test_modulation_sine_square_fourier_radiation() -> None:
     modulation.sine(200 * Hz, modulation.SineOption(), autd3.value.SamplingConfig.FREQ_4K, rp)
     before = len(rp)
 
-    modulation.radiation_pressure_inplace(rp)
+    modulation.radiation_pressure(rp)
     assert len(rp) == before
 
 

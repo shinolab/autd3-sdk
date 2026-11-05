@@ -11,7 +11,7 @@ internal static class Sample
         Modulation.Sine(150 * Hz, new SineOption(), SamplingConfig.Freq4k, buffer);
 
         // ANCHOR: api
-        Modulation.RadiationPressureInplace(buffer);
+        Modulation.RadiationPressure(buffer);
         // ANCHOR_END: api
     }
 }
