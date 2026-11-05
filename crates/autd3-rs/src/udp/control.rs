@@ -1,11 +1,7 @@
 use std::net::SocketAddrV6;
 
-use autd3_cpu_wire::udp::{
-    AssignIdBody, Header, Kind, PROTOCOL_VERSION, Role, SetTimeBody, Status, UnblockReply, UnitInfo,
-};
-use autd3_rs_core::value::SysTime;
+use autd3_cpu_wire::udp::{Header, Kind, PROTOCOL_VERSION, Status, UnblockReply, UnitInfo};
 use zerocopy::FromBytes;
-use zerocopy::little_endian::U64;
 
 use super::error::UdpError;
 
@@ -63,19 +59,6 @@ impl ControlResponse {
     pub(crate) fn opened_downstream_link(&self) -> bool {
         UnblockReply::read_from_prefix(&self.body)
             .is_ok_and(|(reply, _)| reply.downstream_link != 0)
-    }
-}
-
-pub(crate) fn assign_id_body(unit_id: u8, role: Role) -> AssignIdBody {
-    AssignIdBody {
-        unit_id,
-        role: role.as_u8(),
-    }
-}
-
-pub(crate) fn set_time_body(sys_time: SysTime) -> SetTimeBody {
-    SetTimeBody {
-        sys_time: U64::new(sys_time.sys_time()),
     }
 }
 
@@ -214,15 +197,5 @@ mod tests {
             body: info.as_bytes().to_vec(),
         };
         assert_eq!(response.unit_info(), Some(info));
-    }
-
-    #[test]
-    fn the_request_bodies_carry_their_fields() {
-        let body = assign_id_body(5, Role::Slave);
-        assert_eq!((body.unit_id, body.role), (5, Role::Slave.as_u8()));
-        assert_eq!(
-            set_time_body(SysTime::from_nanos(1_234)).sys_time.get(),
-            1_234
-        );
     }
 }

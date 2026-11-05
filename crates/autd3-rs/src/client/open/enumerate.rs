@@ -1,13 +1,13 @@
 use std::net::SocketAddrV6;
 use std::time::{Duration, Instant};
 
-use autd3_cpu_wire::udp::{Flags, Header, Kind, Role};
+use autd3_cpu_wire::udp::{AssignIdBody, Flags, Header, Kind, Role, SetTimeBody};
 use autd3_rs_core::value::SysTime;
+use zerocopy::little_endian::U64;
 use zerocopy::{FromBytes, IntoBytes};
 
 use crate::udp::{
-    Channel, ControlResponse, RECV_BUFFER_BYTES, TransportOption, UdpError, assign_id_body,
-    same_endpoint, set_time_body,
+    Channel, ControlResponse, RECV_BUFFER_BYTES, TransportOption, UdpError, same_endpoint,
 };
 
 use crate::client::GRANDMASTER_UNIT_ID;
@@ -161,7 +161,10 @@ impl Enumerator<'_> {
         } else {
             Role::Slave
         };
-        let body = assign_id_body(unit_id as u8, role);
+        let body = AssignIdBody {
+            unit_id: unit_id as u8,
+            role: role.as_u8(),
+        };
         if let Some(response) = self
             .exchange_with_retries(discovered, Kind::AssignId, body.as_bytes())
             .await?
@@ -311,7 +314,9 @@ impl Enumerator<'_> {
         grandmaster: SocketAddrV6,
         device_clock: &mut DeviceClock,
     ) -> Result<(), UdpError> {
-        let body = set_time_body(DEVICE_TIME_AT_OPEN);
+        let body = SetTimeBody {
+            sys_time: U64::new(DEVICE_TIME_AT_OPEN.sys_time()),
+        };
         let response = self
             .exchange_with_retries(grandmaster, Kind::SetTime, body.as_bytes())
             .await?
