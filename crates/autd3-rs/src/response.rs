@@ -52,14 +52,14 @@ impl Response {
         device: usize,
         error_code: u8,
         sys_time: u64,
-        data: &[u8],
+        data: Vec<u8>,
     ) {
         self.error_codes[device] = error_code;
         self.sys_times[device] = sys_time;
         self.replied_devices.insert(device);
         if !data.is_empty() {
             self.reply_data.resize_with(self.num_devices, Vec::new);
-            self.reply_data[device] = data.to_vec();
+            self.reply_data[device] = data;
         }
     }
 
@@ -126,7 +126,7 @@ mod tests {
     fn replied(num_devices: usize, replies: &[(usize, u64, &[u8])]) -> Response {
         let mut response = Response::for_devices(num_devices);
         for &(device, sys_time, data) in replies {
-            response.record_reply(device, 0, sys_time, data);
+            response.record_reply(device, 0, sys_time, data.to_vec());
         }
         response
     }
@@ -134,7 +134,7 @@ mod tests {
     #[test]
     fn a_recorded_reply_marks_only_its_device_as_replied() {
         let mut response = Response::for_devices(3);
-        response.record_reply(1, 0x07, 2_000, &[]);
+        response.record_reply(1, 0x07, 2_000, Vec::new());
         assert_eq!(response.replied_devices(), DeviceSet::from_iter([1]));
         assert_eq!(response.error_codes(), [0, 0x07, 0]);
         assert_eq!(response.sys_time_of(0), None);
