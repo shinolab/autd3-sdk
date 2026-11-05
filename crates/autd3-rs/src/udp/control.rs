@@ -1,7 +1,6 @@
 use std::net::SocketAddrV6;
 
-use autd3_cpu_wire::udp::{Header, Kind, PROTOCOL_VERSION, Status, UnblockReply, UnitInfo};
-use zerocopy::FromBytes;
+use autd3_cpu_wire::udp::{Header, Kind, PROTOCOL_VERSION, Status};
 
 use super::error::UdpError;
 
@@ -49,26 +48,11 @@ impl ControlResponse {
             })
         }
     }
-
-    pub(crate) fn unit_info(&self) -> Option<UnitInfo> {
-        UnitInfo::read_from_prefix(&self.body)
-            .ok()
-            .map(|(info, _)| info)
-    }
-
-    pub(crate) fn opened_downstream_link(&self) -> bool {
-        UnblockReply::read_from_prefix(&self.body)
-            .is_ok_and(|(reply, _)| reply.downstream_link != 0)
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use std::net::Ipv6Addr;
-
-    use autd3_cpu_wire::udp::Flags;
-    use zerocopy::IntoBytes;
-    use zerocopy::little_endian::I32;
 
     use super::*;
 
@@ -160,42 +144,5 @@ mod tests {
             ..response
         };
         assert!(accepted.check_status(Kind::SetTime, 4).is_ok());
-    }
-
-    #[test]
-    fn a_body_shorter_than_its_reply_reads_as_nothing() {
-        let response = |body: Vec<u8>| ControlResponse {
-            src: SRC,
-            status: 0,
-            body,
-        };
-        assert!(response(vec![0]).unit_info().is_none());
-        assert!(!response(Vec::new()).opened_downstream_link());
-    }
-
-    #[test]
-    fn the_unblock_reply_tells_whether_the_downstream_link_opened() {
-        let response = |downstream_link: u8| ControlResponse {
-            src: SRC,
-            status: 0,
-            body: vec![downstream_link],
-        };
-        assert!(!response(0).opened_downstream_link());
-        assert!(response(1).opened_downstream_link());
-    }
-
-    #[test]
-    fn the_unit_info_is_read_from_the_body() {
-        let info = UnitInfo {
-            unit_id: 3,
-            flags: Flags::ASSIGNED,
-            ptp_offset_ns: I32::new(-1),
-        };
-        let response = ControlResponse {
-            src: SRC,
-            status: 0,
-            body: info.as_bytes().to_vec(),
-        };
-        assert_eq!(response.unit_info(), Some(info));
     }
 }

@@ -24,7 +24,7 @@ use crate::error::{Error, PayloadError};
 use crate::firmware_version::FirmwareVersion;
 use crate::fpga_state::FpgaState;
 use crate::geometry::Geometry;
-use crate::protocol::{Cmd, PAYLOAD_BYTES};
+use crate::protocol::{Cmd, DeviceErrorCode, PAYLOAD_BYTES};
 use crate::telemetry::Telemetry;
 use crate::udp::TransportOption;
 use crate::value::SysTime;
@@ -224,7 +224,20 @@ impl Client {
             .send_frame(Frame::new(Distribution::Broadcast, &datagram))
             .await?
             .await?;
-        response.running_images()
+        response
+            .error_codes()
+            .iter()
+            .enumerate()
+            .map(|(device, &code)| match DeviceErrorCode::from_u8(code) {
+                Some(DeviceErrorCode::UnknownCmd) => Ok(None),
+                Some(DeviceErrorCode::None) => response
+                    .reply_data_of(device)
+                    .first()
+                    .map(|&raw| Some(RunningImage::from_u8(raw).unwrap_or(RunningImage::Unknown)))
+                    .ok_or(Error::UnexpectedReply { device }),
+                _ => Err(Error::DeviceError { device, code }),
+            })
+            .collect()
     }
 
     pub async fn read_fpga_state(&self) -> Result<Vec<FpgaState>, Error> {

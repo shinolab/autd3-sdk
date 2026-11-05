@@ -1,7 +1,9 @@
 use std::net::SocketAddrV6;
 use std::time::{Duration, Instant};
 
-use autd3_cpu_wire::udp::{AssignIdBody, Flags, Header, Kind, Role, SetTimeBody};
+use autd3_cpu_wire::udp::{
+    AssignIdBody, Flags, Header, Kind, Role, SetTimeBody, UnblockReply, UnitInfo,
+};
 use autd3_rs_core::value::SysTime;
 use zerocopy::little_endian::U64;
 use zerocopy::{FromBytes, IntoBytes};
@@ -176,7 +178,7 @@ impl Enumerator<'_> {
             .await?
             .into_iter()
             .find(|r| {
-                r.unit_info().is_some_and(|info| {
+                UnitInfo::read_from_prefix(&r.body).is_ok_and(|(info, _)| {
                     usize::from(info.unit_id) == unit_id && info.flags.contains(Flags::ASSIGNED)
                 })
             })
@@ -200,7 +202,8 @@ impl Enumerator<'_> {
                 unit_id,
             })?;
         response.check_status(Kind::UnblockDownstream, unit_id)?;
-        Ok(response.opened_downstream_link())
+        Ok(UnblockReply::read_from_prefix(&response.body)
+            .is_ok_and(|(reply, _)| reply.downstream_link != 0))
     }
 
     async fn enumerate(&mut self, num_devices: usize) -> Result<Vec<SocketAddrV6>, UdpError> {
@@ -252,8 +255,8 @@ impl Enumerator<'_> {
             .await?
             .into_iter()
             .filter(|r| {
-                r.unit_info()
-                    .is_some_and(|info| info.flags.contains(Flags::ASSIGNED))
+                UnitInfo::read_from_prefix(&r.body)
+                    .is_ok_and(|(info, _)| info.flags.contains(Flags::ASSIGNED))
                     && !device_addrs.iter().any(|&addr| same_endpoint(addr, r.src))
             })
             .map(|r| r.src)
@@ -291,7 +294,9 @@ impl Enumerator<'_> {
     ) -> Result<(), UdpError> {
         let mut seen = vec![false; device_addrs.len()];
         for response in self.request_all_devices(Kind::ReadUnitInfo, None).await? {
-            let info = response.unit_info();
+            let info = UnitInfo::read_from_prefix(&response.body)
+                .ok()
+                .map(|(info, _)| info);
             let unit_id = info.map_or(usize::from(u8::MAX), |info| usize::from(info.unit_id));
             let known = info.is_some_and(|info| info.flags.contains(Flags::ASSIGNED))
                 && device_addrs
@@ -337,7 +342,7 @@ impl Enumerator<'_> {
                 .request_all_devices(Kind::ReadUnitInfo, Some(device_addrs.len()))
                 .await?
             {
-                let Some(info) = response.unit_info() else {
+                let Ok((info, _)) = UnitInfo::read_from_prefix(&response.body) else {
                     continue;
                 };
                 let device = usize::from(info.unit_id);

@@ -1,8 +1,6 @@
 use crate::device_set::DeviceSet;
 use crate::error::Error;
-use autd3_cpu_wire::update::RunningImage;
 use autd3_rs_core::MAX_DEVICES;
-use autd3_rs_core::protocol::DeviceErrorCode;
 use autd3_rs_core::value::SysTime;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -81,24 +79,6 @@ impl Response {
             .collect()
     }
 
-    pub(crate) fn running_images(&self) -> Result<Vec<Option<RunningImage>>, Error> {
-        self.parse_each_device(|value| Some(value.first().copied()))?
-            .into_iter()
-            .zip(self.error_codes())
-            .enumerate()
-            .map(
-                |(device, (value, &code))| match (DeviceErrorCode::from_u8(code), value) {
-                    (Some(DeviceErrorCode::UnknownCmd), _) => Ok(None),
-                    (Some(DeviceErrorCode::None), Some(raw)) => Ok(Some(
-                        RunningImage::from_u8(raw).unwrap_or(RunningImage::Unknown),
-                    )),
-                    (Some(DeviceErrorCode::None), None) => Err(Error::UnexpectedReply { device }),
-                    _ => Err(Error::DeviceError { device, code }),
-                },
-            )
-            .collect()
-    }
-
     #[must_use]
     pub fn error_codes(&self) -> &[u8] {
         &self.error_codes[..self.num_devices]
@@ -138,7 +118,7 @@ impl Response {
 
 #[cfg(test)]
 mod tests {
-    use super::{DeviceErrorCode, Response, RunningImage};
+    use super::Response;
     use crate::device_set::DeviceSet;
     use autd3_rs_core::MAX_DEVICES;
     use autd3_rs_core::value::SysTime;
@@ -242,38 +222,6 @@ mod tests {
                 .len(),
             0
         );
-    }
-
-    #[test]
-    fn running_images_mark_firmware_that_cannot_report_as_none() {
-        let unknown_cmd = DeviceErrorCode::UnknownCmd as u8;
-        let mut response = replied(3, &[(0, 0, &[2]), (1, 0, &[9])]);
-        response.record_reply(2, unknown_cmd, 0, &[]);
-        assert_eq!(
-            response.running_images().unwrap(),
-            [
-                Some(RunningImage::Unconfirmed),
-                Some(RunningImage::Unknown),
-                None
-            ]
-        );
-    }
-
-    #[test]
-    fn running_images_report_other_failures_of_a_device() {
-        let mut rejected = replied(2, &[(0, 0, &[1])]);
-        rejected.record_reply(1, 0x07, 0, &[]);
-        assert!(matches!(
-            rejected.running_images(),
-            Err(crate::error::Error::DeviceError {
-                device: 1,
-                code: 0x07
-            })
-        ));
-        assert!(matches!(
-            replied(2, &[(0, 0, &[1]), (1, 0, &[])]).running_images(),
-            Err(crate::error::Error::UnexpectedReply { device: 1 })
-        ));
     }
 
     #[test]
