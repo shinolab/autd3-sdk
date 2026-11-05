@@ -3,8 +3,8 @@ from autd3 import Duration, Interface, TransportOption
 
 iface = Interface.Auto
 open_timeout = Duration.from_secs(40)
-lost_timeout = Duration.from_millis(100)
-ack_timeout = Duration.from_millis(10)
+lost_timeout = Duration.from_millis(500)
+ack_timeout = Duration.from_millis(200)
 send_buffer_bytes = 8192
 heartbeat_interval = None
 # ANCHOR: api

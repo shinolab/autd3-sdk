@@ -292,11 +292,6 @@ impl SessionState {
             .is_some_and(|deadline| now >= deadline)
     }
 
-    fn is_any_deadline_overdue(&self, now: Instant) -> bool {
-        self.is_head_ack_overdue(now)
-            || self.lost_deadline().is_some_and(|deadline| now >= deadline)
-    }
-
     pub(crate) fn next_deadline(&self, now: Instant) -> Instant {
         [
             self.lost_deadline(),
@@ -602,12 +597,9 @@ impl Session {
         Ok(())
     }
 
-    fn receive_available(
-        &self,
-        recv_from_device: impl Fn(&Channel) -> std::io::Result<Option<DeviceReply>>,
-    ) -> Result<(), NetworkCause> {
+    fn receive_available(&self) -> Result<(), NetworkCause> {
         loop {
-            let reply = recv_from_device(&self.channel).map_err(|e| {
+            let reply = self.channel.try_recv_from_device().map_err(|e| {
                 tracing::error!("receiving failed: {e}");
                 NetworkCause::new(UdpError::from(e))
             })?;
@@ -629,11 +621,8 @@ impl Session {
     }
 
     fn step(&self) -> Result<Instant, NetworkCause> {
-        self.receive_available(Channel::try_recv_from_device)?;
+        self.receive_available()?;
         let now = Instant::now();
-        if self.lock_state().is_any_deadline_overdue(now) {
-            self.receive_available(Channel::recv_from_device_past_readiness)?;
-        }
         let lost_device = self
             .lock_state()
             .first_device_unanswered_past_lost_timeout(now);
@@ -1088,45 +1077,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_reply_the_reactor_has_not_seen_answers_a_frame_past_its_ack_timeout() {
-        let (session, device) = session_with_device(Timeouts {
-            ack: Duration::ZERO,
-            lost: Duration::from_secs(3600),
-        })
-        .await;
-        let datagrams = [Datagram::no_payload(Cmd::Nop)];
-        let frame = Frame::new(Distribution::Broadcast, &datagrams);
-        let (enqueued, response) = session.enqueue().await.unwrap();
-        session.send_frame(enqueued, frame, 0).await.unwrap();
-        answer_the_last_request(&device);
-        session.channel.wait_for_datagram_in_the_kernel();
-
-        session.step().unwrap();
-
-        assert!(response.await.is_ok());
-    }
-
-    #[tokio::test]
-    async fn a_reply_the_reactor_has_not_seen_keeps_a_device_past_its_lost_timeout() {
-        let (session, device) = session_with_device(Timeouts {
-            ack: Duration::from_secs(3600),
-            lost: Duration::ZERO,
-        })
-        .await;
-        session.send_heartbeat().await.unwrap();
-        answer_the_last_request(&device);
-        session.channel.wait_for_datagram_in_the_kernel();
-
-        session.step().unwrap();
-
-        assert!(session.lock_state().closed_error().is_none());
-        assert_eq!(
-            session.lock_state().device_status()[0].state,
-            DeviceState::Ready
-        );
-    }
-
-    #[tokio::test]
     async fn a_device_unanswered_past_the_lost_timeout_closes_the_session_and_nothing_is_sent_after()
      {
         let (session, device) = session_with_device(Timeouts {
@@ -1200,11 +1150,9 @@ mod tests {
         let (enqueued, response) = session.enqueue().await.unwrap();
         session.send_frame(enqueued, frame, 0).await.unwrap();
         answer_the_last_request_with(&device, Flags::PTP_LOCKED | Flags::SYNC_READY);
-        session.channel.wait_for_datagram_in_the_kernel();
+        session.channel.readable().await.unwrap();
 
-        session
-            .receive_available(Channel::recv_from_device_past_readiness)
-            .unwrap();
+        session.receive_available().unwrap();
 
         assert!(matches!(
             response.await,
@@ -1247,10 +1195,8 @@ mod tests {
         let (enqueued, response) = session.enqueue().await.unwrap();
         session.send_frame(enqueued, frame, 0).await.unwrap();
         answer_the_last_request(&device);
-        session.channel.wait_for_datagram_in_the_kernel();
-        session
-            .receive_available(Channel::recv_from_device_past_readiness)
-            .unwrap();
+        session.channel.readable().await.unwrap();
+        session.receive_available().unwrap();
         assert!(response.await.is_ok());
     }
 

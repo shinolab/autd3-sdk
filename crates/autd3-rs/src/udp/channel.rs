@@ -20,7 +20,6 @@ pub(crate) fn same_endpoint(a: SocketAddrV6, b: SocketAddrV6) -> bool {
 
 pub(crate) struct Channel {
     socket: UdpSocket,
-    deadline_check_socket: std::net::UdpSocket,
     all_devices_dst: SocketAddrV6,
     device_addrs: Vec<SocketAddrV6>,
 }
@@ -84,13 +83,10 @@ impl Channel {
             );
         }
         let socket: std::net::UdpSocket = socket.into();
-        let deadline_check_socket = socket.try_clone()?;
-        deadline_check_socket.set_nonblocking(true)?;
         let socket = UdpSocket::from_std(socket)?;
         socket.writable().await?;
         Ok(Self {
             socket,
-            deadline_check_socket,
             all_devices_dst,
             device_addrs: Vec::new(),
         })
@@ -176,13 +172,10 @@ impl Channel {
         }
     }
 
-    fn next_device_reply(
-        &self,
-        mut recv: impl FnMut(&mut [u8]) -> io::Result<(usize, SocketAddr)>,
-    ) -> io::Result<Option<DeviceReply>> {
+    pub(crate) fn try_recv_from_device(&self) -> io::Result<Option<DeviceReply>> {
         let mut buf = [0; RECV_BUFFER_BYTES];
         loop {
-            let (len, src) = match accepted_datagram(recv(&mut buf)) {
+            let (len, src) = match accepted_datagram(self.socket.try_recv_from(&mut buf)) {
                 Ok(Some(datagram)) => datagram,
                 Ok(None) => continue,
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => return Ok(None),
@@ -202,14 +195,6 @@ impl Channel {
                 return Ok(Some(parsed));
             }
         }
-    }
-
-    pub(crate) fn try_recv_from_device(&self) -> io::Result<Option<DeviceReply>> {
-        self.next_device_reply(|buf| self.socket.try_recv_from(buf))
-    }
-
-    pub(crate) fn recv_from_device_past_readiness(&self) -> io::Result<Option<DeviceReply>> {
-        self.next_device_reply(|buf| self.deadline_check_socket.recv_from(buf))
     }
 
     pub(crate) async fn recv_datagram<'a>(
@@ -238,18 +223,6 @@ impl Channel {
 
     pub(crate) async fn readable(&self) -> io::Result<()> {
         self.socket.readable().await
-    }
-
-    #[cfg(test)]
-    pub(crate) fn wait_for_datagram_in_the_kernel(&self) {
-        let mut buf = [0; RECV_BUFFER_BYTES];
-        while self
-            .deadline_check_socket
-            .peek_from(&mut buf)
-            .is_err_and(|e| e.kind() == io::ErrorKind::WouldBlock)
-        {
-            std::hint::spin_loop();
-        }
     }
 }
 

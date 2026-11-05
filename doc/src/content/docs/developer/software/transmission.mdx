@@ -114,11 +114,8 @@ pub(crate) async fn run_io(&self) -> Result<(), NetworkCause> {
 }
 
 fn step(&self) -> Result<Instant, NetworkCause> {
-    self.receive_available(Channel::try_recv_from_device)?;   // 届いている返信を読み切る
+    self.receive_available()?;                  // 届いている返信を読み切る
     let now = Instant::now();
-    if self.lock_state().is_any_deadline_overdue(now) {
-        self.receive_available(Channel::recv_from_device_past_readiness)?;
-    }
     let lost_device = self.lock_state().first_device_unanswered_past_lost_timeout(now);
     if let Some(device) = lost_device {
         self.close(Error::DeviceLost { device });   // 1 台でも途絶したら閉じる
@@ -129,7 +126,6 @@ fn step(&self) -> Result<Instant, NetworkCause> {
 ```
 
 期限は「先頭が `ack_timeout` を過ぎる時刻」「未返信のデバイスが `lost_timeout` に達する時刻」のうち最も早いもの (どれも無ければ 1 秒後) である.
-tokio の `try_recv_from` はリアクタが覚えている readiness が空だと syscall しないので, カーネルに返信が届いていても空に見えることがある. 期限が来ていたら, 判定の前に複製した std ソケットで読み直す.
 送ったフレームが in-flight キューの先頭になったときと, 送信 (`Frame` / `send_heartbeat()`) で機体の未返信を数え始めたときは, 送った側が I/O タスクを起こして (`io_wake`) 期限を計算し直させる.
 返信が 1 つ届いたら, 溜まっている返信を読み切ってからタイマの判定へ戻るので, タスクが遅れても届いている返信を見ずに `Timeout` にすることは無い.
 

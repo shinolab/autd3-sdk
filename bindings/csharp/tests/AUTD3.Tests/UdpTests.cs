@@ -12,8 +12,8 @@ namespace AUTD3.Tests
             var option = new TransportOption();
             Assert.Equal(Interface.Auto, option.Iface);
             Assert.Equal(TimeSpan.FromSeconds(40), option.OpenTimeout);
-            Assert.Equal(TimeSpan.FromMilliseconds(100), option.LostTimeout);
-            Assert.Equal(TimeSpan.FromMilliseconds(10), option.AckTimeout);
+            Assert.Equal(TimeSpan.FromMilliseconds(500), option.LostTimeout);
+            Assert.Equal(TimeSpan.FromMilliseconds(200), option.AckTimeout);
             Assert.Equal(8192ul, option.SendBufferBytes);
             Assert.True(option.SyncOnOpen);
             Assert.True(default(TransportOption).SyncOnOpen);

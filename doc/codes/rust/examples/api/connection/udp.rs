@@ -13,8 +13,8 @@ async fn main() -> Result<()> {
 
     let iface = Interface::Auto;
     let open_timeout = Duration::from_secs(40);
-    let lost_timeout = Duration::from_millis(100);
-    let ack_timeout = Duration::from_millis(10);
+    let lost_timeout = Duration::from_millis(500);
+    let ack_timeout = Duration::from_millis(200);
     let send_buffer_bytes = NonZeroUsize::new(8192);
     let sync_on_open = true;
     let heartbeat_interval = None;
