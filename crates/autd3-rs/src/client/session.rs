@@ -165,11 +165,10 @@ impl SessionState {
         Ok(Some((msg_id, response)))
     }
 
-    pub(crate) fn remove(&mut self, msg_id: u16, now: Instant) -> Option<ResponseSender> {
-        let index = self.inflight.position(msg_id)?;
-        self.inflight
-            .take(index, now)
-            .map(|request| request.completion)
+    pub(crate) fn remove(&mut self, msg_id: u16, now: Instant) {
+        if let Some(index) = self.inflight.position(msg_id) {
+            self.inflight.take(index, now);
+        }
     }
 
     fn record_sent_to(
@@ -715,14 +714,14 @@ mod tests {
         let mut state = session_state(1, now);
         let enqueued = fill_and_park(&mut state, now);
 
-        assert!(state.remove(enqueued[1], now).is_some());
+        state.remove(enqueued[1], now);
 
         assert!(!state.inflight.is_full());
         assert!(state.inflight.is_head(enqueued[0]));
         let (msg_id, _response) = enqueue(&mut state, now);
         assert_eq!(state.inflight.position(msg_id), Some(MAX_INFLIGHT - 1));
 
-        assert!(state.remove(enqueued[0], now).is_some());
+        state.remove(enqueued[0], now);
         assert!(state.inflight.is_head(enqueued[2]));
     }
 
@@ -733,13 +732,13 @@ mod tests {
         for _ in 0..MAX_INFLIGHT * 2 + 3 {
             let (msg_id, _response) = enqueue(&mut state, now);
             assert!(state.inflight.is_head(msg_id));
-            assert!(state.remove(msg_id, now).is_some());
+            state.remove(msg_id, now);
             assert_eq!(state.inflight.requests.len(), 0);
         }
         let first = enqueue(&mut state, now).0;
         let second = enqueue(&mut state, now).0;
         assert!(state.inflight.is_head(first));
-        assert!(state.remove(first, now).is_some());
+        state.remove(first, now);
         assert!(state.inflight.is_head(second));
     }
 
@@ -755,7 +754,7 @@ mod tests {
         let mut state = session_state(1, now);
         let enqueued = fill_and_park(&mut state, now);
 
-        assert!(state.remove(enqueued[MAX_INFLIGHT - 1], now).is_some());
+        state.remove(enqueued[MAX_INFLIGHT - 1], now);
 
         assert_eq!(state.inflight.requests.len(), MAX_INFLIGHT - 1);
         let (msg_id, _response) = enqueue(&mut state, now);
