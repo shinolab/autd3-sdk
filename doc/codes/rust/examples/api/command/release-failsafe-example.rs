@@ -13,12 +13,12 @@ async fn main() -> anyhow::Result<()> {
     client.send(Clear).await?;
     client.send(Synchronize).await?;
 
-    let status = client.device_status()?;
+    let msg_id = client.send_heartbeat().await?;
+    let status = client.collect(msg_id).await?.device_status();
     if status.iter().any(|s| s.failsafe_active) {
         client.send(ReleaseFailsafe).await?;
     }
 
-    client.close().await?;
     // HIDE
     Ok(())
 }

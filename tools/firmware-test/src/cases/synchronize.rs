@@ -63,7 +63,7 @@ async fn transition_brackets(ctx: &Ctx<'_>) -> Result<Vec<Bracket>> {
     let deadline = target + Duration::from_millis(800);
     while Instant::now() < deadline && brackets.iter().any(|b| b.seen_b1_us.is_none()) {
         let before = Instant::now();
-        let states = ctx.client.read_fpga_state().await?;
+        let states = ctx.read_fpga_state().await?;
         let after = Instant::now();
         for (bracket, state) in brackets.iter_mut().zip(&states) {
             if bracket.seen_b1_us.is_some() {

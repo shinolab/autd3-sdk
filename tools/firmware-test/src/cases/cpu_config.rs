@@ -10,7 +10,7 @@ use autd3_rs::commands::{
 use autd3_rs::value::{LoopBehavior, ModulationBank, SamplingConfig};
 use autd3_rs::{DeviceState, Frames};
 
-use crate::{Ctx, failsafe_gates};
+use crate::Ctx;
 
 pub(crate) async fn silence(ctx: &Ctx<'_>) -> Result<()> {
     ctx.stop_output().await?;
@@ -42,8 +42,8 @@ pub(crate) async fn silence(ctx: &Ctx<'_>) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn states(ctx: &Ctx<'_>) -> Result<Vec<DeviceState>> {
-    crate::device_states(ctx.client)
+pub(crate) async fn states(ctx: &Ctx<'_>) -> Result<Vec<DeviceState>> {
+    ctx.device_states().await
 }
 
 pub(crate) async fn watch(
@@ -52,11 +52,11 @@ pub(crate) async fn watch(
     window: Duration,
 ) -> Result<Vec<DeviceState>> {
     let deadline = std::time::Instant::now() + window;
-    let mut seen = states(ctx)?;
+    let mut seen = states(ctx).await?;
     let mut changes = 0u32;
     while std::time::Instant::now() < deadline {
         tokio::time::sleep(Duration::from_millis(20)).await;
-        let now = states(ctx)?;
+        let now = states(ctx).await?;
         if now != seen {
             changes += 1;
             seen = now;
@@ -68,7 +68,6 @@ pub(crate) async fn watch(
 
 async fn failsafe_counts(ctx: &Ctx<'_>) -> Result<Vec<u32>> {
     Ok(ctx
-        .client
         .read_telemetry()
         .await?
         .iter()
@@ -119,7 +118,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
                 "  {} a timeout ({short:?}) shorter than the heartbeat trips on every device: {tripped:?}",
                 verdict(tripped.iter().all(|c| *c > 0))
             );
-            let gated = failsafe_gates(ctx.client)?;
+            let gated = ctx.failsafe_gates().await?;
             println!(
                 "  {} the trip raises the failsafe gate on every device",
                 verdict(gated.iter().all(|g| *g))
@@ -133,9 +132,9 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
                 "  {} a disabled failsafe stops tripping: {before:?} -> {after:?}",
                 verdict(before == after)
             );
-            let still_gated = failsafe_gates(ctx.client)?;
+            let still_gated = ctx.failsafe_gates().await?;
             ctx.send(ReleaseFailsafe).await?;
-            let released = failsafe_gates(ctx.client)?;
+            let released = ctx.failsafe_gates().await?;
             println!(
                 "  {} the gate stays up until ReleaseFailsafe lowers it",
                 verdict(still_gated.iter().all(|g| *g) && released.iter().all(|g| !g))
@@ -169,7 +168,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
                 "  {} Clear disabled the failsafe (the default) and reset the counter: {counts:?}",
                 verdict(counts.iter().all(|c| *c == 0))
             );
-            let cleared = failsafe_gates(ctx.client)?;
+            let cleared = ctx.failsafe_gates().await?;
             println!(
                 "  {} Clear lowered the failsafe gate",
                 verdict(cleared.iter().all(|g| !g))

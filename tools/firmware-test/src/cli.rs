@@ -1,7 +1,7 @@
 use std::num::NonZeroUsize;
 use std::time::Duration;
 
-use autd3_rs::{ExecAt, TransportOption};
+use autd3_rs::ExecAt;
 use clap::Parser;
 
 #[derive(Parser)]
@@ -23,8 +23,6 @@ pub(crate) struct Cli {
     pub devices: NonZeroUsize,
     #[arg(long, value_parser = humantime::parse_duration, default_value = "10ms")]
     pub heartbeat: Duration,
-    #[arg(long, value_parser = humantime::parse_duration)]
-    pub lost_timeout: Option<Duration>,
     #[arg(
         long,
         value_parser = humantime::parse_duration,
@@ -34,9 +32,10 @@ pub(crate) struct Cli {
     #[arg(
         long,
         value_parser = humantime::parse_duration,
-        help = "Maps to TransportOption::ack_timeout. Must exceed --exec-lead"
+        default_value = "200ms",
+        help = "How long to wait for the replies of a frame. Must exceed --exec-lead"
     )]
-    pub ack_timeout: Option<Duration>,
+    pub ack_timeout: Duration,
 }
 
 impl Cli {
@@ -50,10 +49,10 @@ impl Cli {
         {
             return Err("--exec-lead must be at least 100us".to_string());
         }
-        if self.ack_timeout.is_some_and(|timeout| timeout.is_zero()) {
+        if self.ack_timeout.is_zero() {
             return Err("--ack-timeout must be longer than 0".to_string());
         }
-        let ack_timeout = self.ack_timeout();
+        let ack_timeout = self.ack_timeout;
         if let ExecAt::Lead(exec_lead) = self.exec()
             && ack_timeout <= exec_lead
         {
@@ -62,11 +61,6 @@ impl Cli {
             ));
         }
         Ok(())
-    }
-
-    pub(crate) fn ack_timeout(&self) -> Duration {
-        self.ack_timeout
-            .unwrap_or(TransportOption::default().ack_timeout)
     }
 
     pub(crate) fn exec(&self) -> ExecAt {

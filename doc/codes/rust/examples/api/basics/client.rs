@@ -22,12 +22,14 @@ async fn main() -> Result<()> {
 
     let lead = ExecAt::Lead(Duration::from_millis(1));
     for frame in &frames {
-        client.send_frame_at(frame, lead).await?.await?.check()?;
+        let msg_id = client.send_frame(frame, lead).await?;
+        client.collect(msg_id).await?.check()?;
     }
 
     let at = client.device_time_now()? + Duration::from_millis(5);
     for frame in &frames {
-        client.send_frame_at(frame, ExecAt::At(at)).await?.await?.check()?;
+        let msg_id = client.send_frame(frame, ExecAt::At(at)).await?;
+        client.collect(msg_id).await?.check()?;
     }
     // ANCHOR_END: exec_at
     let frame = frames.iter().next().unwrap();
@@ -42,17 +44,19 @@ async fn main() -> Result<()> {
     let num_devices = client.num_devices();
     let geometry = client.geometry();
 
-    client.send_heartbeat().await?;
+    let msg_id = client.send_heartbeat().await?;
+    let heartbeat = client.collect(msg_id).await?;
+    let reply = client.recv().await?;
 
     let firmware = client.read_firmware_version().await?;
     let fpga_state = client.read_fpga_state().await?;
 
     client.send(Nop).await?;
-    let resp = client.send_frame(frame).await?.await?;
+    let msg_id = client.send_frame(frame, ExecAt::Immediate).await?;
+    let resp = tokio::time::timeout(Duration::from_millis(200), client.collect(msg_id)).await??;
 
-    client.close().await?;
     // ANCHOR_END: api
 
-    let _ = (num_devices, geometry, firmware, fpga_state, resp);
+    let _ = (num_devices, geometry, heartbeat, reply, firmware, fpga_state, resp);
     Ok(())
 }

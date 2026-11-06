@@ -1,12 +1,17 @@
-use crate::device_set::DeviceSet;
-use crate::error::Error;
-use autd3_rs_core::MAX_DEVICES;
+use autd3_cpu_wire::udp::Flags;
 use autd3_rs_core::value::SysTime;
+use autd3_rs_core::{DeviceState, MAX_DEVICES};
+
+use crate::device_set::DeviceSet;
+use crate::device_status::DeviceStatus;
+use crate::error::Error;
+use crate::udp::DeviceReply;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Response {
     error_codes: [u8; MAX_DEVICES],
     sys_times: [u64; MAX_DEVICES],
+    flags: [Flags; MAX_DEVICES],
     num_devices: usize,
     reply_data: Vec<Vec<u8>>,
     replied_devices: DeviceSet,
@@ -17,6 +22,7 @@ impl Default for Response {
         Self {
             error_codes: [0; MAX_DEVICES],
             sys_times: [0; MAX_DEVICES],
+            flags: [Flags::empty(); MAX_DEVICES],
             num_devices: 0,
             reply_data: Vec::new(),
             replied_devices: DeviceSet::empty(),
@@ -33,6 +39,7 @@ impl Response {
         Self {
             error_codes: buf,
             sys_times: [0; MAX_DEVICES],
+            flags: [Flags::empty(); MAX_DEVICES],
             num_devices,
             reply_data: Vec::new(),
             replied_devices: DeviceSet::first_n(num_devices),
@@ -47,25 +54,26 @@ impl Response {
         }
     }
 
-    pub(crate) fn record_reply(
-        &mut self,
-        device: usize,
-        error_code: u8,
-        sys_time: u64,
-        data: Vec<u8>,
-    ) {
-        self.error_codes[device] = error_code;
-        self.sys_times[device] = sys_time;
+    pub(crate) fn record_reply(&mut self, reply: DeviceReply) {
+        let device = reply.device;
+        self.error_codes[device] = reply.status;
+        self.sys_times[device] = reply.sys_time;
+        self.flags[device] = reply.flags;
         self.replied_devices.insert(device);
-        if !data.is_empty() {
+        if !reply.data.is_empty() {
             self.reply_data.resize_with(self.num_devices, Vec::new);
-            self.reply_data[device] = data;
+            self.reply_data[device] = reply.data;
         }
     }
 
     #[must_use]
     pub(crate) const fn replied_devices(&self) -> DeviceSet {
         self.replied_devices
+    }
+
+    #[must_use]
+    pub(crate) fn has_all_replies(&self) -> bool {
+        DeviceSet::first_n(self.num_devices).is_subset(&self.replied_devices)
     }
 
     pub(crate) fn parse_each_device<T>(
@@ -103,6 +111,22 @@ impl Response {
             .map(SysTime::from_nanos)
     }
 
+    #[must_use]
+    pub fn device_status(&self) -> Vec<DeviceStatus> {
+        self.flags[..self.num_devices]
+            .iter()
+            .map(|&flags| DeviceStatus {
+                state: if flags.contains(Flags::PTP_LOCKED | Flags::SYNC_READY) {
+                    DeviceState::Ready
+                } else {
+                    DeviceState::Syncing
+                },
+                ptp_locked: flags.contains(Flags::PTP_LOCKED),
+                failsafe_active: flags.contains(Flags::FAILSAFE),
+            })
+            .collect()
+    }
+
     pub fn check(&self) -> Result<(), Error> {
         match self
             .error_codes()
@@ -118,15 +142,24 @@ impl Response {
 
 #[cfg(test)]
 mod tests {
-    use super::Response;
-    use crate::device_set::DeviceSet;
-    use autd3_rs_core::MAX_DEVICES;
-    use autd3_rs_core::value::SysTime;
+    use super::*;
+
+    fn reply(device: usize, status: u8, flags: Flags, sys_time: u64, data: &[u8]) -> DeviceReply {
+        DeviceReply {
+            device,
+            msg_id: 1,
+            status,
+            flags,
+            unit_id: 0,
+            sys_time,
+            data: data.to_vec(),
+        }
+    }
 
     fn replied(num_devices: usize, replies: &[(usize, u64, &[u8])]) -> Response {
         let mut response = Response::for_devices(num_devices);
         for &(device, sys_time, data) in replies {
-            response.record_reply(device, 0, sys_time, data.to_vec());
+            response.record_reply(reply(device, 0, Flags::ASSIGNED, sys_time, data));
         }
         response
     }
@@ -134,11 +167,52 @@ mod tests {
     #[test]
     fn a_recorded_reply_marks_only_its_device_as_replied() {
         let mut response = Response::for_devices(3);
-        response.record_reply(1, 0x07, 2_000, Vec::new());
+        response.record_reply(reply(1, 0x07, Flags::ASSIGNED, 2_000, &[]));
         assert_eq!(response.replied_devices(), DeviceSet::from_iter([1]));
+        assert!(!response.has_all_replies());
         assert_eq!(response.error_codes(), [0, 0x07, 0]);
         assert_eq!(response.sys_time_of(0), None);
         assert_eq!(response.sys_time_of(1), Some(SysTime::from_nanos(2_000)));
+    }
+
+    #[test]
+    fn every_device_replying_completes_the_response() {
+        let response = replied(2, &[(1, 0, &[]), (0, 0, &[])]);
+        assert!(response.has_all_replies());
+    }
+
+    #[test]
+    fn the_device_status_follows_the_flags_of_each_reply() {
+        let mut response = Response::for_devices(3);
+        response.record_reply(reply(
+            0,
+            0,
+            Flags::ASSIGNED | Flags::PTP_LOCKED | Flags::SYNC_READY,
+            0,
+            &[],
+        ));
+        response.record_reply(reply(1, 0, Flags::ASSIGNED | Flags::PTP_LOCKED, 0, &[]));
+        response.record_reply(reply(2, 0, Flags::ASSIGNED | Flags::FAILSAFE, 0, &[]));
+        assert_eq!(
+            response.device_status(),
+            [
+                DeviceStatus {
+                    state: DeviceState::Ready,
+                    ptp_locked: true,
+                    failsafe_active: false,
+                },
+                DeviceStatus {
+                    state: DeviceState::Syncing,
+                    ptp_locked: true,
+                    failsafe_active: false,
+                },
+                DeviceStatus {
+                    state: DeviceState::Syncing,
+                    ptp_locked: false,
+                    failsafe_active: true,
+                },
+            ]
+        );
     }
 
     #[test]
@@ -202,10 +276,7 @@ mod tests {
         let err = response
             .parse_each_device(|value| value.first().copied())
             .unwrap_err();
-        assert!(matches!(
-            err,
-            crate::error::Error::UnexpectedReply { device: 1 }
-        ));
+        assert!(matches!(err, Error::UnexpectedReply { device: 1 }));
     }
 
     #[test]
@@ -232,7 +303,7 @@ mod tests {
             .unwrap_err();
         assert!(matches!(
             err,
-            crate::error::Error::DeviceError {
+            Error::DeviceError {
                 device: 1,
                 code: 0x07
             }

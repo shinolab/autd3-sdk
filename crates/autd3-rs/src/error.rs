@@ -49,11 +49,8 @@ pub enum Error {
     #[error("device {device} returned a shorter reply than the command defines")]
     UnexpectedReply { device: usize },
 
-    #[error("device {device} is lost, so the client is closed; reopen it")]
+    #[error("device {device} is lost: it replied unassigned or as another unit")]
     DeviceLost { device: usize },
-
-    #[error("the devices did not reply within {timeout:?}")]
-    Timeout { timeout: std::time::Duration },
 
     #[error("network error: {0}")]
     Network(#[source] NetworkCause),
@@ -63,9 +60,6 @@ pub enum Error {
 
     #[error("invalid payload: {0}")]
     InvalidPayload(PayloadError),
-
-    #[error("the client is closed")]
-    Closed,
 }
 
 impl From<UdpError> for Error {

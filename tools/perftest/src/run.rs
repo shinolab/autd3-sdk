@@ -14,9 +14,10 @@ use autd3_rs::value::{
     Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig, TransitionMode,
 };
 use autd3_rs::{
-    Client, Error as ClientError, ExecAt, Frame, Frames, Interface, ResponseFuture, Telemetry,
+    Client, DeviceReply, Error as ClientError, ExecAt, Frame, Frames, Interface, Telemetry,
     TransportOption,
 };
+use tokio::time::error::Elapsed;
 
 use crate::cli::{Cli, Command, Mode};
 use crate::report::{LiveBlock, interval_lines, telemetry_lines};
@@ -27,7 +28,7 @@ use crate::stats::{
 pub(crate) struct RunOutput {
     pub summary: Summary,
     pub stopped_on_error: Option<(u64, SampleStatus)>,
-    pub driver_closed: bool,
+    pub device_lost: bool,
     pub telemetry_start: Vec<Telemetry>,
     pub telemetry_end: Vec<Telemetry>,
 }
@@ -121,6 +122,7 @@ impl Sender {
 async fn run_stop_and_wait(
     client: &Client,
     exec: ExecAt,
+    ack_timeout: Duration,
     mut sender: Sender,
     shutdown: Arc<AtomicBool>,
     mut measurement: Measurement,
@@ -132,15 +134,14 @@ async fn run_stop_and_wait(
         let res = async {
             for frame in &sender.frames {
                 let sent_at = Instant::now();
-                let fut = client.send_frame_at(frame, exec).await?;
+                let msg_id = client.send_frame(frame, exec).await?;
                 measurement.traffic.sent(&frame);
-                PendingFuture { sent_at, fut }
-                    .acked(&mut measurement.ack)
-                    .await?
-                    .check()?;
+                let response = tokio::time::timeout(ack_timeout, client.collect(msg_id)).await??;
+                measurement.ack.record(sent_at.elapsed());
+                response.check()?;
                 measurement.traffic.replied();
             }
-            Ok::<(), ClientError>(())
+            Ok::<(), Failure>(())
         }
         .await;
         let rtt = t0.elapsed();
@@ -157,48 +158,110 @@ async fn run_stop_and_wait(
 async fn run_streaming(
     client: &Client,
     exec: ExecAt,
+    ack_timeout: Duration,
     mut sender: Sender,
     shutdown: Arc<AtomicBool>,
     max_inflight: usize,
     mut measurement: Measurement,
 ) -> Result<RunOutput> {
-    let mut pending: VecDeque<PendingFuture> = VecDeque::with_capacity(max_inflight);
+    let mut pending: VecDeque<InFlight> = VecDeque::with_capacity(max_inflight);
     let mut sample_index: u64 = 0;
     while !shutdown.load(Ordering::Relaxed) {
-        if pending.len() < max_inflight {
+        let report_due = measurement.live.is_due();
+        if !report_due && pending.len() < max_inflight {
             let frame = sender.next_frame(client)?;
             let sent_at = Instant::now();
-            let fut = match client.send_frame_at(frame, exec).await {
-                Ok(fut) => fut,
-                Err(ClientError::Closed) => {
-                    eprintln!("the client closed unexpectedly");
-                    measurement.driver_closed = true;
-                    break;
-                }
-                Err(e) => return Err(e.into()),
-            };
+            let msg_id = client.send_frame(frame, exec).await?;
             measurement.traffic.sent(&frame);
-            pending.push_back(PendingFuture { sent_at, fut });
+            pending.push_back(InFlight::new(msg_id, sent_at, client.num_devices()));
+            continue;
+        }
+        if pending.is_empty() {
+            measurement.report(client).await;
             continue;
         }
 
-        let Some(entry) = pending.pop_front() else {
+        let waited = tokio::time::timeout(ack_timeout, async {
+            while !pending[0].is_complete() {
+                let reply = client.recv().await?;
+                if let Some(entry) = pending.iter_mut().find(|e| e.msg_id == reply.msg_id) {
+                    entry.record(&reply);
+                }
+            }
+            Ok::<(), ClientError>(())
+        })
+        .await;
+        let Some(head) = pending.pop_front() else {
             break;
         };
-        let sent_at = entry.sent_at;
-        let res = entry.acked(&mut measurement.ack).await;
-        let rtt = sent_at.elapsed();
-        let outcome = classify(res.and_then(|resp| resp.check()))?;
+        let rtt = head.sent_at.elapsed();
+        let res = waited.map_err(Failure::from).and_then(|received| {
+            received?;
+            measurement.ack.record(rtt);
+            head.check()
+        });
+        let outcome = classify(res)?;
         if matches!(outcome, Outcome::Sample(SampleStatus::Ok)) {
             measurement.traffic.replied();
         }
         if measurement.record(sample_index, rtt, outcome).is_break() {
             break;
         }
-        measurement.report(client).await;
         sample_index += 1;
     }
     Ok(measurement.finish())
+}
+
+struct InFlight {
+    msg_id: u16,
+    sent_at: Instant,
+    replied: Vec<bool>,
+    first_error: Option<(usize, u8)>,
+}
+
+impl InFlight {
+    fn new(msg_id: u16, sent_at: Instant, num_devices: usize) -> Self {
+        Self {
+            msg_id,
+            sent_at,
+            replied: vec![false; num_devices],
+            first_error: None,
+        }
+    }
+
+    fn record(&mut self, reply: &DeviceReply) {
+        if !std::mem::replace(&mut self.replied[reply.device], true) && reply.status != 0 {
+            self.first_error.get_or_insert((reply.device, reply.status));
+        }
+    }
+
+    fn is_complete(&self) -> bool {
+        self.replied.iter().all(|&replied| replied)
+    }
+
+    fn check(&self) -> Result<(), Failure> {
+        match self.first_error {
+            None => Ok(()),
+            Some((device, code)) => Err(ClientError::DeviceError { device, code }.into()),
+        }
+    }
+}
+
+enum Failure {
+    Client(ClientError),
+    Timeout,
+}
+
+impl From<ClientError> for Failure {
+    fn from(e: ClientError) -> Self {
+        Self::Client(e)
+    }
+}
+
+impl From<Elapsed> for Failure {
+    fn from(_: Elapsed) -> Self {
+        Self::Timeout
+    }
 }
 
 #[allow(clippy::too_many_lines)]
@@ -212,7 +275,6 @@ pub(crate) async fn run(cli: &Cli) -> Result<RunOutput> {
             .interface
             .clone()
             .map_or(Interface::Auto, Interface::Name),
-        ack_timeout: cli.ack_timeout,
         send_buffer_bytes: match cli.send_buffer {
             Some(bytes) => std::num::NonZeroUsize::new(bytes),
             None => TransportOption::default().send_buffer_bytes,
@@ -270,7 +332,10 @@ pub(crate) async fn run(cli: &Cli) -> Result<RunOutput> {
     let shutdown = Arc::new(AtomicBool::new(false));
     spawn_signal_listener(Arc::clone(&shutdown));
 
-    let telemetry_start = client.read_telemetry().await.context("reading telemetry")?;
+    let telemetry_start = tokio::time::timeout(Duration::from_secs(1), client.read_telemetry())
+        .await
+        .context("reading telemetry timed out")?
+        .context("reading telemetry")?;
     let mut heartbeats = 0;
     if let Some(hold) = cli.hold {
         eprintln!("holding the connection idle for {hold:?}");
@@ -287,16 +352,28 @@ pub(crate) async fn run(cli: &Cli) -> Result<RunOutput> {
         }
     }
 
+    client.discard_unread_replies()?;
     let sender = Sender::new(&geometry, cli)?;
 
     let measurement = Measurement::start(cli, heartbeats, telemetry_start);
     let exec = cli.exec_lead.map_or(ExecAt::Immediate, ExecAt::Lead);
     let mut output = match cli.mode {
-        Mode::StopAndWait => run_stop_and_wait(&client, exec, sender, shutdown, measurement).await,
+        Mode::StopAndWait => {
+            run_stop_and_wait(
+                &client,
+                exec,
+                cli.ack_timeout,
+                sender,
+                shutdown,
+                measurement,
+            )
+            .await
+        }
         Mode::Streaming => {
             run_streaming(
                 &client,
                 exec,
+                cli.ack_timeout,
                 sender,
                 shutdown,
                 cli.max_inflight.max(1),
@@ -307,13 +384,10 @@ pub(crate) async fn run(cli: &Cli) -> Result<RunOutput> {
     };
 
     if let Ok(output) = &mut output
-        && let Ok(telemetry) = client.read_telemetry().await
+        && let Ok(Ok(telemetry)) =
+            tokio::time::timeout(Duration::from_secs(1), client.read_telemetry()).await
     {
         output.telemetry_end = telemetry;
-    }
-
-    if let Err(e) = client.close().await {
-        eprintln!("the client closed with an error: {e}");
     }
 
     output
@@ -322,26 +396,28 @@ pub(crate) async fn run(cli: &Cli) -> Result<RunOutput> {
 #[derive(Clone, Copy)]
 enum Outcome {
     Sample(SampleStatus),
-    DriverClosed,
+    DeviceLost,
 }
 
-fn classify(res: Result<(), ClientError>) -> Result<Outcome> {
+fn classify(res: Result<(), Failure>) -> Result<Outcome> {
     Ok(Outcome::Sample(match res {
         Ok(()) => SampleStatus::Ok,
-        Err(ClientError::DeviceError { code, .. }) => SampleStatus::DeviceError(code),
-        Err(ClientError::Timeout { .. }) => SampleStatus::Timeout,
-        Err(ClientError::Network(cause)) => {
+        Err(Failure::Timeout) => SampleStatus::Timeout,
+        Err(Failure::Client(ClientError::DeviceError { code, .. })) => {
+            SampleStatus::DeviceError(code)
+        }
+        Err(Failure::Client(ClientError::Network(cause))) => {
             eprintln!("network error: {cause}");
             SampleStatus::NetworkError
         }
-        Err(ClientError::InvalidPayload(e)) => {
+        Err(Failure::Client(ClientError::InvalidPayload(e))) => {
             anyhow::bail!("payload rejected by the local encoder: {e}");
         }
-        Err(ClientError::Closed) => {
-            eprintln!("the client closed unexpectedly");
-            return Ok(Outcome::DriverClosed);
+        Err(Failure::Client(e @ ClientError::DeviceLost { .. })) => {
+            eprintln!("{e}");
+            return Ok(Outcome::DeviceLost);
         }
-        Err(e) => anyhow::bail!("{e}"),
+        Err(Failure::Client(e)) => anyhow::bail!("{e}"),
     }))
 }
 
@@ -351,7 +427,7 @@ struct Measurement {
     rtts: hdrhistogram::Histogram<u64>,
     live: Live,
     stopped_on_error: Option<(u64, SampleStatus)>,
-    driver_closed: bool,
+    device_lost: bool,
     stop_on_error: bool,
     start: Instant,
     heartbeats: u64,
@@ -368,7 +444,7 @@ impl Measurement {
             rtts: rtt_histogram(),
             live,
             stopped_on_error: None,
-            driver_closed: false,
+            device_lost: false,
             stop_on_error: cli.stop_on_error,
             start: Instant::now(),
             heartbeats,
@@ -379,8 +455,8 @@ impl Measurement {
     fn record(&mut self, index: u64, rtt: Duration, outcome: Outcome) -> ControlFlow<()> {
         let status = match outcome {
             Outcome::Sample(status) => status,
-            Outcome::DriverClosed => {
-                self.driver_closed = true;
+            Outcome::DeviceLost => {
+                self.device_lost = true;
                 SampleStatus::NetworkError
             }
         };
@@ -389,7 +465,7 @@ impl Measurement {
             record_rtt(&mut self.rtts, rtt);
             record_rtt(&mut self.live.rtts, rtt);
         }
-        if self.driver_closed {
+        if self.device_lost {
             return ControlFlow::Break(());
         }
         if self.stop_on_error && status != SampleStatus::Ok {
@@ -421,23 +497,10 @@ impl Measurement {
                 counters: self.counters,
             },
             stopped_on_error: self.stopped_on_error,
-            driver_closed: self.driver_closed,
+            device_lost: self.device_lost,
             telemetry_start: self.live.telemetry_start,
             telemetry_end: self.live.telemetry_last,
         }
-    }
-}
-
-struct PendingFuture {
-    sent_at: Instant,
-    fut: ResponseFuture,
-}
-
-impl PendingFuture {
-    async fn acked(self, ack: &mut AckLatency) -> Result<autd3_rs::Response, ClientError> {
-        let response = self.fut.await?;
-        ack.record(self.sent_at.elapsed());
-        Ok(response)
     }
 }
 
@@ -462,6 +525,10 @@ impl Live {
         }
     }
 
+    fn is_due(&self) -> bool {
+        self.last_report.elapsed() >= Duration::from_secs(1)
+    }
+
     async fn report_if_due(
         &mut self,
         client: &Client,
@@ -469,10 +536,10 @@ impl Live {
         traffic: Traffic,
         start: Instant,
     ) {
-        let interval = self.last_report.elapsed();
-        if interval < Duration::from_secs(1) {
+        if !self.is_due() {
             return;
         }
+        let interval = self.last_report.elapsed();
         self.last_report = Instant::now();
         let cmd_per_sec = self.rtts.len() as f64 / interval.as_secs_f64();
         let latency = latency(&self.rtts);
@@ -487,12 +554,13 @@ impl Live {
             &traffic_rate,
         )
         .to_vec();
-        match client.read_telemetry().await {
-            Ok(now) => {
+        match tokio::time::timeout(Duration::from_secs(1), client.read_telemetry()).await {
+            Ok(Ok(now)) => {
                 lines.extend(telemetry_lines(&self.telemetry_start, &now));
                 self.telemetry_last = now;
             }
-            Err(e) => lines.push(format!("{:>11}telemetry  read failed: {e}", "")),
+            Ok(Err(e)) => lines.push(format!("{:>11}telemetry  read failed: {e}", "")),
+            Err(_) => lines.push(format!("{:>11}telemetry  read timed out", "")),
         }
         self.block.draw(&lines);
     }

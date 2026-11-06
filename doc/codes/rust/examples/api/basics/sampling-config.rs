@@ -32,6 +32,5 @@ async fn main() -> Result<()> {
         .await?;
     // ANCHOR_END: modulation
 
-    client.close().await?;
     Ok(())
 }

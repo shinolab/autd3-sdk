@@ -38,7 +38,7 @@ async fn expect_state(
     expected: &str,
     pred: impl Fn(&FpgaState) -> bool,
 ) -> Result<()> {
-    let states = ctx.client.read_fpga_state().await?;
+    let states = ctx.read_fpga_state().await?;
     for (dev, state) in states.iter().enumerate() {
         let mark = if pred(state) { "OK" } else { "FAIL" };
         println!(
@@ -60,7 +60,7 @@ async fn poll_state(
 ) -> Result<()> {
     let start = Instant::now();
     loop {
-        let states = ctx.client.read_fpga_state().await?;
+        let states = ctx.read_fpga_state().await?;
         if states.iter().all(&pred) {
             println!(
                 "  [OK] {label}: all devices reached the expected state ({expected}) after {:.1} s",

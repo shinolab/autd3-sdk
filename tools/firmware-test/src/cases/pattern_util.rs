@@ -48,7 +48,6 @@ pub(crate) fn circle_foci(center: Point3<f32>, n: usize) -> Vec<ControlPoints> {
 
 pub(crate) async fn resyncs(ctx: &Ctx<'_>) -> Result<Vec<u32>> {
     Ok(ctx
-        .client
         .read_telemetry()
         .await?
         .iter()
@@ -149,7 +148,7 @@ pub(crate) async fn report_fpga_state(
     pattern_bank: Option<PatternBank>,
     pattern_mode: Option<bool>,
 ) -> Result<()> {
-    let states = ctx.client.read_fpga_state().await?;
+    let states = ctx.read_fpga_state().await?;
     for (dev, state) in states.iter().enumerate() {
         let mut fields = Vec::new();
         if let Some(expected) = mod_bank {
@@ -191,9 +190,9 @@ async fn send_built(
     ctx: &Ctx<'_>,
     label: &str,
     built: Result<Frames, Error>,
-) -> Option<Result<(), Error>> {
+) -> Option<Result<()>> {
     match built {
-        Ok(frames) => Some(ctx.try_send_frames(&frames).await),
+        Ok(frames) => Some(ctx.send_frames(&frames).await),
         Err(e) => {
             println!("  [FAIL] {label}: rejected client-side before reaching firmware ({e:?})");
             None
@@ -218,16 +217,19 @@ pub(crate) async fn expect_firmware_error(
     let Some(result) = send_built(ctx, label, built).await else {
         return;
     };
-    match result {
-        Err(Error::DeviceError { code, .. }) if code == expected => {
+    match result
+        .as_ref()
+        .map_err(anyhow::Error::downcast_ref::<Error>)
+    {
+        Err(Some(&Error::DeviceError { code, .. })) if code == expected => {
             println!("  [OK] {label}: firmware rejected (code={code:#04x})");
         }
-        Err(Error::DeviceError { device, code }) => {
+        Err(Some(&Error::DeviceError { device, code })) => {
             println!(
                 "  [FAIL] {label}: device[{device}] returned code={code:#04x} (expected {expected:#04x})"
             );
         }
-        Err(e) => println!("  [FAIL] {label}: unexpected error {e:?}"),
+        Err(_) => println!("  [FAIL] {label}: unexpected error {result:?}"),
         Ok(()) => {
             println!("  [FAIL] {label}: firmware accepted the command (expected {expected:#04x})");
         }

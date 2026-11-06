@@ -8,7 +8,7 @@ use autd3_rs_firmware_emulator::autd3_cpu_fw::{
     FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH,
 };
 
-use common::{INVALID_PAYLOAD, REJECTED_BY_THE_DEVICE, fans, open};
+use common::{INVALID_PAYLOAD, REJECTED_BY_THE_DEVICE, fans, open, send_and_collect};
 
 #[tokio::test]
 #[ignore = "depends on real time"]
@@ -20,8 +20,6 @@ async fn a_single_device_receives_what_is_sent() {
 
     client.send(ForceFan { value: true }).await.unwrap();
     assert_eq!(fans(&emulator), [true]);
-
-    client.close().await.unwrap();
 }
 
 #[tokio::test]
@@ -30,19 +28,17 @@ async fn the_emulator_processes_frames_with_an_execution_time_without_waiting() 
     let (emulator, client) = open(3).await;
     let on = Frames::encode(client.geometry(), ForceFan { value: true }).unwrap();
 
-    client
-        .send_frame_at(on.frame(0).unwrap(), ExecAt::Lead(Duration::from_secs(5)))
-        .await
-        .unwrap()
-        .await
-        .unwrap()
-        .check()
-        .unwrap();
+    send_and_collect(
+        &client,
+        on.frame(0).unwrap(),
+        ExecAt::Lead(Duration::from_secs(5)),
+    )
+    .await
+    .check()
+    .unwrap();
     assert_eq!(fans(&emulator), [true, true, true]);
     let telemetry = client.read_telemetry().await.unwrap();
     assert!(telemetry.iter().all(|t| t.exec_late == 0), "{telemetry:?}");
-
-    client.close().await.unwrap();
 }
 
 #[tokio::test]
@@ -52,39 +48,26 @@ async fn a_frame_sent_with_each_execution_time_completes() {
     let on = Frames::encode(client.geometry(), ForceFan { value: true }).unwrap();
     let off = Frames::encode(client.geometry(), ForceFan { value: false }).unwrap();
 
-    client
-        .send_frame_at(on.frame(0).unwrap(), ExecAt::Immediate)
+    send_and_collect(&client, on.frame(0).unwrap(), ExecAt::Immediate)
         .await
-        .unwrap()
-        .await
-        .unwrap()
         .check()
         .unwrap();
     assert_eq!(fans(&emulator), [true, true]);
-    client
-        .send_frame_at(
-            off.frame(0).unwrap(),
-            ExecAt::Lead(Duration::from_millis(1)),
-        )
-        .await
-        .unwrap()
-        .await
-        .unwrap()
-        .check()
-        .unwrap();
+    send_and_collect(
+        &client,
+        off.frame(0).unwrap(),
+        ExecAt::Lead(Duration::from_millis(1)),
+    )
+    .await
+    .check()
+    .unwrap();
     assert_eq!(fans(&emulator), [false, false]);
     let at = client.device_time_now().unwrap() + Duration::from_millis(1);
-    client
-        .send_frame_at(on.frame(0).unwrap(), ExecAt::At(at))
+    send_and_collect(&client, on.frame(0).unwrap(), ExecAt::At(at))
         .await
-        .unwrap()
-        .await
-        .unwrap()
         .check()
         .unwrap();
     assert_eq!(fans(&emulator), [true, true]);
-
-    client.close().await.unwrap();
 }
 
 #[tokio::test]
@@ -96,11 +79,10 @@ async fn a_broadcast_frame_reaches_every_device() {
     assert_eq!(frames.len(), 1);
     let frame = frames.frame(0).unwrap();
     assert_eq!(frame.distribution(), Distribution::Broadcast);
-    let response = client.send_frame(frame).await.unwrap().await.unwrap();
+    let response = send_and_collect(&client, frame, ExecAt::Immediate).await;
 
     assert_eq!(response.error_codes(), [0, 0, 0]);
     assert_eq!(fans(&emulator), [true, true, true]);
-    client.close().await.unwrap();
 }
 
 #[tokio::test]
@@ -117,11 +99,10 @@ async fn a_per_device_frame_delivers_each_device_its_own_payload() {
     assert_eq!(frames.len(), 1);
     let frame = frames.frame(0).unwrap();
     assert_eq!(frame.distribution(), Distribution::PerDevice);
-    let response = client.send_frame(frame).await.unwrap().await.unwrap();
+    let response = send_and_collect(&client, frame, ExecAt::Immediate).await;
 
     assert_eq!(response.error_codes(), [0, 0, 0]);
     assert_eq!(fans(&emulator), [false, true, false]);
-    client.close().await.unwrap();
 }
 
 #[tokio::test]
@@ -138,7 +119,6 @@ async fn a_device_left_out_of_a_per_device_command_keeps_its_state() {
         .unwrap();
 
     assert_eq!(fans(&emulator), [false, true]);
-    client.close().await.unwrap();
 }
 
 #[tokio::test]
@@ -162,7 +142,6 @@ async fn the_firmware_version_is_read_from_every_device() {
         assert!(version.is_emulator());
         assert!(version.is_supported());
     }
-    client.close().await.unwrap();
 }
 
 #[tokio::test]
@@ -175,7 +154,6 @@ async fn the_fpga_state_is_read_from_every_device() {
     let expected: Vec<u8> =
         emulator.with_devices(|devices| devices.iter().map(|d| d.fpga().fpga_state()).collect());
     assert_eq!(states.iter().map(|s| s.0).collect::<Vec<_>>(), expected);
-    client.close().await.unwrap();
 }
 
 #[tokio::test]
@@ -194,7 +172,6 @@ async fn the_telemetry_counts_the_frames_each_device_processed() {
         assert_eq!(after.processed - before.processed, 5);
         assert_eq!(after.fifo_drop, 0);
     }
-    client.close().await.unwrap();
 }
 
 #[tokio::test]
@@ -212,7 +189,6 @@ async fn an_error_reported_by_a_device_fails_only_that_send() {
         }
     ));
     client.send(Nop).await.unwrap();
-    client.close().await.unwrap();
 }
 
 #[tokio::test]
@@ -234,7 +210,6 @@ async fn a_per_device_error_names_the_device_that_reported_it() {
             code: INVALID_PAYLOAD
         }
     ));
-    client.close().await.unwrap();
 }
 
 #[tokio::test]
@@ -247,19 +222,13 @@ async fn the_response_of_a_frame_carries_the_status_of_every_device() {
     )
     .unwrap();
 
-    let response = client
-        .send_frame(frames.frame(0).unwrap())
-        .await
-        .unwrap()
-        .await
-        .unwrap();
+    let response = send_and_collect(&client, frames.frame(0).unwrap(), ExecAt::Immediate).await;
 
     assert_eq!(response.error_codes(), [0, INVALID_PAYLOAD, 0]);
     assert!(matches!(
         response.check(),
         Err(Error::DeviceError { device: 1, .. })
     ));
-    client.close().await.unwrap();
 }
 
 #[tokio::test]
@@ -274,15 +243,14 @@ async fn a_frame_rebuilt_from_its_datagrams_is_sent_like_the_original() {
     let encoded = frames.frame(0).unwrap();
     let datagrams = encoded.datagrams().to_vec();
 
-    client
-        .send_frame(Frame::new(encoded.distribution(), &datagrams))
-        .await
-        .unwrap()
-        .await
-        .unwrap()
-        .check()
-        .unwrap();
+    send_and_collect(
+        &client,
+        Frame::new(encoded.distribution(), &datagrams),
+        ExecAt::Immediate,
+    )
+    .await
+    .check()
+    .unwrap();
 
     assert_eq!(fans(&emulator), [false, true]);
-    client.close().await.unwrap();
 }

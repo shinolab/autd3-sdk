@@ -6,7 +6,9 @@ mod fpga_image;
 mod update;
 mod verify;
 
+use std::ops::Deref;
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
@@ -14,18 +16,70 @@ use clap::Parser;
 
 use crate::cli::{Cli, Command, Connection};
 use crate::cpu::{main_cpu, print_cpu};
+use crate::error::OtaError;
 use crate::fpga::{main_fpga, print_fpga};
-use crate::update::ACK_TIMEOUT;
+use crate::update::{ACK_TIMEOUT, REBOOT_ACK_TIMEOUT};
+use autd3_cpu_wire::update::RunningImage;
 use autd3_firmware_writer::bundle;
-use autd3_rs::commands::{Reboot, UpdateConfirm};
+use autd3_rs::commands::{Command as ClientCommand, Reboot, UpdateConfirm};
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::{Client, Error, Interface, TransportOption, Version};
+use autd3_rs::{Client, Error, FirmwareVersion, Interface, TransportOption, Version};
 
 fn read_image(path: &Path) -> Result<Vec<u8>> {
     std::fs::read(path).with_context(|| format!("reading {}", path.display()))
 }
 
-async fn connect(connection: &Connection, num_devices: usize) -> Result<Client, Error> {
+pub(crate) struct Connected {
+    client: Arc<Client>,
+    heartbeat: tokio::task::AbortHandle,
+}
+
+impl Deref for Connected {
+    type Target = Client;
+
+    fn deref(&self) -> &Client {
+        &self.client
+    }
+}
+
+impl Drop for Connected {
+    fn drop(&mut self) {
+        self.heartbeat.abort();
+    }
+}
+
+impl Connected {
+    pub(crate) async fn send_within<C: ClientCommand>(
+        &self,
+        timeout: Duration,
+        cmd: C,
+    ) -> Result<(), OtaError> {
+        within(timeout, self.client.send(cmd)).await
+    }
+
+    pub(crate) async fn send<C: ClientCommand>(&self, cmd: C) -> Result<(), OtaError> {
+        self.send_within(ACK_TIMEOUT, cmd).await
+    }
+
+    pub(crate) async fn read_firmware_version(&self) -> Result<Vec<FirmwareVersion>, OtaError> {
+        within(ACK_TIMEOUT, self.client.read_firmware_version()).await
+    }
+
+    pub(crate) async fn read_running_image(&self) -> Result<Vec<Option<RunningImage>>, OtaError> {
+        within(ACK_TIMEOUT, self.client.read_running_image()).await
+    }
+}
+
+async fn within<T>(
+    timeout: Duration,
+    replied: impl Future<Output = Result<T, Error>>,
+) -> Result<T, OtaError> {
+    Ok(tokio::time::timeout(timeout, replied)
+        .await
+        .map_err(|_| OtaError::Timeout(timeout))??)
+}
+
+async fn connect(connection: &Connection, num_devices: usize) -> Result<Connected, Error> {
     let default = TransportOption::default();
     let option = TransportOption {
         iface: connection
@@ -33,15 +87,27 @@ async fn connect(connection: &Connection, num_devices: usize) -> Result<Client, 
             .as_deref()
             .map_or(Interface::Auto, |name| Interface::Name(name.to_owned())),
         open_timeout: connection.open_timeout.unwrap_or(default.open_timeout),
-        ack_timeout: ACK_TIMEOUT,
         sync_on_open: false,
-        heartbeat_interval: Some(Duration::from_millis(10)),
         ..default
     };
     let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()));
-    let client = Client::open(&geometry, &option).await?;
+    let client = Arc::new(Client::open(&geometry, &option).await?);
     println!("{} device(s) on the bus", client.num_devices());
-    Ok(client)
+    let heartbeat = tokio::spawn({
+        let client = Arc::clone(&client);
+        let mut interval = tokio::time::interval(Duration::from_millis(10));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        async move {
+            loop {
+                interval.tick().await;
+                if let Err(e) = client.send_heartbeat().await {
+                    eprintln!("warning: sending a heartbeat failed: {e}");
+                }
+            }
+        }
+    })
+    .abort_handle();
+    Ok(Connected { client, heartbeat })
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 1)]
@@ -50,8 +116,7 @@ async fn main() -> Result<()> {
     match &command {
         Command::Reboot { connection } => {
             let client = connect(connection, connection.devices).await?;
-            client.set_ack_timeout(Duration::from_secs(5));
-            client.send(Reboot).await?;
+            client.send_within(REBOOT_ACK_TIMEOUT, Reboot).await?;
             println!(
                 "reboot acknowledged; the devices reset in about 100 ms and come back unassigned"
             );

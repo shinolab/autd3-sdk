@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
     let RunOutput {
         summary,
         stopped_on_error,
-        driver_closed,
+        device_lost,
         telemetry_start,
         telemetry_end,
     } = output;
@@ -40,9 +40,9 @@ async fn main() -> Result<()> {
     if let Some((index, status)) = stopped_on_error {
         anyhow::bail!("stopped at send #{index}: {status:?} (--stop-on-error)");
     }
-    if driver_closed {
+    if device_lost {
         anyhow::bail!(
-            "the client closed before the run finished; \
+            "a device was lost before the run finished; \
              the summary covers only what was sent until then"
         );
     }

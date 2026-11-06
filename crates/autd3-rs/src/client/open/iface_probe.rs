@@ -9,13 +9,7 @@ pub(super) async fn resolve(iface: &Interface) -> Result<ResolvedEndpoint, UdpEr
     async fn devices_respond_at(endpoint: ResolvedEndpoint) -> Result<bool, UdpError> {
         let channel = Channel::open(endpoint.all_devices_dst, endpoint.scope_id, None).await?;
         channel
-            .send(
-                endpoint.all_devices_dst,
-                Kind::ReadUnitInfo,
-                0,
-                [&[], &[]],
-                None,
-            )
+            .send(endpoint.all_devices_dst, Kind::ReadUnitInfo, 0, [&[], &[]])
             .await?;
         match collect_responses(&channel, Kind::ReadUnitInfo, 0, REQUEST_REPLY_WAIT, Some(1)).await
         {

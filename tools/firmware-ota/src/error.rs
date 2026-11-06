@@ -48,6 +48,8 @@ pub(crate) struct NotOnTrial {
 pub(crate) enum OtaError {
     #[error(transparent)]
     Autd3(#[from] Error),
+    #[error("not every device replied within {0:?}")]
+    Timeout(std::time::Duration),
     #[error(
         "device {device} runs an FPGA image without configuration-flash access; flash `autd3-fpga.mcs` once via JTAG"
     )]

@@ -44,7 +44,6 @@ async fn main() -> anyhow::Result<()> {
         transition_mode: TransitionMode::Immediate,
     }).await?;
 
-    client.close().await?;
     // HIDE
     Ok(())
 }

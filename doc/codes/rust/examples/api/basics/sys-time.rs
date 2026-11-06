@@ -27,6 +27,5 @@ async fn main() -> anyhow::Result<()> {
 
     let _ = (opened, raw, ns, elapsed, is_after);
 
-    client.close().await?;
     Ok(())
 }

@@ -74,6 +74,5 @@ async fn main() -> Result<()> {
     // ANCHOR_END: workaround
 
     client.send(Pattern::new(&geometry.phase_buffer(), Intensity::MIN)).await?;
-    client.close().await?;
     Ok(())
 }

@@ -74,17 +74,15 @@ async fn the_bundled_firmware_is_in_the_supported_series() {
 
     assert_eq!(versions.len(), 2);
     assert!(versions.iter().all(FirmwareVersion::is_supported));
-    client.close().await.unwrap();
 }
 
 #[tokio::test]
 #[ignore = "depends on real time"]
-async fn the_devices_can_be_opened_again_after_a_close() {
+async fn the_devices_can_be_opened_again_after_a_drop() {
     let emulator = emulator(3);
     for _ in 0..2 {
         let client = open_with(&emulator, &option(&emulator)).await;
         client.send(Nop).await.unwrap();
         assert_eq!(client.read_firmware_version().await.unwrap().len(), 3);
-        client.close().await.unwrap();
     }
 }

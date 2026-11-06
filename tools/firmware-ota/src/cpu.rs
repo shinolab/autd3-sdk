@@ -4,14 +4,15 @@ use anyhow::{Context, Result};
 
 use autd3_cpu_wire::update::RunningImage;
 use autd3_firmware_writer::image::CpuFirmwareImage;
+use autd3_rs::Version;
 use autd3_rs::commands::{Reboot, UpdateConfirm};
-use autd3_rs::{Client, Version};
 
 use crate::cli::{Connection, UpdateArgs};
-use crate::connect;
+use crate::error::OtaError;
 use crate::error::{NotOnTrial, TrialNotRunning};
-use crate::update::{activate_unrebooted, update_cpu};
+use crate::update::{REBOOT_ACK_TIMEOUT, activate_unrebooted, update_cpu};
 use crate::verify::{Expect, check_expectation, check_trial, describe_running_image};
+use crate::{Connected, connect};
 
 const RECONNECT_INTERVAL: Duration = Duration::from_secs(2);
 const CONFIRM_HINT: &str = "the new CPU image is running but not confirmed: run `autd3-firmware-ota \
@@ -47,13 +48,12 @@ pub(crate) async fn main_cpu(
         );
         return Ok(());
     }
-    client.set_ack_timeout(Duration::from_secs(5));
-    let acknowledged = match client.send(Reboot).await {
+    let acknowledged = match client.send_within(REBOOT_ACK_TIMEOUT, Reboot).await {
         Ok(()) => {
             println!("activation acknowledged; the devices reboot in about 100 ms");
             true
         }
-        Err(autd3_rs::Error::Timeout { .. } | autd3_rs::Error::DeviceLost { .. }) => {
+        Err(OtaError::Timeout(_) | OtaError::Autd3(autd3_rs::Error::DeviceLost { .. })) => {
             eprintln!(
                 "warning: not every device acknowledged the activation; the devices that \
                  have not rebooted are activated after the reconnection"
@@ -146,7 +146,7 @@ async fn reconnect(
 }
 
 pub(crate) async fn print_cpu(
-    client: &Client,
+    client: &Connected,
     label: &str,
 ) -> Result<(Vec<Version>, Vec<Option<RunningImage>>)> {
     let versions: Vec<Version> = client

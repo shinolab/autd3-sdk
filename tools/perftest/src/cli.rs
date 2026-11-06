@@ -79,7 +79,7 @@ pub(crate) struct Cli {
         long = "ack-timeout",
         value_parser = humantime::parse_duration,
         default_value = "10ms",
-        help = "maps to TransportOption.ack_timeout"
+        help = "How long to wait for the replies of a frame before counting it as a timeout"
     )]
     pub ack_timeout: Duration,
     #[arg(
