@@ -37,8 +37,6 @@ The `Client` connects to the devices (or the [Simulator](/autd3-sdk/en/guide/sim
 | `num_devices()`           | —     | `usize`                               | Number of connected devices                                |
 | `geometry()`              | —     | `&Geometry`                           | Physical layout of the devices given at open time          |
 | `read_firmware_version()` | ✓     | `Result<Vec<FirmwareVersion>, Error>` | CPU/FPGA firmware version of each device                   |
-| `read_fpga_state()`       | ✓     | `Result<Vec<FpgaState>, Error>`       | FPGA state of each device                                  |
-| `read_telemetry()`        | ✓     | `Result<Vec<Telemetry>, Error>`       | CPU diagnostic counters of each device                     |
 | `device_time_now()`       | —     | `Result<SysTime, Error>`              | Current time of the devices (see [SysTime](/autd3-sdk/en/api/basics/sys-time/)) |
 | `send(cmd)`               | ✓     | `Result<(), Error>`                   | Send a command, confirming the response frame by frame     |
 | `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | Send one frame (see [streaming](#streaming))                |
@@ -66,8 +64,8 @@ While `MAX_INFLIGHT` frames are waiting for their replies, `send_frame` waits un
 
 ## Types of the Read Results
 
-`read_firmware_version()` / `read_fpga_state()` / `read_telemetry()` return an array with one element per device, in device-number order.
-If even one device is lost, the `Client` closes and they fail with `DeviceLost`.
+`read_firmware_version()` returns an array with one element per device, in device-number order.
+If even one device is lost, the `Client` closes and it fails with `DeviceLost`.
 
 ### FirmwareVersion
 
@@ -81,6 +79,10 @@ If even one device is lost, the `Client` closes and they fail with `DeviceLost`.
 
 ### FpgaState
 
+FPGA state flags. There is no command to read them: every reply to a frame or a heartbeat carries them.
+Read them from `fpga_state` of the `DeviceReply` returned by `recv()`, or from `fpga_state()` of the `Response` returned by `collect` (in device-number order).
+The reply to a frame carries the state right after the frame was processed; the reply to a heartbeat may be up to 1 ms old (older while the device is busy with a long operation). To see when a bank switch took effect, send a frame such as `Nop` and look at its reply.
+
 | Method                    | Type             | Description                              |
 | ------------------------- | ---------------- | ---------------------------------------- |
 | `is_thermal_asserted()`   | `bool`           | Whether the thermal sensor is over the threshold |
@@ -93,20 +95,18 @@ If even one device is lost, the `Client` closes and they fail with `DeviceLost`.
 
 ### Telemetry
 
-CPU diagnostic counters.
+CPU diagnostic counters. There is no command to read them: every reply to a frame or a heartbeat carries them.
+Read them from `telemetry` of the `DeviceReply` returned by `recv()`, or from `telemetry()` of the `Response` returned by `collect` (in device-number order).
 
 | Field                 | Type  | Description                                            |
 | --------------------- | ----- | ------------------------------------------------------ |
-| `fifo_drop`           | `u32` | Frames dropped because the receive FIFO was full       |
-| `dispatch_error`      | `u32` | Number of times processing ended in an error           |
-| `processed`           | `u32` | Frames processed                                       |
-| `send_failure`        | `u32` | Number of times the NIC refused to send                |
-| `failsafe`            | `u16` | Number of times the failsafe fired because communication with the host was lost |
-| `ptp_unlock_failsafe` | `u16` | Number of times the failsafe fired because the PTP lock was lost |
-| `sync_resync`         | `u8`  | Number of hardware resynchronizations of the sync input (reset to 0 by `Synchronize`) |
-| `boot_failure`        | `u8`  | Number of steps that failed at boot (not cleared by `Clear`) |
-| `cpu_watchdog`        | `u8`  | Number of times the CPU watchdog fired (kept until the FPGA is reconfigured) |
+| `fifo_drop`           | `u32` | Frames dropped because the receive FIFO was full (a dropped frame gets no reply) |
 | `exec_late`           | `u32` | Frames whose processing started 1 µs or more after their [processing time](#processing-time) |
+| `sync_resync`         | `u8`  | Number of hardware resynchronizations of the sync input (reset to 0 by `Synchronize`) |
+| `cpu_watchdog`        | `u8`  | Number of times the CPU watchdog fired (kept until the FPGA is reconfigured) |
+| `boot_failure`        | `u8`  | Number of steps that failed at boot (not cleared by `Clear`) |
+
+What the replies already show is not included: the number of processed frames is the number of replies, a command error is the status of its reply, and a failsafe trip shows up as `DeviceStatus::failsafe_active` turning on.
 
 ## Processing time
 
@@ -126,7 +126,7 @@ To send a command with a processing time, convert it into frames with `Frames::e
 
 Note the following:
 - It does not guarantee that every device always starts processing at the same time
-  - If sending to every device does not finish by the stamped time, a late device processes the frame after the stamped time. `exec_late` of `read_telemetry` counts how often that happened.
+  - If sending to every device does not finish by the stamped time, a late device processes the frame after the stamped time. `exec_late` in the telemetry counts how often that happened.
   - When frames are sent one after another without waiting for the responses ([streaming](#streaming)), the stamped time of a frame can come while the device is still processing the previous one; that frame is processed late (and counted in `exec_late`).
   - Even when it succeeds, only the start of the processing inside the CPU board is aligned; it does not guarantee that the start of the processing on the FPGA is aligned (that is, for example, that the phase of the emitted ultrasound is updated at the same timing)
 - The response comes back after the processing, so a send completes only after the stamped time. Waiting for the response frame by frame, a command of several frames takes about the number of frames × `lead`

@@ -564,6 +564,7 @@ impl Frame {
 pub(crate) struct Harness {
     pub cpu: Rc<Cpu>,
     pub port: MockPort,
+    processed: u32,
 }
 
 impl Harness {
@@ -571,11 +572,16 @@ impl Harness {
         let cpu = Rc::new(Cpu::new());
         let mut port = MockPort::new();
         cpu.init(&mut port);
-        Self { cpu, port }
+        Self {
+            cpu,
+            port,
+            processed: 0,
+        }
     }
 
     pub(crate) fn reboot(&mut self) {
         self.cpu = Rc::new(Cpu::new());
+        self.processed = 0;
         self.cpu.mark_boot_attempt(&mut self.port);
         self.cpu.init(&mut self.port);
     }
@@ -590,7 +596,9 @@ impl Harness {
     }
 
     pub(crate) fn process_one(&mut self) -> bool {
-        self.cpu.process_one(&mut self.port) != Drained::Empty
+        let completed = self.cpu.process_one(&mut self.port) != Drained::Empty;
+        self.processed += u32::from(completed);
+        completed
     }
 
     fn reply(&self) -> Reply {
@@ -598,7 +606,7 @@ impl Harness {
     }
 
     pub(crate) fn processed(&self) -> u32 {
-        self.telemetry().processed.get()
+        self.processed
     }
 
     pub(crate) fn status(&self) -> Error {
@@ -648,7 +656,7 @@ impl Harness {
     }
 
     pub(crate) fn telemetry(&self) -> Telemetry {
-        self.cpu.telemetry(0, 0)
+        self.cpu.telemetry()
     }
 
     pub(crate) fn output_mask(&self, idx: usize) -> u16 {

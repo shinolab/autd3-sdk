@@ -32,25 +32,6 @@ fn unlocked_ptp() -> PtpConfig {
     }
 }
 
-struct Observed {
-    ptp_trips: Vec<u16>,
-    host_trips: Vec<u16>,
-    gates: Vec<bool>,
-}
-
-async fn observe(ctx: &Ctx<'_>) -> Result<Observed> {
-    let telemetry = ctx.read_telemetry().await?;
-    Ok(Observed {
-        ptp_trips: telemetry.iter().map(|t| t.ptp_unlock_failsafe).collect(),
-        host_trips: telemetry.iter().map(|t| t.failsafe).collect(),
-        gates: ctx.failsafe_gates().await?,
-    })
-}
-
-fn untouched(seen: &Observed) -> bool {
-    seen.ptp_trips.iter().all(|c| *c == 0) && seen.gates.iter().all(|g| !g)
-}
-
 async fn emit(ctx: &Ctx<'_>) -> Result<()> {
     ctx.send(Clear).await?;
     ctx.send(SetGpioOut {
@@ -109,12 +90,10 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     emit(ctx).await?;
     let outcome = async {
         println!("-- lock dropped by a holdover shorter than the sync interval");
-        let seen = observe(ctx).await?;
+        let gates = ctx.failsafe_gates().await?;
         println!(
-            "  {} nothing has tripped before any change: trips {:?} gates {:?}",
-            verdict(untouched(&seen)),
-            seen.ptp_trips,
-            seen.gates
+            "  {} nothing has tripped before any change: gates {gates:?}",
+            verdict(gates.iter().all(|g| !g))
         );
 
         ctx.send(SetCpuConfig::new(CpuConfig {
@@ -123,11 +102,10 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
         }))
         .await?;
         let s = watch(ctx, "timeout armed, default PTP", Duration::from_secs(3)).await?;
-        let seen = observe(ctx).await?;
+        let gates = ctx.failsafe_gates().await?;
         println!(
-            "  {} an armed timeout (1s) never trips while every device is locked: trips {:?}",
-            verdict(s.iter().all(|d| *d == DeviceState::Ready) && untouched(&seen)),
-            seen.ptp_trips
+            "  {} an armed timeout (1s) never trips while every device is locked: gates {gates:?}",
+            verdict(s.iter().all(|d| *d == DeviceState::Ready) && gates.iter().all(|g| !g))
         );
 
         ctx.send(SetCpuConfig::new(CpuConfig {
@@ -146,12 +124,10 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
             "  {} the slaves lose the lock and the grandmaster keeps it",
             verdict(slaves_unlocked && s.first() == Some(&DeviceState::Ready))
         );
-        let seen = observe(ctx).await?;
+        let gates = ctx.failsafe_gates().await?;
         println!(
-            "  {} a disabled timeout (None) never trips while the slaves are unlocked: trips {:?} gates {:?}",
-            verdict(untouched(&seen)),
-            seen.ptp_trips,
-            seen.gates
+            "  {} a disabled timeout (None) never trips while the slaves are unlocked: gates {gates:?}",
+            verdict(gates.iter().all(|g| !g))
         );
 
         ctx.send(SetCpuConfig::new(CpuConfig {
@@ -161,25 +137,14 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
         }))
         .await?;
         tokio::time::sleep(Duration::from_secs(3)).await;
-        let seen = observe(ctx).await?;
+        let gates = ctx.failsafe_gates().await?;
         println!(
-            "  {} every slave trips once the lock has been gone for 1s: trips {:?}",
-            verdict(seen.ptp_trips.len() > 1 && seen.ptp_trips[1..].iter().all(|c| *c > 0)),
-            seen.ptp_trips
+            "  {} every slave raises its failsafe gate once the lock has been gone for 1s: gates {gates:?}",
+            verdict(gates.len() > 1 && gates[1..].iter().all(|g| *g))
         );
         println!(
-            "  {} the trip raises the failsafe gate on every slave: gates {:?}",
-            verdict(seen.gates.len() > 1 && seen.gates[1..].iter().all(|g| *g)),
-            seen.gates
-        );
-        println!(
-            "  {} the grandmaster neither trips nor raises its gate",
-            verdict(seen.ptp_trips.first() == Some(&0) && seen.gates.first() == Some(&false))
-        );
-        println!(
-            "  {} the host-silence failsafe did not trip, so the gate is the PTP one: host trips {:?}",
-            verdict(seen.host_trips.iter().all(|c| *c == 0)),
-            seen.host_trips
+            "  {} the grandmaster keeps its gate down",
+            verdict(gates.first() == Some(&false))
         );
         wait_enter("Every slave stopped emitting, and the grandmaster still emits").await;
         expect_firmware_error(
@@ -189,11 +154,10 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
             ERR_FAILSAFE_CONDITION_ACTIVE,
         )
         .await;
-        let seen = observe(ctx).await?;
+        let gates = ctx.failsafe_gates().await?;
         println!(
-            "  {} the refused release left the gate up on every slave: gates {:?}",
-            verdict(seen.gates.len() > 1 && seen.gates[1..].iter().all(|g| *g)),
-            seen.gates
+            "  {} the refused release left the gate up on every slave: gates {gates:?}",
+            verdict(gates.len() > 1 && gates[1..].iter().all(|g| *g))
         );
         ctx.send(SetCpuConfig::new(CpuConfig {
             ptp_unlock_failsafe_timeout: Some(Duration::from_secs(1)),
@@ -210,11 +174,10 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
             "  {} every device locks again",
             verdict(s.iter().all(|d| *d == DeviceState::Ready))
         );
-        let seen = observe(ctx).await?;
+        let gates = ctx.failsafe_gates().await?;
         println!(
-            "  {} locking again does not lower the gate by itself: gates {:?}",
-            verdict(seen.gates.len() > 1 && seen.gates[1..].iter().all(|g| *g)),
-            seen.gates
+            "  {} locking again does not lower the gate by itself: gates {gates:?}",
+            verdict(gates.len() > 1 && gates[1..].iter().all(|g| *g))
         );
         wait_enter("Every slave is still silent after locking again").await;
         expect_firmware_ok(
@@ -223,11 +186,10 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
             Frames::encode(ctx.client.geometry(), ReleaseFailsafe),
         )
         .await;
-        let seen = observe(ctx).await?;
+        let gates = ctx.failsafe_gates().await?;
         println!(
-            "  {} the release lowered every gate: gates {:?}",
-            verdict(seen.gates.iter().all(|g| !g)),
-            seen.gates
+            "  {} the release lowered every gate: gates {gates:?}",
+            verdict(gates.iter().all(|g| !g))
         );
         wait_enter("Every device emits again").await;
         ctx.send(Synchronize).await?;
@@ -254,28 +216,14 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
                 states(ctx).await?
             );
 
-            let seen = observe(ctx).await?;
+            let gates = ctx.failsafe_gates().await?;
             println!(
-                "  {} device[{last}] tripped while it was cut off: trips {:?}",
-                verdict(seen.ptp_trips[last] > 0),
-                seen.ptp_trips
+                "  {} device[{last}] raised its failsafe gate while it was cut off: gates {gates:?}",
+                verdict(gates[last])
             );
             println!(
-                "  {} the trip raised the failsafe gate on device[{last}]: gates {:?}",
-                verdict(seen.gates[last]),
-                seen.gates
-            );
-            println!(
-                "  {} the devices that stayed connected neither tripped nor raised their gate",
-                verdict(
-                    seen.ptp_trips[..last].iter().all(|c| *c == 0)
-                        && seen.gates[..last].iter().all(|g| !g)
-                )
-            );
-            println!(
-                "  {} the disabled host-silence failsafe did not trip: host trips {:?}",
-                verdict(seen.host_trips.iter().all(|c| *c == 0)),
-                seen.host_trips
+                "  {} the devices that stayed connected kept their gate down",
+                verdict(gates[..last].iter().all(|g| !g))
             );
             wait_enter(&format!(
                 "device[{last}] is silent, and every other device still emits"
@@ -289,11 +237,10 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
                 Frames::encode(ctx.client.geometry(), ReleaseFailsafe),
             )
             .await;
-            let seen = observe(ctx).await?;
+            let gates = ctx.failsafe_gates().await?;
             println!(
-                "  {} the release lowered every gate: gates {:?}",
-                verdict(seen.gates.iter().all(|g| !g)),
-                seen.gates
+                "  {} the release lowered every gate: gates {gates:?}",
+                verdict(gates.iter().all(|g| !g))
             );
             wait_enter("Every device emits again").await;
             ctx.send(Synchronize).await

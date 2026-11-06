@@ -12,13 +12,14 @@ use anyhow::{Context, Result};
 use clap::Parser;
 
 use autd3_rs::commands::{
-    Clear, Command, FixedCompletionTime, GpioOut, Pattern, SetGpioOut, SetSilencer, Synchronize,
+    Clear, Command, FixedCompletionTime, GpioOut, Nop, Pattern, SetGpioOut, SetSilencer,
+    Synchronize,
 };
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::value::Intensity;
 use autd3_rs::{
     Client, DeviceState, DeviceStatus, Error, ExecAt, FirmwareVersion, FpgaState, Frames,
-    Interface, Telemetry, TransportOption,
+    Interface, Response, Telemetry, TransportOption,
 };
 
 use crate::cli::Cli;
@@ -55,15 +56,17 @@ impl Ctx<'_> {
         Ok(())
     }
 
-    pub(crate) async fn device_status(&self) -> Result<Vec<DeviceStatus>> {
+    async fn heartbeat_response(&self) -> Result<Response> {
         self.client.discard_unread_replies()?;
-        let response = self
-            .within(async {
-                let msg_id = self.client.send_heartbeat().await?;
-                self.client.collect(msg_id).await
-            })
-            .await?;
-        Ok(response.device_status())
+        self.within(async {
+            let msg_id = self.client.send_heartbeat().await?;
+            self.client.collect(msg_id).await
+        })
+        .await
+    }
+
+    pub(crate) async fn device_status(&self) -> Result<Vec<DeviceStatus>> {
+        Ok(self.heartbeat_response().await?.device_status())
     }
 
     pub(crate) async fn read_firmware_version(&self) -> Result<Vec<FirmwareVersion>> {
@@ -71,11 +74,20 @@ impl Ctx<'_> {
     }
 
     pub(crate) async fn read_fpga_state(&self) -> Result<Vec<FpgaState>> {
-        self.within(self.client.read_fpga_state()).await
+        let frames = Frames::encode(self.client.geometry(), Nop)?;
+        let frame = frames.frame(0).context("Nop encodes to one frame")?;
+        self.client.discard_unread_replies()?;
+        let response = self
+            .within(async {
+                let msg_id = self.client.send_frame(frame, ExecAt::Immediate).await?;
+                self.client.collect(msg_id).await
+            })
+            .await?;
+        Ok(response.fpga_state().to_vec())
     }
 
     pub(crate) async fn read_telemetry(&self) -> Result<Vec<Telemetry>> {
-        self.within(self.client.read_telemetry()).await
+        Ok(self.heartbeat_response().await?.telemetry().to_vec())
     }
 
     pub(crate) async fn device_states(&self) -> Result<Vec<DeviceState>> {

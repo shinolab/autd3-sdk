@@ -19,11 +19,9 @@ use crate::commands::operation::Distribution;
 use crate::datagram::{Datagram, Frame, Frames};
 use crate::error::{Error, PayloadError};
 use crate::firmware_version::FirmwareVersion;
-use crate::fpga_state::FpgaState;
 use crate::geometry::Geometry;
 use crate::protocol::{Cmd, DeviceErrorCode, FrameHeader, PAYLOAD_BYTES};
 use crate::response::Response;
-use crate::telemetry::Telemetry;
 use crate::udp::{Channel, DeviceReply, TransportOption, UdpError};
 use crate::value::SysTime;
 
@@ -189,26 +187,17 @@ impl Client {
         Ok(response)
     }
 
-    async fn read_values<T>(
-        &self,
-        cmd: Cmd,
-        parse: impl Fn(&[u8]) -> Option<T>,
-    ) -> Result<Vec<T>, Error> {
-        let datagram = [Datagram::no_payload(cmd)];
+    pub async fn read_firmware_version(&self) -> Result<Vec<FirmwareVersion>, Error> {
+        let datagram = [Datagram::no_payload(Cmd::ReadFirmwareInfo)];
         let response = self
             .send_and_collect(Frame::new(Distribution::Broadcast, &datagram))
             .await?;
         response.check()?;
-        response.parse_each_device(parse)
-    }
-
-    pub async fn read_firmware_version(&self) -> Result<Vec<FirmwareVersion>, Error> {
-        self.read_values(Cmd::ReadFirmwareInfo, |value| {
+        response.parse_each_device(|value| {
             FirmwareInfo::read_from_prefix(value)
                 .ok()
                 .map(|(info, _)| FirmwareVersion::from_info(info))
         })
-        .await
     }
 
     #[doc(hidden)]
@@ -232,17 +221,6 @@ impl Client {
             })
             .collect()
     }
-
-    pub async fn read_fpga_state(&self) -> Result<Vec<FpgaState>, Error> {
-        self.read_values(Cmd::ReadFpgaState, |value| {
-            value.first().copied().map(FpgaState)
-        })
-        .await
-    }
-
-    pub async fn read_telemetry(&self) -> Result<Vec<Telemetry>, Error> {
-        self.read_values(Cmd::ReadTelemetry, Telemetry::parse).await
-    }
 }
 
 #[cfg(test)]
@@ -256,6 +234,8 @@ mod tests {
     use zerocopy::little_endian::{I32, U64};
 
     use crate::commands::Nop;
+    use crate::fpga_state::FpgaState;
+    use crate::telemetry::Telemetry;
     use crate::test_utils::test_geometry;
 
     use super::*;
@@ -320,6 +300,11 @@ mod tests {
             flags,
             unit_id: 0,
             sys_time: U64::new(0),
+            telemetry: autd3_cpu_wire::payload::Telemetry {
+                exec_late: 6.into(),
+                ..Default::default()
+            },
+            fpga_state: 0x10,
         };
         let datagram = [
             Header::new(Kind::Frame, msg_id).as_bytes(),
@@ -437,6 +422,11 @@ mod tests {
                 flags,
                 unit_id: 0,
                 sys_time: 0,
+                telemetry: Telemetry {
+                    exec_late: 6,
+                    ..Telemetry::default()
+                },
+                fpga_state: FpgaState(0x10),
                 data: vec![1, 2],
             }
         );
@@ -453,6 +443,8 @@ mod tests {
             flags: Flags::ASSIGNED,
             unit_id: 1,
             sys_time: U64::new(0),
+            telemetry: autd3_cpu_wire::payload::Telemetry::default(),
+            fpga_state: 0,
         };
         let datagram = [
             Header::new(Kind::Heartbeat, msg_id).as_bytes(),

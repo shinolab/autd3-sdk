@@ -120,10 +120,7 @@ impl Chain {
         for part in body_parts {
             datagram.extend_from_slice(part);
         }
-        let unit = &self.units[index];
-        if unit.socket.send_to(&datagram, dst).is_err() {
-            unit.device.cpu.count_send_failures(1);
-        }
+        let _ = self.units[index].socket.send_to(&datagram, dst);
     }
 
     fn reply_status(
@@ -277,6 +274,8 @@ impl Chain {
             flags: self.flags(index),
             unit_id,
             sys_time: U64::new(self.device_now()),
+            telemetry: self.units[index].device.cpu.telemetry(),
+            fpga_state: self.units[index].device.cpu.fpga_state(),
         };
         self.reply(index, dst, header, &[head.as_bytes(), state.data()]);
     }

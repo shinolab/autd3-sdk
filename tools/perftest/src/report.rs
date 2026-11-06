@@ -11,72 +11,38 @@ struct TelemetryCounter {
     name: &'static str,
     read: fn(&Telemetry) -> u32,
     mask: u32,
-    per_device: bool,
     absolute: bool,
 }
 
-const TELEMETRY_COUNTERS: [TelemetryCounter; 9] = [
+const TELEMETRY_COUNTERS: [TelemetryCounter; 5] = [
     TelemetryCounter {
         name: "fifo_drop",
         read: |t| t.fifo_drop,
         mask: u32::MAX,
-        per_device: true,
-        absolute: false,
-    },
-    TelemetryCounter {
-        name: "dispatch_error",
-        read: |t| t.dispatch_error,
-        mask: u32::MAX,
-        per_device: true,
-        absolute: false,
-    },
-    TelemetryCounter {
-        name: "send_failure",
-        read: |t| t.send_failure,
-        mask: u32::MAX,
-        per_device: true,
-        absolute: false,
-    },
-    TelemetryCounter {
-        name: "failsafe",
-        read: |t| u32::from(t.failsafe),
-        mask: 0xFFFF,
-        per_device: true,
-        absolute: false,
-    },
-    TelemetryCounter {
-        name: "ptp_unlock_failsafe",
-        read: |t| u32::from(t.ptp_unlock_failsafe),
-        mask: 0xFFFF,
-        per_device: true,
-        absolute: false,
-    },
-    TelemetryCounter {
-        name: "sync_resync",
-        read: |t| u32::from(t.sync_resync),
-        mask: 0xFF,
-        per_device: true,
-        absolute: true,
-    },
-    TelemetryCounter {
-        name: "boot_failure",
-        read: |t| u32::from(t.boot_failure),
-        mask: 0xFF,
-        per_device: true,
         absolute: false,
     },
     TelemetryCounter {
         name: "exec_late",
         read: |t| t.exec_late,
         mask: u32::MAX,
-        per_device: true,
         absolute: false,
     },
     TelemetryCounter {
-        name: "processed",
-        read: |t| t.processed,
-        mask: u32::MAX,
-        per_device: false,
+        name: "sync_resync",
+        read: |t| u32::from(t.sync_resync),
+        mask: 0xFF,
+        absolute: true,
+    },
+    TelemetryCounter {
+        name: "cpu_watchdog",
+        read: |t| u32::from(t.cpu_watchdog),
+        mask: 0xFF,
+        absolute: false,
+    },
+    TelemetryCounter {
+        name: "boot_failure",
+        read: |t| u32::from(t.boot_failure),
+        mask: 0xFF,
         absolute: false,
     },
 ];
@@ -170,7 +136,7 @@ pub(crate) fn telemetry_lines(start: &[Telemetry], now: &[Telemetry]) -> Vec<Str
                 let deltas = counter.deltas(start, now);
                 let total: u64 = deltas.iter().map(|&d| u64::from(d)).sum();
                 let _ = write!(line, "  {} {total}", counter.name);
-                if total != 0 && counter.per_device && deltas.len() > 1 {
+                if total != 0 && deltas.len() > 1 {
                     let devices: Vec<String> = deltas
                         .iter()
                         .enumerate()

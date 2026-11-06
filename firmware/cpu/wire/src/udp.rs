@@ -2,9 +2,10 @@ use zerocopy::little_endian::{I32, U16, U64};
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
 
 use crate::frame::FRAME_BYTES_MAX;
+use crate::payload::Telemetry;
 
 pub const PORT: u16 = 0xAD30;
-pub const PROTOCOL_VERSION: u8 = 5;
+pub const PROTOCOL_VERSION: u8 = 6;
 
 const _: () = assert!(PORT == 44336);
 
@@ -130,6 +131,8 @@ pub struct FrameReply {
     pub flags: Flags,
     pub unit_id: u8,
     pub sys_time: U64,
+    pub telemetry: Telemetry,
+    pub fpga_state: u8,
 }
 
 #[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned, Clone, PartialEq, Eq, Debug)]
@@ -140,7 +143,7 @@ pub struct UnblockReply {
 
 assert_layout!(Header { version: 0, kind: 1, msg_id: 2 } size 4);
 assert_layout!(UnitInfo { unit_id: 0, flags: 1, ptp_offset_ns: 2 } size 6);
-assert_layout!(FrameReply { reserved: 0, status: 1, flags: 2, unit_id: 3, sys_time: 4 } size 12);
+assert_layout!(FrameReply { reserved: 0, status: 1, flags: 2, unit_id: 3, sys_time: 4, telemetry: 12, fpga_state: 23 } size 24);
 const _: () = assert!(core::mem::size_of::<Header>() + FRAME_BYTES_MAX == 1452);
 
 #[must_use]
@@ -192,6 +195,8 @@ pub const fn solicited_node(addr: [u8; 16]) -> [u8; 16] {
 
 #[cfg(test)]
 mod tests {
+    use zerocopy::little_endian::U32;
+
     use super::*;
 
     const fn unit_address(unit_id: u8) -> [u8; 16] {
@@ -254,11 +259,20 @@ mod tests {
             flags: Flags::ASSIGNED | Flags::DOWNSTREAM_OPEN | Flags::GRANDMASTER,
             unit_id: 0x03,
             sys_time: U64::new(0x1112_1314_1516_1718),
+            telemetry: Telemetry {
+                fifo_drop: U32::new(0x2122_2324),
+                exec_late: U32::new(0x2526_2728),
+                sync_resync: 0x29,
+                cpu_watchdog: 0x2A,
+                boot_failure: 0x2B,
+            },
+            fpga_state: 0x4C,
         };
         assert_eq!(
             reply.as_bytes(),
             &[
-                0x00, 0x08, 0x23, 0x03, 0x18, 0x17, 0x16, 0x15, 0x14, 0x13, 0x12, 0x11,
+                0x00, 0x08, 0x23, 0x03, 0x18, 0x17, 0x16, 0x15, 0x14, 0x13, 0x12, 0x11, 0x24, 0x23,
+                0x22, 0x21, 0x28, 0x27, 0x26, 0x25, 0x29, 0x2A, 0x2B, 0x4C,
             ]
         );
     }

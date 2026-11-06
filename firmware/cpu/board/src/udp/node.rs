@@ -357,6 +357,8 @@ impl Node {
             flags: self.flags(failsafe_active),
             unit_id: self.unit_id,
             sys_time: U64::new(ethsw::capture().unwrap_or(0)),
+            telemetry: crate::cpu().telemetry(),
+            fpga_state: crate::cpu().fpga_state(),
         };
         let data = state.data();
         let mut body = [0u8; size_of::<FrameReply>() + REPLY_DATA_BYTES_MAX];

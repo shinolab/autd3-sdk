@@ -49,7 +49,9 @@ mod tests {
     use autd3_cpu_wire::cpu_params;
 
     use crate::cmd::cpu_config::CpuConfig;
-    use crate::fpga_params::{ADDR_FUNCTION_BITS, CtlFlags, FunctionBits, NUM_TRANSDUCERS};
+    use crate::fpga_params::{
+        ADDR_CTL_FLAG, ADDR_FUNCTION_BITS, CtlFlags, FunctionBits, NUM_TRANSDUCERS,
+    };
     use crate::proto::{Cmd, Error};
     use crate::test_utils::builders::{force_fan, output_mask, set_cpu_config};
     use crate::test_utils::mock::{Frame, Harness, WatchdogEvent};
@@ -107,6 +109,13 @@ mod tests {
         assert_mask_kept(h);
     }
 
+    fn fires_again(h: &mut Harness) -> bool {
+        let reopened = h.ctl_flags() - CtlFlags::FAILSAFE;
+        h.set_ctl(ADDR_CTL_FLAG, reopened.bits());
+        h.tick_1ms(1);
+        h.ctl_flags().contains(CtlFlags::FAILSAFE)
+    }
+
     #[test]
     fn failsafe_trips_once_the_host_is_silent_for_the_timeout() {
         let mut h = armed();
@@ -115,16 +124,14 @@ mod tests {
         h.set_host_idle_ms(FAILSAFE_TIMEOUT_MS - 1);
         h.tick_1ms(1);
         assert_not_muted(&h);
-        assert_eq!(h.telemetry().failsafe, 0);
 
         h.set_host_idle_ms(FAILSAFE_TIMEOUT_MS);
         h.tick_1ms(1);
         assert_muted(&h);
-        assert_eq!(h.telemetry().failsafe, 1);
 
         h.set_host_idle_ms(FAILSAFE_TIMEOUT_MS * 3);
         h.tick_1ms(10);
-        assert_eq!(h.telemetry().failsafe, 1);
+        assert!(!fires_again(&mut h));
     }
 
     #[test]
@@ -134,7 +141,6 @@ mod tests {
 
         h.tick_1ms(FAILSAFE_TIMEOUT_MS * 2);
         assert_not_muted(&h);
-        assert_eq!(h.telemetry().failsafe, 0);
     }
 
     #[test]
@@ -144,7 +150,7 @@ mod tests {
 
         h.set_host_idle_ms(FAILSAFE_TIMEOUT_MS);
         h.tick_1ms(1);
-        assert_eq!(h.telemetry().failsafe, 1);
+        assert_muted(&h);
 
         h.set_host_idle_ms(3);
         h.tick_1ms(1);
@@ -154,7 +160,6 @@ mod tests {
         h.set_host_idle_ms(FAILSAFE_TIMEOUT_MS + 7);
         h.tick_1ms(1);
         assert_muted(&h);
-        assert_eq!(h.telemetry().failsafe, 2);
     }
 
     #[test]
@@ -170,7 +175,6 @@ mod tests {
         h.set_host_idle_ms(50);
         h.tick_1ms(1);
         assert_muted(&h);
-        assert_eq!(h.telemetry().failsafe, 1);
     }
 
     #[test]
@@ -182,7 +186,6 @@ mod tests {
         h.set_host_idle_ms(1999);
         h.tick_1ms(1);
         assert_not_muted(&h);
-        assert_eq!(h.telemetry().failsafe, 0);
 
         h.set_host_idle_ms(2000);
         h.tick_1ms(1);
@@ -198,7 +201,6 @@ mod tests {
         h.set_host_idle_ms(u32::MAX);
         h.tick_1ms(10);
         assert_not_muted(&h);
-        assert_eq!(h.telemetry().failsafe, 0);
     }
 
     #[test]
@@ -210,7 +212,6 @@ mod tests {
         h.set_host_idle_ms(u32::MAX);
         h.tick_1ms(10);
         assert_not_muted(&h);
-        assert_eq!(h.telemetry().failsafe, 0);
     }
 
     #[test]
@@ -224,13 +225,11 @@ mod tests {
         set_failsafe_timeout(&mut h, None);
         h.tick_1ms(1);
         assert_muted(&h);
-        assert_eq!(h.telemetry().failsafe, 1);
 
         release(&mut h);
         set_failsafe_timeout(&mut h, Some(FAILSAFE_TIMEOUT));
         h.tick_1ms(1);
         assert_muted(&h);
-        assert_eq!(h.telemetry().failsafe, 2);
     }
 
     #[test]
@@ -244,7 +243,6 @@ mod tests {
         h.set_host_idle_ms(u32::MAX);
         h.tick_1ms(1);
         assert_not_muted(&h);
-        assert_eq!(h.telemetry().failsafe, 0);
     }
 
     fn set_ptp_unlock_failsafe_timeout(h: &mut Harness, timeout: Option<Duration>) {
@@ -263,7 +261,6 @@ mod tests {
         h.cpu.publish_ptp_unlocked(Some(u32::MAX));
         h.tick_1ms(3);
         assert_not_muted(&h);
-        assert_eq!(h.telemetry().ptp_unlock_failsafe, 0);
     }
 
     #[test]
@@ -275,17 +272,14 @@ mod tests {
         h.cpu.publish_ptp_unlocked(Some(1999));
         h.tick_1ms(1);
         assert_not_muted(&h);
-        assert_eq!(h.telemetry().ptp_unlock_failsafe, 0);
 
         h.cpu.publish_ptp_unlocked(Some(2000));
         h.tick_1ms(1);
         assert_muted(&h);
-        assert_eq!(h.telemetry().ptp_unlock_failsafe, 1);
-        assert_eq!(h.telemetry().failsafe, 0);
 
         h.cpu.publish_ptp_unlocked(Some(6000));
         h.tick_1ms(1);
-        assert_eq!(h.telemetry().ptp_unlock_failsafe, 1);
+        assert!(!fires_again(&mut h));
     }
 
     #[test]
@@ -300,17 +294,14 @@ mod tests {
             h.step_backlogged(1);
         }
         assert_not_muted(&h);
-        assert_eq!(h.telemetry().ptp_unlock_failsafe, 0);
 
         h.cpu.publish_ptp_unlocked(Some(50));
         h.step_backlogged(1);
         assert_muted(&h);
-        assert_eq!(h.telemetry().ptp_unlock_failsafe, 1);
-        assert_eq!(h.telemetry().failsafe, 0);
 
         h.cpu.publish_ptp_unlocked(Some(51));
         h.step_backlogged(1);
-        assert_eq!(h.telemetry().ptp_unlock_failsafe, 1);
+        assert!(!fires_again(&mut h));
         assert!(h.process_one());
     }
 
@@ -325,7 +316,6 @@ mod tests {
             h.step_backlogged(1);
         }
         assert_not_muted(&h);
-        assert_eq!(h.telemetry().failsafe, 0);
     }
 
     #[test]
@@ -336,7 +326,6 @@ mod tests {
         h.cpu.publish_ptp_unlocked(None);
         h.tick_1ms(5000);
         assert_not_muted(&h);
-        assert_eq!(h.telemetry().ptp_unlock_failsafe, 0);
     }
 
     #[test]
@@ -346,18 +335,16 @@ mod tests {
         set_ptp_unlock_failsafe_timeout(&mut h, Some(Duration::from_millis(50)));
         h.cpu.publish_ptp_unlocked(Some(50));
         h.tick_1ms(1);
-        assert_eq!(h.telemetry().ptp_unlock_failsafe, 1);
+        assert_muted(&h);
 
         h.cpu.publish_ptp_unlocked(None);
         h.tick_1ms(1);
         assert_muted(&h);
-        assert_eq!(h.telemetry().ptp_unlock_failsafe, 1);
 
         release(&mut h);
         h.cpu.publish_ptp_unlocked(Some(51));
         h.tick_1ms(1);
         assert_muted(&h);
-        assert_eq!(h.telemetry().ptp_unlock_failsafe, 2);
     }
 
     #[test]
@@ -367,13 +354,12 @@ mod tests {
         set_ptp_unlock_failsafe_timeout(&mut h, Some(Duration::from_millis(50)));
         h.set_host_idle_ms(FAILSAFE_TIMEOUT_MS);
         h.tick_1ms(1);
-        assert_eq!(h.telemetry().failsafe, 1);
-        assert_eq!(h.telemetry().ptp_unlock_failsafe, 0);
+        assert_muted(&h);
+        assert!(!fires_again(&mut h));
 
         h.cpu.publish_ptp_unlocked(Some(50));
-        h.tick_1ms(1);
-        assert_eq!(h.telemetry().failsafe, 1);
-        assert_eq!(h.telemetry().ptp_unlock_failsafe, 1);
+        assert!(fires_again(&mut h));
+        assert!(!fires_again(&mut h));
     }
 
     #[test]
@@ -382,14 +368,12 @@ mod tests {
         set_ptp_unlock_failsafe_timeout(&mut h, Some(Duration::from_millis(50)));
         h.cpu.publish_ptp_unlocked(Some(50));
         h.tick_1ms(1);
-        assert_eq!(h.telemetry().ptp_unlock_failsafe, 1);
+        assert!(h.cpu.failsafe_active());
 
         h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.status(), Error::None);
-        assert_eq!(h.telemetry().ptp_unlock_failsafe, 0);
         h.tick_1ms(1);
         assert_not_muted(&h);
-        assert_eq!(h.telemetry().ptp_unlock_failsafe, 0);
     }
 
     #[test]
@@ -477,7 +461,7 @@ mod tests {
         h.deliver(&Frame::new(Cmd::ReleaseFailsafe));
         assert_eq!(h.status(), Error::FailsafeConditionActive);
         assert_muted(&h);
-        assert_eq!(h.telemetry().ptp_unlock_failsafe, 1);
+        assert!(!fires_again(&mut h));
 
         h.cpu.publish_ptp_unlocked(None);
         release(&mut h);

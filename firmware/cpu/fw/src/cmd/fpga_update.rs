@@ -78,8 +78,6 @@ pub(crate) fn allowed_while_locked(cmd: Cmd) -> bool {
             | Cmd::FpgaUpdateChunk
             | Cmd::FpgaUpdateCommit
             | Cmd::FpgaUpdateActivate
-            | Cmd::ReadFpgaState
-            | Cmd::ReadTelemetry
             | Cmd::ReadFirmwareInfo
             | Cmd::ReadRunningImage
     )
