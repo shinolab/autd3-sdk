@@ -332,7 +332,7 @@ pub(crate) async fn run(cli: &Cli) -> Result<RunOutput> {
     let shutdown = Arc::new(AtomicBool::new(false));
     spawn_signal_listener(Arc::clone(&shutdown));
 
-    let telemetry_start = tokio::time::timeout(Duration::from_secs(1), client.read_telemetry())
+    let telemetry_start = tokio::time::timeout(Duration::from_secs(1), read_telemetry(&client))
         .await
         .context("reading telemetry timed out")?
         .context("reading telemetry")?;
@@ -385,7 +385,7 @@ pub(crate) async fn run(cli: &Cli) -> Result<RunOutput> {
 
     if let Ok(output) = &mut output
         && let Ok(Ok(telemetry)) =
-            tokio::time::timeout(Duration::from_secs(1), client.read_telemetry()).await
+            tokio::time::timeout(Duration::from_secs(1), read_telemetry(&client)).await
     {
         output.telemetry_end = telemetry;
     }
@@ -554,7 +554,7 @@ impl Live {
             &traffic_rate,
         )
         .to_vec();
-        match tokio::time::timeout(Duration::from_secs(1), client.read_telemetry()).await {
+        match tokio::time::timeout(Duration::from_secs(1), read_telemetry(client)).await {
             Ok(Ok(now)) => {
                 lines.extend(telemetry_lines(&self.telemetry_start, &now));
                 self.telemetry_last = now;
@@ -564,6 +564,12 @@ impl Live {
         }
         self.block.draw(&lines);
     }
+}
+
+async fn read_telemetry(client: &Client) -> Result<Vec<Telemetry>, ClientError> {
+    client.discard_unread_replies()?;
+    let msg_id = client.send_heartbeat().await?;
+    Ok(client.collect(msg_id).await?.telemetry().to_vec())
 }
 
 fn spawn_signal_listener(flag: Arc<AtomicBool>) {

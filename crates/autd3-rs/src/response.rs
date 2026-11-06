@@ -5,6 +5,8 @@ use autd3_rs_core::{DeviceState, MAX_DEVICES};
 use crate::device_set::DeviceSet;
 use crate::device_status::DeviceStatus;
 use crate::error::Error;
+use crate::fpga_state::FpgaState;
+use crate::telemetry::Telemetry;
 use crate::udp::DeviceReply;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -12,6 +14,8 @@ pub struct Response {
     error_codes: [u8; MAX_DEVICES],
     sys_times: [u64; MAX_DEVICES],
     flags: [Flags; MAX_DEVICES],
+    telemetry: [Telemetry; MAX_DEVICES],
+    fpga_state: [FpgaState; MAX_DEVICES],
     num_devices: usize,
     reply_data: Vec<Vec<u8>>,
     replied_devices: DeviceSet,
@@ -23,6 +27,8 @@ impl Default for Response {
             error_codes: [0; MAX_DEVICES],
             sys_times: [0; MAX_DEVICES],
             flags: [Flags::empty(); MAX_DEVICES],
+            telemetry: [Telemetry::default(); MAX_DEVICES],
+            fpga_state: [FpgaState::default(); MAX_DEVICES],
             num_devices: 0,
             reply_data: Vec::new(),
             replied_devices: DeviceSet::empty(),
@@ -40,6 +46,8 @@ impl Response {
             error_codes: buf,
             sys_times: [0; MAX_DEVICES],
             flags: [Flags::empty(); MAX_DEVICES],
+            telemetry: [Telemetry::default(); MAX_DEVICES],
+            fpga_state: [FpgaState::default(); MAX_DEVICES],
             num_devices,
             reply_data: Vec::new(),
             replied_devices: DeviceSet::first_n(num_devices),
@@ -59,6 +67,8 @@ impl Response {
         self.error_codes[device] = reply.status;
         self.sys_times[device] = reply.sys_time;
         self.flags[device] = reply.flags;
+        self.telemetry[device] = reply.telemetry;
+        self.fpga_state[device] = reply.fpga_state;
         self.replied_devices.insert(device);
         if !reply.data.is_empty() {
             self.reply_data.resize_with(self.num_devices, Vec::new);
@@ -112,6 +122,16 @@ impl Response {
     }
 
     #[must_use]
+    pub fn telemetry(&self) -> &[Telemetry] {
+        &self.telemetry[..self.num_devices]
+    }
+
+    #[must_use]
+    pub fn fpga_state(&self) -> &[FpgaState] {
+        &self.fpga_state[..self.num_devices]
+    }
+
+    #[must_use]
     pub fn device_status(&self) -> Vec<DeviceStatus> {
         self.flags[..self.num_devices]
             .iter()
@@ -152,6 +172,8 @@ mod tests {
             flags,
             unit_id: 0,
             sys_time,
+            telemetry: Telemetry::default(),
+            fpga_state: FpgaState::default(),
             data: data.to_vec(),
         }
     }
@@ -211,6 +233,34 @@ mod tests {
                     ptp_locked: false,
                     failsafe_active: true,
                 },
+            ]
+        );
+    }
+
+    #[test]
+    fn the_telemetry_of_each_reply_is_kept_per_device() {
+        let mut response = Response::for_devices(3);
+        response.record_reply(DeviceReply {
+            telemetry: Telemetry {
+                fifo_drop: 4,
+                ..Telemetry::default()
+            },
+            fpga_state: FpgaState(0x08),
+            ..reply(1, 0, Flags::ASSIGNED, 0, &[])
+        });
+        assert_eq!(
+            response.fpga_state(),
+            [FpgaState(0), FpgaState(0x08), FpgaState(0)]
+        );
+        assert_eq!(
+            response.telemetry(),
+            [
+                Telemetry::default(),
+                Telemetry {
+                    fifo_drop: 4,
+                    ..Telemetry::default()
+                },
+                Telemetry::default(),
             ]
         );
     }

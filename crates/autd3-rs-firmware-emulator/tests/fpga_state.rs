@@ -47,15 +47,15 @@ fn config_raw_pattern(bank: PatternBank, size: u32, rep: u16) -> Vec<u8> {
     config_pattern(bank, EmissionType::Raw, size, 0, 0, rep)
 }
 
-fn read_state(device: &mut Device) -> u8 {
-    device.send(&frame(Cmd::ReadFpgaState, &[])).data()[0]
+fn read_state(device: &Device) -> u8 {
+    device.fpga().fpga_state()
 }
 
 #[test]
 fn default_state_is_pattern_mode_bank_zero() {
-    let mut device = Device::new(NUM_TRANSDUCERS);
+    let device = Device::new(NUM_TRANSDUCERS);
 
-    assert_eq!(BIT_PATTERN_MODE, read_state(&mut device));
+    assert_eq!(BIT_PATTERN_MODE, read_state(&device));
 }
 
 #[test]
@@ -71,14 +71,14 @@ fn modulation_bank_switch_reflects_in_state() {
         Cmd::ConfigModulation,
         &config_modulation(ModulationBank::B1, 1, samples.len() as u32, REP_INFINITE),
     ));
-    assert_eq!(0, read_state(&mut device) & BIT_MOD_BANK);
+    assert_eq!(0, read_state(&device) & BIT_MOD_BANK);
 
     device.send(&frame(
         Cmd::ActivateModulationBank,
         &activate_modulation_bank(ModulationBank::B1, TransitionModeKind::Immediate, 0),
     ));
     assert_eq!(1, device.fpga().current_mod_bank());
-    assert_eq!(BIT_MOD_BANK, read_state(&mut device) & BIT_MOD_BANK);
+    assert_eq!(BIT_MOD_BANK, read_state(&device) & BIT_MOD_BANK);
 }
 
 #[test]
@@ -93,14 +93,14 @@ fn pattern_bank_switch_reflects_in_state() {
         Cmd::ConfigPattern,
         &config_raw_pattern(PatternBank::B1, 1, REP_INFINITE),
     ));
-    assert_eq!(0, read_state(&mut device) & BIT_PATTERN_BANK);
+    assert_eq!(0, read_state(&device) & BIT_PATTERN_BANK);
 
     device.send(&frame(
         Cmd::ActivatePatternBank,
         &activate_pattern_bank(PatternBank::B1, TransitionModeKind::Immediate),
     ));
     assert_eq!(1, device.fpga().current_pattern_bank());
-    let state = read_state(&mut device);
+    let state = read_state(&device);
     assert_eq!(BIT_PATTERN_BANK | BIT_PATTERN_MODE, state);
 }
 
@@ -118,5 +118,5 @@ fn multi_index_pattern_reports_stm_mode() {
     ));
 
     assert!(!device.fpga().is_pattern_mode());
-    assert_eq!(0, read_state(&mut device) & BIT_PATTERN_MODE);
+    assert_eq!(0, read_state(&device) & BIT_PATTERN_MODE);
 }

@@ -37,8 +37,6 @@ import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
 | `num_devices()`           | —     | `usize`                                | 接続中のデバイス台数                                       |
 | `geometry()`              | —     | `&Geometry`                            | 接続時のデバイスの物理配置                                 |
 | `read_firmware_version()` | ✓     | `Result<Vec<FirmwareVersion>, Error>` | 各デバイスの CPU/FPGA ファームウェアバージョン             |
-| `read_fpga_state()`       | ✓     | `Result<Vec<FpgaState>, Error>`       | 各デバイスの FPGA 状態                                     |
-| `read_telemetry()`        | ✓     | `Result<Vec<Telemetry>, Error>`       | 各デバイスの CPU の診断カウンタ                            |
 | `device_time_now()`       | —     | `Result<SysTime, Error>`               | 現在のデバイスの時刻 ([SysTime](/autd3-sdk/api/basics/sys-time/) 参照) |
 | `send(cmd)`               | ✓     | `Result<(), Error>`                   | コマンドを送信し, 1 フレームずつ応答確認まで行う           |
 | `send_frame(frame)`       | ✓     | `Result<ResponseFuture, Error>`       | フレームを 1 つ送る ([streaming](#streaming) 参照)          |
@@ -66,7 +64,7 @@ Rust の `Client` は tokio のランタイムの中で使う (`Client::open` �
 
 ## 読み出し結果の型
 
-`read_firmware_version()` / `read_fpga_state()` / `read_telemetry()` はデバイス番号順に 1 台 1 要素の配列を返す.
+`read_firmware_version()` はデバイス番号順に 1 台 1 要素の配列を返す.
 1 台でも途絶すると `Client` が閉じ, `DeviceLost` で失敗する.
 
 ### FirmwareVersion
@@ -81,6 +79,10 @@ Rust の `Client` は tokio のランタイムの中で使う (`Client::open` �
 
 ### FpgaState
 
+FPGA の状態フラグ. 読み出し用のコマンドは無く, フレームと生存確認のすべての返信に載る.
+`recv()` が返す `DeviceReply` の `fpga_state`, または `collect` が返す `Response` の `fpga_state()` (デバイス番号順) で読む.
+フレームの応答はそのフレームを処理した直後の値, 生存確認の応答は最大 1 ms 古い値 (デバイスが長い処理をしている間はさらに古い値) を運ぶ. bank の切り替わりを確かめるときは `Nop` などのフレームを送って応答で見る.
+
 | メソッド                  | 型               | 説明                                     |
 | ------------------------- | ---------------- | ---------------------------------------- |
 | `is_thermal_asserted()`   | `bool`           | 温度センサが閾値を超えているか           |
@@ -93,20 +95,18 @@ Rust の `Client` は tokio のランタイムの中で使う (`Client::open` �
 
 ### Telemetry
 
-CPU の診断カウンタ.
+CPU の診断カウンタ. 読み出し用のコマンドは無く, フレームと生存確認のすべての返信に載る.
+`recv()` が返す `DeviceReply` の `telemetry`, または `collect` が返す `Response` の `telemetry()` (デバイス番号順) で読む.
 
 | フィールド            | 型    | 説明                                                   |
 | --------------------- | ----- | ------------------------------------------------------ |
-| `fifo_drop`           | `u32` | 受信 FIFO が満杯で捨てたフレーム数                     |
-| `dispatch_error`      | `u32` | 処理がエラーになった回数                               |
-| `processed`           | `u32` | 処理したフレーム数                                     |
-| `send_failure`        | `u32` | NIC が送信を断った回数                                 |
-| `failsafe`            | `u16` | ホストとの通信途絶によるフェイルセーフの発火回数       |
-| `ptp_unlock_failsafe` | `u16` | PTP ロック喪失によるフェイルセーフの発火回数           |
-| `sync_resync`         | `u8`  | 同期入力のハード再同期回数 (`Synchronize` で 0 に戻る) |
-| `boot_failure`        | `u8`  | 起動時に失敗した手順の数 (`Clear` で消えない)          |
-| `cpu_watchdog`        | `u8`  | CPU ウォッチドッグの発火回数 (FPGA の再構成まで消えない) |
+| `fifo_drop`           | `u32` | 受信 FIFO が満杯で捨てたフレーム数 (捨てたフレームには返信しない) |
 | `exec_late`           | `u32` | [処理時刻](#処理時刻)を 1 µs 以上過ぎてから処理を始めたフレーム数 |
+| `sync_resync`         | `u8`  | 同期入力のハード再同期回数 (`Synchronize` で 0 に戻る) |
+| `cpu_watchdog`        | `u8`  | CPU ウォッチドッグの発火回数 (FPGA の再構成まで消えない) |
+| `boot_failure`        | `u8`  | 起動時に失敗した手順の数 (`Clear` で消えない)          |
+
+返信から分かるものは載らない. 処理したフレーム数は返信の数, コマンドのエラーは返信の status, フェイルセーフの発火は `DeviceStatus::failsafe_active` が立ったことで分かる.
 
 ## 処理時刻
 
@@ -126,7 +126,7 @@ CPU の診断カウンタ.
 
 注意点は以下の通り
 - 必ず全デバイスが同じ時刻に処理を始めることを保証はしない
-  - 全デバイスへの送信が指定時刻までに終わらなければ, 遅れたデバイスは指定時刻を過ぎてから処理する. この回数は `read_telemetry` の `exec_late` で読める.
+  - 全デバイスへの送信が指定時刻までに終わらなければ, 遅れたデバイスは指定時刻を過ぎてから処理する. この回数はテレメトリの `exec_late` で読める.
   - 応答を待たずに続けて送ると ([streaming](#streaming)), 前のフレームの処理中に次のフレームの指定時刻が来ることがあり, そのフレームは遅れて処理される (`exec_late` にカウントされる).
   - また, 成功したとしてもCPUボード内部の処理の開始が揃うだけであり, FPGAの処理の開始が揃うこと (すなわち, 出力される超音波の位相の更新タイミングが揃うことなど) は保証しない
 - 応答は処理の後に返るので, 送信の完了は指定時刻まで遅れる. 1 フレームずつ応答を待つと, 複数フレームのコマンドはフレーム数 × `lead` 程度かかる

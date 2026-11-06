@@ -66,6 +66,7 @@ impl Cpu {
         fpga::watchdog_kick(port);
         self.update_tick(port);
         self.fpga_update_tick(port);
+        self.sample_fpga_counters(port);
         self.check_failsafes(port);
     }
 
@@ -98,6 +99,7 @@ impl Cpu {
             front.pop();
             return Drained::Empty;
         };
+        self.sample_fpga_state(port);
         front.reply.set(reply);
         front.pop();
         Drained::Completed { msg_id }
@@ -122,9 +124,7 @@ impl Cpu {
             return true;
         }
         let Some(now) = port.sys_time() else {
-            self.health
-                .exec_late
-                .set(self.health.exec_late.get().wrapping_add(1));
+            self.count_exec_late();
             return true;
         };
         if ahead_of_exec_at_ns(now, exec_at) > EXEC_SPIN_NS {
@@ -142,9 +142,7 @@ impl Cpu {
             }
         });
         if late {
-            self.health
-                .exec_late
-                .set(self.health.exec_late.get().wrapping_add(1));
+            self.count_exec_late();
         }
         true
     }
@@ -154,19 +152,10 @@ impl Cpu {
             Some(cmd) => self.dispatch(port, cmd, payload),
             None => Err(Error::UnknownCmd),
         };
-        let result = match outcome {
+        match outcome {
             Ok(data) => Reply::new(Error::None, data),
-            Err(err) => {
-                self.health
-                    .dispatch_error
-                    .set(self.health.dispatch_error.get().wrapping_add(1));
-                Reply::new(err, ReplyData::EMPTY)
-            }
-        };
-        self.health
-            .processed
-            .set(self.health.processed.get().wrapping_add(1));
-        result
+            Err(err) => Reply::new(err, ReplyData::EMPTY),
+        }
     }
 
     fn dispatch<P: Port>(
@@ -182,8 +171,6 @@ impl Cpu {
         let result = match cmd {
             Cmd::Nop => Ok(()),
             Cmd::SetCpuConfig => self.set_cpu_config(port, payload),
-            Cmd::ReadFpgaState => return Ok(cmd::fpga_state::read(port)),
-            Cmd::ReadTelemetry => return Ok(self.read_telemetry(port)),
             Cmd::ReadFirmwareInfo => return Ok(self.read_firmware_info(port)),
             Cmd::ReadFpgaMemory => return cmd::fpga_memory::read(port, payload),
             Cmd::WriteFpgaMemory => cmd::fpga_memory::write(port, payload),
@@ -257,7 +244,6 @@ mod tests {
         h.deliver(&Frame::raw(0x7F));
         assert_eq!(h.status(), Error::UnknownCmd);
         assert_eq!(h.processed(), 1);
-        assert_eq!(h.telemetry().dispatch_error, 1);
     }
 
     #[test]
@@ -276,7 +262,6 @@ mod tests {
         h.deliver(&Frame::new(Cmd::Nop));
         assert_eq!(h.processed(), 1);
         assert_eq!(h.status(), Error::None);
-        assert_eq!(h.telemetry().dispatch_error, 0);
     }
 
     #[test]
@@ -362,22 +347,22 @@ mod tests {
     #[test]
     fn the_reserved_header_byte_is_ignored() {
         let mut h = Harness::new();
-        let mut bytes = Frame::new(Cmd::ReadFpgaState).bytes();
+        let mut bytes = Frame::new(Cmd::ReadFirmwareInfo).bytes();
         bytes[0] = 0xFF;
         h.cpu.recv_frame(&bytes, 0);
         while h.process_one() {}
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.processed(), 1);
-        assert_eq!(h.reply_data().len(), 1);
+        assert_eq!(h.reply_data().len(), 8);
     }
 
     #[test]
     fn the_reply_follows_every_completed_frame_across_the_ring_wrap() {
         let mut h = Harness::new();
         for i in 0..(3 * u32::from(FIFO_DEPTH)) {
-            h.deliver(&Frame::new(Cmd::ReadFpgaState));
+            h.deliver(&Frame::new(Cmd::ReadFirmwareInfo));
             assert_eq!(h.processed(), 2 * i + 1);
-            assert_eq!(h.reply_data().len(), 1);
+            assert_eq!(h.reply_data().len(), 8);
             h.deliver(&Frame::new(Cmd::Nop));
             assert_eq!(h.reply_data(), []);
         }
@@ -388,8 +373,8 @@ mod tests {
         let mut h = Harness::new();
         assert_eq!(h.cpu.reply(), crate::proto::Reply::EMPTY);
         for _ in 0..=FIFO_DEPTH {
-            h.deliver(&Frame::new(Cmd::ReadFpgaState));
-            assert_eq!(h.reply_data().len(), 1);
+            h.deliver(&Frame::new(Cmd::ReadFirmwareInfo));
+            assert_eq!(h.reply_data().len(), 8);
         }
         h.reboot();
         assert_eq!(h.cpu.reply(), crate::proto::Reply::EMPTY);
@@ -448,7 +433,7 @@ mod tests {
     #[test]
     fn a_queued_frame_whose_slot_is_still_borrowed_is_dropped_and_counted() {
         let mut h = Harness::new();
-        h.deliver(&Frame::new(Cmd::ReadFpgaState));
+        h.deliver(&Frame::new(Cmd::ReadFirmwareInfo));
         let previous = h.cpu.reply();
         h.cpu.recv_frame(&Frame::new(Cmd::Nop).bytes(), 1);
         h.cpu.recv_frame(&Frame::new(Cmd::Nop).bytes(), 2);
@@ -457,14 +442,12 @@ mod tests {
         assert_eq!(h.cpu.process_one(&mut h.port), Drained::Empty);
         drop(borrowed);
         assert_eq!(h.telemetry().fifo_drop, 1);
-        assert_eq!(h.processed(), 1);
         assert_eq!(h.cpu.reply(), previous);
 
         assert_eq!(
             h.cpu.process_one(&mut h.port),
             Drained::Completed { msg_id: 2 }
         );
-        assert_eq!(h.processed(), 2);
     }
 
     #[test]

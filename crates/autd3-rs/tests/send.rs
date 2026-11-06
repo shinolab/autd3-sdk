@@ -28,16 +28,15 @@ async fn the_emulator_processes_frames_with_an_execution_time_without_waiting() 
     let (emulator, client) = open(3).await;
     let on = Frames::encode(client.geometry(), ForceFan { value: true }).unwrap();
 
-    send_and_collect(
+    let response = send_and_collect(
         &client,
         on.frame(0).unwrap(),
         ExecAt::Lead(Duration::from_secs(5)),
     )
-    .await
-    .check()
-    .unwrap();
+    .await;
+    response.check().unwrap();
     assert_eq!(fans(&emulator), [true, true, true]);
-    let telemetry = client.read_telemetry().await.unwrap();
+    let telemetry = response.telemetry();
     assert!(telemetry.iter().all(|t| t.exec_late == 0), "{telemetry:?}");
 }
 
@@ -146,10 +145,14 @@ async fn the_firmware_version_is_read_from_every_device() {
 
 #[tokio::test]
 #[ignore = "depends on real time"]
-async fn the_fpga_state_is_read_from_every_device() {
+async fn every_heartbeat_reply_carries_the_fpga_state_of_its_device() {
     let (emulator, client) = open(2).await;
 
-    let states = client.read_fpga_state().await.unwrap();
+    let response = client
+        .collect(client.send_heartbeat().await.unwrap())
+        .await
+        .unwrap();
+    let states = response.fpga_state();
 
     let expected: Vec<u8> =
         emulator.with_devices(|devices| devices.iter().map(|d| d.fpga().fpga_state()).collect());
@@ -158,20 +161,18 @@ async fn the_fpga_state_is_read_from_every_device() {
 
 #[tokio::test]
 #[ignore = "depends on real time"]
-async fn the_telemetry_counts_the_frames_each_device_processed() {
+async fn every_heartbeat_reply_carries_the_telemetry_of_its_device() {
     let (_emulator, client) = open(2).await;
-    let before = client.read_telemetry().await.unwrap();
-    assert_eq!(before.len(), 2);
-
     for _ in 0..4 {
         client.send(Nop).await.unwrap();
     }
 
-    let after = client.read_telemetry().await.unwrap();
-    for (before, after) in before.iter().zip(&after) {
-        assert_eq!(after.processed - before.processed, 5);
-        assert_eq!(after.fifo_drop, 0);
-    }
+    let response = client
+        .collect(client.send_heartbeat().await.unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.telemetry().len(), 2);
+    assert!(response.telemetry().iter().all(|t| t.fifo_drop == 0));
 }
 
 #[tokio::test]

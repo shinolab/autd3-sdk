@@ -66,15 +66,6 @@ pub(crate) async fn watch(
     Ok(seen)
 }
 
-async fn failsafe_counts(ctx: &Ctx<'_>) -> Result<Vec<u32>> {
-    Ok(ctx
-        .read_telemetry()
-        .await?
-        .iter()
-        .map(|t| u32::from(t.failsafe))
-        .collect())
-}
-
 async fn set_failsafe_timeout(ctx: &Ctx<'_>, failsafe_timeout: Option<Duration>) -> Result<()> {
     ctx.send(SetCpuConfig::new(CpuConfig {
         failsafe_timeout,
@@ -104,34 +95,23 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
             silence(ctx).await?;
             set_failsafe_timeout(ctx, Some(Duration::from_millis(500))).await?;
             tokio::time::sleep(idle).await;
-            let counts = failsafe_counts(ctx).await?;
+            let gates = ctx.failsafe_gates().await?;
             println!(
-                "  {} a 500 ms timeout never trips while the heartbeat ({:?}) runs: {counts:?}",
-                verdict(counts.iter().all(|c| *c == 0)),
+                "  {} a 500 ms timeout never trips while the heartbeat ({:?}) runs: gates {gates:?}",
+                verdict(gates.iter().all(|g| !g)),
                 ctx.heartbeat
             );
 
             set_failsafe_timeout(ctx, Some(short)).await?;
             tokio::time::sleep(idle).await;
-            let tripped = failsafe_counts(ctx).await?;
+            let gates = ctx.failsafe_gates().await?;
             println!(
-                "  {} a timeout ({short:?}) shorter than the heartbeat trips on every device: {tripped:?}",
-                verdict(tripped.iter().all(|c| *c > 0))
-            );
-            let gated = ctx.failsafe_gates().await?;
-            println!(
-                "  {} the trip raises the failsafe gate on every device",
-                verdict(gated.iter().all(|g| *g))
+                "  {} a timeout ({short:?}) shorter than the heartbeat raises the failsafe gate on every device: gates {gates:?}",
+                verdict(gates.iter().all(|g| *g))
             );
 
             set_failsafe_timeout(ctx, None).await?;
-            let before = failsafe_counts(ctx).await?;
             tokio::time::sleep(idle).await;
-            let after = failsafe_counts(ctx).await?;
-            println!(
-                "  {} a disabled failsafe stops tripping: {before:?} -> {after:?}",
-                verdict(before == after)
-            );
             let still_gated = ctx.failsafe_gates().await?;
             ctx.send(ReleaseFailsafe).await?;
             let released = ctx.failsafe_gates().await?;
@@ -139,13 +119,19 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
                 "  {} the gate stays up until ReleaseFailsafe lowers it",
                 verdict(still_gated.iter().all(|g| *g) && released.iter().all(|g| !g))
             );
+            tokio::time::sleep(idle).await;
+            let gates = ctx.failsafe_gates().await?;
+            println!(
+                "  {} a disabled failsafe does not trip again: gates {gates:?}",
+                verdict(gates.iter().all(|g| !g))
+            );
 
             set_failsafe_timeout(ctx, Some(short)).await?;
             tokio::time::sleep(idle).await;
-            let rearmed = failsafe_counts(ctx).await?;
+            let gates = ctx.failsafe_gates().await?;
             println!(
-                "  {} enabling it again trips again: {after:?} -> {rearmed:?}",
-                verdict(rearmed.iter().zip(&after).all(|(now, was)| now > was))
+                "  {} enabling it again trips again: gates {gates:?}",
+                verdict(gates.iter().all(|g| *g))
             );
 
             let zero = Frames::encode(
@@ -163,14 +149,9 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
             ctx.send(Clear).await?;
             silence(ctx).await?;
             tokio::time::sleep(idle).await;
-            let counts = failsafe_counts(ctx).await?;
-            println!(
-                "  {} Clear disabled the failsafe (the default) and reset the counter: {counts:?}",
-                verdict(counts.iter().all(|c| *c == 0))
-            );
             let cleared = ctx.failsafe_gates().await?;
             println!(
-                "  {} Clear lowered the failsafe gate",
+                "  {} Clear lowered the failsafe gate and disabled the failsafe (the default)",
                 verdict(cleared.iter().all(|g| !g))
             );
         }
