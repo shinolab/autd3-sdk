@@ -1,8 +1,10 @@
 mod device_clock;
 mod exec_at;
+mod inflight;
 pub(crate) mod open;
 
 pub use exec_at::ExecAt;
+pub use inflight::InflightFrames;
 
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::{Mutex, PoisonError};
@@ -372,6 +374,65 @@ mod tests {
             let (header, _) = next_request(&device).await;
             assert_eq!((header.kind, header.msg_id.get()), (kind.as_u8(), msg_id));
         }
+    }
+
+    #[tokio::test]
+    async fn inflight_frames_keep_replies_that_overtake_the_oldest() {
+        let (client, device) = open_client().await;
+        let datagram = [Datagram::no_payload(Cmd::Nop)];
+        let mut inflight = InflightFrames::default();
+        for _ in 0..2 {
+            let msg_id = client
+                .send_frame(
+                    Frame::new(Distribution::Broadcast, &datagram),
+                    ExecAt::Immediate,
+                )
+                .await
+                .unwrap();
+            inflight.push(msg_id);
+        }
+        let (first, host) = next_request(&device).await;
+        let (second, _) = next_request(&device).await;
+        reply(&device, host, 0xFFFF, 0x07, Flags::ASSIGNED, &[]).await;
+        reply(
+            &device,
+            host,
+            second.msg_id.get(),
+            0x02,
+            Flags::ASSIGNED,
+            &[],
+        )
+        .await;
+        reply(
+            &device,
+            host,
+            second.msg_id.get(),
+            0x03,
+            Flags::ASSIGNED,
+            &[],
+        )
+        .await;
+        reply(
+            &device,
+            host,
+            first.msg_id.get(),
+            0x01,
+            Flags::ASSIGNED,
+            &[],
+        )
+        .await;
+
+        let oldest = inflight.collect_oldest(&client).await.unwrap().unwrap();
+        let next = tokio::select! {
+            biased;
+            next = inflight.collect_oldest(&client) => next.unwrap().unwrap(),
+            () = std::future::ready(()) => panic!("the overtaking reply was dropped"),
+        };
+
+        assert_eq!(oldest.error_codes(), [0x01]);
+        assert_eq!(next.error_codes(), [0x02]);
+        assert!(inflight.is_empty());
+        assert_eq!(inflight.collect_oldest(&client).await.unwrap(), None);
     }
 
     #[tokio::test]

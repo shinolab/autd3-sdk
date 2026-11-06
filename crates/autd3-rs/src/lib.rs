@@ -26,7 +26,7 @@ pub use autd3_rs_core::{
     MAX_INFLIGHT, Point3, Quaternion, UnitQuaternion, UnitVector3, Vector3, Velocity, offset,
     point,
 };
-pub use client::{Client, ExecAt};
+pub use client::{Client, ExecAt, InflightFrames};
 pub use datagram::{Datagram, Frame, FrameIter, Frames};
 pub use device_status::DeviceStatus;
 pub use firmware_version::{FirmwareVersion, Version};
