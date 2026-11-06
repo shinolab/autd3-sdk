@@ -25,6 +25,7 @@ def test_defaults_follow_the_spec() -> None:
     assert option.open_timeout == autd3.Duration.from_secs(40)
     assert option.send_buffer_bytes == 8192
     assert option.sync_on_open is True
+    assert option.heartbeat_interval is None
     with pytest.raises(autd3.InvalidArgumentError, match="send_buffer_bytes"):
         autd3.TransportOption(send_buffer_bytes=0)
 
@@ -38,7 +39,9 @@ def test_fields_round_trip() -> None:
     assert option.open_timeout == autd3.Duration.from_secs(3)
     assert autd3.TransportOption(send_buffer_bytes=None).send_buffer_bytes is None
     assert autd3.TransportOption(send_buffer_bytes=65536).send_buffer_bytes == 65536
-    for removed in ("lost_timeout", "ack_timeout", "heartbeat_interval"):
+    interval = autd3.TransportOption(heartbeat_interval=autd3.Duration.from_millis(10)).heartbeat_interval
+    assert interval == autd3.Duration.from_millis(10)
+    for removed in ("lost_timeout", "ack_timeout"):
         with pytest.raises(TypeError):
             loose(autd3.TransportOption)(**{removed: autd3.Duration.from_millis(1)})
 
@@ -108,10 +111,15 @@ def test_a_zero_open_timeout_is_constructible_and_a_non_duration_is_rejected() -
         autd3.TransportOption(open_timeout=loose(None))
 
 
-def test_the_client_is_a_thin_socket() -> None:
-    for name in ("send_frame", "send_heartbeat", "recv", "collect", "discard_unread_replies"):
+def test_the_client_hides_the_low_level_socket() -> None:
+    for name in ("send", "send_streaming", "read_state", "read_firmware_version"):
         assert callable(getattr(autd3.Client, name, None))
     for removed in (
+        "send_frame",
+        "send_heartbeat",
+        "recv",
+        "collect",
+        "discard_unread_replies",
         "ack_timeout",
         "set_ack_timeout",
         "lost_timeout",
@@ -122,17 +130,8 @@ def test_the_client_is_a_thin_socket() -> None:
         "send_frame_at",
     ):
         assert not hasattr(autd3.Client, removed)
-    assert not hasattr(autd3, "ResponseFuture")
-
-
-def test_inflight_frames_count_the_pushed_frames() -> None:
-    inflight = autd3.InflightFrames()
-    assert len(inflight) == 0
-    assert inflight.is_empty()
-    inflight.push(1)
-    inflight.push(2)
-    assert len(inflight) == 2
-    assert not inflight.is_empty()
+    for removed in ("ResponseFuture", "InflightFrames", "ExecAt"):
+        assert not hasattr(autd3, removed)
 
 
 def test_client_open_takes_a_transport_option() -> None:

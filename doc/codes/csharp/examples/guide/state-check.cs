@@ -24,12 +24,11 @@ internal static class Sample
             DeviceStatus[] last = Array.Empty<DeviceStatus>();
             while (true)
             {
-                var msgId = client.SendHeartbeat();
                 using var timeout = new CancellationTokenSource(CheckInterval);
                 DeviceStatus[] status;
                 try
                 {
-                    status = (await client.CollectAsync(msgId, timeout.Token)).DeviceStatus();
+                    status = (await client.ReadStateAsync(timeout.Token)).DeviceStatus();
                 }
                 catch (OperationCanceledException)
                 {

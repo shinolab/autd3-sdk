@@ -83,7 +83,7 @@ mod tests {
     use crate::geometry::Point3;
     use crate::params::FOCUS_WORDS;
     use crate::protocol::Cmd;
-    use crate::test_utils::{build, cmds, payload};
+    use crate::test_utils::{build, cmds, payload, waits};
     use crate::value::{Intensity, Phase};
     use core::num::NonZeroU16;
 
@@ -205,6 +205,7 @@ mod tests {
                 Cmd::ActivatePatternBank,
             ]
         );
+        assert_eq!(waits(&datagrams), [false, false, false, true]);
         let size = u32::try_from(max_foci_per_frame + 5).unwrap();
         assert_eq!(&payload(&datagrams, 2, 0)[4..8], &size.to_le_bytes());
     }

@@ -24,8 +24,10 @@ dependencies = [
 name = "autd3-binding-rt"
 version = "0.13.0"
 dependencies = [
+ "autd3-rs",
  "thiserror",
  "tokio",
+ "tracing",
  "tracing-appender",
  "tracing-subscriber",
 ]

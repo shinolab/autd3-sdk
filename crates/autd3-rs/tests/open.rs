@@ -4,12 +4,12 @@ use std::time::Duration;
 
 use autd3_rs::commands::Nop;
 use autd3_rs::udp::{TransportOption, UdpError};
-use autd3_rs::{Client, Error, FirmwareVersion};
+use autd3_rs::{Controller, Error, FirmwareVersion};
 
 use common::{emulator, geometry, open_with, option, udp_error};
 
 async fn open_error(num_devices: usize, option: &TransportOption) -> Error {
-    Client::open(&geometry(num_devices), option)
+    Controller::open(&geometry(num_devices), option)
         .await
         .err()
         .unwrap()

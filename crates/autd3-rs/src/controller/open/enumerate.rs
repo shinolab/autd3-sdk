@@ -12,8 +12,8 @@ use crate::udp::{
     Channel, ControlResponse, RECV_BUFFER_BYTES, TransportOption, UdpError, same_endpoint,
 };
 
-use crate::client::GRANDMASTER_UNIT_ID;
-use crate::client::device_clock::DeviceClock;
+use crate::controller::GRANDMASTER_UNIT_ID;
+use crate::controller::device_clock::DeviceClock;
 
 pub(super) const REQUEST_REPLY_WAIT: Duration = Duration::from_millis(200);
 const RESET_SETTLE: Duration = Duration::from_millis(100);

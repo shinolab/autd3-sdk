@@ -18,7 +18,7 @@ use autd3_rs::commands::{
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::value::Intensity;
 use autd3_rs::{
-    Client, DeviceState, DeviceStatus, Error, ExecAt, FirmwareVersion, FpgaState, Frames,
+    Controller, DeviceState, DeviceStatus, Error, ExecAt, FirmwareVersion, FpgaState, Frames,
     Interface, Response, Telemetry, TransportOption,
 };
 
@@ -27,7 +27,7 @@ use crate::io::{check, prompt, wait_enter};
 use tracing_subscriber::EnvFilter;
 
 pub struct Ctx<'a> {
-    pub client: &'a Client,
+    pub client: &'a Controller,
     pub geometry: &'a Geometry,
     pub heartbeat: Duration,
     pub exec: ExecAt,
@@ -196,7 +196,7 @@ async fn main() -> Result<()> {
         ..TransportOption::default()
     };
     let client = Arc::new(
-        Client::open(&geometry, &option)
+        Controller::open(&geometry, &option)
             .await
             .context("opening the devices")?,
     );

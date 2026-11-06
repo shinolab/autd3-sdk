@@ -2,6 +2,7 @@ pub mod commands;
 pub mod error;
 
 mod client;
+mod controller;
 mod datagram;
 mod device_status;
 mod firmware_version;
@@ -25,7 +26,8 @@ pub use autd3_rs_core::{
     MAX_INFLIGHT, Point3, Quaternion, UnitQuaternion, UnitVector3, Vector3, Velocity, offset,
     point,
 };
-pub use client::{Client, ExecAt, InflightFrames};
+pub use client::Client;
+pub use controller::{Controller, ExecAt, InflightFrames};
 pub use datagram::{Datagram, Frame, FrameIter, Frames};
 pub use device_status::DeviceStatus;
 pub use firmware_version::{FirmwareVersion, Version};

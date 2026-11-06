@@ -9,12 +9,11 @@ async fn main() -> anyhow::Result<()> {
     // HIDE_END
     let geometry = Geometry::new(vec![Autd3::default()]);
     let option = TransportOption::default();
-    let client = Client::open(&geometry, &option).await?;
+    let mut client = Client::open(&geometry, &option).await?;
     client.send(Clear).await?;
     client.send(Synchronize).await?;
 
-    let msg_id = client.send_heartbeat().await?;
-    let status = client.collect(msg_id).await?.device_status();
+    let status = client.read_state().await?.device_status();
     if status.iter().any(|s| s.failsafe_active) {
         client.send(ReleaseFailsafe).await?;
     }

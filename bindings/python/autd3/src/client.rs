@@ -1,14 +1,12 @@
-use std::sync::Arc;
-
-use crate::datagram::{Expand, Frame, command_of};
+use crate::datagram::{Expand, command_of};
 use crate::future::{Completed, future_into_py};
 use crate::ops::SysTime;
 use autd3_python_capsule::error::client as client_error;
-use autd3_python_capsule::extract::{extract_duration, geometry_to_py};
+use autd3_python_capsule::extract::geometry_to_py;
 use autd3_python_capsule::{capsule_of, geometry_from_capsule};
-use autd3_rs::Geometry;
+use autd3_rs::{Frames, Geometry};
 
-use pyo3::exceptions::{PyIndexError, PyRuntimeError};
+use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 
@@ -276,35 +274,6 @@ impl Telemetry {
     }
 }
 
-#[pyclass(name = "ExecAt", module = "autd3", eq, hash, frozen, from_py_object)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ExecAt(pub(crate) autd3_rs::ExecAt);
-
-#[pymethods]
-impl ExecAt {
-    #[classattr]
-    #[pyo3(name = "Immediate")]
-    fn immediate() -> Self {
-        Self(autd3_rs::ExecAt::Immediate)
-    }
-
-    #[staticmethod]
-    #[pyo3(name = "Lead")]
-    fn lead(lead: &Bound<'_, PyAny>) -> PyResult<Self> {
-        Ok(Self(autd3_rs::ExecAt::Lead(extract_duration(lead)?)))
-    }
-
-    #[staticmethod]
-    #[pyo3(name = "At")]
-    fn at(sys_time: SysTime) -> Self {
-        Self(autd3_rs::ExecAt::At(sys_time.0))
-    }
-
-    fn __repr__(&self) -> String {
-        format!("ExecAt.{:?}", self.0)
-    }
-}
-
 #[pyclass(name = "DeviceReply", module = "autd3", frozen, eq)]
 #[derive(PartialEq, Eq)]
 pub struct DeviceReply(autd3_rs::DeviceReply);
@@ -374,14 +343,15 @@ impl DeviceReply {
 
 #[pyclass(name = "Client", module = "autd3")]
 pub struct Client {
-    inner: Option<Arc<autd3_rs::Client>>,
+    inner: Option<(autd3_binding_rt::Client, autd3_binding_rt::Heartbeat)>,
     geometry: Geometry,
 }
 
 impl Client {
-    fn inner(&self) -> PyResult<&Arc<autd3_rs::Client>> {
+    fn shared(&self) -> PyResult<&autd3_binding_rt::Client> {
         self.inner
             .as_ref()
+            .map(|(client, _)| client)
             .ok_or_else(|| PyRuntimeError::new_err("the client has been released"))
     }
 }
@@ -396,16 +366,18 @@ impl Client {
     ) -> PyResult<Client> {
         let geometry = geometry_from_capsule(&capsule_of(geometry)?)?.clone();
         let option = &option.0;
-        let client = crate::runtime::block_on(py, autd3_rs::Client::open(&geometry, option))?
-            .map_err(client_error)?;
+        let inner =
+            crate::runtime::block_on(py, autd3_binding_rt::Client::open(&geometry, option))?
+                .map_err(client_error)?;
         Ok(Client {
-            inner: Some(Arc::new(client)),
+            inner: Some(inner),
             geometry,
         })
     }
 
     fn num_devices(&self) -> PyResult<usize> {
-        Ok(self.inner()?.num_devices())
+        self.shared()?;
+        Ok(self.geometry.num_devices())
     }
 
     fn geometry<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
@@ -413,22 +385,14 @@ impl Client {
     }
 
     fn device_time_now(&self) -> PyResult<SysTime> {
-        self.inner()?
+        self.shared()?
             .device_time_now()
             .map(SysTime)
             .map_err(client_error)
     }
 
-    fn discard_unread_replies(&self) -> PyResult<()> {
-        self.inner()?.discard_unread_replies().map_err(client_error)
-    }
-
-    fn send_heartbeat(&self, py: Python<'_>) -> PyResult<u16> {
-        crate::runtime::block_on(py, self.inner()?.send_heartbeat())?.map_err(client_error)
-    }
-
     fn read_firmware_version<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let client = Arc::clone(self.inner()?);
+        let client = self.shared()?.clone();
         future_into_py(py, async move {
             let versions = client.read_firmware_version().await.map_err(client_error)?;
             Ok(versions
@@ -438,56 +402,49 @@ impl Client {
         })
     }
 
+    fn read_state<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let client = self.shared()?.clone();
+        future_into_py(py, async move {
+            client
+                .read_state()
+                .await
+                .map(Response)
+                .map_err(client_error)
+        })
+    }
+
     fn send<'py>(
         &self,
         py: Python<'py>,
         command: &Bound<'py, PyAny>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let client = Arc::clone(self.inner()?);
+        let client = self.shared()?.clone();
         let command = command_of(command, &self.geometry)?;
         future_into_py(py, async move {
+            let frames = Frames::encode(client.geometry(), Expand(command.as_ref()))
+                .map_err(client_error)?;
             client
-                .send(Expand(command.as_ref()))
+                .send(&frames)
                 .await
                 .map(|()| Completed)
                 .map_err(client_error)
         })
     }
 
-    fn send_frame<'py>(
+    fn send_streaming<'py>(
         &self,
         py: Python<'py>,
-        frame: PyRef<'_, Frame>,
-        exec_at: ExecAt,
+        command: &Bound<'py, PyAny>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let client = Arc::clone(self.inner()?);
-        let datagrams = Arc::clone(&frame.datagrams);
-        let index = frame.index;
+        let client = self.shared()?.clone();
+        let command = command_of(command, &self.geometry)?;
         future_into_py(py, async move {
-            let frame = datagrams
-                .frame(index)
-                .ok_or_else(|| PyIndexError::new_err("frame index out of range"))?;
+            let frames = Frames::encode(client.geometry(), Expand(command.as_ref()))
+                .map_err(client_error)?;
             client
-                .send_frame(frame, exec_at.0)
+                .send_streaming(&frames)
                 .await
-                .map_err(client_error)
-        })
-    }
-
-    fn recv<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let client = Arc::clone(self.inner()?);
-        future_into_py(py, async move {
-            client.recv().await.map(DeviceReply).map_err(client_error)
-        })
-    }
-
-    fn collect<'py>(&self, py: Python<'py>, msg_id: u16) -> PyResult<Bound<'py, PyAny>> {
-        let client = Arc::clone(self.inner()?);
-        future_into_py(py, async move {
-            client
-                .collect(msg_id)
-                .await
-                .map(Response)
+                .map(|()| Completed)
                 .map_err(client_error)
         })
     }
@@ -527,51 +484,5 @@ impl Response {
 
     fn check(&self) -> PyResult<()> {
         self.0.check().map_err(client_error)
-    }
-}
-
-#[pyclass(name = "InflightFrames", module = "autd3", frozen)]
-pub struct InflightFrames(Arc<tokio::sync::Mutex<autd3_rs::InflightFrames>>);
-
-fn inflight_busy() -> PyErr {
-    PyRuntimeError::new_err("the inflight frames are being collected")
-}
-
-#[pymethods]
-impl InflightFrames {
-    #[new]
-    fn new() -> Self {
-        Self(Arc::default())
-    }
-
-    fn push(&self, msg_id: u16) -> PyResult<()> {
-        self.0.try_lock().map_err(|_| inflight_busy())?.push(msg_id);
-        Ok(())
-    }
-
-    fn __len__(&self) -> PyResult<usize> {
-        Ok(self.0.try_lock().map_err(|_| inflight_busy())?.len())
-    }
-
-    fn is_empty(&self) -> PyResult<bool> {
-        Ok(self.0.try_lock().map_err(|_| inflight_busy())?.is_empty())
-    }
-
-    fn collect_oldest<'py>(
-        &self,
-        py: Python<'py>,
-        client: PyRef<'_, Client>,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let mut frames = Arc::clone(&self.0)
-            .try_lock_owned()
-            .map_err(|_| inflight_busy())?;
-        let client = Arc::clone(client.inner()?);
-        future_into_py(py, async move {
-            Ok(frames
-                .collect_oldest(&client)
-                .await
-                .map_err(client_error)?
-                .map(Response))
-        })
     }
 }

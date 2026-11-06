@@ -19,12 +19,12 @@ Both are disabled by default and can be enabled with [SetCpuConfig](/autd3-sdk/e
 If `failsafe_timeout` is set, a device stops its output when communication from the host has been cut off for that long.
 The default is `None` (disabled), and the devices do not stop the ultrasound even if communication is cut off by a host crash or a broken cable.
 
-While there is nothing to send, `Client` sends nothing to the devices by itself.
-Therefore, when `failsafe_timeout` is set, the user must keep sending liveness checks by calling [`send_heartbeat()`](/autd3-sdk/en/api/basics/client/#api) periodically, even while waiting with the output kept on.
-The interval must be sufficiently shorter than `failsafe_timeout` (aim for less than half).
-`send_heartbeat()` only sends and does not wait for the replies. The replies stay in the socket until read, and sending on without reading them overflows the receive buffer; `send` and the others discard the unread replies before sending, so they are not affected.
+By default, while there is nothing to send, `Client` sends nothing to the devices by itself.
+Therefore, when `failsafe_timeout` is set, open the `Client` with `heartbeat_interval` in [`TransportOption`](/autd3-sdk/en/api/basics/transport-option/) so that it keeps sending liveness checks even while waiting with the output kept on.
+The interval must be sufficiently shorter than `failsafe_timeout` (aim for less than half). The library does not check this relation.
+The replies to the liveness checks are not read; the next `send` and the others discard them before sending.
 
-The following is an example that sets `failsafe_timeout` to 100 ms and sends a liveness check every 10 ms from another task.
+The following is an example that sets `failsafe_timeout` to 100 ms and sends a liveness check every 10 ms.
 
 <CodeTabs rust={excerpt(sample, "heartbeat")} python={excerpt(pySample, "heartbeat")} csharp={excerpt(csSample, "heartbeat")} />
 

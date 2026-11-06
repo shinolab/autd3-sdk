@@ -39,47 +39,39 @@ import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
 | `read_firmware_version()` | ✓     | `Result<Vec<FirmwareVersion>, Error>` | 各デバイスの CPU/FPGA ファームウェアバージョン             |
 | `device_time_now()`       | —     | `Result<SysTime, Error>`               | 現在のデバイスの時刻 ([SysTime](/autd3-sdk/api/basics/sys-time/) 参照) |
 | `send(cmd)`               | ✓     | `Result<(), Error>`                   | コマンドを送信し, 1 フレームずつ応答確認まで行う           |
-| `send_frame(frame, exec)` | ✓     | `Result<u16, Error>`                  | フレームを 1 つ全デバイスへ送り, msg_id を返す (返信は待たない. [streaming](#streaming) / [処理時刻](#処理時刻) 参照) |
-| `send_heartbeat()`        | ✓     | `Result<u16, Error>`                  | 全デバイスへ生存確認を 1 回送り, msg_id を返す ([フェイルセーフ](/autd3-sdk/guide/failsafe/#通信途絶の-failsafe-と生存確認) 参照) |
-| `recv()`                  | ✓     | `Result<DeviceReply, Error>`          | 返信を 1 個読む (どの msg_id のものでも)                   |
-| `collect(msg_id)`         | ✓     | `Result<Response, Error>`             | その msg_id の全デバイスの返信が揃うまで読む (他の返信は捨てる) |
-| `discard_unread_replies()` | —    | `Result<(), Error>`                   | 届いていて未読の返信をすべて捨てる                         |
+| `send_streaming(cmd)`     | ✓     | `Result<(), Error>`                   | コマンドを応答を待たずに詰めて送り, 全フレームの応答を確認する ([streaming](#streaming) 参照) |
+| `read_state()`            | ✓     | `Result<Response, Error>`             | 全デバイスへ生存確認を 1 回送り, その返信を返す ([状態監視](/autd3-sdk/guide/state-check/) 参照) |
 
-`Client` は待ち時間の上限を持たない. 返信が揃わない (途絶したデバイスがある) と `collect` などは返らないので, 上限は呼び出し側で付ける.
+`Client` は待ち時間の上限を持たない. 返信が揃わない (途絶したデバイスがある) と `send` / `read_state` などは返らないので, 上限は呼び出し側で付ける.
 Rust は `tokio::time::timeout`, Python は `asyncio.wait_for` などの取り消し, C# は `CancellationToken` を使う (取り消すと送受信の処理も止まる).
 途絶とみなすか・その後に送信を止めるか開き直すかもユーザーが決める.
 
-返信はバックグラウンドでは読まれず, `recv` / `collect` (と `send` などの内部) を await している間だけ読まれる.
-そのため `recv` / `collect` を呼ぶのは 1 か所に限る (並行に呼ぶと返信を奪い合う).
-生存確認を周期的に送りながら返信を読まずにいるとソケットの受信バッファがあふれ, 以後の返信が捨てられる.
-`send` と `read_firmware_version` は送る前に `discard_unread_replies()` を呼ぶので影響を受けない. `send_frame` と `collect` を自分で組むときは, 送る前に `discard_unread_replies()` を呼ぶ.
+返信を読むメソッドは同時に 1 つしか動かない. Rust ではこれらが `&mut self` を取り, Python と C# では同時に呼ぶと順番待ちになる.
+各メソッドは送る前に, それまでに届いていて読まれていない返信 (取り消した呼び出しの返信・生存確認の返信) を捨てる.
 
-`close()` は無い. Rust は `Client` を drop したとき, C# は `Dispose()`, Python は `with` を抜けたときにソケットを閉じる. デバイスへは何も送らない.
+`TransportOption` の `heartbeat_interval` を指定すると, `Client` はその周期で生存確認を送り続ける ([フェイルセーフ](/autd3-sdk/guide/failsafe/#通信途絶の-failsafe-と生存確認) 参照). 既定では送らない.
+
+`close()` は無い. Rust は `Client` を drop したとき, C# は `Dispose()`, Python は `with` を抜けたときにソケットを閉じ, 生存確認の送信も止める. デバイスへは何も送らない.
 デバイスは閉じた後も直前の出力を続けるので, 出力を止めるのはユーザーの責任である.
 
-Rust の `Client` は tokio のランタイムの中で使う (`Client::open` を呼び, 返った future もランタイムの中で await する). タスクは spawn しない.
+Rust の `Client` は tokio のランタイムの中で使う (`Client::open` を呼び, 返った future もランタイムの中で await する).
 
 ## streaming
 
 `send` は 1 フレームずつ応答を待つ (stop-and-wait).
-応答を待たずに続けて送るには, `Frames::encode` でコマンドをフレーム列に変換し, `send_frame` が返す msg_id を `InflightFrames` に積んで, `collect_oldest` で最も古いフレームの返信 (`Response`) を受け取る.
+`send_streaming` は応答を待たずに続けて送り, 最も古いフレームから応答を確かめる.
+Modulation や STM のように複数フレームになるコマンドを速く送るときに使う.
 
 <CodeTabs rust={excerpt(sample, "streaming")} python={excerpt(pySample, "streaming")} csharp={excerpt(csSample, "streaming")} />
 
-| `InflightFrames`         | 説明                                                                 |
-| ------------------------ | -------------------------------------------------------------------- |
-| `push(msg_id)`           | 返信待ちのフレームを積む                                             |
-| `len()` / `is_empty()`   | 返信待ちのフレーム数                                                 |
-| `collect_oldest(client)` | 最も古いフレームの全デバイスの返信が揃うまで読み, 取り出して返す. 空なら `None` |
-
-応答を待たずに送ってよいフレーム数は `MAX_INFLIGHT (7)` である.
-それより多く溜めるとデバイスの受信 FIFO があふれ, あふれたフレームは処理されず返信も来ない. `Client` も `InflightFrames` もこれを防がないので, `len()` を見て `collect_oldest` する.
-`collect_oldest` は取り消しても読んだ返信を失わないので, 時間切れの後も続きから呼び直せる.
-`InflightFrames` と `collect` は併用しない (`collect` は待っている msg_id 以外の返信を捨てる).
+応答を待たずに送るフレーム数はデバイスの受信 FIFO の容量 `MAX_INFLIGHT (7)` までに抑える.
+バンクを切り替えるフレーム (`Activate*Bank` など) の前では, それまでに送ったフレームの応答をすべて確かめてから送る.
+そのため, データの書き込みが拒否された場合, 書きかけのバンクには切り替わらずにエラーが返る.
+`send_streaming` を途中で取り消すと, 送ったフレームがデバイスの受信 FIFO に残っていることがある. 取り消した直後に `send_streaming` を続けると FIFO があふれ得るので, 先に `read_state` か `send` を挟む.
 
 ## Response と DeviceReply
 
-`collect` は全デバイスの返信を `Response` にまとめて返す.
+`read_state` は全デバイスの返信を `Response` にまとめて返す.
 
 | `Response`        | 説明                                                                  |
 | ----------------- | --------------------------------------------------------------------- |
@@ -87,12 +79,10 @@ Rust の `Client` は tokio のランタイムの中で使う (`Client::open` �
 | `device_status()` | 返信の flags から作ったデバイスごとの状態 ([状態監視](/autd3-sdk/guide/state-check/) 参照) |
 | `check()`         | 最も番号の小さい, エラーを返したデバイスのエラーを返す                |
 
-`recv` は返信を 1 個ずつ `DeviceReply` で返す. 未割り当て・別 ID の返信は `DeviceLost` エラーになる.
-
 | `DeviceReply` のフィールド | 説明                                                 |
 | -------------------------- | ---------------------------------------------------- |
 | `device`                   | 返信したデバイスの番号                               |
-| `msg_id`                   | どのフレーム (生存確認) への返信か                   |
+| `msg_id`                   | どの生存確認への返信か                               |
 | `status`                   | エラーコード (`0` = 成功)                            |
 | `flags`                    | デバイスの状態フラグ                                 |
 | `unit_id`                  | デバイスの ID                                        |
@@ -119,8 +109,8 @@ Rust の `Client` は tokio のランタイムの中で使う (`Client::open` �
 ### FpgaState
 
 FPGA の状態フラグ. 読み出し用のコマンドは無く, フレームと生存確認のすべての返信に載る.
-`recv()` が返す `DeviceReply` の `fpga_state` で読む (`collect` が返す `Response` からは `replies()` 経由. デバイス番号順).
-フレームの応答はそのフレームを処理した直後の値, 生存確認の応答は最大 1 ms 古い値 (デバイスが長い処理をしている間はさらに古い値) を運ぶ. bank の切り替わりを確かめるときは `Nop` などのフレームを送って応答で見る.
+`read_state()` が返す `Response` の `replies()` の `fpga_state` で読む (デバイス番号順).
+生存確認の応答は最大 1 ms 古い値 (デバイスが長い処理をしている間はさらに古い値) を運ぶ.
 
 | メソッド                  | 型               | 説明                                     |
 | ------------------------- | ---------------- | ---------------------------------------- |
@@ -135,40 +125,17 @@ FPGA の状態フラグ. 読み出し用のコマンドは無く, フレーム�
 ### Telemetry
 
 CPU の診断カウンタ. 読み出し用のコマンドは無く, フレームと生存確認のすべての返信に載る.
-`recv()` が返す `DeviceReply` の `telemetry` で読む (`collect` が返す `Response` からは `replies()` 経由. デバイス番号順).
+`read_state()` が返す `Response` の `replies()` の `telemetry` で読む (デバイス番号順).
 
 | フィールド            | 型    | 説明                                                   |
 | --------------------- | ----- | ------------------------------------------------------ |
 | `fifo_drop`           | `u32` | 受信 FIFO が満杯で捨てたフレーム数 (捨てたフレームには返信しない) |
-| `exec_late`           | `u32` | [処理時刻](#処理時刻)を 1 µs 以上過ぎてから処理を始めたフレーム数 |
+| `exec_late`           | `u32` | 処理時刻を 1 µs 以上過ぎてから処理を始めたフレーム数 |
 | `sync_resync`         | `u8`  | 同期入力のハード再同期回数 (`Synchronize` で 0 に戻る) |
 | `cpu_watchdog`        | `u8`  | CPU ウォッチドッグの発火回数 (FPGA の再構成まで消えない) |
 | `boot_failure`        | `u8`  | 起動時に失敗した手順の数 (`Clear` で消えない)          |
 
 返信から分かるものは載らない. 処理したフレーム数は返信の数, コマンドのエラーは返信の status, フェイルセーフの発火は `DeviceStatus::failsafe_active` が立ったことで分かる.
-
-## 処理時刻
-
-デバイスへの送信は順に 1 台ずつ行われるので, 各デバイスにフレームが届く時刻は少しずつずれる.
-`send_frame` の `exec` に `Lead` / `At` を渡して送ると, フレームに処理時刻を付け, 各デバイスはその時刻まで処理を待つ.
-これにより, 1 回の送信の内容を全デバイスが同じタイミングで処理し始める.
-`send` は処理時刻を付けない (各デバイスは届いた順にすぐ処理する).
-コマンドを処理時刻付きで送るには, `Frames::encode` でフレーム列に変換し, 各フレームを `send_frame` で送る.
-
-<CodeTabs rust={excerpt(methods, "exec_at")} python={excerpt(pyMethods, "exec_at")} csharp={excerpt(csMethods, "exec_at")} />
-
-| `ExecAt`         | 処理時刻                                                                 |
-| ---------------- | ------------------------------------------------------------------------ |
-| `Immediate`      | 付けない (届いた順にすぐ処理する. `send` と同じ)                          |
-| `Lead(lead)`     | 送信時のデバイスの現在時刻 + `lead`                                       |
-| `At(sys_time)`   | デバイス時刻 `sys_time` ([SysTime](/autd3-sdk/api/basics/sys-time/) 参照) |
-
-注意点は以下の通り
-- 必ず全デバイスが同じ時刻に処理を始めることを保証はしない
-  - 全デバイスへの送信が指定時刻までに終わらなければ, 遅れたデバイスは指定時刻を過ぎてから処理する. この回数はテレメトリの `exec_late` で読める.
-  - 応答を待たずに続けて送ると ([streaming](#streaming)), 前のフレームの処理中に次のフレームの指定時刻が来ることがあり, そのフレームは遅れて処理される (`exec_late` にカウントされる).
-  - また, 成功したとしてもCPUボード内部の処理の開始が揃うだけであり, FPGAの処理の開始が揃うこと (すなわち, 出力される超音波の位相の更新タイミングが揃うことなど) は保証しない
-- 応答は処理の後に返るので, 送信の完了は指定時刻まで遅れる. 1 フレームずつ応答を待つと, 複数フレームのコマンドはフレーム数 × `lead` 程度かかる. 返信待ちに上限を付けるなら `lead` + 処理時間より長くする
 
 ## each
 
@@ -178,7 +145,6 @@ CPU の診断カウンタ. 読み出し用のコマンドは無く, フレーム
 
 `each` は常に 1 フレームになる.
 `Modulation` / `FociStm` / `PatternStm` のような複数フレームのコマンドは `each` では送れない.
-デバイスごとに異なる複数フレームの内容が必要な場合, `Frame::new` でフレームを自分で組み立てて `send_frame` で送る.
 
 Rust ではクロージャの返り値はすべて同じ型でなければならない.
 型の異なるコマンドを混在させたい場合は, `Box<dyn Operation>` に揃える.

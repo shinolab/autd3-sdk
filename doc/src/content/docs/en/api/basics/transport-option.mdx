@@ -21,9 +21,10 @@ import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
 | `open_timeout`        | `Duration`             | 40 s    | Upper bound on the time the open waits |
 | `send_buffer_bytes`         | `Option<NonZeroUsize>` | 8192    | Size of the socket send buffer [B]. `None` leaves the OS default                              |
 | `sync_on_open`        | `bool`                 | `true`  | When `false`, open does not wait for the devices to synchronize with one another |
+| `heartbeat_interval`  | `Option<Duration>`     | `None`  | When set, keep sending liveness checks at this interval (see [Failsafe](/autd3-sdk/en/guide/failsafe/#communication-loss-failsafe-and-liveness-check)) |
 
 Changing anything other than `iface` is generally not recommended.
-`Client` neither bounds the wait for replies, judges a device lost, nor sends liveness checks: the user does (see [Client](/autd3-sdk/en/api/basics/client/#api) / [Failsafe](/autd3-sdk/en/guide/failsafe/#communication-loss-failsafe-and-liveness-check)).
+`Client` neither bounds the wait for replies nor judges a device lost: the user does (see [Client](/autd3-sdk/en/api/basics/client/#api)).
 
 :::caution[Windows timer resolution]
 The library does not change the timer resolution of Windows (`timeBeginPeriod`).

@@ -5,7 +5,7 @@ use std::time::Duration;
 use autd3_rs::commands::{CpuConfig, PtpConfig, SetCpuConfig};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::udp::{TransportOption, UdpError};
-use autd3_rs::{Client, Error, ExecAt, Frame, Response};
+use autd3_rs::{Controller, Error, ExecAt, Frame, Response};
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
 pub(crate) const PATIENCE: Duration = Duration::from_secs(10);
@@ -35,19 +35,23 @@ pub(crate) fn option(emulator: &UdpEmulator) -> TransportOption {
     }
 }
 
-pub(crate) async fn open_with(emulator: &UdpEmulator, option: &TransportOption) -> Client {
-    Client::open(&geometry(emulator.num_devices()), option)
+pub(crate) async fn open_with(emulator: &UdpEmulator, option: &TransportOption) -> Controller {
+    Controller::open(&geometry(emulator.num_devices()), option)
         .await
         .unwrap()
 }
 
-pub(crate) async fn open(num_devices: usize) -> (UdpEmulator, Client) {
+pub(crate) async fn open(num_devices: usize) -> (UdpEmulator, Controller) {
     let emulator = emulator(num_devices);
     let client = open_with(&emulator, &option(&emulator)).await;
     (emulator, client)
 }
 
-pub(crate) async fn send_and_collect(client: &Client, frame: Frame<'_>, exec: ExecAt) -> Response {
+pub(crate) async fn send_and_collect(
+    client: &Controller,
+    frame: Frame<'_>,
+    exec: ExecAt,
+) -> Response {
     let msg_id = client.send_frame(frame, exec).await.unwrap();
     tokio::time::timeout(PATIENCE, client.collect(msg_id))
         .await

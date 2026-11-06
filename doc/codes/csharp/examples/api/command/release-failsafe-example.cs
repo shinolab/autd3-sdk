@@ -15,7 +15,7 @@ using var client = Client.Open(geometry, new TransportOption());
 await client.SendAsync(new Clear());
 await client.SendAsync(new Synchronize());
 
-var status = (await client.CollectAsync(client.SendHeartbeat())).DeviceStatus();
+var status = (await client.ReadStateAsync()).DeviceStatus();
 if (status.Any(s => s.FailsafeActive))
 {
     await client.SendAsync(new ReleaseFailsafe());

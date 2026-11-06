@@ -34,6 +34,13 @@ pub(crate) fn cmds(frames: &Frames) -> Vec<Cmd> {
         .collect()
 }
 
+pub(crate) fn waits(frames: &Frames) -> Vec<bool> {
+    frames
+        .iter()
+        .map(|frame| frame.waits_for_previous())
+        .collect()
+}
+
 pub(crate) fn cmd_at(frames: &Frames, frame: usize, device: usize) -> Cmd {
     frames.frame(frame).unwrap().datagrams()[device].cmd
 }

@@ -36,7 +36,7 @@ mod tests {
     use crate::error::Error;
     use crate::geometry::{Autd3, Point3};
     use crate::protocol::{Cmd, PAYLOAD_BYTES};
-    use crate::test_utils::{FailAt, Marker, build, cmd_at, payload, test_geometry};
+    use crate::test_utils::{FailAt, Marker, build, cmd_at, payload, test_geometry, waits};
     use crate::value::{
         ControlPoints, Intensity, LoopBehavior, ModulationBank, PatternBank, Phase, SamplingConfig,
     };
@@ -65,6 +65,28 @@ mod tests {
         assert_eq!(frame.distribution(), Distribution::PerDevice);
         assert_eq!(payload(&frames, 0, 0)[0], 0, "device 0 -> bank B0");
         assert_eq!(payload(&frames, 0, 1)[0], 1, "device 1 -> bank B1");
+        assert_eq!(waits(&frames), [false]);
+    }
+
+    #[test]
+    fn each_waits_when_any_assigned_operation_waits() {
+        let config = ConfigModulation {
+            bank: ModulationBank::B0,
+            config: SamplingConfig::FREQ_40K,
+            size: 2,
+            loop_behavior: LoopBehavior::Infinite,
+        };
+        let frames = build(
+            3,
+            each(|device| match device.idx() {
+                0 => Some(Box::new(config) as Box<dyn Operation>),
+                1 => Some(Box::new(Marker(0))),
+                _ => None,
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(waits(&frames), [true]);
     }
 
     #[test]
