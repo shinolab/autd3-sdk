@@ -9,19 +9,15 @@ internal static class Sample
     {
         var iface = Interface.Auto;
         var openTimeout = TimeSpan.FromSeconds(40);
-        var lostTimeout = TimeSpan.FromMilliseconds(500);
-        var ackTimeout = TimeSpan.FromMilliseconds(200);
         ulong sendBufferBytes = 8192;
-        TimeSpan? heartbeatInterval = null;
+        var syncOnOpen = true;
         // ANCHOR: api
         new TransportOption
         {
             Iface = iface,
             OpenTimeout = openTimeout,
-            LostTimeout = lostTimeout,
-            AckTimeout = ackTimeout,
             SendBufferBytes = sendBufferBytes,
-            HeartbeatInterval = heartbeatInterval,
+            SyncOnOpen = syncOnOpen,
         };
         // ANCHOR_END: api
 

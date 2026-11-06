@@ -11,7 +11,8 @@ async def main() -> None:
         await client.send(Clear())
         await client.send(Synchronize())
 
-        status = client.device_status()
+        msg_id = client.send_heartbeat()
+        status = (await client.collect(msg_id)).device_status()
         if any(s.failsafe_active for s in status):
             await client.send(ReleaseFailsafe())
 

@@ -83,26 +83,18 @@ impl TransportOption {
     #[pyo3(signature = (
         iface = CoreOption::default().iface,
         open_timeout = CoreOption::default().open_timeout,
-        lost_timeout = CoreOption::default().lost_timeout,
-        ack_timeout = CoreOption::default().ack_timeout,
         send_buffer_bytes = CoreOption::default().send_buffer_bytes.map(NonZeroUsize::get),
         sync_on_open = CoreOption::default().sync_on_open,
-        heartbeat_interval = CoreOption::default().heartbeat_interval,
     ))]
     fn new(
         #[pyo3(from_py_with = extract_iface)] iface: CoreInterface,
         #[pyo3(from_py_with = extract_duration)] open_timeout: Duration,
-        #[pyo3(from_py_with = extract_duration)] lost_timeout: Duration,
-        #[pyo3(from_py_with = extract_duration)] ack_timeout: Duration,
         send_buffer_bytes: Option<usize>,
         sync_on_open: bool,
-        #[pyo3(from_py_with = none_or_duration)] heartbeat_interval: Option<Duration>,
     ) -> PyResult<Self> {
         Ok(Self(CoreOption {
             iface,
             open_timeout,
-            lost_timeout,
-            ack_timeout,
             send_buffer_bytes: send_buffer_bytes
                 .map(|n| {
                     NonZeroUsize::new(n)
@@ -110,7 +102,6 @@ impl TransportOption {
                 })
                 .transpose()?,
             sync_on_open,
-            heartbeat_interval,
         }))
     }
 
@@ -125,16 +116,6 @@ impl TransportOption {
     }
 
     #[getter]
-    fn lost_timeout<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        duration_to_py(py, self.0.lost_timeout)
-    }
-
-    #[getter]
-    fn ack_timeout<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        duration_to_py(py, self.0.ack_timeout)
-    }
-
-    #[getter]
     fn send_buffer_bytes(&self) -> Option<NonZeroUsize> {
         self.0.send_buffer_bytes
     }
@@ -142,14 +123,6 @@ impl TransportOption {
     #[getter]
     fn sync_on_open(&self) -> bool {
         self.0.sync_on_open
-    }
-
-    #[getter]
-    fn heartbeat_interval<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
-        self.0
-            .heartbeat_interval
-            .map(|interval| duration_to_py(py, interval))
-            .transpose()
     }
 
     fn __repr__(&self) -> String {

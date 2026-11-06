@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace AUTD3
@@ -24,6 +25,33 @@ namespace AUTD3
                 throw;
             }
             return tcs.Task;
+        }
+
+        internal static async Task<IntPtr> InvokeAsync(Action<IntPtr, CompletionCallback, IntPtr> call, CancellationToken cancellationToken)
+        {
+            if (!cancellationToken.CanBeCanceled)
+            {
+                return await InvokeAsync((cb, ud) => call(IntPtr.Zero, cb, ud)).ConfigureAwait(false);
+            }
+            var token = NativeClient.autd3_cancel_token_new();
+            try
+            {
+                using (cancellationToken.Register(() => NativeClient.autd3_cancel_token_cancel(token)))
+                {
+                    try
+                    {
+                        return await InvokeAsync((cb, ud) => call(token, cb, ud)).ConfigureAwait(false);
+                    }
+                    catch (Autd3Exception e) when (e.Code == Autd3ErrorCode.Aborted && cancellationToken.IsCancellationRequested)
+                    {
+                        throw new OperationCanceledException(e.Message, e, cancellationToken);
+                    }
+                }
+            }
+            finally
+            {
+                NativeClient.autd3_cancel_token_free(token);
+            }
         }
 
         [MonoPInvokeCallback(typeof(CompletionCallback))]

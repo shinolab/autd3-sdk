@@ -128,59 +128,30 @@ namespace AUTD3
     public readonly struct Telemetry : IEquatable<Telemetry>
     {
         public uint FifoDrop { get; }
-        public uint DispatchError { get; }
-        public uint Processed { get; }
-        public uint SendFailure { get; }
-        public ushort Failsafe { get; }
-        public ushort PtpUnlockFailsafe { get; }
-        public byte SyncResync { get; }
-        public byte BootFailure { get; }
-        public byte CpuWatchdog { get; }
         public uint ExecLate { get; }
+        public byte SyncResync { get; }
+        public byte CpuWatchdog { get; }
+        public byte BootFailure { get; }
 
         internal Telemetry(NativeClient.TelemetryNative native)
         {
             FifoDrop = native.FifoDrop;
-            DispatchError = native.DispatchError;
-            Processed = native.Processed;
-            SendFailure = native.SendFailure;
-            Failsafe = native.Failsafe;
-            PtpUnlockFailsafe = native.PtpUnlockFailsafe;
-            SyncResync = native.SyncResync;
-            BootFailure = native.BootFailure;
-            CpuWatchdog = native.CpuWatchdog;
             ExecLate = native.ExecLate;
+            SyncResync = native.SyncResync;
+            CpuWatchdog = native.CpuWatchdog;
+            BootFailure = native.BootFailure;
         }
 
         public override string ToString() =>
-            $"Telemetry {{ FifoDrop = {FifoDrop}, DispatchError = {DispatchError}, " +
-            $"Processed = {Processed}, SendFailure = {SendFailure}, Failsafe = {Failsafe}, PtpUnlockFailsafe = {PtpUnlockFailsafe}, " +
-            $"SyncResync = {SyncResync}, BootFailure = {BootFailure}, CpuWatchdog = {CpuWatchdog}, ExecLate = {ExecLate} }}";
+            $"Telemetry {{ FifoDrop = {FifoDrop}, ExecLate = {ExecLate}, SyncResync = {SyncResync}, CpuWatchdog = {CpuWatchdog}, BootFailure = {BootFailure} }}";
 
         public bool Equals(Telemetry other) =>
-            FifoDrop == other.FifoDrop &&
-            DispatchError == other.DispatchError && Processed == other.Processed && SendFailure == other.SendFailure &&
-            Failsafe == other.Failsafe && PtpUnlockFailsafe == other.PtpUnlockFailsafe &&
-            SyncResync == other.SyncResync && BootFailure == other.BootFailure && CpuWatchdog == other.CpuWatchdog &&
-            ExecLate == other.ExecLate;
+            FifoDrop == other.FifoDrop && ExecLate == other.ExecLate &&
+            SyncResync == other.SyncResync && CpuWatchdog == other.CpuWatchdog && BootFailure == other.BootFailure;
 
         public override bool Equals(object? obj) => obj is Telemetry other && Equals(other);
 
-        public override int GetHashCode()
-        {
-            var hash = new HashCode();
-            hash.Add(FifoDrop);
-            hash.Add(DispatchError);
-            hash.Add(Processed);
-            hash.Add(SendFailure);
-            hash.Add(Failsafe);
-            hash.Add(PtpUnlockFailsafe);
-            hash.Add(SyncResync);
-            hash.Add(BootFailure);
-            hash.Add(CpuWatchdog);
-            hash.Add(ExecLate);
-            return hash.ToHashCode();
-        }
+        public override int GetHashCode() => HashCode.Combine(FifoDrop, ExecLate, SyncResync, CpuWatchdog, BootFailure);
 
         public static bool operator ==(Telemetry left, Telemetry right) => left.Equals(right);
 
@@ -217,38 +188,94 @@ namespace AUTD3
         public static bool operator !=(DeviceStatus left, DeviceStatus right) => !left.Equals(right);
     }
 
-    public sealed class Response
+    public sealed class DeviceReply
     {
-        private readonly byte[] _errorCodes;
-        private readonly byte[][] _replyData;
+        public int Device { get; }
+        public ushort MsgId { get; }
+        public byte Status { get; }
+        public byte Flags { get; }
+        public byte UnitId { get; }
+        public ulong SysTime { get; }
+        public Telemetry Telemetry { get; }
+        public FpgaState FpgaState { get; }
+        public IReadOnlyList<byte> Data { get; }
 
-        internal Response(byte[] errorCodes, byte[][] replyData)
+        private DeviceReply(NativeClient.DeviceReplyNative native, byte[] data)
         {
-            _errorCodes = errorCodes;
-            _replyData = replyData;
+            Device = (int)native.Device;
+            MsgId = native.MsgId;
+            Status = native.Status;
+            Flags = native.Flags;
+            UnitId = native.UnitId;
+            SysTime = native.SysTime;
+            Telemetry = new Telemetry(native.Telemetry);
+            FpgaState = new FpgaState(native.FpgaState);
+            Data = data;
         }
 
-        internal static Response FromNative(IntPtr handle)
+        internal static DeviceReply FromNative(IntPtr reply)
+        {
+            if (NativeClient.autd3_device_reply_get(reply, out var native) != 0)
+            {
+                throw new Autd3Exception("failed to read the reply");
+            }
+            var data = new byte[(int)NativeClient.autd3_device_reply_data_len(reply)];
+            if (data.Length > 0)
+            {
+                Marshal.Copy(NativeClient.autd3_device_reply_data(reply), data, 0, data.Length);
+            }
+            return new DeviceReply(native, data);
+        }
+
+        internal static DeviceReply FromOwned(IntPtr reply)
         {
             try
             {
-                var count = (int)NativeClient.autd3_response_num_devices(handle);
-                var errorCodes = new byte[count];
-                if (count > 0)
-                {
-                    Marshal.Copy(NativeClient.autd3_response_error_codes(handle), errorCodes, 0, count);
-                }
-                var replyData = new byte[count][];
-                for (var i = 0; i < count; i++)
-                {
-                    var len = (int)NativeClient.autd3_response_reply_data_of_len(handle, (UIntPtr)i);
-                    replyData[i] = new byte[len];
-                    if (len > 0)
-                    {
-                        Marshal.Copy(NativeClient.autd3_response_reply_data_of(handle, (UIntPtr)i), replyData[i], 0, len);
-                    }
-                }
-                return new Response(errorCodes, replyData);
+                return FromNative(reply);
+            }
+            finally
+            {
+                NativeClient.autd3_device_reply_free(reply);
+            }
+        }
+    }
+
+    public sealed class Response
+    {
+        private readonly DeviceReply[] _replies;
+        private readonly DeviceStatus[] _deviceStatus;
+        private readonly int _checkCode;
+        private readonly byte[] _checkError;
+
+        private Response(IntPtr handle)
+        {
+            var count = (int)NativeClient.autd3_response_num_devices(handle);
+            _replies = new DeviceReply[count];
+            for (var i = 0; i < count; i++)
+            {
+                _replies[i] = DeviceReply.FromNative(NativeClient.autd3_response_reply(handle, (UIntPtr)i));
+            }
+            var native = new NativeClient.DeviceStatusNative[count];
+            var err = new byte[NativeAbi.ErrorBufferLength];
+            var code = NativeClient.autd3_response_device_status(handle, native, (UIntPtr)native.Length, err, (UIntPtr)err.Length);
+            if (code != 0)
+            {
+                throw Autd3Exception.FromNative(code, err);
+            }
+            _deviceStatus = new DeviceStatus[count];
+            for (var i = 0; i < count; i++)
+            {
+                _deviceStatus[i] = new DeviceStatus(native[i]);
+            }
+            _checkError = new byte[NativeAbi.ErrorBufferLength];
+            _checkCode = NativeClient.autd3_response_check(handle, _checkError, (UIntPtr)_checkError.Length);
+        }
+
+        internal static Response FromOwned(IntPtr handle)
+        {
+            try
+            {
+                return new Response(handle);
             }
             finally
             {
@@ -256,71 +283,70 @@ namespace AUTD3
             }
         }
 
-        public IReadOnlyList<byte> ErrorCodes => _errorCodes;
+        public IReadOnlyList<DeviceReply> Replies => _replies;
 
-        public IReadOnlyList<IReadOnlyList<byte>> ReplyData => _replyData;
-
-        public IReadOnlyList<byte> ReplyDataOf(int device) =>
-            device >= 0 && device < _replyData.Length ? _replyData[device] : Array.Empty<byte>();
+        public DeviceStatus[] DeviceStatus() => (DeviceStatus[])_deviceStatus.Clone();
 
         public void Check()
         {
-            var err = new byte[NativeAbi.ErrorBufferLength];
-            var code = NativeClient.autd3_response_check(_errorCodes, (UIntPtr)_errorCodes.Length, err, (UIntPtr)err.Length);
-            if (code != 0)
+            if (_checkCode != 0)
             {
-                throw Autd3Exception.FromNative(code, err);
+                throw Autd3Exception.FromNative(_checkCode, _checkError);
             }
         }
     }
 
-    public sealed class ResponseFuture : IDisposable
+    public sealed class InflightFrames : IDisposable
     {
-        private IntPtr _handle;
+        private readonly InflightFramesHandle _handle = new InflightFramesHandle(NativeClient.autd3_inflight_frames_new());
 
-        internal ResponseFuture(IntPtr handle)
-        {
-            _handle = handle;
-        }
+        private static Autd3Exception Busy() => new Autd3Exception("the inflight frames are being collected");
 
-        public async Task<Response> AwaitAsync()
+        public void Push(ushort msgId)
         {
-            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
-            if (handle == IntPtr.Zero)
+            switch (NativeClient.autd3_inflight_frames_push(_handle, msgId))
             {
-                throw new Autd3Exception("ResponseFuture has already been awaited");
-            }
-            GC.SuppressFinalize(this);
-            var response = await AsyncOps.InvokeAsync((cb, ud) =>
-                NativeClient.autd3_response_token_await(handle, cb, ud)).ConfigureAwait(false);
-            return Response.FromNative(response);
-        }
-
-        public TaskAwaiter<Response> GetAwaiter() => AwaitAsync().GetAwaiter();
-
-        private void Release()
-        {
-            var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
-            if (handle != IntPtr.Zero)
-            {
-                NativeClient.autd3_response_token_free(handle);
+                case 0:
+                    return;
+                case (int)Autd3ErrorCode.Error:
+                    throw Busy();
+                case var code:
+                    throw new Autd3Exception("failed to push the frame", (Autd3ErrorCode)code);
             }
         }
 
-        public void Dispose()
+        public int Length
         {
-            Release();
-            GC.SuppressFinalize(this);
+            get
+            {
+                switch (NativeClient.autd3_inflight_frames_len(_handle, out var len))
+                {
+                    case 0:
+                        return (int)len;
+                    case (int)Autd3ErrorCode.Error:
+                        throw Busy();
+                    case var code:
+                        throw new Autd3Exception("failed to read the length", (Autd3ErrorCode)code);
+                }
+            }
         }
 
-        ~ResponseFuture() => Release();
+        public bool IsEmpty => Length == 0;
+
+        public async Task<Response?> CollectOldestAsync(Client client, CancellationToken cancellationToken = default)
+        {
+            var response = await AsyncOps.InvokeAsync((cancel, cb, ud) =>
+                NativeClient.autd3_inflight_frames_collect_oldest(_handle, client.Handle, cancel, cb, ud), cancellationToken).ConfigureAwait(false);
+            return response == IntPtr.Zero ? null : Response.FromOwned(response);
+        }
+
+        public void Dispose() => _handle.Dispose();
     }
 
     public sealed class Client : IDisposable
     {
         private readonly ClientHandle _handle;
         private readonly Geometry _geometry;
-        private volatile bool _closed;
 
         internal ClientHandle Handle => _handle;
 
@@ -354,23 +380,6 @@ namespace AUTD3
             return new Client(value, owned);
         }
 
-        public DeviceStatus[] DeviceStatus()
-        {
-            var native = new NativeClient.DeviceStatusNative[NumDevices];
-            var err = new byte[NativeAbi.ErrorBufferLength];
-            var code = NativeClient.autd3_client_device_status(Handle, native, (UIntPtr)native.Length, err, (UIntPtr)err.Length);
-            if (code != 0)
-            {
-                throw Autd3Exception.FromNative(code, err);
-            }
-            var status = new DeviceStatus[native.Length];
-            for (var i = 0; i < native.Length; i++)
-            {
-                status[i] = new DeviceStatus(native[i]);
-            }
-            return status;
-        }
-
         public int NumDevices => (int)NativeClient.autd3_client_num_devices(Handle);
 
         public Geometry Geometry => _geometry;
@@ -386,62 +395,60 @@ namespace AUTD3
             return SysTime.FromNanos(ns);
         }
 
-        public TimeSpan AckTimeout
-        {
-            get
-            {
-                OptionNative.Apply("ackTimeout", NativeClient.autd3_client_ack_timeout(Handle, out var ns));
-                return OptionNative.FromNanos(ns);
-            }
-            set => OptionNative.Apply("ackTimeout", NativeClient.autd3_client_set_ack_timeout(Handle, OptionNative.RequiredNanos("ackTimeout", value)));
-        }
-
-        public TimeSpan LostTimeout
-        {
-            get
-            {
-                OptionNative.Apply("lostTimeout", NativeClient.autd3_client_lost_timeout(Handle, out var ns));
-                return OptionNative.FromNanos(ns);
-            }
-            set => OptionNative.Apply("lostTimeout", NativeClient.autd3_client_set_lost_timeout(Handle, OptionNative.RequiredNanos("lostTimeout", value)));
-        }
-
-        public void SendHeartbeat()
+        public void DiscardUnreadReplies()
         {
             var err = new byte[NativeAbi.ErrorBufferLength];
-            var code = NativeClient.autd3_client_send_heartbeat(Handle, err, (UIntPtr)err.Length);
+            var code = NativeClient.autd3_client_discard_unread_replies(Handle, err, (UIntPtr)err.Length);
             if (code != 0)
             {
                 throw Autd3Exception.FromNative(code, err);
             }
         }
 
-        public async Task SendAsync(ICommand command)
+        public ushort SendHeartbeat()
+        {
+            var err = new byte[NativeAbi.ErrorBufferLength];
+            var code = NativeClient.autd3_client_send_heartbeat(Handle, out var msgId, err, (UIntPtr)err.Length);
+            if (code != 0)
+            {
+                throw Autd3Exception.FromNative(code, err);
+            }
+            return msgId;
+        }
+
+        public async Task SendAsync(ICommand command, CancellationToken cancellationToken = default)
         {
             using var frames = Frames.Encode(_geometry, command);
-            await AsyncOps.InvokeAsync((cb, ud) =>
-                NativeClient.autd3_client_send_checked(Handle, frames.Handle, cb, ud)).ConfigureAwait(false);
+            await AsyncOps.InvokeAsync((cancel, cb, ud) =>
+                NativeClient.autd3_client_send(Handle, frames.Handle, cancel, cb, ud), cancellationToken).ConfigureAwait(false);
         }
 
-        public async Task<ResponseFuture> SendFrameAsync(Frame frame)
-        {
-            var token = await AsyncOps.InvokeAsync((cb, ud) =>
-                NativeClient.autd3_client_send(Handle, frame.Frames.Handle, frame.Index, cb, ud)).ConfigureAwait(false);
-            return new ResponseFuture(token);
-        }
-
-        public async Task<ResponseFuture> SendFrameAsync(Frame frame, ExecAt execAt)
+        public async Task<ushort> SendFrameAsync(Frame frame, ExecAt execAt, CancellationToken cancellationToken = default)
         {
             var exec = execAt.ToNative();
-            var token = await AsyncOps.InvokeAsync((cb, ud) =>
-                NativeClient.autd3_client_send_at(Handle, frame.Frames.Handle, frame.Index, exec, cb, ud)).ConfigureAwait(false);
-            return new ResponseFuture(token);
+            var msgId = await AsyncOps.InvokeAsync((cancel, cb, ud) =>
+                NativeClient.autd3_client_send_frame(Handle, frame.Frames.Handle, frame.Index, exec, cancel, cb, ud), cancellationToken).ConfigureAwait(false);
+            return (ushort)msgId.ToInt64();
         }
 
-        public async Task<IReadOnlyList<FirmwareVersion>> ReadFirmwareVersionAsync()
+        public async Task<DeviceReply> RecvAsync(CancellationToken cancellationToken = default)
         {
-            var array = await AsyncOps.InvokeAsync((cb, ud) =>
-                NativeClient.autd3_client_read_firmware_version(Handle, cb, ud)).ConfigureAwait(false);
+            var reply = await AsyncOps.InvokeAsync((cancel, cb, ud) =>
+                NativeClient.autd3_client_recv(Handle, cancel, cb, ud), cancellationToken).ConfigureAwait(false);
+            return DeviceReply.FromOwned(reply);
+        }
+
+        public async Task<Response> CollectAsync(ushort msgId, CancellationToken cancellationToken = default)
+        {
+            var response = await AsyncOps.InvokeAsync((cancel, cb, ud) =>
+                NativeClient.autd3_client_collect(Handle, msgId, cancel, cb, ud), cancellationToken).ConfigureAwait(false);
+            return Response.FromOwned(response);
+        }
+
+        public async Task<IReadOnlyList<FirmwareVersion>> ReadFirmwareVersionAsync(CancellationToken cancellationToken = default)
+        {
+            var array = await AsyncOps.InvokeAsync((cancel, cb, ud) =>
+                NativeClient.autd3_client_read_firmware_version(Handle, cancel, cb, ud), cancellationToken).ConfigureAwait(false);
             try
             {
                 var count = (int)NativeClient.autd3_firmware_version_array_len(array);
@@ -462,99 +469,14 @@ namespace AUTD3
             }
         }
 
-        public async Task<IReadOnlyList<FpgaState>> ReadFpgaStateAsync()
-        {
-            var bytes = await ReadByteArrayAsync((cb, ud) =>
-                NativeClient.autd3_client_read_fpga_state(Handle, cb, ud)).ConfigureAwait(false);
-            var states = new FpgaState[bytes.Length];
-            for (var i = 0; i < bytes.Length; i++)
-            {
-                states[i] = new FpgaState(bytes[i]);
-            }
-            return states;
-        }
-
-        public async Task<IReadOnlyList<Telemetry>> ReadTelemetryAsync()
-        {
-            var array = await AsyncOps.InvokeAsync((cb, ud) =>
-                NativeClient.autd3_client_read_telemetry(Handle, cb, ud)).ConfigureAwait(false);
-            try
-            {
-                var count = (int)NativeClient.autd3_telemetry_array_len(array);
-                var telemetry = new Telemetry[count];
-                for (var i = 0; i < count; i++)
-                {
-                    if (NativeClient.autd3_telemetry_array_get(array, (UIntPtr)i, out var native) != 0)
-                    {
-                        throw new Autd3Exception("failed to read the telemetry");
-                    }
-                    telemetry[i] = new Telemetry(native);
-                }
-                return telemetry;
-            }
-            finally
-            {
-                NativeClient.autd3_telemetry_array_free(array);
-            }
-        }
-
-        internal static async Task<byte[]> ReadByteArrayAsync(Action<CompletionCallback, IntPtr> invoke)
-        {
-            var array = await AsyncOps.InvokeAsync(invoke).ConfigureAwait(false);
-            try
-            {
-                var len = (int)NativeClient.autd3_byte_array_len(array);
-                var bytes = new byte[len];
-                if (len > 0)
-                {
-                    Marshal.Copy(NativeClient.autd3_byte_array_data(array), bytes, 0, len);
-                }
-                return bytes;
-            }
-            finally
-            {
-                NativeClient.autd3_byte_array_free(array);
-            }
-        }
-
-        public void Close()
-        {
-            try
-            {
-                var err = new byte[NativeAbi.ErrorBufferLength];
-                var code = NativeClient.autd3_client_close(Handle, err, (UIntPtr)err.Length);
-                if (code != 0)
-                {
-                    throw Autd3Exception.FromNative(code, err);
-                }
-            }
-            finally
-            {
-                _closed = true;
-            }
-        }
-
         public void Dispose()
         {
             if (_handle.IsClosed)
             {
                 return;
             }
-            try
-            {
-                if (!_closed)
-                {
-                    Close();
-                }
-            }
-            catch (Autd3Exception)
-            {
-            }
-            finally
-            {
-                _handle.Dispose();
-                _geometry.Dispose();
-            }
+            _handle.Dispose();
+            _geometry.Dispose();
         }
     }
 }

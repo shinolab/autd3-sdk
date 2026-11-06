@@ -48,10 +48,6 @@ def rejected_in_the_middle() -> list[autd3.commands.Command]:
     return [sine(), rejected_silencer(), *[autd3.commands.ForceFan(True) for _ in range(TRAILING)]]
 
 
-async def processed(client: autd3.Client) -> int:
-    return (await client.read_telemetry())[0].processed
-
-
 def test_each_asks_every_device_and_leaves_the_unassigned_ones_out() -> None:
     geo = geometry()
     seen: list[int] = []

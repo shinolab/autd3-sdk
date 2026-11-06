@@ -25,11 +25,6 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         "InvalidArgumentError",
         &[base.clone(), builtins.getattr("ValueError")?],
     )?;
-    define(
-        m,
-        "ReplyTimeoutError",
-        &[base.clone(), builtins.getattr("TimeoutError")?],
-    )?;
     define(m, "DeviceError", std::slice::from_ref(&base))?;
     define(m, "NetworkError", std::slice::from_ref(&base))?;
     Ok(())

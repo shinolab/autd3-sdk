@@ -23,11 +23,8 @@ def test_defaults_follow_the_spec() -> None:
     option = autd3.TransportOption()
     assert option.iface == autd3.Interface.Auto
     assert option.open_timeout == autd3.Duration.from_secs(40)
-    assert option.lost_timeout == autd3.Duration.from_millis(500)
-    assert option.ack_timeout == autd3.Duration.from_millis(200)
     assert option.send_buffer_bytes == 8192
     assert option.sync_on_open is True
-    assert option.heartbeat_interval is None
     with pytest.raises(autd3.InvalidArgumentError, match="send_buffer_bytes"):
         autd3.TransportOption(send_buffer_bytes=0)
 
@@ -35,19 +32,15 @@ def test_defaults_follow_the_spec() -> None:
 def test_fields_round_trip() -> None:
     option = autd3.TransportOption(
         iface="eth1",
-        lost_timeout=autd3.Duration.from_millis(50),
         open_timeout=autd3.Duration.from_secs(3),
-        ack_timeout=autd3.Duration.from_millis(3),
     )
     assert option.iface == autd3.Interface.Name("eth1")
-    assert option.lost_timeout == autd3.Duration.from_millis(50)
     assert option.open_timeout == autd3.Duration.from_secs(3)
-    assert option.ack_timeout == autd3.Duration.from_millis(3)
     assert autd3.TransportOption(send_buffer_bytes=None).send_buffer_bytes is None
     assert autd3.TransportOption(send_buffer_bytes=65536).send_buffer_bytes == 65536
-    interval = autd3.Duration.from_millis(10)
-    assert autd3.TransportOption(heartbeat_interval=interval).heartbeat_interval == interval
-    assert autd3.TransportOption(heartbeat_interval=None).heartbeat_interval is None
+    for removed in ("lost_timeout", "ack_timeout", "heartbeat_interval"):
+        with pytest.raises(TypeError):
+            loose(autd3.TransportOption)(**{removed: autd3.Duration.from_millis(1)})
 
 
 def test_sync_on_open_can_be_turned_off() -> None:
@@ -90,9 +83,9 @@ def test_device_states_are_values() -> None:
     assert str(autd3.DeviceState.Syncing) == "SYNCING"
 
 
-def test_device_status_is_read_from_the_client_per_device() -> None:
-    assert callable(getattr(autd3.Client, "device_status", None))
-    for removed in ("state_checker", "bus_stats"):
+def test_device_status_is_read_from_a_response() -> None:
+    assert callable(getattr(autd3.Response, "device_status", None))
+    for removed in ("state_checker", "bus_stats", "device_status"):
         assert not hasattr(autd3.Client, removed)
     for removed in ("StateChecker", "BusStats", "DeviceMask"):
         assert not hasattr(autd3, removed)
@@ -109,15 +102,37 @@ def test_fpga_state_has_no_stm_mode_query() -> None:
     assert not hasattr(autd3.FpgaState, "is_stm_mode")
 
 
-def test_a_zero_ack_timeout_is_constructible_and_a_non_duration_is_rejected() -> None:
-    assert autd3.TransportOption(ack_timeout=autd3.Duration.from_millis(0)).ack_timeout == autd3.Duration.from_millis(0)
+def test_a_zero_open_timeout_is_constructible_and_a_non_duration_is_rejected() -> None:
+    assert autd3.TransportOption(open_timeout=autd3.Duration.from_millis(0)).open_timeout == autd3.Duration.from_millis(0)
     with pytest.raises(TypeError):
-        autd3.TransportOption(ack_timeout=loose(None))
+        autd3.TransportOption(open_timeout=loose(None))
 
 
-def test_the_timeouts_are_read_and_replaced_through_the_client() -> None:
-    for name in ("ack_timeout", "set_ack_timeout", "lost_timeout", "set_lost_timeout"):
+def test_the_client_is_a_thin_socket() -> None:
+    for name in ("send_frame", "send_heartbeat", "recv", "collect", "discard_unread_replies"):
         assert callable(getattr(autd3.Client, name, None))
+    for removed in (
+        "ack_timeout",
+        "set_ack_timeout",
+        "lost_timeout",
+        "set_lost_timeout",
+        "close",
+        "read_fpga_state",
+        "read_telemetry",
+        "send_frame_at",
+    ):
+        assert not hasattr(autd3.Client, removed)
+    assert not hasattr(autd3, "ResponseFuture")
+
+
+def test_inflight_frames_count_the_pushed_frames() -> None:
+    inflight = autd3.InflightFrames()
+    assert len(inflight) == 0
+    assert inflight.is_empty()
+    inflight.push(1)
+    inflight.push(2)
+    assert len(inflight) == 2
+    assert not inflight.is_empty()
 
 
 def test_client_open_takes_a_transport_option() -> None:

@@ -6,7 +6,6 @@ namespace AUTD3
     public enum Autd3ErrorCode
     {
         Error = -1,
-        Timeout = -2,
         Device = -3,
         Network = -4,
         InvalidArgument = -5,

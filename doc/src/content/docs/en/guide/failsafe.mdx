@@ -19,18 +19,17 @@ Both are disabled by default and can be enabled with [SetCpuConfig](/autd3-sdk/e
 If `failsafe_timeout` is set, a device stops its output when communication from the host has been cut off for that long.
 The default is `None` (disabled), and the devices do not stop the ultrasound even if communication is cut off by a host crash or a broken cable.
 
-By default, while there is nothing to send, `Client` sends nothing to the devices by itself.
-Therefore, when `failsafe_timeout` is set, liveness checks must keep going while you wait with the output kept on.
-Set `heartbeat_interval` of [`TransportOption`](/autd3-sdk/en/api/basics/transport-option/) and `Client` sends them at that interval.
-The interval must be sufficiently shorter than `failsafe_timeout`.
-To send them at your own timing, call [`send_heartbeat()`](/autd3-sdk/en/api/basics/client/#api) periodically instead.
+While there is nothing to send, `Client` sends nothing to the devices by itself.
+Therefore, when `failsafe_timeout` is set, the user must keep sending liveness checks by calling [`send_heartbeat()`](/autd3-sdk/en/api/basics/client/#api) periodically, even while waiting with the output kept on.
+The interval must be sufficiently shorter than `failsafe_timeout` (aim for less than half).
+`send_heartbeat()` only sends and does not wait for the replies. The replies stay in the socket until read, and sending on without reading them overflows the receive buffer; `send` and the others discard the unread replies before sending, so they are not affected.
 
-The following is an example that sets `failsafe_timeout` to 100 ms and sends a liveness check every 10 ms.
+The following is an example that sets `failsafe_timeout` to 100 ms and sends a liveness check every 10 ms from another task.
 
 <CodeTabs rust={excerpt(sample, "heartbeat")} python={excerpt(pySample, "heartbeat")} csharp={excerpt(csSample, "heartbeat")} />
 
 An output stopped by the failsafe does not come back automatically.
-Whether it is stopped can be checked with `failsafe_active` of the `DeviceStatus` that `device_status()` returns, and sending [`ReleaseFailsafe`](/autd3-sdk/en/api/command/release-failsafe/) resumes it ([Clear](/autd3-sdk/en/api/command/clear/) also works, but it resets every state).
+Whether it is stopped can be checked with `failsafe_active` of the `DeviceStatus` that `device_status()` of a reply (`Response`) returns, and sending [`ReleaseFailsafe`](/autd3-sdk/en/api/command/release-failsafe/) resumes it ([Clear](/autd3-sdk/en/api/command/clear/) also works, but it resets every state).
 
 ## Detecting and releasing the PTP failsafe
 

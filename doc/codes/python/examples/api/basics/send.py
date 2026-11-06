@@ -2,7 +2,7 @@ import asyncio
 
 import autd3_modulation as modulation
 import autd3_pattern as pattern
-from autd3 import Client, Frames, TransportOption
+from autd3 import Client, ExecAt, Frames, InflightFrames, TransportOption
 from autd3.commands import Modulation, Pattern, SetSilencer, each
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import Hz, m, mm, s
@@ -25,14 +25,17 @@ async def main() -> None:
 
         # ANCHOR: streaming
         frames = Frames.encode(geometry, Modulation(SamplingConfig.FREQ_4K, data))
-        responses = [await client.send_frame(frame) for frame in frames]
-        for response in responses:
-            (await response).check()
+        inflight = InflightFrames()
+        for frame in frames:
+            inflight.push(await client.send_frame(frame, ExecAt.Immediate))
+        while (response := await inflight.collect_oldest(client)) is not None:
+            response.check()
         # ANCHOR_END: streaming
 
         frames = Frames.encode(geometry, Pattern(left, Intensity.MAX))
         for frame in frames:
-            (await (await client.send_frame(frame))).check()
+            msg_id = await client.send_frame(frame, ExecAt.Immediate)
+            (await client.collect(msg_id)).check()
         # ANCHOR_END: api
 
         # ANCHOR: each

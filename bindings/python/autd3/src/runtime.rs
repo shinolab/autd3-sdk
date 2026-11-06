@@ -86,10 +86,9 @@ pub(crate) fn completions(py: Python<'_>) -> PyResult<Completions> {
 pub(crate) fn spawn<F: Future<Output = ()> + Send + 'static>(
     py: Python<'_>,
     future: F,
-) -> PyResult<()> {
+) -> PyResult<tokio::task::AbortHandle> {
     with_runtime(py, |runtime| {
-        runtime.tokio.spawn(future);
-        Some(())
+        Some(runtime.tokio.spawn(future).abort_handle())
     })
 }
 

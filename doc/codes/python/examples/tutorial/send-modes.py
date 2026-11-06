@@ -1,9 +1,8 @@
 import asyncio
-import collections
 import math
 
 import autd3_pattern as pattern
-from autd3 import Client, Frames, TransportOption
+from autd3 import Client, ExecAt, Frames, InflightFrames, TransportOption
 from autd3.commands import Clear, Pattern, SetSilencer, Synchronize
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.params import MAX_INFLIGHT
@@ -46,7 +45,6 @@ async def main() -> None:
         await streaming(client, geometry, targets, wavelength)
 
         await client.send(Pattern(geometry.phase_buffer(), Intensity.MIN))
-        client.close()
 
 
 async def stop_and_wait(client, geometry, targets, wavelength) -> None:
@@ -67,7 +65,7 @@ async def streaming(client, geometry, targets, wavelength) -> None:
     # ANCHOR: streaming
     phases = geometry.phase_buffer()
     frames = Frames()
-    pending = collections.deque()
+    inflight = InflightFrames()
     for target in targets:
         pattern.focus(
             geometry,
@@ -77,12 +75,12 @@ async def streaming(client, geometry, targets, wavelength) -> None:
         )
         frames.encode_into(geometry, Pattern(phases, Intensity.MAX))
         for frame in frames:
-            if len(pending) >= MAX_INFLIGHT:
-                (await pending.popleft()).check()
-            pending.append(await client.send_frame(frame))
+            if len(inflight) >= MAX_INFLIGHT and (response := await inflight.collect_oldest(client)) is not None:
+                response.check()
+            inflight.push(await client.send_frame(frame, ExecAt.Immediate))
     # Drain the remaining responses.
-    while pending:
-        (await pending.popleft()).check()
+    while (response := await inflight.collect_oldest(client)) is not None:
+        response.check()
     # ANCHOR_END: streaming
 
 

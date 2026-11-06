@@ -19,17 +19,15 @@ import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
 | --------------------- | ----------- | ------- | --------------------------------------------------------------------------------------------- |
 | `iface`               | `Interface` | `Auto`  | 接続先                                                                                        |
 | `open_timeout`        | `Duration`  | 40 s    | open 処理の待ち時間上限                     |
-| `lost_timeout`        | `Duration`  | 500 ms  | この時間返信が無いデバイスがあれば途絶として `Client` を閉じる (`DeviceLost`)                    |
-| `ack_timeout`         | `Duration`  | 200 ms  | 応答待ちのタイムアウト |
 | `send_buffer_bytes`         | `Option<NonZeroUsize>` | 8192 | ソケットの送信バッファの大きさ [B]. `None` で OS の既定のままにする |
 | `sync_on_open`        | `bool`      | `true`  | `false` なら open 時にデバイス間の同期を待たない |
-| `heartbeat_interval`  | `Option<Duration>` | `None` | `Client` がこの間隔で生存確認を送る. `None` なら送らない ([フェイルセーフ](/autd3-sdk/guide/failsafe/#通信途絶の-failsafe-と生存確認) 参照) |
 
-基本的に `iface` と `heartbeat_interval` 以外を変更することは推奨しない.
+基本的に `iface` 以外を変更することは推奨しない.
+返信待ちの上限・途絶の判定・生存確認の送信は `Client` が持たないので, ユーザーが行う ([Client](/autd3-sdk/api/basics/client/#api) / [フェイルセーフ](/autd3-sdk/guide/failsafe/#通信途絶の-failsafe-と生存確認) 参照).
 
 :::caution[Windows のタイマ分解能]
 ライブラリは Windows のタイマ分解能 (`timeBeginPeriod`) を変更しない.
-既定の分解能 (典型的には 15.6 ms) では, 返信の待ち (ソケットの受信タイムアウト) がその粒度に丸められ, `ack_timeout` や `lost_timeout` の判定が遅れることがある.
+既定の分解能 (典型的には 15.6 ms) では, ユーザーが付ける返信待ちの上限や生存確認の周期がその粒度に丸められることがある.
 必要であれば, ユーザーがプロセスで `timeBeginPeriod(1)` を呼ぶ.
 :::
 

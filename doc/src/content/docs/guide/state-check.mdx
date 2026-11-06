@@ -1,6 +1,6 @@
 ---
 title: 状態監視
-description: device_status でデバイスとの通信状態を監視する
+description: 返信の device_status でデバイスとの通信状態を監視する
 sidebar:
   order: 6
 ---
@@ -11,11 +11,12 @@ import sample from "@codes/rust/examples/guide/state-check.rs?raw";
 import pySample from "@codes/python/examples/guide/state-check.py?raw";
 import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 
-[`Client`](/autd3-sdk/api/basics/client/) の `device_status` を使うことでデバイスとの通信が正常に動いているかどうかを監視できる.
+デバイスの状態は返信に載ってくる. 生存確認 (`send_heartbeat`) か任意のフレームを送り, [`Client`](/autd3-sdk/api/basics/client/) の `collect` で集めた `Response` の `device_status` を見ることで, デバイスとの通信が正常に動いているかどうかを監視できる.
+`Client` 自身は状態を保持しない.
 
 ## 状態の取得
 
-`device_status` は, 呼び出した時点の各デバイスの状態 `DeviceStatus` の配列を返す.
+`Response` の `device_status` は, その返信の時点の各デバイスの状態 `DeviceStatus` の配列を返す.
 
 `DeviceStatus` は以下を持つ.
 
@@ -24,8 +25,7 @@ import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 - `failsafe_active`: フェイルセーフで出力を止めていて, まだ解除されていないか
 
 全デバイスが `Ready` か, といった集約は返り値から作る (下の例を参照).
-`ptp_locked` と `failsafe_active` はデバイスからの最後の返信の値である.
-`Client` を閉じた後に呼ぶとエラー (`Closed`. 通信エラーで閉じた場合は `Network`, デバイスの途絶で閉じた場合は `DeviceLost`) になる.
+`ptp_locked` と `failsafe_active` はその返信の値である.
 
 `DeviceState`の意味は以下の通り. 
 
@@ -34,11 +34,12 @@ import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 | `Ready`   | 返信があり, 時刻が同期されている                                        |
 | `Syncing` | 返信はあるが, 時刻を合わせている途中                                    |
 
-1 台でも返信が `lost_timeout` の間無ければ (途絶), `Client` はその時点で閉じ, 以後の送信・読み出し・`device_status` はすべて `DeviceLost` (途絶したデバイスの番号を持つ) で失敗する.
+返信が来ないデバイス (途絶) は, `collect` が返らないことで分かる.
+`Client` は途絶を判定しないので, 待つ時間の上限 (Rust は `tokio::time::timeout`, Python は `asyncio.wait_for`, C# は `CancellationToken`) と, 途絶したときに送信を止めるか開き直すかはユーザーが決める.
 途中の 1 台が途絶すると, その機体より先の機体にも届かなくなる.
-途絶からの自動復帰はしない.
-そのため, 途絶した場合は `Client::open` で開き直すしかない.
+途絶からの自動復帰はしない. 途絶した後も送り続けると, 全台への送信が失敗するようになることがあるので, 送信を止めて `Client::open` で開き直す.
+未割り当て・別 ID の返信 (再起動したデバイスなど) は `DeviceLost` (そのデバイスの番号を持つ) エラーになる.
 
-以下は, 一定間隔で `device_status` を呼び, 状態が変化したときだけ出力する例.
+以下は, 一定間隔で生存確認を送って `device_status` を見て, 状態が変化したときだけ出力する例.
 
 <CodeTabs rust={excerpt(sample, "poll")} python={excerpt(pySample, "poll")} csharp={excerpt(csSample, "poll")} />

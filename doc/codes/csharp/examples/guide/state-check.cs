@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using AUTD3;
 
@@ -23,7 +24,18 @@ internal static class Sample
             DeviceStatus[] last = Array.Empty<DeviceStatus>();
             while (true)
             {
-                var status = client.DeviceStatus();
+                var msgId = client.SendHeartbeat();
+                using var timeout = new CancellationTokenSource(CheckInterval);
+                DeviceStatus[] status;
+                try
+                {
+                    status = (await client.CollectAsync(msgId, timeout.Token)).DeviceStatus();
+                }
+                catch (OperationCanceledException)
+                {
+                    Console.WriteLine($"not every device replied within {CheckInterval}");
+                    continue;
+                }
                 if (!status.SequenceEqual(last))
                 {
                     for (var i = 0; i < status.Length; i++)

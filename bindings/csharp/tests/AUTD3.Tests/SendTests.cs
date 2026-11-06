@@ -10,21 +10,6 @@ namespace AUTD3.Tests
 {
     public class SendTests
     {
-        private static ICommand RejectedByTheDevice() =>
-            new SetSilencer(new FixedCompletionTime { Intensity = TimeSpan.FromTicks(5000), Phase = TimeSpan.FromTicks(10000) });
-
-        private static async Task PlayAModulationTheStrictSilencerRejects(Client client)
-        {
-            using var modulation = ModulationBuffer.FromBytes(new byte[] { 0xFF, 0xFF });
-            await client.SendAsync(new Modulation(SamplingConfig.Freq4k, modulation));
-        }
-
-        private static async Task<uint> ProcessedAsync(Client client) =>
-            (await client.ReadTelemetryAsync())[0].Processed;
-
-        private static async Task<uint> DispatchErrorAsync(Client client, int device = 0) =>
-            (await client.ReadTelemetryAsync())[device].DispatchError;
-
         [Fact]
         public void EachVisitsEveryDeviceWhenEncoded()
         {

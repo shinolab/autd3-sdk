@@ -164,8 +164,7 @@ def test_rust_required_fields_cannot_be_omitted() -> None:
 @pytest.mark.parametrize(
     "build",
     [
-        lambda: autd3.TransportOption(lost_timeout=loose(None)),
-        lambda: autd3.TransportOption(ack_timeout=loose(None)),
+        lambda: autd3.TransportOption(open_timeout=loose(None)),
         lambda: FociStmOption(bank=loose(None)),
         lambda: FociStmOption(sound_speed=loose(None)),
         lambda: PatternStmOption(transition_mode=loose(None)),
@@ -184,7 +183,7 @@ def test_none_is_not_a_default_for_rust_non_option_fields(build: Any) -> None:
 
 def test_option_defaults_and_equality() -> None:
     assert autd3.TransportOption() == autd3.TransportOption()
-    assert autd3.TransportOption() != autd3.TransportOption(lost_timeout=Duration.from_millis(2))
+    assert autd3.TransportOption() != autd3.TransportOption(open_timeout=Duration.from_millis(2))
     assert FociStmOption() == FociStmOption(sound_speed=340 * m / s)
     assert FociStmOption() != FociStmOption(bank=PatternBank.B1)
     assert PatternStmOption() == PatternStmOption(phase_depth=PhaseDepth.Bits8)
@@ -240,8 +239,7 @@ def test_holo_options_expose_their_fields() -> None:
 def test_errors_form_one_hierarchy() -> None:
     assert issubclass(autd3.InvalidArgumentError, autd3.Autd3Error)
     assert issubclass(autd3.InvalidArgumentError, ValueError)
-    assert issubclass(autd3.ReplyTimeoutError, autd3.Autd3Error)
-    assert issubclass(autd3.ReplyTimeoutError, TimeoutError)
+    assert not hasattr(autd3, "ReplyTimeoutError")
     assert issubclass(autd3.DeviceError, autd3.Autd3Error)
     assert issubclass(autd3.NetworkError, autd3.Autd3Error)
     assert not hasattr(holo, "HoloError")

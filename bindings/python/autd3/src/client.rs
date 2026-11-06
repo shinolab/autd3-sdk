@@ -1,18 +1,16 @@
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::sync::Arc;
 
 use crate::datagram::{Expand, Frame, command_of};
 use crate::future::{Completed, future_into_py};
 use crate::ops::SysTime;
 use autd3_python_capsule::error::client as client_error;
-use autd3_python_capsule::extract::{duration_to_py, extract_duration, geometry_to_py};
+use autd3_python_capsule::extract::{extract_duration, geometry_to_py};
 use autd3_python_capsule::{capsule_of, geometry_from_capsule};
 use autd3_rs::Geometry;
 
 use pyo3::exceptions::{PyIndexError, PyRuntimeError};
 use pyo3::prelude::*;
-use pyo3::sync::MutexExt;
+use pyo3::types::PyBytes;
 
 #[pyclass(
     name = "DeviceState",
@@ -247,28 +245,8 @@ impl Telemetry {
     }
 
     #[getter]
-    fn dispatch_error(&self) -> u32 {
-        self.0.dispatch_error
-    }
-
-    #[getter]
-    fn processed(&self) -> u32 {
-        self.0.processed
-    }
-
-    #[getter]
-    fn send_failure(&self) -> u32 {
-        self.0.send_failure
-    }
-
-    #[getter]
-    fn failsafe(&self) -> u16 {
-        self.0.failsafe
-    }
-
-    #[getter]
-    fn ptp_unlock_failsafe(&self) -> u16 {
-        self.0.ptp_unlock_failsafe
+    fn exec_late(&self) -> u32 {
+        self.0.exec_late
     }
 
     #[getter]
@@ -277,33 +255,23 @@ impl Telemetry {
     }
 
     #[getter]
-    fn boot_failure(&self) -> u8 {
-        self.0.boot_failure
-    }
-
-    #[getter]
     fn cpu_watchdog(&self) -> u8 {
         self.0.cpu_watchdog
     }
 
     #[getter]
-    fn exec_late(&self) -> u32 {
-        self.0.exec_late
+    fn boot_failure(&self) -> u8 {
+        self.0.boot_failure
     }
 
     fn __repr__(&self) -> String {
         format!(
-            "Telemetry(fifo_drop={}, dispatch_error={}, processed={}, send_failure={}, failsafe={}, ptp_unlock_failsafe={}, sync_resync={}, boot_failure={}, cpu_watchdog={}, exec_late={})",
+            "Telemetry(fifo_drop={}, exec_late={}, sync_resync={}, cpu_watchdog={}, boot_failure={})",
             self.0.fifo_drop,
-            self.0.dispatch_error,
-            self.0.processed,
-            self.0.send_failure,
-            self.0.failsafe,
-            self.0.ptp_unlock_failsafe,
-            self.0.sync_resync,
-            self.0.boot_failure,
-            self.0.cpu_watchdog,
             self.0.exec_late,
+            self.0.sync_resync,
+            self.0.cpu_watchdog,
+            self.0.boot_failure,
         )
     }
 }
@@ -337,15 +305,85 @@ impl ExecAt {
     }
 }
 
-#[pyclass(name = "Client", module = "autd3")]
-pub struct Client {
-    inner: Arc<autd3_rs::Client>,
-    geometry: Geometry,
-    closed: AtomicBool,
+#[pyclass(name = "DeviceReply", module = "autd3", frozen, eq)]
+#[derive(PartialEq, Eq)]
+pub struct DeviceReply(autd3_rs::DeviceReply);
+
+#[pymethods]
+impl DeviceReply {
+    #[getter]
+    fn device(&self) -> usize {
+        self.0.device
+    }
+
+    #[getter]
+    fn msg_id(&self) -> u16 {
+        self.0.msg_id
+    }
+
+    #[getter]
+    fn status(&self) -> u8 {
+        self.0.status
+    }
+
+    #[getter]
+    fn flags(&self) -> u8 {
+        self.0.flags.bits()
+    }
+
+    #[getter]
+    fn unit_id(&self) -> u8 {
+        self.0.unit_id
+    }
+
+    #[getter]
+    fn sys_time(&self) -> u64 {
+        self.0.sys_time
+    }
+
+    #[getter]
+    fn telemetry(&self) -> Telemetry {
+        Telemetry(self.0.telemetry)
+    }
+
+    #[getter]
+    fn fpga_state(&self) -> FpgaState {
+        FpgaState(self.0.fpga_state)
+    }
+
+    #[getter]
+    fn data<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
+        PyBytes::new(py, &self.0.data)
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "DeviceReply(device={}, msg_id={}, status={}, flags=0x{:02X}, unit_id={}, sys_time={}, telemetry={}, fpga_state={}, data={:?})",
+            self.0.device,
+            self.0.msg_id,
+            self.0.status,
+            self.0.flags.bits(),
+            self.0.unit_id,
+            self.0.sys_time,
+            Telemetry(self.0.telemetry).__repr__(),
+            FpgaState(self.0.fpga_state).__repr__(),
+            self.0.data,
+        )
+    }
 }
 
-fn frame_out_of_range() -> PyErr {
-    PyIndexError::new_err("frame index out of range")
+#[pyclass(name = "Client", module = "autd3")]
+pub struct Client {
+    inner: Option<Arc<autd3_rs::Client>>,
+    geometry: Geometry,
+}
+
+impl Client {
+    fn inner(&self) -> PyResult<&Arc<autd3_rs::Client>> {
+        self.inner
+            .as_ref()
+            .ok_or_else(|| PyRuntimeError::new_err("the client has been released"))
+    }
 }
 
 #[pymethods]
@@ -361,21 +399,13 @@ impl Client {
         let client = crate::runtime::block_on(py, autd3_rs::Client::open(&geometry, option))?
             .map_err(client_error)?;
         Ok(Client {
-            inner: Arc::new(client),
+            inner: Some(Arc::new(client)),
             geometry,
-            closed: AtomicBool::new(false),
         })
     }
 
-    fn num_devices(&self) -> usize {
-        self.inner.num_devices()
-    }
-
-    fn device_status(&self) -> PyResult<Vec<DeviceStatus>> {
-        self.inner
-            .device_status()
-            .map(|status| status.into_iter().map(DeviceStatus).collect())
-            .map_err(client_error)
+    fn num_devices(&self) -> PyResult<usize> {
+        Ok(self.inner()?.num_devices())
     }
 
     fn geometry<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
@@ -383,34 +413,22 @@ impl Client {
     }
 
     fn device_time_now(&self) -> PyResult<SysTime> {
-        self.inner
+        self.inner()?
             .device_time_now()
             .map(SysTime)
             .map_err(client_error)
     }
 
-    fn ack_timeout<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        duration_to_py(py, self.inner.ack_timeout())
+    fn discard_unread_replies(&self) -> PyResult<()> {
+        self.inner()?.discard_unread_replies().map_err(client_error)
     }
 
-    fn set_ack_timeout(&self, #[pyo3(from_py_with = extract_duration)] timeout: Duration) {
-        self.inner.set_ack_timeout(timeout);
-    }
-
-    fn lost_timeout<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        duration_to_py(py, self.inner.lost_timeout())
-    }
-
-    fn set_lost_timeout(&self, #[pyo3(from_py_with = extract_duration)] timeout: Duration) {
-        self.inner.set_lost_timeout(timeout);
-    }
-
-    fn send_heartbeat(&self, py: Python<'_>) -> PyResult<()> {
-        crate::runtime::block_on(py, self.inner.send_heartbeat())?.map_err(client_error)
+    fn send_heartbeat(&self, py: Python<'_>) -> PyResult<u16> {
+        crate::runtime::block_on(py, self.inner()?.send_heartbeat())?.map_err(client_error)
     }
 
     fn read_firmware_version<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let client = Arc::clone(&self.inner);
+        let client = Arc::clone(self.inner()?);
         future_into_py(py, async move {
             let versions = client.read_firmware_version().await.map_err(client_error)?;
             Ok(versions
@@ -420,28 +438,12 @@ impl Client {
         })
     }
 
-    fn read_fpga_state<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let client = Arc::clone(&self.inner);
-        future_into_py(py, async move {
-            let states = client.read_fpga_state().await.map_err(client_error)?;
-            Ok(states.into_iter().map(FpgaState).collect::<Vec<_>>())
-        })
-    }
-
-    fn read_telemetry<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let client = Arc::clone(&self.inner);
-        future_into_py(py, async move {
-            let telemetry = client.read_telemetry().await.map_err(client_error)?;
-            Ok(telemetry.into_iter().map(Telemetry).collect::<Vec<_>>())
-        })
-    }
-
     fn send<'py>(
         &self,
         py: Python<'py>,
         command: &Bound<'py, PyAny>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let client = Arc::clone(&self.inner);
+        let client = Arc::clone(self.inner()?);
         let command = command_of(command, &self.geometry)?;
         future_into_py(py, async move {
             client
@@ -456,40 +458,38 @@ impl Client {
         &self,
         py: Python<'py>,
         frame: PyRef<'_, Frame>,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        let client = Arc::clone(&self.inner);
-        let datagrams = Arc::clone(&frame.datagrams);
-        let index = frame.index;
-        future_into_py(py, async move {
-            let frame = datagrams.frame(index).ok_or_else(frame_out_of_range)?;
-            let fut = client.send_frame(frame).await.map_err(client_error)?;
-            Ok(ResponseFuture(Mutex::new(Some(fut))))
-        })
-    }
-
-    fn send_frame_at<'py>(
-        &self,
-        py: Python<'py>,
-        frame: PyRef<'_, Frame>,
         exec_at: ExecAt,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let client = Arc::clone(&self.inner);
+        let client = Arc::clone(self.inner()?);
         let datagrams = Arc::clone(&frame.datagrams);
         let index = frame.index;
         future_into_py(py, async move {
-            let frame = datagrams.frame(index).ok_or_else(frame_out_of_range)?;
-            let fut = client
-                .send_frame_at(frame, exec_at.0)
+            let frame = datagrams
+                .frame(index)
+                .ok_or_else(|| PyIndexError::new_err("frame index out of range"))?;
+            client
+                .send_frame(frame, exec_at.0)
                 .await
-                .map_err(client_error)?;
-            Ok(ResponseFuture(Mutex::new(Some(fut))))
+                .map_err(client_error)
         })
     }
 
-    fn close(&self, py: Python<'_>) -> PyResult<()> {
-        let result = crate::runtime::block_on(py, self.inner.close());
-        self.closed.store(true, Ordering::Release);
-        result?.map_err(client_error)
+    fn recv<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let client = Arc::clone(self.inner()?);
+        future_into_py(py, async move {
+            client.recv().await.map(DeviceReply).map_err(client_error)
+        })
+    }
+
+    fn collect<'py>(&self, py: Python<'py>, msg_id: u16) -> PyResult<Bound<'py, PyAny>> {
+        let client = Arc::clone(self.inner()?);
+        future_into_py(py, async move {
+            client
+                .collect(msg_id)
+                .await
+                .map(Response)
+                .map_err(client_error)
+        })
     }
 
     fn __enter__(slf: Bound<'_, Self>) -> Bound<'_, Self> {
@@ -497,37 +497,32 @@ impl Client {
     }
 
     #[pyo3(signature = (_exc_type = None, _exc_value = None, _traceback = None))]
-    fn __exit__<'py>(
-        &self,
-        py: Python<'py>,
-        _exc_type: Option<Bound<'py, PyAny>>,
-        _exc_value: Option<Bound<'py, PyAny>>,
-        _traceback: Option<Bound<'py, PyAny>>,
+    fn __exit__(
+        &mut self,
+        _exc_type: Option<Bound<'_, PyAny>>,
+        _exc_value: Option<Bound<'_, PyAny>>,
+        _traceback: Option<Bound<'_, PyAny>>,
     ) {
-        if self.closed.load(Ordering::Acquire) {
-            return;
-        }
-        let _ = self.close(py);
+        self.inner = None;
     }
 }
 
-#[pyclass(name = "Response", module = "autd3")]
+#[pyclass(name = "Response", module = "autd3", frozen)]
 pub struct Response(autd3_rs::Response);
 
 #[pymethods]
 impl Response {
     #[getter]
-    fn error_codes(&self) -> Vec<u8> {
-        self.0.error_codes().to_vec()
+    fn replies(&self) -> Vec<DeviceReply> {
+        self.0.replies().iter().cloned().map(DeviceReply).collect()
     }
 
-    #[getter]
-    fn reply_data(&self) -> Vec<Vec<u8>> {
-        self.0.reply_data().to_vec()
-    }
-
-    fn reply_data_of(&self, device: usize) -> Vec<u8> {
-        self.0.reply_data_of(device).to_vec()
+    fn device_status(&self) -> Vec<DeviceStatus> {
+        self.0
+            .device_status()
+            .into_iter()
+            .map(DeviceStatus)
+            .collect()
     }
 
     fn check(&self) -> PyResult<()> {
@@ -535,22 +530,48 @@ impl Response {
     }
 }
 
-#[pyclass(name = "ResponseFuture", module = "autd3")]
-pub struct ResponseFuture(Mutex<Option<autd3_rs::ResponseFuture>>);
+#[pyclass(name = "InflightFrames", module = "autd3", frozen)]
+pub struct InflightFrames(Arc<tokio::sync::Mutex<autd3_rs::InflightFrames>>);
+
+fn inflight_busy() -> PyErr {
+    PyRuntimeError::new_err("the inflight frames are being collected")
+}
 
 #[pymethods]
-impl ResponseFuture {
-    fn __await__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let fut = self
-            .0
-            .lock_py_attached(py)
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .take()
-            .ok_or_else(|| PyRuntimeError::new_err("ResponseFuture has already been awaited"))?;
-        let awaitable = future_into_py(py, async move {
-            let inner = fut.await.map_err(client_error)?;
-            Ok(Response(inner))
-        })?;
-        awaitable.getattr("__await__")?.call0()
+impl InflightFrames {
+    #[new]
+    fn new() -> Self {
+        Self(Arc::default())
+    }
+
+    fn push(&self, msg_id: u16) -> PyResult<()> {
+        self.0.try_lock().map_err(|_| inflight_busy())?.push(msg_id);
+        Ok(())
+    }
+
+    fn __len__(&self) -> PyResult<usize> {
+        Ok(self.0.try_lock().map_err(|_| inflight_busy())?.len())
+    }
+
+    fn is_empty(&self) -> PyResult<bool> {
+        Ok(self.0.try_lock().map_err(|_| inflight_busy())?.is_empty())
+    }
+
+    fn collect_oldest<'py>(
+        &self,
+        py: Python<'py>,
+        client: PyRef<'_, Client>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let mut frames = Arc::clone(&self.0)
+            .try_lock_owned()
+            .map_err(|_| inflight_busy())?;
+        let client = Arc::clone(client.inner()?);
+        future_into_py(py, async move {
+            Ok(frames
+                .collect_oldest(&client)
+                .await
+                .map_err(client_error)?
+                .map(Response))
+        })
     }
 }

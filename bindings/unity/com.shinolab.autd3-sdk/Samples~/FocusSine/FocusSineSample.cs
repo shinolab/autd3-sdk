@@ -48,7 +48,6 @@ namespace AUTD3.Samples
                 {
                     using var zeroPhases = _geometry.PhaseBuffer();
                     await _client.SendAsync(new Pattern(zeroPhases, Intensity.Min));
-                    _client.Close();
                 }
                 finally
                 {

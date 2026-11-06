@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Numerics;
 using System.Threading.Tasks;
 using AUTD3;
@@ -39,7 +38,6 @@ internal static class Sample
         await Streaming(client, geometry, targets, wavelength);
 
         await client.SendAsync(new Pattern(geometry.PhaseBuffer(), Intensity.Min));
-        client.Close();
     }
 
     private static async Task StopAndWait(Client client, Geometry geometry, Vector3[] targets, Length wavelength)
@@ -64,7 +62,7 @@ internal static class Sample
         // ANCHOR: streaming
         var phases = geometry.PhaseBuffer();
         using var frames = new Frames();
-        var pending = new Queue<ResponseFuture>();
+        using var inflight = new InflightFrames();
         foreach (var target in targets)
         {
             Pattern.Focus(
@@ -76,17 +74,17 @@ internal static class Sample
             frames.EncodeInto(geometry, new Pattern(phases, Intensity.Max));
             foreach (var frame in frames)
             {
-                if (pending.Count >= Params.MaxInflight)
+                if (inflight.Length >= Params.MaxInflight && await inflight.CollectOldestAsync(client) is { } response)
                 {
-                    (await pending.Dequeue()).Check();
+                    response.Check();
                 }
-                pending.Enqueue(await client.SendFrameAsync(frame));
+                inflight.Push(await client.SendFrameAsync(frame, ExecAt.Immediate));
             }
         }
         // Drain the remaining responses.
-        while (pending.Count > 0)
+        while (await inflight.CollectOldestAsync(client) is { } response)
         {
-            (await pending.Dequeue()).Check();
+            response.Check();
         }
         // ANCHOR_END: streaming
     }

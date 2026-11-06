@@ -33,9 +33,9 @@ import csSample from "@codes/csharp/examples/tutorial/send-modes.cs?raw";
 1 フレームごとに応答を待たないため, スループットが高い. 
 
 下の例のように, `Frames::encode_into` でフレームに変換してから `send_frame` で 1 フレームずつ送る.
-`send_frame` はフレームを送り終えた時点で `ResponseFuture` を返し, その `ResponseFuture` を await するとデバイスの応答 (`Response`) が得られる.
+`send_frame` はフレームを送り終えた時点で msg_id を返す. msg_id を `InflightFrames` に積んでおき, `collect_oldest` で最も古いフレームのデバイスの応答 (`Response`) を回収する.
 `Response` は `check` でデバイスエラーの有無を検証できる.
-送信キューの最大サイズは `MAX_INFLIGHT (7)`である.
-`ResponseFuture` を FIFO で保持し, キューが埋まったら最古の応答を回収する.
+応答待ちにしてよいフレーム数は `MAX_INFLIGHT (7)` である (それより多く溜めるとデバイスがフレームを捨てる).
+`InflightFrames` が埋まったら最古の応答を回収してから次を送る.
 
 <CodeTabs rust={excerpt(sample, "streaming")} python={excerpt(pySample, "streaming")} csharp={excerpt(csSample, "streaming")} />

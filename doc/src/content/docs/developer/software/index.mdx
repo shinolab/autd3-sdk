@@ -38,25 +38,23 @@ import Mermaid from "@components/Mermaid.astro";
 
 ## タスクモデル
 
-デバイスとの送受信と, ユーザーの非同期 API を分離している.
+`Client` はタスクを持たない薄いソケットで, 送信も受信も呼び出し側のタスクがその場で行う.
 
 <Mermaid
   title="タスクモデル"
   code={`flowchart LR
   U["ユーザーのタスク (非同期)"]
-  IO["I/O タスク (受信)"]
   D["デバイス"]
-  U -- "UDP: フレーム" --> D
-  D -- "UDP: 返信" --> IO
-  IO -- "oneshot: 完了通知" --> U`}
+  U -- "send_frame / send_heartbeat: UDP フレーム" --> D
+  D -- "recv / collect: UDP 返信" --> U`}
 />
 
-- **ユーザーのタスク**: `send` を呼んだタスクがその場で全デバイスへフレームを送り, `.await` で完了通知を待つ. tokio を前提とする.
-- **I/O タスク**: `Client::open` が呼び出し元のランタイムへ `tokio::spawn` する 1 本のタスクで, `Session::run_io` を回す. 返信を読んで `msg_id` で送信中のフレームへ照合し, 全デバイスの返信が揃ったら完了を通知する. 生存確認は送らない (ユーザーが `send_heartbeat()` を呼んだときに, 呼んだスレッドが送る).
+- **送信**: `send_frame` / `send_heartbeat` を呼んだタスクがその場で全デバイスへ送り, `msg_id` を返す. 返信は待たない. tokio を前提とする.
+- **受信**: `recv` / `collect` を await している間だけソケットを読む. `collect` は `msg_id` が一致する返信を全デバイスぶん集めて `Response` を返す. 期限は持たない (上限はユーザーが付ける).
 
-`Client` と I/O タスクは制御層の `Session` (`client/session.rs`) を `Arc` で共有する. `Session` は in-flight キュー・機体ごとの状態・`msg_id` の採番を 1 本の Mutex の下に持ち, 返信の照合と `ack_timeout` / `lost_timeout` の判定を行う.
-ソケットは `Session` が持つ通信層の `Channel` (`udp/channel.rs`, crate 内部) が扱う. `Channel` は普通の UDP ソケットで各デバイスへデータグラムを 1 つずつ送り, 届いた返信を 1 つずつ返す口だけを持ち, デバイスの状態は持たない.
-いつ送るか (窓) は `Client` が, 生存確認はユーザーが決める.
+`Client` が持つのは `Geometry`・通信層の `Channel` (`udp/channel.rs`, crate 内部)・`msg_id` の採番 (`AtomicU16`)・デバイス時刻の推定 (`DeviceClock`) だけである.
+`Channel` は普通の UDP ソケットで各デバイスへデータグラムを 1 つずつ送り, 届いた返信を 1 つずつ返す口だけを持ち, デバイスの状態は持たない.
+いつ送るか (窓)・返信待ちの上限・途絶の判定・生存確認はユーザーが決める (streaming の照合には `InflightFrames` を使える).
 Link のような差し替え可能な通信路の抽象は無い.
 
 ## ユーザー API からデバイスまで
