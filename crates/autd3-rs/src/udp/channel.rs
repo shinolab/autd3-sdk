@@ -162,18 +162,12 @@ impl Channel {
         }
     }
 
-    pub(crate) fn discard_received(&self) -> io::Result<()> {
-        let mut buf = [0; RECV_BUFFER_BYTES];
-        loop {
-            match accepted_datagram(self.socket.try_recv_from(&mut buf)) {
-                Ok(_) => {}
-                Err(e) if e.kind() == io::ErrorKind::WouldBlock => return Ok(()),
-                Err(e) => return Err(e),
-            }
-        }
+    #[cfg(test)]
+    pub(crate) async fn readable(&self) -> io::Result<()> {
+        self.socket.readable().await
     }
 
-    fn try_recv_from_device(&self) -> io::Result<Option<DeviceReply>> {
+    pub(crate) fn try_recv_from_device(&self) -> io::Result<Option<DeviceReply>> {
         let mut buf = [0; RECV_BUFFER_BYTES];
         loop {
             let (len, src) = match accepted_datagram(self.socket.try_recv_from(&mut buf)) {
@@ -226,9 +220,6 @@ impl Channel {
 
 #[cfg(test)]
 mod tests {
-    use autd3_cpu_wire::udp::FrameReply;
-    use zerocopy::FromZeros;
-
     use super::*;
 
     #[tokio::test]
@@ -252,34 +243,5 @@ mod tests {
         let header = Header::new(Kind::Frame, 0x1234);
         let expected = [header.as_bytes(), &first, &second].concat();
         assert_eq!(&buf[..len], expected);
-    }
-
-    #[tokio::test]
-    async fn discarding_drops_a_datagram_already_received() {
-        let mut channel =
-            Channel::open(SocketAddrV6::new(Ipv6Addr::LOCALHOST, 9, 0, 0), None, None)
-                .await
-                .unwrap();
-        let device =
-            std::net::UdpSocket::bind(SocketAddrV6::new(Ipv6Addr::LOCALHOST, 0, 0, 0)).unwrap();
-        let SocketAddr::V6(device_addr) = device.local_addr().unwrap() else {
-            panic!("the device is bound to an IPv6 address");
-        };
-        channel.attach_devices(vec![device_addr]);
-        let SocketAddr::V6(host) = channel.socket.local_addr().unwrap() else {
-            panic!("the channel is bound to an IPv6 address");
-        };
-        let host = SocketAddrV6::new(Ipv6Addr::LOCALHOST, host.port(), 0, 0);
-        let reply = [
-            Header::new(Kind::Heartbeat, 1).as_bytes(),
-            FrameReply::new_zeroed().as_bytes(),
-        ]
-        .concat();
-        device.send_to(&reply, host).unwrap();
-        channel.socket.readable().await.unwrap();
-
-        channel.discard_received().unwrap();
-
-        assert_eq!(channel.try_recv_from_device().unwrap(), None);
     }
 }
