@@ -569,7 +569,13 @@ impl Live {
 async fn read_telemetry(client: &Client) -> Result<Vec<Telemetry>, ClientError> {
     client.discard_unread_replies()?;
     let msg_id = client.send_heartbeat().await?;
-    Ok(client.collect(msg_id).await?.telemetry().to_vec())
+    Ok(client
+        .collect(msg_id)
+        .await?
+        .replies()
+        .iter()
+        .map(|r| r.telemetry)
+        .collect())
 }
 
 fn spawn_signal_listener(flag: Arc<AtomicBool>) {

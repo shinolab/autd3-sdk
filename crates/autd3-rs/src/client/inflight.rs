@@ -35,11 +35,9 @@ impl InflightFrames {
                 .iter_mut()
                 .find(|(msg_id, _)| *msg_id == reply.msg_id)
             {
-                let response =
-                    response.get_or_insert_with(|| Response::for_devices(client.num_devices()));
-                if !response.replied_devices().contains(reply.device) {
-                    response.record_reply(reply);
-                }
+                response
+                    .get_or_insert_with(|| Response::for_devices(client.num_devices()))
+                    .record_reply(reply);
             }
         }
         Ok(self.frames.pop_front().and_then(|(_, response)| response))

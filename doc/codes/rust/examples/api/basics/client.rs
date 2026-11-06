@@ -49,7 +49,7 @@ async fn main() -> Result<()> {
     let reply = client.recv().await?;
 
     let firmware = client.read_firmware_version().await?;
-    let fpga_state = heartbeat.fpga_state().to_vec();
+    let fpga_state = heartbeat.replies().iter().map(|r| r.fpga_state).collect::<Vec<_>>();
 
     client.send(Nop).await?;
     let msg_id = client.send_frame(frame, ExecAt::Immediate).await?;

@@ -80,7 +80,7 @@ Rust の `Client` は tokio のランタイムの中で使う (`Client::open` �
 ### FpgaState
 
 FPGA の状態フラグ. 読み出し用のコマンドは無く, フレームと生存確認のすべての返信に載る.
-`recv()` が返す `DeviceReply` の `fpga_state`, または `collect` が返す `Response` の `fpga_state()` (デバイス番号順) で読む.
+`recv()` が返す `DeviceReply` の `fpga_state` で読む (`collect` が返す `Response` からは `replies()` 経由. デバイス番号順).
 フレームの応答はそのフレームを処理した直後の値, 生存確認の応答は最大 1 ms 古い値 (デバイスが長い処理をしている間はさらに古い値) を運ぶ. bank の切り替わりを確かめるときは `Nop` などのフレームを送って応答で見る.
 
 | メソッド                  | 型               | 説明                                     |
@@ -96,7 +96,7 @@ FPGA の状態フラグ. 読み出し用のコマンドは無く, フレーム�
 ### Telemetry
 
 CPU の診断カウンタ. 読み出し用のコマンドは無く, フレームと生存確認のすべての返信に載る.
-`recv()` が返す `DeviceReply` の `telemetry`, または `collect` が返す `Response` の `telemetry()` (デバイス番号順) で読む.
+`recv()` が返す `DeviceReply` の `telemetry` で読む (`collect` が返す `Response` からは `replies()` 経由. デバイス番号順).
 
 | フィールド            | 型    | 説明                                                   |
 | --------------------- | ----- | ------------------------------------------------------ |

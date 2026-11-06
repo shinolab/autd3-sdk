@@ -36,8 +36,13 @@ async fn the_emulator_processes_frames_with_an_execution_time_without_waiting() 
     .await;
     response.check().unwrap();
     assert_eq!(fans(&emulator), [true, true, true]);
-    let telemetry = response.telemetry();
-    assert!(telemetry.iter().all(|t| t.exec_late == 0), "{telemetry:?}");
+    assert!(
+        response
+            .replies()
+            .iter()
+            .all(|r| r.telemetry.exec_late == 0),
+        "{response:?}"
+    );
 }
 
 #[tokio::test]
@@ -80,7 +85,14 @@ async fn a_broadcast_frame_reaches_every_device() {
     assert_eq!(frame.distribution(), Distribution::Broadcast);
     let response = send_and_collect(&client, frame, ExecAt::Immediate).await;
 
-    assert_eq!(response.error_codes(), [0, 0, 0]);
+    assert_eq!(
+        response
+            .replies()
+            .iter()
+            .map(|r| r.status)
+            .collect::<Vec<_>>(),
+        [0, 0, 0]
+    );
     assert_eq!(fans(&emulator), [true, true, true]);
 }
 
@@ -100,7 +112,14 @@ async fn a_per_device_frame_delivers_each_device_its_own_payload() {
     assert_eq!(frame.distribution(), Distribution::PerDevice);
     let response = send_and_collect(&client, frame, ExecAt::Immediate).await;
 
-    assert_eq!(response.error_codes(), [0, 0, 0]);
+    assert_eq!(
+        response
+            .replies()
+            .iter()
+            .map(|r| r.status)
+            .collect::<Vec<_>>(),
+        [0, 0, 0]
+    );
     assert_eq!(fans(&emulator), [false, true, false]);
 }
 
@@ -152,11 +171,11 @@ async fn every_heartbeat_reply_carries_the_fpga_state_of_its_device() {
         .collect(client.send_heartbeat().await.unwrap())
         .await
         .unwrap();
-    let states = response.fpga_state();
+    let states: Vec<u8> = response.replies().iter().map(|r| r.fpga_state.0).collect();
 
     let expected: Vec<u8> =
         emulator.with_devices(|devices| devices.iter().map(|d| d.fpga().fpga_state()).collect());
-    assert_eq!(states.iter().map(|s| s.0).collect::<Vec<_>>(), expected);
+    assert_eq!(states, expected);
 }
 
 #[tokio::test]
@@ -171,8 +190,13 @@ async fn every_heartbeat_reply_carries_the_telemetry_of_its_device() {
         .collect(client.send_heartbeat().await.unwrap())
         .await
         .unwrap();
-    assert_eq!(response.telemetry().len(), 2);
-    assert!(response.telemetry().iter().all(|t| t.fifo_drop == 0));
+    assert_eq!(response.replies().len(), 2);
+    assert!(
+        response
+            .replies()
+            .iter()
+            .all(|r| r.telemetry.fifo_drop == 0)
+    );
 }
 
 #[tokio::test]
@@ -225,7 +249,14 @@ async fn the_response_of_a_frame_carries_the_status_of_every_device() {
 
     let response = send_and_collect(&client, frames.frame(0).unwrap(), ExecAt::Immediate).await;
 
-    assert_eq!(response.error_codes(), [0, INVALID_PAYLOAD, 0]);
+    assert_eq!(
+        response
+            .replies()
+            .iter()
+            .map(|r| r.status)
+            .collect::<Vec<_>>(),
+        [0, INVALID_PAYLOAD, 0]
+    );
     assert!(matches!(
         response.check(),
         Err(Error::DeviceError { device: 1, .. })
