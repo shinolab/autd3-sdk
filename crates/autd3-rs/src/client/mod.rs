@@ -74,7 +74,27 @@ impl Client {
     }
 
     pub fn discard_unread_replies(&self) -> Result<(), Error> {
-        Ok(self.channel.discard_received().map_err(UdpError::from)?)
+        while let Some(reply) = self
+            .channel
+            .try_recv_from_device()
+            .map_err(UdpError::from)?
+        {
+            self.check_and_observe(&reply).ok();
+        }
+        Ok(())
+    }
+
+    fn check_and_observe(&self, reply: &DeviceReply) -> Result<(), Error> {
+        if !reply.flags.contains(Flags::ASSIGNED) || usize::from(reply.unit_id) != reply.device {
+            return Err(Error::DeviceLost {
+                device: reply.device,
+            });
+        }
+        if reply.device == GRANDMASTER_UNIT_ID && reply.sys_time != 0 {
+            self.device_clock()
+                .observe(SysTime::from_nanos(reply.sys_time), Instant::now());
+        }
+        Ok(())
     }
 
     async fn send_and_collect(&self, frame: Frame<'_>) -> Result<Response, Error> {
@@ -166,15 +186,7 @@ impl Client {
             .recv_from_device()
             .await
             .map_err(UdpError::from)?;
-        if !reply.flags.contains(Flags::ASSIGNED) || usize::from(reply.unit_id) != reply.device {
-            return Err(Error::DeviceLost {
-                device: reply.device,
-            });
-        }
-        if reply.device == GRANDMASTER_UNIT_ID && reply.sys_time != 0 {
-            self.device_clock()
-                .observe(SysTime::from_nanos(reply.sys_time), Instant::now());
-        }
+        self.check_and_observe(&reply)?;
         Ok(reply)
     }
 
@@ -495,6 +507,38 @@ mod tests {
                 data: vec![1, 2],
             }
         );
+    }
+
+    #[tokio::test]
+    async fn discarding_unread_replies_observes_the_grandmaster_time() {
+        let (client, device) = open_client().await;
+        let msg_id = client.send_heartbeat().await.unwrap();
+        let (_, host) = next_request(&device).await;
+        let head = FrameReply {
+            reserved: 0,
+            status: 0,
+            flags: Flags::ASSIGNED,
+            unit_id: 0,
+            sys_time: U64::new(7_000_000_000),
+            telemetry: autd3_cpu_wire::payload::Telemetry::default(),
+            fpga_state: 0,
+        };
+        let datagram = [
+            Header::new(Kind::Heartbeat, msg_id).as_bytes(),
+            head.as_bytes(),
+        ]
+        .concat();
+        device.send_to(&datagram, host).await.unwrap();
+        client.channel.readable().await.unwrap();
+        assert!(matches!(
+            client.device_time_now(),
+            Err(Error::DeviceTimeUnknown)
+        ));
+
+        client.discard_unread_replies().unwrap();
+
+        assert!(client.device_time_now().unwrap() >= SysTime::from_nanos(7_000_000_000));
+        assert_eq!(client.channel.try_recv_from_device().unwrap(), None);
     }
 
     #[tokio::test]
