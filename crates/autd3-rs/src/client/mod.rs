@@ -182,7 +182,7 @@ impl Client {
         let mut response = Response::for_devices(self.num_devices());
         while !response.has_all_replies() {
             let reply = self.recv().await?;
-            if reply.msg_id == msg_id && !response.replied_devices().contains(reply.device) {
+            if reply.msg_id == msg_id {
                 response.record_reply(reply);
             }
         }
@@ -209,17 +209,21 @@ impl Client {
             .send_and_collect(Frame::new(Distribution::Broadcast, &datagram))
             .await?;
         response
-            .error_codes()
+            .replies()
             .iter()
-            .enumerate()
-            .map(|(device, &code)| match DeviceErrorCode::from_u8(code) {
+            .map(|reply| match DeviceErrorCode::from_u8(reply.status) {
                 Some(DeviceErrorCode::UnknownCmd) => Ok(None),
-                Some(DeviceErrorCode::None) => response
-                    .reply_data_of(device)
+                Some(DeviceErrorCode::None) => reply
+                    .data
                     .first()
                     .map(|&raw| Some(RunningImage::from_u8(raw).unwrap_or(RunningImage::Unknown)))
-                    .ok_or(Error::UnexpectedReply { device }),
-                _ => Err(Error::DeviceError { device, code }),
+                    .ok_or(Error::UnexpectedReply {
+                        device: reply.device,
+                    }),
+                _ => Err(Error::DeviceError {
+                    device: reply.device,
+                    code: reply.status,
+                }),
             })
             .collect()
     }
@@ -429,8 +433,8 @@ mod tests {
             () = std::future::ready(()) => panic!("the overtaking reply was dropped"),
         };
 
-        assert_eq!(oldest.error_codes(), [0x01]);
-        assert_eq!(next.error_codes(), [0x02]);
+        assert_eq!(oldest.replies()[0].status, 0x01);
+        assert_eq!(next.replies()[0].status, 0x02);
         assert!(inflight.is_empty());
         assert_eq!(inflight.collect_oldest(&client).await.unwrap(), None);
     }
@@ -460,8 +464,8 @@ mod tests {
 
         let response = client.collect(msg_id).await.unwrap();
 
-        assert_eq!(response.error_codes(), [0x02]);
-        assert_eq!(response.reply_data_of(0), [9]);
+        assert_eq!(response.replies()[0].status, 0x02);
+        assert_eq!(response.replies()[0].data, [9]);
     }
 
     #[tokio::test]

@@ -83,11 +83,17 @@ impl Ctx<'_> {
                 self.client.collect(msg_id).await
             })
             .await?;
-        Ok(response.fpga_state().to_vec())
+        Ok(response.replies().iter().map(|r| r.fpga_state).collect())
     }
 
     pub(crate) async fn read_telemetry(&self) -> Result<Vec<Telemetry>> {
-        Ok(self.heartbeat_response().await?.telemetry().to_vec())
+        Ok(self
+            .heartbeat_response()
+            .await?
+            .replies()
+            .iter()
+            .map(|r| r.telemetry)
+            .collect())
     }
 
     pub(crate) async fn device_states(&self) -> Result<Vec<DeviceState>> {

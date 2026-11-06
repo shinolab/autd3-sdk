@@ -80,7 +80,7 @@ If even one device is lost, the `Client` closes and it fails with `DeviceLost`.
 ### FpgaState
 
 FPGA state flags. There is no command to read them: every reply to a frame or a heartbeat carries them.
-Read them from `fpga_state` of the `DeviceReply` returned by `recv()`, or from `fpga_state()` of the `Response` returned by `collect` (in device-number order).
+Read them from `fpga_state` of the `DeviceReply` returned by `recv()` (for the `Response` returned by `collect`, through `replies()`, in device-number order).
 The reply to a frame carries the state right after the frame was processed; the reply to a heartbeat may be up to 1 ms old (older while the device is busy with a long operation). To see when a bank switch took effect, send a frame such as `Nop` and look at its reply.
 
 | Method                    | Type             | Description                              |
@@ -96,7 +96,7 @@ The reply to a frame carries the state right after the frame was processed; the 
 ### Telemetry
 
 CPU diagnostic counters. There is no command to read them: every reply to a frame or a heartbeat carries them.
-Read them from `telemetry` of the `DeviceReply` returned by `recv()`, or from `telemetry()` of the `Response` returned by `collect` (in device-number order).
+Read them from `telemetry` of the `DeviceReply` returned by `recv()` (for the `Response` returned by `collect`, through `replies()`, in device-number order).
 
 | Field                 | Type  | Description                                            |
 | --------------------- | ----- | ------------------------------------------------------ |
