@@ -17,7 +17,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ANCHOR: poll
     let mut last: Vec<DeviceStatus> = Vec::new();
     loop {
-        let status = client.device_status()?;
+        let msg_id = client.send_heartbeat().await?;
+        let Ok(response) = tokio::time::timeout(CHECK_INTERVAL, client.collect(msg_id)).await else {
+            println!("not every device replied within {CHECK_INTERVAL:?}");
+            continue;
+        };
+        let status = response?.device_status();
         if last != status {
             for (i, s) in status.iter().enumerate() {
                 println!("device[{i}]: {}", s.state);
@@ -32,6 +37,5 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     // ANCHOR_END: poll
 
-    client.close().await?;
     Ok(())
 }

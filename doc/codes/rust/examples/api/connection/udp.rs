@@ -13,20 +13,14 @@ async fn main() -> Result<()> {
 
     let iface = Interface::Auto;
     let open_timeout = Duration::from_secs(40);
-    let lost_timeout = Duration::from_millis(500);
-    let ack_timeout = Duration::from_millis(200);
     let send_buffer_bytes = NonZeroUsize::new(8192);
     let sync_on_open = true;
-    let heartbeat_interval = None;
     // ANCHOR: api
     TransportOption {
         iface,
         open_timeout,
-        lost_timeout,
-        ack_timeout,
         send_buffer_bytes,
         sync_on_open,
-        heartbeat_interval,
     };
     // ANCHOR_END: api
 

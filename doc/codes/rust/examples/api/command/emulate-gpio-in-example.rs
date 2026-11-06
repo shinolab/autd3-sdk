@@ -17,7 +17,6 @@ async fn main() -> anyhow::Result<()> {
         values: [true, false, false, false],
     }).await?;
 
-    client.close().await?;
     // HIDE
     Ok(())
 }

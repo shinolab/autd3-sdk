@@ -5,6 +5,7 @@ mod io;
 use std::future::Future;
 use std::net::{Ipv6Addr, SocketAddrV6};
 use std::pin::Pin;
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -15,47 +16,84 @@ use autd3_rs::commands::{
 };
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::value::Intensity;
-use autd3_rs::{Client, DeviceState, Error, ExecAt, Frames, Interface, TransportOption};
+use autd3_rs::{
+    Client, DeviceState, DeviceStatus, Error, ExecAt, FirmwareVersion, FpgaState, Frames,
+    Interface, Telemetry, TransportOption,
+};
 
 use crate::cli::Cli;
 use crate::io::{check, prompt, wait_enter};
 use tracing_subscriber::EnvFilter;
-
-pub(crate) fn device_states(client: &Client) -> Result<Vec<DeviceState>> {
-    Ok(client.device_status()?.iter().map(|s| s.state).collect())
-}
-
-pub(crate) fn failsafe_gates(client: &Client) -> Result<Vec<bool>> {
-    Ok(client
-        .device_status()?
-        .iter()
-        .map(|s| s.failsafe_active)
-        .collect())
-}
 
 pub struct Ctx<'a> {
     pub client: &'a Client,
     pub geometry: &'a Geometry,
     pub heartbeat: Duration,
     pub exec: ExecAt,
+    pub ack_timeout: Duration,
 }
 
 type Case = for<'a> fn(&'a Ctx<'a>) -> Pin<Box<dyn Future<Output = Result<()>> + 'a>>;
 
 impl Ctx<'_> {
-    pub(crate) async fn try_send_frames(&self, frames: &Frames) -> Result<(), Error> {
+    async fn within<T>(&self, replied: impl Future<Output = Result<T, Error>>) -> Result<T> {
+        tokio::time::timeout(self.ack_timeout, replied)
+            .await
+            .with_context(|| format!("not every device replied within {:?}", self.ack_timeout))?
+            .map_err(Into::into)
+    }
+
+    pub(crate) async fn send_frames(&self, frames: &Frames) -> Result<()> {
         for frame in frames {
-            self.client
-                .send_frame_at(frame, self.exec)
-                .await?
-                .await?
-                .check()?;
+            self.client.discard_unread_replies()?;
+            self.within(async {
+                let msg_id = self.client.send_frame(frame, self.exec).await?;
+                self.client.collect(msg_id).await?.check()
+            })
+            .await?;
         }
         Ok(())
     }
 
-    pub(crate) async fn send_frames(&self, frames: &Frames) -> Result<()> {
-        Ok(self.try_send_frames(frames).await?)
+    pub(crate) async fn device_status(&self) -> Result<Vec<DeviceStatus>> {
+        self.client.discard_unread_replies()?;
+        let response = self
+            .within(async {
+                let msg_id = self.client.send_heartbeat().await?;
+                self.client.collect(msg_id).await
+            })
+            .await?;
+        Ok(response.device_status())
+    }
+
+    pub(crate) async fn read_firmware_version(&self) -> Result<Vec<FirmwareVersion>> {
+        self.within(self.client.read_firmware_version()).await
+    }
+
+    pub(crate) async fn read_fpga_state(&self) -> Result<Vec<FpgaState>> {
+        self.within(self.client.read_fpga_state()).await
+    }
+
+    pub(crate) async fn read_telemetry(&self) -> Result<Vec<Telemetry>> {
+        self.within(self.client.read_telemetry()).await
+    }
+
+    pub(crate) async fn device_states(&self) -> Result<Vec<DeviceState>> {
+        Ok(self
+            .device_status()
+            .await?
+            .iter()
+            .map(|s| s.state)
+            .collect())
+    }
+
+    pub(crate) async fn failsafe_gates(&self) -> Result<Vec<bool>> {
+        Ok(self
+            .device_status()
+            .await?
+            .iter()
+            .map(|s| s.failsafe_active)
+            .collect())
     }
 
     pub(crate) async fn send<C: Command>(&self, cmd: C) -> Result<()> {
@@ -99,6 +137,7 @@ const CASES: &[(&str, Case)] = &[
     }),
 ];
 
+#[allow(clippy::too_many_lines)]
 #[tokio::main(flavor = "multi_thread")]
 async fn main() -> Result<()> {
     async fn reset(ctx: &Ctx<'_>) -> Result<()> {
@@ -128,7 +167,6 @@ async fn main() -> Result<()> {
 
     let geometry = Geometry::new((0..cli.devices.get()).map(|_| Autd3::default()));
 
-    let default = TransportOption::default();
     let option = TransportOption {
         iface: match cli.simulator {
             Some(port) => Interface::Addr(SocketAddrV6::new(Ipv6Addr::LOCALHOST, port, 0, 0)),
@@ -137,19 +175,43 @@ async fn main() -> Result<()> {
                 .clone()
                 .map_or(Interface::Auto, Interface::Name),
         },
-        lost_timeout: cli.lost_timeout.unwrap_or(default.lost_timeout),
-        ack_timeout: cli.ack_timeout(),
-        heartbeat_interval: Some(cli.heartbeat),
-        ..default
+        ..TransportOption::default()
     };
-    let client = Client::open(&geometry, &option)
-        .await
-        .context("opening the devices")?;
-    client.send(Clear).await?;
-    client.send(Synchronize).await?;
+    let client = Arc::new(
+        Client::open(&geometry, &option)
+            .await
+            .context("opening the devices")?,
+    );
+    let heartbeat = tokio::spawn({
+        let client = Arc::clone(&client);
+        let heartbeat_interval = cli.heartbeat;
+        let mut interval = tokio::time::interval(heartbeat_interval);
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        async move {
+            loop {
+                interval.tick().await;
+                match tokio::time::timeout(heartbeat_interval, client.send_heartbeat()).await {
+                    Ok(Ok(_)) => {}
+                    Ok(Err(e)) => eprintln!("sending a heartbeat failed: {e}"),
+                    Err(_) => eprintln!(
+                        "sending a heartbeat did not finish within {heartbeat_interval:?}"
+                    ),
+                }
+            }
+        }
+    });
+    let ctx = Ctx {
+        client: &client,
+        geometry: &geometry,
+        heartbeat: cli.heartbeat,
+        exec: cli.exec(),
+        ack_timeout: cli.ack_timeout,
+    };
+    ctx.send(Clear).await?;
+    ctx.send(Synchronize).await?;
 
-    describe(&client).await;
-    match client
+    describe(&ctx).await;
+    match ctx
         .send(SetGpioOut {
             outputs: [
                 GpioOut::BaseSignal,
@@ -164,12 +226,6 @@ async fn main() -> Result<()> {
         Err(e) => eprintln!("set gpio out failed: {e}"),
     }
 
-    let ctx = Ctx {
-        client: &client,
-        geometry: &geometry,
-        heartbeat: cli.heartbeat,
-        exec: cli.exec(),
-    };
     loop {
         println!();
         for (i, (name, _)) in CASES.iter().enumerate() {
@@ -186,7 +242,7 @@ async fn main() -> Result<()> {
             eprintln!("test failed: {e:?}");
         }
         if ctx.exec != ExecAt::Immediate {
-            match ctx.client.read_telemetry().await {
+            match ctx.read_telemetry().await {
                 Ok(telemetry) => {
                     let late: Vec<u32> = telemetry.iter().map(|t| t.exec_late).collect();
                     println!(
@@ -207,13 +263,14 @@ async fn main() -> Result<()> {
         }
     }
 
-    client.close().await.context("closing client")?;
+    heartbeat.abort();
     println!("Ok!");
     Ok(())
 }
 
-pub(crate) async fn describe(client: &Client) {
-    match client.read_firmware_version().await {
+pub(crate) async fn describe(ctx: &Ctx<'_>) {
+    let client = ctx.client;
+    match ctx.read_firmware_version().await {
         Ok(fw) => {
             check(&format!("Connected devices: {}", client.num_devices()));
             for (i, v) in fw.iter().enumerate() {
@@ -230,9 +287,9 @@ pub(crate) async fn describe(client: &Client) {
         Err(e) => eprintln!("read firmware version failed: {e}"),
     }
 
-    match client.read_fpga_state().await {
+    match ctx.read_fpga_state().await {
         Ok(states) => {
-            let gates = failsafe_gates(client).unwrap_or_default();
+            let gates = ctx.failsafe_gates().await.unwrap_or_default();
             for (i, s) in states.iter().enumerate() {
                 println!(
                     "  device[{i}] fpga state: raw={:#04x} thermal={} mod_bank={:?} pattern_bank={:?} mode={} pattern_stopped={} mod_stopped={} transition_pending={} failsafe={:?}",

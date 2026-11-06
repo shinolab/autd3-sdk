@@ -17,7 +17,6 @@ async fn main() -> anyhow::Result<()> {
 
     client.send(SetOutputMask { masks }).await?;
 
-    client.close().await?;
     // HIDE
     Ok(())
 }

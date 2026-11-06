@@ -43,7 +43,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::signal::ctrl_c().await?;
 
     client.send(Pattern::new(&geometry.phase_buffer(), Intensity::MIN)).await?;
-    client.close().await?;
 
     Ok(())
 }

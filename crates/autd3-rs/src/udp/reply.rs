@@ -2,38 +2,14 @@ use autd3_cpu_wire::udp::{Flags, FrameReply, Header, Kind, PROTOCOL_VERSION};
 use zerocopy::FromBytes;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Reply {
-    pub(crate) device: usize,
-    pub(crate) msg_id: u16,
-    pub(crate) error_code: u8,
-    pub(crate) sys_time: u64,
-    pub(crate) data: Vec<u8>,
-}
-
-impl Reply {
-    #[must_use]
-    pub(crate) fn new(
-        device: usize,
-        msg_id: u16,
-        error_code: u8,
-        sys_time: u64,
-        data: &[u8],
-    ) -> Self {
-        Self {
-            device,
-            msg_id,
-            error_code,
-            sys_time,
-            data: data.to_vec(),
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct DeviceReply {
-    pub(crate) reply: Reply,
-    pub(crate) reported_unit_id: u8,
-    pub(crate) flags: Flags,
+pub struct DeviceReply {
+    pub device: usize,
+    pub msg_id: u16,
+    pub status: u8,
+    pub flags: Flags,
+    pub unit_id: u8,
+    pub sys_time: u64,
+    pub data: Vec<u8>,
 }
 
 impl DeviceReply {
@@ -46,15 +22,13 @@ impl DeviceReply {
         }
         let (head, data) = FrameReply::read_from_prefix(body).ok()?;
         Some(Self {
-            reply: Reply::new(
-                device,
-                header.msg_id.get(),
-                head.status,
-                head.sys_time.get(),
-                data,
-            ),
-            reported_unit_id: head.unit_id,
+            device,
+            msg_id: header.msg_id.get(),
+            status: head.status,
             flags: head.flags,
+            unit_id: head.unit_id,
+            sys_time: head.sys_time.get(),
+            data: data.to_vec(),
         })
     }
 }
@@ -81,9 +55,18 @@ mod tests {
     fn a_frame_reply_is_read_with_its_device_and_flags() {
         let parsed =
             DeviceReply::parse(2, Header::new(Kind::Frame, 9), &reply_body(&[7, 8])).unwrap();
-        assert_eq!(parsed.reply, Reply::new(2, 9, 3, 1_000, &[7, 8]));
-        assert_eq!(parsed.reported_unit_id, 2);
-        assert_eq!(parsed.flags, Flags::ASSIGNED);
+        assert_eq!(
+            parsed,
+            DeviceReply {
+                device: 2,
+                msg_id: 9,
+                status: 3,
+                flags: Flags::ASSIGNED,
+                unit_id: 2,
+                sys_time: 1_000,
+                data: vec![7, 8],
+            }
+        );
     }
 
     #[test]

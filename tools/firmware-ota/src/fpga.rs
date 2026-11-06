@@ -1,16 +1,16 @@
 use anyhow::{Context, Result, bail};
 
 use autd3_cpu_wire::fpga_update::FpgaBootImage;
+use autd3_rs::FirmwareVersion;
 use autd3_rs::commands::FpgaUpdateActivate;
-use autd3_rs::{Client, FirmwareVersion};
 
 use crate::cli::{Connection, UpdateArgs};
-use crate::connect;
 use crate::fpga_image::FpgaFirmwareImage;
 use crate::update::{
     FPGA_ACTIVATE_ATTEMPTS, FPGA_RECONFIG_WAIT, activate_unreconfigured_fpga,
     ensure_fpga_reconfigured, update_fpga,
 };
+use crate::{Connected, connect};
 
 pub(crate) async fn main_fpga(
     connection: &Connection,
@@ -72,7 +72,7 @@ pub(crate) async fn main_fpga(
     Ok(())
 }
 
-pub(crate) async fn print_fpga(client: &Client, label: &str) -> Result<Vec<FpgaBootImage>> {
+pub(crate) async fn print_fpga(client: &Connected, label: &str) -> Result<Vec<FpgaBootImage>> {
     let infos = client.read_firmware_version().await?;
     for (device, info) in infos.iter().enumerate() {
         println!(

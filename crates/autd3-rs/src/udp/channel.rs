@@ -7,7 +7,6 @@ use autd3_cpu_wire::FRAME_BYTES_MAX;
 use autd3_cpu_wire::udp::{Header, Kind};
 use socket2::{Domain, Protocol, Socket, Type};
 use tokio::net::UdpSocket;
-use tokio::time::timeout_at;
 use zerocopy::{FromBytes, IntoBytes};
 
 use super::DeviceReply;
@@ -111,16 +110,9 @@ impl Channel {
         kind: Kind,
         msg_id: u16,
         body: [&[u8]; 2],
-        retry_full_socket_until: Option<Instant>,
-    ) -> io::Result<Instant> {
-        self.send(
-            self.device_addrs[device],
-            kind,
-            msg_id,
-            body,
-            retry_full_socket_until,
-        )
-        .await
+    ) -> io::Result<()> {
+        self.send(self.device_addrs[device], kind, msg_id, body)
+            .await
     }
 
     fn try_send(
@@ -129,7 +121,7 @@ impl Channel {
         kind: Kind,
         msg_id: u16,
         body: [&[u8]; 2],
-    ) -> io::Result<Instant> {
+    ) -> io::Result<()> {
         let header = Header::new(kind, msg_id);
         let mut datagram = [0; size_of::<Header>() + FRAME_BYTES_MAX];
         let mut len = 0;
@@ -138,9 +130,8 @@ impl Channel {
             len += part.len();
         }
         loop {
-            let attempted_at = Instant::now();
             match self.socket.try_send_to(&datagram[..len], dst.into()) {
-                Ok(_) => return Ok(attempted_at),
+                Ok(_) => return Ok(()),
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
                 Err(e) => return Err(e),
             }
@@ -153,26 +144,36 @@ impl Channel {
         kind: Kind,
         msg_id: u16,
         body: [&[u8]; 2],
-        retry_full_socket_until: Option<Instant>,
-    ) -> io::Result<Instant> {
+    ) -> io::Result<()> {
         loop {
             match self.try_send(dst, kind, msg_id, body) {
-                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    let Some(until) =
-                        retry_full_socket_until.filter(|&until| until > Instant::now())
-                    else {
-                        return Err(e);
-                    };
-                    if let Ok(ready) = timeout_at(until.into(), self.socket.writable()).await {
-                        ready?;
-                    }
-                }
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => self.socket.writable().await?,
                 sent => return sent,
             }
         }
     }
 
-    pub(crate) fn try_recv_from_device(&self) -> io::Result<Option<DeviceReply>> {
+    pub(crate) async fn recv_from_device(&self) -> io::Result<DeviceReply> {
+        loop {
+            if let Some(reply) = self.try_recv_from_device()? {
+                return Ok(reply);
+            }
+            self.socket.readable().await?;
+        }
+    }
+
+    pub(crate) fn discard_received(&self) -> io::Result<()> {
+        let mut buf = [0; RECV_BUFFER_BYTES];
+        loop {
+            match accepted_datagram(self.socket.try_recv_from(&mut buf)) {
+                Ok(_) => {}
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => return Ok(()),
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
+    fn try_recv_from_device(&self) -> io::Result<Option<DeviceReply>> {
         let mut buf = [0; RECV_BUFFER_BYTES];
         loop {
             let (len, src) = match accepted_datagram(self.socket.try_recv_from(&mut buf)) {
@@ -208,7 +209,8 @@ impl Channel {
                 Ok(None) => {}
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => match deadline {
                     Some(deadline) => {
-                        match timeout_at(deadline.into(), self.socket.readable()).await {
+                        match tokio::time::timeout_at(deadline.into(), self.socket.readable()).await
+                        {
                             Ok(ready) => ready?,
                             Err(_) => return Ok(None),
                         }
@@ -220,14 +222,13 @@ impl Channel {
         };
         Ok(Some((src, &buf[..len])))
     }
-
-    pub(crate) async fn readable(&self) -> io::Result<()> {
-        self.socket.readable().await
-    }
 }
 
 #[cfg(test)]
 mod tests {
+    use autd3_cpu_wire::udp::FrameReply;
+    use zerocopy::FromZeros;
+
     use super::*;
 
     #[tokio::test]
@@ -242,7 +243,7 @@ mod tests {
         let second = [2; FRAME_BYTES_MAX - 6];
 
         channel
-            .send(dst, Kind::Frame, 0x1234, [&first, &second], None)
+            .send(dst, Kind::Frame, 0x1234, [&first, &second])
             .await
             .unwrap();
 
@@ -251,5 +252,34 @@ mod tests {
         let header = Header::new(Kind::Frame, 0x1234);
         let expected = [header.as_bytes(), &first, &second].concat();
         assert_eq!(&buf[..len], expected);
+    }
+
+    #[tokio::test]
+    async fn discarding_drops_a_datagram_already_received() {
+        let mut channel =
+            Channel::open(SocketAddrV6::new(Ipv6Addr::LOCALHOST, 9, 0, 0), None, None)
+                .await
+                .unwrap();
+        let device =
+            std::net::UdpSocket::bind(SocketAddrV6::new(Ipv6Addr::LOCALHOST, 0, 0, 0)).unwrap();
+        let SocketAddr::V6(device_addr) = device.local_addr().unwrap() else {
+            panic!("the device is bound to an IPv6 address");
+        };
+        channel.attach_devices(vec![device_addr]);
+        let SocketAddr::V6(host) = channel.socket.local_addr().unwrap() else {
+            panic!("the channel is bound to an IPv6 address");
+        };
+        let host = SocketAddrV6::new(Ipv6Addr::LOCALHOST, host.port(), 0, 0);
+        let reply = [
+            Header::new(Kind::Heartbeat, 1).as_bytes(),
+            FrameReply::new_zeroed().as_bytes(),
+        ]
+        .concat();
+        device.send_to(&reply, host).unwrap();
+        channel.socket.readable().await.unwrap();
+
+        channel.discard_received().unwrap();
+
+        assert_eq!(channel.try_recv_from_device().unwrap(), None);
     }
 }

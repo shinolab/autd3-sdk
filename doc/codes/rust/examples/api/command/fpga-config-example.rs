@@ -19,7 +19,6 @@ async fn main() -> anyhow::Result<()> {
 
     client.send(SetFpgaConfig::default()).await?;
 
-    client.close().await?;
     // HIDE
     Ok(())
 }

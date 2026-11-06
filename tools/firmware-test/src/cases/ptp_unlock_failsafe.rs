@@ -12,13 +12,13 @@ use autd3_rs::value::SamplingConfig;
 use autd3_rs::{DeviceState, Frames};
 use autd3_rs_modulation::{SineOption, modulation_buffer, sine};
 
+use crate::Ctx;
 use crate::cases::ERR_FAILSAFE_CONDITION_ACTIVE;
 use crate::cases::cpu_config::{states, watch};
 use crate::cases::pattern_util::{
     expect_firmware_error, expect_firmware_ok, focus_at, send_pattern_mod,
 };
 use crate::io::wait_enter;
-use crate::{Ctx, failsafe_gates};
 
 fn verdict(ok: bool) -> &'static str {
     if ok { "[OK]" } else { "[FAIL]" }
@@ -39,11 +39,11 @@ struct Observed {
 }
 
 async fn observe(ctx: &Ctx<'_>) -> Result<Observed> {
-    let telemetry = ctx.client.read_telemetry().await?;
+    let telemetry = ctx.read_telemetry().await?;
     Ok(Observed {
         ptp_trips: telemetry.iter().map(|t| t.ptp_unlock_failsafe).collect(),
         host_trips: telemetry.iter().map(|t| t.failsafe).collect(),
-        gates: failsafe_gates(ctx.client)?,
+        gates: ctx.failsafe_gates().await?,
     })
 }
 
@@ -89,7 +89,10 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     async fn all_ready_within(ctx: &Ctx<'_>, window: Duration) -> Result<(bool, Duration)> {
         let started = Instant::now();
         loop {
-            if states(ctx)?.iter().all(|d| *d == DeviceState::Ready) {
+            if states(ctx)
+                .await
+                .is_ok_and(|s| s.iter().all(|d| *d == DeviceState::Ready))
+            {
                 return Ok((true, started.elapsed()));
             }
             if started.elapsed() >= window {
@@ -230,15 +233,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
         ctx.send(Synchronize).await?;
 
         println!("-- lock dropped by unplugging a cable");
-        let lost_timeout = ctx.client.lost_timeout();
-        let raised = lost_timeout.max(Duration::from_secs(30));
-        if raised != lost_timeout {
-            println!(
-                "  lost timeout raised from {lost_timeout:?} to {raised:?} until the cable is back, so the unplugged device does not close the client"
-            );
-        }
-        ctx.client.set_lost_timeout(raised);
-        let outcome = async {
+        async {
             let last = ctx.client.num_devices() - 1;
 
             emit(ctx).await?;
@@ -256,7 +251,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
                 "  {} every device answers and is locked again after {:.1} s: {:?}",
                 verdict(ready),
                 elapsed.as_secs_f32(),
-                states(ctx)?
+                states(ctx).await?
             );
 
             let seen = observe(ctx).await?;
@@ -303,9 +298,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
             wait_enter("Every device emits again").await;
             ctx.send(Synchronize).await
         }
-        .await;
-        ctx.client.set_lost_timeout(lost_timeout);
-        outcome
+        .await
     }
     .await;
     ctx.send(Clear).await?;

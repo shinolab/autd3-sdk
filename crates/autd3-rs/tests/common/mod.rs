@@ -5,7 +5,7 @@ use std::time::Duration;
 use autd3_rs::commands::{CpuConfig, PtpConfig, SetCpuConfig};
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs::udp::{TransportOption, UdpError};
-use autd3_rs::{Client, Error};
+use autd3_rs::{Client, Error, ExecAt, Frame, Response};
 use autd3_rs_firmware_emulator::udp::UdpEmulator;
 
 pub(crate) const PATIENCE: Duration = Duration::from_secs(10);
@@ -30,17 +30,8 @@ pub(crate) fn emulator(num_devices: usize) -> UdpEmulator {
 pub(crate) fn option(emulator: &UdpEmulator) -> TransportOption {
     TransportOption {
         iface: emulator.interface(),
-        lost_timeout: PATIENCE,
         open_timeout: Duration::from_secs(6),
-        ack_timeout: Duration::from_millis(250),
         ..TransportOption::default()
-    }
-}
-
-pub(crate) fn monitoring_option(emulator: &UdpEmulator) -> TransportOption {
-    TransportOption {
-        lost_timeout: Duration::from_millis(500),
-        ..option(emulator)
     }
 }
 
@@ -56,10 +47,12 @@ pub(crate) async fn open(num_devices: usize) -> (UdpEmulator, Client) {
     (emulator, client)
 }
 
-pub(crate) async fn open_monitored(num_devices: usize) -> (UdpEmulator, Client) {
-    let emulator = emulator(num_devices);
-    let client = open_with(&emulator, &monitoring_option(&emulator)).await;
-    (emulator, client)
+pub(crate) async fn send_and_collect(client: &Client, frame: Frame<'_>, exec: ExecAt) -> Response {
+    let msg_id = client.send_frame(frame, exec).await.unwrap();
+    tokio::time::timeout(PATIENCE, client.collect(msg_id))
+        .await
+        .unwrap()
+        .unwrap()
 }
 
 pub(crate) fn fans(emulator: &UdpEmulator) -> Vec<bool> {
@@ -72,10 +65,8 @@ pub(crate) fn udp_error(error: &Error) -> Option<&UdpError> {
         Error::DeviceError { .. }
         | Error::UnexpectedReply { .. }
         | Error::DeviceLost { .. }
-        | Error::Timeout { .. }
         | Error::DeviceTimeUnknown
-        | Error::InvalidPayload(_)
-        | Error::Closed => None,
+        | Error::InvalidPayload(_) => None,
         _ => unreachable!(),
     }
 }

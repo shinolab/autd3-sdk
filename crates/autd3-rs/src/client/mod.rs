@@ -1,91 +1,53 @@
-pub(crate) mod completion;
 mod device_clock;
 mod exec_at;
-mod liveness;
 pub(crate) mod open;
-mod session;
 
-pub use completion::ResponseFuture;
 pub use exec_at::ExecAt;
 
-use std::sync::{Arc, Mutex, PoisonError};
-use std::time::{Duration, Instant};
+use std::sync::atomic::{AtomicU16, Ordering};
+use std::sync::{Mutex, PoisonError};
+use std::time::Instant;
 
 use autd3_cpu_wire::payload::FirmwareInfo;
+use autd3_cpu_wire::udp::{Flags, Kind};
 use autd3_cpu_wire::update::RunningImage;
-use tokio::task::{AbortHandle, JoinHandle};
-use zerocopy::FromBytes;
+use autd3_rs_core::MAX_DEVICES;
+use zerocopy::{FromBytes, FromZeros, IntoBytes};
 
 use crate::commands::Command;
 use crate::commands::operation::Distribution;
 use crate::datagram::{Datagram, Frame, Frames};
-use crate::device_status::DeviceStatus;
 use crate::error::{Error, PayloadError};
 use crate::firmware_version::FirmwareVersion;
 use crate::fpga_state::FpgaState;
 use crate::geometry::Geometry;
-use crate::protocol::{Cmd, DeviceErrorCode, PAYLOAD_BYTES};
+use crate::protocol::{Cmd, DeviceErrorCode, FrameHeader, PAYLOAD_BYTES};
+use crate::response::Response;
 use crate::telemetry::Telemetry;
-use crate::udp::TransportOption;
+use crate::udp::{Channel, DeviceReply, TransportOption, UdpError};
 use crate::value::SysTime;
 
-use session::Session;
+use device_clock::DeviceClock;
 
 const GRANDMASTER_UNIT_ID: usize = 0;
 
 pub struct Client {
     geometry: Geometry,
-    session: Arc<Session>,
-    send_serializer: tokio::sync::Mutex<()>,
-    io_task: Mutex<Option<JoinHandle<Result<(), Error>>>>,
-    heartbeat_task: Option<AbortHandle>,
+    channel: Channel,
+    last_msg_id: AtomicU16,
+    device_clock: Mutex<DeviceClock>,
 }
 
 impl Client {
     pub async fn open(geometry: &Geometry, option: &TransportOption) -> Result<Self, Error> {
-        let session = Arc::new(Session::open(geometry, option).await?);
+        let mut device_clock = DeviceClock::default();
+        let channel = open::open(option, geometry.num_devices(), &mut device_clock).await?;
         tracing::info!(num_devices = geometry.num_devices(), "client opened");
-        let io_task = tokio::spawn({
-            struct CloseOnDrop(Arc<Session>);
-            impl Drop for CloseOnDrop {
-                fn drop(&mut self) {
-                    self.0.close(Error::Closed);
-                }
-            }
-            let closes_the_session = CloseOnDrop(Arc::clone(&session));
-            async move {
-                let session = &closes_the_session.0;
-                session.run_io().await.map_err(|cause| {
-                    let error = Error::Network(cause);
-                    session.close(error.clone());
-                    error
-                })
-            }
-        });
-        let heartbeat_task = option.heartbeat_interval.map(|interval| {
-            let session = Arc::clone(&session);
-            tokio::spawn(async move {
-                let mut interval = (interval != Duration::ZERO).then(|| {
-                    let mut interval = tokio::time::interval(interval);
-                    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-                    interval
-                });
-                while session.send_heartbeat().await.is_ok() {
-                    if let Some(interval) = &mut interval {
-                        interval.tick().await;
-                    } else {
-                        tokio::task::yield_now().await;
-                    }
-                }
-            })
-            .abort_handle()
-        });
         Ok(Self {
             geometry: geometry.clone(),
-            session,
-            send_serializer: tokio::sync::Mutex::new(()),
-            io_task: Mutex::new(Some(io_task)),
-            heartbeat_task,
+            channel,
+            last_msg_id: AtomicU16::new(0),
+            device_clock: Mutex::new(device_clock),
         })
     }
 
@@ -99,61 +61,62 @@ impl Client {
         &self.geometry
     }
 
-    pub fn device_status(&self) -> Result<Vec<DeviceStatus>, Error> {
-        let state = self.session.lock_state();
-        if let Some(error) = self.session.closed_error_of(&state) {
-            return Err(error);
-        }
-        Ok(state.device_status())
+    fn device_clock(&self) -> std::sync::MutexGuard<'_, DeviceClock> {
+        self.device_clock
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
     }
 
     pub fn device_time_now(&self) -> Result<SysTime, Error> {
-        self.session
-            .lock_state()
-            .device_clock
+        self.device_clock()
             .now(Instant::now())
             .ok_or(Error::DeviceTimeUnknown)
     }
 
-    #[must_use]
-    pub fn ack_timeout(&self) -> Duration {
-        self.session.lock_state().ack_timeout
+    pub fn discard_unread_replies(&self) -> Result<(), Error> {
+        Ok(self.channel.discard_received().map_err(UdpError::from)?)
     }
 
-    pub fn set_ack_timeout(&self, timeout: Duration) {
-        self.session.lock_state().ack_timeout = timeout;
-        self.session.wake_io();
-    }
-
-    #[must_use]
-    pub fn lost_timeout(&self) -> Duration {
-        self.session.lock_state().lost_timeout
-    }
-
-    pub fn set_lost_timeout(&self, timeout: Duration) {
-        self.session.lock_state().lost_timeout = timeout;
-        self.session.wake_io();
+    async fn send_and_collect(&self, frame: Frame<'_>) -> Result<Response, Error> {
+        self.discard_unread_replies()?;
+        let msg_id = self.send_frame(frame, ExecAt::Immediate).await?;
+        self.collect(msg_id).await
     }
 
     pub fn send<C: Command>(&self, cmd: C) -> impl Future<Output = Result<(), Error>> + use<'_, C> {
         let frames = Frames::encode(&self.geometry, cmd);
         async move {
             for frame in &frames? {
-                self.send_frame(frame).await?.await?.check()?;
+                self.send_and_collect(frame).await?.check()?;
             }
             Ok(())
         }
     }
 
-    pub async fn send_frame(&self, frame: Frame<'_>) -> Result<ResponseFuture, Error> {
-        self.send_frame_at(frame, ExecAt::Immediate).await
+    async fn send_to_each_device<'a>(
+        &self,
+        kind: Kind,
+        body_for_device: impl Fn(usize) -> [&'a [u8]; 2],
+    ) -> Result<u16, Error> {
+        let msg_id = self
+            .last_msg_id
+            .fetch_add(1, Ordering::Relaxed)
+            .wrapping_add(1);
+        let mut first_failure = None;
+        for device in (0..self.channel.num_devices()).rev() {
+            if let Err(source) = self
+                .channel
+                .send_to_device(device, kind, msg_id, body_for_device(device))
+                .await
+            {
+                tracing::warn!(device, "sending to a device failed; skipping it: {source}");
+                first_failure.get_or_insert(UdpError::Unsent { device, source });
+            }
+        }
+        first_failure.map_or(Ok(msg_id), |e| Err(e.into()))
     }
 
-    pub async fn send_frame_at(
-        &self,
-        frame: Frame<'_>,
-        exec: ExecAt,
-    ) -> Result<ResponseFuture, Error> {
+    pub async fn send_frame(&self, frame: Frame<'_>, exec: ExecAt) -> Result<u16, Error> {
         let datagrams = frame.datagrams();
         let expected = frame.distribution().num_datagrams(self.num_devices());
         if datagrams.len() != expected {
@@ -175,23 +138,55 @@ impl Client {
             }
             .into());
         }
-        let _serialized = self.send_serializer.lock().await;
-        if let Some(e) = self.session.closed_error_of(&self.session.lock_state()) {
-            return Err(e);
+        let exec_at = exec_at::schedule(exec, self.device_clock().now(Instant::now()))?;
+        let mut headers = [FrameHeader::new_zeroed(); MAX_DEVICES];
+        for (header, datagram) in headers.iter_mut().zip(datagrams) {
+            *header = FrameHeader {
+                reserved: 0,
+                cmd: datagram.cmd.as_u8(),
+                exec_at: exec_at.into(),
+            };
         }
-        let (enqueued, response) = self.session.enqueue().await?;
-        let (lost_timeout, device_time) = {
-            let state = self.session.lock_state();
-            (state.lost_timeout, state.device_clock.now(Instant::now()))
-        };
-        let exec_at = exec_at::schedule(exec, lost_timeout, device_time)?;
-        tracing::trace!(msg_id = enqueued.msg_id(), cmd = ?datagrams[0].cmd, dist = ?frame.distribution(), "sending frame");
-        self.session.send_frame(enqueued, frame, exec_at).await?;
-        Ok(response)
+        tracing::trace!(cmd = ?datagrams[0].cmd, dist = ?frame.distribution(), "sending frame");
+        self.send_to_each_device(Kind::Frame, |device| {
+            let index = frame.datagram_index(device);
+            [headers[index].as_bytes(), datagrams[index].payload()]
+        })
+        .await
     }
 
-    pub async fn send_heartbeat(&self) -> Result<(), Error> {
-        self.session.send_heartbeat().await
+    pub async fn send_heartbeat(&self) -> Result<u16, Error> {
+        self.send_to_each_device(Kind::Heartbeat, |_| [&[][..]; 2])
+            .await
+    }
+
+    pub async fn recv(&self) -> Result<DeviceReply, Error> {
+        let reply = self
+            .channel
+            .recv_from_device()
+            .await
+            .map_err(UdpError::from)?;
+        if !reply.flags.contains(Flags::ASSIGNED) || usize::from(reply.unit_id) != reply.device {
+            return Err(Error::DeviceLost {
+                device: reply.device,
+            });
+        }
+        if reply.device == GRANDMASTER_UNIT_ID && reply.sys_time != 0 {
+            self.device_clock()
+                .observe(SysTime::from_nanos(reply.sys_time), Instant::now());
+        }
+        Ok(reply)
+    }
+
+    pub async fn collect(&self, msg_id: u16) -> Result<Response, Error> {
+        let mut response = Response::for_devices(self.num_devices());
+        while !response.has_all_replies() {
+            let reply = self.recv().await?;
+            if reply.msg_id == msg_id && !response.replied_devices().contains(reply.device) {
+                response.record_reply(reply);
+            }
+        }
+        Ok(response)
     }
 
     async fn read_values<T>(
@@ -201,8 +196,7 @@ impl Client {
     ) -> Result<Vec<T>, Error> {
         let datagram = [Datagram::no_payload(cmd)];
         let response = self
-            .send_frame(Frame::new(Distribution::Broadcast, &datagram))
-            .await?
+            .send_and_collect(Frame::new(Distribution::Broadcast, &datagram))
             .await?;
         response.check()?;
         response.parse_each_device(parse)
@@ -221,8 +215,7 @@ impl Client {
     pub async fn read_running_image(&self) -> Result<Vec<Option<RunningImage>>, Error> {
         let datagram = [Datagram::no_payload(Cmd::ReadRunningImage)];
         let response = self
-            .send_frame(Frame::new(Distribution::Broadcast, &datagram))
-            .await?
+            .send_and_collect(Frame::new(Distribution::Broadcast, &datagram))
             .await?;
         response
             .error_codes()
@@ -250,71 +243,30 @@ impl Client {
     pub async fn read_telemetry(&self) -> Result<Vec<Telemetry>, Error> {
         self.read_values(Cmd::ReadTelemetry, Telemetry::parse).await
     }
-
-    fn request_stop(&self) {
-        self.session.request_stop();
-        if let Some(heartbeat_task) = &self.heartbeat_task {
-            heartbeat_task.abort();
-        }
-    }
-
-    pub async fn close(&self) -> Result<(), Error> {
-        tracing::debug!("closing client");
-        let closed = self
-            .session
-            .closed_error_of(&self.session.lock_state())
-            .map_or(Ok(()), Err);
-        self.request_stop();
-        let io_task = self
-            .io_task
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .take();
-        let Some(io_task) = io_task else {
-            return Err(closed.err().unwrap_or(Error::Closed));
-        };
-        let stopped = io_task.await.unwrap_or_else(|e| {
-            tracing::error!("the io task did not finish: {e}");
-            Ok(())
-        });
-        closed.and(stopped)
-    }
-}
-
-impl Drop for Client {
-    fn drop(&mut self) {
-        self.request_stop();
-    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::io::ErrorKind;
-    use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6, UdpSocket};
+    use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6};
+    use std::time::Duration;
 
-    use autd3_cpu_wire::udp::{Flags, Header, Kind, Status, UnitInfo};
+    use autd3_cpu_wire::udp::{FrameReply, Header, Status, UnitInfo};
     use autd3_rs_core::Interface;
-    use zerocopy::IntoBytes;
-    use zerocopy::little_endian::I32;
+    use tokio::net::UdpSocket;
+    use zerocopy::little_endian::{I32, U64};
 
     use crate::commands::Nop;
     use crate::test_utils::test_geometry;
 
     use super::*;
 
-    async fn client() -> Client {
-        client_sending_heartbeats(None).await.0
-    }
-
-    async fn client_sending_heartbeats(
-        heartbeat_interval: Option<Duration>,
-    ) -> (Client, UdpSocket) {
-        let device = UdpSocket::bind(SocketAddrV6::new(Ipv6Addr::LOCALHOST, 0, 0, 0)).unwrap();
-        device.set_nonblocking(true).unwrap();
+    async fn open_client() -> (Client, UdpSocket) {
+        let device = UdpSocket::bind(SocketAddrV6::new(Ipv6Addr::LOCALHOST, 0, 0, 0))
+            .await
+            .unwrap();
         let SocketAddr::V6(device_addr) = device.local_addr().unwrap() else {
             panic!("the device is bound to an IPv6 address");
         };
-        let device = tokio::net::UdpSocket::from_std(device).unwrap();
         let answer_every_request = async {
             let unit_info = UnitInfo {
                 unit_id: 0,
@@ -337,10 +289,7 @@ mod tests {
         let option = TransportOption {
             iface: Interface::Addr(device_addr),
             open_timeout: Duration::MAX,
-            ack_timeout: Duration::from_secs(3600),
-            lost_timeout: Duration::from_secs(3600),
             sync_on_open: false,
-            heartbeat_interval,
             ..TransportOption::default()
         };
         let geometry = test_geometry(1);
@@ -348,121 +297,186 @@ mod tests {
             client = Client::open(&geometry, &option) => client.unwrap(),
             () = answer_every_request => unreachable!(),
         };
-        (client, device.into_std().unwrap())
+        (client, device)
     }
 
-    fn next_request_kind(device: &UdpSocket) -> Option<u8> {
-        let mut buf = [0; 64];
-        match device.recv(&mut buf) {
-            Ok(_) => Some(Header::read_from_prefix(&buf).unwrap().0.kind),
-            Err(e) if e.kind() == ErrorKind::WouldBlock => None,
-            Err(e) => panic!("{e}"),
-        }
+    async fn next_request(device: &UdpSocket) -> (Header, SocketAddr) {
+        let mut buf = [0; 2048];
+        let (_, host) = device.recv_from(&mut buf).await.unwrap();
+        (Header::read_from_prefix(&buf).unwrap().0, host)
     }
 
-    async fn wait_for_a_request(device: &UdpSocket) -> u8 {
-        loop {
-            if let Some(kind) = next_request_kind(device) {
-                return kind;
-            }
-            tokio::task::yield_now().await;
-        }
+    async fn reply(
+        device: &UdpSocket,
+        host: SocketAddr,
+        msg_id: u16,
+        status: u8,
+        flags: Flags,
+        data: &[u8],
+    ) {
+        let head = FrameReply {
+            reserved: 0,
+            status,
+            flags,
+            unit_id: 0,
+            sys_time: U64::new(0),
+        };
+        let datagram = [
+            Header::new(Kind::Frame, msg_id).as_bytes(),
+            head.as_bytes(),
+            data,
+        ]
+        .concat();
+        device.send_to(&datagram, host).await.unwrap();
     }
 
-    #[tokio::test]
-    async fn a_heartbeat_interval_keeps_sending_heartbeats() {
-        let (client, device) = client_sending_heartbeats(Some(Duration::ZERO)).await;
-
-        assert_eq!(wait_for_a_request(&device).await, Kind::Heartbeat as u8);
-        assert_eq!(wait_for_a_request(&device).await, Kind::Heartbeat as u8);
-
-        client.close().await.unwrap();
-    }
-
-    #[tokio::test]
-    async fn no_heartbeat_interval_sends_no_heartbeat() {
-        let (client, device) = client_sending_heartbeats(None).await;
-
-        tokio::task::yield_now().await;
-
-        assert!(client.heartbeat_task.is_none());
-        assert_eq!(next_request_kind(&device), None);
-    }
-
-    #[tokio::test]
-    async fn closing_stops_a_heartbeat_task_waiting_for_its_next_turn() {
-        let (client, device) = client_sending_heartbeats(Some(Duration::MAX)).await;
-        wait_for_a_request(&device).await;
-
-        client.close().await.unwrap();
-        tokio::task::yield_now().await;
-
-        assert!(client.heartbeat_task.as_ref().unwrap().is_finished());
+    async fn answer_one_frame(device: &UdpSocket, status: u8) {
+        let (header, host) = next_request(device).await;
+        reply(
+            device,
+            host,
+            header.msg_id.get(),
+            status,
+            Flags::ASSIGNED,
+            &[],
+        )
+        .await;
     }
 
     #[tokio::test]
-    async fn dropping_the_client_stops_a_heartbeat_task_waiting_for_its_next_turn() {
-        let (client, device) = client_sending_heartbeats(Some(Duration::MAX)).await;
-        wait_for_a_request(&device).await;
-        let heartbeat_task = client.heartbeat_task.clone().unwrap();
+    async fn send_waits_for_the_reply_of_every_frame() {
+        let (client, device) = open_client().await;
 
-        drop(client);
-        tokio::task::yield_now().await;
+        let (sent, ()) = tokio::join!(client.send(Nop), answer_one_frame(&device, 0));
 
-        assert!(heartbeat_task.is_finished());
+        sent.unwrap();
     }
 
     #[tokio::test]
-    async fn the_heartbeat_task_ends_once_the_session_has_closed() {
-        let (client, device) = client_sending_heartbeats(Some(Duration::ZERO)).await;
-        wait_for_a_request(&device).await;
+    async fn send_reports_the_error_code_a_device_replied() {
+        let (client, device) = open_client().await;
 
-        client.session.close(Error::Closed);
+        let (sent, ()) = tokio::join!(client.send(Nop), answer_one_frame(&device, 0x07));
 
-        let heartbeat_task = client.heartbeat_task.as_ref().unwrap();
-        while !heartbeat_task.is_finished() {
-            tokio::task::yield_now().await;
-        }
-    }
-
-    #[tokio::test]
-    async fn closing_stops_the_io_task_and_a_second_close_reports_it() {
-        let client = client().await;
-
-        client.close().await.unwrap();
-
-        assert!(client.session.lock_state().closed_error().is_some());
-        assert!(client.io_task.lock().unwrap().is_none());
-        assert!(matches!(client.close().await, Err(Error::Closed)));
-        assert!(matches!(client.send(Nop).await, Err(Error::Closed)));
-    }
-
-    #[tokio::test]
-    async fn dropping_the_client_stops_the_io_task() {
-        let client = client().await;
-        let session = Arc::clone(&client.session);
-        let io_task = client.io_task.lock().unwrap().take().unwrap();
-
-        drop(client);
-
-        assert!(io_task.await.unwrap().is_ok());
         assert!(matches!(
-            session.lock_state().closed_error(),
-            Some(Error::Closed)
+            sent,
+            Err(Error::DeviceError {
+                device: 0,
+                code: 0x07
+            })
         ));
     }
 
     #[tokio::test]
-    async fn cancelling_the_io_task_closes_the_session() {
-        let client = client().await;
-        let io_task = client.io_task.lock().unwrap().take().unwrap();
+    async fn each_send_gets_the_next_msg_id() {
+        let (client, device) = open_client().await;
+        let datagram = [Datagram::no_payload(Cmd::Nop)];
+        let frame = || Frame::new(Distribution::Broadcast, &datagram);
 
-        io_task.abort();
-        let _ = io_task.await;
+        let first = client.send_frame(frame(), ExecAt::Immediate).await.unwrap();
+        let heartbeat = client.send_heartbeat().await.unwrap();
+        let second = client.send_frame(frame(), ExecAt::Immediate).await.unwrap();
+
+        assert_eq!(heartbeat, first.wrapping_add(1));
+        assert_eq!(second, first.wrapping_add(2));
+        for (kind, msg_id) in [
+            (Kind::Frame, first),
+            (Kind::Heartbeat, heartbeat),
+            (Kind::Frame, second),
+        ] {
+            let (header, _) = next_request(&device).await;
+            assert_eq!((header.kind, header.msg_id.get()), (kind.as_u8(), msg_id));
+        }
+    }
+
+    #[tokio::test]
+    async fn collect_skips_replies_to_other_messages() {
+        let (client, device) = open_client().await;
+        let datagram = [Datagram::no_payload(Cmd::Nop)];
+        let msg_id = client
+            .send_frame(
+                Frame::new(Distribution::Broadcast, &datagram),
+                ExecAt::Immediate,
+            )
+            .await
+            .unwrap();
+        let (_, host) = next_request(&device).await;
+        reply(
+            &device,
+            host,
+            msg_id.wrapping_add(1),
+            0x01,
+            Flags::ASSIGNED,
+            &[],
+        )
+        .await;
+        reply(&device, host, msg_id, 0x02, Flags::ASSIGNED, &[9]).await;
+
+        let response = client.collect(msg_id).await.unwrap();
+
+        assert_eq!(response.error_codes(), [0x02]);
+        assert_eq!(response.reply_data_of(0), [9]);
+    }
+
+    #[tokio::test]
+    async fn recv_returns_each_reply_as_it_is() {
+        let (client, device) = open_client().await;
+        let msg_id = client.send_heartbeat().await.unwrap();
+        let (_, host) = next_request(&device).await;
+        let flags = Flags::ASSIGNED | Flags::FAILSAFE;
+        reply(&device, host, msg_id, 0x03, flags, &[1, 2]).await;
+
+        let received = client.recv().await.unwrap();
+
+        assert_eq!(
+            received,
+            DeviceReply {
+                device: 0,
+                msg_id,
+                status: 0x03,
+                flags,
+                unit_id: 0,
+                sys_time: 0,
+                data: vec![1, 2],
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn a_reply_carrying_another_unit_id_reports_the_device_as_lost() {
+        let (client, device) = open_client().await;
+        let msg_id = client.send_heartbeat().await.unwrap();
+        let (_, host) = next_request(&device).await;
+        let head = FrameReply {
+            reserved: 0,
+            status: 0,
+            flags: Flags::ASSIGNED,
+            unit_id: 1,
+            sys_time: U64::new(0),
+        };
+        let datagram = [
+            Header::new(Kind::Heartbeat, msg_id).as_bytes(),
+            head.as_bytes(),
+        ]
+        .concat();
+        device.send_to(&datagram, host).await.unwrap();
 
         assert!(matches!(
-            client.session.lock_state().closed_error(),
-            Some(Error::Closed)
+            client.recv().await,
+            Err(Error::DeviceLost { device: 0 })
+        ));
+    }
+
+    #[tokio::test]
+    async fn an_unassigned_reply_reports_the_device_as_lost() {
+        let (client, device) = open_client().await;
+        let msg_id = client.send_heartbeat().await.unwrap();
+        let (_, host) = next_request(&device).await;
+        reply(&device, host, msg_id, 0, Flags::empty(), &[]).await;
+
+        assert!(matches!(
+            client.collect(msg_id).await,
+            Err(Error::DeviceLost { device: 0 })
         ));
     }
 }

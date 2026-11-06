@@ -20,7 +20,6 @@ async fn main() -> anyhow::Result<()> {
         ..Default::default()
     })).await?;
 
-    client.close().await?;
     // HIDE
     Ok(())
 }

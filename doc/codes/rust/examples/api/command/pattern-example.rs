@@ -26,7 +26,6 @@ async fn main() -> anyhow::Result<()> {
 
     client.send(Pattern::new(&phases, Intensity::MAX)).await?;
 
-    client.close().await?;
     // HIDE
     Ok(())
 }

@@ -26,11 +26,11 @@ pub use autd3_rs_core::{
     MAX_INFLIGHT, Point3, Quaternion, UnitQuaternion, UnitVector3, Vector3, Velocity, offset,
     point,
 };
-pub use client::{Client, ExecAt, ResponseFuture};
+pub use client::{Client, ExecAt};
 pub use datagram::{Datagram, Frame, FrameIter, Frames};
 pub use device_status::DeviceStatus;
 pub use firmware_version::{FirmwareVersion, Version};
 pub use fpga_state::FpgaState;
 pub use response::Response;
 pub use telemetry::Telemetry;
-pub use udp::{TransportOption, UdpError};
+pub use udp::{DeviceReply, TransportOption, UdpError};

@@ -45,6 +45,5 @@ async fn main() -> Result<()> {
     client.send(Modulation::new(sampling_config, &modulation)).await?;
 
     client.send(Pattern::new(&geometry.phase_buffer(), Intensity::MIN)).await?;
-    client.close().await?;
     Ok(())
 }

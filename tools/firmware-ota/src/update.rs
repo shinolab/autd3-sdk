@@ -9,13 +9,15 @@ use autd3_rs::commands::{
     FpgaUpdateActivate, FpgaUpdateBegin, FpgaUpdateChunk, FpgaUpdateCommit, Reboot, UpdateBegin,
     UpdateChunk, UpdateCommit, each,
 };
-use autd3_rs::{Client, FirmwareVersion, Version};
+use autd3_rs::{FirmwareVersion, Version};
 use indicatif::{ProgressBar, ProgressStyle};
 
+use crate::Connected;
 use crate::error::OtaError;
 use crate::fpga_image::FpgaFirmwareImage;
 
 pub(crate) const ACK_TIMEOUT: Duration = Duration::from_secs(120);
+pub(crate) const REBOOT_ACK_TIMEOUT: Duration = Duration::from_secs(5);
 pub(crate) const FPGA_RECONFIG_WAIT: Duration =
     Duration::from_millis(autd3_cpu_wire::fpga_update::FPGA_RECONFIG_WORST_MS as u64 + 2000);
 pub(crate) const FPGA_ACTIVATE_ATTEMPTS: usize = 3;
@@ -40,7 +42,7 @@ fn ensure_cpu_supported(infos: &[FirmwareVersion]) -> Result<(), OtaError> {
     }
 }
 
-async fn ensure_fpga_update_supported(client: &Client) -> Result<(), OtaError> {
+async fn ensure_fpga_update_supported(client: &Connected) -> Result<(), OtaError> {
     let infos = client.read_firmware_version().await?;
     ensure_cpu_supported(&infos)?;
     match infos.iter().position(|info| !info.supports_fpga_ota()) {
@@ -49,7 +51,7 @@ async fn ensure_fpga_update_supported(client: &Client) -> Result<(), OtaError> {
     }
 }
 
-pub(crate) async fn ensure_fpga_reconfigured(client: &Client) -> Result<(), OtaError> {
+pub(crate) async fn ensure_fpga_reconfigured(client: &Connected) -> Result<(), OtaError> {
     match client
         .read_firmware_version()
         .await?
@@ -91,7 +93,7 @@ async fn stream(
 }
 
 pub(crate) async fn update_fpga(
-    client: &Client,
+    client: &Connected,
     image: &FpgaFirmwareImage,
 ) -> Result<(), OtaError> {
     ensure_fpga_update_supported(client).await?;
@@ -103,13 +105,15 @@ pub(crate) async fn update_fpga(
         })
         .await?;
     stream(bytes, async |offset, data| {
-        Ok(client.send(FpgaUpdateChunk { offset, data }).await?)
+        client.send(FpgaUpdateChunk { offset, data }).await
     })
     .await?;
-    Ok(client.send(FpgaUpdateCommit).await?)
+    client.send(FpgaUpdateCommit).await
 }
 
-pub(crate) async fn activate_unreconfigured_fpga(client: &Client) -> Result<Vec<usize>, OtaError> {
+pub(crate) async fn activate_unreconfigured_fpga(
+    client: &Connected,
+) -> Result<Vec<usize>, OtaError> {
     let failed: Vec<usize> = client
         .read_firmware_version()
         .await?
@@ -129,7 +133,10 @@ pub(crate) async fn activate_unreconfigured_fpga(client: &Client) -> Result<Vec<
     Ok(failed)
 }
 
-pub(crate) async fn update_cpu(client: &Client, image: &CpuFirmwareImage) -> Result<(), OtaError> {
+pub(crate) async fn update_cpu(
+    client: &Connected,
+    image: &CpuFirmwareImage,
+) -> Result<(), OtaError> {
     ensure_cpu_supported(&client.read_firmware_version().await?)?;
     let bytes = image.as_bytes();
     client
@@ -139,13 +146,13 @@ pub(crate) async fn update_cpu(client: &Client, image: &CpuFirmwareImage) -> Res
         })
         .await?;
     stream(bytes, async |offset, data| {
-        Ok(client.send(UpdateChunk { offset, data }).await?)
+        client.send(UpdateChunk { offset, data }).await
     })
     .await?;
-    Ok(client.send(UpdateCommit).await?)
+    client.send(UpdateCommit).await
 }
 
-pub(crate) async fn activate_unrebooted(client: &Client) -> Result<Vec<usize>, OtaError> {
+pub(crate) async fn activate_unrebooted(client: &Connected) -> Result<Vec<usize>, OtaError> {
     let unrebooted: Vec<usize> = client
         .read_running_image()
         .await?
@@ -157,11 +164,11 @@ pub(crate) async fn activate_unrebooted(client: &Client) -> Result<Vec<usize>, O
     if unrebooted.is_empty() {
         return Ok(unrebooted);
     }
-    client.set_ack_timeout(Duration::from_secs(5));
     client
-        .send(each(|device| {
-            unrebooted.contains(&device.idx()).then_some(Reboot)
-        }))
+        .send_within(
+            REBOOT_ACK_TIMEOUT,
+            each(|device| unrebooted.contains(&device.idx()).then_some(Reboot)),
+        )
         .await?;
     Ok(unrebooted)
 }
