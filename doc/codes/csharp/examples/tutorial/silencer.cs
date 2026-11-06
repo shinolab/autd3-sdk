@@ -67,6 +67,5 @@ internal static class Sample
         }
 
         await client.SendAsync(new Pattern(geometry.PhaseBuffer(), Intensity.Min));
-        client.Close();
     }
 }

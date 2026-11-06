@@ -83,7 +83,7 @@ def test_time_arguments_accept_only_a_duration(value: object) -> None:
         with pytest.raises(TypeError, match="expected a Duration"):
             FixedCompletionTime(intensity=loose(value), phase=autd3.Duration.from_micros(1000))
         with pytest.raises(TypeError, match="expected a Duration"):
-            autd3.TransportOption(ack_timeout=loose(value))
+            autd3.TransportOption(open_timeout=loose(value))
         with pytest.raises(TypeError, match="expected a Duration"):
             autd3.commands.CpuConfig(failsafe_timeout=loose(value))
 
@@ -103,7 +103,7 @@ def test_a_duration_is_accepted_wherever_time_is_taken() -> None:
     assert SysTime.from_nanos(0) + period == SysTime.from_nanos(1_000_000)
     assert autd3.value.SamplingConfig(period) == autd3.value.SamplingConfig(40)
     FixedCompletionTime(intensity=period, phase=period)
-    autd3.TransportOption(ack_timeout=period)
+    autd3.TransportOption(open_timeout=period)
 
 
 def assert_float32(array: npt.NDArray[Any], shape: tuple[int, ...]) -> None:

@@ -19,17 +19,15 @@ import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
 | --------------------- | ---------------------- | ------- | --------------------------------------------------------------------------------------------- |
 | `iface`               | `Interface`            | `Auto`  | Destination                                                                                   |
 | `open_timeout`        | `Duration`             | 40 s    | Upper bound on the time the open waits |
-| `lost_timeout`        | `Duration`             | 500 ms  | If a device has not replied for this long, it is lost and the `Client` closes (`DeviceLost`) |
-| `ack_timeout`         | `Duration`             | 200 ms  | Response-wait timeout |
 | `send_buffer_bytes`         | `Option<NonZeroUsize>` | 8192    | Size of the socket send buffer [B]. `None` leaves the OS default                              |
 | `sync_on_open`        | `bool`                 | `true`  | When `false`, open does not wait for the devices to synchronize with one another |
-| `heartbeat_interval`  | `Option<Duration>`     | `None`  | `Client` sends a liveness check at this interval. `None` sends none (see [Failsafe](/autd3-sdk/en/guide/failsafe/)) |
 
-Changing anything other than `iface` and `heartbeat_interval` is generally not recommended.
+Changing anything other than `iface` is generally not recommended.
+`Client` neither bounds the wait for replies, judges a device lost, nor sends liveness checks: the user does (see [Client](/autd3-sdk/en/api/basics/client/#api) / [Failsafe](/autd3-sdk/en/guide/failsafe/#communication-loss-failsafe-and-liveness-check)).
 
 :::caution[Windows timer resolution]
 The library does not change the timer resolution of Windows (`timeBeginPeriod`).
-At the default timer resolution in Windows (typically 15.6 ms), waiting for the replies (the socket receive timeout) is rounded to that granularity, so the judgement of `ack_timeout` and of `lost_timeout` may come late.
+At the default timer resolution in Windows (typically 15.6 ms), the bound you put on waiting for the replies and the interval of your liveness checks may be rounded to that granularity.
 If needed, call `timeBeginPeriod(1)` in your process yourself.
 :::
 

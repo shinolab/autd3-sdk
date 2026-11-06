@@ -88,68 +88,92 @@ namespace AUTD3
         }
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_client_device_status(ClientHandle client, [Out] DeviceStatusNative[] status, UIntPtr len, byte[] outErr, UIntPtr outErrLen);
-
-
-
-
-
-
-
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern UIntPtr autd3_client_num_devices(ClientHandle client);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_client_device_time_now(ClientHandle client, out ulong ns, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_client_ack_timeout(ClientHandle client, out ulong ns);
+        internal static extern IntPtr autd3_cancel_token_new();
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_client_set_ack_timeout(ClientHandle client, ulong timeoutNs);
+        internal static extern void autd3_cancel_token_cancel(IntPtr token);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_client_lost_timeout(ClientHandle client, out ulong ns);
+        internal static extern void autd3_cancel_token_free(IntPtr token);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_client_set_lost_timeout(ClientHandle client, ulong timeoutNs);
+        internal static extern int autd3_client_discard_unread_replies(ClientHandle client, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_client_send_heartbeat(ClientHandle client, byte[] outErr, UIntPtr outErrLen);
+        internal static extern int autd3_client_send_heartbeat(ClientHandle client, out ushort msgId, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_client_send_checked(ClientHandle client, FramesHandle frames, CompletionCallback cb, IntPtr userData);
+        internal static extern void autd3_client_send(ClientHandle client, FramesHandle frames, IntPtr cancel, CompletionCallback cb, IntPtr userData);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_client_send(ClientHandle client, FramesHandle frames, UIntPtr frame, CompletionCallback cb, IntPtr userData);
+        internal static extern void autd3_client_send_frame(ClientHandle client, FramesHandle frames, UIntPtr frame, ExecAtNative exec, IntPtr cancel, CompletionCallback cb, IntPtr userData);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_client_send_at(ClientHandle client, FramesHandle frames, UIntPtr frame, ExecAtNative exec, CompletionCallback cb, IntPtr userData);
+        internal static extern void autd3_client_recv(ClientHandle client, IntPtr cancel, CompletionCallback cb, IntPtr userData);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_response_token_await(IntPtr token, CompletionCallback cb, IntPtr userData);
+        internal static extern void autd3_client_collect(ClientHandle client, ushort msgId, IntPtr cancel, CompletionCallback cb, IntPtr userData);
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct DeviceReplyNative
+        {
+            public UIntPtr Device;
+            public ushort MsgId;
+            public byte Status;
+            public byte Flags;
+            public byte UnitId;
+            public ulong SysTime;
+            public TelemetryNative Telemetry;
+            public byte FpgaState;
+        }
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_response_token_free(IntPtr token);
+        internal static extern int autd3_device_reply_get(IntPtr reply, out DeviceReplyNative @out);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_response_check(byte[] data, UIntPtr len, byte[] outErr, UIntPtr outErrLen);
+        internal static extern UIntPtr autd3_device_reply_data_len(IntPtr reply);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr autd3_device_reply_data(IntPtr reply);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void autd3_device_reply_free(IntPtr reply);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern UIntPtr autd3_response_num_devices(IntPtr response);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_response_error_codes(IntPtr response);
+        internal static extern IntPtr autd3_response_reply(IntPtr response, UIntPtr device);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern UIntPtr autd3_response_reply_data_of_len(IntPtr response, UIntPtr device);
+        internal static extern int autd3_response_device_status(IntPtr response, [Out] DeviceStatusNative[] status, UIntPtr len, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_response_reply_data_of(IntPtr response, UIntPtr device);
+        internal static extern int autd3_response_check(IntPtr response, byte[] outErr, UIntPtr outErrLen);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_response_free(IntPtr response);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr autd3_inflight_frames_new();
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_inflight_frames_push(InflightFramesHandle inflight, ushort msgId);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_inflight_frames_len(InflightFramesHandle inflight, out UIntPtr len);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void autd3_inflight_frames_collect_oldest(InflightFramesHandle inflight, ClientHandle client, IntPtr cancel, CompletionCallback cb, IntPtr userData);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void autd3_inflight_frames_free(IntPtr inflight);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_tracing_option_default([Out] byte[] outDefaultFilter, UIntPtr outDefaultFilterLen, out byte outWriter);
@@ -182,45 +206,16 @@ namespace AUTD3
         internal static extern int autd3_firmware_version_supported_series(out byte major, out byte minor);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_client_close(ClientHandle client, byte[] outErr, UIntPtr outErrLen);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_client_free(IntPtr client);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_client_read_firmware_version(ClientHandle client, CompletionCallback cb, IntPtr userData);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_client_read_fpga_state(ClientHandle client, CompletionCallback cb, IntPtr userData);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_client_read_telemetry(ClientHandle client, CompletionCallback cb, IntPtr userData);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern UIntPtr autd3_byte_array_len(IntPtr array);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_byte_array_data(IntPtr array);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_byte_array_free(IntPtr array);
+        internal static extern void autd3_client_read_firmware_version(ClientHandle client, IntPtr cancel, CompletionCallback cb, IntPtr userData);
 
         [StructLayout(LayoutKind.Sequential)]
         internal struct TelemetryNative
         {
-            public uint FifoDrop, DispatchError, Processed, SendFailure;
-            public ushort Failsafe, PtpUnlockFailsafe;
-            public byte SyncResync, BootFailure, CpuWatchdog;
-            public uint ExecLate;
+            public uint FifoDrop, ExecLate;
+            public byte SyncResync, CpuWatchdog, BootFailure;
         }
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern UIntPtr autd3_telemetry_array_len(IntPtr array);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_telemetry_array_get(IntPtr array, UIntPtr index, out TelemetryNative @out);
-
-        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void autd3_telemetry_array_free(IntPtr array);
     }
 }

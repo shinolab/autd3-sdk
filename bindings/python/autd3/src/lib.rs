@@ -39,7 +39,8 @@ fn _autd3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<client::Version>()?;
     m.add_class::<client::FirmwareVersion>()?;
     m.add_class::<client::Response>()?;
-    m.add_class::<client::ResponseFuture>()?;
+    m.add_class::<client::DeviceReply>()?;
+    m.add_class::<client::InflightFrames>()?;
     m.add_class::<client::DeviceStatus>()?;
     m.add_class::<udp::Interface>()?;
     m.add_class::<udp::TransportOption>()?;

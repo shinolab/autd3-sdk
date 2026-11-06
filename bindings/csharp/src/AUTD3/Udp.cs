@@ -7,32 +7,22 @@ namespace AUTD3
     internal struct TransportOptionNative
     {
         public ulong OpenTimeoutNs;
-        public ulong LostTimeoutNs;
-        public ulong AckTimeoutNs;
         public ulong SendBufferBytes;
         public byte SyncOnOpen;
-        public byte HasHeartbeatInterval;
-        public ulong HeartbeatIntervalNs;
     }
 
     internal static class TransportOptionDefaults
     {
         internal static readonly TimeSpan OpenTimeout;
-        internal static readonly TimeSpan LostTimeout;
-        internal static readonly TimeSpan AckTimeout;
         internal static readonly ulong? SendBufferBytes;
         internal static readonly bool SyncOnOpen;
-        internal static readonly TimeSpan? HeartbeatInterval;
 
         static TransportOptionDefaults()
         {
             OptionNative.Apply("preset", NativeClient.autd3_transport_option_default(out var native));
             OpenTimeout = OptionNative.FromNanos(native.OpenTimeoutNs);
-            LostTimeout = OptionNative.FromNanos(native.LostTimeoutNs);
-            AckTimeout = OptionNative.FromNanos(native.AckTimeoutNs);
             SendBufferBytes = native.SendBufferBytes == 0 ? null : native.SendBufferBytes;
             SyncOnOpen = native.SyncOnOpen != 0;
-            HeartbeatInterval = OptionNative.FromOptionalNanos(native.HasHeartbeatInterval, native.HeartbeatIntervalNs);
         }
     }
 
@@ -46,10 +36,6 @@ namespace AUTD3
 
         private readonly TimeSpan? _openTimeout;
         public TimeSpan OpenTimeout { get => _openTimeout ?? TransportOptionDefaults.OpenTimeout; init => _openTimeout = value; }
-        private readonly TimeSpan? _lostTimeout;
-        public TimeSpan LostTimeout { get => _lostTimeout ?? TransportOptionDefaults.LostTimeout; init => _lostTimeout = value; }
-        private readonly TimeSpan? _ackTimeout;
-        public TimeSpan AckTimeout { get => _ackTimeout ?? TransportOptionDefaults.AckTimeout; init => _ackTimeout = value; }
 
         private readonly bool _sendBufferBytesSet;
         private readonly ulong? _sendBufferBytes;
@@ -67,19 +53,6 @@ namespace AUTD3
         private readonly bool? _syncOnOpen;
         public bool SyncOnOpen { get => _syncOnOpen ?? TransportOptionDefaults.SyncOnOpen; init => _syncOnOpen = value; }
 
-        private readonly bool _heartbeatIntervalSet;
-        private readonly TimeSpan? _heartbeatInterval;
-
-        public TimeSpan? HeartbeatInterval
-        {
-            get => _heartbeatIntervalSet ? _heartbeatInterval : TransportOptionDefaults.HeartbeatInterval;
-            init
-            {
-                _heartbeatInterval = value;
-                _heartbeatIntervalSet = true;
-            }
-        }
-
         internal byte IfaceKind => Iface switch
         {
             { AddrValue: { } } => IfaceKindAddr,
@@ -92,8 +65,6 @@ namespace AUTD3
         internal TransportOptionNative ToNative() => new TransportOptionNative
         {
             OpenTimeoutNs = OptionNative.RequiredNanos("openTimeout", OpenTimeout),
-            LostTimeoutNs = OptionNative.RequiredNanos("lostTimeout", LostTimeout),
-            AckTimeoutNs = OptionNative.RequiredNanos("ackTimeout", AckTimeout),
             SendBufferBytes = SendBufferBytes switch
             {
                 null => 0,
@@ -101,8 +72,6 @@ namespace AUTD3
                 _ => throw OptionNative.OutOfRange("sendBufferBytes"),
             },
             SyncOnOpen = OptionNative.Flag(SyncOnOpen),
-            HasHeartbeatInterval = OptionNative.Flag(HeartbeatInterval.HasValue),
-            HeartbeatIntervalNs = OptionNative.OptionalNanos("heartbeatInterval", HeartbeatInterval),
         };
     }
 }

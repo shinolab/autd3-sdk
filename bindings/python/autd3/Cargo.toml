@@ -16,6 +16,7 @@ autd3-rs.workspace = true
 autd3-binding-rt.workspace = true
 autd3-python-capsule = { workspace = true, features = ["frame"] }
 pyo3.workspace = true
+tokio = { workspace = true, features = ["sync"] }
 
 [lints]
 workspace = true

@@ -46,6 +46,7 @@ async fn main() -> Result<()> {
 
     let msg_id = client.send_heartbeat().await?;
     let heartbeat = client.collect(msg_id).await?;
+    client.send_heartbeat().await?;
     let reply = client.recv().await?;
 
     let firmware = client.read_firmware_version().await?;

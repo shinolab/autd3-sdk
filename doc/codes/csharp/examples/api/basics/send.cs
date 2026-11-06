@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Threading.Tasks;
 using AUTD3;
 using static AUTD3.Units;
@@ -30,21 +29,22 @@ internal static class Sample
 
         // ANCHOR: streaming
         using var modulationFrames = Frames.Encode(geometry, new Modulation(SamplingConfig.Freq4k, modulation));
-        var responses = new List<ResponseFuture>();
+        using var inflight = new InflightFrames();
         foreach (var frame in modulationFrames)
         {
-            responses.Add(await client.SendFrameAsync(frame));
+            inflight.Push(await client.SendFrameAsync(frame, ExecAt.Immediate));
         }
-        foreach (var response in responses)
+        while (await inflight.CollectOldestAsync(client) is { } response)
         {
-            (await response).Check();
+            response.Check();
         }
         // ANCHOR_END: streaming
 
         using var frames = Frames.Encode(geometry, new Pattern(left, Intensity.Max));
         foreach (var frame in frames)
         {
-            (await await client.SendFrameAsync(frame)).Check();
+            var msgId = await client.SendFrameAsync(frame, ExecAt.Immediate);
+            (await client.CollectAsync(msgId)).Check();
         }
         // ANCHOR_END: api
         }

@@ -19,7 +19,13 @@ async def main() -> None:
         # ANCHOR: poll
         last = None
         while True:
-            status = client.device_status()
+            msg_id = client.send_heartbeat()
+            try:
+                response = await asyncio.wait_for(client.collect(msg_id), timeout=CHECK_INTERVAL)
+            except TimeoutError:
+                print(f"not every device replied within {CHECK_INTERVAL} s")
+                continue
+            status = response.device_status()
             if status != last:
                 for i, s in enumerate(status):
                     print(f"device[{i}]: {s.state}")

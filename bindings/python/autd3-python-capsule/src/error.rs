@@ -27,11 +27,10 @@ pub fn invalid_argument<E: core::fmt::Display>(e: E) -> PyErr {
 pub fn client(e: autd3_rs::Error) -> PyErr {
     use autd3_rs::Error;
     let class = match &e {
-        Error::Timeout { .. } => "ReplyTimeoutError",
         Error::DeviceError { .. } | Error::UnexpectedReply { .. } => "DeviceError",
         Error::Network(_) | Error::DeviceLost { .. } => "NetworkError",
         Error::InvalidPayload(_) => "InvalidArgumentError",
-        Error::DeviceTimeUnknown | Error::Closed => "Autd3Error",
+        Error::DeviceTimeUnknown => "Autd3Error",
         _ => unreachable!(),
     };
     new_error(class, e.to_string())

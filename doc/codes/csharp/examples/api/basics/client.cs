@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using AUTD3;
 
@@ -21,13 +23,15 @@ internal static class Sample
         var lead = ExecAt.Lead(TimeSpan.FromMilliseconds(1));
         foreach (var frame in frames)
         {
-            (await await client.SendFrameAsync(frame, lead)).Check();
+            var msgId = await client.SendFrameAsync(frame, lead);
+            (await client.CollectAsync(msgId)).Check();
         }
 
         var at = client.DeviceTimeNow() + TimeSpan.FromMilliseconds(5);
         foreach (var frame in frames)
         {
-            (await await client.SendFrameAsync(frame, ExecAt.At(at))).Check();
+            var msgId = await client.SendFrameAsync(frame, ExecAt.At(at));
+            (await client.CollectAsync(msgId)).Check();
         }
         // ANCHOR_END: exec_at
 
@@ -43,18 +47,20 @@ internal static class Sample
         var numDevices = client.NumDevices;
         var geometry = client.Geometry;
 
+        var heartbeat = await client.CollectAsync(client.SendHeartbeat());
         client.SendHeartbeat();
+        var reply = await client.RecvAsync();
 
         var firmware = await client.ReadFirmwareVersionAsync();
-        var fpgaState = await client.ReadFpgaStateAsync();
+        var fpgaState = heartbeat.Replies.Select(r => r.FpgaState).ToArray();
 
         await client.SendAsync(new Nop());
-        var resp = await await client.SendFrameAsync(frames[0]);
-
-        client.Close();
+        var sent = await client.SendFrameAsync(frames[0], ExecAt.Immediate);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        var resp = await client.CollectAsync(sent, timeout.Token);
         // ANCHOR_END: api
 
-        _ = (numDevices, geometry, firmware, fpgaState, resp);
+        _ = (numDevices, geometry, heartbeat, reply, firmware, fpgaState, resp);
 
         var scopedLayout = new Geometry(new[] { new Autd3() });
 

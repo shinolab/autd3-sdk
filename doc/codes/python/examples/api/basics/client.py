@@ -18,11 +18,13 @@ async def main() -> None:
 
     lead = ExecAt.Lead(Duration.from_millis(1))
     for frame in frames:
-        (await (await client.send_frame_at(frame, lead))).check()
+        msg_id = await client.send_frame(frame, lead)
+        (await client.collect(msg_id)).check()
 
     at = client.device_time_now() + Duration.from_millis(5)
     for frame in frames:
-        (await (await client.send_frame_at(frame, ExecAt.At(at)))).check()
+        msg_id = await client.send_frame(frame, ExecAt.At(at))
+        (await client.collect(msg_id)).check()
     # ANCHOR_END: exec_at
     frame = next(iter(frames))
 
@@ -36,18 +38,20 @@ async def main() -> None:
     num_devices = client.num_devices()
     geometry = client.geometry()
 
+    msg_id = client.send_heartbeat()
+    heartbeat = await client.collect(msg_id)
     client.send_heartbeat()
+    reply = await client.recv()
 
     firmware = await client.read_firmware_version()
-    fpga_state = await client.read_fpga_state()
+    fpga_state = [r.fpga_state for r in heartbeat.replies]
 
     await client.send(Nop())
-    resp = await (await client.send_frame(frame))
-
-    client.close()
+    msg_id = await client.send_frame(frame, ExecAt.Immediate)
+    resp = await asyncio.wait_for(client.collect(msg_id), timeout=0.2)
     # ANCHOR_END: api
 
-    _ = (num_devices, geometry, firmware, fpga_state, resp)
+    _ = (num_devices, geometry, heartbeat, reply, firmware, fpga_state, resp)
 
     geometry = Geometry([Autd3()])
 

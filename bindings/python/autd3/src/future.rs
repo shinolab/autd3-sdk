@@ -38,6 +38,19 @@ impl CheckedCompletor {
     }
 }
 
+#[pyclass]
+struct AbortOnCancel(tokio::task::AbortHandle);
+
+#[pymethods]
+impl AbortOnCancel {
+    fn __call__(&self, future: &Bound<'_, PyAny>) -> PyResult<()> {
+        if future.call_method0("cancelled")?.is_truthy()? {
+            self.0.abort();
+        }
+        Ok(())
+    }
+}
+
 pub(crate) fn future_into_py<'py, F, T>(py: Python<'py>, fut: F) -> PyResult<Bound<'py, PyAny>>
 where
     F: Future<Output = PyResult<T>> + Send + 'static,
@@ -65,7 +78,7 @@ where
     let event_loop_tx = event_loop.unbind();
     let future_tx = py_fut.clone().unbind();
     let completions = runtime::completions(py)?;
-    runtime::spawn(py, async move {
+    let task = runtime::spawn(py, async move {
         let result = fut.await;
         completions.post(move || {
             Python::attach(|py| {
@@ -74,5 +87,6 @@ where
             });
         });
     })?;
+    py_fut.call_method1("add_done_callback", (AbortOnCancel(task),))?;
     Ok(py_fut)
 }

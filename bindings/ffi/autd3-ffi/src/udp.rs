@@ -11,26 +11,18 @@ use autd3_rs::udp::TransportOption;
 #[derive(Clone, Copy)]
 pub struct Autd3TransportOption {
     pub open_timeout_ns: u64,
-    pub lost_timeout_ns: u64,
-    pub ack_timeout_ns: u64,
     pub send_buffer_bytes: u64,
     pub sync_on_open: bool,
-    pub has_heartbeat_interval: bool,
-    pub heartbeat_interval_ns: u64,
 }
 
 impl From<&TransportOption> for Autd3TransportOption {
     fn from(option: &TransportOption) -> Self {
         Self {
             open_timeout_ns: to_ns(option.open_timeout),
-            lost_timeout_ns: to_ns(option.lost_timeout),
-            ack_timeout_ns: to_ns(option.ack_timeout),
             send_buffer_bytes: option
                 .send_buffer_bytes
                 .map_or(0, |bytes| bytes.get() as u64),
             sync_on_open: option.sync_on_open,
-            has_heartbeat_interval: option.heartbeat_interval.is_some(),
-            heartbeat_interval_ns: option.heartbeat_interval.map_or(0, to_ns),
         }
     }
 }
@@ -67,13 +59,8 @@ pub(crate) unsafe fn to_transport_option(
     Ok(TransportOption {
         iface,
         open_timeout: Duration::from_nanos(option.open_timeout_ns),
-        lost_timeout: Duration::from_nanos(option.lost_timeout_ns),
-        ack_timeout: Duration::from_nanos(option.ack_timeout_ns),
         send_buffer_bytes: NonZeroUsize::new(send_buffer_bytes),
         sync_on_open: option.sync_on_open,
-        heartbeat_interval: option
-            .has_heartbeat_interval
-            .then(|| Duration::from_nanos(option.heartbeat_interval_ns)),
     })
 }
 
@@ -97,12 +84,8 @@ mod tests {
     fn default_option() -> Autd3TransportOption {
         let mut option = Autd3TransportOption {
             open_timeout_ns: 0,
-            lost_timeout_ns: 0,
-            ack_timeout_ns: 0,
             send_buffer_bytes: 0,
             sync_on_open: false,
-            has_heartbeat_interval: true,
-            heartbeat_interval_ns: 0,
         };
         assert_eq!(
             unsafe { autd3_transport_option_default(&raw mut option) },
@@ -135,23 +118,16 @@ mod tests {
     fn every_field_reaches_the_rust_option() {
         let option = Autd3TransportOption {
             open_timeout_ns: 1,
-            lost_timeout_ns: 2,
-            ack_timeout_ns: 3,
             send_buffer_bytes: 0,
             sync_on_open: false,
-            has_heartbeat_interval: true,
-            heartbeat_interval_ns: 4,
         };
         assert_eq!(
             unsafe { to_transport_option(0, std::ptr::null(), option) },
             Ok(TransportOption {
                 iface: Interface::Auto,
                 open_timeout: Duration::from_nanos(1),
-                lost_timeout: Duration::from_nanos(2),
-                ack_timeout: Duration::from_nanos(3),
                 send_buffer_bytes: None,
                 sync_on_open: false,
-                heartbeat_interval: Some(Duration::from_nanos(4)),
             })
         );
     }

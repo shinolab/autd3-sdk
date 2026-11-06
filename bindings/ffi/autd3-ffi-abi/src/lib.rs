@@ -39,7 +39,6 @@ macro_rules! export_abi_version {
 
 pub const AUTD3_OK: i32 = 0;
 pub const AUTD3_ERR: i32 = -1;
-pub const AUTD3_ERR_TIMEOUT: i32 = -2;
 pub const AUTD3_ERR_DEVICE: i32 = -3;
 pub const AUTD3_ERR_NETWORK: i32 = -4;
 pub const AUTD3_ERR_INVALID_ARGUMENT: i32 = -5;
@@ -58,15 +57,10 @@ pub struct Autd3FirmwareVersion {
 #[derive(Clone, Copy)]
 pub struct Autd3Telemetry {
     pub fifo_drop: u32,
-    pub dispatch_error: u32,
-    pub processed: u32,
-    pub send_failure: u32,
-    pub failsafe: u16,
-    pub ptp_unlock_failsafe: u16,
-    pub sync_resync: u8,
-    pub boot_failure: u8,
-    pub cpu_watchdog: u8,
     pub exec_late: u32,
+    pub sync_resync: u8,
+    pub cpu_watchdog: u8,
+    pub boot_failure: u8,
 }
 
 #[repr(transparent)]

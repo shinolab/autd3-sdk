@@ -33,9 +33,9 @@ A method that sends one frame after another without waiting for responses, and c
 Because it does not wait for a response on every frame, throughput is high.
 
 As in the example below, convert the command into frames with `Frames::encode_into` and then send them one frame at a time with `send_frame`.
-`send_frame` returns a `ResponseFuture` once the frame has been sent, and awaiting that `ResponseFuture` yields the device's response (`Response`).
+`send_frame` returns a msg_id once the frame has been sent. Push the msg_id onto `InflightFrames`, and collect the device's response (`Response`) to the oldest frame with `collect_oldest`.
 `Response` can be validated for device errors with `check`.
-The maximum size of the send queue is `MAX_INFLIGHT (7)`.
-`ResponseFuture`s are held in FIFO order, and when the queue is full the oldest response is collected.
+The number of frames that may wait for their responses is `MAX_INFLIGHT (7)` (with more queued, the devices drop frames).
+When `InflightFrames` is full, the oldest response is collected before the next frame is sent.
 
 <CodeTabs rust={excerpt(sample, "streaming")} python={excerpt(pySample, "streaming")} csharp={excerpt(csSample, "streaming")} />

@@ -28,6 +28,19 @@ namespace AUTD3
         }
     }
 
+    internal sealed class InflightFramesHandle : Autd3SafeHandle
+    {
+        internal InflightFramesHandle(IntPtr handle) : base(handle)
+        {
+        }
+
+        protected override bool ReleaseHandle()
+        {
+            NativeClient.autd3_inflight_frames_free(handle);
+            return true;
+        }
+    }
+
     internal sealed class TracingGuardHandle : Autd3SafeHandle
     {
         internal TracingGuardHandle(IntPtr handle) : base(handle)
