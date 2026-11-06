@@ -38,23 +38,26 @@ import Mermaid from "@components/Mermaid.astro";
 
 ## タスクモデル
 
-`Client` はタスクを持たない薄いソケットで, 送信も受信も呼び出し側のタスクがその場で行う.
+`Client` は, 送信も受信も呼び出し側のタスクがその場で行う. 持つタスクは生存確認の周期送信 (`TransportOption::heartbeat_interval` を指定したときだけ) の 1 本である.
 
 <Mermaid
   title="タスクモデル"
   code={`flowchart LR
   U["ユーザーのタスク (非同期)"]
+  H["生存確認のタスク (任意)"]
   D["デバイス"]
-  U -- "send_frame / send_heartbeat: UDP フレーム" --> D
-  D -- "recv / collect: UDP 返信" --> U`}
+  U -- "send / send_streaming / read_state: UDP フレーム" --> D
+  H -- "Heartbeat" --> D
+  D -- "UDP 返信" --> U`}
 />
 
-- **送信**: `send_frame` / `send_heartbeat` を呼んだタスクがその場で全デバイスへ送り, `msg_id` を返す. 返信は待たない. tokio を前提とする.
-- **受信**: `recv` / `collect` を await している間だけソケットを読む. `collect` は `msg_id` が一致する返信を全デバイスぶん集めて `Response` を返す. 期限は持たない (上限はユーザーが付ける).
+- **送信**: `send` / `send_streaming` / `read_state` を呼んだタスクがその場で全デバイスへ送る. tokio を前提とする.
+- **受信**: 同じ呼び出しの中で, 送ったフレームの `msg_id` に一致する返信を全デバイスぶん集める. 期限は持たない (上限はユーザーが付ける).
+  返信を読むメソッドは `&mut self` で, 同時に 1 つしか動かない. 生存確認のタスクは送るだけで読まない (返信は次の呼び出しの先頭で捨てる).
 
-`Client` が持つのは `Geometry`・通信層の `Channel` (`udp/channel.rs`, crate 内部)・`msg_id` の採番 (`AtomicU16`)・デバイス時刻の推定 (`DeviceClock`) だけである.
+`Client` の内部の送受信層 (`controller/`) が持つのは `Geometry`・通信層の `Channel` (`udp/channel.rs`, crate 内部)・`msg_id` の採番 (`AtomicU16`)・デバイス時刻の推定 (`DeviceClock`) だけである.
 `Channel` は普通の UDP ソケットで各デバイスへデータグラムを 1 つずつ送り, 届いた返信を 1 つずつ返す口だけを持ち, デバイスの状態は持たない.
-いつ送るか (窓)・返信待ちの上限・途絶の判定・生存確認はユーザーが決める (streaming の照合には `InflightFrames` を使える).
+返信待ちの上限・途絶の判定はユーザーが決める.
 Link のような差し替え可能な通信路の抽象は無い.
 
 ## ユーザー API からデバイスまで

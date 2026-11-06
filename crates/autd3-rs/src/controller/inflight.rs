@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use crate::error::Error;
 use crate::response::Response;
 
-use super::Client;
+use super::Controller;
 
 #[derive(Debug, Default)]
 pub struct InflightFrames {
@@ -25,18 +25,21 @@ impl InflightFrames {
         self.frames.is_empty()
     }
 
-    pub async fn collect_oldest(&mut self, client: &Client) -> Result<Option<Response>, Error> {
+    pub async fn collect_oldest(
+        &mut self,
+        controller: &Controller,
+    ) -> Result<Option<Response>, Error> {
         while let Some((_, oldest)) = self.frames.front()
             && !oldest.as_ref().is_some_and(Response::has_all_replies)
         {
-            let reply = client.recv().await?;
+            let reply = controller.recv().await?;
             if let Some((_, response)) = self
                 .frames
                 .iter_mut()
                 .find(|(msg_id, _)| *msg_id == reply.msg_id)
             {
                 response
-                    .get_or_insert_with(|| Response::for_devices(client.num_devices()))
+                    .get_or_insert_with(|| Response::for_devices(controller.num_devices()))
                     .record_reply(reply);
             }
         }

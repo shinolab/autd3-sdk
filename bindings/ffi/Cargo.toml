@@ -28,6 +28,7 @@ autd3-ffi-abi = { path = "autd3-ffi-abi" }
 autd3-binding-rt = { path = "../autd3-binding-rt" }
 zerocopy = { version = "0.8.63", default-features = false }
 thiserror = { version = "2.0.21", default-features = false, features = ["std"] }
+tracing = { version = "0.1.44", default-features = false }
 tracing-appender = { version = "0.2.5", default-features = false }
 tracing-subscriber = { version = "0.3.23", default-features = false, features = [
     "std",

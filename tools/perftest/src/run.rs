@@ -14,7 +14,7 @@ use autd3_rs::value::{
     Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig, TransitionMode,
 };
 use autd3_rs::{
-    Client, DeviceReply, Error as ClientError, ExecAt, Frame, Frames, Interface, Telemetry,
+    Controller, DeviceReply, Error as ClientError, ExecAt, Frame, Frames, Interface, Telemetry,
     TransportOption,
 };
 use tokio::time::error::Elapsed;
@@ -72,7 +72,7 @@ impl Sender {
         Ok(sender)
     }
 
-    fn prepare(&mut self, client: &Client) -> Result<()> {
+    fn prepare(&mut self, client: &Controller) -> Result<()> {
         if self.command == Command::Nop {
             return Ok(());
         }
@@ -105,7 +105,7 @@ impl Sender {
         Ok(())
     }
 
-    fn next_frame(&mut self, client: &Client) -> Result<Frame<'_>> {
+    fn next_frame(&mut self, client: &Controller) -> Result<Frame<'_>> {
         if self.next_frame >= self.frames.len() {
             self.prepare(client)?;
             self.next_frame = 0;
@@ -120,7 +120,7 @@ impl Sender {
 }
 
 async fn run_stop_and_wait(
-    client: &Client,
+    client: &Controller,
     exec: ExecAt,
     ack_timeout: Duration,
     mut sender: Sender,
@@ -156,7 +156,7 @@ async fn run_stop_and_wait(
 }
 
 async fn run_streaming(
-    client: &Client,
+    client: &Controller,
     exec: ExecAt,
     ack_timeout: Duration,
     mut sender: Sender,
@@ -281,7 +281,7 @@ pub(crate) async fn run(cli: &Cli) -> Result<RunOutput> {
         },
         ..Default::default()
     };
-    let client = Client::open(&geometry, &option)
+    let client = Controller::open(&geometry, &option)
         .await
         .context("opening the devices")?;
     client.send(Clear).await.context("initial Clear")?;
@@ -475,7 +475,7 @@ impl Measurement {
         ControlFlow::Continue(())
     }
 
-    async fn report(&mut self, client: &Client) {
+    async fn report(&mut self, client: &Controller) {
         self.live
             .report_if_due(client, &self.counters, self.traffic, self.start)
             .await;
@@ -531,7 +531,7 @@ impl Live {
 
     async fn report_if_due(
         &mut self,
-        client: &Client,
+        client: &Controller,
         counters: &Counters,
         traffic: Traffic,
         start: Instant,
@@ -566,7 +566,7 @@ impl Live {
     }
 }
 
-async fn read_telemetry(client: &Client) -> Result<Vec<Telemetry>, ClientError> {
+async fn read_telemetry(client: &Controller) -> Result<Vec<Telemetry>, ClientError> {
     client.discard_unread_replies()?;
     let msg_id = client.send_heartbeat().await?;
     Ok(client

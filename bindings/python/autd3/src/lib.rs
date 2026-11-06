@@ -34,13 +34,11 @@ fn _autd3(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("PULSE_WIDTH_PERIOD", autd3_rs::value::PULSE_WIDTH_PERIOD)?;
     m.add("PORT", autd3_rs::udp::PORT)?;
     m.add_class::<client::Client>()?;
-    m.add_class::<client::ExecAt>()?;
     m.add_class::<client::DeviceState>()?;
     m.add_class::<client::Version>()?;
     m.add_class::<client::FirmwareVersion>()?;
     m.add_class::<client::Response>()?;
     m.add_class::<client::DeviceReply>()?;
-    m.add_class::<client::InflightFrames>()?;
     m.add_class::<client::DeviceStatus>()?;
     m.add_class::<udp::Interface>()?;
     m.add_class::<udp::TransportOption>()?;

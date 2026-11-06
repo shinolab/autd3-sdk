@@ -31,18 +31,18 @@ use device_clock::DeviceClock;
 
 const GRANDMASTER_UNIT_ID: usize = 0;
 
-pub struct Client {
+pub struct Controller {
     geometry: Geometry,
     channel: Channel,
     last_msg_id: AtomicU16,
     device_clock: Mutex<DeviceClock>,
 }
 
-impl Client {
+impl Controller {
     pub async fn open(geometry: &Geometry, option: &TransportOption) -> Result<Self, Error> {
         let mut device_clock = DeviceClock::default();
         let channel = open::open(option, geometry.num_devices(), &mut device_clock).await?;
-        tracing::info!(num_devices = geometry.num_devices(), "client opened");
+        tracing::info!(num_devices = geometry.num_devices(), "controller opened");
         Ok(Self {
             geometry: geometry.clone(),
             channel,
@@ -242,7 +242,7 @@ impl Client {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6};
     use std::time::Duration;
 
@@ -258,7 +258,7 @@ mod tests {
 
     use super::*;
 
-    async fn open_client() -> (Client, UdpSocket) {
+    pub(crate) async fn open_controller() -> (Controller, UdpSocket) {
         let device = UdpSocket::bind(SocketAddrV6::new(Ipv6Addr::LOCALHOST, 0, 0, 0))
             .await
             .unwrap();
@@ -291,20 +291,20 @@ mod tests {
             ..TransportOption::default()
         };
         let geometry = test_geometry(1);
-        let client = tokio::select! {
-            client = Client::open(&geometry, &option) => client.unwrap(),
+        let controller = tokio::select! {
+            controller = Controller::open(&geometry, &option) => controller.unwrap(),
             () = answer_every_request => unreachable!(),
         };
-        (client, device)
+        (controller, device)
     }
 
-    async fn next_request(device: &UdpSocket) -> (Header, SocketAddr) {
+    pub(crate) async fn next_request(device: &UdpSocket) -> (Header, SocketAddr) {
         let mut buf = [0; 2048];
         let (_, host) = device.recv_from(&mut buf).await.unwrap();
         (Header::read_from_prefix(&buf).unwrap().0, host)
     }
 
-    async fn reply(
+    pub(crate) async fn reply(
         device: &UdpSocket,
         host: SocketAddr,
         msg_id: u16,
@@ -333,7 +333,7 @@ mod tests {
         device.send_to(&datagram, host).await.unwrap();
     }
 
-    async fn answer_one_frame(device: &UdpSocket, status: u8) {
+    pub(crate) async fn answer_one_frame(device: &UdpSocket, status: u8) {
         let (header, host) = next_request(device).await;
         reply(
             device,
@@ -348,18 +348,18 @@ mod tests {
 
     #[tokio::test]
     async fn send_waits_for_the_reply_of_every_frame() {
-        let (client, device) = open_client().await;
+        let (controller, device) = open_controller().await;
 
-        let (sent, ()) = tokio::join!(client.send(Nop), answer_one_frame(&device, 0));
+        let (sent, ()) = tokio::join!(controller.send(Nop), answer_one_frame(&device, 0));
 
         sent.unwrap();
     }
 
     #[tokio::test]
     async fn send_reports_the_error_code_a_device_replied() {
-        let (client, device) = open_client().await;
+        let (controller, device) = open_controller().await;
 
-        let (sent, ()) = tokio::join!(client.send(Nop), answer_one_frame(&device, 0x07));
+        let (sent, ()) = tokio::join!(controller.send(Nop), answer_one_frame(&device, 0x07));
 
         assert!(matches!(
             sent,
@@ -372,13 +372,19 @@ mod tests {
 
     #[tokio::test]
     async fn each_send_gets_the_next_msg_id() {
-        let (client, device) = open_client().await;
+        let (controller, device) = open_controller().await;
         let datagram = [Datagram::no_payload(Cmd::Nop)];
         let frame = || Frame::new(Distribution::Broadcast, &datagram);
 
-        let first = client.send_frame(frame(), ExecAt::Immediate).await.unwrap();
-        let heartbeat = client.send_heartbeat().await.unwrap();
-        let second = client.send_frame(frame(), ExecAt::Immediate).await.unwrap();
+        let first = controller
+            .send_frame(frame(), ExecAt::Immediate)
+            .await
+            .unwrap();
+        let heartbeat = controller.send_heartbeat().await.unwrap();
+        let second = controller
+            .send_frame(frame(), ExecAt::Immediate)
+            .await
+            .unwrap();
 
         assert_eq!(heartbeat, first.wrapping_add(1));
         assert_eq!(second, first.wrapping_add(2));
@@ -394,11 +400,11 @@ mod tests {
 
     #[tokio::test]
     async fn inflight_frames_keep_replies_that_overtake_the_oldest() {
-        let (client, device) = open_client().await;
+        let (controller, device) = open_controller().await;
         let datagram = [Datagram::no_payload(Cmd::Nop)];
         let mut inflight = InflightFrames::default();
         for _ in 0..2 {
-            let msg_id = client
+            let msg_id = controller
                 .send_frame(
                     Frame::new(Distribution::Broadcast, &datagram),
                     ExecAt::Immediate,
@@ -438,24 +444,24 @@ mod tests {
         )
         .await;
 
-        let oldest = inflight.collect_oldest(&client).await.unwrap().unwrap();
+        let oldest = inflight.collect_oldest(&controller).await.unwrap().unwrap();
         let next = tokio::select! {
             biased;
-            next = inflight.collect_oldest(&client) => next.unwrap().unwrap(),
+            next = inflight.collect_oldest(&controller) => next.unwrap().unwrap(),
             () = std::future::ready(()) => panic!("the overtaking reply was dropped"),
         };
 
         assert_eq!(oldest.replies()[0].status, 0x01);
         assert_eq!(next.replies()[0].status, 0x02);
         assert!(inflight.is_empty());
-        assert_eq!(inflight.collect_oldest(&client).await.unwrap(), None);
+        assert_eq!(inflight.collect_oldest(&controller).await.unwrap(), None);
     }
 
     #[tokio::test]
     async fn collect_skips_replies_to_other_messages() {
-        let (client, device) = open_client().await;
+        let (controller, device) = open_controller().await;
         let datagram = [Datagram::no_payload(Cmd::Nop)];
-        let msg_id = client
+        let msg_id = controller
             .send_frame(
                 Frame::new(Distribution::Broadcast, &datagram),
                 ExecAt::Immediate,
@@ -474,7 +480,7 @@ mod tests {
         .await;
         reply(&device, host, msg_id, 0x02, Flags::ASSIGNED, &[9]).await;
 
-        let response = client.collect(msg_id).await.unwrap();
+        let response = controller.collect(msg_id).await.unwrap();
 
         assert_eq!(response.replies()[0].status, 0x02);
         assert_eq!(response.replies()[0].data, [9]);
@@ -482,13 +488,13 @@ mod tests {
 
     #[tokio::test]
     async fn recv_returns_each_reply_as_it_is() {
-        let (client, device) = open_client().await;
-        let msg_id = client.send_heartbeat().await.unwrap();
+        let (controller, device) = open_controller().await;
+        let msg_id = controller.send_heartbeat().await.unwrap();
         let (_, host) = next_request(&device).await;
         let flags = Flags::ASSIGNED | Flags::FAILSAFE;
         reply(&device, host, msg_id, 0x03, flags, &[1, 2]).await;
 
-        let received = client.recv().await.unwrap();
+        let received = controller.recv().await.unwrap();
 
         assert_eq!(
             received,
@@ -511,8 +517,8 @@ mod tests {
 
     #[tokio::test]
     async fn discarding_unread_replies_observes_the_grandmaster_time() {
-        let (client, device) = open_client().await;
-        let msg_id = client.send_heartbeat().await.unwrap();
+        let (controller, device) = open_controller().await;
+        let msg_id = controller.send_heartbeat().await.unwrap();
         let (_, host) = next_request(&device).await;
         let head = FrameReply {
             reserved: 0,
@@ -529,22 +535,22 @@ mod tests {
         ]
         .concat();
         device.send_to(&datagram, host).await.unwrap();
-        client.channel.readable().await.unwrap();
+        controller.channel.readable().await.unwrap();
         assert!(matches!(
-            client.device_time_now(),
+            controller.device_time_now(),
             Err(Error::DeviceTimeUnknown)
         ));
 
-        client.discard_unread_replies().unwrap();
+        controller.discard_unread_replies().unwrap();
 
-        assert!(client.device_time_now().unwrap() >= SysTime::from_nanos(7_000_000_000));
-        assert_eq!(client.channel.try_recv_from_device().unwrap(), None);
+        assert!(controller.device_time_now().unwrap() >= SysTime::from_nanos(7_000_000_000));
+        assert_eq!(controller.channel.try_recv_from_device().unwrap(), None);
     }
 
     #[tokio::test]
     async fn a_reply_carrying_another_unit_id_reports_the_device_as_lost() {
-        let (client, device) = open_client().await;
-        let msg_id = client.send_heartbeat().await.unwrap();
+        let (controller, device) = open_controller().await;
+        let msg_id = controller.send_heartbeat().await.unwrap();
         let (_, host) = next_request(&device).await;
         let head = FrameReply {
             reserved: 0,
@@ -563,20 +569,20 @@ mod tests {
         device.send_to(&datagram, host).await.unwrap();
 
         assert!(matches!(
-            client.recv().await,
+            controller.recv().await,
             Err(Error::DeviceLost { device: 0 })
         ));
     }
 
     #[tokio::test]
     async fn an_unassigned_reply_reports_the_device_as_lost() {
-        let (client, device) = open_client().await;
-        let msg_id = client.send_heartbeat().await.unwrap();
+        let (controller, device) = open_controller().await;
+        let msg_id = controller.send_heartbeat().await.unwrap();
         let (_, host) = next_request(&device).await;
         reply(&device, host, msg_id, 0, Flags::empty(), &[]).await;
 
         assert!(matches!(
-            client.collect(msg_id).await,
+            controller.collect(msg_id).await,
             Err(Error::DeviceLost { device: 0 })
         ));
     }

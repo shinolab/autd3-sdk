@@ -30,6 +30,10 @@ pub struct ConfigFociStm {
 impl crate::sealed::Sealed for ConfigPattern {}
 
 impl Operation for ConfigPattern {
+    fn waits_for_previous(&self) -> bool {
+        false
+    }
+
     fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
         let payload = ConfigPatternPayload::raw(
             self.bank,
@@ -45,6 +49,10 @@ impl Operation for ConfigPattern {
 impl crate::sealed::Sealed for ConfigFociStm {}
 
 impl Operation for ConfigFociStm {
+    fn waits_for_previous(&self) -> bool {
+        false
+    }
+
     fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
         let payload = ConfigPatternPayload::foci(
             self.bank,

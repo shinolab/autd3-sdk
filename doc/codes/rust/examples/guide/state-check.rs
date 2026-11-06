@@ -11,14 +11,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
     // ANCHOR: open
-    let client = Client::open(&geometry, &TransportOption::default()).await?;
+    let mut client = Client::open(&geometry, &TransportOption::default()).await?;
     // ANCHOR_END: open
 
     // ANCHOR: poll
     let mut last: Vec<DeviceStatus> = Vec::new();
     loop {
-        let msg_id = client.send_heartbeat().await?;
-        let Ok(response) = tokio::time::timeout(CHECK_INTERVAL, client.collect(msg_id)).await else {
+        let Ok(response) = tokio::time::timeout(CHECK_INTERVAL, client.read_state()).await else {
             println!("not every device replied within {CHECK_INTERVAL:?}");
             continue;
         };

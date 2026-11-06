@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use std::time::Duration;
 
 use autd3_rs::commands::{CpuConfig, ReleaseFailsafe, SetCpuConfig, each};
@@ -11,19 +10,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
     // ANCHOR: heartbeat
-    let client = Arc::new(Client::open(&geometry, &TransportOption::default()).await?);
-    let heartbeat = tokio::spawn({
-        let client = Arc::clone(&client);
-        async move {
-            let mut interval = tokio::time::interval(Duration::from_millis(10));
-            loop {
-                interval.tick().await;
-                if let Err(e) = client.send_heartbeat().await {
-                    eprintln!("sending a heartbeat failed: {e}");
-                }
-            }
-        }
-    });
+    let option = TransportOption {
+        heartbeat_interval: Some(Duration::from_millis(10)),
+        ..Default::default()
+    };
+    let mut client = Client::open(&geometry, &option).await?;
 
     client
         .send(SetCpuConfig::new(CpuConfig {
@@ -34,8 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ANCHOR_END: heartbeat
 
     // ANCHOR: ptp_failsafe
-    let msg_id = client.send_heartbeat().await?;
-    let status = client.collect(msg_id).await?.device_status();
+    let status = client.read_state().await?.device_status();
     let releasable = |s: &DeviceStatus| s.failsafe_active && s.ptp_locked;
     if status.iter().any(releasable) {
         client
@@ -46,6 +36,5 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     // ANCHOR_END: ptp_failsafe
 
-    heartbeat.abort();
     Ok(())
 }

@@ -21,6 +21,10 @@ impl WriteModulationBuffer<'_> {
 impl crate::sealed::Sealed for WriteModulationBuffer<'_> {}
 
 impl Operation for WriteModulationBuffer<'_> {
+    fn waits_for_previous(&self) -> bool {
+        false
+    }
+
     fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
         if self.data.is_empty() {
             return Err(PayloadError::ModulationDataEmpty.into());

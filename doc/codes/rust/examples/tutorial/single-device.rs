@@ -11,7 +11,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let geometry = Geometry::new(vec![Autd3::default()]);
 
     // Open the client.
-    let client = Client::open(&geometry, &TransportOption::default()).await?;
+    let mut client = Client::open(&geometry, &TransportOption::default()).await?;
     client.send(Clear).await?;
     client.send(Synchronize).await?;
 

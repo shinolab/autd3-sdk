@@ -374,10 +374,6 @@ name = "tutorial_output_intensity"
 path = "examples/tutorial/output-intensity.rs"
 
 [[example]]
-name = "tutorial_send_modes"
-path = "examples/tutorial/send-modes.rs"
-
-[[example]]
 name = "tutorial_silencer"
 path = "examples/tutorial/silencer.rs"
 

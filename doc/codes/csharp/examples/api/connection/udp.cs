@@ -11,6 +11,7 @@ internal static class Sample
         var openTimeout = TimeSpan.FromSeconds(40);
         ulong sendBufferBytes = 8192;
         var syncOnOpen = true;
+        TimeSpan? heartbeatInterval = null;
         // ANCHOR: api
         new TransportOption
         {
@@ -18,6 +19,7 @@ internal static class Sample
             OpenTimeout = openTimeout,
             SendBufferBytes = sendBufferBytes,
             SyncOnOpen = syncOnOpen,
+            HeartbeatInterval = heartbeatInterval,
         };
         // ANCHOR_END: api
 

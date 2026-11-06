@@ -7,36 +7,6 @@ using System.Threading.Tasks;
 
 namespace AUTD3
 {
-    [StructLayout(LayoutKind.Sequential)]
-    internal struct ExecAtNative
-    {
-        public byte Kind;
-        public ulong Ns;
-    }
-
-    public readonly struct ExecAt
-    {
-        internal byte Kind { get; }
-        internal ulong Ns { get; }
-
-        private ExecAt(byte kind, ulong ns)
-        {
-            Kind = kind;
-            Ns = ns;
-        }
-
-        public static ExecAt Immediate => new ExecAt(0, 0);
-
-        public static ExecAt Lead(TimeSpan lead) =>
-            lead >= TimeSpan.Zero
-                ? new ExecAt(1, OptionNative.ToNanos(lead))
-                : throw new Autd3Exception("ExecAt.Lead must not be negative", Autd3ErrorCode.InvalidArgument);
-
-        public static ExecAt At(SysTime sysTime) => new ExecAt(2, sysTime.Nanos);
-
-        internal ExecAtNative ToNative() => new ExecAtNative { Kind = Kind, Ns = Ns };
-    }
-
     public readonly struct FpgaState
     {
         public byte Raw { get; }
@@ -227,17 +197,6 @@ namespace AUTD3
             return new DeviceReply(native, data);
         }
 
-        internal static DeviceReply FromOwned(IntPtr reply)
-        {
-            try
-            {
-                return FromNative(reply);
-            }
-            finally
-            {
-                NativeClient.autd3_device_reply_free(reply);
-            }
-        }
     }
 
     public sealed class Response
@@ -296,53 +255,6 @@ namespace AUTD3
         }
     }
 
-    public sealed class InflightFrames : IDisposable
-    {
-        private readonly InflightFramesHandle _handle = new InflightFramesHandle(NativeClient.autd3_inflight_frames_new());
-
-        private static Autd3Exception Busy() => new Autd3Exception("the inflight frames are being collected");
-
-        public void Push(ushort msgId)
-        {
-            switch (NativeClient.autd3_inflight_frames_push(_handle, msgId))
-            {
-                case 0:
-                    return;
-                case (int)Autd3ErrorCode.Error:
-                    throw Busy();
-                case var code:
-                    throw new Autd3Exception("failed to push the frame", (Autd3ErrorCode)code);
-            }
-        }
-
-        public int Length
-        {
-            get
-            {
-                switch (NativeClient.autd3_inflight_frames_len(_handle, out var len))
-                {
-                    case 0:
-                        return (int)len;
-                    case (int)Autd3ErrorCode.Error:
-                        throw Busy();
-                    case var code:
-                        throw new Autd3Exception("failed to read the length", (Autd3ErrorCode)code);
-                }
-            }
-        }
-
-        public bool IsEmpty => Length == 0;
-
-        public async Task<Response?> CollectOldestAsync(Client client, CancellationToken cancellationToken = default)
-        {
-            var response = await AsyncOps.InvokeAsync((cancel, cb, ud) =>
-                NativeClient.autd3_inflight_frames_collect_oldest(_handle, client.Handle, cancel, cb, ud), cancellationToken).ConfigureAwait(false);
-            return response == IntPtr.Zero ? null : Response.FromOwned(response);
-        }
-
-        public void Dispose() => _handle.Dispose();
-    }
-
     public sealed class Client : IDisposable
     {
         private readonly ClientHandle _handle;
@@ -395,27 +307,6 @@ namespace AUTD3
             return SysTime.FromNanos(ns);
         }
 
-        public void DiscardUnreadReplies()
-        {
-            var err = new byte[NativeAbi.ErrorBufferLength];
-            var code = NativeClient.autd3_client_discard_unread_replies(Handle, err, (UIntPtr)err.Length);
-            if (code != 0)
-            {
-                throw Autd3Exception.FromNative(code, err);
-            }
-        }
-
-        public ushort SendHeartbeat()
-        {
-            var err = new byte[NativeAbi.ErrorBufferLength];
-            var code = NativeClient.autd3_client_send_heartbeat(Handle, out var msgId, err, (UIntPtr)err.Length);
-            if (code != 0)
-            {
-                throw Autd3Exception.FromNative(code, err);
-            }
-            return msgId;
-        }
-
         public async Task SendAsync(ICommand command, CancellationToken cancellationToken = default)
         {
             using var frames = Frames.Encode(_geometry, command);
@@ -423,25 +314,17 @@ namespace AUTD3
                 NativeClient.autd3_client_send(Handle, frames.Handle, cancel, cb, ud), cancellationToken).ConfigureAwait(false);
         }
 
-        public async Task<ushort> SendFrameAsync(Frame frame, ExecAt execAt, CancellationToken cancellationToken = default)
+        public async Task SendStreamingAsync(ICommand command, CancellationToken cancellationToken = default)
         {
-            var exec = execAt.ToNative();
-            var msgId = await AsyncOps.InvokeAsync((cancel, cb, ud) =>
-                NativeClient.autd3_client_send_frame(Handle, frame.Frames.Handle, frame.Index, exec, cancel, cb, ud), cancellationToken).ConfigureAwait(false);
-            return (ushort)msgId.ToInt64();
+            using var frames = Frames.Encode(_geometry, command);
+            await AsyncOps.InvokeAsync((cancel, cb, ud) =>
+                NativeClient.autd3_client_send_streaming(Handle, frames.Handle, cancel, cb, ud), cancellationToken).ConfigureAwait(false);
         }
 
-        public async Task<DeviceReply> RecvAsync(CancellationToken cancellationToken = default)
-        {
-            var reply = await AsyncOps.InvokeAsync((cancel, cb, ud) =>
-                NativeClient.autd3_client_recv(Handle, cancel, cb, ud), cancellationToken).ConfigureAwait(false);
-            return DeviceReply.FromOwned(reply);
-        }
-
-        public async Task<Response> CollectAsync(ushort msgId, CancellationToken cancellationToken = default)
+        public async Task<Response> ReadStateAsync(CancellationToken cancellationToken = default)
         {
             var response = await AsyncOps.InvokeAsync((cancel, cb, ud) =>
-                NativeClient.autd3_client_collect(Handle, msgId, cancel, cb, ud), cancellationToken).ConfigureAwait(false);
+                NativeClient.autd3_client_read_state(Handle, cancel, cb, ud), cancellationToken).ConfigureAwait(false);
             return Response.FromOwned(response);
         }
 

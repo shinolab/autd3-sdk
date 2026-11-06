@@ -39,47 +39,39 @@ The `Client` connects to the devices (or the [Simulator](/autd3-sdk/en/guide/sim
 | `read_firmware_version()` | ✓     | `Result<Vec<FirmwareVersion>, Error>` | CPU/FPGA firmware version of each device                   |
 | `device_time_now()`       | —     | `Result<SysTime, Error>`              | Current time of the devices (see [SysTime](/autd3-sdk/en/api/basics/sys-time/)) |
 | `send(cmd)`               | ✓     | `Result<(), Error>`                   | Send a command, confirming the response frame by frame     |
-| `send_frame(frame, exec)` | ✓     | `Result<u16, Error>`                  | Send one frame to every device and return its msg_id (does not wait for the replies; see [streaming](#streaming) / [Processing time](#processing-time)) |
-| `send_heartbeat()`        | ✓     | `Result<u16, Error>`                  | Send one liveness check to every device and return its msg_id (see [Failsafe](/autd3-sdk/en/guide/failsafe/#communication-loss-failsafe-and-liveness-check)) |
-| `recv()`                  | ✓     | `Result<DeviceReply, Error>`          | Read one reply (of any msg_id)                             |
-| `collect(msg_id)`         | ✓     | `Result<Response, Error>`             | Read until every device has replied to that msg_id (other replies are discarded) |
-| `discard_unread_replies()` | —    | `Result<(), Error>`                   | Discard every reply that has arrived but has not been read |
+| `send_streaming(cmd)`     | ✓     | `Result<(), Error>`                   | Send a command without waiting for each response, then confirm the responses of every frame (see [streaming](#streaming)) |
+| `read_state()`            | ✓     | `Result<Response, Error>`             | Send one liveness check to every device and return their replies (see [State Monitoring](/autd3-sdk/en/guide/state-check/)) |
 
-`Client` has no upper bound on how long it waits. If the replies never complete (a device is lost), `collect` and the others do not return, so the caller sets the bound:
+`Client` has no upper bound on how long it waits. If the replies never complete (a device is lost), `send`, `read_state`, and the others do not return, so the caller sets the bound:
 `tokio::time::timeout` in Rust, a cancellation such as `asyncio.wait_for` in Python, and a `CancellationToken` in C# (cancelling also stops the sending and receiving).
 Whether to treat it as a lost device, and whether to stop sending or to reopen afterwards, is also up to the user.
 
-Replies are not read in the background: they are read only while `recv` / `collect` (or `send` and the others internally) are awaited.
-Call `recv` / `collect` from one place only (concurrent calls steal each other's replies).
-Sending heartbeats periodically without reading their replies overflows the socket's receive buffer, and later replies are dropped.
-`send` and `read_firmware_version` call `discard_unread_replies()` before sending, so they are not affected. When you combine `send_frame` and `collect` yourself, call `discard_unread_replies()` before sending.
+Only one of the methods that read replies runs at a time. In Rust they take `&mut self`; in Python and C#, concurrent calls wait for their turn.
+Before sending, each method discards the replies that have arrived but have not been read (replies to a cancelled call and to the liveness checks).
 
-There is no `close()`. The socket closes when the `Client` is dropped in Rust, on `Dispose()` in C#, and on leaving the `with` block in Python. Nothing is sent to the devices.
+With `heartbeat_interval` in `TransportOption`, the `Client` keeps sending liveness checks at that interval (see [Failsafe](/autd3-sdk/en/guide/failsafe/#communication-loss-failsafe-and-liveness-check)). By default it sends none.
+
+There is no `close()`. The socket closes, and the liveness checks stop, when the `Client` is dropped in Rust, on `Dispose()` in C#, and on leaving the `with` block in Python. Nothing is sent to the devices.
 The devices keep their last output after the client is closed, so stopping the output is the user's responsibility.
 
-In Rust, use `Client` inside a tokio runtime (call `Client::open` and await the returned futures there). It spawns no tasks.
+In Rust, use `Client` inside a tokio runtime (call `Client::open` and await the returned futures there).
 
 ## streaming
 
 `send` waits for the response frame by frame (stop-and-wait).
-To keep sending without waiting for the responses, convert the command into frames with `Frames::encode`, push the msg_id that `send_frame` returns onto `InflightFrames`, and receive the replies of the oldest frame (a `Response`) with `collect_oldest`.
+`send_streaming` keeps sending without waiting and confirms the responses from the oldest frame.
+Use it to send commands of many frames, such as Modulation or an STM, quickly.
 
 <CodeTabs rust={excerpt(sample, "streaming")} python={excerpt(pySample, "streaming")} csharp={excerpt(csSample, "streaming")} />
 
-| `InflightFrames`         | Description                                                          |
-| ------------------------ | -------------------------------------------------------------------- |
-| `push(msg_id)`           | Push a frame that waits for its replies                              |
-| `len()` / `is_empty()`   | Number of frames waiting for their replies                           |
-| `collect_oldest(client)` | Read until every device has replied to the oldest frame, then take it out and return it; `None` if empty |
-
-The number of frames that may be sent without waiting for a reply is `MAX_INFLIGHT (7)`.
-Queuing more overflows the receive FIFO of the device; an overflowed frame is not processed and gets no reply. Neither `Client` nor `InflightFrames` prevents this, so look at `len()` and call `collect_oldest`.
-Cancelling `collect_oldest` loses none of the replies it has read, so it can be called again after a timeout and continues where it left off.
-Do not mix `InflightFrames` with `collect` (`collect` discards the replies of every msg_id but the one it waits for).
+The frames sent without waiting are kept within the capacity of the device's receive FIFO, `MAX_INFLIGHT (7)`.
+Before a frame that switches a bank (such as `Activate*Bank`), the responses of every frame sent before it are confirmed first.
+So if writing the data is rejected, the error is returned without switching to the half-written bank.
+Cancelling `send_streaming` midway can leave sent frames in the device's receive FIFO. Calling `send_streaming` again right after can overflow the FIFO, so call `read_state` or `send` first.
 
 ## Response and DeviceReply
 
-`collect` gathers the replies of every device into a `Response`.
+`read_state` gathers the replies of every device into a `Response`.
 
 | `Response`        | Description                                                           |
 | ----------------- | --------------------------------------------------------------------- |
@@ -87,12 +79,10 @@ Do not mix `InflightFrames` with `collect` (`collect` discards the replies of ev
 | `device_status()` | State of each device built from the flags of its reply (see [State Monitoring](/autd3-sdk/en/guide/state-check/)) |
 | `check()`         | Return the error of the lowest-numbered device that replied with an error |
 
-`recv` returns the replies one at a time as `DeviceReply`. A reply from an unassigned device or with another ID is a `DeviceLost` error.
-
 | Field of `DeviceReply` | Description                                              |
 | ---------------------- | -------------------------------------------------------- |
 | `device`               | Number of the device that replied                        |
-| `msg_id`               | Which frame (or heartbeat) the reply answers             |
+| `msg_id`               | Which liveness check the reply answers                   |
 | `status`               | Error code (`0` = success)                               |
 | `flags`                | State flags of the device                                |
 | `unit_id`              | ID of the device                                         |
@@ -119,8 +109,8 @@ It does not return until every device has replied.
 ### FpgaState
 
 FPGA state flags. There is no command to read them: every reply to a frame or a heartbeat carries them.
-Read them from `fpga_state` of the `DeviceReply` returned by `recv()` (for the `Response` returned by `collect`, through `replies()`, in device-number order).
-The reply to a frame carries the state right after the frame was processed; the reply to a heartbeat may be up to 1 ms old (older while the device is busy with a long operation). To see when a bank switch took effect, send a frame such as `Nop` and look at its reply.
+Read them from `fpga_state` in `replies()` of the `Response` returned by `read_state()` (in device-number order).
+The reply to a liveness check may be up to 1 ms old (older while the device is busy with a long operation).
 
 | Method                    | Type             | Description                              |
 | ------------------------- | ---------------- | ---------------------------------------- |
@@ -135,40 +125,17 @@ The reply to a frame carries the state right after the frame was processed; the 
 ### Telemetry
 
 CPU diagnostic counters. There is no command to read them: every reply to a frame or a heartbeat carries them.
-Read them from `telemetry` of the `DeviceReply` returned by `recv()` (for the `Response` returned by `collect`, through `replies()`, in device-number order).
+Read them from `telemetry` in `replies()` of the `Response` returned by `read_state()` (in device-number order).
 
 | Field                 | Type  | Description                                            |
 | --------------------- | ----- | ------------------------------------------------------ |
 | `fifo_drop`           | `u32` | Frames dropped because the receive FIFO was full (a dropped frame gets no reply) |
-| `exec_late`           | `u32` | Frames whose processing started 1 µs or more after their [processing time](#processing-time) |
+| `exec_late`           | `u32` | Frames whose processing started 1 µs or more after their processing time |
 | `sync_resync`         | `u8`  | Number of hardware resynchronizations of the sync input (reset to 0 by `Synchronize`) |
 | `cpu_watchdog`        | `u8`  | Number of times the CPU watchdog fired (kept until the FPGA is reconfigured) |
 | `boot_failure`        | `u8`  | Number of steps that failed at boot (not cleared by `Clear`) |
 
 What the replies already show is not included: the number of processed frames is the number of replies, a command error is the status of its reply, and a failsafe trip shows up as `DeviceStatus::failsafe_active` turning on.
-
-## Processing time
-
-Frames are sent to the devices one at a time, so they reach the devices at slightly different times.
-Passing `Lead` / `At` as `exec` of `send_frame` stamps the frame with a processing time, and each device holds the frame until that time.
-Every device thus starts processing what one send carries at the same timing.
-`send` stamps no processing time (each device processes a frame as soon as it arrives).
-To send a command with a processing time, convert it into frames with `Frames::encode` and send each frame with `send_frame`.
-
-<CodeTabs rust={excerpt(methods, "exec_at")} python={excerpt(pyMethods, "exec_at")} csharp={excerpt(csMethods, "exec_at")} />
-
-| `ExecAt`         | Processing time                                                              |
-| ---------------- | ---------------------------------------------------------------------------- |
-| `Immediate`      | None (each device processes the frame as soon as it arrives; the same as `send`) |
-| `Lead(lead)`     | The current device time at the send + `lead`                                 |
-| `At(sys_time)`   | The device time `sys_time` (see [SysTime](/autd3-sdk/en/api/basics/sys-time/)) |
-
-Note the following:
-- It does not guarantee that every device always starts processing at the same time
-  - If sending to every device does not finish by the stamped time, a late device processes the frame after the stamped time. `exec_late` in the telemetry counts how often that happened.
-  - When frames are sent one after another without waiting for the responses ([streaming](#streaming)), the stamped time of a frame can come while the device is still processing the previous one; that frame is processed late (and counted in `exec_late`).
-  - Even when it succeeds, only the start of the processing inside the CPU board is aligned; it does not guarantee that the start of the processing on the FPGA is aligned (that is, for example, that the phase of the emitted ultrasound is updated at the same timing)
-- The response comes back after the processing, so a send completes only after the stamped time. Waiting for the response frame by frame, a command of several frames takes about the number of frames × `lead`. If you bound the wait for the replies, make the bound longer than `lead` plus the processing time
 
 ## each
 
@@ -178,7 +145,6 @@ Note the following:
 
 `each` always makes a single frame.
 A multi-frame command such as `Modulation` / `FociStm` / `PatternStm` cannot be sent with `each`.
-When each device needs different multi-frame content, build the frames yourself with `Frame::new` and send them with `send_frame`.
 
 In Rust, the return values of the closure must all be the same type.
 To mix commands of different types, unify them into a `Box<dyn Operation>`.

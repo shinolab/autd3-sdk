@@ -112,7 +112,7 @@ mod tests {
     use super::*;
     use crate::geometry::Autd3;
     use crate::protocol::Cmd;
-    use crate::test_utils::{build, cmds, payload};
+    use crate::test_utils::{build, cmds, payload, waits};
     use crate::value::Intensity;
     use zerocopy::IntoBytes;
 
@@ -138,6 +138,7 @@ mod tests {
             ],
             "two raw frames carry three indices"
         );
+        assert_eq!(waits(&datagrams), [false, false, false, true]);
         for (frame, (index, count)) in [(0u16, 2u8), (2, 1)].into_iter().enumerate() {
             let write = payload(&datagrams, frame, 0);
             assert_eq!(write[1], count, "frame {frame} count");

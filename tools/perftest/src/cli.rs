@@ -53,7 +53,7 @@ pub(crate) struct Cli {
         long,
         value_parser = humantime::parse_duration,
         default_value = "10ms",
-        help = "Interval of Client::heartbeat while --hold keeps the connection idle, e.g. 10ms."
+        help = "Interval of Controller::send_heartbeat while --hold keeps the connection idle, e.g. 10ms."
     )]
     pub heartbeat: Duration,
     #[arg(

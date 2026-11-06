@@ -28,24 +28,10 @@ internal static class Sample
         await client.SendAsync(new SetSilencer());
 
         // ANCHOR: streaming
-        using var modulationFrames = Frames.Encode(geometry, new Modulation(SamplingConfig.Freq4k, modulation));
-        using var inflight = new InflightFrames();
-        foreach (var frame in modulationFrames)
-        {
-            inflight.Push(await client.SendFrameAsync(frame, ExecAt.Immediate));
-        }
-        while (await inflight.CollectOldestAsync(client) is { } response)
-        {
-            response.Check();
-        }
+        await client.SendStreamingAsync(new Modulation(SamplingConfig.Freq4k, modulation));
         // ANCHOR_END: streaming
 
-        using var frames = Frames.Encode(geometry, new Pattern(left, Intensity.Max));
-        foreach (var frame in frames)
-        {
-            var msgId = await client.SendFrameAsync(frame, ExecAt.Immediate);
-            (await client.CollectAsync(msgId)).Check();
-        }
+        await client.SendAsync(new Pattern(left, Intensity.Max));
         // ANCHOR_END: api
         }
         

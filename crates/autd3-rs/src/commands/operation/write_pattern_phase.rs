@@ -21,6 +21,10 @@ pub struct WritePatternPhase<'a> {
 impl crate::sealed::Sealed for WritePatternPhase<'_> {}
 
 impl Operation for WritePatternPhase<'_> {
+    fn waits_for_previous(&self) -> bool {
+        false
+    }
+
     fn distribution(&self) -> Distribution {
         Distribution::PerDevice
     }

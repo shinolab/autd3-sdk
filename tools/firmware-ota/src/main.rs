@@ -23,21 +23,21 @@ use autd3_cpu_wire::update::RunningImage;
 use autd3_firmware_writer::bundle;
 use autd3_rs::commands::{Command as ClientCommand, Reboot, UpdateConfirm};
 use autd3_rs::geometry::{Autd3, Geometry};
-use autd3_rs::{Client, Error, FirmwareVersion, Interface, TransportOption, Version};
+use autd3_rs::{Controller, Error, FirmwareVersion, Interface, TransportOption, Version};
 
 fn read_image(path: &Path) -> Result<Vec<u8>> {
     std::fs::read(path).with_context(|| format!("reading {}", path.display()))
 }
 
 pub(crate) struct Connected {
-    client: Arc<Client>,
+    client: Arc<Controller>,
     heartbeat: tokio::task::AbortHandle,
 }
 
 impl Deref for Connected {
-    type Target = Client;
+    type Target = Controller;
 
-    fn deref(&self) -> &Client {
+    fn deref(&self) -> &Controller {
         &self.client
     }
 }
@@ -91,7 +91,7 @@ async fn connect(connection: &Connection, num_devices: usize) -> Result<Connecte
         ..default
     };
     let geometry = Geometry::new((0..num_devices).map(|_| Autd3::default()));
-    let client = Arc::new(Client::open(&geometry, &option).await?);
+    let client = Arc::new(Controller::open(&geometry, &option).await?);
     println!("{} device(s) on the bus", client.num_devices());
     let heartbeat = tokio::spawn({
         let client = Arc::clone(&client);

@@ -119,6 +119,10 @@ pub trait Operation: crate::sealed::Sealed {
         Distribution::Broadcast
     }
 
+    fn waits_for_previous(&self) -> bool {
+        true
+    }
+
     fn encode(&self, device: &Device, out: &mut Datagram) -> Result<(), Error>;
 }
 
@@ -127,6 +131,10 @@ impl<O: Operation + ?Sized> crate::sealed::Sealed for Box<O> {}
 impl<O: Operation + ?Sized> Operation for Box<O> {
     fn distribution(&self) -> Distribution {
         (**self).distribution()
+    }
+
+    fn waits_for_previous(&self) -> bool {
+        (**self).waits_for_previous()
     }
 
     fn encode(&self, device: &Device, out: &mut Datagram) -> Result<(), Error> {
@@ -139,6 +147,10 @@ impl<O: Operation + ?Sized> crate::sealed::Sealed for &O {}
 impl<O: Operation + ?Sized> Operation for &O {
     fn distribution(&self) -> Distribution {
         (**self).distribution()
+    }
+
+    fn waits_for_previous(&self) -> bool {
+        (**self).waits_for_previous()
     }
 
     fn encode(&self, device: &Device, out: &mut Datagram) -> Result<(), Error> {
@@ -175,6 +187,28 @@ mod tests {
         for op in ops {
             assert_eq!(op.distribution(), Distribution::PerDevice);
         }
+    }
+
+    #[test]
+    fn an_operation_that_says_nothing_waits_for_the_previous_frames() {
+        assert!(crate::test_utils::Marker(0).waits_for_previous());
+        assert!(Box::new(crate::test_utils::Marker(0)).waits_for_previous());
+        let config = ConfigModulation {
+            bank: crate::value::ModulationBank::B0,
+            config: crate::value::SamplingConfig::FREQ_40K,
+            size: 2,
+            loop_behavior: crate::value::LoopBehavior::Infinite,
+        };
+        let borrowed: &ConfigModulation = &config;
+        assert!(!Operation::waits_for_previous(&borrowed));
+    }
+
+    #[test]
+    fn a_hand_built_frame_waits_for_the_previous_frames() {
+        let datagram = [Datagram::no_payload(Cmd::Nop)];
+        assert!(
+            crate::datagram::Frame::new(Distribution::Broadcast, &datagram).waits_for_previous()
+        );
     }
 
     #[test]

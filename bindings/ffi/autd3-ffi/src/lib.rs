@@ -7,7 +7,7 @@ use std::time::Duration;
 mod logging;
 mod udp;
 
-use autd3_binding_rt::{Runtime, block_on, new_runtime};
+use autd3_binding_rt::{Client, Heartbeat, Runtime, block_on, new_runtime};
 use autd3_ffi_abi::{
     AUTD3_ERR, AUTD3_ERR_DEVICE, AUTD3_ERR_INVALID_ARGUMENT, AUTD3_ERR_NETWORK, AUTD3_OK,
     Autd3FirmwareVersion, Autd3Telemetry, Buffer, CompletionCallback, CompletionCtx,
@@ -30,8 +30,8 @@ use autd3_rs::value::{
     PulseWidth, SamplingConfig, SysTime, TransitionMode,
 };
 use autd3_rs::{
-    Client, DeviceReply, DeviceState, Error, ExecAt, FirmwareVersion, FpgaState, Frames, Geometry,
-    InflightFrames, Point3, Response, Telemetry, Velocity,
+    DeviceReply, DeviceState, Error, FirmwareVersion, FpgaState, Frames, Geometry, Point3,
+    Response, Telemetry, Velocity,
 };
 use tokio::sync::watch;
 
@@ -84,22 +84,6 @@ fn to_gpio_out(g: &Autd3GpioOut) -> Option<GpioOut> {
         11 => Some(GpioOut::SyncDiff),
         12 => Some(GpioOut::PwmOut(g.value as u8)),
         13 => Some(GpioOut::Direct(g.value != 0)),
-        _ => None,
-    }
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct Autd3ExecAt {
-    pub kind: u8,
-    pub ns: u64,
-}
-
-fn to_exec_at(e: Autd3ExecAt) -> Option<ExecAt> {
-    match e.kind {
-        0 => Some(ExecAt::Immediate),
-        1 => Some(ExecAt::Lead(Duration::from_nanos(e.ns))),
-        2 => Some(ExecAt::At(SysTime::from_nanos(e.ns))),
         _ => None,
     }
 }
@@ -1477,13 +1461,14 @@ pub unsafe extern "C" fn autd3_frames_free(frames: *mut Arc<Frames>) {
     unsafe { drop_handle(frames) }
 }
 
-pub struct ClientHandle(Arc<Client>);
+pub struct ClientHandle {
+    client: Client,
+    _heartbeat: Heartbeat,
+}
 
 pub struct ResponseHandle(Response);
 
 pub struct FirmwareVersionArray(Vec<Autd3FirmwareVersion>);
-
-pub struct InflightFramesHandle(Arc<tokio::sync::Mutex<InflightFrames>>);
 
 pub struct CancelToken(watch::Sender<bool>);
 
@@ -1555,13 +1540,13 @@ unsafe fn client_ctx(
     client: *const ClientHandle,
     cb: CompletionCallback,
     user_data: *mut c_void,
-) -> Option<(Arc<Client>, CompletionCtx)> {
+) -> Option<(Client, CompletionCtx)> {
     let ctx = CompletionCtx::new(cb, user_data)?;
     let Some(client) = (unsafe { handle_ref(client) }) else {
         ctx.err("null client");
         return None;
     };
-    Some((Arc::clone(&client.0), ctx))
+    Some((client.client.clone(), ctx))
 }
 
 unsafe fn send_ctx(
@@ -1569,7 +1554,7 @@ unsafe fn send_ctx(
     frames: *const Arc<Frames>,
     cb: CompletionCallback,
     user_data: *mut c_void,
-) -> Option<(Arc<Client>, Arc<Frames>, CompletionCtx)> {
+) -> Option<(Client, Arc<Frames>, CompletionCtx)> {
     let ctx = CompletionCtx::new(cb, user_data)?;
     let (Some(client), Some(frames)) = (unsafe { handle_ref(client) }, unsafe {
         handle_ref::<Arc<Frames>>(frames)
@@ -1577,7 +1562,7 @@ unsafe fn send_ctx(
         ctx.err("null argument");
         return None;
     };
-    Some((Arc::clone(&client.0), Arc::clone(frames), ctx))
+    Some((client.client.clone(), Arc::clone(frames), ctx))
 }
 
 #[unsafe(no_mangle)]
@@ -1625,7 +1610,15 @@ pub unsafe extern "C" fn autd3_client_open(
     };
 
     match block_on(runtime().handle(), Client::open(geometry, &option)) {
-        Ok(client) => unsafe { write_out(out, into_handle(ClientHandle(Arc::new(client)))) },
+        Ok((client, heartbeat)) => unsafe {
+            write_out(
+                out,
+                into_handle(ClientHandle {
+                    client,
+                    _heartbeat: heartbeat,
+                }),
+            )
+        },
         Err(e) => {
             unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
             error_code(&e)
@@ -1639,7 +1632,7 @@ pub unsafe extern "C" fn autd3_client_num_devices(client: *const ClientHandle) -
         return 0;
     };
 
-    client.0.num_devices()
+    client.client.num_devices()
 }
 
 #[unsafe(no_mangle)]
@@ -1654,49 +1647,8 @@ pub unsafe extern "C" fn autd3_client_device_time_now(
         return AUTD3_ERR_INVALID_ARGUMENT;
     };
 
-    match client.0.device_time_now() {
+    match client.client.device_time_now() {
         Ok(now) => unsafe { write_out(out_ns, now.sys_time()) },
-        Err(e) => {
-            unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
-            error_code(&e)
-        }
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_discard_unread_replies(
-    client: *const ClientHandle,
-    out_err: *mut c_char,
-    out_err_len: usize,
-) -> i32 {
-    let Some(client) = (unsafe { handle_ref(client) }) else {
-        unsafe { write_cstr(out_err, out_err_len, "null client") };
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-
-    match client.0.discard_unread_replies() {
-        Ok(()) => AUTD3_OK,
-        Err(e) => {
-            unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
-            error_code(&e)
-        }
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_send_heartbeat(
-    client: *const ClientHandle,
-    out_msg_id: *mut u16,
-    out_err: *mut c_char,
-    out_err_len: usize,
-) -> i32 {
-    let Some(client) = (unsafe { handle_ref(client) }) else {
-        unsafe { write_cstr(out_err, out_err_len, "null client") };
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-
-    match block_on(runtime().handle(), client.0.send_heartbeat()) {
-        Ok(msg_id) => unsafe { write_out(out_msg_id, msg_id) },
         Err(e) => {
             unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
             error_code(&e)
@@ -1715,23 +1667,14 @@ pub unsafe extern "C" fn autd3_client_send(
     let Some((client, frames, ctx)) = (unsafe { send_ctx(client, frames, cb, user_data) }) else {
         return;
     };
-    let future = async move {
-        for frame in frames.iter() {
-            client.discard_unread_replies()?;
-            let msg_id = client.send_frame(frame, ExecAt::Immediate).await?;
-            client.collect(msg_id).await?.check()?;
-        }
-        Ok(())
-    };
+    let future = async move { client.send(&frames).await };
     unsafe { spawn_completion(ctx, cancel, future, |()| std::ptr::null_mut()) };
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_send_frame(
+pub unsafe extern "C" fn autd3_client_send_streaming(
     client: *const ClientHandle,
     frames: *const Arc<Frames>,
-    frame: usize,
-    exec: Autd3ExecAt,
     cancel: *const CancelToken,
     cb: CompletionCallback,
     user_data: *mut c_void,
@@ -1739,46 +1682,13 @@ pub unsafe extern "C" fn autd3_client_send_frame(
     let Some((client, frames, ctx)) = (unsafe { send_ctx(client, frames, cb, user_data) }) else {
         return;
     };
-    if frame >= frames.len() {
-        ctx.invalid_argument(&format!("frame {frame} out of range"));
-        return;
-    }
-    let Some(exec) = to_exec_at(exec) else {
-        ctx.invalid_argument("unknown exec_at kind");
-        return;
-    };
-    let future = async move {
-        let frame = frames.frame(frame).expect("the index is checked above");
-        client.send_frame(frame, exec).await
-    };
-    unsafe {
-        spawn_completion(ctx, cancel, future, |msg_id| {
-            std::ptr::without_provenance_mut(usize::from(msg_id))
-        });
-    }
+    let future = async move { client.send_streaming(&frames).await };
+    unsafe { spawn_completion(ctx, cancel, future, |()| std::ptr::null_mut()) };
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_recv(
+pub unsafe extern "C" fn autd3_client_read_state(
     client: *const ClientHandle,
-    cancel: *const CancelToken,
-    cb: CompletionCallback,
-    user_data: *mut c_void,
-) {
-    let Some((client, ctx)) = (unsafe { client_ctx(client, cb, user_data) }) else {
-        return;
-    };
-    unsafe {
-        spawn_completion(ctx, cancel, async move { client.recv().await }, |reply| {
-            into_handle(reply).cast()
-        });
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_client_collect(
-    client: *const ClientHandle,
-    msg_id: u16,
     cancel: *const CancelToken,
     cb: CompletionCallback,
     user_data: *mut c_void,
@@ -1790,7 +1700,7 @@ pub unsafe extern "C" fn autd3_client_collect(
         spawn_completion(
             ctx,
             cancel,
-            async move { client.collect(msg_id).await },
+            async move { client.read_state().await },
             |response| into_handle(ResponseHandle(response)).cast(),
         );
     }
@@ -1829,11 +1739,6 @@ pub unsafe extern "C" fn autd3_device_reply_data_len(reply: *const DeviceReply) 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_device_reply_data(reply: *const DeviceReply) -> *const u8 {
     unsafe { handle_ref(reply) }.map_or(std::ptr::null(), |r| r.data.as_ptr())
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_device_reply_free(reply: *mut DeviceReply) {
-    unsafe { drop_handle(reply) }
 }
 
 #[unsafe(no_mangle)]
@@ -1913,78 +1818,6 @@ pub unsafe extern "C" fn autd3_response_check(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_response_free(response: *mut ResponseHandle) {
     unsafe { drop_handle(response) }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_inflight_frames_new() -> *mut InflightFramesHandle {
-    into_handle(InflightFramesHandle(Arc::default()))
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_inflight_frames_push(
-    inflight: *const InflightFramesHandle,
-    msg_id: u16,
-) -> i32 {
-    let Some(inflight) = (unsafe { handle_ref(inflight) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    let Ok(mut frames) = inflight.0.try_lock() else {
-        return AUTD3_ERR;
-    };
-    frames.push(msg_id);
-    AUTD3_OK
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_inflight_frames_len(
-    inflight: *const InflightFramesHandle,
-    out: *mut usize,
-) -> i32 {
-    let Some(inflight) = (unsafe { handle_ref(inflight) }) else {
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    };
-    let Ok(frames) = inflight.0.try_lock() else {
-        return AUTD3_ERR;
-    };
-    unsafe { write_out(out, frames.len()) }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_inflight_frames_collect_oldest(
-    inflight: *const InflightFramesHandle,
-    client: *const ClientHandle,
-    cancel: *const CancelToken,
-    cb: CompletionCallback,
-    user_data: *mut c_void,
-) {
-    let Some((client, ctx)) = (unsafe { client_ctx(client, cb, user_data) }) else {
-        return;
-    };
-    let Some(inflight) = (unsafe { handle_ref(inflight) }) else {
-        ctx.invalid_argument("null inflight frames");
-        return;
-    };
-    let Ok(mut frames) = Arc::clone(&inflight.0).try_lock_owned() else {
-        ctx.err("the inflight frames are already being collected");
-        return;
-    };
-    unsafe {
-        spawn_completion(
-            ctx,
-            cancel,
-            async move { frames.collect_oldest(&client).await },
-            |response| {
-                response.map_or(std::ptr::null_mut(), |response| {
-                    into_handle(ResponseHandle(response)).cast()
-                })
-            },
-        );
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn autd3_inflight_frames_free(inflight: *mut InflightFramesHandle) {
-    unsafe { drop_handle(inflight) }
 }
 
 #[unsafe(no_mangle)]
@@ -2495,29 +2328,6 @@ mod tests {
         assert!(PhaseDepth::from_u8(2).is_none());
         assert!(TransitionMode::from_parts(0x03, 0).is_none());
         assert!(to_gpio_out(&Autd3GpioOut { kind: 14, value: 0 }).is_none());
-        assert!(to_exec_at(Autd3ExecAt { kind: 3, ns: 0 }).is_none());
-    }
-
-    #[test]
-    fn exec_at_kinds_map_to_the_rust_variants() {
-        assert_eq!(
-            to_exec_at(Autd3ExecAt { kind: 0, ns: 7 }),
-            Some(ExecAt::Immediate)
-        );
-        assert_eq!(
-            to_exec_at(Autd3ExecAt {
-                kind: 1,
-                ns: 1_500_000
-            }),
-            Some(ExecAt::Lead(Duration::from_micros(1_500)))
-        );
-        assert_eq!(
-            to_exec_at(Autd3ExecAt {
-                kind: 2,
-                ns: 123_456_789
-            }),
-            Some(ExecAt::At(SysTime::from_nanos(123_456_789)))
-        );
     }
 
     #[test]
@@ -2564,7 +2374,7 @@ mod tests {
             )
         };
         assert_eq!(data, [1, 2, 3]);
-        unsafe { autd3_device_reply_free(reply) };
+        unsafe { drop_handle(reply) };
     }
 
     #[test]
@@ -2579,26 +2389,6 @@ mod tests {
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
             autd3_response_check(std::ptr::null(), std::ptr::null_mut(), 0)
         });
-    }
-
-    #[test]
-    fn inflight_frames_count_the_pushed_frames() {
-        let inflight = unsafe { autd3_inflight_frames_new() };
-        let mut len = usize::MAX;
-        assert_eq!(AUTD3_OK, unsafe {
-            autd3_inflight_frames_len(inflight, &raw mut len)
-        });
-        assert_eq!(len, 0);
-        assert_eq!(AUTD3_OK, unsafe { autd3_inflight_frames_push(inflight, 1) });
-        assert_eq!(AUTD3_OK, unsafe { autd3_inflight_frames_push(inflight, 2) });
-        assert_eq!(AUTD3_OK, unsafe {
-            autd3_inflight_frames_len(inflight, &raw mut len)
-        });
-        assert_eq!(len, 2);
-        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
-            autd3_inflight_frames_push(std::ptr::null(), 1)
-        });
-        unsafe { autd3_inflight_frames_free(inflight) };
     }
 
     #[test]
@@ -2888,21 +2678,6 @@ mod tests {
         let mut ns = 0u64;
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
             autd3_client_device_time_now(std::ptr::null(), &raw mut ns, std::ptr::null_mut(), 0)
-        });
-    }
-
-    #[test]
-    fn a_heartbeat_through_a_null_client_is_an_error() {
-        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
-            autd3_client_send_heartbeat(
-                std::ptr::null(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                0,
-            )
-        });
-        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
-            autd3_client_discard_unread_replies(std::ptr::null(), std::ptr::null_mut(), 0)
         });
     }
 

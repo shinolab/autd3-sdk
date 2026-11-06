@@ -33,18 +33,28 @@ impl Datagram {
 #[derive(Clone, Copy, Debug)]
 pub struct Frame<'a> {
     dist: Distribution,
+    waits_for_previous: bool,
     datagrams: &'a [Datagram],
 }
 
 impl<'a> Frame<'a> {
     #[must_use]
     pub const fn new(dist: Distribution, datagrams: &'a [Datagram]) -> Self {
-        Self { dist, datagrams }
+        Self {
+            dist,
+            waits_for_previous: true,
+            datagrams,
+        }
     }
 
     #[must_use]
     pub fn distribution(&self) -> Distribution {
         self.dist
+    }
+
+    #[must_use]
+    pub fn waits_for_previous(&self) -> bool {
+        self.waits_for_previous
     }
 
     #[must_use]
@@ -68,6 +78,7 @@ impl<'a> Frame<'a> {
 #[derive(Debug)]
 struct FrameRange {
     dist: Distribution,
+    waits_for_previous: bool,
     start: usize,
     len: usize,
 }
@@ -109,6 +120,7 @@ impl Frames {
     pub fn frame(&self, index: usize) -> Option<Frame<'_>> {
         self.frame_ranges.get(index).map(|range| Frame {
             dist: range.dist,
+            waits_for_previous: range.waits_for_previous,
             datagrams: &self.datagrams[range.start..][..range.len],
         })
     }
@@ -126,12 +138,22 @@ impl Frames {
         self.frame_ranges.clear();
     }
 
-    fn push_frame(&mut self, dist: Distribution, num_devices: usize) -> usize {
+    fn push_frame(
+        &mut self,
+        dist: Distribution,
+        waits_for_previous: bool,
+        num_devices: usize,
+    ) -> usize {
         let len = dist.num_datagrams(num_devices);
         let start = self.datagrams.len();
         self.datagrams
             .resize_with(start + len, || Datagram::no_payload(Cmd::Nop));
-        self.frame_ranges.push(FrameRange { dist, start, len });
+        self.frame_ranges.push(FrameRange {
+            dist,
+            waits_for_previous,
+            start,
+            len,
+        });
         start
     }
 
@@ -148,7 +170,7 @@ impl Frames {
             .into());
         }
         let dist = op.distribution();
-        let start = self.push_frame(dist, geometry.num_devices());
+        let start = self.push_frame(dist, op.waits_for_previous(), geometry.num_devices());
         for (device, datagram) in self.datagrams[start..].iter_mut().enumerate() {
             op.encode(&geometry[device], datagram)?;
         }
@@ -174,8 +196,14 @@ impl Frames {
             };
             assigned += 1;
             let start = *start.get_or_insert_with(|| {
-                self.push_frame(Distribution::PerDevice, geometry.num_devices())
+                self.push_frame(Distribution::PerDevice, false, geometry.num_devices())
             });
+            if op.waits_for_previous() {
+                self.frame_ranges
+                    .last_mut()
+                    .expect("the frame was pushed above")
+                    .waits_for_previous = true;
+            }
             op.encode(device, &mut self.datagrams[start + device.idx()])?;
         }
         Ok(assigned)

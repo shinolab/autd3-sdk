@@ -138,6 +138,10 @@ pub(crate) fn encode_raw_pattern_entry(
 }
 
 impl Operation for WritePatternBuffer<'_> {
+    fn waits_for_previous(&self) -> bool {
+        false
+    }
+
     fn distribution(&self) -> Distribution {
         Distribution::PerDevice
     }

@@ -62,7 +62,7 @@ impl Command for Modulation<'_> {
 mod tests {
     use super::*;
     use crate::protocol::Cmd;
-    use crate::test_utils::{build, cmds, payload};
+    use crate::test_utils::{build, cmds, payload, waits};
 
     fn config_and_activate_payloads(m: Modulation<'_>) -> (Vec<u8>, Vec<u8>) {
         let datagrams = build(1, m).unwrap();
@@ -116,6 +116,7 @@ mod tests {
                 Cmd::ActivateModulationBank,
             ]
         );
+        assert_eq!(waits(&frames), [false, false, false, true]);
         let p0 = payload(&frames, 0, 0);
         assert_eq!(p0[0], 1, "bank B1");
         assert_eq!(&p0[2..6], &0u32.to_le_bytes());
