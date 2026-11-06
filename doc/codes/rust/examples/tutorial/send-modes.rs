@@ -1,4 +1,3 @@
-use std::collections::VecDeque;
 use std::f32::consts::PI;
 
 use anyhow::Result;
@@ -7,7 +6,7 @@ use autd3_rs::commands::{Clear, Pattern, SetSilencer, Synchronize};
 use autd3_rs::geometry::{Autd3, Geometry, Point3, offset};
 use autd3_rs::units::{m, mm, s};
 use autd3_rs::value::Intensity;
-use autd3_rs::{Client, ExecAt, Frames, Length, MAX_INFLIGHT};
+use autd3_rs::{Client, ExecAt, Frames, InflightFrames, Length, MAX_INFLIGHT};
 use autd3_rs::udp::TransportOption;
 
 const NUM_POINTS: usize = 1000;
@@ -79,7 +78,7 @@ async fn streaming(
     // ANCHOR: streaming
     let mut phases = geometry.phase_buffer();
     let mut frames = Frames::default();
-    let mut pending: VecDeque<(u16, usize)> = VecDeque::with_capacity(MAX_INFLIGHT);
+    let mut inflight = InflightFrames::default();
     for &target in targets {
         autd3_rs_pattern::focus(
             geometry,
@@ -89,28 +88,18 @@ async fn streaming(
         );
         frames.encode_into(geometry, Pattern::new(&phases, Intensity::MAX))?;
         for frame in &frames {
-            if pending.len() >= MAX_INFLIGHT {
-                wait_for_the_oldest(client, &mut pending).await?;
+            if inflight.len() >= MAX_INFLIGHT
+                && let Some(response) = inflight.collect_oldest(client).await?
+            {
+                response.check()?;
             }
-            pending.push_back((client.send_frame(frame, ExecAt::Immediate).await?, 0));
+            inflight.push(client.send_frame(frame, ExecAt::Immediate).await?);
         }
     }
     // Drain the remaining responses.
-    while !pending.is_empty() {
-        wait_for_the_oldest(client, &mut pending).await?;
+    while let Some(response) = inflight.collect_oldest(client).await? {
+        response.check()?;
     }
     // ANCHOR_END: streaming
-    Ok(())
-}
-
-async fn wait_for_the_oldest(client: &Client, pending: &mut VecDeque<(u16, usize)>) -> Result<()> {
-    while pending.front().is_some_and(|&(_, replies)| replies < client.num_devices()) {
-        let reply = client.recv().await?;
-        if let Some((_, replies)) = pending.iter_mut().find(|(msg_id, _)| *msg_id == reply.msg_id) {
-            anyhow::ensure!(reply.status == 0, "device {} rejected a frame: {:#04x}", reply.device, reply.status);
-            *replies += 1;
-        }
-    }
-    pending.pop_front();
     Ok(())
 }

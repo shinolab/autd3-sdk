@@ -4,7 +4,7 @@ use autd3_rs::commands::{Operation, Modulation, Pattern, SetSilencer, each};
 use autd3_rs::geometry::{Autd3, Geometry, offset};
 use autd3_rs::units::{Hz, m, mm, s};
 use autd3_rs::value::{Intensity, SamplingConfig};
-use autd3_rs::{Client, ExecAt, Frames};
+use autd3_rs::{Client, ExecAt, Frames, InflightFrames};
 use autd3_rs::udp::TransportOption;
 use autd3_rs_modulation::{SineOption, modulation_buffer, sine};
 use autd3_rs_pattern::{focus, wavelength};
@@ -33,17 +33,12 @@ async fn main() -> Result<()> {
 
     // ANCHOR: streaming
     let frames = Frames::encode(&geometry, Modulation::new(SamplingConfig::FREQ_4K, &modulation))?;
-    let mut msg_ids = Vec::with_capacity(frames.len());
+    let mut inflight = InflightFrames::default();
     for frame in &frames {
-        msg_ids.push(client.send_frame(frame, ExecAt::Immediate).await?);
+        inflight.push(client.send_frame(frame, ExecAt::Immediate).await?);
     }
-    let mut unanswered = msg_ids.len() * client.num_devices();
-    while unanswered > 0 {
-        let reply = client.recv().await?;
-        if msg_ids.contains(&reply.msg_id) {
-            unanswered -= 1;
-            anyhow::ensure!(reply.status == 0, "device {} rejected a frame: {:#04x}", reply.device, reply.status);
-        }
+    while let Some(response) = inflight.collect_oldest(&client).await? {
+        response.check()?;
     }
     // ANCHOR_END: streaming
 
