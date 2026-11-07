@@ -74,17 +74,17 @@ impl Controller {
     }
 
     pub fn discard_unread_replies(&self) -> Result<(), Error> {
-        while let Some(reply) = self
+        while let Some((reply, received_at)) = self
             .channel
             .try_recv_from_device()
             .map_err(UdpError::from)?
         {
-            self.check_and_observe(&reply).ok();
+            self.check_and_observe(&reply, received_at).ok();
         }
         Ok(())
     }
 
-    fn check_and_observe(&self, reply: &DeviceReply) -> Result<(), Error> {
+    fn check_and_observe(&self, reply: &DeviceReply, received_at: Instant) -> Result<(), Error> {
         if !reply.flags.contains(Flags::ASSIGNED) || usize::from(reply.unit_id) != reply.device {
             return Err(Error::DeviceLost {
                 device: reply.device,
@@ -92,7 +92,7 @@ impl Controller {
         }
         if reply.device == GRANDMASTER_UNIT_ID && reply.sys_time != 0 {
             self.device_clock()
-                .observe(SysTime::from_nanos(reply.sys_time), Instant::now());
+                .observe(SysTime::from_nanos(reply.sys_time), received_at);
         }
         Ok(())
     }
@@ -181,12 +181,12 @@ impl Controller {
     }
 
     pub async fn recv(&self) -> Result<DeviceReply, Error> {
-        let reply = self
+        let (reply, received_at) = self
             .channel
             .recv_from_device()
             .await
             .map_err(UdpError::from)?;
-        self.check_and_observe(&reply)?;
+        self.check_and_observe(&reply, received_at)?;
         Ok(reply)
     }
 

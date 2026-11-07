@@ -106,11 +106,13 @@ dependencies = [
  "autd3-rs-core",
  "autd3-rs-firmware-emulator",
  "if-addrs",
+ "nix",
  "rstest",
  "socket2",
  "thiserror",
  "tokio",
  "tracing",
+ "windows-sys 0.61.2",
  "zerocopy",
 ]
 
@@ -731,6 +733,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
+name = "memoffset"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "488016bfae457b036d996092f6cb448677611ce4449e970ceaf42695203f218a"
+dependencies = [
+ "autocfg",
+]
+
+[[package]]
 name = "miniz_oxide"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -780,6 +791,7 @@ dependencies = [
  "cfg-if",
  "cfg_aliases",
  "libc",
+ "memoffset",
 ]
 
 [[package]]
