@@ -21,6 +21,26 @@ namespace AUTD3.Tests
         }
 
         [Fact]
+        public void BuffersAreFilledFromAFlatSpanOrLeftUntouched()
+        {
+            using var geometry = Fixture.Devices(2);
+            using var phases = geometry.PhaseBuffer();
+            using var intensities = geometry.IntensityBuffer();
+            var n = Autd3.NumTransducers;
+            var flat = Enumerable.Range(0, 3 * 2 * n).Select(i => (byte)(i % 251)).ToArray();
+
+            phases.CopyFrom(flat.AsSpan(2 * n, 2 * n));
+            intensities.CopyFrom(flat.AsSpan(0, 2 * n));
+
+            Assert.Equal(new Phase(flat[2 * n + n + 3]), phases[1][3]);
+            Assert.Equal(new Intensity(flat[5]), intensities[0][5]);
+            var before = phases.ToArray();
+            var error = Assert.Throws<Autd3Exception>(() => phases.CopyFrom(flat.AsSpan(0, 2 * n - 1)));
+            Assert.Equal(Autd3ErrorCode.InvalidArgument, error.Code);
+            Assert.Equal(before, phases.ToArray());
+        }
+
+        [Fact]
         public void WavelengthMatchesSoundSpeed()
         {
             var wavelength = Pattern.Wavelength(340 * m / s);

@@ -93,6 +93,30 @@ unsafe fn buffer_copy_to<T: IntoBytes + Immutable>(
     0
 }
 
+unsafe fn buffer_copy_from<T: FromBytes + IntoBytes>(
+    buffer: *mut Buffer<T>,
+    src: *const u8,
+    len: usize,
+) -> i32 {
+    const { assert!(size_of::<T>() == 1) };
+    let Some(buffer) = (unsafe { handle_mut(buffer) }) else {
+        return -1;
+    };
+    if len != buffer.0.iter().map(Vec::len).sum::<usize>() {
+        return -1;
+    }
+    let Some(src) = (unsafe { slice_ref(src, len) }) else {
+        return -1;
+    };
+    let mut rest = src;
+    for device in &mut buffer.0 {
+        let (head, tail) = rest.split_at(device.len());
+        device.as_mut_bytes().copy_from_slice(head);
+        rest = tail;
+    }
+    0
+}
+
 unsafe fn buffer_set<T: FromBytes + IntoBytes>(
     buffer: *mut Buffer<T>,
     dev: usize,
@@ -111,7 +135,7 @@ unsafe fn buffer_set<T: FromBytes + IntoBytes>(
 }
 
 macro_rules! buffer_api {
-    ($ty:ty, $geometry:ident, $make:ident, $from_array:ident, $num_devices:ident, $num_transducers:ident, $get:ident, $set:ident, $copy_to:ident, $free:ident) => {
+    ($ty:ty, $geometry:ident, $make:ident, $from_array:ident, $num_devices:ident, $num_transducers:ident, $get:ident, $set:ident, $copy_to:ident, $copy_from:ident, $free:ident) => {
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $geometry(geometry: *const Geometry) -> *mut $ty {
             let Some(geometry) = (unsafe { handle_ref(geometry) }) else {
@@ -156,6 +180,11 @@ macro_rules! buffer_api {
         }
 
         #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn $copy_from(buffer: *mut $ty, src: *const u8, len: usize) -> i32 {
+            unsafe { buffer_copy_from(buffer, src, len) }
+        }
+
+        #[unsafe(no_mangle)]
         pub unsafe extern "C" fn $free(buffer: *mut $ty) {
             unsafe { drop_handle(buffer) }
         }
@@ -172,6 +201,7 @@ buffer_api!(
     autd3_phase_buffer_get,
     autd3_phase_buffer_set,
     autd3_phase_buffer_copy_to,
+    autd3_phase_buffer_copy_from,
     autd3_phase_buffer_free
 );
 
@@ -185,6 +215,7 @@ buffer_api!(
     autd3_intensity_buffer_get,
     autd3_intensity_buffer_set,
     autd3_intensity_buffer_copy_to,
+    autd3_intensity_buffer_copy_from,
     autd3_intensity_buffer_free
 );
 
@@ -626,6 +657,33 @@ mod tests {
         assert_eq!(-1, unsafe {
             autd3_phase_buffer_copy_to(&raw const buffer, dst.as_mut_ptr(), dst.len() - 1)
         });
+    }
+
+    #[test]
+    fn copy_from_fills_every_device_in_order_or_nothing() {
+        let geometry = geometry();
+        let mut buffer = intensities(&geometry, 0);
+        let first = geometry[0].num_transducers();
+        let src: Vec<u8> = (0..geometry.num_transducers())
+            .map(|i| u8::try_from(i % 256).unwrap())
+            .collect();
+        assert_eq!(0, unsafe {
+            autd3_intensity_buffer_copy_from(&raw mut buffer, src.as_ptr(), src.len())
+        });
+        assert_eq!(Intensity(1), buffer.0[0][1]);
+        assert_eq!(
+            Intensity(u8::try_from(first % 256).unwrap()),
+            buffer.0[1][0]
+        );
+
+        let untouched = buffer.0.clone();
+        assert_eq!(-1, unsafe {
+            autd3_intensity_buffer_copy_from(&raw mut buffer, src.as_ptr(), src.len() - 1)
+        });
+        assert_eq!(-1, unsafe {
+            autd3_intensity_buffer_copy_from(&raw mut buffer, std::ptr::null(), src.len())
+        });
+        assert_eq!(untouched, buffer.0);
     }
 
     #[test]
