@@ -124,8 +124,60 @@ namespace AUTD3.Tests
             using var geometry = Fixture.SingleDevice();
 
             Assert.Throws<ArgumentNullException>(() => Command.Each(null!));
-            Assert.Throws<ArgumentNullException>(() => Frames.Encode(geometry, null!));
+            Assert.Throws<ArgumentNullException>(() => Frames.Encode(geometry, (ICommand)null!));
+            Assert.Throws<ArgumentNullException>(() => Frames.Encode(geometry, (IEnumerable<ICommand>)null!));
+            Assert.Throws<ArgumentNullException>(() => Frames.Encode(geometry, new List<ICommand> { new Nop(), null! }));
             Assert.Throws<ArgumentNullException>(() => Frames.Encode(null!, new Nop()));
+        }
+
+        [Fact]
+        public void AListOfCommandsExpandsInOrder()
+        {
+            using var geometry = Fixture.Devices(2);
+            using var phases = geometry.PhaseBuffer();
+            using var intensities = geometry.IntensityBuffer();
+
+            using var frames = Frames.Encode(geometry, new List<ICommand>
+            {
+                new Clear(),
+                Command.Each(device => device.Idx == 0 ? new Nop() : null),
+                Command.Each(device => device.Idx == 1 ? new Nop() : null),
+                new Pattern(phases, intensities),
+                new Nop(),
+            });
+
+            Assert.Equal(5, frames.Length);
+        }
+
+        [Fact]
+        public void AnEmptyListEncodesToNoFrames()
+        {
+            using var geometry = Fixture.SingleDevice();
+            using var frames = Frames.Encode(geometry, new List<ICommand>());
+            Assert.Equal(0, frames.Length);
+        }
+
+        [Fact]
+        public void AListIsEncodedIntoExistingFramesInPlace()
+        {
+            using var geometry = Fixture.SingleDevice();
+            using var frames = Frames.Encode(geometry, new Nop());
+
+            frames.EncodeInto(geometry, new ICommand[] { new Nop(), new Synchronize() });
+
+            Assert.Equal(2, frames.Length);
+        }
+
+        [Fact]
+        public void AFailingMemberFailsTheWholeList()
+        {
+            using var geometry = Fixture.SingleDevice();
+
+            Assert.Throws<Autd3Exception>(() => Frames.Encode(geometry, new List<ICommand>
+            {
+                new Nop(),
+                new SetCpuConfig(new CpuConfig { Ptp = new PtpConfig { LockSamples = 0 } }),
+            }));
         }
     }
 }

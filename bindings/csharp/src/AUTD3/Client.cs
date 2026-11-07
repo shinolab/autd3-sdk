@@ -314,6 +314,12 @@ namespace AUTD3
                 NativeClient.autd3_client_send(Handle, frames.Handle, cancel, cb, ud), cancellationToken).ConfigureAwait(false);
         }
 
+        public Task SendAsync(IEnumerable<ICommand> commands, CancellationToken cancellationToken = default) =>
+            SendAsync(SequenceCommand.Of(commands), cancellationToken);
+
+        public Task SendStreamingAsync(IEnumerable<ICommand> commands, CancellationToken cancellationToken = default) =>
+            SendStreamingAsync(SequenceCommand.Of(commands), cancellationToken);
+
         public async Task SendStreamingAsync(ICommand command, CancellationToken cancellationToken = default)
         {
             using var frames = Frames.Encode(_geometry, command);

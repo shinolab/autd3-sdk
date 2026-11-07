@@ -75,6 +75,7 @@ Command: TypeAlias = Union[
     Modulation,
     PatternStm,
     Each,
+    list["Command"],
 ]
 
 __all__ = [
