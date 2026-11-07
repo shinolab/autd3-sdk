@@ -260,6 +260,7 @@ impl OwnedStmIntensity {
 
 pub enum OwnedCommand {
     Each(Vec<Option<OwnedCommand>>),
+    Sequence(Vec<OwnedCommand>),
     Pattern {
         phases: Vec<Vec<Phase>>,
         intensities: OwnedPatternIntensity,
@@ -1124,6 +1125,9 @@ pub unsafe extern "C" fn autd3_op_free(op: *mut OwnedCommand) {
 
 impl OwnedCommand {
     fn check_each(&self, num_devices: usize) -> Result<(), String> {
+        if let OwnedCommand::Sequence(ops) = self {
+            return ops.iter().try_for_each(|op| op.check_each(num_devices));
+        }
         let OwnedCommand::Each(devices) = self else {
             return Ok(());
         };
@@ -1170,6 +1174,12 @@ impl OwnedCommand {
                         .and_then(OwnedCommand::operation)
                 })
                 .boxed(),
+            ),
+            OwnedCommand::Sequence(ops) => Lowered::Command(
+                ops.iter()
+                    .map(OwnedCommand::boxed)
+                    .collect::<Vec<_>>()
+                    .boxed(),
             ),
             OwnedCommand::Pattern {
                 phases,
@@ -1398,6 +1408,25 @@ pub unsafe extern "C" fn autd3_command_each(
 
     into_handle(OwnedCommand::Each(
         ops.iter().map(|&p| unsafe { take_handle(p) }).collect(),
+    ))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autd3_command_sequence(
+    ops: *const *mut OwnedCommand,
+    len: usize,
+) -> *mut OwnedCommand {
+    let Some(ops) = (unsafe { slice_ref(ops, len) }) else {
+        return std::ptr::null_mut();
+    };
+    if ops.iter().any(|p| p.is_null()) || !is_distinct(ops) {
+        return std::ptr::null_mut();
+    }
+
+    into_handle(OwnedCommand::Sequence(
+        ops.iter()
+            .filter_map(|&p| unsafe { take_handle(p) })
+            .collect(),
     ))
 }
 
@@ -2661,6 +2690,77 @@ mod tests {
         let command = unsafe { autd3_command_each(ops.as_ptr(), ops.len()) };
         assert!(!command.is_null());
         assert_eq!(1, num_frames_of(geometry, command));
+        unsafe { drop_handle(geometry) };
+    }
+
+    #[test]
+    fn a_rejected_sequence_leaves_every_op_handle_with_the_caller() {
+        let first = autd3_op_clear();
+        let second = autd3_op_nop();
+
+        assert!(unsafe { autd3_command_sequence(std::ptr::null(), 2) }.is_null());
+
+        let with_null = [first, std::ptr::null_mut(), second];
+        assert!(unsafe { autd3_command_sequence(with_null.as_ptr(), with_null.len()) }.is_null());
+
+        let aliased = [first, second, first];
+        assert!(unsafe { autd3_command_sequence(aliased.as_ptr(), aliased.len()) }.is_null());
+
+        let geometry = geometry_of(1);
+        let ops = [first, second];
+        let command = unsafe { autd3_command_sequence(ops.as_ptr(), ops.len()) };
+        assert!(!command.is_null());
+        assert_eq!(2, num_frames_of(geometry, command));
+        unsafe { drop_handle(geometry) };
+    }
+
+    #[test]
+    fn a_sequence_expands_its_commands_in_order() {
+        let geometry = geometry_of(2);
+        let per_device = [autd3_op_nop(), std::ptr::null_mut()];
+        let per_device = unsafe { autd3_command_each(per_device.as_ptr(), per_device.len()) };
+        let inner = [autd3_op_nop(), autd3_op_nop()];
+        let inner = unsafe { autd3_command_sequence(inner.as_ptr(), inner.len()) };
+        let ops = [autd3_op_clear(), per_device, inner];
+        let command = unsafe { autd3_command_sequence(ops.as_ptr(), ops.len()) };
+
+        assert_eq!(4, num_frames_of(geometry, command));
+        unsafe { drop_handle(geometry) };
+    }
+
+    #[test]
+    fn an_empty_sequence_encodes_to_no_frames() {
+        let geometry = geometry_of(1);
+        let command = unsafe { autd3_command_sequence(std::ptr::null(), 0) };
+        assert!(!command.is_null());
+
+        assert_eq!(0, num_frames_of(geometry, command));
+        unsafe { drop_handle(geometry) };
+    }
+
+    #[test]
+    fn an_each_inside_a_sequence_that_does_not_match_the_device_count_fails_to_encode() {
+        let geometry = geometry_of(2);
+
+        let inner = [autd3_op_nop(), autd3_op_nop(), autd3_op_nop()];
+        let inner = unsafe { autd3_command_each(inner.as_ptr(), inner.len()) };
+        let sequence = [autd3_op_clear(), inner];
+        let sequence = unsafe { autd3_command_sequence(sequence.as_ptr(), sequence.len()) };
+        assert!(encode_error(geometry, sequence).contains("3 entries for 2 devices"));
+
+        unsafe { drop_handle(geometry) };
+    }
+
+    #[test]
+    fn a_sequence_is_not_a_single_frame_operation_inside_each() {
+        let geometry = geometry_of(2);
+
+        let sequence = [autd3_op_clear()];
+        let sequence = unsafe { autd3_command_sequence(sequence.as_ptr(), sequence.len()) };
+        let ops = [std::ptr::null_mut(), sequence];
+        let command = unsafe { autd3_command_each(ops.as_ptr(), ops.len()) };
+        assert!(encode_error(geometry, command).contains("not a single-frame operation"));
+
         unsafe { drop_handle(geometry) };
     }
 

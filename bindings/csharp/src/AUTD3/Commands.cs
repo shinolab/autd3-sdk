@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 
 namespace AUTD3
@@ -708,25 +710,15 @@ namespace AUTD3
             }
             return new EachCommand(factory);
         }
-    }
 
-    internal sealed class EachCommand : ICommand
-    {
-        private readonly Func<Device, ICommand?> _factory;
-
-        internal EachCommand(Func<Device, ICommand?> factory)
+        internal static IntPtr Compose(Geometry geometry, int len, Func<int, ICommand?> commandAt, Func<IntPtr[], UIntPtr, IntPtr> compose)
         {
-            _factory = factory;
-        }
-
-        IntPtr ICommand.CreateOp(Geometry geometry)
-        {
-            var ops = new IntPtr[geometry.NumDevices];
+            var ops = new IntPtr[len];
             try
             {
                 for (var i = 0; i < ops.Length; i++)
                 {
-                    var command = _factory(geometry[i]);
+                    var command = commandAt(i);
                     if (command == null)
                     {
                         continue;
@@ -737,7 +729,7 @@ namespace AUTD3
                         throw new Autd3Exception("failed to create the command", Autd3ErrorCode.InvalidArgument);
                     }
                 }
-                var handle = NativeClient.autd3_command_each(ops, (UIntPtr)ops.Length);
+                var handle = compose(ops, (UIntPtr)ops.Length);
                 if (handle == IntPtr.Zero)
                 {
                     throw new Autd3Exception("failed to compose the commands", Autd3ErrorCode.InvalidArgument);
@@ -756,6 +748,46 @@ namespace AUTD3
                 throw;
             }
         }
+    }
+
+    internal sealed class EachCommand : ICommand
+    {
+        private readonly Func<Device, ICommand?> _factory;
+
+        internal EachCommand(Func<Device, ICommand?> factory)
+        {
+            _factory = factory;
+        }
+
+        IntPtr ICommand.CreateOp(Geometry geometry) =>
+            Command.Compose(geometry, geometry.NumDevices, i => _factory(geometry[i]), NativeClient.autd3_command_each);
+    }
+
+    internal sealed class SequenceCommand : ICommand
+    {
+        private readonly ICommand[] _commands;
+
+        private SequenceCommand(ICommand[] commands)
+        {
+            _commands = commands;
+        }
+
+        internal static SequenceCommand Of(IEnumerable<ICommand> commands)
+        {
+            if (commands == null)
+            {
+                throw new ArgumentNullException(nameof(commands));
+            }
+            var snapshot = commands.ToArray();
+            if (snapshot.Any(command => command == null))
+            {
+                throw new ArgumentNullException(nameof(commands));
+            }
+            return new SequenceCommand(snapshot);
+        }
+
+        IntPtr ICommand.CreateOp(Geometry geometry) =>
+            Command.Compose(geometry, _commands.Length, i => _commands[i], NativeClient.autd3_command_sequence);
     }
 
 }

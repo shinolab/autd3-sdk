@@ -48,6 +48,12 @@ namespace AUTD3
             return frames;
         }
 
+        public static Frames Encode(Geometry geometry, IEnumerable<ICommand> commands) =>
+            Encode(geometry, SequenceCommand.Of(commands));
+
+        public void EncodeInto(Geometry geometry, IEnumerable<ICommand> commands) =>
+            EncodeInto(geometry, SequenceCommand.Of(commands));
+
         public void EncodeInto(Geometry geometry, ICommand command)
         {
             if (geometry == null)

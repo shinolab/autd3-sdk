@@ -71,7 +71,7 @@ def test_each_asks_every_device_and_leaves_the_unassigned_ones_out() -> None:
 def test_each_rejects_what_is_not_a_single_frame_operation() -> None:
     geo = geometry()
     nop = autd3.commands.Nop()
-    not_single_frame: list[Any] = [sine(), each(lambda _: nop)]
+    not_single_frame: list[Any] = [sine(), [nop], each(lambda _: nop)]
     for command in not_single_frame:
 
         def assign(_: autd3.geometry.Device, command: Any = command) -> Any:
@@ -151,12 +151,30 @@ def test_each_rejects_what_is_not_a_command() -> None:
         autd3.Frames.encode(geo, each(failing))
 
 
-def test_a_tuple_or_a_list_of_commands_is_not_a_command() -> None:
+def test_a_list_expands_its_commands_in_order() -> None:
     geo = geometry()
     nop = autd3.commands.Nop()
-    for command in ((nop, nop), [nop], (), [], 1, iter([nop])):
-        with pytest.raises(TypeError, match="expected a command or each"):
+    single = len(autd3.Frames.encode(geo, sine()))
+
+    assert len(autd3.Frames.encode(geo, [nop, sine()])) == 1 + single
+    assert len(autd3.Frames.encode(geo, [nop, [sine(), [nop, nop]], each(lambda _: nop)])) == 4 + single
+    assert len(autd3.Frames.encode(geo, [])) == 0
+
+
+def test_anything_but_a_command_each_or_a_list_is_rejected() -> None:
+    geo = geometry()
+    nop = autd3.commands.Nop()
+    for command in ((nop, nop), (), 1, iter([nop]), [nop, "nop"]):
+        with pytest.raises(TypeError, match="expected a command, each"):
             autd3.Frames.encode(geo, loose(command))
+
+
+def test_a_self_referential_list_is_a_recursion_error() -> None:
+    cyclic: list[object] = []
+    cyclic.append(cyclic)
+
+    with pytest.raises(RecursionError):
+        autd3.Frames.encode(geometry(), loose(cyclic))
 
 
 def test_a_self_referential_each_is_a_recursion_error() -> None:

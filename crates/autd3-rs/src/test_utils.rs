@@ -45,6 +45,7 @@ pub(crate) fn cmd_at(frames: &Frames, frame: usize, device: usize) -> Cmd {
     frames.frame(frame).unwrap().datagrams()[device].cmd
 }
 
+#[derive(Clone)]
 pub(crate) struct Marker(pub(crate) u8);
 
 impl crate::sealed::Sealed for Marker {}
