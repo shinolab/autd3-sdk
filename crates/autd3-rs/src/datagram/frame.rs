@@ -1,7 +1,7 @@
 use crate::commands::Command;
 use crate::commands::operation::{Distribution, Operation};
 use crate::error::{Error, PayloadError};
-use crate::geometry::{Device, Geometry};
+use crate::geometry::Geometry;
 use crate::protocol::{Cmd, PAYLOAD_BYTES};
 use autd3_rs_core::MAX_DEVICES;
 
@@ -157,10 +157,12 @@ impl Frames {
         start
     }
 
-    pub(super) fn push_encoded(
+    pub(super) fn encode_at(
         &mut self,
+        index: usize,
         op: &impl Operation,
         geometry: &Geometry,
+        device: Option<usize>,
     ) -> Result<(), Error> {
         if geometry.is_empty() {
             return Err(PayloadError::DeviceCountOutOfRange {
@@ -169,44 +171,33 @@ impl Frames {
             }
             .into());
         }
-        let dist = op.distribution();
-        let start = self.push_frame(dist, op.waits_for_previous(), geometry.num_devices());
-        for (device, datagram) in self.datagrams[start..].iter_mut().enumerate() {
-            op.encode(&geometry[device], datagram)?;
+        if let Some(range) = self.frame_ranges.get_mut(index) {
+            debug_assert_eq!(range.dist, Distribution::PerDevice);
+            range.waits_for_previous |= op.waits_for_previous();
+        } else {
+            let dist = match device {
+                Some(_) => Distribution::PerDevice,
+                None => op.distribution(),
+            };
+            self.push_frame(dist, op.waits_for_previous(), geometry.num_devices());
+        }
+        let range = &self.frame_ranges[index];
+        let datagrams = &mut self.datagrams[range.start..][..range.len];
+        match device {
+            Some(device) => op.encode(&geometry[device], &mut datagrams[device])?,
+            None => {
+                for (device, datagram) in datagrams.iter_mut().enumerate() {
+                    op.encode(&geometry[device], datagram)?;
+                }
+            }
         }
         tracing::trace!(
-            cmd = ?self.datagrams[start].cmd,
-            dist = ?dist,
-            devices = self.datagrams.len() - start,
+            cmd = ?datagrams[device.unwrap_or(0)].cmd,
+            dist = ?range.dist,
+            device,
             "encoded frame"
         );
         Ok(())
-    }
-
-    pub(super) fn push_per_device<O: Operation>(
-        &mut self,
-        geometry: &Geometry,
-        mut assign: impl FnMut(&Device) -> Option<O>,
-    ) -> Result<usize, Error> {
-        let mut start = None;
-        let mut assigned = 0;
-        for device in geometry {
-            let Some(op) = assign(device) else {
-                continue;
-            };
-            assigned += 1;
-            let start = *start.get_or_insert_with(|| {
-                self.push_frame(Distribution::PerDevice, false, geometry.num_devices())
-            });
-            if op.waits_for_previous() {
-                self.frame_ranges
-                    .last_mut()
-                    .expect("the frame was pushed above")
-                    .waits_for_previous = true;
-            }
-            op.encode(device, &mut self.datagrams[start + device.idx()])?;
-        }
-        Ok(assigned)
     }
 }
 

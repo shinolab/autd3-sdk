@@ -40,22 +40,33 @@ namespace AUTD3.Tests
         }
 
         [Fact]
-        public void EachRejectsWhatIsNotASingleFrameOperation()
+        public void EachTakesMultiFrameCommandsAndOneInstanceMayServeSeveralDevices()
         {
-            using var geometry = Fixture.Devices(2);
+            using var geometry = Fixture.Devices(3);
             using var modulation = ModulationBuffer.FromBytes(new byte[] { 0xFF, 0xFF });
-            var notSingleFrame = new ICommand[]
-            {
-                new Modulation(SamplingConfig.Freq4k, modulation),
-                Command.Each(_ => new Nop()),
-            };
+            var shared = new Modulation(SamplingConfig.Freq4k, modulation);
+            using var alone = Frames.Encode(geometry, shared);
 
-            foreach (var command in notSingleFrame)
-            {
-                var error = Assert.Throws<Autd3Exception>(() => Frames.Encode(geometry, Command.Each(device =>
-                    device.Idx == 1 ? command : null)));
-                Assert.Equal(Autd3ErrorCode.InvalidArgument, error.Code);
-            }
+            using var frames = Frames.Encode(geometry, Command.Each(device =>
+                device.Idx == 1 ? new Clear() : (ICommand)shared));
+            using var nested = Frames.Encode(geometry, Command.Each(device =>
+                device.Idx == 0 ? Command.Each(_ => new Nop()) : null));
+            using var none = Frames.Encode(geometry, Command.Each(_ => null));
+
+            Assert.Equal(alone.Length, frames.Length);
+            Assert.Equal(1, nested.Length);
+            Assert.Equal(0, none.Length);
+        }
+
+        [Fact]
+        public void AFailingEachFactoryFreesTheHandlesItAlreadyCreated()
+        {
+            using var geometry = Fixture.Devices(3);
+            using var modulation = ModulationBuffer.FromBytes(new byte[] { 0xFF, 0xFF });
+            var shared = new Modulation(SamplingConfig.Freq4k, modulation);
+
+            Assert.Throws<InvalidOperationException>(() => Frames.Encode(geometry, Command.Each(device =>
+                device.Idx < 2 ? shared : throw new InvalidOperationException())));
         }
 
         [Fact]

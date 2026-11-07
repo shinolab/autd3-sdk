@@ -68,17 +68,19 @@ def test_each_asks_every_device_and_leaves_the_unassigned_ones_out() -> None:
     assert len(autd3.Frames.encode(geo, each(lambda _: None))) == 0
 
 
-def test_each_rejects_what_is_not_a_single_frame_operation() -> None:
-    geo = geometry()
+def test_each_takes_multi_frame_commands_and_pads_the_shorter_devices() -> None:
+    geo = geometry(3)
+    alone = len(autd3.Frames.encode(geo, sine()))
     nop = autd3.commands.Nop()
-    not_single_frame: list[Any] = [sine(), [nop], each(lambda _: nop)]
-    for command in not_single_frame:
 
-        def assign(_: autd3.geometry.Device, command: Any = command) -> Any:
-            return command
+    def assign(device: autd3.geometry.Device) -> autd3.commands.Command | None:
+        commands: list[autd3.commands.Command] = [sine(), sine(), nop]
+        return commands[device.idx()]
 
-        with pytest.raises(TypeError, match="single-frame operation for device 0"):
-            autd3.Frames.encode(geo, each(assign))
+    assert len(autd3.Frames.encode(geo, each(assign))) == alone
+    assert len(autd3.Frames.encode(geo, each(lambda device: [nop, nop] if device.idx() == 0 else None))) == 2
+    nested = each(lambda device: each(lambda _: nop) if device.idx() == 1 else None)
+    assert len(autd3.Frames.encode(geo, nested)) == 1
 
 
 def test_each_takes_the_buffer_writes_as_single_frame_operations() -> None:

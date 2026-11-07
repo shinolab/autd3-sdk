@@ -1,5 +1,4 @@
 use crate::commands::Command;
-use crate::commands::Operation;
 use crate::error::Error;
 use crate::geometry::Device;
 
@@ -8,21 +7,21 @@ use super::expansion::Expansion;
 pub struct Each<F>(F);
 
 #[must_use]
-pub fn each<O, F>(assign: F) -> Each<F>
+pub fn each<C, F>(assign: F) -> Each<F>
 where
-    O: Operation,
-    F: FnMut(&Device) -> Option<O>,
+    C: Command,
+    F: FnMut(&Device) -> Option<C>,
 {
     Each(assign)
 }
 
-impl<O, F> Command for Each<F>
+impl<C, F> Command for Each<F>
 where
-    O: Operation,
-    F: FnMut(&Device) -> Option<O>,
+    C: Command,
+    F: FnMut(&Device) -> Option<C>,
 {
     fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
-        expansion.push_per_device(self.0)
+        expansion.push_each(self.0)
     }
 }
 
@@ -31,7 +30,9 @@ mod tests {
     use crate::commands::operation::{
         ConfigModulation, Distribution, WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer,
     };
-    use crate::commands::{Operation, Pattern, SetSilencer};
+    use crate::commands::{
+        Command, FociStm, FociStmOption, Modulation, Operation, Pattern, SetSilencer,
+    };
     use crate::datagram::{Datagram, Frames, each};
     use crate::error::Error;
     use crate::geometry::{Autd3, Point3};
@@ -167,6 +168,120 @@ mod tests {
         assert_eq!(foci.len(), 1);
         assert_eq!(cmd_at(&foci, 0, 0), Cmd::Nop);
         assert_eq!(cmd_at(&foci, 0, 1), Cmd::WriteFociBuffer);
+    }
+
+    #[test]
+    fn each_lines_up_the_frames_of_multi_frame_commands_and_pads_the_shorter_with_nop() {
+        let data = [0x5Au8; 4];
+        let modulation = || Modulation::new(SamplingConfig::FREQ_4K, &data);
+        let alone = build(3, modulation()).unwrap();
+        let frames = build(
+            3,
+            each(|device| match device.idx() {
+                0 => Some(Box::new(SetSilencer::default()) as Box<dyn Operation>),
+                1 => Some(Box::new(Marker(1))),
+                _ => None,
+            }),
+        )
+        .unwrap();
+        assert_eq!(frames.len(), 1);
+
+        let frames = build(
+            3,
+            each(|device| match device.idx() {
+                0 => Some(modulation().boxed()),
+                1 => Some(SetSilencer::default().boxed()),
+                _ => None,
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(frames.len(), alone.len());
+        for (i, frame) in frames.iter().enumerate() {
+            assert_eq!(frame.distribution(), Distribution::PerDevice);
+            assert_eq!(cmd_at(&frames, i, 0), cmd_at(&alone, i, 0));
+            assert_eq!(payload(&frames, i, 0), payload(&alone, i, 0));
+            let expected = if i == 0 { Cmd::SetSilencer } else { Cmd::Nop };
+            assert_eq!(cmd_at(&frames, i, 1), expected);
+            assert_eq!(cmd_at(&frames, i, 2), Cmd::Nop);
+            assert_eq!(frame.datagrams()[2].payload, [0u8; PAYLOAD_BYTES]);
+        }
+        let mut expected_waits = waits(&alone);
+        expected_waits[0] |= SetSilencer::default().waits_for_previous();
+        assert_eq!(waits(&frames), expected_waits);
+    }
+
+    #[test]
+    fn a_per_device_stm_keeps_the_encoding_of_its_own_device() {
+        let points: Vec<_> = (0..4)
+            .map(|i| ControlPoints::from(Point3::new(i as f32, 0.0, 150.0)))
+            .collect();
+        let stm = || FociStm::new(SamplingConfig::FREQ_4K, &points, FociStmOption::default());
+        let geometry = test_geometry(3);
+        let alone = Frames::encode(&geometry, stm()).unwrap();
+        let frames =
+            Frames::encode(&geometry, each(|device| (device.idx() != 1).then(stm))).unwrap();
+
+        assert_eq!(frames.len(), alone.len());
+        for (i, frame) in alone.iter().enumerate() {
+            for device in [0, 2] {
+                assert_eq!(cmd_at(&frames, i, device), frame.datagram_for(device).cmd);
+                assert_eq!(
+                    payload(&frames, i, device),
+                    frame.datagram_for(device).payload()
+                );
+            }
+            assert_eq!(cmd_at(&frames, i, 1), Cmd::Nop);
+        }
+    }
+
+    #[test]
+    fn commands_after_an_each_start_after_its_longest_device() {
+        let data = [0u8; 4];
+        let frames = build(
+            2,
+            (
+                Marker(9),
+                each(|device| {
+                    (device.idx() == 1).then(|| Modulation::new(SamplingConfig::FREQ_4K, &data))
+                }),
+                Marker(8),
+            ),
+        )
+        .unwrap();
+
+        let modulation_frames = build(1, Modulation::new(SamplingConfig::FREQ_4K, &data))
+            .unwrap()
+            .len();
+        assert_eq!(frames.len(), modulation_frames + 2);
+        assert_eq!(payload(&frames, 0, 0)[0], 9);
+        assert_eq!(payload(&frames, modulation_frames + 1, 0)[0], 8);
+        assert_eq!(cmd_at(&frames, 1, 0), Cmd::Nop);
+    }
+
+    #[test]
+    fn a_nested_each_is_asked_only_for_the_device_it_runs_under() {
+        let asked = std::sync::Mutex::new(Vec::new());
+        let frames = build(
+            3,
+            each(|outer| {
+                let outer = outer.idx();
+                (outer != 0).then(|| {
+                    let asked = &asked;
+                    each(move |inner| {
+                        asked.lock().unwrap().push((outer, inner.idx()));
+                        Some(Marker(u8::try_from(inner.idx()).unwrap()))
+                    })
+                    .boxed()
+                })
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(*asked.lock().unwrap(), [(1, 1), (2, 2)]);
+        assert_eq!(frames.len(), 1);
+        assert_eq!(cmd_at(&frames, 0, 0), Cmd::Nop);
+        assert_eq!(payload(&frames, 0, 2)[0], 2);
     }
 
     #[test]

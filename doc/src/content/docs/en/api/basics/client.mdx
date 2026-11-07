@@ -139,14 +139,16 @@ What the replies already show is not included: the number of processed frames is
 
 ## each
 
-`each` takes a closure that receives a device and assigns a different single-frame command per device.
+`each` takes a closure that receives a device and assigns a different command per device.
 
 <CodeTabs rust={excerpt(sample, "each")} python={excerpt(pySample, "each")} csharp={excerpt(csSample, "each")} />
 
-`each` always makes a single frame.
-A multi-frame command such as `Modulation` / `FociStm` / `PatternStm` cannot be sent with `each`.
+Multi-frame commands such as `Modulation` / `FociStm` / `PatternStm` can be assigned too.
+The k-th frames of the devices' commands are merged into one frame, and a device left unassigned or with fewer frames gets a do-nothing command (`Nop`).
+To send an STM to only some of the devices, return `None` (`None` / `null` in Python / C#) for the rest.
+In C#, returning the same command instance for several devices shares its data instead of copying it.
 
 In Rust, the return values of the closure must all be the same type.
-To mix commands of different types, unify them into a `Box<dyn Operation>`.
+To mix commands of different types, unify them into a `BoxedCommand` with `.boxed()` (single-frame commands can also be unified into a `Box<dyn Operation>`).
 
 <CodeTabs rust={excerpt(sample, "each_boxed")} />

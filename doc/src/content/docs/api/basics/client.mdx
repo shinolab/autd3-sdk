@@ -141,14 +141,16 @@ CPU の診断カウンタ. 読み出し用のコマンドは無く, フレーム
 
 ## each
 
-`each` はデバイスを引数にするクロージャを受け取り, デバイスごとに異なる 1 フレームのコマンドを割り当てる.
+`each` はデバイスを引数にするクロージャを受け取り, デバイスごとに異なるコマンドを割り当てる.
 
 <CodeTabs rust={excerpt(sample, "each")} python={excerpt(pySample, "each")} csharp={excerpt(csSample, "each")} />
 
-`each` は常に 1 フレームになる.
-`Modulation` / `FociStm` / `PatternStm` のような複数フレームのコマンドは `each` では送れない.
+`Modulation` / `FociStm` / `PatternStm` のような複数フレームのコマンドも割り当てられる.
+各デバイスのコマンドの k 番目のフレームどうしが 1 つのフレームにまとまり, 割り当てていないデバイスとフレーム数の足りないデバイスには何もしないコマンド (`Nop`) が入る.
+一部のデバイスだけに STM を送るには, 残りのデバイスに `None` (Python / C# は `None` / `null`) を返す.
+C# では同じコマンドのインスタンスを複数のデバイスに返すと, データを複製せずに共有する.
 
 Rust ではクロージャの返り値はすべて同じ型でなければならない.
-型の異なるコマンドを混在させたい場合は, `Box<dyn Operation>` に揃える.
+型の異なるコマンドを混在させたい場合は, `.boxed()` で `BoxedCommand` に揃える (1 フレームのコマンド同士なら `Box<dyn Operation>` でもよい).
 
 <CodeTabs rust={excerpt(sample, "each_boxed")} />

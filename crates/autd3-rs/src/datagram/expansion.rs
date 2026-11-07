@@ -8,11 +8,19 @@ use super::frame::Frames;
 pub struct Expansion<'g> {
     geometry: &'g Geometry,
     frames: &'g mut Frames,
+    device: Option<usize>,
+    next_frame: usize,
 }
 
 impl<'g> Expansion<'g> {
     pub(crate) fn new(geometry: &'g Geometry, frames: &'g mut Frames) -> Self {
-        Self { geometry, frames }
+        let next_frame = frames.len();
+        Self {
+            geometry,
+            frames,
+            device: None,
+            next_frame,
+        }
     }
 
     #[must_use]
@@ -28,21 +36,48 @@ impl<'g> Expansion<'g> {
 
     #[doc(hidden)]
     pub fn push_op<O: Operation>(&mut self, op: &O) -> Result<(), Error> {
-        self.frames.push_encoded(op, self.geometry)
+        let index = self.next_frame;
+        self.next_frame += 1;
+        self.frames.encode_at(index, op, self.geometry, self.device)
     }
 
     #[doc(hidden)]
-    pub fn push_per_device<O, F>(&mut self, assign: F) -> Result<(), Error>
+    pub fn push_each<C, F>(&mut self, mut assign: F) -> Result<(), Error>
     where
-        O: Operation,
-        F: FnMut(&Device) -> Option<O>,
+        C: Command,
+        F: FnMut(&Device) -> Option<C>,
     {
-        let assigned = self.frames.push_per_device(self.geometry, assign)?;
+        let start = self.next_frame;
+        let mut end = start;
+        let mut assigned = 0;
+        for device in self.geometry {
+            if self.device.is_some_and(|only| only != device.idx()) {
+                continue;
+            }
+            let Some(cmd) = assign(device) else {
+                continue;
+            };
+            assigned += 1;
+            let mut per_device = Expansion {
+                geometry: self.geometry,
+                frames: self.frames,
+                device: Some(device.idx()),
+                next_frame: start,
+            };
+            let pushed = per_device.push(cmd).map(|_| ());
+            end = end.max(per_device.next_frame);
+            if pushed.is_err() {
+                self.next_frame = end;
+                return pushed;
+            }
+        }
+        self.next_frame = end;
         tracing::trace!(
-            operation = std::any::type_name::<O>(),
+            command = std::any::type_name::<C>(),
             assigned,
+            frames = end - start,
             num_devices = self.geometry.num_devices(),
-            "encoded per-device operations"
+            "expanded per-device commands"
         );
         Ok(())
     }
