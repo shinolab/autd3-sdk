@@ -131,6 +131,9 @@ namespace AUTD3
         internal static extern int autd3_phase_buffer_copy_to(PhaseBufferHandle buffer, [Out] byte[] dst, UIntPtr len);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_phase_buffer_copy_from(PhaseBufferHandle buffer, ref byte src, UIntPtr len);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_phase_buffer_free(IntPtr buffer);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
@@ -153,6 +156,9 @@ namespace AUTD3
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int autd3_intensity_buffer_copy_to(IntensityBufferHandle buffer, [Out] byte[] dst, UIntPtr len);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int autd3_intensity_buffer_copy_from(IntensityBufferHandle buffer, ref byte src, UIntPtr len);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void autd3_intensity_buffer_free(IntPtr buffer);
@@ -397,6 +403,14 @@ namespace AUTD3
 
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
+        public void CopyFrom(ReadOnlySpan<byte> src)
+        {
+            if (NativePattern.autd3_phase_buffer_copy_from(Handle, ref MemoryMarshal.GetReference(src), (UIntPtr)src.Length) != 0)
+            {
+                throw new Autd3Exception("the source must hold one value for every transducer of the buffer", Autd3ErrorCode.InvalidArgument);
+            }
+        }
+
         public void Dispose() => _handle.Dispose();
     }
 
@@ -468,6 +482,14 @@ namespace AUTD3
         }
 
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+        public void CopyFrom(ReadOnlySpan<byte> src)
+        {
+            if (NativePattern.autd3_intensity_buffer_copy_from(Handle, ref MemoryMarshal.GetReference(src), (UIntPtr)src.Length) != 0)
+            {
+                throw new Autd3Exception("the source must hold one value for every transducer of the buffer", Autd3ErrorCode.InvalidArgument);
+            }
+        }
 
         public void Dispose() => _handle.Dispose();
     }
