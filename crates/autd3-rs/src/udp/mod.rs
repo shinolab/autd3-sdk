@@ -2,6 +2,7 @@ mod channel;
 mod control;
 mod error;
 mod iface;
+mod net;
 mod option;
 mod reply;
 
