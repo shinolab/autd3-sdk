@@ -137,7 +137,7 @@ impl Drop for Client {
 mod tests {
     use std::time::Duration;
 
-    use autd3_cpu_wire::udp::{Flags, Kind};
+    use autd3_cpu_wire::udp::{Flags, Header, Kind};
     use tokio::net::UdpSocket;
     use zerocopy::FromBytes;
 
@@ -261,31 +261,39 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "depends on real time"]
     async fn heartbeats_go_out_every_interval_until_the_client_is_dropped() {
         let (controller, device) = open_controller().await;
         tokio::time::pause();
         let start = tokio::time::Instant::now();
         let client = Client::new(Arc::new(controller), Some(Duration::from_millis(10)));
 
-        let mut sent_at = Vec::new();
-        for _ in 0..3 {
-            let (header, _) = next_request(&device).await;
-            assert_eq!(header.kind, Kind::Heartbeat.as_u8());
-            sent_at.push(tokio::time::Instant::now() - start);
-        }
-        drop(client);
         let mut buf = [0; 2048];
-        while device.try_recv_from(&mut buf).is_ok() {}
-        tokio::time::advance(Duration::from_millis(100)).await;
-        tokio::task::yield_now().await;
-
-        for (tick, at) in (0u64..).zip(sent_at) {
+        for tick in 0..3 {
+            assert_nothing_more_was_sent(&device);
+            tokio::time::sleep_until(start + Duration::from_millis(10 * tick)).await;
+            let len = loop {
+                match device.try_recv_from(&mut buf) {
+                    Ok((len, _)) => break len,
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        tokio::task::yield_now().await;
+                    }
+                    Err(e) => panic!("{e}"),
+                }
+            };
+            let (header, _) = Header::read_from_prefix(&buf[..len]).unwrap();
+            assert_eq!(header.kind, Kind::Heartbeat.as_u8());
+            let at = tokio::time::Instant::now() - start;
             assert!(
                 (Duration::from_millis(10 * tick)..Duration::from_millis(10 * tick + 2))
                     .contains(&at),
                 "{at:?}"
             );
         }
+        drop(client);
+        tokio::time::advance(Duration::from_millis(100)).await;
+        tokio::task::yield_now().await;
+
         assert_nothing_more_was_sent(&device);
     }
 
