@@ -46,7 +46,9 @@ import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
 Rust は `tokio::time::timeout`, Python は `asyncio.wait_for` などの取り消し, C# は `CancellationToken` を使う (取り消すと送受信の処理も止まる).
 途絶とみなすか・その後に送信を止めるか開き直すかもユーザーが決める.
 
-返信を読むメソッドは同時に 1 つしか動かない. Rust ではこれらが `&mut self` を取り, Python と C# では同時に呼ぶと順番待ちになる.
+Rust では返信を読むメソッドが `&mut self` を取るので, 同時に 1 つしか動かない.
+Python と C# では同時に呼んでよい. `send` / `send_streaming` は呼んだ順に送り, 前の呼び出しの返信を待たずに次の呼び出しのフレームを送る (返信待ちの上限は呼び出しをまたいで共有する).
+各呼び出しは自分のフレームの返信が揃った時点で完了する. `read_state` は返信待ちが無くなってから行う.
 各メソッドは送る前に, それまでに届いていて読まれていない返信 (取り消した呼び出しの返信・生存確認の返信) を捨てる.
 
 `TransportOption` の `heartbeat_interval` を指定すると, `Client` はその周期で生存確認を送り続ける ([フェイルセーフ](/autd3-sdk/guide/failsafe/#通信途絶の-failsafe-と生存確認) 参照). 既定では送らない.

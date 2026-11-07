@@ -21,15 +21,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "arrayvec"
+version = "0.7.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
+
+[[package]]
 name = "autd3-binding-rt"
 version = "0.13.0"
 dependencies = [
  "autd3-rs",
+ "autd3-rs-firmware-emulator",
  "thiserror",
  "tokio",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "autd3-cpu-fw"
+version = "0.13.0"
+dependencies = [
+ "autd3-cpu-wire",
+ "bitflags",
+ "const_fn",
+ "etherparse",
+ "zerocopy",
 ]
 
 [[package]]
@@ -125,6 +143,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "autd3-rs-firmware-emulator"
+version = "0.13.0"
+dependencies = [
+ "autd3-cpu-fw",
+ "autd3-cpu-wire",
+ "autd3-rs-core",
+ "tracing",
+ "zerocopy",
+]
+
+[[package]]
 name = "autd3-rs-modulation"
 version = "0.13.0"
 dependencies = [
@@ -180,6 +209,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f079e83a288787bcd14a6aea84cee5c87a67c5a3e660c30f557a3d24761b3527"
 
 [[package]]
+name = "const_fn"
+version = "0.4.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "413d67b29ef1021b4d60f4aa1e925ca031751e213832b4b1d588fae623c05c60"
+
+[[package]]
 name = "crc"
 version = "3.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -214,6 +249,15 @@ name = "deranged"
 version = "0.5.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e9de72ce2ad1f90dc62fa25f0f430ef85eb4b0d8fa0be4f30373bc40a21d28e"
+
+[[package]]
+name = "etherparse"
+version = "0.21.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "17304d06addb3283cdc4bd528e42dd95e73c8ee2d6492ffce415e93660885449"
+dependencies = [
+ "arrayvec",
+]
 
 [[package]]
 name = "glam"
