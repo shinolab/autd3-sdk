@@ -19,10 +19,6 @@ pub(super) const REQUEST_REPLY_WAIT: Duration = Duration::from_millis(200);
 const RESET_SETTLE: Duration = Duration::from_millis(100);
 const DEVICE_TIME_AT_OPEN: SysTime = SysTime::ZERO;
 
-fn deadline_passed(deadline: Option<Instant>) -> bool {
-    deadline.is_some_and(|deadline| Instant::now() >= deadline)
-}
-
 pub(super) async fn collect_responses(
     channel: &Channel,
     kind: Kind,
@@ -211,7 +207,7 @@ impl Enumerator<'_> {
         let mut device_addrs: Vec<SocketAddrV6> = Vec::with_capacity(num_devices);
         loop {
             let Some(discovered) = self.discover().await? else {
-                if !deadline_passed(deadline)
+                if deadline.is_none_or(|deadline| Instant::now() < deadline)
                     && self.release_stale_assignments(&device_addrs).await?
                 {
                     continue;
@@ -219,7 +215,7 @@ impl Enumerator<'_> {
                 if device_addrs.len() >= num_devices {
                     break;
                 }
-                if deadline_passed(deadline) {
+                if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
                     return Err(UdpError::EnumerationTimeout {
                         expected: num_devices,
                         found: device_addrs.len(),
@@ -362,7 +358,7 @@ impl Enumerator<'_> {
             if not_ready.is_empty() {
                 return Ok(());
             }
-            if deadline_passed(deadline) {
+            if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
                 return Err(UdpError::SyncTimeout {
                     not_ready,
                     timeout: self.open_timeout,
