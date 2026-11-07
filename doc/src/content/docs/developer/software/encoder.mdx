@@ -248,30 +248,32 @@ if self.data.is_empty() {
 
 ## each
 
-`each` はデバイス毎に異なる `Operation` を割り当てる.
+`each` はデバイス毎に異なる `Command` を割り当てる.
 
 ```rust
-pub fn each<O, F>(assign: F) -> Each<F>
+pub fn each<C, F>(assign: F) -> Each<F>
 where
-    O: Operation,
-    F: FnMut(&Device) -> Option<O>;
+    C: Command,
+    F: FnMut(&Device) -> Option<C>;
 ```
 
-`Each<F>` も `Command` であり, `expand` で `PerDevice` のフレームを 1 つ作る.
-`assign` が返せるのは 1 フレームの `Operation` だけで, 複数フレームに展開される `Command` (`Modulation` や `each` 自身など) は型で弾かれる.
-型の異なる `Operation` は `Box<dyn Operation + 'a>` に揃える (`Box<dyn Operation>` も `Operation` である).
+`Each<F>` も `Command` である. `assign` は複数フレームに展開される `Command` (`Modulation` や `each` 自身など) も返せる.
+型の異なる `Command` は `.boxed()` で `BoxedCommand` に揃える.
 
 ### フレームへの展開
 
-各デバイスについて `assign` を呼び, 返った `Operation` をそのデバイスの `Datagram` へ `encode` する.
-1 フレームは全デバイスへ同じ `msg_id` で送り, 全デバイスの返信が揃って完了するため, `None` を返したデバイスは `Nop` で埋められる.
-どのデバイスにも割り当てなければフレームを作らない.
+各デバイスについて `assign` を呼び, 返った `Command` を**そのデバイスだけ**に対して, 同じ開始位置から展開する.
+`Expansion` はそのデバイスの番号と次に書くフレームの位置を持ち, `Operation` はそのデバイスの `Datagram` へだけ `encode` される (既にあるフレームには上書き, 無ければ `PerDevice` のフレームを足す).
+こうして各デバイスの k 番目のフレームが 1 つのフレームに重なる.
+1 フレームは全デバイスへ同じ `msg_id` で送り, 全デバイスの返信が揃って完了するため, `None` を返したデバイスとフレーム数の足りないデバイスは `Nop` で埋められる.
+`each` の後のコマンドは, 割り当てたコマンドのうち最も長いものの後ろに続く.
+どのデバイスにも割り当てなければフレームを作らない. 入れ子の `each` は, 外側で割り当てたデバイスについてだけ `assign` を呼ぶ.
 
 ```
-        frame 0
-dev0 |   opA    |
-dev1 |   Nop    |   ← None を返したデバイス
-dev2 |   opB    |
+        frame 0   frame 1   frame 2
+dev0 |  stmA0  |  stmA1  |  stmA2  |
+dev1 |   Nop   |   Nop   |   Nop   |   ← None を返したデバイス
+dev2 |   opB   |   Nop   |   Nop   |   ← 1 フレームのコマンド
 ```
 
 `each` を 2 つ続けて渡した場合, 担当デバイスが重複していなくても別々のフレームになる.

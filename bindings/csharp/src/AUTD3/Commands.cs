@@ -710,44 +710,6 @@ namespace AUTD3
             }
             return new EachCommand(factory);
         }
-
-        internal static IntPtr Compose(Geometry geometry, int len, Func<int, ICommand?> commandAt, Func<IntPtr[], UIntPtr, IntPtr> compose)
-        {
-            var ops = new IntPtr[len];
-            try
-            {
-                for (var i = 0; i < ops.Length; i++)
-                {
-                    var command = commandAt(i);
-                    if (command == null)
-                    {
-                        continue;
-                    }
-                    ops[i] = command.CreateOp(geometry);
-                    if (ops[i] == IntPtr.Zero)
-                    {
-                        throw new Autd3Exception("failed to create the command", Autd3ErrorCode.InvalidArgument);
-                    }
-                }
-                var handle = compose(ops, (UIntPtr)ops.Length);
-                if (handle == IntPtr.Zero)
-                {
-                    throw new Autd3Exception("failed to compose the commands", Autd3ErrorCode.InvalidArgument);
-                }
-                return handle;
-            }
-            catch
-            {
-                foreach (var op in ops)
-                {
-                    if (op != IntPtr.Zero)
-                    {
-                        NativeClient.autd3_op_free(op);
-                    }
-                }
-                throw;
-            }
-        }
     }
 
     internal sealed class EachCommand : ICommand
@@ -759,8 +721,48 @@ namespace AUTD3
             _factory = factory;
         }
 
-        IntPtr ICommand.CreateOp(Geometry geometry) =>
-            Command.Compose(geometry, geometry.NumDevices, i => _factory(geometry[i]), NativeClient.autd3_command_each);
+        IntPtr ICommand.CreateOp(Geometry geometry)
+        {
+            var ops = new IntPtr[geometry.NumDevices];
+            var created = new List<(ICommand Command, IntPtr Op)>();
+            try
+            {
+                for (var i = 0; i < ops.Length; i++)
+                {
+                    var command = _factory(geometry[i]);
+                    if (command == null)
+                    {
+                        continue;
+                    }
+                    var index = created.FindIndex(entry => ReferenceEquals(entry.Command, command));
+                    if (index < 0)
+                    {
+                        var op = command.CreateOp(geometry);
+                        if (op == IntPtr.Zero)
+                        {
+                            throw new Autd3Exception("failed to create the command", Autd3ErrorCode.InvalidArgument);
+                        }
+                        created.Add((command, op));
+                        index = created.Count - 1;
+                    }
+                    ops[i] = created[index].Op;
+                }
+                var handle = NativeClient.autd3_command_each(ops, (UIntPtr)ops.Length);
+                if (handle == IntPtr.Zero)
+                {
+                    throw new Autd3Exception("failed to compose the commands", Autd3ErrorCode.InvalidArgument);
+                }
+                return handle;
+            }
+            catch
+            {
+                foreach (var entry in created)
+                {
+                    NativeClient.autd3_op_free(entry.Op);
+                }
+                throw;
+            }
+        }
     }
 
     internal sealed class SequenceCommand : ICommand
@@ -786,8 +788,38 @@ namespace AUTD3
             return new SequenceCommand(snapshot);
         }
 
-        IntPtr ICommand.CreateOp(Geometry geometry) =>
-            Command.Compose(geometry, _commands.Length, i => _commands[i], NativeClient.autd3_command_sequence);
+        IntPtr ICommand.CreateOp(Geometry geometry)
+        {
+            var ops = new IntPtr[_commands.Length];
+            try
+            {
+                for (var i = 0; i < ops.Length; i++)
+                {
+                    ops[i] = _commands[i].CreateOp(geometry);
+                    if (ops[i] == IntPtr.Zero)
+                    {
+                        throw new Autd3Exception("failed to create the command", Autd3ErrorCode.InvalidArgument);
+                    }
+                }
+                var handle = NativeClient.autd3_command_sequence(ops, (UIntPtr)ops.Length);
+                if (handle == IntPtr.Zero)
+                {
+                    throw new Autd3Exception("failed to compose the commands", Autd3ErrorCode.InvalidArgument);
+                }
+                return handle;
+            }
+            catch
+            {
+                foreach (var op in ops)
+                {
+                    if (op != IntPtr.Zero)
+                    {
+                        NativeClient.autd3_op_free(op);
+                    }
+                }
+                throw;
+            }
+        }
     }
 
 }

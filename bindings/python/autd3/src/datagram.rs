@@ -23,10 +23,6 @@ use crate::{commands, ops, stm};
 
 pub(crate) trait PushCommand: Send + Sync {
     fn push_into(&self, expansion: &mut Expansion<'_>) -> Result<(), autd3_rs::Error>;
-
-    fn as_operation(&self) -> Option<Box<dyn Operation + '_>> {
-        None
-    }
 }
 
 pub(crate) trait PushOperation: Send + Sync {
@@ -46,10 +42,6 @@ impl<O: PushOperation> PushCommand for O {
     fn push_into(&self, expansion: &mut Expansion<'_>) -> Result<(), autd3_rs::Error> {
         expansion.push(self.operation())?;
         Ok(())
-    }
-
-    fn as_operation(&self) -> Option<Box<dyn Operation + '_>> {
-        Some(self.operation())
     }
 }
 
@@ -194,9 +186,7 @@ impl CoreCommand for Expand<'_> {
 impl PushCommand for PerDevice {
     fn push_into(&self, expansion: &mut Expansion<'_>) -> Result<(), autd3_rs::Error> {
         expansion.push(core_each(|device| {
-            self.0[device.idx()]
-                .as_deref()
-                .and_then(PushCommand::as_operation)
+            self.0[device.idx()].as_deref().map(Expand)
         }))?;
         Ok(())
     }
@@ -293,14 +283,7 @@ fn nested_command_of(
                 if assigned.is_none() {
                     return Ok(None);
                 }
-                let command = nested_command_of(&assigned, geometry, depth + 1)?;
-                if command.as_operation().is_none() {
-                    return Err(PyTypeError::new_err(format!(
-                        "each expects a single-frame operation for device {device}, got {}",
-                        assigned.get_type().name()?
-                    )));
-                }
-                Ok(Some(command))
+                nested_command_of(&assigned, geometry, depth + 1).map(Some)
             })
             .collect::<PyResult<Vec<_>>>()?;
         return Ok(Arc::new(PerDevice(commands)));
