@@ -3,7 +3,7 @@ use autd3_rs_core::Interface;
 
 use crate::udp::{Channel, ResolvedEndpoint, UdpError, link_local_interfaces};
 
-use super::enumerate::{REQUEST_REPLY_WAIT, collect_responses};
+use super::enumerate::REQUEST_REPLY_WAIT;
 
 pub(super) async fn resolve(iface: &Interface) -> Result<ResolvedEndpoint, UdpError> {
     async fn devices_respond_at(endpoint: ResolvedEndpoint) -> Result<bool, UdpError> {
@@ -11,7 +11,9 @@ pub(super) async fn resolve(iface: &Interface) -> Result<ResolvedEndpoint, UdpEr
         channel
             .send(endpoint.all_devices_dst, Kind::ReadUnitInfo, 0, [&[], &[]])
             .await?;
-        match collect_responses(&channel, Kind::ReadUnitInfo, 0, REQUEST_REPLY_WAIT, Some(1)).await
+        match channel
+            .collect_responses(Kind::ReadUnitInfo, 0, REQUEST_REPLY_WAIT, Some(1))
+            .await
         {
             Ok(responses) => Ok(!responses.is_empty()),
             Err(UdpError::UnsupportedVersion { .. }) => Ok(true),

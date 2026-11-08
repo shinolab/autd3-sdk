@@ -1,7 +1,7 @@
 use std::io;
 use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6};
 use std::num::NonZeroUsize;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use autd3_cpu_wire::FRAME_BYTES_MAX;
 use autd3_cpu_wire::udp::{Header, Kind};
@@ -9,8 +9,8 @@ use socket2::{Domain, Protocol, Socket, Type};
 use tokio::net::UdpSocket;
 use zerocopy::{FromBytes, IntoBytes};
 
-use super::DeviceReply;
 use super::net::Stamping;
+use super::{ControlResponse, DeviceReply, UdpError};
 
 pub(crate) const RECV_BUFFER_BYTES: usize = 2048;
 
@@ -24,42 +24,6 @@ pub(crate) struct Channel {
     device_addrs: Vec<SocketAddrV6>,
     opened_at: Instant,
     stamping: Stamping,
-}
-
-fn is_oversized(e: &io::Error) -> bool {
-    cfg!(windows) && e.raw_os_error() == Some(10040)
-}
-
-fn accepted_datagram<T>(
-    received: io::Result<(usize, SocketAddr, T)>,
-) -> io::Result<Option<(usize, SocketAddrV6, T)>> {
-    match received {
-        Ok((len, src, _)) if len >= RECV_BUFFER_BYTES => {
-            tracing::debug!(%src, "dropped a datagram that does not fit the receive buffer");
-            Ok(None)
-        }
-        Ok((len, SocketAddr::V6(src), extra)) => Ok(Some((len, src, extra))),
-        Ok(_) => Ok(None),
-        Err(e)
-            if matches!(
-                e.kind(),
-                io::ErrorKind::ConnectionReset
-                    | io::ErrorKind::ConnectionRefused
-                    | io::ErrorKind::HostUnreachable
-                    | io::ErrorKind::NetworkUnreachable
-                    | io::ErrorKind::NetworkDown
-                    | io::ErrorKind::AddrNotAvailable
-                    | io::ErrorKind::Interrupted
-            ) =>
-        {
-            Ok(None)
-        }
-        Err(e) if is_oversized(&e) => {
-            tracing::debug!("dropped a datagram that does not fit the receive buffer");
-            Ok(None)
-        }
-        Err(e) => Err(e),
-    }
 }
 
 impl Channel {
@@ -173,10 +137,42 @@ impl Channel {
         self.socket.readable().await
     }
 
+    fn accepted_datagram<T>(
+        received: io::Result<(usize, SocketAddr, T)>,
+    ) -> io::Result<Option<(usize, SocketAddrV6, T)>> {
+        match received {
+            Ok((len, src, _)) if len >= RECV_BUFFER_BYTES => {
+                tracing::debug!(%src, "dropped a datagram that does not fit the receive buffer");
+                Ok(None)
+            }
+            Ok((len, SocketAddr::V6(src), extra)) => Ok(Some((len, src, extra))),
+            Ok(_) => Ok(None),
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    io::ErrorKind::ConnectionReset
+                        | io::ErrorKind::ConnectionRefused
+                        | io::ErrorKind::HostUnreachable
+                        | io::ErrorKind::NetworkUnreachable
+                        | io::ErrorKind::NetworkDown
+                        | io::ErrorKind::AddrNotAvailable
+                        | io::ErrorKind::Interrupted
+                ) =>
+            {
+                Ok(None)
+            }
+            Err(e) if cfg!(windows) && e.raw_os_error() == Some(10040) => {
+                tracing::debug!("dropped a datagram that does not fit the receive buffer");
+                Ok(None)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
     pub(crate) fn try_recv_from_device(&self) -> io::Result<Option<(DeviceReply, Instant)>> {
         let mut buf = [0; RECV_BUFFER_BYTES];
         loop {
-            let (len, src, received_at) = match accepted_datagram(Stamping::try_recv(
+            let (len, src, received_at) = match Self::accepted_datagram(Stamping::try_recv(
                 &self.stamping,
                 &self.socket,
                 &mut buf,
@@ -203,33 +199,47 @@ impl Channel {
         }
     }
 
-    pub(crate) async fn recv_datagram<'a>(
+    pub(crate) async fn collect_responses(
         &self,
-        buf: &'a mut [u8; RECV_BUFFER_BYTES],
-        deadline: Option<Instant>,
-    ) -> io::Result<Option<(SocketAddrV6, &'a [u8])>> {
-        let (len, src) = loop {
-            match accepted_datagram(
-                self.socket
-                    .try_recv_from(&mut buf[..])
-                    .map(|(len, src)| (len, src, ())),
-            ) {
-                Ok(Some((len, src, ()))) => break (len, src),
-                Ok(None) => {}
-                Err(e) if e.kind() == io::ErrorKind::WouldBlock => match deadline {
-                    Some(deadline) => {
-                        match tokio::time::timeout_at(deadline.into(), self.socket.readable()).await
-                        {
-                            Ok(ready) => ready?,
-                            Err(_) => return Ok(None),
+        kind: Kind,
+        msg_id: u16,
+        wait: Duration,
+        max_responses: Option<usize>,
+    ) -> Result<Vec<ControlResponse>, UdpError> {
+        let deadline = Instant::now().checked_add(wait);
+        let mut responses = Vec::new();
+        let mut buf = [0; RECV_BUFFER_BYTES];
+        while max_responses.is_none_or(|n| responses.len() < n) {
+            let (len, src) = loop {
+                match Self::accepted_datagram(
+                    self.socket
+                        .try_recv_from(&mut buf[..])
+                        .map(|(len, src)| (len, src, ())),
+                ) {
+                    Ok(Some((len, src, ()))) => break (len, src),
+                    Ok(None) => {}
+                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => match deadline {
+                        Some(deadline) => {
+                            match tokio::time::timeout_at(deadline.into(), self.socket.readable())
+                                .await
+                            {
+                                Ok(ready) => ready?,
+                                Err(_) => return Ok(responses),
+                            }
                         }
-                    }
-                    None => self.socket.readable().await?,
-                },
-                Err(e) => return Err(e),
+                        None => self.socket.readable().await?,
+                    },
+                    Err(e) => return Err(e.into()),
+                }
+            };
+            let Ok((header, body)) = Header::read_from_prefix(&buf[..len]) else {
+                continue;
+            };
+            if let Some(response) = ControlResponse::parse(src, header, body, kind, msg_id)? {
+                responses.push(response);
             }
-        };
-        Ok(Some((src, &buf[..len])))
+        }
+        Ok(responses)
     }
 }
 
