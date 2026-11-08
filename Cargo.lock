@@ -219,6 +219,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "autd3-rs-recipes"
+version = "0.13.0"
+dependencies = [
+ "anyhow",
+ "autd3-cpu-wire",
+ "autd3-rs",
+ "clap",
+ "hdrhistogram",
+ "humantime",
+ "libc",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "autd3-rs-udp-emulator"
 version = "0.13.0"
 dependencies = [

@@ -4,7 +4,10 @@ use anyhow::{Result, bail};
 use clap::Subcommand;
 
 use crate::clean::{CleanArgs, Cleaner};
-use crate::util::{cargo_clippy, cargo_fmt, on_path, publish_workspace, run, workspace_members};
+use crate::util::{
+    cargo_bin, cargo_build_args, cargo_clippy, cargo_fmt, on_path, publish_workspace, run,
+    workspace_members,
+};
 
 #[derive(Subcommand)]
 pub(crate) enum RustCmd {
@@ -28,7 +31,7 @@ pub(crate) enum RustCmd {
     Coverage {
         #[arg(
             long,
-            help = "Include `tools/`, which is left out of the coverage by convention"
+            help = "Include `tools/` and `recipes/`, which are left out of the coverage by convention"
         )]
         all: bool,
         #[arg(long, help = "Open the HTML report in a browser")]
@@ -84,6 +87,24 @@ pub(crate) enum RustCmd {
         #[arg(long, short, help = "Print every grep hit instead of the first few")]
         verbose: bool,
     },
+    #[command(about = "Build and run a recipe from `recipes/`")]
+    Recipe {
+        #[arg(help = "Recipe binary name (see `recipes/src/bin/`)")]
+        name: String,
+        #[arg(long, help = "Build the dev profile instead of release")]
+        debug: bool,
+        #[arg(
+            long,
+            help = "Run the recipe through sudo (for recipes that raise their priority)"
+        )]
+        sudo: bool,
+        #[arg(
+            trailing_var_arg = true,
+            allow_hyphen_values = true,
+            help = "Arguments forwarded to the recipe"
+        )]
+        args: Vec<String>,
+    },
     #[command(about = "Remove the `crates/` workspace build outputs")]
     Clean(CleanArgs),
 }
@@ -121,7 +142,7 @@ pub(crate) fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
             let filter: &[&str] = if *all {
                 &[]
             } else {
-                &["--ignore-filename-regex", "/tools/"]
+                &["--ignore-filename-regex", "/(tools|recipes)/"]
             };
             coverage(root, &test_args, filter, *open)
         }
@@ -198,6 +219,12 @@ pub(crate) fn run_rust(root: &Path, cmd: &RustCmd) -> Result<()> {
         RustCmd::Deadcode { reuse, verbose } => {
             crate::deadcode::run_deadcode(root, *reuse, *verbose)
         }
+        RustCmd::Recipe {
+            name,
+            debug,
+            sudo,
+            args,
+        } => run_recipe(root, name, *debug, *sudo, args),
         RustCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
 }
@@ -222,4 +249,21 @@ pub(crate) fn coverage(dir: &Path, test_args: &[&str], filter: &[&str], open: bo
     let mut summary_args = vec!["llvm-cov", "report", "--summary-only"];
     summary_args.extend_from_slice(filter);
     run("cargo", summary_args, dir)
+}
+
+fn run_recipe(root: &Path, name: &str, debug: bool, sudo: bool, args: &[String]) -> Result<()> {
+    let mut build_args = cargo_build_args("autd3-rs-recipes", None, debug);
+    build_args.extend(["--bin", name]);
+    run("cargo", build_args, root)?;
+
+    let bin = cargo_bin(root, None, debug, name);
+    if sudo {
+        run(
+            "sudo",
+            std::iter::once(bin.into_os_string()).chain(args.iter().map(Into::into)),
+            root,
+        )
+    } else {
+        run(&bin.to_string_lossy(), args, root)
+    }
 }

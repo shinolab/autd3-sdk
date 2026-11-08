@@ -1,0 +1,33 @@
+[package]
+name = "autd3-rs-recipes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Recipes for autd3-rs"
+publish = false
+
+[dependencies]
+autd3-rs.workspace = true
+autd3-cpu-wire.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+humantime.workspace = true
+hdrhistogram.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tokio = { workspace = true, features = [
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "signal",
+    "sync",
+    "time",
+] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc.workspace = true
+
+[lints]
+workspace = true
