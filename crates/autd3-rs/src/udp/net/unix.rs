@@ -25,8 +25,8 @@ pub(super) fn recv_with_kernel_stamp(
             Some(&mut cmsg),
             MsgFlags::empty(),
         )?;
-        let now = Instant::now();
         let realtime_now = clock_gettime(ClockId::CLOCK_REALTIME)?.num_nanoseconds();
+        let now = Instant::now();
         let queued_ns = msg
             .cmsgs()?
             .find_map(|cmsg| kernel_arrival_ns(&cmsg))

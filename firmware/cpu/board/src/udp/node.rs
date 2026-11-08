@@ -5,6 +5,7 @@ use autd3_cpu_fw::net::{
     self, Endpoint, Ipv6, Mac, NDP_HOP_LIMIT, Packet, UDP_PAYLOAD_OFFSET, Udp,
 };
 use autd3_cpu_fw::proto::{FRAME_BYTES_MAX, FrameHeader, REPLY_DATA_BYTES_MAX, Reply};
+use autd3_cpu_fw::ptp::clock::complete;
 use autd3_cpu_fw::udp::{
     ALL_NODES, AssignIdBody, Flags, FrameReply, Header, Kind, PORT, PROTOCOL_VERSION,
     RESET_ID_CLOSE_DELAY_MS, Role, SetTimeBody, Status, UNASSIGNED_ID, UnblockReply, UnitInfo,
@@ -155,7 +156,8 @@ impl Node {
         };
         let state = crate::cpu().reply();
         let failsafe_active = crate::cpu().failsafe_active();
-        self.frame_reply(tx, &reply_to, &state, failsafe_active);
+        let received_at = crate::cpu().received_at();
+        self.frame_reply(tx, &reply_to, &state, received_at, failsafe_active);
     }
 
     pub(crate) fn on_frame(&mut self, tx: &mut Tx, now_ms: u32, frame: &[u8], rx: RxMeta) {
@@ -220,7 +222,7 @@ impl Node {
         let unicast = udp.dst_ip == self.addr;
         match Kind::from_u8(header.kind) {
             Some(kind @ (Kind::Frame | Kind::Heartbeat)) => {
-                self.frame_or_heartbeat(tx, &reply, now_ms, kind, unicast, body);
+                self.frame_or_heartbeat(tx, &reply, now_ms, kind, unicast, body, rx);
             }
             Some(Kind::ReadUnitInfo) => self.read_unit_info(tx, &reply),
             Some(Kind::ResetId) => self.reset_id(tx, &reply, now_ms),
@@ -235,6 +237,7 @@ impl Node {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn frame_or_heartbeat(
         &mut self,
         tx: &mut Tx,
@@ -243,6 +246,7 @@ impl Node {
         kind: Kind,
         unicast: bool,
         body: &[u8],
+        rx: RxMeta,
     ) {
         let is_frame = matches!(kind, Kind::Frame);
         if !self.is_assigned()
@@ -255,12 +259,13 @@ impl Node {
         self.host = Some((reply.port, reply.to));
         self.last_host_frame_ms = Some(now_ms);
         crate::cpu().publish_host_idle(Some(0));
+        let received_at = ethsw::capture().map_or(0, |now| complete(now, rx.timestamp_ns));
         if is_frame {
-            crate::cpu().recv_frame(body, reply.msg_id);
+            crate::cpu().recv_frame(body, reply.msg_id, received_at);
         } else {
             let state = crate::cpu().reply();
             let failsafe_active = crate::cpu().failsafe_active();
-            self.frame_reply(tx, reply, &state, failsafe_active);
+            self.frame_reply(tx, reply, &state, received_at, failsafe_active);
         }
     }
 
@@ -350,13 +355,21 @@ impl Node {
         self.status(tx, reply, status);
     }
 
-    fn frame_reply(&mut self, tx: &mut Tx, reply: &ReplyTo, state: &Reply, failsafe_active: bool) {
+    fn frame_reply(
+        &mut self,
+        tx: &mut Tx,
+        reply: &ReplyTo,
+        state: &Reply,
+        received_at: u64,
+        failsafe_active: bool,
+    ) {
         let head = FrameReply {
             reserved: 0,
             status: state.status.as_u8(),
             flags: self.flags(failsafe_active),
             unit_id: self.unit_id,
             sys_time: U64::new(ethsw::capture().unwrap_or(0)),
+            rx_sys_time: U64::new(received_at),
             telemetry: crate::cpu().telemetry(),
             fpga_state: crate::cpu().fpga_state(),
         };

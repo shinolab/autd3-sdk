@@ -102,6 +102,7 @@ mod tests {
             flags,
             unit_id: 0,
             sys_time: 0,
+            rx_sys_time: 0,
             telemetry: Telemetry::default(),
             fpga_state: FpgaState::default(),
             data: data.to_vec(),

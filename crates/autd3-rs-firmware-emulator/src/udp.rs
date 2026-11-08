@@ -263,7 +263,7 @@ impl Chain {
         unit.device.fpga_mut().update_with_sys_time(bus);
     }
 
-    fn frame_reply(&self, index: usize, dst: SocketAddr, header: Header) {
+    fn frame_reply(&self, index: usize, dst: SocketAddr, header: Header, received_at: u64) {
         let Some(unit_id) = self.units[index].id else {
             return;
         };
@@ -274,6 +274,7 @@ impl Chain {
             flags: self.flags(index),
             unit_id,
             sys_time: U64::new(self.device_now()),
+            rx_sys_time: U64::new(received_at),
             telemetry: self.units[index].device.cpu.telemetry(),
             fpga_state: self.units[index].device.cpu.fpga_state(),
         };
@@ -290,8 +291,9 @@ impl Chain {
         if self.units[index].id.is_none() {
             return;
         }
+        let received_at = self.device_now();
         self.note_host_contact(index, src, now);
-        self.frame_reply(index, src, header);
+        self.frame_reply(index, src, header, received_at);
     }
 
     fn frame(&mut self, index: usize, src: SocketAddr, header: Header, frame: &[u8], now: Instant) {
@@ -307,11 +309,14 @@ impl Chain {
             frame_header.exec_at = 0.into();
         }
         let body = &*body;
+        let received_at = self.device_now();
         self.note_host_contact(index, src, now);
         if self.units[index].id.is_none() {
             return;
         }
-        self.units[index].device.recv(body, header.msg_id.get());
+        self.units[index]
+            .device
+            .recv(body, header.msg_id.get(), received_at);
         loop {
             match self.units[index].device.process_one() {
                 Drained::Empty => break,
@@ -320,7 +325,8 @@ impl Chain {
                         msg_id: zerocopy::little_endian::U16::new(msg_id),
                         ..header
                     };
-                    self.frame_reply(index, src, header);
+                    let received_at = self.units[index].device.cpu.received_at();
+                    self.frame_reply(index, src, header, received_at);
                 }
             }
         }

@@ -85,6 +85,7 @@ pub(super) struct Slot {
     pub(super) len: Cell<u16>,
     pub(super) payload: RefCell<SlotPayload>,
     pub(super) header: Cell<FrameHeader>,
+    pub(super) received_at: Cell<u64>,
     pub(super) reply: Cell<Reply>,
 }
 
@@ -99,11 +100,18 @@ impl Slot {
                 cmd: 0,
                 exec_at: U32::ZERO,
             }),
+            received_at: Cell::new(0),
             reply: Cell::new(Reply::EMPTY),
         }
     }
 
-    pub(super) fn store(&self, header: FrameHeader, payload: &[u8], msg_id: u16) -> bool {
+    pub(super) fn store(
+        &self,
+        header: FrameHeader,
+        payload: &[u8],
+        msg_id: u16,
+        received_at: u64,
+    ) -> bool {
         let Ok(mut dst) = self.payload.try_borrow_mut() else {
             return false;
         };
@@ -112,6 +120,7 @@ impl Slot {
         self.len.set(len as u16);
         self.msg_id.set(msg_id);
         self.header.set(header);
+        self.received_at.set(received_at);
         true
     }
 }

@@ -90,9 +90,17 @@ impl Controller {
                 device: reply.device,
             });
         }
-        if reply.device == GRANDMASTER_UNIT_ID && reply.sys_time != 0 {
-            self.device_clock()
-                .observe(SysTime::from_nanos(reply.sys_time), received_at);
+        if reply.device == GRANDMASTER_UNIT_ID {
+            let mut device_clock = self.device_clock();
+            if reply.sys_time != 0 {
+                device_clock.observe(SysTime::from_nanos(reply.sys_time), received_at);
+            }
+            if reply.rx_sys_time != 0 {
+                device_clock.observe_received_by_grandmaster(
+                    reply.msg_id,
+                    SysTime::from_nanos(reply.rx_sys_time),
+                );
+            }
         }
         Ok(())
     }
@@ -124,6 +132,10 @@ impl Controller {
             .wrapping_add(1);
         let mut first_failure = None;
         for device in (0..self.channel.num_devices()).rev() {
+            if device == GRANDMASTER_UNIT_ID {
+                self.device_clock()
+                    .record_sent_to_grandmaster(msg_id, Instant::now());
+            }
             if let Err(source) = self
                 .channel
                 .send_to_device(device, kind, msg_id, body_for_device(device))
@@ -158,7 +170,11 @@ impl Controller {
             }
             .into());
         }
-        let exec_at = exec_at::schedule(exec, self.device_clock().now(Instant::now()))?;
+        let now = match exec {
+            ExecAt::Immediate => None,
+            ExecAt::Lead(_) | ExecAt::At(_) => self.device_clock().now(Instant::now()),
+        };
+        let exec_at = exec_at::schedule(exec, now)?;
         let mut headers = [FrameHeader::new_zeroed(); MAX_DEVICES];
         for (header, datagram) in headers.iter_mut().zip(datagrams) {
             *header = FrameHeader {
@@ -318,6 +334,7 @@ pub(crate) mod tests {
             flags,
             unit_id: 0,
             sys_time: U64::new(0),
+            rx_sys_time: U64::new(0),
             telemetry: autd3_cpu_wire::payload::Telemetry {
                 exec_late: 6.into(),
                 ..Default::default()
@@ -505,6 +522,7 @@ pub(crate) mod tests {
                 flags,
                 unit_id: 0,
                 sys_time: 0,
+                rx_sys_time: 0,
                 telemetry: Telemetry {
                     exec_late: 6,
                     ..Telemetry::default()
@@ -526,6 +544,7 @@ pub(crate) mod tests {
             flags: Flags::ASSIGNED,
             unit_id: 0,
             sys_time: U64::new(7_000_000_000),
+            rx_sys_time: U64::new(6_999_000_000),
             telemetry: autd3_cpu_wire::payload::Telemetry::default(),
             fpga_state: 0,
         };
@@ -543,8 +562,38 @@ pub(crate) mod tests {
 
         controller.discard_unread_replies().unwrap();
 
-        assert!(controller.device_time_now().unwrap() >= SysTime::from_nanos(7_000_000_000));
+        assert!(controller.device_time_now().unwrap() >= SysTime::from_nanos(6_999_000_000));
         assert_eq!(controller.channel.try_recv_from_device().unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn a_grandmaster_reply_to_a_recorded_send_bounds_the_offset_from_above() {
+        let (controller, device) = open_controller().await;
+        for (rx_sys_time, upper_bounds) in [(0, 0), (6_999_000_000, 1)] {
+            let msg_id = controller.send_heartbeat().await.unwrap();
+            let (_, host) = next_request(&device).await;
+            let head = FrameReply {
+                reserved: 0,
+                status: 0,
+                flags: Flags::ASSIGNED,
+                unit_id: 0,
+                sys_time: U64::new(7_000_000_000),
+                rx_sys_time: U64::new(rx_sys_time),
+                telemetry: autd3_cpu_wire::payload::Telemetry::default(),
+                fpga_state: 0,
+            };
+            let datagram = [
+                Header::new(Kind::Heartbeat, msg_id).as_bytes(),
+                head.as_bytes(),
+            ]
+            .concat();
+            device.send_to(&datagram, host).await.unwrap();
+            controller.recv().await.unwrap();
+            assert_eq!(
+                controller.device_clock().upper_bound_buckets(),
+                upper_bounds
+            );
+        }
     }
 
     #[tokio::test]
@@ -558,6 +607,7 @@ pub(crate) mod tests {
             flags: Flags::ASSIGNED,
             unit_id: 1,
             sys_time: U64::new(0),
+            rx_sys_time: U64::new(0),
             telemetry: autd3_cpu_wire::payload::Telemetry::default(),
             fpga_state: 0,
         };
