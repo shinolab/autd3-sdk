@@ -1,16 +1,12 @@
 use std::net::SocketAddrV6;
 use std::time::{Duration, Instant};
 
-use autd3_cpu_wire::udp::{
-    AssignIdBody, Flags, Header, Kind, Role, SetTimeBody, UnblockReply, UnitInfo,
-};
+use autd3_cpu_wire::udp::{AssignIdBody, Flags, Kind, Role, SetTimeBody, UnblockReply, UnitInfo};
 use autd3_rs_core::value::SysTime;
 use zerocopy::little_endian::U64;
 use zerocopy::{FromBytes, IntoBytes};
 
-use crate::udp::{
-    Channel, ControlResponse, RECV_BUFFER_BYTES, TransportOption, UdpError, same_endpoint,
-};
+use crate::udp::{Channel, ControlResponse, TransportOption, UdpError, same_endpoint};
 
 use crate::controller::GRANDMASTER_UNIT_ID;
 use crate::controller::device_clock::DeviceClock;
@@ -18,30 +14,6 @@ use crate::controller::device_clock::DeviceClock;
 pub(super) const REQUEST_REPLY_WAIT: Duration = Duration::from_millis(200);
 const RESET_SETTLE: Duration = Duration::from_millis(100);
 const DEVICE_TIME_AT_OPEN: SysTime = SysTime::ZERO;
-
-pub(super) async fn collect_responses(
-    channel: &Channel,
-    kind: Kind,
-    msg_id: u16,
-    wait: Duration,
-    max_responses: Option<usize>,
-) -> Result<Vec<ControlResponse>, UdpError> {
-    let deadline = Instant::now().checked_add(wait);
-    let mut responses = Vec::new();
-    let mut buf = [0; RECV_BUFFER_BYTES];
-    while max_responses.is_none_or(|n| responses.len() < n) {
-        let Some((src, datagram)) = channel.recv_datagram(&mut buf, deadline).await? else {
-            break;
-        };
-        let Ok((header, body)) = Header::read_from_prefix(datagram) else {
-            continue;
-        };
-        if let Some(response) = ControlResponse::parse(src, header, body, kind, msg_id)? {
-            responses.push(response);
-        }
-    }
-    Ok(responses)
-}
 
 struct Enumerator<'a> {
     channel: &'a Channel,
@@ -72,14 +44,9 @@ impl Enumerator<'_> {
         let msg_id = self
             .send_request(self.channel.all_devices_dst(), kind, &[])
             .await?;
-        collect_responses(
-            self.channel,
-            kind,
-            msg_id,
-            REQUEST_REPLY_WAIT,
-            max_responses,
-        )
-        .await
+        self.channel
+            .collect_responses(kind, msg_id, REQUEST_REPLY_WAIT, max_responses)
+            .await
     }
 
     async fn request_once(
@@ -89,11 +56,11 @@ impl Enumerator<'_> {
         body: &[u8],
     ) -> Result<Option<ControlResponse>, UdpError> {
         let msg_id = self.send_request(dst, kind, body).await?;
-        Ok(
-            collect_responses(self.channel, kind, msg_id, REQUEST_REPLY_WAIT, Some(1))
-                .await?
-                .pop(),
-        )
+        Ok(self
+            .channel
+            .collect_responses(kind, msg_id, REQUEST_REPLY_WAIT, Some(1))
+            .await?
+            .pop())
     }
 
     async fn exchange_with_retries(
@@ -121,25 +88,18 @@ impl Enumerator<'_> {
         let msg_id = self
             .send_request(self.channel.all_devices_dst(), Kind::Discover, &[])
             .await?;
-        let Some(first) = collect_responses(
-            self.channel,
-            Kind::Discover,
-            msg_id,
-            REQUEST_REPLY_WAIT,
-            Some(1),
-        )
-        .await?
-        .pop() else {
+        let Some(first) = self
+            .channel
+            .collect_responses(Kind::Discover, msg_id, REQUEST_REPLY_WAIT, Some(1))
+            .await?
+            .pop()
+        else {
             return Ok(None);
         };
-        let others = collect_responses(
-            self.channel,
-            Kind::Discover,
-            msg_id,
-            Duration::from_millis(10),
-            None,
-        )
-        .await?;
+        let others = self
+            .channel
+            .collect_responses(Kind::Discover, msg_id, Duration::from_millis(10), None)
+            .await?;
         if !others.is_empty() {
             return Err(UdpError::DownstreamNotClosed {
                 replies: others.len() + 1,
