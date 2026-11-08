@@ -2383,6 +2383,7 @@ mod tests {
             flags: autd3_rs::udp::Flags::ASSIGNED | autd3_rs::udp::Flags::FAILSAFE,
             unit_id: 3,
             sys_time: 0x0102_0304_0506_0708,
+            rx_sys_time: 0,
             telemetry,
             fpga_state: FpgaState(0x42),
             data: vec![1, 2, 3],

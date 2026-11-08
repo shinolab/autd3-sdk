@@ -85,9 +85,9 @@ impl Stamping {
                     Ok(())
                 })?
             };
-            let now = Instant::now();
             let mut qpc_now = 0;
             unsafe { QueryPerformanceCounter(&raw mut qpc_now) };
+            let now = Instant::now();
             let queued_ns = control
                 .as_bytes()
                 .get(..usize::try_from(control_len).unwrap_or(usize::MAX))

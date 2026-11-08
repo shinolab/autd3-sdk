@@ -318,6 +318,7 @@ impl Enumerator<'_> {
         let body = SetTimeBody {
             sys_time: U64::new(DEVICE_TIME_AT_OPEN.sys_time()),
         };
+        let sent_at = Instant::now();
         let response = self
             .exchange_with_retries(grandmaster, Kind::SetTime, body.as_bytes())
             .await?
@@ -326,6 +327,7 @@ impl Enumerator<'_> {
                 unit_id: GRANDMASTER_UNIT_ID,
             })?;
         response.check_status(Kind::SetTime, GRANDMASTER_UNIT_ID)?;
+        device_clock.observe_reached_after(DEVICE_TIME_AT_OPEN, sent_at);
         device_clock.observe(DEVICE_TIME_AT_OPEN, Instant::now());
         Ok(())
     }

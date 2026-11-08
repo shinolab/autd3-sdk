@@ -14,9 +14,8 @@ struct OffsetSample {
 }
 
 #[derive(Default)]
-pub(crate) struct DeviceClock {
-    origin: Option<Instant>,
-    bucket_maxima: VecDeque<OffsetSample>,
+struct BucketMaxima {
+    samples: VecDeque<OffsetSample>,
 }
 
 fn cross(o: OffsetSample, a: OffsetSample, b: OffsetSample) -> i128 {
@@ -24,61 +23,173 @@ fn cross(o: OffsetSample, a: OffsetSample, b: OffsetSample) -> i128 {
         - (a.offset_ns - o.offset_ns) * (b.host_ns - o.host_ns)
 }
 
-impl DeviceClock {
-    fn host_ns(origin: Instant, host: Instant) -> i128 {
-        i128::try_from(host.saturating_duration_since(origin).as_nanos()).unwrap_or(i128::MAX)
-    }
-
-    pub(crate) fn observe(&mut self, device: SysTime, host: Instant) {
-        let host_ns = Self::host_ns(*self.origin.get_or_insert(host), host);
-        let sample = OffsetSample {
-            host_ns,
-            offset_ns: i128::from(device.sys_time()) - host_ns,
-        };
-        match self.bucket_maxima.back_mut() {
-            Some(last) if last.host_ns / BUCKET_NS >= host_ns / BUCKET_NS => {
+impl BucketMaxima {
+    fn insert(&mut self, sample: OffsetSample) {
+        let bucket = |s: &OffsetSample| s.host_ns / BUCKET_NS;
+        match self.samples.back_mut() {
+            Some(last) if bucket(last) == bucket(&sample) => {
                 if sample.offset_ns > last.offset_ns {
                     *last = sample;
                 }
             }
-            _ => self.bucket_maxima.push_back(sample),
+            Some(last) if bucket(last) > bucket(&sample) => {}
+            _ => self.samples.push_back(sample),
         }
+    }
+
+    fn forget_older_than_window_before(&mut self, latest_host_ns: i128) {
         while self
-            .bucket_maxima
+            .samples
             .front()
-            .is_some_and(|oldest| oldest.host_ns + WINDOW_NS < host_ns)
+            .is_some_and(|oldest| oldest.host_ns + WINDOW_NS < latest_host_ns)
         {
-            self.bucket_maxima.pop_front();
+            self.samples.pop_front();
         }
+    }
+
+    fn spans_rate_window(&self) -> bool {
+        match (self.samples.front(), self.samples.back()) {
+            (Some(first), Some(last)) => last.host_ns - first.host_ns >= MIN_SPAN_FOR_RATE_NS,
+            _ => false,
+        }
+    }
+
+    fn upper_hull(&self) -> Vec<OffsetSample> {
+        let mut hull: Vec<OffsetSample> = Vec::with_capacity(self.samples.len());
+        for &sample in &self.samples {
+            while let [.., o, a] = hull[..]
+                && cross(o, a, sample) >= 0
+            {
+                hull.pop();
+            }
+            hull.push(sample);
+        }
+        hull
+    }
+}
+
+fn centre_of_widest_band(
+    lower_bound_hull: &[OffsetSample],
+    upper_bound_hull: &[OffsetSample],
+    host_ns: i128,
+) -> Option<i128> {
+    let scaled_at = |(rise, run): (i128, i128), s: &OffsetSample| {
+        s.offset_ns * run + rise * (host_ns - s.host_ns)
+    };
+    lower_bound_hull
+        .array_windows::<2>()
+        .chain(upper_bound_hull.array_windows::<2>())
+        .filter_map(|[a, b]| {
+            let slope = (b.offset_ns - a.offset_ns, b.host_ns - a.host_ns);
+            let ceiling = upper_bound_hull.iter().map(|s| scaled_at(slope, s)).min()?;
+            let floor = lower_bound_hull.iter().map(|s| scaled_at(slope, s)).max()?;
+            Some((ceiling, floor, slope.1))
+        })
+        .max_by(|&(c1, f1, run1), &(c2, f2, run2)| ((c1 - f1) * run2).cmp(&((c2 - f2) * run1)))
+        .map(|(ceiling, floor, run)| (ceiling + floor) / (2 * run))
+}
+
+fn negated(samples: Vec<OffsetSample>) -> Vec<OffsetSample> {
+    samples
+        .into_iter()
+        .map(|s| OffsetSample {
+            host_ns: s.host_ns,
+            offset_ns: -s.offset_ns,
+        })
+        .collect()
+}
+
+#[derive(Default)]
+pub(crate) struct DeviceClock {
+    origin: Option<Instant>,
+    lower_bounds: BucketMaxima,
+    negated_upper_bounds: BucketMaxima,
+    sent_to_grandmaster: [Option<(u16, Instant)>; 32],
+}
+
+impl DeviceClock {
+    fn host_ns(&mut self, host: Instant) -> i128 {
+        let origin = *self.origin.get_or_insert(host);
+        i128::try_from(host.saturating_duration_since(origin).as_nanos()).unwrap_or(i128::MAX)
+    }
+
+    fn sent_slot(&mut self, msg_id: u16) -> &mut Option<(u16, Instant)> {
+        let len = self.sent_to_grandmaster.len();
+        &mut self.sent_to_grandmaster[usize::from(msg_id) % len]
+    }
+
+    fn forget_samples_outside_window(&mut self) {
+        let latest = |bounds: &BucketMaxima| bounds.samples.back().map(|s| s.host_ns);
+        if let Some(latest_host_ns) =
+            latest(&self.lower_bounds).max(latest(&self.negated_upper_bounds))
+        {
+            self.lower_bounds
+                .forget_older_than_window_before(latest_host_ns);
+            self.negated_upper_bounds
+                .forget_older_than_window_before(latest_host_ns);
+        }
+    }
+
+    pub(crate) fn observe(&mut self, device: SysTime, host: Instant) {
+        let host_ns = self.host_ns(host);
+        self.lower_bounds.insert(OffsetSample {
+            host_ns,
+            offset_ns: i128::from(device.sys_time()) - host_ns,
+        });
+        self.forget_samples_outside_window();
+    }
+
+    pub(crate) fn record_sent_to_grandmaster(&mut self, msg_id: u16, host: Instant) {
+        self.origin.get_or_insert(host);
+        *self.sent_slot(msg_id) = Some((msg_id, host));
+    }
+
+    pub(crate) fn observe_received_by_grandmaster(&mut self, msg_id: u16, device: SysTime) {
+        let Some((_, sent_at)) = self.sent_slot(msg_id).filter(|&(id, _)| id == msg_id) else {
+            return;
+        };
+        self.observe_reached_after(device, sent_at);
+    }
+
+    pub(crate) fn observe_reached_after(&mut self, device: SysTime, sent_at: Instant) {
+        let host_ns = self.host_ns(sent_at);
+        self.negated_upper_bounds.insert(OffsetSample {
+            host_ns,
+            offset_ns: host_ns - i128::from(device.sys_time()),
+        });
+        self.forget_samples_outside_window();
     }
 
     fn offset_at(&self, host_ns: i128) -> Option<i128> {
-        let (&first, &last) = (self.bucket_maxima.front()?, self.bucket_maxima.back()?);
-        if last.host_ns - first.host_ns < MIN_SPAN_FOR_RATE_NS {
-            return Some(last.offset_ns);
+        let lower = &self.lower_bounds;
+        let negated_upper = &self.negated_upper_bounds;
+        let (first_lower, last_lower) = (lower.samples.front()?, lower.samples.back()?);
+        let (first_upper, last_upper) = (
+            negated_upper.samples.front()?,
+            negated_upper.samples.back()?,
+        );
+        let interleaved =
+            first_lower.host_ns < last_upper.host_ns && first_upper.host_ns < last_lower.host_ns;
+        if lower.spans_rate_window() && negated_upper.spans_rate_window() && interleaved {
+            return centre_of_widest_band(
+                &lower.upper_hull(),
+                &negated(negated_upper.upper_hull()),
+                host_ns,
+            );
         }
-        let mut upper_hull: Vec<OffsetSample> = Vec::with_capacity(self.bucket_maxima.len());
-        for &sample in &self.bucket_maxima {
-            while let [.., o, a] = upper_hull[..]
-                && cross(o, a, sample) >= 0
-            {
-                upper_hull.pop();
-            }
-            upper_hull.push(sample);
-        }
-        let mean_host_ns = self.bucket_maxima.iter().map(|s| s.host_ns).sum::<i128>()
-            / i128::try_from(self.bucket_maxima.len()).ok()?;
-        let [a, b] = *upper_hull
-            .array_windows::<2>()
-            .find(|[_, b]| b.host_ns >= mean_host_ns)?;
-        Some(
-            a.offset_ns
-                + (b.offset_ns - a.offset_ns) * (host_ns - a.host_ns) / (b.host_ns - a.host_ns),
-        )
+        ((last_lower.host_ns - last_upper.host_ns).abs() < MIN_SPAN_FOR_RATE_NS)
+            .then(|| (last_lower.offset_ns - last_upper.offset_ns) / 2)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn upper_bound_buckets(&self) -> usize {
+        self.negated_upper_bounds.samples.len()
     }
 
     pub(crate) fn now(&self, host: Instant) -> Option<SysTime> {
-        let host_ns = Self::host_ns(self.origin?, host);
+        let origin = self.origin?;
+        let host_ns =
+            i128::try_from(host.saturating_duration_since(origin).as_nanos()).unwrap_or(i128::MAX);
         let device_ns = host_ns + self.offset_at(host_ns)?;
         Some(SysTime::from_nanos(
             u64::try_from(device_ns.max(0)).unwrap_or(u64::MAX),
@@ -93,9 +204,29 @@ mod tests {
     use super::*;
 
     const ELAPSED: Duration = Duration::from_millis(3);
+    const FLIGHT: Duration = Duration::from_micros(20);
+    const D: u64 = 5_000_000_000;
 
     fn device(ns: u64) -> SysTime {
         SysTime::from_nanos(ns)
+    }
+
+    fn device_at(ms: u64) -> SysTime {
+        device(1_000_000_000 + ms * 1_000_000 + ms * 100)
+    }
+
+    fn round_trip(
+        clock: &mut DeviceClock,
+        msg_id: u16,
+        sent: Instant,
+        device_at_sent: SysTime,
+        out: Duration,
+        back: Duration,
+    ) {
+        let received_by_device = device_at_sent + out;
+        clock.record_sent_to_grandmaster(msg_id, sent);
+        clock.observe(received_by_device, sent + out + back);
+        clock.observe_received_by_grandmaster(msg_id, received_by_device);
     }
 
     #[test]
@@ -104,61 +235,161 @@ mod tests {
     }
 
     #[test]
-    fn now_runs_on_from_the_observed_device_time() {
+    fn lower_bounds_alone_give_no_device_time() {
         let host = Instant::now();
         let mut clock = DeviceClock::default();
-        clock.observe(device(5_000_000_000), host);
-        assert_eq!(clock.now(host), Some(device(5_000_000_000)));
+        clock.observe(device(D), host);
+        assert_eq!(clock.now(host), None);
+    }
+
+    #[test]
+    fn a_round_trip_centres_the_estimate_between_its_bounds() {
+        let host = Instant::now();
+        let mut clock = DeviceClock::default();
+        round_trip(&mut clock, 1, host, device(D), FLIGHT, FLIGHT);
+        assert_eq!(clock.now(host + FLIGHT * 2), Some(device(D) + FLIGHT * 2));
+    }
+
+    #[test]
+    fn now_runs_on_from_a_round_trip() {
+        let host = Instant::now();
+        let mut clock = DeviceClock::default();
+        round_trip(&mut clock, 1, host, device(D), FLIGHT, FLIGHT);
         assert_eq!(
-            clock.now(host + ELAPSED),
-            Some(device(5_000_000_000) + ELAPSED)
+            clock.now(host + FLIGHT * 2 + ELAPSED),
+            Some(device(D) + FLIGHT * 2 + ELAPSED)
         );
     }
 
     #[test]
-    fn a_reply_read_late_does_not_pull_the_estimate_back() {
+    fn a_host_time_before_the_first_sample_reads_the_device_time_there() {
         let host = Instant::now();
         let mut clock = DeviceClock::default();
-        clock.observe(device(5_000_000_000), host);
-        clock.observe(device(5_000_000_000), host + ELAPSED);
+        round_trip(&mut clock, 1, host + ELAPSED, device(D), FLIGHT, FLIGHT);
+        assert_eq!(clock.now(host), Some(device(D)));
+    }
+
+    #[test]
+    fn a_request_or_reply_delayed_on_the_way_does_not_move_the_estimate() {
+        let host = Instant::now();
+        let mut clock = DeviceClock::default();
+        round_trip(&mut clock, 1, host, device(D), FLIGHT, FLIGHT);
+        round_trip(
+            &mut clock,
+            2,
+            host + ELAPSED,
+            device(D) + ELAPSED,
+            FLIGHT * 5,
+            FLIGHT * 5,
+        );
         assert_eq!(
-            clock.now(host + ELAPSED),
-            Some(device(5_000_000_000) + ELAPSED)
+            clock.now(host + ELAPSED + FLIGHT * 10),
+            Some(device(D) + ELAPSED + FLIGHT * 10)
         );
     }
 
     #[test]
-    fn a_host_time_before_the_sample_reads_the_sampled_device_time() {
+    fn the_rate_is_taken_from_both_bounds_past_delayed_round_trips() {
         let host = Instant::now();
         let mut clock = DeviceClock::default();
-        clock.observe(device(1_000), host + ELAPSED);
-        assert_eq!(clock.now(host), Some(device(1_000)));
-    }
-
-    #[test]
-    fn the_rate_of_the_device_is_extrapolated_past_delayed_samples() {
-        let host = Instant::now();
-        let device_at = |ms: u64| device(1_000_000_000 + ms * 1_000_000 + ms * 100);
-        let mut clock = DeviceClock::default();
-        for ms in (0..3_000).step_by(30) {
-            let read_delay = Duration::from_micros(if ms % 90 == 0 { 0 } else { 20 + ms % 7 });
-            clock.observe(device_at(ms), host + Duration::from_millis(ms) + read_delay);
+        for (msg_id, ms) in (0..3_000).step_by(30).enumerate() {
+            let delay = Duration::from_micros(if ms % 90 == 0 { 0 } else { 30 + ms % 7 });
+            let (out, back) = if ms % 60 == 0 {
+                (FLIGHT + delay, FLIGHT)
+            } else {
+                (FLIGHT, FLIGHT + delay)
+            };
+            round_trip(
+                &mut clock,
+                u16::try_from(msg_id).unwrap(),
+                host + Duration::from_millis(ms),
+                device_at(ms),
+                out,
+                back,
+            );
         }
-        assert_eq!(
-            clock.now(host + Duration::from_millis(60_000)),
-            Some(device_at(60_000))
-        );
+        let estimate = clock.now(host + Duration::from_secs(60)).unwrap();
+        let error = estimate.sys_time().abs_diff(device_at(60_000).sys_time());
+        assert!(error < 1_000, "{error} ns off");
+    }
+
+    #[test]
+    fn an_asymmetric_round_trip_leaves_half_the_difference() {
+        let host = Instant::now();
+        let mut clock = DeviceClock::default();
+        for (msg_id, ms) in (0..3_000).step_by(30).enumerate() {
+            round_trip(
+                &mut clock,
+                u16::try_from(msg_id).unwrap(),
+                host + Duration::from_millis(ms),
+                device_at(ms),
+                FLIGHT / 2,
+                FLIGHT * 3 / 2,
+            );
+        }
+        let estimate = clock.now(host + Duration::from_secs(3)).unwrap();
+        let behind = device_at(3_000).sys_time() - estimate.sys_time();
+        assert!(behind.abs_diff(10_000) < 1_000, "{behind} ns behind");
     }
 
     #[test]
     fn samples_older_than_ten_seconds_are_forgotten() {
         let host = Instant::now();
+        let later = host + Duration::from_secs(11);
         let mut clock = DeviceClock::default();
-        clock.observe(device(1_000_000_000), host);
-        clock.observe(device(1_000_000_000), host + Duration::from_secs(11));
-        assert_eq!(
-            clock.now(host + Duration::from_secs(11)),
-            Some(device(1_000_000_000))
-        );
+        round_trip(&mut clock, 1, host, device(D), FLIGHT, FLIGHT);
+        round_trip(&mut clock, 2, later, device(D), FLIGHT, FLIGHT);
+        assert_eq!(clock.now(later + FLIGHT * 2), Some(device(D) + FLIGHT * 2));
+    }
+
+    #[test]
+    fn upper_bounds_that_stop_arriving_leave_no_device_time() {
+        let host = Instant::now();
+        let mut clock = DeviceClock::default();
+        for (msg_id, ms) in (0..14_000).step_by(30).enumerate() {
+            let sent = host + Duration::from_millis(ms);
+            if ms < 3_000 {
+                round_trip(
+                    &mut clock,
+                    u16::try_from(msg_id % 1_000).unwrap(),
+                    sent,
+                    device_at(ms),
+                    FLIGHT,
+                    FLIGHT,
+                );
+            } else {
+                clock.observe(device_at(ms) + FLIGHT, sent + FLIGHT * 2);
+            }
+        }
+        assert_eq!(clock.now(host + Duration::from_secs(14)), None);
+    }
+
+    #[test]
+    fn a_reply_without_its_send_recorded_gives_no_upper_bound() {
+        let host = Instant::now();
+        let mut clock = DeviceClock::default();
+        clock.observe(device(D) + FLIGHT, host + FLIGHT * 2);
+        clock.observe_received_by_grandmaster(1, device(D) + FLIGHT);
+        assert_eq!(clock.now(host + FLIGHT * 2), None);
+    }
+
+    #[test]
+    fn a_send_record_reused_by_a_later_msg_id_is_not_paired() {
+        let host = Instant::now();
+        let mut clock = DeviceClock::default();
+        clock.record_sent_to_grandmaster(1, host);
+        clock.record_sent_to_grandmaster(1 + 32, host + ELAPSED);
+        clock.observe(device(D) + FLIGHT, host + FLIGHT * 2);
+        clock.observe_received_by_grandmaster(1, device(D) + FLIGHT);
+        assert_eq!(clock.now(host + FLIGHT * 2), None);
+    }
+
+    #[test]
+    fn a_time_set_at_open_bounds_the_offset_from_both_sides() {
+        let host = Instant::now();
+        let mut clock = DeviceClock::default();
+        clock.observe_reached_after(device(D), host);
+        clock.observe(device(D), host + FLIGHT * 2);
+        assert_eq!(clock.now(host + FLIGHT * 2), Some(device(D) + FLIGHT));
     }
 }

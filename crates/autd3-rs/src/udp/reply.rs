@@ -12,6 +12,7 @@ pub struct DeviceReply {
     pub flags: Flags,
     pub unit_id: u8,
     pub sys_time: u64,
+    pub rx_sys_time: u64,
     pub telemetry: Telemetry,
     pub fpga_state: FpgaState,
     pub data: Vec<u8>,
@@ -33,6 +34,7 @@ impl DeviceReply {
             flags: head.flags,
             unit_id: head.unit_id,
             sys_time: head.sys_time.get(),
+            rx_sys_time: head.rx_sys_time.get(),
             telemetry: Telemetry::from_wire(head.telemetry),
             fpga_state: FpgaState(head.fpga_state),
             data: data.to_vec(),
@@ -54,6 +56,7 @@ mod tests {
             flags: Flags::ASSIGNED,
             unit_id: 2,
             sys_time: U64::new(1_000),
+            rx_sys_time: U64::new(900),
             telemetry: autd3_cpu_wire::payload::Telemetry {
                 fifo_drop: 5.into(),
                 ..Default::default()
@@ -76,6 +79,7 @@ mod tests {
                 flags: Flags::ASSIGNED,
                 unit_id: 2,
                 sys_time: 1_000,
+                rx_sys_time: 900,
                 telemetry: Telemetry {
                     fifo_drop: 5,
                     ..Telemetry::default()

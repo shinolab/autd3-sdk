@@ -19,8 +19,8 @@ impl Device {
         self.cpu = boot(&mut self.fpga);
     }
 
-    pub(crate) fn recv(&mut self, frame: &[u8], msg_id: u16) {
-        self.cpu.recv_frame(frame, msg_id);
+    pub(crate) fn recv(&mut self, frame: &[u8], msg_id: u16, received_at: u64) {
+        self.cpu.recv_frame(frame, msg_id, received_at);
     }
 
     #[cfg(feature = "udp")]
@@ -42,7 +42,7 @@ impl Device {
     }
 
     pub fn send(&mut self, frame: &[u8]) -> Reply {
-        self.recv(frame, 0);
+        self.recv(frame, 0, 0);
         while self.cpu.process_one(&mut self.fpga) != Drained::Empty {}
         self.reply()
     }

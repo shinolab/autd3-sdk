@@ -1,0 +1,254 @@
+---
+interface Props {
+  caption?: string;
+}
+const { caption } = Astro.props;
+
+type Point = { x: number; o: number };
+
+const trueOffset = (x: number) => 0.5 + 0.05 * x;
+
+const lower: Point[] = [
+  { x: 0, d: 0.14 },
+  { x: 1.3, d: 0.24 },
+  { x: 2.6, d: 0.12 },
+  { x: 3.6, d: 0.42 },
+  { x: 4.8, d: 0.15 },
+  { x: 6, d: 0.3 },
+  { x: 7.4, d: 0.11 },
+  { x: 8.6, d: 0.22 },
+  { x: 10, d: 0.16 },
+].map(({ x, d }) => ({ x, o: trueOffset(x) - d }));
+
+const upper: Point[] = [
+  { x: 0.5, d: 0.19 },
+  { x: 1.9, d: 0.3 },
+  { x: 3.1, d: 0.16 },
+  { x: 4.2, d: 0.45 },
+  { x: 5.4, d: 0.21 },
+  { x: 6.7, d: 0.17 },
+  { x: 8.1, d: 0.26 },
+  { x: 9.6, d: 0.18 },
+].map(({ x, d }) => ({ x, o: trueOffset(x) + d }));
+
+const cross = (o: Point, a: Point, b: Point) => (a.x - o.x) * (b.o - o.o) - (a.o - o.o) * (b.x - o.x);
+
+const upperHullOf = (points: Point[]) => {
+  const hull: Point[] = [];
+  for (const p of points) {
+    while (hull.length >= 2 && cross(hull[hull.length - 2], hull[hull.length - 1], p) >= 0) {
+      hull.pop();
+    }
+    hull.push(p);
+  }
+  return hull;
+};
+
+const negate = (points: Point[]) => points.map((p) => ({ x: p.x, o: -p.o }));
+const lowerBoundHull = upperHullOf(lower);
+const upperBoundHull = negate(upperHullOf(negate(upper)));
+
+const edgeSlopes = (hull: Point[]) => hull.slice(1).map((b, i) => (b.o - hull[i].o) / (b.x - hull[i].x));
+const ceilingAt0 = (s: number) => Math.min(...upperBoundHull.map((p) => p.o - s * p.x));
+const floorAt0 = (s: number) => Math.max(...lowerBoundHull.map((p) => p.o - s * p.x));
+const width = (s: number) => ceilingAt0(s) - floorAt0(s);
+const slope = [...edgeSlopes(lowerBoundHull), ...edgeSlopes(upperBoundHull)].reduce((best, s) =>
+  width(s) > width(best) ? s : best,
+);
+const ceiling = (x: number) => ceilingAt0(slope) + slope * x;
+const floor = (x: number) => floorAt0(slope) + slope * x;
+const estimate = (x: number) => (ceiling(x) + floor(x)) / 2;
+const binding = [
+  ...lowerBoundHull.filter((p) => Math.abs(p.o - floor(p.x)) < 1e-9),
+  ...upperBoundHull.filter((p) => Math.abs(p.o - ceiling(p.x)) < 1e-9),
+];
+
+const W = 640;
+const H = 340;
+const left = 56;
+const right = 24;
+const top = 16;
+const bottom = 40;
+const xMax = 13;
+const yMin = 0.2;
+const yMax = 1.6;
+const sx = (x: number) => left + (x / xMax) * (W - left - right);
+const sy = (o: number) => H - bottom - ((o - yMin) / (yMax - yMin)) * (H - top - bottom);
+
+const nowX = 12.5;
+const path = (points: Point[]) => points.map((p, i) => `${i ? "L" : "M"}${sx(p.x)},${sy(p.o)}`).join(" ");
+const bandPath = `M${sx(0)},${sy(ceiling(0))} L${sx(xMax)},${sy(ceiling(xMax))} L${sx(xMax)},${sy(floor(xMax))} L${sx(0)},${sy(floor(0))} Z`;
+const square = 7;
+---
+
+<figure class="autd-clock">
+  <ul class="autd-clock-legend">
+    <li><span class="swatch dot"></span>下限 (t₃ − t₄)</li>
+    <li><span class="swatch square"></span>上限 (t₂ − t₁)</li>
+    <li><span class="swatch hull"></span>凸包</li>
+    <li><span class="swatch estimate"></span>推定</li>
+    <li><span class="swatch truth"></span>真の offset θ(x)</li>
+  </ul>
+  <svg
+    viewBox={`0 0 ${W} ${H}`}
+    role="img"
+    aria-label="下限のサンプルは真の offset の直線の下側, 上限のサンプルは上側にある."
+  >
+    <line class="axis" x1={left} y1={H - bottom} x2={W - right} y2={H - bottom} />
+    <line class="axis" x1={left} y1={H - bottom} x2={left} y2={top} />
+    <text class="label" x={sx(9)} y={H - bottom + 28} text-anchor="middle">ホスト時刻 x</text>
+    <text class="label" x={left - 12} y={top + 8} text-anchor="end">o</text>
+
+    <path class="band" d={bandPath} />
+    <line class="bound" x1={sx(0)} y1={sy(ceiling(0))} x2={sx(xMax)} y2={sy(ceiling(xMax))} />
+    <line class="bound" x1={sx(0)} y1={sy(floor(0))} x2={sx(xMax)} y2={sy(floor(xMax))} />
+    <line class="truth" x1={sx(0)} y1={sy(trueOffset(0))} x2={sx(xMax)} y2={sy(trueOffset(xMax))} />
+    <path class="hull" d={path(lowerBoundHull)} />
+    <path class="hull" d={path(upperBoundHull)} />
+    <line class="estimate" x1={sx(0)} y1={sy(estimate(0))} x2={sx(xMax)} y2={sy(estimate(xMax))} />
+
+    {lower.map((s) => <circle class="dot" cx={sx(s.x)} cy={sy(s.o)} r="4" />)}
+    {
+      upper.map((s) => (
+        <rect
+          class="dot"
+          x={sx(s.x) - square / 2}
+          y={sy(s.o) - square / 2}
+          width={square}
+          height={square}
+        />
+      ))
+    }
+
+    {binding.map((p) => <circle class="edge" cx={sx(p.x)} cy={sy(p.o)} r="7" />)}
+
+    <line class="guide" x1={sx(nowX)} y1={H - bottom} x2={sx(nowX)} y2={sy(estimate(nowX))} />
+    <circle class="now" cx={sx(nowX)} cy={sy(estimate(nowX))} r="5" />
+    <text class="label" x={sx(nowX)} y={H - bottom + 18} text-anchor="middle">x</text>
+    <text class="label small" x={sx(nowX) - 8} y={sy(estimate(nowX)) + 22} text-anchor="end">推定値</text>
+  </svg>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<style>
+  .autd-clock {
+    margin: 1.5rem 0;
+  }
+  .autd-clock svg {
+    display: block;
+    width: 100%;
+    max-width: 720px;
+    height: auto;
+    margin-inline: auto;
+  }
+  .autd-clock-legend {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.25rem 1.25rem;
+    margin: 0 0 0.5rem;
+    padding: 0;
+    list-style: none;
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-2);
+  }
+  .autd-clock-legend li {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0;
+  }
+  .swatch {
+    display: inline-block;
+    width: 18px;
+    height: 0;
+    border-top: 2px solid;
+  }
+  .swatch.dot,
+  .swatch.square {
+    width: 8px;
+    height: 8px;
+    border: none;
+    background: var(--sl-color-gray-3);
+  }
+  .swatch.dot {
+    border-radius: 50%;
+  }
+  .swatch.hull {
+    border-color: var(--sl-color-gray-2);
+  }
+  .swatch.band {
+    height: 10px;
+    border: none;
+    background: var(--sl-color-accent-low);
+  }
+  .swatch.estimate {
+    border-color: var(--sl-color-accent);
+  }
+  .swatch.truth {
+    border-top-style: dashed;
+    border-color: var(--sl-color-gray-3);
+  }
+  .axis {
+    stroke: var(--sl-color-gray-4);
+    stroke-width: 1;
+  }
+  .guide {
+    stroke: var(--sl-color-gray-5);
+    stroke-width: 1;
+    stroke-dasharray: 2 3;
+  }
+  .label {
+    fill: var(--sl-color-gray-2);
+    font-size: 14px;
+  }
+  .label.small {
+    font-size: 12px;
+    fill: var(--sl-color-gray-3);
+  }
+  .band {
+    fill: var(--sl-color-accent-low);
+    opacity: 0.6;
+  }
+  .bound {
+    stroke: var(--sl-color-accent);
+    stroke-width: 1;
+    opacity: 0.6;
+  }
+  .truth {
+    stroke: var(--sl-color-gray-3);
+    stroke-width: 1.5;
+    stroke-dasharray: 6 4;
+  }
+  .estimate {
+    stroke: var(--sl-color-accent);
+    stroke-width: 2;
+  }
+  .hull {
+    fill: none;
+    stroke: var(--sl-color-gray-2);
+    stroke-width: 1.5;
+    stroke-linejoin: round;
+  }
+  .dot {
+    fill: var(--sl-color-gray-3);
+    stroke: var(--sl-color-bg);
+    stroke-width: 1.5;
+  }
+  .edge {
+    fill: none;
+    stroke: var(--sl-color-accent);
+    stroke-width: 2;
+  }
+  .now {
+    fill: var(--sl-color-accent);
+    stroke: var(--sl-color-bg);
+    stroke-width: 2;
+  }
+  .autd-clock figcaption {
+    margin-top: 0.5rem;
+    color: var(--sl-color-gray-3);
+    font-size: var(--sl-text-sm);
+    text-align: center;
+  }
+</style>

@@ -5,7 +5,7 @@ use crate::frame::FRAME_BYTES_MAX;
 use crate::payload::Telemetry;
 
 pub const PORT: u16 = 0xAD30;
-pub const PROTOCOL_VERSION: u8 = 6;
+pub const PROTOCOL_VERSION: u8 = 7;
 
 const _: () = assert!(PORT == 44336);
 
@@ -131,6 +131,7 @@ pub struct FrameReply {
     pub flags: Flags,
     pub unit_id: u8,
     pub sys_time: U64,
+    pub rx_sys_time: U64,
     pub telemetry: Telemetry,
     pub fpga_state: u8,
 }
@@ -143,7 +144,7 @@ pub struct UnblockReply {
 
 assert_layout!(Header { version: 0, kind: 1, msg_id: 2 } size 4);
 assert_layout!(UnitInfo { unit_id: 0, flags: 1, ptp_offset_ns: 2 } size 6);
-assert_layout!(FrameReply { reserved: 0, status: 1, flags: 2, unit_id: 3, sys_time: 4, telemetry: 12, fpga_state: 23 } size 24);
+assert_layout!(FrameReply { reserved: 0, status: 1, flags: 2, unit_id: 3, sys_time: 4, rx_sys_time: 12, telemetry: 20, fpga_state: 31 } size 32);
 const _: () = assert!(core::mem::size_of::<Header>() + FRAME_BYTES_MAX == 1452);
 
 #[must_use]
@@ -259,6 +260,7 @@ mod tests {
             flags: Flags::ASSIGNED | Flags::DOWNSTREAM_OPEN | Flags::GRANDMASTER,
             unit_id: 0x03,
             sys_time: U64::new(0x1112_1314_1516_1718),
+            rx_sys_time: U64::new(0x3132_3334_3536_3738),
             telemetry: Telemetry {
                 fifo_drop: U32::new(0x2122_2324),
                 exec_late: U32::new(0x2526_2728),
@@ -271,8 +273,9 @@ mod tests {
         assert_eq!(
             reply.as_bytes(),
             &[
-                0x00, 0x08, 0x23, 0x03, 0x18, 0x17, 0x16, 0x15, 0x14, 0x13, 0x12, 0x11, 0x24, 0x23,
-                0x22, 0x21, 0x28, 0x27, 0x26, 0x25, 0x29, 0x2A, 0x2B, 0x4C,
+                0x00, 0x08, 0x23, 0x03, 0x18, 0x17, 0x16, 0x15, 0x14, 0x13, 0x12, 0x11, 0x38, 0x37,
+                0x36, 0x35, 0x34, 0x33, 0x32, 0x31, 0x24, 0x23, 0x22, 0x21, 0x28, 0x27, 0x26, 0x25,
+                0x29, 0x2A, 0x2B, 0x4C,
             ]
         );
     }

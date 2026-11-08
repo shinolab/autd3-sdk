@@ -1,0 +1,80 @@
+---
+title: デバイス時刻の推定
+description: GM との往復から offset の上下限を取り, ホスト側で現在のデバイス時刻を推定する DeviceClock の内部
+sidebar:
+  order: 1
+---
+
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+import DeviceClockPlot from "@components/DeviceClockPlot.astro";
+
+ここではデバイス時刻の推定について述べる.
+デバイス時刻は毎返信に載っているが, その時刻はデバイスが返信したタイミングであり, 送信遅延などによりズレが生じる.
+また, 返信が無い期間は最新の時刻を見ることができない.
+`DeviceClock` は GM との往復ごとに, デバイス時刻のサンプルを保存しておき, 任意のホスト時刻に対応するデバイス時刻を推定する.
+
+デバイスの時刻 (ETHSW のタイマ) は, open 時に GM (ID 0 のデバイス) が `SetTime` で指定した値 ( `0` ) から GM のクロックでカウントする.
+slave は PTP で GM に追従するので, GM の時刻だけを推定すればいい.
+
+デバイスの時計はホストの時計とは独立しており, 水晶振動子の誤差等により微妙にクロック周波数が異なるため, 一度合わせただけでは駄目で, 時間が経つと徐々にズレていく.
+
+
+GM へ送った `Frame` / `Heartbeat` の 1 往復に関して, 以下の4つの時刻を記録する.
+
+- <Math tex="t_1" />: ホストが要求を送る直前のホスト時刻
+- <Math tex="t_2" />: GM が要求を受信したデバイス時刻
+- <Math tex="t_3" />: GM が返信を組んだデバイス時刻
+- <Math tex="t_4" />: ホストが返信を受信したホスト時刻
+
+ここから 2 種類のサンプルを作る.
+
+- 下限: <Math tex="(t_4,\ t_3 - t_4)" />
+- 上限: <Math tex="(t_1,\ t_2 - t_1)" />
+
+:::note
+なお, ホストの受信時刻は可能な限り, カーネルの受信時刻で取ることにしている.
+カーネルの受信時刻がとれない場合は, ユーザ空間での受信処理の開始時刻にフォールバックする.
+:::
+
+以下, ホスト時刻を最初のサンプル (または最初の送信の記録) からの経過時刻 <Math tex="x" /> [ns] で表し, サンプルを <Math tex="(x_i, o_i)" /> とおく.
+ここで <Math tex="o_i" /> はデバイス時刻と <Math tex="x_i" /> の差 (offset) である.
+
+真の offset を <Math tex="\theta(x)" /> とする.
+返信に載る時刻はデバイスが返信を作った時点のものであり, ホストが受信するまでにはフレームの通信遅延などにより遅れが生じる.
+同様に, 要求はホストが送ってから GM に届くまでに遅れる.
+下限のサンプル <Math tex="l" /> の遅れ (復路) を <Math tex="d_l \ge 0" />, 上限のサンプル <Math tex="u" /> の遅れ (往路) を <Math tex="d_u \ge 0" /> とおくと (遅れは通常短いので, この間の水晶速度差による項は無視できる),
+
+<MathBlock tex={String.raw`
+\begin{aligned}
+o_l &= t_3 - t_4 = \theta(x_l) - d_l \le \theta(x_l),\\
+o_u &= t_2 - t_1 = \theta(x_u) + d_u \ge \theta(x_u),
+\end{aligned}
+`} />
+
+である. つまり 1 往復ごとに
+
+<MathBlock tex={String.raw`
+t_3 - t_4 \le \theta \le t_2 - t_1
+`} />
+
+となる.
+
+ある区間窓の中で真の offset を直線 <Math tex="a + bx" /> とする.
+傾き <Math tex="b" /> がホストとデバイスのクロックの速度差を表す.
+真の直線は全ての下限の上側, 全ての上限の下側にあるはずである.
+
+全ての下限の上側と全ての上限の下側を通る直線のうち,
+
+<MathBlock tex={String.raw`
+W(b) = \min_{u}\left(o_u - b\,x_u\right) - \max_{l}\left(o_l - b\,x_l\right),
+`} />
+
+が最大になる直線を推定値とする.
+
+<Math tex="\max_l" /> は下限の上側凸包の頂点で, <Math tex="\min_u" /> は上限の下側凸包の頂点で取れる.
+
+<DeviceClockPlot caption="下限・上限のサンプル, それぞれの凸包, 最も広い帯と推定の例 (模式図). 丸で囲んだ点が帯の幅を決める凸包の頂点. 往路と復路の遅れの最小値が違う分, 推定は真の offset からその半分だけずれる." />
+
+凸包は `now` のたびにサンプルの列 (ホスト時刻順) から単調連鎖法で作る.
+
