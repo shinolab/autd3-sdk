@@ -19,6 +19,10 @@ This time is a 64-bit counter in ns units, counted from the moment the `Client` 
 It does not correspond to the host clock (date and time).
 The current time of the devices is obtained with `device_time_now()` of the `Client`.
 
+Since the time of the devices cannot be read directly, the value returned by `device_time_now()` is an estimate.
+The estimate is more accurate when there are more samples of sent and received data, and when data was sent and received just before.
+To estimate accurately, send `heartbeat` periodically, and also send `heartbeat` just before calling `device_time_now`.
+
 ## Construction
 
 `SysTime` is constructed from the current time of the devices or raw ns.
@@ -27,10 +31,10 @@ The current time of the devices is obtained with `device_time_now()` of the `Cli
 
 | Operation               | Description                                                    |
 | ----------------------- | ------------------------------------------------------------- |
-| `ZERO`                  | The moment the `Client` opened (C#: `Zero`)                   |
-| `Client::device_time_now()` | Current time of the devices (C#: `DeviceTimeNow()`)       |
-| `from_nanos(ns)`        | Construct from ns elapsed since the open (C#: `FromNanos(ns)`) |
-| `sys_time()`            | ns elapsed since the open (Python: the `sys_time` property, C#: `Nanos`) |
+| `ZERO`                  | The moment the `Client` opened                                |
+| `Client::device_time_now()` | Current time of the devices                               |
+| `from_nanos(ns)`        | Construct from ns elapsed since the open                      |
+| `sys_time()`            | ns elapsed since the open                                     |
 
 ## Arithmetic
 

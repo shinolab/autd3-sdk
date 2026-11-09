@@ -23,14 +23,7 @@ import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
 | `sync_on_open`        | `bool`                 | `true`  | When `false`, open does not wait for the devices to synchronize with one another |
 | `heartbeat_interval`  | `Option<Duration>`     | `None`  | When set, keep sending liveness checks at this interval (see [Failsafe](/autd3-sdk/en/guide/failsafe/#communication-loss-failsafe-and-liveness-check)) |
 
-Changing anything other than `iface` is generally not recommended.
-`Client` neither bounds the wait for replies nor judges a device lost: the user does (see [Client](/autd3-sdk/en/api/basics/client/#api)).
-
-:::caution[Windows timer resolution]
-The library does not change the timer resolution of Windows (`timeBeginPeriod`).
-At the default timer resolution in Windows (typically 15.6 ms), the bound you put on waiting for the replies and the interval of your liveness checks may be rounded to that granularity.
-If needed, call `timeBeginPeriod(1)` in your process yourself.
-:::
+Changing anything other than `iface` and `heartbeat_interval` is generally not recommended.
 
 ## Interface
 

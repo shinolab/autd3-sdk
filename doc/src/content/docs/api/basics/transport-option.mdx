@@ -23,14 +23,7 @@ import csSample from "@codes/csharp/examples/api/connection/udp.cs?raw";
 | `sync_on_open`        | `bool`      | `true`  | `false` なら open 時にデバイス間の同期を待たない |
 | `heartbeat_interval`  | `Option<Duration>` | `None` | 指定するとその周期で生存確認を送り続ける ([フェイルセーフ](/autd3-sdk/guide/failsafe/#通信途絶の-failsafe-と生存確認) 参照) |
 
-基本的に `iface` 以外を変更することは推奨しない.
-返信待ちの上限・途絶の判定は `Client` が持たないので, ユーザーが行う ([Client](/autd3-sdk/api/basics/client/#api) 参照).
-
-:::caution[Windows のタイマ分解能]
-ライブラリは Windows のタイマ分解能 (`timeBeginPeriod`) を変更しない.
-既定の分解能 (典型的には 15.6 ms) では, ユーザーが付ける返信待ちの上限や生存確認の周期がその粒度に丸められることがある.
-必要であれば, ユーザーがプロセスで `timeBeginPeriod(1)` を呼ぶ.
-:::
+基本的に `iface` と `heartbeat_interval` 以外を変更することは推奨しない.
 
 ## Interface
 

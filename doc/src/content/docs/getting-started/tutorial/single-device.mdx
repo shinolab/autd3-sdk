@@ -22,7 +22,7 @@ import { excerpt } from "@lib/excerpt";
 <Fragment slot="rust" >
 まずは適当なプロジェクトを作成し, `autd3-rs`ライブラリを依存関係に追加する.
 焦点計算やAM変調のために, `autd3-rs-pattern`と`autd3-rs-modulation`も依存関係に追加する.
-また, 適当な非同期ランタイムが必要なので `tokio` を追加する.
+また, `autd3-rs` は `tokio` ランタイム上で動作するので `tokio` も追加する.
 
 ```
 cargo new --bin autd3-sample && cd autd3-sample
@@ -41,14 +41,12 @@ cargo run --release
 ```
 </Fragment>
 <Fragment slot="python" >
-まずは適当なディレクトリを作成し, 仮想環境を用意してautd3ライブラリを追加する.
+まずは [uv](https://docs.astral.sh/uv/) で適当なプロジェクトを作成し, autd3ライブラリを追加する.
 また, 焦点計算のautd3-pattern, AM変調のautd3-modulationも併せて追加する.
 
 ```
-mkdir autd3-sample && cd autd3-sample
-python3 -m venv .venv
-source .venv/bin/activate
-pip install autd3 autd3-pattern autd3-modulation
+uv init autd3-sample && cd autd3-sample
+uv add autd3 autd3-pattern autd3-modulation
 ```
 次に, `main.py`ファイルを以下のようにする.
 
@@ -56,7 +54,7 @@ pip install autd3 autd3-pattern autd3-modulation
 
 そして, これを実行する.
 ```
-python3 main.py
+uv run main.py
 ```
 </Fragment>
 <Fragment slot="csharp">

@@ -15,7 +15,7 @@ import sample from "@codes/rust/examples/api/basics/send.rs?raw";
 import pySample from "@codes/python/examples/api/basics/send.py?raw";
 import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
 
-`Client` is the central object that sends commands and reads state.
+`Client` is the object that sends commands and reads state.
 
 <Install rust="autd3-rs" python="autd3" csharp="AUTD3" />
 
@@ -25,8 +25,6 @@ import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
 | ---------- | ----------------- | ---------------------------------------------------------------------------- |
 | `geometry` | `&Geometry`       | Physical layout of the devices                                               |
 | `option`   | `&TransportOption`      | Connection settings. See [`TransportOption`](/autd3-sdk/en/api/basics/transport-option/) |
-
-The `Client` connects to the devices (or the [Simulator](/autd3-sdk/en/guide/simulator/)) directly over UDP.
 
 ## API
 
@@ -42,19 +40,11 @@ The `Client` connects to the devices (or the [Simulator](/autd3-sdk/en/guide/sim
 | `send_streaming(cmd)`     | ✓     | `Result<(), Error>`                   | Send a command without waiting for each response, then confirm the responses of every frame (see [streaming](#streaming)) |
 | `read_state()`            | ✓     | `Result<Response, Error>`             | Send one liveness check to every device and return their replies (see [State Monitoring](/autd3-sdk/en/guide/state-check/)) |
 
-`Client` has no upper bound on how long it waits. If the replies never complete (a device is lost), `send`, `read_state`, and the others do not return, so the caller sets the bound:
-`tokio::time::timeout` in Rust, a cancellation such as `asyncio.wait_for` in Python, and a `CancellationToken` in C# (cancelling also stops the sending and receiving).
-Whether to treat it as a lost device, and whether to stop sending or to reopen afterwards, is also up to the user.
-
-Only one of the methods that read replies runs at a time. In Rust they take `&mut self`; in Python and C#, concurrent calls wait for their turn.
-Before sending, each method discards the replies that have arrived but have not been read (replies to a cancelled call and to the liveness checks).
-
 With `heartbeat_interval` in `TransportOption`, the `Client` keeps sending liveness checks at that interval (see [Failsafe](/autd3-sdk/en/guide/failsafe/#communication-loss-failsafe-and-liveness-check)). By default it sends none.
 
-There is no `close()`. The socket closes, and the liveness checks stop, when the `Client` is dropped in Rust, on `Dispose()` in C#, and on leaving the `with` block in Python. Nothing is sent to the devices.
+There is no function that stops the devices.
+The socket closes, and the liveness checks stop, when the `Client` is dropped in Rust, on `Dispose()` in C#, and on leaving the `with` block in Python. Nothing is sent to the devices.
 The devices keep their last output after the client is closed, so stopping the output is the user's responsibility.
-
-In Rust, use `Client` inside a tokio runtime (call `Client::open` and await the returned futures there).
 
 ## streaming
 
@@ -63,11 +53,6 @@ In Rust, use `Client` inside a tokio runtime (call `Client::open` and await the 
 Use it to send commands of many frames, such as Modulation or an STM, quickly.
 
 <CodeTabs rust={excerpt(sample, "streaming")} python={excerpt(pySample, "streaming")} csharp={excerpt(csSample, "streaming")} />
-
-The frames sent without waiting are kept within the capacity of the device's receive FIFO, `MAX_INFLIGHT (7)`.
-Before a frame that switches a bank (such as `Activate*Bank`), the responses of every frame sent before it are confirmed first.
-So if writing the data is rejected, the error is returned without switching to the half-written bank.
-Cancelling `send_streaming` midway can leave sent frames in the device's receive FIFO. Calling `send_streaming` again right after can overflow the FIFO, so call `read_state` or `send` first.
 
 ## Response and DeviceReply
 
@@ -91,26 +76,9 @@ Cancelling `send_streaming` midway can leave sent frames in the device's receive
 | `fpga_state`           | [FpgaState](#fpgastate)                                  |
 | `data`                 | Value of a read command                                  |
 
-## Types of the Read Results
-
-`read_firmware_version()` returns an array with one element per device, in device-number order.
-It does not return until every device has replied.
-
-### FirmwareVersion
-
-| Member                  | Type             | Description                                            |
-| ----------------------- | ---------------- | ------------------------------------------------------ |
-| `cpu`                   | `Version`        | Version of the CPU firmware                            |
-| `fpga`                  | `Version`        | Version of the FPGA firmware                           |
-| `is_emulator()`         | `bool`           | Whether it is a device emulator                        |
-| `is_supported()`        | `bool`           | Whether both the CPU and the FPGA are in a series this SDK supports |
-| `SUPPORTED_SERIES`      | `(u8, u8)`       | Supported series (major, minor)                        |
-
 ### FpgaState
 
-FPGA state flags. There is no command to read them: every reply to a frame or a heartbeat carries them.
-Read them from `fpga_state` in `replies()` of the `Response` returned by `read_state()` (in device-number order).
-The reply to a liveness check may be up to 1 ms old (older while the device is busy with a long operation).
+FPGA state flags
 
 | Method                    | Type             | Description                              |
 | ------------------------- | ---------------- | ---------------------------------------- |
@@ -124,8 +92,7 @@ The reply to a liveness check may be up to 1 ms old (older while the device is b
 
 ### Telemetry
 
-CPU diagnostic counters. There is no command to read them: every reply to a frame or a heartbeat carries them.
-Read them from `telemetry` in `replies()` of the `Response` returned by `read_state()` (in device-number order).
+CPU diagnostic counters
 
 | Field                 | Type  | Description                                            |
 | --------------------- | ----- | ------------------------------------------------------ |
@@ -135,20 +102,13 @@ Read them from `telemetry` in `replies()` of the `Response` returned by `read_st
 | `cpu_watchdog`        | `u8`  | Number of times the CPU watchdog fired (kept until the FPGA is reconfigured) |
 | `boot_failure`        | `u8`  | Number of steps that failed at boot (not cleared by `Clear`) |
 
-What the replies already show is not included: the number of processed frames is the number of replies, a command error is the status of its reply, and a failsafe trip shows up as `DeviceStatus::failsafe_active` turning on.
-
 ## each
 
 `each` takes a closure that receives a device and assigns a different command per device.
 
 <CodeTabs rust={excerpt(sample, "each")} python={excerpt(pySample, "each")} csharp={excerpt(csSample, "each")} />
 
-Multi-frame commands such as `Modulation` / `FociStm` / `PatternStm` can be assigned too.
-The k-th frames of the devices' commands are merged into one frame, and a device left unassigned or with fewer frames gets a do-nothing command (`Nop`).
-To send an STM to only some of the devices, return `None` (`None` / `null` in Python / C#) for the rest.
-In C#, returning the same command instance for several devices shares its data instead of copying it.
-
 In Rust, the return values of the closure must all be the same type.
-To mix commands of different types, unify them into a `BoxedCommand` with `.boxed()` (single-frame commands can also be unified into a `Box<dyn Operation>`).
+To mix commands of different types, unify them into a `BoxedCommand` with `.boxed()`.
 
 <CodeTabs rust={excerpt(sample, "each_boxed")} />

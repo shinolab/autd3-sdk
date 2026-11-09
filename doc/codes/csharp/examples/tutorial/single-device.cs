@@ -22,6 +22,7 @@ using var client = Client.Open(
 );
 await client.SendAsync(new Clear());
 await client.SendAsync(new Synchronize());
+await client.SendAsync(new SetSilencer());
 
 // Generate a focus 150 mm above the array center.
 var target = geometry.Center + Offset(0.0f * mm, 0.0f * mm, 150.0f * mm);
@@ -33,6 +34,7 @@ Pattern.Focus(
     wavelength,
     phases
 );
+await client.SendAsync(new Pattern(phases, Intensity.Max));
 
 // Apply a 200 Hz sine-wave AM.
 var samplingConfig = SamplingConfig.Freq4k;
@@ -43,9 +45,6 @@ Modulation.Sine(
     samplingConfig,
     modulation
 );
-
-await client.SendAsync(new SetSilencer());
-await client.SendAsync(new Pattern(phases, Intensity.Max));
 await client.SendAsync(new Modulation(samplingConfig, modulation));
 
 using var cts = new CancellationTokenSource();
