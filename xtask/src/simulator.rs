@@ -262,7 +262,7 @@ fn build_frontend(frontend: &Path, debug: bool) -> Result<()> {
     let install_dir = dx_home.join("tools").join(DX_BINARYEN_TOOLS_DIR);
     let wasm_opt = exe_name("wasm-opt");
     let bin = install_dir.join("bin").join(&wasm_opt);
-    if !bin.is_file() {
+    if !debug && !bin.is_file() {
         let platform = if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
             "x86_64-windows"
         } else if cfg!(all(target_os = "windows", target_arch = "aarch64")) {
@@ -289,7 +289,9 @@ fn build_frontend(frontend: &Path, debug: bool) -> Result<()> {
             [
                 "-fsSL",
                 "--retry",
-                "5",
+                "10",
+                "--retry-delay",
+                "15",
                 "--retry-all-errors",
                 "-o",
                 &archive.to_string_lossy(),
