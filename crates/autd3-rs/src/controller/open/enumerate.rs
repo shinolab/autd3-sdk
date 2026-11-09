@@ -287,8 +287,8 @@ impl Enumerator<'_> {
                 unit_id: GRANDMASTER_UNIT_ID,
             })?;
         response.check_status(Kind::SetTime, GRANDMASTER_UNIT_ID)?;
-        device_clock.observe_reached_after(DEVICE_TIME_AT_OPEN, sent_at);
-        device_clock.observe(DEVICE_TIME_AT_OPEN, Instant::now());
+        device_clock.add_upper_bound(sent_at, DEVICE_TIME_AT_OPEN);
+        device_clock.add_lower_bound(DEVICE_TIME_AT_OPEN, Instant::now());
         Ok(())
     }
 
