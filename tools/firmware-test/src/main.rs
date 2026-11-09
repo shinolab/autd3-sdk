@@ -30,7 +30,6 @@ pub struct Ctx<'a> {
     pub client: &'a Controller,
     pub geometry: &'a Geometry,
     pub heartbeat: Duration,
-    pub exec: ExecAt,
     pub ack_timeout: Duration,
 }
 
@@ -48,7 +47,7 @@ impl Ctx<'_> {
         for frame in frames {
             self.client.discard_unread_replies()?;
             self.within(async {
-                let msg_id = self.client.send_frame(frame, self.exec).await?;
+                let msg_id = self.client.send_frame(frame, ExecAt::Immediate).await?;
                 self.client.collect(msg_id).await?.check()
             })
             .await?;
@@ -222,7 +221,6 @@ async fn main() -> Result<()> {
         client: &client,
         geometry: &geometry,
         heartbeat: cli.heartbeat,
-        exec: cli.exec(),
         ack_timeout: cli.ack_timeout,
     };
     ctx.send(Clear).await?;
@@ -259,23 +257,6 @@ async fn main() -> Result<()> {
         if let Err(e) = run(&ctx).await {
             eprintln!("test failed: {e:?}");
         }
-        if ctx.exec != ExecAt::Immediate {
-            match ctx.read_telemetry().await {
-                Ok(telemetry) => {
-                    let late: Vec<u32> = telemetry.iter().map(|t| t.exec_late).collect();
-                    println!(
-                        "  {} no frame since the last Clear started 1 us or more after its EXEC_AT: exec_late {late:?}",
-                        if late.iter().all(|n| *n == 0) {
-                            "[OK]"
-                        } else {
-                            "[FAIL]"
-                        }
-                    );
-                }
-                Err(e) => eprintln!("read telemetry failed: {e}"),
-            }
-        }
-
         if let Err(e) = reset(&ctx).await {
             eprintln!("reset failed: {e:?}");
         }

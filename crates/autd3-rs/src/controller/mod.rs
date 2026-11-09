@@ -172,7 +172,7 @@ impl Controller {
         }
         let now = match exec {
             ExecAt::Immediate => None,
-            ExecAt::Lead(_) | ExecAt::At(_) => self.device_clock().at(Instant::now()),
+            ExecAt::At(_) => self.device_clock().at(Instant::now()),
         };
         let exec_at = exec_at::schedule(exec, now)?;
         let mut headers = [FrameHeader::new_zeroed(); MAX_DEVICES];

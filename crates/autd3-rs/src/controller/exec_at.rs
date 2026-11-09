@@ -9,7 +9,6 @@ const EXEC_BEHIND_LIMIT: Duration = Duration::from_nanos(EXEC_AT_UNIT_NS << 30);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ExecAt {
     Immediate,
-    Lead(Duration),
     At(SysTime),
 }
 
@@ -18,17 +17,6 @@ const EXEC_AHEAD_LIMIT: Duration = Duration::from_nanos(EXEC_AT_UNIT_NS << 31);
 pub(crate) fn schedule(exec: ExecAt, now: Option<SysTime>) -> Result<u32, Error> {
     match exec {
         ExecAt::Immediate => Ok(0),
-        ExecAt::Lead(lead) => {
-            if lead >= EXEC_AHEAD_LIMIT {
-                return Err(PayloadError::ExecTooFarAhead {
-                    ahead: lead,
-                    limit: EXEC_AHEAD_LIMIT,
-                }
-                .into());
-            }
-            let now = now.ok_or(Error::DeviceTimeUnknown)?;
-            Ok(stamp(now + lead))
-        }
         ExecAt::At(at) => {
             let now = now.ok_or(Error::DeviceTimeUnknown)?;
             if at >= now {
@@ -97,38 +85,6 @@ mod tests {
     }
 
     #[test]
-    fn a_lead_is_added_to_the_device_time() {
-        assert_eq!(
-            at_now(ExecAt::Lead(Duration::from_millis(5))).unwrap(),
-            25_000
-        );
-        assert_eq!(
-            at_now(ExecAt::Lead(Duration::from_nanos(100 * US + 1))).unwrap(),
-            20_101
-        );
-    }
-
-    #[test]
-    fn a_lead_has_no_lower_bound() {
-        assert_eq!(at_now(ExecAt::Lead(Duration::ZERO)).unwrap(), 20_000);
-        assert_eq!(
-            at_now(ExecAt::Lead(Duration::from_nanos(1))).unwrap(),
-            20_001
-        );
-    }
-
-    #[test]
-    fn a_lead_not_below_2_pow_31_microseconds_is_rejected() {
-        let limit = Duration::from_micros(1 << 31);
-        assert!(at_now(ExecAt::Lead(Duration::from_nanos((1 << 31) * US - 1))).is_ok());
-        assert!(matches!(
-            at_now(ExecAt::Lead(limit)),
-            Err(Error::InvalidPayload(PayloadError::ExecTooFarAhead { ahead, limit: l }))
-                if ahead == limit && l == limit
-        ));
-    }
-
-    #[test]
     fn an_absolute_time_is_stamped_as_is() {
         assert_eq!(
             at_now(ExecAt::At(SysTime::from_nanos(25_000 * US))).unwrap(),
@@ -182,11 +138,7 @@ mod tests {
     }
 
     #[test]
-    fn a_lead_or_an_absolute_time_with_an_unknown_device_time_fails() {
-        assert!(matches!(
-            schedule(ExecAt::Lead(Duration::from_millis(5)), None),
-            Err(Error::DeviceTimeUnknown)
-        ));
+    fn an_absolute_time_with_an_unknown_device_time_fails() {
         assert!(matches!(
             schedule(ExecAt::At(NOW), None),
             Err(Error::DeviceTimeUnknown)

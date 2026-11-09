@@ -33,8 +33,7 @@ The ack latency runs from the `send_frame_at` call to the moment its `ResponseFu
 | `--send-buffer <BYTES>` | Socket send buffer (`TransportOption.send_buffer_bytes`). `0` keeps the OS default. Omit to use the library default. |
 | `--stop-on-error`     | Stop at the first failed send and exit non-zero. The summary is still printed. Default: off. |
 | `--hold <DUR>`        | Keep the connection idle (heartbeats every `--heartbeat` only) this long before measuring, e.g. `3s`. |
-| `--ack-timeout <DUR>` | How long a request waits for its ACK before raising `Timeout` (`TransportOption.ack_timeout`). Default = `10ms`. Must exceed `--exec-lead` (plus the processing time). |
-| `--exec-lead <DUR>`   | Stamp every frame with `EXEC_AT` = the device time this far ahead, rounded up to 1 µs (each frame is sent with `send_frame_at(frame, ExecAt::Lead(..))`), e.g. `1ms`. Omit to process every frame on arrival. |
+| `--ack-timeout <DUR>` | How long a request waits for its ACK before raising `Timeout` (`TransportOption.ack_timeout`). Default = `10ms`. |
 | `--mode <MODE>`       | `stop-and-wait` (default) or `streaming`. See below. |
 | `--max-inflight <N>`  | Pipeline depth in `streaming` mode: frames sent before awaiting the oldest response. Default = 7 (`MAX_INFLIGHT`, the device's receive queue). `stop-and-wait` ignores it. Alias: `--inflight`. |
 
