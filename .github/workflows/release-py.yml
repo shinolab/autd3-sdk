@@ -39,7 +39,7 @@ jobs:
             Windows) echo "INTERPRETER=$(cygpath -m "$PYTHON_PATH")" >> "$GITHUB_ENV" ;;
             *) echo "INTERPRETER=$PYTHON_PATH" >> "$GITHUB_ENV" ;;
           esac
-      - uses: taiki-e/install-action@v2.88.1
+      - uses: taiki-e/install-action@v2.90.2
         with:
           tool: cargo-about
       - name: Generate third-party licenses
