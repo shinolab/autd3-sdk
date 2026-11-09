@@ -93,13 +93,11 @@ impl Controller {
         if reply.device == GRANDMASTER_UNIT_ID {
             let mut device_clock = self.device_clock();
             if reply.sys_time != 0 {
-                device_clock.observe(SysTime::from_nanos(reply.sys_time), received_at);
+                device_clock.add_lower_bound(SysTime::from_nanos(reply.sys_time), received_at);
             }
             if reply.rx_sys_time != 0 {
-                device_clock.observe_received_by_grandmaster(
-                    reply.msg_id,
-                    SysTime::from_nanos(reply.rx_sys_time),
-                );
+                device_clock
+                    .add_upper_bound_of(reply.msg_id, SysTime::from_nanos(reply.rx_sys_time));
             }
         }
         Ok(())
