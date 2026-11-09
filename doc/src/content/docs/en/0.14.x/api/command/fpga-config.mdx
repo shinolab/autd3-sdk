@@ -1,0 +1,28 @@
+---
+title: SetFpgaConfig
+description: SetFpgaConfig to change the FPGA settings
+sidebar:
+  order: 10.55
+slug: en/0.14.x/api/command/fpga-config
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+`SetFpgaConfig` is a command that changes the settings held by the FPGA.
+
+## API
+
+<CodeTabs rust={"let config = FpgaConfig {\n    sync_phase_lock,\n    sync_kp,\n    sync_ki,\n    sync_kf,\n};\nSetFpgaConfig::new(config);"} python={"config = FpgaConfig(\n    sync_phase_lock=sync_phase_lock,\n    sync_kp=sync_kp,\n    sync_ki=sync_ki,\n    sync_kf=sync_kf,\n)\nSetFpgaConfig(config)"} csharp={"var config = new FpgaConfig\n{\n    SyncPhaseLock = syncPhaseLock,\n    SyncKp = syncKp,\n    SyncKi = syncKi,\n    SyncKf = syncKf,\n};\nnew SetFpgaConfig(config);"} />
+
+### FpgaConfig
+
+| Field             | Type   | Default | Description |
+| ----------------- | ------ | ------- | ----------- |
+| `sync_phase_lock` | `bool` | `true`  | Fine adjustment that phase-locks the FPGA clock to the sync pulse shared between devices. (enabled by default) |
+| `sync_kp`         | `u16`  | `64`    | Proportional gain of the fine adjustment. |
+| `sync_ki`         | `u16`  | `1024`  | Integral gain of the fine adjustment. |
+| `sync_kf`         | `u16`  | `4096`  | Integral gain of the frequency estimation before the fine adjustment engages. |
+
+## Example
+
+<CodeTabs rust={"use autd3_rs::commands::{Clear, FpgaConfig, SetFpgaConfig, Synchronize};\nuse autd3_rs::geometry::{Autd3, Geometry};\nuse autd3_rs::Client;\nuse autd3_rs::udp::TransportOption;\n\nlet geometry = Geometry::new(vec![Autd3::default()]);\nlet option = TransportOption::default();\nlet mut client = Client::open(&geometry, &option).await?;\nclient.send(Clear).await?;\nclient.send(Synchronize).await?;\n\nclient.send(SetFpgaConfig::new(FpgaConfig {\n    sync_phase_lock: false,\n    ..Default::default()\n})).await?;\n\nclient.send(SetFpgaConfig::default()).await?;"} python={"import asyncio\n\nfrom autd3 import Client, TransportOption\nfrom autd3.commands import Clear, FpgaConfig, SetFpgaConfig, Synchronize\nfrom autd3.geometry import Autd3, Geometry\n\n\nasync def main() -> None:\n    geometry = Geometry([Autd3()])\n    with Client.open(geometry, TransportOption()) as client:\n        await client.send(Clear())\n        await client.send(Synchronize())\n\n        await client.send(SetFpgaConfig(FpgaConfig(sync_phase_lock=False)))\n\n        await client.send(SetFpgaConfig())\n\n\nasyncio.run(main())"} csharp={"using System.Threading.Tasks;\nusing AUTD3;\n\nvar geometry = new Geometry(new[] { new Autd3() });\nusing var client = Client.Open(geometry, new TransportOption());\nawait client.SendAsync(new Clear());\nawait client.SendAsync(new Synchronize());\n\nawait client.SendAsync(new SetFpgaConfig(new FpgaConfig { SyncPhaseLock = false }));\n\nawait client.SendAsync(new SetFpgaConfig());"} />

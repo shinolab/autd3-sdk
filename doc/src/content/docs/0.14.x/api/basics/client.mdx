@@ -1,0 +1,108 @@
+---
+title: Client
+description: デバイスとの接続・送信を司る Client
+sidebar:
+  order: 2
+slug: 0.14.x/api/basics/client
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import Install from "@components/Install.astro";
+
+`Client` はコマンドの送信・状態の読み出しを行うオブジェクト.
+
+<Install rust="autd3-rs" python="autd3" csharp="AUTD3" />
+
+<CodeTabs rust={"let mut client = Client::open(&geometry, &option).await?;\nclient.send(Clear).await?;\nclient.send(Synchronize).await?;"} python={"client = Client.open(geometry, TransportOption())\nawait client.send(Clear())\nawait client.send(Synchronize())"} csharp={"var client = Client.Open(layout, new TransportOption());\nawait client.SendAsync(new Clear());\nawait client.SendAsync(new Synchronize());"} />
+
+| 引数       | 型                | 説明                                                         |
+| ---------- | ----------------- | ------------------------------------------------------------ |
+| `geometry` | `&Geometry`       | デバイスの物理配置                                           |
+| `option`   | `&TransportOption`      | 接続の設定. [`TransportOption`](/autd3-sdk/0.14.x/api/basics/transport-option/) 参照 |
+
+## API
+
+<CodeTabs rust={"let num_devices = client.num_devices();\nlet now = client.device_time_now()?;\n\nlet firmware = client.read_firmware_version().await?;\n\nclient.send(Nop).await?;\nclient.send_streaming(Nop).await?;\n\nlet state = tokio::time::timeout(Duration::from_millis(200), client.read_state()).await??;\nlet fpga_state = state.replies().iter().map(|r| r.fpga_state).collect::<Vec<_>>();"} python={"num_devices = client.num_devices()\nnow = client.device_time_now()\n\nfirmware = await client.read_firmware_version()\n\nawait client.send(Nop())\nawait client.send_streaming(Nop())\n\nstate = await asyncio.wait_for(client.read_state(), timeout=0.2)\nfpga_state = [r.fpga_state for r in state.replies]"} csharp={"var numDevices = client.NumDevices;\nvar now = client.DeviceTimeNow();\n\nvar firmware = await client.ReadFirmwareVersionAsync();\n\nawait client.SendAsync(new Nop());\nawait client.SendStreamingAsync(new Nop());\n\nusing var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));\nvar state = await client.ReadStateAsync(timeout.Token);\nvar fpgaState = state.Replies.Select(r => r.FpgaState).ToArray();"} />
+
+| メソッド                  | async | 返り値                                 | 説明                                                       |
+| ------------------------- | :---: | -------------------------------------- | ---------------------------------------------------------- |
+| `num_devices()`           | —     | `usize`                                | 接続中のデバイス台数                                       |
+| `geometry()`              | —     | `&Geometry`                            | 接続時のデバイスの物理配置                                 |
+| `read_firmware_version()` | ✓     | `Result<Vec<FirmwareVersion>, Error>` | 各デバイスの CPU/FPGA ファームウェアバージョン             |
+| `device_time_now()`       | —     | `Result<SysTime, Error>`               | 現在のデバイスの時刻 ([SysTime](/autd3-sdk/0.14.x/api/basics/sys-time/) 参照) |
+| `send(cmd)`               | ✓     | `Result<(), Error>`                   | コマンドを送信し, 1 フレームずつ応答確認まで行う           |
+| `send_streaming(cmd)`     | ✓     | `Result<(), Error>`                   | コマンドを応答を待たずに詰めて送り, 全フレームの応答を確認する ([streaming](#streaming) 参照) |
+| `read_state()`            | ✓     | `Result<Response, Error>`             | 全デバイスへ生存確認を 1 回送り, その返信を返す ([状態監視](/autd3-sdk/0.14.x/guide/state-check/) 参照) |
+
+`TransportOption` の `heartbeat_interval` を指定すると, `Client` はその周期で生存確認を送り続ける ([フェイルセーフ](/autd3-sdk/0.14.x/guide/failsafe/#通信途絶の-failsafe-と生存確認) 参照). 既定では送らない.
+
+デバイスを止める関数はない.
+Rust は `Client` を drop したとき, C# は `Dispose()`, Python は `with` を抜けたときにソケットを閉じ, 生存確認の送信も止めるが, デバイスへは何も送らない.
+デバイスは閉じた後も直前の出力を続けるので, 出力を止めるのはユーザーの責任.
+
+## streaming
+
+`send` は 1 フレームずつ応答を待つ (stop-and-wait).
+`send_streaming` は応答を待たずに続けて送り, 最も古いフレームから応答を確かめる.
+Modulation や STM のように複数フレームになるコマンドを速く送るときに使う.
+
+<CodeTabs rust={"client\n    .send_streaming(Modulation::new(SamplingConfig::FREQ_4K, &modulation))\n    .await?;"} python={"await client.send_streaming(Modulation(SamplingConfig.FREQ_4K, data))"} csharp={"await client.SendStreamingAsync(new Modulation(SamplingConfig.Freq4k, modulation));"} />
+
+## Response と DeviceReply
+
+`read_state` は全デバイスの返信を `Response` にまとめて返す.
+
+| `Response`        | 説明                                                                  |
+| ----------------- | --------------------------------------------------------------------- |
+| `replies()`       | デバイス番号順の `DeviceReply` の配列                                  |
+| `device_status()` | 返信の flags から作ったデバイスごとの状態 ([状態監視](/autd3-sdk/0.14.x/guide/state-check/) 参照) |
+| `check()`         | 最も番号の小さい, エラーを返したデバイスのエラーを返す                |
+
+| `DeviceReply` のフィールド | 説明                                                 |
+| -------------------------- | ---------------------------------------------------- |
+| `device`                   | 返信したデバイスの番号                               |
+| `msg_id`                   | どの生存確認への返信か                               |
+| `status`                   | エラーコード (`0` = 成功)                            |
+| `flags`                    | デバイスの状態フラグ                                 |
+| `unit_id`                  | デバイスの ID                                        |
+| `sys_time`                 | デバイスの時刻 \[ns] (`0` = 載っていない)             |
+| `telemetry`                | [Telemetry](#telemetry)                              |
+| `fpga_state`               | [FpgaState](#fpgastate)                              |
+| `data`                     | 読み出し系コマンドの値                               |
+
+### FpgaState
+
+FPGA の状態フラグ
+
+| メソッド                  | 型               | 説明                                     |
+| ------------------------- | ---------------- | ---------------------------------------- |
+| `is_thermal_asserted()`   | `bool`           | 温度センサが閾値を超えているか           |
+| `current_mod_bank()`      | `ModulationBank` | 現在の Modulation bank                   |
+| `current_pattern_bank()`  | `PatternBank`    | 現在の Pattern bank (Pattern と STM で共有) |
+| `is_pattern_mode()`       | `bool`           | Pattern を出力しているか                 |
+| `is_pattern_stopped()`    | `bool`           | Pattern / STM の再生が止まっているか |
+| `is_mod_stopped()`        | `bool`           | Modulation の再生が止まっているか |
+| `is_transition_pending()` | `bool`           | bank の切り替えが発効待ちか              |
+
+### Telemetry
+
+CPU の診断カウンタ
+
+| フィールド            | 型    | 説明                                                   |
+| --------------------- | ----- | ------------------------------------------------------ |
+| `fifo_drop`           | `u32` | 受信 FIFO が満杯で捨てたフレーム数 (捨てたフレームには返信しない) |
+| `exec_late`           | `u32` | 処理時刻を 1 µs 以上過ぎてから処理を始めたフレーム数 |
+| `sync_resync`         | `u8`  | 同期入力のハード再同期回数 (`Synchronize` で 0 に戻る) |
+| `cpu_watchdog`        | `u8`  | CPU ウォッチドッグの発火回数 (FPGA の再構成まで消えない) |
+| `boot_failure`        | `u8`  | 起動時に失敗した手順の数 (`Clear` で消えない)          |
+
+## each
+
+`each` はデバイスを引数にするクロージャを受け取り, デバイスごとに異なるコマンドを割り当てる.
+
+<CodeTabs rust={"client\n    .send(each(|device| {\n        Some(if device.idx() % 2 == 0 {\n            Pattern::new(&left, Intensity::MAX)\n        } else {\n            Pattern::new(&right, Intensity::MAX)\n        })\n    }))\n    .await?;"} python={"await client.send(each(lambda device: Pattern(left if device.idx() % 2 == 0 else right, Intensity.MAX)))"} csharp={"await client.SendAsync(Command.Each(device => device.Idx % 2 == 0\n    ? new Pattern(left, Intensity.Max)\n    : new Pattern(right, Intensity.Max)));"} />
+
+Rust ではクロージャの返り値はすべて同じ型でなければならない.
+型の異なるコマンドを混在させたい場合は, `.boxed()` で `BoxedCommand` に揃える.
+
+<CodeTabs rust={"client\n    .send(each(|device| {\n        Some(if device.idx() % 2 == 0 {\n            Box::new(Pattern::new(&left, Intensity::MAX)) as Box<dyn Operation>\n        } else {\n            Box::new(SetSilencer::default())\n        })\n    }))\n    .await?;"} />

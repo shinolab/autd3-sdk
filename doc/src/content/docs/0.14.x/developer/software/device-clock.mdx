@@ -1,0 +1,455 @@
+---
+title: デバイス時刻の推定
+description: GM との往復から offset の上下限を取り, ホスト側で現在のデバイス時刻を推定する DeviceClock の内部
+sidebar:
+  order: 1
+slug: 0.14.x/developer/software/device-clock
+---
+
+import Math from "@components/Math.astro";
+import MathBlock from "@components/MathBlock.astro";
+
+`ExecAt` や `GpioOut::SysTimeEq` などでは, デバイスの時刻を指定する必要がある.
+ホストは PTP に参加していないので, デバイスの時刻を直接知ることはできない.
+そのため, `DeviceClock` は, ホストの送信/受信時刻とデバイスの送信/受信時刻を記録して, それらの情報から, ホスト時刻に対応するデバイス時刻を推定する.
+
+デバイスの時刻 (ETHSW のタイマ) は, open 時に GM (ID 0 のデバイス) が `SetTime` で指定した値 ( `0` ) から GM のクロックでカウントする.
+slave は PTP で GM に追従するので, GM の時刻だけを推定すればいい.
+
+## ホスト時刻とデバイス時刻
+
+時刻にはホストの時計で測ったもの (ホスト時刻) と, デバイスの時計で測ったもの (デバイス時刻) の 2 種類がある.
+以下, ある出来事をホストの時計で測った時刻を <Math tex="x" /> と表し, 同じ出来事をデバイスの時計で測った時刻を <Math tex="x'" /> のように <Math tex="'" /> を付けて表す.
+
+ホスト時刻を基準にして, 両者の差を offset <Math tex="\theta(x)" /> とおくと,
+
+<MathBlock
+  tex={String.raw`
+x' = x + \theta(x),
+`}
+/>
+
+となる.
+任意のホスト時刻 <Math tex="x" /> に対して, デバイス時刻 <Math tex="x'" /> を得るために, <Math tex="\theta(x)" /> を推定する必要がある.
+
+デバイスの時計はホストの時計とは独立しており, 水晶振動子の誤差等により微妙にクロック周波数は指定値とは異なる.
+そのため <Math tex="\theta" /> は一定ではなく, 時間が経つと徐々に変化していく.
+周波数差は温度などでもゆっくり変わるが, 短い区間窓 (直近 10 s) の中では一定とみなし, <Math tex="\theta" /> を直線
+
+<MathBlock
+  tex={String.raw`
+\theta(x) = a + bx
+`}
+/>
+
+で近似する.
+<Math tex="a" /> は <Math tex="x = 0" /> での offset, <Math tex="b" /> はクロック周波数の相対差である (例えば, デバイスの時計がホストより 1 ppm 速ければ <Math tex="b = 10^{-6}" />).
+
+## 1 往復から得られる上下限
+
+GM へ送った `Frame` / `Heartbeat` の 1 往復に関して, 以下の 4 つの時刻を記録する.
+
+* <Math tex="t_1" />: ホストが要求を送る直前のホスト時刻
+* <Math tex="t_2'" />: GM が要求を受信したデバイス時刻
+* <Math tex="t_3'" />: GM が返信を組んだデバイス時刻
+* <Math tex="t_4" />: ホストが返信を受信したホスト時刻
+
+:::note
+なお, ホストの受信時刻は可能な限り, カーネルの受信時刻で取ることにしている.
+カーネルの受信時刻がとれない場合は, ユーザ空間での受信処理の開始時刻にフォールバックする.
+:::
+
+GM が要求を受信した時, および, 返信を組んだ時のホスト時刻 <Math tex="t_2, t_3" /> を直接観測することはできない.
+ここで, 往路 (ホスト → GM) の遅れを <Math tex="d_u \ge 0" />, 復路 (GM → ホスト) の遅れを <Math tex="d_l \ge 0" /> とおくと, どちらもホスト時刻で
+
+<MathBlock
+  tex={String.raw`
+\begin{aligned}
+t_2 &= t_1 + d_u,\\
+t_4 &= t_3 + d_l,
+\end{aligned}
+`}
+/>
+
+となる.
+ただし, <Math tex="d_u, d_l" /> も直接観測することはできない.
+
+往路について, 観測される <Math tex="t_2'" /> は
+
+<MathBlock
+  tex={String.raw`
+t_2' = t_2 + \theta(t_2) = t_1 + d_u + \theta(t_2)
+`}
+/>
+
+となる. <Math tex="\theta(t_2) = \theta(t_1) + b\,d_u" /> なので,
+
+<MathBlock
+  tex={String.raw`
+t_2' - t_1 = \theta(t_1) + (1 + b)\,d_u \ge \theta(t_1)
+`}
+/>
+
+が成り立つ.
+ここで, <Math tex="|b| \ll 1" /> のはずなので <Math tex="1 + b > 0" /> となり, <Math tex="t_2' - t_1" /> はホスト時刻 <Math tex="t_1" /> における offset の上限になる.
+
+復路も同様に,
+
+<MathBlock
+  tex={String.raw`
+t_3' - t_4 = \theta(t_4) - (1 + b)\,d_l \le \theta(t_4)
+`}
+/>
+
+となり, <Math tex="t_3' - t_4" /> はホスト時刻 <Math tex="t_4" /> における offset の下限になる.
+
+そこで 1 往復から 2 種類のサンプル (ホスト時刻, offset の限界) を作る.
+
+* 上限: <Math tex="(t_1,\ t_2' - t_1)" />
+* 下限: <Math tex="(t_4,\ t_3' - t_4)" />
+
+以下, 上限のサンプルを <Math tex="(x_u, o_u)" />, 下限のサンプルを <Math tex="(x_l, o_l)" /> とおく.
+
+上の議論から, 全てのサンプルで
+
+<MathBlock
+  tex={String.raw`
+\begin{aligned}
+o_l &\le \theta(x_l) = a + b\,x_l,\\
+o_u &\ge \theta(x_u) = a + b\,x_u,
+\end{aligned}
+`}
+/>
+
+である.
+
+## offset の推定
+
+真の直線 <Math tex="a + bx" /> は, 区間窓の中の全ての下限の上側, 全ての上限の下側を通るはずである.
+傾きを <Math tex="b" /> に固定すると, そのような直線の切片 <Math tex="a" /> が取れる範囲は
+
+<MathBlock
+  tex={String.raw`
+\max_{l}\left(o_l - b\,x_l\right) \le a \le \min_{u}\left(o_u - b\,x_u\right)
+`}
+/>
+
+となる.
+
+ここで,
+
+<MathBlock
+  tex={String.raw`
+W(b) = \min_{u}\left(o_u - b\,x_u\right) - \max_{l}\left(o_l - b\,x_l\right)
+`}
+/>
+
+とすし, 真の傾きで <Math tex="W" /> がほぼ最大になることを示す.
+
+真の値を <Math tex="a^*, b^*" /> とすると, 各サンプルは
+
+<MathBlock
+  tex={String.raw`
+\begin{aligned}
+o_u &= \theta(x_u) + (1 + b^*)\,d_u = a^* + b^*x_u + (1 + b^*)\,d_u,\\
+o_l &= \theta(x_l) - (1 + b^*)\,d_l = a^* + b^*x_l - (1 + b^*)\,d_l
+\end{aligned}
+`}
+/>
+
+と書ける.
+<Math tex="|b^*| \ll 1" /> より <Math tex="1 + b^* \approx 1" /> とすると,
+
+<MathBlock
+  tex={String.raw`
+\begin{aligned}
+o_u &\approx a^* + b^*x_u + d_u,\\
+o_l &\approx a^* + b^*x_l - d_l
+\end{aligned}
+`}
+/>
+
+である.
+
+傾きを <Math tex="b = b^* + \Delta" /> とおくと,
+
+<MathBlock
+  tex={String.raw`
+\begin{aligned}
+o_u - b\,x_u &\approx a^* + b^*x_u + d_u - (b^* + \Delta)\,x_u = a^* + d_u - \Delta\,x_u,\\
+o_l - b\,x_l &\approx a^* + b^*x_l - d_l - (b^* + \Delta)\,x_l = a^* - d_l - \Delta\,x_l,
+\end{aligned}
+`}
+/>
+
+したがって,
+
+<MathBlock
+  tex={String.raw`
+\begin{aligned}
+\min_{u}\left(o_u - b\,x_u\right) &\approx a^* + \min_{u}\left(d_u - \Delta\,x_u\right),\\
+\max_{l}\left(o_l - b\,x_l\right) &\approx a^* + \max_{l}\left(-d_l - \Delta\,x_l\right) = a^* - \min_{l}\left(d_l + \Delta\,x_l\right)
+\end{aligned}
+`}
+/>
+
+となり,
+
+<MathBlock
+  tex={String.raw`
+W(b^* + \Delta) \approx \min_{u}\left(d_u - \Delta\,x_u\right) + \min_{l}\left(d_l + \Delta\,x_l\right)
+`}
+/>
+
+である.
+
+ここで, 遅れは経路で決まる一定の遅れに, 混雑や処理待ちなどによる余分な遅れが加わったものと考え,
+
+<MathBlock
+  tex={String.raw`
+d_u = \delta_u + \varepsilon_u,\qquad d_l = \delta_l + \varepsilon_l\qquad(\varepsilon_u, \varepsilon_l \ge 0)
+`}
+/>
+
+とおく.
+<Math tex="\delta_u, \delta_l" /> はサンプルによらない定数, <Math tex="\varepsilon_u, \varepsilon_l" /> はサンプルごとに異なる誤差である.
+これらを代入すると,
+
+<MathBlock
+  tex={String.raw`
+W(b^* + \Delta) \approx \delta_u + \delta_l + \min_{u}\left(\varepsilon_u - \Delta\,x_u\right) + \min_{l}\left(\varepsilon_l + \Delta\,x_l\right)
+`}
+/>
+
+となる.
+<Math tex="\Delta = 0" /> の場合は, <Math tex="\varepsilon_u, \varepsilon_l \ge 0" /> より
+
+<MathBlock
+  tex={String.raw`
+W(b^*) \approx \delta_u + \delta_l + \min_u \varepsilon_u + \min_l \varepsilon_l \ge \delta_u + \delta_l
+`}
+/>
+
+である.
+
+<Math tex="\Delta > 0" /> のとき, <Math tex="x_u > x_l" /> となる上限のサンプル <Math tex="u" /> と下限のサンプル <Math tex="l" /> を 1 つずつ選ぶと,
+
+<MathBlock
+  tex={String.raw`
+\begin{aligned}
+W(b^* + \Delta) &\lesssim \delta_u + \delta_l + \left(\varepsilon_u - \Delta\,x_u\right) + \left(\varepsilon_l + \Delta\,x_l\right)\\
+&= \delta_u + \delta_l + \varepsilon_u + \varepsilon_l - \Delta\left(x_u - x_l\right)\\
+&\le \delta_u + \delta_l + \varepsilon_u + \varepsilon_l\\
+&\lesssim W(b^*) + \varepsilon_u + \varepsilon_l
+\end{aligned}
+`}
+/>
+
+となる.
+
+<Math tex="\Delta < 0" /> のときは, 逆に <Math tex="x_u < x_l" /> となる <Math tex="u" />, <Math tex="l" /> を選ぶと, 同様に
+
+<MathBlock
+  tex={String.raw`
+W(b^* + \Delta) \lesssim W(b^*) + \varepsilon_u + \varepsilon_l
+`}
+/>
+
+となる.
+
+どちらの場合も, 選んだ <Math tex="u" />, <Math tex="l" /> の誤差 <Math tex="\varepsilon_u + \varepsilon_l" /> が小さいほど <Math tex="W(b^* + \Delta)" /> は <Math tex="W(b^*)" /> 以下に近づく.
+サンプルがたくさん取れれば, <Math tex="\varepsilon_u + \varepsilon_l" /> が十分小さいものが選べるはずなので,
+
+<MathBlock
+  tex={String.raw`
+W(b^* + \Delta) \lesssim W(b^*)
+`}
+/>
+
+となり, 真の傾き <Math tex="b^*" /> で <Math tex="W" /> はほぼ最大になる.
+
+また, <Math tex="W" /> を最大にする傾き <Math tex="\hat{b} = b^* + \hat{\Delta}" /> は <Math tex="W(\hat{b}) \ge W(b^*) \gtrsim \delta_u + \delta_l" /> を満たす.
+したがって,
+
+<MathBlock
+  tex={String.raw`
+\delta_u + \delta_l \lesssim W(\hat{b}) \lesssim \delta_u + \delta_l + \varepsilon_u + \varepsilon_l - |\hat{\Delta}|\,|x_u - x_l|
+\Longrightarrow
+|\hat{b} - b^*| \lesssim \frac{\varepsilon_u + \varepsilon_l}{|x_u - x_l|}
+`}
+/>
+
+となる.
+誤差の小さいサンプル同士が窓の中で離れているほど傾きの推定は正確になる.
+
+切片は, 傾き <Math tex="\hat{b}" /> での <Math tex="a" /> の範囲の中央, つまり帯の中央を取って
+
+<MathBlock
+  tex={String.raw`
+\hat{a} = \frac{1}{2}\left(\max_{l}\left(o_l - \hat{b}\,x_l\right) + \min_{u}\left(o_u - \hat{b}\,x_u\right)\right)
+`}
+/>
+
+とし, ホスト時刻 <Math tex="x" /> に対するデバイス時刻を <Math tex="x + \hat{a} + \hat{b}\,x" /> と推定する.
+
+<Math tex="\hat{b} \approx b^*" /> とすると, 前の式から
+
+<MathBlock
+  tex={String.raw`
+\begin{aligned}
+\min_{u}\left(o_u - \hat{b}\,x_u\right) &\approx a^* + \delta_u + \min_u \varepsilon_u,\\
+\max_{l}\left(o_l - \hat{b}\,x_l\right) &\approx a^* - \delta_l - \min_l \varepsilon_l
+\end{aligned}
+`}
+/>
+
+なので,
+
+<MathBlock
+  tex={String.raw`
+\hat{a} \approx a^* + \frac{\delta_u - \delta_l}{2} + \frac{\min_u \varepsilon_u - \min_l \varepsilon_l}{2} \approx a^* + \frac{\delta_u - \delta_l}{2}
+`}
+/>
+
+となる.
+したがって, 切片の真の値とのずれは <Math tex="(\delta_u - \delta_l)/2" /> 程度であり, 往路と復路の一定の遅れが等しければずれない.
+
+## アルゴリズム
+
+ここでは, <Math tex="W(b)" /> を最大にする傾き <Math tex="\hat{b}" /> を求めるアルゴリズムを述べる.
+
+まず, <Math tex="W(b)" /> は, 上限のサンプル群の下側凸包と下限のサンプル群の上側凸包を構成するサンプルのみが寄与することを示す.
+
+まず, 上限側の <Math tex="C(b) = \min_u(o_u - b\,x_u)" /> について, どのサンプルが効くのかを考える.
+<Math tex="o_u - b\,x_u" /> は, <Math tex="(x, o)" /> 平面で点 <Math tex="u = (x_u, o_u)" /> を通る傾き <Math tex="b" /> の直線の切片である.
+したがって, これを最小にするような点は, 必ず上限のサンプル群の下側凸包の頂点である.
+
+サンプル <Math tex="u" /> を 1 つ固定すると, <Math tex="g_u(b) = o_u - x_u\,b" /> は傾き <Math tex="-x_u" /> の <Math tex="b" /> の 1 次関数である.
+<Math tex="C(b)" /> は, これらの直線のうち各 <Math tex="b" /> で一番下にあるものなので, 直線をつないだ上に凸な折れ線になる.
+また, この折れ線の折れ目は, 2 本の直線 <Math tex="g_u, g_v" /> の交点であり,
+
+<MathBlock
+  tex={String.raw`
+o_u - b\,x_u = o_v - b\,x_v \iff b = \frac{o_v - o_u}{x_v - x_u},
+`}
+/>
+
+となる.
+この右辺は <Math tex="(x, o)" /> 平面で点 <Math tex="u" /> と <Math tex="v" /> を結ぶ線分の傾きである.
+したがって, 折れ目は下側凸包の辺の傾きにある.
+
+よって, <Math tex="C(b)" /> は下側凸包の頂点のみによって決まり, <Math tex="b" /> の候補は, 下側凸包の辺の傾きになる.
+
+下限に関しても同様の議論が成り立ち, 下限のサンプルのなかで, 上側凸包の頂点のみによって <Math tex="F(b) = \max_l(o_l - b\,x_l)" /> が決まる.
+
+したがって, <Math tex="W(b)" /> を最大にする <Math tex="b" /> の候補は, 上限の下側凸包の辺の傾きと, 下限の上側凸包の辺の傾きのみになる.
+
+以上の議論に従って, 以下のアルゴリズムで <Math tex="W(b)" /> を最大にする傾き <Math tex="\hat{b}" /> を求める.
+
+1. 下限・上限の列がどちらも 1 s 以上にわたり, かつ
+
+   <MathBlock
+     tex={String.raw`
+   \begin{aligned}
+   x_{l,\mathrm{first}} &< x_{u,\mathrm{last}},\\
+   x_{u,\mathrm{first}} &< x_{l,\mathrm{last}},
+   \end{aligned}
+   `}
+   />
+
+   を満たすとする. これが満たされない場合は2に進む
+
+   1-1. 下限の列から上側凸包, 上限の列から下側凸包を Andrew's Monotone Chain Algorithm で作る
+
+   1-2. 2 つの凸包の各辺の傾きを候補 <Math tex="b" /> とする
+
+   1-3. 各候補について, 天井と床を
+
+   <MathBlock
+     tex={String.raw`
+    \begin{aligned}
+    C(b) &= \min_{u}\left(o_u - b\,x_u\right),\\
+    F(b) &= \max_{l}\left(o_l - b\,x_l\right),
+    \end{aligned}
+    `}
+   />
+
+   で求める (<Math tex="u, l" /> は凸包の頂点だけ走査する)
+
+   1-4. <Math tex="W(b) = C(b) - F(b)" /> が最大の候補 <Math tex="\hat{b}" /> を選び, <Math tex="\hat{a} = (C(\hat{b}) + F(\hat{b}))/2" />, <Math tex="\hat{\theta}(x) = \hat{a} + \hat{b}\,x" /> とする.
+
+2. 1 の条件を満たさず, 最新の下限と最新の上限のホスト時刻の差が 1 s 未満のとき, 傾きを 0 として <Math tex="\hat{\theta}(x) = (o_{l,\mathrm{last}} + o_{u,\mathrm{last}})/2" /> とする (open 直後など, サンプルがまだ少ない間).
+
+3. どちらでもなければ, 推定しない.
+
+## 実装
+
+### サンプルの収集
+
+* GM 宛てにフレームを送るたびに, その `msg_id` と送信直前のホスト時刻 <Math tex="t_1" /> を記録する
+* GM の返信を受け取るたびに,
+  * 返信時刻 <Math tex="t_3'" /> が載っていれば, 下限のサンプル <Math tex="(t_4,\ t_3' - t_4)" /> を加える.
+  * 要求の受信時刻 <Math tex="t_2'" /> が載っていて, 同じ `msg_id` の <Math tex="t_1" /> が記録されていれば, 上限のサンプル <Math tex="(t_1,\ t_2' - t_1)" /> を加える.
+* open 時の `SetTime` では, デバイス時刻が送信直前のホスト時刻 <Math tex="t_1" /> と応答受信時のホスト時刻 <Math tex="t_4" /> の間に 0 になるので, 上限 <Math tex="(t_1,\ 0 - t_1)" /> と下限 <Math tex="(t_4,\ 0 - t_4)" /> を加える.
+* ホスト時刻 <Math tex="x" /> は, 最初に記録した時刻 (最初の送信または最初の返信) からの経過時間 \[ns] とする.
+
+### 間引きと区間窓
+
+後々の走査の計算量を減らすため, サンプルは間引きと区間窓で整理する.
+
+* ホスト時刻を 100 ms ごとの区間に区切り, 各区間でサンプルを 1 つだけ残す.
+  下限は <Math tex="o_l" /> が最大のもの, 上限は <Math tex="o_u" /> が最小のものを残す.
+  直前の区間より古い区間のサンプルが届いたら捨てる.
+* 下限・上限のどちらかで最新のサンプルから 10 s より古いサンプルを, 両方の列から捨てる.
+
+これにより各列のサンプルは高々 101 個で, ホスト時刻順に並ぶ.
+
+凸包の頂点は高々 101 個なので, 候補は高々 200 個, 1 回の推定は高々 4 万回程度の積和で済む.
+推定は `DeviceClock::now` のたびに行い, 凸包も毎回作り直す.
+なお, 上限の下側凸包は, 符号を反転させて下限の上側凸包と同じアルゴリズムで作る.
+
+### 整数演算
+
+候補の傾きは, 凸包の辺の両端の差
+
+<MathBlock
+  tex={String.raw`
+b = \frac{\rho}{r},\qquad \rho = o_q - o_p,\quad r = x_q - x_p > 0,
+`}
+/>
+
+のまま, 整数の組 <Math tex="(\rho, r)" /> で持つ.
+
+また, 最後に <Math tex="\hat{a}" /> と <Math tex="\hat{b}\,x" /> を別々に割り算しなくて済むよう, 推定したいホスト時刻 <Math tex="x" /> に対して,
+
+<MathBlock
+  tex={String.raw`
+\begin{aligned}
+\tilde{C}(b) &= r\left(C(b) + b\,x\right) = \min_{u}\left(r\,o_u + \rho\,(x - x_u)\right),\\
+\tilde{F}(b) &= r\left(F(b) + b\,x\right) = \max_{l}\left(r\,o_l + \rho\,(x - x_l)\right),
+\end{aligned}
+`}
+/>
+
+を用いる.
+<Math tex="b\,x" /> は共通なので, 幅 <Math tex="W(b) = (\tilde{C}(b) - \tilde{F}(b))/r" /> は変わらない.
+
+この時,
+
+<MathBlock
+  tex={String.raw`
+W(b_1) < W(b_2) \iff \left(\tilde{C}(b_1) - \tilde{F}(b_1)\right) r_2 < \left(\tilde{C}(b_2) - \tilde{F}(b_2)\right) r_1,
+`}
+/>
+
+となる.
+
+最後に, 選んだ候補 <Math tex="(\hat{\rho}, \hat{r})" /> について,
+
+<MathBlock
+  tex={String.raw`
+\hat{\theta}(x) = \hat{a} + \hat{b}\,x = \frac{\tilde{C}(\hat{b}) + \tilde{F}(\hat{b})}{2\hat{r}},
+`}
+/>
+
+で <Math tex="\hat{\theta}(x)" /> を求める.

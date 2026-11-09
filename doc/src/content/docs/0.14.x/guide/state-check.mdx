@@ -1,0 +1,35 @@
+---
+title: 状態監視
+description: 返信の device_status でデバイスとの通信状態を監視する
+sidebar:
+  order: 6
+slug: 0.14.x/guide/state-check
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+[`Client`](/autd3-sdk/0.14.x/api/basics/client/) の `read_state` の返り値を見ることで, デバイスとの通信が正常に動いているかどうかを監視できる.
+
+## 状態の取得
+
+`Response` の `device_status` は, その返信の時点の各デバイスの状態 `DeviceStatus` の配列を返す.
+
+`DeviceStatus` は以下を持つ.
+
+* `state`: デバイスの状態 (`DeviceState`).
+* `ptp_locked`: PTP がロックしているか.
+* `failsafe_active`: フェイルセーフで出力を止めていて, まだ解除されていないか
+
+全デバイスが `Ready` か, といった集約は返り値から作る (下の例を参照).
+`ptp_locked` と `failsafe_active` はその返信の値である.
+
+`DeviceState`の意味は以下の通り.
+
+| 状態     | 意味                                                                     |
+| -------- | ------------------------------------------------------------------------ |
+| `Ready`   | 返信があり, 時刻が同期されている                                        |
+| `Syncing` | 返信はあるが, 時刻を合わせている途中                                    |
+
+以下は, 一定間隔で生存確認を送って `device_status` を見て, 状態が変化したときだけ出力する例.
+
+<CodeTabs rust={"let mut last: Vec<DeviceStatus> = Vec::new();\nloop {\n    let Ok(response) = tokio::time::timeout(CHECK_INTERVAL, client.read_state()).await else {\n        println!(\"not every device replied within {CHECK_INTERVAL:?}\");\n        continue;\n    };\n    let status = response?.device_status();\n    if last != status {\n        for (i, s) in status.iter().enumerate() {\n            println!(\"device[{i}]: {}\", s.state);\n        }\n        println!(\n            \"all ready: {}\",\n            status.iter().all(|s| s.state == DeviceState::Ready)\n        );\n        last = status;\n    }\n    tokio::time::sleep(CHECK_INTERVAL).await;\n}"} python={"last = None\nwhile True:\n    try:\n        response = await asyncio.wait_for(client.read_state(), timeout=CHECK_INTERVAL)\n    except TimeoutError:\n        print(f\"not every device replied within {CHECK_INTERVAL} s\")\n        continue\n    status = response.device_status()\n    if status != last:\n        for i, s in enumerate(status):\n            print(f\"device[{i}]: {s.state}\")\n        all_ready = all(s.state == DeviceState.Ready for s in status)\n        print(f\"all ready: {all_ready}\")\n        last = status\n    await asyncio.sleep(CHECK_INTERVAL)"} csharp={"DeviceStatus[] last = Array.Empty<DeviceStatus>();\nwhile (true)\n{\n    using var timeout = new CancellationTokenSource(CheckInterval);\n    DeviceStatus[] status;\n    try\n    {\n        status = (await client.ReadStateAsync(timeout.Token)).DeviceStatus();\n    }\n    catch (OperationCanceledException)\n    {\n        Console.WriteLine($\"not every device replied within {CheckInterval}\");\n        continue;\n    }\n    if (!status.SequenceEqual(last))\n    {\n        for (var i = 0; i < status.Length; i++)\n        {\n            Console.WriteLine($\"device[{i}]: {status[i].State}\");\n        }\n        var allReady = status.All(s => s.State == DeviceState.Ready);\n        Console.WriteLine($\"all ready: {allReady}\");\n        last = status;\n    }\n    await Task.Delay(CheckInterval);\n}"} />

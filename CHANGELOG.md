@@ -2,6 +2,43 @@
 
 # Rust
 
+## [0.14.0] - 2026-11-09
+
+### 💥 Breaking Changes
+
+- *(client)* [**breaking**] Build the client on tokio
+- [**breaking**] Merge CommandOperation into Operation
+- [**breaking**] Rename radiation_pressure_inplace to radiation_pressure
+- [**breaking**] Close the client when any device is lost
+- *(autd3-rs)* [**breaking**] Make Client a thin socket without background tasks or timeouts
+- *(autd3-rs)* [**breaking**] Return telemetry and FPGA state with each reply instead of separate reads
+- *(autd3-rs)* [**breaking**] Replace Response accessors with per-device replies()
+- *(bindings)* [**breaking**] Make C#/Python/FFI clients thin sockets without timeouts or background tasks
+- *(autd3-rs)* [**breaking**] Make Client a thin socket without timeouts or background tasks
+- [**breaking**] Remove ExecAt::Lead in favor of ExecAt::At
+
+### 🚀 Features
+
+- Add heartbeat_interval to UdpOption for periodic heartbeat
+- Raise the default ack_timeout to 200 ms and lost_timeout to 500 ms and drop the deadline re-read socket
+- *(autd3-rs)* Add InflightFrames to collect replies in send order
+- *(autd3-rs)* Estimate device time from the grandmaster clock rate
+- Accept lists, arrays and tuples of commands as a sequence
+- *(csharp)* Add PhaseBuffer/IntensityBuffer.CopyFrom for bulk writes
+- *(bindings)* Pipeline concurrent sends across calls
+- Let each take multi-frame commands
+- *(autd3-rs)* Estimate device clock from round-trip bounds
+- *(autd3-rs)* Add device_time_at for host instants before the clock origin
+- *(autd3-rs)* Make FPGA sync phase-lock gains configurable in FpgaConfig
+
+### 🐛 Bug Fixes
+
+- Round SamplingConfig::from_freq to the nearest divider within f32 error
+- *(core)* Reject NaN focus coordinates in ControlPoint
+- *(client)* Report devices as Syncing until the first reply when sync_on_open is false
+- *(autd3-rs)* Fail only the overdue head frame on ack timeout and free in-flight slots out of order
+- *(autd3-rs)* Stamp device clock samples with the kernel arrival time
+
 ## [0.13.0] - 2026-10-27
 
 ### 💥 Breaking Changes
@@ -466,6 +503,29 @@
 
 # Python
 
+## [0.14.0] - 2026-11-09
+
+### 💥 Breaking Changes
+
+- *(client)* [**breaking**] Build the client on tokio
+- [**breaking**] Merge CommandOperation into Operation
+- [**breaking**] Rename radiation_pressure_inplace to radiation_pressure
+- [**breaking**] Close the client when any device is lost
+- *(bindings)* [**breaking**] Make C#/Python/FFI clients thin sockets without timeouts or background tasks
+- *(autd3-rs)* [**breaking**] Make Client a thin socket without timeouts or background tasks
+
+### 🚀 Features
+
+- Add heartbeat_interval to UdpOption for periodic heartbeat
+- Raise the default ack_timeout to 200 ms and lost_timeout to 500 ms and drop the deadline re-read socket
+- Accept lists, arrays and tuples of commands as a sequence
+- Let each take multi-frame commands
+- *(autd3-rs)* Make FPGA sync phase-lock gains configurable in FpgaConfig
+
+### 🐛 Bug Fixes
+
+- *(autd3-rs)* Stamp device clock samples with the kernel arrival time
+
 ## [0.13.0] - 2026-10-27
 
 ### 💥 Breaking Changes
@@ -758,6 +818,24 @@
 
 # C#
 
+## [0.14.0] - 2026-11-09
+
+### 💥 Breaking Changes
+
+- [**breaking**] Rename radiation_pressure_inplace to radiation_pressure
+- [**breaking**] Close the client when any device is lost
+- *(bindings)* [**breaking**] Make C#/Python/FFI clients thin sockets without timeouts or background tasks
+- *(autd3-rs)* [**breaking**] Make Client a thin socket without timeouts or background tasks
+
+### 🚀 Features
+
+- Add heartbeat_interval to UdpOption for periodic heartbeat
+- Raise the default ack_timeout to 200 ms and lost_timeout to 500 ms and drop the deadline re-read socket
+- Accept lists, arrays and tuples of commands as a sequence
+- *(csharp)* Add PhaseBuffer/IntensityBuffer.CopyFrom for bulk writes
+- Let each take multi-frame commands
+- *(autd3-rs)* Make FPGA sync phase-lock gains configurable in FpgaConfig
+
 ## [0.13.0] - 2026-10-27
 
 ### 💥 Breaking Changes
@@ -990,6 +1068,12 @@
 
 # Unity
 
+## [0.14.0] - 2026-11-09
+
+### 💥 Breaking Changes
+
+- *(bindings)* [**breaking**] Make C#/Python/FFI clients thin sockets without timeouts or background tasks
+
 ## [0.13.0] - 2026-10-27
 
 ### 💥 Breaking Changes
@@ -1055,6 +1139,16 @@
 ## [0.1.0] - 2026-07-06
 
 # Simulator
+
+## [0.14.0] - 2026-11-09
+
+### 💥 Breaking Changes
+
+- *(client)* [**breaking**] Build the client on tokio
+
+### 🐛 Bug Fixes
+
+- *(autd3-rs)* Stamp device clock samples with the kernel arrival time
 
 ## [0.13.0] - 2026-10-27
 
@@ -1335,6 +1429,17 @@
 - Derive simulator device count from client geometry
 
 # Firmware
+
+## [0.14.0] - 2026-11-09
+
+### 💥 Breaking Changes
+
+- *(autd3-rs)* [**breaking**] Return telemetry and FPGA state with each reply instead of separate reads
+
+### 🚀 Features
+
+- *(autd3-rs)* Estimate device clock from round-trip bounds
+- *(autd3-rs)* Make FPGA sync phase-lock gains configurable in FpgaConfig
 
 ## [0.13.0] - 2026-10-27
 

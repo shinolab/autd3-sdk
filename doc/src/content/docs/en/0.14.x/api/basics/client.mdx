@@ -1,0 +1,108 @@
+---
+title: Client
+description: The Client that manages connection and transmission to devices
+sidebar:
+  order: 2
+slug: en/0.14.x/api/basics/client
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+import Install from "@components/Install.astro";
+
+`Client` is the object that sends commands and reads state.
+
+<Install rust="autd3-rs" python="autd3" csharp="AUTD3" />
+
+<CodeTabs rust={"let mut client = Client::open(&geometry, &option).await?;\nclient.send(Clear).await?;\nclient.send(Synchronize).await?;"} python={"client = Client.open(geometry, TransportOption())\nawait client.send(Clear())\nawait client.send(Synchronize())"} csharp={"var client = Client.Open(layout, new TransportOption());\nawait client.SendAsync(new Clear());\nawait client.SendAsync(new Synchronize());"} />
+
+| Parameter  | Type              | Description                                                                  |
+| ---------- | ----------------- | ---------------------------------------------------------------------------- |
+| `geometry` | `&Geometry`       | Physical layout of the devices                                               |
+| `option`   | `&TransportOption`      | Connection settings. See [`TransportOption`](/autd3-sdk/en/0.14.x/api/basics/transport-option/) |
+
+## API
+
+<CodeTabs rust={"let num_devices = client.num_devices();\nlet now = client.device_time_now()?;\n\nlet firmware = client.read_firmware_version().await?;\n\nclient.send(Nop).await?;\nclient.send_streaming(Nop).await?;\n\nlet state = tokio::time::timeout(Duration::from_millis(200), client.read_state()).await??;\nlet fpga_state = state.replies().iter().map(|r| r.fpga_state).collect::<Vec<_>>();"} python={"num_devices = client.num_devices()\nnow = client.device_time_now()\n\nfirmware = await client.read_firmware_version()\n\nawait client.send(Nop())\nawait client.send_streaming(Nop())\n\nstate = await asyncio.wait_for(client.read_state(), timeout=0.2)\nfpga_state = [r.fpga_state for r in state.replies]"} csharp={"var numDevices = client.NumDevices;\nvar now = client.DeviceTimeNow();\n\nvar firmware = await client.ReadFirmwareVersionAsync();\n\nawait client.SendAsync(new Nop());\nawait client.SendStreamingAsync(new Nop());\n\nusing var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));\nvar state = await client.ReadStateAsync(timeout.Token);\nvar fpgaState = state.Replies.Select(r => r.FpgaState).ToArray();"} />
+
+| Method                    | async | Returns                               | Description                                                |
+| ------------------------- | :---: | ------------------------------------- | ---------------------------------------------------------- |
+| `num_devices()`           | —     | `usize`                               | Number of connected devices                                |
+| `geometry()`              | —     | `&Geometry`                           | Physical layout of the devices given at open time          |
+| `read_firmware_version()` | ✓     | `Result<Vec<FirmwareVersion>, Error>` | CPU/FPGA firmware version of each device                   |
+| `device_time_now()`       | —     | `Result<SysTime, Error>`              | Current time of the devices (see [SysTime](/autd3-sdk/en/0.14.x/api/basics/sys-time/)) |
+| `send(cmd)`               | ✓     | `Result<(), Error>`                   | Send a command, confirming the response frame by frame     |
+| `send_streaming(cmd)`     | ✓     | `Result<(), Error>`                   | Send a command without waiting for each response, then confirm the responses of every frame (see [streaming](#streaming)) |
+| `read_state()`            | ✓     | `Result<Response, Error>`             | Send one liveness check to every device and return their replies (see [State Monitoring](/autd3-sdk/en/0.14.x/guide/state-check/)) |
+
+With `heartbeat_interval` in `TransportOption`, the `Client` keeps sending liveness checks at that interval (see [Failsafe](/autd3-sdk/en/0.14.x/guide/failsafe/#communication-loss-failsafe-and-liveness-check)). By default it sends none.
+
+There is no function that stops the devices.
+The socket closes, and the liveness checks stop, when the `Client` is dropped in Rust, on `Dispose()` in C#, and on leaving the `with` block in Python. Nothing is sent to the devices.
+The devices keep their last output after the client is closed, so stopping the output is the user's responsibility.
+
+## streaming
+
+`send` waits for the response frame by frame (stop-and-wait).
+`send_streaming` keeps sending without waiting and confirms the responses from the oldest frame.
+Use it to send commands of many frames, such as Modulation or an STM, quickly.
+
+<CodeTabs rust={"client\n    .send_streaming(Modulation::new(SamplingConfig::FREQ_4K, &modulation))\n    .await?;"} python={"await client.send_streaming(Modulation(SamplingConfig.FREQ_4K, data))"} csharp={"await client.SendStreamingAsync(new Modulation(SamplingConfig.Freq4k, modulation));"} />
+
+## Response and DeviceReply
+
+`read_state` gathers the replies of every device into a `Response`.
+
+| `Response`        | Description                                                           |
+| ----------------- | --------------------------------------------------------------------- |
+| `replies()`       | `DeviceReply`s in device-number order                                 |
+| `device_status()` | State of each device built from the flags of its reply (see [State Monitoring](/autd3-sdk/en/0.14.x/guide/state-check/)) |
+| `check()`         | Return the error of the lowest-numbered device that replied with an error |
+
+| Field of `DeviceReply` | Description                                              |
+| ---------------------- | -------------------------------------------------------- |
+| `device`               | Number of the device that replied                        |
+| `msg_id`               | Which liveness check the reply answers                   |
+| `status`               | Error code (`0` = success)                               |
+| `flags`                | State flags of the device                                |
+| `unit_id`              | ID of the device                                         |
+| `sys_time`             | Device time \[ns] (`0` = not carried)                     |
+| `telemetry`            | [Telemetry](#telemetry)                                  |
+| `fpga_state`           | [FpgaState](#fpgastate)                                  |
+| `data`                 | Value of a read command                                  |
+
+### FpgaState
+
+FPGA state flags
+
+| Method                    | Type             | Description                              |
+| ------------------------- | ---------------- | ---------------------------------------- |
+| `is_thermal_asserted()`   | `bool`           | Whether the thermal sensor is over the threshold |
+| `current_mod_bank()`      | `ModulationBank` | Current Modulation bank                  |
+| `current_pattern_bank()`  | `PatternBank`    | Current Pattern bank (shared by Pattern and STM) |
+| `is_pattern_mode()`       | `bool`           | Whether a Pattern is being output        |
+| `is_pattern_stopped()`    | `bool`           | Whether Pattern / STM playback has stopped |
+| `is_mod_stopped()`        | `bool`           | Whether Modulation playback has stopped |
+| `is_transition_pending()` | `bool`           | Whether a bank switch is waiting to take effect |
+
+### Telemetry
+
+CPU diagnostic counters
+
+| Field                 | Type  | Description                                            |
+| --------------------- | ----- | ------------------------------------------------------ |
+| `fifo_drop`           | `u32` | Frames dropped because the receive FIFO was full (a dropped frame gets no reply) |
+| `exec_late`           | `u32` | Frames whose processing started 1 µs or more after their processing time |
+| `sync_resync`         | `u8`  | Number of hardware resynchronizations of the sync input (reset to 0 by `Synchronize`) |
+| `cpu_watchdog`        | `u8`  | Number of times the CPU watchdog fired (kept until the FPGA is reconfigured) |
+| `boot_failure`        | `u8`  | Number of steps that failed at boot (not cleared by `Clear`) |
+
+## each
+
+`each` takes a closure that receives a device and assigns a different command per device.
+
+<CodeTabs rust={"client\n    .send(each(|device| {\n        Some(if device.idx() % 2 == 0 {\n            Pattern::new(&left, Intensity::MAX)\n        } else {\n            Pattern::new(&right, Intensity::MAX)\n        })\n    }))\n    .await?;"} python={"await client.send(each(lambda device: Pattern(left if device.idx() % 2 == 0 else right, Intensity.MAX)))"} csharp={"await client.SendAsync(Command.Each(device => device.Idx % 2 == 0\n    ? new Pattern(left, Intensity.Max)\n    : new Pattern(right, Intensity.Max)));"} />
+
+In Rust, the return values of the closure must all be the same type.
+To mix commands of different types, unify them into a `BoxedCommand` with `.boxed()`.
+
+<CodeTabs rust={"client\n    .send(each(|device| {\n        Some(if device.idx() % 2 == 0 {\n            Box::new(Pattern::new(&left, Intensity::MAX)) as Box<dyn Operation>\n        } else {\n            Box::new(SetSilencer::default())\n        })\n    }))\n    .await?;"} />

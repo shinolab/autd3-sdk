@@ -1,0 +1,33 @@
+---
+title: TransportOption
+description: Communicate directly with AUTD3 over UDP/IPv6 link-local
+sidebar:
+  order: 1
+slug: en/0.14.x/api/basics/transport-option
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+## API
+
+<CodeTabs rust={"TransportOption {\n    iface,\n    open_timeout,\n    send_buffer_bytes,\n    sync_on_open,\n    heartbeat_interval,\n};"} python={"TransportOption(\n    iface=iface,\n    open_timeout=open_timeout,\n    send_buffer_bytes=send_buffer_bytes,\n    sync_on_open=sync_on_open,\n    heartbeat_interval=heartbeat_interval,\n)"} csharp={"new TransportOption\n{\n    Iface = iface,\n    OpenTimeout = openTimeout,\n    SendBufferBytes = sendBufferBytes,\n    SyncOnOpen = syncOnOpen,\n    HeartbeatInterval = heartbeatInterval,\n};"} />
+
+| Field                 | Type                   | Default | Description                                                                                   |
+| --------------------- | ---------------------- | ------- | --------------------------------------------------------------------------------------------- |
+| `iface`               | `Interface`            | `Auto`  | Destination                                                                                   |
+| `open_timeout`        | `Duration`             | 40 s    | Upper bound on the time the open waits |
+| `send_buffer_bytes`         | `Option<NonZeroUsize>` | 8192    | Size of the socket send buffer \[B]. `None` leaves the OS default                              |
+| `sync_on_open`        | `bool`                 | `true`  | When `false`, open does not wait for the devices to synchronize with one another |
+| `heartbeat_interval`  | `Option<Duration>`     | `None`  | When set, keep sending liveness checks at this interval (see [Failsafe](/autd3-sdk/en/0.14.x/guide/failsafe/#communication-loss-failsafe-and-liveness-check)) |
+
+Changing anything other than `iface` and `heartbeat_interval` is generally not recommended.
+
+## Interface
+
+<CodeTabs rust={"Interface::Auto;\nInterface::Name(\"eth0\".to_string());\nInterface::Addr(\"[::1]:44336\".parse()?);"} python={"Interface.Auto\nInterface.Name(\"eth0\")\nInterface.Addr(\"[::1]:44336\")"} csharp={"_ = Interface.Auto;\n_ = Interface.Name(\"eth0\");\n_ = Interface.Addr(\"[::1]:44336\");"} />
+
+| Value       | Destination                                                                                             |
+| ----------- | ------------------------------------------------------------------------------------------------------- |
+| `Auto`      | The first network interface on which devices reply                                                      |
+| `Name(..)`  | The real devices connected to the network interface with the given name                                 |
+| `Addr(..)`  | The given IPv6 address and port. Connect to the [Simulator](/autd3-sdk/en/0.14.x/guide/simulator/) with `[::1]:44336` |

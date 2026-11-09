@@ -76,7 +76,6 @@ workflows:
         - 'actions/checkout@v7.0.1'
         - 'dtolnay/rust-toolchain@stable'
         - 'swatinem/rust-cache@v2.9.3'
-        - 'taiki-e/install-action@v2.90.2'
     '.github/workflows/ci-unity.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/setup-node@v7.1.0'

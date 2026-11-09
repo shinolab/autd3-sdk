@@ -1,0 +1,33 @@
+---
+title: TransportOption
+description: UDP/IPv6 リンクローカルで AUTD3 と直接通信する
+sidebar:
+  order: 1
+slug: 0.14.x/api/basics/transport-option
+---
+
+import CodeTabs from "@components/CodeTabs.astro";
+
+## API
+
+<CodeTabs rust={"TransportOption {\n    iface,\n    open_timeout,\n    send_buffer_bytes,\n    sync_on_open,\n    heartbeat_interval,\n};"} python={"TransportOption(\n    iface=iface,\n    open_timeout=open_timeout,\n    send_buffer_bytes=send_buffer_bytes,\n    sync_on_open=sync_on_open,\n    heartbeat_interval=heartbeat_interval,\n)"} csharp={"new TransportOption\n{\n    Iface = iface,\n    OpenTimeout = openTimeout,\n    SendBufferBytes = sendBufferBytes,\n    SyncOnOpen = syncOnOpen,\n    HeartbeatInterval = heartbeatInterval,\n};"} />
+
+| フィールド            | 型          | 既定値  | 説明                                                                                          |
+| --------------------- | ----------- | ------- | --------------------------------------------------------------------------------------------- |
+| `iface`               | `Interface` | `Auto`  | 接続先                                                                                        |
+| `open_timeout`        | `Duration`  | 40 s    | open 処理の待ち時間上限                     |
+| `send_buffer_bytes`         | `Option<NonZeroUsize>` | 8192 | ソケットの送信バッファの大きさ \[B]. `None` で OS の既定のままにする |
+| `sync_on_open`        | `bool`      | `true`  | `false` なら open 時にデバイス間の同期を待たない |
+| `heartbeat_interval`  | `Option<Duration>` | `None` | 指定するとその周期で生存確認を送り続ける ([フェイルセーフ](/autd3-sdk/0.14.x/guide/failsafe/#通信途絶の-failsafe-と生存確認) 参照) |
+
+基本的に `iface` と `heartbeat_interval` 以外を変更することは推奨しない.
+
+## Interface
+
+<CodeTabs rust={"Interface::Auto;\nInterface::Name(\"eth0\".to_string());\nInterface::Addr(\"[::1]:44336\".parse()?);"} python={"Interface.Auto\nInterface.Name(\"eth0\")\nInterface.Addr(\"[::1]:44336\")"} csharp={"_ = Interface.Auto;\n_ = Interface.Name(\"eth0\");\n_ = Interface.Addr(\"[::1]:44336\");"} />
+
+| 値          | 接続先                                                                                                  |
+| ----------- | ------------------------------------------------------------------------------------------------------- |
+| `Auto`      | デバイスが最初に応答したネットワークインタフェース                                                      |
+| `Name(..)`  | 名前で指定したネットワークインタフェースにつながっている実機                                            |
+| `Addr(..)`  | 指定した IPv6 アドレスとポート. [Simulator](/autd3-sdk/0.14.x/guide/simulator/) へは `[::1]:44336` でつなぐ    |
