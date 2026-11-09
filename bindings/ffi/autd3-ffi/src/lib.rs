@@ -850,6 +850,9 @@ pub unsafe extern "C" fn autd3_op_set_cpu_config(
 #[repr(C)]
 pub struct Autd3FpgaConfig {
     pub sync_phase_lock: bool,
+    pub sync_kp: u16,
+    pub sync_ki: u16,
+    pub sync_kf: u16,
 }
 
 #[unsafe(no_mangle)]
@@ -860,6 +863,9 @@ pub unsafe extern "C" fn autd3_fpga_config_default(out: *mut Autd3FpgaConfig) ->
             out,
             Autd3FpgaConfig {
                 sync_phase_lock: config.sync_phase_lock,
+                sync_kp: config.sync_kp,
+                sync_ki: config.sync_ki,
+                sync_kf: config.sync_kf,
             },
         )
     }
@@ -869,6 +875,9 @@ pub unsafe extern "C" fn autd3_fpga_config_default(out: *mut Autd3FpgaConfig) ->
 pub extern "C" fn autd3_op_set_fpga_config(config: Autd3FpgaConfig) -> *mut OwnedCommand {
     into_handle(OwnedCommand::SetFpgaConfig(FpgaConfig {
         sync_phase_lock: config.sync_phase_lock,
+        sync_kp: config.sync_kp,
+        sync_ki: config.sync_ki,
+        sync_kf: config.sync_kf,
     }))
 }
 
@@ -2331,30 +2340,39 @@ mod tests {
 
     #[test]
     fn the_default_fpga_config_matches_the_rust_default_and_reaches_the_op() {
+        let default = FpgaConfig::default();
         let mut config = Autd3FpgaConfig {
-            sync_phase_lock: !FpgaConfig::default().sync_phase_lock,
+            sync_phase_lock: !default.sync_phase_lock,
+            sync_kp: !default.sync_kp,
+            sync_ki: !default.sync_ki,
+            sync_kf: !default.sync_kf,
         };
         assert_eq!(AUTD3_OK, unsafe {
             autd3_fpga_config_default(&raw mut config)
         });
-        assert_eq!(
-            FpgaConfig::default().sync_phase_lock,
-            config.sync_phase_lock
-        );
-        assert_eq!(
-            SetFpgaConfig::default().config.sync_phase_lock,
-            config.sync_phase_lock
-        );
+        assert_eq!(default.sync_phase_lock, config.sync_phase_lock);
+        assert_eq!(default.sync_kp, config.sync_kp);
+        assert_eq!(default.sync_ki, config.sync_ki);
+        assert_eq!(default.sync_kf, config.sync_kf);
+        assert_eq!(SetFpgaConfig::default().config, default);
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, unsafe {
             autd3_fpga_config_default(std::ptr::null_mut())
         });
 
         let op = autd3_op_set_fpga_config(Autd3FpgaConfig {
             sync_phase_lock: false,
+            sync_kp: 1,
+            sync_ki: 2,
+            sync_kf: 3,
         });
         assert!(matches!(
             unsafe { take_handle(op) },
-            Some(OwnedCommand::SetFpgaConfig(config)) if config == FpgaConfig { sync_phase_lock: false }
+            Some(OwnedCommand::SetFpgaConfig(config)) if config == FpgaConfig {
+                sync_phase_lock: false,
+                sync_kp: 1,
+                sync_ki: 2,
+                sync_kf: 3,
+            }
         ));
     }
 

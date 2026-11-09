@@ -25,6 +25,9 @@ import csFullSample from "@codes/csharp/examples/api/command/fpga-config-example
 | Field             | Type   | Default | Description |
 | ----------------- | ------ | ------- | ----------- |
 | `sync_phase_lock` | `bool` | `true`  | Fine adjustment that phase-locks the FPGA clock to the sync pulse shared between devices. (enabled by default) |
+| `sync_kp`         | `u16`  | `64`    | Proportional gain of the fine adjustment. |
+| `sync_ki`         | `u16`  | `1024`  | Integral gain of the fine adjustment. |
+| `sync_kf`         | `u16`  | `4096`  | Integral gain of the frequency estimation before the fine adjustment engages. |
 
 ## Example
 

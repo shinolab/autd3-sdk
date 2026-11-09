@@ -273,11 +273,14 @@ pub(crate) fn force_fan(value: u8) -> Frame {
     f
 }
 
-pub(crate) fn fpga_config(sync_phase_lock: u8) -> Frame {
+pub(crate) fn fpga_config(sync_phase_lock: u8, gains: [u16; 3]) -> Frame {
     let mut f = Frame::from_payload(
         Cmd::SetFpgaConfig,
         &SetFpgaConfigPayload {
             sync_phase_lock: false,
+            sync_kp: gains[0].into(),
+            sync_ki: gains[1].into(),
+            sync_kf: gains[2].into(),
         },
     );
     f.set_payload_byte(

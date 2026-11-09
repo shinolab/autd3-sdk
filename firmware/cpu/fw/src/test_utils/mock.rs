@@ -17,9 +17,9 @@ use crate::fpga_params::{
     ADDR_MOD_TRANSITION_MODE, ADDR_PATTERN_FREQ_DIV0, ADDR_PATTERN_MEM_WR_BANK,
     ADDR_PATTERN_MEM_WR_PAGE, ADDR_PATTERN_REP0, ADDR_PATTERN_REQ_RD_BANK,
     ADDR_PATTERN_TRANSITION_MODE, ADDR_SILENCER_COMPLETION_STEPS_PHASE, ADDR_SILENCER_FLAG,
-    ADDR_SILENCER_SET_RESULT, ADDR_SYNC_PS_CTL, ADDR_WATCHDOG_KICK, ADDR_WATCHDOG_RELEASE,
-    ADDR_WATCHDOG_STATE, ADDR_WATCHDOG_TIMEOUT, BramSelect, CtlFlags, FLASH_BUF_BYTES, FlashErr,
-    FlashOp, FunctionBits, NUM_BANKS,
+    ADDR_SILENCER_SET_RESULT, ADDR_SYNC_PS_CTL, ADDR_SYNC_PS_KF, ADDR_SYNC_PS_KI, ADDR_SYNC_PS_KP,
+    ADDR_WATCHDOG_KICK, ADDR_WATCHDOG_RELEASE, ADDR_WATCHDOG_STATE, ADDR_WATCHDOG_TIMEOUT,
+    BramSelect, CtlFlags, FLASH_BUF_BYTES, FlashErr, FlashOp, FunctionBits, NUM_BANKS,
 };
 use crate::port::{FlashError, Port};
 use crate::proto::{
@@ -108,6 +108,7 @@ pub(crate) struct MockPort {
     pub watchdog_state: u16,
     pub watchdog_log: Vec<WatchdogEvent>,
     pub sync_ps_ctl: Option<u16>,
+    pub sync_ps_gains: [Option<u16>; 3],
     isr_frame: Option<(Rc<Cpu>, u8)>,
     pub isr_seen_reply: Option<Reply>,
 }
@@ -171,6 +172,7 @@ impl MockPort {
             watchdog_state: 0,
             watchdog_log: Vec::new(),
             sync_ps_ctl: None,
+            sync_ps_gains: [None; 3],
             isr_frame: None,
             isr_seen_reply: None,
         }
@@ -251,6 +253,15 @@ impl MockPort {
             },
             Some(BramSelect::SyncPs) if addr & 0xFF == ADDR_SYNC_PS_CTL => {
                 self.sync_ps_ctl = Some(value);
+            }
+            Some(BramSelect::SyncPs)
+                if matches!(
+                    addr & 0xFF,
+                    ADDR_SYNC_PS_KP | ADDR_SYNC_PS_KI | ADDR_SYNC_PS_KF
+                ) =>
+            {
+                self.sync_ps_gains[usize::from(addr & 0xFF) - usize::from(ADDR_SYNC_PS_KP)] =
+                    Some(value);
             }
             Some(
                 BramSelect::FlashBuf | BramSelect::SyncPs | BramSelect::Mod | BramSelect::Emission,

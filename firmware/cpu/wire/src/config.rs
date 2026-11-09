@@ -87,11 +87,17 @@ impl Default for CpuConfig {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct FpgaConfig {
     pub sync_phase_lock: bool,
+    pub sync_kp: u16,
+    pub sync_ki: u16,
+    pub sync_kf: u16,
 }
 
 impl FpgaConfig {
     pub const DEFAULT: Self = Self {
         sync_phase_lock: cpu_params::SYNC_PHASE_LOCK,
+        sync_kp: cpu_params::SYNC_KP,
+        sync_ki: cpu_params::SYNC_KI,
+        sync_kf: cpu_params::SYNC_KF,
     };
 }
 

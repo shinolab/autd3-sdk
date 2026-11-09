@@ -281,6 +281,15 @@ namespace AUTD3.Tests
         }
 
         [Fact]
+        public void TheSyncGainsReachTheNativeConfig()
+        {
+            var native = new FpgaConfig { SyncKp = 1, SyncKi = 2, SyncKf = ushort.MaxValue }.ToNative();
+            Assert.Equal((ushort)1, native.SyncKp);
+            Assert.Equal((ushort)2, native.SyncKi);
+            Assert.Equal(ushort.MaxValue, native.SyncKf);
+        }
+
+        [Fact]
         public void FanAndGpioCommandsHaveADefault()
         {
             using var geometry = Fixture.SingleDevice();

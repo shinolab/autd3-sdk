@@ -47,12 +47,15 @@ mod tests {
     fn the_config_is_encoded() {
         let (cmd, out) = encode(&SetFpgaConfig::default()).unwrap();
         assert_eq!(cmd, (Cmd::SetFpgaConfig, size_of::<SetFpgaConfigPayload>()));
-        assert_eq!(out[0], 1);
+        assert_eq!(out[..7], [1, 64, 0, 0x00, 0x04, 0x00, 0x10]);
 
         let (_, out) = encode(&SetFpgaConfig::new(FpgaConfig {
             sync_phase_lock: false,
+            sync_kp: 1,
+            sync_ki: 0x0203,
+            sync_kf: u16::MAX,
         }))
         .unwrap();
-        assert_eq!(out[0], 0);
+        assert_eq!(out[..7], [0, 1, 0, 0x03, 0x02, 0xFF, 0xFF]);
     }
 }

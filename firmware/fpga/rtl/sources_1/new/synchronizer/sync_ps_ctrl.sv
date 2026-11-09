@@ -15,9 +15,6 @@ module sync_ps_ctrl (
   localparam int IntegMax = RateMax << FracBits;
   localparam int FreqWindow = 16;
   localparam int ErrMax = 31;
-  localparam logic [15:0] Kp = 16'd64;
-  localparam logic [15:0] Ki = 16'd1024;
-  localparam logic [15:0] Kf = 16'd4096;
 
   logic signed [31:0] integ = '0;
   logic signed [15:0] rate = '0;
@@ -35,7 +32,7 @@ module sync_ps_ctrl (
   assign in_freq_window = (EDGE_DIFF <= FreqWindow) && (EDGE_DIFF >= -FreqWindow);
 
   logic [15:0] gain;
-  assign gain = FINE ? Ki : in_freq_window ? Kf : 16'd0;
+  assign gain = FINE ? SETTINGS.KI : in_freq_window ? SETTINGS.KF : 16'd0;
 
   logic signed [22:0] integ_delta;
   logic signed [32:0] integ_sum;
@@ -47,7 +44,7 @@ module sync_ps_ctrl (
   logic signed [22:0] prop;
   logic signed [23:0] rate_sum;
   logic signed [15:0] rate_next;
-  assign prop = FINE ? err * $signed({1'b0, Kp}) : 23'sd0;
+  assign prop = FINE ? err * $signed({1'b0, SETTINGS.KP}) : 23'sd0;
   assign rate_sum = 24'(integ_next >>> FracBits) + 24'(prop);
   assign rate_next = (rate_sum > RateMax) ? 16'(RateMax) : (rate_sum < -RateMax) ? 16'(-RateMax) : 16'(rate_sum);
 

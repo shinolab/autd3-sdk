@@ -15,6 +15,7 @@ async fn main() -> anyhow::Result<()> {
 
     client.send(SetFpgaConfig::new(FpgaConfig {
         sync_phase_lock: false,
+        ..Default::default()
     })).await?;
 
     client.send(SetFpgaConfig::default()).await?;

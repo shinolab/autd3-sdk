@@ -127,4 +127,13 @@ PSEN から PSDONE までは 12 PSCLK かかり, 1 ステップは 14 PSCLK ご�
 レートの 1 単位は <Math tex="2^{18}" /> PSCLK (<Math tex="\SI{1.28}{ms}" />) あたり 1 ステップ (約 <Math tex="\SI{0.0136}{ppm}" />) で, <Math tex="\pm 18000" /> (約 <Math tex="\pm\SI{245}{ppm}" />) で飽和させる.
 <Math tex="|d| \le 1" /> で細調整に入り, <Math tex="|d| > 8" /> でやめる.
 微調整をしていない間は通常の補正で位相を合わせつつ, 積分器で周波数を推定する.
+
+<Math tex="e" /> を <Math tex="\pm 31" /> で飽和させ, 同期パルスごとに積分器 <Math tex="I" /> とレート <Math tex="r" /> を次のように更新する.
+
+- 細調整中: <Math tex="I \leftarrow I + K_I e" />, <Math tex="r = \lfloor I / 2^8 \rfloor + K_P e" />
+- 細調整外で <Math tex="|d| \le 16" />: <Math tex="I \leftarrow I + K_F e" />, <Math tex="r = \lfloor I / 2^8 \rfloor" />
+- それ以外: 更新しない
+
+<Math tex="I" /> は <Math tex="\pm 18000 \cdot 2^8" /> で飽和させる.
+<Math tex="K_P" />, <Math tex="K_I" />, <Math tex="K_F" /> は [SetFpgaConfig](/autd3-sdk/api/command/fpga-config/) の `sync_kp`, `sync_ki`, `sync_kf` で設定する (既定値は 64, 1024, 4096).
 細調整に入ってから安定するまでは約 <Math tex="\SI{110}{ms}" /> かかる.

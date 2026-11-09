@@ -55,6 +55,9 @@ pub const ADDR_WATCHDOG_RELEASE: u16 = 0x2;
 pub const ADDR_WATCHDOG_STATE: u16 = 0x3;
 
 pub const ADDR_SYNC_PS_CTL: u16 = 0x0;
+pub const ADDR_SYNC_PS_KP: u16 = 0x1;
+pub const ADDR_SYNC_PS_KI: u16 = 0x2;
+pub const ADDR_SYNC_PS_KF: u16 = 0x3;
 
 autd3_cpu_wire::wire_enum_u8! {
     pub enum FlashOp {

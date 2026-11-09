@@ -13,8 +13,9 @@ use crate::fpga_params::{
     ADDR_PATTERN_TRANSITION_VALUE_0, ADDR_SILENCER_COMPLETION_STEPS_INTENSITY,
     ADDR_SILENCER_COMPLETION_STEPS_PHASE, ADDR_SILENCER_FLAG, ADDR_SILENCER_SET_RESULT,
     ADDR_SILENCER_UPDATE_RATE_INTENSITY, ADDR_SILENCER_UPDATE_RATE_PHASE, ADDR_SYNC_PS_CTL,
-    ADDR_WATCHDOG_KICK, ADDR_WATCHDOG_RELEASE, ADDR_WATCHDOG_STATE, ADDR_WATCHDOG_TIMEOUT,
-    BramSelect, CtlFlags, FunctionBits, NUM_BANKS, NUM_TRANSDUCERS,
+    ADDR_SYNC_PS_KF, ADDR_SYNC_PS_KI, ADDR_SYNC_PS_KP, ADDR_WATCHDOG_KICK, ADDR_WATCHDOG_RELEASE,
+    ADDR_WATCHDOG_STATE, ADDR_WATCHDOG_TIMEOUT, BramSelect, CtlFlags, FunctionBits, NUM_BANKS,
+    NUM_TRANSDUCERS,
 };
 pub use crate::fpga_params::{PWE_TABLE_SIZE, REP_INFINITE};
 use crate::port::Port;
@@ -94,6 +95,9 @@ pub fn release_watchdog<P: Port>(port: &mut P) {
 }
 
 pub fn apply_fpga_config<P: Port>(port: &mut P, config: &FpgaConfig) {
+    write(port, BramSelect::SyncPs, ADDR_SYNC_PS_KP, config.sync_kp);
+    write(port, BramSelect::SyncPs, ADDR_SYNC_PS_KI, config.sync_ki);
+    write(port, BramSelect::SyncPs, ADDR_SYNC_PS_KF, config.sync_kf);
     write(
         port,
         BramSelect::SyncPs,
