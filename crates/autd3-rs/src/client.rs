@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use autd3_rs_core::MAX_INFLIGHT;
 use tokio::task::JoinHandle;
@@ -66,6 +66,10 @@ impl Client {
 
     pub fn device_time_now(&self) -> Result<SysTime, Error> {
         self.controller.device_time_now()
+    }
+
+    pub fn device_time_at(&self, host: Instant) -> Result<SysTime, Error> {
+        self.controller.device_time_at(host)
     }
 
     pub fn send<C: Command>(
