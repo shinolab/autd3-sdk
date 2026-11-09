@@ -161,7 +161,7 @@ pub struct FpgaEmulator {
     cpu_flash: Box<[u8]>,
     reset_count: u32,
     pub(crate) flash: flash::FlashEmulator,
-    sync_ps_ctl: u16,
+    sync_ps: [u16; 4],
 }
 
 impl FpgaEmulator {
@@ -215,7 +215,7 @@ impl FpgaEmulator {
             cpu_flash,
             reset_count: 0,
             flash: flash::FlashEmulator::new(),
-            sync_ps_ctl: 1,
+            sync_ps: [1, 64, 1024, 4096],
         }
     }
 
@@ -310,8 +310,9 @@ impl FpgaEmulator {
             SELECT_OUTPUT_MASK => self.output_mask[a & (OUTPUT_MASK_WORDS - 1)] = value,
             SELECT_PWE_TABLE => self.pwe[a & (PWE_TABLE_SIZE - 1)] = value,
             SELECT_SYNC_PS if a & 0xFF == reg(fw::ADDR_SYNC_PS_CTL) => {
-                self.sync_ps_ctl = value & 1;
+                self.sync_ps[0] = value & 1;
             }
+            SELECT_SYNC_PS if (1..=3).contains(&(a & 0xFF)) => self.sync_ps[a & 0xFF] = value,
             SELECT_FLASH => {
                 self.flash.write_reg(a & 0xFF, value);
                 if self.flash.take_reboot_request() {
@@ -334,8 +335,8 @@ impl FpgaEmulator {
             }
         } else if select == SELECT_FLASH {
             self.flash.read_reg(a & 0xFF)
-        } else if select == SELECT_SYNC_PS && a & 0xFF == reg(fw::ADDR_SYNC_PS_CTL) {
-            self.sync_ps_ctl
+        } else if select == SELECT_SYNC_PS && a & 0xFF < 4 {
+            self.sync_ps[a & 0xFF]
         } else {
             0
         }
@@ -474,7 +475,12 @@ impl FpgaEmulator {
 
     #[must_use]
     pub fn sync_phase_lock(&self) -> bool {
-        self.sync_ps_ctl & 1 != 0
+        self.sync_ps[0] & 1 != 0
+    }
+
+    #[must_use]
+    pub fn sync_gains(&self) -> [u16; 3] {
+        [self.sync_ps[1], self.sync_ps[2], self.sync_ps[3]]
     }
 
     #[must_use]
@@ -714,10 +720,16 @@ mod tests {
         let functions = FunctionBits::from_bits_retain(fpga.read(fw::ADDR_FUNCTION_BITS) as u8);
         assert!(functions.contains(FunctionBits::SYNC_PHASE_LOCK));
         assert_eq!(fpga.read(addr), 1);
+        assert_eq!(fpga.sync_gains(), [64, 1024, 4096]);
         write(&mut fpga, addr, 0);
+        write(&mut fpga, addr + 1, 11);
+        write(&mut fpga, addr + 3, 33);
         assert_eq!(fpga.read(addr), 0);
+        assert_eq!(fpga.read(addr + 1), 11);
+        assert_eq!(fpga.sync_gains(), [11, 1024, 33]);
         fpga.reload();
         assert_eq!(fpga.read(addr), 1);
+        assert_eq!(fpga.sync_gains(), [64, 1024, 4096]);
     }
 
     #[test]

@@ -4,6 +4,9 @@ use core::time::Duration;
 pub const SYNC_GUARD: Duration = Duration::from_micros(250);
 pub const CPU_WATCHDOG_TIMEOUT: Duration = Duration::from_secs(1);
 pub const SYNC_PHASE_LOCK: bool = true;
+pub const SYNC_KP: u16 = 64;
+pub const SYNC_KI: u16 = 1024;
+pub const SYNC_KF: u16 = 4096;
 
 pub const PTP_SYNC_INTERVAL: Duration = Duration::from_millis(8);
 pub const PTP_TX_TIMESTAMP_TIMEOUT: Duration = Duration::from_millis(3);

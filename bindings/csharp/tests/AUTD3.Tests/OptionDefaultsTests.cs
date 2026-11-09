@@ -41,6 +41,13 @@ namespace AUTD3.Tests
             Assert.True(new FpgaConfig().SyncPhaseLock);
             Assert.True(default(FpgaConfig).SyncPhaseLock);
             Assert.False(new FpgaConfig { SyncPhaseLock = false }.SyncPhaseLock);
+            Assert.Equal((ushort)64, default(FpgaConfig).SyncKp);
+            Assert.Equal((ushort)1024, default(FpgaConfig).SyncKi);
+            Assert.Equal((ushort)4096, default(FpgaConfig).SyncKf);
+            var gains = new FpgaConfig { SyncKi = 7 };
+            Assert.True(gains.SyncPhaseLock);
+            Assert.Equal((ushort)64, gains.SyncKp);
+            Assert.Equal((ushort)7, gains.SyncKi);
         }
 
         [Fact]

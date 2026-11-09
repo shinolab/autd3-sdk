@@ -496,14 +496,38 @@ impl FpgaConfigPy {
     #[pyo3(signature = (
         *,
         sync_phase_lock = CoreFpgaConfig::default().sync_phase_lock,
+        sync_kp = CoreFpgaConfig::default().sync_kp,
+        sync_ki = CoreFpgaConfig::default().sync_ki,
+        sync_kf = CoreFpgaConfig::default().sync_kf,
     ))]
-    fn new(sync_phase_lock: bool) -> Self {
-        Self(CoreFpgaConfig { sync_phase_lock })
+    #[allow(clippy::similar_names)]
+    fn new(sync_phase_lock: bool, sync_kp: u16, sync_ki: u16, sync_kf: u16) -> Self {
+        Self(CoreFpgaConfig {
+            sync_phase_lock,
+            sync_kp,
+            sync_ki,
+            sync_kf,
+        })
     }
 
     #[getter]
     fn sync_phase_lock(&self) -> bool {
         self.0.sync_phase_lock
+    }
+
+    #[getter]
+    fn sync_kp(&self) -> u16 {
+        self.0.sync_kp
+    }
+
+    #[getter]
+    fn sync_ki(&self) -> u16 {
+        self.0.sync_ki
+    }
+
+    #[getter]
+    fn sync_kf(&self) -> u16 {
+        self.0.sync_kf
     }
 
     fn __repr__(&self) -> String {

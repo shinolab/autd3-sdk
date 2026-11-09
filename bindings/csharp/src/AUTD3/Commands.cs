@@ -50,6 +50,9 @@ namespace AUTD3
     internal struct FpgaConfigNative
     {
         public byte SyncPhaseLock;
+        public ushort SyncKp;
+        public ushort SyncKi;
+        public ushort SyncKf;
     }
 
     internal static class NativeCommand
@@ -421,11 +424,17 @@ namespace AUTD3
     internal static class FpgaConfigDefaults
     {
         internal static readonly bool SyncPhaseLock;
+        internal static readonly ushort SyncKp;
+        internal static readonly ushort SyncKi;
+        internal static readonly ushort SyncKf;
 
         static FpgaConfigDefaults()
         {
             OptionNative.Apply("preset", NativeCommand.autd3_fpga_config_default(out var native));
             SyncPhaseLock = native.SyncPhaseLock != 0;
+            SyncKp = native.SyncKp;
+            SyncKi = native.SyncKi;
+            SyncKf = native.SyncKf;
         }
     }
 
@@ -433,10 +442,19 @@ namespace AUTD3
     {
         private readonly bool? _syncPhaseLock;
         public bool SyncPhaseLock { get => _syncPhaseLock ?? FpgaConfigDefaults.SyncPhaseLock; init => _syncPhaseLock = value; }
+        private readonly ushort? _syncKp;
+        public ushort SyncKp { get => _syncKp ?? FpgaConfigDefaults.SyncKp; init => _syncKp = value; }
+        private readonly ushort? _syncKi;
+        public ushort SyncKi { get => _syncKi ?? FpgaConfigDefaults.SyncKi; init => _syncKi = value; }
+        private readonly ushort? _syncKf;
+        public ushort SyncKf { get => _syncKf ?? FpgaConfigDefaults.SyncKf; init => _syncKf = value; }
 
         internal FpgaConfigNative ToNative() => new FpgaConfigNative
         {
             SyncPhaseLock = OptionNative.Flag(SyncPhaseLock),
+            SyncKp = SyncKp,
+            SyncKi = SyncKi,
+            SyncKf = SyncKf,
         };
     }
 

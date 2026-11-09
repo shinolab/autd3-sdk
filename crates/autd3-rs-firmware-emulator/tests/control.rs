@@ -21,21 +21,29 @@ fn force_fan_toggles_and_survives_latch() {
 }
 
 #[test]
-fn the_fpga_config_enables_the_sync_phase_lock_by_default_and_clear_restores_it() {
+fn the_fpga_config_sets_the_sync_phase_lock_and_gains_and_clear_restores_the_defaults() {
     let mut device = Device::new(NUM_TRANSDUCERS);
     assert!(device.fpga().sync_phase_lock());
 
-    let rx = device.send(&frame(Cmd::SetFpgaConfig, &[0]));
+    assert_eq!(device.fpga().sync_gains(), [64, 1024, 4096]);
+
+    let rx = device.send(&frame(Cmd::SetFpgaConfig, &[0, 11, 0, 22, 0, 0x33, 0x44]));
     assert_eq!(rx.status, autd3_cpu_wire::Error::None);
     assert!(!device.fpga().sync_phase_lock());
+    assert_eq!(device.fpga().sync_gains(), [11, 22, 0x4433]);
 
-    let rx = device.send(&frame(Cmd::SetFpgaConfig, &[2]));
+    let rx = device.send(&frame(Cmd::SetFpgaConfig, &[2, 0, 0, 0, 0, 0, 0]));
+    assert_eq!(rx.status, autd3_cpu_wire::Error::InvalidPayload);
+    assert!(!device.fpga().sync_phase_lock());
+
+    let rx = device.send(&frame(Cmd::SetFpgaConfig, &[1]));
     assert_eq!(rx.status, autd3_cpu_wire::Error::InvalidPayload);
     assert!(!device.fpga().sync_phase_lock());
 
     let rx = device.send(&frame(Cmd::Clear, &[]));
     assert_eq!(rx.status, autd3_cpu_wire::Error::None);
     assert!(device.fpga().sync_phase_lock());
+    assert_eq!(device.fpga().sync_gains(), [64, 1024, 4096]);
 }
 
 #[test]

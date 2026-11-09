@@ -648,8 +648,9 @@ def test_set_cpu_config_builds() -> None:
 
 def test_fpga_config_defaults() -> None:
     config = autd3.commands.FpgaConfig()
-    assert config == autd3.commands.FpgaConfig(sync_phase_lock=True)
+    assert config == autd3.commands.FpgaConfig(sync_phase_lock=True, sync_kp=64, sync_ki=1024, sync_kf=4096)
     assert config.sync_phase_lock is True
+    assert (config.sync_kp, config.sync_ki, config.sync_kf) == (64, 1024, 4096)
     assert autd3.commands.SetFpgaConfig().config == config
 
 
@@ -659,6 +660,9 @@ def test_fpga_config_fields() -> None:
     assert config.sync_phase_lock is False
     assert autd3.commands.SetFpgaConfig(config).config == config
     assert autd3.commands.SetFpgaConfig(config=config).config.sync_phase_lock is False
+    gains = autd3.commands.FpgaConfig(sync_kp=0, sync_ki=1, sync_kf=65535)
+    assert (gains.sync_kp, gains.sync_ki, gains.sync_kf) == (0, 1, 65535)
+    assert gains.sync_phase_lock is True
 
 
 def test_fpga_config_rejects_invalid_arguments() -> None:
@@ -666,6 +670,10 @@ def test_fpga_config_rejects_invalid_arguments() -> None:
         loose(autd3.commands.FpgaConfig)(False)
     with pytest.raises(TypeError):
         autd3.commands.FpgaConfig(sync_phase_lock=loose(None))
+    with pytest.raises(OverflowError):
+        autd3.commands.FpgaConfig(sync_kp=65536)
+    with pytest.raises(OverflowError):
+        autd3.commands.FpgaConfig(sync_kf=-1)
     with pytest.raises(TypeError):
         autd3.commands.SetFpgaConfig(loose(None))
     with pytest.raises(TypeError):

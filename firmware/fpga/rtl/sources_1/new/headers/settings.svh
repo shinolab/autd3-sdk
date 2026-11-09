@@ -45,6 +45,9 @@ package settings;
   typedef struct {
     logic UPDATE;
     logic ENABLE;
+    logic [15:0] KP;
+    logic [15:0] KI;
+    logic [15:0] KF;
   } sync_ps_settings_t;
 
 endpackage

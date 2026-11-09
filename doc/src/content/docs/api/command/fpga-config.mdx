@@ -25,6 +25,9 @@ import csFullSample from "@codes/csharp/examples/api/command/fpga-config-example
 | フィールド        | 型     | 既定値 | 説明 |
 | ----------------- | ------ | ------ | ---- |
 | `sync_phase_lock` | `bool` | `true` | FPGA の動作クロックをデバイス間の同期パルスへ位相ロックする細調整. (既定で有効になっている.) |
+| `sync_kp`         | `u16`  | `64`   | 細調整の比例ゲイン. |
+| `sync_ki`         | `u16`  | `1024` | 細調整の積分ゲイン. |
+| `sync_kf`         | `u16`  | `4096` | 細調整に入る前の周波数推定の積分ゲイン. |
 
 ## Example
 

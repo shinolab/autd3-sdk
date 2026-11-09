@@ -62,9 +62,28 @@ module sim_sync_ps_regs ();
     repeat (16) @(posedge CLK);
 
     `ASSERT_EQ(1'b1, settings.ENABLE);
+    `ASSERT_EQ(16'd64, settings.KP);
+    `ASSERT_EQ(16'd1024, settings.KI);
+    `ASSERT_EQ(16'd4096, settings.KF);
     reg_read(ADDR_SYNC_PS_CTL, value);
     `ASSERT_EQ(16'h0001, value);
+    reg_read(ADDR_SYNC_PS_KI, value);
+    `ASSERT_EQ(16'd1024, value);
 
+    reg_write(ADDR_SYNC_PS_KP, 16'd11);
+    reg_write(ADDR_SYNC_PS_KI, 16'd22);
+    reg_write(ADDR_SYNC_PS_KF, 16'hFFFF);
+    repeat (8) @(posedge CLK);
+    `ASSERT_EQ(1'b1, settings.ENABLE);
+    `ASSERT_EQ(16'd11, settings.KP);
+    `ASSERT_EQ(16'd22, settings.KI);
+    `ASSERT_EQ(16'hFFFF, settings.KF);
+    reg_read(ADDR_SYNC_PS_KP, value);
+    `ASSERT_EQ(16'd11, value);
+    reg_read(ADDR_SYNC_PS_KF, value);
+    `ASSERT_EQ(16'hFFFF, value);
+
+    updates = 0;
     reg_write(ADDR_SYNC_PS_CTL, 16'hFFFE);
     repeat (8) @(posedge CLK);
     `ASSERT_EQ(1'b0, settings.ENABLE);
@@ -80,7 +99,7 @@ module sim_sync_ps_regs ();
     reg_read(ADDR_SYNC_PS_CTL, value);
     `ASSERT_EQ(16'h0001, value);
 
-    reg_read(8'h01, value);
+    reg_read(8'h04, value);
     `ASSERT_EQ(16'h0000, value);
 
     reg_read(ADDR_SYNC_PS_CTL, value);

@@ -108,17 +108,18 @@ mod tests {
     #[test]
     fn clear_restores_the_default_fpga_config() {
         let mut h = Harness::new();
-        h.deliver(&fpga_config(0));
+        h.deliver(&fpga_config(0, [1, 2, 3]));
         assert_eq!(h.port.sync_ps_ctl, Some(0));
         h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.status(), Error::None);
         assert_eq!(h.port.sync_ps_ctl, Some(1));
+        assert_eq!(h.port.sync_ps_gains, [Some(64), Some(1024), Some(4096)]);
     }
 
     #[test]
     fn clear_leaves_the_fpga_config_alone_when_a_latch_times_out() {
         let mut h = Harness::new();
-        h.deliver(&fpga_config(0));
+        h.deliver(&fpga_config(0, [64, 1024, 4096]));
         h.port.latch_stuck = true;
         h.deliver(&Frame::new(Cmd::Clear));
         assert_eq!(h.status(), Error::FpgaTimeout);
