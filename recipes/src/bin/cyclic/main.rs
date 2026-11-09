@@ -17,9 +17,7 @@ use crate::controller::CyclicController;
 use crate::report::{LiveBlock, Stats, TelemetryCounters, print_summary};
 
 #[derive(Parser)]
-#[command(
-    about = "Process a frame on every device at a fixed period (like EtherCAT) and show how closely the devices keep it"
-)]
+#[command(about = "Process a frame on every device at a fixed period")]
 struct Cli {
     #[arg(
         long,
@@ -36,14 +34,28 @@ struct Cli {
 
 #[cfg(target_os = "linux")]
 fn raise_priority() -> Result<()> {
-    let param = libc::sched_param { sched_priority: 80 };
-    let ret = unsafe { libc::sched_setscheduler(0, libc::SCHED_FIFO, &raw const param) };
-    anyhow::ensure!(
-        ret == 0,
-        "switching to SCHED_FIFO failed (run with sudo): {}",
-        std::io::Error::last_os_error()
+    use thread_priority::{
+        RealtimeThreadSchedulePolicy, ThreadPriority, ThreadPriorityValue, ThreadSchedulePolicy,
+        set_thread_priority_and_policy, thread_native_id,
+    };
+    let priority = ThreadPriority::Crossplatform(
+        ThreadPriorityValue::try_from(80u8).map_err(|e| anyhow::anyhow!(e))?,
     );
-    Ok(())
+    set_thread_priority_and_policy(
+        thread_native_id(),
+        priority,
+        ThreadSchedulePolicy::Realtime(RealtimeThreadSchedulePolicy::Fifo),
+    )
+    .context("switching to SCHED_FIFO failed (run with sudo)")
+}
+
+#[cfg(target_os = "windows")]
+fn raise_priority() -> Result<()> {
+    use thread_priority::{ThreadPriority, ThreadPriorityValue, set_current_thread_priority};
+    let priority = ThreadPriority::Crossplatform(
+        ThreadPriorityValue::try_from(99u8).map_err(|e| anyhow::anyhow!(e))?,
+    );
+    set_current_thread_priority(priority).context("raising the thread priority to TimeCritical")
 }
 
 fn main() -> Result<()> {
@@ -54,11 +66,11 @@ fn main() -> Result<()> {
         .with_writer(std::io::stderr)
         .init();
     let cli = Cli::parse();
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     raise_priority()?;
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
     tracing::warn!(
-        "raising the priority is implemented only on Linux; running at the normal priority"
+        "raising the priority is not implemented on this OS; running at the normal priority"
     );
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()

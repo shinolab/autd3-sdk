@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError, mpsc};
+use std::sync::{Arc, Mutex, PoisonError, mpsc};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
@@ -32,10 +32,6 @@ struct InFlight {
 }
 
 type InFlightFrames = Arc<Mutex<VecDeque<InFlight>>>;
-
-fn lock(in_flight: &InFlightFrames) -> MutexGuard<'_, VecDeque<InFlight>> {
-    in_flight.lock().unwrap_or_else(PoisonError::into_inner)
-}
 
 pub(crate) struct CyclicController {
     controller: Arc<Controller>,
@@ -187,7 +183,7 @@ fn run_cycles(
         let payload_bytes = (0..controller.num_devices())
             .map(|device| frame.datagram_for(device).payload_len)
             .sum();
-        let mut in_flight = lock(in_flight);
+        let mut in_flight = in_flight.lock().unwrap_or_else(PoisonError::into_inner);
         let sent_at = controller.device_time_now()?;
         let msg_id = handle.block_on(controller.send_frame(frame, ExecAt::At(exec_at)))?;
         in_flight.push_back(InFlight {
@@ -214,7 +210,7 @@ async fn receive_replies(
     let result: Result<()> = async {
         loop {
             let reply = controller.recv().await?;
-            let mut in_flight = lock(&in_flight);
+            let mut in_flight = in_flight.lock().unwrap_or_else(PoisonError::into_inner);
             let Some(position) = in_flight.iter().position(|f| f.msg_id == reply.msg_id) else {
                 continue;
             };
