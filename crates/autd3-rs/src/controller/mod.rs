@@ -68,9 +68,11 @@ impl Controller {
     }
 
     pub fn device_time_now(&self) -> Result<SysTime, Error> {
-        self.device_clock()
-            .now(Instant::now())
-            .ok_or(Error::DeviceTimeUnknown)
+        self.device_time_at(Instant::now())
+    }
+
+    pub fn device_time_at(&self, host: Instant) -> Result<SysTime, Error> {
+        self.device_clock().at(host).ok_or(Error::DeviceTimeUnknown)
     }
 
     pub fn discard_unread_replies(&self) -> Result<(), Error> {
@@ -170,7 +172,7 @@ impl Controller {
         }
         let now = match exec {
             ExecAt::Immediate => None,
-            ExecAt::Lead(_) | ExecAt::At(_) => self.device_clock().now(Instant::now()),
+            ExecAt::Lead(_) | ExecAt::At(_) => self.device_clock().at(Instant::now()),
         };
         let exec_at = exec_at::schedule(exec, now)?;
         let mut headers = [FrameHeader::new_zeroed(); MAX_DEVICES];

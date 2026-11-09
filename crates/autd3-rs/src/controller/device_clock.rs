@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use crate::value::SysTime;
 
@@ -96,6 +96,14 @@ fn centre_of_widest_band(
         .map(|(c, f, r)| (c + f) / (2 * r))
 }
 
+fn signed_ns_since(origin: Instant, host: Instant) -> i128 {
+    let ns = |d: Duration| i128::try_from(d.as_nanos()).unwrap_or(i128::MAX);
+    match host.checked_duration_since(origin) {
+        Some(after) => ns(after),
+        None => -ns(origin.duration_since(host)),
+    }
+}
+
 fn negated(samples: Vec<OffsetSample>) -> Vec<OffsetSample> {
     samples
         .into_iter()
@@ -116,8 +124,7 @@ pub(crate) struct DeviceClock {
 
 impl DeviceClock {
     fn host_ns(&mut self, host: Instant) -> i128 {
-        let origin = *self.origin.get_or_insert(host);
-        i128::try_from(host.saturating_duration_since(origin).as_nanos()).unwrap_or(i128::MAX)
+        signed_ns_since(*self.origin.get_or_insert(host), host)
     }
 
     fn sent_slot(&mut self, msg_id: u16) -> &mut Option<(u16, Instant)> {
@@ -187,10 +194,8 @@ impl DeviceClock {
             .then(|| (last_lower.offset_ns - last_upper.offset_ns) / 2)
     }
 
-    pub(crate) fn now(&self, host: Instant) -> Option<SysTime> {
-        let origin = self.origin?;
-        let host_ns =
-            i128::try_from(host.saturating_duration_since(origin).as_nanos()).unwrap_or(i128::MAX);
+    pub(crate) fn at(&self, host: Instant) -> Option<SysTime> {
+        let host_ns = signed_ns_since(self.origin?, host);
         let device_ns = host_ns + self.estimated_offset_at(host_ns)?;
         Some(SysTime::from_nanos(
             u64::try_from(device_ns.max(0)).unwrap_or(u64::MAX),
@@ -205,8 +210,6 @@ impl DeviceClock {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-
     use super::*;
 
     const ELAPSED: Duration = Duration::from_millis(3);
@@ -237,7 +240,7 @@ mod tests {
 
     #[test]
     fn an_unobserved_clock_has_no_device_time() {
-        assert_eq!(DeviceClock::default().now(Instant::now()), None);
+        assert_eq!(DeviceClock::default().at(Instant::now()), None);
     }
 
     #[test]
@@ -245,7 +248,7 @@ mod tests {
         let host = Instant::now();
         let mut clock = DeviceClock::default();
         clock.add_lower_bound(device(D), host);
-        assert_eq!(clock.now(host), None);
+        assert_eq!(clock.at(host), None);
     }
 
     #[test]
@@ -253,7 +256,7 @@ mod tests {
         let host = Instant::now();
         let mut clock = DeviceClock::default();
         round_trip(&mut clock, 1, host, device(D), FLIGHT, FLIGHT);
-        assert_eq!(clock.now(host + FLIGHT * 2), Some(device(D) + FLIGHT * 2));
+        assert_eq!(clock.at(host + FLIGHT * 2), Some(device(D) + FLIGHT * 2));
     }
 
     #[test]
@@ -262,7 +265,7 @@ mod tests {
         let mut clock = DeviceClock::default();
         round_trip(&mut clock, 1, host, device(D), FLIGHT, FLIGHT);
         assert_eq!(
-            clock.now(host + FLIGHT * 2 + ELAPSED),
+            clock.at(host + FLIGHT * 2 + ELAPSED),
             Some(device(D) + FLIGHT * 2 + ELAPSED)
         );
     }
@@ -272,7 +275,7 @@ mod tests {
         let host = Instant::now();
         let mut clock = DeviceClock::default();
         round_trip(&mut clock, 1, host + ELAPSED, device(D), FLIGHT, FLIGHT);
-        assert_eq!(clock.now(host), Some(device(D)));
+        assert_eq!(clock.at(host), Some(device(D) - ELAPSED));
     }
 
     #[test]
@@ -289,7 +292,7 @@ mod tests {
             FLIGHT * 5,
         );
         assert_eq!(
-            clock.now(host + ELAPSED + FLIGHT * 10),
+            clock.at(host + ELAPSED + FLIGHT * 10),
             Some(device(D) + ELAPSED + FLIGHT * 10)
         );
     }
@@ -314,7 +317,7 @@ mod tests {
                 back,
             );
         }
-        let estimate = clock.now(host + Duration::from_secs(60)).unwrap();
+        let estimate = clock.at(host + Duration::from_secs(60)).unwrap();
         let error = estimate.sys_time().abs_diff(device_at(60_000).sys_time());
         assert!(error < 1_000, "{error} ns off");
     }
@@ -333,7 +336,7 @@ mod tests {
                 FLIGHT * 3 / 2,
             );
         }
-        let estimate = clock.now(host + Duration::from_secs(3)).unwrap();
+        let estimate = clock.at(host + Duration::from_secs(3)).unwrap();
         let behind = device_at(3_000).sys_time() - estimate.sys_time();
         assert!(behind.abs_diff(10_000) < 1_000, "{behind} ns behind");
     }
@@ -345,7 +348,7 @@ mod tests {
         let mut clock = DeviceClock::default();
         round_trip(&mut clock, 1, host, device(D), FLIGHT, FLIGHT);
         round_trip(&mut clock, 2, later, device(D), FLIGHT, FLIGHT);
-        assert_eq!(clock.now(later + FLIGHT * 2), Some(device(D) + FLIGHT * 2));
+        assert_eq!(clock.at(later + FLIGHT * 2), Some(device(D) + FLIGHT * 2));
     }
 
     #[test]
@@ -367,7 +370,7 @@ mod tests {
                 clock.add_lower_bound(device_at(ms) + FLIGHT, sent + FLIGHT * 2);
             }
         }
-        assert_eq!(clock.now(host + Duration::from_secs(14)), None);
+        assert_eq!(clock.at(host + Duration::from_secs(14)), None);
     }
 
     #[test]
@@ -376,7 +379,7 @@ mod tests {
         let mut clock = DeviceClock::default();
         clock.add_lower_bound(device(D) + FLIGHT, host + FLIGHT * 2);
         clock.add_upper_bound_of(1, device(D) + FLIGHT);
-        assert_eq!(clock.now(host + FLIGHT * 2), None);
+        assert_eq!(clock.at(host + FLIGHT * 2), None);
     }
 
     #[test]
@@ -390,7 +393,7 @@ mod tests {
         );
         clock.add_lower_bound(device(D) + FLIGHT, host + FLIGHT * 2);
         clock.add_upper_bound_of(1, device(D) + FLIGHT);
-        assert_eq!(clock.now(host + FLIGHT * 2), None);
+        assert_eq!(clock.at(host + FLIGHT * 2), None);
     }
 
     #[test]
@@ -399,6 +402,6 @@ mod tests {
         let mut clock = DeviceClock::default();
         clock.add_upper_bound(host, device(D));
         clock.add_lower_bound(device(D), host + FLIGHT * 2);
-        assert_eq!(clock.now(host + FLIGHT * 2), Some(device(D) + FLIGHT));
+        assert_eq!(clock.at(host + FLIGHT * 2), Some(device(D) + FLIGHT));
     }
 }
