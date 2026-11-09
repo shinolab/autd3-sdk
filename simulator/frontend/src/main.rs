@@ -305,9 +305,6 @@ fn App() -> Element {
     let on_root_up = move |_: Event<MouseData>| num_drag.set(None);
 
     rsx! {
-        document::Link { rel: "icon", href: asset!("/assets/favicon.svg"), r#type: "image/svg+xml" }
-        document::Link { rel: "icon", href: asset!("/assets/favicon.ico"), sizes: "32x32" }
-        document::Stylesheet { href: asset!("/assets/tailwind.css") }
         div {
             class: "flex h-screen flex-col overflow-hidden bg-base-200 text-base-content",
             onmousemove: on_root_move,

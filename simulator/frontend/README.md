@@ -39,7 +39,6 @@ Then open a client with `Interface::Addr([::1]:44336)`.
 
 ```bash
 rustup target add wasm32-unknown-unknown
-cargo install dioxus-cli
 npm install
 ```
 

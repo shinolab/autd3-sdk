@@ -22,6 +22,7 @@ scip = { version = "0.10.0", default-features = false }
 tar = { version = "0.4.46", default-features = false }
 toml_edit = { version = "0.25.17", default-features = false, features = ["parse", "display"] }
 walkdir = { version = "2.5.0", default-features = false }
+wasm-bindgen-cli-support = { version = "=0.2.129", default-features = false }
 zip = { version = "9.1.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [target.'cfg(windows)'.dependencies]

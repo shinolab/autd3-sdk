@@ -7,8 +7,8 @@ use clap::Subcommand;
 
 use crate::clean::{CleanArgs, Cleaner};
 use crate::util::{
-    capture, cargo_bin, cargo_build_args, cargo_clippy, cargo_fmt, copy_dir, exe_name, on_path,
-    run, run_cargo, run_env, run_tool,
+    cargo_bin, cargo_build_args, cargo_clippy, cargo_fmt, copy_dir, on_path, run, run_cargo,
+    run_tool,
 };
 
 pub(crate) fn build_backend_and_frontend(
@@ -20,7 +20,7 @@ pub(crate) fn build_backend_and_frontend(
     let frontend = sim.join("frontend");
 
     build_frontend(&frontend, debug)?;
-    let public = frontend_public(&frontend, debug);
+    let public = frontend_public(&frontend);
     if !public.join("index.html").is_file() {
         bail!("frontend bundle not found at {}", public.display());
     }
@@ -45,14 +45,8 @@ pub(crate) fn build_backend_and_frontend(
     Ok((bin, public))
 }
 
-fn frontend_public(frontend: &Path, debug: bool) -> PathBuf {
-    frontend
-        .join("target")
-        .join("dx")
-        .join("autd3-rs-simulator-frontend")
-        .join(if debug { "debug" } else { "release" })
-        .join("web")
-        .join("public")
+fn frontend_public(frontend: &Path) -> PathBuf {
+    frontend.join("dist")
 }
 
 #[derive(Subcommand)]
@@ -159,7 +153,7 @@ pub(crate) fn run_simulator(root: &Path, cmd: &SimulatorCmd) -> Result<()> {
             if !*skip_web_build {
                 build_frontend(&frontend, *debug)?;
             }
-            let public = frontend_public(&frontend, *debug);
+            let public = frontend_public(&frontend);
             if !public.join("index.html").is_file() {
                 bail!(
                     "frontend bundle not found at {}. Run without --skip-web-build first.",
@@ -224,111 +218,36 @@ fn ensure_css(frontend: &Path) -> Result<()> {
     run_tool("npm", ["run", "css"], frontend)
 }
 
-const DX_VERSION: &str = "0.7.10";
-const DX_BINARYEN_TOOLS_DIR: &str = "binaryen-129";
-const BINARYEN_RELEASE: &str = "version_127";
-
-#[allow(clippy::too_many_lines)]
 fn build_frontend(frontend: &Path, debug: bool) -> Result<()> {
-    if !on_path("dx") {
-        bail!("`dx` (dioxus-cli) not found on PATH.");
-    }
     ensure_css(frontend)?;
-    let dx_home = if let Some(path) = std::env::var_os("DX_HOME") {
-        PathBuf::from(path)
-    } else {
-        let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
-            .map(PathBuf::from)
-            .context("neither DX_HOME nor the home directory is set")?;
-        if cfg!(any(target_os = "macos", target_os = "windows")) {
-            home.join(".dx")
-        } else {
-            std::env::var_os("XDG_DATA_HOME")
-                .map_or_else(|| home.join(".local").join("share"), PathBuf::from)
-                .join(".dx")
-        }
-    };
-    let installed = capture("dx", &["--version"], frontend)?;
-    if !installed.contains(DX_VERSION) {
-        bail!(
-            "expected dioxus-cli {DX_VERSION} but found `{installed}`. \
-             `dx` downloads wasm-opt itself without checking the HTTP status or the extracted \
-             files, which silently produces a missing binary; xtask pre-installs it into \
-             {DX_BINARYEN_TOOLS_DIR} instead. Re-check that directory name against \
-             BINARYEN_VERSION in the new dioxus-cli before bumping DX_VERSION."
-        );
+    run_cargo(
+        cargo_build_args(
+            "autd3-rs-simulator-frontend",
+            Some("wasm32-unknown-unknown"),
+            debug,
+        ),
+        frontend,
+    )?;
+    let wasm = frontend
+        .join("target")
+        .join("wasm32-unknown-unknown")
+        .join(if debug { "debug" } else { "release" })
+        .join("autd3-rs-simulator-frontend.wasm");
+    let dist = frontend_public(frontend);
+    if dist.is_dir() {
+        std::fs::remove_dir_all(&dist)?;
     }
-
-    let install_dir = dx_home.join("tools").join(DX_BINARYEN_TOOLS_DIR);
-    let wasm_opt = exe_name("wasm-opt");
-    let bin = install_dir.join("bin").join(&wasm_opt);
-    if !debug && !bin.is_file() {
-        let platform = if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
-            "x86_64-windows"
-        } else if cfg!(all(target_os = "windows", target_arch = "aarch64")) {
-            "arm64-windows"
-        } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-            "x86_64-linux"
-        } else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
-            "aarch64-linux"
-        } else if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
-            "x86_64-macos"
-        } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
-            "arm64-macos"
-        } else {
-            bail!("no binaryen release for this platform; install wasm-opt manually");
-        };
-        let asset = format!("binaryen-{BINARYEN_RELEASE}-{platform}.tar.gz");
-        let url = format!(
-            "https://github.com/WebAssembly/binaryen/releases/download/{BINARYEN_RELEASE}/{asset}"
-        );
-        std::fs::create_dir_all(&install_dir)?;
-        let archive = install_dir.join(&asset);
-        run(
-            "curl",
-            [
-                "-fsSL",
-                "--retry",
-                "10",
-                "--retry-delay",
-                "15",
-                "--retry-all-errors",
-                "-o",
-                &archive.to_string_lossy(),
-                &url,
-            ],
-            &install_dir,
-        )?;
-        let file = std::fs::File::open(&archive)
-            .with_context(|| format!("opening {}", archive.display()))?;
-        let mut tar = tar::Archive::new(flate2::read::GzDecoder::new(file));
-        for entry in tar.entries()? {
-            let mut entry = entry?;
-            let path = entry.path()?.into_owned();
-            let mut components = path.components().rev();
-            let (Some(name), Some(parent)) = (components.next(), components.next()) else {
-                continue;
-            };
-            let (name, parent) = (name.as_os_str(), parent.as_os_str());
-            if !(parent == "lib" || (parent == "bin" && name == wasm_opt.as_str())) {
-                continue;
-            }
-            let dir = install_dir.join(parent);
-            std::fs::create_dir_all(&dir)?;
-            entry.unpack(dir.join(name))?;
-        }
-        std::fs::remove_file(&archive)?;
-
-        if !bin.is_file() {
-            bail!(
-                "{asset} did not contain bin/{wasm_opt}; wasm-opt is missing from {}",
-                install_dir.display()
-            );
-        }
-    }
-    let mut dx_args = vec!["build", "--platform", "web"];
-    if !debug {
-        dx_args.extend(["--release", "--debug-symbols", "false"]);
-    }
-    run_env("dx", dx_args, frontend, &[("DX_HOME", dx_home.as_os_str())])
+    wasm_bindgen_cli_support::Bindgen::new()
+        .input_path(&wasm)
+        .web(true)?
+        .typescript(false)
+        .omit_default_module_path(false)
+        .out_name("frontend")
+        .debug(debug)
+        .keep_debug(debug)
+        .generate(&dist)
+        .with_context(|| format!("running wasm-bindgen on {}", wasm.display()))?;
+    copy_dir(&frontend.join("assets"), &dist.join("assets"))?;
+    std::fs::copy(frontend.join("index.html"), dist.join("index.html"))?;
+    Ok(())
 }
