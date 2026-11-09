@@ -19,6 +19,10 @@ import csSample from "@codes/csharp/examples/api/basics/sys-time.cs?raw";
 ホストの時計 (日時) とは対応しない.
 現在のデバイスの時刻は `Client` の `device_time_now()` で取得する.
 
+なお, デバイス時刻を直接取得することはできないので, `device_time_now()`が返す値は推定値であることに注意する.
+この推定は送受信データサンプルが多く, かつ, 直前にデータを送受信していたほうが正確になる.
+正確に推定したい場合は, `heartbeat`を定期的に送りつつ, `device_time_now`を呼ぶ直前にも `heartbeat` を送ると良い.
+
 ## 構築
 
 `SysTime` は現在のデバイスの時刻, または生の ns から構築する.
@@ -27,10 +31,10 @@ import csSample from "@codes/csharp/examples/api/basics/sys-time.cs?raw";
 
 | 操作                    | 説明                                                          |
 | ----------------------- | ------------------------------------------------------------- |
-| `ZERO`                  | `Client` を開いた時点 (C#: `Zero`)                            |
-| `Client::device_time_now()` | 現在のデバイスの時刻 (C#: `DeviceTimeNow()`)              |
-| `from_nanos(ns)`        | 開いてからの経過 ns から構築 (C#: `FromNanos(ns)`)            |
-| `sys_time()`            | 開いてからの経過 ns (Python: プロパティ `sys_time`, C#: `Nanos`) |
+| `ZERO`                  | `Client` を開いた時点                                         |
+| `Client::device_time_now()` | 現在のデバイスの時刻                                      |
+| `from_nanos(ns)`        | 開いてからの経過 ns から構築                                  |
+| `sys_time()`            | 開いてからの経過 ns                                           |
 
 ## 演算
 

@@ -14,6 +14,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut client = Client::open(&geometry, &TransportOption::default()).await?;
     client.send(Clear).await?;
     client.send(Synchronize).await?;
+    client.send(SetSilencer::default()).await?;
 
     // Generate a focus 150 mm above the array center.
     let target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm);
@@ -25,6 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         wavelength,
         &mut phases,
     );
+    client.send(Pattern::new(&phases, Intensity::MAX)).await?;
 
     // Apply a 200 Hz sine-wave AM.
     let sampling_config = SamplingConfig::FREQ_4K;
@@ -35,9 +37,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         sampling_config,
         &mut modulation,
     )?;
-
-    client.send(SetSilencer::default()).await?;
-    client.send(Pattern::new(&phases, Intensity::MAX)).await?;
     client.send(Modulation::new(sampling_config, &modulation)).await?;
 
     tokio::signal::ctrl_c().await?;

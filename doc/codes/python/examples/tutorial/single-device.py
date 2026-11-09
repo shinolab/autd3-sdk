@@ -22,6 +22,7 @@ async def main() -> None:
     ) as client:
         await client.send(Clear())
         await client.send(Synchronize())
+        await client.send(SetSilencer())
 
         # Generate a focus 150 mm above the array center.
         target = geometry.center() + offset(0.0 * mm, 0.0 * mm, 150.0 * mm)
@@ -33,6 +34,7 @@ async def main() -> None:
             wavelength,
             phases,
         )
+        await client.send(Pattern(phases, Intensity.MAX))
 
         # Apply a 200 Hz sine-wave AM.
         sampling_config = SamplingConfig.FREQ_4K
@@ -43,9 +45,6 @@ async def main() -> None:
             sampling_config,
             mod_buf,
         )
-
-        await client.send(SetSilencer())
-        await client.send(Pattern(phases, Intensity.MAX))
         await client.send(Modulation(sampling_config, mod_buf))
 
         try:

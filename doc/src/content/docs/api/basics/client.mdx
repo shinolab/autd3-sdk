@@ -15,7 +15,7 @@ import sample from "@codes/rust/examples/api/basics/send.rs?raw";
 import pySample from "@codes/python/examples/api/basics/send.py?raw";
 import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
 
-`Client` はコマンドの送信・状態の読み出しを行う中心的なオブジェクト.
+`Client` はコマンドの送信・状態の読み出しを行うオブジェクト.
 
 <Install rust="autd3-rs" python="autd3" csharp="AUTD3" />
 
@@ -25,8 +25,6 @@ import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
 | ---------- | ----------------- | ------------------------------------------------------------ |
 | `geometry` | `&Geometry`       | デバイスの物理配置                                           |
 | `option`   | `&TransportOption`      | 接続の設定. [`TransportOption`](/autd3-sdk/api/basics/transport-option/) 参照 |
-
-`Client` は実機 (または [Simulator](/autd3-sdk/guide/simulator/)) へ UDP で直接つなぐ.
 
 ## API
 
@@ -42,21 +40,11 @@ import csSample from "@codes/csharp/examples/api/basics/send.cs?raw";
 | `send_streaming(cmd)`     | ✓     | `Result<(), Error>`                   | コマンドを応答を待たずに詰めて送り, 全フレームの応答を確認する ([streaming](#streaming) 参照) |
 | `read_state()`            | ✓     | `Result<Response, Error>`             | 全デバイスへ生存確認を 1 回送り, その返信を返す ([状態監視](/autd3-sdk/guide/state-check/) 参照) |
 
-`Client` は待ち時間の上限を持たない. 返信が揃わない (途絶したデバイスがある) と `send` / `read_state` などは返らないので, 上限は呼び出し側で付ける.
-Rust は `tokio::time::timeout`, Python は `asyncio.wait_for` などの取り消し, C# は `CancellationToken` を使う (取り消すと送受信の処理も止まる).
-途絶とみなすか・その後に送信を止めるか開き直すかもユーザーが決める.
-
-Rust では返信を読むメソッドが `&mut self` を取るので, 同時に 1 つしか動かない.
-Python と C# では同時に呼んでよい. `send` / `send_streaming` は呼んだ順に送り, 前の呼び出しの返信を待たずに次の呼び出しのフレームを送る (返信待ちの上限は呼び出しをまたいで共有する).
-各呼び出しは自分のフレームの返信が揃った時点で完了する. `read_state` は返信待ちが無くなってから行う.
-各メソッドは送る前に, それまでに届いていて読まれていない返信 (取り消した呼び出しの返信・生存確認の返信) を捨てる.
-
 `TransportOption` の `heartbeat_interval` を指定すると, `Client` はその周期で生存確認を送り続ける ([フェイルセーフ](/autd3-sdk/guide/failsafe/#通信途絶の-failsafe-と生存確認) 参照). 既定では送らない.
 
-`close()` は無い. Rust は `Client` を drop したとき, C# は `Dispose()`, Python は `with` を抜けたときにソケットを閉じ, 生存確認の送信も止める. デバイスへは何も送らない.
-デバイスは閉じた後も直前の出力を続けるので, 出力を止めるのはユーザーの責任である.
-
-Rust の `Client` は tokio のランタイムの中で使う (`Client::open` を呼び, 返った future もランタイムの中で await する).
+デバイスを止める関数はない.
+Rust は `Client` を drop したとき, C# は `Dispose()`, Python は `with` を抜けたときにソケットを閉じ, 生存確認の送信も止めるが, デバイスへは何も送らない.
+デバイスは閉じた後も直前の出力を続けるので, 出力を止めるのはユーザーの責任.
 
 ## streaming
 
@@ -65,11 +53,6 @@ Rust の `Client` は tokio のランタイムの中で使う (`Client::open` �
 Modulation や STM のように複数フレームになるコマンドを速く送るときに使う.
 
 <CodeTabs rust={excerpt(sample, "streaming")} python={excerpt(pySample, "streaming")} csharp={excerpt(csSample, "streaming")} />
-
-応答を待たずに送るフレーム数はデバイスの受信 FIFO の容量 `MAX_INFLIGHT (7)` までに抑える.
-バンクを切り替えるフレーム (`Activate*Bank` など) の前では, それまでに送ったフレームの応答をすべて確かめてから送る.
-そのため, データの書き込みが拒否された場合, 書きかけのバンクには切り替わらずにエラーが返る.
-`send_streaming` を途中で取り消すと, 送ったフレームがデバイスの受信 FIFO に残っていることがある. 取り消した直後に `send_streaming` を続けると FIFO があふれ得るので, 先に `read_state` か `send` を挟む.
 
 ## Response と DeviceReply
 
@@ -93,26 +76,9 @@ Modulation や STM のように複数フレームになるコマンドを速く�
 | `fpga_state`               | [FpgaState](#fpgastate)                              |
 | `data`                     | 読み出し系コマンドの値                               |
 
-## 読み出し結果の型
-
-`read_firmware_version()` はデバイス番号順に 1 台 1 要素の配列を返す.
-全デバイスの返信が揃うまで返らない.
-
-### FirmwareVersion
-
-| メンバ                  | 型               | 説明                                                   |
-| ----------------------- | ---------------- | ------------------------------------------------------ |
-| `cpu`                   | `Version`        | CPU ファームウェアのバージョン                         |
-| `fpga`                  | `Version`        | FPGA ファームウェアのバージョン                        |
-| `is_emulator()`         | `bool`           | デバイスエミュレータか                                 |
-| `is_supported()`        | `bool`           | CPU と FPGA の両方がこの SDK のサポートする系列か      |
-| `SUPPORTED_SERIES`      | `(u8, u8)`       | サポートする系列 (major, minor)                        |
-
 ### FpgaState
 
-FPGA の状態フラグ. 読み出し用のコマンドは無く, フレームと生存確認のすべての返信に載る.
-`read_state()` が返す `Response` の `replies()` の `fpga_state` で読む (デバイス番号順).
-生存確認の応答は最大 1 ms 古い値 (デバイスが長い処理をしている間はさらに古い値) を運ぶ.
+FPGA の状態フラグ
 
 | メソッド                  | 型               | 説明                                     |
 | ------------------------- | ---------------- | ---------------------------------------- |
@@ -126,8 +92,7 @@ FPGA の状態フラグ. 読み出し用のコマンドは無く, フレーム�
 
 ### Telemetry
 
-CPU の診断カウンタ. 読み出し用のコマンドは無く, フレームと生存確認のすべての返信に載る.
-`read_state()` が返す `Response` の `replies()` の `telemetry` で読む (デバイス番号順).
+CPU の診断カウンタ
 
 | フィールド            | 型    | 説明                                                   |
 | --------------------- | ----- | ------------------------------------------------------ |
@@ -137,20 +102,13 @@ CPU の診断カウンタ. 読み出し用のコマンドは無く, フレーム
 | `cpu_watchdog`        | `u8`  | CPU ウォッチドッグの発火回数 (FPGA の再構成まで消えない) |
 | `boot_failure`        | `u8`  | 起動時に失敗した手順の数 (`Clear` で消えない)          |
 
-返信から分かるものは載らない. 処理したフレーム数は返信の数, コマンドのエラーは返信の status, フェイルセーフの発火は `DeviceStatus::failsafe_active` が立ったことで分かる.
-
 ## each
 
 `each` はデバイスを引数にするクロージャを受け取り, デバイスごとに異なるコマンドを割り当てる.
 
 <CodeTabs rust={excerpt(sample, "each")} python={excerpt(pySample, "each")} csharp={excerpt(csSample, "each")} />
 
-`Modulation` / `FociStm` / `PatternStm` のような複数フレームのコマンドも割り当てられる.
-各デバイスのコマンドの k 番目のフレームどうしが 1 つのフレームにまとまり, 割り当てていないデバイスとフレーム数の足りないデバイスには何もしないコマンド (`Nop`) が入る.
-一部のデバイスだけに STM を送るには, 残りのデバイスに `None` (Python / C# は `None` / `null`) を返す.
-C# では同じコマンドのインスタンスを複数のデバイスに返すと, データを複製せずに共有する.
-
 Rust ではクロージャの返り値はすべて同じ型でなければならない.
-型の異なるコマンドを混在させたい場合は, `.boxed()` で `BoxedCommand` に揃える (1 フレームのコマンド同士なら `Box<dyn Operation>` でもよい).
+型の異なるコマンドを混在させたい場合は, `.boxed()` で `BoxedCommand` に揃える.
 
 <CodeTabs rust={excerpt(sample, "each_boxed")} />

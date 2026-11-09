@@ -11,8 +11,7 @@ import sample from "@codes/rust/examples/guide/state-check.rs?raw";
 import pySample from "@codes/python/examples/guide/state-check.py?raw";
 import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 
-デバイスの状態は返信に載ってくる. [`Client`](/autd3-sdk/api/basics/client/) の `read_state` (全デバイスへ生存確認を送り, 返信を集める) が返す `Response` の `device_status` を見ることで, デバイスとの通信が正常に動いているかどうかを監視できる.
-`Client` 自身は状態を保持しない.
+[`Client`](/autd3-sdk/api/basics/client/) の `read_state` の返り値を見ることで, デバイスとの通信が正常に動いているかどうかを監視できる.
 
 ## 状態の取得
 
@@ -33,12 +32,6 @@ import csSample from "@codes/csharp/examples/guide/state-check.cs?raw";
 | -------- | ------------------------------------------------------------------------ |
 | `Ready`   | 返信があり, 時刻が同期されている                                        |
 | `Syncing` | 返信はあるが, 時刻を合わせている途中                                    |
-
-返信が来ないデバイス (途絶) は, `read_state` が返らないことで分かる.
-`Client` は途絶を判定しないので, 待つ時間の上限 (Rust は `tokio::time::timeout`, Python は `asyncio.wait_for`, C# は `CancellationToken`) と, 途絶したときに送信を止めるか開き直すかはユーザーが決める.
-途中の 1 台が途絶すると, その機体より先の機体にも届かなくなる.
-途絶からの自動復帰はしない. 途絶した後も送り続けると, 全台への送信が失敗するようになることがあるので, 送信を止めて `Client::open` で開き直す.
-未割り当て・別 ID の返信 (再起動したデバイスなど) は `DeviceLost` (そのデバイスの番号を持つ) エラーになる.
 
 以下は, 一定間隔で生存確認を送って `device_status` を見て, 状態が変化したときだけ出力する例.
 
