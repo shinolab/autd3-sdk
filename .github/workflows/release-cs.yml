@@ -50,10 +50,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: $/.github/actions/setup-rust
-      - uses: actions/setup-dotnet@v6.0.0
+      - uses: actions/setup-dotnet@v6.1.0
         with:
           dotnet-version: '10.0.x'
-      - uses: taiki-e/install-action@v2.88.1
+      - uses: taiki-e/install-action@v2.90.2
         with:
           tool: cargo-about
       - name: Download native libs
