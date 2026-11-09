@@ -41,5 +41,6 @@ libxkbcommon-dev = '*'
 libssl-dev = '*'
 
 [dist.github-custom-runners]
+aarch64-apple-darwin = "macos-latest"
 x86_64-unknown-linux-gnu = "ubuntu-24.04"
 x86_64-pc-windows-msvc = "windows-latest"
