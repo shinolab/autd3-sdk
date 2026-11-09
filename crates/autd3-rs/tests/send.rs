@@ -31,7 +31,7 @@ async fn the_emulator_processes_frames_with_an_execution_time_without_waiting() 
     let response = send_and_collect(
         &client,
         on.frame(0).unwrap(),
-        ExecAt::Lead(Duration::from_secs(5)),
+        ExecAt::At(client.device_time_now().unwrap() + Duration::from_secs(5)),
     )
     .await;
     response.check().unwrap();
@@ -57,21 +57,12 @@ async fn a_frame_sent_with_each_execution_time_completes() {
         .check()
         .unwrap();
     assert_eq!(fans(&emulator), [true, true]);
-    send_and_collect(
-        &client,
-        off.frame(0).unwrap(),
-        ExecAt::Lead(Duration::from_millis(1)),
-    )
-    .await
-    .check()
-    .unwrap();
-    assert_eq!(fans(&emulator), [false, false]);
     let at = client.device_time_now().unwrap() + Duration::from_millis(1);
-    send_and_collect(&client, on.frame(0).unwrap(), ExecAt::At(at))
+    send_and_collect(&client, off.frame(0).unwrap(), ExecAt::At(at))
         .await
         .check()
         .unwrap();
-    assert_eq!(fans(&emulator), [true, true]);
+    assert_eq!(fans(&emulator), [false, false]);
 }
 
 #[tokio::test]

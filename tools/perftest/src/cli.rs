@@ -83,13 +83,6 @@ pub(crate) struct Cli {
     )]
     pub ack_timeout: Duration,
     #[arg(
-        long = "exec-lead",
-        value_parser = humantime::parse_duration,
-        help = "Process every frame at the device time this far ahead of the send, e.g. 1ms \
-                (sends each frame with ExecAt::Lead). Omit to process every frame on arrival."
-    )]
-    pub exec_lead: Option<Duration>,
-    #[arg(
         long,
         value_enum,
         default_value_t = Mode::StopAndWait,
@@ -121,14 +114,6 @@ impl Cli {
         }
         if self.ack_timeout.is_zero() {
             return Err("--ack-timeout must be longer than 0".to_string());
-        }
-        if let Some(exec_lead) = self.exec_lead
-            && self.ack_timeout <= exec_lead
-        {
-            return Err(format!(
-                "--ack-timeout {:?} must exceed --exec-lead {exec_lead:?}",
-                self.ack_timeout
-            ));
         }
         Ok(())
     }

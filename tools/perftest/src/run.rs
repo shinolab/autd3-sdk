@@ -121,7 +121,6 @@ impl Sender {
 
 async fn run_stop_and_wait(
     client: &Controller,
-    exec: ExecAt,
     ack_timeout: Duration,
     mut sender: Sender,
     shutdown: Arc<AtomicBool>,
@@ -134,7 +133,7 @@ async fn run_stop_and_wait(
         let res = async {
             for frame in &sender.frames {
                 let sent_at = Instant::now();
-                let msg_id = client.send_frame(frame, exec).await?;
+                let msg_id = client.send_frame(frame, ExecAt::Immediate).await?;
                 measurement.traffic.sent(&frame);
                 let response = tokio::time::timeout(ack_timeout, client.collect(msg_id)).await??;
                 measurement.ack.record(sent_at.elapsed());
@@ -157,7 +156,6 @@ async fn run_stop_and_wait(
 
 async fn run_streaming(
     client: &Controller,
-    exec: ExecAt,
     ack_timeout: Duration,
     mut sender: Sender,
     shutdown: Arc<AtomicBool>,
@@ -171,7 +169,7 @@ async fn run_streaming(
         if !report_due && pending.len() < max_inflight {
             let frame = sender.next_frame(client)?;
             let sent_at = Instant::now();
-            let msg_id = client.send_frame(frame, exec).await?;
+            let msg_id = client.send_frame(frame, ExecAt::Immediate).await?;
             measurement.traffic.sent(&frame);
             pending.push_back(InFlight::new(msg_id, sent_at, client.num_devices()));
             continue;
@@ -356,23 +354,13 @@ pub(crate) async fn run(cli: &Cli) -> Result<RunOutput> {
     let sender = Sender::new(&geometry, cli)?;
 
     let measurement = Measurement::start(cli, heartbeats, telemetry_start);
-    let exec = cli.exec_lead.map_or(ExecAt::Immediate, ExecAt::Lead);
     let mut output = match cli.mode {
         Mode::StopAndWait => {
-            run_stop_and_wait(
-                &client,
-                exec,
-                cli.ack_timeout,
-                sender,
-                shutdown,
-                measurement,
-            )
-            .await
+            run_stop_and_wait(&client, cli.ack_timeout, sender, shutdown, measurement).await
         }
         Mode::Streaming => {
             run_streaming(
                 &client,
-                exec,
                 cli.ack_timeout,
                 sender,
                 shutdown,
