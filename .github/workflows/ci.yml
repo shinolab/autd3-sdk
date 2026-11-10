@@ -96,7 +96,6 @@ jobs:
               - *shared
               - *xtask-core
               - 'xtask/src/console.rs'
-              - 'xtask/src/simulator.rs'
               - 'console/**'
               - 'dist-workspace.toml'
               - '.cargo/**'
