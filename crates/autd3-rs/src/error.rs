@@ -154,9 +154,6 @@ pub enum PayloadError {
     #[error("firmware update chunk of {len} bytes exceeds the {max} that fit in one frame")]
     UpdateChunkTooLong { len: usize, max: usize },
 
-    #[error("{words} words from {addr:#06x} do not fit in one frame inside the FPGA bus")]
-    FpgaMemoryAccessOutOfRange { addr: u16, words: usize },
-
     #[error(transparent)]
     Build(#[from] PayloadBuildError),
 
