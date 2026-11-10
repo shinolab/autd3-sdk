@@ -1,7 +1,7 @@
 use autd3_cpu_wire::payload::{ReadFpgaMemoryPayload, WriteFpgaMemoryPayload};
 
 use crate::datagram::Datagram;
-use crate::error::{Error, PayloadError};
+use crate::error::Error;
 use crate::geometry::Device;
 use crate::protocol::{Cmd, PAYLOAD_BYTES, REPLY_DATA_BYTES_MAX};
 
@@ -23,12 +23,7 @@ impl crate::sealed::Sealed for FpgaMemoryWrite<'_> {}
 
 impl Operation for FpgaMemoryWrite<'_> {
     fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
-        let header = WriteFpgaMemoryPayload::new(self.addr, self.words.len()).ok_or(
-            PayloadError::FpgaMemoryAccessOutOfRange {
-                addr: self.addr,
-                words: self.words.len(),
-            },
-        )?;
+        let header = WriteFpgaMemoryPayload::new(self.addr, self.words.len())?;
         let (data, _) = write_header(out, &header).as_chunks_mut::<2>();
         for (dst, word) in data.iter_mut().zip(self.words) {
             *dst = word.to_le_bytes();
@@ -57,12 +52,7 @@ impl crate::sealed::Sealed for FpgaMemoryRead {}
 
 impl Operation for FpgaMemoryRead {
     fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
-        let payload = ReadFpgaMemoryPayload::new(self.addr, self.count).ok_or(
-            PayloadError::FpgaMemoryAccessOutOfRange {
-                addr: self.addr,
-                words: usize::from(self.count),
-            },
-        )?;
+        let payload = ReadFpgaMemoryPayload::new(self.addr, self.count)?;
         encode_header_only(out, Cmd::ReadFpgaMemory, &payload);
         Ok(())
     }
@@ -70,8 +60,11 @@ impl Operation for FpgaMemoryRead {
 
 #[cfg(test)]
 mod tests {
+    use autd3_cpu_wire::payload::PayloadBuildError;
+
     use super::*;
     use crate::commands::operation::Distribution;
+    use crate::error::PayloadError;
     use crate::test_utils::test_device;
 
     fn encode(op: &dyn Operation) -> Result<Datagram, Error> {
@@ -116,11 +109,28 @@ mod tests {
     #[test]
     fn a_write_outside_the_frame_or_the_bus_is_rejected() {
         let longest = vec![0; FpgaMemoryWrite::MAX_LEN + 1];
-        for (addr, words) in [(0, &[][..]), (0, &longest), (0xFFFE, &[0, 0, 0])] {
+        for (addr, words, expected) in [
+            (0, &[][..], PayloadBuildError::FpgaMemoryAccessEmpty),
+            (
+                0,
+                &longest,
+                PayloadBuildError::FpgaMemoryAccessTooLong {
+                    words: FpgaMemoryWrite::MAX_LEN + 1,
+                    max: FpgaMemoryWrite::MAX_LEN,
+                },
+            ),
+            (
+                0xFFFE,
+                &[0, 0, 0],
+                PayloadBuildError::FpgaMemoryAccessExceedsBus {
+                    addr: 0xFFFE,
+                    words: 3,
+                },
+            ),
+        ] {
             assert!(matches!(
                 encode(&FpgaMemoryWrite { addr, words }).unwrap_err(),
-                Error::InvalidPayload(PayloadError::FpgaMemoryAccessOutOfRange { addr: a, words: n })
-                    if a == addr && n == words.len()
+                Error::InvalidPayload(PayloadError::Build(e)) if e == expected
             ));
         }
         encode(&FpgaMemoryWrite {
@@ -133,11 +143,28 @@ mod tests {
     #[test]
     fn a_read_outside_the_reply_or_the_bus_is_rejected() {
         let longest = u16::try_from(FpgaMemoryRead::MAX_LEN).unwrap();
-        for (addr, count) in [(0, 0), (0, longest + 1), (0xFFFF, 2)] {
+        for (addr, count, expected) in [
+            (0, 0, PayloadBuildError::FpgaMemoryAccessEmpty),
+            (
+                0,
+                longest + 1,
+                PayloadBuildError::FpgaMemoryAccessTooLong {
+                    words: FpgaMemoryRead::MAX_LEN + 1,
+                    max: FpgaMemoryRead::MAX_LEN,
+                },
+            ),
+            (
+                0xFFFF,
+                2,
+                PayloadBuildError::FpgaMemoryAccessExceedsBus {
+                    addr: 0xFFFF,
+                    words: 2,
+                },
+            ),
+        ] {
             assert!(matches!(
                 encode(&FpgaMemoryRead { addr, count }).unwrap_err(),
-                Error::InvalidPayload(PayloadError::FpgaMemoryAccessOutOfRange { addr: a, words })
-                    if a == addr && words == usize::from(count)
+                Error::InvalidPayload(PayloadError::Build(e)) if e == expected
             ));
         }
         encode(&FpgaMemoryRead {

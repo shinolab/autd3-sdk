@@ -53,4 +53,10 @@ pub enum PayloadBuildError {
     PatternCountExceedsFrame { count: usize, max: usize },
     #[error("pattern STM index {index} out of range 0..{max}")]
     PatternIndexOutOfRange { index: usize, max: usize },
+    #[error("FPGA memory access must cover at least one word")]
+    FpgaMemoryAccessEmpty,
+    #[error("{words} words exceed the {max} that fit in one frame")]
+    FpgaMemoryAccessTooLong { words: usize, max: usize },
+    #[error("{words} words from {addr:#06x} run past the end of the FPGA bus")]
+    FpgaMemoryAccessExceedsBus { addr: u16, words: usize },
 }
