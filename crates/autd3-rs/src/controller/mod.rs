@@ -372,6 +372,24 @@ pub(crate) mod tests {
         sent.unwrap();
     }
 
+    #[cfg(not(target_os = "macos"))]
+    #[tokio::test]
+    async fn send_fails_once_the_device_port_is_closed() {
+        let (controller, device) = open_controller().await;
+        drop(device);
+
+        let Err(Error::Network(cause)) = controller.send(Nop).await else {
+            panic!("a send to a closed port fails with a network error");
+        };
+        let UdpError::Io(e) = &*cause else {
+            panic!("the network error carries the socket error");
+        };
+        assert!(matches!(
+            e.kind(),
+            std::io::ErrorKind::ConnectionRefused | std::io::ErrorKind::ConnectionReset
+        ));
+    }
+
     #[tokio::test]
     async fn send_reports_the_error_code_a_device_replied() {
         let (controller, device) = open_controller().await;
