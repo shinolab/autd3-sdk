@@ -8,7 +8,6 @@ internal static class Sample
     internal static void Run()
     {
         var iface = Interface.Auto;
-        var openTimeout = TimeSpan.FromSeconds(40);
         ulong sendBufferBytes = 8192;
         var syncOnOpen = true;
         TimeSpan? heartbeatInterval = null;
@@ -16,7 +15,6 @@ internal static class Sample
         new TransportOption
         {
             Iface = iface,
-            OpenTimeout = openTimeout,
             SendBufferBytes = sendBufferBytes,
             SyncOnOpen = syncOnOpen,
             HeartbeatInterval = heartbeatInterval,
