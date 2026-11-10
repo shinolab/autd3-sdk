@@ -12,5 +12,3 @@
 *.log
 *.logfile
 
-/simulator/backend/web/*
-!/simulator/backend/web/.gitkeep

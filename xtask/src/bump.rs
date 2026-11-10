@@ -249,7 +249,7 @@ pub(crate) fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> 
                 }
                 Ok(())
             })?;
-            bump_cargo_toml(&root.join("simulator/Cargo.toml"), &core)?;
+            bump_package_version(&root.join("simulator/Cargo.toml"), &core)?;
             bump_console(root, &core)?;
             let pins = crate::doc::rewrite_crate_version(root, &core)?;
             println!("Updated crate version pins in {pins} doc page(s)/README(s) -> {core}");
@@ -301,7 +301,7 @@ pub(crate) fn run_bump_version(root: &Path, cmd: &BumpVersionCmd) -> Result<()> 
             component.name
         ),
         "simulator" => {
-            bump_cargo_toml(&root.join("simulator/Cargo.toml"), &core)?;
+            bump_package_version(&root.join("simulator/Cargo.toml"), &core)?;
             println!("Updated simulator version -> {core}");
         }
         "console" => {

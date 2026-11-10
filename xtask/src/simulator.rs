@@ -14,7 +14,7 @@ pub(crate) fn build_simulator(root: &Path, debug: bool, target: Option<&str>) ->
 
 #[derive(Subcommand)]
 pub(crate) enum SimulatorCmd {
-    #[command(about = "Build the simulator workspace")]
+    #[command(about = "Build the simulator")]
     Build {
         #[arg(long, help = "Build the dev profile instead of release")]
         debug: bool,
@@ -24,11 +24,11 @@ pub(crate) enum SimulatorCmd {
         )]
         license: bool,
     },
-    #[command(about = "Run the simulator workspace tests")]
+    #[command(about = "Run the simulator tests")]
     Test,
-    #[command(about = "Clippy the simulator workspace")]
+    #[command(about = "Clippy the simulator")]
     Lint,
-    #[command(about = "Rustfmt the simulator workspace")]
+    #[command(about = "Rustfmt the simulator")]
     Format {
         #[arg(long, help = "Rewrite the files instead of only checking them")]
         fix: bool,
@@ -55,9 +55,9 @@ pub(crate) fn run_simulator(root: &Path, cmd: &SimulatorCmd) -> Result<()> {
             crate::license::generate_simulator(root, *license)?;
             build_simulator(root, *debug, None).map(|_| ())
         }
-        SimulatorCmd::Test => run("cargo", ["test", "--workspace", "--bins", "--tests"], &sim),
-        SimulatorCmd::Lint => cargo_clippy(&sim, &["--workspace", "--all-targets"]),
-        SimulatorCmd::Format { fix } => cargo_fmt(&sim, &["-p", "autd3-rs-simulator"], *fix),
+        SimulatorCmd::Test => run("cargo", ["test", "--bins", "--tests"], &sim),
+        SimulatorCmd::Lint => cargo_clippy(&sim, &["--all-targets"]),
+        SimulatorCmd::Format { fix } => cargo_fmt(&sim, &[], *fix),
         SimulatorCmd::Run { debug, port } => {
             let bin = build_simulator(root, *debug, None)?;
             run(
