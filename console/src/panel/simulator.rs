@@ -7,26 +7,17 @@ use crate::process::ManagedProcess;
 #[serde(default)]
 pub(crate) struct SimulatorConfig {
     pub port: u16,
-    pub http_port: u16,
 }
 
 impl Default for SimulatorConfig {
     fn default() -> Self {
-        Self {
-            port: 44336,
-            http_port: 8081,
-        }
+        Self { port: 44336 }
     }
 }
 
 impl SimulatorConfig {
     fn args(&self) -> Vec<String> {
-        vec![
-            "--port".to_string(),
-            self.port.to_string(),
-            "--http-port".to_string(),
-            self.http_port.to_string(),
-        ]
+        vec!["--port".to_string(), self.port.to_string()]
     }
 }
 
@@ -61,12 +52,6 @@ impl SimulatorPanel {
                     egui::DragValue::new(&mut self.config.port).range(1..=65535),
                 );
                 ui.end_row();
-                ui.label("HTTP port");
-                ui.add_enabled(
-                    !running,
-                    egui::DragValue::new(&mut self.config.http_port).range(1..=65535),
-                );
-                ui.end_row();
             });
 
         ui.separator();
@@ -80,10 +65,6 @@ impl SimulatorPanel {
             }
             if ui.add_enabled(running, egui::Button::new("Stop")).clicked() {
                 self.proc = None;
-            }
-            if ui.button("Open browser").clicked() {
-                let url = format!("http://127.0.0.1:{}", self.config.http_port);
-                ui.ctx().open_url(egui::OpenUrl::new_tab(url));
             }
             ui.label(if running { "running" } else { "stopped" });
         });
@@ -110,20 +91,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_config_names_the_udp_and_http_ports() {
-        assert_eq!(
-            SimulatorConfig::default().args(),
-            ["--port", "44336", "--http-port", "8081"]
-        );
+    fn the_config_names_the_udp_port() {
+        assert_eq!(SimulatorConfig::default().args(), ["--port", "44336"]);
     }
 
     #[test]
     fn a_config_saved_with_a_removed_field_still_loads() {
         let config: SimulatorConfig = serde_json::from_str(
-            r#"{"http_port":9000,"link_port":8080,"group":"[::1]:44336","geometry":"g.json"}"#,
+            r#"{"port":44400,"http_port":9000,"link_port":8080,"group":"[::1]:44336","geometry":"g.json"}"#,
         )
         .unwrap();
-        assert_eq!(config.http_port, 9000);
-        assert_eq!(config.port, 44336);
+        assert_eq!(config.port, 44400);
     }
 }

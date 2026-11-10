@@ -201,7 +201,6 @@ jobs:
               - 'console/Cargo.lock'
               - 'simulator/**/Cargo.toml'
               - 'simulator/Cargo.lock'
-              - 'simulator/frontend/Cargo.lock'
               - 'bindings/ffi/**/Cargo.toml'
               - 'bindings/ffi/Cargo.lock'
               - 'bindings/python/**/Cargo.toml'

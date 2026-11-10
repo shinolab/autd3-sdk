@@ -6,7 +6,6 @@ updates:
       - "/"
       - "/xtask"
       - "/simulator"
-      - "/simulator/frontend"
       - "/console"
       - "/extras/autd3-rs-emulator"
       - "/extras/autd3-rs-pattern-holo-wgpu"
@@ -32,7 +31,6 @@ updates:
 
   - package-ecosystem: npm
     directories:
-      - "/simulator/frontend"
       - "/doc"
     schedule:
       interval: weekly

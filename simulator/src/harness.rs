@@ -1,13 +1,11 @@
 use std::sync::Arc;
 use std::time::Instant;
 
+use crate::emulator::{DeviceState, TransState, extract_device_states, extract_states};
 use autd3_rs::Frames;
 use autd3_rs::commands::Command;
 use autd3_rs::geometry::{Autd3, Geometry};
 use autd3_rs_firmware_emulator::{Device as EmuDevice, FpgaEmulator};
-use autd3_rs_simulator_protocol::{DeviceState, TransState};
-
-use crate::emulator::{extract_device_states, extract_states};
 
 pub(crate) struct Harness {
     pub geometry: Arc<Geometry>,

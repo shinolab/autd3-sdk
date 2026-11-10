@@ -4,7 +4,7 @@ use anyhow::{Result, bail};
 use clap::Subcommand;
 
 use crate::clean::{CleanArgs, Cleaner};
-use crate::simulator::build_backend_and_frontend;
+use crate::simulator::build_simulator;
 use crate::util::{
     cargo_bin, cargo_build_args, cargo_clippy, cargo_fmt, copy_file, dist_target, exe_name,
     package_version, run, run_cargo,
@@ -79,7 +79,7 @@ pub(crate) fn run_console(root: &Path, cmd: &ConsoleCmd) -> Result<()> {
             crate::license::generate_console(root, *license)?;
             run_cargo(cargo_build_args("autd3-console", target, *debug), &dir)?;
             let console_bin = cargo_bin(&dir, target, *debug, "autd3-console");
-            let (sim_bin, _) = build_backend_and_frontend(root, *debug, target)?;
+            let sim_bin = build_simulator(root, *debug, target)?;
             run_cargo(
                 cargo_build_args("autd3-firmware-writer", target, *debug),
                 root,

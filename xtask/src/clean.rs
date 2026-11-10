@@ -88,20 +88,6 @@ impl<'a> Cleaner<'a> {
         Ok(())
     }
 
-    pub(crate) fn children(&mut self, rel: &str, keep: &[&str]) -> Result<()> {
-        for path in sorted_entries(&self.root.join(rel)) {
-            if path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| keep.contains(&name))
-            {
-                continue;
-            }
-            self.remove(&path)?;
-        }
-        Ok(())
-    }
-
     pub(crate) fn subdirs(&self, rel: &str) -> Vec<PathBuf> {
         sorted_entries(&self.root.join(rel))
             .into_iter()
