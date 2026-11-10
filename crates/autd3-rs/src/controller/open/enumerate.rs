@@ -18,8 +18,6 @@ const DEVICE_TIME_AT_OPEN: SysTime = SysTime::ZERO;
 struct Enumerator<'a> {
     channel: &'a Channel,
     last_msg_id: u16,
-    open_timeout: Duration,
-    deadline: Option<Instant>,
 }
 
 impl Enumerator<'_> {
@@ -163,23 +161,14 @@ impl Enumerator<'_> {
     }
 
     async fn enumerate(&mut self, num_devices: usize) -> Result<Vec<SocketAddrV6>, UdpError> {
-        let deadline = self.deadline;
         let mut device_addrs: Vec<SocketAddrV6> = Vec::with_capacity(num_devices);
         loop {
             let Some(discovered) = self.discover().await? else {
-                if deadline.is_none_or(|deadline| Instant::now() < deadline)
-                    && self.release_stale_assignments(&device_addrs).await?
-                {
+                if self.release_stale_assignments(&device_addrs).await? {
                     continue;
                 }
                 if device_addrs.len() >= num_devices {
                     break;
-                }
-                if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
-                    return Err(UdpError::EnumerationTimeout {
-                        expected: num_devices,
-                        found: device_addrs.len(),
-                    });
                 }
                 tokio::time::sleep(Duration::from_millis(100)).await;
                 continue;
@@ -293,7 +282,6 @@ impl Enumerator<'_> {
     }
 
     async fn wait_sync(&mut self, device_addrs: &[SocketAddrV6]) -> Result<(), UdpError> {
-        let deadline = self.deadline;
         loop {
             let mut ready = vec![false; device_addrs.len()];
             for response in self
@@ -320,12 +308,6 @@ impl Enumerator<'_> {
             if not_ready.is_empty() {
                 return Ok(());
             }
-            if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
-                return Err(UdpError::SyncTimeout {
-                    not_ready,
-                    timeout: self.open_timeout,
-                });
-            }
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
     }
@@ -334,15 +316,12 @@ impl Enumerator<'_> {
 pub(super) async fn bring_up(
     channel: &Channel,
     option: &TransportOption,
-    deadline: Option<Instant>,
     num_devices: usize,
     device_clock: &mut DeviceClock,
 ) -> Result<Vec<SocketAddrV6>, UdpError> {
     let mut enumerator = Enumerator {
         channel,
         last_msg_id: 0,
-        open_timeout: option.open_timeout,
-        deadline,
     };
     enumerator.reset_all_unit_ids().await?;
     let device_addrs = enumerator.enumerate(num_devices).await?;

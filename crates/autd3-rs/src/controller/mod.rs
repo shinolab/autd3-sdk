@@ -260,7 +260,6 @@ impl Controller {
 #[cfg(test)]
 pub(crate) mod tests {
     use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6};
-    use std::time::Duration;
 
     use autd3_cpu_wire::udp::{FrameReply, Header, Status, UnitInfo};
     use autd3_rs_core::Interface;
@@ -302,7 +301,6 @@ pub(crate) mod tests {
         };
         let option = TransportOption {
             iface: Interface::Addr(device_addr),
-            open_timeout: Duration::MAX,
             sync_on_open: false,
             ..TransportOption::default()
         };

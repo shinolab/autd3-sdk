@@ -30,7 +30,6 @@ pub(crate) fn emulator(num_devices: usize) -> UdpEmulator {
 pub(crate) fn option(emulator: &UdpEmulator) -> TransportOption {
     TransportOption {
         iface: emulator.interface(),
-        open_timeout: Duration::from_secs(6),
         ..TransportOption::default()
     }
 }

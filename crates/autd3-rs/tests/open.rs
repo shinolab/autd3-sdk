@@ -1,7 +1,5 @@
 mod common;
 
-use std::time::Duration;
-
 use autd3_rs::commands::Nop;
 use autd3_rs::udp::{TransportOption, UdpError};
 use autd3_rs::{Controller, Error, FirmwareVersion};
@@ -25,26 +23,6 @@ async fn an_empty_geometry_is_rejected() {
     assert!(matches!(
         udp_error(&error),
         Some(UdpError::InvalidDeviceCount(0))
-    ));
-}
-
-#[tokio::test]
-#[ignore = "depends on real time"]
-async fn a_geometry_with_more_devices_than_attached_times_out_the_enumeration() {
-    let emulator = emulator(1);
-    let option = TransportOption {
-        open_timeout: Duration::from_millis(200),
-        ..option(&emulator)
-    };
-
-    let error = open_error(2, &option).await;
-
-    assert!(matches!(
-        udp_error(&error),
-        Some(UdpError::EnumerationTimeout {
-            expected: 2,
-            found: 1
-        })
     ));
 }
 

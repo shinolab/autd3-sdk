@@ -14,7 +14,6 @@ async fn open(emulator: &UdpEmulator) -> Client {
     let geometry = Geometry::new((0..emulator.num_devices()).map(|_| Autd3::default()));
     let option = TransportOption {
         iface: emulator.interface(),
-        open_timeout: Duration::from_secs(6),
         ..TransportOption::default()
     };
     Client::open(&geometry, &option).await.unwrap().0

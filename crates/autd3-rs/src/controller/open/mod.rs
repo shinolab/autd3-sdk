@@ -1,8 +1,6 @@
 mod enumerate;
 mod iface_probe;
 
-use std::time::Instant;
-
 use autd3_rs_core::MAX_DEVICES;
 
 use crate::udp::{Channel, TransportOption, UdpError};
@@ -16,7 +14,6 @@ pub(crate) async fn open(
     num_devices: usize,
     device_clock: &mut DeviceClock,
 ) -> Result<Channel, UdpError> {
-    let deadline = Instant::now().checked_add(option.open_timeout);
     if !(1..=MAX_DEVICES).contains(&num_devices) {
         return Err(UdpError::InvalidDeviceCount(num_devices));
     }
@@ -27,7 +24,7 @@ pub(crate) async fn open(
         option.send_buffer_bytes,
     )
     .await?;
-    let device_addrs = bring_up(&channel, option, deadline, num_devices, device_clock).await?;
+    let device_addrs = bring_up(&channel, option, num_devices, device_clock).await?;
     channel.attach_devices(device_addrs);
     Ok(channel)
 }
