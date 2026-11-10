@@ -174,7 +174,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "autd3-cpu-wire",
  "autd3-rs-core",
@@ -190,7 +190,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-core"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "autd3-cpu-wire",
  "nalgebra",
@@ -200,7 +200,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-firmware-emulator"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "autd3-cpu-fw",
  "autd3-cpu-wire",
@@ -211,7 +211,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-simulator"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "anyhow",
  "approx",

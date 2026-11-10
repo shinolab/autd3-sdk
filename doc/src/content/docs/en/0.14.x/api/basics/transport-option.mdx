@@ -10,12 +10,11 @@ import CodeTabs from "@components/CodeTabs.astro";
 
 ## API
 
-<CodeTabs rust={"TransportOption {\n    iface,\n    open_timeout,\n    send_buffer_bytes,\n    sync_on_open,\n    heartbeat_interval,\n};"} python={"TransportOption(\n    iface=iface,\n    open_timeout=open_timeout,\n    send_buffer_bytes=send_buffer_bytes,\n    sync_on_open=sync_on_open,\n    heartbeat_interval=heartbeat_interval,\n)"} csharp={"new TransportOption\n{\n    Iface = iface,\n    OpenTimeout = openTimeout,\n    SendBufferBytes = sendBufferBytes,\n    SyncOnOpen = syncOnOpen,\n    HeartbeatInterval = heartbeatInterval,\n};"} />
+<CodeTabs rust={"TransportOption {\n    iface,\n    send_buffer_bytes,\n    sync_on_open,\n    heartbeat_interval,\n    ..Default::default()\n};"} python={"TransportOption(\n    iface=iface,\n    send_buffer_bytes=send_buffer_bytes,\n    sync_on_open=sync_on_open,\n    heartbeat_interval=heartbeat_interval,\n)"} csharp={"new TransportOption\n{\n    Iface = iface,\n    SendBufferBytes = sendBufferBytes,\n    SyncOnOpen = syncOnOpen,\n    HeartbeatInterval = heartbeatInterval,\n};"} />
 
 | Field                 | Type                   | Default | Description                                                                                   |
 | --------------------- | ---------------------- | ------- | --------------------------------------------------------------------------------------------- |
 | `iface`               | `Interface`            | `Auto`  | Destination                                                                                   |
-| `open_timeout`        | `Duration`             | 40 s    | Upper bound on the time the open waits |
 | `send_buffer_bytes`         | `Option<NonZeroUsize>` | 8192    | Size of the socket send buffer \[B]. `None` leaves the OS default                              |
 | `sync_on_open`        | `bool`                 | `true`  | When `false`, open does not wait for the devices to synchronize with one another |
 | `heartbeat_interval`  | `Option<Duration>`     | `None`  | When set, keep sending liveness checks at this interval (see [Failsafe](/autd3-sdk/en/0.14.x/guide/failsafe/#communication-loss-failsafe-and-liveness-check)) |

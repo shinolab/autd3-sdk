@@ -35,7 +35,7 @@ dependencies = [
 
 [[package]]
 name = "autd3-rs-core"
-version = "0.14.0"
+version = "0.14.1"
 dependencies = [
  "autd3-cpu-wire",
  "nalgebra",

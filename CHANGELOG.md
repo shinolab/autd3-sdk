@@ -2,6 +2,17 @@
 
 # Rust
 
+## [0.14.1] - 2026-11-10
+
+### 🚀 Features
+
+- Disable open_timeout from TransportOption
+
+### 🐛 Bug Fixes
+
+- *(udp)* Fail a send to an unreachable device instead of waiting forever
+- *(bindings)* Make Client open asynchronous
+
 ## [0.14.0] - 2026-11-09
 
 ### 💥 Breaking Changes
@@ -503,6 +514,12 @@
 
 # Python
 
+## [0.14.1] - 2026-11-10
+
+### 🐛 Bug Fixes
+
+- *(bindings)* Make Client open asynchronous
+
 ## [0.14.0] - 2026-11-09
 
 ### 💥 Breaking Changes
@@ -818,6 +835,12 @@
 
 # C#
 
+## [0.14.1] - 2026-11-10
+
+### 🐛 Bug Fixes
+
+- *(bindings)* Make Client open asynchronous
+
 ## [0.14.0] - 2026-11-09
 
 ### 💥 Breaking Changes
@@ -1067,6 +1090,12 @@
 - *(cs)* Put bank first in Pattern/Modulation constructors to match Rust
 
 # Unity
+
+## [0.14.1] - 2026-11-10
+
+### 🐛 Bug Fixes
+
+- *(bindings)* Make Client open asynchronous
 
 ## [0.14.0] - 2026-11-09
 

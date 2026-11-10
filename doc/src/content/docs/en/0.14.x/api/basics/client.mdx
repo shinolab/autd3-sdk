@@ -13,7 +13,7 @@ import Install from "@components/Install.astro";
 
 <Install rust="autd3-rs" python="autd3" csharp="AUTD3" />
 
-<CodeTabs rust={"let mut client = Client::open(&geometry, &option).await?;\nclient.send(Clear).await?;\nclient.send(Synchronize).await?;"} python={"client = Client.open(geometry, TransportOption())\nawait client.send(Clear())\nawait client.send(Synchronize())"} csharp={"var client = Client.Open(layout, new TransportOption());\nawait client.SendAsync(new Clear());\nawait client.SendAsync(new Synchronize());"} />
+<CodeTabs rust={"let mut client = Client::open(&geometry, &option).await?;\nclient.send(Clear).await?;\nclient.send(Synchronize).await?;"} python={"client = await Client.open(geometry, TransportOption())\nawait client.send(Clear())\nawait client.send(Synchronize())"} csharp={"var client = await Client.OpenAsync(layout, new TransportOption());\nawait client.SendAsync(new Clear());\nawait client.SendAsync(new Synchronize());"} />
 
 | Parameter  | Type              | Description                                                                  |
 | ---------- | ----------------- | ---------------------------------------------------------------------------- |
