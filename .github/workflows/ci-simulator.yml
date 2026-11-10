@@ -20,19 +20,12 @@ jobs:
       - uses: $/.github/actions/setup-rust
         with:
           components: rustfmt, clippy
-          targets: wasm32-unknown-unknown
           workspaces: |
             simulator
-            simulator/frontend
             xtask
-      - name: Audit
-        if: runner.os == 'Linux'
-        run: cargo xtask simulator audit
       - name: Format
         if: runner.os == 'Linux'
         run: cargo xtask simulator format
       - run: cargo xtask simulator lint
       - run: cargo xtask simulator test
-      - name: Build
-        if: runner.os == 'Linux'
-        run: cargo xtask simulator build --debug
+      - run: cargo xtask simulator build --debug

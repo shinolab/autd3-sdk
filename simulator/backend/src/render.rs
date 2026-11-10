@@ -1,7 +1,12 @@
 mod camera;
 mod gizmo;
 
+use std::sync::Arc;
+
 use bytemuck::{Pod, Zeroable};
+use eframe::egui;
+use eframe::egui_wgpu::{self, RenderState};
+use eframe::wgpu;
 use glam::{EulerRot, Quat, Vec2, Vec3};
 use wgpu::util::DeviceExt;
 
@@ -15,6 +20,7 @@ const SLICE_HEIGHT_MM: f32 = 260.0;
 const SLICE_BOTTOM_MM: f32 = -10.0;
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 const MSAA_SAMPLES: u32 = 4;
+const COLOR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const FIELD_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 pub(crate) const FIELD_TEXELS_PER_MM: f32 = 2.0;
 pub(crate) const FIELD_MAX_DIM: u32 = 1024;
@@ -48,9 +54,10 @@ struct SceneUniforms {
 }
 
 pub(crate) struct Renderer {
-    canvas: web_sys::HtmlCanvasElement,
-    surface: wgpu::Surface<'static>,
-    config: wgpu::SurfaceConfiguration,
+    egui_textures: Arc<egui::mutex::RwLock<egui_wgpu::Renderer>>,
+    texture_id: egui::TextureId,
+    width: u32,
+    height: u32,
     sample_count: u32,
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -64,6 +71,8 @@ pub(crate) struct Renderer {
     field_render_layout: wgpu::BindGroupLayout,
     field_sampler: wgpu::Sampler,
     uniform_buf: wgpu::Buffer,
+    color_tex: wgpu::Texture,
+    color_view: wgpu::TextureView,
     depth_tex: wgpu::Texture,
     depth_view: wgpu::TextureView,
     msaa_tex: Option<wgpu::Texture>,
@@ -93,40 +102,13 @@ pub(crate) struct Renderer {
 
 impl Renderer {
     #[allow(clippy::too_many_lines)]
-    pub(crate) async fn new(
-        canvas: web_sys::HtmlCanvasElement,
-        settings: &Settings,
-    ) -> Result<Self, String> {
-        let (width, height) = backing_size(&canvas);
-        canvas.set_width(width);
-        canvas.set_height(height);
-        let instance = wgpu::Instance::default();
-        let surface = instance
-            .create_surface(wgpu::SurfaceTarget::Canvas(canvas.clone()))
-            .map_err(|e| format!("create_surface: {e}"))?;
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
-                compatible_surface: Some(&surface),
-                force_fallback_adapter: false,
-                apply_limit_buckets: false,
-            })
-            .await
-            .map_err(|e| format!("request_adapter: {e}"))?;
-        let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor {
-                label: Some("simulator-device"),
-                required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::default(),
-                experimental_features: wgpu::ExperimentalFeatures::default(),
-                memory_hints: wgpu::MemoryHints::default(),
-                trace: wgpu::Trace::Off,
-            })
-            .await
-            .map_err(|e| format!("request_device: {e}"))?;
-        let caps = surface.get_capabilities(&adapter);
-        let format = caps.formats[0];
-        let sample_count = if adapter
+    pub(crate) fn new(render_state: &RenderState, settings: &Settings) -> Self {
+        let (width, height) = (1, 1);
+        let device = render_state.device.clone();
+        let queue = render_state.queue.clone();
+        let format = COLOR_FORMAT;
+        let sample_count = if render_state
+            .adapter
             .get_texture_format_features(format)
             .flags
             .sample_count_supported(MSAA_SAMPLES)
@@ -135,18 +117,6 @@ impl Renderer {
         } else {
             1
         };
-        let config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format,
-            width,
-            height,
-            present_mode: wgpu::PresentMode::Fifo,
-            desired_maximum_frame_latency: 2,
-            alpha_mode: caps.alpha_modes[0],
-            color_space: wgpu::SurfaceColorSpace::Auto,
-            view_formats: vec![],
-        };
-        surface.configure(&device, &config);
 
         let target = Target {
             format,
@@ -260,9 +230,16 @@ impl Renderer {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        let (color_tex, color_view) = create_color(&device, width, height);
         let (depth_tex, depth_view) = create_depth(&device, width, height, sample_count);
         let (msaa_tex, msaa_view) = create_msaa(&device, format, width, height, sample_count)
             .map_or((None, None), |(t, v)| (Some(t), Some(v)));
+        let egui_textures = Arc::clone(&render_state.renderer);
+        let texture_id = egui_textures.write().register_native_texture(
+            &device,
+            &color_view,
+            wgpu::FilterMode::Linear,
+        );
 
         let mut camera = Camera {
             pos: Vec3::new(0.0, -600.0, 180.0),
@@ -276,9 +253,10 @@ impl Renderer {
         };
         camera.aim_at_pivot();
         let mut renderer = Self {
-            canvas,
-            surface,
-            config,
+            egui_textures,
+            texture_id,
+            width,
+            height,
             sample_count,
             device,
             queue,
@@ -292,6 +270,8 @@ impl Renderer {
             field_render_layout,
             field_sampler,
             uniform_buf,
+            color_tex,
+            color_view,
             depth_tex,
             depth_view,
             msaa_tex,
@@ -318,7 +298,7 @@ impl Renderer {
             gizmo: Gizmo::new(),
         };
         renderer.apply_settings(settings);
-        Ok(renderer)
+        renderer
     }
 
     pub(crate) fn apply_settings(&mut self, s: &Settings) {
@@ -335,46 +315,49 @@ impl Renderer {
         self.set_slice_resolution(s.slice_resolution);
     }
 
-    pub(crate) fn sync_size(&mut self) {
-        let (width, height) = backing_size(&self.canvas);
-        if width == self.config.width && height == self.config.height {
+    #[must_use]
+    pub(crate) fn texture_id(&self) -> egui::TextureId {
+        self.texture_id
+    }
+
+    pub(crate) fn resize(&mut self, width: u32, height: u32) {
+        let scale = (4.0e6 / (f64::from(width.max(1)) * f64::from(height.max(1))))
+            .sqrt()
+            .min(1.0);
+        let to_dim = |px: u32| ((f64::from(px) * scale).round() as u32).clamp(1, 4096);
+        let (width, height) = (to_dim(width), to_dim(height));
+        if width == self.width && height == self.height {
             return;
         }
-        self.canvas.set_width(width);
-        self.canvas.set_height(height);
-        self.config.width = width;
-        self.config.height = height;
-        self.surface.configure(&self.device, &self.config);
+        self.width = width;
+        self.height = height;
 
+        self.color_tex.destroy();
         self.depth_tex.destroy();
         if let Some(msaa) = &self.msaa_tex {
             msaa.destroy();
         }
+        let (color_tex, color_view) = create_color(&self.device, width, height);
+        self.egui_textures
+            .write()
+            .update_egui_texture_from_wgpu_texture(
+                &self.device,
+                &color_view,
+                wgpu::FilterMode::Linear,
+                self.texture_id,
+            );
+        self.color_tex = color_tex;
+        self.color_view = color_view;
         let (depth_tex, depth_view) = create_depth(&self.device, width, height, self.sample_count);
         self.depth_tex = depth_tex;
         self.depth_view = depth_view;
-        let (msaa_tex, msaa_view) = create_msaa(
-            &self.device,
-            self.config.format,
-            width,
-            height,
-            self.sample_count,
-        )
-        .map_or((None, None), |(t, v)| (Some(t), Some(v)));
+        let (msaa_tex, msaa_view) =
+            create_msaa(&self.device, COLOR_FORMAT, width, height, self.sample_count)
+                .map_or((None, None), |(t, v)| (Some(t), Some(v)));
         self.msaa_tex = msaa_tex;
         self.msaa_view = msaa_view;
 
         self.aspect = width as f32 / height as f32;
-    }
-
-    #[must_use]
-    pub(crate) fn to_ndc(&self, x: f64, y: f64) -> Vec2 {
-        let width = f64::from(self.canvas.client_width().max(1));
-        let height = f64::from(self.canvas.client_height().max(1));
-        Vec2::new(
-            (x / width * 2.0 - 1.0) as f32,
-            (1.0 - y / height * 2.0) as f32,
-        )
     }
 
     pub(crate) fn set_geometry(&mut self, positions: &[[f32; 4]], directions: &[[f32; 4]]) {
@@ -561,7 +544,11 @@ impl Renderer {
     }
 
     pub(crate) fn set_slice_resolution(&mut self, texels_per_mm: f32) {
-        self.texels_per_mm = texels_per_mm.clamp(RESOLUTION_MIN, RESOLUTION_MAX);
+        let texels_per_mm = texels_per_mm.clamp(RESOLUTION_MIN, RESOLUTION_MAX);
+        if (texels_per_mm - self.texels_per_mm).abs() < f32::EPSILON && self.field_tex.is_some() {
+            return;
+        }
+        self.texels_per_mm = texels_per_mm;
         self.create_field();
     }
 
@@ -713,24 +700,10 @@ impl Renderer {
         self.queue
             .write_buffer(&self.uniform_buf, 0, bytemuck::bytes_of(&self.uniforms));
 
-        let frame = match self.surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(frame)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
-            other @ (wgpu::CurrentSurfaceTexture::Timeout
-            | wgpu::CurrentSurfaceTexture::Occluded
-            | wgpu::CurrentSurfaceTexture::Outdated
-            | wgpu::CurrentSurfaceTexture::Lost
-            | wgpu::CurrentSurfaceTexture::Validation) => {
-                tracing::warn!("surface texture unavailable: {other:?}");
-                return;
-            }
-        };
-        let view = frame
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
+        let view = &self.color_view;
         let (attach_view, resolve_target) = match &self.msaa_view {
-            Some(msaa) => (msaa, Some(&view)),
-            None => (&view, None),
+            Some(msaa) => (msaa, Some(view)),
+            None => (view, None),
         };
         let mut encoder = self
             .device
@@ -795,7 +768,6 @@ impl Renderer {
             }
         }
         self.queue.submit([encoder.finish()]);
-        self.queue.present(frame);
     }
 
     fn configure_scene(&mut self, positions: &[[f32; 4]]) {
@@ -853,18 +825,27 @@ fn clear_color(rgb: [f32; 3]) -> wgpu::Color {
     }
 }
 
-fn backing_size(canvas: &web_sys::HtmlCanvasElement) -> (u32, u32) {
-    let dpr = web_sys::window().map_or(1.0, |w| w.device_pixel_ratio());
-    let dpr = if dpr.is_finite() {
-        dpr.clamp(1.0, 2.0)
-    } else {
-        1.0
-    };
-    let width = f64::from(canvas.client_width().max(1)) * dpr;
-    let height = f64::from(canvas.client_height().max(1)) * dpr;
-    let scale = (4.0e6 / (width * height)).sqrt().min(1.0);
-    let to_dim = |px: f64| -> u32 { ((px * scale).round() as u32).clamp(1, 4096) };
-    (to_dim(width), to_dim(height))
+fn create_color(
+    device: &wgpu::Device,
+    width: u32,
+    height: u32,
+) -> (wgpu::Texture, wgpu::TextureView) {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("scene-color"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: COLOR_FORMAT,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        view_formats: &[],
+    });
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    (texture, view)
 }
 
 #[derive(Clone, Copy)]

@@ -1,7 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["backend", "protocol"]
-exclude = ["frontend"]
+members = ["backend"]
 
 [workspace.package]
 version = "0.14.0"
@@ -22,6 +21,9 @@ module_name_repetitions = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 cast_precision_loss = "allow"
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+struct_excessive_bools = "allow"
 
 [workspace.dependencies]
 approx = { version = "0.5.1", default-features = false, features = ["std"] }
@@ -30,10 +32,7 @@ autd3-rs = { path = "../crates/autd3-rs", default-features = false }
 autd3-cpu-wire = { path = "../firmware/cpu/wire" }
 autd3-rs-core = { path = "../crates/autd3-rs-core" }
 autd3-rs-firmware-emulator = { path = "../crates/autd3-rs-firmware-emulator" }
-autd3-rs-simulator-protocol = { path = "protocol" }
 thiserror = { version = "2.0.21", default-features = false, features = ["std"] }
-tokio = { version = "1.54.1", default-features = false }
-futures-util = { version = "0.3.34", default-features = false, features = ["alloc"] }
 clap = { version = "4.6.7", default-features = false, features = [
     "std",
     "derive",
@@ -41,16 +40,20 @@ clap = { version = "4.6.7", default-features = false, features = [
     "usage",
     "error-context",
 ] }
+eframe = { version = "0.37.0", default-features = false, features = [
+    "wgpu",
+    "default_fonts",
+    "links",
+    "persistence",
+    "wayland",
+    "x11",
+] }
+rfd = { version = "0.18.0", default-features = false, features = ["xdg-portal"] }
+bytemuck = { version = "1.25.2", default-features = false, features = ["derive"] }
+glam = { version = "0.34.1", default-features = false, features = ["std", "bytemuck"] }
 anyhow = { version = "1.0.104", default-features = false, features = ["std"] }
 serde = { version = "1.0.229", default-features = false, features = ["std", "derive"] }
 serde_json = { version = "1.0.154", default-features = false, features = ["std"] }
-axum = { version = "0.8.9", default-features = false, features = [
-    "http1",
-    "tokio",
-    "ws",
-] }
-tower-http = { version = "0.7.1", default-features = false, features = ["fs"] }
-rust-embed = { version = "8.13.0", default-features = false, features = ["mime-guess"] }
 tracing = { version = "0.1.44", default-features = false }
 tracing-subscriber = { version = "0.3.23", default-features = false, features = [
     "std",

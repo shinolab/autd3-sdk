@@ -15,7 +15,6 @@ const DENY_WORKSPACES: &[&str] = &[
     ".",
     "console",
     "simulator",
-    "simulator/frontend",
     "bindings/ffi",
     "bindings/python",
 ];
@@ -266,26 +265,12 @@ pub(crate) fn generate_console(root: &Path, generate: bool) -> Result<()> {
 pub(crate) fn generate_simulator(root: &Path, generate: bool) -> Result<()> {
     ensure_about(generate)?;
     let sim = root.join("simulator");
-    let out = sim.join(THIRD_PARTY);
-    about(root, &sim.join("Cargo.toml"), &out, generate)?;
-
-    let frontend_tmp = sim.join(".third-party-frontend.md");
     about(
         root,
-        &sim.join("frontend/Cargo.toml"),
-        &frontend_tmp,
+        &sim.join("Cargo.toml"),
+        &sim.join(THIRD_PARTY),
         generate,
-    )?;
-
-    let mut combined =
-        std::fs::read_to_string(&out).with_context(|| format!("reading {}", out.display()))?;
-    let frontend = std::fs::read_to_string(&frontend_tmp)
-        .with_context(|| format!("reading {}", frontend_tmp.display()))?;
-    combined.push_str("\n\n---\n\n# Browser frontend dependencies\n\n");
-    combined.push_str(&frontend);
-    std::fs::write(&out, combined).with_context(|| format!("writing {}", out.display()))?;
-    std::fs::remove_file(&frontend_tmp).ok();
-    Ok(())
+    )
 }
 
 fn about(root: &Path, manifest: &Path, out: &Path, generate: bool) -> Result<()> {

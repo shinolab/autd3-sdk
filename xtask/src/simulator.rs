@@ -1,57 +1,20 @@
 use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::time::Duration;
 
-use anyhow::{Context, Result, bail};
+use anyhow::Result;
 use clap::Subcommand;
 
 use crate::clean::{CleanArgs, Cleaner};
-use crate::util::{
-    cargo_bin, cargo_build_args, cargo_clippy, cargo_fmt, copy_dir, on_path, run, run_cargo,
-    run_tool,
-};
+use crate::util::{cargo_bin, cargo_build_args, cargo_clippy, cargo_fmt, run, run_cargo};
 
-pub(crate) fn build_backend_and_frontend(
-    root: &Path,
-    debug: bool,
-    target: Option<&str>,
-) -> Result<(PathBuf, PathBuf)> {
+pub(crate) fn build_simulator(root: &Path, debug: bool, target: Option<&str>) -> Result<PathBuf> {
     let sim = root.join("simulator");
-    let frontend = sim.join("frontend");
-
-    build_frontend(&frontend, debug)?;
-    let public = frontend_public(&frontend);
-    if !public.join("index.html").is_file() {
-        bail!("frontend bundle not found at {}", public.display());
-    }
-    let dst = sim.join("backend").join("web");
-    std::fs::create_dir_all(&dst)?;
-    for entry in std::fs::read_dir(&dst).with_context(|| format!("reading {}", dst.display()))? {
-        let entry = entry?;
-        if entry.file_name() == ".gitkeep" {
-            continue;
-        }
-        let path = entry.path();
-        if path.is_dir() {
-            std::fs::remove_dir_all(&path)?;
-        } else {
-            std::fs::remove_file(&path)?;
-        }
-    }
-    copy_dir(&public, &dst)?;
-
     run_cargo(cargo_build_args("autd3-rs-simulator", target, debug), &sim)?;
-    let bin = cargo_bin(&sim, target, debug, "autd3-simulator");
-    Ok((bin, public))
-}
-
-fn frontend_public(frontend: &Path) -> PathBuf {
-    frontend.join("dist")
+    Ok(cargo_bin(&sim, target, debug, "autd3-simulator"))
 }
 
 #[derive(Subcommand)]
 pub(crate) enum SimulatorCmd {
-    #[command(about = "Build the backend workspace and the browser frontend bundle")]
+    #[command(about = "Build the simulator workspace")]
     Build {
         #[arg(long, help = "Build the dev profile instead of release")]
         debug: bool,
@@ -61,193 +24,52 @@ pub(crate) enum SimulatorCmd {
         )]
         license: bool,
     },
-    #[command(about = "Run the backend workspace tests")]
+    #[command(about = "Run the simulator workspace tests")]
     Test,
-    #[command(about = "Clippy the backend workspace and the (wasm) frontend")]
+    #[command(about = "Clippy the simulator workspace")]
     Lint,
-    #[command(about = "Rustfmt the backend workspace and the frontend")]
+    #[command(about = "Rustfmt the simulator workspace")]
     Format {
         #[arg(long, help = "Rewrite the files instead of only checking them")]
         fix: bool,
     },
-    #[command(about = "Build the frontend and run the backend serving it")]
+    #[command(about = "Build and run the simulator")]
     Run {
         #[arg(long, help = "Build the dev profile instead of release")]
         debug: bool,
-        #[arg(long, help = "Open the simulator in a browser")]
-        open: bool,
-        #[arg(long, help = "Reuse the already built frontend bundle")]
-        skip_web_build: bool,
         #[arg(
             long,
             default_value_t = 44336,
             help = "UDP port the emulated devices listen on"
         )]
         port: u16,
-        #[arg(long, default_value_t = 8081, help = "Port the frontend is served on")]
-        http_port: u16,
     },
-    #[command(about = "Fail on known vulnerabilities in the frontend's npm dependencies")]
-    Audit,
     #[command(about = "Remove the simulator build outputs")]
     Clean(CleanArgs),
 }
 
-#[allow(clippy::too_many_lines)]
 pub(crate) fn run_simulator(root: &Path, cmd: &SimulatorCmd) -> Result<()> {
     let sim = root.join("simulator");
-    let frontend = sim.join("frontend");
     match cmd {
         SimulatorCmd::Build { debug, license } => {
             crate::license::generate_simulator(root, *license)?;
-            build_backend_and_frontend(root, *debug, None).map(|_| ())
+            build_simulator(root, *debug, None).map(|_| ())
         }
-        SimulatorCmd::Test => run(
-            "cargo",
-            ["test", "--workspace", "--lib", "--bins", "--tests"],
-            &sim,
-        ),
-        SimulatorCmd::Lint => {
-            cargo_clippy(&sim, &["--workspace", "--all-targets"])?;
-            ensure_css(&frontend)?;
-            cargo_clippy(
-                &frontend,
-                &["--target", "wasm32-unknown-unknown", "--all-targets"],
-            )
-        }
-        SimulatorCmd::Format { fix } => {
-            cargo_fmt(
-                &sim,
-                &[
-                    "-p",
-                    "autd3-rs-simulator",
-                    "-p",
-                    "autd3-rs-simulator-protocol",
-                ],
-                *fix,
-            )?;
-            cargo_fmt(&frontend, &["-p", "autd3-rs-simulator-frontend"], *fix)
-        }
-        SimulatorCmd::Run {
-            debug,
-            open,
-            skip_web_build,
-            port,
-            http_port,
-        } => {
-            fn open_browser(url: &str) -> Result<()> {
-                let (program, args): (&str, Vec<&str>) = if cfg!(target_os = "macos") {
-                    ("open", vec![url])
-                } else if cfg!(target_os = "windows") {
-                    ("cmd", vec!["/C", "start", "", url])
-                } else {
-                    ("xdg-open", vec![url])
-                };
-                Command::new(program)
-                    .args(args)
-                    .spawn()
-                    .with_context(|| format!("failed to open browser via `{program}`"))?;
-                Ok(())
-            }
-
-            if !*skip_web_build {
-                build_frontend(&frontend, *debug)?;
-            }
-            let public = frontend_public(&frontend);
-            if !public.join("index.html").is_file() {
-                bail!(
-                    "frontend bundle not found at {}. Run without --skip-web-build first.",
-                    public.display()
-                );
-            }
+        SimulatorCmd::Test => run("cargo", ["test", "--workspace", "--bins", "--tests"], &sim),
+        SimulatorCmd::Lint => cargo_clippy(&sim, &["--workspace", "--all-targets"]),
+        SimulatorCmd::Format { fix } => cargo_fmt(&sim, &["-p", "autd3-rs-simulator"], *fix),
+        SimulatorCmd::Run { debug, port } => {
+            let bin = build_simulator(root, *debug, None)?;
             run(
-                "cargo",
-                cargo_build_args("autd3-rs-simulator", None, *debug),
+                &bin.to_string_lossy(),
+                ["--port".to_string(), port.to_string()],
                 &sim,
-            )?;
-            let bin = cargo_bin(&sim, None, *debug, "autd3-simulator");
-            let url = format!("http://127.0.0.1:{http_port}");
-            println!("simulator UI at {url} (devices on [::1]:{port})");
-            if *open {
-                let url = url.clone();
-                std::thread::spawn(move || {
-                    std::thread::sleep(Duration::from_millis(1500));
-                    let _ = open_browser(&url);
-                });
-            }
-            let args = [
-                "--port".to_string(),
-                port.to_string(),
-                "--http-port".to_string(),
-                http_port.to_string(),
-                "--web-dir".to_string(),
-                public.to_string_lossy().into_owned(),
-            ];
-            run(&bin.to_string_lossy(), &args, &sim)
-        }
-        SimulatorCmd::Audit => {
-            if !on_path("npm") {
-                bail!("`npm` not found on PATH (needed for `npm audit`).");
-            }
-            run_tool("npm", ["audit"], &frontend)
+            )
         }
         SimulatorCmd::Clean(args) => crate::clean::scope(root, *args, clean),
     }
 }
 
 pub(crate) fn clean(cleaner: &mut Cleaner) -> Result<()> {
-    cleaner.paths(&[
-        "simulator/target",
-        "simulator/THIRD-PARTY-LICENSES.md",
-        "simulator/.third-party-frontend.md",
-        "simulator/frontend/target",
-        "simulator/frontend/dist",
-        "simulator/frontend/assets/tailwind.css",
-    ])?;
-    cleaner.children("simulator/backend/web", &[".gitkeep"])?;
-    cleaner.deps("simulator/frontend/node_modules")
-}
-
-fn ensure_css(frontend: &Path) -> Result<()> {
-    if !on_path("npm") {
-        bail!("`npm` not found on PATH (needed to build Tailwind/daisyUI CSS).");
-    }
-    if !frontend.join("node_modules").is_dir() {
-        run_tool("npm", ["install"], frontend)?;
-    }
-    run_tool("npm", ["run", "css"], frontend)
-}
-
-fn build_frontend(frontend: &Path, debug: bool) -> Result<()> {
-    ensure_css(frontend)?;
-    run_cargo(
-        cargo_build_args(
-            "autd3-rs-simulator-frontend",
-            Some("wasm32-unknown-unknown"),
-            debug,
-        ),
-        frontend,
-    )?;
-    let wasm = frontend
-        .join("target")
-        .join("wasm32-unknown-unknown")
-        .join(if debug { "debug" } else { "release" })
-        .join("autd3-rs-simulator-frontend.wasm");
-    let dist = frontend_public(frontend);
-    if dist.is_dir() {
-        std::fs::remove_dir_all(&dist)?;
-    }
-    wasm_bindgen_cli_support::Bindgen::new()
-        .input_path(&wasm)
-        .web(true)?
-        .typescript(false)
-        .omit_default_module_path(false)
-        .out_name("frontend")
-        .debug(debug)
-        .keep_debug(debug)
-        .generate(&dist)
-        .with_context(|| format!("running wasm-bindgen on {}", wasm.display()))?;
-    copy_dir(&frontend.join("assets"), &dist.join("assets"))?;
-    std::fs::copy(frontend.join("index.html"), dist.join("index.html"))?;
-    Ok(())
+    cleaner.paths(&["simulator/target", "simulator/THIRD-PARTY-LICENSES.md"])
 }

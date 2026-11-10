@@ -4,16 +4,38 @@ use autd3_cpu_wire::fpga_params::GpioOutType;
 use autd3_rs::MAX_DEVICES;
 use autd3_rs::geometry::{Autd3, Geometry, Point3, Quaternion, UnitQuaternion};
 use autd3_rs_firmware_emulator::{Device as EmuDevice, FpgaEmulator, pwm_levels};
-use autd3_rs_simulator_protocol::{DevicePose, DeviceState, ServerMsg, TransState, TransducerInfo};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-const _: () = assert!(autd3_rs_simulator_protocol::MAX_DEVICES == autd3_rs::MAX_DEVICES);
-const _: () =
-    assert!(autd3_rs_simulator_protocol::DEVICE_WIDTH == autd3_rs::geometry::Autd3::DEVICE_WIDTH);
-const _: () = assert!(
-    autd3_rs_simulator_protocol::ROTATION_NORM_TOLERANCE
-        == autd3_rs::geometry::Autd3::ROTATION_NORM_TOLERANCE
-);
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DevicePose {
+    pub origin: [f32; 3],
+    pub rotation: [f32; 4],
+}
+
+#[derive(Debug, PartialEq)]
+pub(crate) struct TransState {
+    pub amp: f32,
+    pub phase: f32,
+    pub enable: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DeviceState {
+    pub num_transducers: u16,
+    pub silencer_fixed_update_rate: bool,
+    pub silencer_intensity: u16,
+    pub silencer_phase: u16,
+    pub mod_freq_div: u16,
+    pub mod_cycle: u32,
+    pub mod_idx: u32,
+    pub mod_buffer: Vec<u8>,
+    pub stm_freq_div: u16,
+    pub stm_cycle: u32,
+    pub stm_idx: u32,
+    pub gpio_types: [String; 4],
+    pub gpio_out: [Vec<u8>; 4],
+}
 
 const ULTRASOUND_PERIOD_COUNT: f32 = 512.0;
 const GPIO_SAMPLES: usize = 512;
@@ -69,22 +91,16 @@ fn gpio_waveform(fpga: &FpgaEmulator, raw: u64) -> Vec<u8> {
     }
 }
 
-#[must_use]
-pub(crate) fn geometry_msg(geometry: &Geometry) -> ServerMsg {
-    let transducers = geometry
+pub(crate) fn transducer_buffers(geometry: &Geometry) -> (Vec<[f32; 4]>, Vec<[f32; 4]>) {
+    geometry
         .iter()
         .flat_map(|dev| {
             let dir = dev.axial_direction();
-            dev.positions().iter().map(move |pos| TransducerInfo {
-                pos: [pos.x, pos.y, pos.z],
-                dir: [dir.x, dir.y, dir.z],
-            })
+            dev.positions()
+                .iter()
+                .map(move |pos| ([pos.x, pos.y, pos.z, 0.0], [dir.x, dir.y, dir.z, 0.0]))
         })
-        .collect();
-    ServerMsg::Geometry {
-        transducers,
-        devices: device_poses(geometry),
-    }
+        .unzip()
 }
 
 pub(crate) fn device_poses(geometry: &Geometry) -> Vec<DevicePose> {
@@ -348,26 +364,20 @@ mod tests {
     }
 
     #[test]
-    fn geometry_message_flattens_every_device() {
+    fn transducer_buffers_flatten_every_device() {
         let geometry = Geometry::new(vec![
             Autd3::default(),
             Autd3::new(Point3::new(0.0, 200.0, 0.0), UnitQuaternion::identity()),
         ]);
-        let ServerMsg::Geometry {
-            transducers,
-            devices,
-        } = geometry_msg(&geometry)
-        else {
-            panic!("expected a geometry message");
-        };
-        assert_eq!(devices, device_poses(&geometry));
-        assert_eq!(transducers.len(), 2 * Autd3::NUM_TRANSDUCERS);
+        let (positions, directions) = transducer_buffers(&geometry);
+        assert_eq!(positions.len(), 2 * Autd3::NUM_TRANSDUCERS);
+        assert_eq!(directions.len(), 2 * Autd3::NUM_TRANSDUCERS);
         let second = geometry.iter().nth(1).unwrap().position(0);
         assert_relative_eq!(
-            transducers[Autd3::NUM_TRANSDUCERS].pos[..],
-            [second.x, second.y, second.z][..]
+            positions[Autd3::NUM_TRANSDUCERS][..],
+            [second.x, second.y, second.z, 0.0][..]
         );
-        assert_relative_eq!(transducers[0].dir[..], [0.0, 0.0, 1.0][..]);
+        assert_relative_eq!(directions[0][..], [0.0, 0.0, 1.0, 0.0][..]);
     }
 
     #[test]

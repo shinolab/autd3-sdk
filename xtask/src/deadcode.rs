@@ -18,7 +18,6 @@ const WORKSPACES: &[&str] = &[
     "bindings/python",
     "console",
     "simulator",
-    "simulator/frontend",
     "extras/autd3-rs-emulator",
     "extras/autd3-rs-pattern-holo-wgpu",
     "firmware/cpu/board",

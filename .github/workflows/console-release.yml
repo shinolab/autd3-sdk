@@ -130,9 +130,6 @@ jobs:
         uses: "taiki-e/install-action@v2.90.2"
         with:
           "tool": "cargo-about"
-      - name: "Add wasm target"
-        run: "rustup target add wasm32-unknown-unknown"
-        shell: "bash"
       - name: Install dist
         run: ${{ matrix.install_dist.run }}
       # Get the dist-manifest

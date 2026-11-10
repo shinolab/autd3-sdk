@@ -58,9 +58,6 @@ jobs:
       - name: doc
         if: ${{ !cancelled() }}
         run: cargo xtask doc audit
-      - name: simulator
-        if: ${{ !cancelled() }}
-        run: cargo xtask simulator audit
 
   links:
     name: links
