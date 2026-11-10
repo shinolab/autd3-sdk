@@ -147,20 +147,7 @@ impl Channel {
             }
             Ok((len, SocketAddr::V6(src), extra)) => Ok(Some((len, src, extra))),
             Ok(_) => Ok(None),
-            Err(e)
-                if matches!(
-                    e.kind(),
-                    io::ErrorKind::ConnectionReset
-                        | io::ErrorKind::ConnectionRefused
-                        | io::ErrorKind::HostUnreachable
-                        | io::ErrorKind::NetworkUnreachable
-                        | io::ErrorKind::NetworkDown
-                        | io::ErrorKind::AddrNotAvailable
-                        | io::ErrorKind::Interrupted
-                ) =>
-            {
-                Ok(None)
-            }
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => Ok(None),
             Err(e) if cfg!(windows) && e.raw_os_error() == Some(10040) => {
                 tracing::debug!("dropped a datagram that does not fit the receive buffer");
                 Ok(None)
