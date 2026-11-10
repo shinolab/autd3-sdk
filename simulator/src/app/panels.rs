@@ -46,10 +46,6 @@ fn renderer_missing(ui: &mut egui::Ui) {
 }
 
 pub(super) fn geometry(app: &mut SimulatorApp, ui: &mut egui::Ui) {
-    ui.label(
-        "Device n is the n-th device of the daisy chain (geometry[n] of the client). \
-         Changing the number of devices resets the emulated devices; reopen the client afterwards.",
-    );
     let count = app.drafts.len();
     let mut commit_poses = false;
     let mut next = None;
@@ -211,8 +207,6 @@ pub(super) fn slice(app: &mut SimulatorApp, ui: &mut egui::Ui) {
                 .speed(0.05)
                 .max_decimals(2),
         );
-        let [fw, fh] = r.field_dims();
-        ui.label(format!("Field texture: {fw} x {fh} px"));
     });
     ui.horizontal(|ui| {
         ui.add(

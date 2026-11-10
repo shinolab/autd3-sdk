@@ -558,11 +558,6 @@ impl Renderer {
     }
 
     #[must_use]
-    pub(crate) fn field_dims(&self) -> [u32; 2] {
-        [self.uniforms.slice_w, self.uniforms.slice_h]
-    }
-
-    #[must_use]
     pub(crate) fn slice_center(&self) -> [f32; 3] {
         self.slice_center.to_array()
     }

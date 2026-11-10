@@ -261,14 +261,9 @@ impl eframe::App for SimulatorApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         egui::Panel::top("tabs").show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.strong("AUTD3 Simulator");
-                ui.separator();
                 for tab in Tab::ALL {
                     ui.selectable_value(&mut self.tab, tab, tab.label());
                 }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(format!("devices on [::1]:{}", self.scene.port()));
-                });
             });
         });
         if self.tab != Tab::Home {
@@ -276,7 +271,12 @@ impl eframe::App for SimulatorApp {
                 .resizable(true)
                 .default_size(420.0)
                 .size_range(280.0..=800.0)
+                .frame(egui::Frame::side_top_panel(ui.style()).inner_margin(14))
                 .show(ui, |ui| {
+                    let spacing = ui.spacing_mut();
+                    spacing.item_spacing = egui::vec2(10.0, 8.0);
+                    spacing.button_padding = egui::vec2(10.0, 4.0);
+                    spacing.interact_size.y = 24.0;
                     egui::ScrollArea::vertical().show(ui, |ui| match self.tab {
                         Tab::Geometry => panels::geometry(self, ui),
                         Tab::Slice => panels::slice(self, ui),
