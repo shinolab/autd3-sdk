@@ -80,7 +80,7 @@ namespace AUTD3
         internal static extern void autd3_frames_free(IntPtr frames);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int autd3_client_open(GeometryHandle geometry, byte ifaceKind, [MarshalAs(UnmanagedType.LPUTF8Str)] string? iface, TransportOptionNative option, out IntPtr client, byte[] outErr, UIntPtr outErrLen);
+        internal static extern void autd3_client_open(GeometryHandle geometry, byte ifaceKind, [MarshalAs(UnmanagedType.LPUTF8Str)] string? iface, TransportOptionNative option, IntPtr cancel, CompletionCallback cb, IntPtr userData);
 
         [StructLayout(LayoutKind.Sequential)]
         internal struct DeviceStatusNative

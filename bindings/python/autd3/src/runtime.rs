@@ -92,15 +92,6 @@ pub(crate) fn spawn<F: Future<Output = ()> + Send + 'static>(
     })
 }
 
-pub(crate) fn block_on<F>(py: Python<'_>, future: F) -> PyResult<F::Output>
-where
-    F: Future + Send,
-    F::Output: Send,
-{
-    let handle = with_runtime(py, |runtime| Some(runtime.tokio.handle().clone()))?;
-    Ok(py.detach(|| autd3_binding_rt::block_on(&handle, future)))
-}
-
 #[pyfunction]
 pub(crate) fn _shutdown_runtime(py: Python<'_>) {
     let runtime = {

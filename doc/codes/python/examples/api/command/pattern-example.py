@@ -10,7 +10,7 @@ from autd3_pattern import focus, wavelength
 
 async def main() -> None:
     geometry = Geometry([Autd3()])
-    with Client.open(geometry, TransportOption()) as client:
+    with await Client.open(geometry, TransportOption()) as client:
         await client.send(Clear())
         await client.send(Synchronize())
 

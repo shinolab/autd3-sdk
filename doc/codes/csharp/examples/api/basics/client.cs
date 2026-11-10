@@ -12,7 +12,7 @@ internal static class Sample
     {
         var layout = new Geometry(new[] { new Autd3() });
         // ANCHOR: open
-        var client = Client.Open(layout, new TransportOption());
+        var client = await Client.OpenAsync(layout, new TransportOption());
         await client.SendAsync(new Clear());
         await client.SendAsync(new Synchronize());
         // ANCHOR_END: open
@@ -36,7 +36,7 @@ internal static class Sample
         var scopedLayout = new Geometry(new[] { new Autd3() });
 
         // ANCHOR: context_manager
-        using (var scoped = Client.Open(scopedLayout, new TransportOption()))
+        using (var scoped = await Client.OpenAsync(scopedLayout, new TransportOption()))
         {
             await scoped.SendAsync(new Nop());
         }

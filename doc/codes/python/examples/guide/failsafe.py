@@ -8,7 +8,7 @@ async def main() -> None:
     geometry = Geometry([Autd3()])
 
     # ANCHOR: heartbeat
-    client = Client.open(geometry, TransportOption(heartbeat_interval=Duration.from_millis(10)))
+    client = await Client.open(geometry, TransportOption(heartbeat_interval=Duration.from_millis(10)))
 
     await client.send(SetCpuConfig(CpuConfig(failsafe_timeout=Duration.from_millis(100))))
     # ANCHOR_END: heartbeat

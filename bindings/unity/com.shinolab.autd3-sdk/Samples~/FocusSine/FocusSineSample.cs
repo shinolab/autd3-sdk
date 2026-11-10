@@ -20,7 +20,7 @@ namespace AUTD3.Samples
         private async void Start()
         {
             _geometry = new Geometry(new List<Autd3> { new Autd3(Vector3.zero) });
-            _client = Client.Open(_geometry, new TransportOption { Iface = Interface.Addr("[::1]:44336") });
+            _client = await Client.OpenAsync(_geometry, new TransportOption { Iface = Interface.Addr("[::1]:44336") });
             await _client.SendAsync(new Clear());
             await _client.SendAsync(new Synchronize());
 

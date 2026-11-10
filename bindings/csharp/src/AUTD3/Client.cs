@@ -268,28 +268,21 @@ namespace AUTD3
             _geometry = geometry;
         }
 
-        public static Client Open(Geometry geometry, TransportOption option)
+        public static async Task<Client> OpenAsync(Geometry geometry, TransportOption option, CancellationToken cancellationToken = default)
         {
             var native = option.ToNative();
             var owned = geometry.Clone();
-            var err = new byte[NativeAbi.ErrorBufferLength];
-            int code;
-            IntPtr value;
             try
             {
-                code = NativeClient.autd3_client_open(geometry.Handle, option.IfaceKind, option.IfaceValue, native, out value, err, (UIntPtr)err.Length);
+                var value = await AsyncOps.InvokeAsync((cancel, cb, ud) =>
+                    NativeClient.autd3_client_open(geometry.Handle, option.IfaceKind, option.IfaceValue, native, cancel, cb, ud), cancellationToken).ConfigureAwait(false);
+                return new Client(value, owned);
             }
             catch
             {
                 owned.Dispose();
                 throw;
             }
-            if (code != 0)
-            {
-                owned.Dispose();
-                throw Autd3Exception.FromNative(code, err);
-            }
-            return new Client(value, owned);
         }
 
         public int NumDevices => (int)NativeClient.autd3_client_num_devices(Handle);

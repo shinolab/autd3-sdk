@@ -9,7 +9,7 @@ from autd3.value import ControlPoints, Intensity, SamplingConfig
 async def main() -> None:
     geometry = Geometry([Autd3()])
 
-    with Client.open(
+    with await Client.open(
         geometry,
         TransportOption(),
     ) as client:

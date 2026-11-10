@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace AUTD3.Tests
@@ -67,11 +68,11 @@ namespace AUTD3.Tests
         }
 
         [Fact]
-        public void AMalformedAddressIsRejectedBeforeTheOpen()
+        public async Task AMalformedAddressIsRejectedBeforeTheOpen()
         {
             using var geometry = Fixture.SingleDevice();
             var option = new TransportOption { Iface = Interface.Addr("127.0.0.1:1") };
-            var error = Assert.Throws<Autd3Exception>(() => Client.Open(geometry, option));
+            var error = await Assert.ThrowsAsync<Autd3Exception>(() => Client.OpenAsync(geometry, option));
             Assert.Equal(Autd3ErrorCode.InvalidArgument, error.Code);
             Assert.Contains("127.0.0.1:1", error.Message);
         }

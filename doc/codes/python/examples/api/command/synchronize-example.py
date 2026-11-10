@@ -7,7 +7,7 @@ from autd3.geometry import Autd3, Geometry
 
 async def main() -> None:
     geometry = Geometry([Autd3()])
-    with Client.open(geometry, TransportOption()) as client:
+    with await Client.open(geometry, TransportOption()) as client:
         await client.send(Synchronize())
 
 
