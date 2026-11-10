@@ -12,7 +12,7 @@ async def main() -> None:
     geometry = Geometry([Autd3()])
 
     # ANCHOR: open
-    client = Client.open(geometry, TransportOption())
+    client = await Client.open(geometry, TransportOption())
     # ANCHOR_END: open
 
     with client:

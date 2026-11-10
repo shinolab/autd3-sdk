@@ -359,19 +359,21 @@ impl Client {
 #[pymethods]
 impl Client {
     #[staticmethod]
-    fn open(
-        py: Python<'_>,
-        geometry: &Bound<'_, PyAny>,
+    fn open<'py>(
+        py: Python<'py>,
+        geometry: &Bound<'py, PyAny>,
         option: &crate::udp::TransportOption,
-    ) -> PyResult<Client> {
+    ) -> PyResult<Bound<'py, PyAny>> {
         let geometry = geometry_from_capsule(&capsule_of(geometry)?)?.clone();
-        let option = &option.0;
-        let inner =
-            crate::runtime::block_on(py, autd3_binding_rt::Client::open(&geometry, option))?
+        let option = option.0.clone();
+        future_into_py(py, async move {
+            let inner = autd3_binding_rt::Client::open(&geometry, &option)
+                .await
                 .map_err(client_error)?;
-        Ok(Client {
-            inner: Some(inner),
-            geometry,
+            Ok(Client {
+                inner: Some(inner),
+                geometry,
+            })
         })
     }
 

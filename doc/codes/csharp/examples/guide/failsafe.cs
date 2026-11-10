@@ -12,7 +12,7 @@ internal static class Sample
         var geometry = new Geometry(new[] { new Autd3() });
 
         // ANCHOR: heartbeat
-        var client = Client.Open(geometry, new TransportOption { HeartbeatInterval = TimeSpan.FromMilliseconds(10) });
+        var client = await Client.OpenAsync(geometry, new TransportOption { HeartbeatInterval = TimeSpan.FromMilliseconds(10) });
 
         await client.SendAsync(new SetCpuConfig(new CpuConfig { FailsafeTimeout = TimeSpan.FromMilliseconds(100) }));
         // ANCHOR_END: heartbeat

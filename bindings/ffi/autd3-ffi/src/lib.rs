@@ -7,7 +7,7 @@ use std::time::Duration;
 mod logging;
 mod udp;
 
-use autd3_binding_rt::{Client, Heartbeat, Runtime, block_on, new_runtime};
+use autd3_binding_rt::{Client, Heartbeat, Runtime, new_runtime};
 use autd3_ffi_abi::{
     AUTD3_ERR, AUTD3_ERR_DEVICE, AUTD3_ERR_INVALID_ARGUMENT, AUTD3_ERR_NETWORK, AUTD3_OK,
     Autd3FirmwareVersion, Autd3Telemetry, Buffer, CompletionCallback, CompletionCtx,
@@ -1635,41 +1635,38 @@ pub unsafe extern "C" fn autd3_client_open(
     iface_kind: u8,
     iface: *const c_char,
     option: udp::Autd3TransportOption,
-    out: *mut *mut ClientHandle,
-    out_err: *mut c_char,
-    out_err_len: usize,
-) -> i32 {
-    if out.is_null() {
-        unsafe { write_cstr(out_err, out_err_len, "null argument") };
-        return AUTD3_ERR_INVALID_ARGUMENT;
-    }
-    unsafe { out.write(std::ptr::null_mut()) };
+    cancel: *const CancelToken,
+    cb: CompletionCallback,
+    user_data: *mut c_void,
+) {
+    let Some(ctx) = CompletionCtx::new(cb, user_data) else {
+        return;
+    };
     let Some(geometry) = (unsafe { handle_ref::<Geometry>(geometry) }) else {
-        unsafe { write_cstr(out_err, out_err_len, "null argument") };
-        return AUTD3_ERR_INVALID_ARGUMENT;
+        ctx.invalid_argument("null argument");
+        return;
     };
     let option = match unsafe { udp::to_transport_option(iface_kind, iface, option) } {
         Ok(option) => option,
         Err(message) => {
-            unsafe { write_cstr(out_err, out_err_len, &message) };
-            return AUTD3_ERR_INVALID_ARGUMENT;
+            ctx.invalid_argument(&message);
+            return;
         }
     };
-
-    match block_on(runtime().handle(), Client::open(geometry, &option)) {
-        Ok((client, heartbeat)) => unsafe {
-            write_out(
-                out,
+    let geometry = geometry.clone();
+    unsafe {
+        spawn_completion(
+            ctx,
+            cancel,
+            async move { Client::open(&geometry, &option).await },
+            |(client, heartbeat)| {
                 into_handle(ClientHandle {
                     client,
                     _heartbeat: heartbeat,
-                }),
-            )
-        },
-        Err(e) => {
-            unsafe { write_cstr(out_err, out_err_len, &e.to_string()) };
-            error_code(&e)
-        }
+                })
+                .cast()
+            },
+        );
     }
 }
 
@@ -1952,6 +1949,8 @@ autd3_ffi_abi::export_abi_version!();
 #[cfg(test)]
 mod tests {
     use std::sync::mpsc::{Sender, channel};
+
+    use autd3_binding_rt::block_on;
 
     use super::*;
 

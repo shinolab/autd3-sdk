@@ -81,6 +81,7 @@ pub(crate) unsafe extern "C" fn autd3_transport_option_default(
 #[cfg(test)]
 mod tests {
     use std::ffi::CString;
+    use std::sync::mpsc::{Sender, channel};
 
     use autd3_ffi_abi::{AUTD3_ERR_INVALID_ARGUMENT, AUTD3_OK};
     use autd3_rs::Geometry;
@@ -167,58 +168,77 @@ mod tests {
         );
     }
 
-    fn open(
-        geometry: *const Geometry,
-        iface_kind: u8,
-        out: bool,
-    ) -> (i32, *mut crate::ClientHandle, String) {
-        let mut client = std::ptr::NonNull::<crate::ClientHandle>::dangling().as_ptr();
-        let mut err = [0 as c_char; 256];
-        let code = unsafe {
+    type OpenResult = (i32, usize, String);
+
+    extern "C" fn report_open(
+        code: i32,
+        value: *mut std::ffi::c_void,
+        message: *const c_char,
+        user_data: *mut std::ffi::c_void,
+    ) {
+        let done = unsafe { Box::from_raw(user_data.cast::<Sender<OpenResult>>()) };
+        let message = if message.is_null() {
+            String::new()
+        } else {
+            unsafe { std::ffi::CStr::from_ptr(message) }
+                .to_string_lossy()
+                .into_owned()
+        };
+        let _ = done.send((code, value as usize, message));
+    }
+
+    fn open(geometry: *const Geometry, iface_kind: u8) -> OpenResult {
+        let (done, finished) = channel();
+        unsafe {
             crate::autd3_client_open(
                 geometry,
                 iface_kind,
                 std::ptr::null(),
                 default_option(),
-                if out {
-                    &raw mut client
-                } else {
-                    std::ptr::null_mut()
-                },
-                err.as_mut_ptr(),
-                err.len(),
-            )
-        };
-        let message = unsafe { std::ffi::CStr::from_ptr(err.as_ptr()) }
-            .to_string_lossy()
-            .into_owned();
-        (code, client, message)
+                std::ptr::null(),
+                Some(report_open),
+                Box::into_raw(Box::new(done)).cast(),
+            );
+        }
+        finished.recv().unwrap()
     }
 
     #[test]
     fn a_rejected_client_open_reports_the_reason() {
-        let (code, client, message) = open(std::ptr::null(), 0, true);
+        let (code, client, message) = open(std::ptr::null(), 0);
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
-        assert!(client.is_null());
+        assert_eq!(0, client);
         assert_eq!("null argument", message);
 
         let geometry = Geometry::new(vec![Autd3::default()]);
-        let (code, _, message) = open(&raw const geometry, 0, false);
+        let (code, client, message) = open(&raw const geometry, 1);
         assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
-        assert_eq!("null argument", message);
-
-        let (code, client, message) = open(&raw const geometry, 1, true);
-        assert_eq!(AUTD3_ERR_INVALID_ARGUMENT, code);
-        assert!(client.is_null());
+        assert_eq!(0, client);
         assert_eq!("null iface", message);
+    }
+
+    #[test]
+    fn a_client_open_without_a_callback_does_nothing() {
+        let geometry = Geometry::new(vec![Autd3::default()]);
+        unsafe {
+            crate::autd3_client_open(
+                &raw const geometry,
+                0,
+                std::ptr::null(),
+                default_option(),
+                std::ptr::null(),
+                None,
+                std::ptr::null_mut(),
+            );
+        }
     }
 
     #[test]
     fn an_out_of_range_device_count_fails_the_open() {
         let geometry = Geometry::new(Vec::<Autd3>::new());
-        let (code, client, message) = open(&raw const geometry, 0, true);
+        let (code, client, message) = open(&raw const geometry, 0);
         assert_eq!(crate::AUTD3_ERR_NETWORK, code);
-        assert!(client.is_null());
+        assert_eq!(0, client);
         assert_eq!(
             "network error: the number of devices must be 1..=128, but 0 was given",
             message
