@@ -58,7 +58,7 @@ pub(crate) const COMPONENTS: &[Component] = &[
         include_paths: &["simulator/**"],
         also_shipped_by: &["console-v"],
         version_file: "simulator/Cargo.toml",
-        version_table: &["workspace", "package"],
+        version_table: &["package"],
     },
     Component {
         name: "console",
