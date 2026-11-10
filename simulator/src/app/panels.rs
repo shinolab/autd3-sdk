@@ -237,8 +237,7 @@ pub(super) fn camera(app: &mut SimulatorApp, ui: &mut egui::Ui) {
         if ui.button("Reset view").clicked() {
             r.reset_camera();
         }
-        ui.selectable_value(&mut settings.cam_free, true, "Free");
-        ui.selectable_value(&mut settings.cam_free, false, "Orbit");
+        ui.weak("Drag: orbit / Shift+drag: pan / Ctrl+drag, wheel: zoom");
     });
     ui.horizontal(|ui| {
         ui.label("FoV (deg)");

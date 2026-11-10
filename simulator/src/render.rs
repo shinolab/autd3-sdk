@@ -249,7 +249,6 @@ impl Renderer {
             near: 1.0,
             far: 5000.0,
             move_speed: 1.5,
-            free: true,
         };
         camera.aim_at_pivot();
         let mut renderer = Self {
@@ -307,7 +306,6 @@ impl Renderer {
         self.set_show_markers(s.show_markers);
         self.set_colormap(u32::from(s.colormap));
         self.set_background(s.bg);
-        self.set_camera_free(s.cam_free);
         self.set_fov(s.fov);
         self.set_near(s.near);
         self.set_far(s.far);
@@ -428,6 +426,10 @@ impl Renderer {
         self.camera.orbit(dx, dy);
     }
 
+    pub(crate) fn pan(&mut self, dx: f32, dy: f32) {
+        self.camera.pan(dx, dy);
+    }
+
     pub(crate) fn zoom(&mut self, delta: f32) {
         self.camera.dolly(delta);
     }
@@ -436,16 +438,6 @@ impl Renderer {
         self.camera.pos = self.initial_camera.pos;
         self.camera.rot = self.initial_camera.rot;
         self.camera.pivot = self.initial_camera.pivot;
-        if !self.camera.free {
-            self.camera.aim_at_pivot();
-        }
-    }
-
-    pub(crate) fn set_camera_free(&mut self, free: bool) {
-        self.camera.free = free;
-        if !free {
-            self.camera.aim_at_pivot();
-        }
     }
 
     pub(crate) fn set_fov(&mut self, deg: f32) {
@@ -477,16 +469,17 @@ impl Renderer {
 
     pub(crate) fn set_camera_pos(&mut self, axis: usize, value: f32) {
         if axis < 3 {
-            self.camera.pos[axis] = value;
-            if !self.camera.free {
-                self.camera.aim_at_pivot();
-            }
+            let mut pos = self.camera.pos;
+            pos[axis] = value;
+            self.camera.set_pos(pos);
         }
     }
 
     pub(crate) fn set_camera_rot(&mut self, axis: usize, degrees: f32) {
         if axis < 3 {
-            self.camera.rot[axis] = degrees;
+            let mut rot = self.camera.rot;
+            rot[axis] = degrees;
+            self.camera.set_rot(rot);
         }
     }
 

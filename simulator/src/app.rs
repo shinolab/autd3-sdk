@@ -196,7 +196,15 @@ impl SimulatorApp {
                 }
             } else {
                 let delta = response.drag_delta();
-                r.orbit(delta.x, delta.y);
+                let modifiers = ui.input(|i| i.modifiers);
+                if modifiers.shift {
+                    let h = rect.height().max(1.0);
+                    r.pan(delta.x / h, delta.y / h);
+                } else if modifiers.command {
+                    r.zoom(delta.y * 0.2);
+                } else {
+                    r.orbit(delta.x, delta.y);
+                }
             }
         } else if let Some(pos) = response.hover_pos() {
             r.set_hover(ndc(pos));
