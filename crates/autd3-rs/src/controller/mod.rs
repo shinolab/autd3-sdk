@@ -379,7 +379,7 @@ pub(crate) mod tests {
         let Err(Error::Network(cause)) = controller.send(Nop).await else {
             panic!("a send to a closed port fails with a network error");
         };
-        let UdpError::Io(e) = &*cause else {
+        let UdpError::Io(e) = &cause else {
             panic!("the network error carries the socket error");
         };
         assert!(matches!(

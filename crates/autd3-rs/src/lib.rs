@@ -19,7 +19,7 @@ mod sealed {
 mod test_utils;
 
 pub use autd3_rs_core::{bus, common, geometry, nalgebra, params, protocol, units, value};
-pub use error::{Error, NetworkCause, PayloadError};
+pub use error::{Error, PayloadError};
 
 pub use autd3_rs_core::{
     Angle, Autd3, Device, DeviceState, Freq, Geometry, Interface, Length, MAX_DEVICES,
