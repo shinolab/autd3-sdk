@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use std::time::Duration;
 
 use thiserror::Error;
@@ -10,37 +9,7 @@ use autd3_rs_core::protocol::describe_device_error;
 use crate::commands::PhaseDepth;
 use crate::udp::UdpError;
 
-#[derive(Clone)]
-pub struct NetworkCause(Arc<UdpError>);
-
-impl NetworkCause {
-    #[must_use]
-    pub(crate) fn new(source: UdpError) -> Self {
-        Self(Arc::new(source))
-    }
-}
-
-impl core::ops::Deref for NetworkCause {
-    type Target = UdpError;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl core::fmt::Debug for NetworkCause {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        core::fmt::Debug::fmt(&*self.0, f)
-    }
-}
-
-impl core::fmt::Display for NetworkCause {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        core::fmt::Display::fmt(&*self.0, f)
-    }
-}
-
-#[derive(Clone, Debug, Error)]
+#[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum Error {
     #[error("device {device} firmware error {code:#04x}: {}", describe_device_error(*code))]
@@ -53,7 +22,7 @@ pub enum Error {
     DeviceLost { device: usize },
 
     #[error("network error: {0}")]
-    Network(#[source] NetworkCause),
+    Network(#[source] UdpError),
 
     #[error("the device time is unknown: no reply carrying it has been observed yet")]
     DeviceTimeUnknown,
@@ -64,7 +33,7 @@ pub enum Error {
 
 impl From<UdpError> for Error {
     fn from(e: UdpError) -> Self {
-        Error::Network(NetworkCause::new(e))
+        Error::Network(e)
     }
 }
 
