@@ -28,7 +28,7 @@ module emission_raw #(
     RUN
   } state_t;
 
-  state_t state = WAITING;
+  (* fsm_encoding = "none" *) state_t state = WAITING;
 
   assign EMISSION_BUS.RAW_IDX = IDX[9:0];
   assign EMISSION_BUS.RAW_ADDR = addr;

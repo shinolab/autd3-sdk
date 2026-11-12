@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 `default_nettype none
-module sync_ps_ctrl (
+(* use_dsp = "no" *) module sync_ps_ctrl (
     input wire CLK,
     input wire settings::sync_ps_settings_t SETTINGS,
     input wire EDGE,
