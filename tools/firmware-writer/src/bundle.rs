@@ -151,8 +151,7 @@ pub(crate) fn find(dir: &Path) -> Result<Bundle> {
     for f in files {
         let name = f
             .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default();
+            .map_or_default(|n| n.to_string_lossy().into_owned());
         if name.ends_with(FPGA_UPDATE_SUFFIX) {
             fpga_update.push(f);
             continue;
