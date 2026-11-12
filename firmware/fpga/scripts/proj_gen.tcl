@@ -22,14 +22,14 @@ if {[string equal [get_filesets -quiet sim_1] ""]} {
     create_fileset -simset sim_1
 }
 
-set synth_flow              "Vivado Synthesis 2025"
+set synth_flow              "Vivado Synthesis 2026"
 set synth_strategy_default  "Vivado Synthesis Defaults"
 set synth_strategy_alter    "Flow_AlternateRoutability"
 create_run -name synth_default -flow $synth_flow -strategy $synth_strategy_default -constrset constrs_1
 create_run -name synth_alter -flow $synth_flow -strategy $synth_strategy_alter -constrset constrs_1
 current_run -synthesis [get_runs synth_default]
 
-set impl_flow                "Vivado Implementation 2025"
+set impl_flow                "Vivado Implementation 2026"
 set impl_strategy_default    "Vivado Implementation Defaults"
 set impl_strategy_area       "Area_ExploreWithRemap"
 set impl_strategy_fanout_opt "Performance_WLBlockPlacementFanoutOpt"
@@ -117,13 +117,12 @@ set_property -name {xsim.simulate.xsim.more_options} -value {-sv_seed random} -o
 add_files -fileset sim_1 -norecurse [file join $project_directory "rtl/sim_1/new/emission/atan.txt"]
 add_files -fileset sim_1 -norecurse [file join $project_directory "rtl/sim_1/new/emission/sin.txt"]
 
-set_msg_config -id {Synth 8-7080} -new_severity {ADVISORY}
-set_msg_config -id {Synth 8-7129} -new_severity {ADVISORY}
-set_msg_config -id {Synth 8-5640} -new_severity {ADVISORY}
-# set_msg_config -id {Synth 8-5858} -new_severity {ADVISORY}
 set_msg_config -id {Synth 8-3917} -new_severity {ADVISORY}
-set_msg_config -id {Synth 8-13157} -new_severity {ADVISORY}
+set_msg_config -id {Synth 8-4446} -new_severity {ADVISORY}
+set_msg_config -id {Synth 8-5640} -new_severity {ADVISORY}
+set_msg_config -id {Synth 8-7129} -new_severity {ADVISORY}
 set_msg_config -id {Project 1-5713} -new_severity {ADVISORY}
+set_msg_config -id {Power 33-332} -new_severity {ADVISORY}
 
 set_property top top [get_filesets sources_1]
 set_property top sim_synchronizer [get_filesets sim_1]
