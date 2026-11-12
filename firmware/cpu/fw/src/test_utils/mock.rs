@@ -191,9 +191,9 @@ impl MockPort {
                 if addr == ADDR_CTL_FLAG {
                     self.ctl_flag_writes.push(CtlFlags::from_bits_retain(value));
                     let latching = CtlFlags::from_bits_retain(value) & LATCH_MASK;
-                    for bit in 0..16usize {
+                    for (bit, count) in self.latch_count.iter_mut().enumerate() {
                         if (latching.bits() & (1 << bit)) != 0 {
-                            self.latch_count[bit] += 1;
+                            *count += 1;
                         }
                     }
                     self.ctl[ADDR_CTL_FLAG as usize] = if self.latch_stuck {
