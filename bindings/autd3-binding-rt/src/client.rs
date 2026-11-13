@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::mem::DropGuard;
 use std::sync::{Arc, PoisonError};
 use std::time::Duration;
 
@@ -110,18 +111,6 @@ impl Book {
     }
 }
 
-struct CallRegistration<'a> {
-    shared: &'a Shared,
-    call: u64,
-}
-
-impl Drop for CallRegistration<'_> {
-    fn drop(&mut self) {
-        self.shared.book().forget(self.call);
-        self.shared.changed.notify_waiters();
-    }
-}
-
 impl Shared {
     fn book(&self) -> std::sync::MutexGuard<'_, Book> {
         self.book.lock().unwrap_or_else(PoisonError::into_inner)
@@ -200,11 +189,11 @@ impl Client {
 
     async fn send_frames(&self, frames: &Frames, every_frame_waits: bool) -> Result<(), Error> {
         let shared = &*self.shared;
-        let registration = CallRegistration {
-            shared,
-            call: shared.book().begin_call(),
-        };
-        let call = registration.call;
+        let call = shared.book().begin_call();
+        let _registration = DropGuard::new(call, |call| {
+            shared.book().forget(call);
+            shared.changed.notify_waiters();
+        });
         let sent = {
             let _sending = shared.sending.lock().await;
             if shared.book().pending.is_empty() {
