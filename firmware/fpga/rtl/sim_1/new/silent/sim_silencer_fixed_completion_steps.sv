@@ -197,7 +197,7 @@ module sim_silencer_fixed_completion_steps ();
     silencer_settings.COMPLETION_STEPS_PHASE = 10;
     phase_buf[0] = 127;
     intensity_buf[0] = 245;
-    check_manual_seq({254, 253, 252, 251, 250, 249, 248, 247, 246, 245, 245}, {242, 229, 216, 203, 191, 178, 165, 152, 139, 127, 127}, 11);
+    check_manual_seq({254, 253, 252, 251, 250, 249, 248, 247, 246, 245, 245}, {242, 229, 216, 203, 190, 178, 165, 152, 139, 127, 127}, 11);
     $display("manual check 9 done");
     //////////////// Manual check 9 ////////////////
 

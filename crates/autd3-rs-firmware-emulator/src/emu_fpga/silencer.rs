@@ -52,8 +52,8 @@ impl SilencerEmulator {
         let step_rem = (u16::from(diff) << 8) % self.value;
         if rst {
             self.step_rem_mem = step_rem;
-            step_quo
-        } else if self.step_rem_mem == 0 {
+        }
+        if self.step_rem_mem == 0 {
             step_quo
         } else {
             self.step_rem_mem -= 1;
