@@ -18,7 +18,7 @@ CPU から見たアドレス (<Math tex="\SI{16}{bit}" />) の内, 上位 <Math 
 | `0x00`        | Controller Main BRAM        | 制御フラグ・各種設定値                               |
 | `0x01`        | Phase Correction BRAM       | 振動子毎の位相補正値                                 |
 | `0x02`        | Output Mask BRAM            | 振動子毎の出力マスク                                 |
-| `0x03`        | Flash レジスタ              | コンフィグレーション用 SPI フラッシュの操作 (FPGA OTA) |
+| `0x03`        | Flash レジスタ              | コンフィグレーション用 SPI フラッシュの操作. [Flash](/autd3-sdk/developer/fpga/flash/) 参照 |
 | `0x04`-`0x05` | Flash バッファ              | フラッシュへの書き込みデータ (1024 byte)             |
 | `0x06`        | Pulse Width Encoder Table BRAM | 強度 → パルス幅の変換テーブル                     |
 | `0x07`        | CPU ウォッチドッグ レジスタ | 後述                                                 |
@@ -30,6 +30,16 @@ CPU から見たアドレス (<Math tex="\SI{16}{bit}" />) の内, 上位 <Math 
 Modulation / Emission BRAM はそのままだと書き込みアドレスが足りないので, Controller Main BRAM 内の特定のアドレス (`ADDR_MOD_MEM_WR_PAGE` (`0x21`), `ADDR_PATTERN_MEM_WR_PAGE` (`0x51`)) に書き込まれたページ番号をアドレスの上位に付加することでアドレスを拡張している.
 また, Modulation / Emission BRAM は, 書き込むバンクの選択も Controller Main BRAM 内の特定のアドレス (`ADDR_MOD_MEM_WR_BANK` (`0x20`), `ADDR_PATTERN_MEM_WR_BANK` (`0x50`)) に書き込まれたバンク番号により行う.
 
+:::note
+これらのページ番号, バンク番号データは CPU バスのクロックドメインで使用するため, BRAM に格納されたデータは使用しない.
+代わりに, このアドレスへの書き込みを監視し, 直接レジスタに格納して使用するようにしている.
+:::
+
+:::caution
+ページ番号・バンク番号レジスタは書き込み先を切り替えるものであり, BRAM のようにラッチされない.
+CPU ファームウェア側はこれらのレジスタを書き換える前後でメモリバリアを張る必要がある (`firmware/cpu/fw/src/fpga.rs` の `write_switch`).
+:::
+
 | BRAM                       | 書き込み幅 | 読み出し幅 | バンク | 備考                                      |
 | -------------------------- | ---------- | ---------- | ------ | ----------------------------------------- |
 | Controller Main            | 16         | 16         | -      | 256 語                                    |
@@ -40,16 +50,6 @@ Modulation / Emission BRAM はそのままだと書き込みアドレスが足�
 | Emission                   | 16         | 64         | 2      | ページ 4 bit. バンク毎に書き込み側 262144 語 |
 
 CPU から読み出せるのは Controller Main BRAM, Flash レジスタ, CPU ウォッチドッグ レジスタ, 同期位相ロック レジスタだけである.
-
-:::note
-これらのページ番号, バンク番号データは CPU バスのクロックドメインで使用するため, BRAM に格納されたデータは使用しない.
-代わりに, このアドレスへの書き込みを監視し, 直接レジスタに格納して使用するようにしている.
-:::
-
-:::caution
-ページ番号・バンク番号レジスタは書き込み先を切り替えるものであり, BRAM のようにラッチされない.
-CPU ファームウェア側はこれらのレジスタを書き換える前後でメモリバリアを張る必要がある (`firmware/cpu/fw/src/fpga.rs` の `write_switch`).
-:::
 
 ## CPU ウォッチドッグ
 

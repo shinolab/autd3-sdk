@@ -1,0 +1,211 @@
+---
+title: Flash (FPGA OTA)
+description: コンフィグレーション用 SPI フラッシュの書き換えと, golden / update の 2 イメージによる起動
+sidebar:
+  order: 14
+---
+
+import Math from "@components/Math.astro";
+import Mermaid from "@components/Mermaid.astro";
+
+| Name       | In/Out | Width | Description                                         |
+| ---------- | ------ | ----- | --------------------------------------------------- |
+| CLK        | In     | 1     | メインクロック                                      |
+| LOCKED     | In     | 1     | MMCM のロック                                       |
+| EOS        | In     | 1     | コンフィグレーションの完了 (`STARTUPE2` の End Of Startup) |
+| USR_ACCESS | In     | 32    | bitstream に埋め込まれた値 (`USR_ACCESSE2`)         |
+| FLASH_BUS  | -      | -     | CPU バス側 (`flash_host`) とのインターフェース      |
+| SCK        | Out    | 1     | SPI クロック (`STARTUPE2` の `USRCCLKO` へ)         |
+| CS_N       | Out    | 1     | SPI チップセレクト                                  |
+| MOSI       | Out    | 1     | SPI データ出力                                      |
+| MISO       | In     | 1     | SPI データ入力                                      |
+| ICAP_CSIB  | Out    | 1     | `ICAPE2` のイネーブル (負論理)                      |
+| ICAP_I     | Out    | 32    | `ICAPE2` への書き込みデータ                         |
+
+Flash モジュールは, OTA のために, FPGA 自身のコンフィグレーション用 SPI フラッシュ (mt25ql128, <Math tex="\SI{16}{MB}" />) を CPU から読み書きし, FPGA を再コンフィグレーションさせるためのモジュールである.
+
+## フラッシュの配置
+
+フラッシュには 2 つのイメージを置く.
+`golden` は JTAG でのみ書き込み, OTA では書き換えない.
+`update` が OTA で書き換える領域である.
+両者は同じソースから生成されるが, bitstream の設定 (`NEXT_CONFIG_ADDR` と `USR_ACCESS`) が異なる.
+
+| アドレス                  | 内容      | 備考                                                  |
+| ------------------------- | --------- | ----------------------------------------------------- |
+| `0x000000`-               | golden    | `USR_ACCESS` = `0x474F4C44`                           |
+| `0x7FFF00`-`0x7FFF37`     | barrier   | <Math tex="\SI{56}{byte}" />. 後述                    |
+| `0x7FFF38`-`0x8000FF`     | 空 (`0xFF`) |                                                     |
+| `0x800100`-`0xFFFFFF`     | update    | `USR_ACCESS` = `0x55504454`                           |
+
+起動中のイメージは `USR_ACCESS` で判別できる.
+
+## 起動シーケンス
+
+:::note
+参考文献: XAPP1247, Xilinx
+:::
+
+<Mermaid
+  title="電源投入時の起動"
+  code={`flowchart TD
+  PON(["電源投入"])
+  G["0x000000:golden<br/>ウォッチドッグ有効化<br/>WBSTAR=0x7FFF01"]
+  B["0x7FFF00:barrier<br/>sync<br/>TIMER を短く設定"]
+  U["0x800100:update"]
+  OK(["update で起動 (UPDT)"])
+  FB["fallback<br/>0x000000 から読み直す (IPROG は無視)"]
+  GOLD(["golden で起動"])
+  PON --> G
+  G -- IPROG --> B
+  B --> U
+  U -- 正常 --> OK
+  U -- "ウォッチドッグ満了" --> FB
+  U -- "CRC エラー" --> FB
+  FB --> GOLD`}
+/>
+
+1. 電源投入後, コンフィグレーションロジックは `0x000000` の golden を読み始める
+    1. golden のヘッダはウォッチドッグを有効にし, `WBSTAR` に barrier のアドレスを書いて `IPROG` を発行する
+1. `IPROG` によりコンフィグレーションがやり直され, `0x7FFF00` (barrier) から読み始める
+    1. barrier で同期を取り直し, ウォッチドッグのタイムアウトを短く設定する
+1. その後, そのまま読みすすめられ `0x800100` の update をそのまま読み始める
+1. update が正常であれば, update のヘッダがタイムアウトを長い値に設定し直し, 本体のコンフィグレーションと CRC チェックを経て update が起動する
+1. update が空 (`0xFF` のみ) の場合は, パケットが来ないまま barrier で設定した短いウォッチドッグが発火し, あるいは, update が破損している場合は CRC エラーになり fallback が起こり `0x000000` から読み直す
+    - fallback 中は golden の `WBSTAR` / `IPROG` は無視されるので, golden がそのまま起動する
+
+:::note
+barrier を挟まず, golden の `WBSTAR` で update (`0x800100`) を直接指すと, update が空のときにコンフィグレーションロジックもウォッチドッグも止まり, fallback せず未コンフィグレーションのまま止まってしまう.
+
+また, `ICAPE2` からユーザロジックで `WBSTAR` を書いて `IPROG` を発行しても, 書き込んだ `WBSTAR` は使われず, 再コンフィグレーションは `0x000000` から始まってしまう.
+そのため, 任意のアドレスへのジャンプは golden に埋め込んだ `NEXT_CONFIG_ADDR` だけで行う.
+:::
+
+## モジュール構成
+
+<Mermaid
+  title="Flash モジュール"
+  code={`flowchart LR
+  CPU(["CPU バス (CPU_CKIO)"])
+  HOST["flash_host<br/>レジスタ + 1 KiB バッファ"]
+  SPI["flash_spi"]
+  IPROG["flash_iprog"]
+  FLASH(["SPI フラッシュ"])
+  ICAP(["ICAPE2"])
+  CPU --> HOST
+  HOST -- "コマンド (CDC)" --> SPI
+  SPI -- "DONE (CDC)" --> HOST
+  SPI -- SPI x1 --> FLASH
+  SPI -- REBOOT --> IPROG
+  IPROG --> ICAP`}
+/>
+
+### flash_host
+
+CPU バスのクロックドメインにあるレジスタとバッファ.
+
+| アドレス | 名前              | 意味                                                               |
+| -------- | ----------------- | ------------------------------------------------------------------ |
+| `0x00`   | `CMD`             | 書き込むとコマンドを発行する. 読み出すと最後に発行したコマンド     |
+| `0x01`   | `ADDR_0`          | フラッシュアドレスの下位 <Math tex="\SI{16}{bit}" />               |
+| `0x02`   | `ADDR_1`          | フラッシュアドレスの上位 <Math tex="\SI{8}{bit}" />                |
+| `0x03`   | `LEN_0`           | 長さ (byte) の下位 <Math tex="\SI{16}{bit}" />                     |
+| `0x04`   | `LEN_1`           | 長さ (byte) の上位 <Math tex="\SI{8}{bit}" />                      |
+| `0x05`   | `STATUS`          | 読み出し専用. bit 0 が busy, bit 8-15 が直前のコマンドのエラー     |
+| `0x06`   | `RESULT_0`        | 読み出し専用. 結果 (CRC32) の下位 <Math tex="\SI{16}{bit}" />      |
+| `0x07`   | `RESULT_1`        | 読み出し専用. 結果 (CRC32) の上位 <Math tex="\SI{16}{bit}" />      |
+| `0x08`   | `USR_ACCESS_0`    | 読み出し専用. `USR_ACCESS` の下位 <Math tex="\SI{16}{bit}" />      |
+| `0x09`   | `USR_ACCESS_1`    | 読み出し専用. `USR_ACCESS` の上位 <Math tex="\SI{16}{bit}" />      |
+
+`CMD` は再コンフィグレーションで初期値 `0` に戻る.
+これにより, 再コンフィグレーションが起きたがどうかが確認できる.
+
+### flash_spi
+
+フラッシュを操作するステートマシン.
+SCK はメインクロックの 1/4 (<Math tex="\SI{5.12}{MHz}" />) である.
+
+| `CMD`  | 名前      | 動作                                                                                       |
+| ------ | --------- | ------------------------------------------------------------------------------------------ |
+| `0x02` | `CRC32`   | `ADDR` から `LEN` byte 分のデータを `READ` (`0x03`) で読み, その CRC32 を `RESULT` にいれる     |
+| `0x03` | `ERASE`   | `ADDR` を含むセクタから `ADDR + LEN` を含むセクタまでを <Math tex="\SI{64}{KiB}" /> 単位で消去 |
+| `0x04` | `PROGRAM` | バッファの先頭から `LEN` byte 分を `ADDR` に書き込む |
+| `0x05` | `REBOOT`  | `flash_iprog` を起動する                                                                   |
+
+消去・書き込みでは, 1 回ごとに `WREN` を発行し, その後 `RDSR` で WIP ビットが落ちるまでポーリングする.
+
+| エラー | 名前        | 意味                                                      |
+| ------ | ----------- | --------------------------------------------------------- |
+| `0x00` | `NONE`      | エラーなし                                                |
+| `0x01` | `PROTECTED` | 書き込み禁止領域 (`0x800000` 未満, またはフラッシュ外) への消去・書き込み |
+| `0x02` | `TIMEOUT`   | ポーリングの上限に達した                                  |
+| `0x03` | `INVALID`   | 未知のコマンド, フラッシュ外の読み出し, `LEN` が 1024 を超える書き込み |
+
+### flash_iprog
+
+IPROG コマンドを発行して, 再コンフィグレーションするためのモジュール.
+
+詳細は UG470 を参照されたい.
+
+`ICAPE2` に `dummy`, sync, `NOOP`, `WBSTAR`, `0` (開始アドレス), `CMD`, `IPROG`, `NOOP` を順に流す.
+これにより FPGA は `0x000000` から再コンフィグレーションされる.
+
+:::note
+`ICAPE2` インターフェスには入力コンフィグレーションバスにビットスワップが必要なことに注意
+:::
+
+## CPU ファームウェアからの操作
+
+1. `STATUS` が busy でないことを確認する.
+1. `ADDR` / `LEN` を書き込み, メモリバリアを張る.
+1. `ADDR` / `LEN` を読み返し, 書き込んだ値になっていることを確認する.
+1. `CMD` を書き込み, メモリバリアを張る.
+1. `STATUS` の busy が落ちるまでポーリングし, エラーがあれば `ERR_UPDATE_FLASH`, そうでなければ `RESULT` を返す. busy が落ちなければ `ERR_FPGA_TIMEOUT` を返す.
+
+:::caution
+`ADDR` / `LEN` の書き込みと `CMD` の書き込みの間のメモリバリアは, `CMD` が先に届き, 古いアドレス・長さで実行されてしまうのを防ぐために入れてある
+:::
+
+更新は以下のコマンドで行う.
+
+| コマンド             | ID     | 動作                                                                                             |
+| -------------------- | ------ | ------------------------------------------------------------------------------------------------ |
+| `FpgaUpdateBegin`    | `0x75` | 出力を止め, CPU ウォッチドッグを無効化し, `0x800000` のセクタを消去する |
+| `FpgaUpdateChunk`    | `0x76` | オフセットとデータを受け取る. 必要な分だけ `ERASE CMD` でセクタを消去し, データを 1024 byte ずつ `PROGRAM CMD` で書き込む|
+| `FpgaUpdateCommit`   | `0x77` | `CRC32 CMD` で update 領域を読み戻し, CRC32 を照合                |
+| `FpgaUpdateActivate` | `0x78` | <Math tex="\SI{100}{ms}" /> 後に `REBOOT CMD` を発行                                              |
+
+<Mermaid
+  title="CPU 側の状態遷移"
+  code={`stateDiagram-v2
+  [*] --> Idle
+  Idle --> Receiving: FpgaUpdateBegin
+  Receiving --> Receiving: FpgaUpdateChunk
+  Receiving --> Committed: FpgaUpdateCommit
+  Committed --> Reboot: FpgaUpdateActivate
+  Reboot --> Settle: 100 ms 後に REBOOT
+  Settle --> Idle: 3000 ms 後, CMD == 0
+  Settle --> Committed: 3000 ms 後, CMD != 0`}
+/>
+
+- `REBOOT` を <Math tex="\SI{100}{ms}" /> 遅らせるのは, `FpgaUpdateActivate` への返信を先に送るためである
+- `REBOOT` の <Math tex="\SI{3000}{ms}" /> 後に `CMD` を読み, `0` (再コンフィグレーション後の値) であれば `Cpu::init` で FPGA を初期化して `Idle` に戻る
+
+## ビルド
+
+`cargo xtask fpga build` (`xtask/src/fpga.rs` の `fpga_build`) は以下を行う.
+
+1. Vivado プロジェクトを `scripts/proj_gen.tcl` で生成
+1. barrier (`fpga_barrier_image()`) を `autd3-fpga-barrier.bin` に書き出す
+1. `scripts/build.tcl` に barrier のパスと, barrier / update のアドレスを渡して Vivado を実行
+    1. `top.bit` を生成する
+        - このときの `top.bit` は `timing.xdc` の設定 (`USR_ACCESS` = "UPDT", `CONFIGFALLBACK`, `TIMER_CFG`) を持つ update イメージになる
+    1. 実装済みの結果を開き, `NEXT_CONFIG_ADDR` = barrier のアドレスと `USR_ACCESS` = "GOLD" を上書きして `write_bitstream` し直し, `autd3-fpga-golden.bit` を作る
+    1. `write_cfgmem` で golden, barrier, update を 1 つの `autd3-fpga.mcs` にまとめる
+1. `autd3-fpga.mcs` を読んでフラッシュ全体のイメージを組み立て, 以下を検査する
+    - golden の USR_ACCESS が "0x474F4C44" で, `IPROG` を持ち, `WBSTAR` が barrier を指し, ウォッチドッグを有効にしている
+    - barrier のアドレスに barrier がそのまま置かれている
+    - barrier と update の間が空 (`0xFF`) である
+    - update の USR_ACCESS が "0x55504454" で, `IPROG` を持たず, `WBSTAR` が 0 で, ウォッチドッグを有効にしている
+1. update 領域を `autd3-fpga-update.img` に書き出す. これが OTA で送るイメージになる.
+
