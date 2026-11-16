@@ -93,7 +93,7 @@ CPU から送られてきたデータはすべて `Memory` モジュール内の
 `Emission` から `PWM` までの各モジュールは, `DIN_VALID` がアサートされている間に 249 個の振動子分のデータが順番に流れてくることを前提としたパイプライン処理を行う.
 
 このほか, デバッグ用に内部状態を GPIO ピンへ出力する `GPIO Output` モジュールと, CPU から書き込まれた設定値を読み出して各モジュールへ配る `Controller` モジュールがある.
-また, CPU のメインループの停止を検知して出力を止める CPU ウォッチドッグ ([Memory](/autd3-sdk/developer/fpga/memory/#cpu-ウォッチドッグ) 参照) と, コンフィグレーション用 SPI フラッシュを書き換える (FPGA OTA) `Flash` モジュールがある.
+また, CPU のメインループの停止を検知して出力を止める CPU ウォッチドッグ ([Memory](/autd3-sdk/developer/fpga/memory/#cpu-ウォッチドッグ) 参照) と, コンフィグレーション用 SPI フラッシュを書き換える (FPGA OTA) [`Flash`](/autd3-sdk/developer/fpga/flash/) モジュールがある.
 
 以下に, 各モジュールの解説をしていく.
 なお, 説明の都合上, 信号の流れる順とは異なる順序で説明する.
