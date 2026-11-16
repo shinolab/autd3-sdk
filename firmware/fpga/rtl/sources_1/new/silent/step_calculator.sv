@@ -41,8 +41,10 @@ module step_calculator #(
   logic [15:0] step_quo_i, step_rem_i;
   logic [15:0] step_quo_p, step_rem_p;
 
-  logic [7:0] intensity_d1, intensity_din, intensity_q, intensity_out;
-  logic [7:0] phase_d1, phase_din, phase_q, phase_out;
+  logic [7:0] intensity_din, intensity_q, intensity_out;
+  logic [7:0] phase_din, phase_q, phase_out;
+  logic [15:0] rem_cur_i, rem_cur_p;
+  logic rem_left_i, rem_left_p;
 
   logic dout_valid = 0;
   logic [15:0] update_rate_i, update_rate_p;
@@ -56,6 +58,20 @@ module step_calculator #(
   assign UPDATE_RATE_INTENSITY = update_rate_i;
   assign UPDATE_RATE_PHASE = update_rate_p;
   assign DOUT_VALID = dout_valid;
+
+  assign rem_cur_i = reset_out_i ? step_rem_i : step_rem_mem_i[output_cnt];
+  assign rem_cur_p = reset_out_p ? step_rem_p : step_rem_mem_p[output_cnt];
+  assign rem_left_i = rem_cur_i != '0;
+  assign rem_left_p = rem_cur_p != '0;
+
+  delay_fifo #(
+      .WIDTH(16),
+      .DEPTH(2)
+  ) delay_fifo_din (
+      .CLK (CLK),
+      .DIN ({INTENSITY, PHASE}),
+      .DOUT({intensity_din, phase_din})
+  );
 
   div_16_16 div_i (
       .s_axis_dividend_tdata({diff_i, 8'h00}),
@@ -101,10 +117,6 @@ module step_calculator #(
 
     first_in <= (state == IDLE) & DIN_VALID;
 
-    intensity_d1 <= INTENSITY;
-    intensity_din <= intensity_d1;
-    phase_d1 <= PHASE;
-    phase_din <= phase_d1;
     intensity_out <= intensity_q;
     phase_out <= phase_q;
 
@@ -126,27 +138,11 @@ module step_calculator #(
       diff_mem_p[cnt] <= (diff_tmp_p >= 8'd128) ? 9'd256 - diff_tmp_p : diff_tmp_p;
     end
 
-    if (reset_out_i) begin
-      update_rate_i <= step_quo_i;
-      step_rem_mem_i[output_cnt] <= step_rem_i;
-    end else begin
-      if (step_rem_mem_i[output_cnt] == '0) begin
-        update_rate_i <= step_quo_i;
-      end else begin
-        update_rate_i <= step_quo_i + 1;
-        step_rem_mem_i[output_cnt] <= (state == OUTPUT) ? step_rem_mem_i[output_cnt] - 1 : step_rem_mem_i[output_cnt];
-      end
-    end
-    if (reset_out_p) begin
-      update_rate_p <= step_quo_p;
-      step_rem_mem_p[output_cnt] <= step_rem_p;
-    end else begin
-      if (step_rem_mem_p[output_cnt] == '0) begin
-        update_rate_p <= step_quo_p;
-      end else begin
-        update_rate_p <= step_quo_p + 1;
-        step_rem_mem_p[output_cnt] <= (state == OUTPUT) ? step_rem_mem_p[output_cnt] - 1 : step_rem_mem_p[output_cnt];
-      end
+    update_rate_i <= step_quo_i + {15'd0, rem_left_i};
+    update_rate_p <= step_quo_p + {15'd0, rem_left_p};
+    if (state == OUTPUT) begin
+      step_rem_mem_i[output_cnt] <= rem_cur_i - {15'd0, rem_left_i};
+      step_rem_mem_p[output_cnt] <= rem_cur_p - {15'd0, rem_left_p};
     end
   end
 
