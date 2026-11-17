@@ -135,6 +135,9 @@ module synchronizer (
     end
   end
 
+  // Concentrating the coarse correction right after the SYNC edge can produce noise around 1 kHz
+  // so the correction timing is dithered with a pseudo-random number
+  // (in practice this noise is not audible).
   always_ff @(posedge CLK) begin
     if (adjust_cnt == '0) begin
       xor_t <= xor_x ^ {xor_x[20:0], 11'd0};
