@@ -7,11 +7,12 @@ module time_cnt_generator (
     output wire [8:0] TIME_CNT,
     output wire UPDATE
 );
-  logic [8:0] t_buf0, t_buf1, t;
+  logic [8:0] t_buf0, t;
+  logic [8:0] t_buf1 = '0;
   logic update;
 
-  wire  cross0 = t_buf0 == 8'd0;
-  wire  cross0_with_skip = (t_buf0 == 8'd1) & SKIP_ONE_ASSERT;
+  wire cross0 = (t_buf0 == 8'd0) & (t_buf1 != 9'd0);
+  wire cross0_with_skip = (t_buf0 == 8'd1) & SKIP_ONE_ASSERT;
 
   assign t_buf0   = SYS_TIME[8:0];
   assign UPDATE   = update;

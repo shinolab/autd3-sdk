@@ -20,8 +20,10 @@ import Math from "@components/Math.astro";
 `SYS_TIME` の値は, 全デバイス間で同期しているため, <Math tex="t" /> も必然的に全てのデバイスの全振動子で同期する.
 `SYS_TIME` に関しては, [Synchronizer](/autd3-sdk/developer/fpga/synchronizer/) を参照されたい.
 
-`TIME_CNT` の生成には, `SYS_TIME` の下位 9 bit をそのまま使用する.
+`TIME_CNT` には, `SYS_TIME` の下位 9 bit を 2 クロック遅らせて出力する.
 また, `UPDATE` は基本的に `TIME_CNT` が特定の値のときだけ <Math tex="1" /> とすれば良い.
 ただし, `SYS_TIME` は補正のために, 値が 1 飛ばしでインクリメント (すなわち前回の値 <Math tex="+2" />) される, または, インクリメントされない可能性があるため, 単純に `UPDATE` は `TIME_CNT` が <Math tex="0" /> のときに <Math tex="1" /> のようにすることができない.
-そのため, `UPDATE` がアサートされるのは, `TIME_CNT` が <Math tex="0" /> またぐタイミング, としている.
+そのため, `UPDATE` は `SYS_TIME` の下位 9 bit が <Math tex="0" /> をまたいだときに 1 クロックだけアサートする.
+具体的には, 下位 9 bit が <Math tex="0" /> かつ前のクロックの値が <Math tex="0" /> でないとき, または, 下位 9 bit が <Math tex="1" /> かつ `SKIP_ONE_ASSERT` がアサートされているとき (<Math tex="0" /> を飛ばしたとき) である.
+`UPDATE` は `SYS_TIME` から 1 クロック遅れて出力されるため, `TIME_CNT` より 1 クロック早い.
 すなわち, `UPDATE` がアサートされたクロックの次のクロックから新しい周期が始まるようになっている.
