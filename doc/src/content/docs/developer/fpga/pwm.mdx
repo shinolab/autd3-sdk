@@ -14,12 +14,10 @@ import Mermaid from "@components/Mermaid.astro";
   code={`flowchart LR
   IN(["PULSE_WIDTH / PHASE"])
   PRE["Preconditioner"]
-  BUF["Buffer"]
   GEN["Generator"]
   OUT(["PWM_OUT"])
   IN --> PRE
-  PRE -- "R / F" --> BUF
-  BUF -- "R / F" --> GEN
+  PRE -- "R / F" --> GEN
   GEN --> OUT`}
 />
 
@@ -61,11 +59,6 @@ F &= \left[2P + \left\lceil\frac{D}{2}\right\rceil\right] \%\, T
 入力として, `DIN_VALID` は 249 クロックの間 1 であり, その間 `PULSE_WIDTH`, `PHASE` からパルス幅/位相データが順番に流れてくることを想定している.
 出力に関して, 中間データを出力しないようにするために, 一旦バッファに格納している.
 
-## Buffer
-
-Buffer は, `UPDATE` がアサートされるまで <Math tex="R, F" /> の更新を遅らせる.
-すなわち, 超音波周期の途中で <Math tex="R, F" /> が更新されることを防ぐためにある.
-
 ## Generator
 
 Generator は `TIME_CNT` の値 <Math tex="t" /> と Buffer から出力された <Math tex="R, F" /> を用いて, PWM の出力 <Math tex="v" /> を計算する.
@@ -76,4 +69,7 @@ v = \begin{cases}
         (t < F) \lor (R \le t)  & (\text{Otherwise})   \\
     \end{cases}
 `} />
+
+なお, Generator への <Math tex="R, F" /> の入力は, `UPDATE` がアサートされるまで遅らせている.
+これは, 超音波周期の途中で <Math tex="R, F" /> が更新されることを防ぐためにある.
 

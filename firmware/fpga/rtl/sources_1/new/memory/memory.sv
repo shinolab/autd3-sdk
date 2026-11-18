@@ -21,7 +21,6 @@ module memory (
   logic we;
   logic [15:0] addr;
   logic [7:0] select;
-  logic [15:0] data_in;
   logic [15:0] data_out;
   logic [15:0] ctl_dout;
   logic [15:0] flash_dout;
@@ -65,7 +64,6 @@ module memory (
   assign en = we ? en_q : ~cs_n_iob;
   assign addr = we ? addr_q : addr_iob;
   assign select = addr[15:8];
-  assign data_in = data_q;
   assign MEM_BUS.DATA_OUT = data_out;
   assign data_out = (rd_sel == RD_SEL_FLASH) ? flash_dout : (rd_sel == RD_SEL_WATCHDOG) ? watchdog_dout : (rd_sel == RD_SEL_SYNC_PS) ? sync_ps_dout : ctl_dout;
 
@@ -79,7 +77,7 @@ module memory (
       .ena  (ctl_en),
       .wea  (we),
       .addra(addr[7:0]),
-      .dina (data_in),
+      .dina (data_q),
       .douta(ctl_dout),
       .clkb (CLK),
       .web  (CNT_BUS.WE),
@@ -121,7 +119,7 @@ module memory (
       .EN(watchdog_en),
       .WE(we),
       .ADDR(addr[7:0]),
-      .DATA_IN(data_in),
+      .DATA_IN(data_q),
       .DATA_OUT(watchdog_dout),
       .FIRED(CPU_WATCHDOG_FIRED)
   );
@@ -132,7 +130,7 @@ module memory (
       .EN(sync_ps_en),
       .WE(we),
       .ADDR(addr[7:0]),
-      .DATA_IN(data_in),
+      .DATA_IN(data_q),
       .DATA_OUT(sync_ps_dout),
       .SETTINGS(SYNC_PS_SETTINGS)
   );
@@ -144,7 +142,7 @@ module memory (
       .BUF_EN(flash_buf_en),
       .WE(we),
       .ADDR(addr[8:0]),
-      .DATA_IN(data_in),
+      .DATA_IN(data_q),
       .DATA_OUT(flash_dout),
       .FLASH_BUS(FLASH_BUS)
   );
@@ -152,60 +150,50 @@ module memory (
   ///////////////////////// Phase correction //////////////////////////
   logic phase_corr_en;
 
-  logic [7:0] phase_corr_idx;
-  logic [7:0] phase_corr_dout;
-
   assign phase_corr_en = (select == BRAM_SELECT_PHASE_CORR) & en;
-  assign phase_corr_idx = PHASE_CORR_BUS.IDX;
-  assign PHASE_CORR_BUS.VALUE = phase_corr_dout;
 
   BRAM_PHASE_CORR phase_corr_bram (
       .clka (bus_clk),
       .ena  (phase_corr_en),
       .wea  (we),
       .addra(addr[6:0]),
-      .dina (data_in),
+      .dina (data_q),
       .douta(),
       .clkb (CLK),
       .enb  (PHASE_CORR_BUS.RD_EN),
       .web  (1'b0),
-      .addrb(phase_corr_idx),
+      .addrb(PHASE_CORR_BUS.IDX),
       .dinb (),
-      .doutb(phase_corr_dout)
+      .doutb(PHASE_CORR_BUS.VALUE)
   );
   ///////////////////////// Phase correction //////////////////////////
 
   //////////////////////////// Output mask ////////////////////////////
   logic output_mask_en;
 
-  logic [255:0] output_mask_dout;
-
   assign output_mask_en = (select == BRAM_SELECT_OUTPUT_MASK) & en;
-  assign OUTPUT_MASK_BUS.VALUE = output_mask_dout;
   BRAM_OUTPUT_MASK output_mask_bram (
       .clka (bus_clk),
       .ena  (output_mask_en),
       .wea  (we),
       .addra(addr[4:0]),
-      .dina (data_in),
+      .dina (data_q),
       .douta(),
       .clkb (CLK),
       .enb  (OUTPUT_MASK_BUS.RD_EN),
       .web  (1'b0),
       .addrb(1'b0),
       .dinb (),
-      .doutb(output_mask_dout)
+      .doutb(OUTPUT_MASK_BUS.VALUE)
   );
   //////////////////////////// Output mask ////////////////////////////
 
   ///////////////////////////// PWE table ////////////////////////////
   logic pwe_table_en;
 
-  logic [7:0] pwe_table_idx;
   logic [15:0] pwe_table_dout;
 
   assign pwe_table_en = (select == BRAM_SELECT_PWE_TABLE) & en;
-  assign pwe_table_idx = PWE_TABLE_BUS.IDX;
   assign PWE_TABLE_BUS.VALUE = pwe_table_dout[8:0];
 
   BRAM_PWE_TABLE pwe_table_bram (
@@ -213,12 +201,12 @@ module memory (
       .ena  (pwe_table_en),
       .wea  (we),
       .addra(addr[7:0]),
-      .dina (data_in),
+      .dina (data_q),
       .douta(),
       .clkb (CLK),
       .enb  (PWE_TABLE_BUS.RD_EN),
       .web  (1'b0),
-      .addrb(pwe_table_idx),
+      .addrb(PWE_TABLE_BUS.IDX),
       .dinb (),
       .doutb(pwe_table_dout)
   );
@@ -228,13 +216,11 @@ module memory (
   logic mod_en[NumBanks];
   logic mod_rd_en[NumBanks];
 
-  logic [15:0] mod_idx;
   logic [7:0] mod_value[NumBanks];
 
   logic mod_mem_wr_bank = 1'b0;
   logic mod_mem_wr_page = 1'b0;
 
-  assign mod_idx = MOD_BUS.IDX;
   assign MOD_BUS.VALUE = mod_value[MOD_BUS.BANK];
   for (genvar i = 0; i < NumBanks; i++) begin : gen_mod_bram
     assign mod_en[i] = (select[7:6] == ModSelect[7:6]) & en & (mod_mem_wr_bank == i);
@@ -244,12 +230,12 @@ module memory (
         .ena  (mod_en[i]),
         .wea  (we),
         .addra({mod_mem_wr_page, addr[13:0]}),
-        .dina (data_in),
+        .dina (data_q),
         .douta(),
         .clkb (CLK),
         .enb  (mod_rd_en[i]),
         .web  ('0),
-        .addrb(mod_idx),
+        .addrb(MOD_BUS.IDX),
         .dinb ('0),
         .doutb(mod_value[i])
     );
@@ -260,13 +246,11 @@ module memory (
   logic emission_en[NumBanks];
   logic emission_rd_en[NumBanks];
 
-  logic [15:0] pattern_idx;
   logic [63:0] emission_value[NumBanks];
 
   logic pattern_mem_wr_bank = 1'b0;
   logic [3:0] pattern_mem_wr_page = '0;
 
-  assign pattern_idx = EMISSION_BUS.ADDR;
   assign EMISSION_BUS.VALUE = emission_value[EMISSION_BUS.BANK];
   for (genvar i = 0; i < NumBanks; i++) begin : gen_emission_bram
     assign emission_en[i] = (select[7:6] == EmissionSelect[7:6]) & en & (pattern_mem_wr_bank == i);
@@ -276,10 +260,10 @@ module memory (
         .ena  (emission_en[i]),
         .wea  (we),
         .addra({pattern_mem_wr_page, addr[13:0]}),
-        .dina (data_in),
+        .dina (data_q),
         .clkb (CLK),
         .enb  (emission_rd_en[i]),
-        .addrb(pattern_idx),
+        .addrb(EMISSION_BUS.ADDR),
         .doutb(emission_value[i])
     );
   end
@@ -288,10 +272,10 @@ module memory (
   always_ff @(posedge bus_clk) begin
     if (we & ctl_en) begin
       case (addr[7:0])
-        ADDR_MOD_MEM_WR_BANK: mod_mem_wr_bank <= data_in[0];
-        ADDR_MOD_MEM_WR_PAGE: mod_mem_wr_page <= data_in[0];
-        ADDR_PATTERN_MEM_WR_BANK: pattern_mem_wr_bank <= data_in[0];
-        ADDR_PATTERN_MEM_WR_PAGE: pattern_mem_wr_page <= data_in[3:0];
+        ADDR_MOD_MEM_WR_BANK: mod_mem_wr_bank <= data_q[0];
+        ADDR_MOD_MEM_WR_PAGE: mod_mem_wr_page <= data_q[0];
+        ADDR_PATTERN_MEM_WR_BANK: pattern_mem_wr_bank <= data_q[0];
+        ADDR_PATTERN_MEM_WR_PAGE: pattern_mem_wr_page <= data_q[3:0];
         default: begin
         end
       endcase

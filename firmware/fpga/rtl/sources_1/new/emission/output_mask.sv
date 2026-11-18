@@ -13,8 +13,7 @@ module output_mask #(
     output wire DOUT_VALID
 );
 
-  logic [  7:0] cnt;
-  logic [255:0] dout;
+  logic [7:0] cnt;
 
   logic [7:0] intensity_in, intensity_out;
 
@@ -24,8 +23,6 @@ module output_mask #(
   } state_t;
 
   state_t state = IDLE;
-
-  assign dout = MASK_VALUE;
 
   assign INTENSITY_OUT = intensity_out;
 
@@ -57,10 +54,8 @@ module output_mask #(
       end
       RUN: begin
         cnt <= cnt + 1;
-        intensity_out <= (!FAILSAFE && dout[cnt]) ? intensity_in : 8'h00;
+        intensity_out <= (!FAILSAFE && MASK_VALUE[cnt]) ? intensity_in : 8'h00;
         state <= cnt == DEPTH - 1 ? IDLE : state;
-      end
-      default: begin
       end
     endcase
   end

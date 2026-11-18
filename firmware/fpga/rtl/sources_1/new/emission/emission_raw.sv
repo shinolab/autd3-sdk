@@ -61,26 +61,7 @@ module emission_raw #(
         addr <= addr + 1;
         dout_valid <= 1;
         cnt <= cnt + 1;
-        case (cnt[1:0])
-          2'h0: begin
-            phase <= data_out[7:0];
-            intensity <= data_out[15:8];
-          end
-          2'h1: begin
-            phase <= data_out[23:16];
-            intensity <= data_out[31:24];
-          end
-          2'h2: begin
-            phase <= data_out[39:32];
-            intensity <= data_out[47:40];
-          end
-          2'h3: begin
-            phase <= data_out[55:48];
-            intensity <= data_out[63:56];
-          end
-          default: begin
-          end
-        endcase
+        {intensity, phase} <= data_out[16*cnt[1:0]+:16];
         state <= (cnt == DEPTH - 1) ? WAITING : state;
       end
       default: state <= WAITING;

@@ -13,14 +13,9 @@ module pulse_width_encoder #(
     output var DOUT_VALID
 );
 
-  logic [7:0] addr;
-  logic [8:0] dout;
-
   logic dout_valid;
 
   logic [$clog2(DEPTH)-1:0] cnt;
-
-  assign addr = INTENSITY_IN;
 
   typedef enum logic {
     WAITING,
@@ -38,11 +33,10 @@ module pulse_width_encoder #(
       .DOUT(PHASE_OUT)
   );
 
-  assign PWE_TABLE_BUS.IDX = addr;
+  assign PWE_TABLE_BUS.IDX = INTENSITY_IN;
   assign PWE_TABLE_BUS.RD_EN = DIN_VALID | (state == RUN);
-  assign dout = PWE_TABLE_BUS.VALUE;
 
-  assign PULSE_WIDTH_OUT = dout;
+  assign PULSE_WIDTH_OUT = PWE_TABLE_BUS.VALUE;
   assign DOUT_VALID = dout_valid;
 
   always_ff @(posedge CLK) begin
@@ -58,8 +52,6 @@ module pulse_width_encoder #(
         cnt <= cnt + 1;
         dout_valid <= 1'b1;
         state <= cnt == DEPTH - 1 ? WAITING : state;
-      end
-      default: begin
       end
     endcase
   end

@@ -152,7 +152,10 @@ module emission_focus #(
   );
   for (genvar i = 1; i < params::NumFociMax; i++) begin : gen_focus_calc
     logic active;
+    logic [7:0] sin_raw, cos_raw;
     assign active = num_foci > 8'(i);
+    assign sin[i] = active ? sin_raw : 8'd0;
+    assign cos[i] = active ? cos_raw : 8'd0;
     focus_calc focus_calc (
         .CLK(CLK),
         .DIN_VALID(1'b0),
@@ -163,8 +166,8 @@ module emission_focus #(
         .TRANS_Y(active ? trans_y : '0),
         .SOUND_SPEED(SOUND_SPEED),
         .OFFSET(intensity_or_offset[i]),
-        .SIN(sin[i]),
-        .COS(cos[i]),
+        .SIN(sin_raw),
+        .COS(cos_raw),
         .DOUT_VALID()
     );
   end
@@ -233,14 +236,14 @@ module emission_focus #(
   );
 
   always_ff @(posedge CLK) begin
-    sin_01 <= sin[0] + (num_foci <= 8'd1 ? 8'd0 : sin[1]);
-    sin_23 <= (num_foci <= 8'd2 ? 8'd0 : sin[2]) + (num_foci <= 8'd3 ? 8'd0 : sin[3]);
-    sin_45 <= (num_foci <= 8'd4 ? 8'd0 : sin[4]) + (num_foci <= 8'd5 ? 8'd0 : sin[5]);
-    sin_67 <= (num_foci <= 8'd6 ? 8'd0 : sin[6]) + (num_foci <= 8'd7 ? 8'd0 : sin[7]);
-    cos_01 <= cos[0] + (num_foci <= 8'd1 ? 8'd0 : cos[1]);
-    cos_23 <= (num_foci <= 8'd2 ? 8'd0 : cos[2]) + (num_foci <= 8'd3 ? 8'd0 : cos[3]);
-    cos_45 <= (num_foci <= 8'd4 ? 8'd0 : cos[4]) + (num_foci <= 8'd5 ? 8'd0 : cos[5]);
-    cos_67 <= (num_foci <= 8'd6 ? 8'd0 : cos[6]) + (num_foci <= 8'd7 ? 8'd0 : cos[7]);
+    sin_01 <= sin[0] + sin[1];
+    sin_23 <= sin[2] + sin[3];
+    sin_45 <= sin[4] + sin[5];
+    sin_67 <= sin[6] + sin[7];
+    cos_01 <= cos[0] + cos[1];
+    cos_23 <= cos[2] + cos[3];
+    cos_45 <= cos[4] + cos[5];
+    cos_67 <= cos[6] + cos[7];
     sin_0123 <= sin_01 + sin_23;
     sin_4567 <= sin_45 + sin_67;
     cos_0123 <= cos_01 + cos_23;

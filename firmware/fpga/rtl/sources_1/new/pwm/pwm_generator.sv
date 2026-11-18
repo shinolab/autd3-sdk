@@ -8,21 +8,11 @@ module pwm_generator (
     output var PWM_OUT
 );
 
-  logic [8:0] t;
-  logic [8:0] R;
-  logic [8:0] F;
-  logic v;
-
-  assign t = TIME_CNT;
-  assign R = RISE;
-  assign F = FALL;
-  assign PWM_OUT = v;
-
   always_ff @(posedge CLK) begin
-    if (R <= F) begin
-      v <= (R <= t) & (t < F);
+    if (RISE <= FALL) begin
+      PWM_OUT <= (RISE <= TIME_CNT) & (TIME_CNT < FALL);
     end else begin
-      v <= (t < F) | (R <= t);
+      PWM_OUT <= (TIME_CNT < FALL) | (RISE <= TIME_CNT);
     end
   end
 
