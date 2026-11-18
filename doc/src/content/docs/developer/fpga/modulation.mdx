@@ -114,7 +114,7 @@ f = \frac{\SI{40}{kHz}}{N}
 
 このサブモジュールは, 強度データに変調データを掛け合わせ, <Math tex="255" /> で割る.
 
-なお, <Math tex="255" /> による除算は除算器を使わず, <Math tex="0 \le a \le 255^2" /> の範囲で厳密に成り立つ以下の近似で計算している.
+なお, <Math tex="255" /> による除算は除算器を使わず, <Math tex="0 \le a \le 255^2" /> の範囲で厳密に成り立つ以下の式で計算している.
 
 <MathBlock tex={String.raw`
 \left\lfloor\frac{a}{255}\right\rfloor = \left\lfloor \frac{a + \lfloor a / 256 \rfloor + 1}{256} \right\rfloor
