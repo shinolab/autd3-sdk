@@ -29,14 +29,12 @@ module pwm #(
 
   for (genvar i = 0; i < DEPTH; i++) begin : gen_pwm
     logic [8:0] R_buf, F_buf;
-    pwm_buffer pwm_buffer (
-        .CLK(CLK),
-        .UPDATE(UPDATE),
-        .RISE_IN(R[i]),
-        .FALL_IN(F[i]),
-        .RISE_OUT(R_buf),
-        .FALL_OUT(F_buf)
-    );
+    always_ff @(posedge CLK) begin
+      if (UPDATE) begin
+        R_buf <= R[i];
+        F_buf <= F[i];
+      end
+    end
     pwm_generator pwm_generator (
         .CLK(CLK),
         .TIME_CNT(TIME_CNT),

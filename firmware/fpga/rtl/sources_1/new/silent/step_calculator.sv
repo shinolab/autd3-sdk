@@ -16,17 +16,10 @@ module step_calculator #(
     output var DOUT_VALID
 );
 
-  `include "define.vh"
-
-`RAM
   logic [15:0] current_target_mem[256] = '{256{16'h0000}};
-  `RAM
   logic [7:0] diff_mem_i[256] = '{256{8'h00}};
-  `RAM
   logic [7:0] diff_mem_p[256] = '{256{8'h00}};
-  `RAM
   logic [15:0] step_rem_mem_i[256] = '{256{16'h00}};
-  `RAM
   logic [15:0] step_rem_mem_p[256] = '{256{16'h00}};
 
   logic [7:0] current_i, current_p;
@@ -37,7 +30,7 @@ module step_calculator #(
   logic first_in, first_out;
   logic _unused_first_p;
   logic [7:0] diff_tmp_i, diff_i;
-  logic [7:0] diff_tmp_p, diff_p;
+  logic [7:0] diff_tmp_p, diff_short_p, diff_p;
   logic [15:0] step_quo_i, step_rem_i;
   logic [15:0] step_quo_p, step_rem_p;
 
@@ -63,6 +56,7 @@ module step_calculator #(
   assign rem_cur_p = reset_out_p ? step_rem_p : step_rem_mem_p[output_cnt];
   assign rem_left_i = rem_cur_i != '0;
   assign rem_left_p = rem_cur_p != '0;
+  assign diff_short_p = (diff_tmp_p >= 8'd128) ? 9'd256 - diff_tmp_p : diff_tmp_p;
 
   delay_fifo #(
       .WIDTH(16),
@@ -134,8 +128,8 @@ module step_calculator #(
       diff_p <= diff_mem_p[cnt];
     end else begin
       reset_in_p <= 1'b1;
-      diff_p <= (diff_tmp_p >= 8'd128) ? 9'd256 - diff_tmp_p : diff_tmp_p;
-      diff_mem_p[cnt] <= (diff_tmp_p >= 8'd128) ? 9'd256 - diff_tmp_p : diff_tmp_p;
+      diff_p <= diff_short_p;
+      diff_mem_p[cnt] <= diff_short_p;
     end
 
     update_rate_i <= step_quo_i + {15'd0, rem_left_i};

@@ -73,6 +73,12 @@ module sim_helper_bram #(
     bram_read(BRAM_SELECT_CONTROLLER, addr, data_out);
   endtask
 
+  task automatic write_cnt_64(input logic [7:0] addr, input logic [63:0] data);
+    for (int i = 0; i < 4; i++) begin
+      write_cnt(addr + i, data[16*i+:16]);
+    end
+  endtask
+
   task automatic write_phase_corr(input logic [7:0] value[256]);
     for (int i = 0; i < 128; i++) begin
       bram_write(BRAM_SELECT_PHASE_CORR, i[7:0], {value[2*i+1], value[2*i]});
@@ -93,13 +99,13 @@ module sim_helper_bram #(
 
   task automatic write_mod(input logic bank, input logic [7:0] mod_data[], int cnt);
     logic page = 0;
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_MEM_WR_BANK, {15'h000, bank});
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_MEM_WR_PAGE, {15'h000, page});
+    write_cnt(ADDR_MOD_MEM_WR_BANK, {15'h000, bank});
+    write_cnt(ADDR_MOD_MEM_WR_PAGE, {15'h000, page});
     for (int i = 0; i < (cnt + 1) / 2; i++) begin
       bram_write(BRAM_SELECT_MOD, i, {mod_data[2*i+1], mod_data[2*i]});
       if (i % 16384 == 16383) begin
         page = page + 1;
-        bram_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_MEM_WR_PAGE, {15'h000, page});
+        write_cnt(ADDR_MOD_MEM_WR_PAGE, {15'h000, page});
       end
     end
   endtask
@@ -108,15 +114,15 @@ module sim_helper_bram #(
                                                     int cnt);
     logic [5:0] offset = 0;
     logic [3:0] page = 0;
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_MEM_WR_BANK, {15'h000, bank});
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_MEM_WR_PAGE, {12'h000, page});
+    write_cnt(ADDR_PATTERN_MEM_WR_BANK, {15'h000, bank});
+    write_cnt(ADDR_PATTERN_MEM_WR_PAGE, {12'h000, page});
     for (int j = 0; j < cnt; j++) begin
       for (int i = 0; i < DEPTH; i++) begin
         bram_write(BRAM_SELECT_EMISSION, {2'b00, offset, i[7:0]}, {intensity[j][i], phase[j][i]});
       end
       if (offset == 63) begin
         page = page + 1;
-        bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_MEM_WR_PAGE, {12'h000, page});
+        write_cnt(ADDR_PATTERN_MEM_WR_PAGE, {12'h000, page});
         offset = 0;
       end else begin
         offset = offset + 1;
@@ -127,8 +133,8 @@ module sim_helper_bram #(
   task automatic write_emission_focus(input logic bank, input logic signed [17:0] x[], input logic signed [17:0] y[], input logic signed [17:0] z[],
                                       input logic [7:0] intensity_and_offsets[], input int cnt);
     logic [3:0] page = 0;
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_MEM_WR_BANK, {15'h000, bank});
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_MEM_WR_PAGE, {12'h000, page});
+    write_cnt(ADDR_PATTERN_MEM_WR_BANK, {15'h000, bank});
+    write_cnt(ADDR_PATTERN_MEM_WR_PAGE, {12'h000, page});
     for (int i = 0; i < cnt; i++) begin
       bram_write(BRAM_SELECT_EMISSION, 4 * i, x[i][15:0]);
       bram_write(BRAM_SELECT_EMISSION, 4 * i + 1, {y[i][13:0], x[i][17:16]});
@@ -136,79 +142,57 @@ module sim_helper_bram #(
       bram_write(BRAM_SELECT_EMISSION, 4 * i + 3, {2'd0, intensity_and_offsets[i], z[i][17:12]});
       if (i % 4096 == 4095) begin
         page = page + 1;
-        bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_MEM_WR_PAGE, {12'h000, page});
+        write_cnt(ADDR_PATTERN_MEM_WR_PAGE, {12'h000, page});
       end
     end
   endtask
 
   task automatic write_mod_settings(input settings::mod_settings_t settings);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_REQ_RD_BANK, settings.REQ_RD_BANK);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_TRANSITION_MODE, settings.TRANSITION_MODE);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_TRANSITION_VALUE_0, settings.TRANSITION_VALUE[15:0]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_TRANSITION_VALUE_1, settings.TRANSITION_VALUE[31:16]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_TRANSITION_VALUE_2, settings.TRANSITION_VALUE[47:32]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_TRANSITION_VALUE_3, settings.TRANSITION_VALUE[63:48]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_CYCLE0, settings.CYCLE[0]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_FREQ_DIV0, settings.FREQ_DIV[0]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_CYCLE1, settings.CYCLE[1]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_FREQ_DIV1, settings.FREQ_DIV[1]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_REP0, settings.REP[0]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_MOD_REP1, settings.REP[1]);
+    write_cnt(ADDR_MOD_REQ_RD_BANK, settings.REQ_RD_BANK);
+    write_cnt(ADDR_MOD_TRANSITION_MODE, settings.TRANSITION_MODE);
+    write_cnt_64(ADDR_MOD_TRANSITION_VALUE_0, settings.TRANSITION_VALUE);
+    write_cnt(ADDR_MOD_CYCLE0, settings.CYCLE[0]);
+    write_cnt(ADDR_MOD_FREQ_DIV0, settings.FREQ_DIV[0]);
+    write_cnt(ADDR_MOD_CYCLE1, settings.CYCLE[1]);
+    write_cnt(ADDR_MOD_FREQ_DIV1, settings.FREQ_DIV[1]);
+    write_cnt(ADDR_MOD_REP0, settings.REP[0]);
+    write_cnt(ADDR_MOD_REP1, settings.REP[1]);
   endtask
 
   task automatic write_pattern_settings(input settings::pattern_settings_t settings);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_MODE0, settings.MODE[0]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_MODE1, settings.MODE[1]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_REQ_RD_BANK, settings.REQ_RD_BANK);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_TRANSITION_MODE, settings.TRANSITION_MODE);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_TRANSITION_VALUE_0, settings.TRANSITION_VALUE[15:0]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_TRANSITION_VALUE_1, settings.TRANSITION_VALUE[31:16]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_TRANSITION_VALUE_2, settings.TRANSITION_VALUE[47:32]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_TRANSITION_VALUE_3, settings.TRANSITION_VALUE[63:48]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_CYCLE0, settings.CYCLE[0]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_FREQ_DIV0, settings.FREQ_DIV[0]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_CYCLE1, settings.CYCLE[1]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_FREQ_DIV1, settings.FREQ_DIV[1]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_REP0, settings.REP[0]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_REP1, settings.REP[1]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_SOUND_SPEED0, settings.SOUND_SPEED[0]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_SOUND_SPEED1, settings.SOUND_SPEED[1]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_NUM_FOCI0, settings.NUM_FOCI[0]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_PATTERN_NUM_FOCI1, settings.NUM_FOCI[1]);
+    write_cnt(ADDR_PATTERN_MODE0, settings.MODE[0]);
+    write_cnt(ADDR_PATTERN_MODE1, settings.MODE[1]);
+    write_cnt(ADDR_PATTERN_REQ_RD_BANK, settings.REQ_RD_BANK);
+    write_cnt(ADDR_PATTERN_TRANSITION_MODE, settings.TRANSITION_MODE);
+    write_cnt_64(ADDR_PATTERN_TRANSITION_VALUE_0, settings.TRANSITION_VALUE);
+    write_cnt(ADDR_PATTERN_CYCLE0, settings.CYCLE[0]);
+    write_cnt(ADDR_PATTERN_FREQ_DIV0, settings.FREQ_DIV[0]);
+    write_cnt(ADDR_PATTERN_CYCLE1, settings.CYCLE[1]);
+    write_cnt(ADDR_PATTERN_FREQ_DIV1, settings.FREQ_DIV[1]);
+    write_cnt(ADDR_PATTERN_REP0, settings.REP[0]);
+    write_cnt(ADDR_PATTERN_REP1, settings.REP[1]);
+    write_cnt(ADDR_PATTERN_SOUND_SPEED0, settings.SOUND_SPEED[0]);
+    write_cnt(ADDR_PATTERN_SOUND_SPEED1, settings.SOUND_SPEED[1]);
+    write_cnt(ADDR_PATTERN_NUM_FOCI0, settings.NUM_FOCI[0]);
+    write_cnt(ADDR_PATTERN_NUM_FOCI1, settings.NUM_FOCI[1]);
   endtask
 
   task automatic write_silencer_settings(input settings::silencer_settings_t settings);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_SILENCER_FLAG, settings.FLAG);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_SILENCER_UPDATE_RATE_INTENSITY, settings.UPDATE_RATE_INTENSITY);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_SILENCER_UPDATE_RATE_PHASE, settings.UPDATE_RATE_PHASE);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_SILENCER_COMPLETION_STEPS_INTENSITY, settings.COMPLETION_STEPS_INTENSITY);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_SILENCER_COMPLETION_STEPS_PHASE, settings.COMPLETION_STEPS_PHASE);
+    write_cnt(ADDR_SILENCER_FLAG, settings.FLAG);
+    write_cnt(ADDR_SILENCER_UPDATE_RATE_INTENSITY, settings.UPDATE_RATE_INTENSITY);
+    write_cnt(ADDR_SILENCER_UPDATE_RATE_PHASE, settings.UPDATE_RATE_PHASE);
+    write_cnt(ADDR_SILENCER_COMPLETION_STEPS_INTENSITY, settings.COMPLETION_STEPS_INTENSITY);
+    write_cnt(ADDR_SILENCER_COMPLETION_STEPS_PHASE, settings.COMPLETION_STEPS_PHASE);
   endtask
 
   task automatic write_sync_settings(input settings::sync_settings_t settings);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_SYNC_TIME_0, settings.SYNC_TIME[15:0]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_SYNC_TIME_1, settings.SYNC_TIME[31:16]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_SYNC_TIME_2, settings.SYNC_TIME[47:32]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_SYNC_TIME_3, settings.SYNC_TIME[63:48]);
+    write_cnt_64(ADDR_SYNC_TIME_0, settings.SYNC_TIME);
   endtask
 
   task automatic write_debug_settings(input settings::debug_settings_t settings);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_DEBUG_VALUE0_0, settings.VALUE[0][15:0]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_DEBUG_VALUE0_1, settings.VALUE[0][31:16]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_DEBUG_VALUE0_2, settings.VALUE[0][47:32]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_DEBUG_VALUE0_3, settings.VALUE[0][63:48]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_DEBUG_VALUE1_0, settings.VALUE[1][15:0]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_DEBUG_VALUE1_1, settings.VALUE[1][31:16]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_DEBUG_VALUE1_2, settings.VALUE[1][47:32]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_DEBUG_VALUE1_3, settings.VALUE[1][63:48]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_DEBUG_VALUE2_0, settings.VALUE[2][15:0]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_DEBUG_VALUE2_1, settings.VALUE[2][31:16]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_DEBUG_VALUE2_2, settings.VALUE[2][47:32]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_DEBUG_VALUE2_3, settings.VALUE[2][63:48]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_DEBUG_VALUE3_0, settings.VALUE[3][15:0]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_DEBUG_VALUE3_1, settings.VALUE[3][31:16]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_DEBUG_VALUE3_2, settings.VALUE[3][47:32]);
-    bram_write(BRAM_SELECT_CONTROLLER, ADDR_DEBUG_VALUE3_3, settings.VALUE[3][63:48]);
+    for (int i = 0; i < 4; i++) begin
+      write_cnt_64(ADDR_DEBUG_VALUE0_0 + 4 * i, settings.VALUE[i]);
+    end
   endtask
 
   initial begin

@@ -33,29 +33,27 @@ module swapchain (
 
   logic signed [57:0] time_diff;
 
-  typedef enum logic {
-    IDX_MODE_SYNC_IDX,
-    IDX_MODE_TIC
-  } idx_mode_t;
-
   typedef enum logic [1:0] {
     WAIT_START,
     FINITE_LOOP,
     INFINITE_LOOP
   } state_t;
 
-  idx_mode_t idx_mode = IDX_MODE_SYNC_IDX;
   state_t state = INFINITE_LOOP;
 
   logic [7:0] transition_mode;
   logic [1:0] gpio_pin;
   logic target_bank;
+  logic transition_fires;
+  logic cycle_end;
+  logic tic_mode = 1'b0;
 
   assign BANK = bank;
   assign STOP = stop;
   assign TRANSITION_PENDING = state == WAIT_START;
   assign EXT_ACTIVE = ext_mode & (state == INFINITE_LOOP);
   assign target_bank = (state == WAIT_START) ? req_bank : bank;
+  assign cycle_end = idx_changed[bank] && (tic_mode ? (tic_idx[bank] == CYCLE[bank]) : (SYNC_IDX[bank] == '0));
 
   logic [$clog2(Latency+1)-1:0] addsub_latency;
   logic [56:0] transition_time;
@@ -66,17 +64,26 @@ module swapchain (
       .S  (time_diff)
   );
 
+  always_comb begin
+    case (transition_mode)
+      params::TRANSITION_MODE_SYNC_IDX: transition_fires = idx_changed[req_bank] && (SYNC_IDX[req_bank] == '0);
+      params::TRANSITION_MODE_SYS_TIME: transition_fires = (addsub_latency == Latency) && (time_diff >= 58'sd0);
+      params::TRANSITION_MODE_GPIO: transition_fires = idx_changed[req_bank] && GPIO_IN[gpio_pin];
+      default: transition_fires = 1'b0;
+    endcase
+  end
+
   for (genvar i = 0; i < params::NumBanks; i++) begin : gen_swapchain
     always_ff @(posedge CLK) idx_old[i] <= SYNC_IDX[i];
     assign idx_changed[i] = idx_old[i] != SYNC_IDX[i];
-    assign IDX[i] = (idx_mode == IDX_MODE_SYNC_IDX) ? idx_old[i] : tic_idx[i];
+    assign IDX[i] = tic_mode ? tic_idx[i] : idx_old[i];
   end
 
   always_ff @(posedge CLK) begin
     if (UPDATE_SETTINGS && (REP[REQ_RD_BANK] == params::RepInfinite)) begin
       stop <= 1'b0;
       bank <= REQ_RD_BANK;
-      idx_mode <= IDX_MODE_SYNC_IDX;
+      tic_mode <= 1'b0;
       ext_mode <= TRANSITION_MODE == params::TRANSITION_MODE_EXT;
       state <= INFINITE_LOOP;
     end else if (UPDATE_SETTINGS && (REQ_RD_BANK != target_bank)) begin
@@ -90,76 +97,25 @@ module swapchain (
     end else begin
       case (state)
         WAIT_START: begin
-          case (transition_mode)
-            params::TRANSITION_MODE_SYNC_IDX: begin
-              if (idx_changed[req_bank] && (SYNC_IDX[req_bank] == '0)) begin
-                stop <= 1'b0;
-                loop_cnt <= '0;
-                bank <= req_bank;
-                idx_mode <= IDX_MODE_SYNC_IDX;
-                state <= FINITE_LOOP;
-              end
-            end
-            params::TRANSITION_MODE_SYS_TIME: begin
-              if (addsub_latency == Latency) begin
-                if (time_diff >= 58'sd0) begin
-                  stop <= 1'b0;
-                  loop_cnt <= '0;
-                  bank <= req_bank;
-                  idx_mode <= IDX_MODE_TIC;
-                  tic_idx[req_bank] <= '0;
-                  state <= FINITE_LOOP;
-                end
-              end else begin
-                addsub_latency <= addsub_latency + 1;
-              end
-            end
-            params::TRANSITION_MODE_GPIO: begin
-              if (idx_changed[req_bank] && GPIO_IN[gpio_pin]) begin
-                stop <= 1'b0;
-                loop_cnt <= '0;
-                bank <= req_bank;
-                idx_mode <= IDX_MODE_TIC;
-                tic_idx[req_bank] <= '0;
-                state <= FINITE_LOOP;
-              end
-            end
-            default: ;
-          endcase
+          if (addsub_latency != Latency) addsub_latency <= addsub_latency + 1;
+          if (transition_fires) begin
+            stop <= 1'b0;
+            loop_cnt <= '0;
+            bank <= req_bank;
+            tic_mode <= transition_mode != params::TRANSITION_MODE_SYNC_IDX;
+            tic_idx[req_bank] <= '0;
+            state <= FINITE_LOOP;
+          end
         end
         INFINITE_LOOP: begin
-          if (ext_mode && idx_changed[bank] && (SYNC_IDX[bank] == '0)) begin
-            bank <= ~bank;
-          end
-          state <= INFINITE_LOOP;
+          if (ext_mode && cycle_end) bank <= ~bank;
         end
         FINITE_LOOP: begin
-          case (idx_mode)
-            IDX_MODE_SYNC_IDX: begin
-              if (idx_changed[bank] && (SYNC_IDX[bank] == '0)) begin
-                if (loop_cnt == rep) begin
-                  stop <= 1'b1;
-                end else begin
-                  loop_cnt <= loop_cnt + 1;
-                end
-              end
-            end
-            IDX_MODE_TIC: begin
-              if (idx_changed[bank]) begin
-                if (tic_idx[bank] == CYCLE[bank]) begin
-                  tic_idx[bank] <= '0;
-                  if (loop_cnt == rep) begin
-                    stop <= 1'b1;
-                  end else begin
-                    loop_cnt <= loop_cnt + 1;
-                  end
-                end else begin
-                  tic_idx[bank] <= tic_idx[bank] + 1;
-                end
-              end
-            end
-            default: ;
-          endcase
+          if (tic_mode && idx_changed[bank]) tic_idx[bank] <= cycle_end ? '0 : tic_idx[bank] + 1;
+          if (cycle_end) begin
+            if (loop_cnt == rep) stop <= 1'b1;
+            else loop_cnt <= loop_cnt + 1;
+          end
         end
         default: state <= INFINITE_LOOP;
       endcase

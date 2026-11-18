@@ -30,71 +30,29 @@ module gpio_output #(
   end
 
   always_ff @(posedge CLK) begin
+    if (DEBUG_SETTINGS.UPDATE) debug_value <= DEBUG_SETTINGS.VALUE;
     for (int i = 0; i < 4; i++) begin
       sync_raw_sel[i] <= debug_value[i][63:56] == params::GPIO_O_TYPE_SYNC_RAW;
+      gpio_out[i] <= debug_signal(debug_value[i][63:56], debug_value[i][55:0]);
     end
-  end
-
-  always_ff @(posedge CLK) begin
-    if (DEBUG_SETTINGS.UPDATE) begin
-      debug_value <= DEBUG_SETTINGS.VALUE;
-    end
-  end
-
-  always_ff @(posedge CLK) begin
-    gpio_out[0] <= debug_signal(debug_value[0][63:56], debug_value[0][55:0]);
-    gpio_out[1] <= debug_signal(debug_value[1][63:56], debug_value[1][55:0]);
-    gpio_out[2] <= debug_signal(debug_value[2][63:56], debug_value[2][55:0]);
-    gpio_out[3] <= debug_signal(debug_value[3][63:56], debug_value[3][55:0]);
   end
 
   function automatic logic debug_signal(input logic [7:0] o_type, input logic [55:0] value);
     case (o_type)
-      params::GPIO_O_TYPE_NONE: begin
-        debug_signal = 1'b0;
-      end
-      params::GPIO_O_TYPE_BASE_SIG: begin
-        debug_signal = TIME_CNT[8] == 1'b0;
-      end
-      params::GPIO_O_TYPE_THERMO: begin
-        debug_signal = THERMO;
-      end
-      params::GPIO_O_TYPE_FORCE_FAN: begin
-        debug_signal = FORCE_FAN;
-      end
-      params::GPIO_O_TYPE_SYNC: begin
-        debug_signal = SYNC;
-      end
-      params::GPIO_O_TYPE_MOD_BANK: begin
-        debug_signal = MOD_BANK;
-      end
-      params::GPIO_O_TYPE_MOD_IDX: begin
-        debug_signal = MOD_IDX == value[15:0];
-      end
-      params::GPIO_O_TYPE_PATTERN_BANK: begin
-        debug_signal = PATTERN_BANK;
-      end
-      params::GPIO_O_TYPE_PATTERN_IDX: begin
-        debug_signal = PATTERN_IDX == value[15:0];
-      end
-      params::GPIO_O_TYPE_IS_STM_MODE: begin
-        debug_signal = PATTERN_CYCLE != '0;
-      end
-      params::GPIO_O_TYPE_SYS_TIME_EQ: begin
-        debug_signal = SYS_TIME[56:9] == value[47:0];
-      end
-      params::GPIO_O_TYPE_SYNC_DIFF: begin
-        debug_signal = SYNC_TIME_DIFF != 14'sd0;
-      end
-      params::GPIO_O_TYPE_PWM_OUT: begin
-        debug_signal = PWM_OUT[(value[7:0]<8'(DEPTH))?value[7:0] : 8'(DEPTH-1)];
-      end
-      params::GPIO_O_TYPE_DIRECT: begin
-        debug_signal = value[0];
-      end
-      default: begin
-        debug_signal = 1'b0;
-      end
+      params::GPIO_O_TYPE_BASE_SIG: return TIME_CNT[8] == 1'b0;
+      params::GPIO_O_TYPE_THERMO: return THERMO;
+      params::GPIO_O_TYPE_FORCE_FAN: return FORCE_FAN;
+      params::GPIO_O_TYPE_SYNC: return SYNC;
+      params::GPIO_O_TYPE_MOD_BANK: return MOD_BANK;
+      params::GPIO_O_TYPE_MOD_IDX: return MOD_IDX == value[15:0];
+      params::GPIO_O_TYPE_PATTERN_BANK: return PATTERN_BANK;
+      params::GPIO_O_TYPE_PATTERN_IDX: return PATTERN_IDX == value[15:0];
+      params::GPIO_O_TYPE_IS_STM_MODE: return PATTERN_CYCLE != '0;
+      params::GPIO_O_TYPE_SYS_TIME_EQ: return SYS_TIME[56:9] == value[47:0];
+      params::GPIO_O_TYPE_SYNC_DIFF: return SYNC_TIME_DIFF != 14'sd0;
+      params::GPIO_O_TYPE_PWM_OUT: return PWM_OUT[(value[7:0]<8'(DEPTH))?value[7:0] : 8'(DEPTH-1)];
+      params::GPIO_O_TYPE_DIRECT: return value[0];
+      default: return 1'b0;
     endcase
   endfunction
 

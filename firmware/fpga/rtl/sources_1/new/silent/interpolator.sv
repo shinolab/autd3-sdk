@@ -14,9 +14,6 @@ module interpolator #(
     output var DOUT_VALID
 );
 
-  `include "define.vh"
-
-`RAM
   logic [31:0] current_mem[256] = '{256{32'h0000}};
 
   logic [31:0] current_0, current_1;
@@ -69,17 +66,14 @@ module interpolator #(
     update_rate_p_p <= $signed({1'b0, update_rate_p});
     update_rate_p_n <= -$signed({1'b0, update_rate_p});
 
-    if (step_i_buf < 17'sd0) begin
-      intensity_out <= $signed({1'b0, current_1[31:16]}) + ((update_rate_i_n < step_i_buf) ? step_i_buf : update_rate_i_n);
-    end else begin
-      intensity_out <= $signed({1'b0, current_1[31:16]}) + ((step_i_buf < update_rate_i_p) ? step_i_buf : update_rate_i_p);
-    end
-    if (step_p_wrapped < 17'sd0) begin
-      phase_out <= $signed({1'b0, current_1[15:0]}) + ((update_rate_p_n < step_p_wrapped) ? step_p_wrapped : update_rate_p_n);
-    end else begin
-      phase_out <= $signed({1'b0, current_1[15:0]}) + ((step_p_wrapped < update_rate_p_p) ? step_p_wrapped : update_rate_p_p);
-    end
+    intensity_out <= $signed({1'b0, current_1[31:16]}) + clamp(step_i_buf, update_rate_i_n, update_rate_i_p);
+    phase_out <= $signed({1'b0, current_1[15:0]}) + clamp(step_p_wrapped, update_rate_p_n, update_rate_p_p);
   end
+
+  function automatic logic signed [16:0] clamp(input logic signed [16:0] step, input logic signed [16:0] lower, input logic signed [16:0] upper);
+    if (step < 17'sd0) return (lower < step) ? step : lower;
+    else return (step < upper) ? step : upper;
+  endfunction
 
   always_ff @(posedge CLK) begin
     case (state)

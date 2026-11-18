@@ -5,23 +5,15 @@ module sim_helper_clk (
     output var [56:0] SYS_TIME
 );
 
-  logic clk;
-  logic locked;
-  logic [56:0] sys_time;
-
-  assign CLK = clk;
-  assign LOCKED = locked;
-  assign SYS_TIME = sys_time;
-
   initial begin
-    clk = '0;
-    locked = '0;
-    sys_time = 1;
-    #500 locked = '1;
+    CLK = '0;
+    LOCKED = '0;
+    SYS_TIME = 1;
+    #500 LOCKED = '1;
   end
 
-  always #24.414 clk = ~clk;
+  always #24.414 CLK = ~CLK;
 
-  always @(posedge clk) sys_time <= locked ? sys_time + 1 : sys_time;
+  always @(posedge CLK) SYS_TIME <= LOCKED ? SYS_TIME + 1 : SYS_TIME;
 
 endmodule

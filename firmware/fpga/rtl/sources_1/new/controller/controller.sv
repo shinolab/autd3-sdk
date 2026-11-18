@@ -128,13 +128,10 @@ module controller (
   typedef enum logic [6:0] {
     REQ_WR_VER_PATCH,
     REQ_WR_VER_MINOR,
-    REQ_WR_VER,
+    REQ_WR_VER_MAJOR,
     REQ_WR_FUNCTION_BITS,
-    WAIT_WR_VER_0_REQ_RD_CTL_FLAG,
-    WR_VER_MINOR_WAIT_RD_CTL_FLAG_BIT_0,
-    WR_VER_WAIT_RD_CTL_FLAG_BIT_1,
-    WAIT_0,
-    WAIT_1,
+    WR_FPGA_STATE_RD_CTL_FLAG,
+    REQ_RD_CTL_FLAG,
     SET_DONE_0,
     SET_DONE_1,
     REQ_MOD_REQ_RD_BANK,
@@ -251,9 +248,9 @@ module controller (
           din   <= {8'd0, params::VersionNumMinor};
           addr  <= params::ADDR_VERSION_NUM_MINOR;
 
-          state <= REQ_WR_VER;
+          state <= REQ_WR_VER_MAJOR;
         end
-        REQ_WR_VER: begin
+        REQ_WR_VER_MAJOR: begin
           din   <= {8'd0, params::VersionNumMajor};
           addr  <= params::ADDR_VERSION_NUM_MAJOR;
 
@@ -263,22 +260,9 @@ module controller (
           din   <= {8'd0, FunctionBits};
           addr  <= params::ADDR_FUNCTION_BITS;
 
-          state <= WAIT_WR_VER_0_REQ_RD_CTL_FLAG;
+          state <= REQ_RD_CTL_FLAG;
         end
-        WAIT_WR_VER_0_REQ_RD_CTL_FLAG: begin
-          we <= 1'b0;
-          addr <= params::ADDR_CTL_FLAG;
-
-          state <= WR_VER_MINOR_WAIT_RD_CTL_FLAG_BIT_0;
-        end
-        WR_VER_MINOR_WAIT_RD_CTL_FLAG_BIT_0: begin
-          state <= WR_VER_WAIT_RD_CTL_FLAG_BIT_1;
-        end
-        WR_VER_WAIT_RD_CTL_FLAG_BIT_1: begin
-          state <= WAIT_0;
-        end
-
-        WAIT_0: begin
+        WR_FPGA_STATE_RD_CTL_FLAG: begin
           addr <= params::ADDR_FPGA_STATE;
           if (fpga_state_din() != fpga_state_prev) begin
             we <= 1'b1;
@@ -289,32 +273,32 @@ module controller (
           end
 
           if (ctl_flags[params::CTL_FLAG_BIT_MOD_SET]) begin
-            ctl_flags <= ctl_flags & ~(1 << params::CTL_FLAG_BIT_MOD_SET);
+            ctl_flags[params::CTL_FLAG_BIT_MOD_SET] <= 1'b0;
             state <= REQ_MOD_REQ_RD_BANK;
           end else if (ctl_flags[params::CTL_FLAG_BIT_PATTERN_SET]) begin
-            ctl_flags <= ctl_flags & ~(1 << params::CTL_FLAG_BIT_PATTERN_SET);
+            ctl_flags[params::CTL_FLAG_BIT_PATTERN_SET] <= 1'b0;
             state <= REQ_PATTERN_REQ_RD_BANK;
           end else if (ctl_flags[params::CTL_FLAG_BIT_SILENCER_SET]) begin
-            ctl_flags <= ctl_flags & ~(1 << params::CTL_FLAG_BIT_SILENCER_SET);
+            ctl_flags[params::CTL_FLAG_BIT_SILENCER_SET] <= 1'b0;
             state <= REQ_SILENCER_FLAG;
           end else if (ctl_flags[params::CTL_FLAG_BIT_DEBUG_SET]) begin
-            ctl_flags <= ctl_flags & ~(1 << params::CTL_FLAG_BIT_DEBUG_SET);
+            ctl_flags[params::CTL_FLAG_BIT_DEBUG_SET] <= 1'b0;
             state <= REQ_DEBUG_VALUE0_0;
           end else if (ctl_flags[params::CTL_FLAG_BIT_SYNC_SET]) begin
-            ctl_flags <= ctl_flags & ~(1 << params::CTL_FLAG_BIT_SYNC_SET);
+            ctl_flags[params::CTL_FLAG_BIT_SYNC_SET] <= 1'b0;
             state <= REQ_SYNC_TIME_0;
           end else begin
             ctl_flags_cand <= dout;
             if (dout == ctl_flags_cand) begin
               ctl_flags <= dout;
             end
-            state <= WAIT_1;
+            state <= REQ_RD_CTL_FLAG;
           end
         end
-        WAIT_1: begin
+        REQ_RD_CTL_FLAG: begin
           we <= 1'b0;
           addr <= params::ADDR_CTL_FLAG;
-          state <= WAIT_0;
+          state <= WR_FPGA_STATE_RD_CTL_FLAG;
         end
         SET_DONE_0: begin
           we <= 1'b0;
@@ -322,7 +306,7 @@ module controller (
         end
         SET_DONE_1: begin
           addr  <= params::ADDR_FPGA_STATE;
-          state <= WAIT_1;
+          state <= REQ_RD_CTL_FLAG;
         end
 
         REQ_MOD_REQ_RD_BANK: begin
@@ -771,7 +755,7 @@ module controller (
           state <= SET_DONE_0;
         end
 
-        default: state <= WAIT_0;
+        default: state <= WR_FPGA_STATE_RD_CTL_FLAG;
       endcase
   end
 
