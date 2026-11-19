@@ -239,7 +239,8 @@ module controller (
     input wire [15:0] PATTERN_CYCLE,
     input wire PATTERN_STOPPED,
     input wire MOD_STOPPED,
-    input wire TRANSITION_PENDING,
+    input wire PATTERN_TRANSITION_PENDING,
+    input wire MOD_TRANSITION_PENDING,
     input wire [7:0] SYNC_RESYNC_COUNT,
     cnt_bus_if.out_port cnt_bus,
     output var settings::mod_settings_t MOD_SETTINGS,
@@ -290,8 +291,8 @@ module controller (
     s[params::FPGA_STATE_BIT_PATTERN_MODE] = PATTERN_CYCLE == '0;
     s[params::FPGA_STATE_BIT_PATTERN_STOPPED] = PATTERN_STOPPED;
     s[params::FPGA_STATE_BIT_MOD_STOPPED] = MOD_STOPPED;
-    s[params::FPGA_STATE_BIT_TRANSITION_PENDING] = TRANSITION_PENDING;
-    s[params::FPGA_STATE_BIT_FAILSAFE] = ctl_flags[params::CTL_FLAG_BIT_FAILSAFE];
+    s[params::FPGA_STATE_BIT_PATTERN_TRANSITION_PENDING] = PATTERN_TRANSITION_PENDING;
+    s[params::FPGA_STATE_BIT_MOD_TRANSITION_PENDING] = MOD_TRANSITION_PENDING;
     s[15:8] = SYNC_RESYNC_COUNT;
     return s;
   endfunction

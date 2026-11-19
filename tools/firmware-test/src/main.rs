@@ -291,7 +291,7 @@ pub(crate) async fn describe(ctx: &Ctx<'_>) {
             let gates = ctx.failsafe_gates().await.unwrap_or_default();
             for (i, s) in states.iter().enumerate() {
                 println!(
-                    "  device[{i}] fpga state: raw={:#04x} thermal={} mod_bank={:?} pattern_bank={:?} mode={} pattern_stopped={} mod_stopped={} transition_pending={} failsafe={:?}",
+                    "  device[{i}] fpga state: raw={:#04x} thermal={} mod_bank={:?} pattern_bank={:?} mode={} pattern_stopped={} mod_stopped={} pattern_transition_pending={} mod_transition_pending={} failsafe={:?}",
                     s.0,
                     s.is_thermal_asserted(),
                     s.current_mod_bank(),
@@ -303,7 +303,8 @@ pub(crate) async fn describe(ctx: &Ctx<'_>) {
                     },
                     s.is_pattern_stopped(),
                     s.is_mod_stopped(),
-                    s.is_transition_pending(),
+                    s.is_pattern_transition_pending(),
+                    s.is_mod_transition_pending(),
                     gates.get(i),
                 );
             }

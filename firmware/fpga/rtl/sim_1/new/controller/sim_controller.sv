@@ -53,7 +53,8 @@ module sim_controller ();
   logic [15:0] pattern_cycle;
   logic pattern_stopped;
   logic mod_stopped;
-  logic transition_pending;
+  logic pattern_transition_pending;
+  logic mod_transition_pending;
   logic [7:0] sync_resync_count;
   logic gpio_in[4];
   settings::mod_settings_t mod_settings;
@@ -74,7 +75,8 @@ module sim_controller ();
       .PATTERN_CYCLE(pattern_cycle),
       .PATTERN_STOPPED(pattern_stopped),
       .MOD_STOPPED(mod_stopped),
-      .TRANSITION_PENDING(transition_pending),
+      .PATTERN_TRANSITION_PENDING(pattern_transition_pending),
+      .MOD_TRANSITION_PENDING(mod_transition_pending),
       .SYNC_RESYNC_COUNT(sync_resync_count),
       .cnt_bus(cnt_bus.out_port),
       .MOD_SETTINGS(mod_settings),
@@ -258,7 +260,8 @@ module sim_controller ();
     pattern_cycle = 16'd5;
     pattern_stopped = 1'b1;
     mod_stopped = 1'b0;
-    transition_pending = 1'b1;
+    pattern_transition_pending = 1'b1;
+    mod_transition_pending = 1'b0;
     sync_resync_count = 8'd7;
 
     mod_settings_in.UPDATE = 1'b1;
@@ -336,8 +339,17 @@ module sim_controller ();
     `ASSERT_EQ(sync_settings_in, sync_settings);
 
     sim_helper_bram.read_cnt(params::ADDR_FPGA_STATE, fpga_state);
-    `ASSERT_EQ({sync_resync_count, 1'h0, transition_pending, mod_stopped, pattern_stopped, pattern_cycle == '0, pattern_bank, mod_bank, thermo},
-               fpga_state);
+    `ASSERT_EQ({
+               sync_resync_count,
+               mod_transition_pending,
+               pattern_transition_pending,
+               mod_stopped,
+               pattern_stopped,
+               pattern_cycle == '0,
+               pattern_bank,
+               mod_bank,
+               thermo
+               }, fpga_state);
 
     repeat (32) @(posedge CLK);
     sim_helper_bram.read_cnt(params::ADDR_CTL_FLAG, ctl_flag);

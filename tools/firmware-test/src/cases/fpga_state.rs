@@ -42,11 +42,12 @@ async fn expect_state(
     for (dev, state) in states.iter().enumerate() {
         let mark = if pred(state) { "OK" } else { "FAIL" };
         println!(
-            "  [{mark}] {label} device[{dev}]: expected {expected} (raw={:#04x} pattern_stopped={} mod_stopped={} transition_pending={})",
+            "  [{mark}] {label} device[{dev}]: expected {expected} (raw={:#04x} pattern_stopped={} mod_stopped={} pattern_transition_pending={} mod_transition_pending={})",
             state.0,
             state.is_pattern_stopped(),
             state.is_mod_stopped(),
-            state.is_transition_pending(),
+            state.is_pattern_transition_pending(),
+            state.is_mod_transition_pending(),
         );
     }
     Ok(())
@@ -72,11 +73,12 @@ async fn poll_state(
             for (dev, state) in states.iter().enumerate() {
                 if !pred(state) {
                     println!(
-                        "  [FAIL] {label} device[{dev}]: expected {expected} within 10s (raw={:#04x} pattern_stopped={} mod_stopped={} transition_pending={})",
+                        "  [FAIL] {label} device[{dev}]: expected {expected} within 10s (raw={:#04x} pattern_stopped={} mod_stopped={} pattern_transition_pending={} mod_transition_pending={})",
                         state.0,
                         state.is_pattern_stopped(),
                         state.is_mod_stopped(),
-                        state.is_transition_pending(),
+                        state.is_pattern_transition_pending(),
+                        state.is_mod_transition_pending(),
                     );
                 }
             }
@@ -94,8 +96,13 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     expect_state(
         ctx,
         "baseline",
-        "!pattern_stopped && !mod_stopped && !transition_pending",
-        |s| !s.is_pattern_stopped() && !s.is_mod_stopped() && !s.is_transition_pending(),
+        "!pattern_stopped && !mod_stopped && !pattern_transition_pending && !mod_transition_pending",
+        |s| {
+            !s.is_pattern_stopped()
+                && !s.is_mod_stopped()
+                && !s.is_pattern_transition_pending()
+                && !s.is_mod_transition_pending()
+        },
     )
     .await?;
 
@@ -116,15 +123,15 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     expect_state(
         ctx,
         "right after the bank change",
-        "transition_pending",
-        |s| s.is_transition_pending() && !s.is_pattern_stopped(),
+        "pattern_transition_pending",
+        |s| s.is_pattern_transition_pending() && !s.is_pattern_stopped(),
     )
     .await?;
     poll_state(
         ctx,
         "finite pattern loop",
-        "pattern_stopped && !transition_pending",
-        |s| s.is_pattern_stopped() && !s.is_transition_pending(),
+        "pattern_stopped && !pattern_transition_pending",
+        |s| s.is_pattern_stopped() && !s.is_pattern_transition_pending(),
     )
     .await?;
     ctx.send(ActivatePatternBank {
@@ -133,7 +140,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     })
     .await?;
     expect_state(ctx, "back to the infinite bank", "!pattern_stopped", |s| {
-        !s.is_pattern_stopped() && !s.is_transition_pending()
+        !s.is_pattern_stopped() && !s.is_pattern_transition_pending()
     })
     .await?;
     println!("pattern finite loop (GPIO transition):");
@@ -154,8 +161,8 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     expect_state(
         ctx,
         "while waiting for the GPIO trigger",
-        "transition_pending",
-        |s| s.is_transition_pending() && !s.is_pattern_stopped(),
+        "pattern_transition_pending",
+        |s| s.is_pattern_transition_pending() && !s.is_pattern_stopped(),
     )
     .await?;
     ctx.send(EmulateGpioIn {
@@ -165,8 +172,8 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     poll_state(
         ctx,
         "finite pattern loop after the GPIO trigger",
-        "pattern_stopped && !transition_pending",
-        |s| s.is_pattern_stopped() && !s.is_transition_pending(),
+        "pattern_stopped && !pattern_transition_pending",
+        |s| s.is_pattern_stopped() && !s.is_pattern_transition_pending(),
     )
     .await?;
     ctx.send(EmulateGpioIn {
@@ -201,15 +208,15 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     expect_state(
         ctx,
         "right after the bank change",
-        "transition_pending",
-        |s| s.is_transition_pending() && !s.is_mod_stopped(),
+        "mod_transition_pending",
+        |s| s.is_mod_transition_pending() && !s.is_mod_stopped(),
     )
     .await?;
     poll_state(
         ctx,
         "finite modulation loop",
-        "mod_stopped && !transition_pending",
-        |s| s.is_mod_stopped() && !s.is_transition_pending(),
+        "mod_stopped && !mod_transition_pending",
+        |s| s.is_mod_stopped() && !s.is_mod_transition_pending(),
     )
     .await?;
     ctx.send(ActivateModulationBank {
@@ -218,7 +225,7 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
     })
     .await?;
     expect_state(ctx, "back to the infinite bank", "!mod_stopped", |s| {
-        !s.is_mod_stopped() && !s.is_transition_pending()
+        !s.is_mod_stopped() && !s.is_mod_transition_pending()
     })
     .await?;
 
