@@ -5,6 +5,7 @@ use zerocopy::{Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned};
 
 use super::{PayloadBuildError, try_read_exact};
 use crate::layout::{BUFFER_SIZE_MIN, MOD_BUFFER_SAMPLES};
+use crate::value::{LoopBehavior, SamplingConfig};
 use crate::{Error, ModulationBank};
 
 #[derive(TryFromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
@@ -20,9 +21,9 @@ pub struct ConfigModPayload {
 impl ConfigModPayload {
     pub fn new(
         bank: ModulationBank,
-        divider: NonZeroU16,
+        config: SamplingConfig,
         size: usize,
-        rep: u16,
+        loop_behavior: LoopBehavior,
     ) -> Result<Self, PayloadBuildError> {
         if !(BUFFER_SIZE_MIN..=MOD_BUFFER_SAMPLES).contains(&size) {
             return Err(PayloadBuildError::ModulationSizeOutOfRange {
@@ -34,9 +35,9 @@ impl ConfigModPayload {
         Ok(Self {
             bank,
             reserved: 0,
-            divider: U16::new(divider.get()),
+            divider: U16::new(config.divide().get()),
             size: U32::new(size as u32),
-            rep: U16::new(rep),
+            rep: U16::new(loop_behavior.rep()),
         })
     }
 
@@ -74,9 +75,13 @@ mod tests {
     #[case(BUFFER_SIZE_MIN)]
     #[case(MOD_BUFFER_SAMPLES)]
     fn a_built_payload_passes_parse(#[case] size: usize) {
-        let built =
-            ConfigModPayload::new(ModulationBank::B1, NonZeroU16::new(10).unwrap(), size, 9)
-                .unwrap();
+        let built = ConfigModPayload::new(
+            ModulationBank::B1,
+            SamplingConfig::FREQ_4K,
+            size,
+            LoopBehavior::Finite(NonZeroU16::new(10).unwrap()),
+        )
+        .unwrap();
         let parsed = ConfigModPayload::parse(built.as_bytes()).unwrap();
         assert_eq!(parsed.bank, ModulationBank::B1);
         assert_eq!(parsed.divider.get(), 10);
@@ -90,7 +95,13 @@ mod tests {
     #[case(usize::MAX)]
     fn a_size_outside_the_buffer_is_rejected(#[case] size: usize) {
         assert_eq!(
-            ConfigModPayload::new(ModulationBank::B0, NonZeroU16::MIN, size, 0).err(),
+            ConfigModPayload::new(
+                ModulationBank::B0,
+                SamplingConfig::FREQ_40K,
+                size,
+                LoopBehavior::ONCE
+            )
+            .err(),
             Some(PayloadBuildError::ModulationSizeOutOfRange {
                 size,
                 min: BUFFER_SIZE_MIN,

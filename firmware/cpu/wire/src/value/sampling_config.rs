@@ -6,8 +6,10 @@
 
 use core::{num::NonZeroU16, time::Duration};
 
-use crate::common::{Freq, ULTRASOUND_PERIOD, units::Hz};
-use crate::params::ULTRASOUND_FREQ_HZ;
+use super::freq::{Freq, Hz};
+use crate::fpga_params::ULTRASOUND_FREQ_HZ;
+
+pub const ULTRASOUND_PERIOD: Duration = Duration::from_micros(25);
 
 #[derive(Debug, PartialEq, Clone, thiserror::Error)]
 #[non_exhaustive]
@@ -50,11 +52,11 @@ impl SamplingConfig {
             ));
         }
         let divide = ULTRASOUND_FREQ_HZ as f64 / freq.hz() as f64;
-        let nearest = divide.round();
-        if (divide - nearest).abs() > nearest * f32::EPSILON as f64 * 4.0 {
+        let nearest = (divide + 0.5) as u16;
+        if (divide - f64::from(nearest)).abs() > f64::from(nearest) * f32::EPSILON as f64 * 4.0 {
             return Err(SamplingConfigError::FreqInvalid(freq));
         }
-        Ok(Self(at_least_one(nearest as u16)))
+        Ok(Self(at_least_one(nearest)))
     }
 
     pub fn from_period(period: Duration) -> Result<Self, SamplingConfigError> {
@@ -97,7 +99,7 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
-    use crate::common::units::kHz;
+    use crate::value::kHz;
 
     #[rstest]
     #[case(1, SamplingConfig::new(NonZeroU16::MIN))]
