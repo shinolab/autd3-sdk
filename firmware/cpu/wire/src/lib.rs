@@ -1,4 +1,4 @@
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 #![allow(clippy::cast_possible_truncation)]
 
 #[doc(hidden)]

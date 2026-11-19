@@ -24,12 +24,7 @@ impl Operation for ConfigModulation {
     }
 
     fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
-        let payload = ConfigModPayload::new(
-            self.bank,
-            self.config.divide(),
-            self.size,
-            self.loop_behavior.rep(),
-        )?;
+        let payload = ConfigModPayload::new(self.bank, self.config, self.size, self.loop_behavior)?;
         encode_header_only(out, Cmd::ConfigModulation, &payload);
         Ok(())
     }

@@ -6,6 +6,7 @@ use zerocopy::{Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned};
 use super::{PayloadBuildError, try_read_exact};
 use crate::fpga_params::{EMISSION_MAX_INDICES, EmissionType, NUM_FOCI_MAX, REP_INFINITE};
 use crate::layout::{BUFFER_SIZE_MIN, MAX_FOCI_TOTAL};
+use crate::value::{LoopBehavior, SamplingConfig};
 use crate::{Error, PatternBank};
 
 #[derive(TryFromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
@@ -26,9 +27,9 @@ const SOUND_SPEED_UNITS_PER_M_S: f32 = 64.0;
 impl ConfigPatternPayload {
     pub fn raw(
         bank: PatternBank,
-        divider: NonZeroU16,
+        config: SamplingConfig,
         size: usize,
-        rep: u16,
+        loop_behavior: LoopBehavior,
     ) -> Result<Self, PayloadBuildError> {
         if !(1..=EMISSION_MAX_INDICES as usize).contains(&size) {
             return Err(PayloadBuildError::StmSizeOutOfRange {
@@ -37,29 +38,29 @@ impl ConfigPatternPayload {
                 max: EMISSION_MAX_INDICES as usize,
             });
         }
-        if size < BUFFER_SIZE_MIN && rep != REP_INFINITE {
+        if size < BUFFER_SIZE_MIN && loop_behavior != LoopBehavior::Infinite {
             return Err(PayloadBuildError::FiniteLoopNeedsMultipleSamples { size });
         }
         Ok(Self {
             bank,
             emission_type: EmissionType::Raw,
-            divider: U16::new(divider.get()),
+            divider: U16::new(config.divide().get()),
             size: U32::new(size as u32),
             num_foci: None,
             reserved: 0,
             sound_speed: U16::new(0),
-            rep: U16::new(rep),
+            rep: U16::new(loop_behavior.rep()),
         })
     }
 
     #[allow(clippy::cast_sign_loss)]
     pub fn foci(
         bank: PatternBank,
-        divider: NonZeroU16,
+        config: SamplingConfig,
         size: usize,
         num_foci: u8,
         sound_speed_m_s: f32,
-        rep: u16,
+        loop_behavior: LoopBehavior,
     ) -> Result<Self, PayloadBuildError> {
         if size < BUFFER_SIZE_MIN {
             return Err(PayloadBuildError::PatternSizeTooSmall {
@@ -94,12 +95,12 @@ impl ConfigPatternPayload {
         Ok(Self {
             bank,
             emission_type: EmissionType::Foci,
-            divider: U16::new(divider.get()),
+            divider: U16::new(config.divide().get()),
             size: U32::new(size as u32),
             num_foci: Some(foci_per_index),
             reserved: 0,
             sound_speed: U16::new(sound_speed.get()),
-            rep: U16::new(rep),
+            rep: U16::new(loop_behavior.rep()),
         })
     }
 
@@ -157,16 +158,21 @@ mod tests {
 
     use super::*;
 
-    const DIVIDER: NonZeroU16 = NonZeroU16::new(10).unwrap();
     const SOUND_SPEED_M_S: f32 = 340.0;
     const MAX_INDICES: usize = EMISSION_MAX_INDICES as usize;
 
     #[rstest]
-    #[case(1, REP_INFINITE)]
-    #[case(BUFFER_SIZE_MIN, 0)]
-    #[case(MAX_INDICES, 3)]
-    fn a_built_raw_payload_passes_parse(#[case] size: usize, #[case] rep: u16) {
-        let built = ConfigPatternPayload::raw(PatternBank::B1, DIVIDER, size, rep).unwrap();
+    #[case(1, LoopBehavior::Infinite)]
+    #[case(BUFFER_SIZE_MIN, LoopBehavior::ONCE)]
+    #[case(MAX_INDICES, LoopBehavior::Finite(NonZeroU16::new(4).unwrap()))]
+    fn a_built_raw_payload_passes_parse(#[case] size: usize, #[case] loop_behavior: LoopBehavior) {
+        let built = ConfigPatternPayload::raw(
+            PatternBank::B1,
+            SamplingConfig::FREQ_4K,
+            size,
+            loop_behavior,
+        )
+        .unwrap();
         let parsed = ConfigPatternPayload::parse(built.as_bytes()).unwrap();
         assert_eq!(parsed.bank, PatternBank::B1);
         assert_eq!(parsed.emission_type, EmissionType::Raw);
@@ -174,7 +180,7 @@ mod tests {
         assert_eq!(parsed.size.get() as usize, size);
         assert_eq!(parsed.num_foci, None);
         assert_eq!(parsed.sound_speed.get(), 0);
-        assert_eq!(parsed.rep.get(), rep);
+        assert_eq!(parsed.rep.get(), loop_behavior.rep());
     }
 
     #[rstest]
@@ -183,7 +189,13 @@ mod tests {
     #[case(usize::MAX)]
     fn a_raw_size_outside_the_bank_is_rejected(#[case] size: usize) {
         assert_eq!(
-            ConfigPatternPayload::raw(PatternBank::B0, DIVIDER, size, REP_INFINITE).err(),
+            ConfigPatternPayload::raw(
+                PatternBank::B0,
+                SamplingConfig::FREQ_4K,
+                size,
+                LoopBehavior::Infinite
+            )
+            .err(),
             Some(PayloadBuildError::StmSizeOutOfRange {
                 size,
                 min: 1,
@@ -195,7 +207,13 @@ mod tests {
     #[test]
     fn a_single_raw_index_needs_an_infinite_loop() {
         assert_eq!(
-            ConfigPatternPayload::raw(PatternBank::B0, DIVIDER, 1, 0).err(),
+            ConfigPatternPayload::raw(
+                PatternBank::B0,
+                SamplingConfig::FREQ_4K,
+                1,
+                LoopBehavior::ONCE
+            )
+            .err(),
             Some(PayloadBuildError::FiniteLoopNeedsMultipleSamples { size: 1 })
         );
     }
@@ -207,11 +225,11 @@ mod tests {
     fn a_built_foci_payload_passes_parse(#[case] size: usize, #[case] num_foci: u8) {
         let built = ConfigPatternPayload::foci(
             PatternBank::B1,
-            DIVIDER,
+            SamplingConfig::FREQ_4K,
             size,
             num_foci,
             SOUND_SPEED_M_S,
-            7,
+            LoopBehavior::Finite(NonZeroU16::new(8).unwrap()),
         )
         .unwrap();
         let parsed = ConfigPatternPayload::parse(built.as_bytes()).unwrap();
@@ -264,11 +282,11 @@ mod tests {
         assert_eq!(
             ConfigPatternPayload::foci(
                 PatternBank::B0,
-                DIVIDER,
+                SamplingConfig::FREQ_4K,
                 size,
                 num_foci,
                 SOUND_SPEED_M_S,
-                0
+                LoopBehavior::ONCE
             )
             .err(),
             Some(expected)
@@ -282,7 +300,15 @@ mod tests {
     #[case(65535.0 / 64.0, u16::MAX)]
     #[case(65535.4 / 64.0, u16::MAX)]
     fn a_sound_speed_is_carried_in_units_of_one_64th_m_s(#[case] m_s: f32, #[case] units: u16) {
-        let built = ConfigPatternPayload::foci(PatternBank::B0, DIVIDER, 2, 1, m_s, 0).unwrap();
+        let built = ConfigPatternPayload::foci(
+            PatternBank::B0,
+            SamplingConfig::FREQ_4K,
+            2,
+            1,
+            m_s,
+            LoopBehavior::ONCE,
+        )
+        .unwrap();
         assert_eq!(built.sound_speed.get(), units);
         assert!(ConfigPatternPayload::parse(built.as_bytes()).is_ok());
     }
@@ -294,7 +320,15 @@ mod tests {
     #[case(f32::NAN)]
     fn a_sound_speed_that_rounds_to_zero_is_rejected(#[case] m_s: f32) {
         assert_eq!(
-            ConfigPatternPayload::foci(PatternBank::B0, DIVIDER, 2, 1, m_s, 0).err(),
+            ConfigPatternPayload::foci(
+                PatternBank::B0,
+                SamplingConfig::FREQ_4K,
+                2,
+                1,
+                m_s,
+                LoopBehavior::ONCE
+            )
+            .err(),
             Some(PayloadBuildError::SoundSpeedZero)
         );
     }
@@ -304,7 +338,15 @@ mod tests {
     #[case(f32::INFINITY)]
     fn a_sound_speed_above_the_field_is_rejected(#[case] m_s: f32) {
         assert_eq!(
-            ConfigPatternPayload::foci(PatternBank::B0, DIVIDER, 2, 1, m_s, 0).err(),
+            ConfigPatternPayload::foci(
+                PatternBank::B0,
+                SamplingConfig::FREQ_4K,
+                2,
+                1,
+                m_s,
+                LoopBehavior::ONCE
+            )
+            .err(),
             Some(PayloadBuildError::SoundSpeedTooLarge {
                 m_s,
                 max: 65535.0 / 64.0,

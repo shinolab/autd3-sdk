@@ -35,12 +35,8 @@ impl Operation for ConfigPattern {
     }
 
     fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
-        let payload = ConfigPatternPayload::raw(
-            self.bank,
-            self.config.divide(),
-            self.size,
-            self.loop_behavior.rep(),
-        )?;
+        let payload =
+            ConfigPatternPayload::raw(self.bank, self.config, self.size, self.loop_behavior)?;
         encode_header_only(out, Cmd::ConfigPattern, &payload);
         Ok(())
     }
@@ -56,11 +52,11 @@ impl Operation for ConfigFociStm {
     fn encode(&self, _device: &Device, out: &mut Datagram) -> Result<(), Error> {
         let payload = ConfigPatternPayload::foci(
             self.bank,
-            self.config.divide(),
+            self.config,
             self.size,
             self.num_foci,
             self.sound_speed.m_s(),
-            self.loop_behavior.rep(),
+            self.loop_behavior,
         )?;
         encode_header_only(out, Cmd::ConfigPattern, &payload);
         Ok(())
