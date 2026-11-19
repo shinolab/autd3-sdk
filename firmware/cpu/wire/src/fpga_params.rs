@@ -40,8 +40,8 @@ bitflags::bitflags! {
         const PATTERN_MODE = 1 << 3;
         const PATTERN_STOPPED = 1 << 4;
         const MOD_STOPPED = 1 << 5;
-        const TRANSITION_PENDING = 1 << 6;
-        const FAILSAFE = 1 << 7;
+        const PATTERN_TRANSITION_PENDING = 1 << 6;
+        const MOD_TRANSITION_PENDING = 1 << 7;
     }
 }
 

@@ -48,8 +48,15 @@ impl FpgaState {
     }
 
     #[must_use]
-    pub const fn is_transition_pending(self) -> bool {
-        self.flags().contains(FpgaStateFlags::TRANSITION_PENDING)
+    pub const fn is_pattern_transition_pending(self) -> bool {
+        self.flags()
+            .contains(FpgaStateFlags::PATTERN_TRANSITION_PENDING)
+    }
+
+    #[must_use]
+    pub const fn is_mod_transition_pending(self) -> bool {
+        self.flags()
+            .contains(FpgaStateFlags::MOD_TRANSITION_PENDING)
     }
 }
 
@@ -59,14 +66,15 @@ mod tests {
 
     type Getter = fn(FpgaState) -> bool;
 
-    const BITS: [(u8, Getter); 7] = [
+    const BITS: [(u8, Getter); 8] = [
         (0, FpgaState::is_thermal_asserted),
         (1, |s| s.current_mod_bank() == ModulationBank::B1),
         (2, |s| s.current_pattern_bank() == PatternBank::B1),
         (3, FpgaState::is_pattern_mode),
         (4, FpgaState::is_pattern_stopped),
         (5, FpgaState::is_mod_stopped),
-        (6, FpgaState::is_transition_pending),
+        (6, FpgaState::is_pattern_transition_pending),
+        (7, FpgaState::is_mod_transition_pending),
     ];
 
     #[test]

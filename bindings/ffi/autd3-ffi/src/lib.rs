@@ -220,8 +220,13 @@ pub extern "C" fn autd3_fpga_state_is_mod_stopped(raw: u8) -> bool {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_fpga_state_is_transition_pending(raw: u8) -> bool {
-    FpgaState(raw).is_transition_pending()
+pub extern "C" fn autd3_fpga_state_is_pattern_transition_pending(raw: u8) -> bool {
+    FpgaState(raw).is_pattern_transition_pending()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn autd3_fpga_state_is_mod_transition_pending(raw: u8) -> bool {
+    FpgaState(raw).is_mod_transition_pending()
 }
 
 pub enum OwnedPatternIntensity {
@@ -2507,8 +2512,12 @@ mod tests {
             );
             assert_eq!(state.is_mod_stopped(), autd3_fpga_state_is_mod_stopped(raw));
             assert_eq!(
-                state.is_transition_pending(),
-                autd3_fpga_state_is_transition_pending(raw)
+                state.is_pattern_transition_pending(),
+                autd3_fpga_state_is_pattern_transition_pending(raw)
+            );
+            assert_eq!(
+                state.is_mod_transition_pending(),
+                autd3_fpga_state_is_mod_transition_pending(raw)
             );
         }
     }

@@ -42,7 +42,8 @@ module sim_cpu_readback ();
   logic [15:0] pattern_cycle;
   logic pattern_stopped;
   logic mod_stopped;
-  logic transition_pending;
+  logic pattern_transition_pending;
+  logic mod_transition_pending;
   logic [7:0] sync_resync_count;
   logic gpio_in[4];
   settings::mod_settings_t mod_settings;
@@ -62,7 +63,8 @@ module sim_cpu_readback ();
       .PATTERN_CYCLE(pattern_cycle),
       .PATTERN_STOPPED(pattern_stopped),
       .MOD_STOPPED(mod_stopped),
-      .TRANSITION_PENDING(transition_pending),
+      .PATTERN_TRANSITION_PENDING(pattern_transition_pending),
+      .MOD_TRANSITION_PENDING(mod_transition_pending),
       .SYNC_RESYNC_COUNT(sync_resync_count),
       .cnt_bus(cnt_bus.out_port),
       .MOD_SETTINGS(mod_settings),
@@ -97,7 +99,8 @@ module sim_cpu_readback ();
     pattern_cycle = 16'd0;
     pattern_stopped = 1'b0;
     mod_stopped = 1'b1;
-    transition_pending = 1'b0;
+    pattern_transition_pending = 1'b0;
+    mod_transition_pending = 1'b1;
     sync_resync_count = 8'd3;
 
     @(posedge locked);
@@ -118,8 +121,17 @@ module sim_cpu_readback ();
     `ASSERT_EQ({8'h00, params::VersionNumPatch}, value);
 
     sim_helper_bram.read_cnt(params::ADDR_FPGA_STATE, value);
-    `ASSERT_EQ({sync_resync_count, 1'h0, transition_pending, mod_stopped, pattern_stopped, pattern_cycle == '0, pattern_bank, mod_bank, thermo},
-               value);
+    `ASSERT_EQ({
+               sync_resync_count,
+               mod_transition_pending,
+               pattern_transition_pending,
+               mod_stopped,
+               pattern_stopped,
+               pattern_cycle == '0,
+               pattern_bank,
+               mod_bank,
+               thermo
+               }, value);
 
     sim_helper_bram.write_cnt(params::ADDR_CTL_FLAG, PersistentFlags);
     repeat (32) @(posedge CLK);
@@ -132,24 +144,29 @@ module sim_cpu_readback ();
     sim_helper_bram.read_cnt(params::ADDR_CTL_FLAG, value);
     `ASSERT_EQ(PersistentFlags, value);
     `ASSERT_EQ(1'b0, FAILSAFE);
-    sim_helper_bram.read_cnt(params::ADDR_FPGA_STATE, value);
-    `ASSERT_EQ(1'b0, value[params::FPGA_STATE_BIT_FAILSAFE]);
 
     sim_helper_bram.write_cnt(params::ADDR_CTL_FLAG, PersistentFlags | (16'd1 << params::CTL_FLAG_BIT_FAILSAFE));
     repeat (32) @(posedge CLK);
     `ASSERT_EQ(1'b1, FAILSAFE);
     `ASSERT_EQ(1'b1, FORCE_FAN);
     sim_helper_bram.read_cnt(params::ADDR_FPGA_STATE, value);
-    `ASSERT_EQ({sync_resync_count, 1'h1, transition_pending, mod_stopped, pattern_stopped, pattern_cycle == '0, pattern_bank, mod_bank, thermo},
-               value);
+    `ASSERT_EQ({
+               sync_resync_count,
+               mod_transition_pending,
+               pattern_transition_pending,
+               mod_stopped,
+               pattern_stopped,
+               pattern_cycle == '0,
+               pattern_bank,
+               mod_bank,
+               thermo
+               }, value);
     sim_helper_bram.read_cnt(params::ADDR_CTL_FLAG, value);
     `ASSERT_EQ((PersistentFlags | (16'd1 << params::CTL_FLAG_BIT_FAILSAFE)), value);
 
     sim_helper_bram.write_cnt(params::ADDR_CTL_FLAG, PersistentFlags);
     repeat (32) @(posedge CLK);
     `ASSERT_EQ(1'b0, FAILSAFE);
-    sim_helper_bram.read_cnt(params::ADDR_FPGA_STATE, value);
-    `ASSERT_EQ(1'b0, value[params::FPGA_STATE_BIT_FAILSAFE]);
 
     $display("OK! sim_cpu_readback");
     $finish();

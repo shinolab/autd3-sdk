@@ -523,10 +523,13 @@ impl FpgaEmulator {
         );
         state.set(FpgaStateFlags::MOD_STOPPED, self.mod_swapchain.stopped());
         state.set(
-            FpgaStateFlags::TRANSITION_PENDING,
-            self.pattern_swapchain.transition_pending() || self.mod_swapchain.transition_pending(),
+            FpgaStateFlags::PATTERN_TRANSITION_PENDING,
+            self.pattern_swapchain.transition_pending(),
         );
-        state.set(FpgaStateFlags::FAILSAFE, self.failsafe());
+        state.set(
+            FpgaStateFlags::MOD_TRANSITION_PENDING,
+            self.mod_swapchain.transition_pending(),
+        );
         state.bits()
     }
 

@@ -6,7 +6,7 @@ use autd3_cpu_wire::payload::Telemetry;
 use super::Cpu;
 use crate::cmd;
 use crate::fpga;
-use crate::fpga_params::{ADDR_FPGA_STATE, FpgaStateFlags};
+use crate::fpga_params::ADDR_FPGA_STATE;
 use crate::port::Port;
 use crate::utils::OptionalAtomic;
 
@@ -119,8 +119,7 @@ impl Cpu {
     pub(super) fn sample_fpga_state<P: Port>(&self, port: &mut P) {
         let health = &self.health;
         let [state, resync] = fpga::read_ctl(port, ADDR_FPGA_STATE).to_le_bytes();
-        let state = FpgaStateFlags::from_bits_retain(state) - FpgaStateFlags::FAILSAFE;
-        health.fpga_state.store(state.bits(), Ordering::Relaxed);
+        health.fpga_state.store(state, Ordering::Relaxed);
         health.sync_resync.store(resync, Ordering::Relaxed);
     }
 
@@ -236,11 +235,11 @@ mod tests {
     #[test]
     fn a_tick_samples_the_state_flags_from_the_fpga_state_low_byte() {
         let mut h = Harness::new();
-        h.set_ctl(ADDR_FPGA_STATE, 0x2A7F);
+        h.set_ctl(ADDR_FPGA_STATE, 0x2AFF);
         assert_eq!(h.cpu.fpga_state(), 0);
 
         h.tick_1ms(1);
-        assert_eq!(h.cpu.fpga_state(), 0x7F);
+        assert_eq!(h.cpu.fpga_state(), 0xFF);
     }
 
     #[test]
@@ -250,14 +249,6 @@ mod tests {
         h.deliver(&Frame::new(Cmd::Nop));
         assert_eq!(h.cpu.fpga_state(), 0x06);
         assert_eq!(h.telemetry().sync_resync, 0x05);
-    }
-
-    #[test]
-    fn the_failsafe_bit_of_the_fpga_state_is_never_sampled() {
-        let mut h = Harness::new();
-        h.set_ctl(ADDR_FPGA_STATE, 0x83);
-        h.tick_1ms(1);
-        assert_eq!(h.cpu.fpga_state(), 0x03);
     }
 
     #[test]

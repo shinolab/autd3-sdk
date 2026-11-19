@@ -22,7 +22,8 @@ namespace AUTD3
         public bool IsPatternMode => NativeClient.autd3_fpga_state_is_pattern_mode(Raw);
         public bool IsPatternStopped => NativeClient.autd3_fpga_state_is_pattern_stopped(Raw);
         public bool IsModStopped => NativeClient.autd3_fpga_state_is_mod_stopped(Raw);
-        public bool IsTransitionPending => NativeClient.autd3_fpga_state_is_transition_pending(Raw);
+        public bool IsPatternTransitionPending => NativeClient.autd3_fpga_state_is_pattern_transition_pending(Raw);
+        public bool IsModTransitionPending => NativeClient.autd3_fpga_state_is_mod_transition_pending(Raw);
     }
 
     public readonly struct Version : IEquatable<Version>

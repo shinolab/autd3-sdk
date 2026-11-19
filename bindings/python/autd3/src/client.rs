@@ -212,13 +212,17 @@ impl FpgaState {
         self.0.is_mod_stopped()
     }
 
-    fn is_transition_pending(&self) -> bool {
-        self.0.is_transition_pending()
+    fn is_pattern_transition_pending(&self) -> bool {
+        self.0.is_pattern_transition_pending()
+    }
+
+    fn is_mod_transition_pending(&self) -> bool {
+        self.0.is_mod_transition_pending()
     }
 
     fn __repr__(&self) -> String {
         format!(
-            "FpgaState(raw=0x{:02X}, thermal_asserted={}, mod_bank={:?}, pattern_bank={:?}, pattern_mode={}, pattern_stopped={}, mod_stopped={}, transition_pending={})",
+            "FpgaState(raw=0x{:02X}, thermal_asserted={}, mod_bank={:?}, pattern_bank={:?}, pattern_mode={}, pattern_stopped={}, mod_stopped={}, pattern_transition_pending={}, mod_transition_pending={})",
             self.0.0,
             self.0.is_thermal_asserted(),
             self.0.current_mod_bank(),
@@ -226,7 +230,8 @@ impl FpgaState {
             self.0.is_pattern_mode(),
             self.0.is_pattern_stopped(),
             self.0.is_mod_stopped(),
-            self.0.is_transition_pending()
+            self.0.is_pattern_transition_pending(),
+            self.0.is_mod_transition_pending()
         )
     }
 }

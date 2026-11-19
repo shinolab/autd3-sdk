@@ -55,7 +55,11 @@ namespace AUTD3
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         [return: MarshalAs(UnmanagedType.I1)]
-        internal static extern bool autd3_fpga_state_is_transition_pending(byte raw);
+        internal static extern bool autd3_fpga_state_is_pattern_transition_pending(byte raw);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        internal static extern bool autd3_fpga_state_is_mod_transition_pending(byte raw);
 
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]

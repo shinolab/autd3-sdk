@@ -24,6 +24,8 @@ use pattern::{activate_pattern_bank, config_pattern};
 const BIT_MOD_BANK: u8 = FpgaStateFlags::MOD_BANK.bits();
 const BIT_PATTERN_BANK: u8 = FpgaStateFlags::PATTERN_BANK.bits();
 const BIT_PATTERN_MODE: u8 = FpgaStateFlags::PATTERN_MODE.bits();
+const BIT_TRANSITION_PENDING: u8 = FpgaStateFlags::PATTERN_TRANSITION_PENDING.bits()
+    | FpgaStateFlags::MOD_TRANSITION_PENDING.bits();
 
 fn write_modulation(bank: ModulationBank, samples: &[u8]) -> Vec<u8> {
     let header = WriteModPayload {
@@ -119,4 +121,53 @@ fn multi_index_pattern_reports_stm_mode() {
 
     assert!(!device.fpga().is_pattern_mode());
     assert_eq!(0, read_state(&device) & BIT_PATTERN_MODE);
+}
+
+#[test]
+fn a_pending_pattern_transition_sets_only_the_pattern_bit() {
+    let mut device = Device::new(NUM_TRANSDUCERS);
+
+    device.send(&frame(
+        Cmd::WritePatternRaw,
+        &write_pattern(PatternBank::B1),
+    ));
+    device.send(&frame(
+        Cmd::ConfigPattern,
+        &config_raw_pattern(PatternBank::B1, 4, 0),
+    ));
+    device.send(&frame(
+        Cmd::ActivatePatternBank,
+        &activate_pattern_bank(PatternBank::B1, TransitionModeKind::Gpio),
+    ));
+
+    assert_eq!(0, device.fpga().current_pattern_bank());
+    assert_eq!(
+        FpgaStateFlags::PATTERN_TRANSITION_PENDING.bits(),
+        read_state(&device) & BIT_TRANSITION_PENDING
+    );
+}
+
+#[test]
+fn a_pending_modulation_transition_sets_only_the_modulation_bit() {
+    let mut device = Device::new(NUM_TRANSDUCERS);
+
+    let samples = [10u8, 20, 30, 40];
+    device.send(&frame(
+        Cmd::WriteModulationBuffer,
+        &write_modulation(ModulationBank::B1, &samples),
+    ));
+    device.send(&frame(
+        Cmd::ConfigModulation,
+        &config_modulation(ModulationBank::B1, 1, samples.len() as u32, 0),
+    ));
+    device.send(&frame(
+        Cmd::ActivateModulationBank,
+        &activate_modulation_bank(ModulationBank::B1, TransitionModeKind::Gpio, 0),
+    ));
+
+    assert_eq!(0, device.fpga().current_mod_bank());
+    assert_eq!(
+        FpgaStateFlags::MOD_TRANSITION_PENDING.bits(),
+        read_state(&device) & BIT_TRANSITION_PENDING
+    );
 }
