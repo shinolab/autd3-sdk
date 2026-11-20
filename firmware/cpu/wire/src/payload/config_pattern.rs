@@ -115,23 +115,24 @@ impl ConfigPatternPayload {
         let p = try_read_exact::<Self>(payload)?;
         p.divider().ok_or(Error::InvalidPayload)?;
         let size = p.size.get();
-        let emission_valid = match p.emission_type {
+        match p.emission_type {
             EmissionType::Raw => {
-                (1..=EMISSION_MAX_INDICES).contains(&size)
-                    && (size >= BUFFER_SIZE_MIN as u32 || p.rep.get() == REP_INFINITE)
+                if !(1..=EMISSION_MAX_INDICES).contains(&size)
+                    || (size < BUFFER_SIZE_MIN as u32 && p.rep.get() != REP_INFINITE)
+                {
+                    return Err(Error::InvalidPayload);
+                }
             }
-            EmissionType::Foci => p
-                .num_foci
-                .zip(p.sound_speed())
-                .is_some_and(|(num_foci, _)| {
-                    num_foci.get() <= NUM_FOCI_MAX
-                        && (BUFFER_SIZE_MIN as u32
+            EmissionType::Foci => {
+                if p.num_foci.zip(p.sound_speed()).is_none_or(|(num_foci, _)| {
+                    num_foci.get() > NUM_FOCI_MAX
+                        || !(BUFFER_SIZE_MIN as u32
                             ..=MAX_FOCI_TOTAL as u32 / u32::from(num_foci.get()))
                             .contains(&size)
-                }),
-        };
-        if !emission_valid {
-            return Err(Error::InvalidPayload);
+                }) {
+                    return Err(Error::InvalidPayload);
+                }
+            }
         }
         Ok(p)
     }
