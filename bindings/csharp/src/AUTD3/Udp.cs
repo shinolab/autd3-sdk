@@ -6,7 +6,6 @@ namespace AUTD3
     [StructLayout(LayoutKind.Sequential)]
     internal struct TransportOptionNative
     {
-        public ulong OpenTimeoutNs;
         public ulong SendBufferBytes;
         public byte SyncOnOpen;
         public byte HasHeartbeatInterval;
@@ -15,7 +14,6 @@ namespace AUTD3
 
     internal static class TransportOptionDefaults
     {
-        internal static readonly TimeSpan OpenTimeout;
         internal static readonly ulong? SendBufferBytes;
         internal static readonly bool SyncOnOpen;
         internal static readonly TimeSpan? HeartbeatInterval;
@@ -23,7 +21,6 @@ namespace AUTD3
         static TransportOptionDefaults()
         {
             OptionNative.Apply("preset", NativeClient.autd3_transport_option_default(out var native));
-            OpenTimeout = OptionNative.FromNanos(native.OpenTimeoutNs);
             SendBufferBytes = native.SendBufferBytes == 0 ? null : native.SendBufferBytes;
             SyncOnOpen = native.SyncOnOpen != 0;
             HeartbeatInterval = OptionNative.FromOptionalNanos(native.HasHeartbeatInterval, native.HeartbeatIntervalNs);
@@ -37,9 +34,6 @@ namespace AUTD3
         private const byte IfaceKindAddr = 2;
 
         public Interface Iface { get; init; }
-
-        private readonly TimeSpan? _openTimeout;
-        public TimeSpan OpenTimeout { get => _openTimeout ?? TransportOptionDefaults.OpenTimeout; init => _openTimeout = value; }
 
         private readonly bool _sendBufferBytesSet;
         private readonly ulong? _sendBufferBytes;
@@ -81,7 +75,6 @@ namespace AUTD3
 
         internal TransportOptionNative ToNative() => new TransportOptionNative
         {
-            OpenTimeoutNs = OptionNative.RequiredNanos("openTimeout", OpenTimeout),
             SendBufferBytes = SendBufferBytes switch
             {
                 null => 0,

@@ -12,7 +12,6 @@ namespace AUTD3.Tests
         {
             var option = new TransportOption();
             Assert.Equal(Interface.Auto, option.Iface);
-            Assert.Equal(TimeSpan.FromSeconds(40), option.OpenTimeout);
             Assert.Equal(8192ul, option.SendBufferBytes);
             Assert.True(option.SyncOnOpen);
             Assert.True(default(TransportOption).SyncOnOpen);
@@ -31,27 +30,16 @@ namespace AUTD3.Tests
         {
             var native = new TransportOption
             {
-                OpenTimeout = TimeSpan.FromSeconds(1),
                 SendBufferBytes = 4096,
                 SyncOnOpen = false,
                 HeartbeatInterval = TimeSpan.FromMilliseconds(10),
             }.ToNative();
-            Assert.Equal(1_000_000_000ul, native.OpenTimeoutNs);
             Assert.Equal(4096ul, native.SendBufferBytes);
             Assert.Equal((byte)0, native.SyncOnOpen);
             Assert.Equal((byte)1, new TransportOption().ToNative().SyncOnOpen);
             Assert.Equal((byte)1, native.HasHeartbeatInterval);
             Assert.Equal(10_000_000ul, native.HeartbeatIntervalNs);
             Assert.Equal((byte)0, new TransportOption().ToNative().HasHeartbeatInterval);
-        }
-
-        [Fact]
-        public void ANegativeOpenTimeoutIsRejected()
-        {
-            var option = new TransportOption { OpenTimeout = TimeSpan.FromTicks(-1) };
-            var error = Assert.Throws<Autd3Exception>(() => option.ToNative());
-            Assert.Equal(Autd3ErrorCode.InvalidArgument, error.Code);
-            Assert.Contains("openTimeout", error.Message);
         }
 
         [Fact]

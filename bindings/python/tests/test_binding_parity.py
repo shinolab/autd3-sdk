@@ -164,7 +164,6 @@ def test_rust_required_fields_cannot_be_omitted() -> None:
 @pytest.mark.parametrize(
     "build",
     [
-        lambda: autd3.TransportOption(open_timeout=loose(None)),
         lambda: FociStmOption(bank=loose(None)),
         lambda: FociStmOption(sound_speed=loose(None)),
         lambda: PatternStmOption(transition_mode=loose(None)),
@@ -183,7 +182,7 @@ def test_none_is_not_a_default_for_rust_non_option_fields(build: Any) -> None:
 
 def test_option_defaults_and_equality() -> None:
     assert autd3.TransportOption() == autd3.TransportOption()
-    assert autd3.TransportOption() != autd3.TransportOption(open_timeout=Duration.from_millis(2))
+    assert autd3.TransportOption() != autd3.TransportOption(send_buffer_bytes=4096)
     assert FociStmOption() == FociStmOption(sound_speed=340 * m / s)
     assert FociStmOption() != FociStmOption(bank=PatternBank.B1)
     assert PatternStmOption() == PatternStmOption(phase_depth=PhaseDepth.Bits8)

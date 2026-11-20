@@ -99,12 +99,6 @@ pub(crate) struct Connection {
     pub(crate) devices: usize,
     #[arg(long, help = "Network interface name (default: auto-detect)")]
     pub(crate) interface: Option<String>,
-    #[arg(
-        long,
-        value_parser = humantime::parse_duration,
-        help = "How long opening the connection may take, enumeration included, e.g. 20s"
-    )]
-    pub(crate) open_timeout: Option<Duration>,
 }
 
 #[derive(Args)]

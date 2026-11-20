@@ -185,15 +185,12 @@ class TransportOption:
     def __new__(
         cls,
         iface: Interface | str = ...,
-        open_timeout: Duration = ...,
         send_buffer_bytes: int | None = ...,
         sync_on_open: bool = ...,
         heartbeat_interval: Duration | None = ...,
     ) -> TransportOption: ...
     @property
     def iface(self) -> Interface: ...
-    @property
-    def open_timeout(self) -> Duration: ...
     @property
     def send_buffer_bytes(self) -> int | None: ...
     @property

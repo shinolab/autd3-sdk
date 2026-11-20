@@ -31,10 +31,6 @@ pub enum UdpError {
         "{replies} unassigned devices answered one Discover; a device failed to close its downstream port"
     )]
     DownstreamNotClosed { replies: usize },
-    #[error(
-        "only {found} of the {expected} devices declared by the geometry were enumerated within open_timeout"
-    )]
-    EnumerationTimeout { expected: usize, found: usize },
     #[error("geometry declares {expected} devices but {found} are attached")]
     DeviceCountMismatch { expected: usize, found: usize },
     #[error("an unexpected unit (id {unit_id:#04x}) at {addr} answered the cross-check")]
