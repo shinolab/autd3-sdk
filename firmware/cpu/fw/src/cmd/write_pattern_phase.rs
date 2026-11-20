@@ -6,16 +6,16 @@ use crate::proto::{EMISSION_SLOT_WORDS, Error};
 
 pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
     let (p, data) = WritePatternPhasePayload::parse(payload)?;
-    let depth = p.depth;
-    let intensity = p.intensity;
-    let patterns = (u32::from(p.index.get())..)
+    let depth = p.depth();
+    let intensity = p.intensity();
+    let patterns = (u32::from(p.index())..)
         .map(|index| index * EMISSION_SLOT_WORDS)
         .zip(data.chunks_exact(depth.bytes_per_pattern()));
     match depth {
         PhaseDepth::Bits8 => fpga::write_ram_at(
             port,
             &EMISSION_RAM,
-            p.bank.as_u8(),
+            p.bank().as_u8(),
             patterns.flat_map(|(offset, pattern)| {
                 (offset..).zip(
                     PhaseDepth::unpack_bits8(pattern)
@@ -26,7 +26,7 @@ pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error>
         PhaseDepth::Bits4 => fpga::write_ram_at(
             port,
             &EMISSION_RAM,
-            p.bank.as_u8(),
+            p.bank().as_u8(),
             patterns.flat_map(|(offset, pattern)| {
                 (offset..).zip(
                     PhaseDepth::unpack_bits4(pattern)

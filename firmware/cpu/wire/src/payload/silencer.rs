@@ -27,11 +27,11 @@ fn completion_steps(time: Duration) -> Result<NonZeroU16, PayloadBuildError> {
 #[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct SilencerPayload {
-    pub flag: u8,
-    pub update_rate_intensity: U16,
-    pub update_rate_phase: U16,
-    pub completion_steps_intensity: U16,
-    pub completion_steps_phase: U16,
+    flag: u8,
+    update_rate_intensity: U16,
+    update_rate_phase: U16,
+    completion_steps_intensity: U16,
+    completion_steps_phase: U16,
 }
 
 impl SilencerPayload {
@@ -84,25 +84,31 @@ impl SilencerPayload {
     }
 
     #[must_use]
-    pub fn update_rate(&self) -> Option<(NonZeroU16, NonZeroU16)> {
-        NonZeroU16::new(self.update_rate_intensity.get())
-            .zip(NonZeroU16::new(self.update_rate_phase.get()))
+    pub const fn update_rate(&self) -> (u16, u16) {
+        (
+            self.update_rate_intensity.get(),
+            self.update_rate_phase.get(),
+        )
     }
 
     #[must_use]
-    pub fn completion_steps(&self) -> Option<(NonZeroU16, NonZeroU16)> {
-        NonZeroU16::new(self.completion_steps_intensity.get())
-            .zip(NonZeroU16::new(self.completion_steps_phase.get()))
+    pub const fn completion_steps(&self) -> (u16, u16) {
+        (
+            self.completion_steps_intensity.get(),
+            self.completion_steps_phase.get(),
+        )
     }
 
     pub fn parse(payload: &[u8]) -> Result<Self, Error> {
         let p = try_read_exact::<Self>(payload)?;
-        let active = if p.flags().contains(SilencerFlags::FIXED_UPDATE_RATE_MODE) {
+        let (intensity, phase) = if p.flags().contains(SilencerFlags::FIXED_UPDATE_RATE_MODE) {
             p.update_rate()
         } else {
             p.completion_steps()
         };
-        active.ok_or(Error::InvalidPayload)?;
+        if intensity == 0 || phase == 0 {
+            return Err(Error::InvalidPayload);
+        }
         Ok(p)
     }
 }
@@ -135,10 +141,10 @@ mod tests {
         let built = SilencerPayload::fixed_completion_steps(INTENSITY, PHASE, strict_mode);
         let parsed = SilencerPayload::parse(built.as_bytes()).unwrap();
         assert_eq!(parsed.flags(), flags);
-        assert_eq!(parsed.completion_steps(), Some((INTENSITY, PHASE)));
+        assert_eq!(parsed.completion_steps(), (INTENSITY.get(), PHASE.get()));
         assert_eq!(
-            parsed.update_rate().map(|(i, p)| (i.get(), p.get())),
-            Some((SILENCER_DEFAULT_UPDATE_RATE, SILENCER_DEFAULT_UPDATE_RATE))
+            parsed.update_rate(),
+            (SILENCER_DEFAULT_UPDATE_RATE, SILENCER_DEFAULT_UPDATE_RATE)
         );
     }
 
@@ -147,13 +153,13 @@ mod tests {
         let built = SilencerPayload::fixed_update_rate(INTENSITY, PHASE);
         let parsed = SilencerPayload::parse(built.as_bytes()).unwrap();
         assert_eq!(parsed.flags(), SilencerFlags::FIXED_UPDATE_RATE_MODE);
-        assert_eq!(parsed.update_rate(), Some((INTENSITY, PHASE)));
+        assert_eq!(parsed.update_rate(), (INTENSITY.get(), PHASE.get()));
         assert_eq!(
-            parsed.completion_steps().map(|(i, p)| (i.get(), p.get())),
-            Some((
+            parsed.completion_steps(),
+            (
                 SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY,
                 SILENCER_DEFAULT_COMPLETION_STEPS_PHASE
-            ))
+            )
         );
     }
 

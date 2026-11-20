@@ -1,15 +1,12 @@
 use core::mem::offset_of;
-use core::num::NonZeroU8;
 
-use autd3_cpu_wire::payload::{EmissionType, PhaseDepth, SilencerFlags};
+use autd3_cpu_wire::payload::SilencerFlags;
 use autd3_cpu_wire::{ModulationBank, PatternBank};
 use zerocopy::FromZeros;
-use zerocopy::little_endian::{U16, U32, U64};
+use zerocopy::little_endian::{U16, U64};
 
 use crate::cmd::activate_mod_bank::ActivateModBankPayload;
 use crate::cmd::activate_pattern_bank::ActivatePatternBankPayload;
-use crate::cmd::config_mod::ConfigModPayload;
-use crate::cmd::config_pattern::ConfigPatternPayload;
 use crate::cmd::cpu_config::{CpuConfig, SetCpuConfigPayload};
 use crate::cmd::force_fan::ForceFanPayload;
 use crate::cmd::fpga_config::SetFpgaConfigPayload;
@@ -18,12 +15,7 @@ use crate::cmd::gpio_out::GpioOutPayload;
 use crate::cmd::output_mask::OutputMaskPayload;
 use crate::cmd::phase_corr::PhaseCorrPayload;
 use crate::cmd::pwe::PwePayload;
-use crate::cmd::silencer::SilencerPayload;
-use crate::cmd::write_foci::WriteFociPayload;
-use crate::cmd::write_mod::WriteModPayload;
 use crate::cmd::write_pattern_fused::WritePatternFusedPayload;
-use crate::cmd::write_pattern_phase::WritePatternPhasePayload;
-use crate::cmd::write_pattern_raw::WritePatternRawPayload;
 use crate::fpga::{REP_INFINITE, TransitionModeKind};
 use crate::fpga_params::NUM_BANKS;
 use crate::proto::Cmd;
@@ -61,14 +53,12 @@ pub(crate) fn assert_fpga_unchanged(before: &FpgaSnapshot, h: &Harness) {
 }
 
 pub(crate) fn write_foci_buffer(bank: u8, offset_words: u32, words: &[u16]) -> Frame {
-    let header = WriteFociPayload {
-        bank: PatternBank::B0,
-        offset: U32::new(offset_words),
-    };
-    let bytes: std::vec::Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
-    let mut f = Frame::from_parts(Cmd::WriteFociBuffer, &header, &bytes);
-    f.set_payload_byte(offset_of!(WriteFociPayload, bank), bank);
-    f
+    let payload: std::vec::Vec<u8> = [bank]
+        .into_iter()
+        .chain(offset_words.to_le_bytes())
+        .chain(words.iter().flat_map(|w| w.to_le_bytes()))
+        .collect();
+    Frame::from_payload(Cmd::WriteFociBuffer, payload.as_slice())
 }
 
 fn interleave<'a>(phases: &'a [u8], intensities: &'a [u8]) -> impl Iterator<Item = u8> + 'a {
@@ -84,18 +74,16 @@ pub(crate) fn write_pattern_raw(bank: u8, index: u16, phases: &[u8], intensities
 }
 
 pub(crate) fn write_pattern_raw_multi(bank: u8, index: u16, slots: &[(&[u8], &[u8])]) -> Frame {
-    let header = WritePatternRawPayload {
-        bank: PatternBank::B0,
-        count: u8::try_from(slots.len()).unwrap(),
-        index: U16::new(index),
-    };
-    let data: std::vec::Vec<u8> = slots
-        .iter()
-        .flat_map(|(phases, intensities)| interleave(phases, intensities))
+    let payload: std::vec::Vec<u8> = [bank, u8::try_from(slots.len()).unwrap()]
+        .into_iter()
+        .chain(index.to_le_bytes())
+        .chain(
+            slots
+                .iter()
+                .flat_map(|(phases, intensities)| interleave(phases, intensities)),
+        )
         .collect();
-    let mut f = Frame::from_parts(Cmd::WritePatternRaw, &header, &data);
-    f.set_payload_byte(offset_of!(WritePatternRawPayload, bank), bank);
-    f
+    Frame::from_payload(Cmd::WritePatternRaw, payload.as_slice())
 }
 
 pub(crate) fn write_pattern_fused(
@@ -124,27 +112,21 @@ pub(crate) fn write_pattern_phase(
     intensity: u8,
     data: &[u8],
 ) -> Frame {
-    let header = WritePatternPhasePayload {
-        bank: PatternBank::B0,
-        depth: PhaseDepth::Bits8,
-        count,
-        intensity,
-        index: U16::new(index),
-    };
-    let mut f = Frame::from_parts(Cmd::WritePatternPhase, &header, data);
-    f.set_payload_byte(offset_of!(WritePatternPhasePayload, bank), bank);
-    f.set_payload_byte(offset_of!(WritePatternPhasePayload, depth), depth);
-    f
+    let payload: std::vec::Vec<u8> = [bank, depth, count, intensity]
+        .into_iter()
+        .chain(index.to_le_bytes())
+        .chain(data.iter().copied())
+        .collect();
+    Frame::from_payload(Cmd::WritePatternPhase, payload.as_slice())
 }
 
 pub(crate) fn write_mod_buffer(bank: u8, offset: u32, data: &[u8]) -> Frame {
-    let header = WriteModPayload {
-        bank: ModulationBank::B0,
-        offset: U32::new(offset),
-    };
-    let mut f = Frame::from_parts(Cmd::WriteModulationBuffer, &header, data);
-    f.set_payload_byte(offset_of!(WriteModPayload, bank), bank);
-    f
+    let payload: std::vec::Vec<u8> = [bank]
+        .into_iter()
+        .chain(offset.to_le_bytes())
+        .chain(data.iter().copied())
+        .collect();
+    Frame::from_payload(Cmd::WriteModulationBuffer, payload.as_slice())
 }
 
 pub(crate) fn config_mod(bank: u8, divider: u16, size: u32) -> Frame {
@@ -152,15 +134,13 @@ pub(crate) fn config_mod(bank: u8, divider: u16, size: u32) -> Frame {
 }
 
 pub(crate) fn config_mod_rep(bank: u8, divider: u16, size: u32, rep: u16) -> Frame {
-    let p = ConfigModPayload {
-        bank: ModulationBank::B0,
-        divider: U16::new(divider),
-        size: U32::new(size),
-        rep: U16::new(rep),
-    };
-    let mut f = Frame::from_payload(Cmd::ConfigModulation, &p);
-    f.set_payload_byte(offset_of!(ConfigModPayload, bank), bank);
-    f
+    let payload: std::vec::Vec<u8> = [bank]
+        .into_iter()
+        .chain(divider.to_le_bytes())
+        .chain(size.to_le_bytes())
+        .chain(rep.to_le_bytes())
+        .collect();
+    Frame::from_payload(Cmd::ConfigModulation, payload.as_slice())
 }
 
 pub(crate) fn config_pattern(
@@ -192,22 +172,15 @@ pub(crate) fn config_pattern_rep(
     sound_speed: u16,
     rep: u16,
 ) -> Frame {
-    let p = ConfigPatternPayload {
-        bank: PatternBank::B0,
-        emission_type: EmissionType::Foci,
-        divider: U16::new(divider),
-        size: U32::new(size),
-        num_foci: NonZeroU8::new(num_foci),
-        sound_speed: U16::new(sound_speed),
-        rep: U16::new(rep),
-    };
-    let mut f = Frame::from_payload(Cmd::ConfigPattern, &p);
-    f.set_payload_byte(offset_of!(ConfigPatternPayload, bank), bank);
-    f.set_payload_byte(
-        offset_of!(ConfigPatternPayload, emission_type),
-        emission_type,
-    );
-    f
+    let payload: std::vec::Vec<u8> = [bank, emission_type]
+        .into_iter()
+        .chain(divider.to_le_bytes())
+        .chain(size.to_le_bytes())
+        .chain([num_foci])
+        .chain(sound_speed.to_le_bytes())
+        .chain(rep.to_le_bytes())
+        .collect();
+    Frame::from_payload(Cmd::ConfigPattern, payload.as_slice())
 }
 
 pub(crate) fn activate_pattern_bank(
@@ -254,13 +227,14 @@ pub(crate) fn set_silencer(
     completion_steps_intensity: u16,
     completion_steps_phase: u16,
 ) -> Frame {
-    let mut p = SilencerPayload::new_zeroed();
-    p.flag = flag.bits();
-    p.update_rate_intensity = U16::new(update_rate_intensity);
-    p.update_rate_phase = U16::new(update_rate_phase);
-    p.completion_steps_intensity = U16::new(completion_steps_intensity);
-    p.completion_steps_phase = U16::new(completion_steps_phase);
-    Frame::from_payload(Cmd::SetSilencer, &p)
+    let payload: std::vec::Vec<u8> = [flag.bits()]
+        .into_iter()
+        .chain(update_rate_intensity.to_le_bytes())
+        .chain(update_rate_phase.to_le_bytes())
+        .chain(completion_steps_intensity.to_le_bytes())
+        .chain(completion_steps_phase.to_le_bytes())
+        .collect();
+    Frame::from_payload(Cmd::SetSilencer, payload.as_slice())
 }
 
 pub(crate) fn force_fan(value: u8) -> Frame {

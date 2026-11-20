@@ -11,7 +11,6 @@ use autd3_rs_core::protocol::{Cmd, DeviceErrorCode};
 use autd3_rs_core::value::Intensity;
 use autd3_rs_firmware_emulator::Device;
 use zerocopy::IntoBytes;
-use zerocopy::little_endian::U32;
 
 use common::{NUM_TRANSDUCERS, frame};
 use pattern::{activate_pattern_bank, config_pattern};
@@ -26,12 +25,10 @@ fn single_focus_synthesizes_phases() {
     let z: u64 = 8192;
     let focus: u64 = (u64::from(FOCUS_INTENSITY) << 54) | (z << 36);
 
-    let mut write = WriteFociPayload {
-        bank: BANK,
-        offset: U32::new(0),
-    }
-    .as_bytes()
-    .to_vec();
+    let mut write = WriteFociPayload::new(BANK, 0, 2)
+        .unwrap()
+        .as_bytes()
+        .to_vec();
     write.extend_from_slice(&focus.to_le_bytes());
     write.extend_from_slice(&focus.to_le_bytes());
 

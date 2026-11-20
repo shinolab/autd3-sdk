@@ -25,7 +25,7 @@ fn check_access(addr: u16, words: usize, max: usize) -> Result<(), PayloadBuildE
 #[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned, Clone, Debug)]
 #[repr(C)]
 pub struct WriteFpgaMemoryPayload {
-    pub addr: U16,
+    addr: U16,
 }
 
 impl WriteFpgaMemoryPayload {
@@ -36,6 +36,11 @@ impl WriteFpgaMemoryPayload {
             (PAYLOAD_BYTES - size_of::<Self>()) / size_of::<u16>(),
         )?;
         Ok(Self { addr: addr.into() })
+    }
+
+    #[must_use]
+    pub const fn addr(&self) -> u16 {
+        self.addr.get()
     }
 
     pub fn parse(payload: &[u8]) -> Result<(Self, &[u8]), Error> {
@@ -52,8 +57,8 @@ impl WriteFpgaMemoryPayload {
 #[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned, Clone, Copy, Debug)]
 #[repr(C)]
 pub struct ReadFpgaMemoryPayload {
-    pub addr: U16,
-    pub count: U16,
+    addr: U16,
+    count: U16,
 }
 
 impl ReadFpgaMemoryPayload {
@@ -64,6 +69,16 @@ impl ReadFpgaMemoryPayload {
         };
         p.check()?;
         Ok(p)
+    }
+
+    #[must_use]
+    pub const fn addr(&self) -> u16 {
+        self.addr.get()
+    }
+
+    #[must_use]
+    pub const fn count(&self) -> u16 {
+        self.count.get()
     }
 
     pub fn parse(payload: &[u8]) -> Result<Self, Error> {

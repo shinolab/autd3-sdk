@@ -6,7 +6,7 @@ use crate::proto::Error;
 
 pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
     let (p, data) = WriteModPayload::parse(payload)?;
-    fpga::write_ram(port, &MOD_RAM, p.bank.as_u8(), p.offset.get() / 2, data);
+    fpga::write_ram(port, &MOD_RAM, p.bank().as_u8(), p.offset() / 2, data);
     Ok(())
 }
 

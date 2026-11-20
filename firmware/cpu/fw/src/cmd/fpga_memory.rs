@@ -7,7 +7,7 @@ use crate::proto::{Error, REPLY_DATA_BYTES_MAX, ReplyData};
 pub(crate) fn write<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
     let (p, data) = WriteFpgaMemoryPayload::parse(payload)?;
     port.memory_barrier();
-    for (addr, word) in (p.addr.get()..=u16::MAX).zip(fpga::le_words(data, 0)) {
+    for (addr, word) in (p.addr()..=u16::MAX).zip(fpga::le_words(data, 0)) {
         port.fpga_write(addr, word);
         port.memory_barrier();
     }
@@ -17,8 +17,8 @@ pub(crate) fn write<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> 
 pub(crate) fn read<P: Port>(port: &mut P, payload: &[u8]) -> Result<ReplyData, Error> {
     let p = ReadFpgaMemoryPayload::parse(payload)?;
     let mut data = [0; REPLY_DATA_BYTES_MAX];
-    let len = usize::from(p.count.get()) * size_of::<u16>();
-    for (addr, word) in (p.addr.get()..=u16::MAX).zip(data[..len].as_chunks_mut::<2>().0) {
+    let len = usize::from(p.count()) * size_of::<u16>();
+    for (addr, word) in (p.addr()..=u16::MAX).zip(data[..len].as_chunks_mut::<2>().0) {
         *word = port.fpga_read(addr).to_le_bytes();
     }
     Ok(ReplyData::from_slice(&data[..len]))
@@ -26,8 +26,6 @@ pub(crate) fn read<P: Port>(port: &mut P, payload: &[u8]) -> Result<ReplyData, E
 
 #[cfg(all(test, not(loom)))]
 mod tests {
-    use zerocopy::little_endian::U16;
-
     use autd3_cpu_wire::payload::{ReadFpgaMemoryPayload, WriteFpgaMemoryPayload};
 
     use crate::fpga_params::{
@@ -43,22 +41,18 @@ mod tests {
     }
 
     fn write(addr: u16, words: &[u16]) -> Frame {
-        let data: std::vec::Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
-        Frame::from_parts(
-            Cmd::WriteFpgaMemory,
-            &WriteFpgaMemoryPayload { addr: addr.into() },
-            &data,
-        )
+        let payload: std::vec::Vec<u8> = addr
+            .to_le_bytes()
+            .into_iter()
+            .chain(words.iter().flat_map(|w| w.to_le_bytes()))
+            .collect();
+        Frame::from_payload(Cmd::WriteFpgaMemory, payload.as_slice())
     }
 
     fn read(addr: u16, count: u16) -> Frame {
-        Frame::from_payload(
-            Cmd::ReadFpgaMemory,
-            &ReadFpgaMemoryPayload {
-                addr: addr.into(),
-                count: count.into(),
-            },
-        )
+        let [addr_lo, addr_hi] = addr.to_le_bytes();
+        let [count_lo, count_hi] = count.to_le_bytes();
+        Frame::from_payload(Cmd::ReadFpgaMemory, &[addr_lo, addr_hi, count_lo, count_hi])
     }
 
     fn reply_words(h: &Harness) -> std::vec::Vec<u16> {
@@ -146,14 +140,7 @@ mod tests {
             read(ADDR_CTL_FLAG, 0),
             read(ADDR_CTL_FLAG, 21),
             short_read,
-            Frame::from_parts(
-                Cmd::ReadFpgaMemory,
-                &ReadFpgaMemoryPayload {
-                    addr: U16::ZERO,
-                    count: U16::new(1),
-                },
-                &[0],
-            ),
+            Frame::from_payload(Cmd::ReadFpgaMemory, &[0, 0, 1, 0, 0]),
         ];
         for (i, frame) in frames.iter().enumerate() {
             h.deliver(frame);

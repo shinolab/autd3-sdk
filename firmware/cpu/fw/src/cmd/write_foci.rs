@@ -6,16 +6,12 @@ use crate::proto::Error;
 
 pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
     let (p, data) = WriteFociPayload::parse(payload)?;
-    fpga::write_ram(port, &EMISSION_RAM, p.bank.as_u8(), p.offset.get(), data);
+    fpga::write_ram(port, &EMISSION_RAM, p.bank().as_u8(), p.offset(), data);
     Ok(())
 }
 
 #[cfg(all(test, not(loom)))]
 mod tests {
-    use autd3_cpu_wire::PatternBank;
-    use zerocopy::little_endian::U32;
-
-    use super::WriteFociPayload;
     use crate::fpga::FPGA_PAGE_WORDS;
     use crate::fpga_params::{ADDR_PATTERN_MEM_WR_BANK, ADDR_PATTERN_MEM_WR_PAGE};
     use crate::proto::{Cmd, EMISSION_RAM_WORDS, Error};
@@ -89,14 +85,9 @@ mod tests {
         h.deliver(&write_foci_buffer(invalid_bank(), 0, &[0x0001]));
         assert_eq!(h.status(), Error::InvalidPayload);
 
-        let odd = WriteFociPayload {
-            bank: PatternBank::B0,
-            offset: U32::new(0),
-        };
-        h.deliver(&Frame::from_parts(
+        h.deliver(&Frame::from_payload(
             Cmd::WriteFociBuffer,
-            &odd,
-            &[0x01, 0x02, 0x03],
+            &[0, 0, 0, 0, 0, 0x01, 0x02, 0x03],
         ));
         assert_eq!(h.status(), Error::InvalidPayload);
         assert_eq!(h.emission_word(0, 0), 0);

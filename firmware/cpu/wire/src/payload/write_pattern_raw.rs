@@ -9,9 +9,9 @@ use crate::{Error, PatternBank};
 #[derive(TryFromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct WritePatternRawPayload {
-    pub bank: PatternBank,
-    pub count: u8,
-    pub index: U16,
+    bank: PatternBank,
+    count: u8,
+    index: U16,
 }
 
 impl WritePatternRawPayload {
@@ -40,6 +40,16 @@ impl WritePatternRawPayload {
             count: count as u8,
             index: U16::new(index as u16),
         })
+    }
+
+    #[must_use]
+    pub const fn bank(&self) -> PatternBank {
+        self.bank
+    }
+
+    #[must_use]
+    pub const fn index(&self) -> u16 {
+        self.index.get()
     }
 
     pub fn parse(payload: &[u8]) -> Result<(Self, &[[u8; PATTERN_RAW_DATA_LEN]]), Error> {

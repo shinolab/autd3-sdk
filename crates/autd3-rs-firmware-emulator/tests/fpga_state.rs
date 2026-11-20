@@ -15,7 +15,6 @@ use autd3_cpu_wire::{ModulationBank, PatternBank};
 use autd3_rs_core::protocol::Cmd;
 use autd3_rs_firmware_emulator::Device;
 use zerocopy::IntoBytes;
-use zerocopy::little_endian::{U16, U32};
 
 use common::{NUM_TRANSDUCERS, frame};
 use modulation::{activate_modulation_bank, config_modulation};
@@ -28,19 +27,12 @@ const BIT_TRANSITION_PENDING: u8 = FpgaStateFlags::PATTERN_TRANSITION_PENDING.bi
     | FpgaStateFlags::MOD_TRANSITION_PENDING.bits();
 
 fn write_modulation(bank: ModulationBank, samples: &[u8]) -> Vec<u8> {
-    let header = WriteModPayload {
-        bank,
-        offset: U32::new(0),
-    };
+    let header = WriteModPayload::new(bank, 0, samples.len()).unwrap();
     [header.as_bytes(), samples].concat()
 }
 
 fn write_pattern(bank: PatternBank) -> Vec<u8> {
-    let header = WritePatternRawPayload {
-        bank,
-        count: 1,
-        index: U16::new(0),
-    };
+    let header = WritePatternRawPayload::new(bank, 1, 0).unwrap();
     [header.as_bytes(), &[0u8; NUM_TRANSDUCERS * 2]].concat()
 }
 

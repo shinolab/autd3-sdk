@@ -63,11 +63,11 @@ impl PhaseDepth {
 #[derive(TryFromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct WritePatternPhasePayload {
-    pub bank: PatternBank,
-    pub depth: PhaseDepth,
-    pub count: u8,
-    pub intensity: u8,
-    pub index: U16,
+    bank: PatternBank,
+    depth: PhaseDepth,
+    count: u8,
+    intensity: u8,
+    index: U16,
 }
 
 impl WritePatternPhasePayload {
@@ -105,6 +105,26 @@ impl WritePatternPhasePayload {
             intensity,
             index: U16::new(index as u16),
         })
+    }
+
+    #[must_use]
+    pub const fn bank(&self) -> PatternBank {
+        self.bank
+    }
+
+    #[must_use]
+    pub const fn depth(&self) -> PhaseDepth {
+        self.depth
+    }
+
+    #[must_use]
+    pub const fn intensity(&self) -> u8 {
+        self.intensity
+    }
+
+    #[must_use]
+    pub const fn index(&self) -> u16 {
+        self.index.get()
     }
 
     pub fn parse(payload: &[u8]) -> Result<(Self, &[u8]), Error> {

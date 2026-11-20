@@ -12,7 +12,6 @@ use autd3_rs_core::protocol::{Cmd, DeviceErrorCode};
 use autd3_rs_core::value::{Intensity, Phase};
 use autd3_rs_firmware_emulator::Device;
 use zerocopy::IntoBytes;
-use zerocopy::little_endian::U16;
 
 use common::{NUM_TRANSDUCERS, frame};
 use pattern::{activate_pattern_bank, config_pattern};
@@ -20,15 +19,10 @@ use pattern::{activate_pattern_bank, config_pattern};
 const BANK: PatternBank = PatternBank::B1;
 
 fn write_phase_header(depth: PhaseDepth, count: u8, intensity: u8) -> Vec<u8> {
-    WritePatternPhasePayload {
-        bank: BANK,
-        depth,
-        count,
-        intensity,
-        index: U16::new(0),
-    }
-    .as_bytes()
-    .to_vec()
+    WritePatternPhasePayload::new(BANK, depth, count.into(), intensity, 0)
+        .unwrap()
+        .as_bytes()
+        .to_vec()
 }
 
 fn send_phase_pattern(write: &[u8]) -> Device {

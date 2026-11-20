@@ -2,20 +2,18 @@ mod common;
 #[path = "common/modulation.rs"]
 mod modulation;
 
-use core::num::NonZeroU8;
-
 use autd3_cpu_wire::ModulationBank::{self, B0, B1};
 use autd3_cpu_wire::PatternBank;
 use autd3_cpu_wire::fpga_params::REP_INFINITE;
 use autd3_cpu_wire::payload::{
-    ActivatePatternBankPayload, ConfigPatternPayload, EmissionType,
-    SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY, SILENCER_DEFAULT_COMPLETION_STEPS_PHASE,
-    SILENCER_DEFAULT_UPDATE_RATE, SilencerFlags, SilencerPayload, TransitionModeKind,
+    ActivatePatternBankPayload, EmissionType, SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY,
+    SILENCER_DEFAULT_COMPLETION_STEPS_PHASE, SILENCER_DEFAULT_UPDATE_RATE, SilencerFlags,
+    TransitionModeKind,
 };
 use autd3_rs_core::protocol::{Cmd, DeviceErrorCode};
 use autd3_rs_firmware_emulator::Device;
 use zerocopy::IntoBytes;
-use zerocopy::little_endian::{U16, U32, U64};
+use zerocopy::little_endian::U64;
 
 use common::{NUM_TRANSDUCERS, frame};
 
@@ -63,16 +61,15 @@ impl Host {
     }
 
     fn config_pattern(&mut self, bank: PatternBank, divider: u16) -> DeviceErrorCode {
-        let payload = ConfigPatternPayload {
-            bank,
-            emission_type: EmissionType::Raw,
-            divider: U16::new(divider),
-            size: U32::new(1),
-            num_foci: NonZeroU8::new(0),
-            sound_speed: U16::new(0),
-            rep: U16::new(REP_INFINITE),
-        };
-        self.send(Cmd::ConfigPattern, payload.as_bytes())
+        let payload: Vec<u8> = [bank.as_u8(), EmissionType::Raw.as_u8()]
+            .into_iter()
+            .chain(divider.to_le_bytes())
+            .chain(1u32.to_le_bytes())
+            .chain([0])
+            .chain(0u16.to_le_bytes())
+            .chain(REP_INFINITE.to_le_bytes())
+            .collect();
+        self.send(Cmd::ConfigPattern, &payload)
     }
 
     fn activate_pattern_bank(
@@ -94,14 +91,14 @@ impl Host {
         intensity: u16,
         phase: u16,
     ) -> DeviceErrorCode {
-        let payload = SilencerPayload {
-            flag: flags.bits(),
-            update_rate_intensity: U16::new(SILENCER_DEFAULT_UPDATE_RATE),
-            update_rate_phase: U16::new(SILENCER_DEFAULT_UPDATE_RATE),
-            completion_steps_intensity: U16::new(intensity),
-            completion_steps_phase: U16::new(phase),
-        };
-        self.send(Cmd::SetSilencer, payload.as_bytes())
+        let payload: Vec<u8> = [flags.bits()]
+            .into_iter()
+            .chain(SILENCER_DEFAULT_UPDATE_RATE.to_le_bytes())
+            .chain(SILENCER_DEFAULT_UPDATE_RATE.to_le_bytes())
+            .chain(intensity.to_le_bytes())
+            .chain(phase.to_le_bytes())
+            .collect();
+        self.send(Cmd::SetSilencer, &payload)
     }
 
     fn assert_silencer_at_default(&self) {

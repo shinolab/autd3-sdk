@@ -12,10 +12,8 @@ use crate::proto::Error;
 pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
     let p = SilencerPayload::parse(payload)?;
     let flag = p.flags();
-    let update_rate_intensity = p.update_rate_intensity.get();
-    let update_rate_phase = p.update_rate_phase.get();
-    let completion_steps_intensity = p.completion_steps_intensity.get();
-    let completion_steps_phase = p.completion_steps_phase.get();
+    let (update_rate_intensity, update_rate_phase) = p.update_rate();
+    let (completion_steps_intensity, completion_steps_phase) = p.completion_steps();
 
     fpga::write_ctl(
         port,

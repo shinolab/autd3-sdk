@@ -36,7 +36,6 @@ mod tests {
 
     use autd3_cpu_wire::config::{FpgaBusWait, PtpConfig};
     use zerocopy::IntoBytes;
-    use zerocopy::little_endian::{U16, U32};
 
     use super::{CpuConfig, SetCpuConfigPayload};
 
@@ -52,23 +51,19 @@ mod tests {
 
     #[test]
     fn invalid_values_are_rejected_without_changing_anything() {
-        let valid = SetCpuConfigPayload {
-            sync_guard_ns: U32::new(1),
-            ..SetCpuConfigPayload::encode(&CpuConfig::DEFAULT).unwrap()
-        };
-        let rejected = [
-            SetCpuConfigPayload {
-                ptp_sync_interval_ms: U16::new(0),
-                ..valid
-            },
-            SetCpuConfigPayload {
-                ptp_lock_samples: U16::new(0),
-                ..valid
-            },
-        ];
+        let valid = SetCpuConfigPayload::encode(&CpuConfig {
+            sync_guard: Duration::from_nanos(1),
+            ..CpuConfig::DEFAULT
+        })
+        .unwrap();
+        let rejected = [4, 12].map(|zeroed_u16_at| {
+            let mut payload = valid.as_bytes().to_vec();
+            payload[zeroed_u16_at..zeroed_u16_at + 2].fill(0);
+            payload
+        });
         let mut h = Harness::new();
         for payload in &rejected {
-            h.deliver(&Frame::from_payload(Cmd::SetCpuConfig, payload));
+            h.deliver(&Frame::from_payload(Cmd::SetCpuConfig, payload.as_slice()));
             assert_eq!(h.status(), Error::InvalidPayload);
             assert_eq!(h.cpu.config(), CpuConfig::DEFAULT);
             assert_eq!(h.port.ptp_config, None);
