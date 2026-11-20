@@ -22,7 +22,6 @@ def loose(value: object) -> Any:
 def test_defaults_follow_the_spec() -> None:
     option = autd3.TransportOption()
     assert option.iface == autd3.Interface.Auto
-    assert option.open_timeout == autd3.Duration.from_secs(40)
     assert option.send_buffer_bytes == 8192
     assert option.sync_on_open is True
     assert option.heartbeat_interval is None
@@ -31,12 +30,8 @@ def test_defaults_follow_the_spec() -> None:
 
 
 def test_fields_round_trip() -> None:
-    option = autd3.TransportOption(
-        iface="eth1",
-        open_timeout=autd3.Duration.from_secs(3),
-    )
+    option = autd3.TransportOption(iface="eth1")
     assert option.iface == autd3.Interface.Name("eth1")
-    assert option.open_timeout == autd3.Duration.from_secs(3)
     assert autd3.TransportOption(send_buffer_bytes=None).send_buffer_bytes is None
     assert autd3.TransportOption(send_buffer_bytes=65536).send_buffer_bytes == 65536
     interval = autd3.TransportOption(heartbeat_interval=autd3.Duration.from_millis(10)).heartbeat_interval
@@ -103,12 +98,6 @@ def test_device_status_is_read_from_a_response() -> None:
 def test_fpga_state_has_no_stm_mode_query() -> None:
     assert callable(getattr(autd3.FpgaState, "is_pattern_mode", None))
     assert not hasattr(autd3.FpgaState, "is_stm_mode")
-
-
-def test_a_zero_open_timeout_is_constructible_and_a_non_duration_is_rejected() -> None:
-    assert autd3.TransportOption(open_timeout=autd3.Duration.from_millis(0)).open_timeout == autd3.Duration.from_millis(0)
-    with pytest.raises(TypeError):
-        autd3.TransportOption(open_timeout=loose(None))
 
 
 def test_the_client_hides_the_low_level_socket() -> None:

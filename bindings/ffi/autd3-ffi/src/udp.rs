@@ -10,7 +10,6 @@ use autd3_rs::udp::TransportOption;
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Autd3TransportOption {
-    pub open_timeout_ns: u64,
     pub send_buffer_bytes: u64,
     pub sync_on_open: bool,
     pub has_heartbeat_interval: bool,
@@ -20,7 +19,6 @@ pub struct Autd3TransportOption {
 impl From<&TransportOption> for Autd3TransportOption {
     fn from(option: &TransportOption) -> Self {
         Self {
-            open_timeout_ns: to_ns(option.open_timeout),
             send_buffer_bytes: option
                 .send_buffer_bytes
                 .map_or(0, |bytes| bytes.get() as u64),
@@ -62,7 +60,6 @@ pub(crate) unsafe fn to_transport_option(
     })?;
     Ok(TransportOption {
         iface,
-        open_timeout: Duration::from_nanos(option.open_timeout_ns),
         send_buffer_bytes: NonZeroUsize::new(send_buffer_bytes),
         sync_on_open: option.sync_on_open,
         heartbeat_interval: option
@@ -91,7 +88,6 @@ mod tests {
 
     fn default_option() -> Autd3TransportOption {
         let mut option = Autd3TransportOption {
-            open_timeout_ns: 0,
             send_buffer_bytes: 0,
             sync_on_open: false,
             has_heartbeat_interval: true,
@@ -127,7 +123,6 @@ mod tests {
     #[test]
     fn every_field_reaches_the_rust_option() {
         let option = Autd3TransportOption {
-            open_timeout_ns: 1,
             send_buffer_bytes: 0,
             sync_on_open: false,
             has_heartbeat_interval: true,
@@ -137,7 +132,6 @@ mod tests {
             unsafe { to_transport_option(0, std::ptr::null(), option) },
             Ok(TransportOption {
                 iface: Interface::Auto,
-                open_timeout: Duration::from_nanos(1),
                 send_buffer_bytes: None,
                 sync_on_open: false,
                 heartbeat_interval: Some(Duration::from_nanos(2)),

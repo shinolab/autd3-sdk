@@ -737,7 +737,7 @@ def test_device_accessors() -> None:
 
 def test_transport_options_construct() -> None:
     autd3.TransportOption()
-    autd3.TransportOption(iface="eth0", open_timeout=autd3.Duration.from_millis(2))
+    autd3.TransportOption(iface="eth0")
 
 
 def test_loop_behavior_and_transition_mode() -> None:

@@ -86,7 +86,6 @@ async fn connect(connection: &Connection, num_devices: usize) -> Result<Connecte
             .interface
             .as_deref()
             .map_or(Interface::Auto, |name| Interface::Name(name.to_owned())),
-        open_timeout: connection.open_timeout.unwrap_or(default.open_timeout),
         sync_on_open: false,
         ..default
     };

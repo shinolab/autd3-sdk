@@ -80,8 +80,8 @@ namespace AUTD3.Tests
         [Fact]
         public void InitializerKeepsTheOtherDefaults()
         {
-            var option = new TransportOption { OpenTimeout = TimeSpan.FromMilliseconds(4) };
-            Assert.Equal(TimeSpan.FromMilliseconds(4), option.OpenTimeout);
+            var option = new TransportOption { SendBufferBytes = 4096 };
+            Assert.Equal(4096ul, option.SendBufferBytes);
             Assert.True(option.SyncOnOpen);
 
             var gs = new GsOption { Repeat = 5 };
@@ -181,7 +181,6 @@ namespace AUTD3.Tests
         [Fact]
         public void TheDefaultValueCarriesTheRustDefaults()
         {
-            Assert.Equal(TimeSpan.FromSeconds(40), default(TransportOption).OpenTimeout);
             Assert.Equal(new PtpConfig().SyncInterval, default(CpuConfig).Ptp.SyncInterval);
             Assert.NotEqual(TimeSpan.Zero, default(PtpConfig).SyncInterval);
             Assert.Equal((byte)0xFF, default(SineOption).Amplitude);
