@@ -8,6 +8,12 @@ pub enum HoloError {
     NoFoci,
     #[error("dst has {got} device slots but the geometry has {expected} devices")]
     DstDeviceCountMismatch { got: usize, expected: usize },
+    #[error("dst has {got} transducers for device {device} but the geometry has {expected}")]
+    DstTransducerCountMismatch {
+        device: usize,
+        got: usize,
+        expected: usize,
+    },
     #[error("intensities has {got} device slots but the geometry has {expected} devices")]
     IntensityDeviceCountMismatch { got: usize, expected: usize },
     #[error(
