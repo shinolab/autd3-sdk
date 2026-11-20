@@ -5,6 +5,7 @@ use autd3_rs_core::value::Phase;
 use crate::each::fill_each_transducer;
 use crate::focus::propagation_phase;
 
+#[inline]
 fn bessel_phase(
     position: Point3<f32>,
     apex: Point3<f32>,
