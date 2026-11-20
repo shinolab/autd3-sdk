@@ -190,7 +190,11 @@ impl Cpu {
             return Err(Error::UpdateImageInvalid);
         }
         let header = ImageHeader::new_trial(generation, length, crc32);
-        slot_write(port, slot, 0, header.as_bytes())?;
+        let (identity, status) = header
+            .as_bytes()
+            .split_at(IMAGE_HEADER_STATUS_OFFSET as usize);
+        slot_write(port, slot, IMAGE_HEADER_STATUS_OFFSET, status)?;
+        slot_write(port, slot, 0, identity)?;
         self.update.state.set(State::Committed);
         Ok(())
     }
@@ -1120,13 +1124,17 @@ mod tests {
         assert_eq!(h.status(), Error::UpdateFlash);
     }
 
-    #[test]
-    fn a_header_write_failure_fails_the_commit_and_leaves_the_slot_invalid() {
+    #[rstest]
+    #[case(0)]
+    #[case(1)]
+    fn a_header_write_failure_fails_the_commit_and_leaves_the_slot_invalid(
+        #[case] writes_before_failure: usize,
+    ) {
         let (mut h, _) = running_from_slot_a();
         let img = image(300, 33);
         h.deliver(&begin(img.len() as u32, crc32(&img)));
         send_image(&mut h, &img);
-        h.port.flash_write_fail_after = Some(0);
+        h.port.flash_write_fail_after = Some(writes_before_failure);
         h.deliver(&Frame::new(Cmd::UpdateCommit));
         assert_eq!(h.status(), Error::UpdateFlash);
         assert!(!header_of(&h, Slot::B).is_plausible());
