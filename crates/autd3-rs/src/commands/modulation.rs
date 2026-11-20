@@ -36,7 +36,14 @@ impl Command for Modulation<'_> {
         if self.data.is_empty() {
             return Err(PayloadError::ModulationDataEmpty.into());
         }
+        let mut padded = [0u8; WriteModulationBuffer::MAX_LEN];
         for (i, data) in self.data.chunks(WriteModulationBuffer::MAX_LEN).enumerate() {
+            let data = if data.len().is_multiple_of(2) {
+                data
+            } else {
+                padded[..data.len()].copy_from_slice(data);
+                &padded[..=data.len()]
+            };
             expansion.push(WriteModulationBuffer {
                 bank: self.bank,
                 offset: i * WriteModulationBuffer::MAX_LEN,
@@ -129,6 +136,14 @@ mod tests {
             &payload(&frames, 2, 0)[3..7],
             &u32::try_from(data.len()).unwrap().to_le_bytes()
         );
+    }
+
+    #[test]
+    fn modulation_pads_an_odd_tail_to_a_word() {
+        let data = [0x11u8, 0x22, 0x33];
+        let frames = build(1, Modulation::new(SamplingConfig::FREQ_4K, &data)).unwrap();
+        assert_eq!(&payload(&frames, 0, 0)[5..], &[0x11, 0x22, 0x33, 0x00]);
+        assert_eq!(&payload(&frames, 1, 0)[3..7], &3u32.to_le_bytes());
     }
 
     #[test]

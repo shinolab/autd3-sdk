@@ -61,20 +61,20 @@ mod tests {
         let op = WriteModulationBuffer {
             bank: ModulationBank::B1,
             offset: 0x0102,
-            data: &[0xAA, 0xBB, 0xCC],
+            data: &[0xAA, 0xBB, 0xCC, 0xDD],
         };
 
         let (cmd, out) = encode(&op).unwrap();
 
         assert_eq!(
             cmd,
-            (Cmd::WriteModulationBuffer, size_of::<WriteModPayload>() + 3)
+            (Cmd::WriteModulationBuffer, size_of::<WriteModPayload>() + 4)
         );
         assert_eq!(out[0], 1);
         assert_eq!(&out[1..5], &0x0102u32.to_le_bytes());
         assert_eq!(
-            &out[size_of::<WriteModPayload>()..][..3],
-            &[0xAA, 0xBB, 0xCC]
+            &out[size_of::<WriteModPayload>()..][..4],
+            &[0xAA, 0xBB, 0xCC, 0xDD]
         );
     }
 
@@ -131,12 +131,18 @@ mod tests {
         };
         assert!(matches!(write(1, &[0; 2]), Err(Error::InvalidPayload(_))));
         assert!(matches!(
-            write(MOD_BUFFER_SAMPLES - 2, &[0; 3]),
+            write(MOD_BUFFER_SAMPLES - 2, &[0; 4]),
             Err(Error::InvalidPayload(_))
         ));
         assert!(matches!(
             write(usize::MAX - 1, &[0; 2]),
             Err(Error::InvalidPayload(_))
+        ));
+        assert!(matches!(
+            write(0, &[0; 3]),
+            Err(Error::InvalidPayload(PayloadError::Build(
+                autd3_cpu_wire::payload::PayloadBuildError::ModulationLenNotEven { len: 3 }
+            )))
         ));
     }
 }

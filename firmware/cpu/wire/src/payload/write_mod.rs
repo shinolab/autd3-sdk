@@ -18,6 +18,9 @@ impl WriteModPayload {
         if !offset.is_multiple_of(2) {
             return Err(PayloadBuildError::ModulationOffsetNotEven { offset });
         }
+        if !len.is_multiple_of(2) {
+            return Err(PayloadBuildError::ModulationLenNotEven { len });
+        }
         let end = offset.saturating_add(len);
         if end > MOD_BUFFER_SAMPLES {
             return Err(PayloadBuildError::ModulationWriteExceedsCapacity {
@@ -46,6 +49,7 @@ impl WriteModPayload {
         let (p, data) = try_read_header::<Self>(payload)?;
         let offset = p.offset.get();
         if !offset.is_multiple_of(2)
+            || !data.len().is_multiple_of(2)
             || data.len() > PAYLOAD_BYTES - core::mem::size_of::<Self>()
             || offset.saturating_add(data.len() as u32) > MOD_BUFFER_SAMPLES as u32
         {
@@ -92,9 +96,21 @@ mod tests {
     }
 
     #[rstest]
-    #[case(MOD_BUFFER_SAMPLES - 2, 3, MOD_BUFFER_SAMPLES + 1)]
+    #[case(1)]
+    #[case(3)]
+    fn an_odd_length_is_rejected(#[case] len: usize) {
+        assert_eq!(
+            WriteModPayload::new(ModulationBank::B0, 0, len).err(),
+            Some(PayloadBuildError::ModulationLenNotEven { len })
+        );
+        let frame = [0u8; HEADER + 3];
+        assert!(WriteModPayload::parse(&frame[..HEADER + len]).is_err());
+    }
+
+    #[rstest]
+    #[case(MOD_BUFFER_SAMPLES - 2, 4, MOD_BUFFER_SAMPLES + 2)]
     #[case(MOD_BUFFER_SAMPLES + 2, 0, MOD_BUFFER_SAMPLES + 2)]
-    #[case(2, usize::MAX, usize::MAX)]
+    #[case(2, usize::MAX - 1, usize::MAX)]
     fn a_write_past_the_buffer_is_rejected(
         #[case] offset: usize,
         #[case] len: usize,

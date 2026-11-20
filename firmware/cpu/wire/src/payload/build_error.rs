@@ -9,6 +9,8 @@ pub enum PayloadBuildError {
     ModulationSizeOutOfRange { size: usize, min: usize, max: usize },
     #[error("modulation offset {offset} must be even (word-write-only RAM)")]
     ModulationOffsetNotEven { offset: usize },
+    #[error("modulation write length {len} must be even (word-write-only RAM)")]
+    ModulationLenNotEven { len: usize },
     #[error("modulation write [{offset}, {end}) exceeds buffer capacity {capacity}")]
     ModulationWriteExceedsCapacity {
         offset: usize,

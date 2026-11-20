@@ -64,6 +64,8 @@ modulation の計算には幾つかの[ヘルパ関数](/autd3-sdk/api/compute/m
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />
 
+`data` が奇数長のとき, `Modulation` は最後のチャンクの末尾に 0 を 1 つ足して書き込む.
+
 ## Example
 
 <CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />
