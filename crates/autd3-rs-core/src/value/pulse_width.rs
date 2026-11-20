@@ -10,7 +10,11 @@ pub const PULSE_WIDTH_PERIOD: u16 =
 pub enum PulseWidthError {
     #[error("pulse width ({0}) is out of range [0, {n})", n = PULSE_WIDTH_PERIOD)]
     PulseWidthOutOfRange(u16),
-    #[error("duty ratio ({0}) is out of range [0, 1)")]
+    #[error(
+        "duty ratio ({0}) is out of range [0, {max}/{n})",
+        max = f32::from(PULSE_WIDTH_PERIOD) - 0.5,
+        n = PULSE_WIDTH_PERIOD
+    )]
     DutyRatioOutOfRange(f32),
 }
 
@@ -28,10 +32,11 @@ impl PulseWidth {
     }
 
     pub fn from_duty(duty: f32) -> Result<Self, PulseWidthError> {
-        if !(0.0..1.0).contains(&duty) {
+        let pulse_width = (duty * f32::from(PULSE_WIDTH_PERIOD)).round();
+        if !(0.0..1.0).contains(&duty) || pulse_width >= f32::from(PULSE_WIDTH_PERIOD) {
             return Err(PulseWidthError::DutyRatioOutOfRange(duty));
         }
-        Self::new((duty * f32::from(PULSE_WIDTH_PERIOD)).round() as u16)
+        Ok(Self(pulse_width as u16))
     }
 
     #[must_use]
@@ -77,6 +82,14 @@ mod tests {
         assert_eq!(
             PulseWidth::from_duty(1.0),
             Err(PulseWidthError::DutyRatioOutOfRange(1.0))
+        );
+        assert_eq!(
+            PulseWidth::from_duty(0.9995),
+            Err(PulseWidthError::DutyRatioOutOfRange(0.9995))
+        );
+        assert_eq!(
+            PulseWidthError::DutyRatioOutOfRange(0.9995).to_string(),
+            "duty ratio (0.9995) is out of range [0, 511.5/512)"
         );
     }
 }
