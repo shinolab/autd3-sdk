@@ -63,7 +63,7 @@ impl GpioOut {
             GpioOut::PatternBank => (GpioOutType::PatternBank, 0),
             GpioOut::PatternIdx(idx) => (GpioOutType::PatternIdx, idx as u64),
             GpioOut::IsStmMode => (GpioOutType::IsStmMode, 0),
-            GpioOut::SysTimeEq(t) => (GpioOutType::SysTimeEq, ((t.sys_time() / 3125) << 6) >> 9),
+            GpioOut::SysTimeEq(t) => (GpioOutType::SysTimeEq, t.fpga_ticks() >> 9),
             GpioOut::SyncDiff => (GpioOutType::SyncDiff, 0),
             GpioOut::PwmOut(tr) => (GpioOutType::PwmOut, tr as u64),
             GpioOut::Direct(on) => (GpioOutType::Direct, on as u64),

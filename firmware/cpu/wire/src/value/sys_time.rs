@@ -15,6 +15,11 @@ impl SysTime {
     pub const fn sys_time(self) -> u64 {
         self.0
     }
+
+    #[must_use]
+    pub const fn fpga_ticks(self) -> u64 {
+        self.0 / 3125 * 64
+    }
 }
 
 impl core::ops::Add<Duration> for SysTime {

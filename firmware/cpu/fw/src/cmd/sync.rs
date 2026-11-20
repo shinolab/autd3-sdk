@@ -1,12 +1,14 @@
 use autd3_cpu_wire::udp::SYNC_CYCLE_NS;
+use autd3_cpu_wire::value::SysTime;
 
 use crate::cmd::cpu_config::CpuConfig;
-use crate::fpga::{self, sys_time_ticks};
+use crate::fpga;
 use crate::fpga_params::{ADDR_SYNC_TIME_0, CtlFlags, SYNC_CYCLE_TICKS};
 use crate::port::Port;
 use crate::proto::Error;
 
-const _: () = assert!(sys_time_ticks(SYNC_CYCLE_NS as u64) == SYNC_CYCLE_TICKS as u64);
+const _: () =
+    assert!(SysTime::from_nanos(SYNC_CYCLE_NS as u64).fpga_ticks() == SYNC_CYCLE_TICKS as u64);
 
 pub(crate) fn handle<P: Port>(port: &mut P, config: &CpuConfig) -> Result<(), Error> {
     let next_edge = port
@@ -25,7 +27,11 @@ pub(crate) fn handle<P: Port>(port: &mut P, config: &CpuConfig) -> Result<(), Er
             return Err(Error::SyncNotReady);
         }
     }
-    fpga::write_u64(port, ADDR_SYNC_TIME_0, sys_time_ticks(next_edge));
+    fpga::write_u64(
+        port,
+        ADDR_SYNC_TIME_0,
+        SysTime::from_nanos(next_edge).fpga_ticks(),
+    );
     fpga::set_and_wait_update(port, CtlFlags::SYNC_SET, fpga::FPGA_WAIT_UPDATE_MAX_POLLS)?;
     let latched_at = port.sys_time().ok_or(Error::SyncNotReady)?;
     if latched_at < next_edge {

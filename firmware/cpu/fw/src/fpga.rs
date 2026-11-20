@@ -3,6 +3,7 @@ use core::time::Duration;
 
 use autd3_cpu_wire::config::FpgaConfig;
 use autd3_cpu_wire::cpu_params::PWE_DEFAULT_TABLE;
+use autd3_cpu_wire::value::SysTime;
 
 use crate::fpga_params::{
     ADDR_CTL_FLAG, ADDR_DEBUG_VALUE0_0, ADDR_FUNCTION_BITS, ADDR_MOD_CYCLE0, ADDR_MOD_FREQ_DIV0,
@@ -27,17 +28,12 @@ pub const FPGA_PAGE_WORDS: u32 = 16384;
 pub use autd3_cpu_wire::payload::{EmissionType, TransitionModeKind};
 
 #[must_use]
-pub const fn sys_time_ticks(ns: u64) -> u64 {
-    ns / 3125 * 64
-}
-
-#[must_use]
 pub fn transition_register_value(
     transition_mode: TransitionModeKind,
     transition_value: u64,
 ) -> u64 {
     if transition_mode == TransitionModeKind::SysTime {
-        sys_time_ticks(transition_value)
+        SysTime::from_nanos(transition_value).fpga_ticks()
     } else {
         transition_value
     }
