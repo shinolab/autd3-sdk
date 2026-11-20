@@ -51,11 +51,10 @@ mod tests {
 
         assert_eq!(encoded, ENCODED);
         assert_eq!(payload[0], 1);
-        assert_eq!(payload[1], 0);
-        assert_eq!(&payload[2..4], &10u16.to_le_bytes());
-        assert_eq!(&payload[4..8], &4000u32.to_le_bytes());
-        assert_eq!(&payload[8..10], &9u16.to_le_bytes());
-        assert!(payload[10..].iter().all(|&b| b == 0));
+        assert_eq!(&payload[1..3], &10u16.to_le_bytes());
+        assert_eq!(&payload[3..7], &4000u32.to_le_bytes());
+        assert_eq!(&payload[7..9], &9u16.to_le_bytes());
+        assert!(payload[9..].iter().all(|&b| b == 0));
     }
 
     #[test]

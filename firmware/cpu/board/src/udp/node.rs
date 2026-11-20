@@ -364,7 +364,6 @@ impl Node {
         failsafe_active: bool,
     ) {
         let head = FrameReply {
-            reserved: 0,
             status: state.status.as_u8(),
             flags: self.flags(failsafe_active),
             unit_id: self.unit_id,

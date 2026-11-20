@@ -21,7 +21,6 @@ pub(crate) fn config_pattern(
         divider: U16::new(512),
         size: U32::new(size),
         num_foci: NonZeroU8::new(num_foci),
-        reserved: 0,
         sound_speed: U16::new(sound_speed),
         rep: U16::new(rep),
     }

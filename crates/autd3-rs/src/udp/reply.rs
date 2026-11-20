@@ -51,7 +51,6 @@ mod tests {
 
     fn reply_body(data: &[u8]) -> Vec<u8> {
         let head = FrameReply {
-            reserved: 0,
             status: 3,
             flags: Flags::ASSIGNED,
             unit_id: 2,

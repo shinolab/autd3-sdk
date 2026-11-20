@@ -10,7 +10,6 @@ use crate::{Error, ModulationBank};
 #[repr(C)]
 pub struct WriteModPayload {
     pub bank: ModulationBank,
-    pub reserved: u8,
     pub offset: U32,
 }
 
@@ -29,7 +28,6 @@ impl WriteModPayload {
         }
         Ok(Self {
             bank,
-            reserved: 0,
             offset: U32::new(offset as u32),
         })
     }
@@ -47,7 +45,7 @@ impl WriteModPayload {
     }
 }
 
-assert_layout!(WriteModPayload { bank: 0, reserved: 1, offset: 2 } size 6);
+assert_layout!(WriteModPayload { bank: 0, offset: 1 } size 5);
 
 #[cfg(test)]
 mod tests {

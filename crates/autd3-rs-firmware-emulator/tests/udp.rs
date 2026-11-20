@@ -376,7 +376,6 @@ fn a_frame_runs_on_the_addressed_unit_and_is_answered() {
 
     let (head, data) = answer.frame_reply();
     assert_eq!(answer.src, emulator.device_addr(1));
-    assert_eq!(head.reserved, 0);
     assert_eq!(head.status, 0);
     assert_eq!(head.unit_id, 1);
     assert!(head.flags.contains(Flags::ASSIGNED));

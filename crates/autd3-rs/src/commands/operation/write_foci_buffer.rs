@@ -117,7 +117,7 @@ mod tests {
         );
         assert_eq!(out[0], 1, "bank B1");
         let word_offset = u32::try_from(10 * FOCUS_WORDS).unwrap();
-        assert_eq!(&out[2..6], &word_offset.to_le_bytes());
+        assert_eq!(&out[1..5], &word_offset.to_le_bytes());
         let data = &out[size_of::<WriteFociPayload>()..];
         for (i, point) in points.iter().enumerate() {
             let focus = u64::from_le_bytes(data[i * 8..][..8].try_into().unwrap());
@@ -153,7 +153,7 @@ mod tests {
 
         assert_eq!(cmd.1, size_of::<WriteFociPayload>() + 4 * 8);
         let word_offset = u32::try_from(3 * 2 * FOCUS_WORDS).unwrap();
-        assert_eq!(&out[2..6], &word_offset.to_le_bytes());
+        assert_eq!(&out[1..5], &word_offset.to_le_bytes());
         let data = &out[size_of::<WriteFociPayload>()..];
         let expected = [(0, 0), (0, 1), (1, 0), (1, 1)];
         for (k, (i, j)) in expected.into_iter().enumerate() {

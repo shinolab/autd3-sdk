@@ -96,7 +96,7 @@ impl Slot {
             len: Cell::new(0),
             payload: RefCell::new(SlotPayload([0; PAYLOAD_BYTES])),
             header: Cell::new(FrameHeader {
-                reserved: 0,
+                padding: 0,
                 cmd: 0,
                 exec_at: U32::ZERO,
             }),

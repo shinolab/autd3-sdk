@@ -415,7 +415,7 @@ mod tests {
 
         assert_eq!(cmds(&datagrams)[2], Cmd::ConfigPattern);
         assert_eq!(
-            &payload(&datagrams, 2, 0)[12..14],
+            &payload(&datagrams, 2, 0)[11..13],
             &4u16.to_le_bytes(),
             "rep = loop_count - 1"
         );

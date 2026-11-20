@@ -22,7 +22,6 @@ const SAMPLES: [u8; 4] = [10, 20, 30, 40];
 fn write_modulation(bank: ModulationBank, samples: &[u8]) -> Vec<u8> {
     let header = WriteModPayload {
         bank,
-        reserved: 0,
         offset: U32::new(0),
     };
     [header.as_bytes(), samples].concat()

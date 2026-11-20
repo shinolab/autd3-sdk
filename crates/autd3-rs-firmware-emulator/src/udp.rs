@@ -269,7 +269,6 @@ impl Chain {
         };
         let state: Reply = self.units[index].device.reply();
         let head = FrameReply {
-            reserved: 0,
             status: state.status.as_u8(),
             flags: self.flags(index),
             unit_id,

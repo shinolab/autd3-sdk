@@ -90,8 +90,8 @@ mod tests {
         assert_eq!(&payload[2..4], &2u16.to_le_bytes());
         assert_eq!(&payload[4..8], &1024u32.to_le_bytes());
         assert_eq!(payload[8], 0);
-        assert_eq!(&payload[10..12], &0u16.to_le_bytes());
-        assert_eq!(&payload[12..14], &7u16.to_le_bytes());
+        assert_eq!(&payload[9..11], &0u16.to_le_bytes());
+        assert_eq!(&payload[11..13], &7u16.to_le_bytes());
     }
 
     #[test]
@@ -111,8 +111,8 @@ mod tests {
         assert_eq!(payload[1], 0, "Foci wire value");
         assert_eq!(&payload[4..8], &8192u32.to_le_bytes());
         assert_eq!(payload[8], 8);
-        assert_eq!(&payload[10..12], &21760u16.to_le_bytes(), "340 m/s * 64");
-        assert_eq!(&payload[12..14], &0xFFFFu16.to_le_bytes(), "infinite rep");
+        assert_eq!(&payload[9..11], &21760u16.to_le_bytes(), "340 m/s * 64");
+        assert_eq!(&payload[11..13], &0xFFFFu16.to_le_bytes(), "infinite rep");
     }
 
     #[test]

@@ -30,7 +30,6 @@ const BIT_TRANSITION_PENDING: u8 = FpgaStateFlags::PATTERN_TRANSITION_PENDING.bi
 fn write_modulation(bank: ModulationBank, samples: &[u8]) -> Vec<u8> {
     let header = WriteModPayload {
         bank,
-        reserved: 0,
         offset: U32::new(0),
     };
     [header.as_bytes(), samples].concat()

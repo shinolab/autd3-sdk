@@ -178,7 +178,7 @@ impl Controller {
         let mut headers = [FrameHeader::new_zeroed(); MAX_DEVICES];
         for (header, datagram) in headers.iter_mut().zip(datagrams) {
             *header = FrameHeader {
-                reserved: 0,
+                padding: 0,
                 cmd: datagram.cmd.as_u8(),
                 exec_at: exec_at.into(),
             };
@@ -327,7 +327,6 @@ pub(crate) mod tests {
         data: &[u8],
     ) {
         let head = FrameReply {
-            reserved: 0,
             status,
             flags,
             unit_id: 0,
@@ -555,7 +554,6 @@ pub(crate) mod tests {
         let msg_id = controller.send_heartbeat().await.unwrap();
         let (_, host) = next_request(&device).await;
         let head = FrameReply {
-            reserved: 0,
             status: 0,
             flags: Flags::ASSIGNED,
             unit_id: 0,
@@ -589,7 +587,6 @@ pub(crate) mod tests {
             let msg_id = controller.send_heartbeat().await.unwrap();
             let (_, host) = next_request(&device).await;
             let head = FrameReply {
-                reserved: 0,
                 status: 0,
                 flags: Flags::ASSIGNED,
                 unit_id: 0,
@@ -618,7 +615,6 @@ pub(crate) mod tests {
         let msg_id = controller.send_heartbeat().await.unwrap();
         let (_, host) = next_request(&device).await;
         let head = FrameReply {
-            reserved: 0,
             status: 0,
             flags: Flags::ASSIGNED,
             unit_id: 1,

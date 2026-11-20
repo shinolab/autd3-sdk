@@ -5,7 +5,7 @@ use crate::frame::FRAME_BYTES_MAX;
 use crate::payload::Telemetry;
 
 pub const PORT: u16 = 0xAD30;
-pub const PROTOCOL_VERSION: u8 = 7;
+pub const PROTOCOL_VERSION: u8 = 8;
 
 const _: () = assert!(PORT == 44336);
 
@@ -126,7 +126,6 @@ pub struct UnitInfo {
 #[derive(FromBytes, IntoBytes, KnownLayout, Immutable, Unaligned, Clone, PartialEq, Eq, Debug)]
 #[repr(C)]
 pub struct FrameReply {
-    pub reserved: u8,
     pub status: u8,
     pub flags: Flags,
     pub unit_id: u8,
@@ -144,7 +143,7 @@ pub struct UnblockReply {
 
 assert_layout!(Header { version: 0, kind: 1, msg_id: 2 } size 4);
 assert_layout!(UnitInfo { unit_id: 0, flags: 1, ptp_offset_ns: 2 } size 6);
-assert_layout!(FrameReply { reserved: 0, status: 1, flags: 2, unit_id: 3, sys_time: 4, rx_sys_time: 12, telemetry: 20, fpga_state: 31 } size 32);
+assert_layout!(FrameReply { status: 0, flags: 1, unit_id: 2, sys_time: 3, rx_sys_time: 11, telemetry: 19, fpga_state: 30 } size 31);
 const _: () = assert!(core::mem::size_of::<Header>() + FRAME_BYTES_MAX == 1452);
 
 #[must_use]
@@ -255,7 +254,6 @@ mod tests {
     #[test]
     fn a_frame_reply_is_these_bytes_on_the_wire() {
         let reply = FrameReply {
-            reserved: 0,
             status: 0x08,
             flags: Flags::ASSIGNED | Flags::DOWNSTREAM_OPEN | Flags::GRANDMASTER,
             unit_id: 0x03,
@@ -273,9 +271,9 @@ mod tests {
         assert_eq!(
             reply.as_bytes(),
             &[
-                0x00, 0x08, 0x23, 0x03, 0x18, 0x17, 0x16, 0x15, 0x14, 0x13, 0x12, 0x11, 0x38, 0x37,
-                0x36, 0x35, 0x34, 0x33, 0x32, 0x31, 0x24, 0x23, 0x22, 0x21, 0x28, 0x27, 0x26, 0x25,
-                0x29, 0x2A, 0x2B, 0x4C,
+                0x08, 0x23, 0x03, 0x18, 0x17, 0x16, 0x15, 0x14, 0x13, 0x12, 0x11, 0x38, 0x37, 0x36,
+                0x35, 0x34, 0x33, 0x32, 0x31, 0x24, 0x23, 0x22, 0x21, 0x28, 0x27, 0x26, 0x25, 0x29,
+                0x2A, 0x2B, 0x4C,
             ]
         );
     }

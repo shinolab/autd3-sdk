@@ -79,7 +79,7 @@ mod tests {
         let mut written: u32 = 0;
         let mut last = 0u8;
         while written < MOD_BUFFER_SAMPLES {
-            let len = u32::try_from(PAYLOAD_BYTES - size_of::<WriteModPayload>())
+            let len = u32::try_from((PAYLOAD_BYTES - size_of::<WriteModPayload>()) / 2 * 2)
                 .unwrap()
                 .min(MOD_BUFFER_SAMPLES - written);
             last = (written >> 8) as u8;

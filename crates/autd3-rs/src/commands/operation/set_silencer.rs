@@ -141,12 +141,11 @@ mod tests {
 
         assert_eq!(encoded, ENCODED);
         assert_eq!(payload[0], SilencerFlags::STRICT_MODE.bits());
-        assert_eq!(payload[1], 0);
-        assert_eq!(&payload[2..4], &SILENCER_DEFAULT_UPDATE_RATE.to_le_bytes());
-        assert_eq!(&payload[4..6], &SILENCER_DEFAULT_UPDATE_RATE.to_le_bytes());
-        assert_eq!(&payload[6..8], &5u16.to_le_bytes());
-        assert_eq!(&payload[8..10], &7u16.to_le_bytes());
-        assert!(payload[10..].iter().all(|&b| b == 0));
+        assert_eq!(&payload[1..3], &SILENCER_DEFAULT_UPDATE_RATE.to_le_bytes());
+        assert_eq!(&payload[3..5], &SILENCER_DEFAULT_UPDATE_RATE.to_le_bytes());
+        assert_eq!(&payload[5..7], &5u16.to_le_bytes());
+        assert_eq!(&payload[7..9], &7u16.to_le_bytes());
+        assert!(payload[9..].iter().all(|&b| b == 0));
     }
 
     #[test]
@@ -158,8 +157,8 @@ mod tests {
         let (encoded, payload) = encode(&SetSilencer::default()).unwrap();
         assert_eq!(encoded, ENCODED);
         assert_eq!(payload[0], SilencerFlags::STRICT_MODE.bits());
-        assert_eq!(&payload[6..8], &10u16.to_le_bytes());
-        assert_eq!(&payload[8..10], &40u16.to_le_bytes());
+        assert_eq!(&payload[5..7], &10u16.to_le_bytes());
+        assert_eq!(&payload[7..9], &40u16.to_le_bytes());
     }
 
     #[test]
@@ -167,8 +166,8 @@ mod tests {
         let (encoded, payload) = encode(&SetSilencer::disable()).unwrap();
         assert_eq!(encoded, ENCODED);
         assert_eq!(payload[0], 0);
-        assert_eq!(&payload[6..8], &1u16.to_le_bytes());
-        assert_eq!(&payload[8..10], &1u16.to_le_bytes());
+        assert_eq!(&payload[5..7], &1u16.to_le_bytes());
+        assert_eq!(&payload[7..9], &1u16.to_le_bytes());
     }
 
     #[test]
@@ -192,12 +191,11 @@ mod tests {
 
         assert_eq!(encoded, ENCODED);
         assert_eq!(payload[0], SilencerFlags::FIXED_UPDATE_RATE_MODE.bits());
-        assert_eq!(payload[1], 0);
-        assert_eq!(&payload[2..4], &8u16.to_le_bytes());
-        assert_eq!(&payload[4..6], &16u16.to_le_bytes());
-        assert_eq!(&payload[6..8], &10u16.to_le_bytes());
-        assert_eq!(&payload[8..10], &40u16.to_le_bytes());
-        assert!(payload[10..].iter().all(|&b| b == 0));
+        assert_eq!(&payload[1..3], &8u16.to_le_bytes());
+        assert_eq!(&payload[3..5], &16u16.to_le_bytes());
+        assert_eq!(&payload[5..7], &10u16.to_le_bytes());
+        assert_eq!(&payload[7..9], &40u16.to_le_bytes());
+        assert!(payload[9..].iter().all(|&b| b == 0));
     }
 
     #[test]

@@ -28,7 +28,6 @@ fn completion_steps(time: Duration) -> Result<NonZeroU16, PayloadBuildError> {
 #[repr(C)]
 pub struct SilencerPayload {
     pub flag: u8,
-    pub reserved: u8,
     pub update_rate_intensity: U16,
     pub update_rate_phase: U16,
     pub completion_steps_intensity: U16,
@@ -49,7 +48,6 @@ impl SilencerPayload {
         };
         Self {
             flag: flags.bits(),
-            reserved: 0,
             update_rate_intensity: U16::new(SILENCER_DEFAULT_UPDATE_RATE),
             update_rate_phase: U16::new(SILENCER_DEFAULT_UPDATE_RATE),
             completion_steps_intensity: U16::new(intensity.get()),
@@ -73,7 +71,6 @@ impl SilencerPayload {
     pub const fn fixed_update_rate(intensity: NonZeroU16, phase: NonZeroU16) -> Self {
         Self {
             flag: SilencerFlags::FIXED_UPDATE_RATE_MODE.bits(),
-            reserved: 0,
             update_rate_intensity: U16::new(intensity.get()),
             update_rate_phase: U16::new(phase.get()),
             completion_steps_intensity: U16::new(SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY),
@@ -112,12 +109,11 @@ impl SilencerPayload {
 
 assert_layout!(SilencerPayload {
     flag: 0,
-    reserved: 1,
-    update_rate_intensity: 2,
-    update_rate_phase: 4,
-    completion_steps_intensity: 6,
-    completion_steps_phase: 8,
-} size 10);
+    update_rate_intensity: 1,
+    update_rate_phase: 3,
+    completion_steps_intensity: 5,
+    completion_steps_phase: 7,
+} size 9);
 
 #[cfg(test)]
 mod tests {

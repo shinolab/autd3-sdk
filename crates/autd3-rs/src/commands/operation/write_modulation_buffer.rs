@@ -15,7 +15,7 @@ pub struct WriteModulationBuffer<'a> {
 }
 
 impl WriteModulationBuffer<'_> {
-    pub const MAX_LEN: usize = PAYLOAD_BYTES - size_of::<WriteModPayload>();
+    pub const MAX_LEN: usize = (PAYLOAD_BYTES - size_of::<WriteModPayload>()) / 2 * 2;
 }
 
 impl crate::sealed::Sealed for WriteModulationBuffer<'_> {}
@@ -71,8 +71,7 @@ mod tests {
             (Cmd::WriteModulationBuffer, size_of::<WriteModPayload>() + 3)
         );
         assert_eq!(out[0], 1);
-        assert_eq!(out[1], 0);
-        assert_eq!(&out[2..6], &0x0102u32.to_le_bytes());
+        assert_eq!(&out[1..5], &0x0102u32.to_le_bytes());
         assert_eq!(
             &out[size_of::<WriteModPayload>()..][..3],
             &[0xAA, 0xBB, 0xCC]
@@ -88,8 +87,11 @@ mod tests {
             data: &data,
         })
         .unwrap();
-        assert_eq!(cmd.1, PAYLOAD_BYTES);
-        assert_eq!(&out[size_of::<WriteModPayload>()..], &data[..]);
+        assert!(PAYLOAD_BYTES - cmd.1 < 2);
+        assert_eq!(
+            &out[size_of::<WriteModPayload>()..][..data.len()],
+            &data[..]
+        );
     }
 
     #[test]
