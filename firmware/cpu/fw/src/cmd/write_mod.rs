@@ -41,11 +41,12 @@ mod tests {
     }
 
     #[test]
-    fn write_mod_buffer_odd_length_pads_high_byte() {
+    fn write_mod_buffer_rejects_odd_length() {
         let mut h = Harness::new();
+        h.deliver(&write_mod_buffer(0, 0, &[0x11, 0x22]));
         h.deliver(&write_mod_buffer(0, 0, &[0xAA]));
-        assert_eq!(h.status(), Error::None);
-        assert_eq!(h.mod_word(0, 0), 0x00AA);
+        assert_eq!(h.status(), Error::InvalidPayload);
+        assert_eq!(h.mod_word(0, 0), 0x2211);
     }
 
     #[test]
@@ -104,7 +105,7 @@ mod tests {
     fn write_mod_buffer_rejects_invalid_payloads() {
         let mut h = Harness::new();
 
-        h.deliver(&write_mod_buffer(invalid_bank(), 0, &[0x01]));
+        h.deliver(&write_mod_buffer(invalid_bank(), 0, &[0x01, 0x02]));
         assert_eq!(h.status(), Error::InvalidPayload);
 
         h.deliver(&write_mod_buffer(0, 1, &[0x01, 0x02]));
@@ -113,7 +114,7 @@ mod tests {
         h.deliver(&write_mod_buffer(
             0,
             MOD_BUFFER_SAMPLES - 2,
-            &[0x01, 0x02, 0x03],
+            &[0x01, 0x02, 0x03, 0x04],
         ));
         assert_eq!(h.status(), Error::InvalidPayload);
         assert_eq!(h.mod_word(0, MOD_BUFFER_SAMPLES as usize / 2 - 1), 0);
