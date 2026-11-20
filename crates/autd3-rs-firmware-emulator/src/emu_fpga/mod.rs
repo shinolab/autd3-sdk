@@ -792,6 +792,22 @@ mod tests {
         );
     }
 
+    #[test]
+    fn silencer_phase_shortest_path_after_full_turn() {
+        let mut fpga = FpgaEmulator::new(249);
+        write(
+            &mut fpga,
+            fw::ADDR_SILENCER_FLAG,
+            SILENCER_FIXED_UPDATE_RATE_MODE,
+        );
+        write(&mut fpga, fw::ADDR_SILENCER_UPDATE_RATE_PHASE, 0x4000);
+        write(&mut fpga, fw::ADDR_CTL_FLAG, CtlFlags::SILENCER_SET.bits());
+        let mut s = fpga.silencer_emulator_phase(0);
+        let input = [64, 128, 192, 0, 64, 128, 192, 0];
+        let out: Vec<u8> = input.iter().map(|&p| s.apply(p)).collect();
+        assert_eq!(input.to_vec(), out);
+    }
+
     fn latch_mod(
         fpga: &mut FpgaEmulator,
         req: u16,
