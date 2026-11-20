@@ -1,6 +1,4 @@
-use std::future::Future;
-
-pub use tokio::runtime::{Handle, Runtime};
+pub use tokio::runtime::Runtime;
 
 #[must_use]
 pub fn new_runtime() -> Runtime {
@@ -11,10 +9,6 @@ pub fn new_runtime() -> Runtime {
         .enable_all()
         .build()
         .expect("failed to build the tokio runtime")
-}
-
-pub fn block_on<F: Future>(handle: &Handle, future: F) -> F::Output {
-    tokio::task::block_in_place(|| handle.block_on(future))
 }
 
 #[cfg(test)]
@@ -43,26 +37,5 @@ mod tests {
         }
 
         assert!(started.lock().unwrap().is_sorted());
-    }
-
-    #[test]
-    fn blocking_works_outside_the_runtime() {
-        let runtime = new_runtime();
-
-        assert_eq!(block_on(runtime.handle(), async { 7 }), 7);
-    }
-
-    #[test]
-    fn blocking_works_on_a_runtime_worker() {
-        let runtime = new_runtime();
-        let handle = runtime.handle().clone();
-        let (tx, rx) = channel();
-
-        runtime.spawn(async move {
-            let spawned = block_on(&handle, async { tokio::spawn(async { 7 }).await.unwrap() });
-            let _ = tx.send(spawned);
-        });
-
-        assert_eq!(rx.recv(), Ok(7));
     }
 }
