@@ -7,7 +7,7 @@ use autd3_rs::error::Error;
 use autd3_rs::{Frame, Frames};
 use autd3_rs_core::common::ULTRASOUND_PERIOD;
 use autd3_rs_core::geometry::Geometry;
-use autd3_rs_core::protocol::{Cmd, DeviceErrorCode, FRAME_BYTES_MAX, FrameHeader};
+use autd3_rs_core::protocol::{DeviceErrorCode, FRAME_BYTES_MAX, FrameHeader};
 use autd3_rs_firmware_emulator::{Device, SilencerEmulator};
 
 use crate::error::EmulatorError;
@@ -18,8 +18,6 @@ struct RawTransducerRecord {
     phase: Vec<u8>,
     silencer_phase: SilencerEmulator,
     silencer_intensity: SilencerEmulator,
-    last_phase: u8,
-    last_intensity: u8,
 }
 
 pub struct Recorder {
@@ -46,8 +44,6 @@ impl Recorder {
                         phase: Vec::new(),
                         silencer_phase: dev.fpga().silencer_emulator_phase(0),
                         silencer_intensity: dev.fpga().silencer_emulator_intensity(0),
-                        last_phase: 0,
-                        last_intensity: 0,
                     })
                     .collect()
             })
@@ -101,8 +97,6 @@ impl Recorder {
                     let ph = rec.silencer_phase.apply(phase.0);
                     rec.pulse_width.push(pw);
                     rec.phase.push(ph);
-                    rec.last_intensity = silenced_int;
-                    rec.last_phase = ph;
                 }
             }
         }
@@ -121,10 +115,6 @@ impl Recorder {
     }
 
     fn stage_and_send(&mut self, frame: &Frame<'_>) -> Result<(), EmulatorError> {
-        let touches_silencer = frame
-            .datagrams()
-            .iter()
-            .any(|d| matches!(d.cmd, Cmd::SetSilencer | Cmd::Clear));
         let mut rejected = None;
         for (device, dev) in self.devices.iter_mut().enumerate() {
             let dg = frame.datagram_for(device);
@@ -142,13 +132,12 @@ impl Recorder {
                 });
             }
         }
-        if touches_silencer {
-            for (dev, recs) in self.devices.iter().zip(&mut self.records) {
-                for rec in recs {
-                    rec.silencer_phase = dev.fpga().silencer_emulator_phase(rec.last_phase);
-                    rec.silencer_intensity =
-                        dev.fpga().silencer_emulator_intensity(rec.last_intensity);
-                }
+        for (dev, recs) in self.devices.iter().zip(&mut self.records) {
+            for rec in recs {
+                dev.fpga()
+                    .reconfigure_silencer_emulator(&mut rec.silencer_phase);
+                dev.fpga()
+                    .reconfigure_silencer_emulator(&mut rec.silencer_intensity);
             }
         }
         rejected.map_or(Ok(()), |e| Err(e.into()))

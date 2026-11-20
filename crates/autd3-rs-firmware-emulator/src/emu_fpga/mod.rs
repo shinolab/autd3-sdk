@@ -600,14 +600,28 @@ impl FpgaEmulator {
     }
 
     fn silencer_emulator(&self, is_phase: bool, initial: u8) -> SilencerEmulator {
-        let fixed_rate = self.silencer_fixed_update_rate_mode();
-        let value = match (fixed_rate, is_phase) {
-            (true, true) => self.silencer_update_rate_phase(),
-            (true, false) => self.silencer_update_rate_intensity(),
-            (false, true) => self.silencer_completion_steps_phase(),
-            (false, false) => self.silencer_completion_steps_intensity(),
+        let mut s = SilencerEmulator::new(is_phase, initial, false, 0, 0);
+        self.reconfigure_silencer_emulator(&mut s);
+        s
+    }
+
+    pub fn reconfigure_silencer_emulator(&self, s: &mut SilencerEmulator) {
+        let (update_rate, completion_steps) = if s.is_phase() {
+            (
+                self.silencer_update_rate_phase(),
+                self.silencer_completion_steps_phase(),
+            )
+        } else {
+            (
+                self.silencer_update_rate_intensity(),
+                self.silencer_completion_steps_intensity(),
+            )
         };
-        SilencerEmulator::new(is_phase, initial, fixed_rate, value)
+        s.configure(
+            self.silencer_fixed_update_rate_mode(),
+            update_rate,
+            completion_steps,
+        );
     }
 
     #[must_use]
@@ -777,6 +791,19 @@ mod tests {
         let mut s = fpga.silencer_emulator_phase(0);
         let out: Vec<u8> = (0..11).map(|_| s.apply(128)).collect();
         assert_eq!(vec![12, 25, 38, 51, 64, 76, 89, 102, 115, 128, 128], out);
+    }
+
+    #[test]
+    fn silencer_reconfigure_keeps_transition_state() {
+        let mut fpga = FpgaEmulator::new(249);
+        write(&mut fpga, fw::ADDR_SILENCER_COMPLETION_STEPS_INTENSITY, 10);
+        write(&mut fpga, fw::ADDR_CTL_FLAG, CtlFlags::SILENCER_SET.bits());
+        let mut s = fpga.silencer_emulator_intensity(10);
+        let mut out: Vec<u8> = (0..5).map(|_| s.apply(128)).collect();
+        write(&mut fpga, fw::ADDR_CTL_FLAG, CtlFlags::SILENCER_SET.bits());
+        fpga.reconfigure_silencer_emulator(&mut s);
+        out.extend((0..6).map(|_| s.apply(128)));
+        assert_eq!(vec![21, 33, 45, 57, 69, 80, 92, 104, 116, 128, 128], out);
     }
 
     #[test]

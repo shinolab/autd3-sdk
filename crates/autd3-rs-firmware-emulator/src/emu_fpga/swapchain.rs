@@ -100,7 +100,7 @@ impl Swapchain {
             self.cur_bank = req_bank;
             self.ext_mode = transition_mode == MODE_EXT;
             self.ext_last_lap = self.lap_and_idx(req_bank, sys_time_ns).0;
-            self.tic_idx_offset[req_bank] = 0;
+            self.tic_idx_offset = [0; NUM_BANKS];
             self.state = State::InfiniteLoop;
         } else if req_bank != target_bank {
             self.rep = rep;
@@ -296,5 +296,20 @@ mod tests {
         assert_eq!(0, sc.cur_bank());
         assert!(!sc.transition_pending());
         assert!(!sc.stopped());
+    }
+
+    #[test]
+    fn ext_mode_ignores_tic_offset_left_by_previous_finite_loop() {
+        let mut sc = Swapchain::new();
+        sc.set(0, REP_INFINITE, 1, CYCLE, 0, MODE_IMMEDIATE, 0);
+        sc.set(LAP_NS / 2, 0, 1, CYCLE, 1, MODE_IMMEDIATE, 0);
+        sc.update([false; 4], LAP_NS / 2);
+        assert_eq!(1, sc.cur_bank());
+        assert_ne!(0, sc.tic_idx_offset[1]);
+
+        sc.set(LAP_NS, REP_INFINITE, 1, CYCLE, 0, MODE_EXT, 0);
+        run(&mut sc, LAP_NS, 2 * LAP_NS + LAP_NS / 2);
+        assert_eq!(1, sc.cur_bank());
+        assert_eq!(2, sc.cur_idx());
     }
 }
