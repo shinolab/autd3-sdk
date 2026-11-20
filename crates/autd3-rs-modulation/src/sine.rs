@@ -44,7 +44,7 @@ pub(crate) fn sine_samples(
     let phase = option.phase.rad();
 
     Ok((0..n).map(move |i| {
-        let t = (rep * i as u64) as f32 / n as f32;
+        let t = ((rep * i as u64) % n as u64) as f32 / n as f32;
         (amplitude / 2.0 * (2.0 * PI * t + phase).sin()) + offset
     }))
 }
@@ -94,6 +94,23 @@ mod tests {
         let mut buf = Vec::new();
         sine(200 * Hz, &SineOption::default(), config, &mut buf).unwrap();
         assert_eq!(expected, buf.len());
+    }
+
+    #[test]
+    fn sine_samples_stay_accurate_with_many_samples_and_cycles() {
+        let (n, rep) = samples_and_cycles(1999.75 * Hz, SamplingConfig::FREQ_4K).unwrap();
+        assert_eq!((16000, 7999), (n, rep));
+        sine_samples(1999.75 * Hz, SineOption::default(), SamplingConfig::FREQ_4K)
+            .unwrap()
+            .enumerate()
+            .for_each(|(i, v)| {
+                let t = (rep * i as u64) as f64 / n as f64;
+                let expected = 127.5 * (2.0 * core::f64::consts::PI * t).sin() + 128.0;
+                assert!(
+                    (f64::from(v) - expected).abs() < 1e-2,
+                    "i={i}: {v} vs {expected}"
+                );
+            });
     }
 
     #[test]
