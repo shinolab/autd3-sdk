@@ -53,12 +53,21 @@ pub(crate) fn enabled_transducers(
     (tr_pos, tr_dir)
 }
 
-pub(crate) fn validate_dst_len(dst: usize, geometry: &Geometry) -> Result<(), HoloError> {
-    if dst != geometry.num_devices() {
+pub(crate) fn validate_dst_len<T>(dst: &[Vec<T>], geometry: &Geometry) -> Result<(), HoloError> {
+    if dst.len() != geometry.num_devices() {
         return Err(HoloError::DstDeviceCountMismatch {
-            got: dst,
+            got: dst.len(),
             expected: geometry.num_devices(),
         });
+    }
+    for (device, (slot, dev)) in dst.iter().zip(geometry.iter()).enumerate() {
+        if slot.len() != dev.num_transducers() {
+            return Err(HoloError::DstTransducerCountMismatch {
+                device,
+                got: slot.len(),
+                expected: dev.num_transducers(),
+            });
+        }
     }
     Ok(())
 }

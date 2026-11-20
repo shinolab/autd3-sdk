@@ -37,8 +37,8 @@ where
     }
     let mask = setup.mask;
     mask.validate(geometry)?;
-    validate_dst_len(phases.len(), geometry)?;
-    validate_dst_len(intensities.len(), geometry)?;
+    validate_dst_len(phases, geometry)?;
+    validate_dst_len(intensities, geometry)?;
 
     let k = wavenumber(wavelength);
     let (tr_pos, tr_dir) = enabled_transducers(geometry, mask);
@@ -126,6 +126,18 @@ mod tests {
                 ),
                 want,
                 "{name} intensities"
+            );
+
+            let mut long_row = slot(&g);
+            long_row.1[1].push(Intensity::MIN);
+            assert_eq!(
+                single(&g, &foci, TransducerMask::AllEnabled, &mut long_row),
+                Err(HoloError::DstTransducerCountMismatch {
+                    device: 1,
+                    got: Autd3::NUM_TRANSDUCERS + 1,
+                    expected: Autd3::NUM_TRANSDUCERS,
+                }),
+                "{name} intensity row"
             );
         }
     }

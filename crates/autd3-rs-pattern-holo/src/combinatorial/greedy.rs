@@ -56,7 +56,7 @@ pub fn greedy<'a>(
     if foci.is_empty() {
         return Err(HoloError::NoFoci);
     }
-    validate_dst_len(dst.len(), geometry)?;
+    validate_dst_len(dst, geometry)?;
     if let PatternIntensity::PerDevice(intensities) = intensities
         && intensities.len() != geometry.num_devices()
     {
@@ -231,6 +231,27 @@ mod tests {
             Err(HoloError::DstDeviceCountMismatch {
                 got: 1,
                 expected: 2
+            }),
+        );
+
+        let mut short_row = vec![
+            vec![Phase::ZERO; Autd3::NUM_TRANSDUCERS],
+            vec![Phase::ZERO; 3],
+        ];
+        assert_eq!(
+            greedy(
+                &geometry,
+                &single_focus(),
+                wavelength(),
+                &intensities,
+                &ascending(&geometry),
+                &GreedyOption::default(),
+                &mut short_row
+            ),
+            Err(HoloError::DstTransducerCountMismatch {
+                device: 1,
+                got: 3,
+                expected: Autd3::NUM_TRANSDUCERS,
             }),
         );
     }
