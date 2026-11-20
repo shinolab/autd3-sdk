@@ -118,9 +118,12 @@ impl FpgaEmulator {
                         } else {
                             focus_intensity
                         };
-                        let d2 = (x - tr_x) * (x - tr_x)
-                            + (y - tr_y) * (y - tr_y)
-                            + (z - tr_z) * (z - tr_z);
+                        let (dx, dy, dz) = (
+                            i64::from(x - tr_x),
+                            i64::from(y - tr_y),
+                            i64::from(z - tr_z),
+                        );
+                        let d2 = dx * dx + dy * dy + dz * dz;
                         let dist = d2.isqrt() as u32;
                         let q = ((dist << 14) / sound_speed) as usize + offset as usize;
                         (

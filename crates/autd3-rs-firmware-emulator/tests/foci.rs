@@ -20,9 +20,7 @@ const NUM_FOCI: u8 = 1;
 const SOUND_SPEED: u16 = 340;
 const FOCUS_INTENSITY: u8 = 0xAA;
 
-#[test]
-fn single_focus_synthesizes_phases() {
-    let z: u64 = 8192;
+fn synthesize_single_focus(z: u64) -> Device {
     let focus: u64 = (u64::from(FOCUS_INTENSITY) << 54) | (z << 36);
 
     let mut write = WriteFociPayload::new(BANK, 0, 2)
@@ -58,6 +56,12 @@ fn single_focus_synthesizes_phases() {
         DeviceErrorCode::None
     );
     device.fpga_mut().update_with_sys_time(0);
+    device
+}
+
+#[test]
+fn single_focus_synthesizes_phases() {
+    let device = synthesize_single_focus(8192);
 
     assert_eq!(
         u16::from(EmissionType::Foci.as_u8()),
@@ -72,4 +76,12 @@ fn single_focus_synthesizes_phases() {
     assert!(intensities.iter().all(|&i| i == Intensity(FOCUS_INTENSITY)));
 
     assert!(phases.iter().any(|&p| p != phases[0]));
+}
+
+#[test]
+fn far_focus_does_not_overflow() {
+    let device = synthesize_single_focus(0x1_FFFF);
+
+    let (_, intensities) = device.fpga().emissions();
+    assert!(intensities.iter().all(|&i| i == Intensity(FOCUS_INTENSITY)));
 }
