@@ -370,7 +370,6 @@ class Modulation:
 
 @final
 class WritePatternBuffer:
-    MAX_LEN: ClassVar[int]
     def __new__(
         cls,
         bank: PatternBank,
@@ -418,7 +417,6 @@ class ActivatePatternBank:
 
 @final
 class WriteModulationBuffer:
-    MAX_LEN: ClassVar[int]
     def __new__(cls, bank: ModulationBank, offset: int, data: ModulationBuffer) -> WriteModulationBuffer: ...
 
 @final
@@ -484,8 +482,6 @@ class FociStm:
 
 @final
 class WriteFociBuffer:
-    @staticmethod
-    def max_len(num_foci: int) -> int: ...
     def __new__(cls, bank: PatternBank, start_index: int, points: Sequence[ControlPoints]) -> WriteFociBuffer: ...
 
 @final

@@ -8,7 +8,7 @@ use autd3_python_capsule::extract::{
 };
 use autd3_python_capsule::{capsule_of, modulation_from_capsule};
 use autd3_rs::Velocity;
-use autd3_rs::commands::Operation;
+use autd3_rs::commands::Expansion;
 use autd3_rs::commands::{
     ActivateModulationBank as CoreActivateModulationBank,
     ActivatePatternBank as CoreActivatePatternBank, ConfigFociStm as CoreConfigFociStm,
@@ -23,7 +23,7 @@ use autd3_rs::value::{
 };
 use pyo3::prelude::*;
 
-use crate::datagram::PushOperation;
+use crate::datagram::PushCommand;
 use crate::stm::{OwnedStmIntensity, extract_stm_intensity};
 
 #[pyclass(
@@ -285,14 +285,15 @@ pub(crate) struct WritePatternBufferData {
     intensities: OwnedStmIntensity,
 }
 
-impl PushOperation for WritePatternBufferData {
-    fn operation(&self) -> Box<dyn Operation + '_> {
-        Box::new(CoreWritePatternBuffer::new(
+impl PushCommand for WritePatternBufferData {
+    fn push_into(&self, expansion: &mut Expansion<'_>) -> Result<(), autd3_rs::Error> {
+        expansion.push(CoreWritePatternBuffer::new(
             self.bank,
             self.start_index,
             &self.patterns,
             self.intensities.as_ref(),
-        ))
+        ))?;
+        Ok(())
     }
 }
 
@@ -301,9 +302,6 @@ pub struct WritePatternBuffer(pub(crate) Arc<WritePatternBufferData>);
 
 #[pymethods]
 impl WritePatternBuffer {
-    #[classattr]
-    const MAX_LEN: usize = CoreWritePatternBuffer::MAX_LEN;
-
     #[new]
     fn new(
         bank: PatternBank,
@@ -372,15 +370,16 @@ pub(crate) struct WritePatternPhaseData {
     patterns: Vec<Vec<Vec<Phase>>>,
 }
 
-impl PushOperation for WritePatternPhaseData {
-    fn operation(&self) -> Box<dyn Operation + '_> {
-        Box::new(CoreWritePatternPhase {
+impl PushCommand for WritePatternPhaseData {
+    fn push_into(&self, expansion: &mut Expansion<'_>) -> Result<(), autd3_rs::Error> {
+        expansion.push(CoreWritePatternPhase {
             bank: self.bank,
             start_index: self.start_index,
             depth: self.depth,
             intensity: self.intensity,
             patterns: &self.patterns,
-        })
+        })?;
+        Ok(())
     }
 }
 
@@ -480,13 +479,14 @@ pub(crate) struct WriteModulationBufferData {
     data: Vec<u8>,
 }
 
-impl PushOperation for WriteModulationBufferData {
-    fn operation(&self) -> Box<dyn Operation + '_> {
-        Box::new(CoreWriteModulationBuffer {
+impl PushCommand for WriteModulationBufferData {
+    fn push_into(&self, expansion: &mut Expansion<'_>) -> Result<(), autd3_rs::Error> {
+        expansion.push(CoreWriteModulationBuffer {
             bank: self.bank,
             offset: self.offset,
             data: &self.data,
-        })
+        })?;
+        Ok(())
     }
 }
 
@@ -495,9 +495,6 @@ pub struct WriteModulationBuffer(pub(crate) Arc<WriteModulationBufferData>);
 
 #[pymethods]
 impl WriteModulationBuffer {
-    #[classattr]
-    const MAX_LEN: usize = CoreWriteModulationBuffer::MAX_LEN;
-
     #[new]
     fn new(bank: ModulationBank, offset: usize, data: &Bound<'_, PyAny>) -> PyResult<Self> {
         let capsule = capsule_of(data)?;

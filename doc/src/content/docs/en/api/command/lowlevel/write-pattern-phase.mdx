@@ -26,7 +26,7 @@ import { excerpt } from "@lib/excerpt";
 | `start_index` | `usize`             | Start index for writing within the bank                      |
 | `depth`     | `PhaseDepth`          | Bit depth of the phase (see below)                           |
 | `intensity` | `Intensity`           | Intensity shared by every transducer and Pattern             |
-| `patterns`  | `&[Vec<Vec<Phase>>]`  | Sequence of phases to write (1 to `depth.max_count()` items) |
+| `patterns`  | `&[Vec<Vec<Phase>>]`  | Sequence of phases to write (at least 1 item)                |
 
 ## PhaseDepth
 
@@ -34,6 +34,8 @@ import { excerpt } from "@lib/excerpt";
 | ------- | ---------------------------------- | ------------------------------------------------ |
 | `Bits8` | 5                                  | Sends the phase at full resolution (8 bit) (default) |
 | `Bits4` | 11                                 | Sends the phase quantized to its upper 4 bits    |
+
+More `patterns` than that are sent in several frames.
 
 ## Example
 

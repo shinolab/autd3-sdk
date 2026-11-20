@@ -1,4 +1,3 @@
-using System;
 using AUTD3;
 
 namespace DocSamples.ApiCommandModulation;
@@ -29,16 +28,11 @@ internal static class Sample
         // ANCHOR_END: api
 
         // ANCHOR: equivalent
-        var samples = data.ToArray();
-        for (var offset = 0; offset < samples.Length; offset += WriteModulationBuffer.MaxLen)
-        {
-            using var chunk = ModulationBuffer.FromBytes(samples[offset..Math.Min(offset + WriteModulationBuffer.MaxLen, samples.Length)]);
-            new WriteModulationBuffer(
-                bank: bank,
-                offset: (uint)offset,
-                data: chunk
-            );
-        }
+        new WriteModulationBuffer(
+            bank: bank,
+            offset: 0,
+            data: data
+        );
         new ConfigModulation(
             bank: bank,
             config: config,

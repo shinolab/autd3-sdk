@@ -26,7 +26,7 @@ import { excerpt } from "@lib/excerpt";
 | `start_index` | `usize`             | バンク内の書き込み開始インデックス                     |
 | `depth`     | `PhaseDepth`          | 位相のビット幅 (下記参照)                              |
 | `intensity` | `Intensity`           | 全振動子・全 Pattern に共通の強度                      |
-| `patterns`  | `&[Vec<Vec<Phase>>]`  | 書き込む位相の列 (1 個以上 `depth.max_count()` 個以下) |
+| `patterns`  | `&[Vec<Vec<Phase>>]`  | 書き込む位相の列 (1 個以上)                            |
 
 ## PhaseDepth
 
@@ -34,6 +34,8 @@ import { excerpt } from "@lib/excerpt";
 | ---------- | --------------------------------------------- | ------------------------------------------ |
 | `Bits8`    | 5                                             | 位相を全分解能 (8 bit) で送る (デフォルト) |
 | `Bits4`    | 11                                            | 位相を上位 4 bit に量子化して送る          |
+
+それより多い `patterns` は複数フレームに分けて送られる.
 
 ## Example
 

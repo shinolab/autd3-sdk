@@ -4,8 +4,8 @@ use core::num::NonZeroU16;
 use anyhow::Result;
 
 use autd3_rs::commands::{
-    Command, ConfigFociStm, ConfigModulation, ConfigPattern, Expansion, Modulation, Pattern,
-    SetSilencer, WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer,
+    ConfigFociStm, ConfigModulation, ConfigPattern, Modulation, Pattern, SetSilencer,
+    WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer,
 };
 use autd3_rs::geometry::{Geometry, Point3, Vector3, offset};
 use autd3_rs::units::{m, mm, s};
@@ -87,51 +87,18 @@ pub(crate) async fn write_pattern_bank(
     .await
 }
 
-struct WholeModulationWrite<'a> {
-    bank: ModulationBank,
-    data: &'a [u8],
-}
-
-impl Command for WholeModulationWrite<'_> {
-    fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
-        for (i, data) in self.data.chunks(WriteModulationBuffer::MAX_LEN).enumerate() {
-            expansion.push(WriteModulationBuffer {
-                bank: self.bank,
-                offset: i * WriteModulationBuffer::MAX_LEN,
-                data,
-            })?;
-        }
-        Ok(())
-    }
-}
-
-struct WholeFociWrite<'a> {
-    bank: PatternBank,
-    num_foci: u8,
-    points: &'a [ControlPoints],
-}
-
-impl Command for WholeFociWrite<'_> {
-    fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
-        let max_len = WriteFociBuffer::max_len(self.num_foci).max(1);
-        for (i, points) in self.points.chunks(max_len).enumerate() {
-            expansion.push(WriteFociBuffer {
-                bank: self.bank,
-                start_index: i * max_len,
-                points,
-            })?;
-        }
-        Ok(())
-    }
-}
-
 pub(crate) async fn write_mod_bank(
     ctx: &Ctx<'_>,
     bank: ModulationBank,
     config: SamplingConfig,
     data: &[u8],
 ) -> Result<()> {
-    ctx.send(WholeModulationWrite { bank, data }).await?;
+    ctx.send(WriteModulationBuffer {
+        bank,
+        offset: 0,
+        data,
+    })
+    .await?;
     ctx.send(ConfigModulation {
         bank,
         config,
@@ -249,9 +216,9 @@ pub(crate) async fn write_foci_bank(
 ) -> Result<()> {
     let size = points.len();
     let num_foci = u8::try_from(points.first().map_or(0, |p| p.points.len()))?;
-    ctx.send(WholeFociWrite {
+    ctx.send(WriteFociBuffer {
         bank,
-        num_foci,
+        start_index: 0,
         points,
     })
     .await?;

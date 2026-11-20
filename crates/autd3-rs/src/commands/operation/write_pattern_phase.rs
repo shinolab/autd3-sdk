@@ -1,4 +1,5 @@
-use crate::datagram::Datagram;
+use crate::commands::Command;
+use crate::datagram::{Datagram, Expansion};
 use crate::error::Error;
 use crate::geometry::Device;
 use crate::protocol::Cmd;
@@ -6,7 +7,7 @@ use crate::value::{Intensity, PatternBank, Phase};
 
 use super::{Distribution, Operation, checked_device_row, set_cmd, write_header};
 pub use autd3_cpu_wire::payload::PhaseDepth;
-use autd3_cpu_wire::payload::WritePatternPhasePayload;
+use autd3_cpu_wire::payload::{PayloadBuildError, WritePatternPhasePayload};
 use zerocopy::IntoBytes;
 
 #[derive(Clone, Debug)]
@@ -18,9 +19,36 @@ pub struct WritePatternPhase<'a> {
     pub patterns: &'a [Vec<Vec<Phase>>],
 }
 
-impl crate::sealed::Sealed for WritePatternPhase<'_> {}
+impl Command for WritePatternPhase<'_> {
+    fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
+        if self.patterns.is_empty() {
+            return Err(PayloadBuildError::PatternSizeTooSmall { size: 0, min: 1 }.into());
+        }
+        let per_frame = self.depth.max_count();
+        for (k, patterns) in self.patterns.chunks(per_frame).enumerate() {
+            expansion.push_op(&WritePatternPhaseChunk {
+                bank: self.bank,
+                start_index: self.start_index.saturating_add(k * per_frame),
+                depth: self.depth,
+                intensity: self.intensity,
+                patterns,
+            })?;
+        }
+        Ok(())
+    }
+}
 
-impl Operation for WritePatternPhase<'_> {
+struct WritePatternPhaseChunk<'a> {
+    bank: PatternBank,
+    start_index: usize,
+    depth: PhaseDepth,
+    intensity: Intensity,
+    patterns: &'a [Vec<Vec<Phase>>],
+}
+
+impl crate::sealed::Sealed for WritePatternPhaseChunk<'_> {}
+
+impl Operation for WritePatternPhaseChunk<'_> {
     fn waits_for_previous(&self) -> bool {
         false
     }
@@ -62,8 +90,17 @@ mod tests {
     use crate::error::PayloadError;
     use crate::geometry::Autd3;
     use crate::params::EMISSION_MAX_INDICES;
-    use crate::test_utils::{encode, test_device};
-    use autd3_cpu_wire::payload::PayloadBuildError;
+    use crate::test_utils::{build, cmds, payload};
+
+    fn encode(op: &WritePatternPhase<'_>) -> Result<((Cmd, usize), Vec<u8>), Error> {
+        let frames = build(1, op.clone())?;
+        assert_eq!(frames.len(), 1);
+        let datagram = frames.frame(0).unwrap().datagram_for(0);
+        Ok((
+            (datagram.cmd, datagram.payload_len),
+            datagram.payload.to_vec(),
+        ))
+    }
 
     fn ramp(offset: usize) -> Vec<Vec<Phase>> {
         vec![
@@ -166,25 +203,38 @@ mod tests {
     }
 
     #[test]
-    fn rejects_more_patterns_than_the_depth_carries() {
+    fn splits_by_the_depth_from_the_start_index() {
         for depth in [PhaseDepth::Bits8, PhaseDepth::Bits4] {
-            let patterns = vec![ramp(0); depth.max_count() + 1];
-            let op = WritePatternPhase {
-                bank: PatternBank::B0,
-                start_index: 0,
-                depth,
-                intensity: Intensity::MAX,
-                patterns: &patterns,
-            };
-            let err = encode(&op).unwrap_err();
-            assert!(
-                matches!(
-                    err,
-                    Error::InvalidPayload(PayloadError::Build(
-                        PayloadBuildError::PatternCountExceedsDepth { .. }
-                    ))
-                ),
-                "{err}"
+            let max = depth.max_count();
+            let patterns = vec![ramp(0); max + 1];
+            let frames = build(
+                1,
+                WritePatternPhase {
+                    bank: PatternBank::B0,
+                    start_index: 2,
+                    depth,
+                    intensity: Intensity::MAX,
+                    patterns: &patterns,
+                },
+            )
+            .unwrap();
+            assert_eq!(
+                cmds(&frames),
+                [Cmd::WritePatternPhase, Cmd::WritePatternPhase]
+            );
+            assert_eq!(
+                frames.frame(0).unwrap().distribution(),
+                Distribution::PerDevice
+            );
+            let first = payload(&frames, 0, 0);
+            assert_eq!(usize::from(first[2]), max, "count");
+            assert_eq!(&first[4..6], &2u16.to_le_bytes(), "index");
+            let second = payload(&frames, 1, 0);
+            assert_eq!(second[2], 1, "count");
+            assert_eq!(
+                &second[4..6],
+                &u16::try_from(2 + max).unwrap().to_le_bytes(),
+                "index"
             );
         }
     }
@@ -217,11 +267,7 @@ mod tests {
             intensity: Intensity::MAX,
             patterns: &patterns,
         };
-        let mut out = Datagram::no_payload(Cmd::Nop);
-        assert!(op.encode(&test_device(0), &mut out).is_ok());
-        assert!(matches!(
-            op.encode(&test_device(1), &mut out),
-            Err(Error::InvalidPayload(_))
-        ));
+        assert!(build(1, op.clone()).is_ok());
+        assert!(matches!(build(2, op), Err(Error::InvalidPayload(_))));
     }
 }

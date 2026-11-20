@@ -29,14 +29,11 @@ async fn main() -> anyhow::Result<()> {
 
     let bank = PatternBank::B0;
 
-    let max_len = WriteFociBuffer::max_len(1);
-    for (i, chunk) in points.chunks(max_len).enumerate() {
-        client.send(WriteFociBuffer {
-            bank,
-            start_index: i * max_len,
-            points: chunk,
-        }).await?;
-    }
+    client.send(WriteFociBuffer {
+        bank,
+        start_index: 0,
+        points: &points,
+    }).await?;
     client.send(ConfigFociStm {
         bank,
         config: SamplingConfig::from_freq(1.0 * Hz * points.len() as f32)?,

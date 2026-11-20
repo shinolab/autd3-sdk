@@ -70,7 +70,7 @@ namespace AUTD3.Tests
         }
 
         [Fact]
-        public void EachTakesTheBufferWritesAsSingleFrameOperations()
+        public void EachTakesTheBufferWrites()
         {
             using var geometry = Fixture.Devices(2);
             using var modulation = ModulationBuffer.FromBytes(new byte[] { 0xFF, 0xFF });
@@ -86,38 +86,24 @@ namespace AUTD3.Tests
         }
 
         [Fact]
-        public void BufferWritesLongerThanOneFrameAreRejectedWhenEncoded()
+        public void BufferWritesLongerThanOneFrameAreSplitIntoFrames()
         {
             using var geometry = Fixture.Devices(1);
-            using var fits = ModulationBuffer.FromBytes(new byte[WriteModulationBuffer.MaxLen]);
-            using var tooLong = ModulationBuffer.FromBytes(new byte[WriteModulationBuffer.MaxLen + 1]);
+            using var modulation = ModulationBuffer.FromBytes(new byte[4000]);
 
-            using (var frames = Frames.Encode(geometry, new WriteModulationBuffer(ModulationBank.B0, 0, fits)))
+            using (var frames = Frames.Encode(geometry, new WriteModulationBuffer(ModulationBank.B0, 0, modulation)))
             {
-                Assert.Equal(1, frames.Length);
+                Assert.True(frames.Length > 1);
             }
-            var error = Assert.Throws<Autd3Exception>(() => Frames.Encode(geometry, new WriteModulationBuffer(ModulationBank.B0, 0, tooLong)));
-            Assert.Equal(Autd3ErrorCode.InvalidArgument, error.Code);
 
             var point = new ControlPoint(new Vector3(0f, 0f, 150f), Phase.Zero);
-            var points = Enumerable.Range(0, WriteFociBuffer.MaxLen(2) + 1)
+            var points = Enumerable.Range(0, 200)
                 .Select(_ => new ControlPoints(new[] { point, point }, Intensity.Max))
                 .ToArray();
-            using (var frames = Frames.Encode(geometry, new WriteFociBuffer(PatternBank.B0, 0, points[..^1])))
+            using (var frames = Frames.Encode(geometry, new WriteFociBuffer(PatternBank.B0, 0, points)))
             {
-                Assert.Equal(1, frames.Length);
+                Assert.True(frames.Length > 1);
             }
-            error = Assert.Throws<Autd3Exception>(() => Frames.Encode(geometry, new WriteFociBuffer(PatternBank.B0, 0, points)));
-            Assert.Equal(Autd3ErrorCode.InvalidArgument, error.Code);
-        }
-
-        [Fact]
-        public void TheWriteFociBufferMaxLenShrinksWithTheNumberOfFoci()
-        {
-            Assert.True(WriteFociBuffer.MaxLen(1) > WriteFociBuffer.MaxLen(8));
-            Assert.True(WriteFociBuffer.MaxLen(8) > 0);
-            Assert.Equal(Autd3ErrorCode.InvalidArgument, Assert.Throws<Autd3Exception>(() => WriteFociBuffer.MaxLen(0)).Code);
-            Assert.Equal(Autd3ErrorCode.InvalidArgument, Assert.Throws<Autd3Exception>(() => WriteFociBuffer.MaxLen(9)).Code);
         }
 
         [Fact]

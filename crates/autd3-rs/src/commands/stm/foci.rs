@@ -50,17 +50,13 @@ impl Command for FociStm<'_> {
     fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
         let size = self.points.len();
         let num_foci = num_foci(self.points)?;
-        let max_len = WriteFociBuffer::max_len(num_foci);
-
         let bank = self.option.bank;
-        for (i, points) in self.points.chunks(max_len).enumerate() {
-            expansion.push(WriteFociBuffer {
-                bank,
-                start_index: i * max_len,
-                points,
-            })?;
-        }
         expansion
+            .push(WriteFociBuffer {
+                bank,
+                start_index: 0,
+                points: self.points,
+            })?
             .push(ConfigFociStm {
                 bank,
                 config: self.config,
@@ -188,7 +184,8 @@ mod tests {
 
     #[test]
     fn foci_stm_auto_splits_write_frames() {
-        let max_foci_per_frame = WriteFociBuffer::max_len(1);
+        let max_foci_per_frame =
+            (crate::protocol::PAYLOAD_BYTES - size_of::<WriteFociPayload>()) / (FOCUS_WORDS * 2);
         let points: Vec<ControlPoints> = (0..max_foci_per_frame + 5)
             .map(|i| ControlPoints::from(Point3::new(0.0, 0.0, i as f32 * 0.1)))
             .collect();
@@ -211,36 +208,6 @@ mod tests {
     }
 
     #[test]
-    fn foci_stm_splits_on_control_point_boundaries() {
-        let max = WriteFociBuffer::max_len(7);
-        let points =
-            vec![
-                ControlPoints::new([ControlPoint::from(Point3::origin()); 7], Intensity::MAX);
-                max + 1
-            ];
-        let frames = build(
-            1,
-            FociStm::new(SamplingConfig::FREQ_4K, &points, FociStmOption::default()),
-        )
-        .unwrap();
-
-        let first = payload(&frames, 0, 0);
-        assert_eq!(
-            first.len(),
-            size_of::<WriteFociPayload>() + max * 7 * FOCUS_WORDS * 2
-        );
-        let second = payload(&frames, 1, 0);
-        assert_eq!(
-            &second[1..5],
-            &u32::try_from(max * 7 * FOCUS_WORDS).unwrap().to_le_bytes()
-        );
-        assert_eq!(
-            second.len(),
-            size_of::<WriteFociPayload>() + 7 * FOCUS_WORDS * 2
-        );
-    }
-
-    #[test]
     fn foci_stm_rejects_empty_points() {
         let points: [ControlPoints; 0] = [];
         assert!(matches!(
@@ -249,22 +216,6 @@ mod tests {
                 FociStm::new(SamplingConfig::FREQ_4K, &points, FociStmOption::default())
             ),
             Err(Error::InvalidPayload(PayloadError::FociEmpty))
-        ));
-    }
-
-    #[test]
-    fn foci_stm_rejects_a_num_foci_mismatch_across_frames() {
-        let max = WriteFociBuffer::max_len(2);
-        let pair = ControlPoints::new([ControlPoint::from(Point3::origin()); 2], Intensity::MAX);
-        let mut points = vec![pair; max + 1];
-        points[max] = ControlPoints::from(Point3::origin());
-        assert!(matches!(
-            build(
-                1,
-                FociStm::new(SamplingConfig::FREQ_4K, &points, FociStmOption::default())
-            ),
-            Err(Error::InvalidPayload(PayloadError::NumFociMismatch { index, expected: 2, got: 1 }))
-                if index == max
         ));
     }
 

@@ -26,11 +26,10 @@ import { excerpt } from "@lib/excerpt";
 | `offset`   | `usize`          | Start offset for writing within the bank |
 | `data`     | `&[u8]`          | Sequence of AM waveform samples    |
 
-`WriteModulationBuffer` writes only what fits in one frame.
-The limit is `WriteModulationBuffer::MAX_LEN`; exceeding it is an error when sending.
+`data` that does not fit in one frame is sent in several frames.
 
-Both `offset` and the length of `data` must be even; an odd value is an error when sending (the buffer can only be written two samples at a time).
-To write an odd-length waveform, append a single 0 and pass the original length as the `size` of `ConfigModulation`.
+The buffer can only be written two samples at a time, so `offset` must be even; an odd value is an error when sending.
+When `data` has an odd length, a single 0 is appended. Pass the original length as the `size` of `ConfigModulation`.
 
 ## Example
 

@@ -75,14 +75,8 @@ pub enum PayloadError {
     #[error("modulation data must not be empty")]
     ModulationDataEmpty,
 
-    #[error("modulation data of {len} samples exceeds the {max} that fit in one frame")]
-    ModulationWriteTooLong { len: usize, max: usize },
-
     #[error("foci must not be empty")]
     FociEmpty,
-
-    #[error("{len} control points exceed the {max} that fit in one frame")]
-    FociWriteTooLong { len: usize, max: usize },
 
     #[error(
         "number of foci per sample must be 1..={}, got {num_foci}",

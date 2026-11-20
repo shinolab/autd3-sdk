@@ -29,11 +29,10 @@ import { excerpt } from "@lib/excerpt";
 `ControlPoints` は焦点 (`ControlPoint`) の列と振幅を持つ 1 サンプル. 焦点数は全サンプルで揃える.
 詳細は [FociStm](/autd3-sdk/api/command/foci-stm/#controlpoint--controlpoints) を参照.
 
-`WriteFociBuffer` は1 フレームに収まる分しか書けない.
-上限 (`ControlPoints` の数) は焦点数で変わり, `WriteFociBuffer::max_len(num_foci)`で, 超えると送信時にエラーになる.
+1 フレームに収まらない `points` は, `ControlPoints` の境目で複数フレームに分けて送られる.
 
 ## Example
 
-`WriteFociBuffer` → `ConfigFociStm` → `ActivatePatternBank` で焦点列を Foci STM として再生する例 (高レベルの [FociStm](/autd3-sdk/api/command/foci-stm/) と等価). 200 点は 1 フレームに収まらないので分割して書き込む.
+`WriteFociBuffer` → `ConfigFociStm` → `ActivatePatternBank` で焦点列を Foci STM として再生する例 (高レベルの [FociStm](/autd3-sdk/api/command/foci-stm/) と等価).
 
 <CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

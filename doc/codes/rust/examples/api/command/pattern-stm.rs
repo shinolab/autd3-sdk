@@ -54,16 +54,13 @@ fn main() -> anyhow::Result<()> {
     // ANCHOR_END: api
 
     // ANCHOR: equivalent
-    let max_count = option.phase_depth.max_count();
-    for (k, chunk) in patterns.chunks(max_count).enumerate() {
-        WritePatternPhase {
-            bank: option.bank,
-            start_index: k * max_count,
-            depth: option.phase_depth,
-            intensity: intensities,
-            patterns: chunk,
-        };
-    }
+    WritePatternPhase {
+        bank: option.bank,
+        start_index: 0,
+        depth: option.phase_depth,
+        intensity: intensities,
+        patterns: &patterns,
+    };
     ConfigPattern {
         bank: option.bank,
         config,

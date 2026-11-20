@@ -314,15 +314,15 @@ mod tests {
         let frames = Frames::encode(
             &geometry,
             each(|device| match device.idx() {
-                0 => Some(Box::new(pattern) as Box<dyn Operation>),
-                1 => Some(Box::new(config)),
+                0 => Some(pattern.boxed()),
+                1 => Some(config.boxed()),
                 _ => None,
             }),
         )
         .unwrap();
 
-        let mut pattern_datagram = Datagram::no_payload(Cmd::Nop);
-        pattern.encode(&geometry[0], &mut pattern_datagram).unwrap();
+        let pattern_frames = Frames::encode(&test_geometry(1), pattern).unwrap();
+        let pattern_datagram = pattern_frames.frame(0).unwrap().datagram_for(0);
         let mut config_datagram = Datagram::no_payload(Cmd::Nop);
         config.encode(&geometry[1], &mut config_datagram).unwrap();
 

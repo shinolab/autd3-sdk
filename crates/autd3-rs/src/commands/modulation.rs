@@ -1,7 +1,7 @@
 use super::{Command, WriteModulationBuffer};
 use crate::commands::operation::{ActivateModulationBank, ConfigModulation};
 use crate::datagram::Expansion;
-use crate::error::{Error, PayloadError};
+use crate::error::Error;
 use crate::value::{LoopBehavior, ModulationBank, SamplingConfig, TransitionMode};
 
 #[derive(Clone, Copy, Debug)]
@@ -33,24 +33,12 @@ impl<'a> Modulation<'a> {
 
 impl Command for Modulation<'_> {
     fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
-        if self.data.is_empty() {
-            return Err(PayloadError::ModulationDataEmpty.into());
-        }
-        let mut padded = [0u8; WriteModulationBuffer::MAX_LEN];
-        for (i, data) in self.data.chunks(WriteModulationBuffer::MAX_LEN).enumerate() {
-            let data = if data.len().is_multiple_of(2) {
-                data
-            } else {
-                padded[..data.len()].copy_from_slice(data);
-                &padded[..=data.len()]
-            };
-            expansion.push(WriteModulationBuffer {
-                bank: self.bank,
-                offset: i * WriteModulationBuffer::MAX_LEN,
-                data,
-            })?;
-        }
         expansion
+            .push(WriteModulationBuffer {
+                bank: self.bank,
+                offset: 0,
+                data: self.data,
+            })?
             .push(ConfigModulation {
                 bank: self.bank,
                 config: self.config,
@@ -68,6 +56,7 @@ impl Command for Modulation<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::PayloadError;
     use crate::protocol::Cmd;
     use crate::test_utils::{build, cmds, payload, waits};
 
@@ -103,42 +92,6 @@ mod tests {
     }
 
     #[test]
-    fn modulation_splits_the_write_with_advancing_even_offsets() {
-        let max = WriteModulationBuffer::MAX_LEN;
-        let data: Vec<u8> = (0..max + 562)
-            .map(|i| u8::try_from(i % 256).unwrap())
-            .collect();
-        let frames = build(
-            1,
-            Modulation::with_bank(ModulationBank::B1, SamplingConfig::FREQ_4K, &data),
-        )
-        .unwrap();
-
-        assert_eq!(
-            cmds(&frames),
-            [
-                Cmd::WriteModulationBuffer,
-                Cmd::WriteModulationBuffer,
-                Cmd::ConfigModulation,
-                Cmd::ActivateModulationBank,
-            ]
-        );
-        assert_eq!(waits(&frames), [false, false, false, true]);
-        let p0 = payload(&frames, 0, 0);
-        assert_eq!(p0[0], 1, "bank B1");
-        assert_eq!(&p0[1..5], &0u32.to_le_bytes());
-        assert_eq!(&p0[5..], &data[..max]);
-        let p1 = payload(&frames, 1, 0);
-        assert_eq!(p1[0], 1, "bank B1");
-        assert_eq!(&p1[1..5], &u32::try_from(max).unwrap().to_le_bytes());
-        assert_eq!(&p1[5..], &data[max..]);
-        assert_eq!(
-            &payload(&frames, 2, 0)[3..7],
-            &u32::try_from(data.len()).unwrap().to_le_bytes()
-        );
-    }
-
-    #[test]
     fn modulation_pads_an_odd_tail_to_a_word() {
         let data = [0x11u8, 0x22, 0x33];
         let frames = build(1, Modulation::new(SamplingConfig::FREQ_4K, &data)).unwrap();
@@ -150,10 +103,14 @@ mod tests {
     fn modulation_fills_the_whole_buffer() {
         let data = vec![0x55; crate::params::MOD_BUFFER_SAMPLES];
         let frames = build(1, Modulation::new(SamplingConfig::FREQ_4K, &data)).unwrap();
-        assert_eq!(
-            frames.len(),
-            data.len().div_ceil(WriteModulationBuffer::MAX_LEN) + 2
-        );
+        let cmds = cmds(&frames);
+        let (writes, rest) = cmds.split_at(cmds.len() - 2);
+        assert!(writes.len() > 1);
+        assert!(writes.iter().all(|&c| c == Cmd::WriteModulationBuffer));
+        assert_eq!(rest, [Cmd::ConfigModulation, Cmd::ActivateModulationBank]);
+        let waits = waits(&frames);
+        assert_eq!(waits.iter().filter(|&&w| w).count(), 1);
+        assert_eq!(waits.last(), Some(&true));
     }
 
     #[test]
