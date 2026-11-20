@@ -140,14 +140,6 @@ namespace AUTD3.Tests
             using var frames = Frames.Encode(geometry, new Modulation(SamplingConfig.Freq4k, modulation));
 
             Assert.True(frames.Length > 0);
-
-            var frameCount = 0;
-            foreach (var frame in frames)
-            {
-                _ = frame;
-                frameCount++;
-            }
-            Assert.Equal(frames.Length, frameCount);
         }
 
         [Fact]
@@ -162,8 +154,6 @@ namespace AUTD3.Tests
                 new WritePatternBuffer(PatternBank.B0, 0, new[] { phases }, intensities));
 
             Assert.Equal(1, frames.Length);
-            _ = frames[0];
-            Assert.Throws<ArgumentOutOfRangeException>(() => frames[frames.Length]);
         }
 
         [Fact]

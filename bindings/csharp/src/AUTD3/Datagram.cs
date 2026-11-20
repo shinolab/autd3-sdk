@@ -1,24 +1,11 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 
 namespace AUTD3
 {
 
 
-    public readonly struct Frame
-    {
-        internal Frames Frames { get; }
-        internal UIntPtr Index { get; }
-
-        internal Frame(Frames frames, int index)
-        {
-            Frames = frames;
-            Index = (UIntPtr)index;
-        }
-    }
-
-    public sealed class Frames : IDisposable, IEnumerable<Frame>
+    public sealed class Frames : IDisposable
     {
         private readonly FramesHandle _handle;
 
@@ -96,29 +83,6 @@ namespace AUTD3
         public int Length => (int)NativeClient.autd3_frames_num_frames(Handle);
 
         public bool IsEmpty => Length == 0;
-
-        public Frame this[int index]
-        {
-            get
-            {
-                if (index < 0 || index >= Length)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(index));
-                }
-                return new Frame(this, index);
-            }
-        }
-
-        public IEnumerator<Frame> GetEnumerator()
-        {
-            var count = Length;
-            for (var i = 0; i < count; i++)
-            {
-                yield return new Frame(this, i);
-            }
-        }
-
-        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
         public void Dispose() => _handle.Dispose();
     }

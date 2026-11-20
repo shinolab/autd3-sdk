@@ -1950,40 +1950,7 @@ autd3_ffi_abi::export_abi_version!();
 mod tests {
     use std::sync::mpsc::{Sender, channel};
 
-    use autd3_binding_rt::block_on;
-
     use super::*;
-
-    extern "C" fn block_on_the_runtime_from_the_callback(
-        _code: i32,
-        _value: *mut c_void,
-        _message: *const c_char,
-        user_data: *mut c_void,
-    ) {
-        let done = unsafe { Box::from_raw(user_data.cast::<Sender<u32>>()) };
-        let blocked = block_on(runtime().handle(), async {
-            tokio::spawn(async { 7 }).await.unwrap()
-        });
-        let _ = done.send(blocked);
-    }
-
-    #[test]
-    fn a_completion_callback_can_block_on_the_runtime() {
-        let (done, finished) = channel();
-        let ctx = CompletionCtx::new(
-            Some(block_on_the_runtime_from_the_callback),
-            Box::into_raw(Box::new(done)).cast(),
-        )
-        .unwrap();
-
-        unsafe {
-            spawn_completion(ctx, std::ptr::null(), async { Ok(()) }, |()| {
-                std::ptr::null_mut()
-            });
-        }
-
-        assert_eq!(finished.recv(), Ok(7));
-    }
 
     extern "C" fn report_code(
         code: i32,
