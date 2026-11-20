@@ -163,8 +163,8 @@ mod tests {
         .unwrap();
 
         assert_eq!(modulation.len(), 1);
-        assert_eq!(&payload(&modulation, 0, 0)[6..], &low);
-        assert_eq!(&payload(&modulation, 0, 1)[6..], &high);
+        assert_eq!(&payload(&modulation, 0, 0)[5..], &low);
+        assert_eq!(&payload(&modulation, 0, 1)[5..], &high);
         assert_eq!(foci.len(), 1);
         assert_eq!(cmd_at(&foci, 0, 0), Cmd::Nop);
         assert_eq!(cmd_at(&foci, 0, 1), Cmd::WriteFociBuffer);

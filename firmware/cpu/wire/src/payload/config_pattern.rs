@@ -17,7 +17,6 @@ pub struct ConfigPatternPayload {
     pub divider: U16,
     pub size: U32,
     pub num_foci: Option<NonZeroU8>,
-    pub reserved: u8,
     pub sound_speed: U16,
     pub rep: U16,
 }
@@ -47,7 +46,6 @@ impl ConfigPatternPayload {
             divider: U16::new(config.divide().get()),
             size: U32::new(size as u32),
             num_foci: None,
-            reserved: 0,
             sound_speed: U16::new(0),
             rep: U16::new(loop_behavior.rep()),
         })
@@ -98,7 +96,6 @@ impl ConfigPatternPayload {
             divider: U16::new(config.divide().get()),
             size: U32::new(size as u32),
             num_foci: Some(foci_per_index),
-            reserved: 0,
             sound_speed: U16::new(sound_speed.get()),
             rep: U16::new(loop_behavior.rep()),
         })
@@ -146,10 +143,9 @@ assert_layout!(ConfigPatternPayload {
     divider: 2,
     size: 4,
     num_foci: 8,
-    reserved: 9,
-    sound_speed: 10,
-    rep: 12,
-} size 14);
+    sound_speed: 9,
+    rep: 11,
+} size 13);
 
 #[cfg(test)]
 mod tests {

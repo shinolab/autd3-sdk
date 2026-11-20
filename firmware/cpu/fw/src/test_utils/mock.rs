@@ -561,7 +561,7 @@ impl Frame {
         let mut bytes = std::vec::Vec::with_capacity(size_of::<FrameHeader>() + self.len);
         bytes.extend_from_slice(
             FrameHeader {
-                reserved: 0,
+                padding: 0,
                 cmd: self.cmd,
                 exec_at: self.exec_at.into(),
             }

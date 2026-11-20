@@ -69,7 +69,6 @@ impl Host {
             divider: U16::new(divider),
             size: U32::new(1),
             num_foci: NonZeroU8::new(0),
-            reserved: 0,
             sound_speed: U16::new(0),
             rep: U16::new(REP_INFINITE),
         };
@@ -97,7 +96,6 @@ impl Host {
     ) -> DeviceErrorCode {
         let payload = SilencerPayload {
             flag: flags.bits(),
-            reserved: 0,
             update_rate_intensity: U16::new(SILENCER_DEFAULT_UPDATE_RATE),
             update_rate_phase: U16::new(SILENCER_DEFAULT_UPDATE_RATE),
             completion_steps_intensity: U16::new(intensity),

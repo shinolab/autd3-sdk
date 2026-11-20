@@ -28,7 +28,6 @@ fn single_focus_synthesizes_phases() {
 
     let mut write = WriteFociPayload {
         bank: BANK,
-        reserved: 0,
         offset: U32::new(0),
     }
     .as_bytes()

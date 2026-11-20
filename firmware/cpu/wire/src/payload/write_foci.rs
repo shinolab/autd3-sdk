@@ -10,7 +10,6 @@ use crate::{Error, PatternBank};
 #[repr(C)]
 pub struct WriteFociPayload {
     pub bank: PatternBank,
-    pub reserved: u8,
     pub offset: U32,
 }
 
@@ -30,7 +29,6 @@ impl WriteFociPayload {
         }
         Ok(Self {
             bank,
-            reserved: 0,
             offset: U32::new((focus_offset * FOCUS_WORDS) as u32),
         })
     }
@@ -47,7 +45,7 @@ impl WriteFociPayload {
     }
 }
 
-assert_layout!(WriteFociPayload { bank: 0, reserved: 1, offset: 2 } size 6);
+assert_layout!(WriteFociPayload { bank: 0, offset: 1 } size 5);
 
 #[cfg(test)]
 mod tests {

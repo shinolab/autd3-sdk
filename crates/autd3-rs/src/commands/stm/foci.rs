@@ -126,7 +126,7 @@ mod tests {
         assert_eq!(&config[2..4], &10u16.to_le_bytes(), "FREQ_4K divider");
         assert_eq!(&config[4..8], &2u32.to_le_bytes(), "size = sample count");
         assert_eq!(config[8], 1, "num_foci = N");
-        assert_eq!(&config[10..12], &21760u16.to_le_bytes(), "340 m/s * 64");
+        assert_eq!(&config[9..11], &21760u16.to_le_bytes(), "340 m/s * 64");
         assert_eq!(activate[1], 0xFF, "IMMEDIATE");
 
         let expected = Focus {
@@ -231,7 +231,7 @@ mod tests {
         );
         let second = payload(&frames, 1, 0);
         assert_eq!(
-            &second[2..6],
+            &second[1..5],
             &u32::try_from(max * 7 * FOCUS_WORDS).unwrap().to_le_bytes()
         );
         assert_eq!(
@@ -305,7 +305,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            &payload(&frames, 1, 0)[12..14],
+            &payload(&frames, 1, 0)[11..13],
             &0xFFFFu16.to_le_bytes(),
             "default = infinite"
         );
@@ -324,7 +324,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            &payload(&frames, 1, 0)[12..14],
+            &payload(&frames, 1, 0)[11..13],
             &0u16.to_le_bytes(),
             "ONCE = rep 0"
         );

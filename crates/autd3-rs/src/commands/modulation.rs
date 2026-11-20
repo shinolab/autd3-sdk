@@ -91,7 +91,7 @@ mod tests {
         ));
 
         assert_eq!(config[0], 1, "bank B1");
-        assert_eq!(&config[4..8], &20u32.to_le_bytes(), "size");
+        assert_eq!(&config[3..7], &20u32.to_le_bytes(), "size");
         assert_eq!(activate[0], 1, "bank B1");
     }
 
@@ -119,14 +119,14 @@ mod tests {
         assert_eq!(waits(&frames), [false, false, false, true]);
         let p0 = payload(&frames, 0, 0);
         assert_eq!(p0[0], 1, "bank B1");
-        assert_eq!(&p0[2..6], &0u32.to_le_bytes());
-        assert_eq!(&p0[6..], &data[..max]);
+        assert_eq!(&p0[1..5], &0u32.to_le_bytes());
+        assert_eq!(&p0[5..], &data[..max]);
         let p1 = payload(&frames, 1, 0);
         assert_eq!(p1[0], 1, "bank B1");
-        assert_eq!(&p1[2..6], &u32::try_from(max).unwrap().to_le_bytes());
-        assert_eq!(&p1[6..], &data[max..]);
+        assert_eq!(&p1[1..5], &u32::try_from(max).unwrap().to_le_bytes());
+        assert_eq!(&p1[5..], &data[max..]);
         assert_eq!(
-            &payload(&frames, 2, 0)[4..8],
+            &payload(&frames, 2, 0)[3..7],
             &u32::try_from(data.len()).unwrap().to_le_bytes()
         );
     }
@@ -154,7 +154,7 @@ mod tests {
         let data = vec![0x80u8; 4];
         let (config, _) =
             config_and_activate_payloads(Modulation::new(SamplingConfig::FREQ_4K, &data));
-        assert_eq!(&config[8..10], &0xFFFFu16.to_le_bytes());
+        assert_eq!(&config[7..9], &0xFFFFu16.to_le_bytes());
     }
 
     #[test]
@@ -191,6 +191,6 @@ mod tests {
             loop_behavior: LoopBehavior::Finite(NonZeroU16::new(10).unwrap()),
             ..Modulation::new(SamplingConfig::FREQ_4K, &data)
         });
-        assert_eq!(&config[8..10], &9u16.to_le_bytes());
+        assert_eq!(&config[7..9], &9u16.to_le_bytes());
     }
 }

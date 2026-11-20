@@ -91,7 +91,6 @@ mod tests {
 
         let odd = WriteFociPayload {
             bank: PatternBank::B0,
-            reserved: 0,
             offset: U32::new(0),
         };
         h.deliver(&Frame::from_parts(

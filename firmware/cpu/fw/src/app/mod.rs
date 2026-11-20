@@ -353,7 +353,7 @@ mod tests {
     }
 
     #[test]
-    fn the_reserved_header_byte_is_ignored() {
+    fn the_header_padding_byte_is_ignored() {
         let mut h = Harness::new();
         let mut bytes = Frame::new(Cmd::ReadFirmwareInfo).bytes();
         bytes[0] = 0xFF;

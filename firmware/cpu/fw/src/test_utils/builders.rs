@@ -63,7 +63,6 @@ pub(crate) fn assert_fpga_unchanged(before: &FpgaSnapshot, h: &Harness) {
 pub(crate) fn write_foci_buffer(bank: u8, offset_words: u32, words: &[u16]) -> Frame {
     let header = WriteFociPayload {
         bank: PatternBank::B0,
-        reserved: 0,
         offset: U32::new(offset_words),
     };
     let bytes: std::vec::Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
@@ -141,7 +140,6 @@ pub(crate) fn write_pattern_phase(
 pub(crate) fn write_mod_buffer(bank: u8, offset: u32, data: &[u8]) -> Frame {
     let header = WriteModPayload {
         bank: ModulationBank::B0,
-        reserved: 0,
         offset: U32::new(offset),
     };
     let mut f = Frame::from_parts(Cmd::WriteModulationBuffer, &header, data);
@@ -156,7 +154,6 @@ pub(crate) fn config_mod(bank: u8, divider: u16, size: u32) -> Frame {
 pub(crate) fn config_mod_rep(bank: u8, divider: u16, size: u32, rep: u16) -> Frame {
     let p = ConfigModPayload {
         bank: ModulationBank::B0,
-        reserved: 0,
         divider: U16::new(divider),
         size: U32::new(size),
         rep: U16::new(rep),
@@ -201,7 +198,6 @@ pub(crate) fn config_pattern_rep(
         divider: U16::new(divider),
         size: U32::new(size),
         num_foci: NonZeroU8::new(num_foci),
-        reserved: 0,
         sound_speed: U16::new(sound_speed),
         rep: U16::new(rep),
     };

@@ -20,7 +20,6 @@ pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error>
             divider: U16::new(u16::MAX),
             size: U32::new(1),
             num_foci: None,
-            reserved: 0,
             sound_speed: U16::new(0),
             rep: U16::new(REP_INFINITE),
         },

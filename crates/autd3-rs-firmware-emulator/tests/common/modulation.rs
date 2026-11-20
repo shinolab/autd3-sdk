@@ -11,7 +11,6 @@ pub(crate) fn config_modulation(
 ) -> Vec<u8> {
     ConfigModPayload {
         bank,
-        reserved: 0,
         divider: U16::new(divider),
         size: U32::new(size),
         rep: U16::new(rep),

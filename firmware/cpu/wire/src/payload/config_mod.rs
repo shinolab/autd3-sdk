@@ -12,7 +12,6 @@ use crate::{Error, ModulationBank};
 #[repr(C)]
 pub struct ConfigModPayload {
     pub bank: ModulationBank,
-    pub reserved: u8,
     pub divider: U16,
     pub size: U32,
     pub rep: U16,
@@ -34,7 +33,6 @@ impl ConfigModPayload {
         }
         Ok(Self {
             bank,
-            reserved: 0,
             divider: U16::new(config.divide().get()),
             size: U32::new(size as u32),
             rep: U16::new(loop_behavior.rep()),
@@ -58,11 +56,10 @@ impl ConfigModPayload {
 
 assert_layout!(ConfigModPayload {
     bank: 0,
-    reserved: 1,
-    divider: 2,
-    size: 4,
-    rep: 8,
-} size 10);
+    divider: 1,
+    size: 3,
+    rep: 7,
+} size 9);
 
 #[cfg(test)]
 mod tests {
