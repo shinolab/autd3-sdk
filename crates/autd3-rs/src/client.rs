@@ -227,6 +227,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn send_streaming_keeps_at_most_max_inflight_frames_unanswered() {
+        let (mut client, device) = open_client(None).await;
+        let data = vec![0u8; crate::protocol::PAYLOAD_BYTES * MAX_INFLIGHT];
+        let modulation = Modulation::new(SamplingConfig::FREQ_4K, &data);
+
+        let answer = async {
+            let mut unanswered = Vec::new();
+            for _ in 0..MAX_INFLIGHT {
+                unanswered.push(next_request(&device).await);
+            }
+            assert_nothing_more_was_sent(&device);
+
+            let (oldest, host) = unanswered.remove(0);
+            reply(&device, host, oldest.msg_id.get(), 0, Flags::ASSIGNED, &[]).await;
+            unanswered.push(next_request(&device).await);
+            assert_nothing_more_was_sent(&device);
+
+            for (header, host) in unanswered {
+                reply(&device, host, header.msg_id.get(), 0, Flags::ASSIGNED, &[]).await;
+            }
+            loop {
+                let mut buf = [0; 2048];
+                let (_, host) = device.recv_from(&mut buf).await.unwrap();
+                let (header, rest) = Header::read_from_prefix(&buf).unwrap();
+                reply(&device, host, header.msg_id.get(), 0, Flags::ASSIGNED, &[]).await;
+                if rest[1] == Cmd::ActivateModulationBank.as_u8() {
+                    break;
+                }
+            }
+        };
+        let (sent, ()) = tokio::join!(client.send_streaming(modulation), answer);
+
+        sent.unwrap();
+        assert_nothing_more_was_sent(&device);
+    }
+
+    #[tokio::test]
     async fn read_state_returns_the_replies_to_its_own_heartbeat() {
         let (mut client, device) = open_client(None).await;
 
