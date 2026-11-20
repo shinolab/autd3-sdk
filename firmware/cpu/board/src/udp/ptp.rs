@@ -192,10 +192,8 @@ impl Ptp {
     }
 
     pub(crate) fn time_set(&mut self) {
-        if self.role == Some(Role::Grandmaster) {
-            self.locked = true;
-            self.master = MasterState::Idle;
-        }
+        self.locked = true;
+        self.master = MasterState::Idle;
     }
 
     pub(crate) fn arm_pulse(&mut self) {

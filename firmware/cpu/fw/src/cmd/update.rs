@@ -151,9 +151,6 @@ impl Cpu {
         }
         let erase_len =
             (SLOT_HEADER_BYTES + length).div_ceil(FLASH_SECTOR_BYTES) * FLASH_SECTOR_BYTES;
-        if !slot_range_ok(0, erase_len) {
-            return Err(Error::InvalidPayload);
-        }
         port.flash_erase(slot.base(), erase_len)?;
         self.update.state.set(State::Receiving {
             slot,

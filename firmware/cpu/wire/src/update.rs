@@ -30,6 +30,7 @@ const _: () = assert!(IMAGE_RESET_VECTOR_OFFSET < IMAGE_VECTOR_BYTES);
 const _: () = assert!(SLOT_A_BASE.is_multiple_of(FLASH_SECTOR_BYTES));
 const _: () = assert!(SLOT_B_BASE.is_multiple_of(FLASH_SECTOR_BYTES));
 const _: () = assert!(SLOT_B_BASE + SLOT_BYTES <= FLASH_BYTES);
+const _: () = assert!(SLOT_BYTES.is_multiple_of(FLASH_SECTOR_BYTES));
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Slot {
