@@ -145,7 +145,7 @@ impl Node {
     }
 
     pub(crate) fn send_completion(&mut self, tx: &mut Tx, msg_id: u16) {
-        let Some((port, to)) = self.host.filter(|_| self.is_assigned()) else {
+        let Some((port, to)) = self.host else {
             return;
         };
         let reply_to = ReplyTo {
@@ -319,7 +319,7 @@ impl Node {
     }
 
     fn unblock_downstream(&mut self, tx: &mut Tx, reply: &ReplyTo) {
-        let Some(upstream) = self.upstream.filter(|_| self.is_assigned()) else {
+        let Some(upstream) = self.upstream else {
             self.status(tx, reply, Status::NotAssigned);
             return;
         };
