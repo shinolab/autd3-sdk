@@ -83,7 +83,7 @@ def test_each_takes_multi_frame_commands_and_pads_the_shorter_devices() -> None:
     assert len(autd3.Frames.encode(geo, nested)) == 1
 
 
-def test_each_takes_the_buffer_writes_as_single_frame_operations() -> None:
+def test_each_takes_the_buffer_writes() -> None:
     geo = geometry()
     data = modulation.ModulationBuffer(4)
     points = [autd3.value.ControlPoints([autd3.value.ControlPoint([0.0, 0.0, 150.0], autd3.value.Phase.ZERO)], 0xFF)]
@@ -95,45 +95,28 @@ def test_each_takes_the_buffer_writes_as_single_frame_operations() -> None:
     assert len(autd3.Frames.encode(geo, write_foci)) == 1
 
 
-def test_buffer_writes_longer_than_one_frame_are_rejected_when_encoded() -> None:
+def test_buffer_writes_longer_than_one_frame_are_split_into_frames() -> None:
     geo = geometry()
-    max_len = autd3.commands.WriteModulationBuffer.MAX_LEN
-    fits = modulation.ModulationBuffer(max_len)
-    too_long = modulation.ModulationBuffer(max_len + 1)
     bank = autd3.value.ModulationBank.B0
-    assert len(autd3.Frames.encode(geo, autd3.commands.WriteModulationBuffer(bank, 0, fits))) == 1
-    with pytest.raises(autd3.InvalidArgumentError, match="fit in one frame"):
-        autd3.Frames.encode(geo, autd3.commands.WriteModulationBuffer(bank, 0, too_long))
+    data = modulation.ModulationBuffer(4000)
+    assert len(autd3.Frames.encode(geo, autd3.commands.WriteModulationBuffer(bank, 0, data))) > 1
 
     point = autd3.value.ControlPoint([0.0, 0.0, 150.0], autd3.value.Phase.ZERO)
-    foci_max_len = autd3.commands.WriteFociBuffer.max_len(2)
-    points = [autd3.value.ControlPoints([point, point], 0xFF) for _ in range(foci_max_len + 1)]
+    points = [autd3.value.ControlPoints([point, point], 0xFF) for _ in range(200)]
     pattern_bank = autd3.value.PatternBank.B0
-    assert len(autd3.Frames.encode(geo, autd3.commands.WriteFociBuffer(pattern_bank, 0, points[:-1]))) == 1
-    with pytest.raises(autd3.Autd3Error, match="fit in one frame"):
-        autd3.Frames.encode(geo, autd3.commands.WriteFociBuffer(pattern_bank, 0, points))
+    assert len(autd3.Frames.encode(geo, autd3.commands.WriteFociBuffer(pattern_bank, 0, points))) > 1
 
 
-def test_a_pattern_buffer_write_takes_up_to_max_len_consecutive_indices() -> None:
+def test_a_pattern_buffer_write_puts_two_consecutive_indices_in_one_frame() -> None:
     geo = geometry()
     phases = geo.phase_buffer()
     intensities = geo.intensity_buffer()
     bank = autd3.value.PatternBank.B0
-    max_len = autd3.commands.WritePatternBuffer.MAX_LEN
-    assert max_len == 2
-    for given in (autd3.value.Intensity.MAX, 0x80, intensities, [intensities] * (1 + max_len)):
-        write = autd3.commands.WritePatternBuffer(bank, 1, [phases] * max_len, given)
+    for given in (autd3.value.Intensity.MAX, 0x80, intensities, [intensities] * 3):
+        write = autd3.commands.WritePatternBuffer(bank, 1, [phases] * 2, given)
         assert len(autd3.Frames.encode(geo, write)) == 1
     assert len(autd3.Frames.encode(geo, each(lambda _: autd3.commands.WritePatternBuffer(bank, 0, [phases], 0xFF)))) == 1
-    with pytest.raises(autd3.InvalidArgumentError, match="do not fit one frame"):
-        autd3.Frames.encode(geo, autd3.commands.WritePatternBuffer(bank, 0, [phases] * (max_len + 1), 0xFF))
-
-
-def test_the_write_foci_buffer_max_len_shrinks_with_the_number_of_foci() -> None:
-    assert autd3.commands.WriteFociBuffer.max_len(1) > autd3.commands.WriteFociBuffer.max_len(8) > 0
-    for num_foci in (0, 9):
-        with pytest.raises(autd3.InvalidArgumentError):
-            autd3.commands.WriteFociBuffer.max_len(num_foci)
+    assert len(autd3.Frames.encode(geo, autd3.commands.WritePatternBuffer(bank, 0, [phases] * 3, 0xFF))) == 2
 
 
 def test_each_rejects_what_is_not_a_command() -> None:

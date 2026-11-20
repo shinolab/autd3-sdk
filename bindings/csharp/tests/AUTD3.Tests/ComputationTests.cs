@@ -167,18 +167,16 @@ namespace AUTD3.Tests
         }
 
         [Fact]
-        public void WritePatternBufferWritesUpToMaxLenPatternsInOneFrame()
+        public void WritePatternBufferSplitsThePatternsIntoFrames()
         {
             using var geometry = Fixture.SingleDevice();
             using var phases = geometry.PhaseBuffer();
-            var full = Enumerable.Repeat(phases, WritePatternBuffer.MaxLen).ToArray();
-            var tooMany = Enumerable.Repeat(phases, WritePatternBuffer.MaxLen + 1).ToArray();
 
-            using var frames = Frames.Encode(geometry, new WritePatternBuffer(PatternBank.B0, 0, full, Intensity.Max));
+            using var one = Frames.Encode(geometry, new WritePatternBuffer(PatternBank.B0, 0, new[] { phases }, Intensity.Max));
+            using var many = Frames.Encode(geometry, new WritePatternBuffer(PatternBank.B0, 0, Enumerable.Repeat(phases, 100).ToArray(), Intensity.Max));
 
-            Assert.Equal(1, frames.Length);
-            var error = Assert.Throws<Autd3Exception>(() => Frames.Encode(geometry, new WritePatternBuffer(PatternBank.B0, 0, tooMany, Intensity.Max)));
-            Assert.Equal(Autd3ErrorCode.InvalidArgument, error.Code);
+            Assert.Equal(1, one.Length);
+            Assert.True(many.Length > 1);
         }
     }
 }

@@ -1,4 +1,5 @@
-use crate::datagram::Datagram;
+use crate::commands::Command;
+use crate::datagram::{Datagram, Expansion};
 use crate::error::{Error, PayloadError};
 use crate::geometry::Device;
 use crate::protocol::Cmd;
@@ -6,7 +7,7 @@ use crate::value::{Intensity, PatternBank, PatternIntensity, Phase};
 
 use super::{Distribution, Operation, checked_device_row, set_cmd, write_header};
 use autd3_cpu_wire::layout::{PATTERN_RAW_DATA_LEN, PATTERN_RAW_MAX_COUNT};
-use autd3_cpu_wire::payload::WritePatternRawPayload;
+use autd3_cpu_wire::payload::{PayloadBuildError, WritePatternRawPayload};
 use zerocopy::IntoBytes;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -93,8 +94,6 @@ pub struct WritePatternBuffer<'a> {
 }
 
 impl<'a> WritePatternBuffer<'a> {
-    pub const MAX_LEN: usize = PATTERN_RAW_MAX_COUNT;
-
     #[must_use]
     pub fn new(
         bank: PatternBank,
@@ -111,7 +110,37 @@ impl<'a> WritePatternBuffer<'a> {
     }
 }
 
-impl crate::sealed::Sealed for WritePatternBuffer<'_> {}
+impl Command for WritePatternBuffer<'_> {
+    fn expand(self, expansion: &mut Expansion<'_>) -> Result<(), Error> {
+        if self.patterns.is_empty() {
+            return Err(PayloadBuildError::PatternSizeTooSmall { size: 0, min: 1 }.into());
+        }
+        let required = self.start_index.saturating_add(self.patterns.len());
+        if let Some(len) = self.intensities.per_index_len()
+            && len < required
+        {
+            return Err(PayloadError::PerIndexIntensityTooShort { required, len }.into());
+        }
+        for (k, patterns) in self.patterns.chunks(PATTERN_RAW_MAX_COUNT).enumerate() {
+            expansion.push_op(&WritePatternChunk {
+                bank: self.bank,
+                start_index: self.start_index + k * PATTERN_RAW_MAX_COUNT,
+                patterns,
+                intensities: self.intensities,
+            })?;
+        }
+        Ok(())
+    }
+}
+
+struct WritePatternChunk<'a> {
+    bank: PatternBank,
+    start_index: usize,
+    patterns: &'a [Vec<Vec<Phase>>],
+    intensities: StmIntensity<'a>,
+}
+
+impl crate::sealed::Sealed for WritePatternChunk<'_> {}
 
 pub(crate) fn encode_raw_pattern_entry(
     phases: &[Vec<Phase>],
@@ -137,7 +166,7 @@ pub(crate) fn encode_raw_pattern_entry(
     Ok(())
 }
 
-impl Operation for WritePatternBuffer<'_> {
+impl Operation for WritePatternChunk<'_> {
     fn waits_for_previous(&self) -> bool {
         false
     }
@@ -149,12 +178,6 @@ impl Operation for WritePatternBuffer<'_> {
     fn encode(&self, device: &Device, out: &mut Datagram) -> Result<(), Error> {
         let num_patterns = self.patterns.len();
         let header = WritePatternRawPayload::new(self.bank, num_patterns, self.start_index)?;
-        let required = self.start_index + num_patterns;
-        if let Some(len) = self.intensities.per_index_len()
-            && len < required
-        {
-            return Err(PayloadError::PerIndexIntensityTooShort { required, len }.into());
-        }
         let rest = write_header(out, &header);
         let (slots, _) = rest.as_chunks_mut::<PATTERN_RAW_DATA_LEN>();
         for (k, (phases, data)) in self.patterns.iter().zip(slots).enumerate() {
@@ -178,10 +201,19 @@ impl Operation for WritePatternBuffer<'_> {
 mod tests {
     use super::*;
     use crate::params::EMISSION_MAX_INDICES;
-    use crate::test_utils::{encode, test_device};
-    use autd3_cpu_wire::payload::PayloadBuildError;
+    use crate::test_utils::{build, cmds, payload, test_device};
     const PHASES_OFFSET: usize = size_of::<WritePatternRawPayload>();
     const INTENSITIES_OFFSET: usize = size_of::<WritePatternRawPayload>() + 1;
+
+    fn encode(op: &WritePatternBuffer<'_>) -> Result<((Cmd, usize), Vec<u8>), Error> {
+        let frames = build(1, *op)?;
+        assert_eq!(frames.len(), 1);
+        let datagram = frames.frame(0).unwrap().datagram_for(0);
+        Ok((
+            (datagram.cmd, datagram.payload_len),
+            datagram.payload.to_vec(),
+        ))
+    }
 
     #[test]
     fn write_pattern_interleaves_phase_and_intensity_per_transducer() {
@@ -249,9 +281,12 @@ mod tests {
         let dev = test_device(1);
         let patterns = [vec![vec![Phase::ZERO; dev.num_transducers()]; 2]];
         let op = WritePatternBuffer::new(PatternBank::B0, 0, &patterns, StmIntensity::default());
-        let mut out = Datagram::no_payload(Cmd::Nop);
-        assert!(op.encode(&dev, &mut out).is_ok());
-        assert_eq!(out.payload[INTENSITIES_OFFSET], Intensity::MAX.0);
+        let frames = build(2, op).unwrap();
+        assert_eq!(
+            frames.frame(0).unwrap().distribution(),
+            Distribution::PerDevice
+        );
+        assert_eq!(payload(&frames, 0, 1)[INTENSITIES_OFFSET], Intensity::MAX.0);
     }
 
     #[test]
@@ -273,12 +308,8 @@ mod tests {
         let patterns = [vec![vec![Phase::ZERO; dev.num_transducers()]]];
         let intensities = [vec![Intensity::MAX; dev.num_transducers()]];
         let op = WritePatternBuffer::new(PatternBank::B0, 0, &patterns, &intensities);
-        let mut out = Datagram::no_payload(Cmd::Nop);
-        assert!(op.encode(&dev, &mut out).is_ok());
-        assert!(matches!(
-            op.encode(&test_device(1), &mut out),
-            Err(Error::InvalidPayload(_))
-        ));
+        assert!(build(1, op).is_ok());
+        assert!(matches!(build(2, op), Err(Error::InvalidPayload(_))));
     }
 
     #[test]
@@ -325,16 +356,40 @@ mod tests {
     }
 
     #[test]
-    fn more_patterns_than_one_frame_holds_are_rejected() {
+    fn more_patterns_than_one_frame_holds_are_split_from_the_start_index() {
         let dev = test_device(0);
-        let patterns =
-            vec![vec![vec![Phase::ZERO; dev.num_transducers()]]; WritePatternBuffer::MAX_LEN + 1];
-        let op = WritePatternBuffer::new(PatternBank::B0, 0, &patterns, Intensity::MAX);
+        let n = dev.num_transducers();
+        let patterns: Vec<_> = (0..=PATTERN_RAW_MAX_COUNT)
+            .map(|k| vec![vec![Phase(u8::try_from(k).unwrap()); n]])
+            .collect();
+        let op = WritePatternBuffer::new(PatternBank::B0, 3, &patterns, Intensity::MAX);
+        let frames = build(1, op).unwrap();
+        assert_eq!(cmds(&frames), [Cmd::WritePatternRaw, Cmd::WritePatternRaw]);
+        let first = payload(&frames, 0, 0);
+        assert_eq!(usize::from(first[1]), PATTERN_RAW_MAX_COUNT, "count");
+        assert_eq!(&first[2..4], &3u16.to_le_bytes());
+        let second = payload(&frames, 1, 0);
+        assert_eq!(second[1], 1, "count");
+        assert_eq!(
+            &second[2..4],
+            &u16::try_from(3 + PATTERN_RAW_MAX_COUNT)
+                .unwrap()
+                .to_le_bytes()
+        );
+        assert_eq!(
+            second[PHASES_OFFSET],
+            u8::try_from(PATTERN_RAW_MAX_COUNT).unwrap()
+        );
+    }
+
+    #[test]
+    fn empty_patterns_are_rejected() {
+        let op = WritePatternBuffer::new(PatternBank::B0, 0, &[], Intensity::MAX);
         assert!(matches!(
-            encode(&op),
+            build(1, op),
             Err(Error::InvalidPayload(PayloadError::Build(
-                PayloadBuildError::PatternCountExceedsFrame { count, max }
-            ))) if count == WritePatternBuffer::MAX_LEN + 1 && max == WritePatternBuffer::MAX_LEN
+                PayloadBuildError::PatternSizeTooSmall { size: 0, min: 1 }
+            )))
         ));
     }
 

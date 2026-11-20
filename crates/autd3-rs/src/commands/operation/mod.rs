@@ -162,27 +162,14 @@ impl<O: Operation + ?Sized> Operation for &O {
 mod tests {
     use super::*;
     use crate::test_utils::{build, cmds, payload, test_geometry};
-    use crate::value::{Intensity, PatternBank};
+    use crate::value::Intensity;
 
     #[test]
     fn ops_whose_payload_depends_on_the_device_are_per_device() {
-        let ops: [&dyn Operation; 6] = [
+        let ops: [&dyn Operation; 3] = [
             &SetOutputMask { masks: vec![] },
             &SetPhaseCorrection { phases: vec![] },
-            &WriteFociBuffer {
-                bank: PatternBank::B0,
-                start_index: 0,
-                points: &[],
-            },
-            &WritePatternBuffer::new(PatternBank::B0, 0, &[], Intensity::MAX),
             &crate::commands::Pattern::new(&[], Intensity::MAX),
-            &WritePatternPhase {
-                bank: PatternBank::B0,
-                start_index: 0,
-                depth: PhaseDepth::Bits8,
-                intensity: Intensity::MAX,
-                patterns: &[],
-            },
         ];
         for op in ops {
             assert_eq!(op.distribution(), Distribution::PerDevice);

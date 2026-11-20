@@ -66,26 +66,21 @@ impl Command for PatternStm<'_> {
 
         match (self.intensities, self.option.phase_depth) {
             (StmIntensity::Uniform(intensity), depth) => {
-                let per_frame = depth.max_count();
-                for (k, patterns) in self.phases.chunks(per_frame).enumerate() {
-                    expansion.push(WritePatternPhase {
-                        bank,
-                        start_index: k * per_frame,
-                        depth,
-                        intensity,
-                        patterns,
-                    })?;
-                }
+                expansion.push(WritePatternPhase {
+                    bank,
+                    start_index: 0,
+                    depth,
+                    intensity,
+                    patterns: self.phases,
+                })?;
             }
             (_, PhaseDepth::Bits8) => {
-                for (k, phases) in self.phases.chunks(WritePatternBuffer::MAX_LEN).enumerate() {
-                    expansion.push(WritePatternBuffer {
-                        bank,
-                        start_index: k * WritePatternBuffer::MAX_LEN,
-                        patterns: phases,
-                        intensities: self.intensities,
-                    })?;
-                }
+                expansion.push(WritePatternBuffer {
+                    bank,
+                    start_index: 0,
+                    patterns: self.phases,
+                    intensities: self.intensities,
+                })?;
             }
             (_, depth) => {
                 return Err(PayloadError::PhaseDepthRequiresUniformIntensity { depth }.into());
@@ -114,6 +109,7 @@ mod tests {
     use crate::protocol::Cmd;
     use crate::test_utils::{build, cmds, payload, waits};
     use crate::value::Intensity;
+    use autd3_cpu_wire::layout::PATTERN_RAW_MAX_COUNT;
     use zerocopy::IntoBytes;
 
     #[test]
@@ -227,10 +223,7 @@ mod tests {
         let header = core::mem::size_of::<autd3_cpu_wire::payload::WritePatternRawPayload>();
         let entry_len = autd3_cpu_wire::layout::PATTERN_RAW_DATA_LEN;
         for (i, phases) in phases.iter().enumerate() {
-            let (frame, k) = (
-                i / WritePatternBuffer::MAX_LEN,
-                i % WritePatternBuffer::MAX_LEN,
-            );
+            let (frame, k) = (i / PATTERN_RAW_MAX_COUNT, i % PATTERN_RAW_MAX_COUNT);
             let write = payload(&datagrams, frame, 0);
             let base = header + k * entry_len;
             assert_eq!(write[base], phases[0][0].0, "index {i} phase");

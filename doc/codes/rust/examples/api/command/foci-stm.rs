@@ -44,14 +44,11 @@ fn main() -> anyhow::Result<()> {
 
     let num_foci = 1;
     // ANCHOR: equivalent
-    let max_len = WriteFociBuffer::max_len(num_foci);
-    for (i, chunk) in points.chunks(max_len).enumerate() {
-        WriteFociBuffer {
-            bank: option.bank,
-            start_index: i * max_len,
-            points: chunk,
-        };
-    }
+    WriteFociBuffer {
+        bank: option.bank,
+        start_index: 0,
+        points: &points,
+    };
     ConfigFociStm {
         bank: option.bank,
         config,

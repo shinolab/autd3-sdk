@@ -64,7 +64,7 @@ The following is equivalent to `Modulation { bank, config, data, loop_behavior, 
 
 <CodeTabs rust={excerpt(sample, "equivalent")} python={excerpt(pySample, "equivalent")} csharp={excerpt(csSample, "equivalent")} />
 
-When `data` has an odd length, `Modulation` appends a single 0 to the last chunk.
+When `data` has an odd length, a single 0 is appended (see [WriteModulationBuffer](/autd3-sdk/en/api/command/lowlevel/write-modulation-buffer/)).
 
 ## Example
 

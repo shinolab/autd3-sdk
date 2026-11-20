@@ -47,15 +47,13 @@ PatternStm(config, patterns, intensities, option)
 # ANCHOR_END: api
 
 # ANCHOR: equivalent
-max_count = option.phase_depth.max_count()
-for start_index in range(0, len(patterns), max_count):
-    WritePatternPhase(
-        bank=option.bank,
-        start_index=start_index,
-        depth=option.phase_depth,
-        intensity=intensities,
-        patterns=patterns[start_index : start_index + max_count],
-    )
+WritePatternPhase(
+    bank=option.bank,
+    start_index=0,
+    depth=option.phase_depth,
+    intensity=intensities,
+    patterns=patterns,
+)
 ConfigPattern(
     bank=option.bank,
     config=config,

@@ -102,11 +102,6 @@ pub struct Autd3StmControlPoint {
     pub phase_offset: u8,
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn autd3_op_write_foci_buffer_max_len(num_foci: u8) -> usize {
-    WriteFociBuffer::max_len(num_foci)
-}
-
 unsafe fn foci_points(
     points: *const Autd3StmControlPoint,
     num_samples: usize,
@@ -514,11 +509,6 @@ pub unsafe extern "C" fn autd3_op_write_pattern_buffer(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn autd3_op_write_pattern_buffer_max_len() -> usize {
-    WritePatternBuffer::MAX_LEN
-}
-
-#[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_op_write_foci_buffer(
     bank: u8,
     start_index: u32,
@@ -652,11 +642,6 @@ pub unsafe extern "C" fn autd3_op_write_modulation_buffer(
 
     let data = modulation_buffer.0.clone();
     into_handle(OwnedCommand::WriteModulationBuffer { bank, offset, data })
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn autd3_op_write_modulation_buffer_max_len() -> usize {
-    WriteModulationBuffer::MAX_LEN
 }
 
 #[unsafe(no_mangle)]
@@ -1222,12 +1207,15 @@ impl OwnedCommand {
                 start_index,
                 patterns,
                 intensities,
-            } => Lowered::Operation(Box::new(WritePatternBuffer::new(
-                *bank,
-                usize::from(*start_index),
-                patterns,
-                intensities.as_ref(),
-            ))),
+            } => Lowered::Command(
+                WritePatternBuffer::new(
+                    *bank,
+                    usize::from(*start_index),
+                    patterns,
+                    intensities.as_ref(),
+                )
+                .boxed(),
+            ),
             OwnedCommand::ConfigPattern {
                 bank,
                 config,
@@ -1261,13 +1249,14 @@ impl OwnedCommand {
                 bank: *bank,
                 transition_mode: *transition_mode,
             })),
-            OwnedCommand::WriteModulationBuffer { bank, offset, data } => {
-                Lowered::Operation(Box::new(WriteModulationBuffer {
+            OwnedCommand::WriteModulationBuffer { bank, offset, data } => Lowered::Command(
+                WriteModulationBuffer {
                     bank: *bank,
                     offset: usize::try_from(*offset).unwrap_or(usize::MAX),
                     data,
-                }))
-            }
+                }
+                .boxed(),
+            ),
             OwnedCommand::ConfigModulation {
                 bank,
                 config,
@@ -1330,24 +1319,30 @@ impl OwnedCommand {
                 bank,
                 start_index,
                 points,
-            } => Lowered::Operation(Box::new(WriteFociBuffer {
-                bank: *bank,
-                start_index: *start_index,
-                points,
-            })),
+            } => Lowered::Command(
+                WriteFociBuffer {
+                    bank: *bank,
+                    start_index: *start_index,
+                    points,
+                }
+                .boxed(),
+            ),
             OwnedCommand::WritePatternPhase {
                 bank,
                 start_index,
                 depth,
                 intensity,
                 patterns,
-            } => Lowered::Operation(Box::new(WritePatternPhase {
-                bank: *bank,
-                start_index: usize::from(*start_index),
-                depth: *depth,
-                intensity: *intensity,
-                patterns,
-            })),
+            } => Lowered::Command(
+                WritePatternPhase {
+                    bank: *bank,
+                    start_index: usize::from(*start_index),
+                    depth: *depth,
+                    intensity: *intensity,
+                    patterns,
+                }
+                .boxed(),
+            ),
             OwnedCommand::FociStm {
                 config,
                 points,
@@ -2678,17 +2673,14 @@ mod tests {
     }
 
     #[test]
-    fn write_pattern_buffer_takes_up_to_max_len_patterns_in_one_frame() {
+    fn write_pattern_buffer_splits_the_patterns_into_frames() {
         let geometry = geometry_of(1);
-        let max_len = autd3_op_write_pattern_buffer_max_len();
 
         assert_eq!(
             1,
-            num_frames_of(geometry, write_pattern_buffer_of(geometry, max_len))
+            num_frames_of(geometry, write_pattern_buffer_of(geometry, 1))
         );
-        let too_many = write_pattern_buffer_of(geometry, max_len + 1);
-        assert!(encode(geometry, too_many).is_err());
-        unsafe { autd3_op_free(too_many) };
+        assert!(num_frames_of(geometry, write_pattern_buffer_of(geometry, 100)) > 1);
         unsafe { drop_handle(geometry) };
     }
 
@@ -2919,7 +2911,7 @@ mod tests {
     }
 
     #[test]
-    fn an_each_takes_the_buffer_writes_as_single_frame_operations() {
+    fn an_each_takes_the_buffer_writes() {
         let geometry = geometry_of(2);
 
         let buffer = ModulationBuffer(vec![0xFF; 2]);
@@ -2941,42 +2933,26 @@ mod tests {
     }
 
     #[test]
-    fn a_buffer_write_longer_than_one_frame_fails_to_encode() {
+    fn a_buffer_write_longer_than_one_frame_is_split_into_frames() {
         let geometry = geometry_of(1);
 
-        let max = autd3_op_write_modulation_buffer_max_len();
-        let buffer = ModulationBuffer(vec![0xFF; max + 1]);
+        let buffer = ModulationBuffer(vec![0xFF; 4000]);
         let command = unsafe { autd3_op_write_modulation_buffer(0, 0, &raw const buffer) };
-        assert!(encode_error(geometry, command).contains("fit in one frame"));
+        assert!(num_frames_of(geometry, command) > 1);
 
-        let max = autd3_op_write_foci_buffer_max_len(2);
-        let points: Vec<_> = (0..(max + 1) * 2)
+        let points: Vec<_> = (0..400)
             .map(|_| Autd3StmControlPoint {
                 point: [0.0, 0.0, 150.0],
                 phase_offset: 0,
             })
             .collect();
-        let intensities = vec![0xFF; max + 1];
+        let intensities = [0xFF; 200];
         let command = unsafe {
-            autd3_op_write_foci_buffer(0, 0, points.as_ptr(), max + 1, 2, intensities.as_ptr())
+            autd3_op_write_foci_buffer(0, 0, points.as_ptr(), 200, 2, intensities.as_ptr())
         };
-        assert!(encode_error(geometry, command).contains("fit in one frame"));
+        assert!(num_frames_of(geometry, command) > 1);
 
         unsafe { drop_handle(geometry) };
-    }
-
-    #[test]
-    fn the_write_foci_buffer_max_len_shrinks_with_the_number_of_foci() {
-        assert_eq!(
-            autd3_op_write_foci_buffer_max_len(1),
-            WriteFociBuffer::max_len(1)
-        );
-        assert_eq!(
-            autd3_op_write_foci_buffer_max_len(8),
-            WriteFociBuffer::max_len(8)
-        );
-        assert_eq!(autd3_op_write_foci_buffer_max_len(0), 0);
-        assert_eq!(autd3_op_write_foci_buffer_max_len(9), 0);
     }
 
     #[test]

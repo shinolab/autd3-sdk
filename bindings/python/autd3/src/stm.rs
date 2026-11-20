@@ -1,18 +1,16 @@
 use std::sync::Arc;
 
-use autd3_python_capsule::error::invalid_argument;
 use autd3_python_capsule::extract::{
     extract_point, extract_sampling_config, extract_u8, extract_velocity, intensity_to_py,
     phase_to_py, velocity_to_py,
 };
 use autd3_python_capsule::numpy::{f32_vec3, f32_vec3_rows_from_ndarray, is_ndarray};
+use autd3_rs::commands::Expansion;
 use autd3_rs::commands::WriteFociBuffer as CoreWriteFociBuffer;
-use autd3_rs::commands::{Expansion, Operation};
 use autd3_rs::commands::{
     FociStm as CoreFociStm, FociStmOption as CoreFociStmOption, PatternStm as CorePatternStm,
     PatternStmOption as CorePatternStmOption, StmIntensity as CoreStmIntensity,
 };
-use autd3_rs::params::NUM_FOCI_MAX;
 use autd3_rs::value::{
     ControlPoint as CoreControlPoint, ControlPoints as CoreControlPoints, Intensity,
     PatternBank as CorePatternBank, Phase, SamplingConfig,
@@ -21,7 +19,7 @@ use autd3_rs::{Point3, Velocity};
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 
-use crate::datagram::{PushCommand, PushOperation};
+use crate::datagram::PushCommand;
 use crate::ops;
 
 #[pyclass(name = "ControlPoint", module = "autd3.value", eq, frozen)]
@@ -254,13 +252,14 @@ pub(crate) struct WriteFociBufferData {
     points: Vec<CoreControlPoints>,
 }
 
-impl PushOperation for WriteFociBufferData {
-    fn operation(&self) -> Box<dyn Operation + '_> {
-        Box::new(CoreWriteFociBuffer {
+impl PushCommand for WriteFociBufferData {
+    fn push_into(&self, expansion: &mut Expansion<'_>) -> Result<(), autd3_rs::Error> {
+        expansion.push(CoreWriteFociBuffer {
             bank: self.bank,
             start_index: self.start_index,
             points: &self.points,
-        })
+        })?;
+        Ok(())
     }
 }
 
@@ -269,19 +268,6 @@ pub struct WriteFociBuffer(pub(crate) Arc<WriteFociBufferData>);
 
 #[pymethods]
 impl WriteFociBuffer {
-    #[staticmethod]
-    fn max_len(num_foci: usize) -> PyResult<usize> {
-        u8::try_from(num_foci)
-            .ok()
-            .map(CoreWriteFociBuffer::max_len)
-            .filter(|&len| len > 0)
-            .ok_or_else(|| {
-                invalid_argument(format!(
-                    "number of foci per sample must be 1..={NUM_FOCI_MAX}, got {num_foci}"
-                ))
-            })
-    }
-
     #[new]
     fn new(
         bank: ops::PatternBank,

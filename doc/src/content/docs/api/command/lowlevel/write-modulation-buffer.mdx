@@ -26,11 +26,10 @@ import { excerpt } from "@lib/excerpt";
 | `offset`   | `usize`          | バンク内の書き込み開始オフセット |
 | `data`     | `&[u8]`          | AM 波形サンプル列                |
 
-`WriteModulationBuffer` は 1 フレームに収まる分しか書けない.
-上限は `WriteModulationBuffer::MAX_LEN` で, 超えると送信時にエラーになる.
+1 フレームに収まらない `data` は複数フレームに分けて送られる.
 
-`offset` と `data` の長さはどちらも偶数でなければならず, 奇数だと送信時にエラーになる (バッファは 2 サンプル単位でしか書けない).
-奇数長の波形は末尾に 0 を 1 つ足して書き込み, `ConfigModulation` の `size` に元の長さを渡す.
+バッファは 2 サンプル単位でしか書けないため, `offset` は偶数でなければならず, 奇数だと送信時にエラーになる.
+`data` が奇数長のときは末尾に 0 を 1 つ足して書き込む. `ConfigModulation` の `size` には元の長さを渡す.
 
 ## Example
 

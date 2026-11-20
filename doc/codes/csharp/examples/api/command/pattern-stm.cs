@@ -46,17 +46,13 @@ internal static class Sample
         // ANCHOR_END: api
 
         // ANCHOR: equivalent
-        var maxCount = option.PhaseDepth.MaxCount();
-        for (var startIndex = 0; startIndex < patterns.Length; startIndex += maxCount)
-        {
-            new WritePatternPhase(
-                bank: option.Bank,
-                startIndex: (ushort)startIndex,
-                depth: option.PhaseDepth,
-                intensity: intensities,
-                patterns: patterns[startIndex..Math.Min(startIndex + maxCount, patterns.Length)]
-            );
-        }
+        new WritePatternPhase(
+            bank: option.Bank,
+            startIndex: 0,
+            depth: option.PhaseDepth,
+            intensity: intensities,
+            patterns: patterns
+        );
         new ConfigPattern(
             bank: option.Bank,
             config: config,

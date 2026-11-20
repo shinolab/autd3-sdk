@@ -15,8 +15,7 @@ import csFullSample from "@codes/csharp/examples/api/command/lowlevel/bank-examp
 import { excerpt } from "@lib/excerpt";
 
 `WritePatternBuffer` is a low-level command that writes Patterns (the phase and intensity of each transducer) to consecutive indices of the specified bank, starting at `start_index`.
-One frame holds up to `WritePatternBuffer::MAX_LEN` (2) Patterns.
-To write more, send them in several commands.
+One frame holds up to 2 Patterns; more are sent in several frames.
 
 ## API
 
