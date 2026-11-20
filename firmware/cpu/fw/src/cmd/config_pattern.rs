@@ -14,33 +14,29 @@ pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error>
 }
 
 pub(crate) fn write<P: Port>(port: &mut P, cfg: &ConfigPatternPayload) {
-    let bank_offset = u16::from(cfg.bank.as_u8());
+    let bank_offset = u16::from(cfg.bank().as_u8());
     fpga::write_ctl(
         port,
         ADDR_PATTERN_MODE0 + bank_offset,
-        cfg.emission_type as u16,
+        cfg.emission_type() as u16,
     );
     fpga::write_ctl(
         port,
         ADDR_PATTERN_CYCLE0 + bank_offset,
-        (cfg.size.get() - 1) as u16,
+        (cfg.size() - 1) as u16,
     );
-    fpga::write_ctl(
-        port,
-        ADDR_PATTERN_FREQ_DIV0 + bank_offset,
-        cfg.divider.get(),
-    );
+    fpga::write_ctl(port, ADDR_PATTERN_FREQ_DIV0 + bank_offset, cfg.divider());
     fpga::write_ctl(
         port,
         ADDR_PATTERN_SOUND_SPEED0 + bank_offset,
-        cfg.sound_speed.get(),
+        cfg.sound_speed(),
     );
     fpga::write_ctl(
         port,
         ADDR_PATTERN_NUM_FOCI0 + bank_offset,
-        cfg.num_foci.map_or(0, |n| u16::from(n.get())),
+        cfg.num_foci().map_or(0, |n| u16::from(n.get())),
     );
-    fpga::write_ctl(port, ADDR_PATTERN_REP0 + bank_offset, cfg.rep.get());
+    fpga::write_ctl(port, ADDR_PATTERN_REP0 + bank_offset, cfg.rep());
 }
 
 #[cfg(all(test, not(loom)))]

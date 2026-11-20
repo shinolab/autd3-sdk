@@ -12,13 +12,13 @@ use crate::{Error, PatternBank};
 #[derive(TryFromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct ConfigPatternPayload {
-    pub bank: PatternBank,
-    pub emission_type: EmissionType,
-    pub divider: U16,
-    pub size: U32,
-    pub num_foci: Option<NonZeroU8>,
-    pub sound_speed: U16,
-    pub rep: U16,
+    bank: PatternBank,
+    emission_type: EmissionType,
+    divider: U16,
+    size: U32,
+    num_foci: Option<NonZeroU8>,
+    sound_speed: U16,
+    rep: U16,
 }
 
 const SOUND_SPEED_UNITS_PER_M_S: f32 = 64.0;
@@ -102,19 +102,46 @@ impl ConfigPatternPayload {
     }
 
     #[must_use]
-    pub const fn divider(&self) -> Option<NonZeroU16> {
-        NonZeroU16::new(self.divider.get())
+    pub const fn bank(&self) -> PatternBank {
+        self.bank
     }
 
     #[must_use]
-    pub const fn sound_speed(&self) -> Option<NonZeroU16> {
-        NonZeroU16::new(self.sound_speed.get())
+    pub const fn emission_type(&self) -> EmissionType {
+        self.emission_type
+    }
+
+    #[must_use]
+    pub const fn divider(&self) -> u16 {
+        self.divider.get()
+    }
+
+    #[must_use]
+    pub const fn size(&self) -> u32 {
+        self.size.get()
+    }
+
+    #[must_use]
+    pub const fn num_foci(&self) -> Option<NonZeroU8> {
+        self.num_foci
+    }
+
+    #[must_use]
+    pub const fn sound_speed(&self) -> u16 {
+        self.sound_speed.get()
+    }
+
+    #[must_use]
+    pub const fn rep(&self) -> u16 {
+        self.rep.get()
     }
 
     pub fn parse(payload: &[u8]) -> Result<Self, Error> {
         let p = try_read_exact::<Self>(payload)?;
-        p.divider().ok_or(Error::InvalidPayload)?;
-        let size = p.size.get();
+        if p.divider() == 0 {
+            return Err(Error::InvalidPayload);
+        }
+        let size = p.size();
         match p.emission_type {
             EmissionType::Raw => {
                 if !(1..=EMISSION_MAX_INDICES).contains(&size)
@@ -124,12 +151,14 @@ impl ConfigPatternPayload {
                 }
             }
             EmissionType::Foci => {
-                if p.num_foci.zip(p.sound_speed()).is_none_or(|(num_foci, _)| {
-                    num_foci.get() > NUM_FOCI_MAX
-                        || !(BUFFER_SIZE_MIN as u32
-                            ..=MAX_FOCI_TOTAL as u32 / u32::from(num_foci.get()))
-                            .contains(&size)
-                }) {
+                if p.sound_speed() == 0
+                    || p.num_foci.is_none_or(|num_foci| {
+                        num_foci.get() > NUM_FOCI_MAX
+                            || !(BUFFER_SIZE_MIN as u32
+                                ..=MAX_FOCI_TOTAL as u32 / u32::from(num_foci.get()))
+                                .contains(&size)
+                    })
+                {
                     return Err(Error::InvalidPayload);
                 }
             }

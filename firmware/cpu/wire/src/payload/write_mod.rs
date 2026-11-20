@@ -9,8 +9,8 @@ use crate::{Error, ModulationBank};
 #[derive(TryFromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct WriteModPayload {
-    pub bank: ModulationBank,
-    pub offset: U32,
+    bank: ModulationBank,
+    offset: U32,
 }
 
 impl WriteModPayload {
@@ -30,6 +30,16 @@ impl WriteModPayload {
             bank,
             offset: U32::new(offset as u32),
         })
+    }
+
+    #[must_use]
+    pub const fn bank(&self) -> ModulationBank {
+        self.bank
+    }
+
+    #[must_use]
+    pub const fn offset(&self) -> u32 {
+        self.offset.get()
     }
 
     pub fn parse(payload: &[u8]) -> Result<(Self, &[u8]), Error> {

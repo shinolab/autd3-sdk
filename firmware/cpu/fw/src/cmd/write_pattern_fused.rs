@@ -1,29 +1,26 @@
 pub(crate) use autd3_cpu_wire::payload::WritePatternFusedPayload;
 
+use core::num::NonZeroU16;
+
 use autd3_cpu_wire::payload::ConfigPatternPayload;
-use zerocopy::little_endian::{U16, U32};
+use autd3_cpu_wire::value::{LoopBehavior, SamplingConfig};
 
 use crate::cmd::bank::{PATTERN_BANK_REGS, activate_bank};
 use crate::cmd::{config_pattern, write_pattern_raw};
-use crate::fpga::{EmissionType, REP_INFINITE};
 use crate::port::Port;
 use crate::proto::Error;
 
 pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
     let (p, data) = WritePatternFusedPayload::parse(payload)?;
     write_pattern_raw::write_slot(port, p.bank, 0, data);
-    config_pattern::write(
-        port,
-        &ConfigPatternPayload {
-            bank: p.bank,
-            emission_type: EmissionType::Raw,
-            divider: U16::new(u16::MAX),
-            size: U32::new(1),
-            num_foci: None,
-            sound_speed: U16::new(0),
-            rep: U16::new(REP_INFINITE),
-        },
-    );
+    let cfg = ConfigPatternPayload::raw(
+        p.bank,
+        SamplingConfig::new(NonZeroU16::MAX),
+        1,
+        LoopBehavior::Infinite,
+    )
+    .map_err(|_| Error::InvalidPayload)?;
+    config_pattern::write(port, &cfg);
     activate_bank(
         port,
         &PATTERN_BANK_REGS,

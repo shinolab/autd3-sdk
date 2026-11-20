@@ -1,5 +1,3 @@
-use core::num::NonZeroU16;
-
 use zerocopy::little_endian::{U16, U32};
 use zerocopy::{Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned};
 
@@ -11,10 +9,10 @@ use crate::{Error, ModulationBank};
 #[derive(TryFromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct ConfigModPayload {
-    pub bank: ModulationBank,
-    pub divider: U16,
-    pub size: U32,
-    pub rep: U16,
+    bank: ModulationBank,
+    divider: U16,
+    size: U32,
+    rep: U16,
 }
 
 impl ConfigModPayload {
@@ -40,14 +38,30 @@ impl ConfigModPayload {
     }
 
     #[must_use]
-    pub const fn divider(&self) -> Option<NonZeroU16> {
-        NonZeroU16::new(self.divider.get())
+    pub const fn bank(&self) -> ModulationBank {
+        self.bank
+    }
+
+    #[must_use]
+    pub const fn divider(&self) -> u16 {
+        self.divider.get()
+    }
+
+    #[must_use]
+    pub const fn size(&self) -> u32 {
+        self.size.get()
+    }
+
+    #[must_use]
+    pub const fn rep(&self) -> u16 {
+        self.rep.get()
     }
 
     pub fn parse(payload: &[u8]) -> Result<Self, Error> {
         let p = try_read_exact::<Self>(payload)?;
-        p.divider().ok_or(Error::InvalidPayload)?;
-        if !(BUFFER_SIZE_MIN as u32..=MOD_BUFFER_SAMPLES as u32).contains(&p.size.get()) {
+        if p.divider() == 0
+            || !(BUFFER_SIZE_MIN as u32..=MOD_BUFFER_SAMPLES as u32).contains(&p.size())
+        {
             return Err(Error::InvalidPayload);
         }
         Ok(p)
@@ -63,6 +77,8 @@ assert_layout!(ConfigModPayload {
 
 #[cfg(test)]
 mod tests {
+    use core::num::NonZeroU16;
+
     use rstest::rstest;
     use zerocopy::IntoBytes;
 

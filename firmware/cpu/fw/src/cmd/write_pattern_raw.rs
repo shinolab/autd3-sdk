@@ -9,9 +9,9 @@ use crate::proto::{EMISSION_SLOT_WORDS, Error};
 
 pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
     let (p, slots) = WritePatternRawPayload::parse(payload)?;
-    let index = u32::from(p.index.get());
+    let index = u32::from(p.index());
     for (k, data) in slots.iter().enumerate() {
-        write_slot(port, p.bank, index + k as u32, data);
+        write_slot(port, p.bank(), index + k as u32, data);
     }
     Ok(())
 }

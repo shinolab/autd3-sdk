@@ -9,8 +9,8 @@ use crate::{Error, PatternBank};
 #[derive(TryFromBytes, IntoBytes, KnownLayout, Immutable, Unaligned)]
 #[repr(C)]
 pub struct WriteFociPayload {
-    pub bank: PatternBank,
-    pub offset: U32,
+    bank: PatternBank,
+    offset: U32,
 }
 
 impl WriteFociPayload {
@@ -31,6 +31,16 @@ impl WriteFociPayload {
             bank,
             offset: U32::new((focus_offset * FOCUS_WORDS) as u32),
         })
+    }
+
+    #[must_use]
+    pub const fn bank(&self) -> PatternBank {
+        self.bank
+    }
+
+    #[must_use]
+    pub const fn offset(&self) -> u32 {
+        self.offset.get()
     }
 
     pub fn parse(payload: &[u8]) -> Result<(Self, &[u8]), Error> {

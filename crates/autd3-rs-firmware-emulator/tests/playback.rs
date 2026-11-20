@@ -11,7 +11,6 @@ use autd3_rs_core::params::ULTRASOUND_FREQ_HZ;
 use autd3_rs_core::protocol::{Cmd, DeviceErrorCode};
 use autd3_rs_firmware_emulator::Device;
 use zerocopy::IntoBytes;
-use zerocopy::little_endian::U32;
 
 use common::{NUM_TRANSDUCERS, frame};
 use modulation::{activate_modulation_bank, config_modulation};
@@ -20,10 +19,7 @@ const ULTRASOUND_PERIOD_NS: u64 = 1_000_000_000 / ULTRASOUND_FREQ_HZ as u64;
 const SAMPLES: [u8; 4] = [10, 20, 30, 40];
 
 fn write_modulation(bank: ModulationBank, samples: &[u8]) -> Vec<u8> {
-    let header = WriteModPayload {
-        bank,
-        offset: U32::new(0),
-    };
+    let header = WriteModPayload::new(bank, 0, samples.len()).unwrap();
     [header.as_bytes(), samples].concat()
 }
 
