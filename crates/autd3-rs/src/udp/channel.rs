@@ -99,10 +99,17 @@ impl Channel {
             datagram[len..len + part.len()].copy_from_slice(part);
             len += part.len();
         }
+        let mut pending_error_of_earlier_datagram_consumed = false;
         loop {
             match self.socket.try_send_to(&datagram[..len], dst.into()) {
                 Ok(_) => return Ok(()),
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
+                Err(e)
+                    if e.kind() != io::ErrorKind::WouldBlock
+                        && !pending_error_of_earlier_datagram_consumed =>
+                {
+                    pending_error_of_earlier_datagram_consumed = true;
+                }
                 Err(e) => return Err(e),
             }
         }
@@ -255,5 +262,33 @@ mod tests {
         let header = Header::new(Kind::Frame, 0x1234);
         let expected = [header.as_bytes(), &first, &second].concat();
         assert_eq!(&buf[..len], expected);
+    }
+
+    #[tokio::test]
+    async fn an_unreachable_device_does_not_fail_the_send_to_the_next_device() {
+        let bind_localhost = || {
+            let socket =
+                std::net::UdpSocket::bind(SocketAddrV6::new(Ipv6Addr::LOCALHOST, 0, 0, 0)).unwrap();
+            let SocketAddr::V6(addr) = socket.local_addr().unwrap() else {
+                panic!("the socket is bound to an IPv6 address");
+            };
+            (socket, addr)
+        };
+        let (closed, closed_addr) = bind_localhost();
+        drop(closed);
+        let (receiver, receiver_addr) = bind_localhost();
+        let mut channel = Channel::open(receiver_addr, None, None).await.unwrap();
+        channel.attach_devices(vec![closed_addr, receiver_addr]);
+
+        for device in 0..2 {
+            channel
+                .send_to_device(device, Kind::Heartbeat, 1, [&[], &[]])
+                .await
+                .unwrap();
+        }
+
+        let mut buf = [0; RECV_BUFFER_BYTES];
+        let (len, _) = receiver.recv_from(&mut buf).unwrap();
+        assert_eq!(&buf[..len], Header::new(Kind::Heartbeat, 1).as_bytes());
     }
 }
