@@ -73,7 +73,7 @@ impl SilencerEmulator {
                 step - 65536
             };
         }
-        self.current += step.clamp(-update_rate, update_rate);
+        self.current = (self.current + step.clamp(-update_rate, update_rate)) & 0xFFFF;
         (self.current >> 8) as u8
     }
 }
