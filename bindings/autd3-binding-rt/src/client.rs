@@ -202,12 +202,12 @@ impl Client {
             }
             let mut sent = Ok(());
             for frame in frames {
-                if every_frame_waits || frame.waits_for_previous() {
-                    self.wait_until(|book| book.pending.is_empty()).await?;
-                } else {
-                    self.wait_until(|book| book.pending.len() < MAX_INFLIGHT)
-                        .await?;
-                }
+                let waits_for_every_pending = every_frame_waits || frame.waits_for_previous();
+                self.wait_until(|book| {
+                    (!waits_for_every_pending || book.pending.is_empty())
+                        && self.controller.most_frames_awaiting_reply() < MAX_INFLIGHT
+                })
+                .await?;
                 if shared.book().has_error(call) {
                     break;
                 }

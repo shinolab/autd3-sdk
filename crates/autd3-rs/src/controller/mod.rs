@@ -6,6 +6,8 @@ pub(crate) mod open;
 pub use exec_at::ExecAt;
 pub use inflight::InflightFrames;
 
+use std::collections::VecDeque;
+use std::mem::DropGuard;
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::{Mutex, PoisonError};
 use std::time::Instant;
@@ -13,7 +15,7 @@ use std::time::Instant;
 use autd3_cpu_wire::payload::FirmwareInfo;
 use autd3_cpu_wire::udp::{Flags, Kind};
 use autd3_cpu_wire::update::RunningImage;
-use autd3_rs_core::MAX_DEVICES;
+use autd3_rs_core::{MAX_DEVICES, MAX_INFLIGHT};
 use zerocopy::{FromBytes, FromZeros, IntoBytes};
 
 use crate::commands::Command;
@@ -36,6 +38,7 @@ pub struct Controller {
     channel: Channel,
     last_msg_id: AtomicU16,
     device_clock: Mutex<DeviceClock>,
+    frames_awaiting_reply: Mutex<Vec<VecDeque<u16>>>,
 }
 
 impl Controller {
@@ -48,6 +51,7 @@ impl Controller {
             channel,
             last_msg_id: AtomicU16::new(0),
             device_clock: Mutex::new(device_clock),
+            frames_awaiting_reply: Mutex::new(vec![VecDeque::new(); geometry.num_devices()]),
         })
     }
 
@@ -65,6 +69,24 @@ impl Controller {
         self.device_clock
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
+    }
+
+    #[must_use]
+    pub fn most_frames_awaiting_reply(&self) -> usize {
+        self.frames_awaiting_reply
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .iter()
+            .map(VecDeque::len)
+            .max()
+            .unwrap_or(0)
+    }
+
+    pub(crate) async fn wait_for_device_queue_room(&self) -> Result<(), Error> {
+        while self.most_frames_awaiting_reply() >= MAX_INFLIGHT {
+            self.recv().await?;
+        }
+        Ok(())
     }
 
     pub fn device_time_now(&self) -> Result<SysTime, Error> {
@@ -87,6 +109,15 @@ impl Controller {
     }
 
     fn check_and_observe(&self, reply: &DeviceReply, received_at: Instant) -> Result<(), Error> {
+        if let Some(awaiting) = self
+            .frames_awaiting_reply
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get_mut(reply.device)
+            && let Some(answered) = awaiting.iter().position(|&id| id == reply.msg_id)
+        {
+            awaiting.drain(..=answered);
+        }
         if !reply.flags.contains(Flags::ASSIGNED) || usize::from(reply.unit_id) != reply.device {
             return Err(Error::DeviceLost {
                 device: reply.device,
@@ -107,6 +138,7 @@ impl Controller {
 
     async fn send_and_collect(&self, frame: Frame<'_>) -> Result<Response, Error> {
         self.discard_unread_replies()?;
+        self.wait_for_device_queue_room().await?;
         let msg_id = self.send_frame(frame, ExecAt::Immediate).await?;
         self.collect(msg_id).await
     }
@@ -136,13 +168,36 @@ impl Controller {
                 self.device_clock()
                     .record_sent_to_grandmaster(msg_id, Instant::now());
             }
-            if let Err(source) = self
+            let awaiting_reply = matches!(kind, Kind::Frame).then(|| {
+                self.frames_awaiting_reply
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)[device]
+                    .push_back(msg_id);
+                DropGuard::new((), |()| {
+                    let mut frames_awaiting_reply = self
+                        .frames_awaiting_reply
+                        .lock()
+                        .unwrap_or_else(PoisonError::into_inner);
+                    let awaiting = &mut frames_awaiting_reply[device];
+                    if let Some(unsent) = awaiting.iter().rposition(|&id| id == msg_id) {
+                        awaiting.remove(unsent);
+                    }
+                })
+            });
+            let sent = self
                 .channel
                 .send_to_device(device, kind, msg_id, body_for_device(device))
-                .await
-            {
-                tracing::warn!(device, "sending to a device failed; skipping it: {source}");
-                first_failure.get_or_insert(UdpError::Unsent { device, source });
+                .await;
+            match sent {
+                Ok(()) => {
+                    if let Some(awaiting_reply) = awaiting_reply {
+                        DropGuard::dismiss(awaiting_reply);
+                    }
+                }
+                Err(source) => {
+                    tracing::warn!(device, "sending to a device failed; skipping it: {source}");
+                    first_failure.get_or_insert(UdpError::Unsent { device, source });
+                }
             }
         }
         first_failure.map_or(Ok(msg_id), |e| Err(e.into()))
