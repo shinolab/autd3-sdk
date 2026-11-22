@@ -99,7 +99,14 @@ module sim_sync_ps_regs ();
     reg_read(ADDR_SYNC_PS_CTL, value);
     `ASSERT_EQ(16'h0001, value);
 
-    reg_read(8'h04, value);
+    updates = 0;
+    reg_write(ADDR_SYNC_PS_STATS_CTL, 16'h0003);
+    reg_write(ADDR_SYNC_PS_DIFF_MIN, 16'h0000);
+    reg_write(8'h0B, 16'h0000);
+    repeat (8) @(posedge CLK);
+    `ASSERT_EQ(0, updates);
+
+    reg_read(8'h0B, value);
     `ASSERT_EQ(16'h0000, value);
 
     reg_read(ADDR_SYNC_PS_CTL, value);

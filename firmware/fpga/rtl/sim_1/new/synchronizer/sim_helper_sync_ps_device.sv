@@ -38,6 +38,12 @@ module sim_helper_sync_ps_device #(
   logic signed [13:0] ps_edge_diff;
   logic ps_rate_toggle;
   settings::sync_ps_settings_t PS_SETTINGS;
+  settings::sync_ps_status_t PS_STATUS;
+
+  assign PS_STATUS.EDGE = ps_edge;
+  assign PS_STATUS.FINE = FINE;
+  assign PS_STATUS.EDGE_DIFF = ps_edge_diff;
+  assign PS_STATUS.RATE = PS_RATE;
 
   sync_ps_regs sync_ps_regs (
       .BUS_CLK(BUS_CLK),
@@ -47,7 +53,8 @@ module sim_helper_sync_ps_device #(
       .ADDR(BUS_ADDR),
       .DATA_IN(BUS_DATA_IN),
       .DATA_OUT(BUS_DATA_OUT),
-      .SETTINGS(PS_SETTINGS)
+      .SETTINGS(PS_SETTINGS),
+      .STATUS(PS_STATUS)
   );
 
   initial begin

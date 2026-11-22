@@ -83,6 +83,12 @@ module main #(
   logic signed [13:0] ps_edge_diff;
   logic signed [15:0] ps_rate;
   logic ps_rate_toggle;
+  settings::sync_ps_status_t sync_ps_status;
+
+  assign sync_ps_status.EDGE = ps_edge;
+  assign sync_ps_status.FINE = ps_fine;
+  assign sync_ps_status.EDGE_DIFF = ps_edge_diff;
+  assign sync_ps_status.RATE = ps_rate;
 
   logic gpio_in_hard_sync[4];
   logic gpio_in[4];
@@ -137,7 +143,8 @@ module main #(
       .PWE_TABLE_BUS(pwe_table_bus.in_port),
       .FLASH_BUS(flash_bus.host_port),
       .CPU_WATCHDOG_FIRED(cpu_watchdog_fired),
-      .SYNC_PS_SETTINGS(sync_ps_settings)
+      .SYNC_PS_SETTINGS(sync_ps_settings),
+      .SYNC_PS_STATUS(sync_ps_status)
   );
 
   assign output_gate = failsafe | cpu_watchdog_fired;
