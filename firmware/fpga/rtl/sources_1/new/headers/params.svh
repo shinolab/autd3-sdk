@@ -92,10 +92,17 @@ package params;
   } watchdog_addr_t;
 
   typedef enum logic [7:0] {
-    ADDR_SYNC_PS_CTL = 8'h00,
-    ADDR_SYNC_PS_KP  = 8'h01,
-    ADDR_SYNC_PS_KI  = 8'h02,
-    ADDR_SYNC_PS_KF  = 8'h03
+    ADDR_SYNC_PS_CTL           = 8'h00,
+    ADDR_SYNC_PS_KP            = 8'h01,
+    ADDR_SYNC_PS_KI            = 8'h02,
+    ADDR_SYNC_PS_KF            = 8'h03,
+    ADDR_SYNC_PS_STATS_CTL     = 8'h04,
+    ADDR_SYNC_PS_DIFF_MIN      = 8'h05,
+    ADDR_SYNC_PS_DIFF_MAX      = 8'h06,
+    ADDR_SYNC_PS_DIFF_OUTLIERS = 8'h07,
+    ADDR_SYNC_PS_RATE_MIN      = 8'h08,
+    ADDR_SYNC_PS_RATE_MAX      = 8'h09,
+    ADDR_SYNC_PS_FINE_EXITS    = 8'h0A
   } sync_ps_addr_t;
 
   typedef enum logic [7:0] {

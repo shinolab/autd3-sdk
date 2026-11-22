@@ -214,6 +214,51 @@ module sim_sync_ps ();
     $display("%s: fine lock after %0d ms", label, elapsed - AcquireStableMs);
   endtask
 
+  int st_diff_min;
+  int st_diff_max;
+  int st_diff_outliers;
+  int st_rate_min;
+  int st_rate_max;
+  int st_fine_exits;
+  int exits_at_clear[NumDevices];
+
+  task stats_command(input logic [15:0] cmd);
+    logic [15:0] busy;
+    bus_write('1, params::ADDR_SYNC_PS_STATS_CTL, cmd);
+    for (int i = 0; i < NumDevices; i++) begin
+      do bus_read(i, params::ADDR_SYNC_PS_STATS_CTL, busy); while (busy[0]);
+    end
+  endtask
+
+  task stats_read(input string label, input int dev);
+    logic [15:0] v;
+    bus_read(dev, params::ADDR_SYNC_PS_DIFF_MIN, v);
+    st_diff_min = $signed(v);
+    bus_read(dev, params::ADDR_SYNC_PS_DIFF_MAX, v);
+    st_diff_max = $signed(v);
+    bus_read(dev, params::ADDR_SYNC_PS_DIFF_OUTLIERS, v);
+    st_diff_outliers = v;
+    bus_read(dev, params::ADDR_SYNC_PS_RATE_MIN, v);
+    st_rate_min = $signed(v);
+    bus_read(dev, params::ADDR_SYNC_PS_RATE_MAX, v);
+    st_rate_max = $signed(v);
+    bus_read(dev, params::ADDR_SYNC_PS_FINE_EXITS, v);
+    st_fine_exits = v;
+    $display("%s: device %0d stats: diff [%0d, %0d] outliers %0d rate [%0d, %0d] fine exits %0d", label, dev, st_diff_min, st_diff_max,
+             st_diff_outliers, st_rate_min, st_rate_max, st_fine_exits);
+  endtask
+
+  task check_fine_exits(input string label);
+    for (int i = 0; i < NumDevices; i++) begin
+      stats_read(label, i);
+      if (st_fine_exits != fine_exits[i] - exits_at_clear[i]) begin
+        $error("%s:%d: %s: device %0d FINE_EXITS: expected is %0d, but actual is %0d", `__FILE__, `__LINE__, label, i,
+               fine_exits[i] - exits_at_clear[i], st_fine_exits);
+        $finish();
+      end
+    end
+  endtask
+
   logic [15:0] rd;
   int exit_before[NumDevices];
   real expected_rate;
@@ -230,16 +275,42 @@ module sim_sync_ps ();
     repeat (3) @(negedge SYNC_IN[0]);
     synchronize(SYNC_CYCLE_TICKS * 3);
     repeat (10) @(negedge SYNC_IN[0]);
+    stats_command(16'h0002);
     measure("ps off", 40);
+    stats_command(16'h0001);
+    for (int i = 0; i < NumDevices; i++) begin
+      stats_read("ps off", i);
+      if ((st_fine_exits != 0) || (st_rate_min != 0) || (st_rate_max != 0) || ((i == 0) && (st_diff_outliers == 0))) begin
+        $error("%s:%d: device %0d stats with ps off: expected is no fine exit, rate 0 and outliers on the 180 ppm device, but actual is not",
+               `__FILE__, `__LINE__, i);
+        $finish();
+      end
+    end
 
     bus_write('1, params::ADDR_SYNC_PS_CTL, 16'h0001);
     wait_all_fine("enable", '1);
     repeat (SettleMs) @(negedge SYNC_IN[0]);
 
+    stats_command(16'h0002);
+    exits_at_clear = fine_exits;
     exit_before = fine_exits;
-    watch_fine  = 1'b1;
+    watch_fine = 1'b1;
     measure("ps on", 200);
     watch_fine = 1'b0;
+    stats_command(16'h0001);
+    for (int i = 0; i < NumDevices; i++) begin
+      stats_read("ps on", i);
+      expected_rate = -Ppm[i] * 1.0e-6 * 56.0 * 1024.0e6 * 262144.0 / 204.8e6;
+      if ((st_diff_outliers != 0) || (st_diff_min > st_diff_max) || (st_diff_min < -1) || (st_diff_max > 1) || (st_fine_exits != 0) || (abs_real(
+              $itor(st_rate_min) - expected_rate
+          ) > RateTolerance * 7340.0) || (abs_real(
+              $itor(st_rate_max) - expected_rate
+          ) > RateTolerance * 7340.0)) begin
+        $error("%s:%d: device %0d stats with fine lock: expected is |diff| <= 1, no fine exit and rate around %0.0f, but actual is not", `__FILE__,
+               `__LINE__, i, expected_rate);
+        $finish();
+      end
+    end
     for (int i = 0; i < NumDevices; i++) begin
       if (st_std[i] > StdBoundNs) begin
         $error("%s:%d: device %0d edge std with fine lock: expected is <= %0.1f ns, but actual is %0.3f ns", `__FILE__, `__LINE__, i, StdBoundNs,
@@ -289,6 +360,13 @@ module sim_sync_ps ();
       $finish();
     end
     wait_all_fine("after a spurious pulse", '1);
+    stats_command(16'h0001);
+    check_fine_exits("after a spurious pulse");
+    stats_read("after a spurious pulse", 1);
+    if (st_fine_exits == 0) begin
+      $error("%s:%d: FINE_EXITS of the resynced device: expected is > 0, but actual is 0", `__FILE__, `__LINE__);
+      $finish();
+    end
 
     synchronize(SYNC_CYCLE_TICKS * 1000);
     wait_all_fine("after Synchronize", '1);
@@ -310,6 +388,9 @@ module sim_sync_ps ();
              FINE[2]);
       $finish();
     end
+
+    stats_command(16'h0001);
+    check_fine_exits("after disable");
 
     $display("OK! sim_sync_ps");
     $finish();

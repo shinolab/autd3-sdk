@@ -58,6 +58,13 @@ pub const ADDR_SYNC_PS_CTL: u16 = 0x0;
 pub const ADDR_SYNC_PS_KP: u16 = 0x1;
 pub const ADDR_SYNC_PS_KI: u16 = 0x2;
 pub const ADDR_SYNC_PS_KF: u16 = 0x3;
+pub const ADDR_SYNC_PS_STATS_CTL: u16 = 0x4;
+pub const ADDR_SYNC_PS_DIFF_MIN: u16 = 0x5;
+pub const ADDR_SYNC_PS_DIFF_MAX: u16 = 0x6;
+pub const ADDR_SYNC_PS_DIFF_OUTLIERS: u16 = 0x7;
+pub const ADDR_SYNC_PS_RATE_MIN: u16 = 0x8;
+pub const ADDR_SYNC_PS_RATE_MAX: u16 = 0x9;
+pub const ADDR_SYNC_PS_FINE_EXITS: u16 = 0xA;
 
 autd3_cpu_wire::wire_enum_u8! {
     pub enum FlashOp {

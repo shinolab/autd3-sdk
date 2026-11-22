@@ -50,4 +50,11 @@ package settings;
     logic [15:0] KF;
   } sync_ps_settings_t;
 
+  typedef struct {
+    logic EDGE;
+    logic FINE;
+    logic signed [13:0] EDGE_DIFF;
+    logic signed [15:0] RATE;
+  } sync_ps_status_t;
+
 endpackage

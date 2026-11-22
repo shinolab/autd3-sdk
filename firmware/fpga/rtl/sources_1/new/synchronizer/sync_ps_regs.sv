@@ -8,7 +8,8 @@ module sync_ps_regs (
     input wire [7:0] ADDR,
     input wire [15:0] DATA_IN,
     output var [15:0] DATA_OUT,
-    output var settings::sync_ps_settings_t SETTINGS
+    output var settings::sync_ps_settings_t SETTINGS,
+    input wire settings::sync_ps_status_t STATUS
 );
 
   import params::*;
@@ -24,6 +25,9 @@ module sync_ps_regs (
   logic [3:0] write_count = '0;
   logic [3:0] write_count_gray = '0;
   logic [15:0] rdata = '0;
+  logic [1:0] stats_cmd = '0;
+  logic stats_req = 1'b0;
+  logic stats_ack_sync;
 
   logic [3:0] write_count_gray_sync;
   logic [3:0] write_count_gray_seen = '0;
@@ -55,10 +59,16 @@ module sync_ps_regs (
         ADDR_SYNC_PS_KP:  kp_reg <= DATA_IN;
         ADDR_SYNC_PS_KI:  ki_reg <= DATA_IN;
         ADDR_SYNC_PS_KF:  kf_reg <= DATA_IN;
+        ADDR_SYNC_PS_STATS_CTL: begin
+          if (stats_req == stats_ack_sync) begin
+            stats_cmd <= DATA_IN[1:0];
+            stats_req <= ~stats_req;
+          end
+        end
         default: begin
         end
       endcase
-      write_count <= write_count + 4'd1;
+      if (ADDR <= ADDR_SYNC_PS_KF) write_count <= write_count + 4'd1;
     end
     write_count_gray <= write_count ^ {1'b0, write_count[3:1]};
   end
@@ -75,6 +85,42 @@ module sync_ps_regs (
     end
   end
 
+  logic stats_req_pulse;
+  logic stats_ack = 1'b0;
+  logic signed [15:0] diff_min;
+  logic signed [15:0] diff_max;
+  logic [15:0] diff_outliers;
+  logic signed [15:0] rate_min;
+  logic signed [15:0] rate_max;
+  logic [15:0] fine_exits;
+
+  cdc_toggle stats_req_cdc (
+      .CLK(CLK),
+      .TOGGLE(stats_req),
+      .PULSE(stats_req_pulse)
+  );
+
+  always_ff @(posedge CLK) if (stats_req_pulse) stats_ack <= ~stats_ack;
+
+  cdc_sync stats_ack_cdc (
+      .CLK(BUS_CLK),
+      .D  (stats_ack),
+      .Q  (stats_ack_sync)
+  );
+
+  sync_ps_stats sync_ps_stats (
+      .CLK(CLK),
+      .STATUS(STATUS),
+      .SNAPSHOT(stats_req_pulse & stats_cmd[0]),
+      .CLEAR(stats_req_pulse & stats_cmd[1]),
+      .DIFF_MIN(diff_min),
+      .DIFF_MAX(diff_max),
+      .DIFF_OUTLIERS(diff_outliers),
+      .RATE_MIN(rate_min),
+      .RATE_MAX(rate_max),
+      .FINE_EXITS(fine_exits)
+  );
+
   assign DATA_OUT = rdata;
 
   always_ff @(posedge BUS_CLK) begin
@@ -84,6 +130,13 @@ module sync_ps_regs (
         ADDR_SYNC_PS_KP: rdata <= kp_reg;
         ADDR_SYNC_PS_KI: rdata <= ki_reg;
         ADDR_SYNC_PS_KF: rdata <= kf_reg;
+        ADDR_SYNC_PS_STATS_CTL: rdata <= {15'd0, stats_req ^ stats_ack_sync};
+        ADDR_SYNC_PS_DIFF_MIN: rdata <= diff_min;
+        ADDR_SYNC_PS_DIFF_MAX: rdata <= diff_max;
+        ADDR_SYNC_PS_DIFF_OUTLIERS: rdata <= diff_outliers;
+        ADDR_SYNC_PS_RATE_MIN: rdata <= rate_min;
+        ADDR_SYNC_PS_RATE_MAX: rdata <= rate_max;
+        ADDR_SYNC_PS_FINE_EXITS: rdata <= fine_exits;
         default: rdata <= 16'd0;
       endcase
     end
