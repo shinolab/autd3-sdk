@@ -65,6 +65,7 @@ pub const ADDR_SYNC_PS_DIFF_OUTLIERS: u16 = 0x7;
 pub const ADDR_SYNC_PS_RATE_MIN: u16 = 0x8;
 pub const ADDR_SYNC_PS_RATE_MAX: u16 = 0x9;
 pub const ADDR_SYNC_PS_FINE_EXITS: u16 = 0xA;
+pub const ADDR_SYNC_PS_TDC_BUF: u16 = 0x80;
 
 autd3_cpu_wire::wire_enum_u8! {
     pub enum FlashOp {

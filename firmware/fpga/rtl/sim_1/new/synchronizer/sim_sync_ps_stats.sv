@@ -24,7 +24,8 @@ module sim_sync_ps_stats ();
   output_mask_bus_if output_mask_bus ();
   flash_bus_if flash_bus ();
 
-  settings::sync_ps_status_t status;
+  settings::sync_ps_status_t  status;
+  settings::sync_tdc_status_t tdc_status;
 
   memory memory (
       .CLK(CLK),
@@ -38,7 +39,10 @@ module sim_sync_ps_stats ();
       .FLASH_BUS(flash_bus.host_port),
       .CPU_WATCHDOG_FIRED(),
       .SYNC_PS_SETTINGS(),
-      .SYNC_PS_STATUS(status)
+      .SYNC_PS_STATUS(status),
+      .SYNC_TDC_CLK(1'b0),
+      .SYNC_TDC_CTL(),
+      .SYNC_TDC_STATUS(tdc_status)
   );
 
   assign cnt_bus.WE   = 1'b0;
@@ -62,6 +66,11 @@ module sim_sync_ps_stats ();
     status.FINE = 1'b0;
     status.EDGE_DIFF = '0;
     status.RATE = '0;
+    tdc_status.CAPTURING = 1'b0;
+    tdc_status.LOCKED = 1'b0;
+    tdc_status.WE = 1'b0;
+    tdc_status.ADDR = '0;
+    tdc_status.DATA = '0;
   end
 
   task automatic pulse_edge(input int diff);

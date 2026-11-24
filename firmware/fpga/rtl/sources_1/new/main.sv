@@ -84,6 +84,9 @@ module main #(
   logic signed [15:0] ps_rate;
   logic ps_rate_toggle;
   settings::sync_ps_status_t sync_ps_status;
+  logic sync_tdc_clk;
+  settings::sync_tdc_ctl_t sync_tdc_ctl;
+  settings::sync_tdc_status_t sync_tdc_status;
 
   assign sync_ps_status.EDGE = ps_edge;
   assign sync_ps_status.FINE = ps_fine;
@@ -144,7 +147,20 @@ module main #(
       .FLASH_BUS(flash_bus.host_port),
       .CPU_WATCHDOG_FIRED(cpu_watchdog_fired),
       .SYNC_PS_SETTINGS(sync_ps_settings),
-      .SYNC_PS_STATUS(sync_ps_status)
+      .SYNC_PS_STATUS(sync_ps_status),
+      .SYNC_TDC_CLK(sync_tdc_clk),
+      .SYNC_TDC_CTL(sync_tdc_ctl),
+      .SYNC_TDC_STATUS(sync_tdc_status)
+  );
+
+  sync_tdc sync_tdc (
+      .CLK(clk),
+      .BUS_CLK(MEM_BUS.BUS_CLK),
+      .RESET(~locked_sync),
+      .SYNC_IN(SYNC_IN),
+      .CTL(sync_tdc_ctl),
+      .TDC_CLK(sync_tdc_clk),
+      .STATUS(sync_tdc_status)
   );
 
   assign output_gate = failsafe | cpu_watchdog_fired;

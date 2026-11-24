@@ -29,6 +29,7 @@ set_output_delay -clock [get_clocks -of_objects [get_pins main/clk_wiz/clk_out1]
 set_output_delay -clock [get_clocks -of_objects [get_pins main/clk_wiz/clk_out1]] -min 0.500 [get_ports GPIO_OUT*]
 set_output_delay -clock [get_clocks -of_objects [get_pins main/clk_wiz/clk_out1]] -max 1.500 [get_ports GPIO_OUT*]
 set_false_path -from [get_ports SYNC_IN] -to [get_ports GPIO_OUT*]
+set_false_path -to [get_cells -hierarchical -filter {NAME =~ *sync_tdc/taps_meta_reg*}]
 
 set_property CFGBVS VCCO [current_design]
 set_property CONFIG_VOLTAGE 3.3 [current_design]
