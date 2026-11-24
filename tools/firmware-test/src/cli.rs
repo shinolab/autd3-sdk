@@ -20,11 +20,11 @@ pub(crate) struct Cli {
     pub simulator: Option<u16>,
     #[arg(long, default_value_t = NonZeroUsize::MIN)]
     pub devices: NonZeroUsize,
-    #[arg(long, value_parser = humantime::parse_duration, default_value = "10ms")]
+    #[arg(long, value_parser = |s: &str| Duration::try_from(s.parse::<jiff::SignedDuration>()?), default_value = "10ms")]
     pub heartbeat: Duration,
     #[arg(
         long,
-        value_parser = humantime::parse_duration,
+        value_parser = |s: &str| Duration::try_from(s.parse::<jiff::SignedDuration>()?),
         default_value = "200ms",
         help = "How long to wait for the replies of a frame"
     )]

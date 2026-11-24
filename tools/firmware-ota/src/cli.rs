@@ -116,7 +116,7 @@ pub(crate) struct UpdateArgs {
     pub(crate) no_confirm: bool,
     #[arg(
         long,
-        value_parser = humantime::parse_duration,
+        value_parser = |s: &str| Duration::try_from(s.parse::<jiff::SignedDuration>()?),
         default_value = "10s",
         help = "How long to wait after the CPU reboot before reconnecting"
     )]

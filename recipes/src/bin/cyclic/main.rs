@@ -26,9 +26,9 @@ struct Cli {
     interface: Option<String>,
     #[arg(long, default_value_t = NonZeroUsize::MIN, help = "Device count of the geometry")]
     devices: NonZeroUsize,
-    #[arg(long, value_parser = humantime::parse_duration, default_value = "1ms", help = "Period at which the devices process a frame")]
+    #[arg(long, value_parser = |s: &str| Duration::try_from(s.parse::<jiff::SignedDuration>()?), default_value = "1ms", help = "Period at which the devices process a frame")]
     period: Duration,
-    #[arg(long, value_parser = humantime::parse_duration, default_value = "2ms", help = "How long before its processing time each frame is sent")]
+    #[arg(long, value_parser = |s: &str| Duration::try_from(s.parse::<jiff::SignedDuration>()?), default_value = "2ms", help = "How long before its processing time each frame is sent")]
     lead: Duration,
 }
 

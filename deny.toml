@@ -24,9 +24,7 @@ ignore = true
 version = 2
 yanked = "deny"
 unmaintained = "all"
-ignore = [
-    { id = "RUSTSEC-2026-0542", reason = "humantime is used only as the clap value_parser for duration arguments of the tools/ and recipes/ binaries (parse_duration); it has no dependencies and parses local command-line input. Remove once a maintained replacement is adopted." },
-]
+ignore = []
 
 [bans]
 multiple-versions = "warn"
