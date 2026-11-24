@@ -25,6 +25,7 @@ tracing = { workspace = true, optional = true }
 zerocopy = { workspace = true, optional = true }
 
 [dev-dependencies]
+autd3-rs-pattern.workspace = true
 zerocopy.workspace = true
 
 [[test]]

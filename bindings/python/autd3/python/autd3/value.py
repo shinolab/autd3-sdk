@@ -3,6 +3,7 @@
 from autd3_core import Intensity, Phase, SamplingConfig
 
 from ._autd3 import (
+    Beam,
     ControlPoint,
     ControlPoints,
     GpioIn,
@@ -15,6 +16,7 @@ from ._autd3 import (
 )
 
 __all__ = [
+    "Beam",
     "ControlPoint",
     "ControlPoints",
     "GpioIn",

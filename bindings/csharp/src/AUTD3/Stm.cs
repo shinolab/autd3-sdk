@@ -6,17 +6,24 @@ using System.Runtime.InteropServices;
 namespace AUTD3
 {
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Autd3StmControlPointNative
+    internal struct Autd3StmBeamNative
     {
         public float X;
         public float Y;
         public float Z;
+        public float DirX;
+        public float DirY;
+        public float DirZ;
+        public float ThetaRad;
+        public float WavelengthMm;
+        public byte Kind;
         public byte PhaseOffset;
+        public sbyte L;
     }
 
     internal static class FociPoints
     {
-        internal static (Autd3StmControlPointNative[] Points, byte[] Intensities, byte NumFoci) Flatten(IReadOnlyList<ControlPoints> samples, string command)
+        internal static (Autd3StmBeamNative[] Points, byte[] Intensities, byte NumFoci) Flatten(IReadOnlyList<ControlPoints> samples, string command)
         {
             if (samples.Count == 0)
             {
@@ -28,7 +35,7 @@ namespace AUTD3
                 throw new Autd3Exception($"number of foci per sample must be 1..={Params.NumFociMax}", Autd3ErrorCode.InvalidArgument);
             }
             var numFoci = (byte)firstFoci;
-            var points = new Autd3StmControlPointNative[samples.Count * numFoci];
+            var points = new Autd3StmBeamNative[samples.Count * numFoci];
             var intensities = new byte[samples.Count];
             for (var i = 0; i < samples.Count; i++)
             {
@@ -39,15 +46,7 @@ namespace AUTD3
                 intensities[i] = samples[i].Intensity.Value;
                 for (var j = 0; j < numFoci; j++)
                 {
-                    var cp = samples[i].Points[j];
-                    var p = Coords.Point(cp.Point);
-                    points[i * numFoci + j] = new Autd3StmControlPointNative
-                    {
-                        X = p.X,
-                        Y = p.Y,
-                        Z = p.Z,
-                        PhaseOffset = cp.PhaseOffset.Value,
-                    };
+                    points[i * numFoci + j] = samples[i].Points[j].ToNative();
                 }
             }
             return (points, intensities, numFoci);
@@ -64,10 +63,10 @@ namespace AUTD3
         private static extern uint autd3_abi_version();
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_foci_stm(ushort configDivide, Autd3StmControlPointNative[] points, UIntPtr numSamples, byte numFoci, byte[] intensities, byte bank, float soundSpeedMS, ushort loopRep, byte transitionMode, ulong transitionValue);
+        internal static extern IntPtr autd3_op_foci_stm(ushort configDivide, Autd3StmBeamNative[] points, UIntPtr numSamples, byte numFoci, byte[] intensities, byte bank, float soundSpeedMS, ushort loopRep, byte transitionMode, ulong transitionValue);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr autd3_op_write_foci_buffer(byte bank, uint startIndex, Autd3StmControlPointNative[] points, UIntPtr numSamples, byte numFoci, byte[] intensities);
+        internal static extern IntPtr autd3_op_write_foci_buffer(byte bank, uint startIndex, Autd3StmBeamNative[] points, UIntPtr numSamples, byte numFoci, byte[] intensities);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr autd3_op_pattern_stm(ushort configDivide, IntPtr[] phases, UIntPtr numPatterns, byte intensityKind, IntPtr[] intensities, UIntPtr numIntensities, byte uniformIntensity, byte bank, byte phaseDepth, ushort loopRep, byte transitionMode, ulong transitionValue);
@@ -93,20 +92,85 @@ namespace AUTD3
         public static explicit operator ControlPoint(Vector3 point) => new ControlPoint(point, Phase.Zero);
     }
 
+    public readonly struct Beam
+    {
+        private const byte KindFocus = 0;
+        private const byte KindBessel = 1;
+        private const byte KindPlane = 2;
+        private const byte KindVortex = 3;
+
+        private readonly byte _kind;
+        private readonly Vector3 _point;
+        private readonly Vector3 _direction;
+        private readonly Angle _theta;
+        private readonly Length _wavelength;
+        private readonly Phase _phaseOffset;
+        private readonly sbyte _l;
+
+        private Beam(byte kind, Vector3 point, Vector3 direction, Angle theta, Length wavelength, Phase phaseOffset, sbyte l)
+        {
+            _kind = kind;
+            _point = point;
+            _direction = direction;
+            _theta = theta;
+            _wavelength = wavelength;
+            _phaseOffset = phaseOffset;
+            _l = l;
+        }
+
+        public static Beam Focus(ControlPoint point) => new Beam(KindFocus, point.Point, default, default, default, point.PhaseOffset, 0);
+
+        public static Beam Bessel(Vector3 apex, Vector3 direction, Angle theta, Length wavelength, Phase phaseOffset) =>
+            new Beam(KindBessel, apex, direction, theta, wavelength, phaseOffset, 0);
+
+        public static Beam Plane(Vector3 direction, Length wavelength) => new Beam(KindPlane, default, direction, default, wavelength, Phase.Zero, 0);
+
+        public static Beam Vortex(Vector3 center, Vector3 axis, sbyte l) => new Beam(KindVortex, center, axis, default, default, Phase.Zero, l);
+
+        public static implicit operator Beam(ControlPoint point) => Focus(point);
+
+        internal Autd3StmBeamNative ToNative()
+        {
+            var p = Coords.Point(_point);
+            var d = _kind == KindFocus ? default : Coords.Dir(_direction);
+            return new Autd3StmBeamNative
+            {
+                X = p.X,
+                Y = p.Y,
+                Z = p.Z,
+                DirX = d.X,
+                DirY = d.Y,
+                DirZ = d.Z,
+                ThetaRad = _theta.Rad,
+                WavelengthMm = _wavelength.Mm,
+                Kind = _kind,
+                PhaseOffset = _phaseOffset.Value,
+                L = _l,
+            };
+        }
+    }
+
     public readonly struct ControlPoints
     {
-        public ControlPoint[] Points { get; }
+        public Beam[] Points { get; }
         public Intensity Intensity { get; }
 
-        public ControlPoints(ControlPoint[] points, Intensity intensity)
+        public ControlPoints(Beam[] points, Intensity intensity)
         {
             Points = points;
             Intensity = intensity;
         }
 
+        public ControlPoints(ControlPoint[] points, Intensity intensity)
+            : this(points == null ? Array.Empty<Beam>() : Array.ConvertAll(points, p => (Beam)p), intensity)
+        {
+        }
+
         public static explicit operator ControlPoints(Vector3 point) => (ControlPoints)(ControlPoint)point;
 
-        public static explicit operator ControlPoints(ControlPoint point) => new ControlPoints(new[] { point }, Intensity.Max);
+        public static explicit operator ControlPoints(ControlPoint point) => new ControlPoints(new[] { (Beam)point }, Intensity.Max);
+
+        public static explicit operator ControlPoints(Beam beam) => new ControlPoints(new[] { beam }, Intensity.Max);
 
         public static explicit operator ControlPoints(Vector3[] points)
         {

@@ -6,6 +6,7 @@ sidebar:
 ---
 
 import CodeTabs from "@components/CodeTabs.astro";
+import Math from "@components/Math.astro";
 import sample from "@codes/rust/examples/api/command/foci-stm.rs?raw";
 import pySample from "@codes/python/examples/api/command/foci-stm.py?raw";
 import fullSample from "@codes/rust/examples/api/command/foci-stm-example.rs?raw";
@@ -34,7 +35,27 @@ import { excerpt } from "@lib/excerpt";
 1 サンプルは `ControlPoints` で表される. `points` の長さが同時に出す焦点の数 (1 以上 8 以下) で, 全サンプルで揃っていなければならない (揃っていないと送信時にエラーになる). 
 
 - `ControlPoint { point, phase_offset }` — 焦点座標 [mm] と位相オフセット. 
-- `ControlPoints { points: Vec<ControlPoint>, intensity }` — 焦点の列と振幅. 
+- `ControlPoints { points: Vec<Beam>, intensity }` — 項 (`Beam`) の列と振幅. `ControlPoint` と座標はそのまま `Beam::Focus` に変換される. 
+
+## ビーム形状 (Beam)
+
+点焦点以外のビームも, 数個のパラメータを送るだけで FPGA が振動子ごとの位相を計算する. 1 サンプルの項は次の 4 種類を混ぜられる.
+
+| 項 | 位相 | 合成 |
+| --- | --- | --- |
+| `Beam::Focus(ControlPoint)` | 点焦点 ([`focus`](/autd3-sdk/api/compute/pattern/focus/) と同じ) | 重ね合わせ |
+| `Beam::Bessel { apex, direction, theta, wavelength, phase_offset }` | Bessel ビームの径方向の項 <Math tex="-k \cos\theta \, \rho" /> | 重ね合わせ |
+| `Beam::Plane { direction, wavelength }` | 平面波 ([`plane`](/autd3-sdk/api/compute/pattern/plane/) と同じ) | 位相加算 |
+| `Beam::Vortex { center, axis, l }` | <Math tex="l" /> 倍の方位角 <Math tex="l \, \phi" /> | 位相加算 |
+
+<CodeTabs rust={excerpt(sample, "beam")} python={excerpt(pySample, "beam")} csharp={excerpt(csSample, "beam")} />
+
+- 重ね合わせの項は従来どおり複素振幅を足し合わせて平均する. 位相加算の項 (`Plane` / `Vortex`) は重ね合わせた結果の位相に足される. 例えば点焦点と `Vortex` を並べると渦を巻いた焦点になる. 
+- 位相加算の項は 1 サンプルに 1 つまで. 位相加算の項だけのサンプルは, その項の位相だけになる. 
+- `Bessel` の `direction` と `Vortex` の `axis` はデバイスの法線 (±z) に平行でなければならない (外れると送信時にエラーになる). `Bessel` の軸方向の項 (<Math tex="\sin\theta" /> に比例する部分) はデバイス内で一定なので省いている. この定数はデバイスの法線方向の位置で変わるため, 複数台で `Bessel` を出すときは全デバイスが同じ平面に同じ向きで並んでいなければならない. また点焦点など他の重ね合わせの項と並べたとき, 軸方向の位相の分だけ [`bessel`](/autd3-sdk/api/compute/pattern/bessel/) を足し合わせた場合と相対位相がずれる. 
+- `Bessel` と `Plane` は `FociStmOption::sound_speed` ではなく項ごとの `wavelength` を使う. `Bessel` は `wavelength / cos(theta)` が 25.6 mm 以下でなければならない. 
+- `Vortex` の方位角の基準はパターン関数の [Laguerre-Gaussian](/autd3-sdk/api/compute/pattern/laguerre-gaussian/) と同じ. 方位角は 7 bit の表引きなので, `l` が大きいほど量子化誤差が増える (`l` = 1 で最大約 1.2/256 周期). 
+- 項の種類は FPGA 側で解釈するので, 対応する FPGA ファームウェアが要る. 
 
 ## FociStmOption
 

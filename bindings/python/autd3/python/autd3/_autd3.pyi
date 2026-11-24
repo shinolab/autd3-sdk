@@ -6,10 +6,12 @@ from typing import Any, ClassVar, TypeAlias, final, overload
 import numpy as np
 import numpy.typing as npt
 from autd3_core import (
+    Angle,
     Device,
     Duration,
     Geometry,
     Intensity,
+    Length,
     Phase,
     SamplingConfig,
     Velocity,
@@ -330,14 +332,26 @@ class ControlPoint:
     def __eq__(self, other: object) -> bool: ...
 
 @final
+class Beam:
+    @staticmethod
+    def Focus(point: ControlPoint) -> Beam: ...
+    @staticmethod
+    def Bessel(apex: _Vec3, direction: _Vec3, theta: Angle, wavelength: Length, phase_offset: Phase | int) -> Beam: ...
+    @staticmethod
+    def Plane(direction: _Vec3, wavelength: Length) -> Beam: ...
+    @staticmethod
+    def Vortex(center: _Vec3, axis: _Vec3, l: int) -> Beam: ...
+    def __eq__(self, other: object) -> bool: ...
+
+@final
 class ControlPoints:
     def __new__(
         cls,
-        points: ControlPoint | Sequence[ControlPoint] | npt.NDArray[np.floating[Any] | np.integer[Any]],
+        points: ControlPoint | Beam | Sequence[ControlPoint | Beam] | npt.NDArray[np.floating[Any] | np.integer[Any]],
         intensity: Intensity | int = ...,
     ) -> ControlPoints: ...
     @property
-    def points(self) -> list[ControlPoint]: ...
+    def points(self) -> list[ControlPoint | Beam]: ...
     @property
     def intensity(self) -> Intensity: ...
     def __eq__(self, other: object) -> bool: ...

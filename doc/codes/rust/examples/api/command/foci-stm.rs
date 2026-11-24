@@ -3,9 +3,12 @@ use std::f32::consts::PI;
 use autd3_rs::commands::{
     ActivatePatternBank, ConfigFociStm, FociStm, FociStmOption, WriteFociBuffer,
 };
-use autd3_rs::geometry::{Autd3, Geometry, offset};
-use autd3_rs::units::{Hz, m, mm, s};
-use autd3_rs::value::{ControlPoints, LoopBehavior, PatternBank, SamplingConfig, TransitionMode};
+use autd3_rs::geometry::{Autd3, Geometry, Vector3, offset};
+use autd3_rs::units::{Hz, m, mm, rad, s};
+use autd3_rs::value::{
+    Beam, ControlPoints, Intensity, LoopBehavior, PatternBank, Phase, SamplingConfig,
+    TransitionMode,
+};
 
 fn main() -> anyhow::Result<()> {
     let geometry = Geometry::new(vec![Autd3::default()]);
@@ -22,6 +25,31 @@ fn main() -> anyhow::Result<()> {
         })
         .collect();
     // ANCHOR_END: circle
+    // ANCHOR: beam
+    let vortex = ControlPoints::new(
+        [
+            Beam::from(center),
+            Beam::Vortex {
+                center,
+                axis: Vector3::z_axis(),
+                l: 1,
+            },
+        ],
+        Intensity::MAX,
+    );
+    let bessel = ControlPoints::from(Beam::Bessel {
+        apex: center,
+        direction: Vector3::z_axis(),
+        theta: 0.3 * rad,
+        wavelength: 8.5 * mm,
+        phase_offset: Phase::ZERO,
+    });
+    let plane = ControlPoints::from(Beam::Plane {
+        direction: Vector3::z_axis(),
+        wavelength: 8.5 * mm,
+    });
+    // ANCHOR_END: beam
+    let _ = [vortex, bessel, plane];
     let config = SamplingConfig::from_freq(1.0 * Hz * num_points as f32)?;
     let bank = PatternBank::B0;
     let sound_speed = 340.0 * m / s;

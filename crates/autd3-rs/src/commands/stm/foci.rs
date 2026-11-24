@@ -126,6 +126,7 @@ mod tests {
         assert_eq!(activate[1], 0xFF, "IMMEDIATE");
 
         let expected = Focus {
+            kind: crate::value::FocusKind::Point,
             x: 0,
             y: 0,
             z: 6000,

@@ -53,6 +53,9 @@ pub(super) static TR_POS: [u32; 252] = [
 struct StmFocus(u64);
 
 impl StmFocus {
+    fn kind(&self) -> u8 {
+        (self.0 >> 62) as u8
+    }
     fn x(&self) -> i32 {
         sign_extend_18(self.0 & 0x3_FFFF)
     }
@@ -62,10 +65,16 @@ impl StmFocus {
     fn z(&self) -> i32 {
         sign_extend_18((self.0 >> 36) & 0x3_FFFF)
     }
-    fn intensity(&self) -> u8 {
+    fn byte(&self) -> u8 {
         ((self.0 >> 54) & 0xFF) as u8
     }
+    fn is_additive(&self) -> bool {
+        self.kind() & 0b10 != 0
+    }
 }
+
+const KIND_BESSEL: u8 = 0b01;
+const KIND_VORTEX: u8 = 0b11;
 
 fn sign_extend_18(v: u64) -> i32 {
     let v = v as u32;
@@ -73,6 +82,47 @@ fn sign_extend_18(v: u64) -> i32 {
         (v | 0xFFFC_0000) as i32
     } else {
         v as i32
+    }
+}
+
+fn superposed_phase(focus: &StmFocus, tr_x: i32, tr_y: i32, sound_speed: u32, offset: u8) -> u8 {
+    let (dz, divisor) = if focus.kind() == KIND_BESSEL {
+        (0, focus.z() as u32 & 0xFFFF)
+    } else {
+        (i64::from(focus.z()), sound_speed)
+    };
+    let (dx, dy) = (i64::from(focus.x() - tr_x), i64::from(focus.y() - tr_y));
+    let dist = (dx * dx + dy * dy + dz * dz).isqrt() as u32;
+    ((dist << 14).checked_div(divisor).unwrap_or(0) as u8).wrapping_add(offset)
+}
+
+fn atan_key_axis(v: i32, shift: i32) -> usize {
+    let scaled = if shift > 0 {
+        ((v + (1 << (shift - 1))) >> shift).min(63)
+    } else {
+        v << -shift
+    };
+    (scaled + 64) as usize
+}
+
+fn additive_phase(focus: &StmFocus, tr_x: i32, tr_y: i32) -> u8 {
+    if focus.kind() == KIND_VORTEX {
+        let (dx, dy) = (tr_x - focus.x(), tr_y - focus.y());
+        let m = dx.unsigned_abs().max(dy.unsigned_abs());
+        let shift = m.bit_width() as i32 - 6;
+        let key = if m == 0 {
+            (64 << 7) | 64
+        } else {
+            (atan_key_axis(dy, shift) << 7) | atan_key_axis(dx, shift)
+        };
+        let l = (focus.z() & 0xFF) as u8;
+        let k = ((focus.z() >> 8) & 0xFF) as u8;
+        k.wrapping_sub(l.wrapping_mul(ATAN_TABLE[key]))
+    } else {
+        let acc = i64::from(focus.x()) * i64::from(tr_x)
+            + i64::from(focus.y()) * i64::from(tr_y)
+            + 32 * i64::from(focus.z());
+        (acc >> 15) as u8
     }
 }
 
@@ -96,45 +146,37 @@ impl FpgaEmulator {
         let sound_speed = u32::from(self.sound_speed(bank));
         let num_foci = self.num_foci(bank);
         let ram = &self.em_ram[bank];
-        let foci: Vec<(i32, i32, i32, u8)> = (0..num_foci)
-            .map(|f| {
-                let focus = StmFocus(u64_at(ram, 4 * (idx * num_foci + f)));
-                (focus.x(), focus.y(), focus.z(), focus.intensity())
-            })
+        let foci: Vec<StmFocus> = (0..num_foci)
+            .map(|f| StmFocus(u64_at(ram, 4 * (idx * num_foci + f))))
             .collect();
+        let intensity = foci[0].byte();
+        let num_superposed = foci.iter().filter(|f| !f.is_additive()).count() as u16;
+        let additive = foci.iter().rfind(|f| f.is_additive());
         (0..self.num_transducers)
             .map(|i| {
                 let tr = TR_POS[i];
                 let tr_x = i32::from(((tr >> 16) & 0xFFFF) as i16);
                 let tr_y = i32::from((tr & 0xFFFF) as i16);
-                let tr_z = 0i32;
-                let mut intensity = 0u8;
-                let (sin, cos) = foci.iter().enumerate().fold(
-                    (0u16, 0u16),
-                    |acc, (f, &(x, y, z, focus_intensity))| {
-                        let offset = if f == 0 {
-                            intensity = focus_intensity;
-                            0
-                        } else {
-                            focus_intensity
-                        };
-                        let (dx, dy, dz) = (
-                            i64::from(x - tr_x),
-                            i64::from(y - tr_y),
-                            i64::from(z - tr_z),
-                        );
-                        let d2 = dx * dx + dy * dy + dz * dz;
-                        let dist = d2.isqrt() as u32;
-                        let q = ((dist << 14) / sound_speed) as usize + offset as usize;
+                let (sin, cos) = foci
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, focus)| !focus.is_additive())
+                    .fold((0u16, 0u16), |acc, (f, focus)| {
+                        let offset = if f == 0 { 0 } else { focus.byte() };
+                        let q = superposed_phase(focus, tr_x, tr_y, sound_speed, offset);
                         (
-                            acc.0 + u16::from(SIN_TABLE[q % 256]),
-                            acc.1 + u16::from(SIN_TABLE[(q + 64) % 256]),
+                            acc.0 + u16::from(SIN_TABLE[usize::from(q)]),
+                            acc.1 + u16::from(SIN_TABLE[usize::from(q.wrapping_add(64))]),
                         )
-                    },
-                );
-                let sin = ((sin / num_foci as u16) >> 1) as usize;
-                let cos = ((cos / num_foci as u16) >> 1) as usize;
-                let phase = Phase(ATAN_TABLE[(sin << 7) | cos]) + self.phase_correction(i);
+                    });
+                let base = sin
+                    .checked_div(num_superposed)
+                    .zip(cos.checked_div(num_superposed))
+                    .map_or(0, |(sin, cos)| {
+                        ATAN_TABLE[(usize::from(sin >> 1) << 7) | usize::from(cos >> 1)]
+                    });
+                let added = additive.map_or(0, |focus| additive_phase(focus, tr_x, tr_y));
+                let phase = Phase(base.wrapping_add(added)) + self.phase_correction(i);
                 let intensity = if self.emits(i) {
                     Intensity(intensity)
                 } else {

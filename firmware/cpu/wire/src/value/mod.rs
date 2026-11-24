@@ -6,7 +6,7 @@ mod sampling_config;
 mod sys_time;
 mod transition_mode;
 
-pub use focus::{Focus, FocusOutOfRange};
+pub use focus::{Focus, FocusKind, FocusOutOfRange};
 pub use freq::{Freq, Hz, kHz};
 pub use gpio::{GpioIn, GpioOut};
 pub use loop_behavior::LoopBehavior;

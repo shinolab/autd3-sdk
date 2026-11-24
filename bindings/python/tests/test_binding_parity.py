@@ -33,6 +33,7 @@ from autd3.commands import (
 from autd3.geometry import Autd3, Geometry, offset
 from autd3.units import Angle, Freq, Hz, Length, deg, kHz, m, mm, rad, s
 from autd3.value import (
+    Beam,
     ControlPoint,
     ControlPoints,
     Intensity,
@@ -336,6 +337,32 @@ def test_command_contents_are_checked_when_encoded() -> None:
     ):
         with pytest.raises(autd3.InvalidArgumentError):
             autd3.Frames.encode(geometry, loose(command))
+
+
+def test_foci_stm_carries_every_beam_kind() -> None:
+    geometry = one_device()
+    target = [10.0, 20.0, 150.0]
+    focus = ControlPoint(target, Phase.ZERO)
+    samples = [
+        ControlPoints([focus, Beam.Vortex(target, [0.0, 0.0, 1.0], 2)]),
+        ControlPoints(
+            [
+                Beam.Bessel(target, [0.0, 0.0, -1.0], 0.3 * rad, 8.5 * mm, Phase.ZERO),
+                Beam.Plane([0.1, 0.2, 1.0], 8.5 * mm),
+            ]
+        ),
+    ]
+    assert samples[0].points[0] == focus
+    assert samples[0].points[1] == Beam.Vortex(target, [0.0, 0.0, 1.0], 2)
+    assert ControlPoints(Beam.Focus(focus)) == ControlPoints(focus)
+    assert len(autd3.Frames.encode(geometry, FociStm(SamplingConfig.FREQ_4K, samples, FociStmOption()))) == 3
+
+    tilted = [ControlPoints(Beam.Vortex(target, [1.0, 0.0, 1.0], 1))]
+    with pytest.raises(autd3.InvalidArgumentError, match="normal"):
+        autd3.Frames.encode(geometry, FociStm(SamplingConfig.FREQ_4K, tilted, FociStmOption()))
+    two_additive = [ControlPoints([Beam.Plane([0.0, 0.0, 1.0], 8.5 * mm), Beam.Vortex(target, [0.0, 0.0, 1.0], 1)])]
+    with pytest.raises(autd3.InvalidArgumentError, match="additive"):
+        autd3.Frames.encode(geometry, FociStm(SamplingConfig.FREQ_4K, two_additive, FociStmOption()))
 
 
 def test_set_phase_correction_takes_a_phase_buffer_of_the_geometry() -> None:

@@ -280,7 +280,7 @@ def test_control_points_from_an_n_by_3_ndarray() -> None:
         ControlPoints(np.zeros((2, 3), dtype=np.complex64), 0x80)
     with pytest.raises(TypeError, match="masked arrays"):
         ControlPoints(np.ma.masked_array(rows), 0x80)
-    with pytest.raises(TypeError, match="a ControlPoint, a sequence of ControlPoint"):
+    with pytest.raises(TypeError, match="a ControlPoint or Beam, a sequence of them"):
         loose(ControlPoints)([[1.0, 2.0, 3.0]], 0x80)
 
 

@@ -37,6 +37,9 @@ pub(crate) fn num_foci(points: &[ControlPoints]) -> Result<u8, PayloadError> {
             got,
         });
     }
+    if let Some(index) = points.iter().position(|cp| cp.num_additive() > 1) {
+        return Err(PayloadError::MultipleAdditiveBeams { index });
+    }
     Ok(num_foci)
 }
 
@@ -90,7 +93,7 @@ impl Operation for WriteFociChunk<'_> {
             .iter()
             .flat_map(|points| (0..n).map(move |j| points.focus(device, j)));
         for (dst, focus) in rest.as_chunks_mut::<8>().0.iter_mut().zip(foci) {
-            *dst = focus.encode()?.to_le_bytes();
+            *dst = focus?.encode()?.to_le_bytes();
         }
         set_cmd(
             out,
@@ -149,7 +152,10 @@ mod tests {
         let data = &out[size_of::<WriteFociPayload>()..];
         for (i, point) in points.iter().enumerate() {
             let focus = u64::from_le_bytes(data[i * 8..][..8].try_into().unwrap());
-            assert_eq!(focus, point.focus(&test_device(0), 0).encode().unwrap());
+            assert_eq!(
+                focus,
+                point.focus(&test_device(0), 0).unwrap().encode().unwrap()
+            );
         }
     }
 
@@ -182,7 +188,14 @@ mod tests {
         let expected = [(0, 0), (0, 1), (1, 0), (1, 1)];
         for (k, (i, j)) in expected.into_iter().enumerate() {
             let focus = u64::from_le_bytes(data[k * 8..][..8].try_into().unwrap());
-            assert_eq!(focus, points[i].focus(&test_device(0), j).encode().unwrap());
+            assert_eq!(
+                focus,
+                points[i]
+                    .focus(&test_device(0), j)
+                    .unwrap()
+                    .encode()
+                    .unwrap()
+            );
         }
     }
 
@@ -263,6 +276,53 @@ mod tests {
                 expected: 2,
                 got: 3
             }))
+        ));
+    }
+
+    #[test]
+    fn write_foci_buffer_rejects_more_than_one_additive_beam_per_sample() {
+        use crate::common::Length;
+        use crate::geometry::Vector3;
+        use crate::value::Beam;
+
+        let plane = Beam::Plane {
+            direction: Vector3::z_axis(),
+            wavelength: Length::from_mm(8.5),
+        };
+        let vortex = Beam::Vortex {
+            center: Point3::origin(),
+            axis: Vector3::z_axis(),
+            l: 1,
+        };
+        let focus = Beam::from(Point3::origin());
+        assert!(write(0, &[ControlPoints::new([focus, plane], Intensity::MAX)]).is_ok());
+        assert!(matches!(
+            write(
+                0,
+                &[
+                    ControlPoints::new([focus, vortex], Intensity::MAX),
+                    ControlPoints::new([plane, vortex], Intensity::MAX)
+                ]
+            ),
+            Err(Error::InvalidPayload(PayloadError::MultipleAdditiveBeams {
+                index: 1
+            }))
+        ));
+    }
+
+    #[test]
+    fn write_foci_buffer_reports_a_beam_that_does_not_fit_the_device() {
+        use crate::geometry::{UnitVector3, Vector3};
+        use crate::value::Beam;
+
+        let tilted = Beam::Vortex {
+            center: Point3::origin(),
+            axis: UnitVector3::new_normalize(Vector3::new(1.0, 0.0, 1.0)),
+            l: 1,
+        };
+        assert!(matches!(
+            write(0, &[ControlPoints::from(tilted)]),
+            Err(Error::InvalidPayload(PayloadError::Beam(_)))
         ));
     }
 

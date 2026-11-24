@@ -147,6 +147,23 @@ module sim_helper_bram #(
     end
   endtask
 
+  task automatic write_emission_beam(input logic bank, input logic [1:0] kind[], input logic signed [17:0] x[], input logic signed [17:0] y[],
+                                     input logic signed [17:0] z[], input logic [7:0] intensity_and_offsets[], input int cnt);
+    logic [3:0] page = 0;
+    write_cnt(ADDR_PATTERN_MEM_WR_BANK, {15'h000, bank});
+    write_cnt(ADDR_PATTERN_MEM_WR_PAGE, {12'h000, page});
+    for (int i = 0; i < cnt; i++) begin
+      bram_write(BRAM_SELECT_EMISSION, 4 * i, x[i][15:0]);
+      bram_write(BRAM_SELECT_EMISSION, 4 * i + 1, {y[i][13:0], x[i][17:16]});
+      bram_write(BRAM_SELECT_EMISSION, 4 * i + 2, {z[i][11:0], y[i][17:14]});
+      bram_write(BRAM_SELECT_EMISSION, 4 * i + 3, {kind[i], intensity_and_offsets[i], z[i][17:12]});
+      if (i % 4096 == 4095) begin
+        page = page + 1;
+        write_cnt(ADDR_PATTERN_MEM_WR_PAGE, {12'h000, page});
+      end
+    end
+  endtask
+
   task automatic write_mod_settings(input settings::mod_settings_t settings);
     write_cnt(ADDR_MOD_REQ_RD_BANK, settings.REQ_RD_BANK);
     write_cnt(ADDR_MOD_TRANSITION_MODE, settings.TRANSITION_MODE);

@@ -380,5 +380,23 @@ namespace AUTD3.Tests
             Assert.Single(cps.Points);
             Assert.Equal(2, ((ControlPoints)new[] { point, point }).Points.Length);
         }
+
+        [Fact]
+        public void FociStmCarriesEveryBeamKind()
+        {
+            using var geometry = Fixture.SingleDevice();
+            var target = new Vector3(10, 20, 150);
+            var samples = new[]
+            {
+                new ControlPoints(new[] { (Beam)(ControlPoint)target, Beam.Vortex(target, Vector3.UnitZ, 2) }, Intensity.Max),
+                new ControlPoints(new[] { Beam.Bessel(target, -Vector3.UnitZ, 0.3f * rad, 8.5f * mm, Phase.Zero), Beam.Plane(new Vector3(0.1f, 0.2f, 1f), 8.5f * mm) }, Intensity.Max),
+            };
+            using var frames = Frames.Encode(geometry, new FociStm(new SamplingConfig(1 * Hz), samples, new FociStmOption()));
+            Assert.Equal(3, frames.Length);
+
+            var tilted = new[] { (ControlPoints)Beam.Vortex(target, new Vector3(1, 0, 1), 1) };
+            var error = Assert.Throws<Autd3Exception>(() => Frames.Encode(geometry, new FociStm(new SamplingConfig(1 * Hz), tilted, new FociStmOption())));
+            Assert.Contains("normal", error.Message);
+        }
     }
 }

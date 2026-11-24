@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use autd3_python_capsule::extract::{
-    extract_point, extract_sampling_config, extract_u8, extract_velocity, intensity_to_py,
-    phase_to_py, velocity_to_py,
+    extract_angle, extract_direction, extract_length, extract_point, extract_sampling_config,
+    extract_u8, extract_velocity, intensity_to_py, phase_to_py, velocity_to_py,
 };
 use autd3_python_capsule::numpy::{f32_vec3, f32_vec3_rows_from_ndarray, is_ndarray};
 use autd3_rs::commands::Expansion;
@@ -11,11 +11,12 @@ use autd3_rs::commands::{
     FociStm as CoreFociStm, FociStmOption as CoreFociStmOption, PatternStm as CorePatternStm,
     PatternStmOption as CorePatternStmOption, StmIntensity as CoreStmIntensity,
 };
+use autd3_rs::common::{Angle, Length};
 use autd3_rs::value::{
-    ControlPoint as CoreControlPoint, ControlPoints as CoreControlPoints, Intensity,
-    PatternBank as CorePatternBank, Phase, SamplingConfig,
+    Beam as CoreBeam, ControlPoint as CoreControlPoint, ControlPoints as CoreControlPoints,
+    Intensity, PatternBank as CorePatternBank, Phase, SamplingConfig,
 };
-use autd3_rs::{Point3, Velocity};
+use autd3_rs::{Point3, UnitVector3, Velocity};
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 
@@ -53,6 +54,71 @@ impl ControlPoint {
     }
 }
 
+#[pyclass(name = "Beam", module = "autd3.value", eq, frozen)]
+#[derive(Clone, Copy, PartialEq)]
+pub struct Beam(pub(crate) CoreBeam);
+
+#[pymethods]
+impl Beam {
+    #[staticmethod]
+    #[pyo3(name = "Focus")]
+    fn focus(point: PyRef<'_, ControlPoint>) -> Self {
+        Self(CoreBeam::Focus(point.0))
+    }
+
+    #[staticmethod]
+    #[pyo3(name = "Bessel")]
+    fn bessel(
+        #[pyo3(from_py_with = extract_point)] apex: Point3<f32>,
+        #[pyo3(from_py_with = extract_direction)] direction: UnitVector3<f32>,
+        #[pyo3(from_py_with = extract_angle)] theta: Angle,
+        #[pyo3(from_py_with = extract_length)] wavelength: Length,
+        #[pyo3(from_py_with = extract_u8)] phase_offset: u8,
+    ) -> Self {
+        Self(CoreBeam::Bessel {
+            apex,
+            direction,
+            theta,
+            wavelength,
+            phase_offset: Phase(phase_offset),
+        })
+    }
+
+    #[staticmethod]
+    #[pyo3(name = "Plane")]
+    fn plane(
+        #[pyo3(from_py_with = extract_direction)] direction: UnitVector3<f32>,
+        #[pyo3(from_py_with = extract_length)] wavelength: Length,
+    ) -> Self {
+        Self(CoreBeam::Plane {
+            direction,
+            wavelength,
+        })
+    }
+
+    #[staticmethod]
+    #[pyo3(name = "Vortex")]
+    fn vortex(
+        #[pyo3(from_py_with = extract_point)] center: Point3<f32>,
+        #[pyo3(from_py_with = extract_direction)] axis: UnitVector3<f32>,
+        l: i8,
+    ) -> Self {
+        Self(CoreBeam::Vortex { center, axis, l })
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{:?}", self.0)
+    }
+}
+
+fn to_beam(obj: &Bound<'_, PyAny>) -> Option<CoreBeam> {
+    if let Ok(point) = obj.cast::<ControlPoint>() {
+        Some(CoreBeam::Focus(point.get().0))
+    } else {
+        obj.cast::<Beam>().ok().map(|beam| beam.get().0)
+    }
+}
+
 #[pyclass(name = "ControlPoints", module = "autd3.value", eq, frozen)]
 #[derive(Clone, PartialEq)]
 pub struct ControlPoints(pub(crate) CoreControlPoints);
@@ -65,31 +131,41 @@ impl ControlPoints {
         points: &Bound<'_, PyAny>,
         #[pyo3(from_py_with = extract_u8)] intensity: u8,
     ) -> PyResult<Self> {
+        let not_points = || {
+            PyTypeError::new_err(
+                "expected a ControlPoint or Beam, a sequence of them, or a numpy.ndarray of shape (3,) or (n, 3)",
+            )
+        };
         let points = if is_ndarray(points)? {
             f32_vec3_rows_from_ndarray(points)?
                 .into_iter()
-                .map(|[x, y, z]| CoreControlPoint::new(Point3::new(x, y, z), Phase::ZERO))
+                .map(|[x, y, z]| CoreBeam::from(Point3::new(x, y, z)))
                 .collect::<Vec<_>>()
-        } else if let Ok(point) = points.cast::<ControlPoint>() {
-            vec![point.get().0]
+        } else if let Some(beam) = to_beam(points) {
+            vec![beam]
         } else {
             points
-                .extract::<Vec<PyRef<'_, ControlPoint>>>()
-                .map_err(|_| {
-                    PyTypeError::new_err(
-                        "expected a ControlPoint, a sequence of ControlPoint, or a numpy.ndarray of shape (3,) or (n, 3)",
-                    )
-                })?
+                .extract::<Vec<Bound<'_, PyAny>>>()
+                .map_err(|_| not_points())?
                 .iter()
-                .map(|p| p.0)
-                .collect()
+                .map(|p| to_beam(p).ok_or_else(not_points))
+                .collect::<PyResult<_>>()?
         };
         Ok(Self(CoreControlPoints::new(points, Intensity(intensity))))
     }
 
     #[getter]
-    fn points(&self) -> Vec<ControlPoint> {
-        self.0.points.iter().copied().map(ControlPoint).collect()
+    fn points<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyAny>>> {
+        self.0
+            .points
+            .iter()
+            .map(|&beam| match beam {
+                CoreBeam::Focus(point) => Bound::new(py, ControlPoint(point)).map(Bound::into_any),
+                CoreBeam::Bessel { .. } | CoreBeam::Plane { .. } | CoreBeam::Vortex { .. } => {
+                    Bound::new(py, Beam(beam)).map(Bound::into_any)
+                }
+            })
+            .collect()
     }
 
     #[getter]
@@ -369,6 +445,7 @@ impl PatternStm {
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ControlPoint>()?;
+    m.add_class::<Beam>()?;
     m.add_class::<ControlPoints>()?;
     m.add_class::<FociStmOption>()?;
     m.add_class::<PatternStmOption>()?;

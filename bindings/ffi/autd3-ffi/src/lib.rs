@@ -24,14 +24,15 @@ use autd3_rs::commands::{
     Synchronize, WriteFociBuffer, WriteModulationBuffer, WritePatternBuffer, WritePatternPhase,
     each,
 };
+use autd3_rs::common::{Angle, Length};
 use autd3_rs::params::NUM_FOCI_MAX;
 use autd3_rs::value::{
-    ControlPoint, ControlPoints, Intensity, LoopBehavior, ModulationBank, PatternBank, Phase,
+    Beam, ControlPoint, ControlPoints, Intensity, LoopBehavior, ModulationBank, PatternBank, Phase,
     PulseWidth, SamplingConfig, SysTime, TransitionMode,
 };
 use autd3_rs::{
     DeviceReply, DeviceState, Error, FirmwareVersion, FpgaState, Frames, Geometry, Point3,
-    Response, Telemetry, Velocity,
+    Response, Telemetry, UnitVector3, Vector3, Velocity,
 };
 use tokio::sync::watch;
 
@@ -97,13 +98,44 @@ fn rep_to_loop_behavior(rep: u16) -> LoopBehavior {
 }
 
 #[repr(C)]
-pub struct Autd3StmControlPoint {
+pub struct Autd3StmBeam {
     pub point: [f32; 3],
+    pub direction: [f32; 3],
+    pub theta_rad: f32,
+    pub wavelength_mm: f32,
+    pub kind: u8,
     pub phase_offset: u8,
+    pub l: i8,
+}
+
+fn to_beam(b: &Autd3StmBeam) -> Option<Beam> {
+    let point = Point3::from(b.point);
+    let direction = UnitVector3::new_normalize(Vector3::from(b.direction));
+    let wavelength = Length::from_mm(b.wavelength_mm);
+    Some(match b.kind {
+        0 => Beam::Focus(ControlPoint::new(point, Phase(b.phase_offset))),
+        1 => Beam::Bessel {
+            apex: point,
+            direction,
+            theta: Angle::from_rad(b.theta_rad),
+            wavelength,
+            phase_offset: Phase(b.phase_offset),
+        },
+        2 => Beam::Plane {
+            direction,
+            wavelength,
+        },
+        3 => Beam::Vortex {
+            center: point,
+            axis: direction,
+            l: b.l,
+        },
+        _ => return None,
+    })
 }
 
 unsafe fn foci_points(
-    points: *const Autd3StmControlPoint,
+    points: *const Autd3StmBeam,
     num_samples: usize,
     num_foci: u8,
     intensities: *const u8,
@@ -114,26 +146,16 @@ unsafe fn foci_points(
     let n = usize::from(num_foci);
     let points = unsafe { slice_ref(points, num_samples.checked_mul(n)?) }?;
     let intensities = unsafe { slice_ref(intensities, num_samples) }?;
-    Some(
-        points
-            .chunks_exact(n)
-            .zip(intensities)
-            .map(|(chunk, &intensity)| {
-                ControlPoints::new(
-                    chunk
-                        .iter()
-                        .map(|p| {
-                            ControlPoint::new(
-                                Point3::new(p.point[0], p.point[1], p.point[2]),
-                                Phase(p.phase_offset),
-                            )
-                        })
-                        .collect::<Vec<_>>(),
-                    Intensity(intensity),
-                )
-            })
-            .collect(),
-    )
+    points
+        .chunks_exact(n)
+        .zip(intensities)
+        .map(|(chunk, &intensity)| {
+            Some(ControlPoints::new(
+                chunk.iter().map(to_beam).collect::<Option<Vec<_>>>()?,
+                Intensity(intensity),
+            ))
+        })
+        .collect()
 }
 
 unsafe fn clone_buffers<T: Clone>(
@@ -512,7 +534,7 @@ pub unsafe extern "C" fn autd3_op_write_pattern_buffer(
 pub unsafe extern "C" fn autd3_op_write_foci_buffer(
     bank: u8,
     start_index: u32,
-    points: *const Autd3StmControlPoint,
+    points: *const Autd3StmBeam,
     num_samples: usize,
     num_foci: u8,
     intensities: *const u8,
@@ -1037,7 +1059,7 @@ pub unsafe extern "C" fn autd3_pulse_width_from_duty(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn autd3_op_foci_stm(
     config_divide: u16,
-    points: *const Autd3StmControlPoint,
+    points: *const Autd3StmBeam,
     num_samples: usize,
     num_foci: u8,
     intensities: *const u8,
@@ -2534,6 +2556,59 @@ mod tests {
         len
     }
 
+    fn focus_beam(point: [f32; 3]) -> Autd3StmBeam {
+        beam(0, point, [0.0, 0.0, 1.0], 0)
+    }
+
+    fn beam(kind: u8, point: [f32; 3], direction: [f32; 3], l: i8) -> Autd3StmBeam {
+        Autd3StmBeam {
+            point,
+            direction,
+            theta_rad: 0.3,
+            wavelength_mm: 8.5,
+            kind,
+            phase_offset: 0,
+            l,
+        }
+    }
+
+    #[test]
+    fn a_foci_stm_carries_every_beam_kind() {
+        let geometry = geometry_of(1);
+        let beams = [
+            beam(0, [10.0, 20.0, 150.0], [0.0, 0.0, 1.0], 0),
+            beam(3, [10.0, 20.0, 150.0], [0.0, 0.0, 1.0], 2),
+            beam(1, [50.0, 60.0, 0.0], [0.0, 0.0, -1.0], 0),
+            beam(2, [0.0; 3], [0.1, 0.2, 1.0], 0),
+        ];
+        let intensities = [0xFF; 2];
+        let command =
+            unsafe { autd3_op_write_foci_buffer(0, 0, beams.as_ptr(), 2, 2, intensities.as_ptr()) };
+        assert_eq!(1, num_frames_of(geometry, command));
+
+        unsafe { drop_handle(geometry) };
+    }
+
+    #[test]
+    fn an_unknown_beam_kind_is_rejected_and_a_bad_axis_fails_to_encode() {
+        let geometry = geometry_of(1);
+        let intensity = 0xFF;
+        let unknown = beam(4, [0.0; 3], [0.0, 0.0, 1.0], 0);
+        assert!(
+            unsafe {
+                autd3_op_write_foci_buffer(0, 0, &raw const unknown, 1, 1, &raw const intensity)
+            }
+            .is_null()
+        );
+        let tilted = beam(3, [0.0; 3], [1.0, 0.0, 1.0], 1);
+        let command = unsafe {
+            autd3_op_write_foci_buffer(0, 0, &raw const tilted, 1, 1, &raw const intensity)
+        };
+        assert!(encode_error(geometry, command).contains("normal"));
+
+        unsafe { drop_handle(geometry) };
+    }
+
     fn two_entries_for_one_device() -> *mut OwnedCommand {
         let per_device = [autd3_op_nop(), autd3_op_nop()];
         unsafe { autd3_command_each(per_device.as_ptr(), per_device.len()) }
@@ -2882,10 +2957,7 @@ mod tests {
         let geometry = geometry_of(2);
 
         let buffer = ModulationBuffer(vec![0xFF; 2]);
-        let point = Autd3StmControlPoint {
-            point: [0.0, 0.0, 150.0],
-            phase_offset: 0,
-        };
+        let point = focus_beam([0.0, 0.0, 150.0]);
         let intensity = 0xFF;
         let ops = [
             unsafe { autd3_op_write_modulation_buffer(0, 0, &raw const buffer) },
@@ -2907,12 +2979,7 @@ mod tests {
         let command = unsafe { autd3_op_write_modulation_buffer(0, 0, &raw const buffer) };
         assert!(num_frames_of(geometry, command) > 1);
 
-        let points: Vec<_> = (0..400)
-            .map(|_| Autd3StmControlPoint {
-                point: [0.0, 0.0, 150.0],
-                phase_offset: 0,
-            })
-            .collect();
+        let points: Vec<_> = (0..400).map(|_| focus_beam([0.0, 0.0, 150.0])).collect();
         let intensities = [0xFF; 200];
         let command = unsafe {
             autd3_op_write_foci_buffer(0, 0, points.as_ptr(), 200, 2, intensities.as_ptr())

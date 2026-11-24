@@ -6,6 +6,7 @@ module focus_calc (
     input wire signed [17:0] FOCUS_X,
     input wire signed [17:0] FOCUS_Y,
     input wire signed [17:0] FOCUS_Z,
+    input wire BESSEL,
     input wire signed [15:0] TRANS_X,
     input wire signed [15:0] TRANS_Y,
     input wire [15:0] SOUND_SPEED,
@@ -77,13 +78,18 @@ module focus_calc (
       .P  (dy2)
   );
 
+  logic signed [17:0] dz;
+  logic [15:0] divisor;
+  assign dz = BESSEL ? 18'sd0 : FOCUS_Z;
+  assign divisor = BESSEL ? FOCUS_Z[15:0] : SOUND_SPEED;
+
   mult #(
       .WIDTH_A(18),
       .WIDTH_B(18)
   ) mult_z (
       .CLK(CLK),
-      .A  (FOCUS_Z),
-      .B  (FOCUS_Z),
+      .A  (dz),
+      .B  (dz),
       .P  (dz2)
   );
 
@@ -121,7 +127,7 @@ module focus_calc (
       .s_axis_dividend_tdata({sqrt_dout[17:0], 14'd0}),
       .s_axis_dividend_tvalid(1'b1),
       .s_axis_dividend_tuser(sqrt_valid),
-      .s_axis_divisor_tdata(SOUND_SPEED),
+      .s_axis_divisor_tdata(divisor),
       .s_axis_divisor_tvalid(1'b1),
       .aclk(CLK),
       .m_axis_dout_tdata({quo, _unused_rem}),

@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Numerics;
 using AUTD3;
 using static AUTD3.Units;
 
@@ -19,6 +20,12 @@ internal static class Sample
             .Select(theta => (ControlPoints)(center + Offset(MathF.Cos(theta) * radius, MathF.Sin(theta) * radius, 0.0f * mm)))
             .ToArray();
         // ANCHOR_END: circle
+        // ANCHOR: beam
+        var vortex = new ControlPoints(new[] { (Beam)(ControlPoint)center, Beam.Vortex(center, Vector3.UnitZ, 1) }, Intensity.Max);
+        var bessel = (ControlPoints)Beam.Bessel(center, Vector3.UnitZ, 0.3f * rad, 8.5f * mm, Phase.Zero);
+        var plane = (ControlPoints)Beam.Plane(Vector3.UnitZ, 8.5f * mm);
+        // ANCHOR_END: beam
+        _ = new[] { vortex, bessel, plane };
         var config = new SamplingConfig(1.0f * Hz * numPoints);
         var bank = PatternBank.B0;
         var soundSpeed = 340.0f * m / s;

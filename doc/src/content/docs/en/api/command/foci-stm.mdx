@@ -6,6 +6,7 @@ sidebar:
 ---
 
 import CodeTabs from "@components/CodeTabs.astro";
+import Math from "@components/Math.astro";
 import sample from "@codes/rust/examples/api/command/foci-stm.rs?raw";
 import pySample from "@codes/python/examples/api/command/foci-stm.py?raw";
 import fullSample from "@codes/rust/examples/api/command/foci-stm-example.rs?raw";
@@ -34,7 +35,27 @@ Unlike [`PatternStm`](/autd3-sdk/en/api/command/pattern-stm/), it can only handl
 A single sample is represented by `ControlPoints`. The length of `points` is the number of focal points emitted simultaneously (1 to 8), and it must be the same for every sample (otherwise sending fails with an error).
 
 - `ControlPoint { point, phase_offset }` — focal point coordinate [mm] and phase offset.
-- `ControlPoints { points: Vec<ControlPoint>, intensity }` — a sequence of focal points and an amplitude.
+- `ControlPoints { points: Vec<Beam>, intensity }` — a sequence of terms (`Beam`) and an amplitude. A `ControlPoint` or a plain coordinate converts to `Beam::Focus`.
+
+## Beam shapes (Beam)
+
+Beams other than a point focus are also computed per transducer by the FPGA from a few parameters. The terms of one sample can mix the following four kinds.
+
+| Term | Phase | Composition |
+| --- | --- | --- |
+| `Beam::Focus(ControlPoint)` | point focus (same as [`focus`](/autd3-sdk/en/api/compute/pattern/focus/)) | superposed |
+| `Beam::Bessel { apex, direction, theta, wavelength, phase_offset }` | radial term of a Bessel beam <Math tex="-k \cos\theta \, \rho" /> | superposed |
+| `Beam::Plane { direction, wavelength }` | plane wave (same as [`plane`](/autd3-sdk/en/api/compute/pattern/plane/)) | phase-added |
+| `Beam::Vortex { center, axis, l }` | <Math tex="l" /> times the azimuth <Math tex="l \, \phi" /> | phase-added |
+
+<CodeTabs rust={excerpt(sample, "beam")} python={excerpt(pySample, "beam")} csharp={excerpt(csSample, "beam")} />
+
+- Superposed terms add their complex amplitudes and average them, as before. A phase-added term (`Plane` / `Vortex`) is added to the phase of the superposed result. For example, a point focus with a `Vortex` gives a twisted focus.
+- At most one phase-added term per sample. A sample with only a phase-added term emits that term's phase alone.
+- The `direction` of `Bessel` and the `axis` of `Vortex` must be parallel to the device normal (±z); otherwise sending fails with an error. The axial term of `Bessel` (the part proportional to <Math tex="\sin\theta" />) is constant within a device and is left out. That constant depends on the device position along its normal, so a `Bessel` beam across several devices requires all of them to lie in one plane facing the same way. Mixed with other superposed terms such as a point focus, its relative phase also differs from summing [`bessel`](/autd3-sdk/en/api/compute/pattern/bessel/) by that axial phase.
+- `Bessel` and `Plane` use the per-term `wavelength`, not `FociStmOption::sound_speed`. `Bessel` requires `wavelength / cos(theta)` to be at most 25.6 mm.
+- The azimuth origin of `Vortex` is the same as the [Laguerre-Gaussian](/autd3-sdk/en/api/compute/pattern/laguerre-gaussian/) pattern function. The azimuth comes from a 7-bit table lookup, so the quantization error grows with `l` (up to about 1.2/256 of a cycle at `l` = 1).
+- The FPGA interprets the term kinds, so a matching FPGA firmware is required.
 
 ## FociStmOption
 

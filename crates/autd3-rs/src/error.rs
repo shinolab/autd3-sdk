@@ -5,6 +5,7 @@ use thiserror::Error;
 use autd3_cpu_wire::payload::{CpuConfigOutOfRange, PayloadBuildError};
 use autd3_cpu_wire::value::FocusOutOfRange;
 use autd3_rs_core::protocol::describe_device_error;
+use autd3_rs_core::value::BeamError;
 
 use crate::commands::PhaseDepth;
 use crate::udp::UdpError;
@@ -91,6 +92,9 @@ pub enum PayloadError {
         got: usize,
     },
 
+    #[error("sample {index} has more than one additive beam (plane wave or vortex)")]
+    MultipleAdditiveBeams { index: usize },
+
     #[error("per-device data has {len} entr(ies) but device {device} was requested")]
     DeviceDataOutOfRange { device: usize, len: usize },
 
@@ -125,6 +129,9 @@ pub enum PayloadError {
 
     #[error(transparent)]
     Focus(#[from] FocusOutOfRange),
+
+    #[error(transparent)]
+    Beam(#[from] BeamError),
 }
 
 #[cfg(test)]
