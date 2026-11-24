@@ -716,13 +716,18 @@ impl FpgaEmulator {
         self.output_mask[i >> 4] & (1 << (i & 0x0F)) != 0
     }
 
-    fn emits(&self, i: usize) -> bool {
-        self.output_mask_enabled(i) && !self.failsafe()
+    #[must_use]
+    pub fn output_pulse_width(&self, key: usize) -> u16 {
+        if self.failsafe() {
+            0
+        } else {
+            self.pulse_width_table(key)
+        }
     }
 
     #[must_use]
     pub fn to_pulse_width(&self, intensity: Intensity, modulation: u8) -> u16 {
-        self.pulse_width_table((intensity.0 as usize * modulation as usize) / 255)
+        self.output_pulse_width((intensity.0 as usize * modulation as usize) / 255)
     }
 
     #[must_use]
@@ -732,7 +737,7 @@ impl FpgaEmulator {
             .map(|i| {
                 let word = self.em_ram[bank][base + i];
                 let phase = Phase((word & 0xFF) as u8) + self.phase_correction(i);
-                let intensity = if self.emits(i) {
+                let intensity = if self.output_mask_enabled(i) {
                     Intensity((word >> 8) as u8)
                 } else {
                     Intensity::MIN
@@ -768,6 +773,19 @@ mod tests {
         fpga.reload();
         assert_eq!(fpga.read(addr), 1);
         assert_eq!(fpga.sync_gains(), [64, 1024, 4096]);
+    }
+
+    #[test]
+    fn failsafe_zeroes_the_pulse_width_after_the_table_even_if_the_first_entry_is_nonzero() {
+        let mut fpga = FpgaEmulator::new(249);
+        fpga.pwe[0] = 100;
+        fpga.pwe[255] = 256;
+        assert_eq!(fpga.output_pulse_width(0), 100);
+        assert_eq!(fpga.to_pulse_width(Intensity::MAX, u8::MAX), 256);
+        write(&mut fpga, fw::ADDR_CTL_FLAG, CtlFlags::FAILSAFE.bits());
+        assert_eq!(fpga.output_pulse_width(0), 0);
+        assert_eq!(fpga.to_pulse_width(Intensity::MAX, u8::MAX), 0);
+        assert_eq!(fpga.pulse_width_table(0), 100);
     }
 
     #[test]

@@ -135,7 +135,7 @@ impl FpgaEmulator {
                 let sin = ((sin / num_foci as u16) >> 1) as usize;
                 let cos = ((cos / num_foci as u16) >> 1) as usize;
                 let phase = Phase(ATAN_TABLE[(sin << 7) | cos]) + self.phase_correction(i);
-                let intensity = if self.emits(i) {
+                let intensity = if self.output_mask_enabled(i) {
                     Intensity(intensity)
                 } else {
                     Intensity::MIN
