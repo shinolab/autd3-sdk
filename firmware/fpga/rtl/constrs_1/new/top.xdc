@@ -1451,3 +1451,8 @@ set_property PACKAGE_PIN R15 [get_ports FLASH_MISO]
 set_property PACKAGE_PIN P14 [get_ports FLASH_WP_N]
 set_property PACKAGE_PIN N14 [get_ports FLASH_HOLD_N]
 set_property IOSTANDARD LVCMOS33 [get_ports {FLASH_CS_N FLASH_MOSI FLASH_MISO FLASH_WP_N FLASH_HOLD_N}]
+
+create_pblock pblock_sync_tdc
+add_cells_to_pblock [get_pblocks pblock_sync_tdc] [get_cells -hierarchical -filter {NAME =~ main/sync_tdc/gen_chain* || NAME =~ main/sync_tdc/taps_meta_reg*}]
+resize_pblock [get_pblocks pblock_sync_tdc] -add {SLICE_X2Y122:SLICE_X3Y249}
+set_property IS_SOFT FALSE [get_pblocks pblock_sync_tdc]

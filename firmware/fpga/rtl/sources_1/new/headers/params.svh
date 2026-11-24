@@ -102,7 +102,8 @@ package params;
     ADDR_SYNC_PS_DIFF_OUTLIERS = 8'h07,
     ADDR_SYNC_PS_RATE_MIN      = 8'h08,
     ADDR_SYNC_PS_RATE_MAX      = 8'h09,
-    ADDR_SYNC_PS_FINE_EXITS    = 8'h0A
+    ADDR_SYNC_PS_FINE_EXITS    = 8'h0A,
+    ADDR_SYNC_PS_TDC_BUF       = 8'h80
   } sync_ps_addr_t;
 
   typedef enum logic [7:0] {

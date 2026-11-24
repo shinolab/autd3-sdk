@@ -9,7 +9,10 @@ module sync_ps_regs (
     input wire [15:0] DATA_IN,
     output var [15:0] DATA_OUT,
     output var settings::sync_ps_settings_t SETTINGS,
-    input wire settings::sync_ps_status_t STATUS
+    input wire settings::sync_ps_status_t STATUS,
+    input wire TDC_CLK,
+    output var settings::sync_tdc_ctl_t TDC_CTL,
+    input wire settings::sync_tdc_status_t TDC_STATUS
 );
 
   import params::*;
@@ -25,7 +28,7 @@ module sync_ps_regs (
   logic [3:0] write_count = '0;
   logic [3:0] write_count_gray = '0;
   logic [15:0] rdata = '0;
-  logic [1:0] stats_cmd = '0;
+  logic [3:0] stats_cmd = '0;
   logic stats_req = 1'b0;
   logic stats_ack_sync;
 
@@ -61,7 +64,7 @@ module sync_ps_regs (
         ADDR_SYNC_PS_KF:  kf_reg <= DATA_IN;
         ADDR_SYNC_PS_STATS_CTL: begin
           if (stats_req == stats_ack_sync) begin
-            stats_cmd <= DATA_IN[1:0];
+            stats_cmd <= DATA_IN[3:0];
             stats_req <= ~stats_req;
           end
         end
@@ -100,7 +103,12 @@ module sync_ps_regs (
       .PULSE(stats_req_pulse)
   );
 
-  always_ff @(posedge CLK) if (stats_req_pulse) stats_ack <= ~stats_ack;
+  logic stats_req_pulse_q = 1'b0;
+
+  always_ff @(posedge CLK) begin
+    stats_req_pulse_q <= stats_req_pulse;
+    if (stats_req_pulse_q) stats_ack <= ~stats_ack;
+  end
 
   cdc_sync stats_ack_cdc (
       .CLK(BUS_CLK),
@@ -121,7 +129,32 @@ module sync_ps_regs (
       .FINE_EXITS(fine_exits)
   );
 
-  assign DATA_OUT = rdata;
+  assign TDC_CTL.START  = stats_req_pulse & stats_cmd[2];
+  assign TDC_CTL.SOURCE = stats_cmd[3];
+
+  logic [1:0] tdc_flags_sync;
+  cdc_sync #(
+      .WIDTH(2)
+  ) tdc_flags_cdc (
+      .CLK(BUS_CLK),
+      .D  ({TDC_STATUS.LOCKED, TDC_STATUS.CAPTURING}),
+      .Q  (tdc_flags_sync)
+  );
+
+  (* ram_style = "block" *) logic [15:0] tdc_buf[128];
+  logic [15:0] tdc_rdata;
+  logic tdc_sel = 1'b0;
+
+  always_ff @(posedge TDC_CLK) if (TDC_STATUS.WE) tdc_buf[TDC_STATUS.ADDR] <= TDC_STATUS.DATA;
+
+  always_ff @(posedge BUS_CLK) begin
+    if (EN) begin
+      tdc_rdata <= tdc_buf[ADDR[6:0]];
+      tdc_sel   <= ADDR[7];
+    end
+  end
+
+  assign DATA_OUT = tdc_sel ? tdc_rdata : rdata;
 
   always_ff @(posedge BUS_CLK) begin
     if (EN) begin
@@ -130,7 +163,7 @@ module sync_ps_regs (
         ADDR_SYNC_PS_KP: rdata <= kp_reg;
         ADDR_SYNC_PS_KI: rdata <= ki_reg;
         ADDR_SYNC_PS_KF: rdata <= kf_reg;
-        ADDR_SYNC_PS_STATS_CTL: rdata <= {15'd0, stats_req ^ stats_ack_sync};
+        ADDR_SYNC_PS_STATS_CTL: rdata <= {13'd0, tdc_flags_sync, stats_req ^ stats_ack_sync};
         ADDR_SYNC_PS_DIFF_MIN: rdata <= diff_min;
         ADDR_SYNC_PS_DIFF_MAX: rdata <= diff_max;
         ADDR_SYNC_PS_DIFF_OUTLIERS: rdata <= diff_outliers;

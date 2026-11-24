@@ -57,4 +57,17 @@ package settings;
     logic signed [15:0] RATE;
   } sync_ps_status_t;
 
+  typedef struct {
+    logic START;
+    logic SOURCE;
+  } sync_tdc_ctl_t;
+
+  typedef struct {
+    logic CAPTURING;
+    logic LOCKED;
+    logic WE;
+    logic [6:0] ADDR;
+    logic [15:0] DATA;
+  } sync_tdc_status_t;
+
 endpackage

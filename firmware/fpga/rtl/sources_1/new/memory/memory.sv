@@ -12,7 +12,10 @@ module memory (
     flash_bus_if.host_port FLASH_BUS,
     output wire CPU_WATCHDOG_FIRED,
     output var settings::sync_ps_settings_t SYNC_PS_SETTINGS,
-    input wire settings::sync_ps_status_t SYNC_PS_STATUS
+    input wire settings::sync_ps_status_t SYNC_PS_STATUS,
+    input wire SYNC_TDC_CLK,
+    output var settings::sync_tdc_ctl_t SYNC_TDC_CTL,
+    input wire settings::sync_tdc_status_t SYNC_TDC_STATUS
 );
 
   import params::*;
@@ -233,7 +236,10 @@ module memory (
       .DATA_IN(data_q),
       .DATA_OUT(sync_ps_dout),
       .SETTINGS(SYNC_PS_SETTINGS),
-      .STATUS(SYNC_PS_STATUS)
+      .STATUS(SYNC_PS_STATUS),
+      .TDC_CLK(SYNC_TDC_CLK),
+      .TDC_CTL(SYNC_TDC_CTL),
+      .TDC_STATUS(SYNC_TDC_STATUS)
   );
 
   assign MOD_BUS.VALUE = mod_value[MOD_BUS.BANK];
