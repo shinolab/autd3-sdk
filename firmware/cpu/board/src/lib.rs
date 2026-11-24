@@ -31,6 +31,7 @@ const FPGA_STARTUP_MS: u16 = 200;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn main() -> ! {
+    cpu().mark_boot_attempt(&mut HwPort);
     bsp::io::init();
     bsp::bus::init();
     bsp::clock::init();
@@ -41,7 +42,6 @@ pub extern "C" fn main() -> ! {
     bsp::io::leds_on();
     bsp::timer::delay_ms(FPGA_STARTUP_MS);
     udp::init();
-    cpu().mark_boot_attempt(&mut HwPort);
     cpu().init(&mut HwPort);
     udp::start();
     bsp::vic::irq_enable();
