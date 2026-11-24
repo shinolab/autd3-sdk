@@ -9,9 +9,7 @@ allow = [
     "Zlib",
     "Unicode-3.0",
     "Unlicense",
-    "MPL-2.0",
     "CC0-1.0",
-    "BSL-1.0",
     "OFL-1.1",
     "Ubuntu-font-1.0",
     "CDLA-Permissive-2.0",
@@ -27,8 +25,7 @@ version = 2
 yanked = "deny"
 unmaintained = "all"
 ignore = [
-    { id = "RUSTSEC-2026-0194", reason = "quick-xml is reached only through wayland-scanner, a build-time code generator that parses the Wayland protocol XML bundled inside the wayland-client/wayland-protocols crates; the input is trusted and never reaches the shipped binary. wayland-scanner requires ^0.39, so the fixed 0.41 is unreachable until upstream moves." },
-    { id = "RUSTSEC-2026-0195", reason = "quick-xml is reached only through wayland-scanner, a build-time code generator that parses the Wayland protocol XML bundled inside the wayland-client/wayland-protocols crates; the input is trusted and never reaches the shipped binary. wayland-scanner requires ^0.39, so the fixed 0.41 is unreachable until upstream moves." },
+    { id = "RUSTSEC-2026-0542", reason = "humantime is used only as the clap value_parser for duration arguments of the tools/ and recipes/ binaries (parse_duration); it has no dependencies and parses local command-line input. Remove once a maintained replacement is adopted." },
 ]
 
 [bans]
