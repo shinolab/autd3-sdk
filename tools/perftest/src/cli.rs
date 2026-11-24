@@ -51,7 +51,7 @@ pub(crate) struct Cli {
     pub devices: NonZeroUsize,
     #[arg(
         long,
-        value_parser = humantime::parse_duration,
+        value_parser = |s: &str| Duration::try_from(s.parse::<jiff::SignedDuration>()?),
         default_value = "10ms",
         help = "Interval of Controller::send_heartbeat while --hold keeps the connection idle, e.g. 10ms."
     )]
@@ -71,13 +71,13 @@ pub(crate) struct Cli {
     pub stop_on_error: bool,
     #[arg(
         long,
-        value_parser = humantime::parse_duration,
+        value_parser = |s: &str| Duration::try_from(s.parse::<jiff::SignedDuration>()?),
         help = "Keep the connection idle (heartbeats only) this long before measuring, e.g. 3s."
     )]
     pub hold: Option<Duration>,
     #[arg(
         long = "ack-timeout",
-        value_parser = humantime::parse_duration,
+        value_parser = |s: &str| Duration::try_from(s.parse::<jiff::SignedDuration>()?),
         default_value = "10ms",
         help = "How long to wait for the replies of a frame before counting it as a timeout"
     )]
