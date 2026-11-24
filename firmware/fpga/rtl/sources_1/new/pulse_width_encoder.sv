@@ -5,6 +5,7 @@ module pulse_width_encoder #(
 ) (
     input wire CLK,
     pwe_table_bus_if.out_port PWE_TABLE_BUS,
+    input wire FAILSAFE,
     input wire DIN_VALID,
     input wire [7:0] INTENSITY_IN,
     input wire [7:0] PHASE_IN,
@@ -36,7 +37,7 @@ module pulse_width_encoder #(
   assign PWE_TABLE_BUS.IDX = INTENSITY_IN;
   assign PWE_TABLE_BUS.RD_EN = DIN_VALID | (state == RUN);
 
-  assign PULSE_WIDTH_OUT = PWE_TABLE_BUS.VALUE;
+  assign PULSE_WIDTH_OUT = FAILSAFE ? 9'd0 : PWE_TABLE_BUS.VALUE;
   assign DOUT_VALID = dout_valid;
 
   always_ff @(posedge CLK) begin

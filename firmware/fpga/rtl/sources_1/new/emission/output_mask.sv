@@ -4,7 +4,6 @@ module output_mask #(
 ) (
     input wire CLK,
     input wire [255:0] MASK_VALUE,
-    input wire FAILSAFE,
     input wire DIN_VALID,
     input wire [7:0] INTENSITY_IN,
     output wire [7:0] INTENSITY_OUT,
@@ -54,7 +53,7 @@ module output_mask #(
       end
       RUN: begin
         cnt <= cnt + 1;
-        intensity_out <= (!FAILSAFE && MASK_VALUE[cnt]) ? intensity_in : 8'h00;
+        intensity_out <= MASK_VALUE[cnt] ? intensity_in : 8'h00;
         state <= cnt == DEPTH - 1 ? IDLE : state;
       end
     endcase

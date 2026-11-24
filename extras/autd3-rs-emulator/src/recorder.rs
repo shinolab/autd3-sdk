@@ -93,7 +93,7 @@ impl Recorder {
                 {
                     let intensity_mod = ((u16::from(intensity.0) * u16::from(m)) / 255) as u8;
                     let silenced_int = rec.silencer_intensity.apply(intensity_mod);
-                    let pw = fpga.pulse_width_table(silenced_int as usize);
+                    let pw = fpga.output_pulse_width(silenced_int as usize);
                     let ph = rec.silencer_phase.apply(phase.0);
                     rec.pulse_width.push(pw);
                     rec.phase.push(ph);

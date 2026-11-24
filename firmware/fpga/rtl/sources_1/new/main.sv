@@ -259,7 +259,6 @@ module main #(
       .EMISSION_BUS_FOCUS(emission_bus.out_focus_port),
       .EMISSION_BUS_RAW(emission_bus.out_raw_port),
       .OUTPUT_MASK_BUS(output_mask_bus.out_port),
-      .FAILSAFE(output_gate),
       .INTENSITY(intensity),
       .PHASE(phase),
       .GPIO_IN(gpio_in),
@@ -312,6 +311,7 @@ module main #(
   ) pulse_width_encoder (
       .CLK(clk),
       .PWE_TABLE_BUS(pwe_table_bus.out_port),
+      .FAILSAFE(output_gate),
       .DIN_VALID(dout_valid_s),
       .INTENSITY_IN(intensity_s),
       .PHASE_IN(phase_s),

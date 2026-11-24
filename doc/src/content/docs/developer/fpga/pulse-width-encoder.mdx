@@ -12,6 +12,7 @@ import MathBlock from "@components/MathBlock.astro";
 | --------------- | ------ | ----- | ----------------------------- |
 | CLK             | In     | 1     | メインクロック                |
 | PWE_TABLE_BUS   | In     | -     | メモリバス                    |
+| FAILSAFE        | In     | 1     | 出力停止フラグ                |
 | DIN_VALID       | In     | 1     | 強度/位相データ有効フラグ     |
 | INTENSITY_IN    | In     | 8     | 強度                          |
 | PHASE_IN        | In     | 8     | 位相                          |
@@ -48,3 +49,8 @@ A \propto \sin\left(\pi \frac{D}{T}\right)
 :::note
 位相に関しては何も処理しないが, ディレイを入れてパルス幅データと歩調を揃えている.
 :::
+
+`FAILSAFE` が 1 の間は, テーブルの内容によらず `PULSE_WIDTH_OUT` を 0 にする.
+`FAILSAFE` は [Controller](/autd3-sdk/developer/fpga/controller/) の `FAILSAFE` ビットと [CPU ウォッチドッグ](/autd3-sdk/developer/fpga/memory/#cpu-ウォッチドッグ) の発火の論理和である.
+テーブルの後段で止めるため, テーブルの先頭要素 (強度 0 に対するパルス幅) が 0 でなくても出力は止まる.
+また, `Silencer` より後段なので, 停止と再開は静音化されない.

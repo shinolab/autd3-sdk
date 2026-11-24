@@ -13,6 +13,7 @@ import csSample from "@codes/csharp/examples/guide/failsafe.cs?raw";
 
 ホストとの通信が途絶えたときや PTP のロックを失ったときに, 自分で出力を止めるフェイルセーフ機能がある.
 どちらも既定では無効で, [SetCpuConfig](/autd3-sdk/api/command/cpu-config/) で有効化できる.
+フェイルセーフは [Silencer](/autd3-sdk/guide/silencer/) と[パルス幅テーブル](/autd3-sdk/guide/pulse-width/)の後段で出力を止めるため, 停止と再開は静音化されず, パルス幅テーブルの内容によらず出力は止まる.
 
 ## 通信途絶の failsafe と生存確認
 

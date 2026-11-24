@@ -39,6 +39,7 @@ module sim_pulse_width_encoder ();
   );
 
   logic din_valid, dout_valid;
+  logic failsafe;
   logic [7:0] intensity_in;
   logic [8:0] pulse_width_out;
   logic [7:0] phase;
@@ -53,6 +54,7 @@ module sim_pulse_width_encoder ();
   ) pulse_width_encoder (
       .CLK(CLK),
       .PWE_TABLE_BUS(pwe_table_bus.out_port),
+      .FAILSAFE(failsafe),
       .DIN_VALID(din_valid),
       .INTENSITY_IN(intensity_in),
       .PHASE_IN(phase),
@@ -103,7 +105,7 @@ module sim_pulse_width_encoder ();
     end
 
     for (int i = 0; i < DEPTH; i++) begin
-      expect_pulse_width = pwe_table[intensity_buf[i]];
+      expect_pulse_width = failsafe ? 0 : pwe_table[intensity_buf[i]];
       `ASSERT_EQ(expect_pulse_width, pulse_width_out);
       `ASSERT_EQ(phase_buf[i], phase_out);
       @(posedge CLK);
@@ -114,6 +116,7 @@ module sim_pulse_width_encoder ();
   logic [7:0] phase_tmp[DEPTH];
   initial begin
     din_valid = 0;
+    failsafe  = 0;
 
     @(posedge locked);
 
@@ -144,6 +147,27 @@ module sim_pulse_width_encoder ();
         check();
       join
       i += DEPTH;
+    end
+
+    for (int i = 0; i < TABLE_SIZE; i++) begin
+      pwe_table[i] = sim_helper_random.range(9'h1FF, 9'h001);
+    end
+    sim_helper_bram.write_pwe_table(pwe_table);
+
+    for (int f = 1; f >= 0; f--) begin
+      @(posedge CLK);
+      failsafe <= f[0];
+      for (int i = 0; i <= TABLE_SIZE;) begin
+        for (int j = i; j < i + DEPTH; j++) begin
+          intensity_tmp[j-i] = j;
+          phase_tmp[j-i] = sim_helper_random.range(8'hFF, 0);
+        end
+        fork
+          set(intensity_tmp, phase_tmp);
+          check();
+        join
+        i += DEPTH;
+      end
     end
 
     $display("OK! sim_pulse_width_encoder");

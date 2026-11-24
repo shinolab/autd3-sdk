@@ -64,4 +64,4 @@ CPU のメインループの停止 (ハング, リセット中, デバッガに�
 
 `TIMEOUT` が 0 でなく, 最後の `KICK` から `TIMEOUT` ms 経過すると発火する.
 経過時間はメインクロックで数える (CPU が止まると `CPU_CKIO` も止まり得るため).
-発火中は, [Controller](/autd3-sdk/developer/fpga/controller/) の `FAILSAFE` ビットと同様に, すべての振動子の強度を 0 にする ([Emission](/autd3-sdk/developer/fpga/emission/) の Output Mask を参照).
+発火中は, [Controller](/autd3-sdk/developer/fpga/controller/) の `FAILSAFE` ビットと同様に, すべての振動子のパルス幅を 0 にする ([Pulse Width Encoder](/autd3-sdk/developer/fpga/pulse-width-encoder/) を参照).

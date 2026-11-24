@@ -13,6 +13,7 @@ import csSample from "@codes/csharp/examples/guide/failsafe.cs?raw";
 
 The devices have a failsafe feature that stops their output by themselves when communication with the host is lost or when they lose the PTP lock.
 Both are disabled by default and can be enabled with [SetCpuConfig](/autd3-sdk/en/api/command/cpu-config/).
+The failsafe stops the output after the [Silencer](/autd3-sdk/en/guide/silencer/) and the [pulse width table](/autd3-sdk/en/guide/pulse-width/), so stopping and resuming are not silenced, and the output stops whatever the pulse width table contains.
 
 ## Communication-loss failsafe and liveness check
 
