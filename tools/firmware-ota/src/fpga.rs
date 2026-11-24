@@ -68,6 +68,7 @@ pub(crate) async fn main_fpga(
             images[device]
         );
     }
+    println!("FPGA updated; power-cycle the devices before using them");
     println!("Ok!");
     Ok(())
 }
