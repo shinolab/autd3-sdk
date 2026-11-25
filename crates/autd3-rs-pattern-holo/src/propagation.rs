@@ -34,6 +34,22 @@ pub(crate) fn wavenumber(wavelength: Length) -> f32 {
     2.0 * PI / wavelength.mm()
 }
 
+pub(crate) fn reject_focus_on_transducer(
+    foci: &[AmplitudeTarget],
+    device: usize,
+    transducer: usize,
+    pos: Point3<f32>,
+) -> Result<(), HoloError> {
+    match foci.iter().position(|f| (f.point - pos).norm() == 0.0) {
+        Some(focus) => Err(HoloError::FocusOnTransducer {
+            focus,
+            device,
+            transducer,
+        }),
+        None => Ok(()),
+    }
+}
+
 pub(crate) fn enabled_transducers(
     geometry: &Geometry,
     mask: TransducerMask<'_>,
@@ -51,6 +67,21 @@ pub(crate) fn enabled_transducers(
         }
     }
     (tr_pos, tr_dir)
+}
+
+pub(crate) fn reject_focus_on_enabled_transducer(
+    geometry: &Geometry,
+    mask: TransducerMask<'_>,
+    foci: &[AmplitudeTarget],
+) -> Result<(), HoloError> {
+    for (d, dev) in geometry.iter().enumerate() {
+        for (t, &pos) in dev.positions().iter().enumerate() {
+            if mask.is_enabled(d, t) {
+                reject_focus_on_transducer(foci, d, t, pos)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn validate_dst_len<T>(dst: &[Vec<T>], geometry: &Geometry) -> Result<(), HoloError> {

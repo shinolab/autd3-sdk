@@ -109,6 +109,24 @@ namespace AUTD3.Tests
         }
 
         [Fact]
+        public void AFocusOnATransducerIsAnInvalidArgument()
+        {
+            using var geometry = Fixture.SingleDevice();
+            using var phases = geometry.PhaseBuffer();
+            using var intensities = geometry.IntensityBuffer();
+            var foci = new[] { new AUTD3.Holo.AmplitudeTarget(geometry[0].Position(5), 5e3f * AUTD3.Holo.HoloUnits.Pa) };
+            var order = Enumerable.Range(0, geometry[0].NumTransducers).Select(i => (uint)i).ToArray();
+
+            var error = Assert.Throws<Autd3Exception>(() => AUTD3.Holo.Holo.Gspat(geometry, foci, Pattern.Wavelength(340 * m / s), new AUTD3.Holo.GspatOption(), phases, intensities));
+            Assert.Equal(Autd3ErrorCode.InvalidArgument, error.Code);
+            Assert.Contains("focus 0 is at the position of transducer 5 of device 0", error.Message);
+
+            error = Assert.Throws<Autd3Exception>(() => AUTD3.Holo.Holo.Greedy(geometry, foci, Pattern.Wavelength(340 * m / s), Intensity.Max, order, new AUTD3.Holo.GreedyOption(), phases));
+            Assert.Equal(Autd3ErrorCode.InvalidArgument, error.Code);
+            Assert.Contains("focus 0 is at the position of transducer 5 of device 0", error.Message);
+        }
+
+        [Fact]
         public void SineProducesSamples()
         {
             using var modulation = Modulation.ModulationBuffer();

@@ -29,6 +29,12 @@ pub enum HoloError {
         index: usize,
         num_transducers: usize,
     },
+    #[error("focus {focus} is at the position of transducer {transducer} of device {device}")]
+    FocusOnTransducer {
+        focus: usize,
+        device: usize,
+        transducer: usize,
+    },
     #[error(transparent)]
     Mask(#[from] TransducerMaskError),
 }

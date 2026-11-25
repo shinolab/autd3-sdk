@@ -364,6 +364,19 @@ def test_holo_algorithms() -> None:
     assert len(intensities) == geo.num_devices()
 
 
+def test_holo_focus_on_a_transducer_is_an_invalid_argument() -> None:
+    geo = geometry()
+    wavelength = pattern.wavelength(340 * m / s)
+    foci = [holo.AmplitudeTarget(geo[0].position(5), 5e3 * Pa)]
+    phases = geo.phase_buffer()
+    intensities = geo.intensity_buffer()
+    match = "focus 0 is at the position of transducer 5 of device 0"
+    with pytest.raises(autd3.InvalidArgumentError, match=match):
+        holo.gspat(geo, foci, wavelength, holo.GspatOption(), phases, intensities)
+    with pytest.raises(autd3.InvalidArgumentError, match=match):
+        holo.greedy(geo, foci, wavelength, autd3.value.Intensity.MAX, list(range(geo.num_transducers())), holo.GreedyOption(), phases)
+
+
 def test_holo_greedy_follows_the_given_order() -> None:
     geo = geometry()
     wavelength = pattern.wavelength(340 * m / s)
