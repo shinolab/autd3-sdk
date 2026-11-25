@@ -16,7 +16,7 @@ use crate::fpga_params::{
     ADDR_SILENCER_UPDATE_RATE_INTENSITY, ADDR_SILENCER_UPDATE_RATE_PHASE, ADDR_SYNC_PS_CTL,
     ADDR_SYNC_PS_KF, ADDR_SYNC_PS_KI, ADDR_SYNC_PS_KP, ADDR_WATCHDOG_KICK, ADDR_WATCHDOG_RELEASE,
     ADDR_WATCHDOG_STATE, ADDR_WATCHDOG_TIMEOUT, BramSelect, CtlFlags, FunctionBits, NUM_BANKS,
-    NUM_TRANSDUCERS,
+    NUM_TRANSDUCERS, SET_RESULT_TRANSITION_INVALID_BIT,
 };
 pub use crate::fpga_params::{PWE_TABLE_SIZE, REP_INFINITE};
 use crate::port::Port;
@@ -129,8 +129,11 @@ pub fn set_and_wait_update<P: Port>(
     write_ctl(port, ADDR_CTL_FLAG, persistent | flag);
     for _ in 0..max_polls.get() {
         if (read_ctl(port, ADDR_CTL_FLAG) & flag) == 0 {
-            return if (read_ctl(port, ADDR_SILENCER_SET_RESULT) & flag) == 0 {
+            let result = read_ctl(port, ADDR_SILENCER_SET_RESULT);
+            return if (result & flag) == 0 {
                 Ok(())
+            } else if result & (1 << SET_RESULT_TRANSITION_INVALID_BIT) != 0 {
+                Err(Error::InvalidTransitionMode)
             } else {
                 Err(Error::InvalidSilencerSetting)
             };
@@ -235,7 +238,7 @@ pub fn init<P: Port>(port: &mut P) -> Result<(), Error> {
     write_ctl(
         port,
         ADDR_MOD_TRANSITION_MODE,
-        TransitionModeKind::SyncIdx as u16,
+        TransitionModeKind::Immediate as u16,
     );
     write_u64(port, ADDR_MOD_TRANSITION_VALUE_0, 0);
     write_ctl(port, ADDR_MOD_REQ_RD_BANK, 0);
@@ -248,7 +251,7 @@ pub fn init<P: Port>(port: &mut P) -> Result<(), Error> {
     write_ctl(
         port,
         ADDR_PATTERN_TRANSITION_MODE,
-        TransitionModeKind::SyncIdx as u16,
+        TransitionModeKind::Immediate as u16,
     );
     write_u64(port, ADDR_PATTERN_TRANSITION_VALUE_0, 0);
     write_ctl(port, ADDR_PATTERN_REQ_RD_BANK, 0);

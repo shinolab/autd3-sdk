@@ -123,7 +123,7 @@ impl Swapchain {
                     MODE_SYS_TIME => self.transition_value <= Self::fpga_sys_time(sys_time_ns),
                     MODE_GPIO => gpio_in[self.transition_value as usize & 0x3],
 
-                    _ => true,
+                    _ => false,
                 };
                 if fire {
                     self.stop = false;
@@ -302,7 +302,7 @@ mod tests {
     fn ext_mode_ignores_tic_offset_left_by_previous_finite_loop() {
         let mut sc = Swapchain::new();
         sc.set(0, REP_INFINITE, 1, CYCLE, 0, MODE_IMMEDIATE, 0);
-        sc.set(LAP_NS / 2, 0, 1, CYCLE, 1, MODE_IMMEDIATE, 0);
+        sc.set(LAP_NS / 2, 0, 1, CYCLE, 1, MODE_SYS_TIME, 0);
         sc.update([false; 4], LAP_NS / 2);
         assert_eq!(1, sc.cur_bank());
         assert_ne!(0, sc.tic_idx_offset[1]);
@@ -311,5 +311,42 @@ mod tests {
         run(&mut sc, LAP_NS, 2 * LAP_NS + LAP_NS / 2);
         assert_eq!(1, sc.cur_bank());
         assert_eq!(2, sc.cur_idx());
+    }
+
+    #[test]
+    fn finite_loop_with_immediate_or_ext_stays_pending_until_infinite_request() {
+        for mode in [MODE_IMMEDIATE, MODE_EXT] {
+            let mut sc = Swapchain::new();
+            sc.set(0, REP_INFINITE, 1, CYCLE, 0, MODE_IMMEDIATE, 0);
+            sc.set(LAP_NS / 2, 0, 1, CYCLE, 1, mode, 0);
+            assert!(sc.transition_pending());
+            run(&mut sc, LAP_NS / 2, 10 * LAP_NS);
+            assert_eq!(0, sc.cur_bank());
+            assert!(sc.transition_pending());
+
+            sc.set(10 * LAP_NS, REP_INFINITE, 1, CYCLE, 1, MODE_IMMEDIATE, 0);
+            assert_eq!(1, sc.cur_bank());
+            assert!(!sc.transition_pending());
+        }
+    }
+
+    #[test]
+    fn finite_loop_with_immediate_pending_is_replaced_by_firing_mode_to_other_bank() {
+        let mut sc = Swapchain::new();
+        sc.set(0, REP_INFINITE, 1, CYCLE, 0, MODE_IMMEDIATE, 0);
+        sc.set(LAP_NS / 2, 0, 1, CYCLE, 1, MODE_IMMEDIATE, 0);
+        run(&mut sc, LAP_NS / 2, 2 * LAP_NS);
+        assert!(sc.transition_pending());
+
+        sc.set(2 * LAP_NS, 0, 1, CYCLE, 1, MODE_SYS_TIME, 0);
+        sc.update([false; 4], 2 * LAP_NS);
+        assert_eq!(0, sc.cur_bank());
+        assert!(sc.transition_pending());
+
+        sc.set(2 * LAP_NS, 0, 1, CYCLE, 0, MODE_SYS_TIME, 0);
+        sc.update([false; 4], 2 * LAP_NS);
+        assert_eq!(0, sc.cur_bank());
+        assert!(!sc.transition_pending());
+        assert!(!sc.stopped());
     }
 }

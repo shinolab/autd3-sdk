@@ -83,6 +83,7 @@ module controller (
   logic mod_now_all;
   logic [params::NumBanks-1:0] mod_stage_ng;
   logic [params::NumBanks-1:0] mod_now_ng;
+  logic mod_transition_invalid;
   logic mod_reject;
   assign mod_stage_finite = mod_stage.REP[mod_stage.REQ_RD_BANK] != params::RepInfinite;
   assign mod_now_finite = MOD_SETTINGS.REP[MOD_SETTINGS.REQ_RD_BANK] != params::RepInfinite;
@@ -96,7 +97,12 @@ module controller (
     assign mod_stage_ng[b] = stage_used & (mod_stage.FREQ_DIV[b] < SILENCER_SETTINGS.COMPLETION_STEPS_INTENSITY);
     assign mod_now_ng[b] = now_used & (MOD_SETTINGS.FREQ_DIV[b] < silencer_stage.COMPLETION_STEPS_INTENSITY);
   end
-  assign mod_reject = is_strict(SILENCER_SETTINGS.FLAG) & (|mod_stage_ng);
+  assign mod_transition_invalid = mod_stage_finite
+      ? !(mod_stage.TRANSITION_MODE inside {params::TRANSITION_MODE_SYNC_IDX,
+          params::TRANSITION_MODE_SYS_TIME, params::TRANSITION_MODE_GPIO})
+      : !(mod_stage.TRANSITION_MODE inside {params::TRANSITION_MODE_IMMEDIATE,
+          params::TRANSITION_MODE_EXT});
+  assign mod_reject = (is_strict(SILENCER_SETTINGS.FLAG) & (|mod_stage_ng)) | mod_transition_invalid;
 
   logic pattern_stage_finite;
   logic pattern_now_finite;
@@ -104,6 +110,7 @@ module controller (
   logic pattern_now_all;
   logic [params::NumBanks-1:0] pattern_stage_ng;
   logic [params::NumBanks-1:0] pattern_now_ng;
+  logic pattern_transition_invalid;
   logic pattern_reject;
   assign pattern_stage_finite = pattern_stage.REP[pattern_stage.REQ_RD_BANK] != params::RepInfinite;
   assign pattern_now_finite = PATTERN_SETTINGS.REP[PATTERN_SETTINGS.REQ_RD_BANK] != params::RepInfinite;
@@ -121,7 +128,12 @@ module controller (
         & ((PATTERN_SETTINGS.FREQ_DIV[b] < silencer_stage.COMPLETION_STEPS_INTENSITY)
            | (PATTERN_SETTINGS.FREQ_DIV[b] < silencer_stage.COMPLETION_STEPS_PHASE));
   end
-  assign pattern_reject = is_strict(SILENCER_SETTINGS.FLAG) & (|pattern_stage_ng);
+  assign pattern_transition_invalid = pattern_stage_finite
+      ? !(pattern_stage.TRANSITION_MODE inside {params::TRANSITION_MODE_SYNC_IDX,
+          params::TRANSITION_MODE_SYS_TIME, params::TRANSITION_MODE_GPIO})
+      : !(pattern_stage.TRANSITION_MODE inside {params::TRANSITION_MODE_IMMEDIATE,
+          params::TRANSITION_MODE_EXT});
+  assign pattern_reject = (is_strict(SILENCER_SETTINGS.FLAG) & (|pattern_stage_ng)) | pattern_transition_invalid;
 
   logic silencer_reject;
   assign silencer_reject = is_strict(silencer_stage.FLAG) & ((|mod_now_ng) | (|pattern_now_ng));
@@ -292,6 +304,7 @@ module controller (
             ctl_flags_cand <= dout;
             if (dout == ctl_flags_cand) begin
               ctl_flags <= dout;
+              silencer_set_result[params::SetResultTransitionInvalidBit] <= 1'b0;
             end
             state <= REQ_RD_CTL_FLAG;
           end
@@ -382,6 +395,7 @@ module controller (
         end
         MOD_VALIDATE: begin
           silencer_set_result[params::CTL_FLAG_BIT_MOD_SET] <= mod_reject;
+          silencer_set_result[params::SetResultTransitionInvalidBit] <= silencer_set_result[params::SetResultTransitionInvalidBit] | mod_transition_invalid;
           state <= MOD_COMMIT;
         end
         MOD_COMMIT: begin
@@ -513,6 +527,7 @@ module controller (
         end
         PATTERN_VALIDATE: begin
           silencer_set_result[params::CTL_FLAG_BIT_PATTERN_SET] <= pattern_reject;
+          silencer_set_result[params::SetResultTransitionInvalidBit] <= silencer_set_result[params::SetResultTransitionInvalidBit] | pattern_transition_invalid;
           state <= PATTERN_COMMIT;
         end
         PATTERN_COMMIT: begin

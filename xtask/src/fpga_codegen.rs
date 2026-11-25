@@ -43,6 +43,7 @@ struct Group {
     name: &'static str,
     params: Vec<Param>,
     reject: Option<&'static str>,
+    transition_invalid: Option<&'static str>,
 }
 
 impl Group {
@@ -85,6 +86,7 @@ pub(crate) fn gen_controller(fpga_dir: &Path, check: bool) -> Result<()> {
         Group {
             name: "MOD",
             reject: Some("mod_reject"),
+            transition_invalid: Some("mod_transition_invalid"),
             params: vec![
                 Param::new("MOD_REQ_RD_BANK", 1, "REQ_RD_BANK", "1'd0"),
                 Param::new(
@@ -105,6 +107,7 @@ pub(crate) fn gen_controller(fpga_dir: &Path, check: bool) -> Result<()> {
         Group {
             name: "PATTERN",
             reject: Some("pattern_reject"),
+            transition_invalid: Some("pattern_transition_invalid"),
             params: vec![
                 Param::new("PATTERN_REQ_RD_BANK", 1, "REQ_RD_BANK", "1'd0"),
                 Param::new(
@@ -131,6 +134,7 @@ pub(crate) fn gen_controller(fpga_dir: &Path, check: bool) -> Result<()> {
         Group {
             name: "SILENCER",
             reject: Some("silencer_reject"),
+            transition_invalid: None,
             params: vec![
                 Param::new("SILENCER_FLAG", 8, "FLAG", "8'd0"),
                 Param::new(
@@ -162,6 +166,7 @@ pub(crate) fn gen_controller(fpga_dir: &Path, check: bool) -> Result<()> {
         Group {
             name: "DEBUG",
             reject: None,
+            transition_invalid: None,
             params: vec![
                 Param::new("DEBUG_VALUE0", 64, "VALUE[0]", debug_default),
                 Param::new("DEBUG_VALUE1", 64, "VALUE[1]", debug_default),
@@ -172,6 +177,7 @@ pub(crate) fn gen_controller(fpga_dir: &Path, check: bool) -> Result<()> {
         Group {
             name: "SYNC",
             reject: None,
+            transition_invalid: None,
             params: vec![Param::new("SYNC_TIME", 64, "SYNC_TIME", "64'd0")],
         },
     ];
@@ -331,6 +337,7 @@ module controller (
   logic {name}_now_all;
   logic [params::NumBanks-1:0] {name}_stage_ng;
   logic [params::NumBanks-1:0] {name}_now_ng;
+  logic {name}_transition_invalid;
   logic {name}_reject;
   assign {name}_stage_finite = {name}_stage.REP[{name}_stage.REQ_RD_BANK] != params::RepInfinite;
   assign {name}_now_finite = {upper}_SETTINGS.REP[{upper}_SETTINGS.REQ_RD_BANK] != params::RepInfinite;
@@ -350,7 +357,13 @@ module controller (
     assign {name}_now_ng[b] = now_used
         & {};
   end
-  assign {name}_reject = is_strict(SILENCER_SETTINGS.FLAG) & (|{name}_stage_ng);
+  assign {name}_transition_invalid = {name}_stage_finite
+      ? !({name}_stage.TRANSITION_MODE inside {{params::TRANSITION_MODE_SYNC_IDX,
+          params::TRANSITION_MODE_SYS_TIME, params::TRANSITION_MODE_GPIO}})
+      : !({name}_stage.TRANSITION_MODE inside {{params::TRANSITION_MODE_IMMEDIATE,
+          params::TRANSITION_MODE_EXT}});
+  assign {name}_reject = (is_strict(SILENCER_SETTINGS.FLAG) & (|{name}_stage_ng))
+      | {name}_transition_invalid;
 ",
                             violates(&format!("{name}_stage.FREQ_DIV[b]"), "SILENCER_SETTINGS"),
                             violates(&format!("{upper}_SETTINGS.FREQ_DIV[b]"), "silencer_stage"),
@@ -449,6 +462,7 @@ module controller (
           ctl_flags_cand <= dout;
           if (dout == ctl_flags_cand) begin
             ctl_flags <= dout;
+            silencer_set_result[params::SetResultTransitionInvalidBit] <= 1'b0;
           end
           state <= REQ_RD_CTL_FLAG;
         end
@@ -508,6 +522,13 @@ module controller (
                     "\n        silencer_set_result[params::CTL_FLAG_BIT_{name}_SET] <= {reject};"
                 )
                 .unwrap();
+                if let Some(invalid) = group.transition_invalid {
+                    write!(
+                        &mut source,
+                        "\n        silencer_set_result[params::SetResultTransitionInvalidBit] <= silencer_set_result[params::SetResultTransitionInvalidBit] | {invalid};"
+                    )
+                    .unwrap();
+                }
             }
 
             if i == len - 2 {

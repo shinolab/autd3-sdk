@@ -1,4 +1,5 @@
 pub(crate) const ERR_INVALID_SILENCER_SETTING: u8 = 0x04;
+pub(crate) const ERR_INVALID_TRANSITION_MODE: u8 = 0x05;
 pub(crate) const ERR_FAILSAFE_CONDITION_ACTIVE: u8 = 0x15;
 
 pub(crate) mod cpu_config;

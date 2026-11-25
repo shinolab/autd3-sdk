@@ -52,10 +52,29 @@ mod tests {
     use crate::cmd::activate_mod_bank::ActivateModBankPayload;
     use crate::cmd::activate_pattern_bank::ActivatePatternBankPayload;
     use crate::fpga::TransitionModeKind;
-    use crate::fpga_params::{ADDR_MOD_REQ_RD_BANK, ADDR_PATTERN_REQ_RD_BANK};
+    use crate::fpga_params::{ADDR_MOD_REQ_RD_BANK, ADDR_PATTERN_REQ_RD_BANK, CtlFlags};
     use crate::proto::Error;
     use crate::test_utils::builders::{activate_mod_bank, activate_pattern_bank};
     use crate::test_utils::mock::Harness;
+
+    #[test]
+    fn a_latch_rejected_for_the_transition_mode_reports_invalid_transition_mode() {
+        let mut h = Harness::new();
+        h.port.reject_latch = CtlFlags::MOD_SET | CtlFlags::PATTERN_SET;
+        h.port.reject_as_transition_invalid = true;
+
+        h.deliver(&activate_mod_bank(1, TransitionModeKind::Immediate, 0));
+        assert_eq!(h.status(), Error::InvalidTransitionMode);
+        assert_eq!(h.latched(ADDR_MOD_REQ_RD_BANK), 0);
+
+        h.deliver(&activate_pattern_bank(1, TransitionModeKind::SyncIdx, 0));
+        assert_eq!(h.status(), Error::InvalidTransitionMode);
+        assert_eq!(h.latched(ADDR_PATTERN_REQ_RD_BANK), 0);
+
+        h.port.reject_as_transition_invalid = false;
+        h.deliver(&activate_mod_bank(1, TransitionModeKind::Immediate, 0));
+        assert_eq!(h.status(), Error::InvalidSilencerSetting);
+    }
 
     #[test]
     fn activate_bank_rejects_unknown_transition_mode_as_invalid_payload() {

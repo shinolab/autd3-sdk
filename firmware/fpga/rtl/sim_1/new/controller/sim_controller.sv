@@ -245,6 +245,18 @@ module sim_controller ();
     end
   endtask
 
+  task automatic expect_transition_invalid(input logic expected);
+    sim_helper_bram.read_cnt(params::ADDR_SILENCER_SET_RESULT, set_result);
+    `ASSERT_EQ(expected, set_result[params::SetResultTransitionInvalidBit]);
+  endtask
+
+  task automatic check_transition(input logic [15:0] rep, input logic [7:0] mode, input logic expect_invalid);
+    latch_mod(1'b1, mode, 16'd100, 16'd100, 16'hFFFF, rep, expect_invalid);
+    expect_transition_invalid(expect_invalid);
+    latch_pattern(1'b1, mode, 16'd100, 16'd100, 16'hFFFF, rep, expect_invalid);
+    expect_transition_invalid(expect_invalid);
+  endtask
+
   initial begin
 
     enable_gate = 1'b1;
@@ -274,6 +286,8 @@ module sim_controller ();
     mod_settings_in.FREQ_DIV[1] = sim_helper_random.range(16'hFFFF, 0);
     mod_settings_in.REP[0] = sim_helper_random.range(16'hFFFF, 0);
     mod_settings_in.REP[1] = sim_helper_random.range(16'hFFFF, 0);
+    mod_settings_in.TRANSITION_MODE = mod_settings_in.REP[mod_settings_in.REQ_RD_BANK] == params::RepInfinite
+        ? TransitionImmediate : params::TRANSITION_MODE_SYS_TIME;
 
     pattern_settings_in.UPDATE = 1'b1;
     pattern_settings_in.REQ_RD_BANK = sim_helper_random.range(1'b1, 0);
@@ -287,6 +301,8 @@ module sim_controller ();
     pattern_settings_in.FREQ_DIV[1] = sim_helper_random.range(16'hFFFF, 0);
     pattern_settings_in.REP[0] = sim_helper_random.range(16'hFFFF, 0);
     pattern_settings_in.REP[1] = sim_helper_random.range(16'hFFFF, 0);
+    pattern_settings_in.TRANSITION_MODE = pattern_settings_in.REP[pattern_settings_in.REQ_RD_BANK] == params::RepInfinite
+        ? params::TRANSITION_MODE_EXT : params::TRANSITION_MODE_GPIO;
     pattern_settings_in.SOUND_SPEED[0] = sim_helper_random.range(16'hFFFF, 0);
     pattern_settings_in.SOUND_SPEED[1] = sim_helper_random.range(16'hFFFF, 0);
     pattern_settings_in.NUM_FOCI[0] = sim_helper_random.range(8'd8, 0);
@@ -512,6 +528,53 @@ module sim_controller ();
     sim_helper_bram.read_cnt(params::ADDR_SILENCER_SET_RESULT, set_result);
     `ASSERT_EQ(16'd0, set_result);
     $display("OK! losing ENABLE clears the latch results");
+
+    check_transition(16'd0, TransitionImmediate, 1'b1);
+    check_transition(16'd0, params::TRANSITION_MODE_EXT, 1'b1);
+    check_transition(16'd0, 8'h03, 1'b1);
+    check_transition(16'd0, params::TRANSITION_MODE_SYNC_IDX, 1'b0);
+    check_transition(16'd0, params::TRANSITION_MODE_SYS_TIME, 1'b0);
+    check_transition(16'd0, params::TRANSITION_MODE_GPIO, 1'b0);
+    $display("OK! a finite loop accepts only SYNC_IDX / SYS_TIME / GPIO");
+
+    check_transition(16'hFFFF, params::TRANSITION_MODE_SYNC_IDX, 1'b1);
+    check_transition(16'hFFFF, params::TRANSITION_MODE_SYS_TIME, 1'b1);
+    check_transition(16'hFFFF, params::TRANSITION_MODE_GPIO, 1'b1);
+    check_transition(16'hFFFF, 8'h03, 1'b1);
+    check_transition(16'hFFFF, TransitionImmediate, 1'b0);
+    check_transition(16'hFFFF, params::TRANSITION_MODE_EXT, 1'b0);
+    $display("OK! an infinite loop accepts only IMMEDIATE / EXT");
+
+    latch_silencer(SilencerStrict, 16'd8, 16'd8, 1'b0);
+    latch_mod(1'b1, TransitionImmediate, 16'd100, 16'd3, 16'hFFFF, 16'hFFFF, 1'b1);
+    expect_transition_invalid(1'b0);
+    $display("OK! a strict violation leaves the transition bit clear");
+
+    latch_mod(1'b1, TransitionImmediate, 16'd100, 16'd100, 16'hFFFF, 16'd0, 1'b1);
+    expect_transition_invalid(1'b1);
+    latch_silencer(SilencerStrict, 16'd200, 16'd200, 1'b1);
+    expect_transition_invalid(1'b0);
+    latch_silencer(8'd0, 16'd8, 16'd8, 1'b0);
+    $display("OK! the transition bit only reports the latches of the current sequence");
+
+    mod_settings_in.REQ_RD_BANK = 1'b1;
+    mod_settings_in.TRANSITION_MODE = TransitionImmediate;
+    mod_settings_in.REP[1] = 16'd0;
+    sim_helper_bram.write_mod_settings(mod_settings_in);
+    pattern_settings_in.REQ_RD_BANK = 1'b1;
+    pattern_settings_in.TRANSITION_MODE = TransitionImmediate;
+    pattern_settings_in.REP[1] = 16'hFFFF;
+    sim_helper_bram.write_pattern_settings(pattern_settings_in);
+    sim_helper_bram.write_cnt(params::ADDR_CTL_FLAG,
+                              PersistentFlags | (16'd1 << params::CTL_FLAG_BIT_MOD_SET) | (16'd1 << params::CTL_FLAG_BIT_PATTERN_SET));
+    do begin
+      sim_helper_bram.read_cnt(params::ADDR_CTL_FLAG, ctl_flag);
+    end while (ctl_flag[params::CTL_FLAG_BIT_MOD_SET] | ctl_flag[params::CTL_FLAG_BIT_PATTERN_SET]);
+    sim_helper_bram.read_cnt(params::ADDR_SILENCER_SET_RESULT, set_result);
+    `ASSERT_EQ(((16'd1 << params::CTL_FLAG_BIT_MOD_SET) | (16'd1 << params::SetResultTransitionInvalidBit)), set_result);
+    `ASSERT_EQ(pattern_settings_in, pattern_settings);
+    repeat (8) @(posedge CLK);
+    $display("OK! the transition bit accumulates over the latches of one sequence");
 
     $display("OK! sim_controller");
     $finish();

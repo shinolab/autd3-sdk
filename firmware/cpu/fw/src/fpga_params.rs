@@ -4,6 +4,7 @@
 
 pub use autd3_cpu_wire::fpga_params::*;
 pub const SYNC_CYCLE_TICKS: u16 = 20480;
+pub const SET_RESULT_TRANSITION_INVALID_BIT: u16 = 15;
 pub const FLASH_BUF_BYTES: usize = 1024;
 
 bitflags::bitflags! {

@@ -20,6 +20,7 @@ use crate::fpga_params::{
     ADDR_SILENCER_SET_RESULT, ADDR_SYNC_PS_CTL, ADDR_SYNC_PS_KF, ADDR_SYNC_PS_KI, ADDR_SYNC_PS_KP,
     ADDR_WATCHDOG_KICK, ADDR_WATCHDOG_RELEASE, ADDR_WATCHDOG_STATE, ADDR_WATCHDOG_TIMEOUT,
     BramSelect, CtlFlags, FLASH_BUF_BYTES, FlashErr, FlashOp, FunctionBits, NUM_BANKS,
+    SET_RESULT_TRANSITION_INVALID_BIT,
 };
 use crate::port::{FlashError, Port};
 use crate::proto::{
@@ -62,6 +63,7 @@ pub(crate) struct MockPort {
     pub ctl: Box<[u16; 256]>,
     pub latched: Box<[u16; 256]>,
     pub reject_latch: CtlFlags,
+    pub reject_as_transition_invalid: bool,
     pub latch_log: Vec<CtlFlags>,
     pub ctl_flag_writes: Vec<CtlFlags>,
     pub phase_corr: Box<[u16; 256]>,
@@ -126,6 +128,7 @@ impl MockPort {
             ctl,
             latched: Box::new([0; 256]),
             reject_latch: CtlFlags::empty(),
+            reject_as_transition_invalid: false,
             latch_log: Vec::new(),
             ctl_flag_writes: Vec::new(),
             phase_corr: Box::new([0; 256]),
@@ -276,8 +279,16 @@ impl MockPort {
         }
         self.latch_log.push(flags);
         let rejected = flags & self.reject_latch;
-        let kept = CtlFlags::from_bits_retain(self.ctl[ADDR_SILENCER_SET_RESULT as usize]) & !flags;
-        self.ctl[ADDR_SILENCER_SET_RESULT as usize] = (kept | rejected).bits();
+        let kept =
+            CtlFlags::from_bits_truncate(self.ctl[ADDR_SILENCER_SET_RESULT as usize]) & !flags;
+        let transition_invalid = if self.reject_as_transition_invalid
+            && rejected.intersects(CtlFlags::MOD_SET | CtlFlags::PATTERN_SET)
+        {
+            1 << SET_RESULT_TRANSITION_INVALID_BIT
+        } else {
+            0
+        };
+        self.ctl[ADDR_SILENCER_SET_RESULT as usize] = (kept | rejected).bits() | transition_invalid;
         let accepted = flags & !rejected;
         if accepted.contains(CtlFlags::MOD_SET) {
             self.copy_latched(&MOD_LATCHED_REGS);

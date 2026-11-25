@@ -113,7 +113,7 @@ mod tests {
         assert_eq!(h.ctl(ADDR_PATTERN_REP0), REP_INFINITE);
         assert_eq!(
             h.ctl(ADDR_PATTERN_TRANSITION_MODE),
-            TransitionModeKind::SyncIdx as u16
+            TransitionModeKind::Immediate as u16
         );
         assert_eq!(h.ctl(ADDR_PATTERN_REQ_RD_BANK), 0);
         assert_eq!(h.latch_count(CtlFlags::PATTERN_SET), latches_at_boot);

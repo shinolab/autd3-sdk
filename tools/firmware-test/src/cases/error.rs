@@ -11,8 +11,8 @@ use autd3_rs::common::ULTRASOUND_PERIOD;
 use autd3_rs::value::{LoopBehavior, ModulationBank, PatternBank, SamplingConfig, TransitionMode};
 
 use crate::Ctx;
-use crate::cases::ERR_INVALID_SILENCER_SETTING;
 use crate::cases::pattern_util::{expect_firmware_error, expect_firmware_ok};
+use crate::cases::{ERR_INVALID_SILENCER_SETTING, ERR_INVALID_TRANSITION_MODE};
 use crate::io::wait_enter;
 
 fn divider(steps: u16) -> SamplingConfig {
@@ -249,6 +249,41 @@ pub(crate) async fn run(ctx: &Ctx<'_>) -> Result<()> {
                 transition_mode: TransitionMode::Immediate,
             },
         ),
+    )
+    .await;
+
+    ctx.send(Clear).await?;
+    mod_banks(
+        ctx,
+        [100, 100],
+        LoopBehavior::ONCE,
+        (ModulationBank::B0, TransitionMode::Immediate),
+    )
+    .await?;
+    expect_firmware_error(
+        ctx,
+        "switching onto a finite bank with Immediate",
+        Frames::encode(
+            ctx.client.geometry(),
+            ActivateModulationBank {
+                bank: ModulationBank::B1,
+                transition_mode: TransitionMode::Immediate,
+            },
+        ),
+        ERR_INVALID_TRANSITION_MODE,
+    )
+    .await;
+    expect_firmware_error(
+        ctx,
+        "switching onto an infinite bank with SyncIdx",
+        Frames::encode(
+            ctx.client.geometry(),
+            ActivateModulationBank {
+                bank: ModulationBank::B0,
+                transition_mode: TransitionMode::SyncIdx,
+            },
+        ),
+        ERR_INVALID_TRANSITION_MODE,
     )
     .await;
 

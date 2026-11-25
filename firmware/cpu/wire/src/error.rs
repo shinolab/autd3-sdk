@@ -4,6 +4,7 @@ crate::wire_enum_u8! {
         UnknownCmd = 0x01,
         InvalidPayload = 0x02,
         InvalidSilencerSetting = 0x04,
+        InvalidTransitionMode = 0x05,
         FpgaTimeout = 0x07,
         SyncNotReady = 0x08,
         UpdateNotStarted = 0x0A,
@@ -27,6 +28,9 @@ impl Error {
             Self::UnknownCmd => "unknown command (device firmware may be out of date)",
             Self::InvalidPayload => "invalid payload",
             Self::InvalidSilencerSetting => "invalid silencer setting",
+            Self::InvalidTransitionMode => {
+                "the transition mode does not match the loop of the target bank (a finite loop takes SyncIdx, SysTime or Gpio; an infinite loop takes Immediate or Ext)"
+            }
             Self::FpgaTimeout => "FPGA did not acknowledge a register update in time",
             Self::SyncNotReady => {
                 "the sync pulse is not running (SetTime not received, PTP not locked, or the pulse was re-armed)"
@@ -83,7 +87,6 @@ mod tests {
     #[test]
     fn retired_codes_stay_unassigned() {
         assert_eq!(Error::from_u8(0x03), None);
-        assert_eq!(Error::from_u8(0x05), None);
         assert_eq!(Error::from_u8(0x06), None);
         assert_eq!(Error::from_u8(0x09), None);
         assert_eq!(Error::from_u8(0x11), None);
