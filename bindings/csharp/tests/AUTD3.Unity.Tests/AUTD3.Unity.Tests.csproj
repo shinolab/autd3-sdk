@@ -19,6 +19,10 @@
     <Compile Include="../../src/AUTD3.Core/*.cs" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(NativeDir)' != ''">
+    <None Include="$(NativeDir)/*autd3_core.*" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <Reference Include="UnityEngine.CoreModule">
       <HintPath>$(UnityManagedDir)/UnityEngine.CoreModule.dll</HintPath>

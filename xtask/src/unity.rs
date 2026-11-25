@@ -304,6 +304,9 @@ pub(crate) fn run_unity(root: &Path, cmd: UnityCmd) -> Result<()> {
                 .join("tests")
                 .join("AUTD3.Unity.Tests")
                 .join("AUTD3.Unity.Tests.csproj");
+            let ffi = root.join("bindings").join("ffi");
+            run("cargo", ["build", "--workspace", "--release"], &ffi)?;
+            let native = ffi.join("target").join("release");
             let cwd = proj.parent().unwrap();
             run(
                 "dotnet",
@@ -313,6 +316,7 @@ pub(crate) fn run_unity(root: &Path, cmd: UnityCmd) -> Result<()> {
                     "-c",
                     "Debug",
                     &format!("-p:UnityManagedDir={}", managed.display()),
+                    &format!("-p:NativeDir={}", native.display()),
                 ],
                 cwd,
             )
