@@ -2,8 +2,8 @@ use autd3_rs_core::common::units::{m, s};
 use autd3_rs_core::geometry::{Autd3, Geometry, Point3, TransducerMask, UnitQuaternion, Vector3};
 use autd3_rs_core::value::{Intensity, Phase};
 use autd3_rs_pattern_holo::{
-    AmplitudeTarget, Directivity, GsOption, GspatOption, IntensityConstraint, NaiveOption,
-    NalgebraBackend, Pa, gs, gspat, naive,
+    AmplitudeTarget, Directivity, GsOption, GspatOption, HoloError, IntensityConstraint,
+    NaiveOption, NalgebraBackend, Pa, gs, gspat, naive,
 };
 use autd3_rs_pattern_holo_wgpu::WgpuBackend;
 
@@ -175,5 +175,77 @@ fn matches_nalgebra_backend() {
                 }
             }
         }
+    }
+}
+
+#[test]
+fn a_focus_on_a_transducer_is_the_same_error_and_masking_it_matches() {
+    let Ok(gpu) = WgpuBackend::new() else {
+        eprintln!("skipping: no GPU adapter available");
+        return;
+    };
+    let wl = autd3_rs_pattern::wavelength(340.0 * m / s);
+    let g = geometry(2);
+    let mut f = foci(&g, 4);
+    f[3].point = g[1].positions()[5];
+    let want = Err(HoloError::FocusOnTransducer {
+        focus: 3,
+        device: 1,
+        transducer: 5,
+    });
+    let mut enabled = vec![vec![true; Autd3::NUM_TRANSDUCERS]; 2];
+    enabled[1][5] = false;
+
+    for mask in [TransducerMask::AllEnabled, TransducerMask::Masked(&enabled)] {
+        let label = format!("{mask:?}");
+        let mut a = buffer(&g);
+        let mut b = buffer(&g);
+        let expect = |r: Result<(), HoloError>| {
+            if matches!(mask, TransducerMask::AllEnabled) {
+                assert_eq!(r, want, "{label}");
+            } else {
+                r.unwrap();
+            }
+        };
+
+        let opt = NaiveOption {
+            mask,
+            ..Default::default()
+        };
+        expect(naive(
+            &NalgebraBackend,
+            &g,
+            &f,
+            wl,
+            &opt,
+            &mut a.0,
+            &mut a.1,
+        ));
+        expect(naive(&gpu, &g, &f, wl, &opt, &mut b.0, &mut b.1));
+        compare(&format!("naive {label}"), &a.0, &a.1, &b.0, &b.1);
+
+        let opt = GsOption {
+            mask,
+            ..Default::default()
+        };
+        expect(gs(&NalgebraBackend, &g, &f, wl, &opt, &mut a.0, &mut a.1));
+        expect(gs(&gpu, &g, &f, wl, &opt, &mut b.0, &mut b.1));
+        compare(&format!("gs {label}"), &a.0, &a.1, &b.0, &b.1);
+
+        let opt = GspatOption {
+            mask,
+            ..Default::default()
+        };
+        expect(gspat(
+            &NalgebraBackend,
+            &g,
+            &f,
+            wl,
+            &opt,
+            &mut a.0,
+            &mut a.1,
+        ));
+        expect(gspat(&gpu, &g, &f, wl, &opt, &mut b.0, &mut b.1));
+        compare(&format!("gspat {label}"), &a.0, &a.1, &b.0, &b.1);
     }
 }

@@ -11,7 +11,7 @@ use crate::amp::Amplitude;
 use crate::amplitude_target::AmplitudeTarget;
 use crate::directivity::Directivity;
 use crate::error::HoloError;
-use crate::propagation::{propagate, validate_dst_len, wavenumber};
+use crate::propagation::{propagate, reject_focus_on_transducer, validate_dst_len, wavenumber};
 
 #[must_use]
 pub fn abs_objective_func(c: Complex<f32>, a: Amplitude) -> f32 {
@@ -110,6 +110,7 @@ pub fn greedy<'a>(
             continue;
         }
         let pos = geometry[d].positions()[t];
+        reject_focus_on_transducer(foci, d, t, pos)?;
         let dir = device_directions[d];
         let amp = f32::from(intensity_at(intensities, d, t).0) / f32::from(Intensity::MAX.0);
         for (r, f) in tmp.iter_mut().zip(foci) {
@@ -348,6 +349,64 @@ mod tests {
                 num_transducers: 0,
             }),
         );
+    }
+
+    #[test]
+    fn a_focus_on_an_emitting_transducer_is_an_error_and_on_a_silent_one_is_not() {
+        let geometry = geometry(2);
+        let foci = [
+            single_focus()[0],
+            AmplitudeTarget {
+                point: geometry[1].positions()[5],
+                amplitude: 5e3 * Pa,
+            },
+        ];
+        let index = Autd3::NUM_TRANSDUCERS + 5;
+        let mut dst = geometry.phase_buffer();
+        assert_eq!(
+            greedy(
+                &geometry,
+                &foci,
+                wavelength(),
+                Intensity::MAX,
+                &ascending(&geometry),
+                &GreedyOption::default(),
+                &mut dst
+            ),
+            Err(HoloError::FocusOnTransducer {
+                focus: 1,
+                device: 1,
+                transducer: 5,
+            }),
+        );
+
+        let mut silent = uniform(&geometry, Intensity::MAX);
+        silent[1][5] = Intensity::MIN;
+        greedy(
+            &geometry,
+            &foci,
+            wavelength(),
+            &silent,
+            &ascending(&geometry),
+            &GreedyOption::default(),
+            &mut dst,
+        )
+        .unwrap();
+
+        let skipped: Vec<usize> = ascending(&geometry)
+            .into_iter()
+            .filter(|&i| i != index)
+            .collect();
+        greedy(
+            &geometry,
+            &foci,
+            wavelength(),
+            Intensity::MAX,
+            &skipped,
+            &GreedyOption::default(),
+            &mut dst,
+        )
+        .unwrap();
     }
 
     #[test]

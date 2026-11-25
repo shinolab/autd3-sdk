@@ -8,7 +8,8 @@ use crate::constraint::IntensityConstraint;
 use crate::directivity::Directivity;
 use crate::error::HoloError;
 use crate::propagation::{
-    enabled_transducers, quantize, target_amplitudes, validate_dst_len, wavenumber,
+    enabled_transducers, quantize, reject_focus_on_enabled_transducer, target_amplitudes,
+    validate_dst_len, wavenumber,
 };
 
 pub(crate) struct SynthesisSetup<'a> {
@@ -39,6 +40,7 @@ where
     mask.validate(geometry)?;
     validate_dst_len(phases, geometry)?;
     validate_dst_len(intensities, geometry)?;
+    reject_focus_on_enabled_transducer(geometry, mask, foci)?;
 
     let k = wavenumber(wavelength);
     let (tr_pos, tr_dir) = enabled_transducers(geometry, mask);
@@ -97,6 +99,35 @@ mod tests {
             let mut dst = filled(&g, Phase(0x7F), Intensity(0xFF));
             single(&g, &foci, mask, &mut dst).unwrap();
             assert_eq!(dst, inactive, "{name}");
+        }
+    }
+
+    #[test]
+    fn a_focus_on_an_enabled_transducer_is_an_error_and_on_a_masked_one_is_not() {
+        let g = geometry(2);
+        let mut foci = problem(&g, 3);
+        foci[2].point = g[1].positions()[5];
+
+        let mut enabled = vec![vec![true; Autd3::NUM_TRANSDUCERS]; g.num_devices()];
+        enabled[1][5] = false;
+
+        for (name, single) in ALGORITHMS {
+            let mut dst = slot(&g);
+            assert_eq!(
+                single(&g, &foci, TransducerMask::AllEnabled, &mut dst),
+                Err(HoloError::FocusOnTransducer {
+                    focus: 2,
+                    device: 1,
+                    transducer: 5,
+                }),
+                "{name}"
+            );
+
+            single(&g, &foci, TransducerMask::Masked(&enabled), &mut dst).unwrap();
+            assert!(
+                dst.1.iter().flatten().any(|&i| i != Intensity::MIN),
+                "{name}"
+            );
         }
     }
 
