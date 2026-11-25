@@ -25,6 +25,8 @@ module swapchain (
   logic stop = 1'b0;
   logic ext_mode = 1'b0;
   logic [15:0] rep;
+  logic [15:0] req_rep;
+  logic playing_finite = 1'b0;
   logic [15:0] loop_cnt;
 
   logic idx_changed[params::NumBanks];
@@ -80,14 +82,22 @@ module swapchain (
   end
 
   always_ff @(posedge CLK) begin
+    if (playing_finite) begin
+      if (tic_mode && idx_changed[bank]) tic_idx[bank] <= cycle_end ? '0 : tic_idx[bank] + 1;
+      if (cycle_end) begin
+        if (loop_cnt == rep) stop <= 1'b1;
+        else loop_cnt <= loop_cnt + 1;
+      end
+    end
     if (UPDATE_SETTINGS && (REP[REQ_RD_BANK] == params::RepInfinite)) begin
       stop <= 1'b0;
       bank <= REQ_RD_BANK;
       tic_mode <= 1'b0;
+      playing_finite <= 1'b0;
       ext_mode <= TRANSITION_MODE == params::TRANSITION_MODE_EXT;
       state <= INFINITE_LOOP;
     end else if (UPDATE_SETTINGS && (REQ_RD_BANK != target_bank)) begin
-      rep <= REP[REQ_RD_BANK];
+      req_rep <= REP[REQ_RD_BANK];
       req_bank <= REQ_RD_BANK;
       transition_mode <= TRANSITION_MODE;
       gpio_pin <= TRANSITION_VALUE[1:0];
@@ -101,6 +111,8 @@ module swapchain (
           if (transition_fires) begin
             stop <= 1'b0;
             loop_cnt <= '0;
+            rep <= req_rep;
+            playing_finite <= 1'b1;
             bank <= req_bank;
             tic_mode <= transition_mode != params::TRANSITION_MODE_SYNC_IDX;
             tic_idx[req_bank] <= '0;
@@ -111,11 +123,6 @@ module swapchain (
           if (ext_mode && cycle_end) bank <= ~bank;
         end
         FINITE_LOOP: begin
-          if (tic_mode && idx_changed[bank]) tic_idx[bank] <= cycle_end ? '0 : tic_idx[bank] + 1;
-          if (cycle_end) begin
-            if (loop_cnt == rep) stop <= 1'b1;
-            else loop_cnt <= loop_cnt + 1;
-          end
         end
         default: state <= INFINITE_LOOP;
       endcase
