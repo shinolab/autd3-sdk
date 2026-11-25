@@ -469,8 +469,10 @@ impl FpgaEmulator {
         let regs = chain.regs();
         let req = self.controller[reg(regs.req_rd_bank)] as usize & 1;
         let rep = self.latched_config[reg(regs.rep) + req];
-        let freq_div = self.latched_config[reg(regs.freq_div) + req];
-        let cycle = self.latched_config[reg(regs.cycle) + req] as usize + 1;
+        let freq_div: [u16; NUM_BANKS] =
+            std::array::from_fn(|bank| self.latched_config[reg(regs.freq_div) + bank]);
+        let cycle: [usize; NUM_BANKS] =
+            std::array::from_fn(|bank| self.latched_config[reg(regs.cycle) + bank] as usize + 1);
         let mode = self.controller[reg(regs.transition_mode)] as u8;
         let value = self.reg_u64(reg(regs.transition_value));
         let sys_time_ns = self.sys_time_ns;
