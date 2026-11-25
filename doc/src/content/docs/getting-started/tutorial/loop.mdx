@@ -38,7 +38,7 @@ import csSample from "@codes/csharp/examples/tutorial/loop.cs?raw";
 
 - `SyncIdx`: 切り替え対象バンクの再生インデックスが 0 に戻ったタイミングで切り替える.
 - `SysTime { time }`: 指定した [デバイス時刻](/autd3-sdk/api/basics/sys-time/) `time` に切り替える (Python / C# では `TransitionMode.SysTime(time)`).
-- `Gpio(GpioIn)`: 指定した [GPIO 入力ピン](/autd3-sdk/hardware/gpio)のトリガで切り替える.
+- `Gpio(GpioIn)`: 指定した [GPIO 入力ピン](/autd3-sdk/hardware/gpio)がアサートされている間に, 切り替え対象バンクの再生インデックスが変化したタイミングで切り替える.
 
 これ以外の組み合わせはデバイスが拒否し, `InvalidTransitionMode` のエラーになる.
 

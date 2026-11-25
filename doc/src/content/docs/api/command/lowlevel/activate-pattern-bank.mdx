@@ -32,7 +32,7 @@ import { excerpt } from "@lib/excerpt";
 | `Immediate`          | 即時                              |
 | `SyncIdx`            | 次に再生インデックスが0になった時 |
 | `SysTime { time }`   | 指定した デバイス時刻 `time` (`SysTime`) |
-| `Gpio(GpioIn)`       | 指定 GPIO 入力ピンのトリガ        |
+| `Gpio(GpioIn)`       | 指定 GPIO 入力ピンがアサートされている間に再生インデックスが変化した時 |
 | `Ext`                | 拡張モード (バンク内の再生が終わると次のバンクに自動で切り替え) |
 
 `Immediate` / `Ext` は無限ループのバンク用.

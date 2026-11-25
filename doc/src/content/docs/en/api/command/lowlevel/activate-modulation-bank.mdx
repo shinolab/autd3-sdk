@@ -32,7 +32,7 @@ import { excerpt } from "@lib/excerpt";
 | `Immediate`          | Immediate                         |
 | `SyncIdx`            | When the playback index next becomes 0 |
 | `SysTime { time }`   | At the specified device time `time` (`SysTime`) |
-| `Gpio(GpioIn)`       | Trigger on the specified GPIO input pin |
+| `Gpio(GpioIn)`       | When the playback index changes while the specified GPIO input pin is asserted |
 | `Ext`                | Extended mode (automatically switches to the next bank when playback within the bank finishes) |
 
 `Immediate` / `Ext` are for infinite-loop banks.
