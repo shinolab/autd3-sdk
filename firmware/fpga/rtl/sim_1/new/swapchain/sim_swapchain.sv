@@ -963,6 +963,56 @@ module sim_swapchain ();
     gpio_in <= {1'b0, 1'b0, 1'b0, 1'b0};
   endtask
 
+  task automatic test_tic_finite_loop_keeps_running_while_other_bank_pending();
+    @(posedge CLK);
+    sync_idx[0] <= 0;
+    sync_idx[1] <= 1;
+    rep[1] <= 16'hFFFF;
+    gpio_in <= {1'b0, 1'b0, 1'b0, 1'b0};
+    latch(1, params::TRANSITION_MODE_IMMEDIATE, 0);
+    `ASSERT_EQ(1, bank);
+
+    @(posedge CLK);
+    rep[0] <= 16'h0001;
+    gpio_in[0] <= 1'b1;
+    latch(0, params::TRANSITION_MODE_GPIO, 0);
+    `ASSERT_EQ(1, transition_pending);
+    step_idx(0, 1);
+    `ASSERT_EQ(0, bank);
+    `ASSERT_EQ(0, transition_pending);
+    `ASSERT_EQ(0, idx[0]);
+
+    @(posedge CLK);
+    gpio_in[0] <= 1'b0;
+    rep[1] <= 16'h0000;
+    latch(1, params::TRANSITION_MODE_GPIO, 0);
+    `ASSERT_EQ(0, bank);
+    `ASSERT_EQ(1, transition_pending);
+
+    for (int i = 0; i < 5; i++) begin
+      step_idx(0, 16'((i + 2) % 3));
+      `ASSERT_EQ(0, bank);
+      `ASSERT_EQ(0, stop);
+      `ASSERT_EQ(1, transition_pending);
+      `ASSERT_EQ((i + 1) % 3, idx[0]);
+    end
+    step_idx(0, 1);
+    `ASSERT_EQ(0, bank);
+    `ASSERT_EQ(1, stop);
+    `ASSERT_EQ(1, transition_pending);
+
+    @(posedge CLK);
+    gpio_in[0] <= 1'b1;
+    step_idx(1, 2);
+    `ASSERT_EQ(1, bank);
+    `ASSERT_EQ(0, stop);
+    `ASSERT_EQ(0, transition_pending);
+    `ASSERT_EQ(0, idx[1]);
+
+    @(posedge CLK);
+    gpio_in <= {1'b0, 1'b0, 1'b0, 1'b0};
+  endtask
+
   initial begin
     update_settings = 0;
     transition_mode = params::TRANSITION_MODE_SYNC_IDX;
@@ -1004,6 +1054,9 @@ module sim_swapchain ();
 
     reset();
     test_gpio_pin_latched_and_coincident_tic();
+
+    reset();
+    test_tic_finite_loop_keeps_running_while_other_bank_pending();
 
     reset();
 

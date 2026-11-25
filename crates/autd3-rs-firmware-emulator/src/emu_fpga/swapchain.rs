@@ -16,6 +16,8 @@ enum State {
 pub(crate) struct Swapchain {
     sys_time_ns: u64,
     rep: u16,
+    req_rep: u16,
+    playing_finite: bool,
     start_lap: [usize; NUM_BANKS],
     freq_div: [u16; NUM_BANKS],
     cycle: [usize; NUM_BANKS],
@@ -36,6 +38,8 @@ impl Swapchain {
         Self {
             sys_time_ns: 0,
             rep: 0,
+            req_rep: 0,
+            playing_finite: false,
             start_lap: [0; NUM_BANKS],
             freq_div: [10; NUM_BANKS],
             cycle: [1; NUM_BANKS],
@@ -97,13 +101,14 @@ impl Swapchain {
         self.cycle[req_bank] = cycle;
         if rep == REP_INFINITE {
             self.stop = false;
+            self.playing_finite = false;
             self.cur_bank = req_bank;
             self.ext_mode = transition_mode == MODE_EXT;
             self.ext_last_lap = self.lap_and_idx(req_bank, sys_time_ns).0;
             self.tic_idx_offset = [0; NUM_BANKS];
             self.state = State::InfiniteLoop;
         } else if req_bank != target_bank {
-            self.rep = rep;
+            self.req_rep = rep;
             self.req_bank = req_bank;
             self.sys_time_ns = sys_time_ns;
             self.transition_mode = transition_mode;
@@ -114,6 +119,17 @@ impl Swapchain {
     }
 
     pub(crate) fn update(&mut self, gpio_in: [bool; 4], sys_time_ns: u64) {
+        if self.playing_finite {
+            let (lap, idx) = self.lap_and_idx(self.cur_bank, sys_time_ns);
+            if (self.start_lap[self.cur_bank] + self.rep as usize) + 1 < lap {
+                self.stop = true;
+            }
+            if (self.start_lap[self.cur_bank] + self.rep as usize) < lap
+                && self.tic_idx_offset[self.cur_bank] <= idx
+            {
+                self.stop = true;
+            }
+        }
         let (last_lap, _) = self.lap_and_idx(self.req_bank, self.sys_time_ns);
         let (lap, idx) = self.lap_and_idx(self.req_bank, sys_time_ns);
         match self.state {
@@ -127,6 +143,8 @@ impl Swapchain {
                 };
                 if fire {
                     self.stop = false;
+                    self.rep = self.req_rep;
+                    self.playing_finite = true;
                     self.start_lap[self.req_bank] = lap;
                     self.tic_idx_offset[self.req_bank] = if self.transition_mode == MODE_SYNC_IDX {
                         0
@@ -137,16 +155,7 @@ impl Swapchain {
                     self.state = State::FiniteLoop;
                 }
             }
-            State::FiniteLoop => {
-                if (self.start_lap[self.cur_bank] + self.rep as usize) + 1 < lap {
-                    self.stop = true;
-                }
-                if (self.start_lap[self.cur_bank] + self.rep as usize) < lap
-                    && self.tic_idx_offset[self.cur_bank] <= idx
-                {
-                    self.stop = true;
-                }
-            }
+            State::FiniteLoop => {}
             State::InfiniteLoop => {
                 if self.ext_mode
                     && self.ext_last_lap < lap
@@ -328,6 +337,33 @@ mod tests {
             assert_eq!(1, sc.cur_bank());
             assert!(!sc.transition_pending());
         }
+    }
+
+    #[test]
+    fn tic_finite_loop_stops_at_its_rep_while_other_bank_pending() {
+        let mut sc = Swapchain::new();
+        sc.set(0, REP_INFINITE, 1, CYCLE, 1, MODE_IMMEDIATE, 0);
+        sc.set(LAP_NS / 2, 1, 1, CYCLE, 0, MODE_SYS_TIME, 0);
+        sc.update([false; 4], LAP_NS / 2);
+        assert_eq!(0, sc.cur_bank());
+        assert!(!sc.transition_pending());
+
+        sc.set(
+            LAP_NS / 2,
+            0,
+            1,
+            CYCLE,
+            1,
+            MODE_SYS_TIME,
+            Swapchain::fpga_sys_time(1_000 * LAP_NS),
+        );
+        assert!(sc.transition_pending());
+        run(&mut sc, LAP_NS / 2, 2 * LAP_NS + LAP_NS / 4);
+        assert!(!sc.stopped());
+        run(&mut sc, 2 * LAP_NS + LAP_NS / 2, 3 * LAP_NS);
+        assert_eq!(0, sc.cur_bank());
+        assert!(sc.transition_pending());
+        assert!(sc.stopped());
     }
 
     #[test]
