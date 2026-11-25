@@ -211,6 +211,7 @@ impl Client {
                 if shared.book().has_error(call) {
                     break;
                 }
+                let _receiving = shared.receiving.lock().await;
                 match self.controller.send_frame(frame, ExecAt::Immediate).await {
                     Ok(msg_id) => shared.book().push(msg_id, call, self.num_devices()),
                     Err(e) => {
