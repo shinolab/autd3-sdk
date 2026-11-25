@@ -271,10 +271,9 @@ impl Duration {
 
     #[staticmethod]
     fn from_secs_f64(secs: f64) -> PyResult<Self> {
-        if !secs.is_finite() || secs < 0.0 {
-            return Err(invalid_argument("secs must be finite and non-negative"));
-        }
-        Ok(Self(StdDuration::from_secs_f64(secs)))
+        StdDuration::try_from_secs_f64(secs)
+            .map(Self)
+            .map_err(invalid_argument)
     }
 
     fn as_nanos(&self) -> u128 {
