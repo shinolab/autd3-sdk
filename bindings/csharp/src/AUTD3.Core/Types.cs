@@ -51,8 +51,13 @@ namespace AUTD3
         public static readonly uint GridX = NativeCore.autd3_core_params_grid_x();
         public static readonly uint GridY = NativeCore.autd3_core_params_grid_y();
         public static readonly float PitchMm = NativeCore.autd3_core_params_pitch_mm();
+#if UNITY_5_3_OR_NEWER || AUTD3_UNITY
+        public static readonly float DeviceWidth = NativeCore.autd3_core_params_device_width_mm() * 0.001f;
+        public static readonly float DeviceHeight = NativeCore.autd3_core_params_device_height_mm() * 0.001f;
+#else
         public static readonly float DeviceWidth = NativeCore.autd3_core_params_device_width_mm();
         public static readonly float DeviceHeight = NativeCore.autd3_core_params_device_height_mm();
+#endif
         public static readonly float RotationNormTolerance = NativeCore.autd3_core_params_rotation_norm_tolerance();
 
         private readonly Quaternion? _rotation;
