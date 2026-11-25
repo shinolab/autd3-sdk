@@ -140,6 +140,17 @@ def test_value_types_are_immutable() -> None:
         loose(10 * mm).mm = 2.0
 
 
+@pytest.mark.parametrize("secs", [1e20, float("nan"), float("inf"), -1.0])
+def test_duration_from_secs_f64_rejects_unrepresentable_values(secs: float) -> None:
+    with pytest.raises(autd3.InvalidArgumentError):
+        autd3.Duration.from_secs_f64(secs)
+
+
+def test_duration_from_secs_f64_converts_representable_values() -> None:
+    assert autd3.Duration.from_secs_f64(0.0) == autd3.Duration.from_nanos(0)
+    assert autd3.Duration.from_secs_f64(1.5) == autd3.Duration.from_millis(1500)
+
+
 def test_sampling_config_reports_typed_period_and_frequency() -> None:
     config = SamplingConfig(10)
     assert config.period() == autd3.Duration.from_micros(250)
