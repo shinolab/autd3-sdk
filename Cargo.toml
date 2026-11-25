@@ -48,7 +48,7 @@ zerocopy = { version = "0.8.63", default-features = false, features = [
 ] }
 crc = { version = "3.4.0", default-features = false }
 bitflags = { version = "2.13.2", default-features = false }
-etherparse = { version = "0.21.0", default-features = false }
+etherparse = { version = "0.21.1", default-features = false }
 tokio = { version = "1.54.1", default-features = false }
 socket2 = { version = "0.6.5", default-features = false }
 nix = { version = "0.31.3", default-features = false }
