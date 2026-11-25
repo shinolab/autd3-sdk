@@ -34,7 +34,7 @@ module controller (
 
   logic [15:0] ctl_flags = '0;
   logic [15:0] ctl_flags_cand = '0;
-  logic [15:0] silencer_set_result = '0;
+  logic [15:0] set_result = '0;
 
   logic we = 1'b0;
   logic [7:0] addr;
@@ -241,7 +241,7 @@ module controller (
       fpga_state_prev <= 16'hFFFF;
       ctl_flags <= '0;
       ctl_flags_cand <= '0;
-      silencer_set_result <= '0;
+      set_result <= '0;
       MOD_SETTINGS.UPDATE <= 1'b0;
       PATTERN_SETTINGS.UPDATE <= 1'b0;
       SILENCER_SETTINGS.UPDATE <= 1'b0;
@@ -304,7 +304,7 @@ module controller (
             ctl_flags_cand <= dout;
             if (dout == ctl_flags_cand) begin
               ctl_flags <= dout;
-              silencer_set_result[params::SetResultTransitionInvalidBit] <= 1'b0;
+              set_result[params::SetResultTransitionInvalidBit] <= 1'b0;
             end
             state <= REQ_RD_CTL_FLAG;
           end
@@ -394,12 +394,12 @@ module controller (
           state <= MOD_VALIDATE;
         end
         MOD_VALIDATE: begin
-          silencer_set_result[params::CTL_FLAG_BIT_MOD_SET] <= mod_reject;
-          silencer_set_result[params::SetResultTransitionInvalidBit] <= silencer_set_result[params::SetResultTransitionInvalidBit] | mod_transition_invalid;
+          set_result[params::CTL_FLAG_BIT_MOD_SET] <= mod_reject;
+          set_result[params::SetResultTransitionInvalidBit] <= set_result[params::SetResultTransitionInvalidBit] | mod_transition_invalid;
           state <= MOD_COMMIT;
         end
         MOD_COMMIT: begin
-          if (!silencer_set_result[params::CTL_FLAG_BIT_MOD_SET]) begin
+          if (!set_result[params::CTL_FLAG_BIT_MOD_SET]) begin
             MOD_SETTINGS.REQ_RD_BANK <= mod_stage.REQ_RD_BANK;
             MOD_SETTINGS.TRANSITION_MODE <= mod_stage.TRANSITION_MODE;
             MOD_SETTINGS.TRANSITION_VALUE <= mod_stage.TRANSITION_VALUE;
@@ -413,7 +413,7 @@ module controller (
           end
           we <= 1'b1;
           addr <= params::ADDR_SILENCER_SET_RESULT;
-          din <= silencer_set_result;
+          din <= set_result;
           state <= MOD_CLR_UPDATE_SETTINGS_BIT;
         end
         MOD_CLR_UPDATE_SETTINGS_BIT: begin
@@ -526,12 +526,12 @@ module controller (
           state <= PATTERN_VALIDATE;
         end
         PATTERN_VALIDATE: begin
-          silencer_set_result[params::CTL_FLAG_BIT_PATTERN_SET] <= pattern_reject;
-          silencer_set_result[params::SetResultTransitionInvalidBit] <= silencer_set_result[params::SetResultTransitionInvalidBit] | pattern_transition_invalid;
+          set_result[params::CTL_FLAG_BIT_PATTERN_SET] <= pattern_reject;
+          set_result[params::SetResultTransitionInvalidBit] <= set_result[params::SetResultTransitionInvalidBit] | pattern_transition_invalid;
           state <= PATTERN_COMMIT;
         end
         PATTERN_COMMIT: begin
-          if (!silencer_set_result[params::CTL_FLAG_BIT_PATTERN_SET]) begin
+          if (!set_result[params::CTL_FLAG_BIT_PATTERN_SET]) begin
             PATTERN_SETTINGS.REQ_RD_BANK <= pattern_stage.REQ_RD_BANK;
             PATTERN_SETTINGS.TRANSITION_MODE <= pattern_stage.TRANSITION_MODE;
             PATTERN_SETTINGS.TRANSITION_VALUE <= pattern_stage.TRANSITION_VALUE;
@@ -551,7 +551,7 @@ module controller (
           end
           we <= 1'b1;
           addr <= params::ADDR_SILENCER_SET_RESULT;
-          din <= silencer_set_result;
+          din <= set_result;
           state <= PATTERN_CLR_UPDATE_SETTINGS_BIT;
         end
         PATTERN_CLR_UPDATE_SETTINGS_BIT: begin
@@ -599,11 +599,11 @@ module controller (
           state <= SILENCER_VALIDATE;
         end
         SILENCER_VALIDATE: begin
-          silencer_set_result[params::CTL_FLAG_BIT_SILENCER_SET] <= silencer_reject;
+          set_result[params::CTL_FLAG_BIT_SILENCER_SET] <= silencer_reject;
           state <= SILENCER_COMMIT;
         end
         SILENCER_COMMIT: begin
-          if (!silencer_set_result[params::CTL_FLAG_BIT_SILENCER_SET]) begin
+          if (!set_result[params::CTL_FLAG_BIT_SILENCER_SET]) begin
             SILENCER_SETTINGS.FLAG <= silencer_stage.FLAG;
             SILENCER_SETTINGS.UPDATE_RATE_INTENSITY <= silencer_stage.UPDATE_RATE_INTENSITY;
             SILENCER_SETTINGS.UPDATE_RATE_PHASE <= silencer_stage.UPDATE_RATE_PHASE;
@@ -613,7 +613,7 @@ module controller (
           end
           we <= 1'b1;
           addr <= params::ADDR_SILENCER_SET_RESULT;
-          din <= silencer_set_result;
+          din <= set_result;
           state <= SILENCER_CLR_UPDATE_SETTINGS_BIT;
         end
         SILENCER_CLR_UPDATE_SETTINGS_BIT: begin

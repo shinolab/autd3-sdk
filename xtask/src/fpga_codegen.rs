@@ -268,7 +268,7 @@ module controller (
 
   logic [15:0] ctl_flags = '0;
   logic [15:0] ctl_flags_cand = '0;
-  logic [15:0] silencer_set_result = '0;
+  logic [15:0] set_result = '0;
 
   logic we = 1'b0;
   logic [7:0]  addr;
@@ -399,7 +399,7 @@ module controller (
       fpga_state_prev <= 16'hFFFF;
       ctl_flags <= '0;
       ctl_flags_cand <= '0;
-      silencer_set_result <= '0;
+      set_result <= '0;
 ",
     );
     for (group, _) in &all_states {
@@ -462,7 +462,7 @@ module controller (
           ctl_flags_cand <= dout;
           if (dout == ctl_flags_cand) begin
             ctl_flags <= dout;
-            silencer_set_result[params::SetResultTransitionInvalidBit] <= 1'b0;
+            set_result[params::SetResultTransitionInvalidBit] <= 1'b0;
           end
           state <= REQ_RD_CTL_FLAG;
         end
@@ -519,13 +519,13 @@ module controller (
             {
                 write!(
                     &mut source,
-                    "\n        silencer_set_result[params::CTL_FLAG_BIT_{name}_SET] <= {reject};"
+                    "\n        set_result[params::CTL_FLAG_BIT_{name}_SET] <= {reject};"
                 )
                 .unwrap();
                 if let Some(invalid) = group.transition_invalid {
                     write!(
                         &mut source,
-                        "\n        silencer_set_result[params::SetResultTransitionInvalidBit] <= silencer_set_result[params::SetResultTransitionInvalidBit] | {invalid};"
+                        "\n        set_result[params::SetResultTransitionInvalidBit] <= set_result[params::SetResultTransitionInvalidBit] | {invalid};"
                     )
                     .unwrap();
                 }
@@ -535,7 +535,7 @@ module controller (
                 if group.reject.is_some() {
                     write!(
                         &mut source,
-                        "\n        if (!silencer_set_result[params::CTL_FLAG_BIT_{name}_SET]) begin"
+                        "\n        if (!set_result[params::CTL_FLAG_BIT_{name}_SET]) begin"
                     )
                     .unwrap();
                     for param in &group.params {
@@ -553,7 +553,7 @@ module controller (
         end
         we <= 1'b1;
         addr <= params::ADDR_SILENCER_SET_RESULT;
-        din <= silencer_set_result;"
+        din <= set_result;"
                     )
                     .unwrap();
                 } else {
