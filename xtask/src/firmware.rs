@@ -68,33 +68,11 @@ pub(crate) fn run_firmware(root: &Path, cmd: FirmwareCmd) -> Result<()> {
         FirmwareCmd::Bundle(args) => {
             crate::bump::firmware_series(root)?;
             let version = crate::component::find("firmware")?.current_version(root)?;
-            let cpu = crate::cpu::cpu_build(root)?;
-            let fpga = crate::fpga::fpga_build(root, args.force)?;
             let stem = format!("autd3-sdk-firmware-v{version}");
             let dist = root.join("firmware/dist");
-            std::fs::create_dir_all(&dist)
-                .with_context(|| format!("creating {}", dist.display()))?;
             let archive = dist.join(format!("{stem}.zip"));
-            let entries: &[(String, PathBuf)] = &[
-                (format!("{stem}.bin"), cpu),
-                (format!("{stem}.mcs"), fpga.mcs),
-                (format!("{stem}-fpga-update.img"), fpga.update_image),
-            ];
-            let file = std::fs::File::create(&archive)
-                .with_context(|| format!("creating {}", archive.display()))?;
-            let mut zip = zip::ZipWriter::new(file);
-            let options = zip::write::SimpleFileOptions::default()
-                .compression_method(zip::CompressionMethod::Deflated);
-            for (name, path) in entries {
-                zip.start_file(name.clone(), options)?;
-                let mut src = std::fs::File::open(path)
-                    .with_context(|| format!("opening {}", path.display()))?;
-                std::io::copy(&mut src, &mut zip).with_context(|| format!("adding {name}"))?;
-            }
-            zip.finish()?;
-            println!("firmware bundle: {}", archive.display());
+            let tag = format!("firmware-v{version}");
             if args.upload {
-                let tag = format!("firmware-v{version}");
                 if !on_path("gh") {
                     bail!(
                         "`gh` is required for --upload but was not found on PATH; install the GitHub CLI (https://cli.github.com/) or upload {} manually to the `{tag}` release",
@@ -121,6 +99,30 @@ pub(crate) fn run_firmware(root: &Path, cmd: FirmwareCmd) -> Result<()> {
                         "no `{tag}` release on GitHub; push the `{tag}` tag first and wait for `release.yml` to create the release, then rerun with --upload"
                     );
                 }
+            }
+            let cpu = crate::cpu::cpu_build(root)?;
+            let fpga = crate::fpga::fpga_build(root, args.force || args.upload)?;
+            std::fs::create_dir_all(&dist)
+                .with_context(|| format!("creating {}", dist.display()))?;
+            let entries: &[(String, PathBuf)] = &[
+                (format!("{stem}.bin"), cpu),
+                (format!("{stem}.mcs"), fpga.mcs),
+                (format!("{stem}-fpga-update.img"), fpga.update_image),
+            ];
+            let file = std::fs::File::create(&archive)
+                .with_context(|| format!("creating {}", archive.display()))?;
+            let mut zip = zip::ZipWriter::new(file);
+            let options = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Deflated);
+            for (name, path) in entries {
+                zip.start_file(name.clone(), options)?;
+                let mut src = std::fs::File::open(path)
+                    .with_context(|| format!("opening {}", path.display()))?;
+                std::io::copy(&mut src, &mut zip).with_context(|| format!("adding {name}"))?;
+            }
+            zip.finish()?;
+            println!("firmware bundle: {}", archive.display());
+            if args.upload {
                 run(
                     "gh",
                     [
