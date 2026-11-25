@@ -130,15 +130,18 @@ impl Swapchain {
                 self.stop = true;
             }
         }
-        let (last_lap, _) = self.lap_and_idx(self.req_bank, self.sys_time_ns);
+        let (last_lap, last_idx) = self.lap_and_idx(self.req_bank, self.sys_time_ns);
         let (lap, idx) = self.lap_and_idx(self.req_bank, sys_time_ns);
+        self.sys_time_ns = sys_time_ns;
         match self.state {
             State::WaitStart => {
                 let fire = match self.transition_mode {
                     MODE_SYNC_IDX => last_lap < lap,
                     MODE_SYS_TIME => self.transition_value <= Self::fpga_sys_time(sys_time_ns),
-                    MODE_GPIO => gpio_in[self.transition_value as usize & 0x3],
-
+                    MODE_GPIO => {
+                        (last_lap, last_idx) != (lap, idx)
+                            && gpio_in[self.transition_value as usize & 0x3]
+                    }
                     _ => false,
                 };
                 if fire {
@@ -364,6 +367,28 @@ mod tests {
         assert_eq!(0, sc.cur_bank());
         assert!(sc.transition_pending());
         assert!(sc.stopped());
+    }
+
+    #[test]
+    fn gpio_transition_fires_on_idx_change_not_on_level() {
+        let mut sc = Swapchain::new();
+        sc.set(0, REP_INFINITE, 1, CYCLE, 0, MODE_IMMEDIATE, 0);
+        sc.set(LAP_NS / 2 + 1_000, 0, 1, CYCLE, 1, MODE_GPIO, 0);
+
+        sc.update([true, false, false, false], LAP_NS / 2 + 2_000);
+        assert_eq!(0, sc.cur_bank());
+        assert!(sc.transition_pending());
+
+        sc.update([false; 4], 3 * LAP_NS / 4 + 1_000);
+        assert!(sc.transition_pending());
+
+        sc.update([true, false, false, false], 3 * LAP_NS / 4 + 2_000);
+        assert!(sc.transition_pending());
+
+        sc.update([true, false, false, false], LAP_NS + 1_000);
+        assert_eq!(1, sc.cur_bank());
+        assert!(!sc.transition_pending());
+        assert_eq!(0, sc.cur_idx());
     }
 
     #[test]
