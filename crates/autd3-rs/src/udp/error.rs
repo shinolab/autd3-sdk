@@ -1,5 +1,4 @@
 use std::net::SocketAddrV6;
-use std::time::Duration;
 
 use autd3_cpu_wire::udp::Kind;
 
@@ -37,13 +36,6 @@ pub enum UdpError {
     UnexpectedUnit { unit_id: usize, addr: SocketAddrV6 },
     #[error("unit {0} did not answer the cross-check")]
     MissingUnit(usize),
-    #[error(
-        "units {not_ready:?} did not lock to the grandmaster and start their sync pulse within {timeout:?}"
-    )]
-    SyncTimeout {
-        not_ready: Vec<usize>,
-        timeout: Duration,
-    },
     #[error("the number of devices must be 1..=128, but {0} was given")]
     InvalidDeviceCount(usize),
     #[error("the frame could not be sent to device {device}: {source}")]
