@@ -58,10 +58,6 @@ fn to_millis(field: &'static str, value: Duration) -> Result<U16, CpuConfigOutOf
     to_millis_at_least(field, value, Duration::ZERO)
 }
 
-const FAILSAFE_DISABLED: u16 = 0;
-const WATCHDOG_DISABLED: u16 = 0;
-const PAUSE_DISABLED: u16 = 0;
-
 fn from_nanos(value: U32) -> Duration {
     Duration::from_nanos(u64::from(value.get()))
 }
@@ -117,13 +113,13 @@ impl SetCpuConfigPayload {
                 Some(timeout) => {
                     to_millis_at_least("failsafe_timeout", timeout, Duration::from_millis(1))?
                 }
-                None => U16::new(FAILSAFE_DISABLED),
+                None => U16::new(0),
             },
             ptp_delay_req_syncs: U16::new(ptp.delay_req_syncs.get()),
             ptp_path_delay_filter_shift: U16::new(u16::from(ptp.path_delay_filter_shift)),
             ptp_pause_quanta: U16::new(match ptp.pause_quanta {
                 Some(quanta) => quanta.get(),
-                None => PAUSE_DISABLED,
+                None => 0,
             }),
             ptp_pause_hold_syncs: U16::new(ptp.pause_hold_syncs),
             ptp_pause_retry_ms: to_millis("ptp.pause_retry", ptp.pause_retry)?,
@@ -133,14 +129,14 @@ impl SetCpuConfigPayload {
                     timeout,
                     Duration::from_millis(1),
                 )?,
-                None => U16::new(FAILSAFE_DISABLED),
+                None => U16::new(0),
             },
             fpga_bus_wait: U16::new(u16::from(config.fpga_bus_wait.as_u8())),
             cpu_watchdog_timeout_ms: match config.cpu_watchdog_timeout {
                 Some(timeout) => {
                     to_millis_at_least("cpu_watchdog_timeout", timeout, Duration::from_millis(1))?
                 }
-                None => U16::new(WATCHDOG_DISABLED),
+                None => U16::new(0),
             },
         })
     }
@@ -161,16 +157,16 @@ impl SetCpuConfigPayload {
         Some(CpuConfig {
             sync_guard: from_nanos(self.sync_guard_ns),
             failsafe_timeout: match self.failsafe_timeout_ms.get() {
-                FAILSAFE_DISABLED => None,
+                0 => None,
                 _ => Some(from_millis(self.failsafe_timeout_ms)),
             },
             ptp_unlock_failsafe_timeout: match self.ptp_unlock_failsafe_timeout_ms.get() {
-                FAILSAFE_DISABLED => None,
+                0 => None,
                 _ => Some(from_millis(self.ptp_unlock_failsafe_timeout_ms)),
             },
             fpga_bus_wait,
             cpu_watchdog_timeout: match self.cpu_watchdog_timeout_ms.get() {
-                WATCHDOG_DISABLED => None,
+                0 => None,
                 _ => Some(from_millis(self.cpu_watchdog_timeout_ms)),
             },
             ptp: PtpConfig {
