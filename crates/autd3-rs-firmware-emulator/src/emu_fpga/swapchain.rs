@@ -86,8 +86,8 @@ impl Swapchain {
         &mut self,
         sys_time_ns: u64,
         rep: u16,
-        freq_div: u16,
-        cycle: usize,
+        freq_div: [u16; NUM_BANKS],
+        cycle: [usize; NUM_BANKS],
         req_bank: usize,
         transition_mode: u8,
         transition_value: u64,
@@ -97,8 +97,8 @@ impl Swapchain {
         } else {
             self.cur_bank
         };
-        self.freq_div[req_bank] = freq_div;
-        self.cycle[req_bank] = cycle;
+        self.freq_div = freq_div;
+        self.cycle = cycle;
         if rep == REP_INFINITE {
             self.stop = false;
             self.playing_finite = false;
@@ -119,7 +119,7 @@ impl Swapchain {
     }
 
     pub(crate) fn update(&mut self, gpio_in: [bool; 4], sys_time_ns: u64) {
-        if self.playing_finite {
+        if self.playing_finite && self.cycle[self.cur_bank] > 1 {
             let (lap, idx) = self.lap_and_idx(self.cur_bank, sys_time_ns);
             if (self.start_lap[self.cur_bank] + self.rep as usize) + 1 < lap {
                 self.stop = true;
@@ -135,13 +135,12 @@ impl Swapchain {
         self.sys_time_ns = sys_time_ns;
         match self.state {
             State::WaitStart => {
+                let idx_changed =
+                    self.cycle[self.req_bank] > 1 && (last_lap, last_idx) != (lap, idx);
                 let fire = match self.transition_mode {
-                    MODE_SYNC_IDX => last_lap < lap,
+                    MODE_SYNC_IDX => idx_changed && last_lap < lap,
                     MODE_SYS_TIME => self.transition_value <= Self::fpga_sys_time(sys_time_ns),
-                    MODE_GPIO => {
-                        (last_lap, last_idx) != (lap, idx)
-                            && gpio_in[self.transition_value as usize & 0x3]
-                    }
+                    MODE_GPIO => idx_changed && gpio_in[self.transition_value as usize & 0x3],
                     _ => false,
                 };
                 if fire {
@@ -160,12 +159,14 @@ impl Swapchain {
             }
             State::FiniteLoop => {}
             State::InfiniteLoop => {
+                let (lap, _) = self.lap_and_idx(self.cur_bank, sys_time_ns);
                 if self.ext_mode
+                    && self.cycle[self.cur_bank] > 1
                     && self.ext_last_lap < lap
                     && self.ext_last_lap.is_multiple_of(2) != lap.is_multiple_of(2)
                 {
-                    self.ext_last_lap = lap;
                     self.cur_bank = (self.cur_bank + 1) % NUM_BANKS;
+                    self.ext_last_lap = self.lap_and_idx(self.cur_bank, sys_time_ns).0;
                 }
             }
         }
@@ -203,14 +204,30 @@ mod tests {
     #[test]
     fn cur_idx_stays_within_bank_after_switch_from_large_cycle() {
         let mut sc = Swapchain::new();
-        sc.set(0, REP_INFINITE, 1, 65536, 0, MODE_IMMEDIATE, 0);
+        sc.set(
+            0,
+            REP_INFINITE,
+            [1; NUM_BANKS],
+            [65536, 1],
+            0,
+            MODE_IMMEDIATE,
+            0,
+        );
 
         let sys_time = 225_000_000;
         sc.update([false; 4], sys_time);
         assert_eq!(0, sc.cur_bank());
         assert!(sc.cur_idx() > 1024, "expected a large stm index on bank 0");
 
-        sc.set(sys_time, REP_INFINITE, 1, 1, 1, MODE_IMMEDIATE, 0);
+        sc.set(
+            sys_time,
+            REP_INFINITE,
+            [1; NUM_BANKS],
+            [65536, 1],
+            1,
+            MODE_IMMEDIATE,
+            0,
+        );
         assert_eq!(1, sc.cur_bank());
         assert!(
             sc.cur_idx() < sc.cycle[sc.cur_bank()],
@@ -232,8 +249,24 @@ mod tests {
     }
 
     fn start_finite_on_bank0(sc: &mut Swapchain, rep: u16) -> u64 {
-        sc.set(0, REP_INFINITE, 1, CYCLE, 1, MODE_IMMEDIATE, 0);
-        sc.set(LAP_NS / 2, rep, 1, CYCLE, 0, MODE_SYNC_IDX, 0);
+        sc.set(
+            0,
+            REP_INFINITE,
+            [1; NUM_BANKS],
+            [CYCLE; NUM_BANKS],
+            1,
+            MODE_IMMEDIATE,
+            0,
+        );
+        sc.set(
+            LAP_NS / 2,
+            rep,
+            [1; NUM_BANKS],
+            [CYCLE; NUM_BANKS],
+            0,
+            MODE_SYNC_IDX,
+            0,
+        );
         assert!(sc.transition_pending());
         run(sc, LAP_NS / 2, LAP_NS + LAP_NS / 8);
         assert_eq!(0, sc.cur_bank());
@@ -250,7 +283,15 @@ mod tests {
         assert!(sc.stopped());
         assert_eq!(CYCLE - 1, sc.cur_idx());
 
-        sc.set(3 * LAP_NS, 0, 1, CYCLE, 0, MODE_SYNC_IDX, 0);
+        sc.set(
+            3 * LAP_NS,
+            0,
+            [1; NUM_BANKS],
+            [CYCLE; NUM_BANKS],
+            0,
+            MODE_SYNC_IDX,
+            0,
+        );
         let mut t = 3 * LAP_NS;
         while t <= 10 * LAP_NS {
             sc.update([false; 4], t);
@@ -269,7 +310,15 @@ mod tests {
         run(&mut sc, t, 2 * LAP_NS + LAP_NS / 2);
         assert!(!sc.stopped());
 
-        sc.set(2 * LAP_NS + LAP_NS / 2, 1, 1, CYCLE, 0, MODE_SYNC_IDX, 0);
+        sc.set(
+            2 * LAP_NS + LAP_NS / 2,
+            1,
+            [1; NUM_BANKS],
+            [CYCLE; NUM_BANKS],
+            0,
+            MODE_SYNC_IDX,
+            0,
+        );
         assert!(!sc.transition_pending());
         run(
             &mut sc,
@@ -285,24 +334,48 @@ mod tests {
     #[test]
     fn pending_transition_is_replaced_by_request_to_previous_bank() {
         let mut sc = Swapchain::new();
-        sc.set(0, REP_INFINITE, 1, CYCLE, 0, MODE_IMMEDIATE, 0);
+        sc.set(
+            0,
+            REP_INFINITE,
+            [1; NUM_BANKS],
+            [CYCLE; NUM_BANKS],
+            0,
+            MODE_IMMEDIATE,
+            0,
+        );
         sc.set(
             LAP_NS / 2,
             0,
-            1,
-            CYCLE,
+            [1; NUM_BANKS],
+            [CYCLE; NUM_BANKS],
             1,
             MODE_SYS_TIME,
             Swapchain::fpga_sys_time(1_000 * LAP_NS),
         );
         assert!(sc.transition_pending());
 
-        sc.set(LAP_NS / 2 + 1, 0, 1, CYCLE, 1, MODE_SYNC_IDX, 0);
+        sc.set(
+            LAP_NS / 2 + 1,
+            0,
+            [1; NUM_BANKS],
+            [CYCLE; NUM_BANKS],
+            1,
+            MODE_SYNC_IDX,
+            0,
+        );
         run(&mut sc, LAP_NS / 2 + 1, 2 * LAP_NS + LAP_NS / 2);
         assert_eq!(0, sc.cur_bank());
         assert!(sc.transition_pending());
 
-        sc.set(2 * LAP_NS + LAP_NS / 2, 0, 1, CYCLE, 0, MODE_SYNC_IDX, 0);
+        sc.set(
+            2 * LAP_NS + LAP_NS / 2,
+            0,
+            [1; NUM_BANKS],
+            [CYCLE; NUM_BANKS],
+            0,
+            MODE_SYNC_IDX,
+            0,
+        );
         assert!(sc.transition_pending());
         run(&mut sc, 2 * LAP_NS + LAP_NS / 2, 3 * LAP_NS + LAP_NS / 8);
         assert_eq!(0, sc.cur_bank());
@@ -313,30 +386,144 @@ mod tests {
     #[test]
     fn ext_mode_ignores_tic_offset_left_by_previous_finite_loop() {
         let mut sc = Swapchain::new();
-        sc.set(0, REP_INFINITE, 1, CYCLE, 0, MODE_IMMEDIATE, 0);
-        sc.set(LAP_NS / 2, 0, 1, CYCLE, 1, MODE_SYS_TIME, 0);
+        sc.set(
+            0,
+            REP_INFINITE,
+            [1; NUM_BANKS],
+            [CYCLE; NUM_BANKS],
+            0,
+            MODE_IMMEDIATE,
+            0,
+        );
+        sc.set(
+            LAP_NS / 2,
+            0,
+            [1; NUM_BANKS],
+            [CYCLE; NUM_BANKS],
+            1,
+            MODE_SYS_TIME,
+            0,
+        );
         sc.update([false; 4], LAP_NS / 2);
         assert_eq!(1, sc.cur_bank());
         assert_ne!(0, sc.tic_idx_offset[1]);
 
-        sc.set(LAP_NS, REP_INFINITE, 1, CYCLE, 0, MODE_EXT, 0);
+        sc.set(
+            LAP_NS,
+            REP_INFINITE,
+            [1; NUM_BANKS],
+            [CYCLE; NUM_BANKS],
+            0,
+            MODE_EXT,
+            0,
+        );
         run(&mut sc, LAP_NS, 2 * LAP_NS + LAP_NS / 2);
         assert_eq!(1, sc.cur_bank());
         assert_eq!(2, sc.cur_idx());
     }
 
     #[test]
+    fn sync_idx_and_gpio_never_fire_into_single_entry_bank() {
+        for mode in [MODE_SYNC_IDX, MODE_GPIO] {
+            let mut sc = Swapchain::new();
+            sc.set(
+                0,
+                REP_INFINITE,
+                [1; NUM_BANKS],
+                [CYCLE, 1],
+                0,
+                MODE_IMMEDIATE,
+                0,
+            );
+            sc.set(LAP_NS / 2, 0, [1; NUM_BANKS], [CYCLE, 1], 1, mode, 0);
+            let mut t = LAP_NS / 2;
+            while t <= 10 * LAP_NS {
+                sc.update([true; 4], t);
+                t += LAP_NS / 8;
+            }
+            assert_eq!(0, sc.cur_bank());
+            assert!(sc.transition_pending());
+        }
+    }
+
+    #[test]
+    fn finite_loop_on_single_entry_bank_never_stops() {
+        let mut sc = Swapchain::new();
+        sc.set(
+            0,
+            REP_INFINITE,
+            [1; NUM_BANKS],
+            [CYCLE, 1],
+            0,
+            MODE_IMMEDIATE,
+            0,
+        );
+        sc.set(
+            LAP_NS / 2,
+            0,
+            [1; NUM_BANKS],
+            [CYCLE, 1],
+            1,
+            MODE_SYS_TIME,
+            0,
+        );
+        run(&mut sc, LAP_NS / 2, 10 * LAP_NS);
+        assert_eq!(1, sc.cur_bank());
+        assert!(!sc.transition_pending());
+        assert!(!sc.stopped());
+    }
+
+    #[test]
+    fn ext_mode_never_leaves_single_entry_bank() {
+        let mut sc = Swapchain::new();
+        sc.set(0, REP_INFINITE, [1; NUM_BANKS], [1, CYCLE], 0, MODE_EXT, 0);
+        run(&mut sc, 0, 10 * LAP_NS);
+        assert_eq!(0, sc.cur_bank());
+
+        let mut sc = Swapchain::new();
+        sc.set(0, REP_INFINITE, [1; NUM_BANKS], [CYCLE, 1], 0, MODE_EXT, 0);
+        run(&mut sc, 0, LAP_NS + LAP_NS / 8);
+        assert_eq!(1, sc.cur_bank());
+        run(&mut sc, LAP_NS + LAP_NS / 8, 10 * LAP_NS);
+        assert_eq!(1, sc.cur_bank());
+    }
+
+    #[test]
     fn finite_loop_with_immediate_or_ext_stays_pending_until_infinite_request() {
         for mode in [MODE_IMMEDIATE, MODE_EXT] {
             let mut sc = Swapchain::new();
-            sc.set(0, REP_INFINITE, 1, CYCLE, 0, MODE_IMMEDIATE, 0);
-            sc.set(LAP_NS / 2, 0, 1, CYCLE, 1, mode, 0);
+            sc.set(
+                0,
+                REP_INFINITE,
+                [1; NUM_BANKS],
+                [CYCLE; NUM_BANKS],
+                0,
+                MODE_IMMEDIATE,
+                0,
+            );
+            sc.set(
+                LAP_NS / 2,
+                0,
+                [1; NUM_BANKS],
+                [CYCLE; NUM_BANKS],
+                1,
+                mode,
+                0,
+            );
             assert!(sc.transition_pending());
             run(&mut sc, LAP_NS / 2, 10 * LAP_NS);
             assert_eq!(0, sc.cur_bank());
             assert!(sc.transition_pending());
 
-            sc.set(10 * LAP_NS, REP_INFINITE, 1, CYCLE, 1, MODE_IMMEDIATE, 0);
+            sc.set(
+                10 * LAP_NS,
+                REP_INFINITE,
+                [1; NUM_BANKS],
+                [CYCLE; NUM_BANKS],
+                1,
+                MODE_IMMEDIATE,
+                0,
+            );
             assert_eq!(1, sc.cur_bank());
             assert!(!sc.transition_pending());
         }
@@ -345,8 +532,24 @@ mod tests {
     #[test]
     fn tic_finite_loop_stops_at_its_rep_while_other_bank_pending() {
         let mut sc = Swapchain::new();
-        sc.set(0, REP_INFINITE, 1, CYCLE, 1, MODE_IMMEDIATE, 0);
-        sc.set(LAP_NS / 2, 1, 1, CYCLE, 0, MODE_SYS_TIME, 0);
+        sc.set(
+            0,
+            REP_INFINITE,
+            [1; NUM_BANKS],
+            [CYCLE; NUM_BANKS],
+            1,
+            MODE_IMMEDIATE,
+            0,
+        );
+        sc.set(
+            LAP_NS / 2,
+            1,
+            [1; NUM_BANKS],
+            [CYCLE; NUM_BANKS],
+            0,
+            MODE_SYS_TIME,
+            0,
+        );
         sc.update([false; 4], LAP_NS / 2);
         assert_eq!(0, sc.cur_bank());
         assert!(!sc.transition_pending());
@@ -354,8 +557,8 @@ mod tests {
         sc.set(
             LAP_NS / 2,
             0,
-            1,
-            CYCLE,
+            [1; NUM_BANKS],
+            [CYCLE; NUM_BANKS],
             1,
             MODE_SYS_TIME,
             Swapchain::fpga_sys_time(1_000 * LAP_NS),
@@ -372,8 +575,24 @@ mod tests {
     #[test]
     fn gpio_transition_fires_on_idx_change_not_on_level() {
         let mut sc = Swapchain::new();
-        sc.set(0, REP_INFINITE, 1, CYCLE, 0, MODE_IMMEDIATE, 0);
-        sc.set(LAP_NS / 2 + 1_000, 0, 1, CYCLE, 1, MODE_GPIO, 0);
+        sc.set(
+            0,
+            REP_INFINITE,
+            [1; NUM_BANKS],
+            [CYCLE; NUM_BANKS],
+            0,
+            MODE_IMMEDIATE,
+            0,
+        );
+        sc.set(
+            LAP_NS / 2 + 1_000,
+            0,
+            [1; NUM_BANKS],
+            [CYCLE; NUM_BANKS],
+            1,
+            MODE_GPIO,
+            0,
+        );
 
         sc.update([true, false, false, false], LAP_NS / 2 + 2_000);
         assert_eq!(0, sc.cur_bank());
@@ -394,17 +613,49 @@ mod tests {
     #[test]
     fn finite_loop_with_immediate_pending_is_replaced_by_firing_mode_to_other_bank() {
         let mut sc = Swapchain::new();
-        sc.set(0, REP_INFINITE, 1, CYCLE, 0, MODE_IMMEDIATE, 0);
-        sc.set(LAP_NS / 2, 0, 1, CYCLE, 1, MODE_IMMEDIATE, 0);
+        sc.set(
+            0,
+            REP_INFINITE,
+            [1; NUM_BANKS],
+            [CYCLE; NUM_BANKS],
+            0,
+            MODE_IMMEDIATE,
+            0,
+        );
+        sc.set(
+            LAP_NS / 2,
+            0,
+            [1; NUM_BANKS],
+            [CYCLE; NUM_BANKS],
+            1,
+            MODE_IMMEDIATE,
+            0,
+        );
         run(&mut sc, LAP_NS / 2, 2 * LAP_NS);
         assert!(sc.transition_pending());
 
-        sc.set(2 * LAP_NS, 0, 1, CYCLE, 1, MODE_SYS_TIME, 0);
+        sc.set(
+            2 * LAP_NS,
+            0,
+            [1; NUM_BANKS],
+            [CYCLE; NUM_BANKS],
+            1,
+            MODE_SYS_TIME,
+            0,
+        );
         sc.update([false; 4], 2 * LAP_NS);
         assert_eq!(0, sc.cur_bank());
         assert!(sc.transition_pending());
 
-        sc.set(2 * LAP_NS, 0, 1, CYCLE, 0, MODE_SYS_TIME, 0);
+        sc.set(
+            2 * LAP_NS,
+            0,
+            [1; NUM_BANKS],
+            [CYCLE; NUM_BANKS],
+            0,
+            MODE_SYS_TIME,
+            0,
+        );
         sc.update([false; 4], 2 * LAP_NS);
         assert_eq!(0, sc.cur_bank());
         assert!(!sc.transition_pending());
