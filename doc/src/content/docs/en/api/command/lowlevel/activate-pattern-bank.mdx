@@ -35,6 +35,11 @@ import { excerpt } from "@lib/excerpt";
 | `Gpio(GpioIn)`       | Trigger on the specified GPIO input pin |
 | `Ext`                | Extended mode (automatically switches to the next bank when playback within the bank finishes) |
 
+`Immediate` / `Ext` are for infinite-loop banks.
+Use `SyncIdx` / `SysTime` / `Gpio` for finite-loop banks.
+
+The device rejects a transition mode that does not match the loop setting of the destination bank with an `InvalidTransitionMode` error.
+
 ## Example
 
 <CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

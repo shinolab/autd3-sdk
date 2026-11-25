@@ -35,6 +35,11 @@ import { excerpt } from "@lib/excerpt";
 | `Gpio(GpioIn)`       | 指定 GPIO 入力ピンのトリガ        |
 | `Ext`                | 拡張モード (バンク内の再生が終わると次のバンクに自動で切り替え) |
 
+`Immediate` / `Ext` は無限ループのバンク用.
+有限ループのバンクには `SyncIdx` / `SysTime` / `Gpio` を使う.
+
+切り替え先のバンクのループ設定と合わない遷移モードはデバイスが拒否し, `InvalidTransitionMode` のエラーになる.
+
 ## Example
 
 <CodeTabs rust={excerpt(fullSample)} python={excerpt(pyFullSample)} csharp={excerpt(csFullSample)} />

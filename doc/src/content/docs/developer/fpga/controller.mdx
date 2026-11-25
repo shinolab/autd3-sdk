@@ -48,3 +48,13 @@ Silencer が固定完了ステップモードかつ strict モード (`SILENCER_
 検証の結果は `ADDR_SILENCER_SET_RESULT` (アドレス `0x06`) の, `ADDR_CTL_FLAG` と同じ位置のビットに書き込まれる (拒否で 1).
 Controller はこれを書いてから `*_SET` ビットをクリアするので, CPU はビットのクリアを確認した後に結果を読む.
 
+## 遷移モードの検証
+
+`MOD_SET` / `PATTERN_SET` では, 要求されたバンク (`REQ_RD_BANK`) の繰り返し回数 `REP` と遷移モード `TRANSITION_MODE` の組み合わせも検証する.
+有効なのは, 無限ループ (`REP == 0xFFFF`) には `IMMEDIATE` / `EXT`, 有限ループには `SYNC_IDX` / `SYS_TIME` / `GPIO` だけで, それ以外 (未知の値を含む) は拒否する.
+この検証は Silencer の設定によらず常に行う.
+
+拒否した場合は, `ADDR_SILENCER_SET_RESULT` の該当ビットに加えて bit 15 (`SetResultTransitionInvalidBit`) を立てる.
+bit 15 は `MOD_SET` / `PATTERN_SET` で共有し, その回に処理したどれかの `*_SET` が遷移モードで拒否されれば 1 になる (`SILENCER_SET` だけの回は 0. `DEBUG_SET` / `SYNC_SET` だけの回は `ADDR_SILENCER_SET_RESULT` を書かない).
+CPU は `*_SET` のビットが立っていれば, bit 15 が 1 なら `ERR_INVALID_TRANSITION_MODE`, 0 なら `ERR_INVALID_SILENCER_SETTING` を返す.
+

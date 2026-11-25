@@ -129,7 +129,7 @@ FIFO が満杯の場合, フレームは捨てられ (`fifo_drop` に数える),
 | `0x02` | `ERR_INVALID_PAYLOAD`          | ペイロードの長さ・オフセットが不正         |
 | `0x03` | (欠番)                         | 再利用しない                               |
 | `0x04` | `ERR_INVALID_SILENCER_SETTING` | Silencer の設定が厳格モードの条件を満たさない |
-| `0x05` | (欠番)                         | Firmware v0.14.x までの `ERR_INVALID_TRANSITION_MODE`. 遷移モードと繰り返し回数の組み合わせは検査しない |
+| `0x05` | `ERR_INVALID_TRANSITION_MODE`  | 遷移モードが遷移先バンクのループと合わない (FPGA が拒否する) |
 | `0x06` | (欠番)                         | Firmware v0.14.x までの `ERR_MISS_TRANSITION_TIME`. `SysTime` 遷移の時刻は検査しない |
 | `0x07` | `ERR_FPGA_TIMEOUT`             | FPGA が制御フラグを期限内にクリアしない     |
 | `0x08` | `ERR_SYNC_NOT_READY`           | 同期パルスがまだ動いていない (時刻合わせ前) |
@@ -195,6 +195,7 @@ ETHSW のタイマはデバイス間で PTP (IEEE 1588, L2, E2E, two-step) に�
 ## バンク遷移
 
 CPU ファームは遷移モードと繰り返し回数の組み合わせも, `SysTime` 遷移の時刻も検査せず, そのまま FPGA へ書く.
-FPGA は, 無限ループ (`REP == 0xFFFF`) のバンクへはどの遷移モードでも即時に切り替える.
-有限ループのバンクへは `SyncIdx` / `SysTime` / `Gpio` の条件を待って切り替え, `Immediate` / `Ext` では切り替わらずに待ち続ける.
+組み合わせは FPGA の Controller が latch 時に検証し, 無限ループ (`REP == 0xFFFF`) に `Immediate` / `Ext` 以外, 有限ループに `SyncIdx` / `SysTime` / `Gpio` 以外を拒否する.
+CPU は拒否を `ERR_INVALID_TRANSITION_MODE` として返す.
+FPGA は, 無限ループのバンクへは即時に切り替え, 有限ループのバンクへは `SyncIdx` / `SysTime` / `Gpio` の条件を待って切り替える.
 `SysTime` の時刻が過ぎていれば即時に切り替える.

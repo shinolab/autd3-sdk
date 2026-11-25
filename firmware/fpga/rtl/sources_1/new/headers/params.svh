@@ -21,6 +21,8 @@ package params;
   localparam int FuncSyncPhaseLockBit = 5;
   localparam int FuncEmulatorBit = 7;  // reserved
 
+  localparam int SetResultTransitionInvalidBit = 15;
+
   localparam bit [23:0] FlashWritableBase = 24'h800000;
   localparam bit [24:0] FlashEnd = 25'h1000000;
   localparam bit [23:0] FlashImageBase = 24'h800100;

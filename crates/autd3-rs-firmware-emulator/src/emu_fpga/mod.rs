@@ -277,15 +277,17 @@ impl FpgaEmulator {
                 if a & 0xFF == reg(fw::ADDR_CTL_FLAG) {
                     let flags = CtlFlags::from_bits_retain(value);
                     self.controller[reg(fw::ADDR_CTL_FLAG)] = (flags & !LATCH_MASK).bits();
-                    let mut rejected = CtlFlags::from_bits_retain(
-                        self.controller[reg(fw::ADDR_SILENCER_SET_RESULT)],
-                    ) & !flags;
+                    let previous = self.controller[reg(fw::ADDR_SILENCER_SET_RESULT)];
+                    let mut rejected = CtlFlags::from_bits_truncate(previous) & !flags;
+                    let mut transition_invalid = false;
                     for chain in [Chain::Mod, Chain::Pattern] {
                         let regs = chain.regs();
                         if !flags.contains(regs.set_flag) {
                             continue;
                         }
-                        if self.swapchain_latch_rejected(chain) {
+                        let chain_transition_invalid = self.transition_latch_rejected(chain);
+                        transition_invalid |= chain_transition_invalid;
+                        if chain_transition_invalid || self.swapchain_latch_rejected(chain) {
                             rejected |= regs.set_flag;
                         } else {
                             self.latch_config(regs.config);
@@ -301,7 +303,15 @@ impl FpgaEmulator {
                                 .copy_from_slice(&self.controller[SILENCER_REGS]);
                         }
                     }
-                    self.controller[reg(fw::ADDR_SILENCER_SET_RESULT)] = rejected.bits();
+                    let transition_bit = if flags.intersects(
+                        CtlFlags::MOD_SET | CtlFlags::PATTERN_SET | CtlFlags::SILENCER_SET,
+                    ) {
+                        u16::from(transition_invalid) << fw::SET_RESULT_TRANSITION_INVALID_BIT
+                    } else {
+                        previous & (1 << fw::SET_RESULT_TRANSITION_INVALID_BIT)
+                    };
+                    self.controller[reg(fw::ADDR_SILENCER_SET_RESULT)] =
+                        rejected.bits() | transition_bit;
                 } else {
                     self.controller[a & 0xFF] = value;
                 }
@@ -428,6 +438,17 @@ impl FpgaEmulator {
                     self.silencer_completion_steps_phase(),
                 ),
             )
+    }
+
+    fn transition_latch_rejected(&self, chain: Chain) -> bool {
+        use fw::TransitionModeKind::{Ext, Gpio, Immediate, SyncIdx, SysTime};
+        let mode = fw::TransitionModeKind::from_u8(
+            self.controller[reg(chain.regs().transition_mode)] as u8,
+        );
+        !matches!(
+            (self.staged_request(chain).finite, mode),
+            (true, Some(SyncIdx | SysTime | Gpio)) | (false, Some(Immediate | Ext))
+        )
     }
 
     fn silencer_latch_rejected(&self) -> bool {
@@ -871,6 +892,11 @@ mod tests {
             write(&mut fpga, fw::ADDR_PATTERN_FREQ_DIV0 + bank, 0xFFFF);
             write(&mut fpga, fw::ADDR_PATTERN_REP0 + bank, fw::REP_INFINITE);
         }
+        write(
+            &mut fpga,
+            fw::ADDR_PATTERN_TRANSITION_MODE,
+            u16::from(fw::TransitionModeKind::Immediate.as_u8()),
+        );
         write(&mut fpga, fw::ADDR_CTL_FLAG, CtlFlags::PATTERN_SET.bits());
         fpga
     }

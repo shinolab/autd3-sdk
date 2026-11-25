@@ -38,6 +38,7 @@ const FW_INTERNAL_PREFIXES: &[&str] = &[
     "FLASH_ERR_",
     "FLASH_BUF_",
     "SYNC_CYCLE_",
+    "SET_RESULT_",
 ];
 
 enum TypedKind {

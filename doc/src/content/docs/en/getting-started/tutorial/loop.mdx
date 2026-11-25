@@ -40,6 +40,8 @@ Modes available when the destination is a finite loop.
 - `SysTime { time }`: switches at the specified [device time](/autd3-sdk/en/api/basics/sys-time/) `time` (`TransitionMode.SysTime(time)` in Python / C#).
 - `Gpio(GpioIn)`: switches on the trigger of the specified [GPIO input pin](/autd3-sdk/en/hardware/gpio).
 
+The device rejects any other combination with an `InvalidTransitionMode` error.
+
 :::note
 The various loop and transition constraints exist in order to synchronize multiple devices.
 :::
