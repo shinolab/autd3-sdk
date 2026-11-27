@@ -66,12 +66,6 @@ impl FirmwareVersion {
         }
     }
 
-    #[doc(hidden)]
-    #[must_use]
-    pub const fn supports_fpga_ota(&self) -> bool {
-        FunctionBits::from_bits_retain(self.function_bits).contains(FunctionBits::FLASH_OTA)
-    }
-
     #[must_use]
     pub const fn is_supported(&self) -> bool {
         !self.fpga.is_unknown() && is_supported_series(self.cpu) && is_supported_series(self.fpga)
@@ -138,7 +132,7 @@ mod tests {
     }
 
     #[test]
-    fn the_boot_image_and_the_ota_capability_come_from_the_firmware_info() {
+    fn the_boot_image_comes_from_the_firmware_info() {
         let info = |fpga_functions, fpga_boot_image| {
             FirmwareVersion::from_info(FirmwareInfo {
                 cpu_version: [0; 3],
@@ -147,11 +141,8 @@ mod tests {
                 fpga_boot_image,
             })
         };
-        let ota = FunctionBits::FLASH_OTA.bits();
-        assert!(info(ota, 0x02).supports_fpga_ota());
-        assert!(!info(0, 0x02).supports_fpga_ota());
-        assert_eq!(info(ota, 0x02).fpga_boot_image(), FpgaBootImage::Update);
-        assert_eq!(info(ota, 0x7F).fpga_boot_image(), FpgaBootImage::Unknown);
+        assert_eq!(info(0, 0x02).fpga_boot_image(), FpgaBootImage::Update);
+        assert_eq!(info(0, 0x7F).fpga_boot_image(), FpgaBootImage::Unknown);
     }
 
     #[test]

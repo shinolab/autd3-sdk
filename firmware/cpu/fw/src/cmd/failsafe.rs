@@ -51,9 +51,7 @@ mod tests {
     use autd3_cpu_wire::cpu_params;
 
     use crate::cmd::cpu_config::CpuConfig;
-    use crate::fpga_params::{
-        ADDR_CTL_FLAG, ADDR_FUNCTION_BITS, CtlFlags, FunctionBits, NUM_TRANSDUCERS,
-    };
+    use crate::fpga_params::{ADDR_CTL_FLAG, CtlFlags, NUM_TRANSDUCERS};
     use crate::proto::{Cmd, Error};
     use crate::test_utils::builders::{force_fan, output_mask, set_cpu_config};
     use crate::test_utils::mock::{Frame, Harness, WatchdogEvent};
@@ -503,18 +501,6 @@ mod tests {
         release(&mut h);
         h.tick_1ms(1);
         assert_not_muted(&h);
-    }
-
-    #[test]
-    fn a_watchdog_bit_on_an_fpga_without_the_watchdog_raises_nothing() {
-        let mut h = Harness::new();
-        h.set_ctl(
-            ADDR_FUNCTION_BITS,
-            u16::from(FunctionBits::STRICT_SILENCER_GUARD.bits()),
-        );
-        h.port.watchdog_state = 0x0101;
-        h.tick_1ms(1);
-        assert!(!h.cpu.failsafe_active());
     }
 
     #[test]
