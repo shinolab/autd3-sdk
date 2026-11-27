@@ -15,7 +15,7 @@ impl Cpu {
         self.config.set(config);
         port.configure_ptp(config.ptp);
         port.set_fpga_bus_wait(config.fpga_bus_wait);
-        fpga::set_watchdog_timeout(port, config.cpu_watchdog_timeout);
+        fpga::watchdog(port).set_timeout(config.cpu_watchdog_timeout);
     }
 
     pub(crate) fn set_cpu_config<P: Port>(

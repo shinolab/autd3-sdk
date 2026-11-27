@@ -118,7 +118,7 @@ impl Cpu {
 
     pub(super) fn sample_fpga_state<P: Port>(&self, port: &mut P) {
         let health = &self.health;
-        let [state, resync] = fpga::read_ctl(port, ADDR_FPGA_STATE).to_le_bytes();
+        let [state, resync] = fpga::controller(port).read(ADDR_FPGA_STATE).to_le_bytes();
         health.fpga_state.store(state, Ordering::Relaxed);
         health.sync_resync.store(resync, Ordering::Relaxed);
     }
@@ -127,7 +127,7 @@ impl Cpu {
         self.sample_fpga_state(port);
         self.health
             .cpu_watchdog
-            .store(fpga::watchdog_state(port).count, Ordering::Relaxed);
+            .store(fpga::watchdog(port).state().count, Ordering::Relaxed);
     }
 
     pub(super) fn check_failsafes<P: Port>(&self, port: &mut P) {
@@ -149,7 +149,7 @@ impl Cpu {
         failsafe(self, port, silent, &health.failsafe_fired);
         let unlocked = cmd::failsafe::ptp_unlock_expired(self, &config);
         failsafe(self, port, unlocked, &health.ptp_unlock_failsafe_fired);
-        if !self.failsafe_active() && fpga::watchdog_state(port).fired {
+        if !self.failsafe_active() && fpga::watchdog(port).state().fired {
             health.failsafe_active.store(true, Ordering::Relaxed);
         }
     }

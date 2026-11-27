@@ -1,6 +1,6 @@
 pub(crate) use autd3_cpu_wire::payload::{PhaseDepth, WritePatternPhasePayload};
 
-use crate::fpga::{self, EMISSION_RAM};
+use crate::fpga;
 use crate::port::Port;
 use crate::proto::{EMISSION_SLOT_WORDS, Error};
 
@@ -11,10 +11,9 @@ pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error>
     let patterns = (u32::from(p.index())..)
         .map(|index| index * EMISSION_SLOT_WORDS)
         .zip(data.chunks_exact(depth.bytes_per_pattern()));
+    let mut ram = fpga::emission_ram(port);
     match depth {
-        PhaseDepth::Bits8 => fpga::write_ram_at(
-            port,
-            &EMISSION_RAM,
+        PhaseDepth::Bits8 => ram.write_at(
             p.bank().as_u8(),
             patterns.flat_map(|(offset, pattern)| {
                 (offset..).zip(
@@ -23,9 +22,7 @@ pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error>
                 )
             }),
         ),
-        PhaseDepth::Bits4 => fpga::write_ram_at(
-            port,
-            &EMISSION_RAM,
+        PhaseDepth::Bits4 => ram.write_at(
             p.bank().as_u8(),
             patterns.flat_map(|(offset, pattern)| {
                 (offset..).zip(

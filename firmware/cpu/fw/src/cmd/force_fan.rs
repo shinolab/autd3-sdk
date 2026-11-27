@@ -7,9 +7,10 @@ use crate::proto::Error;
 
 pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
     let p = ForceFanPayload::parse(payload)?;
-    let mut ctl = CtlFlags::from_bits_retain(fpga::read_ctl(port, ADDR_CTL_FLAG));
-    ctl.set(CtlFlags::FORCE_FAN, p.value);
-    fpga::write_ctl(port, ADDR_CTL_FLAG, ctl.bits());
+    let mut ctl = fpga::controller(port);
+    let mut flags = CtlFlags::from_bits_retain(ctl.read(ADDR_CTL_FLAG));
+    flags.set(CtlFlags::FORCE_FAN, p.value);
+    ctl.write(ADDR_CTL_FLAG, flags.bits());
     Ok(())
 }
 

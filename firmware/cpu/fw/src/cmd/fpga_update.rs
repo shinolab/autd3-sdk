@@ -12,7 +12,7 @@ use crate::fpga;
 use crate::fpga_params::{
     ADDR_FLASH_ADDR_0, ADDR_FLASH_ADDR_1, ADDR_FLASH_CMD, ADDR_FLASH_LEN_0, ADDR_FLASH_LEN_1,
     ADDR_FLASH_RESULT_0, ADDR_FLASH_RESULT_1, ADDR_FLASH_STATUS, ADDR_FLASH_USR_ACCESS_0,
-    ADDR_FLASH_USR_ACCESS_1, BramSelect, FLASH_BUF_BYTES, FlashOp, FunctionBits,
+    ADDR_FLASH_USR_ACCESS_1, FLASH_BUF_BYTES, FlashOp, FunctionBits,
 };
 use crate::port::Port;
 use crate::proto::{Cmd, Error};
@@ -84,11 +84,11 @@ pub(crate) fn allowed_while_locked(cmd: Cmd) -> bool {
 }
 
 fn write_reg<P: Port>(port: &mut P, addr: u16, value: u16) {
-    fpga::write(port, BramSelect::Flash, addr, value);
+    fpga::flash(port).write(addr, value);
 }
 
 fn read_reg<P: Port>(port: &mut P, addr: u16) -> u16 {
-    fpga::read(port, BramSelect::Flash, addr)
+    fpga::flash(port).read(addr)
 }
 
 fn write_target<P: Port>(port: &mut P, addr: u32, len: u32) {
@@ -140,7 +140,9 @@ fn run_command<P: Port>(
 }
 
 pub(crate) fn supports_flash<P: Port>(port: &mut P) -> bool {
-    fpga::functions(port).contains(FunctionBits::FLASH_OTA)
+    fpga::controller(port)
+        .functions()
+        .contains(FunctionBits::FLASH_OTA)
 }
 
 fn boot_image<P: Port>(port: &mut P) -> FpgaBootImage {
@@ -192,7 +194,7 @@ impl Cpu {
         }
         self.fpga_update.state.set(State::Locked);
         self.mute_output(port);
-        fpga::set_watchdog_timeout(port, None);
+        fpga::watchdog(port).set_timeout(None);
         run_command(
             port,
             FPGA_FLASH_MAX_POLLS,
@@ -242,9 +244,7 @@ impl Cpu {
             });
         }
         for (k, part) in data.chunks(FLASH_BUF_BYTES).enumerate() {
-            for (i, word) in fpga::le_words(part, 0xFF).enumerate() {
-                fpga::write(port, BramSelect::FlashBuf, i as u16, word);
-            }
+            fpga::flash_buf(port).write_le_bytes(part, 0xFF);
             run_command(
                 port,
                 max_polls,

@@ -7,17 +7,20 @@ use crate::proto::Error;
 
 pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
     let p = GpioInPayload::parse(payload)?;
-    let mut ctl = CtlFlags::from_bits_retain(fpga::read_ctl(port, ADDR_CTL_FLAG));
-    let pins = [
+    let mut ctl = fpga::controller(port);
+    let mut flags = CtlFlags::from_bits_retain(ctl.read(ADDR_CTL_FLAG));
+    for (pin, value) in [
         CtlFlags::GPIO_IN_0,
         CtlFlags::GPIO_IN_1,
         CtlFlags::GPIO_IN_2,
         CtlFlags::GPIO_IN_3,
-    ];
-    for (pin, value) in pins.into_iter().zip(p.values) {
-        ctl.set(pin, value);
+    ]
+    .into_iter()
+    .zip(p.values)
+    {
+        flags.set(pin, value);
     }
-    fpga::write_ctl(port, ADDR_CTL_FLAG, ctl.bits());
+    ctl.write(ADDR_CTL_FLAG, flags.bits());
     Ok(())
 }
 

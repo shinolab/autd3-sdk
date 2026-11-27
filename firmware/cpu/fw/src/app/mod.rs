@@ -53,7 +53,7 @@ impl Cpu {
         } else {
             self.count_boot_failure();
         }
-        fpga::set_watchdog_timeout(port, config.cpu_watchdog_timeout);
+        fpga::watchdog(port).set_timeout(config.cpu_watchdog_timeout);
     }
 
     pub fn mark_boot_attempt<P: Port>(&self, port: &mut P) {
@@ -63,7 +63,7 @@ impl Cpu {
     }
 
     pub fn tick_1ms<P: Port>(&self, port: &mut P) {
-        fpga::watchdog_kick(port);
+        fpga::watchdog(port).kick();
         self.update_tick(port);
         self.fpga_update_tick(port);
         self.sample_fpga_counters(port);

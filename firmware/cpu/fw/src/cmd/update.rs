@@ -131,7 +131,7 @@ impl Cpu {
             return Err(Error::InvalidPayload);
         }
         self.mute_output(port);
-        fpga::set_watchdog_timeout(port, None);
+        fpga::watchdog(port).set_timeout(None);
         self.update.state.set(State::Idle);
         let a = valid_header(port, Slot::A)?;
         let b = valid_header(port, Slot::B)?;

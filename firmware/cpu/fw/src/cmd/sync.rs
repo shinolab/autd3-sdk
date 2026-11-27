@@ -27,12 +27,12 @@ pub(crate) fn handle<P: Port>(port: &mut P, config: &CpuConfig) -> Result<(), Er
             return Err(Error::SyncNotReady);
         }
     }
-    fpga::write_u64(
-        port,
+    let mut ctl = fpga::controller(port);
+    ctl.write_u64(
         ADDR_SYNC_TIME_0,
         SysTime::from_nanos(next_edge).fpga_ticks(),
     );
-    fpga::set_and_wait_update(port, CtlFlags::SYNC_SET, fpga::FPGA_WAIT_UPDATE_MAX_POLLS)?;
+    ctl.set_and_wait_update(CtlFlags::SYNC_SET, fpga::FPGA_WAIT_UPDATE_MAX_POLLS)?;
     let latched_at = port.sys_time().ok_or(Error::SyncNotReady)?;
     if latched_at < next_edge {
         Ok(())

@@ -1,15 +1,12 @@
 pub(crate) use autd3_cpu_wire::payload::PwePayload;
 
 use crate::fpga;
-use crate::fpga_params::BramSelect;
 use crate::port::Port;
 use crate::proto::Error;
 
 pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
     let p = PwePayload::parse(payload)?;
-    for (i, value) in p.table.iter().enumerate() {
-        fpga::write(port, BramSelect::PweTable, i as u16, value.get());
-    }
+    fpga::pwe_table(port).write_words(p.table.iter().map(|value| value.get()));
     Ok(())
 }
 
