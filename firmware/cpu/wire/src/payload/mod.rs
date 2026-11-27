@@ -17,6 +17,7 @@ mod pwe;
 mod set_cpu_config;
 mod set_fpga_config;
 mod silencer;
+mod sync_ps;
 mod telemetry;
 mod update_begin;
 mod update_chunk;
@@ -44,6 +45,10 @@ pub use set_fpga_config::SetFpgaConfigPayload;
 pub use silencer::{
     SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY, SILENCER_DEFAULT_COMPLETION_STEPS_PHASE,
     SILENCER_DEFAULT_UPDATE_RATE, SilencerPayload,
+};
+pub use sync_ps::{
+    ReadSyncPsStatsPayload, ReadTdcPayload, StartTdcCapturePayload, SyncPsStats, TDC_CHUNK_SAMPLES,
+    TDC_SAMPLES, TdcChunk, TdcSource,
 };
 pub use telemetry::Telemetry;
 pub use update_begin::UpdateBeginPayload;

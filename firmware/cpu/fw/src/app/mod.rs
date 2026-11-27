@@ -185,6 +185,9 @@ impl Cpu {
                     .running_image(port)
                     .map(|image| ReplyData::from_slice(&[image.as_u8()]));
             }
+            Cmd::ReadSyncPsStats => return cmd::sync_ps::read_stats(port, payload),
+            Cmd::StartTdcCapture => cmd::sync_ps::start_tdc_capture(port, payload),
+            Cmd::ReadTdc => return cmd::sync_ps::read_tdc(port, payload),
             Cmd::WriteFociBuffer => cmd::write_foci::handle(port, payload),
             Cmd::WritePatternRaw => cmd::write_pattern_raw::handle(port, payload),
             Cmd::WritePatternFused => cmd::write_pattern_fused::handle(port, payload),
@@ -273,7 +276,7 @@ mod tests {
     #[test]
     fn unknown_non_streaming_cmd_reports_unknown_cmd() {
         let mut h = Harness::new();
-        h.deliver(&Frame::raw(0xEE));
+        h.deliver(&Frame::raw(0xF0));
         assert_eq!(h.status(), Error::UnknownCmd);
     }
 

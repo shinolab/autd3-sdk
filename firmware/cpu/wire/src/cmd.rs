@@ -33,6 +33,9 @@ crate::wire_enum_u8! {
         FpgaUpdateActivate = 0x78,
         ReadFirmwareInfo = 0xEB,
         ReadRunningImage = 0xEC,
+        ReadSyncPsStats = 0xED,
+        StartTdcCapture = 0xEE,
+        ReadTdc = 0xEF,
     }
 }
 
@@ -44,7 +47,7 @@ mod tests {
     fn retired_ids_stay_unassigned() {
         for raw in [
             0x00, 0x02, 0x14, 0x23, 0x73, 0xE0, 0xE1, 0xE2, 0xE3, 0xE4, 0xE5, 0xE6, 0xE7, 0xE8,
-            0xE9, 0xEA,
+            0xE9, 0xEA, 0xF0, 0xF1,
         ] {
             assert_eq!(Cmd::from_u8(raw), None);
         }

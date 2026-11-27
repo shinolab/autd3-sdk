@@ -17,6 +17,7 @@ pub(crate) mod phase_corr;
 pub(crate) mod pwe;
 pub(crate) mod silencer;
 pub(crate) mod sync;
+pub(crate) mod sync_ps;
 pub(crate) mod update;
 pub(crate) mod write_foci;
 pub(crate) mod write_mod;

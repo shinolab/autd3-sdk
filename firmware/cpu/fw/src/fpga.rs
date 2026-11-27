@@ -3,7 +3,9 @@ use core::time::Duration;
 
 use autd3_cpu_wire::config::FpgaConfig;
 use autd3_cpu_wire::cpu_params::PWE_DEFAULT_TABLE;
+use autd3_cpu_wire::payload::{SyncPsStats, TDC_CHUNK_SAMPLES, TdcChunk, TdcSource};
 use autd3_cpu_wire::value::SysTime;
+use zerocopy::little_endian::{I16, U16};
 
 use crate::fpga_params::{
     ADDR_CTL_FLAG, ADDR_DEBUG_VALUE0_0, ADDR_FUNCTION_BITS, ADDR_MOD_CYCLE0, ADDR_MOD_FREQ_DIV0,
@@ -14,9 +16,12 @@ use crate::fpga_params::{
     ADDR_PATTERN_TRANSITION_VALUE_0, ADDR_SILENCER_COMPLETION_STEPS_INTENSITY,
     ADDR_SILENCER_COMPLETION_STEPS_PHASE, ADDR_SILENCER_FLAG, ADDR_SILENCER_SET_RESULT,
     ADDR_SILENCER_UPDATE_RATE_INTENSITY, ADDR_SILENCER_UPDATE_RATE_PHASE, ADDR_SYNC_PS_CTL,
-    ADDR_SYNC_PS_KF, ADDR_SYNC_PS_KI, ADDR_SYNC_PS_KP, ADDR_WATCHDOG_KICK, ADDR_WATCHDOG_RELEASE,
-    ADDR_WATCHDOG_STATE, ADDR_WATCHDOG_TIMEOUT, BramSelect, CtlFlags, FunctionBits, NUM_BANKS,
-    NUM_TRANSDUCERS, SET_RESULT_TRANSITION_INVALID_BIT,
+    ADDR_SYNC_PS_DIFF_MAX, ADDR_SYNC_PS_DIFF_MIN, ADDR_SYNC_PS_DIFF_OUTLIERS,
+    ADDR_SYNC_PS_FINE_EXITS, ADDR_SYNC_PS_KF, ADDR_SYNC_PS_KI, ADDR_SYNC_PS_KP,
+    ADDR_SYNC_PS_RATE_MAX, ADDR_SYNC_PS_RATE_MIN, ADDR_SYNC_PS_STATS_CTL, ADDR_SYNC_PS_TDC_BUF,
+    ADDR_WATCHDOG_KICK, ADDR_WATCHDOG_RELEASE, ADDR_WATCHDOG_STATE, ADDR_WATCHDOG_TIMEOUT,
+    BramSelect, CtlFlags, FunctionBits, NUM_BANKS, NUM_TRANSDUCERS,
+    SET_RESULT_TRANSITION_INVALID_BIT,
 };
 pub use crate::fpga_params::{PWE_TABLE_SIZE, REP_INFINITE};
 use crate::port::Port;
@@ -257,6 +262,56 @@ impl<P: Port> SyncPs<'_, P> {
         self.bram.write(ADDR_SYNC_PS_KF, config.sync_kf);
         self.bram
             .write(ADDR_SYNC_PS_CTL, u16::from(config.sync_phase_lock));
+    }
+
+    fn wait_stats_idle(&mut self, max_polls: NonZeroU32) -> Result<(), Error> {
+        for _ in 0..max_polls.get() {
+            if self.bram.read(ADDR_SYNC_PS_STATS_CTL) & 1 == 0 {
+                return Ok(());
+            }
+        }
+        Err(Error::FpgaTimeout)
+    }
+
+    fn command_stats(&mut self, command: u16, max_polls: NonZeroU32) -> Result<(), Error> {
+        self.wait_stats_idle(max_polls)?;
+        self.bram.write(ADDR_SYNC_PS_STATS_CTL, command);
+        self.wait_stats_idle(max_polls)
+    }
+
+    pub fn snapshot_stats(
+        &mut self,
+        clear: bool,
+        max_polls: NonZeroU32,
+    ) -> Result<SyncPsStats, Error> {
+        self.command_stats(1 | (u16::from(clear) << 1), max_polls)?;
+        Ok(SyncPsStats {
+            diff_min: I16::new(self.bram.read(ADDR_SYNC_PS_DIFF_MIN).cast_signed()),
+            diff_max: I16::new(self.bram.read(ADDR_SYNC_PS_DIFF_MAX).cast_signed()),
+            diff_outliers: U16::new(self.bram.read(ADDR_SYNC_PS_DIFF_OUTLIERS)),
+            rate_min: I16::new(self.bram.read(ADDR_SYNC_PS_RATE_MIN).cast_signed()),
+            rate_max: I16::new(self.bram.read(ADDR_SYNC_PS_RATE_MAX).cast_signed()),
+            fine_exits: U16::new(self.bram.read(ADDR_SYNC_PS_FINE_EXITS)),
+        })
+    }
+
+    pub fn start_tdc_capture(
+        &mut self,
+        source: TdcSource,
+        max_polls: NonZeroU32,
+    ) -> Result<(), Error> {
+        self.command_stats(0b100 | (u16::from(source.as_u8()) << 3), max_polls)
+    }
+
+    #[must_use]
+    pub fn read_tdc(&mut self, chunk: u8) -> TdcChunk {
+        let status = self.bram.read(ADDR_SYNC_PS_STATS_CTL);
+        let base = ADDR_SYNC_PS_TDC_BUF + u16::from(chunk) * TDC_CHUNK_SAMPLES as u16;
+        TdcChunk {
+            capturing: status & 0b010 != 0,
+            locked: status & 0b100 != 0,
+            samples: core::array::from_fn(|i| U16::new(self.bram.read(base + i as u16))),
+        }
     }
 }
 
