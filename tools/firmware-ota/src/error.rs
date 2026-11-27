@@ -51,10 +51,6 @@ pub(crate) enum OtaError {
     #[error("not every device replied within {0:?}")]
     Timeout(std::time::Duration),
     #[error(
-        "device {device} runs an FPGA image without configuration-flash access; flash `autd3-fpga.mcs` once via JTAG"
-    )]
-    FpgaUpdateUnsupported { device: usize },
-    #[error(
         "device {device} did not reconfigure after activation; it keeps its output off and boots the written image at the next power cycle"
     )]
     FpgaReconfigFailed { device: usize },

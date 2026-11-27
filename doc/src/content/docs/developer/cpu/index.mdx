@@ -139,7 +139,6 @@ FIFO が満杯の場合, フレームは捨てられ (`fifo_drop` に数える),
 | `0x0C` | `ERR_UPDATE_FLASH`             | シリアルフラッシュの消去・書き込み・読み出しが失敗した |
 | `0x0D` | `ERR_UPDATE_NOT_COMMITTED`     | Commit 済みのイメージが無い                |
 | `0x0E` | `ERR_UPDATE_NOTHING_TO_CONFIRM` | 確定の対象 (今回起動したイメージ) が不明, または書き直されている |
-| `0x0F` | `ERR_UPDATE_UNSUPPORTED`       | 稼働中の FPGA が自身のコンフィギュレーションフラッシュを書けない |
 | `0x10` | `ERR_FPGA_UPDATE_IN_PROGRESS`  | FPGA 更新のロック中に出力系コマンドを受けた |
 | `0x12` | `ERR_UPDATE_ACTIVATING`        | `Reboot` 受理後のリセット待ちの間に更新の開始を受けた |
 | `0x14` | `ERR_SYNC_MISSED`              | `Synchronize` の書き込みが同期パルスの立ち上がりに間に合わなかった. 送り直せばよい |

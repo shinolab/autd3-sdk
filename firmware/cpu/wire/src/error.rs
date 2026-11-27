@@ -12,7 +12,6 @@ crate::wire_enum_u8! {
         UpdateFlash = 0x0C,
         UpdateNotCommitted = 0x0D,
         UpdateNothingToConfirm = 0x0E,
-        UpdateUnsupported = 0x0F,
         FpgaUpdateInProgress = 0x10,
         UpdateActivating = 0x12,
         SyncMissed = 0x14,
@@ -41,9 +40,6 @@ impl Error {
             Self::UpdateNotCommitted => "no committed firmware image to activate",
             Self::UpdateNothingToConfirm => {
                 "the running firmware image is unknown or was overwritten; nothing to confirm"
-            }
-            Self::UpdateUnsupported => {
-                "the running FPGA image cannot write its configuration flash (flash it once via JTAG)"
             }
             Self::FpgaUpdateInProgress => {
                 "an FPGA update is in progress; output commands are rejected until the FPGA reboots"

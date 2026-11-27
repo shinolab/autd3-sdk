@@ -42,15 +42,6 @@ fn ensure_cpu_supported(infos: &[FirmwareVersion]) -> Result<(), OtaError> {
     }
 }
 
-async fn ensure_fpga_update_supported(client: &Connected) -> Result<(), OtaError> {
-    let infos = client.read_firmware_version().await?;
-    ensure_cpu_supported(&infos)?;
-    match infos.iter().position(|info| !info.supports_fpga_ota()) {
-        None => Ok(()),
-        Some(device) => Err(OtaError::FpgaUpdateUnsupported { device }),
-    }
-}
-
 pub(crate) async fn ensure_fpga_reconfigured(client: &Connected) -> Result<(), OtaError> {
     match client
         .read_firmware_version()
@@ -96,7 +87,7 @@ pub(crate) async fn update_fpga(
     client: &Connected,
     image: &FpgaFirmwareImage,
 ) -> Result<(), OtaError> {
-    ensure_fpga_update_supported(client).await?;
+    ensure_cpu_supported(&client.read_firmware_version().await?)?;
     let bytes = image.as_bytes();
     client
         .send(FpgaUpdateBegin {

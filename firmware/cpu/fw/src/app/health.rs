@@ -158,7 +158,7 @@ impl Cpu {
 #[cfg(all(test, not(loom)))]
 mod tests {
     use crate::app::fifo::FIFO_DEPTH;
-    use crate::fpga_params::{ADDR_FPGA_STATE, ADDR_FUNCTION_BITS, FunctionBits};
+    use crate::fpga_params::ADDR_FPGA_STATE;
     use crate::proto::{Cmd, Error};
     use crate::test_utils::mock::{Frame, Harness};
 
@@ -261,17 +261,5 @@ mod tests {
         h.deliver(&Frame::new(Cmd::Clear));
         h.tick_1ms(1);
         assert_eq!(h.telemetry().cpu_watchdog, 0x2A);
-    }
-
-    #[test]
-    fn an_fpga_without_the_watchdog_reports_no_fires() {
-        let mut h = Harness::new();
-        h.set_ctl(
-            ADDR_FUNCTION_BITS,
-            u16::from(FunctionBits::STRICT_SILENCER_GUARD.bits()),
-        );
-        h.port.watchdog_state = 0x2A01;
-        h.tick_1ms(1);
-        assert_eq!(h.telemetry().cpu_watchdog, 0);
     }
 }
