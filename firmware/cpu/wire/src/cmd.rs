@@ -33,8 +33,6 @@ crate::wire_enum_u8! {
         FpgaUpdateActivate = 0x78,
         ReadFirmwareInfo = 0xEB,
         ReadRunningImage = 0xEC,
-        WriteFpgaMemory = 0xF0,
-        ReadFpgaMemory = 0xF1,
     }
 }
 

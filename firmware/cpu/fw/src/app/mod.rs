@@ -180,8 +180,6 @@ impl Cpu {
             Cmd::Nop => Ok(()),
             Cmd::SetCpuConfig => self.set_cpu_config(port, payload),
             Cmd::ReadFirmwareInfo => return Ok(self.read_firmware_info(port)),
-            Cmd::ReadFpgaMemory => return cmd::fpga_memory::read(port, payload),
-            Cmd::WriteFpgaMemory => cmd::fpga_memory::write(port, payload),
             Cmd::ReadRunningImage => {
                 return self
                     .running_image(port)

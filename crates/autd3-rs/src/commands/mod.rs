@@ -16,8 +16,8 @@ pub use operation::{
 };
 #[doc(hidden)]
 pub use operation::{
-    FpgaMemoryRead, FpgaMemoryWrite, FpgaUpdateActivate, FpgaUpdateBegin, FpgaUpdateChunk,
-    FpgaUpdateCommit, Reboot, UpdateBegin, UpdateChunk, UpdateCommit, UpdateConfirm,
+    FpgaUpdateActivate, FpgaUpdateBegin, FpgaUpdateChunk, FpgaUpdateCommit, Reboot, UpdateBegin,
+    UpdateChunk, UpdateCommit, UpdateConfirm,
 };
 pub use stm::{FociStm, FociStmOption, PatternStm, PatternStmOption};
 
