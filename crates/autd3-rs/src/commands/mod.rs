@@ -6,6 +6,8 @@ pub(crate) mod stm;
 pub use modulation::Modulation;
 pub use pattern::Pattern;
 
+#[doc(hidden)]
+pub use autd3_cpu_wire::payload::TdcSource;
 pub use operation::{
     ActivateModulationBank, ActivatePatternBank, Clear, ConfigFociStm, ConfigModulation,
     ConfigPattern, CpuConfig, Distribution, EmulateGpioIn, FixedCompletionTime, FixedUpdateRate,
@@ -16,8 +18,8 @@ pub use operation::{
 };
 #[doc(hidden)]
 pub use operation::{
-    FpgaUpdateActivate, FpgaUpdateBegin, FpgaUpdateChunk, FpgaUpdateCommit, Reboot, UpdateBegin,
-    UpdateChunk, UpdateCommit, UpdateConfirm,
+    FpgaUpdateActivate, FpgaUpdateBegin, FpgaUpdateChunk, FpgaUpdateCommit, Reboot,
+    StartTdcCapture, UpdateBegin, UpdateChunk, UpdateCommit, UpdateConfirm,
 };
 pub use stm::{FociStm, FociStmOption, PatternStm, PatternStmOption};
 

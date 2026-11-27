@@ -18,9 +18,9 @@ use crate::fpga_params::{
     ADDR_PATTERN_MEM_WR_PAGE, ADDR_PATTERN_REP0, ADDR_PATTERN_REQ_RD_BANK,
     ADDR_PATTERN_TRANSITION_MODE, ADDR_SILENCER_COMPLETION_STEPS_PHASE, ADDR_SILENCER_FLAG,
     ADDR_SILENCER_SET_RESULT, ADDR_SYNC_PS_CTL, ADDR_SYNC_PS_KF, ADDR_SYNC_PS_KI, ADDR_SYNC_PS_KP,
-    ADDR_WATCHDOG_KICK, ADDR_WATCHDOG_RELEASE, ADDR_WATCHDOG_STATE, ADDR_WATCHDOG_TIMEOUT,
-    BramSelect, CtlFlags, FLASH_BUF_BYTES, FlashErr, FlashOp, FunctionBits, NUM_BANKS,
-    SET_RESULT_TRANSITION_INVALID_BIT,
+    ADDR_SYNC_PS_STATS_CTL, ADDR_WATCHDOG_KICK, ADDR_WATCHDOG_RELEASE, ADDR_WATCHDOG_STATE,
+    ADDR_WATCHDOG_TIMEOUT, BramSelect, CtlFlags, FLASH_BUF_BYTES, FlashErr, FlashOp, FunctionBits,
+    NUM_BANKS, SET_RESULT_TRANSITION_INVALID_BIT,
 };
 use crate::port::{FlashError, Port};
 use crate::proto::{
@@ -111,6 +111,8 @@ pub(crate) struct MockPort {
     pub watchdog_log: Vec<WatchdogEvent>,
     pub sync_ps_ctl: Option<u16>,
     pub sync_ps_gains: [Option<u16>; 3],
+    pub sync_ps_stats_ctl_writes: Vec<u16>,
+    pub sync_ps_regs: [u16; 256],
     isr_frame: Option<(Rc<Cpu>, u8)>,
     pub isr_seen_reply: Option<Reply>,
 }
@@ -176,6 +178,8 @@ impl MockPort {
             watchdog_log: Vec::new(),
             sync_ps_ctl: None,
             sync_ps_gains: [None; 3],
+            sync_ps_stats_ctl_writes: Vec::new(),
+            sync_ps_regs: [0; 256],
             isr_frame: None,
             isr_seen_reply: None,
         }
@@ -256,6 +260,9 @@ impl MockPort {
             },
             Some(BramSelect::SyncPs) if addr & 0xFF == ADDR_SYNC_PS_CTL => {
                 self.sync_ps_ctl = Some(value);
+            }
+            Some(BramSelect::SyncPs) if addr & 0xFF == ADDR_SYNC_PS_STATS_CTL => {
+                self.sync_ps_stats_ctl_writes.push(value);
             }
             Some(BramSelect::SyncPs)
                 if matches!(
@@ -417,6 +424,9 @@ impl Port for MockPort {
                 ADDR_WATCHDOG_STATE => self.watchdog_state,
                 _ => 0,
             };
+        }
+        if select == BramSelect::SyncPs.as_u8() {
+            return self.sync_ps_regs[usize::from(addr & 0xFF)];
         }
         if select == BramSelect::Flash.as_u8() {
             if addr & 0xFF == ADDR_FLASH_STATUS {

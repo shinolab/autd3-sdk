@@ -12,6 +12,7 @@ mod set_output_mask;
 mod set_phase_correction;
 mod set_pulse_width_table;
 mod set_silencer;
+mod start_tdc_capture;
 mod update;
 mod write_foci_buffer;
 mod write_modulation_buffer;
@@ -33,6 +34,8 @@ pub use set_output_mask::SetOutputMask;
 pub use set_phase_correction::SetPhaseCorrection;
 pub use set_pulse_width_table::{PWE_TABLE_SIZE, SetPulseWidthTable};
 pub use set_silencer::{FixedCompletionTime, FixedUpdateRate, SetSilencer, SilencerConfig};
+#[doc(hidden)]
+pub use start_tdc_capture::StartTdcCapture;
 #[doc(hidden)]
 pub use update::{
     FpgaUpdateActivate, FpgaUpdateBegin, FpgaUpdateChunk, FpgaUpdateCommit, Reboot, UpdateBegin,

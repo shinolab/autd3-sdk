@@ -12,20 +12,25 @@ use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::{Mutex, PoisonError};
 use std::time::Instant;
 
-use autd3_cpu_wire::payload::FirmwareInfo;
+use autd3_cpu_wire::payload::{
+    FirmwareInfo, ReadSyncPsStatsPayload, ReadTdcPayload, SyncPsStats, TDC_CHUNK_SAMPLES,
+    TDC_SAMPLES, TdcChunk,
+};
 use autd3_cpu_wire::udp::{Flags, Kind};
 use autd3_cpu_wire::update::RunningImage;
 use autd3_rs_core::{MAX_DEVICES, MAX_INFLIGHT};
-use zerocopy::{FromBytes, FromZeros, IntoBytes};
+use zerocopy::little_endian::U16;
+use zerocopy::{FromBytes, FromZeros, IntoBytes, TryFromBytes};
 
 use crate::commands::Command;
-use crate::commands::operation::Distribution;
+use crate::commands::operation::{Distribution, encode_header_only};
 use crate::datagram::{Datagram, Frame, Frames};
 use crate::error::{Error, PayloadError};
 use crate::firmware_version::FirmwareVersion;
 use crate::geometry::Geometry;
 use crate::protocol::{Cmd, DeviceErrorCode, FrameHeader, PAYLOAD_BYTES};
 use crate::response::Response;
+use crate::sync_ps::TdcCapture;
 use crate::udp::{Channel, DeviceReply, TransportOption, UdpError};
 use crate::value::SysTime;
 
@@ -309,6 +314,54 @@ impl Controller {
                 }),
             })
             .collect()
+    }
+
+    #[doc(hidden)]
+    pub async fn read_sync_ps_stats(&self, clear: bool) -> Result<Vec<SyncPsStats>, Error> {
+        let mut datagram = [Datagram::no_payload(Cmd::ReadSyncPsStats)];
+        encode_header_only(
+            &mut datagram[0],
+            Cmd::ReadSyncPsStats,
+            &ReadSyncPsStatsPayload { clear },
+        );
+        let response = self
+            .send_and_collect(Frame::new(Distribution::Broadcast, &datagram))
+            .await?;
+        response.check()?;
+        response.parse_each_device(|value| SyncPsStats::read_from_bytes(value).ok())
+    }
+
+    #[doc(hidden)]
+    pub async fn read_tdc(&self) -> Result<Vec<TdcCapture>, Error> {
+        let mut captures = vec![
+            TdcCapture {
+                capturing: false,
+                locked: true,
+                samples: [0; TDC_SAMPLES],
+            };
+            self.num_devices()
+        ];
+        for (chunk_id, chunk) in (0u8..).zip(0..TDC_SAMPLES / TDC_CHUNK_SAMPLES) {
+            let mut datagram = [Datagram::no_payload(Cmd::ReadTdc)];
+            encode_header_only(
+                &mut datagram[0],
+                Cmd::ReadTdc,
+                &ReadTdcPayload { chunk: chunk_id },
+            );
+            let response = self
+                .send_and_collect(Frame::new(Distribution::Broadcast, &datagram))
+                .await?;
+            response.check()?;
+            let chunks =
+                response.parse_each_device(|value| TdcChunk::try_read_from_bytes(value).ok())?;
+            for (capture, received) in captures.iter_mut().zip(chunks) {
+                capture.capturing |= received.capturing;
+                capture.locked &= received.locked;
+                capture.samples[chunk * TDC_CHUNK_SAMPLES..][..TDC_CHUNK_SAMPLES]
+                    .copy_from_slice(&received.samples.map(U16::get));
+            }
+        }
+        Ok(captures)
     }
 }
 

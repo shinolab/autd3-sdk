@@ -4,6 +4,7 @@ use std::time::{Duration, Instant};
 use autd3_rs_core::MAX_INFLIGHT;
 use tokio::task::JoinHandle;
 
+use crate::SyncPsStats;
 use crate::commands::Command;
 use crate::controller::{Controller, ExecAt, InflightFrames};
 use crate::datagram::Frames;
@@ -11,6 +12,7 @@ use crate::error::Error;
 use crate::firmware_version::FirmwareVersion;
 use crate::geometry::Geometry;
 use crate::response::Response;
+use crate::sync_ps::TdcCapture;
 use crate::udp::TransportOption;
 use crate::value::SysTime;
 
@@ -128,6 +130,16 @@ impl Client {
 
     pub async fn read_firmware_version(&mut self) -> Result<Vec<FirmwareVersion>, Error> {
         self.controller.read_firmware_version().await
+    }
+
+    #[doc(hidden)]
+    pub async fn read_sync_ps_stats(&mut self, clear: bool) -> Result<Vec<SyncPsStats>, Error> {
+        self.controller.read_sync_ps_stats(clear).await
+    }
+
+    #[doc(hidden)]
+    pub async fn read_tdc(&mut self) -> Result<Vec<TdcCapture>, Error> {
+        self.controller.read_tdc().await
     }
 }
 
