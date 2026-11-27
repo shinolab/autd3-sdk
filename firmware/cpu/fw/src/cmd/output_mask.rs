@@ -1,15 +1,12 @@
 pub(crate) use autd3_cpu_wire::payload::OutputMaskPayload;
 
 use crate::fpga;
-use crate::fpga_params::BramSelect;
 use crate::port::Port;
 use crate::proto::Error;
 
 pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
     let p = OutputMaskPayload::parse(payload)?;
-    for (j, word) in p.words.iter().enumerate() {
-        fpga::write(port, BramSelect::OutputMask, j as u16, word.get());
-    }
+    fpga::output_mask(port).write_words(p.words.iter().map(|word| word.get()));
     Ok(())
 }
 

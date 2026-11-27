@@ -7,10 +7,11 @@ use crate::proto::Error;
 
 pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
     let p = GpioOutPayload::parse(payload)?;
+    let mut ctl = fpga::controller(port);
     for (i, value) in p.values.iter().enumerate() {
-        fpga::write_u64(port, ADDR_DEBUG_VALUE0_0 + 4 * i as u16, value.get());
+        ctl.write_u64(ADDR_DEBUG_VALUE0_0 + 4 * i as u16, value.get());
     }
-    fpga::set_and_wait_update(port, CtlFlags::DEBUG_SET, fpga::FPGA_WAIT_UPDATE_MAX_POLLS)
+    ctl.set_and_wait_update(CtlFlags::DEBUG_SET, fpga::FPGA_WAIT_UPDATE_MAX_POLLS)
 }
 
 #[cfg(all(test, not(loom)))]

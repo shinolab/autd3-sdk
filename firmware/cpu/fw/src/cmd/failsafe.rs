@@ -21,9 +21,10 @@ pub(crate) fn ptp_unlock_expired(cpu: &Cpu, config: &CpuConfig) -> bool {
 }
 
 fn set<P: Port>(port: &mut P, active: bool) {
-    let mut ctl = CtlFlags::from_bits_retain(fpga::read_ctl(port, ADDR_CTL_FLAG));
+    let mut fpga_ctl = fpga::controller(port);
+    let mut ctl = CtlFlags::from_bits_retain(fpga_ctl.read(ADDR_CTL_FLAG));
     ctl.set(CtlFlags::FAILSAFE, active);
-    fpga::write_ctl(port, ADDR_CTL_FLAG, ctl.bits());
+    fpga_ctl.write(ADDR_CTL_FLAG, ctl.bits());
 }
 
 pub(crate) fn mute<P: Port>(port: &mut P) {
@@ -35,8 +36,9 @@ pub(crate) fn release<P: Port>(port: &mut P, cpu: &Cpu, config: &CpuConfig) -> R
         return Err(Error::FailsafeConditionActive);
     }
     set(port, false);
-    fpga::set_watchdog_timeout(port, config.cpu_watchdog_timeout);
-    fpga::release_watchdog(port);
+    let mut watchdog = fpga::watchdog(port);
+    watchdog.set_timeout(config.cpu_watchdog_timeout);
+    watchdog.release();
     Ok(())
 }
 

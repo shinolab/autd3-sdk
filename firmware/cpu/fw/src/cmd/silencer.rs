@@ -15,28 +15,16 @@ pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error>
     let (update_rate_intensity, update_rate_phase) = p.update_rate();
     let (completion_steps_intensity, completion_steps_phase) = p.completion_steps();
 
-    fpga::write_ctl(
-        port,
-        ADDR_SILENCER_UPDATE_RATE_INTENSITY,
-        update_rate_intensity,
-    );
-    fpga::write_ctl(port, ADDR_SILENCER_UPDATE_RATE_PHASE, update_rate_phase);
-    fpga::write_ctl(
-        port,
+    let mut ctl = fpga::controller(port);
+    ctl.write(ADDR_SILENCER_UPDATE_RATE_INTENSITY, update_rate_intensity);
+    ctl.write(ADDR_SILENCER_UPDATE_RATE_PHASE, update_rate_phase);
+    ctl.write(
         ADDR_SILENCER_COMPLETION_STEPS_INTENSITY,
         completion_steps_intensity,
     );
-    fpga::write_ctl(
-        port,
-        ADDR_SILENCER_COMPLETION_STEPS_PHASE,
-        completion_steps_phase,
-    );
-    fpga::write_ctl(port, ADDR_SILENCER_FLAG, u16::from(flag.bits()));
-    fpga::set_and_wait_update(
-        port,
-        CtlFlags::SILENCER_SET,
-        fpga::FPGA_WAIT_UPDATE_MAX_POLLS,
-    )
+    ctl.write(ADDR_SILENCER_COMPLETION_STEPS_PHASE, completion_steps_phase);
+    ctl.write(ADDR_SILENCER_FLAG, u16::from(flag.bits()));
+    ctl.set_and_wait_update(CtlFlags::SILENCER_SET, fpga::FPGA_WAIT_UPDATE_MAX_POLLS)
 }
 
 #[cfg(all(test, not(loom)))]

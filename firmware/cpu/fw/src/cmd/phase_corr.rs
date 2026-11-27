@@ -1,15 +1,12 @@
 pub(crate) use autd3_cpu_wire::payload::PhaseCorrPayload;
 
 use crate::fpga;
-use crate::fpga_params::BramSelect;
 use crate::port::Port;
 use crate::proto::Error;
 
 pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
     let p = PhaseCorrPayload::parse(payload)?;
-    for (j, word) in fpga::le_words(&p.data, 0).enumerate() {
-        fpga::write(port, BramSelect::PhaseCorr, j as u16, word);
-    }
+    fpga::phase_corr(port).write_le_bytes(&p.data, 0);
     Ok(())
 }
 

@@ -8,9 +8,10 @@ use crate::proto::Error;
 pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
     let cfg = ConfigModPayload::parse(payload)?;
     let bank_offset = u16::from(cfg.bank().as_u8());
-    fpga::write_ctl(port, ADDR_MOD_CYCLE0 + bank_offset, (cfg.size() - 1) as u16);
-    fpga::write_ctl(port, ADDR_MOD_FREQ_DIV0 + bank_offset, cfg.divider());
-    fpga::write_ctl(port, ADDR_MOD_REP0 + bank_offset, cfg.rep());
+    let mut ctl = fpga::controller(port);
+    ctl.write(ADDR_MOD_CYCLE0 + bank_offset, (cfg.size() - 1) as u16);
+    ctl.write(ADDR_MOD_FREQ_DIV0 + bank_offset, cfg.divider());
+    ctl.write(ADDR_MOD_REP0 + bank_offset, cfg.rep());
     Ok(())
 }
 

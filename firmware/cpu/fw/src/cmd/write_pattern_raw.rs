@@ -3,7 +3,7 @@ pub(crate) use autd3_cpu_wire::payload::WritePatternRawPayload;
 use autd3_cpu_wire::PatternBank;
 use autd3_cpu_wire::layout::PATTERN_RAW_DATA_LEN;
 
-use crate::fpga::{self, EMISSION_RAM};
+use crate::fpga;
 use crate::port::Port;
 use crate::proto::{EMISSION_SLOT_WORDS, Error};
 
@@ -22,9 +22,7 @@ pub(crate) fn write_slot<P: Port>(
     index: u32,
     data: &[u8; PATTERN_RAW_DATA_LEN],
 ) {
-    fpga::write_ram_words(
-        port,
-        &EMISSION_RAM,
+    fpga::emission_ram(port).write_words(
         bank.as_u8(),
         index * EMISSION_SLOT_WORDS,
         data.as_chunks::<2>()

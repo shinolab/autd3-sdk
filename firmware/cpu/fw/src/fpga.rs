@@ -46,60 +46,144 @@ pub use autd3_cpu_wire::payload::{
 pub const PHASE_CORR_WORDS: usize = NUM_TRANSDUCERS.div_ceil(2);
 const DEBUG_VALUE_WORDS: u16 = 16;
 
-pub fn write<P: Port>(port: &mut P, select: BramSelect, addr: u16, value: u16) {
-    port.fpga_write((u16::from(select.as_u8()) << 8) | addr, value);
+fn le_words(data: &[u8], pad: u8) -> impl Iterator<Item = u16> {
+    let (pairs, tail) = data.as_chunks::<2>();
+    pairs
+        .iter()
+        .map(|pair| u16::from_le_bytes(*pair))
+        .chain(tail.first().map(|byte| u16::from_le_bytes([*byte, pad])))
 }
 
-pub fn read<P: Port>(port: &mut P, select: BramSelect, addr: u16) -> u16 {
-    port.fpga_read((u16::from(select.as_u8()) << 8) | addr)
+pub struct Bram<'a, P: Port> {
+    port: &'a mut P,
+    select: BramSelect,
 }
 
-pub fn write_ctl<P: Port>(port: &mut P, addr: u16, value: u16) {
-    write(port, BramSelect::Controller, addr, value);
-}
+impl<P: Port> Bram<'_, P> {
+    fn addr(select: BramSelect, addr: u16) -> u16 {
+        (u16::from(select.as_u8()) << 8) | addr
+    }
 
-pub fn read_ctl<P: Port>(port: &mut P, addr: u16) -> u16 {
-    read(port, BramSelect::Controller, addr)
-}
+    pub fn write(&mut self, addr: u16, value: u16) {
+        self.port.fpga_write(Self::addr(self.select, addr), value);
+    }
 
-fn write_switch<P: Port>(port: &mut P, reg: u16, value: u16) {
-    port.memory_barrier();
-    write_ctl(port, reg, value);
-    port.memory_barrier();
-}
+    #[must_use]
+    pub fn read(&mut self, addr: u16) -> u16 {
+        self.port.fpga_read(Self::addr(self.select, addr))
+    }
 
-pub fn functions<P: Port>(port: &mut P) -> FunctionBits {
-    match read_ctl(port, ADDR_FUNCTION_BITS) as u8 {
-        0xFF => FunctionBits::empty(),
-        bits => FunctionBits::from_bits_retain(bits),
+    pub fn write_words(&mut self, words: impl IntoIterator<Item = u16>) {
+        (0..)
+            .zip(words)
+            .for_each(|(addr, word)| self.write(addr, word));
+    }
+
+    pub fn write_le_bytes(&mut self, src: &[u8], pad: u8) {
+        self.write_words(le_words(src, pad));
     }
 }
 
-pub fn watchdog_kick<P: Port>(port: &mut P) {
-    write(port, BramSelect::Watchdog, ADDR_WATCHDOG_KICK, 0);
-}
-
-pub fn set_watchdog_timeout<P: Port>(port: &mut P, timeout: Option<Duration>) {
-    let ms = timeout.map_or(0, |timeout| {
-        u16::try_from(timeout.as_millis()).unwrap_or(u16::MAX)
-    });
-    write(port, BramSelect::Watchdog, ADDR_WATCHDOG_TIMEOUT, ms);
-}
-
-pub fn release_watchdog<P: Port>(port: &mut P) {
-    write(port, BramSelect::Watchdog, ADDR_WATCHDOG_RELEASE, 0);
-}
-
-pub fn apply_fpga_config<P: Port>(port: &mut P, config: &FpgaConfig) {
-    write(port, BramSelect::SyncPs, ADDR_SYNC_PS_KP, config.sync_kp);
-    write(port, BramSelect::SyncPs, ADDR_SYNC_PS_KI, config.sync_ki);
-    write(port, BramSelect::SyncPs, ADDR_SYNC_PS_KF, config.sync_kf);
-    write(
+pub fn phase_corr<P: Port>(port: &mut P) -> Bram<'_, P> {
+    Bram {
         port,
-        BramSelect::SyncPs,
-        ADDR_SYNC_PS_CTL,
-        u16::from(config.sync_phase_lock),
-    );
+        select: BramSelect::PhaseCorr,
+    }
+}
+
+pub fn output_mask<P: Port>(port: &mut P) -> Bram<'_, P> {
+    Bram {
+        port,
+        select: BramSelect::OutputMask,
+    }
+}
+
+pub fn pwe_table<P: Port>(port: &mut P) -> Bram<'_, P> {
+    Bram {
+        port,
+        select: BramSelect::PweTable,
+    }
+}
+
+pub fn flash<P: Port>(port: &mut P) -> Bram<'_, P> {
+    Bram {
+        port,
+        select: BramSelect::Flash,
+    }
+}
+
+pub fn flash_buf<P: Port>(port: &mut P) -> Bram<'_, P> {
+    Bram {
+        port,
+        select: BramSelect::FlashBuf,
+    }
+}
+
+pub struct Controller<'a, P: Port> {
+    bram: Bram<'a, P>,
+}
+
+pub fn controller<P: Port>(port: &mut P) -> Controller<'_, P> {
+    Controller {
+        bram: Bram {
+            select: BramSelect::Controller,
+            port,
+        },
+    }
+}
+
+impl<P: Port> Controller<'_, P> {
+    pub fn write(&mut self, addr: u16, value: u16) {
+        self.bram.write(addr, value);
+    }
+
+    #[must_use]
+    pub fn read(&mut self, addr: u16) -> u16 {
+        self.bram.read(addr)
+    }
+
+    pub fn write_u64(&mut self, addr: u16, value: u64) {
+        for i in 0..4u16 {
+            self.write(addr + i, (value >> (16 * i)) as u16);
+        }
+    }
+
+    #[must_use]
+    pub fn functions(&mut self) -> FunctionBits {
+        match self.read(ADDR_FUNCTION_BITS) as u8 {
+            0xFF => FunctionBits::empty(),
+            bits => FunctionBits::from_bits_retain(bits),
+        }
+    }
+
+    pub fn set_and_wait_update(
+        &mut self,
+        flags: CtlFlags,
+        max_polls: NonZeroU32,
+    ) -> Result<(), Error> {
+        let flag = flags.bits();
+        let persistent = self.read(ADDR_CTL_FLAG);
+        self.write(ADDR_CTL_FLAG, persistent | flag);
+        for _ in 0..max_polls.get() {
+            if (self.read(ADDR_CTL_FLAG) & flag) == 0 {
+                let result = self.read(ADDR_SILENCER_SET_RESULT);
+                return if (result & flag) == 0 {
+                    Ok(())
+                } else if result & (1 << SET_RESULT_TRANSITION_INVALID_BIT) != 0 {
+                    Err(Error::InvalidTransitionMode)
+                } else {
+                    Err(Error::InvalidSilencerSetting)
+                };
+            }
+        }
+        Err(Error::FpgaTimeout)
+    }
+
+    fn write_switch(&mut self, reg: u16, value: u16) {
+        self.bram.port.memory_barrier();
+        self.write(reg, value);
+        self.bram.port.memory_barrier();
+    }
 }
 
 #[derive(Default)]
@@ -108,196 +192,204 @@ pub struct WatchdogState {
     pub count: u8,
 }
 
-pub fn watchdog_state<P: Port>(port: &mut P) -> WatchdogState {
-    if !functions(port).contains(FunctionBits::CPU_WATCHDOG) {
-        return WatchdogState::default();
-    }
-    let raw = read(port, BramSelect::Watchdog, ADDR_WATCHDOG_STATE);
-    WatchdogState {
-        fired: raw & 1 != 0,
-        count: (raw >> 8) as u8,
+pub struct Watchdog<'a, P: Port> {
+    bram: Bram<'a, P>,
+}
+
+pub fn watchdog<P: Port>(port: &mut P) -> Watchdog<'_, P> {
+    Watchdog {
+        bram: Bram {
+            port,
+            select: BramSelect::Watchdog,
+        },
     }
 }
 
-pub fn set_and_wait_update<P: Port>(
-    port: &mut P,
-    flags: CtlFlags,
-    max_polls: NonZeroU32,
-) -> Result<(), Error> {
-    let flag = flags.bits();
-    let persistent = read_ctl(port, ADDR_CTL_FLAG);
-    write_ctl(port, ADDR_CTL_FLAG, persistent | flag);
-    for _ in 0..max_polls.get() {
-        if (read_ctl(port, ADDR_CTL_FLAG) & flag) == 0 {
-            let result = read_ctl(port, ADDR_SILENCER_SET_RESULT);
-            return if (result & flag) == 0 {
-                Ok(())
-            } else if result & (1 << SET_RESULT_TRANSITION_INVALID_BIT) != 0 {
-                Err(Error::InvalidTransitionMode)
-            } else {
-                Err(Error::InvalidSilencerSetting)
-            };
+impl<P: Port> Watchdog<'_, P> {
+    pub fn kick(&mut self) {
+        self.bram.write(ADDR_WATCHDOG_KICK, 0);
+    }
+
+    pub fn set_timeout(&mut self, timeout: Option<Duration>) {
+        let ms = timeout.map_or(0, |timeout| {
+            u16::try_from(timeout.as_millis()).unwrap_or(u16::MAX)
+        });
+        self.bram.write(ADDR_WATCHDOG_TIMEOUT, ms);
+    }
+
+    pub fn release(&mut self) {
+        self.bram.write(ADDR_WATCHDOG_RELEASE, 0);
+    }
+
+    #[must_use]
+    pub fn state(&mut self) -> WatchdogState {
+        if !controller(self.bram.port)
+            .functions()
+            .contains(FunctionBits::CPU_WATCHDOG)
+        {
+            return WatchdogState::default();
+        }
+        let raw = self.bram.read(ADDR_WATCHDOG_STATE);
+        WatchdogState {
+            fired: raw & 1 != 0,
+            count: (raw >> 8) as u8,
         }
     }
-    Err(Error::FpgaTimeout)
 }
 
-pub fn write_u64<P: Port>(port: &mut P, addr: u16, value: u64) {
-    for i in 0..4u16 {
-        write_ctl(port, addr + i, (value >> (16 * i)) as u16);
+pub struct SyncPs<'a, P: Port> {
+    bram: Bram<'a, P>,
+}
+
+pub fn sync_ps<P: Port>(port: &mut P) -> SyncPs<'_, P> {
+    SyncPs {
+        bram: Bram {
+            port,
+            select: BramSelect::SyncPs,
+        },
     }
 }
 
-pub struct Ram {
-    select: BramSelect,
+impl<P: Port> SyncPs<'_, P> {
+    pub fn apply(&mut self, config: &FpgaConfig) {
+        self.bram.write(ADDR_SYNC_PS_KP, config.sync_kp);
+        self.bram.write(ADDR_SYNC_PS_KI, config.sync_ki);
+        self.bram.write(ADDR_SYNC_PS_KF, config.sync_kf);
+        self.bram
+            .write(ADDR_SYNC_PS_CTL, u16::from(config.sync_phase_lock));
+    }
+}
+
+pub struct Ram<'a, P: Port> {
+    bram: Bram<'a, P>,
     wr_bank_reg: u16,
     wr_page_reg: u16,
 }
 
-pub const MOD_RAM: Ram = Ram {
-    select: BramSelect::Mod,
-    wr_bank_reg: ADDR_MOD_MEM_WR_BANK,
-    wr_page_reg: ADDR_MOD_MEM_WR_PAGE,
-};
-
-pub const EMISSION_RAM: Ram = Ram {
-    select: BramSelect::Emission,
-    wr_bank_reg: ADDR_PATTERN_MEM_WR_BANK,
-    wr_page_reg: ADDR_PATTERN_MEM_WR_PAGE,
-};
-
-pub fn le_words(data: &[u8], pad: u8) -> impl Iterator<Item = u16> {
-    let (pairs, tail) = data.as_chunks::<2>();
-    pairs
-        .iter()
-        .map(|pair| u16::from_le_bytes(*pair))
-        .chain(tail.first().map(|byte| u16::from_le_bytes([*byte, pad])))
+pub fn mod_ram<P: Port>(port: &mut P) -> Ram<'_, P> {
+    Ram {
+        bram: Bram {
+            port,
+            select: BramSelect::Mod,
+        },
+        wr_bank_reg: ADDR_MOD_MEM_WR_BANK,
+        wr_page_reg: ADDR_MOD_MEM_WR_PAGE,
+    }
 }
 
-pub fn write_ram<P: Port>(port: &mut P, ram: &Ram, bank: u8, offset: u32, src: &[u8]) {
-    write_ram_words(port, ram, bank, offset, le_words(src, 0));
+pub fn emission_ram<P: Port>(port: &mut P) -> Ram<'_, P> {
+    Ram {
+        bram: Bram {
+            port,
+            select: BramSelect::Emission,
+        },
+        wr_bank_reg: ADDR_PATTERN_MEM_WR_BANK,
+        wr_page_reg: ADDR_PATTERN_MEM_WR_PAGE,
+    }
 }
 
-pub fn write_ram_words<P: Port>(
-    port: &mut P,
-    ram: &Ram,
-    bank: u8,
-    offset: u32,
-    words: impl Iterator<Item = u16>,
-) {
-    write_ram_at(port, ram, bank, (offset..).zip(words));
-}
+impl<P: Port> Ram<'_, P> {
+    pub fn write(&mut self, bank: u8, offset: u32, src: &[u8]) {
+        self.write_words(bank, offset, le_words(src, 0));
+    }
 
-pub fn write_ram_at<P: Port>(
-    port: &mut P,
-    ram: &Ram,
-    bank: u8,
-    words: impl Iterator<Item = (u32, u16)>,
-) {
-    let mut words = words.peekable();
-    let Some(&(first, _)) = words.peek() else {
-        return;
-    };
-    write_switch(port, ram.wr_bank_reg, u16::from(bank));
-    let mut page = first / FPGA_PAGE_WORDS;
-    write_switch(port, ram.wr_page_reg, page as u16);
-    words.for_each(|(word_idx, word)| {
-        let p = word_idx / FPGA_PAGE_WORDS;
-        if p != page {
-            page = p;
-            write_switch(port, ram.wr_page_reg, page as u16);
-        }
-        write(port, ram.select, (word_idx % FPGA_PAGE_WORDS) as u16, word);
-    });
+    pub fn write_words(&mut self, bank: u8, offset: u32, words: impl Iterator<Item = u16>) {
+        self.write_at(bank, (offset..).zip(words));
+    }
+
+    pub fn write_at(&mut self, bank: u8, words: impl Iterator<Item = (u32, u16)>) {
+        let mut words = words.peekable();
+        let Some(&(first, _)) = words.peek() else {
+            return;
+        };
+        let wr_bank_reg = self.wr_bank_reg;
+        let wr_page_reg = self.wr_page_reg;
+        controller(self.bram.port).write_switch(wr_bank_reg, u16::from(bank));
+        let mut page = first / FPGA_PAGE_WORDS;
+        controller(self.bram.port).write_switch(wr_page_reg, page as u16);
+        words.for_each(|(word_idx, word)| {
+            let p = word_idx / FPGA_PAGE_WORDS;
+            if p != page {
+                page = p;
+                controller(self.bram.port).write_switch(wr_page_reg, page as u16);
+            }
+            self.bram.write((word_idx % FPGA_PAGE_WORDS) as u16, word);
+        });
+    }
 }
 
 pub fn init<P: Port>(port: &mut P) -> Result<(), Error> {
-    let gate = CtlFlags::from_bits_retain(read_ctl(port, ADDR_CTL_FLAG)) & CtlFlags::FAILSAFE;
-    write_ctl(port, ADDR_CTL_FLAG, gate.bits());
-    write_ctl(
-        port,
+    for bank in 0..NUM_BANKS as u8 {
+        mod_ram(port).write_words(bank, 0, core::iter::once(0xFFFF));
+        emission_ram(port).write_words(bank, 0, core::iter::repeat_n(0, NUM_TRANSDUCERS));
+    }
+    phase_corr(port).write_words(core::iter::repeat_n(0, PHASE_CORR_WORDS));
+    output_mask(port).write_words(core::iter::repeat_n(0xFFFF, OUTPUT_MASK_WORDS));
+    pwe_table(port).write_words(PWE_DEFAULT_TABLE.iter().copied());
+
+    let mut ctl = controller(port);
+    let gate = CtlFlags::from_bits_retain(ctl.read(ADDR_CTL_FLAG)) & CtlFlags::FAILSAFE;
+    ctl.write(ADDR_CTL_FLAG, gate.bits());
+    ctl.write(
         ADDR_SILENCER_UPDATE_RATE_INTENSITY,
         SILENCER_DEFAULT_UPDATE_RATE,
     );
-    write_ctl(
-        port,
+    ctl.write(
         ADDR_SILENCER_UPDATE_RATE_PHASE,
         SILENCER_DEFAULT_UPDATE_RATE,
     );
-    write_ctl(port, ADDR_SILENCER_FLAG, 0);
-    write_ctl(
-        port,
+    ctl.write(ADDR_SILENCER_FLAG, 0);
+    ctl.write(
         ADDR_SILENCER_COMPLETION_STEPS_INTENSITY,
         SILENCER_DEFAULT_COMPLETION_STEPS_INTENSITY,
     );
-    write_ctl(
-        port,
+    ctl.write(
         ADDR_SILENCER_COMPLETION_STEPS_PHASE,
         SILENCER_DEFAULT_COMPLETION_STEPS_PHASE,
     );
-    write_ctl(
-        port,
+    ctl.write(
         ADDR_MOD_TRANSITION_MODE,
         TransitionModeKind::Immediate as u16,
     );
-    write_u64(port, ADDR_MOD_TRANSITION_VALUE_0, 0);
-    write_ctl(port, ADDR_MOD_REQ_RD_BANK, 0);
+    ctl.write_u64(ADDR_MOD_TRANSITION_VALUE_0, 0);
+    ctl.write(ADDR_MOD_REQ_RD_BANK, 0);
     for bank in 0..NUM_BANKS as u8 {
-        write_ctl(port, ADDR_MOD_CYCLE0 + u16::from(bank), 1);
-        write_ctl(port, ADDR_MOD_FREQ_DIV0 + u16::from(bank), 0xFFFF);
-        write_ctl(port, ADDR_MOD_REP0 + u16::from(bank), REP_INFINITE);
-        write_ram_words(port, &MOD_RAM, bank, 0, core::iter::once(0xFFFF));
+        ctl.write(ADDR_MOD_CYCLE0 + u16::from(bank), 1);
+        ctl.write(ADDR_MOD_FREQ_DIV0 + u16::from(bank), 0xFFFF);
+        ctl.write(ADDR_MOD_REP0 + u16::from(bank), REP_INFINITE);
     }
-    write_ctl(
-        port,
+    ctl.write(
         ADDR_PATTERN_TRANSITION_MODE,
         TransitionModeKind::Immediate as u16,
     );
-    write_u64(port, ADDR_PATTERN_TRANSITION_VALUE_0, 0);
-    write_ctl(port, ADDR_PATTERN_REQ_RD_BANK, 0);
+    ctl.write_u64(ADDR_PATTERN_TRANSITION_VALUE_0, 0);
+    ctl.write(ADDR_PATTERN_REQ_RD_BANK, 0);
     for bank in 0..NUM_BANKS as u8 {
-        write_ctl(
-            port,
+        ctl.write(
             ADDR_PATTERN_MODE0 + u16::from(bank),
             EmissionType::Raw as u16,
         );
-        write_ctl(port, ADDR_PATTERN_CYCLE0 + u16::from(bank), 0);
-        write_ctl(port, ADDR_PATTERN_FREQ_DIV0 + u16::from(bank), 0xFFFF);
-        write_ctl(port, ADDR_PATTERN_REP0 + u16::from(bank), REP_INFINITE);
-        write_ram_words(
-            port,
-            &EMISSION_RAM,
-            bank,
-            0,
-            core::iter::repeat_n(0, NUM_TRANSDUCERS),
-        );
-    }
-    for i in 0..PHASE_CORR_WORDS as u16 {
-        write(port, BramSelect::PhaseCorr, i, 0);
-    }
-    for i in 0..OUTPUT_MASK_WORDS as u16 {
-        write(port, BramSelect::OutputMask, i, 0xFFFF);
-    }
-
-    for (i, v) in PWE_DEFAULT_TABLE.iter().enumerate() {
-        write(port, BramSelect::PweTable, i as u16, *v);
+        ctl.write(ADDR_PATTERN_CYCLE0 + u16::from(bank), 0);
+        ctl.write(ADDR_PATTERN_FREQ_DIV0 + u16::from(bank), 0xFFFF);
+        ctl.write(ADDR_PATTERN_REP0 + u16::from(bank), REP_INFINITE);
     }
 
     for i in 0..DEBUG_VALUE_WORDS {
-        write_ctl(port, ADDR_DEBUG_VALUE0_0 + i, 0);
+        ctl.write(ADDR_DEBUG_VALUE0_0 + i, 0);
     }
 
-    set_and_wait_update(port, CtlFlags::SILENCER_SET, FPGA_WAIT_UPDATE_MAX_POLLS)?;
-    set_and_wait_update(
-        port,
+    ctl.set_and_wait_update(CtlFlags::SILENCER_SET, FPGA_WAIT_UPDATE_MAX_POLLS)?;
+    ctl.set_and_wait_update(
         CtlFlags::MOD_SET | CtlFlags::PATTERN_SET | CtlFlags::DEBUG_SET,
         FPGA_WAIT_UPDATE_MAX_POLLS,
     )?;
     if !gate.is_empty() {
-        write_ctl(port, ADDR_CTL_FLAG, 0);
+        ctl.write(ADDR_CTL_FLAG, 0);
     }
-    release_watchdog(port);
-    apply_fpga_config(port, &FpgaConfig::DEFAULT);
+
+    watchdog(port).release();
+    sync_ps(port).apply(&FpgaConfig::DEFAULT);
+
     Ok(())
 }
 
@@ -305,7 +397,7 @@ pub fn init<P: Port>(port: &mut P) -> Result<(), Error> {
 mod tests {
     use core::num::NonZeroU32;
 
-    use super::{FPGA_PAGE_WORDS, MOD_RAM, set_and_wait_update, write_ram_words};
+    use super::{FPGA_PAGE_WORDS, controller, mod_ram};
     use crate::fpga_params::{ADDR_MOD_MEM_WR_BANK, ADDR_MOD_MEM_WR_PAGE, CtlFlags};
     use crate::proto::Error;
     use crate::test_utils::mock::Harness;
@@ -316,7 +408,7 @@ mod tests {
         h.port.barriers = 0;
         let latched = h.latch_count(CtlFlags::SILENCER_SET);
         assert_eq!(
-            set_and_wait_update(&mut h.port, CtlFlags::SILENCER_SET, NonZeroU32::MIN),
+            controller(&mut h.port).set_and_wait_update(CtlFlags::SILENCER_SET, NonZeroU32::MIN),
             Ok(())
         );
         assert_eq!(h.latch_count(CtlFlags::SILENCER_SET), latched + 1);
@@ -329,7 +421,8 @@ mod tests {
         h.port.latch_stuck = true;
         let reads = h.port.ctl_flag_reads;
         assert_eq!(
-            set_and_wait_update(&mut h.port, CtlFlags::SYNC_SET, NonZeroU32::new(5).unwrap()),
+            controller(&mut h.port)
+                .set_and_wait_update(CtlFlags::SYNC_SET, NonZeroU32::new(5).unwrap()),
             Err(Error::FpgaTimeout)
         );
         assert_eq!(h.port.ctl_flag_reads - reads, 1 + 5);
@@ -340,13 +433,7 @@ mod tests {
         let mut h = Harness::new();
         h.port.ram_switches.clear();
         h.port.barriers = 0;
-        write_ram_words(
-            &mut h.port,
-            &MOD_RAM,
-            1,
-            FPGA_PAGE_WORDS - 1,
-            [0x1234, 0x5678].into_iter(),
-        );
+        mod_ram(&mut h.port).write_words(1, FPGA_PAGE_WORDS - 1, [0x1234, 0x5678].into_iter());
         assert_eq!(
             h.port.ram_switches,
             [

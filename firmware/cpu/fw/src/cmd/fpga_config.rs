@@ -6,7 +6,7 @@ use crate::proto::Error;
 
 pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
     let config = SetFpgaConfigPayload::parse(payload)?;
-    fpga::apply_fpga_config(port, &config);
+    fpga::sync_ps(port).apply(&config);
     Ok(())
 }
 

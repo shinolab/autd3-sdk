@@ -1,12 +1,12 @@
 pub(crate) use autd3_cpu_wire::payload::WriteFociPayload;
 
-use crate::fpga::{self, EMISSION_RAM};
+use crate::fpga;
 use crate::port::Port;
 use crate::proto::Error;
 
 pub(crate) fn handle<P: Port>(port: &mut P, payload: &[u8]) -> Result<(), Error> {
     let (p, data) = WriteFociPayload::parse(payload)?;
-    fpga::write_ram(port, &EMISSION_RAM, p.bank().as_u8(), p.offset(), data);
+    fpga::emission_ram(port).write(p.bank().as_u8(), p.offset(), data);
     Ok(())
 }
 
